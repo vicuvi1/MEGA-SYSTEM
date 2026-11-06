@@ -1,0 +1,78 @@
+/* The wallpaper layer (Settings → Look → Wallpaper). It sits behind the whole
+   app: z-index -1 under the root, so every page, card and menu stays on top.
+   The picture is a static image; only with "Gentle motion" on does it drift
+   slowly and show a light effect, moving by transform and opacity only. */
+
+html.has-wp { background: var(--bg); }
+html.has-wp body { background: transparent !important; }
+
+.wp-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; contain: strict; }
+.wp-art { position: absolute; inset: 0; background-position: center; background-size: cover; background-repeat: no-repeat; transform: translateZ(0); }
+/* The shade is the page colour: it keeps text readable (see core/wallpaper.ts, MAX_SHOW_THROUGH). */
+.wp-shade { position: absolute; inset: 0; background: var(--bg); }
+
+/* Cards stay nearly solid over a picture, so their text keeps its contrast. */
+html.has-wp:not([data-theme='light']) { --panel: rgba(14, 18, 28, 0.93); --panel-2: rgba(20, 26, 40, 0.95); }
+html.has-wp .topbar { background: color-mix(in srgb, var(--bg) 90%, transparent); }
+/* Text that sits straight on the picture (page titles, tabs, the Settings list) gets a soft
+   halo in the page colour; inside a card it matches the card and can't be seen. */
+html.has-wp .content, html.has-wp .topbar { text-shadow: 0 0 8px var(--bg), 0 1px 2px var(--bg); }
+
+/* ---------- Gentle motion (off by default) ---------- */
+.wp-moving .wp-art { animation: wp-drift 70s ease-in-out infinite alternate; will-change: transform; }
+@keyframes wp-drift {
+  from { transform: scale(1.04) translate3d(0, 0, 0); }
+  to { transform: scale(1.08) translate3d(-1.2%, -0.8%, 0); }
+}
+.wp-fx { position: absolute; inset: 0; }
+.wp-fx i { position: absolute; left: var(--x); top: var(--y); display: block; animation-delay: var(--d); animation-iteration-count: infinite; animation-timing-function: linear; will-change: transform, opacity; }
+.wp-fx-rain i { top: -12%; width: 1.5px; height: calc(70px * var(--s)); background: linear-gradient(transparent, rgba(200, 220, 255, 0.55)); animation-name: wp-rain; animation-duration: calc(1.1s * var(--t)); }
+@keyframes wp-rain { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-36px, 120vh, 0); } }
+.wp-fx-stars i { width: calc(3px * var(--s)); height: calc(3px * var(--s)); border-radius: 50%; background: #fff; box-shadow: 0 0 6px #cfe3ff; animation-name: wp-twinkle; animation-duration: calc(4.5s * var(--t)); animation-timing-function: ease-in-out; }
+@keyframes wp-twinkle { 0%, 100% { opacity: 0.15; transform: scale(0.7); } 50% { opacity: 1; transform: scale(1); } }
+.wp-fx-petals i { top: -6%; width: calc(12px * var(--s)); height: calc(7px * var(--s)); border-radius: 60% 0; background: #ffc2d4; opacity: 0.85; animation-name: wp-petal; animation-duration: calc(16s * var(--t)); }
+@keyframes wp-petal { from { transform: translate3d(0, 0, 0) rotate(0deg); } to { transform: translate3d(-22vw, 112vh, 0) rotate(540deg); } }
+.wp-fx-snow i { top: -4%; width: calc(4px * var(--s)); height: calc(4px * var(--s)); border-radius: 50%; background: #fff; opacity: 0.75; animation-name: wp-snow; animation-duration: calc(14s * var(--t)); }
+@keyframes wp-snow { 0% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(18px, 55vh, 0); } 100% { transform: translate3d(-10px, 110vh, 0); } }
+.wp-fx-leaves i { left: 104%; width: calc(11px * var(--s)); height: calc(5px * var(--s)); border-radius: 50%; background: #c8202a; animation-name: wp-leaf; animation-duration: calc(11s * var(--t)); }
+@keyframes wp-leaf { from { transform: translate3d(0, 0, 0) rotate(0deg); } to { transform: translate3d(-112vw, 18vh, 0) rotate(720deg); } }
+
+/* Calm mode plays loops once; "Gentle motion" is your own choice, so it keeps going —
+   unless the system asks for less motion (then the layer draws no effect at all). */
+@media (prefers-reduced-motion: no-preference) {
+  html.calm .wp-moving .wp-art, html.calm .wp-moving .wp-fx i { animation-iteration-count: infinite !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wp-moving .wp-art { animation: none !important; }
+  .wp-fx { display: none; }
+}
+
+/* ---------- Settings → Look → Wallpaper ---------- */
+.wpg-cats { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 12px; }
+.wpg-cat { border: 1px solid var(--line); background: transparent; color: var(--muted); padding: 6px 12px; border-radius: 999px; font-size: 12.5px; transition: background 0.15s, color 0.15s, border-color 0.15s; }
+.wpg-cat:hover { color: var(--text); }
+.wpg-cat.on { background: var(--panel-2); color: var(--text); border-color: color-mix(in srgb, var(--lime) 50%, var(--line)); }
+.wpg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+.wpg-item { position: relative; display: grid; gap: 6px; padding: 0; border: 0; background: none; text-align: left; color: var(--text); }
+.wpg-thumb { position: relative; display: block; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: var(--bg-2) center / cover no-repeat; border: 2px solid transparent; box-shadow: 0 0 0 1px var(--line); transition: border-color 0.15s, transform 0.15s; }
+.wpg-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.wpg-item:hover .wpg-thumb, .wpg-item:focus-visible .wpg-thumb { transform: translateY(-2px); }
+.wpg-item.on .wpg-thumb { border-color: var(--lime); }
+.wpg-item.on .wpg-thumb::after { content: '✓'; position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--lime); color: var(--lime-ink); font-size: 12px; font-weight: 800; }
+.wpg-item b { font-size: 12.5px; font-weight: 600; }
+.wpg-item small { color: var(--muted); font-size: 11.5px; }
+.wpg-none { display: grid; place-items: center; height: 100%; color: var(--muted); font-size: 12px; background: repeating-linear-gradient(45deg, transparent 0 8px, rgb(var(--ink) / 0.04) 8px 16px); }
+.wpg-own { display: grid; place-items: center; gap: 4px; height: 100%; color: var(--muted); font-size: 12px; text-align: center; background: rgb(var(--ink) / 0.03); }
+.wpg-own svg { opacity: 0.8; }
+.wpg-apply { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); opacity: 0; transition: opacity 0.15s; padding: 4px 12px; font-size: 12px; border-radius: 999px; border: 0; background: var(--lime); color: var(--lime-ink); font-weight: 700; pointer-events: none; }
+.wpg-item:hover .wpg-apply, .wpg-item:focus-visible .wpg-apply { opacity: 1; }
+.wpg-item.on .wpg-apply { display: none; }
+.wpg-motion { display: inline-block; margin-left: 6px; font-size: 10.5px; color: var(--muted); }
+.wpg-tune { margin-top: 16px; }
+.wpg-range { display: flex; align-items: center; gap: 10px; }
+.wpg-range output { min-width: 42px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12.5px; }
+.wpg-note { color: var(--muted); font-size: 12px; margin: 10px 0 0; }
+@media (max-width: 640px) {
+  .wpg-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .wpg-range { width: 100%; }
+}

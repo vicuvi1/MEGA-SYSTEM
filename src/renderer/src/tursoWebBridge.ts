@@ -28,6 +28,7 @@ import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../main/settings'
 import { cleanLooks, type CoachLooks } from '@core/coachLooks'
+import { cleanWallpaper, okWallpaperPhoto, type WallpaperPrefs } from '@core/wallpaper'
 import { financeSpending } from '@core/progress'
 
 /** What every screen listens to; sent when live data arrived. */
@@ -1366,6 +1367,24 @@ export function createTursoWebBridge(): Bridge {
         const clean = cleanKit(kit)
         await (await mirrorP).write((db) => writeSetting(db as any, 'island_kit', clean as unknown as Record<string, unknown>))
         return clean
+      }
+    },
+    // Settings → Look → Wallpaper: the choice and your own picture, two synced settings.
+    look: {
+      wallpaper: async () => (await mirrorP).read((db) => cleanWallpaper(readSetting(db as any, 'look_wallpaper'))),
+      setWallpaper: async (patch: Partial<WallpaperPrefs>) =>
+        (await mirrorP).write((db) => {
+          const next = cleanWallpaper({ ...cleanWallpaper(readSetting(db as any, 'look_wallpaper')), ...patch })
+          writeSetting(db as any, 'look_wallpaper', next as unknown as Record<string, unknown>)
+          return next
+        }),
+      photo: async () => (await mirrorP).read((db) => {
+        const v = readSetting(db as any, 'look_wallpaper_photo')
+        return okWallpaperPhoto(v) ? v : null
+      }),
+      setPhoto: async (url: string | null) => {
+        if (url !== null && !okWallpaperPhoto(url)) throw new Error('That picture is too big or not an image')
+        await (await mirrorP).write((db) => writeSetting(db as any, 'look_wallpaper_photo', url))
       }
     },
     // PL1–PL8: widgets, pages, scripts and the island look, one synced setting (cleaned by the caller, which knows the widgets).

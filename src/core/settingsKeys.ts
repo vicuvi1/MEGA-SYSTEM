@@ -146,6 +146,8 @@ export const SETTINGS = {
   coach_memory_changes: json<unknown[]>("recent changes to Ben's memory, with what was there before (undo)", []),
   coach_style: json<Record<string, unknown> | null>("Ben's tone and style", null),
   coach_looks: json<Record<string, unknown> | null>("how the chat looks: Ben's face and your photo (small data URL)", null),
+  look_wallpaper: json<Record<string, unknown> | null>('the wallpaper: which picture, how strong, blur, shade, where, motion (src/core/wallpaper.ts)', null),
+  look_wallpaper_photo: text('your own wallpaper picture, made small on the device (a data URL)'),
   coach_adapt: json<Record<string, unknown> | null>('how Ben adapts the plan to how it went', null),
   goal_booking: json<Record<string, unknown> | null>('goal blocks booked into the calendar', null),
   goal_asks: json<Record<string, unknown> | null>("Ben's goal check-ins: what he asked this period, today's count, auto goals' last number", null),

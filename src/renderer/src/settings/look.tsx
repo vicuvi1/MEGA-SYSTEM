@@ -5,6 +5,7 @@ import { life } from '../bridge'
 import { Row, Saved, Segmented, Switch } from '../settingsUi'
 import { Icon } from '../Icon'
 import { ZoomControl } from '../zoom'
+import { WallpaperPanel } from '../wallpaper/WallpaperPanel'
 import type { SettingsState } from './useSettingsState'
 
 export function LookSection({ s }: { s: SettingsState }) {
@@ -32,6 +33,7 @@ export function LookSection({ s }: { s: SettingsState }) {
         </Row>
         {!window.desktop && <IslandToggle onSaved={lookSaved} />}
       </section>
+      <WallpaperPanel />
       <LayoutEditor />
         </>
   )

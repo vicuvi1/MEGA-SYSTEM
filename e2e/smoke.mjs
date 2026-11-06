@@ -570,6 +570,57 @@ try {
       if (!ok) throw new Error(`${name} looks empty`)
     }
   })
+  // Wallpaper (Settings → Look → Wallpaper): pick one; the layer sits behind the app with the
+  // page-coloured shade that keeps text readable; "Only on Today" hides it elsewhere; None removes it.
+  await step('Wallpaper: pick one, the layer and its readability shade are there', async () => {
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Look' }).first().click()
+    await pg.waitForSelector('.st-tabs .ptabs [data-tab="wallpaper"]', { timeout: 8000 })
+    await pg.click('.st-tabs .ptabs [data-tab="wallpaper"]')
+    await pg.waitForSelector('.wpg-grid .wpg-item[data-wp="ronin-moon"]', { timeout: 8000 })
+    if ((await pg.locator('.wpg-grid .wpg-item').count()) < 22) throw new Error('fewer than 20 pictures in the gallery')
+    await pg.click('.wpg-item[data-wp="ronin-moon"]')
+    await pg.waitForSelector('.wp-layer[data-wp="ronin-moon"] .wp-art', { timeout: 5000 })
+    const r = await pg.evaluate(() => {
+      const layer = document.querySelector('.wp-layer')
+      const art = layer.querySelector('.wp-art')
+      const shade = layer.querySelector('.wp-shade')
+      const cs = (el) => getComputedStyle(el)
+      return {
+        has: document.documentElement.classList.contains('has-wp'),
+        z: cs(layer).zIndex,
+        events: cs(layer).pointerEvents,
+        bg: cs(art).backgroundImage,
+        art: Number(cs(art).opacity),
+        shade: shade ? Number(cs(shade).opacity) : -1,
+        shadeColour: shade ? cs(shade).backgroundColor : '',
+        page: cs(document.documentElement).backgroundColor,
+        moving: !!layer.querySelector('.wp-fx')
+      }
+    })
+    if (!r.has) throw new Error('html.has-wp is not set')
+    if (r.z !== '-1' || r.events !== 'none') throw new Error(`the layer is not behind the app (z-index ${r.z}, pointer-events ${r.events})`)
+    if (!/\.svg|data:image/.test(r.bg)) throw new Error(`no picture on the layer: ${r.bg.slice(0, 80)}`)
+    if (r.shade < 0) throw new Error('no readability shade over the picture')
+    // at most 40 % of the picture may reach the text (core/wallpaper.ts MAX_SHOW_THROUGH)
+    if (r.art * (1 - r.shade) > 0.401) throw new Error(`too much picture shows through: ${r.art} × (1 − ${r.shade})`)
+    if (r.shadeColour !== r.page) throw new Error(`the shade (${r.shadeColour}) is not the page colour (${r.page})`)
+    if (r.moving) throw new Error('motion is on by default')
+    await pg.locator('.wpg-tune button', { hasText: 'Only on Today' }).click()
+    await pg.waitForFunction(() => !document.querySelector('.wp-layer'), null, { timeout: 5000 }).catch(() => {
+      throw new Error('"Only on Today" still shows it in Settings')
+    })
+    await open('today')
+    await pg.waitForSelector('.wp-layer[data-wp="ronin-moon"]', { timeout: 5000 })
+    await open('settings')
+    await pg.waitForSelector('.wpg-item[data-wp="none"]', { timeout: 8000 })
+    await pg.locator('.wpg-tune button', { hasText: 'Everywhere' }).click()
+    await pg.click('.wpg-item[data-wp="none"]')
+    await pg.waitForFunction(() => !document.querySelector('.wp-layer') && !document.documentElement.classList.contains('has-wp'), null, { timeout: 5000 })
+    // Leave Look on its first tab, as the later steps expect.
+    await pg.click('.st-tabs .ptabs [data-tab="look"]')
+  })
   // Life fit: Settings → Ben → My life (sleep, work window, how hard Ben pushes), Settings → Sound's
   // "Which sound for what", and the one-tap shift buttons. LIFEFIT_SHOTS=<dir> saves screenshots.
   await step('My life, how hard Ben pushes, which sound for what', async () => {

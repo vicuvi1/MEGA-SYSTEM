@@ -95,6 +95,13 @@ export type Bridge = LifeApi & {
     log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; mood?: string; proactive?: boolean; undo?: unknown[]; undone?: boolean[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards }[]>
     model(): Promise<string | null>
   }
+  /** Settings → Look → Wallpaper: the choice and your own picture (synced settings). */
+  look?: {
+    wallpaper(): Promise<import('@core/wallpaper').WallpaperPrefs>
+    setWallpaper(patch: Partial<import('@core/wallpaper').WallpaperPrefs>): Promise<import('@core/wallpaper').WallpaperPrefs>
+    photo(): Promise<string | null>
+    setPhoto(dataUrl: string | null): Promise<void>
+  }
   /** Google Calendar through the server (sign in once in Settings). */
   google?: {
     status(): Promise<GoogleStatus>

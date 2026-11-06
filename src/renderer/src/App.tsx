@@ -42,6 +42,7 @@ import { storageWakesApp } from './islandLog'
 import { watchDayTurn } from './dayTurn'
 import { MusicHost } from './musicHost'
 import { startZoom, ZoomToast } from './zoom'
+import { WallpaperLayer } from './wallpaper/WallpaperLayer'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at
 // once), and every page is fetched in the background once Today is up
@@ -658,6 +659,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
   return (
     <div className={`shell ${collapsed ? 'rail' : ''} ${focus ? 'focus' : ''}`}>
+      <WallpaperLayer page={page} />
       <Palette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}

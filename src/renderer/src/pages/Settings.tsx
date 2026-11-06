@@ -48,10 +48,11 @@ export function Settings(props: SettingsProps) {
       id: 'look',
       label: 'Look',
       icon: 'sun',
-      hint: 'Theme, colors and your Today screen',
-      keywords: 'appearance theme dark light color colour today sections layout name',
+      hint: 'Theme, wallpaper, colors and your Today screen',
+      keywords: 'appearance theme dark light color colour today sections layout name wallpaper background picture photo anime samurai space sci-fi cyberpunk nature',
       tabs: [
         { id: 'look', label: 'Appearance', heads: ['appearance'] },
+        { id: 'wallpaper', label: 'Wallpaper', heads: ['wallpaper'] },
         { id: 'today', label: 'Today screen & pages', heads: ['today screen'] }
       ],
       body: <LookSection s={s} />
