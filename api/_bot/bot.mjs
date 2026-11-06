@@ -43,8 +43,293 @@ function notMoney(text) {
 	if (MONEY.test(t)) return false;
 	return MONTH$1.test(t) || TIME.test(t) || DURATION.test(t) || EVENT.test(t);
 }
-// src/core/music.ts
+var HOSTS = [
+	"soundcloud.com",
+	"www.soundcloud.com",
+	"m.soundcloud.com"
+];
+var SEG = /^[a-z0-9][a-z0-9_-]{0,99}$/i;
+/** Pages that are SoundCloud's own, not a profile. */
+var RESERVED = /* @__PURE__ */ new Set([
+	"discover",
+	"search",
+	"upload",
+	"you",
+	"stream",
+	"settings",
+	"pages",
+	"charts",
+	"jobs",
+	"terms-of-use",
+	"mobile",
+	"signin",
+	"logout",
+	"messages",
+	"notifications"
+]);
+/**
+* A pasted address → its clean form and kind, or null when it isn't a
+* SoundCloud track, playlist ("/sets/"), profile or profile likes page.
+* Query strings and tracking bits are dropped.
+*/
+function parseSoundCloud(input) {
+	let u;
+	try {
+		const raw = String(input ?? "").trim();
+		u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+	} catch {
+		return null;
+	}
+	if (u.protocol !== "https:" && u.protocol !== "http:") return null;
+	if (!HOSTS.includes(u.hostname.toLowerCase()) || u.username || u.password || u.port) return null;
+	const parts = u.pathname.split("/").filter(Boolean);
+	if (!parts.length || parts.length > 3 || !parts.every((p) => SEG.test(p))) return null;
+	const [user, a, b] = parts.map((p) => p.toLowerCase());
+	if (RESERVED.has(user)) return null;
+	const base = `https://soundcloud.com/${user}`;
+	if (parts.length === 1) return {
+		url: base,
+		kind: "profile",
+		user
+	};
+	if (parts.length === 2 && a === "likes") return {
+		url: `${base}/likes`,
+		kind: "likes",
+		user
+	};
+	if (parts.length === 2 && ![
+		"sets",
+		"tracks",
+		"albums",
+		"reposts",
+		"followers",
+		"following",
+		"popular-tracks",
+		"comments"
+	].includes(a)) return {
+		url: `${base}/${a}`,
+		kind: "track",
+		user,
+		slug: a
+	};
+	if (parts.length === 3 && a === "sets") return {
+		url: `${base}/sets/${b}`,
+		kind: "playlist",
+		user,
+		slug: b
+	};
+	return null;
+}
+/** "lofi-beats" → "Lofi beats". */
+var nice$2 = (s) => {
+	const t = s.replace(/[-_]+/g, " ").trim();
+	return t ? t[0].toUpperCase() + t.slice(1) : s;
+};
+/** A name for a new station from its address. */
+function stationName(p) {
+	return p.kind === "likes" ? `${nice$2(p.user)} · likes` : p.kind === "profile" ? nice$2(p.user) : nice$2(p.slug ?? p.user);
+}
+function cleanStation(s, i = 0) {
+	const p = parseSoundCloud(s?.url);
+	if (!p) return null;
+	const name = String(s?.name ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, 40) || stationName(p);
+	return {
+		id: typeof s?.id === "string" && /^s[a-z0-9]{1,20}$/i.test(s.id) ? s.id : `s${i}`,
+		name,
+		url: p.url,
+		kind: p.kind
+	};
+}
+function cleanStations(v) {
+	if (!Array.isArray(v)) return [];
+	const ids = /* @__PURE__ */ new Set();
+	const urls = /* @__PURE__ */ new Set();
+	const out = [];
+	v.forEach((x, i) => {
+		const s = cleanStation(x, i);
+		if (!s || urls.has(s.url)) return;
+		while (ids.has(s.id)) s.id = `${s.id}x`.slice(0, 21);
+		ids.add(s.id);
+		urls.add(s.url);
+		out.push(s);
+	});
+	return out.slice(0, 12);
+}
+/**
+* "Your SoundCloud": a typed profile name or a pasted profile link → the
+* public profile name (lower case), or null. Accepts "name", "@name",
+* "soundcloud.com/name" and any link on that profile (likes, a playlist…).
+*/
+function parseScUser(input) {
+	const raw = String(input ?? "").trim().replace(/^@/, "");
+	if (!raw || raw.length > 300) return null;
+	if (SEG.test(raw)) return RESERVED.has(raw.toLowerCase()) ? null : raw.toLowerCase();
+	let u;
+	try {
+		u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+	} catch {
+		return null;
+	}
+	if (u.protocol !== "https:" && u.protocol !== "http:" || !HOSTS.includes(u.hostname.toLowerCase()) || u.username || u.password || u.port) return null;
+	const first = u.pathname.split("/").filter(Boolean)[0] ?? "";
+	if (!SEG.test(first) || RESERVED.has(first.toLowerCase())) return null;
+	return first.toLowerCase();
+}
+/** The synced setting's value: a clean profile name, or ''. */
+var cleanScUser = (v) => typeof v === "string" && v ? parseScUser(v) ?? "" : "";
+// src/core/starterStations.ts
+/**
+* Public profiles of well-known labels and curators (profiles change less
+* often than playlists). The sandbox this was built in could not reach
+* SoundCloud, so each one is checked on your device the first time it plays.
+*/
+var STARTER_STATIONS = [
+	{
+		id: "svlofi",
+		vibe: "lofi",
+		name: "Lofi beats",
+		blurb: "Chillhop Music",
+		url: "https://soundcloud.com/chillhopdotcom",
+		kind: "profile",
+		icon: "🎧",
+		colors: ["#8b5cf6", "#f472b6"]
+	},
+	{
+		id: "svfocus",
+		vibe: "focus",
+		name: "Deep focus",
+		blurb: "Erased Tapes: piano and strings",
+		url: "https://soundcloud.com/erasedtapes",
+		kind: "profile",
+		icon: "🎯",
+		colors: ["#0ea5e9", "#1e3a8a"]
+	},
+	{
+		id: "svchill",
+		vibe: "chill",
+		name: "Chill electronic",
+		blurb: "MrSuicideSheep",
+		url: "https://soundcloud.com/mrsuicidesheep",
+		kind: "profile",
+		icon: "🌊",
+		colors: ["#14b8a6", "#6366f1"]
+	},
+	{
+		id: "svjazz",
+		vibe: "jazz",
+		name: "Jazz cafe",
+		blurb: "Jazz hop and soft keys",
+		url: "https://soundcloud.com/jazzhopcafe",
+		kind: "profile",
+		icon: "☕",
+		colors: ["#f59e0b", "#7c2d12"]
+	},
+	{
+		id: "svambient",
+		vibe: "ambient",
+		name: "Ambient drift",
+		blurb: "Ultimae Records",
+		url: "https://soundcloud.com/ultimae",
+		kind: "profile",
+		icon: "🌧",
+		colors: ["#64748b", "#0f766e"]
+	},
+	{
+		id: "svworkout",
+		vibe: "workout",
+		name: "Upbeat workout",
+		blurb: "Monstercat",
+		url: "https://soundcloud.com/monstercat",
+		kind: "profile",
+		icon: "⚡",
+		colors: ["#ef4444", "#f97316"]
+	},
+	{
+		id: "svclassic",
+		vibe: "classical",
+		name: "Classical study",
+		blurb: "Deutsche Grammophon",
+		url: "https://soundcloud.com/deutschegrammophon",
+		kind: "profile",
+		icon: "🎻",
+		colors: ["#a16207", "#fde68a"]
+	},
+	{
+		id: "svsoul",
+		vibe: "soul",
+		name: "Evening soul",
+		blurb: "Majestic Casual",
+		url: "https://soundcloud.com/majesticcasual",
+		kind: "profile",
+		icon: "🌙",
+		colors: ["#be185d", "#312e81"]
+	}
+];
+/** Only ids of real starters, once each. */
+function cleanHiddenStarters(v) {
+	if (!Array.isArray(v)) return [];
+	const ids = new Set(STARTER_STATIONS.map((s) => s.id));
+	return [...new Set(v.filter((x) => typeof x === "string" && ids.has(x)))];
+}
+var DEFAULT_MUSIC = {
+	stations: [],
+	favs: [],
+	focusMix: null,
+	benSees: false,
+	lyrics: true,
+	pillLyric: false,
+	eqMode: "beat",
+	pin: null,
+	hiddenStarters: [],
+	nowToast: true,
+	scUser: ""
+};
 var line = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+/** Only SoundCloud's own image host (the artwork the widget gives). */
+function safeArt(u) {
+	const s = String(u ?? "");
+	return /^https:\/\/i\d?\.sndcdn\.com\/[\w./-]{1,200}$/.test(s) ? s : "";
+}
+function cleanFav(v) {
+	const p = parseSoundCloud(v?.url);
+	if (!p || p.kind !== "track") return null;
+	return {
+		url: p.url,
+		title: line(v?.title, 120) || p.slug || "Track",
+		artist: line(v?.artist, 60),
+		artwork: safeArt(v?.artwork)
+	};
+}
+function cleanFavs(v) {
+	if (!Array.isArray(v)) return [];
+	const seen = /* @__PURE__ */ new Set();
+	const out = [];
+	for (const x of v) {
+		const f = cleanFav(x);
+		if (!f || seen.has(f.url)) continue;
+		seen.add(f.url);
+		out.push(f);
+	}
+	return out.slice(0, 60);
+}
+function cleanMusicKit(v) {
+	const stations = cleanStations(v?.stations);
+	const mix = typeof v?.focusMix === "string" && stations.some((s) => s.id === v.focusMix) ? v.focusMix : null;
+	const pin = typeof v?.pin === "string" && /^(sc|scweb|sys:[A-Za-z0-9._!\- ]{1,200})$/.test(v.pin) ? v.pin : null;
+	return {
+		stations,
+		favs: cleanFavs(v?.favs),
+		focusMix: mix,
+		benSees: v?.benSees === true,
+		lyrics: v?.lyrics !== false,
+		pillLyric: v?.pillLyric === true,
+		eqMode: v?.eqMode === "pitch" ? "pitch" : "beat",
+		pin,
+		hiddenStarters: cleanHiddenStarters(v?.hiddenStarters),
+		nowToast: v?.nowToast !== false,
+		scUser: cleanScUser(v?.scUser)
+	};
+}
 function cleanMusicNow(v) {
 	const l = line(v?.line, 160);
 	const at = Number(v?.at);
@@ -871,7 +1156,7 @@ function applyBlockOp(blocks, op, by, now = /* @__PURE__ */ new Date()) {
 function logChanges(log, add) {
 	return [...Array.isArray(log) ? log.filter((c) => c && typeof c.id === "string") : [], ...add.filter((c) => !!c)].slice(-80);
 }
-var norm$3 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+var norm$4 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 /** Keeps at most `max` facts: pinned ones always stay; the weakest, oldest unpinned go first. */
 function capFacts(facts, max) {
 	if (facts.length <= max) return {
@@ -959,7 +1244,7 @@ function applyTidy(facts, decisions, ids, max, now = /* @__PURE__ */ new Date())
 	const touched = /* @__PURE__ */ new Set();
 	const find = (id) => {
 		const f = id ? ids.get(id) : void 0;
-		return f ? list.findIndex((x) => norm$3(x.t) === norm$3(f.t)) : -1;
+		return f ? list.findIndex((x) => norm$4(x.t) === norm$4(f.t)) : -1;
 	};
 	const log = (before, after, why) => changes.push({
 		id: changeId(now),
@@ -974,7 +1259,7 @@ function applyTidy(facts, decisions, ids, max, now = /* @__PURE__ */ new Date())
 	for (const d of decisions) {
 		if (d.op === "ADD") {
 			const t = d.text;
-			if (list.some((x) => norm$3(x.t) === norm$3(t))) continue;
+			if (list.some((x) => norm$4(x.t) === norm$4(t))) continue;
 			list.push(toRecord(t, today));
 			log(null, t, d.why);
 			continue;
@@ -982,19 +1267,19 @@ function applyTidy(facts, decisions, ids, max, now = /* @__PURE__ */ new Date())
 		const i = find(d.id);
 		if (i < 0) continue;
 		const f = list[i];
-		if (f.pin || touched.has(norm$3(f.t))) continue;
-		touched.add(norm$3(f.t));
+		if (f.pin || touched.has(norm$4(f.t))) continue;
+		touched.add(norm$4(f.t));
 		if (d.op === "DELETE") {
 			list.splice(i, 1);
 			log(f.t, null, d.why);
-		} else if (d.op === "UPDATE" && norm$3(d.text) !== norm$3(f.t)) {
-			const dup = list.findIndex((x, k) => k !== i && norm$3(x.t) === norm$3(d.text));
+		} else if (d.op === "UPDATE" && norm$4(d.text) !== norm$4(f.t)) {
+			const dup = list.findIndex((x, k) => k !== i && norm$4(x.t) === norm$4(d.text));
 			list[i] = {
 				...f,
 				t: d.text,
 				at: today
 			};
-			touched.add(norm$3(d.text));
+			touched.add(norm$4(d.text));
 			if (dup >= 0 && !list[dup].pin) list.splice(dup, 1);
 			log(f.t, d.text, d.why);
 		}
@@ -1017,7 +1302,7 @@ function textHash(t) {
 	return (h >>> 0).toString(16).padStart(8, "0");
 }
 /** The id of a fact's piece ("fact:<hash of its words>"). */
-var factDocId = (f) => `fact:${textHash(norm$3(f.t))}`;
+var factDocId = (f) => `fact:${textHash(norm$4(f.t))}`;
 var NOTE_PART = 700;
 /** Every piece of memory worth finding by meaning, at most 600 (newest kept). */
 function memoryDocs(s) {
@@ -1035,9 +1320,9 @@ function memoryDocs(s) {
 	if (m) {
 		for (const p of m.people) add("mind", `p:${textHash(p.name.toLowerCase())}`, `${p.name}: ${p.note}`);
 		for (const g of m.goals) add("mind", `g:${textHash(g.title.toLowerCase())}`, `Goal: ${g.title}${g.deadline ? ` by ${g.deadline}` : ""}${g.weekly ? `, ${g.weekly} a week` : ""}`);
-		for (const x of m.works) add("mind", `w:${textHash(norm$3(x.t))}`, `Works for him: ${x.t}`);
-		for (const x of m.fails) add("mind", `f:${textHash(norm$3(x.t))}`, `Doesn't work for him: ${x.t}`);
-		for (const x of m.patterns) add("mind", `t:${textHash(norm$3(x.t))}`, `Pattern: ${x.t}`);
+		for (const x of m.works) add("mind", `w:${textHash(norm$4(x.t))}`, `Works for him: ${x.t}`);
+		for (const x of m.fails) add("mind", `f:${textHash(norm$4(x.t))}`, `Doesn't work for him: ${x.t}`);
+		for (const x of m.patterns) add("mind", `t:${textHash(norm$4(x.t))}`, `Pattern: ${x.t}`);
 	}
 	for (const n of s.notes ?? []) {
 		const body = n.body.trim();
@@ -1141,8 +1426,8 @@ function keywordRecall(docs, query, k = 6) {
 }
 /** Recalled pieces as prompt lines ("- [note] …"), skipping what the prompt already has. */
 function recallText(hits, already = "") {
-	const have = norm$3(already);
-	return hits.filter((h) => !have.includes(norm$3(h.text).slice(0, 60))).map((h) => `- [${h.kind}] ${h.text.slice(0, 300)}`).join("\n");
+	const have = norm$4(already);
+	return hits.filter((h) => !have.includes(norm$4(h.text).slice(0, 60))).map((h) => `- [${h.kind}] ${h.text.slice(0, 300)}`).join("\n");
 }
 // src/core/stealth.ts
 var SWAPS = [
@@ -1885,6 +2170,8 @@ var SETTINGS = {
 	coach_memory_changes: json$5("recent changes to Ben's memory, with what was there before (undo)", []),
 	coach_style: json$5("Ben's tone and style", null),
 	coach_looks: json$5("how the chat looks: Ben's face and your photo (small data URL)", null),
+	look_wallpaper: json$5("the wallpaper: which picture, how strong, blur, shade, where, motion (src/core/wallpaper.ts)", null),
+	look_wallpaper_photo: text("your own wallpaper picture, made small on the device (a data URL)"),
 	coach_adapt: json$5("how Ben adapts the plan to how it went", null),
 	goal_booking: json$5("goal blocks booked into the calendar", null),
 	goal_asks: json$5("Ben's goal check-ins: what he asked this period, today's count, auto goals' last number", null),
@@ -1936,6 +2223,9 @@ var SETTINGS = {
 	fun_moves: json$5("leftover money moved to a Finance Helper savings goal, by month", {}),
 	fun_budget: json$5("monthly fun budget in lei, typed or from Finance Helper", null),
 	reward_unlocks: json$5("rewards that unlock with a goal or streak", null),
+	reward_rules: json$5("healthy limits per reward: a most-per-day and \"pair it\" (src/core/rewardGuard.ts)", null),
+	reward_coupons: json$5("coupons from level chests and the weekly mystery reward: a free small treat or a discount (src/core/rewardSurprise.ts)", null),
+	reward_suggest_hidden: json$5("suggested rewards you said \"not for me\" to (src/core/rewardSuggest.ts)", null),
 	reward_ready_seen: json$5("rewards whose \"Ready!\" moment was already shown (id:buys)", []),
 	currency: text("old name of the money currency"),
 	coin_exchange_rate: num$3("lei per point"),
@@ -2822,11 +3112,11 @@ function cleanStats(start, relapses, today) {
 // src/core/myHabits.ts
 var MY_HABITS = "my_habits";
 var DAY$4 = /^\d{4}-\d{2}-\d{2}$/;
-var clip$4 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var clip$6 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanBook(v) {
-	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$4(h.name, 60)).map((h) => ({
-		id: clip$4(h.id, 40),
-		name: clip$4(h.name, 60),
+	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$6(h.name, 60)).map((h) => ({
+		id: clip$6(h.id, 40),
+		name: clip$6(h.name, 60),
 		at: String(h.at ?? "")
 	})) : [];
 	const log = {};
@@ -3089,17 +3379,17 @@ var TRACKS = {
 };
 var TRACK_IDS = Object.keys(TRACKS);
 var DAY$2 = /^\d{4}-\d{2}-\d{2}$/;
-var clip$3 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var clip$5 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var cleanLink = (s) => {
-	const t = clip$3(s, 300);
+	const t = clip$5(s, 300);
 	return /^https?:\/\/\S+$/i.test(t) ? t : null;
 };
 function cleanLearn(v) {
-	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$3(e.title, 120) && DAY$2.test(e.day)).map((e) => ({
-		id: clip$3(e.id, 40) || `l${e.day}`,
+	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$5(e.title, 120) && DAY$2.test(e.day)).map((e) => ({
+		id: clip$5(e.id, 40) || `l${e.day}`,
 		track: e.track,
-		title: clip$3(e.title, 120),
-		tag: clip$3(e.tag, 30).toLowerCase(),
+		title: clip$5(e.title, 120),
+		tag: clip$5(e.tag, 30).toLowerCase(),
 		link: cleanLink(e.link),
 		day: e.day
 	})).slice(-500);
@@ -3204,23 +3494,23 @@ var MAX = {
 	patterns: 10,
 	people: 20
 };
-var norm$2 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
-var clip$2 = (t, n = 160) => String(t ?? "").trim().slice(0, n);
+var norm$3 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+var clip$4 = (t, n = 160) => String(t ?? "").trim().slice(0, n);
 function cleanMind(m) {
 	const list = (x) => Array.isArray(x) ? x.filter((e) => e && typeof e.t === "string").map((e) => ({
-		t: clip$2(e.t),
+		t: clip$4(e.t),
 		at: String(e.at ?? "")
 	})) : [];
 	return {
 		people: Array.isArray(m?.people) ? m.people.filter((x) => x && typeof x.name === "string").map((x) => ({
-			name: clip$2(x.name, 40),
-			note: clip$2(x.note ?? "", 120),
+			name: clip$4(x.name, 40),
+			note: clip$4(x.note ?? "", 120),
 			at: String(x.at ?? "")
 		})) : [],
 		goals: Array.isArray(m?.goals) ? m.goals.filter((g) => g && typeof g.title === "string").map((g) => ({
-			title: clip$2(g.title, 120),
+			title: clip$4(g.title, 120),
 			deadline: /^\d{4}-\d{2}-\d{2}$/.test(g.deadline) ? g.deadline : "",
-			weekly: clip$2(g.weekly ?? "", 80),
+			weekly: clip$4(g.weekly ?? "", 80),
 			at: String(g.at ?? "")
 		})) : [],
 		works: list(m?.works),
@@ -3240,31 +3530,31 @@ function readMindOp(line) {
 		if (!title) return null;
 		return {
 			kind: "aim",
-			title: clip$2(title, 120),
+			title: clip$4(title, 120),
 			deadline: /^\d{4}-\d{2}-\d{2}$/.test(deadline) ? deadline : "",
-			weekly: clip$2(weekly.replace(/^-$/, ""), 80)
+			weekly: clip$4(weekly.replace(/^-$/, ""), 80)
 		};
 	}
 	if (kind === "aimdone") return {
 		kind: "aimdone",
-		title: clip$2(arg, 120)
+		title: clip$4(arg, 120)
 	};
 	if (kind === "person") {
 		const [name, note = ""] = arg.split("|").map((x) => x.trim());
 		return name ? {
 			kind: "person",
-			name: clip$2(name, 40),
-			note: clip$2(note, 120)
+			name: clip$4(name, 40),
+			note: clip$4(note, 120)
 		} : null;
 	}
 	return {
 		kind,
-		text: clip$2(arg)
+		text: clip$4(arg)
 	};
 }
 var sameIdea = (a, b) => {
-	const x = norm$2(a);
-	const y = norm$2(b);
+	const x = norm$3(a);
+	const y = norm$3(b);
 	return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
 };
 /** Applies one memory change; the newest version of an idea replaces the old one. */
@@ -6038,8 +6328,8 @@ var SAFE_LABEL = {
 	offerNote: "Offer a meeting note",
 	moveCard: "Show the move-break card (you still confirm)"
 };
-var HM$4 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var clip$1 = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
+var HM$5 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var clip$3 = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
 function safeLink(url) {
 	try {
 		const u = new URL(String(url ?? ""));
@@ -6052,7 +6342,7 @@ function safeLink(url) {
 function cleanAction(a) {
 	switch (a?.do) {
 		case "focus": {
-			const subject = clip$1(a.subject, 60) || "Focus";
+			const subject = clip$3(a.subject, 60) || "Focus";
 			const minutes = Math.round(Number(a.minutes));
 			return {
 				do: "focus",
@@ -6076,7 +6366,7 @@ function cleanAction(a) {
 		}
 		case "note":
 		case "task": {
-			const text = clip$1(a.text, 160);
+			const text = clip$3(a.text, 160);
 			return text ? {
 				do: a.do,
 				text
@@ -6113,7 +6403,7 @@ function cleanRecipe(r, i = 0) {
 		when.ctx = r.when.ctx;
 	}
 	if (on === "time") {
-		if (!HM$4.test(String(r.when.at ?? ""))) return null;
+		if (!HM$5.test(String(r.when.at ?? ""))) return null;
 		when.at = r.when.at;
 	}
 	const then = (Array.isArray(r.then) ? r.then : []).map(cleanAction).filter((x) => !!x).slice(0, 5);
@@ -6123,14 +6413,14 @@ function cleanRecipe(r, i = 0) {
 		const days = [...new Set(r.if.days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
 		if (days.length && days.length < 7) iff.days = days;
 	}
-	if (HM$4.test(String(r.if?.from ?? "")) && HM$4.test(String(r.if?.to ?? ""))) {
+	if (HM$5.test(String(r.if?.from ?? "")) && HM$5.test(String(r.if?.to ?? ""))) {
 		iff.from = r.if.from;
 		iff.to = r.if.to;
 	}
 	if (r.if?.noTimer) iff.noTimer = true;
 	return {
-		id: clip$1(r.id, 40) || `r${Date.now().toString(36)}${i}`,
-		name: clip$1(r.name, 60) || recipeText({
+		id: clip$3(r.id, 40) || `r${Date.now().toString(36)}${i}`,
+		name: clip$3(r.name, 60) || recipeText({
 			when,
 			if: iff,
 			then
@@ -6582,7 +6872,7 @@ var BAD_COMBOS = /* @__PURE__ */ new Set([
 	"ctrl+alt+del",
 	"ctrl+shift+delete"
 ]);
-var norm$1 = (s) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+var norm$2 = (s) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 /** Ben's line → an action, or null. "pc: open spotify", "pc: url https://…", "pc: keys ctrl+shift+t". */
 function readPcAction(line) {
 	const m = /^\s*pc\s*:\s*(open|launch|start|url|link|file|type|keys?|press|feature|close|quit)\s*[:\s]\s*(.+)$/i.exec(String(line ?? ""));
@@ -6600,7 +6890,7 @@ function readPcAction(line) {
 }
 /** "open Spotify", "type “hello”", "press Ctrl+Shift+T": what the card says. */
 function pcActText(a) {
-	if (a.kind === "open") return `open ${KNOWN_APPS[norm$1(a.arg)]?.label ?? a.arg}`;
+	if (a.kind === "open") return `open ${KNOWN_APPS[norm$2(a.arg)]?.label ?? a.arg}`;
 	if (a.kind === "url") try {
 		return `open ${new URL(a.arg).hostname.replace(/^www\./, "")}`;
 	} catch {
@@ -6610,11 +6900,11 @@ function pcActText(a) {
 	if (a.kind === "file") return `open the file ${a.arg.split(/[\\/]/).pop()}`;
 	if (a.kind === "type") return `type “${a.arg.length > 40 ? `${a.arg.slice(0, 40)}…` : a.arg}”`;
 	if (a.kind === "keys") return `press ${a.arg.split("+").map((k) => k.trim()).map((k) => k.length <= 3 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1)).join("+")}`;
-	return `open ${FEATURES[norm$1(a.arg)]?.label ?? a.arg}`;
+	return `open ${FEATURES[norm$2(a.arg)]?.label ?? a.arg}`;
 }
 /** Why this action is refused (deny list, bad link or file, unknown key), or null when it may be asked. */
 function pcDenied(a) {
-	const text = norm$1(a.arg);
+	const text = norm$2(a.arg);
 	const word = DENY_WORDS.find((w) => text.split(" ").some((t) => t.includes(w.replace(/\s+/g, ""))) || text.includes(w));
 	if (word && a.kind !== "type") return `“${word}” is on the never list`;
 	if (a.kind === "type") {
@@ -8030,12 +8320,12 @@ var nice$1 = (n, unit) => {
 	return Math.max(1, Math.ceil(a));
 };
 /** "45 min", "1h30" for hours. */
-var hoursText$1 = (h) => {
+var hoursText$2 = (h) => {
 	const m = Math.round(h * 60);
 	return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad$6(m % 60) : ""}`;
 };
 var amount = (g, n) => {
-	if (g.unit === "hours") return hoursText$1(n);
+	if (g.unit === "hours") return hoursText$2(n);
 	if (g.source.kind === "sport.reps" && g.source.arg) return `${fmtValue("count", n)} ${g.source.arg.toLowerCase()}`;
 	return fmtValue(g.unit, n, g.unitLabel);
 };
@@ -8045,8 +8335,8 @@ function habitVerb(g, dayMin) {
 	if (s.kind === "body.workouts") return "Work out";
 	if (s.kind === "sleep.bed") return `In bed by ${s.arg || "00:00"} tonight`;
 	if (s.kind === "water") return `Drink ${fmtValue("ml", dayMin)}`;
-	if (s.kind === "focus.hours") return `${hoursText$1(dayMin)} of ${s.arg || "focus"}`;
-	if (s.kind === "pc.work") return `${hoursText$1(dayMin)} of real work`;
+	if (s.kind === "focus.hours") return `${hoursText$2(dayMin)} of ${s.arg || "focus"}`;
+	if (s.kind === "pc.work") return `${hoursText$2(dayMin)} of real work`;
 	if (s.kind === "sport.reps") return `${fmtValue("count", dayMin)} ${(s.arg || "reps").toLowerCase()}`;
 	if (s.kind === "tasks.done") return dayMin > 1 ? `Close ${dayMin} tasks` : "Close a task";
 	return g.title.replace(/\s*\d+\s*(?:×|x|times?)\s*(?:a|per|\/)\s*(?:week|month)\b.*$/i, "").trim() || "Do it";
@@ -9153,8 +9443,8 @@ var DEFAULT_LIFE_FIT = {
 	push: "push",
 	tonight: null
 };
-var HM$3 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var isHm$1 = (x) => typeof x === "string" && HM$3.test(x);
+var HM$4 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm$1 = (x) => typeof x === "string" && HM$4.test(x);
 var isEnd = (x) => isHm$1(x) || x === "24:00";
 var toMin$3 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 var hm$6 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -9315,7 +9605,7 @@ function pushStyle(level, caps = {
 	};
 }
 // src/renderer/src/web/lifeFitStore.ts
-var HM$2 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var HM$3 = /^([01]\d|2[0-3]):[0-5]\d$/;
 function readLifeFit(db) {
 	try {
 		return cleanLifeFit(JSON.parse(getSetting(db, "life_fit") || "null"));
@@ -9328,8 +9618,8 @@ function sleepWindow(db) {
 	const bed = getSetting(db, "sleep_bed_target");
 	const wake = getSetting(db, "sleep_weekday_target");
 	return {
-		bed: bed && HM$2.test(bed) ? bed : DEFAULT_BED,
-		wake: wake && HM$2.test(wake) ? wake : DEFAULT_WAKE
+		bed: bed && HM$3.test(bed) ? bed : DEFAULT_BED,
+		wake: wake && HM$3.test(wake) ? wake : DEFAULT_WAKE
 	};
 }
 /** "Short shift tonight" / "no work tonight" / "normal shift" for the app day `day`. */
@@ -14250,7 +14540,7 @@ function energyMap(sessions, quality = [], blocks = []) {
 	};
 }
 /** "09–11 and 16–17" from start hours. */
-function hoursText(hs) {
+function hoursText$1(hs) {
 	const s = [...hs].sort((a, b) => a - b);
 	const runs = [];
 	for (const h of s) {
@@ -14568,7 +14858,7 @@ function profileNote(p, previousBody = "") {
 		list(p.people.map((x) => `${x.name}: ${x.note}`), "none yet"),
 		"",
 		"## Best hours (energy map)",
-		p.energy.ready ? `- Best: ${hoursText(p.energy.best)}${p.energy.worst.length ? `\n- Weakest: ${hoursText(p.energy.worst)}` : ""}` : "- Not enough focus data yet (about a week of sessions).",
+		p.energy.ready ? `- Best: ${hoursText$1(p.energy.best)}${p.energy.worst.length ? `\n- Weakest: ${hoursText$1(p.energy.worst)}` : ""}` : "- Not enough focus data yet (about a week of sessions).",
 		"",
 		"## What works",
 		list(p.works, "Ben is still learning"),
@@ -15488,7 +15778,7 @@ function deskPrompt(s, finance, now = /* @__PURE__ */ new Date()) {
 	const v = deskView(s, finance, now);
 	const d = loadDesk(s.db);
 	const lines = [];
-	if (v.energy.ready) lines.push(`His energy map: best hours ${hoursText(v.energy.best)}${v.energy.worst.length ? `, weakest ${hoursText(v.energy.worst)}` : ""}. Put HARD tasks in the best hours when you plan or move blocks.`);
+	if (v.energy.ready) lines.push(`His energy map: best hours ${hoursText$1(v.energy.best)}${v.energy.worst.length ? `, weakest ${hoursText$1(v.energy.worst)}` : ""}. Put HARD tasks in the best hours when you plan or move blocks.`);
 	if (v.patterns.length) lines.push(`Weekly patterns (his data):\n${v.patterns.map((p) => `- ${p.text} → try: ${p.change}`).join("\n")}`);
 	const ex = excuseLine(d.excuses, v.today);
 	if (ex) lines.push(ex);
@@ -17937,7 +18227,7 @@ function sourceOf(e) {
 	return "bonus";
 }
 /** Moving points into or out of a savings jar is not earning or spending. */
-var isJarMove = (e) => !!e.ref?.startsWith("goal:");
+var isJarMove$1 = (e) => !!e.ref?.startsWith("goal:");
 /** Monday of the week `day` is in. */
 function mondayOf$1(day) {
 	const wd = (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
@@ -17973,7 +18263,7 @@ function earnings(entries, today, span = 30) {
 		spent: 0
 	};
 	for (const e of effective(entries)) {
-		if (isJarMove(e) || e.kind === "adjust") continue;
+		if (isJarMove$1(e) || e.kind === "adjust") continue;
 		const earn = e.kind === "earn" && e.coins > 0 ? e.coins : 0;
 		const spend = e.coins < 0 ? -e.coins : 0;
 		const wk = e.day >= mon && e.day <= today ? thisWeek : e.day >= lastMon && e.day <= addDays$5(today, -7) ? lastWeek : null;
@@ -18181,6 +18471,855 @@ function badgeStats(entries, bought, focusDays) {
 		lucky: live.filter((e) => isExtra(e, "lucky")).length,
 		challenges: live.filter((e) => e.ref?.startsWith("challenge:")).length
 	};
+}
+// src/core/rewardGuard.ts
+var REWARD_RULES = "reward_rules";
+var PAIRS = {
+	workout: {
+		label: "a workout",
+		need: "Log a workout today first",
+		tag: "With a workout"
+	},
+	move: {
+		label: "moving (a workout or a move break)",
+		need: "Move first today: a workout or a move break",
+		tag: "After you move"
+	},
+	focus: {
+		label: "a focus session",
+		need: "Finish a focus session today first",
+		tag: "After focus"
+	}
+};
+var PAIR_IDS = Object.keys(PAIRS);
+function cleanRules(v) {
+	const out = {};
+	if (!v || typeof v !== "object") return out;
+	for (const [id, r] of Object.entries(v)) {
+		if (!/^\d+$/.test(id) || !r || typeof r !== "object") continue;
+		const perDay = Math.max(0, Math.min(20, Math.round(Number(r.perDay) || 0)));
+		const pair = PAIR_IDS.includes(r.pair) ? r.pair : null;
+		if (perDay || pair) out[id] = {
+			...perDay ? { perDay } : {},
+			...pair ? { pair } : {}
+		};
+	}
+	return out;
+}
+function setRules(all, rewardId, r) {
+	const next = { ...all };
+	if (r) next[String(rewardId)] = r;
+	else delete next[String(rewardId)];
+	return cleanRules(next);
+}
+function todayDeeds(entries, today) {
+	const t = effective(entries).filter((e) => e.day === today && e.kind === "earn" && e.coins > 0);
+	const workout = t.some((e) => e.ruleId === "body.workout_done");
+	return {
+		workout,
+		move: workout || t.some((e) => e.module === "body"),
+		focus: t.some((e) => e.ruleId === "focus.session")
+	};
+}
+/** Why the rules stop a buy now, or null. `buysToday`: buys of this reward today that still count. */
+function guardBlocker(r, buysToday, did) {
+	if (!r) return null;
+	if (r.perDay && buysToday >= r.perDay) return r.perDay === 1 ? "Once a day: again tomorrow" : `${r.perDay} a day: again tomorrow`;
+	if (r.pair && !did[r.pair]) return PAIRS[r.pair].need;
+	return null;
+}
+/**
+* "watch": fun took more than 60% of what you earned this week (and at least
+* 60 points), or the budget is down to its last 20% before the month's last
+* week. "over": fun took more than you earned, or the budget is gone early.
+*/
+function funPace(i) {
+	const fun = Math.max(0, i.funSpentWeek);
+	const earned = Math.max(0, i.earnedWeek);
+	const lateMonth = i.dayOfMonth > i.daysInMonth - 7;
+	if (fun >= 60 && fun > earned) return {
+		level: "over",
+		line: `Fun is ahead of earning this week: ${fun} points spent, ${earned} earned. One focus block before the next treat?`
+	};
+	if (i.funBudgetLei != null && i.funBudgetLei > 0 && i.funLeftLei != null) {
+		if (i.funLeftLei <= 0 && !lateMonth) return {
+			level: "over",
+			line: `Your fun budget for the month is used up and there are ${i.daysInMonth - i.dayOfMonth} days to go. Free fun for a bit: a walk, music, friends.`
+		};
+		if (i.funLeftLei < i.funBudgetLei * .2 && !lateMonth) return {
+			level: "watch",
+			line: `Only ${Math.round(i.funLeftLei)} lei of fun budget left this month. Pick the treat that counts most.`
+		};
+	}
+	if (fun >= 60 && fun > earned * .6) return {
+		level: "watch",
+		line: `Fun took ${Math.round(fun / Math.max(1, earned) * 100)}% of what you earned this week. Fine, just keep it planned.`
+	};
+	return {
+		level: "ok",
+		line: null
+	};
+}
+// src/core/rewardSurprise.ts
+var REWARD_COUPONS = "reward_coupons";
+function cleanCoupons(v) {
+	if (!Array.isArray(v)) return [];
+	const out = [];
+	for (const c of v) {
+		if (!c || typeof c.id !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(String(c.made)) || !/^\d{4}-\d{2}-\d{2}$/.test(String(c.expires))) continue;
+		if (c.kind === "free" && Number(c.rewardId) > 0) out.push({
+			id: c.id.slice(0, 40),
+			kind: "free",
+			rewardId: Number(c.rewardId),
+			title: String(c.title ?? "").slice(0, 80),
+			from: String(c.from ?? "").slice(0, 40),
+			made: c.made,
+			expires: c.expires,
+			usedBy: Number(c.usedBy) > 0 ? Number(c.usedBy) : null
+		});
+		else if (c.kind === "off" && Number(c.pct) > 0) out.push({
+			id: c.id.slice(0, 40),
+			kind: "off",
+			pct: Math.min(50, Math.round(Number(c.pct))),
+			from: String(c.from ?? "").slice(0, 40),
+			made: c.made,
+			expires: c.expires,
+			usedBy: Number(c.usedBy) > 0 ? Number(c.usedBy) : null
+		});
+	}
+	return out.slice(-40);
+}
+/** Coupons you can still use today. `liveIds`: ledger ids that still count (an undone buy frees its coupon). */
+function openCoupons(all, today, liveIds) {
+	return all.filter((c) => c.expires >= today && (!c.usedBy || liveIds != null && !liveIds.has(c.usedBy)));
+}
+/** The coupon a buy of this reward would use (a free one for it first, then the biggest % off), and the price after it. */
+function couponFor(reward, open) {
+	const free = open.find((c) => c.kind === "free" && c.rewardId === reward.id);
+	if (free) return {
+		coupon: free,
+		price: 0
+	};
+	const off = [...open].filter((c) => c.kind === "off").sort((a, b) => (b.pct ?? 0) - (a.pct ?? 0) || (a.expires < b.expires ? -1 : 1))[0];
+	if (off) return {
+		coupon: off,
+		price: Math.max(0, Math.round(reward.price * (1 - (off.pct ?? 0) / 100)))
+	};
+	return {
+		coupon: null,
+		price: reward.price
+	};
+}
+/** Small treats from your own list a free coupon can be for (repeatable, at most SMALL_TREAT_MAX points). */
+function smallTreats(rewards) {
+	return rewards.filter((r) => !r.archived && !r.oneTime && r.price > 0 && r.price <= 150);
+}
+/**
+* The prize for one chest. `a` picks the kind, `b` the size or the treat
+* (both 0..1): 30% a free small treat from your list (when you have one),
+* 20% 25% off, else the coins chests always gave (rollChest).
+*/
+function rollChestPrize(level, a, b, treats) {
+	if (a < .3 && treats.length) {
+		const t = treats[Math.min(treats.length - 1, Math.floor(b * treats.length))];
+		return {
+			kind: "free",
+			rewardId: t.id,
+			title: t.title
+		};
+	}
+	if (a < .5) return {
+		kind: "off",
+		pct: 25
+	};
+	return {
+		kind: "coins",
+		coins: rollChest(level, b)
+	};
+}
+/** A coupon for a prize (none for coins). */
+function prizeCoupon(p, from, today, id) {
+	if (p.kind === "coins") return null;
+	const base = {
+		id,
+		from,
+		made: today,
+		expires: addDays$5(today, 14),
+		usedBy: null
+	};
+	return p.kind === "free" ? {
+		...base,
+		kind: "free",
+		rewardId: p.rewardId,
+		title: p.title
+	} : {
+		...base,
+		kind: "off",
+		pct: p.pct
+	};
+}
+/** Open once a week, when all of this week's top 3 are done. */
+function mysteryState(plan, week, coupons) {
+	const active = plan && plan.week === week ? plan : null;
+	const total = active?.big3.length ?? 0;
+	const done = active?.big3.filter((b) => b.done).length ?? 0;
+	const claimed = coupons.some((c) => c.from === `mystery:${week}`);
+	return {
+		week: active ? week : null,
+		done,
+		total,
+		ready: total >= 3 && done >= total && !claimed,
+		claimed
+	};
+}
+/** The mystery prize: 60% a free small treat from your list (when you have one), else 30% off. Never coins. */
+function rollMystery(a, b, treats) {
+	if (a < .6 && treats.length) {
+		const t = treats[Math.min(treats.length - 1, Math.floor(b * treats.length))];
+		return {
+			kind: "free",
+			rewardId: t.id,
+			title: t.title
+		};
+	}
+	return {
+		kind: "off",
+		pct: 30
+	};
+}
+// src/core/rewardActivity.ts
+var AREAS = [
+	{
+		id: "focus",
+		label: "Focus",
+		emoji: "🎯",
+		color: "#a78bfa"
+	},
+	{
+		id: "mustdo",
+		label: "Must-dos",
+		emoji: "✅",
+		color: "#c8f135"
+	},
+	{
+		id: "tasks",
+		label: "Tasks",
+		emoji: "📋",
+		color: "#38bdf8"
+	},
+	{
+		id: "body",
+		label: "Body",
+		emoji: "💪",
+		color: "#f97316"
+	},
+	{
+		id: "sleep",
+		label: "Sleep",
+		emoji: "🌙",
+		color: "#818cf8"
+	},
+	{
+		id: "discipline",
+		label: "Discipline",
+		emoji: "🛡️",
+		color: "#34d399"
+	},
+	{
+		id: "money",
+		label: "Money",
+		emoji: "💰",
+		color: "#facc15"
+	},
+	{
+		id: "habits",
+		label: "Habits",
+		emoji: "🌱",
+		color: "#2dd4bf"
+	},
+	{
+		id: "bonus",
+		label: "Bonuses",
+		emoji: "✨",
+		color: "#f472b6"
+	}
+];
+/** The area a point belongs to, by the module (and ref) that paid it. */
+function areaOf(e) {
+	const ref = e.ref ?? "";
+	if (/^(extra|quest|chest|challenge|saved):/.test(ref) || e.module === "quests" || e.module === "shop") return "bonus";
+	if (e.module === "focus" || e.module === "schedule") return "focus";
+	if (e.module === "plan") return "mustdo";
+	if (e.module === "tasks" || ref.startsWith("task:")) return "tasks";
+	if (e.module === "body" || e.module === "grand_slam") return "body";
+	if (e.module === "sleep") return "sleep";
+	if (e.module === "discipline") return "discipline";
+	if (e.module === "money") return "money";
+	if (e.module === "habits" || e.module === "face" || e.ruleId?.startsWith("habit.")) return "habits";
+	return "bonus";
+}
+var isJarMove = (e) => !!e.ref?.startsWith("goal:");
+/** This week's earned points by area (live rows only), biggest first, with each one's share. */
+function weekAreas(entries, today) {
+	const mon = mondayOf$1(today);
+	const by = /* @__PURE__ */ new Map();
+	for (const e of effective(entries)) {
+		if (e.kind !== "earn" || !(e.coins > 0) || isJarMove(e) || e.day < mon || e.day > today) continue;
+		const a = areaOf(e);
+		by.set(a, (by.get(a) ?? 0) + e.coins);
+	}
+	const total = [...by.values()].reduce((s, n) => s + n, 0);
+	return AREAS.filter((a) => (by.get(a.id) ?? 0) > 0).map((a) => ({
+		...a,
+		points: by.get(a.id),
+		share: total ? by.get(a.id) / total : 0
+	})).sort((a, b) => b.points - a.points);
+}
+var KIND_WORDS = [
+	["security", /\b(ctf|cyber|secur|hack|pwn|htb|hackthebox|tryhackme|thm|exploit|reverse|crypto|forensic|pentest|red team|blue team|osint)/i],
+	["code", /\b(cod(e|ing)|program|dev|rust|python|js|javascript|typescript|ts|react|go|golang|c\+\+|java|git|bug|build|app|website|api|leetcode|algorithm)/i],
+	["study", /\b(study|uni|universit|class|course|exam|lecture|homework|read|book|learn|math|physics|english|notes|revision)/i],
+	["work", /\b(work|job|shift|client|office|meeting)/i]
+];
+/** What kind of focus a subject is ("Rust" = code, "CTF practice" = security). */
+function focusKind(subject) {
+	const s = String(subject ?? "");
+	for (const [k, re] of KIND_WORDS) if (re.test(s)) return k;
+	return "other";
+}
+function activity(i) {
+	const { today } = i;
+	const week = mondayOf$1(today);
+	const live = effective(i.ledger);
+	const inWeek = (d) => d >= week && d <= today;
+	const last7 = (d) => d > addDays$5(today, -7) && d <= today;
+	let earnedWeek = 0;
+	let spentWeek = 0;
+	let funSpentWeek = 0;
+	let funTimesWeek = 0;
+	let movedToday = false;
+	const active = /* @__PURE__ */ new Set();
+	const funIds = new Set((i.funRewardIds ?? []).map((n) => `reward:${n}`));
+	for (const e of live) {
+		if (isJarMove(e) || e.kind === "adjust") continue;
+		if (e.kind === "earn" && e.coins > 0) {
+			if (last7(e.day)) active.add(e.day);
+			if (inWeek(e.day)) earnedWeek += e.coins;
+			if (e.day === today && e.module === "body") movedToday = true;
+		}
+		if (e.coins < 0 && inWeek(e.day)) {
+			spentWeek += -e.coins;
+			if (e.module === "fun" || e.module === "shop" && funIds.has(e.ref ?? "")) {
+				funSpentWeek += -e.coins;
+				funTimesWeek++;
+			}
+		}
+	}
+	const focusByKind = {
+		code: 0,
+		security: 0,
+		study: 0,
+		work: 0,
+		other: 0
+	};
+	let focusMinWeek = 0;
+	let focusToday = 0;
+	for (const f of i.focus) {
+		const m = Math.max(0, Math.round(Number(f.minutes) || 0));
+		if (f.day === today) focusToday += m;
+		if (!inWeek(f.day)) continue;
+		focusMinWeek += m;
+		focusByKind[focusKind(f.subject)] += m;
+	}
+	const wdays = [...new Set(i.workoutDays)];
+	const workoutToday = wdays.includes(today);
+	const goal = i.waterGoalMl && i.waterGoalMl > 0 ? i.waterGoalMl : 2e3;
+	return {
+		today,
+		week,
+		earnedWeek,
+		spentWeek,
+		funSpentWeek,
+		funTimesWeek,
+		areas: weekAreas(i.ledger, today),
+		focusMinWeek,
+		focusByKind,
+		focusToday,
+		workoutsWeek: wdays.filter(inWeek).length,
+		workoutStreak: i.workoutStreak ?? dayStreak(wdays, today),
+		workoutToday,
+		movedToday: movedToday || workoutToday,
+		sleepNights7: new Set(i.sleep.filter((s) => last7(s.day) && s.onTime && s.bedOnTime !== false).map((s) => s.day)).size,
+		waterDays7: Object.entries(i.water ?? {}).filter(([d, ml]) => last7(d) && ml >= goal).length,
+		musicSaved: Math.max(0, i.musicSaved ?? 0),
+		activeDays7: active.size
+	};
+}
+/** Hours with one decimal ("9.5"), whole from 10 up. */
+var hoursText = (min) => {
+	const h = min / 60;
+	return h >= 10 ? String(Math.round(h)) : (Math.round(h * 10) / 10).toString();
+};
+// src/core/rewardSuggest.ts
+var SUGGEST_HIDDEN = "reward_suggest_hidden";
+var BANDS = {
+	daily: {
+		label: "Small treat",
+		hint: "up to 150 points",
+		tier: "bronze"
+	},
+	weekly: {
+		label: "Weekly",
+		hint: "300–800 points",
+		tier: "silver"
+	},
+	monthly: {
+		label: "Monthly",
+		hint: "1,000–3,000 points",
+		tier: "gold"
+	},
+	big: {
+		label: "Big goal",
+		hint: "save up for it",
+		tier: "legendary"
+	}
+};
+var S = (key, title, emoji, category, band, points, lei, tags, more = {}) => ({
+	key,
+	title,
+	emoji,
+	category,
+	band,
+	points,
+	lei,
+	tags,
+	...more
+});
+/** About 50 starter rewards. Made-up typical prices; yours are what you type. */
+var STARTERS = [
+	S("snack", "Favourite snack", "🍫", "food", "daily", 60, 25, ["food"], { rules: { perDay: 1 } }),
+	S("episode", "An episode of your show", "📺", "fun", "daily", 80, 0, ["rest"], { rules: { perDay: 2 } }),
+	S("game30", "30 min of gaming", "🎮", "fun", "daily", 45, 0, ["gaming"], { rules: { perDay: 2 } }),
+	S("game60", "An hour of gaming", "🕹️", "fun", "daily", 90, 0, ["gaming"], {
+		rules: {
+			perDay: 1,
+			pair: "focus"
+		},
+		note: "After a focus session"
+	}),
+	S("coffee", "A fancy coffee", "☕", "food", "daily", 70, 45, [
+		"code",
+		"study",
+		"focus"
+	], { rules: { perDay: 1 } }),
+	S("bubbletea", "Bubble tea", "🧋", "food", "daily", 90, 55, ["food"], { cooldownDays: 2 }),
+	S("podcast", "Podcast or album while you walk", "🎧", "fun", "daily", 40, 0, ["music", "fitness"], {
+		rules: {
+			perDay: 2,
+			pair: "move"
+		},
+		note: "Only while you walk or train"
+	}),
+	S("mask", "Long shower and a face mask", "🧖", "selfcare", "daily", 50, 20, ["rest", "sleep"]),
+	S("liein", "Sleep in an hour on the weekend", "😴", "selfcare", "daily", 120, 0, ["sleep"], {
+		cooldownDays: 7,
+		unlock: {
+			kind: "deed",
+			deed: "sleepNights",
+			target: 5
+		}
+	}),
+	S("stream", "45 min of videos, no guilt", "📱", "fun", "daily", 60, 0, ["rest"], { rules: { perDay: 1 } }),
+	S("icecream", "Ice cream", "🍦", "food", "daily", 50, 20, ["fitness", "food"]),
+	S("smoothie", "Smoothie after training", "🥤", "food", "daily", 70, 40, ["fitness"], { rules: {
+		perDay: 1,
+		pair: "workout"
+	} }),
+	S("functf", "A CTF just for fun, no notes", "🚩", "fun", "daily", 100, 0, ["security"], { cooldownDays: 3 }),
+	S("sticker", "A sticker for your laptop", "💻", "gear", "daily", 60, 30, ["code"], { monthLimit: 2 }),
+	S("lofi", "A new playlist to focus to", "🎶", "fun", "daily", 30, 0, ["music", "focus"], { rules: { perDay: 1 } }),
+	S("cinema", "Cinema night", "🎬", "experience", "weekly", 400, 120, ["social", "rest"], { cooldownDays: 7 }),
+	S("takeaway", "Takeaway dinner", "🥡", "food", "weekly", 350, 180, ["food"], { cooldownDays: 5 }),
+	S("pizza", "Pizza night", "🍕", "food", "weekly", 300, 150, ["food", "social"], { cooldownDays: 5 }),
+	S("musicsub", "A month of a music subscription", "🎵", "fun", "weekly", 500, 60, ["music"], { monthLimit: 1 }),
+	S("album", "Merch or an album from an artist you love", "💿", "fun", "weekly", 450, 150, ["music"]),
+	S("book", "A new book", "📚", "gear", "weekly", 500, 200, [
+		"study",
+		"code",
+		"security"
+	]),
+	S("module", "One course module", "🎓", "gear", "weekly", 700, 250, ["study", "code"], { unlock: {
+		kind: "deed",
+		deed: "focusHours",
+		target: 6
+	} }),
+	S("techbook", "A tech book (Linux, Rust, security)", "📘", "gear", "weekly", 700, 400, ["code", "security"]),
+	S("gamenight", "A long gaming evening (3 h)", "🎮", "fun", "weekly", 350, 0, ["gaming"], {
+		cooldownDays: 6,
+		unlock: {
+			kind: "deed",
+			deed: "focusHours",
+			target: 10
+		},
+		note: "Unlocks after 10 h of focus this week"
+	}),
+	S("bowling", "Bowling or billiards with friends", "🎳", "experience", "weekly", 500, 200, ["social"]),
+	S("band", "Resistance bands or gym gloves", "🏋️", "gear", "weekly", 400, 200, ["fitness"], { oneTime: true }),
+	S("massage", "A massage", "💆", "selfcare", "weekly", 800, 400, ["fitness", "sleep"], {
+		cooldownDays: 30,
+		unlock: {
+			kind: "deed",
+			deed: "workouts",
+			target: 4
+		}
+	}),
+	S("noalarm", "A morning without the alarm", "🛌", "selfcare", "weekly", 300, 0, ["sleep"], {
+		cooldownDays: 7,
+		unlock: {
+			kind: "deed",
+			deed: "sleepNights",
+			target: 5
+		}
+	}),
+	S("brunch", "Brunch out", "🥞", "food", "weekly", 450, 220, ["social", "food"]),
+	S("indie", "DLC or a small indie game", "👾", "fun", "weekly", 600, 150, ["gaming"], { unlock: {
+		kind: "deed",
+		deed: "workouts",
+		target: 4
+	} }),
+	S("bottle", "A really good water bottle", "🚰", "gear", "weekly", 350, 180, ["water"], {
+		oneTime: true,
+		unlock: {
+			kind: "deed",
+			deed: "waterDays",
+			target: 5
+		}
+	}),
+	S("keycaps", "A new keycap set", "⌨️", "gear", "weekly", 650, 350, ["code"], { oneTime: true }),
+	S("newgame", "A new game", "🎮", "fun", "monthly", 1500, 700, ["gaming"], {
+		oneTime: true,
+		unlock: {
+			kind: "streak",
+			streak: "workout",
+			days: 7
+		},
+		note: "Unlocks at a 7-day workout streak"
+	}),
+	S("headphones", "New headphones", "🎧", "gear", "monthly", 2500, 1200, ["music", "code"], { oneTime: true }),
+	S("keyboard", "A mechanical keyboard", "⌨️", "gear", "monthly", 2200, 1100, ["code"], {
+		oneTime: true,
+		unlock: {
+			kind: "deed",
+			deed: "codeHours",
+			target: 10
+		}
+	}),
+	S("gymgear", "Training shoes or a set of weights", "👟", "gear", "monthly", 2e3, 1e3, ["fitness"], {
+		oneTime: true,
+		unlock: {
+			kind: "streak",
+			streak: "workout",
+			days: 14
+		}
+	}),
+	S("ctfsub", "A month of a hacking lab platform", "🚩", "gear", "monthly", 1200, 250, ["security"], { monthLimit: 1 }),
+	S("certstep", "A step towards a certification (save 500 lei)", "🛡️", "big", "monthly", 3e3, 500, ["security", "study"], { monthLimit: 1 }),
+	S("course", "A full online course", "🎓", "gear", "monthly", 2500, 900, ["study", "code"]),
+	S("concert", "A concert ticket", "🎤", "experience", "monthly", 2e3, 600, ["music", "social"]),
+	S("daytrip", "A day trip somewhere new", "🚆", "experience", "monthly", 1800, 500, ["social", "rest"]),
+	S("lamp", "A good desk lamp or a monitor arm", "💡", "gear", "monthly", 1400, 600, ["code", "study"]),
+	S("tracker", "A fitness tracker or smart band", "⌚", "gear", "monthly", 2800, 1500, ["fitness", "sleep"], { oneTime: true }),
+	S("sleepkit", "Sleep kit: blackout mask, earplugs, a good pillow", "🌙", "selfcare", "monthly", 1e3, 450, ["sleep"], {
+		oneTime: true,
+		unlock: {
+			kind: "deed",
+			deed: "sleepNights",
+			target: 5
+		}
+	}),
+	S("spa", "A spa day", "🧖", "selfcare", "monthly", 1600, 700, ["rest"]),
+	S("laptop", "New laptop fund", "💻", "big", "big", 15e3, 18e3, ["code", "security"], { oneTime: true }),
+	S("trip", "A weekend trip", "🏔️", "big", "big", 8e3, 3e3, ["social", "rest"], { oneTime: true }),
+	S("certexam", "Certification exam fund", "🎖️", "big", "big", 12e3, 6e3, ["security", "study"], { oneTime: true }),
+	S("bike", "A good bike", "🚲", "big", "big", 9e3, 5e3, ["fitness"], { oneTime: true }),
+	S("speakers", "Studio speakers for your music", "🔊", "big", "big", 6e3, 2500, ["music"], { oneTime: true }),
+	S("pcupgrade", "A PC upgrade", "🖥️", "big", "big", 1e4, 7e3, ["gaming", "code"], { oneTime: true }),
+	S("festival", "A music festival ticket", "🎪", "big", "big", 5e3, 2e3, ["music", "social"], { oneTime: true })
+];
+var starterByKey = (key) => STARTERS.find((s) => s.key === key);
+var plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** How strongly each kind of reward fits what you did, and the line that says so. */
+function signals(a) {
+	const h = (min) => min / 60;
+	const code = a.focusByKind.code;
+	const sec = a.focusByKind.security;
+	const study = a.focusByKind.study;
+	const fit = Math.max(a.workoutsWeek / 4, a.workoutStreak / 7);
+	return {
+		code: {
+			score: Math.min(1, h(code) / 8),
+			why: code >= 30 ? `You coded ${hoursText(code)} h this week` : null
+		},
+		security: {
+			score: Math.min(1, h(sec) / 5),
+			why: sec >= 30 ? `${hoursText(sec)} h of security practice this week` : null
+		},
+		study: {
+			score: Math.min(1, h(study) / 6),
+			why: study >= 30 ? `You studied ${hoursText(study)} h this week` : null
+		},
+		focus: {
+			score: Math.min(1, h(a.focusMinWeek) / 12),
+			why: a.focusMinWeek >= 60 ? `${hoursText(a.focusMinWeek)} h of focus this week` : null
+		},
+		fitness: {
+			score: Math.min(1, fit),
+			why: a.workoutStreak >= 3 ? `A ${a.workoutStreak}-day workout streak` : a.workoutsWeek > 0 ? `${plural(a.workoutsWeek, "workout")} this week` : null
+		},
+		sleep: {
+			score: Math.min(1, a.sleepNights7 / 6),
+			why: a.sleepNights7 >= 3 ? `On time ${a.sleepNights7} of the last 7 nights` : null
+		},
+		water: {
+			score: Math.min(1, a.waterDays7 / 6),
+			why: a.waterDays7 >= 3 ? `At your water goal ${a.waterDays7} of the last 7 days` : null
+		},
+		music: {
+			score: a.musicSaved > 0 ? Math.min(1, .45 + a.musicSaved / 30) : .15,
+			why: a.musicSaved > 0 ? `You keep ${plural(a.musicSaved, "track")} and stations saved` : null
+		},
+		gaming: {
+			score: a.funTimesWeek > 0 ? Math.min(1, .45 + a.funTimesWeek / 6) : .3,
+			why: a.funTimesWeek > 0 ? `You took fun time ${a.funTimesWeek}× this week` : null
+		},
+		rest: {
+			score: a.activeDays7 / 7 * .6,
+			why: a.activeDays7 >= 5 ? `Active ${a.activeDays7} of the last 7 days: rest is earned` : null
+		},
+		social: {
+			score: .25,
+			why: null
+		},
+		food: {
+			score: .3,
+			why: null
+		}
+	};
+}
+var norm$1 = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+var lowerFirst = (t) => /^[A-Z](?=[a-z ])/.test(t) ? t[0].toLowerCase() + t.slice(1) : t;
+/** A small, stable shuffle per week, so the row changes a little each week. */
+function jitter(key, week) {
+	let h = 2166136261;
+	for (const ch of `${key}|${week}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619);
+	return (h >>> 0) % 1e3 / 1e3;
+}
+function reasonFor(s, sig, i) {
+	const best = s.tags.map((t) => sig[t]).filter((x) => x.why).sort((a, b) => b.score - a.score)[0];
+	const t = lowerFirst(s.title);
+	if (best?.why) return `${best.why}: ${t} fits.`;
+	if (s.band === "big") return i.hasGoal ? "Something big to save for next." : "Something big to save for, with milestones on the way.";
+	if (i.balance >= s.points) return "You can get it today with what you have.";
+	const days = i.perDay > 0 ? Math.ceil((s.points - i.balance) / i.perDay) : null;
+	return days != null && days <= 14 ? `About ${plural(days, "day")} of your usual earning.` : "A treat worth working towards.";
+}
+/** The row: the best fit of each size first, then the next best, at most 2 per kind of reward. */
+function suggest(i) {
+	const sig = signals(i.activity);
+	if (i.funOver) sig.gaming = {
+		score: .1,
+		why: null
+	};
+	const have = new Set(i.have.map(norm$1));
+	const hidden = new Set(i.hidden);
+	const limit = i.limit ?? 8;
+	const scored = STARTERS.filter((s) => !hidden.has(s.key) && !have.has(norm$1(s.title)) && (!i.only || i.only(s))).map((s) => {
+		let score = Math.max(...s.tags.map((t) => sig[t].score));
+		if (s.points <= i.balance) score += .3;
+		else if (i.perDay > 0 && s.points <= i.balance + i.perDay * 7) score += .2;
+		else if (i.perDay > 0 && s.points <= i.perDay * 40) score += .1;
+		if (s.band === "big") score += i.hasGoal ? -.15 : .2;
+		if (i.funOver && s.category === "fun") score -= .35;
+		if (s.unlock) score += .05;
+		score += jitter(s.key, i.activity.week) * .08;
+		const lead = s.tags.reduce((b, t) => sig[t].score > sig[b].score ? t : b, s.tags[0]);
+		return {
+			starter: s,
+			score: Math.round(score * 1e3) / 1e3,
+			reason: reasonFor(s, sig, i),
+			affordable: s.points <= i.balance,
+			lead
+		};
+	});
+	scored.sort((a, b) => b.score - a.score);
+	const out = [];
+	const perCat = /* @__PURE__ */ new Map();
+	const perLead = /* @__PURE__ */ new Map();
+	const take = (x) => {
+		out.push(x);
+		perCat.set(x.starter.category, (perCat.get(x.starter.category) ?? 0) + 1);
+		perLead.set(x.lead, (perLead.get(x.lead) ?? 0) + 1);
+	};
+	for (const band of Object.keys(BANDS)) {
+		const x = scored.find((y) => y.starter.band === band);
+		if (x && out.length < limit) take(x);
+	}
+	for (const x of scored) {
+		if (out.length >= limit) break;
+		if (out.includes(x) || (perCat.get(x.starter.category) ?? 0) >= 2 || (perLead.get(x.lead) ?? 0) >= 2) continue;
+		take(x);
+	}
+	for (const x of scored) if (out.length < limit && !out.includes(x)) take(x);
+	return out.sort((a, b) => b.score - a.score).map(({ lead: _lead, ...x }) => x);
+}
+/** What "Add to my rewards" saves (the reward itself; its limits and lock are saved beside it). */
+function starterReward(s) {
+	return {
+		title: s.title,
+		price: s.points,
+		tier: BANDS[s.band].tier,
+		realCost: s.lei,
+		pinned: false,
+		note: s.note ?? null,
+		imageUrl: null,
+		productUrl: null,
+		currency: "MDL",
+		emoji: s.emoji,
+		category: s.category,
+		cooldownDays: s.cooldownDays ?? 0,
+		monthLimit: s.monthLimit ?? 0,
+		oneTime: !!s.oneTime,
+		bundle: null,
+		priceLocked: true
+	};
+}
+// src/core/unlocks.ts
+var REWARD_UNLOCKS = "reward_unlocks";
+/** How each deed reads: "10 h of focus this week". `unit` follows the number. */
+var DEED_LABEL = {
+	focusHours: {
+		label: "focus",
+		unit: "h",
+		window: "this week",
+		max: 80
+	},
+	codeHours: {
+		label: "coding or security practice",
+		unit: "h",
+		window: "this week",
+		max: 80
+	},
+	workouts: {
+		label: "workouts",
+		unit: "",
+		window: "this week",
+		max: 7
+	},
+	sleepNights: {
+		label: "nights on time",
+		unit: "",
+		window: "in the last 7",
+		max: 7
+	},
+	waterDays: {
+		label: "days at your water goal",
+		unit: "",
+		window: "in the last 7",
+		max: 7
+	}
+};
+var DEEDS = Object.keys(DEED_LABEL);
+var deedText = (d, n) => {
+	const l = DEED_LABEL[d];
+	return l.unit ? `${n} ${l.unit} of ${l.label}` : `${n} ${l.label}`;
+};
+/** "10 h of focus this week", "5 nights on time in the last 7". */
+var deedGoalText = (d, target) => `${deedText(d, target)} ${DEED_LABEL[d].window}`;
+var STREAK_LABEL = {
+	workout: "training",
+	focus: "focus",
+	clean: "clean",
+	wake: "up-on-time"
+};
+var STREAKS = Object.keys(STREAK_LABEL);
+function cleanUnlocks(v) {
+	const out = {};
+	if (!v || typeof v !== "object") return out;
+	for (const [id, u] of Object.entries(v)) {
+		if (!/^\d+$/.test(id) || !u) continue;
+		if (u.kind === "goal" && Number(u.goalId) > 0) out[id] = {
+			kind: "goal",
+			goalId: Number(u.goalId),
+			title: String(u.title ?? "goal").slice(0, 80)
+		};
+		else if (u.kind === "streak" && STREAKS.includes(u.streak) && Number(u.days) >= 1) out[id] = {
+			kind: "streak",
+			streak: u.streak,
+			days: Math.min(365, Math.round(Number(u.days)))
+		};
+		else if (u.kind === "deed" && DEEDS.includes(u.deed) && Number(u.target) > 0) out[id] = {
+			kind: "deed",
+			deed: u.deed,
+			target: Math.min(DEED_LABEL[u.deed].max, Math.round(Number(u.target) * 2) / 2)
+		};
+	}
+	return out;
+}
+function setUnlock(all, rewardId, u) {
+	const next = { ...all };
+	if (u) next[String(rewardId)] = u;
+	else delete next[String(rewardId)];
+	return cleanUnlocks(next);
+}
+function unlockState(u, f) {
+	if (u.kind === "goal") {
+		const g = f.goals.find((x) => x.id === u.goalId);
+		if (!g) return {
+			met: false,
+			text: `Unlocks with the goal "${u.title}" (that goal is no longer on your list: pick another lock)`,
+			progress: 0
+		};
+		return g.done ? {
+			met: true,
+			text: `Unlocked: ${g.title} is done`,
+			progress: 1
+		} : {
+			met: false,
+			text: `Unlocks when "${g.title}" is done`,
+			progress: 0
+		};
+	}
+	if (u.kind === "deed") {
+		const raw = Math.max(0, f.deeds?.[u.deed] ?? 0);
+		const now = Math.floor(raw * 10) / 10;
+		const l = DEED_LABEL[u.deed];
+		return now >= u.target ? {
+			met: true,
+			text: `Unlocked: ${deedText(u.deed, now)} ${l.window}`,
+			progress: 1
+		} : {
+			met: false,
+			text: `Unlocks at ${deedGoalText(u.deed, u.target)} (now ${now}${l.unit ? ` ${l.unit}` : ""})`,
+			progress: now / u.target
+		};
+	}
+	const cur = Math.max(0, f.streaks[u.streak] ?? 0);
+	const label = STREAK_LABEL[u.streak];
+	return cur >= u.days ? {
+		met: true,
+		text: `Unlocked: ${cur}-day ${label} streak`,
+		progress: 1
+	} : {
+		met: false,
+		text: `Unlocks at a ${u.days}-day ${label} streak (now ${cur})`,
+		progress: cur / u.days
+	};
+}
+/** The reason a reward can't be bought yet because of its lock, or null. */
+function unlockBlocker(u, f) {
+	if (!u) return null;
+	const s = unlockState(u, f);
+	return s.met ? null : s.text;
 }
 // src/main/points.ts
 /** rule id → [old default, new value]. */
@@ -18449,8 +19588,79 @@ var Shop = class {
 			})),
 			buys: this.buys(undone),
 			today: day,
-			economy: this.economy?.getEconomySummary(now)
+			economy: this.economy?.getEconomySummary(now),
+			rules: this.rules(),
+			guards: this.guards(day, undone, all),
+			coupons: openCoupons(this.coupons(), day, new Set(liveRows.map((e) => e.id)))
 		};
+	}
+	rules() {
+		return cleanRules(this.json(REWARD_RULES));
+	}
+	setRules(rewardId, r) {
+		this.reward(rewardId);
+		setSetting(this.db, REWARD_RULES, JSON.stringify(setRules(this.rules(), rewardId, r)));
+	}
+	/** Why each reward with rules can't be bought now (null = fine), from today's logged rows. */
+	guards(day, undone, all = this.wallet.entries()) {
+		const rules = this.rules();
+		const ids = Object.keys(rules);
+		if (!ids.length) return {};
+		const did = todayDeeds(all, day);
+		const buys = this.buys(undone);
+		return Object.fromEntries(ids.map((id) => [Number(id), guardBlocker(rules[id], (buys[Number(id)] ?? []).filter((d) => d === day).length, did)]));
+	}
+	json(key) {
+		try {
+			return JSON.parse(getSetting(this.db, key) || "null");
+		} catch {
+			return null;
+		}
+	}
+	/** Every coupon (used and expired ones too, the last 40). */
+	coupons() {
+		return cleanCoupons(this.json(REWARD_COUPONS));
+	}
+	saveCoupons(list) {
+		setSetting(this.db, REWARD_COUPONS, JSON.stringify(cleanCoupons(list)));
+	}
+	addCoupon(c) {
+		this.saveCoupons([...this.coupons(), c]);
+	}
+	/** The weekly mystery reward: open once all of this week's top 3 are done. */
+	mystery(plan, now = /* @__PURE__ */ new Date()) {
+		return mysteryState(plan, mondayOf$1(dayKey(now, this.timeZone)), this.coupons());
+	}
+	/** Opens the mystery reward: a coupon (a free small treat from your list, or 30% off). Never points. */
+	claimMystery(plan, now = /* @__PURE__ */ new Date()) {
+		return this.db.transaction(() => {
+			const m = this.mystery(plan, now);
+			if (m.claimed) throw new LedgerError("Already opened this week");
+			if (!m.ready) throw new LedgerError(m.total >= 3 ? `Finish your top 3 first (${m.done} of ${m.total} done)` : "Pick your top 3 for the week first");
+			const day = dayKey(now, this.timeZone);
+			const prize = rollMystery(this.rand(), this.rand(), smallTreats(this.rewards()));
+			this.addCoupon(prizeCoupon(prize, `mystery:${m.week}`, day, `m${m.week}`));
+			return prize;
+		})();
+	}
+	hiddenSuggestions() {
+		const v = this.json(SUGGEST_HIDDEN);
+		return Array.isArray(v) ? v.map(String).slice(-200) : [];
+	}
+	hideSuggestion(key) {
+		setSetting(this.db, SUGGEST_HIDDEN, JSON.stringify([.../* @__PURE__ */ new Set([...this.hiddenSuggestions(), String(key).slice(0, 40)])].slice(-200)));
+	}
+	/** "Add to my rewards": the starter reward, with its healthy limits and its "unlock by doing" lock. Returns the new id. */
+	addStarter(key) {
+		const st = starterByKey(key);
+		if (!st) throw new LedgerError("That suggestion is gone");
+		return this.db.transaction(() => {
+			this.save(starterReward(st));
+			const id = this.db.prepare("SELECT MAX(id) AS id FROM rewards").get().id;
+			if (st.rules) this.setRules(id, st.rules);
+			if (st.unlock) setSetting(this.db, REWARD_UNLOCKS, JSON.stringify(setUnlock(cleanUnlocks(this.json(REWARD_UNLOCKS)), id, st.unlock)));
+			return id;
+		})();
 	}
 	/**
 	* Adds or edits a reward. On an edit, fields the caller leaves out keep
@@ -18564,10 +19774,21 @@ var Shop = class {
 	redeem(id, now = /* @__PURE__ */ new Date(), opts = {}) {
 		return this.db.transaction(() => {
 			this.migrateFunBudget();
-			const reward = this.reward(id);
+			const listed = this.reward(id);
 			const all = this.wallet.entries();
 			const day = dayKey(now, this.timeZone);
 			const undone = this.undoneIds();
+			const guard = this.guards(day, undone, all)[id];
+			if (guard) throw new LedgerError(guard);
+			const live = new Set(this.wallet.effective().map((e) => e.id));
+			const deal = opts.noCoupon ? {
+				coupon: null,
+				price: listed.price
+			} : couponFor(listed, openCoupons(this.coupons(), day, live));
+			const reward = {
+				...listed,
+				price: deal.price
+			};
 			planRedeem({
 				reward,
 				balance: balance(all),
@@ -18591,8 +19812,12 @@ var Shop = class {
 				coins: -(reward.price - fromJar),
 				xp: 0,
 				ref: `reward:${id}`,
-				note: reward.title
+				note: deal.coupon ? `${reward.title} (coupon: ${deal.coupon.kind === "free" ? "free" : `${deal.coupon.pct}% off`})` : reward.title
 			});
+			if (deal.coupon) this.saveCoupons(this.coupons().map((c) => c.id === deal.coupon.id ? {
+				...c,
+				usedBy: ledgerId
+			} : c));
 			this.db.prepare("INSERT INTO redemptions (ledger_id, reward_id, title, real_cost, day, jar_used) VALUES (?, ?, ?, ?, ?, ?)").run(ledgerId, id, reward.title, paid, day, fromJar);
 			if (fromJar && reward.jarGoalId) this.db.prepare("UPDATE wishlist_goals SET allocated_coins = allocated_coins - ?, completed = 0, completed_at = NULL WHERE id = ?").run(fromJar, reward.jarGoalId);
 			if (reward.oneTime) this.db.prepare("UPDATE rewards SET archived = 1, pinned = 0, goal_rank = 0 WHERE id = ?").run(id);
@@ -18658,21 +19883,37 @@ var Shop = class {
 			this.db.prepare("UPDATE wishlist_goals SET allocated_coins = allocated_coins - ?, completed = 0, completed_at = NULL WHERE id = ?").run(n, r.jarGoalId);
 		})();
 	}
+	/** Opens a level chest: its coins (0 when the prize is a coupon). */
 	openChest(level, now = /* @__PURE__ */ new Date()) {
+		const p = this.openChestPrize(level, now);
+		return p.kind === "coins" ? p.coins : 0;
+	}
+	/**
+	* A level chest (one per level reached through real XP): the small coin
+	* bonus chests always gave, or a coupon for a free small treat from your
+	* own list or 25% off one reward. The chest's ledger row marks it opened.
+	*/
+	openChestPrize(level, now = /* @__PURE__ */ new Date()) {
 		return this.db.transaction(() => {
-			if (!this.state(now).chests.includes(level)) throw new LedgerError("No chest waiting for that level");
-			const coins = rollChest(level, this.rand());
-			this.wallet.append({
+			const s = this.state(now);
+			if (!s.chests.includes(level)) throw new LedgerError("No chest waiting for that level");
+			const day = dayKey(now, this.timeZone);
+			const prize = rollChestPrize(level, this.rand(), this.rand(), smallTreats(s.rewards));
+			const coins = prize.kind === "coins" ? prize.coins : 0;
+			const note = prize.kind === "coins" ? `Level ${level} chest` : `Level ${level} chest: ${prize.kind === "free" ? `free ${prize.title}` : `${prize.pct}% off a reward`}`;
+			const ledgerId = this.wallet.append({
 				ts: now.toISOString(),
-				day: dayKey(now, this.timeZone),
+				day,
 				module: "shop",
 				kind: "earn",
 				coins,
 				xp: 0,
 				ref: chestRef(level),
-				note: `Level ${level} chest`
+				note
 			});
-			return coins;
+			const c = prizeCoupon(prize, chestRef(level), day, `c${ledgerId}`);
+			if (c) this.addCoupon(c);
+			return prize;
 		}).immediate();
 	}
 	/** Days with a paid focus session (the flame and the streak bonus). */
@@ -21971,68 +23212,481 @@ function weekTime(i) {
 		line
 	};
 }
-// src/core/unlocks.ts
-var REWARD_UNLOCKS = "reward_unlocks";
-var STREAK_LABEL = {
-	workout: "training",
-	focus: "focus",
-	clean: "clean",
-	wake: "up-on-time"
+// src/core/islandKeys.ts
+/** The modifiers, in the order they are written. */
+var MOD_ORDER = [
+	"Control",
+	"Alt",
+	"Shift",
+	"Super"
+];
+var MOD_ALIASES = {
+	control: "Control",
+	ctrl: "Control",
+	commandorcontrol: "Control",
+	cmdorctrl: "Control",
+	alt: "Alt",
+	option: "Alt",
+	shift: "Shift",
+	super: "Super",
+	meta: "Super",
+	win: "Super",
+	cmd: "Super",
+	command: "Super"
 };
-var STREAKS = Object.keys(STREAK_LABEL);
-function cleanUnlocks(v) {
-	const out = {};
-	if (!v || typeof v !== "object") return out;
-	for (const [id, u] of Object.entries(v)) {
-		if (!/^\d+$/.test(id) || !u) continue;
-		if (u.kind === "goal" && Number(u.goalId) > 0) out[id] = {
-			kind: "goal",
-			goalId: Number(u.goalId),
-			title: String(u.title ?? "goal").slice(0, 80)
-		};
-		else if (u.kind === "streak" && STREAKS.includes(u.streak) && Number(u.days) >= 1) out[id] = {
-			kind: "streak",
-			streak: u.streak,
-			days: Math.min(365, Math.round(Number(u.days)))
-		};
-	}
-	return out;
+/** Keys a global shortcut may use (a safe part of what Electron knows). */
+var NAMED_KEYS = {
+	space: "Space",
+	tab: "Tab",
+	backspace: "Backspace",
+	delete: "Delete",
+	insert: "Insert",
+	enter: "Enter",
+	return: "Enter",
+	up: "Up",
+	down: "Down",
+	left: "Left",
+	right: "Right",
+	home: "Home",
+	end: "End",
+	pageup: "PageUp",
+	pagedown: "PageDown",
+	plus: "Plus"
+};
+var PUNCT = [
+	",",
+	".",
+	"/",
+	";",
+	"'",
+	"[",
+	"]",
+	"\\",
+	"-",
+	"=",
+	"`"
+];
+var NUMPAD = /^num([0-9])$/i;
+var FKEY = /^f([1-9]|1[0-9]|2[0-4])$/i;
+/** One key (not a modifier) in its written form, or null when not allowed. */
+function keyName(k) {
+	if (!k) return null;
+	if (/^[a-z]$/i.test(k)) return k.toUpperCase();
+	if (/^[0-9]$/.test(k)) return k;
+	const f = FKEY.exec(k);
+	if (f) return `F${f[1]}`;
+	const n = NUMPAD.exec(k);
+	if (n) return `num${n[1]}`;
+	if (PUNCT.includes(k)) return k;
+	return NAMED_KEYS[k.toLowerCase()] ?? null;
 }
-function unlockState(u, f) {
-	if (u.kind === "goal") {
-		const g = f.goals.find((x) => x.id === u.goalId);
-		if (!g) return {
-			met: false,
-			text: `Unlocks with the goal "${u.title}" (that goal is no longer on your list: pick another lock)`,
-			progress: 0
-		};
-		return g.done ? {
-			met: true,
-			text: `Unlocked: ${g.title} is done`,
-			progress: 1
-		} : {
-			met: false,
-			text: `Unlocks when "${g.title}" is done`,
-			progress: 0
-		};
+/**
+* "ctrl+shift+n" → "Control+Shift+N"; null when it isn't a shortcut the
+* island may take: exactly one key, known modifiers, and at least one of
+* Ctrl, Alt or Win (Shift alone types capitals). F13–F24 may stand alone.
+*/
+function normalizeAccelerator(acc) {
+	if (typeof acc !== "string" || !acc || acc.length > 60) return null;
+	const parts = acc.replace(/\+\+$/, "+Plus").split("+").map((p) => p.trim());
+	if (parts.some((p) => !p)) return null;
+	const mods = /* @__PURE__ */ new Set();
+	let key = null;
+	for (const p of parts) {
+		const m = MOD_ALIASES[p.toLowerCase()];
+		if (m) {
+			if (mods.has(m)) return null;
+			mods.add(m);
+			continue;
+		}
+		if (key) return null;
+		key = keyName(p);
+		if (!key) return null;
 	}
-	const cur = Math.max(0, f.streaks[u.streak] ?? 0);
-	const label = STREAK_LABEL[u.streak];
-	return cur >= u.days ? {
-		met: true,
-		text: `Unlocked: ${cur}-day ${label} streak`,
-		progress: 1
-	} : {
-		met: false,
-		text: `Unlocks at a ${u.days}-day ${label} streak (now ${cur})`,
-		progress: cur / u.days
+	if (!key) return null;
+	const strong = mods.has("Control") || mods.has("Alt") || mods.has("Super");
+	const lonely = /^F(1[3-9]|2[0-4])$/.test(key);
+	if (!strong && !lonely) return null;
+	return [...MOD_ORDER.filter((m) => mods.has(m)), key].join("+");
+}
+/** Emails, links, long numbers (cards, codes, phones) and key-like strings are taken out. */
+function scrub(text) {
+	return String(text ?? "").replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "…").replace(/\bhttps?:\/\/\S+/gi, "…").replace(/\b(?:\d[ -]?){5,}\d\b/g, "…").replace(/\b[A-Za-z0-9_\-]{24,}\b/g, "…").replace(/(…\s*){2,}/g, "… ");
+}
+/** One line, at most `max` characters (whole words, with … when cut). */
+function summarize(text, max = 120) {
+	const t = scrub(text).replace(/\s+/g, " ").trim();
+	if (t.length <= max) return t;
+	const cut = t.slice(0, max - 1);
+	const sp = cut.lastIndexOf(" ");
+	return `${(sp > max * .6 ? cut.slice(0, sp) : cut).replace(/[\s,.;:–-]+$/, "")}…`;
+}
+// src/core/islandKitExtras.ts
+var NUDGE_KINDS$1 = [
+	"water",
+	"move",
+	"eyes",
+	"ben",
+	"block",
+	"highlight"
+];
+var HM$2 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var clip$2 = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
+var names = (v, re, max = 20) => Array.isArray(v) ? [...new Set(v.map((x) => clip$2(x, 40).toLowerCase().replace(/\.exe$/, "")).filter((x) => re.test(x)))].slice(0, max) : [];
+var ids = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "string" && /^[a-z0-9:_-]{1,40}$/i.test(x)).slice(0, 30) : null;
+function cleanKitProfile(p, i = 0) {
+	const name = clip$2(p?.name, 24);
+	if (!name) return null;
+	const nudges = {};
+	for (const k of NUDGE_KINDS$1) if ([
+		"peek",
+		"dot",
+		"never"
+	].includes(p?.nudges?.[k])) nudges[k] = p.nudges[k];
+	return {
+		id: typeof p?.id === "string" && /^p[a-z0-9]{1,20}$/i.test(p.id) ? p.id : `p${i}`,
+		name,
+		icon: clip$2(p?.icon, 4) || "⭐",
+		apps: names(p?.apps, /^[a-z0-9 ._-]{1,40}$/),
+		wifi: Array.isArray(p?.wifi) ? [...new Set(p.wifi.map((x) => clip$2(x, 32)).filter(Boolean))].slice(0, 10) : [],
+		...HM$2.test(p?.from) && HM$2.test(p?.to) ? {
+			from: p.from,
+			to: p.to
+		} : {},
+		days: Array.isArray(p?.days) ? [...new Set(p.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort() : [],
+		tiles: ids(p?.tiles),
+		buttons: ids(p?.buttons),
+		nudges
 	};
 }
-/** The reason a reward can't be bought yet because of its lock, or null. */
-function unlockBlocker(u, f) {
-	if (!u) return null;
-	const s = unlockState(u, f);
-	return s.met ? null : s.text;
+function cleanKitProfiles(v) {
+	if (!Array.isArray(v)) return [];
+	const seen = /* @__PURE__ */ new Set();
+	return v.map(cleanKitProfile).filter((p) => !!p && !seen.has(p.id) && (seen.add(p.id), true)).slice(0, 8);
+}
+// src/core/islandTiles.ts
+var TILE_KINDS = [
+	"counter",
+	"timer",
+	"exercise",
+	"water",
+	"link",
+	"page",
+	"note",
+	"music"
+];
+var TILE_LABEL = {
+	counter: "Counter",
+	timer: "Timer",
+	exercise: "Exercise +N",
+	water: "Water",
+	link: "Link",
+	page: "App page",
+	note: "Note",
+	music: "Music"
+};
+var TILE_ICON = {
+	counter: "🔢",
+	timer: "⏱",
+	exercise: "💪",
+	water: "💧",
+	link: "🔗",
+	page: "📄",
+	note: "📝",
+	music: "♫"
+};
+/** App pages a tile may open. */
+var TILE_PAGES = [
+	"today",
+	"calendar",
+	"tasks",
+	"insights",
+	"sleep",
+	"discipline",
+	"money",
+	"body",
+	"rewards",
+	"notebook",
+	"coach"
+];
+var PALETTES = [
+	"lime",
+	"ocean",
+	"rose",
+	"amber",
+	"violet",
+	"mint"
+];
+var DEFAULT_KIT = {
+	tiles: [],
+	buttons: [],
+	profiles: [],
+	look: {
+		palette: "lime",
+		contrast: false,
+		seasonal: false
+	},
+	dock: { on: false },
+	clipboard: false,
+	shelf: false,
+	music: DEFAULT_MUSIC,
+	counts: {}
+};
+var clip$1 = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
+var int$1 = (v, lo, hi, d) => {
+	const n = Math.round(Number(v));
+	return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : d;
+};
+var ID$2 = /^[a-z0-9:_-]{1,40}$/i;
+var cleanId = (v, fallback) => typeof v === "string" && ID$2.test(v) ? v : fallback;
+var cleanKey = (v) => typeof v === "string" && v ? normalizeAccelerator(v) ?? void 0 : void 0;
+/** An https link, or null. */
+function safeHttps(url) {
+	try {
+		const u = new URL(String(url ?? ""));
+		return u.protocol === "https:" && !u.username && !u.password ? u.toString() : null;
+	} catch {
+		return null;
+	}
+}
+function cleanTile(t, i = 0) {
+	if (!t || !TILE_KINDS.includes(t.kind)) return null;
+	const kind = t.kind;
+	const base = {
+		id: cleanId(t.id, `t${i}`),
+		kind,
+		label: clip$1(t.label, 30) || TILE_LABEL[kind],
+		icon: clip$1(t.icon, 4) || TILE_ICON[kind]
+	};
+	const key = cleanKey(t.shortcut);
+	if (key) base.shortcut = key;
+	if (t.dock === true) base.dock = true;
+	switch (kind) {
+		case "counter": return {
+			...base,
+			n: int$1(t.n, 1, 100, 1)
+		};
+		case "timer": return {
+			...base,
+			minutes: int$1(t.minutes, 1, 180, 25)
+		};
+		case "exercise": {
+			const name = clip$1(t.name, 30);
+			return name ? {
+				...base,
+				name,
+				n: int$1(t.n, 1, 500, 10)
+			} : null;
+		}
+		case "water": return {
+			...base,
+			n: int$1(t.n, 50, 1e3, 250)
+		};
+		case "link": {
+			const url = safeHttps(t.url);
+			return url ? {
+				...base,
+				url
+			} : null;
+		}
+		case "page": return TILE_PAGES.includes(t.page) ? {
+			...base,
+			page: t.page
+		} : null;
+		case "note": return {
+			...base,
+			text: clip$1(t.text, 140)
+		};
+		case "music": return base;
+	}
+}
+function cleanButtonAct(a) {
+	switch (a?.do) {
+		case "reps": {
+			const name = clip$1(a.name, 30);
+			return name ? {
+				do: "reps",
+				name,
+				n: int$1(a.n, 1, 500, 10)
+			} : null;
+		}
+		case "hold": {
+			const name = clip$1(a.name, 30);
+			return name ? {
+				do: "hold",
+				name,
+				sec: int$1(a.sec, 5, 600, 60)
+			} : null;
+		}
+		case "walk": return {
+			do: "walk",
+			min: int$1(a.min, 1, 120, 10)
+		};
+		case "water": return {
+			do: "water",
+			ml: int$1(a.ml, 50, 1e3, 250)
+		};
+		default: return null;
+	}
+}
+/** What a button says by itself: "+25 squats", "Plank 60 s", "Walk 10 min", "+250 ml". */
+function buttonText(a) {
+	return a.do === "reps" ? `+${a.n} ${a.name}` : a.do === "hold" ? `${a.name} ${a.sec} s` : a.do === "walk" ? `Walk ${a.min} min` : `+${a.ml} ml`;
+}
+var ACT_ICON = {
+	reps: "💪",
+	hold: "🧘",
+	walk: "🚶",
+	water: "💧"
+};
+function cleanButton(b, i = 0) {
+	const act = cleanButtonAct(b?.act);
+	if (!act) return null;
+	const key = cleanKey(b.shortcut);
+	return {
+		id: cleanId(b.id, `b${i}`),
+		label: clip$1(b.label, 30) || buttonText(act),
+		icon: clip$1(b.icon, 4) || ACT_ICON[act.do],
+		act,
+		pill: b.pill !== false,
+		ring: b.ring === true,
+		...key ? { shortcut: key } : {}
+	};
+}
+var uniqueIds = (list) => {
+	const seen = /* @__PURE__ */ new Set();
+	return list.filter((x) => !seen.has(x.id) && (seen.add(x.id), true));
+};
+/** Any saved value → a valid kit (missing → defaults). */
+function cleanKit(v) {
+	const d = DEFAULT_KIT;
+	const tiles = uniqueIds((Array.isArray(v?.tiles) ? v.tiles : []).map(cleanTile).filter(Boolean)).slice(0, 16);
+	const buttons = uniqueIds((Array.isArray(v?.buttons) ? v.buttons : []).map(cleanButton).filter(Boolean)).slice(0, 10);
+	const counts = {};
+	if (v?.counts && typeof v.counts === "object") for (const t of tiles) {
+		const c = v.counts[t.id];
+		if (t.kind === "counter" && c && /^\d{4}-\d{2}-\d{2}$/.test(c.day)) counts[t.id] = {
+			day: c.day,
+			n: int$1(c.n, 0, 1e5, 0)
+		};
+	}
+	return {
+		tiles,
+		buttons,
+		profiles: cleanKitProfiles(v?.profiles),
+		look: {
+			palette: PALETTES.includes(v?.look?.palette) ? v.look.palette : d.look.palette,
+			contrast: v?.look?.contrast === true,
+			seasonal: v?.look?.seasonal === true
+		},
+		dock: { on: v?.dock?.on === true },
+		clipboard: v?.clipboard === true,
+		shelf: v?.shelf === true,
+		music: cleanMusicKit(v?.music),
+		counts
+	};
+}
+// src/renderer/src/web/rewardsMore.ts
+var rows = (db, sql, ...args) => {
+	try {
+		return db.prepare(sql).all(...args);
+	} catch {
+		return [];
+	}
+};
+/** What you did lately, from logged rows only. */
+function activityOf(s, now = /* @__PURE__ */ new Date()) {
+	const today = s.wallet.today(now);
+	const from = addDays$5(today, -21);
+	const focus = rows(s.db, "SELECT day, subject, minutes FROM focus_sessions WHERE day >= ?", from);
+	const workoutDays = rows(s.db, "SELECT DISTINCT day FROM workouts WHERE day >= ?", addDays$5(today, -60)).map((r) => r.day);
+	const sleep = rows(s.db, "SELECT day, on_time, bed_on_time FROM sleep_logs WHERE day >= ?", from).map((r) => ({
+		day: r.day,
+		onTime: !!r.on_time,
+		bedOnTime: r.bed_on_time == null ? null : !!r.bed_on_time
+	}));
+	const events = bodyEvents(s.db, addDays$5(today, -7), today);
+	const water = {};
+	for (let i = 0; i < 7; i++) {
+		const d = addDays$5(today, -i);
+		water[d] = totalsOf(events, d)["water"] ?? 0;
+	}
+	let musicSaved = 0;
+	try {
+		const kit = cleanKit(readSetting(s.db, "island_kit"));
+		musicSaved = kit.music.favs.length + kit.music.stations.length;
+	} catch {
+		musicSaved = 0;
+	}
+	let workoutStreak;
+	try {
+		workoutStreak = s.body.state(now).streak;
+	} catch {
+		workoutStreak = void 0;
+	}
+	const funRewardIds = rows(s.db, "SELECT id FROM rewards WHERE category = 'fun'").map((r) => r.id);
+	return activity({
+		today,
+		ledger: s.wallet.entries(),
+		focus,
+		workoutDays,
+		sleep,
+		water,
+		musicSaved,
+		workoutStreak,
+		funRewardIds
+	});
+}
+/** The numbers "unlock by doing" reads. */
+var deedsOf = (a) => ({
+	focusHours: a.focusMinWeek / 60,
+	codeHours: (a.focusByKind.code + a.focusByKind.security) / 60,
+	workouts: a.workoutsWeek,
+	sleepNights: a.sleepNights7,
+	waterDays: a.waterDays7
+});
+function rewardsMore(s, value, now = /* @__PURE__ */ new Date()) {
+	const a = activityOf(s, now);
+	const st = s.shop.state(now);
+	const live = st.rewards.filter((r) => !r.archived);
+	const today = a.today;
+	const dim = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)), 0)).getUTCDate();
+	const pace = funPace({
+		earnedWeek: a.earnedWeek,
+		funSpentWeek: a.funSpentWeek,
+		funBudgetLei: value?.funBudgetLei ?? null,
+		funLeftLei: value?.funLeftLei ?? null,
+		dayOfMonth: Number(today.slice(8, 10)),
+		daysInMonth: dim
+	});
+	const input = {
+		activity: a,
+		balance: st.balance,
+		perDay: st.earnPerDay ?? 0,
+		have: live.map((r) => r.title),
+		hidden: s.shop.hiddenSuggestions(),
+		hasGoal: live.some((r) => r.goalRank),
+		funOver: pace.level === "over"
+	};
+	const suggestions = suggest(input);
+	const shown = new Set(suggestions.map((x) => x.starter.key));
+	const unlockIdeas = suggest({
+		...input,
+		limit: 6,
+		only: (x) => !!x.unlock && !shown.has(x.key)
+	});
+	let plan = null;
+	try {
+		plan = s.weekPlan.active(now);
+	} catch {
+		plan = null;
+	}
+	return {
+		activity: a,
+		suggestions,
+		unlockIdeas,
+		pace,
+		mystery: s.shop.mystery(plan, now)
+	};
 }
 // src/renderer/src/web/lifeExtras.ts
 var json$2 = (db, key) => {
@@ -22144,13 +23798,20 @@ function unlockFacts(s, now = /* @__PURE__ */ new Date()) {
 	} catch {
 		measures = [];
 	}
+	let deeds = {};
+	try {
+		deeds = deedsOf(activityOf(s, now));
+	} catch {
+		deeds = {};
+	}
 	return {
 		goals: [...f.goals.map((g) => ({
 			id: g.id,
 			title: g.title,
 			done: g.hours * 60 - g.doneMin <= 0
 		})), ...measures],
-		streaks
+		streaks,
+		deeds
 	};
 }
 var loadUnlocks = (db) => cleanUnlocks(json$2(db, REWARD_UNLOCKS));
@@ -22506,7 +24167,27 @@ syncFinance: (recordDays) => write((s) => {
 				coins: s.shop.claimChallenge(),
 				state: s.shop.state()
 			}), W),
-			markReady: (keys) => write((s) => s.shop.markReady(keys))
+			markReady: (keys) => write((s) => s.shop.markReady(keys)),
+			more: () => read((s) => rewardsMore(s, shopValue(s))),
+			addSuggestion: (key) => write((s) => (s.shop.addStarter(key), s.shop.state())),
+			hideSuggestion: (key) => write((s) => (s.shop.hideSuggestion(key), rewardsMore(s, shopValue(s)))),
+			setRules: (rewardId, rules) => write((s) => (s.shop.setRules(rewardId, rules), s.shop.state())),
+			openChestPrize: (level) => write((s) => ({
+				prize: s.shop.openChestPrize(level),
+				state: s.shop.state()
+			}), W),
+			claimMystery: () => write((s) => {
+				let plan = null;
+				try {
+					plan = s.weekPlan.active();
+				} catch {
+					plan = null;
+				}
+				return {
+					prize: s.shop.claimMystery(plan),
+					state: s.shop.state()
+				};
+			}, W)
 		},
 		tasks: {
 			state: () => read((s) => s.tasks.state()),
@@ -30787,18 +32468,6 @@ function answerMore(need, db, s, finance, now = /* @__PURE__ */ new Date()) {
 /** The lookup list Ben sees, for these new kinds (added to his prompt's LOOKUPS). */
 var MORE_LOOKUPS = `- "goals" every goal with its status. "day <YYYY-MM-DD|yesterday>" one day in numbers (score, must-dos, focus, sleep, water, workouts, money). "money week" spending of the last 7 days. "sleep7" bed and wake times of the last 7 days. "water <from> <to>" days the water goal was met.
 - "todoist <project>" open tasks of one project (with T-numbers).`;
-/** Emails, links, long numbers (cards, codes, phones) and key-like strings are taken out. */
-function scrub(text) {
-	return String(text ?? "").replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, "…").replace(/\bhttps?:\/\/\S+/gi, "…").replace(/\b(?:\d[ -]?){5,}\d\b/g, "…").replace(/\b[A-Za-z0-9_\-]{24,}\b/g, "…").replace(/(…\s*){2,}/g, "… ");
-}
-/** One line, at most `max` characters (whole words, with … when cut). */
-function summarize(text, max = 120) {
-	const t = scrub(text).replace(/\s+/g, " ").trim();
-	if (t.length <= max) return t;
-	const cut = t.slice(0, max - 1);
-	const sp = cut.lastIndexOf(" ");
-	return `${(sp > max * .6 ? cut.slice(0, sp) : cut).replace(/[\s,.;:–-]+$/, "")}…`;
-}
 // src/core/eyesSense.ts
 /** What Ben is told, when you share it (the line is already short and checked). */
 function benNowLine(seen, now, maxAgeMin = 10) {

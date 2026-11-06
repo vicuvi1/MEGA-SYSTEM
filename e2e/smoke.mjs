@@ -338,6 +338,23 @@ try {
     await pg.waitForSelector('.rx-ben', { timeout: 5000 })
     await pg.click('.rx .ptabs [data-tab="all"]')
     await pg.waitForSelector('.rx-card .rx-title', { timeout: 5000 })
+    // Rewards 2: suggestions from what you do, one tap adds one (with its limits and lock).
+    await pg.click('.rx .ptabs [data-tab="now"]')
+    await pg.waitForSelector('.rx-suggest .rx-sug', { timeout: 8000 })
+    if ((await pg.locator('.rx-suggest .rx-sug').count()) < 4) throw new Error('fewer than 4 suggestions')
+    if (!(await pg.locator('.rx-suggest .rx-sug-why').first().innerText()).trim()) throw new Error('a suggestion has no reason line')
+    const sug = pg.locator('.rx-suggest .rx-sug').first()
+    const title = (await sug.locator('.rx-title').innerText()).trim()
+    await sug.locator('.rx-sug-add').click()
+    await pg.waitForFunction((t) => ![...document.querySelectorAll('.rx-suggest .rx-sug .rx-title')].some((e) => e.textContent.trim() === t), title, { timeout: 8000 })
+    await pg.click('.rx .ptabs [data-tab="all"]')
+    await pg.waitForFunction((t) => [...document.querySelectorAll('.rx-grid .rx-card .rx-title')].some((e) => e.textContent.trim() === t), title, { timeout: 8000 })
+    // Unlock by doing and Earn (where the points came from) show their own content.
+    await pg.click('.rx .ptabs [data-tab="unlock"]')
+    await pg.waitForSelector('.rx-unlock .rx-unlock-intro', { timeout: 5000 })
+    await pg.click('.rx .ptabs [data-tab="earn"]')
+    await pg.waitForSelector('.rx-earn .rx-from', { timeout: 8000 })
+    await pg.click('.rx .ptabs [data-tab="now"]')
   })
   // One place each: the points and Settings live in the top bar only; the sidebar has neither.
   await step('Points and Settings show once (top bar), not in the sidebar', async () => {
@@ -1928,7 +1945,7 @@ try {
       ['goals', '.gx', ['goals', 'week', 'hours', 'path'], { goals: 2.6 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],
-      ['shop', '.rx', ['now', 'saving', 'all', 'history', 'earn'], { all: 2 }]
+      ['shop', '.rx', ['now', 'unlock', 'all', 'history', 'earn'], { now: 2, all: 2, earn: 2 }]
     ]
     for (const [page, scope, ids, wide] of pages) {
       await open(page)

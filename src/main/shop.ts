@@ -3,11 +3,15 @@ import { earnPerDay, isRewardCategory } from '@core/shop'
 import { addDays, dayKey, monthKey } from '@core/dates'
 import { balance, effective, LedgerError, totalXp, type LedgerEntry } from '@core/ledger'
 import { levelInfo } from '@core/levels'
-import { chestRef, planRedeem, rollChest, unopenedChests, validateReward, type Reward, type Tier } from '@core/shop'
+import { chestRef, planRedeem, unopenedChests, validateReward, type Reward, type Tier } from '@core/shop'
 import type { RewardInput, ShopState, ShopValue } from '@shared/api'
 import { pointValue } from '@core/pointValue'
 import { funBudgetLei, funSpentLei, migrateRewardBudget, parseFunBudget, toLei, type FunBudgetSetting } from '@core/funBudget'
 import { badgeStats, badges, challengeRef, challengeState, dayStreak, earnings, flameLevel, mondayOf, pickChallenge, type Badge, type ChallengeState, type Earnings } from '@core/rewardsKit'
+import { cleanRules, guardBlocker, REWARD_RULES, setRules, todayDeeds, type RewardRules } from '@core/rewardGuard'
+import { cleanCoupons, couponFor, mysteryState, openCoupons, prizeCoupon, REWARD_COUPONS, rollChestPrize, rollMystery, smallTreats, type ChestPrize, type Coupon, type MysteryState } from '@core/rewardSurprise'
+import { starterByKey, starterReward, SUGGEST_HIDDEN } from '@core/rewardSuggest'
+import { cleanUnlocks, REWARD_UNLOCKS, setUnlock } from '@core/unlocks'
 import type { DB } from './db'
 import { payOnce } from './points'
 import { getSetting, readSetting, setSetting, writeSetting } from './settings'
@@ -252,8 +256,97 @@ export class Shop {
       })),
       buys: this.buys(undone),
       today: day,
-      economy: this.economy?.getEconomySummary(now)
+      economy: this.economy?.getEconomySummary(now),
+      rules: this.rules(),
+      guards: this.guards(day, undone, all),
+      coupons: openCoupons(this.coupons(), day, new Set(liveRows.map((e) => e.id)))
     }
+  }
+
+  // ---------- Healthy limits (a most-per-day, "pair it") ----------
+
+  rules(): Record<string, RewardRules> {
+    return cleanRules(this.json(REWARD_RULES))
+  }
+
+  setRules(rewardId: number, r: RewardRules | null): void {
+    this.reward(rewardId)
+    setSetting(this.db, REWARD_RULES, JSON.stringify(setRules(this.rules(), rewardId, r)))
+  }
+
+  /** Why each reward with rules can't be bought now (null = fine), from today's logged rows. */
+  private guards(day: string, undone: Set<number>, all = this.wallet.entries()): Record<number, string | null> {
+    const rules = this.rules()
+    const ids = Object.keys(rules)
+    if (!ids.length) return {}
+    const did = todayDeeds(all, day)
+    const buys = this.buys(undone)
+    return Object.fromEntries(ids.map((id) => [Number(id), guardBlocker(rules[id], (buys[Number(id)] ?? []).filter((d) => d === day).length, did)]))
+  }
+
+  private json(key: string): any {
+    try {
+      return JSON.parse(getSetting(this.db, key) || 'null')
+    } catch {
+      return null
+    }
+  }
+
+  // ---------- Coupons (chests and the weekly mystery reward) ----------
+
+  /** Every coupon (used and expired ones too, the last 40). */
+  coupons(): Coupon[] {
+    return cleanCoupons(this.json(REWARD_COUPONS))
+  }
+
+  private saveCoupons(list: Coupon[]): void {
+    setSetting(this.db, REWARD_COUPONS, JSON.stringify(cleanCoupons(list)))
+  }
+
+  private addCoupon(c: Coupon): void {
+    this.saveCoupons([...this.coupons(), c])
+  }
+
+  /** The weekly mystery reward: open once all of this week's top 3 are done. */
+  mystery(plan: { week: string; big3: { done: boolean }[] } | null, now = new Date()): MysteryState {
+    return mysteryState(plan, mondayOf(dayKey(now, this.timeZone)), this.coupons())
+  }
+
+  /** Opens the mystery reward: a coupon (a free small treat from your list, or 30% off). Never points. */
+  claimMystery(plan: { week: string; big3: { done: boolean }[] } | null, now = new Date()): ChestPrize {
+    return this.db.transaction(() => {
+      const m = this.mystery(plan, now)
+      if (m.claimed) throw new LedgerError('Already opened this week')
+      if (!m.ready) throw new LedgerError(m.total >= 3 ? `Finish your top 3 first (${m.done} of ${m.total} done)` : 'Pick your top 3 for the week first')
+      const day = dayKey(now, this.timeZone)
+      const prize = rollMystery(this.rand(), this.rand(), smallTreats(this.rewards()))
+      this.addCoupon(prizeCoupon(prize, `mystery:${m.week}`, day, `m${m.week}`)!)
+      return prize
+    })()
+  }
+
+  // ---------- Suggestions ----------
+
+  hiddenSuggestions(): string[] {
+    const v = this.json(SUGGEST_HIDDEN)
+    return Array.isArray(v) ? v.map(String).slice(-200) : []
+  }
+
+  hideSuggestion(key: string): void {
+    setSetting(this.db, SUGGEST_HIDDEN, JSON.stringify([...new Set([...this.hiddenSuggestions(), String(key).slice(0, 40)])].slice(-200)))
+  }
+
+  /** "Add to my rewards": the starter reward, with its healthy limits and its "unlock by doing" lock. Returns the new id. */
+  addStarter(key: string): number {
+    const st = starterByKey(key)
+    if (!st) throw new LedgerError('That suggestion is gone')
+    return this.db.transaction(() => {
+      this.save(starterReward(st))
+      const id = (this.db.prepare('SELECT MAX(id) AS id FROM rewards').get() as { id: number }).id
+      if (st.rules) this.setRules(id, st.rules)
+      if (st.unlock) setSetting(this.db, REWARD_UNLOCKS, JSON.stringify(setUnlock(cleanUnlocks(this.json(REWARD_UNLOCKS)), id, st.unlock)))
+      return id
+    })()
   }
 
   /**
@@ -370,13 +463,19 @@ export class Shop {
    * `paid`: what you really paid (the reward's currency; default its real cost).
    * `force`: buy even though the fun budget is empty (the explicit second tap).
    */
-  redeem(id: number, now = new Date(), opts: { paid?: number; force?: boolean; finance?: any } = {}): number {
+  redeem(id: number, now = new Date(), opts: { paid?: number; force?: boolean; finance?: any; noCoupon?: boolean } = {}): number {
     return this.db.transaction(() => {
       this.migrateFunBudget()
-      const reward = this.reward(id)
+      const listed = this.reward(id)
       const all = this.wallet.entries()
       const day = dayKey(now, this.timeZone)
       const undone = this.undoneIds()
+      const guard = this.guards(day, undone, all)[id]
+      if (guard) throw new LedgerError(guard)
+      // A coupon (a chest or the mystery reward) makes it cheaper or free; it never adds points.
+      const live = new Set(this.wallet.effective().map((e) => e.id))
+      const deal = opts.noCoupon ? { coupon: null, price: listed.price } : couponFor(listed, openCoupons(this.coupons(), day, live))
+      const reward = { ...listed, price: deal.price }
       planRedeem({
         reward,
         balance: balance(all),
@@ -393,7 +492,8 @@ export class Shop {
       }
       // Points already in its jar pay first; the wallet pays the rest.
       const fromJar = Math.min(reward.jar ?? 0, reward.price)
-      const ledgerId = this.wallet.append({ ts: now.toISOString(), day, module: 'shop', kind: 'spend', coins: -(reward.price - fromJar), xp: 0, ref: `reward:${id}`, note: reward.title })
+      const ledgerId = this.wallet.append({ ts: now.toISOString(), day, module: 'shop', kind: 'spend', coins: -(reward.price - fromJar), xp: 0, ref: `reward:${id}`, note: deal.coupon ? `${reward.title} (coupon: ${deal.coupon.kind === 'free' ? 'free' : `${deal.coupon.pct}% off`})` : reward.title })
+      if (deal.coupon) this.saveCoupons(this.coupons().map((c) => (c.id === deal.coupon!.id ? { ...c, usedBy: ledgerId } : c)))
       this.db.prepare('INSERT INTO redemptions (ledger_id, reward_id, title, real_cost, day, jar_used) VALUES (?, ?, ?, ?, ?, ?)').run(ledgerId, id, reward.title, paid, day, fromJar)
       if (fromJar && reward.jarGoalId) this.db.prepare('UPDATE wishlist_goals SET allocated_coins = allocated_coins - ?, completed = 0, completed_at = NULL WHERE id = ?').run(fromJar, reward.jarGoalId)
       // Bought once and gone (RF2).
@@ -449,13 +549,29 @@ export class Shop {
     })()
   }
 
+  /** Opens a level chest: its coins (0 when the prize is a coupon). */
   openChest(level: number, now = new Date()): number {
+    const p = this.openChestPrize(level, now)
+    return p.kind === 'coins' ? p.coins : 0
+  }
+
+  /**
+   * A level chest (one per level reached through real XP): the small coin
+   * bonus chests always gave, or a coupon for a free small treat from your
+   * own list or 25% off one reward. The chest's ledger row marks it opened.
+   */
+  openChestPrize(level: number, now = new Date()): ChestPrize {
     return this.db.transaction(() => {
       const s = this.state(now)
       if (!s.chests.includes(level)) throw new LedgerError('No chest waiting for that level')
-      const coins = rollChest(level, this.rand())
-      this.wallet.append({ ts: now.toISOString(), day: dayKey(now, this.timeZone), module: 'shop', kind: 'earn', coins, xp: 0, ref: chestRef(level), note: `Level ${level} chest` })
-      return coins
+      const day = dayKey(now, this.timeZone)
+      const prize = rollChestPrize(level, this.rand(), this.rand(), smallTreats(s.rewards))
+      const coins = prize.kind === 'coins' ? prize.coins : 0
+      const note = prize.kind === 'coins' ? `Level ${level} chest` : `Level ${level} chest: ${prize.kind === 'free' ? `free ${prize.title}` : `${prize.pct}% off a reward`}`
+      const ledgerId = this.wallet.append({ ts: now.toISOString(), day, module: 'shop', kind: 'earn', coins, xp: 0, ref: chestRef(level), note })
+      const c = prizeCoupon(prize, chestRef(level), day, `c${ledgerId}`)
+      if (c) this.addCoupon(c)
+      return prize
     }).immediate()
   }
 

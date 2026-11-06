@@ -1,14 +1,13 @@
-// The hero wallet (RW1): the balance counting up, "+X today", this week's
-// earned and spent, the streak flame (RW8), what a point is worth, and the
-// goal you're saving for with its photo in a progress ring and the day you'll
-// reach it at your pace (RG1).
+// The hero (RW1, Rewards 2): one band with the balance counting up and what
+// it is worth in lei, what you earned today, the streak flame (RW8), your
+// coupons, and the next reward you'll have at your pace. Your goals and their
+// milestones live in "Saving for" on the For you tab.
 import { useState } from 'react'
-import type { Reward } from '@core/shop'
-import { pointValueLine } from '@core/pointValue'
-import { readyLine, soonerWith } from '@core/rewardsKit'
+import { leiForPoints, pointValueLine } from '@core/pointValue'
 import { useCountUp } from '../motionKit'
 import { Cover } from './RewardCard'
-import { useGrowFrom, type ValueInfo } from './useRewards'
+import type { ValueInfo } from './useRewards'
+import type { Reward } from '@core/shop'
 import type { RewardsInsights } from '../../../main/shop'
 
 const FLAME_TEXT = ['', 'On a roll', 'On fire', 'Unstoppable']
@@ -18,12 +17,118 @@ export function Balance({ n, className = '' }: { n: number; className?: string }
   return <span className={`num ${className}`}>{v.toLocaleString()}</span>
 }
 
-function Ring({ frac, children }: { frac: number; children: React.ReactNode }) {
+const fmtLei = (n: number) => (n >= 100 ? Math.round(n).toLocaleString() : n.toFixed(n < 10 ? 1 : 0))
+
+export interface NextUp {
+  reward: Reward
+  /** "Ready tomorrow" / "40 to go" / "Ready now". */
+  line: string
+}
+
+export function WalletHero({
+  balance,
+  insights,
+  value,
+  next,
+  coupons,
+  onFun,
+  onHow,
+  onAdd,
+  ben
+}: {
+  balance: number
+  insights: RewardsInsights | null
+  value: ValueInfo
+  next: NextUp | null
+  coupons: number
+  onFun: (min: number) => void
+  onHow: () => void
+  onAdd: () => void
+  /** Ben's one line, along the bottom of the hero. */
+  ben?: React.ReactNode
+}) {
+  const e = insights?.earnings
+  const flame = insights?.flame ?? 0
+  const [fun, setFun] = useState(false)
+  const lei = leiForPoints(balance, value.value)
+
+  return (
+    <section className="rx-hero">
+      <div className="rx-wallet">
+        <span className="rx-kicker">Points to spend</span>
+        <div className="rx-balance">
+          <i className="rx-coin" aria-hidden />
+          <Balance n={balance} />
+          <span className="rx-bal-lei" title={`${pointValueLine(value.value)}${value.value.source === 'default' ? ' (set a fun budget in Settings → Rewards to make it yours)' : ''}`}>
+            ≈ {fmtLei(lei)} lei
+          </span>
+        </div>
+        <div className="rx-pills">
+          <span className={`rx-pill today ${e && e.today > 0 ? 'on' : ''}`}>+{(e?.today ?? 0).toLocaleString()} today</span>
+          {flame > 0 && (
+            <span className={`rx-pill rx-flame f${flame}`} title={`${insights!.focusStreak} days of focus in a row${insights!.focusStreak >= 7 ? ': +10% on focus points' : ''}`}>
+              <i aria-hidden>🔥</i> {insights!.focusStreak} days · {FLAME_TEXT[flame]}
+            </span>
+          )}
+          {coupons > 0 && (
+            <span className="rx-pill rx-coupon-pill" title="Coupons from chests and the mystery reward: they make a buy cheaper or free">
+              🎟️ {coupons} coupon{coupons > 1 ? 's' : ''}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="rx-next">
+        {next ? (
+          <>
+            <Cover r={next.reward} small />
+            <span className="rx-next-text">
+              <span className="rx-kicker">Next reward</span>
+              <b>{next.reward.title}</b>
+              <small className={next.line.startsWith('Ready') ? 'ok' : ''}>{next.line}</small>
+            </span>
+          </>
+        ) : (
+          <span className="rx-next-text">
+            <span className="rx-kicker">Next reward</span>
+            <b>Add something you want</b>
+            <small>Pick one from Suggested for you</small>
+          </span>
+        )}
+      </div>
+
+      <div className="rx-hero-acts">
+        <button type="button" className="rx-btn primary" onClick={onAdd}>
+          + Add
+        </button>
+        <button type="button" className="rx-btn" onClick={onHow}>
+          How to earn
+        </button>
+        <button type="button" className={`rx-btn ${fun ? 'on' : ''}`} aria-expanded={fun} onClick={() => setFun((f) => !f)}>
+          🎮 Fun time
+        </button>
+      </div>
+      {ben && <div className="rx-hero-ben">{ben}</div>}
+      {fun && (
+        <div className="rx-fun">
+          <span>Guilt-free fun · 1 point a minute</span>
+          {[15, 30, 60].map((min) => (
+            <button key={min} type="button" className="rx-chip" disabled={balance < min} onClick={() => onFun(min)}>
+              {min} min
+            </button>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function Ring({ frac, children, size = 64 }: { frac: number; children: React.ReactNode; size?: number }) {
   const R = 46
   const C = 2 * Math.PI * R
   const f = Math.max(0, Math.min(1, frac))
   return (
-    <div className="rx-ring">
+    <div className="rx-ring" style={{ width: size, height: size }}>
       <svg viewBox="0 0 104 104" aria-hidden>
         <defs>
           <linearGradient id="rxRingG" x1="0" y1="0" x2="1" y2="1">
@@ -38,118 +143,4 @@ function Ring({ frac, children }: { frac: number; children: React.ReactNode }) {
     </div>
   )
 }
-
-export function WalletHero({
-  balance,
-  goals,
-  perDay,
-  today,
-  insights,
-  value,
-  onFun,
-  onHow,
-  onAdd
-}: {
-  balance: number
-  goals: Reward[]
-  perDay: number
-  today: string
-  insights: RewardsInsights | null
-  value: ValueInfo
-  onFun: (min: number) => void
-  onHow: () => void
-  onAdd: () => void
-}) {
-  const goal = goals[0] ?? null
-  const have = goal ? balance + (goal.jar ?? 0) : 0
-  const left = goal ? Math.max(0, goal.price - have) : 0
-  const frac = goal ? have / Math.max(1, goal.price) : 0
-  const grown = useGrowFrom(goal ? `g${goal.id}` : 'g', frac)
-  const sooner = goal && left > 0 ? soonerWith(left, perDay, 2) : null
-  const ready = goal ? readyLine(today, left, perDay) : null
-  const e = insights?.earnings
-  const flame = insights?.flame ?? 0
-  const [fun, setFun] = useState(false)
-
-  return (
-    <section className="rx-hero">
-      <div className="rx-wallet">
-        <span className="rx-kicker">Points to spend</span>
-        <div className="rx-balance">
-          <i className="rx-coin" aria-hidden />
-          <Balance n={balance} />
-        </div>
-        <div className="rx-pills">
-          <span className={`rx-pill today ${e && e.today > 0 ? 'on' : ''}`}>+{(e?.today ?? 0).toLocaleString()} today</span>
-          {/* This week's earnings show once, in "Your earnings". */}
-          {flame > 0 && (
-            <span className={`rx-pill rx-flame f${flame}`} title={`${insights!.focusStreak} days of focus in a row${insights!.focusStreak >= 7 ? ': +10% on focus points' : ''}`}>
-              <i aria-hidden>🔥</i> {insights!.focusStreak} days · {FLAME_TEXT[flame]}
-            </span>
-          )}
-        </div>
-        <p className="rx-worth">
-          {pointValueLine(value.value)}
-          {value.value.source === 'default' ? ' (set a fun budget in Settings → Rewards to make it yours)' : ''}
-        </p>
-        <div className="rx-hero-acts">
-          <button type="button" className="rx-btn primary" onClick={onAdd}>
-            + Add a reward
-          </button>
-          <button type="button" className="rx-btn" onClick={onHow}>
-            How to earn
-          </button>
-          <button type="button" className={`rx-btn ${fun ? 'on' : ''}`} aria-expanded={fun} onClick={() => setFun((f) => !f)}>
-            🎮 Fun time
-          </button>
-        </div>
-        {fun && (
-          <div className="rx-fun">
-            <span>Guilt-free fun · 1 point a minute</span>
-            {[15, 30, 60].map((min) => (
-              <button key={min} type="button" className="rx-chip" disabled={balance < min} onClick={() => onFun(min)}>
-                {min} min
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="rx-goal">
-        {goal ? (
-          <>
-            <Ring frac={grown}>
-              <Cover r={goal} small />
-            </Ring>
-            <div className="rx-goal-text">
-              <span className="rx-kicker">Saving for</span>
-              <b className="rx-goal-title">{goal.title}</b>
-              <span className="rx-goal-left">{left > 0 ? `${left.toLocaleString()} to go · ${Math.floor(frac * 100)}%` : 'You can get it now 🎉'}</span>
-              {ready && left > 0 && <span className="rx-goal-eta">{ready} at your pace</span>}
-              {sooner && sooner.days > 0 && (
-                <span className="rx-goal-tip">
-                  {sooner.blocks} focus blocks a day → {sooner.days} day{sooner.days > 1 ? 's' : ''} sooner
-                </span>
-              )}
-              {sooner && !ready && <span className="rx-goal-tip">{sooner.blocks} focus blocks a day → ready in {sooner.alone} days</span>}
-              {goals.length > 1 && (
-                <span className="rx-goal-more">
-                  Next:{' '}
-                  {goals.slice(1).map((g) => (
-                    <i key={g.id}>{g.title}</i>
-                  ))}
-                </span>
-              )}
-            </div>
-          </>
-        ) : (
-          <div className="rx-goal-empty">
-            <span className="rx-kicker">Saving for</span>
-            <b>Pick something worth working for</b>
-            <span>Open a reward's ⋯ menu and choose "Save for this".</span>
-          </div>
-        )}
-      </div>
-    </section>
-  )
-}
+export { Ring }

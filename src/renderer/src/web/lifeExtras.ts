@@ -22,6 +22,7 @@ import { cleanSet } from '@core/insights'
 import { financeSpending } from '@core/progress'
 import { getSetting, setSetting } from '../../../main/settings'
 import { loadDesk } from './benDesk'
+import { activityOf, deedsOf } from './rewardsMore'
 import { financeStateFrom } from './botBrain'
 import { DAY_LOG } from './dayLog'
 import { loadAims, loadHabits, loadLearn, loadModes, modeRest, saveAims, saveHabits, saveLearn, saveModes } from './extrasContext'
@@ -394,7 +395,14 @@ export function unlockFacts(s: Services, now = new Date()): UnlockFacts {
   } catch {
     measures = []
   }
-  return { goals: [...f.goals.map((g) => ({ id: g.id, title: g.title, done: g.hours * 60 - g.doneMin <= 0 })), ...measures], streaks }
+  // "Unlock by doing": counts of real logged things this week.
+  let deeds: UnlockFacts['deeds'] = {}
+  try {
+    deeds = deedsOf(activityOf(s, now))
+  } catch {
+    deeds = {}
+  }
+  return { goals: [...f.goals.map((g) => ({ id: g.id, title: g.title, done: g.hours * 60 - g.doneMin <= 0 })), ...measures], streaks, deeds }
 }
 
 export const loadUnlocks = (db: any): Record<string, Unlock> => cleanUnlocks(json(db, REWARD_UNLOCKS))

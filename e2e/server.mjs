@@ -262,6 +262,37 @@ if (process.env.E2E_REWARDS_DEMO) {
   add.run(['Mountain weekend', 5000, 'bronze', 3000, 0, 'With the whole group', '🏔️', 'big', 0, 1, 2, 6])
   db.run('UPDATE rewards SET pinned = 0 WHERE title NOT IN (\'New headphones\')')
   db.run("UPDATE rewards SET archived = 1 WHERE emoji IS NULL")
+  // Rewards 2 (made up): a week of coding and security focus, workouts, nights on time and water,
+  // a reward that unlocks by doing, healthy limits, a level-up chest and a done top 3 (the mystery box).
+  add.run(['30 min of gaming', 45, 'bronze', 0, 0, null, '🎮', 'fun', 0, 0, 0, 7])
+  add.run(['A long gaming evening (3 h)', 350, 'silver', 0, 0, null, '🕹️', 'fun', 6, 0, 0, 8])
+  add.run(['A mechanical keyboard', 2200, 'gold', 1100, 0, null, '⌨️', 'gear', 0, 1, 3, 9])
+  const idOf = (t) => db.exec('SELECT id FROM rewards WHERE title = ?', [t])[0].values[0][0]
+  const monday = (() => {
+    const d = new Date(`${day(0)}T12:00:00Z`)
+    const wd = d.getUTCDay()
+    d.setUTCDate(d.getUTCDate() - (wd === 0 ? 6 : wd - 1))
+    return d.toISOString().slice(0, 10)
+  })()
+  const since = Math.max(0, Math.round((Date.parse(`${day(0)}T12:00:00Z`) - Date.parse(`${monday}T12:00:00Z`)) / 864e5))
+  const subjects = ['Rust project', 'CTF practice', 'Rust project', 'Study', 'CTF practice', 'Python']
+  for (let n = 0; n <= Math.max(since, 3); n++) {
+    db.run('INSERT INTO focus_sessions (day, subject, minutes, coins, started_at, ended_at) VALUES (?, ?, ?, 15, ?, ?)', [day(n), subjects[n % subjects.length], 100 + (n % 3) * 20, new Date().toISOString(), new Date().toISOString()])
+    db.run('INSERT INTO focus_sessions (day, subject, minutes, coins, started_at, ended_at) VALUES (?, ?, 50, 15, ?, ?)', [day(n), subjects[(n + 1) % subjects.length], new Date().toISOString(), new Date().toISOString()])
+  }
+  for (const n of [0, 1, 2, 4, 5]) {
+    db.run("INSERT INTO workouts (day, ts, title, items_json) VALUES (?, ?, 'Push-ups and sit-ups', '[]')", [day(n), `${day(n)}T18:00:00.000Z`])
+    put(n, 'body', 'earn', 10, 'body.workout_done', 'Workout: push-ups and sit-ups')
+  }
+  for (let n = 0; n < 7; n++) db.run('INSERT OR IGNORE INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [day(n), '07:05', '07:30', n === 3 ? 0 : 1, '23:10', '23:30', 1, new Date().toISOString()])
+  for (let n = 0; n < 7; n++) db.run('INSERT INTO body_log (id, at, day, kind, amount, source) VALUES (?, ?, ?, ?, ?, ?)', [`demo-w${n}`, `${day(n)}T12:00:00.000Z`, day(n), 'water', n % 3 === 1 ? 1500 : 2200, 'web'])
+  put(1, 'money', 'earn', 6, 'money.logged', 'Logged spending')
+  put(2, 'discipline', 'earn', 20, 'discipline.clean_day', 'Clean day')
+  ins.run([`${day(0)}T09:00:00.000Z`, day(0), 'quests', 'earn', 0, 900, null, 'demo:xp', 'made-up: experience for a level-up chest'])
+  const set = (k, v) => db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [k, JSON.stringify(v)])
+  set('reward_unlocks', { [idOf('A long gaming evening (3 h)')]: { kind: 'deed', deed: 'focusHours', target: 20 }, [idOf('A mechanical keyboard')]: { kind: 'deed', deed: 'codeHours', target: 10 }, [idOf('Spa afternoon')]: { kind: 'deed', deed: 'sleepNights', target: 5 } })
+  set('reward_rules', { [idOf('30 min of gaming')]: { perDay: 2 }, [idOf('Pizza night')]: { pair: 'workout' } })
+  set('week_plans', { [monday]: { week: monday, focus: 'focus', note: '', big3: [{ text: 'Finish the Rust parser', done: true }, { text: 'Two CTF rooms', done: true }, { text: 'Three workouts', done: true }], savedAt: new Date().toISOString() } })
 }
 
 Object.assign(process.env, { TURSO_URL: `http://127.0.0.1:${port}`, TURSO_TOKEN: 'fake-turso-key', SESSION_SECRET: 'e2e-secret' })

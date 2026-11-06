@@ -16,7 +16,7 @@ import { useGrowFrom } from './useRewards'
 export function BenLine({ text }: { text: string }) {
   return (
     <div className="rx-ben" aria-live="polite">
-      <BenAvatar size={40} ring />
+      <BenAvatar size={32} ring />
       <m.p key={text} className="rx-ben-say" initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
         <b>Ben</b> {text}
       </m.p>

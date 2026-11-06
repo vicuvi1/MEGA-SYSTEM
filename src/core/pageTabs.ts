@@ -46,5 +46,6 @@ export const TAB_LINKS: TabLink[] = [
   { page: 'money', tab: 'month', label: 'Where money goes', hint: 'Money → Month: categories and forecast' },
   { page: 'money', tab: 'goals', label: 'Savings goals and fun budget', hint: 'Money → Goals' },
   { page: 'music', tab: 'library', label: 'Music stations and favourites', hint: 'Music → Library' },
-  { page: 'shop', tab: 'earn', label: 'Daily quests and badges', hint: 'Rewards → Quests: quests, challenge, earnings, badges' }
+  { page: 'shop', tab: 'earn', label: 'Daily quests and badges', hint: 'Rewards → Earn: where points came from, quests, challenge, badges' },
+  { page: 'shop', tab: 'unlock', label: 'Rewards you unlock by doing', hint: 'Rewards → Unlock by doing: streaks, focus hours, nights on time' }
 ]

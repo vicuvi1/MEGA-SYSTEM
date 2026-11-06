@@ -73,14 +73,14 @@
 .rx-hero-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
 .rx-fun { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
 .rx-goal { display: flex; align-items: center; gap: 18px; padding: 16px; border-radius: 22px; background: rgb(var(--ink) / 0.035); border: 1px solid var(--border); min-width: 0; }
-.rx-ring { position: relative; width: 120px; height: 120px; flex: none; }
+.rx-ring { position: relative; width: 64px; height: 64px; flex: none; }
 .rx-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
 .rx-ring circle { fill: none; stroke-width: 7; }
 .rx-ring .bg { stroke: rgb(var(--ink) / 0.08); }
 .rx-ring .fg { stroke: url(#rxRingG); stroke-linecap: round; }
-.rx-ring-in { position: absolute; inset: 15px; border-radius: 50%; overflow: hidden; }
+.rx-ring-in { position: absolute; inset: 13%; border-radius: 50%; overflow: hidden; }
 .rx-ring-in .rx-cover.small { width: 100%; height: 100%; border-radius: 50%; }
-.rx-ring-in .rx-cover.small .rx-emoji { font-size: 40px; }
+.rx-ring-in .rx-cover.small .rx-emoji { font-size: 22px; }
 .rx-goal-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .rx-goal-title { font: 750 20px/1.2 var(--display, inherit); letter-spacing: -0.015em; overflow-wrap: anywhere; }
 .rx-goal-left { font-size: 14px; color: var(--text); font-variant-numeric: tabular-nums; }
@@ -355,9 +355,6 @@ input.short { width: 92px; }
   .rx-hero-acts .rx-btn.primary { grid-column: 1 / -1; }
   .rx-hero-acts .rx-btn { width: 100%; }
   .rx-goal { gap: 14px; padding: 12px; }
-  .rx-ring { width: 92px; height: 92px; }
-  .rx-ring-in { inset: 12px; }
-  .rx-ring-in .rx-cover.small .rx-emoji { font-size: 30px; }
   .rx-goal-title { font-size: 17px; }
   .rx-ben { border-radius: 20px; align-items: flex-start; }
   .rx-tabs { width: 100%; }

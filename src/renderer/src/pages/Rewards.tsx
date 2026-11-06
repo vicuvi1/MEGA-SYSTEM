@@ -1,13 +1,18 @@
 // Rewards: what your points buy, made to make you want to earn them. A hero
-// wallet with the goal you're saving for, Ben's one line, photo cards you
-// hold to buy, tabs (Can get now / Saving for / All / History), daily quests,
-// the weekly challenge, level chests, the earnings graph and badges.
-// Points only come from real, logged actions (see core/rewardsKit.ts).
+// band (points, lei, today, the next reward at your pace), Ben's one line,
+// surprises (chests, the weekly mystery reward, coupons) and tabs: For you
+// (ready now, saving for with milestones, suggested for you), Unlock by
+// doing, All, History and Earn (where points came from, quests, the weekly
+// challenge, the graph, badges). Points only come from real, logged actions
+// (core/rewardsKit.ts); rewards only spend them; chests and coupons never
+// make points from nothing (core/rewardSurprise.ts).
 import { PageTabs } from '../PageTabs'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RewardInput, ShopState } from '@shared/api'
 import { REWARD_CATEGORIES, redeemBlocker, rewardEmoji, type Reward, type RewardCategory } from '@core/shop'
-import { benRewardLine, readyKey } from '@core/rewardsKit'
+import { benRewardLine, readyKey, readyLine } from '@core/rewardsKit'
+import { ruleTags, type RewardRules } from '@core/rewardGuard'
+import { couponFor, type ChestPrize } from '@core/rewardSurprise'
 import { dayLabel } from '@core/dates'
 import { life } from '../bridge'
 import { buyToast, redeemReward } from '../redeem'
@@ -15,24 +20,35 @@ import { play, soundSuccess } from '../soundKit'
 import { useAction, useToast } from '../ui'
 import { celebrate } from '../fx'
 import { askConfirm } from '../confirmSheet'
-import { WalletHero, Balance } from '../rewards/WalletHero'
+import { WalletHero, Balance, type NextUp } from '../rewards/WalletHero'
 import { CardMenu, Cover, RewardCard, type CardInfo } from '../rewards/RewardCard'
 import { RewardSheet } from '../rewards/RewardSheet'
 import { EarnChart } from '../rewards/EarnChart'
-import { AffordRow, Badges, BenLine, Challenge, Chests, HowToEarn, Quests } from '../rewards/Extras'
+import { AffordRow, Badges, BenLine, Challenge, HowToEarn, Quests } from '../rewards/Extras'
+import { MysteryCard, PointsFrom, Rail, Reveal, RulesEditor, SavingFor, Section, SuggestRow, Surprises } from '../rewards/More'
 import { LockEditor, useUnlocks } from '../rewards/LockEditor'
 import { stillMode, useRewardsData } from '../rewards/useRewards'
 import '../lifeExtras.css'
 import '../rewards/rewards.css'
+import '../rewards/rewards2.css'
 
-type Tab = 'now' | 'saving' | 'all' | 'history' | 'earn'
+type Tab = 'now' | 'unlock' | 'all' | 'history' | 'earn'
 const TABS: { id: Tab; label: string; title: string }[] = [
-  { id: 'now', label: 'Can get now', title: 'Rewards you can afford now (1)' },
-  { id: 'saving', label: 'Saving for', title: 'Your goals and jars (2)' },
+  { id: 'now', label: 'For you', title: 'Ready now, what you save for, and rewards that fit what you do (1)' },
+  { id: 'unlock', label: 'Unlock by doing', title: 'Rewards that open when you really did the work (2)' },
   { id: 'all', label: 'All', title: 'Every reward (3)' },
   { id: 'history', label: 'History', title: 'What you bought (4)' },
-  { id: 'earn', label: 'Quests', title: 'Daily quests, the weekly challenge, your earnings and badges (5)' }
+  { id: 'earn', label: 'Earn', title: 'Where your points came from, quests, the weekly challenge, your earnings and badges (5)' }
 ]
+const UNLOCK_SEEN = 'ls.rw.unlockSeen'
+const readSeen = (): string[] => {
+  try {
+    const v = JSON.parse(localStorage.getItem(UNLOCK_SEEN) || '[]')
+    return Array.isArray(v) ? v.map(String) : []
+  } catch {
+    return []
+  }
+}
 const TAB_KEY = 'ls.rw.tab'
 const readTab = (): Tab | null => {
   try {
@@ -47,7 +63,10 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   const act = useAction()
   const toast = useToast()
   const [locks, reloadLocks] = useUnlocks()
-  const { insights, quests, value, reload } = useRewardsData(state)
+  const { insights, quests, value, more, setMore, reload } = useRewardsData(state)
+  const [ruling, setRuling] = useState<number | null>(null)
+  const [reveal, setReveal] = useState<{ prize: ChestPrize; box: 'chest' | 'mystery' } | null>(null)
+  const [unlocking, setUnlocking] = useState<Set<number>>(new Set())
   const [tab, setTabNow] = useState<Tab | null>(readTab)
   useEffect(() => {
     const on = (e: Event) => {
@@ -75,15 +94,20 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   const live = useMemo(() => state.rewards.filter((r) => !r.archived), [state.rewards])
   const goals = useMemo(() => live.filter((r) => r.goalRank).sort((a, b) => (a.goalRank ?? 0) - (b.goalRank ?? 0)), [live])
 
+  const coupons = state.coupons ?? []
   const infoOf = (r: Reward): CardInfo => {
     const ls = locks?.states[String(r.id)]
-    const lock = ls ? { text: ls.text, met: ls.met } : null
-    const blocked = redeemBlocker({ reward: r, balance: state.balance, level: state.level, monthSpent: state.monthSpent, budget: state.budget, buys: state.buys?.[r.id] ?? [], today }) ?? (lock && !lock.met ? lock.text : null)
-    return { blocked, lock, left: Math.max(0, r.price - state.balance - (r.jar ?? 0)), justReady: justReady.has(r.id) }
+    const lock = ls ? { text: ls.text, met: ls.met, progress: ls.progress } : null
+    const d = couponFor(r, coupons)
+    const deal = d.coupon ? { price: d.price, label: d.coupon.kind === 'free' ? 'Free with a coupon' : `−${d.coupon.pct}% coupon` } : null
+    const priced = deal ? { ...r, price: d.price } : r
+    const guard = state.guards?.[r.id] ?? null
+    const blocked = redeemBlocker({ reward: priced, balance: state.balance, level: state.level, monthSpent: state.monthSpent, budget: state.budget, buys: state.buys?.[r.id] ?? [], today }) ?? guard ?? (lock && !lock.met ? lock.text : null)
+    return { blocked, lock, left: Math.max(0, priced.price - state.balance - (r.jar ?? 0)), justReady: justReady.has(r.id), unlocking: unlocking.has(r.id), tags: ruleTags(state.rules?.[String(r.id)]), deal }
   }
   const infos = new Map(live.map((r) => [r.id, infoOf(r)]))
   const readyList = live.filter((r) => !infos.get(r.id)!.blocked)
-  const shownTab: Tab = tab ?? (readyList.length ? 'now' : 'all')
+  const shownTab: Tab = tab ?? 'now'
   const setTab = (t: Tab) => {
     setTabNow(t)
     try {
@@ -97,22 +121,51 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   // once, with a soft chime and a toast. Once per reward and buy, remembered
   // in a synced setting. The very first time, today's ready ones are noted quietly.
   const announced = useRef(false)
+  // Keys already marked this visit (the save is on its way), and rewards you just bought:
+  // a repeatable one that is still ready after a buy is not "newly ready".
+  const marked = useRef(new Set<string>())
+  const bought = useRef(new Set<number>())
   useEffect(() => {
     if (!insights || !locks) return
-    const seen = new Set(insights.readySeen)
-    const fresh = readyList.filter((r) => !seen.has(readyKey(r.id, state.buys?.[r.id]?.length ?? 0)))
-    if (!fresh.length) return
-    const keys = fresh.map((r) => readyKey(r.id, state.buys?.[r.id]?.length ?? 0))
+    const seen = new Set([...insights.readySeen, ...marked.current])
+    const all = readyList.filter((r) => !seen.has(readyKey(r.id, state.buys?.[r.id]?.length ?? 0)))
+    if (!all.length) return
+    const keys = all.map((r) => readyKey(r.id, state.buys?.[r.id]?.length ?? 0))
+    for (const k of keys) marked.current.add(k)
+    const fresh = all.filter((r) => !bought.current.has(r.id))
     const quiet = !insights.readySeen.length && !announced.current
     announced.current = true
     void life.shop.markReady?.(keys).then(reload).catch(() => {})
-    if (quiet) return
+    if (quiet || !fresh.length) return
     setJustReady(new Set(fresh.map((r) => r.id)))
     play('remindReward')
     toast(fresh.length === 1 ? `${rewardEmoji(fresh[0])} ${fresh[0].title} is ready` : `${fresh.length} rewards are ready`, 'good')
     const t = setTimeout(() => setJustReady(new Set()), 1600)
     return () => clearTimeout(t)
   }, [insights, locks, readyList.map((r) => r.id).join(',')])
+
+  // Rewards 2: a lock that just opened plays its unlock once (per device, per week for weekly deeds).
+  useEffect(() => {
+    if (!locks) return
+    const week = more?.activity.week ?? ''
+    const seen = new Set(readSeen())
+    const fresh = live.filter((r) => {
+      const st = locks.states[String(r.id)]
+      return st?.met && !seen.has(`${r.id}:${week}`)
+    })
+    if (!fresh.length) return
+    try {
+      localStorage.setItem(UNLOCK_SEEN, JSON.stringify([...seen, ...fresh.map((r) => `${r.id}:${week}`)].slice(-200)))
+    } catch {
+      /* a convenience only */
+    }
+    if (stillMode()) return
+    setUnlocking(new Set(fresh.map((r) => r.id)))
+    play('levelUp')
+    toast(fresh.length === 1 ? `🔓 ${fresh[0].title} unlocked: you did the work` : `🔓 ${fresh.length} rewards unlocked`, 'good')
+    const t = setTimeout(() => setUnlocking(new Set()), 1800)
+    return () => clearTimeout(t)
+  }, [locks, more?.activity.week, live.map((r) => r.id).join(',')])
 
   useEffect(() => {
     if (!justBought) return
@@ -149,6 +202,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   const buy = async (r: Reward, el: HTMLElement): Promise<boolean> => {
     const s = await act(() => redeemReward(r.id))
     if (!s) return false
+    bought.current.add(r.id)
     celebrate(el, 'reward')
     play('reward')
     setJustBought(r.title)
@@ -213,13 +267,41 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
       onWallet()
     }
   }
-  const openChest = async (level: number): Promise<number | null> => {
-    const r = await act(() => life.shop.openChest(level))
-    if (!r) return null
+  const openChest = async (level: number) => {
+    const r = await act(async () => (life.shop.openChestPrize ? life.shop.openChestPrize(level) : life.shop.openChest(level).then((x) => ({ prize: { kind: 'coins' as const, coins: x.coins }, state: x.state }))))
+    if (!r) return
     play('levelUp')
+    setReveal({ prize: r.prize, box: 'chest' })
     onState(r.state)
     onWallet()
-    return r.coins
+  }
+  const openMystery = async () => {
+    if (!life.shop.claimMystery) return
+    const r = await act(() => life.shop.claimMystery!())
+    if (!r) return
+    play('levelUp')
+    setReveal({ prize: r.prize, box: 'mystery' })
+    onState(r.state)
+    reload()
+  }
+  const addSuggestion = async (key: string) => {
+    if (!life.shop.addSuggestion) return
+    const s = await act(() => life.shop.addSuggestion!(key), 'Added to your rewards')
+    if (!s) return
+    onState(s)
+    reloadLocks()
+    reload()
+  }
+  const hideSuggestion = async (key: string) => {
+    if (!life.shop.hideSuggestion) return
+    const m = await act(() => life.shop.hideSuggestion!(key))
+    if (m) setMore(m)
+  }
+  const saveRules = async (id: number, rules: RewardRules | null) => {
+    if (!life.shop.setRules) return false
+    const s = await act(() => life.shop.setRules!(id, rules), rules ? 'Limits saved' : 'Limits removed')
+    if (s) onState(s)
+    return !!s
   }
 
   // Drag to reorder (RF3), on the All tab.
@@ -242,7 +324,8 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     ]
     if (isGoal && r.goalRank! > 1) items.push({ label: 'Make it my main goal', run: () => void setGoals([r.id, ...goals.filter((g) => g.id !== r.id).map((g) => g.id)], `${r.title} is your main goal`) })
     if (life.shop.jarAdd) items.push({ label: (r.jar ?? 0) > 0 ? 'Savings jar…' : 'Set points aside…', run: () => setJarFor(jarFor === r.id ? null : r.id) })
-    if (locks) items.push({ label: locks.locks[String(r.id)] ? 'Change lock' : 'Lock it to a goal', run: () => setLocking(locking === r.id ? null : r.id) })
+    if (locks) items.push({ label: locks.locks[String(r.id)] ? 'Change lock' : 'Unlock by doing…', run: () => setLocking(locking === r.id ? null : r.id) })
+    if (life.shop.setRules) items.push({ label: state.rules?.[String(r.id)] ? 'Change healthy limits' : 'Healthy limits…', run: () => setRuling(ruling === r.id ? null : r.id) })
     if (r.productUrl) items.push({ label: 'Open link', run: () => window.open(r.productUrl!, '_blank', 'noopener') })
     items.push({ label: 'Remove', danger: true, run: () => void remove(r) })
     return <CardMenu items={items} />
@@ -260,13 +343,15 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
           }}
         />
       )}
+      {ruling === r.id && <RulesEditor cur={state.rules?.[String(r.id)]} onSave={(x) => saveRules(r.id, x)} onDone={() => setRuling(null)} />}
       {jarFor === r.id && <JarEditor r={r} balance={state.balance} onPut={(n) => void jar(r, n)} onTake={(n) => void jar(r, n, true)} onClose={() => setJarFor(null)} />}
     </>
   )
 
-  const card = (r: Reward, draggable = false) => (
+  const card = (r: Reward, draggable = false, compact = false) => (
     <RewardCard
       key={r.id}
+      compact={compact}
       r={r}
       info={infos.get(r.id) ?? { blocked: null, lock: null, left: 0, justReady: false }}
       balance={state.balance}
@@ -293,7 +378,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   )
 
   const list = (() => {
-    let xs = shownTab === 'now' ? live.filter((r) => !infos.get(r.id)!.blocked || flipping.has(r.id)) : shownTab === 'saving' ? [...goals, ...live.filter((r) => !r.goalRank && (r.jar ?? 0) > 0)] : sorted(live)
+    let xs = sorted(live)
     // A one-time reward just bought has left the list: keep it for its flip.
     for (const [id, r] of flipping) if (!xs.some((x) => x.id === id)) xs = [...xs, r]
     if (shownTab === 'all' && cat) xs = xs.filter((r) => r.category === cat)
@@ -311,7 +396,22 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     justBought,
     streak: insights?.focusStreak ?? 0
   })
-  const counts: Record<Tab, number> = { now: readyList.length, saving: goals.length, all: live.length, history: state.recent.filter((x) => !x.undone).length, earn: 0 }
+  const lockedIds = new Set(Object.keys(locks?.locks ?? {}).map(Number))
+  const lockedList = live.filter((r) => lockedIds.has(r.id)).sort((a, b) => Number(!!locks?.states[String(a.id)]?.met) - Number(!!locks?.states[String(b.id)]?.met))
+  const counts: Record<Tab, number> = { now: readyList.length, unlock: lockedList.filter((r) => !locks?.states[String(r.id)]?.met).length, all: live.length, history: state.recent.filter((x) => !x.undone).length, earn: 0 }
+  const readyNow = [...readyList, ...[...flipping.values()].filter((r) => !readyList.some((x) => x.id === r.id))]
+  // The next reward you'll have at your pace: the closest one only points stand between.
+  const next: NextUp | null = (() => {
+    const waiting = live.filter((r) => {
+      const i = infos.get(r.id)!
+      return i.blocked && i.left > 0 && !(i.lock && !i.lock.met)
+    })
+    const pick = waiting.sort((a, b) => infos.get(a.id)!.left - infos.get(b.id)!.left)[0] ?? readyList[0]
+    if (!pick) return null
+    const left = infos.get(pick.id)!.left
+    return { reward: pick, line: !infos.get(pick.id)!.blocked ? 'Ready now' : readyLine(today, left, perDay) ?? `${left.toLocaleString()} to go` }
+  })()
+  const benText = more?.pace.line ?? ben
 
   return (
     <div className="rx">
@@ -332,12 +432,11 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
         </button>
       </div>
 
-      <WalletHero balance={state.balance} goals={goals} perDay={perDay} today={today} insights={insights} value={value} onFun={(m) => void fun(m)} onHow={() => setHow(true)} onAdd={() => setSheet('new')} />
+      <WalletHero balance={state.balance} insights={insights} value={value} next={next} coupons={coupons.length} onFun={(m) => void fun(m)} onHow={() => setHow(true)} onAdd={() => setSheet('new')} ben={<BenLine text={benText} />} />
 
       <div className="rx-layout rx-one">
         <div className="rx-main">
-          <BenLine text={ben} />
-          <Chests levels={state.chests} onOpen={openChest} />
+          <Surprises chests={state.chests} mystery={more?.mystery ?? null} coupons={coupons} today={today} onChest={openChest} onMystery={openMystery} />
 
           <PageTabs
             page="shop"
@@ -350,25 +449,79 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
             }}
           />
 
-          {shownTab !== 'history' && shownTab !== 'earn' && <AffordRow rewards={live} balance={state.balance} perDay={perDay} onPick={setOnly} />}
-
-          {shownTab === 'all' && usedCats.length > 1 && !only && (
-            <div className="rx-cats filter" role="group" aria-label="Category">
-              <button type="button" className={`rx-chip ${!cat ? 'on' : ''}`} onClick={() => setCat(null)}>
-                Everything
-              </button>
-              {usedCats.map((c) => (
-                <button key={c.id} type="button" className={`rx-chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(cat === c.id ? null : c.id)}>
-                  {c.emoji} {c.label}
-                </button>
-              ))}
+          {shownTab === 'now' && (
+            <div className="rx-foryou" role="tabpanel" data-tabpanel="now">
+              <Section title="Ready now" sub={readyNow.length ? `${readyNow.length} you can get` : undefined}>
+                {readyNow.length ? (
+                  <Rail label="Ready now">{readyNow.map((r) => card(r, false, true))}</Rail>
+                ) : (
+                  <div className="rx-slim-empty">
+                    <span>{next ? `Nothing ready yet. Next: ${next.reward.title}, ${next.line[0].toLowerCase()}${next.line.slice(1)}.` : 'Earn a few points and something will be ready.'}</span>
+                  </div>
+                )}
+              </Section>
+              <SavingFor goals={goals} balance={state.balance} perDay={perDay} today={today} onAll={() => setTab('all')} />
+              {more && <SuggestRow list={more.suggestions} onAdd={addSuggestion} onHide={(k) => void hideSuggestion(k)} />}
             </div>
           )}
 
-          {shownTab === 'earn' ? (
-            <div className="rx-earn">
+          {shownTab === 'unlock' && (
+            <div className="rx-unlock" role="tabpanel" data-tabpanel="unlock">
+              <p className="rx-sub rx-unlock-intro">These open when you really did it: a workout streak, hours of focus, nights on time. Your points still count; only the buy waits.</p>
+              {lockedList.length ? (
+                <div className="rx-grid">{lockedList.map((r) => card(r))}</div>
+              ) : (
+                <div className="rx-slim-empty">
+                  <span>No reward is locked yet. Add an idea below, or use any card's ⋯ menu → "Unlock by doing…".</span>
+                </div>
+              )}
+              {more && <SuggestRow list={more.unlockIdeas} onAdd={addSuggestion} onHide={(k) => void hideSuggestion(k)} title="Ideas to unlock by doing" sub="Each one comes with its lock" />}
+            </div>
+          )}
+
+          {shownTab === 'all' && (
+            <div className="rx-all" role="tabpanel" data-tabpanel="all">
+              <AffordRow rewards={live} balance={state.balance} perDay={perDay} onPick={setOnly} />
+              {usedCats.length > 1 && !only && (
+                <div className="rx-cats filter" role="group" aria-label="Category">
+                  <button type="button" className={`rx-chip ${!cat ? 'on' : ''}`} onClick={() => setCat(null)}>
+                    Everything
+                  </button>
+                  {usedCats.map((c) => (
+                    <button key={c.id} type="button" className={`rx-chip ${cat === c.id ? 'on' : ''}`} onClick={() => setCat(cat === c.id ? null : c.id)}>
+                      {c.emoji} {c.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {!list.length && (
+                <div className="rx-empty">
+                  <b>No rewards yet</b>
+                  <span>Add something you really want, or pick one from Suggested for you.</span>
+                  <button type="button" className="rx-btn primary" onClick={() => setSheet('new')}>
+                    + Add a reward
+                  </button>
+                </div>
+              )}
+              <div className="rx-grid">{list.map((r) => card(r, !cat && !only))}</div>
+              {life.shop.reorder && live.length > 1 && <p className="rx-sub rx-drag-hint">Drag a card to change the order.</p>}
+            </div>
+          )}
+
+          {shownTab === 'history' && (
+            <div role="tabpanel" data-tabpanel="history">
+              <History recent={state.recent} currency={state.currency} onUndo={life.shop.undoBuy ? (id, t) => void undoBuy(id, t) : null} />
+            </div>
+          )}
+
+          {shownTab === 'earn' && (
+            <div className="rx-earn" role="tabpanel" data-tabpanel="earn">
+              {more && <PointsFrom a={more.activity} />}
+              <div className="rx-earn-col">
+                {insights && <Challenge c={insights.challenge} onClaim={() => void claimChallenge()} />}
+                {more && <MysteryCard m={more.mystery} />}
+              </div>
               {quests && <Quests q={quests} onClaim={() => void claimQuests()} />}
-              {insights && <Challenge c={insights.challenge} onClaim={() => void claimChallenge()} />}
               {insights && (
                 <section className="rx-panel">
                   <header>
@@ -380,39 +533,8 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
               )}
               {insights && <Badges list={insights.badges} />}
             </div>
-          ) : shownTab === 'history' ? (
-            <History recent={state.recent} currency={state.currency} onUndo={life.shop.undoBuy ? (id, t) => void undoBuy(id, t) : null} />
-          ) : (
-            <>
-              {!list.length && (
-                <div className="rx-empty">
-                  {shownTab === 'now' ? (
-                    <>
-                      <b>Nothing ready yet</b>
-                      <span>{goal ? `${Math.max(0, goal.price - state.balance - (goal.jar ?? 0)).toLocaleString()} points to go for ${goal.title}. One focus block is +15.` : 'Earn a few points and something will be ready.'}</span>
-                    </>
-                  ) : shownTab === 'saving' ? (
-                    <>
-                      <b>Not saving for anything yet</b>
-                      <span>Pick up to 3 goals with a card's ⋯ menu. The first one shows on Today.</span>
-                    </>
-                  ) : (
-                    <>
-                      <b>No rewards yet</b>
-                      <span>Add something you really want: a game, headphones, a dinner out.</span>
-                    </>
-                  )}
-                  <button type="button" className="rx-btn primary" onClick={() => (shownTab === 'all' ? setSheet('new') : setTab('all'))}>
-                    {shownTab === 'all' ? '+ Add a reward' : 'See all rewards'}
-                  </button>
-                </div>
-              )}
-              <div className="rx-grid">{list.map((r) => card(r, shownTab === 'all' && !cat && !only))}</div>
-              {shownTab === 'all' && life.shop.reorder && live.length > 1 && <p className="rx-sub rx-drag-hint">Drag a card to change the order.</p>}
-            </>
           )}
         </div>
-
       </div>
 
       {sheet && (
@@ -427,6 +549,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
         />
       )}
       {how && <HowToEarn streak={insights?.focusStreak ?? 0} onClose={() => setHow(false)} />}
+      {reveal && <Reveal prize={reveal.prize} box={reveal.box} onClose={() => setReveal(null)} />}
     </div>
   )
 }

@@ -151,6 +151,11 @@ export interface ShopState {
   economy?: EconomySummary
   /** Your usual points a day (last 30 days), for "about 3 days" next to a price. */
   earnPerDay?: number
+  /** Healthy limits per reward id (a most-per-day, "pair it"), and why each blocks a buy now (null = fine). */
+  rules?: Record<string, import('@core/rewardGuard').RewardRules>
+  guards?: Record<number, string | null>
+  /** Coupons you can use now (from chests and the weekly mystery reward). */
+  coupons?: import('@core/rewardSurprise').Coupon[]
   /** Set right after a buy (RL4): what went, for the toast "−600 points · −150 lei added to Money as Fun". */
   lastBuy?: { ledgerId: number; title: string; points: number; paid: number; currency: string; toast: string }
 }
@@ -575,6 +580,13 @@ export interface LifeApi {
     jarAdd?(rewardId: number, amount: number): Promise<ShopState>
     jarTake?(rewardId: number, amount: number): Promise<ShopState>
     claimChallenge?(): Promise<{ coins: number; state: ShopState }>
+    /** Rewards 2: suggestions from your activity, where points came from, unlock progress, the mystery reward, Ben's fun note. */
+    more?(): Promise<import('../renderer/src/web/rewardsMore').RewardsMore>
+    addSuggestion?(key: string): Promise<ShopState>
+    hideSuggestion?(key: string): Promise<import('../renderer/src/web/rewardsMore').RewardsMore>
+    setRules?(rewardId: number, rules: import('@core/rewardGuard').RewardRules | null): Promise<ShopState>
+    openChestPrize?(level: number): Promise<{ prize: import('@core/rewardSurprise').ChestPrize; state: ShopState }>
+    claimMystery?(): Promise<{ prize: import('@core/rewardSurprise').ChestPrize; state: ShopState }>
     markReady?(keys: string[]): Promise<void>
   }
   tasks: {

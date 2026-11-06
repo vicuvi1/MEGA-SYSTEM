@@ -1,7 +1,7 @@
 // Reward locks (FT21): a reward opens only when a goal is done or a streak is
 // reached. Points still count; only the buy waits.
 import { useEffect, useState } from 'react'
-import { STREAK_LABEL, type StreakId, type Unlock } from '@core/unlocks'
+import { DEED_LABEL, STREAK_LABEL, type DeedId, type StreakId, type Unlock } from '@core/unlocks'
 import type { UnlocksView } from '../web/lifeExtras'
 import { life } from '../bridge'
 import { useAction } from '../ui'
@@ -18,7 +18,9 @@ export function LockEditor({ rewardId, view, onDone }: { rewardId: number; view:
   const act = useAction()
   const cur = view?.locks[String(rewardId)]
   const openGoals = (view?.goals ?? []).filter((g) => !g.done)
-  const [kind, setKind] = useState<'goal' | 'streak'>(cur?.kind ?? (openGoals.length ? 'goal' : 'streak'))
+  const [kind, setKind] = useState<'goal' | 'streak' | 'deed'>(cur?.kind ?? 'deed')
+  const [deed, setDeed] = useState<DeedId>(cur?.kind === 'deed' ? cur.deed : 'focusHours')
+  const [target, setTarget] = useState<number>(cur?.kind === 'deed' ? cur.target : 10)
   const [goalId, setGoalId] = useState<number>(cur?.kind === 'goal' ? cur.goalId : openGoals[0]?.id ?? 0)
   const [streak, setStreak] = useState<StreakId>(cur?.kind === 'streak' ? cur.streak : 'workout')
   const [days, setDays] = useState<number>(cur?.kind === 'streak' ? cur.days : 14)
@@ -28,11 +30,23 @@ export function LockEditor({ rewardId, view, onDone }: { rewardId: number; view:
   return (
     <div className="rw-lock-edit rx-lock-edit">
       <div className="row">
-        <Select value={kind} onChange={(e) => setKind(e.target.value as 'goal' | 'streak')} aria-label="Unlock with">
-          <option value="goal">When a goal is done</option>
+        <Select value={kind} onChange={(e) => setKind(e.target.value as 'goal' | 'streak' | 'deed')} aria-label="Unlock with">
+          <option value="deed">By doing (this week)</option>
           <option value="streak">At a streak</option>
+          <option value="goal">When a goal is done</option>
         </Select>
-        {kind === 'goal' ? (
+        {kind === 'deed' ? (
+          <>
+            <input type="number" min={1} max={DEED_LABEL[deed].max} value={target} onChange={(e) => setTarget(Math.max(1, Math.min(DEED_LABEL[deed].max, Number(e.target.value) || 1)))} aria-label="How many" />
+            <Select value={deed} onChange={(e) => setDeed(e.target.value as DeedId)} aria-label="Of what">
+              {(Object.keys(DEED_LABEL) as DeedId[]).map((k) => (
+                <option key={k} value={k}>
+                  {DEED_LABEL[k].unit ? `${DEED_LABEL[k].unit} of ${DEED_LABEL[k].label}` : DEED_LABEL[k].label} {DEED_LABEL[k].window}
+                </option>
+              ))}
+            </Select>
+          </>
+        ) : kind === 'goal' ? (
           <Select value={goalId} onChange={(e) => setGoalId(Number(e.target.value))} aria-label="Goal">
             {!openGoals.length && <option value={0}>No open goals: add one on the Goals page</option>}
             {openGoals.map((g) => (
@@ -59,7 +73,7 @@ export function LockEditor({ rewardId, view, onDone }: { rewardId: number; view:
           type="button"
           className="rx-btn primary small"
           disabled={kind === 'goal' && !goalId}
-          onClick={() => void save(kind === 'goal' ? { kind: 'goal', goalId, title: openGoals.find((g) => g.id === goalId)?.title ?? 'goal' } : { kind: 'streak', streak, days })}
+          onClick={() => void save(kind === 'deed' ? { kind: 'deed', deed, target } : kind === 'goal' ? { kind: 'goal', goalId, title: openGoals.find((g) => g.id === goalId)?.title ?? 'goal' } : { kind: 'streak', streak, days })}
         >
           Save lock
         </button>

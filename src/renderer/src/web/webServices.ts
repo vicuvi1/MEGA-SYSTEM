@@ -39,6 +39,8 @@ import { isFlowRule } from '@core/rules'
 import { getSetting, setSetting } from '../../../main/settings'
 import { loadUnlocks, unlockFacts } from './lifeExtras'
 import { unlockBlocker } from '@core/unlocks'
+import { rewardsMore } from './rewardsMore'
+import type { RewardRules } from '@core/rewardGuard'
 import type { BrowserDb } from './browserDb'
 import type { Mirror } from './mirror'
 
@@ -340,7 +342,23 @@ export function createWebServices(mirror: Mirror) {
       jarAdd: (rewardId: number, amount: number) => write((s) => (s.shop.jarAdd(rewardId, amount, s.economy), s.shop.state()), W),
       jarTake: (rewardId: number, amount: number) => write((s) => (s.shop.jarTake(rewardId, amount), s.shop.state()), W),
       claimChallenge: () => write((s) => ({ coins: s.shop.claimChallenge(), state: s.shop.state() }), W),
-      markReady: (keys: string[]) => write((s) => s.shop.markReady(keys))
+      markReady: (keys: string[]) => write((s) => s.shop.markReady(keys)),
+      // Rewards 2: suggestions, where points came from, guardrails, coupons, the mystery reward.
+      more: () => read((s) => rewardsMore(s, shopValue(s))),
+      addSuggestion: (key: string) => write((s) => (s.shop.addStarter(key), s.shop.state())),
+      hideSuggestion: (key: string) => write((s) => (s.shop.hideSuggestion(key), rewardsMore(s, shopValue(s)))),
+      setRules: (rewardId: number, rules: RewardRules | null) => write((s) => (s.shop.setRules(rewardId, rules), s.shop.state())),
+      openChestPrize: (level: number) => write((s) => ({ prize: s.shop.openChestPrize(level), state: s.shop.state() }), W),
+      claimMystery: () =>
+        write((s) => {
+          let plan = null
+          try {
+            plan = s.weekPlan.active()
+          } catch {
+            plan = null
+          }
+          return { prize: s.shop.claimMystery(plan), state: s.shop.state() }
+        }, W)
     },
     tasks: {
       state: () => read((s) => s.tasks.state()),

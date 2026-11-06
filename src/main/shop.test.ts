@@ -280,6 +280,79 @@ describe('honest extras on real actions', () => {
   })
 })
 
+describe('Rewards 2: suggestions, guardrails and honest surprises', () => {
+  const day = '2026-10-25'
+  const earn = (coins: number, module = 'test', ruleId: string | null = null) => db.transaction(() => wallet.append({ ts: now.toISOString(), day, module, kind: 'earn', coins, xp: 0, ruleId }))()
+  const idOf = (title: string) => shop.state(now).rewards.find((r) => r.title === title)!.id
+
+  it('"Add to my rewards" saves the starter with its limits and its lock', () => {
+    const id = shop.addStarter('game30')
+    expect(shop.state(now).rewards.find((r) => r.id === id)).toMatchObject({ title: '30 min of gaming', price: 45, emoji: '🎮', category: 'fun' })
+    expect(shop.rules()[String(id)]).toEqual({ perDay: 2 })
+    const kb = shop.addStarter('keyboard')
+    expect(JSON.parse((db.prepare("SELECT value FROM settings WHERE key = 'reward_unlocks'").get() as { value: string }).value)[String(kb)]).toEqual({ kind: 'deed', deed: 'codeHours', target: 10 })
+    expect(() => shop.addStarter('nope')).toThrow('gone')
+    shop.hideSuggestion('keyboard')
+    expect(shop.hiddenSuggestions()).toEqual(['keyboard'])
+  })
+
+  it('a most-per-day and "pair it" hold at the buy, from logged rows', () => {
+    earn(1000)
+    const id = shop.addStarter('game30')
+    shop.redeem(id, now)
+    shop.redeem(id, now)
+    expect(shop.state(now).guards?.[id]).toBe('2 a day: again tomorrow')
+    expect(() => shop.redeem(id, now)).toThrow('2 a day')
+    // Tomorrow it is open again.
+    expect(() => shop.redeem(id, new Date('2026-10-26T12:00:00Z'))).not.toThrow()
+    const smoothie = shop.addStarter('smoothie')
+    expect(() => shop.redeem(smoothie, now)).toThrow('Log a workout today first')
+    earn(10, 'body', 'body.workout_done')
+    expect(() => shop.redeem(smoothie, now)).not.toThrow()
+    shop.setRules(smoothie, null)
+    expect(shop.rules()[String(smoothie)]).toBeUndefined()
+  })
+
+  it('a chest can give a coupon instead of coins: no points made, the buy gets cheaper or free', () => {
+    const seq = [0.1, 0, 0.4, 0]
+    const lucky = new Shop(db, wallet, 'UTC', () => seq.shift() ?? 0.9)
+    const tea = lucky.addStarter('bubbletea') // 90 points, repeatable
+    grant(0, xpToNext(1) + xpToNext(2)) // level 3: two chests
+    const before = lucky.state(now).balance
+    expect(lucky.openChestPrize(2, now)).toEqual({ kind: 'free', rewardId: tea, title: 'Bubble tea' })
+    expect(lucky.openChestPrize(3, now)).toEqual({ kind: 'off', pct: 25 })
+    let s = lucky.state(now)
+    expect(s.balance).toBe(before)
+    expect(s.chests).toEqual([])
+    expect(s.coupons?.map((c) => c.kind)).toEqual(['free', 'off'])
+    // The free one pays the tea: 0 points, and a buy with no points still counts as a buy.
+    const buy = lucky.redeem(tea, now)
+    s = lucky.state(now)
+    expect(s.balance).toBe(before)
+    expect(s.coupons?.map((c) => c.kind)).toEqual(['off'])
+    // Undo the buy: the coupon comes back.
+    lucky.undoBuy(buy, now)
+    expect(lucky.state(now).coupons?.map((c) => c.kind)).toEqual(['free', 'off'])
+    // 25% off a bigger one.
+    earn(500)
+    lucky.redeem(idOf('Face cream'), now, { noCoupon: false })
+    expect(lucky.state(now).balance).toBe(before + 500 - 225)
+  })
+
+  it('the weekly mystery reward opens once, after the top 3, and gives a coupon only', () => {
+    shop.addStarter('snack')
+    const plan = (done: boolean[]) => ({ week: '2026-10-19', big3: done.map((d) => ({ done: d })) })
+    expect(() => shop.claimMystery(plan([true, false, true]), now)).toThrow('2 of 3 done')
+    expect(() => shop.claimMystery(null, now)).toThrow('Pick your top 3')
+    const bal = shop.state(now).balance
+    const p = shop.claimMystery(plan([true, true, true]), now)
+    expect(p.kind).toBe('free')
+    expect(shop.state(now).balance).toBe(bal)
+    expect(shop.mystery(plan([true, true, true]), now)).toMatchObject({ claimed: true, ready: false })
+    expect(() => shop.claimMystery(plan([true, true, true]), now)).toThrow('Already opened')
+  })
+})
+
 function rollMid(level: number) {
   return Math.round(10 + level * 2 + 0.5 * (40 + level * 5 - (10 + level * 2)))
 }

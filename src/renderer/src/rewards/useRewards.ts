@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { QuestState, ShopState, ShopValue } from '@shared/api'
 import type { RewardsInsights } from '../../../main/shop'
+import type { RewardsMore } from '../web/rewardsMore'
 import { pointValue, type PointValue } from '@core/pointValue'
 import { life } from '../bridge'
 import { reducedMotion } from '../motionKit'
@@ -19,7 +20,9 @@ export function useRewardsData(state: ShopState) {
   const [insights, setInsights] = useState<RewardsInsights | null>(null)
   const [quests, setQuests] = useState<QuestState | null>(null)
   const [remote, setRemote] = useState<ShopValue | null>(null)
+  const [more, setMore] = useState<RewardsMore | null>(null)
   const load = useCallback(() => {
+    life.shop.more?.().then(setMore).catch(() => {})
     life.shop.insights?.().then(setInsights).catch(() => {})
     life.wallet.quests().then(setQuests).catch(() => {})
     // What a point is worth (from your fun budget); if it can't be read, the
@@ -40,7 +43,7 @@ export function useRewardsData(state: ShopState) {
   const value: ValueInfo = remote?.value
     ? { value: remote.value, hourlyLei: remote.hourlyLei ?? null }
     : { value: pointValue({ funBudgetLei: null, earnPerDay: state.earnPerDay ?? 0 }), hourlyLei: null }
-  return { insights, quests, value, reload: load }
+  return { insights, quests, value, more, setMore, reload: load }
 }
 
 /** Calm mode or "reduce motion": the page stays still (no flying coins, no flips). */
