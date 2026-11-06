@@ -7,6 +7,7 @@ import { life } from './bridge'
 import { Icon } from './Icon'
 import { useAction } from './ui'
 import { useLive } from './live'
+import { PlanAlso } from './PlanAlso'
 
 /** `oneApprove`: on Today, where "Do this now" already shows Approve, the card doesn't repeat it. */
 export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: { onChange?: () => void; oneApprove?: boolean; hideReview?: boolean }) {
@@ -92,7 +93,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
   // A waiting plan with nothing in it (only the water goal) or one left over
   // in the evening isn't worth a card: Ben approves or replans on his own.
   if (b.status !== 'approved' && ((!p.mustdos.length && !p.blocks.length && !p.training) || hour >= 18)) return null
-  const timed = [...p.blocks.map((x) => ({ s: x.start, e: fromMin(toMin(x.start) + x.minutes), t: x.title, train: false })), ...(p.training ? [{ s: p.training.time, e: '', t: p.training.what, train: true }] : [])].sort((a, c) => a.s.localeCompare(c.s))
+  const timed = [...p.blocks.map((x) => ({ s: x.start, e: fromMin(toMin(x.start) + x.minutes), t: x.title, train: false, tasks: (x.tasks?.length ?? 0) > 1 ? x.tasks : undefined })), ...(p.training ? [{ s: p.training.time, e: '', t: p.training.what, train: true, tasks: undefined }] : [])].sort((a, c) => a.s.localeCompare(c.s))
   const approved = b.status === 'approved'
   return (
     <section className={`panel cp ${approved ? 'cp-ok' : ''} ${justApproved ? 'cp-cheer' : ''}`}>
@@ -104,6 +105,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
         {approved && <span className="chip on">✓ Approved</span>}
       </header>
       <p className="cp-headline">{p.headline}</p>
+      {p.why && <p className="plan-why">{p.why}</p>}
       <div className="cp-grid">
         {p.mustdos.length > 0 && (
           <div>
@@ -134,7 +136,10 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
                       onBlur={(e) => e.target.value && e.target.value !== x.s && void run('propose', x.train ? `move training to ${e.target.value}` : `move ${x.t.replace(/[,;]/g, ' ')} to ${e.target.value}`, 'Moving…')}
                     />
                   )}
-                  <span>{x.train ? `💪 ${x.t}` : x.t}</span>
+                  <span>
+                    {x.train ? `💪 ${x.t}` : x.t}
+                    {x.tasks && <small className="plan-tasks">{x.tasks.join(' · ')}</small>}
+                  </span>
                   {!approved && (
                     <button className="cp-drop" disabled={!!busy} title="Drop this block" aria-label={`Drop ${x.t}`} onClick={() => void run('propose', x.train ? 'no training' : `drop ${x.t.replace(/[,;]/g, ' ')}`, 'Dropping…')}>
                       ✕
@@ -146,6 +151,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
           </div>
         )}
       </div>
+      <PlanAlso plan={p} />
       <p className="hint small">💧 Water goal {(p.waterMl / 1000).toFixed(1)} L</p>
       {!approved && (
         <>
@@ -160,7 +166,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
                 setNote('')
               }}
             >
-              <input autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="What should change? e.g. no gym today, lab report first" />
+              <input autoFocus value={note} onChange={(e) => setNote(e.target.value)} placeholder="What should change? e.g. add the CV update, move gym to the evening" />
               <button className="btn primary small" disabled={!note.trim()}>
                 Replan
               </button>

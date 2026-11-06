@@ -99,6 +99,30 @@ export function Receipts({ m, onUndo }: { m: Entry; onUndo: (index?: number) => 
 }
 
 /** CN1: the older automatic messages of a run, folded into one line. */
+/**
+ * The feed cut into sections at each day/time divider. Each divider is sticky
+ * only inside its own section, so exactly one label sticks at a time (the
+ * current section's) and the next one pushes it away instead of piling up.
+ */
+export function feedSections<T extends { t: string; key: string }>(feed: T[], render: (it: T, idx: number) => ReactNode): ReactNode[] {
+  const out: ReactNode[] = []
+  let cur: ReactNode[] = []
+  let key = 'top'
+  const flush = () => {
+    if (cur.length) out.push(<section key={`sec-${key}`} className="cf-sec">{cur}</section>)
+    cur = []
+  }
+  feed.forEach((it, idx) => {
+    if (it.t === 'divider') {
+      flush()
+      key = it.key
+    }
+    cur.push(render(it, idx))
+  })
+  flush()
+  return out
+}
+
 export function FoldLine({ item, log, open, onToggle }: { item: Extract<FeedItem, { t: 'fold' }>; log: Entry[]; open: boolean; onToggle: () => void }) {
   return (
     <div className={`cf-fold ${open ? 'open' : ''}`}>

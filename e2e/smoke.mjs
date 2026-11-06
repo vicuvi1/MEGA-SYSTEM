@@ -45,6 +45,17 @@ try {
   })
   await step('Today shows Ben and the day', async () => {
     await pg.waitForSelector('.thb', { timeout: 15000 })
+    if (process.env.PLAN_SHOTS) {
+      await pg.waitForTimeout(1500)
+      const cp = pg.locator('section.cp').first()
+      if (await cp.count()) {
+        await cp.locator('.pa-head').first().click().catch(() => {})
+        await pg.setViewportSize({ width: 1440, height: 2300 })
+        await cp.scrollIntoViewIfNeeded()
+        await cp.screenshot({ path: `${process.env.PLAN_SHOTS}/today-plan.png` })
+        await pg.setViewportSize({ width: 1440, height: 900 })
+      }
+    }
   })
   // LT3: a 14-day session (renewed while in use), and the backups can't be wiped from a page (LT1).
   await step('the session lasts 14 days and the cloud backups are read-only', async () => {
@@ -115,6 +126,35 @@ try {
     await pg.waitForSelector('.cf-plan.live .cf-plan-list li', { timeout: 10000 })
     if (!(await pg.$('.cf-plan.live .cf-plan-track .bar i'))) throw new Error('no timeline on the plan card')
     if (!(await pg.locator('.cf-plan.live .cf-btns button', { hasText: 'Approve' }).count())) throw new Error('no Approve on the plan card')
+    // DP1: the whole day: the reason, block tasks, and "Also today" with ticks that can be undone.
+    const card = pg.locator('.cf-plan.live').last()
+    if (!(await card.locator('.plan-why').count())) throw new Error('no reason line on the plan card')
+    await card.locator('.pa-head', { hasText: 'Also today' }).waitFor({ timeout: 8000 })
+    await card.locator('.pa-head', { hasText: 'Also today' }).click()
+    await card.locator('.pa-list li').first().waitFor({ timeout: 5000 })
+    if ((await card.locator('.pa-list li').count()) < 6) throw new Error('Also today lists too few tasks')
+    if (!(await card.locator('.pa-later').count())) throw new Error('no tasks moved to tomorrow with a reason')
+    if (process.env.PLAN_SHOTS) {
+      await pg.setViewportSize({ width: 1440, height: 2300 })
+      await pg.waitForTimeout(400)
+      await card.scrollIntoViewIfNeeded()
+      await card.screenshot({ path: `${process.env.PLAN_SHOTS}/plan-card.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await card.locator('.pa-list li .pa-tick').first().click()
+    await pg.locator('.toast button', { hasText: 'Undo' }).first().waitFor({ timeout: 4000 })
+    await pg.locator('.toast button', { hasText: 'Undo' }).first().click()
+    if (await card.locator('.pa-list li.done').count()) throw new Error('Undo did not untick the task')
+    // One sticky day label at a time: each divider lives in its own section.
+    if (await pg.$('.cf-col > .cf-divider')) throw new Error('a day divider is outside its section')
+    if (process.env.PLAN_SHOTS) {
+      await pg.evaluate(() => {
+        const s = document.querySelector('.cf-stream')
+        if (s) s.scrollTop = s.scrollHeight * 0.45
+      })
+      await pg.waitForTimeout(300)
+      await pg.locator('.cx-chat').screenshot({ path: `${process.env.PLAN_SHOTS}/chat-one-sticky-label.png` })
+    }
     if (!(await pg.$('.cf-result button'))) throw new Error('no result card with Undo')
     if (!(await pg.$('.cf-daycard'))) throw new Error('no day card')
     if (!(await pg.$('.cf-row.ben.first .cf-who-line'))) throw new Error("no name line at the start of Ben's messages")

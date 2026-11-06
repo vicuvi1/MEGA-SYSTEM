@@ -12,6 +12,31 @@ export interface PlanBlock {
   title: string
   start: string
   minutes: number
+  /** DP1: what kind of block (a goal, focus work, or small tasks batched). */
+  kind?: 'goal' | 'focus' | 'quick'
+  /** DP1: the tasks it covers (their exact Todoist titles). */
+  tasks?: string[]
+}
+
+/** DP1: one of today's other tasks (not a must-do), for the "Also today" list. */
+export interface AlsoItem {
+  id?: string
+  title: string
+  /** Time estimate in minutes. */
+  minutes: number
+  /** Todoist priority: 4 = P1 … 1 = P4. */
+  priority: number
+  project?: string
+  /** The start of the block it is packed into, when it is in one. */
+  at?: string
+  overdue?: boolean
+}
+
+/** DP1: a task moved to tomorrow, with the reason. */
+export interface DeferredItem {
+  id?: string
+  title: string
+  why: string
 }
 
 export interface DayProposal {
@@ -21,6 +46,16 @@ export interface DayProposal {
   blocks: PlanBlock[]
   training: { time: string; what: string } | null
   waterMl: number
+  /** DP1: every other task of the day, most important first. */
+  also?: AlsoItem[]
+  /** DP1: tasks that don't fit today, each with its reason. */
+  deferred?: DeferredItem[]
+  /** DP1: one line on why the day is planned this way. */
+  why?: string
+  /** DP1: already lighter for a short night (not lightened twice). */
+  light?: boolean
+  /** DP1: the free time between events when it was planned (for "add X" / "move Y to the afternoon"). */
+  free?: { start: string; end: string }[]
 }
 
 export interface RhythmState {
@@ -213,7 +248,9 @@ export function cleanProposal(raw: any, fallback: DayProposal, events: CalEvent[
     if (s < after || e > toMin('23:30')) continue
     if ([...busy, ...taken].some((x) => s < x.e && e > x.s)) continue
     taken.push({ s, e })
-    blocks.push({ title, start, minutes })
+    const tasks = (Array.isArray(b?.tasks) ? b.tasks : []).map((x: any) => String(x ?? '').trim().slice(0, 160)).filter(Boolean).slice(0, 12)
+    const kind = b?.kind === 'quick' || b?.kind === 'goal' || b?.kind === 'focus' ? b.kind : undefined
+    blocks.push({ title, start, minutes, ...(kind ? { kind } : {}), ...(tasks.length ? { tasks } : {}) })
     if (blocks.length >= 6) break
   }
   const mustdos = (Array.isArray(raw.mustdos) ? raw.mustdos : []).map((x: any) => String(x).trim().slice(0, 120)).filter(Boolean).slice(0, 3)
@@ -224,13 +261,21 @@ export function cleanProposal(raw: any, fallback: DayProposal, events: CalEvent[
     if (s >= after && ![...busy, ...taken].some((x) => s < x.e && s + 30 > x.s)) training = { time: t, what: String(raw.training.what ?? 'Workout').slice(0, 60) || 'Workout' }
   }
   const waterMl = Number(raw.waterMl) >= 1000 && Number(raw.waterMl) <= 5000 ? Math.round(Number(raw.waterMl)) : fallback.waterMl
+  // DP1: "Also today" and what moves to tomorrow (checked against the real tasks later: checkModelPlan).
+  const name = (x: any) => String(x?.task ?? x?.title ?? (typeof x === 'string' ? x : '')).trim().slice(0, 160)
+  const also: AlsoItem[] = (Array.isArray(raw.also) ? raw.also : []).map((x: any) => ({ title: name(x), minutes: Math.round(Number(x?.minutes)) || 0, priority: 1 })).filter((x: AlsoItem) => x.title)
+  const deferred: DeferredItem[] = (Array.isArray(raw.deferred) ? raw.deferred : []).map((x: any) => ({ title: name(x), why: String(x?.why ?? '').trim().slice(0, 120) })).filter((x: DeferredItem) => x.title && x.why)
+  const why = String(raw.why ?? '').trim().slice(0, 200)
   return {
     day,
     headline: String(raw.headline ?? '').trim().slice(0, 140) || fallback.headline,
     mustdos: mustdos.length ? mustdos : fallback.mustdos,
     blocks: blocks.length || !fallback.blocks.length ? blocks : fallback.blocks,
     training: training ?? (raw.training === null ? null : fallback.training),
-    waterMl
+    waterMl,
+    ...(also.length ? { also } : fallback.also ? { also: fallback.also } : {}),
+    ...(deferred.length ? { deferred } : {}),
+    ...(why ? { why } : fallback.why ? { why: fallback.why } : {})
   }
 }
 
@@ -250,6 +295,10 @@ export function proposalText(p: DayProposal, opts: { version?: number; approved?
   if (p.mustdos.length) lines.push('', '<b>Must-dos</b>', ...p.mustdos.map((m, i) => `${i + 1}. ${esc(m)}`))
   const timed = [...p.blocks.map((b) => ({ s: b.start, text: `${b.start}–${fromMin(toMin(b.start) + b.minutes)} ${esc(b.title)}` })), ...(p.training ? [{ s: p.training.time, text: `${p.training.time} 💪 ${esc(p.training.what)}` }] : [])].sort((a, b) => a.s.localeCompare(b.s))
   if (timed.length) lines.push('', '<b>Blocks</b>', ...timed.map((x) => x.text))
+  const also = p.also ?? []
+  if (also.length) lines.push('', `<b>Also today (${also.length})</b>`, ...also.slice(0, 12).map((a) => `· ${esc(a.title)} · ${a.minutes} min${a.at ? ` (in the ${a.at} block)` : ''}`), ...(also.length > 12 ? [`…and ${also.length - 12} more`] : []))
+  if (p.deferred?.length) lines.push('', '<b>Tomorrow</b>', ...p.deferred.slice(0, 6).map((d) => `· ${esc(d.title)}: ${esc(d.why)}`))
+  if (p.why) lines.push('', `<i>${esc(p.why)}</i>`)
   lines.push('', `💧 Water: ${(p.waterMl / 1000).toFixed(1)} L`)
   lines.push('', opts.approved ? '✅ <b>Approved.</b> Blocks are in your calendar, must-dos are starred.' : 'Approve, change it, or ask for another one.')
   return lines.join('\n')
@@ -352,12 +401,17 @@ export const REVIEW_KEYBOARD = { inline_keyboard: [[{ text: "✅ Keep as tomorro
  * (75%, at least 25 min), at most 3, and training "easy".
  */
 export function lightenForSleep(plan: DayProposal, sleptMin: number | null): DayProposal {
-  if (sleptMin == null || sleptMin >= 360 || !plan.blocks.length) return plan
+  if (sleptMin == null || sleptMin >= 360 || !plan.blocks.length || plan.light) return plan
   const h = `${Math.floor(sleptMin / 60)}h${String(sleptMin % 60).padStart(2, '0')}`
+  // DP1: at most 4 blocks (never cut to one when the day is full); the dropped blocks' tasks stay on the list.
+  const kept = plan.blocks.slice(0, 4)
+  const dropped = new Set(plan.blocks.slice(4).map((b) => b.start))
   return {
     ...plan,
+    light: true,
     headline: `Short night (${h}): a lighter day. ${plan.headline}`.slice(0, 160),
-    blocks: plan.blocks.slice(0, 3).map((b) => ({ ...b, minutes: Math.max(25, Math.round((b.minutes * 0.75) / 5) * 5) })),
+    ...(plan.also ? { also: plan.also.map((a) => (a.at && dropped.has(a.at) ? { ...a, at: undefined } : a)) } : {}),
+    blocks: kept.map((b) => ({ ...b, minutes: Math.max(25, Math.round((b.minutes * 0.75) / 5) * 5) })),
     training: plan.training ? { ...plan.training, what: /^easy/i.test(plan.training.what) ? plan.training.what : `easy: ${plan.training.what}` } : null
   }
 }
@@ -506,6 +560,8 @@ const TRAINING = /^(gym|training|workout|train|sport|run)$/
  * without the AI. null when the note isn't one of these (then the AI re-plans).
  */
 export function editPlan(plan: DayProposal, note: string): DayProposal | null {
+  const day = editDayPart(plan, note)
+  if (day) return day
   const t = note.trim().toLowerCase().replace(/[.!]+$/, '')
   if (!t || t.length > 80 || /[,;]| and | then /.test(t)) return null
   const find = (name: string) => {
@@ -537,6 +593,95 @@ export function editPlan(plan: DayProposal, note: string): DayProposal | null {
     const i = find(m[1])
     if (i < 0) return null
     return { ...plan, blocks: plan.blocks.map((b, k) => (k === i ? { ...b, minutes } : b)) }
+  }
+  return null
+}
+
+// ---- DP1: "add X", "move Y to the afternoon", in code ---------------------
+
+const PARTS: Record<string, [string, string]> = { morning: ['07:00', '12:00'], afternoon: ['12:00', '18:00'], evening: ['18:00', '22:30'], tonight: ['18:00', '22:30'], later: ['00:00', '23:30'] }
+const similar = (a: string, b: string) => {
+  const want = planWords(a)
+  const have = planWords(b)
+  return want.length > 0 && want.every((x) => have.some((w) => w.startsWith(x.slice(0, 5)) || x.startsWith(w.slice(0, 5))))
+}
+
+/** The first free start in [from, to) for `minutes`, inside the plan's free time and clear of its blocks (10 min apart). */
+export function freeSlot(plan: Pick<DayProposal, 'blocks' | 'training' | 'free'>, minutes: number, from: string, to: string, skip = -1): string | null {
+  const free = plan.free?.length ? plan.free.map((f) => [toMin(f.start), toMin(f.end)] as const) : [[toMin('07:00'), toMin('22:30')] as const]
+  const busy = [...plan.blocks.filter((_, i) => i !== skip).map((b) => [toMin(b.start) - 10, toMin(b.start) + b.minutes + 10] as const), ...(plan.training ? [[toMin(plan.training.time) - 10, toMin(plan.training.time) + 60] as const] : [])]
+  for (const [fs, fe] of free) {
+    for (let st = Math.ceil(Math.max(fs, toMin(from)) / 5) * 5; st + minutes <= Math.min(fe, toMin(to)); st += 5) {
+      if (!busy.some(([bs, be]) => st < be && st + minutes > bs)) return fromMin(st)
+    }
+  }
+  return null
+}
+
+function editDayPart(plan: DayProposal, note: string): DayProposal | null {
+  const raw = note.trim().replace(/[.!]+$/, '')
+  if (!raw || raw.length > 100) return null
+  const also = plan.also ?? []
+  const sorted = (blocks: PlanBlock[]) => [...blocks].sort((a, b) => a.start.localeCompare(b.start))
+  // "add X [at 15:00 | this afternoon] [30 min]"
+  let m = /^add\s+(.+?)(?:\s+(?:at\s+(\S+(?:\s*[ap]m)?)|(?:in the |this )?(morning|afternoon|evening|tonight)))?(?:\s+(\d{2,3})\s*(?:m|min|mins|minutes))?$/i.exec(raw)
+  if (m) {
+    const what = m[1].replace(/^(?:a|an|the)\s+/i, '').replace(/\s+(?:block|today)$/i, '').trim()
+    if (!what) return null
+    const item = also.find((a) => !a.at && similar(what, a.title)) ?? also.find((a) => similar(what, a.title))
+    const later = !item ? plan.deferred?.find((d) => similar(what, d.title)) : undefined
+    if (item?.at) return null
+    const title = item?.title ?? later?.title ?? what.slice(0, 80)
+    const minutes = Math.min(180, Math.max(15, Number(m[4]) || item?.minutes || 30))
+    const at = m[2] ? planTime(m[2]) : null
+    if (m[2] && !at) return null
+    const [from, to] = m[3] ? PARTS[m[3].toLowerCase()] : ['00:00', '23:30']
+    const start = at ?? freeSlot(plan, minutes, from, to)
+    if (!start) return null
+    const block: PlanBlock = { title, start, minutes, kind: 'focus', ...(item || later ? { tasks: [title] } : {}) }
+    const nextAlso: AlsoItem[] = item ? also.map((a) => (a === item ? { ...a, at: start } : a)) : later ? [...also, { title, minutes, priority: 1, ...(later.id ? { id: later.id } : {}), at: start }] : also
+    return { ...plan, blocks: sorted([...plan.blocks, block]), ...(plan.also || later ? { also: nextAlso } : {}), ...(later ? { deferred: (plan.deferred ?? []).filter((d) => d !== later) } : {}) }
+  }
+  // "move Y to the afternoon / this evening / later"
+  m = /^(?:move|put|shift|push|do)\s+(.+?)\s+(?:to|in|into|for)?\s*(?:the\s+|this\s+)?(morning|afternoon|evening|tonight|later)$/i.exec(raw)
+  if (m) {
+    const what = m[1].replace(/^(?:the|my)\s+/i, '').replace(/\s+block$/i, '')
+    const part = m[2].toLowerCase()
+    const [from, to] = PARTS[part]
+    // A block by its name: the whole block moves.
+    const bi = plan.blocks.findIndex((b) => similar(what, b.title) && (b.tasks?.length ?? 0) <= 1)
+    if (bi >= 0) {
+      const b = plan.blocks[bi]
+      const start = freeSlot(plan, b.minutes, part === 'later' ? fromMin(toMin(b.start) + 15) : from, to, bi)
+      if (!start) return null
+      const blocks = plan.blocks.map((x, k) => (k === bi ? { ...x, start } : x))
+      return { ...plan, blocks: sorted(blocks), ...(plan.also ? { also: also.map((a) => (a.at === b.start ? { ...a, at: start } : a)) } : {}) }
+    }
+    // One task inside a bigger block, or one on the list: it gets its own block there.
+    const item = also.find((a) => similar(what, a.title))
+    const host = plan.blocks.findIndex((b) => (b.tasks ?? []).some((x) => similar(what, x)))
+    const title = item?.title ?? (host >= 0 ? (plan.blocks[host].tasks ?? []).find((x) => similar(what, x)) ?? null : null)
+    if (!title) return null
+    const minutes = Math.max(15, item?.minutes ?? 30)
+    let blocks = plan.blocks
+    if (host >= 0) {
+      const h = plan.blocks[host]
+      const rest = (h.tasks ?? []).filter((x) => x !== title)
+      blocks = rest.length ? blocks.map((x, k) => (k === host ? { ...x, tasks: rest, minutes: Math.max(20, x.minutes - minutes), title: rest.length === 1 ? rest[0] : `${x.title.split(':')[0]}: ${rest.join(', ')}`.slice(0, 80) } : x)) : blocks.filter((_, k) => k !== host)
+    }
+    const start = freeSlot({ ...plan, blocks }, minutes, part === 'later' && host >= 0 ? fromMin(toMin(plan.blocks[host].start) + 15) : from, to)
+    if (!start) return null
+    blocks = sorted([...blocks, { title, start, minutes, kind: 'focus', tasks: [title] }])
+    return { ...plan, blocks, ...(plan.also ? { also: also.map((a) => (a.title === title ? { ...a, at: start } : a)) } : {}) }
+  }
+  // "drop X" for a task on the list (not a block): moved to tomorrow, with the reason.
+  m = /^(?:drop|skip|remove|defer|postpone)\s+(.+?)(?:\s+today)?$/i.exec(raw)
+  if (m) {
+    const what = m[1]
+    if (plan.blocks.some((b) => similar(what, b.title))) return null
+    const item = also.find((a) => !a.at && similar(what, a.title))
+    if (!item) return null
+    return { ...plan, also: also.filter((a) => a !== item), deferred: [...(plan.deferred ?? []), { title: item.title, ...(item.id ? { id: item.id } : {}), why: 'You moved it to tomorrow' }] }
   }
   return null
 }

@@ -86,12 +86,25 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
     headline: 'App dev first, study after lunch, the gym to close the day',
     mustdos: ['Ship the settings screen', 'Revise algebra chapter 4', 'Gym: legs'],
     blocks: [
-      { title: 'App dev', start: hm(base), minutes: 100 },
-      { title: 'Study algebra', start: hm(base + 150), minutes: 90 },
-      { title: 'Read 20 pages', start: hm(base + 270), minutes: 30 }
+      { title: 'App dev', start: hm(base), minutes: 100, kind: 'focus', tasks: ['Ship the settings screen'] },
+      { title: 'Study algebra', start: hm(base + 150), minutes: 90, kind: 'focus', tasks: ['Revise algebra chapter 4', 'Read chapter 4'] },
+      { title: 'Quick tasks (3)', start: hm(base + 270), minutes: 45, kind: 'quick', tasks: ['Pay the internet bill', 'Email the lab partner', 'Book the dentist'] }
     ],
     training: { time: hm(base + 360), what: 'Gym: legs' },
-    waterMl: 2700
+    waterMl: 2700,
+    // DP1: every other task of the day, with estimates (made-up).
+    also: [
+      { id: 't4', title: 'Draft the networking lab report', minutes: 60, priority: 4, project: 'University', overdue: true },
+      { id: 't5', title: 'Update the CV projects section', minutes: 30, priority: 3, project: 'Job & Career' },
+      { title: 'Read chapter 4', minutes: 45, priority: 2, project: 'University', at: hm(base + 150) },
+      { id: 't6', title: 'Try one beginner CTF challenge', minutes: 45, priority: 2, project: 'Cyber' },
+      { id: 't1', title: 'Pay the internet bill', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 270) },
+      { id: 't2', title: 'Email the lab partner', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 270) },
+      { id: 't7', title: 'Book the dentist', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 270) },
+      { id: 't8', title: 'Watch the refactoring talk, part 1', minutes: 30, priority: 1, project: 'Cyber' }
+    ],
+    deferred: [{ id: 't9', title: 'Sort the photo folder', why: 'No free time left today; tomorrow' }],
+    why: '11 tasks and 2 classes, 5h20 free: 3 blocks (3h55), small tasks batched.'
   }
   db.run("INSERT INTO settings (key, value) VALUES ('coach_rhythm', ?)", [JSON.stringify({ day: appDay, water: [], briefing: { status: 'proposed', sentAt: ago(30), plan, version: 2 } })])
 }
@@ -296,7 +309,7 @@ const gcal = (() => {
 const todo = (() => {
   const day = new Date().toISOString().slice(0, 10)
   const t = (id, content, due, dueTime) => ({ id, content, priority: 1, due, dueTime, project: 'Inbox', section: null, recurring: false, projectId: 'p1', sectionId: null, labels: [], duration: null })
-  const tasks = [t('t1', 'Pay the internet bill', day, null), t('t2', 'Email the lab partner', day, '16:00'), t('t3', 'Read chapter 4', null, null)]
+  const tasks = [t('t1', 'Pay the internet bill', day, null), t('t2', 'Email the lab partner', day, '16:00'), t('t3', 'Read chapter 4', null, null), t('t4', 'Draft the networking lab report', day, null), t('t5', 'Update the CV projects section', day, null), t('t6', 'Try one beginner CTF challenge', day, null), t('t7', 'Book the dentist', day, null), t('t8', 'Watch the refactoring talk, part 1', day, null)]
   return (q, r) => {
     const b = q.body || {}
     const send = (j) => (r.setHeader('Content-Type', 'application/json'), r.end(JSON.stringify(j)))

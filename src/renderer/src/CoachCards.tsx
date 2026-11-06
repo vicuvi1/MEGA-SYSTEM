@@ -13,6 +13,7 @@ import type { TodoTask } from '@core/todoist'
 import { fmtMinutes, planTimeline, type PlanItem } from '@core/planView'
 import { barFill } from './motionKit'
 import { Ring } from './CoachFeed'
+import { PlanAlso } from './PlanAlso'
 import './coachFeed.css'
 
 /** The kinds of `show` that are cards here (the rest are ReplyExtras' small widgets). */
@@ -146,6 +147,7 @@ export function PlanCard({ live = true, spotlight = false, onChange }: { live?: 
     <div className={`cf-card cf-plan t-plan live ${approved ? 'ok' : 'waiting'} ${spotlight ? 'spot' : ''} ${cheer ? 'cheer' : ''}`}>
       <CardHead icon="🗓" title={approved ? "Today's plan" : 'Your plan for today'} sub={[tl.items.length ? `${tl.items.filter((x) => !x.train).length} blocks · ${fmtMinutes(tl.totalMin)} of focus` : '', b.version > 1 ? `v${b.version}` : ''].filter(Boolean).join(' · ')} chip={approved ? '✓ Approved' : 'Waiting for you'} chipTone={approved ? 'ok' : 'wait'} />
       {p.headline && <p className="cf-plan-head">{p.headline}</p>}
+      {p.why && <p className="plan-why">{p.why}</p>}
       <PlanTrack items={tl.items} now={tl.now} from={tl.from} to={tl.to} />
       {tl.items.length > 0 && (
         <ol className="cf-plan-list">
@@ -159,6 +161,7 @@ export function PlanCard({ live = true, spotlight = false, onChange }: { live?: 
               <span className="tt">
                 <b>{x.train ? `💪 ${x.title}` : x.title}</b>
                 <small>{x.train ? 'Training' : fmtMinutes(x.minutes)}{x.state === 'now' ? ' · now' : x.state === 'next' ? ` · in ${fmtMinutes(Math.max(1, toMinutes(x.start) - t))}` : ''}</small>
+                {x.tasks && <small className="plan-tasks">{x.tasks.join(' · ')}</small>}
               </span>
               {!approved && (
                 <button type="button" className="drop" disabled={!!busy} title="Drop this block" aria-label={`Drop ${x.title}`} onClick={() => void run('propose', x.train ? 'no training' : `drop ${x.title.replace(/[,;]/g, ' ')}`, 'Dropping…')}>
@@ -179,6 +182,7 @@ export function PlanCard({ live = true, spotlight = false, onChange }: { live?: 
           </ul>
         </div>
       )}
+      <PlanAlso plan={p} />
       <small className="cf-plan-water">💧 Water goal {(p.waterMl / 1000).toFixed(1)} L</small>
       {!approved &&
         (editing ? (
@@ -192,7 +196,7 @@ export function PlanCard({ live = true, spotlight = false, onChange }: { live?: 
               setNote('')
             }}
           >
-            <input autoFocus value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setEditing(false)} placeholder="What should change? e.g. gym at 19:00, lab report first" aria-label="What should change in the plan" />
+            <input autoFocus value={note} onChange={(e) => setNote(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && setEditing(false)} placeholder="What should change? e.g. add the CV update, move gym to the evening" aria-label="What should change in the plan" />
             <button className="p" disabled={!note.trim()}>
               Replan
             </button>

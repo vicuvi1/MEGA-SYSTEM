@@ -19,7 +19,7 @@ import type { DeskView } from '../web/benDesk'
 import { readDo } from '@core/coachButtons'
 import { BenDesk, type DeskTab } from '../BenDesk'
 import { Feedback, ReplyExtras, Rich, type Entry } from '../BenThread'
-import { BenMark, FoldLine, Meta, NowCard, NudgeCard, Receipts } from '../CoachFeed'
+import { BenMark, FoldLine, Meta, NowCard, NudgeCard, Receipts, feedSections } from '../CoachFeed'
 import { Bubble, CoachAmbient, GlyphIcon, Ring, StreamText, SuggestChip, TypingBubble } from '../CoachFeed'
 import { BenAvatar, MeAvatar, avatarFromFile, useCoachLooks, type Presence } from '../BenAvatar'
 import { CoachSide } from '../CoachSide'
@@ -702,7 +702,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             )}
             {!!log?.length && !feed.some((x) => x.t === 'msg') && <p className="cf-empty">Nothing here with this filter.</p>}
             {log &&
-              feed.map((it, idx) => {
+              feedSections(feed, (it, idx) => {
                 // The last message of a group carries the face, the tail and the time.
                 const nx = feed[idx + 1]
                 const lastOfGroup = !(nx && nx.t === 'msg' && nx.grouped)

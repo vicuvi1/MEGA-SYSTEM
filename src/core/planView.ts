@@ -16,6 +16,8 @@ export interface PlanItem {
   left: number
   width: number
   state: 'past' | 'now' | 'next' | 'later'
+  /** DP1: the tasks the block covers, when it covers more than its title says. */
+  tasks?: string[]
 }
 
 export interface PlanTimeline {
@@ -38,8 +40,8 @@ export function planTone(title: string, train = false): PlanTone {
 
 export function planTimeline(plan: Pick<DayProposal, 'blocks' | 'training'>, nowMin: number): PlanTimeline {
   const raw = [
-    ...plan.blocks.map((b) => ({ title: b.title, s: toMin(b.start), m: Math.max(5, b.minutes), train: false })),
-    ...(plan.training ? [{ title: plan.training.what, s: toMin(plan.training.time), m: 60, train: true }] : [])
+    ...plan.blocks.map((b) => ({ title: b.title, s: toMin(b.start), m: Math.max(5, b.minutes), train: false, tasks: (b.tasks ?? []).length > 1 || (b.tasks?.length === 1 && b.tasks[0] !== b.title) ? b.tasks : undefined })),
+    ...(plan.training ? [{ title: plan.training.what, s: toMin(plan.training.time), m: 60, train: true, tasks: undefined }] : [])
   ]
     .filter((x) => Number.isFinite(x.s))
     .sort((a, b) => a.s - b.s)
@@ -55,7 +57,7 @@ export function planTimeline(plan: Pick<DayProposal, 'blocks' | 'training'>, now
     else if (x.s <= nowMin) state = 'now'
     else if (!nextSeen) state = 'next'
     if (state === 'next') nextSeen = true
-    return { title: x.title, start: fromMin(x.s), end: fromMin(end), minutes: x.m, tone: planTone(x.title, x.train), train: x.train, left: (x.s - from) / span, width: x.m / span, state }
+    return { title: x.title, start: fromMin(x.s), end: fromMin(end), minutes: x.m, tone: planTone(x.title, x.train), train: x.train, left: (x.s - from) / span, width: x.m / span, state, ...(x.tasks ? { tasks: x.tasks } : {}) }
   })
   return {
     items,

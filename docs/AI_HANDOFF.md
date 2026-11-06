@@ -74,7 +74,7 @@ Bot tokens come from @BotFather. If a token was ever pasted in a chat or screens
 |---|---|
 | `src/renderer/src/web/botBrain.ts` | persona and prompt, `lifeContext()`, actions (`readAction`), memory, profile, coach log, letters |
 | `src/renderer/src/web/webBots.ts` | `think()` (context → model → actions → reply), Telegram handling, buttons, commands, undo (shared by browser and server) |
-| `src/renderer/src/web/rhythmBot.ts` | daily rhythm: morning plan, evening review, Sunday review, weekly letter, goal booking |
+| `src/renderer/src/web/rhythmBot.ts` | daily rhythm: morning plan, evening review, Sunday review, weekly letter, goal booking. The morning plan looks at ALL of today's tasks (`core/dayPacker.ts`: 3 must-dos, 3–5 blocks packed between events, small tasks in one "Quick tasks" block, "Also today" with estimates, deferred tasks with a reason; the model's plan is checked by `checkModelPlan` and the packer is the fallback). "add X" / "move Y to the afternoon" run in code (`editPlan`). |
 | `src/renderer/src/web/benDesk.ts` + `BenDesk.tsx` | Ben's desk (`ben_desk`): patterns, energy map, excuses, mood, study topics, stakes, the Sunday call, the month's story |
 | `src/renderer/src/CoachFeed.tsx` | the chat feed: cards for Ben's automatic messages, folded updates, the "Now" card |
 | `src/core/coachKit.ts`, `coachMind.ts`, `rhythm.ts`, `goalPlan.ts`, `coachImpact.ts`, `coachButtons.ts`, `coachNext.ts` | references and promises, long-term memory, rhythm timing, goal plans, scorecard, buttons, "Do this now" |

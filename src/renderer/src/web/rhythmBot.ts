@@ -2,7 +2,8 @@
 // the day, puts an approved plan into your calendar and Todoist, writes the
 // evening and Sunday reviews, and the water and training nudges. Used by the
 // tick on the server (Telegram, Mega) and by the app (Today, Coach).
-import { weeklyGoalLines } from '@core/goalsBen'
+import { behindMove, weeklyGoalLines } from '@core/goalsBen'
+import { checkModelPlan, estimateMinutes, packDay, relinkAlso, type PlanTask } from '@core/dayPacker'
 import { waterToday } from './coachStatus'
 import { withTimeout } from '@core/ai'
 import { addDays, dayKey } from '@core/dates'
@@ -17,7 +18,6 @@ import {
   nameAndRank,
   dayScore,
   focusName,
-  localProposal,
   readLines,
   rhythmFor,
   suggestWeekFocus,
@@ -252,8 +252,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const st = load(db, today)
         const cur = st.briefing
         if (!cur || cur.plan.day !== today) return null
-        const plan = editPlan(cur.plan, note)
-        if (!plan) return null
+        const edited = editPlan(cur.plan, note)
+        if (!edited) return null
+        const plan = relinkAlso(edited)
         const version = (cur.version ?? 0) + 1
         save(db, { ...st, briefing: { status: 'proposed', sentAt: new Date().toISOString(), plan, version } })
         return { plan, version }
@@ -291,7 +292,19 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         past = []
       }
       const hist = { focus: past.flatMap((x) => x.d.focus ?? []), hours: past.map((x) => x.d.hours).filter((h): h is NonNullable<typeof h> => !!h && Object.keys(h).length > 0) }
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist }
+      // DP1: goals behind pace (the Goals page) deserve time today.
+      let behind: { title: string; minutes: number }[] = []
+      try {
+        behind = svc.goals
+          .cards(now, financeStateFrom(db, null))
+          .map((c) => ({ c, move: behindMove(c) }))
+          .filter((x) => x.move && x.move.do.startsWith('focus:'))
+          .slice(0, 2)
+          .map((x) => ({ title: `Goal: ${x.c.goal.title}`.slice(0, 60), minutes: Number(x.move!.do.split(':')[1]) || 25 }))
+      } catch {
+        behind = []
+      }
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind }
     })
     const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : ''
     const plans = await goalPlans().catch(() => [] as GoalPlan[])
@@ -301,16 +314,29 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     // A life mode (FT4): sick = no study blocks, travel = one short one, exam week = longer ones.
     const mode = base.mode
     const goalItems = !mode ? allGoalItems : mode.kind === 'sick' ? [] : mode.kind === 'travel' ? allGoalItems.slice(0, 1).map((g) => ({ ...g, minutes: Math.min(45, g.minutes) })) : allGoalItems.map((g) => ({ ...g, minutes: Math.min(90, Math.round((g.minutes * mode.focus) / 5) * 5) }))
-    const fallback = localProposal({
-      goals: goalItems,
+    // DP1: ALL of today's work (due today, overdue, starred), packed around the calendar's fixed events.
+    const planTasks: PlanTask[] = tasks.map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null }))
+    const behindGoals = !mode || mode.kind === 'exam' ? base.behind.filter((g) => !goalItems.some((x) => x.title.toLowerCase().includes(g.title.slice(6).toLowerCase()))) : []
+    const packed = packDay({
+      goals: [...goalItems, ...behindGoals],
       today: base.today,
       now: hmNow(now),
       events,
-      tasks: tasks.map((t) => ({ content: t.content, starred: isStarred(t), priority: t.priority, due: t.due })),
+      tasks: planTasks,
       top3: base.st.tomorrow?.day === base.today ? base.st.tomorrow.top3 : [],
       waterTarget: base.water,
-      workoutDone: base.workoutDone
+      workoutDone: base.workoutDone,
+      sleptMin: base.slept,
+      best: base.hist.focus.length >= 3 ? bestHours(base.hist.focus) : []
     })
+    // A life mode: sick = no blocks (the list stays), travel = one short block.
+    const fallback = !mode
+      ? packed
+      : mode.kind === 'sick'
+        ? relinkAlso({ ...packed, blocks: [], why: 'Sick day: rest first. Your tasks are on the list for when you feel better.' })
+        : mode.kind === 'travel'
+          ? relinkAlso({ ...packed, blocks: packed.blocks.slice(0, 1).map((b) => ({ ...b, minutes: Math.min(45, b.minutes) })), why: 'Travel day: one short block, the rest on the list.' })
+          : packed
     let plan = fallback
     // W18: tomorrow's plan was drafted last night: used as it is when nothing new clashes (no AI call).
     const draft = !note && base.st.tomorrow?.day === base.today ? base.st.tomorrow.plan : undefined
@@ -323,8 +349,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const raw = await withTimeout(
           ai(
             [
-              "You are BEN, Victor's coach. His day plan is built (times fixed). Only: name each block in a few words tied to his goal, rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
-              `Plan: ${JSON.stringify({ blocks: fallback.blocks.map((b) => ({ start: b.start, minutes: b.minutes, title: b.title })), mustdos: fallback.mustdos, training: fallback.training })}`,
+              "You are BEN, Victor's coach. His day plan is built (times fixed) from ALL of today's tasks. Only: name each block in a few words tied to his goal (a block with several tasks names what they share), rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
+              `Plan: ${JSON.stringify({ blocks: fallback.blocks.map((b) => ({ start: b.start, minutes: b.minutes, title: b.title, tasks: b.tasks })), mustdos: fallback.mustdos, training: fallback.training, alsoToday: (fallback.also ?? []).length })}`,
               plans.length ? `Goals: ${plans.map((p) => planLine(p)).join(' | ')}` : '',
               base.yday ? `Yesterday (use it: the headline names what went well or slipped and how today fixes it, e.g. "Yesterday 2/3, focus slipped after lunch, so the hard block is first"): ${base.yday}` : '',
               histFacts ? `His last week, from real activity: ${histFacts}.` : '',
@@ -337,7 +363,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           15_000
         )
         const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
-        plan = nameAndRank(fallback, json ? JSON.parse(json) : null)
+        const named = nameAndRank(fallback, json ? JSON.parse(json) : null)
+        // Quick-task blocks keep their plain name (the list is what matters there).
+        plan = { ...named, blocks: named.blocks.map((b, i) => (b.kind === 'quick' ? fallback.blocks[i] : b)) }
       } catch {
         plan = fallback
       }
@@ -347,7 +375,11 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const prev = base.st.briefing?.plan
         const prompt = [
           "You are BEN, Victor's best friend and coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
-          `It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
+          `It is ${hmNow(now)}. Only plan from now on, never over calendar events (classes, commutes and meetings are fixed: plan AROUND them, 10 minutes to get there), with 10-minute breaks between blocks and nothing after 22:00. Exactly 3 must-dos when there are 3+ tasks (the ones that matter most; last night's top 3 first if given): they are his daily points, keep them at 3. A training slot if he hasn't trained today. Water goal in ml.`,
+          'Consider ALL of today\'s tasks below (due today and overdue), not only the must-dos. Pack the important ones into 3–5 focus blocks (25–90 min, sized from the estimates, hard work in his best hours) in the free time between events; batch small tasks (about 15 min) into ONE "Quick tasks" block (kind "quick"). Every task must be accounted for: in a block (its exact title in that block\'s "tasks"), in "also" (with minutes), or in "deferred" with a short reason. A short night means fewer or shorter blocks, never one tiny block when the day has free hours and many tasks. "why": one line on why the day is planned this way.',
+          `Fixed events today: ${events.filter((e) => !e.allDay).map((e) => `${new Date(e.start).toTimeString().slice(0, 5)}–${new Date(e.end).toTimeString().slice(0, 5)} ${e.title}`).join('; ') || 'none'}`,
+          `Today's tasks (${planTasks.length}, priority 1 = most urgent): ${JSON.stringify(planTasks.slice(0, 40).map((t) => ({ task: t.content, project: t.project, priority: 5 - (t.priority ?? 1), overdue: !!(t.due && t.due < base.today), minutes: estimateMinutes(t) })))}`,
+          base.slept != null && base.slept < 360 ? `Short night: he slept ${Math.floor(base.slept / 60)}h${String(base.slept % 60).padStart(2, '0')}. Lighter, not empty.` : '',
           mode ? `LIFE MODE today: ${mode.label}. ${mode.kind === 'sick' ? 'Keep it tiny: rest, water, sleep; at most one easy must-do; no focus blocks unless he asks; training null.' : mode.kind === 'travel' ? 'A light plan: one or two small must-dos, at most one short block; training null.' : 'Exam week: more and longer study blocks for the exam goals; a short walk instead of a full workout is fine.'}` : '',
           'Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits ("Algebra set (exam 15 Dec)").',
           'headline: one short line with numbers ("3 must-dos · 2h40 focus · gym 18:00").',
@@ -355,7 +387,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           plans.length ? `Goals planned backward from their deadlines (today's minutes are a MUST; booked ones are already in the calendar):\n${plans.map((p) => `- ${planLine(p)}${bookedToday(p) ? ' (booked today)' : ''}`).join('\n')}` : '',
           histFacts ? `His last week, from real activity (put hard blocks in his best hours; never plan study later than he ever does): ${histFacts}.` : '',
           `A simple starting point (improve it): ${JSON.stringify(fallback)}`,
-          'Answer ONLY with JSON: {"headline": string, "mustdos": string[], "blocks": [{"title": string, "start": "HH:MM", "minutes": number}], "training": {"time": "HH:MM", "what": string} | null, "waterMl": number}',
+          'Answer ONLY with JSON: {"headline": string, "why": string, "mustdos": string[], "blocks": [{"title": string, "start": "HH:MM", "minutes": number, "kind": "focus" | "quick" | "goal", "tasks": string[]}], "also": [{"task": string, "minutes": number}], "deferred": [{"task": string, "why": string}], "training": {"time": "HH:MM", "what": string} | null, "waterMl": number}',
           '',
           '== Victor right now ==',
           context
@@ -364,7 +396,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           .join('\n')
         const raw = await withTimeout(ai(prompt, { json: true, think: true, strong: true, kind: 'plan' }), 35_000)
         const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
-        plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now))
+        // DP1: checked: every task accounted for, and the packer's plan when the model gave too little.
+        plan = checkModelPlan(cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now)), fallback, planTasks)
       } catch {
         plan = fallback
       }
@@ -382,6 +415,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const moved = moveLateStudy(plan.blocks, { lastHour: latestHour(base.hist.hours, 'study'), best: bestHours(base.hist.focus), now: hmNow(now), busy, words })
       if (moved.note) plan = { ...plan, blocks: moved.blocks, headline: `${plan.headline} · ${moved.note}`.slice(0, 200) }
     }
+    plan = relinkAlso(plan)
     return mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1
@@ -407,11 +441,11 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     if (calendar) {
       let made = 0
       // Blocks that already ended (approved late) don't go into the calendar.
-      const items = [...p.blocks.map((b) => ({ title: b.title, start: b.start, minutes: b.minutes })), ...(p.training ? [{ title: `💪 ${p.training.what}`, start: p.training.time, minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45 }] : [])].filter((b) => new Date(`${p.day}T${b.start}:00`).getTime() + b.minutes * 60000 > Date.now())
+      const items: { title: string; start: string; minutes: number; tasks?: string[] }[] = [...p.blocks.map((b) => ({ title: b.title, start: b.start, minutes: b.minutes, tasks: b.tasks })), ...(p.training ? [{ title: `💪 ${p.training.what}`, start: p.training.time, minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45 }] : [])].filter((b) => new Date(`${p.day}T${b.start}:00`).getTime() + b.minutes * 60000 > Date.now())
       for (const b of items) {
         const start = new Date(`${p.day}T${b.start}:00`)
         const ok = await calendar
-          .create({ title: b.title, start: start.toISOString(), end: new Date(start.getTime() + b.minutes * 60000).toISOString(), description: 'Planned with your coach in Life System' })
+          .create({ title: b.title, start: start.toISOString(), end: new Date(start.getTime() + b.minutes * 60000).toISOString(), description: ['Planned with your coach in Life System', ...(b.tasks?.length ? ['', ...b.tasks.map((t) => `- ${t}`)] : [])].join('\n') })
           .then(() => true)
           .catch(() => false)
         if (ok) made++
@@ -560,7 +594,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const svc = services.services(db)
       const st = load(db, today)
       const top3 = st.tomorrow?.day === day ? st.tomorrow.top3 : []
-      const plan = localProposal({ today: day, now: '08:00', events, tasks: tasks.filter((t) => t.due === day).map((t) => ({ content: t.content, starred: isStarred(t), priority: t.priority, due: t.due })), top3, waterTarget: waterToday(db, svc).target, workoutDone: false })
+      const plan = packDay({ today: day, now: '08:00', events, tasks: tasks.filter((t) => t.due === day).map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null })), top3, waterTarget: waterToday(db, svc).target, workoutDone: false })
       save(db, { ...st, tomorrow: { day, top3, plan } })
       return plan
     })

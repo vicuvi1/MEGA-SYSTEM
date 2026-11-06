@@ -4,7 +4,7 @@ import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { lookup } from "node:dns/promises";
 // src/core/calWatch.ts
-var hm$5 = (iso) => new Date(iso).toTimeString().slice(0, 5);
+var hm$6 = (iso) => new Date(iso).toTimeString().slice(0, 5);
 var day = (iso, now) => {
 	const d = new Date(iso);
 	const t = new Date(now);
@@ -17,7 +17,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 	for (const [id, e] of Object.entries(now)) if (!prev[id] && live(e)) out.push({
 		kind: "added",
 		ev: e,
-		text: `📅 New in your calendar: <b>${e.title}</b> ${day(e.start, at)} at ${hm$5(e.start)}. I'll plan around it.`
+		text: `📅 New in your calendar: <b>${e.title}</b> ${day(e.start, at)} at ${hm$6(e.start)}. I'll plan around it.`
 	});
 	for (const [id, e] of Object.entries(prev)) if (!now[id] && live(e) && Date.parse(e.start) > at.getTime()) {
 		const freeMin = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 6e4);
@@ -25,7 +25,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 			kind: "cancelled",
 			ev: e,
 			freeMin,
-			text: `❌ <b>${e.title}</b> ${day(e.start, at)} at ${hm$5(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
+			text: `❌ <b>${e.title}</b> ${day(e.start, at)} at ${hm$6(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
 		});
 	}
 	return out.slice(0, 3);
@@ -1244,14 +1244,14 @@ function parseSets(raw) {
 	};
 }
 var e1rm = (reps, kg) => reps >= 1 && reps <= 12 && kg > 0 ? Math.round(kg * (1 + reps / 30) * 10) / 10 : 0;
-var key$2 = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+var key$3 = (s) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 /** Every weighted lift in the workouts, newest activity first. */
 function strengthSummary(workouts) {
 	const by = /* @__PURE__ */ new Map();
 	for (const w of [...workouts].sort((a, b) => a.day.localeCompare(b.day))) for (const it of w.items) {
 		const weighted = (it.sets ?? []).filter((s) => (s.weight ?? 0) > 0);
 		if (!weighted.length) continue;
-		const k = key$2(it.name);
+		const k = key$3(it.name);
 		const g = by.get(k) ?? {
 			name: it.name,
 			days: /* @__PURE__ */ new Map()
@@ -1377,7 +1377,7 @@ function weekReport(sessions, plans, funMin, today) {
 	};
 }
 /** "2h 05m", "45m". */
-var hm$4 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
+var hm$5 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
 // src/core/progress.ts
 var WEEKS = 6;
 /** Sum of `value` for days in [from, to]. */
@@ -1414,8 +1414,8 @@ function progressReport(i) {
 			label: "Focus time",
 			higherBetter: true,
 			f: (a, b) => sum$1(i.focus, a, b, (r) => r.minutes),
-			text: hm$4,
-			day: (v) => v ? hm$4(v) : "·",
+			text: hm$5,
+			day: (v) => v ? hm$5(v) : "·",
 			target: 600,
 			unit: 30
 		},
@@ -2931,14 +2931,14 @@ function addWater(st, ml, today) {
 	if (ml < 0) s.water.fixedAt = Date.now();
 	return s;
 }
-var key$1 = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
+var key$2 = (x) => String(x ?? "").toLowerCase().replace(/[^a-z]/g, "");
 /** The exercise "pushups", "Push-ups" or "push up" means. */
 function findSharedExercise(s, name) {
-	const k = key$1(name).replace(/s$/, "");
+	const k = key$2(name).replace(/s$/, "");
 	if (!k) return null;
 	return (s.exercises ?? []).find((e) => {
-		const id = key$1(e.id).replace(/s$/, "");
-		const n = key$1(e.name).replace(/s$/, "");
+		const id = key$2(e.id).replace(/s$/, "");
+		const n = key$2(e.name).replace(/s$/, "");
 		return id === k || n === k || id.includes(k) || n.includes(k) || n.length > 3 && k.includes(n);
 	}) ?? null;
 }
@@ -7952,7 +7952,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 			month: "long"
 		})}, ${now.toTimeString().slice(0, 5)}.`,
 		`Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
-		`Focus today: ${hm$4(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm$4(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
+		`Focus today: ${hm$5(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm$5(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
 		`Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") : "none written yet"}.`,
 		f.goals.length ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals.map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`).join("\n")}` : "No goals with deadlines (offer to set one when he mentions an exam, project or deadline).",
 		goalsNowSection(s, extra.finance, now),
@@ -8936,7 +8936,7 @@ function answerLocal(need, d) {
 		const by = /* @__PURE__ */ new Map();
 		for (const s of list) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
 		const days = new Set(list.map((s) => s.day)).size;
-		return `Focus ${span}: ${hm$4(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$4(m)}`).join(", ")}.` : ""}`;
+		return `Focus ${span}: ${hm$5(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$5(m)}`).join(", ")}.` : ""}`;
 	}
 	if (k === "workouts") {
 		const days = [...new Set(d.input.workouts.filter((w) => inRange(w.day)).map((w) => w.day))].sort();
@@ -12541,7 +12541,7 @@ var sum = (s, today, from, to, counted) => {
 		n: vals.length
 	};
 };
-var hm$3 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
+var hm$4 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
 function lifeReview(series, urges, today) {
 	const out = [];
 	const gaps = {};
@@ -12563,9 +12563,9 @@ function lifeReview(series, urges, today) {
 			text: fmt(week, usual)
 		});
 	};
-	area("sleep", "Sleep", (w, u) => `${hm$3(w)} a night, ${Math.abs(Math.round(w - u))} min ${w >= u ? "more" : "less"} than usual`, true, "up");
+	area("sleep", "Sleep", (w, u) => `${hm$4(w)} a night, ${Math.abs(Math.round(w - u))} min ${w >= u ? "more" : "less"} than usual`, true, "up");
 	area("workouts", "Training", (w, u) => `${Math.round(w)} workout${Math.round(w) === 1 ? "" : "s"} (usual ${u.toFixed(1)})`, false, "up");
-	area("focus", "Focus", (w, u) => `${hm$3(w)} of focus (usual ${hm$3(u)})`, false, "up");
+	area("focus", "Focus", (w, u) => `${hm$4(w)} of focus (usual ${hm$4(u)})`, false, "up");
 	area("spend", "Money", (w, u) => `${Math.round(w).toLocaleString("en-US")} lei spent, ${Math.abs(Math.round((w - u) / Math.max(1, u) * 100))}% ${w <= u ? "under" : "over"} usual`, false, "down");
 	if (urges.crushed || urges.slips || urges.prevCrushed) {
 		const good = urges.slips === 0;
@@ -13177,7 +13177,7 @@ function stackRate(s, today) {
 	return days ? Math.round(full / days * 100) : 0;
 }
 // src/core/coachKit.ts
-var hm$2 = (iso) => {
+var hm$3 = (iso) => {
 	const d = new Date(iso);
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
@@ -13192,7 +13192,7 @@ function makeRefs(events, tasks) {
 	};
 	const evLines = events.filter((e) => !e.allDay).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 40).map((e, i) => {
 		refs.events.set(`E${i + 1}`, e);
-		return `E${i + 1} ${dayOf$1(e.start).slice(5)} ${hm$2(e.start)}–${hm$2(e.end)} ${e.title}`;
+		return `E${i + 1} ${dayOf$1(e.start).slice(5)} ${hm$3(e.start)}–${hm$3(e.end)} ${e.title}`;
 	});
 	const tLines = tasks.slice(0, 60).map((t, i) => {
 		refs.tasks.set(`T${i + 1}`, t);
@@ -20308,13 +20308,13 @@ function pcWorkMinutes(line) {
 	if (!m) return null;
 	return m[2] === "h" ? Number(m[1]) * 60 + Number(m[3] ?? 0) : Number(m[1]);
 }
-var key = (s) => s.trim().toLowerCase();
-var hm$1 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(Math.round(min % 60)).padStart(2, "0") : ""}` : `${Math.round(min)}m`;
+var key$1 = (s) => s.trim().toLowerCase();
+var hm$2 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(Math.round(min % 60)).padStart(2, "0") : ""}` : `${Math.round(min)}m`;
 function weekTime(i) {
 	const inWeek = (d) => d >= i.from && d <= i.to;
 	const rows = /* @__PURE__ */ new Map();
 	const row = (subject) => {
-		const k = key(subject) || "focus";
+		const k = key$1(subject) || "focus";
 		if (!rows.has(k)) rows.set(k, {
 			subject: subject.trim() || "Focus",
 			plannedMin: 0,
@@ -20335,7 +20335,7 @@ function weekTime(i) {
 	const pcDays = (i.pcLines ?? []).filter((x) => inWeek(x.day)).map((x) => pcWorkMinutes(x.line)).filter((x) => x != null);
 	const pcWorkMin = pcDays.length ? pcDays.reduce((t, x) => t + x, 0) : null;
 	const worst = list.filter((r) => r.plannedMin >= 30).sort((a, b) => a.realMin / a.plannedMin - b.realMin / b.plannedMin)[0];
-	const line = !list.length ? "" : `⏱ Planned vs real: ${hm$1(plannedMin)} planned, ${hm$1(realMin)} done${plannedMin ? ` (${Math.round(realMin / plannedMin * 100)}%)` : ""}${pcWorkMin != null ? `, PC work ${hm$1(pcWorkMin)}` : ""}. ${list.slice(0, 4).map((r) => `${r.subject} ${hm$1(r.realMin)}/${hm$1(r.plannedMin)}`).join(", ")}${worst && worst.realMin < worst.plannedMin * .6 ? `. Biggest gap: ${worst.subject}.` : "."}`;
+	const line = !list.length ? "" : `⏱ Planned vs real: ${hm$2(plannedMin)} planned, ${hm$2(realMin)} done${plannedMin ? ` (${Math.round(realMin / plannedMin * 100)}%)` : ""}${pcWorkMin != null ? `, PC work ${hm$2(pcWorkMin)}` : ""}. ${list.slice(0, 4).map((r) => `${r.subject} ${hm$2(r.realMin)}/${hm$2(r.plannedMin)}`).join(", ")}${worst && worst.realMin < worst.plannedMin * .6 ? `. Biggest gap: ${worst.subject}.` : "."}`;
 	return {
 		from: i.from,
 		to: i.to,
@@ -23081,7 +23081,7 @@ var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
 var PLAN_ASK = "What are your 1–3 must-dos today?";
 function morningText(o) {
 	const lines = ["☀️ <b>Good morning!</b>", ""];
-	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$4(o.focusYesterdayMin)}</b> of focus.`);
+	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$5(o.focusYesterdayMin)}</b> of focus.`);
 	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$1(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
 	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
 	if (lines.length > 2) lines.push("");
@@ -23110,7 +23110,7 @@ function planKeyboard(plan, withReasons) {
 	return { inline_keyboard: rows };
 }
 function eveningText(plan, focusMin) {
-	const head = `🌙 <b>Evening review</b> · ${hm$4(focusMin)} of focus today`;
+	const head = `🌙 <b>Evening review</b> · ${hm$5(focusMin)} of focus today`;
 	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
 	const done = plan.items.filter((i) => i.done).length;
 	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
@@ -23120,19 +23120,19 @@ function weekText(w, goals) {
 	const lines = [
 		`📊 <b>Your week</b> (${w.from.slice(5)} → ${w.to.slice(5)})`,
 		"",
-		`⏱ Focus: <b>${hm$4(w.totalMin)}</b>`
+		`⏱ Focus: <b>${hm$5(w.totalMin)}</b>`
 	];
-	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$1(s.subject)}: ${hm$4(s.minutes)}`);
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$1(s.subject)}: ${hm$5(s.minutes)}`);
 	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
 	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$1(r.reason)} ×${r.count}`).join(", ")}`);
-	if (w.funMin) lines.push(`🎮 Fun: ${hm$4(w.funMin)}`);
-	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$1(g.title)}: ${hm$4(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	if (w.funMin) lines.push(`🎮 Fun: ${hm$5(w.funMin)}`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$1(g.title)}: ${hm$5(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
 	lines.push("", "<b>One thing to change next week?</b> Reply here.");
 	return lines.join("\n");
 }
 function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
-	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$4(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$5(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/core/rhythm.ts
 var RHYTHM = "coach_rhythm";
@@ -23199,61 +23199,6 @@ function waterBehind(state, f, max = 5) {
 	return f.waterMl < f.waterTarget * pace - f.waterTarget * .25;
 }
 var quarter = (hm) => fromMin(Math.ceil(toMin(hm) / 15) * 15);
-/** A plan without the model: last night's top 3 (else starred and urgent tasks), blocks in free time, a training slot. */
-function localProposal(p) {
-	const seen = /* @__PURE__ */ new Set();
-	const pick = [];
-	const add = (t) => {
-		const k = t.trim().toLowerCase();
-		if (!k || seen.has(k) || pick.length >= 3) return;
-		seen.add(k);
-		pick.push(t.trim());
-	};
-	p.top3.forEach(add);
-	[...p.tasks].sort((a, b) => Number(!!b.starred) - Number(!!a.starred) || (b.priority ?? 1) - (a.priority ?? 1) || String(a.due ?? "9").localeCompare(String(b.due ?? "9"))).forEach((t) => add(t.content));
-	const blocks = suggestBlocks(freeGaps(p.events, p.today, {
-		after: quarter(p.now),
-		minMinutes: 30
-	}), [...p.goals ?? [], ...pick.map((title) => ({
-		title,
-		minutes: 50
-	}))]).map((b) => ({
-		title: b.title,
-		start: b.start,
-		minutes: b.minutes
-	}));
-	let training = null;
-	if (!p.workoutDone) {
-		const taken = blocks.map((b) => ({
-			s: toMin(b.start),
-			e: toMin(b.start) + b.minutes
-		}));
-		const evening = freeGaps(p.events, p.today, {
-			after: fromMin(Math.max(toMin(quarter(p.now)), toMin("17:00"))),
-			minMinutes: 45
-		});
-		for (const g of evening) {
-			let s = toMin(g.start);
-			while (s + 45 <= toMin(g.end) && taken.some((x) => s < x.e + 10 && s + 45 > x.s - 10)) s += 15;
-			if (s + 45 <= toMin(g.end)) {
-				training = {
-					time: fromMin(s),
-					what: "Workout · 45 min"
-				};
-				break;
-			}
-		}
-	}
-	const focus = blocks.reduce((t, b) => t + b.minutes, 0);
-	return {
-		day: p.today,
-		headline: pick.length ? `${pick.length} must-do${pick.length === 1 ? "" : "s"} · ${focus} min of focus planned` : "A light day: pick one thing that matters",
-		mustdos: pick,
-		blocks,
-		training,
-		waterMl: p.waterTarget
-	};
-}
 /** The model's plan, made safe: real times, no clashes with your calendar or each other, at most 3 must-dos. */
 function cleanProposal(raw, fallback, events, now) {
 	if (!raw || typeof raw !== "object") return fallback;
@@ -23278,10 +23223,14 @@ function cleanProposal(raw, fallback, events, now) {
 			s,
 			e
 		});
+		const tasks = (Array.isArray(b?.tasks) ? b.tasks : []).map((x) => String(x ?? "").trim().slice(0, 160)).filter(Boolean).slice(0, 12);
+		const kind = b?.kind === "quick" || b?.kind === "goal" || b?.kind === "focus" ? b.kind : void 0;
 		blocks.push({
 			title,
 			start,
-			minutes
+			minutes,
+			...kind ? { kind } : {},
+			...tasks.length ? { tasks } : {}
 		});
 		if (blocks.length >= 6) break;
 	}
@@ -23296,13 +23245,27 @@ function cleanProposal(raw, fallback, events, now) {
 		};
 	}
 	const waterMl = Number(raw.waterMl) >= 1e3 && Number(raw.waterMl) <= 5e3 ? Math.round(Number(raw.waterMl)) : fallback.waterMl;
+	const name = (x) => String(x?.task ?? x?.title ?? (typeof x === "string" ? x : "")).trim().slice(0, 160);
+	const also = (Array.isArray(raw.also) ? raw.also : []).map((x) => ({
+		title: name(x),
+		minutes: Math.round(Number(x?.minutes)) || 0,
+		priority: 1
+	})).filter((x) => x.title);
+	const deferred = (Array.isArray(raw.deferred) ? raw.deferred : []).map((x) => ({
+		title: name(x),
+		why: String(x?.why ?? "").trim().slice(0, 120)
+	})).filter((x) => x.title && x.why);
+	const why = String(raw.why ?? "").trim().slice(0, 200);
 	return {
 		day,
 		headline: String(raw.headline ?? "").trim().slice(0, 140) || fallback.headline,
 		mustdos: mustdos.length ? mustdos : fallback.mustdos,
 		blocks: blocks.length || !fallback.blocks.length ? blocks : fallback.blocks,
 		training: training ?? (raw.training === null ? null : fallback.training),
-		waterMl
+		waterMl,
+		...also.length ? { also } : fallback.also ? { also: fallback.also } : {},
+		...deferred.length ? { deferred } : {},
+		...why ? { why } : fallback.why ? { why: fallback.why } : {}
 	};
 }
 var localDayOf = (iso) => {
@@ -23325,6 +23288,10 @@ function proposalText(p, opts = {}) {
 		text: `${p.training.time} 💪 ${esc(p.training.what)}`
 	}] : []].sort((a, b) => a.s.localeCompare(b.s));
 	if (timed.length) lines.push("", "<b>Blocks</b>", ...timed.map((x) => x.text));
+	const also = p.also ?? [];
+	if (also.length) lines.push("", `<b>Also today (${also.length})</b>`, ...also.slice(0, 12).map((a) => `· ${esc(a.title)} · ${a.minutes} min${a.at ? ` (in the ${a.at} block)` : ""}`), ...also.length > 12 ? [`…and ${also.length - 12} more`] : []);
+	if (p.deferred?.length) lines.push("", "<b>Tomorrow</b>", ...p.deferred.slice(0, 6).map((d) => `· ${esc(d.title)}: ${esc(d.why)}`));
+	if (p.why) lines.push("", `<i>${esc(p.why)}</i>`);
 	lines.push("", `💧 Water: ${(p.waterMl / 1e3).toFixed(1)} L`);
 	lines.push("", opts.approved ? "✅ <b>Approved.</b> Blocks are in your calendar, must-dos are starred." : "Approve, change it, or ask for another one.");
 	return lines.join("\n");
@@ -23438,12 +23405,19 @@ var REVIEW_KEYBOARD = { inline_keyboard: [[{
 * (75%, at least 25 min), at most 3, and training "easy".
 */
 function lightenForSleep(plan, sleptMin) {
-	if (sleptMin == null || sleptMin >= 360 || !plan.blocks.length) return plan;
+	if (sleptMin == null || sleptMin >= 360 || !plan.blocks.length || plan.light) return plan;
 	const h = `${Math.floor(sleptMin / 60)}h${String(sleptMin % 60).padStart(2, "0")}`;
+	const kept = plan.blocks.slice(0, 4);
+	const dropped = new Set(plan.blocks.slice(4).map((b) => b.start));
 	return {
 		...plan,
+		light: true,
 		headline: `Short night (${h}): a lighter day. ${plan.headline}`.slice(0, 160),
-		blocks: plan.blocks.slice(0, 3).map((b) => ({
+		...plan.also ? { also: plan.also.map((a) => a.at && dropped.has(a.at) ? {
+			...a,
+			at: void 0
+		} : a) } : {},
+		blocks: kept.map((b) => ({
 			...b,
 			minutes: Math.max(25, Math.round(b.minutes * .75 / 5) * 5)
 		})),
@@ -23636,6 +23610,8 @@ var TRAINING = /^(gym|training|workout|train|sport|run)$/;
 * without the AI. null when the note isn't one of these (then the AI re-plans).
 */
 function editPlan(plan, note) {
+	const day = editDayPart(plan, note);
+	if (day) return day;
 	const t = note.trim().toLowerCase().replace(/[.!]+$/, "");
 	if (!t || t.length > 80 || /[,;]| and | then /.test(t)) return null;
 	const find = (name) => {
@@ -23690,6 +23666,145 @@ function editPlan(plan, note) {
 				...b,
 				minutes
 			} : b)
+		};
+	}
+	return null;
+}
+var PARTS = {
+	morning: ["07:00", "12:00"],
+	afternoon: ["12:00", "18:00"],
+	evening: ["18:00", "22:30"],
+	tonight: ["18:00", "22:30"],
+	later: ["00:00", "23:30"]
+};
+var similar = (a, b) => {
+	const want = planWords(a);
+	const have = planWords(b);
+	return want.length > 0 && want.every((x) => have.some((w) => w.startsWith(x.slice(0, 5)) || x.startsWith(w.slice(0, 5))));
+};
+/** The first free start in [from, to) for `minutes`, inside the plan's free time and clear of its blocks (10 min apart). */
+function freeSlot(plan, minutes, from, to, skip = -1) {
+	const free = plan.free?.length ? plan.free.map((f) => [toMin(f.start), toMin(f.end)]) : [[toMin("07:00"), toMin("22:30")]];
+	const busy = [...plan.blocks.filter((_, i) => i !== skip).map((b) => [toMin(b.start) - 10, toMin(b.start) + b.minutes + 10]), ...plan.training ? [[toMin(plan.training.time) - 10, toMin(plan.training.time) + 60]] : []];
+	for (const [fs, fe] of free) for (let st = Math.ceil(Math.max(fs, toMin(from)) / 5) * 5; st + minutes <= Math.min(fe, toMin(to)); st += 5) if (!busy.some(([bs, be]) => st < be && st + minutes > bs)) return fromMin(st);
+	return null;
+}
+function editDayPart(plan, note) {
+	const raw = note.trim().replace(/[.!]+$/, "");
+	if (!raw || raw.length > 100) return null;
+	const also = plan.also ?? [];
+	const sorted = (blocks) => [...blocks].sort((a, b) => a.start.localeCompare(b.start));
+	let m = /^add\s+(.+?)(?:\s+(?:at\s+(\S+(?:\s*[ap]m)?)|(?:in the |this )?(morning|afternoon|evening|tonight)))?(?:\s+(\d{2,3})\s*(?:m|min|mins|minutes))?$/i.exec(raw);
+	if (m) {
+		const what = m[1].replace(/^(?:a|an|the)\s+/i, "").replace(/\s+(?:block|today)$/i, "").trim();
+		if (!what) return null;
+		const item = also.find((a) => !a.at && similar(what, a.title)) ?? also.find((a) => similar(what, a.title));
+		const later = !item ? plan.deferred?.find((d) => similar(what, d.title)) : void 0;
+		if (item?.at) return null;
+		const title = item?.title ?? later?.title ?? what.slice(0, 80);
+		const minutes = Math.min(180, Math.max(15, Number(m[4]) || item?.minutes || 30));
+		const at = m[2] ? planTime(m[2]) : null;
+		if (m[2] && !at) return null;
+		const [from, to] = m[3] ? PARTS[m[3].toLowerCase()] : ["00:00", "23:30"];
+		const start = at ?? freeSlot(plan, minutes, from, to);
+		if (!start) return null;
+		const block = {
+			title,
+			start,
+			minutes,
+			kind: "focus",
+			...item || later ? { tasks: [title] } : {}
+		};
+		const nextAlso = item ? also.map((a) => a === item ? {
+			...a,
+			at: start
+		} : a) : later ? [...also, {
+			title,
+			minutes,
+			priority: 1,
+			...later.id ? { id: later.id } : {},
+			at: start
+		}] : also;
+		return {
+			...plan,
+			blocks: sorted([...plan.blocks, block]),
+			...plan.also || later ? { also: nextAlso } : {},
+			...later ? { deferred: (plan.deferred ?? []).filter((d) => d !== later) } : {}
+		};
+	}
+	m = /^(?:move|put|shift|push|do)\s+(.+?)\s+(?:to|in|into|for)?\s*(?:the\s+|this\s+)?(morning|afternoon|evening|tonight|later)$/i.exec(raw);
+	if (m) {
+		const what = m[1].replace(/^(?:the|my)\s+/i, "").replace(/\s+block$/i, "");
+		const part = m[2].toLowerCase();
+		const [from, to] = PARTS[part];
+		const bi = plan.blocks.findIndex((b) => similar(what, b.title) && (b.tasks?.length ?? 0) <= 1);
+		if (bi >= 0) {
+			const b = plan.blocks[bi];
+			const start = freeSlot(plan, b.minutes, part === "later" ? fromMin(toMin(b.start) + 15) : from, to, bi);
+			if (!start) return null;
+			const blocks = plan.blocks.map((x, k) => k === bi ? {
+				...x,
+				start
+			} : x);
+			return {
+				...plan,
+				blocks: sorted(blocks),
+				...plan.also ? { also: also.map((a) => a.at === b.start ? {
+					...a,
+					at: start
+				} : a) } : {}
+			};
+		}
+		const item = also.find((a) => similar(what, a.title));
+		const host = plan.blocks.findIndex((b) => (b.tasks ?? []).some((x) => similar(what, x)));
+		const title = item?.title ?? (host >= 0 ? (plan.blocks[host].tasks ?? []).find((x) => similar(what, x)) ?? null : null);
+		if (!title) return null;
+		const minutes = Math.max(15, item?.minutes ?? 30);
+		let blocks = plan.blocks;
+		if (host >= 0) {
+			const rest = (plan.blocks[host].tasks ?? []).filter((x) => x !== title);
+			blocks = rest.length ? blocks.map((x, k) => k === host ? {
+				...x,
+				tasks: rest,
+				minutes: Math.max(20, x.minutes - minutes),
+				title: rest.length === 1 ? rest[0] : `${x.title.split(":")[0]}: ${rest.join(", ")}`.slice(0, 80)
+			} : x) : blocks.filter((_, k) => k !== host);
+		}
+		const start = freeSlot({
+			...plan,
+			blocks
+		}, minutes, part === "later" && host >= 0 ? fromMin(toMin(plan.blocks[host].start) + 15) : from, to);
+		if (!start) return null;
+		blocks = sorted([...blocks, {
+			title,
+			start,
+			minutes,
+			kind: "focus",
+			tasks: [title]
+		}]);
+		return {
+			...plan,
+			blocks,
+			...plan.also ? { also: also.map((a) => a.title === title ? {
+				...a,
+				at: start
+			} : a) } : {}
+		};
+	}
+	m = /^(?:drop|skip|remove|defer|postpone)\s+(.+?)(?:\s+today)?$/i.exec(raw);
+	if (m) {
+		const what = m[1];
+		if (plan.blocks.some((b) => similar(what, b.title))) return null;
+		const item = also.find((a) => !a.at && similar(what, a.title));
+		if (!item) return null;
+		return {
+			...plan,
+			also: also.filter((a) => a !== item),
+			deferred: [...plan.deferred ?? [], {
+				title: item.title,
+				...item.id ? { id: item.id } : {},
+				why: "You moved it to tomorrow"
+			}]
 		};
 	}
 	return null;
@@ -24421,6 +24536,331 @@ function amountIn(line) {
 	const n = Math.round(Number(m[1].replace(",", ".")));
 	return n >= 50 && n <= 3e3 ? n : null;
 }
+// src/core/dayPacker.ts
+var QUICK = /\b(check|email|e-mail|mail|reply|answer|call|text|message|pay|buy|order|send|book|sign|print|upload|submit|confirm|cancel|renew|schedule|remind|ask|tidy|water)\b/i;
+var LONG = /\b(study|learn|revise|exam|homework|project|write|essay|report|thesis|lab|code|build|refactor|implement|course|lecture|practice|ctf|research|prepare|read)\b/i;
+var MEDIUM = /\b(watch|video|youtube|review|fix|clean|plan|problem|cv|resume|apply)\b/i;
+/** How long a task takes: its Todoist duration, else a guess from its words and priority. */
+function estimateMinutes(t) {
+	if (t.duration && t.duration > 0) return Math.min(240, Math.round(t.duration));
+	const x = t.content;
+	const said = /(\d{1,3})\s*(?:min|mins|minutes|m)\b/i.exec(x);
+	if (said && Number(said[1]) >= 5) return Math.min(240, Number(said[1]));
+	const hours = /(\d(?:[.,]5)?)\s*h(?:ours?)?\b/i.exec(x);
+	if (hours) return Math.min(240, Math.round(Number(hours[1].replace(",", ".")) * 60));
+	if (LONG.test(x)) return (t.priority ?? 1) >= 3 ? 60 : 45;
+	if (QUICK.test(x) && x.split(/\s+/).length <= 6) return 15;
+	if (MEDIUM.test(x)) return 30;
+	return (t.priority ?? 1) >= 3 ? 45 : 25;
+}
+var isQuick = (minutes) => minutes <= 15;
+var key = (s) => s.trim().toLowerCase().replace(/\s+/g, " ");
+/** Most important first: starred, priority, overdue, then due time. */
+function rankTasks(tasks, today) {
+	return [...tasks].sort((a, b) => Number(!!b.starred) - Number(!!a.starred) || (b.priority ?? 1) - (a.priority ?? 1) || Number(!!(b.due && b.due < today)) - Number(!!(a.due && a.due < today)) || String(a.due ?? "9").localeCompare(String(b.due ?? "9")) || String(a.dueTime ?? "99").localeCompare(String(b.dueTime ?? "99")));
+}
+/** Free windows between events, with 10 minutes to get to and from each event. */
+function freeWindows(events, today, after, endBy) {
+	const gaps = freeGaps(events, today, {
+		after,
+		to: endBy,
+		minMinutes: 20
+	});
+	const a = toMin(after);
+	const end = toMin(endBy);
+	return gaps.map((g) => {
+		const s = toMin(g.start);
+		const e = toMin(g.end);
+		return {
+			s: s > a && s > toMin("07:00") ? s + 10 : s,
+			e: e < end ? e - 10 : e
+		};
+	}).filter((w) => w.e - w.s >= 20);
+}
+/** Puts one chunk in a window (best hours first for hard work, the afternoon for quick tasks). Mutates `wins`. */
+function place(wins, c, best, minMin) {
+	const fits = (w, need) => w.e - w.s >= need;
+	const take = (w, start, minutes) => {
+		const i = wins.indexOf(w);
+		const parts = [];
+		if (start - 10 - w.s >= 20) parts.push({
+			s: w.s,
+			e: start - 10
+		});
+		if (w.e - (start + minutes + 10) >= 20) parts.push({
+			s: start + minutes + 10,
+			e: w.e
+		});
+		wins.splice(i, 1, ...parts);
+		return {
+			start,
+			minutes
+		};
+	};
+	if (c.kind === "quick") {
+		const pm = wins.find((w) => w.e - Math.max(w.s, toMin("13:00")) >= c.minutes);
+		if (pm) return take(pm, Math.max(pm.s, toMin("13:00")), c.minutes);
+	}
+	if (c.hard && best.length) for (const h of best) {
+		const w = wins.find((x) => x.s <= h * 60 + 30 && x.e >= Math.max(x.s, h * 60) + c.minutes);
+		if (w) return take(w, Math.max(w.s, h * 60), c.minutes);
+	}
+	const w = wins.find((x) => fits(x, c.minutes));
+	if (w) return take(w, w.s, c.minutes);
+	const big = [...wins].sort((a, b) => b.e - b.s - (a.e - a.s))[0];
+	if (big && big.e - big.s >= minMin) return take(big, big.s, Math.floor((big.e - big.s) / 5) * 5);
+	return null;
+}
+var hm$1 = (m) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+var fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m} min`;
+/** The whole day packed without the model (also the fallback when the model returns too little). */
+function packDay(p) {
+	const short = p.sleptMin != null && p.sleptMin < 360;
+	const cap = short ? 60 : 90;
+	const maxBlocks = short ? 4 : 5;
+	const endBy = p.endBy ?? (short ? "21:30" : "22:00");
+	const after = quarter(p.now);
+	const seen = /* @__PURE__ */ new Set();
+	const tasks = rankTasks(p.tasks, p.today).filter((t) => {
+		const k = t.id ? `#${t.id}` : key(t.content);
+		if (!t.content.trim() || seen.has(k)) return false;
+		seen.add(k);
+		return true;
+	});
+	const est = new Map(tasks.map((t) => [t, estimateMinutes(t)]));
+	const mustdos = [];
+	const mustTasks = /* @__PURE__ */ new Set();
+	const addMust = (title) => {
+		if (mustdos.length >= 3 || !title.trim() || mustdos.some((m) => key(m) === key(title))) return;
+		mustdos.push(title.trim());
+		const t = tasks.find((x) => key(x.content) === key(title));
+		if (t) mustTasks.add(t);
+	};
+	p.top3.forEach(addMust);
+	tasks.forEach((t) => addMust(t.content));
+	const chunks = (p.goals ?? []).map((g) => ({
+		title: g.title,
+		minutes: Math.min(cap, Math.max(25, g.minutes)),
+		kind: "goal",
+		tasks: [],
+		hard: true
+	}));
+	const quick = [];
+	const others = [];
+	for (const m of mustdos) {
+		const t = tasks.find((x) => key(x.content) === key(m));
+		const minutes = t ? est.get(t) : 50;
+		if (t && isQuick(minutes)) quick.push(t);
+		else chunks.push({
+			title: m,
+			minutes: Math.min(cap, Math.max(25, minutes)),
+			kind: "focus",
+			tasks: [{
+				title: m,
+				id: t?.id,
+				minutes
+			}],
+			hard: true
+		});
+	}
+	for (const t of tasks) {
+		if (mustTasks.has(t)) continue;
+		if (isQuick(est.get(t))) quick.push(t);
+		else others.push(t);
+	}
+	const groups = /* @__PURE__ */ new Map();
+	for (const t of others) {
+		const g = t.project?.trim() || "Tasks";
+		groups.set(g, [...groups.get(g) ?? [], t]);
+	}
+	const groupChunks = [];
+	for (const [project, list] of groups) {
+		let cur = null;
+		for (const t of list) {
+			const m = Math.min(cap, est.get(t));
+			if (!cur || cur.minutes + m > cap) {
+				cur = {
+					title: project,
+					minutes: 0,
+					kind: "focus",
+					tasks: [],
+					hard: (t.priority ?? 1) >= 3
+				};
+				groupChunks.push(cur);
+			}
+			cur.minutes += m;
+			cur.tasks.push({
+				title: t.content,
+				id: t.id,
+				minutes: est.get(t)
+			});
+		}
+	}
+	for (const c of groupChunks) c.title = c.tasks.length === 1 ? c.tasks[0].title : `${c.title}: ${c.tasks.map((x) => x.title).join(", ")}`;
+	groupChunks.sort((a, b) => Number(b.hard) - Number(a.hard) || b.minutes - a.minutes);
+	chunks.push(...groupChunks);
+	if (quick.length) {
+		const list = quick.slice(0, 8);
+		const minutes = Math.min(60, Math.max(20, list.reduce((s, t) => s + est.get(t), 0)));
+		chunks.push({
+			title: `Quick tasks (${list.length})`,
+			minutes: Math.round(minutes / 5) * 5,
+			kind: "quick",
+			tasks: list.map((t) => ({
+				title: t.content,
+				id: t.id,
+				minutes: est.get(t)
+			})),
+			hard: false
+		});
+	}
+	const wins = freeWindows(p.events, p.today, after, endBy);
+	const freeMin = wins.reduce((s, w) => s + w.e - w.s, 0);
+	const order = [...chunks.filter((c) => c.kind !== "quick").slice(0, maxBlocks - (quick.length ? 1 : 0)), ...chunks.filter((c) => c.kind === "quick")];
+	if (short) {
+		for (const c of order) if (c.kind !== "quick") c.minutes = Math.max(25, Math.round(c.minutes * .75 / 5) * 5);
+	}
+	const placed = [];
+	for (const c of order) {
+		if (placed.length >= maxBlocks) break;
+		const at = place(wins, c, p.best ?? [], 25);
+		if (!at) continue;
+		placed.push({
+			title: c.title.slice(0, 80),
+			start: fromMin(at.start),
+			minutes: at.minutes,
+			kind: c.kind,
+			tasks: c.tasks.map((t) => t.title),
+			chunk: c
+		});
+	}
+	placed.sort((a, b) => a.start.localeCompare(b.start));
+	const blocks = placed.map(({ chunk: _c, ...b }) => b);
+	const inBlock = /* @__PURE__ */ new Map();
+	for (const b of placed) for (const t of b.chunk.tasks) inBlock.set(key(t.title), b.start);
+	let training = null;
+	if (!p.workoutDone) {
+		const evening = wins.filter((w) => w.e > toMin("17:00"));
+		for (const w of evening) {
+			const s = Math.max(w.s, toMin("17:00"));
+			if (s + 45 <= w.e) {
+				training = {
+					time: fromMin(Math.ceil(s / 15) * 15),
+					what: short ? "easy: Workout · 30 min" : "Workout · 45 min"
+				};
+				break;
+			}
+		}
+	}
+	const leftFree = wins.reduce((s, w) => s + w.e - w.s, 0) - (training ? 45 : 0);
+	let budget = Math.max(0, leftFree);
+	const also = [];
+	const deferred = [];
+	for (const t of tasks) {
+		if (mustTasks.has(t)) continue;
+		const minutes = est.get(t);
+		const at = inBlock.get(key(t.content));
+		const item = {
+			title: t.content,
+			minutes,
+			priority: t.priority ?? 1,
+			...t.id ? { id: t.id } : {},
+			...t.project ? { project: t.project } : {},
+			...at ? { at } : {},
+			...t.due && t.due < p.today ? { overdue: true } : {}
+		};
+		if (at || (t.priority ?? 1) >= 3 || t.due && t.due < p.today || minutes <= budget) {
+			if (!at) budget = Math.max(0, budget - minutes);
+			also.push(item);
+		} else deferred.push({
+			title: t.content,
+			...t.id ? { id: t.id } : {},
+			why: "No free time left today; tomorrow"
+		});
+	}
+	also.sort((a, b) => b.priority - a.priority || Number(!!b.overdue) - Number(!!a.overdue));
+	const focus = blocks.reduce((s, b) => s + b.minutes, 0);
+	const total = tasks.length;
+	const classes = p.events.filter((e) => !e.allDay).length;
+	const why = !blocks.length ? freeMin < 25 ? "No free time between your events today, so the must-dos fit where they can." : "Nothing to plan today: pick one thing that matters." : `${total} task${total === 1 ? "" : "s"}${classes ? ` and ${classes} event${classes === 1 ? "" : "s"}` : ""}, ${hm$1(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? "" : "s"} (${fmtMin(focus)})${quick.length ? ", small tasks batched" : ""}${short ? `. Short night (${hm$1(p.sleptMin)}), so shorter blocks and an earlier end` : ""}.`;
+	const headline = mustdos.length ? `${mustdos.length} must-do${mustdos.length === 1 ? "" : "s"} · ${blocks.length} block${blocks.length === 1 ? "" : "s"} · ${fmtMin(focus)} focus${also.length ? ` · ${also.length} more on the list` : ""}` : "A light day: pick one thing that matters";
+	return {
+		day: p.today,
+		headline: short ? `Short night (${hm$1(p.sleptMin)}): a lighter day. ${headline}`.slice(0, 160) : headline,
+		mustdos,
+		blocks,
+		training,
+		waterMl: p.waterTarget,
+		also,
+		deferred,
+		why,
+		light: short || void 0,
+		free: wins.length || blocks.length ? freeWindows(p.events, p.today, after, endBy).map((w) => ({
+			start: fromMin(w.s),
+			end: fromMin(w.e)
+		})) : []
+	};
+}
+/**
+* The model's plan, checked against the packer's: every task accounted for
+* (missing ones go into "Also today"), "Also today" filled from the tasks
+* (estimates, priority, ids), and the packer's plan when the model gave too
+* little (far fewer blocks or far less focus than the day has room for).
+*/
+function checkModelPlan(model, packed, tasks) {
+	if (!(packed.blocks.length < 3 || model.blocks.length >= Math.ceil(packed.blocks.length / 2) + 1 && model.blocks.reduce((s, b) => s + b.minutes, 0) >= packed.blocks.reduce((s, b) => s + b.minutes, 0) * .5)) return {
+		...packed,
+		headline: packed.headline
+	};
+	const byKey = new Map(tasks.map((t) => [key(t.content), t]));
+	const byId = new Map(tasks.filter((t) => t.id).map((t) => [t.id, t]));
+	const inBlock = /* @__PURE__ */ new Map();
+	for (const b of model.blocks) for (const t of b.tasks ?? []) inBlock.set(key(t), b.start);
+	const must = new Set(model.mustdos.map(key));
+	const deferred = (model.deferred ?? []).filter((d) => d.why?.trim() && (byKey.has(key(d.title)) || d.id && byId.has(d.id)) && !must.has(key(d.title)));
+	const deferredKeys = new Set(deferred.map((d) => key(d.title)));
+	const also = [];
+	for (const t of rankTasks(tasks, model.day)) {
+		const k = key(t.content);
+		if (must.has(k) || deferredKeys.has(k)) continue;
+		const fromModel = (model.also ?? []).find((a) => key(a.title) === k || a.id && a.id === t.id);
+		const at = inBlock.get(k) ?? fromModel?.at;
+		also.push({
+			title: t.content,
+			minutes: fromModel?.minutes && fromModel.minutes >= 5 && fromModel.minutes <= 240 ? Math.round(fromModel.minutes) : estimateMinutes(t),
+			priority: t.priority ?? 1,
+			...t.id ? { id: t.id } : {},
+			...t.project ? { project: t.project } : {},
+			...at ? { at } : {},
+			...t.due && t.due < model.day ? { overdue: true } : {}
+		});
+	}
+	also.sort((a, b) => b.priority - a.priority || Number(!!b.overdue) - Number(!!a.overdue));
+	return {
+		...model,
+		also,
+		deferred,
+		why: model.why || packed.why,
+		free: packed.free
+	};
+}
+/** After blocks moved: each "Also today" item points at the block that holds it now (or none). */
+function relinkAlso(plan) {
+	if (!plan.also?.length) return plan;
+	const at = /* @__PURE__ */ new Map();
+	for (const b of plan.blocks) for (const t of b.tasks ?? []) at.set(key(t), b.start);
+	return {
+		...plan,
+		also: plan.also.map((a) => {
+			const { at: _old, ...rest } = a;
+			const now = at.get(key(a.title));
+			return now ? {
+				...rest,
+				at: now
+			} : rest;
+		})
+	};
+}
 // src/core/coachImpact.ts
 var COACH_HISTORY = "coach_history";
 function cleanHistory(h) {
@@ -24835,8 +25275,9 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				const st = load(db, today);
 				const cur = st.briefing;
 				if (!cur || cur.plan.day !== today) return null;
-				const plan = editPlan(cur.plan, note);
-				if (!plan) return null;
+				const edited = editPlan(cur.plan, note);
+				if (!edited) return null;
+				const plan = relinkAlso(edited);
 				const version = (cur.version ?? 0) + 1;
 				save(db, {
 					...st,
@@ -24889,6 +25330,18 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				focus: past.flatMap((x) => x.d.focus ?? []),
 				hours: past.map((x) => x.d.hours).filter((h) => !!h && Object.keys(h).length > 0)
 			};
+			let behind = [];
+			try {
+				behind = svc.goals.cards(now, financeStateFrom(db, null)).map((c) => ({
+					c,
+					move: behindMove(c)
+				})).filter((x) => x.move && x.move.do.startsWith("focus:")).slice(0, 2).map((x) => ({
+					title: `Goal: ${x.c.goal.title}`.slice(0, 60),
+					minutes: Number(x.move.do.split(":")[1]) || 25
+				}));
+			} catch {
+				behind = [];
+			}
 			return {
 				today,
 				st,
@@ -24897,7 +25350,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				slept,
 				yday,
 				mode: todayMode(db, today),
-				hist
+				hist,
+				behind
 			};
 		});
 		const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : "";
@@ -24908,27 +25362,48 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			minutes: Math.min(90, p.todayLeftMin)
 		}));
 		const mode = base.mode;
-		const fallback = localProposal({
-			goals: !mode ? allGoalItems : mode.kind === "sick" ? [] : mode.kind === "travel" ? allGoalItems.slice(0, 1).map((g) => ({
-				...g,
-				minutes: Math.min(45, g.minutes)
-			})) : allGoalItems.map((g) => ({
-				...g,
-				minutes: Math.min(90, Math.round(g.minutes * mode.focus / 5) * 5)
-			})),
+		const goalItems = !mode ? allGoalItems : mode.kind === "sick" ? [] : mode.kind === "travel" ? allGoalItems.slice(0, 1).map((g) => ({
+			...g,
+			minutes: Math.min(45, g.minutes)
+		})) : allGoalItems.map((g) => ({
+			...g,
+			minutes: Math.min(90, Math.round(g.minutes * mode.focus / 5) * 5)
+		}));
+		const planTasks = tasks.map((t) => ({
+			id: t.id,
+			content: t.content,
+			starred: isStarred(t),
+			priority: t.priority,
+			due: t.due,
+			dueTime: t.dueTime,
+			project: t.section ?? t.project,
+			duration: t.duration ?? null
+		}));
+		const behindGoals = !mode || mode.kind === "exam" ? base.behind.filter((g) => !goalItems.some((x) => x.title.toLowerCase().includes(g.title.slice(6).toLowerCase()))) : [];
+		const packed = packDay({
+			goals: [...goalItems, ...behindGoals],
 			today: base.today,
 			now: hmNow(now),
 			events,
-			tasks: tasks.map((t) => ({
-				content: t.content,
-				starred: isStarred(t),
-				priority: t.priority,
-				due: t.due
-			})),
+			tasks: planTasks,
 			top3: base.st.tomorrow?.day === base.today ? base.st.tomorrow.top3 : [],
 			waterTarget: base.water,
-			workoutDone: base.workoutDone
+			workoutDone: base.workoutDone,
+			sleptMin: base.slept,
+			best: base.hist.focus.length >= 3 ? bestHours(base.hist.focus) : []
 		});
+		const fallback = !mode ? packed : mode.kind === "sick" ? relinkAlso({
+			...packed,
+			blocks: [],
+			why: "Sick day: rest first. Your tasks are on the list for when you feel better."
+		}) : mode.kind === "travel" ? relinkAlso({
+			...packed,
+			blocks: packed.blocks.slice(0, 1).map((b) => ({
+				...b,
+				minutes: Math.min(45, b.minutes)
+			})),
+			why: "Travel day: one short block, the rest on the list."
+		}) : packed;
 		let plan = fallback;
 		const draft = !note && base.st.tomorrow?.day === base.today ? base.st.tomorrow.plan : void 0;
 		const useDraft = !!draft && draft.blocks.length > 0 && draftFits(draft, events) && draft.blocks.every((b) => b.start >= hmNow(now));
@@ -24938,15 +25413,17 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		};
 		if (ai && !note && !useDraft) try {
 			const raw = await withTimeout(ai([
-				"You are BEN, Victor's coach. His day plan is built (times fixed). Only: name each block in a few words tied to his goal, rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
+				"You are BEN, Victor's coach. His day plan is built (times fixed) from ALL of today's tasks. Only: name each block in a few words tied to his goal (a block with several tasks names what they share), rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
 				`Plan: ${JSON.stringify({
 					blocks: fallback.blocks.map((b) => ({
 						start: b.start,
 						minutes: b.minutes,
-						title: b.title
+						title: b.title,
+						tasks: b.tasks
 					})),
 					mustdos: fallback.mustdos,
-					training: fallback.training
+					training: fallback.training,
+					alsoToday: (fallback.also ?? []).length
 				})}`,
 				plans.length ? `Goals: ${plans.map((p) => planLine(p)).join(" | ")}` : "",
 				base.yday ? `Yesterday (use it: the headline names what went well or slipped and how today fixes it, e.g. "Yesterday 2/3, focus slipped after lunch, so the hard block is first"): ${base.yday}` : "",
@@ -24957,7 +25434,11 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				kind: "plan-names"
 			}), 15e3);
 			const json = String(raw).match(/\{[\s\S]*\}/)?.[0];
-			plan = nameAndRank(fallback, json ? JSON.parse(json) : null);
+			const named = nameAndRank(fallback, json ? JSON.parse(json) : null);
+			plan = {
+				...named,
+				blocks: named.blocks.map((b, i) => b.kind === "quick" ? fallback.blocks[i] : b)
+			};
 		} catch {
 			plan = fallback;
 		}
@@ -24966,7 +25447,17 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const prev = base.st.briefing?.plan;
 			const raw = await withTimeout(ai([
 				"You are BEN, Victor's best friend and coach. Plan his day: what makes today a win for his goals. Tough love, realistic.",
-				`It is ${hmNow(now)}. Only plan from now on, never over calendar events, with 10-minute breaks between blocks. 1–3 must-dos (the ones that matter most; last night's top 3 first if given). Focus blocks 25–90 min. A training slot if he hasn't trained today. Water goal in ml.`,
+				`It is ${hmNow(now)}. Only plan from now on, never over calendar events (classes, commutes and meetings are fixed: plan AROUND them, 10 minutes to get there), with 10-minute breaks between blocks and nothing after 22:00. Exactly 3 must-dos when there are 3+ tasks (the ones that matter most; last night's top 3 first if given): they are his daily points, keep them at 3. A training slot if he hasn't trained today. Water goal in ml.`,
+				"Consider ALL of today's tasks below (due today and overdue), not only the must-dos. Pack the important ones into 3–5 focus blocks (25–90 min, sized from the estimates, hard work in his best hours) in the free time between events; batch small tasks (about 15 min) into ONE \"Quick tasks\" block (kind \"quick\"). Every task must be accounted for: in a block (its exact title in that block's \"tasks\"), in \"also\" (with minutes), or in \"deferred\" with a short reason. A short night means fewer or shorter blocks, never one tiny block when the day has free hours and many tasks. \"why\": one line on why the day is planned this way.",
+				`Fixed events today: ${events.filter((e) => !e.allDay).map((e) => `${new Date(e.start).toTimeString().slice(0, 5)}–${new Date(e.end).toTimeString().slice(0, 5)} ${e.title}`).join("; ") || "none"}`,
+				`Today's tasks (${planTasks.length}, priority 1 = most urgent): ${JSON.stringify(planTasks.slice(0, 40).map((t) => ({
+					task: t.content,
+					project: t.project,
+					priority: 5 - (t.priority ?? 1),
+					overdue: !!(t.due && t.due < base.today),
+					minutes: estimateMinutes(t)
+				})))}`,
+				base.slept != null && base.slept < 360 ? `Short night: he slept ${Math.floor(base.slept / 60)}h${String(base.slept % 60).padStart(2, "0")}. Lighter, not empty.` : "",
 				mode ? `LIFE MODE today: ${mode.label}. ${mode.kind === "sick" ? "Keep it tiny: rest, water, sleep; at most one easy must-do; no focus blocks unless he asks; training null." : mode.kind === "travel" ? "A light plan: one or two small must-dos, at most one short block; training null." : "Exam week: more and longer study blocks for the exam goals; a short walk instead of a full workout is fine."}` : "",
 				"Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits (\"Algebra set (exam 15 Dec)\").",
 				"headline: one short line with numbers (\"3 must-dos · 2h40 focus · gym 18:00\").",
@@ -24974,7 +25465,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				plans.length ? `Goals planned backward from their deadlines (today's minutes are a MUST; booked ones are already in the calendar):\n${plans.map((p) => `- ${planLine(p)}${bookedToday(p) ? " (booked today)" : ""}`).join("\n")}` : "",
 				histFacts ? `His last week, from real activity (put hard blocks in his best hours; never plan study later than he ever does): ${histFacts}.` : "",
 				`A simple starting point (improve it): ${JSON.stringify(fallback)}`,
-				"Answer ONLY with JSON: {\"headline\": string, \"mustdos\": string[], \"blocks\": [{\"title\": string, \"start\": \"HH:MM\", \"minutes\": number}], \"training\": {\"time\": \"HH:MM\", \"what\": string} | null, \"waterMl\": number}",
+				"Answer ONLY with JSON: {\"headline\": string, \"why\": string, \"mustdos\": string[], \"blocks\": [{\"title\": string, \"start\": \"HH:MM\", \"minutes\": number, \"kind\": \"focus\" | \"quick\" | \"goal\", \"tasks\": string[]}], \"also\": [{\"task\": string, \"minutes\": number}], \"deferred\": [{\"task\": string, \"why\": string}], \"training\": {\"time\": \"HH:MM\", \"what\": string} | null, \"waterMl\": number}",
 				"",
 				"== Victor right now ==",
 				context
@@ -24985,7 +25476,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				kind: "plan"
 			}), 35e3);
 			const json = String(raw).match(/\{[\s\S]*\}/)?.[0];
-			plan = cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now));
+			plan = checkModelPlan(cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now)), fallback, planTasks);
 		} catch {
 			plan = fallback;
 		}
@@ -25013,6 +25504,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				headline: `${plan.headline} · ${moved.note}`.slice(0, 200)
 			};
 		}
+		plan = relinkAlso(plan);
 		return mirror.write((db) => {
 			const st = load(db, plan.day);
 			const version = (st.briefing?.version ?? 0) + 1;
@@ -25062,7 +25554,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const items = [...p.blocks.map((b) => ({
 				title: b.title,
 				start: b.start,
-				minutes: b.minutes
+				minutes: b.minutes,
+				tasks: b.tasks
 			})), ...p.training ? [{
 				title: `💪 ${p.training.what}`,
 				start: p.training.time,
@@ -25074,7 +25567,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 					title: b.title,
 					start: start.toISOString(),
 					end: new Date(start.getTime() + b.minutes * 6e4).toISOString(),
-					description: "Planned with your coach in Life System"
+					description: ["Planned with your coach in Life System", ...b.tasks?.length ? ["", ...b.tasks.map((t) => `- ${t}`)] : []].join("\n")
 				}).then(() => true).catch(() => false)) made++;
 			}
 			if (items.length) done.push(made ? `🗓 ${made} block${made === 1 ? "" : "s"} in your calendar` : "⚠️ Calendar: blocks not added");
@@ -25227,15 +25720,19 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const svc = services.services(db);
 			const st = load(db, today);
 			const top3 = st.tomorrow?.day === day ? st.tomorrow.top3 : [];
-			const plan = localProposal({
+			const plan = packDay({
 				today: day,
 				now: "08:00",
 				events,
 				tasks: tasks.filter((t) => t.due === day).map((t) => ({
+					id: t.id,
 					content: t.content,
 					starred: isStarred(t),
 					priority: t.priority,
-					due: t.due
+					due: t.due,
+					dueTime: t.dueTime,
+					project: t.section ?? t.project,
+					duration: t.duration ?? null
 				})),
 				top3,
 				waterTarget: waterToday(db, svc).target,
@@ -25870,7 +26367,7 @@ function focusKeyboard(subjects) {
 }
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r, plan) {
-	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$4(r.state.todayMin)}`;
+	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$5(r.state.todayMin)}`;
 	const rate = [
 		1,
 		2,
@@ -26820,7 +27317,7 @@ function runFocus(s, text, focusEnded) {
 				const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
 				return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
 			}
-			return { reply: `⏱ Today: <b>${hm$4(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
+			return { reply: `⏱ Today: <b>${hm$5(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
 		}
 		const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
 		const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
@@ -29134,7 +29631,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	async function lessonOfDay(token, chat, botId, cfg, note) {
 		const ctx = await mirror.read((db) => {
 			const f = services.services(db).focus.state();
-			return `Focus today ${hm$4(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
+			return `Focus today ${hm$5(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
 		});
 		const out = parseBrain(await ai(`You are Victor's coach. Here is his day and his evening note. Write ONE short lesson for tomorrow (max 25 words, concrete, kind, in the language of his note) as "reply", and the same lesson as one item in "remember" starting with "Lesson ${(/* @__PURE__ */ new Date()).toISOString().slice(5, 10)}:". Answer only JSON {"reply": string, "actions": [], "remember": string[]}.
 

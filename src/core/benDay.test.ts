@@ -32,13 +32,14 @@ describe("Ben's day (W1–W9)", () => {
     expect(dueRhythm({ day: today, water: [] } as any, DEFAULT_RHYTHM_PREFS, { ...facts, time: '16:30' } as any)).not.toContain('replan')
   })
   it('makes the plan lighter after a short night (W5)', () => {
-    const plan = { day: today, headline: 'Big day', mustdos: [], blocks: [1, 2, 3, 4].map((i) => ({ title: `B${i}`, start: `0${8 + i}:00`, minutes: 60 })), training: { time: '18:00', what: 'Gym' }, waterMl: 2700 }
+    const plan = { day: today, headline: 'Big day', mustdos: [], blocks: [1, 2, 3, 4, 5].map((i) => ({ title: `B${i}`, start: `${String(8 + i).padStart(2, '0')}:00`, minutes: 60 })), training: { time: '18:00', what: 'Gym' }, waterMl: 2700 }
     const l = lightenForSleep(plan, 320)
-    expect(l.blocks).toHaveLength(3)
+    expect(l.blocks).toHaveLength(4)
     expect(l.blocks[0].minutes).toBe(45)
     expect(l.training?.what).toBe('easy: Gym')
     expect(l.headline).toContain('Short night (5h20)')
     expect(lightenForSleep(plan, 450)).toBe(plan)
+    expect(lightenForSleep(l, 320)).toBe(l)
   })
   it('checks out the day honestly (W6)', () => {
     const items = ['Lab report', 'Algebra block']
