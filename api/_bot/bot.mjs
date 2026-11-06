@@ -5658,6 +5658,95 @@ function parseRecipeLine(line) {
 		return null;
 	}
 }
+// src/core/sysmon.ts
+/**
+* Programs that are part of Windows (or this app): they are shown but never
+* get a Close button, and a close action naming one is refused.
+*/
+var SYSTEM_PROCS = /* @__PURE__ */ new Set([
+	"system",
+	"idle",
+	"system idle process",
+	"registry",
+	"memory compression",
+	"secure system",
+	"smss",
+	"csrss",
+	"wininit",
+	"winlogon",
+	"services",
+	"lsass",
+	"lsaiso",
+	"svchost",
+	"dwm",
+	"explorer",
+	"fontdrvhost",
+	"sihost",
+	"taskhostw",
+	"ctfmon",
+	"spoolsv",
+	"searchhost",
+	"searchindexer",
+	"searchapp",
+	"startmenuexperiencehost",
+	"shellexperiencehost",
+	"textinputhost",
+	"runtimebroker",
+	"applicationframehost",
+	"dllhost",
+	"wmiprvse",
+	"conhost",
+	"audiodg",
+	"wudfhost",
+	"msmpeng",
+	"mpdefendercoreservice",
+	"nissrv",
+	"securityhealthservice",
+	"securityhealthsystray",
+	"smartscreen",
+	"lockapp",
+	"logonui",
+	"userinit",
+	"taskmgr",
+	"msedgewebview2",
+	"widgets",
+	"widgetservice",
+	"phoneexperiencehost",
+	"gamebar",
+	"gamebarftserver",
+	"useroobebroker",
+	"backgroundtaskhost",
+	"compattelrunner",
+	"wlanext",
+	"unsecapp",
+	"dashost",
+	"igfxem",
+	"nvcontainer",
+	"nvdisplay.container",
+	"amdrsserv",
+	"atiesrxx",
+	"atieclxx",
+	"rtkaudiouniversalservice",
+	"life system",
+	"life-system",
+	"electron",
+	"powershell",
+	"pwsh",
+	"cmd",
+	"typeperf",
+	"kernel_task",
+	"launchd",
+	"windowserver",
+	"systemd",
+	"init",
+	"kthreadd",
+	"xorg",
+	"gnome-shell"
+]);
+var isSystemProc = (name) => {
+	const n = String(name ?? "").toLowerCase().replace(/\.exe$/, "").trim();
+	return !n || SYSTEM_PROCS.has(n) || n.startsWith("kworker") || n.startsWith("svchost");
+};
 /** Words that are never touched: money, passwords, security, system internals and shells. */
 var DENY_WORDS = [
 	"bank",
@@ -5951,12 +6040,12 @@ var BAD_COMBOS = /* @__PURE__ */ new Set([
 var norm$1 = (s) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 /** Ben's line → an action, or null. "pc: open spotify", "pc: url https://…", "pc: keys ctrl+shift+t". */
 function readPcAction(line) {
-	const m = /^\s*pc\s*:\s*(open|launch|start|url|link|file|type|keys?|press|feature)\s*[:\s]\s*(.+)$/i.exec(String(line ?? ""));
+	const m = /^\s*pc\s*:\s*(open|launch|start|url|link|file|type|keys?|press|feature|close|quit)\s*[:\s]\s*(.+)$/i.exec(String(line ?? ""));
 	if (!m) return null;
 	const verb = m[1].toLowerCase();
 	const arg = m[2].trim().replace(/^["']|["']$/g, "").trim();
 	if (!arg) return null;
-	const kind = verb === "launch" || verb === "start" ? "open" : verb === "link" ? "url" : verb === "key" || verb === "press" ? "keys" : verb;
+	const kind = verb === "quit" ? "close" : verb === "launch" || verb === "start" ? "open" : verb === "link" ? "url" : verb === "key" || verb === "press" ? "keys" : verb;
 	const max = kind === "type" ? 200 : kind === "url" || kind === "file" ? 400 : 60;
 	if (arg.length > max) return null;
 	return {
@@ -5972,6 +6061,7 @@ function pcActText(a) {
 	} catch {
 		return `open ${a.arg.slice(0, 40)}`;
 	}
+	if (a.kind === "close") return `close ${a.arg.replace(/\.exe$/i, "")}`;
 	if (a.kind === "file") return `open the file ${a.arg.split(/[\\/]/).pop()}`;
 	if (a.kind === "type") return `type “${a.arg.length > 40 ? `${a.arg.slice(0, 40)}…` : a.arg}”`;
 	if (a.kind === "keys") return `press ${a.arg.split("+").map((k) => k.trim()).map((k) => k.length <= 3 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1)).join("+")}`;
@@ -6012,6 +6102,11 @@ function pcDenied(a) {
 		return null;
 	}
 	if (a.kind === "keys") return keysToSend(a.arg) ? null : "Those keys are not allowed";
+	if (a.kind === "close") {
+		if (!/^[\p{L}\p{N} ._+-]{1,40}$/u.test(a.arg)) return "Use the plain name of the app";
+		if (isSystemProc(a.arg)) return "That is part of Windows (or this app): never closed";
+		return null;
+	}
 	return FEATURES[text] ? null : "Not a feature Ben knows";
 }
 /** "ctrl+shift+t" → SendKeys "^+t"; null when a key isn't allowed. */

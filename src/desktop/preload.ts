@@ -107,6 +107,9 @@ const api: DesktopApi = {
   pcSmartState: (s) => ipcRenderer.send('pc:smartState', s),
   // Settings → PC & automation (AU1, AU2, AU7): one channel.
   pcx: (op, arg) => ipcRenderer.invoke('pcx', op, arg),
+  // Island pages: System and AI usage (one channel), and their settings changing.
+  sysmon: (op, arg) => ipcRenderer.invoke('sysmon', op, arg),
+  onSysmonPrefs: (cb) => void ipcRenderer.on('sysmon:prefs', (_e, p) => cb(p)),
   onLock: (cb) => void ipcRenderer.on('desktop:lock', (_e, l) => cb(l)),
   onJump: (cb) => void ipcRenderer.on('desktop:jump', (_e, a) => cb(String(a))),
   onIslandCapture: (cb) => void ipcRenderer.on('island:capture', () => cb()),

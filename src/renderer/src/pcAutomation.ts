@@ -62,8 +62,30 @@ export async function pcAutoTick(now = Date.now()): Promise<void> {
 /** Settings changed: read them again now. */
 export const pcAutoRefresh = () => void loadPrefs(Date.now(), true)
 
+// System page: "Close" on a busy app asks here first, with the same Allow /
+// Deny card and the same checks in the desktop (never a part of Windows).
+// Kept on this PC only, for 2 minutes.
+let mine: PcAsk | null = null
+export function askClose(app: string, now = Date.now()) {
+  mine = { id: `mc${now.toString(36)}`, at: now, act: { kind: 'close', arg: String(app).slice(0, 40) }, status: 'waiting' }
+}
+
 /** AU7: the card for Ben's oldest waiting ask (nothing runs without your tap). */
 export function pcAskAlert(now: number, dismissed: Record<string, number>): IslandAlert | null {
+  if (mine && mine.status === 'waiting' && now - mine.at < 2 * 60_000 && !((dismissed[`pcask:${mine.id}`] ?? 0) > now)) {
+    const id = `pcask:${mine.id}`
+    return {
+      id,
+      kind: 'ben',
+      title: 'Close this app?',
+      text: `${pcActText(mine.act)} on this PC (it can still ask to save)`,
+      face: '🖥',
+      actions: [
+        { label: 'Allow', primary: true, action: { kind: 'pcAsk', askId: mine.id, answer: 'allow', alertId: id } },
+        { label: 'Deny', action: { kind: 'pcAsk', askId: mine.id, answer: 'deny', alertId: id } }
+      ]
+    }
+  }
   if (!prefs?.benActions || !state) return null
   const a = nextAsk(state.asks, now)
   if (!a) return null
@@ -84,6 +106,18 @@ export function pcAskAlert(now: number, dismissed: Record<string, number>): Isla
 
 /** Your tap on the card: run it (the desktop checks it again) or say no. Returns what to show. */
 export async function pcAskAct(a: Extract<IslandAction, { kind: 'pcAsk' }>): Promise<string> {
+  if (mine && a.askId === mine.id) {
+    const ask = mine
+    mine = null
+    if (ask.status !== 'waiting') throw new Error('That is gone')
+    if (a.answer === 'deny') {
+      await desk()?.pcx?.('deny', ask.act).catch(() => null)
+      return 'Left it open'
+    }
+    const r = await desk()?.pcx?.('run', { ...ask.act, mine: true }).catch((e: Error) => ({ ok: false, why: e.message }))
+    if (!r?.ok) throw new Error(r?.why ?? 'That did not work')
+    return `Done: ${pcActText(ask.act)}`
+  }
   const ask: PcAsk | undefined = state?.asks.find((x) => x.id === a.askId)
   if (!ask || ask.status !== 'waiting') throw new Error('That ask is gone (it waits 10 minutes)')
   const mark = (status: PcAsk['status'], why?: string) => {

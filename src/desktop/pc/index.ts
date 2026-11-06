@@ -87,7 +87,8 @@ export async function registerPcExtras(o: { dir: string; win: BrowserWindow; ori
         await save()
         return { ok: true }
       }
-      if (!prefs.benActions) return { ok: false, why: 'Turn on “Ben can do things on this PC” in Settings → PC & automation' }
+      // Closing an app from the System page is your own tap (Allow), not Ben's: no switch needed.
+      if (!prefs.benActions && !(act.kind === 'close' && arg?.mine === true)) return { ok: false, why: 'Turn on “Ben can do things on this PC” in Settings → PC & automation' }
       const r = pcDenied(act) ? { ok: false, what: pcActText(act), why: pcDenied(act)!, refused: true } : await runPcAct(act)
       log = addActLog(log, { at: Date.now(), what: r.what, result: r.ok ? 'done' : r.refused ? 'refused' : 'failed', ...(r.why ? { why: r.why } : {}) })
       await save()

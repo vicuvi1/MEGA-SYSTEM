@@ -31,6 +31,8 @@ import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
 import { MusicPanel, ScHost, ScPillBadge } from './IslandMusic'
 import { IslandPager } from './widgets/islandPages'
+import './sysmon/register'
+import { SysPill } from './sysmon/SysPill'
 import { lookClasses } from '@core/islandTiles'
 import './island.css'
 import './island-motion.css'
@@ -1650,6 +1652,8 @@ export function DesktopIsland() {
           ))}
         </span>
       )}
+      {/* System / AI usage: usage rings, CPU and memory, the 70% / 90% notice (each only when on). */}
+      {!s.locked && !old && <SysPill />}
       {/* IN35: your one-tap buttons (shown while the mouse is on the pill). */}
       {!s.locked && <PillKitButtons k={k} />}
     </div>

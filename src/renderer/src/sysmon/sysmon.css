@@ -1,0 +1,100 @@
+/* System and AI usage pages on the island (BrimDeck feel: dark cards, thin
+   bars, small lines). Bars and core meters move by transform only (the
+   motion budget); rings are drawn, not animated. */
+.sm-page { display: flex; flex-direction: column; gap: 8px; font-variant-numeric: tabular-nums; }
+.sm-card { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 10px 12px; border-radius: 14px; background: rgb(var(--ink) / 0.06); }
+.sm-card > b, .sm-card header > b { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--sub); }
+.sm-card header { display: flex; align-items: center; gap: 8px; }
+.sm-sub { color: var(--sub); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-big { font-size: 22px; font-weight: 700; line-height: 1; }
+.sm-num { font-size: 17px; font-weight: 650; line-height: 1.1; }
+.sm-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; }
+.sm-foot { color: var(--sub); font-size: 11px; text-align: center; padding: 0 8px; }
+
+/* Levels: green, amber, red. */
+.sm-page, .sm-pill { --sm-ok: #4ade80; --sm-warn: #fbbf24; --sm-crit: #f87171; --sm-line: #60a5fa; }
+
+/* Bars (transform only). */
+.sm-bar { display: block; position: relative; overflow: hidden; height: 5px; border-radius: 999px; background: rgb(var(--ink) / 0.1); }
+.sm-bar > i { display: block; width: 100%; height: 100%; border-radius: 999px; background: var(--sm-ok); transform: translateX(calc((var(--p, 0) - 1) * 100%)); transition: transform 0.4s ease-out; }
+.sm-bar.warn > i { background: var(--sm-warn); }
+.sm-bar.crit > i { background: var(--sm-crit); }
+.sm-bar.inv > i { background: var(--sm-ok); }
+
+/* CPU cores: one small column each, filled from the bottom by scaleY. */
+.sm-cpu header { justify-content: flex-start; }
+.sm-cpu .sm-spark { flex: 1; height: 22px; margin-left: 6px; }
+.sm-cores { display: grid; grid-template-columns: repeat(var(--n, 8), 1fr); gap: 3px; }
+.sm-core { position: relative; display: block; height: 22px; border-radius: 3px; overflow: hidden; background: rgb(var(--ink) / 0.08); }
+.sm-core > i { position: absolute; inset: 0; background: var(--sm-ok); transform-origin: bottom; transition: transform 0.6s ease-out; }
+.sm-core.warn > i { background: var(--sm-warn); }
+.sm-core.crit > i { background: var(--sm-crit); }
+
+/* Small lines. */
+.sm-spark { display: block; width: 100%; height: 24px; overflow: visible; }
+.sm-spark path { fill: none; stroke: var(--sm-line); stroke-width: 1.6; vector-effect: non-scaling-stroke; stroke-linejoin: round; stroke-linecap: round; }
+.sm-spark.up path { stroke: #c084fc; }
+.sm-spark.power path { stroke: var(--sm-warn); }
+.sm-sparks { position: relative; display: block; height: 24px; }
+.sm-sparks .sm-spark { position: absolute; inset: 0; }
+.sm-netnum { display: flex; flex-direction: column; font-size: 12.5px; }
+.sm-netnum em { font-style: normal; }
+.sm-net { grid-column: span 2; }
+.sm-temps { display: flex; flex-wrap: wrap; gap: 4px 8px; font-size: 13px; font-weight: 600; }
+.sm-temps em { font-style: normal; }
+.sm-temps em.warn { color: var(--sm-warn); }
+.sm-temps em.crit { color: var(--sm-crit); }
+
+/* Busiest apps. */
+.sm-apps header { justify-content: space-between; }
+.sm-sort { display: inline-flex; gap: 2px; padding: 2px; border-radius: 999px; background: rgb(var(--ink) / 0.06); }
+.sm-sort button { border: 0; border-radius: 999px; padding: 2px 8px; background: transparent; color: var(--sub); font: inherit; font-size: 11px; cursor: pointer; }
+.sm-sort button.on { background: rgb(var(--ink) / 0.14); color: var(--fg); }
+.sm-apps ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.sm-apps li { display: grid; grid-template-columns: 1fr 44px 58px 52px; align-items: center; gap: 6px; padding: 3px 0; font-size: 12.5px; }
+.sm-app-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.sm-app-num { text-align: right; color: rgb(var(--ink) / 0.8); }
+.sm-app-sys { justify-self: end; color: var(--sub); font-size: 10.5px; }
+.sm-close { justify-self: end; border: 0; border-radius: 999px; padding: 3px 9px; background: rgb(var(--ink) / 0.08); color: var(--fg); font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; transition: transform 0.12s ease; }
+.sm-close:hover { background: rgb(248 113 113 / 0.25); }
+.sm-close:active { transform: scale(0.94); }
+
+/* Drives. */
+.sm-drive { display: grid; grid-template-columns: 60px 1fr; align-items: center; gap: 2px 8px; font-size: 12px; }
+.sm-drive small { grid-column: 2; color: var(--sub); font-size: 10.5px; }
+
+/* AI usage columns. */
+.sm-cols { display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); gap: 8px; }
+.sm-col { align-items: center; text-align: center; gap: 4px; }
+.sm-col > .sm-col-name { font-size: 12.5px; font-weight: 650; color: var(--fg); text-transform: none; letter-spacing: 0; }
+.sm-col .sm-sub { white-space: normal; line-height: 1.25; }
+.sm-reset { font-size: 11px; font-weight: 600; color: rgb(var(--ink) / 0.85); }
+.sm-col dl { display: grid; grid-template-columns: auto 1fr; gap: 1px 6px; margin: 4px 0 0; width: 100%; font-size: 11px; text-align: left; }
+.sm-col dt { color: var(--sub); }
+.sm-col dd { margin: 0; text-align: right; white-space: nowrap; }
+.sm-models { list-style: none; margin: 4px 0 0; padding: 4px 0 0; width: 100%; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 1px; font-size: 10.5px; }
+.sm-models li { display: flex; justify-content: space-between; gap: 4px; color: var(--sub); }
+.sm-models em { font-style: normal; color: rgb(var(--ink) / 0.85); }
+.sm-refresh { align-self: center; border: 0; border-radius: 999px; padding: 4px 12px; background: rgb(var(--ink) / 0.07); color: var(--sub); font: inherit; font-size: 11px; cursor: pointer; }
+
+/* Rings. */
+.sm-ring { position: relative; display: inline-grid; place-items: center; flex: none; }
+.sm-ring svg { position: absolute; inset: 0; }
+.sm-ring circle { fill: none; }
+.sm-ring .bg { stroke: rgb(var(--ink) / 0.12); }
+.sm-ring .fg { stroke: var(--sm-ok); stroke-linecap: round; }
+.sm-ring.warn .fg { stroke: var(--sm-warn); }
+.sm-ring.crit .fg { stroke: var(--sm-crit); }
+.sm-ring.none .fg { stroke: transparent; }
+.sm-ring b { position: relative; font-size: 13px; font-weight: 700; }
+.sm-col .sm-ring b { font-size: 14px; }
+
+/* On the pill. */
+.sm-pill { display: inline-flex; align-items: center; gap: 4px; flex: none; margin-left: 4px; }
+.sm-pill .sm-ring b { font-size: 9px; }
+.sm-pill-cpu { display: inline-flex; flex-direction: column; line-height: 1.05; font-size: 9.5px; font-weight: 600; color: rgb(var(--ink) / 0.75); font-variant-numeric: tabular-nums; }
+.sm-pill-cpu em { font-style: normal; white-space: nowrap; }
+.sm-notice { position: absolute; inset: 0; z-index: 3; display: flex; align-items: center; justify-content: center; padding: 0 14px; border-radius: calc(var(--di-pill-h, 38px) / 2); background: rgb(8 8 10 / 0.97); font-size: 12px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: sm-notice-in 0.25s ease-out both; }
+.sm-notice.warn { color: var(--sm-warn); }
+.sm-notice.crit { color: var(--sm-crit); }
+@keyframes sm-notice-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

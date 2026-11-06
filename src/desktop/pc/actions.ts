@@ -74,6 +74,13 @@ export async function runPcAct(a: PcAct, now = Date.now()): Promise<{ ok: boolea
       await shell.openExternal(f.uri!)
       return { ok: true, what }
     }
+    if (a.kind === 'close') {
+      // Asks the app to close (like its X button: it can still ask to save). Never forced.
+      if (process.platform !== 'win32') return { ok: false, what, why: 'Closing apps works on Windows only', refused: true }
+      const exe = /\.exe$/i.test(a.arg) ? a.arg : `${a.arg}.exe`
+      const ok = await new Promise<boolean>((resolve) => execFile('taskkill.exe', ['/IM', exe], { windowsHide: true, timeout: 8000 }, (err) => resolve(!err)))
+      return ok ? { ok: true, what } : { ok: false, what, why: 'It did not close (it may be asking to save)' }
+    }
     if (a.kind === 'keys') {
       const k = keysToSend(a.arg)!
       return (await sendKeys(k)) ? { ok: true, what } : { ok: false, what, why: 'Windows did not take the keys' }

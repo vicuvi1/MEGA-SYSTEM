@@ -13,6 +13,7 @@ import { Icon } from './Icon'
 import { ReorderList, Row, Saved, Segmented, Switch, useSaved } from './settingsUi'
 import './islandSettings.css'
 import { IslandNudgeSettings } from './IslandNudgeSettings'
+import { SysmonSettings } from './sysmon/SysmonSettings'
 
 type Prefs = IslandAllPrefs
 /** An older desktop may not know the newer settings: fill them in so the page always works. */
@@ -490,6 +491,8 @@ export function IslandSettingsPanel() {
         ))}
 
       <IslandNudgeSettings onSaved={saved} />
+
+      <SysmonSettings onSaved={saved} />
 
       <h3 className="is-sec">Look</h3>
       <Row title="Colours" hint="Black like an iPhone, glass, a glow in Ben's mood, or the app's own colours (light or dark)">

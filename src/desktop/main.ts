@@ -16,6 +16,7 @@ import { createBackups } from './backups'
 import { createVault } from './vault'
 import { createPc } from './pc'
 import { registerPcExtras } from './pc/index'
+import { registerSysmon } from './sysmon/index'
 import { createEyes } from './eyes'
 import { createMeetings } from './meetings'
 import { setupVoice } from './voice'
@@ -315,6 +316,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   pcRef.current = pc
   // Settings → PC & automation: music, ActivityWatch, Ben's actions (all off until switched on).
   await registerPcExtras({ dir, win, origin }).catch(() => {})
+  // Island pages: System (CPU, memory, apps…) and AI usage (off until switched on).
+  await registerSysmon({ dir, origin }).catch(() => {})
   eyes.attach(win, () => refreshTray(), () => pc.prefs().goalWords ?? [])
   let pcPrefsNow = pc.prefs()
   pcAction = (a) => {

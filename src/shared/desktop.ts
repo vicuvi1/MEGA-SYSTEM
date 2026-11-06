@@ -67,6 +67,9 @@ export interface DesktopApi {
   /** Smart island: the block on now (its title) and whether a meeting is on. */
   pcSmartState?(s: { block: string | null; meeting: boolean }): void
   /** Settings → PC & automation (AU1 music, AU2 ActivityWatch, AU7 Ben's actions): one channel, ops in src/desktop/pc/index.ts. */
+  /** Island pages: System (sample once a second while open) and AI usage (local logs, read-only). */
+  sysmon?(op: 'prefs' | 'setPrefs' | 'sample' | 'stop' | 'light' | 'usage', arg?: unknown): Promise<any>
+  onSysmonPrefs?(cb: (p: import('../core/sysmon').SysmonPrefs) => void): void
   pcx?(op: 'media' | 'prefs' | 'setPrefs' | 'log' | 'clearLog' | 'lastHour' | 'awCheck' | 'run' | 'deny', arg?: unknown): Promise<any>
   /** The PC locked / unlocked. */
   onLock?(cb: (l: { locked: boolean; at: number }) => void): void

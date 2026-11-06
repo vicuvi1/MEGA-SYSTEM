@@ -584,7 +584,7 @@ async function listModels(fetchImpl = fetch) {
 /** What the coach cost: today, 7 and 30 days, by model, the last calls, and OpenRouter's balance. */
 async function usageReport(orKey, fetchImpl = fetch) {
   const cfg = config()
-  const out = { today: null, week: null, month: null, byModel: [], byKind: [], recent: [], credits: null }
+  const out = { today: null, week: null, month: null, byModel: [], byModelToday: [], byModelWeek: [], byKind: [], recent: [], credits: null }
   if (cfg.ok) {
     const day0 = new Date()
     day0.setHours(0, 0, 0, 0)
@@ -592,6 +592,7 @@ async function usageReport(orKey, fetchImpl = fetch) {
     const q = (sql, args = []) => ({ type: 'execute', stmt: { sql, args: args.map((a) => ({ type: 'text', value: a })) } })
     // A monthly roll-up row (LT8) stands for `calls` calls.
     const sum = 'SELECT COALESCE(SUM(COALESCE(calls, 1)),0), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ?'
+    const byModel = 'SELECT model, COALESCE(SUM(COALESCE(calls, 1)),0), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0) + COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ? GROUP BY model ORDER BY 3 DESC, 2 DESC LIMIT 8'
     const { json } = await turso(cfg, {
       requests: [
         { type: 'execute', stmt: { sql: USAGE_TABLE } },
@@ -602,6 +603,9 @@ async function usageReport(orKey, fetchImpl = fetch) {
         q('SELECT model, COUNT(*), COALESCE(SUM(cost),0), COALESCE(SUM(prompt_tokens),0) + COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ? GROUP BY model ORDER BY 3 DESC, 2 DESC', [since(30)]),
         q('SELECT at, model, kind, prompt_tokens, completion_tokens, cost FROM ai_usage WHERE calls IS NULL ORDER BY id DESC LIMIT 60'),
         q("SELECT COALESCE(kind, 'chat'), COUNT(*), COALESCE(SUM(cost),0) FROM ai_usage WHERE at >= ? GROUP BY 1 ORDER BY 3 DESC, 2 DESC", [since(30)]),
+        // The island's AI usage page: by model for today and for 7 days.
+        q(byModel, [day0.toISOString()]),
+        q(byModel, [since(7)]),
         { type: 'close' }
       ]
     }, fetchImpl).catch(() => ({ json: null }))
@@ -617,6 +621,9 @@ async function usageReport(orKey, fetchImpl = fetch) {
     out.week = tot(2)
     out.month = tot(3)
     out.byModel = rows(4).map((r) => ({ model: v(r[0]), calls: Number(v(r[1])), cost: Number(v(r[2])), tokens: Number(v(r[3])) }))
+    const models = (i) => rows(i).map((r) => ({ model: v(r[0]), calls: Number(v(r[1])), cost: Number(v(r[2])), tokens: Number(v(r[3])) }))
+    out.byModelToday = models(7)
+    out.byModelWeek = models(8)
     out.byKind = rows(6).map((r) => ({ kind: v(r[0]), calls: Number(v(r[1])), cost: Number(v(r[2])) }))
     out.recent = rows(5).map((r) => ({ at: v(r[0]), model: v(r[1]), kind: v(r[2]), prompt: v(r[3]) == null ? null : Number(v(r[3])), completion: v(r[4]) == null ? null : Number(v(r[4])), cost: v(r[5]) == null ? null : Number(v(r[5])) }))
   }

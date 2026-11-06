@@ -8,7 +8,9 @@
 // links only, no programs as files. Every run or refusal goes to a log on
 // that PC (Settings → PC & automation).
 
-export type PcActKind = 'open' | 'url' | 'file' | 'type' | 'keys' | 'feature'
+import { isSystemProc } from './sysmon'
+
+export type PcActKind = 'open' | 'url' | 'file' | 'type' | 'keys' | 'feature' | 'close'
 export interface PcAct { kind: PcActKind; arg: string }
 export interface PcAsk { id: string; at: number; act: PcAct; status: 'waiting' | 'allowed' | 'denied' | 'done' | 'failed' | 'expired'; why?: string }
 
@@ -96,12 +98,12 @@ const norm = (s: string) => String(s ?? '').toLowerCase().replace(/[^\p{L}\p{N}]
 
 /** Ben's line → an action, or null. "pc: open spotify", "pc: url https://…", "pc: keys ctrl+shift+t". */
 export function readPcAction(line: string): PcAct | null {
-  const m = /^\s*pc\s*:\s*(open|launch|start|url|link|file|type|keys?|press|feature)\s*[:\s]\s*(.+)$/i.exec(String(line ?? ''))
+  const m = /^\s*pc\s*:\s*(open|launch|start|url|link|file|type|keys?|press|feature|close|quit)\s*[:\s]\s*(.+)$/i.exec(String(line ?? ''))
   if (!m) return null
   const verb = m[1].toLowerCase()
   const arg = m[2].trim().replace(/^["']|["']$/g, '').trim()
   if (!arg) return null
-  const kind: PcActKind = verb === 'launch' || verb === 'start' ? 'open' : verb === 'link' ? 'url' : verb === 'key' || verb === 'press' ? 'keys' : (verb as PcActKind)
+  const kind: PcActKind = verb === 'quit' ? 'close' : verb === 'launch' || verb === 'start' ? 'open' : verb === 'link' ? 'url' : verb === 'key' || verb === 'press' ? 'keys' : (verb as PcActKind)
   const max = kind === 'type' ? 200 : kind === 'url' || kind === 'file' ? 400 : 60
   if (arg.length > max) return null
   return { kind, arg }
@@ -117,6 +119,7 @@ export function pcActText(a: PcAct): string {
       return `open ${a.arg.slice(0, 40)}`
     }
   }
+  if (a.kind === 'close') return `close ${a.arg.replace(/\.exe$/i, '')}`
   if (a.kind === 'file') return `open the file ${a.arg.split(/[\\/]/).pop()}`
   if (a.kind === 'type') return `type “${a.arg.length > 40 ? `${a.arg.slice(0, 40)}…` : a.arg}”`
   if (a.kind === 'keys') return `press ${a.arg.split('+').map((k) => k.trim()).map((k) => (k.length <= 3 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1))).join('+')}`
@@ -158,6 +161,12 @@ export function pcDenied(a: PcAct): string | null {
     return null
   }
   if (a.kind === 'keys') return keysToSend(a.arg) ? null : 'Those keys are not allowed'
+  // System page: close an app (asks it to close, like the X; Windows parts and this app never).
+  if (a.kind === 'close') {
+    if (!/^[\p{L}\p{N} ._+-]{1,40}$/u.test(a.arg)) return 'Use the plain name of the app'
+    if (isSystemProc(a.arg)) return 'That is part of Windows (or this app): never closed'
+    return null
+  }
   return FEATURES[text] ? null : 'Not a feature Ben knows'
 }
 

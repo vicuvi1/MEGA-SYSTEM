@@ -33,7 +33,7 @@ import { WATER_TARGET_ML } from '@core/defaults'
 import { preferSlot, workHours } from '@core/bestHours'
 import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart, shareGoalWords, smartAct, smartNotice, smartOn, smartSuggestion, smartTick, startSmart } from './smartIsland'
 import { breakOverAlert, controlAct, flowTick, islandRunning, loadBreakPref, mustdoUndo, rememberUndo } from './islandControlsFeed'
-import { pcAskAct, pcAskAlert, pcAutoTick } from './pcAutomation'
+import { askClose, pcAskAct, pcAskAlert, pcAutoTick } from './pcAutomation'
 import { kitAct, kitForIsland } from './islandKitFeed'
 import { weatherAlert, widgetsForIsland } from './widgets/widgetsFeed'
 import { MOVE_CARD_EVENT, moveCardAlert } from '@core/islandMoveCard'
@@ -747,6 +747,9 @@ export function IslandFeed() {
             said = await pcAskAct(a)
             break
           }
+          case 'pcClose':
+            askClose(a.app)
+            break
           case 'lockPc': {
             const d = get<Record<string, number>>(DISMISSED, {})
             d[a.alertId] = Date.now() + 864e5
