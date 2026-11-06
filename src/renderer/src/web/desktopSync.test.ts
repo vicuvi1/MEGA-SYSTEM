@@ -67,6 +67,7 @@ it('adds up both sides when the same counter changed on both (reps here, water f
   await mirror.ready
   const start = { savedAt: 1, data: { exercises: [{ id: 'ex_pushups', doneToday: 10 }], waterMl: 500 } }
   await mirror.write((db) => db.prepare('INSERT INTO settings (key,value) VALUES (?,?)').run('sport_tracker_json', JSON.stringify(start)))
+  await mirror.read(() => 0) // the upload goes right after the write: let it finish first
   env.offline()
   await mirror.write((db) => db.prepare("UPDATE settings SET value=? WHERE key='sport_tracker_json'").run(JSON.stringify({ savedAt: 5, data: { exercises: [{ id: 'ex_pushups', doneToday: 35 }], waterMl: 500 } })))
   env.remote.run("UPDATE settings SET value=? WHERE key='sport_tracker_json'", [JSON.stringify({ savedAt: 3, data: { exercises: [{ id: 'ex_pushups', doneToday: 10 }], waterMl: 750 } })])
@@ -108,6 +109,7 @@ it('keeps a row the server edited even if the desktop deleted it offline', async
   const mirror = env.open()
   await mirror.ready
   await mirror.write((db) => db.prepare('INSERT INTO settings (key,value) VALUES (?,?)').run('test_note', 'v1'))
+  await mirror.read(() => 0) // the upload goes right after the write: let it finish first
   env.offline()
   await mirror.write((db) => db.prepare("DELETE FROM settings WHERE key='test_note'").run())
   env.remote.run("UPDATE settings SET value='v2 from phone' WHERE key='test_note'")
@@ -122,6 +124,7 @@ it('a change that changes nothing is not queued', async () => {
   const mirror = env.open()
   await mirror.ready
   await mirror.write((db) => db.prepare('INSERT INTO settings (key,value) VALUES (?,?)').run('test_note', 'same'))
+  await mirror.read(() => 0) // the upload goes right after the write: let it finish first
   env.offline()
   await mirror.write((db) => db.prepare("UPDATE settings SET value='same' WHERE key='test_note'").run())
   expect(await mirror.read((db) => db.prepare('SELECT COUNT(*) AS n FROM desktop_outbox').get()?.n)).toBe(0)

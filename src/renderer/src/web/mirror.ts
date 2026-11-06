@@ -769,7 +769,10 @@ export class Mirror {
     return this.lock(async () => {
       if (!this.store) throw new MirrorError('Local storage is unavailable')
       // Online edits start from the newest copy, reducing avoidable conflicts.
-      if (!this.pending().length) {
+      // Live sync keeps it fresh, so a copy checked in the last 15 s is used as
+      // it is (a tap on the island doesn't wait for the internet twice).
+      const fresh = this.syncedAt && Date.now() - Date.parse(this.syncedAt) < 15_000
+      if (!this.pending().length && !fresh) {
         try {
           await this.catchUp()
         } catch { /* cached data is still usable offline */ }
@@ -805,7 +808,8 @@ export class Mirror {
       this.emit()
       this.desktopStatus()
       // A successful local save is usable offline. Remote failures retain the outbox.
-      await this.flushDesktop().catch(() => {})
+      // It goes up right after this (next in line), so the caller isn't kept waiting.
+      void this.lock(() => this.flushDesktop()).catch(() => {})
       return result!
     })
   }

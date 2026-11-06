@@ -423,7 +423,28 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   })
   // The island page is ready (it loads a moment after the window): tell it where it lives and what to show.
   ipcMain.on('island:ready', (e) => { if (fromIsland(e)) markReady() })
-  ipcMain.on('island:action', (e, a) => { if (fromIsland(e)) o.appWindow.webContents.send('island:action', a) })
+  // The app window does every island tap, and it sits in the tray most of the
+  // time, where Chromium slows its timers down (AF1 saves battery that way).
+  // So while you use the island it runs at full speed, and 30 s after the last
+  // tap it may rest again.
+  let fastUntil = 0
+  let fastT: ReturnType<typeof setTimeout> | null = null
+  const fullSpeed = (ms = 30_000) => {
+    const wc = o.appWindow.webContents
+    if (o.appWindow.isDestroyed() || wc.isDestroyed()) return
+    fastUntil = Math.max(fastUntil, Date.now() + ms)
+    if (!fastT) try { wc.setBackgroundThrottling(false) } catch { /* fine */ }
+    if (fastT) clearTimeout(fastT)
+    fastT = setTimeout(() => {
+      fastT = null
+      try { if (!o.appWindow.isDestroyed()) o.appWindow.webContents.setBackgroundThrottling(true) } catch { /* fine */ }
+    }, Math.max(0, fastUntil - Date.now()))
+  }
+  ipcMain.on('island:action', (e, a) => {
+    if (!fromIsland(e)) return
+    fullSpeed(a?.kind === 'chat' ? 150_000 : 30_000)
+    o.appWindow.webContents.send('island:action', a)
+  })
   ipcMain.on('island:ack', (e, ack) => { if (fromApp(e)) win?.webContents.send('island:ack', ack) })
   // Typing: the island takes the keyboard (it never takes it on its own), and gives it back.
   // IS5: the mouse is left to the hover check (it looks again right away), so the
@@ -595,6 +616,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   // IN39: the panel resized by its corner: room to grow while you drag, then the size is kept for this screen.
   ipcMain.on('island:panelSize', (e, phase, size) => {
     if (!fromIsland(e) || !win || win.isDestroyed()) return
+    // Opening the panel: you're about to tap, so the app window wakes up now.
+    if (phase === 'start') fullSpeed()
     if (phase === 'start') {
       resizing = true
       placeWin()
