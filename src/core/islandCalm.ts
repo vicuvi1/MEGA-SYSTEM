@@ -99,7 +99,7 @@ export function calmDots(o: { alert: { id: string; kind: string; title: string; 
 
 export interface ZoneRect { x: number; y: number; w: number; h: number }
 /** How long the mouse must rest before the pill slides down, and how long after it left before it hides again. */
-export const CALM_TIMING = { dwellMs: 200, dwellTitleBarMs: 400, leaveMs: 600, /** The mouse stays on the pill this long: the panel opens (not while it's on a dot). */ expandMs: 900 }
+export const CALM_TIMING = { dwellMs: 200, dwellTitleBarMs: 400, leaveMs: 600 }
 export function calmTiming(overTitleBar: boolean): { dwellMs: number; leaveMs: number } {
   return { dwellMs: overTitleBar ? CALM_TIMING.dwellTitleBarMs : CALM_TIMING.dwellMs, leaveMs: CALM_TIMING.leaveMs }
 }

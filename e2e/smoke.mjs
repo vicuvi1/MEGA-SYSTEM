@@ -821,7 +821,10 @@ try {
     await ip.waitForSelector('.di-pill.di-rest', { timeout: 3000 })
     if (shots) await ip.waitForTimeout(700)
     if (shots) await ip.screenshot({ path: `${shots}/calm-hover-pill.png`, clip: { x: 0, y: 0, width: 520, height: 120 } })
-    // Staying on it opens the panel; away, it goes back to the line.
+    // Staying on it does NOT open the panel (only a click does); away, it goes back to the line.
+    await ip.waitForTimeout(1600)
+    if (await ip.$('.di-panel')) throw new Error('the panel opened by itself on hover (it must wait for a click)')
+    await ip.click('.di-pill.di-rest')
     await ip.waitForSelector('.di-panel', { timeout: 3000 })
     await ip.mouse.move(260, 600, { steps: 3 })
     await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 8000 })

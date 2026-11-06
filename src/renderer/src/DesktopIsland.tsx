@@ -1909,13 +1909,9 @@ export function DesktopIsland() {
   const restLabel = s.locked ? 'Open Life System' : picked ? `${picked.text} ${picked.sub}` : restMain.tip
   // ---- Calm: the line at rest, its dots, the one-line peek (core/islandCalm.ts) ----
   const calm = prefs.mode === 'calm'
-  // Staying on the pill opens the panel (not while the mouse is on a dot, and not with "open on click").
+  // Hover only shows the small pill; the full panel opens only on a click (the owner's choice:
+  // it must never open by itself just because the mouse stayed on it).
   const [onDot, setOnDot] = useState(false)
-  useEffect(() => {
-    if (!calm || ui.view !== 'compact' || !ui.over || onDot || prefs.openOn === 'click' || s.locked || !calmRevealed(calmPhase)) return
-    const t = window.setTimeout(() => dispatch({ type: 'click' }), CALM_TIMING.expandMs)
-    return () => clearTimeout(t)
-  }, [calm, ui.view, ui.over, onDot, prefs.openOn, s.locked, calmPhase, dispatch])
   const calmHidden = calm && ui.view === 'compact' && !calmRevealed(calmPhase) && !mv.moveMode && !mv.parked && !nudgeRun
   calmHiddenRef.current = calmHidden
   useEffect(() => {
