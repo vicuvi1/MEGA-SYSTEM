@@ -1,0 +1,233 @@
+/* MU: the Music tab (island) and the Music page. Motion: transform and
+   opacity only; loops run only while music plays (.playing / .on) and pause
+   in a hidden window (motion.css) and with reduce motion (below). */
+
+.mu {
+  --mu-fg: var(--text, #f5f5f6);
+  --mu-sub: var(--muted, rgb(255 255 255 / 0.56));
+  --mu-line: rgb(var(--ink, 255 255 255) / 0.09);
+  --mu-chip: rgb(var(--ink, 255 255 255) / 0.07);
+  --mu-rgb: 200 241 53;
+  --mu-beat: 0.75s;
+  --mu-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: var(--mu-fg);
+  position: relative;
+}
+.di .mu { --mu-fg: var(--fg); --mu-sub: var(--sub); --mu-line: var(--line); }
+
+/* ---- scrolling title ---- */
+.mu-scroll { display: block; min-width: 0; overflow: hidden; white-space: nowrap; }
+.mu-scroll > span { display: inline-block; }
+.mu-scroll.on { mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 18px), transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 12px, #000 calc(100% - 18px), transparent); }
+.mu-scroll.on > span { padding-left: 12px; animation: mu-marquee var(--mu-dur, 10s) ease-in-out 1.2s infinite alternate; }
+@keyframes mu-marquee { 0%, 12% { transform: translateX(0); } 88%, 100% { transform: translateX(var(--mu-dist, 0)); } }
+
+/* ---- equalizer (made up: the sound itself can't be read) ---- */
+.mu-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; font-style: normal; }
+.mu-eq b { display: block; width: 3px; height: 100%; border-radius: 1.5px; background: rgb(var(--mu-rgb)); transform-origin: 50% 100%; transform: scaleY(0.28); transition: transform 0.3s ease; }
+.mu-eq.on b { animation: mu-eq 0.82s ease-in-out infinite; }
+.mu-eq.on b:nth-child(2) { animation-duration: 0.64s; animation-delay: -0.2s; }
+.mu-eq.on b:nth-child(3) { animation-duration: 0.95s; animation-delay: -0.45s; }
+.mu-eq.on b:nth-child(4) { animation-duration: 0.7s; animation-delay: -0.1s; }
+@keyframes mu-eq { 0%, 100% { transform: scaleY(0.28); } 30% { transform: scaleY(1); } 60% { transform: scaleY(0.5); } 80% { transform: scaleY(0.82); } }
+
+/* ---- artwork ---- */
+.mu-art { position: relative; flex: none; border-radius: 18px; isolation: isolate; }
+.mu-art-in { position: absolute; inset: 0; animation: mu-swap-fwd 0.38s var(--mu-spring) both; }
+.mu-art-in.back { animation-name: mu-swap-back; }
+@keyframes mu-swap-fwd { from { opacity: 0; transform: translateX(26px) scale(0.9) rotate(2deg); } to { opacity: 1; transform: none; } }
+@keyframes mu-swap-back { from { opacity: 0; transform: translateX(-26px) scale(0.9) rotate(-2deg); } to { opacity: 1; transform: none; } }
+.mu-art-breathe { width: 100%; height: 100%; border-radius: inherit; overflow: hidden; border-radius: 18px; box-shadow: 0 18px 40px -16px rgb(var(--mu-rgb) / 0.55), 0 0 0 1px rgb(255 255 255 / 0.06); transform: scale(0.965); transition: transform 0.4s var(--mu-spring); background: linear-gradient(135deg, rgb(var(--mu-rgb) / 0.55), rgb(var(--mu-rgb) / 0.15)); }
+.mu-art.playing .mu-art-breathe { transform: scale(1); animation: mu-breathe calc(var(--mu-beat) * 2) ease-in-out infinite; }
+@keyframes mu-breathe { 0%, 100% { transform: scale(1); } 18% { transform: scale(1.022); } 50% { transform: scale(0.994); } 68% { transform: scale(1.012); } }
+.mu-art-breathe img { width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; }
+.mu-art-blank { width: 100%; height: 100%; display: grid; place-items: center; font-size: 42px; color: rgb(255 255 255 / 0.85); }
+/* The glow under it: drawn once, only its opacity and size move. */
+.mu-art-glow { position: absolute; inset: 14% 8% -10%; z-index: -1; border-radius: 50%; background: radial-gradient(closest-side, rgb(var(--mu-rgb) / 0.55), transparent); opacity: 0.35; transform: scale(0.9); transition: opacity 0.4s ease, transform 0.4s ease; }
+.mu-art.playing .mu-art-glow { opacity: 0.7; transform: scale(1); animation: mu-glow calc(var(--mu-beat) * 2) ease-in-out infinite; }
+@keyframes mu-glow { 0%, 100% { opacity: 0.55; transform: scale(0.96); } 20% { opacity: 0.85; transform: scale(1.04); } }
+
+/* ---- the ambient background (the artwork, blurred once, plus two soft lights) ---- */
+.mu-amb { position: absolute; inset: 0; overflow: hidden; pointer-events: none; border-radius: inherit; z-index: 0; }
+.mu-amb img { position: absolute; inset: -20%; width: 140%; height: 140%; object-fit: cover; filter: blur(48px); opacity: 0.42; transform: scale(1.1); animation: mu-fade 0.4s ease both; }
+.mu-amb i { position: absolute; width: 70%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(closest-side, rgb(var(--mu-rgb) / 0.5), transparent); opacity: 0.55; }
+.mu-amb .a { top: -30%; left: -18%; }
+.mu-amb .b { bottom: -40%; right: -20%; opacity: 0.32; }
+.mu-amb::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgb(0 0 0 / 0.05), rgb(0 0 0 / 0.35)); }
+@keyframes mu-fade { from { opacity: 0; } }
+
+/* ---- waveform ---- */
+.mu-wave { position: relative; width: 100%; cursor: pointer; touch-action: none; outline: none; border-radius: 6px; }
+.mu-wave:focus-visible { box-shadow: 0 0 0 2px rgb(var(--mu-rgb) / 0.6); }
+.mu-wave svg { display: block; }
+.mu-wave-base rect { fill: rgb(var(--ink, 255 255 255) / 0.2); }
+.mu-wave.guess .mu-wave-base rect { fill: rgb(var(--ink, 255 255 255) / 0.13); }
+.mu-wave-clip { position: absolute; inset: 0; overflow: hidden; }
+.mu-wave-fill { position: absolute; inset: 0; }
+.mu-wave-fill rect { fill: rgb(var(--mu-rgb)); }
+.mu-wave.playing:not(.drag) .mu-wave-clip, .mu-wave.playing:not(.drag) .mu-wave-fill, .mu-wave.playing:not(.drag) .mu-wave-head { transition: transform 0.5s linear; }
+.mu-wave-head { position: absolute; top: -3px; bottom: -3px; left: 0; width: 100%; pointer-events: none; }
+.mu-wave-head::before { content: ''; position: absolute; left: -1px; top: 0; bottom: 0; width: 2px; border-radius: 1px; background: var(--mu-fg); opacity: 0; transition: opacity 0.15s ease; }
+.mu-wave:hover .mu-wave-head::before, .mu-wave.drag .mu-wave-head::before { opacity: 0.85; }
+.mu-times { display: flex; justify-content: space-between; font-size: 11px; color: var(--mu-sub); font-variant-numeric: tabular-nums; margin-top: 4px; }
+
+/* ---- buttons ---- */
+.mu button { font: inherit; color: inherit; }
+.mu-transport { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.mu-ic { position: relative; display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 50%; background: transparent; color: var(--mu-sub); cursor: pointer; transition: transform 0.18s var(--mu-spring), color 0.15s ease, background-color 0.15s ease; }
+.mu-ic:hover { color: var(--mu-fg); background: var(--mu-chip); transform: translateY(-1px); }
+.mu-ic:active { transform: scale(0.88); }
+.mu-ic.big { width: 44px; height: 44px; color: var(--mu-fg); }
+.mu-ic.sm { width: 28px; height: 28px; }
+.mu-ic.on { color: rgb(var(--mu-rgb)); }
+.mu-ic.on::after { content: ''; position: absolute; bottom: 3px; left: 50%; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+.mu-one { position: absolute; top: 5px; right: 5px; font-size: 8.5px; font-weight: 800; line-height: 1; }
+.mu-star.on { color: #ffd451; }
+.mu-star.on svg { animation: mu-pop 0.34s var(--mu-spring); }
+@keyframes mu-pop { 0% { transform: scale(0.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+
+.mu .mu-play, .mu-play { position: relative; display: grid; place-items: center; flex: none; border: 0; border-radius: 50%; cursor: pointer; background: var(--mu-fg); color: #0b0c0f; box-shadow: 0 10px 26px -10px rgb(var(--mu-rgb) / 0.9); transition: transform 0.2s var(--mu-spring); }
+.mu-play:hover { transform: scale(1.05); }
+.mu-play:active { transform: scale(0.92); }
+.mu-play::before { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 1.5px solid rgb(var(--mu-rgb) / 0.6); opacity: 0; transform: scale(0.85); transition: opacity 0.3s ease, transform 0.3s ease; }
+.mu-play.on::before { opacity: 1; transform: scale(1); }
+.mu-play svg g { transform-origin: 12px 12px; transition: transform 0.28s var(--mu-spring), opacity 0.2s ease; }
+.mu-play-tri { transform: translateX(0.6px); }
+.mu-play .mu-play-bars { opacity: 0; transform: rotate(-90deg) scale(0.4); }
+.mu-play.on .mu-play-tri { opacity: 0; transform: rotate(90deg) scale(0.4); }
+.mu-play.on .mu-play-bars { opacity: 1; transform: none; }
+
+.mu-vol { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mu .mu-vol input[type='range'] { flex: 1; min-width: 60px; height: 4px; padding: 0; border: 0; box-shadow: none; -webkit-appearance: none; appearance: none; border-radius: 2px; background: linear-gradient(90deg, rgb(var(--mu-rgb)) var(--mu-v, 70%), rgb(var(--ink, 255 255 255) / 0.16) var(--mu-v, 70%)); cursor: pointer; }
+.mu-vol input[type='range']::-webkit-slider-thumb { -webkit-appearance: none; width: 12px; height: 12px; border-radius: 50%; background: var(--mu-fg); box-shadow: 0 1px 4px rgb(0 0 0 / 0.4); transition: transform 0.15s ease; }
+.mu-vol input[type='range']:hover::-webkit-slider-thumb { transform: scale(1.2); }
+
+.mu-chip { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 11px; border: 0; border-radius: 999px; background: var(--mu-chip); color: var(--mu-sub); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: transform 0.18s var(--mu-spring), background-color 0.15s ease, color 0.15s ease; }
+.mu-chip:hover { color: var(--mu-fg); transform: translateY(-1px); }
+.mu-chip.on { background: rgb(var(--mu-rgb) / 0.2); color: var(--mu-fg); }
+.mu-sleep { position: relative; }
+.mu-sleep-menu { position: absolute; bottom: calc(100% + 6px); left: 50%; z-index: 5; display: flex; gap: 4px; padding: 5px; border-radius: 14px; background: rgb(18 20 26 / 0.96); box-shadow: 0 12px 30px -10px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(255 255 255 / 0.08); transform: translateX(-50%); animation: mu-menu 0.22s var(--mu-spring) both; }
+.mu-sleep-menu button { border: 0; border-radius: 10px; background: rgb(255 255 255 / 0.06); color: #f5f5f6; padding: 6px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+.mu-sleep-menu button:hover { background: rgb(var(--mu-rgb) / 0.3); }
+@keyframes mu-menu { from { opacity: 0; transform: translate(-50%, 6px) scale(0.94); } }
+
+/* ---- lists ---- */
+.mu-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.mu-row { display: flex; align-items: center; gap: 4px; border-radius: 12px; transition: transform 0.18s var(--mu-spring), background-color 0.15s ease; }
+.mu-row:hover { background: var(--mu-chip); transform: translateX(2px); }
+.mu-row.on { background: rgb(var(--mu-rgb) / 0.12); }
+.mu-row-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 5px 6px; border: 0; background: none; text-align: left; cursor: pointer; }
+.mu-row-art { position: relative; flex: none; width: 36px; height: 36px; border-radius: 8px; overflow: hidden; background: rgb(var(--mu-rgb) / 0.25); display: grid; place-items: center; }
+.mu-row-art img { width: 100%; height: 100%; object-fit: cover; }
+.mu-row-art i { font-style: normal; opacity: 0.7; }
+.mu-row-eq { position: absolute; inset: auto 0 0 0; height: 100%; padding: 0 8px 8px; box-sizing: border-box; justify-content: center; background: rgb(0 0 0 / 0.45); }
+.mu-row-eq b { background: #fff; }
+.mu-row-t { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.mu-row-t b, .mu-row-t small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mu-row-t b { font-size: 12.5px; font-weight: 600; }
+.mu-row-t small { font-size: 11px; color: var(--mu-sub); }
+.mu-row-main em { font-style: normal; font-size: 11px; color: var(--mu-sub); font-variant-numeric: tabular-nums; }
+.mu-empty { margin: 4px 2px; font-size: 12px; color: var(--mu-sub); }
+
+/* ---- stations grid ---- */
+.mu-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+.mu-tile { display: flex; flex-direction: column; gap: 3px; padding: 0; border: 0; background: none; text-align: left; cursor: pointer; min-width: 0; transition: transform 0.22s var(--mu-spring); }
+.mu-tile:hover { transform: translateY(-3px); }
+.mu-tile:active { transform: scale(0.96); }
+.mu-tile-art { position: relative; width: 100%; aspect-ratio: 1; border-radius: 14px; overflow: hidden; display: grid; place-items: center; background: linear-gradient(140deg, hsl(var(--mu-h) 70% 55%), hsl(calc(var(--mu-h) + 50) 65% 32%)); box-shadow: 0 10px 22px -14px rgb(0 0 0 / 0.7); }
+.mu-tile-art img { width: 100%; height: 100%; object-fit: cover; }
+.mu-tile-art i { font-style: normal; font-size: 30px; font-weight: 800; color: rgb(255 255 255 / 0.9); }
+.mu-tile.on .mu-tile-art { box-shadow: 0 0 0 2px rgb(var(--mu-rgb)), 0 12px 26px -12px rgb(var(--mu-rgb) / 0.8); }
+.mu-tile-eq { position: absolute; right: 7px; bottom: 7px; padding: 4px 5px; height: 12px; border-radius: 7px; background: rgb(0 0 0 / 0.55); }
+.mu-tile-eq b { background: #fff; }
+.mu-tile b { font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-top: 3px; }
+.mu-tile small { font-size: 10.5px; color: var(--mu-sub); }
+
+/* ---- the add-a-station form ---- */
+.mu-add { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.mu-add input { flex: 1; min-width: 160px; height: 34px; padding: 0 12px; border: 1px solid var(--mu-line); border-radius: 10px; background: rgb(var(--ink, 255 255 255) / 0.05); color: var(--mu-fg); font: inherit; font-size: 13px; outline: none; user-select: text; }
+.mu-add input:focus { border-color: rgb(var(--mu-rgb) / 0.7); }
+.mu-btn { height: 34px; padding: 0 14px; border: 0; border-radius: 10px; background: rgb(var(--mu-rgb)); color: #0b0c0f; font-weight: 700; font-size: 13px; cursor: pointer; transition: transform 0.18s var(--mu-spring); }
+.mu-btn:hover { transform: translateY(-1px); }
+.mu-btn:active { transform: scale(0.95); }
+.mu-btn.ghost { background: var(--mu-chip); color: var(--mu-fg); font-weight: 600; }
+.mu-warn { color: #ff8a8f; font-size: 12px; margin: 0; }
+
+/* ======== the island's Music tab ======== */
+.di-mu { display: flex; flex-direction: column; gap: 12px; margin: -12px; padding: 14px 16px 16px; overflow: hidden; border-radius: inherit; min-height: 380px; }
+.di-mu > *:not(.mu-amb) { position: relative; z-index: 1; }
+.di-mu-head { display: flex; align-items: center; gap: 8px; }
+.di-mu-head b { font-size: 13px; letter-spacing: 0.02em; flex: 1; }
+.di-mu-tabs { display: flex; gap: 4px; }
+.di-mu-hero { display: flex; gap: 14px; align-items: center; }
+.di-mu-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.di-mu-lyrics { margin-top: 6px; }
+.di-mu-nolyric { margin-top: 6px; font-size: 11.5px; color: var(--mu-sub); }
+.di-mu-meta .t { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+.di-mu-meta .a { font-size: 12.5px; color: var(--mu-sub); }
+.di-mu-meta .st { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--mu-sub); margin-bottom: 4px; }
+.di-mu-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.di-mu-row .mu-vol { flex: 1; max-width: 170px; }
+.di-mu-sec { display: flex; flex-direction: column; gap: 8px; }
+.di-mu-sec h4 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu-sub); }
+.di-mu .mu-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.di-mu .mu-tile-art { border-radius: 12px; }
+.di-mu-tab-btn.on { background: rgb(var(--mu-rgb) / 0.22); color: var(--fg); }
+
+/* The island header's music button. */
+.di-icon.di-mu-open { position: relative; }
+.di-icon.di-mu-open.on { color: var(--lime); }
+
+/* ======== the pill and the peek: the mini player ======== */
+.di-mp { position: relative; display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; }
+.di-mp img, .di-mp .di-mp-blank { width: calc(100% - 6px); height: calc(100% - 6px); border-radius: 50%; object-fit: cover; background: rgb(var(--mu-rgb) / 0.5); display: grid; place-items: center; font-size: 10px; font-style: normal; }
+.di-mp.playing img { animation: mu-spin 9s linear infinite; }
+@keyframes mu-spin { to { transform: rotate(360deg); } }
+.di-mp svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.di-mp circle { fill: none; stroke-width: 2; }
+.di-mp .bg { stroke: rgb(255 255 255 / 0.14); }
+.di-mp .fg { stroke: rgb(var(--mu-rgb)); stroke-linecap: round; }
+.di-sc-pill { gap: 5px; }
+.di-sc-pill .mu-eq { height: 11px; }
+.di-mu-peek { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding: 6px 6px 6px 6px; border-radius: 14px; background: rgb(var(--mu-rgb) / 0.12); }
+.di-mu-peek > img, .di-mu-peek > .blank { width: 34px; height: 34px; border-radius: 9px; object-fit: cover; flex: none; background: rgb(var(--mu-rgb) / 0.4); display: grid; place-items: center; }
+.di-mu-peek .mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.di-mu-peek .mid b { font-size: 12.5px; }
+.di-mu-peek .mid small { font-size: 10.5px; color: var(--sub); display: flex; align-items: center; gap: 6px; }
+.di-mu-peek .mu-ic { width: 30px; height: 30px; color: var(--fg); }
+
+/* Calm mode (the app's default) plays loops once; the equalizer and the
+   breathing are "music is playing right now", so they keep going while it plays. */
+html.calm .mu-eq.on b, html.calm .mu-art.playing .mu-art-breathe, html.calm .mu-art.playing .mu-art-glow, html.calm .di-mp.playing img { animation-iteration-count: infinite !important; }
+.mu-eq.on b { transform: scaleY(0.6); }
+
+/* ======== reduce motion and the island's "motion off" ======== */
+@media (prefers-reduced-motion: reduce) {
+  .mu-eq.on b, .mu-art.playing .mu-art-breathe, .mu-art.playing .mu-art-glow, .mu-scroll.on > span, .di-mp.playing img { animation: none; }
+  .mu-art-in, .mu-amb img, .mu-sleep-menu, .mu-star.on svg { animation-duration: 0.01s; }
+}
+.di.motion-off .mu *, .di.motion-off .di-mp img { animation: none !important; }
+
+/* ---- lyrics: the list slides by transform; the line playing now is bright ---- */
+.mu-lyrics { position: relative; overflow: hidden; mask-image: linear-gradient(180deg, transparent, #000 22%, #000 72%, transparent); -webkit-mask-image: linear-gradient(180deg, transparent, #000 22%, #000 72%, transparent); }
+.mu-lyrics ol { list-style: none; margin: 0; padding: 0; transition: transform 0.4s var(--mu-spring); }
+.mu-lyrics li { height: var(--mu-lh, 30px); line-height: var(--mu-lh, 30px); font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--mu-sub); opacity: 0.55; transform: scale(0.96); transform-origin: left center; transition: opacity 0.3s ease, transform 0.3s ease, color 0.3s ease; }
+.mu-lyrics li.past { opacity: 0.35; }
+.mu-lyrics li.on { color: var(--mu-fg); opacity: 1; transform: none; }
+.mu-thin { position: relative; height: 3px; border-radius: 2px; overflow: hidden; background: rgb(var(--ink, 255 255 255) / 0.14); }
+.mu-thin i { position: absolute; inset: 0; border-radius: inherit; background: rgb(var(--mu-rgb)); }
+.mu-thin.playing i { transition: transform 0.5s linear; }
+.mu-players { display: flex; flex-wrap: wrap; gap: 6px; }
+.mu-chip-eq { height: 10px; }
+.mu-chip-eq b { width: 2px; }
+/* The pitch equalizer: bass on the left, highs on the right (a drawn shape, not measured). */
+.mu-eq.pitch b { transform: scaleY(calc(var(--k, 1) * 0.35)); }
+.mu-eq.pitch.on b { animation: mu-pitch 1.1s ease-in-out infinite; }
+.mu-eq.pitch.on b:nth-child(2n) { animation-duration: 0.8s; animation-delay: -0.3s; }
+.mu-eq.pitch.on b:nth-child(3n) { animation-duration: 1.3s; animation-delay: -0.6s; }
+@keyframes mu-pitch { 0%, 100% { transform: scaleY(calc(var(--k, 1) * 0.55)); } 50% { transform: scaleY(var(--k, 1)); } }
+.di-mp-lyric { max-width: 180px; font-size: 11.5px; color: var(--sub); }
+@media (prefers-reduced-motion: reduce) {
+  .mu-eq.pitch.on b { animation: none; }
+  .mu-lyrics ol { transition: none; }
+}

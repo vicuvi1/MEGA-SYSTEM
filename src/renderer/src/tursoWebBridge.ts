@@ -3,6 +3,7 @@
 // the same services as the desktop on that copy, so every section behaves the
 // same as on the PC: caps, cooldowns, undo, shop, quests, streaks. Things only
 // the web has (embedded apps, Telegram polling, cloud snapshots) are here.
+import { cleanMusicNow } from '@core/music'
 import { setupPasskey, unlockWithPasskey } from './web/passkey'
 import initSqlJs from 'sql.js'
 import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
@@ -1257,6 +1258,13 @@ export function createTursoWebBridge(): Bridge {
       asks: async () => (await mirrorP).read((db) => cleanAutoAsks(readSetting(db as any, 'auto_asks'), Date.now())),
       setAsk: async (id: string, status: AutoAsk['status'], why?: string) => {
         await (await mirrorP).write((db) => writeSetting(db as any, 'auto_asks', { asks: setAutoAsk(cleanAutoAsks(readSetting(db as any, 'auto_asks'), Date.now()), id, status, why) }))
+      }
+    },
+    // MU: the song playing now, for Ben (only with that option on).
+    musicNow: {
+      set: async (v: import('@core/music').MusicNow | null) => {
+        const clean = v ? cleanMusicNow(v) : null
+        await (await mirrorP).write((db) => writeSetting(db as any, 'music_now', clean as unknown as Record<string, unknown> | null))
       }
     },
     // Island 2: tiles, buttons, profiles, colours and stations, one synced setting.

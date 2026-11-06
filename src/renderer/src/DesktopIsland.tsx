@@ -29,7 +29,8 @@ import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake,
 import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from './IslandMoveBits'
 import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
-import { MusicPanel, ScHost, ScPillBadge } from './IslandMusic'
+import { MusicPanel, ScHost, ScPeekRow, ScPillBadge } from './IslandMusic'
+import { useMusicPage } from './IslandMusicTab'
 import { IslandPager } from './widgets/islandPages'
 import './sysmon/register'
 import { SysPill } from './sysmon/SysPill'
@@ -1195,6 +1196,10 @@ export function DesktopIsland() {
   const [ghost, setGhost] = useState<string | null>(null)
   // IC17: the pill's edit mode in the panel.
   const [editing, setEditing] = useState(false)
+  // MU: the Music page of the opened island (the header's ♫, the music tile, the media row open it).
+  useMusicPage(k, () => {
+    if (uiRef.current.view !== 'expanded') dispatch({ type: 'click' })
+  })
   const savePillOrder = (pillOrder: IslandPrefs['pillOrder']) => {
     setPrefs((p) => ({ ...p, pillOrder }))
     void desk()?.setIslandPrefs?.({ pillOrder })
@@ -1600,7 +1605,7 @@ export function DesktopIsland() {
       aria-label="Open the island (drag to move it, double-click to tuck it away, arrows or the mouse wheel switch)"
     >
       <GripHandle onPointerDown={(e) => { e.stopPropagation(); dragProps.onPointerDown(e, true) }} />
-      <ScPillBadge />
+      <ScPillBadge music={k.kit.music} />
       {s.locked ? (
         <span className="di-pill-text">🔒 Open Life System</span>
       ) : old ? (
@@ -1775,6 +1780,7 @@ export function DesktopIsland() {
         )}
       </div>
       {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><Marquee className="di-peek-ben-text" text={benLine} /></p>}
+      <ScPeekRow />
       {/* IN35: your one-tap buttons. */}
       {!s.locked && <PillKitButtons k={k} />}
       {/* IC5: today in three numbers (the rings' colours). */}
@@ -1801,6 +1807,7 @@ export function DesktopIsland() {
           <small>{s.ben.busy ? 'thinking…' : s.ben.why ? `${s.ben.mood} · ${s.ben.why}` : s.ben.mood}</small>
         </div>
         <button className={`di-icon ${quietMenu || quiet ? 'on' : ''}`} {...tp('head:quiet', () => (quiet ? setQuiet(null) : setQuietMenu((x) => !x)))} title={quiet ? `Quiet until ${new Date(q.until).toTimeString().slice(0, 5)}: wake now` : 'Quiet for a while'}>🌙</button>
+        <button className="di-icon di-mu-open" {...tp('head:music', () => window.dispatchEvent(new Event('life-island-music-tab')))} title="Music">♫</button>
         <button className={`di-icon ${ui.pinned ? 'on' : ''}`} {...tp('head:pin', () => dispatch({ type: 'pin' }))} title={ui.pinned ? 'Unpin' : 'Keep open'}>📌</button>
         <button className="di-icon" {...tp('head:app', () => (desk()?.showApp?.(), close()))} title="Open Life System">⤢</button>
         <button className="di-icon" {...tp('head:close', close)} aria-label="Close" title="Close (Esc)">✕</button>
@@ -1896,13 +1903,13 @@ export function DesktopIsland() {
         <ClipTray k={k} tap={tap} />
         <FileShelf k={k} tap={tap} />
       </>} />
-      <PanelCorner root={rootEl} scale={scale} />
       {/* IC17: edit what the pill shows, like a phone's home screen. */}
       {editing ? (
         <PillEditor order={prefs.pillOrder} onChange={savePillOrder} onDone={() => setEditing(false)} />
       ) : (
         <button className="di-edit-open" {...tp('edit:open', () => setEditing(true))}>✎ Edit the pill</button>
       )}
+      <PanelCorner root={rootEl} scale={scale} />
     </div>
   )
 
@@ -2186,7 +2193,7 @@ export function DesktopIsland() {
         </LayoutGroup>
         <IslandParticles />
         {/* IN-SC: the SoundCloud player, hidden, outside the panel so it keeps playing. */}
-        <ScHost call={!!s.call || inCall} running={!!s.running && !s.running.brk} pauseInFocus={!!s.musicPause} />
+        <ScHost call={!!s.call || inCall} running={!!s.running && !s.running.brk} pauseInFocus={!!s.musicPause} music={k.kit.music} />
         {debugOn && <IslandDebug peek={peekBox()} />}
       </MotionConfig>
       </ViewContext.Provider>

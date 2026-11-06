@@ -1,0 +1,61 @@
+/* MU: the Music page. Coach-style glass with a background tinted by the artwork. */
+.mup { display: flex; flex-direction: column; gap: 18px; max-width: 1180px; margin: 0 auto; --mu-chip: rgb(var(--ink) / 0.06); }
+.mup-hero { position: relative; overflow: hidden; border-radius: 28px; border: 1px solid var(--border); background: var(--surface); padding: 26px; isolation: isolate; box-shadow: 0 30px 80px -50px rgb(var(--mu-rgb) / 0.8); }
+:root[data-theme='light'] .mup-hero { background: #fbfcfe; }
+:root[data-theme='light'] .mup-hero .mu-amb img { opacity: 0.3; }
+:root[data-theme='light'] .mup-hero .mu-amb::after { background: linear-gradient(180deg, rgb(255 255 255 / 0.15), rgb(255 255 255 / 0.55)); }
+.mup-hero > *:not(.mu-amb) { position: relative; z-index: 1; }
+.mup-hero-in { display: flex; gap: 30px; align-items: center; }
+.mup-art { border-radius: 22px; }
+.mup-art .mu-art-breathe { border-radius: 22px; }
+.mup-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.mup-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mup-src { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu-sub); }
+.mup-src em { font-style: normal; text-transform: none; letter-spacing: 0; font-weight: 500; }
+.mup-title { margin: 4px 0 0; font-size: 34px; line-height: 1.15; font-weight: 800; letter-spacing: -0.025em; }
+.mup-artist { margin: 0; font-size: 16px; color: var(--mu-sub); }
+.mup-lyrics { margin-top: 10px; }
+.mup-lyrics li { font-size: 18px; }
+.mup-nolyric { margin: 10px 0 0; color: var(--mu-sub); font-size: 13px; }
+.mup-bottom { margin-top: 22px; }
+.mup-ctl { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; margin-top: 10px; }
+.mup-ctl-r { display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.mup-ctl-r .mu-vol { width: 150px; }
+.mup-ctl .mu-sleep-menu { left: auto; right: 0; transform: none; animation: none; }
+.mup-cols { display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px; align-items: start; }
+.mup-col { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.mup-card { border: 1px solid var(--border); border-radius: 20px; background: var(--surface); padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; transition: transform 0.2s var(--mu-spring); }
+.mup-card h3 { margin: 0; font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+.mup-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.mup-card-head small { color: var(--mu-sub); font-size: 12px; }
+.mup .mu-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); }
+.mup-examples .mu-tile { opacity: 0.5; cursor: default; }
+.mup-examples .mu-tile:hover { transform: none; }
+.mup .mup-name { flex: 0 1 150px; min-width: 110px; }
+.mup-manage { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.mup-manage li { display: flex; align-items: center; gap: 6px; padding: 4px 4px 4px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.03); }
+.mup-manage li input { flex: 1; min-width: 0; height: 30px; border-radius: 8px; border: 1px solid var(--border-strong); background: transparent; color: var(--mu-fg); padding: 0 8px; font: inherit; }
+.mup-mname { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.mup-mname b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mup-mname small { color: var(--mu-sub); font-size: 11px; }
+.mup-manage .mu-ic:disabled { opacity: 0.3; cursor: default; transform: none; }
+.mup-opts label { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.mup-opts label small { color: var(--mu-sub); }
+.mup-opts input { accent-color: rgb(var(--mu-rgb)); }
+:root[data-theme='light'] .mup .mu-play { background: #14171d; color: #fff; }
+:root[data-theme='light'] .mup .mu-wave-base rect { fill: rgb(20 25 34 / 0.16); }
+
+/* ---- phone ---- */
+@media (max-width: 760px) {
+  .mup-hero { padding: 18px; border-radius: 22px; }
+  .mup-hero-in { flex-direction: column; align-items: stretch; gap: 16px; }
+  .mup-art { width: min(100%, 300px) !important; height: auto !important; aspect-ratio: 1; align-self: center; }
+  .mup-title { font-size: 24px; }
+  .mup-lyrics li { font-size: 15px; }
+  .mup-ctl { grid-template-columns: 1fr; justify-items: center; }
+  .mup-ctl-l { display: none; }
+  .mup-ctl-r { justify-content: center; width: 100%; }
+  .mup-cols { grid-template-columns: 1fr; }
+  .mup .mu-grid { grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); }
+  .mup-manage .mu-chip { padding: 0 8px; }
+}

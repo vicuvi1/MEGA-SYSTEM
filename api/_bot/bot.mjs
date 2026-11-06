@@ -43,6 +43,22 @@ function notMoney(text) {
 	if (MONEY.test(t)) return false;
 	return MONTH$1.test(t) || TIME.test(t) || DURATION.test(t) || EVENT.test(t);
 }
+// src/core/music.ts
+var line = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").replace(/\s+/g, " ").trim().slice(0, n);
+function cleanMusicNow(v) {
+	const l = line(v?.line, 160);
+	const at = Number(v?.at);
+	return l && Number.isFinite(at) ? {
+		line: l,
+		at
+	} : null;
+}
+/** Ben's context line: only while fresh (20 min), so an old song is never "now". */
+function musicNowContext(v, now) {
+	const m = cleanMusicNow(v);
+	if (!m || now - m.at > 12e5 || m.at - now > 6e4) return null;
+	return `Music playing on SoundCloud now: ${m.line}.`;
+}
 // src/core/botCommands.ts
 function parseAmountAndUnit(str, defaultUnit = "reps") {
 	if (!str) return {
@@ -1830,7 +1846,8 @@ var SETTINGS = {
 	island_day_log: json$4("the island's log of the day", null),
 	island_nudges: json$4("Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)", null),
 	island_recipes: json$4("Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)", []),
-	island_kit: json$4("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations (src/core/islandTiles.ts)", null),
+	island_kit: json$4("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)", null),
+	music_now: json$4("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
 	sport_tracker_json: json$4("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
 	sport_sync_seen: json$4("when Sporty last synced water and workouts", null),
 	sporty_status: json$4("Sporty's last status", null),
@@ -6432,6 +6449,10 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 	try {
 		const lh = lastHourContext(cleanLastHour(readSetting(db, "pc_last_hour")), now.getTime());
 		if (lh) lines.push(lh);
+	} catch {}
+	try {
+		const mu = musicNowContext(readSetting(db, "music_now"), now.getTime());
+		if (mu) lines.push(mu);
 	} catch {}
 	if (extra.todoToday) {
 		const list = extra.todoToday.slice(0, 8).map((t) => `${t.content}${t.due && t.due < today ? " (late)" : ""}${t.priority >= 3 ? ` P${5 - t.priority}` : ""}${t.section ? ` [${t.section}]` : ""}`);

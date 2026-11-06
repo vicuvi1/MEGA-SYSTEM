@@ -119,3 +119,74 @@ export function focusMediaStep(s: { wasRunning: boolean; running: boolean; media
   if (s.wasRunning && !s.running) return s.pausedByUs && s.media && !s.media.playing ? 'resume' : null
   return null
 }
+
+// ---- MU: every player on the PC (the Music page's "players" list) ----
+
+/** One media session Windows knows (Spotify, a browser tab, Media Player…). */
+export interface MediaSession extends MediaNow {
+  /** Windows' id for the player app (kept to pick the same player again). */
+  id: string
+  /** Where it is and how long it is, in ms (0 when the player doesn't say). */
+  pos: number
+  dur: number
+}
+/** A player id we may put into the script: letters, digits and . _ ! - only. */
+export function cleanSessionId(v: unknown): string | null {
+  const s = String(v ?? '')
+  return /^[A-Za-z0-9._!\- ]{1,200}$/.test(s) ? s : null
+}
+/**
+ * The PowerShell that lists every session (and, with `target`, runs `op` on
+ * that one first). Prints one JSON line: {"ok":true,"list":[…]}.
+ */
+export function mediaListScript(op: MediaOp = 'get', target: string | null = null): string {
+  const id = target ? cleanSessionId(target) : null
+  const act = op !== 'get' && id ? `foreach($s in $all){ if([string]$s.SourceAppUserModelId -eq '${id}'){ $null = Await ($s.${WINRT_OP[op]}()) ([bool]); Start-Sleep -Milliseconds 350 } };` : ''
+  return [
+    "$ErrorActionPreference='Stop'",
+    'try {',
+    'Add-Type -AssemblyName System.Runtime.WindowsRuntime',
+    "$g=([System.WindowsRuntimeSystemExtensions].GetMethods()|?{$_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1'})[0]",
+    'function Await($t,$r){$x=$g.MakeGenericMethod($r).Invoke($null,@($t));$null=$x.Wait(4000);$x.Result}',
+    '$null=[Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager,Windows.Media.Control,ContentType=WindowsRuntime]',
+    '$m=Await ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager]::RequestAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager])',
+    '$all=@($m.GetSessions())',
+    act,
+    '$out=@()',
+    'foreach($s in ($all|Select-Object -First 8)){',
+    '$p=Await ($s.TryGetMediaPropertiesAsync()) ([Windows.Media.Control.GlobalSystemMediaTransportControlsSessionMediaProperties])',
+    '$tl=$s.GetTimelineProperties()',
+    '$st=[string]$s.GetPlaybackInfo().PlaybackStatus',
+    "$out+=@{id=[string]$s.SourceAppUserModelId;playing=($st -eq 'Playing');title=[string]$p.Title;artist=[string]$p.Artist;pos=[int64]$tl.Position.TotalMilliseconds;dur=[int64]$tl.EndTime.TotalMilliseconds}",
+    '}',
+    '@{ok=$true;list=$out}|ConvertTo-Json -Compress -Depth 3',
+    "} catch { '{\"ok\":false}' }"
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+/** The list's JSON line → sessions (null when Windows couldn't say). */
+export function parseMediaList(out: string): MediaSession[] | null {
+  const line = String(out ?? '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.startsWith('{'))
+    .pop()
+  if (!line) return null
+  try {
+    const j = JSON.parse(line)
+    if (!j || j.ok !== true) return null
+    // PowerShell prints one item as an object, not a list.
+    const raw = Array.isArray(j.list) ? j.list : j.list ? [j.list] : []
+    const out: MediaSession[] = []
+    const ms = (v: unknown) => Math.max(0, Math.min(24 * 3600_000, Math.round(Number(v) || 0)))
+    for (const x of raw.slice(0, 8)) {
+      const id = cleanSessionId(x?.id)
+      if (!id || out.some((y) => y.id === id)) continue
+      out.push({ id, app: playerName(id), playing: x?.playing === true, title: String(x?.title ?? '').slice(0, 120), artist: String(x?.artist ?? '').slice(0, 80), pos: ms(x?.pos), dur: ms(x?.dur) })
+    }
+    return out
+  } catch {
+    return null
+  }
+}

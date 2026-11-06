@@ -113,7 +113,7 @@ export function useSeen<T extends Element>(): [(el: T | null) => void, boolean] 
   return [ref, seen]
 }
 
-type VTDoc = Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void> } }
+type VTDoc = Document & { startViewTransition?: (cb: () => void) => { finished: Promise<void>; ready?: Promise<void> } }
 
 /** Runs a page change inside a short view transition (fade + small rise of the
  *  page only). Falls back to a plain update when the browser has no view
@@ -125,7 +125,9 @@ export function viewSwitch(update: () => void): void {
   root.classList.add('vt-page')
   try {
     const t = d.startViewTransition(() => flushSync(update))
-    void t.finished.finally(() => root.classList.remove('vt-page'))
+    // A quick second page change skips this one: its promises reject, which is fine.
+    t.ready?.catch(() => {})
+    void t.finished.catch(() => {}).finally(() => root.classList.remove('vt-page'))
   } catch {
     root.classList.remove('vt-page')
     update()

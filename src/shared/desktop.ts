@@ -70,7 +70,7 @@ export interface DesktopApi {
   /** Island pages: System (sample once a second while open) and AI usage (local logs, read-only). */
   sysmon?(op: 'prefs' | 'setPrefs' | 'sample' | 'stop' | 'light' | 'usage', arg?: unknown): Promise<any>
   onSysmonPrefs?(cb: (p: import('../core/sysmon').SysmonPrefs) => void): void
-  pcx?(op: 'media' | 'prefs' | 'setPrefs' | 'log' | 'clearLog' | 'lastHour' | 'awCheck' | 'run' | 'deny', arg?: unknown): Promise<any>
+  pcx?(op: 'media' | 'mediaList' | 'prefs' | 'setPrefs' | 'log' | 'clearLog' | 'lastHour' | 'awCheck' | 'run' | 'deny', arg?: unknown): Promise<any>
   /** Automation hub: local webhooks and n8n, the selection, scripts, workspaces, sensors (src/desktop/automations.ts). */
   auto?(op: string, arg?: unknown): Promise<any>
   /** Automation hub: a sensor saw something (Wi-Fi, USB, battery, away/back, clipboard, a new file). */

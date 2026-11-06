@@ -119,6 +119,18 @@ export function IslandPager({ snap, tap, now, day, profile }: { snap: IslandSnap
   const step = (d: number) => d && go(stepPage(shown, page, d))
   const stepRef = useRef(step)
   stepRef.current = step
+  const goRef = useRef(go)
+  goRef.current = go
+
+  // Another part of the island asks for a page (the Music button: event "life-island-page" with its id).
+  useEffect(() => {
+    const onAsk = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail
+      if (typeof id === 'string' && isPageId(id)) goRef.current(id)
+    }
+    window.addEventListener('life-island-page', onAsk)
+    return () => window.removeEventListener('life-island-page', onAsk)
+  }, [])
 
   // Keys (while the island is open).
   useEffect(() => {

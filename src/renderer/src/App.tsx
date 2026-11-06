@@ -40,6 +40,7 @@ import { countdown, nextUp } from '@core/dayGlance'
 import { useTodayEvents } from './todayEvents'
 import { storageWakesApp } from './islandLog'
 import { watchDayTurn } from './dayTurn'
+import { MusicHost } from './musicHost'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at
 // once), and every page is fetched in the background once Today is up
@@ -82,6 +83,7 @@ const Money = lazyNamed(() => import('./pages/Money'), 'Money')
 const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
 const BotCenter = lazyNamed(() => import('./pages/BotCenter'), 'BotCenter')
 const Notebook = lazyNamed(() => import('./pages/Notebook'), 'Notebook')
+const Music = lazyNamed(() => import('./pages/Music'), 'Music')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const Goals = lazyNamed(() => import('./pages/Goals'), 'Goals')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
@@ -784,6 +786,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <PwaInstallBanner />
 
         <EmbedHost active={activeEmbed} soundEnabled={ui.sound} />
+        {/* MU: the website's SoundCloud player (hidden, only after you press play) and Ben's "now playing" line. */}
+        <MusicHost />
 
         {!activeEmbed && (
           <main className="content">
@@ -802,6 +806,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'connected' && connections && <Connected state={connections} onState={setConnections} onWallet={onWallet} />}
             {page === 'bots' && <BotCenter />}
             {page === 'notebook' && <Notebook />}
+            {page === 'music' && <Music />}
             {page === 'tasks' && <TodoTasks onWallet={onWallet} />}
             {page === 'shop' && shop && <Rewards state={shop} onState={setShop} onWallet={onWallet} />}
             {(page === 'progress' || page === 'focus') && <Progress onGo={setPage} onWallet={onWallet} />}

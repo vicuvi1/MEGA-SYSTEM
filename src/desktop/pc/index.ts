@@ -9,7 +9,7 @@ import { join } from 'node:path'
 import { addActLog, cleanPcExtra, type PcActLogLine, type PcExtraPrefs } from '../../core/pcExtra'
 import { focusMediaStep, MEDIA_OPS, type MediaNow, type MediaOp } from '../../core/pcMedia'
 import { pcActText, pcDenied, readPcAction } from '../../core/pcActions'
-import { media } from './media'
+import { media, mediaList } from './media'
 import { runPcAct } from './actions'
 import { awLastHour } from './activityWatch'
 
@@ -61,6 +61,12 @@ export async function registerPcExtras(o: { dir: string; win: BrowserWindow; ori
       const want = MEDIA_OPS.includes(arg) ? (arg as MediaOp) : 'get'
       const r = await media(want)
       return { now: r.now as MediaNow | null, via: r.via, windows: process.platform === 'win32' }
+    }
+    // MU: every player (the Music page's list); with an app id, a button for that player.
+    if (op === 'mediaList') {
+      if (!prefs.islandMedia && !fromApp(e)) return null
+      const want = MEDIA_OPS.includes(arg?.op) ? (arg.op as MediaOp) : 'get'
+      return { list: await mediaList(want, typeof arg?.app === 'string' ? arg.app : null), windows: process.platform === 'win32' }
     }
     if (!fromApp(e)) return null
     if (op === 'prefs') return { prefs, windows: process.platform === 'win32' }

@@ -105,7 +105,8 @@ export const SETTINGS = {
   island_day_log: json<Record<string, unknown> | null>("the island's log of the day", null),
   island_nudges: json<Record<string, unknown> | null>('Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)', null),
   island_recipes: json<unknown[]>('Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)', []),
-  island_kit: json<Record<string, unknown> | null>('Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations (src/core/islandTiles.ts)', null),
+  island_kit: json<Record<string, unknown> | null>('Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)', null),
+  music_now: json<Record<string, unknown> | null>("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
   // ---- shared app data (embedded apps) ----
   sport_tracker_json: json<SportBlob | null>('Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}', null),
   sport_sync_seen: json<{ at?: string } | null>('when Sporty last synced water and workouts', null),

@@ -150,6 +150,22 @@ export function createIslandKit(o: { origin: string; preload: string; appWindow:
   // ---- IN-SC: the music pauses when the PC locks ----
   powerMonitor.on('lock-screen', () => o.island.send({ type: 'lock' }))
 
+  // ---- MU: the media keys drive the island's music, only while its player is loaded ----
+  // (While they are ours, other players don't get them; they go back when the music stops.)
+  const MEDIA_KEYS: [string, string][] = [['MediaPlayPause', 'toggle'], ['MediaNextTrack', 'next'], ['MediaPreviousTrack', 'prev']]
+  let mediaKeysOn = false
+  const setMediaKeys = (on: boolean) => {
+    if (on === mediaKeysOn) return mediaKeysOn
+    mediaKeysOn = on
+    for (const [key, op] of MEDIA_KEYS) {
+      try {
+        if (on) globalShortcut.register(key, () => o.island.send({ type: 'media', op }))
+        else globalShortcut.unregister(key)
+      } catch { /* another app has it */ }
+    }
+    return mediaKeysOn
+  }
+
   ipcMain.handle('islandKit', async (e, op: string, arg: any) => {
     const isl = o.island.isIsland(e.sender)
     if (!isl && !fromDock(e)) return null
@@ -215,6 +231,9 @@ export function createIslandKit(o: { origin: string; preload: string; appWindow:
         shelf = []
         save()
         return shelf
+      case 'mediaKeys':
+        if (!isl) return null
+        return setMediaKeys(arg === true)
       case 'dock':
         if (!isl) return null
         if (arg === true) openDock()

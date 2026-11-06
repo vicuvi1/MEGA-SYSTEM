@@ -1,7 +1,7 @@
 // AU1: what's playing on this PC, and play/pause/next (Windows media
 // controls, through one short PowerShell call; the media keys when those
 // can't be read). Asked only on demand: never polled from here.
-import { mediaKeyScript, mediaScript, parseMedia, type MediaNow, type MediaOp } from '../../core/pcMedia'
+import { mediaKeyScript, mediaListScript, mediaScript, parseMedia, parseMediaList, type MediaNow, type MediaOp, type MediaSession } from '../../core/pcMedia'
 import { runPs } from './ps'
 
 let last: { at: number; m: MediaNow | null } = { at: 0, m: null }
@@ -21,4 +21,10 @@ export async function media(op: MediaOp): Promise<{ now: MediaNow | null; via: '
   const ok = (await runPs(mediaKeyScript(op), { timeoutMs: 5000, lane: 'mediakey' })) != null
   last = { at: 0, m: null }
   return { now: null, via: ok ? 'keys' : 'none' }
+}
+
+/** MU: every player on the PC; with `app`, run `op` on that one first. */
+export async function mediaList(op: MediaOp, app: string | null): Promise<MediaSession[] | null> {
+  const out = await runPs(mediaListScript(op, app), { timeoutMs: 8000, lane: `medialist:${op}` })
+  return out == null ? null : parseMediaList(out)
 }

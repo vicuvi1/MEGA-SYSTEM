@@ -10,12 +10,12 @@
 import type { IslandAction } from './islandModel'
 import { isAltGrCombo, normalizeAccelerator } from './islandKeys'
 import { cleanKitProfiles, type KitProfile } from './islandKitExtras'
-import { cleanStations, type Station } from './soundcloud'
+import { cleanMusicKit, DEFAULT_MUSIC, type MusicKit } from './music'
 
-export type TileKind = 'counter' | 'timer' | 'exercise' | 'water' | 'link' | 'page' | 'note'
-export const TILE_KINDS: TileKind[] = ['counter', 'timer', 'exercise', 'water', 'link', 'page', 'note']
-export const TILE_LABEL: Record<TileKind, string> = { counter: 'Counter', timer: 'Timer', exercise: 'Exercise +N', water: 'Water', link: 'Link', page: 'App page', note: 'Note' }
-const TILE_ICON: Record<TileKind, string> = { counter: '🔢', timer: '⏱', exercise: '💪', water: '💧', link: '🔗', page: '📄', note: '📝' }
+export type TileKind = 'counter' | 'timer' | 'exercise' | 'water' | 'link' | 'page' | 'note' | 'music'
+export const TILE_KINDS: TileKind[] = ['counter', 'timer', 'exercise', 'water', 'link', 'page', 'note', 'music']
+export const TILE_LABEL: Record<TileKind, string> = { counter: 'Counter', timer: 'Timer', exercise: 'Exercise +N', water: 'Water', link: 'Link', page: 'App page', note: 'Note', music: 'Music' }
+const TILE_ICON: Record<TileKind, string> = { counter: '🔢', timer: '⏱', exercise: '💪', water: '💧', link: '🔗', page: '📄', note: '📝', music: '♫' }
 
 /** App pages a tile may open. */
 export const TILE_PAGES = ['today', 'calendar', 'tasks', 'insights', 'sleep', 'discipline', 'money', 'body', 'rewards', 'notebook', 'coach'] as const
@@ -80,8 +80,8 @@ export interface IslandKit {
   clipboard: boolean
   /** IN48: drop files on the island to keep them for later. */
   shelf: boolean
-  /** IN-SC: SoundCloud stations. */
-  music: { stations: Station[] }
+  /** IN-SC / MU: SoundCloud stations, starred tracks, the focus mix, Ben may see what plays. */
+  music: MusicKit
   /** Counters: today's count per tile. */
   counts: Record<string, { day: string; n: number }>
 }
@@ -97,7 +97,7 @@ export const DEFAULT_KIT: IslandKit = {
   dock: { on: false },
   clipboard: false,
   shelf: false,
-  music: { stations: [] },
+  music: DEFAULT_MUSIC,
   counts: {}
 }
 
@@ -141,6 +141,8 @@ export function cleanTile(t: any, i = 0): Tile | null {
     }
     case 'page': return (TILE_PAGES as readonly string[]).includes(t.page) ? { ...base, page: t.page } : null
     case 'note': return { ...base, text: clip(t.text, 140) }
+    // MU: play / pause your music (the island does it itself).
+    case 'music': return base
   }
 }
 
@@ -198,7 +200,7 @@ export function cleanKit(v: any): IslandKit {
     dock: { on: v?.dock?.on === true },
     clipboard: v?.clipboard === true,
     shelf: v?.shelf === true,
-    music: { stations: cleanStations(v?.music?.stations) },
+    music: cleanMusicKit(v?.music),
     counts
   }
 }
@@ -278,6 +280,7 @@ export function tileAction(t: Tile, tapId: string, o: { exId?: string | null; su
     case 'link': return t.url ? { kind: 'kitLink', url: t.url } : null
     case 'counter': return { kind: 'kitCount', tile: t.id, by: t.n ?? 1 }
     case 'note': return null
+    case 'music': return null
   }
 }
 

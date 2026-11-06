@@ -146,6 +146,16 @@ try {
     const titles = await pg.locator('.nb-item b').allInnerTexts()
     if (!titles.some((t) => t.includes('About me'))) throw new Error(`no About me note (${titles.join(', ')})`)
   })
+  // MU: the Music page opens without SoundCloud (nothing loads until play) and adds a station.
+  await step('Music: the page opens, adds a station, nothing loads from SoundCloud until play', async () => {
+    await open('music')
+    await pg.waitForSelector('.mup-hero', { timeout: 15000 })
+    if (await pg.$('iframe[src*="soundcloud"]')) throw new Error('the player loaded before play')
+    await pg.fill('.mu-add input', 'https://soundcloud.com/example-artist/sets/smoke-mix')
+    await pg.locator('.mu-add .mu-btn').click()
+    await pg.waitForSelector('.mup-manage li', { timeout: 5000 })
+    if (!/Smoke mix/.test(await pg.locator('.mup-manage').innerText())) throw new Error('the new station is not listed')
+  })
   await step('Calendar shows the week with its events', async () => {
     await open('calendar')
     await pg.waitForSelector('.cal-item', { timeout: 15000 })

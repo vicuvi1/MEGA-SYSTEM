@@ -15,6 +15,7 @@ import { cleanKitProfile, NUDGE_KINDS, profileFilter, withProfileNudges, type Cl
 import { normalizeAccelerator } from '@core/islandKeys'
 import { calendarDay } from '@core/dates'
 import { tp } from './islandTap'
+import { musicTile } from './IslandMusic'
 import './islandKit.css'
 
 const desk = () => (typeof window !== 'undefined' ? window.desktop : undefined)
@@ -83,6 +84,8 @@ export function useKit(s: IslandSnapshot, tap: Tap): KitState {
   sRef.current = s
 
   const fireTile = (t: Tile) => {
+    // MU: the music tile plays / pauses (or opens the Music tab).
+    if (t.kind === 'music') return musicTile(kitRef.current.music)
     if (t.kind === 'counter') {
       const day = calendarDay(new Date())
       const k = kitRef.current

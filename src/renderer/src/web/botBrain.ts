@@ -1,4 +1,5 @@
 import { notMoney } from '@core/moneyGuess'
+import { musicNowContext } from '@core/music'
 import { parseTelegramText } from '@core/botCommands'
 // The coach's brain: a message that isn't a simple log or a command goes to
 // Gemini with your real data (today, the week, sleep, money, Todoist), what
@@ -335,6 +336,13 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
   try {
     const lh = lastHourContext(cleanLastHour(readSetting(db as any, 'pc_last_hour')), now.getTime())
     if (lh) lines.push(lh)
+  } catch {
+    /* not shared */
+  }
+  // MU: the song playing now (only with "Ben can see what's playing" on, and only while fresh).
+  try {
+    const mu = musicNowContext(readSetting(db as any, 'music_now'), now.getTime())
+    if (mu) lines.push(mu)
   } catch {
     /* not shared */
   }

@@ -479,6 +479,8 @@ export interface LifeApi {
     desk(on: boolean): Promise<void>
     lastHour(h: import('@core/pcLastHour').LastHour | null): Promise<void>
   }
+  /** MU: the song playing now, for Ben (only with that option on; null clears it). */
+  musicNow?: { set(v: import('@core/music').MusicNow | null): Promise<void> }
   /** SI7: your Smart island recipes (synced; they run only in the desktop app). */
   recipes?: {
     list(): Promise<import('@core/recipes').Recipe[]>

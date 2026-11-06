@@ -1,127 +1,90 @@
-// IN-SC: SoundCloud on the island. Your stations (pasted track, playlist or
-// likes addresses) play through SoundCloud's own free embed player and its
-// Widget API (w.soundcloud.com): no key, no login. The player lives hidden
-// in the island window (ScHost, outside the panel), so it keeps playing when
-// the panel closes. Nothing loads until you press play on a station; it
-// pauses by itself in a call, when the PC locks, and when a focus timer
-// starts (with "Pause music during focus" on). The island's media row drives
-// it while it plays. Light: progress is read at most once a second and only
-// while the panel is open.
+// IN-SC / MU: SoundCloud on the island. Your stations (pasted track, playlist
+// or likes addresses) play through SoundCloud's own free embed player and its
+// Widget API (w.soundcloud.com): no key, no login. The player (music/engine.ts)
+// lives hidden in the island window (ScHost, outside the panel), so it keeps
+// playing when the panel closes, and the app's Music page drives this same
+// player (music/remote.ts): one player, not two. Nothing loads until you press
+// play; it pauses by itself in a call, when the PC locks, and when a focus
+// timer starts (with "Pause music during focus" on), or plays your focus mix.
+// The media keys drive it while it is loaded. The full player is the Music
+// tab (IslandMusicTab.tsx); here are the host, the pill and peek bits, and
+// the panel's small card.
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { addStation, removeStation, shouldPause, timeText, widgetSrc, WIDGET_API, type Station } from '@core/soundcloud'
+import { onFocusStart, type MusicKit } from '@core/music'
+import { shouldPause, widgetSrc } from '@core/soundcloud'
 import { tp } from './islandTap'
 import { onKitEvent, type KitState } from './IslandTiles'
+import { attachFrame, getState, playStation, run, sc, subscribe, uiTick } from './music/engine'
+import { serveRemote } from './music/remote'
+import { Eq, EqMode, lyricNow, MuIcon, posNow, Scroller, useTint, tintStyle } from './music/MusicUi'
+import { useLyrics } from './music/players'
+import { useTicker } from './music/hooks'
+import './music/music.css'
 
-interface ScState { station: Station | null; loaded: boolean; ready: boolean; playing: boolean; title: string; artwork: string; pos: number; dur: number; vol: number; error: string }
-let st: ScState = { station: null, loaded: false, ready: false, playing: false, title: '', artwork: '', pos: 0, dur: 0, vol: 70, error: '' }
-const subs = new Set<() => void>()
-const set = (p: Partial<ScState>) => {
-  st = { ...st, ...p }
-  subs.forEach((f) => f())
-}
-export const useSc = () => useSyncExternalStore((f) => (subs.add(f), () => void subs.delete(f)), () => st)
+export { playStation, sc } from './music/engine'
+export const useSc = () => useSyncExternalStore(subscribe, getState, getState)
 
-// The Widget API (loaded once, only when you first press play).
-let widget: any = null
-let apiP: Promise<any> | null = null
-function loadApi(): Promise<any> {
-  const w = window as any
-  if (w.SC?.Widget) return Promise.resolve(w.SC)
-  apiP ??= new Promise((ok, no) => {
-    const el = document.createElement('script')
-    el.src = WIDGET_API
-    el.async = true
-    el.onload = () => (w.SC?.Widget ? ok(w.SC) : no(new Error('no widget')))
-    el.onerror = () => no(new Error('SoundCloud did not load'))
-    document.head.appendChild(el)
-  }).catch((e) => {
-    apiP = null
-    throw e
-  })
-  return apiP
-}
-let watchProgress = false
-let lastPosAt = 0
-function readSound() {
-  widget?.getCurrentSound?.((s: any) => {
-    if (!s) return
-    const art = typeof s.artwork_url === 'string' && /^https:\/\/i\d?\.sndcdn\.com\//.test(s.artwork_url) ? s.artwork_url : ''
-    set({ title: String(s.title ?? '').slice(0, 120), artwork: art, dur: Number(s.duration) || 0 })
-  })
-}
-function bind(iframe: HTMLIFrameElement) {
-  void loadApi()
-    .then((SC) => {
-      widget = SC.Widget(iframe)
-      const E = SC.Widget.Events
-      widget.bind(E.READY, () => {
-        set({ ready: true, error: '' })
-        widget.setVolume(st.vol)
-        widget.play()
-        readSound()
-      })
-      widget.bind(E.PLAY, () => (set({ playing: true }), readSound()))
-      widget.bind(E.PAUSE, () => set({ playing: false }))
-      widget.bind(E.FINISH, () => set({ playing: false }))
-      widget.bind(E.ERROR, () => set({ error: 'SoundCloud could not play that', playing: false }))
-      widget.bind(E.PLAY_PROGRESS, (e: any) => {
-        if (!watchProgress) return
-        const t = Date.now()
-        if (t - lastPosAt < 1000) return
-        lastPosAt = t
-        set({ pos: Number(e?.currentPosition) || 0 })
-      })
-    })
-    .catch((e) => set({ error: String(e?.message ?? e), loaded: false }))
-}
-
-/** Play a station (the player loads now, the first time). */
-export function playStation(s: Station) {
-  if (st.station?.url === s.url && widget && st.ready) return widget.play()
-  if (widget && st.ready) {
-    set({ station: s, title: '', artwork: '', pos: 0, dur: 0 })
-    widget.load(s.url, { auto_play: true, visual: false, show_comments: false, hide_related: true })
-    return
+const kitOp = (op: string, arg?: unknown) => {
+  try {
+    return Promise.resolve(window.desktop?.islandKit?.(op, arg)).catch(() => null)
+  } catch {
+    return Promise.resolve(null)
   }
-  set({ station: s, loaded: true, ready: false, title: '', artwork: '', pos: 0, dur: 0 })
 }
-export const sc = {
-  toggle: () => (st.playing ? widget?.pause() : widget?.play()),
-  pause: () => widget?.pause(),
-  next: () => widget?.next(),
-  prev: () => (st.pos > 3000 ? widget?.seekTo(0) : widget?.prev()),
-  seek: (ms: number) => widget?.seekTo(Math.max(0, ms)),
-  volume: (v: number) => {
-    const n = Math.max(0, Math.min(100, Math.round(v)))
-    set({ vol: n })
-    widget?.setVolume(n)
-  },
-  stop: () => {
-    try { widget?.pause() } catch { /* fine */ }
-    widget = null
-    set({ loaded: false, ready: false, playing: false, station: null, title: '', artwork: '', pos: 0, dur: 0 })
-  }
+
+/** Open the island's Music tab (the panel's header button and the music tile listen). */
+export const openMusicTab = () => window.dispatchEvent(new Event('life-island-music-tab'))
+
+/** The music tile (island_kit): play / pause; with nothing loaded, the first station, or the Music tab. */
+export function musicTile(m: MusicKit) {
+  const s = getState()
+  if (s.loaded && s.station) return sc.toggle()
+  if (m.stations[0]) return playStation(m.stations[0])
+  openMusicTab()
 }
 
 /**
  * The hidden player, in the island window (outside the panel, so it never
- * reloads), and the pauses: a call, the PC locking, a focus timer starting.
+ * reloads), and the rules: a call, the PC locking, a focus timer starting
+ * (pause, or your focus mix), the media keys while it is loaded.
  */
-export function ScHost({ call, running, pauseInFocus }: { call: boolean; running: boolean; pauseInFocus: boolean }) {
+export function ScHost({ call, running, pauseInFocus, music }: { call: boolean; running: boolean; pauseInFocus: boolean; music?: MusicKit }) {
   const s = useSc()
   const ref = useRef<HTMLIFrameElement>(null)
   const wasRunning = useRef(running)
   const [locked, setLocked] = useState(false)
-  useEffect(() => onKitEvent((ev) => { if (ev.type === 'lock') setLocked(true) }), [])
+  useEffect(() => serveRemote(), [])
+  useEffect(
+    () =>
+      onKitEvent((ev) => {
+        if (ev.type === 'lock') setLocked(true)
+        // The media keys (registered only while the player is loaded).
+        if (ev.type === 'media' && getState().loaded) {
+          if (ev.op === 'toggle') sc.toggle()
+          if (ev.op === 'next') sc.next()
+          if (ev.op === 'prev') sc.prev()
+        }
+      }),
+    []
+  )
+  useEffect(() => {
+    void kitOp('mediaKeys', s.loaded)
+  }, [s.loaded])
   useEffect(() => {
     if (!locked) return
     const t = window.setTimeout(() => setLocked(false), 1500)
     return () => clearTimeout(t)
   }, [locked])
+  const mix = music?.focusMix ? music.stations.find((x) => x.id === music.focusMix) ?? null : null
   useEffect(() => {
     const focusStarted = running && !wasRunning.current
     wasRunning.current = running
-    if (shouldPause({ playing: st.playing, call, locked, focusStarted, pauseInFocus })) sc.pause()
+    const now = getState()
+    if (shouldPause({ playing: now.playing, call, locked, focusStarted: false, pauseInFocus })) return sc.pause()
+    if (!focusStarted || call || locked) return
+    const step = onFocusStart({ mix, pauseInFocus, playing: now.playing, playingUrl: now.station?.url ?? null })
+    if (step === 'mix' && mix) playStation(mix)
+    if (step === 'pause') sc.pause()
   }, [call, locked, running, pauseInFocus])
   const src = s.loaded && s.station ? widgetSrc(s.station.url) : null
   // Bound once per player (a station change loads into the same one).
@@ -129,7 +92,7 @@ export function ScHost({ call, running, pauseInFocus }: { call: boolean; running
   useEffect(() => {
     if (src && ref.current && !bound.current) {
       bound.current = src
-      bind(ref.current)
+      attachFrame(ref.current)
     }
     if (!src) bound.current = null
   }, [src])
@@ -137,14 +100,62 @@ export function ScHost({ call, running, pauseInFocus }: { call: boolean; running
   return <iframe ref={ref} className="di-sc-host" src={bound.current ?? src} title="SoundCloud player" allow="autoplay" aria-hidden tabIndex={-1} />
 }
 
-/** The pill's now playing: a small equalizer (moves only while it plays) and the title. */
-export function ScPillBadge() {
+/** The artwork in a progress ring (the pill's and the peek's). */
+function RingArt({ size = 24 }: { size?: number }) {
   const s = useSc()
+  useTicker(s.playing, 5000)
+  const p = s.dur ? Math.min(1, posNow(s) / s.dur) : 0
+  const r = size / 2 - 1.5
+  const c = 2 * Math.PI * r
+  return (
+    <span className={`di-mp ${s.playing ? 'playing' : ''}`} style={{ width: size, height: size }}>
+      {s.artwork ? <img src={s.artwork} alt="" referrerPolicy="no-referrer" /> : <i className="di-mp-blank">♫</i>}
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
+        <circle className="bg" cx={size / 2} cy={size / 2} r={r} />
+        <circle className="fg" cx={size / 2} cy={size / 2} r={r} strokeDasharray={c} strokeDashoffset={c * (1 - p)} />
+      </svg>
+    </span>
+  )
+}
+
+/** The pill's now playing: the artwork in its progress ring, a small equalizer, and (if you want) the lyric line. */
+export function ScPillBadge({ music }: { music?: MusicKit }) {
+  const s = useSc()
+  const tint = useTint(s, '#d4ff3f')
+  const lines = useLyrics(s.title, s.artist, s.dur, !!music?.lyrics && !!music?.pillLyric && s.loaded)
+  useTicker(!!lines && s.playing, 1000)
+  if (!s.loaded || !s.station) return null
+  const lyric = lyricNow(s, lines)
+  return (
+    <span className={`di-sc-pill mu ${s.playing ? 'playing' : ''}`} style={tintStyle(tint.rgb, s)} title={s.title || s.station.name} aria-label={s.playing ? `Playing ${s.title || s.station.name}` : 'Music paused'}>
+      <RingArt />
+      <EqMode on={s.playing} mode={music?.eqMode ?? 'beat'} />
+      {lyric && <Scroller key={lyric} className="di-mp-lyric" text={lyric} />}
+    </span>
+  )
+}
+
+/** The peek's mini player: artwork with its ring, the title, the equalizer, play and next. */
+export function ScPeekRow() {
+  const s = useSc()
+  const tint = useTint(s, '#d4ff3f')
   if (!s.loaded || !s.station) return null
   return (
-    <span className={`di-sc-pill ${s.playing ? 'playing' : ''}`} title={s.title || s.station.name} aria-label={s.playing ? `Playing ${s.title || s.station.name}` : 'Music paused'}>
-      <i className="di-eq" aria-hidden><b /><b /><b /></i>
-    </span>
+    <div className="di-mu-peek mu" style={tintStyle(tint.rgb, s)} onPointerDown={(e) => e.stopPropagation()}>
+      <RingArt size={34} />
+      <div className="mid">
+        <Scroller text={s.title || s.station.name} className="t" />
+        <small>
+          <Eq on={s.playing} /> {s.artist || s.station.name}
+        </small>
+      </div>
+      <button className="mu-ic" aria-label={s.playing ? 'Pause' : 'Play'} {...tp('mu:peek:toggle', () => (uiTick(), sc.toggle()))}>
+        {s.playing ? <MuIcon d="pause" size={15} /> : <svg width={14} height={14} viewBox="0 0 24 24" aria-hidden><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" /></svg>}
+      </button>
+      <button className="mu-ic" aria-label="Next" {...tp('mu:peek:next', () => (uiTick(), sc.next()))}>
+        <MuIcon d="next" size={15} fill />
+      </button>
+    </div>
   )
 }
 
@@ -157,91 +168,21 @@ export function ScMediaRow() {
       <button className="di-icon" {...tp('sc:m:prev', () => sc.prev())} aria-label="Previous" title="Previous">⏮</button>
       <button className="di-icon" {...tp('sc:m:toggle', () => sc.toggle())} aria-label={s.playing ? 'Pause' : 'Play'} title={s.playing ? 'Pause' : 'Play'}>{s.playing ? '⏸' : '▶'}</button>
       <button className="di-icon" {...tp('sc:m:next', () => sc.next())} aria-label="Next" title="Next">⏭</button>
+      <button className="di-icon" {...tp('sc:m:tab', openMusicTab)} aria-label="Open the Music tab" title="Music">♫</button>
     </div>
   )
 }
 
-/** The music tile and panel: your stations, what plays, the buttons, the volume. */
+/** The panel's small music card: one line that opens the Music tab. */
 export function MusicPanel({ k }: { k: KitState }) {
   const s = useSc()
-  const [url, setUrl] = useState('')
-  const [err, setErr] = useState('')
-  const [adding, setAdding] = useState(false)
-  useEffect(() => {
-    watchProgress = true
-    return () => void (watchProgress = false)
-  }, [])
-  const stations = k.kit.music.stations
-  if (!stations.length && !adding) {
-    return <button className="di-kit-start" {...tp('sc:start', () => setAdding(true))}>♫ Add a SoundCloud station</button>
-  }
-  const add = () => {
-    const r = addStation(stations, url)
-    if (r.error) return setErr(r.error)
-    setErr('')
-    setUrl('')
-    setAdding(false)
-    k.save({ ...k.kit, music: { stations: r.list } })
-  }
-  const pct = s.dur ? Math.min(100, (s.pos / s.dur) * 100) : 0
+  const n = k.kit.music.stations.length
   return (
-    <section className="di-kit di-music" aria-label="Music">
-      <div className="di-kit-head">
-        <b>♫ SoundCloud</b>
-        <button className="di-kit-edit" {...tp('sc:add', () => setAdding((x) => !x))}>{adding ? 'Cancel' : '＋ Station'}</button>
-      </div>
-      {s.loaded && s.station && (
-        <div className="di-sc-now">
-          {s.artwork ? <img src={s.artwork} alt="" width={44} height={44} referrerPolicy="no-referrer" /> : <span className="di-sc-art" aria-hidden>♫</span>}
-          <div className="di-sc-mid">
-            <b title={s.title}>{s.title || (s.ready ? s.station.name : 'Loading…')}</b>
-            <div
-              className="di-sc-bar"
-              role="slider"
-              aria-label="Position"
-              aria-valuemin={0}
-              aria-valuemax={Math.round(s.dur / 1000)}
-              aria-valuenow={Math.round(s.pos / 1000)}
-              onPointerUp={(e) => {
-                const r = e.currentTarget.getBoundingClientRect()
-                if (s.dur) sc.seek(((e.clientX - r.left) / Math.max(1, r.width)) * s.dur)
-              }}
-            >
-              <i style={{ transform: `scaleX(${pct / 100})` }} />
-            </div>
-            <small>{timeText(s.pos)} / {timeText(s.dur)}</small>
-          </div>
-        </div>
-      )}
-      {s.loaded && (
-        <div className="di-sc-ctl">
-          <button className="di-icon" {...tp('sc:prev', () => sc.prev())} aria-label="Previous">⏮</button>
-          <button className="di-icon" {...tp('sc:toggle', () => sc.toggle())} aria-label={s.playing ? 'Pause' : 'Play'}>{s.playing ? '⏸' : '▶'}</button>
-          <button className="di-icon" {...tp('sc:next', () => sc.next())} aria-label="Next">⏭</button>
-          <input type="range" min={0} max={100} value={s.vol} aria-label="Volume" onChange={(e) => sc.volume(Number(e.target.value))} />
-          <button className="di-icon" {...tp('sc:stop', () => sc.stop())} aria-label="Stop the player" title="Stop (unloads the player)">⏹</button>
-        </div>
-      )}
-      {s.error && <p className="di-kit-warn">{s.error}</p>}
-      {adding && (
-        <div className="di-kit-add">
-          <label className="di-kit-field">
-            <span>SoundCloud address</span>
-            <input value={url} placeholder="https://soundcloud.com/artist/sets/playlist" style={{ width: 230 }} onPointerDown={() => window.desktop?.islandFocus?.()} onChange={(e) => setUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} />
-          </label>
-          <button className="di-kit-plus" {...tp('sc:addgo', add)}>Add</button>
-          {err && <em className="di-kit-warn">{err}</em>}
-        </div>
-      )}
-      <ul className="di-kit-list">
-        {stations.map((x) => (
-          <li key={x.id} className={s.station?.url === x.url ? 'pinned' : ''}>
-            <span>{x.name}</span>
-            <button aria-label={`Play ${x.name}`} {...tp(`sc:play:${x.id}`, () => playStation(x))}>▶</button>
-            <button aria-label={`Remove ${x.name}`} {...tp(`sc:del:${x.id}`, () => k.save({ ...k.kit, music: { stations: removeStation(stations, x.id) } }))}>✕</button>
-          </li>
-        ))}
-      </ul>
-    </section>
+    <button className="di-kit-start di-mu-card" {...tp('sc:open-tab', openMusicTab)}>
+      ♫ {s.loaded && s.station ? `Music · ${s.title || s.station.name}` : n ? `Music · ${n} station${n === 1 ? '' : 's'}` : 'Music: add a SoundCloud station'}
+    </button>
   )
 }
+
+/** For the Music tab's run() (one way in for every command). */
+export { run as runMusic }
