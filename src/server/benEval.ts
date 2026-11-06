@@ -19,7 +19,7 @@ import { setSetting } from '../main/settings'
  * blocks and Todoist tasks that only record what Ben does (`log`), and Ben.
  * Exported for the stub-model tests (benQuality.test.ts).
  */
-export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalCase, 'facts' | 'chat' | 'extraEvents' | 'plan'> = {}) {
+export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalCase, 'facts' | 'chat' | 'extraEvents' | 'plan'> = {}, timing?: { budgetMs?: number; reserveMs?: number; minMs?: number }) {
   const log: string[] = []
   const remote = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
@@ -67,7 +67,7 @@ export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalC
   }
   // BQ2: a plan Ben proposed this morning that waits for an OK.
   if (c.plan) await mirror.write((db) => setSetting(db as any, RHYTHM, JSON.stringify({ day: today, water: [], briefing: { status: 'proposed', sentAt: new Date().toISOString(), version: 1, plan: { day: today, headline: 'Lab first, then the gym', mustdos: ['laborator 4 PC'], blocks: [{ title: 'Lab report', start: '10:00', minutes: 90 }, { title: 'Study algebra', start: '16:00', minutes: 50 }], training: null, waterMl: 2500 } } })))
-  const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model })
+  const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model, ...(timing ? { timing } : {}) })
   return { bots, log, mirror, services, today }
 }
 

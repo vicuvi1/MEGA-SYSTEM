@@ -88,7 +88,7 @@ html.vt-page .content { view-transition-name: page; }
 @keyframes t-out-right { to { opacity: 0; transform: translateX(60px); } }
 
 /* ---------- Ben's reply reveals word by word (AF13; BenThread.tsx Rich) ---------- */
-.cx-rich.typing .cx-w { animation: cx-word 0.2s ease-out both; animation-delay: calc(var(--i, 0) * var(--step, 20ms)); }
+.cx-rich.typing .cx-wd { animation: cx-word 0.2s ease-out both; animation-delay: calc(var(--i, 0) * var(--step, 20ms)); }
 @keyframes cx-word { from { opacity: 0; } }
 
 /* ---------- Focus mode dims the rest (AF19; FocusIsland.tsx) ----------

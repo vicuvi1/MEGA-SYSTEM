@@ -790,11 +790,12 @@ export function chatGist(c: { role: 'me' | 'coach'; text: string }): string {
 }
 
 /** The full prompt for one message. `refs`: the E/T lists; `found`: answers to the coach's lookups. */
-export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string; stealth?: boolean; allActions?: boolean; blocks?: string; recalled?: string; now?: Date; meant?: string } = {}): string {
+export function brainPrompt(persona: Persona, context: string, memory: Memory, message: string, media?: 'voice' | 'photo', profile: CoachProfile = DEFAULT_PROFILE, extra: { refs?: string; found?: string; mind?: string; mood?: string; style?: string; tone?: number; feedback?: string; selfReview?: string; notes?: string; desk?: string; stealth?: boolean; allActions?: boolean; blocks?: string; recalled?: string; now?: Date; meant?: string; task?: string; moreLookups?: string; lean?: boolean } = {}): string {
   // Prompt diet: the last 12 turns (240 chars each) and only the facts that matter now.
-  const turns = memory.chat.slice(-12)
+  // lean (a review, a goals check): the facts come from the data, so less chat and memory.
+  const turns = memory.chat.slice(extra.lean ? -4 : -12)
   const chat = turns.map((c) => `${c.role === 'me' ? 'Victor' : c.bot === 'mega' ? 'Ben' : `Coach (${c.bot})`}: ${chatGist(c)}`)
-  const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(' ')}`)
+  const facts = pickFacts(memory.facts, `${message} ${turns.slice(-4).map((c) => c.text).join(' ')}`, extra.lean ? 8 : 24)
   // BR1: what was found by meaning, minus the facts already listed.
   const recalled = (extra.recalled ?? '').split('\n').filter((l) => l && !facts.some((f) => l.includes(f.t))).join('\n')
   // BQ1: what his last replies already said (themes, openers, emoji), so he doesn't repeat himself.
@@ -813,6 +814,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     pluginActionsHelp(),
     '',
     LOOKUPS,
+    extra.moreLookups ?? '',
     '',
     'Also put in "remember" any NEW lasting fact worth keeping about Victor, like a friend would: goals, exams and dates, people in his life, what he likes and hates, what stresses him, wins, excuses he repeats, promises. Short, with dates. Not things already in memory, not one-off logs.',
     'Interactive replies: "buttons" (0–3) are one-tap actions under your message for what you just suggested; he taps instead of typing. "do" is one of: "focus:<minutes>:<subject>" (start a focus timer), "approve" (approve today\'s plan), "change" (change today\'s plan), "plan" (make today\'s plan), "book:<goal title>" (book a goal\'s blocks), "say:<his reply>" (sends that as his message), "open:plan|goals|score|about". Example: {"label": "▶ 25 min Algebra", "do": "focus:25:Algebra"}. Prefer a button over telling him to type a command. "show" (0–2) puts a live card under your message: "plan" (today\'s plan with Approve and Change), "day" (today\'s calendar), "tasks" (today\'s Todoist list), "mustdos" (tickable list), "focus-week" (focus per day, 7 days), "goals" (goal progress), "water", "promises".',
@@ -830,8 +832,9 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     timeFrame(extra.now ?? new Date()).text,
     said,
     saidNo(message) ? 'He just said NO. Accept it in a few words ("OK, your call.") and drop that topic. Do not push again, do not explain why he should.' : '',
-    actionGroups(`${message} ${turns.slice(-2).map((c) => c.text).join(' ')}`, !!extra.allActions || !!media),
+    extra.lean && !extra.allActions ? '' : actionGroups(`${message} ${turns.slice(-2).map((c) => c.text).join(' ')}`, !!extra.allActions || !!media),
     extra.found ? 'You already have the answers to your lookups (below): answer now, leave "need" empty.' : '',
+    extra.task ?? '',
     '',
     extra.style ? `== How he wants you to write ==\n${extra.style}` : '',
     extra.feedback ? `== ${extra.feedback}` : '',

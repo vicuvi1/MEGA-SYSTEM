@@ -323,8 +323,9 @@
 
 /* A message that didn't go out (K4) */
 .cx .co-row.me.failed .co-bubble, .cx .co-msg.me:has(.cx-failed) .co-bubble { opacity: 0.75; }
-.cx-failed { display: block; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--danger, #e5484d); background: var(--surface); border-radius: 8px; padding: 3px 8px; width: fit-content; margin-left: auto; }
-.cx-failed button { border: 0; background: none; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; padding: 0; }
+.cx-failed { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--muted); width: fit-content; margin-left: auto; }
+.cx-failed button { border: 1px solid var(--border-strong, var(--border)); background: var(--surface-2, var(--surface)); color: var(--text); font: inherit; cursor: pointer; padding: 3px 10px; border-radius: 999px; }
+.cx-failed button:hover { border-color: var(--accent); }
 .bd-tabs::-webkit-scrollbar { display: none; }
 
 /* ---- Night 5: the coach screen (U1–U18) ---- */

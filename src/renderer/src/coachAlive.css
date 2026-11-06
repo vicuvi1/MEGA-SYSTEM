@@ -218,8 +218,8 @@ html.calm .cf-send.stop::after { animation-iteration-count: infinite !important;
 
 /* ======================= Message motion ======================= */
 /* Ben's words: each one fades up from a soft blur (a blurred copy that fades out). */
-.cf-col .cx-rich.typing .cx-w, .cf-sw { position: relative; display: inline-block; max-width: 100%; animation: cf-word 0.42s var(--ease-out) both; animation-delay: calc(var(--i, 0) * var(--step, 20ms)); }
-.cf-col .cx-rich.typing .cx-w::after, .cf-sw::after { content: attr(data-w); position: absolute; left: 0; top: 0; white-space: nowrap; color: transparent; text-shadow: 0 0 7px color-mix(in srgb, var(--text) 85%, transparent); pointer-events: none; opacity: 0; animation: cf-ghost 0.5s ease-out both; animation-delay: calc(var(--i, 0) * var(--step, 20ms)); }
+.cf-col .cx-rich.typing .cx-wd, .cf-sw { position: relative; display: inline-block; max-width: 100%; padding: 0; margin: 0; border: 0; border-radius: 0; background: none; box-shadow: none; animation: cf-word 0.42s var(--ease-out) both; animation-delay: calc(var(--i, 0) * var(--step, 20ms)); }
+.cf-col .cx-rich.typing .cx-wd::after, .cf-sw::after { content: attr(data-w); position: absolute; left: 0; top: 0; white-space: nowrap; color: transparent; text-shadow: 0 0 7px color-mix(in srgb, var(--text) 85%, transparent); pointer-events: none; opacity: 0; animation: cf-ghost 0.5s ease-out both; animation-delay: calc(var(--i, 0) * var(--step, 20ms)); }
 @keyframes cf-word { from { opacity: 0; transform: translateY(0.3em) scale(0.97); } 60% { opacity: 0.8; } }
 @keyframes cf-ghost { 0% { opacity: 0.9; transform: scale(1.04); } 100% { opacity: 0; transform: none; } }
 .cf-sw { --step: 26ms; }
@@ -323,7 +323,7 @@ html.calm .cf-send.stop::after { animation-iteration-count: infinite !important;
 
 /* ======================= Reduce motion: everything still ======================= */
 @media (prefers-reduced-motion: reduce) {
-  .bl *, .bl-body, .bl-aura, .bl-swirl, .bl-ping, .bl-wave, .bl-z i, .bl-spark, .cf-amb-set i, .cf-amb-burst, .ch-hero, .ch-hero.closing, .ch-inner > *, .ch-ask, .ch-down span, .cf-will, .cf-wave i, .cf-sw, .cf-sw::after, .cf-col .cx-rich.typing .cx-w, .cf-col .cx-rich.typing .cx-w::after, .cx.cf .cf-card:not(.settled), .cx.cf .cf-card:not(.settled) > *, .cx.cf .cf-result, .cx.cf .cf-result .badge, .cf-moment, .mo-rays, .mo-badge, .mo-tx > *, .cf-send.stop::after { animation: none !important; }
+  .bl *, .bl-body, .bl-aura, .bl-swirl, .bl-ping, .bl-wave, .bl-z i, .bl-spark, .cf-amb-set i, .cf-amb-burst, .ch-hero, .ch-hero.closing, .ch-inner > *, .ch-ask, .ch-down span, .cf-will, .cf-wave i, .cf-sw, .cf-sw::after, .cf-col .cx-rich.typing .cx-wd, .cf-col .cx-rich.typing .cx-wd::after, .cx.cf .cf-card:not(.settled), .cx.cf .cf-card:not(.settled) > *, .cx.cf .cf-result, .cx.cf .cf-result .badge, .cf-moment, .mo-rays, .mo-badge, .mo-tx > *, .cf-send.stop::after { animation: none !important; }
   .bl-lean, .bl .ba-look, .bl .ba-lid, .bl .ba-smile, .cf-amb-set, .cf-amb-mood, .cf-stage > .cf-stream, .cx.cf .cf-composer { transition: none !important; }
   .bl-ping, .bl-wave, .bl-z, .cf-amb-burst { display: none; }
 }

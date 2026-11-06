@@ -181,6 +181,51 @@ try {
     await pg.keyboard.press('Escape')
     if (await pg.inputValue('.cf-input textarea')) throw new Error('Escape did not clear the edit')
   })
+  // Coach fix: Ben's words flow as normal text (no box per word), during and after the reveal;
+  // a reply that didn't come in time shows a friendly line with Try again, never the raw error.
+  await step('Coach: a reply reads as flowing text and a failed one offers Try again', async () => {
+    await open('coach')
+    await pg.waitForSelector('.cf-input textarea', { timeout: 10000 })
+    let fail = false
+    await pg.route('**/api/coach', async (r) => {
+      const b = JSON.parse(r.request().postData() || '{}')
+      if (b.op || !b.text) return r.fallback()
+      const body = fail
+        ? JSON.stringify({ ok: false, retry: true, reply: "Sorry, I couldn't finish that answer in time.", done: [] })
+        : JSON.stringify({ ok: true, reply: 'Yesterday went fine: lab intro done and 75 min of focus. Algebra slipped, so it goes first today at 09:00.', done: [], at: new Date().toISOString(), buttons: [{ label: '▶ 25 min Algebra', do: 'focus:25:Algebra' }] })
+      await r.fulfill({ status: 200, headers: { 'Content-Type': 'application/x-ndjson' }, body: `${JSON.stringify({ step: 'Read yesterday' })}\n${body}\n` })
+    })
+    const words = () =>
+      pg.evaluate(() => {
+        const rows = [...document.querySelectorAll('.cf-row.ben .cf-text')]
+        const el = rows[rows.length - 1]
+        if (!el) return null
+        const spans = [...el.querySelectorAll('.cx-rich span, .cx-rich b')]
+        const boxed = spans.filter((s) => {
+          const cs = getComputedStyle(s)
+          const bg = cs.backgroundColor
+          return !(bg === 'transparent' || bg === 'rgba(0, 0, 0, 0)') || parseFloat(cs.paddingLeft) > 0 || parseFloat(cs.borderTopWidth) > 0 || cs.display === 'grid'
+        })
+        return { text: el.textContent, words: el.querySelectorAll('.cx-wd').length, boxed: boxed.length }
+      })
+    await pg.fill('.cf-input textarea', 'Review yesterday for me')
+    await pg.keyboard.press('Enter')
+    await pg.waitForFunction(() => /Algebra slipped/.test([...document.querySelectorAll('.cf-row.ben .cf-text')].pop()?.textContent ?? ''), null, { timeout: 8000 })
+    const during = await words()
+    if (!during || during.boxed) throw new Error(`${during?.boxed} words sit in their own box while they appear`)
+    await pg.waitForTimeout(2200)
+    const after = await words()
+    if (!after || after.boxed || after.words) throw new Error(`after the reveal: ${after?.words} word spans, ${after?.boxed} boxed`)
+    if (process.env.COACH_SHOTS) await pg.locator('.cx-chat').screenshot({ path: `${process.env.COACH_SHOTS}/review-answer.png` })
+    fail = true
+    await pg.fill('.cf-input textarea', 'what now')
+    await pg.keyboard.press('Enter')
+    await pg.waitForSelector('.cx-failed button', { timeout: 8000 })
+    const line = await pg.locator('.cx-failed').last().innerText()
+    if (!/Try again/.test(line) || /took too long|Error|couldn't think/i.test(line)) throw new Error(`failed line: ${line}`)
+    if (!(await pg.locator('.cf-row.me', { hasText: 'what now' }).count())) throw new Error('your message is gone')
+    await pg.unroute('**/api/coach')
+  })
   // Goals: made-up goals show as cards with a ring and a pace chart; a clear goal from plain words; a check-in.
   await step('Goals: cards with rings and pace lines, a new goal from words, a check-in', async () => {
     await open('goals')

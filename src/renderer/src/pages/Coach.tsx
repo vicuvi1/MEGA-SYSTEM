@@ -36,6 +36,8 @@ import '../ben.css'
 
 type Profile = { about: string; goals: string[]; rules: string[] }
 
+/** Ben couldn't answer (timeout, server hiccup): one friendly line, never the raw error. */
+const FAIL_LINE = "Ben couldn't answer in time"
 const BOT_LABEL: Record<string, string> = { mega: 'Ben', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
 const CARDS: { title: string; sub: string; ask: string }[] = [
   { title: 'What now?', sub: 'The one thing that matters most right now', ask: 'What should I focus on right now? Be specific.' },
@@ -408,6 +410,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           setLog((l) => (l ?? []).map((x) => (x.pending ? { ...x, text: soFar, streamed: true } : x)))
         }
       )
+      // Ben couldn't answer in time: no fake reply, your message stays with Try again.
+      if (r.ok === false && (r as { retry?: boolean }).retry) throw new Error(FAIL_LINE)
       const stopped = stopRef.current && shown.length < r.reply.length
       if (!stopRef.current) readAloud.end(r.reply)
       // Each thing Ben did stamps in with a tick; a plain reply gets one tick.
@@ -424,10 +428,11 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
       void life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
       void life.coach.mind?.().then(setMind).catch(() => {})
     } catch (e) {
-      // Not a fake Ben reply (K4): your message is marked "Not sent" with Retry, the draft comes back.
-      const why = (e as Error).message || 'no connection'
-      setLog((l) => (l ?? []).filter((x) => !x.pending).map((x) => (x.role === 'me' && x.at === now ? { ...x, failed: why } : x)))
-      if (t) setText((cur) => cur || t)
+      // Not a fake Ben reply (K4): your message stays, marked with a friendly line and Try again.
+      // The raw error is never shown (it goes to the console for us).
+      console.warn('coach:', (e as Error)?.message)
+      const offline = typeof navigator !== 'undefined' && navigator.onLine === false
+      setLog((l) => (l ?? []).filter((x) => !x.pending).map((x) => (x.role === 'me' && x.at === now ? { ...x, failed: offline ? "You're offline. Not sent" : FAIL_LINE } : x)))
     }
     setBusy(false)
     loadStatus()
@@ -872,8 +877,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                         {firstOfGroup ? <MeAvatar size={26} onPick={() => meFile.current?.click()} /> : <span className="cf-me-gap" />}
                       </div>
                       {m.failed ? (
-                        <span className="cx-failed" title={m.failed}>
-                          Not sent ·{' '}
+                        <span className="cx-failed" role="status">
+                          {m.failed} ·{' '}
                           <button
                             type="button"
                             disabled={busy}
@@ -883,7 +888,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                               void send(m.text)
                             }}
                           >
-                            Retry
+                            Try again
                           </button>
                         </span>
                       ) : (

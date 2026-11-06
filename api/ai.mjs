@@ -87,7 +87,7 @@ export function thinkSlot(limit, deadline) {
   return left < 8000 ? 0 : Math.min(limit, left)
 }
 /** The model for one request (a webhook, a tick): every call shares its deadline. */
-export const modelUntil = (deadline, env = process.env, fetchImpl = fetch) => async (prompt, opts = {}) => (await askModel(prompt, { ...opts, deadline: opts.deadline ?? deadline }, env, fetchImpl)).text
+export const modelUntil = (deadline, env = process.env, fetchImpl = fetch) => async (prompt, opts = {}) => (await askModel(prompt, { ...opts, deadline: Math.min(opts.deadline ?? deadline, deadline) }, env, fetchImpl)).text
 
 /**
  * LT9: the models Ben uses unless you pick others (Settings → Ben → Brain) or
@@ -325,12 +325,14 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
     // 15 s, so the quick model can still answer when it fails or runs out of time.
     const flash = pick.chat || (await openRouterModel(env, fetchImpl))
     const deep = mine || (await strongModel(env, fetchImpl))
-    const t = thinkSlot(mine ? 60_000 : 35_000, opts.deadline)
+    // opts.thinkMs: the caller's cap on thinking (Ben's chat keeps time for its own quick retry).
+    const t = thinkSlot(Math.min(mine ? 60_000 : 35_000, opts.thinkMs || Infinity), opts.deadline)
     if (deep && t) {
       try {
-        return await callOpenRouter(key, deep, prompt, fetchImpl, { ...opts, think: deep !== flash || !!mine }, t, 'medium')
+        // A chat answer thinks a little (fast); plans and reviews from the rhythm think more.
+        return await callOpenRouter(key, deep, prompt, fetchImpl, { ...opts, think: deep !== flash || !!mine }, t, /^chat|^lookup|^retry/.test(opts.kind || '') ? 'low' : 'medium')
       } catch (e) {
-        if (e.timeUp) throw e
+        if (e.timeUp || opts.noFallback) throw e
         console.warn(`thinking model ${deep} failed, using ${flash}:`, e.message)
       }
     }
@@ -496,7 +498,8 @@ export async function askModel(prompt, opts = {}, env = process.env, fetchImpl =
     try {
       return await askOpenRouter(orKey, prompt, fetchImpl, opts, env)
     } catch (e) {
-      if (!gKey || e.budget || e.timeUp) throw e
+      // noFallback: the caller (Ben's chat) retries with the quick model itself, faster than Gemini.
+      if (!gKey || e.budget || e.timeUp || opts.noFallback) throw e
     }
   }
   if (!gKey) throw new Error('Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use the AI coach')

@@ -24,13 +24,26 @@ const NUM = /(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\
 export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity }: { text: string; reveal?: boolean; highlight?: string; maxBold?: number }) {
   const animate = reveal && !(typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
   const h = highlight.trim().toLowerCase()
-  const { nodes, words } = useMemo(() => {
+  // ~1.2 s for a whole reply, 12–40 ms between words.
+  const words = useMemo(() => (text.match(/\S+/g) ?? []).length, [text])
+  const step = Math.max(12, Math.min(40, Math.round(1200 / Math.max(1, words))))
+  const total = words * step + 220
+  const [typing, setTyping] = useState(animate)
+  useEffect(() => {
+    if (!animate) return setTyping(false)
+    setTyping(true)
+    const t = setTimeout(() => setTyping(false), total)
+    return () => clearTimeout(t)
+  }, [animate, total, text])
+  // Words get their own span only while they fade in; then the reply is plain flowing text.
+  const split = animate && typing
+  const nodes = useMemo(() => {
     let w = 0
     let bold = 0
     let key = 0
     const word = (str: string): ReactNode[] =>
-      animate
-        ? str.split(/(\s+)/).map((t) => (!t || /^\s+$/.test(t) ? t : <span key={key++} className="cx-w" data-w={t} style={{ ['--i' as string]: w++ }}>{t}</span>))
+      split
+        ? str.split(/(\s+)/).map((t) => (!t || /^\s+$/.test(t) ? t : <span key={key++} className="cx-wd" data-w={t} style={{ ['--i' as string]: w++ }}>{t}</span>))
         : [str]
     const plain = (str: string): ReactNode[] =>
       str.split(NUM).map((p, i) => {
@@ -38,7 +51,7 @@ export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity 
         const hit = h && p.toLowerCase().includes(h)
         if (i % 2 === 1 && bold < maxBold) {
           bold++
-          return <b key={key++} className={`${hit ? 'hit' : ''}${animate ? ' cx-w' : ''}`} data-w={animate ? p : undefined} style={animate ? { ['--i' as string]: w++ } : undefined}>{p}</b>
+          return <b key={key++} className={`${hit ? 'hit' : ''}${split ? ' cx-wd' : ''}`} data-w={split ? p : undefined} style={split ? { ['--i' as string]: w++ } : undefined}>{p}</b>
         }
         if (!hit) return <Fragment key={key++}>{word(p)}</Fragment>
         const k = p.toLowerCase().indexOf(h)
@@ -73,20 +86,10 @@ export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity 
               </span>
             )
           )
-    return { nodes: out, words: w }
-  }, [text, h, maxBold, animate])
-  // ~1.2 s for a whole reply, 12–40 ms between words.
-  const step = Math.max(12, Math.min(40, Math.round(1200 / Math.max(1, words))))
-  const total = words * step + 220
-  const [typing, setTyping] = useState(animate)
-  useEffect(() => {
-    if (!animate) return setTyping(false)
-    setTyping(true)
-    const t = setTimeout(() => setTyping(false), total)
-    return () => clearTimeout(t)
-  }, [animate, total, text])
+    return out
+  }, [text, h, maxBold, split])
   return (
-    <span className={`cx-rich${animate ? ' typing' : ''}`} style={animate ? { ['--step' as string]: `${step}ms` } : undefined}>
+    <span className={`cx-rich${split ? ' typing' : ''}`} style={split ? { ['--step' as string]: `${step}ms` } : undefined}>
       {nodes}
       {typing && <i className="cx-caret" />}
     </span>
