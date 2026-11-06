@@ -58,7 +58,7 @@ jobs:
           rm -f snap.json.gz headers.txt
           echo "DAY=${day}" >> "$GITHUB_ENV"
           ls -l out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: life-backup-${{ env.DAY }}
           path: out/*.enc
