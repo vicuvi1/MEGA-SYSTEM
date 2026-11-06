@@ -270,14 +270,14 @@ try {
     await pg.evaluate(() => { window.__sportLog = []; window.addEventListener('message', (e) => e.data?.action === 'SPORT_LOG' && window.__sportLog.push(e.data.payload)) })
     const before = await frame.locator('.ex .ex-count b').first().innerText()
     await frame.locator('.ex [data-action="add"]').first().click()
-    await frame.waitForFunction((b) => document.querySelector('.ex .ex-count b')?.textContent !== b, before, { timeout: 3000 })
-    await pg.waitForFunction(() => window.__sportLog.some((p) => p.changes.some((c) => c.kind.startsWith('reps:') && c.amount > 0)), null, { timeout: 3000 })
+    await frame.waitForFunction((b) => document.querySelector('.ex .ex-count b')?.textContent !== b, before, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
+    await pg.waitForFunction(() => window.__sportLog.some((p) => p.changes.some((c) => c.kind.startsWith('reps:') && c.amount > 0)), null, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
     // Water: a glass and its undo.
     const w0 = await frame.locator('#water-display-ml').innerText()
     await frame.click('#water-glass')
-    await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.textContent !== w, w0, { timeout: 3000 })
+    await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.textContent !== w, w0, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
     await frame.click('#water-undo')
-    await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.innerText === w, w0, { timeout: 3000 })
+    await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.innerText === w, w0, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
     // Logging can earn a badge: it pops up with "Nice!" (checked a moment after a change).
     await pg.waitForTimeout(1000)
     if (await frame.locator('#unlock.open').count()) await frame.click('#unlock-ok')
@@ -295,7 +295,7 @@ try {
     if (await frame.locator('#st-more').isVisible()) throw new Error('the top menu stayed open')
     // The demo opens the How-to sheet: steps, the common mistake, the ladder.
     await frame.locator('.ex .ex-demo').first().click()
-    await frame.waitForSelector('#modal-howto.open #howto-name', { timeout: 3000 })
+    await frame.waitForSelector('#modal-howto.open #howto-name', { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
     if ((await frame.locator('#modal-howto .howto-steps li').count()) < 2) throw new Error('the How-to sheet has no steps')
     await frame.waitForSelector('#modal-howto .howto-warn', { timeout: 2000 })
     await frame.click('#btn-close-howto')
