@@ -40,6 +40,7 @@ import { parseRecipeLine, type Recipe } from '@core/recipes'
 import { readPcAction, type PcAct } from '@core/pcActions'
 import { cleanLastHour, lastHourContext } from '@core/pcLastHour'
 import { alreadySaid, alreadySaidText, saidNo, timeFrame, whenWords } from '@core/benTalk'
+import { goalsNowSection, readGoalAction, type GoalAction } from './goalsBrain'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -310,6 +311,7 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
           .map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`)
           .join('\n')}`
       : 'No goals with deadlines (offer to set one when he mentions an exam, project or deadline).',
+    goalsNowSection(s, extra.finance, now),
     `Week score ${report.score}/100 (last week ${report.prevScore}). ${report.verdict}`,
     `Last 7 days: ${report.metrics.map((m) => `${m.label} ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`).join('; ')}.`,
     wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ''}. Big 3: ${wp.big3.map((b) => `${b.done ? '[done]' : '[open]'} ${b.text}`).join('; ')}.` : 'No week plan yet.',
@@ -948,6 +950,8 @@ export type BrainAction =
   | { kind: 'recipe'; recipe: Recipe }
   /** AU7: something on his PC, asked first on the desktop island (never run by itself). */
   | { kind: 'pc'; act: PcAct }
+  /** Measurable goals: a draft from his words (he confirms) and a check-in (goalsBrain.ts). */
+  | GoalAction
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -963,6 +967,8 @@ export function readAction(line: string): BrainAction | null {
   // Plugin verbs first ("steps: 8000"); the built-ins after.
   const plugin = readPluginAction(line)
   if (plugin) return plugin
+  const goalAct = readGoalAction(line)
+  if (goalAct) return goalAct
   // AU7: "pc: open spotify": an ask for the desktop island (Allow / Deny).
   if (/^\s*pc\s*:/i.test(line)) {
     const act = readPcAction(line)

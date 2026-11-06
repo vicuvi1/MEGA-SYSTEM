@@ -1,6 +1,7 @@
 // Desktop only: the app window (it keeps running hidden in the tray) feeds the
 // desktop island its snapshot and does what the island's buttons ask. The
 // island window itself never opens your data, so there is one owner of it.
+import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
 import { focusQualityPc, lateNight } from '@core/pcActivity'
 import { useCallback, useEffect, useRef } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
@@ -520,6 +521,8 @@ export function IslandFeed() {
           breakOverAlert(now, dismissed, !!run) ??
           qualityAlert(dismissed, now) ??
           nudges.early ??
+          // Goals: a check-in that's due (once a period; never during a timer or a call).
+          goalAlert(now, busy, dismissed) ??
           (() => {
             // A reward you can now afford: celebrate it (for 3 minutes, once).
             const r = rewardAlert({ balance: shop?.balance ?? 0, goal: goal ? { title: goal.title, price: goal.price } : null, celebrated: Object.keys(celebrated).filter((k) => now - celebrated[k] > 3 * 60_000), now, dismissed })
@@ -558,6 +561,7 @@ export function IslandFeed() {
       // PL1–PL8, LF1/LF2: your widgets and layout, today's rain and sunset.
       ...(await widgetsForIsland(now)),
       auto: autoIslandView(),
+      goals: await goalsForIsland(now),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,
@@ -886,6 +890,15 @@ export function IslandFeed() {
           case 'kitLink':
             said = await kitAct(a)
             break
+          case 'goal': {
+            said = await goalAct(a)
+            if (a.alertId) {
+              const d = get<Record<string, number>>(DISMISSED, {})
+              d[a.alertId] = Date.now() + 864e5
+              put(DISMISSED, d)
+            }
+            break
+          }
           case 'widget':
             // PL1–PL5: a widget's or script's call, checked again in widgetsFeed.
             said = await widgetAct(a)

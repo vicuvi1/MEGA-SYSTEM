@@ -8,7 +8,18 @@ export interface CaptureResult {
   ok: boolean
   /** One short line for a toast. */
   said: string
-  via: 'focus' | 'task' | 'rule' | 'ben' | 'todoist' | 'discipline'
+  via: 'focus' | 'task' | 'rule' | 'ben' | 'todoist' | 'discipline' | 'goal'
+}
+
+/** Opens Goals with a draft from words (the sheet reads it once). */
+export function openGoalDraft(text: string): void {
+  try {
+    sessionStorage.setItem('ls.goalDraft', text.slice(0, 200))
+  } catch {
+    /* the event still carries it */
+  }
+  window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'goals' }))
+  window.dispatchEvent(new CustomEvent('life-goal-draft', { detail: text.slice(0, 200) }))
 }
 
 const changed = (...names: string[]) => names.forEach((n) => window.dispatchEvent(new CustomEvent(n)))
@@ -31,6 +42,11 @@ export async function capture(text: string, onStep?: (step: string) => void): Pr
     await life.discipline.checkIn()
     changed('life-external-changed')
     return { ok: true, said: 'Clean day checked in', via: 'discipline' }
+  }
+  if (c.kind === 'goal') {
+    // A draft to confirm: the Goals page opens its New goal sheet with these words.
+    openGoalDraft(c.text)
+    return { ok: true, said: `🎯 Goal draft: confirm it on Goals`, via: 'goal' }
   }
   if (c.kind === 'oath') {
     await life.discipline.oath()

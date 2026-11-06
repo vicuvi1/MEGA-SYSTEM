@@ -148,6 +148,26 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
   db.run("INSERT INTO settings (key, value) VALUES ('app_sync_finance', ?)", [JSON.stringify({ savedAt: Date.now(), data })])
 }
 
+// Made-up goals (Goals page smoke and screenshots): three you can measure with
+// a few weekly check-ins, and one hour goal planned into focus blocks.
+{
+  const ahead = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10)
+  const g = db.prepare("INSERT INTO focus_goals (title, subject, deadline, hours, created_day, kind, unit, unit_label, target, start_value, why, area, cadence, source, milestones, curve) VALUES (?, '', ?, ?, ?, 'measure', ?, ?, ?, ?, ?, ?, ?, '{\"kind\":\"manual\"}', '[]', ?)")
+  const c = db.prepare("INSERT INTO goal_checkins (id, goal_id, at, day, value, who) VALUES (?, ?, ?, ?, ?, 'me')")
+  const add = (row, checks) => {
+    g.run(row)
+    const id = Number(db.exec('SELECT MAX(id) FROM focus_goals')[0].values[0][0])
+    for (const [n, v] of checks) c.run([`demo${id}-${n}`, id, `${day(n)}T18:00:00.000Z`, day(n), v])
+  }
+  add(['Profit 5,000 lei a month', ahead(55), 5000, day(36), 'lei', null, 5000, 1200, 'Rent and savings without stress', 'Money', 'weekly', 'line'], [[29, 1500], [22, 1850], [15, 2200], [8, 2450]])
+  add(['Lose 5 kg', ahead(86), 77, day(36), 'kg', null, 77, 82, 'Feel light on the bike again', 'Body', 'weekly', 'front'], [[26, 81.3], [12, 80.2], [2, 79.5]])
+  add(['100 GitHub stars', ahead(145), 100, day(52), 'custom', 'stars', 100, 12, 'A portfolio people notice', 'Career', 'weekly', 'ramp'], [[36, 18], [17, 26], [3, 33]])
+  db.run("INSERT INTO focus_goals (title, subject, deadline, hours, created_day) VALUES ('Rust book', 'Rust', ?, 30, ?)", [ahead(40), day(10)])
+  db.run("INSERT INTO focus_sessions (day, subject, minutes, coins, started_at, ended_at) VALUES (?, 'Rust', 240, 0, ?, ?)", [day(4), new Date().toISOString(), new Date().toISOString()])
+  g.free()
+  c.free()
+}
+
 // E2E_REWARDS_DEMO=1: a month of made-up points and a few made-up rewards, for
 // looking at the Rewards page (screenshots). Off for the smoke test.
 if (process.env.E2E_REWARDS_DEMO) {

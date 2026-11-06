@@ -350,5 +350,29 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE rewards ADD COLUMN jar_goal_id INTEGER;
   ALTER TABLE rewards ADD COLUMN price_locked INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE redemptions ADD COLUMN jar_used INTEGER NOT NULL DEFAULT 0;
+  `,
+  /* 021 Measurable goals next to the hour goals (kind 'measure'), and their check-ins (append-only) */ `
+  ALTER TABLE focus_goals ADD COLUMN kind TEXT NOT NULL DEFAULT 'hours';
+  ALTER TABLE focus_goals ADD COLUMN unit TEXT;
+  ALTER TABLE focus_goals ADD COLUMN unit_label TEXT;
+  ALTER TABLE focus_goals ADD COLUMN target REAL;
+  ALTER TABLE focus_goals ADD COLUMN start_value REAL;
+  ALTER TABLE focus_goals ADD COLUMN why TEXT;
+  ALTER TABLE focus_goals ADD COLUMN area TEXT;
+  ALTER TABLE focus_goals ADD COLUMN cadence TEXT;
+  ALTER TABLE focus_goals ADD COLUMN source TEXT;
+  ALTER TABLE focus_goals ADD COLUMN milestones TEXT;
+  ALTER TABLE focus_goals ADD COLUMN curve TEXT;
+  ALTER TABLE focus_goals ADD COLUMN done_day TEXT;
+  CREATE TABLE IF NOT EXISTS goal_checkins (
+    id TEXT PRIMARY KEY,
+    goal_id INTEGER NOT NULL,
+    at TEXT NOT NULL,
+    day TEXT NOT NULL,
+    value REAL NOT NULL,
+    who TEXT NOT NULL DEFAULT 'me',
+    note TEXT
+  );
+  CREATE INDEX IF NOT EXISTS goal_checkins_goal ON goal_checkins(goal_id, day);
   `
 ]

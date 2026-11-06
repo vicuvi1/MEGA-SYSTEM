@@ -26,6 +26,9 @@ import { financeStateFrom } from './botBrain'
 import { DAY_LOG } from './dayLog'
 import { loadAims, loadHabits, loadLearn, loadModes, modeRest, saveAims, saveHabits, saveLearn, saveModes } from './extrasContext'
 import type { Services, WebServices } from './webServices'
+import type { CheckIn, GoalCard, GoalSource } from '@core/goals'
+import { parseGoalText, type GoalDraft } from '@core/goalsText'
+import type { CheckInResult, GoalInput } from '../../../main/goals'
 
 const json = (db: any, key: string): any => {
   try {
@@ -142,14 +145,22 @@ export function setMode(s: Services, kind: ModeKind | null, days = 0, now = new 
 
 export interface GoalsView {
   today: string
+  /** Measurable goals ("profit 5,000 lei by 31 Dec"), the ones needing you first. */
+  measures: GoalCard[]
+  /** Their check-ins of the last 30 days, newest first. */
+  checkins: CheckIn[]
+  /** Hour goals: their total hours (focus_goals id → hours), for the progress ring. */
+  hourTotals: Record<number, number>
   goals: BoardGoal[]
   week: WeekItem[]
   learn: TrackView[]
   learnNext: { track: LearnTrack; subject: string; why: string } | null
 }
 
-export function goalsView(s: Services, events: CalEvent[] = [], now = new Date()): GoalsView {
+export function goalsView(s: Services, events: CalEvent[] = [], now = new Date(), finance?: any): GoalsView {
   const today = s.wallet.today(now)
+  const measures = s.goals.cards(now, finance)
+  const checkins = s.goals.recent(30, now)
   const f = s.focus.state(now)
   const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))
   const mind = cleanMind(json(s.db, 'coach_mind'))
@@ -163,7 +174,8 @@ export function goalsView(s: Services, events: CalEvent[] = [], now = new Date()
   const call = [...desk.calls].reverse().find((c) => c.week >= weekOf(addDays(today, -6)))
   const board = goalsBoard({ today, plans, aims: mind.goals, events, weekPlan, callBig3: call ? big3Of(call.answers?.big3 ?? '') : [] })
   const learn = loadLearn(s.db)
-  return { today, ...board, learn: learnLadders(learn), learnNext: nextSubject(learn, today) }
+  const hourTotals = Object.fromEntries(f.goals.map((g) => [g.id, g.hours]))
+  return { today, measures, checkins, hourTotals, ...board, learn: learnLadders(learn), learnNext: nextSubject(learn, today) }
 }
 
 export function addLearning(s: Services, e: { track: LearnTrack; title: string; tag?: string; link?: string | null }, now = new Date()): GoalsView {
@@ -382,6 +394,7 @@ export function createExtras(svcP: Promise<WebServices>) {
   const W = 'life-wallet-changed'
   const H = 'life-habits-changed'
   const M = 'life-mode-changed'
+  const G = 'life-goals-changed'
   return {
     habits: () => read((s) => habitsView(s)),
     tapHabit: (id: string) => write((s) => tapHabit(s, id), W, H),
@@ -389,7 +402,15 @@ export function createExtras(svcP: Promise<WebServices>) {
     editHabits: (e: HabitEdit) => write((s) => editHabits(s, e), H),
     mode: () => read((s) => modeView(s)),
     setMode: (kind: ModeKind | null, days?: number) => write((s) => setMode(s, kind, days ?? 0), M, 'life-body-changed'),
-    goals: (events: CalEvent[] = []) => read((s) => goalsView(s, events)),
+    goals: (events: CalEvent[] = []) => read((s) => goalsView(s, events, new Date(), fin(s))),
+    /** Measurable goals: save (a new one or an edit), check in, skip, archive, the auto number now, a draft from words. */
+    saveMeasure: (g: GoalInput) => write((s) => s.goals.save(g, new Date(), fin(s)), G),
+    goalCheckIn: (id: number, value: number, note?: string): Promise<CheckInResult> => write((s) => s.goals.checkIn(id, value, 'me', note ?? null), W, G),
+    goalSkip: (id: number) => write((s) => s.goals.skip(id), G),
+    archiveMeasure: (id: number) => write((s) => s.goals.archive(id), G),
+    syncGoals: () => write((s) => s.goals.syncAuto(new Date(), fin(s))),
+    goalAutoValue: (source: GoalSource) => read((s) => s.goals.autoValue({ source, startDay: s.wallet.today() }, new Date(), fin(s))),
+    parseGoal: (text: string): Promise<GoalDraft | null> => read((s) => parseGoalText(text, s.wallet.today())),
     addLearning: (e: { track: LearnTrack; title: string; tag?: string; link?: string | null }) => write((s) => addLearning(s, e)),
     removeLearning: (id: string) => write((s) => removeLearning(s, id)),
     weekTime: (events: CalEvent[], day?: string) => read((s) => weekTimeFor(s, events, day)),

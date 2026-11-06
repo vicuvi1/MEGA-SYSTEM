@@ -26,6 +26,7 @@ import { ShieldService } from '../../../main/shields'
 import { Shop } from '../../../main/shop'
 import { SleepService } from '../../../main/sleep'
 import { FocusService, type FocusTask } from '../../../main/focus'
+import { GoalsService } from '../../../main/goals'
 import { ProgressService } from '../../../main/progress'
 import { WeekPlanService } from '../../../main/weekPlan'
 import { applyPointsV2, applyPointsV3 } from '../../../main/points'
@@ -158,6 +159,7 @@ function servicesFor(db: BrowserDb) {
     schedule: new Schedule(d, wallet),
     sleep: new SleepService(d, wallet),
     focus: new FocusService(d, wallet),
+    goals: new GoalsService(d, wallet),
     progress: new ProgressService(d, wallet),
     weekPlan: new WeekPlanService(d, wallet),
     economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),

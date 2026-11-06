@@ -663,7 +663,7 @@ function formatUrgeResponse() {
 	].join("\n");
 }
 // src/core/factTypes.ts
-var MONTHS$6 = {
+var MONTHS$7 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -693,9 +693,9 @@ function dateIn(text, today) {
 		return cand < addDays$6(today, -60) ? `${y + 1}${cand.slice(4)}` : cand;
 	};
 	const dm = /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.exec(text) ?? null;
-	if (dm) return pick(MONTHS$6[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
+	if (dm) return pick(MONTHS$7[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
 	const md = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i.exec(text);
-	if (md) return pick(MONTHS$6[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
+	if (md) return pick(MONTHS$7[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
 	const num = /\b(\d{1,2})[./](\d{1,2})\b/.exec(text);
 	if (num) return pick(Number(num[2]), Number(num[1]));
 	return null;
@@ -1225,13 +1225,13 @@ function monthKey$1(day) {
 	return day.slice(0, 7);
 }
 // src/core/strength.ts
-var num$2 = (s) => Number(s.replace(",", "."));
+var num$3 = (s) => Number(s.replace(",", "."));
 function parseSets(raw) {
 	const t = raw.trim().replace(/\s+/g, " ");
 	const m = /^(.+?)\s+(?:(\d+(?:[.,]\d+)?)\s*kg\s+)?(\d{1,2})\s*[x×]\s*(\d{1,3})(?:\s*(?:[x×]|@)\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?)?$/i.exec(t);
 	if (!m) return null;
 	const name = m[1].trim();
-	const kg = m[2] ? num$2(m[2]) : m[5] ? num$2(m[5]) : void 0;
+	const kg = m[2] ? num$3(m[2]) : m[5] ? num$3(m[5]) : void 0;
 	const sets = Number(m[3]);
 	const reps = Number(m[4]);
 	if (!name || sets < 1 || sets > 20 || reps < 1 || reps > 200 || kg != null && !(kg > 0 && kg < 1e3)) return null;
@@ -1787,7 +1787,7 @@ function overlapMin(aStart, aEnd, bStart, bEnd) {
 	return Math.max(0, (Math.min(aEnd, bEnd) - Math.max(aStart, bStart)) / 6e4);
 }
 // src/core/settingsKeys.ts
-function json$4(about, fallback) {
+function json$5(about, fallback) {
 	return {
 		about,
 		type: "json",
@@ -1813,7 +1813,7 @@ function text(about) {
 		serialize: (v) => v ?? ""
 	};
 }
-function num$1(about, fallback = 0) {
+function num$2(about, fallback = 0) {
 	return {
 		about,
 		type: "number",
@@ -1836,117 +1836,118 @@ function flag(about) {
 	};
 }
 var SETTINGS = {
-	data_version: num$1("bumped on every write; devices refresh when it changes"),
-	coach_tick_at: num$1("old place of the tick clock (now in sys_kv); never written to settings"),
+	data_version: num$2("bumped on every write; devices refresh when it changes"),
+	coach_tick_at: num$2("old place of the tick clock (now in sys_kv); never written to settings"),
 	pin_hash: text("old device PIN hash (the PIN lives on the server now)"),
 	theme: text("the app look (dark / light)"),
-	bot_bridge_config: json$4("Telegram bot tokens and chat ids saved in the app", null),
-	notif_settings: json$4("quiet hours, event warnings, travel times (N2, N3, N6)", null),
-	milestones_seen: json$4("milestones already celebrated", []),
-	island_day_log: json$4("the island's log of the day", null),
-	island_nudges: json$4("Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)", null),
-	island_recipes: json$4("Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)", []),
-	island_widgets: json$4("PL1–PL8: installed widgets (pinned hashes, permissions), island pages, script tiles, the island look and the synced layout (src/core/widgets/settings.ts)", null),
-	island_kit: json$4("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)", null),
-	music_now: json$4("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
-	sport_tracker_json: json$4("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
-	sport_sync_seen: json$4("when Sporty last synced water and workouts", null),
-	sporty_status: json$4("Sporty's last status", null),
-	sporty_update_request: json$4("a change waiting for Sporty to pick up", null),
-	sport_rest_days: json$4("days marked as rest days", []),
-	ben_workouts: json$4("workouts Ben logged", []),
-	app_sync_finance: json$4("Finance Helper data synced into Life System", null),
-	app_sync_waky: json$4("Waky (sleep) data synced into Life System", null),
-	finance_backup_json: json$4("older copy of the Finance Helper data", null),
-	waky_backup_json: json$4("older copy of the Waky data", null),
-	finance_inbox_json: json$4("bank lines waiting to be sorted in Finance Helper", []),
-	fin_tx_links: json$4("money entries linked to Finance Helper transactions", null),
-	tg_expense_links: json$4("Telegram messages linked to the expenses they logged", null),
+	bot_bridge_config: json$5("Telegram bot tokens and chat ids saved in the app", null),
+	notif_settings: json$5("quiet hours, event warnings, travel times (N2, N3, N6)", null),
+	milestones_seen: json$5("milestones already celebrated", []),
+	island_day_log: json$5("the island's log of the day", null),
+	island_nudges: json$5("Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)", null),
+	island_recipes: json$5("Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)", []),
+	island_widgets: json$5("PL1–PL8: installed widgets (pinned hashes, permissions), island pages, script tiles, the island look and the synced layout (src/core/widgets/settings.ts)", null),
+	island_kit: json$5("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)", null),
+	music_now: json$5("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
+	sport_tracker_json: json$5("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
+	sport_sync_seen: json$5("when Sporty last synced water and workouts", null),
+	sporty_status: json$5("Sporty's last status", null),
+	sporty_update_request: json$5("a change waiting for Sporty to pick up", null),
+	sport_rest_days: json$5("days marked as rest days", []),
+	ben_workouts: json$5("workouts Ben logged", []),
+	app_sync_finance: json$5("Finance Helper data synced into Life System", null),
+	app_sync_waky: json$5("Waky (sleep) data synced into Life System", null),
+	finance_backup_json: json$5("older copy of the Finance Helper data", null),
+	waky_backup_json: json$5("older copy of the Waky data", null),
+	finance_inbox_json: json$5("bank lines waiting to be sorted in Finance Helper", []),
+	fin_tx_links: json$5("money entries linked to Finance Helper transactions", null),
+	tg_expense_links: json$5("Telegram messages linked to the expenses they logged", null),
 	conn_finance_since: text("when Finance Helper was first connected"),
-	money_ask: json$4("a money question Ben is waiting on", null),
+	money_ask: json$5("a money question Ben is waiting on", null),
 	money_currency: text("currency for money (MDL)"),
-	money_daily_budget: num$1("daily spending budget"),
-	money_nothing_spent: json$4("days you tapped \"Nothing spent today\"", []),
-	money_cooked_days: json$4("days you confirmed you cooked at home", []),
-	coach_log: json$4("Ben's chat (newest 200 entries)", []),
-	coach_memory: json$4("Ben's memory: facts and recent chat", null),
-	coach_profile: json$4("about you, as Ben knows it", null),
-	coach_mind: json$4("long-term memory: goals, people, what works", null),
-	coach_reminders: json$4("reminders and check-ins Ben will send", []),
-	coach_nudges: json$4("nudge state (paused today, last sent)", null),
-	coach_rhythm: json$4("the daily rhythm: morning plan, reviews", null),
-	coach_rhythm_prefs: json$4("daily rhythm settings", null),
-	coach_history: json$4("past days Ben looks back on", []),
-	coach_letters: json$4("Ben's weekly letters", []),
-	coach_feedback: json$4("your thumbs up / down on replies", []),
-	coach_selfreview: json$4("Ben's review of his own week", null),
-	coach_story: json$4("the story of your weeks", null),
-	coach_blocks: json$4("Ben's notes about you: About you, Goals now, How to coach you, People (BR4)", []),
-	coach_memory_changes: json$4("recent changes to Ben's memory, with what was there before (undo)", []),
-	coach_style: json$4("Ben's tone and style", null),
-	coach_looks: json$4("how the chat looks: Ben's face and your photo (small data URL)", null),
-	coach_adapt: json$4("how Ben adapts the plan to how it went", null),
-	goal_booking: json$4("goal blocks booked into the calendar", null),
-	ben_desk: json$4("Ben's desk: excuses, moods, study, stakes, calls, letters", null),
-	ben_experiment: json$4("the experiment running now", null),
-	ben_why: json$4("why Ben did what he did", []),
-	ben_confirm: json$4("an action waiting for your yes", null),
-	ben_cal_seen: json$4("old place of the calendar events Ben saw (now in sys_kv)", []),
-	ben_outbox: json$4("messages Telegram refused, tried again for 6 hours", []),
-	ben_sent_count: json$4("messages Ben sent on his own today (app day)", null),
-	ben_sent_today: json$4("kinds of message already sent today (app day)", null),
+	money_daily_budget: num$2("daily spending budget"),
+	money_nothing_spent: json$5("days you tapped \"Nothing spent today\"", []),
+	money_cooked_days: json$5("days you confirmed you cooked at home", []),
+	coach_log: json$5("Ben's chat (newest 200 entries)", []),
+	coach_memory: json$5("Ben's memory: facts and recent chat", null),
+	coach_profile: json$5("about you, as Ben knows it", null),
+	coach_mind: json$5("long-term memory: goals, people, what works", null),
+	coach_reminders: json$5("reminders and check-ins Ben will send", []),
+	coach_nudges: json$5("nudge state (paused today, last sent)", null),
+	coach_rhythm: json$5("the daily rhythm: morning plan, reviews", null),
+	coach_rhythm_prefs: json$5("daily rhythm settings", null),
+	coach_history: json$5("past days Ben looks back on", []),
+	coach_letters: json$5("Ben's weekly letters", []),
+	coach_feedback: json$5("your thumbs up / down on replies", []),
+	coach_selfreview: json$5("Ben's review of his own week", null),
+	coach_story: json$5("the story of your weeks", null),
+	coach_blocks: json$5("Ben's notes about you: About you, Goals now, How to coach you, People (BR4)", []),
+	coach_memory_changes: json$5("recent changes to Ben's memory, with what was there before (undo)", []),
+	coach_style: json$5("Ben's tone and style", null),
+	coach_looks: json$5("how the chat looks: Ben's face and your photo (small data URL)", null),
+	coach_adapt: json$5("how Ben adapts the plan to how it went", null),
+	goal_booking: json$5("goal blocks booked into the calendar", null),
+	goal_asks: json$5("Ben's goal check-ins: what he asked this period, today's count, auto goals' last number", null),
+	ben_desk: json$5("Ben's desk: excuses, moods, study, stakes, calls, letters", null),
+	ben_experiment: json$5("the experiment running now", null),
+	ben_why: json$5("why Ben did what he did", []),
+	ben_confirm: json$5("an action waiting for your yes", null),
+	ben_cal_seen: json$5("old place of the calendar events Ben saw (now in sys_kv)", []),
+	ben_outbox: json$5("messages Telegram refused, tried again for 6 hours", []),
+	ben_sent_count: json$5("messages Ben sent on his own today (app day)", null),
+	ben_sent_today: json$5("kinds of message already sent today (app day)", null),
 	ben_misstwice_day: text("app day of the last \"never miss twice\" message"),
-	voiced_kinds: json$4("nudge kinds Ben already wrote in his own words today", null),
+	voiced_kinds: json$5("nudge kinds Ben already wrote in his own words today", null),
 	morning_sent_day: text("day the morning message went out"),
 	wind_down_day: text("day the wind-down message went out"),
-	plan_suggestion: json$4("Ben's suggested plan for today", null),
-	area_words: json$4("words that map tasks to life areas", null),
-	task_area_colors: json$4("colours of the life areas", null),
-	focus_running: json$4("the focus session running now, or null", null),
-	focus_ratings: json$4("how each focus session felt", []),
-	block_marks: json$4("calendar blocks marked done / skipped", null),
-	block_kinds: json$4("calendar items you set as an event or a focus block (by title)", null),
+	plan_suggestion: json$5("Ben's suggested plan for today", null),
+	area_words: json$5("words that map tasks to life areas", null),
+	task_area_colors: json$5("colours of the life areas", null),
+	focus_running: json$5("the focus session running now, or null", null),
+	focus_ratings: json$5("how each focus session felt", []),
+	block_marks: json$5("calendar blocks marked done / skipped", null),
+	block_kinds: json$5("calendar items you set as an event or a focus block (by title)", null),
 	blocks_settled_day: text("day the blocks were last settled"),
-	cal_templates: json$4("saved calendar templates", []),
-	today_order: json$4("the order of Today's cards", []),
-	week_plan: json$4("this week's plan", null),
-	week_plans: json$4("past week plans", null),
-	my_habits: json$4("your own habits", []),
-	month_aims: json$4("the month's aims", null),
-	learn_log: json$4("learning path log", []),
-	life_mode: json$4("life mode (exam, holiday, sick…)", null),
+	cal_templates: json$5("saved calendar templates", []),
+	today_order: json$5("the order of Today's cards", []),
+	week_plan: json$5("this week's plan", null),
+	week_plans: json$5("past week plans", null),
+	my_habits: json$5("your own habits", []),
+	month_aims: json$5("the month's aims", null),
+	learn_log: json$5("learning path log", []),
+	life_mode: json$5("life mode (exam, holiday, sick…)", null),
 	sleep_bed_target: text("bedtime target (HH:MM)"),
 	sleep_weekday_target: text("weekday wake target (HH:MM)"),
 	sleep_weekend_target: text("weekend wake target (HH:MM)"),
 	discipline_stealth: flag("stealth mode: neutral words everywhere (\"1\" on)"),
-	discipline_triggers: json$4("urge triggers you logged", []),
-	discipline_undone_resets: json$4("resets you took back", []),
-	discipline_warned: json$4("risk warnings already sent", null),
+	discipline_triggers: json$5("urge triggers you logged", []),
+	discipline_undone_resets: json$5("resets you took back", []),
+	discipline_warned: json$5("risk warnings already sent", null),
 	urge_started_at: text("when the current urge started (ISO), or empty"),
 	points_v2: text("marker: points moved to version 2"),
 	points_v3: text("marker: points moved to version 3"),
-	"perk.shadow_monarch.p1_streak": num$1("perk: P1 task streak"),
-	"hunter.stat_allocation": json$4("points put into each stat", null),
-	streak_shields: num$1("streak shields you hold"),
-	reward_budget: num$1("old monthly money for rewards (moved into fun_budget)"),
-	fun_moves: json$4("leftover money moved to a Finance Helper savings goal, by month", {}),
-	fun_budget: json$4("monthly fun budget in lei, typed or from Finance Helper", null),
-	reward_unlocks: json$4("rewards that unlock with a goal or streak", null),
-	reward_ready_seen: json$4("rewards whose \"Ready!\" moment was already shown (id:buys)", []),
+	"perk.shadow_monarch.p1_streak": num$2("perk: P1 task streak"),
+	"hunter.stat_allocation": json$5("points put into each stat", null),
+	streak_shields: num$2("streak shields you hold"),
+	reward_budget: num$2("old monthly money for rewards (moved into fun_budget)"),
+	fun_moves: json$5("leftover money moved to a Finance Helper savings goal, by month", {}),
+	fun_budget: json$5("monthly fun budget in lei, typed or from Finance Helper", null),
+	reward_unlocks: json$5("rewards that unlock with a goal or streak", null),
+	reward_ready_seen: json$5("rewards whose \"Ready!\" moment was already shown (id:buys)", []),
 	currency: text("old name of the money currency"),
-	coin_exchange_rate: num$1("lei per point"),
-	bank_base_rate: num$1("points bank interest rate"),
-	bank_cap_per_level: num$1("points bank cap per level"),
+	coin_exchange_rate: num$2("lei per point"),
+	bank_base_rate: num$2("points bank interest rate"),
+	bank_cap_per_level: num$2("points bank cap per level"),
 	bank_last_interest_day: text("day interest was last paid"),
-	bank_staked_coins: num$1("points in the bank"),
-	bank_total_interest_earned: num$1("interest earned so far"),
-	pc_asks: json$4("Ben's asks to do something on the PC (Allow / Deny on the desktop island), and whether a desktop app can answer", null),
-	pc_last_hour: json$4("the last hour on the PC as app names, sites and minutes (only when shared from the desktop app)", null),
-	automations: json$4("your automations: \"When X, do Y\", island buttons, Ben may run (src/core/automations.ts); never an address or key", null),
-	auto_asks: json$4("Ben's asks to run one of your automations (Allow / Deny on the island)", null),
-	plugins_on: json$4("which plugins are switched on", {}),
-	plugins_status: json$4("how each plugin's last job went", {}),
-	plugin_notes_notion: json$4("the notes plugin: Notion settings", null)
+	bank_staked_coins: num$2("points in the bank"),
+	bank_total_interest_earned: num$2("interest earned so far"),
+	pc_asks: json$5("Ben's asks to do something on the PC (Allow / Deny on the desktop island), and whether a desktop app can answer", null),
+	pc_last_hour: json$5("the last hour on the PC as app names, sites and minutes (only when shared from the desktop app)", null),
+	automations: json$5("your automations: \"When X, do Y\", island buttons, Ben may run (src/core/automations.ts); never an address or key", null),
+	auto_asks: json$5("Ben's asks to run one of your automations (Allow / Deny on the island)", null),
+	plugins_on: json$5("which plugins are switched on", {}),
+	plugins_status: json$5("how each plugin's last job went", {}),
+	plugin_notes_notion: json$5("the notes plugin: Notion settings", null)
 };
 function parseSetting(key, raw) {
 	return SETTINGS[key].parse(raw);
@@ -2128,10 +2129,10 @@ function readShow(raw) {
 	if (!Array.isArray(raw)) return [];
 	return [...new Set(raw.map((x) => String(x).toLowerCase().trim()).filter((x) => WIDGETS.includes(x)))].slice(0, 2);
 }
-var bytes = (s) => new TextEncoder().encode(s).length;
-var fit = (prefix, s) => {
+var bytes$1 = (s) => new TextEncoder().encode(s).length;
+var fit$1 = (prefix, s) => {
 	let t = s;
-	while (bytes(prefix + t) > 64) t = t.slice(0, -1);
+	while (bytes$1(prefix + t) > 64) t = t.slice(0, -1);
 	return prefix + t;
 };
 /** The same buttons on Telegram (inline keyboard); "open" has no Telegram form. */
@@ -2139,7 +2140,7 @@ function telegramKeyboard(buttons) {
 	const row = buttons.map((b) => {
 		const d = readDo(b.do);
 		if (!d) return null;
-		const data = d.k === "focus" ? fit(`fo|${d.minutes}|`, d.subject) : d.k === "approve" ? "rb|a" : d.k === "change" ? "rb|e" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit("gb|", d.goal) : d.k === "say" ? fit("cs|", d.text) : d.k === "workout" ? "wk|show" : d.k === "water" ? "wa|show" : null;
+		const data = d.k === "focus" ? fit$1(`fo|${d.minutes}|`, d.subject) : d.k === "approve" ? "rb|a" : d.k === "change" ? "rb|e" : d.k === "plan" ? "rb|p" : d.k === "book" ? fit$1("gb|", d.goal) : d.k === "say" ? fit$1("cs|", d.text) : d.k === "workout" ? "wk|show" : d.k === "water" ? "wa|show" : null;
 		return data ? {
 			text: b.label,
 			callback_data: data
@@ -2212,7 +2213,7 @@ function cleanStats(start, relapses, today) {
 }
 // src/core/myHabits.ts
 var MY_HABITS = "my_habits";
-var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$4 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$4 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanBook(v) {
 	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$4(h.name, 60)).map((h) => ({
@@ -2222,7 +2223,7 @@ function cleanBook(v) {
 	})) : [];
 	const log = {};
 	if (v?.log && typeof v.log === "object") {
-		const days = Object.keys(v.log).filter((d) => DAY$3.test(d)).sort().slice(-400);
+		const days = Object.keys(v.log).filter((d) => DAY$4.test(d)).sort().slice(-400);
 		for (const d of days) if (Array.isArray(v.log[d])) log[d] = [...new Set(v.log[d].map(String))];
 	}
 	return {
@@ -2314,8 +2315,8 @@ var MODES = {
 	}
 };
 var MODE_KINDS = Object.keys(MODES);
-var DAY$2 = /^\d{4}-\d{2}-\d{2}$/;
-var okMode = (m) => !!m && MODE_KINDS.includes(m.kind) && DAY$2.test(m.from) && DAY$2.test(m.until) && m.until >= m.from;
+var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
+var okMode = (m) => !!m && MODE_KINDS.includes(m.kind) && DAY$3.test(m.from) && DAY$3.test(m.until) && m.until >= m.from;
 /** A saved book, with a mode whose last day has passed moved to the past. */
 function cleanModes(v, today) {
 	const past = (Array.isArray(v?.past) ? v.past : []).filter(okMode).map((m) => ({
@@ -2365,7 +2366,7 @@ function modeRestDays(book, today) {
 	}
 	return [...out].sort().slice(-120);
 }
-var shortDay$1 = (d) => (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).toLocaleDateString("en-GB", {
+var shortDay$2 = (d) => (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).toLocaleDateString("en-GB", {
 	weekday: "short",
 	day: "numeric",
 	month: "short",
@@ -2376,7 +2377,7 @@ function modeLine(book, today) {
 	const r = modeRules(book, today);
 	if (!r) return "";
 	const how = r.kind === "exam" ? "push focus (target ×1.5), keep training and water nudges quiet, protect sleep" : r.kind === "sick" ? "everything down: rest, water, sleep; no training, no pressure; a tiny plan at most" : "a light plan (one or two small things), no training nudges, no guilt";
-	return `LIFE MODE: ${r.label} ${r.emoji}, day ${r.dayN} of ${r.days} (until ${shortDay$1(r.until)}). Coach accordingly: ${how}. Streaks are kept; points are still only for what he does.`;
+	return `LIFE MODE: ${r.label} ${r.emoji}, day ${r.dayN} of ${r.days} (until ${shortDay$2(r.until)}). Coach accordingly: ${how}. Streaks are kept; points are still only for what he does.`;
 }
 // src/core/learnPath.ts
 var LEARN_LOG = "learn_log";
@@ -2479,14 +2480,14 @@ var TRACKS = {
 	}
 };
 var TRACK_IDS = Object.keys(TRACKS);
-var DAY$1 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$2 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$3 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var cleanLink = (s) => {
 	const t = clip$3(s, 300);
 	return /^https?:\/\/\S+$/i.test(t) ? t : null;
 };
 function cleanLearn(v) {
-	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$3(e.title, 120) && DAY$1.test(e.day)).map((e) => ({
+	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$3(e.title, 120) && DAY$2.test(e.day)).map((e) => ({
 		id: clip$3(e.id, 40) || `l${e.day}`,
 		track: e.track,
 		title: clip$3(e.title, 120),
@@ -3007,7 +3008,7 @@ var DAYS$2 = [
 	"Fri",
 	"Sat"
 ];
-var pad$6 = (n) => String(n % 24).padStart(2, "0");
+var pad$7 = (n) => String(n % 24).padStart(2, "0");
 var W = {
 	urge: 1,
 	reset: 3
@@ -3046,8 +3047,8 @@ function riskWindows(events, now = /* @__PURE__ */ new Date(), max = 3) {
 	const win = (slot, weekday, a) => ({
 		slot,
 		weekday,
-		from: `${pad$6(slot * 2)}:00`,
-		to: `${pad$6(slot * 2 + 2)}:00`,
+		from: `${pad$7(slot * 2)}:00`,
+		to: `${pad$7(slot * 2 + 2)}:00`,
 		urges: a.urges,
 		resets: a.resets,
 		score: a.score
@@ -3269,7 +3270,7 @@ function startOf(events) {
 function statsOf(events, today) {
 	return cleanStats(startOf(events)?.day ?? null, events.filter((e) => e.kind === "reset").map((e) => e.day), today);
 }
-function milestoneRef(since, days) {
+function milestoneRef$1(since, days) {
 	return `milestone:${since}:${days}`;
 }
 /**
@@ -3277,7 +3278,7 @@ function milestoneRef(since, days) {
 * streak was entered in the app shows as reached but pays nothing, so a
 * backdated start date can't unlock a pile of coins at once.
 */
-function milestonesOf(events, today, claimedRefs, setupDay) {
+function milestonesOf$1(events, today, claimedRefs, setupDay) {
 	const start = startOf(events);
 	const stats = statsOf(events, today);
 	if (!start || !stats.since) return MILESTONES$1.map((m) => ({
@@ -3293,7 +3294,7 @@ function milestonesOf(events, today, claimedRefs, setupDay) {
 			reachedOn: null
 		};
 		const reachedOn = addDays$5(stats.since, m.days);
-		if (claimedRefs.has(milestoneRef(stats.since, m.days))) return {
+		if (claimedRefs.has(milestoneRef$1(stats.since, m.days))) return {
 			...m,
 			status: "claimed",
 			reachedOn
@@ -3385,7 +3386,7 @@ var Discipline = class {
 		return new Set(this.wallet.effective().map((e) => e.ref ?? "").filter((r) => r.startsWith("milestone:")));
 	}
 	milestones(events, today) {
-		return milestonesOf(events, today, this.claimedRefs(), (start) => this.wallet.today(new Date(start.ts)));
+		return milestonesOf$1(events, today, this.claimedRefs(), (start) => this.wallet.today(new Date(start.ts)));
 	}
 	state(now = /* @__PURE__ */ new Date()) {
 		const today = this.wallet.today(now);
@@ -3550,7 +3551,7 @@ var Discipline = class {
 				kind: "earn",
 				coins: m.coins,
 				xp: m.coins,
-				ref: milestoneRef(since, days),
+				ref: milestoneRef$1(since, days),
 				note: `${days}-day milestone`
 			});
 			return m.coins;
@@ -4143,7 +4144,7 @@ var hmOf$3 = (iso) => {
 	const m = /T(\d{2}:\d{2})/.exec(String(iso ?? ""));
 	return m ? m[1] : null;
 };
-var num = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
+var num$1 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
 var toMin$1 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 var fromMin$1 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 /** An hour counts as rainy at 50%+ with at least a little rain, or at 70%+ either way. */
@@ -4158,8 +4159,8 @@ function summarizeDay(json, day) {
 	const spans = [];
 	times.forEach((t, k) => {
 		if (!t.startsWith(day)) return;
-		const prob = num(h.precipitation_probability?.[k]);
-		if (!rainy(prob, num(h.precipitation?.[k]))) return;
+		const prob = num$1(h.precipitation_probability?.[k]);
+		if (!rainy(prob, num$1(h.precipitation?.[k]))) return;
 		const from = hmOf$3(t);
 		const last = spans[spans.length - 1];
 		if (last && last.to === from) {
@@ -4176,8 +4177,8 @@ function summarizeDay(json, day) {
 		day,
 		sunrise: hmOf$3(d.sunrise?.[i]),
 		sunset: hmOf$3(d.sunset?.[i]),
-		tmin: r(num(d.temperature_2m_min?.[i])),
-		tmax: r(num(d.temperature_2m_max?.[i])),
+		tmin: r(num$1(d.temperature_2m_min?.[i])),
+		tmax: r(num$1(d.temperature_2m_max?.[i])),
 		rain: spans
 	};
 }
@@ -4480,7 +4481,7 @@ function readMessage(m) {
 		snippet: String(m?.snippet ?? "").replace(/&#39;/g, "'").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").slice(0, 240)
 	};
 }
-var MONTHS$5 = {
+var MONTHS$6 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -4513,7 +4514,7 @@ function findDate(text, today) {
 	};
 	if (dmy) return fix(Number(dmy[1]), Number(dmy[2]), dmy[3] ? dmy[3].length === 2 ? 2e3 + Number(dmy[3]) : Number(dmy[3]) : void 0);
 	const word = /\b(\d{1,2})\s+([a-z]{3})[a-z]*\b/i.exec(text);
-	if (word && MONTHS$5[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$5[word[2].toLowerCase()]);
+	if (word && MONTHS$6[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$6[word[2].toLowerCase()]);
 	return null;
 }
 var KIND = [
@@ -6150,7 +6151,7 @@ function keysToSend(combo) {
 	return key == null ? null : `${mods}${key}`;
 }
 /** The asks list as stored (synced), cleaned, with old ones dropped (20 kept). */
-function cleanAsks(v, now) {
+function cleanAsks$1(v, now) {
 	const list = Array.isArray(v) ? v : [];
 	const out = [];
 	for (const x of list) {
@@ -6203,7 +6204,7 @@ function cleanPcState(v, now) {
 			on: d.on === true,
 			at: Number(d.at)
 		} : null,
-		asks: cleanAsks(Array.isArray(v) ? v : o.asks, now)
+		asks: cleanAsks$1(Array.isArray(v) ? v : o.asks, now)
 	};
 }
 /** A desktop app with Ben's actions on was seen in the last 30 minutes. */
@@ -6238,9 +6239,9 @@ function lastHourContext(h, now) {
 // src/core/benTalk.ts
 /** A regex with Unicode word edges: \\b only knows ASCII, so "arată" or "второй" would never match. */
 var uw = (src, flags = "") => new RegExp(src.replace(/\\b/g, "(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))"), `${flags}u`);
-var pad$5 = (n) => String(n).padStart(2, "0");
+var pad$6 = (n) => String(n).padStart(2, "0");
 var ymd$1 = (d) => calendarDay(d);
-var hmOf$1 = (d) => `${pad$5(d.getHours())}:${pad$5(d.getMinutes())}`;
+var hmOf$1 = (d) => `${pad$6(d.getHours())}:${pad$6(d.getMinutes())}`;
 var label = (d) => d.toLocaleDateString("en-GB", {
 	weekday: "short",
 	day: "numeric",
@@ -6255,11 +6256,11 @@ function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
 	const appDay = ymd$1(app);
 	const nextCal = new Date(now);
 	nextCal.setDate(nextCal.getDate() + 1);
-	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$1(now)}, ${label(now)}. App day: ${label(app)} (the app's day turns at ${pad$5(startHour)}:00).`];
+	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$1(now)}, ${label(now)}. App day: ${label(app)} (the app's day turns at ${pad$6(startHour)}:00).`];
 	if (afterMidnight) {
 		const seven = new Date(now);
 		seven.setHours(7, 0, 0, 0);
-		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label(now)} from ${pad$5(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label(app)} until ${pad$5(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label(now)}); ask with chips only if it really matters.`);
+		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label(now)} from ${pad$6(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label(app)} until ${pad$6(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label(now)}); ask with chips only if it really matters.`);
 	} else if (h >= 18) lines.push(`- "tonight" = this evening (${label(now)}). "tomorrow morning" = ${label(nextCal)}.`);
 	else if (h < 12) lines.push(`- "this morning" = now (${label(now)}). "tonight" = this evening. "tomorrow" = ${label(nextCal)}.`);
 	else lines.push(`- "this afternoon" = now. "tonight" = this evening (${label(now)}). "tomorrow" = ${label(nextCal)}.`);
@@ -6563,7 +6564,7 @@ var timeOf = (s) => {
 	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
 	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
 	const mi = Number(m[2] ?? 0);
-	return h < 24 && mi < 60 ? `${pad$5(h)}:${pad$5(mi)}` : null;
+	return h < 24 && mi < 60 ? `${pad$6(h)}:${pad$6(mi)}` : null;
 };
 var BLOCK = "(?:block|blocks|blocul|blocului|блок|блока)";
 /**
@@ -6628,7 +6629,7 @@ function pickChoice(text, labels) {
 	if (exact >= 0) return exact;
 	const time = /\b(\d{1,2})[:.](\d{2})\b/.exec(t) ?? /\b(?:at|la|в)\s+(\d{1,2})\b/.exec(t);
 	if (time) {
-		const hm = `${pad$5(Number(time[1]))}:${time[2] ?? "00"}`;
+		const hm = `${pad$6(Number(time[1]))}:${time[2] ?? "00"}`;
 		const k = labels.findIndex((l) => l.endsWith(hm));
 		if (k >= 0) return k;
 	}
@@ -6716,6 +6717,1063 @@ function editPlanBlock(st, index, patch) {
 		},
 		old: { ...old }
 	};
+}
+// src/core/goals.ts
+var GOAL_UNITS = [
+	{
+		id: "lei",
+		label: "lei"
+	},
+	{
+		id: "eur",
+		label: "€"
+	},
+	{
+		id: "usd",
+		label: "$"
+	},
+	{
+		id: "kg",
+		label: "kg"
+	},
+	{
+		id: "km",
+		label: "km"
+	},
+	{
+		id: "pct",
+		label: "%"
+	},
+	{
+		id: "count",
+		label: "count"
+	},
+	{
+		id: "hours",
+		label: "hours"
+	},
+	{
+		id: "custom",
+		label: "custom"
+	}
+];
+var CADENCES = [
+	{
+		id: "daily",
+		label: "Every day"
+	},
+	{
+		id: "weekly",
+		label: "Every week"
+	},
+	{
+		id: "biweekly",
+		label: "Every 2 weeks"
+	},
+	{
+		id: "monthly",
+		label: "Every month"
+	}
+];
+var SOURCES = [
+	{
+		id: "manual",
+		label: "I check in",
+		unit: null,
+		hint: "Ben asks you for the number on your rhythm"
+	},
+	{
+		id: "money.profit",
+		label: "Profit this month",
+		unit: "lei",
+		hint: "Income minus spending this month, from Finance Helper"
+	},
+	{
+		id: "money.income",
+		label: "Income this month",
+		unit: "lei",
+		hint: "Money in this month, from Finance Helper"
+	},
+	{
+		id: "money.saved",
+		label: "Saved since the start",
+		unit: "lei",
+		hint: "Income minus spending since the goal started (Finance Helper)"
+	},
+	{
+		id: "body.weight",
+		label: "Body weight",
+		unit: "kg",
+		hint: "Your latest weight from Body"
+	},
+	{
+		id: "body.workouts",
+		label: "Workouts done",
+		unit: "count",
+		hint: "Workouts logged since the goal started"
+	},
+	{
+		id: "sport.reps",
+		label: "Reps of an exercise",
+		unit: "count",
+		hint: "Reps logged since the start (Sport Track)",
+		needsArg: "Exercise, e.g. Pushups"
+	},
+	{
+		id: "focus.hours",
+		label: "Focus hours",
+		unit: "hours",
+		hint: "Focus timer hours on one subject since the start",
+		needsArg: "Subject, e.g. Rust"
+	},
+	{
+		id: "tasks.done",
+		label: "Todoist tasks done",
+		unit: "count",
+		hint: "Tasks you closed since the start"
+	},
+	{
+		id: "habit.clean",
+		label: "Clean streak",
+		unit: "count",
+		hint: "Your current Discipline streak in days"
+	}
+];
+var isAuto = (s) => !!s && s.kind !== "manual";
+/** Sources that count from the goal's first day (they start at 0); the others start where you are now. */
+var countsFromStart = (k) => k === "money.saved" || k === "body.workouts" || k === "sport.reps" || k === "focus.hours" || k === "tasks.done";
+var round = (n, d = 2) => {
+	const k = 10 ** d;
+	return Math.round(n * k) / k;
+};
+var clamp01 = (n) => Math.max(0, Math.min(1, n));
+/** Going down (lose weight, cut spending) or up. */
+var goingDown = (g) => g.target < g.start;
+/** Share of the way from start to target (0–1, can pass 1 when beaten). */
+function progressOf(g, value) {
+	const span = g.target - g.start;
+	if (span === 0) return value === g.target ? 1 : 0;
+	return Math.max(0, (value - g.start) / span);
+}
+function bend(t, curve) {
+	const x = clamp01(t);
+	if (curve === "ramp") return x ** 1.6;
+	if (curve === "front") return 1 - (1 - x) ** 1.6;
+	return x;
+}
+/** Share of the time used on `day` (0 at the start day, 1 on the deadline). */
+function timeShare(g, day) {
+	const total = daysBetween$2(g.startDay, g.deadline);
+	if (total <= 0) return 1;
+	return clamp01(daysBetween$2(g.startDay, day) / total);
+}
+/** Where you should be on `day` on the pace line. */
+function expectedAt(g, day) {
+	return round(g.start + (g.target - g.start) * bend(timeShare(g, day), g.curve ?? "line"));
+}
+/** The newest real number: the last check-in that carries a value (skips don't), else the start. */
+function currentValue(g, checkins) {
+	const real = checkins.filter((c) => c.by !== "skip").sort((a, b) => a.at.localeCompare(b.at));
+	return real.length ? real[real.length - 1].value : g.start;
+}
+/**
+* Ahead / on track / behind / at risk from how far you are from the line,
+* measured as a share of the whole distance (5 % either side is on track,
+* 15 % behind is at risk, and so is "behind" with a tenth of the time left).
+*/
+function goalStatus$1(g, value, today) {
+	const p = progressOf(g, value);
+	if (p >= 1 || g.doneDay) return "done";
+	if (today > g.deadline) return "missed";
+	if (today < g.startDay) return "not started";
+	const diff = p - progressOf(g, expectedAt(g, today));
+	if (diff >= .05) return "ahead";
+	if (diff > -.05) return "on track";
+	if (diff <= -.15) return "at risk";
+	return timeShare(g, today) >= .9 ? "at risk" : "behind";
+}
+/** Days left to the deadline (0 on the day itself). */
+var daysLeftOf = (g, today) => Math.max(0, daysBetween$2(today, g.deadline));
+/** What it takes per day from here to make it (positive = up, negative = down), or 0 when done. */
+function requiredPerDay(g, value, today) {
+	const left = g.target - value;
+	if (goingDown(g) ? left >= 0 : left <= 0) return 0;
+	return left / Math.max(1, daysBetween$2(today, g.deadline));
+}
+/**
+* Your real pace per day: the change over the last 28 days when there is a
+* number at least 7 days old in that window, else since the start. null
+* with too little to tell (under 3 days).
+*/
+function currentPerDay(g, checkins, today) {
+	const real = checkins.filter((c) => c.by !== "skip").sort((a, b) => a.at.localeCompare(b.at));
+	const now = currentValue(g, real);
+	const windowFrom = addDays$5(today, -28);
+	const old = real.filter((c) => c.day >= windowFrom && daysBetween$2(c.day, today) >= 7)[0];
+	if (old) return (now - old.value) / Math.max(1, daysBetween$2(old.day, today));
+	const days = daysBetween$2(g.startDay, today);
+	if (days < 3) return null;
+	return (now - g.start) / days;
+}
+/** The day you'd reach the target at your current pace, or null (no pace, or going the wrong way). */
+function etaDay(g, value, perDay, today) {
+	if (progressOf(g, value) >= 1) return today;
+	if (perDay == null || perDay === 0) return null;
+	const left = g.target - value;
+	if (Math.sign(left) !== Math.sign(perDay)) return null;
+	const days = Math.ceil(left / perDay);
+	return days > 3650 ? null : addDays$5(today, days);
+}
+/** The milestones to use: yours, else 25 %, 50 % and 75 % of the way. */
+function milestonesOf(g) {
+	const down = g.target < g.start;
+	const inside = (v) => down ? v < g.start && v > g.target : v > g.start && v < g.target;
+	const own = (g.milestones ?? []).filter((m) => Number.isFinite(m.value) && inside(m.value));
+	if (own.length) return [...own].sort((a, b) => down ? b.value - a.value : a.value - b.value);
+	const whole = g.unit !== "kg" && g.unit !== "km" && g.unit !== "pct";
+	return [
+		.25,
+		.5,
+		.75
+	].map((k) => {
+		const v = g.start + (g.target - g.start) * k;
+		return {
+			value: whole ? Math.round(v) : round(v, 1),
+			label: `${k * 100}%`
+		};
+	});
+}
+/** Milestones passed when the number moved from `before` to `after` (in order). */
+function milestonesCrossed(g, before, after) {
+	const pb = progressOf(g, before);
+	const pa = progressOf(g, after);
+	if (pa <= pb) return [];
+	return milestonesOf(g).filter((m) => {
+		const pm = progressOf(g, m.value);
+		return pm > pb && pm <= pa;
+	});
+}
+/** The next milestone ahead of `value` (the target itself when they're all passed). */
+function nextMilestone(g, value) {
+	const p = progressOf(g, value);
+	const list = milestonesOf(g);
+	const i = list.findIndex((m) => progressOf(g, m.value) > p);
+	return i >= 0 ? {
+		...list[i],
+		index: i
+	} : {
+		value: g.target,
+		label: "Goal",
+		index: list.length
+	};
+}
+var mondayOf$2 = (day) => addDays$5(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
+/** The check-in period a day belongs to ("2026-11-06", "w2026-11-02", "b2026-11-02", "m2026-11"). */
+function periodKey(cadence, day, startDay = day) {
+	if (cadence === "daily") return day;
+	if (cadence === "monthly") return `m${day.slice(0, 7)}`;
+	const mon = mondayOf$2(day);
+	if (cadence === "weekly") return `w${mon}`;
+	const base = mondayOf$2(startDay);
+	const weeks = Math.floor(daysBetween$2(base, mon) / 7);
+	return `b${addDays$5(base, Math.floor(weeks / 2) * 14)}`;
+}
+/** Check-ins that count for the rhythm: yours or Ben's (a skip counts as answered). */
+var answered$1 = (c) => c.by === "me" || c.by === "ben" || c.by === "skip";
+/**
+* Is a check-in due today? Only for manual goals that are still open, never
+* on the day the goal was made, once per period: answered (or skipped) in
+* this period means not due.
+*/
+function checkinDue(g, checkins, today) {
+	if (isAuto(g.source) || g.doneDay || today > g.deadline || today <= g.startDay) return false;
+	const key = periodKey(g.cadence, today, g.startDay);
+	return !checkins.some((c) => c.goalId === g.id && answered$1(c) && periodKey(g.cadence, c.day, g.startDay) === key);
+}
+/** Is this check-in the first real one of its period (the one that may pay)? */
+function firstOfPeriod(g, checkins, day) {
+	const key = periodKey(g.cadence, day, g.startDay);
+	return !checkins.some((c) => c.goalId === g.id && (c.by === "me" || c.by === "ben") && periodKey(g.cadence, c.day, g.startDay) === key);
+}
+/** Periods in a row (to this one, or the last one if this one is still open) with a real check-in. */
+function checkinStreak(g, checkins, today) {
+	const keys = new Set(checkins.filter((c) => c.goalId === g.id && (c.by === "me" || c.by === "ben")).map((c) => periodKey(g.cadence, c.day, g.startDay)));
+	if (!keys.size) return 0;
+	let day = today;
+	let n = 0;
+	let first = true;
+	for (let guard = 0; guard < 400; guard++) {
+		const key = periodKey(g.cadence, day, g.startDay);
+		if (keys.has(key)) n++;
+		else if (!first) break;
+		first = false;
+		day = addDays$5(g.cadence === "daily" ? day : g.cadence === "monthly" ? `${day.slice(0, 7)}-01` : key.slice(1), -1);
+		if (day < g.startDay) break;
+	}
+	return n;
+}
+function goalCard(g, all, today) {
+	const mine = all.filter((c) => c.goalId === g.id).sort((a, b) => a.at.localeCompare(b.at));
+	const value = currentValue(g, mine);
+	const status = goalStatus$1(g, value, today);
+	const per = requiredPerDay(g, value, today);
+	const now = currentPerDay(g, mine, today);
+	const daysLeft = daysLeftOf(g, today);
+	const expected = expectedAt(g, today);
+	const real = mine.filter((c) => c.by !== "skip");
+	const byDay = /* @__PURE__ */ new Map([[g.startDay, g.start]]);
+	for (const c of real) byDay.set(c.day, c.value);
+	const series = [...byDay].map(([day, v]) => ({
+		day,
+		value: v
+	})).sort((a, b) => a.day.localeCompare(b.day));
+	return {
+		goal: g,
+		value,
+		pct: Math.round(clamp01(progressOf(g, value)) * 100),
+		expected,
+		expectedPct: Math.round(clamp01(progressOf(g, expected)) * 100),
+		status,
+		daysLeft,
+		perDayNeeded: per,
+		perDayNow: now,
+		need: status === "done" || status === "missed" ? "" : needText(g, per, daysLeft),
+		eta: etaDay(g, value, now, today),
+		next: nextMilestone(g, value),
+		milestones: milestonesOf(g).map((m) => ({
+			...m,
+			reached: progressOf(g, value) >= progressOf(g, m.value)
+		})),
+		streak: checkinStreak(g, mine, today),
+		due: checkinDue(g, mine, today),
+		auto: isAuto(g.source),
+		series,
+		lastAt: real.length ? real[real.length - 1].at : null
+	};
+}
+/** On track first? No: the ones needing you first (due, at risk, behind), then the rest by deadline. */
+function sortCards(cards) {
+	const rank = {
+		"at risk": 0,
+		behind: 1,
+		"on track": 2,
+		ahead: 3,
+		"not started": 4,
+		missed: 5,
+		done: 6
+	};
+	return [...cards].sort((a, b) => Number(b.due) - Number(a.due) || rank[a.status] - rank[b.status] || a.goal.deadline.localeCompare(b.goal.deadline));
+}
+var SYMBOL = {
+	eur: "€",
+	usd: "$"
+};
+/** "3,200 lei", "€3,200", "72.5 kg", "40%", "12h", "12 stars". */
+function fmtValue(unit, n, unitLabel) {
+	const abs = Math.abs(n);
+	const digits = abs >= 100 || unit === "lei" || unit === "eur" || unit === "usd" ? 0 : abs >= 10 || unit === "count" || unit === "custom" ? abs >= 10 && (unit === "count" || unit === "custom") ? 0 : 1 : 2;
+	const num = Number(round(n, digits)).toLocaleString("en-US", { maximumFractionDigits: digits });
+	if (SYMBOL[unit]) return n < 0 ? `-${SYMBOL[unit]}${num.replace("-", "")}` : `${SYMBOL[unit]}${num}`;
+	if (unit === "pct") return `${num}%`;
+	if (unit === "hours") return `${num}h`;
+	if (unit === "count") return num;
+	if (unit === "custom") return unitLabel ? `${num} ${unitLabel}` : num;
+	return `${num} ${unit}`;
+}
+/** "3,200 of 5,000 lei" (the unit once), "€3,200 of €5,000". */
+function fmtPair(unit, a, b, unitLabel) {
+	return `${unit === "lei" || unit === "kg" || unit === "km" || unit === "custom" ? fmtValue(unit === "custom" ? "count" : unit, a).replace(/ (lei|kg|km)$/, "") : fmtValue(unit, a, unitLabel)} of ${fmtValue(unit, b, unitLabel)}`;
+}
+/** "+44 lei" / "−0.4 kg": a change with its sign. */
+function fmtDelta(unit, n, unitLabel) {
+	const s = fmtValue(unit, Math.abs(n), unitLabel);
+	return `${n < 0 ? "−" : "+"}${s}`;
+}
+/** What it takes, per day or per week, whichever reads better. */
+function needText(g, perDay, daysLeft) {
+	if (!perDay) return "";
+	const week = daysLeft > 14 && g.cadence !== "daily";
+	if (daysLeft > 75 && g.cadence === "monthly") return `${fmtDelta(g.unit, perDay * 30, g.unitLabel)} a month`;
+	return week ? `${fmtDelta(g.unit, perDay * 7, g.unitLabel)} a week` : `${fmtDelta(g.unit, perDay, g.unitLabel)}/day`;
+}
+var STATUS_TEXT = {
+	done: "Done",
+	ahead: "Ahead",
+	"on track": "On track",
+	behind: "Behind",
+	"at risk": "At risk",
+	missed: "Deadline passed",
+	"not started": "Starts soon"
+};
+/** "31 Dec", from YYYY-MM-DD. */
+var shortDay$1 = (d) => (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).toLocaleDateString("en-GB", {
+	day: "numeric",
+	month: "short",
+	timeZone: "UTC"
+});
+function cleanAsks(raw, today) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const asked = r.asked && typeof r.asked === "object" ? Object.fromEntries(Object.entries(r.asked).filter(([, v]) => typeof v === "string").slice(-60)) : {};
+	const seen = r.seen && typeof r.seen === "object" ? Object.fromEntries(Object.entries(r.seen).filter(([, v]) => Number.isFinite(v)).slice(-60)) : {};
+	return {
+		day: today,
+		n: r.day === today ? Math.max(0, Number(r.n) || 0) : 0,
+		asked,
+		seen
+	};
+}
+/**
+* What to send now (at most one per tick): a manual goal whose check-in is
+* due and not asked this period, else an auto goal whose number moved since
+* the last report (once per period). Nothing outside the hours or past the cap.
+*/
+function pickPing(cards, st, hour) {
+	if (hour < 10 || hour >= 21 || st.n >= 2) return null;
+	const today = st.day;
+	for (const c of sortCards(cards)) {
+		const g = c.goal;
+		const key = periodKey(g.cadence, today, g.startDay);
+		if (st.asked[g.id] === key) continue;
+		if (!c.auto && c.due) return {
+			kind: "ask",
+			card: c
+		};
+		if (c.auto && c.status !== "done" && today > g.startDay) {
+			const before = st.seen[g.id];
+			if (before != null && Math.abs(before - c.value) > 1e-9) return {
+				kind: "report",
+				card: c,
+				before
+			};
+		}
+	}
+	return null;
+}
+/** The state after sending a ping (or seeing an auto goal's number for the first time). */
+function markPing(st, p) {
+	const g = p.card.goal;
+	return {
+		...st,
+		n: st.n + 1,
+		asked: {
+			...st.asked,
+			[g.id]: periodKey(g.cadence, st.day, g.startDay)
+		},
+		seen: {
+			...st.seen,
+			[g.id]: p.card.value
+		}
+	};
+}
+/** Auto goals seen for the first time: remember their number quietly (no message). */
+function seedSeen(st, cards) {
+	const fresh = cards.filter((c) => c.auto && st.seen[c.goal.id] == null);
+	return fresh.length ? {
+		...st,
+		seen: {
+			...st.seen,
+			...Object.fromEntries(fresh.map((c) => [c.goal.id, c.value]))
+		}
+	} : st;
+}
+var nice = (n) => {
+	if (n <= 0) return 0;
+	const p = 10 ** Math.floor(Math.log10(n));
+	const k = n / p;
+	return (k < 1.5 ? 1 : k < 3.5 ? 2 : k < 7.5 ? 5 : 10) * p;
+};
+var PERIOD_DAYS = {
+	daily: 1,
+	weekly: 7,
+	biweekly: 14,
+	monthly: 30
+};
+/** One tap's step for "+" and "−": about one period's worth of what it takes, rounded nicely. */
+function quickStep(c) {
+	const g = c.goal;
+	const per = Math.abs(c.perDayNeeded) * PERIOD_DAYS[g.cadence];
+	const span = Math.abs(g.target - g.start);
+	const step = nice(per || span / 10);
+	const floor = g.unit === "kg" || g.unit === "km" ? .1 : 1;
+	return Math.max(floor, g.unit === "kg" ? Math.round(step * 10) / 10 : step);
+}
+/** The quick answers under a check-in: −step, same, +step, skip. `op`: "+50", "-0.5", "s" (same), "k" (skip). */
+function quickAnswers(c) {
+	const g = c.goal;
+	const s = quickStep(c);
+	const up = g.target >= g.start;
+	const plus = {
+		label: fmtDelta(g.unit, up ? s : -s, g.unitLabel),
+		op: `${up ? "+" : "-"}${s}`
+	};
+	return [
+		{
+			label: fmtDelta(g.unit, up ? -s : s, g.unitLabel),
+			op: `${up ? "-" : "+"}${s}`
+		},
+		{
+			label: "Same as before",
+			op: "s"
+		},
+		plus,
+		{
+			label: "Skip",
+			op: "k"
+		}
+	];
+}
+/** The value an answer means ("+50" on 3,200 → 3,250; "=3400" → 3,400; "s" → the same). null for skip. */
+function answerValue(c, op) {
+	const o = String(op ?? "").trim();
+	if (o === "k") return null;
+	if (o === "s") return c.value;
+	const m = /^([+=-])(\d+(?:\.\d+)?)$/.exec(o);
+	if (!m) return null;
+	const n = Number(m[2]);
+	return Math.round((m[1] === "=" ? n : m[1] === "+" ? c.value + n : c.value - n) * 100) / 100;
+}
+/** One concrete move when you're behind: what to do, and a button that does it (you still tap). */
+function behindMove(c) {
+	if (c.status !== "behind" && c.status !== "at risk") return null;
+	const g = c.goal;
+	const s = g.source;
+	const subject = (s.kind === "focus.hours" && s.arg ? s.arg : g.title).slice(0, 28);
+	if (s.kind === "focus.hours") return {
+		text: `Book 50 min on ${subject} today and you're back on the line sooner.`,
+		do: `focus:50:${subject}`
+	};
+	if (s.kind === "body.workouts" || s.kind === "sport.reps") return {
+		text: "One short workout today closes part of the gap.",
+		do: "workout"
+	};
+	if (s.kind === "body.weight") return {
+		text: "Today: cook at home, no sugary drinks, a 30 min walk.",
+		do: `focus:30:Walk`
+	};
+	if (s.kind.startsWith("money.") || g.unit === "lei" || g.unit === "eur" || g.unit === "usd") return {
+		text: `One money move today: 25 min on what brings money in (send the invoice, the offer, the post).`,
+		do: "focus:25:Money move"
+	};
+	return {
+		text: `25 min on "${subject}" today moves the number.`,
+		do: `focus:25:${subject}`
+	};
+}
+var days = (n) => `${n} day${n === 1 ? "" : "s"}`;
+/** "Profit goal: you're at 3,200 of 5,000 lei, 41 days left, need +44 lei/day. What's the number now?" */
+function askText(c) {
+	const g = c.goal;
+	const gap = c.status === "behind" || c.status === "at risk" ? ` You're ${fmtValue(g.unit, Math.abs(c.expected - c.value), g.unitLabel)} behind the line.` : c.status === "ahead" ? " Ahead of the line 😎" : "";
+	return `🎯 ${g.title}: you're at ${fmtPair(g.unit, c.value, g.target, g.unitLabel)}, ${days(c.daysLeft)} left${c.need ? `, need ${c.need}` : ""}.${gap} What's the number now?`;
+}
+/** For goals that count themselves: "📈 Profit: 3,450 of 5,000 lei (+250 since last time). On track · 41 days left · need +44 lei/day." */
+function reportText(c, before) {
+	const g = c.goal;
+	const change = c.value - before;
+	return `${(g.target >= g.start ? change > 0 : change < 0) ? "📈" : "📉"} ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)} (${fmtDelta(g.unit, change, g.unitLabel)} since last time). ${STATUS_TEXT[c.status]} · ${days(c.daysLeft)} left${c.need ? ` · need ${c.need}` : ""}.`;
+}
+/** The goal's number about a week ago (for the Sunday lines). */
+function valueOn(c, day) {
+	const before = c.series.filter((p) => p.day <= day);
+	return before.length ? before[before.length - 1].value : c.goal.start;
+}
+/** The Sunday review: one line per open goal, this week's change and where it stands. */
+function weeklyGoalLines(cards, today) {
+	return sortCards(cards).filter((c) => c.status !== "missed").slice(0, 5).map((c) => {
+		const g = c.goal;
+		const was = valueOn(c, addDays$5(today, -7));
+		const change = c.value - was;
+		return `🎯 ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)}${change ? ` (${fmtDelta(g.unit, change, g.unitLabel)} this week)` : " (no change this week)"} · ${STATUS_TEXT[c.status].toLowerCase()}${c.status === "done" ? "" : ` · ${days(c.daysLeft)} left`}${c.streak > 1 ? ` · ${c.streak} check-ins in a row` : ""}`;
+	});
+}
+/** G1, G2…: the refs Ben uses in "goalcheck: G1 | 3400". */
+var goalRef = (i) => `G${i + 1}`;
+/**
+* The short "Goals now" part of Ben's prompt: the top 3 with their status,
+* and the two lines he needs to act on them. Kept small on purpose.
+*/
+function goalsNowText(cards) {
+	const open = sortCards(cards).filter((c) => c.status !== "done" && c.status !== "missed").slice(0, 3);
+	if (!open.length) return "Measurable goals: none yet. When he names a clear target with a number (\"profit 5k by December\"), offer it as a goal: \"goal: <his words>\" (he confirms with a tap).";
+	return [
+		"Goals now (measurable; tie today to these, push the one behind):",
+		...open.map((c, i) => {
+			const g = c.goal;
+			const v = (n) => fmtValue(g.unit, n, g.unitLabel);
+			return `- ${goalRef(i)} ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)} by ${shortDay$1(g.deadline)} (${c.pct}%, line says ${v(c.expected)}), ${STATUS_TEXT[c.status].toLowerCase()}, ${days(c.daysLeft)} left${c.need ? `, need ${c.need}` : ""}${c.auto ? ", counts itself" : c.due ? ", CHECK-IN DUE" : ""}${g.why ? `. Why: ${g.why.slice(0, 60)}` : ""}`;
+		}),
+		"When he tells you a goal's new number, add \"goalcheck: G1 | 3400\". A new clear goal from his words: \"goal: raise profit to 5000 lei by 31 Dec\" (he confirms with a tap)."
+	].join("\n");
+}
+/** Which goal "G2" or a title means. */
+function findGoal(cards, ref, order = cards) {
+	const r = String(ref ?? "").trim();
+	const m = /^G(\d{1,2})$/i.exec(r);
+	if (m) return order[Number(m[1]) - 1] ?? null;
+	const want = r.toLowerCase();
+	if (!want) return null;
+	return cards.find((c) => c.goal.title.toLowerCase() === want) ?? cards.find((c) => c.goal.title.toLowerCase().includes(want) || want.includes(c.goal.title.toLowerCase())) ?? null;
+}
+/** Points for check-ins: honest and small (rules goal.checkin and goal.milestone). */
+var CHECKIN_RULE = "goal.checkin";
+var MILESTONE_RULE = "goal.milestone";
+var checkinRef = (goalId, period) => `goalci:${goalId}:${period}`;
+var milestoneRef = (goalId, index) => `goalms:${goalId}:${index}`;
+// src/core/goalsText.ts
+var MONTHS$5 = [
+	"jan",
+	"feb",
+	"mar",
+	"apr",
+	"may",
+	"jun",
+	"jul",
+	"aug",
+	"sep",
+	"oct",
+	"nov",
+	"dec"
+];
+var monthOf = (w) => MONTHS$5.indexOf(w.slice(0, 3).toLowerCase());
+var pad$5 = (n) => String(n).padStart(2, "0");
+var lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
+var valid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= lastDay(y, m);
+/** The first date in the text after today: "31 Dec", "Dec 31", "31.12", "2026-12-31", "end of month", "in 3 months", "by June". */
+function parseDeadline(text, today) {
+	const t = text.toLowerCase();
+	const y0 = Number(today.slice(0, 4));
+	const future = (y, m, d, yearGiven) => {
+		if (!valid(y, m, d)) return null;
+		let day = `${y}-${pad$5(m)}-${pad$5(d)}`;
+		if (!yearGiven && day < today) day = `${y + 1}-${pad$5(m)}-${pad$5(Math.min(d, lastDay(y + 1, m)))}`;
+		return day;
+	};
+	let m = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(t);
+	if (m) return valid(+m[1], +m[2], +m[3]) ? {
+		day: `${m[1]}-${m[2]}-${m[3]}`,
+		match: m[0]
+	} : null;
+	m = /\b(\d{1,2})[./](\d{1,2})(?:[./](\d{2,4}))?\b/.exec(t);
+	if (m && +m[2] <= 12) {
+		const day = future(m[3] ? m[3].length === 2 ? 2e3 + +m[3] : +m[3] : y0, +m[2], +m[1], !!m[3]);
+		if (day) return {
+			day,
+			match: m[0]
+		};
+	}
+	m = /\b(\d{1,2})(?:st|nd|rd|th)?\s+(?:of\s+)?(jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*)(?:\s+(\d{4}))?\b/.exec(t);
+	if (m) {
+		const day = future(m[3] ? +m[3] : y0, monthOf(m[2]) + 1, +m[1], !!m[3]);
+		if (day) return {
+			day,
+			match: m[0]
+		};
+	}
+	m = /\b(jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b/.exec(t);
+	if (m) {
+		const day = future(m[3] ? +m[3] : y0, monthOf(m[1]) + 1, +m[2], !!m[3]);
+		if (day) return {
+			day,
+			match: m[0]
+		};
+	}
+	m = /\bend of (?:the )?(month|year)\b/.exec(t);
+	if (m) {
+		const y = y0;
+		const mo = Number(today.slice(5, 7));
+		return {
+			day: m[1] === "year" ? `${y}-12-31` : `${y}-${pad$5(mo)}-${pad$5(lastDay(y, mo))}`,
+			match: m[0]
+		};
+	}
+	m = /\bin\s+(\d{1,3}|a|one|two|three|six)\s+(day|week|month|year)s?\b/.exec(t);
+	if (m) {
+		const n = {
+			a: 1,
+			one: 1,
+			two: 2,
+			three: 3,
+			six: 6
+		}[m[1]] ?? Number(m[1]);
+		return {
+			day: addDays$5(today, m[2] === "day" ? n : m[2] === "week" ? n * 7 : m[2] === "month" ? Math.round(n * 30.44) : n * 365),
+			match: m[0]
+		};
+	}
+	m = /\b(?:by|until|till|before)\s+(?:the\s+end\s+of\s+)?(jan\w*|feb\w*|mar\w*|apr\w*|may|jun\w*|jul\w*|aug\w*|sep\w*|oct\w*|nov\w*|dec\w*)(?:\s+(\d{4}))?\b/.exec(t);
+	if (m) {
+		const mo = monthOf(m[1]) + 1;
+		const day = future(m[2] ? +m[2] : y0, mo, lastDay(m[2] ? +m[2] : y0, mo), !!m[2]);
+		if (day) return {
+			day,
+			match: m[0]
+		};
+	}
+	return null;
+}
+var NUM = String.raw`(\d+(?:[.,]\d+)?)\s*(k(?![a-z]))?`;
+var num = (n, k) => Number(n.replace(",", ".")) * (k ? 1e3 : 1);
+/** The unit a word means. */
+function unitOf(word) {
+	const w = word.toLowerCase();
+	if (/^(lei|leu|mdl|ron)$/.test(w)) return { unit: "lei" };
+	if (/^(€|eur|euro|euros)$/.test(w)) return { unit: "eur" };
+	if (/^(\$|usd|dollars?)$/.test(w)) return { unit: "usd" };
+	if (/^(kg|kilos?|kilograms?)$/.test(w)) return { unit: "kg" };
+	if (/^(km|kilometers?|kilometres?)$/.test(w)) return { unit: "km" };
+	if (/^(%|percent)$/.test(w)) return { unit: "pct" };
+	if (/^(h|hours?|hrs?)$/.test(w)) return { unit: "hours" };
+	return null;
+}
+var cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+/**
+* A goal draft from plain words, or null when there's no number to aim at.
+* The deadline may be missing (null): the sheet asks for it.
+*/
+function parseGoalText(raw, today) {
+	const text = String(raw ?? "").replace(/^\s*goal\s*:\s*/i, "").replace(/(\d),(\d{3})(?!\d)/g, "$1$2").replace(/\s+/g, " ").trim().slice(0, 200);
+	if (!text) return null;
+	const dl = parseDeadline(text, today);
+	let rest = dl ? text.replace(new RegExp(`\\s*(?:by|until|till|before|on|in)?\\s*(?:the\\s+end\\s+of\\s+)?${dl.match.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`, "i"), "") : text;
+	rest = rest.replace(/[.!]+$/, "").trim();
+	const lower = rest.toLowerCase();
+	const base = {
+		deadline: dl && daysBetween$2(today, dl.day) >= 1 ? dl.day : null,
+		curve: "line",
+		cadence: "weekly"
+	};
+	let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, "i").exec(rest);
+	if (m) {
+		const subject = cap(m[3].trim());
+		return {
+			...base,
+			kind: "hours",
+			title: `${num(m[1], m[2])}h of ${subject}`,
+			unit: "hours",
+			target: num(m[1], m[2]),
+			area: "Study",
+			source: {
+				kind: "focus.hours",
+				arg: subject
+			},
+			subject,
+			template: "hours"
+		};
+	}
+	m = new RegExp(String.raw`\b(lose|drop|cut|gain|put on)\s+${NUM}\s*(kg|kilos?)\b`, "i").exec(rest);
+	if (m) {
+		const n = num(m[2], m[3]);
+		const down = !/gain|put on/i.test(m[1]);
+		return {
+			...base,
+			kind: "measure",
+			title: `${down ? "Lose" : "Gain"} ${n} kg`,
+			unit: "kg",
+			target: null,
+			delta: down ? -n : n,
+			area: "Body",
+			source: { kind: "body.weight" },
+			curve: down ? "front" : "line",
+			template: "lose"
+		};
+	}
+	m = new RegExp(String.raw`\b(?:weigh|weight(?: to)?|get (?:down )?to|reach)\s+${NUM}\s*(kg|kilos?)\b`, "i").exec(rest);
+	if (m) return {
+		...base,
+		kind: "measure",
+		title: `Weigh ${num(m[1], m[2])} kg`,
+		unit: "kg",
+		target: num(m[1], m[2]),
+		area: "Body",
+		source: { kind: "body.weight" },
+		curve: "front",
+		template: "lose"
+	};
+	const money = new RegExp(String.raw`(?:(€|\$)\s*${NUM}|${NUM}\s*(lei|leu|mdl|ron|€|eur|euros?|\$|usd|dollars?|kg|km|%|percent))`, "i").exec(rest);
+	const what = /\b(profit|income|revenue|earn(?:ings)?|salary|savings?|save|saved)\b/i.exec(lower)?.[1]?.toLowerCase();
+	if (money) {
+		const n = money[1] ? num(money[2], money[3]) : num(money[4], money[5]);
+		const u = unitOf(money[1] ?? money[6] ?? "") ?? { unit: "count" };
+		if (u.unit === "lei" || u.unit === "eur" || u.unit === "usd") {
+			const shown = u.unit === "lei" ? `${n.toLocaleString("en-US")} lei` : `${u.unit === "eur" ? "€" : "$"}${n.toLocaleString("en-US")}`;
+			if (what && /profit|revenue/.test(what)) return {
+				...base,
+				kind: "measure",
+				title: `Profit ${shown} a month`,
+				unit: u.unit,
+				target: n,
+				area: "Money",
+				source: { kind: "money.profit" },
+				template: "profit"
+			};
+			if (what && /income|earn|salary/.test(what)) return {
+				...base,
+				kind: "measure",
+				title: `Earn ${shown} a month`,
+				unit: u.unit,
+				target: n,
+				area: "Money",
+				source: { kind: "money.income" },
+				template: "profit"
+			};
+			return {
+				...base,
+				kind: "measure",
+				title: `Save ${shown}`,
+				unit: u.unit,
+				target: n,
+				area: "Money",
+				source: { kind: "money.saved" },
+				curve: "ramp",
+				template: "save"
+			};
+		}
+		if (u.unit === "km") return {
+			...base,
+			kind: "measure",
+			title: `${/run|jog/.test(lower) ? "Run" : "Cover"} ${n} km`,
+			unit: "km",
+			target: n,
+			area: "Body",
+			source: { kind: "manual" }
+		};
+		if (u.unit === "kg") return {
+			...base,
+			kind: "measure",
+			title: `Weigh ${n} kg`,
+			unit: "kg",
+			target: n,
+			area: "Body",
+			source: { kind: "body.weight" },
+			curve: "front",
+			template: "lose"
+		};
+		if (u.unit === "pct") return {
+			...base,
+			kind: "measure",
+			title: cap(rest.replace(/^(raise|get|reach|hit)\s+/i, "")).slice(0, 60),
+			unit: "pct",
+			target: n,
+			area: "Life",
+			source: { kind: "manual" }
+		};
+	}
+	m = new RegExp(String.raw`${NUM}\s+([\p{L}][\p{L}\s-]{1,30})$`, "iu").exec(rest.replace(/\s+(in total|total)$/i, ""));
+	if (m) {
+		const n = num(m[1], m[2]);
+		const thing = m[3].trim().replace(/^(more|new)\s+/i, "");
+		const t = thing.toLowerCase();
+		if (/workouts?|trainings?|gym sessions?/.test(t)) return {
+			...base,
+			kind: "measure",
+			title: `${n} workouts`,
+			unit: "count",
+			target: n,
+			area: "Body",
+			source: { kind: "body.workouts" },
+			template: "workouts"
+		};
+		if (/push-?ups?|pull-?ups?|squats?|dips?|sit-?ups?|burpees?/.test(t)) return {
+			...base,
+			kind: "measure",
+			title: `${n} ${t}`,
+			unit: "count",
+			target: n,
+			area: "Body",
+			source: {
+				kind: "sport.reps",
+				arg: cap(t.split(" ")[0])
+			},
+			template: "reps"
+		};
+		if (/tasks?/.test(t)) return {
+			...base,
+			kind: "measure",
+			title: `${n} tasks done`,
+			unit: "count",
+			target: n,
+			area: "Work",
+			source: { kind: "tasks.done" }
+		};
+		if (/clean days?|days? clean/.test(t)) return {
+			...base,
+			kind: "measure",
+			title: `${n} clean days`,
+			unit: "count",
+			target: n,
+			area: "Discipline",
+			source: { kind: "habit.clean" }
+		};
+		const star = /stars?/.test(t);
+		const label = star ? "stars" : t.split(" ").slice(-1)[0];
+		return {
+			...base,
+			kind: "measure",
+			title: `${n} ${thing}`.slice(0, 60),
+			unit: "custom",
+			unitLabel: label.slice(0, 16),
+			target: n,
+			area: star || /ctf|flags?|github|projects?/.test(t) ? "Career" : /books?|pages?/.test(t) ? "Study" : "Life",
+			source: { kind: "manual" },
+			curve: star ? "ramp" : "line",
+			template: star ? "stars" : "custom"
+		};
+	}
+	m = new RegExp(String.raw`${NUM}`, "i").exec(rest);
+	if (m && what) {
+		const n = num(m[1], m[2]);
+		if (/profit|revenue/.test(what)) return {
+			...base,
+			kind: "measure",
+			title: `Profit ${n.toLocaleString("en-US")} lei a month`,
+			unit: "lei",
+			target: n,
+			area: "Money",
+			source: { kind: "money.profit" },
+			template: "profit"
+		};
+		if (/income|earn|salary/.test(what)) return {
+			...base,
+			kind: "measure",
+			title: `Earn ${n.toLocaleString("en-US")} lei a month`,
+			unit: "lei",
+			target: n,
+			area: "Money",
+			source: { kind: "money.income" },
+			template: "profit"
+		};
+		return {
+			...base,
+			kind: "measure",
+			title: `Save ${n.toLocaleString("en-US")} lei`,
+			unit: "lei",
+			target: n,
+			area: "Money",
+			source: { kind: "money.saved" },
+			curve: "ramp",
+			template: "save"
+		};
+	}
+	return null;
+}
+/** The check-in rhythm that fits the time you have: daily under 3 weeks, monthly over 6 months. */
+function suggestCadence(today, deadline) {
+	if (!deadline) return "weekly";
+	const d = daysBetween$2(today, deadline);
+	return d <= 21 ? "daily" : d > 180 ? "monthly" : "weekly";
+}
+/** "Profit 5,000 lei a month · by 31 Dec · Finance Helper" for a confirm card. */
+function draftLine(d) {
+	const date = d.deadline ? (/* @__PURE__ */ new Date(`${d.deadline}T12:00:00Z`)).toLocaleDateString("en-GB", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+		timeZone: "UTC"
+	}) : "no deadline yet";
+	return `${d.title} · by ${date}`;
+}
+// src/renderer/src/web/goalsBrain.ts
+/** "goal: <plain words>" (no "|", so not an hour goal line) and "goalcheck: G1 | 3400". */
+function readGoalAction(line, today = calendarDay()) {
+	const check = /^\s*goalcheck\s*:\s*([^|]{1,80})\|\s*([+-]?\d+(?:[.,]\d+)?)\s*$/i.exec(line);
+	if (check) return {
+		kind: "goalcheck",
+		ref: check[1].trim(),
+		value: Number(check[2].replace(",", "."))
+	};
+	const m = /^\s*goal\s*:\s*([^|]{4,200})$/i.exec(line);
+	if (!m) return null;
+	const draft = parseGoalText(m[1], today);
+	return draft ? {
+		kind: "newgoal",
+		draft,
+		text: m[1].trim()
+	} : null;
+}
+/** The part of Ben's prompt about your measurable goals (top 3 with status). */
+function goalsNowSection(s, finance, now = /* @__PURE__ */ new Date()) {
+	try {
+		return goalsNowText(s.goals.cards(now, finance));
+	} catch {
+		return "";
+	}
+}
+/** The confirm button's label for a draft. */
+var draftButton = (d) => `🎯 Save goal: ${d.title}`.slice(0, 40);
+/** Did his own message carry this number (so a check-in is really his)? */
+function numberInText(text, value) {
+	return (String(text ?? "").replace(/(\d),(\d{3})(?!\d)/g, "$1$2").match(/\d+(?:[.,]\d+)?\s*k?/gi) ?? []).map((n) => Number(n.replace(/k$/i, "").trim().replace(",", ".")) * (/k$/i.test(n.trim()) ? 1e3 : 1)).some((n) => Math.abs(n - Math.abs(value)) < 1e-9);
+}
+/** Runs a goal action on the database copy; one line for Ben's receipts. */
+function runGoalAction(s, a, finance, now = /* @__PURE__ */ new Date()) {
+	const today = s.wallet.today(now);
+	if (a.kind === "goalcheck") {
+		const cards = s.goals.cards(now, finance);
+		const open = cards.filter((c) => c.status !== "done" && c.status !== "missed");
+		const c = findGoal(cards, a.ref, open);
+		if (!c) return `⚠️ No goal called "${a.ref}"`;
+		if (c.auto) return `ℹ️ ${c.goal.title} counts itself from your data (now ${fmtPair(c.goal.unit, c.value, c.goal.target, c.goal.unitLabel)})`;
+		const r = s.goals.checkIn(c.goal.id, a.value, "ben", null, now);
+		const g = r.card.goal;
+		return `🎯 ${g.title}: ${fmtPair(g.unit, r.card.value, g.target, g.unitLabel)} (${r.card.pct}%)${r.done ? " · GOAL REACHED 🏆" : r.milestones.length ? ` · milestone ${r.milestones.map((m) => m.label ?? m.value).join(", ")} 🎉` : ""}${r.paid ? ` · +${r.paid} points` : ""}`;
+	}
+	const d = a.draft;
+	if (!d.deadline) throw new LedgerError(`${d.title}: by when? Say a date (e.g. "by 31 Dec")`);
+	if (d.kind === "hours") {
+		s.focus.saveGoal({
+			title: d.title,
+			subject: d.subject ?? d.title,
+			deadline: d.deadline,
+			hours: Number(d.target)
+		});
+		return `🎯 Goal: ${d.title} · ${d.target}h by ${d.deadline} (planned into focus blocks)`;
+	}
+	let target = d.target;
+	let start = d.start ?? null;
+	if (target == null && d.delta != null) {
+		const now0 = s.goals.autoValue({
+			source: d.source,
+			startDay: today
+		}, now, finance);
+		if (now0 == null) throw new LedgerError(`${d.title}: log your weight on Body first, then I can set the target`);
+		start = now0;
+		target = Math.round((now0 + d.delta) * 10) / 10;
+	}
+	if (target == null) throw new LedgerError(`${d.title}: what number are you aiming for?`);
+	const g = s.goals.save({
+		title: d.title,
+		unit: d.unit,
+		unitLabel: d.unitLabel,
+		target,
+		start,
+		deadline: d.deadline,
+		area: d.area,
+		cadence: d.cadence ?? suggestCadence(today, d.deadline),
+		source: d.source,
+		curve: d.curve,
+		why: d.why
+	}, now, finance);
+	return `🎯 New goal: ${draftLine({
+		...d,
+		title: g.title
+	})} · starting at ${fmtPair(g.unit, g.start, g.target, g.unitLabel)}`;
+}
+/**
+* A quick answer to a check-in (Telegram button, island, the Goals page):
+* "+50", "-0.5", "=3400", "s" (same as before), "k" (skip). One line back.
+*/
+function goalTap(s, id, op, now = /* @__PURE__ */ new Date()) {
+	const card = s.goals.cards(now).find((c) => c.goal.id === id);
+	if (!card) return "That goal is gone.";
+	if (op === "k") {
+		s.goals.skip(id, now);
+		return `⏭ ${card.goal.title}: skipped this time.`;
+	}
+	const value = answerValue(card, op);
+	if (value == null) return "Type the number instead.";
+	const r = s.goals.checkIn(id, value, "me", null, now);
+	const g = r.card.goal;
+	return `✅ ${g.title}: ${fmtPair(g.unit, r.card.value, g.target, g.unitLabel)} (${r.card.pct}%)${r.done ? " · GOAL REACHED 🏆" : r.milestones.length ? ` · milestone ${r.milestones.map((m) => m.label ?? m.value).join(", ")} 🎉` : ""}${r.paid ? ` · +${r.paid} points` : ""}`;
 }
 // src/renderer/src/web/botBrain.ts
 var MEMORY = "coach_memory";
@@ -6897,6 +7955,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		`Focus today: ${hm$4(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm$4(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
 		`Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") : "none written yet"}.`,
 		f.goals.length ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals.map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`).join("\n")}` : "No goals with deadlines (offer to set one when he mentions an exam, project or deadline).",
+		goalsNowSection(s, extra.finance, now),
 		`Week score ${report.score}/100 (last week ${report.prevScore}). ${report.verdict}`,
 		`Last 7 days: ${report.metrics.map((m) => `${m.label} ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`).join("; ")}.`,
 		wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ""}. Big 3: ${wp.big3.map((b) => `${b.done ? "[done]" : "[open]"} ${b.text}`).join("; ")}.` : "No week plan yet.",
@@ -7478,6 +8537,8 @@ var BREF = /^B\d{1,2}$/i;
 function readAction(line) {
 	const plugin = readPluginAction(line);
 	if (plugin) return plugin;
+	const goalAct = readGoalAction(line);
+	if (goalAct) return goalAct;
 	if (/^\s*pc\s*:/i.test(line)) {
 		const act = readPcAction(line);
 		return act ? {
@@ -8495,6 +9556,30 @@ var MIGRATIONS = [
   ALTER TABLE rewards ADD COLUMN jar_goal_id INTEGER;
   ALTER TABLE rewards ADD COLUMN price_locked INTEGER NOT NULL DEFAULT 1;
   ALTER TABLE redemptions ADD COLUMN jar_used INTEGER NOT NULL DEFAULT 0;
+  `,
+	`
+  ALTER TABLE focus_goals ADD COLUMN kind TEXT NOT NULL DEFAULT 'hours';
+  ALTER TABLE focus_goals ADD COLUMN unit TEXT;
+  ALTER TABLE focus_goals ADD COLUMN unit_label TEXT;
+  ALTER TABLE focus_goals ADD COLUMN target REAL;
+  ALTER TABLE focus_goals ADD COLUMN start_value REAL;
+  ALTER TABLE focus_goals ADD COLUMN why TEXT;
+  ALTER TABLE focus_goals ADD COLUMN area TEXT;
+  ALTER TABLE focus_goals ADD COLUMN cadence TEXT;
+  ALTER TABLE focus_goals ADD COLUMN source TEXT;
+  ALTER TABLE focus_goals ADD COLUMN milestones TEXT;
+  ALTER TABLE focus_goals ADD COLUMN curve TEXT;
+  ALTER TABLE focus_goals ADD COLUMN done_day TEXT;
+  CREATE TABLE IF NOT EXISTS goal_checkins (
+    id TEXT PRIMARY KEY,
+    goal_id INTEGER NOT NULL,
+    at TEXT NOT NULL,
+    day TEXT NOT NULL,
+    value REAL NOT NULL,
+    who TEXT NOT NULL DEFAULT 'me',
+    note TEXT
+  );
+  CREATE INDEX IF NOT EXISTS goal_checkins_goal ON goal_checkins(goal_id, day);
   `
 ];
 // src/core/rules.ts
@@ -8710,6 +9795,26 @@ var DEFAULT_RULES = [
 		enabled: true
 	},
 	{
+		id: "goal.checkin",
+		module: "general",
+		title: "Goal check-in on time",
+		coins: 3,
+		xp: 5,
+		dailyCap: 3,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
+		id: "goal.milestone",
+		module: "general",
+		title: "Goal milestone reached",
+		coins: 15,
+		xp: 30,
+		dailyCap: 3,
+		cooldownMin: 0,
+		enabled: true
+	},
+	{
 		id: "grand_slam.all_four",
 		module: "general",
 		title: "4-Pillar Grand Slam (Sovereign Day)",
@@ -8732,7 +9837,8 @@ function isFlowRule(id) {
 		"sleep.",
 		"money.",
 		"tasks.todoist",
-		"habit."
+		"habit.",
+		"goal."
 	].some((p) => id.startsWith(p));
 }
 /** Checks caps and cooldowns and returns the row to insert for this rule. */
@@ -10580,6 +11686,87 @@ var isUniqueClash = (e) => /UNIQUE constraint failed/i.test(String(e?.message ??
 var isRetryable = (e) => e instanceof UnauthorizedError || /Turso HTTP (5\d\d|408|429)|timed? ?out|abort/i.test(String(e?.message ?? "")) || e?.name === "TimeoutError" || e?.name === "AbortError";
 /** A failure because there's no connection (not a refusal by the database). */
 var isOffline = (e) => typeof window !== "undefined" && (navigator.onLine === false || e instanceof TypeError || /failed to fetch|network|load failed/i.test(String(e?.message ?? "")));
+// src/server/goalsTick.ts
+var GOAL_ASKS = "goal_asks";
+var bytes = (s) => new TextEncoder().encode(s).length;
+var fit = (prefix, s) => {
+	let t = s;
+	while (bytes(prefix + t) > 64 && t) t = t.slice(0, -1);
+	return prefix + t;
+};
+/** The Telegram keyboard under a goal ping: quick answers (manual goals), and the move when behind. */
+function goalKeyboard(p) {
+	const rows = [];
+	if (p.kind === "ask") {
+		const q = quickAnswers(p.card).map((a) => ({
+			text: a.label,
+			callback_data: `gc|${p.card.goal.id}|${a.op}`
+		}));
+		rows.push([
+			q[0],
+			q[1],
+			q[2]
+		], [q[3]]);
+	}
+	const move = behindMove(p.card);
+	if (move) {
+		const f = /^focus:(\d+):(.+)$/.exec(move.do);
+		if (f) rows.push([{
+			text: `▶ ${f[1]} min: ${f[2]}`.slice(0, 40),
+			callback_data: fit(`fo|${f[1]}|`, f[2])
+		}]);
+		else if (move.do === "workout") rows.push([{
+			text: "💪 Log a workout",
+			callback_data: "wk|show"
+		}]);
+	}
+	return rows.length ? { inline_keyboard: rows } : void 0;
+}
+/** The message for a ping (HTML-escaped by `esc`). */
+function goalPingText(p, esc) {
+	const main = p.kind === "ask" ? askText(p.card) : reportText(p.card, p.before);
+	const move = behindMove(p.card);
+	return esc(move ? `${main}\n👉 ${move.text}` : main);
+}
+async function goalsTick(mirror, services, now, send, esc) {
+	const hourKey = `${now.toISOString().slice(0, 13)}`;
+	const plan = await mirror.read((db) => {
+		const s = services.services(db);
+		const today = s.wallet.today(now);
+		let raw = null;
+		try {
+			raw = JSON.parse(getSetting(db, "goal_asks") || "null");
+		} catch {
+			raw = null;
+		}
+		const cards = s.goals.cards(now);
+		if (!cards.length) return null;
+		const st0 = cleanAsks(raw, today);
+		const st = seedSeen(st0, cards);
+		return {
+			st,
+			seeded: st !== st0,
+			ping: pickPing(cards, st, now.getHours()),
+			sync: raw?.synced !== hourKey && cards.some((c) => c.auto)
+		};
+	});
+	if (!plan) return null;
+	const save = (st) => mirror.write((db) => setSetting(db, GOAL_ASKS, JSON.stringify({
+		...st,
+		synced: hourKey
+	})));
+	if (plan.sync) await mirror.write((db) => services.services(db).goals.syncAuto(now)).catch(() => null);
+	if (!plan.ping) {
+		if (plan.seeded || plan.sync) await save(plan.st).catch(() => null);
+		return null;
+	}
+	const p = plan.ping;
+	await save(markPing(plan.st, p));
+	try {
+		await send(goalPingText(p, esc), goalKeyboard(p));
+	} catch {}
+	return `${p.kind}:${p.card.goal.id}`;
+}
 // src/core/health.ts
 /** 1234567 → "1.2M" */
 var big = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n));
@@ -12728,7 +13915,7 @@ function saveDesk(db, d) {
 function editDesk(db, f) {
 	return saveDesk(db, f(loadDesk(db)));
 }
-var json$3 = (db, key) => {
+var json$4 = (db, key) => {
 	try {
 		return JSON.parse(getSetting(db, key) || "null");
 	} catch {
@@ -12799,7 +13986,7 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 	const today = s.wallet.today(now);
 	const d = loadDesk(db);
 	const sessions = sessionsOf(db, addDays$5(today, -62));
-	const dayLog = json$3(db, "island_day_log") ?? {};
+	const dayLog = json$4(db, "island_day_log") ?? {};
 	const quality = Object.values(dayLog).flatMap((x) => x.focus ?? []).map((q) => ({
 		at: q.at,
 		pct: q.pct
@@ -12843,7 +14030,7 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 	const recentMoods = d.moods.filter((m) => m.day >= addDays$5(today, -6));
 	const cats = new Map((finance?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 	const catName = (id) => cats.get(id) ?? id;
-	const ps = promiseStats(json$3(db, "coach_reminders") ?? [], now);
+	const ps = promiseStats(json$4(db, "coach_reminders") ?? [], now);
 	let restDays = [];
 	try {
 		restDays = s.body.restDays();
@@ -12896,7 +14083,7 @@ function deskView(s, finance, now = /* @__PURE__ */ new Date()) {
 		if (!usual) return 0;
 		return m === "spend" ? Math.max(0, (last - usual) / usual) : Math.max(0, (usual - last) / usual);
 	};
-	const expState = json$3(db, EXP_KEY);
+	const expState = json$4(db, EXP_KEY);
 	const current = expState ? measureExperiment(expState, series[EXPERIMENTS.find((e) => e.id === expState.id)?.metric ?? "focus"], today) : null;
 	const experiment = {
 		current,
@@ -16624,7 +17811,7 @@ var FocusService = class {
 		const todays = all.filter((s) => s.day === today);
 		const by = /* @__PURE__ */ new Map();
 		for (const s of todays) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
-		const goals = this.db.prepare("SELECT * FROM focus_goals WHERE archived = 0 ORDER BY deadline").all().map((g) => {
+		const goals = this.db.prepare("SELECT * FROM focus_goals WHERE archived = 0 AND COALESCE(kind, 'hours') = 'hours' ORDER BY deadline").all().map((g) => {
 			const goal = {
 				id: Number(g.id),
 				title: String(g.title),
@@ -16942,6 +18129,333 @@ var FocusService = class {
 				balance: bal - cost
 			};
 		})();
+	}
+};
+// src/main/goals.ts
+var DAY$1 = /^\d{4}-\d{2}-\d{2}$/;
+var json$3 = (s, d) => {
+	try {
+		return JSON.parse(String(s ?? "")) ?? d;
+	} catch {
+		return d;
+	}
+};
+var rid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+/** Finance Helper's synced state (the app may pass its fresher local copy instead). */
+function financeFromDb(db) {
+	try {
+		const synced = JSON.parse(getSetting(db, "app_sync_finance") || "null");
+		if (synced?.data) return synced.data;
+	} catch {}
+	try {
+		return JSON.parse(getSetting(db, "finance_backup_json") || "null");
+	} catch {
+		return null;
+	}
+}
+/** Money in and out (lei) between two days, from Finance Helper (amounts are in bani). */
+function moneyBetween(state, from, to) {
+	if (!state || !Array.isArray(state.tx)) return null;
+	let income = 0;
+	let spent = 0;
+	for (const t of state.tx) {
+		if (!t || t.deleted || typeof t.date !== "string") continue;
+		const d = t.date.slice(0, 10);
+		if (d < from || d > to) continue;
+		const v = Math.abs(Number(t.base ?? t.amount) || 0) / 100;
+		if (t.type === "income") income += v;
+		else if (t.type === "expense") spent += v;
+	}
+	return {
+		income: Math.round(income),
+		spent: Math.round(spent)
+	};
+}
+var GoalsService = class {
+	db;
+	wallet;
+	constructor(db, wallet) {
+		this.db = db;
+		this.wallet = wallet;
+	}
+	rows(all = false) {
+		try {
+			return this.db.prepare(`SELECT * FROM focus_goals WHERE kind = 'measure'${all ? "" : " AND archived = 0"} ORDER BY deadline`).all();
+		} catch {
+			return [];
+		}
+	}
+	toGoal(r) {
+		const source = json$3(r.source, { kind: "manual" });
+		return {
+			id: Number(r.id),
+			title: String(r.title),
+			unit: GOAL_UNITS.some((u) => u.id === r.unit) ? r.unit : "count",
+			unitLabel: r.unit_label ? String(r.unit_label) : void 0,
+			start: Number(r.start_value) || 0,
+			target: Number(r.target ?? r.hours) || 0,
+			startDay: String(r.created_day),
+			deadline: String(r.deadline),
+			why: String(r.why ?? ""),
+			area: String(r.area ?? "Life"),
+			cadence: CADENCES.some((c) => c.id === r.cadence) ? r.cadence : "weekly",
+			source: SOURCES.some((s) => s.id === source.kind) ? source : { kind: "manual" },
+			milestones: json$3(r.milestones, []).filter((m) => Number.isFinite(Number(m?.value))).map((m) => ({
+				value: Number(m.value),
+				...m.label ? { label: String(m.label).slice(0, 30) } : {}
+			})),
+			curve: [
+				"line",
+				"ramp",
+				"front"
+			].includes(r.curve) ? r.curve : "line",
+			doneDay: r.done_day ? String(r.done_day) : null
+		};
+	}
+	goals(all = false) {
+		return this.rows(all).map((r) => this.toGoal(r));
+	}
+	goal(id) {
+		const r = this.db.prepare("SELECT * FROM focus_goals WHERE id = ? AND kind = 'measure'").get(id);
+		return r ? this.toGoal(r) : null;
+	}
+	checkins(goalId) {
+		try {
+			return (goalId == null ? this.db.prepare("SELECT * FROM goal_checkins ORDER BY at").all() : this.db.prepare("SELECT * FROM goal_checkins WHERE goal_id = ? ORDER BY at").all(goalId)).map((r) => ({
+				id: String(r.id),
+				goalId: Number(r.goal_id),
+				at: String(r.at),
+				day: String(r.day),
+				value: Number(r.value),
+				by: [
+					"me",
+					"auto",
+					"ben",
+					"skip"
+				].includes(r.who) ? r.who : "me",
+				note: r.note ?? null
+			}));
+		} catch {
+			return [];
+		}
+	}
+	/** The number an auto source shows now (null: no data for it). */
+	autoValue(g, now = /* @__PURE__ */ new Date(), finance) {
+		const today = this.wallet.today(now);
+		const s = g.source;
+		try {
+			if (s.kind.startsWith("money.")) {
+				const m = moneyBetween(finance ?? financeFromDb(this.db), s.kind === "money.saved" ? g.startDay : `${today.slice(0, 7)}-01`, today);
+				if (!m) return null;
+				return s.kind === "money.income" ? m.income : m.income - m.spent;
+			}
+			if (s.kind === "body.weight") {
+				const r = this.db.prepare("SELECT weight FROM body_metrics WHERE weight IS NOT NULL ORDER BY day DESC LIMIT 1").get();
+				return r ? Number(r.weight) : null;
+			}
+			if (s.kind === "body.workouts") return Number(this.db.prepare("SELECT COUNT(*) AS n FROM workouts WHERE day >= ?").get(g.startDay)?.n ?? 0);
+			if (s.kind === "sport.reps") {
+				const want = String(s.arg ?? "").toLowerCase().replace(/[^a-z]/g, "").replace(/s$/, "");
+				if (!want) return null;
+				let n = 0;
+				for (const w of this.db.prepare("SELECT items_json FROM workouts WHERE day >= ?").all(g.startDay)) for (const it of json$3(w.items_json, [])) if (String(it?.name ?? it?.exerciseId ?? "").toLowerCase().replace(/[^a-z]/g, "").includes(want) && (it?.unit ?? "reps") === "reps") n += Number(it.amount) || 0;
+				return n;
+			}
+			if (s.kind === "focus.hours") {
+				const r = this.db.prepare("SELECT COALESCE(SUM(minutes), 0) AS m FROM focus_sessions WHERE day >= ? AND lower(subject) = lower(?)").get(g.startDay, String(s.arg ?? ""));
+				return Math.round(Number(r?.m ?? 0) / 60 * 10) / 10;
+			}
+			if (s.kind === "tasks.done") {
+				const r = this.db.prepare("SELECT COUNT(*) AS n FROM ledger WHERE rule_id = 'tasks.todoist_done' AND day >= ? AND undo_of IS NULL AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)").get(g.startDay);
+				return Number(r?.n ?? 0);
+			}
+			if (s.kind === "habit.clean") return new Discipline(this.db, this.wallet).state(now).current;
+		} catch {
+			return null;
+		}
+		return null;
+	}
+	/**
+	* The cards, newest numbers in: auto goals get today's number live (not
+	* saved; syncAuto keeps one a day for the history).
+	*/
+	cards(now = /* @__PURE__ */ new Date(), finance) {
+		const today = this.wallet.today(now);
+		const all = this.checkins();
+		return sortCards(this.goals().map((g) => {
+			const mine = all.filter((c) => c.goalId === g.id);
+			if (isAuto(g.source)) {
+				const v = this.autoValue(g, now, finance);
+				if (v != null && v !== currentValue(g, mine)) mine.push({
+					id: "live",
+					goalId: g.id,
+					at: now.toISOString(),
+					day: today,
+					value: v,
+					by: "auto"
+				});
+			}
+			return goalCard(g, mine, today);
+		}));
+	}
+	/**
+	* Auto goals: keep at most one number a day in the history when it moved,
+	* and mark the goal done when it gets there (no points: it moved by itself).
+	* Returns the goals whose number was saved.
+	*/
+	syncAuto(now = /* @__PURE__ */ new Date(), finance) {
+		const today = this.wallet.today(now);
+		const out = [];
+		for (const g of this.goals()) {
+			if (!isAuto(g.source) || g.doneDay) continue;
+			const v = this.autoValue(g, now, finance);
+			if (v == null) continue;
+			const mine = this.checkins(g.id);
+			if (mine.some((c) => c.day === today && c.by === "auto")) continue;
+			if (v === currentValue(g, mine)) continue;
+			this.db.prepare("INSERT INTO goal_checkins (id, goal_id, at, day, value, who, note) VALUES (?, ?, ?, ?, ?, 'auto', NULL)").run(rid(), g.id, now.toISOString(), today, v);
+			if (progressOf(g, v) >= 1) this.db.prepare("UPDATE focus_goals SET done_day = ? WHERE id = ?").run(today, g.id);
+			out.push(g.id);
+		}
+		return out;
+	}
+	save(input, now = /* @__PURE__ */ new Date(), finance) {
+		const title = String(input.title ?? "").trim().slice(0, 80);
+		if (!title) throw new LedgerError("Name the goal, e.g. \"Profit 5,000 lei a month\"");
+		if (!DAY$1.test(String(input.deadline ?? ""))) throw new LedgerError("Pick the deadline");
+		const today = this.wallet.today(now);
+		if (!input.id && input.deadline <= today) throw new LedgerError("The deadline needs to be after today");
+		const target = Number(input.target);
+		if (!Number.isFinite(target)) throw new LedgerError("What number are you aiming for?");
+		const unit = GOAL_UNITS.some((u) => u.id === input.unit) ? input.unit : "count";
+		const source = input.source && SOURCES.some((s) => s.id === input.source.kind) ? {
+			kind: input.source.kind,
+			...input.source.arg ? { arg: String(input.source.arg).trim().slice(0, 40) } : {}
+		} : { kind: "manual" };
+		const meta = SOURCES.find((s) => s.id === source.kind);
+		if (meta.needsArg && !source.arg) throw new LedgerError(`${meta.label}: which one? (${meta.needsArg})`);
+		const startDay = input.startDay && DAY$1.test(input.startDay) && input.startDay <= today ? input.startDay : today;
+		let start = input.start == null || !Number.isFinite(Number(input.start)) ? null : Number(input.start);
+		if (start == null) start = isAuto(source) && !countsFromStart(source.kind) ? this.autoValue({
+			source,
+			startDay
+		}, now, finance) ?? 0 : 0;
+		if (start === target) throw new LedgerError("The target is where you are already: aim for a different number");
+		const cadence = CADENCES.some((c) => c.id === input.cadence) ? input.cadence : "weekly";
+		const curve = input.curve && [
+			"line",
+			"ramp",
+			"front"
+		].includes(input.curve) ? input.curve : "line";
+		const milestones = (input.milestones ?? []).filter((m) => Number.isFinite(Number(m?.value))).slice(0, 8).map((m) => ({
+			value: Number(m.value),
+			...m.label ? { label: String(m.label).trim().slice(0, 30) } : {}
+		}));
+		const vals = {
+			title,
+			unit,
+			unit_label: unit === "custom" ? String(input.unitLabel ?? "").trim().slice(0, 16) || null : null,
+			target,
+			start_value: start,
+			why: String(input.why ?? "").trim().slice(0, 140),
+			area: String(input.area ?? "Life").trim().slice(0, 24) || "Life",
+			cadence,
+			source: JSON.stringify(source),
+			milestones: JSON.stringify(milestones),
+			curve,
+			deadline: input.deadline
+		};
+		if (input.id) {
+			if (!this.goal(input.id)) throw new LedgerError("That goal is gone");
+			this.db.prepare("UPDATE focus_goals SET title = @title, unit = @unit, unit_label = @unit_label, target = @target, hours = @target, start_value = @start_value, why = @why, area = @area, cadence = @cadence, source = @source, milestones = @milestones, curve = @curve, deadline = @deadline WHERE id = @id").run({
+				...vals,
+				id: input.id
+			});
+			return this.goal(input.id);
+		}
+		const r = this.db.prepare("INSERT INTO focus_goals (title, subject, deadline, hours, created_day, kind, unit, unit_label, target, start_value, why, area, cadence, source, milestones, curve) VALUES (@title, '', @deadline, @target, @day, 'measure', @unit, @unit_label, @target, @start_value, @why, @area, @cadence, @source, @milestones, @curve)").run({
+			...vals,
+			day: startDay
+		});
+		return this.goal(Number(r.lastInsertRowid));
+	}
+	archive(id) {
+		this.db.prepare("UPDATE focus_goals SET archived = 1 WHERE id = ? AND kind = 'measure'").run(id);
+	}
+	/**
+	* A check-in: the number now (a new row, never an edit). Pays +3 when it is
+	* the first one of this goal's period, +15 per milestone it reaches (each
+	* once), and marks the goal done when it gets there.
+	*/
+	checkIn(id, value, by = "me", note = null, now = /* @__PURE__ */ new Date()) {
+		const g = this.goal(id);
+		if (!g) throw new LedgerError("That goal is gone");
+		if (!Number.isFinite(value)) throw new LedgerError("Type the number, e.g. 3400");
+		if (Math.abs(value) > 1e9) throw new LedgerError("That number is too big");
+		const today = this.wallet.today(now);
+		return this.db.transaction(() => {
+			const before = this.checkins(id);
+			const prev = currentValue(g, before);
+			const onTime = firstOfPeriod(g, before, today);
+			this.db.prepare("INSERT INTO goal_checkins (id, goal_id, at, day, value, who, note) VALUES (?, ?, ?, ?, ?, ?, ?)").run(rid(), id, now.toISOString(), today, value, by, note ? String(note).slice(0, 140) : null);
+			let paid = 0;
+			if (onTime && !isAuto(g.source)) {
+				const lid = this.wallet.payOnce(CHECKIN_RULE, {
+					day: today,
+					ref: checkinRef(id, periodKey(g.cadence, today, g.startDay)),
+					note: `Checked in: ${g.title}`,
+					now
+				});
+				paid += this.coinsOf(lid);
+			}
+			const crossed = isAuto(g.source) ? [] : milestonesCrossed(g, prev, value);
+			const list = milestonesOf(g);
+			for (const m of crossed) {
+				const lid = this.wallet.payOnce(MILESTONE_RULE, {
+					day: today,
+					ref: milestoneRef(id, list.findIndex((x) => x.value === m.value)),
+					note: `Milestone: ${g.title} · ${m.label ?? m.value}`,
+					now
+				});
+				paid += this.coinsOf(lid);
+			}
+			const done = progressOf(g, value) >= 1 && !g.doneDay;
+			if (done) {
+				this.db.prepare("UPDATE focus_goals SET done_day = ? WHERE id = ?").run(today, id);
+				if (!isAuto(g.source)) {
+					const lid = this.wallet.payOnce(MILESTONE_RULE, {
+						day: today,
+						ref: milestoneRef(id, "done"),
+						note: `Goal reached: ${g.title}`,
+						now
+					});
+					paid += this.coinsOf(lid);
+				}
+			}
+			return {
+				card: goalCard(this.goal(id), this.checkins(id), today),
+				paid,
+				milestones: crossed,
+				done
+			};
+		})();
+	}
+	coinsOf(ledgerId) {
+		if (!ledgerId) return 0;
+		return Number(this.db.prepare("SELECT coins FROM ledger WHERE id = ?").get(ledgerId)?.coins ?? 0);
+	}
+	/** "Skip" this period: answered, no number, no points. */
+	skip(id, now = /* @__PURE__ */ new Date()) {
+		const g = this.goal(id);
+		if (!g) throw new LedgerError("That goal is gone");
+		const today = this.wallet.today(now);
+		this.db.prepare("INSERT INTO goal_checkins (id, goal_id, at, day, value, who, note) VALUES (?, ?, ?, ?, ?, 'skip', NULL)").run(rid(), id, now.toISOString(), today, currentValue(g, this.checkins(id)));
+		return goalCard(g, this.checkins(id), today);
+	}
+	/** The check-ins of the last days (newest first), for the page's history. */
+	recent(days = 30, now = /* @__PURE__ */ new Date()) {
+		const from = addDays$5(this.wallet.today(now), -days);
+		return this.checkins().filter((c) => c.day >= from).reverse();
 	}
 };
 // src/core/insights.ts
@@ -19137,6 +20651,7 @@ function servicesFor(db) {
 		schedule: new Schedule(d, wallet),
 		sleep: new SleepService(d, wallet),
 		focus: new FocusService(d, wallet),
+		goals: new GoalsService(d, wallet),
 		progress: new ProgressService(d, wallet),
 		weekPlan: new WeekPlanService(d, wallet),
 		economy: new UnifiedEconomyService(d, wallet, discipline, money, shields),
@@ -23885,6 +25400,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		const adapt = await adaptIfNotWorking(coachCheck.verdict).catch(() => null);
 		const money = await moneyLine();
 		const goalLines = (await goalPlans().catch(() => [])).filter((p) => p.status !== "done").map((p) => `🎯 ${planLine(p)}`);
+		goalLines.push(...await mirror.read((db) => weeklyGoalLines(services.services(db).goals.cards(/* @__PURE__ */ new Date(), financeStateFrom(db, null)), today)).catch(() => []));
 		const monday = weekOf$1(today);
 		const weekEvents = calendar ? await calendar.events((/* @__PURE__ */ new Date(`${monday}T00:00:00`)).toISOString(), (/* @__PURE__ */ new Date()).toISOString()).catch(() => []) : [];
 		const extraLines = await mirror.read((db) => {
@@ -24404,7 +25920,7 @@ var ruleCoins = (svc, id, fallback) => {
 };
 // src/renderer/src/web/bots/callbacks.ts
 /** Every callback data the bots answer (anything else isn't a bot button). */
-var CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/;
+var CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/;
 var CALLBACKS = [
 	{
 		prefixes: ["wa", "wk"],
@@ -24655,6 +26171,20 @@ var CALLBACKS = [
 					id: arg
 				})}`;
 			});
+			await answer(line.slice(0, 190));
+			await edit(`${esc(String(cq.message?.text ?? ""))}\n\n${esc(line)}`);
+			return line;
+		}
+	},
+	{
+		prefixes: ["gc"],
+		match: (data) => data.startsWith("gc|"),
+		run: async (c, t) => {
+			const { mirror, services, markSeen } = c;
+			const { data, key, cq, answer, edit } = t;
+			if (!await markSeen(key)) return null;
+			const [, id, op] = data.split("|");
+			const line = await mirror.write((db) => goalTap(services.services(db), Number(id), op ?? ""));
 			await answer(line.slice(0, 190));
 			await edit(`${esc(String(cq.message?.text ?? ""))}\n\n${esc(line)}`);
 			return line;
@@ -26771,6 +28301,22 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			out.buttons = [...out.buttons ?? [], confirmButton(risk, what, id)].slice(0, 3);
 			return false;
 		});
+		acts = acts.filter((a) => {
+			if (a.kind !== "newgoal" && a.kind !== "goalcheck" || confirmed || direct) return true;
+			if (a.kind === "goalcheck" && numberInText(text, a.value)) return true;
+			const id = `${Date.now().toString(36).slice(-6)}g${toKeep.length}`;
+			toKeep.push({
+				id,
+				a
+			});
+			const label = a.kind === "newgoal" ? draftButton(a.draft) : `🎯 Yes, ${a.ref} is ${a.value}`.slice(0, 40);
+			out.buttons = [...out.buttons ?? [], {
+				label,
+				do: `say:✓${id} ${a.kind === "newgoal" ? `Save the goal: ${a.draft.title}` : `${a.ref} is ${a.value}`}`.slice(0, 120)
+			}].slice(0, 3);
+			if (a.kind === "newgoal") done.push(`📝 Goal draft: ${draftLine(a.draft)}${a.draft.deadline ? "" : " (say by when)"} · tap to save it`);
+			return false;
+		});
 		if (toKeep.length) await mirror.write((db) => toKeep.forEach((k) => keepConfirm(db, k.id, k.a))).catch(() => null);
 		const noteOps = out.actions.map(readNoteOp).filter((x) => !!x);
 		if (noteOps.length) {
@@ -27100,6 +28646,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 							const b = svc.body.state();
 							return `💪 Workout logged for ${a.day} · streak ${b.streak}`;
 						});
+						done.push(line);
+						continue;
+					}
+					if (a.kind === "newgoal" || a.kind === "goalcheck") {
+						const line = await mirror.write((db) => runGoalAction(services.services(db), a, financeStateFrom(db, store)));
 						done.push(line);
 						continue;
 					}
@@ -34540,6 +36091,12 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			await deskTick(mirror, services, now, send, esc);
 		} catch (e) {
 			console.error("desk:", e);
+		}
+		try {
+			const g = await goalsTick(mirror, services, now, send, esc);
+			if (g) note("sent", `Goal check-in: ${g}`, void 0, "goals");
+		} catch (e) {
+			console.error("goals:", e);
 		}
 		try {
 			await backupTick(healthDb, SQL, mirror, now);

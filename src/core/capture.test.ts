@@ -4,6 +4,8 @@ import { parseCapture } from './capture'
 describe('one capture box', () => {
   it('focus timers in any order', () => {
     expect(parseCapture('focus 50 algebra')).toEqual({ kind: 'focus', subject: 'algebra', minutes: 50 })
+    expect(parseCapture('goal: save 2000 lei by 31 Dec')).toEqual({ kind: 'goal', text: 'save 2000 lei by 31 Dec' })
+    expect(parseCapture('goal: DS exam | DS | 2026-12-01 | 10')?.kind).toBe('free')
     expect(parseCapture('f lab report 25m')).toEqual({ kind: 'focus', subject: 'lab report', minutes: 25 })
     expect(parseCapture('focus 900 x')).toEqual({ kind: 'focus', subject: 'x', minutes: 180 })
     expect(parseCapture('focus algebra')?.kind).toBe('free') // no minutes: Ben decides

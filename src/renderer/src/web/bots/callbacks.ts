@@ -26,6 +26,7 @@ import { activeExercises, allDone, applyWorkoutTap, defaultSport, progression, r
 import { esc, tg } from './telegram'
 import { takeLink, sleepTip, STOP_KEYBOARD, stoppedReply } from './helpers'
 import type { BotContext, Tap } from './context'
+import { goalTap } from '../goalsBrain'
 
 export interface CallbackHandler {
   /** The callback-data prefixes it answers ("wa" for "wa|250"), for docs and tests. */
@@ -35,7 +36,7 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxb]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/
+export const CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
   // Water and workout cards: a tap updates the shared log and the card.
@@ -216,6 +217,21 @@ export const CALLBACKS: CallbackHandler[] = [
         }
         return `📚 ${deskChange(svc, { op: 'reviewed', id: arg })}`
       })
+      await answer(line.slice(0, 190))
+      await edit(`${esc(String(cq.message?.text ?? ''))}\n\n${esc(line)}`)
+      return line
+    }
+  },
+  // A goal check-in from Telegram: gc|<goal id>|<op> ("+50", "-0.5", "s" same as before, "k" skip, "=3400").
+  {
+    prefixes: ['gc'],
+    match: (data) => data.startsWith('gc|'),
+    run: async (c, t) => {
+      const { mirror, services, markSeen } = c
+      const { data, key, cq, answer, edit } = t
+      if (!(await markSeen(key))) return null
+      const [, id, op] = data.split('|')
+      const line = await mirror.write((db) => goalTap(services.services(db), Number(id), op ?? ''))
       await answer(line.slice(0, 190))
       await edit(`${esc(String(cq.message?.text ?? ''))}\n\n${esc(line)}`)
       return line

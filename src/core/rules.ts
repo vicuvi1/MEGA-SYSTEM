@@ -36,6 +36,10 @@ export const DEFAULT_RULES: Rule[] = [
   { id: 'body.move_break', module: 'body', title: 'Move break', coins: 3, xp: 5, dailyCap: 5, cooldownMin: 10, enabled: true },
   { id: 'body.eye_break', module: 'body', title: 'Eye break (20-20-20)', coins: 1, xp: 1, dailyCap: 3, cooldownMin: 15, enabled: true },
   { id: 'body.challenge_done', module: 'body', title: "Ben's daily challenge", coins: 10, xp: 15, dailyCap: 1, cooldownMin: 0, enabled: true },
+  // Goals: a check-in on time (+3, once per goal and check-in period, at most 3 a day) and a
+  // milestone you reached (+15, once per milestone). Never for a number that moved by itself.
+  { id: 'goal.checkin', module: 'general', title: 'Goal check-in on time', coins: 3, xp: 5, dailyCap: 3, cooldownMin: 0, enabled: true },
+  { id: 'goal.milestone', module: 'general', title: 'Goal milestone reached', coins: 15, xp: 30, dailyCap: 3, cooldownMin: 0, enabled: true },
   { id: 'grand_slam.all_four', module: 'general', title: '4-Pillar Grand Slam (Sovereign Day)', coins: 50, xp: 100, dailyCap: 1, cooldownMin: 0, enabled: true }
 ]
 
@@ -47,7 +51,8 @@ export const DEFAULT_RULES: Rule[] = [
 export function isFlowRule(id: string): boolean {
   // tasks.todoist_done pays only for a real Todoist completion, never a tap.
   // habit.own pays only through your habit list (once per habit and day).
-  return ['discipline.', 'study.', 'sleep.', 'money.', 'tasks.todoist', 'habit.'].some((p) => id.startsWith(p))
+  // goal.* pays only through a goal check-in (once per period / milestone).
+  return ['discipline.', 'study.', 'sleep.', 'money.', 'tasks.todoist', 'habit.', 'goal.'].some((p) => id.startsWith(p))
 }
 
 /** Checks caps and cooldowns and returns the row to insert for this rule. */

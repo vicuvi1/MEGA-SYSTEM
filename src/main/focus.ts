@@ -130,7 +130,7 @@ export class FocusService {
     const todays = all.filter((s) => s.day === today)
     const by = new Map<string, number>()
     for (const s of todays) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes)
-    const goals = (this.db.prepare('SELECT * FROM focus_goals WHERE archived = 0 ORDER BY deadline').all() as any[]).map((g) => {
+    const goals = (this.db.prepare("SELECT * FROM focus_goals WHERE archived = 0 AND COALESCE(kind, 'hours') = 'hours' ORDER BY deadline").all() as any[]).map((g) => {
       const goal: FocusGoal = { id: Number(g.id), title: String(g.title), subject: String(g.subject), deadline: String(g.deadline), hours: Number(g.hours), createdDay: String(g.created_day) }
       const done = all.filter((s) => s.day >= goal.createdDay && s.subject.toLowerCase() === goal.subject.toLowerCase()).reduce((t, s) => t + s.minutes, 0)
       return goalProgress(goal, done, today)

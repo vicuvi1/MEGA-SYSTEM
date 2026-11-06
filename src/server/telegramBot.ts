@@ -14,6 +14,7 @@ import initSqlJs from 'sql.js'
 import type { SqlJsStatic } from 'sql.js'
 import type { BotBridgeConfig } from '@shared/api'
 import { Mirror, WRITES_TABLE } from '../renderer/src/web/mirror'
+import { goalsTick } from './goalsTick'
 import { runSelfCheck, tgSend, timed, type SelfCheckDeps } from './selfCheck'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
@@ -818,6 +819,14 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     await deskTick(mirror, services, now, send, esc)
   } catch (e) {
     console.error('desk:', e)
+  }
+
+  // Measurable goals: Ben asks for the number on each goal's rhythm, or reports a goal that counts itself.
+  try {
+    const g = await goalsTick(mirror, services, now, send, esc)
+    if (g) note('sent', `Goal check-in: ${g}`, undefined, 'goals')
+  } catch (e) {
+    console.error('goals:', e)
   }
 
   // System health: Ben warns you when a part has been broken for 30+ minutes,

@@ -2,6 +2,7 @@
 // the day, puts an approved plan into your calendar and Todoist, writes the
 // evening and Sunday reviews, and the water and training nudges. Used by the
 // tick on the server (Telegram, Mega) and by the app (Today, Coach).
+import { weeklyGoalLines } from '@core/goalsBen'
 import { waterToday } from './coachStatus'
 import { withTimeout } from '@core/ai'
 import { addDays, dayKey } from '@core/dates'
@@ -681,6 +682,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const adapt = await adaptIfNotWorking(coachCheck.verdict).catch(() => null)
     const money = await moneyLine()
     const goalLines = (await goalPlans().catch(() => [] as GoalPlan[])).filter((p) => p.status !== 'done').map((p) => `🎯 ${planLine(p)}`)
+    // Measurable goals: this week's change and where each stands (Sunday review).
+    goalLines.push(...(await mirror.read((db) => weeklyGoalLines(services.services(db).goals.cards(new Date(), financeStateFrom(db, null)), today)).catch(() => [] as string[])))
     // Planned vs real time per subject (FT10) and how mood moves with sleep and training (FT13).
     const monday = weekOf(today)
     const weekEvents = calendar ? await calendar.events(new Date(`${monday}T00:00:00`).toISOString(), new Date().toISOString()).catch(() => [] as CalEvent[]) : []

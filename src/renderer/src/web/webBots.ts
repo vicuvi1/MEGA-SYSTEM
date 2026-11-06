@@ -25,6 +25,8 @@ import { financeDayTx, shopValue } from './webServices'
 import { suggestPoints } from '@core/funBudget'
 import { notesForBen, readNoteOp } from '@core/notebook'
 import { askedFor, confirmButton, loggedInText, readConfirm, riskOf } from '@core/benSafety'
+import { draftButton, numberInText, runGoalAction } from './goalsBrain'
+import { draftLine } from '@core/goalsText'
 import { startsNow } from '@core/startNow'
 import { notMoney } from '@core/moneyGuess'
 import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
@@ -972,6 +974,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       out.buttons = [...(out.buttons ?? []), confirmButton(risk, what, id)].slice(0, 3)
       return false
     })
+    // Goals: a new goal from words is always a draft you confirm; a check-in runs only with a number you wrote.
+    acts = acts.filter((a) => {
+      if ((a.kind !== 'newgoal' && a.kind !== 'goalcheck') || confirmed || direct) return true
+      if (a.kind === 'goalcheck' && numberInText(text, a.value)) return true
+      const id = `${Date.now().toString(36).slice(-6)}g${toKeep.length}`
+      toKeep.push({ id, a })
+      const label = a.kind === 'newgoal' ? draftButton(a.draft) : `🎯 Yes, ${a.ref} is ${a.value}`.slice(0, 40)
+      out.buttons = [...(out.buttons ?? []), { label, do: `say:✓${id} ${a.kind === 'newgoal' ? `Save the goal: ${a.draft.title}` : `${a.ref} is ${a.value}`}`.slice(0, 120) }].slice(0, 3)
+      if (a.kind === 'newgoal') done.push(`📝 Goal draft: ${draftLine(a.draft)}${a.draft.deadline ? '' : ' (say by when)'} · tap to save it`)
+      return false
+    })
     if (toKeep.length) await mirror.write((db) => toKeep.forEach((k) => keepConfirm(db, k.id, k.a))).catch(() => null)
     // Its notebook: a dated line under the right note.
     const noteOps = out.actions.map(readNoteOp).filter((x): x is { title: string; line: string } => !!x)
@@ -1253,6 +1266,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const b = svc.body.state()
               return `💪 Workout logged for ${a.day} · streak ${b.streak}`
             })
+            done.push(line)
+            continue
+          }
+          if (a.kind === 'newgoal' || a.kind === 'goalcheck') {
+            const line = await mirror.write((db) => runGoalAction(services.services(db), a, financeStateFrom(db, store)))
             done.push(line)
             continue
           }

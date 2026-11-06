@@ -102,11 +102,13 @@ export type IslandAction = { id?: string } & (
   | ({ kind: 'auto' } & import('./automations').AutoIslandOp)
   /** PL1–PL5: a widget's or script's checked call (`widget`: its id, or "script:<id>"); the app window checks it again. */
   | { kind: 'widget'; op: 'fetch' | 'addTask' | 'addNote' | 'notify' | 'save'; widget: string; url?: string; text?: string; setting?: unknown }
+  /** Goals: a check-in from the island ("+50", "-0.5", "=3400", "s" same as before, "k" skip: src/core/goalsBen.ts). */
+  | { kind: 'goal'; goalId: number; op: string; alertId?: string }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal'
   title: string
   text: string
   face?: string
@@ -190,6 +192,8 @@ export interface IslandSnapshot {
   weather?: import('./widgets/weatherPill').IslandWeather | null
   /** Automation hub: your island buttons, runs in progress and their answers, the last runs. */
   auto?: import('./automations').IslandAutoView | null
+  /** Goals: the top ones with their ring and quick check-in (src/core/goalsIsland.ts). */
+  goals?: import('./goalsIsland').IslandGoal[]
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {

@@ -148,6 +148,7 @@ export const SETTINGS = {
   coach_looks: json<Record<string, unknown> | null>("how the chat looks: Ben's face and your photo (small data URL)", null),
   coach_adapt: json<Record<string, unknown> | null>('how Ben adapts the plan to how it went', null),
   goal_booking: json<Record<string, unknown> | null>('goal blocks booked into the calendar', null),
+  goal_asks: json<Record<string, unknown> | null>("Ben's goal check-ins: what he asked this period, today's count, auto goals' last number", null),
   ben_desk: json<object | null>("Ben's desk: excuses, moods, study, stakes, calls, letters", null),
   ben_experiment: json<Record<string, unknown> | null>('the experiment running now', null),
   ben_why: json<unknown[]>('why Ben did what he did', []),

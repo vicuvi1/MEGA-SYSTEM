@@ -7,6 +7,8 @@ export type Captured =
   | { kind: 'task'; text: string }
   | { kind: 'clean' }
   | { kind: 'oath' }
+  /** "goal: raise profit to 5000 lei by 31 Dec": opens the New goal sheet with the draft to confirm. */
+  | { kind: 'goal'; text: string }
   | { kind: 'free'; text: string }
 
 /** "focus 50 algebra", "f algebra 25", "task call mom tomorrow p1", "clean", "oath", anything else. */
@@ -21,5 +23,8 @@ export function parseCapture(raw: string): Captured | null {
   if (task) return { kind: 'task', text: task[1].trim() }
   if (/^(?:clean|check ?in|clean day)$/i.test(t)) return { kind: 'clean' }
   if (/^oath$/i.test(t)) return { kind: 'oath' }
+  // "goal: …" without "|" (the "|" form is Ben's hour-goal line, which goes to Ben).
+  const goal = /^(?:goal|new goal)\s*:\s*([^|]{4,200})$/i.exec(t)
+  if (goal) return { kind: 'goal', text: goal[1].trim() }
   return { kind: 'free', text: t }
 }
