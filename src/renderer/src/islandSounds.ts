@@ -8,7 +8,7 @@
 // starts the audio engine before your first click or key, and a rate limit
 // keeps a burst of taps from rattling. The notes and rules: core/islandSound.ts.
 import { useEffect, useRef } from 'react'
-import { createIslandGate, islandGain, islandRecipe, ISLAND_SOUND_CATEGORY, ISLAND_SOUND_NAMES, pagePan, soundForAction, soundsFromSnapshots, viewSound, type IslandSoundName } from '@core/islandSound'
+import { createIslandGate, islandGain, islandVoices, ISLAND_SOUND_CATEGORY, ISLAND_SOUND_NAMES, pagePan, soundForAction, soundsFromSnapshots, viewSound, type IslandSoundName } from '@core/islandSound'
 import type { IslandAction, IslandSnapshot } from '@core/islandModel'
 import { playVoices, soundPrefs } from './soundKit'
 import { getState as musicState } from './music/engine'
@@ -25,8 +25,11 @@ export function play(name: IslandSoundName, opts: { dir?: number; preview?: bool
     const p = soundPrefs()
     const gain = islandGain(name, { mode: p.island, musicPlaying: musicState().playing, call: ctx.call, focus: ctx.focus, quietInFocus: p.islandFocusQuiet, preview: opts.preview })
     if (gain <= 0) return
+    // Which sound for what (Settings → Sound): your pick, or None.
+    const pick = islandVoices(name, p.moments)
+    if (!pick) return
     if (!opts.preview && !gate(name, Date.now())) return
-    playVoices(islandRecipe(name), ISLAND_SOUND_CATEGORY[name], { gain, pan: name === 'page' ? pagePan(opts.dir ?? 0) : 0, preview: opts.preview })
+    playVoices(pick.voices, ISLAND_SOUND_CATEGORY[name], { gain: gain * pick.gain, pan: name === 'page' ? pagePan(opts.dir ?? 0) : 0, preview: opts.preview })
   } catch {
     /* no audio here */
   }

@@ -636,7 +636,7 @@ export function DesktopIsland() {
     // IC14: the evening story peeks long enough to be told (~10 s).
     const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : { type: 'alert' }
     const pref = alertPref(a.kind, !!a.meeting)
-    if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume)
+    if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume, !!a.meeting)
     calmCardRef.current = false
     setCalmCard(false)
     // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce (not in Calm: it slides out of the line).
@@ -1688,14 +1688,33 @@ export function DesktopIsland() {
                   <span>⚡ Start focus by itself when a block begins</span>
                 </label>
               </section>),
-    mustdos: s.mustdos.length ? (<section className="di-must">
-                  <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>
+    mustdos: s.mustdos.length || s.week?.top.length || s.work ? (<section className="di-must">
+                  {s.mustdos.length > 0 && <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>}
                   {s.mustdos.map((m) => (
                     <button key={m.i} className={`di-check ${m.done ? 'done' : ''}`} {...tp(`must:${m.i}`, () => tap({ kind: 'mustdo', i: m.i }))}>
                       <i>{m.done ? '✓' : ''}</i>
                       <span>{m.text}</span>
                     </button>
                   ))}
+                  {!!s.week?.top.length && (
+                    <div className="di-week3">
+                      <span className="di-label">This week's top 3</span>
+                      {s.week.top.map((b) => (
+                        <div key={b.i} className={`di-week3-row ${b.done ? 'done' : ''}`}>
+                          <i>{b.done ? '✓' : '🎯'}</i>
+                          <span>{b.text}</span>
+                        </div>
+                      ))}
+                      {s.week.parked.length > 0 && <small className="di-parked">Parked: {s.week.parked.join(' · ')}</small>}
+                    </div>
+                  )}
+                  {s.work && (
+                    <div className="di-shift" role="group" aria-label="Tonight's work">
+                      <small>Work {s.work.from}–{s.work.to === '24:00' ? '00:00' : s.work.to}</small>
+                      <button className={s.work.mode === 'short' ? 'on' : ''} {...tp('shift:short', () => tap({ kind: 'shift', mode: s.work!.mode === 'short' ? 'normal' : 'short' }))}>Short shift</button>
+                      <button className={s.work.mode === 'off' ? 'on' : ''} {...tp('shift:off', () => tap({ kind: 'shift', mode: s.work!.mode === 'off' ? 'normal' : 'off' }))}>No work tonight</button>
+                    </div>
+                  )}
                 </section>) : null,
     logs: (<section className="di-logs">
                 <div className="di-water">

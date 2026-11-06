@@ -5,6 +5,7 @@ import { Icon } from '../Icon'
 import { BrainPanel } from '../BrainPanel'
 import { BenNotes } from '../BenNotes'
 import { CoachLooksPanel } from '../CoachLooksPanel'
+import { LifeFitPanel } from '../LifeFitPanel'
 import type { SettingsState } from './useSettingsState'
 import { Select } from '../Select'
 
@@ -12,6 +13,7 @@ export function BenSection({ s }: { s: SettingsState }) {
   const { onGo, aiCfg, setAiCfg, showGemini, setShowGemini, showOr, setShowOr, testingProvider, aiTestResult, saveAiConfig, testAiConnection } = s
   return (
         <>
+          <LifeFitPanel />
           <CoachLooksPanel />
           {!features.aiSettings && <BrainPanel />}
           <BenNotes />

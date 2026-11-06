@@ -48,6 +48,11 @@ import { nightMinutes } from '@core/readiness'
 import { dayLog, dayLogLine, recentDayLogs } from './dayLog'
 import { bestHours, historyFacts, latestHour, moveLateStudy } from '@core/bestHours'
 import { localDay } from '@core/dayTime'
+import { workToday } from '@core/lifeFit'
+import { planFromPicks, planWeek, toggleChip, top3Chips, top3Keyboard, top3Text } from '@core/weekPlan'
+
+const TOP3_ASK = 'week_top3_ask'
+import { readLifeFit } from './lifeFitStore'
 
 /** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
 const localHm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
@@ -304,7 +309,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       } catch {
         behind = []
       }
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind }
+      // My life: today's work window (partly busy), tonight's shift and the sleep window.
+      const fit = readLifeFit(db)
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: workToday(fit, today) }
     })
     const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : ''
     const plans = await goalPlans().catch(() => [] as GoalPlan[])
@@ -327,7 +334,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       waterTarget: base.water,
       workoutDone: base.workoutDone,
       sleptMin: base.slept,
-      best: base.hist.focus.length >= 3 ? bestHours(base.hist.focus) : []
+      best: base.hist.focus.length >= 3 ? bestHours(base.hist.focus) : [],
+      work: base.work
     })
     // A life mode: sick = no blocks (the list stays), travel = one short block.
     const fallback = !mode
@@ -379,6 +387,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           'Consider ALL of today\'s tasks below (due today and overdue), not only the must-dos. Pack the important ones into 3–5 focus blocks (25–90 min, sized from the estimates, hard work in his best hours) in the free time between events; batch small tasks (about 15 min) into ONE "Quick tasks" block (kind "quick"). Every task must be accounted for: in a block (its exact title in that block\'s "tasks"), in "also" (with minutes), or in "deferred" with a short reason. A short night means fewer or shorter blocks, never one tiny block when the day has free hours and many tasks. "why": one line on why the day is planned this way.',
           `Fixed events today: ${events.filter((e) => !e.allDay).map((e) => `${new Date(e.start).toTimeString().slice(0, 5)}–${new Date(e.end).toTimeString().slice(0, 5)} ${e.title}`).join('; ') || 'none'}`,
           `Today's tasks (${planTasks.length}, priority 1 = most urgent): ${JSON.stringify(planTasks.slice(0, 40).map((t) => ({ task: t.content, project: t.project, priority: 5 - (t.priority ?? 1), overdue: !!(t.due && t.due < base.today), minutes: estimateMinutes(t) })))}`,
+          base.work?.light ? `WORK WINDOW today ${base.work.light.from}–${base.work.light.to}: partly busy (he works part of it). NO focus or goal blocks there; only the "Quick tasks" block may go there.` : base.work?.busy ? `Short shift today: ${base.work.busy.from}–${base.work.busy.to} is busy (plan around it); the rest of the evening is free.` : '',
           base.slept != null && base.slept < 360 ? `Short night: he slept ${Math.floor(base.slept / 60)}h${String(base.slept % 60).padStart(2, '0')}. Lighter, not empty.` : '',
           mode ? `LIFE MODE today: ${mode.label}. ${mode.kind === 'sick' ? 'Keep it tiny: rest, water, sleep; at most one easy must-do; no focus blocks unless he asks; training null.' : mode.kind === 'travel' ? 'A light plan: one or two small must-dos, at most one short block; training null.' : 'Exam week: more and longer study blocks for the exam goals; a short walk instead of a full workout is fine.'}` : '',
           'Big picture first: blocks must move his tracked goals and nearest deadlines forward (see his goals, deadlines and weekly targets below); say which goal in the block title when it fits ("Algebra set (exam 15 Dec)").',
@@ -397,7 +406,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         const raw = await withTimeout(ai(prompt, { json: true, think: true, strong: true, kind: 'plan' }), 35_000)
         const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
         // DP1: checked: every task accounted for, and the packer's plan when the model gave too little.
-        plan = checkModelPlan(cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now)), fallback, planTasks)
+        plan = checkModelPlan(cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now)), fallback, planTasks, base.work)
       } catch {
         plan = fallback
       }
@@ -594,7 +603,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const svc = services.services(db)
       const st = load(db, today)
       const top3 = st.tomorrow?.day === day ? st.tomorrow.top3 : []
-      const plan = packDay({ today: day, now: '08:00', events, tasks: tasks.filter((t) => t.due === day).map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null })), top3, waterTarget: waterToday(db, svc).target, workoutDone: false })
+      const plan = packDay({ work: workToday(readLifeFit(db), day), today: day, now: '08:00', events, tasks: tasks.filter((t) => t.due === day).map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null })), top3, waterTarget: waterToday(db, svc).target, workoutDone: false })
       save(db, { ...st, tomorrow: { day, top3, plan } })
       return plan
     })
@@ -904,9 +913,61 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       if (!w) throw new Error('No weekly review yet')
       const big3 = typed ? readLines(typed) : w.big3
       if (!big3.length) throw new Error('Give at least one big task')
-      const plan = svc.weekPlan.save({ focus: w.focus as any, note: w.note, big3: big3.map((text) => ({ text, done: false })) })
+      // Top 3 already picked from the chips for this week: keep them (and the parked ones), only the focus changes.
+      const prev = svc.weekPlan.saved()
+      const picked = !typed && prev && prev.week === planWeek(svc.wallet.today()) && Array.isArray(prev.parked) ? prev : null
+      const plan = svc.weekPlan.save(picked ? { ...picked, focus: w.focus as any, note: w.note } : { focus: w.focus as any, note: w.note, big3: big3.map((text) => ({ text, done: false })) })
       if (typed) save(db, { ...st, weekly: { ...w, big3 } })
       return `🗓 Next week: ${focusName(plan.focus)} · ${plan.big3.map((b) => b.text).join(' / ')}`
+    })
+  }
+
+  /** Sunday: "Pick your top 3 for this week", chips from your goals and projects (saved until you tap Save). */
+  async function top3Ask(suggested: string[] = []): Promise<{ text: string; keyboard: ReturnType<typeof top3Keyboard> } | null> {
+    const upcoming = todoist?.upcoming ? await todoist.upcoming(14).catch(() => [] as TodoTask[]) : []
+    return mirror.write((db) => {
+      const svc = services.services(db)
+      const today = svc.wallet.today()
+      const week = planWeek(today)
+      let goals: string[] = []
+      try {
+        goals = svc.goals.cards(new Date(), financeStateFrom(db, null)).filter((c: any) => c.status !== 'done' && c.status !== 'missed').map((c: any) => c.goal.title)
+      } catch {
+        goals = []
+      }
+      const projects = upcoming.map((t) => t.project ?? '').filter(Boolean) as string[]
+      const chips = top3Chips(goals, projects, suggested)
+      if (!chips.length) return null
+      const prev = svc.weekPlan.saved()
+      const picked = prev && prev.week === week ? prev.big3.map((b) => b.text).filter((t) => chips.includes(t)).slice(0, 3) : []
+      setSetting(db as any, TOP3_ASK, JSON.stringify({ week, chips, picked }))
+      return { text: top3Text(picked), keyboard: top3Keyboard(chips, picked) }
+    })
+  }
+  const readAsk = (db: any): { week: string; chips: string[]; picked: string[] } | null => {
+    const a = readJson<any>(db, TOP3_ASK, null)
+    return a && Array.isArray(a.chips) && Array.isArray(a.picked) && typeof a.week === 'string' ? a : null
+  }
+  /** A chip tapped on Telegram: in or out (at most 3). */
+  async function top3Tap(i: number): Promise<{ text: string; keyboard: ReturnType<typeof top3Keyboard> } | null> {
+    return mirror.write((db) => {
+      const a = readAsk(db)
+      if (!a || !a.chips[i]) return null
+      const picked = toggleChip(a.picked, a.chips[i])
+      setSetting(db as any, TOP3_ASK, JSON.stringify({ ...a, picked }))
+      return { text: top3Text(picked), keyboard: top3Keyboard(a.chips, picked) }
+    })
+  }
+  /** Save: the picked ones become the week's big 3, the rest are parked. */
+  async function top3Save(): Promise<string> {
+    return mirror.write((db) => {
+      const a = readAsk(db)
+      if (!a) throw new Error('That question is old: ask me again on Sunday')
+      if (!a.picked.length) throw new Error('Tap at least one first')
+      const svc = services.services(db)
+      const plan = svc.weekPlan.save(planFromPicks(svc.weekPlan.saved(), a.week, a.chips, a.picked))
+      setSetting(db as any, TOP3_ASK, 'null')
+      return `🎯 This week's top ${plan.big3.length}: ${plan.big3.map((b) => b.text).join(' · ')}${plan.parked?.length ? `\nParked: ${plan.parked.join(', ')}` : ''}`
     })
   }
 
@@ -980,7 +1041,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, writeStory, checkoutStart, checkoutMark, planTomorrow, midweek, bookingPreview, bookWeek, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, top3Ask, top3Tap, top3Save, writeStory, checkoutStart, checkoutMark, planTomorrow, midweek, bookingPreview, bookWeek, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

@@ -3,6 +3,8 @@
 // the same services as the desktop on that copy, so every section behaves the
 // same as on the PC: caps, cooldowns, undo, shop, quests, streaks. Things only
 // the web has (embedded apps, Telegram polling, cloud snapshots) are here.
+import { lifeFitView, readLifeFit, saveLifeFit, saveTonight, type LifeFitView } from './web/lifeFitStore'
+import { pushStyle, shiftReply, type ShiftMode } from '@core/lifeFit'
 import { cleanMusicNow } from '@core/music'
 import { setupPasskey, unlockWithPasskey } from './web/passkey'
 import initSqlJs from 'sql.js'
@@ -792,6 +794,21 @@ export function createTursoWebBridge(): Bridge {
       // How Ben writes: length and tone.
       style: async () => (await svcP).read((s) => loadStyle(s.db)),
       setStyle: async (st: Partial<CoachStyle>) => (await svcP).write((s) => saveStyle(s.db, st)),
+      // My life: sleep window, work window, how hard Ben pushes, tonight's shift (synced).
+      lifeFit: async () => (await svcP).read((s) => lifeFitView(s.db)),
+      setLifeFit: async (patch: Partial<LifeFitView>) =>
+        (await svcP).write((s) => {
+          const v = saveLifeFit(s.db, patch)
+          // How hard Ben pushes sets his tone (Coach → About you can still fine-tune it).
+          if (patch.push) saveStyle(s.db, { tone: pushStyle(v.push).tone })
+          return v
+        }),
+      setTonight: async (mode: ShiftMode) =>
+        (await svcP).write((s) => {
+          const day = s.wallet.today()
+          saveTonight(s.db, day, mode)
+          return { view: lifeFitView(s.db), line: shiftReply(readLifeFit(s.db), day, mode) }
+        }),
       // How the chat looks: Ben's face and your photo (one small synced setting).
       looks: async () => (await svcP).read((s) => cleanLooks(readSetting(s.db, 'coach_looks'))),
       setLooks: async (patch: Partial<CoachLooks>) =>

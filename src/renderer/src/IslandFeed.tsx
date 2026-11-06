@@ -1,6 +1,9 @@
 // Desktop only: the app window (it keeps running hidden in the tray) feeds the
 // desktop island its snapshot and does what the island's buttons ask. The
 // island window itself never opens your data, so there is one owner of it.
+import { pushStyle, workToday } from '@core/lifeFit'
+import { weekTop3View, type WeekPlan } from '@core/weekPlan'
+import type { LifeFitView } from './web/lifeFitStore'
 import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
 import { focusQualityPc } from '@core/pcActivity'
 import { useCallback, useEffect, useRef } from 'react'
@@ -68,6 +71,8 @@ const QUEUE = 'ls.healthQueue'
 const WATER_SEEN = 'ls.waterSeen'
 let lastAlertId: string | null = null
 let remindCache: { at: number; list: ReminderItem[] } = { at: 0, list: [] }
+/** My life and this week's plan (cached a minute; a shift tap refreshes it). */
+let fitCache: { at: number; fit: LifeFitView | null; week: WeekPlan | null } = { at: 0, fit: null, week: null }
 /** Phase 3: the last copied dated text, and today's Todoist (cached a minute). */
 const CLIP = 'ls.islandClip'
 /** Phase 4: rewards already celebrated (id → first shown). */
@@ -432,7 +437,15 @@ export function IslandFeed() {
     const callOn = callNow(blocks.current.list, now)
     const nudges = await nudgeTick({ now, busy: !!running || !!callOn, call: !!callOn, idleSec, activeSince, running: focusRun, blockEnd: cur && !cur.call ? cur.end : null, meetingEnd: callOn?.end ?? (next?.call && next.start - now < 15 * 60_000 ? next.end : null), dismissed, eyeBreaks: get<boolean>(EYES, false), doing: doingForBreaks(now) }).catch(() => null)
     const sleepLogs = sleep?.recentLogs ?? []
-    const bedTarget = sleep?.todayLog?.bedTarget ?? sleepLogs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
+    if (now - fitCache.at > 60_000) {
+      fitCache.at = now
+      const [fit, week] = await Promise.all([life.coach?.lifeFit?.().catch(() => null) ?? Promise.resolve(null), life.weekPlan?.saved().catch(() => null) ?? Promise.resolve(null)])
+      fitCache = { at: now, fit: fit ?? fitCache.fit, week: week ?? fitCache.week }
+    }
+    const fit = fitCache.fit
+    // Tonight's bedtime: your target now (My life), else the last one logged.
+    const bedTarget = fit?.bed ?? (sleep as { bedTarget?: string } | null)?.bedTarget ?? sleep?.todayLog?.bedTarget ?? sleepLogs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
+    const push = fit ? pushStyle(fit.push) : null
     const bedLogged = bedLoggedTonight(sleepLogs, new Date(now))
     const wakeLogged = wakeLoggedToday(sleep?.todayLog, sleep?.today ?? '')
     const waterTarget = status.today.waterTarget || Number(sport?.water?.targetMl) || WATER_TARGET_ML
@@ -471,6 +484,8 @@ export function IslandFeed() {
           bedAuto: get<{ time: string; at: string } | null>(BED_AUTO, null),
           bedTarget,
           bedLogged,
+          latestBed: fit?.latestBed,
+          push: push ? { perHour: push.perHour, escalate: push.escalate } : undefined,
           store: nudges.store,
           lastMoveAt: nudges.lastMoveAt,
           lastEyesAt: nudges.lastEyesAt,
@@ -571,6 +586,11 @@ export function IslandFeed() {
       // IS6: later today, a maybe or an invite (greyed in the Next list).
       maybe: blocks.current.maybe.filter((b) => b.end > now).sort((x, y) => x.start - y.start).slice(0, 3),
       mustdos: status.mustdos,
+      week: weekTop3View(fitCache.week, dayKey(new Date(now))),
+      work: (() => {
+        const w = fit ? workToday(fit, dayKey(new Date(now))) : null
+        return w ? { from: w.from, to: w.to, mode: w.mode } : null
+      })(),
       water: { ml: localWater, target: waterTarget },
       reps,
       alert: alertNow,
@@ -834,6 +854,12 @@ export function IslandFeed() {
           case 'eyeBreaks':
             put(EYES, a.on)
             break
+          case 'shift': {
+            const r = await life.coach?.setTonight?.(a.mode)
+            fitCache.at = 0
+            if (r) said = r.line
+            break
+          }
           case 'todoDone': {
             // IS19: the real task (its priority pays the points), never made-up fields.
             const task = todoCache.full[a.id]

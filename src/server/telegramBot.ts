@@ -83,6 +83,8 @@ import { PLUGINS_STATUS, parseJson as parsePluginJson, pluginsOn, readData, writ
 import { cleanHealth, mergeDay, type HealthData } from '../plugins/health/health'
 import { HEALTH } from '../plugins/health'
 import { BEN_DAILY_MESSAGES, DEFAULT_TZ } from '@core/defaults'
+import { pushStyle } from '@core/lifeFit'
+import { readLifeFit } from '../renderer/src/web/lifeFitStore'
 import { tagNudge } from '@core/chatFeed'
 import { MemoryVectors, geminiEmbedder, type Embedder } from './memoryVectors'
 import { memoryJobs } from './memoryJobs'
@@ -677,7 +679,9 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
           return 0
         }
       })
-      if (count >= BEN_DAILY_MESSAGES) {
+      // How hard Ben pushes (My life): Gentle and Firm send fewer, Push uses the whole budget, never more.
+      const cap = await mirror.read((db) => pushStyle(readLifeFit(db).push, { maxMessages: BEN_DAILY_MESSAGES, maxPerHour: 3 }).messagesPerDay).catch(() => BEN_DAILY_MESSAGES)
+      if (count >= cap) {
         await mirror.write((db) => {
           const n = notifFromMessage(text, reply_markup, new Date())
           if (n) addNotif(db as any, n)
@@ -1436,6 +1440,9 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const week = await mirror.read((db) => weekMoneyLine(financeStateFrom(db, null), services.services(db).wallet.today())).catch(() => null)
       // HD: the week for your body (water, moves, breaks, bedtimes).
       await send(weeklyText(w) + (week ? `\n\n💸 ${escapeHtml(week)}` : '') + `\n\n${weeklyHealthText(f.body.week)}`, WEEKLY_KEYBOARD)
+      // Then: "Pick your top 3 for this week", chips from his goals and projects (the same big 3 as the Goals page).
+      const ask = await bots.rhythm.top3Ask(w.big3).catch(() => null)
+      if (ask) await send(ask.text, ask.keyboard, { always: true }).catch(() => null)
       // Ben's story so far about you, rewritten once a week (B5).
       await bots.rhythm.writeStory().catch(() => null)
       const letter = await bots.rhythm.letter().catch(() => null)

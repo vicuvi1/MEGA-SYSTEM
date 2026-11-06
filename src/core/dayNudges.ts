@@ -51,6 +51,10 @@ export interface DayNudgeInput {
   // Bed
   bedTarget: string
   bedLogged: boolean
+  /** My life: the latest bedtime; the late nudges get firm from there. */
+  latestBed?: string
+  /** How hard Ben pushes (My life): interruptions an hour, and whether a long sitting ends in Ben's firmer line. */
+  push?: { perHour: number; escalate: boolean }
   // Body
   store: NudgeStore
   lastMoveAt: number
@@ -104,14 +108,14 @@ export function dayNudge(i: DayNudgeInput): DayNudge {
   const wd = windDown(i.now, i.bedTarget, i.bedLogged)
   // From bedtime − 60 min until bed is logged: only bed things (healthyDay.ts govern).
   const night = windDownMode(i.now, i.bedTarget, i.bedLogged)
-  const ctx: GovernCtx = { ...i.ctx, windDown: i.ctx.windDown ?? !!night }
+  const ctx: GovernCtx = { ...i.ctx, windDown: i.ctx.windDown ?? !!night, ...(i.push ? { perHour: i.push.perHour } : {}) }
   const morning = () => morningAlert({ now: i.now, firstActiveAt: i.firstActiveAt, wakeLogged: i.wakeLogged, wakeTime: i.wakeTime, firstBlock: i.firstBlock, blockStarted: i.blockStarted, dismissed: i.dismissed, bedAuto: i.bedAuto?.time ?? null })
   const morningId = `morning:${new Date(i.now).toDateString()}`
   const morningShown = i.shown.some((x) => x.key === morningId) || morning() != null
   const move = () => {
     const mv = learnAlert(moveNudge({ ...c, busy: false, lastMoveAt: i.lastMoveAt, exercises: i.exercises, coins: i.coins, doing: i.doing }), s, 'move', i.now)
     // IN31: at 90 min Ben's firmer line always drops down.
-    return mv && mv.nudge?.type === 'move' && mv.nudge.level === 'ben' ? { ...mv, dot: false } : mv
+    return mv && i.push?.escalate !== false && mv.nudge?.type === 'move' && mv.nudge.level === 'ben' ? { ...mv, dot: false } : mv
   }
   const recap = () => {
     if (i.eveningSent) return null
@@ -132,7 +136,7 @@ export function dayNudge(i: DayNudgeInput): DayNudge {
       queue = r.rest
       return r.alert
     },
-    () => (i.running ? null : lateAlert({ now: i.now, bedTarget: i.bedTarget, idleSec: i.idleSec, bedLogged: i.bedLogged, dismissed: i.dismissed, day: i.day })),
+    () => (i.running ? null : lateAlert({ now: i.now, bedTarget: i.bedTarget, latest: i.latestBed, idleSec: i.idleSec, bedLogged: i.bedLogged, dismissed: i.dismissed, day: i.day })),
     () => (busy ? null : windDownAlert(wd, i.now, i.dismissed)),
     morning,
     () => bedAutoAlert({ bed: i.bedAuto, now: i.now, running: !!i.running, wakeLogged: i.wakeLogged, morningShown, dismissed: i.dismissed }),

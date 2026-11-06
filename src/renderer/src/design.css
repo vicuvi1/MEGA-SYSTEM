@@ -1403,6 +1403,36 @@
 .sx-range { width: 200px; accent-color: var(--lime); }
 .sx-select, .sx-input { min-width: 200px; padding: 7px 10px; border-radius: 10px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; }
 .sx-try { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+.sx-moments { margin: 12px 0 8px; padding: 12px 0; border-top: 1px solid rgb(var(--ink) / 0.08); border-bottom: 1px solid rgb(var(--ink) / 0.08); }
+.sx-moments h3 { margin: 0 0 2px; font-size: 14px; }
+.sx-moments .hint { margin: 0 0 8px; }
+.sx-moment { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 210px) auto; align-items: center; gap: 8px; padding: 4px 0; }
+.sx-moment-name { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sx-moment-name i { font-style: normal; display: inline-block; width: 1.4em; }
+.sx-play { min-width: 34px; }
+.lf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 6px 0 10px; }
+.lf-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.lf-grid input[type='time'], .lf-grid input[type='number'] { padding: 7px 10px; border-radius: 10px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; }
+.lf-days { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 8px; }
+.lf-days button { border: 0; padding: 6px 10px; border-radius: 9px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; background: rgb(var(--ink) / 0.06); color: var(--muted); }
+.lf-days button.on { background: var(--lime); color: var(--lime-ink); }
+.lf-sub { margin: 14px 0 4px; font-size: 13.5px; }
+.lf-push { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 6px 0; }
+.lf-push button { text-align: left; border: 0; padding: 10px 12px; border-radius: 12px; font: inherit; cursor: pointer; background: rgb(var(--ink) / 0.05); color: var(--text); box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.08); }
+.lf-push button b { display: block; font-size: 14px; }
+.lf-push button small { color: var(--muted); font-size: 12px; }
+.lf-push button.on { box-shadow: inset 0 0 0 2px var(--lime); background: rgb(var(--ink) / 0.08); }
+.wk3 { margin: 10px 0; padding: 12px 14px; border-radius: 14px; background: rgb(var(--ink) / 0.04); box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.07); }
+.wk3 h3 { margin: 0 0 4px; font-size: 14px; }
+.wk3 .hint { margin: 0 0 8px; }
+.wk3-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.wk3-chips button { border: 0; padding: 6px 11px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; background: rgb(var(--ink) / 0.07); color: var(--text); }
+.wk3-chips button.on { background: var(--gold, var(--lime)); color: var(--lime-ink); font-weight: 600; }
+.wk3-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.dl-parked { margin: 4px 0 0 4px; font-size: 12.5px; color: var(--muted); opacity: 0.8; }
+.shift-pill { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 8px 0; font-size: 13px; color: var(--muted); }
+.shift-pill button { border: 0; padding: 5px 10px; border-radius: 999px; font: inherit; font-size: 12.5px; cursor: pointer; background: rgb(var(--ink) / 0.07); color: var(--text); }
+.shift-pill button.on { background: var(--lime); color: var(--lime-ink); }
 .sx-saved { font-size: 12px; font-weight: 700; color: var(--lime); opacity: 0; transition: opacity .2s; margin-left: auto; margin-right: 8px; }
 .sx-saved.on { opacity: 1; }
 .sx-list { list-style: none; margin: 4px 0 8px; padding: 0; display: flex; flex-direction: column; gap: 6px; }

@@ -103,6 +103,8 @@ export interface GovernCtx {
   asleep: boolean
   /** Wind-down or later (bedtime − 60 min until bed): no push-ups or water now, only bed. */
   windDown?: boolean
+  /** Interruptions an hour (how hard Ben pushes); never above MAX_PER_HOUR. */
+  perHour?: number
 }
 
 export interface Verdict {
@@ -143,7 +145,8 @@ export function govern(a: IslandAlert | null, c: GovernCtx, shown: Shown[]): Ver
   const key = alertKey(a)
   const dup = shown.find((s) => s.topic === topic && s.key !== key && c.now - s.at < SAME_TOPIC_MIN * 60_000)
   if (dup) return { show: null, why: `${topic} already nudged at ${hmOf(dup.at)} (${dup.surface})` }
-  if (!a.dot && !FIRM.has(topic) && interruptions(shown, c.now, key) >= MAX_PER_HOUR) return { show: { ...a, dot: true }, why: `${MAX_PER_HOUR} interruptions this hour: a dot` }
+  const cap = Math.min(MAX_PER_HOUR, Math.max(1, c.perHour ?? MAX_PER_HOUR))
+  if (!a.dot && !FIRM.has(topic) && interruptions(shown, c.now, key) >= cap) return { show: { ...a, dot: true }, why: `${cap} interruptions this hour: a dot` }
   return { show: a, why: 'ok' }
 }
 
@@ -400,10 +403,13 @@ export function windDownMode(now: number, bedTarget: string, bedLogged: boolean)
  * (firmer), each once, only while you're really at the PC. Then it stops:
  * no nagging every 20 minutes until 05:00.
  */
-export function lateAlert(o: { now: number; bedTarget: string; idleSec: number | null; bedLogged: boolean; dismissed: Record<string, number>; day: string }): IslandAlert | null {
+export function lateAlert(o: { now: number; bedTarget: string; latest?: string; idleSec: number | null; bedLogged: boolean; dismissed: Record<string, number>; day: string }): IslandAlert | null {
   const w = windDownMode(o.now, o.bedTarget, o.bedLogged)
   if (!w || w.phase !== 'late' || o.idleSec == null || o.idleSec > 120) return null
-  const stage = w.minutes >= 60 && w.minutes < 120 ? 2 : w.minutes >= 30 && w.minutes < 60 ? 1 : 0
+  // My life: the first one at your latest bedtime (when it's within 2 h of the target), else at +30; the firmer one 30 min later.
+  const gap = o.latest && isHm(o.latest) ? (toMin(o.latest) - toMin(o.bedTarget) + 1440) % 1440 : 30
+  const first = gap >= 10 && gap <= 120 ? gap : 30
+  const stage = w.minutes >= first + 30 && w.minutes < first + 90 ? 2 : w.minutes >= first && w.minutes < first + 30 ? 1 : 0
   if (!stage) return null
   const id = `late:${o.day}:${stage}`
   if ((o.dismissed[id] ?? 0) > o.now) return null
@@ -413,7 +419,7 @@ export function lateAlert(o: { now: number; bedTarget: string; idleSec: number |
         id,
         kind: 'late',
         title: 'Still up?',
-        text: `It's ${now} and your bedtime was ${o.bedTarget}. Close the laptop: tomorrow starts tonight.`,
+        text: `It's ${now} and your bedtime was ${o.bedTarget}${o.latest && gap >= 10 && gap <= 120 ? ` (latest ${o.latest})` : ''}. Close the laptop: tomorrow starts tonight.`,
         face: '🌙',
         actions: [
           { label: '🌙 Going to bed', action: { kind: 'bed' }, primary: true },

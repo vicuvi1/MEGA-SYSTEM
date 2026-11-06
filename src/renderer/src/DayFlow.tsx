@@ -969,6 +969,11 @@ export function DayFlow(props: DayFlowProps) {
             </ul>
           </div>
         )}
+        {bigOpen.length > 0 && !!week?.parked?.length && (
+          <p className="dl-parked" title="You picked these for later this week: still here, Ben won't push them">
+            Parked: {week.parked.join(' · ')}
+          </p>
+        )}
           </>
         ) : (
           <>
@@ -1055,6 +1060,11 @@ export function DayFlow(props: DayFlowProps) {
               ))}
             </ul>
           </div>
+        )}
+        {bigOpen.length > 0 && !!week?.parked?.length && (
+          <p className="dl-parked" title="You picked these for later this week: still here, Ben won't push them">
+            Parked: {week.parked.join(' · ')}
+          </p>
         )}
 
         {loose.length > 0 && (

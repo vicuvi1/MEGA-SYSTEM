@@ -256,8 +256,8 @@ export const CALLBACKS: CallbackHandler[] = [
   },
   // The daily rhythm: today's plan, the evening review, the Sunday review.
   {
-    prefixes: ['rb', 'rv', 'rw'],
-    match: (data) => /^r[bvw]\|/.test(data),
+    prefixes: ['rb', 'rv', 'rw', 'w3'],
+    match: (data) => /^(r[bvw]|w3)\|/.test(data),
     run: async (c, t) => {
       const { calendar, markSeen, rhythm, sendProposal } = c
       const { data, chat, key, update, cq, answer, edit } = t
@@ -311,6 +311,20 @@ export const CALLBACKS: CallbackHandler[] = [
           const text = `${esc(msg)}\n\n✅ ${esc(line)}`
           await edit(text, { inline_keyboard: [[{ text: '📅 Book the big 3 in my calendar', callback_data: 'rw|b' }]] })
           return text
+        }
+        // Sunday's "pick your top 3": a chip in or out, then Save (the rest are parked).
+        if (data.startsWith('w3|')) {
+          const arg = data.slice(3)
+          if (arg === 'ok') {
+            const line = await rhythm.top3Save()
+            await answer('Saved')
+            await edit(esc(line))
+            return line
+          }
+          const r = await rhythm.top3Tap(Number(arg))
+          await answer(r ? 'Ok' : 'That question is old')
+          if (r) await edit(r.text, r.keyboard)
+          return r ? 'picked' : null
         }
         // W13: the big 3 as blocks: shown first, booked on "Book them".
         if (data === 'rw|b') {

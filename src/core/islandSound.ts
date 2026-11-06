@@ -6,6 +6,7 @@
 // through the one sound engine (soundKit.ts). Tested in islandSound.test.ts.
 import type { IslandAction, IslandSnapshot } from './islandModel'
 import type { SoundCategory, Voice } from './sounds'
+import { DEFAULT_MOMENTS, momentRecipe, type MomentId, type MomentSound } from './soundMoments'
 
 export type IslandSoundName = 'open' | 'close' | 'page' | 'tap' | 'done' | 'error' | 'hover' | 'notify' | 'levelup'
 export const ISLAND_SOUND_NAMES: IslandSoundName[] = ['open', 'close', 'page', 'tap', 'hover', 'done', 'levelup', 'notify', 'error']
@@ -52,6 +53,23 @@ export function islandRecipe(name: IslandSoundName): Voice[] {
     // A short rising arpeggio with a shimmer on top.
     case 'levelup': return [...[523.25, 659.25, 783.99, 1046.5, 1318.5].flatMap((f, i) => bell(f, i * 0.065, i === 4 ? 0.65 : 0.2, 0.038)), v(5274, 0.3, 0.4, 0.004, { attack: 0.08 })]
   }
+}
+
+/** The island sounds that follow "Which sound for what" (Settings → Sound). */
+export const ISLAND_MOMENT: Partial<Record<IslandSoundName, MomentId>> = { done: 'done', notify: 'reminder', error: 'error' }
+/** Another pick plays quieter on the island (its own sounds are about a third of the app's). */
+export const ISLAND_PICK_GAIN = 0.45
+
+/**
+ * The notes for an island sound with your picks: its own soft notes while the
+ * moment keeps its default, your pick (quieter) when you chose another, null for None.
+ */
+export function islandVoices(name: IslandSoundName, moments?: Partial<Record<MomentId, MomentSound>>): { voices: Voice[]; gain: number } | null {
+  const m = ISLAND_MOMENT[name]
+  const pick = m ? moments?.[m] ?? DEFAULT_MOMENTS[m] : null
+  if (!m || !pick || pick === DEFAULT_MOMENTS[m]) return { voices: islandRecipe(name), gain: 1 }
+  if (pick === 'none') return null
+  return { voices: momentRecipe(pick), gain: ISLAND_PICK_GAIN }
 }
 
 /** How far left (-) or right (+) a page tick sits: the way you swiped. */

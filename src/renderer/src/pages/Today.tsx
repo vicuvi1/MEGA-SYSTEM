@@ -25,6 +25,8 @@ import { HealthyToday, SleepToday, useHealthyToday } from '../TodayBody'
 import '../todayTabs.css'
 import { PluginCards } from '../../../plugins/cards'
 import { MoneyPill } from '../MoneyQuick'
+import { ShiftButtons } from '../LifeFitPanel'
+import { WeekTop3Pick } from '../WeekTop3'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -208,6 +210,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
             <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
             <MoneyPill />
             <NextUpBar />
+            <ShiftButtons />
+            <WeekTop3Pick />
             {has('day') && (
               <>
                 <LifeModeCard compact />

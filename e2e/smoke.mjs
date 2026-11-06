@@ -408,6 +408,44 @@ try {
       if (!ok) throw new Error(`${name} looks empty`)
     }
   })
+  // Life fit: Settings → Ben → My life (sleep, work window, how hard Ben pushes), Settings → Sound's
+  // "Which sound for what", and the one-tap shift buttons. LIFEFIT_SHOTS=<dir> saves screenshots.
+  await step('My life, how hard Ben pushes, which sound for what', async () => {
+    const shots = process.env.LIFEFIT_SHOTS
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Ben' }).first().click()
+    await pg.waitForSelector('.st-tabs .ptabs [data-tab="life"]', { timeout: 8000 })
+    await pg.click('.st-tabs .ptabs [data-tab="life"]')
+    await pg.waitForSelector('.lf-panel', { timeout: 8000 })
+    if (!(await pg.locator('.lf-panel input[type="checkbox"]').isChecked())) await pg.locator('.lf-panel input[type="checkbox"]').check()
+    await pg.waitForSelector('.lf-panel .lf-days', { timeout: 5000 })
+    await pg.click('.lf-push button:has(b:text-is("Firm"))')
+    await pg.waitForSelector('.lf-push button.on:has(b:text-is("Firm"))', { timeout: 5000 })
+    await pg.click('.lf-push button:has(b:text-is("Push"))')
+    await pg.waitForSelector('.lf-push button.on:has(b:text-is("Push"))', { timeout: 5000 })
+    if (shots) {
+      await pg.waitForTimeout(500)
+      await pg.locator('.lf-panel').screenshot({ path: `${shots}/settings-my-life.png` })
+    }
+    await pg.locator('.st-item', { hasText: 'Sound' }).first().click()
+    await pg.waitForFunction(() => document.querySelector('.st-head h1')?.textContent === 'Sound', null, { timeout: 5000 })
+    const n = await pg.locator('.sx-moment').count()
+    if (n !== 11) throw new Error(`${n} sound rows, want 11`)
+    await pg.click('button[aria-label="Sound for Water"]')
+    await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
+    await pg.locator('.ui-select-list [role=option]', { hasText: 'Pop' }).click()
+    await pg.waitForFunction(() => document.querySelector('button[aria-label="Sound for Water"]')?.getAttribute('data-value') === 'pop', null, { timeout: 3000 })
+    await pg.click('button[aria-label="Play the sound for Water"]')
+    if (shots) {
+      await pg.locator('.sx-moments').scrollIntoViewIfNeeded()
+      await pg.waitForTimeout(500)
+      await pg.locator('.sx-moments').screenshot({ path: `${shots}/settings-sounds.png` })
+    }
+    // Back to the default, so later steps hear what they always did.
+    await pg.click('button[aria-label="Sound for Water"]')
+    await pg.locator('.ui-select-list [role=option]', { hasText: 'Water drop' }).click()
+  })
   // Laptop fixes: drop-down lists are readable in dark and light (the system list
   // of a plain <select> came out white with faint text on Windows), they open fully
   // on screen, and the app's own drop-down works with the keyboard.
@@ -1121,6 +1159,17 @@ try {
       await ip.waitForTimeout(700)
       await ip.locator('.di-panel').screenshot({ path: `${shots}/weekly-health-card.png` })
     }
+    // Life fit: the week's top 3 (the rest parked) and tonight's shift on the Day page.
+    await ip.evaluate(() => window.__setSnap({ health: null, week: { top: [{ i: 0, text: 'Finish the essay', done: true }, { i: 1, text: 'Side project: login page', done: false }, { i: 2, text: 'Run 3 times', done: false }], parked: ['Read 4 books', 'Learn Spanish'] }, work: { from: '17:00', to: '22:00', mode: 'normal' } }))
+    await ip.waitForSelector('.di-week3', { timeout: 3000 })
+    if (!/Parked: Read 4 books/.test(await ip.locator('.di-week3').innerText())) throw new Error('no parked line on the Day page')
+    await ip.click('[data-tap="shift:short"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'shift' && a.mode === 'short'), null, { timeout: 3000 })
+    if (process.env.LIFEFIT_SHOTS) {
+      await ip.locator('.di-week3').scrollIntoViewIfNeeded()
+      await ip.waitForTimeout(500)
+      await ip.locator('.di-panel').screenshot({ path: `${process.env.LIFEFIT_SHOTS}/island-day-top3.png` })
+    }
     await ip.context().close()
   })
   // Island 2: a move break you pick and count (−/+), logged with ↶ Undo; an eye break counts down on the pill.
@@ -1506,7 +1555,7 @@ try {
     }
     await open('settings')
     await pg.waitForSelector('.st-item', { timeout: 10000 })
-    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['brain', 'talk', 'notes']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
+    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['life', 'brain', 'talk', 'notes']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
       await pg.locator('.st-item', { hasText: name }).first().click()
       await pg.waitForFunction((n) => document.querySelector('.st-head h1')?.textContent === n, name, { timeout: 5000 })
       await pg.waitForSelector(`.st-tabs .ptabs [data-tab="${ids[0]}"]`, { timeout: 8000 })

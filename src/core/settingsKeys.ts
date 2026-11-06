@@ -178,6 +178,8 @@ export const SETTINGS = {
   month_aims: json<Record<string, unknown> | null>("the month's aims", null),
   learn_log: json<unknown[]>('learning path log', []),
   life_mode: json<Record<string, unknown> | null>('life mode (exam, holiday, sick…)', null),
+  life_fit: json<Record<string, unknown> | null>("My life: latest bedtime, the work window (days, hours, how much you really work), how hard Ben pushes, tonight's shift (src/core/lifeFit.ts)", null),
+  week_top3_ask: json<Record<string, unknown> | null>('Sunday "pick your top 3" on Telegram: the week, the chips offered and the ones tapped so far', null),
   // ---- sleep ----
   sleep_bed_target: text('bedtime target (HH:MM)'),
   sleep_weekday_target: text('weekday wake target (HH:MM)'),

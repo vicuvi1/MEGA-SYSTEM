@@ -10,6 +10,7 @@
 // silently: every task is a must-do, in "Also today", or deferred.
 import { freeGaps, type CalEvent } from './dayTime'
 import { fromMin, toMin, quarter, type AlsoItem, type DayProposal, type DeferredItem, type PlanBlock } from './rhythm'
+import type { WorkToday } from './lifeFit'
 
 export interface PlanTask {
   id?: string
@@ -40,6 +41,12 @@ export interface PackInputs {
   best?: number[]
   /** The plan ends by then (default 22:00, 21:30 after a short night). */
   endBy?: string
+  /**
+   * Today's work window (My life): partly busy. No deep focus there, only the
+   * quick-tasks batch; a short shift blocks only its busy part, "no work
+   * tonight" frees it all (core/lifeFit.ts workToday).
+   */
+  work?: WorkToday | null
 }
 
 const QUICK = /\b(check|email|e-mail|mail|reply|answer|call|text|message|pay|buy|order|send|book|sign|print|upload|submit|confirm|cancel|renew|schedule|remind|ask|tidy|water)\b/i
@@ -79,6 +86,32 @@ export function rankTasks<T extends PlanTask>(tasks: T[], today: string): T[] {
 interface Win {
   s: number
   e: number
+  /** Inside the work window: light tasks only. */
+  light?: boolean
+}
+
+/** The free windows with today's work window applied: its busy part cut out, its light part marked. */
+export function withWork(wins: Win[], work: WorkToday | null | undefined): Win[] {
+  if (!work) return wins
+  const cut = (list: Win[], r: { from: string; to: string }, mark: boolean): Win[] => {
+    const a = toMin(r.from)
+    const b = toMin(r.to)
+    const out: Win[] = []
+    for (const w of list) {
+      if (w.e <= a || w.s >= b) {
+        out.push(w)
+        continue
+      }
+      if (w.s < a) out.push({ ...w, e: a })
+      if (mark) out.push({ s: Math.max(w.s, a), e: Math.min(w.e, b), light: true })
+      if (w.e > b) out.push({ ...w, s: b })
+    }
+    return out.filter((w) => w.e - w.s >= 20)
+  }
+  let out = wins
+  if (work.busy) out = cut(out, work.busy, false)
+  if (work.light) out = cut(out, work.light, true)
+  return out
 }
 
 /** Free windows between events, with 10 minutes to get to and from each event. */
@@ -109,25 +142,30 @@ function place(wins: Win[], c: Chunk, best: number[], minMin: number): { start: 
   const take = (w: Win, start: number, minutes: number) => {
     const i = wins.indexOf(w)
     const parts: Win[] = []
-    if (start - 10 - w.s >= 20) parts.push({ s: w.s, e: start - 10 })
-    if (w.e - (start + minutes + 10) >= 20) parts.push({ s: start + minutes + 10, e: w.e })
+    if (start - 10 - w.s >= 20) parts.push({ ...w, e: start - 10 })
+    if (w.e - (start + minutes + 10) >= 20) parts.push({ ...w, s: start + minutes + 10 })
     wins.splice(i, 1, ...parts)
     return { start, minutes }
   }
   if (c.kind === 'quick') {
-    const pm = wins.find((w) => w.e - Math.max(w.s, toMin('13:00')) >= c.minutes)
+    // Quick wins fit the work window (light time), so the free day stays for deep work.
+    const lw = wins.find((w) => w.light && fits(w, c.minutes))
+    if (lw) return take(lw, lw.s, c.minutes)
+    const pm = wins.find((w) => !w.light && w.e - Math.max(w.s, toMin('13:00')) >= c.minutes)
     if (pm) return take(pm, Math.max(pm.s, toMin('13:00')), c.minutes)
   }
+  // Deep focus never goes into the work window.
+  const open = c.kind === 'quick' ? wins : wins.filter((w) => !w.light)
   if (c.hard && best.length) {
     for (const h of best) {
-      const w = wins.find((x) => x.s <= h * 60 + 30 && x.e >= Math.max(x.s, h * 60) + c.minutes)
+      const w = open.find((x) => x.s <= h * 60 + 30 && x.e >= Math.max(x.s, h * 60) + c.minutes)
       if (w) return take(w, Math.max(w.s, h * 60), c.minutes)
     }
   }
-  const w = wins.find((x) => fits(x, c.minutes))
+  const w = open.find((x) => fits(x, c.minutes))
   if (w) return take(w, w.s, c.minutes)
   // Shrink to the biggest window left when it still makes a real block.
-  const big = [...wins].sort((a, b) => b.e - b.s - (a.e - a.s))[0]
+  const big = [...open].sort((a, b) => b.e - b.s - (a.e - a.s))[0]
   if (big && big.e - big.s >= minMin) return take(big, big.s, Math.floor((big.e - big.s) / 5) * 5)
   return null
 }
@@ -214,8 +252,8 @@ export function packDay(p: PackInputs): DayProposal {
     : null
 
   // Place them: goals and must-dos, the urgent work, the quick batch, training, then the rest until the day is full.
-  const wins = freeWindows(p.events, p.today, after, endBy)
-  const freeMin = wins.reduce((s, w) => s + w.e - w.s, 0)
+  const wins = withWork(freeWindows(p.events, p.today, after, endBy), p.work)
+  const freeMin = wins.filter((w) => !w.light).reduce((s, w) => s + w.e - w.s, 0)
   const maxBlocks = short ? 5 : 8
   const budget = short ? 240 : 390
   const firsts = [...chunks, ...groupChunks.filter((c) => c.hard)]
@@ -244,12 +282,12 @@ export function packDay(p: PackInputs): DayProposal {
   // Training in the evening when there's room (kept before the lower tasks fill the day).
   let training: DayProposal['training'] = null
   if (!p.workoutDone) {
-    for (const w of wins.filter((x) => x.e > toMin('17:00'))) {
+    for (const w of wins.filter((x) => !x.light && x.e > toMin('17:00'))) {
       const s = Math.ceil(Math.max(w.s, toMin('17:00')) / 15) * 15
       if (s + 45 <= w.e) {
         training = { time: fromMin(s), what: short ? 'easy: Workout · 30 min' : 'Workout · 45 min' }
         const i = wins.indexOf(w)
-        wins.splice(i, 1, ...[{ s: w.s, e: s - 10 }, { s: s + 55, e: w.e }].filter((x) => x.e - x.s >= 20))
+        wins.splice(i, 1, ...[{ ...w, e: s - 10 }, { ...w, s: s + 55 }].filter((x) => x.e - x.s >= 20))
         break
       }
     }
@@ -296,7 +334,7 @@ export function packDay(p: PackInputs): DayProposal {
     deferred,
     why,
     light: short || undefined,
-    free: wins.length || blocks.length ? freeWindows(p.events, p.today, after, endBy).map((w) => ({ start: fromMin(w.s), end: fromMin(w.e) })) : []
+    free: wins.length || blocks.length ? withWork(freeWindows(p.events, p.today, after, endBy), p.work).filter((w) => !w.light).map((w) => ({ start: fromMin(w.s), end: fromMin(w.e) })) : []
   }
 }
 
@@ -313,7 +351,9 @@ export function unaccounted(plan: Pick<DayProposal, 'mustdos' | 'blocks' | 'also
  * (estimates, priority, ids), and the packer's plan when the model gave too
  * little (far fewer blocks or far less focus than the day has room for).
  */
-export function checkModelPlan(model: DayProposal, packed: DayProposal, tasks: PlanTask[]): DayProposal {
+export function checkModelPlan(model: DayProposal, packed: DayProposal, tasks: PlanTask[], work?: WorkToday | null): DayProposal {
+  // Deep focus in the work window (or in a short shift's busy part): the packer's plan instead.
+  if (workClash(model.blocks, work)) return { ...packed, headline: packed.headline }
   const enough = packed.blocks.length < 3 || (model.blocks.length >= Math.ceil(packed.blocks.length / 2) + 1 && model.blocks.reduce((s, b) => s + b.minutes, 0) >= packed.blocks.reduce((s, b) => s + b.minutes, 0) * 0.5)
   if (!enough) return { ...packed, headline: packed.headline }
   const byKey = new Map(tasks.map((t) => [key(t.content), t]))
@@ -333,6 +373,13 @@ export function checkModelPlan(model: DayProposal, packed: DayProposal, tasks: P
   }
   also.sort((a, b) => b.priority - a.priority || Number(!!b.overdue) - Number(!!a.overdue))
   return { ...model, also, deferred, why: model.why || packed.why, free: packed.free }
+}
+
+/** A block that breaks the work window rule: deep focus in its light part, anything in its busy part. */
+export function workClash(blocks: PlanBlock[], work: WorkToday | null | undefined): PlanBlock | null {
+  if (!work) return null
+  const over = (b: PlanBlock, r: { from: string; to: string } | null) => !!r && toMin(b.start) < toMin(r.to) && toMin(b.start) + b.minutes > toMin(r.from)
+  return blocks.find((b) => over(b, work.busy) || (b.kind !== 'quick' && over(b, work.light))) ?? null
 }
 
 /** After blocks moved: each "Also today" item points at the block that holds it now (or none). */

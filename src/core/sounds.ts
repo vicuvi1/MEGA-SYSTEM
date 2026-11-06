@@ -3,6 +3,7 @@
 // phone buzz that goes with it and the focus background noise. Pure: the
 // renderer's soundKit.ts turns these notes into WebAudio. No audio files.
 import { inQuietHours } from './notifyRules'
+import { cleanMoments, DEFAULT_MOMENTS, type MomentId, type MomentSound } from './soundMoments'
 
 export type SoundCategory = 'ui' | 'success' | 'money' | 'focus' | 'alerts'
 export const SOUND_CATEGORIES: { id: SoundCategory; label: string; hint: string }[] = [
@@ -31,8 +32,10 @@ export interface SoundPrefs {
   island: 'off' | 'subtle' | 'full'
   /** The island stays silent while a focus timer runs. */
   islandFocusQuiet: boolean
+  /** Which sound for what (Ben, reminders, water, timer…), or None (core/soundMoments.ts). */
+  moments: Record<MomentId, MomentSound>
 }
-export const DEFAULT_SOUND_PREFS: SoundPrefs = { cats: { ui: true, success: true, money: true, focus: true, alerts: true }, theme: 'soft', haptics: true, bed: 'off', bedVolume: 40, lastTen: true, island: 'subtle', islandFocusQuiet: false }
+export const DEFAULT_SOUND_PREFS: SoundPrefs = { cats: { ui: true, success: true, money: true, focus: true, alerts: true }, theme: 'soft', haptics: true, bed: 'off', bedVolume: 40, lastTen: true, island: 'subtle', islandFocusQuiet: false, moments: { ...DEFAULT_MOMENTS } }
 
 export function cleanSoundPrefs(p: unknown): SoundPrefs {
   const o = (p && typeof p === 'object' ? p : {}) as Partial<SoundPrefs>
@@ -46,7 +49,8 @@ export function cleanSoundPrefs(p: unknown): SoundPrefs {
     bedVolume: typeof o.bedVolume === 'number' ? Math.max(0, Math.min(100, o.bedVolume)) : 40,
     lastTen: o.lastTen !== false,
     island: o.island === 'off' || o.island === 'full' ? o.island : 'subtle',
-    islandFocusQuiet: o.islandFocusQuiet === true
+    islandFocusQuiet: o.islandFocusQuiet === true,
+    moments: cleanMoments(o.moments)
   }
 }
 
@@ -56,7 +60,7 @@ export type SoundName =
   | 'coin' | 'spend' | 'reward'
   | 'focusStart' | 'focusEnd' | 'lastTick'
   | 'error' | 'notify' | 'ben'
-  | 'remind' | 'remindWater' | 'remindMove' | 'remindEyes' | 'remindBed' | 'remindReward'
+  | 'remind' | 'remindWater' | 'remindMove' | 'remindEyes' | 'remindBed' | 'remindReward' | 'remindMeeting'
 
 export const SOUND_CATEGORY: Record<SoundName, SoundCategory> = {
   tick: 'ui', click: 'ui',
@@ -64,7 +68,7 @@ export const SOUND_CATEGORY: Record<SoundName, SoundCategory> = {
   coin: 'money', spend: 'money', reward: 'money',
   focusStart: 'focus', focusEnd: 'focus', lastTick: 'focus',
   error: 'alerts', notify: 'alerts', ben: 'alerts',
-  remind: 'alerts', remindWater: 'alerts', remindMove: 'alerts', remindEyes: 'alerts', remindBed: 'alerts', remindReward: 'alerts'
+  remind: 'alerts', remindWater: 'alerts', remindMove: 'alerts', remindEyes: 'alerts', remindBed: 'alerts', remindReward: 'alerts', remindMeeting: 'alerts'
 }
 export const SOUND_NAMES = Object.keys(SOUND_CATEGORY) as SoundName[]
 export const isSoundName = (x: unknown): x is SoundName => typeof x === 'string' && x in SOUND_CATEGORY
@@ -72,10 +76,11 @@ export const isSoundName = (x: unknown): x is SoundName => typeof x === 'string'
 /** The phone buzz that goes with a sound (SO9); none for the rest. */
 export const HAPTICS: Partial<Record<SoundName, number | number[]>> = { habit: 8, mustDo: [10, 30, 10], success: 8, error: [30], levelUp: [15, 30, 15, 30, 30], reward: [10, 30, 10] }
 
-/** What the island's reminder kinds sound like (time up is the focus gong). */
-export function remindSound(kind: string): SoundName {
-  if (kind === 'winddown' || kind === 'sleep' || kind === 'bed') return 'remindBed'
-  const m: Record<string, SoundName> = { water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', reward: 'remindReward', over: 'focusEnd' }
+/** What the island's reminder kinds sound like (time up is the focus gong; `meeting`: a call starting soon). */
+export function remindSound(kind: string, meeting = false): SoundName {
+  if (meeting) return 'remindMeeting'
+  if (kind === 'winddown' || kind === 'sleep' || kind === 'bed' || kind === 'late') return 'remindBed'
+  const m: Record<string, SoundName> = { ben: 'ben', water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', reward: 'remindReward', over: 'focusEnd' }
   return m[kind] ?? 'remind'
 }
 
@@ -198,6 +203,7 @@ export function recipe(name: SoundName, step = 0): Voice[] {
     case 'remindMove': return [v(523, 0, 0.14, 0.1, { wave: 'triangle' }), v(659, 0.1, 0.14, 0.1, { wave: 'triangle' }), v(784, 0.2, 0.22, 0.1, { wave: 'triangle' })]
     case 'remindEyes': return [v(700, 0, 0.18, 0.1), v(700, 0.25, 0.18, 0.1)]
     case 'remindBed': return [v(330, 0, 0.7, 0.1)]
+    case 'remindMeeting': return [0, 0.17, 0.34].map((t) => v(987.77, t, 0.09, 0.08, { attack: 0.004 }))
     case 'remindReward': return [1046, 1318, 1568, 2093].map((f, i) => v(f, i * 0.07, i === 3 ? 0.25 : 0.1, 0.09, { wave: 'triangle' }))
     default: return [v(660, 0, 0.35, 0.1), v(880, 0.12, 0.35, 0.1)]
   }
@@ -205,9 +211,14 @@ export function recipe(name: SoundName, step = 0): Voice[] {
 
 /** The notes of a sound in a theme: its wave, attack, length and bells (SO8). */
 export function themed(name: SoundName, theme: SoundThemeId = 'soft', step = 0): Voice[] {
+  return themeVoices(recipe(name, step), theme)
+}
+
+/** Any notes in a theme (the "fixed" ones stay as they are). */
+export function themeVoices(voices: Voice[], theme: SoundThemeId = 'soft'): Voice[] {
   const t = SOUND_THEMES[theme] ?? SOUND_THEMES.soft
   const out: Voice[] = []
-  for (const x of recipe(name, step)) {
+  for (const x of voices) {
     if (x.fixed) {
       out.push(x)
       continue

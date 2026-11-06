@@ -3,8 +3,9 @@
 // master volume and a limiter, so stacked sounds never clip. Unlocked on the
 // first tap, asleep after 30 s of silence. The notes, themes and rules live in
 // core/sounds.ts; nothing here is a file, everything is synthesized.
-import { DEFAULT_SOUND_PREFS, BED_LOWPASS, HAPTICS, SOUND_CATEGORY, bedSamples, cleanSoundPrefs, createDebounce, remindSound, soundBlock, soundLength, themed, type BedKind, type PlayCheck, type SoundCategory, type SoundName, type SoundPrefs, type Voice } from '@core/sounds'
+import { DEFAULT_SOUND_PREFS, BED_LOWPASS, HAPTICS, SOUND_CATEGORY, bedSamples, cleanSoundPrefs, createDebounce, remindSound, soundBlock, soundLength, themed, themeVoices, type BedKind, type PlayCheck, type SoundCategory, type SoundName, type SoundPrefs, type Voice } from '@core/sounds'
 import { DEFAULT_NOTIF, getUiPrefs } from './uiPrefs'
+import { MOMENT_CATEGORY, momentForNotif, momentRecipe, pickFor, type MomentId, type MomentSound } from '@core/soundMoments'
 
 type Ctx = AudioContext
 interface Engine { c: Ctx; master: GainNode; pan: StereoPannerNode | null; buses: Record<SoundCategory, GainNode> }
@@ -182,11 +183,15 @@ export function play(name: SoundName, opts: PlayOpts = {}): void {
     lastLong.set(name, now)
   }
   const prefs = soundPrefs()
+  // Which sound for what (Settings → Sound): your pick for this moment, or None.
+  const pick = pickFor(name, prefs.moments)
+  if (pick === null) return
   if (!opts.preview) buzzFor(name, prefs)
   if (soundBlock(cat, playCheck(), opts)) return
   const e = engine()
   if (!e) return
-  const voices = themed(name, opts.theme ?? prefs.theme, opts.step ?? 0)
+  const theme = opts.theme ?? prefs.theme
+  const voices = pick === 'own' ? themed(name, theme, opts.step ?? 0) : themeVoices(momentRecipe(pick), theme)
   schedule(e, voices, cat, opts.gain == null ? 1 : Math.max(0, Math.min(1, opts.gain)), 0)
 }
 
@@ -282,8 +287,18 @@ export function playVoices(voices: Voice[], cat: SoundCategory, opts: { gain?: n
   return true
 }
 
-/** The island's reminders (water, stretch, eyes, bed…), at the island's own volume. */
-export const playReminder = (kind: string, volume = 0.7) => volume > 0 && play(remindSound(kind), { gain: volume, ownSwitch: true })
+/** The island's reminders (water, stretch, eyes, bed, a meeting soon…), at the island's own volume. */
+export const playReminder = (kind: string, volume = 0.7, meeting = false) => volume > 0 && play(remindSound(kind, meeting), { gain: volume, ownSwitch: true })
+
+/** Settings' ▶ for one moment: its sound (or `sound` to try another), in quiet hours too. */
+export function previewMoment(id: MomentId, sound?: MomentSound): void {
+  const pick = sound ?? soundPrefs().moments[id]
+  if (pick === 'none') return
+  const e = engine()
+  if (!e) return
+  if (soundBlock(MOMENT_CATEGORY[id], playCheck(), { preview: true, ownSwitch: true })) return
+  schedule(e, themeVoices(momentRecipe(pick), soundPrefs().theme), MOMENT_CATEGORY[id], 1, 0)
+}
 
 // ---- phone buzz (SO9) ----
 
@@ -379,7 +394,13 @@ export const soundFanfare = () => play('levelUp')
 export const soundWarning = () => play('error')
 export const soundSystemOracle = () => play('ben')
 /** A new notification: its own switch (Settings → Notifications), even with other sounds off. */
-export const soundNotify = () => play('notify', { ownSwitch: true })
+export const soundNotify = (kind?: string) => play(notifSound(kind), { ownSwitch: true })
+/** A notification's own sound by its kind (Ben, a reminder, water, a meeting, bedtime…). */
+function notifSound(kind?: string): SoundName {
+  if (!kind) return 'notify'
+  const m: Record<MomentId, SoundName> = { ben: 'ben', reminder: 'notify', water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', timer: 'focusEnd', meeting: 'remindMeeting', done: 'success', points: 'coin', bed: 'remindBed', error: 'error' }
+  return m[momentForNotif(kind)]
+}
 /** Quiet everything now (the context wakes again on the next sound). */
 export function stopAllSounds(): void {
   stopBed(0.1)

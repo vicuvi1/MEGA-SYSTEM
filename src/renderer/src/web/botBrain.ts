@@ -42,6 +42,8 @@ import { readPcAction, type PcAct } from '@core/pcActions'
 import { cleanLastHour, lastHourContext } from '@core/pcLastHour'
 import { alreadySaid, alreadySaidText, saidNo, timeFrame, whenWords } from '@core/benTalk'
 import { goalsNowSection, readGoalAction, type GoalAction } from './goalsBrain'
+import { lifeFitLine, pushStyle } from '@core/lifeFit'
+import { readLifeFit, sleepWindow } from './lifeFitStore'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -315,9 +317,14 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     goalsNowSection(s, extra.finance, now),
     `Week score ${report.score}/100 (last week ${report.prevScore}). ${report.verdict}`,
     `Last 7 days: ${report.metrics.map((m) => `${m.label} ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`).join('; ')}.`,
-    wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ''}. Big 3: ${wp.big3.map((b) => `${b.done ? '[done]' : '[open]'} ${b.text}`).join('; ')}.` : 'No week plan yet.',
+    wp ? `This week's chosen focus: ${wp.focus}${wp.note ? ` ("${wp.note}")` : ''}. Big 3: ${wp.big3.map((b) => `${b.done ? '[done]' : '[open]'} ${b.text}`).join('; ')}.${wp.parked?.length ? ` Parked this week (he chose not to push these; don't nag about them): ${wp.parked.join('; ')}.` : ''}` : 'No week plan yet.',
     `Sleep: bedtime target ${sl.bedtimeTarget()}, wake target weekday ${sl.weekdayTarget()} / weekend ${sl.weekendTarget()}. Last wake-ups: ${wakes.map((w) => `${w.day.slice(5)} ${w.onTime ? 'on time' : 'late'}`).join(', ') || 'none logged'}.`,
     wakePattern(input.wakes) ?? '',
+    (() => {
+      const fit = readLifeFit(db)
+      const ps = pushStyle(fit.push)
+      return `${lifeFitLine(fit, today, sleepWindow(db))} How hard to push: ${ps.label} (his choice: ${ps.hint.toLowerCase()}). Never accuse him of something the data doesn't show.`
+    })(),
     (() => {
       const r = focusRatings(db).filter((x) => x.day > addDays(today, -7))
       if (!r.length) return ''

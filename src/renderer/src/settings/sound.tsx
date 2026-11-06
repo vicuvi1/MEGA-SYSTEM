@@ -6,9 +6,11 @@ import { SOUND_CATEGORIES, SOUND_THEMES, type BedKind, type SoundCategory, type 
 import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { Icon } from '../Icon'
 import { useUiPrefs } from '../uiPrefs'
-import { bedPlaying, play, setBedVolume, soundPrefs, startBed, stopBed, whyQuiet } from '../soundKit'
+import { bedPlaying, play, previewMoment, setBedVolume, soundPrefs, startBed, stopBed, whyQuiet } from '../soundKit'
 import { ISLAND_SOUND_LABEL, ISLAND_SOUND_MODES, type IslandSoundMode, type IslandSoundName } from '@core/islandSound'
 import { soundCheck } from '../islandSounds'
+import { DEFAULT_MOMENTS, MOMENTS, MOMENT_SOUNDS, type MomentId, type MomentSound } from '@core/soundMoments'
+import { Select } from '../Select'
 
 /** What each kind's preview plays. */
 const PREVIEW: Record<SoundCategory, SoundName[]> = { success: ['habit', 'mustDo', 'water', 'levelUp'], money: ['coin', 'reward'], focus: ['focusStart', 'focusEnd'], alerts: ['remind', 'error'], ui: ['tick', 'click'] }
@@ -77,6 +79,35 @@ export function SoundSection() {
               </div>
             </Row>
           ))}
+          <div className="sx-moments" role="group" aria-label="Which sound for what">
+            <h3>Which sound for what</h3>
+            <p className="hint">Each thing has its own sound, so you know what it is without looking. Telegram keeps its own sound.</p>
+            {MOMENTS.map((m) => {
+              const cur = p.moments[m.id]
+              const pickMoment = (id: MomentId, v: MomentSound) => {
+                set({ moments: { ...p.moments, [id]: v } })
+                previewMoment(id, v)
+              }
+              return (
+                <div key={m.id} className="sx-moment" data-moment={m.id}>
+                  <span className="sx-moment-name">
+                    <i aria-hidden>{m.icon}</i> {m.label}
+                  </span>
+                  <Select aria-label={`Sound for ${m.label}`} value={cur} onChange={(e) => pickMoment(m.id, e.target.value as MomentSound)}>
+                    {MOMENT_SOUNDS.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.label}
+                        {o.id === DEFAULT_MOMENTS[m.id] ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </Select>
+                  <button type="button" className="btn small ghost sx-play" aria-label={`Play the sound for ${m.label}`} disabled={cur === 'none'} onClick={() => previewMoment(m.id)}>
+                    ▶
+                  </button>
+                </div>
+              )
+            })}
+          </div>
           <Row title="Focus background" hint="Plays softly while a focus timer runs; fades in and out">
             <div className="sx-try">
               <Segmented<BedKind> label="Focus background" value={p.bed} options={[['off', 'Off'], ['brown', 'Brown noise'], ['rain', 'Rain'], ['tick', 'Soft tick']]} onChange={(v) => set({ bed: v })} />

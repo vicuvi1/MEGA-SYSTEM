@@ -58,6 +58,11 @@ export type Bridge = LifeApi & {
     style?(): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' }>
     setStyle?(st: Partial<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang: 'en' | 'ro' | 'ru' | 'auto' }>): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' }>
     status?(): Promise<CoachStatus>
+    /** My life (Settings → Ben): bedtime, wake time, latest bedtime, the work window, how hard Ben pushes (synced). */
+    lifeFit?(): Promise<import('./web/lifeFitStore').LifeFitView>
+    setLifeFit?(patch: Partial<import('./web/lifeFitStore').LifeFitView>): Promise<import('./web/lifeFitStore').LifeFitView>
+    /** "Short shift tonight" / "no work tonight" / back to normal, for today. */
+    setTonight?(mode: import('@core/lifeFit').ShiftMode): Promise<{ view: import('./web/lifeFitStore').LifeFitView; line: string }>
     /** How the chat looks: Ben's face and your photo (synced). */
     looks?(): Promise<CoachLooks>
     setLooks?(patch: Partial<CoachLooks>): Promise<CoachLooks>

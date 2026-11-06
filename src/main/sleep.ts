@@ -1,6 +1,7 @@
 import { bedNightDay, computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, wakyFill, type SleepLog, type SleepSummary } from '@core/sleep'
 import { daysBetween } from '@core/dates'
 import { LedgerError } from '@core/ledger'
+import { DEFAULT_BED, DEFAULT_WAKE } from '@core/lifeFit'
 import type { DB } from './db'
 import { getSetting, setSetting } from './settings'
 import type { Wallet } from './wallet'
@@ -37,7 +38,7 @@ export class SleepService {
   constructor(private db: DB, private wallet: Wallet) {}
 
   weekdayTarget(): string {
-    return getSetting(this.db, 'sleep_weekday_target') || '07:00'
+    return getSetting(this.db, 'sleep_weekday_target') || DEFAULT_WAKE
   }
 
   weekendTarget(): string {
@@ -45,7 +46,7 @@ export class SleepService {
   }
 
   bedtimeTarget(): string {
-    return getSetting(this.db, 'sleep_bed_target') || '23:00'
+    return getSetting(this.db, 'sleep_bed_target') || DEFAULT_BED
   }
 
   setTargets(weekday: string, weekend: string, bedtime?: string): SleepSummary {

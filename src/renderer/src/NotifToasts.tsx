@@ -113,7 +113,7 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     const how = force ? { popup: true, sound: prefs.sound } : interrupt(prefs, time, running)
     window.dispatchEvent(new CustomEvent('life-notif-new', { detail: { count: fresh.length, quiet: !how.popup } }))
-    if (how.sound) soundNotify()
+    if (how.sound) soundNotify(fresh[fresh.length - 1]?.kind)
     if (!how.popup) return
     const visible = document.visibilityState === 'visible' && document.hasFocus()
     for (const n of fresh) {

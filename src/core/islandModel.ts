@@ -58,6 +58,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'moveBreak'; name: string; n: number; alertId: string }
   | { kind: 'eyeBreaks'; on: boolean }
   | { kind: 'closeDay' }
+  /** My life: "short shift tonight" / "no work tonight" / back to normal, for today. */
+  | { kind: 'shift'; mode: 'normal' | 'short' | 'off' }
   | { kind: 'todoDone'; id: string; content: string }
   | { kind: 'clipSave'; to: 'task' | 'note'; text: string; alertId: string }
   | { kind: 'book'; text: string }
@@ -203,6 +205,10 @@ export interface IslandSnapshot {
   health?: { today: import('./healthyDay').HealthyView; week?: import('./healthyDay').WeeklyHealth | null } | null
   /** HD: wind-down mode (the island dims, counts down, says close the laptop). */
   windMode?: import('./healthyDay').WindDownMode | null
+  /** This week's top 3 (the big 3) and the parked ones, quiet (core/weekPlan.ts weekTop3View). */
+  week?: { top: { i: number; text: string; done: boolean }[]; parked: string[] } | null
+  /** My life: today's work window and tonight's shift (a work day only), for the one-tap buttons. */
+  work?: { from: string; to: string; mode: 'normal' | 'short' | 'off' } | null
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {

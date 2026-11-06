@@ -3,6 +3,8 @@
 // recorded in bot_seen_updates in the same Turso transaction as what it
 // logged, so the phone and the PC never log one message twice, and a message
 // is never marked done without its record (or the other way round).
+import { readShift, shiftReply, workToday } from '@core/lifeFit'
+import { readLifeFit, saveTonight } from './lifeFitStore'
 import { addWhy, WHY_KEY } from '@core/benWhy'
 import { withTimeout } from '@core/ai'
 import type { BotBridgeConfig, BotLogEntry } from '@shared/api'
@@ -640,6 +642,23 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (!preset && !media && text) {
       const fix = codeFix(text)
       if (fix) preset = await fixInCode(fix).catch(() => null)
+    }
+    // My life: "short shift tonight" / "no work tonight" opens the free part of the work window for today.
+    if (!preset && !media && text && !direct) {
+      const shift = readShift(clean)
+      if (shift) {
+        const line = await mirror
+          .write((db) => {
+            const day = services.services(db).wallet.today()
+            saveTonight(db, day, shift)
+            return shiftReply(readLifeFit(db), day, shift)
+          })
+          .catch(() => null)
+        if (line) {
+          step('Saved for today')
+          preset = { reply: workToday(await mirror.read((db) => readLifeFit(db)), await mirror.read((db) => services.services(db).wallet.today())) ? `${line} Say "plan my day" and I'll fit the evening in.` : line, acts: [], chips: ['Plan my day'] }
+        }
+      }
     }
     if (!preset && !media && text) {
       const q = await mirror.read((db) => quickKind(clean, services.services(db).wallet.today()))
