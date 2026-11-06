@@ -177,7 +177,7 @@ function backAlert(running: { subject: string } | null, now: number, dismissed: 
     text: `You were away ${b.away} min during ${running.subject}. Keep going?`,
     face: '👋',
     actions: [
-      { label: `▶ Add ${Math.min(60, b.away)} min`, action: { kind: 'extend', minutes: Math.min(60, b.away) }, primary: true },
+      { label: `▶ Add ${Math.min(60, b.away)} min`, action: { kind: 'extend', minutes: Math.min(60, b.away), alertId: id }, primary: true },
       { label: '▶ Keep going', action: { kind: 'dismiss', id } },
       { label: '⏹ Stop & log', action: { kind: 'stop' } }
     ]
@@ -726,6 +726,12 @@ export function IslandFeed() {
           case 'extend':
             await life.focus.extend?.(a.minutes)
             rememberUndo(a.id, { kind: 'extend', minutes: a.minutes })
+            // From a card ("Welcome back · Add 21 min"): adding the time also closes the card.
+            if (a.alertId) {
+              const d = get<Record<string, number>>(DISMISSED, {})
+              d[a.alertId] = Date.now() + 7 * 864e5
+              put(DISMISSED, d)
+            }
             window.dispatchEvent(new Event('life-focus-changed'))
             break
           case 'dismiss': {

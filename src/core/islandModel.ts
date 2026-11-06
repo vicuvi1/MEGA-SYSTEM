@@ -50,7 +50,7 @@ export type IslandAction = { id?: string } & (
   /** IC8: a link or a file dropped on the island. */
   | { kind: 'drop'; link?: string; file?: { name: string; mime: string; size: number; data: string } }
   | { kind: 'stop' }
-  | { kind: 'extend'; minutes: number }
+  | { kind: 'extend'; minutes: number; /** The card it came from: closed once the time is added (one tap, not two). */ alertId?: string }
   | { kind: 'dismiss'; id: string; snoozeMin?: number }
   | { kind: 'open'; page?: string }
   | { kind: 'bed'; time?: string }
