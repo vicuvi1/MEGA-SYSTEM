@@ -986,7 +986,7 @@ try {
     await writeFile(entry, `export { decideCoach, newCoachState, coachAlert } from ${JSON.stringify(join(repo, 'src/core/pcCoach.ts'))}\nexport { sessionize } from ${JSON.stringify(join(repo, 'src/core/activityStream.ts'))}\n`)
     const out = await build({ input: entry, write: false, output: { format: 'esm' } })
     await writeFile(join(dir, 'coach.mjs'), out.output[0].code)
-    const C = await import(join(dir, 'coach.mjs'))
+    const C = await import((await import('node:url')).pathToFileURL(join(dir, 'coach.mjs')).href)
     await rm(dir, { recursive: true, force: true })
     const now = fakeNow()
     const day = new Date(now).toISOString().slice(0, 10)
