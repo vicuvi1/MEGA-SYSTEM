@@ -17,3 +17,7 @@
 .au-list small { display: block; }
 .au-preview { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px; background: rgba(127, 127, 127, 0.1); }
 .au-preview code { word-break: break-all; font-size: 12px; }
+/* One "Saved" note in the panel header (in the layout, so it never covers anything); fades by opacity. */
+.au-saved { margin-left: auto; font-size: 13px; color: #65a30d; opacity: 0; transition: opacity 0.2s ease; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+.au-saved.on { opacity: 1; }
+.au-head { display: flex; align-items: center; gap: 8px; }

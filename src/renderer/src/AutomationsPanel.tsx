@@ -5,7 +5,7 @@
 // SHA-256 pins, the tools found on this PC, "Pause all", and the run log.
 // The server and the desktop keep every address and key: this page only gets
 // names and the last 4 characters back.
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AUTOMATION_TEMPLATES, cleanAutomation, cleanStep, cleanTrigger, dryRun, fromRecipe, mapParams, newAutoId, PARAM_TYPES, PARAM_LABEL, POWERTOYS_FEATURES, PRESETS, PRESET_IDS, presetWarning,
   RISK_LABEL, sentence, STEP_ICON, STEP_KINDS, STEP_LABEL, TRIGGER_LABEL, TRIGGER_ONS, triggerText, stepText, type Automation, type AutomationStore, type N8nWorkflow, type Param,
@@ -375,9 +375,21 @@ export function AutomationsPanel() {
     return h ? `${h.label || h.host} ${h.hint}` : ''
   }, [cloud, local])
 
+  // One "Saved" note in the panel's own flow (never a pile of toasts over the page): a new one replaces the last.
+  const [note, setNote] = useState<string | null>(null)
+  const noteTimer = useRef<number | null>(null)
+  const flash = (text: string) => {
+    if (noteTimer.current) clearTimeout(noteTimer.current)
+    setNote(text)
+    noteTimer.current = window.setTimeout(() => setNote(null), 2500)
+  }
+  useEffect(() => () => void (noteTimer.current && clearTimeout(noteTimer.current)), [])
   const save = async (next: AutomationStore, ok?: string) => {
-    const r = await act(() => saveStore(next), ok)
-    if (r) setStore(r)
+    const r = await act(() => saveStore(next))
+    if (r) {
+      setStore(r)
+      if (ok) flash(ok)
+    }
     return r
   }
   const upsert = async (a: Automation) => store ? save({ ...store, list: store.list.some((x) => x.id === a.id) ? store.list.map((x) => (x.id === a.id ? a : x)) : [...store.list, a] }, 'Saved') : undefined
@@ -419,10 +431,13 @@ export function AutomationsPanel() {
   return (
     <>
       <section className="panel">
-        <header className="panel-head">
+        <header className="panel-head au-head">
           <h2>
             <Icon name="bolt" /> Automations
           </h2>
+          <span className={`au-saved ${note ? 'on' : ''}`} role="status" aria-live="polite">
+            {note ? `✓ ${note}` : ''}
+          </span>
         </header>
         <p className="hint block">“When X, do Y”, or a one-tap button on the island. Flows in n8n, Make, Pipedream, Activepieces or Node-RED, your own scripts, a workspace, a message to you. Nothing runs from a trigger more than once in 30 seconds.</p>
         <Row title="Pause all automations" hint="Triggers and Ben stop; your island taps still work.">
