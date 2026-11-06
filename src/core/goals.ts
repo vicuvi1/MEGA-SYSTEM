@@ -6,8 +6,9 @@
 // ("+120 lei a week"), when you'll get there at this pace, milestones, the
 // check-in rhythm and its streak. No database, no clock: today comes in.
 import { addDays, daysBetween } from './dates'
+import type { GoalMeta, GoalType, PeriodInfo } from './goalKinds'
 
-export type GoalUnit = 'lei' | 'eur' | 'usd' | 'kg' | 'km' | 'pct' | 'count' | 'hours' | 'custom'
+export type GoalUnit = 'lei' | 'eur' | 'usd' | 'kg' | 'km' | 'pct' | 'count' | 'hours' | 'ml' | 'custom'
 export const GOAL_UNITS: { id: GoalUnit; label: string }[] = [
   { id: 'lei', label: 'lei' },
   { id: 'eur', label: '€' },
@@ -17,6 +18,7 @@ export const GOAL_UNITS: { id: GoalUnit; label: string }[] = [
   { id: 'pct', label: '%' },
   { id: 'count', label: 'count' },
   { id: 'hours', label: 'hours' },
+  { id: 'ml', label: 'ml' },
   { id: 'custom', label: 'custom' }
 ]
 
@@ -33,7 +35,22 @@ export const CADENCES: { id: Cadence; label: string }[] = [
  * from data the app already has, so they never ask (and never pay points for
  * the number moving by itself).
  */
-export type SourceKind = 'manual' | 'money.profit' | 'money.income' | 'money.saved' | 'body.weight' | 'body.workouts' | 'sport.reps' | 'focus.hours' | 'tasks.done' | 'habit.clean'
+export type SourceKind =
+  | 'manual'
+  | 'money.profit'
+  | 'money.income'
+  | 'money.saved'
+  | 'money.spent'
+  | 'body.weight'
+  | 'body.workouts'
+  | 'sport.reps'
+  | 'water'
+  | 'sleep.bed'
+  | 'focus.hours'
+  | 'pc.work'
+  | 'pc.kind'
+  | 'tasks.done'
+  | 'habit.clean'
 export interface GoalSource {
   kind: SourceKind
   /** The exercise (sport.reps) or the focus subject (focus.hours). */
@@ -43,17 +60,24 @@ export const SOURCES: { id: SourceKind; label: string; unit: GoalUnit | null; hi
   { id: 'manual', label: 'I check in', unit: null, hint: 'Ben asks you for the number on your rhythm' },
   { id: 'money.profit', label: 'Profit this month', unit: 'lei', hint: 'Income minus spending this month, from Finance Helper' },
   { id: 'money.income', label: 'Income this month', unit: 'lei', hint: 'Money in this month, from Finance Helper' },
-  { id: 'money.saved', label: 'Saved since the start', unit: 'lei', hint: 'Income minus spending since the goal started (Finance Helper)' },
+  { id: 'money.saved', label: 'Money saved', unit: 'lei', hint: 'Income minus spending (Finance Helper)' },
+  { id: 'money.spent', label: 'Money spent', unit: 'lei', hint: 'What you spent (Finance Helper)' },
   { id: 'body.weight', label: 'Body weight', unit: 'kg', hint: 'Your latest weight from Body' },
   { id: 'body.workouts', label: 'Workouts done', unit: 'count', hint: 'Workouts logged since the goal started' },
-  { id: 'sport.reps', label: 'Reps of an exercise', unit: 'count', hint: 'Reps logged since the start (Sport Track)', needsArg: 'Exercise, e.g. Pushups' },
-  { id: 'focus.hours', label: 'Focus hours', unit: 'hours', hint: 'Focus timer hours on one subject since the start', needsArg: 'Subject, e.g. Rust' },
-  { id: 'tasks.done', label: 'Todoist tasks done', unit: 'count', hint: 'Tasks you closed since the start' },
+  { id: 'sport.reps', label: 'Reps of an exercise', unit: 'count', hint: 'Reps logged in Sport Track', needsArg: 'Exercise, e.g. Pushups' },
+  { id: 'water', label: 'Water', unit: 'ml', hint: 'Water you logged on Body or the island' },
+  { id: 'sleep.bed', label: 'Nights in bed on time', unit: 'count', hint: 'Bedtimes from Sleep (Waky) before a time', needsArg: 'In bed by, e.g. 00:00' },
+  { id: 'focus.hours', label: 'Focus hours', unit: 'hours', hint: 'Focus timer hours (one subject, or leave it empty for all)', needsArg: 'Subject, e.g. Rust' },
+  { id: 'pc.work', label: 'Work time on the PC', unit: 'hours', hint: 'Coding, study, CTF and writing time the island saw (if you share PC totals)' },
+  { id: 'pc.kind', label: 'PC time on one thing', unit: 'hours', hint: 'Time the island saw on one kind: gaming, video, social, coding, study, ctf', needsArg: 'Kind, e.g. gaming' },
+  { id: 'tasks.done', label: 'Todoist tasks done', unit: 'count', hint: 'Tasks you closed (add words to count only tasks that have them, e.g. ctf)' },
   { id: 'habit.clean', label: 'Clean streak', unit: 'count', hint: 'Your current Discipline streak in days' }
 ]
 export const isAuto = (s: GoalSource | null | undefined) => !!s && s.kind !== 'manual'
 /** Sources that count from the goal's first day (they start at 0); the others start where you are now. */
-export const countsFromStart = (k: SourceKind) => k === 'money.saved' || k === 'body.workouts' || k === 'sport.reps' || k === 'focus.hours' || k === 'tasks.done'
+export const countsFromStart = (k: SourceKind) => k !== 'manual' && k !== 'money.profit' && k !== 'money.income' && k !== 'body.weight' && k !== 'habit.clean'
+/** Sources whose extra word may stay empty (focus: all subjects; tasks: all tasks). */
+export const argOptional = (k: SourceKind) => k === 'focus.hours' || k === 'tasks.done'
 
 /** How the expected line bends: straight, slow start (savings, skills), or fast start (weight). */
 export type PaceCurve = 'line' | 'ramp' | 'front'
@@ -313,6 +337,19 @@ export interface GoalCard {
   /** For the chart: your numbers over time (start first). */
   series: { day: string; value: number }[]
   lastAt: string | null
+  /** What kind of goal (goalKinds.ts); a goal saved before kinds is a 'target'. */
+  kind?: GoalType
+  meta?: GoalMeta
+  /** Habit, limit and repeating goals: this week or month. */
+  period?: PeriodInfo | null
+  /** One small thing for today ("+25 pushups today", "Work out today · 2 of 4"). */
+  todayStep?: string
+  /** "On track", "3 days behind: 12 pushups today gets you back". */
+  pace?: string
+  /** "Best week: +450 lei (w/c 26 Oct)". */
+  best?: string | null
+  paused?: boolean
+  pinned?: boolean
 }
 
 export function goalCard(g: MeasureGoal, all: CheckIn[], today: string): GoalCard {
@@ -375,8 +412,8 @@ export function fmtValue(unit: GoalUnit, n: number, unitLabel?: string): string 
 
 /** "3,200 of 5,000 lei" (the unit once), "€3,200 of €5,000". */
 export function fmtPair(unit: GoalUnit, a: number, b: number, unitLabel?: string): string {
-  const after = unit === 'lei' || unit === 'kg' || unit === 'km' || unit === 'custom'
-  const first = after ? fmtValue(unit === 'custom' ? 'count' : unit, a).replace(/ (lei|kg|km)$/, '') : fmtValue(unit, a, unitLabel)
+  const after = unit === 'lei' || unit === 'kg' || unit === 'km' || unit === 'ml' || unit === 'custom'
+  const first = after ? fmtValue(unit === 'custom' ? 'count' : unit, a).replace(/ (lei|kg|km|ml)$/, '') : fmtValue(unit, a, unitLabel)
   return `${first} of ${fmtValue(unit, b, unitLabel)}`
 }
 

@@ -6,6 +6,7 @@
 // and the short "Goals now" part of his prompt.
 import { addDays } from './dates'
 import { fmtDelta, fmtPair, fmtValue, periodKey, shortDay, sortCards, STATUS_TEXT, type CheckIn, type GoalCard } from './goals'
+import { cardSummary, perWord } from './goalKinds'
 
 /** The goal check-ins Ben may send on his own in a day (they also count in his overall daily cap). */
 export const GOAL_ASKS_PER_DAY = 2
@@ -77,6 +78,7 @@ const PERIOD_DAYS = { daily: 1, weekly: 7, biweekly: 14, monthly: 30 } as const
 /** One tap's step for "+" and "−": about one period's worth of what it takes, rounded nicely. */
 export function quickStep(c: GoalCard): number {
   const g = c.goal
+  if (c.period) return c.kind === 'habit' ? 1 : Math.max(g.unit === 'hours' ? 0.5 : 1, nice(c.period.target / 4))
   const per = Math.abs(c.perDayNeeded) * PERIOD_DAYS[g.cadence]
   const span = Math.abs(g.target - g.start)
   const raw = per || span / 10
@@ -124,6 +126,7 @@ const days = (n: number) => `${n} day${n === 1 ? '' : 's'}`
 /** "Profit goal: you're at 3,200 of 5,000 lei, 41 days left, need +44 lei/day. What's the number now?" */
 export function askText(c: GoalCard): string {
   const g = c.goal
+  if (c.period) return `🎯 ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)} this ${perWord(c.period.per)}, ${days(c.period.daysLeft)} left. How many so far?`
   const v = (n: number) => fmtValue(g.unit, n, g.unitLabel)
   const behind = c.status === 'behind' || c.status === 'at risk'
   const gap = behind ? ` You're ${fmtValue(g.unit, Math.abs(c.expected - c.value), g.unitLabel)} behind the line.` : c.status === 'ahead' ? ' Ahead of the line 😎' : ''
@@ -152,6 +155,8 @@ export function weeklyGoalLines(cards: GoalCard[], today: string): string[] {
     .slice(0, 5)
     .map((c) => {
       const g = c.goal
+      const own = cardSummary(c)
+      if (own) return `🎯 ${own}`
       const was = valueOn(c, addDays(today, -7))
       const change = c.value - was
       return `🎯 ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)}${change ? ` (${fmtDelta(g.unit, change, g.unitLabel)} this week)` : ' (no change this week)'} · ${STATUS_TEXT[c.status].toLowerCase()}${c.status === 'done' ? '' : ` · ${days(c.daysLeft)} left`}${c.streak > 1 ? ` · ${c.streak} check-ins in a row` : ''}`
@@ -171,7 +176,10 @@ export function goalsNowText(cards: GoalCard[]): string {
   const lines = open.map((c, i) => {
     const g = c.goal
     const v = (n: number) => fmtValue(g.unit, n, g.unitLabel)
-    return `- ${goalRef(i)} ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)} by ${shortDay(g.deadline)} (${c.pct}%, line says ${v(c.expected)}), ${STATUS_TEXT[c.status].toLowerCase()}, ${days(c.daysLeft)} left${c.need ? `, need ${c.need}` : ''}${c.auto ? ', counts itself' : c.due ? ', CHECK-IN DUE' : ''}${g.why ? `. Why: ${g.why.slice(0, 60)}` : ''}`
+    const today = c.todayStep ? `; today: ${c.todayStep}` : ''
+    const own = cardSummary(c)
+    if (own) return `- ${goalRef(i)} ${own}${c.auto ? ', counts itself' : c.due ? ', CHECK-IN DUE' : ''}${today}${g.why ? `. Why: ${g.why.slice(0, 60)}` : ''}`
+    return `- ${goalRef(i)} ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)} by ${shortDay(g.deadline)} (${c.pct}%, line says ${v(c.expected)}), ${STATUS_TEXT[c.status].toLowerCase()}, ${days(c.daysLeft)} left${c.need ? `, need ${c.need}` : ''}${c.auto ? ', counts itself' : c.due ? ', CHECK-IN DUE' : ''}${today}${g.why ? `. Why: ${g.why.slice(0, 60)}` : ''}`
   })
   return [
     'Goals now (measurable; tie today to these, push the one behind):',

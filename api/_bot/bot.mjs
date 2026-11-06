@@ -3506,7 +3506,7 @@ var DAYS$2 = [
 	"Fri",
 	"Sat"
 ];
-var pad$7 = (n) => String(n % 24).padStart(2, "0");
+var pad$8 = (n) => String(n % 24).padStart(2, "0");
 var W = {
 	urge: 1,
 	reset: 3
@@ -3545,8 +3545,8 @@ function riskWindows(events, now = /* @__PURE__ */ new Date(), max = 3) {
 	const win = (slot, weekday, a) => ({
 		slot,
 		weekday,
-		from: `${pad$7(slot * 2)}:00`,
-		to: `${pad$7(slot * 2 + 2)}:00`,
+		from: `${pad$8(slot * 2)}:00`,
+		to: `${pad$8(slot * 2 + 2)}:00`,
 		urges: a.urges,
 		resets: a.resets,
 		score: a.score
@@ -6759,9 +6759,9 @@ function lastHourContext(h, now) {
 // src/core/benTalk.ts
 /** A regex with Unicode word edges: \\b only knows ASCII, so "arată" or "второй" would never match. */
 var uw = (src, flags = "") => new RegExp(src.replace(/\\b/g, "(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))"), `${flags}u`);
-var pad$6 = (n) => String(n).padStart(2, "0");
+var pad$7 = (n) => String(n).padStart(2, "0");
 var ymd$1 = (d) => calendarDay(d);
-var hmOf$1 = (d) => `${pad$6(d.getHours())}:${pad$6(d.getMinutes())}`;
+var hmOf$1 = (d) => `${pad$7(d.getHours())}:${pad$7(d.getMinutes())}`;
 var label = (d) => d.toLocaleDateString("en-GB", {
 	weekday: "short",
 	day: "numeric",
@@ -6776,11 +6776,11 @@ function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
 	const appDay = ymd$1(app);
 	const nextCal = new Date(now);
 	nextCal.setDate(nextCal.getDate() + 1);
-	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$1(now)}, ${label(now)}. App day: ${label(app)} (the app's day turns at ${pad$6(startHour)}:00).`];
+	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$1(now)}, ${label(now)}. App day: ${label(app)} (the app's day turns at ${pad$7(startHour)}:00).`];
 	if (afterMidnight) {
 		const seven = new Date(now);
 		seven.setHours(7, 0, 0, 0);
-		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label(now)} from ${pad$6(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label(app)} until ${pad$6(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label(now)}); ask with chips only if it really matters.`);
+		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label(now)} from ${pad$7(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label(app)} until ${pad$7(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label(now)}); ask with chips only if it really matters.`);
 	} else if (h >= 18) lines.push(`- "tonight" = this evening (${label(now)}). "tomorrow morning" = ${label(nextCal)}.`);
 	else if (h < 12) lines.push(`- "this morning" = now (${label(now)}). "tonight" = this evening. "tomorrow" = ${label(nextCal)}.`);
 	else lines.push(`- "this afternoon" = now. "tonight" = this evening (${label(now)}). "tomorrow" = ${label(nextCal)}.`);
@@ -7077,14 +7077,14 @@ var ORD = [
 	[uw("\\b(third|3rd|three|al treilea|a treia|третий|третью)\\b"), 2],
 	[uw("\\b(last|ultimul|ultima|последний|последнюю)\\b"), -1]
 ];
-var timeOf = (s) => {
+var timeOf$1 = (s) => {
 	const m = /^(?:at\s+|la\s+|в\s+)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i.exec(s.trim());
 	if (!m) return null;
 	let h = Number(m[1]);
 	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
 	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
 	const mi = Number(m[2] ?? 0);
-	return h < 24 && mi < 60 ? `${pad$6(h)}:${pad$6(mi)}` : null;
+	return h < 24 && mi < 60 ? `${pad$7(h)}:${pad$7(mi)}` : null;
 };
 var BLOCK = "(?:block|blocks|blocul|blocului|блок|блока)";
 /**
@@ -7109,7 +7109,7 @@ function readBlockEdit(text) {
 		target = target.replace(r, "").trim();
 	}
 	target = target.replace(/\b(the|my|a|an|blocul|focus)\b/g, "").replace(/\s+/g, " ").trim();
-	const when = timeOf(raw);
+	const when = timeOf$1(raw);
 	const moving = /^(move|push|shift|put|mută|muta|перенеси)$/.test(verbWord);
 	if (when && (moving || /^(at|la|в)\s/i.test(raw) || /^\d{1,2}([:.]\d{2})?$/.test(raw))) return {
 		verb: "move",
@@ -7149,7 +7149,7 @@ function pickChoice(text, labels) {
 	if (exact >= 0) return exact;
 	const time = /\b(\d{1,2})[:.](\d{2})\b/.exec(t) ?? /\b(?:at|la|в)\s+(\d{1,2})\b/.exec(t);
 	if (time) {
-		const hm = `${pad$6(Number(time[1]))}:${time[2] ?? "00"}`;
+		const hm = `${pad$7(Number(time[1]))}:${time[2] ?? "00"}`;
 		const k = labels.findIndex((l) => l.endsWith(hm));
 		if (k >= 0) return k;
 	}
@@ -7273,6 +7273,10 @@ var GOAL_UNITS = [
 		label: "hours"
 	},
 	{
+		id: "ml",
+		label: "ml"
+	},
+	{
 		id: "custom",
 		label: "custom"
 	}
@@ -7316,9 +7320,15 @@ var SOURCES = [
 	},
 	{
 		id: "money.saved",
-		label: "Saved since the start",
+		label: "Money saved",
 		unit: "lei",
-		hint: "Income minus spending since the goal started (Finance Helper)"
+		hint: "Income minus spending (Finance Helper)"
+	},
+	{
+		id: "money.spent",
+		label: "Money spent",
+		unit: "lei",
+		hint: "What you spent (Finance Helper)"
 	},
 	{
 		id: "body.weight",
@@ -7336,21 +7346,47 @@ var SOURCES = [
 		id: "sport.reps",
 		label: "Reps of an exercise",
 		unit: "count",
-		hint: "Reps logged since the start (Sport Track)",
+		hint: "Reps logged in Sport Track",
 		needsArg: "Exercise, e.g. Pushups"
+	},
+	{
+		id: "water",
+		label: "Water",
+		unit: "ml",
+		hint: "Water you logged on Body or the island"
+	},
+	{
+		id: "sleep.bed",
+		label: "Nights in bed on time",
+		unit: "count",
+		hint: "Bedtimes from Sleep (Waky) before a time",
+		needsArg: "In bed by, e.g. 00:00"
 	},
 	{
 		id: "focus.hours",
 		label: "Focus hours",
 		unit: "hours",
-		hint: "Focus timer hours on one subject since the start",
+		hint: "Focus timer hours (one subject, or leave it empty for all)",
 		needsArg: "Subject, e.g. Rust"
+	},
+	{
+		id: "pc.work",
+		label: "Work time on the PC",
+		unit: "hours",
+		hint: "Coding, study, CTF and writing time the island saw (if you share PC totals)"
+	},
+	{
+		id: "pc.kind",
+		label: "PC time on one thing",
+		unit: "hours",
+		hint: "Time the island saw on one kind: gaming, video, social, coding, study, ctf",
+		needsArg: "Kind, e.g. gaming"
 	},
 	{
 		id: "tasks.done",
 		label: "Todoist tasks done",
 		unit: "count",
-		hint: "Tasks you closed since the start"
+		hint: "Tasks you closed (add words to count only tasks that have them, e.g. ctf)"
 	},
 	{
 		id: "habit.clean",
@@ -7361,7 +7397,9 @@ var SOURCES = [
 ];
 var isAuto = (s) => !!s && s.kind !== "manual";
 /** Sources that count from the goal's first day (they start at 0); the others start where you are now. */
-var countsFromStart = (k) => k === "money.saved" || k === "body.workouts" || k === "sport.reps" || k === "focus.hours" || k === "tasks.done";
+var countsFromStart = (k) => k !== "manual" && k !== "money.profit" && k !== "money.income" && k !== "body.weight" && k !== "habit.clean";
+/** Sources whose extra word may stay empty (focus: all subjects; tasks: all tasks). */
+var argOptional = (k) => k === "focus.hours" || k === "tasks.done";
 var round = (n, d = 2) => {
 	const k = 10 ** d;
 	return Math.round(n * k) / k;
@@ -7487,14 +7525,14 @@ function nextMilestone(g, value) {
 		index: list.length
 	};
 }
-var mondayOf$2 = (day) => addDays$5(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
+var mondayOf$3 = (day) => addDays$5(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
 /** The check-in period a day belongs to ("2026-11-06", "w2026-11-02", "b2026-11-02", "m2026-11"). */
 function periodKey(cadence, day, startDay = day) {
 	if (cadence === "daily") return day;
 	if (cadence === "monthly") return `m${day.slice(0, 7)}`;
-	const mon = mondayOf$2(day);
+	const mon = mondayOf$3(day);
 	if (cadence === "weekly") return `w${mon}`;
-	const base = mondayOf$2(startDay);
+	const base = mondayOf$3(startDay);
 	const weeks = Math.floor(daysBetween$2(base, mon) / 7);
 	return `b${addDays$5(base, Math.floor(weeks / 2) * 14)}`;
 }
@@ -7602,7 +7640,7 @@ function fmtValue(unit, n, unitLabel) {
 }
 /** "3,200 of 5,000 lei" (the unit once), "€3,200 of €5,000". */
 function fmtPair(unit, a, b, unitLabel) {
-	return `${unit === "lei" || unit === "kg" || unit === "km" || unit === "custom" ? fmtValue(unit === "custom" ? "count" : unit, a).replace(/ (lei|kg|km)$/, "") : fmtValue(unit, a, unitLabel)} of ${fmtValue(unit, b, unitLabel)}`;
+	return `${unit === "lei" || unit === "kg" || unit === "km" || unit === "ml" || unit === "custom" ? fmtValue(unit === "custom" ? "count" : unit, a).replace(/ (lei|kg|km|ml)$/, "") : fmtValue(unit, a, unitLabel)} of ${fmtValue(unit, b, unitLabel)}`;
 }
 /** "+44 lei" / "−0.4 kg": a change with its sign. */
 function fmtDelta(unit, n, unitLabel) {
@@ -7631,6 +7669,558 @@ var shortDay$1 = (d) => (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).toLocaleDat
 	month: "short",
 	timeZone: "UTC"
 });
+// src/core/goalKinds.ts
+var GOAL_TYPES = [
+	{
+		id: "target",
+		icon: "🎯",
+		label: "A number by a date",
+		hint: "Save 3,000 lei by March, 100 GitHub stars"
+	},
+	{
+		id: "habit",
+		icon: "🔁",
+		label: "A habit",
+		hint: "Work out 4× a week, in bed by 00:00 5 nights a week"
+	},
+	{
+		id: "limit",
+		icon: "🛑",
+		label: "Do less",
+		hint: "At most 5h of gaming a week"
+	},
+	{
+		id: "repeat",
+		icon: "📅",
+		label: "Every month",
+		hint: "Save 2,000 lei every month"
+	},
+	{
+		id: "project",
+		icon: "🧩",
+		label: "Steps to finish",
+		hint: "Security+: domains, practice exams, book it"
+	}
+];
+var isPeriodType = (t) => t === "habit" || t === "limit" || t === "repeat";
+/** Which data can measure which kind of goal ('manual': you log it). */
+var SOURCES_FOR = {
+	target: [
+		"manual",
+		"money.saved",
+		"money.profit",
+		"money.income",
+		"body.weight",
+		"body.workouts",
+		"sport.reps",
+		"focus.hours",
+		"pc.work",
+		"tasks.done",
+		"habit.clean"
+	],
+	habit: [
+		"manual",
+		"body.workouts",
+		"sport.reps",
+		"sleep.bed",
+		"water",
+		"focus.hours",
+		"pc.work",
+		"tasks.done"
+	],
+	limit: [
+		"manual",
+		"pc.kind",
+		"money.spent",
+		"pc.work"
+	],
+	repeat: [
+		"manual",
+		"money.saved",
+		"money.income",
+		"focus.hours",
+		"body.workouts",
+		"sport.reps",
+		"tasks.done",
+		"pc.work"
+	],
+	project: ["manual"]
+};
+var COLORS = [
+	"lime",
+	"cyan",
+	"violet",
+	"amber",
+	"rose",
+	"blue"
+];
+/** Covers are drawn in CSS (no pictures from the internet); 'photo' is a small picture you picked, kept on this device's copy. */
+var COVERS = [
+	"aurora",
+	"sunrise",
+	"ocean",
+	"forest",
+	"night",
+	"ember"
+];
+var defaultMeta = (type = "target") => ({
+	type,
+	per: type === "repeat" ? "month" : "week",
+	dayMin: 1,
+	steps: [],
+	emoji: "",
+	color: "lime",
+	cover: "aurora",
+	photo: null,
+	vision: "",
+	reward: null,
+	paused: false,
+	pinned: false,
+	order: null
+});
+var TYPES = GOAL_TYPES.map((t) => t.id);
+var str$1 = (v, n) => String(v ?? "").trim().slice(0, n);
+/** Meta from storage (anything missing or broken falls back; a goal from before kinds is a 'target'). */
+function cleanMeta(raw) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const type = TYPES.includes(r.type) ? r.type : "target";
+	const base = defaultMeta(type);
+	const steps = Array.isArray(r.steps) ? r.steps.filter((s) => s && str$1(s.text, 80)).slice(0, 40).map((s, i) => ({
+		id: str$1(s.id, 24) || `s${i + 1}`,
+		text: str$1(s.text, 80),
+		weight: Math.max(1, Math.min(10, Math.round(Number(s.weight) || 1))),
+		done: typeof s.done === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.done) ? s.done : null
+	})) : [];
+	const photo = typeof r.photo === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(r.photo) && r.photo.length < 12e4 ? r.photo : null;
+	const rw = r.reward && typeof r.reward === "object" && Number.isFinite(Number(r.reward.id)) && str$1(r.reward.title, 60) ? {
+		id: Number(r.reward.id),
+		title: str$1(r.reward.title, 60),
+		emoji: r.reward.emoji ? str$1(r.reward.emoji, 8) : null,
+		price: Number.isFinite(Number(r.reward.price)) ? Number(r.reward.price) : null
+	} : null;
+	return {
+		type,
+		per: r.per === "month" || r.per === "week" ? r.per : base.per,
+		dayMin: Number.isFinite(Number(r.dayMin)) && Number(r.dayMin) > 0 ? Number(r.dayMin) : 1,
+		steps,
+		emoji: str$1(r.emoji, 8),
+		color: COLORS.includes(r.color) ? r.color : base.color,
+		cover: COVERS.includes(r.cover) || r.cover === "photo" && photo ? r.cover : base.cover,
+		photo,
+		vision: str$1(r.vision, 200),
+		reward: rw,
+		paused: !!r.paused,
+		pinned: !!r.pinned,
+		order: Number.isFinite(Number(r.order)) && r.order !== null ? Number(r.order) : null
+	};
+}
+/** Share of a project done (0–100), by weight. */
+function stepsPct(steps) {
+	const total = steps.reduce((t, s) => t + s.weight, 0);
+	if (!total) return 0;
+	return Math.round(steps.filter((s) => s.done).reduce((t, s) => t + s.weight, 0) / total * 1e3) / 10;
+}
+var nextStep = (steps) => steps.find((s) => !s.done) ?? null;
+/**
+* Steps from words: "learn domain 1..5, 3 practice exams, book exam" →
+* Learn domain 1 … Learn domain 5, Practice exam 1 … 3, Book exam.
+* "x3" or "(3)" at the end sets a step's weight.
+*/
+function stepsFromText(text) {
+	const out = [];
+	const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+	for (let part of String(text ?? "").split(/[,;\n]|\s+(?:and|then)\s+/i)) {
+		part = part.trim().replace(/\.$/, "");
+		if (!part) continue;
+		let weight = 1;
+		const w = /\s*(?:\bx\s*(\d{1,2})|\((\d{1,2})\))$/i.exec(part);
+		if (w) {
+			weight = Math.max(1, Math.min(10, Number(w[1] ?? w[2])));
+			part = part.slice(0, w.index).trim();
+		}
+		const range = /^(.*?)\s*(\d{1,2})\s*(?:\.\.|–|-|to)\s*(\d{1,2})$/i.exec(part);
+		if (range && Number(range[3]) > Number(range[2]) && Number(range[3]) - Number(range[2]) < 20) {
+			const word = range[1].trim().replace(/s$/i, "");
+			for (let i = Number(range[2]); i <= Number(range[3]); i++) out.push({
+				text: cap(`${word} ${i}`.trim()),
+				weight
+			});
+			continue;
+		}
+		const many = /^(\d{1,2})\s+(.+)$/i.exec(part);
+		if (many && Number(many[1]) > 1 && Number(many[1]) <= 12) {
+			const one = many[2].replace(/(ss|x|sh|ch)es$/i, "$1").replace(/([^s])s$/i, "$1");
+			for (let i = 1; i <= Number(many[1]); i++) out.push({
+				text: cap(`${one} ${i}`),
+				weight
+			});
+			continue;
+		}
+		out.push({
+			text: cap(part).slice(0, 80),
+			weight
+		});
+	}
+	return out.slice(0, 40);
+}
+var pad$6 = (n) => String(n).padStart(2, "0");
+var mondayOf$2 = (day) => addDays$5(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
+var lastOfMonth = (day) => {
+	const y = Number(day.slice(0, 4));
+	const m = Number(day.slice(5, 7));
+	return `${y}-${pad$6(m)}-${pad$6(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
+};
+/** The week (Monday–Sunday) or month a day is in. */
+function periodOf(per, day) {
+	if (per === "month") return {
+		key: `m${day.slice(0, 7)}`,
+		from: `${day.slice(0, 7)}-01`,
+		to: lastOfMonth(day)
+	};
+	const from = mondayOf$2(day);
+	return {
+		key: `w${from}`,
+		from,
+		to: addDays$5(from, 6)
+	};
+}
+var periodBefore = (per, from) => periodOf(per, addDays$5(from, -1));
+var perWord = (per) => per === "month" ? "month" : "week";
+var MONTH_SHORT = (d) => (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).toLocaleDateString("en-GB", {
+	month: "short",
+	timeZone: "UTC"
+});
+/** Sum (or count of days that pass `dayMin`) between two days. */
+function measure(daily, from, to, mode, dayMin) {
+	let n = 0;
+	for (const [d, v] of Object.entries(daily)) {
+		if (d < from || d > to) continue;
+		n += mode === "days" ? v >= dayMin - 1e-9 ? 1 : 0 : v;
+	}
+	return Math.round(n * 100) / 100;
+}
+var hits = (type, value, target) => type === "limit" ? value <= target + 1e-9 : value >= target - 1e-9;
+/**
+* This week or month of a habit, limit or repeating goal: where you are, the
+* last periods, the streak and the best one. `daily`: day → amount.
+*/
+function periodInfo(type, per, target, daily, startDay, today, dayMin = 1, keep = 8) {
+	const mode = type === "habit" ? "days" : "sum";
+	const cur = periodOf(per, today);
+	const rows = [];
+	let p = cur;
+	for (let i = 0; i < 60; i++) {
+		if (p.to < startDay) break;
+		const value = measure(daily, p.from > startDay ? p.from : startDay, p.to < today ? p.to : today, mode, dayMin);
+		rows.unshift({
+			key: p.key,
+			from: p.from,
+			to: p.to,
+			label: i === 0 ? `This ${perWord(per)}` : per === "month" ? MONTH_SHORT(p.from) : `w/c ${shortDay$1(p.from)}`,
+			value,
+			hit: hits(type, value, target)
+		});
+		p = periodBefore(per, p.from);
+	}
+	const now = rows[rows.length - 1];
+	let streak = (type === "limit" ? false : now.hit) ? 1 : 0;
+	for (let i = rows.length - 2; i >= 0; i--) if (rows[i].hit) streak++;
+	else break;
+	const past = rows.slice(0, -1);
+	const pool = type === "limit" ? past : rows;
+	const best = pool.length ? pool.reduce((b, r) => type === "limit" ? r.value < b.value ? r : b : r.value > b.value ? r : b) : null;
+	const len = daysBetween$2(cur.from, cur.to) + 1;
+	const daysLeft = daysBetween$2(today, cur.to) + 1;
+	const todayValue = Math.round((daily[today] ?? 0) * 100) / 100;
+	const passed = Math.max(1, len - daysLeft + 1);
+	const projected = mode === "days" ? Math.min(len, Math.round(now.value / passed * len)) : Math.round(now.value / passed * len * 10) / 10;
+	const days = [];
+	if (per === "week") for (let i = 0; i < 7; i++) {
+		const d = addDays$5(cur.from, i);
+		const v = daily[d] ?? 0;
+		days.push({
+			day: d,
+			value: v,
+			done: mode === "days" ? v >= dayMin - 1e-9 : v > 0,
+			future: d > today
+		});
+	}
+	return {
+		per,
+		mode,
+		value: now.value,
+		target,
+		hit: now.hit,
+		over: type === "limit" && now.value > target + 1e-9,
+		daysLeft,
+		todayValue,
+		todayDone: mode === "days" ? todayValue >= dayMin - 1e-9 : todayValue > 0,
+		history: rows.slice(-keep),
+		streak,
+		best: best && best.value > 0 ? best : type === "limit" ? best : null,
+		days,
+		projected
+	};
+}
+/** Ahead / on track / behind / at risk for this week or month (limits: under, close, over). */
+function periodStatusAt(type, pi) {
+	const total = Math.max(pi.daysLeft, daysInPeriod(pi));
+	const before = total - pi.daysLeft;
+	if (type === "limit") {
+		if (pi.over) return "at risk";
+		const allowed = pi.target * (before + 1) / total;
+		if (pi.value > allowed + pi.target * .1) return "behind";
+		return pi.value <= allowed * .6 ? "ahead" : "on track";
+	}
+	if (pi.hit) return "ahead";
+	const need = pi.target - pi.value;
+	if (pi.mode === "days" && need > pi.daysLeft) return "at risk";
+	const expected = pi.target * before / total;
+	const diff = (pi.value - expected) / (pi.target || 1);
+	if (diff >= -.05 || pi.mode === "days" && pi.value >= expected - .5) return "on track";
+	return diff <= -.3 ? "at risk" : "behind";
+}
+function daysInPeriod(pi) {
+	const last = pi.history[pi.history.length - 1];
+	return last ? daysBetween$2(last.from, last.to) + 1 : 30;
+}
+/**
+* How many days you are behind (+) or ahead (−) of the pace line: how long
+* ago the line was where you are now (or how long until it gets there).
+*/
+function daysOffLine(g, value, today) {
+	if (today <= g.startDay) return 0;
+	const pv = progressOf(g, value);
+	const pe = progressOf(g, expectedAt(g, today));
+	if (Math.abs(pv - pe) < 1e-9) return 0;
+	const total = Math.max(1, daysBetween$2(g.startDay, g.deadline));
+	if (pv < pe) {
+		for (let k = 1; k <= total; k++) if (progressOf(g, expectedAt(g, addDays$5(today, -k))) <= pv + 1e-9) return k;
+		return daysBetween$2(g.startDay, today);
+	}
+	for (let k = 1; k <= total; k++) if (progressOf(g, expectedAt(g, addDays$5(today, k))) >= pv - 1e-9) return -k;
+	return -daysBetween$2(today, g.deadline);
+}
+/** The best calendar week so far (the biggest move toward the target), from the daily series. */
+function bestWeek(g, series, today) {
+	if (series.length < 2) return null;
+	const sorted = [...series].sort((a, b) => a.day.localeCompare(b.day));
+	const up = g.target >= g.start;
+	const at = (day) => {
+		let v = sorted[0].value;
+		for (const p of sorted) if (p.day <= day) v = p.value;
+		return v;
+	};
+	let best = null;
+	for (let mon = mondayOf$2(sorted[0].day); mon <= today; mon = addDays$5(mon, 7)) {
+		const gain = (at(addDays$5(mon, 6)) - at(addDays$5(mon, -1))) * (up ? 1 : -1);
+		if (gain > 0 && (!best || gain > best.gain)) best = {
+			from: mon,
+			gain: Math.round(gain * 100) / 100
+		};
+	}
+	return best;
+}
+var nice$1 = (n, unit) => {
+	const a = Math.abs(n);
+	if (unit === "kg" || unit === "km" || unit === "pct") return Math.round(a * 10) / 10;
+	if (unit === "hours") return Math.max(.25, Math.round(a * 4) / 4);
+	if (a >= 1e3) return Math.round(a / 50) * 50;
+	if (a >= 100) return Math.round(a / 10) * 10;
+	return Math.max(1, Math.ceil(a));
+};
+/** "45 min", "1h30" for hours. */
+var hoursText$1 = (h) => {
+	const m = Math.round(h * 60);
+	return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad$6(m % 60) : ""}`;
+};
+var amount = (g, n) => {
+	if (g.unit === "hours") return hoursText$1(n);
+	if (g.source.kind === "sport.reps" && g.source.arg) return `${fmtValue("count", n)} ${g.source.arg.toLowerCase()}`;
+	return fmtValue(g.unit, n, g.unitLabel);
+};
+/** What doing it today means for a habit: "Work out", "In bed by 00:00 tonight", "Drink 2,000 ml". */
+function habitVerb(g, dayMin) {
+	const s = g.source;
+	if (s.kind === "body.workouts") return "Work out";
+	if (s.kind === "sleep.bed") return `In bed by ${s.arg || "00:00"} tonight`;
+	if (s.kind === "water") return `Drink ${fmtValue("ml", dayMin)}`;
+	if (s.kind === "focus.hours") return `${hoursText$1(dayMin)} of ${s.arg || "focus"}`;
+	if (s.kind === "pc.work") return `${hoursText$1(dayMin)} of real work`;
+	if (s.kind === "sport.reps") return `${fmtValue("count", dayMin)} ${(s.arg || "reps").toLowerCase()}`;
+	if (s.kind === "tasks.done") return dayMin > 1 ? `Close ${dayMin} tasks` : "Close a task";
+	return g.title.replace(/\s*\d+\s*(?:×|x|times?)\s*(?:a|per|\/)\s*(?:week|month)\b.*$/i, "").trim() || "Do it";
+}
+var dayWord = (n) => `${n} day${n === 1 ? "" : "s"}`;
+/**
+* Today's one step for a goal: what to do today to stay on the line. Shown on
+* the card, on Today's list and in Ben's prompt.
+*/
+function todayStepOf(c) {
+	const g = c.goal;
+	const kind = c.kind ?? "target";
+	if (c.paused) return "Paused";
+	if (c.status === "done") return "Reached 🏆";
+	if (c.status === "missed") return "The date passed: set a new one or close it";
+	if (c.status === "not started") return `Starts ${shortDay$1(g.startDay)}`;
+	const pi = c.period;
+	if (pi && kind === "habit") {
+		const verb = habitVerb(g, c.meta?.dayMin ?? 1);
+		if (pi.todayDone) return `Done today ✓ · ${pi.value} of ${pi.target} this ${perWord(pi.per)}`;
+		if (pi.hit) return `${verb}: a bonus day (${pi.target} done this ${perWord(pi.per)})`;
+		return `${verb} today · ${pi.value} of ${pi.target} this ${perWord(pi.per)}`;
+	}
+	if (pi && kind === "limit") {
+		const left = pi.target - pi.value;
+		if (pi.over) return `Over by ${amount(g, -left)}: none today`;
+		return `Under ${amount(g, left / Math.max(1, pi.daysLeft))} today · ${amount(g, left)} left this ${perWord(pi.per)}`;
+	}
+	if (pi && kind === "repeat") {
+		const left = pi.target - pi.value;
+		if (left <= 0) return `Done this ${perWord(pi.per)} ✓`;
+		const per = left / Math.max(1, pi.daysLeft);
+		return pi.daysLeft > 7 ? `${amount(g, nice$1(left / Math.ceil(pi.daysLeft / 7), g.unit))} this week · ${amount(g, left)} to go` : `${amount(g, nice$1(per, g.unit))} today · ${amount(g, left)} to go`;
+	}
+	if (kind === "project") {
+		const s = nextStep(c.meta?.steps ?? []);
+		return s ? `Next: ${s.text}` : "All steps done: mark it reached";
+	}
+	const per = Math.abs(c.perDayNeeded);
+	if (!per) return "On the line: keep going";
+	const small = g.unit !== "kg" && g.unit !== "km" && g.unit !== "pct" && g.unit !== "hours" && per < .75 || nice$1(per, g.unit) === 0;
+	const sign = g.target < g.start ? "−" : "+";
+	if (g.source.kind === "body.weight") return `${sign}${fmtValue("kg", nice$1(per * 7, "kg"))} this week: eat clean, move`;
+	return small ? `${sign}${amount(g, nice$1(per * 7, g.unit))} this week` : `${sign}${amount(g, nice$1(per, g.unit))} today`;
+}
+/** The pace line in words: "On track", "3 days behind: 12 pushups today gets you back", "2 days ahead". */
+function paceTextOf(c, today) {
+	const g = c.goal;
+	const kind = c.kind ?? "target";
+	if (c.paused) return "Paused: no nudges";
+	if (c.status === "done") return g.doneDay ? `Reached on ${shortDay$1(g.doneDay)}` : "Reached";
+	if (c.status === "missed") return "The date passed";
+	if (c.status === "not started") return `Starts ${shortDay$1(g.startDay)}`;
+	const pi = c.period;
+	if (pi) {
+		const w = perWord(pi.per);
+		if (kind === "limit") return pi.over ? `Over the limit this ${w}` : c.status === "behind" ? `Close to the limit: go easy` : `Under the limit · ${pi.daysLeft} ${pi.daysLeft === 1 ? "day" : "days"} left`;
+		if (pi.hit) return `Done this ${w} ✓`;
+		const need = pi.target - pi.value;
+		if (c.status === "at risk") return pi.mode === "days" ? `Can't reach ${pi.target} this ${w}: make every day count` : `Behind: ${amount(g, need)} to go, ${dayWord(pi.daysLeft)} left`;
+		if (c.status === "behind") return pi.mode === "days" ? `Behind: ${need} more in ${dayWord(pi.daysLeft)}` : `Behind: ${amount(g, need)} in ${dayWord(pi.daysLeft)}`;
+		return pi.mode === "days" ? `On track: ${need} more in ${dayWord(pi.daysLeft)}` : `On track: ${amount(g, need)} to go`;
+	}
+	const off = daysOffLine(g, c.value, today);
+	if (off > 0 && (c.status === "behind" || c.status === "at risk")) {
+		const gap = Math.abs(c.expected - c.value);
+		if (kind === "project") {
+			const steps = c.meta?.steps ?? [];
+			const avg = steps.length ? 100 / steps.reduce((t, s) => t + s.weight, 0) : 10;
+			const n = Math.max(1, Math.round(gap / avg));
+			return `${dayWord(off)} behind: ${n} step${n === 1 ? "" : "s"} gets you back`;
+		}
+		return `${dayWord(off)} behind: ${amount(g, nice$1(gap, g.unit))} ${off > 7 ? "this week" : "today"} gets you back`;
+	}
+	if (off < 0 && c.status === "ahead") return `${dayWord(-off)} ahead of the line 😎`;
+	return "On track";
+}
+/** Daily amounts from your own logs (habit, limit, repeat goals you log by hand). */
+function dailyFromCheckins(checkins) {
+	const out = {};
+	for (const c of checkins) if (c.by === "me" || c.by === "ben") out[c.day] = Math.round(((out[c.day] ?? 0) + c.value) * 100) / 100;
+	for (const k of Object.keys(out)) if (out[k] < 0) out[k] = 0;
+	return out;
+}
+/**
+* A goal card for any kind. `daily`: the day → amount map from the goal's
+* data source (habit, limit and repeat goals that count themselves); goals
+* you log by hand use their check-ins.
+*/
+function typedCard(g, meta, all, today, daily) {
+	const mine = all.filter((c) => c.goalId === g.id).sort((a, b) => a.at.localeCompare(b.at));
+	const kind = meta.type;
+	let card;
+	if (isPeriodType(kind)) {
+		const dm = daily ?? dailyFromCheckins(mine);
+		const pi = periodInfo(kind, meta.per, g.target, dm, g.startDay, today, kind === "habit" && g.source.kind === "manual" ? 1 : meta.dayMin);
+		const ended = today > g.deadline;
+		const status = g.doneDay || ended ? "done" : today < g.startDay ? "not started" : periodStatusAt(kind, pi);
+		const auto = g.source.kind !== "manual";
+		const answered = mine.some((c) => (c.by === "me" || c.by === "ben" || c.by === "skip") && periodOf(meta.per, c.day).key === periodOf(meta.per, today).key);
+		card = {
+			goal: g,
+			value: pi.value,
+			pct: Math.round(Math.max(0, Math.min(1, g.target ? pi.value / g.target : 0)) * 100),
+			expected: 0,
+			expectedPct: 0,
+			status,
+			daysLeft: pi.daysLeft,
+			perDayNeeded: 0,
+			perDayNow: null,
+			need: kind === "limit" || pi.hit ? "" : kind === "habit" ? `${pi.target - pi.value} more` : amount(g, pi.target - pi.value),
+			eta: null,
+			next: {
+				value: g.target,
+				label: "Goal",
+				index: 0
+			},
+			milestones: [],
+			streak: pi.streak,
+			due: !auto && !answered && !meta.paused && status !== "done" && today > g.startDay && pi.daysLeft <= (meta.per === "week" ? 3 : 10),
+			auto,
+			series: pi.history.map((r) => ({
+				day: r.from,
+				value: r.value
+			})),
+			lastAt: mine.length ? mine[mine.length - 1].at : null,
+			period: pi
+		};
+	} else {
+		let list = mine;
+		if (kind === "project") {
+			const pct = stepsPct(meta.steps);
+			const g2 = {
+				...g,
+				unit: "pct",
+				start: 0,
+				target: 100
+			};
+			const last = list.filter((c) => c.by !== "skip");
+			if (meta.steps.length && (!last.length || last[last.length - 1].value !== pct)) list = [...list, {
+				id: "steps",
+				goalId: g.id,
+				at: `${today}T23:59:59.000Z`,
+				day: today,
+				value: pct,
+				by: "auto"
+			}];
+			card = goalCard(g2, list, today);
+			card.auto = true;
+			card.due = false;
+		} else card = goalCard(g, list, today);
+		const bw = bestWeek(card.goal, card.series, today);
+		card.best = bw ? `Best week: ${fmtDelta(card.goal.unit, (card.goal.target >= card.goal.start ? 1 : -1) * bw.gain, card.goal.unitLabel)} (w/c ${shortDay$1(bw.from)})` : null;
+	}
+	card.kind = kind;
+	card.meta = meta;
+	card.paused = meta.paused;
+	card.pinned = meta.pinned;
+	if (meta.paused) card.due = false;
+	if (card.period) {
+		const b = card.period.best;
+		card.best = b && card.period.history.length > 1 ? `Best ${perWord(meta.per)}: ${kind === "habit" ? `${b.value} of ${card.goal.target}` : amount(card.goal, b.value)} (${b.label})` : null;
+	}
+	card.todayStep = todayStepOf(card);
+	card.pace = paceTextOf(card, today);
+	return card;
+}
+/** One line for Ben or a list, any kind ("Work out 4×/week: 2 of 4 this week, on track, today: Work out"). */
+function cardSummary(c) {
+	const g = c.goal;
+	const pi = c.period;
+	const head = pi ? `${g.title}: ${c.kind === "habit" ? `${pi.value} of ${pi.target}` : `${amount(g, pi.value)} of ${amount(g, pi.target)}`} this ${perWord(pi.per)}` : c.kind === "project" ? `${g.title}: ${c.pct}% of the steps by ${shortDay$1(g.deadline)}` : null;
+	return head ? `${head}, ${(c.pace ?? "").toLowerCase()}${pi && pi.streak > 1 ? `, ${pi.streak} in a row` : ""}` : "";
+}
 function cleanAsks(raw, today) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	const asked = r.asked && typeof r.asked === "object" ? Object.fromEntries(Object.entries(r.asked).filter(([, v]) => typeof v === "string").slice(-60)) : {};
@@ -7711,6 +8301,7 @@ var PERIOD_DAYS = {
 /** One tap's step for "+" and "−": about one period's worth of what it takes, rounded nicely. */
 function quickStep(c) {
 	const g = c.goal;
+	if (c.period) return c.kind === "habit" ? 1 : Math.max(g.unit === "hours" ? .5 : 1, nice(c.period.target / 4));
 	const per = Math.abs(c.perDayNeeded) * PERIOD_DAYS[g.cadence];
 	const span = Math.abs(g.target - g.start);
 	const step = nice(per || span / 10);
@@ -7783,6 +8374,7 @@ var days = (n) => `${n} day${n === 1 ? "" : "s"}`;
 /** "Profit goal: you're at 3,200 of 5,000 lei, 41 days left, need +44 lei/day. What's the number now?" */
 function askText(c) {
 	const g = c.goal;
+	if (c.period) return `🎯 ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)} this ${perWord(c.period.per)}, ${days(c.period.daysLeft)} left. How many so far?`;
 	const gap = c.status === "behind" || c.status === "at risk" ? ` You're ${fmtValue(g.unit, Math.abs(c.expected - c.value), g.unitLabel)} behind the line.` : c.status === "ahead" ? " Ahead of the line 😎" : "";
 	return `🎯 ${g.title}: you're at ${fmtPair(g.unit, c.value, g.target, g.unitLabel)}, ${days(c.daysLeft)} left${c.need ? `, need ${c.need}` : ""}.${gap} What's the number now?`;
 }
@@ -7801,6 +8393,8 @@ function valueOn(c, day) {
 function weeklyGoalLines(cards, today) {
 	return sortCards(cards).filter((c) => c.status !== "missed").slice(0, 5).map((c) => {
 		const g = c.goal;
+		const own = cardSummary(c);
+		if (own) return `🎯 ${own}`;
 		const was = valueOn(c, addDays$5(today, -7));
 		const change = c.value - was;
 		return `🎯 ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)}${change ? ` (${fmtDelta(g.unit, change, g.unitLabel)} this week)` : " (no change this week)"} · ${STATUS_TEXT[c.status].toLowerCase()}${c.status === "done" ? "" : ` · ${days(c.daysLeft)} left`}${c.streak > 1 ? ` · ${c.streak} check-ins in a row` : ""}`;
@@ -7820,7 +8414,10 @@ function goalsNowText(cards) {
 		...open.map((c, i) => {
 			const g = c.goal;
 			const v = (n) => fmtValue(g.unit, n, g.unitLabel);
-			return `- ${goalRef(i)} ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)} by ${shortDay$1(g.deadline)} (${c.pct}%, line says ${v(c.expected)}), ${STATUS_TEXT[c.status].toLowerCase()}, ${days(c.daysLeft)} left${c.need ? `, need ${c.need}` : ""}${c.auto ? ", counts itself" : c.due ? ", CHECK-IN DUE" : ""}${g.why ? `. Why: ${g.why.slice(0, 60)}` : ""}`;
+			const today = c.todayStep ? `; today: ${c.todayStep}` : "";
+			const own = cardSummary(c);
+			if (own) return `- ${goalRef(i)} ${own}${c.auto ? ", counts itself" : c.due ? ", CHECK-IN DUE" : ""}${today}${g.why ? `. Why: ${g.why.slice(0, 60)}` : ""}`;
+			return `- ${goalRef(i)} ${g.title}: ${fmtPair(g.unit, c.value, g.target, g.unitLabel)} by ${shortDay$1(g.deadline)} (${c.pct}%, line says ${v(c.expected)}), ${STATUS_TEXT[c.status].toLowerCase()}, ${days(c.daysLeft)} left${c.need ? `, need ${c.need}` : ""}${c.auto ? ", counts itself" : c.due ? ", CHECK-IN DUE" : ""}${today}${g.why ? `. Why: ${g.why.slice(0, 60)}` : ""}`;
 		}),
 		"When he tells you a goal's new number, add \"goalcheck: G1 | 3400\". A new clear goal from his words: \"goal: raise profit to 5000 lei by 31 Dec\" (he confirms with a tap)."
 	].join("\n");
@@ -7957,11 +8554,14 @@ function parseGoalText(raw, today) {
 	let rest = dl ? text.replace(new RegExp(`\\s*(?:by|until|till|before|on|in)?\\s*(?:the\\s+end\\s+of\\s+)?${dl.match.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`, "i"), "") : text;
 	rest = rest.replace(/[.!]+$/, "").trim();
 	const lower = rest.toLowerCase();
+	const deadline = dl && daysBetween$2(today, dl.day) >= 1 ? dl.day : null;
 	const base = {
-		deadline: dl && daysBetween$2(today, dl.day) >= 1 ? dl.day : null,
+		deadline,
 		curve: "line",
 		cadence: "weekly"
 	};
+	const kinds = parseKinds(rest, deadline);
+	if (kinds) return kinds;
 	let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, "i").exec(rest);
 	if (m) {
 		const subject = cap(m[3].trim());
@@ -8172,6 +8772,240 @@ function parseGoalText(raw, today) {
 			source: { kind: "money.saved" },
 			curve: "ramp",
 			template: "save"
+		};
+	}
+	return null;
+}
+var PER = String.raw`(?:a|per|each|every|\/|in a)\s*(week|month|day)`;
+var timeOf = (t) => {
+	if (/midnight/i.test(t)) return "00:00";
+	const m = /(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?/i.exec(t);
+	if (!m) return null;
+	let h = Number(m[1]);
+	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
+	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
+	return h > 23 ? null : `${pad$5(h)}:${m[2] ?? "00"}`;
+};
+var PC_KIND = [
+	[/gam(e|es|ing)|steam|valorant|cs2|lol\b/i, "gaming"],
+	[/youtube|video|netflix|series|movies?|twitch/i, "video"],
+	[/social|instagram|tiktok|reddit|twitter|scroll/i, "social"]
+];
+/**
+* The newer kinds of goal from words: steps ("Security+: domain 1..5, 3
+* practice exams, book it"), do less ("at most 5h of gaming a week"), habits
+* ("work out 4 times a week", "in bed by 00:00 5 nights a week") and repeats
+* ("save 2000 lei every month"). null: a number goal (the parser goes on).
+*/
+function parseKinds(rest, deadline) {
+	const lower = rest.toLowerCase();
+	const base = {
+		deadline,
+		curve: "line",
+		cadence: "weekly"
+	};
+	let m = /^(.{2,60}?)\s*:\s*(.+)$/.exec(rest);
+	if (m && !/\d$/.test(m[1]) && /,|;|\.\.|\bthen\b/.test(m[2])) {
+		const steps = stepsFromText(m[2]);
+		if (steps.length >= 2) return {
+			...base,
+			kind: "measure",
+			type: "project",
+			title: cap(m[1].replace(/^(goal|project)\s+/i, "")).slice(0, 60),
+			unit: "pct",
+			target: 100,
+			area: /sec|cert|exam|ctf|course|learn|study/i.test(rest) ? "Study" : "Life",
+			source: { kind: "manual" },
+			steps
+		};
+	}
+	m = new RegExp(String.raw`(?:at most|max(?:imum)?|no more than|less than|under|up to|≤|<=|limit\s+\w+\s+to)\s*${NUM}\s*(hours?|hrs?|h|minutes?|mins?|m\b|lei|mdl|€|eur|\$|usd)?\s*(?:of|on)?\s*([\p{L}\s]{0,30}?)\s*${PER}`, "iu").exec(rest);
+	if (m) {
+		let n = num$1(m[1], m[2]);
+		const u = (m[3] ?? "").toLowerCase();
+		const what = `${m[4] ?? ""} ${lower}`;
+		const per = m[5].toLowerCase();
+		const money = /lei|mdl|€|eur|\$|usd/.test(u) || /\bspend|spending\b/.test(lower);
+		if (/^min|^m$/.test(u)) n = Math.round(n / 60 * 100) / 100;
+		if (per === "day") n = Math.round(n * 7 * 100) / 100;
+		const per2 = per === "month" ? "month" : "week";
+		if (money) {
+			const unit = /€|eur/.test(u) ? "eur" : /\$|usd/.test(u) ? "usd" : "lei";
+			return {
+				...base,
+				kind: "measure",
+				type: "limit",
+				per: per2,
+				title: `Spend at most ${n.toLocaleString("en-US")} ${unit === "lei" ? "lei" : unit === "eur" ? "€" : "$"} a ${per2}`,
+				unit,
+				target: n,
+				area: "Money",
+				source: { kind: "money.spent" }
+			};
+		}
+		const kind = PC_KIND.find(([re]) => re.test(what))?.[1];
+		const thing = (m[4] ?? "").trim() || kind || "it";
+		return {
+			...base,
+			kind: "measure",
+			type: "limit",
+			per: per2,
+			title: `${cap(thing)}: at most ${n}h a ${per2}`,
+			unit: "hours",
+			target: n,
+			area: "Discipline",
+			source: kind ? {
+				kind: "pc.kind",
+				arg: kind
+			} : { kind: "manual" }
+		};
+	}
+	m = new RegExp(String.raw`(\d{1,2})\s*(?:×|x|times?|nights?|days?|sessions?)\s*${PER}`, "i").exec(rest);
+	const daily = /\b(every ?day|daily|each day)\b/i.test(rest);
+	const weekdays = /\bweekdays\b/i.test(rest);
+	if (m && m[2].toLowerCase() !== "day" || daily || weekdays) {
+		const per = m?.[2].toLowerCase() === "month" ? "month" : "week";
+		const n = m ? Number(m[1]) : weekdays ? 5 : per === "month" ? 30 : 7;
+		const times = `${n}× a ${per}`;
+		const lead = (m ? rest.slice(0, m.index) + rest.slice(m.index + m[0].length) : rest).replace(/\b(every ?day|daily|each day|on weekdays|weekdays)\b/gi, "").trim();
+		if (/work ?out|train|gym|exercise|lift/i.test(lower)) return {
+			...base,
+			kind: "measure",
+			type: "habit",
+			per,
+			title: `Work out ${times}`,
+			unit: "count",
+			target: n,
+			area: "Body",
+			source: { kind: "body.workouts" }
+		};
+		if (/sleep|bed/i.test(lower)) {
+			const t = timeOf(/(?:before|by|until|at)\s+(midnight|\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?)/i.exec(rest)?.[1] ?? "midnight") ?? "00:00";
+			return {
+				...base,
+				kind: "measure",
+				type: "habit",
+				per,
+				title: `In bed by ${t}, ${n} nights a ${per}`,
+				unit: "count",
+				target: n,
+				area: "Body",
+				source: {
+					kind: "sleep.bed",
+					arg: t
+				}
+			};
+		}
+		const water = /water/i.test(lower) ? /(\d+(?:[.,]\d+)?)\s*(l|liters?|litres?|ml)\b/i.exec(rest) : null;
+		if (/water/i.test(lower)) {
+			const ml = water ? Math.round(Number(water[1].replace(",", ".")) * (/^ml$/i.test(water[2]) ? 1 : 1e3)) : 2e3;
+			return {
+				...base,
+				kind: "measure",
+				type: "habit",
+				per,
+				title: `Drink ${ml.toLocaleString("en-US")} ml of water, ${times}`,
+				unit: "count",
+				target: n,
+				area: "Body",
+				source: { kind: "water" },
+				dayMin: ml
+			};
+		}
+		const hours = /(\d+(?:[.,]\d+)?)\s*(h|hours?|hrs?|min(?:utes?)?)\b(?:\s+(?:of|on)\s+([\p{L}\d+#.\s-]{2,30}?))?(?=\s*$|\s+\d|\s+(?:a|per|each|every))/iu.exec(lead);
+		if (hours) {
+			const h = /^min/i.test(hours[2]) ? Number(hours[1]) / 60 : Number(hours[1].replace(",", "."));
+			const subject = hours[3] ? cap(hours[3].trim()) : /\b(rust|ctf|python|math|study|code|coding)\b/i.exec(lead)?.[1];
+			const subj = subject && !/^(study|code|coding)$/i.test(subject) ? cap(subject) : void 0;
+			return {
+				...base,
+				kind: "measure",
+				type: "habit",
+				per,
+				title: `${h >= 1 ? `${h}h` : `${Math.round(h * 60)} min`} of ${subj ?? "focus"}, ${times}`,
+				unit: "count",
+				target: n,
+				area: "Study",
+				source: {
+					kind: "focus.hours",
+					...subj ? { arg: subj } : {}
+				},
+				dayMin: Math.round(h * 100) / 100
+			};
+		}
+		const reps = /(\d+)\s*(push-?ups?|pull-?ups?|squats?|dips?|sit-?ups?|burpees?)/i.exec(lead);
+		if (reps) return {
+			...base,
+			kind: "measure",
+			type: "habit",
+			per,
+			title: `${reps[1]} ${reps[2].toLowerCase()}, ${times}`,
+			unit: "count",
+			target: n,
+			area: "Body",
+			source: {
+				kind: "sport.reps",
+				arg: cap(reps[2].toLowerCase().split(" ")[0])
+			},
+			dayMin: Number(reps[1])
+		};
+		const title = cap(lead.replace(/^(i want to|i will|to)\s+/i, "").replace(/\s+/g, " ").trim()) || "My habit";
+		return {
+			...base,
+			kind: "measure",
+			type: "habit",
+			per,
+			title: `${title} ${times}`.slice(0, 60),
+			unit: "count",
+			target: n,
+			area: /read|study|learn|ctf|code/i.test(lower) ? "Study" : "Life",
+			source: { kind: "manual" }
+		};
+	}
+	m = new RegExp(String.raw`(?:(€|\$)\s*${NUM}|${NUM}\s*([\p{L}€$]+(?:\s[\p{L}]+)?))\s*${PER}`, "iu").exec(rest);
+	if (m && /\b(save|saving|put aside|set aside|invest|read|write|publish|solve|ship|post|do|finish)\b/i.test(lower)) {
+		if (m[7].toLowerCase() === "day") return null;
+		const per = m[7].toLowerCase() === "week" ? "week" : "month";
+		const n = m[1] ? num$1(m[2], m[3]) : num$1(m[4], m[5]);
+		const label = (m[1] ?? m[6] ?? "").toLowerCase().trim();
+		const u = unitOf(label) ?? (m[1] ? unitOf(m[1]) : null);
+		if (u && (u.unit === "lei" || u.unit === "eur" || u.unit === "usd")) {
+			const shown = u.unit === "lei" ? `${n.toLocaleString("en-US")} lei` : `${u.unit === "eur" ? "€" : "$"}${n.toLocaleString("en-US")}`;
+			return {
+				...base,
+				kind: "measure",
+				type: "repeat",
+				per,
+				title: `Save ${shown} every ${per}`,
+				unit: u.unit,
+				target: n,
+				area: "Money",
+				source: { kind: "money.saved" }
+			};
+		}
+		if (u?.unit === "hours") return {
+			...base,
+			kind: "measure",
+			type: "repeat",
+			per,
+			title: `${n}h of focus every ${per}`,
+			unit: "hours",
+			target: n,
+			area: "Study",
+			source: { kind: "focus.hours" }
+		};
+		const thing = label.replace(/^(new|more)\s+/, "");
+		return {
+			...base,
+			kind: "measure",
+			type: "repeat",
+			per,
+			title: `${n} ${thing} every ${per}`.slice(0, 60),
+			unit: "custom",
+			unitLabel: thing.split(" ").slice(-1)[0].slice(0, 16),
+			target: n,
+			area: /books?|pages?|ctf|flags?|writeups?/.test(thing) ? "Study" : "Life",
+			source: { kind: "manual" }
 		};
 	}
 	return null;
@@ -18614,6 +19448,19 @@ var FocusService = class {
 	}
 };
 // src/main/goals.ts
+/** Open-ended habits and repeats ("every month, no end date"). */
+var NO_END = "2099-12-31";
+var META = "goal_meta:";
+/** Kinds of PC time that count as work (the island's day totals). */
+var WORK_KINDS = [
+	"coding",
+	"study",
+	"writing",
+	"ctf",
+	"email",
+	"meeting",
+	"money"
+];
 var DAY$1 = /^\d{4}-\d{2}-\d{2}$/;
 var json$3 = (s, d) => {
 	try {
@@ -18701,6 +19548,25 @@ var GoalsService = class {
 		const r = this.db.prepare("SELECT * FROM focus_goals WHERE id = ? AND kind = 'measure'").get(id);
 		return r ? this.toGoal(r) : null;
 	}
+	/** The kind and extras of a goal (a goal from before kinds: a 'target'). */
+	meta(id) {
+		try {
+			return cleanMeta(JSON.parse(getSetting(this.db, META + id) || "null"));
+		} catch {
+			return defaultMeta();
+		}
+	}
+	/** Changes some extras of a goal (the rest stay; the kind never changes here). */
+	setMeta(id, patch) {
+		const cur = this.meta(id);
+		const next = cleanMeta({
+			...cur,
+			...patch,
+			type: cur.type
+		});
+		setSetting(this.db, META + id, JSON.stringify(next));
+		return next;
+	}
 	checkins(goalId) {
 		try {
 			return (goalId == null ? this.db.prepare("SELECT * FROM goal_checkins ORDER BY at").all() : this.db.prepare("SELECT * FROM goal_checkins WHERE goal_id = ? ORDER BY at").all(goalId)).map((r) => ({
@@ -18752,33 +19618,126 @@ var GoalsService = class {
 				return Number(r?.n ?? 0);
 			}
 			if (s.kind === "habit.clean") return new Discipline(this.db, this.wallet).state(now).current;
+			const d = this.dailyValues(s, g.startDay, today, finance);
+			if (!d) return null;
+			return Math.round(Object.values(d).reduce((t, v) => t + v, 0) * 100) / 100;
+		} catch {
+			return null;
+		}
+	}
+	/**
+	* Day -> amount between two days from a data source (habits, limits and
+	* repeats; the newer sources of number goals too). null: no data for it.
+	*/
+	dailyValues(s, from, to, finance) {
+		const out = {};
+		const add = (day, n) => {
+			if (day < from || day > to || !Number.isFinite(n)) return;
+			out[day] = Math.round(((out[day] ?? 0) + n) * 100) / 100;
+		};
+		try {
+			if (s.kind.startsWith("money.")) {
+				const fin = finance ?? financeFromDb(this.db);
+				if (!fin || !Array.isArray(fin.tx)) return null;
+				for (const t of fin.tx) {
+					if (!t || t.deleted || typeof t.date !== "string") continue;
+					const v = Math.abs(Number(t.base ?? t.amount) || 0) / 100;
+					const inc = t.type === "income";
+					const exp = t.type === "expense";
+					if (s.kind === "money.income" && inc) add(t.date.slice(0, 10), v);
+					else if (s.kind === "money.spent" && exp) add(t.date.slice(0, 10), v);
+					else if ((s.kind === "money.saved" || s.kind === "money.profit") && (inc || exp)) add(t.date.slice(0, 10), inc ? v : -v);
+				}
+				return out;
+			}
+			if (s.kind === "body.workouts") {
+				for (const r of this.db.prepare("SELECT day, COUNT(*) AS n FROM workouts WHERE day >= ? AND day <= ? GROUP BY day").all(from, to)) add(String(r.day), Number(r.n));
+				return out;
+			}
+			if (s.kind === "sport.reps") {
+				const want = String(s.arg ?? "").toLowerCase().replace(/[^a-z]/g, "").replace(/s$/, "");
+				if (!want) return null;
+				for (const w of this.db.prepare("SELECT day, items_json FROM workouts WHERE day >= ? AND day <= ?").all(from, to)) for (const it of json$3(w.items_json, [])) if (String(it?.name ?? it?.exerciseId ?? "").toLowerCase().replace(/[^a-z]/g, "").includes(want) && (it?.unit ?? "reps") === "reps") add(String(w.day), Number(it.amount) || 0);
+				return out;
+			}
+			if (s.kind === "water") {
+				const ev = bodyEvents(this.db, from, to);
+				for (const day of new Set(ev.map((e) => e.day))) add(day, totalsOf(ev, day)["water"] ?? 0);
+				return out;
+			}
+			if (s.kind === "sleep.bed") {
+				const mins = (t) => {
+					const [a, b] = t.split(":").map(Number);
+					const v = (Number.isFinite(a) ? a : 0) * 60 + (Number.isFinite(b) ? b : 0);
+					return a < 12 ? v + 1440 : v;
+				};
+				const limit = mins(String(s.arg || "00:00"));
+				for (const r of this.db.prepare("SELECT day, bed_time FROM sleep_logs WHERE day >= ? AND day <= ? AND bed_time IS NOT NULL").all(from, to)) if (/^\d{1,2}:\d{2}/.test(String(r.bed_time))) add(String(r.day), mins(String(r.bed_time)) <= limit ? 1 : 0);
+				return out;
+			}
+			if (s.kind === "focus.hours") {
+				const rows = s.arg ? this.db.prepare("SELECT day, SUM(minutes) AS m FROM focus_sessions WHERE day >= ? AND day <= ? AND lower(subject) = lower(?) GROUP BY day").all(from, to, String(s.arg)) : this.db.prepare("SELECT day, SUM(minutes) AS m FROM focus_sessions WHERE day >= ? AND day <= ? GROUP BY day").all(from, to);
+				for (const r of rows) add(String(r.day), Math.round(Number(r.m) / 60 * 100) / 100);
+				return out;
+			}
+			if (s.kind === "tasks.done") {
+				const rows = this.db.prepare("SELECT day, note FROM ledger WHERE rule_id = 'tasks.todoist_done' AND day >= ? AND day <= ? AND undo_of IS NULL AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)").all(from, to);
+				const want = String(s.arg ?? "").toLowerCase().trim();
+				for (const r of rows) if (!want || String(r.note ?? "").toLowerCase().includes(want)) add(String(r.day), 1);
+				return out;
+			}
+			if (s.kind === "pc.work" || s.kind === "pc.kind") {
+				const log = json$3(getSetting(this.db, "island_day_log"), {});
+				const kinds = s.kind === "pc.work" ? WORK_KINDS : [String(s.arg ?? "").toLowerCase().trim()];
+				for (const [day, d] of Object.entries(log)) {
+					let min = 0;
+					for (const hour of Object.values(d?.hours ?? {})) for (const [k, v] of Object.entries(hour ?? {})) if (kinds.includes(k)) min += Number(v) || 0;
+					if (min) add(day, Math.round(min / 60 * 100) / 100);
+				}
+				return out;
+			}
 		} catch {
 			return null;
 		}
 		return null;
 	}
+	/** One card with the right maths for its kind. */
+	cardOf(g, meta, mine, now, finance) {
+		const today = this.wallet.today(now);
+		if (isPeriodType(meta.type)) {
+			const from = periodOf(meta.per, addDays$5(today, meta.per === "month" ? -400 : -70)).from;
+			const daily = isAuto(g.source) ? this.dailyValues(g.source, from < g.startDay ? g.startDay : from, today, finance) : null;
+			return typedCard(g, meta, mine, today, isAuto(g.source) ? daily ?? {} : null);
+		}
+		if (isAuto(g.source) && meta.type === "target") {
+			const v = this.autoValue(g, now, finance);
+			if (v != null && v !== currentValue(g, mine)) mine = [...mine, {
+				id: "live",
+				goalId: g.id,
+				at: now.toISOString(),
+				day: today,
+				value: v,
+				by: "auto"
+			}];
+		}
+		return typedCard(g, meta, mine, today);
+	}
 	/**
 	* The cards, newest numbers in: auto goals get today's number live (not
-	* saved; syncAuto keeps one a day for the history).
+	* saved; syncAuto keeps one a day for the history). Paused goals only with
+	* `paused: true` (the page); Ben, the island and the tick leave them be.
 	*/
-	cards(now = /* @__PURE__ */ new Date(), finance) {
-		const today = this.wallet.today(now);
+	cards(now = /* @__PURE__ */ new Date(), finance, opts = {}) {
 		const all = this.checkins();
-		return sortCards(this.goals().map((g) => {
-			const mine = all.filter((c) => c.goalId === g.id);
-			if (isAuto(g.source)) {
-				const v = this.autoValue(g, now, finance);
-				if (v != null && v !== currentValue(g, mine)) mine.push({
-					id: "live",
-					goalId: g.id,
-					at: now.toISOString(),
-					day: today,
-					value: v,
-					by: "auto"
-				});
-			}
-			return goalCard(g, mine, today);
-		}));
+		return sortCards(this.goals().map((g) => ({
+			g,
+			meta: this.meta(g.id)
+		})).filter((x) => opts.paused || !x.meta.paused).map(({ g, meta }) => this.cardOf(g, meta, all.filter((c) => c.goalId === g.id), now, finance)));
+	}
+	/** One card by id (paused ones too). */
+	card(id, now = /* @__PURE__ */ new Date(), finance) {
+		const g = this.goal(id);
+		return g ? this.cardOf(g, this.meta(id), this.checkins(id), now, finance) : null;
 	}
 	/**
 	* Auto goals: keep at most one number a day in the history when it moved,
@@ -18789,7 +19748,7 @@ var GoalsService = class {
 		const today = this.wallet.today(now);
 		const out = [];
 		for (const g of this.goals()) {
-			if (!isAuto(g.source) || g.doneDay) continue;
+			if (!isAuto(g.source) || g.doneDay || this.meta(g.id).type !== "target") continue;
 			const v = this.autoValue(g, now, finance);
 			if (v == null) continue;
 			const mine = this.checkins(g.id);
@@ -18804,26 +19763,34 @@ var GoalsService = class {
 	save(input, now = /* @__PURE__ */ new Date(), finance) {
 		const title = String(input.title ?? "").trim().slice(0, 80);
 		if (!title) throw new LedgerError("Name the goal, e.g. \"Profit 5,000 lei a month\"");
-		if (!DAY$1.test(String(input.deadline ?? ""))) throw new LedgerError("Pick the deadline");
+		const prevMeta = input.id ? this.meta(input.id) : null;
+		const type = prevMeta && input.id ? input.meta?.type ?? prevMeta.type : input.meta?.type ?? "target";
+		const period = isPeriodType(type);
+		const deadline = period && !input.deadline ? NO_END : String(input.deadline ?? "");
+		if (!DAY$1.test(deadline)) throw new LedgerError("Pick the deadline");
 		const today = this.wallet.today(now);
-		if (!input.id && input.deadline <= today) throw new LedgerError("The deadline needs to be after today");
-		const target = Number(input.target);
+		if (!input.id && deadline <= today) throw new LedgerError("The deadline needs to be after today");
+		const steps = type === "project" ? input.meta?.steps ?? prevMeta?.steps ?? [] : [];
+		if (type === "project" && !steps.length) throw new LedgerError("Add the steps, e.g. \"Learn domain 1\"");
+		const target = type === "project" ? 100 : Number(input.target);
 		if (!Number.isFinite(target)) throw new LedgerError("What number are you aiming for?");
-		const unit = GOAL_UNITS.some((u) => u.id === input.unit) ? input.unit : "count";
-		const source = input.source && SOURCES.some((s) => s.id === input.source.kind) ? {
+		if (period && target <= 0) throw new LedgerError(type === "habit" ? "How many times? e.g. 4" : "How much? e.g. 5");
+		const unit = type === "project" ? "pct" : GOAL_UNITS.some((u) => u.id === input.unit) ? input.unit : "count";
+		const source = type !== "project" && input.source && SOURCES.some((s) => s.id === input.source.kind) && SOURCES_FOR[type].includes(input.source.kind) ? {
 			kind: input.source.kind,
 			...input.source.arg ? { arg: String(input.source.arg).trim().slice(0, 40) } : {}
 		} : { kind: "manual" };
 		const meta = SOURCES.find((s) => s.id === source.kind);
-		if (meta.needsArg && !source.arg) throw new LedgerError(`${meta.label}: which one? (${meta.needsArg})`);
+		if (meta.needsArg && !source.arg && !argOptional(source.kind)) throw new LedgerError(`${meta.label}: which one? (${meta.needsArg})`);
 		const startDay = input.startDay && DAY$1.test(input.startDay) && input.startDay <= today ? input.startDay : today;
-		let start = input.start == null || !Number.isFinite(Number(input.start)) ? null : Number(input.start);
+		let start = type !== "target" ? 0 : input.start == null || !Number.isFinite(Number(input.start)) ? null : Number(input.start);
 		if (start == null) start = isAuto(source) && !countsFromStart(source.kind) ? this.autoValue({
 			source,
 			startDay
 		}, now, finance) ?? 0 : 0;
-		if (start === target) throw new LedgerError("The target is where you are already: aim for a different number");
-		const cadence = CADENCES.some((c) => c.id === input.cadence) ? input.cadence : "weekly";
+		if (!period && start === target) throw new LedgerError("The target is where you are already: aim for a different number");
+		const per = input.meta?.per ?? prevMeta?.per ?? (type === "repeat" ? "month" : "week");
+		const cadence = period ? per === "month" ? "monthly" : "weekly" : CADENCES.some((c) => c.id === input.cadence) ? input.cadence : "weekly";
 		const curve = input.curve && [
 			"line",
 			"ramp",
@@ -18845,7 +19812,17 @@ var GoalsService = class {
 			source: JSON.stringify(source),
 			milestones: JSON.stringify(milestones),
 			curve,
-			deadline: input.deadline
+			deadline
+		};
+		const metaOut = (id) => {
+			const base = prevMeta ?? defaultMeta(type);
+			setSetting(this.db, META + id, JSON.stringify(cleanMeta({
+				...base,
+				...input.meta ?? {},
+				type,
+				per,
+				steps
+			})));
 		};
 		if (input.id) {
 			if (!this.goal(input.id)) throw new LedgerError("That goal is gone");
@@ -18853,16 +19830,94 @@ var GoalsService = class {
 				...vals,
 				id: input.id
 			});
+			metaOut(input.id);
 			return this.goal(input.id);
 		}
 		const r = this.db.prepare("INSERT INTO focus_goals (title, subject, deadline, hours, created_day, kind, unit, unit_label, target, start_value, why, area, cadence, source, milestones, curve) VALUES (@title, '', @deadline, @target, @day, 'measure', @unit, @unit_label, @target, @start_value, @why, @area, @cadence, @source, @milestones, @curve)").run({
 			...vals,
 			day: startDay
 		});
-		return this.goal(Number(r.lastInsertRowid));
+		const id = Number(r.lastInsertRowid);
+		metaOut(id);
+		return this.goal(id);
 	}
 	archive(id) {
 		this.db.prepare("UPDATE focus_goals SET archived = 1 WHERE id = ? AND kind = 'measure'").run(id);
+	}
+	/** Pause (no nudges, no check-ins due) or carry on. */
+	setPaused(id, paused) {
+		return this.setMeta(id, {
+			paused,
+			...paused ? { pinned: false } : {}
+		});
+	}
+	/** The one focus goal at the top of the page (pinning one unpins the others). */
+	setPinned(id, pinned) {
+		if (pinned) {
+			for (const g of this.goals()) if (g.id !== id && this.meta(g.id).pinned) this.setMeta(g.id, { pinned: false });
+		}
+		this.setMeta(id, { pinned });
+	}
+	/** Your own order: the ids as you want them shown. */
+	reorder(ids) {
+		ids.forEach((id, i) => {
+			if (this.goal(id)) this.setMeta(id, { order: i });
+		});
+	}
+	/** Mark it reached yourself (no points: those come from what you logged) or open it again. */
+	setDone(id, done, now = /* @__PURE__ */ new Date()) {
+		this.db.prepare("UPDATE focus_goals SET done_day = ? WHERE id = ? AND kind = 'measure'").run(done ? this.wallet.today(now) : null, id);
+	}
+	/**
+	* Habit, limit and repeating goals you log by hand: add an amount for today
+	* (1 = "did it today"; a negative amount takes some back). The first log of
+	* a period that adds something pays +3, as a check-in does.
+	*/
+	logPeriod(id, amount, now = /* @__PURE__ */ new Date(), onDay) {
+		const g = this.goal(id);
+		if (!g) throw new LedgerError("That goal is gone");
+		const meta = this.meta(id);
+		if (!isPeriodType(meta.type) || isAuto(g.source)) throw new LedgerError("This goal counts itself");
+		if (!Number.isFinite(amount) || !amount || Math.abs(amount) > 1e7) throw new LedgerError("Type how much, e.g. 1");
+		const today = this.wallet.today(now);
+		const day = onDay && DAY$1.test(onDay) && onDay <= today && periodOf(meta.per, onDay).key === periodOf(meta.per, today).key ? onDay : today;
+		return this.db.transaction(() => {
+			const before = this.checkins(id);
+			const dayHas = before.filter((c) => c.day === day && (c.by === "me" || c.by === "ben")).reduce((t, c) => t + c.value, 0);
+			if (amount < 0 && dayHas + amount < -1e-9) throw new LedgerError("Nothing to take back today");
+			const onTime = amount > 0 && firstOfPeriod(g, before, today);
+			this.db.prepare("INSERT INTO goal_checkins (id, goal_id, at, day, value, who, note) VALUES (?, ?, ?, ?, ?, 'me', 'log')").run(rid(), id, now.toISOString(), day, amount);
+			let paid = 0;
+			if (onTime) paid += this.coinsOf(this.wallet.payOnce(CHECKIN_RULE, {
+				day: today,
+				ref: checkinRef(id, periodKey(g.cadence, today, g.startDay)),
+				note: `Logged: ${g.title}`,
+				now
+			}));
+			return {
+				card: typedCard(g, meta, this.checkins(id), today),
+				paid,
+				milestones: [],
+				done: false
+			};
+		})();
+	}
+	/**
+	* Ticks a step of a project goal (or unticks it). The new share done goes
+	* into the history as a check-in, so milestones pay as they do for any goal
+	* you report yourself (each once).
+	*/
+	toggleStep(id, stepId, now = /* @__PURE__ */ new Date()) {
+		const meta = this.meta(id);
+		if (meta.type !== "project") throw new LedgerError("This goal has no steps");
+		if (!meta.steps.some((s) => s.id === stepId)) throw new LedgerError("That step is gone");
+		const today = this.wallet.today(now);
+		const steps = meta.steps.map((s) => s.id === stepId ? {
+			...s,
+			done: s.done ? null : today
+		} : s);
+		this.setMeta(id, { steps });
+		return this.checkIn(id, stepsPct(steps), "me", "step", now);
 	}
 	/**
 	* A check-in: the number now (a new row, never an edit). Pays +3 when it is
@@ -18875,6 +19930,40 @@ var GoalsService = class {
 		if (!Number.isFinite(value)) throw new LedgerError("Type the number, e.g. 3400");
 		if (Math.abs(value) > 1e9) throw new LedgerError("That number is too big");
 		const today = this.wallet.today(now);
+		const meta = this.meta(id);
+		if (isPeriodType(meta.type)) {
+			if (isAuto(g.source)) throw new LedgerError("This goal counts itself");
+			const card = typedCard(g, meta, this.checkins(id), today);
+			const diff = Math.round((value - card.value) * 100) / 100;
+			if (!diff) return {
+				card,
+				paid: 0,
+				milestones: [],
+				done: false
+			};
+			if (meta.type !== "habit" || !card.period) return this.logPeriod(id, diff, now);
+			const pick = (card.period.days.length ? card.period.days : [{
+				day: today,
+				done: card.period.todayDone,
+				future: false,
+				value: card.period.todayValue
+			}]).filter((d) => !d.future && (diff > 0 ? !d.done : d.done)).reverse().slice(0, Math.abs(Math.round(diff)));
+			let last = {
+				card,
+				paid: 0,
+				milestones: [],
+				done: false
+			};
+			let paid = 0;
+			for (const d of pick) {
+				last = this.logPeriod(id, diff > 0 ? 1 : -1, now, d.day);
+				paid += last.paid;
+			}
+			return {
+				...last,
+				paid
+			};
+		}
 		return this.db.transaction(() => {
 			const before = this.checkins(id);
 			const prev = currentValue(g, before);
@@ -18915,7 +20004,7 @@ var GoalsService = class {
 				}
 			}
 			return {
-				card: goalCard(this.goal(id), this.checkins(id), today),
+				card: typedCard(this.goal(id), meta, this.checkins(id), today),
 				paid,
 				milestones: crossed,
 				done
@@ -21045,12 +22134,22 @@ function unlockFacts(s, now = /* @__PURE__ */ new Date()) {
 	try {
 		streaks.workout = s.body.state(now).streak;
 	} catch {}
+	let measures = [];
+	try {
+		measures = s.goals.goals().map((g) => ({
+			id: g.id,
+			title: g.title,
+			done: !!g.doneDay
+		}));
+	} catch {
+		measures = [];
+	}
 	return {
-		goals: f.goals.map((g) => ({
+		goals: [...f.goals.map((g) => ({
 			id: g.id,
 			title: g.title,
 			done: g.hours * 60 - g.doneMin <= 0
-		})),
+		})), ...measures],
 		streaks
 	};
 }

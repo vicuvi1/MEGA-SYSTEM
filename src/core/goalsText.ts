@@ -6,6 +6,7 @@
 // templates the sheet and the empty Goals page offer.
 import { addDays, daysBetween } from './dates'
 import type { Cadence, GoalSource, GoalUnit, PaceCurve } from './goals'
+import { stepsFromText, type GoalType, type Per } from './goalKinds'
 
 export interface GoalDraft {
   /** 'hours': an hour goal planned backward into focus blocks (focus_goals as before). */
@@ -26,6 +27,14 @@ export interface GoalDraft {
   /** Hour goals: the focus subject. */
   subject?: string
   template?: string
+  /** The kind of goal (missing: a number by a date). */
+  type?: GoalType
+  /** Habits, limits, repeats: per week or month (the target is per period). */
+  per?: Per
+  /** Habits from data: what makes a day count (2,000 ml, 1 h). */
+  dayMin?: number
+  /** Projects: the steps. */
+  steps?: { text: string; weight: number }[]
 }
 
 export interface GoalTemplate {
@@ -150,6 +159,8 @@ export function parseGoalText(raw: string, today: string): GoalDraft | null {
   const lower = rest.toLowerCase()
   const deadline = dl && daysBetween(today, dl.day) >= 1 ? dl.day : null
   const base = { deadline, curve: 'line' as PaceCurve, cadence: 'weekly' as Cadence }
+  const kinds = parseKinds(rest, deadline)
+  if (kinds) return kinds
 
   // "finish 30 hours of Rust", "30h of math", "study 20 hours of Rust"
   let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, 'i').exec(rest)
@@ -205,6 +216,106 @@ export function parseGoalText(raw: string, today: string): GoalDraft | null {
     if (/profit|revenue/.test(what)) return { ...base, kind: 'measure', title: `Profit ${n.toLocaleString('en-US')} lei a month`, unit: 'lei', target: n, area: 'Money', source: { kind: 'money.profit' }, template: 'profit' }
     if (/income|earn|salary/.test(what)) return { ...base, kind: 'measure', title: `Earn ${n.toLocaleString('en-US')} lei a month`, unit: 'lei', target: n, area: 'Money', source: { kind: 'money.income' }, template: 'profit' }
     return { ...base, kind: 'measure', title: `Save ${n.toLocaleString('en-US')} lei`, unit: 'lei', target: n, area: 'Money', source: { kind: 'money.saved' }, curve: 'ramp', template: 'save' }
+  }
+  return null
+}
+
+const PER = String.raw`(?:a|per|each|every|\/|in a)\s*(week|month|day)`
+const timeOf = (t: string) => {
+  if (/midnight/i.test(t)) return '00:00'
+  const m = /(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?/i.exec(t)
+  if (!m) return null
+  let h = Number(m[1])
+  if (m[3]?.toLowerCase() === 'pm' && h < 12) h += 12
+  if (m[3]?.toLowerCase() === 'am' && h === 12) h = 0
+  return h > 23 ? null : `${pad(h)}:${m[2] ?? '00'}`
+}
+const PC_KIND: [RegExp, string][] = [
+  [/gam(e|es|ing)|steam|valorant|cs2|lol\b/i, 'gaming'],
+  [/youtube|video|netflix|series|movies?|twitch/i, 'video'],
+  [/social|instagram|tiktok|reddit|twitter|scroll/i, 'social']
+]
+
+/**
+ * The newer kinds of goal from words: steps ("Security+: domain 1..5, 3
+ * practice exams, book it"), do less ("at most 5h of gaming a week"), habits
+ * ("work out 4 times a week", "in bed by 00:00 5 nights a week") and repeats
+ * ("save 2000 lei every month"). null: a number goal (the parser goes on).
+ */
+export function parseKinds(rest: string, deadline: string | null): GoalDraft | null {
+  const lower = rest.toLowerCase()
+  const base = { deadline, curve: 'line' as PaceCurve, cadence: 'weekly' as Cadence }
+  // Steps: "Get Security+: learn domain 1..5, 3 practice exams, book exam"
+  let m = /^(.{2,60}?)\s*:\s*(.+)$/.exec(rest)
+  if (m && !/\d$/.test(m[1]) && /,|;|\.\.|\bthen\b/.test(m[2])) {
+    const steps = stepsFromText(m[2])
+    if (steps.length >= 2) return { ...base, kind: 'measure', type: 'project', title: cap(m[1].replace(/^(goal|project)\s+/i, '')).slice(0, 60), unit: 'pct', target: 100, area: /sec|cert|exam|ctf|course|learn|study/i.test(rest) ? 'Study' : 'Life', source: { kind: 'manual' }, steps }
+  }
+  // Do less: "at most 5h of gaming a week", "max 1 hour of youtube a day", "spend less than 3000 lei a month"
+  m = new RegExp(String.raw`(?:at most|max(?:imum)?|no more than|less than|under|up to|≤|<=|limit\s+\w+\s+to)\s*${NUM}\s*(hours?|hrs?|h|minutes?|mins?|m\b|lei|mdl|€|eur|\$|usd)?\s*(?:of|on)?\s*([\p{L}\s]{0,30}?)\s*${PER}`, 'iu').exec(rest)
+  if (m) {
+    let n = num(m[1], m[2])
+    const u = (m[3] ?? '').toLowerCase()
+    const what = `${m[4] ?? ''} ${lower}`
+    const per = m[5].toLowerCase()
+    const money = /lei|mdl|€|eur|\$|usd/.test(u) || /\bspend|spending\b/.test(lower)
+    if (/^min|^m$/.test(u)) n = Math.round((n / 60) * 100) / 100
+    if (per === 'day') n = Math.round(n * 7 * 100) / 100
+    const per2: Per = per === 'month' ? 'month' : 'week'
+    if (money) {
+      const unit: GoalUnit = /€|eur/.test(u) ? 'eur' : /\$|usd/.test(u) ? 'usd' : 'lei'
+      return { ...base, kind: 'measure', type: 'limit', per: per2, title: `Spend at most ${n.toLocaleString('en-US')} ${unit === 'lei' ? 'lei' : unit === 'eur' ? '€' : '$'} a ${per2}`, unit, target: n, area: 'Money', source: { kind: 'money.spent' } }
+    }
+    const kind = PC_KIND.find(([re]) => re.test(what))?.[1]
+    const thing = (m[4] ?? '').trim() || kind || 'it'
+    return { ...base, kind: 'measure', type: 'limit', per: per2, title: `${cap(thing)}: at most ${n}h a ${per2}`, unit: 'hours', target: n, area: 'Discipline', source: kind ? { kind: 'pc.kind', arg: kind } : { kind: 'manual' } }
+  }
+  // Habits: "work out 4 times a week", "sleep before 00:00 5 nights a week", "drink 2l of water 6 days a week"
+  m = new RegExp(String.raw`(\d{1,2})\s*(?:×|x|times?|nights?|days?|sessions?)\s*${PER}`, 'i').exec(rest)
+  const daily = /\b(every ?day|daily|each day)\b/i.test(rest)
+  const weekdays = /\bweekdays\b/i.test(rest)
+  if ((m && m[2].toLowerCase() !== 'day') || daily || weekdays) {
+    const per: Per = m?.[2].toLowerCase() === 'month' ? 'month' : 'week'
+    const n = m ? Number(m[1]) : weekdays ? 5 : per === 'month' ? 30 : 7
+    const times = `${n}× a ${per}`
+    const lead = (m ? rest.slice(0, m.index) + rest.slice(m.index + m[0].length) : rest).replace(/\b(every ?day|daily|each day|on weekdays|weekdays)\b/gi, '').trim()
+    if (/work ?out|train|gym|exercise|lift/i.test(lower)) return { ...base, kind: 'measure', type: 'habit', per, title: `Work out ${times}`, unit: 'count', target: n, area: 'Body', source: { kind: 'body.workouts' } }
+    if (/sleep|bed/i.test(lower)) {
+      const t = timeOf(/(?:before|by|until|at)\s+(midnight|\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?)/i.exec(rest)?.[1] ?? 'midnight') ?? '00:00'
+      return { ...base, kind: 'measure', type: 'habit', per, title: `In bed by ${t}, ${n} nights a ${per}`, unit: 'count', target: n, area: 'Body', source: { kind: 'sleep.bed', arg: t } }
+    }
+    const water = /water/i.test(lower) ? /(\d+(?:[.,]\d+)?)\s*(l|liters?|litres?|ml)\b/i.exec(rest) : null
+    if (/water/i.test(lower)) {
+      const ml = water ? Math.round(Number(water[1].replace(',', '.')) * (/^ml$/i.test(water[2]) ? 1 : 1000)) : 2000
+      return { ...base, kind: 'measure', type: 'habit', per, title: `Drink ${ml.toLocaleString('en-US')} ml of water, ${times}`, unit: 'count', target: n, area: 'Body', source: { kind: 'water' }, dayMin: ml }
+    }
+    const hours = /(\d+(?:[.,]\d+)?)\s*(h|hours?|hrs?|min(?:utes?)?)\b(?:\s+(?:of|on)\s+([\p{L}\d+#.\s-]{2,30}?))?(?=\s*$|\s+\d|\s+(?:a|per|each|every))/iu.exec(lead)
+    if (hours) {
+      const h = /^min/i.test(hours[2]) ? Number(hours[1]) / 60 : Number(hours[1].replace(',', '.'))
+      const subject = hours[3] ? cap(hours[3].trim()) : /\b(rust|ctf|python|math|study|code|coding)\b/i.exec(lead)?.[1]
+      const subj = subject && !/^(study|code|coding)$/i.test(subject) ? cap(subject) : undefined
+      return { ...base, kind: 'measure', type: 'habit', per, title: `${h >= 1 ? `${h}h` : `${Math.round(h * 60)} min`} of ${subj ?? 'focus'}, ${times}`, unit: 'count', target: n, area: 'Study', source: { kind: 'focus.hours', ...(subj ? { arg: subj } : {}) }, dayMin: Math.round(h * 100) / 100 }
+    }
+    const reps = /(\d+)\s*(push-?ups?|pull-?ups?|squats?|dips?|sit-?ups?|burpees?)/i.exec(lead)
+    if (reps) return { ...base, kind: 'measure', type: 'habit', per, title: `${reps[1]} ${reps[2].toLowerCase()}, ${times}`, unit: 'count', target: n, area: 'Body', source: { kind: 'sport.reps', arg: cap(reps[2].toLowerCase().split(' ')[0]) }, dayMin: Number(reps[1]) }
+    const title = cap(lead.replace(/^(i want to|i will|to)\s+/i, '').replace(/\s+/g, ' ').trim()) || 'My habit'
+    return { ...base, kind: 'measure', type: 'habit', per, title: `${title} ${times}`.slice(0, 60), unit: 'count', target: n, area: /read|study|learn|ctf|code/i.test(lower) ? 'Study' : 'Life', source: { kind: 'manual' } }
+  }
+  // Repeats: "save 2000 lei every month", "read 2 books a month"
+  m = new RegExp(String.raw`(?:(€|\$)\s*${NUM}|${NUM}\s*([\p{L}€$]+(?:\s[\p{L}]+)?))\s*${PER}`, 'iu').exec(rest)
+  if (m && /\b(save|saving|put aside|set aside|invest|read|write|publish|solve|ship|post|do|finish)\b/i.test(lower)) {
+    if (m[7].toLowerCase() === 'day') return null
+    const per: Per = m[7].toLowerCase() === 'week' ? 'week' : 'month'
+    const n = m[1] ? num(m[2], m[3]) : num(m[4], m[5])
+    const label = (m[1] ?? m[6] ?? '').toLowerCase().trim()
+    const u = unitOf(label) ?? (m[1] ? unitOf(m[1]) : null)
+    if (u && (u.unit === 'lei' || u.unit === 'eur' || u.unit === 'usd')) {
+      const shown = u.unit === 'lei' ? `${n.toLocaleString('en-US')} lei` : `${u.unit === 'eur' ? '€' : '$'}${n.toLocaleString('en-US')}`
+      return { ...base, kind: 'measure', type: 'repeat', per, title: `Save ${shown} every ${per}`, unit: u.unit, target: n, area: 'Money', source: { kind: 'money.saved' } }
+    }
+    if (u?.unit === 'hours') return { ...base, kind: 'measure', type: 'repeat', per, title: `${n}h of focus every ${per}`, unit: 'hours', target: n, area: 'Study', source: { kind: 'focus.hours' } }
+    const thing = label.replace(/^(new|more)\s+/, '')
+    return { ...base, kind: 'measure', type: 'repeat', per, title: `${n} ${thing} every ${per}`.slice(0, 60), unit: 'custom', unitLabel: thing.split(' ').slice(-1)[0].slice(0, 16), target: n, area: /books?|pages?|ctf|flags?|writeups?/.test(thing) ? 'Study' : 'Life', source: { kind: 'manual' } }
   }
   return null
 }

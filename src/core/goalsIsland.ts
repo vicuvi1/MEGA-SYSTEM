@@ -25,7 +25,7 @@ export interface IslandGoal {
 
 export function islandGoals(cards: GoalCard[], max = 4): IslandGoal[] {
   return sortCards(cards)
-    .filter((c) => c.status !== 'missed')
+    .filter((c) => c.status !== 'missed' && !c.paused)
     .slice(0, max)
     .map((c) => ({
       id: c.goal.id,

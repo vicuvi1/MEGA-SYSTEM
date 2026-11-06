@@ -523,7 +523,7 @@ try {
     await pg.unroute('**/api/coach')
   })
   // Goals: made-up goals show as cards with a ring and a pace chart; a clear goal from plain words; a check-in.
-  await step('Goals: cards with rings and pace lines, a new goal from words, a check-in', async () => {
+  await step('Goals: cards with rings and pace lines, a new goal from words, a check-in, a habit day and a project step', async () => {
     await open('goals')
     await pg.waitForSelector('.gx-hero .gx-ring', { timeout: 15000 })
     await pg.waitForSelector('.gx-card .gx-chart svg polyline.plan', { timeout: 10000 })
@@ -536,10 +536,24 @@ try {
     await pg.click('.gx-sheet-foot .btn.primary')
     await pg.waitForSelector('.gx-sheet', { state: 'detached', timeout: 8000 })
     await pg.waitForFunction(() => [...document.querySelectorAll('.gx-card h3')].some((h) => /12 books/.test(h.textContent ?? '')), null, { timeout: 8000 })
-    await pg.click('.gx-card.due .gx-card-foot .btn.primary')
+    await pg.click('.gx-card.due .gx-today .btn.primary')
     await pg.fill('.gx-check input', '2900')
     await pg.click('.gx-check .btn.primary')
     await pg.waitForFunction(() => [...document.querySelectorAll('.gx-card .gx-now b')].some((b) => /2,900/.test(b.textContent ?? '')), null, { timeout: 8000 })
+    // The newer kinds: a habit's "Done today" fills a day, a project's step ticks, the detail opens.
+    const habit = pg.locator('.gx-card.k-habit').first()
+    const before = Number(await habit.locator('.gx-now b').innerText())
+    await habit.locator('.gx-today .btn.primary').click()
+    await pg.waitForFunction((n) => Number(document.querySelector('.gx-card.k-habit .gx-now b')?.textContent) === n + 1, before, { timeout: 8000 })
+    const project = pg.locator('.gx-card.k-project').first()
+    await project.locator('.gx-today .btn.primary').click()
+    await pg.waitForFunction(() => /^4$/.test(document.querySelector('.gx-card.k-project .gx-now b')?.textContent ?? ''), null, { timeout: 8000 })
+    for (let i = 0; i < 4 && (await pg.$('.gx-cel')); i++) await pg.keyboard.press('Escape')
+    await project.click({ position: { x: 24, y: 24 } })
+    await pg.waitForSelector('.gx-detail .gx-steps li.done', { timeout: 5000 })
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('.gx-detail', { state: 'detached', timeout: 5000 })
+    if (!(await pg.$('.gx-card.k-limit .gx-bars'))) throw new Error('the limit has no week bars')
   })
   await step('Settings: every section opens with content', async () => {
     await open('settings')
@@ -1860,7 +1874,7 @@ try {
     const report = []
     const pages = [
       ['progress', '.pg', ['week', 'areas', 'streaks', 'focus', 'look'], { week: 2.2 }],
-      ['goals', '.gx', ['goals', 'hours', 'path'], { goals: 2.6 }],
+      ['goals', '.gx', ['goals', 'week', 'hours', 'path'], { goals: 2.6 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],
       ['shop', '.rx', ['now', 'saving', 'all', 'history', 'earn'], { all: 2 }]

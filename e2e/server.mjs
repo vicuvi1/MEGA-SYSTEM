@@ -208,7 +208,8 @@ if (process.env.E2E_DISCIPLINE === 'demo') {
 
 // Made-up goals (Goals page smoke and screenshots): three you can measure with
 // a few weekly check-ins, and one hour goal planned into focus blocks.
-{
+// E2E_NO_GOALS=1: none at all (the empty Goals page).
+if (!process.env.E2E_NO_GOALS) {
   const ahead = (n) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10)
   const g = db.prepare("INSERT INTO focus_goals (title, subject, deadline, hours, created_day, kind, unit, unit_label, target, start_value, why, area, cadence, source, milestones, curve) VALUES (?, '', ?, ?, ?, 'measure', ?, ?, ?, ?, ?, ?, ?, '{\"kind\":\"manual\"}', '[]', ?)")
   const c = db.prepare("INSERT INTO goal_checkins (id, goal_id, at, day, value, who) VALUES (?, ?, ?, ?, ?, 'me')")
@@ -220,6 +221,16 @@ if (process.env.E2E_DISCIPLINE === 'demo') {
   add(['Profit 5,000 lei a month', ahead(55), 5000, day(36), 'lei', null, 5000, 1200, 'Rent and savings without stress', 'Money', 'weekly', 'line'], [[29, 1500], [22, 1850], [15, 2200], [8, 2450]])
   add(['Lose 5 kg', ahead(86), 77, day(36), 'kg', null, 77, 82, 'Feel light on the bike again', 'Body', 'weekly', 'front'], [[26, 81.3], [12, 80.2], [2, 79.5]])
   add(['100 GitHub stars', ahead(145), 100, day(52), 'custom', 'stars', 100, 12, 'A portfolio people notice', 'Career', 'weekly', 'ramp'], [[36, 18], [17, 26], [3, 33]])
+  // The newer kinds (their extras live in settings goal_meta:<id>): a habit, a do-less limit, a project with steps.
+  const meta = (m) => db.run('INSERT INTO settings (key, value) VALUES (?, ?)', [`goal_meta:${Number(db.exec('SELECT MAX(id) FROM focus_goals')[0].values[0][0])}`, JSON.stringify(m)])
+  const metaOf = (title, m) => db.run('INSERT INTO settings (key, value) VALUES (?, ?)', [`goal_meta:${Number(db.exec(`SELECT id FROM focus_goals WHERE title = '${title}'`)[0].values[0][0])}`, JSON.stringify(m)])
+  metaOf('Profit 5,000 lei a month', { type: 'target', emoji: '💰', color: 'amber', cover: 'sunrise', pinned: true, vision: 'Rent paid on the 1st, savings growing, no money stress at all.', reward: { id: 1, title: 'New headphones', emoji: '🎧', price: 900 } })
+  add(['Read 20 pages, 5× a week', '2099-12-31', 5, day(40), 'count', null, 5, 0, 'Read more than I scroll', 'Study', 'weekly', 'line'], [1, 2, 4, 7, 8, 9, 10, 11, 14, 15, 17, 18, 21, 22, 23, 24, 25].map((n) => [n, 1]))
+  meta({ type: 'habit', per: 'week', emoji: '📚', color: 'cyan', cover: 'ocean' })
+  add(['Gaming: at most 5h a week', '2099-12-31', 5, day(30), 'hours', null, 5, 0, 'Evenings for CTFs instead', 'Discipline', 'weekly', 'line'], [[1, 1.5], [3, 1], [8, 2], [10, 2.5], [12, 2], [16, 1.5], [19, 2]])
+  meta({ type: 'limit', per: 'week', emoji: '🎮', color: 'rose', cover: 'ember' })
+  add(['Get Security+', ahead(70), 100, day(20), 'pct', null, 100, 0, 'The first cert for a security job', 'Study', 'weekly', 'line'], [[12, 11.1], [6, 22.2], [2, 33.3]])
+  meta({ type: 'project', emoji: '🛡️', color: 'violet', cover: 'night', vision: 'I walk into the exam calm and walk out certified.', steps: ['Learn domain 1', 'Learn domain 2', 'Learn domain 3', 'Learn domain 4', 'Learn domain 5', 'Practice exam 1', 'Practice exam 2', 'Practice exam 3', 'Book the exam'].map((text, i) => ({ id: `s${i}`, text, weight: 1, done: i < 3 ? day(12 - i * 5) : null })) })
   db.run("INSERT INTO focus_goals (title, subject, deadline, hours, created_day) VALUES ('Rust book', 'Rust', ?, 30, ?)", [ahead(40), day(10)])
   db.run("INSERT INTO focus_sessions (day, subject, minutes, coins, started_at, ended_at) VALUES (?, 'Rust', 240, 0, ?, ?)", [day(4), new Date().toISOString(), new Date().toISOString()])
   g.free()

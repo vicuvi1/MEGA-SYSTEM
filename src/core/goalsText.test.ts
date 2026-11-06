@@ -70,3 +70,29 @@ describe('a goal from plain words', () => {
     }
   })
 })
+
+describe('the newer kinds in plain words', () => {
+  it('habits: workouts, bedtimes, water, focus, anything', () => {
+    expect(parseGoalText('workout 4 times a week', today)).toMatchObject({ type: 'habit', per: 'week', target: 4, source: { kind: 'body.workouts' }, title: 'Work out 4× a week' })
+    expect(parseGoalText('sleep before 00:00 5 nights a week', today)).toMatchObject({ type: 'habit', target: 5, source: { kind: 'sleep.bed', arg: '00:00' } })
+    expect(parseGoalText('in bed by 23:30 5 nights a week', today)).toMatchObject({ source: { kind: 'sleep.bed', arg: '23:30' } })
+    expect(parseGoalText('drink 2l of water 6 days a week', today)).toMatchObject({ type: 'habit', target: 6, source: { kind: 'water' }, dayMin: 2000 })
+    expect(parseGoalText('study 1h of Rust 5 days a week', today)).toMatchObject({ type: 'habit', source: { kind: 'focus.hours', arg: 'Rust' }, dayMin: 1 })
+    expect(parseGoalText('meditate every day', today)).toMatchObject({ type: 'habit', target: 7, source: { kind: 'manual' }, title: 'Meditate 7× a week' })
+  })
+  it('do less, repeats and steps', () => {
+    expect(parseGoalText('at most 5h of gaming a week', today)).toMatchObject({ type: 'limit', target: 5, unit: 'hours', source: { kind: 'pc.kind', arg: 'gaming' } })
+    expect(parseGoalText('max 1 hour of youtube a day', today)).toMatchObject({ type: 'limit', target: 7, source: { kind: 'pc.kind', arg: 'video' } })
+    expect(parseGoalText('spend less than 3000 lei a month', today)).toMatchObject({ type: 'limit', per: 'month', unit: 'lei', source: { kind: 'money.spent' } })
+    expect(parseGoalText('save 2000 lei every month', today)).toMatchObject({ type: 'repeat', per: 'month', target: 2000, source: { kind: 'money.saved' } })
+    expect(parseGoalText('read 2 books a month', today)).toMatchObject({ type: 'repeat', unit: 'custom', unitLabel: 'books' })
+    const p = parseGoalText('Get Security+: learn domain 1..5, 3 practice exams, book exam by 31 Jan', today)!
+    expect(p).toMatchObject({ type: 'project', title: 'Get Security+', deadline: '2027-01-31', area: 'Study' })
+    expect(p.steps).toHaveLength(9)
+  })
+  it('number goals stay number goals', () => {
+    expect(parseGoalText('earn 3000 lei a month by 31 Dec', today)).toMatchObject({ source: { kind: 'money.income' } })
+    expect(parseGoalText('earn 3000 lei a month by 31 Dec', today)?.type).toBeUndefined()
+    expect(parseGoalText('sleep before 23:30, 5 nights a week', today)?.type).toBe('habit')
+  })
+})

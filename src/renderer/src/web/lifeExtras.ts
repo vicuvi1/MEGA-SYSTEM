@@ -28,7 +28,8 @@ import { loadAims, loadHabits, loadLearn, loadModes, modeRest, saveAims, saveHab
 import type { Services, WebServices } from './webServices'
 import type { CheckIn, GoalCard, GoalSource } from '@core/goals'
 import { parseGoalText, type GoalDraft } from '@core/goalsText'
-import type { CheckInResult, GoalInput } from '../../../main/goals'
+import { orderCards, starterGoals, type GoalMeta, type Starter } from '@core/goalKinds'
+import { financeFromDb, type CheckInResult, type GoalInput } from '../../../main/goals'
 
 const json = (db: any, key: string): any => {
   try {
@@ -155,11 +156,35 @@ export interface GoalsView {
   week: WeekItem[]
   learn: TrackView[]
   learnNext: { track: LearnTrack; subject: string; why: string } | null
+  /** Three starter goals that fit the data you already have (the empty page). */
+  starters: Starter[]
+}
+
+/** What the starter goals look at: workouts, focus, money, sleep and water of the last 30 days. */
+function starterFacts(s: Services, today: string, finance?: any) {
+  const from = addDays(today, -30)
+  const one = (sql: string, ...args: unknown[]) => {
+    try {
+      return s.db.prepare(sql).get(...args) as any
+    } catch {
+      return null
+    }
+  }
+  const top = one('SELECT subject, SUM(minutes) AS m FROM focus_sessions WHERE day >= ? GROUP BY lower(subject) ORDER BY m DESC LIMIT 1', from)
+  const fin = finance ?? financeFromDb(s.db)
+  return {
+    today,
+    workouts30: Number(one('SELECT COUNT(*) AS n FROM workouts WHERE day >= ?', from)?.n ?? 0),
+    focusTop: top?.subject ? { subject: String(top.subject), hours: Number(top.m) / 60 } : null,
+    finance: !!(fin && Array.isArray(fin.tx) && fin.tx.length),
+    sleepLogs30: Number(one('SELECT COUNT(*) AS n FROM sleep_logs WHERE day >= ?', from)?.n ?? 0),
+    waterDays30: Number(one("SELECT COUNT(DISTINCT day) AS n FROM body_log WHERE kind = 'water' AND day >= ?", from)?.n ?? 0)
+  }
 }
 
 export function goalsView(s: Services, events: CalEvent[] = [], now = new Date(), finance?: any): GoalsView {
   const today = s.wallet.today(now)
-  const measures = s.goals.cards(now, finance)
+  const measures = orderCards(s.goals.cards(now, finance, { paused: true }))
   const checkins = s.goals.recent(30, now)
   const f = s.focus.state(now)
   const plans = f.goals.map((g) => planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))
@@ -175,7 +200,7 @@ export function goalsView(s: Services, events: CalEvent[] = [], now = new Date()
   const board = goalsBoard({ today, plans, aims: mind.goals, events, weekPlan, callBig3: call ? big3Of(call.answers?.big3 ?? '') : [] })
   const learn = loadLearn(s.db)
   const hourTotals = Object.fromEntries(f.goals.map((g) => [g.id, g.hours]))
-  return { today, measures, checkins, hourTotals, ...board, learn: learnLadders(learn), learnNext: nextSubject(learn, today) }
+  return { today, measures, checkins, hourTotals, ...board, learn: learnLadders(learn), learnNext: nextSubject(learn, today), starters: measures.length ? [] : starterGoals(starterFacts(s, today, finance)) }
 }
 
 export function addLearning(s: Services, e: { track: LearnTrack; title: string; tag?: string; link?: string | null }, now = new Date()): GoalsView {
@@ -362,7 +387,14 @@ export function unlockFacts(s: Services, now = new Date()): UnlockFacts {
   } catch {
     /* no body data yet */
   }
-  return { goals: f.goals.map((g) => ({ id: g.id, title: g.title, done: g.hours * 60 - g.doneMin <= 0 })), streaks }
+  // Hour goals and measurable goals (a reward can unlock when either is reached).
+  let measures: { id: number; title: string; done: boolean }[] = []
+  try {
+    measures = s.goals.goals().map((g) => ({ id: g.id, title: g.title, done: !!g.doneDay }))
+  } catch {
+    measures = []
+  }
+  return { goals: [...f.goals.map((g) => ({ id: g.id, title: g.title, done: g.hours * 60 - g.doneMin <= 0 })), ...measures], streaks }
 }
 
 export const loadUnlocks = (db: any): Record<string, Unlock> => cleanUnlocks(json(db, REWARD_UNLOCKS))
@@ -408,6 +440,16 @@ export function createExtras(svcP: Promise<WebServices>) {
     goalCheckIn: (id: number, value: number, note?: string): Promise<CheckInResult> => write((s) => s.goals.checkIn(id, value, 'me', note ?? null), W, G),
     goalSkip: (id: number) => write((s) => s.goals.skip(id), G),
     archiveMeasure: (id: number) => write((s) => s.goals.archive(id), G),
+    /** Kinds of goals: log a habit day or an amount, tick a step, change the extras, pause, pin, order, mark reached. */
+    goalLog: (id: number, amount: number): Promise<CheckInResult> => write((s) => s.goals.logPeriod(id, amount), W, G),
+    goalStep: (id: number, stepId: string): Promise<CheckInResult> => write((s) => s.goals.toggleStep(id, stepId), W, G),
+    goalMeta: (id: number, patch: Partial<GoalMeta>) => write((s) => s.goals.setMeta(id, patch), G),
+    goalPause: (id: number, paused: boolean) => write((s) => s.goals.setPaused(id, paused), G),
+    goalPin: (id: number, pinned: boolean) => write((s) => s.goals.setPinned(id, pinned), G),
+    goalReorder: (ids: number[]) => write((s) => s.goals.reorder(ids), G),
+    goalDone: (id: number, done: boolean) => write((s) => s.goals.setDone(id, done), G),
+    /** Rewards you can tie to a goal (read only: id, name, emoji, price). */
+    goalRewards: () => read((s) => s.shop.state().rewards.filter((r) => !r.archived).map((r) => ({ id: r.id, title: r.title, emoji: r.emoji ?? null, price: r.price }))),
     syncGoals: () => write((s) => s.goals.syncAuto(new Date(), fin(s))),
     goalAutoValue: (source: GoalSource) => read((s) => s.goals.autoValue({ source, startDay: s.wallet.today() }, new Date(), fin(s))),
     parseGoal: (text: string): Promise<GoalDraft | null> => read((s) => parseGoalText(text, s.wallet.today())),

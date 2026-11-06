@@ -1,30 +1,31 @@
-// The Goals page's parts: the ring, the pace chart (where you are against
-// where the line says you should be), a goal card with its check-in, the
-// guided New goal sheet (templates, plain words, a live pace preview) and
-// the soft lights behind the page. Pure maths lives in core/goals*.ts.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+// The Goals page's parts: the ring (it fills and counts up on load), the pace
+// chart, the week dots and period bars, a goal card for every kind (target,
+// habit, limit, repeat, project) with today's one step and a button that does
+// it, the card's menu (pin, order, pause, reached), and the detail view with
+// the steps, the history, the "future you" picture and the reward. The New /
+// Edit sheet is goalSheet.tsx; the celebrations are goalsFx.tsx. Pure maths
+// lives in core/goals.ts and core/goalKinds.ts.
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { m } from 'framer-motion'
 import { createPortal } from 'react-dom'
 import { life } from './bridge'
 import { useAction } from './ui'
 import { celebrate, feedback } from './fx'
-import { useSeen } from './motionKit'
+import { useCountUp, useSeen } from './motionKit'
 import { askConfirm } from './confirmSheet'
 import { daysBetween, addDays } from '@core/dates'
-import { CADENCES, countsFromStart, GOAL_UNITS, SOURCES, expectedAt, fmtDelta, fmtPair, fmtValue, milestonesOf, needText, requiredPerDay, shortDay, STATUS_TEXT, type Cadence, type GoalCard, type GoalSource, type GoalStatus, type GoalUnit, type PaceCurve } from '@core/goals'
-import { answerValue, behindMove, quickStep } from '@core/goalsBen'
-import { GOAL_TEMPLATES, parseGoalText, suggestCadence, type GoalTemplate } from '@core/goalsText'
-import { Select } from './Select'
+import { expectedAt, fmtPair, fmtValue, shortDay, STATUS_TEXT, type GoalCard, type GoalStatus, type GoalUnit, type PaceCurve } from '@core/goals'
+import { answerValue, quickStep } from '@core/goalsBen'
+import { GOAL_TYPES, hoursText, nextStep, perWord, sourceShort, type GoalStep } from '@core/goalKinds'
+import { GOAL_TEMPLATES, type GoalTemplate } from '@core/goalsText'
 
 export type Tone = 'good' | 'warn' | 'bad' | 'calm'
-export const toneOf = (s: GoalStatus): Tone => (s === 'done' || s === 'ahead' || s === 'on track' ? 'good' : s === 'behind' ? 'warn' : s === 'not started' ? 'calm' : 'bad')
+export const toneOf = (s: GoalStatus, paused?: boolean): Tone => (paused ? 'calm' : s === 'done' || s === 'ahead' || s === 'on track' ? 'good' : s === 'behind' ? 'warn' : s === 'not started' ? 'calm' : 'bad')
 const AREA_ICON: Record<string, string> = { Money: '💰', Body: '💪', Study: '📚', Career: '🚀', Discipline: '🛡️', Work: '🧰', Life: '🎯' }
 export const areaIcon = (a: string) => AREA_ICON[a] ?? '🎯'
-const CURVES: { id: PaceCurve; label: string; hint: string }[] = [
-  { id: 'line', label: 'Straight', hint: 'the same every week' },
-  { id: 'ramp', label: 'Slow start', hint: 'small steps first, bigger later' },
-  { id: 'front', label: 'Fast start', hint: 'most of it early (weight)' }
-]
+export const AREAS = ['Money', 'Body', 'Study', 'Career', 'Discipline', 'Life']
+export const goalEmoji = (c: GoalCard) => c.meta?.emoji || areaIcon(c.goal.area)
+const typeLabel = (c: GoalCard) => GOAL_TYPES.find((t) => t.id === (c.kind ?? 'target'))?.label ?? ''
 
 /** The soft lights behind the page (they drift slowly; paused when hidden or with reduced motion). */
 export function GoalsAmbient() {
@@ -37,11 +38,11 @@ export function GoalsAmbient() {
   )
 }
 
-/** A progress ring with a small dot where the pace line says you should be. */
-export function Ring({ pct, expected, size = 96, stroke = 9, tone, children }: { pct: number; expected?: number; size?: number; stroke?: number; tone: Tone; children?: ReactNode }) {
+/** A progress ring that fills and counts up when it first shows, with a dot where the pace line says you should be. */
+export function Ring({ pct, expected, size = 96, stroke = 9, tone, children, roll = false }: { pct: number; expected?: number; size?: number; stroke?: number; tone: Tone; children?: ReactNode; roll?: boolean }) {
   const r = (size - stroke) / 2 - 1
   const c = 2 * Math.PI * r
-  const p = Math.max(0, Math.min(100, pct))
+  const shown = useCountUp(Math.max(0, Math.min(100, pct)), 400, { fromZero: roll })
   const a = expected == null ? null : (Math.max(0, Math.min(100, expected)) / 100) * 2 * Math.PI - Math.PI / 2
   return (
     <div className={`gx-ring t-${tone}`} style={{ width: size, height: size }}>
@@ -53,12 +54,18 @@ export function Ring({ pct, expected, size = 96, stroke = 9, tone, children }: {
           </linearGradient>
         </defs>
         <circle cx={size / 2} cy={size / 2} r={r} className="bg" strokeWidth={stroke} />
-        <circle cx={size / 2} cy={size / 2} r={r} className="fg" strokeWidth={stroke} stroke={`url(#gx-rg-${tone})`} strokeDasharray={`${(p / 100) * c} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
+        <circle cx={size / 2} cy={size / 2} r={r} className="fg" strokeWidth={stroke} stroke={`url(#gx-rg-${tone})`} strokeOpacity={shown < 0.5 ? 0 : 1} strokeDasharray={`${(shown / 100) * c} ${c}`} transform={`rotate(-90 ${size / 2} ${size / 2})`} />
         {a != null && <circle cx={size / 2 + r * Math.cos(a)} cy={size / 2 + r * Math.sin(a)} r={stroke / 2.6} className="pace" />}
       </svg>
       <div className="gx-ring-in">{children}</div>
     </div>
   )
+}
+
+/** A number that rolls up to its value on load (tabular digits). */
+export function Roll({ value, fmt }: { value: number; fmt: (n: number) => string }) {
+  const v = useCountUp(value, 400, { fromZero: true })
+  return <>{fmt(v)}</>
 }
 
 export interface ChartInput {
@@ -78,7 +85,7 @@ export interface ChartInput {
 export function PaceChart({ c, tone, h = 120, label = true }: { c: ChartInput; tone: Tone; h?: number; label?: boolean }) {
   const [ref, seen] = useSeen<HTMLDivElement>()
   const W = 320
-  const pad = { l: 6, r: 6, t: 14, b: 16 }
+  const pad = { l: 6, r: 6, t: 10, b: 10 }
   const total = Math.max(1, daysBetween(c.startDay, c.deadline))
   const vals = [c.start, c.target, ...c.series.map((p) => p.value)]
   let lo = Math.min(...vals)
@@ -98,7 +105,7 @@ export function PaceChart({ c, tone, h = 120, label = true }: { c: ChartInput; t
   const last = pts[pts.length - 1]
   return (
     <div ref={ref} className={`gx-chart chart-in${seen ? ' seen' : ''} t-${tone}`}>
-      <svg viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" role="img" aria-label="Your numbers against the pace line">
+      <svg viewBox={`0 0 ${W} ${h}`} preserveAspectRatio="none" role="img" aria-label="Your numbers against the pace line" style={{ minHeight: h }}>
         <defs>
           <linearGradient id={`gx-area-${tone}`} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0" className="a1" />
@@ -128,7 +135,7 @@ export function PaceChart({ c, tone, h = 120, label = true }: { c: ChartInput; t
   )
 }
 
-const chartOf = (card: GoalCard, today: string): ChartInput => ({
+export const chartOf = (card: GoalCard, today: string): ChartInput => ({
   start: card.goal.start,
   target: card.goal.target,
   startDay: card.goal.startDay,
@@ -141,237 +148,541 @@ const chartOf = (card: GoalCard, today: string): ChartInput => ({
   unitLabel: card.goal.unitLabel
 })
 
-const SOURCE_NOTE: Partial<Record<GoalSource['kind'], string>> = {
-  'money.profit': 'Counts itself from Finance Helper',
-  'money.income': 'Counts itself from Finance Helper',
-  'money.saved': 'Counts itself from Finance Helper',
-  'body.weight': 'Counts itself from your weight on Body',
-  'body.workouts': 'Counts itself from your workouts',
-  'sport.reps': 'Counts itself from your reps',
-  'focus.hours': 'Counts itself from the focus timer',
-  'tasks.done': 'Counts itself from Todoist',
-  'habit.clean': 'Counts itself from your clean streak'
+/** This week's days for a habit: a dot per day, filled when it counted. */
+export function WeekDots({ card }: { card: GoalCard }) {
+  const days = card.period?.days ?? []
+  if (!days.length) return null
+  const today = days.find((d) => !d.future && days.every((x) => x.day <= d.day || x.future))?.day
+  return (
+    <div className="gx-dots" aria-label={`This week: ${card.period?.value} of ${card.period?.target}`}>
+      {days.map((d, i) => (
+        <span key={d.day} className={`${d.done ? 'on' : ''}${d.future ? ' fut' : ''}${d.day === today ? ' now' : ''}`} style={{ ['--i' as string]: i }}>
+          <i />
+          <em>{'MTWTFSS'[i]}</em>
+        </span>
+      ))}
+    </div>
+  )
 }
 
-/** One goal: ring, numbers, the pace chart, milestones, why, and the check-in. */
-export function GoalCardView({ card, today, index, onChanged, onEdit, onAskBen }: { card: GoalCard; today: string; index: number; onChanged: () => void; onEdit: (c: GoalCard) => void; onAskBen?: (text: string) => void }) {
-  const act = useAction()
+/** The last weeks or months as bars, with the target line (limits: the line is the cap). */
+export function PeriodBars({ card, h = 54 }: { card: GoalCard; h?: number }) {
+  const [ref, seen] = useSeen<HTMLDivElement>()
+  const pi = card.period
+  if (!pi) return null
+  const rows = pi.history
+  const max = Math.max(pi.target * 1.15, ...rows.map((r) => r.value), 0.01)
   const g = card.goal
-  const tone = toneOf(card.status)
-  const [open, setOpen] = useState(false)
-  const [val, setVal] = useState('')
-  const [busy, setBusy] = useState(false)
-  const el = useRef<HTMLElement>(null)
-  const v = (n: number) => fmtValue(g.unit, n, g.unitLabel)
-  const step = quickStep(card)
-  const up = g.target >= g.start
-  const move = behindMove(card)
-  useEffect(() => {
-    if (open) setVal(String(card.value))
-  }, [open, card.value])
+  const fmt = (n: number) => (pi.mode === 'days' ? `${n}` : g.unit === 'hours' ? hoursText(n) : fmtValue(g.unit, n, g.unitLabel))
+  return (
+    <div ref={ref} className={`gx-bars chart-in${seen ? ' seen' : ''}${card.kind === 'limit' ? ' cap' : ''}`} style={{ minHeight: h }} role="img" aria-label={`Last ${rows.length} ${perWord(pi.per)}s`}>
+      <span className="line" style={{ bottom: `${(pi.target / max) * 100}%` }} />
+      {rows.map((r, i) => (
+        <span key={r.key} className={`bar${r.hit ? ' hit' : ''}${i === rows.length - 1 ? ' now' : ''}${card.kind === 'limit' && r.value > pi.target ? ' over' : ''}`} title={`${r.label}: ${fmt(r.value)}`}>
+          <i style={{ transform: `scaleY(${Math.max(0.03, r.value / max)})`, animationDelay: `${i * 30}ms` }} />
+        </span>
+      ))}
+    </div>
+  )
+}
 
-  const done = async (r: Awaited<ReturnType<NonNullable<typeof life.extras>['goalCheckIn']>> | undefined) => {
-    setBusy(false)
-    if (!r) return
-    setOpen(false)
-    const big = r.done || r.milestones.length > 0
-    celebrate(el.current, big ? 'reward' : 'checkin')
-    feedback(big ? 'reward' : 'checkin')
-    onChanged()
+/** A project's steps: tick them right here. */
+export function StepList({ card, max, onToggle, busy }: { card: GoalCard; max?: number; onToggle: (s: GoalStep) => void; busy?: boolean }) {
+  const steps = card.meta?.steps ?? []
+  const next = nextStep(steps)
+  const show = max ? [...steps.filter((s) => s.done).slice(-1), ...steps.filter((s) => !s.done)].slice(0, max) : steps
+  return (
+    <ul className="gx-steps">
+      {show.map((s) => (
+        <li key={s.id} className={`${s.done ? 'done' : ''}${next?.id === s.id ? ' next' : ''}`}>
+          <button type="button" role="checkbox" aria-checked={!!s.done} disabled={busy} onClick={(e) => (e.stopPropagation(), onToggle(s))} aria-label={`${s.done ? 'Untick' : 'Tick'} ${s.text}`}>
+            <span className="box" aria-hidden>
+              {s.done ? '✓' : ''}
+            </span>
+            <span className="t">{s.text}</span>
+            {s.weight > 1 && <small className="w">×{s.weight}</small>}
+          </button>
+        </li>
+      ))}
+      {max && steps.length > show.length && <li className="more">+{steps.length - show.length} more</li>}
+    </ul>
+  )
+}
+
+/** "2 of 4 this week", "1h30 of 5h", "3,200 of 5,000 lei", "4 of 9 steps". */
+export function headline(c: GoalCard): { big: string; small: string } {
+  const g = c.goal
+  const pi = c.period
+  const f = (n: number) => (g.unit === 'hours' ? hoursText(n) : fmtValue(g.unit, n, g.unitLabel))
+  if (pi) return { big: pi.mode === 'days' ? `${pi.value}` : f(pi.value), small: `of ${pi.mode === 'days' ? `${pi.target} ${c.kind === 'habit' && g.source.kind === 'sleep.bed' ? 'nights' : 'days'}` : f(pi.target)} this ${perWord(pi.per)}` }
+  if (c.kind === 'project') {
+    const steps = c.meta?.steps ?? []
+    return { big: `${steps.filter((s) => s.done).length}`, small: `of ${steps.length} steps` }
   }
-  const save = async (value: number) => {
+  return { big: fmtValue(g.unit, c.value, g.unitLabel), small: `of ${fmtValue(g.unit, g.target, g.unitLabel)}` }
+}
+
+// ------------------------------------------------------------ one card
+
+export interface CardActions {
+  onChanged: () => void
+  onOpen: (c: GoalCard) => void
+  onEdit: (c: GoalCard) => void
+  onMove?: (c: GoalCard, dir: -1 | 1) => void
+  onAskBen?: (text: string) => void
+}
+
+/** What the card's main button does today, by kind. */
+function useToday(card: GoalCard, onChanged: () => void, el: React.RefObject<HTMLElement | null>) {
+  const act = useAction()
+  const [busy, setBusy] = useState(false)
+  const g = card.goal
+  const run = async (fn: () => Promise<any>, msg: (x: any) => string, big = false) => {
     setBusy(true)
-    const r = await act(
-      () => life.extras!.goalCheckIn(g.id, value),
-      (x) => (x.done ? `🏆 ${g.title}: goal reached!${x.paid ? ` +${x.paid} points` : ''}` : x.milestones.length ? `🎉 Milestone: ${x.milestones.map((m) => m.label ?? v(m.value)).join(', ')}${x.paid ? ` · +${x.paid} points` : ''}` : `Checked in: ${fmtPair(g.unit, value, g.target, g.unitLabel)}${x.paid ? ` · +${x.paid} points` : ''}`)
-    )
-    await done(r)
-  }
-  const skip = async () => {
-    if (await act(() => life.extras!.goalSkip(g.id), 'Skipped this time')) {
-      setOpen(false)
+    const r = await act(fn, msg)
+    setBusy(false)
+    if (r) {
+      const huge = big || r.done || (r.milestones?.length ?? 0) > 0
+      celebrate(el.current, huge ? 'reward' : 'checkin')
+      feedback(huge ? 'reward' : 'checkin')
       onChanged()
     }
+    return r
   }
-  const remove = async () => {
-    if (!(await askConfirm(`Remove "${g.title}"? Its check-ins stay in your history.`, { ok: 'Remove' }))) return
-    if (await act(() => life.extras!.archiveMeasure(g.id), `${g.title}: off the list`)) onChanged()
+  const paid = (x: any) => (x?.paid ? ` · +${x.paid} points` : '')
+  return {
+    busy,
+    logDay: () => run(() => life.extras!.goalLog(g.id, 1), (x) => `✓ ${g.title}: ${x.card.value} of ${g.target} this ${perWord(card.period?.per ?? 'week')}${paid(x)}`),
+    undoDay: () => run(() => life.extras!.goalLog(g.id, -1), () => 'Taken back'),
+    log: (n: number) => run(() => life.extras!.goalLog(g.id, n), (x) => `Logged ${g.unit === 'hours' ? hoursText(n) : fmtValue(g.unit, n, g.unitLabel)}${paid(x)}`),
+    step: (s: GoalStep) => run(() => life.extras!.goalStep(g.id, s.id), (x) => (s.done ? `Unticked: ${s.text}` : x.done ? `🏆 ${g.title}: every step done!${paid(x)}` : `✓ ${s.text}${x.milestones.length ? ` · 🎉 ${x.card.pct}%` : ''}${paid(x)}`), !s.done),
+    checkIn: (v: number) => run(() => life.extras!.goalCheckIn(g.id, v), (x) => (x.done ? `🏆 ${g.title}: goal reached!${paid(x)}` : x.milestones.length ? `🎉 Milestone: ${x.milestones.map((ms: any) => ms.label ?? fmtValue(g.unit, ms.value, g.unitLabel)).join(', ')}${paid(x)}` : `Checked in: ${fmtPair(g.unit, v, g.target, g.unitLabel)}${paid(x)}`))
   }
-  const typed = Number(val.replace(',', '.'))
-  const daysText = card.status === 'done' ? 'Reached 🏆' : card.status === 'missed' ? 'Deadline passed' : `${card.daysLeft} day${card.daysLeft === 1 ? '' : 's'} left`
+}
 
+/** The card's ⋯ menu: pin, order, pause, reached, edit, remove. */
+function CardMenu({ card, onChanged, onEdit, onMove, first, last }: { card: GoalCard; onChanged: () => void; onEdit: () => void; onMove?: (dir: -1 | 1) => void; first?: boolean; last?: boolean }) {
+  const act = useAction()
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  const g = card.goal
+  useEffect(() => {
+    if (!open) return
+    const off = (e: MouseEvent) => !box.current?.contains(e.target as Node) && setOpen(false)
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
+    window.addEventListener('mousedown', off)
+    window.addEventListener('keydown', k)
+    return () => {
+      window.removeEventListener('mousedown', off)
+      window.removeEventListener('keydown', k)
+    }
+  }, [open])
+  const go = async (fn: () => Promise<unknown>, msg: string) => {
+    setOpen(false)
+    if ((await act(fn, msg)) !== undefined) onChanged()
+  }
+  const done = card.status === 'done'
+  return (
+    <div className="gx-menu" ref={box} onClick={(e) => e.stopPropagation()}>
+      <button className="gx-menu-btn" aria-label={`More for ${g.title}`} aria-expanded={open} onClick={() => setOpen(!open)}>
+        ⋯
+      </button>
+      {open && (
+        <div className="gx-menu-list" role="menu">
+          <button role="menuitem" onClick={() => void go(() => life.extras!.goalPin(g.id, !card.pinned), card.pinned ? 'Unpinned' : `📌 Focus goal: ${g.title}`)}>
+            📌 {card.pinned ? 'Unpin' : 'Make it my focus goal'}
+          </button>
+          {onMove && !first && (
+            <button role="menuitem" onClick={() => (setOpen(false), onMove(-1))}>
+              ↑ Move up
+            </button>
+          )}
+          {onMove && !last && (
+            <button role="menuitem" onClick={() => (setOpen(false), onMove(1))}>
+              ↓ Move down
+            </button>
+          )}
+          <button role="menuitem" onClick={() => (setOpen(false), onEdit())}>
+            ✎ Edit
+          </button>
+          <button role="menuitem" onClick={() => void go(() => life.extras!.goalPause(g.id, !card.paused), card.paused ? `▶ ${g.title}: back on` : `⏸ Paused: ${g.title}`)}>
+            {card.paused ? '▶ Carry on' : '⏸ Pause'}
+          </button>
+          <button role="menuitem" onClick={() => void go(() => life.extras!.goalDone(g.id, !done), done ? 'Open again' : `🏆 Marked reached: ${g.title}`)}>
+            {done ? '↺ Open it again' : '🏆 Mark it reached'}
+          </button>
+          <button
+            role="menuitem"
+            className="danger"
+            onClick={async () => {
+              setOpen(false)
+              if (!(await askConfirm(`Remove "${g.title}"? Its check-ins stay in your history.`, { ok: 'Remove' }))) return
+              if ((await act(() => life.extras!.archiveMeasure(g.id), `${g.title}: off the list`)) !== undefined) onChanged()
+            }}
+          >
+            ✕ Remove
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** The small check-in / log box under a card. */
+function QuickBox({ card, kind, onSave, onClose, busy }: { card: GoalCard; kind: 'checkin' | 'log'; onSave: (n: number) => void; onClose: () => void; busy: boolean }) {
+  const g = card.goal
+  const step = quickStep(card)
+  const [val, setVal] = useState(kind === 'checkin' ? String(card.value) : String(step))
+  const typed = Number(val.replace(',', '.'))
+  const ok = val.trim() !== '' && Number.isFinite(typed) && (kind === 'checkin' || typed !== 0)
+  const label = kind === 'checkin' ? "What's the number now?" : `How much today?${g.unit === 'hours' ? ' (hours)' : ''}`
+  return (
+    <form
+      className="gx-check"
+      onClick={(e) => e.stopPropagation()}
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (ok) onSave(typed)
+      }}
+    >
+      <label>
+        <span>{label}</span>
+        <div className="gx-stepper">
+          <button type="button" onClick={() => setVal(String(answerValue({ value: Number.isFinite(typed) ? typed : 0 }, `-${step}`)))} aria-label={`Minus ${step}`}>
+            −
+          </button>
+          <input value={val} onChange={(e) => setVal(e.target.value.replace(/[^\d.,-]/g, ''))} inputMode="decimal" autoFocus aria-label={label} />
+          <button type="button" onClick={() => setVal(String(answerValue({ value: Number.isFinite(typed) ? typed : 0 }, `+${step}`)))} aria-label={`Plus ${step}`}>
+            +
+          </button>
+        </div>
+      </label>
+      <div className="gx-check-row">
+        <button className="btn primary small" disabled={busy || !ok}>
+          Save
+        </button>
+        {kind === 'checkin' && (
+          <button type="button" className="btn small" disabled={busy} onClick={() => onSave(card.value)}>
+            Same as before
+          </button>
+        )}
+        <button type="button" className="btn small ghost" onClick={onClose}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  )
+}
+
+/** One goal, any kind: cover, ring, numbers, the pace line, a small chart, today's step and its button. */
+export function GoalCardView({ card, today, index, hero, first, last, ...a }: { card: GoalCard; today: string; index: number; hero?: boolean; first?: boolean; last?: boolean } & CardActions) {
+  const g = card.goal
+  const tone = toneOf(card.status, card.paused)
+  const el = useRef<HTMLElement>(null)
+  const t = useToday(card, a.onChanged, el)
+  const [box, setBox] = useState<null | 'checkin' | 'log'>(null)
+  const kind = card.kind ?? 'target'
+  const meta = card.meta
+  const pi = card.period
+  const h = headline(card)
+  const open = !card.paused && card.status !== 'done' && card.status !== 'missed'
+  const next = kind === 'project' ? nextStep(meta?.steps ?? []) : null
+
+  // The one button for today.
+  let main: ReactNode = null
+  if (open && !card.auto && kind === 'habit') {
+    main = pi?.todayDone ? (
+      <button className="btn small ghost" disabled={t.busy} onClick={(e) => (e.stopPropagation(), void t.undoDay())}>
+        ↺ Undo today
+      </button>
+    ) : (
+      <button className="btn small primary gx-do" disabled={t.busy} onClick={(e) => (e.stopPropagation(), void t.logDay())}>
+        ✓ Done today
+      </button>
+    )
+  } else if (open && !card.auto && (kind === 'limit' || kind === 'repeat')) {
+    main = (
+      <button className={`btn small ${kind === 'repeat' ? 'primary gx-do' : ''}`} onClick={(e) => (e.stopPropagation(), setBox('log'))}>
+        + Log
+      </button>
+    )
+  } else if (open && kind === 'project' && next) {
+    main = (
+      <button className="btn small primary gx-do" disabled={t.busy} onClick={(e) => (e.stopPropagation(), void t.step(next))} title={`Tick "${next.text}"`}>
+        ✓ Done
+      </button>
+    )
+  } else if (open && !card.auto && kind === 'target') {
+    main = (
+      <button className={`btn small ${card.due ? 'primary gx-do' : ''}`} onClick={(e) => (e.stopPropagation(), setBox('checkin'))}>
+        {card.due ? '✓ Check in now' : '✓ Check in'}
+      </button>
+    )
+  }
+
+  const reward = meta?.reward
   return (
     <m.article
       ref={el}
-      className={`gx-card t-${tone}${card.due ? ' due' : ''}`}
-      initial={{ opacity: 0, y: 14 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.32, delay: Math.min(index, 6) * 0.05, ease: [0.22, 1, 0.36, 1] }}
+      className={`gx-card t-${tone} k-${kind}${hero ? ' hero' : ''}${card.due ? ' due' : ''}${card.paused ? ' paused' : ''}${card.status === 'done' ? ' reached' : ''} c-${meta?.color ?? 'lime'}`}
+      initial={{ opacity: 0, y: 16, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.34, delay: Math.min(index, 8) * 0.05, ease: [0.22, 1, 0.36, 1] }}
+      onClick={() => a.onOpen(card)}
+      tabIndex={0}
+      onKeyDown={(e) => e.key === 'Enter' && e.target === e.currentTarget && a.onOpen(card)}
+      aria-label={`${g.title}: ${card.pace}`}
     >
+      <div className={`gx-cover cv-${meta?.cover ?? 'aurora'}`} aria-hidden>
+        {meta?.cover === 'photo' && meta.photo && <img src={meta.photo} alt="" />}
+      </div>
       <header className="gx-card-head">
         <span className="gx-ic" aria-hidden>
-          {areaIcon(g.area)}
+          {goalEmoji(card)}
         </span>
         <div className="gx-card-title">
           <small>
-            {g.area} · by {shortDay(g.deadline)}
+            {card.pinned && <b className="gx-pin">📌 Focus · </b>}
+            {typeLabel(card)} · {g.area}
+            {kind !== 'habit' && kind !== 'limit' && kind !== 'repeat' && g.deadline < '2099' ? ` · by ${shortDay(g.deadline)}` : ''}
           </small>
           <h3 title={g.title}>{g.title}</h3>
         </div>
-        <span className={`gx-pill t-${tone}`}>{STATUS_TEXT[card.status]}</span>
+        <span className={`gx-pill t-${tone}`}>{card.paused ? 'Paused' : pi && card.status === 'ahead' && kind !== 'limit' ? 'Done ✓' : kind === 'limit' && card.status === 'ahead' ? 'Well under' : STATUS_TEXT[card.status]}</span>
+        <CardMenu card={card} onChanged={a.onChanged} onEdit={() => a.onEdit(card)} onMove={a.onMove ? (d) => a.onMove!(card, d) : undefined} first={first} last={last} />
       </header>
 
       <div className="gx-card-body">
-        <Ring pct={card.pct} expected={card.status === 'done' ? undefined : card.expectedPct} tone={tone} size={104}>
-          <b className="num">{card.pct}%</b>
-          <small>{card.status === 'done' ? 'done' : `line ${card.expectedPct}%`}</small>
+        <Ring pct={card.pct} expected={kind === 'target' && card.status !== 'done' ? card.expectedPct : undefined} tone={tone} size={hero ? 118 : 84} stroke={hero ? 11 : 8} roll>
+          <b className="num">
+            <Roll value={card.pct} fmt={(n) => `${Math.round(n)}%`} />
+          </b>
+          {hero && <small>{kind === 'limit' ? 'used' : card.status === 'done' ? 'done' : kind === 'target' ? `line ${card.expectedPct}%` : 'done'}</small>}
         </Ring>
         <div className="gx-card-nums">
           <p className="gx-now">
-            <b className="num">{v(card.value)}</b>
-            <span> of {v(g.target)}</span>
+            <b className="num">{h.big}</b>
+            <span>{h.small}</span>
           </p>
-          <ul className="gx-facts">
-            <li>
-              <i>⏳</i>
-              {daysText}
-            </li>
-            {card.need && (
-              <li>
-                <i>📈</i>need <b>{card.need}</b>
-              </li>
-            )}
-            <li>
-              <i>🏁</i>
-              {card.status === 'done' ? `on ${shortDay(g.doneDay ?? today)}` : card.eta ? `at this pace: ${shortDay(card.eta)}${card.eta > g.deadline && (card.status === 'behind' || card.status === 'at risk') ? ' (late)' : ''}` : 'pace: check in twice to see'}
-            </li>
-          </ul>
+          <p className={`gx-pace t-${tone}`}>{card.pace}</p>
+          {(card.streak > 1 || card.eta || card.best) && (
+            <ul className="gx-facts">
+              {card.streak > 1 && (
+                <li className="fl" title={pi ? `${perWord(pi.per)}s in a row` : 'Check-ins in a row'}>
+                  <i>🔥</i>
+                  {card.streak} {pi ? `${perWord(pi.per)}s` : 'check-ins'} in a row
+                </li>
+              )}
+              {kind === 'target' && card.status !== 'done' && card.eta && (
+                <li>
+                  <i>🏁</i>at this pace: {shortDay(card.eta)}
+                  {card.eta > g.deadline ? ' (late)' : ''}
+                </li>
+              )}
+              {hero && card.best && (
+                <li>
+                  <i>🏆</i>
+                  {card.best}
+                </li>
+              )}
+            </ul>
+          )}
         </div>
       </div>
 
-      <PaceChart c={chartOf(card, today)} tone={tone} />
+      {kind === 'habit' && pi?.per === 'week' ? (
+        <>
+          <WeekDots card={card} />
+          {pi.history.length > 1 && <PeriodBars card={card} h={hero ? 48 : 30} />}
+        </>
+      ) : pi ? <PeriodBars card={card} h={hero ? 64 : 44} /> : kind === 'project' ? <StepList card={card} max={hero ? 4 : 2} onToggle={(s) => void t.step(s)} busy={t.busy} /> : <PaceChart c={chartOf(card, today)} tone={tone} h={hero ? 96 : 52} label={!!hero} />}
 
-      <div className="gx-ms" aria-label="Milestones">
-        {card.milestones.map((ms, i) => (
-          <span key={i} className={ms.reached ? 'on' : i === card.next.index ? 'next' : ''} title={`${ms.label ?? ''} ${v(ms.value)}`.trim()}>
-            <i />
-            <em>{v(ms.value)}</em>
+      {hero && (g.why || meta?.vision) && (
+        <div className="gx-vision">
+          <span className="gx-vision-e" aria-hidden>
+            {goalEmoji(card)}
           </span>
-        ))}
-        <span className={card.status === 'done' ? 'on goal' : 'goal'}>
-          <i />
-          <em>🏆</em>
-        </span>
-      </div>
-      {card.status !== 'done' && card.next && (
-        <p className="gx-next">
-          Next milestone: <b>{v(card.next.value)}</b> · {fmtDelta(g.unit, card.next.value - card.value, g.unitLabel).replace(/^[+−]/, '')} to go
-        </p>
-      )}
-      {g.why && <p className="gx-why">“{g.why}”</p>}
-      {move && card.status !== 'done' && (
-        <p className="gx-move">
-          <span>👉 {move.text}</span>
-          {move.do.startsWith('focus:') && (
-            <button
-              className="btn small ghost"
-              onClick={() => {
-                const [, min, subject] = /^focus:(\d+):(.+)$/.exec(move.do) ?? []
-                void act(() => life.focus.start(subject, Number(min), null), `Focus started: ${subject} · ${min} min`)
-              }}
-            >
-              ▶ Start
-            </button>
-          )}
-        </p>
+          <div>
+            {meta?.vision && (
+              <p>
+                <b>Future you:</b> {meta.vision}
+              </p>
+            )}
+            {g.why && <p className="why">“{g.why}”</p>}
+          </div>
+        </div>
       )}
 
-      {open && !card.auto ? (
-        <form
-          className="gx-check"
-          onSubmit={(e) => {
-            e.preventDefault()
-            if (Number.isFinite(typed) && val.trim()) void save(typed)
+      {box ? (
+        <QuickBox
+          card={card}
+          kind={box}
+          busy={t.busy}
+          onClose={() => setBox(null)}
+          onSave={(n) => {
+            void (box === 'log' ? t.log(n) : t.checkIn(n)).then((r) => r && setBox(null))
           }}
-        >
-          <label>
-            <span>What's the number now?</span>
-            <div className="gx-stepper">
-              <button type="button" onClick={() => setVal(String(answerValue({ value: Number.isFinite(typed) ? typed : card.value }, `-${step}`)))} aria-label={`Minus ${step}`}>
-                −
-              </button>
-              <input value={val} onChange={(e) => setVal(e.target.value.replace(/[^\d.,-]/g, ''))} inputMode="decimal" autoFocus aria-label="The number now" />
-              <button type="button" onClick={() => setVal(String(answerValue({ value: Number.isFinite(typed) ? typed : card.value }, `+${step}`)))} aria-label={`Plus ${step}`}>
-                +
-              </button>
-            </div>
-          </label>
-          <div className="gx-check-row">
-            <button className="btn primary small" disabled={busy || !val.trim() || !Number.isFinite(typed)}>
-              Save {up ? '' : ''}
-            </button>
-            <button type="button" className="btn small" disabled={busy} onClick={() => void save(card.value)}>
-              Same as before
-            </button>
-            <button type="button" className="btn small ghost" disabled={busy} onClick={() => void skip()}>
-              Skip
-            </button>
-          </div>
-        </form>
+        />
       ) : (
-        <footer className="gx-card-foot">
-          {card.auto ? (
-            <span className="gx-auto">⚡ {SOURCE_NOTE[g.source.kind] ?? 'Counts itself'}</span>
-          ) : card.status === 'done' || card.status === 'missed' ? null : (
-            <button className={`btn small ${card.due ? 'primary' : ''}`} onClick={() => setOpen(true)}>
-              {card.due ? '✓ Check in now' : '✓ Check in'}
-            </button>
+        <footer className="gx-today" onClick={(e) => e.stopPropagation()}>
+          <span className="gx-today-text">
+            <i aria-hidden>{card.auto && open && kind !== 'project' ? '⚡' : '👉'}</i>
+            <span>{card.todayStep}</span>
+          </span>
+          {main}
+          {reward && !hero && (
+            <span className="gx-reward-chip" title={`Unlocks ${reward.title} when you reach it`}>
+              🎁
+            </span>
           )}
-          {card.streak > 0 && <span className="gx-streak" title="Check-ins in a row">🔥 {card.streak}</span>}
-          <span className="gx-spacer" />
-          {onAskBen && card.status !== 'done' && (
-            <button className="btn small ghost" onClick={() => onAskBen(`How do I get my "${g.title}" goal back on track? I'm at ${v(card.value)} of ${v(g.target)} with ${card.daysLeft} days left.`)} title="Ask Ben for a plan">
-              Ask Ben
-            </button>
-          )}
-          <button className="btn small ghost" onClick={() => onEdit(card)}>
-            Edit
-          </button>
-          <button className="btn small ghost" onClick={() => void remove()} aria-label={`Remove ${g.title}`}>
-            ✕
-          </button>
         </footer>
       )}
     </m.article>
   )
 }
 
-// ------------------------------------------------------------ the sheet
+// ------------------------------------------------------------ the detail view
 
-interface Form {
-  id?: number
-  template: string
-  kind: 'measure' | 'hours'
-  title: string
-  unit: GoalUnit
-  unitLabel: string
-  target: string
-  start: string
-  deadline: string
-  why: string
-  area: string
-  cadence: Cadence
-  source: GoalSource
-  curve: PaceCurve
-  subject: string
-}
+/** Everything about one goal: the big picture, its chart, steps, history, why, future you and the reward. */
+export function GoalDetail({ card, today, onClose, onEdit, onChanged, onAskBen, onGo }: { card: GoalCard; today: string; onClose: () => void; onEdit: () => void; onChanged: () => void; onAskBen?: (text: string) => void; onGo?: (p: 'rewards') => void }) {
+  const g = card.goal
+  const kind = card.kind ?? 'target'
+  const tone = toneOf(card.status, card.paused)
+  const el = useRef<HTMLDivElement>(null)
+  const t = useToday(card, onChanged, el as any)
+  const meta = card.meta
+  const pi = card.period
+  const h = headline(card)
+  const [history, setHistory] = useState<{ day: string; value: number; by: string }[]>([])
+  useEffect(() => {
+    let live = true
+    life.extras
+      ?.goals([])
+      .then((v) => live && setHistory(v.checkins.filter((c) => c.goalId === g.id && c.by !== 'auto').slice(0, 6).map((c) => ({ day: c.day, value: c.value, by: c.by }))))
+      .catch(() => null)
+    return () => {
+      live = false
+    }
+  }, [g.id, card.lastAt])
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }, [onClose])
+  const fmt = (n: number) => (g.unit === 'hours' ? hoursText(n) : fmtValue(g.unit, n, g.unitLabel))
+  return createPortal(
+    <div className="gx-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <m.div ref={el} className={`gx-sheet gx-detail t-${tone}`} role="dialog" aria-modal="true" aria-label={g.title} initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
+        <div className={`gx-detail-cover cv-${meta?.cover ?? 'aurora'}`}>
+          {meta?.cover === 'photo' && meta.photo && <img src={meta.photo} alt="" />}
+          <span className="gx-detail-emoji" aria-hidden>
+            {goalEmoji(card)}
+          </span>
+          <button className="gx-x" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </div>
+        <header className="gx-detail-head">
+          <span className="gx-kicker">
+            {typeLabel(card)} · {g.area} · {sourceShort(g.source)}
+          </span>
+          <h2>{g.title}</h2>
+        </header>
+        <div className="gx-detail-top">
+          <Ring pct={card.pct} expected={kind === 'target' && card.status !== 'done' ? card.expectedPct : undefined} tone={tone} size={120} stroke={11} roll>
+            <b className="num">{card.pct}%</b>
+            <small>{kind === 'limit' ? 'used' : 'done'}</small>
+          </Ring>
+          <div className="gx-detail-nums">
+            <p className="gx-now">
+              <b className="num">{h.big}</b>
+              <span>{h.small}</span>
+            </p>
+            <p className={`gx-pace t-${tone}`}>{card.pace}</p>
+            <p className="gx-detail-step">👉 {card.todayStep}</p>
+            <div className="gx-detail-chips">
+              {card.streak > 1 && <span className="gx-chip">🔥 {card.streak} in a row</span>}
+              {kind === 'target' && card.eta && card.status !== 'done' && <span className="gx-chip">🏁 At this pace: {shortDay(card.eta)}</span>}
+              {pi && pi.mode === 'sum' && <span className="gx-chip">📈 On pace for {fmt(pi.projected)}</span>}
+              {card.best && <span className="gx-chip">🏆 {card.best}</span>}
+              {g.deadline < '2099' && <span className="gx-chip">📅 {kind === 'target' || kind === 'project' ? 'By' : 'Until'} {shortDay(g.deadline)}</span>}
+            </div>
+          </div>
+        </div>
 
-const blankForm = (today: string): Form => ({ template: 'custom', kind: 'measure', title: '', unit: 'count', unitLabel: '', target: '', start: '', deadline: addDays(today, 56), why: '', area: 'Life', cadence: 'weekly', source: { kind: 'manual' }, curve: 'line', subject: '' })
-const AREAS = ['Money', 'Body', 'Study', 'Career', 'Discipline', 'Life']
+        {kind === 'project' ? (
+          <section className="gx-detail-sec">
+            <h3>Steps</h3>
+            <StepList card={card} onToggle={(s) => void t.step(s)} busy={t.busy} />
+          </section>
+        ) : pi ? (
+          <section className="gx-detail-sec">
+            <h3>{kind === 'habit' && pi.per === 'week' ? 'This week' : `Last ${pi.history.length} ${perWord(pi.per)}s`}</h3>
+            {kind === 'habit' && pi.per === 'week' && <WeekDots card={card} />}
+            <PeriodBars card={card} h={84} />
+          </section>
+        ) : (
+          <section className="gx-detail-sec">
+            <h3>Your numbers and the line</h3>
+            <PaceChart c={chartOf(card, today)} tone={tone} h={130} />
+          </section>
+        )}
 
-export function formFromCard(c: GoalCard): Form {
-  const g = c.goal
-  return { id: g.id, template: 'custom', kind: 'measure', title: g.title, unit: g.unit, unitLabel: g.unitLabel ?? '', target: String(g.target), start: String(g.start), deadline: g.deadline, why: g.why, area: g.area, cadence: g.cadence, source: g.source, curve: g.curve, subject: '' }
+        {(meta?.vision || g.why) && (
+          <section className={`gx-future cv-${meta?.cover ?? 'aurora'}`}>
+            {meta?.cover === 'photo' && meta.photo && <img src={meta.photo} alt="" />}
+            <div>
+              <span className="gx-kicker">Future you</span>
+              {meta?.vision && <p className="v">{meta.vision}</p>}
+              {g.why && <p className="w">Why: {g.why}</p>}
+            </div>
+          </section>
+        )}
+
+        {meta?.reward && (
+          <section className="gx-detail-reward">
+            <span className="gx-big-e">{meta.reward.emoji || '🎁'}</span>
+            <div>
+              <b>{card.status === 'done' ? 'Unlocked' : 'Unlocks when you reach it'}: {meta.reward.title}</b>
+              <small>{meta.reward.price ? `${meta.reward.price} points in Rewards` : 'In Rewards'}</small>
+            </div>
+            {onGo && (
+              <button className="btn small ghost" onClick={() => (onGo('rewards'), onClose())}>
+                Rewards →
+              </button>
+            )}
+          </section>
+        )}
+
+        {history.length > 0 && (
+          <section className="gx-detail-sec">
+            <h3>Recent</h3>
+            <ul className="gx-hist">
+              {history.map((x, i) => (
+                <li key={i}>
+                  <span>{shortDay(x.day)}</span>
+                  <b className="num">{x.by === 'skip' ? 'skipped' : pi ? `${x.value > 0 ? '+' : ''}${pi.mode === 'days' ? x.value : fmt(x.value)}` : kind === 'project' ? `${x.value}%` : fmt(x.value)}</b>
+                  <small>{x.by === 'ben' ? 'via Ben' : ''}</small>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
+
+        <footer className="gx-sheet-foot">
+          {onAskBen && card.status !== 'done' && (
+            <button className="btn ghost" onClick={() => (onAskBen(`Help me with my goal "${g.title}": ${card.pace}. Today's step: ${card.todayStep}. What should I do today?`), onClose())}>
+              Ask Ben
+            </button>
+          )}
+          <button className="btn primary" onClick={onEdit}>
+            ✎ Edit
+          </button>
+        </footer>
+      </m.div>
+    </div>,
+    document.body
+  )
 }
 
 /** Template tiles ("Raise profit to __ by __"…). */
@@ -382,306 +693,8 @@ export function TemplateGrid({ onPick, compact }: { onPick: (t: GoalTemplate) =>
         <button key={t.id} type="button" onClick={() => onPick(t)}>
           <span aria-hidden>{t.icon}</span>
           <b>{t.label}</b>
-          {!compact && <small>{SOURCES.find((s) => s.id === t.source.kind)?.label}</small>}
         </button>
       ))}
     </div>
-  )
-}
-
-/**
- * The guided New goal sheet: say it in words or pick a template, then the
- * target, the deadline, how it's measured, how often Ben checks in, and why.
- * A live pace preview shows what it takes.
- */
-export function GoalSheet({ today, initial, words, template, onClose, onSaved }: { today: string; initial?: Form | null; words?: string; template?: GoalTemplate | null; onClose: () => void; onSaved: (title: string) => void }) {
-  const act = useAction()
-  const [f, setF] = useState<Form>(() => initial ?? blankForm(today))
-  const [said, setSaid] = useState(words ?? '')
-  const [heard, setHeard] = useState<string | null>(null)
-  const [autoNow, setAutoNow] = useState<number | null>(null)
-  const [saving, setSaving] = useState(false)
-  const box = useRef<HTMLDivElement>(null)
-  const set = (p: Partial<Form>) => setF((x) => ({ ...x, ...p }))
-
-  const useTemplate = (t: GoalTemplate) =>
-    setF((x) => ({
-      ...x,
-      template: t.id,
-      kind: t.kind,
-      unit: t.unit,
-      unitLabel: t.unitLabel ?? '',
-      source: t.source,
-      cadence: t.cadence,
-      curve: t.curve,
-      area: t.area,
-      target: x.target || '',
-      title: '',
-      subject: t.source.arg ?? ''
-    }))
-
-  // A template passed in (from the empty page) or words (from Ben, the island, Ctrl+K).
-  useEffect(() => {
-    if (template) useTemplate(template)
-    if (words) hear(words)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // The number an auto source shows now: the start, and "lose 5 kg" becomes a target.
-  useEffect(() => {
-    let live = true
-    if (f.source.kind === 'manual' || f.id || countsFromStart(f.source.kind)) {
-      setAutoNow(null)
-      return
-    }
-    life.extras?.goalAutoValue(f.source).then((n) => live && setAutoNow(n ?? null)).catch(() => live && setAutoNow(null))
-    return () => {
-      live = false
-    }
-  }, [f.source.kind, f.source.arg, f.id])
-
-  function hear(text: string) {
-    const d = parseGoalText(text, today)
-    if (!d) {
-      setHeard(text.trim().length > 6 ? "Couldn't find a number to aim at yet: try “save 2000 lei by 31 Dec”." : null)
-      return
-    }
-    setHeard(`Got it: ${d.title}${d.deadline ? ` · by ${shortDay(d.deadline)}` : ' · pick the deadline below'}`)
-    setF((x) => ({
-      ...x,
-      template: d.delta != null ? 'lose' : d.template === 'lose' ? 'custom' : (d.template ?? 'custom'),
-      kind: d.kind,
-      title: d.title,
-      unit: d.unit,
-      unitLabel: d.unitLabel ?? '',
-      target: d.target != null ? String(d.target) : d.delta != null ? String(Math.abs(d.delta)) : x.target,
-      deadline: d.deadline ?? x.deadline,
-      area: d.area,
-      cadence: d.deadline ? suggestCadence(today, d.deadline) : d.cadence,
-      source: d.source,
-      curve: d.curve,
-      subject: d.subject ?? x.subject
-    }))
-  }
-
-  const tpl = GOAL_TEMPLATES.find((t) => t.id === f.template)
-  const change = tpl?.change === 'down' && f.kind === 'measure'
-  const startNum = f.start.trim() !== '' ? Number(f.start) : autoNow ?? 0
-  const amount = Number(f.target)
-  // "Lose 5 kg": the target is 5 down from where you are.
-  const targetNum = change ? Math.round((startNum - Math.abs(amount)) * 10) / 10 : amount
-  const unitLabel = f.unit === 'custom' ? f.unitLabel.trim() || 'things' : undefined
-  const autoTitle = tpl && tpl.id !== 'custom' && f.target ? tpl.title(fmtValue(f.unit, Math.abs(Number(f.target)), unitLabel), f.subject || f.source.arg) : ''
-  const title = f.title.trim() || autoTitle
-  const valid = !!title && (!change || startNum > 0) && Number.isFinite(targetNum) && f.target.trim() !== '' && targetNum !== startNum && /^\d{4}-\d{2}-\d{2}$/.test(f.deadline) && f.deadline > today && (!SOURCES.find((s) => s.id === f.source.kind)?.needsArg || !!(f.source.arg || f.subject).trim())
-  const days = Math.max(1, daysBetween(today, f.deadline || today))
-  const per = valid ? requiredPerDay({ id: 0, title, unit: f.unit, start: startNum, target: targetNum, startDay: today, deadline: f.deadline, why: '', area: f.area, cadence: f.cadence, source: f.source, milestones: [], curve: f.curve, doneDay: null }, startNum, today) : 0
-  const preview: ChartInput | null = valid
-    ? { start: startNum, target: targetNum, startDay: today, deadline: f.deadline, curve: f.curve, series: [], today, milestones: milestonesOf({ start: startNum, target: targetNum, milestones: [], unit: f.unit }).map((x) => x.value), unit: f.unit, unitLabel }
-    : null
-
-  const save = async () => {
-    if (!valid || saving) return
-    setSaving(true)
-    const ok =
-      f.kind === 'hours'
-        ? await act(() => life.focus.saveGoal({ title, subject: (f.subject || f.source.arg || title).trim(), deadline: f.deadline, hours: Math.abs(targetNum) }), `🎯 Goal set: ${title}`)
-        : await act(
-            () =>
-              life.extras!.saveMeasure({
-                id: f.id,
-                title,
-                unit: f.unit,
-                unitLabel,
-                target: targetNum,
-                start: f.start.trim() === '' ? (change ? startNum : null) : Number(f.start),
-                deadline: f.deadline,
-                why: f.why,
-                area: f.area,
-                cadence: f.cadence,
-                source: f.source.kind === 'manual' ? f.source : { kind: f.source.kind, ...(f.source.arg || f.subject ? { arg: (f.source.arg || f.subject).trim() } : {}) },
-                curve: f.curve
-              }),
-            f.id ? `Saved: ${title}` : `🎯 Goal set: ${title}`
-          )
-    setSaving(false)
-    if (ok) {
-      if (!f.id) {
-        celebrate(box.current, 'reward')
-        feedback('reward')
-      }
-      onSaved(title)
-    }
-  }
-
-  // Esc closes.
-  useEffect(() => {
-    const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
-    window.addEventListener('keydown', k)
-    return () => window.removeEventListener('keydown', k)
-  }, [onClose])
-
-  const srcMeta = SOURCES.find((s) => s.id === f.source.kind)
-  const sources = useMemo(() => SOURCES.filter((s) => s.id === 'manual' || s.unit === null || s.unit === f.unit || (f.unit === 'eur' || f.unit === 'usd' ? s.unit === 'lei' : false) || (f.kind === 'hours' && s.id === 'focus.hours')), [f.unit, f.kind])
-
-  return createPortal(
-    <div className="gx-scrim" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <m.div ref={box} className="gx-sheet" role="dialog" aria-modal="true" aria-label={f.id ? 'Edit goal' : 'New goal'} initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}>
-        <header className="gx-sheet-head">
-          <div>
-            <span className="gx-kicker">{f.id ? 'Edit goal' : 'New goal'}</span>
-            <h2>{f.id ? title || 'Your goal' : 'What do you want to reach?'}</h2>
-          </div>
-          <button className="gx-x" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
-
-        {!f.id && (
-          <>
-            <label className="gx-say">
-              <span>Say it in your words</span>
-              <input
-                value={said}
-                onChange={(e) => {
-                  setSaid(e.target.value)
-                  hear(e.target.value)
-                }}
-                placeholder="e.g. raise profit to 5000 lei by 31 Dec"
-                maxLength={200}
-                autoFocus={!words && !template}
-                aria-label="Your goal in words"
-              />
-              {heard && <small className="gx-heard">{heard}</small>}
-            </label>
-            <div className="gx-or">
-              <span>or start from one</span>
-            </div>
-            <TemplateGrid compact onPick={(t) => (useTemplate(t), setSaid(''), setHeard(null))} />
-          </>
-        )}
-
-        <section className="gx-preview" aria-live="polite">
-          {preview ? (
-            <>
-              <PaceChart c={preview} tone="good" h={96} />
-              <p>
-                <b>{fmtPair(f.unit, startNum, targetNum, unitLabel)}</b> in {days} days · that's <b>{needText({ unit: f.unit, unitLabel, cadence: f.cadence }, per, days) || '—'}</b>
-                {f.kind === 'measure' ? (f.source.kind === 'manual' ? ` · Ben asks ${CADENCES.find((c) => c.id === f.cadence)!.label.toLowerCase()}` : ' · counts itself') : ' · planned into focus blocks'}
-              </p>
-            </>
-          ) : (
-            <p className="hint">{change && !startNum ? 'Log your weight on Body (or type where you start) to see the pace line.' : 'Fill in the target and the date to see the pace line.'}</p>
-          )}
-        </section>
-
-        <div className="gx-fields">
-          <label className="wide">
-            <span>Goal</span>
-            <input value={f.title} onChange={(e) => set({ title: e.target.value })} placeholder={autoTitle || 'e.g. Profit 5,000 lei a month'} maxLength={80} aria-label="Goal title" />
-          </label>
-          {tpl?.extra && f.kind !== 'measure' ? (
-            <label>
-              <span>{tpl.extra.split(',')[0]}</span>
-              <input value={f.subject} onChange={(e) => set({ subject: e.target.value })} placeholder={tpl.extra.split(', ')[1] ?? ''} maxLength={40} />
-            </label>
-          ) : null}
-          <label>
-            <span>{change ? 'How much to lose' : 'Target'}</span>
-            <div className="gx-unit">
-              <input value={f.target} onChange={(e) => set({ target: e.target.value.replace(/[^\d.,-]/g, '').replace(',', '.') })} inputMode="decimal" placeholder={String(tpl?.example ?? 10)} aria-label="Target" />
-              <Select value={f.unit} onChange={(e) => set({ unit: e.target.value as GoalUnit })} aria-label="Unit" disabled={f.kind === 'hours'}>
-                {GOAL_UNITS.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </label>
-          {f.unit === 'custom' && (
-            <label>
-              <span>Counted in</span>
-              <input value={f.unitLabel} onChange={(e) => set({ unitLabel: e.target.value })} placeholder="stars, books, flags…" maxLength={16} />
-            </label>
-          )}
-          <label>
-            <span>By</span>
-            <input type="date" value={f.deadline} min={addDays(today, 1)} onChange={(e) => set({ deadline: e.target.value, cadence: f.id ? f.cadence : suggestCadence(today, e.target.value) })} aria-label="Deadline" />
-          </label>
-          {f.kind === 'measure' && (
-            <label>
-              <span>Starting from</span>
-              <input value={f.start} onChange={(e) => set({ start: e.target.value.replace(/[^\d.,-]/g, '').replace(',', '.') })} inputMode="decimal" placeholder={autoNow != null ? `${autoNow} (now)` : '0'} aria-label="Start value" />
-            </label>
-          )}
-          {f.kind === 'measure' && (
-            <label className="wide">
-              <span>How it's measured</span>
-              <Select value={f.source.kind} onChange={(e) => set({ source: { kind: e.target.value as GoalSource['kind'], ...(f.source.arg ? { arg: f.source.arg } : {}) } })} aria-label="How it's measured">
-                {sources.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.label}
-                  </option>
-                ))}
-              </Select>
-              <small className="hint">{srcMeta?.hint}{autoNow != null ? ` · now ${fmtValue(f.unit, autoNow, unitLabel)}` : ''}</small>
-            </label>
-          )}
-          {f.kind === 'measure' && srcMeta?.needsArg && (
-            <label>
-              <span>{srcMeta.needsArg.split(',')[0]}</span>
-              <input value={f.source.arg ?? ''} onChange={(e) => set({ source: { ...f.source, arg: e.target.value } })} placeholder={srcMeta.needsArg.split(', ')[1] ?? ''} maxLength={40} />
-            </label>
-          )}
-          {f.kind === 'measure' && (
-            <div className="wide gx-seg-wrap">
-              <span>Ben checks in</span>
-              <div className="gx-seg" role="radiogroup" aria-label="Check-in rhythm">
-                {CADENCES.map((c) => (
-                  <button type="button" key={c.id} role="radio" aria-checked={f.cadence === c.id} className={f.cadence === c.id ? 'on' : ''} onClick={() => set({ cadence: c.id })}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-              {f.source.kind !== 'manual' && <small className="hint">This one counts itself: Ben reports the change instead of asking.</small>}
-            </div>
-          )}
-          {f.kind === 'measure' && (
-            <div className="wide gx-seg-wrap">
-              <span>Pace</span>
-              <div className="gx-seg" role="radiogroup" aria-label="Pace line">
-                {CURVES.map((c) => (
-                  <button type="button" key={c.id} role="radio" aria-checked={f.curve === c.id} className={f.curve === c.id ? 'on' : ''} onClick={() => set({ curve: c.id })} title={c.hint}>
-                    {c.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <label className="wide">
-            <span>Why it matters (one line)</span>
-            <input value={f.why} onChange={(e) => set({ why: e.target.value })} placeholder="e.g. pay rent without stress" maxLength={140} />
-          </label>
-          <div className="wide gx-areas" role="radiogroup" aria-label="Area">
-            {AREAS.map((a) => (
-              <button type="button" key={a} role="radio" aria-checked={f.area === a} className={f.area === a ? 'on' : ''} onClick={() => set({ area: a })}>
-                {areaIcon(a)} {a}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <footer className="gx-sheet-foot">
-          <button className="btn ghost" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn primary" disabled={!valid || saving} onClick={() => void save()}>
-            {f.id ? 'Save changes' : '🎯 Set this goal'}
-          </button>
-        </footer>
-      </m.div>
-    </div>,
-    document.body
   )
 }
