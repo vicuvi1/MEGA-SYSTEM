@@ -23,6 +23,8 @@ on:
       - 'build/**'
       - 'vite.web.mts'
       - 'electron.desktop.config.mts'
+      # The release test decides whether a build ships, so a fix there ships too.
+      - 'e2e/**'
       - 'scripts/copy-desktop-ui.mjs'
       - '.github/workflows/release.yml'
 
