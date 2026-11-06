@@ -1,0 +1,4 @@
+# Widgets are pinned to the sha256 of their exact bytes: keep them LF on every
+# checkout (Windows included), or the hash would not match.
+widgets/** text eol=lf
+widgets/**/*.png binary

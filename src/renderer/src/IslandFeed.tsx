@@ -35,7 +35,7 @@ import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart,
 import { breakOverAlert, controlAct, flowTick, islandRunning, loadBreakPref, mustdoUndo, rememberUndo } from './islandControlsFeed'
 import { askClose, pcAskAct, pcAskAlert, pcAutoTick } from './pcAutomation'
 import { kitAct, kitForIsland } from './islandKitFeed'
-import { weatherAlert, widgetsForIsland } from './widgets/widgetsFeed'
+import { weatherAlert, widgetAct, widgetsForIsland } from './widgets/widgetsFeed'
 import { autoAct, autoAlert, autoIslandView, autoTick, noteDone, startAutomations } from './automationsFeed'
 import { MOVE_CARD_EVENT, moveCardAlert } from '@core/islandMoveCard'
 
@@ -856,6 +856,10 @@ export function IslandFeed() {
           case 'kitCount':
           case 'kitLink':
             said = await kitAct(a)
+            break
+          case 'widget':
+            // PL1–PL5: a widget's or script's call, checked again in widgetsFeed.
+            said = await widgetAct(a)
             break
           case 'join': {
             // IS11: the meeting's video link, through the app window's open-external path.

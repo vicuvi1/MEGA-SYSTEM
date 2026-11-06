@@ -1,0 +1,10 @@
+{
+  "id": "pomodoro",
+  "name": "Pomodoro mini",
+  "version": "1.0.0",
+  "author": "Life System",
+  "about": "A tiny 25/5 timer. Plays a sound at the end and can save a note (you confirm).",
+  "size": "1x1",
+  "refresh": 60,
+  "permissions": ["sound", "add"]
+}

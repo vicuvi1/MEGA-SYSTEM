@@ -1,0 +1,35 @@
+/* The island's look: collapsed styles, the clock and eight themes
+   (BrimDeck-inspired). Colours only change variables; nothing animates here
+   except a 0.2 s fade of the bar's handle on hover. `:root .di` beats the
+   base island styles, whichever file loads first. */
+
+/* Notch: flush with the top edge of the screen, black, only the bottom corners round. */
+:root .di.style-notch { top: 0; }
+:root .di.style-notch .di-shade { box-shadow: 0 10px 28px rgb(0 0 0 / 0.45), 0 0 18px -6px var(--glow); }
+:root .di.style-notch.th-dark { --bg: rgb(0 0 0 / var(--di-alpha, 1)); }
+
+/* The thin bar (a window is maximized, or you picked it). */
+.di-bar { display: flex; align-items: center; justify-content: center; width: 132px; height: 8px; padding: 3px 0; cursor: pointer; }
+.di-bar i { display: block; width: 100%; height: 4px; border-radius: 999px; background: rgb(var(--ink) / 0.35); opacity: 0.8; transition: opacity 0.2s ease; }
+.di-bar:hover i { opacity: 1; }
+
+/* The clock in the pill. */
+.di-clock { flex: none; margin-left: 6px; font-variant-numeric: tabular-nums; color: var(--clock, var(--fg)); font-size: 13px; letter-spacing: 0.02em; }
+.di-clock.serif { font-family: Georgia, 'Times New Roman', serif; font-size: 14px; }
+.di-clock.seg { display: inline-flex; align-items: center; gap: 1.5px; height: 14px; }
+.di-seg { width: 7px; height: 13px; }
+.di-seg path { stroke: var(--clock, var(--fg)); stroke-width: 1.6; stroke-linecap: round; fill: none; opacity: 0.1; }
+.di-seg path.on { opacity: 1; }
+.di-seg-colon { width: 2px; height: 8px; background: radial-gradient(circle, var(--clock, var(--fg)) 45%, transparent 50%) 0 0 / 2px 3px repeat-y; display: inline-block; }
+
+/* Themes. Dark is the island's own black. */
+:root .di.th-light { --ink: 20 25 34; --bg: rgb(250 250 252 / var(--di-alpha, 1)); --fg: #15181f; --sub: rgb(var(--ink) / 0.6); --line: rgb(var(--ink) / 0.12); --lime: #3b6df6; --acc-text: #2a56d6; --glow: rgb(59 109 246 / 0.25); }
+:root .di.th-onedark { --bg: rgb(40 44 52 / var(--di-alpha, 1)); --fg: #abb2bf; --line: rgb(171 178 191 / 0.14); --lime: #61afef; --acc-text: #61afef; --glow: rgb(97 175 239 / 0.3); --amber: #e5c07b; --red: #e06c75; }
+:root .di.th-ghdark { --bg: rgb(13 17 23 / var(--di-alpha, 1)); --fg: #e6edf3; --line: rgb(240 246 252 / 0.12); --lime: #2f81f7; --acc-text: #58a6ff; --glow: rgb(47 129 247 / 0.3); --red: #f85149; }
+:root .di.th-ghlight { --ink: 31 35 40; --bg: rgb(255 255 255 / var(--di-alpha, 1)); --fg: #1f2328; --sub: rgb(var(--ink) / 0.62); --line: rgb(var(--ink) / 0.14); --lime: #0969da; --acc-text: #0969da; --glow: rgb(9 105 218 / 0.22); --red: #cf222e; }
+:root .di.th-dracula { --bg: rgb(40 42 54 / var(--di-alpha, 1)); --fg: #f8f8f2; --line: rgb(248 248 242 / 0.12); --lime: #bd93f9; --acc-text: #ff79c6; --glow: rgb(189 147 249 / 0.35); --amber: #f1fa8c; --red: #ff5555; --water: #8be9fd; }
+:root .di.th-nightowl { --bg: rgb(1 22 39 / var(--di-alpha, 1)); --fg: #d6deeb; --line: rgb(214 222 235 / 0.12); --lime: #82aaff; --acc-text: #c792ea; --glow: rgb(130 170 255 / 0.3); --amber: #ecc48d; --red: #ef5350; }
+:root .di.th-cyberpunk { --bg: rgb(10 6 18 / var(--di-alpha, 1)); --fg: #f4f4f4; --line: rgb(0 240 255 / 0.25); --lime: #fcee0a; --acc-text: #fcee0a; --glow: rgb(0 240 255 / 0.45); --red: #ff2a6d; --water: #00f0ff; }
+:root .di.th-cyberpunk .di-shade { box-shadow: 0 10px 32px rgb(0 0 0 / 0.6), 0 0 0 1px rgb(0 240 255 / 0.5), 0 0 22px -4px rgb(255 42 109 / 0.55); }
+:root .di.th-light .di-sky, :root .di.th-ghlight .di-sky { display: none; }
+:root .di.th-light .di-pill-text, :root .di.th-ghlight .di-pill-text { color: rgb(var(--ink) / 0.9); }

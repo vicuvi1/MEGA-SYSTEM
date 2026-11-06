@@ -1276,6 +1276,14 @@ export function createTursoWebBridge(): Bridge {
         return clean
       }
     },
+    // PL1–PL8: widgets, pages, scripts and the island look, one synced setting (cleaned by the caller, which knows the widgets).
+    widgets: {
+      get: async () => (await mirrorP).read((db) => readSetting(db as any, 'island_widgets')),
+      save: async (v: unknown) => {
+        if (!v || typeof v !== 'object' || JSON.stringify(v).length > 64_000) throw new Error('Widget settings are too big')
+        await (await mirrorP).write((db) => writeSetting(db as any, 'island_widgets', v as Record<string, unknown>))
+      }
+    },
     // Settings → Plugins (src/plugins): on/off, their settings, what their jobs fetched.
     plugins: {
       state: async () =>

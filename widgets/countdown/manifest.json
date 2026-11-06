@@ -1,0 +1,14 @@
+{
+  "id": "countdown",
+  "name": "Countdown",
+  "version": "1.0.0",
+  "author": "Life System",
+  "about": "Days left until a date you pick (an exam, a trip, a deadline).",
+  "size": "1x1",
+  "refresh": 900,
+  "permissions": [],
+  "settings": [
+    { "key": "date", "label": "Date", "kind": "date" },
+    { "key": "label", "label": "What it is", "kind": "text", "placeholder": "Exam" }
+  ]
+}

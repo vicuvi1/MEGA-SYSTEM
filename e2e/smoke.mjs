@@ -524,6 +524,86 @@ try {
     await ip.waitForSelector('.di-meet-strip', { state: 'detached', timeout: 4000 })
     await ip.context().close()
   })
+  // PL1–PL6: pages in the opened island, widgets running in their sandboxed boxes,
+  // a call that needs a permission refused, an add confirmed by you on the island.
+  await step('Island widgets: pages by the dots and Ctrl+arrows, widgets run sandboxed, permissions checked, adds confirmed', async () => {
+    const { readFileSync } = await import('node:fs')
+    const hashes = Object.fromEntries(JSON.parse(readFileSync(join(repo, 'widgets/gallery.json'), 'utf8')).widgets.map((w) => [w.id, w.sha256]))
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 760 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    ip.on('console', (m) => /Content.Security.Policy/i.test(m.text()) && errors.push(`island CSP: ${m.text().slice(0, 200)}`))
+    await ip.addInitScript((hashes) => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const day = new Date(now + 23 * 864e5).toISOString().slice(0, 10)
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null, mustdos: [], water: { ml: 2000, target: 2000 }, reps: [], alert: null,
+        streak: { days: 12, kind: 'sport', atRisk: false },
+        widgets: { installed: [
+          { id: 'countdown', version: '1.0.0', sha256: hashes.countdown, grants: {}, page: 'home', config: { date: day, label: 'Exam' } },
+          { id: 'streak', version: '1.0.0', sha256: hashes.streak, grants: { read: true }, page: 'home', config: {} },
+          { id: 'pomodoro', version: '1.0.0', sha256: hashes.pomodoro, grants: { add: true }, page: 'fun', config: {} },
+          { id: 'quote', version: '1.0.0', sha256: '0'.repeat(64), grants: {}, page: 'fun', config: {} }
+        ], look: { style: 'notch', clock: 'segment' } }
+      }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandAction: (a) => { window.__island.actions.push(a); if (a.id) setTimeout(() => (cbs.acks ?? []).forEach((f) => f({ id: a.id, ok: true, tookMs: 5 })), 50) },
+        islandHot: () => {}, islandTakeClicks: () => {},
+        // Like the real desktop: every listener hears every answer.
+        onIslandAck: (cb) => { (cbs.acks ??= []).push(cb) },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    }, hashes)
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di.style-notch .di-pill .di-clock.seg', { timeout: 15000 })
+    await ip.click('.di-pill')
+    await ip.waitForSelector('.ip-dots', { timeout: 5000 })
+    const titles = await ip.$$eval('.ip-dots button', (b) => b.map((x) => x.title))
+    for (const t of ['Day', 'Music', 'Home', 'PC', 'Fun']) if (!titles.includes(t)) throw new Error(`no ${t} page (${titles.join(', ')})`)
+    await ip.click('.ip-dots button[title="Home"]')
+    await ip.waitForFunction(() => document.querySelectorAll('.wf:not(.is-loading) iframe[sandbox="allow-scripts"]').length === 2, null, { timeout: 8000 })
+    const box = ip.frames().find((f) => f.url().includes('/widgets/frame.html'))
+    if (!box) throw new Error('no widget frame')
+    const iso = await box.evaluate(() => {
+      let parent = 'open'
+      try { void window.parent.document } catch { parent = 'blocked' }
+      let storage = 'open'
+      try { void localStorage.length } catch { storage = 'blocked' }
+      return { parent, storage, text: document.body.innerText }
+    })
+    if (iso.parent !== 'blocked' || iso.storage !== 'blocked') throw new Error(`the widget box is not locked: ${JSON.stringify(iso)}`)
+    if (!/days to Exam|12 days/.test(iso.text)) throw new Error(`widget did not draw: ${iso.text}`)
+    // Ctrl+→ to the next page, then Fun: the changed widget (wrong hash) refuses to run.
+    await ip.keyboard.press('Control+ArrowRight')
+    await ip.waitForFunction(() => document.querySelector('.ip-dots button.on')?.title === 'PC', null, { timeout: 3000 })
+    await ip.click('.ip-dots button[title="Fun"]')
+    await ip.waitForFunction(() => /changed since you installed it/.test(document.querySelector('.wg-grid')?.textContent ?? ''), null, { timeout: 8000 })
+    await ip.waitForFunction(() => document.querySelectorAll('.wf:not(.is-loading) iframe').length === 1, null, { timeout: 8000 })
+    const pomo = ip.frames().find((f) => f.url().includes('/widgets/frame.html'))
+    const refused = await pomo.evaluate(() => window.widget.fetch('https://api.good-site.io/').then(() => 'ok', (e) => e.message))
+    if (!/Network is off/.test(refused)) throw new Error(`a fetch without permission answered: ${refused}`)
+    const added = pomo.evaluate(() => window.widget.addNote('Pomodoro done').then(() => 'added', (e) => e.message))
+    await ip.waitForSelector('.wg-confirm', { timeout: 3000 })
+    await ip.click('.wg-confirm button.primary')
+    const addedSays = await added
+    if (addedSays !== 'added') throw new Error(`the confirmed note was not added: ${addedSays}`)
+    if (!(await ip.evaluate(() => window.__island.actions.some((a) => a.kind === 'widget' && a.op === 'addNote' && a.widget === 'pomodoro')))) throw new Error('no addNote action')
+    await ip.context().close()
+  })
+  await step('Settings → Widgets: the gallery runs the four widgets in their boxes and Install asks for permissions', async () => {
+    await open('settings')
+    await pg.locator('.st-item', { hasText: 'Widgets' }).first().click()
+    await pg.waitForFunction(() => document.querySelectorAll('.wg-card .wf:not(.is-loading) iframe').length === 4, null, { timeout: 10000 })
+    await pg.locator('.wg-card', { hasText: 'Streak ring' }).getByRole('button', { name: 'Install' }).click()
+    await pg.waitForSelector('.wg-ask', { timeout: 3000 })
+    if (!/today’s plan/.test(await pg.locator('.wg-ask').innerText())) throw new Error('the install ask does not say what it reads')
+    await pg.locator('.wg-ask').getByRole('button', { name: 'Cancel' }).click()
+  })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

@@ -31,7 +31,8 @@ import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
 import { MusicPanel, ScHost, ScPeekRow, ScPillBadge } from './IslandMusic'
 import { useMusicPage } from './IslandMusicTab'
-import { IslandPager } from './widgets/islandPages'
+import { IslandPager, useScriptClock } from './widgets/island'
+import { IslandBar, IslandClock, lookRootClasses, notchRadius, showBar, useIslandLook } from './widgets/islandLook'
 import './sysmon/register'
 import { SysPill } from './sysmon/SysPill'
 import { IslandAutomations } from './IslandAutomations'
@@ -336,6 +337,10 @@ export function DesktopIsland() {
   const tapRef = useRef<(a: IslandAction, lbl?: string) => void>(() => {})
   const k = useKit(s, (a, lbl) => tapRef.current(a, lbl))
   const prefs = useMemo(() => k.prefsFor(basePrefs), [basePrefs, k.profile])
+  // PL5: your script tiles run on their own slow clock.
+  useScriptClock(s)
+  // BrimDeck-style look: notch / capsule / thin bar, the clock, the theme (synced).
+  const look = useIslandLook(s)
   // The size setting: the desktop sends a scale and the page scales itself (its zoom stays locked).
   const [scale, setScale] = useState(1)
   // IP4: the app's colours, for the "Match the app" look.
@@ -496,12 +501,18 @@ export function DesktopIsland() {
   }, [ui.view])
 
   // Quiet for a while (Q1) and what Windows says (a call, a full-screen app: Q2, Q3).
-  const [q, setQ] = useState<{ until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: 'hide' | 'dot' | 'show' }>({ until: 0, call: false, fullscreen: false })
+  const [q, setQ] = useState<{ until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: 'hide' | 'dot' | 'show'; maximized?: boolean }>({ until: 0, call: false, fullscreen: false })
   useEffect(() => {
     desk()?.onIslandQuiet?.(setQ)
   }, [])
   const quiet = q.until > Date.now()
   const inCall = !!s.call || q.call
+  // The thin bar: a window is maximized on this screen (or you picked the bar).
+  const bar = showBar(look, !!q.maximized)
+  // Hover to open (BrimDeck-style, a switch in Settings → Widgets → Island look): the peek grows into the panel; moving away or Esc closes it.
+  useEffect(() => {
+    if (look.hoverOpen && ui.view === 'peek' && ui.over && !ui.byAlert && !s.locked) dispatch({ type: 'click' })
+  }, [look.hoverOpen, ui.view, ui.over, ui.byAlert, s.locked]) // eslint-disable-line react-hooks/exhaustive-deps
   // IS12: tell the desktop when a meeting from your calendar is on (by its data: a call link or other people, accepted).
   const meetingOn = !!s.inMeeting
   useEffect(() => {
@@ -1660,6 +1671,7 @@ export function DesktopIsland() {
       )}
       {/* System / AI usage: usage rings, CPU and memory, the 70% / 90% notice (each only when on). */}
       {!s.locked && !old && <SysPill />}
+      {!s.locked && look.clock !== 'off' && <IslandClock kind={look.clock} color={look.clockColor || undefined} />}
       {/* IN35: your one-tap buttons (shown while the mouse is on the pill). */}
       {!s.locked && <PillKitButtons k={k} />}
     </div>
@@ -1946,7 +1958,7 @@ export function DesktopIsland() {
     </div>
   )
   const showMoment = !!moment && !hushed && !s.locked && !old
-  const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
+  const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : bar && !ui.over && !s.alert ? <IslandBar {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
   // IA3 / IL3: one feel: snappy open, softer close, a bouncy landing for a new alert, a quick stretch before it.
   const transition = stretch ? { type: 'spring' as const, stiffness: 700, damping: 26 } : ui.view === 'compact' ? f.close : dropping2 && ui.view === 'peek' ? f.drop : f.open
@@ -1964,6 +1976,11 @@ export function DesktopIsland() {
   const anchorRef = useRef(anchor)
   anchorRef.current = anchor
   const clip = useMotionValue('none')
+  const notchOn = look.style === 'notch' && (place === 'top' || place.startsWith('top')) && !bar
+  const notchRef = useRef(notchOn)
+  notchRef.current = notchOn
+  useLayoutEffect(() => drawClipRef.current(), [notchOn])
+  const drawClipRef = useRef<() => void>(() => {})
   const shadeX = useMotionValue(1)
   const shadeY = useMotionValue(1)
   const besideX = useMotionValue(size.w)
@@ -1975,7 +1992,10 @@ export function DesktopIsland() {
     const dy = Math.max(0, b.h - h)
     const an = anchorRef.current
     const l = an === 'left' ? 0 : an === 'right' ? dx : dx / 2
-    clip.set(dx < 0.25 && dy < 0.25 ? `inset(0px round ${mr.get().toFixed(2)}px)` : `inset(0px ${(dx - l).toFixed(2)}px ${dy.toFixed(2)}px ${l.toFixed(2)}px round ${mr.get().toFixed(2)}px)`)
+    const r = mr.get().toFixed(2)
+    // The notch: square top corners, round bottom ones.
+    const rr = notchRef.current ? `0px 0px ${r}px ${r}px` : `${r}px`
+    clip.set(dx < 0.25 && dy < 0.25 ? `inset(0px round ${rr})` : `inset(0px ${(dx - l).toFixed(2)}px ${dy.toFixed(2)}px ${l.toFixed(2)}px round ${rr})`)
     shadeX.set((w / Math.max(1, b.w)) * lift.get() * jx.get())
     shadeY.set((h / Math.max(1, b.h)) * jy.get())
     besideX.set(an === 'left' ? w : an === 'right' ? -w : w / 2)
@@ -1985,6 +2005,7 @@ export function DesktopIsland() {
     return () => u.forEach((x) => x())
   }, [mw, mh, mr, lift, jx, jy, drawClip])
   useLayoutEffect(drawClip, [box, anchor, drawClip])
+  drawClipRef.current = drawClip
   const shapeH = size.h + (stretch ? 8 : 0)
   const firstSize = useRef(true)
   useLayoutEffect(() => {
@@ -2119,9 +2140,9 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, bar && !ui.over)}`}
           >
-            <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: radius, scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
+            <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
               <i className="di-glow" />
             </motion.div>
@@ -2129,7 +2150,7 @@ export function DesktopIsland() {
               ref={shape}
               data-hot
               className="di-shape"
-              style={{ width: box.w, height: box.h, borderRadius: radius, clipPath: clip, scale: lift, scaleX: jx, scaleY: jy, originX: origin, originY: 0 }}
+              style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), clipPath: clip, scale: lift, scaleX: jx, scaleY: jy, originX: origin, originY: 0 }}
             >
               <Sky />
               <AnimatePresence mode="popLayout" initial={false}>

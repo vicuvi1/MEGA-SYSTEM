@@ -1,0 +1,26 @@
+/* PL1: widget boxes on the island pages and in the gallery. Sizes: 1x1,
+   2x1 (two columns), 2x2 (two by two). Only transform and opacity move. */
+.wg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 86px; gap: 8px; }
+.wf { position: relative; border-radius: 14px; border: 1px solid var(--line); background: rgb(var(--ink, 255 255 255) / 0.04); overflow: hidden; transition: opacity 0.2s ease; }
+.wf-2x1 { grid-column: span 2; }
+.wf-2x2 { grid-column: span 2; grid-row: span 2; }
+.wf.is-loading { opacity: 0.4; }
+.wf iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: transparent; color-scheme: normal; }
+.wf-msg { display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; }
+.wf-msg b { font-size: 12px; }
+.wf-msg small { font-size: 11px; color: var(--sub); line-height: 1.3; }
+.wf-msg button { align-self: flex-start; margin-top: auto; border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 2px 9px; font: inherit; font-size: 11.5px; cursor: pointer; }
+.wf-slowed { border-color: rgb(255 181 71 / 0.5); }
+.wf-slowed b { color: var(--amber, #ffb547); }
+.wg-script { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 8px 10px; }
+.wg-script i { font-style: normal; font-size: 18px; line-height: 1; }
+.wg-script span { font-size: 13px; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.wg-script small { font-size: 10.5px; color: var(--sub); }
+.wg-script.has-error span { color: var(--amber, #ffb547); font-size: 11.5px; }
+.wg-confirm { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--lime, #d4ff3f); background: rgb(var(--ink, 255 255 255) / 0.06); animation: wg-pop 0.18s ease-out both; }
+.wg-confirm p { margin: 0; font-size: 12.5px; }
+.wg-confirm q { font-size: 13px; color: var(--fg); }
+.wg-confirm div { display: flex; gap: 6px; }
+.wg-confirm button { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 12px; cursor: pointer; }
+.wg-confirm button.primary { background: var(--lime, #d4ff3f); color: #11140a; border-color: transparent; }
+@keyframes wg-pop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }

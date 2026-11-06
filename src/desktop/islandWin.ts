@@ -260,6 +260,8 @@ export interface WatcherLine {
   app: { proc: string; title: string | null } | null
   /** The middle of the screen the window in front is on (physical pixels): "follow the active window" (IF2). */
   fg?: { x: number; y: number }
+  /** A normal window in front is maximized: its monitor's middle (the thin-bar look). */
+  max?: { x: number; y: number }
   /** The program in front, always (IF6: apps it hides over; kept in memory only). */
   proc?: string
 }
@@ -274,13 +276,15 @@ export function parseWatcherLine(line: string): WatcherLine | null {
   const head = line.split(' app=')[0]
   const gm = / fgm=(-?\d+),(-?\d+)/.exec(head)
   const pm = / fgp=([^\s|]+)/.exec(head)
+  const xm = / max=(-?\d+),(-?\d+)/.exec(head)
   return {
     qs,
     media: / media=1/.test(line),
     fs: fm ? { x: Number(fm[1]), y: Number(fm[2]) } : null,
     app: am && am[1].trim() ? { proc: am[1].trim(), title: am[2]?.trim() || null } : null,
     ...(gm ? { fg: { x: Number(gm[1]), y: Number(gm[2]) } } : {}),
-    ...(pm ? { proc: pm[1] } : {})
+    ...(pm ? { proc: pm[1] } : {}),
+    ...(xm ? { max: { x: Number(xm[1]), y: Number(xm[2]) } } : {})
   }
 }
 

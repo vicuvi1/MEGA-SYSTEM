@@ -160,7 +160,7 @@ export interface DesktopApi {
   /** Island window: quiet for N minutes / until tomorrow, or back on (null). */
   islandQuiet?(choice: number | 'tomorrow' | null): void
   /** Island window: quiet until (ms, 0 = not quiet), and what Windows says (a call, a full-screen app). */
-  onIslandQuiet?(cb: (q: { until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: IslandDeskPrefs['fullscreen'] }) => void): void
+  onIslandQuiet?(cb: (q: { until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: IslandDeskPrefs['fullscreen']; maximized?: boolean }) => void): void
   /** Island window: where the visible shape is, in CSS pixels of the page (one or more areas); clicks pass through elsewhere. The old single rect still works. */
   islandHot?(rect: { rects: { x: number; y: number; w: number; h: number }[] } | { x: number; y: number; width: number; height: number }): void
   /** Island window: the pointer is on the island (take clicks) or not (let them pass through) (IC1). */
@@ -215,6 +215,8 @@ export interface DesktopApi {
   onIslandDodge?(cb: (on: boolean) => void): void
   /** Island 2 (IN34–IN48): tiles' shortcuts, the dock, the clipboard tray, the file shelf. */
   islandKit?(op: string, arg?: unknown): Promise<any>
+  /** PL2: App window: a widget's https request to one of the hosts you allowed it (checked again by the desktop). */
+  widgetFetch?(url: string, hosts: string[]): Promise<{ status: number; type: string; body: string }>
   onIslandKit?(cb: (ev: { type: string; [k: string]: unknown }) => void): void
   /** IN48: where a dropped file is on disk ('' when not known). */
   islandFilePath?(f: File): string

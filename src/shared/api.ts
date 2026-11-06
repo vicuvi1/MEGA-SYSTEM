@@ -498,6 +498,11 @@ export interface LifeApi {
     get(): Promise<import('@core/islandTiles').IslandKit>
     save(kit: import('@core/islandTiles').IslandKit): Promise<import('@core/islandTiles').IslandKit>
   }
+  /** PL1–PL8: your widgets, pages, scripts and island look (synced setting island_widgets; cleaned by the caller). */
+  widgets?: {
+    get(): Promise<unknown>
+    save(v: unknown): Promise<void>
+  }
   /** The notebook (Obsidian-like): your notes and Ben's. */
   notes?: {
     list(): Promise<import('@core/notebook').Note[]>

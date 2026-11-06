@@ -10,6 +10,7 @@ import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
 import { islandMoveMenu } from './islandMenu'
 import { createIslandKit } from './islandKit'
+import { widgetFetch } from './widgetNet'
 import { PLACEMENT_LABEL, PLACEMENTS } from './islandWin'
 import { PROFILE_IDS, PROFILE_LABEL } from '../core/islandControlPrefs'
 import { createBackups } from './backups'
@@ -88,7 +89,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   // Camera, microphone, location…: only the app itself may ask for the
   // microphone (voice notes) and notifications; everything else is refused,
   // and the embedded apps get nothing.
-  const own = (url: string) => url.startsWith('life-system://app/') && !url.startsWith('life-system://app/apps/')
+  // Widgets (/widgets/, sandboxed) get nothing either.
+  const own = (url: string) => url.startsWith('life-system://app/') && !url.startsWith('life-system://app/apps/') && !url.startsWith('life-system://app/widgets/')
   session.defaultSession.setPermissionRequestHandler((wc, permission, done, details) => {
     const url = details.requestingUrl || wc.getURL()
     const media = permission === 'media' && (details as any).mediaTypes?.every((m: string) => m === 'audio')
@@ -290,6 +292,8 @@ if (firstCopy) void app.whenReady().then(async () => {
     onFg: (proc) => (eyes.noteWindow(proc, null), islandKit?.noteFg(proc), meetings?.noteFg(proc, null))
   })
   // Island 2: tiles' shortcuts, your own profiles, the mini dock, the clipboard tray, the file shelf.
+  // PL2: widgets' network, checked again here (only the app window may ask).
+  handle('widgets:fetch', (url: unknown, hosts: unknown) => widgetFetch(url, hosts))
   const islandKit = createIslandKit({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, dir, island: island.kit })
   // Meetings: captions in a call and Help me reply (the watcher runs only while you caption).
   const meetings = createMeetings({ origin, inCall: island.inCall, eyesPrefs: eyes.prefs })

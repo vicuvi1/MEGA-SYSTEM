@@ -73,7 +73,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let quietEnd = 0
   // What Windows says (Q2, Q3): mic or camera in use, a full-screen app on the island's screen;
   // and from the island page: a calendar meeting going on now.
-  let busy = { mic: false, fullscreen: false, meeting: false, app: '' }
+  let busy = { mic: false, fullscreen: false, meeting: false, app: '', maximized: false }
   // IF6: programs seen in front lately (memory only, for picking in Settings).
   let recentApps: string[] = []
   let version = 0
@@ -823,7 +823,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   // ---- Quiet, calls and full screen (Q1–Q3, Q5) ----------------------------
   const inCall = () => busy.mic || busy.meeting
   const fullscreenShown = () => busy.fullscreen && desk.fullscreen !== 'show'
-  const sendQuiet = () => win?.webContents.send('island:quiet', { until: quietEnd, call: inCall(), fullscreen: fullscreenShown(), mic: busy.mic, meeting: busy.meeting, fullscreenMode: desk.fullscreen })
+  const sendQuiet = () => win?.webContents.send('island:quiet', { until: quietEnd, call: inCall(), fullscreen: fullscreenShown(), mic: busy.mic, meeting: busy.meeting, fullscreenMode: desk.fullscreen, maximized: busy.maximized })
   let shownWhy = ''
   let leaving = false
   /** Hidden over a full-screen app on its screen (if you chose "hide"), and in a call when you chose "hide". */
@@ -928,6 +928,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       'bool cap=(GetWindowLong(h,-16)&0x00C00000)==0x00C00000;if(cap&&IsZoomed(h))return "";R r;if(!GetWindowRect(h,out r))return "";',
       'MI i=new MI();i.cbSize=Marshal.SizeOf(typeof(MI));if(!GetMonitorInfo(MonitorFromWindow(h,2),ref i))return "";R m=i.rcMonitor;',
       'if(r.L<=m.L&&r.T<=m.T&&r.Rt>=m.Rt&&r.B>=m.B)return ((m.L+m.Rt)/2)+","+((m.T+m.B)/2);return "";}',
+      // BrimDeck-style thin bar: a normal window in front is maximized: that monitor's middle.
+      'public static string Mx(){IntPtr h=GetForegroundWindow();if(h==IntPtr.Zero||!IsZoomed(h))return "";MI i=new MI();i.cbSize=Marshal.SizeOf(typeof(MI));if(!GetMonitorInfo(MonitorFromWindow(h,2),ref i))return "";R m=i.rcMonitor;return ((m.L+m.Rt)/2)+","+((m.T+m.B)/2);}',
       // IF2: the middle of the screen the window in front is on (follow the active window).
       'public static string Mon(){IntPtr h=GetForegroundWindow();if(h==IntPtr.Zero)return "";MI i=new MI();i.cbSize=Marshal.SizeOf(typeof(MI));if(!GetMonitorInfo(MonitorFromWindow(h,2),ref i))return "";R m=i.rcMonitor;return ((m.L+m.Rt)/2)+","+((m.T+m.B)/2);}',
       // Mic / camera: only the apps\' own keys and NonPackaged\'s, not the whole tree.
@@ -946,9 +948,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       "$prev=''; $same=0",
       'while($true){',
       ' $s=0; [void][QN]::SHQueryUserNotificationState([ref]$s)',
-      ' $m=[QN]::Media(); $f=[QN]::Fs(); $g=[QN]::Mon()',
+      ' $m=[QN]::Media(); $f=[QN]::Fs(); $g=[QN]::Mon(); $x=[QN]::Mx()',
       fgLine,
-      ' $o="qs=$s media=$m"; if($f){ $o+=" fs=$f" }; if($g){ $o+=" fgm=$g" }; if($pn){ $o+=" fgp=$($pn -replace \'\\s\',\'_\')" }',
+      ' $o="qs=$s media=$m"; if($f){ $o+=" fs=$f" }; if($g){ $o+=" fgm=$g" }; if($x){ $o+=" max=$x" }; if($pn){ $o+=" fgp=$($pn -replace \'\\s\',\'_\')" }',
       ...(pc.activeApp ? [' $o+=" app=$pn|$tt"'] : []),
       ' Write-Output $o',
       ' if($o -eq $prev){ $same++ } else { $same=0 }; $prev=$o',
@@ -987,9 +989,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       const fsHere = !!w.fs && onIslandScreen(w.fs)
       // IF6: an app you hide it over is in front (on the island's screen, when known).
       const hideApp = hideOverApp({ proc: w.proc ?? null, hideApps: desk.hideApps, onIslandScreen: w.fg ? onIslandScreen(w.fg) : true }) ? w.proc! : ''
-      const next = { ...busy, fullscreen: fsHere || w.qs === QUNS_PRESENTATION, mic: w.media, app: hideApp }
+      const next = { ...busy, fullscreen: fsHere || w.qs === QUNS_PRESENTATION, mic: w.media, app: hideApp, maximized: !!w.max && onIslandScreen(w.max) }
       if (next.app !== busy.app) diag('app', next.app ? `${next.app} is in front: hidden (your list)` : 'The app you hide it over is gone', true)
-      if (next.fullscreen === busy.fullscreen && next.mic === busy.mic && next.app === busy.app) return
+      if (next.fullscreen === busy.fullscreen && next.mic === busy.mic && next.app === busy.app && next.maximized === busy.maximized) return
       if (next.fullscreen !== busy.fullscreen) diag('fs', next.fullscreen ? (fsHere ? 'A full-screen app is on the island\'s screen' : 'Presentation mode is on') : 'No full-screen app on the island\'s screen', true)
       if (next.mic !== busy.mic) diag('mic', next.mic ? 'Microphone or camera in use' : 'Microphone and camera free', true)
       busy = next

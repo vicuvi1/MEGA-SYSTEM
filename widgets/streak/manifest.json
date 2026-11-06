@@ -1,0 +1,10 @@
+{
+  "id": "streak",
+  "name": "Streak ring",
+  "version": "1.0.0",
+  "author": "Life System",
+  "about": "Your current streak as a ring that fills up to the next milestone.",
+  "size": "1x1",
+  "refresh": 300,
+  "permissions": ["read"]
+}

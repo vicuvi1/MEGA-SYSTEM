@@ -92,11 +92,13 @@ export type IslandAction = { id?: string } & (
   | { kind: 'kitLink'; url: string }
   /** Automation hub: run a button, answer a confirm or Ben's ask, close a result (src/core/automations.ts). */
   | ({ kind: 'auto' } & import('./automations').AutoIslandOp)
+  /** PL1–PL5: a widget's or script's checked call (`widget`: its id, or "script:<id>"); the app window checks it again. */
+  | { kind: 'widget'; op: 'fetch' | 'addTask' | 'addNote' | 'notify' | 'save'; widget: string; url?: string; text?: string; setting?: unknown }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget'
   title: string
   text: string
   face?: string

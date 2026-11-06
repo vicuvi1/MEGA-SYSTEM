@@ -11,6 +11,7 @@ import { PcAutomationPanel } from '../PcAutomationPanel'
 import { SettingsShell, type SettingsGroup } from '../SettingsShell'
 import { NotifSettings } from '../NotifSettings'
 import { PluginsPanel } from '../../../plugins/PluginsPanel'
+import { WidgetsPanel } from '../widgets/WidgetsPanel'
 import { useSettingsState, type SettingsProps } from '../settings/useSettingsState'
 import { GeneralSection } from '../settings/general'
 import { LookSection } from '../settings/look'
@@ -98,6 +99,14 @@ export function Settings(props: SettingsProps) {
       hint: 'Weather, GitHub, Gmail, bank import, phone numbers, notes',
       keywords: 'plugins weather rain sunset github ctf gmail mail deadlines bank csv statement import phone shortcut steps weight sleep health obsidian notion notes vault',
       body: <PluginsPanel />
+    },
+    {
+      id: 'widgets',
+      label: 'Widgets',
+      icon: 'spark',
+      hint: 'Widget gallery, script tiles, island pages and the island look',
+      keywords: 'widgets gallery install permissions countdown quote pomodoro streak script tiles pages swipe island look notch capsule theme clock dracula cyberpunk',
+      body: <WidgetsPanel />
     },
     {
       id: 'ai-apps',

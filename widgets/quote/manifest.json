@@ -1,0 +1,10 @@
+{
+  "id": "quote",
+  "name": "Quote of the day",
+  "version": "1.0.0",
+  "author": "Life System",
+  "about": "One short line a day from a small list kept inside the widget (no internet).",
+  "size": "2x1",
+  "refresh": 3600,
+  "permissions": []
+}

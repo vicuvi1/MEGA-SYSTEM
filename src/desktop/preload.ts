@@ -82,6 +82,8 @@ const api: DesktopApi = {
   onIslandDodge: (cb) => void ipcRenderer.on('island:dodge', (_e, on) => cb(!!on)),
   // Island 2 (IN34–IN48): one channel for tiles' shortcuts, the dock, the clipboard tray and the file shelf.
   islandKit: (op, arg) => ipcRenderer.invoke('islandKit', String(op), arg),
+  // PL2: a widget's https request (the desktop checks it again).
+  widgetFetch: (url, hosts) => ipcRenderer.invoke('widgets:fetch', String(url), Array.isArray(hosts) ? hosts.map(String) : []),
   onIslandKit: (cb) => void ipcRenderer.on('islandKit', (_e, ev) => cb(ev)),
   // IN48: a dropped file's place on disk (a reference for the shelf, never its contents).
   islandFilePath: (f) => { try { return webUtils.getPathForFile(f) || '' } catch { return '' } },

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "widgets": [
+    {
+      "id": "countdown",
+      "name": "Countdown",
+      "author": "Life System",
+      "version": "1.0.0",
+      "sha256": "33ec20d7dbf3abb24b446eb7456bca52afea5e07a154e4d1c08b80ff970fcff0",
+      "screenshot": "countdown/screenshot.png",
+      "about": "Days left until a date you pick (an exam, a trip, a deadline)."
+    },
+    {
+      "id": "quote",
+      "name": "Quote of the day",
+      "author": "Life System",
+      "version": "1.0.0",
+      "sha256": "8c636cbd3b4a762bff3f5146793c090d94bca057275af3a15d896ad15f364745",
+      "screenshot": "quote/screenshot.png",
+      "about": "One short line a day from a small list kept inside the widget (no internet)."
+    },
+    {
+      "id": "pomodoro",
+      "name": "Pomodoro mini",
+      "author": "Life System",
+      "version": "1.0.0",
+      "sha256": "6c4718c1bd27eab225cf6cc8c1cdb21e6e571a013ebcbf5c0ff4adaf1c7eb0e8",
+      "screenshot": "pomodoro/screenshot.png",
+      "about": "A tiny 25/5 timer. Plays a sound at the end and can save a note (you confirm)."
+    },
+    {
+      "id": "streak",
+      "name": "Streak ring",
+      "author": "Life System",
+      "version": "1.0.0",
+      "sha256": "88cbd6f1202a85d32ccfd4175cbc30293d0ffd52f6d4552e5bb83f28faba7ead",
+      "screenshot": "streak/screenshot.png",
+      "about": "Your current streak as a ring that fills up to the next milestone."
+    }
+  ]
+}

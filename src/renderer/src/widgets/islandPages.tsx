@@ -109,10 +109,19 @@ export function IslandPager({ snap, tap, now, day, profile }: { snap: IslandSnap
   // Opening: the page for this time / profile when it follows one, else the one you left it on.
   const [cur, setCur] = useState<string>(() => autoPage(prefs, { hour: new Date().getHours(), profile }, shown) ?? readLast() ?? 'day')
   const [dir, setDir] = useState(0)
+  // The carousel: the page you leave slides out while the new one slides in (260 ms), then it is gone.
+  const [leaving, setLeaving] = useState<{ id: string; dir: number; n: number } | null>(null)
   const page = shown.includes(cur) ? cur : shown[0]
+  useEffect(() => {
+    if (!leaving) return
+    const t = window.setTimeout(() => setLeaving(null), 280)
+    return () => clearTimeout(t)
+  }, [leaving])
   const go = (id: string) => {
     if (id === page) return
-    setDir(shown.indexOf(id) > shown.indexOf(page) ? 1 : -1)
+    const d = shown.indexOf(id) > shown.indexOf(page) ? 1 : -1
+    setDir(d)
+    setLeaving((l) => ({ id: page, dir: d, n: (l?.n ?? 0) + 1 }))
     setCur(id)
     saveLast(id)
   }
@@ -183,8 +192,19 @@ export function IslandPager({ snap, tap, now, day, profile }: { snap: IslandSnap
           </button>
         ))}
       </nav>
-      <div key={page} className={`ip-page ${dir > 0 ? 'from-right' : dir < 0 ? 'from-left' : ''}`} role="tabpanel" aria-label={active?.title}>
-        {active?.render({ snap, tap, now, day })}
+      <div className="ip-stage">
+        {/* Keyed by page: the page you leave keeps its parts (nothing reloads) while it slides out. */}
+        {[...(leaving && leaving.id !== page && shown.includes(leaving.id) ? [leaving.id] : []), page].map((id) =>
+          id === page ? (
+            <div key={id} className={`ip-page ${dir > 0 ? 'from-right' : dir < 0 ? 'from-left' : ''}`} role="tabpanel" aria-label={active?.title}>
+              {active?.render({ snap, tap, now, day })}
+            </div>
+          ) : (
+            <div key={id} className={`ip-page ip-out ${leaving!.dir > 0 ? 'to-left' : 'to-right'}`} aria-hidden>
+              {all.find((p) => p.id === id)?.render({ snap, tap, now, day })}
+            </div>
+          )
+        )}
       </div>
     </div>
   )

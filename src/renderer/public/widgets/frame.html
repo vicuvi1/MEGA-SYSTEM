@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<!-- A widget's box (PL1): opened as sandbox="allow-scripts" only (an opaque
+     origin: no cookies, no storage, nothing of the app's). This page's own
+     policy: scripts only from here and the one blob made from the checked
+     widget code; no network at all, no frames, no forms. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src data: blob:; font-src 'none'; connect-src 'none'; media-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'">
+<meta name="referrer" content="no-referrer">
+<link rel="stylesheet" href="frame.css">
+</head>
+<body>
+<div id="w" aria-live="polite"></div>
+<script src="frame.js"></script>
+</body>
+</html>
