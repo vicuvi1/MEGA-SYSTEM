@@ -20,6 +20,9 @@ import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
 import { DeepWork, MissTwiceCard, NextUpBar, WeekStrip } from '../TodayExtras'
+import { PageTabs, TabPanel, usePageTab, type PageTab } from '../PageTabs'
+import { HealthyToday, SleepToday, useHealthyToday } from '../TodayBody'
+import '../todayTabs.css'
 import { PluginCards } from '../../../plugins/cards'
 import { MoneyPill } from '../MoneyQuick'
 
@@ -86,41 +89,10 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       /* private window */
     }
   }
-  const [repsOpen, setRepsOpenState] = useState(() => {
-    try {
-      return localStorage.getItem('ls.todayReps') !== '0'
-    } catch {
-      return true
-    }
-  })
-  const setRepsOpen = (v: boolean) => {
-    setRepsOpenState(v)
-    try {
-      localStorage.setItem('ls.todayReps', v ? '1' : '0')
-    } catch {
-      /* private window */
-    }
-  }
   // Your sections, in your order (Settings → Today screen).
   const sections: Record<TodaySectionId, () => ReactNode> = {
-    reps: () => (
-      <details className="td-fold" open={repsOpen} onToggle={(e) => setRepsOpen((e.target as HTMLDetailsElement).open)}>
-        <summary>
-          <span>Reps & water</span>
-          <small>{repsOpen ? 'hide' : 'show'}</small>
-        </summary>
-        <SoloDailyQuestBanner body={body ?? null} summary={summary} onRefresh={() => onChange()} onGo={onGo} />
-      </details>
-    ),
-    day: () => (
-      <>
-      <LifeModeCard compact />
-      <YearOffer onOpen={() => openYear(onGo)} />
-      <MissTwiceCard />
-      <CoachPlan oneApprove hideReview onChange={() => onChange()} />
-      <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} />
-      </>
-    ),
+    reps: () => null,
+    day: () => null,
     progress: () => <ProgressCard onOpen={() => onGo('progress')} />,
     timeline: () => null,
     fun: () => <FunCard onWallet={() => onChange()} onOpenShop={onOpenShop} />,
@@ -186,50 +158,124 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
       )
   }
 
-  // A calm cockpit: Ben and the one move on top; your day's timeline on the
-  // right, full height; the lists on the left. On a big screen each column
-  // scrolls on its own, so the page never feels endless.
+  // Today's switch (the teacher's "too much scrolling"): Now, Plan, Tasks,
+  // Body and Week, each about one laptop screen. Your day stays on the right
+  // on a wide screen; on a narrow one or the phone it is its own tab.
   const on = todayLayout(ui).filter((x) => x.on)
-  // One page: the lists, reps and the week on the left; your day, big, on the right.
-  const MAIN: TodaySectionId[] = ['day', 'reps']
-  const SIDE: TodaySectionId[] = []
-  const FOLDED = on.filter((x) => !MAIN.includes(x.id) && !SIDE.includes(x.id) && x.id !== 'timeline')
+  const has = (id: TodaySectionId) => on.some((x) => x.id === id)
+  const narrow = useNarrow(1100)
+  const [tasksEl, setTasksEl] = useState<HTMLDivElement | null>(null)
+  const [weekEl, setWeekEl] = useState<HTMLDivElement | null>(null)
+  const [counts, setCounts] = useState<{ tasks: number; late: number; mustDone: number; mustTotal: number } | null>(null)
+  const { health, sleep } = useHealthyToday()
+  const showDay = narrow && has('timeline')
+  const tabs: PageTab[] = [
+    // Must-dos are counted on the Now tab itself (the top row and the list), so its tab has no number.
+    { id: 'now', label: 'Now', title: "What's on now, your must-dos and habits (1)" },
+    { id: 'plan', label: 'Plan', title: "Ben's plan for today (2)" },
+    { id: 'tasks', label: 'Tasks', count: counts ? counts.tasks : null, title: `Everything else today${counts?.late ? `, ${counts.late} late` : ''}, and coming up (3)` },
+    { id: 'body', label: 'Body', count: health ? `${health.met}/4` : null, title: 'Reps, water, sleep and your healthy day (4)' },
+    { id: 'week', label: 'Week', title: 'This week, the week score and more (5)' },
+    ...(showDay ? [{ id: 'day', label: 'Day', title: 'Your day, hour by hour (6)' }] : [])
+  ]
+  const [tab, setTab] = usePageTab('today', tabs.map((t) => t.id), 'now')
+  // Things that need the Now tab (closing the day, logging spending) bring it up.
+  useEffect(() => {
+    const toNow = () => setTab('now')
+    const toPlan = () => setTab('plan')
+    window.addEventListener('life-close-day', toNow)
+    window.addEventListener('life-open-spend', toNow)
+    window.addEventListener('life-show-plan', toPlan)
+    return () => {
+      window.removeEventListener('life-close-day', toNow)
+      window.removeEventListener('life-open-spend', toNow)
+      window.removeEventListener('life-show-plan', toPlan)
+    }
+  }, [setTab])
+  const FOLDED = on.filter((x) => x.id === 'fun' || x.id === 'quicklog')
+  const day = (
+    <>
+      {has('timeline') && <TodayStrip />}
+      <PluginCards />
+    </>
+  )
   return (
-    <div className="today td2">
-      <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
-      <MoneyPill />
-      <NextUpBar />
-      <DeepWork />
+    <div className="today td2 td-tabs">
       <div className="cmd">
         <div className="cmd-main">
-          {on.filter((x) => MAIN.includes(x.id)).map((x) => (
-            <Fragment key={x.id}>{sections[x.id]()}</Fragment>
-          ))}
-          <WeekStrip />
-          {FOLDED.length > 0 && (
-            <details className="td-more" open={moreOpen} onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
-              <summary>
-                <span>More</span>
-                <small>{FOLDED.map((x) => ({ progress: 'week score', fun: 'fun time', quicklog: 'quick log', day: '', timeline: '', reps: '' })[x.id]).filter(Boolean).join(' · ')}</small>
-              </summary>
-              <div className="td-more-body">
-                {FOLDED.map((x) => (
-                  <Fragment key={x.id}>{sections[x.id]()}</Fragment>
-                ))}
-              </div>
-            </details>
+          <PageTabs page="today" label="Today views" tabs={tabs} value={tab} onChange={setTab} />
+          <TabPanel page="today" id="now" value={tab}>
+            <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
+            <MoneyPill />
+            <NextUpBar />
+            {has('day') && (
+              <>
+                <LifeModeCard compact />
+                <YearOffer onOpen={() => openYear(onGo)} />
+                <MissTwiceCard />
+                <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} tasksSlot={tasksEl} weekSlot={weekEl} onCounts={setCounts} />
+              </>
+            )}
+          </TabPanel>
+          <TabPanel page="today" id="plan" value={tab} className="td-plan">
+            <CoachPlan oneApprove hideReview onChange={() => onChange()} />
+            <p className="hint td-plan-none">No plan for today. Ben plans the morning; ask him on the Coach page.</p>
+          </TabPanel>
+          <TabPanel page="today" id="tasks" value={tab}>
+            <div ref={setTasksEl} className="td-slot" />
+            {!has('day') && <p className="hint">Today's list is off in Settings → Look → Today screen.</p>}
+          </TabPanel>
+          <TabPanel page="today" id="body" value={tab} className="td-body">
+            <div className="td-body-top">
+              <HealthyToday health={health} />
+              <SleepToday sleep={sleep} onOpen={() => onGo('sleep')} />
+            </div>
+            {has('reps') && <SoloDailyQuestBanner body={body ?? null} summary={summary} onRefresh={() => onChange()} onGo={onGo} />}
+          </TabPanel>
+          <TabPanel page="today" id="week" value={tab}>
+            <WeekStrip />
+            <div ref={setWeekEl} className="td-slot" />
+            {has('progress') && <ProgressCard onOpen={() => onGo('progress')} />}
+            {FOLDED.length > 0 && (
+              <details className="td-more" open={moreOpen} onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
+                <summary>
+                  <span>More</span>
+                  <small>{FOLDED.map((x) => (x.id === 'fun' ? 'fun time' : 'quick log')).join(' · ')}</small>
+                </summary>
+                <div className="td-more-body">
+                  {FOLDED.map((x) => (
+                    <Fragment key={x.id}>{sections[x.id]()}</Fragment>
+                  ))}
+                </div>
+              </details>
+            )}
+          </TabPanel>
+          {showDay && (
+            <TabPanel page="today" id="day" value={tab} className="td-day">
+              {day}
+            </TabPanel>
           )}
         </div>
-        <aside className="cmd-side">
-          {on.some((x) => x.id === 'timeline') && <TodayStrip />}
-          <PluginCards />
-          {on.filter((x) => SIDE.includes(x.id)).map((x) => (
-            <Fragment key={x.id}>{sections[x.id]()}</Fragment>
-          ))}
-        </aside>
+        {!narrow && <aside className="cmd-side">{day}</aside>}
       </div>
+      <DeepWork />
     </div>
   )
+}
+
+/** True while the window is narrower than `px` (Today's Day tab). */
+function useNarrow(px: number): boolean {
+  const q = `(max-width: ${px - 0.02}px)`
+  const [v, setV] = useState(() => typeof matchMedia === 'function' && matchMedia(q).matches)
+  useEffect(() => {
+    if (typeof matchMedia !== 'function') return
+    const m = matchMedia(q)
+    const on = () => setV(m.matches)
+    on()
+    m.addEventListener('change', on)
+    return () => m.removeEventListener('change', on)
+  }, [q])
+  return v
 }
 
 /** The day strip with today's Todoist tasks; a task dropped on it gets a block there. */

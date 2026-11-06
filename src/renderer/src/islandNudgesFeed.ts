@@ -232,6 +232,18 @@ export async function healthTick(now: number, water: { ml: number; target: numbe
   return { today: healthyView(h, streak, !!paid), week: null }
 }
 
+/**
+ * Today's Healthy day ring, read only (Today → Body): the same numbers as the
+ * island's ring, but it never pays or takes back the bonus (only healthTick does).
+ */
+export async function healthPeek(now: number, water: { ml: number; target: number }, slept: boolean | null): Promise<HealthyView> {
+  const s = await load()
+  const day = today(now)
+  const d = dayOf(s, day)
+  const h = healthyDay({ waterMl: water.ml, waterTarget: water.target, moves: d.moves, breaks: screenBreaks(d), sleptOnTime: slept })
+  return healthyView(h, healthyStreak(s.days, day), !!d.healthyPaid)
+}
+
 /** You took a water reminder (learning: a yes at this hour). */
 export function nudgeYes(kind: NudgeKind): void {
   if (store) save({ ...store, stats: noteAnswer(store.stats, kind, true, new Date().getHours()) })

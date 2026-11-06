@@ -108,6 +108,7 @@ export function TodayTaskRow({
       ref={ref}
       data-swipe={`${starred ? 'star' : 'todo'}:${t.id}`}
       data-task={t.id}
+      data-hotkeys=""
       className={`tt-row ${leaving ? 'leaving' : ''} ${dropping ? 'drop-before' : ''} ${menu ? 'menu-open' : ''} ${up ? 'pop-up' : ''}`}
       style={{ ['--c' as string]: color, ['--pc' as string]: P_COLOR[t.priority] }}
       onMouseEnter={() => onHot(t.id)}

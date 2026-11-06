@@ -94,7 +94,10 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
       if (m.kind === 'focus') await act(() => life.focus.start(m.subject, m.minutes, null), `Focus started: ${m.subject} · ${m.minutes} min`)
       else if (m.kind === 'running') await act(() => life.focus.stop(), 'Logged')
       else if (m.kind === 'approve') await act(() => life.coach!.rhythm!('approve'), 'Approved: blocks in your calendar, must-dos on Today')
-      else if (m.kind === 'plan') await act(() => life.coach!.rhythm!('propose'), 'Your plan is ready: see below')
+      else if (m.kind === 'plan') {
+        const ok = await act(() => life.coach!.rhythm!('propose'), 'Your plan is ready: here it is')
+        if (ok) window.dispatchEvent(new CustomEvent('life-show-plan'))
+      }
       else if (m.kind === 'answer') {
         const r = await act(() => life.coach!.chat(`Done: ${m.promise}`))
         if (r?.reply) await act(async () => r, r.reply.slice(0, 140))

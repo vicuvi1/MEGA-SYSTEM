@@ -1,0 +1,27 @@
+/* How each page sits under its switch (PageTabs): so a tab fits one laptop screen. */
+
+/* Settings: a long section shows the cards of one tab. */
+.st-grid-tabs > [data-st-off] { display: none !important; }
+.st-grid-tabs > :not([data-st-off]) { animation: ptab-in 0.22s var(--ease-out, ease-out) both; }
+.st-tabs { position: sticky; top: 0; z-index: 6; }
+.st-tabs .ptabs-wrap { margin-bottom: 4px; }
+.st-body .is-sec { scroll-margin-top: 72px; }
+@media (prefers-reduced-motion: reduce) { .st-grid-tabs > :not([data-st-off]) { animation: none; } }
+
+/* Insights → Areas: four across on a laptop, so the seven areas fit in two rows. */
+@media (min-width: 1000px) { .pg-grid.pg-grid-tab { grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); } }
+
+/* Goals → Hours, when there are none yet. */
+.gx-none { padding: 16px 18px; border-radius: 16px; background: var(--surface); margin: 0; }
+
+/* Rewards: the quests and badges are their own tab, so the rewards use the full width. */
+.rx-layout.rx-one { grid-template-columns: minmax(0, 1fr); }
+.rx-earn { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 760px) { .rx .ptabs-wrap { top: 60px; } }
+
+/* Money: the hub's cards under its switch. */
+.mh .ptab-panel { gap: 18px; }
+.mh .ptab-panel > .mh-grid, .mh .ptab-panel > .mh-top { margin: 0; }
+
+/* Discipline: the switch sits under the privacy eye. */
+.discipline .ptab-panel { gap: var(--s-4, 16px); }

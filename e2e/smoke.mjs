@@ -49,6 +49,7 @@ try {
     await pg.waitForSelector('.thb', { timeout: 15000 })
     if (process.env.PLAN_SHOTS) {
       await pg.waitForTimeout(1500)
+      await pg.click('.td2 .ptabs [data-tab="plan"]')
       const cp = pg.locator('section.cp').first()
       if (await cp.count()) {
         await cp.locator('.pa-head').first().click().catch(() => {})
@@ -75,6 +76,84 @@ try {
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+
+  // The teacher's review: Today was one long scroll. Now a switch (Now · Plan · Tasks · Body · Week):
+  // each tab about one laptop screen (1280×720, 150 % on a 1080p screen), the last tab remembered,
+  // ←/→ on the switch and 1–5 on the page, Ctrl+K "water" opens Body.
+  const tabFit = async (scope, id, limit = 1.75) => {
+    await pg.click(`${scope} .ptabs [data-tab="${id}"]`)
+    await pg.waitForFunction(([sc, t]) => document.querySelector(`${sc} .ptabs [data-tab="${t}"]`)?.getAttribute('aria-selected') === 'true', [scope, id], { timeout: 3000 })
+    await pg.waitForTimeout(450)
+    const r = await pg.evaluate(([sc, t]) => {
+      const c = document.querySelector('main.content')
+      const panel = [...document.querySelectorAll(`${sc} [role="tabpanel"], ${sc} .st-grid-tabs`)].find((e) => e.offsetParent) ?? document.querySelector(sc) // Rewards' tabs filter one list
+      return { scroll: c.scrollHeight, view: c.clientHeight, text: (panel?.textContent ?? '').trim().length, sel: [...document.querySelectorAll(`${sc} .ptabs [aria-selected="true"]`)].map((b) => b.dataset.tab) }
+    }, [scope, id])
+    if (r.sel.join() !== id) throw new Error(`${id}: the switch shows ${r.sel.join()}`)
+    if (r.text < 10) throw new Error(`${id} looks empty`)
+    if (r.scroll > r.view * limit) throw new Error(`${id} needs ${(r.scroll / r.view).toFixed(2)} screens (over ${limit})`)
+    return r
+  }
+  await step('Today tabs: each fits a laptop screen, keys and Ctrl+K switch, the last tab is remembered', async () => {
+    await pg.setViewportSize({ width: 1280, height: 720 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="now"]', { timeout: 10000 })
+    const ids = await pg.locator('.td2 .ptabs [role="tab"]').evaluateAll((bs) => bs.map((b) => b.dataset.tab))
+    if (ids.join() !== 'now,plan,tasks,body,week') throw new Error(`tabs ${ids.join()}`)
+    // Your day stays beside the tabs on a laptop (no Day tab there).
+    if (!(await pg.locator('.td2 .cmd-side .ds').first().isVisible())) throw new Error('"Your day" is not beside the tabs')
+    const sizes = []
+    for (const id of ids) sizes.push(`${id} ${((await tabFit('.td2', id)).scroll / 654).toFixed(2)}`)
+    // Each thing once: must-dos on Now, the rest of today on Tasks, water on Body.
+    await pg.click('.td2 .ptabs [data-tab="tasks"]')
+    if (!(await pg.locator('.td2 .dl-tasks .dl-tabs').isVisible())) throw new Error('the task tabs are not on Tasks')
+    if (await pg.locator('[data-tabpanel="now"] .dl-tabs').count()) throw new Error('the task tabs are also on Now')
+    await pg.click('.td2 .ptabs [data-tab="body"]')
+    if ((await pg.locator('[data-tabpanel="body"]', { hasText: /\d+\/\d+ ml/ }).count()) !== 1) throw new Error('water is not on Body')
+    if (await pg.locator('[data-tabpanel="body"] .tb-parts', { hasText: /\d(\.\d)? of \d(\.\d)? L/ }).count()) throw new Error('the healthy-day card repeats the water amount')
+    // Small counts on the tabs.
+    if (!/\d+\/4/.test(await pg.locator('.td2 .ptabs [data-tab="body"]').innerText())) throw new Error('no healthy-day count on Body')
+    if (!/\d/.test(await pg.locator('.td2 .ptabs [data-tab="tasks"]').innerText())) throw new Error('no count on Tasks')
+    // Keyboard: ← / → on the switch, 1–5 on the page.
+    await pg.focus('.td2 .ptabs [data-tab="body"]')
+    await pg.keyboard.press('ArrowRight')
+    await pg.waitForFunction(() => document.querySelector('.td2 .ptabs [data-tab="week"]')?.getAttribute('aria-selected') === 'true', null, { timeout: 2000 })
+    if ((await pg.evaluate(() => document.activeElement?.dataset?.tab)) !== 'week') throw new Error('focus did not follow the arrow')
+    await pg.locator('.td2 .ptab-panel:visible').first().click({ position: { x: 5, y: 5 } }).catch(() => {})
+    await pg.evaluate(() => document.activeElement?.blur?.())
+    await pg.keyboard.press('2')
+    await pg.waitForFunction(() => document.querySelector('.td2 .ptabs [data-tab="plan"]')?.getAttribute('aria-selected') === 'true', null, { timeout: 2000 })
+    // Ctrl+K "water" opens Today on Body.
+    await pg.keyboard.press('Control+k')
+    await pg.waitForSelector('.palette input', { timeout: 3000 })
+    await pg.fill('.palette input', 'water, reps')
+    await pg.locator('.palette-item', { hasText: 'Water, reps and sleep' }).first().click()
+    await pg.waitForFunction(() => document.querySelector('.td2 .ptabs [data-tab="body"]')?.getAttribute('aria-selected') === 'true', null, { timeout: 3000 })
+    // Remembered on this device: a fresh page opens Today on Body again.
+    const p2 = await pg.context().newPage()
+    try {
+      await p2.setViewportSize({ width: 1280, height: 720 })
+      await p2.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
+      await p2.goto(pg.url())
+      await p2.waitForSelector('.td2, input', { timeout: 20000 })
+      if (!(await p2.$('.td2'))) {
+        await p2.fill('input', '1234')
+        await p2.keyboard.press('Enter')
+      }
+      await p2.waitForSelector('.td2 .ptabs [data-tab="body"][aria-selected="true"]', { timeout: 20000 })
+    } finally {
+      await p2.close()
+    }
+    // A narrow window: "Your day" becomes its own tab in the same switch.
+    await pg.setViewportSize({ width: 900, height: 720 })
+    await pg.waitForSelector('.td2 .ptabs [data-tab="day"]', { timeout: 3000 })
+    await pg.click('.td2 .ptabs [data-tab="day"]')
+    await pg.waitForSelector('[data-tabpanel="day"] .ds', { timeout: 5000 })
+    await pg.setViewportSize({ width: 1280, height: 720 })
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    console.log(`  Today screens: ${sizes.join(' · ')}`)
+  })
   // Night 11: Money opens on its own hub (Finance Helper's synced numbers), with quick add.
   await step('Money hub: safe to spend, quick add into Finance Helper, insights', async () => {
     await open('money')
@@ -110,12 +189,14 @@ try {
     await open('shop')
     await pg.waitForSelector('.rx-hero .rx-balance', { timeout: 10000 })
     await pg.waitForSelector('.rx-ben', { timeout: 5000 })
-    await pg.click('.rx-tabs button:nth-child(3)')
+    await pg.click('.rx .ptabs [data-tab="all"]')
     await pg.waitForSelector('.rx-card .rx-title', { timeout: 5000 })
   })
   // One place each: the points and Settings live in the top bar only; the sidebar has neither.
   await step('Points and Settings show once (top bar), not in the sidebar', async () => {
     await open('today')
+    // Today's top row lives on its Now tab.
+    await pg.click('.td2 .ptabs [data-tab="now"]').catch(() => {})
     await pg.waitForSelector('aside.sb .sb-item', { timeout: 10000 })
     if (await pg.$('aside.sb .sb-me, aside.sb .sb-tools, aside.sb .sb-tool')) throw new Error('the sidebar still has a points card or a Settings tile')
     if (await pg.locator('aside.sb', { hasText: /points|Settings/i }).count()) throw new Error('the sidebar still mentions points or Settings')
@@ -488,6 +569,7 @@ try {
     await pg.waitForSelector('.vb-card', { timeout: 5000 })
     if (!(await pg.$('.vb-now'))) throw new Error('no "Play something for now" button')
     if ((await pg.locator('.vb-card').count()) < 6) throw new Error('fewer than 6 starter stations')
+    await pg.click('.mup .ptabs [data-tab="library"]')
     await pg.fill('.mu-add input', 'https://soundcloud.com/example-artist/sets/smoke-mix')
     await pg.locator('.mu-add .mu-btn').click()
     await pg.waitForSelector('.mup-manage li', { timeout: 5000 })
@@ -495,6 +577,7 @@ try {
   })
   // "Your SoundCloud": connect by username (a made-up profile) shows your Likes and tracks as cards.
   await step('Music: connect by username shows "Your SoundCloud" with Likes and tracks', async () => {
+    await pg.click('.mup .ptabs [data-tab="options"]')
     await pg.fill('.ysc-connect input', 'https://soundcloud.com/example-listener/likes')
     await pg.locator('.ysc-connect .mu-btn').click()
     await pg.waitForSelector('.ysc-card', { timeout: 5000 })
@@ -1387,6 +1470,58 @@ try {
     await pg.waitForSelector('.wg-ask', { timeout: 3000 })
     if (!/today’s plan/.test(await pg.locator('.wg-ask').innerText())) throw new Error('the install ask does not say what it reads')
     await pg.locator('.wg-ask').getByRole('button', { name: 'Cancel' }).click()
+  })
+  // The same switch on every long page: each tab about one laptop screen.
+  await step('Long pages: Insights, Goals, Money, Discipline, Music, Rewards and long Settings sections fit by tabs', async () => {
+    await pg.setViewportSize({ width: 1280, height: 720 })
+    const report = []
+    const pages = [
+      ['progress', '.pg', ['week', 'areas', 'streaks', 'focus', 'look'], { week: 2.2 }],
+      ['goals', '.gx', ['goals', 'hours', 'path'], { goals: 2.6 }],
+      ['money', '.mh', ['today', 'month', 'goals'], {}],
+      ['discipline', '.discipline', ['today', 'milestones', 'history'], {}],
+      ['music', '.mup', ['player', 'library', 'options'], {}],
+      ['shop', '.rx', ['now', 'saving', 'all', 'history', 'earn'], { all: 2 }]
+    ]
+    for (const [page, scope, ids, wide] of pages) {
+      await open(page)
+      // Money: its own hub (an earlier step opened the Finance Helper app).
+      if (page === 'money') await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click({ timeout: 5000 }).catch(() => {})
+      await pg.waitForSelector(`${scope} .ptabs [data-tab="${ids[0]}"]`, { timeout: 15000 })
+      const got = await pg.locator(`${scope} .ptabs [role="tab"]`).evaluateAll((bs) => bs.map((b) => b.dataset.tab))
+      if (got.slice(0, ids.length).join() !== ids.join()) throw new Error(`${page} tabs ${got.join()}`)
+      const sizes = []
+      // (the week plan, the goal cards and all rewards are lists that grow with you)
+      for (const id of ids) sizes.push(`${id} ${((await tabFit(scope, id, wide[id] ?? 1.75)).scroll / 654).toFixed(2)}`)
+      // Remembered when you come back.
+      await open('today')
+      await pg.waitForSelector('.td2', { timeout: 10000 })
+      await open(page)
+      await pg.waitForSelector(`${scope} .ptabs [data-tab="${ids[ids.length - 1]}"][aria-selected="true"]`, { timeout: 5000 })
+      await pg.click(`${scope} .ptabs [data-tab="${ids[0]}"]`)
+      report.push(`${page}: ${sizes.join(', ')}`)
+    }
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['brain', 'talk', 'notes']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
+      await pg.locator('.st-item', { hasText: name }).first().click()
+      await pg.waitForFunction((n) => document.querySelector('.st-head h1')?.textContent === n, name, { timeout: 5000 })
+      await pg.waitForSelector(`.st-tabs .ptabs [data-tab="${ids[0]}"]`, { timeout: 8000 })
+      const sizes = []
+      // (the Telegram bots card and the Today screen card are one long card each)
+      const oneCard = { 'connections.telegram': 3.8, 'look.today': 2.4 }
+      for (const id of ids) {
+        if (!(await pg.waitForSelector(`.st-tabs .ptabs [data-tab="${id}"]`, { timeout: 8000 }).catch(() => null))) {
+          const heads = await pg.evaluate(() => [...document.querySelectorAll('.st-grid-tabs > *')].map((e) => (e.querySelector('h2, h3')?.textContent ?? '').trim().slice(0, 24)))
+          throw new Error(`settings ${sec}: no "${id}" tab (cards: ${heads.join(' | ')})`)
+        }
+        sizes.push(`${id} ${((await tabFit('.st-body', id, oneCard[`${sec}.${id}`] ?? 2)).scroll / 654).toFixed(2)}`)
+      }
+      report.push(`settings ${sec}: ${sizes.join(', ')}`)
+      await pg.click(`.st-tabs .ptabs [data-tab="${ids[0]}"]`)
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    console.log(`  ${report.join('\n  ')}`)
   })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))

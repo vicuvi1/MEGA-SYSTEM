@@ -4,6 +4,7 @@
 // the fun budget and what a point is worth. The full Finance Helper app is one
 // tap away ("Open full app", the embedded app). The old separate expense
 // list is gone: every lei comes from Finance Helper.
+import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { ConnectionsState, MoneyDaysState } from '@shared/api'
 import { life } from '../bridge'
@@ -76,6 +77,7 @@ function useHub(): [MoneyHubView | null | undefined, (v: MoneyHubView | null) =>
 
 export function Money({ state, onState, onWallet, onOpenApp }: { state: ConnectionsState; onState: (s: ConnectionsState) => void; onWallet: () => void; onOpenApp?: () => void }) {
   const [view] = useHub()
+  const [tab, setTab] = usePageTab('money', ['today', 'month', 'goals'], 'today')
   const days = useMoneyDays(onWallet)
   const ring = useRef<HTMLDivElement>(null)
   const [pop, setPop] = useState(0)
@@ -97,29 +99,48 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
         <EmptyHub onOpenApp={openApp} />
       ) : (
         <>
-          <div className="mh-top">
-            <Hero view={view} ringRef={ring} pop={pop} streak={days.state?.streak.days ?? 0} />
-            <section className="mh-card mh-quick">
-              <header className="mh-head">
-                <h2>
-                  <Icon name="plus" size={16} /> Quick add
-                </h2>
-                <span className="mh-hint">Enter saves</span>
-              </header>
-              <QuickAddBox onAdded={added} />
-              <Recent view={view} />
-            </section>
-          </div>
-          <div className="mh-grid">
-            <WhereMoneyGoes view={view} />
-            <Forecast view={view} />
-            <Goals view={view} />
-            <div className="mh-stack">
-              <FunCard />
-              <PointsCard state={state} onState={onState} days={days} onWallet={onWallet} />
+          <PageTabs
+            page="money"
+            label="Money views"
+            tabs={[
+              { id: 'today', label: 'Today', title: 'Safe to spend, quick add, what you logged (1)' },
+              { id: 'month', label: 'Month', title: 'Where money goes and the forecast (2)' },
+              { id: 'goals', label: 'Goals & points', title: 'Savings goals, fun budget, points for money (3)' }
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+          <TabPanel page="money" id="today" value={tab}>
+            <div className="mh-top">
+              <Hero view={view} ringRef={ring} pop={pop} streak={days.state?.streak.days ?? 0} />
+              <section className="mh-card mh-quick">
+                <header className="mh-head">
+                  <h2>
+                    <Icon name="plus" size={16} /> Quick add
+                  </h2>
+                  <span className="mh-hint">Enter saves</span>
+                </header>
+                <QuickAddBox onAdded={added} />
+                <Recent view={view} />
+              </section>
             </div>
             <OpenApp onOpenApp={openApp} />
-          </div>
+          </TabPanel>
+          <TabPanel page="money" id="month" value={tab}>
+            <div className="mh-grid">
+              <WhereMoneyGoes view={view} />
+              <Forecast view={view} />
+            </div>
+          </TabPanel>
+          <TabPanel page="money" id="goals" value={tab}>
+            <div className="mh-grid">
+              <Goals view={view} />
+              <div className="mh-stack">
+                <FunCard />
+                <PointsCard state={state} onState={onState} days={days} onWallet={onWallet} />
+              </div>
+            </div>
+          </TabPanel>
         </>
       )}
       <BankImport />

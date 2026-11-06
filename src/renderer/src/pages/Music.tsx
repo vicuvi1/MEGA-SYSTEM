@@ -20,7 +20,8 @@ import {
 } from '../music/MusicUi'
 import { VibeGrid } from '../music/VibeGrid'
 import { hasScWeb, useScWeb } from '../music/scWeb'
-import { LikeButton, ScWebPanel, useMusicTab, YourScRow } from '../music/YourSoundCloud'
+import { LikeButton, MUSIC_TAB_KEY, ScWebPanel, YourScRow } from '../music/YourSoundCloud'
+import { PageTabs, TabPanel, usePageTab, type PageTab } from '../PageTabs'
 import '../music/musicPage.css'
 
 function useMusicKit(): [IslandKit, (m: Partial<MusicKit>) => void] {
@@ -45,7 +46,20 @@ export function Music() {
   const sys = useSystemPlayers(!!window.desktop?.pcx)
   const web = useScWeb()
   const f = useFollowed(sc, sys, music.pin, web)
-  const [tab, setTab] = useMusicTab()
+  // Player · Library · Options (and Your SoundCloud, signed in, on the desktop): one switch.
+  const tabList: PageTab[] = [
+    { id: 'player', label: 'Player', title: 'Now playing, lyrics, up next (1)' },
+    { id: 'library', label: 'Library', count: music.stations.length || null, title: 'Your stations, favourites and recently played (2)' },
+    { id: 'options', label: 'Options', title: 'Your SoundCloud name, lyrics and the pill (3)' },
+    ...(hasScWeb() ? [{ id: 'web', label: 'Your SoundCloud', title: "SoundCloud's own site, signed in (4)" }] : [])
+  ]
+  const [tab, setTab] = usePageTab('music', tabList.map((t) => t.id), 'player', MUSIC_TAB_KEY)
+  useEffect(() => {
+    // "Your mixes" on the island opens the signed-in tab.
+    const ev = (e: Event) => setTab((e as CustomEvent).detail === 'web' && hasScWeb() ? 'web' : 'player')
+    window.addEventListener('life-music-tab', ev)
+    return () => window.removeEventListener('life-music-tab', ev)
+  }, [setTab])
   const { ctl } = f
   const s = ctl.s
   const tint = useTint(s, '#c8f135')
@@ -66,13 +80,7 @@ export function Music() {
     setName('')
     saveMusic({ stations: r.list })
   }
-  // Desktop: "Player" and "Your SoundCloud" (SoundCloud's own home, signed in).
-  const tabs = hasScWeb() && (
-    <div className="mup-tabs" role="tablist" aria-label="Music views">
-      <button role="tab" aria-selected={tab === 'player'} className={`mu-chip ${tab === 'player' ? 'on' : ''}`} onClick={() => setTab('player')}>Player</button>
-      <button role="tab" aria-selected={tab === 'web'} className={`mu-chip ${tab === 'web' ? 'on' : ''}`} onClick={() => setTab('web')}>Your SoundCloud</button>
-    </div>
-  )
+  const tabs = <PageTabs page="music" label="Music views" tabs={tabList} value={tab} onChange={setTab} />
   if (tab === 'web') {
     return (
       <div className="mup mu" style={tintStyle(tint.rgb, s)}>
@@ -84,9 +92,7 @@ export function Music() {
   return (
     <div className="mup mu" style={tintStyle(tint.rgb, s)}>
       {tabs}
-      <section className="mup-card" aria-label="Your SoundCloud">
-        <YourScRow music={music} save={saveMusic} ctl={sc} press={press} prefix="page" />
-      </section>
+      <TabPanel page="music" id="player" value={tab}>
       {f.kind === 'none' && !sc.probing && (
         <section className="mup-card mup-vibes" aria-label="Pick a vibe">
           <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="page" now={{ hour: new Date().getHours() }} />
@@ -139,17 +145,20 @@ export function Music() {
         )}
       </section>
 
+      <section className="mup-card">
+        <h3>Up next</h3>
+        {sc.s.loaded ? <UpNext ctl={sc} press={press} max={10} /> : <p className="mu-empty">Play a station to see what comes next.</p>}
+      </section>
+      </TabPanel>
+
+      <TabPanel page="music" id="library" value={tab}>
+      {f.kind !== 'none' && (
+        <section className="mup-card mup-vibes">
+          <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="page:sec" now={{ hour: new Date().getHours() }} title="Vibes" />
+        </section>
+      )}
       <div className="mup-cols">
         <div className="mup-col">
-          {f.kind !== 'none' && (
-            <section className="mup-card mup-vibes">
-              <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="page:sec" now={{ hour: new Date().getHours() }} title="Vibes" />
-            </section>
-          )}
-          <section className="mup-card">
-            <h3>Up next</h3>
-            {sc.s.loaded ? <UpNext ctl={sc} press={press} max={10} /> : <p className="mu-empty">Play a station to see what comes next.</p>}
-          </section>
           <section className="mup-card">
             <div className="mup-card-head">
               <h3>Stations</h3>
@@ -206,6 +215,18 @@ export function Music() {
             <h3>Recently played</h3>
             <TrackList list={recents.slice(0, 10)} ctl={sc} press={press} prefix="rec" empty="What you play shows up here (on this device)." />
           </section>
+        </div>
+      </div>
+      </TabPanel>
+
+      <TabPanel page="music" id="options" value={tab}>
+      <div className="mup-cols">
+        <div className="mup-col">
+          <section className="mup-card" aria-label="Your SoundCloud">
+            <YourScRow music={music} save={saveMusic} ctl={sc} press={press} prefix="page" />
+          </section>
+        </div>
+        <div className="mup-col">
           <section className="mup-card mup-opts">
             <h3>Options</h3>
             <label><input type="checkbox" checked={music.lyrics} onChange={(e) => saveMusic({ lyrics: e.target.checked })} /> Synced lyrics <small>(the song's name is looked up on lrclib.net)</small></label>
@@ -216,6 +237,7 @@ export function Music() {
           </section>
         </div>
       </div>
+      </TabPanel>
     </div>
   )
 }

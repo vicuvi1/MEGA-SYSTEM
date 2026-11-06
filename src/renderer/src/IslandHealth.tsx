@@ -35,7 +35,7 @@ export function HealthBadge({ health }: { health: HealthyView | null | undefined
  * own progress, so a half-done water shows as half a segment and the middle
  * says how many of the four are complete.
  */
-function HealthRing({ health }: { health: HealthyView }) {
+export function HealthRing({ health }: { health: HealthyView }) {
   const r = 21
   const c = 2 * Math.PI * r
   const gap = 9

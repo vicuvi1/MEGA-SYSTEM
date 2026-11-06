@@ -3,6 +3,7 @@
 // right section, and the developer things folded under Advanced.
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Icon } from './Icon'
+import { SectionJump, SectionTabs, type SectionTab } from './SettingsTabs'
 import './settingsLook.css'
 
 export interface SettingsGroup {
@@ -16,6 +17,10 @@ export interface SettingsGroup {
   body: ReactNode
   /** Shown under "Advanced" at the bottom of the menu. */
   advanced?: boolean
+  /** A long section: a switch between its cards (by their headings). */
+  tabs?: SectionTab[]
+  /** One long card: a jump bar to the headings this selector finds. */
+  jump?: string
 }
 
 const KEY = 'ls.settingsTab'
@@ -90,7 +95,17 @@ export function SettingsShell({ groups, initial }: { groups: SettingsGroup[]; in
             <h1>{current.label}</h1>
             <p>{current.hint}</p>
           </header>
-          <div className="st-grid">{current.body}</div>
+          {current.tabs ? (
+            <SectionTabs section={current.id} tabs={current.tabs}>
+              {current.body}
+            </SectionTabs>
+          ) : current.jump ? (
+            <SectionJump section={current.id} selector={current.jump}>
+              {current.body}
+            </SectionJump>
+          ) : (
+            <div className="st-grid">{current.body}</div>
+          )}
         </section>
       )}
     </div>

@@ -3,6 +3,7 @@
 // hold to buy, tabs (Can get now / Saving for / All / History), daily quests,
 // the weekly challenge, level chests, the earnings graph and badges.
 // Points only come from real, logged actions (see core/rewardsKit.ts).
+import { PageTabs } from '../PageTabs'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { RewardInput, ShopState } from '@shared/api'
 import { REWARD_CATEGORIES, redeemBlocker, rewardEmoji, type Reward, type RewardCategory } from '@core/shop'
@@ -24,12 +25,13 @@ import { stillMode, useRewardsData } from '../rewards/useRewards'
 import '../lifeExtras.css'
 import '../rewards/rewards.css'
 
-type Tab = 'now' | 'saving' | 'all' | 'history'
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'now', label: 'Can get now' },
-  { id: 'saving', label: 'Saving for' },
-  { id: 'all', label: 'All' },
-  { id: 'history', label: 'History' }
+type Tab = 'now' | 'saving' | 'all' | 'history' | 'earn'
+const TABS: { id: Tab; label: string; title: string }[] = [
+  { id: 'now', label: 'Can get now', title: 'Rewards you can afford now (1)' },
+  { id: 'saving', label: 'Saving for', title: 'Your goals and jars (2)' },
+  { id: 'all', label: 'All', title: 'Every reward (3)' },
+  { id: 'history', label: 'History', title: 'What you bought (4)' },
+  { id: 'earn', label: 'Quests', title: 'Daily quests, the weekly challenge, your earnings and badges (5)' }
 ]
 const TAB_KEY = 'ls.rw.tab'
 const readTab = (): Tab | null => {
@@ -47,6 +49,14 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   const [locks, reloadLocks] = useUnlocks()
   const { insights, quests, value, reload } = useRewardsData(state)
   const [tab, setTabNow] = useState<Tab | null>(readTab)
+  useEffect(() => {
+    const on = (e: Event) => {
+      const d = (e as CustomEvent).detail as { page?: string; tab?: string } | undefined
+      if (d?.page === 'shop' && TABS.some((x) => x.id === d.tab)) setTabNow(d.tab as Tab)
+    }
+    window.addEventListener('life-open-tab', on)
+    return () => window.removeEventListener('life-open-tab', on)
+  }, [])
   const [cat, setCat] = useState<RewardCategory | null>(null)
   const [only, setOnly] = useState<number[] | null>(null)
   const [sheet, setSheet] = useState<Reward | 'new' | null>(null)
@@ -301,7 +311,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     justBought,
     streak: insights?.focusStreak ?? 0
   })
-  const counts: Record<Tab, number> = { now: readyList.length, saving: goals.length, all: live.length, history: state.recent.filter((x) => !x.undone).length }
+  const counts: Record<Tab, number> = { now: readyList.length, saving: goals.length, all: live.length, history: state.recent.filter((x) => !x.undone).length, earn: 0 }
 
   return (
     <div className="rx">
@@ -324,31 +334,23 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
 
       <WalletHero balance={state.balance} goals={goals} perDay={perDay} today={today} insights={insights} value={value} onFun={(m) => void fun(m)} onHow={() => setHow(true)} onAdd={() => setSheet('new')} />
 
-      <div className="rx-layout">
+      <div className="rx-layout rx-one">
         <div className="rx-main">
           <BenLine text={ben} />
           <Chests levels={state.chests} onOpen={openChest} />
 
-          <nav className="rx-tabs" role="tablist" aria-label="Rewards">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                role="tab"
-                aria-selected={shownTab === t.id}
-                className={shownTab === t.id ? 'on' : ''}
-                onClick={() => {
-                  setTab(t.id)
-                  setOnly(null)
-                }}
-              >
-                {t.label}
-                {counts[t.id] > 0 && <i>{counts[t.id]}</i>}
-              </button>
-            ))}
-          </nav>
+          <PageTabs
+            page="shop"
+            label="Rewards"
+            tabs={TABS.map((t) => ({ id: t.id, label: t.label, title: t.title, count: t.id === 'earn' ? null : counts[t.id] || null }))}
+            value={shownTab}
+            onChange={(id) => {
+              setTab(id as Tab)
+              setOnly(null)
+            }}
+          />
 
-          {shownTab !== 'history' && <AffordRow rewards={live} balance={state.balance} perDay={perDay} onPick={setOnly} />}
+          {shownTab !== 'history' && shownTab !== 'earn' && <AffordRow rewards={live} balance={state.balance} perDay={perDay} onPick={setOnly} />}
 
           {shownTab === 'all' && usedCats.length > 1 && !only && (
             <div className="rx-cats filter" role="group" aria-label="Category">
@@ -363,7 +365,22 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
             </div>
           )}
 
-          {shownTab === 'history' ? (
+          {shownTab === 'earn' ? (
+            <div className="rx-earn">
+              {quests && <Quests q={quests} onClaim={() => void claimQuests()} />}
+              {insights && <Challenge c={insights.challenge} onClaim={() => void claimChallenge()} />}
+              {insights && (
+                <section className="rx-panel">
+                  <header>
+                    <h3>Your earnings</h3>
+                    <span className="rx-sub">30 days</span>
+                  </header>
+                  <EarnChart e={insights.earnings} />
+                </section>
+              )}
+              {insights && <Badges list={insights.badges} />}
+            </div>
+          ) : shownTab === 'history' ? (
             <History recent={state.recent} currency={state.currency} onUndo={life.shop.undoBuy ? (id, t) => void undoBuy(id, t) : null} />
           ) : (
             <>
@@ -396,20 +413,6 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
           )}
         </div>
 
-        <aside className="rx-side">
-          {quests && <Quests q={quests} onClaim={() => void claimQuests()} />}
-          {insights && <Challenge c={insights.challenge} onClaim={() => void claimChallenge()} />}
-          {insights && (
-            <section className="rx-panel">
-              <header>
-                <h3>Your earnings</h3>
-                <span className="rx-sub">30 days</span>
-              </header>
-              <EarnChart e={insights.earnings} />
-            </section>
-          )}
-          {insights && <Badges list={insights.badges} />}
-        </aside>
       </div>
 
       {sheet && (

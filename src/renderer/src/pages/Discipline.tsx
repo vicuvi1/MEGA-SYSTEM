@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
 import { AnimatePresence, m } from 'framer-motion'
 import { dayKey } from '@core/dates'
 import { campaignMap, disciplineCharts, URGE_SECONDS } from '@core/discipline'
@@ -30,6 +31,7 @@ interface Props {
 
 export function Discipline({ state, man, onState, onWallet, revealed, onReveal, urgeOpen, onUrgeOpen }: Props) {
   const act = useAction()
+  const [tab, setTab] = usePageTab('discipline', ['today', 'milestones', 'history'], 'today')
   const [confirmReset, setConfirmReset] = useState(false)
   const [comeback, setComeback] = useState(false)
   const [celebrate, setCelebrate] = useState<string | null>(null)
@@ -92,6 +94,18 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
         {blurred ? '🙈 Hidden: tap to show' : '👁 Hide'}
       </button>
       {blurred && <button className="privacy-cover" aria-label="Show the numbers" onClick={() => setBlurred(false)} />}
+      <PageTabs
+        page="discipline"
+        label="Discipline views"
+        tabs={[
+          { id: 'today', label: 'Today', title: 'Your streak, check in, the urge crusher (1)' },
+          { id: 'milestones', label: 'Milestones', count: state.milestones.filter((m) => m.status === 'claimable').length || null, title: 'Milestones and the 90-day campaign (2)' },
+          { id: 'history', label: 'History', title: 'Last 12 weeks and your reflection (3)' }
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      <TabPanel page="discipline" id="today" value={tab}>
       <section className="disc-hero">
         <div className="streak">
           <div className="flame">
@@ -137,6 +151,19 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
         <Stat label="Resets" value={`${state.resets}`} />
       </section>
 
+      <section className="panel slim">
+        <div className="row spread">
+          <label className="check">
+            <input type="checkbox" checked={state.stealth} onChange={(e) => run(() => life.discipline.setStealth(e.target.checked))} /> Stealth mode: hide this section and its numbers until clicked
+          </label>
+          <button className="btn small ghost danger-text" disabled={state.resetToday} onClick={() => setConfirmReset(true)}>
+            I slipped
+          </button>
+        </div>
+      </section>
+
+      </TabPanel>
+      <TabPanel page="discipline" id="milestones" value={tab}>
       <section className="panel">
         <header className="panel-head">
           <h2>Milestones</h2>
@@ -184,20 +211,13 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
         </div>
       </section>
 
+      </TabPanel>
+      <TabPanel page="discipline" id="history" value={tab}>
       <DisciplineCharts state={state} />
 
       <ReflectionCard today={state.today} />
 
-      <section className="panel slim">
-        <div className="row spread">
-          <label className="check">
-            <input type="checkbox" checked={state.stealth} onChange={(e) => run(() => life.discipline.setStealth(e.target.checked))} /> Stealth mode: hide this section and its numbers until clicked
-          </label>
-          <button className="btn small ghost danger-text" disabled={state.resetToday} onClick={() => setConfirmReset(true)}>
-            I slipped
-          </button>
-        </div>
-      </section>
+      </TabPanel>
 
       {confirmReset && (
         <div className="sheet" role="dialog" aria-label="Reset streak">

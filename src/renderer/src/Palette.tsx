@@ -5,6 +5,8 @@ import type { Rule, ShopState } from '@shared/api'
 import type { TodoTask } from '@core/todoist'
 import { Icon, type IconName } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
+import { TAB_LINKS } from '@core/pageTabs'
+import { openTab } from './PageTabs'
 
 export interface Command {
   id: string
@@ -33,6 +35,11 @@ export function buildCommands(s: Sources): Command[] {
   for (const m of [...MODULES, ...SYSTEM_PAGES]) {
     if (m.phase > 0) continue
     out.push({ id: `go:${m.id}`, label: m.label, hint: m.blurb, group: 'Go to', icon: m.icon, color: m.color, run: () => s.go(m.id) })
+  }
+  // A page's own tab, straight away ("water" opens Today on Body).
+  for (const l of TAB_LINKS) {
+    const m = [...MODULES, ...SYSTEM_PAGES].find((x) => x.id === l.page)
+    out.push({ id: `tab:${l.page}:${l.tab}`, label: l.label, hint: l.hint, group: 'Go to', icon: m?.icon ?? 'list', color: m?.color, run: () => openTab(l.page, l.tab) })
   }
   out.push(
     { id: 'go:finance', label: 'Finance Helper', hint: 'Open the app', group: 'Go to', icon: 'coin', color: '#F5C84B', run: () => s.go('money', 'app') },

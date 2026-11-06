@@ -20,6 +20,7 @@ import { GoalCardView, GoalSheet, GoalsAmbient, Ring, TemplateGrid, formFromCard
 import '../lifeExtras.css'
 import '../goals.css'
 import { Select } from '../Select'
+import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
 
 const hm = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(min % 60).padStart(2, '0') : ''}` : `${min} min`)
 const dayText = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
@@ -42,6 +43,7 @@ export function Goals({ onGo }: { onGo?: (p: PageId) => void }) {
   const act = useAction()
   const { events } = useTodayEvents()
   const [v, setV] = useState<GoalsView | null>(null)
+  const [tab, setTab] = usePageTab('goals', ['goals', 'hours', 'path'], 'goals')
   const [sheet, setSheet] = useState<Sheet>(() => {
     const words = takeDraft()
     return words ? { kind: 'new', words } : null
@@ -140,6 +142,18 @@ export function Goals({ onGo }: { onGo?: (p: PageId) => void }) {
         </div>
       </m.section>
 
+      <PageTabs
+        page="goals"
+        label="Goals views"
+        tabs={[
+          { id: 'goals', label: 'Goals', title: 'Your goals with a number and a date (1)' },
+          { id: 'hours', label: 'Hours', title: "Hours to put in and this week's big 3 (2)" },
+          { id: 'path', label: 'Cyber path', title: 'CTFs, Rust and crypto: what you finished (3)' }
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      <TabPanel page="goals" id="goals" value={tab}>
       {empty && (
         <section className="gx-empty">
           <h3>Start with one</h3>
@@ -158,6 +172,8 @@ export function Goals({ onGo }: { onGo?: (p: PageId) => void }) {
         </div>
       )}
 
+      </TabPanel>
+      <TabPanel page="goals" id="hours" value={tab}>
       {(hourGoals.length > 0 || aims.length > 0) && (
         <section className="gx-sec">
           <header className="gx-sec-head">
@@ -244,7 +260,11 @@ export function Goals({ onGo }: { onGo?: (p: PageId) => void }) {
         </section>
       )}
 
-      <LearningPath v={v} onChange={setV} />
+        {!hourGoals.length && !aims.length && !v.week.length && <p className="hint gx-none">No hour goals yet. A goal like “20 hours of Rust by December” shows here, planned backward into focus blocks.</p>}
+      </TabPanel>
+      <TabPanel page="goals" id="path" value={tab}>
+        <LearningPath v={v} onChange={setV} />
+      </TabPanel>
 
       {sheet && (
         <GoalSheet

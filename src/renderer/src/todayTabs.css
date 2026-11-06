@@ -1,0 +1,35 @@
+/* Today's switch (Now · Plan · Tasks · Body · Week, + Day on narrow screens). */
+.td-tabs .cmd-main > .ptabs-wrap { margin-bottom: 0; }
+.td-tabs .ptab-panel > .thb { margin: 0; }
+.td-tabs .ptab-panel .cmd-day { gap: var(--s-3); }
+.td-slot { display: contents; }
+.td2 .td-plan .cp-empty { display: flex; }
+.td-plan:has(.cp) .td-plan-none { display: none; }
+.td-plan-none { padding: var(--s-4); border-radius: 18px; background: var(--surface); margin: 0; }
+.dl-tasks .dl-sec { display: flex; align-items: baseline; gap: var(--s-2); margin: var(--s-3) 0 var(--s-1); font-size: var(--t-sm); font-weight: 600; color: var(--muted); }
+.dl-tasks .dl-sec small { font-weight: 500; font-size: var(--t-xs); }
+.dl-tasks .dl-tabs { margin-top: 0; }
+.td-body-top { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-3); }
+@media (min-width: 1500px) { .td-body-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+.card.tb-health { flex-direction: row; align-items: center; gap: var(--s-4); padding-top: var(--s-3); padding-bottom: var(--s-3); }
+.card.tb-sleep { padding-top: var(--s-3); padding-bottom: var(--s-3); gap: var(--s-2); }
+.td-tabs .thb { flex-wrap: wrap; row-gap: 10px; }
+.td-tabs .thb-reward { flex: 1 1 200px; }
+.td-tabs .thb-nums { order: 5; }
+.tb-health .hd-score { --dw-hd-ring: 64px; }
+.tb-health-mid { display: grid; gap: 2px; min-width: 0; flex: 1; }
+.tb-health-mid > small { color: var(--muted); font-size: var(--t-xs); }
+.tb-parts { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+@media (max-width: 640px) { .tb-parts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tb-parts li { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: baseline; padding: 6px 8px; border-radius: 10px; background: rgb(var(--ink) / 0.04); font-size: var(--t-sm); }
+.tb-parts li > span { grid-row: span 2; }
+.tb-parts li small { color: var(--muted); font-size: var(--t-xs); }
+.tb-parts li.done { background: color-mix(in srgb, var(--green, #34d399) 12%, transparent); }
+.tb-parts li.done > span { color: var(--green, #34d399); font-weight: 700; }
+.tb-sleep-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--s-2); }
+.tb-sleep-row > span { display: grid; gap: 1px; padding: 8px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.04); min-width: 0; }
+.tb-sleep-row b { font-size: var(--t-lg); font-variant-numeric: tabular-nums; }
+.tb-sleep-row small { color: var(--muted); font-size: var(--t-xs); }
+.tb-sleep-row > span.good b { color: var(--green, #34d399); }
+.tb-sleep-row > span.late b { color: var(--orange, #ff8a3d); }
+.td-day .ds-v .ds-scroll { max-height: calc(100vh - 230px); }

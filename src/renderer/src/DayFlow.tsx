@@ -5,6 +5,7 @@ import { askConfirm } from './confirmSheet'
 import { appHour } from '@core/dates'
 import { bookMinutes, bookTask as bookIntoCalendar } from './booking'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { capture } from './capture'
 import { nowActions, type NowAction } from '@core/nextAction'
 import { decideNow, type DoNow } from '@core/doNow'
@@ -316,6 +317,10 @@ export function DayFlow(props: DayFlowProps) {
   }
   const onSwipe = useCallback((key: string) => swipeRef.current(key), [])
   useSwipeRows(listRef, onSwipe)
+  // Today's tabs: the rest of today's tasks live on the Tasks tab (one DayFlow, shown in two places).
+  const tasksRef = useRef<HTMLElement>(null)
+  useSwipeRows(tasksRef, onSwipe)
+  const slotted = props.tasksSlot !== undefined
 
   const startFocus = async (subject: string, task: FocusTask | null = null, minutes = 50) => {
     if (await act(() => life.focus.start(subject, minutes, task), `Focus started: ${task?.title ?? subject} · +3 per 10 min`)) loadFocus()
@@ -625,6 +630,16 @@ export function DayFlow(props: DayFlowProps) {
     />
   )
 
+  // Today's tab counts (Tasks 11, Now 1/3), told to the page when they change.
+  const countsNow = useRef<{ tasks: number; late: number; mustDone: number; mustTotal: number } | null>(null)
+  const countsSent = useRef('')
+  useEffect(() => {
+    const c = countsNow.current
+    const key = JSON.stringify(c)
+    if (!c || key === countsSent.current) return
+    countsSent.current = key
+    props.onCounts?.(c)
+  })
   if (!st)
     return (
       <div className="cmd-day">
@@ -646,6 +661,7 @@ export function DayFlow(props: DayFlowProps) {
   const mustTotal = plan.length
   const mustDone = plan.filter((p) => p.done).length
   const lateCount = loose.filter((t) => t.due && t.due < today).length
+  countsNow.current = { tasks: loose.length, late: lateCount, mustDone, mustTotal }
   // The rest of today's tasks fold away while you have must-dos (your choice is remembered).
   const restOpen = restPref ?? true
   const total = planOnly.length + starred.length + bigOpen.length + loose.length
@@ -738,7 +754,10 @@ export function DayFlow(props: DayFlowProps) {
                   // One "Plan my day" (Z4): Ben's plan, which you approve (blocks + must-dos).
                   if (life.coach?.rhythm) {
                     const ok = await act(() => life.coach!.rhythm!('propose'), "Ben planned your day: check it and tap ✓ Approve")
-                    if (ok) window.dispatchEvent(new CustomEvent('life-external-changed'))
+                    if (ok) {
+                      window.dispatchEvent(new CustomEvent('life-external-changed'))
+                      window.dispatchEvent(new CustomEvent('life-show-plan'))
+                    }
                     return
                   }
                   // No Ben here (desktop without the coach): book the open must-dos into free time, after you see them.
@@ -895,12 +914,69 @@ export function DayFlow(props: DayFlowProps) {
             <button type="button" className="btn ghost small" onClick={() => setSpendOpen(false)} aria-label="Close">✕</button>
           </form>
         )}
-
+        {slotted ? (
+          <>
+        <div className="dl-group" style={{ ['--c' as string]: 'var(--accent)' }}>
+          <h3 className="dl-head">
+            <i /> Must-dos <small>+{PLAN_ITEM_COINS} each, first 3</small>
+          </h3>
+          <ul className="dl">
+            {starred.map((t) => taskRow(t, true, null))}
+            {planOnly.map(({ p, i }) => (
+              <li key={`m${i}`} className={p.done ? 'done' : ''} data-swipe={p.done ? undefined : `must:${i}`}>
+                <button className="dl-check" aria-label={p.done ? `Untick ${p.text}` : `Tick ${p.text}`} onClick={() => void tickMustDo(i)}>
+                  {p.done ? <Tick /> : ''}
+                </button>
+                <span className="dl-text">{p.text}</span>
+                <span className="tt-pts">+{PLAN_ITEM_COINS} ⭐</span>
+                {!p.done && playBtn(p.text, subjectOf(p.text), { kind: 'mustdo', ref: p.text, title: p.text })}
+              </li>
+            ))}
+          </ul>
+          {!plan.length && !starred.length && <p className="hint dl-tip">Tap ☆ on any task below to make it a must-do, or type one.</p>}
+          {plan.length < 5 && (
+            <form
+              className="dl-add"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void addMustDo()
+              }}
+            >
+              <input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder={plan.length ? 'Add another must-do…' : 'What are your 1–3 must-dos today?'} maxLength={140} />
+              {adding.trim() && <button className="btn small">Add</button>}
+            </form>
+          )}
+        </div>
+        {bigOpen.length > 0 && bigOpen.every((b) => b.done) && (
+          <p className="dl-bigdone">✓ This week's big 3 are done 🎉</p>
+        )}
+        {bigOpen.length > 0 && !bigOpen.every((b) => b.done) && (
+          <div className="dl-group" style={{ ['--c' as string]: 'var(--gold)' }}>
+            <h3 className="dl-head">
+              <i /> This week's big 3 <small>+25 each</small>
+            </h3>
+            <ul className="dl">
+              {bigOpen.map((b) => (
+                <li key={`b${b.i}`} className={b.done ? 'done' : ''} data-swipe={b.done ? undefined : `big:${b.i}`}>
+                  <button className="dl-check" aria-label={b.done ? `Untick ${b.text}` : `Tick ${b.text}`} onClick={() => void toggleBig(b.i)}>
+                    {b.done ? <Tick /> : ''}
+                  </button>
+                  <span className="dl-text">{b.text}</span>
+                  <span className="tt-pts">+{BIG3_POINTS} ⭐</span>
+                  {!b.done && playBtn(b.text, subjectOf(b.text), null)}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+          </>
+        ) : (
+          <>
         <div className="dl-tabs" role="tablist" aria-label="Which tasks">
           {TODO_TABS.map(([id, label]) => (
             <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
               {label}
-              <i>{id === 'today' ? (todoList?.length ?? 0) + planOnly.length : tabTasks(id).length}</i>
+              {!(slotted && id === 'today') && <i>{id === 'today' ? (todoList?.length ?? 0) + planOnly.length : tabTasks(id).length}</i>}
             </button>
           ))}
           <button className={`dl-sync ${syncing ? 'busy' : ''}`} onClick={() => void syncNow()} title="Get the newest from Todoist now (it also checks by itself every few seconds)">
@@ -958,7 +1034,6 @@ export function DayFlow(props: DayFlowProps) {
             </form>
           )}
         </div>
-
         {bigOpen.length > 0 && bigOpen.every((b) => b.done) && (
           <p className="dl-bigdone">✓ This week's big 3 are done 🎉</p>
         )}
@@ -1023,7 +1098,6 @@ export function DayFlow(props: DayFlowProps) {
           </details>
         )}
         {todoList && todoList.length === 0 && <p className="hint dl-empty">Nothing due in Todoist today.</p>}
-
         {radar.length > 0 && (
           <div className="dl-group radar-group" style={{ ['--c' as string]: 'var(--orange)' }}>
             <h3 className="dl-head">
@@ -1046,11 +1120,109 @@ export function DayFlow(props: DayFlowProps) {
             <Icon name="trophy" size={13} /> Week focus: <b>{week.note || WEEK_LABEL[week.focus] || week.focus}</b>
           </p>
         )}
+          </>
+        )}
       </section>
+      {slotted && props.tasksSlot && createPortal(
+        <section className="card day-list dl-tasks" aria-label="Today's tasks" ref={tasksRef}>
+        <div className="dl-tabs" role="tablist" aria-label="Which tasks">
+          {TODO_TABS.map(([id, label]) => (
+            <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>
+              {label}
+              {!(slotted && id === 'today') && <i>{id === 'today' ? (todoList?.length ?? 0) + planOnly.length : tabTasks(id).length}</i>}
+            </button>
+          ))}
+          <button className={`dl-sync ${syncing ? 'busy' : ''}`} onClick={() => void syncNow()} title="Get the newest from Todoist now (it also checks by itself every few seconds)">
+            ⟳ {syncing ? 'Syncing…' : syncedAt ? `Synced ${Date.now() - syncedAt < 15_000 ? 'just now' : `${Math.round((Date.now() - syncedAt) / 60_000) || '<1'} min ago`}` : 'Sync'}
+          </button>
+        </div>
+        {tab !== 'today' && (
+          <TabList
+            tasks={tabTasks(tab)}
+            empty={tab === 'nodate' ? 'Every task has a date. Nice.' : tab === 'tomorrow' ? 'Nothing for tomorrow yet.' : 'Nothing here.'}
+            groupOf={(t) => ({ key: areaKey(t), name: t.section || (t.project && t.project !== 'Inbox' ? t.project : 'Inbox'), color: colorOf(t) })}
+            row={(t, g, extra) => taskRow(t, isStarred(t), g, extra)}
+            quick={(t) => (
+              <span className="dl-quick">
+                {t.due !== today && (
+                  <button onClick={() => void patchTask(t, { due: 'today' }, { due: today }, `${t.content}: today`)}>Today</button>
+                )}
+                {t.due !== addDays(today, 1) && (
+                  <button onClick={() => void patchTask(t, { due: 'tomorrow' }, { due: addDays(today, 1) }, `${t.content}: tomorrow`)}>Tomorrow</button>
+                )}
+              </span>
+            )}
+          />
+        )}
+          {tab === 'today' && (
+            <>
+              {loose.length > 0 && (
+                <div className="dl-rest-open">
+                  <h3 className="dl-sec">
+                    Everything else today
+                    <small>
+                      {loose.length} task{loose.length === 1 ? '' : 's'}
+                      {lateCount ? ` · ${lateCount} late` : ''}
+                    </small>
+                  </h3>
+        {groups.map((g) => {
+          const items = g.items
+          if (!items.length) return null
+          return (
+            <div key={g.key} className="dl-group" style={{ ['--c' as string]: g.color }}>
+              <h3
+                className={`dl-head ${dragId && dropOn === `g:${g.key}` ? 'drop' : ''}`}
+                onDragOver={(e) => {
+                  if (!dragId) return
+                  e.preventDefault()
+                  setDropOn(`g:${g.key}`)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  dropTask(items[0]?.id ?? null, g.key)
+                }}
+              >
+                <i /> {g.name} <small>{g.items.length} · +{taskPts} each</small>
+              </h3>
+              <ul className="dl">{items.map((t) => taskRow(t, false, g.key))}</ul>
+              <AreaAdd name={plainName(g.name) || g.name} onAdd={(v) => addToArea(g.key, v)} />
+            </div>
+          )
+        })}
+
+                </div>
+              )}
+        {todoList && todoList.length === 0 && <p className="hint dl-empty">Nothing due in Todoist today.</p>}
+        {radar.length > 0 && (
+          <div className="dl-group radar-group" style={{ ['--c' as string]: 'var(--orange)' }}>
+            <h3 className="dl-head">
+              <i /> Coming up
+            </h3>
+            <ul className="dl">
+              {radar.slice(0, 3).map((x) => (
+                <li key={x.task.id} className={x.daysLeft === 1 ? 'soon' : ''}>
+                  <span className="radar-when">⏳ {whenText(x.daysLeft, x.date)}</span>
+                  <span className="dl-text">{x.task.content}</span>
+                  {playBtn(x.task.content, todoSubject(x.task), { kind: 'todoist', ref: x.task.id, title: x.task.content })}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+            </>
+          )}
+        </section>,
+        props.tasksSlot
+      )}
+      {slotted && props.weekSlot && week?.focus && createPortal(
+        <p className="hint dl-week" onClick={() => onGo('progress')}>
+          <Icon name="trophy" size={13} /> Week focus: <b>{week.note || WEEK_LABEL[week.focus] || week.focus}</b>
+        </p>,
+        props.weekSlot
+      )}
     </div>
   )
 }
-
 
 const TODO_TABS: [TodoTab, string][] = [
   ['today', 'Today'],

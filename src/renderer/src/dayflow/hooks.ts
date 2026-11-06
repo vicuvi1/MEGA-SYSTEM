@@ -20,6 +20,11 @@ export interface DayFlowProps {
   onOpenApp: (p: PageId) => void
   /** The point rules, so each habit shows what it really pays. */
   rules?: Rule[]
+  /** Today's tabs: where the rest of today's tasks (and coming up) go, and the week focus line. */
+  tasksSlot?: HTMLElement | null
+  weekSlot?: HTMLElement | null
+  /** Today's tabs show small counts. */
+  onCounts?: (c: { tasks: number; late: number; mustDone: number; mustTotal: number }) => void
 }
 
 export interface Habit {

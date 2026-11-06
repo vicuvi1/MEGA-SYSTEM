@@ -50,6 +50,10 @@ export function Settings(props: SettingsProps) {
       icon: 'sun',
       hint: 'Theme, colors and your Today screen',
       keywords: 'appearance theme dark light color colour today sections layout name',
+      tabs: [
+        { id: 'look', label: 'Appearance', heads: ['appearance'] },
+        { id: 'today', label: 'Today screen & pages', heads: ['today screen'] }
+      ],
       body: <LookSection s={s} />
     },
     {
@@ -74,6 +78,11 @@ export function Settings(props: SettingsProps) {
       icon: 'face',
       hint: 'Your coach: his brain (model & cost), tone, rhythm',
       keywords: 'coach ai tone style length nudges rhythm model angry brain openrouter price cost usage claude gpt',
+      tabs: [
+        { id: 'brain', label: 'Brain & test', heads: ["ben's brain", 'test ben'] },
+        { id: 'talk', label: 'How he talks', heads: ['faces in the chat', 'how ben talks'] },
+        { id: 'notes', label: 'Notes about you', heads: ['notes about you'] }
+      ],
       body: <BenSection s={s} />
     },
     {
@@ -90,6 +99,11 @@ export function Settings(props: SettingsProps) {
       icon: 'link',
       hint: 'Google, Todoist, Telegram, Sporty',
       keywords: 'google calendar todoist telegram bots bot token sporty sport connect',
+      tabs: [
+        { id: 'accounts', label: 'Google & Todoist', heads: ['google calendar'] },
+        { id: 'bots', label: 'Bots & Sporty', heads: ['bots & connections', 'sporty'] },
+        { id: 'telegram', label: 'Telegram bots', heads: ['telegram'] }
+      ],
       body: <ConnectionsSection s={s} />
     },
     {
@@ -106,6 +120,11 @@ export function Settings(props: SettingsProps) {
       icon: 'grid',
       hint: 'Widget gallery, script tiles, island pages and the island look',
       keywords: 'widgets gallery install permissions countdown quote pomodoro streak script tiles pages swipe island look notch capsule theme clock dracula cyberpunk',
+      tabs: [
+        { id: 'gallery', label: 'Widgets & scripts', heads: ['widgets', 'script tiles'] },
+        { id: 'pages', label: 'Island pages', heads: ['island pages'] },
+        { id: 'look', label: 'Island look', heads: ['island look'] }
+      ],
       body: <WidgetsPanel />
     },
     {
@@ -114,6 +133,10 @@ export function Settings(props: SettingsProps) {
       icon: 'plug',
       hint: 'Claude, ChatGPT and other AI apps',
       keywords: 'ai app claude chatgpt mcp connector token connect desktop code phone',
+      tabs: [
+        { id: 'connect', label: 'Connect', heads: ['connect an ai app', 'your connections'] },
+        { id: 'how', label: 'How to connect', heads: ['how to connect'] }
+      ],
       body: <AiAppsPanel />
     },
     {
@@ -122,6 +145,13 @@ export function Settings(props: SettingsProps) {
       icon: 'bolt',
       hint: 'Music during focus, ActivityWatch, Ben on your PC, phone push, n8n, outside tools',
       keywords: 'automation pc music spotify pause media activitywatch actions ntfy push phone n8n webhook zapier make mcp tools server',
+      tabs: [
+        { id: 'push', label: 'Phone push', heads: ['phone push'] },
+        { id: 'n8n', label: 'n8n', heads: ['n8n flows', 'connect my n8n'] },
+        { id: 'hooks', label: 'Webhooks', heads: ['your flows'] },
+        { id: 'auto', label: 'Automations', heads: ['automations', 'run log'] },
+        { id: 'mcp', label: 'Outside tools', heads: ['outside tools'] }
+      ],
       body: <PcAutomationPanel />
     },
     ...(window.desktop
@@ -132,6 +162,7 @@ export function Settings(props: SettingsProps) {
       icon: 'island',
       hint: 'The island at the edge of your screen',
       keywords: 'island dynamic size look see-through shortcut sound sections tray',
+      jump: 'h3.is-sec',
       body: <IslandSettingsPanel />
     },
     {

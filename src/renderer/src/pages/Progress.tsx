@@ -16,6 +16,7 @@ import { useLive } from '../live'
 import { GrowthSections } from './Growth'
 import { MonthReview, MoodLinksCard, PlannedVsReal, YearRecapView, saveTab, savedTab, type InsightsTab } from './Reviews'
 import { barFill } from '../motionKit'
+import { PageTabs, TabPanel, usePageTab, type PageTab } from '../PageTabs'
 import { useSeen } from '../motionKit'
 export { YearOffer, openYear } from './Reviews'
 import { ScoreRing, useCountUp, useProgress, useShown, weekday } from './ProgressCard'
@@ -211,43 +212,82 @@ function Streaks({ ins }: { ins: Insights }) {
   )
 }
 
-/** Week, Month or Year at the top of Insights. */
-function InsightsTabs({ tab, setTab }: { tab: InsightsTab; setTab: (t: InsightsTab) => void }) {
+/** Month or Year inside "Look back". */
+function LookBackTabs({ tab, setTab }: { tab: InsightsTab; setTab: (t: InsightsTab) => void }) {
   return (
-    <div className="rv-tabs" role="tablist" aria-label="Insights view">
-      {(['week', 'month', 'year'] as InsightsTab[]).map((t) => (
+    <div className="rv-tabs" role="tablist" aria-label="Look back at">
+      {(['month', 'year'] as InsightsTab[]).map((t) => (
         <button key={t} role="tab" aria-selected={tab === t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
-          {t === 'week' ? 'Week' : t === 'month' ? 'Month' : 'Your year'}
+          {t === 'month' ? 'Month' : 'Your year'}
         </button>
       ))}
     </div>
   )
 }
 
+const INSIGHTS_TABS: PageTab[] = [
+  { id: 'week', label: 'Week', title: 'Week score, your week plan, planned vs real (1)' },
+  { id: 'areas', label: 'Areas', title: 'Each area: the last 7 days against last week (2)' },
+  { id: 'streaks', label: 'Streaks', title: 'Streaks, milestones, the long view and your year (3)' },
+  { id: 'focus', label: 'Focus', title: 'Focus this week and goals with a deadline (4)' },
+  { id: 'look', label: 'Look back', title: 'Month and year reviews (5)' }
+]
+
 export function Progress({ onGo, onWallet }: { onGo?: (p: PageId) => void; onWallet?: () => void }) {
-  const [tab, setTabRaw] = useState<InsightsTab>(savedTab)
-  const setTab = (t: InsightsTab) => {
-    setTabRaw(t)
+  const [tab, setTab] = usePageTab('progress', INSIGHTS_TABS.map((t) => t.id), savedTab() === 'week' ? 'week' : 'look')
+  // Month or year inside Look back (kept as before).
+  const [back, setBackRaw] = useState<InsightsTab>(() => (savedTab() === 'year' ? 'year' : 'month'))
+  const setBack = (t: InsightsTab) => {
+    setBackRaw(t)
     saveTab(t)
   }
   useEffect(() => {
-    const on = (e: Event) => setTabRaw(((e as CustomEvent).detail as InsightsTab) || 'week')
+    // Links from elsewhere (the year recap offer, Ctrl+K "month review").
+    const on = (e: Event) => {
+      const d = ((e as CustomEvent).detail as InsightsTab) || 'week'
+      if (d === 'week') setTab('week')
+      else {
+        setBackRaw(d)
+        setTab('look')
+      }
+    }
     window.addEventListener('life-insights-tab', on)
     return () => window.removeEventListener('life-insights-tab', on)
-  }, [])
-  if (tab !== 'week')
-    return (
-      <div className="pg">
-        <InsightsTabs tab={tab} setTab={setTab} />
-        {tab === 'month' ? <MonthReview /> : <YearRecapView />}
-      </div>
-    )
-  return <WeekInsights onGo={onGo} onWallet={onWallet} tabs={<InsightsTabs tab={tab} setTab={setTab} />} />
-}
-
-function WeekInsights({ onGo, onWallet, tabs }: { onGo?: (p: PageId) => void; onWallet?: () => void; tabs: ReactNode }) {
+  }, [setTab])
   const ins = useInsights()
   const r = useProgress()
+  return (
+    <div className="pg">
+      <PageTabs page="progress" label="Insights views" tabs={INSIGHTS_TABS} value={tab} onChange={setTab} />
+      <TabPanel page="progress" id="week" value={tab}>
+        <WeekInsights r={r} />
+      </TabPanel>
+      <TabPanel page="progress" id="areas" value={tab}>
+        {r ? (
+          <div className="pg-grid pg-grid-tab">
+            {r.metrics.map((m, k) => (
+              <MetricCard key={m.id} m={m} index={k} onGo={onGo} />
+            ))}
+          </div>
+        ) : r === undefined ? <PageSkeleton /> : null}
+      </TabPanel>
+      <TabPanel page="progress" id="streaks" value={tab}>
+        <GrowthSections />
+        {ins && <Streaks ins={ins} />}
+        {ins && <YearHeatmap ins={ins} />}
+      </TabPanel>
+      <TabPanel page="progress" id="focus" value={tab}>
+        <FocusInsights onWallet={onWallet ?? (() => {})} />
+      </TabPanel>
+      <TabPanel page="progress" id="look" value={tab}>
+        <LookBackTabs tab={back} setTab={setBack} />
+        {tab === 'look' && (back === 'year' ? <YearRecapView /> : <MonthReview />)}
+      </TabPanel>
+    </div>
+  )
+}
+
+function WeekInsights({ r }: { r: ReturnType<typeof useProgress> }) {
   const [plan] = useWeekPlan()
   const [editing, setEditing] = useState(false)
   if (r === undefined) return <PageSkeleton />
@@ -258,8 +298,7 @@ function WeekInsights({ onGo, onWallet, tabs }: { onGo?: (p: PageId) => void; on
   const active = plan ? activePlan(plan, r.to) : null
   const planNow = plan !== undefined && (editing || shouldPlan(plan, r.to))
   return (
-    <div className="pg">
-      {tabs}
+    <>
       <section className="panel pg-hero">
         <ScoreRing score={r.score} />
         <div className="pg-hero-text">
@@ -282,16 +321,6 @@ function WeekInsights({ onGo, onWallet, tabs }: { onGo?: (p: PageId) => void; on
         <PlannedVsReal />
         <MoodLinksCard />
       </div>
-      <GrowthSections />
-      {ins && <Streaks ins={ins} />}
-      {ins && <YearHeatmap ins={ins} />}
-      <div className="pg-grid">
-        {r.metrics.map((m, k) => (
-          <MetricCard key={m.id} m={m} index={k} onGo={onGo} />
-        ))}
-      </div>
-      <FocusInsights onWallet={onWallet ?? (() => {})} />
-    </div>
+    </>
   )
 }
-
