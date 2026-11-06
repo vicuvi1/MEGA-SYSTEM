@@ -9,6 +9,7 @@ import { PERMISSION_TEXT, type WidgetManifest } from '@core/widgets/manifest'
 import { BUILTIN_PAGES, DAY_PART_LABEL, DAY_PARTS, type PageFollow } from '@core/widgets/pages'
 import { runScript } from '@core/widgets/scriptRun'
 import { cleanScript, SCRIPT_CODE_MAX, SCRIPTS_MAX, type UserScript } from '@core/widgets/scripts'
+import { REST_IDLE, REST_IDLE_LABEL } from '@core/islandRest'
 import { CLOCK_LABEL, CLOCK_STYLES, installWidget, ISLAND_STYLES, ISLAND_THEMES, patchWidget, removeWidget, setGrant, STYLE_LABEL, THEME_LABEL, type IslandLookPrefs, type WidgetsSetting } from '@core/widgets/settings'
 import { Icon } from '../Icon'
 import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
@@ -314,7 +315,10 @@ function LookSection({ s, save }: { s: WidgetsSetting; save: (n: WidgetsSetting)
       <Row title="Open on hover" hint="The whole panel opens when the mouse rests on it; moving away or Esc closes it">
         <Switch label="Open on hover" on={l.hoverOpen} onChange={(hoverOpen) => set({ hoverOpen })} />
       </Row>
-      <Row title="Clock in the pill">
+      <Row title="When nothing is happening, show" hint="Next event falls back to the time when nothing is left today">
+        <Segmented label="When nothing is happening, show" value={l.rest} options={REST_IDLE.map((x) => [x, REST_IDLE_LABEL[x]] as [typeof x, string])} onChange={(rest) => set({ rest })} />
+      </Row>
+      <Row title="Clock" hint="How the time looks when the island shows it. With a style picked, a small clock also sits beside music and messages">
         <Segmented label="Clock" value={l.clock} options={CLOCK_STYLES.map((x) => [x, CLOCK_LABEL[x]] as [typeof x, string])} onChange={(clock) => set({ clock })} />
         {l.clock !== 'off' && <input type="color" aria-label="Clock colour" value={l.clockColor || '#f5f5f6'} onChange={(e) => set({ clockColor: e.target.value })} />}
       </Row>

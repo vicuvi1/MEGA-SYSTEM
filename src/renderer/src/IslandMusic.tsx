@@ -116,6 +116,13 @@ function usePillSc(music?: MusicKit): { s: ScState; web: boolean } {
   return { s: own, web: false }
 }
 
+/** What plays now (for the resting island's priority): playing or not, and its title. */
+export function usePillMusic(music?: MusicKit): { playing: boolean; title: string } | null {
+  const { s } = usePillSc(music)
+  if (!s.loaded || !s.station) return null
+  return { playing: !!s.playing, title: s.title || s.station.name }
+}
+
 /** The artwork in a progress ring (the pill's and the peek's). */
 function RingArt({ size = 24, s }: { size?: number; s: ScState }) {
   useTicker(s.playing, 5000)
@@ -134,7 +141,7 @@ function RingArt({ size = 24, s }: { size?: number; s: ScState }) {
 }
 
 /** The pill's now playing: the artwork in its progress ring, a small equalizer, and (if you want) the lyric line. */
-export function ScPillBadge({ music, title = false }: { music?: MusicKit; title?: boolean }) {
+export function ScPillBadge({ music, title = false, mini = false }: { music?: MusicKit; title?: boolean; /** Only the small equalizer (the resting island's extra). */ mini?: boolean }) {
   const { s } = usePillSc(music)
   const tint = useTint(s, '#d4ff3f')
   const lines = useLyrics(s.title, s.artist, s.dur, !!music?.lyrics && !!music?.pillLyric && s.loaded)
@@ -142,6 +149,12 @@ export function ScPillBadge({ music, title = false }: { music?: MusicKit; title?
   const toast = useTrackToast(s, music?.nowToast !== false)
   if (!s.loaded || !s.station) return null
   const lyric = toast ? null : lyricNow(s, lines)
+  if (mini)
+    return (
+      <span className={`di-sc-pill mu mini ${s.playing ? 'playing' : ''}`} style={tintStyle(tint.rgb, s)} aria-hidden>
+        <EqMode on={s.playing} mode={music?.eqMode ?? 'beat'} />
+      </span>
+    )
   return (
     <span className={`di-sc-pill mu ${s.playing ? 'playing' : ''}`} style={tintStyle(tint.rgb, s)} title={s.title || s.station.name} aria-label={s.playing ? `Playing ${s.title || s.station.name}` : 'Music paused'}>
       <RingArt s={s} />

@@ -67,7 +67,8 @@ export function IslandMeet({ inCall, title, near, onLayout, onCaptioning }: { in
   }, [captioning])
   const held = !captioning && (s?.words ?? 0) > 0
   const canCaption = inCall && !!s?.windows && !!s.live && !priv
-  const showCall = !!s && (captioning || held || (near && inCall && !priv && !!s.windows))
+  // While captions run, the strip shows on its own; Stop / Save wait for the mouse (the resting island stays clean).
+  const showCall = !!s && ((captioning && near) || held || (near && inCall && !priv && !!s.windows))
   const showReply = !!s?.replyApp && !captioning && (near || !!rep)
   const shown = !!meet && !!s && (showCall || showReply || !!said || notice)
   const layout = useRef(onLayout)

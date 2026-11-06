@@ -12,7 +12,9 @@ import { createContext, Fragment, useCallback, useContext, useEffect, useLayoutE
 import { IslandVoice, islandVoiceOn } from './voice/IslandVoice'
 import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pill, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
+import { restingView, type RestItem, type RestKind } from '@core/islandRest'
+
 import type { IslandBeat, IslandPlacement, IslandTheme } from '../../shared/desktop'
 import { AlertScene, CountUp, Glass, Marquee, Roll, TypeIn, type WaterSplash } from './IslandScenes'
 import { FeelContext, bump, feelFor, flyId, onFrame, ringColor, setFrameMode, useFeel, type Feel } from './islandFeel'
@@ -30,7 +32,7 @@ import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake,
 import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from './IslandMoveBits'
 import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
-import { MusicPanel, ScHost, ScPeekRow, ScPillBadge, useSc } from './IslandMusic'
+import { MusicPanel, ScHost, ScPeekRow, ScPillBadge, usePillMusic, useSc } from './IslandMusic'
 import { IslandBeatGlow } from './music/IslandMusicFx'
 import { run as musicRun } from './music/engine'
 import { useTint } from './music/MusicUi'
@@ -49,14 +51,15 @@ import './island.css'
 import './island-motion.css'
 import './island-move.css'
 import './island-fit.css'
+import './island-rest.css'
 import { islandSizing, type IslandDensity } from '@core/islandFit'
 import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
 import { cursorNear } from '../../desktop/islandPlace'
 import { IslandParticles, burstFrom, setParticlesAllowed } from './IslandParticles'
-import { CalendarCap, Crescent, DropCap, LiquidBorder, Sky, TodayRing, pageTurn } from './islandShapes'
+import { Crescent, LiquidBorder, Sky, TodayRing } from './islandShapes'
 import { IslandEyesBadge } from './IslandEyesBadge'
 import { IslandMeet } from './IslandMeet'
-import { IslandMoveBadge, IslandNudgeCard, IslandNudgePill, type NudgeRun } from './IslandNudgeCard'
+import { IslandNudgeCard, IslandNudgePill, type NudgeRun } from './IslandNudgeCard'
 import { HealthBadge, HealthCard, WeekHealthCard, WindDownCard } from './IslandHealth'
 import { calmStationOf } from '@core/healthyDay'
 import { STARTER_STATIONS } from '@core/starterStations'
@@ -178,6 +181,8 @@ function Sweep({ from, to, freeze = null }: { from: number; to: number; freeze?:
   return <i ref={el} className="di-sweep" aria-hidden />
 }
 
+/** The resting island's live kinds (it may breathe while one shows; Full motion only). */
+const REST_LIVE: RestKind[] = ['timer', 'music', 'soon', 'captions', 'alert', 'winddown']
 /** IC8: the view; things only fly (and are measured) when it changes, not on every redraw. */
 const ViewContext = createContext<string>('compact')
 /**
@@ -617,7 +622,6 @@ export function DesktopIsland() {
     wasBusy.current = busyNow
   }, [quiet, inCall]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const p = useMemo(() => pill(s, now), [s, now])
   // IF4: what the pill shows, in your order.
   const acts = useMemo(() => activities(s, now, prefs.pillOrder), [s, now, prefs.pillOrder])
   // Switch between activities (P6): the dots under the pill, a sideways swipe
@@ -687,6 +691,19 @@ export function DesktopIsland() {
   // your pill order when you have set one.
   // IC15: three or more live things: the others stack up beside it and fan out on hover.
   const stack = useMemo(() => liveStack(acts, pick, now), [acts, pick, now])
+  // The resting island: what the closed pill shows (core/islandRest.ts).
+  const music = usePillMusic(k.kit.music)
+  const offKey = prefs.pillOrder.filter((x) => !x.on).map((x) => x.id).join(',')
+  const restView = useMemo(
+    () => restingView({ s, now, music: music ? { playing: music.playing, title: music.title } : null, captions: captioning, idle: look.rest, off: new Set(offKey.split(',').filter(Boolean) as PillItem[]), clock: look.clock !== 'off' }),
+    [s, now, music?.playing, music?.title, captioning, look.rest, look.clock, offKey] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  // A thing you switched to goes back to the usual after a while.
+  useEffect(() => {
+    if (!pick) return
+    const t = window.setTimeout(() => setPick(null), 20_000)
+    return () => clearTimeout(t)
+  }, [pick])
   const bubble: Activity | null = stack.length === 1 ? stack[0] : null
   const run = s.running
   useIslandSounds(place, inCall, run)
@@ -1717,88 +1734,169 @@ export function DesktopIsland() {
     : a.kind === 'now' && nowBlock && a.key === `now:${nowBlock.start}` ? <SmoothRing from={nowBlock.start} to={nowBlock.end} size={size} />
     : a.kind === 'winddown' ? <Crescent pct={a.pct} size={size - 2} />
     : <ActIcon a={a} face={s.ben.face} size={size} />
-  // IL4: the activity you switch to slides in from the side you swiped to.
-  // IM9: the title turns like a page (perspective on .di-turn); IM13: the icon
-  // and time are the same parts in every activity, so they glide to their new
-  // place and swap (Full). Calm: a crossfade; Off: a jump.
-  const slide = f.moves ? { enter: {}, center: {}, exit: {} } : { enter: { opacity: 0 }, center: { opacity: 1 }, exit: { opacity: 0 } }
-  const turn = pageTurn(f)
-  const slotFade = { enter: { opacity: 0, scale: 0.7 }, center: { opacity: 1, scale: 1 }, exit: { opacity: 0, scale: 0.7 } }
-  // IM1: the pill's ends per activity: a calendar tile with the time for a meeting, a drop for water.
-  const meetAt = (a: Activity) => (a.kind === 'now' && s.now?.call ? s.now.start : a.kind === 'next' && s.next?.call ? s.next.start : null)
   const rings = todayRings(s)
+  // The resting island (core/islandRest.ts): one main thing and at most one small extra.
+  // A thing you switched to (arrows, the wheel, a dot on hover) shows as before.
+  const picked = pick ? acts.find((x) => x.key === pick) ?? null : null
+  const restMain = restView.primary
+  const restSecond = restView.secondary
+  const restKind = s.locked ? 'locked' : old ? 'old' : s.ben.busy && !run ? 'think' : picked ? picked.kind : restMain.kind
+  const restBody = (r: RestItem) => {
+    switch (r.kind) {
+      case 'timer':
+        return run ? (
+          <>
+            <Fly id="ic-timer"><span className="rest-ico">{icon({ kind: 'timer', key: 'timer', text: '', sub: '', pct: 0, over: false, dot: false }, 20)}</span></Fly>
+            <LiveTimer run={run} />
+            {/* Focus → break → next: part of the timer, only for a flow. */}
+            <StageDots dots={run.dots} />
+          </>
+        ) : null
+      case 'music':
+        return <ScPillBadge music={k.kit.music} title />
+      case 'soon':
+        return (
+          <>
+            <span className="rest-ico rest-cal" aria-hidden><i /></span>
+            <span className="rest-text">{r.text}</span>
+            {r.at && r.at - now <= 10 * 60_000 ? <LiveCountdown at={r.at} /> : <span className="rest-time soon">{r.time}</span>}
+          </>
+        )
+      case 'captions':
+        return (
+          <>
+            <span className="rest-ico rest-rec" aria-hidden><i /></span>
+            <span className="rest-text">{r.text}</span>
+          </>
+        )
+      case 'alert':
+        return (
+          <>
+            <span className="rest-ico di-face-sm" aria-hidden>{s.alert?.face ?? s.ben.face}</span>
+            <span className="rest-text">{r.text}</span>
+            <i className="rest-dot" aria-hidden />
+          </>
+        )
+      case 'winddown':
+        return (
+          <>
+            <span className="rest-ico"><Crescent pct={r.pct ?? 0} size={18} /></span>
+            <span className="rest-text">{r.text}</span>
+            <Roll className="di-pill-time moon" text={r.time} />
+          </>
+        )
+      case 'now':
+      case 'next':
+        return (
+          <>
+            <span className={`rest-ico rest-mark ${r.kind}`} aria-hidden><i /></span>
+            <span className="rest-text">{r.text}</span>
+            <span className="rest-time">{r.time}</span>
+          </>
+        )
+      case 'health':
+        return (
+          <>
+            <HealthBadge health={s.health?.today} />
+            <span className="rest-time">{r.text}</span>
+          </>
+        )
+      case 'time':
+        return <IslandClock kind={look.clock === 'off' ? 'simple' : look.clock} color={look.clockColor || undefined} />
+      default:
+        return null
+    }
+  }
+  // The small extra: an icon or a number, never a placeholder; its tooltip says what it means.
+  const restMini = (r: RestItem) => {
+    if (r.kind === 'timer' && run) return <><SmoothRing from={run.startedAt} to={run.endsAt} size={15} stroke={2} timer freeze={run.pausedAt} /><b className="rest-num">{Math.max(0, Math.ceil((run.endsAt - (run.pausedAt ?? now)) / 60_000))}m</b></>
+    if (r.kind === 'soon' && r.at) return <b className="rest-num soon">{Math.max(1, Math.ceil((r.at - now) / 60_000))}m</b>
+    if (r.kind === 'music') return <ScPillBadge music={k.kit.music} mini />
+    if (r.kind === 'captions') return <i className="rest-dot rec" />
+    if (r.kind === 'alert') return <i className="rest-dot" />
+    if (r.kind === 'winddown') return <b className="rest-num moon">{r.time}</b>
+    if (r.kind === 'clock') return <IslandClock kind={look.clock} color={look.clockColor || undefined} />
+    return null
+  }
+  const restLabel = s.locked ? 'Open Life System' : picked ? `${picked.text} ${picked.sub}` : restMain.tip
   const compact = (
     <div
-      className={`di-pill kind-${s.locked ? 'locked' : s.ben.busy && main?.kind !== 'timer' ? 'think' : main?.kind ?? 'idle'}`}
+      className={`di-pill di-rest kind-${restKind} ${restSecond ? 'has-second' : ''}`}
       role="button"
       tabIndex={0}
+      title={restLabel}
       {...dragProps}
       {...clickProps}
       onKeyDown={(e) => (e.key === 'Enter' ? dispatch({ type: 'click' }) : e.key === 'ArrowRight' ? cycle(1) : e.key === 'ArrowLeft' ? cycle(-1) : undefined)}
       onWheel={onWheel}
       // H1: a double-click tucks it into a small dot (a click on the dot brings it back).
       onDoubleClick={(e) => { e.preventDefault(); dispatch({ type: 'close' }); desk()?.islandHide?.('dot') }}
-      aria-label="Open the island (drag to move it, double-click to tuck it away, arrows or the mouse wheel switch)"
+      aria-label={`${restLabel}. Open the island (drag to move it, double-click to tuck it away, arrows or the mouse wheel switch)`}
     >
+      {/* Shown only while the mouse is on it (it takes no room at rest). */}
       <GripHandle onPointerDown={(e) => { e.stopPropagation(); dragProps.onPointerDown(e, true) }} />
-      {/* Music: the artwork ring and equalizer; with nothing else on the pill, the song's title too. */}
-      <ScPillBadge music={k.kit.music} title={!main && !s.ben.busy && !s.locked} />
-      {s.locked ? (
-        <span className="di-pill-text">🔒 Open Life System</span>
-      ) : old ? (
-        <>
-          <span className="di-face-sm">{s.ben.face}</span>
-          <span className="di-pill-text di-reconnect">Reconnecting…</span>
-        </>
-      ) : s.ben.busy && main?.kind !== 'timer' ? (
-        // IM3: Ben is thinking: a slow wave in the pill.
-        <span className="di-pill-main di-pill-think">
-          <span className="di-face-sm">{s.ben.face}</span>
-          <ThinkWave />
-          <span className="di-pill-text">Ben is thinking…</span>
-        </span>
-      ) : !main ? (
-        <Fly id="ic-idle">
-          {/* IC5: today's three rings around Ben's face. */}
-          <TodayRing must={rings.must} water={rings.water} focus={rings.focus} size={28}>
-            <span className="di-face-sm">{s.ben.face}</span>
-          </TodayRing>
-        </Fly>
-      ) : (
-        <AnimatePresence mode="popLayout" initial={false} custom={dir}>
-          <motion.span key={main.key} className="di-pill-main" custom={dir} variants={slide} initial="enter" animate="center" exit="exit" transition={f.pop}>
-            {meetAt(main) != null && <CalendarCap at={meetAt(main)!} />}
-            <Fly id={`ic-${main.key}`}>
-              <motion.span className="di-slot" layoutId={flyId(f, 'pill-ic')} variants={f.moves ? slotFade : undefined} transition={f.fly}>{icon(main)}</motion.span>
-            </Fly>
-            <span className="di-turn">
-              <motion.span className="di-turn-in" custom={dir} variants={turn} transition={f.pop}>
-                <Fly id={`ti-${main.key}`} pos className="di-pill-title">
-                  <Marquee className="di-pill-text" text={main.kind === 'timer' ? main.sub : main.kind === 'next' ? `Next: ${main.text}` : main.kind === 'winddown' ? 'Bed in' : main.text} />
-                </Fly>
-              </motion.span>
+      <AnimatePresence mode="popLayout" initial={false} custom={dir}>
+        <motion.span
+          key={s.locked ? 'locked' : old ? 'old' : restKind === 'think' ? 'think' : picked ? picked.key : restMain.key}
+          className={`rest-item rest-primary rest-k-${restKind}`}
+          custom={dir}
+          initial={f.mode === 'off' ? false : { opacity: 0, y: f.moves ? 6 : 0 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: f.moves ? -6 : 0 }}
+          transition={f.pop}
+        >
+          {s.locked ? (
+            <span className="rest-text">🔒 Open Life System</span>
+          ) : old ? (
+            <>
+              <span className="rest-ico di-face-sm">{s.ben.face}</span>
+              <span className="rest-text di-reconnect">Reconnecting…</span>
+            </>
+          ) : restKind === 'think' ? (
+            // IM3: Ben is thinking: a slow wave in the pill.
+            <span className="di-pill-main di-pill-think">
+              <span className="di-face-sm">{s.ben.face}</span>
+              <ThinkWave />
+              <span className="rest-text">Ben is thinking…</span>
             </span>
-            <Fly id={`tm-${main.key}`}>
-              <motion.span className="di-slot" layoutId={flyId(f, 'pill-tm')} variants={f.moves ? slotFade : undefined} transition={f.fly}>{pillTime(main)}</motion.span>
-            </Fly>
-            {main.kind === 'timer' && <StageDots dots={run?.dots} />}
-            {main.kind === 'water' && <DropCap pct={main.pct} />}
+          ) : picked ? (
+            <>
+              <span className="rest-ico">{icon(picked, 20)}</span>
+              <Marquee className="rest-text" text={picked.kind === 'timer' ? picked.sub : picked.kind === 'next' ? `Next: ${picked.text}` : picked.text} />
+              {pillTime(picked)}
+            </>
+          ) : (
+            restBody(restMain)
+          )}
+        </motion.span>
+      </AnimatePresence>
+      <AnimatePresence initial={false}>
+        {restSecond && !s.locked && !old && restKind !== 'think' && !picked && (
+          <motion.span
+            key={restSecond.key}
+            className={`rest-item rest-secondary rest-k-${restSecond.kind}`}
+            title={restSecond.tip}
+            aria-label={restSecond.tip}
+            initial={f.mode === 'off' ? false : { opacity: 0, scale: 0.6 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.6 }}
+            transition={f.pop}
+          >
+            {restMini(restSecond)}
           </motion.span>
-        </AnimatePresence>
-      )}
-      {!s.locked && !old && <IslandMoveBadge move={s.move} now={now} />}
-      {!s.locked && !old && <HealthBadge health={s.health?.today} />}
-      {p.dot && <i className={`di-dot ${main?.kind === 'next' && main.at && main.at - now <= 10 * 60_000 ? 'tick' : ''}`} />}
-      {acts.length > 1 && !s.locked && (
+        )}
+      </AnimatePresence>
+      {/* Hover: a hint of what else there is, the switch dots, CPU / usage, your one-tap buttons. */}
+      {ui.over && !s.locked && !old && (restView.hint || picked) && <span className="rest-hint">{picked ? restMain.tip : restView.hint}</span>}
+      {ui.over && acts.length > 1 && !s.locked && (
         <span className="di-dots" aria-hidden>
           {acts.slice(0, 5).map((x) => (
-            <i key={x.key} className={x === main ? 'on' : ''} {...tp(`dot:${x.key}`, () => pickKey(x.key))} />
+            <i key={x.key} className={x === main && pick ? 'on' : ''} {...tp(`dot:${x.key}`, () => pickKey(x.key))} />
           ))}
         </span>
       )}
-      {/* System / AI usage: usage rings, CPU and memory, the 70% / 90% notice (each only when on). */}
-      {!s.locked && !old && <SysPill />}
-      {!s.locked && look.clock !== 'off' && <IslandClock kind={look.clock} color={look.clockColor || undefined} />}
+      {/* System / AI usage: the 70% / 90% notice at rest; rings, CPU and memory only on hover. */}
+      {!s.locked && !old && <SysPill rest={!ui.over} />}
       {/* IN35: your one-tap buttons (shown while the mouse is on the pill). */}
       {!s.locked && <PillKitButtons k={k} />}
     </div>
@@ -1821,7 +1919,8 @@ export function DesktopIsland() {
       </>
     )
   const hushedNow = q.until > Date.now() || (inCall && prefs.callMode === 'dot') || (q.fullscreen && q.fullscreenMode === 'dot')
-  const bubbleOn = !!bubble && ui.view === 'compact' && !hushedNow && !s.locked && !old
+  // At rest the pill holds everything (one main thing, one small extra); the bubble shows on hover.
+  const bubbleOn = !!bubble && ui.over && ui.view === 'compact' && !hushedNow && !s.locked && !old
   const bubbleEl = bubbleOn && bubble ? (
     <motion.button
       key="bubble"
@@ -2238,7 +2337,17 @@ export function DesktopIsland() {
     alert: s.alert?.id ?? null
   }
   const views = { compact: mv.parked ? <ParkedDot /> : hushed ? moonPill : barNow ? <IslandIndicator info={indInfo} {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : peek, expanded }
-  const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : ISLAND_SHAPE.compact.radius) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
+  // No desktop size (the website preview, an older desktop): fit the screen the page is on.
+  const sentMaxH = (prefs as { panelMaxH?: number }).panelMaxH
+  const localFit = islandSizing({ pick: prefs.size, area: { width: window.screen?.availWidth, height: window.screen?.availHeight }, panelWidth: prefs.panelWidth })
+  const density: IslandDensity = sentDensity ?? localFit.density
+  const panelW = sentMaxH ? prefs.panelWidth : localFit.panelW
+  const panelMaxH = sentMaxH || localFit.panelH
+  // The notch hangs from the top edge (the bar look too): square top corners.
+  const notchOn = bar || (look.style === 'notch' && (place === 'top' || place.startsWith('top')))
+  // At rest: a capsule is fully round; the notch's bottom corners are a softer, hardware-like curve.
+  const restR = notchOn ? (density === 'compact' ? 12 : 14) : Math.max(12, Math.round(size.h / 2))
+  const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : barNow ? ISLAND_SHAPE.compact.radius : restR) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
   // IA3 / IL3: one feel: snappy open, softer close, a bouncy landing for a new alert, a quick stretch before it.
   const transition = stretch ? { type: 'spring' as const, stiffness: 700, damping: 26 } : ui.view === 'compact' ? f.close : dropping2 && ui.view === 'peek' ? f.drop : f.open
 
@@ -2256,7 +2365,6 @@ export function DesktopIsland() {
   anchorRef.current = anchor
   const clip = useMotionValue('none')
   // The bar look hugs the top edge too: square top corners, round bottom ones (the Indicator, its pill and panel).
-  const notchOn = bar || (look.style === 'notch' && (place === 'top' || place.startsWith('top')))
   const notchRef = useRef(notchOn)
   notchRef.current = notchOn
   useLayoutEffect(() => drawClipRef.current(), [notchOn])
@@ -2320,7 +2428,7 @@ export function DesktopIsland() {
     if (shape.current) shape.current.style.transform = 'none'
   }, [ui.view, lift])
   // The click area follows every new shape: the stretch, the bubble, the toast (IA1).
-  const stackOn = stack.length >= 2 && (ui.view === 'compact' || (ui.view === 'peek' && !ui.byAlert)) && !hushedNow && !s.locked && !old && !showMoment
+  const stackOn = stack.length >= 2 && ui.over && (ui.view === 'compact' || (ui.view === 'peek' && !ui.byAlert)) && !hushedNow && !s.locked && !old && !showMoment
   const stackOpen = stackOn && ui.over
   useEffect(() => {
     pump(700)
@@ -2395,14 +2503,9 @@ export function DesktopIsland() {
     return finalShapeRect({ anchor, ax: anchor === 'left' ? b.left : anchor === 'right' ? b.right : b.left + b.width / 2, top: sh.getBoundingClientRect().top, w: prefs.peekWidth * scale, h })
   }
   const benUnread = s.ben.unread > 0 && !hushed && !s.locked
-  // No desktop size (the website preview, an older desktop): fit the screen the page is on.
-  const sentMaxH = (prefs as { panelMaxH?: number }).panelMaxH
-  const localFit = islandSizing({ pick: prefs.size, area: { width: window.screen?.availWidth, height: window.screen?.availHeight }, panelWidth: prefs.panelWidth })
-  const density: IslandDensity = sentDensity ?? localFit.density
-  const panelW = sentMaxH ? prefs.panelWidth : localFit.panelW
-  const panelMaxH = sentMaxH || localFit.panelH
   const origin = place === 'left' || place === 'top-left' ? 0 : place === 'right' || place === 'top-right' ? 1 : 0.5
-  const edgeOk = !barNow && ui.view !== 'expanded' && !(ui.view === 'peek' && ui.byAlert) && !hushed && !s.locked && !old && !showMoment
+  // The resting pill draws no lines (no bottom line, no outline): only the peek shows them.
+  const edgeOk = !barNow && ui.view === 'peek' && !ui.byAlert && !hushed && !s.locked && !old && !showMoment
   // IM2: while a timer runs the whole outline fills (with a glowing head) instead of the bottom line.
   const sweep = edgeOk && !run && s.now ? <Sweep from={s.now.start} to={s.now.end} /> : null
   const border = edgeOk && run && !moving ? <LiquidBorder from={run.startedAt} to={run.endsAt} freeze={run.pausedAt} w={box.w} h={box.h} r={radius} /> : null
@@ -2428,7 +2531,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''}`}
+            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -2459,6 +2562,8 @@ export function DesktopIsland() {
               {border}
               <motion.div className="di-follow" style={{ y: mh }}>{sweep}</motion.div>
             </motion.div>
+            {/* The notch's shoulders: the concave curves where it meets the top edge, like a hardware notch. */}
+            {notchOn && !barNow && !bar && <motion.div className={`di-ears at-${anchor}`} style={{ width: mw, scale: lift, scaleX: jx, originX: origin, originY: 0 }} aria-hidden />}
             <motion.div className={`di-beside at-${anchor}`} style={{ x: besideX }}>
               <AnimatePresence>{stackOn ? null : bubbleEl}</AnimatePresence>
               {stackOn && <LiveStack items={stack} open={stackOpen} side={side as 1 | -1} icon={bubbleIcon} onPick={pickKey} onMoved={(done) => (done ? sendHot(true) : pump(700))} />}

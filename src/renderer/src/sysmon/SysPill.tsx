@@ -8,7 +8,8 @@ import { usageAlert, type ToolUsage, type UsageNotice } from '@core/aiUsage'
 import { aiOn, readTold, saveTold, usageColumns, useSysmonPrefs } from './sysmonFeed'
 import { UsageRing } from './AiUsagePage'
 
-export function SysPill() {
+/** `rest`: the closed island at rest shows only the notice (rings, CPU and memory wait for the hover). */
+export function SysPill({ rest = false }: { rest?: boolean } = {}) {
   const p = useSysmonPrefs()
   const [cpu, setCpu] = useState<{ cpu: number; mem: number } | null>(null)
   const [tools, setTools] = useState<ToolUsage[]>([])
@@ -61,17 +62,18 @@ export function SysPill() {
   }, [notice])
 
   if (!p) return null
-  const rings = p.readings.rings ? tools.filter((t) => t.pct != null) : []
-  if (!notice && !rings.length && !cpu) return null
+  const rings = p.readings.rings && !rest ? tools.filter((t) => t.pct != null && t.pct > 0) : []
+  const cpuShown = rest ? null : cpu
+  if (!notice && !rings.length && !cpuShown) return null
   return (
     <span className="sm-pill" aria-live="polite">
       {rings.map((t) => (
         <UsageRing key={t.tool} pct={t.pct} letter={t.letter} size={20} stroke={2.4} warn={p.alerts.warn} crit={p.alerts.crit} />
       ))}
-      {cpu && (
+      {cpuShown && (
         <span className="sm-pill-cpu" title="CPU and memory (every 30 s)">
-          <em>CPU {cpu.cpu}%</em>
-          <em>RAM {cpu.mem}%</em>
+          <em>CPU {cpuShown.cpu}%</em>
+          <em>RAM {cpuShown.mem}%</em>
         </span>
       )}
       {/* The notice covers the pill for 5 s (the pill keeps its size). */}

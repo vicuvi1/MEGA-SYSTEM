@@ -40,7 +40,7 @@ html.di-root body { -webkit-font-smoothing: antialiased; user-select: none; }
 .di.view-expanded .di-shade { box-shadow: 0 24px 70px rgb(0 0 0 / 0.6), 0 0 0 1px var(--line), 0 0 40px -12px var(--glow); }
 /* IC10: a running timer's pill breathes: a glow drawn once, only its opacity changes (no shadow repainted every frame). */
 .di-breath { position: absolute; inset: 0; pointer-events: none; opacity: 0; will-change: opacity; box-shadow: 0 0 30px -2px var(--glow); }
-.di.has-timer.view-compact .di-breath { animation: di-breath 3.2s ease-in-out infinite; }
+/* It runs only in Full motion while something live shows on the resting pill (island-rest.css). */
 @keyframes di-breath { 50% { opacity: 1; } }
 .di.dropping .di-shade { box-shadow: 0 0 0 2px var(--lime), 0 0 28px -4px var(--lime); }
 .di.look-glass { --bg: rgb(24 27 36 / calc(var(--di-alpha, 1) * 0.78)); --line: rgb(var(--ink) / 0.16); }

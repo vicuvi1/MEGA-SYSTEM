@@ -5,6 +5,7 @@ import { cleanGrants, fullGrants, type WidgetGrants } from './bridge'
 import { cleanConfig, type WidgetManifest } from './manifest'
 import { cleanPagesPrefs, isPageId, type PagesPrefs } from './pages'
 import { cleanScripts, type UserScript } from './scripts'
+import { REST_IDLE, type RestIdle } from '../islandRest'
 
 export interface InstalledWidget {
   id: string
@@ -26,7 +27,7 @@ export const ISLAND_STYLES: IslandStyle[] = ['notch', 'capsule', 'indicator']
 export const STYLE_LABEL: Record<IslandStyle, string> = { notch: 'Notch (on the top edge)', capsule: 'Capsule (floating pill)', indicator: 'Thin bar' }
 export type ClockStyle = 'off' | 'simple' | 'segment' | 'serif'
 export const CLOCK_STYLES: ClockStyle[] = ['off', 'simple', 'segment', 'serif']
-export const CLOCK_LABEL: Record<ClockStyle, string> = { off: 'No clock', simple: 'Simple', segment: 'Seven-segment', serif: 'Serif' }
+export const CLOCK_LABEL: Record<ClockStyle, string> = { off: 'Plain, only when idle', simple: 'Simple', segment: 'Seven-segment', serif: 'Serif' }
 export type IslandThemeId = 'dark' | 'light' | 'onedark' | 'ghdark' | 'ghlight' | 'dracula' | 'nightowl' | 'cyberpunk'
 export const ISLAND_THEMES: IslandThemeId[] = ['dark', 'light', 'onedark', 'ghdark', 'ghlight', 'dracula', 'nightowl', 'cyberpunk']
 export const THEME_LABEL: Record<IslandThemeId, string> = { dark: 'Dark', light: 'Light', onedark: 'One Dark Pro', ghdark: 'GitHub Dark', ghlight: 'GitHub Light', dracula: 'Dracula', nightowl: 'Night Owl', cyberpunk: 'Cyberpunk' }
@@ -41,8 +42,10 @@ export interface IslandLookPrefs {
   theme: IslandThemeId
   /** Open the whole panel on hover (not just the peek); moving away or Esc closes it. */
   hoverOpen: boolean
+  /** What the closed island shows when nothing is happening (core/islandRest.ts). */
+  rest: RestIdle
 }
-export const DEFAULT_LOOK: IslandLookPrefs = { style: 'notch', maxBar: true, clock: 'off', clockColor: '', theme: 'dark', hoverOpen: false }
+export const DEFAULT_LOOK: IslandLookPrefs = { style: 'notch', maxBar: true, clock: 'off', clockColor: '', theme: 'dark', hoverOpen: false, rest: 'next' }
 
 /** PL8: island settings that follow you to every PC (the rest of the island's settings stay on each PC). */
 export interface SyncedLayout {
@@ -73,7 +76,8 @@ export function cleanLook(v: any, fallbackStyle: IslandStyle = 'notch'): IslandL
     clock: CLOCK_STYLES.includes(v?.clock) ? v.clock : 'off',
     clockColor: typeof v?.clockColor === 'string' && COLOR.test(v.clockColor) ? v.clockColor.toLowerCase() : '',
     theme: ISLAND_THEMES.includes(v?.theme) ? v.theme : 'dark',
-    hoverOpen: v?.hoverOpen === true
+    hoverOpen: v?.hoverOpen === true,
+    rest: REST_IDLE.includes(v?.rest) ? v.rest : 'next'
   }
 }
 

@@ -737,8 +737,13 @@ try {
     })
     await ip.goto(`http://127.0.0.1:${port}/?island=1`)
     await ip.waitForSelector('.di-pill.kind-timer', { timeout: 15000 })
-    // IM2: a running timer fills the outline.
+    // IM2: a running timer fills the outline of the peek (the resting pill draws no lines).
+    if (await ip.$('.di-border')) throw new Error('the resting pill draws the timer outline')
+    await ip.evaluate(() => window.__island.send('hover', true))
+    await ip.waitForSelector('.di-peek', { timeout: 4000 })
     await ip.waitForSelector('.di-border .di-border-fg', { timeout: 4000 })
+    await ip.evaluate(() => window.__island.send('hover', false))
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
     // IM4: all must-dos done: the pill stretches with what happened.
     await ip.evaluate(() => window.__setSnap({ mustdos: window.__island.snap.mustdos.map((m) => ({ ...m, done: true })) }))
     await ip.waitForSelector('.di-moment', { timeout: 3000 })
@@ -755,7 +760,11 @@ try {
     // IC15: a timer, a meeting in 5 minutes and Ben's message: the other two stack beside the pill.
     const t = Date.now()
     await ip.evaluate((t) => window.__setSnap({ running: { subject: 'Essay', startedAt: t - 60_000, endsAt: t + 600_000 }, next: { title: 'Dentist', start: t + 5 * 60_000, end: t + 3600_000 }, ben: { ...window.__island.snap.ben, busy: false, unread: 1 } }), t)
+    // At rest the pill holds them (one main thing, one small extra); the stack fans out on hover.
+    await ip.waitForSelector('.di-rest .rest-secondary', { timeout: 3000 })
+    await ip.evaluate(() => window.__island.send('hover', true))
     await ip.waitForFunction(() => document.querySelectorAll('.di-stack-b[data-hot]').length === 2, null, { timeout: 3000 })
+    await ip.evaluate(() => window.__island.send('hover', false))
     // IC14: the evening story.
     await ip.evaluate(() => window.__setSnap({ alert: { id: 'recap:x', kind: 'recap', title: 'Your day', text: '1 of 2 must-dos', recap: { mustDone: 1, mustTotal: 2, waterMl: 1500, waterTarget: 2000, focusMin: 80, focusGoal: 120 }, actions: [{ label: 'Nice', action: { kind: 'dismiss', id: 'recap:x' } }] } }))
     await ip.waitForSelector('.di-peek.alert .ev-scene', { timeout: 4000 })
@@ -818,7 +827,12 @@ try {
       }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
     })
     await ip.goto(`http://127.0.0.1:${port}/?island=1`)
-    await ip.waitForSelector('.di-pill .hd-badge', { timeout: 15000 })
+    await ip.waitForSelector('.di-pill.di-rest:not(.kind-locked)', { timeout: 15000 })
+    // "When nothing is happening, show: Healthy day": the ring alone on the resting pill.
+    const alert0 = await ip.evaluate(() => window.__island.snap.alert)
+    await ip.evaluate(() => window.__setSnap({ alert: null, widgets: { installed: [], look: { rest: 'health' } } }))
+    await ip.waitForSelector('.di-pill .hd-badge', { timeout: 5000 })
+    await ip.evaluate((a) => window.__setSnap({ alert: a }), alert0)
     await ip.click('.di-pill')
     await ip.waitForSelector('.di-panel .hd-card', { timeout: 5000 })
     if (!/Healthy day/.test(await ip.locator('.hd-card').innerText())) throw new Error('no Healthy day card on the Day page')
@@ -879,7 +893,9 @@ try {
       }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
     })
     await ip.goto(`http://127.0.0.1:${port}/?island=1`)
-    await ip.waitForSelector('.di-pill .nd-badge', { timeout: 15000 })
+    // The first picture has arrived (not the locked pill).
+    await ip.waitForSelector('.di-pill.di-rest:not(.kind-locked)', { timeout: 15000 })
+    if (await ip.$('.di-pill .nd-badge')) throw new Error('the resting pill still shows the movement ring')
     const op = (o) => ({ kind: 'nudge', op: o })
     await ip.evaluate((op) => {
       window.__island.send('prefs', { size: 'normal', gapMin: 0 })
@@ -1026,6 +1042,83 @@ try {
     if (addedSays !== 'added') throw new Error(`the confirmed note was not added: ${addedSays}`)
     if (!(await ip.evaluate(() => window.__island.actions.some((a) => a.kind === 'widget' && a.op === 'addNote' && a.widget === 'pomodoro')))) throw new Error('no addNote action')
     await ip.context().close()
+  })
+  // The resting island: one main thing and at most one small extra, nothing empty
+  // (no 0% ring, no empty circle, no grey dash), and no stray lines under the notch.
+  await step('Resting island: at most 2 items, no empty placeholders, no stray lines (notch and capsule, dark and light)', async () => {
+    for (const style of ['notch', 'capsule']) for (const theme of ['dark', 'light']) {
+      const ctx = await browser.newContext({ viewport: { width: 640, height: 220 }, colorScheme: theme })
+      const ip = await ctx.newPage()
+      ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+      await ip.addInitScript(([style, theme]) => {
+        const cbs = {}
+        const on = (name) => (cb) => { cbs[name] = cb }
+        const now = Date.now()
+        const d = new Date(now)
+        const later = Math.min(now + 78 * 60_000, new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 50).getTime())
+        const parts = [{ id: 'water', icon: '💧', label: 'Water', done: false, pct: 0.48, text: '' }, { id: 'move', icon: '💪', label: 'Moves', done: false, pct: 0, text: '' }]
+        // Made-up: the busy day that used to cram the pill (water, an empty movement ring, a 20% ring, a dot).
+        const snap = {
+          at: now, locked: false,
+          ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+          running: null, now: null, next: { title: 'Made-up class', start: later, end: later + 3600_000, kind: 'event' }, mustdos: [], water: { ml: 1300, target: 2700 }, reps: [], alert: null,
+          health: { today: { score: 20, met: 0, parts, streak: 0, bonus: false, line: '' }, week: null },
+          move: { done: 0, goal: 100, unit: 'reps', breaks: 0, streak: 1, best: 3, challenge: { name: 'Push-ups', done: 0, target: 100 }, plus: null },
+          widgets: { installed: [], look: { style, theme } }
+        }
+        window.__island = { send: (name, v) => cbs[name]?.(v), snap }
+        window.__setSnap = (patch) => { window.__island.snap = { ...window.__island.snap, at: Date.now(), ...patch }; cbs.state?.(window.__island.snap) }
+        window.desktop = new Proxy({
+          islandHot: () => {}, islandTakeClicks: () => {}, islandAction: () => {}, setIslandPrefs: async () => null,
+          onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+          onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+        }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+      }, [style, theme])
+      await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+      await ip.waitForSelector('.di-pill.di-rest', { timeout: 15000 })
+      await ip.mouse.move(600, 210)
+      const check = async (what, kind) => {
+        await ip.waitForSelector(`.di-pill.di-rest.kind-${kind}`, { timeout: 4000 })
+        await ip.waitForTimeout(700)
+        const r = await ip.evaluate(() => {
+          const shown = (e) => {
+            const b = e.getBoundingClientRect()
+            const cs = getComputedStyle(e)
+            return b.width > 0.5 && b.height > 0.5 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05
+          }
+          const pill = document.querySelector('.di-pill.di-rest')
+          const items = [...pill.children].filter(shown).map((e) => e.className.baseVal ?? e.className)
+          // A ring with nothing in it: a progress circle drawn at 0%.
+          const zero = [...pill.querySelectorAll('circle[stroke-dasharray]')].filter((c) => shown(c) && Math.abs(parseFloat(c.getAttribute('stroke-dasharray')) - parseFloat(c.getAttribute('stroke-dashoffset') ?? '0')) < 0.01).length
+          const placeholders = [...pill.querySelectorAll('.nd-badge, .nd-chbar, .di-today, .di-cap, .di-dot, .di-dots, .sm-pill-cpu')].filter(shown).map((e) => e.className.baseVal ?? e.className)
+          // Lines: anything thin and wide under or around the shape (a progress line, dots, an outline fill).
+          const lines = [...document.querySelectorAll('.di *')].filter((e) => {
+            if (!shown(e) || e.closest('.di-pill') || e.closest('.di-ears')) return false
+            const b = e.getBoundingClientRect()
+            return b.height <= 3 && b.width >= 12
+          }).map((e) => e.className.baseVal ?? e.className)
+          const extra = [...document.querySelectorAll('.di-sweep, .di-border, .di-beside > *')].filter(shown).length
+          const sh = document.querySelector('.di-shape').getBoundingClientRect()
+          return { items, zero, placeholders, lines, extra, top: sh.top, h: sh.height, ears: !!document.querySelector('.di-ears') }
+        })
+        const where = `${style}, ${theme}, ${what}`
+        if (r.items.length > 2) throw new Error(`${where}: the resting pill shows ${r.items.length} things: ${r.items.join(', ')}`)
+        if (r.zero) throw new Error(`${where}: an empty (0%) ring on the resting pill`)
+        if (r.placeholders.length) throw new Error(`${where}: placeholders on the resting pill: ${r.placeholders.join(', ')}`)
+        if (r.lines.length || r.extra) throw new Error(`${where}: stray lines around the island: ${r.lines.join(', ')} (${r.extra} beside)`)
+        if (style === 'notch' && (r.top !== 0 || r.h < 26 || r.h > 34 || !r.ears)) throw new Error(`${where}: the notch is not flush with the top edge (${r.top}, ${r.h}px, shoulders ${r.ears})`)
+      }
+      await check('a calm day', 'next')
+      await ip.evaluate(() => window.__setSnap({ ben: { ...window.__island.snap.ben, unread: 1 } }))
+      await check('a new message', 'alert')
+      if ((await ip.getAttribute('.di-rest .rest-primary', 'class')).includes('alert') && !/new message/.test(await ip.getAttribute('.di-pill.di-rest', 'title'))) throw new Error('the message dot says nothing')
+      const t = Date.now()
+      await ip.evaluate((t) => window.__setSnap({ running: { subject: 'Made-up focus', startedAt: t - 60_000, endsAt: t + 600_000 }, next: { title: 'Made-up class', start: t + 8 * 60_000, end: t + 3600_000 } }), t)
+      await check('a timer, an event soon and a message', 'timer')
+      await ip.evaluate(() => window.__setSnap({ running: null, ben: { ...window.__island.snap.ben, unread: 0 }, next: null }))
+      await check('nothing left today', 'time')
+      await ctx.close()
+    }
   })
   // The thin Indicator (a window is maximized): ONE small capsule on the top edge. The timer fills it,
   // music adds an equalizer, nothing else is drawn as a second line; hover grows it into the pill.

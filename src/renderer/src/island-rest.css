@@ -1,0 +1,101 @@
+/* The resting island (core/islandRest.ts): the closed pill or notch while you
+   are not using it. One main thing and at most one small extra, generous
+   spacing, one baseline. The notch hangs flush from the top edge with
+   concave shoulders (.di-ears) and a fixed height; the capsule is a clean
+   pill. No lines at rest: no bottom line, no outline fill, no dots (the
+   switch dots, the grip and the hint show only on hover). Colours come from
+   the theme variables (islandLook.css), so every theme works. */
+
+.di {
+  --rest-h: calc(var(--di-pill-h, 38px) - 4px); --rest-font: 13px; --rest-pad: 15px; --rest-gap: 7px; --rest-space: 11px;
+  --rest-min: 112px; --rest-text-max: 190px; --ear: 10px; --rest-r: 14px;
+  --rest-shadow: rgb(0 0 0 / 0.42);
+}
+.di.dens-compact { --rest-h: calc(var(--di-pill-h, 38px) - 8px); --rest-font: 12px; --rest-pad: 12px; --rest-gap: 6px; --rest-space: 9px; --rest-min: 96px; --rest-text-max: 150px; --ear: 8px; }
+/* The notch: a fixed height, like hardware. */
+.di.style-notch { --rest-h: 30px; --rest-min: 124px; }
+.di.style-notch.dens-compact { --rest-h: 28px; --rest-min: 108px; }
+/* Light themes: a softer shadow. */
+.di:is(.th-light, .th-ghlight), .di.look-app.theme-light { --rest-shadow: rgb(20 25 34 / 0.16); }
+
+/* ---- the pill ---- */
+.di .di-pill.di-rest {
+  height: var(--rest-h); min-width: var(--rest-min); padding: 0 var(--rest-pad); gap: var(--rest-space);
+  justify-content: center; font-size: var(--rest-font); line-height: 1; letter-spacing: 0.005em;
+}
+.di .di-pill.di-rest.kind-nothing { min-width: calc(var(--rest-min) - 28px); }
+.di .di-pill.di-rest.kind-time, .di .di-pill.di-rest.kind-health { min-width: calc(var(--rest-min) - 16px); }
+.di-rest .rest-item { display: inline-flex; align-items: center; gap: var(--rest-gap); min-width: 0; white-space: nowrap; }
+.di-rest .rest-primary { flex: 0 1 auto; }
+.di-rest .rest-secondary { flex: none; gap: 4px; color: var(--sub); }
+.di-rest .rest-text { min-width: 0; max-width: var(--rest-text-max); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; color: rgb(var(--ink) / 0.92); }
+.di-rest .rest-time { flex: none; font-variant-numeric: tabular-nums; font-weight: 500; color: var(--sub); }
+.di-rest .rest-time.soon { color: var(--amber); font-weight: 600; }
+.di-rest .di-pill-time { font-size: calc(var(--rest-font) + 0.5px); line-height: 1; }
+.di-rest .rest-ico { flex: none; display: inline-grid; place-items: center; min-width: 16px; height: 18px; }
+.di.dens-compact .di-rest .rest-ico { height: 16px; }
+.di-rest .rest-ico.di-face-sm { font-size: 14px; }
+.di-rest .rest-ico svg { display: block; }
+.di-rest .rest-num { font-size: calc(var(--rest-font) - 1px); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--sub); }
+.di-rest .rest-num.soon { color: var(--amber); }
+.di-rest .rest-num.moon { color: #a9c4ff; }
+
+/* What is on now: an accent dot. An event soon: a tiny calendar. Captions: a red dot. */
+.di-rest .rest-mark i { width: 6px; height: 6px; border-radius: 50%; background: var(--acc-text); box-shadow: 0 0 6px var(--acc-text); }
+.di-rest .rest-mark.next i { width: 6px; height: 6px; background: var(--sub); box-shadow: none; opacity: 0.8; }
+.di-rest .rest-cal i { width: 11px; height: 11px; box-sizing: border-box; border-radius: 3px; border: 1.5px solid var(--amber); border-top-width: 3.5px; }
+.di-rest .rest-rec i, .di-rest .rest-dot { display: block; width: 7px; height: 7px; border-radius: 50%; background: var(--red); box-shadow: 0 0 6px rgb(255 90 95 / 0.55); }
+.di-rest .rest-dot { width: 6px; height: 6px; }
+.di.motion-full .di-rest :is(.rest-rec i, .rest-dot) { animation: rest-pulse 2.4s ease-in-out infinite; }
+@keyframes rest-pulse { 50% { opacity: 0.45; } }
+
+/* The clock: no extra margin, the theme's colour. */
+:root .di .di-rest .di-clock { margin-left: 0; font-size: calc(var(--rest-font) + 0.5px); }
+:root .di .di-rest .rest-secondary .di-clock { font-size: var(--rest-font); color: var(--clock, var(--sub)); }
+:root .di .di-rest .di-clock.seg { height: 12px; }
+.di-rest .di-clock.seg .di-seg { width: 6px; height: 11px; }
+
+/* Music: the artwork ring and title, a little smaller; the extra is the equalizer alone. */
+.di-rest .di-sc-pill { gap: var(--rest-gap); }
+.di-rest .di-mp { width: 20px !important; height: 20px !important; }
+.di-rest .di-mp svg { width: 100%; height: 100%; }
+.di-rest .di-mp-lyric { max-width: var(--rest-text-max); font-size: var(--rest-font); }
+.di-rest .di-sc-pill.mini { gap: 0; }
+/* Light themes: the music colour is the theme's accent (a pale artwork tint would vanish on white). */
+.di:is(.th-light, .th-ghlight) .di-rest .di-sc-pill, .di.look-app.theme-light .di-rest .di-sc-pill { --mu-rgb: 42 86 214 !important; }
+
+/* The healthy-day ring alone (with its count). */
+.di-rest .hd-badge { margin: 0; }
+
+/* Hover only: the grip (it takes no room), a hint, the switch dots. */
+.di-rest .di-grip { position: absolute; left: 3px; top: 0; bottom: 0; margin: 0; opacity: 0; }
+.di.is-hover .di-rest .di-grip, .di.di-move-mode .di-rest .di-grip, .di-rest:focus-visible .di-grip { opacity: 0.55; }
+.di-rest .rest-hint { flex: 0 1 auto; max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sub); font-size: calc(var(--rest-font) - 0.5px); }
+.di.motion-full .di-rest .rest-hint, .di.motion-calm .di-rest .rest-hint { animation: rest-hint 0.28s ease-out both; }
+@keyframes rest-hint { from { opacity: 0; transform: translateX(-4px); } }
+.di-rest .di-dots { bottom: 2px; }
+.di-rest .sm-pill { gap: 5px; }
+
+/* ---- the shape at rest ---- */
+.di.view-compact:not(.is-bar) .di-shade { box-shadow: 0 8px 22px var(--rest-shadow), 0 0 0 1px var(--line); }
+:root .di.style-notch.view-compact:not(.is-bar) .di-shade { box-shadow: 0 6px 18px var(--rest-shadow), 0 0 0 1px var(--line); }
+.di.is-hover.view-compact .di-shade, :root .di.style-notch.is-hover.view-compact .di-shade { box-shadow: 0 12px 30px var(--rest-shadow), 0 0 0 1px var(--line), 0 0 22px -8px var(--glow); }
+/* Cyberpunk keeps its neon edge. */
+:root .di.th-cyberpunk.view-compact:not(.is-bar) .di-shade { box-shadow: 0 8px 24px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(0 240 255 / 0.5), 0 0 18px -6px rgb(255 42 109 / 0.5); }
+/* The time-of-day tint and the stars stay off the resting pill (a clean black notch). */
+.di.view-compact .di-sky { display: none; }
+
+/* The notch's shoulders: two concave curves in the island's own colour where it meets the top edge. */
+.di-ears { position: absolute; top: 0; height: var(--ear); pointer-events: none; }
+.di-ears.at-center { left: 50%; translate: -50% 0; }
+.di-ears.at-left { left: 0; }
+.di-ears.at-right { right: 0; }
+/* Each one overlaps the shape by 1 px so the hairline never shows at the shoulder. */
+.di-ears::before, .di-ears::after { content: ''; position: absolute; top: 0; width: calc(var(--ear) + 1px); height: var(--ear); }
+.di-ears::before { right: calc(100% - 1px); background: radial-gradient(circle at 0 100%, transparent calc(var(--ear) - 0.6px), var(--bg) var(--ear)); }
+.di-ears::after { left: calc(100% - 1px); background: radial-gradient(circle at 100% 100%, transparent calc(var(--ear) - 0.6px), var(--bg) var(--ear)); }
+.di.tucked .di-ears, .di.is-bar .di-ears { display: none; }
+
+/* Breathing: only in Full motion, only while something live shows, never on hover. */
+.di.motion-full.rest-live.view-compact:not(.is-hover) .di-breath { animation: di-breath 4.8s ease-in-out infinite; }
+:root .di.style-notch .di-breath { box-shadow: 0 6px 22px -6px var(--glow); }
