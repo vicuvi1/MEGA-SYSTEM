@@ -3,7 +3,8 @@
 // habit.own rule, with a daily cap), keeps a streak, and when you miss a day
 // Today says "never miss twice" once.
 import { addDays } from './dates'
-import { bestDayStreak, dayStreak } from './streaks'
+import { bestDayStreak } from './streaks'
+import { cleanLook, cleanSchedule, dueToday, habitStreak, weekdayOf, type HabitLook, type Schedule } from './habitBoard'
 
 export const MY_HABITS = 'my_habits'
 /** The rule that pays a tap (+2, at most 6 a day across all your habits). */
@@ -14,6 +15,10 @@ export interface MyHabit {
   id: string
   name: string
   at: string
+  /** Icon, colour and time of day on Today's board (optional, older habits have none). */
+  look?: Partial<HabitLook>
+  /** Every day (the default), weekdays, or N times a week. */
+  schedule?: Schedule
 }
 export interface HabitBook {
   habits: MyHabit[]
@@ -27,7 +32,15 @@ const clip = (s: unknown, n: number) => String(s ?? '').replace(/\s+/g, ' ').tri
 
 export function cleanBook(v: any): HabitBook {
   const habits: MyHabit[] = Array.isArray(v?.habits)
-    ? v.habits.filter((h: any) => h && typeof h.id === 'string' && clip(h.name, 60)).map((h: any) => ({ id: clip(h.id, 40), name: clip(h.name, 60), at: String(h.at ?? '') }))
+    ? v.habits
+        .filter((h: any) => h && typeof h.id === 'string' && clip(h.name, 60))
+        .map((h: any) => {
+          const out: MyHabit = { id: clip(h.id, 40), name: clip(h.name, 60), at: String(h.at ?? '') }
+          const look = cleanLook(h.look)
+          if (Object.keys(look).length) out.look = look
+          if (h.schedule) out.schedule = cleanSchedule(h.schedule)
+          return out
+        })
     : []
   const log: Record<string, string[]> = {}
   if (v?.log && typeof v.log === 'object') {
@@ -37,13 +50,39 @@ export function cleanBook(v: any): HabitBook {
   return { habits: habits.slice(0, MAX_HABITS), log }
 }
 
-export function addHabit(b: HabitBook, name: string, now = new Date()): HabitBook {
+export function addHabit(b: HabitBook, name: string, now = new Date(), extra: { look?: Partial<HabitLook>; schedule?: Schedule } = {}): HabitBook {
   const n = clip(name, 60)
   if (!n) throw new Error('Name the habit, e.g. "Read 10 pages"')
   if (b.habits.some((h) => h.name.toLowerCase() === n.toLowerCase())) throw new Error(`"${n}" is already on your list`)
   if (b.habits.length >= MAX_HABITS) throw new Error(`${MAX_HABITS} habits at most: remove one first`)
   const id = `h${now.getTime().toString(36)}${b.habits.length}`
-  return { ...b, habits: [...b.habits, { id, name: n, at: now.toISOString() }] }
+  const h: MyHabit = { id, name: n, at: now.toISOString() }
+  const look = cleanLook(extra.look)
+  if (Object.keys(look).length) h.look = look
+  if (extra.schedule) h.schedule = cleanSchedule(extra.schedule)
+  return { ...b, habits: [...b.habits, h] }
+}
+
+/** Changes the name, look or schedule of one habit (its past days stay). */
+export function updateHabit(b: HabitBook, id: string, patch: { name?: string; look?: Partial<HabitLook>; schedule?: Schedule }): HabitBook {
+  const h = b.habits.find((x) => x.id === id)
+  if (!h) throw new Error('That habit is gone')
+  let next = b
+  if (patch.name !== undefined && clip(patch.name, 60) !== h.name) {
+    const n = clip(patch.name, 60)
+    if (b.habits.some((x) => x.id !== id && x.name.toLowerCase() === n.toLowerCase())) throw new Error(`"${n}" is already on your list`)
+    next = renameHabit(b, id, n)
+  }
+  return {
+    ...next,
+    habits: next.habits.map((x) => {
+      if (x.id !== id) return x
+      const out: MyHabit = { ...x }
+      if (patch.look) out.look = { ...(x.look ?? {}), ...cleanLook(patch.look) }
+      if (patch.schedule) out.schedule = cleanSchedule(patch.schedule)
+      return out
+    })
+  }
 }
 
 export function renameHabit(b: HabitBook, id: string, name: string): HabitBook {
@@ -88,14 +127,25 @@ export interface HabitRow {
   best: number
   /** Done in the last 7 days (today included). */
   week: number
+  /** The days it was done (recent first is not promised), for the board's dots. */
+  days: string[]
+  look: Partial<HabitLook>
+  schedule: Schedule
+  /** Asked for today (weekdays only on weekdays; N× a week until N are in). */
+  due: boolean
+  /** "week" when the streak counts weeks (N× a week). */
+  streakUnit: 'day' | 'week'
 }
 
 /** Each habit for today: done, its streak (rest days keep it alive), best and this week. */
-export function habitRows(b: HabitBook, today: string, restDays: string[] = []): HabitRow[] {
+export function habitRows(b: HabitBook, today: string, restDays: string[] = [], skips: (id: string) => string[] = () => []): HabitRow[] {
   return b.habits.map((h) => {
     const days = doneDays(b, h.id)
     const from = addDays(today, -6)
-    return { id: h.id, name: h.name, done: isLogged(b, h.id, today), streak: dayStreak(days, today, restDays), best: bestDayStreak(days, restDays), week: days.filter((d) => d >= from && d <= today).length }
+    const schedule = h.schedule ?? { kind: 'daily' }
+    const st = habitStreak(days, today, { rest: restDays, skips: skips(h.id), schedule })
+    const done = isLogged(b, h.id, today)
+    return { id: h.id, name: h.name, done, streak: st.n, streakUnit: st.unit, best: bestDayStreak(days, restDays), week: days.filter((d) => d >= from && d <= today).length, days: days.filter((d) => d >= addDays(today, -60)), look: h.look ?? {}, schedule, due: done || dueToday(schedule, days, today) }
   })
 }
 
@@ -108,6 +158,9 @@ export function missedYesterday(b: HabitBook, today: string, restDays: string[] 
   if (restDays.includes(y)) return []
   return b.habits.filter((h) => {
     if (isLogged(b, h.id, y) || isLogged(b, h.id, today)) return false
+    // Only for habits asked for every day (or a weekday that was asked for).
+    const s = h.schedule?.kind ?? 'daily'
+    if (s === 'perWeek' || (s === 'weekdays' && weekdayOf(y) >= 5)) return false
     return Array.from({ length: 7 }, (_, k) => addDays(y, -1 - k)).some((d) => isLogged(b, h.id, d))
   })
 }
@@ -117,5 +170,5 @@ export function habitsLine(b: HabitBook, today: string, restDays: string[] = [])
   if (!b.habits.length) return ''
   const rows = habitRows(b, today, restDays)
   const miss = missedYesterday(b, today, restDays)
-  return `His own habits today: ${rows.map((r) => `${r.done ? '[done]' : '[open]'} ${r.name}${r.streak ? ` (${r.streak}-day streak)` : ''}`).join('; ')}.${miss.length ? ` Missed yesterday (never miss twice): ${miss.map((h) => h.name).join(', ')}.` : ''}`
+  return `His own habits today: ${rows.map((r) => `${r.done ? '[done]' : r.due ? '[open]' : '[not today]'} ${r.name}${r.streak ? ` (${r.streak}-${r.streakUnit} streak)` : ''}`).join('; ')}.${miss.length ? ` Missed yesterday (never miss twice): ${miss.map((h) => h.name).join(', ')}.` : ''}`
 }

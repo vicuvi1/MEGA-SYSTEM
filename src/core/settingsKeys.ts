@@ -177,6 +177,7 @@ export const SETTINGS = {
   week_plan: json<Record<string, unknown> | null>("this week's plan", null),
   week_plans: json<Record<string, unknown> | null>('past week plans', null),
   my_habits: json<unknown[]>('your own habits', []),
+  habit_board: json<Record<string, unknown> | null>("Today's habit board: icons, colours and times you set, your order, hidden habits, skipped days (src/core/habitBoard.ts)", null),
   month_aims: json<Record<string, unknown> | null>("the month's aims", null),
   learn_log: json<unknown[]>('learning path log', []),
   life_mode: json<Record<string, unknown> | null>('life mode (exam, holiday, sick…)', null),

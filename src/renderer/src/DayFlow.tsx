@@ -29,7 +29,9 @@ import { useLive } from './live'
 import { addDays, dayKey } from '@core/dates'
 import { PLAN_ITEM_COINS, isPlanFor, type PlanItem } from '@core/focus'
 import { BIG3_POINTS } from '../../main/points'
-import { HabitEditor, MissTwiceNote, useMyHabits } from './MyHabits'
+import { MissTwiceNote, useMyHabits } from './MyHabits'
+import { HabitBoard } from './habits/HabitBoard'
+import { MustDos } from './habits/MustDos'
 import { useLifeMode } from './LifeMode'
 import { modeTarget } from '@core/lifeMode'
 import { type DayFlowProps, useTodoist, useHabits } from './dayflow/hooks'
@@ -105,9 +107,9 @@ export function DayFlow(props: DayFlowProps) {
   const [spendBusy, setSpendBusy] = useState(false)
   const spendAct = useAction()
   const [own, reloadOwn] = useMyHabits()
-  const [habitEdit, setHabitEdit] = useState(false)
   const [lifeMode] = useLifeMode()
-  const habits = useHabits(props, st?.todayMin ?? 0, () => setSpendOpen(true), own, reloadOwn, modeTarget(50, lifeMode?.current ?? null))
+  const focusTarget = modeTarget(50, lifeMode?.current ?? null)
+  const habits = useHabits(props, st?.todayMin ?? 0, () => setSpendOpen(true), own, reloadOwn, focusTarget)
   // "Log spending" from a home-screen shortcut (FT15) opens the line here.
   useEffect(() => {
     const on = () => setSpendOpen(true)
@@ -155,8 +157,6 @@ export function DayFlow(props: DayFlowProps) {
     })
   const [adding, setAdding] = useState('')
   const [showAll, setShowAll] = useState(false)
-  // A habit just ticked: the chip bursts and the ring pulses.
-  const [burst, setBurst] = useState<string | null>(null)
   const [restPref, setRestPrefState] = useState<boolean | null>(() => {
     const v = storeGet('ls.todayRest')
     return v === '1' ? true : v === '0' ? false : null
@@ -684,6 +684,22 @@ export function DayFlow(props: DayFlowProps) {
   const openLeft = [...plan.map((p, i) => ({ p, i })).filter((x) => !x.p.done)]
   const doneToday = plan.filter((p) => p.done).length
 
+  const mustDos = (
+    <MustDos
+      starred={starred.map((t) => taskRow(t, true, null))}
+      items={planOnly.map(({ p, i }) => ({ key: `m${i}`, text: p.text, done: p.done, onTick: () => void tickMustDo(i), play: playBtn(p.text, subjectOf(p.text), { kind: 'mustdo', ref: p.text, title: p.text }) }))}
+      done={mustDone}
+      total={mustTotal}
+      coins={PLAN_ITEM_COINS}
+      canAdd={plan.length < 5}
+      adding={adding}
+      setAdding={setAdding}
+      onAdd={() => void addMustDo()}
+      hasTodoist={!!life.todoist && todo !== null}
+      bigDone={bigOpen.length > 0 && bigOpen.every((b) => b.done)}
+    />
+  )
+
   // Today's Todoist shows this many first (late and P1 on top).
   let shown_ = 0
   const LIMIT = 8
@@ -843,62 +859,29 @@ export function DayFlow(props: DayFlowProps) {
       )}
 
       <section className="card day-list" aria-label="Today's list" ref={listRef}>
-        <header className="card-head">
-          <h2>Today</h2>
-          <div className="actions">
-            <span className="hint" title={`${doneCount} of ${total} things on today's list done`}>
-              {mustTotal ? `${mustDone}/${mustTotal} must-dos` : `${doneCount} done`}
-            </span>
-            {mode !== 'morning' && (
-              <button className="btn small ghost" onClick={() => setForced('morning')} title="Plan your day in 2 minutes">
-                <Icon name="sun" size={13} /> Plan
-              </button>
-            )}
-            {mode !== 'evening' && (
-              <button className="btn small ghost" onClick={() => setForced('evening')} title="Shut down your day in 2 minutes">
-                <Icon name="moon" size={13} /> Shut down
-              </button>
-            )}
-          </div>
-        </header>
-
-        <div className="habit-chips" aria-label="Habits">
-          {habits.length > 0 && (
-            <span className={`hb-ring ${burst ? 'pulse' : ''} ${habits.every((h) => h.done) ? 'all' : ''}`} style={{ ['--p' as string]: `${(habits.filter((h) => h.done).length / habits.length) * 100}%` }} title="Habits done today">
-              <b>
-                {habits.filter((h) => h.done).length}/{habits.length}
-              </b>
-            </span>
-          )}
-          {habits.map((h) => (
-            <button
-              key={h.id}
-              type="button"
-              className={`chip habit ${h.done ? 'on' : ''} ${burst === h.id ? 'burst' : ''}`}
-              disabled={h.done}
-              onClick={(e) => {
-                const el = e.currentTarget
-                void Promise.resolve(h.run()).then(() => {
-                  setBurst(h.id)
-                  celebrate(el, 'habit')
-                  setTimeout(() => setBurst(null), 1200)
-                })
-              }}
-              title={h.done ? `${h.label}: done` : `${h.label} · ${h.hint}`}
-            >
-              <span className="hc-check">{h.done ? '✓' : ''}</span>
-              {h.label}
-              {!h.done && <small>{h.hint}</small>}
-            </button>
-          ))}
-          {life.extras && (
-            <button type="button" className="chip habit mh-edit" onClick={() => setHabitEdit((x) => !x)} title="Add, rename or remove your own habits" aria-expanded={habitEdit}>
-              {own?.rows.length ? '✎ Habits' : '+ Your habit'}
-            </button>
-          )}
-        </div>
-        <MissTwiceNote v={own} />
-        {habitEdit && own && <HabitEditor v={own} onClose={() => setHabitEdit(false)} onChange={() => { reloadOwn(); props.onChange() }} />}
+        <HabitBoard
+          habits={habits}
+          own={own}
+          reloadOwn={reloadOwn}
+          onChange={() => props.onChange()}
+          focusTarget={focusTarget}
+          actions={
+            <>
+              {mode !== 'morning' && (
+                <button className="btn small" onClick={() => setForced('morning')} title="Plan your day in 2 minutes">
+                  <Icon name="sun" size={13} /> <span className="lbl">Plan</span>
+                </button>
+              )}
+              {mode !== 'evening' && (
+                <button className="btn small" onClick={() => setForced('evening')} title="Shut down your day in 2 minutes">
+                  <Icon name="moon" size={13} /> <span className="lbl">Shut down</span>
+                </button>
+              )}
+            </>
+          }
+        >
+          <MissTwiceNote v={own} />
+        </HabitBoard>
 
         {spendOpen && (
           <form
@@ -916,40 +899,7 @@ export function DayFlow(props: DayFlowProps) {
         )}
         {slotted ? (
           <>
-        <div className="dl-group" style={{ ['--c' as string]: 'var(--accent)' }}>
-          <h3 className="dl-head">
-            <i /> Must-dos <small>+{PLAN_ITEM_COINS} each, first 3</small>
-          </h3>
-          <ul className="dl">
-            {starred.map((t) => taskRow(t, true, null))}
-            {planOnly.map(({ p, i }) => (
-              <li key={`m${i}`} className={p.done ? 'done' : ''} data-swipe={p.done ? undefined : `must:${i}`}>
-                <button className="dl-check" aria-label={p.done ? `Untick ${p.text}` : `Tick ${p.text}`} onClick={() => void tickMustDo(i)}>
-                  {p.done ? <Tick /> : ''}
-                </button>
-                <span className="dl-text">{p.text}</span>
-                <span className="tt-pts">+{PLAN_ITEM_COINS} ⭐</span>
-                {!p.done && playBtn(p.text, subjectOf(p.text), { kind: 'mustdo', ref: p.text, title: p.text })}
-              </li>
-            ))}
-          </ul>
-          {!plan.length && !starred.length && <p className="hint dl-tip">Tap ☆ on any task below to make it a must-do, or type one.</p>}
-          {plan.length < 5 && (
-            <form
-              className="dl-add"
-              onSubmit={(e) => {
-                e.preventDefault()
-                void addMustDo()
-              }}
-            >
-              <input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder={plan.length ? 'Add another must-do…' : 'What are your 1–3 must-dos today?'} maxLength={140} />
-              {adding.trim() && <button className="btn small">Add</button>}
-            </form>
-          )}
-        </div>
-        {bigOpen.length > 0 && bigOpen.every((b) => b.done) && (
-          <p className="dl-bigdone">✓ This week's big 3 are done 🎉</p>
-        )}
+        {mustDos}
         {bigOpen.length > 0 && !bigOpen.every((b) => b.done) && (
           <div className="dl-group" style={{ ['--c' as string]: 'var(--gold)' }}>
             <h3 className="dl-head">
@@ -1008,40 +958,7 @@ export function DayFlow(props: DayFlowProps) {
           />
         )}
         {tab === 'today' && (<>
-        <div className="dl-group" style={{ ['--c' as string]: 'var(--accent)' }}>
-          <h3 className="dl-head">
-            <i /> Must-dos <small>+{PLAN_ITEM_COINS} each, first 3</small>
-          </h3>
-          <ul className="dl">
-            {starred.map((t) => taskRow(t, true, null))}
-            {planOnly.map(({ p, i }) => (
-              <li key={`m${i}`} className={p.done ? 'done' : ''} data-swipe={p.done ? undefined : `must:${i}`}>
-                <button className="dl-check" aria-label={p.done ? `Untick ${p.text}` : `Tick ${p.text}`} onClick={() => void tickMustDo(i)}>
-                  {p.done ? <Tick /> : ''}
-                </button>
-                <span className="dl-text">{p.text}</span>
-                <span className="tt-pts">+{PLAN_ITEM_COINS} ⭐</span>
-                {!p.done && playBtn(p.text, subjectOf(p.text), { kind: 'mustdo', ref: p.text, title: p.text })}
-              </li>
-            ))}
-          </ul>
-          {!plan.length && !starred.length && <p className="hint dl-tip">Tap ☆ on any task below to make it a must-do, or type one.</p>}
-          {plan.length < 5 && (
-            <form
-              className="dl-add"
-              onSubmit={(e) => {
-                e.preventDefault()
-                void addMustDo()
-              }}
-            >
-              <input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder={plan.length ? 'Add another must-do…' : 'What are your 1–3 must-dos today?'} maxLength={140} />
-              {adding.trim() && <button className="btn small">Add</button>}
-            </form>
-          )}
-        </div>
-        {bigOpen.length > 0 && bigOpen.every((b) => b.done) && (
-          <p className="dl-bigdone">✓ This week's big 3 are done 🎉</p>
-        )}
+        {mustDos}
         {bigOpen.length > 0 && !bigOpen.every((b) => b.done) && (
           <div className="dl-group" style={{ ['--c' as string]: 'var(--gold)' }}>
             <h3 className="dl-head">

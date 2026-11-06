@@ -57,6 +57,30 @@ describe('your own habits, paid honestly (FT1)', () => {
   })
 })
 
+describe("Today's habit board", () => {
+  it('reads what was really done and paid; a skip pays nothing and keeps the streak', async () => {
+    fakeTurso()
+    const { web, extras } = await open()
+    const v = await extras.editHabits({ op: 'add', name: 'Stretch', look: { icon: 'leaf', color: 'teal', slot: 'morning' }, schedule: { kind: 'weekdays' } })
+    expect(v.rows[0]).toMatchObject({ look: { icon: 'leaf', color: 'teal', slot: 'morning' }, schedule: { kind: 'weekdays' } })
+    await extras.tapHabit(v.rows[0].id)
+    await web.wallet.award('face.routine_done')
+    const b = await extras.habitBoard(50)
+    expect(b.days.skincare).toEqual([b.today])
+    expect(b.paid.skincare).toBeGreaterThan(0)
+    expect(b.paid[`own:${v.rows[0].id}`]).toBe(2)
+    const before = (await web.wallet.summary()).balance
+    const p = await extras.skipHabit('oath', true)
+    expect(p.skips[b.today]).toEqual(['oath'])
+    expect((await web.wallet.summary()).balance).toBe(before)
+    expect((await extras.skipHabit('oath', false)).skips).toEqual({})
+    const saved = await extras.saveHabitBoard({ hidden: ['skincare'], order: ['focus', 'oath'], fixed: true })
+    expect(saved).toMatchObject({ hidden: ['skincare'], order: ['focus', 'oath'], fixed: true })
+    const u = await extras.editHabits({ op: 'update', id: v.rows[0].id, name: 'Stretch 5 min', schedule: { kind: 'perWeek', n: 3 } })
+    expect(u.rows[0]).toMatchObject({ name: 'Stretch 5 min', schedule: { kind: 'perWeek', n: 3 }, look: { icon: 'leaf' } })
+  })
+})
+
 describe('life modes keep the workout streak (FT4)', () => {
   it('sick days count as rest days without using the rest budget', async () => {
     fakeTurso()

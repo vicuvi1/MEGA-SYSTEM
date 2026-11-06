@@ -2200,6 +2200,7 @@ var SETTINGS = {
 	week_plan: json$5("this week's plan", null),
 	week_plans: json$5("past week plans", null),
 	my_habits: json$5("your own habits", []),
+	habit_board: json$5("Today's habit board: icons, colours and times you set, your order, hidden habits, skipped days (src/core/habitBoard.ts)", null),
 	month_aims: json$5("the month's aims", null),
 	learn_log: json$5("learning path log", []),
 	life_mode: json$5("life mode (exam, holiday, sick…)", null),
@@ -3109,16 +3110,130 @@ function cleanStats(start, relapses, today) {
 		since
 	};
 }
+// src/core/habitBoard.ts
+var SLOTS = [
+	"morning",
+	"day",
+	"evening"
+];
+var HABIT_ICONS = [
+	"sunrise",
+	"shield",
+	"dumbbell",
+	"target",
+	"sparkle",
+	"wallet",
+	"book",
+	"drop",
+	"run",
+	"leaf",
+	"bed",
+	"phone",
+	"pen",
+	"heart",
+	"brain",
+	"check"
+];
+var HABIT_COLORS = [
+	"lime",
+	"amber",
+	"coral",
+	"pink",
+	"violet",
+	"sky",
+	"teal",
+	"slate"
+];
+var HM$6 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm$2 = (v) => typeof v === "string" && HM$6.test(v);
+/** 0 = Monday … 6 = Sunday, for a YYYY-MM-DD day. */
+function weekdayOf(day) {
+	return ((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7;
+}
+/** The Monday of the day's week. */
+var mondayOf$4 = (day) => addDays$5(day, -weekdayOf(day));
+function cleanSchedule(v) {
+	if (v?.kind === "weekdays") return { kind: "weekdays" };
+	if (v?.kind === "perWeek") {
+		const n = Math.round(Number(v.n));
+		return n >= 1 && n <= 6 ? {
+			kind: "perWeek",
+			n
+		} : { kind: "daily" };
+	}
+	return { kind: "daily" };
+}
+/** Days a schedule doesn't ask for (weekends for "weekdays"): they keep the streak, like rest days. */
+function offDays(s, from, to) {
+	if (s.kind !== "weekdays") return [];
+	const out = [];
+	for (let d = from; d <= to; d = addDays$5(d, 1)) if (weekdayOf(d) >= 5) out.push(d);
+	return out;
+}
+/** Is it asked for today? "N× a week" is done for the week once N days are in. */
+function dueToday(s, doneDays, today) {
+	if (s.kind === "weekdays") return weekdayOf(today) < 5;
+	if (s.kind === "perWeek") {
+		const mon = mondayOf$4(today);
+		return doneDays.filter((d) => d >= mon && d < today).length < s.n;
+	}
+	return true;
+}
+/**
+* The streak: days in a row (rest, skipped and days off keep it alive but
+* don't add to it). For "N× a week" it is weeks in a row with N days done
+* (this week counts once it's reached, and doesn't break it while it's on).
+*/
+function habitStreak(doneDays, today, o = {}) {
+	const s = o.schedule ?? { kind: "daily" };
+	if (s.kind === "perWeek") {
+		const per = (mon) => doneDays.filter((d) => d >= mon && d <= addDays$5(mon, 6)).length;
+		let mon = mondayOf$4(today);
+		let n = per(mon) >= s.n ? 1 : 0;
+		mon = addDays$5(mon, -7);
+		while (per(mon) >= s.n) {
+			n++;
+			mon = addDays$5(mon, -7);
+		}
+		return {
+			n,
+			unit: "week"
+		};
+	}
+	const from = addDays$5(today, -400);
+	return {
+		n: dayStreak$1(doneDays, today, [
+			...o.rest ?? [],
+			...o.skips ?? [],
+			...offDays(s, from, today)
+		]),
+		unit: "day"
+	};
+}
+function cleanLook(v) {
+	const out = {};
+	if (HABIT_ICONS.includes(v?.icon)) out.icon = v.icon;
+	if (HABIT_COLORS.includes(v?.color)) out.color = v.color;
+	if (v?.slot === "any" || SLOTS.includes(v?.slot)) out.slot = v.slot;
+	if (v?.by === null || isHm$2(v?.by)) out.by = v.by;
+	return out;
+}
 // src/core/myHabits.ts
 var MY_HABITS = "my_habits";
 var DAY$4 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$6 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanBook(v) {
-	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$6(h.name, 60)).map((h) => ({
-		id: clip$6(h.id, 40),
-		name: clip$6(h.name, 60),
-		at: String(h.at ?? "")
-	})) : [];
+	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$6(h.name, 60)).map((h) => {
+		const out = {
+			id: clip$6(h.id, 40),
+			name: clip$6(h.name, 60),
+			at: String(h.at ?? "")
+		};
+		const look = cleanLook(h.look);
+		if (Object.keys(look).length) out.look = look;
+		if (h.schedule) out.schedule = cleanSchedule(h.schedule);
+		return out;
+	}) : [];
 	const log = {};
 	if (v?.log && typeof v.log === "object") {
 		const days = Object.keys(v.log).filter((d) => DAY$4.test(d)).sort().slice(-400);
@@ -3136,17 +3251,29 @@ function doneDays(b, id) {
 	return Object.keys(b.log).filter((d) => b.log[d].includes(id));
 }
 /** Each habit for today: done, its streak (rest days keep it alive), best and this week. */
-function habitRows(b, today, restDays = []) {
+function habitRows(b, today, restDays = [], skips = () => []) {
 	return b.habits.map((h) => {
 		const days = doneDays(b, h.id);
 		const from = addDays$5(today, -6);
+		const schedule = h.schedule ?? { kind: "daily" };
+		const st = habitStreak(days, today, {
+			rest: restDays,
+			skips: skips(h.id),
+			schedule
+		});
+		const done = isLogged(b, h.id, today);
 		return {
 			id: h.id,
 			name: h.name,
-			done: isLogged(b, h.id, today),
-			streak: dayStreak$1(days, today, restDays),
+			done,
+			streak: st.n,
+			streakUnit: st.unit,
 			best: bestDayStreak(days, restDays),
-			week: days.filter((d) => d >= from && d <= today).length
+			week: days.filter((d) => d >= from && d <= today).length,
+			days: days.filter((d) => d >= addDays$5(today, -60)),
+			look: h.look ?? {},
+			schedule,
+			due: done || dueToday(schedule, days, today)
 		};
 	});
 }
@@ -3159,6 +3286,8 @@ function missedYesterday(b, today, restDays = []) {
 	if (restDays.includes(y)) return [];
 	return b.habits.filter((h) => {
 		if (isLogged(b, h.id, y) || isLogged(b, h.id, today)) return false;
+		const s = h.schedule?.kind ?? "daily";
+		if (s === "perWeek" || s === "weekdays" && weekdayOf(y) >= 5) return false;
 		return Array.from({ length: 7 }, (_, k) => addDays$5(y, -1 - k)).some((d) => isLogged(b, h.id, d));
 	});
 }
@@ -3167,7 +3296,7 @@ function habitsLine(b, today, restDays = []) {
 	if (!b.habits.length) return "";
 	const rows = habitRows(b, today, restDays);
 	const miss = missedYesterday(b, today, restDays);
-	return `His own habits today: ${rows.map((r) => `${r.done ? "[done]" : "[open]"} ${r.name}${r.streak ? ` (${r.streak}-day streak)` : ""}`).join("; ")}.${miss.length ? ` Missed yesterday (never miss twice): ${miss.map((h) => h.name).join(", ")}.` : ""}`;
+	return `His own habits today: ${rows.map((r) => `${r.done ? "[done]" : r.due ? "[open]" : "[not today]"} ${r.name}${r.streak ? ` (${r.streak}-${r.streakUnit} streak)` : ""}`).join("; ")}.${miss.length ? ` Missed yesterday (never miss twice): ${miss.map((h) => h.name).join(", ")}.` : ""}`;
 }
 // src/core/lifeMode.ts
 var LIFE_MODE = "life_mode";

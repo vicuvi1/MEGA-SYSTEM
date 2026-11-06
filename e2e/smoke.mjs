@@ -1935,6 +1935,94 @@ try {
     if (!/today’s plan/.test(await pg.locator('.wg-ask').innerText())) throw new Error('the install ask does not say what it reads')
     await pg.locator('.wg-ask').getByRole('button', { name: 'Cancel' }).click()
   })
+  // Today's habit board: tiles in Morning / Day / Evening, a tap habit pays once and shows it,
+  // an auto habit only opens its app (never ticks itself), skip today, the add sheet, must-dos.
+  await step('Today habits: tiles by time of day, a tick, auto habits, skip, the add sheet, must-dos', async () => {
+    await pg.setViewportSize({ width: 1280, height: 720 })
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.waitForSelector('.hb .hb-tile', { timeout: 10000 })
+    const tile = (name) => pg.locator('.hb-tile', { hasText: name }).first()
+    const count = async () => {
+      const m = /(\d+) of (\d+) habits/.exec(await pg.locator('.hb-head h2').innerText())
+      if (!m) throw new Error('no "N of M habits" in the header')
+      return [Number(m[1]), Number(m[2])]
+    }
+    if ((await pg.locator('.hb-group').count()) < 2) throw new Error('habits are not grouped by time of day')
+    for (const n of ['Morning oath', 'Workout', 'Skincare', 'Log spending']) if (!(await tile(n).count())) throw new Error(`no ${n} tile`)
+    for (const b of ['Plan', 'Shut down']) if (!(await pg.locator('.hb-actions button', { hasText: b }).count())) throw new Error(`no ${b} button`)
+    // An auto habit: the tap opens the spending line and the tile stays open (no points for a tap).
+    if (!/\bauto\b/.test((await tile('Log spending').getAttribute('class')) ?? '')) throw new Error('Log spending is not marked auto')
+    // (The Money step may have logged spending already: then it ticked by itself, from Finance.)
+    if (!/s-done/.test((await tile('Log spending').getAttribute('class')) ?? '')) {
+      await tile('Log spending').locator('.hb-hit').click()
+      await pg.waitForSelector('.spend-line input', { timeout: 3000 })
+      await pg.locator('.spend-line input').press('Escape')
+      if (/s-done/.test((await tile('Log spending').getAttribute('class')) ?? '')) throw new Error('a tap ticked an auto habit')
+    }
+    // A tap habit: done, paid once, the count goes up; a second tap does nothing.
+    const [d0, t0] = await count()
+    await tile('Skincare').locator('.hb-hit').click()
+    await pg.waitForFunction(() => /s-done/.test([...document.querySelectorAll('.hb-tile')].find((t) => t.textContent.includes('Skincare'))?.className ?? ''), null, { timeout: 5000 }).catch(() => {
+      throw new Error('Skincare did not tick')
+    })
+    await pg.waitForFunction(() => /\+\d+ paid/.test([...document.querySelectorAll('.hb-tile')].find((t) => t.textContent.includes('Skincare'))?.textContent ?? ''), null, { timeout: 5000 }).catch(() => {
+      throw new Error('Skincare does not say what it paid')
+    })
+    const [d1, t1] = await count()
+    if (d1 !== d0 + 1 || t1 !== t0) throw new Error(`count went ${d0}/${t0} → ${d1}/${t1}`)
+    await pg.waitForTimeout(1500) // the balance counts up
+    const bal = await pg.evaluate(() => document.querySelector('.topbar')?.textContent ?? '')
+    await tile('Skincare').locator('.hb-hit').click({ force: true })
+    await pg.waitForTimeout(1500)
+    if ((await pg.evaluate(() => document.querySelector('.topbar')?.textContent ?? '')) !== bal) throw new Error('a second tap paid again')
+    // Skip today from the ⋯ menu: no points, out of the count; and back on.
+    await tile('Clean day').hover()
+    await tile('Clean day').locator('.hb-dots-btn').click()
+    await pg.locator('.hb-menu button', { hasText: 'Skip today' }).click()
+    // Out of the count (its part of the day may fold when nothing else is left there: open it again).
+    await pg.waitForFunction((t) => new RegExp(`of ${t} habits`).test(document.querySelector('.hb-head h2')?.textContent ?? ''), t1 - 1, { timeout: 5000 }).catch(() => {
+      throw new Error('a skipped habit still counts')
+    })
+    for (const f of await pg.locator('.hb-folded').all()) await f.click()
+    if (!/s-skipped/.test((await tile('Clean day').getAttribute('class')) ?? '')) throw new Error('Clean day does not show as skipped')
+    await tile('Clean day').locator('.hb-dots-btn').click({ force: true })
+    await pg.locator('.hb-menu button', { hasText: 'Back on for today' }).click()
+    await pg.waitForFunction(() => !/s-skipped/.test([...document.querySelectorAll('.hb-tile')].find((t) => t.textContent.includes('Clean day'))?.className ?? 's-skipped'), null, { timeout: 5000 }).catch(() => {
+      throw new Error('Clean day did not come back')
+    })
+    // The add sheet: name, icon, colour, how often, time of day, and what it pays.
+    await pg.locator('.hb-add').click()
+    await pg.waitForSelector('.hb-sheet', { timeout: 3000 })
+    if (!/Pays|no points/.test(await pg.locator('.hb-sheet .hb-pays').innerText())) throw new Error('the add sheet does not say what it pays')
+    await pg.fill('.hb-sheet input[aria-label="Habit name"]', 'Smoke stretch')
+    await pg.locator('.hb-sheet .hb-icons button[aria-label="leaf"]').click()
+    await pg.locator('.hb-sheet .hb-seg button', { hasText: 'Evening' }).click()
+    await pg.locator('.hb-sheet button', { hasText: 'Add habit' }).click()
+    await pg.waitForFunction(() => [...document.querySelectorAll('.hb-tile')].some((t) => t.textContent.includes('Smoke stretch')), null, { timeout: 5000 }).catch(() => {
+      throw new Error('the new habit is not on the board')
+    })
+    await tile('Smoke stretch').locator('.hb-hit').click()
+    await pg.waitForFunction(() => /s-done/.test([...document.querySelectorAll('.hb-tile')].find((t) => t.textContent.includes('Smoke stretch'))?.className ?? ''), null, { timeout: 5000 }).catch(() => {
+      throw new Error('the new habit did not tick')
+    })
+    await tile('Smoke stretch').locator('.hb-dots-btn').click({ force: true })
+    await pg.locator('.hb-menu button', { hasText: 'Undo today' }).click()
+    await pg.waitForFunction(() => !/s-done/.test([...document.querySelectorAll('.hb-tile')].find((t) => t.textContent.includes('Smoke stretch'))?.className ?? 's-done'), null, { timeout: 5000 }).catch(() => {
+      throw new Error('Undo today did not take it back')
+    })
+    // Must-dos: numbered, typed in, ticked.
+    await pg.fill('.md .md-slot input', 'Smoke must-do')
+    await pg.locator('.md .md-slot input').press('Enter')
+    const row = pg.locator('.md-list li.md-item', { hasText: 'Smoke must-do' })
+    await row.waitFor({ timeout: 5000 })
+    if (!/^\d$/.test((await row.locator('.dl-check').innerText()).trim())) throw new Error('the must-do has no number')
+    await row.locator('.dl-check').click()
+    await pg.waitForFunction(() => [...document.querySelectorAll('.md-list li.md-item')].some((l) => l.textContent.includes('Smoke must-do') && l.classList.contains('done')), null, { timeout: 5000 }).catch(() => {
+      throw new Error('the must-do did not tick')
+    })
+    await pg.setViewportSize({ width: 1440, height: 900 })
+  })
   // The same switch on every long page: each tab about one laptop screen.
   // Run at 10:00: how long Insights → Week is depends on what's left of today's calendar.
   await step('Long pages: Insights, Goals, Money, Music, Rewards and long Settings sections fit by tabs', () => atTime('10:00', async () => {

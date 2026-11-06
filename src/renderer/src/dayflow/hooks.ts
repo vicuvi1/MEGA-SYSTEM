@@ -27,14 +27,6 @@ export interface DayFlowProps {
   onCounts?: (c: { tasks: number; late: number; mustDone: number; mustTotal: number }) => void
 }
 
-export interface Habit {
-  id: string
-  label: string
-  hint: string
-  done: boolean
-  run: () => void | Promise<void>
-}
-
 export function useTodoist() {
   const [tasks, setTasks] = useState<TodoTask[] | null>(null)
   const load = useCallback(async () => {
@@ -49,6 +41,35 @@ export function useTodoist() {
   return [tasks, load, setTasks] as const
 }
 
+
+export interface Habit {
+  id: string
+  label: string
+  hint: string
+  done: boolean
+  /**
+   * Does the habit's own thing: a tap habit logs it (and pays it once, by its
+   * rule); an auto habit opens or starts what really counts (Sport Track, the
+   * focus timer, the spending line) and never ticks itself. Resolves true when
+   * something was logged.
+   */
+  run: () => void | Promise<boolean | void>
+  /** What it pays when done, from the real rule ("+3", "+3 per 10 min"); '' when it pays nothing. */
+  pays: string
+  /** Ticks itself from another app; a tap only opens that app (never pays). */
+  auto?: boolean
+  /** Where it's logged from ("Sport Track", "Focus timer", "Finance", "Discipline"). */
+  source?: string
+  /** What a tap does on an auto habit ("Start 50 min", "Open Sport Track"). */
+  action?: string
+  /** Live progress for an auto habit (32 of 50 minutes). */
+  progress?: { value: number; target: number; unit: string }
+  /** Your own habit's id (own:<id> is its board id). */
+  ownId?: string
+  /** A shorter name for the tile ("Focus 50 min"). */
+  short?: string
+}
+
 export function useHabits({ summary, discipline, connections, body, onChange, onGo, rules }: DayFlowProps, focusMin: number, onSpend: () => void, own: HabitsView | null, reloadOwn: () => void, focusTarget = 50): Habit[] {
   const act = useAction()
   const tapOwn = useTapHabit(() => {
@@ -56,25 +77,29 @@ export function useHabits({ summary, discipline, connections, body, onChange, on
     onChange()
   })
   const r = summary.todayRules ?? []
-  const pts = (id: string, fallback: number) => `+${rules?.find((x) => x.id === id)?.coins ?? fallback}`
+  const coins = (id: string, fallback: number) => rules?.find((x) => x.id === id)?.coins ?? fallback
+  const pts = (id: string, fallback: number) => `+${coins(id, fallback)}`
   // A soft pluck that climbs with each habit done today.
   let doneToday = 0
   const pluck = () => play('habit', { step: doneToday })
-  const done = async (p: Promise<unknown> | undefined) => {
+  const done = async (p: Promise<unknown> | undefined): Promise<boolean> => {
     if (await p) {
       pluck()
       onChange()
+      return true
     }
+    return false
   }
+  const focusMins = Math.min(90, focusTarget)
   const list: Habit[] = [
-    { id: 'oath', label: 'Morning oath', hint: pts('discipline.oath', 1), done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
-    { id: 'clean', label: 'Clean day check-in', hint: discipline?.setup ? `day ${discipline.day ?? discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
-    { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), done: !!(body?.workoutDoneToday || body?.restToday || r.includes('body.workout_done')), run: () => onGo('body') },
-    { id: 'focus', label: `${focusTarget} minutes of focus`, hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', done: focusMin >= focusTarget || r.includes('study.block_done'), run: () => done(act(() => life.focus.start('Focus', Math.min(90, focusTarget)), `Focus started: ${Math.min(90, focusTarget)} minutes`)) },
-    { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
-    { id: 'spending', label: "Log today's spending", hint: pts('money.logged', 1), done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: onSpend },
+    { id: 'oath', label: 'Morning oath', hint: pts('discipline.oath', 1), pays: pts('discipline.oath', 1), source: 'Discipline', done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
+    { id: 'clean', label: 'Clean day check-in', short: 'Clean day', hint: discipline?.setup ? `day ${discipline.day ?? discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), pays: pts('discipline.clean_day', 3), source: discipline?.setup ? `Discipline · day ${discipline.day ?? discipline.current}` : 'Discipline', done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
+    { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), pays: pts('body.workout_done', 3), auto: true, source: 'Sport Track', action: 'Open Sport Track', done: !!(body?.workoutDoneToday || body?.restToday || r.includes('body.workout_done')), run: () => onGo('body') },
+    { id: 'focus', label: `${focusTarget} minutes of focus`, short: `Focus ${focusTarget} min`, hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', pays: '+3 / 10 min', auto: true, source: 'Focus timer', action: `Start ${focusMins} min`, progress: { value: Math.min(focusMin, focusTarget), target: focusTarget, unit: 'min' }, done: focusMin >= focusTarget || r.includes('study.block_done'), run: () => void act(() => life.focus.start('Focus', focusMins), `Focus started: ${focusMins} minutes`).then((ok) => ok && onChange()) },
+    { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), pays: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
+    { id: 'spending', label: "Log today's spending", short: 'Log spending', hint: pts('money.logged', 1), pays: pts('money.logged', 1), auto: true, source: 'Finance', action: 'Log spending', done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: onSpend },
     // Your own habits (FT1): +2 only for the tap, once a day each.
-    ...(own?.rows ?? []).map((h) => ({ id: `own:${h.id}`, label: h.name, hint: `${own?.pays ? `+${own.pays}` : ''}${h.streak ? ` · 🔥${h.streak}` : ''}`.replace(/^ · /, '') || 'tap when done', done: h.done, run: () => void tapOwn(h.id, h.name).then((ok) => ok && pluck()) }))
+    ...(own?.rows ?? []).map((h) => ({ id: `own:${h.id}`, ownId: h.id, label: h.name, hint: `${own?.pays ? `+${own.pays}` : ''}${h.streak ? ` · 🔥${h.streak}` : ''}`.replace(/^ · /, '') || 'tap when done', pays: own?.pays ? `+${own.pays}` : '', source: 'Your habit', done: h.done, run: () => tapOwn(h.id, h.name).then((ok) => (ok && pluck(), ok)) }))
   ]
   doneToday = list.filter((h) => h.done).length
   return list

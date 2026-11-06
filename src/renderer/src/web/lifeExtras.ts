@@ -9,7 +9,8 @@ import { LedgerError } from '@core/ledger'
 import { cleanMind } from '@core/coachMind'
 import { planGoal } from '@core/goalPlan'
 import { goalsBoard, type BoardGoal, type WeekItem } from '@core/goalsBoard'
-import { addHabit, HABIT_RULE, habitRef, habitRows, logHabit, missedYesterday, removeHabit, renameHabit, unlogHabit, isLogged, type HabitRow } from '@core/myHabits'
+import { addHabit, HABIT_RULE, habitRef, habitRows, logHabit, missedYesterday, removeHabit, renameHabit, unlogHabit, updateHabit, isLogged, type HabitRow } from '@core/myHabits'
+import { BOARD_PREFS, cleanPrefs, setSkip, skipsOf, type BoardPrefs, type HabitLook, type Schedule } from '@core/habitBoard'
 import { endMode, MODES, startMode, modeRules, type LifeMode, type ModeKind, type ModeRules } from '@core/lifeMode'
 import { addLearn, learnLadders, nextSubject, removeLearn, type LearnTrack, type TrackView, type LearnEntry } from '@core/learnPath'
 import { weekTime, type WeekTime } from '@core/plannedVsReal'
@@ -72,6 +73,7 @@ export function habitsView(s: Services, now = new Date()): HabitsView {
   const today = s.wallet.today(now)
   const b = loadHabits(s.db)
   const rest = restFor(s, today)
+  const prefs = loadBoard(s.db)
   const rule = (() => {
     try {
       return s.wallet.rule(HABIT_RULE)
@@ -79,7 +81,7 @@ export function habitsView(s: Services, now = new Date()): HabitsView {
       return null
     }
   })()
-  return { rows: habitRows(b, today, rest), missed: missedYesterday(b, today, rest).map((h) => h.name), pays: rule?.enabled ? rule.coins : 0, cap: rule?.dailyCap ?? 0 }
+  return { rows: habitRows(b, today, rest, (id) => skipsOf(prefs, `own:${id}`)), missed: missedYesterday(b, today, rest).map((h) => h.name), pays: rule?.enabled ? rule.coins : 0, cap: rule?.dailyCap ?? 0 }
 }
 
 /** One tap: logs it for today and pays the habit rule once (the daily cap still holds). */
@@ -104,15 +106,98 @@ export function untapHabit(s: Services, id: string, now = new Date()): HabitsVie
   return habitsView(s, now)
 }
 
-export type HabitEdit = { op: 'add'; name: string } | { op: 'rename'; id: string; name: string } | { op: 'remove'; id: string }
+export type HabitEdit =
+  | { op: 'add'; name: string; look?: Partial<HabitLook>; schedule?: Schedule }
+  | { op: 'rename'; id: string; name: string }
+  | { op: 'update'; id: string; name?: string; look?: Partial<HabitLook>; schedule?: Schedule }
+  | { op: 'remove'; id: string }
 export function editHabits(s: Services, e: HabitEdit, now = new Date()): HabitsView {
   const b = loadHabits(s.db)
   try {
-    saveHabits(s.db, e.op === 'add' ? addHabit(b, e.name, now) : e.op === 'rename' ? renameHabit(b, e.id, e.name) : removeHabit(b, e.id))
+    saveHabits(s.db, e.op === 'add' ? addHabit(b, e.name, now, { look: e.look, schedule: e.schedule }) : e.op === 'rename' ? renameHabit(b, e.id, e.name) : e.op === 'update' ? updateHabit(b, e.id, e) : removeHabit(b, e.id))
   } catch (err) {
     throw new LedgerError((err as Error).message)
   }
   return habitsView(s, now)
+}
+
+// ------------------------------------------------- Today's habit board
+
+const loadBoard = (db: any): BoardPrefs => cleanPrefs(json(db, BOARD_PREFS))
+const saveBoard = (db: any, p: BoardPrefs) => setSetting(db, BOARD_PREFS, JSON.stringify(cleanPrefs(p)))
+
+/** The built-in habits and the point rules that say they happened. */
+const BUILTIN_RULES: Record<string, string[]> = {
+  oath: ['discipline.oath'],
+  clean: ['discipline.clean_day'],
+  workout: ['body.workout_done'],
+  focus: ['study.block_done'],
+  skincare: ['face.routine_done'],
+  spending: ['money.logged']
+}
+
+export interface BoardView {
+  today: string
+  prefs: BoardPrefs
+  /** Built-in habit id → the days it was done (the last 60 days). */
+  days: Record<string, string[]>
+  /** What each habit really paid today (built-in id, or own:<id>). */
+  paid: Record<string, number>
+  /** Rest days (Body) and sick / travel days: they keep streaks. */
+  rest: string[]
+}
+
+/**
+ * The board's history, read from what really happened: points that were paid
+ * (and not undone), the discipline log, workouts, focus minutes. Nothing here
+ * pays anything.
+ */
+export function boardView(s: Services, focusTarget = 50, now = new Date()): BoardView {
+  const today = s.wallet.today(now)
+  const from = addDays(today, -60)
+  const days: Record<string, Set<string>> = {}
+  const add = (id: string, d: string) => (days[id] ??= new Set()).add(d)
+  const paid: Record<string, number> = {}
+  const ruleTo: Record<string, string> = {}
+  for (const [id, rules] of Object.entries(BUILTIN_RULES)) for (const r of rules) ruleTo[r] = id
+  const rows = all<{ day: string; rule_id: string | null; ref: string | null; coins: number }>(
+    s.db,
+    "SELECT day, rule_id, ref, coins FROM ledger WHERE day >= ? AND kind = 'earn' AND id NOT IN (SELECT undo_of FROM ledger WHERE undo_of IS NOT NULL)",
+    from
+  )
+  for (const r of rows) {
+    const id = r.rule_id ? ruleTo[r.rule_id] : undefined
+    if (id) {
+      add(id, r.day)
+      if (r.day === today) paid[id] = (paid[id] ?? 0) + r.coins
+    }
+    if (r.day === today && r.rule_id === HABIT_RULE && r.ref?.startsWith('habit:')) {
+      const own = r.ref.split(':')[1]
+      paid[`own:${own}`] = (paid[`own:${own}`] ?? 0) + r.coins
+    }
+  }
+  for (const e of all<{ kind: string; day: string }>(s.db, "SELECT kind, day FROM discipline_events WHERE day >= ? AND kind IN ('oath', 'checkin')", from)) add(e.kind === 'oath' ? 'oath' : 'clean', e.day)
+  for (const w of all<{ day: string }>(s.db, 'SELECT DISTINCT day FROM workouts WHERE day >= ?', from)) add('workout', w.day)
+  for (const f of all<{ day: string; m: number; c: number }>(s.db, 'SELECT day, SUM(minutes) AS m, SUM(coins) AS c FROM focus_sessions WHERE day >= ? GROUP BY day', from)) {
+    if (f.m >= focusTarget) add('focus', f.day)
+    if (f.day === today && f.c) paid.focus = (paid.focus ?? 0) + f.c
+  }
+  return { today, prefs: loadBoard(s.db), days: Object.fromEntries(Object.entries(days).map(([k, v]) => [k, [...v].sort()])), paid, rest: restFor(s, today) }
+}
+
+/** Saves what you changed on the board (looks, order, hidden, fixed order). */
+export function saveBoardPrefs(s: Services, patch: Partial<BoardPrefs>): BoardPrefs {
+  const next = cleanPrefs({ ...loadBoard(s.db), ...patch })
+  saveBoard(s.db, next)
+  return next
+}
+
+/** Skip today (no points, the streak waits) or take the skip back. */
+export function skipHabit(s: Services, id: string, on: boolean, now = new Date()): BoardPrefs {
+  const today = s.wallet.today(now)
+  const next = setSkip(loadBoard(s.db), id, today, on)
+  saveBoard(s.db, next)
+  return next
 }
 
 // --------------------------------------------------------- life modes (FT4)
@@ -440,6 +525,9 @@ export function createExtras(svcP: Promise<WebServices>) {
     tapHabit: (id: string) => write((s) => tapHabit(s, id), W, H),
     untapHabit: (id: string) => write((s) => untapHabit(s, id), W, H),
     editHabits: (e: HabitEdit) => write((s) => editHabits(s, e), H),
+    habitBoard: (focusTarget?: number) => read((s) => boardView(s, focusTarget)),
+    saveHabitBoard: (patch: Partial<BoardPrefs>) => write((s) => saveBoardPrefs(s, patch), H),
+    skipHabit: (id: string, on: boolean) => write((s) => skipHabit(s, id, on), H),
     mode: () => read((s) => modeView(s)),
     setMode: (kind: ModeKind | null, days?: number) => write((s) => setMode(s, kind, days ?? 0), M, 'life-body-changed'),
     goals: (events: CalEvent[] = []) => read((s) => goalsView(s, events, new Date(), fin(s))),
