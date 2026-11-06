@@ -2,20 +2,21 @@
 // desktop island its snapshot and does what the island's buttons ask. The
 // island window itself never opens your data, so there is one owner of it.
 import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
-import { focusQualityPc, lateNight } from '@core/pcActivity'
+import { focusQualityPc } from '@core/pcActivity'
 import { useCallback, useEffect, useRef } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
-import { morningAlert, waterAlert, windDown, windDownAlert } from '@core/islandBody'
+import { windDown } from '@core/islandBody'
+import { dayNudge } from '@core/dayNudges'
+import { alertTopic, govern, noteMessage, noteShown, sleptOnTime, textTopic, waterSeen, weekDaysFromStore, weeklyHealth, windDownMode, type GovernCtx, type Queued, type ReminderItem, type Shown } from '@core/healthyDay'
 import { wakeLoggedToday } from '@core/sleep'
 import { blockKindOf, type BlockKinds } from '@core/blockKind'
-import { nudgeAct, nudgeIdle, nudgeTick, nudgeWater, nudgeYes } from './islandNudgesFeed'
+import { healthTick, nudgeAct, nudgeIdle, nudgeTick, nudgeTouched, nudgeYes } from './islandNudgesFeed'
 import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/islandActions'
 import { dayHighlight, highlightAlert, rewardAlert } from '@core/islandFeel'
 import { liveScore } from '@core/liveScore'
-import { recapAlert } from '@core/islandMoments'
 import { isDeclined, isInvite, isMarker, isRealMeeting, isTentative } from '@core/calResponse'
 import type { TodoTask } from '@core/todoist'
 import { currentSession, sessionValid } from './web/session'
@@ -31,7 +32,7 @@ import { startIslandThemeSync } from './islandTheme'
 import { todoistErrorText } from '@core/islandErrors'
 import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
-import { calendarDay } from '@core/dates'
+import { calendarDay, dayKey } from '@core/dates'
 import { WATER_TARGET_ML } from '@core/defaults'
 import { preferSlot, workHours } from '@core/bestHours'
 import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart, shareGoalWords, smartAct, smartNotice, smartOn, smartSuggestion, smartTick, startSmart } from './smartIsland'
@@ -61,6 +62,12 @@ const LAST_WATER = 'ls.lastWaterAt'
 const LAST_MOVE = 'ls.lastMoveAt'
 const LAST_EYES = 'ls.lastEyesAt'
 const EYES = 'ls.eyeBreaks'
+/** HD: what reached you (the governor), nudges held back by a call / focus / class, the last water total seen. */
+const SHOWN = 'ls.healthShown'
+const QUEUE = 'ls.healthQueue'
+const WATER_SEEN = 'ls.waterSeen'
+let lastAlertId: string | null = null
+let remindCache: { at: number; list: ReminderItem[] } = { at: 0, list: [] }
 /** Phase 3: the last copied dated text, and today's Todoist (cached a minute). */
 const CLIP = 'ls.islandClip'
 /** Phase 4: rewards already celebrated (id → first shown). */
@@ -92,7 +99,6 @@ const PC_SNOOZE = 'ls.pcDistractSnooze'
 /** The PC was locked during focus: when (P6). */
 let lockedAt: number | null = null
 const BACK = 'ls.pcBack'
-const LATE = 'ls.lateNightAsked'
 const BLOCK_NOTIFIED = 'ls.blockNotified'
 /** P16: messages to Ben typed while offline, sent when the internet is back. */
 const OUTBOX = 'ls.islandOutbox'
@@ -177,26 +183,6 @@ function backAlert(running: { subject: string } | null, now: number, dismissed: 
     ]
   }
 }
-/** P13: still at the PC half an hour after bedtime. */
-function lateAlert(now: number, bedTarget: string, dismissed: Record<string, number>): IslandAlert | null {
-  if (!lateNight(new Date(now), bedTarget, idleSec)) return null
-  const day = localDayOf(now - 6 * 3600_000)
-  const id = `late:${day}`
-  if ((dismissed[id] ?? 0) > now || get<string>(LATE, '') === `${day}:done`) return null
-  return {
-    id,
-    kind: 'late',
-    title: 'Still up?',
-    text: `It's ${new Date(now).toTimeString().slice(0, 5)} and your bedtime was ${bedTarget}. Close the day: tomorrow starts tonight.`,
-    face: '🌙',
-    actions: [
-      { label: '🌙 Going to bed', action: { kind: 'bed' }, primary: true },
-      { label: 'Close the day', action: { kind: 'closeDay' } },
-      { label: '20 min more', action: { kind: 'dismiss', id, snoozeMin: 20 } }
-    ]
-  }
-}
-
 /** While a focus timer runs: time away from the PC counts against its quality. */
 function guardTick(sec: number) {
   idleSec = sec
@@ -305,26 +291,6 @@ async function onAway(w: { from: string; to: string }): Promise<void> {
   await life.sleep.logBed(time)
   put(BED_AUTO, { time, at: w.to })
   window.dispatchEvent(new CustomEvent('life-sleep-changed'))
-}
-
-/** "You went to bed at 00:40": once, until you confirm or fix it (not over a time-up). */
-function bedAlert(dismissed: Record<string, number>, now: number, running: boolean): IslandAlert | null {
-  const b = get<{ time: string; at: string } | null>(BED_AUTO, null)
-  if (!b || running || now - Date.parse(b.at) > 6 * 3600_000) return null
-  const id = `sleep:${b.at}`
-  if (dismissed[id] && dismissed[id] > now) return null
-  return {
-    id,
-    kind: 'sleep',
-    title: 'Good morning ☀️',
-    text: `You went to bed at ${b.time}: that's when the PC was last used. It's in Waky now.`,
-    face: '😴',
-    actions: [
-      { label: '✓ Right', action: { kind: 'dismiss', id }, primary: true },
-      { label: 'Fix the time', action: { kind: 'open', page: 'sleep' } },
-      { label: "☀️ I'm up", action: { kind: 'wake' } }
-    ]
-  }
 }
 
 export function IslandFeed() {
@@ -462,9 +428,130 @@ export function IslandFeed() {
       const h = await life.finance.hub().catch(() => null)
       moneyCache.v = h && h.hero.perDay > 0 ? { left: h.hero.leftToday, level: h.hero.dayLevel } : null
     }
-    // Island 2: the nudge cards (move breaks, eyes, mood, people…), the movement ring and the challenge.
+    // Island 2: the movement ring and the challenge; what the healthy-day chain needs.
     const callOn = callNow(blocks.current.list, now)
-    const nudges = await nudgeTick({ now, busy: !!running || !!callOn, call: !!callOn, idleSec, activeSince, running: focusRun, blockEnd: cur && !cur.call ? cur.end : null, meetingEnd: callOn?.end ?? (next?.call && next.start - now < 15 * 60_000 ? next.end : null), dismissed, eyeBreaks: get<boolean>(EYES, false), doing: doingForBreaks(now) }).catch(() => ({ early: null, body: null, move: null }))
+    const nudges = await nudgeTick({ now, busy: !!running || !!callOn, call: !!callOn, idleSec, activeSince, running: focusRun, blockEnd: cur && !cur.call ? cur.end : null, meetingEnd: callOn?.end ?? (next?.call && next.start - now < 15 * 60_000 ? next.end : null), dismissed, eyeBreaks: get<boolean>(EYES, false), doing: doingForBreaks(now) }).catch(() => null)
+    const sleepLogs = sleep?.recentLogs ?? []
+    const bedTarget = sleep?.todayLog?.bedTarget ?? sleepLogs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
+    const bedLogged = bedLoggedTonight(sleepLogs, new Date(now))
+    const wakeLogged = wakeLoggedToday(sleep?.todayLog, sleep?.today ?? '')
+    const waterTarget = status.today.waterTarget || Number(sport?.water?.targetMl) || WATER_TARGET_ML
+    // HD: water logged anywhere (the phone, Telegram) starts the island's 90 minutes again.
+    const seenWater = waterSeen(get<{ ml: number; at: number } | null>(WATER_SEEN, null), localWater, now)
+    put(WATER_SEEN, seenWater)
+    if (seenWater.at > get<number>(LAST_WATER, 0)) put(LAST_WATER, seenWater.at)
+    // HD: your reminders (cached 30 s; a tap on one refreshes it).
+    if (now - remindCache.at > 30_000 && life.coach?.reminders) {
+      remindCache.at = now
+      remindCache.list = (await life.coach.reminders().catch(() => null)) ?? remindCache.list
+    }
+    // HD: one set of rules for every body and day nudge (core/healthyDay.ts, core/dayNudges.ts).
+    const classOn = blocks.current.list.some((b) => b.kind === 'event' && !b.call && !b.maybe && b.mark !== 'skip' && b.start <= now && now < b.end)
+    const govCtx: GovernCtx = { now, call: !!callOn, focus: !!focusRun && !focusRun.pausedAt, event: classOn, asleep: bedLogged }
+    let shown = get<Shown[]>(SHOWN, [])
+    // Ben's Telegram messages (they show in the island's log too) count as nudges that reached you.
+    for (const e of log) if (e.role === 'coach' && e.via === 'telegram' && now - Date.parse(e.at) < 4 * 3600_000) shown = noteMessage(shown, e.text, Date.parse(e.at))
+    const first = get<{ day: string; at: number } | null>(FIRST, null)
+    const health = nudges
+      ? dayNudge({
+          now,
+          day: dayKey(new Date(now)),
+          ctx: govCtx,
+          shown,
+          queue: get<Queued[]>(QUEUE, []),
+          dismissed,
+          reminders: remindCache.list,
+          idleSec,
+          activeSince,
+          firstActiveAt: first?.day === localDayOf(now) ? first.at : null,
+          wakeLogged,
+          wakeTime: sleep?.todayLog?.wakeTime ?? null,
+          firstBlock: blocks.current.list.filter((b) => b.end > now && !b.maybe).sort((x, y) => x.start - y.start)[0] ?? null,
+          blockStarted: blocks.current.list.some((b) => !b.maybe && !b.call && b.start <= now && localDayOf(b.start) === localDayOf(now)),
+          bedAuto: get<{ time: string; at: string } | null>(BED_AUTO, null),
+          bedTarget,
+          bedLogged,
+          store: nudges.store,
+          lastMoveAt: nudges.lastMoveAt,
+          lastEyesAt: nudges.lastEyesAt,
+          lastWaterAt: get<number>(LAST_WATER, 0),
+          exercises: nudges.exercises,
+          coins: nudges.coins,
+          doing: doingForBreaks(now),
+          eyeBreaks: get<boolean>(EYES, false),
+          running: focusRun,
+          moodSlots: nudges.moodSlots,
+          lowMood: nudges.lowMood,
+          snooze: nudges.snooze,
+          water: { ml: localWater, target: waterTarget },
+          eveningAt: evAt,
+          recap: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined },
+          eveningSent: log.some((e) => e.role === 'coach' && e.via === 'telegram' && localDayOf(Date.parse(e.at)) === localDayOf(now) && textTopic(e.text) === 'evening')
+        })
+      : null
+    if (health) put(QUEUE, health.queue)
+    const alertNow = (() => {
+      // Paused: its time is never up (the end moves on with the pause).
+      // Your reminders show as their own card (Done / Snooze), not as a copy of Ben's ⏰ message.
+      const pick = pickAlert({ now, running: focusRun?.pausedAt ? { ...focusRun, endsAt: focusRun.endsAt + now - focusRun.pausedAt } : focusRun, blocks: blocks.current.list, log: log.filter((e) => !/^\s*⏰/u.test(e.text)).map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
+      if (pick?.kind === 'over') return pick
+      const answered = get<Record<string, string>>(ANSWERED, {})
+      const smart = smartAlert({ now, blocks: blocks.current.list, running: !!running, idleSec, dismissed, answered, reality: realityOf })
+      // In a call: only what you must see (time up); the rest waits.
+      const call = callOn
+      const busy = !!running || !!call
+      const wd = busy ? null : windDown(now, bedTarget, bedLogged)
+      // Smart island: one suggestion at a time (budget, cooldowns, learning), recipes asking first, the fix-it picker.
+      const suggestion = () => {
+        if (call) return null
+        const last = [...(focus.todaySessions ?? [])].filter((x) => x.endedAt).sort((x, y) => Date.parse(y.endedAt!) - Date.parse(x.endedAt!))[0]
+        const unfinished = blocks.current.list.filter((b) => !b.call && !b.maybe && b.kind !== 'event' && b.start < now && b.end - b.start >= 15 * 60_000 && !answered[blockKey(b)])
+        const sg = smartSuggestion({ now, blocks: blocks.current.list, running: !!running, mustdos: status.mustdos, goals: focus.goals.flatMap((g) => [g.title, g.subject]), windDown: wd, last: last ? { subject: last.subject, endedAt: Date.parse(last.endedAt!) } : null, bedLogged, unfinished })
+        return sg && (dismissed[sg.id] ?? 0) > now ? null : sg
+      }
+      return (
+        autoAlert(now, dismissed) ??
+        pcAskAlert(now, dismissed) ??
+        backAlert(focusRun, now, dismissed) ??
+        driftAlert(focusRun, now, dismissed) ??
+        distractAlert(focusRun, now, dismissed) ??
+        breakOverAlert(now, dismissed, !!run) ??
+        qualityAlert(dismissed, now) ??
+        // HD: your reminder, then your body and your day's edges, through one governor.
+        health?.alert ??
+        // Goals: a check-in that's due (once a period; never during a timer or a call).
+        goalAlert(now, busy, dismissed) ??
+        (() => {
+          // A reward you can now afford: celebrate it (for 3 minutes, once).
+          const r = rewardAlert({ balance: shop?.balance ?? 0, goal: goal ? { title: goal.title, price: goal.price } : null, celebrated: Object.keys(celebrated).filter((k) => now - celebrated[k] > 3 * 60_000), now, dismissed })
+          if (r && !celebrated[r.id]) put(CELEBRATED, { ...celebrated, [r.id]: now })
+          return r
+        })() ??
+        (() => {
+          const c = get<{ text: string; at: number } | null>(CLIP, null)
+          return c && !call ? clipAlert(c.text, c.at, dismissed, now) : null
+        })() ??
+        smart ??
+        smartNotice(now) ??
+        suggestion() ??
+        moveCardAlert(moveAsk, now, dismissed) ??
+        // LF1 / LF2: rain in 30 minutes, the light going (weather plugin).
+        (call ? null : weatherAlert(now, dismissed, busy)) ??
+        highlightAlert(highlight, now, dismissed) ??
+        // Ben's message from Telegram: the same governor (it already reached you there: a dot).
+        (call ? null : pick?.kind === 'ben' ? govern(pick, govCtx, shown).show : pick)
+      )
+    })()
+    // HD: what reached you, for the governor (a card that just came up counts; the island's water and wind-down tell Telegram).
+    const appeared = !!alertNow && alertNow.id !== lastAlertId
+    lastAlertId = alertNow?.id ?? null
+    const nextShown = noteShown(shown, alertNow, 'island', now, appeared)
+    put(SHOWN, nextShown)
+    const topicNow = alertTopic(alertNow)
+    if (appeared && (topicNow === 'water' || topicNow === 'bed')) nudgeTouched(topicNow, now)
+    // HD: today's Healthy day ring and its bonus; the weekly card on Sundays.
+    const healthView = await healthTick(now, { ml: localWater, target: waterTarget }, sleptOnTime(sleep?.todayLog, bedTarget)).catch(() => null)
+    const week = healthView && nudges && new Date(now).getDay() === 0 ? weeklyHealth(weekDaysFromStore(nudges.store, dayKey(new Date(now))), sleepLogs, dayKey(new Date(now))) : null
     return {
       at: now,
       locked: false,
@@ -484,78 +571,18 @@ export function IslandFeed() {
       // IS6: later today, a maybe or an invite (greyed in the Next list).
       maybe: blocks.current.maybe.filter((b) => b.end > now).sort((x, y) => x.start - y.start).slice(0, 3),
       mustdos: status.mustdos,
-      water: { ml: localWater, target: status.today.waterTarget || Number(sport?.water?.targetMl) || WATER_TARGET_ML },
+      water: { ml: localWater, target: waterTarget },
       reps,
-      alert: (() => {
-        // Paused: its time is never up (the end moves on with the pause).
-        const pick = pickAlert({ now, running: focusRun?.pausedAt ? { ...focusRun, endsAt: focusRun.endsAt + now - focusRun.pausedAt } : focusRun, blocks: blocks.current.list, log: log.map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
-        if (pick?.kind === 'over') return pick
-        const answered = get<Record<string, string>>(ANSWERED, {})
-        const smart = smartAlert({ now, blocks: blocks.current.list, running: !!running, idleSec, dismissed, answered, reality: realityOf })
-        // In a call: only what you must see (time up); the rest waits.
-        const call = callNow(blocks.current.list, now)
-        // Your body and your day's edges (phase 2): never during a call or a focus timer.
-        const busy = !!running || !!call
-        const logs = sleep?.recentLogs ?? []
-        const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
-        const wd = busy ? null : windDown(now, target, bedLoggedTonight(logs, new Date(now)))
-        const wakeLogged = wakeLoggedToday(sleep?.todayLog, sleep?.today ?? '')
-        const first = get<{ day: string; at: number } | null>(FIRST, null)
-        const firstBlock = blocks.current.list.filter((b) => b.end > now).sort((x, y) => x.start - y.start)[0] ?? null
-        const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || WATER_TARGET_ML }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed, doing: doingForBreaks(now) }
-        // Smart island: one suggestion at a time (budget, cooldowns, learning), recipes asking first, the fix-it picker.
-        const suggestion = () => {
-          if (call) return null
-          const last = [...(focus.todaySessions ?? [])].filter((x) => x.endedAt).sort((x, y) => Date.parse(y.endedAt!) - Date.parse(x.endedAt!))[0]
-          const unfinished = blocks.current.list.filter((b) => !b.call && !b.maybe && b.kind !== 'event' && b.start < now && b.end - b.start >= 15 * 60_000 && !answered[blockKey(b)])
-          const sg = smartSuggestion({ now, blocks: blocks.current.list, running: !!running, mustdos: status.mustdos, goals: focus.goals.flatMap((g) => [g.title, g.subject]), windDown: wd, last: last ? { subject: last.subject, endedAt: Date.parse(last.endedAt!) } : null, bedLogged: bedLoggedTonight(logs, new Date(now)), unfinished })
-          return sg && (dismissed[sg.id] ?? 0) > now ? null : sg
-        }
-        return (
-          autoAlert(now, dismissed) ??
-          pcAskAlert(now, dismissed) ??
-          backAlert(focusRun, now, dismissed) ??
-          driftAlert(focusRun, now, dismissed) ??
-          distractAlert(focusRun, now, dismissed) ??
-          bedAlert(dismissed, now, !!running) ??
-          breakOverAlert(now, dismissed, !!run) ??
-          qualityAlert(dismissed, now) ??
-          nudges.early ??
-          // Goals: a check-in that's due (once a period; never during a timer or a call).
-          goalAlert(now, busy, dismissed) ??
-          (() => {
-            // A reward you can now afford: celebrate it (for 3 minutes, once).
-            const r = rewardAlert({ balance: shop?.balance ?? 0, goal: goal ? { title: goal.title, price: goal.price } : null, celebrated: Object.keys(celebrated).filter((k) => now - celebrated[k] > 3 * 60_000), now, dismissed })
-            if (r && !celebrated[r.id]) put(CELEBRATED, { ...celebrated, [r.id]: now })
-            return r
-          })() ??
-          (() => {
-            const c = get<{ text: string; at: number } | null>(CLIP, null)
-            return c && !call ? clipAlert(c.text, c.at, dismissed, now) : null
-          })() ??
-          smart ??
-          smartNotice(now) ??
-          suggestion() ??
-          (running ? null : lateAlert(now, target, dismissed)) ??
-          windDownAlert(wd, now, dismissed) ??
-          (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, wakeTime: sleep?.todayLog?.wakeTime ?? null, firstBlock, blockStarted: blocks.current.list.some((b) => !b.maybe && !b.call && b.start <= now && localDayOf(b.start) === localDayOf(now)), dismissed })) ??
-          moveCardAlert(moveAsk, now, dismissed) ??
-          // LF1 / LF2: rain in 30 minutes, the light going (weather plugin).
-          (call ? null : weatherAlert(now, dismissed, busy)) ??
-          nudges.body ??
-          nudgeWater(waterAlert(body), now) ??
-          (busy ? null : recapAlert({ now, eveningAt: evAt, dismissed, recap: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget: status.today.waterTarget || WATER_TARGET_ML, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined } })) ??
-          highlightAlert(highlight, now, dismissed) ??
-          (call ? null : pick)
-        )
-      })(),
+      alert: alertNow,
+      health: healthView ? { today: healthView.today, week } : null,
+      windMode: windDownMode(now, bedTarget, bedLogged),
       call: (() => {
         const c = running ? null : callNow(blocks.current.list, now)
         return c ? { title: c.title, end: c.end } : null
       })(),
       inMeeting: !!callNow(blocks.current.list, now),
       doing: doingNow(),
-      move: nudges.move,
+      move: nudges?.move ?? null,
       // Island 2: your tiles and buttons, today's blocks for the mini calendar, the music's focus pause.
       ...(await kitForIsland(blocks.current.list)),
       // PL1–PL8, LF1/LF2: your widgets and layout, today's rain and sunset.
@@ -571,11 +598,7 @@ export function IslandFeed() {
       today: { focusMin: status.today.focusMin, focusGoal },
       // IM4: a new best streak is celebrated on the island.
       streak: body && body.streak > 0 ? { days: body.streak, kind: 'sport', atRisk: false, best: Number((body as { bestStreak?: number }).bestStreak) || body.streak } : null,
-      windDown: (() => {
-        const logs = sleep?.recentLogs ?? []
-        const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
-        return windDown(now, target, bedLoggedTonight(logs, new Date(now)))
-      })(),
+      windDown: windDown(now, bedTarget, bedLogged),
       focusGuard: (() => {
         const gg = get<Guard | null>(GUARD, null)
         if (!running || !gg || gg.startedAt !== running.startedAt) return null
@@ -877,9 +900,26 @@ export function IslandFeed() {
             }
             break
           }
-          case 'closeDay':
+          case 'closeDay': {
+            // HD: closing the day answers the wind-down card too (no card left hanging).
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[`winddown:${new Date().toDateString()}`] = Date.now() + 3 * 3600_000
+            put(DISMISSED, d)
             window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'today' }))
             setTimeout(() => window.dispatchEvent(new CustomEvent('life-close-day')), 600)
+            break
+          }
+          case 'remind': {
+            // HD: a reminder you set from the island ("remind me to call mom at 18:00"), or Done / Snooze on its card.
+            if (!life.coach?.remind) throw new Error('Reminders need Life System open')
+            if (a.op === 'add') said = await life.coach.remind({ op: 'add', text: a.text ?? '', at: a.at ?? 0 })
+            else if (a.op === 'done' && a.id) said = await life.coach.remind({ op: 'done', id: a.id })
+            else if (a.id) said = await life.coach.remind({ op: 'snooze', id: a.id, minutes: a.minutes ?? 10 })
+            remindCache.at = 0
+            break
+          }
+          case 'calmMusic':
+            // The island window plays it on its own player.
             break
           case 'wake':
             await life.sleep.logWake(a.time)

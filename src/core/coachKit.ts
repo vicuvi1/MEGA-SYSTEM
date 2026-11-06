@@ -66,6 +66,8 @@ export interface Reminder {
   ignored?: boolean
   /** The coach's call after your answer: promise kept or broken. */
   outcome?: 'kept' | 'broken' | null
+  /** HD: answered with Done or Snooze (island or Telegram): the island card goes. */
+  handled?: boolean
 }
 
 export const REMINDERS = 'coach_reminders'

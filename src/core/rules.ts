@@ -35,6 +35,7 @@ export const DEFAULT_RULES: Rule[] = [
   // and Ben's daily challenge once complete. Paid only on a real log, undone with it.
   { id: 'body.move_break', module: 'body', title: 'Move break', coins: 3, xp: 5, dailyCap: 5, cooldownMin: 10, enabled: true },
   { id: 'body.eye_break', module: 'body', title: 'Eye break (20-20-20)', coins: 1, xp: 1, dailyCap: 3, cooldownMin: 15, enabled: true },
+  { id: 'body.healthy_day', module: 'body', title: 'Healthy day (water, moves, breaks, bed on time)', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'body.challenge_done', module: 'body', title: "Ben's daily challenge", coins: 10, xp: 15, dailyCap: 1, cooldownMin: 0, enabled: true },
   // Goals: a check-in on time (+3, once per goal and check-in period, at most 3 a day) and a
   // milestone you reached (+15, once per milestone). Never for a number that moved by itself.

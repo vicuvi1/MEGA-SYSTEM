@@ -3,6 +3,7 @@
 // the round menu (IC3), the command bar's live suggestions (IC4), scrolling to
 // adjust (IC6), the right-click menu (IC7), what a drop means (IC8), keyboard
 // moves (IC9), what can be undone (IC10) and fading while you type (IC19).
+import { parseReminder } from './healthyDay'
 import { parseCapture } from './capture'
 import { parseTelegramText, tryParseNaturalExpense } from './botCommands'
 import { parseWater } from './sportShared'
@@ -234,6 +235,13 @@ export function commandPreview(raw: string, c: PreviewCtx): Suggestion[] {
     if (out.length < 6 && !out.some((y) => y.id === x.id)) out.push(x)
   }
   const send: IslandAction = { kind: 'chat', text }
+  // HD: "remind me to call mom at 18:00" (a time): a reminder on the island and Telegram, no AI needed.
+  const rem = parseReminder(text, c.now)
+  if (rem) {
+    const when = new Date(rem.at)
+    const day = when.toDateString() === new Date(c.now).toDateString() ? '' : ' tomorrow'
+    add({ id: `remind:${rem.at}`, icon: '⏰', label: `Remind me at ${when.toTimeString().slice(0, 5)}${day}: ${rem.text}`, action: { kind: 'remind', op: 'add', text: rem.text, at: rem.at }, hint: 'Island + Telegram' })
+  }
   // Water: "water 500", "+250ml", "2 glasses".
   const ml = parseWater(text)
   if (ml) add({ id: `water:${ml}`, icon: '💧', label: `Log ${ml} ml`, action: { kind: 'water', ml } })

@@ -118,6 +118,12 @@ export interface NudgeDay {
   /** Kind → last time it was shown or answered today (spacing). */
   lastAt: Record<string, number>
   challenge?: NudgeChallenge | null
+  /** HD: the day's water (ml) and goal, saved by the island for the weekly card. */
+  water?: number
+  waterTarget?: number
+  /** HD: all four parts of a healthy day met, and the bonus payment (ledger id). */
+  healthy?: boolean
+  healthyPaid?: number | null
 }
 
 export interface NudgeStore {
@@ -186,6 +192,10 @@ function cleanDay(x: any): NudgeDay {
     focus: (Array.isArray(x?.focus) ? x.focus : []).filter((f: any) => ['yes', 'drifted', 'switch'].includes(f?.answer)).slice(-12).map((f: any) => ({ at: Number(f.at) || 0, subject: str(f.subject), answer: f.answer })),
     postponed: recNum(x?.postponed),
     lastAt: recNum(x?.lastAt),
+    ...(Number.isFinite(x?.water) ? { water: num(x.water, 0, 0, 20000) } : {}),
+    ...(Number.isFinite(x?.waterTarget) ? { waterTarget: num(x.waterTarget, 0, 0, 20000) } : {}),
+    ...(x?.healthy ? { healthy: true } : {}),
+    ...(Number.isFinite(x?.healthyPaid) ? { healthyPaid: x.healthyPaid } : {}),
     ...(ch && ch.ex ? { challenge: { ex: str(ch.ex, 40), name: str(ch.name, 40), target: num(ch.target, 50, 1, 1000), paid: Number.isFinite(ch.paid) ? ch.paid : null, said: Array.isArray(ch.said) ? ch.said.filter((v: unknown) => Number.isFinite(v)).slice(0, 4) : [] } } : {})
   }
 }

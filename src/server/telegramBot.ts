@@ -30,6 +30,9 @@ import { bedtimeNudge, coachFacts, coachPrompt, coachText, deadlineFacts, wakeSl
 import { deadlineRadar } from '@core/todoist'
 import { shouldPlan } from '@core/weekPlan'
 import { targetForDay } from '@core/sleep'
+import { bodyLine, healthyDay, screenBreaks, sleptOnTime, stillQuiet, telegramWindDown, weekDaysFromStore, weeklyHealth, weeklyHealthText } from '@core/healthyDay'
+import { cleanNudgeStore, dayOf } from '@core/islandNudges'
+import { bedLoggedTonight } from '@core/bedSense'
 import { addDays, calendarDay, dayKey } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting, readSetting, writeSetting } from '../main/settings'
@@ -639,10 +642,19 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // ("Last check on…" twice is the point), so the once-a-day rule never drops them.
   // Quiet hours, event warnings, travel times: the same settings as the app (N2, N3, N6).
   const notifSet = await mirror.read((db) => cleanNotifSettings(JSON.parse(getSetting(db as any, NOTIF_SETTINGS_KEY) || 'null'))).catch(() => cleanNotifSettings(null))
+  // HD: the morning part of the quiet hours ends once you logged waking up (the plan comes at once).
+  let wakeP: Promise<string | null> | null = null
+  const wakeAt = () =>
+    (wakeP ??= mirror
+      .read((db) => {
+        const today = services.services(db).wallet.today(now)
+        return ((db.prepare('SELECT wake_time FROM sleep_logs WHERE day = ?').get(today) as { wake_time?: string } | undefined)?.wake_time ?? null) as string | null
+      })
+      .catch(() => null))
   /** `notif`: the bell entry to use (fixed id, so the app's own copy isn't doubled). `urgent`: through quiet hours. */
   const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean; notif?: Omit<Notif, 'readAt'>; urgent?: boolean } = {}): Promise<any> => {
     // Quiet hours (N6): only your own reminders (🔔 ⏰) and urgent things go to Telegram; the rest waits in the bell.
-    if (!opts.urgent && quietNowSet(notifSet, now) && !/^\s*(🔔|⏰)/u.test(text)) {
+    if (!opts.urgent && stillQuiet(quietNowSet(notifSet, now), now, await wakeAt()) && !/^\s*(🔔|⏰)/u.test(text)) {
       await mirror.write((db) => {
         const n = opts.notif ?? notifFromMessage(text, reply_markup, new Date())
         if (n) addNotif(db as any, n)
@@ -794,7 +806,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     if (hush && r.kind === 'checkin') continue
     try {
       // Check-ins get sharper each time and name the week's missed promises.
-      const went = await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : undefined, { always: true })
+      // HD: your reminder with Done / Snooze (the island's card answers the same reminder).
+      const went = await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : { inline_keyboard: [[{ text: '✓ Done', callback_data: `rm|d|${r.id}` }, { text: '⏰ 10 min', callback_data: `rm|s|${r.id}` }, { text: '1 hour', callback_data: `rm|h|${r.id}` }]] }, { always: true })
       // Only a message that really reached him moves the check-in on (and can count as ignored).
       if (!went) continue
       list = afterSend(list, r.id, now)
@@ -1011,7 +1024,9 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     const bed = await mirror.read((db) => services.services(db).sleep.bedtimeTarget())
     const bm = Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5))
     const before = (bm - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440
-    if (before >= 25 && before <= 50) {
+    // HD: not when bed is logged, nor when the island just showed its own wind-down (you saw it at the PC).
+    const seen = before >= 25 && before <= 50 ? await mirror.read((db) => bodyFacts(db as any, services.services(db), today0, now)).catch(() => null) : null
+    if (telegramWindDown({ minutesBefore: before, bedLogged: !!seen?.bedLogged, islandBedAt: seen?.bedAt ?? null, now: now.getTime() })) {
       const first = await mirror.write((db) => {
         if (getSetting(db as any, 'wind_down_day') === today0) return false
         setSetting(db as any, 'wind_down_day', today0)
@@ -1259,6 +1274,32 @@ async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unk
   }
 }
 
+/**
+ * HD: your body today and this week, from the island's tallies (synced
+ * setting island_nudges), the shared water log and Waky: the evening line,
+ * the Sunday card, and when the island last showed its water / wind-down card.
+ */
+function bodyFacts(db: any, svc: any, today: string, now: Date) {
+  let store = cleanNudgeStore(null)
+  try {
+    store = cleanNudgeStore(readSetting(db, 'island_nudges'), today)
+  } catch {
+    /* no island yet */
+  }
+  let sport: any = null
+  try {
+    sport = readSetting(db, 'sport_tracker_json')?.data ?? null
+  } catch {
+    sport = null
+  }
+  const water = sport ? sharedView(sport, sportToday(now)).water : { ml: 0, target: 0 }
+  const logs = svc.sleep.state().recentLogs ?? []
+  const d = dayOf(store, today)
+  const h = healthyDay({ waterMl: water.ml, waterTarget: water.target, moves: d.moves, breaks: screenBreaks(d), sleptOnTime: sleptOnTime(logs.find((l: any) => l.day === today), svc.sleep.bedtimeTarget()) })
+  const week = weeklyHealth(weekDaysFromStore(store, today).map((x) => (x.day === today ? { ...x, waterMl: water.ml, waterTarget: water.target } : x)), logs, today)
+  return { line: bodyLine(h), week, waterAt: d.lastAt.water ?? null, bedAt: d.lastAt.bed ?? null, bedLogged: bedLoggedTonight(logs, now) }
+}
+
 async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown, opts?: { always?: boolean }) => Promise<unknown>): Promise<void> {
   const { bots, services, mirror } = await botsFor(env)
   const f = await mirror.read((db) => {
@@ -1282,6 +1323,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       paused = false
     }
     const mode = todayMode(db, today)
+    const body = bodyFacts(db, svc, today, now)
     return {
       prefs,
       state,
@@ -1296,10 +1338,22 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
         waterTarget: water.target,
         workoutDone: (svc.wallet.summary(now).todayRules ?? []).includes('body.workout_done') || !!svc.body.state().restToday,
         paused,
-        mode: mode ? { waterMax: mode.waterMax, training: mode.training, replan: mode.replan } : null
-      }
+        mode: mode ? { waterMax: mode.waterMax, training: mode.training, replan: mode.replan } : null,
+        // HD: a focus timer now (a class or meeting is checked below), the island's water card, bed logged.
+        busy: !!svc.focus.state(now).running,
+        islandWaterAt: body.waterAt,
+        nowMs: now.getTime(),
+        asleep: body.bedLogged
+      },
+      body
     }
   })
+  // HD: in a class or a meeting from your calendar: water and training wait for after.
+  if (!f.facts.busy) {
+    const cal = calendarFor(env, mirror)
+    const evs = cal ? await cal.events(new Date(now.getTime() - 4 * 3600_000).toISOString(), new Date(now.getTime() + 60_000).toISOString()).catch(() => []) : []
+    f.facts.busy = evs.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime())
+  }
   // The training slot in today's approved plan: Ben opens the workout then.
   const slot = f.state.briefing?.status === 'approved' ? f.state.briefing.plan.training : null
   if (f.prefs.on && slot && !f.facts.workoutDone && !(f.state as any).slotSent && f.facts.time >= slot.time && f.facts.time < addMinutesHM(slot.time, 40)) {
@@ -1379,7 +1433,8 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const w = await bots.rhythm.weekly()
       // MF10: Sunday, this week's spending against last week's (same days).
       const week = await mirror.read((db) => weekMoneyLine(financeStateFrom(db, null), services.services(db).wallet.today())).catch(() => null)
-      await send(weeklyText(w) + (week ? `\n\n💸 ${escapeHtml(week)}` : ''), WEEKLY_KEYBOARD)
+      // HD: the week for your body (water, moves, breaks, bedtimes).
+      await send(weeklyText(w) + (week ? `\n\n💸 ${escapeHtml(week)}` : '') + `\n\n${weeklyHealthText(f.body.week)}`, WEEKLY_KEYBOARD)
       // Ben's story so far about you, rewritten once a week (B5).
       await bots.rhythm.writeStory().catch(() => null)
       const letter = await bots.rhythm.letter().catch(() => null)
@@ -1408,7 +1463,9 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const askText = [warn, ask].filter(Boolean).map((x) => escapeHtml(x!)).join('\n')
       const keyboard = r.top3.length ? REVIEW_KEYBOARD : undefined
       const withAsk = ask ? { inline_keyboard: [...(keyboard?.inline_keyboard ?? []), MONEY_ASK_ROW] } : keyboard
-      await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + moneyText + (askText ? `\n\n${askText}` : '') + bonus, withAsk)
+      // HD: how your body did today, in one line.
+      const bodyText = `\n\n🩺 ${escapeHtml(f.body.line)}`
+      await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + bodyText + goalText + moneyText + (askText ? `\n\n${askText}` : '') + bonus, withAsk)
     }
   }
 }

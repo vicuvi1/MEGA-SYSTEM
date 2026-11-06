@@ -55,6 +55,9 @@ import { CalendarCap, Crescent, DropCap, LiquidBorder, Sky, TodayRing, pageTurn 
 import { IslandEyesBadge } from './IslandEyesBadge'
 import { IslandMeet } from './IslandMeet'
 import { IslandMoveBadge, IslandNudgeCard, IslandNudgePill, type NudgeRun } from './IslandNudgeCard'
+import { HealthBadge, HealthCard, WeekHealthCard, WindDownCard } from './IslandHealth'
+import { calmStationOf } from '@core/healthyDay'
+import { STARTER_STATIONS } from '@core/starterStations'
 import { NUDGE_CLOSES, nudgeTapLabel } from '@core/islandNudges'
 import { BenThinking, EveningScene, LiveStack, MomentPill, PillEditor, RECAP_MS, SnapGhost, ThinkWave, leanFor, makeJelly, snapBounceIn } from './islandWidgets'
 
@@ -1119,6 +1122,12 @@ export function DesktopIsland() {
   doUndoRef.current = doUndo
   const tap = (a: IslandAction, lbl?: string) => {
     if (a.kind === 'kit' || a.kind === 'kitCount') return send(a)
+    // HD: wind-down's calm music plays on the island's own player (your calm station, else a calm starter).
+    if (a.kind === 'calmMusic') {
+      const st = calmStationOf([...(k.kit.music?.stations ?? []), ...STARTER_STATIONS])
+      if (st) (islandSound('tap'), musicRun({ op: 'play', station: st }))
+      return
+    }
     if (a.kind === 'water') (setSplash((x) => ({ n: x.n + 1, ml: a.ml })), play('water'))
     if (lbl === 'Reply') {
       dispatch({ type: 'click' })
@@ -1772,6 +1781,7 @@ export function DesktopIsland() {
         </AnimatePresence>
       )}
       {!s.locked && !old && <IslandMoveBadge move={s.move} now={now} />}
+      {!s.locked && !old && <HealthBadge health={s.health?.today} />}
       {p.dot && <i className={`di-dot ${main?.kind === 'next' && main.at && main.at - now <= 10 * 60_000 ? 'tick' : ''}`} />}
       {acts.length > 1 && !s.locked && (
         <span className="di-dots" aria-hidden>
@@ -2123,6 +2133,10 @@ export function DesktopIsland() {
           <DayHero greeting={greeting} sub={heroSub} stats={heroStats} />
           <PowerRow tiles={power.map(powerTile)} editing={powerEdit} onTap={doPower} onCycle={(i) => savePower(cyclePower(power, i))} onEdit={setPowerEdit} />
           {alertCard}
+          {/* HD: wind-down mode, today's Healthy day and (Sundays) the week for your body. */}
+          {s.windMode && <WindDownCard mode={s.windMode} tap={tap} playing={!!sc.playing} />}
+          {s.health && <HealthCard health={s.health.today} evening={new Date(now).getHours() >= 18} />}
+          {s.health?.week && <WeekHealthCard week={s.health.week} />}
           {s.doing && (
             // SI1: what Ben thinks you're doing (a kind, never a title); tap to fix it.
             <button className="di-doing" title="That's not right? Tap to fix" {...tp('doing', () => tap({ kind: 'ctxFix', app: s.doing!.app }))}>
@@ -2402,7 +2416,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />

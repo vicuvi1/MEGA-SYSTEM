@@ -38,7 +38,7 @@ export interface VoiceCtx {
 }
 
 /** The command bar's results a voice line may run by itself (never "tick a Todoist task" from a loose match). */
-const SAFE = /^(?:water:|pause$|resume$|stop$|next$|extend:|focus:|bed:|wake:|join$|reps:|sport$|money:|task$)/
+const SAFE = /^(?:remind:|water:|pause$|resume$|stop$|next$|extend:|focus:|bed:|wake:|join$|reps:|sport$|money:|task$)/
 
 const PAGES: Record<string, string> = {
   today: 'today', home: 'today', calendar: 'calendar', schedule: 'calendar', tasks: 'tasks', todoist: 'tasks', coach: 'coach', chat: 'coach', ben: 'coach',
@@ -128,6 +128,9 @@ export function toCommandLine(t: string, running: boolean): { text: string; inte
   // Money: "I spent 40 lei on a taxi", "paid 120 for groceries".
   m = /^(?:i )?(?:spent|paid|bought .{2,30} for) (\d{1,6}(?:[.,]\d{1,2})?)(?: lei| mdl| dollars?| euros?)?(?: on| for)? (?:a |an |the )?(.{2,40})$/.exec(t)
   if (m) return { text: `spent ${m[1]} ${m[2]}`, intent: 'log' }
+  // HD: a reminder with a time: "remind me to call mom at 18:00", "remind me in 20 min to stretch".
+  m = /^remind me (?:to .{2,100} (?:at \d{1,2}(?::\d{2})?(?: ?[ap]m)?|in \d{1,3} (?:min|minutes|hours?))|(?:at \d{1,2}(?::\d{2})?(?: ?[ap]m)?|in \d{1,3} (?:min|minutes|hours?)) to .{2,100})$/.exec(t)
+  if (m) return { text: t, intent: 'log' }
   // A task: "add task call mom tomorrow", "remind me to call mom friday".
   m = /^(?:add|create|new|make)(?: a| an)? (?:task|todo|to-do|to do|reminder)(?: to)?:? (.{2,120})$|^remind me to (.{2,120})$/.exec(t)
   if (m) return { text: `task ${m[1] ?? m[2]}`, intent: 'log' }

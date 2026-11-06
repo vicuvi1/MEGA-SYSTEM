@@ -46,6 +46,7 @@ import { healthChecks } from '@core/health'
 import { beat, logError, logErrors, readBenLog, readHealth, type ErrorReport } from './web/systemHealth'
 import { addTrigger, loadTriggers, urgeEvents } from './web/disciplinePatterns'
 import { addReminder, REMINDERS, type Reminder } from '@core/coachKit'
+import { reminderDone, reminderSnooze } from '@core/healthyDay'
 import { comebackPlan } from '@core/comeback'
 import { neutral } from '@core/stealth'
 import { addWater, sharedView, sportToday } from '@core/sportShared'
@@ -728,6 +729,41 @@ export function createTursoWebBridge(): Bridge {
           writeSetting(s.db, 'sport_tracker_json', { savedAt: Date.now(), data: next })
           return sharedView(next, day).water
         }),
+      // HD: your reminders (the same list Ben's ⏰ uses): read, add, Done, Snooze. The server sends each to Telegram once.
+      reminders: async () =>
+        (await svcP).read((s) => {
+          try {
+            return (readSetting(s.db as any, REMINDERS) as Reminder[]) ?? []
+          } catch {
+            return [] as Reminder[]
+          }
+        }),
+      remind: async (op: { op: 'add'; text: string; at: number } | { op: 'done'; id: string } | { op: 'snooze'; id: string; minutes: number }) => {
+        const line = await (await svcP).write((s) => {
+          let list: Reminder[] = []
+          try {
+            list = readSetting(s.db as any, REMINDERS) ?? []
+          } catch {
+            list = []
+          }
+          const now = Date.now()
+          if (op.op === 'add') {
+            const text = String(op.text ?? '').trim().slice(0, 120)
+            if (!text || !Number.isFinite(op.at) || op.at < now - 60_000) throw new Error('That reminder needs a time from now on')
+            writeSetting(s.db as any, REMINDERS, addReminder(list, { at: new Date(op.at).toISOString(), text, kind: 'remind' }))
+            return `⏰ ${new Date(op.at).toTimeString().slice(0, 5)}${new Date(op.at).toDateString() !== new Date().toDateString() ? ' tomorrow' : ''}: ${text}`
+          }
+          if (!list.some((r) => r.id === op.id)) throw new Error('That reminder is gone')
+          if (op.op === 'done') {
+            writeSetting(s.db as any, REMINDERS, reminderDone(list, op.id, now))
+            return '✓ Done'
+          }
+          writeSetting(s.db as any, REMINDERS, reminderSnooze(list, op.id, op.minutes, now))
+          return `⏰ Again at ${new Date(now + op.minutes * 60_000).toTimeString().slice(0, 5)}`
+        })
+        void syncNow().catch(() => null)
+        return line
+      },
       // Sporty on the server: status, and the Update Sporty button (picked up within a minute).
       sporty: async () => (await svcP).read((s) => sportyViewOf(s.db)),
       updateSporty: async () =>

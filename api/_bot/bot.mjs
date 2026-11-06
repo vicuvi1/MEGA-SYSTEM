@@ -1225,13 +1225,13 @@ function monthKey$1(day) {
 	return day.slice(0, 7);
 }
 // src/core/strength.ts
-var num$3 = (s) => Number(s.replace(",", "."));
+var num$4 = (s) => Number(s.replace(",", "."));
 function parseSets(raw) {
 	const t = raw.trim().replace(/\s+/g, " ");
 	const m = /^(.+?)\s+(?:(\d+(?:[.,]\d+)?)\s*kg\s+)?(\d{1,2})\s*[x×]\s*(\d{1,3})(?:\s*(?:[x×]|@)\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?)?$/i.exec(t);
 	if (!m) return null;
 	const name = m[1].trim();
-	const kg = m[2] ? num$3(m[2]) : m[5] ? num$3(m[5]) : void 0;
+	const kg = m[2] ? num$4(m[2]) : m[5] ? num$4(m[5]) : void 0;
 	const sets = Number(m[3]);
 	const reps = Number(m[4]);
 	if (!name || sets < 1 || sets > 20 || reps < 1 || reps > 200 || kg != null && !(kg > 0 && kg < 1e3)) return null;
@@ -1690,7 +1690,7 @@ var isAccepted = (e) => !isDeclined(e) && !isInvite(e) && !isTentative(e);
 var takesTime = (e) => !isDeclined(e) && !isInvite(e) && e.eventType !== "workingLocation";
 /** Can be what's on "Now", alert you, or start a focus timer by itself. */
 var canBeNow = (e) => isAccepted(e) && !e.free && !isMarker(e);
-var toMin$2 = (hm) => {
+var toMin$4 = (hm) => {
 	const [h, m] = hm.split(":").map(Number);
 	return h * 60 + (m || 0);
 };
@@ -1708,11 +1708,11 @@ function localDay$1(iso) {
 }
 /** Timed events of one day as minute ranges, clipped to the day window. */
 function busy(events, day, from, to) {
-	const lo = toMin$2(from);
-	const hi = toMin$2(to);
+	const lo = toMin$4(from);
+	const hi = toMin$4(to);
 	return events.filter((e) => !e.allDay && localDay$1(e.start) === day && takesTime(e)).map((e) => {
-		const s = toMin$2(localHM(e.start));
-		const en = localDay$1(e.end) > day ? 1440 : toMin$2(localHM(e.end));
+		const s = toMin$4(localHM(e.start));
+		const en = localDay$1(e.end) > day ? 1440 : toMin$4(localHM(e.end));
 		return [Math.max(lo, s), Math.min(hi, en)];
 	}).filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
 }
@@ -1724,7 +1724,7 @@ function freeGaps(events, day, opts = {}) {
 	const from = opts.from ?? "07:00";
 	const to = opts.to ?? "23:00";
 	const min = opts.minMinutes ?? 25;
-	let cursor = Math.max(toMin$2(from), opts.after ? toMin$2(opts.after) : 0);
+	let cursor = Math.max(toMin$4(from), opts.after ? toMin$4(opts.after) : 0);
 	const out = [];
 	for (const [s, e] of busy(events, day, from, to)) {
 		if (s - cursor >= min) out.push({
@@ -1734,10 +1734,10 @@ function freeGaps(events, day, opts = {}) {
 		});
 		cursor = Math.max(cursor, e);
 	}
-	if (toMin$2(to) - cursor >= min) out.push({
+	if (toMin$4(to) - cursor >= min) out.push({
 		start: fromMin$2(cursor),
 		end: to,
-		minutes: toMin$2(to) - cursor
+		minutes: toMin$4(to) - cursor
 	});
 	return out;
 }
@@ -1747,8 +1747,8 @@ function freeGaps(events, day, opts = {}) {
 */
 function suggestBlocks(gaps, items, breather = 10) {
 	const free = gaps.map((g) => ({
-		s: toMin$2(g.start),
-		e: toMin$2(g.end)
+		s: toMin$4(g.start),
+		e: toMin$4(g.end)
 	}));
 	const out = [];
 	for (const it of items) {
@@ -1813,7 +1813,7 @@ function text(about) {
 		serialize: (v) => v ?? ""
 	};
 }
-function num$2(about, fallback = 0) {
+function num$3(about, fallback = 0) {
 	return {
 		about,
 		type: "number",
@@ -1836,8 +1836,8 @@ function flag(about) {
 	};
 }
 var SETTINGS = {
-	data_version: num$2("bumped on every write; devices refresh when it changes"),
-	coach_tick_at: num$2("old place of the tick clock (now in sys_kv); never written to settings"),
+	data_version: num$3("bumped on every write; devices refresh when it changes"),
+	coach_tick_at: num$3("old place of the tick clock (now in sys_kv); never written to settings"),
 	pin_hash: text("old device PIN hash (the PIN lives on the server now)"),
 	theme: text("the app look (dark / light)"),
 	bot_bridge_config: json$5("Telegram bot tokens and chat ids saved in the app", null),
@@ -1865,7 +1865,7 @@ var SETTINGS = {
 	conn_finance_since: text("when Finance Helper was first connected"),
 	money_ask: json$5("a money question Ben is waiting on", null),
 	money_currency: text("currency for money (MDL)"),
-	money_daily_budget: num$2("daily spending budget"),
+	money_daily_budget: num$3("daily spending budget"),
 	money_nothing_spent: json$5("days you tapped \"Nothing spent today\"", []),
 	money_cooked_days: json$5("days you confirmed you cooked at home", []),
 	coach_log: json$5("Ben's chat (newest 200 entries)", []),
@@ -1926,21 +1926,21 @@ var SETTINGS = {
 	urge_started_at: text("when the current urge started (ISO), or empty"),
 	points_v2: text("marker: points moved to version 2"),
 	points_v3: text("marker: points moved to version 3"),
-	"perk.shadow_monarch.p1_streak": num$2("perk: P1 task streak"),
+	"perk.shadow_monarch.p1_streak": num$3("perk: P1 task streak"),
 	"hunter.stat_allocation": json$5("points put into each stat", null),
-	streak_shields: num$2("streak shields you hold"),
-	reward_budget: num$2("old monthly money for rewards (moved into fun_budget)"),
+	streak_shields: num$3("streak shields you hold"),
+	reward_budget: num$3("old monthly money for rewards (moved into fun_budget)"),
 	fun_moves: json$5("leftover money moved to a Finance Helper savings goal, by month", {}),
 	fun_budget: json$5("monthly fun budget in lei, typed or from Finance Helper", null),
 	reward_unlocks: json$5("rewards that unlock with a goal or streak", null),
 	reward_ready_seen: json$5("rewards whose \"Ready!\" moment was already shown (id:buys)", []),
 	currency: text("old name of the money currency"),
-	coin_exchange_rate: num$2("lei per point"),
-	bank_base_rate: num$2("points bank interest rate"),
-	bank_cap_per_level: num$2("points bank cap per level"),
+	coin_exchange_rate: num$3("lei per point"),
+	bank_base_rate: num$3("points bank interest rate"),
+	bank_cap_per_level: num$3("points bank cap per level"),
 	bank_last_interest_day: text("day interest was last paid"),
-	bank_staked_coins: num$2("points in the bank"),
-	bank_total_interest_earned: num$2("interest earned so far"),
+	bank_staked_coins: num$3("points in the bank"),
+	bank_total_interest_earned: num$3("interest earned so far"),
 	pc_asks: json$5("Ben's asks to do something on the PC (Allow / Deny on the desktop island), and whether a desktop app can answer", null),
 	pc_last_hour: json$5("the last hour on the PC as app names, sites and minutes (only when shared from the desktop app)", null),
 	automations: json$5("your automations: \"When X, do Y\", island buttons, Ben may run (src/core/automations.ts); never an address or key", null),
@@ -4144,8 +4144,8 @@ var hmOf$3 = (iso) => {
 	const m = /T(\d{2}:\d{2})/.exec(String(iso ?? ""));
 	return m ? m[1] : null;
 };
-var num$1 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
-var toMin$1 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+var num$2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
+var toMin$3 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 var fromMin$1 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 /** An hour counts as rainy at 50%+ with at least a little rain, or at 70%+ either way. */
 var rainy = (prob, mm) => (prob ?? 0) >= 70 || (prob ?? 0) >= 50 && (mm ?? 0) >= .2;
@@ -4159,16 +4159,16 @@ function summarizeDay(json, day) {
 	const spans = [];
 	times.forEach((t, k) => {
 		if (!t.startsWith(day)) return;
-		const prob = num$1(h.precipitation_probability?.[k]);
-		if (!rainy(prob, num$1(h.precipitation?.[k]))) return;
+		const prob = num$2(h.precipitation_probability?.[k]);
+		if (!rainy(prob, num$2(h.precipitation?.[k]))) return;
 		const from = hmOf$3(t);
 		const last = spans[spans.length - 1];
 		if (last && last.to === from) {
-			last.to = fromMin$1(toMin$1(from) + 60);
+			last.to = fromMin$1(toMin$3(from) + 60);
 			last.prob = Math.max(last.prob, prob ?? 0);
 		} else spans.push({
 			from,
-			to: fromMin$1(toMin$1(from) + 60),
+			to: fromMin$1(toMin$3(from) + 60),
 			prob: prob ?? 0
 		});
 	});
@@ -4177,29 +4177,29 @@ function summarizeDay(json, day) {
 		day,
 		sunrise: hmOf$3(d.sunrise?.[i]),
 		sunset: hmOf$3(d.sunset?.[i]),
-		tmin: r(num$1(d.temperature_2m_min?.[i])),
-		tmax: r(num$1(d.temperature_2m_max?.[i])),
+		tmin: r(num$2(d.temperature_2m_min?.[i])),
+		tmax: r(num$2(d.temperature_2m_max?.[i])),
 		rain: spans
 	};
 }
 /** "Get daylight before 15:00": 90 minutes before sunset, on the half hour before. */
 function daylightBy(sunset) {
-	const m = toMin$1(sunset) - 90;
+	const m = toMin$3(sunset) - 90;
 	return fromMin$1(Math.max(0, m - m % 30));
 }
 /** The advice for the rest of the day (from `nowHM`); empty when there's nothing to say. */
 function weatherAdvice(w, nowHM = "00:00") {
 	const out = [];
-	const now = toMin$1(nowHM);
-	const next = w.rain.find((s) => toMin$1(s.to) > now);
+	const now = toMin$3(nowHM);
+	const next = w.rain.find((s) => toMin$3(s.to) > now);
 	if (next) {
-		const long = toMin$1(next.to) - toMin$1(next.from) > 60;
-		out.push(`${long ? `Rain ${toMin$1(next.from) <= now ? "now" : `from ${next.from}`} to ${next.to}` : `Rain at ${next.from}`} (${next.prob}%), move the run indoors or go before`);
+		const long = toMin$3(next.to) - toMin$3(next.from) > 60;
+		out.push(`${long ? `Rain ${toMin$3(next.from) <= now ? "now" : `from ${next.from}`} to ${next.to}` : `Rain at ${next.from}`} (${next.prob}%), move the run indoors or go before`);
 	}
-	if (w.sunset && toMin$1(w.sunset) <= 1110) {
+	if (w.sunset && toMin$3(w.sunset) <= 1110) {
 		const by = daylightBy(w.sunset);
-		if (now < toMin$1(by)) out.push(`Sunset ${w.sunset}, get daylight before ${by}`);
-		else if (now < toMin$1(w.sunset)) out.push(`Sunset ${w.sunset}, light is almost gone`);
+		if (now < toMin$3(by)) out.push(`Sunset ${w.sunset}, get daylight before ${by}`);
+		else if (now < toMin$3(w.sunset)) out.push(`Sunset ${w.sunset}, light is almost gone`);
 	}
 	return out;
 }
@@ -4231,7 +4231,7 @@ function readCoords(text) {
 }
 // src/plugins/weather/index.ts
 var WEATHER = "weather";
-var dayOf$5 = (d) => calendarDay(d);
+var dayOf$6 = (d) => calendarDay(d);
 var hmOf$2 = (d) => d.toTimeString().slice(0, 5);
 var job$2 = async (ctx) => {
 	const cfg = JSON.parse(await ctx.get(`plugin_weather`) || "{}");
@@ -4257,8 +4257,8 @@ var job$2 = async (ctx) => {
 	const res = await ctx.fetch(forecastUrl(where.lat, where.lon), { signal: AbortSignal.timeout(1e4) });
 	if (!res.ok) throw new Error(`Open-Meteo ${res.status}`);
 	const json = await res.json();
-	const today = dayOf$5(ctx.now);
-	const tomorrow = dayOf$5(new Date(ctx.now.getTime() + 864e5));
+	const today = dayOf$6(ctx.now);
+	const tomorrow = dayOf$6(new Date(ctx.now.getTime() + 864e5));
 	const days = [summarizeDay(json, today), summarizeDay(json, tomorrow)].filter((d) => !!d);
 	const data = {
 		place,
@@ -4285,13 +4285,13 @@ var weather_default = definePlugin({
 	}] },
 	context(db, now) {
 		const data = readData(db, WEATHER);
-		return data ? weatherLine(data, dayOf$5(now), hmOf$2(now)) : null;
+		return data ? weatherLine(data, dayOf$6(now), hmOf$2(now)) : null;
 	},
 	commands: { weather: {
 		help: "Today’s weather and daylight",
 		run({ db, now }) {
 			const data = readData(db, WEATHER);
-			const w = data?.days.find((d) => d.day === dayOf$5(now));
+			const w = data?.days.find((d) => d.day === dayOf$6(now));
 			if (!data || !w) return readConfig(db, "weather").city ? "🌤 No forecast yet. It comes with the next check (every few hours)." : "🌤 Set your city in Settings → Plugins → Weather first.";
 			const advice = weatherAdvice(w, hmOf$2(now));
 			return [
@@ -4382,7 +4382,7 @@ var ctftimeUrl = (now, days = 30) => {
 var validUser = (u) => /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i.test(u);
 // src/plugins/github/index.ts
 var GITHUB = "github";
-var dayOf$4 = (d) => calendarDay(d);
+var dayOf$5 = (d) => calendarDay(d);
 async function job$1(ctx) {
 	const cfg = JSON.parse(await ctx.get(`plugin_github`) || "{}");
 	const user = String(cfg.user ?? "").trim().replace(/^@/, "");
@@ -4400,7 +4400,7 @@ async function job$1(ctx) {
 	});
 	if (res.status === 401 || res.status === 403) throw new Error(`GitHub refused the token (HTTP ${res.status}): check GITHUB_TOKEN`);
 	if (!res.ok) throw new Error(`GitHub ${res.status}`);
-	const stats = commitStats(await res.json(), dayOf$4(ctx.now));
+	const stats = commitStats(await res.json(), dayOf$5(ctx.now));
 	let ctfs = [];
 	try {
 		const c = await ctx.fetch(ctftimeUrl(ctx.now), {
@@ -4439,13 +4439,13 @@ var github_default = definePlugin({
 	},
 	context(db, now) {
 		const d = readData(db, GITHUB);
-		return d ? githubLine(d, dayOf$4(now)) : null;
+		return d ? githubLine(d, dayOf$5(now)) : null;
 	},
 	commands: { github: {
 		help: "Commits this week and the next CTFs",
 		run({ db, now }) {
 			const d = readData(db, GITHUB);
-			return d ? `💻 ${githubLine(d, dayOf$4(now)).replace(/ Nudge him:.*?\.| Suggest one.*$/g, "")}` : "💻 No GitHub data yet. Set your user name in Settings → Plugins.";
+			return d ? `💻 ${githubLine(d, dayOf$5(now)).replace(/ Nudge him:.*?\.| Suggest one.*$/g, "")}` : "💻 No GitHub data yet. Set your user name in Settings → Plugins.";
 		}
 	} },
 	jobs: {
@@ -4586,7 +4586,7 @@ function gmailLine(d, today, yesterday) {
 // src/plugins/gmail/index.ts
 var GMAIL = "gmail";
 var API$1 = "https://gmail.googleapis.com/gmail/v1/users/me";
-var dayOf$3 = (d) => calendarDay(d);
+var dayOf$4 = (d) => calendarDay(d);
 var esc$4 = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 async function job(ctx) {
 	const cfg = JSON.parse(await ctx.get(`plugin_gmail`) || "{}");
@@ -4607,7 +4607,7 @@ async function job(ctx) {
 	const list = await get(`/messages?maxResults=15&q=${encodeURIComponent(q)}`);
 	const msgs = [];
 	for (const m of (list.messages ?? []).slice(0, 15)) msgs.push(readMessage(await get(`/messages/${encodeURIComponent(m.id)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`)));
-	const today = dayOf$3(ctx.now);
+	const today = dayOf$4(ctx.now);
 	let items = msgs.length ? heuristicDigest(msgs, today) : [];
 	if (msgs.length && ctx.ai) try {
 		items = parseDigest(await ctx.ai(digestPrompt(msgs, today)));
@@ -4647,7 +4647,7 @@ var gmail_default = definePlugin({
 	}] },
 	context(db, now) {
 		const d = readData(db, GMAIL);
-		return d ? gmailLine(d, dayOf$3(now), dayOf$3(/* @__PURE__ */ new Date(now.getTime() - 864e5))) : null;
+		return d ? gmailLine(d, dayOf$4(now), dayOf$4(/* @__PURE__ */ new Date(now.getTime() - 864e5))) : null;
 	},
 	jobs: { morning: job },
 	mcpTools: [{
@@ -5103,20 +5103,20 @@ function parseSteps(arg) {
 }
 // src/plugins/health/index.ts
 var HEALTH = "health";
-var dayOf$2 = (d) => calendarDay(d);
+var dayOf$3 = (d) => calendarDay(d);
 var health_default = definePlugin({
 	id: HEALTH,
 	title: "Phone health numbers",
 	icon: "chart",
 	about: "An iOS Shortcut or Android automation sends weight, steps and sleep. Weight goes to Body; Ben sees steps and sleep.",
 	context(db, now) {
-		return healthLine(readData(db, HEALTH), dayOf$2(now));
+		return healthLine(readData(db, HEALTH), dayOf$3(now));
 	},
 	actions: { steps: {
 		help: "\"steps: <number> [| YYYY-MM-DD]\" saves his step count when he tells you it (no points).",
 		parse: parseSteps,
 		run({ db, now }, a) {
-			const today = dayOf$2(now);
+			const today = dayOf$3(now);
 			const day = a.day && a.day <= today ? a.day : today;
 			const data = readData(db, HEALTH);
 			const before = data?.days[day]?.steps ?? null;
@@ -5158,7 +5158,7 @@ var health_default = definePlugin({
 			return [
 				"👟 <b>From your phone</b>",
 				...days.map((d) => `${d.slice(5)}: ${data.days[d].steps != null ? `${data.days[d].steps} steps` : "—"}${data.days[d].sleepHours != null ? ` · slept ${data.days[d].sleepHours} h` : ""}`),
-				healthLine(data, dayOf$2(now))?.replace(/^From his phone: /, "") ?? ""
+				healthLine(data, dayOf$3(now))?.replace(/^From his phone: /, "") ?? ""
 			].filter(Boolean).join("\n");
 		}
 	} },
@@ -7412,7 +7412,7 @@ function parseDeadline(text, today) {
 	return null;
 }
 var NUM = String.raw`(\d+(?:[.,]\d+)?)\s*(k(?![a-z]))?`;
-var num = (n, k) => Number(n.replace(",", ".")) * (k ? 1e3 : 1);
+var num$1 = (n, k) => Number(n.replace(",", ".")) * (k ? 1e3 : 1);
 /** The unit a word means. */
 function unitOf(word) {
 	const w = word.toLowerCase();
@@ -7448,9 +7448,9 @@ function parseGoalText(raw, today) {
 		return {
 			...base,
 			kind: "hours",
-			title: `${num(m[1], m[2])}h of ${subject}`,
+			title: `${num$1(m[1], m[2])}h of ${subject}`,
 			unit: "hours",
-			target: num(m[1], m[2]),
+			target: num$1(m[1], m[2]),
 			area: "Study",
 			source: {
 				kind: "focus.hours",
@@ -7462,7 +7462,7 @@ function parseGoalText(raw, today) {
 	}
 	m = new RegExp(String.raw`\b(lose|drop|cut|gain|put on)\s+${NUM}\s*(kg|kilos?)\b`, "i").exec(rest);
 	if (m) {
-		const n = num(m[2], m[3]);
+		const n = num$1(m[2], m[3]);
 		const down = !/gain|put on/i.test(m[1]);
 		return {
 			...base,
@@ -7481,9 +7481,9 @@ function parseGoalText(raw, today) {
 	if (m) return {
 		...base,
 		kind: "measure",
-		title: `Weigh ${num(m[1], m[2])} kg`,
+		title: `Weigh ${num$1(m[1], m[2])} kg`,
 		unit: "kg",
-		target: num(m[1], m[2]),
+		target: num$1(m[1], m[2]),
 		area: "Body",
 		source: { kind: "body.weight" },
 		curve: "front",
@@ -7492,7 +7492,7 @@ function parseGoalText(raw, today) {
 	const money = new RegExp(String.raw`(?:(€|\$)\s*${NUM}|${NUM}\s*(lei|leu|mdl|ron|€|eur|euros?|\$|usd|dollars?|kg|km|%|percent))`, "i").exec(rest);
 	const what = /\b(profit|income|revenue|earn(?:ings)?|salary|savings?|save|saved)\b/i.exec(lower)?.[1]?.toLowerCase();
 	if (money) {
-		const n = money[1] ? num(money[2], money[3]) : num(money[4], money[5]);
+		const n = money[1] ? num$1(money[2], money[3]) : num$1(money[4], money[5]);
 		const u = unitOf(money[1] ?? money[6] ?? "") ?? { unit: "count" };
 		if (u.unit === "lei" || u.unit === "eur" || u.unit === "usd") {
 			const shown = u.unit === "lei" ? `${n.toLocaleString("en-US")} lei` : `${u.unit === "eur" ? "€" : "$"}${n.toLocaleString("en-US")}`;
@@ -7560,7 +7560,7 @@ function parseGoalText(raw, today) {
 	}
 	m = new RegExp(String.raw`${NUM}\s+([\p{L}][\p{L}\s-]{1,30})$`, "iu").exec(rest.replace(/\s+(in total|total)$/i, ""));
 	if (m) {
-		const n = num(m[1], m[2]);
+		const n = num$1(m[1], m[2]);
 		const thing = m[3].trim().replace(/^(more|new)\s+/i, "");
 		const t = thing.toLowerCase();
 		if (/workouts?|trainings?|gym sessions?/.test(t)) return {
@@ -7621,7 +7621,7 @@ function parseGoalText(raw, today) {
 	}
 	m = new RegExp(String.raw`${NUM}`, "i").exec(rest);
 	if (m && what) {
-		const n = num(m[1], m[2]);
+		const n = num$1(m[1], m[2]);
 		if (/profit|revenue/.test(what)) return {
 			...base,
 			kind: "measure",
@@ -9784,6 +9784,16 @@ var DEFAULT_RULES = [
 		xp: 1,
 		dailyCap: 3,
 		cooldownMin: 15,
+		enabled: true
+	},
+	{
+		id: "body.healthy_day",
+		module: "body",
+		title: "Healthy day (water, moves, breaks, bed on time)",
+		coins: 5,
+		xp: 10,
+		dailyCap: 1,
+		cooldownMin: 0,
 		enabled: true
 	},
 	{
@@ -13183,7 +13193,7 @@ var hm$4 = (iso) => {
 	const d = new Date(iso);
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
-var dayOf$1 = (iso) => {
+var dayOf$2 = (iso) => {
 	return calendarDay(new Date(iso));
 };
 /** E1… for events (time order), T1… for tasks; the lines the model sees. */
@@ -13194,7 +13204,7 @@ function makeRefs(events, tasks) {
 	};
 	const evLines = events.filter((e) => !e.allDay).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 40).map((e, i) => {
 		refs.events.set(`E${i + 1}`, e);
-		return `E${i + 1} ${dayOf$1(e.start).slice(5)} ${hm$4(e.start)}–${hm$4(e.end)} ${e.title}`;
+		return `E${i + 1} ${dayOf$2(e.start).slice(5)} ${hm$4(e.start)}–${hm$4(e.end)} ${e.title}`;
 	});
 	const tLines = tasks.slice(0, 60).map((t, i) => {
 		refs.tasks.set(`T${i + 1}`, t);
@@ -17475,7 +17485,7 @@ var cleanTime = (t) => {
 	if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
 	return `${m[1].padStart(2, "0")}:${m[2]}`;
 };
-var isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+var isDay$1 = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 /**
 * Waky's mornings (`days[date].time`) and nights (`nights[evening date].time`,
 * the night of that evening) for the last `horizon` days, where the sleep log
@@ -17485,7 +17495,7 @@ var isDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 function wakyFill(waky, logs, today, horizon = 14) {
 	const w = waky && typeof waky === "object" ? waky : {};
 	const byDay = new Map(logs.map((l) => [l.day, l]));
-	const recent = (d) => isDay(d) && d <= today && daysBetween$2(d, today) <= horizon;
+	const recent = (d) => isDay$1(d) && d <= today && daysBetween$2(d, today) <= horizon;
 	const wakes = [];
 	for (const [day, rec] of Object.entries(w.days ?? {})) {
 		const time = cleanTime(rec?.time);
@@ -17498,7 +17508,7 @@ function wakyFill(waky, logs, today, horizon = 14) {
 	const beds = [];
 	for (const [evening, rec] of Object.entries(w.nights ?? {})) {
 		const time = cleanTime(rec?.time);
-		if (!time || !isDay(evening)) continue;
+		if (!time || !isDay$1(evening)) continue;
 		const day = addDays$5(evening, 1);
 		if (!recent(day) && day !== addDays$5(today, 1)) continue;
 		if (byDay.get(day)?.bedTime) continue;
@@ -23131,6 +23141,171 @@ function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
 	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$6(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
+var toMin$2 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+var isHm = (v) => typeof v === "string" && /^\d{2}:\d{2}$/.test(v);
+/** Today's four parts, each 0..1, and a score out of 100 (the ring on the pill and the Day page). */
+function healthyDay(i) {
+	const mg = Math.max(1, i.moveGoal ?? 3);
+	const bg = Math.max(1, i.breakGoal ?? 3);
+	const clamp = (n) => Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
+	const water = i.waterTarget > 0 ? clamp(i.waterMl / i.waterTarget) : 0;
+	const parts = [
+		{
+			id: "water",
+			icon: "💧",
+			label: "Water",
+			done: i.waterTarget > 0 && i.waterMl >= i.waterTarget,
+			pct: water,
+			text: `${(i.waterMl / 1e3).toFixed(1)} of ${(i.waterTarget / 1e3).toFixed(1)} L`
+		},
+		{
+			id: "move",
+			icon: "💪",
+			label: "Moves",
+			done: i.moves >= mg,
+			pct: clamp(i.moves / mg),
+			text: `${i.moves} of ${mg} move breaks`
+		},
+		{
+			id: "breaks",
+			icon: "👁️",
+			label: "Breaks",
+			done: i.breaks >= bg,
+			pct: clamp(i.breaks / bg),
+			text: `${i.breaks} of ${bg} screen breaks`
+		},
+		{
+			id: "sleep",
+			icon: "🌙",
+			label: "Sleep",
+			done: i.sleptOnTime === true,
+			pct: i.sleptOnTime ? 1 : 0,
+			text: i.sleptOnTime == null ? "No bedtime logged last night" : i.sleptOnTime ? "In bed on time last night" : "Late to bed last night"
+		}
+	];
+	const met = parts.filter((p) => p.done).length;
+	return {
+		parts,
+		score: Math.round(parts.reduce((t, p) => t + p.pct, 0) / 4 * 100),
+		met,
+		all: met === 4
+	};
+}
+/** Screen breaks in a nudge day (eyes, calm, tidy, walks). */
+var screenBreaks = (d) => d ? d.eyes + d.calm + d.tidy + d.walks : 0;
+/** Last night's bedtime on time? From the row of the morning the night ended in (15 min grace). */
+function sleptOnTime(log, fallbackTarget = "23:00") {
+	if (!log || !isHm(log.bedTime)) return null;
+	if (typeof log.bedOnTime === "boolean") return log.bedOnTime;
+	const target = isHm(log.bedTarget) ? log.bedTarget : fallbackTarget;
+	return (toMin$2(log.bedTime) - toMin$2(target) + 1440 + 720) % 1440 - 720 <= 15;
+}
+/** The evening's "how did your body do today" line (plain words, real numbers). */
+function bodyLine(h) {
+	const [w, m, b, s] = h.parts;
+	const tail = h.all ? "All four: a healthy day. 💚" : h.met === 3 ? `3 of 4. Missing: ${h.parts.find((p) => !p.done).label.toLowerCase()}.` : `${h.met} of 4 healthy.`;
+	return `Body today: ${w.text} water, ${m.text}, ${b.text}, ${s.done ? "bed on time last night" : s.text.charAt(0).toLowerCase() + s.text.slice(1)}. ${tail}`;
+}
+/** The last 7 days (ending today) from the island's tallies and Waky's bedtimes. */
+function weeklyHealth(days, beds, today) {
+	const from = addDays$5(today, -6);
+	const week = days.filter((d) => d.day >= from && d.day <= today);
+	const watered = week.filter((d) => (d.waterMl ?? 0) > 0);
+	const nights = beds.filter((b) => b.day >= from && b.day <= today && isHm(b.bedTime));
+	const onTime = nights.filter((b) => sleptOnTime({
+		bedTime: b.bedTime,
+		bedTarget: b.bedTarget ?? null,
+		bedOnTime: b.bedOnTime
+	}) === true).length;
+	const mins = nights.map((b) => (toMin$2(b.bedTime) - 1080 + 1440) % 1440);
+	const spread = mins.length >= 2 ? Math.max(...mins) - Math.min(...mins) : null;
+	const r = {
+		days: week.length,
+		waterAvgMl: watered.length ? Math.round(watered.reduce((t, d) => t + (d.waterMl ?? 0), 0) / watered.length) : 0,
+		waterDaysMet: week.filter((d) => (d.waterTarget ?? 0) > 0 && (d.waterMl ?? 0) >= (d.waterTarget ?? 0)).length,
+		moves: week.reduce((t, d) => t + d.moves, 0),
+		breaks: week.reduce((t, d) => t + d.breaks, 0),
+		bedOnTime: onTime,
+		bedNights: nights.length,
+		bedSpreadMin: spread,
+		healthyDays: week.filter((d) => d.healthy).length
+	};
+	const lines = [
+		`💧 Water: ${(r.waterAvgMl / 1e3).toFixed(1)} L a day on average, goal reached ${r.waterDaysMet} of 7 days`,
+		`💪 Moves: ${r.moves} move break${r.moves === 1 ? "" : "s"} · 👁️ ${r.breaks} screen break${r.breaks === 1 ? "" : "s"}`,
+		`🌙 Bedtime: on time ${r.bedOnTime} of ${r.bedNights} night${r.bedNights === 1 ? "" : "s"}${spread != null ? ` · ${spread <= 30 ? "steady" : spread <= 75 ? "a bit all over" : "all over the place"} (${Math.floor(spread / 60)}h${String(spread % 60).padStart(2, "0")} between earliest and latest)` : ""}`,
+		`💚 Healthy days: ${r.healthyDays} of 7`
+	];
+	return {
+		...r,
+		lines
+	};
+}
+/** The Sunday card's text (Telegram and the island). */
+function weeklyHealthText(w) {
+	return `🩺 <b>Your body this week</b>\n${w.lines.join("\n")}`;
+}
+/** The week from the island's nudge store (water is saved there each day the island runs). */
+function weekDaysFromStore(s, today) {
+	const out = [];
+	for (let i = 6; i >= 0; i--) {
+		const day = addDays$5(today, -i);
+		const d = s.days[day];
+		if (!d) continue;
+		out.push({
+			day,
+			waterMl: d.water ?? 0,
+			waterTarget: d.waterTarget ?? 0,
+			moves: d.moves,
+			breaks: screenBreaks(d),
+			healthy: !!d.healthy
+		});
+	}
+	return out;
+}
+/**
+* Telegram's wind-down message (25–50 min before bed): not when the bed is
+* already logged, and not when the island just showed its own wind-down
+* (you're at the PC and saw it).
+*/
+function telegramWindDown(o) {
+	if (o.bedLogged || o.minutesBefore < 25 || o.minutesBefore > 50) return false;
+	return !(o.islandBedAt && o.now - o.islandBedAt < 36e5);
+}
+/**
+* Quiet hours end once you're up: after you log the wake-up (Telegram, Waky,
+* the island) the morning part of the quiet hours is over, so the morning
+* plan comes at once instead of waiting in the bell.
+*/
+function stillQuiet(quiet, now, wakeAt) {
+	if (!quiet) return false;
+	if (!isHm(wakeAt) || now.getHours() >= 12) return true;
+	return now.getHours() * 60 + now.getMinutes() < toMin$2(wakeAt);
+}
+/** Telegram's water nudge waits while the island has water covered (its card within 90 min). */
+function islandHasWater(islandWaterAt, now) {
+	return !!islandWaterAt && now - islandWaterAt < 54e5;
+}
+/** Done: it's answered everywhere (the island card goes, Telegram won't send it). */
+function reminderDone(list, id, now) {
+	return list.map((r) => r.id === id ? {
+		...r,
+		done: true,
+		handled: true,
+		answeredAt: new Date(now).toISOString()
+	} : r);
+}
+/** Snooze: it comes back once on both, this many minutes from now. */
+function reminderSnooze(list, id, minutes, now) {
+	const m = Math.max(1, Math.min(1440, Math.round(minutes)));
+	return list.map((r) => r.id === id ? {
+		...r,
+		at: new Date(now + m * 6e4).toISOString(),
+		done: false,
+		handled: false,
+		sentAt: null
+	} : r);
+}
 // src/core/rhythm.ts
 var RHYTHM = "coach_rhythm";
 var RHYTHM_PREFS = "coach_rhythm_prefs";
@@ -23143,9 +23318,9 @@ var DEFAULT_RHYTHM_PREFS = {
 	autopilot: "07:30"
 };
 var HM$1 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var toMin$1 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 var fromMin = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-function cleanPrefs(p) {
+function cleanPrefs$1(p) {
 	return {
 		on: p?.on !== false,
 		evening: HM$1.test(p?.evening) ? p.evening : DEFAULT_RHYTHM_PREFS.evening,
@@ -23171,31 +23346,31 @@ function rhythmFor(state, today) {
 }
 /** What the coach should send now (in order). */
 function dueRhythm(state, prefs, f) {
-	if (!prefs.on) return [];
-	const t = toMin(f.time);
+	if (!prefs.on || f.asleep) return [];
+	const t = toMin$1(f.time);
 	const out = [];
-	const auto = Math.max(toMin(prefs.autopilot ?? "07:30"), toMin(f.wakeTarget));
-	const start = Math.max(toMin("06:00"), Math.min(f.wakeAt ? toMin(f.wakeAt) + 5 : toMin(f.wakeTarget) + 45, auto));
-	if (!state.briefing && t >= start && t < toMin("12:00")) out.push("briefing");
-	else if (!state.briefing && !f.paused && f.mode?.replan !== false && t >= Math.max(start, toMin("12:00")) && t < toMin("16:00")) out.push("replan");
-	if (!f.paused && prefs.water && waterBehind(state, f, f.mode?.waterMax ?? 5)) out.push("water");
-	if (!f.paused && prefs.training && f.mode?.training !== false && !f.workoutDone && !state.training && t >= toMin("18:00") && t < toMin("21:00")) out.push("training");
-	if (f.weekday === 0 && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push("weekly");
-	if (f.weekday === 3 && !state.midweek && t >= toMin(prefs.evening) - 90 && t < toMin(prefs.evening)) out.push("midweek");
-	if (!state.evening && t >= toMin(prefs.evening)) out.push("evening");
+	const auto = Math.max(toMin$1(prefs.autopilot ?? "07:30"), toMin$1(f.wakeTarget));
+	const start = Math.max(toMin$1("06:00"), Math.min(f.wakeAt ? toMin$1(f.wakeAt) + 5 : toMin$1(f.wakeTarget) + 45, auto));
+	if (!state.briefing && t >= start && t < toMin$1("12:00")) out.push("briefing");
+	else if (!state.briefing && !f.paused && f.mode?.replan !== false && t >= Math.max(start, toMin$1("12:00")) && t < toMin$1("16:00")) out.push("replan");
+	if (!f.paused && !f.busy && prefs.water && !islandHasWater(f.islandWaterAt, f.nowMs ?? 0) && waterBehind(state, f, f.mode?.waterMax ?? 5)) out.push("water");
+	if (!f.paused && !f.busy && prefs.training && f.mode?.training !== false && !f.workoutDone && !state.training && t >= toMin$1("18:00") && t < toMin$1("21:00")) out.push("training");
+	if (f.weekday === 0 && t >= toMin$1(prefs.weekly) && state.weekly?.day !== f.today) out.push("weekly");
+	if (f.weekday === 3 && !state.midweek && t >= toMin$1(prefs.evening) - 90 && t < toMin$1(prefs.evening)) out.push("midweek");
+	if (!state.evening && t >= toMin$1(prefs.evening)) out.push("evening");
 	return out;
 }
 /** Water well behind the day's pace (08:00→21:00), at most 5 nudges, 1h50 apart, 11:00–20:30. */
 function waterBehind(state, f, max = 5) {
-	const t = toMin(f.time);
-	if (t < toMin("11:00") || t > toMin("20:30") || f.waterTarget <= 0) return false;
+	const t = toMin$1(f.time);
+	if (t < toMin$1("11:00") || t > toMin$1("20:30") || f.waterTarget <= 0) return false;
 	if (state.water.length >= max) return false;
 	const last = state.water[state.water.length - 1];
-	if (last && t - toMin(last) < 110) return false;
-	const pace = Math.min(1, Math.max(0, (t - toMin("08:00")) / (toMin("21:00") - toMin("08:00"))));
+	if (last && t - toMin$1(last) < 110) return false;
+	const pace = Math.min(1, Math.max(0, (t - toMin$1("08:00")) / (toMin$1("21:00") - toMin$1("08:00"))));
 	return f.waterMl < f.waterTarget * pace - f.waterTarget * .25;
 }
-var quarter = (hm) => fromMin(Math.ceil(toMin(hm) / 15) * 15);
+var quarter = (hm) => fromMin(Math.ceil(toMin$1(hm) / 15) * 15);
 /** The model's plan, made safe: real times, no clashes with your calendar or each other, at most 3 must-dos. */
 function cleanProposal(raw, fallback, events, now) {
 	if (!raw || typeof raw !== "object") return fallback;
@@ -23204,7 +23379,7 @@ function cleanProposal(raw, fallback, events, now) {
 		s: minOfIso(e.start),
 		e: minOfIso(e.end)
 	}));
-	const after = toMin(quarter(now));
+	const after = toMin$1(quarter(now));
 	const taken = [];
 	const blocks = [];
 	for (const b of Array.isArray(raw.blocks) ? raw.blocks : []) {
@@ -23212,9 +23387,9 @@ function cleanProposal(raw, fallback, events, now) {
 		const minutes = Math.round(Number(b?.minutes));
 		const title = String(b?.title ?? "").trim().slice(0, 80);
 		if (!HM$1.test(start) || !title || !(minutes >= 15 && minutes <= 180)) continue;
-		const s = toMin(start);
+		const s = toMin$1(start);
 		const e = s + minutes;
-		if (s < after || e > toMin("23:30")) continue;
+		if (s < after || e > toMin$1("23:30")) continue;
 		if ([...busy, ...taken].some((x) => s < x.e && e > x.s)) continue;
 		taken.push({
 			s,
@@ -23235,7 +23410,7 @@ function cleanProposal(raw, fallback, events, now) {
 	let training = null;
 	if (raw.training && HM$1.test(String(raw.training.time ?? "").padStart(5, "0"))) {
 		const t = String(raw.training.time).padStart(5, "0");
-		const s = toMin(t);
+		const s = toMin$1(t);
 		if (s >= after && ![...busy, ...taken].some((x) => s < x.e && s + 30 > x.s)) training = {
 			time: t,
 			what: String(raw.training.what ?? "Workout").slice(0, 60) || "Workout"
@@ -23279,7 +23454,7 @@ function proposalText(p, opts = {}) {
 	if (p.mustdos.length) lines.push("", "<b>Must-dos</b>", ...p.mustdos.map((m, i) => `${i + 1}. ${esc(m)}`));
 	const timed = [...p.blocks.map((b) => ({
 		s: b.start,
-		text: `${b.start}–${fromMin(toMin(b.start) + b.minutes)} ${esc(b.title)}`
+		text: `${b.start}–${fromMin(toMin$1(b.start) + b.minutes)} ${esc(b.title)}`
 	})), ...p.training ? [{
 		s: p.training.time,
 		text: `${p.training.time} 💪 ${esc(p.training.what)}`
@@ -23521,7 +23696,7 @@ function bookBig3(big3, events, days, nowIso, perTask = 2, minutes = 50) {
 			minMinutes: minutes + 10
 		})[0];
 		if (!gap) continue;
-		const end = fromMin(toMin(gap.start) + minutes);
+		const end = fromMin(toMin$1(gap.start) + minutes);
 		out.push({
 			title: `🎯 ${title}`.slice(0, 80),
 			day,
@@ -23533,7 +23708,7 @@ function bookBig3(big3, events, days, nowIso, perTask = 2, minutes = 50) {
 			calendarId: "",
 			title,
 			start: (/* @__PURE__ */ new Date(`${day}T${gap.start}:00`)).toISOString(),
-			end: (/* @__PURE__ */ new Date(`${day}T${fromMin(toMin(gap.start) + minutes + 10)}:00`)).toISOString(),
+			end: (/* @__PURE__ */ new Date(`${day}T${fromMin(toMin$1(gap.start) + minutes + 10)}:00`)).toISOString(),
 			allDay: false
 		});
 		left.set(title, (left.get(title) ?? 0) - 1);
@@ -23681,9 +23856,9 @@ var similar = (a, b) => {
 };
 /** The first free start in [from, to) for `minutes`, inside the plan's free time and clear of its blocks (10 min apart). */
 function freeSlot(plan, minutes, from, to, skip = -1) {
-	const free = plan.free?.length ? plan.free.map((f) => [toMin(f.start), toMin(f.end)]) : [[toMin("07:00"), toMin("22:30")]];
-	const busy = [...plan.blocks.filter((_, i) => i !== skip).map((b) => [toMin(b.start) - 10, toMin(b.start) + b.minutes + 10]), ...plan.training ? [[toMin(plan.training.time) - 10, toMin(plan.training.time) + 60]] : []];
-	for (const [fs, fe] of free) for (let st = Math.ceil(Math.max(fs, toMin(from)) / 5) * 5; st + minutes <= Math.min(fe, toMin(to)); st += 5) if (!busy.some(([bs, be]) => st < be && st + minutes > bs)) return fromMin(st);
+	const free = plan.free?.length ? plan.free.map((f) => [toMin$1(f.start), toMin$1(f.end)]) : [[toMin$1("07:00"), toMin$1("22:30")]];
+	const busy = [...plan.blocks.filter((_, i) => i !== skip).map((b) => [toMin$1(b.start) - 10, toMin$1(b.start) + b.minutes + 10]), ...plan.training ? [[toMin$1(plan.training.time) - 10, toMin$1(plan.training.time) + 60]] : []];
+	for (const [fs, fe] of free) for (let st = Math.ceil(Math.max(fs, toMin$1(from)) / 5) * 5; st + minutes <= Math.min(fe, toMin$1(to)); st += 5) if (!busy.some(([bs, be]) => st < be && st + minutes > bs)) return fromMin(st);
 	return null;
 }
 function editDayPart(plan, note) {
@@ -23737,7 +23912,7 @@ function editDayPart(plan, note) {
 		const bi = plan.blocks.findIndex((b) => similar(what, b.title) && (b.tasks?.length ?? 0) <= 1);
 		if (bi >= 0) {
 			const b = plan.blocks[bi];
-			const start = freeSlot(plan, b.minutes, part === "later" ? fromMin(toMin(b.start) + 15) : from, to, bi);
+			const start = freeSlot(plan, b.minutes, part === "later" ? fromMin(toMin$1(b.start) + 15) : from, to, bi);
 			if (!start) return null;
 			const blocks = plan.blocks.map((x, k) => k === bi ? {
 				...x,
@@ -23770,7 +23945,7 @@ function editDayPart(plan, note) {
 		const start = freeSlot({
 			...plan,
 			blocks
-		}, minutes, part === "later" && host >= 0 ? fromMin(toMin(plan.blocks[host].start) + 15) : from, to);
+		}, minutes, part === "later" && host >= 0 ? fromMin(toMin$1(plan.blocks[host].start) + 15) : from, to);
 		if (!start) return null;
 		blocks = sorted([...blocks, {
 			title,
@@ -23841,7 +24016,7 @@ function nextSlot(events, day, nowHm, minutes) {
 	if (!gap) return null;
 	return {
 		start: gap.start,
-		end: fromMin(toMin(gap.start) + minutes)
+		end: fromMin(toMin$1(gap.start) + minutes)
 	};
 }
 function movedText(title, slot) {
@@ -24563,13 +24738,13 @@ function freeWindows(events, today, after, endBy) {
 		to: endBy,
 		minMinutes: 20
 	});
-	const a = toMin(after);
-	const end = toMin(endBy);
+	const a = toMin$1(after);
+	const end = toMin$1(endBy);
 	return gaps.map((g) => {
-		const s = toMin(g.start);
-		const e = toMin(g.end);
+		const s = toMin$1(g.start);
+		const e = toMin$1(g.end);
 		return {
-			s: s > a && s > toMin("07:00") ? s + 10 : s,
+			s: s > a && s > toMin$1("07:00") ? s + 10 : s,
 			e: e < end ? e - 10 : e
 		};
 	}).filter((w) => w.e - w.s >= 20);
@@ -24595,8 +24770,8 @@ function place(wins, c, best, minMin) {
 		};
 	};
 	if (c.kind === "quick") {
-		const pm = wins.find((w) => w.e - Math.max(w.s, toMin("13:00")) >= c.minutes);
-		if (pm) return take(pm, Math.max(pm.s, toMin("13:00")), c.minutes);
+		const pm = wins.find((w) => w.e - Math.max(w.s, toMin$1("13:00")) >= c.minutes);
+		if (pm) return take(pm, Math.max(pm.s, toMin$1("13:00")), c.minutes);
 	}
 	if (c.hard && best.length) for (const h of best) {
 		const w = wins.find((x) => x.s <= h * 60 + 30 && x.e >= Math.max(x.s, h * 60) + c.minutes);
@@ -24755,8 +24930,8 @@ function packDay(p) {
 	for (const c of firsts) fit(c);
 	if (quickChunk) fit(quickChunk);
 	let training = null;
-	if (!p.workoutDone) for (const w of wins.filter((x) => x.e > toMin("17:00"))) {
-		const s = Math.ceil(Math.max(w.s, toMin("17:00")) / 15) * 15;
+	if (!p.workoutDone) for (const w of wins.filter((x) => x.e > toMin$1("17:00"))) {
+		const s = Math.ceil(Math.max(w.s, toMin$1("17:00")) / 15) * 15;
 		if (s + 45 <= w.e) {
 			training = {
 				time: fromMin(s),
@@ -25189,14 +25364,14 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const today = services.services(db).wallet.today();
 			return {
 				state: load(db, today),
-				prefs: cleanPrefs(readJson$1(db, RHYTHM_PREFS, null))
+				prefs: cleanPrefs$1(readJson$1(db, RHYTHM_PREFS, null))
 			};
 		});
 	}
 	async function setPrefs(p) {
 		return mirror.write((db) => {
-			const next = cleanPrefs({
-				...cleanPrefs(readJson$1(db, RHYTHM_PREFS, null)),
+			const next = cleanPrefs$1({
+				...cleanPrefs$1(readJson$1(db, RHYTHM_PREFS, null)),
 				...p
 			});
 			setSetting(db, RHYTHM_PREFS, JSON.stringify(next));
@@ -25860,8 +26035,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				}));
 				line = "fewer nudges: 5 a day at most, so each one counts";
 			} else if (change === "earlier-plan") {
-				const prefs = cleanPrefs(readJson$1(db, RHYTHM_PREFS, null));
-				const at = fromMin(Math.max(toMin("06:30"), toMin(prefs.autopilot ?? "07:30") - 30));
+				const prefs = cleanPrefs$1(readJson$1(db, RHYTHM_PREFS, null));
+				const at = fromMin(Math.max(toMin$1("06:30"), toMin$1(prefs.autopilot ?? "07:30") - 30));
 				setSetting(db, RHYTHM_PREFS, JSON.stringify({
 					...prefs,
 					autopilot: at
@@ -26439,7 +26614,7 @@ var ruleCoins = (svc, id, fallback) => {
 };
 // src/renderer/src/web/bots/callbacks.ts
 /** Every callback data the bots answer (anything else isn't a bot button). */
-var CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/;
+var CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/;
 var CALLBACKS = [
 	{
 		prefixes: ["wa", "wk"],
@@ -26918,6 +27093,36 @@ var CALLBACKS = [
 				text: x,
 				callback_data: `pr|${day}|${k * 3 + i}`
 			}))) } : void 0);
+			return text;
+		}
+	},
+	{
+		prefixes: ["rm"],
+		match: (data) => data.startsWith("rm|"),
+		run: async (c, t) => {
+			const { mirror, markSeen } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			const [, op, id] = data.split("|");
+			const now = Date.now();
+			const minutes = op === "h" ? 60 : 10;
+			const text = !await mirror.write((db) => {
+				let list = [];
+				try {
+					list = JSON.parse(getSetting(db, "coach_reminders") || "[]");
+				} catch {
+					list = [];
+				}
+				if (!list.some((r) => r.id === id)) return false;
+				setSetting(db, "coach_reminders", JSON.stringify(op === "d" ? reminderDone(list, id, now) : reminderSnooze(list, id, minutes, now)));
+				return true;
+			}) ? "That reminder is already gone." : op === "d" ? "✓ Done." : `⏰ Again at ${new Date(now + minutes * 6e4).toTimeString().slice(0, 5)}.`;
+			await answer(text);
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
 			return text;
 		}
 	},
@@ -28946,7 +29151,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			ref: `B${i + 1}`,
 			i,
 			b,
-			end: fromMin(toMin(b.start) + b.minutes)
+			end: fromMin(toMin$1(b.start) + b.minutes)
 		})) : [];
 		const planLines = planB.length ? `Today's plan blocks waiting for his OK (use the B-number; once approved they become calendar events):\n${planB.map((x) => `${x.ref} ${x.b.start}–${x.end} ${x.b.title}`).join("\n")}` : "";
 		const hmOfIso = (iso) => new Date(iso).toTimeString().slice(0, 5);
@@ -29425,7 +29630,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								start: nb.start
 							}
 						};
-						done.push(a.kind === "rename" ? `✏️ Renamed: ${r.old.title} (${r.old.start}–${fromMin(toMin(r.old.start) + r.old.minutes)}) → ${nb.title}` : `🗓 Moved: ${nb.title} (${r.old.start}) → ${nb.start}–${fromMin(toMin(nb.start) + nb.minutes)}`);
+						done.push(a.kind === "rename" ? `✏️ Renamed: ${r.old.title} (${r.old.start}–${fromMin(toMin$1(r.old.start) + r.old.minutes)}) → ${nb.title}` : `🗓 Moved: ${nb.title} (${r.old.start}) → ${nb.start}–${fromMin(toMin$1(nb.start) + nb.minutes)}`);
 						continue;
 					}
 					if (a.kind === "rename") {
@@ -30029,7 +30234,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (w === "plan" && rh.briefing) {
 				const p = rh.briefing.plan;
 				out.push(`☀️ <b>Today's plan</b>${rh.briefing.status === "approved" ? " (approved)" : " (waiting for your OK)"}`);
-				out.push(...p.blocks.map((b) => `${b.start}–${fromMin(toMin(b.start) + b.minutes)} ${esc(b.title)}`));
+				out.push(...p.blocks.map((b) => `${b.start}–${fromMin(toMin$1(b.start) + b.minutes)} ${esc(b.title)}`));
 				if (p.training) out.push(`${p.training.time} 🏋️ ${esc(p.training.what)}`);
 				if (p.mustdos.length) out.push(`Must-dos: ${p.mustdos.map(esc).join(" · ")}`);
 				continue;
@@ -31361,6 +31566,173 @@ function deadlineFacts(items) {
 		};
 	});
 }
+// src/core/islandNudges.ts
+var NUDGE_KINDS = [
+	"move",
+	"water",
+	"eyes",
+	"posture",
+	"breathe",
+	"mood",
+	"gratitude",
+	"focus",
+	"people",
+	"tidy",
+	"away"
+];
+var DEFAULT_NUDGE_PREFS = {
+	sitMin: 50,
+	on: {
+		move: true,
+		water: true,
+		eyes: true,
+		posture: true,
+		breathe: true,
+		mood: true,
+		gratitude: true,
+		focus: true,
+		people: true,
+		tidy: true,
+		away: true
+	},
+	people: [],
+	challenge: true,
+	ringGoal: 100,
+	ringUnit: "reps",
+	breath: "box"
+};
+var EMPTY_NUDGE_DAY = () => ({
+	moves: 0,
+	reps: 0,
+	minutes: 0,
+	eyes: 0,
+	posture: 0,
+	postureFix: 0,
+	calm: 0,
+	tidy: 0,
+	walks: 0,
+	moods: 0,
+	focus: [],
+	postponed: {},
+	lastAt: {}
+});
+var num = (v, d, lo, hi) => {
+	const n = Math.round(Number(v));
+	return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
+};
+var str = (v, max = 60) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+var isDay = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+var recNum = (v) => v && typeof v === "object" ? Object.fromEntries(Object.entries(v).filter(([, n]) => Number.isFinite(n)).slice(-40)) : {};
+function cleanPrefs(x) {
+	const d = DEFAULT_NUDGE_PREFS;
+	const on = { ...d.on };
+	for (const k of NUDGE_KINDS) if (typeof x?.on?.[k] === "boolean") on[k] = x.on[k];
+	const people = (Array.isArray(x?.people) ? x.people : []).map((p, i) => ({
+		id: str(p?.id, 20) || `p${i}`,
+		name: str(p?.name, 30),
+		everyDays: num(p?.everyDays, 7, 1, 90),
+		last: isDay(p?.last) ? p.last : null
+	})).filter((p) => p.name).slice(0, 12);
+	return {
+		sitMin: num(x?.sitMin, d.sitMin, 20, 180),
+		on,
+		people,
+		challenge: typeof x?.challenge === "boolean" ? x.challenge : d.challenge,
+		ringGoal: num(x?.ringGoal, d.ringGoal, 5, 1e3),
+		ringUnit: x?.ringUnit === "min" ? "min" : "reps",
+		breath: x?.breath === "478" ? "478" : "box"
+	};
+}
+function cleanDay(x) {
+	const e = EMPTY_NUDGE_DAY();
+	const n = (k) => num(x?.[k], 0, 0, 1e5);
+	const ch = x?.challenge;
+	return {
+		...e,
+		moves: n("moves"),
+		reps: n("reps"),
+		minutes: n("minutes"),
+		eyes: n("eyes"),
+		posture: n("posture"),
+		postureFix: n("postureFix"),
+		calm: n("calm"),
+		tidy: n("tidy"),
+		walks: n("walks"),
+		moods: n("moods"),
+		...x?.gratitude ? { gratitude: true } : {},
+		focus: (Array.isArray(x?.focus) ? x.focus : []).filter((f) => [
+			"yes",
+			"drifted",
+			"switch"
+		].includes(f?.answer)).slice(-12).map((f) => ({
+			at: Number(f.at) || 0,
+			subject: str(f.subject),
+			answer: f.answer
+		})),
+		postponed: recNum(x?.postponed),
+		lastAt: recNum(x?.lastAt),
+		...Number.isFinite(x?.water) ? { water: num(x.water, 0, 0, 2e4) } : {},
+		...Number.isFinite(x?.waterTarget) ? { waterTarget: num(x.waterTarget, 0, 0, 2e4) } : {},
+		...x?.healthy ? { healthy: true } : {},
+		...Number.isFinite(x?.healthyPaid) ? { healthyPaid: x.healthyPaid } : {},
+		...ch && ch.ex ? { challenge: {
+			ex: str(ch.ex, 40),
+			name: str(ch.name, 40),
+			target: num(ch.target, 50, 1, 1e3),
+			paid: Number.isFinite(ch.paid) ? ch.paid : null,
+			said: Array.isArray(ch.said) ? ch.said.filter((v) => Number.isFinite(v)).slice(0, 4) : []
+		} } : {}
+	};
+}
+/** Saved state → valid; keeps 45 days of tallies and 3 days of move logs. */
+function cleanNudgeStore(x, today) {
+	const days = {};
+	if (x?.days && typeof x.days === "object") for (const k of Object.keys(x.days).filter(isDay).sort().slice(-45)) days[k] = cleanDay(x.days[k]);
+	const oldest = today ? addDays$5(today, -2) : "";
+	const logs = (Array.isArray(x?.logs) ? x.logs : []).filter((l) => l && typeof l.id === "string" && isDay(l.day) && l.day >= oldest).map((l) => ({
+		id: l.id,
+		at: Number(l.at) || 0,
+		day: l.day,
+		ex: str(l.ex, 40),
+		name: str(l.name, 40),
+		n: num(l.n, 0, 0, 1e3),
+		workoutId: Number.isFinite(l.workoutId) ? l.workoutId : null,
+		ledgerId: Number.isFinite(l.ledgerId) ? l.ledgerId : null,
+		coins: num(l.coins, 0, 0, 100),
+		...l.water ? { water: true } : {},
+		...l.undone ? { undone: true } : {}
+	})).slice(-40);
+	const last = x?.last && x.last.name ? {
+		ex: str(x.last.ex, 40),
+		name: str(x.last.name, 40),
+		n: num(x.last.n, 10, 1, 1e3)
+	} : null;
+	return {
+		prefs: cleanPrefs(x?.prefs),
+		days,
+		logs,
+		last,
+		stats: x?.stats && typeof x.stats === "object" ? x.stats : {},
+		snooze: recNum(x?.snooze),
+		best: num(x?.best, 0, 0, 1e4),
+		away: x?.away && Number.isFinite(x.away.min) ? {
+			min: num(x.away.min, 0, 0, 1440),
+			at: Number(x.away.at) || 0
+		} : null
+	};
+}
+var dayOf$1 = (s, day) => s.days[day] ?? EMPTY_NUDGE_DAY();
+// src/core/bedSense.ts
+/** Was a bedtime logged for the night that ends this morning / starts tonight? */
+function bedLoggedTonight(logs, now) {
+	const day = (d) => calendarDay(d);
+	const today = day(now);
+	const yesterday = day(/* @__PURE__ */ new Date(now.getTime() - 864e5));
+	const tomorrow = day(new Date(now.getTime() + 864e5));
+	const morning = now.getHours() < 12;
+	return logs.some((l) => !!l.bedTime && (morning ? l.day === today || l.day === yesterday && toMin(l.bedTime) >= 1080 : l.day === tomorrow || l.day === today && toMin(l.bedTime) >= 1080));
+}
+var toMin = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 // src/core/benOnce.ts
 /** The message's kind: its opening words without numbers or markup. */
 function messageKind(html) {
@@ -36587,7 +36959,7 @@ async function runDaily(env, job) {
 	lifeTz(env);
 	const { services, mirror } = await botsFor(env);
 	if (job === "morning" || job === "reask" || job === "evening" || job === "midday") {
-		if (await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null")).on).catch(() => true)) {
+		if (await mirror.read((db) => cleanPrefs$1(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null")).on).catch(() => true)) {
 			await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{
 				status: "skipped",
 				kind: `${job} message`,
@@ -36897,9 +37269,14 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			}
 		};
 		const notifSet = await mirror.read((db) => cleanNotifSettings(JSON.parse(getSetting(db, "notif_settings") || "null"))).catch(() => cleanNotifSettings(null));
+		let wakeP = null;
+		const wakeAt = () => wakeP ??= mirror.read((db) => {
+			const today = services.services(db).wallet.today(now);
+			return db.prepare("SELECT wake_time FROM sleep_logs WHERE day = ?").get(today)?.wake_time ?? null;
+		}).catch(() => null);
 		/** `notif`: the bell entry to use (fixed id, so the app's own copy isn't doubled). `urgent`: through quiet hours. */
 		const send = async (text, reply_markup, opts = {}) => {
-			if (!opts.urgent && quietNow(notifSet, now) && !/^\s*(🔔|⏰)/u.test(text)) {
+			if (!opts.urgent && stillQuiet(quietNow(notifSet, now), now, await wakeAt()) && !/^\s*(🔔|⏰)/u.test(text)) {
 				await mirror.write((db) => {
 					const n = opts.notif ?? notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
 					if (n) addNotif(db, n);
@@ -37054,7 +37431,20 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				if (!await send(r.kind === "checkin" ? followUpText({
 					...r,
 					text: esc(r.text)
-				}, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : void 0, { always: true })) continue;
+				}, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === "checkin" ? { inline_keyboard: [pauseRow] } : { inline_keyboard: [[
+					{
+						text: "✓ Done",
+						callback_data: `rm|d|${r.id}`
+					},
+					{
+						text: "⏰ 10 min",
+						callback_data: `rm|s|${r.id}`
+					},
+					{
+						text: "1 hour",
+						callback_data: `rm|h|${r.id}`
+					}
+				]] }, { always: true })) continue;
 				list = afterSend(list, r.id, now);
 				if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
 			} catch {}
@@ -37288,7 +37678,13 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		try {
 			const bed = await mirror.read((db) => services.services(db).sleep.bedtimeTarget());
 			const before = (Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5)) - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440;
-			if (before >= 25 && before <= 50) {
+			const seen = before >= 25 && before <= 50 ? await mirror.read((db) => bodyFacts(db, services.services(db), today0, now)).catch(() => null) : null;
+			if (telegramWindDown({
+				minutesBefore: before,
+				bedLogged: !!seen?.bedLogged,
+				islandBedAt: seen?.bedAt ?? null,
+				now: now.getTime()
+			})) {
 				if (await mirror.write((db) => {
 					if (getSetting(db, "wind_down_day") === today0) return false;
 					setSetting(db, "wind_down_day", today0);
@@ -37600,12 +37996,54 @@ async function benActs(env, now, send, state, on, time) {
 		}
 	}
 }
+/**
+* HD: your body today and this week, from the island's tallies (synced
+* setting island_nudges), the shared water log and Waky: the evening line,
+* the Sunday card, and when the island last showed its water / wind-down card.
+*/
+function bodyFacts(db, svc, today, now) {
+	let store = cleanNudgeStore(null);
+	try {
+		store = cleanNudgeStore(readSetting(db, "island_nudges"), today);
+	} catch {}
+	let sport = null;
+	try {
+		sport = readSetting(db, "sport_tracker_json")?.data ?? null;
+	} catch {
+		sport = null;
+	}
+	const water = sport ? sharedView(sport, sportToday(now)).water : {
+		ml: 0,
+		target: 0
+	};
+	const logs = svc.sleep.state().recentLogs ?? [];
+	const d = dayOf$1(store, today);
+	const h = healthyDay({
+		waterMl: water.ml,
+		waterTarget: water.target,
+		moves: d.moves,
+		breaks: screenBreaks(d),
+		sleptOnTime: sleptOnTime(logs.find((l) => l.day === today), svc.sleep.bedtimeTarget())
+	});
+	const week = weeklyHealth(weekDaysFromStore(store, today).map((x) => x.day === today ? {
+		...x,
+		waterMl: water.ml,
+		waterTarget: water.target
+	} : x), logs, today);
+	return {
+		line: bodyLine(h),
+		week,
+		waterAt: d.lastAt.water ?? null,
+		bedAt: d.lastAt.bed ?? null,
+		bedLogged: bedLoggedTonight(logs, now)
+	};
+}
 async function rhythmTick(env, now, send) {
 	const { bots, services, mirror } = await botsFor(env);
 	const f = await mirror.read((db) => {
 		const svc = services.services(db);
 		const today = svc.wallet.today(now);
-		const prefs = cleanPrefs(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null"));
+		const prefs = cleanPrefs$1(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null"));
 		const state = rhythmFor(JSON.parse(getSetting(db, "coach_rhythm") || "null"), today);
 		const row = db.prepare("SELECT wake_time, created_at FROM sleep_logs WHERE day = ?").get(today);
 		const sl = svc.sleep;
@@ -37626,6 +38064,7 @@ async function rhythmTick(env, now, send) {
 			paused = false;
 		}
 		const mode = todayMode(db, today);
+		const body = bodyFacts(db, svc, today, now);
 		return {
 			prefs,
 			state,
@@ -37644,10 +38083,20 @@ async function rhythmTick(env, now, send) {
 					waterMax: mode.waterMax,
 					training: mode.training,
 					replan: mode.replan
-				} : null
-			}
+				} : null,
+				busy: !!svc.focus.state(now).running,
+				islandWaterAt: body.waterAt,
+				nowMs: now.getTime(),
+				asleep: body.bedLogged
+			},
+			body
 		};
 	});
+	if (!f.facts.busy) {
+		const cal = calendarFor(env, mirror);
+		const evs = cal ? await cal.events((/* @__PURE__ */ new Date(now.getTime() - 144e5)).toISOString(), new Date(now.getTime() + 6e4).toISOString()).catch(() => []) : [];
+		f.facts.busy = evs.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime());
+	}
 	const slot = f.state.briefing?.status === "approved" ? f.state.briefing.plan.training : null;
 	if (f.prefs.on && slot && !f.facts.workoutDone && !f.state.slotSent && f.facts.time >= slot.time && f.facts.time < addMinutesHM(slot.time, 40)) {
 		await mirror.write((db) => {
@@ -37750,7 +38199,7 @@ async function rhythmTick(env, now, send) {
 	} else if (job === "weekly") {
 		const w = await bots.rhythm.weekly();
 		const week = await mirror.read((db) => weekMoneyLine(financeStateFrom(db, null), services.services(db).wallet.today())).catch(() => null);
-		await send(weeklyText(w) + (week ? `\n\n💸 ${escapeHtml(week)}` : ""), WEEKLY_KEYBOARD);
+		await send(weeklyText(w) + (week ? `\n\n💸 ${escapeHtml(week)}` : "") + `\n\n${weeklyHealthText(f.body.week)}`, WEEKLY_KEYBOARD);
 		await bots.rhythm.writeStory().catch(() => null);
 		const letter = await bots.rhythm.letter().catch(() => null);
 		if (letter) await send(`💌 <b>A letter from Ben</b>\n\n${escapeHtml(letter)}`);
@@ -37781,7 +38230,8 @@ async function rhythmTick(env, now, send) {
 		const askText = [warn, ask].filter(Boolean).map((x) => escapeHtml(x)).join("\n");
 		const keyboard = r.top3.length ? REVIEW_KEYBOARD : void 0;
 		const withAsk = ask ? { inline_keyboard: [...keyboard?.inline_keyboard ?? [], MONEY_ASK_ROW] } : keyboard;
-		await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + goalText + moneyText + (askText ? `\n\n${askText}` : "") + bonus, withAsk);
+		const bodyText = `\n\n🩺 ${escapeHtml(f.body.line)}`;
+		await send(reviewText(r.result, r.score, r.lesson, r.top3, f.tone) + bodyText + goalText + moneyText + (askText ? `\n\n${askText}` : "") + bonus, withAsk);
 	}
 }
 /** The app: today's rhythm (state), or an action on it. */

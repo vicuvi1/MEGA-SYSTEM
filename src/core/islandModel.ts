@@ -104,11 +104,15 @@ export type IslandAction = { id?: string } & (
   | { kind: 'widget'; op: 'fetch' | 'addTask' | 'addNote' | 'notify' | 'save'; widget: string; url?: string; text?: string; setting?: unknown }
   /** Goals: a check-in from the island ("+50", "-0.5", "=3400", "s" same as before, "k" skip: src/core/goalsBen.ts). */
   | { kind: 'goal'; goalId: number; op: string; alertId?: string }
+  /** HD: a reminder you set: add one ("remind me to call mom at 18:00"), or Done / Snooze on its card. */
+  | { kind: 'remind'; op: 'add' | 'done' | 'snooze'; id?: string; text?: string; at?: number; minutes?: number }
+  /** HD: wind-down mode's calm music (the island's own player). */
+  | { kind: 'calmMusic' }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind'
   title: string
   text: string
   face?: string
@@ -194,6 +198,10 @@ export interface IslandSnapshot {
   auto?: import('./automations').IslandAutoView | null
   /** Goals: the top ones with their ring and quick check-in (src/core/goalsIsland.ts). */
   goals?: import('./goalsIsland').IslandGoal[]
+  /** HD: today's Healthy day ring (water, moves, breaks, sleep), its streak, and Sunday's weekly card. */
+  health?: { today: import('./healthyDay').HealthyView; week?: import('./healthyDay').WeeklyHealth | null } | null
+  /** HD: wind-down mode (the island dims, counts down, says close the laptop). */
+  windMode?: import('./healthyDay').WindDownMode | null
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {
@@ -448,7 +456,7 @@ export function alertPref(kind: string, meeting = false): AlertKindPref | null {
   if (kind === 'water') return 'water'
   if (kind === 'move') return 'move'
   if (kind === 'eyes') return 'eyes'
-  if (kind === 'ben') return 'ben'
+  if (kind === 'ben' || kind === 'remind') return 'ben'
   if (kind === 'block' || kind === 'drift' || kind === 'end' || kind === 'quality') return 'block'
   if (kind === 'bed' || kind === 'winddown' || kind === 'sleep') return 'bed'
   if (kind === 'morning') return 'morning'
@@ -857,7 +865,8 @@ export function alertGate(o: { kind: string; meeting?: boolean; dot?: boolean; p
   if (rule === 'never' || (k && k.on === false)) return 'drop'
   const p = alertPriority(o.kind)
   // Quiet: nothing drops down; your own timer running out still waits for you.
-  if (o.quiet) return p === 'urgent' ? 'silent' : 'drop'
+  // A reminder you set waits as a dot through quiet (never lost).
+  if (o.quiet) return p === 'urgent' || o.kind === 'remind' ? 'silent' : 'drop'
   if (rule === 'dot' || o.dot) return 'silent'
   // In a call: only time-up drops down.
   if (o.call) return p === 'urgent' ? 'peek' : 'silent'

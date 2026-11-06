@@ -12,6 +12,7 @@ import { TursoHttp } from '../tursoHttp'
 import { createWebServices } from '../webServices'
 import { createWebBots } from '../webBots'
 import { CALLBACKS } from './callbacks'
+import { setSetting } from '../../../../main/settings'
 
 const require = createRequire(import.meta.url)
 let SQL: SqlJsStatic
@@ -129,6 +130,22 @@ const CASES: Case[] = [
     name: 'fq| saves how a focus session went',
     data: (w) => `fq|${w.day}|4|25`,
     check: (w) => expect(w.setting('focus_ratings')).toEqual([{ day: w.day, rating: 4, minutes: 25 }])
+  },
+  {
+    name: 'rm| answers your reminder: Done (the island card goes too)',
+    setup: (w) => w.mirror.write((db) => setSetting(db as any, 'coach_reminders', JSON.stringify([{ id: 'r1', at: '2026-10-02T15:00:00.000Z', text: 'call mom', kind: 'remind', done: true, sentAt: '2026-10-02T15:00:00.000Z', createdAt: '2026-10-02T14:00:00.000Z' }]))),
+    data: () => 'rm|d|r1',
+    check: (w) => expect(w.setting('coach_reminders')[0]).toMatchObject({ id: 'r1', done: true, handled: true })
+  },
+  {
+    name: 'rm| snoozes your reminder: it comes back once on both',
+    setup: (w) => w.mirror.write((db) => setSetting(db as any, 'coach_reminders', JSON.stringify([{ id: 'r2', at: '2026-10-02T15:00:00.000Z', text: 'stretch', kind: 'remind', done: true, sentAt: '2026-10-02T15:00:00.000Z', createdAt: '2026-10-02T14:00:00.000Z' }]))),
+    data: () => 'rm|s|r2',
+    check: (w) => {
+      const r = w.setting('coach_reminders')[0]
+      expect(r).toMatchObject({ id: 'r2', done: false, sentAt: null, handled: false })
+      expect(Date.parse(r.at) - Date.now()).toBeGreaterThan(9 * 60_000)
+    }
   },
   {
     name: 'bf| saves feedback on a reply',

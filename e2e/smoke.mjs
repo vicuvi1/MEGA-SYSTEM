@@ -583,6 +583,78 @@ try {
     }
     await ip.context().close()
   })
+  // HD: your healthy day on the island: the ring on the pill and the Day page, the reminder card with Done / Snooze,
+  // wind-down mode (dimmed, the countdown, calm music) and Sunday's weekly card. Made-up data.
+  await step('Desktop island healthy day: the ring, a reminder with Done, wind-down mode, the weekly card', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 640, height: 900 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const parts = (w, m, b, sl) => [
+        { id: 'water', icon: '💧', label: 'Water', done: w >= 1, pct: Math.min(1, w), text: `${(2.5 * w).toFixed(1)} of 2.5 L` },
+        { id: 'move', icon: '💪', label: 'Moves', done: m >= 3, pct: Math.min(1, m / 3), text: `${m} of 3 move breaks` },
+        { id: 'breaks', icon: '👁️', label: 'Breaks', done: b >= 3, pct: Math.min(1, b / 3), text: `${b} of 3 screen breaks` },
+        { id: 'sleep', icon: '🌙', label: 'Sleep', done: sl, pct: sl ? 1 : 0, text: sl ? 'In bed on time last night' : 'Late to bed last night' }
+      ]
+      const health = { score: 79, met: 2, parts: parts(0.64, 3, 2, true), streak: 4, bonus: false, line: 'Body today: 1.6 of 2.5 L water, 3 of 3 move breaks, 2 of 3 screen breaks, bed on time last night. 2 of 4 healthy.' }
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null, mustdos: [{ i: 0, text: 'Algebra problem set', done: true }], water: { ml: 1600, target: 2500 }, reps: [],
+        alert: { id: 'remind:r1', kind: 'remind', title: 'call mom', text: 'Your reminder for 18:00.', face: '⏰', actions: [{ label: '✓ Done', action: { kind: 'remind', op: 'done', id: 'r1' }, primary: true }, { label: '10 min', action: { kind: 'remind', op: 'snooze', id: 'r1', minutes: 10 } }, { label: '1 hour', action: { kind: 'remind', op: 'snooze', id: 'r1', minutes: 60 } }] },
+        today: { focusMin: 50, focusGoal: 100 },
+        health: { today: health, week: null }
+      }
+      window.__island = { actions: [], snap, parts, send: (name, v) => cbs[name]?.(v) }
+      window.__setSnap = (patch) => { window.__island.snap = { ...window.__island.snap, at: Date.now(), ...patch }; cbs.state?.(window.__island.snap) }
+      window.desktop = new Proxy({
+        islandAction: (a) => { window.__island.actions.push(a); if (a.id) setTimeout(() => cbs.ack?.({ id: a.id, ok: true, tookMs: 5 }), 100) },
+        islandHot: () => {}, islandTakeClicks: () => {},
+        onIslandAck: on('ack'),
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill .hd-badge', { timeout: 15000 })
+    await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel .hd-card', { timeout: 5000 })
+    if (!/Healthy day/.test(await ip.locator('.hd-card').innerText())) throw new Error('no Healthy day card on the Day page')
+    // The reminder you set: Done sends the answer.
+    await ip.waitForSelector('.di-panel .di-alert.kind-remind', { timeout: 5000 })
+    const shots = process.env.HEALTH_SHOTS
+    if (shots) {
+      await ip.locator('.hd-card').scrollIntoViewIfNeeded()
+      await ip.waitForTimeout(700)
+      await ip.locator('.di-panel').screenshot({ path: `${shots}/healthy-day-ring.png` })
+    }
+    await ip.click('.di-panel .di-alert.kind-remind button.primary')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'remind' && a.op === 'done' && a.id === 'r1'), null, { timeout: 3000 })
+    // All four done: the ring is full and says so.
+    await ip.evaluate(() => window.__setSnap({ alert: null, water: { ml: 2500, target: 2500 }, health: { today: { score: 100, met: 4, parts: window.__island.parts(1, 4, 3, true), streak: 5, bonus: true, line: 'Body today: 2.5 of 2.5 L water, 4 of 3 move breaks, 3 of 3 screen breaks, bed on time last night. All four: a healthy day. 💚' }, week: null } }))
+    await ip.waitForSelector('.hd-card.hd-all', { timeout: 3000 })
+    // Wind-down mode: dimmed, the countdown, calm music and Going to bed.
+    await ip.evaluate(() => window.__setSnap({ windDown: { bedAt: '23:00', minutesLeft: 42 }, windMode: { phase: 'wind', minutes: 42, bedAt: '23:00', title: 'Wind down · bed at 23:00', line: 'Finish what you are on, then close the laptop.', music: true }, sleep: { bed: true, wake: false, target: '23:00' } }))
+    await ip.waitForSelector('.di.windmode .hd-wind', { timeout: 3000 })
+    if (!/Bed in 0:42/.test(await ip.locator('.hd-wind').innerText())) throw new Error('no wind-down countdown')
+    if (shots) {
+      await ip.locator('.hd-wind').scrollIntoViewIfNeeded()
+      await ip.waitForTimeout(700)
+      await ip.locator('.di-panel').screenshot({ path: `${shots}/wind-down-mode.png` })
+    }
+    await ip.click('[data-tap="wind:music"]')
+    // Sunday: the weekly card.
+    await ip.evaluate(() => window.__setSnap({ windDown: null, windMode: null, sleep: null, health: { ...window.__island.snap.health, week: { days: 7, waterAvgMl: 2240, waterDaysMet: 4, moves: 23, breaks: 17, bedOnTime: 5, bedNights: 7, bedSpreadMin: 50, healthyDays: 3, lines: ['💧 Water: 2.2 L a day on average, goal reached 4 of 7 days', '💪 Moves: 23 move breaks · 👁️ 17 screen breaks', '🌙 Bedtime: on time 5 of 7 nights · a bit all over (0h50 between earliest and latest)', '💚 Healthy days: 3 of 7'] } } }))
+    await ip.waitForSelector('.hd-week', { timeout: 3000 })
+    if (shots) {
+      await ip.locator('.hd-week').scrollIntoViewIfNeeded()
+      await ip.waitForTimeout(700)
+      await ip.locator('.di-panel').screenshot({ path: `${shots}/weekly-health-card.png` })
+    }
+    await ip.context().close()
+  })
   // Island 2: a move break you pick and count (−/+), logged with ↶ Undo; an eye break counts down on the pill.
   await step('Desktop island nudges: pick the count, log it, undo it, the eye break countdown', async () => {
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()

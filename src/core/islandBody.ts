@@ -44,7 +44,7 @@ export function waterAlert(a: BodyInput): IslandAlert | null {
     id,
     kind: 'water',
     title: 'A glass of water?',
-    text: `${(a.water.ml / 1000).toFixed(1)} of ${(a.water.target / 1000).toFixed(1)} L so far · ${Math.ceil(left / 250)} glasses to go`,
+    text: `${(a.water.ml / 1000).toFixed(1)} of ${(a.water.target / 1000).toFixed(1)} L so far · ${Math.ceil(left / 250)} glass${Math.ceil(left / 250) === 1 ? '' : 'es'} to go`,
     face: '💧',
     actions: [
       { label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true },
@@ -122,7 +122,7 @@ export function windDownAlert(w: { bedAt: string; minutesLeft: number } | null, 
  * (from anywhere: Telegram, Waky, the island, Ben) it never asks "Up at…?"
  * again, it just says when you got up; and it goes once your first block has begun.
  */
-export function morningAlert(o: { now: number; firstActiveAt: number | null; wakeLogged: boolean; wakeTime?: string | null; firstBlock: { title: string; start: number } | null; blockStarted?: boolean; dismissed: Record<string, number> }): IslandAlert | null {
+export function morningAlert(o: { now: number; firstActiveAt: number | null; wakeLogged: boolean; wakeTime?: string | null; firstBlock: { title: string; start: number } | null; blockStarted?: boolean; dismissed: Record<string, number>; /** HD: last night's bedtime the PC logged by itself: the same card says it (no second good-morning card). */ bedAuto?: string | null }): IslandAlert | null {
   if (!o.firstActiveAt) return null
   if (o.wakeLogged && o.blockStarted) return null
   const h = hour(o.now)
@@ -130,18 +130,43 @@ export function morningAlert(o: { now: number; firstActiveAt: number | null; wak
   const id = `morning:${new Date(o.now).toDateString()}`
   if ((o.dismissed[id] ?? 0) > o.now) return null
   const wake = hm(o.firstActiveAt)
+  const bed = o.bedAuto ? `Bed at ${o.bedAuto} (the PC logged it). ` : ''
   return {
     id,
     kind: 'morning',
     title: 'Good morning ☀️',
     text: o.wakeLogged
-      ? `${o.wakeTime ? `Up at ${o.wakeTime}. ` : ''}${o.firstBlock ? `First up: ${o.firstBlock.title} at ${hm(o.firstBlock.start)}.` : 'Nothing planned yet.'}`
-      : `${o.firstBlock ? `First up: ${o.firstBlock.title} at ${hm(o.firstBlock.start)}. ` : 'Nothing planned yet. '}Up since ${wake}?`,
+      ? `${bed}${o.wakeTime ? `Up at ${o.wakeTime}. ` : ''}${o.firstBlock ? `First up: ${o.firstBlock.title} at ${hm(o.firstBlock.start)}.` : 'Nothing planned yet.'}`
+      : `${bed}${o.firstBlock ? `First up: ${o.firstBlock.title} at ${hm(o.firstBlock.start)}. ` : 'Nothing planned yet. '}Up since ${wake}?`,
     face: '🌅',
     actions: [
       ...(o.wakeLogged ? [] : [{ label: `☀️ Up at ${wake}`, action: { kind: 'wake' as const, time: wake }, primary: true }]),
       { label: '▶ Start my day', action: { kind: 'open' as const, page: 'today' }, primary: o.wakeLogged },
-      { label: 'Later', action: { kind: 'dismiss' as const, id, snoozeMin: 60 } }
+      o.bedAuto ? { label: 'Fix bedtime', action: { kind: 'open' as const, page: 'sleep' } } : { label: 'Later', action: { kind: 'dismiss' as const, id, snoozeMin: 60 } }
+    ]
+  }
+}
+
+/**
+ * "You went to bed at 00:40" (the PC logged it by itself), for when the
+ * morning card isn't showing (it says it there). "I'm up" only while no
+ * wake-up is logged for today: never after Telegram or Waky logged it.
+ */
+export function bedAutoAlert(o: { bed: { time: string; at: string } | null; now: number; running: boolean; wakeLogged: boolean; morningShown: boolean; dismissed: Record<string, number> }): IslandAlert | null {
+  const b = o.bed
+  if (!b || o.running || o.morningShown || o.now - Date.parse(b.at) > 6 * 3600_000) return null
+  const id = `sleep:${b.at}`
+  if ((o.dismissed[id] ?? 0) > o.now) return null
+  return {
+    id,
+    kind: 'sleep',
+    title: `Bed at ${b.time}`,
+    text: `That's when the PC was last used last night. It's in Waky now.`,
+    face: '😴',
+    actions: [
+      { label: '✓ Right', action: { kind: 'dismiss', id }, primary: true },
+      { label: 'Fix the time', action: { kind: 'open', page: 'sleep' } },
+      ...(o.wakeLogged ? [] : [{ label: "☀️ I'm up", action: { kind: 'wake' as const } }])
     ]
   }
 }

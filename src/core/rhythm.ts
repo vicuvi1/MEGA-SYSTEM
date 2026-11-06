@@ -5,6 +5,7 @@
 // - the evening review (planned vs done, a score, one lesson, tomorrow's
 //   top 3) and the Sunday review (the week, next week's focus and big 3).
 // When each is due comes from the tick (every few minutes) and this state.
+import { islandHasWater } from './healthyDay'
 import { freeGaps, suggestBlocks, type CalEvent } from './dayTime'
 import { calendarDay } from './dates'
 
@@ -134,13 +135,21 @@ export interface RhythmFacts {
   paused: boolean
   /** A life mode today (exam week, sick, travel): fewer nudges (FT4). */
   mode?: { waterMax: number; training: boolean; replan: boolean } | null
+  /** HD: a class, a meeting or a focus timer is on right now: water and training wait for after. */
+  busy?: boolean
+  /** HD: when the island last showed its water card (ms): it has water covered for 90 minutes. */
+  islandWaterAt?: number | null
+  /** HD: now in ms (with islandWaterAt). */
+  nowMs?: number
+  /** HD: you logged going to bed: nothing more until the morning. */
+  asleep?: boolean
 }
 
 export type RhythmJob = 'briefing' | 'replan' | 'midweek' | 'evening' | 'weekly' | 'water' | 'training'
 
 /** What the coach should send now (in order). */
 export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts): RhythmJob[] {
-  if (!prefs.on) return []
+  if (!prefs.on || f.asleep) return []
   const t = toMin(f.time)
   const out: RhythmJob[] = []
   // Morning: 5 minutes after you log waking up, else 45 minutes after your target; never before 06:00 or after noon.
@@ -150,8 +159,8 @@ export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts
   if (!state.briefing && t >= start && t < toMin('12:00')) out.push('briefing')
   // W8: no plan by noon → half a day left, still worth planning (until 16:00).
   else if (!state.briefing && !f.paused && f.mode?.replan !== false && t >= Math.max(start, toMin('12:00')) && t < toMin('16:00')) out.push('replan')
-  if (!f.paused && prefs.water && waterBehind(state, f, f.mode?.waterMax ?? 5)) out.push('water')
-  if (!f.paused && prefs.training && f.mode?.training !== false && !f.workoutDone && !state.training && t >= toMin('18:00') && t < toMin('21:00')) out.push('training')
+  if (!f.paused && !f.busy && prefs.water && !islandHasWater(f.islandWaterAt, f.nowMs ?? 0) && waterBehind(state, f, f.mode?.waterMax ?? 5)) out.push('water')
+  if (!f.paused && !f.busy && prefs.training && f.mode?.training !== false && !f.workoutDone && !state.training && t >= toMin('18:00') && t < toMin('21:00')) out.push('training')
   if (f.weekday === 0 && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push('weekly')
   // W14: Wednesday, 90 minutes before the evening review: where the week stands.
   if (f.weekday === 3 && !state.midweek && t >= toMin(prefs.evening) - 90 && t < toMin(prefs.evening)) out.push('midweek')

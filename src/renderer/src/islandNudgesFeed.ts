@@ -4,12 +4,10 @@
 // the ledger (body.move_break, capped), and an undo or "I only did 12" takes
 // back exactly that. Tallies (eyes, posture, calm) are quiet records.
 import { calendarDay, dayKey } from '@core/dates'
-import type { IslandAction, IslandAlert } from '@core/islandModel'
+import type { IslandAction } from '@core/islandModel'
 import {
   addFocusCheck,
   addMove,
-  awayNudge,
-  breatheNudge,
   challengeBonus,
   challengeDone,
   challengeLine,
@@ -17,29 +15,19 @@ import {
   cleanNudgeStore,
   dayOf,
   EMPTY_NUDGES,
-  eyesNudge,
   EYES_RULE,
   fixMove,
-  focusNudge,
-  gratitudeNudge,
-  learnAlert,
   makeChallenge,
-  moodNudge,
-  moveDoneAlert,
-  moveNudge,
   movePill,
   moveStreak,
   MOVE_RULE,
   noteAnswer,
   noteIdle,
   personCalled,
-  personNudge,
   postpone,
-  postureNudge,
   setLog,
   snoozeUntil,
   tally,
-  tidyNudge,
   touched,
   undoMove,
   type ExerciseLine,
@@ -50,6 +38,7 @@ import {
   type NudgeStore,
   type SnoozeCtx
 } from '@core/islandNudges'
+import { HEALTHY_RULE, healthyBonus, healthyDay, healthyStreak, healthyView, screenBreaks, type HealthyView, type WeeklyHealth } from '@core/healthyDay'
 import { life } from './bridge'
 import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
@@ -151,11 +140,16 @@ export interface NudgeTickInput {
 }
 
 export interface NudgeTick {
-  /** Right after a log, back from away, the focus check-in: before most other alerts. */
-  early: IslandAlert | null
-  /** Your body and your day (in place of the old move / eyes alerts). */
-  body: IslandAlert | null
   move: MovePill | null
+  /** HD: what the island's healthy-day chain needs (core/dayNudges.ts decides the card). */
+  store: NudgeStore
+  exercises: ExerciseLine[]
+  coins: number
+  moodSlots: ('noon' | 'evening')[]
+  lowMood: boolean
+  lastMoveAt: number
+  lastEyesAt: number
+  snooze: SnoozeCtx
 }
 
 let ctx: SnoozeCtx = { now: 0 }
@@ -201,36 +195,41 @@ export async function nudgeTick(i: NudgeTickInput): Promise<NudgeTick> {
   const streak = moveStreak(s, day)
   if (streak > s.best) s = save({ ...s, best: streak })
   const move = movePill(s, day, i.now)
-  const c = { now: i.now, day, busy: i.busy, idleSec: i.idleSec, activeSince: i.activeSince, store: s, dismissed: i.dismissed, snooze: { ...ctx, now: i.now } }
-  if (i.call) return { early: null, body: null, move }
-  const early = moveDoneAlert(s, i.now, i.dismissed, day) ?? learnAlert(awayNudge({ now: i.now, store: s, dismissed: i.dismissed, busy: i.busy }), s, 'away', i.now) ?? learnAlert(focusNudge({ now: i.now, running: i.running, store: s, day, dismissed: i.dismissed }), s, 'focus', i.now)
-  const mv = learnAlert(moveNudge({ ...c, lastMoveAt: lsGet<number>(LAST_MOVE, 0), exercises: exs, coins: await ruleCoins(MOVE_RULE), doing: i.doing }), s, 'move', i.now)
-  // IN31: at 90 min Ben's firmer line always drops down.
-  const moveCard = mv && mv.nudge?.type === 'move' && mv.nudge.level === 'ben' ? { ...mv, dot: false } : mv
   const md = await moods(i.now)
-  const body =
-    moveCard ??
-    learnAlert(personNudge(c), s, 'people', i.now) ??
-    learnAlert(moodNudge({ ...c, moodSlotsDone: md.slots }), s, 'mood', i.now) ??
-    learnAlert(gratitudeNudge(c), s, 'gratitude', i.now) ??
-    learnAlert(tidyNudge(c), s, 'tidy', i.now) ??
-    learnAlert(postureNudge(c), s, 'posture', i.now) ??
-    learnAlert(breatheNudge({ ...c, lowMood: md.low }), s, 'breathe', i.now) ??
-    learnAlert(eyesNudge({ ...c, eyeBreaks: i.eyeBreaks, lastEyesAt: lsGet<number>(LAST_EYES, 0) }), s, 'eyes', i.now)
-  return { early, body, move: s.prefs.on.move ? move : null }
+  return { move: s.prefs.on.move ? move : null, store: s, exercises: exs, coins: await ruleCoins(MOVE_RULE), moodSlots: md.slots, lowMood: md.low, lastMoveAt: lsGet<number>(LAST_MOVE, 0), lastEyesAt: lsGet<number>(LAST_EYES, 0), snooze: { ...ctx, now: i.now } }
 }
 
-/** The water reminder learns too (IN26), and its Later is the snooze menu (IN30). */
-export function nudgeWater(a: IslandAlert | null, now: number): IslandAlert | null {
-  if (!a || !store) return a
-  const g = learnAlert(a, store, 'water', now)
-  if (!g) return null
-  const postponed = dayOf(store, today(now)).postponed.water ?? 0
-  return {
-    ...g,
-    text: postponed ? `${g.text} · postponed ${postponed}×` : g.text,
-    actions: g.actions.map((x) => (x.action.kind === 'dismiss' ? { ...x, action: { kind: 'nudge', op: { op: 'snooze', kind: 'water', alertId: a.id, choice: '15' } } as IslandAction } : x))
+/** HD: a card reached you: its time goes into the synced store (Telegram reads it: no second water or wind-down nudge). */
+export function nudgeTouched(kind: string, now: number): void {
+  if (store) save(touched(store, today(now), kind, now))
+}
+
+/**
+ * HD: today's Healthy day ring: water (saved for the weekly card), moves,
+ * screen breaks and last night's bedtime. All four met pays the small bonus
+ * once (body.healthy_day); a break undone the same day takes it back.
+ */
+export async function healthTick(now: number, water: { ml: number; target: number }, slept: boolean | null): Promise<{ today: HealthyView; week: WeeklyHealth | null; beds?: undefined } | null> {
+  if (!store) return null
+  const day = today(now)
+  let s = store
+  const d = dayOf(s, day)
+  const h = healthyDay({ waterMl: water.ml, waterTarget: water.target, moves: d.moves, breaks: screenBreaks(d), sleptOnTime: slept })
+  let paid = d.healthyPaid ?? null
+  const b = healthyBonus(h, paid)
+  if (b === 'pay') paid = (await payOnce(HEALTHY_RULE, `healthy:${day}`, 'Healthy day: water, moves, breaks, bed on time')) || null
+  if (b === 'undo' && paid) {
+    await life.wallet.undo(paid, 'Healthy day no longer complete').catch(() => {})
+    paid = null
   }
+  s = store
+  const cur = dayOf(s, day)
+  if (cur.water !== water.ml || cur.waterTarget !== water.target || !!cur.healthy !== h.all || (cur.healthyPaid ?? null) !== paid) {
+    s = save({ ...s, days: { ...s.days, [day]: { ...cur, water: water.ml, waterTarget: water.target, healthy: h.all, healthyPaid: paid } } })
+    if (b) window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+  }
+  const streak = healthyStreak(s.days, day)
+  return { today: healthyView(h, streak, !!paid), week: null }
 }
 
 /** You took a water reminder (learning: a yes at this hour). */

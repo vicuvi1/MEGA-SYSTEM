@@ -11,7 +11,8 @@ import { payTodoist } from '../todoistCoins'
 import { REASONS } from '@core/focus'
 import type { CalEvent } from '@core/dayTime'
 import { eveningText, planKeyboard, planText } from '@core/focusBot'
-import { NUDGES, type NudgeState } from '@core/coachKit'
+import { NUDGES, REMINDERS, type NudgeState, type Reminder } from '@core/coachKit'
+import { reminderDone, reminderSnooze } from '@core/healthyDay'
 import { readConfirm } from '@core/benSafety'
 import { deskChange, loadDesk, saveDesk } from '../benDesk'
 import { moodFace } from '@core/benKnows'
@@ -36,7 +37,7 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvw]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/
+export const CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
   // Water and workout cards: a tap updates the shared log and the card.
@@ -417,6 +418,34 @@ export const CALLBACKS: CallbackHandler[] = [
       const text = `${base}\n\n${low ? `Session: <b>${r}/5</b>. What got in the way? Tap it, and next time we fix that first.` : r === 3 ? 'Session: <b>3/5</b>. Fine. Next one: phone in another room for the first 10 minutes.' : `Session: <b>${r}/5</b> 🔥 That's the feeling. Same time tomorrow?`}`
       const keyboard = low ? { inline_keyboard: [REASONS.slice(0, 3), REASONS.slice(3)].map((row, k) => row.map((x, i) => ({ text: x, callback_data: `pr|${day}|${k * 3 + i}` }))) } : undefined
       await edit(text, keyboard)
+      return text
+    }
+  },
+  // HD: your reminder's buttons: Done, or again in 10 minutes / an hour (the island's card is the same reminder).
+  {
+    prefixes: ['rm'],
+    match: (data) => data.startsWith('rm|'),
+    run: async (c, t) => {
+      const { mirror, markSeen } = c
+      const { data, chat, key, update, cq, answer } = t
+      if (!(await markSeen(key))) return null
+      const [, op, id] = data.split('|')
+      const now = Date.now()
+      const minutes = op === 'h' ? 60 : 10
+      const found = await mirror.write((db) => {
+        let list: Reminder[] = []
+        try {
+          list = JSON.parse(getSetting(db as any, REMINDERS) || '[]')
+        } catch {
+          list = []
+        }
+        if (!list.some((r) => r.id === id)) return false
+        setSetting(db as any, REMINDERS, JSON.stringify(op === 'd' ? reminderDone(list, id, now) : reminderSnooze(list, id, minutes, now)))
+        return true
+      })
+      const text = !found ? 'That reminder is already gone.' : op === 'd' ? '✓ Done.' : `⏰ Again at ${new Date(now + minutes * 60_000).toTimeString().slice(0, 5)}.`
+      await answer(text)
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
       return text
     }
   },

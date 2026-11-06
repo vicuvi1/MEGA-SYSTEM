@@ -65,6 +65,9 @@ export type Bridge = LifeApi & {
     sporty?(): Promise<SportyView>
     /** Adds water to the shared log (the one Ben and Sporty use). */
     water?(ml: number): Promise<{ ml: number; target: number }>
+    /** HD: your reminders (the list Ben's ⏰ uses), and add / Done / Snooze from the island. */
+    reminders?(): Promise<import('@core/healthyDay').ReminderItem[]>
+    remind?(op: { op: 'add'; text: string; at: number } | { op: 'done'; id: string } | { op: 'snooze'; id: string; minutes: number }): Promise<string>
     updateSporty?(): Promise<SportyView>
     scorecard?(): Promise<{ rows: WeekRow[]; verdict: 'working' | 'mixed' | 'not yet' | 'too early'; lines: string[] }>
     setMind?(m: CoachMind): Promise<void>
