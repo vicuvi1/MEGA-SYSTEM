@@ -23,15 +23,20 @@ import { IslandMedia } from './IslandMedia'
 import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
 import { play, playReminder } from './soundKit'
-import { islandActionSound, useIslandSoundEvents } from './islandSounds'
+import { islandActionSound, play as islandSound, useIslandSoundEvents } from './islandSounds'
 import { useIslandSounds } from './focusSound'
 import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
 import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
 import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from './IslandMoveBits'
 import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
-import { MusicPanel, ScHost, ScPeekRow, ScPillBadge } from './IslandMusic'
+import { MusicPanel, ScHost, ScPeekRow, ScPillBadge, useSc } from './IslandMusic'
 import { IslandBeatGlow } from './music/IslandMusicFx'
+import { run as musicRun } from './music/engine'
+import { useTint } from './music/MusicUi'
+import { cleanPower, cyclePower, filterPalette, paletteItems, POWER_LABEL, startsTyping, type PaletteItem, type PowerId } from '@core/islandPalette'
+import { DayHero, Palette, PowerRow, useRipples, type HeroStat, type PowerTile } from './islandWow'
+import { registeredPages } from './widgets/islandPages'
 import { useMusicPage } from './IslandMusicTab'
 import { IslandPager, useScriptClock } from './widgets/island'
 import { IslandBar, IslandClock, lookRootClasses, notchRadius, showBar, useIslandLook } from './widgets/islandLook'
@@ -386,11 +391,24 @@ export function DesktopIsland() {
   }, [kbd])
   const uiRef = useRef(ui)
   // P4: the input adds a Todoist task (Ctrl+Alt+N) instead of talking to Ben.
-  const [capture, setCapture] = useState(false)
+  const [capture, setCapture] = useState<boolean | 'note'>(false)
+  // The command bar lives in the "/" palette now: closed until you press /, type, or tap search.
+  const [cmdOpen, setCmdOpen] = useState(false)
+  const cmdOpenRef = useRef(false)
+  cmdOpenRef.current = cmdOpen
   const timer = useRef<number | null>(null)
+  /** Opening: the window takes the keyboard (so typing goes to the palette) and the panel has focus. */
   const focusInput = useCallback(() => {
     desk()?.islandFocus?.()
-    window.setTimeout(() => input.current?.focus(), 40)
+    window.setTimeout(() => (cmdOpenRef.current ? input.current?.focus() : panelEl.current?.focus({ preventScroll: true })), 40)
+  }, [])
+  /** The palette with the command bar, focused (and what you started typing in it). */
+  const openCmd = useCallback((prefill?: string) => {
+    desk()?.islandFocus?.()
+    setCmdOpen(true)
+    cmdOpenRef.current = true
+    if (prefill) setText((t) => t + prefill)
+    window.setTimeout(() => input.current?.focus(), 30)
   }, [])
   // IC5: from a press until 150 ms after its release, nothing changes under the
   // pointer: what happens by itself (hover, timers, a new alert) waits.
@@ -480,6 +498,8 @@ export function DesktopIsland() {
     const esc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setMenu(null)
+        // The palette first, then the island.
+        if (cmdOpenRef.current) return closeCmdRef.current()
         dispatch({ type: 'close' })
       }
       // IC10: Ctrl+Z takes back the last log (while "↶ Undo" shows).
@@ -494,13 +514,16 @@ export function DesktopIsland() {
     window.addEventListener('keydown', esc)
     return () => window.removeEventListener('keydown', esc)
   }, [dispatch])
-  // Not open any more: the keyboard goes back to your app.
+  // Not open any more: the keyboard goes back to your app (and the palette closes).
   useEffect(() => {
-    if (ui.view !== 'expanded') {
+    const open = ui.view === 'expanded'
+    if (!open) {
       input.current?.blur()
       desk()?.islandKeyboard?.(false)
+      setCmdOpen(false)
     }
   }, [ui.view])
+  const closeCmdRef = useRef<() => void>(() => {})
 
   // Quiet for a while (Q1) and what Windows says (a call, a full-screen app: Q2, Q3).
   const [q, setQ] = useState<{ until: number; call: boolean; fullscreen: boolean; mic?: boolean; meeting?: boolean; fullscreenMode?: 'hide' | 'dot' | 'show'; maximized?: boolean }>({ until: 0, call: false, fullscreen: false })
@@ -1009,6 +1032,8 @@ export function DesktopIsland() {
     : a.kind === 'bed' ? (a.time ? `Bed at ${a.time} · Waky` : 'Good night 🌙 · logged in Waky')
     : a.kind === 'wake' ? 'Good morning ☀️ · wake-up logged'
     : a.kind === 'push' ? `${a.block.title}: moved ${Math.abs(a.minutes)} min ${a.minutes < 0 ? 'earlier' : 'later'}`
+    : a.kind === 'eventMark' ? (a.mark === 'done' ? `✓ ${a.block.title}: done` : a.mark === 'skip' ? `${a.block.title}: didn't go, noted` : `${a.block.title}: back to open`)
+    : a.kind === 'blockKind' ? (a.to === 'event' ? `📅 ${a.title}: an event from now on` : `⏱ ${a.title}: a focus block from now on`)
     : a.kind === 'blockResult' ? (a.result === 'done' ? `✓ ${a.block.title}: done` : a.result === 'half' ? `½ ${a.block.title}: half done` : `${a.block.title}: not done, noted`)
     : a.kind === 'autoFocus' ? (a.on ? 'Focus starts by itself with each block' : 'Auto-start off')
     : a.kind === 'moveBreak' ? `💪 +${a.n} ${a.name} · nice break`
@@ -1090,7 +1115,7 @@ export function DesktopIsland() {
     if (a.kind === 'water') (setSplash((x) => ({ n: x.n + 1, ml: a.ml })), play('water'))
     if (lbl === 'Reply') {
       dispatch({ type: 'click' })
-      focusInput()
+      openCmd()
       return send(a)
     }
     send(a)
@@ -1099,37 +1124,92 @@ export function DesktopIsland() {
       close()
     }
     // Answered the thing that peeked: it goes back to the pill.
-    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'moveBreak', 'clipSave', 'water'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)))) close()
+    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'water'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)))) close()
   }
   tapRef.current = tap
   // IC4: what Enter will do, live while you type (the same rules as the command bar).
   const [sel, setSel] = useState(0)
-  const sugg = useMemo<Suggestion[]>(() => {
+  const cmdRaw = useMemo<Suggestion[]>(() => {
     if (capture || !text.trim()) return []
     const t = Date.now()
     const meet = (s.now?.call && s.now.meet) || (s.next?.call && s.next.meet && s.next.start - t < 15 * 60_000 ? s.next.meet : null) || null
-    const list = commandPreview(text, { now: t, running: s.running, tasks: s.tasks ?? [], meet, chips: prefs.chips, reps: s.reps, subject: s.now && !s.now.call ? s.now.title : 'Focus' })
-    // Only "Ask Ben": no list (Enter sends it, as always).
-    return list.length === 1 && list[0].action.kind === 'chat' ? [] : list
+    return commandPreview(text, { now: t, running: s.running, tasks: s.tasks ?? [], meet, chips: prefs.chips, reps: s.reps, subject: s.now && !s.now.call ? s.now.title : 'Focus' })
   }, [text, capture, s, prefs.chips])
+  // Only "Ask Ben": no list of its own; in the palette it stays first, so Enter still sends it to Ben.
+  const sugg = cmdRaw.length === 1 && cmdRaw[0].action.kind === 'chat' ? [] : cmdRaw
+  const palSugg = sugg.length ? sugg : cmdRaw
+  // The palette: pages, quick logs, automations, stations and island steps.
+  const sc = useSc()
+  const muTint = useTint(sc, '#d4ff3f')
+  const palAll = useMemo(() => paletteItems({
+    pages: registeredPages().map((p) => ({ id: p.id, title: p.title, icon: p.icon })),
+    autos: (s.auto?.buttons ?? []).map((b) => ({ id: b.id, name: b.name, icon: b.icon, fields: b.fields.length })),
+    stations: k.kit.music?.stations ?? [],
+    chips: prefs.chips,
+    reps: s.reps,
+    running: !!s.running,
+    playing: sc.playing,
+    musicLoaded: !!sc.loaded
+  }), [s.auto, k.kit.music, prefs.chips, s.reps, s.running, sc.playing, sc.loaded, cmdOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  const palList = useMemo(() => {
+    if (!cmdOpen || capture) return []
+    // What the command bar already offers (Log 500 ml…) isn't listed twice.
+    const has = new Set(sugg.map((x) => x.action.kind))
+    return filterPalette(palAll, text, text.trim() ? 6 : 8).filter((x) => !(x.run.kind === 'tap' && x.group === 'Do' && has.has(x.run.action.kind)))
+  }, [palAll, text, cmdOpen, capture, sugg])
+  const runPalette = (x: PaletteItem) => {
+    const r = x.run
+    setText('')
+    setCmdOpen(false)
+    cmdOpenRef.current = false
+    dispatch({ type: 'typing', on: false })
+    if (r.kind === 'page') return void window.dispatchEvent(new CustomEvent('life-island-page', { detail: r.id }))
+    if (r.kind === 'tap') return tap(r.action, r.label)
+    if (r.kind === 'music') return (islandSound('tap'), musicRun({ op: r.op }))
+    if (r.kind === 'station') {
+      const st = k.kit.music?.stations.find((y) => y.id === r.id)
+      if (st) (islandSound('tap'), musicRun({ op: 'play', station: st }))
+      return
+    }
+    if (r.op === 'quiet') return setQuiet(60)
+    if (r.op === 'pin') return dispatch({ type: 'pin' })
+    if (r.op === 'app') return (desk()?.showApp?.(), close())
+    if (r.op === 'editPill') return setEditing(true)
+    if (r.op === 'editPower') return (window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'day' })), setPowerEdit(true))
+    if (r.op === 'note' || r.op === 'task') return (setCapture(r.op === 'note' ? 'note' : true), openCmd())
+    if (r.op === 'close') return close()
+  }
   useEffect(() => setSel(0), [text])
+  const closeCmd = () => {
+    setCmdOpen(false)
+    cmdOpenRef.current = false
+    setCapture(false)
+    input.current?.blur()
+    if (!text.trim()) dispatch({ type: 'typing', on: false })
+    window.setTimeout(() => panelEl.current?.focus({ preventScroll: true }), 20)
+  }
+  closeCmdRef.current = closeCmd
   const runSuggestion = (x: Suggestion) => {
     if (x.action.kind === 'chat') return chat(true)
     setText('')
     dispatch({ type: 'typing', on: false })
     tap(x.action)
+    setCmdOpen(false)
   }
   const chat = (asIs = false): void => {
     const t = text.trim()
+    const pickItem = !asIs && !capture ? palList[sel - palSugg.length] : undefined
+    if (pickItem) return runPalette(pickItem)
     if (!t) return
-    const pick = asIs ? null : sugg[sel]
+    const pick = asIs ? null : palSugg[sel]
     if (pick && pick.action.kind !== 'chat') return runSuggestion(pick)
     // P4: in capture mode it's a Todoist task, not a message to Ben.
     if (capture) {
       setText('')
       setCapture(false)
       dispatch({ type: 'typing', on: false })
-      send({ kind: 'clipSave', to: 'task', text: t, alertId: 'capture' })
+      send({ kind: 'clipSave', to: capture === 'note' ? 'note' : 'task', text: t, alertId: 'capture' })
+      setCmdOpen(false)
       return
     }
     if (s.ben.busy) {
@@ -1141,6 +1221,7 @@ export function DesktopIsland() {
     setText('')
     dispatch({ type: 'typing', on: false })
     send({ kind: 'chat', text: t })
+    setCmdOpen(false)
   }
 
   // IS18: no fresh picture for a minute: dim and say so; the next snapshot brings it back.
@@ -1348,7 +1429,8 @@ export function DesktopIsland() {
                     </button>
                   ))}
                 </section>) : null,
-    sleep: s.sleep?.bed || s.sleep?.wake ? (<section className={`di-sleep ${s.sleep?.bed ? 'night' : 'day'} ${moon ? 'going' : ''}`}>
+    // One morning card: while the good-morning card shows, it carries the wake-up ask (no second "I'm up").
+    sleep: s.sleep?.bed || (s.sleep?.wake && s.alert?.kind !== 'morning') ? (<section className={`di-sleep ${s.sleep?.bed ? 'night' : 'day'} ${moon ? 'going' : ''}`}>
                   {s.sleep?.bed ? (
                     <>
                       <span className="di-moon" aria-hidden>🌙<i>✦</i><i>✦</i><i>✦</i></span>
@@ -1422,7 +1504,20 @@ export function DesktopIsland() {
                       <small>{s.ben.move?.sub ?? 'Nothing planned right now.'}</small>
                     </div>
                   )}
-                  {!run && s.now && !s.now.call && (
+                  {s.now && s.now.kind === 'event' && !s.now.call && (
+                    // An event (a class, a commute): no timer, just ✓ when you're there.
+                    s.now.mark ? (
+                      <button className={`di-ev-mark ${s.now.mark}`} {...tp('plan:evundo', () => tap({ kind: 'eventMark', block: s.now!, mark: null }))} title="Tap to undo">
+                        {s.now.mark === 'done' ? '✓ Done' : "Didn't go"}
+                      </button>
+                    ) : (
+                      <span className="di-ev-btns">
+                        <button className="di-go" {...tp('plan:evdone', () => tap({ kind: 'eventMark', block: s.now!, mark: 'done' }))}>✓ Done</button>
+                        <button className="di-ev-skip" {...tp('plan:evskip', () => tap({ kind: 'eventMark', block: s.now!, mark: 'skip' }))}>Didn't go</button>
+                      </span>
+                    )
+                  )}
+                  {!run && s.now && !s.now.call && s.now.kind !== 'event' && (
                     <button className="di-go" {...tp('plan:start', () => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) }))}>
                       Start
                     </button>
@@ -1439,9 +1534,13 @@ export function DesktopIsland() {
                     <div className="di-block">
                       <b>{s.next.title}</b>
                       <small>
-                        {hhmm(s.next.start)} · in {minsText(s.next.start - now)}
+                        {hhmm(s.next.start)}–{hhmm(s.next.end)} · in {minsText(s.next.start - now)}
+                        {s.next.kind === 'event' ? ' · event' : ''}
                       </small>
                     </div>
+                    {s.next.kind === 'event' && !s.next.call && (
+                      <button className={`di-ev-tick ${s.next.mark === 'done' ? 'on' : ''}`} aria-label={s.next.mark === 'done' ? `Undo done: ${s.next.title}` : `Done: ${s.next.title}`} {...tp('plan:nextdone', () => tap({ kind: 'eventMark', block: s.next!, mark: s.next!.mark === 'done' ? null : 'done' }))}>✓</button>
+                    )}
                   </div>
                 )}
                 {(s.maybe ?? []).map((b) => (
@@ -1620,7 +1719,8 @@ export function DesktopIsland() {
       aria-label="Open the island (drag to move it, double-click to tuck it away, arrows or the mouse wheel switch)"
     >
       <GripHandle onPointerDown={(e) => { e.stopPropagation(); dragProps.onPointerDown(e, true) }} />
-      <ScPillBadge music={k.kit.music} />
+      {/* Music: the artwork ring and equalizer; with nothing else on the pill, the song's title too. */}
+      <ScPillBadge music={k.kit.music} title={!main && !s.ben.busy && !s.locked} />
       {s.locked ? (
         <span className="di-pill-text">🔒 Open Life System</span>
       ) : old ? (
@@ -1810,121 +1910,260 @@ export function DesktopIsland() {
     </div>
   )
 
-  // ---- expanded: the command center ----
+  // ---- expanded: the command center (page-first) ----
   const firstRep = s.reps[0]
   // IC9: opened with the shortcut: the keyboard moves around it.
-  useKeyboardMode({ on: kbd && ui.view === 'expanded', panel: () => panelEl.current, input: () => input.current, suggesting: () => sugg.length > 0 })
-  const expanded = (
-    <div className="di-panel" ref={panelEl} role="dialog" aria-label="Life System command center">
-      <IslandBeatGlow />
-      <header className="di-head" {...dragProps}>
-        <span className={`di-face mood-${s.ben.mood}`}>{s.ben.face}</span>
-        <div className="di-who">
-          <b>Ben</b>
-          <small>{s.ben.busy ? 'thinking…' : s.ben.why ? `${s.ben.mood} · ${s.ben.why}` : s.ben.mood}</small>
-        </div>
-        <button className={`di-icon ${quietMenu || quiet ? 'on' : ''}`} {...tp('head:quiet', () => (quiet ? setQuiet(null) : setQuietMenu((x) => !x)))} title={quiet ? `Quiet until ${new Date(q.until).toTimeString().slice(0, 5)}: wake now` : 'Quiet for a while'}>🌙</button>
-        <button className="di-icon di-mu-open" {...tp('head:music', () => window.dispatchEvent(new Event('life-island-music-tab')))} title="Music">♫</button>
-        <button className={`di-icon ${ui.pinned ? 'on' : ''}`} {...tp('head:pin', () => dispatch({ type: 'pin' }))} title={ui.pinned ? 'Unpin' : 'Keep open'}>📌</button>
-        <button className="di-icon" {...tp('head:app', () => (desk()?.showApp?.(), close()))} title="Open Life System">⤢</button>
-        <button className="di-icon" {...tp('head:close', close)} aria-label="Close" title="Close (Esc)">✕</button>
-      </header>
-
-      {old && <p className="di-reconnect-line">Reconnecting… this is from {hhmm(s.at)}</p>}
-      {s.doing && (
-        // SI1: what Ben thinks you're doing (a kind, never a title); tap to fix it.
-        <button className="di-doing" title="That's not right? Tap to fix" {...tp('doing', () => tap({ kind: 'ctxFix', app: s.doing!.app }))}>
-          {s.doing.icon} {s.doing.label}
-          {s.doing.detail ? ` · ${s.doing.detail}` : ''}
-        </button>
-      )}
-      {/* AU1: what's playing (only with that switch on in PC & automation). */}
-      <IslandMedia />
-      {quietMenu && !quiet && (
-        <div className="di-quiet">
-          <span>Quiet for</span>
-          {([[30, '30 min'], [60, '1 hour'], [120, '2 hours'], ['tomorrow', 'until tomorrow']] as const).map(([c, label]) => (
-            <button key={String(c)} {...tp(`quiet:${c}`, () => (setQuietMenu(false), setQuiet(c)))}>{label}</button>
+  useKeyboardMode({ on: kbd && ui.view === 'expanded' && !cmdOpen, panel: () => panelEl.current, input: () => input.current, suggesting: () => sugg.length > 0 })
+  // A soft ripple from the pointer on every press (Full).
+  useRipples(panelEl, f.extras && ui.view === 'expanded')
+  // Any key typed while the island is open goes into the palette; "/" opens it.
+  useEffect(() => {
+    if (ui.view !== 'expanded') return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      if (e.key === '/' && !e.ctrlKey && !e.altKey && !e.metaKey) {
+        e.preventDefault()
+        return openCmd()
+      }
+      if (startsTyping(e.key, { ctrl: e.ctrlKey, alt: e.altKey, meta: e.metaKey }) && !(kbd && /^Arrow/.test(e.key))) {
+        e.preventDefault()
+        dispatch({ type: 'typing', on: true })
+        openCmd(e.key)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [ui.view, kbd, openCmd, dispatch])
+  // The power row: four one-tap actions you pick (kept on this PC).
+  const [power, setPower] = useState<PowerId[]>(() => {
+    try {
+      return cleanPower(JSON.parse(localStorage.getItem('ls.islandPower') || 'null'))
+    } catch {
+      return cleanPower(null)
+    }
+  })
+  const [powerEdit, setPowerEdit] = useState(false)
+  const savePower = (row: PowerId[]) => {
+    setPower(row)
+    try {
+      localStorage.setItem('ls.islandPower', JSON.stringify(row))
+    } catch {
+      /* fine */
+    }
+  }
+  const favAuto = (s.auto?.buttons ?? []).filter((b) => !b.fields.length).sort((x, y) => Number(y.fav) - Number(x.fav))[0]
+  const waterMl = prefs.chips.water[0] ?? 250
+  const powerTile = (id: PowerId): PowerTile => {
+    switch (id) {
+      case 'focus':
+        return run ? { id, icon: '⏹', label: 'Stop & log', sub: run.subject, on: true } : { id, icon: '▶', label: `Focus ${focusMin}`, sub: s.today ? `${s.today.focusMin} / ${s.today.focusGoal} min today` : 'Start a timer' }
+      case 'water':
+        return { id, icon: '💧', label: `+${waterMl} ml`, sub: `${(water.ml / 1000).toFixed(2).replace(/0$/, '')} / ${(water.target / 1000).toFixed(1)} L` }
+      case 'note':
+        return { id, icon: '📝', label: 'Quick note', sub: 'Into your notebook' }
+      case 'task':
+        return { id, icon: '✅', label: 'Add task', sub: 'To Todoist' }
+      case 'auto':
+        return favAuto ? { id, icon: favAuto.icon || '⚡', label: favAuto.name, sub: favAuto.fav ? 'Favourite automation' : 'Automation' } : { id, icon: '⚡', label: 'Automation', sub: 'Pin one in Settings', off: true }
+      case 'reps':
+        return firstRep ? { id, icon: '💪', label: `+${repN} ${firstRep.name}`, sub: `${firstRep.done} / ${firstRep.target} today` } : { id, icon: '💪', label: 'Reps', sub: 'No exercise yet', off: true }
+      case 'music':
+        return sc.loaded ? { id, icon: sc.playing ? '⏸' : '▶', label: sc.playing ? 'Pause' : 'Play', sub: sc.title || sc.station?.name || 'Music', on: sc.playing } : { id, icon: '🎵', label: 'Music', sub: 'Open the Music page' }
+      case 'ben':
+        return { id, icon: s.ben.face, label: 'Ask Ben', sub: s.ben.busy ? 'Thinking…' : 'Type or talk' }
+      case 'quiet':
+        return { id, icon: '🌙', label: quiet ? 'Wake up' : 'Quiet 1 h', sub: quiet ? `Quiet until ${hhmm(q.until)}` : 'No reminders', on: quiet }
+    }
+  }
+  const doPower = (id: PowerId, el: HTMLElement) => {
+    bump(el, f, 1.05)
+    if (id === 'focus') return run ? tap({ kind: 'stop' }) : tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: focusMin })
+    if (id === 'water') return tap({ kind: 'water', ml: waterMl })
+    if (id === 'note' || id === 'task') return (setCapture(id === 'note' ? 'note' : true), openCmd())
+    if (id === 'auto' && favAuto) return tap({ kind: 'auto', op: 'run', id: favAuto.id }, favAuto.name)
+    if (id === 'reps' && firstRep) return tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n: repN })
+    if (id === 'music') return sc.loaded ? (islandSound('tap'), musicRun({ op: 'toggle' })) : window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'music' }))
+    if (id === 'ben') return openCmd()
+    if (id === 'quiet') return quiet ? setQuiet(null) : setQuiet(60)
+  }
+  // The Day page's hero: the greeting and today's numbers (they count up as the page opens).
+  const part = dayPart(now)
+  const greeting = part === 'morning' ? 'Good morning' : part === 'day' ? 'Good afternoon' : part === 'evening' ? 'Good evening' : 'Late night'
+  const mustDone = s.mustdos.filter((m) => m.done).length
+  const heroStats: HeroStat[] = [
+    ...(s.mustdos.length ? [{ id: 'must', label: 'Must-dos', value: mustDone, unit: `/${s.mustdos.length}`, pct: mustDone / s.mustdos.length, tone: 'lime' as const }] : []),
+    ...(water.target ? [{ id: 'water', label: 'Water', value: water.ml / 1000, decimals: 1, unit: 'L', pct: water.ml / water.target, tone: 'water' as const, onTap: () => tap({ kind: 'water', ml: waterMl }) }] : []),
+    ...(s.today ? [{ id: 'focus', label: 'Focus', value: s.today.focusMin, unit: 'min', pct: s.today.focusMin / Math.max(1, s.today.focusGoal), tone: 'violet' as const }] : []),
+    ...(!s.today && pts ? [{ id: 'pts', label: 'Points', value: pts.balance, pct: pts.goal ? pts.balance / pts.goal.price : 0, tone: 'gold' as const }] : [])
+  ].slice(0, 3)
+  const heroSub = (
+    <>
+      {new Date(now).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
+      {s.streak && s.streak.days > 1 ? <span className="dw-streak"> · 🔥 {s.streak.days}-day {s.streak.kind} streak</span> : null}
+    </>
+  )
+  const alertCard = a ? (
+    <section className={`di-alert kind-${a.kind}`}>
+      {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
+      <div className="di-alert-top">
+        <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
+        <b>{a.title}</b>
+      </div>
+      <p>{a.kind === 'ben' ? <TypeIn key={a.id} text={a.text} /> : a.text}</p>
+      {a.nudge ? (
+        <IslandNudgeCard a={a} tap={tap} onRun={startNudgeRun} sound={false} volume={prefs.volume} />
+      ) : (
+        <div className="di-actions">
+          {a.actions.map((x) => (
+            <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`alert:${x.label}`, () => tap(x.action, x.label))}>{x.label}</button>
           ))}
         </div>
       )}
-      <form
-        className="di-cmd"
-        onSubmit={(e) => {
-          e.preventDefault()
-          chat()
+    </section>
+  ) : null
+  const placeholder = capture === 'note' ? 'A quick note for your notebook · Enter saves · Esc cancels' : capture ? 'Add a task: call bank friday 10:00 · Esc to cancel' : 'Log, ask Ben, or go anywhere: water 500 · 30 pushups · music'
+  const total = palSugg.length + palList.length
+  const cmdForm = (
+    <form
+      className="di-cmd"
+      onSubmit={(e) => {
+        e.preventDefault()
+        chat()
+      }}
+    >
+      <span className="di-cmd-ico" aria-hidden>
+        {capture === 'note' ? '📝' : capture ? '✅' : <svg width="17" height="17" viewBox="0 0 16 16"><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.7" /><path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" /></svg>}
+      </span>
+      <input
+        ref={input}
+        value={text}
+        onChange={(e) => (setText(e.target.value), uiRef.current.typing || dispatch({ type: 'typing', on: true }))}
+        placeholder={placeholder}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            e.stopPropagation()
+            closeCmd()
+            return
+          }
+          if (total && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+            e.preventDefault()
+            setSel((i) => moveChoice(i, total, e.key === 'ArrowDown' ? 1 : -1))
+          }
         }}
-      >
-        <input
-          ref={input}
-          value={text}
-          onChange={(e) => (setText(e.target.value), uiRef.current.typing || dispatch({ type: 'typing', on: true }))}
-          placeholder={capture ? 'Add a task: call bank friday 10:00 · Esc to cancel' : 'spent 40 taxi · water 500 · 30 pushups · ask Ben'}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setCapture(false)
-            if (sugg.length && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
-              e.preventDefault()
-              setSel((i) => moveChoice(i, sugg.length, e.key === 'ArrowDown' ? 1 : -1))
-            }
-          }}
-          onPointerDown={() => desk()?.islandFocus?.()}
-          onFocus={() => dispatch({ type: 'typing', on: true })}
-          onBlur={() => dispatch({ type: 'typing', on: !!text.trim() })}
-        />
-        <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), islandVoiceOn() ? void window.dispatchEvent(new Event('island-voice-ptt')) : void startRec())} onPointerUp={stopRec} onPointerLeave={stopRec}>
-          {rec ? '●' : '🎤'}
-        </button>
-        <button type="button" className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send" {...tp('send', () => chat())}>↑</button>
-      </form>
-      <Suggest list={sugg} sel={sel} onPick={runSuggestion} />
-      <div className="di-chips">
-        {prefs.chips.water.map((ml) => (
-          <button key={`w${ml}`} {...tp(`chip:w${ml}`, (t) => (tap({ kind: 'water', ml }), bump(t.el, f)))}>💧 +{ml} ml</button>
-        ))}
-        {firstRep && prefs.chips.reps.map((n) => (
-          <button key={`r${n}`} {...tp(`chip:r${n}`, (t) => (tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n }), bump(t.el, f)))}>💪 +{n} {firstRep.name}</button>
-        ))}
-        {!run && prefs.chips.focus.map((m) => (
-          <button key={`f${m}`} {...tp(`chip:f${m}`, () => tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: m }))}>▶ Focus {m}</button>
-        ))}
-        {run && <button {...tp('chip:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>}
-      </div>
-
-      {a && (
-        <section className={`di-alert kind-${a.kind}`}>
-          {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
-          <div className="di-alert-top">
-            <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
-            <b>{a.title}</b>
+        onPointerDown={() => desk()?.islandFocus?.()}
+        onFocus={() => dispatch({ type: 'typing', on: true })}
+        onBlur={() => dispatch({ type: 'typing', on: !!text.trim() })}
+      />
+      <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), islandVoiceOn() ? void window.dispatchEvent(new Event('island-voice-ptt')) : void startRec())} onPointerUp={stopRec} onPointerLeave={stopRec}>
+        {rec ? '●' : '🎤'}
+      </button>
+      <button type="button" className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send" {...tp('send', () => chat())}>↑</button>
+    </form>
+  )
+  const benStatus = s.ben.busy ? 'thinking…' : s.ben.why ? `${s.ben.mood} · ${s.ben.why}` : s.ben.mood
+  const expanded = (
+    <div className={`di-panel ${cmdOpen ? 'has-pal' : ''}`} ref={panelEl} role="dialog" aria-label="Life System command center" tabIndex={-1}>
+      <IslandBeatGlow />
+      <IslandPager
+        snap={s}
+        tap={tap}
+        now={now}
+        profile={(basePrefs as { profile?: string }).profile ?? null}
+        topProps={dragProps}
+        left={
+          <span className={`di-me mood-${s.ben.mood} ${s.ben.busy ? 'busy' : ''}`} title={`Ben: ${benStatus}`}>
+            <span className="di-face">{s.ben.face}</span>
+            <i className="di-me-dot" aria-hidden />
+          </span>
+        }
+        right={
+          <div className="di-top-acts">
+            <button className="di-icon di-search-btn" {...tp('head:search', () => openCmd())} title="Search, log or ask Ben ( / )" aria-label="Open the palette">
+              <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden><circle cx="7" cy="7" r="5" fill="none" stroke="currentColor" strokeWidth="1.8" /><path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /></svg>
+              <kbd>/</kbd>
+            </button>
+            <button className={`di-icon ${quietMenu || quiet ? 'on' : ''}`} {...tp('head:quiet', () => (quiet ? setQuiet(null) : setQuietMenu((x) => !x)))} title={quiet ? `Quiet until ${new Date(q.until).toTimeString().slice(0, 5)}: wake now` : 'Quiet for a while'}>🌙</button>
+            <button className={`di-icon ${ui.pinned ? 'on' : ''}`} {...tp('head:pin', () => dispatch({ type: 'pin' }))} title={ui.pinned ? 'Unpin' : 'Keep open'}>📌</button>
+            <button className="di-icon" {...tp('head:app', () => (desk()?.showApp?.(), close()))} title="Open Life System">⤢</button>
+            <button className="di-icon" {...tp('head:close', close)} aria-label="Close" title="Close (Esc)">✕</button>
           </div>
-          <p>{a.kind === 'ben' ? <TypeIn key={a.id} text={a.text} /> : a.text}</p>
-          {a.nudge ? (
-            <IslandNudgeCard a={a} tap={tap} onRun={startNudgeRun} sound={false} volume={prefs.volume} />
-          ) : (
-            <div className="di-actions">
-              {a.actions.map((x) => (
-                <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`alert:${x.label}`, () => tap(x.action, x.label))}>{x.label}</button>
-              ))}
-            </div>
+        }
+        below={
+          <>
+            {old && <p className="di-reconnect-line">Reconnecting… this is from {hhmm(s.at)}</p>}
+            {quietMenu && !quiet && (
+              <div className="di-quiet">
+                <span>Quiet for</span>
+                {([[30, '30 min'], [60, '1 hour'], [120, '2 hours'], ['tomorrow', 'until tomorrow']] as const).map(([c, label]) => (
+                  <button key={String(c)} {...tp(`quiet:${c}`, () => (setQuietMenu(false), setQuiet(c)))}>{label}</button>
+                ))}
+              </div>
+            )}
+            {a && (
+              // Something waits on the Day page: a strip on every other page takes you there.
+              <button className="di-alert-strip" {...tp('alert:strip', () => window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'day' })))}>
+                <i aria-hidden />
+                <span>{a.face ?? '●'}</span>
+                <b>{a.title}</b>
+                <small>Open on Day</small>
+              </button>
+            )}
+          </>
+        }
+        day={<>
+          <DayHero greeting={greeting} sub={heroSub} stats={heroStats} />
+          <PowerRow tiles={power.map(powerTile)} editing={powerEdit} onTap={doPower} onCycle={(i) => savePower(cyclePower(power, i))} onEdit={setPowerEdit} />
+          {alertCard}
+          {s.doing && (
+            // SI1: what Ben thinks you're doing (a kind, never a title); tap to fix it.
+            <button className="di-doing" title="That's not right? Tap to fix" {...tp('doing', () => tap({ kind: 'ctxFix', app: s.doing!.app }))}>
+              {s.doing.icon} {s.doing.label}
+              {s.doing.detail ? ` · ${s.doing.detail}` : ''}
+            </button>
           )}
-        </section>
-      )}
-      {/* PL6: pages (Day, Music, Home, PC, Fun…): swipe, Shift + wheel, Ctrl+← → or the dots. */}
-      <IslandPager snap={s} tap={tap} now={now} profile={(basePrefs as { profile?: string }).profile ?? null} day={<>
-        {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
-        {/* Island 2: your tiles and buttons, today's strip, music, the clipboard tray, the file shelf. */}
-        <KitTiles k={k} s={s} />
-        <IslandAutomations s={s} tap={tap} />
-        <MiniCalendar s={s} tap={tap} now={now} />
-        <MusicPanel k={k} />
-        <ClipTray k={k} tap={tap} />
-        <FileShelf k={k} tap={tap} />
-      </>} />
-      {/* IC17: edit what the pill shows, like a phone's home screen. */}
-      {editing ? (
-        <PillEditor order={prefs.pillOrder} onChange={savePillOrder} onDone={() => setEditing(false)} />
-      ) : (
-        <button className="di-edit-open" {...tp('edit:open', () => setEditing(true))}>✎ Edit the pill</button>
+          {/* AU1: what's playing (only with that switch on in PC & automation). */}
+          <IslandMedia />
+          <div className="di-chips">
+            {prefs.chips.water.map((ml) => (
+              <button key={`w${ml}`} {...tp(`chip:w${ml}`, (t) => (tap({ kind: 'water', ml }), bump(t.el, f)))}>💧 +{ml} ml</button>
+            ))}
+            {firstRep && prefs.chips.reps.map((n) => (
+              <button key={`r${n}`} {...tp(`chip:r${n}`, (t) => (tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n }), bump(t.el, f)))}>💪 +{n} {firstRep.name}</button>
+            ))}
+            {!run && prefs.chips.focus.map((m) => (
+              <button key={`f${m}`} {...tp(`chip:f${m}`, () => tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: m }))}>▶ Focus {m}</button>
+            ))}
+            {run && <button {...tp('chip:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>}
+          </div>
+          {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
+          {/* Island 2: your tiles and buttons, today's strip, music, the clipboard tray, the file shelf. */}
+          <KitTiles k={k} s={s} />
+          <IslandAutomations s={s} tap={tap} />
+          <MiniCalendar s={s} tap={tap} now={now} />
+          <MusicPanel k={k} />
+          <ClipTray k={k} tap={tap} />
+          <FileShelf k={k} tap={tap} />
+          {/* IC17: edit what the pill shows, like a phone's home screen. */}
+          {editing ? (
+            <PillEditor order={prefs.pillOrder} onChange={savePillOrder} onDone={() => setEditing(false)} />
+          ) : (
+            <button className="di-edit-open" {...tp('edit:open', () => setEditing(true))}>✎ Edit the pill</button>
+          )}
+        </>}
+      />
+      {cmdOpen && (
+        <Palette
+          form={cmdForm}
+          sugg={palSugg}
+          items={palList}
+          sel={sel}
+          note={capture === 'note' ? 'Saved to Notebook → Notes' : capture ? 'Saved to Todoist (a date or time in the text works)' : undefined}
+          onPickSuggestion={runSuggestion}
+          onPickItem={runPalette}
+          onClose={closeCmd}
+        />
       )}
       <PanelCorner root={rootEl} scale={scale} />
     </div>
@@ -2140,12 +2379,14 @@ export function DesktopIsland() {
               ['--di-pill-h' as string]: `${prefs.pillHeight}px`,
               ['--di-peek-w' as string]: `${prefs.peekWidth}px`,
               ['--di-panel-w' as string]: `${prefs.panelWidth}px`,
+              // The glow follows the music's colour while something plays.
+              ...(sc.playing ? { ['--mu-aura' as string]: `${muTint.rgb.r} ${muTint.rgb.g} ${muTint.rgb.b}` } : {}),
               // IN39: the panel's own height on this screen (drag its corner).
               ...((prefs as { panelMaxH?: number }).panelMaxH ? { ['--di-panel-maxh' as string]: `${(prefs as { panelMaxH?: number }).panelMaxH}px` } : {}),
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, bar && !ui.over)}`}
+            className={`di at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, bar && !ui.over)} ${sc.playing ? 'has-music' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -2165,9 +2406,10 @@ export function DesktopIsland() {
                   data-view={ui.view}
                   className={`di-view di-v-${ui.view}`}
                   // IA4: opacity and scale only (no blur): cheap and crisp.
-                  initial={f.mode === 'off' ? false : { opacity: 0 }}
-                  animate={{ opacity: 1, transition: f.fadeIn }}
-                  exit={{ opacity: 0, scale: f.moves ? 0.97 : 1, transition: f.fadeOut }}
+                  // The panel grows out of the notch: its content starts a little smaller and rises into place.
+                  initial={f.mode === 'off' ? false : ui.view === 'expanded' && f.moves ? { opacity: 0, scale: 0.94, y: -8 } : { opacity: 0 }}
+                  animate={{ opacity: 1, scale: 1, y: 0, transition: ui.view === 'expanded' && f.moves ? { ...f.open, opacity: f.fadeIn } : f.fadeIn }}
+                  exit={{ opacity: 0, scale: f.moves ? (ui.view === 'expanded' ? 0.97 : 0.94) : 1, y: f.moves && ui.view !== 'expanded' ? -10 : 0, transition: f.fadeOut }}
                 >
                   {views[ui.view]}
                 </motion.div>

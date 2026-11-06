@@ -167,6 +167,7 @@ export const SETTINGS = {
   focus_running: json<FocusRunning | null>('the focus session running now, or null', null),
   focus_ratings: json<unknown[]>('how each focus session felt', []),
   block_marks: json<Record<string, unknown> | null>('calendar blocks marked done / skipped', null),
+  block_kinds: json<Record<string, unknown> | null>('calendar items you set as an event or a focus block (by title)', null),
   blocks_settled_day: text('day the blocks were last settled'),
   cal_templates: json<unknown[]>('saved calendar templates', []),
   today_order: json<unknown[]>("the order of Today's cards", []),

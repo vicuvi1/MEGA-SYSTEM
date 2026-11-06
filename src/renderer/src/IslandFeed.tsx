@@ -8,6 +8,8 @@ import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, ty
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert } from '@core/islandSmart'
 import { morningAlert, waterAlert, windDown, windDownAlert } from '@core/islandBody'
+import { wakeLoggedToday } from '@core/sleep'
+import { blockKindOf, type BlockKinds } from '@core/blockKind'
 import { nudgeAct, nudgeIdle, nudgeTick, nudgeWater, nudgeYes } from './islandNudgesFeed'
 import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/islandActions'
 import { dayHighlight, highlightAlert, rewardAlert } from '@core/islandFeel'
@@ -256,6 +258,9 @@ const put = (k: string, v: unknown) => {
 async function todayBlocks(): Promise<IslandBlock[]> {
   const d = new Date()
   const day = calendarDay(d)
+  // Event or focus block (your choice per title wins), and today's ✓ marks (the same as the Today timeline's).
+  const [kinds, marks] = await Promise.all([life.timeline?.kinds?.().catch(() => ({})) ?? {}, life.timeline?.marks(day).catch(() => ({})) ?? {}])
+  const typed = (b: IslandBlock, ours?: boolean): IslandBlock => ({ ...b, kind: blockKindOf({ title: b.title, ours, call: b.call }, kinds as BlockKinds), mark: (b.id && (marks as Record<string, 'done' | 'skip'>)[b.id]) || null })
   const on = !!(await life.google?.status().catch(() => null))?.connected
   if (on) {
     const events = await life.google!.events(new Date(`${day}T00:00:00`).toISOString(), new Date(`${day}T23:59:59`).toISOString()).catch(() => [])
@@ -263,13 +268,13 @@ async function todayBlocks(): Promise<IslandBlock[]> {
     // a call link or other people make it a meeting (Q4, IS11); a maybe or an unanswered invite is greyed (IS6).
     const blocks = events
       .filter((e) => !e.allDay && !isDeclined(e) && !e.free && !isMarker(e))
-      .map((e): IslandBlock => ({ title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), id: e.id, calendarId: e.calendarId, call: isRealMeeting(e), meet: e.meet ?? null, ...(isInvite(e) ? { maybe: 'invite' as const } : isTentative(e) ? { maybe: 'tentative' as const } : {}) }))
+      .map((e): IslandBlock => typed({ title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), id: e.id, calendarId: e.calendarId, call: isRealMeeting(e), meet: e.meet ?? null, ...(isInvite(e) ? { maybe: 'invite' as const } : isTentative(e) ? { maybe: 'tentative' as const } : {}) }, e.ours))
       .filter((b) => Number.isFinite(b.start) && Number.isFinite(b.end))
     if (blocks.length) return blocks
   }
   const rh = await life.coach?.rhythm?.('state').catch(() => null)
   const plan = rh?.state?.briefing?.plan?.blocks ?? []
-  return blocksFromPlan(plan, d)
+  return blocksFromPlan(plan, d).map((b) => typed(b))
 }
 
 let listening = false
@@ -493,7 +498,7 @@ export function IslandFeed() {
         const logs = sleep?.recentLogs ?? []
         const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
         const wd = busy ? null : windDown(now, target, bedLoggedTonight(logs, new Date(now)))
-        const wakeLogged = !!sleep?.todayLog && sleep.todayLog.createdAt.slice(0, 10) === sleep.today && sleep.todayLog.wakeTime !== '07:00'
+        const wakeLogged = wakeLoggedToday(sleep?.todayLog, sleep?.today ?? '')
         const first = get<{ day: string; at: number } | null>(FIRST, null)
         const firstBlock = blocks.current.list.filter((b) => b.end > now).sort((x, y) => x.start - y.start)[0] ?? null
         const body = { now, busy, idleSec, activeSince, water: { ml: localWater, target: status.today.waterTarget || WATER_TARGET_ML }, lastWaterAt: get<number>(LAST_WATER, 0), lastMoveAt: get<number>(LAST_MOVE, 0), lastEyesAt: get<number>(LAST_EYES, 0), eyeBreaks: get<boolean>(EYES, false), dismissed, doing: doingForBreaks(now) }
@@ -501,7 +506,7 @@ export function IslandFeed() {
         const suggestion = () => {
           if (call) return null
           const last = [...(focus.todaySessions ?? [])].filter((x) => x.endedAt).sort((x, y) => Date.parse(y.endedAt!) - Date.parse(x.endedAt!))[0]
-          const unfinished = blocks.current.list.filter((b) => !b.call && !b.maybe && b.start < now && b.end - b.start >= 15 * 60_000 && !answered[blockKey(b)])
+          const unfinished = blocks.current.list.filter((b) => !b.call && !b.maybe && b.kind !== 'event' && b.start < now && b.end - b.start >= 15 * 60_000 && !answered[blockKey(b)])
           const sg = smartSuggestion({ now, blocks: blocks.current.list, running: !!running, mustdos: status.mustdos, goals: focus.goals.flatMap((g) => [g.title, g.subject]), windDown: wd, last: last ? { subject: last.subject, endedAt: Date.parse(last.endedAt!) } : null, bedLogged: bedLoggedTonight(logs, new Date(now)), unfinished })
           return sg && (dismissed[sg.id] ?? 0) > now ? null : sg
         }
@@ -530,7 +535,7 @@ export function IslandFeed() {
           suggestion() ??
           (running ? null : lateAlert(now, target, dismissed)) ??
           windDownAlert(wd, now, dismissed) ??
-          (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, firstBlock, dismissed })) ??
+          (busy ? null : morningAlert({ now, firstActiveAt: first?.day === localDayOf(now) ? first.at : null, wakeLogged, wakeTime: sleep?.todayLog?.wakeTime ?? null, firstBlock, blockStarted: blocks.current.list.some((b) => !b.maybe && !b.call && b.start <= now && localDayOf(b.start) === localDayOf(now)), dismissed })) ??
           moveCardAlert(moveAsk, now, dismissed) ??
           // LF1 / LF2: rain in 30 minutes, the light going (weather plugin).
           (call ? null : weatherAlert(now, dismissed, busy)) ??
@@ -576,7 +581,7 @@ export function IslandFeed() {
         const d = new Date(now)
         const logs = sleep?.recentLogs ?? []
         const target = sleep?.todayLog?.bedTarget ?? logs.find((l) => l.bedTarget)?.bedTarget ?? '23:00'
-        const wakeLogged = !!sleep?.todayLog && sleep.todayLog.createdAt.slice(0, 10) === sleep.today && sleep.todayLog.wakeTime !== '07:00'
+        const wakeLogged = wakeLoggedToday(sleep?.todayLog, sleep?.today ?? '')
         return { bed: showBedButton(d, target, bedLoggedTonight(logs, d)), wake: showWakeButton(d, wakeLogged), target }
       })(),
       money: moneyCache.v,
@@ -732,6 +737,30 @@ export function IslandFeed() {
             const day = localDayOf(a.block.start)
             await life.dayLog?.addBlock(day, { at: new Date().toISOString(), title: a.block.title, result: a.result }).catch(() => {})
             if (a.block.id) await life.timeline?.mark(day, a.block.id, a.result === 'no' ? 'skip' : 'done').catch(() => {})
+            break
+          }
+          case 'eventMark': {
+            // The same ✓ as the Today timeline: marked here, it shows there (and back). No points: an event isn't measured.
+            const day = localDayOf(a.block.start)
+            const id = a.block.id ?? blockKey(a.block)
+            const prev = (((await life.timeline?.marks(day).catch(() => ({}))) ?? {}) as Record<string, 'done' | 'skip'>)[id] ?? null
+            await life.timeline?.mark(day, id, a.mark)
+            put(ANSWERED, { ...Object.fromEntries(Object.entries(get<Record<string, string>>(ANSWERED, {})).slice(-60)), [blockKey(a.block)]: a.mark ?? 'open' })
+            if (a.alertId) {
+              const d = get<Record<string, number>>(DISMISSED, {})
+              d[a.alertId] = Date.now() + 7 * 864e5
+              put(DISMISSED, d)
+            }
+            if (a.mark) rememberUndo(a.id, { kind: 'eventMark', day, block: id, prev })
+            blocks.current = { ...blocks.current, at: 0, list: blocks.current.list.map((b) => ((b.id ?? blockKey(b)) === id ? { ...b, mark: a.mark } : b)) }
+            said = a.mark === 'done' ? `✓ ${a.block.title}` : a.mark === 'skip' ? `${a.block.title}: didn't go` : `${a.block.title}: back to open`
+            break
+          }
+          case 'blockKind': {
+            if (!life.timeline?.setKind) throw new Error('This needs the newest version')
+            await life.timeline.setKind(a.title, a.to)
+            blocks.current = { ...blocks.current, at: 0 }
+            said = a.to === 'event' ? `📅 “${a.title.slice(0, 30)}” is an event now: ✓ Done, no timer` : `⏱ “${a.title.slice(0, 30)}” is a focus block now`
             break
           }
           case 'autoFocus':

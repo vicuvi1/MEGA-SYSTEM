@@ -35,4 +35,10 @@ describe('the island and your body', () => {
     expect(a?.actions[0].action).toEqual({ kind: 'wake', time: '07:42' })
     expect(morningAlert({ now: at('13:00'), firstActiveAt: at('12:30'), wakeLogged: false, firstBlock: null, dismissed: {} })).toBeNull()
   })
+  it('wake already logged (Telegram, Waky…): no "Up at" ask, just when you got up; gone once the first block began', () => {
+    const a = morningAlert({ now: at('07:50'), firstActiveAt: at('07:42'), wakeLogged: true, wakeTime: '06:36', firstBlock: { title: 'Deep block 1', start: at('08:00') }, dismissed: {} })
+    expect(a?.text).toBe('Up at 06:36. First up: Deep block 1 at 08:00.')
+    expect(a?.actions.some((x) => x.action.kind === 'wake')).toBe(false)
+    expect(morningAlert({ now: at('08:10'), firstActiveAt: at('07:42'), wakeLogged: true, wakeTime: '06:36', firstBlock: null, blockStarted: true, dismissed: {} })).toBeNull()
+  })
 })

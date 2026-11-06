@@ -1,25 +1,32 @@
-/* PL6: the opened island's pages. Only transform and opacity move (the
-   motion budget); a page slides in once (200 ms) and stops. */
-.ip-pager { display: flex; flex-direction: column; gap: 10px; touch-action: pan-y; }
-.ip-dots { position: sticky; top: -12px; z-index: 2; display: flex; justify-content: center; gap: 4px; padding: 4px 0; background: var(--bg, transparent); }
-.ip-dots button { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px; border: 0; border-radius: 999px; background: transparent; color: var(--sub); font: inherit; font-size: 12px; cursor: pointer; opacity: 0.7; transition: opacity 0.15s ease, transform 0.12s ease; }
-.ip-dots button i { font-style: normal; display: none; }
-.ip-dots button.on { opacity: 1; color: var(--fg); background: rgb(var(--ink) / 0.08); }
-.ip-dots button.on i { display: inline; }
-.ip-dots button:hover { opacity: 1; }
-.ip-dots button:active { transform: scale(0.94); }
-.ip-page { display: flex; flex-direction: column; gap: 10px; min-height: 120px; }
-/* The carousel (BrimDeck-like): the old page slides out, the new one slides in; 260 ms, then still. */
-.ip-stage { position: relative; overflow: hidden; margin: 0 -12px; padding: 0 12px; }
-.ip-page.from-right { animation: ip-in-right 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.ip-page.from-left { animation: ip-in-left 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.ip-out { position: absolute; top: 0; left: 12px; right: 12px; pointer-events: none; }
-.ip-out.to-left { animation: ip-out-left 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
-.ip-out.to-right { animation: ip-out-right 0.26s cubic-bezier(0.22, 1, 0.36, 1) both; }
-@keyframes ip-in-right { from { opacity: 0.2; transform: translateX(100%); } to { opacity: 1; transform: none; } }
-@keyframes ip-in-left { from { opacity: 0.2; transform: translateX(-100%); } to { opacity: 1; transform: none; } }
-@keyframes ip-out-left { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(-100%); } }
-@keyframes ip-out-right { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateX(100%); } }
-.ip-empty { display: flex; flex-direction: column; gap: 4px; align-items: center; justify-content: center; text-align: center; padding: 24px 12px; border: 1px dashed var(--line); border-radius: 14px; color: var(--sub); }
-.ip-empty b { color: var(--fg); font-size: 13px; }
-.ip-empty small { font-size: 12px; max-width: 300px; }
+/* PL6: the opened island's pages, page-first (BrimDeck-like): a slim top bar
+   with tabs and a sliding indicator, then one page with the rest of the
+   height. Only transform and opacity move (the motion budget); the slides
+   themselves run as Web Animations in islandPages.tsx and then stop. */
+.ip-pager { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; touch-action: pan-y; }
+.ip-top { display: flex; align-items: center; gap: 8px; height: 44px; flex: none; padding: 0 2px 0 0; cursor: grab; touch-action: none; }
+.ip-solo { flex: 1; font-weight: 700; font-size: 15px; }
+.ip-dots { position: relative; flex: 1 1 auto; min-width: 0; display: flex; gap: 2px; padding: 3px; overflow-x: auto; scrollbar-width: none; border-radius: 999px; background: rgb(var(--ink) / 0.05); box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.05); scroll-behavior: smooth; }
+.ip-dots::-webkit-scrollbar { display: none; }
+/* Many pages: the tabs scroll, fading at the edges. */
+.ip-dots.over { -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent); mask-image: linear-gradient(90deg, transparent 0, #000 14px, #000 calc(100% - 22px), transparent); }
+.ip-dots button { position: relative; z-index: 1; flex: none; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 999px; background: transparent; color: var(--sub); font: inherit; font-size: 13px; font-weight: 600; letter-spacing: 0.01em; cursor: pointer; white-space: nowrap; transition: color 0.2s ease, transform 0.14s ease; }
+.ip-dots button > span { font-size: 14px; line-height: 1; }
+.ip-dots button i { font-style: normal; }
+.ip-dots button.on { color: var(--fg); }
+.ip-dots button:hover { color: var(--fg); }
+/* The indicator: one pill under the active tab, moved by transform. */
+.ip-ind { position: absolute; z-index: 0; top: 3px; left: 0; height: 30px; width: 60px; border-radius: 999px; background: rgb(var(--ink) / 0.12); box-shadow: 0 1px 0 rgb(var(--ink) / 0.08) inset, 0 4px 14px -6px var(--glow); transform-origin: left center; pointer-events: none; }
+.ip-ind::after { content: ''; position: absolute; left: 30%; right: 30%; bottom: -1px; height: 2px; border-radius: 2px; background: var(--lime); opacity: 0.9; }
+
+/* The stage: the page fills it and scrolls by itself. */
+.ip-stage { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; margin: 0 -16px; }
+.ip-page { position: relative; box-sizing: border-box; height: 100%; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: rgb(var(--ink) / 0.15) transparent; padding: 6px 16px 22px; display: flex; flex-direction: column; gap: 12px; transform-origin: 50% 30%; }
+.ip-page::-webkit-scrollbar { width: 6px; }
+.ip-page::-webkit-scrollbar-thumb { background: rgb(var(--ink) / 0.14); border-radius: 6px; }
+.ip-out { position: absolute; inset: 0; pointer-events: none; }
+/* The page fades out at the bottom edge instead of being cut. */
+.ip-stage::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 22px; background: linear-gradient(transparent, var(--bg)); pointer-events: none; z-index: 2; }
+html.ip-swiping, html.ip-swiping * { cursor: grabbing !important; user-select: none; }
+.ip-empty { display: flex; flex-direction: column; gap: 6px; align-items: center; justify-content: center; text-align: center; padding: 32px 16px; border: 1px dashed var(--line); border-radius: 18px; color: var(--sub); }
+.ip-empty b { color: var(--fg); font-size: 16px; }
+.ip-empty small { font-size: 13.5px; max-width: 340px; }

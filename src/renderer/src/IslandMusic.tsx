@@ -120,7 +120,7 @@ function RingArt({ size = 24 }: { size?: number }) {
 }
 
 /** The pill's now playing: the artwork in its progress ring, a small equalizer, and (if you want) the lyric line. */
-export function ScPillBadge({ music }: { music?: MusicKit }) {
+export function ScPillBadge({ music, title = false }: { music?: MusicKit; title?: boolean }) {
   const s = useSc()
   const tint = useTint(s, '#d4ff3f')
   const lines = useLyrics(s.title, s.artist, s.dur, !!music?.lyrics && !!music?.pillLyric && s.loaded)
@@ -133,7 +133,7 @@ export function ScPillBadge({ music }: { music?: MusicKit }) {
       <RingArt />
       <EqMode on={s.playing} mode={music?.eqMode ?? 'beat'} />
       {toast && <NowPlayingToast t={toast} />}
-      {lyric && <Scroller key={lyric} className="di-mp-lyric" text={lyric} />}
+      {toast ? null : lyric ? <Scroller key={lyric} className="di-mp-lyric" text={lyric} /> : title && (s.title || s.station.name) ? <Scroller key={s.title || s.station.name} className="di-mp-lyric di-mp-title" text={s.title || s.station.name} /> : null}
     </span>
   )
 }

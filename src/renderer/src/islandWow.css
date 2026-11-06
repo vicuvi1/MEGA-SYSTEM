@@ -1,0 +1,187 @@
+/* The opened island, page-first (BrimDeck-like): wide, calm and readable.
+   A slim top bar, then one page with the rest of the height; big titles and
+   numbers, 14–15 px body text. Theme-aware: everything uses the island's
+   variables (--bg, --fg, --sub, --ink, --lime, --glow), which the themes set.
+   Motion: transform and opacity only, Full / Calm / Off (.motion-*). */
+
+/* ---- the panel ---- */
+.di .di-panel {
+  width: var(--di-panel-w, 600px); height: min(var(--di-panel-maxh, 560px), 600px); max-height: none;
+  padding: 4px 16px 0; gap: 0; overflow: hidden; display: flex; flex-direction: column;
+  font-size: 14.5px; line-height: 1.45; outline: none;
+}
+.di .di-panel > .ip-pager { position: relative; z-index: 1; }
+.di .di-panel > .di-panel-corner { position: absolute; right: 6px; bottom: 6px; margin: 0; z-index: 5; }
+/* The aura: a soft glow in the accent (or the music's colour) around the opened panel, drawn once; only its opacity moves. */
+.di .di-shade > .di-glow { position: absolute; inset: 0; opacity: 0; box-shadow: 0 0 60px -6px var(--aura, var(--glow)), 0 30px 90px -30px var(--aura, var(--glow)); transition: opacity 0.5s ease; pointer-events: none; }
+.di.view-expanded .di-shade > .di-glow { opacity: 0.9; }
+.di.motion-off .di-shade > .di-glow { transition: none; }
+.di.has-music { --glow: rgb(var(--mu-aura) / 0.45); --aura: rgb(var(--mu-aura) / 0.55); }
+
+/* ---- the top bar ---- */
+.di-me { position: relative; flex: none; display: grid; place-items: center; }
+.di .di-me .di-face { width: 32px; height: 32px; font-size: 18px; box-shadow: 0 0 0 1px var(--line), 0 0 14px -4px var(--glow); }
+.di-me-dot { position: absolute; right: -1px; bottom: -1px; width: 9px; height: 9px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 0 2px var(--bg); }
+.di-me.mood-annoyed .di-me-dot { background: var(--amber); }
+.di-me.mood-angry .di-me-dot, .di-me.mood-furious .di-me-dot { background: var(--red); }
+.di-me.mood-chill .di-me-dot { background: #8cc8ff; }
+.di.motion-full .di-me.busy .di-me-dot { animation: dw-blink 1.1s ease-in-out infinite; }
+@keyframes dw-blink { 50% { opacity: 0.25; transform: scale(0.8); } }
+.di-top-acts { flex: none; display: flex; align-items: center; gap: 4px; }
+.di .di-top-acts .di-icon { width: 30px; height: 30px; font-size: 13px; background: transparent; }
+.di .di-top-acts .di-icon:hover, .di .di-top-acts .di-icon.on { background: rgb(var(--ink) / 0.1); }
+.di .di-top-acts .di-search-btn { width: auto; padding: 0 7px 0 9px; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--fg); background: rgb(var(--ink) / 0.07); border-radius: 999px; }
+.di-search-btn kbd, .dw-pal kbd { font: 600 10.5px/1 Geist, Inter, system-ui, sans-serif; padding: 3px 5px; border-radius: 5px; background: rgb(var(--ink) / 0.1); color: var(--sub); }
+.ip-pager[data-page='day'] .di-alert-strip { display: none; }
+.di-alert-strip { flex: none; display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; padding: 7px 12px; border: 0; border-radius: 14px; background: rgb(var(--ink) / 0.06); color: var(--fg); font: inherit; font-size: 13.5px; cursor: pointer; text-align: left; }
+.di-alert-strip i { width: 7px; height: 7px; border-radius: 50%; background: var(--lime); box-shadow: 0 0 10px var(--lime); }
+.di-alert-strip b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.di-alert-strip small { color: var(--sub); }
+.di .di-quiet, .di .di-reconnect-line { flex: none; margin: 2px 0 8px; }
+
+/* ---- the Day page hero ---- */
+.dw-hero { display: grid; gap: 14px; padding: 4px 2px 2px; }
+.dw-hello h2 { margin: 0; font-size: 22px; line-height: 1.15; font-weight: 750; letter-spacing: -0.02em; }
+.dw-hello p { margin: 3px 0 0; color: var(--sub); font-size: 13.5px; }
+.dw-streak { color: var(--amber); }
+.dw-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 10px; }
+.dw-stat { position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 12px; align-items: center; padding: 14px 14px 12px; border: 0; border-radius: 20px; background: rgb(var(--ink) / 0.05); box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.05); color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.dw-stat .dw-ring { grid-row: 1 / 3; }
+.dw-num { display: flex; align-items: baseline; gap: 3px; min-width: 0; }
+.dw-num b { font-size: 32px; line-height: 1; font-weight: 750; letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.dw-num small { font-size: 14px; font-weight: 600; color: var(--sub); }
+.dw-lbl { font-size: 12.5px; font-weight: 600; color: var(--sub); letter-spacing: 0.02em; text-transform: uppercase; }
+.dw-ring .bg { fill: none; stroke: rgb(var(--ink) / 0.1); stroke-width: 4; }
+.dw-ring .fg { fill: none; stroke: var(--tone); stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset 0.9s cubic-bezier(0.22, 1, 0.36, 1); }
+.dw-stat.tone-lime { --tone: var(--lime); }
+.dw-stat.tone-water { --tone: var(--water-hi, #8fdcff); }
+.dw-stat.tone-gold { --tone: var(--gold, #ffd451); }
+.dw-stat.tone-violet { --tone: #b69cff; }
+.di.th-light .dw-stat.tone-violet, .di.th-ghlight .dw-stat.tone-violet { --tone: #7a52f4; }
+.di.th-light .dw-stat.tone-water, .di.th-ghlight .dw-stat.tone-water { --tone: #1f8de0; }
+
+/* ---- the power row ---- */
+.di .di-panel section.di-power { position: relative; padding: 0; background: none; box-shadow: none; }
+.dw-power-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.dw-tile { position: relative; display: grid; align-content: start; gap: 2px; min-height: 92px; padding: 14px 12px 12px; border: 0; border-radius: 20px; text-align: left; font: inherit; color: var(--fg); cursor: pointer; overflow: hidden;
+  background: linear-gradient(160deg, rgb(var(--ink) / 0.09), rgb(var(--ink) / 0.03)); box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.07); }
+.dw-tile::before { content: ''; position: absolute; inset: 0; border-radius: inherit; background: radial-gradient(120% 90% at 0% 0%, var(--tile, var(--glow)), transparent 60%); opacity: 0.55; pointer-events: none; }
+.dw-tile > * { position: relative; }
+.dw-tile-ico { font-size: 22px; line-height: 1; margin-bottom: 8px; }
+.dw-tile b { font-size: 14.5px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-tile small { font-size: 12px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-tile.on { box-shadow: inset 0 0 0 1.5px var(--lime); }
+.dw-tile:disabled { opacity: 0.45; cursor: default; }
+.dw-tile.p-focus { --tile: rgb(212 255 63 / 0.35); }
+.dw-tile.p-water { --tile: rgb(71 181 255 / 0.4); }
+.dw-tile.p-note { --tile: rgb(255 212 81 / 0.32); }
+.dw-tile.p-auto { --tile: rgb(182 156 255 / 0.4); }
+.dw-tile.p-reps { --tile: rgb(255 140 90 / 0.35); }
+.dw-tile.p-music { --tile: rgb(255 90 170 / 0.35); }
+.dw-tile.p-ben { --tile: rgb(140 200 255 / 0.35); }
+.dw-tile.p-quiet { --tile: rgb(120 140 255 / 0.4); }
+.dw-tile.p-task { --tile: rgb(90 220 150 / 0.35); }
+.dw-tile-cycle { position: absolute; top: 8px; right: 10px; font-style: normal; color: var(--sub); }
+.dw-power-edit { position: absolute; top: -30px; right: 0; border: 0; border-radius: 999px; padding: 3px 10px; background: transparent; color: var(--sub); font: inherit; font-size: 12.5px; cursor: pointer; opacity: 0; transition: opacity 0.2s ease; }
+.di-power:hover .dw-power-edit, .di-power.editing .dw-power-edit, .dw-power-edit:focus-visible { opacity: 1; }
+.di-power.editing .dw-power-edit { color: var(--lime); }
+.di.motion-full .di-power.editing .dw-tile { animation: di-wobble 0.28s ease-in-out infinite alternate; animation-delay: calc(var(--i, 0) * -70ms); }
+
+/* ---- bigger, calmer type inside the pages ---- */
+.di .di-panel section { border-radius: 22px; padding: 14px 16px; background: rgb(var(--ink) / 0.045); box-shadow: inset 0 0 0 1px rgb(var(--ink) / 0.05); }
+.di .di-panel .di-label { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 8px; }
+.di .di-panel .di-row { grid-template-columns: 56px 1fr auto; gap: 12px; }
+.di .di-panel .di-row .di-label { margin: 0; }
+.di .di-panel .di-block b { font-size: 16.5px; font-weight: 700; letter-spacing: -0.01em; }
+.di .di-panel .di-block small, .di .di-panel .di-auto { font-size: 13px; }
+.di .di-panel .di-check { padding: 9px 6px; gap: 12px; font-size: 15px; }
+.di .di-panel .di-check i { width: 22px; height: 22px; font-size: 12px; }
+.di .di-panel .di-task { font-size: 14.5px; }
+.di .di-panel .di-chips button { padding: 8px 14px; font-size: 13px; }
+.di .di-panel .di-alert { padding: 16px 18px; }
+.di .di-panel .di-alert-top { font-size: 17px; font-weight: 700; }
+.di .di-panel .di-alert-top span { font-size: 22px; }
+.di .di-panel .di-alert p { font-size: 14.5px; }
+.di .di-panel .di-actions button, .di .di-panel button.primary, .di .di-panel .di-go { padding: 9px 16px; font-size: 14px; }
+.di .di-panel .di-pts { font-size: 22px; }
+.di .di-panel .di-last { font-size: 14.5px; }
+.di .di-panel .di-edit-open { margin: 4px auto 0; font-size: 13px; }
+.di .di-panel .di-doing { font-size: 13px; padding: 5px 12px; }
+
+/* ---- the palette ---- */
+.dw-pal { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column; padding: 10px 12px; }
+.dw-pal-back { position: absolute; inset: 0; border: 0; padding: 0; margin: 0; background: rgb(0 0 0 / 0.45); cursor: default; }
+.di.th-light .dw-pal-back, .di.th-ghlight .dw-pal-back, .di.theme-light .dw-pal-back { background: rgb(240 242 248 / 0.6); }
+.dw-pal-box { position: relative; display: flex; flex-direction: column; gap: 8px; max-height: 100%; padding: 10px; border-radius: 22px; background: var(--bg); box-shadow: 0 20px 60px rgb(0 0 0 / 0.5), inset 0 0 0 1px rgb(var(--ink) / 0.1), 0 0 40px -10px var(--glow); overflow: hidden; transform-origin: top center; }
+.di.motion-full .dw-pal-box { animation: dw-pal-in 0.26s cubic-bezier(0.34, 1.3, 0.64, 1) both; }
+.di.motion-calm .dw-pal-box { animation: dw-fade 0.18s ease-out both; }
+.di.motion-full .dw-pal-back, .di.motion-calm .dw-pal-back { animation: dw-fade 0.2s ease-out both; }
+@keyframes dw-pal-in { from { opacity: 0; transform: translateY(-10px) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes dw-fade { from { opacity: 0; } to { opacity: 1; } }
+.dw-pal .di-cmd { align-items: center; gap: 8px; }
+.dw-pal .di-cmd input { padding: 13px 16px 13px 40px; font-size: 16px; background: rgb(var(--ink) / 0.07); }
+.dw-pal .di-cmd { position: relative; }
+.di-cmd-ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--sub); font-size: 17px; pointer-events: none; }
+.dw-pal-note { margin: -2px 6px 0; font-size: 12.5px; color: var(--sub); }
+.dw-pal .di-suggest { margin: 0; padding: 0; background: none; box-shadow: none; gap: 2px; }
+.dw-pal .di-suggest button { padding: 10px 12px; gap: 12px; border-radius: 14px; font-size: 14.5px; }
+.dw-pal .di-suggest button > span { width: 24px; text-align: center; font-size: 17px; }
+.dw-pal .di-suggest button b { font-weight: 650; }
+.dw-pal .di-suggest button.on { box-shadow: inset 3px 0 0 var(--lime); }
+.dw-pal .di-suggest button small { font-size: 12px; }
+.dw-pal-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; overflow-y: auto; min-height: 0; }
+.dw-pal-list button { width: 100%; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 0; border-radius: 14px; background: transparent; color: var(--fg); font: inherit; font-size: 14.5px; text-align: left; cursor: pointer; }
+.dw-pal-list button:hover, .dw-pal-list button.on { background: rgb(var(--ink) / 0.08); }
+.dw-pal-list button.on { box-shadow: inset 3px 0 0 var(--lime); }
+.dw-pal-ico { width: 24px; text-align: center; font-size: 17px; }
+.dw-pal-list b { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dw-pal-list small { color: var(--sub); font-size: 12px; }
+.dw-pal-keys { margin: 2px 6px 0; font-size: 12px; color: var(--sub); }
+.dw-pal-keys kbd { margin: 0 1px; }
+
+/* ---- motion: the open (staggered rise), hover lift, press squish, ripple, shimmer ---- */
+.di.motion-full.view-expanded .ip-top > *,
+.di.motion-full.view-expanded .ip-page:not(.ip-out) > :nth-child(-n + 7) { animation: dw-rise 0.46s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.di.motion-full.view-expanded .ip-top > :nth-child(2) { animation-delay: 40ms; }
+.di.motion-full.view-expanded .ip-top > :nth-child(3) { animation-delay: 80ms; }
+.di.motion-full.view-expanded .ip-page:not(.ip-out) > :nth-child(1) { animation-delay: 70ms; }
+.di.motion-full.view-expanded .ip-page:not(.ip-out) > :nth-child(2) { animation-delay: 110ms; }
+.di.motion-full.view-expanded .ip-page:not(.ip-out) > :nth-child(3) { animation-delay: 150ms; }
+.di.motion-full.view-expanded .ip-page:not(.ip-out) > :nth-child(4) { animation-delay: 190ms; }
+.di.motion-full.view-expanded .ip-page:not(.ip-out) > :nth-child(5) { animation-delay: 230ms; }
+.di.motion-full.view-expanded .ip-page:not(.ip-out) > :nth-child(6) { animation-delay: 260ms; }
+.di.motion-full.view-expanded .ip-page:not(.ip-out) > :nth-child(7) { animation-delay: 290ms; }
+.di.motion-calm.view-expanded .ip-page:not(.ip-out) > :nth-child(-n + 4) { animation: dw-fade 0.24s ease-out both; }
+@keyframes dw-rise { from { opacity: 0; transform: translateY(14px) scale(0.98); } to { opacity: 1; transform: none; } }
+.dw-power-grid > .dw-tile:nth-child(2) { animation-delay: 40ms; }
+.di.motion-full.view-expanded .dw-power-grid > .dw-tile { animation: dw-pop 0.5s cubic-bezier(0.34, 1.45, 0.64, 1) both; animation-delay: calc(140ms + var(--i, 0) * 45ms); }
+@keyframes dw-pop { from { opacity: 0; transform: translateY(10px) scale(0.9); } to { opacity: 1; transform: none; } }
+.di.motion-full .di-power.editing .dw-tile { animation: di-wobble 0.28s ease-in-out infinite alternate; }
+
+.di.motion-full :is(.dw-tile, .dw-stat, .di-panel section:not(.di-power):not(.di-alert)) { transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.2s ease; }
+.di.motion-full :is(.dw-tile, .dw-stat):hover { transform: translateY(-3px); }
+.di.motion-full .di-panel section:not(.di-power):not(.di-alert):hover { transform: translateY(-1px); }
+.di.motion-full :is(.dw-tile, .dw-stat):active { transform: translateY(0) scale(0.93); transition-duration: 0.08s; }
+.di.motion-calm :is(.dw-tile, .dw-stat):active { transform: scale(0.97); }
+.dw-tile:hover, .dw-stat:hover { background-color: rgb(var(--ink) / 0.08); }
+
+.dw-ripple { position: absolute; z-index: 7; width: 160px; height: 160px; border-radius: 50%; pointer-events: none; background: radial-gradient(circle, rgb(var(--ink) / 0.28), rgb(var(--ink) / 0) 70%); transform: translate(-50%, -50%) scale(0.15); opacity: 0; }
+
+/* A shimmer once when something is done (a must-do ticked, a log that went through). */
+.di .di-panel .di-check { position: relative; overflow: hidden; }
+.di.motion-full .di-panel .di-check.done::after,
+.di.motion-full .di-toast.ok::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(100deg, transparent 30%, rgb(var(--ink) / 0.22) 50%, transparent 70%); transform: translateX(-100%); animation: dw-shimmer 0.8s ease-out 1 both; }
+.di.motion-full .di-toast.ok { overflow: hidden; }
+@keyframes dw-shimmer { to { transform: translateX(100%); } }
+
+/* The exit: the panel's content fades up quickly as the shape closes. */
+.di-view.di-v-expanded { transform-origin: top center; }
+
+/* Events (a class, a commute): ✓ Done / Didn't go instead of a timer. */
+.di-ev-btns { display: inline-flex; gap: 6px; align-items: center; }
+.di .di-panel .di-ev-skip { border: 0; border-radius: 999px; padding: 9px 12px; background: rgb(var(--ink) / 0.08); color: var(--sub); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.di .di-panel .di-ev-mark { border: 0; border-radius: 999px; padding: 8px 14px; font: inherit; font-size: 13.5px; font-weight: 700; cursor: pointer; background: rgb(var(--ink) / 0.08); color: var(--sub); }
+.di .di-panel .di-ev-mark.done { background: rgb(212 255 63 / 0.16); color: var(--acc-text); }
+.di-ev-tick { width: 30px; height: 30px; border: 0; border-radius: 50%; background: transparent; box-shadow: inset 0 0 0 1.6px rgb(var(--ink) / 0.3); color: transparent; font: inherit; font-weight: 800; cursor: pointer; }
+.di-ev-tick:hover { color: var(--sub); }
+.di-ev-tick.on { background: var(--lime); box-shadow: none; color: #101300; }

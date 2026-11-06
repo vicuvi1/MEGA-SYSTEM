@@ -336,7 +336,7 @@ export function useKeyboardMode(o: { on: boolean; panel: () => HTMLElement | nul
       // In the command bar: only arrows with no suggestions (and nothing typed) leave it.
       if (inInput && (typing || opts.current.suggesting() || !/^Arrow(Down|Up)$/.test(e.key))) return
       if (document.activeElement instanceof HTMLInputElement && !inInput) return
-      const sections = [...p.querySelectorAll<HTMLElement>(':scope > section, :scope > .di-chips')]
+      const sections = [...p.querySelectorAll<HTMLElement>('.ip-page:not(.ip-out) > section, .ip-page:not(.ip-out) > .di-chips')]
       const cur = sections.findIndex((s) => s.contains(document.activeElement))
       const m = keyMove(e.key, inInput ? -1 : cur, sections.length)
       if (!m) return

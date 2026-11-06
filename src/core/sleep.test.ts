@@ -61,3 +61,18 @@ describe('a night belongs to its morning', () => {
     expect(bedNightDay('2026-11-04', 10)).toBe('2026-11-04')
   })
 })
+
+import { wakeLoggedToday } from './sleep'
+describe('a wake-up logged today, from anywhere', () => {
+  it('counts today’s row with a wake time, even when last night’s bedtime made the row', () => {
+    // Bed at 23:30 made today's row last night; "I'm up" on Telegram filled the wake time this morning.
+    expect(wakeLoggedToday({ day: '2026-11-06', wakeTime: '06:36' }, '2026-11-06')).toBe(true)
+    // A wake-up at exactly 07:00 is a real one too.
+    expect(wakeLoggedToday({ day: '2026-11-06', wakeTime: '07:00' }, '2026-11-06')).toBe(true)
+  })
+  it('a bedtime alone, or yesterday’s row, is no wake-up', () => {
+    expect(wakeLoggedToday({ day: '2026-11-06', wakeTime: '' }, '2026-11-06')).toBe(false)
+    expect(wakeLoggedToday({ day: '2026-11-05', wakeTime: '06:50' }, '2026-11-06')).toBe(false)
+    expect(wakeLoggedToday(null, '2026-11-06')).toBe(false)
+  })
+})

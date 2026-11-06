@@ -116,9 +116,15 @@ export function windDownAlert(w: { bedAt: string; minutesLeft: number } | null, 
   }
 }
 
-/** The first time at the PC today (05:00–12:00): wake-up, today's first block, Start my day. */
-export function morningAlert(o: { now: number; firstActiveAt: number | null; wakeLogged: boolean; firstBlock: { title: string; start: number } | null; dismissed: Record<string, number> }): IslandAlert | null {
+/**
+ * The first time at the PC today (05:00–12:00): wake-up, today's first block,
+ * Start my day. The one morning card: once a wake-up is logged for today
+ * (from anywhere: Telegram, Waky, the island, Ben) it never asks "Up at…?"
+ * again, it just says when you got up; and it goes once your first block has begun.
+ */
+export function morningAlert(o: { now: number; firstActiveAt: number | null; wakeLogged: boolean; wakeTime?: string | null; firstBlock: { title: string; start: number } | null; blockStarted?: boolean; dismissed: Record<string, number> }): IslandAlert | null {
   if (!o.firstActiveAt) return null
+  if (o.wakeLogged && o.blockStarted) return null
   const h = hour(o.now)
   if (h < 5 || h >= 12 || o.now - o.firstActiveAt > 3 * 3600_000) return null
   const id = `morning:${new Date(o.now).toDateString()}`
@@ -128,7 +134,9 @@ export function morningAlert(o: { now: number; firstActiveAt: number | null; wak
     id,
     kind: 'morning',
     title: 'Good morning ☀️',
-    text: `${o.firstBlock ? `First up: ${o.firstBlock.title} at ${hm(o.firstBlock.start)}. ` : 'Nothing planned yet. '}${o.wakeLogged ? '' : `Up since ${wake}?`}`,
+    text: o.wakeLogged
+      ? `${o.wakeTime ? `Up at ${o.wakeTime}. ` : ''}${o.firstBlock ? `First up: ${o.firstBlock.title} at ${hm(o.firstBlock.start)}.` : 'Nothing planned yet.'}`
+      : `${o.firstBlock ? `First up: ${o.firstBlock.title} at ${hm(o.firstBlock.start)}. ` : 'Nothing planned yet. '}Up since ${wake}?`,
     face: '🌅',
     actions: [
       ...(o.wakeLogged ? [] : [{ label: `☀️ Up at ${wake}`, action: { kind: 'wake' as const, time: wake }, primary: true }]),

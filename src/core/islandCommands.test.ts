@@ -204,8 +204,8 @@ describe('IC9, IC10, IC19', () => {
     expect(keyMove('ArrowDown', -1, 4)).toEqual({ focus: 0 })
     expect(keyMove('ArrowDown', 3, 4)).toEqual({ focus: 0 })
     expect(keyMove('ArrowUp', 0, 4)).toEqual({ focus: 3 })
-    expect(keyMove('3', 0, 4)).toEqual({ chip: 2 })
-    expect(keyMove('/', 0, 4)).toEqual({ command: true })
+    expect(keyMove('3', 0, 4)).toBeNull()
+    expect(keyMove('/', 0, 4)).toBeNull()
     expect(keyMove('x', 0, 4)).toBeNull()
   })
   it('only logs can be undone', () => {

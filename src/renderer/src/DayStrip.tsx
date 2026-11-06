@@ -12,9 +12,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { layoutDay } from '@core/calLayout'
 import { addBlockTask, blockTasks } from '@core/blockTasks'
-import { blockState, blockSubject, freeGaps, isFocusBlock, localDay, localHM, planKept, type BlockState, type CalEvent } from '@core/dayTime'
+import { blockState, blockSubject, freeGaps, localDay, localHM, planKept, type BlockState, type CalEvent } from '@core/dayTime'
 import type { TodoTask } from '@core/todoist'
 import { bookMinutes } from '@core/booking'
+import { blockKindOf, type BlockKind, type BlockKinds } from '@core/blockKind'
 import { life } from './bridge'
 import { useLive } from './live'
 import { useFocus } from './pages/Focus'
@@ -107,7 +108,19 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     const t = setInterval(() => setNow(Date.now()), 30_000)
     return () => clearInterval(t)
   }, [])
-  const loadMarks = () => void life.timeline?.marks(today).then(setMarks).catch(() => {})
+  // Event or focus block, your choice per title (the island reads the same setting).
+  const [kinds, setKinds] = useState<BlockKinds>({})
+  const loadMarks = () => {
+    void life.timeline?.marks(today).then(setMarks).catch(() => {})
+    void life.timeline?.kinds?.().then(setKinds).catch(() => {})
+  }
+  const isFocus = (e: CalEvent) => !e.allDay && blockKindOf({ title: e.title, ours: e.ours }, kinds) === 'focus'
+  const flipKind = async (b: Block, to: BlockKind) => {
+    setMenu(null)
+    const next = await life.timeline?.setKind?.(b.title, to).catch(() => null)
+    if (next) setKinds(next)
+    toast(to === 'event' ? `“${b.title}” is an event now: ✓ Done, no timer` : `“${b.title}” is a focus block now`, 'good')
+  }
   useEffect(loadMarks, [today])
   useLive(loadMarks, { external: true })
   // Open on now (an hour before it), not at 06:00.
@@ -139,7 +152,7 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     const id = b.event?.id ?? b.key
     const m = marks[id]
     if (m) return m === 'done' ? 'done' : 'skipped'
-    if (b.event && isFocusBlock(b.event)) return blockState(b.event.start, b.event.end, sessions, now, focus?.running ?? null).state
+    if (b.event && isFocus(b.event)) return blockState(b.event.start, b.event.end, sessions, now, focus?.running ?? null).state
     return b.end <= nowMin ? null : b.start <= nowMin ? 'now' : 'upcoming'
   }
   const kept = planKept(todayEvents.map((e) => stateOf({ key: `e:${e.id}`, title: e.title, start: 0, end: 0, color: '', event: e })).filter((s): s is BlockState => !!s))
@@ -180,8 +193,8 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   const shiftRest = (minutes: number) => {
     // Only your own blocks move (focus, study, must-dos you planned); lectures,
     // meetings and other people's events stay where they are (F2).
-    const later = blocks.filter((b) => b.event && b.start >= nowMin && isFocusBlock(b.event))
-    const fixed = blocks.filter((b) => b.event && b.start >= nowMin && !isFocusBlock(b.event)).length
+    const later = blocks.filter((b) => b.event && b.start >= nowMin && isFocus(b.event))
+    const fixed = blocks.filter((b) => b.event && b.start >= nowMin && !isFocus(b.event)).length
     if (!later.length) return toast(fixed ? 'Only meetings and classes left: those stay put' : 'Nothing left to shift today', 'info')
     const before = later.map((b) => ({ b, start: b.start, end: b.end }))
     for (const b of later) {
@@ -408,9 +421,16 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
               <button onClick={() => (move(b, b.start + 15, b.end + 15), setMenu(null))}>+15 min</button>
               <button onClick={() => (move(b, Math.max(START_H * 60, b.start - 15), b.end - 15), setMenu(null))}>−15 min</button>
               <button onClick={() => (move(b, b.start, b.end + 15), setMenu(null))}>Longer</button>
-              <button className="go" onClick={() => void startFocus(b)}>
-                ▶ Start
-              </button>
+              {b.event && (isFocus(b.event) ? (
+                <button onClick={() => void flipKind(b, 'event')}>📅 Treat as an event</button>
+              ) : (
+                <button onClick={() => void flipKind(b, 'focus')}>⏱ Treat as a focus block</button>
+              ))}
+              {(!b.event || isFocus(b.event)) && (
+                <button className="go" onClick={() => void startFocus(b)}>
+                  ▶ Start
+                </button>
+              )}
             </div>,
             document.body
           )

@@ -67,6 +67,15 @@ export function targetForDay(day: string, weekdayTarget: string, weekendTarget: 
   return isWeekend ? weekendTarget : weekdayTarget
 }
 
+/**
+ * Is a wake-up logged for this app day? Only today's row with a wake time
+ * counts, whoever wrote it (Telegram, Waky, the island, Ben). Never judged by
+ * when the row was made: a bedtime logged last night already made today's row.
+ */
+export function wakeLoggedToday(todayLog: Pick<SleepLog, 'day' | 'wakeTime'> | null | undefined, today: string): boolean {
+  return !!todayLog && todayLog.day === today && !!todayLog.wakeTime
+}
+
 export function computeSleepStats(
   logs: SleepLog[],
   today: string,

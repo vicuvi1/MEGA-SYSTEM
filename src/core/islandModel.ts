@@ -20,6 +20,10 @@ export interface IslandBlock {
   meet?: string | null
   /** IS6: you said "maybe", or haven't answered the invite yet: shown greyed, never "Now". */
   maybe?: 'tentative' | 'invite'
+  /** A focus block (the timer flow) or an event you go to (✓ Done / Didn't go, no timer): core/blockKind.ts. */
+  kind?: import('./blockKind').BlockKind
+  /** Today's ✓ / skip on it (the same marks as the Today timeline). */
+  mark?: import('./blockKind').BlockMark | null
 }
 
 /** Every tap gets an answer from the app window: done, or why not. */
@@ -59,6 +63,10 @@ export type IslandAction = { id?: string } & (
   | { kind: 'voice'; mime: string; data: string }
   | { kind: 'push'; block: IslandBlock; minutes: number }
   | { kind: 'blockResult'; block: IslandBlock; result: 'done' | 'half' | 'no'; alertId: string }
+  /** An event: ✓ Done, Didn't go, or back to open (null). Shared with the Today timeline's ✓. */
+  | { kind: 'eventMark'; block: IslandBlock; mark: 'done' | 'skip' | null; alertId?: string }
+  /** Treat this title (and later ones with the same title) as an event or a focus block. */
+  | { kind: 'blockKind'; title: string; to: 'event' | 'focus' }
   | { kind: 'autoFocus'; on: boolean }
   /** P3: "It's for this": this app counts as work from now on. */
   | { kind: 'pcWork'; app: string; alertId: string }
@@ -267,7 +275,22 @@ export function pickAlert(a: AlertInput): IslandAlert | null {
     if (starting) {
       const id = `blk:${starting.start}:${starting.title}`
       const minutes = Math.max(5, Math.min(90, Math.round((starting.end - Math.max(a.now, starting.start)) / 60000)))
-      if (!hidden(id))
+      const hmOf = (t: number) => new Date(t).toTimeString().slice(0, 5)
+      // An event (a class, a commute, a meeting): no timer to start, just ✓ Done (or Didn't go).
+      if (starting.kind === 'event' && !starting.mark && !hidden(id))
+        return {
+          id,
+          kind: 'block',
+          ...(starting.call ? { meeting: true } : {}),
+          title: `${starting.title} · ${hmOf(starting.start)}–${hmOf(starting.end)}`,
+          text: starting.start > a.now ? 'Starting in a minute.' : 'Starting now.',
+          actions: [
+            { label: '✓ Done', action: { kind: 'eventMark', block: starting, mark: 'done', alertId: id }, primary: true },
+            { label: "Didn't go", action: { kind: 'eventMark', block: starting, mark: 'skip', alertId: id } },
+            { label: 'Later', action: { kind: 'dismiss', id } }
+          ]
+        }
+      if (starting.kind !== 'event' && !hidden(id))
         return {
           id,
           kind: 'block',
@@ -407,7 +430,7 @@ export const DEFAULT_PILL_ORDER: { id: PillItem; on: boolean }[] = (['timer', 'n
 /** The quick picks for "Tucks away" (seconds the panel stays after the mouse leaves). */
 export const HIDE_SEC: Record<'fast' | 'normal' | 'slow', number> = { fast: 1, normal: 2, slow: 4 }
 /** What the size sliders allow (CSS px before the size setting) (IF3). */
-export const SIZE_LIMITS = { pillHeight: [28, 56], peekWidth: [320, 560], panelWidth: [380, 640] } as const
+export const SIZE_LIMITS = { pillHeight: [28, 56], peekWidth: [320, 560], panelWidth: [520, 720] } as const
 
 /** The reminder kinds you can turn on/off (P4). */
 export type AlertKindPref = 'meeting' | 'block' | 'water' | 'move' | 'eyes' | 'ben' | 'bed' | 'morning' | 'highlight' | 'reward' | 'over'
@@ -469,7 +492,7 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   idleLook: 'dot',
   pillHeight: 38,
   peekWidth: 400,
-  panelWidth: 460,
+  panelWidth: 600,
   motion: 'full',
   controls: DEFAULT_CONTROLS
 }
@@ -802,7 +825,7 @@ export function islandStep(ui: IslandUi, e: IslandUiEvent, hide: IslandPrefs['hi
 export const ISLAND_SHAPE = {
   compact: { radius: 19 },
   peek: { width: 400, radius: 28 },
-  expanded: { width: 460, maxHeight: 600, radius: 32 }
+  expanded: { width: 600, maxHeight: 600, radius: 30 }
 } as const
 
 // ---- One rule for every reminder (P1, P3, P4) ------------------------------

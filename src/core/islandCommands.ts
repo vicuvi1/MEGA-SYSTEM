@@ -56,12 +56,21 @@ export function quickButtons(a: Activity | null, s: IslandSnapshot, chips: Islan
     const b = s.next
     if (b.call && b.meet) return [{ id: 'q:join', label: '🎥 Join', action: { kind: 'join', url: b.meet }, primary: true }]
     if (b.call) return []
+    // An event (a class, a commute): nothing to start; ✓ once you're there.
+    if (b.kind === 'event') return b.mark ? [] : [{ id: 'q:evdone', label: '✓ Done', action: { kind: 'eventMark', block: b, mark: 'done' }, title: `${b.title}: mark it done` }]
     const minutes = Math.max(5, Math.min(90, Math.round((b.end - now) / MIN)))
     return [{ id: 'q:early', label: '▶ Start early', action: { kind: 'start', subject: b.title, minutes, flow: true }, primary: true, title: `Start ${b.title} now (${minutes} min)` }]
   }
   if (a.kind === 'now' && s.now) {
     const b = s.now
     if (b.call) return b.meet ? [{ id: 'q:join', label: '🎥 Join', action: { kind: 'join', url: b.meet }, primary: true }] : []
+    if (b.kind === 'event')
+      return b.mark
+        ? []
+        : [
+            { id: 'q:evdone', label: '✓ Done', action: { kind: 'eventMark', block: b, mark: 'done' }, primary: true, title: `${b.title}: mark it done` },
+            { id: 'q:evskip', label: "Didn't go", action: { kind: 'eventMark', block: b, mark: 'skip' }, title: 'Skip it for today' }
+          ]
     if (r) return []
     const minutes = Math.max(5, Math.min(90, Math.round((b.end - now) / MIN)))
     return [{ id: 'q:start', label: `▶ Start ${minutes}`, action: { kind: 'start', subject: b.title, minutes, flow: true }, primary: true }]
@@ -346,11 +355,19 @@ export function menuFor(a: Activity | null, s: IslandSnapshot, chips: IslandPref
     ]
   }
   const meeting = a.kind === 'now' ? s.now : a.kind === 'next' ? s.next : null
+  // Flip it: an event (✓ Done, no timer) or a focus block (the timer), remembered for this title.
+  const flip: MenuItem[] = meeting ? [meeting.kind === 'event' ? { id: 'm:asfocus', label: '⏱ Treat as a focus block', act: { kind: 'blockKind', title: meeting.title, to: 'focus' } } : { id: 'm:asevent', label: '📅 Treat as an event (✓ Done, no timer)', act: { kind: 'blockKind', title: meeting.title, to: 'event' } }] : []
   if (meeting?.call)
     return [
       { id: 'm:join', label: '🎥 Join', act: meeting.meet ? { kind: 'join', url: meeting.meet } : 'copyLink', disabled: !meeting.meet },
       { id: 'm:copy', label: '🔗 Copy link', act: 'copyLink', disabled: !meeting.meet },
       { id: 'm:mute', label: '🔕 Mute until it ends', act: 'mute' }
+    ]
+  if ((a.kind === 'now' || a.kind === 'next') && meeting?.kind === 'event')
+    return [
+      { id: 'm:evdone', label: meeting.mark === 'done' ? '↶ Not done' : '✓ Done', act: { kind: 'eventMark', block: meeting, mark: meeting.mark === 'done' ? null : 'done' } },
+      { id: 'm:evskip', label: "Didn't go", act: { kind: 'eventMark', block: meeting, mark: 'skip' }, disabled: meeting.mark === 'skip' },
+      ...flip
     ]
   if (a.kind === 'water')
     return [
@@ -359,7 +376,7 @@ export function menuFor(a: Activity | null, s: IslandSnapshot, chips: IslandPref
     ]
   if ((a.kind === 'now' || a.kind === 'next') && meeting && !r) {
     const minutes = Math.max(5, Math.min(90, Math.round((meeting.end - Math.max(Date.now(), meeting.start)) / MIN)))
-    return [{ id: 'm:start', label: `▶ Start ${meeting.title.slice(0, 30)}`, act: { kind: 'start', subject: meeting.title, minutes, flow: true } }]
+    return [{ id: 'm:start', label: `▶ Start ${meeting.title.slice(0, 30)}`, act: { kind: 'start', subject: meeting.title, minutes, flow: true } }, ...flip]
   }
   if (a.kind === 'ben') return [{ id: 'm:open', label: 'Open the chat', act: { kind: 'open', page: 'coach' } }]
   return []
@@ -401,10 +418,9 @@ export function classifyDrop(d: { uris?: string[]; text?: string; files?: { name
 
 // ---- IC9: keyboard moves ----------------------------------------------------------
 
-/** Arrow keys between sections (wraps); 1–9 fires that chip (index), '/' jumps to the command bar. */
+/** Arrow keys between sections (wraps), Home and End. */
 export function keyMove(key: string, i: number, n: number): { focus?: number; chip?: number; command?: true } | null {
-  if (key === '/') return { command: true }
-  if (/^[1-9]$/.test(key)) return { chip: Number(key) - 1 }
+  // "/" (the palette) and 1–9 (pages) belong to the opened island's pager now.
   if (!n) return null
   if (key === 'ArrowDown' || key === 'ArrowRight') return { focus: i < 0 ? 0 : (i + 1) % n }
   if (key === 'ArrowUp' || key === 'ArrowLeft') return { focus: i < 0 ? n - 1 : (i - 1 + n) % n }
@@ -420,10 +436,10 @@ export const UNDO_SHOW_MS = 5000
 export const UNDO_KEEP_MS = 60_000
 /** Taps that log something that can be taken back. */
 export function canUndo(a: IslandAction): boolean {
-  return a.kind === 'water' || a.kind === 'reps' || a.kind === 'mustdo' || a.kind === 'extend' || a.kind === 'start' || a.kind === 'moveBreak' || (a.kind === 'nudge' && a.op.op === 'move')
+  return a.kind === 'water' || a.kind === 'reps' || a.kind === 'mustdo' || a.kind === 'extend' || a.kind === 'start' || a.kind === 'moveBreak' || (a.kind === 'nudge' && a.op.op === 'move') || (a.kind === 'eventMark' && !!a.mark)
 }
 export function undoLabel(a: IslandAction): string {
-  return a.kind === 'water' ? `+${a.ml} ml` : a.kind === 'reps' ? `+${a.n} ${a.name}` : a.kind === 'mustdo' ? 'the must-do' : a.kind === 'extend' ? `+${a.minutes} min` : a.kind === 'start' ? 'the timer' : a.kind === 'moveBreak' ? `+${a.n} ${a.name}` : a.kind === 'nudge' && a.op.op === 'move' ? `+${a.op.n} ${a.op.name}` : 'that'
+  return a.kind === 'eventMark' ? (a.mark === 'skip' ? "didn't go" : 'done') : a.kind === 'water' ? `+${a.ml} ml` : a.kind === 'reps' ? `+${a.n} ${a.name}` : a.kind === 'mustdo' ? 'the must-do' : a.kind === 'extend' ? `+${a.minutes} min` : a.kind === 'start' ? 'the timer' : a.kind === 'moveBreak' ? `+${a.n} ${a.name}` : a.kind === 'nudge' && a.op.op === 'move' ? `+${a.op.n} ${a.op.name}` : 'that'
 }
 
 // ---- IC19: fade while you type in another app --------------------------------------

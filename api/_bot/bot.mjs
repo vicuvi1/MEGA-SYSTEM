@@ -1905,6 +1905,7 @@ var SETTINGS = {
 	focus_running: json$4("the focus session running now, or null", null),
 	focus_ratings: json$4("how each focus session felt", []),
 	block_marks: json$4("calendar blocks marked done / skipped", null),
+	block_kinds: json$4("calendar items you set as an event or a focus block (by title)", null),
 	blocks_settled_day: text("day the blocks were last settled"),
 	cal_templates: json$4("saved calendar templates", []),
 	today_order: json$4("the order of Today's cards", []),

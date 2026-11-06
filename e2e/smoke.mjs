@@ -369,7 +369,12 @@ try {
     // IC4: the command bar suggests while you type: "water 500" → Log 500 ml, Enter logs it.
     await ip.mouse.move(8, 640)
     await ip.click('.di-pill')
-    await ip.waitForSelector('.di-panel .di-cmd input', { timeout: 5000 })
+    await ip.waitForSelector('.di-panel', { timeout: 5000 })
+    // The command bar lives in the "/" palette: a letter typed anywhere on the open island opens it with that letter.
+    await ip.waitForTimeout(250)
+    await ip.keyboard.type('w')
+    await ip.waitForSelector('.di-panel .dw-pal .di-cmd input', { timeout: 5000 })
+    if ((await ip.inputValue('.di-cmd input')) !== 'w') throw new Error('typing on the island did not go into the palette')
     await ip.fill('.di-cmd input', 'water 500')
     await ip.waitForSelector('.di-suggest button.on', { timeout: 3000 })
     const first = await ip.textContent('.di-suggest button.on')
@@ -605,7 +610,15 @@ try {
     // Ctrl+→ to the next page, then Fun: the changed widget (wrong hash) refuses to run.
     await ip.keyboard.press('Control+ArrowRight')
     await ip.waitForFunction(() => document.querySelector('.ip-dots button.on')?.title === 'PC', null, { timeout: 3000 })
-    await ip.click('.ip-dots button[title="Fun"]')
+    // "/" opens the palette over the island; it reaches the pages too (Esc closes it, not the island).
+    await ip.keyboard.press('/')
+    await ip.waitForSelector('.dw-pal [data-tap="pal:page:day"]', { timeout: 3000 })
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.dw-pal', { state: 'detached', timeout: 3000 })
+    if (!(await ip.$('.di-panel'))) throw new Error('Esc in the palette closed the island too')
+    // 1–9 jump to a page: 5 is Fun.
+    await ip.keyboard.press('5')
+    await ip.waitForFunction(() => document.querySelector('.ip-dots button.on')?.title === 'Fun', null, { timeout: 3000 })
     await ip.waitForFunction(() => /changed since you installed it/.test(document.querySelector('.wg-grid')?.textContent ?? ''), null, { timeout: 8000 })
     await ip.waitForFunction(() => document.querySelectorAll('.wf:not(.is-loading) iframe').length === 1, null, { timeout: 8000 })
     const pomo = ip.frames().find((f) => f.url().includes('/widgets/frame.html'))

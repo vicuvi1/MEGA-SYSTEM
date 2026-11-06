@@ -13,10 +13,11 @@
 .di-bar i { display: block; width: 100%; height: 4px; border-radius: 999px; background: rgb(var(--ink) / 0.35); opacity: 0.8; transition: opacity 0.2s ease; }
 .di-bar:hover i { opacity: 1; }
 
-/* The clock in the pill. */
-.di-clock { flex: none; margin-left: 6px; font-variant-numeric: tabular-nums; color: var(--clock, var(--fg)); font-size: 13px; letter-spacing: 0.02em; }
-.di-clock.serif { font-family: Georgia, 'Times New Roman', serif; font-size: 14px; }
-.di-clock.seg { display: inline-flex; align-items: center; gap: 1.5px; height: 14px; }
+/* The clock in the pill (scoped: the timer's big clock is also .di-clock). */
+:root .di .di-pill .di-clock, :root .di .di-pill .di-clock.serif { line-height: 1; font-weight: 600; }
+:root .di .di-pill .di-clock { flex: none; margin-left: 6px; font-variant-numeric: tabular-nums; color: var(--clock, var(--fg)); font-size: 13px; letter-spacing: 0.02em; }
+:root .di .di-pill .di-clock.serif { font-family: Georgia, 'Times New Roman', serif; font-size: 14px; }
+:root .di .di-pill .di-clock.seg { display: inline-flex; align-items: center; gap: 1.5px; height: 14px; }
 .di-seg { width: 7px; height: 13px; }
 .di-seg path { stroke: var(--clock, var(--fg)); stroke-width: 1.6; stroke-linecap: round; fill: none; opacity: 0.1; }
 .di-seg path.on { opacity: 1; }

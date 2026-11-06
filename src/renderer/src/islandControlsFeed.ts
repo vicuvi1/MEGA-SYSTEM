@@ -119,6 +119,7 @@ type Undo =
   | { kind: 'mustdo'; i: number; ledgerId: number | null }
   | { kind: 'extend'; minutes: number }
   | { kind: 'start'; startedAt: string }
+  | { kind: 'eventMark'; day: string; block: string; prev: 'done' | 'skip' | null }
 const undos = new Map<string, { at: number; u: Undo }>()
 
 /** After a tap went through: remember how to take it back (only logs; for a minute). */
@@ -173,6 +174,10 @@ async function runUndo(of: string): Promise<string> {
       window.dispatchEvent(new CustomEvent('life-external-changed'))
       return '↶ Must-do back to open'
     }
+    case 'eventMark':
+      await life.timeline?.mark(u.day, u.block, u.prev)
+      window.dispatchEvent(new Event('life-island-refresh'))
+      return u.prev ? '↶ Back as it was' : '↶ Back to open'
     case 'extend':
       await life.focus.extend?.(-u.minutes)
       focusChanged()

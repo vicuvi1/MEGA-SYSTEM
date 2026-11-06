@@ -70,6 +70,7 @@ import { createExtras } from './web/lifeExtras'
 import { createMoneyApi } from './web/moneyApi'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 import { MIGRATIONS } from '@core/schema'
+import { cleanBlockKinds, setBlockKind, type BlockKind, type BlockKinds } from '@core/blockKind'
 
 /**
  * /api/db with this page's database version (LT22): when the server is
@@ -905,6 +906,26 @@ export function createTursoWebBridge(): Bridge {
           next[day] = dayMarks
           setSetting(s.db, 'block_marks', JSON.stringify(next))
           return dayMarks
+        }),
+      // Event or focus block, your choice per title (synced; the island and the Today timeline both read it).
+      kinds: async () => (await svcP).read((s) => {
+        try {
+          return cleanBlockKinds(JSON.parse(getSetting(s.db, 'block_kinds') || '{}'))
+        } catch {
+          return {}
+        }
+      }),
+      setKind: async (title: string, kind: BlockKind) =>
+        (await svcP).write((s) => {
+          let cur: BlockKinds = {}
+          try {
+            cur = cleanBlockKinds(JSON.parse(getSetting(s.db, 'block_kinds') || '{}'))
+          } catch {
+            /* start over */
+          }
+          const next = setBlockKind(cur, title, kind)
+          setSetting(s.db, 'block_kinds', JSON.stringify(next))
+          return next
         })
     },
     weekPlan: S('weekPlan'),

@@ -97,7 +97,7 @@ export type Bridge = LifeApi & {
   /** Day templates for the calendar ("study day"), synced (web). */
   calTemplates?: { list(): Promise<DayTemplate[]>; save(t: DayTemplate): Promise<DayTemplate[]>; remove(name: string): Promise<DayTemplate[]> }
   /** Done / skipped marks on today's calendar blocks (web). */
-  timeline?: { marks(day: string): Promise<Record<string, 'done' | 'skip'>>; mark(day: string, id: string, v: 'done' | 'skip' | null): Promise<Record<string, 'done' | 'skip'>> }
+  timeline?: { marks(day: string): Promise<Record<string, 'done' | 'skip'>>; mark(day: string, id: string, v: 'done' | 'skip' | null): Promise<Record<string, 'done' | 'skip'>>; kinds?(): Promise<import('@core/blockKind').BlockKinds>; setKind?(title: string, kind: import('@core/blockKind').BlockKind): Promise<import('@core/blockKind').BlockKinds> }
   /** The Sunday plan: one focus area and 3 big tasks for the week (web). */
   /** System health and the shared error log (Settings → System health). */
   system?: {

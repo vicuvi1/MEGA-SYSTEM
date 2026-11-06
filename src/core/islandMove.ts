@@ -124,12 +124,12 @@ export function cleanSpots(v: unknown): Record<string, ScreenSpot> {
 
 // ---- IN39: the panel's own size ----
 
-/** The panel's width follows the Settings slider's limits (380–640). */
-export const PANEL_MIN = { w: 380, h: 260 }
-export const PANEL_MAX = { w: 640, h: 900 }
+/** The panel's width follows the Settings slider's limits (520–720): the opened island is page-first and wide. */
+export const PANEL_MIN = { w: 520, h: 360 }
+export const PANEL_MAX = { w: 720, h: 900 }
 export function cleanPanelSize(s: { w: number; h: number }): { w: number; h: number } {
   const c = (v: unknown, lo: number, hi: number, d: number) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.min(hi, Math.max(lo, v))) : d)
-  return { w: c(s?.w, PANEL_MIN.w, PANEL_MAX.w, 460), h: c(s?.h, PANEL_MIN.h, PANEL_MAX.h, 520) }
+  return { w: c(s?.w, PANEL_MIN.w, PANEL_MAX.w, 600), h: c(s?.h, PANEL_MIN.h, PANEL_MAX.h, 560) }
 }
 /** Dragging the corner by (dx, dy) from `start`, kept within the limits and the screen. */
 export function resizePanel(start: { w: number; h: number }, d: Pt, screenMax?: { w: number; h: number }): { w: number; h: number } {
