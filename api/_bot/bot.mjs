@@ -1092,7 +1092,7 @@ function planSync(docs, stored, limit = 60) {
 	};
 }
 var WORD$1 = /[\p{L}\p{N}]{3,}/gu;
-var STOP$2 = /* @__PURE__ */ new Set([
+var STOP$3 = /* @__PURE__ */ new Set([
 	"the",
 	"and",
 	"for",
@@ -1126,7 +1126,7 @@ var STOP$2 = /* @__PURE__ */ new Set([
 	"its",
 	"too"
 ]);
-var stems = (t) => new Set((t.toLowerCase().match(WORD$1) ?? []).filter((w) => !STOP$2.has(w)).map((w) => w.slice(0, 5)));
+var stems = (t) => new Set((t.toLowerCase().match(WORD$1) ?? []).filter((w) => !STOP$3.has(w)).map((w) => w.slice(0, 5)));
 /** The keyword fallback: pieces sharing the most words with the question (rarer words count more). */
 function keywordRecall(docs, query, k = 6) {
 	const q = stems(query);
@@ -21691,6 +21691,563 @@ function formatMoney(cents, currency = "MDL", { sign = false, compact = false } 
 function group(n) {
 	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
 }
+// src/renderer/public/apps/finance/js/cattree.js
+var fold$3 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var SUB_DEFAULTS = [
+	{
+		key: "groceries",
+		name: "Groceries",
+		emoji: "🛒",
+		homes: ["food"]
+	},
+	{
+		key: "restaurants",
+		name: "Restaurants",
+		emoji: "🍽️",
+		homes: ["food"]
+	},
+	{
+		key: "cafes",
+		name: "Cafés & coffee",
+		emoji: "☕",
+		homes: ["food"]
+	},
+	{
+		key: "delivery",
+		name: "Delivery",
+		emoji: "🛵",
+		homes: ["food"]
+	},
+	{
+		key: "snacks",
+		name: "Snacks",
+		emoji: "🍫",
+		homes: ["food"]
+	},
+	{
+		key: "fuel",
+		name: "Fuel",
+		emoji: "⛽",
+		homes: ["transport"]
+	},
+	{
+		key: "taxi",
+		name: "Taxi",
+		emoji: "🚕",
+		homes: ["transport"]
+	},
+	{
+		key: "public",
+		name: "Public transport",
+		emoji: "🚌",
+		homes: ["transport"]
+	},
+	{
+		key: "car",
+		name: "Car repairs",
+		emoji: "🔧",
+		homes: ["transport"]
+	},
+	{
+		key: "rent",
+		name: "Rent",
+		emoji: "🔑",
+		homes: ["home"]
+	},
+	{
+		key: "utilities",
+		name: "Utilities",
+		emoji: "💡",
+		homes: ["home", "bills"]
+	},
+	{
+		key: "internet",
+		name: "Internet & phone",
+		emoji: "📶",
+		homes: ["home", "bills"]
+	},
+	{
+		key: "furniture",
+		name: "Furniture",
+		emoji: "🛋️",
+		homes: ["home"]
+	},
+	{
+		key: "cleaning",
+		name: "Cleaning",
+		emoji: "🧽",
+		homes: ["home"]
+	},
+	{
+		key: "cosmetics",
+		name: "Cosmetics",
+		emoji: "💄",
+		homes: ["beauty", "health"]
+	},
+	{
+		key: "skincare",
+		name: "Skincare",
+		emoji: "🧴",
+		homes: ["beauty", "health"]
+	},
+	{
+		key: "haircut",
+		name: "Haircut",
+		emoji: "💇",
+		homes: ["beauty", "health"]
+	},
+	{
+		key: "pharmacy",
+		name: "Pharmacy",
+		emoji: "💊",
+		homes: ["health", "beauty"]
+	},
+	{
+		key: "doctor",
+		name: "Doctor",
+		emoji: "🩺",
+		homes: ["health", "beauty"]
+	},
+	{
+		key: "gym",
+		name: "Gym",
+		emoji: "🏋️",
+		homes: [
+			"sport",
+			"health",
+			"beauty"
+		]
+	},
+	{
+		key: "competitions",
+		name: "Competitions",
+		emoji: "🏆",
+		homes: ["sport"]
+	},
+	{
+		key: "gear",
+		name: "Sports gear",
+		emoji: "🎽",
+		homes: ["sport"]
+	},
+	{
+		key: "gadgets",
+		name: "Gadgets",
+		emoji: "📱",
+		homes: ["tech"]
+	},
+	{
+		key: "software",
+		name: "Software & AI",
+		emoji: "🤖",
+		homes: ["tech", "subscriptions"]
+	},
+	{
+		key: "games",
+		name: "Games",
+		emoji: "🎮",
+		homes: ["tech", "fun"]
+	},
+	{
+		key: "streaming",
+		name: "Streaming & music",
+		emoji: "📺",
+		homes: ["subscriptions", "fun"]
+	},
+	{
+		key: "apps",
+		name: "Apps & cloud",
+		emoji: "☁️",
+		homes: ["subscriptions", "tech"]
+	},
+	{
+		key: "clothes",
+		name: "Clothes",
+		emoji: "👕",
+		homes: ["shopping"]
+	},
+	{
+		key: "shoes",
+		name: "Shoes",
+		emoji: "👟",
+		homes: ["shopping"]
+	},
+	{
+		key: "accessories",
+		name: "Accessories",
+		emoji: "👜",
+		homes: ["shopping"]
+	},
+	{
+		key: "gifts",
+		name: "Gifts",
+		emoji: "🎁",
+		homes: ["gifts", "family"]
+	},
+	{
+		key: "support",
+		name: "Family support",
+		emoji: "💞",
+		homes: ["family", "gifts"]
+	},
+	{
+		key: "celebrations",
+		name: "Celebrations",
+		emoji: "🎂",
+		homes: ["gifts", "family"]
+	},
+	{
+		key: "goingout",
+		name: "Going out",
+		emoji: "🍻",
+		homes: ["fun"]
+	},
+	{
+		key: "cinema",
+		name: "Cinema",
+		emoji: "🎬",
+		homes: ["fun"]
+	},
+	{
+		key: "events",
+		name: "Events",
+		emoji: "🎟️",
+		homes: ["fun"]
+	},
+	{
+		key: "hobbies",
+		name: "Hobbies",
+		emoji: "🎨",
+		homes: ["fun"]
+	},
+	{
+		key: "travel",
+		name: "Travel",
+		emoji: "✈️",
+		homes: ["fun"]
+	},
+	{
+		key: "courses",
+		name: "Courses",
+		emoji: "🎓",
+		homes: ["learning"]
+	},
+	{
+		key: "books",
+		name: "Books",
+		emoji: "📚",
+		homes: ["learning"]
+	},
+	{
+		key: "certifications",
+		name: "Certifications",
+		emoji: "📜",
+		homes: ["learning"]
+	},
+	{
+		key: "stocks",
+		name: "Stocks & funds",
+		emoji: "📈",
+		homes: ["investing"]
+	},
+	{
+		key: "crypto",
+		name: "Crypto",
+		emoji: "🪙",
+		homes: ["investing"]
+	},
+	{
+		key: "bankfees",
+		name: "Bank fees",
+		emoji: "🏦",
+		homes: ["bills"]
+	},
+	{
+		key: "taxes",
+		name: "Taxes",
+		emoji: "🧾",
+		homes: ["bills"]
+	}
+];
+var PARENT_IDS = {
+	food: "food",
+	transport: "transport",
+	home: "home",
+	hygiene: "beauty",
+	health: "health",
+	clothes: "shopping",
+	shopping: "shopping",
+	gifts: "gifts",
+	"family-out": "family",
+	fun: "fun",
+	learning: "learning",
+	subscriptions: "subscriptions",
+	sport: "sport",
+	investing: "investing",
+	tech: "tech",
+	bills: "bills",
+	other: "other"
+};
+var PARENT_NAMES = [
+	["food", /food|grocer|eat|mancare|продукт|еда/],
+	["transport", /transport|car\b|auto|masina|travel to|транспорт/],
+	["home", /home|house|rent|casa|locuin|chirie|дом|кварт/],
+	["tech", /tech|gadget|electron|computer|laptop|техник|гаджет/],
+	["beauty", /beauty|cosmet|hygien|igien|frumus|красот|космет|гигиен/],
+	["health", /health|medic|sanat|pharm|здоров|медиц/],
+	["shopping", /shop|cloth|haine|fashion|одежд|покупк/],
+	["gifts", /gift|cadou|подар/],
+	["family", /family|famil|parent|kids|copii|семь|дет/],
+	["fun", /fun|going out|entertain|leisure|distract|развлеч|досуг/],
+	["learning", /learn|study|course|educ|school|invat|учеб|образов/],
+	["subscriptions", /subscri|abonam|подпис/],
+	["sport", /sport|gym|fitness|спорт/],
+	["investing", /invest|инвест/],
+	["bills", /bill|fee|tax|bank|impozit|comision|налог|комисс/]
+];
+function parentKeyOf(c) {
+	if (!c || c.type !== "expense") return null;
+	if (PARENT_IDS[c.id]) return PARENT_IDS[c.id];
+	const n = fold$3(c.name);
+	return PARENT_NAMES.find(([, re]) => re.test(n))?.[0] || null;
+}
+var ADD_IF_MISSING = {
+	tech: {
+		id: "tech",
+		name: "Tech",
+		emoji: "💻",
+		jar: "growth"
+	},
+	bills: {
+		id: "bills",
+		name: "Bills & fees",
+		emoji: "🧾",
+		jar: "living"
+	}
+};
+function ensureTree(settings) {
+	if (Array.isArray(settings.subcats)) {
+		if (!settings.subMemory || typeof settings.subMemory !== "object") settings.subMemory = {};
+		return false;
+	}
+	settings.categories = [...settings.categories || []];
+	const jars = settings.jars || [];
+	const home = {};
+	for (const c of settings.categories) {
+		if (c.archived) continue;
+		const k = parentKeyOf(c);
+		if (k && !home[k]) home[k] = c.id;
+	}
+	for (const [k, def] of Object.entries(ADD_IF_MISSING)) {
+		if (home[k] || settings.categories.some((c) => c.id === def.id)) continue;
+		const jar = jars.some((j) => j.id === def.jar) ? def.jar : jars.find((j) => !j.savings)?.id;
+		settings.categories.push({
+			id: def.id,
+			type: "expense",
+			name: def.name,
+			emoji: def.emoji,
+			...jar ? { jar } : {},
+			jarChosen: true,
+			updatedAt: 0
+		});
+		home[k] = def.id;
+	}
+	settings.subcats = [];
+	for (const d of SUB_DEFAULTS) {
+		const h = d.homes.find((x) => home[x]);
+		if (!h) continue;
+		settings.subcats.push({
+			id: `s-${d.key}`,
+			parent: home[h],
+			key: d.key,
+			name: d.name,
+			emoji: d.emoji,
+			updatedAt: 0
+		});
+	}
+	if (!settings.subMemory || typeof settings.subMemory !== "object") settings.subMemory = {};
+	return true;
+}
+var subList = (state) => Array.isArray(state.settings.subcats) ? state.settings.subcats : [];
+var subById = (state, id) => id ? subList(state).find((s) => s.id === id) || null : null;
+var subsOf = (state, catId) => subList(state).filter((s) => s.parent === catId && !s.archived);
+function subOf(state, t) {
+	const s = t && t.sub ? subById(state, t.sub) : null;
+	return s && s.parent === t.category ? s : null;
+}
+var isOther = (catId) => !catId || catId === "other" || catId === "other-in";
+var touch = (o, now) => Object.assign(o, { updatedAt: now });
+function setSub(state, t, id, { learn = true, now = Date.now() } = {}) {
+	const s = subById(state, id);
+	if (!s) return false;
+	t.sub = s.id;
+	t.category = s.parent;
+	touch(t, now);
+	if (learn) rememberSub(state, t.note, s.id, now);
+	return true;
+}
+var STOP$2 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store at in on of la de si cu pe some a an my lei mdl usd eur today yesterday azi ieri".split(" "));
+var noteWords = (note) => (fold$3(String(note || "").replace(/#[\p{L}\p{N}_-]+/gu, " ")).match(/[\p{L}]{2,}/gu) || []).filter((w) => !STOP$2.has(w));
+function merchantKey(note) {
+	return [...new Set(noteWords(note))].slice(0, 3).join(" ");
+}
+var MEMORY_MAX = 600;
+function rememberSub(state, note, id, now = Date.now()) {
+	const k = merchantKey(note);
+	if (!k || !subById(state, id)) return false;
+	const mem = { ...state.settings.subMemory || {} };
+	delete mem[k];
+	mem[k] = id;
+	const keys = Object.keys(mem);
+	for (const old of keys.slice(0, Math.max(0, keys.length - MEMORY_MAX))) delete mem[old];
+	state.settings.subMemory = mem;
+	state.settings.updatedAt = now;
+	return true;
+}
+function memorySub(state, note) {
+	const mem = state.settings.subMemory || {};
+	const k = merchantKey(note);
+	if (!k) return null;
+	if (mem[k] && subById(state, mem[k])) return subById(state, mem[k]);
+	const have = new Set(noteWords(note));
+	let best = null;
+	for (const [key, id] of Object.entries(mem)) {
+		const ws = key.split(" ");
+		if (!ws.every((w) => have.has(w))) continue;
+		const s = subById(state, id);
+		if (s && (!best || ws.length > best.n)) best = {
+			s,
+			n: ws.length
+		};
+	}
+	return best?.s || null;
+}
+var KEYWORDS$1 = [
+	["delivery", "glovo, wolt, straus, bolt food, yandex eda, livrare, deliver, доставк"],
+	["bankfees", "comision, commission, комисси, bank fee, card fee, deservire, обслуживание счета, maintenance fee, taxa card"],
+	["taxes", "tax$, taxes$, taxa$, impozit, налог, fisc, amenda, штраф, fine$"],
+	["software", "chatgpt, openai, claude, anthropic, cursor, copilot, github, midjourney, notion, figma, adobe, jetbrains, software, licen, gpt$, ai subscription"],
+	["streaming", "netflix, spotify, youtube premium, apple music, hbo, disney, deezer, okko, кинопоиск, yandex plus, music app"],
+	["apps", "icloud, google one, google storage, dropbox, cloud$, app store, google play"],
+	["games", "steam$, playstation, xbox, nintendo, epic games, game$, games$, joc$, jocuri, игр"],
+	["gadgets", "gadget, laptop, headphone, casti, charger, incarcator, mouse$, keyboard, monitor, usb$, cable, cablu, наушник, ноутбук, зарядк, smartphone, iphone, samsung, xiaomi, airpods, tablet, phone case, darwin, enter$"],
+	["taxi", "taxi, такси, yandex$, bolt$, uber$, itaxi"],
+	["fuel", "fuel, petrol, benzin, motorin, diesel, бензин, топлив, lukoil, rompetrol, petrom, tirex, gas station, азс$"],
+	["public", "bus$, autobuz, troleibuz, microbuz, metro$, tram$, train$, tren$, автобус, троллейбус, маршрутк, трамва, поезд, метро"],
+	["car", "car repair, service auto, mecanic, vulcaniz, шиномонтаж, автосервис, car wash, spalatorie, parking, parcare, парковк"],
+	["rent", "rent$, chirie, аренд, квартплат"],
+	["utilities", "electric, lumina, gaz$, apa$, water bill, utilit, comunal, коммун, свет$, газ$, вода$, termoelectrica, premier energy, heating, incalzire"],
+	["internet", "internet, telefon, phone bill, orange$, moldcell, starnet, unite$, mobile top, интернет, связь, телефон"],
+	["furniture", "furniture, mobila, sofa$, ikea, jysk, мебел, desk$, chair, scaun, canapea"],
+	["cleaning", "cleaning, curatenie, detergent, уборк, моющ, bleach, burete, clor$"],
+	["haircut", "haircut, hair$, frizer, tuns$, barber, стрижк, парикмах, nails$, manichiur, маникюр"],
+	["cosmetics", "cosmetic, makeup, machiaj, lipstick, ruj$, perfume, parfum, косметик, духи, помад, mascara, rimel"],
+	["skincare", "skincare, cream, crema, крем, serum, lotion, shampoo, sampon, soap$, sapun, шампун, мыло, toothpaste, pasta de dinti, deodorant, hygiene, igien, гигиен, уход"],
+	["pharmacy", "pharm, farmac, аптек, vitamin, medicament, лекарств, pills, pastile, таблетк"],
+	["doctor", "doctor, medic$, dentist, stomatolog, clinic, analize, hospital, spital, врач, клиник, стоматолог, анализ"],
+	["gym", "gym$, fitness, фитнес, спортзал, sala de forta, yoga, йога"],
+	["competitions", "competi, turneu, tournament, соревнов, турнир"],
+	["gear", "kimono, echipament, экипиров, sports gear, sport gear"],
+	["groceries", "grocer, supermarket, market$, lidl, kaufland, linella, fidesco, nr1$, green hills, produse, alimente, продукт, супермаркет, fruit, fructe, legume, vegetables, овощ, фрукт, bread, paine, хлеб, milk$, lapte, молок"],
+	["restaurants", "restaurant, kebab, shaorma, shawarma, шаурм, pizza, burger, sushi, lunch, dinner, pranz, cina$, ресторан, обед, ужин, mcdonald, kfc$, andy$, bistro, grill"],
+	["cafes", "coffee, cafe$, cafea, кофе, кафе, latte, cappuccino, espresso, starbucks, tea$, ceai, чай$, cofetarie"],
+	["snacks", "snack, chips, chocolate, ciocolat, шоколад, juice, suc$, сок$, ice cream, inghetata, мороженое, bakery, patiserie, covrig, sweets, dulciuri, конфет"],
+	["gifts", "gift, cadou, подар, present$, flowers, flori, цвет"],
+	["celebrations", "birthday, zi de nastere, aniversar, wedding, nunta, cumatrie, день рождения, свадьб, christmas, craciun, new year, revelion"],
+	["support", "mama$, mom$, mother, tata$, dad$, father, brother, frate, sister, sora$, parents, parinti, мама, папа, брат, сестр, родител, family, familie"],
+	["goingout", "bar$, club$, pub$, party, petrecere, drinks, beer, bere$, cocktail, бар$, клуб, пиво"],
+	["cinema", "cinema, movie, film$, кино$, cineplex"],
+	["events", "concert, ticket, bilet, theatre, theater, teatru, festival, show$, концерт, театр, museum, muzeu, музей, bowling, escape room"],
+	["hobbies", "hobby, paint, culori, guitar, chitara, lego$, craft, board game, joc de masa"],
+	["travel", "travel, trip$, hotel, airbnb, flight, avion, zbor$, booking, vacation, vacanta, excursie, путешеств, отель, wizz, ryanair"],
+	["courses", "course, curs$, cursuri, udemy, coursera, training, tutor$, репетитор, курс, school, scoala, universit, lesson, lectie"],
+	["books", "book$, books$, carte$, carti$, книг, kindle, librarie"],
+	["certifications", "certif, exam$, examen, экзамен, сертиф, ielts, toefl"],
+	["shoes", "shoe, pantofi, sneaker, adidasi, ghete, обув, кроссовк, boots, cizme"],
+	["accessories", "bag$, geanta, watch$, ceas$, belt$, curea, sunglasses, ochelari, jewel, bijuter, сумк, часы, рюкзак, backpack, rucsac"],
+	["clothes", "cloth, haine, shirt, tricou, jeans, blugi, jacket, geaca, dress$, rochie, одежд, футболк, куртк, zara$, lcw$, sweater, pulover, hoodie"],
+	["stocks", "stock$, stocks$, actiuni, etf$, broker, акци"],
+	["crypto", "crypto, bitcoin, btc$, binance, крипт, usdt$"]
+].map(([key, text]) => {
+	const items = text.split(",").map((x) => fold$3(x.trim())).filter(Boolean);
+	return {
+		key,
+		phrases: items.filter((x) => x.includes(" ")),
+		exact: items.filter((x) => !x.includes(" ") && x.endsWith("$")).map((x) => x.slice(0, -1)),
+		stems: items.filter((x) => !x.includes(" ") && !x.endsWith("$"))
+	};
+});
+function keywordKeys(note) {
+	const text = ` ${fold$3(note).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+	const words = text.trim().split(" ").filter(Boolean);
+	const out = [];
+	for (const k of KEYWORDS$1) if (k.phrases.some((p) => text.includes(` ${p} `)) || k.exact.some((x) => words.includes(x)) || k.stems.some((x) => words.some((w) => w.startsWith(x)))) out.push(k.key);
+	return out;
+}
+function nameSub(state, note, ok) {
+	const words = new Set(noteWords(note));
+	return subList(state).filter((s) => !s.key && !s.archived && ok(s)).find((s) => {
+		const n = noteWords(s.name);
+		return n.length && n.every((w) => w.length >= 3 && words.has(w));
+	}) || null;
+}
+var pastCache = /* @__PURE__ */ new WeakMap();
+function pastIndex(state) {
+	let last = 0;
+	let filed = 0;
+	for (const t of state.tx) {
+		if ((t.updatedAt || 0) > last) last = t.updatedAt || 0;
+		if (t.sub) filed++;
+	}
+	const key = `${state.tx.length}|${last}|${filed}|${subList(state).length}`;
+	const hit = pastCache.get(state.tx);
+	if (hit && hit.key === key) return hit.map;
+	const map = /* @__PURE__ */ new Map();
+	for (const t of state.tx) {
+		if (t.type !== "expense" || !t.sub) continue;
+		const s = subOf(state, t);
+		if (!s) continue;
+		const k = fold$3(t.note).trim();
+		const prev = map.get(k);
+		if (!prev || (t.updatedAt || 0) > (prev.t.updatedAt || 0)) map.set(k, {
+			t,
+			s
+		});
+	}
+	pastCache.set(state.tx, {
+		key,
+		map
+	});
+	return map;
+}
+function suggestSub(state, note, { category = null } = {}) {
+	if (!String(note || "").trim()) return null;
+	const free = isOther(category);
+	const ok = (s) => s && !s.archived && (free || s.parent === category) && state.settings.categories.some((c) => c.id === s.parent && c.type === "expense");
+	const mem = memorySub(state, note);
+	if (ok(mem)) return {
+		sub: mem,
+		source: "memory"
+	};
+	const past = pastIndex(state).get(fold$3(note).trim());
+	if (past && ok(past.s)) return {
+		sub: past.s,
+		source: "past"
+	};
+	const named = nameSub(state, note, ok);
+	if (named) return {
+		sub: named,
+		source: "name"
+	};
+	for (const key of keywordKeys(note)) {
+		const s = subList(state).find((x) => x.key === key && ok(x));
+		if (s) return {
+			sub: s,
+			source: "words"
+		};
+	}
+	return null;
+}
 // src/renderer/public/apps/finance/js/dates.js
 var MONTHS$4 = [
 	"January",
@@ -21843,6 +22400,11 @@ var ACCOUNT_DEFAULTS = {
 	holdings: []
 };
 function defaultState() {
+	const st = baseState();
+	ensureTree(st.settings);
+	return st;
+}
+function baseState() {
 	return {
 		version: 3,
 		settings: {
@@ -22111,6 +22673,10 @@ function normalizeState(raw) {
 		accounts,
 		categories: Array.isArray(s.categories) && s.categories.length ? s.categories : base.settings.categories
 	};
+	if (Array.isArray(s.subcats)) settings.subcats = s.subcats.filter((x) => x && typeof x.id === "string" && typeof x.parent === "string" && x.name);
+	else if (Array.isArray(s.categories) && s.categories.length) delete settings.subcats;
+	if (s.subMemory && typeof s.subMemory === "object") settings.subMemory = { ...s.subMemory };
+	ensureTree(settings);
 	const baseCur = settings.currency || "MDL";
 	const accCur = Object.fromEntries(accounts.map((a) => [a.id, a.currency || baseCur]));
 	const tx = (Array.isArray(raw.tx) ? raw.tx : []).filter(validTx).map((t) => {
@@ -22458,6 +23024,25 @@ function goalStatus(state, today, goal = mainGoal(state)) {
 }
 var spentIn = (state, key, catId) => txInMonth(state, key).filter((t) => t.type === "expense" && counts(t) && t.category === catId).reduce((a, t) => a + B$1(t), 0);
 function budgetAlert(state, t) {
+	return subBudgetAlert(state, t) || categoryBudgetAlert(state, t);
+}
+function subBudgetAlert(state, t) {
+	const s = t.type === "expense" && counts(t) ? subOf(state, t) : null;
+	if (!(s?.budget > 0)) return null;
+	const after = txInMonth(state, monthKey(t.date)).filter((x) => x.type === "expense" && counts(x) && x.sub === s.id && x.category === s.parent).reduce((a, x) => a + B$1(x), 0);
+	const before = after - B$1(t);
+	const fmt = (x) => formatMoney(x, state.settings.currency);
+	if (before <= s.budget && after > s.budget) return {
+		level: "over",
+		text: `${s.name} is over budget: ${fmt(after)} of ${fmt(s.budget)} (${fmt(after - s.budget)} over).`
+	};
+	if (before < s.budget * .8 && after >= s.budget * .8) return {
+		level: "near",
+		text: `${s.name}: ${Math.round(after / s.budget * 100)}% of the budget used. ${fmt(s.budget - after)} left this month.`
+	};
+	return null;
+}
+function categoryBudgetAlert(state, t) {
 	const c = category(state, t.category);
 	if (t.type !== "expense" || !counts(t) || !(c?.budget > 0)) return null;
 	const after = spentIn(state, monthKey(t.date), c.id);
@@ -22549,9 +23134,13 @@ function suggestCategory(state, note, type) {
 	if (rule && valid(rule.category)) return rule.category;
 	const past = sortTx(state.tx).find((t) => t.type === type && (t.note || "").trim().toLowerCase() === n);
 	if (past && valid(past.category)) return past.category;
+	const mem = type === "expense" ? memorySub(state, note) : null;
+	if (mem && valid(mem.parent)) return mem.parent;
 	const learned = learnedCategory(state, note, type);
 	if (learned && valid(learned)) return learned;
 	for (const [id, re] of KEYWORDS[type] || []) if (re.test(n) && valid(id)) return id;
+	const sub = type === "expense" ? suggestSub(state, note) : null;
+	if (sub && valid(sub.sub.parent)) return sub.sub.parent;
 	return null;
 }
 // src/renderer/public/apps/finance/js/blocks.js
@@ -22893,14 +23482,19 @@ function parseQuick(text, state) {
 	const same = recent.find((x) => fold$1(x.note) === fold$1(note) && account(state, x.account) && !account(state, x.account).archived);
 	const accountId = acc?.id || same?.account || recent[0]?.account || state.settings.accounts[0]?.id;
 	const cat = suggestCategory(state, note, type) || (type === "income" ? "other-in" : "other");
+	const sub = type === "expense" ? subFor(state, note, cat) : null;
 	return {
 		type,
 		amount,
 		note,
 		account: accountId,
-		category: cat,
+		category: sub ? sub.parent : cat,
+		...sub ? { sub: sub.id } : {},
 		...daysAgo ? { daysAgo } : {}
 	};
+}
+function subFor(state, note, category) {
+	return suggestSub(state, note, { category })?.sub || null;
 }
 var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays(sentDay, -f.daysAgo) : sentDay;
 function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = Date.now() }) {
@@ -22915,6 +23509,7 @@ function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = D
 		base: Math.round(fields.amount * rate),
 		date,
 		category: fields.category,
+		...fields.sub ? { sub: fields.sub } : {},
 		account: fields.account,
 		note: fields.note,
 		source: "telegram"
@@ -22929,11 +23524,12 @@ var fm = (state, c) => esc$2(formatMoney(Math.round(c / 100) * 100, state.settin
 var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B$1(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
+	const sc = subOf(state, t);
 	const a = account(state, t.account)?.name || "";
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
 	const work = t.type === "expense" ? workText(state, B$1(t), t.date) : "";
-	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
+	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)}${sc ? ` › ${esc$2(sc.emoji ? `${sc.emoji} ` : "")}${esc$2(sc.name)}` : ""} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
 	if (work) lines.push(`⏱ ${esc$2(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
@@ -23307,6 +23903,21 @@ function betterCategory(state, f) {
 	const hit = state.settings.categories.find((c) => c.id === guess && c.type === f.type && !c.archived);
 	return hit ? hit.id : f.category || fallback;
 }
+/** The category, then the subcategory that fits the note ("kebab" → Food › Restaurants). */
+function fileIt(state, f) {
+	f.category = betterCategory(state, f);
+	if (f.type !== "expense") return;
+	const sub = f.sub && subById(state, f.sub)?.parent === f.category ? subById(state, f.sub) : subFor(state, f.note, f.category);
+	if (sub) {
+		f.sub = sub.id;
+		f.category = sub.parent;
+	} else delete f.sub;
+}
+var catLabel = (state, t) => {
+	const c = category(state, t.category);
+	const s = subOf(state, t);
+	return `${c?.name || "Category"}${s ? ` › ${s.name}` : ""}`;
+};
 /**
 * Quick add in the app (MF1): no account named in the text → the main lei
 * wallet (not "the account you used last", which the Telegram bot keeps).
@@ -23339,7 +23950,7 @@ function moneyKeyboard(state, t, extra = "") {
 		callback_data: `fa|${t.id}|${a.id}`
 	})));
 	rows.push([{
-		text: `📂 ${category(state, t.category)?.name || "Category"}`,
+		text: `📂 ${catLabel(state, t)}`,
 		callback_data: `fc|${t.id}`
 	}, {
 		text: "↩️ Undo",
@@ -23360,22 +23971,37 @@ function categoryKeyboard(state, t) {
 	}]);
 	return { inline_keyboard: rows };
 }
+/** After a category is picked: its subcategories, one tap each. */
+function subKeyboard(state, t) {
+	const subs = subsOf(state, t.category).slice(0, 15);
+	const rows = [];
+	for (let i = 0; i < subs.length; i += 3) rows.push(subs.slice(i, i + 3).map((s) => ({
+		text: `${s.id === t.sub ? "✓ " : ""}${s.emoji ? s.emoji + " " : ""}${s.name}`,
+		callback_data: `fs|${t.id}|${s.id}`
+	})));
+	rows.push([{
+		text: "⬅️ Done",
+		callback_data: `fb|${t.id}`
+	}]);
+	return { inline_keyboard: rows };
+}
 /** What a money message would log, without logging it (X5): "45 lei · Food", or null. */
 function previewMoney(db, text, opts = {}) {
 	const state = financeState(db);
 	if (!state) return null;
 	const f = parseQuick(text, state);
 	if (!f || !(f.amount > 0)) return null;
-	f.category = betterCategory(state, f);
+	fileIt(state, f);
 	if (opts.mainAccount) toMainAccount(state, text, f);
 	const c = category(state, f.category);
+	const sc = f.sub ? subById(state, f.sub) : null;
 	const cur = account(state, f.account)?.currency || state.settings.currency;
 	const a = account(state, f.account);
 	return {
 		amount: f.amount,
-		label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}` : ""}${f.type === "income" ? " (income)" : ""}`,
+		label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}${sc ? ` › ${sc.name}` : ""}` : ""}${f.type === "income" ? " (income)" : ""}`,
 		type: f.type,
-		category: `${c?.emoji ? c.emoji + " " : ""}${c?.name ?? "Other"}`,
+		category: `${c?.emoji ? c.emoji + " " : ""}${c?.name ?? "Other"}${sc ? ` › ${sc.emoji ? sc.emoji + " " : ""}${sc.name}` : ""}`,
 		account: `${a?.emoji ? a.emoji + " " : ""}${a?.name ?? ""}`,
 		daysAgo: Number(f.daysAgo) || 0
 	};
@@ -23420,7 +24046,7 @@ function logMoney(db, text, key, today, now = Date.now(), opts = {}) {
 	if (!state) return null;
 	const f = parseQuick(text, state);
 	if (!f || !(f.amount > 0)) return null;
-	f.category = betterCategory(state, f);
+	fileIt(state, f);
 	if (opts.mainAccount) toMainAccount(state, text, f);
 	const currency = account(state, f.account)?.currency || state.settings.currency;
 	const rate = currency === state.settings.currency ? 1 : Number(state.rates?.[currency]) || 1;
@@ -23473,12 +24099,28 @@ function moneyButton(db, data, today) {
 			undoExpense: Number(arg) || void 0
 		};
 	}
+	if (kind === "fs") {
+		if (!setSub(state, t, arg, { now })) return null;
+		save$1(db, state);
+		return {
+			text: loggedText(state, t, today),
+			keyboard: moneyKeyboard(state, t),
+			toast: `✓ ${subById(state, arg).name}`
+		};
+	}
 	if (kind === "fa" && account(state, arg)) t.account = arg;
-	else if (kind === "fk" && category(state, arg)) t.category = arg;
-	else return null;
+	else if (kind === "fk" && category(state, arg)) {
+		t.category = arg;
+		if (t.sub && subById(state, t.sub)?.parent !== arg) delete t.sub;
+	} else return null;
 	t.updatedAt = now;
 	save$1(db, state);
 	const what = kind === "fa" ? `From ${account(state, arg).name}` : category(state, arg).name;
+	if (kind === "fk" && t.type === "expense" && subsOf(state, arg).length) return {
+		text: loggedText(state, t, today),
+		keyboard: subKeyboard(state, t),
+		toast: `✓ ${what}`
+	};
 	return {
 		text: loggedText(state, t, today),
 		keyboard: moneyKeyboard(state, t),
@@ -23529,12 +24171,19 @@ function editMoney(db, id, patch) {
 	}
 	if (patch.category) {
 		const c = fuzzy(state.settings.categories.filter((x) => x.type === t.type && !x.archived), patch.category);
-		if (!c) return {
+		const s = !c && t.type === "expense" ? fuzzy((state.settings.subcats || []).filter((x) => !x.archived && category(state, x.parent)), patch.category) : null;
+		if (!c && !s) return {
 			ok: false,
 			text: `No category called "${patch.category}"`
 		};
-		t.category = c.id;
-		changed.push(c.name);
+		if (s) {
+			setSub(state, t, s.id);
+			changed.push(`${category(state, s.parent)?.name} › ${s.name}`);
+		} else {
+			t.category = c.id;
+			if (t.sub && subById(state, t.sub)?.parent !== c.id) delete t.sub;
+			changed.push(c.name);
+		}
 	}
 	if (patch.account) {
 		const a = fuzzy(state.settings.accounts.filter((x) => !x.archived), patch.account);
@@ -27286,7 +27935,7 @@ var ruleCoins = (svc, id, fallback) => {
 };
 // src/renderer/src/web/bots/callbacks.ts
 /** Every callback data the bots answer (anything else isn't a bot button). */
-var CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/;
+var CALLBACK_DATA = /^(f[acbksuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/;
 var CALLBACKS = [
 	{
 		prefixes: ["wa", "wk"],
@@ -28111,6 +28760,7 @@ var CALLBACKS = [
 			"fb",
 			"fc",
 			"fk",
+			"fs",
 			"fu"
 		],
 		match: () => true,
@@ -28170,7 +28820,7 @@ var CALLBACKS = [
 				parse_mode: "HTML",
 				...res.keyboard ? { reply_markup: res.keyboard } : {}
 			}).catch(() => null);
-			if (data.startsWith("fu|") || data.startsWith("fa|") || data.startsWith("fk|")) onExpense?.();
+			if (data.startsWith("fu|") || data.startsWith("fa|") || data.startsWith("fk|") || data.startsWith("fs|")) onExpense?.();
 			return res.text;
 		}
 	}

@@ -8,10 +8,12 @@
 //   spent  earned  moves        a type
 //   #trip                       a tag in the note
 //   cat:food  acc:cash          a category or account (name or id, start of it)
+//   sub:coffee                  a subcategory (name, start of it)
+//   this year  last month       a period (also "this week"); "all", "my" are ignored
 //   from:2026-01-01 to:2026-01-31   a date range (or 2026-01-01..2026-01-31)
 // Pure; app.js shows the results and the summary.
 
-import { addDays } from './dates.js';
+import { addDays, addMonths } from './dates.js';
 
 const fold = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -39,15 +41,43 @@ const num = (s) => {
   return Number.isFinite(v) ? Math.round(v * 100) : null;
 };
 
+const REL_WORDS = [
+  [/\b(this|current) year\b|\banul (acesta|asta|curent)\b|(в )?этом году|этот год/g, 'year'],
+  [/\blast year\b|\banul trecut\b|(в )?прошлом году|прошлый год/g, 'lastyear'],
+  [/\b(this|current) month\b|\bluna (aceasta|asta|curenta)\b|(в )?этом месяце|этот месяц/g, 'month'],
+  [/\blast month\b|\bluna trecuta\b|(в )?прошлом месяце|прошлый месяц/g, 'lastmonth'],
+  [/\bthis week\b|\bsaptamana (aceasta|asta)\b|(на )?этой неделе/g, 'week'],
+];
+// Words people type in a question that say nothing to filter by.
+const FILLER = new Set(['all', 'my', 'everything', 'on', 'in', 'for', 'the', 'of', 'tot', 'toate', 'toata', 'pe', 'все', 'всё', 'на']);
+
+// The dates a relative period ("this year") covers on `today`.
+export function relRange(rel, today) {
+  if (!rel || !today) return null;
+  const y = today.slice(0, 4);
+  const m = today.slice(0, 7);
+  const end = (k) => { const [yy, mm] = k.split('-').map(Number); return `${k}-${String(new Date(Date.UTC(yy, mm, 0)).getUTCDate()).padStart(2, '0')}`; };
+  if (rel === 'year') return { from: `${y}-01-01`, to: today };
+  if (rel === 'lastyear') return { from: `${Number(y) - 1}-01-01`, to: `${Number(y) - 1}-12-31` };
+  if (rel === 'month') return { from: `${m}-01`, to: end(m) };
+  if (rel === 'lastmonth') { const k = addMonths(m, -1); return { from: `${k}-01`, to: end(k) }; }
+  if (rel === 'week') return { from: addDays(today, -6), to: today };
+  return null;
+}
+
 export function parseQuery(q) {
-  const out = { words: [], min: null, max: null, exact: null, months: [], year: null, day: null, type: null, tags: [], cats: [], accs: [], from: null, to: null };
+  const out = { words: [], min: null, max: null, exact: null, months: [], year: null, day: null, type: null, tags: [], cats: [], subs: [], accs: [], from: null, to: null, rel: null };
   // Join "1 000" into "1000", "> 1000" into ">1000", "100 - 500" into "100-500".
-  const text = fold(q).replace(/(\d)[\s\u00a0](?=\d{3}(?!\d))/g, '$1').replace(/([<>]=?)\s+(?=\d)/g, '$1').replace(/(\d)\s*-\s*(\d)/g, '$1-$2').trim();
+  let text = fold(q).replace(/(\d)[\s\u00a0](?=\d{3}(?!\d))/g, '$1').replace(/([<>]=?)\s+(?=\d)/g, '$1').replace(/(\d)\s*-\s*(\d)/g, '$1-$2').trim();
+  // "this year", "last month", "anul acesta", "в этом году": a period from today.
+  for (const [re, rel] of REL_WORDS) text = text.replace(re, () => { out.rel = rel; return ' '; });
   for (const tok of text.split(/\s+/).filter(Boolean)) {
     let m;
+    if (FILLER.has(tok)) continue;
     if ((m = tok.match(/^#([\p{L}\p{N}_-]+)$/u))) out.tags.push(m[1]);
     else if ((m = tok.match(/^(?:cat|category):(.+)$/))) out.cats.push(m[1]);
     else if ((m = tok.match(/^(?:acc|account):(.+)$/))) out.accs.push(m[1]);
+    else if ((m = tok.match(/^(?:sub|subcategory):(.+)$/))) out.subs.push(m[1]);
     else if ((m = tok.match(/^from:(\d{4}-\d{2}-\d{2})$/))) out.from = m[1];
     else if ((m = tok.match(/^to:(\d{4}-\d{2}-\d{2})$/))) out.to = m[1];
     else if ((m = tok.match(/^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$/))) { out.from = m[1]; out.to = m[2]; }
@@ -101,6 +131,8 @@ function haystack(state, t) {
   const name = (arr, id) => arr.find((x) => x.id === id);
   const parts = [t.note, t.currency, t.personName];
   if (t.category) parts.push(name(state.settings.categories, t.category)?.name);
+  const sub = t.sub && (state.settings.subcats || []).find((x) => x.id === t.sub && x.parent === t.category);
+  if (sub) parts.push(sub.name);
   for (const id of [t.account, t.from, t.to]) {
     const a = id && name(state.settings.accounts, id);
     if (a) parts.push(a.name, a.bank);
@@ -112,8 +144,10 @@ function haystack(state, t) {
 export function searchTx(state, query, today) {
   const q = typeof query === 'string' ? parseQuery(query) : query;
   const day = q.day == null ? null : addDays(today, q.day);
+  const rel = relRange(q.rel, today);
   return state.tx.filter((t) => {
     if (q.type && t.type !== q.type) return false;
+    if (rel && (t.date < rel.from || t.date > rel.to)) return false;
     if (q.from && t.date < q.from) return false;
     if (q.to && t.date > q.to) return false;
     if (q.tags?.length) {
@@ -123,6 +157,10 @@ export function searchTx(state, query, today) {
     if (q.cats?.length) {
       const c = t.category && state.settings.categories.find((x) => x.id === t.category);
       if (!c || !q.cats.some((w) => fold(c.id).startsWith(w) || fold(c.name).startsWith(w))) return false;
+    }
+    if (q.subs?.length) {
+      const sub = t.sub && (state.settings.subcats || []).find((x) => x.id === t.sub && x.parent === t.category);
+      if (!sub || !q.subs.some((w) => fold(sub.name).startsWith(w) || fold(sub.name).split(/[\s&]+/).some((p) => p.startsWith(w)))) return false;
     }
     if (q.accs?.length) {
       const accs = [t.account, t.from, t.to].filter(Boolean).map((id) => state.settings.accounts.find((a) => a.id === id)).filter(Boolean);

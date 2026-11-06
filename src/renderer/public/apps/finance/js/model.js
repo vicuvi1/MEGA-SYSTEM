@@ -5,6 +5,7 @@ import { splitByPercent, formatMoney } from './money.js';
 import { monthKey, addMonths, daysInMonth, monthLabel, addDays, isValidISO } from './dates.js';
 import { convert, coinValue } from './fx.js';
 import { perMonth } from './recurring.js';
+import { ensureTree, memorySub, suggestSub, subOf } from './cattree.js';
 
 // v1: first release. v2: custom multi-currency accounts, people, loans,
 // per-record timestamps and deletion markers for sync.
@@ -25,6 +26,12 @@ export const ACCOUNT_KINDS = [
 const ACCOUNT_DEFAULTS = { bank: '', kind: 'cash', currency: 'MDL', start: 0, last4: '', color: 1, savings: false, archived: false, holdings: [] };
 
 export function defaultState() {
+  const st = baseState();
+  ensureTree(st.settings);
+  return st;
+}
+
+function baseState() {
   return {
     version: SCHEMA_VERSION,
     settings: {
@@ -118,6 +125,11 @@ export function normalizeState(raw) {
     accounts,
     categories: Array.isArray(s.categories) && s.categories.length ? s.categories : base.settings.categories,
   };
+  // Subcategories (js/cattree.js): kept as saved, or built once from your categories.
+  if (Array.isArray(s.subcats)) settings.subcats = s.subcats.filter((x) => x && typeof x.id === 'string' && typeof x.parent === 'string' && x.name);
+  else if (Array.isArray(s.categories) && s.categories.length) delete settings.subcats;
+  if (s.subMemory && typeof s.subMemory === 'object') settings.subMemory = { ...s.subMemory };
+  ensureTree(settings);
   const baseCur = settings.currency || 'MDL';
   const accCur = Object.fromEntries(accounts.map((a) => [a.id, a.currency || baseCur]));
   const tx = (Array.isArray(raw.tx) ? raw.tx : []).filter(validTx).map((t) => {
@@ -911,6 +923,22 @@ export function budgetStatus(state, key, today) {
 
 // After a new expense: did it cross 80% or 100% of its category's budget?
 export function budgetAlert(state, t) {
+  return subBudgetAlert(state, t) || categoryBudgetAlert(state, t);
+}
+
+// The same for a subcategory with its own budget (Food › Cafés & coffee).
+function subBudgetAlert(state, t) {
+  const s = t.type === 'expense' && counts(t) ? subOf(state, t) : null;
+  if (!(s?.budget > 0)) return null;
+  const after = txInMonth(state, monthKey(t.date)).filter((x) => x.type === 'expense' && counts(x) && x.sub === s.id && x.category === s.parent).reduce((a, x) => a + B(x), 0);
+  const before = after - B(t);
+  const fmt = (x) => formatMoney(x, state.settings.currency);
+  if (before <= s.budget && after > s.budget) return { level: 'over', text: `${s.name} is over budget: ${fmt(after)} of ${fmt(s.budget)} (${fmt(after - s.budget)} over).` };
+  if (before < s.budget * 0.8 && after >= s.budget * 0.8) return { level: 'near', text: `${s.name}: ${Math.round((after / s.budget) * 100)}% of the budget used. ${fmt(s.budget - after)} left this month.` };
+  return null;
+}
+
+function categoryBudgetAlert(state, t) {
   const c = category(state, t.category);
   if (t.type !== 'expense' || !counts(t) || !(c?.budget > 0)) return null;
   const after = spentIn(state, monthKey(t.date), c.id);
@@ -1158,11 +1186,17 @@ export function suggestCategory(state, note, type) {
   if (rule && valid(rule.category)) return rule.category;
   const past = sortTx(state.tx).find((t) => t.type === type && (t.note || '').trim().toLowerCase() === n);
   if (past && valid(past.category)) return past.category;
+  // A merchant you filed under a subcategory before.
+  const mem = type === 'expense' ? memorySub(state, note) : null;
+  if (mem && valid(mem.parent)) return mem.parent;
   const learned = learnedCategory(state, note, type);
   if (learned && valid(learned)) return learned;
   for (const [id, re] of KEYWORDS[type] || []) {
     if (re.test(n) && valid(id)) return id;
   }
+  // The detailed word list ("kebab" -> Food › Restaurants).
+  const sub = type === 'expense' ? suggestSub(state, note) : null;
+  if (sub && valid(sub.sub.parent)) return sub.sub.parent;
   return null;
 }
 

@@ -38,7 +38,7 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(f[acbkuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/
+export const CALLBACK_DATA = /^(f[acbksuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
   // Water and workout cards: a tap updates the shared log and the card.
@@ -702,7 +702,7 @@ export const CALLBACKS: CallbackHandler[] = [
   },
   // Everything else: a must-do tick or a "what got in the way" (p…), or a money card button (f…).
   {
-    prefixes: ['pp', 'pr', 'fa', 'fb', 'fc', 'fk', 'fu'],
+    prefixes: ['pp', 'pr', 'fa', 'fb', 'fc', 'fk', 'fs', 'fu'],
     match: () => true,
     run: async (c, t) => {
       const { mirror, services, onExpense } = c
@@ -759,7 +759,7 @@ export const CALLBACKS: CallbackHandler[] = [
         parse_mode: 'HTML',
         ...(res.keyboard ? { reply_markup: res.keyboard } : {})
       }).catch(() => null)
-      if (data.startsWith('fu|') || data.startsWith('fa|') || data.startsWith('fk|')) onExpense?.()
+      if (data.startsWith('fu|') || data.startsWith('fa|') || data.startsWith('fk|') || data.startsWith('fs|')) onExpense?.()
       return res.text
     }
   }

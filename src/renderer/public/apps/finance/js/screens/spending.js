@@ -4,6 +4,7 @@
 
 import { ctx, esc } from '../ctx.js';
 import * as M from '../model.js';
+import * as T from '../cattree.js';
 import { todayISO, addMonths, monthKey, monthLabel } from '../dates.js';
 
 const TOP = 7; // more than this folds into "Everything else"
@@ -33,6 +34,7 @@ export function spendingCard({ period = 'month', type = 'expense', title } = {})
   const restSum = rest.reduce((a, r) => a + r.amount, 0);
   const colors = colorsFor(state, shown.map((r) => r.id));
   const name = (id) => M.category(state, id)?.name || 'Unknown';
+  const icon = (id) => M.category(state, id)?.emoji || '';
   const items = [...shown.map((r) => ({ ...r, name: name(r.id), color: colors[r.id] })),
     ...(restSum ? [{ id: '__rest', name: `Everything else (${rest.length})`, amount: restSum, share: total ? restSum / total : 0, count: rest.reduce((a, r) => a + r.count, 0), color: 'var(--faint)' }] : [])];
 
@@ -40,7 +42,7 @@ export function spendingCard({ period = 'month', type = 'expense', title } = {})
   const verb = type === 'expense' ? 'spent' : 'earned';
   const bar = items.map((it) => `<button class="part" data-act="cat-open" data-cat="${esc(it.id)}" data-type="${type}" data-period="${period}" style="flex:${it.amount} 1 0;--c:${it.color}" aria-label="${esc(it.name)}: ${ctx.money(it.amount)}, ${Math.round(it.share * 100)}%"><span class="tip-bubble">${esc(it.name)} · ${ctx.money(it.amount)}</span></button>`).join('');
   const list = items.map((it) => `<button class="cat-row-btn" data-act="cat-open" data-cat="${esc(it.id)}" data-type="${type}" data-period="${period}">
-      <span class="name"><i class="dot" style="--c:${it.color}"></i>${esc(it.name)}</span>
+      <span class="name">${icon(it.id) ? `<span class="ci" aria-hidden="true">${esc(icon(it.id))}</span>` : `<i class="dot" style="--c:${it.color}"></i>`}${esc(it.name)}</span>
       <span class="share">${Math.round(it.share * 100)}%</span>
       <span class="money">${ctx.money(it.amount)}</span>
       <span class="meter"><i style="width:${(it.amount / (items[0]?.amount || 1) * 100).toFixed(1)}%;background:${it.color}"></i></span>
@@ -77,6 +79,12 @@ export function openCategory(id, period = 'month', type = 'expense') {
   // Normal month = average of the earlier months that have any spending here.
   const prior = months.slice(0, 5).filter((m) => m.v > 0);
   const avg = prior.length ? Math.round(prior.reduce((a, m) => a + m.v, 0) / prior.length) : null;
+  // One level deeper: where the money went inside this category.
+  const subs = type === 'expense' && id !== '__rest' && T.subsOf(state, id).length ? T.totalsBySub(state, list, id).rows : [];
+  const subHtml = subs.length ? `<div class="sheet-subs">${subs.map((r) => {
+    const sb = r.id === T.NO_SUB ? null : T.subById(state, r.id);
+    return `<div class="sheet-sub"><span>${sb?.emoji ? `${esc(sb.emoji)} ` : ''}${esc(sb ? sb.name : 'No subcategory')}</span><span class="muted small">${Math.round(r.share * 100)}%</span><b class="font-num">${ctx.money(r.amount)}</b></div>`;
+  }).join('')}<button type="button" class="btn small" data-drill="${esc(id)}">See it in Reports</button></div>` : '';
   ctx.openSheet(`<h3>${esc(title)} <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
     <div class="stats" style="margin-bottom:14px">
       <div class="stat"><span class="k">${esc(range.label)}</span><b>${ctx.money(sum)}</b></div>
@@ -84,8 +92,11 @@ export function openCategory(id, period = 'month', type = 'expense') {
       <div class="stat"><span class="k">Normal month</span><b>${avg == null ? '–' : ctx.money(avg)}</b></div>
     </div>
     <div class="mini-months">${months.map((m) => `<div class="mm"><span class="mm-bar"><i style="height:${((m.v / max) * 100).toFixed(1)}%"></i></span><span class="mm-l">${monthLabel(m.k, true).slice(0, 3)}</span><span class="mm-v">${m.v ? ctx.money(m.v).replace(/ [A-Z]+$/, '') : '–'}</span></div>`).join('')}</div>
+    ${subHtml}
     ${items.length ? `<div class="list">${items.map((t) => ctx.txRow(t, { showDate: true })).join('')}</div>` : '<p class="muted">No records.</p>'}`, (sheet) => {
     sheet.addEventListener('click', (e) => {
+      const d = e.target.closest('[data-drill]');
+      if (d) { ctx.closeSheet(); ctx.drillReports?.(d.dataset.drill); return; }
       const row = e.target.closest('[data-act="edit"]');
       if (row) { ctx.closeSheet(); ctx.openTxSheet(ctx.state.tx.find((t) => t.id === row.dataset.id)); }
     });

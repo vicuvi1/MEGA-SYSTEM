@@ -6,7 +6,9 @@
 // in Turso (settings.app_sync_finance), so every device gets it; buttons
 // under the reply change the account or category, or undo it.
 // @ts-ignore plain JS modules from the embedded app
-import { parseQuick, recordFromMessage, recordDay, loggedText } from '../../public/apps/finance/js/telegram.js'
+import { parseQuick, recordFromMessage, recordDay, loggedText, subFor } from '../../public/apps/finance/js/telegram.js'
+// @ts-ignore
+import { subsOf, subOf, subById, setSub } from '../../public/apps/finance/js/cattree.js'
 // @ts-ignore
 import { normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } from '../../public/apps/finance/js/model.js'
 // @ts-ignore
@@ -45,6 +47,23 @@ function betterCategory(state: any, f: any): string {
   return hit ? hit.id : f.category || fallback
 }
 
+/** The category, then the subcategory that fits the note ("kebab" → Food › Restaurants). */
+function fileIt(state: any, f: any): void {
+  f.category = betterCategory(state, f)
+  if (f.type !== 'expense') return
+  const sub = f.sub && subById(state, f.sub)?.parent === f.category ? subById(state, f.sub) : subFor(state, f.note, f.category)
+  if (sub) {
+    f.sub = sub.id
+    f.category = sub.parent
+  } else delete f.sub
+}
+
+const catLabel = (state: any, t: any): string => {
+  const c = catOf(state, t.category)
+  const s = subOf(state, t)
+  return `${c?.name || 'Category'}${s ? ` › ${s.name}` : ''}`
+}
+
 /**
  * Quick add in the app (MF1): no account named in the text → the main lei
  * wallet (not "the account you used last", which the Telegram bot keeps).
@@ -74,7 +93,7 @@ export function moneyKeyboard(state: any, t: any, extra = ''): any {
     rows.push(accs.slice(i, i + 3).map((a: any) => ({ text: `${a.id === t.account ? '✓ ' : ''}${a.emoji ? a.emoji + ' ' : ''}${a.name}`, callback_data: `fa|${t.id}|${a.id}` })))
   }
   rows.push([
-    { text: `📂 ${catOf(state, t.category)?.name || 'Category'}`, callback_data: `fc|${t.id}` },
+    { text: `📂 ${catLabel(state, t)}`, callback_data: `fc|${t.id}` },
     { text: '↩️ Undo', callback_data: `fu|${t.id}${extra ? '|' + extra : ''}` }
   ])
   return { inline_keyboard: rows }
@@ -90,18 +109,30 @@ function categoryKeyboard(state: any, t: any): any {
   return { inline_keyboard: rows }
 }
 
+/** After a category is picked: its subcategories, one tap each. */
+function subKeyboard(state: any, t: any): any {
+  const subs = subsOf(state, t.category).slice(0, 15)
+  const rows: any[][] = []
+  for (let i = 0; i < subs.length; i += 3) {
+    rows.push(subs.slice(i, i + 3).map((s: any) => ({ text: `${s.id === t.sub ? '✓ ' : ''}${s.emoji ? s.emoji + ' ' : ''}${s.name}`, callback_data: `fs|${t.id}|${s.id}` })))
+  }
+  rows.push([{ text: '⬅️ Done', callback_data: `fb|${t.id}` }])
+  return { inline_keyboard: rows }
+}
+
 /** What a money message would log, without logging it (X5): "45 lei · Food", or null. */
 export function previewMoney(db: Db, text: string, opts: { mainAccount?: boolean } = {}): { amount: number; label: string; type: string; category: string; account: string; daysAgo: number } | null {
   const state = financeState(db)
   if (!state) return null
   const f = parseQuick(text, state)
   if (!f || !(f.amount > 0)) return null
-  f.category = betterCategory(state, f)
+  fileIt(state, f)
   if (opts.mainAccount) toMainAccount(state, text, f)
   const c = catOf(state, f.category)
+  const sc = f.sub ? subById(state, f.sub) : null
   const cur = accOf(state, f.account)?.currency || state.settings.currency
   const a = accOf(state, f.account)
-  return { amount: f.amount, label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}` : ''}${f.type === 'income' ? ' (income)' : ''}`, type: f.type, category: `${c?.emoji ? c.emoji + ' ' : ''}${c?.name ?? 'Other'}`, account: `${a?.emoji ? a.emoji + ' ' : ''}${a?.name ?? ''}`, daysAgo: Number(f.daysAgo) || 0 }
+  return { amount: f.amount, label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}${sc ? ` › ${sc.name}` : ''}` : ''}${f.type === 'income' ? ' (income)' : ''}`, type: f.type, category: `${c?.emoji ? c.emoji + ' ' : ''}${c?.name ?? 'Other'}${sc ? ` › ${sc.emoji ? sc.emoji + ' ' : ''}${sc.name}` : ''}`, account: `${a?.emoji ? a.emoji + ' ' : ''}${a?.name ?? ''}`, daysAgo: Number(f.daysAgo) || 0 }
 }
 
 const ASK_KEY = 'money_ask'
@@ -142,7 +173,7 @@ export function logMoney(db: Db, text: string, key: string, today: string, now =
   if (!state) return null
   const f = parseQuick(text, state)
   if (!f || !(f.amount > 0)) return null
-  f.category = betterCategory(state, f)
+  fileIt(state, f)
   if (opts.mainAccount) toMainAccount(state, text, f)
   const acc = accOf(state, f.account)
   const currency = acc?.currency || state.settings.currency
@@ -169,12 +200,22 @@ export function moneyButton(db: Db, data: string, today: string): { text: string
     save(db, state)
     return { text: `↩️ <s>${loggedText(state, t, null).split('\n')[0].replace(/<[^>]+>/g, '')}</s>\nRemoved from Finance Helper.`, toast: 'Undone', undoExpense: Number(arg) || undefined }
   }
+  if (kind === 'fs') {
+    // A subcategory picked: filed there, and the merchant is remembered.
+    if (!setSub(state, t, arg, { now })) return null
+    save(db, state)
+    return { text: loggedText(state, t, today), keyboard: moneyKeyboard(state, t), toast: `✓ ${subById(state, arg).name}` }
+  }
   if (kind === 'fa' && accOf(state, arg)) t.account = arg
-  else if (kind === 'fk' && catOf(state, arg)) t.category = arg
-  else return null
+  else if (kind === 'fk' && catOf(state, arg)) {
+    t.category = arg
+    if (t.sub && subById(state, t.sub)?.parent !== arg) delete t.sub
+  } else return null
   t.updatedAt = now
   save(db, state)
   const what = kind === 'fa' ? `From ${accOf(state, arg).name}` : catOf(state, arg).name
+  // A category with subcategories: offer them next.
+  if (kind === 'fk' && t.type === 'expense' && subsOf(state, arg).length) return { text: loggedText(state, t, today), keyboard: subKeyboard(state, t), toast: `✓ ${what}` }
   return { text: loggedText(state, t, today), keyboard: moneyKeyboard(state, t), toast: `✓ ${what}` }
 }
 
@@ -230,9 +271,17 @@ export function editMoney(db: Db, id: string, patch: { amount?: number; category
   }
   if (patch.category) {
     const c = fuzzy(state.settings.categories.filter((x: any) => x.type === t.type && !x.archived), patch.category)
-    if (!c) return { ok: false, text: `No category called "${patch.category}"` }
-    t.category = c.id
-    changed.push(c.name)
+    // A subcategory name works too ("coffee" → Food › Cafés & coffee).
+    const s = !c && t.type === 'expense' ? fuzzy((state.settings.subcats || []).filter((x: any) => !x.archived && catOf(state, x.parent)), patch.category) : null
+    if (!c && !s) return { ok: false, text: `No category called "${patch.category}"` }
+    if (s) {
+      setSub(state, t, s.id)
+      changed.push(`${catOf(state, s.parent)?.name} › ${s.name}`)
+    } else {
+      t.category = c.id
+      if (t.sub && subById(state, t.sub)?.parent !== c.id) delete t.sub
+      changed.push(c.name)
+    }
   }
   if (patch.account) {
     const a = fuzzy(state.settings.accounts.filter((x: any) => !x.archived), patch.account)

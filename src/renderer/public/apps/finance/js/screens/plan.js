@@ -3,6 +3,7 @@
 
 import { ctx, esc } from '../ctx.js';
 import * as M from '../model.js';
+import * as T from '../cattree.js';
 import * as R from '../recurring.js';
 import { todayISO, dayLabel, daysBetween, addDays, monthKey, monthLabel, daysInMonth } from '../dates.js';
 import { evalAmount, formatMoney, centsToPlain } from '../money.js';
@@ -537,7 +538,8 @@ function budgetCard() {
   const today = todayISO();
   const key = monthKey(today);
   const st = M.budgetStatus(ctx.state, key, today);
-  if (!st.rows.length) {
+  const subRows = T.subBudgetStatus(ctx.state, key);
+  if (!st.rows.length && !subRows.length) {
     return `<section class="card"><h2>Budgets</h2>
       <p class="muted" style="margin-top:0">Give the categories you want to keep in check (food, going out, clothes…) a monthly limit. You get a warning at 80%, when you go over, and when your pace would take you over.</p>
       <button class="btn primary block" data-act="budget-set">Set budgets</button></section>`;
@@ -553,9 +555,18 @@ function budgetCard() {
       <span class="foot ${r.level === 'over' ? 'bad' : ''}">${foot}</span>
     </button>`;
   }).join('');
+  const subs = subRows.map((r) => {
+    const s = r.sub;
+    const w = Math.min(100, r.pct * 100).toFixed(1);
+    return `<button class="jar budget-row budget-sub" data-act="cat-open" data-cat="${esc(s.parent)}" data-period="month" data-type="expense">
+      <span class="row"><span>${s.emoji ? `${esc(s.emoji)} ` : ''}${esc(M.category(ctx.state, s.parent)?.name || '')} › ${esc(s.name)} <span class="muted">${Math.round(r.pct * 100)}%</span></span><span class="money">${ctx.money(r.spent)} <span class="muted">/ ${ctx.money(r.budget, { compact: true })}</span></span></span>
+      <span class="bar ${r.level === 'over' ? 'over' : r.level === 'ok' ? '' : 'gold'}"><i style="width:${w}%"></i><span class="mark" style="left:${evenPace.toFixed(1)}%"></span></span>
+      <span class="foot ${r.level === 'over' ? 'bad' : ''}">${r.level === 'over' ? `Over by ${ctx.money(-r.left)}` : `${ctx.money(r.left)} left`}</span>
+    </button>`;
+  }).join('');
   return `<section class="card"><h2>Budgets · ${esc(monthLabel(key))} <button class="card-link right" data-act="budget-set">Edit</button></h2>
     <p class="muted small" style="margin-top:0">${ctx.money(st.spent)} of ${ctx.money(st.budget)} · ${st.left >= 0 ? `${ctx.money(st.left)} left` : `<b class="expense">${ctx.money(-st.left)} over</b>`} · ${st.daysLeft} day${st.daysLeft === 1 ? '' : 's'} to go. The line marks an even pace.</p>
-    ${rows}</section>`;
+    ${rows}${subs ? `<p class="muted small" style="margin:14px 0 6px">Subcategories</p>${subs}` : ''}</section>`;
 }
 
 function budgetSheet() {
@@ -564,14 +575,20 @@ function budgetSheet() {
   const cats = state.settings.categories.filter((c) => c.type === 'expense');
   const avg = Object.fromEntries(cats.map((c) => [c.id, M.averageSpend(state, c.id, key, 3)]));
   const round50 = (x) => Math.ceil(x / 5000) * 5000;
+  // Subcategories you spend in (3-month average) can have their own budget too.
+  const subAvg = Object.fromEntries([...T.monthlyAverage(state, `${key}-01`, (t) => T.subOf(state, t)?.id || null, 3).avg]);
   ctx.openSheet(`<h3>Monthly budgets <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
     <form id="budget-form" novalidate>
       <p class="muted small" style="margin-top:0">Leave empty for no limit. Amounts in ${esc(base())} per month; "avg" is what you spent on average in the last 3 months (tap it to use it).</p>
       <div class="budget-list">${cats.map((c) => `<label class="budget-edit">
-        <span class="n">${ctx.dot(ctx.catColor(c.id))}${esc(c.name)}</span>
+        <span class="n">${c.emoji ? `<span class="ci">${esc(c.emoji)}</span>` : ctx.dot(ctx.catColor(c.id))}${esc(c.name)}</span>
         ${avg[c.id] ? `<button type="button" class="card-link" data-fill="${esc(c.id)}" data-v="${round50(avg[c.id])}">avg ${ctx.money(avg[c.id], { compact: true })}</button>` : '<span></span>'}
         <input type="text" inputmode="decimal" id="b-${esc(c.id)}" value="${c.budget ? esc(centsToPlain(c.budget)) : ''}" placeholder="no limit" aria-label="Budget for ${esc(c.name)}">
-      </label>`).join('')}</div>
+      </label>${T.subsOf(state, c.id).filter((x) => x.budget > 0 || subAvg[x.id]).map((x) => `<label class="budget-edit budget-edit-sub">
+        <span class="n">${x.emoji ? `<span class="ci">${esc(x.emoji)}</span>` : ''}${esc(x.name)}</span>
+        ${subAvg[x.id] ? `<button type="button" class="card-link" data-fill="${esc(x.id)}" data-v="${round50(subAvg[x.id])}">avg ${ctx.money(subAvg[x.id], { compact: true })}</button>` : '<span></span>'}
+        <input type="text" inputmode="decimal" id="b-${esc(x.id)}" data-sub-budget="${esc(x.id)}" value="${x.budget ? esc(centsToPlain(x.budget)) : ''}" placeholder="no limit" aria-label="Budget for ${esc(x.name)}">
+      </label>`).join('')}`).join('')}</div>
       <div class="btns" style="margin-top:14px"><button type="button" class="btn" data-fill-all>Use my averages for empty ones</button><button type="submit" class="btn primary">Save budgets</button></div>
     </form>`, (sheet) => {
     sheet.addEventListener('click', (e) => {
@@ -592,6 +609,12 @@ function budgetSheet() {
         const next = v > 0 ? v : null;
         if ((c.budget || null) !== next) { c.budget = next; M.touch(c); }
         if (next) n++;
+      }
+      for (const input of sheet.querySelectorAll('[data-sub-budget]')) {
+        const v = evalAmount(input.value) || 0;
+        const sub = T.subById(state, input.dataset.subBudget);
+        if (sub && (sub.budget || null) !== (v > 0 ? v : null)) T.renameSub(state, sub.id, { budget: v > 0 ? v : null });
+        if (v > 0) n++;
       }
       ctx.commit();
       ctx.closeSheet();

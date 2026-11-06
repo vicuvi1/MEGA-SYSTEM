@@ -128,3 +128,35 @@ describe('quick add in the app (MF1): the main lei wallet unless you name one', 
     expect(previewMoney(db(), 'hello there', main)).toBeNull()
   })
 })
+
+describe('subcategories from Telegram', () => {
+  it('files a message one level deeper, out of Other too', () => {
+    const d = db()
+    const kebab = logMoney(d, 'shaorma 60', 's:1', TODAY)!
+    expect(kebab.tx).toMatchObject({ category: 'food', sub: 's-restaurants' })
+    expect(kebab.reply).toContain('Restaurants')
+    expect(JSON.stringify(kebab.keyboard)).toContain('Food › Restaurants')
+    expect(logMoney(d, 'farmacie 120', 's:2', TODAY)!.tx).toMatchObject({ category: 'health', sub: 's-pharmacy' })
+    expect(logMoney(d, 'cadou 300', 's:3', TODAY)!.tx).toMatchObject({ category: 'gifts', sub: 's-gifts' })
+    expect(previewMoney(d, 'yandex 45')!.category).toContain('Taxi')
+  })
+
+  it('picking a category offers its subcategories; a pick is remembered for next time', () => {
+    const d = db()
+    const { tx } = logMoney(d, 'Corner bistro 90', 's:4', TODAY)!
+    const pick = moneyButton(d, `fk|${tx.id}|fun`, TODAY)!
+    expect(JSON.stringify(pick.keyboard)).toContain(`fs|${tx.id}|s-goingout`)
+    const done = moneyButton(d, `fs|${tx.id}|s-goingout`, TODAY)!
+    expect(done.toast).toContain('Going out')
+    expect(financeState(d).tx.find((t: any) => t.id === tx.id)).toMatchObject({ category: 'fun', sub: 's-goingout' })
+    // The next message from the same place goes there by itself.
+    expect(logMoney(d, 'corner bistro 50', 's:5', TODAY)!.tx).toMatchObject({ category: 'fun', sub: 's-goingout' })
+  })
+
+  it('Ben can name a subcategory when fixing a record', () => {
+    const d = db()
+    const { tx } = logMoney(d, 'something 20', 's:6', TODAY)!
+    expect(editMoney(d, tx.id, { category: 'cafés' }).ok).toBe(true)
+    expect(financeState(d).tx.find((t: any) => t.id === tx.id)).toMatchObject({ category: 'food', sub: 's-cafes' })
+  })
+})

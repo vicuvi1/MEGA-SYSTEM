@@ -3,6 +3,8 @@
 
 import { load, save, backupText, restoreJSON, requestPersistence, isSealed, openImported, wipeStore, hasSession, reopen, STORAGE_KEYS } from './store.js';
 import * as M from './model.js';
+import * as T from './cattree.js';
+import * as Cats from './screens/categories.js';
 import { formatMoney, evalAmount, centsToPlain } from './money.js';
 import { todayISO, monthKey, monthLabel, addMonths, daysInMonth, dayLabel, dowIndex, DOW_LONG, DOW_SHORT, MONTHS, addDays } from './dates.js';
 import { convert, pairRate, formatRate } from './fx.js';
@@ -489,6 +491,13 @@ function goToMonth(k) {
 }
 
 
+// A new spending record without a subcategory gets the one its note fits.
+function autoSub(t) {
+  if (t.type !== 'expense' || T.subOf(state, t)) return;
+  const g = T.suggestSub(state, t.note, { category: t.category })?.sub;
+  if (g) { t.sub = g.id; t.category = g.parent; }
+}
+
 function txRow(t, { showDate = false } = {}) {
   let av;
   let title;
@@ -503,10 +512,12 @@ function txRow(t, { showDate = false } = {}) {
     amount = `<span class="amount">${fm(t.amount)}${Number.isInteger(t.toAmount) ? ` <span class="muted">→ ${formatMoney(t.toAmount, accOf(t.to).currency || cur)}</span>` : ''}</span>`;
   } else {
     const c = catOf(t.category);
+    const sc = T.subOf(state, t);
     const who = t.person ? M.person(state, t.person)?.name : null;
-    av = `<span class="av" style="--c:${catColor(t.category)}" aria-hidden="true">${initial(c.name)}</span>`;
-    title = t.note || c.name;
-    sub = [c.name, who ? `${t.type === 'income' ? 'from' : 'to'} ${who}` : null, accOf(t.account).name].filter(Boolean).join(' · ');
+    const icon = sc?.emoji || c.emoji;
+    av = `<span class="av${icon ? ' av-emoji' : ''}" style="--c:${catColor(t.category)}" aria-hidden="true">${icon ? esc(icon) : initial(c.name)}</span>`;
+    title = t.note || (sc ? sc.name : c.name);
+    sub = [sc ? `${c.name} › ${sc.name}` : c.name, who ? `${t.type === 'income' ? 'from' : 'to'} ${who}` : null, accOf(t.account).name].filter(Boolean).join(' · ');
     const ty = M.typedAs(t);
     // In another currency: what it was in lei too (at that day's rate).
     const inLei = cur !== state.settings.currency && Number.isInteger(t.base) ? `<small class="typed-as">≈ ${formatMoney(t.base, state.settings.currency)}</small>` : '';
@@ -1217,6 +1228,7 @@ function onSheetChange(el) {
     } else if (field === 'note') {
       t.note = v;
       if (t.category === 'other' || t.category === 'other-in') t.category = M.suggestCategory(state, v, t.type) || t.category;
+      autoSub(t);
     } else if (field === 'category') t.category = v;
     M.touch(t);
     persist();
@@ -1236,6 +1248,7 @@ function onSheetChange(el) {
   const now = Date.now();
   const tx = { id: M.uid(), createdAt: now, updatedAt: now, type, amount, currency: cur, rate, base: Math.round(amount * rate), date, account, note,
     category: M.suggestCategory(state, note, type) || (type === 'income' ? 'other-in' : 'other') };
+  autoSub(tx);
   state.tx.push(tx);
   ui.sheetExtra.delete(date);
   ui.flashId = tx.id;
@@ -1374,7 +1387,7 @@ function viewSettings() {
     + `<option value="${M.NO_JAR}" ${sel === M.NO_JAR ? 'selected' : ''}>Business, outside the jars</option>`;
   const used = new Set(state.tx.map((t) => t.category));
   const catRow = (c) => `<div class="cat-row">
-    ${dot(catColor(c.id))}
+    <input class="cat-emoji" type="text" maxlength="4" value="${esc(c.emoji || '')}" data-cat="${esc(c.id)}" data-field="emoji" aria-label="Icon for ${esc(c.name)}" placeholder="•" style="--c:${catColor(c.id)}">
     <input type="text" value="${esc(c.name)}" data-cat="${esc(c.id)}" data-field="name" aria-label="Name">
     ${c.type === 'expense'
     ? `<select data-cat="${esc(c.id)}" data-field="jar" aria-label="Jar">${jarOptions(c.jar)}</select>
@@ -1516,7 +1529,7 @@ function viewSettings() {
   const sections = [
     { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals },
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
-    { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Rules.settingsCard() },
+    { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() },
     { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + Backups.settingsCard() + Sync.settingsCard() },
     { id: 'connect', icon: '🔗', label: 'Telegram & Binance', sub: 'Your bot, crypto balances', desc: 'Your own Telegram bot for logging from your phone, and Binance balances (read-only).', html: () => Telegram.settingsCard() + TgBlocks.settingsCard() + Binance.settingsCard() },
     { id: 'buddy', icon: '🤖', label: 'Bit, your buddy', sub: 'Show, name, color', desc: 'Bit, the little robot that cheers you on: show or hide it, its name and color.', html: () => Buddy.settingsCard() },
@@ -1747,6 +1760,26 @@ function openTxSheet(existing = null, preset = {}) {
   // You picked the account yourself: a category no longer moves it.
   let accTouched = !!existing || !!preset.account;
   let addingCat = false;
+  // Subcategory: picked by you (or confirmed), else a guess from the note.
+  let subTouched = !!existing?.sub;
+  let subGuess = null;
+  let subOpen = false;
+  let addingSub = false;
+  if (!existing) draft.sub = preset.sub || null;
+  const guessSub = () => (draft.type === 'expense' ? T.suggestSub(state, draft.note, { category: draft.category })?.sub || null : null);
+  // After the note or category changed (unless you picked one yourself). A
+  // new record takes the guess (shown as "Is this …?"); an old one only
+  // shows it until you tap ✓.
+  const reguess = () => {
+    if (subTouched) return;
+    if (draft.type !== 'expense') { subGuess = null; draft.sub = existing?.sub || null; return; }
+    subGuess = guessSub();
+    if (!existing) {
+      if (subGuess && !catTouched && T.isOther(draft.category)) draft.category = subGuess.parent;
+      draft.sub = subGuess && subGuess.parent === draft.category ? subGuess.id : null;
+    }
+  };
+  if ((existing && !existing.sub) || (!existing && draft.note && !draft.sub)) reguess();
   // One-tap fills for things you log often (and your favorites).
   const picks = existing || preset.fromRule ? [] : M.quickPicks(state, todayISO(), 8);
 
@@ -1780,6 +1813,34 @@ function openTxSheet(existing = null, preset = {}) {
       ${accountOptionsHTML(all, draft[field], { baseCur })}</select></label>`;
   };
 
+  const catChipIcon = (c) => (c.emoji ? `<span class="ci" aria-hidden="true">${esc(c.emoji)}</span>` : dot(catColor(c.id)));
+  const subRow = () => {
+    if (draft.type !== 'expense' || !draft.category) return '';
+    const subs = T.subsOf(state, draft.category);
+    const other = T.isOther(draft.category);
+    // In Other, a guess may point at another category ("kebab" -> Food › Restaurants).
+    const g = subGuess && !subTouched && (subGuess.parent === draft.category || other) ? subGuess : null;
+    if (!subs.length && !g && other) return '';
+    const chosen = draft.sub && T.subById(state, draft.sub)?.parent === draft.category ? draft.sub : null;
+    const gp = g && g.parent !== draft.category ? catOf(g.parent) : null;
+    const guessLine = g ? `<div class="guess-line"><span class="guess-q">Is this <b>${gp ? `${esc(gp.emoji || '')} ${esc(gp.name)} › ` : ''}${esc(g.emoji || '')} ${esc(g.name)}</b>?</span>
+      <button type="button" class="guess-yes" data-act="sub-yes">✓ Yes</button>
+      ${other ? '' : `<button type="button" class="guess-change" data-act="sub-change" aria-expanded="${subOpen}">Change</button>`}</div>` : '';
+    const list = !other && (!g || subOpen) ? `<div class="subs" role="group" aria-label="Subcategory">${subs.map((x) => `<button type="button" class="sub-chip" data-sub="${esc(x.id)}" aria-pressed="${chosen === x.id}" style="--c:${Cats.subColor(state, x)}">${x.emoji ? `<span class="ci" aria-hidden="true">${esc(x.emoji)}</span>` : ''}<span>${esc(x.name)}</span></button>`).join('')}
+      ${addingSub ? `<span class="cat-new"><input id="new-sub" type="text" placeholder="New subcategory" aria-label="New subcategory name"><button type="button" class="btn primary" data-act="sub-create">Add</button></span>` : `<button type="button" class="sub-chip sub-add" data-act="sub-new">+ New</button>`}</div>` : '';
+    return `<div class="sub-row">${guessLine}${list}</div>`;
+  };
+  const paintSub = (sheet) => {
+    const wrap = sheet.querySelector('#sub-row-wrap');
+    if (wrap) wrap.innerHTML = subRow();
+    for (const b of sheet.querySelectorAll('.cat[data-cat]')) b.setAttribute('aria-pressed', String(b.dataset.cat === draft.category));
+    const box = sheet.querySelector('#new-sub');
+    if (box) {
+      box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sheet.querySelector('[data-act="sub-create"]').click(); } });
+      box.focus();
+    }
+  };
+
   const html = () => {
     const isT = draft.type === 'transfer';
     const cur = curOf();
@@ -1801,8 +1862,9 @@ function openTxSheet(existing = null, preset = {}) {
         <input id="tx-note" type="text" list="note-list" autocomplete="off" value="${esc(draft.note)}" placeholder="${draft.type === 'income' ? 'e.g. salary, project for a client' : isT ? 'e.g. to the safe' : 'e.g. groceries, taxi, rent'}"></label>
       <datalist id="note-list">${M.noteSuggestions(state, draft.type).map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
       ${(() => { const tags = M.allTags(state).slice(0, 8); return `<div class="tag-picks" role="group" aria-label="Tags">${tags.map((g) => `<button type="button" class="tag-pick" data-tag="${esc(g.tag)}" aria-pressed="${M.tagsOf(draft.note).includes(g.tag)}">#${esc(g.tag)}</button>`).join('')}<span class="muted small">${tags.length ? 'Tap a tag, or' : 'Tags:'} type #trip in the note</span></div>`; })()}
-      ${isT ? '' : `<div class="cats" role="group" aria-label="Category">${categoryOrder(draft.type).map((c) => `<button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${draft.category === c.id}">${dot(catColor(c.id))}<span>${esc(c.name)}</span></button>`).join('')}
-        ${addingCat ? `<span class="cat-new"><input id="new-cat" type="text" placeholder="New category" aria-label="New category name"><button type="button" class="btn primary" data-act="cat-create">Add</button></span>` : '<button type="button" class="cat cat-add" data-act="cat-new">+ New</button>'}</div>`}
+      ${isT ? '' : `<div class="cats" role="group" aria-label="Category">${categoryOrder(draft.type).map((c) => `<button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${draft.category === c.id}">${catChipIcon(c)}<span>${esc(c.name)}</span></button>`).join('')}
+        ${addingCat ? `<span class="cat-new"><input id="new-cat" type="text" placeholder="New category" aria-label="New category name"><button type="button" class="btn primary" data-act="cat-create">Add</button></span>` : '<button type="button" class="cat cat-add" data-act="cat-new">+ New</button>'}</div>
+        <div id="sub-row-wrap">${subRow()}</div>`}
       ${isT ? '' : `<div class="row2">
         <label class="field"><span>${draft.type === 'income' ? 'From who? (optional)' : 'To who? (optional)'}</span><input id="tx-person" type="text" list="people-list" autocomplete="off" value="${esc(draft.personName)}" placeholder="Name"></label>
         <label class="field check"><input id="tx-loan" type="checkbox" ${draft.loan ? 'checked' : ''}><span>${draft.type === 'income' ? 'Borrowed: I pay it back' : 'Lent: they pay it back'}</span></label>
@@ -1924,11 +1986,13 @@ function openTxSheet(existing = null, preset = {}) {
       });
     }
     sheet.querySelector('#tx-note').addEventListener('input', (e) => {
-      if (catTouched || draft.type === 'transfer') return;
-      const s = M.suggestCategory(state, e.target.value, draft.type);
-      draft.category = s;
-      for (const b of sheet.querySelectorAll('.cat[data-cat]')) b.setAttribute('aria-pressed', String(b.dataset.cat === s));
-      if (s) followCategory(sheet);
+      if (draft.type === 'transfer') return;
+      draft.note = e.target.value;
+      const before = draft.category;
+      if (!catTouched) draft.category = M.suggestCategory(state, e.target.value, draft.type);
+      reguess();
+      paintSub(sheet);
+      if (draft.category && draft.category !== before) followCategory(sheet);
     });
     sheet.querySelector('#new-cat')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); sheet.querySelector('[data-act="cat-create"]').click(); }
@@ -1982,6 +2046,7 @@ function openTxSheet(existing = null, preset = {}) {
         amount: entry.amount,
         account: draft.account,
         category: draft.category || (draft.type === 'income' ? 'other-in' : 'other'),
+        ...(draft.type === 'expense' && draft.sub && T.subById(state, draft.sub)?.parent === draft.category ? { sub: draft.sub } : {}),
         rate,
         base: Math.round(entry.amount * rate),
         ...(entry.orig ? { orig: entry.orig } : {}),
@@ -2007,6 +2072,8 @@ function openTxSheet(existing = null, preset = {}) {
     }
     if (existing) state.tx = state.tx.map((t) => (t.id === existing.id ? tx : t));
     else state.tx.push(tx);
+    // You picked or confirmed the subcategory: remember the shop for next time.
+    if (tx.sub && subTouched && tx.note) T.rememberSub(state, tx.note, tx.sub, now);
     ui.flashId = tx.id;
     if (tx.type === 'income' || (tx.type === 'transfer' && tx.to === state.settings.savingsAccount)) sound.income(state);
     else if (tx.type === 'expense') sound.expense(state);
@@ -2034,6 +2101,9 @@ function openTxSheet(existing = null, preset = {}) {
           draft.category = catTouched ? null : M.suggestCategory(state, draft.note, draft.type);
           catTouched = false;
           addingCat = false;
+          subTouched = false;
+          draft.sub = null;
+          reguess();
           if (!accTouched && draft.type !== 'transfer') draft.account = M.defaultAccount(state, draft.type, draft.category);
           paint(sheet);
         }
@@ -2058,11 +2128,64 @@ function openTxSheet(existing = null, preset = {}) {
         paint(sheet, false);
         return;
       }
+      const subBtn = e.target.closest('.sub-chip[data-sub]');
+      if (subBtn) {
+        draft.sub = draft.sub === subBtn.dataset.sub && subTouched ? null : subBtn.dataset.sub;
+        subTouched = true;
+        paintSub(sheet);
+        return;
+      }
+      if (e.target.closest('[data-act="sub-yes"]') && subGuess) {
+        subTouched = true;
+        subOpen = false;
+        draft.sub = subGuess.id;
+        const moved = draft.category !== subGuess.parent;
+        draft.category = subGuess.parent;
+        catTouched = true;
+        if (moved) followCategory(sheet);
+        // An old record: filed right away, one tap.
+        const live = existing && state.tx.find((t) => t.id === existing.id);
+        if (live && live.type === 'expense') {
+          T.setSub(state, live, subGuess.id);
+          existing.sub = subGuess.id;
+          existing.category = subGuess.parent;
+          persist();
+          Sync.changed();
+          toast(`Filed under ${subGuess.name}`);
+        }
+        paintSub(sheet);
+        return;
+      }
+      if (e.target.closest('[data-act="sub-change"]')) {
+        subOpen = !subOpen;
+        paintSub(sheet);
+        return;
+      }
+      if (e.target.closest('[data-act="sub-new"]')) {
+        addingSub = true;
+        subOpen = true;
+        paintSub(sheet);
+        return;
+      }
+      if (e.target.closest('[data-act="sub-create"]')) {
+        const made = T.addSub(state, draft.category, sheet.querySelector('#new-sub')?.value || '');
+        addingSub = false;
+        if (made) {
+          draft.sub = made.id;
+          subTouched = true;
+          persist();
+        }
+        paintSub(sheet);
+        return;
+      }
       const cat = e.target.closest('.cat[data-cat]');
       if (cat) {
         draft.category = cat.dataset.cat;
         catTouched = true;
-        for (const b of sheet.querySelectorAll('.cat[data-cat]')) b.setAttribute('aria-pressed', String(b === cat));
+        if (draft.sub && T.subById(state, draft.sub)?.parent !== draft.category) { draft.sub = null; subTouched = false; }
+        subOpen = false;
+        reguess();
+        paintSub(sheet);
         followCategory(sheet);
         return;
       }
@@ -2070,12 +2193,14 @@ function openTxSheet(existing = null, preset = {}) {
       if (pick) {
         const p = picks[pick.dataset.pick];
         readInputs(sheet);
-        Object.assign(draft, { type: p.type, note: p.note, category: p.category });
+        Object.assign(draft, { type: p.type, note: p.note, category: p.category, sub: null });
+        subTouched = false;
         if (M.account(state, p.account) && !M.account(state, p.account).archived) draft.account = p.account;
         amountText = centsToPlain(p.amount);
         rateText = '';
         entryCur = null; // quick picks are in the account's currency
         catTouched = true;
+        reguess();
         paint(sheet, false);
         const a = sheet.querySelector('#tx-amount');
         a.focus();
@@ -3162,6 +3287,7 @@ document.addEventListener('input', (e) => {
 // Desktop shortcuts: N = new record, / = search, 1-9 and 0 = sections, Esc = close.
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && isPaletteOpen()) { e.preventDefault(); closePalette(); return; }
+  if (Cats.onKey(e) || ReportsScreen.onKey?.(e)) return;
   if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
     e.preventDefault();
     if (isPaletteOpen()) closePalette();
@@ -3246,7 +3372,7 @@ const SCREENS = {
   rates: RatesScreen,
   telegram: TelegramHub,
   bot: TelegramHub,
-  settings: { view: viewSettings, onClick: (a, el) => Security.onClick(a, el) || Rules.onClick(a, el) || Telegram.onClick(a) || TgBlocks.onClick(a, el) || Buddy.onClick(a, el) || Binance.onClick(a) || Sync.onClick(a) || SelfCheck.onClick(a) || Backups.onClick(a, el) || (a.startsWith('update-') && (Updates.onClick(a), true)), onChange: (el) => Security.onChange(el) || Telegram.onChange(el) || Buddy.onChange(el) || WorkHour.onChange(el) },
+  settings: { view: viewSettings, onClick: (a, el) => Security.onClick(a, el) || Cats.onClick(a, el) || Rules.onClick(a, el) || Telegram.onClick(a) || TgBlocks.onClick(a, el) || Buddy.onClick(a, el) || Binance.onClick(a) || Sync.onClick(a) || SelfCheck.onClick(a) || Backups.onClick(a, el) || (a.startsWith('update-') && (Updates.onClick(a), true)), onChange: (el) => Security.onChange(el) || Cats.onChange(el) || Telegram.onChange(el) || Buddy.onChange(el) || WorkHour.onChange(el) },
 };
 
 function openMoreSheet() {
@@ -3295,6 +3421,13 @@ Object.assign(ctx, {
   tipCard,
   dot,
   catColor,
+  persistSync: () => { persist(); Sync.changed(); },
+  openNeedsSub: (list) => Cats.openNeedsSub(list),
+  drillReports: (cat, sub) => {
+    ReportsScreen.drillTo(cat, sub);
+    if (location.hash === '#reports') render();
+    else location.hash = '#reports';
+  },
   download,
   DEMO,
   commit,

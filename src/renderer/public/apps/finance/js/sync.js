@@ -7,7 +7,7 @@
 import { normalizeState, SCHEMA_VERSION } from './model.js';
 
 const LOCAL_SETTINGS = ['theme', 'themeInLife', 'themeMotion', 'logView'];
-const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'accounts', 'categories', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
+const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'accounts', 'categories', 'subcats', 'subMemory', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
 
 // What goes to Drive.
 export function toCloud(state, deviceId, now = Date.now()) {
@@ -87,6 +87,9 @@ export function mergeStates(local, remote) {
   settings.accounts.sort((a, b) => (Number.isFinite(a.order) ? a.order : 1e6) - (Number.isFinite(b.order) ? b.order : 1e6));
   settings.categories = mergeList(local.settings.categories, r.settings.categories, deleted);
   settings.jars = mergeList(local.settings.jars, r.settings.jars, deleted);
+  settings.subcats = mergeList(local.settings.subcats, r.settings.subcats, deleted);
+  // Learned merchants: both sides, the newer settings winning on the same merchant.
+  settings.subMemory = newer ? { ...(local.settings.subMemory || {}), ...(r.settings.subMemory || {}) } : { ...(r.settings.subMemory || {}), ...(local.settings.subMemory || {}) };
 
   const merged = {
     ...local,
