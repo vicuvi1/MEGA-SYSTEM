@@ -509,6 +509,89 @@ try {
     const n = await pg.locator('.cal-item').count()
     if (n < 3) throw new Error(`only ${n} events on the calendar`)
   })
+  // The teacher's review: events at the same time must sit side by side (never
+  // on top of each other), a click shows the details, and an edit saves.
+  const boxesOf = (sel, titles) =>
+    pg.evaluate(
+      ([s, ts]) =>
+        ts.map((t) => {
+          const el = [...document.querySelectorAll(s)].find((x) => x.querySelector('b')?.textContent?.trim().startsWith(t))
+          const r = el?.getBoundingClientRect()
+          return r ? { t, x: r.left, y: r.top, w: r.width, h: r.height } : { t, missing: true }
+        }),
+      [sel, titles]
+    )
+  const noOverlap = (boxes) => {
+    const miss = boxes.filter((b) => b.missing).map((b) => b.t)
+    if (miss.length) throw new Error(`not on screen: ${miss.join(', ')}`)
+    for (const a of boxes)
+      for (const b of boxes) {
+        if (a === b) continue
+        const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+        const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+        if (ox > 1 && oy > 1) throw new Error(`"${a.t}" covers "${b.t}"`)
+      }
+    for (const b of boxes) if (b.h < 20) throw new Error(`"${b.t}" is only ${Math.round(b.h)} px tall`)
+  }
+  const lastUpdate = () => pg.evaluate(async () => (await fetch('/api/google', { method: 'POST', headers: { Authorization: `Bearer ${localStorage.getItem('life_web_session')}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'lastUpdate' }) })).json())
+  await step('Calendar: events at the same time sit side by side, a click shows the details, a click on empty time adds one', async () => {
+    noOverlap(await boxesOf('.cal-item', ['Stand-up prep', 'Team stand-up', 'Sport (20 min)']))
+    noOverlap(await boxesOf('.cal-item', ['AI study', 'Family call']))
+    noOverlap(await boxesOf('.cal-item', ['Plan tomorrow', 'Read 10 min']))
+    await pg.locator('.cal-item', { hasText: 'Team stand-up' }).first().click()
+    await pg.waitForSelector('.ev-sheet', { timeout: 5000 })
+    const txt = await pg.locator('.ev-sheet').innerText()
+    if (!/Join the call/.test(txt) || !/4 people invited/.test(txt) || !/Repeats/.test(txt)) throw new Error(`the details show ${txt.slice(0, 160)}`)
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('.ev-sheet', { state: 'detached', timeout: 3000 })
+    // A click on an empty hour: the quick "New event" form, saved as a Life System block.
+    const col = pg.locator('.cal-col').first()
+    await col.scrollIntoViewIfNeeded()
+    await pg.evaluate(() => (document.querySelector('.cal-scroll').scrollTop = 0))
+    const box = await col.boundingBox()
+    if (!box) throw new Error('no day column')
+    await pg.mouse.click(box.x + box.width / 2, box.y + 30)
+    await pg.waitForSelector('.cal-draft', { timeout: 3000 })
+    await pg.fill('.cal-draft input[aria-label="Title"]', 'Smoke focus block')
+    await pg.locator('.cal-draft-kind button', { hasText: 'Life System block' }).click()
+    await pg.locator('.cal-draft button.primary').click()
+    await pg.waitForSelector('.cal-item:has-text("Smoke focus block")', { timeout: 8000 })
+  })
+  await step('Today: events at the same time sit side by side, a click opens the details, an edit saves to Google', async () => {
+    await open('today')
+    await pg.waitForSelector('.ds-block', { timeout: 15000 })
+    noOverlap(await boxesOf('.ds-block', ['Stand-up prep', 'Team stand-up', 'Sport (20 min)']))
+    noOverlap(await boxesOf('.ds-block', ['AI study', 'Family call']))
+    noOverlap(await boxesOf('.ds-block', ['Plan tomorrow', 'Read 10 min']))
+    const block = pg.locator('.ds-block', { hasText: 'Stand-up prep' }).first()
+    await block.scrollIntoViewIfNeeded()
+    await block.click()
+    await pg.waitForSelector('.ev-sheet', { timeout: 5000 })
+    const txt = await pg.locator('.ev-sheet').innerText()
+    if (!/Room 204/.test(txt) || !/16:45/.test(txt) || !/Look over yesterday/.test(txt)) throw new Error(`the details show ${txt.slice(0, 160)}`)
+    await pg.locator('.ev-sheet button', { hasText: 'Edit' }).click()
+    await pg.fill('.ev-sheet input[aria-label="Title"]', 'Stand-up notes')
+    await pg.locator('.ev-sheet .ce-lens button', { hasText: '30 min' }).click()
+    await pg.fill('.ev-sheet input[aria-label="Place"]', 'Room 101')
+    await pg.locator('.ev-sheet button', { hasText: 'Save' }).click()
+    await pg.waitForSelector('.ev-sheet', { state: 'detached', timeout: 3000 })
+    // On screen at once, and Google got the change.
+    await pg.waitForSelector('.ds-block:has-text("Stand-up notes")', { timeout: 3000 })
+    let up = null
+    for (let i = 0; i < 20 && up?.title !== 'Stand-up notes'; i++) {
+      up = await lastUpdate()
+      if (up?.title !== 'Stand-up notes') await pg.waitForTimeout(150)
+    }
+    if (up?.title !== 'Stand-up notes' || up?.location !== 'Room 101' || !up?.end) throw new Error(`Google got ${JSON.stringify(up)?.slice(0, 160)}`)
+    const mins = (new Date(up.end).getTime() - new Date(up.start).getTime()) / 60000
+    if (mins !== 30) throw new Error(`the new length is ${mins} min`)
+    // Keys: Enter opens a focused block, Escape closes.
+    await pg.locator('.ds-block', { hasText: 'Family call' }).first().focus()
+    await pg.keyboard.press('Enter')
+    await pg.waitForSelector('.ev-sheet', { timeout: 3000 })
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('.ev-sheet', { state: 'detached', timeout: 3000 })
+  })
   // IP6: the desktop island on its own page, with a stand-in for the desktop
   // bridge: the pill, a click opens the panel, Escape closes it, hover peeks,
   // a right click opens the quiet menu, a reminder drops down.

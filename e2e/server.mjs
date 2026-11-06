@@ -292,6 +292,15 @@ const gcal = (() => {
     ev(0, '19:00', '19:30', 'Quick sync', '#fbbf24'),
     ev(0, '19:10', '19:40', 'Mentor chat', '#a3e635'),
     ev(0, '20:00', '21:00', 'Interview prep', '#a3e635'),
+    // Short events back to back and small overlaps (the "can't see them" case):
+    // they must sit side by side, never on top of each other.
+    { ...ev(0, '16:45', '17:00', 'Stand-up prep', '#fb923c'), description: "Look over yesterday's notes", location: 'Room 204' },
+    { ...ev(0, '17:00', '17:15', 'Team stand-up', '#60a5fa'), meet: 'https://meet.example.com/abc-defg-hij', attendees: 4, recurringEventId: 'standup1' },
+    ev(0, '17:15', '17:35', 'Sport (20 min)', '#c084fc'),
+    ev(0, '22:00', '22:40', 'AI study', '#f97316'),
+    ev(0, '22:25', '22:45', 'Family call', '#f472b6'),
+    ev(0, '23:00', '23:15', 'Plan tomorrow', '#facc15'),
+    ev(0, '23:05', '23:20', 'Read 10 min', '#818cf8'),
     ev(1, '07:00', '09:00', 'Deep block 1', '#c084fc'),
     ev(1, '12:00', '13:30', 'Lecture: Math', '#7cc4ff'),
     ev(1, '17:00', '17:30', 'Sport (20 min)', '#fbbf24'),
@@ -303,7 +312,7 @@ const gcal = (() => {
     if (b.op === 'status') return send({ configured: true, connected: true, calendars: [{ id: 'primary', name: 'Test calendar', color: '#7cc4ff', canWrite: true, on: true }] })
     if (b.op === 'events') return send({ events: events.filter((e) => e.end > b.from && e.start < b.to) })
     if (b.op === 'create') {
-      const e = { id: `ev${++n}`, calendarId: 'primary', title: b.title, start: b.start, end: b.end, allDay: false, ours: true }
+      const e = { id: `ev${++n}`, calendarId: b.calendarId || 'primary', title: b.title, start: b.start, end: b.end, allDay: false, ours: true, description: b.description ?? null, location: b.location ?? null }
       events.push(e)
       return send({ event: e })
     }
@@ -311,7 +320,7 @@ const gcal = (() => {
     if (b.op === 'move' && e) return (Object.assign(e, { start: b.start, end: b.end }), send({ ok: true }))
     if (b.op === 'update' && e) {
       gcal.last = b
-      return (Object.assign(e, Object.fromEntries(Object.entries({ title: b.title, start: b.start, end: b.end, description: b.description, colorId: b.colorId }).filter(([, v]) => v !== undefined))), send({ ok: true }))
+      return (Object.assign(e, Object.fromEntries(Object.entries({ title: b.title, start: b.start, end: b.end, description: b.description, location: b.location, colorId: b.colorId }).filter(([, v]) => v !== undefined))), send({ ok: true }))
     }
     if (b.op === 'lastUpdate') return send(gcal.last ?? null)
     if (b.op === 'remove' && e) return (events.splice(events.indexOf(e), 1), send({ ok: true }))

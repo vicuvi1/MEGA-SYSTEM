@@ -30941,6 +30941,7 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 			const body = {
 				summary: e.title,
 				description: e.description ?? "Added by Life System",
+				...e.location ? { location: e.location } : {},
 				start: allDay ? { date: e.start } : {
 					dateTime: e.start,
 					...e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || "Europe/Chisinau" } : {}
@@ -30999,6 +31000,7 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 			const body = {};
 			if (patch.title != null) body.summary = patch.title;
 			if (patch.description != null) body.description = patch.description;
+			if (patch.location != null) body.location = patch.location;
 			if (patch.colorId !== void 0) body.colorId = patch.colorId || null;
 			if (patch.reminder !== void 0) body.reminders = patch.reminder == null ? { useDefault: true } : {
 				useDefault: false,

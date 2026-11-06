@@ -182,12 +182,13 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
       return all.flat().sort((a, b) => a.start.localeCompare(b.start))
     },
     /** A new event (in your chosen calendar), marked as made by Life System. */
-    async create(e: { title: string; start: string; end: string; description?: string; calendarId?: string; colorId?: string; recurrence?: string[]; timeZone?: string; reminder?: number | null }): Promise<CalEvent> {
+    async create(e: { title: string; start: string; end: string; description?: string; location?: string; calendarId?: string; colorId?: string; recurrence?: string[]; timeZone?: string; reminder?: number | null }): Promise<CalEvent> {
       const calId = e.calendarId || (await target())
       const allDay = /^\d{4}-\d{2}-\d{2}$/.test(e.start)
       const body = {
         summary: e.title,
         description: e.description ?? 'Added by Life System',
+        ...(e.location ? { location: e.location } : {}),
         start: allDay ? { date: e.start } : { dateTime: e.start, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || DEFAULT_TZ } : {}) },
         end: allDay ? { date: e.end } : { dateTime: e.end, ...(e.recurrence?.length ? { timeZone: e.timeZone || process.env.TZ || DEFAULT_TZ } : {}) },
         ...(e.colorId ? { colorId: e.colorId } : {}),
@@ -211,11 +212,12 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
      * scope 'all' on a repeating event, the whole series changes (its times
      * keep each day, only the time of day moves).
      */
-    async update(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string; colorId?: string | null; recurrence?: string[] | null; moveTo?: string; scope?: 'one' | 'all'; recurringEventId?: string | null; timeZone?: string; reminder?: number | null }): Promise<void> {
+    async update(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string; location?: string; colorId?: string | null; recurrence?: string[] | null; moveTo?: string; scope?: 'one' | 'all'; recurringEventId?: string | null; timeZone?: string; reminder?: number | null }): Promise<void> {
       let target = id
       const body: any = {}
       if (patch.title != null) body.summary = patch.title
       if (patch.description != null) body.description = patch.description
+      if (patch.location != null) body.location = patch.location
       if (patch.colorId !== undefined) body.colorId = patch.colorId || null
       // Reminder (D6): a number of minutes, 0 = none, null = the calendar's default.
       if (patch.reminder !== undefined) body.reminders = patch.reminder == null ? { useDefault: true } : { useDefault: false, overrides: patch.reminder > 0 ? [{ method: 'popup', minutes: Math.min(40320, Math.round(patch.reminder)) }] : [] }

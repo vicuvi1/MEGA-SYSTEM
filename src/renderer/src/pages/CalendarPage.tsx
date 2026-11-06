@@ -10,10 +10,11 @@
 //   ("Study day") to drop onto any other day.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { localDay, localHM, type CalEvent } from '@core/dayTime'
-import { layoutDay } from '@core/calLayout'
-import { addBlockTask, blockTasks, removeBlockTask, setBlockTaskDone } from '@core/blockTasks'
-import { blocksToApply, customRule, repeatRule, templateFromDay, type CustomRepeat, type DayTemplate, type Repeat } from '@core/calTemplates'
-import { parseWhen, type When } from '@core/whenParse'
+import { BAND_STRIP, layoutDay, minLenFor } from '@core/calLayout'
+import { addBlockTask, blockTasks } from '@core/blockTasks'
+import { blocksToApply, customRule, repeatRule, templateFromDay, type CustomRepeat, type DayTemplate } from '@core/calTemplates'
+import { CUSTOM0, CustomRepeatFields, EventSheet, REMINDERS, WhenBox, type RepeatChoice } from '../EventSheet'
+import { blockKindOf, type BlockKind } from '@core/blockKind'
 import { currentSession } from '../web/session'
 import { defaultAreaColor, sortTasks, type Area, type TodoTask } from '@core/todoist'
 import { life, type GoogleStatus } from '../bridge'
@@ -41,19 +42,8 @@ const addDays = addLocalDays
 const monday = (day: string) => weekStartOf(day, 1)
 const agoShort = (ms: number) => (ms < 10_000 ? 'just now' : ms < 60_000 ? `${Math.round(ms / 1000)} s ago` : `${Math.round(ms / 60_000)} min ago`)
 const LENGTHS = [15, 30, 45, 60, 90, 120]
-/** Reminder choices (D6), in minutes before. "default" = the calendar's own. */
-const REMINDERS: [string, string][] = [
-  ['default', 'Calendar default'],
-  ['0', 'No reminder'],
-  ['5', '5 min before'],
-  ['10', '10 min before'],
-  ['30', '30 min before'],
-  ['60', '1 hour before'],
-  ['1440', '1 day before']
-]
-const WD2 = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
-type RepeatChoice = Repeat | 'custom'
-const CUSTOM0: CustomRepeat = { freq: 'weekly', interval: 1, days: [], until: null, count: 12 }
+/** The shortest an event is drawn (px), so its title can be read. */
+const MIN_ITEM_PX = 24
 const deviceTz = () => {
   try {
     return Intl.DateTimeFormat().resolvedOptions().timeZone || ''
@@ -107,6 +97,8 @@ interface NewEvent {
   calendarId?: string
   reminder?: number
   description?: string
+  /** A plain event, or a Life System focus block (timer, Start). */
+  kind?: BlockKind
 }
 /** An all-day event as an editable item (F5, F6). */
 const allDayItem = (e: CalEvent, color: string): Item => ({ key: `e:${e.calendarId}:${e.id}`, title: e.title, day: localDay(e.start), start: 0, end: 24 * 60, color, kind: 'event', event: e })
@@ -384,10 +376,12 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
     const end = n.allDay ? addDays(n.endDay && n.endDay > n.day ? n.endDay : n.day, 1) : isoFrom(n.day, n.end)
     const ok = await act(
       () => life.google!.create({ title: n.title, start, end, recurrence: n.recurrence, calendarId: n.calendarId, description: n.description, ...(n.reminder != null ? { reminder: n.reminder } : {}) }).then(() => true),
-      n.recurrence?.length ? 'Added, repeating' : 'Added to your calendar'
+      n.recurrence?.length ? 'Added, repeating' : n.kind === 'focus' ? 'Added as a focus block' : 'Added to your calendar'
     )
     if (ok) {
       soundSuccess()
+      // Life System's own blocks count as focus blocks; an "event" choice is kept for this title.
+      if (n.kind === 'event' && !n.allDay) void life.timeline?.setKind?.(n.title, 'event').catch(() => null)
       setDraft(null)
       setAllDayDraft(null)
       void load()
@@ -1022,8 +1016,11 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                     )}
                   </div>
                   {gridDays.map((d) => {
-                    const lay = layoutDay(items.filter((x) => x.day === d && x.end > startH * 60))
-                    const bands = lay.placed.filter((p) => p.backdrop).map((p) => p.it)
+                    // Side by side when they overlap; short ones drawn at least 24 px tall (and laid out that tall).
+                    const lay = layoutDay(
+                      items.filter((x) => x.day === d && x.end > startH * 60),
+                      { minLen: minLenFor(MIN_ITEM_PX, hourPx) }
+                    )
                     const yOf = (m: number) => ((Math.max(m, startH * 60) - startH * 60) / 60) * hourPx
                     return (
                       <div
@@ -1049,12 +1046,15 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                         {d === today && nowMin >= startH * 60 && <i className="cal-now" style={{ top: ((nowMin - startH * 60) / 60) * hourPx }} />}
                         {lay.placed.map(({ it, left, width, backdrop }) => {
                           const top = yOf(it.start)
-                          const h = Math.max(22, ((Math.min(it.end, endH * 60) - Math.max(it.start, startH * 60)) / 60) * hourPx - 2)
-                          const tiny = h < 34
-                          // Events inside a long "window" sit a little in, so the window's name stays visible.
-                          const inset = !backdrop && bands.some((b) => b.start < it.end && it.start < b.end) ? 12 : 0
-                          const l = inset + (left * (100 - inset)) / 100
-                          const w = (width * (100 - inset)) / 100
+                          const h = Math.max(MIN_ITEM_PX - 2, ((Math.min(it.end, endH * 60) - Math.max(it.start, startH * 60)) / 60) * hourPx - 2)
+                          const tiny = h < 38
+                          // Events inside a long "window" sit to the right of its name: the
+                          // layout keeps a strip of the width, at least 20 px on narrow days.
+                          const inBand = !backdrop && left >= BAND_STRIP - 0.01 && lay.placed.some((p) => p.backdrop && p.it.start < it.end && it.start < p.it.end)
+                          const strip = `max(${BAND_STRIP}%, 20px)`
+                          const k = 100 - BAND_STRIP
+                          const xLeft = inBand ? `calc(${strip} + (100% - ${strip}) * ${(left - BAND_STRIP) / k} + 2px)` : `calc(${left}% + 2px)`
+                          const xWidth = inBand ? `calc((100% - ${strip}) * ${width / k} - 4px)` : `calc(${width}% - 4px)`
                           return (
                             <div
                               key={it.key}
@@ -1077,7 +1077,7 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
                                 const t = todo?.tasks.find((x) => x.id === ev.dataTransfer.getData('text/task'))
                                 if (t) groupTask(t, it)
                               }}
-                              style={{ top, height: h, left: `calc(${l}% + 2px)`, width: `calc(${w}% - 4px)`, ['--c' as string]: it.color }}
+                              style={{ top, height: h, left: xLeft, width: xWidth, ['--c' as string]: it.color }}
                               onPointerDown={(e) => startItemDrag(e, it)}
                               onKeyDown={(e) => e.key === 'Enter' && setEditing(it)}
                               title={`${it.title} · ${hmOf(it.start)}–${hmOf(it.end)}`}
@@ -1158,16 +1158,21 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
         </button>
       )}
       {editing && (
-        <EditSheet
+        <EventSheet
+          key={editing.key}
           item={editing}
           calendars={(status?.calendars ?? []) as any}
           tasks={todo?.tasks ?? []}
-          connected={connected && (editing.kind === 'task' || writable(editing.event!.calendarId))}
+          canEdit={connected && (editing.kind === 'task' || writable(editing.event!.calendarId))}
           onClose={() => setEditing(null)}
-          onChanged={() => {
-            setEditing(null)
-            void load()
-          }}
+          onChanged={() => void load()}
+          onPatch={(before, after) =>
+            setEvents((list) => {
+              const same = (x: CalEvent) => x.id === before.id && x.calendarId === before.calendarId
+              if (!after) return list.filter((x) => !same(x))
+              return list.some(same) ? list.map((x) => (same(x) ? after : x)) : [...list, after]
+            })
+          }
         />
       )}
     </div>
@@ -1386,100 +1391,6 @@ function Agenda({ days, today, items, allDay, colorOf, onPick, more, onMore }: {
   )
 }
 
-/** A box to type the time in (D4): "fri 18:00", "tomorrow 9-10:30", "in 2h", "every mon 8:00". */
-function WhenBox({ onWhen }: { onWhen: (w: When) => void }) {
-  const [txt, setTxt] = useState('')
-  const w = txt.trim() ? parseWhen(txt) : null
-  const apply = () => {
-    if (!w) return
-    onWhen(w)
-    setTxt('')
-  }
-  const said = w
-    ? `${w.every ? `every ${w.every.map((d) => WD2[d]).join(', ')}, from ` : ''}${new Date(`${w.day}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })} ${hmOf(w.start)}${w.end != null ? `–${hmOf(w.end)}` : ''}`
-    : ''
-  return (
-    <div className="ce-whenbox">
-      <input
-        value={txt}
-        onChange={(e) => setTxt(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key !== 'Enter') return
-          e.preventDefault()
-          e.stopPropagation()
-          apply()
-        }}
-        placeholder="Or type it: fri 18:00, tomorrow 9-10:30, in 2h"
-        aria-label="Type the time"
-      />
-      {txt.trim() && (
-        <small className={w ? 'ok' : 'bad'}>
-          {w ? `→ ${said}` : "Can't read that time yet"}
-          {w && (
-            <button type="button" className="btn small" onClick={apply}>
-              Use
-            </button>
-          )}
-        </small>
-      )}
-    </div>
-  )
-}
-
-/** Repeat every N days/weeks, on chosen weekdays, until a date or N times (D5). */
-function CustomRepeatFields({ value, day, onChange }: { value: CustomRepeat; day: string; onChange: (v: CustomRepeat) => void }) {
-  return (
-    <div className="ce-custom">
-      <div className="ce-row">
-        <span className="ce-label">Every</span>
-        <input type="number" min={1} max={30} value={value.interval} onChange={(e) => onChange({ ...value, interval: Math.max(1, Math.min(30, Number(e.target.value) || 1)) })} aria-label="Every how many" style={{ width: 64 }} />
-        <Select value={value.freq} onChange={(e) => onChange({ ...value, freq: e.target.value as CustomRepeat['freq'] })} aria-label="Days or weeks">
-          <option value="daily">{value.interval > 1 ? 'days' : 'day'}</option>
-          <option value="weekly">{value.interval > 1 ? 'weeks' : 'week'}</option>
-        </Select>
-      </div>
-      {value.freq === 'weekly' && (
-        <div className="ce-row ce-wd" role="group" aria-label="On these days">
-          <span className="ce-label">On</span>
-          {[1, 2, 3, 4, 5, 6, 0].map((d) => {
-            const on = value.days.length ? value.days.includes(d) : new Date(`${day}T12:00:00`).getDay() === d
-            return (
-              <button
-                key={d}
-                type="button"
-                className={on ? 'on' : ''}
-                aria-pressed={on}
-                onClick={() => {
-                  const cur = value.days.length ? value.days : [new Date(`${day}T12:00:00`).getDay()]
-                  const next = on ? cur.filter((x) => x !== d) : [...cur, d]
-                  onChange({ ...value, days: next.length ? next : cur })
-                }}
-              >
-                {WD2[d]}
-              </button>
-            )
-          })}
-        </div>
-      )}
-      <div className="ce-row">
-        <span className="ce-label">Ends</span>
-        <Select value={value.until ? 'until' : 'count'} onChange={(e) => onChange(e.target.value === 'until' ? { ...value, until: addDays(day, 56) } : { ...value, until: null })} aria-label="How it ends">
-          <option value="count">After</option>
-          <option value="until">On a date</option>
-        </Select>
-        {value.until ? (
-          <input type="date" value={value.until} min={day} onChange={(e) => e.target.value && onChange({ ...value, until: e.target.value })} aria-label="Last day" />
-        ) : (
-          <>
-            <input type="number" min={1} max={52} value={value.count ?? 12} onChange={(e) => onChange({ ...value, count: Math.max(1, Math.min(52, Number(e.target.value) || 1)) })} aria-label="How many times" style={{ width: 64 }} />
-            <span>times</span>
-          </>
-        )}
-      </div>
-    </div>
-  )
-}
-
 function DraftForm({ top, start, end, day, calendars, onSave, onCancel }: { top: number; start: number; end: number; day: string; calendars: { id: string; name: string }[]; onSave: (n: NewEvent) => void; onCancel: () => void }) {
   const [title, setTitle] = useState('')
   const [d, setD] = useState(day)
@@ -1491,11 +1402,15 @@ function DraftForm({ top, start, end, day, calendars, onSave, onCancel }: { top:
   const [cal, setCal] = useState('')
   const [reminder, setReminder] = useState('default')
   const [notes, setNotes] = useState('')
+  // Event or focus block: what the title suggests until you pick.
+  const [kindPick, setKindPick] = useState<BlockKind | null>(null)
+  const kind: BlockKind = kindPick ?? blockKindOf({ title: title.trim() || 'x', ours: false })
   const wd = new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'long' })
   const stop = from + len
   const save = () => {
     if (!title.trim()) return
     onSave({
+      kind,
       title: title.trim(),
       day: d,
       start: from,
@@ -1517,6 +1432,14 @@ function DraftForm({ top, start, end, day, calendars, onSave, onCancel }: { top:
       }}
     >
       <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What? e.g. Study math" onKeyDown={(e) => e.key === 'Escape' && onCancel()} aria-label="Title" />
+      <div className="sx-seg cal-draft-kind" role="radiogroup" aria-label="Save as">
+        <button type="button" role="radio" aria-checked={kind === 'event'} className={kind === 'event' ? 'on' : ''} onClick={() => setKindPick('event')} title="A plain event in Google Calendar: ✓ Done, no timer">
+          📅 Event
+        </button>
+        <button type="button" role="radio" aria-checked={kind === 'focus'} className={kind === 'focus' ? 'on' : ''} onClick={() => setKindPick('focus')} title="A Life System block: Start timer, Ben holds you to it (also in Google Calendar)">
+          ⏱ Life System block
+        </button>
+      </div>
       <div className="row cal-draft-time">
         {d !== day && <small>{new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}</small>}
         <input type="time" value={hmOf(from)} step={300} onChange={(e) => e.target.value && setFrom(toMin(e.target.value))} aria-label="Start" />
@@ -1602,321 +1525,6 @@ function AllDayNew({ onSave, onCancel }: { onSave: (title: string) => Promise<un
     >
       <input autoFocus value={t} onChange={(e) => setT(e.target.value)} onBlur={() => !t.trim() && onCancel()} onKeyDown={(e) => e.key === 'Escape' && onCancel()} placeholder="All day: e.g. Exam week" aria-label="All-day event name" />
     </form>
-  )
-}
-
-/** Google's event colors, as Google shows them (id → name, color). */
-const EVENT_COLORS: [string, string, string][] = [
-  ['', 'Calendar color', ''],
-  ['7', 'Peacock', '#039be5'],
-  ['9', 'Blueberry', '#3f51b5'],
-  ['1', 'Lavender', '#7986cb'],
-  ['3', 'Grape', '#8e24aa'],
-  ['4', 'Flamingo', '#e67c73'],
-  ['11', 'Tomato', '#d50000'],
-  ['6', 'Tangerine', '#f4511e'],
-  ['5', 'Banana', '#f6bf26'],
-  ['2', 'Sage', '#33b679'],
-  ['10', 'Basil', '#0b8043'],
-  ['8', 'Graphite', '#616161']
-]
-
-function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { item: Item; connected: boolean; calendars: { id: string; name: string; color?: string; canWrite?: boolean }[]; tasks: TodoTask[]; onClose: () => void; onChanged: () => void }) {
-  const act = useAction()
-  const e = item.event
-  const [title, setTitle] = useState(item.title)
-  // Times (D5): the real end from Google, so events past midnight or over days keep it.
-  const origAllDay = !!e?.allDay
-  const origEndDay = e ? (origAllDay ? addDays(localDay(e.end), -1) : localDay(e.end)) : item.day
-  const [allDay, setAllDay] = useState(origAllDay)
-  const [day, setDayRaw] = useState(item.day)
-  const [endDay, setEndDay] = useState(origEndDay < item.day ? item.day : origEndDay)
-  const [start, setStart] = useState(hmOf(item.start))
-  const [end, setEnd] = useState(e && !origAllDay ? localHM(e.end) : hmOf(item.end))
-  const setDay = (d: string) => {
-    if (!d) return
-    setEndDay(addDays(d, Math.max(0, dayDiff(day, endDay))))
-    setDayRaw(d)
-  }
-  const reminder0 = e?.reminder == null ? 'default' : String(e.reminder)
-  const [reminder, setReminder] = useState(reminder0)
-  const [notes, setNotes] = useState(e?.description ?? '')
-  const [colorId, setColorId] = useState(e?.colorId ?? '')
-  const [cal, setCal] = useState(e?.calendarId ?? '')
-  const [repeat, setRepeat] = useState<RepeatChoice>('none')
-  const [custom, setCustom] = useState<CustomRepeat>(CUSTOM0)
-  /** Start and end as Google wants them; an end at or before the start on the same day = the next day. */
-  const sp = (() => {
-    if (allDay) {
-      const last = endDay < day ? day : endDay
-      return { s: day, en: addDays(last, 1), mins: (dayDiff(day, last) + 1) * 1440, nextDay: false }
-    }
-    const sm = toMin(start)
-    const em = toMin(end)
-    const ed = endDay > day ? endDay : em <= sm ? addDays(day, 1) : day
-    return { s: isoAt(day, sm), en: isoAt(ed, em), mins: dayDiff(day, ed) * 1440 + em - sm, nextDay: ed !== day }
-  })()
-  const setLen = (m: number) => {
-    const em = toMin(start) + m
-    setEnd(hmOf(em))
-    setEndDay(em >= 1440 ? addDays(day, 1) : day)
-  }
-  const applyWhen = (w: When) => {
-    const len = !allDay && sp.mins > 0 && sp.mins < 1440 ? sp.mins : 60
-    const em = w.end != null && w.end > w.start ? w.end : w.start + len
-    setAllDay(false)
-    setDayRaw(w.day)
-    setStart(hmOf(w.start))
-    setEnd(hmOf(em))
-    setEndDay(em >= 1440 ? addDays(w.day, 1) : w.day)
-    if (w.every && !e?.recurringEventId) {
-      setRepeat('custom')
-      setCustom({ ...CUSTOM0, days: w.every })
-    }
-  }
-  const toggleAllDay = (on: boolean) => {
-    setAllDay(on)
-    if (on) setEndDay(endDay < day ? day : endDay)
-    else {
-      if (start === end) {
-        setStart('09:00')
-        setEnd('10:00')
-      }
-      setEndDay(day)
-    }
-  }
-  const series = !!e?.recurringEventId
-  const [scope, setScope] = useState<'one' | 'all'>('one')
-  const [sure, setSure] = useState<null | 'one' | 'all'>(null)
-  useEffect(() => {
-    const on = (ev: KeyboardEvent) => ev.key === 'Escape' && onClose()
-    window.addEventListener('keydown', on)
-    return () => window.removeEventListener('keydown', on)
-  }, [onClose])
-  const save = async () => {
-    const s = toMin(start)
-    const en = toMin(end)
-    if (e) {
-      if (sp.mins <= 0) return void act(async () => true, 'The end must be after the start')
-      const same = (a: string, b: string) => (/^\d{4}-\d{2}-\d{2}$/.test(a) || /^\d{4}-\d{2}-\d{2}$/.test(b) ? a === b : new Date(a).getTime() === new Date(b).getTime())
-      const timesChanged = allDay !== origAllDay || !same(sp.s, e.start) || !same(sp.en, e.end)
-      const ok = await act(async () => {
-        await life.google!.update!(e.calendarId, e.id, {
-          title: title.trim() || e.title,
-          ...(timesChanged ? { start: sp.s, end: sp.en } : {}),
-          description: notes,
-          colorId: colorId || null,
-          ...(reminder !== reminder0 ? { reminder: reminder === 'default' ? null : Number(reminder) } : {}),
-          ...(cal && cal !== e.calendarId ? { moveTo: cal } : {}),
-          ...(series ? { scope, recurringEventId: e.recurringEventId } : repeat !== 'none' ? { recurrence: repeat === 'custom' ? customRule(custom, day) : repeatRule(repeat, day) } : {})
-        })
-        return true
-      }, series && scope === 'all' ? 'Saved for every repeat' : 'Saved')
-      if (ok) onChanged()
-    } else if (item.task) {
-      const ok = await act(() => life.todoist!.update!(item.task!.id, { content: title.trim() || item.task!.content, due: `${day} ${start}`, ...(en > s ? { duration: en - s } : {}) }).then(() => true), 'Saved in Todoist')
-      if (ok) onChanged()
-    }
-  }
-  const remove = async (which: 'one' | 'all') => {
-    if (!e) return
-    if (sure !== which) return setSure(which)
-    const id = which === 'all' && e.recurringEventId ? e.recurringEventId : e.id
-    if (await act(() => life.google!.remove(e.calendarId, id).then(() => true), which === 'all' ? 'Every repeat removed' : 'Removed from your calendar')) onChanged()
-  }
-  const focus = async () => {
-    const nowM = new Date().getHours() * 60 + new Date().getMinutes()
-    const left = Math.max(10, Math.min(180, (sp.nextDay ? toMin(end) + 1440 : toMin(end)) - Math.max(toMin(start), nowM)))
-    if (await act(() => life.focus.start(item.title.replace(/^[^\p{L}\p{N}]+/u, '').slice(0, 40), left, item.task ? { kind: 'todoist', ref: item.task.id, title: item.task.content } : null), `Focus started · ${left} min`)) onClose()
-  }
-  const canEdit = item.kind === 'task' || connected
-  const writableCals = calendars.filter((c) => c.canWrite !== false)
-  const shown = colorId ? EVENT_COLORS.find((c) => c[0] === colorId)?.[2] : item.color
-  return (
-    <div className="sheet" role="dialog" aria-label={item.title} onClick={(ev) => ev.target === ev.currentTarget && onClose()}>
-      <div className="sheet-card cal-edit ce">
-        <header className="ce-head" style={{ ['--c' as string]: shown ?? item.color }}>
-          <i className="ce-bar" />
-          <input className="ce-title" value={title} onChange={(ev) => setTitle(ev.target.value)} disabled={!canEdit} aria-label="Title" placeholder="Title" />
-          <button className="btn small ghost" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
-        <div className="ce-row">
-          <Icon name="clock" size={15} />
-          <input type="date" value={day} onChange={(ev) => setDay(ev.target.value)} disabled={!canEdit} aria-label="Day" />
-          {!allDay && <input type="time" value={start} step={300} onChange={(ev) => ev.target.value && setStart(ev.target.value)} disabled={!canEdit} aria-label="Start" />}
-          <span>–</span>
-          {!allDay && <input type="time" value={end} step={300} onChange={(ev) => ev.target.value && setEnd(ev.target.value)} disabled={!canEdit} aria-label="End" />}
-          {e && (allDay || endDay !== day || sp.nextDay) && <input type="date" value={sp.nextDay && endDay === day ? addDays(day, 1) : endDay} min={day} onChange={(ev) => ev.target.value && setEndDay(ev.target.value)} disabled={!canEdit} aria-label="End day" />}
-          <small className={`ce-len ${sp.mins <= 0 ? 'bad' : ''}`}>
-            {sp.mins <= 0 ? 'ends before it starts' : allDay ? (sp.mins === 1440 ? '1 day' : `${sp.mins / 1440} days`) : `${lenLabel(sp.mins)}${sp.nextDay ? ' · ends next day' : ''}`}
-          </small>
-        </div>
-        {canEdit && (
-          <div className="ce-row ce-lens">
-            {e && (
-              <label className="ce-check">
-                <input type="checkbox" checked={allDay} onChange={(ev) => toggleAllDay(ev.target.checked)} /> All day
-              </label>
-            )}
-            {!allDay &&
-              LENGTHS.map((m) => (
-                <button key={m} type="button" className={`btn small ${sp.mins === m ? '' : 'ghost'}`} onClick={() => setLen(m)}>
-                  {lenLabel(m)}
-                </button>
-              ))}
-            {e && !allDay && endDay === day && !sp.nextDay && (
-              <button type="button" className="btn small ghost" onClick={() => setEndDay(addDays(day, 1))} title="Make it end on a later day">
-                Several days…
-              </button>
-            )}
-          </div>
-        )}
-        {canEdit && <WhenBox onWhen={applyWhen} />}
-        {e && (
-          <>
-            {series ? (
-              <div className="ce-row">
-                <Icon name="refresh" size={15} />
-                <span className="ce-label">Repeating event · change</span>
-                <div className="sx-seg" role="radiogroup" aria-label="Which repeats">
-                  <button type="button" className={scope === 'one' ? 'on' : ''} onClick={() => setScope('one')}>
-                    Only this one
-                  </button>
-                  <button type="button" className={scope === 'all' ? 'on' : ''} onClick={() => setScope('all')}>
-                    All repeats
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="ce-row">
-                <Icon name="refresh" size={15} />
-                <span className="ce-label">Repeat</span>
-                <Select value={repeat} onChange={(ev) => setRepeat(ev.target.value as RepeatChoice)} disabled={!canEdit} aria-label="Repeat">
-                  <option value="none">Doesn't repeat</option>
-                  <option value="daily">Every day</option>
-                  <option value="weekdays">Every weekday</option>
-                  <option value="weekly">Every week</option>
-                  <option value="custom">Custom…</option>
-                </Select>
-              </div>
-            )}
-            {!series && repeat === 'custom' && <CustomRepeatFields value={custom} day={day} onChange={setCustom} />}
-            <div className="ce-row">
-              <Icon name="bell" size={15} />
-              <span className="ce-label">Reminder</span>
-              <Select value={reminder} onChange={(ev) => setReminder(ev.target.value)} disabled={!canEdit} aria-label="Reminder">
-                {REMINDERS.map(([v, l]) => (
-                  <option key={v} value={v}>
-                    {l}
-                  </option>
-                ))}
-                {!REMINDERS.some(([v]) => v === reminder) && <option value={reminder}>{lenLabel(Number(reminder))} before</option>}
-              </Select>
-            </div>
-            <div className="ce-row ce-colors" role="radiogroup" aria-label="Color">
-              <span className="ce-label">Color</span>
-              {EVENT_COLORS.map(([id, name, hex]) => (
-                <button key={id || 'cal'} type="button" title={name} aria-label={name} aria-checked={colorId === id} role="radio" className={`ce-swatch ${colorId === id ? 'on' : ''} ${id ? '' : 'cal'}`} style={{ ['--s' as string]: hex || item.color }} onClick={() => setColorId(id)} disabled={!canEdit} />
-              ))}
-            </div>
-            {writableCals.length > 1 && (
-              <div className="ce-row">
-                <Icon name="calendar" size={15} />
-                <span className="ce-label">Calendar</span>
-                <Select value={cal} onChange={(ev) => setCal(ev.target.value)} disabled={!canEdit} aria-label="Calendar">
-                  {writableCals.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            )}
-            {blockTasks(notes).length > 0 && (
-              <div className="ce-tasks">
-                <span className="ce-label">Tasks in this block</span>
-                {blockTasks(notes).map((t) => (
-                  <div key={t.id} className={`ce-task ${t.done ? 'done' : ''}`}>
-                    <button
-                      className="dl-check"
-                      aria-label={t.done ? `${t.text} is done` : `Done: ${t.text}`}
-                      disabled={!canEdit || t.done}
-                      onClick={async () => {
-                        const next = setBlockTaskDone(notes, t.id, true)
-                        setNotes(next)
-                        const full = tasks.find((x) => x.id === t.id) ?? ({ id: t.id, content: t.text, priority: 1, due: null, dueTime: null, project: null, recurring: false } as TodoTask)
-                        await act(async () => {
-                          await life.todoist!.complete(full)
-                          await life.google!.update!(e.calendarId, e.id, { description: next })
-                          return true
-                        }, `Done: ${t.text}`)
-                      }}
-                    >
-                      {t.done ? '✓' : ''}
-                    </button>
-                    <span>{t.text}</span>
-                    {!t.done && canEdit && (
-                      <button
-                        className="nc-x"
-                        title="Take it out of this block"
-                        aria-label={`Take ${t.text} out of this block`}
-                        onClick={async () => {
-                          const next = removeBlockTask(notes, t.id)
-                          setNotes(next)
-                          await act(async () => {
-                            await life.google!.update!(e.calendarId, e.id, { description: next })
-                            await life.todoist!.update!(t.id, { due: item.day })
-                            return true
-                          }, `${t.text}: back to your list`)
-                        }}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-            <textarea className="ce-notes" value={notes} onChange={(ev) => setNotes(ev.target.value)} disabled={!canEdit} placeholder="Notes" rows={3} aria-label="Notes" />
-            {e.location && <p className="hint small">📍 {e.location}</p>}
-            {!connected && <p className="hint small">This calendar is read-only (shared with you), so it can't be changed here.</p>}
-          </>
-        )}
-        <div className="sheet-actions cal-edit-actions">
-          <button className="btn small" onClick={() => void focus()}>
-            ▶ Focus
-          </button>
-          {item.task && (
-            <button
-              className="btn small"
-              onClick={async () => {
-                if (await act(() => life.todoist!.complete(item.task!), 'Done in Todoist')) onChanged()
-              }}
-            >
-              <Icon name="check" size={13} /> Done
-            </button>
-          )}
-          {e && connected && (
-            <button className={`btn small ghost ${sure === 'one' ? 'danger' : ''}`} onClick={() => void remove('one')}>
-              <Icon name="trash" size={13} /> {sure === 'one' ? 'Sure? Delete' : series ? 'Delete this one' : 'Delete'}
-            </button>
-          )}
-          {e && connected && series && (
-            <button className={`btn small ghost ${sure === 'all' ? 'danger' : ''}`} onClick={() => void remove('all')}>
-              {sure === 'all' ? 'Sure? Delete all' : 'Delete all repeats'}
-            </button>
-          )}
-          <span style={{ flex: 1 }} />
-          {canEdit && (
-            <button className="btn small primary" onClick={() => void save()}>
-              Save
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
   )
 }
 

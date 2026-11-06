@@ -2,20 +2,22 @@
 // down, a "now" line, and every block where it really is.
 // - Drag a block up or down to move it, pull its bottom edge to change its
 //   length (15-minute steps): it moves at once, Google catches up, Undo.
-// - ✓ on a block marks it done in one click; click it for Done / Skip /
-//   ±15 min / Start focus.
+// - ✓ on a block marks it done in one click; click it (or Enter) for its
+//   details: edit, done, skip, start the timer, move, delete (EventSheet).
+// - Events at the same time sit side by side (core/calLayout.ts); a short
+//   one is drawn at least 24 px tall and gets its own column if it needs it.
 // - Drop a task from the list onto the strip to book it there, or onto a
 //   block to add it to that block's checklist.
 // - Free time shows as "free 1h"; click to fill it with your top task.
 // - Running late? Shift everything after now by 15 / 30 / 60 minutes.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
-import { layoutDay } from '@core/calLayout'
+import { layoutDay, minLenFor } from '@core/calLayout'
+import { EventSheet, type SheetCalendar } from './EventSheet'
 import { addBlockTask, blockTasks } from '@core/blockTasks'
-import { blockState, blockSubject, freeGaps, localDay, localHM, planKept, type BlockState, type CalEvent } from '@core/dayTime'
+import { blockState, freeGaps, localDay, localHM, planKept, type BlockState, type CalEvent } from '@core/dayTime'
 import type { TodoTask } from '@core/todoist'
 import { bookMinutes } from '@core/booking'
-import { blockKindOf, type BlockKind, type BlockKinds } from '@core/blockKind'
+import { blockKindOf, type BlockKinds } from '@core/blockKind'
 import { life } from './bridge'
 import { useLive } from './live'
 import { useFocus } from './pages/Focus'
@@ -30,6 +32,8 @@ const END_H = 24
 const MIN_PX = 34 // pixels per hour at least; more when the column is tall (the whole day fits)
 const LANE_LEFT = 42 // right of the hour labels
 const LANE_RIGHT = 6
+/** The shortest a block is drawn (px), so its title can be read. */
+const MIN_BLOCK_PX = 24
 const pad = (n: number) => String(n).padStart(2, '0')
 const toMin = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
 const hmOf = (m: number) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`
@@ -57,29 +61,17 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   const [marks, setMarks] = useState<Record<string, 'done' | 'skip'>>({})
   const [focus] = useFocus()
   const [now, setNow] = useState(Date.now())
-  const [over, setOver] = useState<Record<string, { start: string; end: string }>>({})
+  // Changes shown at once while Google catches up (null: deleted).
+  const [over, setOver] = useState<Record<string, Partial<CalEvent> | null>>({})
   const [ghost, setGhost] = useState<{ key: string; start: number; end: number } | null>(null)
-  const [menu, setMenuRaw] = useState<{ key: string; x: number; y: number } | null>(null)
-  const setMenu = (k: string | null, el?: HTMLElement | null) => {
-    if (!k || !el) return setMenuRaw(null)
-    const r = el.getBoundingClientRect()
-    // Beside the block (left of it: the column sits on the right), kept on screen.
-    const x = r.left - 246 > 8 ? r.left - 246 : Math.min(window.innerWidth - 250, r.right + 6)
-    setMenuRaw({ key: k, x, y: Math.max(8, Math.min(window.innerHeight - 160, r.top)) })
-  }
-  // Click anywhere else, scroll or Escape closes the menu.
+  // The open details sheet (click or Enter on a block).
+  const [menu, setMenuRaw] = useState<{ key: string } | null>(null)
+  const setMenu = (k: string | null) => setMenuRaw(k ? { key: k } : null)
+  const [moreAt, setMoreAt] = useState<number | null>(null)
+  const [cals, setCals] = useState<SheetCalendar[]>([])
   useEffect(() => {
-    if (!menu) return
-    const close = (ev: Event) => !(ev.target as HTMLElement).closest?.('.ds-menu, .ds-block') && setMenuRaw(null)
-    const esc = (ev: KeyboardEvent) => ev.key === 'Escape' && setMenuRaw(null)
-    window.addEventListener('pointerdown', close)
-    window.addEventListener('keydown', esc)
-    window.addEventListener('scroll', () => setMenuRaw(null), { once: true, capture: true })
-    return () => {
-      window.removeEventListener('pointerdown', close)
-      window.removeEventListener('keydown', esc)
-    }
-  }, [menu])
+    if (menu && !cals.length) void life.google?.status().then((s) => setCals((s.calendars ?? []) as SheetCalendar[])).catch(() => {})
+  }, [menu, cals.length])
   const [dropAt, setDropAt] = useState<{ key: string | null; min: number } | null>(null)
   const drag = useRef<Drag | null>(null)
   const scroller = useRef<HTMLDivElement>(null)
@@ -102,7 +94,6 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   const yOf = (m: number) => ((m - START_H * 60) / 60) * px
   const ghostRef = useRef(ghost)
   ghostRef.current = ghost
-  const menuRef = useRef<{ key: string } | null>(null)
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30_000)
@@ -115,12 +106,6 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     void life.timeline?.kinds?.().then(setKinds).catch(() => {})
   }
   const isFocus = (e: CalEvent) => !e.allDay && blockKindOf({ title: e.title, ours: e.ours }, kinds) === 'focus'
-  const flipKind = async (b: Block, to: BlockKind) => {
-    setMenu(null)
-    const next = await life.timeline?.setKind?.(b.title, to).catch(() => null)
-    if (next) setKinds(next)
-    toast(to === 'event' ? `“${b.title}” is an event now: ✓ Done, no timer` : `“${b.title}” is a focus block now`, 'good')
-  }
   useEffect(loadMarks, [today])
   useLive(loadMarks, { external: true })
   // Open on now (an hour before it), not at 06:00.
@@ -130,7 +115,14 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
   }, [])
 
   const nowMin = new Date(now).getHours() * 60 + new Date(now).getMinutes()
-  const todayEvents = useMemo(() => events.filter((e) => !e.allDay && localDay(e.start) === today).map((e) => (over[e.id] ? { ...e, ...over[e.id] } : e)), [events, today, over])
+  const todayEvents = useMemo(
+    () =>
+      events
+        .filter((e) => over[e.id] !== null)
+        .map((e) => (over[e.id] ? { ...e, ...over[e.id] } : e))
+        .filter((e) => !e.allDay && localDay(e.start) === today),
+    [events, today, over]
+  )
   const grouped = useMemo(() => new Set(todayEvents.flatMap((e) => blockTasks(e.description).map((t) => t.id))), [todayEvents])
   const blocks: Block[] = useMemo(() => {
     const out: Block[] = todayEvents.map((e) => {
@@ -145,7 +137,9 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
     }
     return out.filter((b) => b.end > START_H * 60)
   }, [todayEvents, tasks, today, grouped])
-  const lay = useMemo(() => layoutDay(blocks), [blocks])
+  // Side by side when they overlap on screen: a short block counts as tall as it's drawn.
+  const minLen = minLenFor(MIN_BLOCK_PX, px)
+  const lay = useMemo(() => layoutDay(blocks, { minLen }), [blocks, minLen])
 
   const sessions = focus?.todaySessions ?? []
   const stateOf = (b: Block): BlockState | null => {
@@ -228,11 +222,6 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
       window.dispatchEvent(new CustomEvent('life-external-changed'))
     })
   }
-  menuRef.current = menu
-  const startFocus = async (b: Block) => {
-    const minutes = Math.max(10, Math.min(180, b.end - Math.max(b.start, nowMin)))
-    if (await act(() => life.focus.start(blockSubject(b.title), minutes, b.task ? { kind: 'todoist', ref: b.task.id, title: b.task.content } : null), `Focus: ${b.title} · ${minutes} min`)) setMenu(null)
-  }
 
   // ---- Pointer drag (up and down) ----------------------------------------
   const minuteAt = (clientY: number) => {
@@ -260,7 +249,8 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
       setGhost(null)
       ghostRef.current = null
       if (!d) return
-      if (!d.moved) return setMenu(menuRef.current?.key === d.b.key ? null : d.b.key, d.el)
+      // A click (moved less than 5 px), not a drag: open its details.
+      if (!d.moved) return setMenu(d.b.key)
       if (g && (g.start !== d.b.start || g.end !== d.b.end)) move(d.b, g.start, g.end)
     }
     window.addEventListener('pointermove', onMove)
@@ -373,14 +363,25 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
             const s = g ? g.start : b.start
             const e = g ? g.end : b.end
             const bt = b.event ? blockTasks(b.event.description) : []
+            const h = Math.max(MIN_BLOCK_PX - 2, yOf(e) - yOf(s) - 2)
             return (
               <div
                 key={b.key}
                 data-key={b.key}
                 id={b.event ? `event-${b.event.id}` : undefined}
-                className={`ds-block ${backdrop ? 'band' : ''} ${b.task ? 'task' : ''} ${b.event && isInvite(b.event) ? 'invite' : ''} ${b.event && isTentative(b.event) ? 'maybe' : ''} ${done ? 'done' : ''} ${st === 'skipped' ? 'skipped' : ''} ${st === 'now' ? 'now' : ''} ${g ? 'dragging' : ''} ${yOf(e) - yOf(s) < 38 ? 'short' : ''} ${dropAt?.key === b.key ? 'drop' : ''}`}
-                style={{ top: yOf(s) + 1, height: Math.max(16, yOf(e) - yOf(s) - 2), left: lane(left), width: `calc((100% - ${LANE_LEFT + LANE_RIGHT}px) * ${w / 100} - 3px)`, ['--c' as string]: b.color }}
+                role="button"
+                tabIndex={0}
+                aria-label={`${b.title}, ${hmOf(s)} to ${hmOf(e)}. Enter for details`}
+                className={`ds-block ${backdrop ? 'band' : ''} ${b.task ? 'task' : ''} ${b.event && isInvite(b.event) ? 'invite' : ''} ${b.event && isTentative(b.event) ? 'maybe' : ''} ${done ? 'done' : ''} ${st === 'skipped' ? 'skipped' : ''} ${st === 'now' ? 'now' : ''} ${g ? 'dragging' : ''} ${h < 38 ? 'short' : ''} ${w < 40 ? 'narrow' : ''} ${dropAt?.key === b.key ? 'drop' : ''}`}
+                style={{ top: yOf(s) + 1, height: h, left: lane(left), width: `calc((100% - ${LANE_LEFT + LANE_RIGHT}px) * ${w / 100} - 3px)`, ['--c' as string]: b.color }}
                 onPointerDown={(ev) => startDrag(ev, b, 'move')}
+                onKeyDown={(ev) => {
+                  if (ev.target !== ev.currentTarget) return
+                  if (ev.key === 'Enter' || ev.key === ' ') {
+                    ev.preventDefault()
+                    setMenu(b.key)
+                  }
+                }}
                 title={`${b.title} · ${hmOf(s)}–${hmOf(e)}${bt.length ? ` · ${bt.length} tasks` : ''}`}
               >
                 <b>{b.title}</b>
@@ -399,8 +400,20 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
             )
           })}
           {lay.more.map((m) => (
-            <span key={`m${m.start}`} className="ds-more" style={{ top: yOf(m.start) + 1, left: lane(m.left) }} title={m.items.map((x) => x.title).join(', ')}>
-              +{m.items.length}
+            <span key={`m${m.start}`} className="ds-more-wrap" style={{ top: yOf(m.start) + 1, left: lane(m.left) }}>
+              <button type="button" className="ds-more" onPointerDown={(ev) => ev.stopPropagation()} onClick={() => setMoreAt(moreAt === m.start ? null : m.start)} title={m.items.map((x) => x.title).join(', ')} aria-expanded={moreAt === m.start}>
+                +{m.items.length}
+              </button>
+              {moreAt === m.start && (
+                <span className="ds-more-list" role="menu" onPointerDown={(ev) => ev.stopPropagation()}>
+                  {m.items.map((x) => (
+                    <button key={x.key} type="button" role="menuitem" style={{ ['--c' as string]: x.color }} onClick={() => (setMoreAt(null), setMenu(x.key))}>
+                      <i />
+                      {x.title} <small>{hmOf(x.start)}</small>
+                    </button>
+                  ))}
+                </span>
+              )}
             </span>
           ))}
           {dropAt && !dropAt.key && <i className="ds-drop" style={{ top: yOf(dropAt.min) }} />}
@@ -412,30 +425,31 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
           const b = blocks.find((x) => x.key === menu.key)
           if (!b) return null
           const st = stateOf(b)
-          // On the page itself: a moved parent would carry a fixed menu off screen.
-          return createPortal(
-            <div className="ds-menu" style={{ left: menu.x, top: menu.y }} onPointerDown={(ev) => ev.stopPropagation()}>
-              <b className="ds-menu-title">{b.title}</b>
-              <button onClick={() => void mark(b, st === 'done' ? null : 'done').then(() => setMenu(null))}>{st === 'done' ? 'Not done' : '✓ Done'}</button>
-              <button onClick={() => void mark(b, st === 'skipped' ? null : 'skip').then(() => setMenu(null))}>{st === 'skipped' ? 'Not skipped' : 'Skip'}</button>
-              <button onClick={() => (move(b, b.start + 15, b.end + 15), setMenu(null))}>+15 min</button>
-              <button onClick={() => (move(b, Math.max(START_H * 60, b.start - 15), b.end - 15), setMenu(null))}>−15 min</button>
-              <button onClick={() => (move(b, b.start, b.end + 15), setMenu(null))}>Longer</button>
-              {b.event && (isFocus(b.event) ? (
-                <button onClick={() => void flipKind(b, 'event')}>📅 Treat as an event</button>
-              ) : (
-                <button onClick={() => void flipKind(b, 'focus')}>⏱ Treat as a focus block</button>
-              ))}
-              {(!b.event || isFocus(b.event)) && (
-                <button className="go" onClick={() => void startFocus(b)}>
-                  ▶ Start
+          const writable = !b.event || cals.find((c) => c.id === b.event!.calendarId)?.canWrite !== false
+          return (
+            <EventSheet
+              key={b.key}
+              item={{ key: b.key, title: b.title, day: today, start: b.start, end: b.end, color: b.color, kind: b.event ? 'event' : 'task', event: b.event, task: b.task }}
+              canEdit={!!connected && writable}
+              calendars={cals}
+              tasks={tasks}
+              done={st === 'done'}
+              onMark={(v) => mark(b, v)}
+              onClose={() => (setMenu(null), loadMarks())}
+              onChanged={() => {
+                void reloadToday()
+                if (b.task) window.dispatchEvent(new CustomEvent('life-external-changed'))
+              }}
+              onPatch={(before, after) => setOver((o) => ({ ...o, [before.id]: after ? { ...after } : null }))}
+              extra={
+                <button className="btn small ghost" onClick={() => void mark(b, st === 'skipped' ? null : 'skip').then(() => setMenu(null))}>
+                  {st === 'skipped' ? 'Not skipped' : 'Skip'}
                 </button>
-              )}
-            </div>,
-            document.body
+              }
+            />
           )
         })()}
-      <p className="hint small ds-tip">Drag to move · pull the bottom edge to resize · ✓ to mark done · drop a task here to book it, or onto a block to add it</p>
+      <p className="hint small ds-tip">Click for details and edit · drag to move · pull the bottom edge to resize · ✓ to mark done · drop a task here to book it, or onto a block to add it</p>
     </section>
   )
 }

@@ -1,0 +1,53 @@
+/* The event details / edit sheet (EventSheet.tsx) and the timeline's side-by-side
+   blocks. Motion: transform and opacity only (motion budget). */
+
+/* Above the phone's bottom bar (100). */
+.sheet.ev-sheet-wrap { z-index: 110; }
+.ev-sheet { outline: none; animation: ev-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes ev-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .ev-sheet { animation: none; } }
+
+.ev-head { align-items: flex-start; }
+.ev-titles { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.ev-title { flex-basis: 100%; margin: 0; font-size: 20px; font-weight: 700; line-height: 1.25; color: var(--text); overflow-wrap: anywhere; }
+.ev-title.done { text-decoration: line-through; color: var(--muted); }
+.ev-chip { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 11.5px; font-weight: 650; background: rgb(var(--ink) / 0.07); color: var(--muted); }
+.ev-chip.focus { background: color-mix(in srgb, var(--lime) 18%, transparent); color: var(--text); }
+.ev-chip.ok { background: color-mix(in srgb, var(--green, #34d399) 20%, transparent); color: var(--text); }
+.ev-row { color: var(--text); font-size: 13.5px; }
+.ev-row > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.ev-notes { margin: 4px 0 0; padding: 10px 12px; border-radius: 12px; background: rgb(var(--ink) / 0.04); color: var(--text); font-size: 13.5px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 180px; overflow-y: auto; }
+.ev-glink { align-self: flex-start; margin-top: 2px; color: var(--muted); text-decoration: none; }
+.ev-glink:hover { color: var(--text); }
+.ev-actions { justify-content: flex-start; align-items: center; flex-wrap: wrap; }
+.ev-actions .btn.on { background: color-mix(in srgb, var(--lime) 22%, transparent); }
+.ev-sheet .btn.danger { color: var(--red); }
+.ev-sheet .btn.danger:not(.ghost) { background: var(--red); color: #fff; }
+.ev-move-wrap { position: relative; }
+.ev-move { position: absolute; bottom: calc(100% + 6px); left: 0; z-index: 5; display: flex; flex-direction: column; min-width: 200px; padding: 6px; border-radius: 12px; background: var(--surface); box-shadow: 0 14px 40px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(var(--ink) / 0.1); }
+.ev-move button { text-align: left; border: 0; border-radius: 8px; padding: 8px 10px; background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.ev-move button:hover, .ev-move button:focus-visible { background: rgb(var(--ink) / 0.08); }
+.ev-confirm { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; padding: 12px; border-radius: 12px; background: color-mix(in srgb, var(--red) 10%, transparent); }
+.ev-confirm .row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ev-place { flex: 1; min-width: 160px; }
+.ev-kind button { white-space: nowrap; }
+.cal-draft .sx-seg.cal-draft-kind { display: flex; width: 100%; box-sizing: border-box; }
+.cal-draft .sx-seg.cal-draft-kind button { flex: 1 1 0; min-width: 0; white-space: normal; font-size: 12px; padding: 5px 6px; line-height: 1.2; }
+
+/* The timeline's blocks side by side: narrow columns keep the title readable. */
+.ds-block:focus-visible { outline: 2px solid var(--lime); outline-offset: 1px; }
+.ds-v .ds-block.narrow { padding-left: 6px; padding-right: 22px; }
+.ds-v .ds-block.narrow b { font-size: 11.5px; }
+.ds-v .ds-block.short.narrow small { display: none; }
+.ds-v .ds-block.short.narrow .ds-tick { right: 3px; }
+.ds-more-wrap { position: absolute; z-index: 6; }
+.ds-more-wrap .ds-more { position: static; border: 0; color: var(--text); cursor: pointer; font: inherit; font-size: 11px; font-weight: 700; }
+.ds-more-list { position: absolute; top: calc(100% + 4px); right: 0; z-index: 7; display: flex; flex-direction: column; min-width: 180px; padding: 5px; border-radius: 10px; background: var(--surface); box-shadow: 0 10px 30px rgb(0 0 0 / 0.45), 0 0 0 1px rgb(var(--ink) / 0.1); }
+.ds-more-list button { display: flex; align-items: center; gap: 8px; border: 0; border-radius: 7px; padding: 6px 8px; background: transparent; color: var(--text); font: inherit; font-size: 12.5px; text-align: left; cursor: pointer; white-space: nowrap; }
+.ds-more-list button:hover { background: rgb(var(--ink) / 0.08); }
+.ds-more-list i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); flex: none; }
+.ds-more-list small { margin-left: auto; color: var(--muted); }
+.cal-item:focus-visible { outline: 2px solid var(--lime); outline-offset: 1px; }
