@@ -261,8 +261,11 @@ try {
     await frame.waitForSelector('#hero-ring .ring-fill', { timeout: 5000 })
     await frame.waitForSelector('.ex', { timeout: 5000 })
     if (!(await frame.locator('#btn-workout-mode').isVisible())) throw new Error('no Start workout button')
-    const most = await frame.evaluate(() => Math.max(...[...document.querySelectorAll('.ex')].map((c) => c.querySelectorAll('button').length)))
+    // Besides its demo ("How to"), a card has only quick-add, Done and ⋯.
+    const most = await frame.evaluate(() => Math.max(...[...document.querySelectorAll('.ex')].map((c) => c.querySelectorAll('button:not([data-howto])').length)))
     if (most > 3) throw new Error(`an exercise card has ${most} buttons (want: quick-add, Done, ⋯)`)
+    // A library exercise shows its animated demo, drawn (not an empty picture).
+    await frame.waitForSelector('.ex .ex-demo svg.fig path[data-p="torso"][d]', { state: 'attached', timeout: 5000 })
     // A quick-add sends the change to Life System's log.
     await pg.evaluate(() => { window.__sportLog = []; window.addEventListener('message', (e) => e.data?.action === 'SPORT_LOG' && window.__sportLog.push(e.data.payload)) })
     const before = await frame.locator('.ex .ex-count b').first().innerText()
@@ -275,6 +278,9 @@ try {
     await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.textContent !== w, w0, { timeout: 3000 })
     await frame.click('#water-undo')
     await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.innerText === w, w0, { timeout: 3000 })
+    // Logging can earn a badge: it pops up with "Nice!" (checked a moment after a change).
+    await pg.waitForTimeout(1000)
+    if (await frame.locator('#unlock.open').count()) await frame.click('#unlock-ok')
     // The ⋯ menu opens and Esc closes it; the rest timer opens from it.
     await frame.locator('.ex .ex-more').first().click()
     await frame.waitForSelector('.ex-menu', { timeout: 2000 })
@@ -287,6 +293,19 @@ try {
     await frame.waitForSelector('#st-more:not([hidden]) #btn-open-manage-modal', { timeout: 2000 })
     await frame.press('body', 'Escape')
     if (await frame.locator('#st-more').isVisible()) throw new Error('the top menu stayed open')
+    // The demo opens the How-to sheet: steps, the common mistake, the ladder.
+    await frame.locator('.ex .ex-demo').first().click()
+    await frame.waitForSelector('#modal-howto.open #howto-name', { timeout: 3000 })
+    if ((await frame.locator('#modal-howto .howto-steps li').count()) < 2) throw new Error('the How-to sheet has no steps')
+    await frame.waitForSelector('#modal-howto .howto-warn', { timeout: 2000 })
+    await frame.click('#btn-close-howto')
+    // Library: groups of moves with demos; Badges: earned and still to get.
+    await frame.click('.st-tab[data-tab="library"]')
+    await frame.waitForSelector('.mv svg.fig path[data-p="torso"][d]', { state: 'attached', timeout: 5000 })
+    if ((await frame.locator('.mv').count()) < 40) throw new Error('the library shows fewer than 40 moves')
+    await frame.click('.st-tab[data-tab="badges"]')
+    await frame.waitForSelector('.bd .medal', { timeout: 5000 })
+    await frame.click('.st-tab[data-tab="today"]')
     // No sideways scroll at a laptop size or on a phone.
     for (const [w, h] of [[1280, 720], [390, 844]]) {
       await pg.setViewportSize({ width: w, height: h })

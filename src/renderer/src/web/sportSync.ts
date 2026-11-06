@@ -62,6 +62,18 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
     out.days = days
   }
   if (a.daysBackfilled || b.daysBackfilled) out.daysBackfilled = true
+  // Badges already shown (id → day) and "not yet" for a harder move (id → the
+  // day it may come back): from both devices, so a badge never pops twice.
+  if (a.badges || b.badges) {
+    const seen: Record<string, string> = { ...(older.badges ?? {}) }
+    for (const [k, v] of Object.entries(newer.badges ?? {})) seen[k] = seen[k] && seen[k] < String(v) ? seen[k] : String(v)
+    out.badges = seen
+  }
+  if (a.notYet || b.notYet) {
+    const later: Record<string, string> = { ...(older.notYet ?? {}) }
+    for (const [k, v] of Object.entries(newer.notYet ?? {})) later[k] = later[k] && later[k] > String(v) ? later[k] : String(v)
+    out.notYet = later
+  }
   return out
 }
 

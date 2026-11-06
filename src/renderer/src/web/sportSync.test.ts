@@ -130,3 +130,14 @@ describe('deletions stick across devices', () => {
     expect(out.history.map((h: any) => h.title).sort()).toEqual(['Gym', 'Swim'])
   })
 })
+
+describe('mergeSport: badges and "not yet"', () => {
+  it('keeps every badge already shown (earliest day) and the later "not yet"', () => {
+    const a = { lastDate: '2026-11-06', badges: { first: '2026-10-01', streak3: '2026-11-02' }, notYet: { wide_pushup: '2026-11-10' } }
+    const b = { lastDate: '2026-11-06', badges: { first: '2026-10-03', record: '2026-11-05' }, notYet: { wide_pushup: '2026-11-13', jump_squat: '2026-11-09' } }
+    const m = mergeSport(a, b, false)
+    expect(m.badges).toEqual({ first: '2026-10-01', streak3: '2026-11-02', record: '2026-11-05' })
+    expect(m.notYet).toEqual({ wide_pushup: '2026-11-13', jump_squat: '2026-11-09' })
+    expect(mergeSport({ lastDate: '2026-11-06' }, { lastDate: '2026-11-06' }, true).badges).toBeUndefined()
+  })
+})

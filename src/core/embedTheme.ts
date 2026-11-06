@@ -45,8 +45,8 @@ export const SPORT_PHONE = `
   }`
 
 /** Sport Track's light and dark details that Life's tokens don't carry. */
-const SPORT_DARK = '--st-water: #38bdf8; --st-water-text: #7dd3fc; --st-good: #34d399; --st-warn: #fbbf24; --st-bad: #f87171; --st-soft: color-mix(in srgb, var(--st-accent) 14%, transparent); --st-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -30px rgba(0,0,0,.7); --st-pop: 0 18px 50px -12px rgba(0,0,0,.65); color-scheme: dark;'
-const SPORT_LIGHT = '--st-water: #0284c7; --st-water-text: #0369a1; --st-good: #059669; --st-warn: #b45309; --st-bad: #dc2626; --st-soft: color-mix(in srgb, var(--st-accent) 30%, transparent); --st-shadow: 0 1px 2px rgba(20,25,34,.05), 0 10px 30px -18px rgba(20,25,34,.25); --st-pop: 0 18px 50px -14px rgba(20,25,34,.35); color-scheme: light;'
+const SPORT_DARK = '--st-fig: var(--st-accent); --st-water: #38bdf8; --st-water-text: #7dd3fc; --st-good: #34d399; --st-warn: #fbbf24; --st-bad: #f87171; --st-soft: color-mix(in srgb, var(--st-accent) 14%, transparent); --st-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -30px rgba(0,0,0,.7); --st-pop: 0 18px 50px -12px rgba(0,0,0,.65); color-scheme: dark;'
+const SPORT_LIGHT = '--st-fig: color-mix(in srgb, var(--st-accent) 58%, #1f2a10); --st-water: #0284c7; --st-water-text: #0369a1; --st-good: #059669; --st-warn: #b45309; --st-bad: #dc2626; --st-soft: color-mix(in srgb, var(--st-accent) 30%, transparent); --st-shadow: 0 1px 2px rgba(20,25,34,.05), 0 10px 30px -18px rgba(20,25,34,.25); --st-pop: 0 18px 50px -14px rgba(20,25,34,.35); color-scheme: light;'
 
 /** MAN had no phone layout: one column, smaller numbers, no sideways scroll. */
 export const MAN_PHONE = `
