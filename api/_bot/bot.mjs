@@ -24617,7 +24617,6 @@ var fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).p
 function packDay(p) {
 	const short = p.sleptMin != null && p.sleptMin < 360;
 	const cap = short ? 60 : 90;
-	const maxBlocks = short ? 4 : 5;
 	const endBy = p.endBy ?? (short ? "21:30" : "22:00");
 	const after = quarter(p.now);
 	const seen = /* @__PURE__ */ new Set();
@@ -24673,6 +24672,8 @@ function packDay(p) {
 		const g = t.project?.trim() || "Tasks";
 		groups.set(g, [...groups.get(g) ?? [], t]);
 	}
+	const overdue = (t) => !!(t.due && t.due < p.today);
+	const weight = (t) => (t.priority ?? 1) + (overdue(t) ? .5 : 0);
 	const groupChunks = [];
 	for (const [project, list] of groups) {
 		let cur = null;
@@ -24684,11 +24685,14 @@ function packDay(p) {
 					minutes: 0,
 					kind: "focus",
 					tasks: [],
-					hard: (t.priority ?? 1) >= 3
+					hard: false,
+					w: 0
 				};
 				groupChunks.push(cur);
 			}
 			cur.minutes += m;
+			cur.hard ||= (t.priority ?? 1) >= 3 || overdue(t);
+			cur.w = Math.max(cur.w, weight(t));
 			cur.tasks.push({
 				title: t.content,
 				id: t.id,
@@ -24697,12 +24701,11 @@ function packDay(p) {
 		}
 	}
 	for (const c of groupChunks) c.title = c.tasks.length === 1 ? c.tasks[0].title : `${c.title}: ${c.tasks.map((x) => x.title).join(", ")}`;
-	groupChunks.sort((a, b) => Number(b.hard) - Number(a.hard) || b.minutes - a.minutes);
-	chunks.push(...groupChunks);
-	if (quick.length) {
+	groupChunks.sort((a, b) => b.w - a.w || b.minutes - a.minutes);
+	const quickChunk = quick.length ? (() => {
 		const list = quick.slice(0, 8);
 		const minutes = Math.min(60, Math.max(20, list.reduce((s, t) => s + est.get(t), 0)));
-		chunks.push({
+		return {
 			title: `Quick tasks (${list.length})`,
 			minutes: Math.round(minutes / 5) * 5,
 			kind: "quick",
@@ -24711,20 +24714,27 @@ function packDay(p) {
 				id: t.id,
 				minutes: est.get(t)
 			})),
-			hard: false
-		});
-	}
+			hard: quick.some((t) => overdue(t) || (t.priority ?? 1) >= 3)
+		};
+	})() : null;
 	const wins = freeWindows(p.events, p.today, after, endBy);
 	const freeMin = wins.reduce((s, w) => s + w.e - w.s, 0);
-	const order = [...chunks.filter((c) => c.kind !== "quick").slice(0, maxBlocks - (quick.length ? 1 : 0)), ...chunks.filter((c) => c.kind === "quick")];
-	if (short) {
-		for (const c of order) if (c.kind !== "quick") c.minutes = Math.max(25, Math.round(c.minutes * .75 / 5) * 5);
-	}
+	const maxBlocks = short ? 5 : 8;
+	const budget = short ? 240 : 390;
+	const firsts = [...chunks, ...groupChunks.filter((c) => c.hard)];
+	const rest = groupChunks.filter((c) => !c.hard);
+	if (short) for (const c of [...firsts, ...rest]) c.minutes = Math.max(25, Math.round(c.minutes * .75 / 5) * 5);
 	const placed = [];
-	for (const c of order) {
-		if (placed.length >= maxBlocks) break;
-		const at = place(wins, c, p.best ?? [], 25);
-		if (!at) continue;
+	let used = 0;
+	const tryPlace = (c) => {
+		if (placed.length >= maxBlocks || budget - used < 25) return false;
+		const want = {
+			...c,
+			minutes: Math.min(c.minutes, budget - used)
+		};
+		const at = place(wins, want, p.best ?? [], 25);
+		if (!at) return false;
+		used += at.minutes;
 		placed.push({
 			title: c.title.slice(0, 80),
 			start: fromMin(at.start),
@@ -24733,49 +24743,64 @@ function packDay(p) {
 			tasks: c.tasks.map((t) => t.title),
 			chunk: c
 		});
+		return true;
+	};
+	/** A chunk that doesn't fit whole is tried task by task (most important first). */
+	const fit = (c) => {
+		if (tryPlace(c) || c.tasks.length < 2) return;
+		for (const t of c.tasks) tryPlace({
+			...c,
+			title: t.title,
+			minutes: Math.min(cap, Math.max(25, short ? Math.round(t.minutes * .75 / 5) * 5 : t.minutes)),
+			tasks: [t]
+		});
+	};
+	for (const c of firsts) fit(c);
+	if (quickChunk) fit(quickChunk);
+	let training = null;
+	if (!p.workoutDone) for (const w of wins.filter((x) => x.e > toMin("17:00"))) {
+		const s = Math.ceil(Math.max(w.s, toMin("17:00")) / 15) * 15;
+		if (s + 45 <= w.e) {
+			training = {
+				time: fromMin(s),
+				what: short ? "easy: Workout · 30 min" : "Workout · 45 min"
+			};
+			const i = wins.indexOf(w);
+			wins.splice(i, 1, ...[{
+				s: w.s,
+				e: s - 10
+			}, {
+				s: s + 55,
+				e: w.e
+			}].filter((x) => x.e - x.s >= 20));
+			break;
+		}
 	}
+	for (const c of rest) fit(c);
 	placed.sort((a, b) => a.start.localeCompare(b.start));
 	const blocks = placed.map(({ chunk: _c, ...b }) => b);
 	const inBlock = /* @__PURE__ */ new Map();
 	for (const b of placed) for (const t of b.chunk.tasks) inBlock.set(key(t.title), b.start);
-	let training = null;
-	if (!p.workoutDone) {
-		const evening = wins.filter((w) => w.e > toMin("17:00"));
-		for (const w of evening) {
-			const s = Math.max(w.s, toMin("17:00"));
-			if (s + 45 <= w.e) {
-				training = {
-					time: fromMin(Math.ceil(s / 15) * 15),
-					what: short ? "easy: Workout · 30 min" : "Workout · 45 min"
-				};
-				break;
-			}
-		}
-	}
-	const leftFree = wins.reduce((s, w) => s + w.e - w.s, 0) - (training ? 45 : 0);
-	let budget = Math.max(0, leftFree);
+	const full = used >= budget - 25 ? `today already has ${fmtMin(used)} of focus` : placed.length >= maxBlocks ? `today already has ${placed.length} blocks` : "no free time left between your events";
 	const also = [];
 	const deferred = [];
 	for (const t of tasks) {
 		if (mustTasks.has(t)) continue;
 		const minutes = est.get(t);
 		const at = inBlock.get(key(t.content));
-		const item = {
+		if (at) also.push({
 			title: t.content,
 			minutes,
 			priority: t.priority ?? 1,
 			...t.id ? { id: t.id } : {},
 			...t.project ? { project: t.project } : {},
-			...at ? { at } : {},
-			...t.due && t.due < p.today ? { overdue: true } : {}
-		};
-		if (at || (t.priority ?? 1) >= 3 || t.due && t.due < p.today || minutes <= budget) {
-			if (!at) budget = Math.max(0, budget - minutes);
-			also.push(item);
-		} else deferred.push({
+			at,
+			...overdue(t) ? { overdue: true } : {}
+		});
+		else deferred.push({
 			title: t.content,
 			...t.id ? { id: t.id } : {},
-			why: "No free time left today; tomorrow"
+			why: short ? `Short night, ${full}: tomorrow` : `The day is full (${full}): tomorrow`
 		});
 	}
 	also.sort((a, b) => b.priority - a.priority || Number(!!b.overdue) - Number(!!a.overdue));

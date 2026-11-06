@@ -87,24 +87,28 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
     mustdos: ['Ship the settings screen', 'Revise algebra chapter 4', 'Gym: legs'],
     blocks: [
       { title: 'App dev', start: hm(base), minutes: 100, kind: 'focus', tasks: ['Ship the settings screen'] },
-      { title: 'Study algebra', start: hm(base + 150), minutes: 90, kind: 'focus', tasks: ['Revise algebra chapter 4', 'Read chapter 4'] },
-      { title: 'Quick tasks (3)', start: hm(base + 270), minutes: 45, kind: 'quick', tasks: ['Pay the internet bill', 'Email the lab partner', 'Book the dentist'] }
+      { title: 'Draft the networking lab report', start: hm(base + 110), minutes: 60, kind: 'focus', tasks: ['Draft the networking lab report'] },
+      { title: 'Study algebra', start: hm(base + 180), minutes: 90, kind: 'focus', tasks: ['Revise algebra chapter 4', 'Read chapter 4'] },
+      { title: 'Quick tasks (3)', start: hm(base + 280), minutes: 45, kind: 'quick', tasks: ['Pay the internet bill', 'Email the lab partner', 'Book the dentist'] },
+      { title: 'CV and a CTF challenge', start: hm(base + 335), minutes: 75, kind: 'focus', tasks: ['Update the CV projects section', 'Try one beginner CTF challenge'] }
     ],
-    training: { time: hm(base + 360), what: 'Gym: legs' },
+    training: { time: hm(base + 420), what: 'Gym: legs' },
     waterMl: 2700,
     // DP1: every other task of the day, with estimates (made-up).
     also: [
-      { id: 't4', title: 'Draft the networking lab report', minutes: 60, priority: 4, project: 'University', overdue: true },
-      { id: 't5', title: 'Update the CV projects section', minutes: 30, priority: 3, project: 'Job & Career' },
-      { title: 'Read chapter 4', minutes: 45, priority: 2, project: 'University', at: hm(base + 150) },
-      { id: 't6', title: 'Try one beginner CTF challenge', minutes: 45, priority: 2, project: 'Cyber' },
-      { id: 't1', title: 'Pay the internet bill', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 270) },
-      { id: 't2', title: 'Email the lab partner', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 270) },
-      { id: 't7', title: 'Book the dentist', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 270) },
-      { id: 't8', title: 'Watch the refactoring talk, part 1', minutes: 30, priority: 1, project: 'Cyber' }
+      { id: 't4', title: 'Draft the networking lab report', minutes: 60, priority: 4, project: 'University', overdue: true, at: hm(base + 110) },
+      { id: 't5', title: 'Update the CV projects section', minutes: 30, priority: 3, project: 'Job & Career', at: hm(base + 335) },
+      { title: 'Read chapter 4', minutes: 45, priority: 2, project: 'University', at: hm(base + 180) },
+      { id: 't6', title: 'Try one beginner CTF challenge', minutes: 45, priority: 2, project: 'Cyber', at: hm(base + 335) },
+      { id: 't1', title: 'Pay the internet bill', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 280) },
+      { id: 't2', title: 'Email the lab partner', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 280) },
+      { id: 't7', title: 'Book the dentist', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 280) }
     ],
-    deferred: [{ id: 't9', title: 'Sort the photo folder', why: 'No free time left today; tomorrow' }],
-    why: '11 tasks and 2 classes, 5h20 free: 3 blocks (3h55), small tasks batched.'
+    deferred: [
+      { id: 't8', title: 'Watch the refactoring talk, part 1', why: 'The day is full (today already has 6h10 of focus): tomorrow' },
+      { id: 't9', title: 'Sort the photo folder', why: 'The day is full (today already has 6h10 of focus): tomorrow' }
+    ],
+    why: '11 tasks and 2 classes, 7h free: 5 blocks (6h10), small tasks batched.'
   }
   db.run("INSERT INTO settings (key, value) VALUES ('coach_rhythm', ?)", [JSON.stringify({ day: appDay, water: [], briefing: { status: 'proposed', sentAt: ago(30), plan, version: 2 } })])
 }

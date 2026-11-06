@@ -51,14 +51,53 @@ describe('the whole-day plan (DP1)', () => {
   it('a short night lowers the load but never to one tiny block', () => {
     const p = packDay({ ...base, sleptMin: 335 })
     expect(p.blocks.length).toBeGreaterThanOrEqual(3)
-    expect(p.blocks.length).toBeLessThanOrEqual(4)
+    expect(p.blocks.length).toBeLessThanOrEqual(5)
     expect(p.blocks.every((b) => b.minutes <= 60)).toBe(true)
+    expect(p.blocks.reduce((t, b) => t + b.minutes, 0)).toBeLessThanOrEqual(240)
+    expect((p.deferred ?? []).every((d) => /Short night/.test(d.why))).toBe(true)
     expect(p.headline).toContain('Short night (5h35)')
     expect(p.why).toContain('Short night')
     expect(p.light).toBe(true)
     // Not lightened a second time.
     expect(lightenForSleep(p, 335)).toBe(p)
     expect(unaccounted(p, tasks)).toEqual([])
+  })
+
+  it('urgent and overdue tasks get a slot first, and the free time is filled before anything waits', () => {
+    const two = [ev('Morning class', '08:00', '09:30'), ev('Afternoon class', '13:00', '14:30')]
+    const list: PlanTask[] = [
+      { id: 'a', content: 'Ship the settings screen', priority: 2, project: 'Projects' },
+      { id: 'b', content: 'Revise algebra chapter 4', priority: 2, project: 'University' },
+      { id: 'c', content: 'Gym plan for next week', priority: 1, project: 'Life' },
+      { id: 'd', content: 'Draft the networking lab report', priority: 4, project: 'University', due: '2030-03-10', duration: 60 },
+      { id: 'e', content: 'Update the CV projects section', priority: 3, project: 'Job & Career' },
+      { id: 'f', content: 'Try one beginner CTF challenge', priority: 2, project: 'Cyber' },
+      { id: 'g', content: 'Watch the refactoring talk, part 1', priority: 1, project: 'Cyber' },
+      { id: 'h', content: 'Pay the internet bill', priority: 1, project: 'Inbox' },
+      { id: 'i', content: 'Email the lab partner', priority: 1, project: 'Inbox' }
+    ]
+    const p = packDay({ ...base, now: '07:00', events: two, tasks: list, top3: ['Ship the settings screen', 'Revise algebra chapter 4', 'Gym plan for next week'] })
+    const lab = p.blocks.find((b) => b.tasks?.includes('Draft the networking lab report'))
+    expect(lab).toBeTruthy()
+    // It gets the first free slot after the must-dos, before the lower-priority work.
+    const low = p.blocks.find((b) => b.tasks?.includes('Watch the refactoring talk, part 1'))
+    if (low) expect(lab!.start < low.start).toBe(true)
+    // There's room for everything: nothing waits without a slot, nothing moves to tomorrow.
+    expect((p.also ?? []).every((a) => !!a.at)).toBe(true)
+    expect(p.deferred).toEqual([])
+    expect(unaccounted(p, list)).toEqual([])
+    expect(p.blocks.some((b) => b.start >= '15:00')).toBe(true)
+  })
+
+  it('a really full day: urgent work first, the rest moves to tomorrow with the reason', () => {
+    const busy = [ev('Lectures', '07:00', '12:00'), ev('Work shift', '13:30', '22:00')]
+    const p = packDay({ ...base, events: busy })
+    expect(p.blocks.length).toBeGreaterThan(0)
+    expect((p.also ?? []).every((a) => !!a.at)).toBe(true)
+    const placedPrio = (p.also ?? []).map((a) => a.priority)
+    const waiting = tasks.filter((t) => (p.deferred ?? []).some((d) => d.id === t.id)).map((t) => t.priority ?? 1)
+    if (placedPrio.length && waiting.length) expect(Math.max(...waiting)).toBeLessThanOrEqual(Math.max(...placedPrio))
+    expect((p.deferred ?? []).every((d) => /full/.test(d.why))).toBe(true)
   })
 
   it('a quick must-do goes into the quick block, not its own 40 minutes', () => {
@@ -89,9 +128,9 @@ describe('the whole-day plan (DP1)', () => {
 
   it('keeps the model plan when it is good, and fills in every task it forgot', () => {
     const packed = packDay(base)
-    const model = { ...packed, blocks: packed.blocks.slice(0, 4), also: [{ title: 'Pay the phone bill', minutes: 5, priority: 1 }], deferred: [{ title: 'Buy printer paper', why: 'The shop is closed today' }] }
+    const model = { ...packed, blocks: packed.blocks.slice(0, 6), also: [{ title: 'Pay the phone bill', minutes: 5, priority: 1 }], deferred: [{ title: 'Buy printer paper', why: 'The shop is closed today' }] }
     const out = checkModelPlan(model, packed, tasks)
-    expect(out.blocks).toHaveLength(4)
+    expect(out.blocks).toHaveLength(6)
     expect(out.deferred).toEqual([{ title: 'Buy printer paper', why: 'The shop is closed today' }])
     expect(out.also).toHaveLength(8)
     expect(out.also?.find((a) => a.title === 'Pay the phone bill')?.minutes).toBe(5)
@@ -121,7 +160,7 @@ describe('the whole-day plan (DP1)', () => {
     expect(after.start >= '18:00').toBe(true)
     if (moved.training) expect(overlaps(after, moved.training.time, `${String(Math.floor(toMin(moved.training.time) / 60) + 1).padStart(2, '0')}${moved.training.time.slice(2)}`)).toBe(false)
     // A small task inside the quick block moves on its own.
-    const q = packDay(base)
+    const q = packDay({ ...base, tasks: [...tasks.slice(0, 2), ...tasks.slice(7, 10)] })
     const split = editPlan(q, 'move the phone bill to the evening')!
     expect(split.blocks.find((b) => b.title === 'Pay the phone bill')!.start >= '18:00').toBe(true)
     expect(split.blocks.find((b) => b.kind === 'quick')!.tasks).not.toContain('Pay the phone bill')
