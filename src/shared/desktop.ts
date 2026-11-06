@@ -106,6 +106,10 @@ export interface DesktopApi {
   titleBar?(color: string, symbol: string): void
   /** Crashes from the last run (sent once after loading), for the error log. */
   onCrashes?(cb: (list: { at: string; why: string }[]) => void): void
+  /** The window's zoom: step in/out, reset, a factor, or nothing to just read it. Answers the factor. */
+  zoom?(op?: 'in' | 'out' | 'reset' | number | null): Promise<number>
+  /** The zoom changed (keys, Ctrl + wheel, another screen). */
+  onZoom?(cb: (factor: number) => void): void
   // ---- daily backup files (optional: older desktops don't have them) ----
   backupStatus?(): Promise<BackupStatus>
   writeBackup?(text: string, day: string): Promise<BackupStatus>

@@ -25,6 +25,7 @@ import { useLive } from '../live'
 import { buzz, soundSuccess } from '../soundKit'
 import { calendarDay } from '@core/dates'
 import { addLocalDays, dayDiff, dragSpan, hmOf, isoAt, isoFrom, isoWeek, lenLabel, snapMinute, toMin, tzAhead, weekStartOf, type DragShape } from '@core/calMath'
+import { Select } from '../Select'
 
 type View = 'day' | '3day' | 'ndays' | 'workweek' | 'week' | 'month' | 'agenda'
 /** Hour height: 72 px by default (C1), any size from 32 to 160 (C2). */
@@ -792,13 +793,13 @@ export function CalendarPage({ onGo }: { onGo: (p: PageId) => void }) {
           </div>
           {/* UI6: on a phone the views are one small menu, so nothing is cut off. */}
           <label className="cal-view-pick">
-            <select value={view} onChange={(e) => setView(e.target.value as typeof view)} aria-label="View">
+            <Select value={view} onChange={(e) => setView(e.target.value as typeof view)} aria-label="View">
               {viewChoices.map(([v, l]) => (
                 <option key={v} value={v}>
                   {l}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {gridDays.length > 0 && (
             <div className="cal-zoom" aria-label="Zoom">
@@ -1432,10 +1433,10 @@ function CustomRepeatFields({ value, day, onChange }: { value: CustomRepeat; day
       <div className="ce-row">
         <span className="ce-label">Every</span>
         <input type="number" min={1} max={30} value={value.interval} onChange={(e) => onChange({ ...value, interval: Math.max(1, Math.min(30, Number(e.target.value) || 1)) })} aria-label="Every how many" style={{ width: 64 }} />
-        <select value={value.freq} onChange={(e) => onChange({ ...value, freq: e.target.value as CustomRepeat['freq'] })} aria-label="Days or weeks">
+        <Select value={value.freq} onChange={(e) => onChange({ ...value, freq: e.target.value as CustomRepeat['freq'] })} aria-label="Days or weeks">
           <option value="daily">{value.interval > 1 ? 'days' : 'day'}</option>
           <option value="weekly">{value.interval > 1 ? 'weeks' : 'week'}</option>
-        </select>
+        </Select>
       </div>
       {value.freq === 'weekly' && (
         <div className="ce-row ce-wd" role="group" aria-label="On these days">
@@ -1462,10 +1463,10 @@ function CustomRepeatFields({ value, day, onChange }: { value: CustomRepeat; day
       )}
       <div className="ce-row">
         <span className="ce-label">Ends</span>
-        <select value={value.until ? 'until' : 'count'} onChange={(e) => onChange(e.target.value === 'until' ? { ...value, until: addDays(day, 56) } : { ...value, until: null })} aria-label="How it ends">
+        <Select value={value.until ? 'until' : 'count'} onChange={(e) => onChange(e.target.value === 'until' ? { ...value, until: addDays(day, 56) } : { ...value, until: null })} aria-label="How it ends">
           <option value="count">After</option>
           <option value="until">On a date</option>
-        </select>
+        </Select>
         {value.until ? (
           <input type="date" value={value.until} min={day} onChange={(e) => e.target.value && onChange({ ...value, until: e.target.value })} aria-label="Last day" />
         ) : (
@@ -1542,33 +1543,33 @@ function DraftForm({ top, start, end, day, calendars, onSave, onCancel }: { top:
           }
         }}
       />
-      <select value={repeat} onChange={(e) => setRepeat(e.target.value as RepeatChoice)} aria-label="Repeat">
+      <Select value={repeat} onChange={(e) => setRepeat(e.target.value as RepeatChoice)} aria-label="Repeat">
         <option value="none">Doesn't repeat</option>
         <option value="daily">Every day (4 weeks)</option>
         <option value="weekdays">Weekdays (8 weeks)</option>
         <option value="weekly">Every {wd} (12 weeks)</option>
         <option value="custom">Custom…</option>
-      </select>
+      </Select>
       {repeat === 'custom' && <CustomRepeatFields value={custom} day={d} onChange={setCustom} />}
       {more ? (
         <>
           {calendars.length > 1 && (
-            <select value={cal} onChange={(e) => setCal(e.target.value)} aria-label="Calendar">
+            <Select value={cal} onChange={(e) => setCal(e.target.value)} aria-label="Calendar">
               <option value="">Main calendar</option>
               {calendars.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
-          <select value={reminder} onChange={(e) => setReminder(e.target.value)} aria-label="Reminder">
+          <Select value={reminder} onChange={(e) => setReminder(e.target.value)} aria-label="Reminder">
             {REMINDERS.map(([v, l]) => (
               <option key={v} value={v}>
                 🔔 {l}
               </option>
             ))}
-          </select>
+          </Select>
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes" rows={2} aria-label="Notes" />
         </>
       ) : (
@@ -1792,27 +1793,27 @@ function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { 
               <div className="ce-row">
                 <Icon name="refresh" size={15} />
                 <span className="ce-label">Repeat</span>
-                <select value={repeat} onChange={(ev) => setRepeat(ev.target.value as RepeatChoice)} disabled={!canEdit} aria-label="Repeat">
+                <Select value={repeat} onChange={(ev) => setRepeat(ev.target.value as RepeatChoice)} disabled={!canEdit} aria-label="Repeat">
                   <option value="none">Doesn't repeat</option>
                   <option value="daily">Every day</option>
                   <option value="weekdays">Every weekday</option>
                   <option value="weekly">Every week</option>
                   <option value="custom">Custom…</option>
-                </select>
+                </Select>
               </div>
             )}
             {!series && repeat === 'custom' && <CustomRepeatFields value={custom} day={day} onChange={setCustom} />}
             <div className="ce-row">
               <Icon name="bell" size={15} />
               <span className="ce-label">Reminder</span>
-              <select value={reminder} onChange={(ev) => setReminder(ev.target.value)} disabled={!canEdit} aria-label="Reminder">
+              <Select value={reminder} onChange={(ev) => setReminder(ev.target.value)} disabled={!canEdit} aria-label="Reminder">
                 {REMINDERS.map(([v, l]) => (
                   <option key={v} value={v}>
                     {l}
                   </option>
                 ))}
                 {!REMINDERS.some(([v]) => v === reminder) && <option value={reminder}>{lenLabel(Number(reminder))} before</option>}
-              </select>
+              </Select>
             </div>
             <div className="ce-row ce-colors" role="radiogroup" aria-label="Color">
               <span className="ce-label">Color</span>
@@ -1824,13 +1825,13 @@ function EditSheet({ item, connected, calendars, tasks, onClose, onChanged }: { 
               <div className="ce-row">
                 <Icon name="calendar" size={15} />
                 <span className="ce-label">Calendar</span>
-                <select value={cal} onChange={(ev) => setCal(ev.target.value)} disabled={!canEdit} aria-label="Calendar">
+                <Select value={cal} onChange={(ev) => setCal(ev.target.value)} disabled={!canEdit} aria-label="Calendar">
                   {writableCals.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             )}
             {blockTasks(notes).length > 0 && (
@@ -1962,13 +1963,13 @@ function TemplatesPop({ templates, day, onApply, onSave, onRemove }: { templates
 function ViewPop({ prefs, onChange, onView }: { prefs: CalPrefs; onChange: (p: Partial<CalPrefs>) => void; onView: (v: View) => void }) {
   const hours = Array.from({ length: 25 }, (_, i) => i)
   const sel = (v: number, set: (n: number) => void, from: number, to: number, label: string) => (
-    <select value={v} onChange={(e) => set(Number(e.target.value))} aria-label={label}>
+    <Select value={v} onChange={(e) => set(Number(e.target.value))} aria-label={label}>
       {hours.filter((h) => h >= from && h <= to).map((h) => (
         <option key={h} value={h}>
           {pad(h % 24)}:00{h === 24 ? ' (midnight)' : ''}
         </option>
       ))}
-    </select>
+    </Select>
   )
   return (
     <div className="cal-pop cal-viewpop">
@@ -2023,14 +2024,14 @@ function ViewPop({ prefs, onChange, onView }: { prefs: CalPrefs; onChange: (p: P
       </label>
       <div className="cal-pop-row">
         <span>2nd time zone</span>
-        <select value={prefs.tz2} onChange={(e) => onChange({ tz2: e.target.value })} aria-label="Second time zone">
+        <Select value={prefs.tz2} onChange={(e) => onChange({ tz2: e.target.value })} aria-label="Second time zone">
           <option value="">None</option>
           {[...new Set([...(prefs.tz2 ? [prefs.tz2] : []), ...TZ_CHOICES])].filter((z) => z !== deviceTz()).map((z) => (
             <option key={z} value={z}>
               {tzShort(z)}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       <p className="hint small">Keys: T today · ← → back/forward · D W M A views · + − zoom · N new · G go to date</p>
     </div>

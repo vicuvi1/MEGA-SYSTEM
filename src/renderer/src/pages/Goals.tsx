@@ -19,6 +19,7 @@ import { PageSkeleton } from '../blocks'
 import { GoalCardView, GoalSheet, GoalsAmbient, Ring, TemplateGrid, formFromCard, type Tone } from '../goalsUi'
 import '../lifeExtras.css'
 import '../goals.css'
+import { Select } from '../Select'
 
 const hm = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(min % 60).padStart(2, '0') : ''}` : `${min} min`)
 const dayText = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
@@ -354,13 +355,13 @@ function LearningPath({ v, onChange }: { v: GoalsView; onChange: (v: GoalsView) 
           void add()
         }}
       >
-        <select value={track} onChange={(e) => setTrack(e.target.value as LearnTrack)} aria-label="Track">
+        <Select value={track} onChange={(e) => setTrack(e.target.value as LearnTrack)} aria-label="Track">
           {TRACK_IDS.map((t) => (
             <option key={t} value={t}>
               {TRACKS[t].label}
             </option>
           ))}
-        </select>
+        </Select>
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={TRACKS[track].placeholder} maxLength={120} aria-label="What you did" />
         <input value={tag} onChange={(e) => setTag(e.target.value)} placeholder="Tag, e.g. web" maxLength={30} aria-label="Tag" />
         <input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Link (optional)" maxLength={300} aria-label="Link" />

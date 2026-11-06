@@ -19,6 +19,8 @@ const api: DesktopApi = {
   loginGithub: () => ipcRenderer.invoke('desktop:loginGithub'),
   titleBar: (color, symbol) => ipcRenderer.send('desktop:titlebar', color, symbol),
   onCrashes: (cb) => void ipcRenderer.on('desktop:crashes', (_e, list) => cb(list)),
+  zoom: (op) => ipcRenderer.invoke('desktop:zoom', op ?? null),
+  onZoom: (cb) => void ipcRenderer.on('desktop:zoom', (_e, f) => cb(Number(f) || 1)),
   backupStatus: () => ipcRenderer.invoke('backups:status'),
   writeBackup: (text, day) => ipcRenderer.invoke('backups:write', text, day),
   readBackup: (where, name) => ipcRenderer.invoke('backups:read', where, name),

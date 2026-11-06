@@ -7,6 +7,7 @@ import { Icon } from './Icon'
 import { testNotification } from './NotifToasts'
 import { Row, Saved, Switch, useSaved } from './settingsUi'
 import { DEFAULT_NOTIF, useUiPrefs, type NotifPrefs } from './uiPrefs'
+import { Select } from './Select'
 
 export function NotifSettings() {
   const [ui, setUi] = useUiPrefs()
@@ -68,13 +69,13 @@ export function NotifSettings() {
             <Switch label="Quiet hours" on={sy.quiet.on} onChange={(v) => void setSynced({ quiet: { ...sy.quiet, on: v } })} />
           </Row>
           <Row title="Before an event" hint="A warning before classes and meetings in your calendar, with the room and Join">
-            <select className="sx-select" value={sy.lead} onChange={(e) => void setSynced({ lead: Number(e.target.value) })} aria-label="Warn before an event">
+            <Select className="sx-select" value={sy.lead} onChange={(e) => void setSynced({ lead: Number(e.target.value) })} aria-label="Warn before an event">
               {[0, 5, 10, 15, 30].map((m) => (
                 <option key={m} value={m}>
                   {m ? `${m} min before` : 'Off'}
                 </option>
               ))}
-            </select>
+            </Select>
           </Row>
           <Row title="Bedtime" hint="30 minutes before your bedtime target">
             <Switch label="Bedtime reminder" on={sy.bedtime} onChange={(v) => void setSynced({ bedtime: v })} />

@@ -19,6 +19,7 @@ import { Icon } from './Icon'
 import { life } from './bridge'
 import { clearRunLog, deskAuto, flowsCall, loadStore, runLog, saveStore, startRun } from './automationsFeed'
 import './automations.css'
+import { Select } from './Select'
 
 type HookView = { id: string; label: string; preset: string; hint: string; host: string; hasToken: boolean; at: number }
 type Secrets = { hooks: HookView[]; n8n: { on: boolean; host: string; keyHint: string } }
@@ -36,13 +37,13 @@ function TriggerFields({ t, set }: { t: any; set: (t: any) => void }) {
       return <input className="ai-input au-small" type="time" value={t.at ?? '09:00'} onChange={(e) => f('at', e.target.value)} aria-label="Time" />
     case 'context':
       return (
-        <select className="ai-input au-small" value={t.ctx ?? 'coding'} onChange={(e) => f('ctx', e.target.value)} aria-label="What you start">
+        <Select className="ai-input au-small" value={t.ctx ?? 'coding'} onChange={(e) => f('ctx', e.target.value)} aria-label="What you start">
           {CONTEXT_KINDS.filter((k) => k !== 'idle').map((k) => (
             <option key={k} value={k}>
               {CONTEXT_LABEL[k]}
             </option>
           ))}
-        </select>
+        </Select>
       )
     case 'app:open':
     case 'app:close':
@@ -53,10 +54,10 @@ function TriggerFields({ t, set }: { t: any; set: (t: any) => void }) {
       return <input className="ai-input au-small" type="number" min={5} max={95} value={t.below ?? 20} onChange={(e) => f('below', Number(e.target.value))} aria-label="Below percent" />
     case 'charger':
       return (
-        <select className="ai-input au-small" value={t.plugged === false ? 'out' : 'in'} onChange={(e) => f('plugged', e.target.value === 'in')} aria-label="Plugged">
+        <Select className="ai-input au-small" value={t.plugged === false ? 'out' : 'in'} onChange={(e) => f('plugged', e.target.value === 'in')} aria-label="Plugged">
           <option value="in">plugged in</option>
           <option value="out">unplugged</option>
-        </select>
+        </Select>
       )
     case 'idle':
       return <input className="ai-input au-small" type="number" min={1} max={240} value={t.minutes ?? 10} onChange={(e) => f('minutes', Number(e.target.value))} aria-label="Minutes away" />
@@ -89,7 +90,7 @@ function StepFields({ s, set, hooks, scripts }: { s: any; set: (s: any) => void;
     case 'webhook':
       return (
         <>
-          <select className="ai-input" value={s.hook ? `${s.where}:${s.hook}` : ''} onChange={(e) => {
+          <Select className="ai-input" value={s.hook ? `${s.where}:${s.hook}` : ''} onChange={(e) => {
             const [where, hook] = e.target.value.split(':')
             set({ ...s, where, hook, preset: hooks.find((h) => h.value === e.target.value)?.preset ?? 'custom' })
           }} aria-label="Which webhook">
@@ -99,7 +100,7 @@ function StepFields({ s, set, hooks, scripts }: { s: any; set: (s: any) => void;
                 {h.label}
               </option>
             ))}
-          </select>
+          </Select>
           {s.preset === 'n8n' && (
             <label className="hint small au-check">
               <input type="checkbox" checked={!!s.wait} onChange={(e) => f('wait', e.target.checked)} /> Wait for the run to finish (the flow answers with its executionId)
@@ -110,20 +111,20 @@ function StepFields({ s, set, hooks, scripts }: { s: any; set: (s: any) => void;
     case 'safe':
       return (
         <>
-          <select className="ai-input" value={s.act?.do ?? 'focusPack'} onChange={(e) => f('act', { do: e.target.value, ...(e.target.value === 'quiet' ? { minutes: 60 } : e.target.value === 'open' ? { page: 'today' } : {}) })} aria-label="Recipe action">
+          <Select className="ai-input" value={s.act?.do ?? 'focusPack'} onChange={(e) => f('act', { do: e.target.value, ...(e.target.value === 'quiet' ? { minutes: 60 } : e.target.value === 'open' ? { page: 'today' } : {}) })} aria-label="Recipe action">
             {SAFE_SIMPLE.map((k) => (
               <option key={k} value={k}>
                 {SAFE_LABEL[k]}
               </option>
             ))}
-          </select>
+          </Select>
           {s.act?.do === 'quiet' && <input className="ai-input au-small" type="number" min={5} max={240} value={s.act.minutes ?? 60} onChange={(e) => f('act', { do: 'quiet', minutes: Number(e.target.value) })} aria-label="Minutes" />}
           {s.act?.do === 'open' && (
-            <select className="ai-input au-small" value={s.act.page} onChange={(e) => f('act', { do: 'open', page: e.target.value })} aria-label="Page">
+            <Select className="ai-input au-small" value={s.act.page} onChange={(e) => f('act', { do: 'open', page: e.target.value })} aria-label="Page">
               {SAFE_PAGES.map((p) => (
                 <option key={p}>{p}</option>
               ))}
-            </select>
+            </Select>
           )}
         </>
       )
@@ -155,14 +156,14 @@ function StepFields({ s, set, hooks, scripts }: { s: any; set: (s: any) => void;
       const list = scripts.filter((x) => (s.do === 'ahk' ? x.ext === '.ahk' : x.ext !== '.ahk'))
       return (
         <>
-          <select className="ai-input" value={s.file ?? ''} onChange={(e) => f('file', e.target.value)} aria-label="Script">
+          <Select className="ai-input" value={s.file ?? ''} onChange={(e) => f('file', e.target.value)} aria-label="Script">
             <option value="">{list.length ? 'Pick a script…' : 'Choose your scripts folder below first'}</option>
             {list.map((x) => (
               <option key={x.file} value={x.file}>
                 {x.name}
               </option>
             ))}
-          </select>
+          </Select>
           <input className="ai-input" value={(s.args ?? []).join(' | ')} maxLength={400} placeholder="Arguments, split by |  (e.g. {{topic}} | -Force)" onChange={(e) => f('args', e.target.value.split('|').map((x) => x.trim()).filter(Boolean))} aria-label="Arguments" />
         </>
       )
@@ -185,20 +186,20 @@ function StepFields({ s, set, hooks, scripts }: { s: any; set: (s: any) => void;
     }
     case 'powertoys':
       return (
-        <select className="ai-input" value={s.feature ?? 'run'} onChange={(e) => f('feature', e.target.value)} aria-label="PowerToys feature">
+        <Select className="ai-input" value={s.feature ?? 'run'} onChange={(e) => f('feature', e.target.value)} aria-label="PowerToys feature">
           {Object.entries(POWERTOYS_FEATURES).map(([k, v]) => (
             <option key={k} value={k}>
               {v}
             </option>
           ))}
-        </select>
+        </Select>
       )
     case 'espanso':
       return (
-        <select className="ai-input" value={s.cmd ?? 'search'} onChange={(e) => f('cmd', e.target.value)} aria-label="Espanso">
+        <Select className="ai-input" value={s.cmd ?? 'search'} onChange={(e) => f('cmd', e.target.value)} aria-label="Espanso">
           <option value="search">Open its search</option>
           <option value="toggle">Switch it on / off</option>
-        </select>
+        </Select>
       )
   }
 }
@@ -223,14 +224,14 @@ function Editor({ start, hooks, scripts, hint, onSave, onCancel }: { start: Auto
           </span>
         ))}
         {(d.when?.length ?? 0) < 3 && (
-          <select className="au-add" value="" onChange={(e) => e.target.value && set('when', [...(d.when ?? []), { on: e.target.value }])} aria-label="Add a trigger">
+          <Select className="au-add" value="" onChange={(e) => e.target.value && set('when', [...(d.when ?? []), { on: e.target.value }])} aria-label="Add a trigger">
             <option value="">{d.when?.length ? '＋ or…' : '＋ something happens (or only a tap)'}</option>
             {TRIGGER_ONS.map((o) => (
               <option key={o} value={o}>
                 {TRIGGER_LABEL[o]}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <span className="au-word">do</span>
         {(d.steps ?? []).map((s: any, i: number) => (
@@ -242,14 +243,14 @@ function Editor({ start, hooks, scripts, hint, onSave, onCancel }: { start: Auto
           </span>
         ))}
         {(d.steps?.length ?? 0) < 5 && (
-          <select className="au-add" value="" onChange={(e) => e.target.value && set('steps', [...(d.steps ?? []), { do: e.target.value, ...(e.target.value === 'safe' ? { act: { do: 'focusPack' } } : {}) }])} aria-label="Add a step">
+          <Select className="au-add" value="" onChange={(e) => e.target.value && set('steps', [...(d.steps ?? []), { do: e.target.value, ...(e.target.value === 'safe' ? { act: { do: 'focusPack' } } : {}) }])} aria-label="Add a step">
             <option value="">{d.steps?.length ? '＋ then…' : '＋ an action'}</option>
             {STEP_KINDS.map((k) => (
               <option key={k} value={k}>
                 {STEP_LABEL[k]}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
       <p className="au-summary">{clean ? sentence(clean, hint) : 'Add at least one action.'}</p>
@@ -280,13 +281,13 @@ function Editor({ start, hooks, scripts, hint, onSave, onCancel }: { start: Auto
             <div key={i} className="au-fields">
               <input className="ai-input au-small" value={p.key} maxLength={24} onChange={(e) => set('params', d.params.map((x: Param, j: number) => (j === i ? { ...x, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') } : x)))} aria-label="Name in the template" />
               <input className="ai-input au-small" value={p.label} maxLength={40} onChange={(e) => set('params', d.params.map((x: Param, j: number) => (j === i ? { ...x, label: e.target.value } : x)))} aria-label="Label" />
-              <select className="ai-input au-small" value={p.type} onChange={(e) => set('params', d.params.map((x: Param, j: number) => (j === i ? { ...x, type: e.target.value } : x)))} aria-label="Type">
+              <Select className="ai-input au-small" value={p.type} onChange={(e) => set('params', d.params.map((x: Param, j: number) => (j === i ? { ...x, type: e.target.value } : x)))} aria-label="Type">
                 {PARAM_TYPES.map((t) => (
                   <option key={t} value={t}>
                     {PARAM_LABEL[t]}
                   </option>
                 ))}
-              </select>
+              </Select>
               {p.type === 'choice' && <input className="ai-input au-small" value={(p.choices ?? []).join(', ')} placeholder="a, b, c" onChange={(e) => set('params', d.params.map((x: Param, j: number) => (j === i ? { ...x, choices: e.target.value.split(',').map((c) => c.trim()) } : x)))} aria-label="Choices" />}
               <button type="button" className="btn small ghost" onClick={() => set('params', d.params.filter((_: unknown, j: number) => j !== i))}>
                 ✕
@@ -486,7 +487,7 @@ export function AutomationsPanel() {
               <button type="button" className="btn primary" onClick={() => setEditing(blank())}>
                 ＋ New automation
               </button>
-              <select className="ai-input au-small" value="" onChange={(e) => {
+              <Select className="ai-input au-small" value="" onChange={(e) => {
                 const t = AUTOMATION_TEMPLATES[Number(e.target.value)]
                 if (t) setEditing(blank({ pin: false, ...t.make() }))
               }} aria-label="Start from a template">
@@ -496,7 +497,7 @@ export function AutomationsPanel() {
                     {t.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               <button type="button" className="btn small ghost" onClick={() => void moveRecipes()}>
                 Copy my Smart island recipes here
               </button>
@@ -535,14 +536,14 @@ export function AutomationsPanel() {
           ))}
         </ul>
         <Row title="Service" hint={PRESETS[hookForm.preset].how}>
-          <select className="ai-input" value={hookForm.preset} onChange={(e) => setHookForm({ ...hookForm, preset: e.target.value as PresetId, where: PRESETS[e.target.value as PresetId].local && hookForm.where === 'local' ? 'local' : hookForm.where })} aria-label="Service">
+          <Select className="ai-input" value={hookForm.preset} onChange={(e) => setHookForm({ ...hookForm, preset: e.target.value as PresetId, where: PRESETS[e.target.value as PresetId].local && hookForm.where === 'local' ? 'local' : hookForm.where })} aria-label="Service">
             {PRESET_IDS.map((p) => (
               <option key={p} value={p}>
                 {PRESETS[p].label}
                 {PRESETS[p].paid ? ' (needs a paid plan)' : ''}
               </option>
             ))}
-          </select>
+          </Select>
         </Row>
         {desk?.auto && (
           <Row title="Where it runs">

@@ -13,7 +13,7 @@ type Msg = { role: 'me' | 'coach'; text: string; at: string; mood?: string; done
 // The face can be dragged (U15); where you put it is remembered.
 const POS_KEY = 'ls.benBubblePos'
 
-export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unread: number; onOpenChat: () => void }) {
+export function BenBubble({ hidden, unread, onOpenChat, where }: { hidden: boolean; unread: number; onOpenChat: () => void; where?: string }) {
   const [open, setOpen] = useState(false)
   const [status, setStatus] = useState<CoachStatus | null>(null)
   const [log, setLog] = useState<Msg[]>([])
@@ -85,6 +85,77 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
     }
     setOpen((o) => !o)
   }
+
+  // Never over a button or a box you type in: while you scroll down the face tucks into
+  // the edge, and it stays tucked while something you can press sits under it
+  // (hover or Tab brings it back). Pages also keep room for it at the bottom.
+  const bubbleRef = useRef<HTMLButtonElement>(null)
+  const [tucked, setTucked] = useState(false)
+  useEffect(() => {
+    if (hidden || open) {
+      setTucked(false)
+      return
+    }
+    let idle: ReturnType<typeof setTimeout> | undefined
+    let lastY = new WeakMap<EventTarget, number>()
+    const check = () => {
+      const el = bubbleRef.current
+      if (!el) return
+      // Where it sits when not tucked (its CSS spot), in screen pixels.
+      const cs = getComputedStyle(el)
+      const z = parseFloat(getComputedStyle(document.documentElement).zoom || '1') || 1
+      const w = el.offsetWidth * z
+      const hgt = el.offsetHeight * z
+      const left = window.innerWidth - (parseFloat(cs.right) || 0) * z - w
+      const top = window.innerHeight - (parseFloat(cs.bottom) || 0) * z - hgt
+      const r = { left, top, width: w, height: hgt }
+      // Anything you can press or type in on the page whose box meets the face (plus a 6 px margin).
+      const m = 6
+      let under = false
+      const sel = 'button, a[href], input:not([type=hidden]), select, textarea, summary, [role=combobox], [role=button], [role=switch], [role=tab], [contenteditable=true]'
+      for (const c of document.querySelectorAll<HTMLElement>(`.content :is(${sel})`)) {
+        const q = c.getBoundingClientRect()
+        if (!q.width || !q.height || q.right < r.left - m || q.left > r.left + r.width + m || q.bottom < r.top - m || q.top > r.top + r.height + m) continue
+        const st = getComputedStyle(c)
+        // (Buttons that only show on hover count too: they'd appear under the face.)
+        if (st.visibility === 'hidden') continue
+        under = true
+        break
+      }
+      setTucked(under)
+    }
+    const onScroll = (e: Event) => {
+      const t = e.target as Element | Document
+      const y = t instanceof Document ? window.scrollY : (t as Element).scrollTop ?? 0
+      const prev = lastY.get(t) ?? y
+      lastY.set(t, y)
+      if (y > prev + 2) setTucked(true)
+      clearTimeout(idle)
+      idle = setTimeout(check, 450)
+    }
+    const first = setTimeout(check, 900)
+    // Pages fill in after they open (tasks, cards): look again now and then while the window is seen.
+    const every = setInterval(() => document.visibilityState === 'visible' && check(), 2500)
+    // A click or a key can change what's under it (another Settings section, a sheet).
+    const later = () => {
+      clearTimeout(idle)
+      idle = setTimeout(check, 350)
+    }
+    document.addEventListener('click', later, true)
+    document.addEventListener('keyup', later, true)
+    window.addEventListener('scroll', onScroll, { capture: true, passive: true })
+    window.addEventListener('resize', onScroll as EventListener, { passive: true })
+    return () => {
+      clearTimeout(first)
+      clearInterval(every)
+      clearTimeout(idle)
+      lastY = new WeakMap()
+      document.removeEventListener('click', later, true)
+      document.removeEventListener('keyup', later, true)
+      window.removeEventListener('scroll', onScroll, { capture: true })
+      window.removeEventListener('resize', onScroll as EventListener)
+    }
+  }, [hidden, open, where])
 
   if (!life.coach || hidden) return null
 
@@ -241,7 +312,8 @@ export function BenBubble({ hidden, unread, onOpenChat }: { hidden: boolean; unr
         </div>
       )}
       <button
-        className={`bb-bubble mood-${status?.mood ?? 'chill'} ${open ? 'open' : ''}`}
+        ref={bubbleRef}
+        className={`bb-bubble mood-${status?.mood ?? 'chill'} ${open ? 'open' : ''} ${tucked ? 'tucked' : ''}`}
         /* UI7: a moved face still keeps clear of the phone's bottom bar (--bb-min-bottom). */
         style={pos ? { right: pos.right, bottom: `max(${pos.bottom}px, var(--bb-min-bottom, 8px))`, left: 'auto', top: 'auto' } : undefined}
         onPointerDown={onDown}

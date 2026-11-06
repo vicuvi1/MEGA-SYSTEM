@@ -4,6 +4,7 @@ import { LayoutEditor } from '../LayoutEditor'
 import { life } from '../bridge'
 import { Row, Saved, Segmented, Switch } from '../settingsUi'
 import { Icon } from '../Icon'
+import { ZoomControl } from '../zoom'
 import type { SettingsState } from './useSettingsState'
 
 export function LookSection({ s }: { s: SettingsState }) {
@@ -20,8 +21,8 @@ export function LookSection({ s }: { s: SettingsState }) {
         <Row title="Theme" hint="Dark, light, or follow Windows">
           <Segmented label="Theme" value={ui.theme} options={[['dark', 'Dark'], ['light', 'Light'], ['system', 'Like Windows']]} onChange={(v) => (setUi({ theme: v }), lookSaved())} />
         </Row>
-        <Row title="Text size" hint="Ctrl + / Ctrl − also work, Ctrl 0 resets">
-          <Segmented label="Text size" value={ui.textSize ?? 100} options={[[90, 'Small'], [100, 'Normal'], [110, '110%'], [125, '125%']]} onChange={(v) => (setUi({ textSize: v }), lookSaved())} />
+        <Row title="Zoom" hint={window.desktop?.zoom ? 'Everything bigger or smaller. Ctrl + / Ctrl − and Ctrl + mouse wheel work too, Ctrl 0 resets. Kept on this PC, for each screen' : 'Everything bigger or smaller, kept in this browser. Your browser’s Ctrl + / Ctrl − work too, Ctrl 0 resets'}>
+          <ZoomControl />
         </Row>
         <Row title="Your name" hint="For the greeting on Today">
           <input className="sx-input" value={ui.name} maxLength={30} placeholder="e.g. Victor" onChange={(e) => setUi({ name: e.target.value })} onBlur={() => lookSaved()} aria-label="Your name" />

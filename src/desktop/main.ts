@@ -23,6 +23,7 @@ import { registerAutomations } from './automations'
 import { createEyes } from './eyes'
 import { createMeetings } from './meetings'
 import { setupVoice } from './voice'
+import { setupZoom } from './zoom'
 import { installNow, memoryReloadDue } from '../core/nightCare'
 
 const origin = 'life-system://app'
@@ -200,6 +201,9 @@ if (firstCopy) void app.whenReady().then(async () => {
   win.webContents.setWindowOpenHandler(({ url }) => { external(url); return { action: 'deny' } })
   win.webContents.on('will-navigate', (event, url) => { if (!url.startsWith(origin + '/')) { event.preventDefault(); external(url) } })
   win.setMenu(null)
+  // Zoom (Ctrl + / - / 0, Ctrl + wheel, Settings → Look), remembered per screen; the island keeps its own size.
+  const zoom = setupZoom(win, dir, (f) => { if (!win.isDestroyed()) win.webContents.send('desktop:zoom', f) })
+  handle('desktop:zoom', (op: unknown) => (op === 'in' || op === 'out' || op === 'reset' || typeof op === 'number' ? zoom.set(op) : zoom.get()))
   ipcMain.on('desktop:titlebar', (event, color: unknown, symbol: unknown) => {
     const ok = (c: unknown): c is string => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c)
     if (event.sender !== win.webContents || !ok(color) || !ok(symbol)) return

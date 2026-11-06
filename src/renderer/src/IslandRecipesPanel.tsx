@@ -9,6 +9,7 @@ import { SUGGEST_LABEL, type SuggestKind } from '@core/suggest'
 import { life } from './bridge'
 import { pausedSuggestions, resumeSuggestion, setRecipes } from './smartIsland'
 import { useAction } from './ui'
+import { Select } from './Select'
 
 const ACTS: SafeAction['do'][] = ['focus', 'focusPack', 'blockSites', 'dnd', 'quiet', 'stopFocus', 'note', 'task', 'open', 'windDown', 'offerNote', 'moveCard']
 const DAYS: { label: string; days: number[] | undefined }[] = [
@@ -81,7 +82,7 @@ export function IslandRecipesPanel() {
         ))}
       </ul>
       <div className="row">
-        <select
+        <Select
           value=""
           aria-label="Add from a template"
           onChange={(e) => {
@@ -95,7 +96,7 @@ export function IslandRecipesPanel() {
               {t.name}
             </option>
           ))}
-        </select>
+        </Select>
         <button className="btn small ghost" onClick={() => setEdit({ id: `r${Date.now().toString(36)}`, name: 'My recipe', on: true, when: { on: 'context', ctx: 'coding' }, then: [blankAct('focus')], confirmFirst: false, ranOnce: false })}>
           ＋ New
         </button>
@@ -118,33 +119,33 @@ function RecipeEditor({ r, onSave, onCancel }: { r: Recipe; onSave: (r: Recipe) 
       </label>
       <label className="pc-list">
         <span>When</span>
-        <select value={x.when.on} onChange={(e) => setX({ ...x, when: { on: e.target.value as RecipeOn, ...(e.target.value === 'context' ? { ctx: 'coding' as ContextKind } : e.target.value === 'time' ? { at: '22:30' } : {}) } })}>
+        <Select value={x.when.on} onChange={(e) => setX({ ...x, when: { on: e.target.value as RecipeOn, ...(e.target.value === 'context' ? { ctx: 'coding' as ContextKind } : e.target.value === 'time' ? { at: '22:30' } : {}) } })}>
           {RECIPE_ON.map((o) => (
             <option key={o} value={o}>
               {RECIPE_ON_LABEL[o]}
             </option>
           ))}
-        </select>
+        </Select>
         {x.when.on === 'context' && (
-          <select value={x.when.ctx} onChange={(e) => setX({ ...x, when: { on: 'context', ctx: e.target.value as ContextKind } })}>
+          <Select value={x.when.ctx} onChange={(e) => setX({ ...x, when: { on: 'context', ctx: e.target.value as ContextKind } })}>
             {CONTEXT_KINDS.filter((k) => k !== 'idle').map((k) => (
               <option key={k} value={k}>
                 {CONTEXT_LABEL[k].toLowerCase()}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         {x.when.on === 'time' && <input type="time" value={x.when.at} onChange={(e) => setX({ ...x, when: { on: 'time', at: e.target.value } })} />}
       </label>
       <label className="pc-list">
         <span>If</span>
-        <select value={Math.max(0, days)} onChange={(e) => setIf({ days: DAYS[Number(e.target.value)].days })}>
+        <Select value={Math.max(0, days)} onChange={(e) => setIf({ days: DAYS[Number(e.target.value)].days })}>
           {DAYS.map((d, i) => (
             <option key={d.label} value={i}>
               {d.label}
             </option>
           ))}
-        </select>
+        </Select>
         <input type="time" aria-label="From" value={x.if?.from ?? ''} onChange={(e) => setIf({ from: e.target.value || undefined, to: x.if?.to ?? (e.target.value ? '23:59' : undefined) })} />
         <input type="time" aria-label="To" value={x.if?.to ?? ''} onChange={(e) => setIf({ to: e.target.value || undefined })} />
         <label>
@@ -154,13 +155,13 @@ function RecipeEditor({ r, onSave, onCancel }: { r: Recipe; onSave: (r: Recipe) 
       {x.then.map((a, i) => (
         <label key={i} className="pc-list">
           <span>{i ? 'And' : 'Then'}</span>
-          <select value={a.do} onChange={(e) => setAct(i, blankAct(e.target.value as SafeAction['do']))}>
+          <Select value={a.do} onChange={(e) => setAct(i, blankAct(e.target.value as SafeAction['do']))}>
             {ACTS.map((d) => (
               <option key={d} value={d}>
                 {SAFE_LABEL[d]}
               </option>
             ))}
-          </select>
+          </Select>
           {a.do === 'focus' && (
             <>
               <input value={a.subject} aria-label="Subject" onChange={(e) => setAct(i, { ...a, subject: e.target.value })} />
@@ -170,13 +171,13 @@ function RecipeEditor({ r, onSave, onCancel }: { r: Recipe; onSave: (r: Recipe) 
           {a.do === 'quiet' && <input type="number" min={5} max={240} value={a.minutes} aria-label="Minutes" onChange={(e) => setAct(i, { ...a, minutes: Number(e.target.value) })} />}
           {(a.do === 'note' || a.do === 'task') && <input value={a.text} aria-label="Text" onChange={(e) => setAct(i, { ...a, text: e.target.value })} />}
           {a.do === 'open' && (
-            <select value={a.page} onChange={(e) => setAct(i, { do: 'open', page: e.target.value as (typeof SAFE_PAGES)[number] })}>
+            <Select value={a.page} onChange={(e) => setAct(i, { do: 'open', page: e.target.value as (typeof SAFE_PAGES)[number] })}>
               {SAFE_PAGES.map((p) => (
                 <option key={p} value={p}>
                   {p}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
           <button className="btn small ghost" onClick={() => setX({ ...x, then: x.then.filter((_, j) => j !== i) })} aria-label="Remove">
             ✕

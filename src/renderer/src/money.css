@@ -110,7 +110,7 @@
 
 /* ---------- quick add ---------- */
 .mh-quick { display: flex; flex-direction: column; }
-.mq { display: grid; gap: 8px; }
+.mq { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
 .mq-row { display: flex; gap: 8px; }
 .mq-row input { flex: 1; min-width: 0; height: 48px; padding: 0 16px; border-radius: 14px; font: inherit; font-size: 16px; color: var(--text); background: rgb(var(--ink) / 0.05); border: 1px solid var(--border-strong); outline: none; transition: border-color 0.15s, background-color 0.15s; }
 .mq-row input:focus { border-color: color-mix(in srgb, var(--accent) 70%, transparent); background: rgb(var(--ink) / 0.07); }

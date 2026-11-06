@@ -11,6 +11,7 @@ import { deleteVoiceDownloads, getFile, hasFile, hasModel, voiceBytes } from './
 import { preload, unload } from './voiceAi'
 import { Speaker, systemVoices } from './voiceSpeak'
 import './voice.css'
+import { Select } from '../Select'
 
 const LANGS: [string, string][] = [['', 'Find out'], ['en', 'English'], ['ro', 'Romanian'], ['ru', 'Russian'], ['fr', 'French'], ['de', 'German'], ['es', 'Spanish'], ['it', 'Italian']]
 
@@ -109,23 +110,23 @@ export function VoiceSettings() {
         </>
       )}
       <Row title="Speech to text" hint={`${STT_MODELS[p.stt].hint} · ${sizeText(STT_MODELS[p.stt].bytes)} · loads when you talk, unloads after 2 minutes`}>
-        <select value={p.stt} onChange={(e) => set({ stt: e.target.value as SttModelId })} aria-label="Speech to text model">
+        <Select value={p.stt} onChange={(e) => set({ stt: e.target.value as SttModelId })} aria-label="Speech to text model">
           {Object.entries(STT_MODELS).map(([id, m]) => (
             <option key={id} value={id}>
               {m.label} · {m.hint}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
       {STT_MODELS[p.stt].multilingual && (
         <Row title="Language" hint="What you speak (Whisper can also find out by itself).">
-          <select value={p.lang} onChange={(e) => set({ lang: e.target.value })} aria-label="Language">
+          <Select value={p.lang} onChange={(e) => set({ lang: e.target.value })} aria-label="Language">
             {LANGS.map(([v, l]) => (
               <option key={v} value={v}>
                 {l}
               </option>
             ))}
-          </select>
+          </Select>
         </Row>
       )}
       <Row title="Ben's voice" hint={p.tts === 'kokoro' ? 'Kokoro: natural, runs on this PC (about 92 MB, loads when he talks).' : "Light: your system's own voices, no download."}>
@@ -133,24 +134,24 @@ export function VoiceSettings() {
       </Row>
       {p.tts === 'system' ? (
         <Row title="Voice" hint={voices.length ? `${voices.length} voices on this device` : 'Your system has no voices installed'}>
-          <select value={p.systemVoice} onChange={(e) => set({ systemVoice: e.target.value })} aria-label="System voice">
+          <Select value={p.systemVoice} onChange={(e) => set({ systemVoice: e.target.value })} aria-label="System voice">
             <option value="">Default</option>
             {voices.map((v) => (
               <option key={v.name} value={v.name}>
                 {v.name} ({v.lang})
               </option>
             ))}
-          </select>
+          </Select>
         </Row>
       ) : (
         <Row title="Voice" hint="Kokoro's voices (English)">
-          <select value={p.kokoroVoice} onChange={(e) => set({ kokoroVoice: e.target.value })} aria-label="Kokoro voice">
+          <Select value={p.kokoroVoice} onChange={(e) => set({ kokoroVoice: e.target.value })} aria-label="Kokoro voice">
             {KOKORO_VOICES.map((v) => (
               <option key={v.id} value={v.id}>
                 {v.label}
               </option>
             ))}
-          </select>
+          </Select>
         </Row>
       )}
       <Row title="Speed" hint={`${p.speed.toFixed(1)}×`}>

@@ -29,7 +29,16 @@ const PATHS = {
   spark: 'M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M6 18l2.5-2.5M15.5 8.5L18 6',
   trash: 'M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6',
   edit: 'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z',
-  clock: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11h-4a1 1 0 0 1 0-2h3V6a1 1 0 0 1 2 0v6a1 1 0 0 1-1 1z'
+  clock: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2zm1 11h-4a1 1 0 0 1 0-2h3V6a1 1 0 0 1 2 0v6a1 1 0 0 1-1 1z',
+  speaker: 'M4 9h4l5-4v14l-5-4H4zM16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12',
+  mic: 'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3zM5 11a7 7 0 0 0 14 0M12 18v3M9 21h6',
+  face: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM9 10h.01M15 10h.01M8.5 14.5a4.5 4.5 0 0 0 7 0',
+  puzzle: 'M4 8h4a2 2 0 1 1 4 0h4v4a2 2 0 1 1 0 4v4H4v-4a2 2 0 1 0 0-4z',
+  grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  plug: 'M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4',
+  island: 'M3 5h18v14H3zM9.5 8h5a1 1 0 0 1 0 2h-5a1 1 0 0 1 0-2z',
+  pcshield: 'M3 4h18v12H3zM8 20h8M12 16v4M12 7l3 1v2c0 1.6-1.2 2.8-3 3.2-1.8-.4-3-1.6-3-3.2V8z',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'
 } as const
 
 // Closed shapes behind the lines, shown softly when an icon is "duo" (the active section).
@@ -50,7 +59,16 @@ const FILLS: Partial<Record<keyof typeof PATHS, string>> = {
   bot: 'M6 8h12v10H6z',
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7z',
   trash: 'M5 6h14v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6z',
-  clock: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z'
+  clock: 'M12 2a10 10 0 1 0 10 10A10 10 0 0 0 12 2z',
+  speaker: 'M4 9h4l5-4v14l-5-4H4z',
+  mic: 'M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z',
+  face: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z',
+  puzzle: 'M4 8h4a2 2 0 1 1 4 0h4v4a2 2 0 1 1 0 4v4H4v-4a2 2 0 1 0 0-4z',
+  grid: 'M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h6v6h-6z',
+  plug: 'M6 8h12v3a6 6 0 0 1-12 0z',
+  island: 'M3 5h18v14H3z',
+  pcshield: 'M3 4h18v12H3z',
+  eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z'
 }
 
 export type IconName = keyof typeof PATHS

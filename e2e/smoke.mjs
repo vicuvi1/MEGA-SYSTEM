@@ -280,6 +280,139 @@ try {
       if (!ok) throw new Error(`${name} looks empty`)
     }
   })
+  // Laptop fixes: drop-down lists are readable in dark and light (the system list
+  // of a plain <select> came out white with faint text on Windows), they open fully
+  // on screen, and the app's own drop-down works with the keyboard.
+  await step('Drop-downs: readable options in dark and light (also disabled ones), open on screen, keyboard works', async () => {
+    // Contrast of two CSS colours (rgb()/rgba()/color(srgb …)); `under` is what shows through a see-through colour.
+    const contrastIn = () => {
+      const parse = (c) => {
+        let m = c.match(/rgba?\(([^)]+)\)/)
+        if (m) {
+          const p = m[1].split(/[ ,/]+/).filter(Boolean).map(Number)
+          return [p[0], p[1], p[2], p[3] ?? 1]
+        }
+        m = c.match(/color\(srgb ([^)]+)\)/)
+        if (m) {
+          const p = m[1].split(/[ /]+/).filter(Boolean).map(Number)
+          return [p[0] * 255, p[1] * 255, p[2] * 255, p[3] ?? 1]
+        }
+        return null
+      }
+      const over = (top, under) => [0, 1, 2].map((i) => top[i] * top[3] + under[i] * (1 - top[3])).concat(1)
+      const lum = (c) => {
+        const [r, g, b] = c.slice(0, 3).map((v) => {
+          const s = v / 255
+          return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+        })
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b
+      }
+      window.__contrast = (fg, bg, under = 'rgb(255,255,255)') => {
+        const u = parse(under)
+        const b = over(parse(bg) ?? [0, 0, 0, 0], u)
+        const f = over(parse(fg), b)
+        const [L1, L2] = [lum(f), lum(b)].sort((x, y) => y - x)
+        return (L1 + 0.05) / (L2 + 0.05)
+      }
+    }
+    await pg.evaluate(contrastIn)
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    const names = await pg.locator('.st-item b').allInnerTexts()
+    let found = false
+    for (const n of names) {
+      await pg.locator('.st-item', { hasText: n }).first().click()
+      await pg.waitForTimeout(300)
+      if (await pg.locator('.st-body .ui-select:visible').count()) { found = true; break }
+    }
+    if (!found) throw new Error('no drop-down found in Settings')
+    if (await pg.locator('.st-body select').count()) throw new Error('Settings still has a plain <select>')
+    const sel = pg.locator('.st-body .ui-select:visible').first()
+    const theme0 = await pg.evaluate(() => document.documentElement.dataset.theme)
+    try {
+      for (const theme of ['dark', 'light']) {
+        await pg.evaluate((t) => (document.documentElement.dataset.theme = t), theme)
+        await sel.scrollIntoViewIfNeeded()
+        await sel.click()
+        await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
+        const r = await pg.evaluate(() => {
+          const list = document.querySelector('.ui-select-list')
+          const lb = getComputedStyle(list).backgroundColor
+          const box = list.getBoundingClientRect()
+          const opts = [...list.querySelectorAll('[role=option]')].map((o) => {
+            const cs = getComputedStyle(o)
+            return { text: o.textContent, off: o.getAttribute('aria-disabled') === 'true', ratio: window.__contrast(cs.color, cs.backgroundColor, lb) }
+          })
+          return { opts, onScreen: box.left >= 0 && box.top >= 0 && box.right <= innerWidth && box.bottom <= innerHeight, lb }
+        })
+        const bad = r.opts.filter((o) => o.ratio < (o.off ? 3 : 4.5))
+        if (bad.length) throw new Error(`${theme}: hard to read: ${bad.map((o) => `${o.text} (${o.ratio.toFixed(1)})`).join(', ')}`)
+        if (!r.onScreen) throw new Error(`${theme}: the list does not fit on the screen`)
+        await pg.keyboard.press('Escape')
+        await pg.waitForSelector('.ui-select-list', { state: 'detached', timeout: 2000 })
+        // A plain <select> elsewhere (the embedded apps, the island) gets solid option colours too.
+        const native = await pg.evaluate(() => {
+          const s = document.createElement('select')
+          s.innerHTML = '<option>Top left</option><option disabled>Docked right</option>'
+          document.body.appendChild(s)
+          const out = [...s.options].map((o) => {
+            const cs = getComputedStyle(o)
+            return { off: o.disabled, ratio: window.__contrast(cs.color, cs.backgroundColor), bg: cs.backgroundColor }
+          })
+          const scheme = getComputedStyle(document.documentElement).colorScheme
+          s.remove()
+          return { out, scheme }
+        })
+        const nbad = native.out.filter((o) => o.ratio < (o.off ? 3 : 4.5))
+        if (nbad.length) throw new Error(`${theme}: plain drop-down options are hard to read (${nbad.map((o) => o.ratio.toFixed(1)).join(', ')})`)
+        if (native.scheme !== theme) throw new Error(`${theme}: color-scheme is ${native.scheme}`)
+      }
+      // Keyboard: ↓ opens, ↓ moves, Escape closes without changing the choice.
+      const before = await sel.getAttribute('data-value')
+      await sel.focus()
+      await pg.keyboard.press('ArrowDown')
+      await pg.waitForSelector('.ui-select-list', { timeout: 2000 })
+      if ((await sel.getAttribute('aria-expanded')) !== 'true') throw new Error('↓ did not open it')
+      const a1 = await sel.getAttribute('aria-activedescendant')
+      await pg.keyboard.press('End')
+      const a2 = await sel.getAttribute('aria-activedescendant')
+      if (!a1 || a1 === a2) throw new Error('End did not move the highlight')
+      await pg.keyboard.press('Escape')
+      await pg.waitForSelector('.ui-select-list', { state: 'detached', timeout: 2000 })
+      if ((await sel.getAttribute('data-value')) !== before) throw new Error('Escape changed the choice')
+    } finally {
+      await pg.evaluate((t) => (t ? (document.documentElement.dataset.theme = t) : delete document.documentElement.dataset.theme), theme0)
+    }
+  })
+  // Zoom (Settings → Look): − 100% +, a short "Zoom 110%" note, kept after a reload, Reset.
+  await step('Zoom: Settings → Look zooms the app, says so, and keeps it after a reload', async () => {
+    const zoomOf = () => pg.evaluate(() => getComputedStyle(document.documentElement).zoom)
+    await open('settings')
+    await pg.locator('.st-item', { hasText: 'Look' }).first().click()
+    await pg.getByRole('button', { name: 'Zoom in' }).click()
+    await pg.waitForSelector('.zoom-toast', { timeout: 2000 })
+    if (!/Zoom 110%/.test(await pg.locator('.zoom-toast').innerText())) throw new Error('no "Zoom 110%" note')
+    if (Number(await zoomOf()) !== 1.1) throw new Error(`zoom is ${await zoomOf()}`)
+    if ((await pg.evaluate(() => localStorage.getItem('ls.zoom'))) !== '1.1') throw new Error('the zoom was not kept')
+    // A fresh page in this browser starts at 110 %.
+    const p2 = await pg.context().newPage()
+    try {
+      await p2.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
+      await p2.goto(pg.url())
+      await p2.waitForFunction(() => document.querySelector('#root')?.children.length, null, { timeout: 20000 })
+      await p2.waitForTimeout(500)
+      const z2 = await p2.evaluate(() => getComputedStyle(document.documentElement).zoom)
+      if (Number(z2) !== 1.1) throw new Error(`a fresh page starts at zoom ${z2}`)
+    } finally {
+      await p2.close()
+    }
+    // At 110 % the page still has no sideways scroll.
+    if (await pg.evaluate(() => document.scrollingElement.scrollWidth > document.scrollingElement.clientWidth + 1)) throw new Error('sideways scroll at 110 %')
+    await open('settings')
+    await pg.locator('.st-item', { hasText: 'Look' }).first().click()
+    await pg.locator('.zoom-reset').click()
+    await pg.waitForFunction(() => Number(getComputedStyle(document.documentElement).zoom) === 1, null, { timeout: 2000 })
+  })
   await step('Settings: connect an AI app (make a token, see it listed, it opens the tools)', async () => {
     await pg.locator('.st-item', { hasText: 'Connect an AI app' }).first().click()
     await pg.waitForSelector('.ai-input', { timeout: 8000 })

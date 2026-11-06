@@ -638,6 +638,9 @@ export function createTursoWebBridge(): Bridge {
   const backupStatus = async () => {
     if (!backupDays || Date.now() - backupDays.at > 3600_000) backupDays = { at: Date.now(), days: await snapshotDays() }
     const days = backupDays.days
+    // An old failure from this device doesn't count once today's backup is in the cloud
+    // (the server makes one every day too): "Backup off" stayed on although backups were fine.
+    if (days[0] && days[0] >= dayKey(new Date())) store?.removeItem('life_snapshot_error')
     return { dir: 'Turso cloud (daily snapshot, 30 kept)', driveAvailable: false, passphraseSet: true, last: days[0] ? { name: days[0], at: days[0] } : null, pending: 0, count: days.length, lastError: store?.getItem('life_snapshot_error') ?? null }
   }
   const aiOnP: Promise<boolean> = direct
@@ -1611,7 +1614,11 @@ export function createTursoWebBridge(): Bridge {
           await ensureSnapshotsTable()
           const day = dayKey(new Date())
           const [have] = await turso.readMany([{ sql: 'SELECT 1 FROM cloud_snapshots WHERE day = ?', args: [day] }])
-          if (!(have instanceof Error) && have.rows.length) return true
+          if (!(have instanceof Error) && have.rows.length) {
+            // Today's is already there (made by the server or another device): nothing is wrong.
+            store?.removeItem('life_snapshot_error')
+            return true
+          }
           // Packed (gzip) so a big history fits the 4.5 MB a request may carry (Y8).
           const data = await packSnapshot(JSON.stringify(await snapshot()))
           if (data.length > 4_200_000) {

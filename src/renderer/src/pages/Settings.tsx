@@ -55,7 +55,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'sound',
       label: 'Sound',
-      icon: 'bell',
+      icon: 'speaker',
       hint: 'Volume, kinds of sounds, theme, focus background, phone buzz',
       keywords: 'sound sounds volume mute audio theme arcade glass soft focus background brown noise rain tick gong haptics vibrate buzz',
       body: <SoundSection />
@@ -63,7 +63,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'voice',
       label: 'Voice',
-      icon: 'bot',
+      icon: 'mic',
       hint: 'Talk to Ben: "Hey Ben", speech to text, his voice',
       keywords: 'voice mic microphone speak talk hey ben wake word dictation speech text tts read aloud kokoro whisper moonshine',
       body: <VoiceSettings />
@@ -71,7 +71,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'ben',
       label: 'Ben',
-      icon: 'spark',
+      icon: 'face',
       hint: 'Your coach: his brain (model & cost), tone, rhythm',
       keywords: 'coach ai tone style length nudges rhythm model angry brain openrouter price cost usage claude gpt',
       body: <BenSection s={s} />
@@ -95,7 +95,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'plugins',
       label: 'Plugins',
-      icon: 'spark',
+      icon: 'puzzle',
       hint: 'Weather, GitHub, Gmail, bank import, phone numbers, notes',
       keywords: 'plugins weather rain sunset github ctf gmail mail deadlines bank csv statement import phone shortcut steps weight sleep health obsidian notion notes vault',
       body: <PluginsPanel />
@@ -103,7 +103,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'widgets',
       label: 'Widgets',
-      icon: 'spark',
+      icon: 'grid',
       hint: 'Widget gallery, script tiles, island pages and the island look',
       keywords: 'widgets gallery install permissions countdown quote pomodoro streak script tiles pages swipe island look notch capsule theme clock dracula cyberpunk',
       body: <WidgetsPanel />
@@ -111,7 +111,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'ai-apps',
       label: 'Connect an AI app',
-      icon: 'bot',
+      icon: 'plug',
       hint: 'Claude, ChatGPT and other AI apps',
       keywords: 'ai app claude chatgpt mcp connector token connect desktop code phone',
       body: <AiAppsPanel />
@@ -119,7 +119,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'automation',
       label: 'PC & automation',
-      icon: 'link',
+      icon: 'bolt',
       hint: 'Music during focus, ActivityWatch, Ben on your PC, phone push, n8n, outside tools',
       keywords: 'automation pc music spotify pause media activitywatch actions ntfy push phone n8n webhook zapier make mcp tools server',
       body: <PcAutomationPanel />
@@ -129,7 +129,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'desktop',
       label: 'Desktop & island',
-      icon: 'expand',
+      icon: 'island',
       hint: 'The island at the edge of your screen',
       keywords: 'island dynamic size look see-through shortcut sound sections tray',
       body: <IslandSettingsPanel />
@@ -137,7 +137,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'pc',
       label: 'Ben on this PC',
-      icon: 'shield',
+      icon: 'pcshield',
       hint: 'What the desktop app may see, and what it saw today',
       keywords: 'privacy pc computer app activity focus distraction clipboard idle sensors block sites do not disturb shortcuts',
       body: <PcPrivacyPanel />
@@ -145,7 +145,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'eyes',
       label: 'Island eyes',
-      icon: 'search',
+      icon: 'eye',
       hint: 'Let the island read the window in front (off until you turn it on)',
       keywords: 'eyes read screen window text ocr caption florence model download privacy pause private list what the eyes saw',
       body: <IslandEyesPanel />
@@ -155,7 +155,7 @@ export function Settings(props: SettingsProps) {
     {
       id: 'backups',
       label: 'Backups & data',
-      icon: 'shield',
+      icon: 'cloud',
       hint: 'Daily backups, restore, export',
       keywords: 'backup restore export import google drive folder snapshot data',
       body: <BackupsSection s={s} />

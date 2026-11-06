@@ -9,6 +9,7 @@ import { useAction } from '../ui'
 import { ConnectCard } from './Connected'
 import { addDays } from '@core/dates'
 import { CountUp } from '../motionKit'
+import { Select } from '../Select'
 
 const hm = (min: number | null) => (min == null ? '–' : `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, '0')}m`)
 const toMin = (t: string) => {
@@ -126,7 +127,7 @@ function WakeEditor({ state, onState, onWallet, openSignal = 0 }: { state: Conne
       <div className="row wake-editor-row">
         <label className="field">
           <span>Day</span>
-          <select
+          <Select
             value={day}
             onChange={(e) => {
               setDay(e.target.value)
@@ -139,7 +140,7 @@ function WakeEditor({ state, onState, onWallet, openSignal = 0 }: { state: Conne
                 {known(d) ? ` · now ${known(d)}` : ' · not logged'}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
         <label className="field">
           <span>Woke up at</span>
@@ -356,13 +357,13 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
                 </label>
                 <label>
                   <span>Sleep Quality (1-5):</span>
-                  <select value={quality} onChange={(e) => setQuality(Number(e.target.value))}>
+                  <Select value={quality} onChange={(e) => setQuality(Number(e.target.value))}>
                     <option value={5}>⭐⭐⭐⭐⭐ Rested</option>
                     <option value={4}>⭐⭐⭐⭐ Good</option>
                     <option value={3}>⭐⭐⭐ Moderate</option>
                     <option value={2}>⭐⭐ Tired</option>
                     <option value={1}>⭐ Exhausted</option>
-                  </select>
+                  </Select>
                 </label>
               </div>
               <button className="btn primary block-btn" onClick={handleLogWake}>

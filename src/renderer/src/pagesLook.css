@@ -13,7 +13,7 @@
 
 /* The view picker: tabs on a wide screen, one small menu on a phone. */
 .cal-view-pick { display: none; position: relative; }
-.cal-view-pick select { appearance: none; -webkit-appearance: none; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; padding: 7px 30px 7px 12px; border-radius: 10px; cursor: pointer; }
+.cal-view-pick select, .cal-view-pick .ui-select { appearance: none; -webkit-appearance: none; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; font-size: 13.5px; font-weight: 600; padding: 7px 30px 7px 12px; border-radius: 10px; cursor: pointer; }
 .cal-view-pick::after { content: '▾'; position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 12px; pointer-events: none; }
 @media (max-width: 760px) {
   .cal-tools .cal-view-tabs { display: none; }

@@ -213,7 +213,7 @@
 
 .rx-lock-edit, .rx-jar-edit { display: grid; gap: 8px; padding: 10px; border-radius: 14px; border: 1px dashed var(--border-strong); background: rgb(var(--ink) / 0.03); }
 .rx-lock-edit .row { display: flex; flex-wrap: wrap; gap: 6px; }
-.rx-lock-edit select, .rx-lock-edit input { min-width: 0; max-width: 100%; }
+.rx-lock-edit select, .rx-lock-edit input, .rx-lock-edit .ui-select { min-width: 0; max-width: 100%; }
 input.short { width: 92px; }
 
 .rx-empty { display: grid; justify-items: center; gap: 8px; text-align: center; padding: 34px 18px; border-radius: var(--rx-r); border: 1px dashed var(--border-strong); background: var(--rx-glass); color: var(--muted); font-size: 13.5px; }
@@ -306,7 +306,7 @@ input.short { width: 92px; }
 .rx-field { display: grid; gap: 6px; min-width: 0; }
 .rx-field > span:first-child, .rx-field > summary { font-size: 12.5px; font-weight: 650; color: var(--muted); }
 .rx-field > summary { cursor: pointer; }
-.rx-field input, .rx-sheet select { width: 100%; min-width: 0; box-sizing: border-box; height: 42px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--border-strong); background: rgb(var(--ink) / 0.03); color: var(--text); font: inherit; font-size: 14px; }
+.rx-field input, .rx-sheet select, .rx-sheet .ui-select { width: 100%; min-width: 0; box-sizing: border-box; height: 42px; padding: 0 14px; border-radius: 14px; border: 1px solid var(--border-strong); background: rgb(var(--ink) / 0.03); color: var(--text); font: inherit; font-size: 14px; }
 .rx-field input:focus { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 1px; }
 .rx-field input.short, .rx-row input.short { width: 120px; }
 .rx-field.inline { gap: 4px; }

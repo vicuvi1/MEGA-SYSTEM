@@ -12,6 +12,7 @@ import { Icon } from './Icon'
 import { play, soundSuccess } from './soundKit'
 import { useAction } from './ui'
 import { barFill } from './motionKit'
+import { Select } from './Select'
 
 const FUN = [15, 30, 60]
 
@@ -78,11 +79,11 @@ export function FunCard({ onWallet, onOpenShop }: { onWallet: () => void; onOpen
       <div className="fun-row">
         <span className="fun-label">Guilt-free fun · 1 point a minute</span>
         <div className="fun-time">
-          <select value={what} onChange={(e) => setWhat(e.target.value)} aria-label="What kind of fun">
+          <Select value={what} onChange={(e) => setWhat(e.target.value)} aria-label="What kind of fun">
             {['Gaming', 'YouTube', 'Series', 'Social media', 'Free time'].map((x) => (
               <option key={x}>{x}</option>
             ))}
-          </select>
+          </Select>
           {FUN.map((m) => (
             <button key={m} className="btn small" disabled={bal < m} onClick={() => void fun(m)} title={bal < m ? `You need ${m - bal} more points` : `Spend ${m} points`}>
               {m} min

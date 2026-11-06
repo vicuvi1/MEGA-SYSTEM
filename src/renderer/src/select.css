@@ -1,0 +1,82 @@
+/* Drop-downs that read well in every theme.
+   1. A plain <select>'s list is drawn by the system: on Windows it came out white
+      with the select's light text on it (unreadable). The options get solid colours
+      of their own here, for both themes, disabled ones included.
+   2. .ui-select (Select.tsx): the app's own drop-down, used in Settings and the pages. */
+
+:root { color-scheme: dark; }
+:root[data-theme='light'] { color-scheme: light; }
+
+select { color-scheme: inherit; }
+select option, select optgroup { background-color: var(--surface-2, #151a24); color: var(--text, #f1f5f9); }
+select option:disabled { color: var(--muted, #8b9bb4); }
+select option:checked { background-color: color-mix(in srgb, var(--lime, #c8f135) 26%, var(--surface-2, #151a24)); color: var(--text, #f1f5f9); }
+:root[data-theme='light'] select option, :root[data-theme='light'] select optgroup { background-color: #ffffff; color: #151922; }
+:root[data-theme='light'] select option:disabled { color: #5b6475; }
+:root[data-theme='light'] select option:checked { background-color: #e8f0cc; color: #151922; }
+
+/* The button: the same look as the app's inputs. */
+.ui-select {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+  min-width: 0; max-width: 100%; box-sizing: border-box;
+  padding: 7px 10px 7px 12px; border-radius: 10px;
+  border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text);
+  font: inherit; font-size: 13.5px; line-height: 1.35; text-align: left; cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
+}
+.ui-select:hover:not(:disabled) { border-color: rgb(var(--ink) / 0.22); background: rgb(var(--ink) / 0.06); }
+.ui-select:focus-visible, .ui-select.open {
+  outline: none;
+  border-color: color-mix(in srgb, var(--lime) 60%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lime) 14%, transparent);
+}
+.ui-select:disabled { opacity: 0.5; cursor: default; }
+.ui-select-value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ui-select-value.ph { color: var(--muted); }
+.ui-select-caret { flex: none; color: var(--muted); transition: transform 0.15s; }
+.ui-select.open .ui-select-caret { transform: rotate(180deg); }
+:root[data-theme='light'] .ui-select { background: #fff; border-color: #d4d9e2; }
+:root[data-theme='light'] .ui-select:hover:not(:disabled) { border-color: #b9c0cc; }
+/* Inside the Settings rows a long choice ("Follow the window you work in", a monitor's
+   name) never pushes the control off the right edge. */
+.sx-select.ui-select { min-width: 200px; max-width: min(340px, 100%); }
+@media (max-width: 600px) { .sx-select.ui-select { min-width: 0; width: 100%; max-width: 100%; } }
+
+/* The list: solid, high contrast, over everything, never off screen (placed by Select.tsx). */
+.ui-select-list {
+  position: fixed; z-index: 1000; margin: 0; padding: 5px; list-style: none; box-sizing: border-box;
+  overflow-y: auto; overscroll-behavior: contain;
+  background: var(--surface-2, #151a24); color: var(--text);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.13)); border-radius: 12px;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.5);
+  font-size: 13.5px;
+  animation: ui-select-in 0.12s ease-out both;
+}
+.ui-select-list.up { animation-name: ui-select-up; }
+@keyframes ui-select-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+@keyframes ui-select-up { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.ui-select-opt {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 8px 10px; border-radius: 8px; cursor: pointer; color: var(--text); line-height: 1.3;
+}
+.ui-select-opt.in-group { padding-left: 18px; }
+.ui-select-opt.active { background: rgb(var(--ink) / 0.09); }
+.ui-select-opt.sel { font-weight: 650; }
+.ui-select-opt.sel svg { color: var(--lime-text, var(--lime)); flex: none; }
+.ui-select-opt.off { color: var(--muted); cursor: default; }
+.ui-select-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+:root[data-theme='light'] .ui-select-list { background: #ffffff; color: #151922; border-color: #d4d9e2; box-shadow: 0 18px 50px rgb(20 25 34 / 0.18); }
+:root[data-theme='light'] .ui-select-opt { color: #151922; }
+:root[data-theme='light'] .ui-select-opt.active { background: #eef1f6; }
+:root[data-theme='light'] .ui-select-opt.off, :root[data-theme='light'] .ui-select-group { color: #5b6475; }
+
+/* Zoom (Settings → Look) and the "Zoom 110%" note. */
+.zoom-ctl { display: inline-flex; align-items: center; gap: 6px; }
+.zoom-btn { width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: 18px; font-weight: 700; line-height: 1; cursor: pointer; }
+.zoom-btn:hover:not(:disabled) { background: rgb(var(--ink) / 0.08); }
+.zoom-btn:disabled { opacity: 0.4; cursor: default; }
+.zoom-val { min-width: 52px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.zoom-toast { position: fixed; left: 50%; top: 72px; z-index: 1200; transform: translateX(-50%); padding: 7px 14px; border-radius: 999px; background: var(--surface-3, #1c2230); color: var(--text); border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.13)); box-shadow: 0 10px 30px rgb(0 0 0 / 0.35); font-weight: 700; font-size: 13px; pointer-events: none; animation: zoom-toast-in 0.16s ease-out both; }
+@keyframes zoom-toast-in { from { opacity: 0; transform: translate(-50%, -6px); } to { opacity: 1; transform: translate(-50%, 0); } }
+:root[data-theme='light'] .zoom-toast { background: #fff; color: #151922; border-color: #d4d9e2; }
+.cal-view-pick .ui-select-caret { display: none; }

@@ -15,6 +15,7 @@ import { ReorderList, Row, Saved, Segmented, Switch, useSaved } from './settings
 import './islandSettings.css'
 import { IslandNudgeSettings } from './IslandNudgeSettings'
 import { SysmonSettings } from './sysmon/SysmonSettings'
+import { Select } from './Select'
 
 type Prefs = IslandAllPrefs
 /** An older desktop may not know the newer settings: fill them in so the page always works. */
@@ -222,13 +223,13 @@ export function IslandSettingsPanel() {
   const setCtl = (c: Partial<IslandControls>) => save({ controls: { ...p.controls, ...c } })
   const clickRow = (k: 'left' | 'middle' | 'right', title: string) => (
     <Row title={title}>
-      <select className="sx-select" aria-label={title} value={p.clicks[k]} onChange={(e) => void save({ clicks: { ...p.clicks, [k]: e.target.value as ClickAction } })}>
+      <Select className="sx-select" aria-label={title} value={p.clicks[k]} onChange={(e) => void save({ clicks: { ...p.clicks, [k]: e.target.value as ClickAction } })}>
         {(Object.keys(CLICK_LABEL) as ClickAction[]).map((c) => (
           <option key={c} value={c}>
             {CLICK_LABEL[c]}
           </option>
         ))}
-      </select>
+      </Select>
     </Row>
   )
 
@@ -258,13 +259,13 @@ export function IslandSettingsPanel() {
       {desk.islandDisplays && (<>
       <h3 className="is-sec">Where</h3>
       <Row title="Position" hint="Drag the island to move it too: drop it on an edge to dock it">
-        <select className="sx-select" aria-label="Position" value={p.place ?? 'top'} onChange={(e) => void save({ place: e.target.value as Placement, offset: { x: 0, y: 0 } })}>
+        <Select className="sx-select" aria-label="Position" value={p.place ?? 'top'} onChange={(e) => void save({ place: e.target.value as Placement, offset: { x: 0, y: 0 } })}>
           {PLACEMENTS.map((x) => (
             <option key={x} value={x}>
               {PLACEMENT_LABEL[x]}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
       <Row title="Fine-tune" hint="Move it a few pixels right / down (negative: left / up)">
         <span className="is-offset">
@@ -282,7 +283,7 @@ export function IslandSettingsPanel() {
         </span>
       </Row>
       <Row title="Screen" hint={monitor === 'mouse' ? 'It moves to the screen your mouse is on (after a second there)' : monitor === 'window' ? 'It moves to the screen of the window you work in' : 'Which screen it lives on'}>
-        <select className="sx-select" aria-label="Screen" value={screenValue} onChange={(e) => setScreen(e.target.value)}>
+        <Select className="sx-select" aria-label="Screen" value={screenValue} onChange={(e) => setScreen(e.target.value)}>
           <option value="main">The main screen</option>
           <option value="mouse">Follow the mouse</option>
           <option value="window">Follow the window you work in</option>
@@ -291,7 +292,7 @@ export function IslandSettingsPanel() {
               {s.label}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
       <Row title="A spot for each screen setup" hint="Laptop alone or with screens plugged in: it remembers where it was for each and goes back there by itself">
         <Switch label="A spot for each screen setup" on={p.perScreen !== false} onChange={(v) => void save({ perScreen: v })} />
@@ -365,13 +366,13 @@ export function IslandSettingsPanel() {
         ))}
       </div>
       <Row title="Open before a meeting" hint="The island opens by itself with Join, a few minutes before a meeting you said yes to">
-        <select className="sx-select" aria-label="Open before a meeting" value={p.meetingOpenMin} onChange={(e) => void save({ meetingOpenMin: Number(e.target.value) })}>
+        <Select className="sx-select" aria-label="Open before a meeting" value={p.meetingOpenMin} onChange={(e) => void save({ meetingOpenMin: Number(e.target.value) })}>
           {[0, 1, 2, 5, 10, 15].map((m) => (
             <option key={m} value={m}>
               {m ? `${m} min before` : 'Don’t'}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
       <Row title="A reminder peeks for">
         <Slider label="A reminder peeks for" value={p.peekSec} min={2} max={30} unit=" s" onChange={(v) => void save({ peekSec: v })} />
@@ -392,13 +393,13 @@ export function IslandSettingsPanel() {
       </Row>
       <Row title="Tuck away when nothing is on" hint="No timer, block, reminder or message for a while: it shrinks to a tiny dot or fades. The mouse on it brings it back.">
         <span className="is-stack">
-          <select className="sx-select" aria-label="Tuck away after" value={p.idleMin} onChange={(e) => void save({ idleMin: Number(e.target.value) })}>
+          <Select className="sx-select" aria-label="Tuck away after" value={p.idleMin} onChange={(e) => void save({ idleMin: Number(e.target.value) })}>
             {[0, 5, 15, 30, 60].map((m) => (
               <option key={m} value={m}>
                 {m ? `After ${m} min` : 'Never'}
               </option>
             ))}
-          </select>
+          </Select>
           {p.idleMin > 0 && opt('idleLook', 'Tucked away as', [['dot', 'Tiny dot'], ['fade', 'Faded']])}
         </span>
       </Row>
@@ -418,7 +419,7 @@ export function IslandSettingsPanel() {
       {p.hideApps && (
         <>
           <Row title="Always hide over these apps" hint="Games or players that aren't full screen. Pick from apps you used lately; only the ones you pick are kept.">
-            <select
+            <Select
               className="sx-select"
               aria-label="Add an app"
               value=""
@@ -431,7 +432,7 @@ export function IslandSettingsPanel() {
                   {a}
                 </option>
               ))}
-            </select>
+            </Select>
           </Row>
           {hideApps.length > 0 && (
             <div className="is-apps">
@@ -470,13 +471,13 @@ export function IslandSettingsPanel() {
         <Switch label="Fade while I type" on={p.controls.fadeTyping} onChange={(v) => void setCtl({ fadeTyping: v })} />
       </Row>
       <Row title="Profile" hint="Work, Study, Gaming and Night each change what the pill shows first, which reminders drop down, sound and motion. Also in the tray menu.">
-        <select className="sx-select" aria-label="Profile" value={p.controls.profile} onChange={(e) => void setCtl({ profile: e.target.value as IslandProfileId })}>
+        <Select className="sx-select" aria-label="Profile" value={p.controls.profile} onChange={(e) => void setCtl({ profile: e.target.value as IslandProfileId })}>
           {PROFILE_IDS.map((id) => (
             <option key={id} value={id}>
               {PROFILE_LABEL[id]}
             </option>
           ))}
-        </select>
+        </Select>
       </Row>
       <Row title="Switch the profile by itself" hint="By the time of day (Night 22–06, Work on weekdays 9–18), or by the app in front (e.g. Steam → Gaming)">
         <Segmented label="Switch the profile by itself" value={p.controls.profileAuto} options={[['off', 'No'], ['time', 'Time of day'], ['app', 'App in front']]} onChange={(v) => void setCtl({ profileAuto: v })} />
@@ -502,11 +503,11 @@ export function IslandSettingsPanel() {
         {opt('look', 'Look', [['black', 'Black'], ['glass', 'Glass'], ['mood', 'Mood glow'], ['app', 'Match the app']])}
       </Row>
       <Row title="Animations" hint="Full: springs, water that sloshes, things that fly into the pill. Calm: gentle fades. Off: no motion">
-        <select className="sx-select" aria-label="Animations" value={p.motion} onChange={(e) => void save({ motion: e.target.value as IslandPrefs['motion'] })}>
+        <Select className="sx-select" aria-label="Animations" value={p.motion} onChange={(e) => void save({ motion: e.target.value as IslandPrefs['motion'] })}>
           <option value="full">Full</option>
           <option value="calm">Calm</option>
           <option value="off">Off</option>
-        </select>
+        </Select>
       </Row>
       <Row title="See-through" hint={`${Math.round(p.opacity * 100)}% solid`}>
         <input className="sx-range" type="range" min={55} max={100} step={5} value={Math.round(p.opacity * 100)} onChange={(e) => void save({ opacity: Number(e.target.value) / 100 })} aria-label="See-through" />

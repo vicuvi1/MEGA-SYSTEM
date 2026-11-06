@@ -6,6 +6,7 @@ import { BrainPanel } from '../BrainPanel'
 import { BenNotes } from '../BenNotes'
 import { CoachLooksPanel } from '../CoachLooksPanel'
 import type { SettingsState } from './useSettingsState'
+import { Select } from '../Select'
 
 export function BenSection({ s }: { s: SettingsState }) {
   const { onGo, aiCfg, setAiCfg, showGemini, setShowGemini, showOr, setShowOr, testingProvider, aiTestResult, saveAiConfig, testAiConnection } = s
@@ -97,7 +98,7 @@ export function BenSection({ s }: { s: SettingsState }) {
 
         <div className="field">
           <span>Model Routing Strategy</span>
-          <select
+          <Select
             value={aiCfg.selectedModel}
             onChange={(e) => setAiCfg({ ...aiCfg, selectedModel: e.target.value })}
           >
@@ -112,7 +113,7 @@ export function BenSection({ s }: { s: SettingsState }) {
                 <option key={m.model} value={m.model}>{m.label}</option>
               ))}
             </optgroup>
-          </select>
+          </Select>
         </div>
 
         <label className="check toggle-row">

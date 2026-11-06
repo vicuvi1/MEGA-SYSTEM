@@ -20,6 +20,7 @@ import { PROFILE_NOTE } from '@core/benKnows'
 import { BenLog } from './BenLog'
 import { LifeModeCard } from './LifeMode'
 import { barFill } from './motionKit'
+import { Select } from './Select'
 
 export type DeskTab = 'today' | 'sunday' | 'plan' | 'you' | 'money' | 'month' | 'log'
 export const DESK_TABS: { id: DeskTab; label: string; icon: string }[] = [
@@ -394,13 +395,13 @@ function StakesCard({ v, now, change }: { v: DeskView; now: number; change: Chan
             </label>
             <label>
               or lose
-              <select value={pts} onChange={(e) => setPts(Number(e.target.value))}>
+              <Select value={pts} onChange={(e) => setPts(Number(e.target.value))}>
                 {[20, 50, 100, 200].map((p) => (
                   <option key={p} value={p}>
                     {p} pts
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           </div>
           <div className="bd-row">

@@ -41,6 +41,7 @@ import { useTodayEvents } from './todayEvents'
 import { storageWakesApp } from './islandLog'
 import { watchDayTurn } from './dayTurn'
 import { MusicHost } from './musicHost'
+import { startZoom, ZoomToast } from './zoom'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at
 // once), and every page is fetched in the background once Today is up
@@ -129,6 +130,8 @@ export function App() {
 function WindowErrors() {
   const toast = useToast()
   useEffect(() => installWindowErrorHandlers((t) => toast(t, 'bad')), [toast])
+  // Zoom: the desktop window's own (Ctrl + / - / 0, Ctrl + wheel), told to the page.
+  useEffect(() => startZoom(), [])
   // Back from the Google sign-in (/?google=connected): say how it went, open Calendar.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('google')
@@ -540,6 +543,17 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     if (v) setView((cur) => ({ ...cur, [p]: v }))
     setPage(p)
   }, [])
+  const bbHidden = page === 'coach' || page === 'today' || page === 'calendar' || !!embed
+  /** Settings, opened on one section (the backup chip opens Backups & data). */
+  const openSettingsTab = (id: string) => {
+    try {
+      localStorage.setItem('ls.settingsTab', id)
+    } catch {
+      /* private window */
+    }
+    setPage('settings')
+    window.dispatchEvent(new CustomEvent('life-settings-tab', { detail: id }))
+  }
   const commands: Command[] = buildCommands({
     rules,
     todo: paletteTodo,
@@ -605,7 +619,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const alerts: Alert[] = []
   // On the desktop the title bar offers 'Restart to update' itself.
   if (updateReady && !window.desktop) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
-  if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Backups are off', body: backup.lastError, page: 'settings' })
+  if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Today’s cloud backup didn’t save', body: backup.lastError, page: 'settings' })
   if (checkInDue) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current}`, page: 'discipline' })
   if (overdue) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
   // The next thing in your real calendar within the hour (T2; it read an old, empty schedule).
@@ -675,7 +689,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         {!window.desktop?.islandState && <FocusIsland />}
         <DeepLinks onGo={setPage} />
         {/* UI7: not on pages with their own full-screen app or a floating + button. */}
-        <BenBubble hidden={page === 'coach' || page === 'today' || page === 'calendar' || !!embed} unread={coachUnread} onOpenChat={() => setPage('coach')} />
+        <ZoomToast />
+        <BenBubble hidden={bbHidden} where={page} unread={coachUnread} onOpenChat={() => setPage('coach')} />
         <DisciplineMoments onOpenChat={() => setPage('coach')} />
         <header className={`topbar ${compact ? 'compact' : ''}`}>
           <div className="title">
@@ -743,9 +758,18 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           <NotifToasts onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
           {!window.desktop && <UpdateChip status={update} onClick={() => setPage('settings')} />}
           {backup && !isDemo && (
-            <button className={`chip ${backup.lastError ? 'warn' : 'ok'}`} onClick={() => setPage('settings')} title={backup.lastError ?? `Last backup ${backup.last?.at ?? ''}`}>
+            <button
+              className={`chip ${backup.lastError ? 'warn' : 'ok'}`}
+              onClick={() => openSettingsTab('backups')}
+              aria-label={backup.lastError ? 'Today’s cloud backup didn’t save: open Backups & data' : 'Backed up: open Backups & data'}
+              title={
+                backup.lastError
+                  ? `Today’s cloud backup didn’t save.\n${backup.lastError}\nYour data is safe; only today’s copy is missing. Click to open Backups & data.`
+                  : `Cloud backup saved${backup.last?.at ? ` (${backup.last.at})` : ''}. Click to open Backups & data.`
+              }
+            >
               <Icon name="cloud" size={15} />
-              <span className="chip-text">{backup.lastError ? 'Backup off' : 'Backed up'}</span>
+              <span className="chip-text">{backup.lastError ? 'Backup missed' : 'Backed up'}</span>
             </button>
           )}
           <button className={`tb-icon ${page === 'settings' ? 'active' : ''}`} aria-label="Settings" title="Settings" onClick={() => setPage('settings')}>
@@ -790,7 +814,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <MusicHost />
 
         {!activeEmbed && (
-          <main className="content">
+          <main className={`content ${bbHidden || !life.coach ? '' : 'has-bb'}`}>
             <ErrorBoundary key={page} area={current.label} onHome={page === 'today' ? undefined : () => setPage('today')}>
             <Suspense fallback={<PageSkeleton />}>
             {page === 'today' && !summary && <PageSkeleton />}

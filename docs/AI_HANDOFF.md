@@ -208,6 +208,10 @@ bash scripts/ship.sh <message-file> # typecheck, tests, bundle, commit, push
 - Commit with the owner's git identity as configured on the machine (never write a personal email into the repo). Before pushing: `git fetch origin main && git rebase origin/main`. Never force-push.
 - Local testing: a fake Turso is in `src/renderer/src/web/fakeTurso.ts`; the bot bundle exports `coachChat`, `runTick`, `handleTelegramUpdate`, `coachRhythm`, `coachUndo`, `sportShared` for end-to-end tests with a fake model.
 - Check UI changes at desktop width (1280–1440 px) first, then phone (390 px).
+- **Drop-downs:** use `Select` (`src/renderer/src/Select.tsx`), not a plain `<select>`: same children (`<option>`, `<optgroup>`) and `onChange(e)` with `e.target.value`, keyboard and screen-reader friendly, its list placed on screen. A plain `<select>`'s system list came out white with faint text on Windows, so the leftovers (island window, embedded apps) get solid option colours (`select.css`, `island.css`, `EmbedHost.tsx`). The smoke test checks option contrast in dark and light.
+- **Zoom:** `core/zoom.ts` (steps 67–200 %). Desktop: `src/desktop/zoom.ts` (Ctrl + / - / 0, Ctrl + wheel, isolated so the island never zooms, saved per screen in `zoom.json`). Website: Settings → Look scales the page with CSS zoom (`zoom.tsx`, `ls.zoom`, capped so the page stays at least 1024 px wide); the old "Text size" is where it starts.
+- **Ben's face** (`BenBubble.tsx`) tucks into the right edge while you scroll down or while a button or box sits under it; pages keep room for it at the bottom (`.content.has-bb`).
+- **"Backup missed"** in the top bar means this device's attempt at today's cloud backup failed (`life_snapshot_error`); it clears itself once today's backup is in the cloud (the server makes one every day too). Hover says why; a click opens Settings → Backups & data.
 
 ### Motion & sound budget
 

@@ -7,6 +7,7 @@ import { SyncPanel } from '../SyncPanel'
 import { timeAgo } from '../ui'
 import { soundSuccess } from '../soundKit'
 import type { SettingsState } from './useSettingsState'
+import { Select } from '../Select'
 
 export function BackupsSection({ s }: { s: SettingsState }) {
   const { logs, backupFolderName, backupSchedule, setBackupSchedule, cloudSnapshots, lastBackupTime, backupStatusMsg, setBackupStatusMsg, syncCfg, setSyncCfg, syncTestMsg, syncingNow, showSyncSecret, setShowSyncSecret, syncInstructionsOpen, setSyncInstructionsOpen, saveSyncConfig, testSyncConnection, pullSyncNow, handleDownloadBackupFile, handleSelectFolder, handleSaveBackupNow, handleFileRestore } = s
@@ -42,7 +43,7 @@ export function BackupsSection({ s }: { s: SettingsState }) {
 
           <dt>Auto-Backup Schedule</dt>
           <dd>
-            <select
+            <Select
               value={backupSchedule}
               onChange={(e) => {
                 setBackupSchedule(e.target.value)
@@ -54,7 +55,7 @@ export function BackupsSection({ s }: { s: SettingsState }) {
               <option value="12h">Every 12 Hours</option>
               <option value="session">Every Session (On Open)</option>
               <option value="manual">Manual Only</option>
-            </select>
+            </Select>
           </dd>
 
           <dt>Last Full Snapshot</dt>

@@ -286,7 +286,9 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
       const root = document.documentElement
       const cs = getComputedStyle(root)
       const light = root.dataset.theme === 'light' || (root.dataset.theme !== 'dark' && window.matchMedia?.('(prefers-color-scheme: light)').matches)
-      const css = appKey === 'finance' ? (on ? financeLifeCss(readTokens((n) => cs.getPropertyValue(n), !!light)) : '') : `${on ? embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light)) : ''}${embedPhoneCss(appKey)}`
+      const base = appKey === 'finance' ? (on ? financeLifeCss(readTokens((n) => cs.getPropertyValue(n), !!light)) : '') : `${on ? embedThemeCss(appKey, readTokens((n) => cs.getPropertyValue(n), !!light)) : ''}${embedPhoneCss(appKey)}`
+      // A drop-down's list is drawn by the system: solid, readable colours (it came out white with faint text on Windows).
+      const css = `${base}\nselect option, select optgroup { background-color: ${light ? '#ffffff' : '#151a24'} !important; color: ${light ? '#151922' : '#f1f5f9'} !important; }\nselect option:disabled { color: ${light ? '#5b6475' : '#8b9bb4'} !important; }`
       // MO2: Finance Helper's "Match Life System" look (its default here)
       // follows Life's light / dark, live. Its own themes stay optional picks.
       if (appKey === 'finance') {

@@ -16,6 +16,7 @@ import { useAction, useToast } from '../ui'
 import type { CleanChange } from '@core/todoistClean'
 import { useSwipeRows } from '../swipe'
 import { useLive } from '../live'
+import { Select } from '../Select'
 
 /** A touch screen: no keyboard-shortcut hints in placeholders (U6). */
 const TOUCH = typeof window !== 'undefined' && !!window.matchMedia?.('(hover: none)').matches
@@ -346,14 +347,14 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
         >
           <Icon name="plus" size={16} />
           <input ref={addRef} value={text} onChange={(e) => setText(e.target.value)} placeholder={TOUCH ? "Add a task… “fix lab 3 friday 18:00 p1”" : "Add a task… e.g. “fix lab 3 friday 18:00 p1”  (n)"} maxLength={300} />
-          <select value={addArea} onChange={(e) => setAddArea(e.target.value)} aria-label="Area">
+          <Select value={addArea} onChange={(e) => setAddArea(e.target.value)} aria-label="Area">
             <option value="auto">Area: automatic</option>
             {data.areas.map((a) => (
               <option key={a.key} value={a.key}>
                 {a.name}
               </option>
             ))}
-          </select>
+          </Select>
           <button className="btn primary" disabled={!text.trim() || busy}>
             {busy ? 'Adding…' : 'Add'}
           </button>

@@ -19,6 +19,7 @@ import { WidgetFrame } from './WidgetFrame'
 import { readWidgets, saveWidgets } from './widgetsFeed'
 import './widgets.css'
 import './widgetsPanel.css'
+import { Select } from '../Select'
 
 const PAGE_LABEL: Record<string, string> = { day: 'Day', music: 'Music', home: 'Home', pc: 'PC', fun: 'Fun', system: 'System', ai: 'AI usage' }
 const WIDGET_PAGES = ['home', 'pc', 'fun']
@@ -153,9 +154,9 @@ function InstallAsk({ m, onInstall, onCancel }: { m: WidgetManifest; onInstall: 
       ))}
       <label className="wg-ask-row">
         <span>On the island page</span>
-        <select value={page} onChange={(e) => setPage(e.target.value)}>
+        <Select value={page} onChange={(e) => setPage(e.target.value)}>
           {WIDGET_PAGES.map((p) => <option key={p} value={p}>{PAGE_LABEL[p]}</option>)}
-        </select>
+        </Select>
       </label>
       <div className="wg-ask-actions">
         <button className="btn small primary" onClick={() => onInstall(g, page)}>Install</button>
@@ -174,9 +175,9 @@ function InstalledRow({ m, grants, page, config, onGrant, onPatch }: { m: Widget
           <b>{m.name}</b>
           <small>{m.about}</small>
         </span>
-        <select aria-label={`${m.name}: island page`} value={page} onChange={(e) => onPatch({ page: e.target.value })}>
+        <Select aria-label={`${m.name}: island page`} value={page} onChange={(e) => onPatch({ page: e.target.value })}>
           {WIDGET_PAGES.map((p) => <option key={p} value={p}>{PAGE_LABEL[p]}</option>)}
-        </select>
+        </Select>
       </div>
       {m.permissions.map((p) => (
         <Row key={p} title={PERMISSION_TEXT[p]} hint={p === 'network' ? m.hosts.join(', ') : undefined}>
@@ -233,7 +234,7 @@ function ScriptsSection({ s, save }: { s: WidgetsSetting; save: (n: WidgetsSetti
           <div className="pl-fields">
             <label className="pl-field"><span>Name</span><input value={edit.name} maxLength={30} onChange={(e) => setEdit({ ...edit, name: e.target.value })} /></label>
             <label className="pl-field"><span>Icon</span><input value={edit.icon} maxLength={4} onChange={(e) => setEdit({ ...edit, icon: e.target.value })} /></label>
-            <label className="pl-field"><span>Page</span><select value={edit.page} onChange={(e) => setEdit({ ...edit, page: e.target.value })}>{WIDGET_PAGES.map((p) => <option key={p} value={p}>{PAGE_LABEL[p]}</option>)}</select></label>
+            <label className="pl-field"><span>Page</span><Select value={edit.page} onChange={(e) => setEdit({ ...edit, page: e.target.value })}>{WIDGET_PAGES.map((p) => <option key={p} value={p}>{PAGE_LABEL[p]}</option>)}</Select></label>
             <label className="pl-field"><span>Every (minutes)</span><input type="number" min={1} max={60} value={Math.round(edit.every / 60)} onChange={(e) => setEdit({ ...edit, every: Number(e.target.value) * 60 })} /></label>
             <label className="pl-field"><span>Sites it may fetch (https, comma separated; empty = none)</span><input value={edit.hosts.join(', ')} onChange={(e) => setEdit({ ...edit, hosts: e.target.value.split(/[,\s]+/).filter(Boolean) })} /></label>
           </div>
@@ -281,16 +282,16 @@ function PagesSection({ s, save }: { s: WidgetsSetting; save: (n: WidgetsSetting
       </Row>
       {p.follow === 'time' && DAY_PARTS.map((d) => (
         <Row key={d} title={DAY_PART_LABEL[d]}>
-          <select value={p.byTime[d]} onChange={(e) => void save({ ...s, pages: { ...p, byTime: { ...p.byTime, [d]: e.target.value } } })}>
+          <Select value={p.byTime[d]} onChange={(e) => void save({ ...s, pages: { ...p, byTime: { ...p.byTime, [d]: e.target.value } } })}>
             {pageOpts.map((id) => <option key={id} value={id}>{PAGE_LABEL[id] ?? id}</option>)}
-          </select>
+          </Select>
         </Row>
       ))}
       {p.follow === 'profile' && ['work', 'study', 'gaming', 'night'].map((pr) => (
         <Row key={pr} title={`Profile: ${pr}`}>
-          <select value={p.byProfile[pr] ?? 'day'} onChange={(e) => void save({ ...s, pages: { ...p, byProfile: { ...p.byProfile, [pr]: e.target.value } } })}>
+          <Select value={p.byProfile[pr] ?? 'day'} onChange={(e) => void save({ ...s, pages: { ...p, byProfile: { ...p.byProfile, [pr]: e.target.value } } })}>
             {pageOpts.map((id) => <option key={id} value={id}>{PAGE_LABEL[id] ?? id}</option>)}
-          </select>
+          </Select>
         </Row>
       ))}
     </section>

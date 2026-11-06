@@ -14,6 +14,7 @@ import { daysBetween, addDays } from '@core/dates'
 import { CADENCES, countsFromStart, GOAL_UNITS, SOURCES, expectedAt, fmtDelta, fmtPair, fmtValue, milestonesOf, needText, requiredPerDay, shortDay, STATUS_TEXT, type Cadence, type GoalCard, type GoalSource, type GoalStatus, type GoalUnit, type PaceCurve } from '@core/goals'
 import { answerValue, behindMove, quickStep } from '@core/goalsBen'
 import { GOAL_TEMPLATES, parseGoalText, suggestCadence, type GoalTemplate } from '@core/goalsText'
+import { Select } from './Select'
 
 export type Tone = 'good' | 'warn' | 'bad' | 'calm'
 export const toneOf = (s: GoalStatus): Tone => (s === 'done' || s === 'ahead' || s === 'on track' ? 'good' : s === 'behind' ? 'warn' : s === 'not started' ? 'calm' : 'bad')
@@ -589,13 +590,13 @@ export function GoalSheet({ today, initial, words, template, onClose, onSaved }:
             <span>{change ? 'How much to lose' : 'Target'}</span>
             <div className="gx-unit">
               <input value={f.target} onChange={(e) => set({ target: e.target.value.replace(/[^\d.,-]/g, '').replace(',', '.') })} inputMode="decimal" placeholder={String(tpl?.example ?? 10)} aria-label="Target" />
-              <select value={f.unit} onChange={(e) => set({ unit: e.target.value as GoalUnit })} aria-label="Unit" disabled={f.kind === 'hours'}>
+              <Select value={f.unit} onChange={(e) => set({ unit: e.target.value as GoalUnit })} aria-label="Unit" disabled={f.kind === 'hours'}>
                 {GOAL_UNITS.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.label}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           </label>
           {f.unit === 'custom' && (
@@ -617,13 +618,13 @@ export function GoalSheet({ today, initial, words, template, onClose, onSaved }:
           {f.kind === 'measure' && (
             <label className="wide">
               <span>How it's measured</span>
-              <select value={f.source.kind} onChange={(e) => set({ source: { kind: e.target.value as GoalSource['kind'], ...(f.source.arg ? { arg: f.source.arg } : {}) } })} aria-label="How it's measured">
+              <Select value={f.source.kind} onChange={(e) => set({ source: { kind: e.target.value as GoalSource['kind'], ...(f.source.arg ? { arg: f.source.arg } : {}) } })} aria-label="How it's measured">
                 {sources.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.label}
                   </option>
                 ))}
-              </select>
+              </Select>
               <small className="hint">{srcMeta?.hint}{autoNow != null ? ` · now ${fmtValue(f.unit, autoNow, unitLabel)}` : ''}</small>
             </label>
           )}

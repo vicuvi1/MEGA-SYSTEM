@@ -5,6 +5,7 @@ import { STREAK_LABEL, type StreakId, type Unlock } from '@core/unlocks'
 import type { UnlocksView } from '../web/lifeExtras'
 import { life } from '../bridge'
 import { useAction } from '../ui'
+import { Select } from '../Select'
 
 export function useUnlocks(): [UnlocksView | null, () => void] {
   const [v, setV] = useState<UnlocksView | null>(null)
@@ -27,29 +28,29 @@ export function LockEditor({ rewardId, view, onDone }: { rewardId: number; view:
   return (
     <div className="rw-lock-edit rx-lock-edit">
       <div className="row">
-        <select value={kind} onChange={(e) => setKind(e.target.value as 'goal' | 'streak')} aria-label="Unlock with">
+        <Select value={kind} onChange={(e) => setKind(e.target.value as 'goal' | 'streak')} aria-label="Unlock with">
           <option value="goal">When a goal is done</option>
           <option value="streak">At a streak</option>
-        </select>
+        </Select>
         {kind === 'goal' ? (
-          <select value={goalId} onChange={(e) => setGoalId(Number(e.target.value))} aria-label="Goal">
+          <Select value={goalId} onChange={(e) => setGoalId(Number(e.target.value))} aria-label="Goal">
             {!openGoals.length && <option value={0}>No open goals: add one on the Goals page</option>}
             {openGoals.map((g) => (
               <option key={g.id} value={g.id}>
                 {g.title}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           <>
             <input type="number" min={1} max={365} value={days} onChange={(e) => setDays(Math.max(1, Math.min(365, Number(e.target.value) || 1)))} aria-label="Days" />
-            <select value={streak} onChange={(e) => setStreak(e.target.value as StreakId)} aria-label="Streak">
+            <Select value={streak} onChange={(e) => setStreak(e.target.value as StreakId)} aria-label="Streak">
               {(Object.keys(STREAK_LABEL) as StreakId[]).map((k) => (
                 <option key={k} value={k}>
                   day {STREAK_LABEL[k]} streak
                 </option>
               ))}
-            </select>
+            </Select>
           </>
         )}
       </div>

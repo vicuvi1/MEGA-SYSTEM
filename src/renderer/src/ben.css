@@ -77,10 +77,10 @@
 .bd-form { display: grid; gap: 8px; }
 .bd-form.inline { grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr) auto; align-items: center; }
 .bd-form.inline:has(> input:nth-of-type(1):last-of-type) { grid-template-columns: minmax(0, 1fr) auto; }
-.bd-form input, .bd-form select, .bd-form textarea, .bd-call textarea { width: 100%; min-width: 0; font: inherit; font-size: var(--t-sm); color: var(--text); background: rgb(var(--ink) / 0.05); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
+.bd-form input, .bd-form select, .bd-form textarea, .bd-call textarea, .bd-form .ui-select { width: 100%; min-width: 0; font: inherit; font-size: var(--t-sm); color: var(--text); background: rgb(var(--ink) / 0.05); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; }
 .bd-form input.short { max-width: 90px; }
 .bd-form input:focus, .bd-form textarea:focus, .bd-call textarea:focus { outline: none; border-color: color-mix(in srgb, var(--accent) 55%, transparent); box-shadow: 0 0 0 3px var(--accent-soft); }
-.bd-row input[type='time'], .bd-row select { width: auto; }
+.bd-row input[type='time'], .bd-row select, .bd-row .ui-select { width: auto; }
 
 .bd-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .bd-list li { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 10px; transition: background 0.15s; }
@@ -406,3 +406,16 @@
   .bb-bubble { bottom: calc(84px + env(safe-area-inset-bottom)); }
   .cx-newbtn { bottom: 116px; }
 }
+
+/* Laptop: Ben's face never sits on a button or a box you type in.
+   Pages keep room for it at the bottom; while you scroll down, or while something
+   you can press is under it, it tucks into the right edge (hover or Tab brings it back). */
+@media (min-width: 721px) {
+  :root .content.has-bb { padding-bottom: max(var(--s-8, 48px), 104px); }
+}
+@media (min-width: 721px) and (max-height: 860px) {
+  .bb-bubble { width: 48px; height: 48px; font-size: 24px; right: 16px; bottom: 16px; }
+  .bb-panel { right: 16px; bottom: 76px; }
+}
+.bb-bubble { transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s ease, box-shadow 0.3s; }
+.bb-bubble.tucked:not(:hover):not(:focus-visible) { transform: translateX(64%) scale(0.7); opacity: 0.55; }

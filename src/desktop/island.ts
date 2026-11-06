@@ -350,6 +350,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (process.platform === 'darwin') { try { w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: false }) } catch { /* fine */ } }
     // No menu: its Ctrl+= / Ctrl+- would zoom the island (and with it the app).
     try { w.setMenu(null) } catch { /* fine */ }
+    // Its own zoom, never the app window's (the app's Ctrl + / - must not resize the island).
+    try { w.webContents.setZoomMode('isolated') } catch { /* fine */ }
     w.setIgnoreMouseEvents(true, { forward: true })
     ignoring = true
     w.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))

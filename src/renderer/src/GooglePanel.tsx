@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { life, type GoogleStatus } from './bridge'
 import { Icon } from './Icon'
 import { useAction } from './ui'
+import { Select } from './Select'
 
 export function GooglePanel() {
   const act = useAction()
@@ -67,7 +68,7 @@ export function GooglePanel() {
           </div>
           <label className="field">
             <span>New blocks (focus, planned tasks) go to</span>
-            <select value={st.target ?? (st.calendars ?? []).find((c) => c.primary)?.id ?? ''} onChange={(e) => void save([...on], e.target.value)}>
+            <Select value={st.target ?? (st.calendars ?? []).find((c) => c.primary)?.id ?? ''} onChange={(e) => void save([...on], e.target.value)}>
               {(st.calendars ?? [])
                 .filter((c) => c.canWrite)
                 .map((c) => (
@@ -75,7 +76,7 @@ export function GooglePanel() {
                     {c.name}
                   </option>
                 ))}
-            </select>
+            </Select>
           </label>
           <button className="btn small ghost" onClick={() => void act(() => life.google!.disconnect(), 'Disconnected').then(load)}>
             Disconnect

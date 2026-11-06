@@ -15,6 +15,7 @@ import { useAction } from '../ui'
 import '../body.css'
 import { WATER_TARGET_ML } from '@core/defaults'
 import { celebrate } from '../fx'
+import { Select } from '../Select'
 
 export function Body({
   state,
@@ -622,23 +623,23 @@ function ExerciseModal({
 
           <label>
             Unit
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+            <Select value={unit} onChange={(e) => setUnit(e.target.value)}>
               <option value="reps">reps</option>
               <option value="sec">sec</option>
               <option value="min">min</option>
               <option value="km">km</option>
-            </select>
+            </Select>
           </label>
         </div>
 
         <label style={{ marginTop: 10 }}>
           Category
-          <select value={category} onChange={(e) => setCategory(e.target.value as any)}>
+          <Select value={category} onChange={(e) => setCategory(e.target.value as any)}>
             <option value="calisthenics">Calisthenics</option>
             <option value="cardio">Cardio</option>
             <option value="gym">Gym / Weights</option>
             <option value="other">Other</option>
-          </select>
+          </Select>
         </label>
 
         <div className="sheet-actions" style={{ marginTop: 16 }}>

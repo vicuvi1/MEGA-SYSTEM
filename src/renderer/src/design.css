@@ -429,7 +429,7 @@
   :root .ta-actions { position: static !important; transform: none !important; pointer-events: auto !important; width: 100%; padding-left: 30px; justify-content: flex-start; gap: 4px; background: none !important; box-shadow: none !important; border: 0 !important; }
   :root .ta-add { flex-wrap: wrap; }
   :root .ta-add input { flex: 1 1 calc(100% - 40px); min-width: 0; }
-  :root .ta-add select { flex: 1 1 auto; }
+  :root .ta-add select, :root .ta-add .ui-select { flex: 1 1 auto; }
   :root .ta-tabs button small { margin-left: 4px; }
 }
 
@@ -1372,6 +1372,10 @@
 .sx-label b { font-weight: 600; color: var(--text); font-size: 14.5px; }
 .sx-label small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
 .sx-control { flex: none; display: flex; align-items: center; gap: 8px; }
+/* Laptop: a wide control (theme chips, long choices) wraps instead of running off the right edge. */
+.sx-control { flex: 0 1 auto; min-width: 0; max-width: 68%; flex-wrap: wrap; justify-content: flex-end; }
+.sx-control > .sx-seg { flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+.sx-control > .wg-themes { justify-content: flex-end; }
 .sx-switch { position: relative; width: 44px; height: 26px; border: 0; border-radius: 999px; background: rgb(var(--ink) / 0.16); cursor: pointer; transition: background .2s; padding: 0; flex: none; }
 .sx-switch i { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .35); transition: transform .22s cubic-bezier(.3, 1.3, .5, 1); }
 .sx-switch.on { background: var(--lime); }
@@ -1398,7 +1402,7 @@
 .sx-pages { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); column-gap: 24px; }
 @media (max-width: 600px) {
   .sx-row { flex-wrap: wrap; }
-  .sx-control { width: 100%; justify-content: flex-start; }
+  .sx-control { width: 100%; max-width: none; justify-content: flex-start; }
   .sx-range, .sx-select, .sx-input { width: 100%; min-width: 0; }
   .sx-seg { flex-wrap: wrap; }
 }
@@ -1519,7 +1523,7 @@
 .ce-title { flex: 1; font-size: 20px; font-weight: 700; border: 0 !important; background: transparent !important; color: var(--text); padding: 6px 2px !important; box-shadow: none !important; }
 .ce-title:focus { outline: none; border-bottom: 2px solid var(--lime) !important; }
 .ce-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 9px 2px; border-top: 1px solid rgb(var(--ink) / 0.06); color: var(--muted); }
-.ce-row input, .ce-row select { padding: 6px 9px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: 13.5px; }
+.ce-row input, .ce-row select, .ce-row .ui-select { padding: 6px 9px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: 13.5px; }
 .ce-label { min-width: 70px; font-size: 13px; }
 .ce-len { margin-left: auto; font-size: 12px; }
 .ce-colors { gap: 6px; }
@@ -2083,7 +2087,7 @@ body:has(.bb-bubble) main { padding-bottom: 96px; }
 
 /* ===== Tasks on a phone (U6): the list first, actions on tap ===== */
 @media (max-width: 760px) {
-  .ta-add:not(:focus-within) select, .ta-add:not(:focus-within) .btn { display: none; }
+  .ta-add:not(:focus-within) select, .ta-add:not(:focus-within) .btn, .ta-add:not(:focus-within) .ui-select { display: none; }
   .ta-add { flex-wrap: wrap; }
   .ta-filters { flex-wrap: nowrap !important; overflow-x: auto; scrollbar-width: none; gap: 6px; }
   .ta-filters::-webkit-scrollbar { display: none; }
@@ -2181,7 +2185,7 @@ body:has(.bb-bubble) main { padding-bottom: 96px; }
 .cal-zoom-n { min-width: 52px; font-variant-numeric: tabular-nums; }
 .cal-viewpop { width: 330px; display: grid; gap: 8px; }
 .cal-viewpop .cal-pop-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.cal-viewpop select { border: 1px solid var(--border, rgb(var(--ink) / 0.14)); border-radius: 8px; padding: 4px 6px; background: var(--surface, transparent); color: inherit; font: inherit; }
+.cal-viewpop select, .cal-viewpop .ui-select { border: 1px solid var(--border, rgb(var(--ink) / 0.14)); border-radius: 8px; padding: 4px 6px; background: var(--surface, transparent); color: inherit; font: inherit; }
 .cal-check { cursor: pointer; }
 .cal-datepop { width: 280px; }
 .cal-dp-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
@@ -2274,7 +2278,7 @@ button.cal-chip:hover { filter: brightness(1.15); }
 .cal-draft .ce-wd button { min-width: 26px; }
 .cal-draft-more { align-self: flex-start; }
 .cal-draft.more, .cal-draft:has(.ce-custom) { max-height: 70vh; overflow-y: auto; }
-.cal-draft select, .cal-draft textarea { width: 100%; box-sizing: border-box; }
+.cal-draft select, .cal-draft textarea, .cal-draft .ui-select { width: 100%; box-sizing: border-box; }
 .ce-check input { padding: 0 !important; width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
 .sheet-card label.ce-check { display: inline-flex; white-space: nowrap; font-size: 13px; color: var(--text); }
 .cal-hours span.under-now { opacity: 0; }
