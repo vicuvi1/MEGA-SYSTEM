@@ -11,7 +11,7 @@ import { CoachPlan } from './CoachPlan'
 import { parseRich, type Inline } from '@core/richText'
 
 /** One chat message (the Coach page's log entry). */
-export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string }
+export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string; stopped?: boolean; full?: string; fly?: boolean }
 
 // Numbers with their unit in bold ("25 min", "1.9/2.7", "750 ml"), never half a word ("10 min|utes").
 const NUM = /(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu
@@ -30,7 +30,7 @@ export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity 
     let key = 0
     const word = (str: string): ReactNode[] =>
       animate
-        ? str.split(/(\s+)/).map((t) => (!t || /^\s+$/.test(t) ? t : <span key={key++} className="cx-w" style={{ ['--i' as string]: w++ }}>{t}</span>))
+        ? str.split(/(\s+)/).map((t) => (!t || /^\s+$/.test(t) ? t : <span key={key++} className="cx-w" data-w={t} style={{ ['--i' as string]: w++ }}>{t}</span>))
         : [str]
     const plain = (str: string): ReactNode[] =>
       str.split(NUM).map((p, i) => {
@@ -38,7 +38,7 @@ export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity 
         const hit = h && p.toLowerCase().includes(h)
         if (i % 2 === 1 && bold < maxBold) {
           bold++
-          return <b key={key++} className={`${hit ? 'hit' : ''}${animate ? ' cx-w' : ''}`} style={animate ? { ['--i' as string]: w++ } : undefined}>{p}</b>
+          return <b key={key++} className={`${hit ? 'hit' : ''}${animate ? ' cx-w' : ''}`} data-w={animate ? p : undefined} style={animate ? { ['--i' as string]: w++ } : undefined}>{p}</b>
         }
         if (!hit) return <Fragment key={key++}>{word(p)}</Fragment>
         const k = p.toLowerCase().indexOf(h)

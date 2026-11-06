@@ -15,7 +15,7 @@ const ACC = 'var(--accent, #c8f135)'
 const mix = (pct: number, other: string) => `color-mix(in srgb, ${ACC} ${pct}%, ${other})`
 
 /** One of Ben's looks, drawn on a 64×64 disc. */
-function Face({ look }: { look: BenLook }) {
+export function BenFace({ look }: { look: BenLook }) {
   const id = useId().replace(/:/g, '')
   const bg = (
     <radialGradient id={`${id}bg`} cx="50%" cy="38%" r="70%">
@@ -42,11 +42,11 @@ function Face({ look }: { look: BenLook }) {
         <rect x="49" y="28" width="5" height="11" rx="2.5" fill="#8a94a6" />
         <rect x="14" y="17" width="36" height="32" rx="12" fill={`url(#${id}m)`} />
         <rect x="18.5" y="24.5" width="27" height="15" rx="7.5" fill="#0c1017" />
-        <g className="ba-eyes">
+        <g className="ba-look"><g className="ba-lid"><g className="ba-eyes">
           <rect x="24" y="28.5" width="5" height="7" rx="2.5" style={{ fill: ACC }} />
           <rect x="35" y="28.5" width="5" height="7" rx="2.5" style={{ fill: ACC }} />
-        </g>
-        <rect className="ba-mouth" x="27.5" y="43" width="9" height="2.2" rx="1.1" fill="#7d879a" />
+        </g></g></g>
+        <g className="ba-smile"><rect className="ba-mouth" x="27.5" y="43" width="9" height="2.2" rx="1.1" fill="#7d879a" /></g>
         <path d="M17 52c3 5 9 8 15 8s12-3 15-8" style={{ fill: mix(70, '#0c1017') }} opacity="0.9" />
       </>
     )
@@ -73,13 +73,13 @@ function Face({ look }: { look: BenLook }) {
         <path d="M17 30.2Q32 25.6 47 30.2Q32 33.6 17 30.2Z" style={{ fill: mix(60, '#1c2600') }} />
         <circle cx="32" cy="15.6" r="1.6" style={{ fill: mix(60, '#1c2600') }} />
         <path d="M24.3 33.2l4 .7M39.7 33.2l-4 .7" stroke="#4a3322" strokeWidth="1.5" strokeLinecap="round" />
-        <g className="ba-eyes">
+        <g className="ba-look"><g className="ba-lid"><g className="ba-eyes">
           <ellipse cx="27" cy="36.4" rx="1.6" ry="2" fill="#2a1d14" />
           <ellipse cx="37" cy="36.4" rx="1.6" ry="2" fill="#2a1d14" />
-        </g>
+        </g></g></g>
         <circle cx="23.4" cy="40" r="2" fill="#ff8f8f" opacity="0.28" />
         <circle cx="40.6" cy="40" r="2" fill="#ff8f8f" opacity="0.28" />
-        <path className="ba-mouth" d="M28.6 41.2q3.4 2.6 6.8 0" fill="none" stroke="#7a3b2a" strokeWidth="1.6" strokeLinecap="round" />
+        <g className="ba-smile"><path className="ba-mouth" d="M28.6 41.2q3.4 2.6 6.8 0" fill="none" stroke="#7a3b2a" strokeWidth="1.6" strokeLinecap="round" /></g>
       </>
     )
   if (look === 'fox')
@@ -102,13 +102,13 @@ function Face({ look }: { look: BenLook }) {
         <path d="M48.5 35.5Q41 37 36.5 44.5L32 53Q44.5 47 48.5 37Z" fill="#fff3e6" />
         <path d="M26.5 41Q32 37.4 37.5 41L32 51.5Z" fill="#fff3e6" />
         <path d="M32 23.2l2 3-2 3-2-3Z" style={{ fill: ACC }} />
-        <g className="ba-eyes">
+        <g className="ba-look"><g className="ba-lid"><g className="ba-eyes">
           <ellipse cx="25" cy="33" rx="2.3" ry="2.8" fill="#1b1410" />
           <ellipse cx="39" cy="33" rx="2.3" ry="2.8" fill="#1b1410" />
           <circle cx="25.8" cy="32" r="0.8" fill="#fff" />
           <circle cx="39.8" cy="32" r="0.8" fill="#fff" />
-        </g>
-        <ellipse className="ba-mouth" cx="32" cy="47" rx="2.6" ry="1.9" fill="#1b1410" />
+        </g></g></g>
+        <g className="ba-smile"><ellipse className="ba-mouth" cx="32" cy="47" rx="2.6" ry="1.9" fill="#1b1410" /></g>
       </>
     )
   // The default: a glowing orb with a face.
@@ -125,13 +125,13 @@ function Face({ look }: { look: BenLook }) {
       {disc}
       <circle cx="32" cy="33" r="21.5" fill={`url(#${id}o)`} />
       <ellipse cx="24.5" cy="23.5" rx="7" ry="3.6" fill="#fff" opacity="0.42" transform="rotate(-28 24.5 23.5)" />
-      <g className="ba-eyes">
+      <g className="ba-look"><g className="ba-lid"><g className="ba-eyes">
         <rect x="24.2" y="28" width="4.8" height="8.4" rx="2.4" fill="#142004" />
         <rect x="35" y="28" width="4.8" height="8.4" rx="2.4" fill="#142004" />
-      </g>
+      </g></g></g>
       <circle cx="21.6" cy="38" r="2.5" fill="#ff7a90" opacity="0.32" />
       <circle cx="42.4" cy="38" r="2.5" fill="#ff7a90" opacity="0.32" />
-      <path className="ba-mouth" d="M27.6 40q4.4 3.6 8.8 0" fill="none" stroke="#142004" strokeWidth="2.2" strokeLinecap="round" />
+      <g className="ba-smile"><path className="ba-mouth" d="M27.6 40q4.4 3.6 8.8 0" fill="none" stroke="#142004" strokeWidth="2.2" strokeLinecap="round" /></g>
       <path d="M51 12.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1Z" style={{ fill: ACC }} opacity="0.9" />
     </>
   )
@@ -149,7 +149,7 @@ export function BenAvatar({ look, size = 32, state = 'idle', ring = false, onlin
       {ring && <i className="ba-glow" />}
       {ring && <i className="ba-ring" />}
       <svg className="ba-face" viewBox="0 0 64 64">
-        <Face look={look ?? looks.ben} />
+        <BenFace look={look ?? looks.ben} />
       </svg>
       {online && <i className="ba-dot" />}
     </span>

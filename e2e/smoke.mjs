@@ -121,6 +121,13 @@ try {
     if (!(await pg.$('.cf-card'))) throw new Error('no card')
     if (!(await pg.$('.cf-head .ba-face'))) throw new Error("no face for Ben in the header")
     if (!(await pg.$('.cf-rail .cf-now'))) throw new Error('no Now pill above the message box')
+    // Coach UI v4: the start screen (greeting, numbers, four big asks), Ben beside the box, "Ben will…".
+    await pg.waitForSelector('.ch-hero .ch-title', { timeout: 5000 })
+    if ((await pg.$$('.ch-hero .ch-ask')).length !== 4) throw new Error('the start screen needs four big suggestions')
+    if (!(await pg.$('.cf-compose-row .bl .ba-face'))) throw new Error("no live Ben beside the message box")
+    await pg.fill('.cf-input textarea', 'water 500')
+    await pg.waitForFunction(() => /Log 500 ml of water/.test(document.querySelector('.cf-will')?.textContent ?? ''), null, { timeout: 3000 })
+    await pg.waitForSelector('.ch-hero', { state: 'detached', timeout: 3000 })
     await pg.fill('.cf-input textarea', '/wa')
     if (!(await pg.$('.cf-slash'))) throw new Error('no / shortcuts')
     await pg.fill('.cf-input textarea', '')

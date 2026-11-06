@@ -70,7 +70,17 @@ export function CoachMic({ base, onText, onListening, disabled }: { base: string
   }
   return (
     <button type="button" className={`cx-tool ${on ? 'rec' : ''}`} onClick={toggle} disabled={disabled} aria-label={on ? 'Stop and send' : 'Talk to Ben'} title={on ? 'Listening… tap to send' : 'Talk to Ben (tap, speak, it sends when you stop)'}>
-      🎙
+      {on ? (
+        <span className="cf-wave" aria-hidden>
+          <i />
+          <i />
+          <i />
+          <i />
+          <i />
+        </span>
+      ) : (
+        '🎙'
+      )}
     </button>
   )
 }

@@ -15,19 +15,7 @@
 .cx.cf .cx-chat { border: 1px solid var(--border); border-radius: 24px; background: var(--surface); box-shadow: 0 30px 80px -50px rgb(0 0 0 / 0.8); isolation: isolate; }
 :root[data-theme='light'] .cx.cf .cx-chat { background: #fbfcfe; box-shadow: 0 24px 60px -40px rgb(20 25 34 / 0.35); }
 
-/* ---------- Atmosphere: soft lights drifting behind the chat ---------- */
-.cx.cf .cx-chat > .cf-amb { position: absolute; inset: 0; z-index: 0; overflow: hidden; pointer-events: none; }
-.cf-amb i { position: absolute; width: 62%; aspect-ratio: 1; border-radius: 50%; opacity: 0.13; animation: cf-drift 26s ease-in-out infinite alternate; }
-.cf-amb .a { top: -30%; right: -16%; background: radial-gradient(closest-side, var(--accent), transparent); }
-.cf-amb .b { bottom: -36%; left: -20%; background: radial-gradient(closest-side, #22d3ee, transparent); opacity: 0.08; animation-duration: 32s; animation-direction: alternate-reverse; }
-.cf-amb .c { top: 26%; left: 34%; width: 44%; background: radial-gradient(closest-side, #8b5cf6, transparent); opacity: 0.07; animation-duration: 38s; }
-.cf-amb::after { content: ''; position: absolute; inset: 0; opacity: 0.045; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.6'/%3E%3C/svg%3E"); }
-:root[data-theme='light'] .cf-amb .a { opacity: 0.22; }
-:root[data-theme='light'] .cf-amb .b { opacity: 0.12; }
-:root[data-theme='light'] .cf-amb .c { opacity: 0.1; }
-:root[data-theme='light'] .cf-amb::after { opacity: 0.03; }
-@keyframes cf-drift { 0% { transform: translate(0, 0) scale(1); } 50% { transform: translate(-6%, 8%) scale(1.08); } 100% { transform: translate(5%, -4%) scale(0.96); } }
-.cx.cf.busy .cf-amb .a { animation-duration: 9s; }
+/* The atmosphere (soft lights behind the chat) lives in coachAlive.css (Coach UI v4). */
 
 /* ---------- Header: Ben's face, what he is doing, today's pills ---------- */
 .cf-head { display: flex; align-items: center; gap: 16px; min-height: var(--cf-head-h); padding: 12px 22px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--surface) 72%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: 3; box-sizing: border-box; }
@@ -174,7 +162,7 @@
 :root[data-theme='light'] .cf-shimmer::after { background: linear-gradient(100deg, transparent 20%, rgb(251 252 254 / 0.85) 50%, transparent 80%); }
 @keyframes cf-sweep { to { transform: translateX(100%); } }
 .cf-streamtx { white-space: pre-wrap; }
-.cf-fresh { animation: cf-fade 0.35s ease-out both; }
+.cf-fresh { display: inline; }
 /* A soft caret: a thin bar that breathes at the end of what he has written */
 .cf-caret, .cf-col .cx-caret { display: inline-block; width: 2px; height: 1.05em; margin-left: 3px; vertical-align: -0.16em; border-radius: 2px; background: var(--accent); animation: cf-caret 1.1s ease-in-out infinite; }
 @keyframes cf-caret { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
@@ -495,7 +483,7 @@ html.nt-dock-strip .nt-x { align-self: center; }
 .cf-row.me { transform-origin: 100% 100%; }
 .cf-row.ben { transform-origin: 0 0; }
 @media (prefers-reduced-motion: reduce) {
-  .cx.cf .cf-row, .cf-fold, .cf-fold ul, .cf-now, .cf-chip, .cf-moods button, .cf-send, .cf-send svg, .cf-bar i, .cf-amb i, .cf-orbs i, .cf-shimmer, .cf-shimmer::after, .cf-think-done li, .cf-fresh, .cf-caret, .cf-side, .cf-sheet, .cf-sheet-wrap, .cf-rated, .cf-status.typing::before, .cf-send.busy::after, .cf-card, .cf-result, .cf-plan-track .bar i, .cf-plan-list li, .cf-side-plan li, .cf-task-list li, .cf-menu, .cf-slash, .cf-quote, .cf-plan.flash::after, .cf-plan.cheer::after { animation: none !important; transition: none !important; }
+  .cx.cf .cf-row, .cf-fold, .cf-fold ul, .cf-now, .cf-chip, .cf-moods button, .cf-send, .cf-send svg, .cf-bar i, .cf-orbs i, .cf-shimmer, .cf-shimmer::after, .cf-think-done li, .cf-fresh, .cf-caret, .cf-side, .cf-sheet, .cf-sheet-wrap, .cf-rated, .cf-status.typing::before, .cf-send.busy::after, .cf-card, .cf-result, .cf-plan-track .bar i, .cf-plan-list li, .cf-side-plan li, .cf-task-list li, .cf-menu, .cf-slash, .cf-quote, .cf-plan.flash::after, .cf-plan.cheer::after { animation: none !important; transition: none !important; }
 }
 
 /* ---------- Phone: full width, the composer sits above the bottom bar, nothing overflows at 360 px ---------- */

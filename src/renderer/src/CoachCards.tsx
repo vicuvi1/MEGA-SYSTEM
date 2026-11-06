@@ -4,6 +4,7 @@
 // a glance, today's tasks to tick, and the next block with Start / Move / Skip.
 // Only the newest card of a kind is live; older ones settle into one line.
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { coachCheer } from './coachCheer'
 import { life } from './bridge'
 import { useAction } from './ui'
 import { useLive } from './live'
@@ -231,6 +232,7 @@ export function BlockCard({ title, time, minutes, note, onChange }: { title: str
   const start = async () => {
     if (await act(() => life.focus.start(subject, minutes ?? 25, null), `Focus started: ${subject}`)) {
       setDone('Timer running')
+      coachCheer('focus')
       onChange?.()
     }
   }
@@ -341,11 +343,11 @@ export function TaskListCard({ status, onChange }: { status: CoachStatus | null;
     setTicked((m) => ({ ...m, [x.id]: true }))
     const r = await act(() => life.todoist!.complete(x), 'Done')
     if (!r) setTicked((m) => ({ ...m, [x.id]: false }))
-    else onChange?.()
+    else (coachCheer('done'), onChange?.())
   }
   const must = status?.mustdos ?? []
   const useMust = !tasks.length
-  const rows = useMust ? must.map((m) => ({ id: `m${m.i}`, text: m.text, done: m.done, meta: 'Must-do', run: async () => (await act(() => life.focus.togglePlan(m.i))) && onChange?.() })) : tasks.map((x) => ({ id: x.id, text: x.content, done: !!ticked[x.id], meta: [x.dueTime, x.section ?? x.project].filter(Boolean).join(' · '), prio: x.priority, run: () => void tick(x) }))
+  const rows = useMust ? must.map((m) => ({ id: `m${m.i}`, text: m.text, done: m.done, meta: 'Must-do', run: async () => (await act(() => life.focus.togglePlan(m.i))) && (!m.done && coachCheer('done'), onChange?.()) })) : tasks.map((x) => ({ id: x.id, text: x.content, done: !!ticked[x.id], meta: [x.dueTime, x.section ?? x.project].filter(Boolean).join(' · '), prio: x.priority, run: () => void tick(x) }))
   const left = rows.filter((r) => !r.done).length
   return (
     <div className="cf-card cf-tasks t-tasks">

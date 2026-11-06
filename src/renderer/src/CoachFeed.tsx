@@ -17,6 +17,7 @@ import { BenAvatar, type Presence } from './BenAvatar'
 import { createPortal } from 'react-dom'
 import { doingNow } from '@core/coachLooks'
 import { plainRich } from '@core/richText'
+import { coachCheer } from './coachCheer'
 
 const hm = (iso: string | number) => new Date(iso).toTimeString().slice(0, 5)
 
@@ -221,6 +222,7 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
       const r = await act(() => life.coach!.deskDo!({ op: 'water', ml: n }))
       if (r) {
         setDone(String(r))
+        coachCheer('water')
         onChange()
       }
     }
@@ -433,11 +435,17 @@ export function StreamText({ text }: { text: string }) {
       {done && <br />}
       <span>{plainRich(line.slice(0, lineCut))}</span>
       <span key={cut} className="cf-fresh">
-        {plainRich(line.slice(lineCut))}
+        {freshWords(plainRich(line.slice(lineCut)), cut)}
       </span>
       <i className="cf-caret" aria-hidden />
     </span>
   )
+}
+
+/** Coach UI v4: the words that just streamed in, one by one from a soft blur. */
+function freshWords(text: string, at: number): ReactNode[] {
+  let n = 0
+  return text.split(/(\s+)/).map((w, k) => (!w || /^\s+$/.test(w) ? w : <span key={`${at}-${k}`} className="cf-sw" data-w={w} style={{ '--i': n++ } as CSSProperties}>{w}</span>))
 }
 
 /** Ben is thinking: what he is doing now (shimmering), the steps he finished above it. */
@@ -465,17 +473,6 @@ export function TypingBubble({ step, steps = [] }: { step?: string; steps?: stri
           {doingNow(step)}…
         </span>
       </div>
-    </div>
-  )
-}
-
-/** The soft moving light behind the chat (GPU only; still when hidden, calm or reduced motion). */
-export function CoachAmbient() {
-  return (
-    <div className="cf-amb" aria-hidden>
-      <i className="a" />
-      <i className="b" />
-      <i className="c" />
     </div>
   )
 }
