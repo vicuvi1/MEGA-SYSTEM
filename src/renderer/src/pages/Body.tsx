@@ -182,26 +182,12 @@ export function Body({
 
       <div className="body-actions">
         {onOpenSportApp && (
-          <button
-            className="btn"
-            style={{
-              background: 'linear-gradient(135deg, rgba(0, 242, 254, 0.2), rgba(79, 172, 254, 0.15))',
-              borderColor: 'rgba(0, 242, 254, 0.6)',
-              color: '#00f2fe',
-              fontWeight: 700
-            }}
-            onClick={onOpenSportApp}
-            title="Switch to embedded Sport Track app"
-          >
+          <button className="btn sub" onClick={onOpenSportApp} title="Today's exercises, water and the rest timer">
             <Icon name="bolt" size={15} />
-            ⚡ Launch Sport Track App
+            Open the tracker
           </button>
         )}
-        <button
-          className="btn"
-          style={{ background: '#ff6b8b', borderColor: '#ff6b8b', color: '#fff' }}
-          onClick={() => setWorkoutOpen(true)}
-        >
+        <button className="btn primary" onClick={() => setWorkoutOpen(true)}>
           <Icon name="plus" size={15} />
           Log workout
         </button>
@@ -215,8 +201,7 @@ export function Body({
         </button>
         {state.recentWorkouts.length > 0 && (
           <button
-            className="btn"
-            style={{ background: 'rgba(239, 68, 68, 0.12)', borderColor: 'rgba(239, 68, 68, 0.35)', color: '#fca5a5' }}
+            className="btn ghost body-undo"
             onClick={handleUndoLast}
             title={`Undo last workout: "${state.recentWorkouts[0]?.title}"`}
           >
@@ -227,7 +212,6 @@ export function Body({
       </div>
 
       {/* SP6: the daily checklist and water live in Sport Track only (one routine panel, not two). */}
-      <p className="hint small">Your daily checklist, water and rest timer are in <b>Sport Track</b> (the tab at the top).</p>
       <section className="card">
         <WaterHistory />
       </section>
@@ -262,21 +246,7 @@ export function Body({
                     </div>
                     <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                       <small style={{ color: 'var(--muted)' }}>{w.day}</small>
-                      <button
-                        className="btn small"
-                        title="Undo / delete this workout record"
-                        onClick={() => handleDelete(w.id)}
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.12)',
-                          borderColor: 'rgba(239, 68, 68, 0.3)',
-                          color: '#fca5a5',
-                          fontSize: '11px',
-                          padding: '3px 8px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}
-                      >
+                      <button className="btn small ghost body-undo" title="Undo / delete this workout record" onClick={() => handleDelete(w.id)}>
                         <Icon name="undo" size={12} />
                         Undo
                       </button>
@@ -328,9 +298,9 @@ export function Body({
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
               {state.exercises.map((ex) => (
                 <div key={ex.id} className="weight-row">
-                  <span>{ex.name}</span>
-                  <span className="chip-text" style={{ color: '#ff8fa5', fontWeight: 600 }}>
-                    Target: {ex.target} {ex.unit}
+                  <span style={{ fontWeight: 600 }}>{ex.name ? ex.name[0].toUpperCase() + ex.name.slice(1) : ex.name}</span>
+                  <span className="chip-text" style={{ color: 'var(--muted)', fontWeight: 600 }}>
+                    {ex.target} {ex.unit} a day
                   </span>
                 </div>
               ))}
@@ -420,7 +390,7 @@ function WorkoutModal({
 
   return (
     <div className="sheet" role="dialog" aria-label="Log workout">
-      <div className="sheet-card" style={{ ['--c' as string]: '#ff6b8b', maxWidth: 480 }}>
+      <div className="sheet-card" style={{ maxWidth: 480 }}>
         <h3>Log today's workout</h3>
 
         <label>
@@ -495,8 +465,7 @@ function WorkoutModal({
           </button>
           <button
             type="button"
-            className="btn"
-            style={{ background: '#ff6b8b', borderColor: '#ff6b8b', color: '#fff' }}
+            className="btn primary"
             disabled={!title.trim() || items.length === 0}
             onClick={() => onSave({ title, items, note: note || undefined })}
           >
@@ -525,7 +494,7 @@ function MetricModal({
 
   return (
     <div className="sheet" role="dialog" aria-label="Log body metrics">
-      <div className="sheet-card" style={{ ['--c' as string]: '#ff6b8b', maxWidth: 420 }}>
+      <div className="sheet-card" style={{ maxWidth: 420 }}>
         <h3>Log weight & waist</h3>
 
         <div className="metric-grid">
@@ -568,8 +537,7 @@ function MetricModal({
           </button>
           <button
             type="button"
-            className="btn"
-            style={{ background: '#ff6b8b', borderColor: '#ff6b8b', color: '#fff' }}
+            className="btn primary"
             disabled={!weight && !waist}
             onClick={() =>
               onSave({
@@ -601,7 +569,7 @@ function ExerciseModal({
 
   return (
     <div className="sheet" role="dialog" aria-label="Add custom exercise">
-      <div className="sheet-card" style={{ ['--c' as string]: '#ff6b8b', maxWidth: 420 }}>
+      <div className="sheet-card" style={{ maxWidth: 420 }}>
         <h3>Add custom exercise</h3>
 
         <label>
@@ -652,8 +620,7 @@ function ExerciseModal({
           </button>
           <button
             type="button"
-            className="btn"
-            style={{ background: '#ff6b8b', borderColor: '#ff6b8b', color: '#fff' }}
+            className="btn primary"
             disabled={!name.trim()}
             onClick={() => onSave({ name, unit, target, category })}
           >

@@ -9,13 +9,11 @@ export function embedThemeCss(kind: EmbedKind, t: Tokens): string {
   html { color-scheme: ${t.light ? 'light' : 'dark'}; }
   body { font-family: ${t.font} !important; background: ${t.bg} !important; color: ${t.text} !important; }
   button, input, select, textarea { font-family: inherit; }`
+  // Sport Track draws itself from its --st-* colours (its own light and dark
+  // design); here they point at Life's, so it matches the app and the accent.
   if (kind === 'sport')
-    return `:root { --bg-dark: ${t.bg}; --card-bg: ${t.surface}; --card-border: ${t.border}; --card-border-glow: ${t.border}; --text-main: ${t.text}; --text-sub: ${t.muted}; --text-muted: ${t.muted}; --cyan-neon: ${t.accent}; --azure-neon: ${t.accent}; --electric-blue: ${t.accent}; --font: ${t.font}; }${base}${CALM_LOOK}
-  #ambient-canvas { display: none !important; }
-  .glass-card, .today-routine-card, .hunter-hud { background: ${t.surface} !important; border: 1px solid ${t.border} !important; border-radius: 18px !important; box-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -28px rgba(0,0,0,.6) !important; backdrop-filter: none !important; }
-  .hunter-hud::before, .glass-card::before { display: none !important; }
-  .rank-crest { border-radius: 16px !important; box-shadow: none !important; }
-  .chip-btn.primary, .btn-primary, button.primary { background: ${t.accent} !important; color: #0b0d12 !important; border-color: transparent !important; box-shadow: none !important; }`
+    return `:root { --st-bg: ${t.bg}; --st-surface: ${t.surface}; --st-surface-2: ${t.surface2}; --st-border: ${t.border}; --st-text: ${t.text}; --st-muted: ${t.muted}; --st-accent: ${t.accent}; --st-accent-text: ${t.light ? `color-mix(in srgb, ${t.accent} 45%, #1a2400)` : t.accent}; --st-font: ${t.font}; ${t.light ? SPORT_LIGHT : SPORT_DARK}
+    --bg-dark: ${t.bg}; --card-bg: ${t.surface}; --card-border: ${t.border}; --text-main: ${t.text}; --text-sub: ${t.muted}; --text-muted: ${t.muted}; --cyan-neon: ${t.accent}; --font: ${t.font}; }${base}`
   if (kind === 'waky')
     return `:root { --bg: ${t.bg}; --surface: ${t.surface}; --surface-2: ${t.surface2}; --line: ${t.border}; --text: ${t.text}; --muted: ${t.muted}; }${base}`
   return `:root { --bg-dark: ${t.bg}; --card-bg: ${t.surface}; --card-border: ${t.border}; --text-primary: ${t.text}; --text-secondary: ${t.muted}; --text-muted: ${t.muted}; --spartan-gold: ${t.accent}; }${base}${CALM_LOOK}
@@ -40,34 +38,15 @@ export function embedPhoneCss(kind: EmbedKind): string {
   return kind === 'man' ? MAN_PHONE : kind === 'sport' ? SPORT_PHONE : ''
 }
 
-/** Sport Track on a phone: the hero card wraps instead of running off the right edge. */
+/** Sport Track has its own phone layout (one column, big buttons); only no sideways scroll here. */
 export const SPORT_PHONE = `
   @media (max-width: 620px) {
     html, body { overflow-x: hidden; }
-    .container { padding: 10px !important; max-width: 100% !important; }
-    .hunter-hud { padding: 14px !important; gap: 12px !important; }
-    .hud-profile { flex-wrap: wrap; gap: 12px !important; min-width: 0; }
-    .profile-info { min-width: 0; flex: 1 1 180px; }
-    .profile-info h1 { font-size: 22px !important; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-    .profile-info .hunter-badge { font-size: 10px !important; }
-    .xp-meter-wrap { flex-wrap: wrap; gap: 6px; }
-    .hud-metrics { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 10px !important; width: 100%; }
-    .metric-pill { min-width: 0; }
-    .metric-pill .val { font-size: 18px !important; }
-    .card { max-width: 100%; overflow: hidden; padding: 14px !important; }
-    .card-header { flex-wrap: wrap; gap: 8px !important; }
-    .card-header h2, .card-header h3 { font-size: 17px !important; line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
-    .card-header > div, .card-header .actions { flex-wrap: wrap; gap: 8px; }
-    .card button { max-width: 100%; white-space: normal; }
-    /* Cards in a flex column grew to their longest line: let them shrink. */
-    .glass-card, .glass-card > *, [style*="flex-direction: column"] > * { min-width: 0; max-width: 100%; }
-    .glass-card { overflow: hidden; }
-    [style*="grid-template-columns"], .dashboard-grid { grid-template-columns: minmax(0, 1fr) !important; }
-    .dashboard-grid > * { min-width: 0; }
-    .card-title { white-space: normal !important; flex-wrap: wrap; font-size: 18px !important; }
-    .routine-top-actions, .card-header { flex-wrap: wrap !important; }
-    .chip-btn { white-space: normal; }
   }`
+
+/** Sport Track's light and dark details that Life's tokens don't carry. */
+const SPORT_DARK = '--st-water: #38bdf8; --st-water-text: #7dd3fc; --st-good: #34d399; --st-warn: #fbbf24; --st-bad: #f87171; --st-soft: color-mix(in srgb, var(--st-accent) 14%, transparent); --st-shadow: 0 1px 0 rgba(255,255,255,.03) inset, 0 18px 40px -30px rgba(0,0,0,.7); --st-pop: 0 18px 50px -12px rgba(0,0,0,.65); color-scheme: dark;'
+const SPORT_LIGHT = '--st-water: #0284c7; --st-water-text: #0369a1; --st-good: #059669; --st-warn: #b45309; --st-bad: #dc2626; --st-soft: color-mix(in srgb, var(--st-accent) 30%, transparent); --st-shadow: 0 1px 2px rgba(20,25,34,.05), 0 10px 30px -18px rgba(20,25,34,.25); --st-pop: 0 18px 50px -14px rgba(20,25,34,.35); color-scheme: light;'
 
 /** MAN had no phone layout: one column, smaller numbers, no sideways scroll. */
 export const MAN_PHONE = `

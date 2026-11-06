@@ -7,6 +7,8 @@ describe('the embedded apps in Life System’s look', () => {
   it('points each app’s own colour variables at ours', () => {
     expect(embedThemeCss('sport', t)).toContain('--card-bg: #fff')
     expect(embedThemeCss('sport', t)).toContain('--cyan-neon: #123456')
+    expect(embedThemeCss('sport', t)).toContain('--st-surface: #fff')
+    expect(embedThemeCss('sport', t)).toContain('--st-accent: #123456')
     expect(embedThemeCss('waky', t)).toContain('--surface: #fff')
     expect(embedThemeCss('man', t)).toContain('--card-bg: #fff')
   })
@@ -14,7 +16,7 @@ describe('the embedded apps in Life System’s look', () => {
     expect(embedThemeCss('waky', t)).toContain('color-scheme: light')
     // Phone layouts are separate from the colours (U6): MAN and Sport Track both get one.
     expect(embedPhoneCss('man')).toContain('@media (max-width: 620px)')
-    expect(embedPhoneCss('sport')).toContain('.hud-metrics')
+    expect(embedPhoneCss('sport')).toContain('overflow-x: hidden')
     expect(embedPhoneCss('waky')).toBe('')
     expect(embedThemeCss('sport', t)).not.toContain('@media')
   })

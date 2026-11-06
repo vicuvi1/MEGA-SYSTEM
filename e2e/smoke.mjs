@@ -249,6 +249,53 @@ try {
       if (text.length < 40) throw new Error(`frame looks empty (${text.length} chars)`)
     })
   }
+  // Sport Track's Today: one hero with the next step, big exercise cards (one
+  // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
+  await step('Sport Track Today: hero, exercise cards, water, menus, fits laptop and phone', async () => {
+    await open('body')
+    await pg.locator('.seg-switch button').first().click()
+    await pg.waitForTimeout(2500)
+    const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+    if (!frame) throw new Error('no Sport Track frame')
+    await frame.click('.st-tab[data-tab="today"]')
+    await frame.waitForSelector('#hero-ring .ring-fill', { timeout: 5000 })
+    await frame.waitForSelector('.ex', { timeout: 5000 })
+    if (!(await frame.locator('#btn-workout-mode').isVisible())) throw new Error('no Start workout button')
+    const most = await frame.evaluate(() => Math.max(...[...document.querySelectorAll('.ex')].map((c) => c.querySelectorAll('button').length)))
+    if (most > 3) throw new Error(`an exercise card has ${most} buttons (want: quick-add, Done, ⋯)`)
+    // A quick-add sends the change to Life System's log.
+    await pg.evaluate(() => { window.__sportLog = []; window.addEventListener('message', (e) => e.data?.action === 'SPORT_LOG' && window.__sportLog.push(e.data.payload)) })
+    const before = await frame.locator('.ex .ex-count b').first().innerText()
+    await frame.locator('.ex [data-action="add"]').first().click()
+    await frame.waitForFunction((b) => document.querySelector('.ex .ex-count b')?.textContent !== b, before, { timeout: 3000 })
+    await pg.waitForFunction(() => window.__sportLog.some((p) => p.changes.some((c) => c.kind.startsWith('reps:') && c.amount > 0)), null, { timeout: 3000 })
+    // Water: a glass and its undo.
+    const w0 = await frame.locator('#water-display-ml').innerText()
+    await frame.click('#water-glass')
+    await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.textContent !== w, w0, { timeout: 3000 })
+    await frame.click('#water-undo')
+    await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.innerText === w, w0, { timeout: 3000 })
+    // The ⋯ menu opens and Esc closes it; the rest timer opens from it.
+    await frame.locator('.ex .ex-more').first().click()
+    await frame.waitForSelector('.ex-menu', { timeout: 2000 })
+    await frame.locator('.ex-menu [data-open-rest]').click()
+    await frame.waitForSelector('#modal-rest.open', { timeout: 2000 })
+    await frame.locator('#btn-close-rest').click()
+    if (await frame.$('.ex-menu')) throw new Error('the exercise menu stayed open')
+    // The top ⋯ holds exercises & targets, settings, rest day and reset.
+    await frame.click('#st-more-btn')
+    await frame.waitForSelector('#st-more:not([hidden]) #btn-open-manage-modal', { timeout: 2000 })
+    await frame.press('body', 'Escape')
+    if (await frame.locator('#st-more').isVisible()) throw new Error('the top menu stayed open')
+    // No sideways scroll at a laptop size or on a phone.
+    for (const [w, h] of [[1280, 720], [390, 844]]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.waitForTimeout(400)
+      const over = await frame.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (over > 1) throw new Error(`Sport Track scrolls sideways at ${w}px (${over}px)`)
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
+  })
   // MN24: Discipline is one built-in page (no embedded MAN copy).
   await step('Discipline is one page with its own content', async () => {
     await open('discipline')
