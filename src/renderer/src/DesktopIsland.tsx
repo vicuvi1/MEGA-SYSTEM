@@ -33,6 +33,7 @@ import { MusicPanel, ScHost, ScPillBadge } from './IslandMusic'
 import { IslandPager } from './widgets/islandPages'
 import './sysmon/register'
 import { SysPill } from './sysmon/SysPill'
+import { IslandAutomations } from './IslandAutomations'
 import { lookClasses } from '@core/islandTiles'
 import './island.css'
 import './island-motion.css'
@@ -1889,6 +1890,7 @@ export function DesktopIsland() {
         {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
         {/* Island 2: your tiles and buttons, today's strip, music, the clipboard tray, the file shelf. */}
         <KitTiles k={k} s={s} />
+        <IslandAutomations s={s} tap={tap} />
         <MiniCalendar s={s} tap={tap} now={now} />
         <MusicPanel k={k} />
         <ClipTray k={k} tap={tap} />

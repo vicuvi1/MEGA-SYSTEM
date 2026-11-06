@@ -1180,7 +1180,7 @@ export function addRecent(list: RecentRun[], r: RecentRun): RecentRun[] {
 // ---------------------------------------------------------------- the island (AH1, AH4, AH20)
 
 export interface IslandAutoButton { id: string; name: string; icon: string; fav: boolean; fields: Param[]; ask: boolean; kind: StepKind }
-export interface IslandAutoRun { run: string; id: string; name: string; startedAt: number; state: 'running' | 'ok' | 'failed'; result?: StepResult }
+export interface IslandAutoRun { run: string; id: string; name: string; startedAt: number; state: 'running' | 'ok' | 'failed'; result?: StepResult; /** AH12: it opened a workspace ("End workspace"). */ ws?: boolean }
 export interface IslandAutoView {
   paused: boolean
   buttons: IslandAutoButton[]
@@ -1205,6 +1205,8 @@ export type AutoIslandOp =
   | { op: 'dismiss'; run: string }
   | { op: 'ask'; ask: string; yes: boolean }
   | { op: 'suggest'; key: string; yes: boolean }
+  /** AH12: close the apps a workspace opened. */
+  | { op: 'endWs'; id: string }
 
 // ---------------------------------------------------------------- Ben (AH8)
 

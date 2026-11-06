@@ -1,0 +1,34 @@
+/* Automation hub on the island: your buttons, the mini-form, the run cards
+   with their answers, the last runs. Motion: transform and opacity only. */
+.di-ah { display: flex; flex-direction: column; gap: 6px; }
+.di-ah-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.di-ah-head b { font-size: 12px; font-weight: 600; color: var(--sub); }
+.di-ah-head small { font-size: 11px; color: var(--sub); }
+.di-ah-head button { border: 0; background: transparent; color: var(--sub); font: inherit; font-size: 11px; cursor: pointer; }
+.di-ah-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.di-ah-btn { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); background: rgb(var(--ink) / 0.06); color: var(--fg); border-radius: 999px; padding: 4px 10px; font: inherit; font-size: 12px; cursor: pointer; transition: transform 0.12s ease; }
+.di-ah-btn.fav { border-color: var(--acc-text); }
+.di-ah-btn:active { transform: scale(0.95); }
+.di-ah-form { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 12px; border: 1px solid var(--line); background: rgb(var(--ink) / 0.04); font-size: 12px; }
+.di-ah-form label { display: flex; flex-direction: column; gap: 2px; color: var(--sub); }
+.di-ah-form input, .di-ah-form select { font: inherit; font-size: 12px; color: var(--fg); background: rgb(var(--ink) / 0.06); border: 1px solid var(--line); border-radius: 8px; padding: 4px 6px; }
+.di-ah-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.di-ah-form button, .di-ah-card button { border: 1px solid var(--line); background: transparent; color: var(--fg); border-radius: 8px; padding: 3px 9px; font: inherit; font-size: 12px; cursor: pointer; }
+.di-ah-form button.primary, .di-ah-card button.primary { background: var(--lime); color: #11140a; border-color: transparent; }
+.di-ah-card { display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 12px; border: 1px solid var(--line); background: rgb(var(--ink) / 0.04); font-size: 12px; }
+.di-ah-card.failed { border-color: #e5484d; }
+.di-ah-top { display: flex; align-items: center; gap: 6px; }
+.di-ah-top b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.di-ah-top small { color: var(--sub); }
+.di-ah-ring { width: 12px; height: 12px; border-radius: 50%; border: 2px solid rgb(var(--ink) / 0.2); border-top-color: var(--acc-text); animation: di-ah-spin 0.9s linear infinite; flex: none; }
+@keyframes di-ah-spin { to { transform: rotate(360deg); } }
+.di-ah-ok { color: var(--acc-text); font-weight: 700; }
+.di-ah-dot { width: 8px; height: 8px; border-radius: 50%; background: #e5484d; flex: none; }
+.di-ah-text { margin: 0; white-space: pre-wrap; word-break: break-word; max-height: 140px; overflow: auto; color: var(--fg); font: inherit; }
+.di-ah-why { margin: 0; color: #e5484d; }
+.di-ah-img { max-width: 100%; max-height: 160px; object-fit: contain; border-radius: 8px; align-self: flex-start; }
+.di-ah-preview { margin: 0; padding-left: 0; list-style: none; color: var(--sub); font-family: ui-monospace, Consolas, monospace; font-size: 11px; word-break: break-all; }
+.di-ah-recent { display: flex; flex-direction: column; gap: 3px; font-size: 12px; }
+.di-ah-recent div { display: flex; align-items: center; gap: 6px; }
+.di-ah-recent span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--sub); }
+.di-ah-recent button { border: 0; background: transparent; color: var(--acc-text); font: inherit; font-size: 11px; cursor: pointer; }

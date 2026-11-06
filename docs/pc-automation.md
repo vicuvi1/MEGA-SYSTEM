@@ -54,3 +54,21 @@ Keep the token in n8n's credentials or environment, never in a shared workflow e
 Add a remote MCP server (Streamable HTTP, https, optional bearer token). Life System connects (`initialize`, `tools/list`), shows its tools, and you tick the ones Ben may use. When it helps, Ben asks for one (`need: "tool <name> {json}"`), the server calls it (`tools/call`, 8 s at most, the answer cut to 1500 characters and marked as outside data, never instructions) and Ben answers with it in one round. Servers, tokens and ticks live in `sys_kv` (`auto:mcp`); pages never get the token or full address back.
 
 Code: `src/server/automation.ts`, `src/core/automation.ts`, `src/core/netGuard.ts`; routes in `api/mcp.mjs` (`?op=automation`, `?op=hook`, `/api/hook` rewrite).
+
+## Automations ("When X, do Y" and island buttons)
+
+Settings → PC & automation → **Automations**. One record for everything (`src/core/automations.ts`, synced setting `automations`, never an address or a key):
+
+- **Do Y** (up to 5 steps; a step can use `{{result.text}}` / `{{result.url}}` from the one before, and the chain stops at the first failure): a flow's webhook (presets for n8n, Make, Pipedream, Activepieces, Node-RED; Zapier needs a paid plan), a recipe action, Telegram, ntfy, a Todoist task, a note, an https link, typing a snippet, focus, a music station, your own script, a workspace, AutoHotkey / PowerToys / Espanso (only if installed).
+- **When X** (optional, up to 3): the recipe triggers plus app opened / left, a Wi-Fi name, a USB drive, battery low, charger in / out, away / back, a calendar event, a clipboard pattern, a new file in a folder. The desktop starts only the sensors in use. The same automation starts from a trigger at most once in 30 s; **Pause all** stops triggers and Ben.
+- **Ask first**: "Just run it", "Ask me first when not tapped", "Always ask me". Scripts always ask; typing and workspaces ask when a trigger or Ben starts them.
+- **Small form**: up to 3 things the island asks before a run (text, number, choice, yes/no), remembering the last answers; "Selected text" (UI Automation, else Ctrl+C with your clipboard put back) and "Clipboard" are read from the PC.
+- **Answers**: a flow can answer `{ "text": "…", "url": "https://…", "image": "https://…", "ok": true }` (n8n: "Respond to Webhook"); the island shows a card with Copy and Open link. With "Wait for the run" and `"executionId": "{{$execution.id}}"` in the answer, the island shows a ring until n8n says done or failed.
+
+Where secrets live: cloud webhooks and a cloud n8n (address + API key) in `sys_kv` `auto:flows`, called from `/api/mcp?op=flows` through the same `safeFetch` (public https only, no redirects). A local or LAN n8n / Node-RED is called from the desktop app, its address and key kept with Electron safeStorage (`auto-local.json`). Pages see a name and the last 4 characters.
+
+**Connect my n8n** lists workflows (`GET /api/v1/workflows`), switches them on/off and makes a Webhook node into a button. Every 10 minutes the server tick checks `GET /api/v1/executions?status=error` and tells you each new failure once (Telegram + ntfy). **Ben** may run automations you tick (`flow_<name>` tools): safe cloud ones run on the server; the rest wait for your tap on the island (`auto_asks`). When you do the same 3 things in a row on 3 occasions, Ben offers "Make this a button?" (created switched off).
+
+**Scripts**: only .ps1 / .bat / .py (and .ahk) right inside one folder you choose, each allowed by its SHA-256 after a dry-run preview of the exact command (a changed file asks again), run as a program and an argument array (`powershell -NoProfile -NonInteractive -File …`), 60 s at most, 4 KB of output on the island. **Workspaces** open apps, https links, files and a folder; "End workspace" closes only the apps it opened. The last 20 runs (Re-run) and the run log (secrets removed) stay on this device.
+
+Code: `src/core/automations.ts`, `src/server/flows.ts`, `src/desktop/automations.ts`, `src/renderer/src/automationsFeed.ts`, `IslandAutomations.tsx`, `AutomationsPanel.tsx`.

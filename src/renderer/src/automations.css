@@ -1,0 +1,19 @@
+/* Settings → PC & automation → Automations: the "When X, do Y" sentence builder. */
+.au-editor { display: flex; flex-direction: column; gap: 8px; }
+.au-sentence { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px; border-radius: 12px; border: 1px solid var(--line, rgba(127, 127, 127, 0.25)); }
+.au-word { font-weight: 600; opacity: 0.8; }
+.au-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border-radius: 999px; background: rgba(127, 127, 127, 0.14); font-size: 13px; }
+.au-chip.do { background: rgba(132, 204, 22, 0.16); }
+.au-chip button { border: 0; background: transparent; color: inherit; cursor: pointer; opacity: 0.6; font: inherit; padding: 0 4px; }
+.au-add { border: 1px dashed rgba(127, 127, 127, 0.5); background: transparent; color: inherit; border-radius: 999px; padding: 3px 8px; font: inherit; font-size: 13px; max-width: 260px; }
+.au-summary { margin: 0; font-size: 14px; font-style: italic; }
+.au-fields { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.au-fields.bad .ai-input { border-color: #e5484d; }
+.au-col { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+.au-small { max-width: 160px; }
+.au-icon { max-width: 56px; text-align: center; }
+.au-check { display: inline-flex; align-items: center; gap: 6px; }
+.au-test { margin: 0; padding: 8px 12px; border-radius: 10px; background: rgba(127, 127, 127, 0.1); font-family: ui-monospace, Consolas, monospace; font-size: 12px; list-style: none; word-break: break-word; }
+.au-list small { display: block; }
+.au-preview { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 10px; background: rgba(127, 127, 127, 0.1); }
+.au-preview code { word-break: break-all; font-size: 12px; }

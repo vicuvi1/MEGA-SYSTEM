@@ -484,6 +484,13 @@ export interface LifeApi {
     list(): Promise<import('@core/recipes').Recipe[]>
     save(list: import('@core/recipes').Recipe[]): Promise<import('@core/recipes').Recipe[]>
   }
+  /** Automation hub: your automations and Ben's asks to run one (synced settings automations, auto_asks). */
+  automations?: {
+    get(): Promise<import('@core/automations').AutomationStore>
+    save(s: import('@core/automations').AutomationStore): Promise<import('@core/automations').AutomationStore>
+    asks(): Promise<import('@core/automations').AutoAsk[]>
+    setAsk(id: string, status: import('@core/automations').AutoAsk['status'], why?: string): Promise<void>
+  }
   /** Island 2: your island tiles, buttons, profiles, colours and stations (synced settings). */
   islandKit?: {
     get(): Promise<import('@core/islandTiles').IslandKit>

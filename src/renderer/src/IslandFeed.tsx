@@ -36,6 +36,7 @@ import { breakOverAlert, controlAct, flowTick, islandRunning, loadBreakPref, mus
 import { askClose, pcAskAct, pcAskAlert, pcAutoTick } from './pcAutomation'
 import { kitAct, kitForIsland } from './islandKitFeed'
 import { weatherAlert, widgetsForIsland } from './widgets/widgetsFeed'
+import { autoAct, autoAlert, autoIslandView, autoTick, noteDone, startAutomations } from './automationsFeed'
 import { MOVE_CARD_EVENT, moveCardAlert } from '@core/islandMoveCard'
 
 const SEEN = 'ls.coachSeen'
@@ -408,6 +409,8 @@ export function IslandFeed() {
     // PC & automation: Ben's asks for this PC, the last hour for Ben (each on its own slow clock).
     await pcAutoTick(now).catch(() => {})
     smartTick({ now, running, blocks: blocks.current.list })
+    // Automation hub: time / calendar triggers, focus and meetings, Ben's asks.
+    await autoTick({ now, running: !!running && !running.brk, call: !!callNow(blocks.current.list, now), block: blocks.current.list.find((b) => b.start <= now && b.end > now)?.title ?? '', events: blocks.current.list.map((b) => ({ title: b.title, start: b.start })) }).catch(() => {})
     if (smartOn()) shareGoalWords([...focus.goals.flatMap((g) => [g.title, g.subject]), ...(focus.subjects ?? [])])
     // Focus state for the PC (P19 site blocker, P20 holding notifications).
     // A break (IC11) is not focus: sites aren't blocked during it.
@@ -503,6 +506,7 @@ export function IslandFeed() {
           return sg && (dismissed[sg.id] ?? 0) > now ? null : sg
         }
         return (
+          autoAlert(now, dismissed) ??
           pcAskAlert(now, dismissed) ??
           backAlert(focusRun, now, dismissed) ??
           driftAlert(focusRun, now, dismissed) ??
@@ -548,6 +552,7 @@ export function IslandFeed() {
       ...(await kitForIsland(blocks.current.list)),
       // PL1–PL8, LF1/LF2: your widgets and layout, today's rain and sunset.
       ...(await widgetsForIsland(now)),
+      auto: autoIslandView(),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,
@@ -638,11 +643,15 @@ export function IslandFeed() {
         if (last.current.locked && a.kind !== 'open' && a.kind !== 'dismiss' && a.kind !== 'join' && !sessionValid(currentSession())) throw new Error('Life System is locked: open it and enter your PIN')
         // IC1, IC6–IC8, IC10, IC11: pause, the wheel's end, rename, undo, drops, breaks and flow timers.
         // Island 2: nudge cards and move breaks (islandNudgesFeed.ts); undefined: not theirs.
-        const nd = await nudgeAct(a, { moved: () => void (activeSince = Date.now()) })
-        const ctl = nd !== undefined ? null : await controlAct(a, { blocks: blocks.current.list, findTask: (id) => todoCache.full[id] ?? null })
+        // Automation hub: its own taps; and what you do by hand, for Ben's "Make this a button?".
+        const isAuto = a.kind === 'auto'
+        if (a.kind === 'auto') said = await autoAct(a)
+        else noteDone(a)
+        const nd = isAuto ? undefined : await nudgeAct(a, { moved: () => void (activeSince = Date.now()) })
+        const ctl = isAuto || nd !== undefined ? null : await controlAct(a, { blocks: blocks.current.list, findTask: (id) => todoCache.full[id] ?? null })
         if (nd !== undefined) said = nd
         else if (ctl != null) said = ctl || null
-        else switch (a.kind) {
+        else if (!isAuto) switch (a.kind) {
           case 'water': {
             put(LAST_WATER, Date.now())
             // The one shared water path (water.ts, N9): the shared log, then this
@@ -973,6 +982,7 @@ export function IslandFeed() {
       desk.onIslandAction?.((a) => void actRef.current(a))
       // Smart island: title-free activity events from the desktop.
       startSmart(() => void sendRef.current())
+      startAutomations(() => void sendRef.current())
       desk.onNavigate?.((page) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: page })))
       // Back after a night away from the PC: that's when you went to bed.
       desk.onAway?.((w) => void onAway(w).then(() => void sendRef.current()))

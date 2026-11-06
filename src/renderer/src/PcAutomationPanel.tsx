@@ -16,6 +16,7 @@ import { timeAgo, useAction } from './ui'
 import { Icon } from './Icon'
 import { mcpUrl } from './AiAppsPanel'
 import { pcAutoRefresh } from './pcAutomation'
+import { AutomationsPanel } from './AutomationsPanel'
 
 type View = {
   ntfy: { on: boolean; server: string; topicHint: string; level: 'reminders' | 'all' }
@@ -275,6 +276,8 @@ export function PcAutomationPanel() {
           </section>
         </>
       )}
+      {/* Automation hub: "When X, do Y", island buttons, flows, n8n, scripts, the run log. */}
+      <AutomationsPanel />
     </>
   )
 }

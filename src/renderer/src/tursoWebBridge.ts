@@ -61,6 +61,7 @@ import { importBank, importText } from '../../plugins/bank'
 import { addBlockResult, addFocusCheck, addFocusQuality, setDoingLine, setEyesLine, setPcLine, setWebLine } from './web/dayLog'
 import { cleanNudgeStore, type NudgeStore } from '@core/islandNudges'
 import { cleanRecipes, type Recipe } from '@core/recipes'
+import { cleanAutoAsks, cleanStore, setAutoAsk, type AutoAsk, type AutomationStore } from '@core/automations'
 import { cleanKit } from '@core/islandTiles'
 import { cleanPcState, setAskStatus, type PcAsk } from '@core/pcActions'
 import type { LastHour } from '@core/pcLastHour'
@@ -1243,6 +1244,19 @@ export function createTursoWebBridge(): Bridge {
         const clean = cleanRecipes(list)
         await (await mirrorP).write((db) => writeSetting(db as any, 'island_recipes', clean))
         return clean
+      }
+    },
+    // Automation hub: your automations (never an address or key) and Ben's asks.
+    automations: {
+      get: async () => (await mirrorP).read((db) => cleanStore(readSetting(db as any, 'automations'))),
+      save: async (st: AutomationStore) => {
+        const clean = cleanStore(st)
+        await (await mirrorP).write((db) => writeSetting(db as any, 'automations', clean))
+        return clean
+      },
+      asks: async () => (await mirrorP).read((db) => cleanAutoAsks(readSetting(db as any, 'auto_asks'), Date.now())),
+      setAsk: async (id: string, status: AutoAsk['status'], why?: string) => {
+        await (await mirrorP).write((db) => writeSetting(db as any, 'auto_asks', { asks: setAutoAsk(cleanAutoAsks(readSetting(db as any, 'auto_asks'), Date.now()), id, status, why) }))
       }
     },
     // Island 2: tiles, buttons, profiles, colours and stations, one synced setting.

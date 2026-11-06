@@ -90,6 +90,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'kitCount'; tile: string; by: number }
   /** IN34: a link tile (https only). */
   | { kind: 'kitLink'; url: string }
+  /** Automation hub: run a button, answer a confirm or Ben's ask, close a result (src/core/automations.ts). */
+  | ({ kind: 'auto' } & import('./automations').AutoIslandOp)
 )
 
 export interface IslandAlert {
@@ -176,6 +178,8 @@ export interface IslandSnapshot {
   widgets?: unknown
   /** LF1/LF2: today's rain and daylight from the weather plugin (src/core/widgets/weatherPill.ts). */
   weather?: import('./widgets/weatherPill').IslandWeather | null
+  /** Automation hub: your island buttons, runs in progress and their answers, the last runs. */
+  auto?: import('./automations').IslandAutoView | null
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {
