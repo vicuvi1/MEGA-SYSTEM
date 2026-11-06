@@ -425,7 +425,9 @@ export function IslandFeed() {
       const list = await life.todoist.today().catch(() => null)
       if (list) {
         const top = list.slice(0, 3)
-        todoCache = { at: now, okAt: now, failed: false, list: top.map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null })), full: Object.fromEntries(top.map((t) => [t.id, t])) }
+        // `full` keeps every task of today (not just the 3 shown): a tap on a row the island still
+        // shows from an older list must find its task even after the top 3 changed.
+        todoCache = { at: now, okAt: now, failed: false, list: top.map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null })), full: { ...todoCache.full, ...Object.fromEntries(list.map((t) => [t.id, t])) } }
       } else todoCache.failed = true
     }
     if (now - moneyCache.at > 60_000 && life.finance) {
@@ -862,19 +864,32 @@ export function IslandFeed() {
           }
           case 'todoDone': {
             // IS19: the real task (its priority pays the points), never made-up fields.
-            const task = todoCache.full[a.id]
-            try {
-              if (!task) throw new Error('not found')
-              await life.todoist!.complete(task)
-            } catch (e) {
-              // The list may be stale (a task done elsewhere): fetch it fresh now.
-              todoCache.at = 0
-              throw new Error(todoistErrorText(e))
+            let task: TodoTask | undefined = todoCache.full[a.id]
+            // Not in the cached list (it changed since the island drew the row): look it up fresh.
+            if (!task && life.todoist?.today) {
+              const fresh = await life.todoist.today().catch(() => null)
+              task = fresh?.find((t) => t.id === a.id)
             }
+            let gone = false
+            try {
+              // Still not found: it's no longer open in Todoist (done or deleted elsewhere), which
+              // is what the tap wanted; try closing it by id anyway (a 404 there counts as done).
+              await life.todoist!.complete(task ?? ({ id: a.id, content: a.content, priority: 1 } as TodoTask))
+            } catch (e) {
+              const msg = String((e as Error)?.message ?? e)
+              console.warn('[island] todoist complete failed:', msg)
+              // Already done or gone counts as done: drop the row instead of an error you can't get past.
+              if (/\b404\b|not found|already|completed|closed|gone/i.test(msg)) gone = true
+              else {
+                todoCache.at = 0
+                throw new Error(todoistErrorText(e))
+              }
+            }
+            if (gone) said = `✓ ${a.content} (already done)`
             const { [a.id]: _done, ...full } = todoCache.full
             todoCache = { ...todoCache, at: 0, list: todoCache.list.filter((t) => t.id !== a.id), full }
             window.dispatchEvent(new CustomEvent('life-external-changed'))
-            said = `✓ ${a.content}`
+            said ||= `✓ ${a.content}`
             break
           }
           case 'clipSave': {
