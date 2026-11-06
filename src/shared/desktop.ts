@@ -90,6 +90,10 @@ export interface DesktopApi {
   onVoicePower?(cb: (s: { locked: boolean; idleSec: number }) => void): void
   /** Voice: press a media key (play/pause, next, previous, mute, volume). */
   voiceMedia?(key: string): Promise<boolean>
+  /** "Sign in to SoundCloud" (desktop): status, signIn, show {x,y,width,height}, hide, home, back, zoom, op, like, playMix, mixes, stop, signOut. */
+  scweb?(op: string, arg?: unknown): Promise<any>
+  /** What the signed-in SoundCloud view plays (sent on change). Returns a function that stops listening. */
+  onScWeb?(cb: (s: unknown) => void): () => void
   /** A button on a Windows notification (N9). */
   onNotifAction?(cb: (a: { id: string; action: string }) => void): void
   /** You clicked one: the app is in front, run its action. */

@@ -1897,7 +1897,7 @@ export function DesktopIsland() {
         )}
       </div>
       {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><Marquee className="di-peek-ben-text" text={benLine} /></p>}
-      <ScPeekRow />
+      <ScPeekRow music={k.kit.music} />
       {/* IN35: your one-tap buttons. */}
       {!s.locked && <PillKitButtons k={k} />}
       {/* IC5: today in three numbers (the rings' colours). */}

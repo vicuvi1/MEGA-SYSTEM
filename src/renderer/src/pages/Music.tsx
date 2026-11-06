@@ -19,6 +19,8 @@ import {
   useRememberArt, useTint, tintStyle, Volume, Waveform
 } from '../music/MusicUi'
 import { VibeGrid } from '../music/VibeGrid'
+import { hasScWeb, useScWeb } from '../music/scWeb'
+import { LikeButton, ScWebPanel, useMusicTab, YourScRow } from '../music/YourSoundCloud'
 import '../music/musicPage.css'
 
 function useMusicKit(): [IslandKit, (m: Partial<MusicKit>) => void] {
@@ -41,7 +43,9 @@ export function Music() {
   const music = kit.music
   const sc = useMusic()
   const sys = useSystemPlayers(!!window.desktop?.pcx)
-  const f = useFollowed(sc, sys, music.pin)
+  const web = useScWeb()
+  const f = useFollowed(sc, sys, music.pin, web)
+  const [tab, setTab] = useMusicTab()
   const { ctl } = f
   const s = ctl.s
   const tint = useTint(s, '#c8f135')
@@ -62,8 +66,27 @@ export function Music() {
     setName('')
     saveMusic({ stations: r.list })
   }
+  // Desktop: "Player" and "Your SoundCloud" (SoundCloud's own home, signed in).
+  const tabs = hasScWeb() && (
+    <div className="mup-tabs" role="tablist" aria-label="Music views">
+      <button role="tab" aria-selected={tab === 'player'} className={`mu-chip ${tab === 'player' ? 'on' : ''}`} onClick={() => setTab('player')}>Player</button>
+      <button role="tab" aria-selected={tab === 'web'} className={`mu-chip ${tab === 'web' ? 'on' : ''}`} onClick={() => setTab('web')}>Your SoundCloud</button>
+    </div>
+  )
+  if (tab === 'web') {
+    return (
+      <div className="mup mu" style={tintStyle(tint.rgb, s)}>
+        {tabs}
+        <ScWebPanel />
+      </div>
+    )
+  }
   return (
     <div className="mup mu" style={tintStyle(tint.rgb, s)}>
+      {tabs}
+      <section className="mup-card" aria-label="Your SoundCloud">
+        <YourScRow music={music} save={saveMusic} ctl={sc} press={press} prefix="page" />
+      </section>
       {f.kind === 'none' && !sc.probing && (
         <section className="mup-card mup-vibes" aria-label="Pick a vibe">
           <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="page" now={{ hour: new Date().getHours() }} />
@@ -104,7 +127,7 @@ export function Music() {
             {isSc ? <Waveform ctl={ctl} bars={140} height={56} /> : <ThinBar s={s} />}
             <Times s={s} />
             <div className="mup-ctl">
-              <div className="mup-ctl-l">{isSc && <StarButton s={s} favs={music.favs} press={press} onToggle={(x) => saveMusic({ favs: toggleFav(music.favs, x) })} />}</div>
+              <div className="mup-ctl-l">{f.kind === 'web' && <LikeButton press={press} id="page:like" />}{isSc && <StarButton s={s} favs={music.favs} press={press} onToggle={(x) => saveMusic({ favs: toggleFav(music.favs, x) })} />}</div>
               {isSc ? <Transport ctl={ctl} press={press} size={62} /> : <SysTransport ctl={ctl} press={press} size={62} />}
               <div className="mup-ctl-r">
                 {isSc && <SleepTimer ctl={ctl} press={press} />}

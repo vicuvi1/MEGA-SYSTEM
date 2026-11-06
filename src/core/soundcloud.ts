@@ -107,3 +107,26 @@ export function shouldPause(o: { playing: boolean; call: boolean; locked: boolea
   if (o.focusStarted && o.pauseInFocus) return 'focus'
   return null
 }
+
+/**
+ * "Your SoundCloud": a typed profile name or a pasted profile link → the
+ * public profile name (lower case), or null. Accepts "name", "@name",
+ * "soundcloud.com/name" and any link on that profile (likes, a playlist…).
+ */
+export function parseScUser(input: unknown): string | null {
+  const raw = String(input ?? '').trim().replace(/^@/, '')
+  if (!raw || raw.length > 300) return null
+  if (SEG.test(raw)) return RESERVED.has(raw.toLowerCase()) ? null : raw.toLowerCase()
+  let u: URL
+  try {
+    u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`)
+  } catch {
+    return null
+  }
+  if ((u.protocol !== 'https:' && u.protocol !== 'http:') || !HOSTS.includes(u.hostname.toLowerCase()) || u.username || u.password || u.port) return null
+  const first = u.pathname.split('/').filter(Boolean)[0] ?? ''
+  if (!SEG.test(first) || RESERVED.has(first.toLowerCase())) return null
+  return first.toLowerCase()
+}
+/** The synced setting's value: a clean profile name, or ''. */
+export const cleanScUser = (v: unknown): string => (typeof v === 'string' && v ? parseScUser(v) ?? '' : '')

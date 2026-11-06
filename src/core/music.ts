@@ -4,7 +4,7 @@
 // shuffle and repeat, the waveform's bars, the sleep timer's fade, the colour
 // picked from the artwork, station order, the focus mix, and the "now
 // playing" line Ben may see. No DOM here; tested in music.test.ts.
-import { cleanStations, parseSoundCloud, type Station } from './soundcloud'
+import { cleanScUser, cleanStations, parseSoundCloud, type Station } from './soundcloud'
 import { cleanHiddenStarters } from './starterStations'
 
 // ---- the synced part (island_kit.music) ----
@@ -33,9 +33,11 @@ export interface MusicKit {
   hiddenStarters: string[]
   /** A small "now playing" card with the cover (and a soft bell) when the track changes. */
   nowToast: boolean
+  /** "Your SoundCloud": your public profile name ('' = not connected). Only the public name, nothing else. */
+  scUser: string
 }
 export type EqMode = 'beat' | 'pitch'
-export const DEFAULT_MUSIC: MusicKit = { stations: [], favs: [], focusMix: null, benSees: false, lyrics: true, pillLyric: false, eqMode: 'beat', pin: null, hiddenStarters: [], nowToast: true }
+export const DEFAULT_MUSIC: MusicKit = { stations: [], favs: [], focusMix: null, benSees: false, lyrics: true, pillLyric: false, eqMode: 'beat', pin: null, hiddenStarters: [], nowToast: true, scUser: '' }
 
 const line = (s: unknown, n: number) => String(s ?? '').replace(/[\r\n\t]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, n)
 
@@ -70,8 +72,8 @@ export function cleanFavs(v: unknown): Fav[] {
 export function cleanMusicKit(v: any): MusicKit {
   const stations = cleanStations(v?.stations)
   const mix = typeof v?.focusMix === 'string' && stations.some((s) => s.id === v.focusMix) ? v.focusMix : null
-  const pin = typeof v?.pin === 'string' && /^(sc|sys:[A-Za-z0-9._!\- ]{1,200})$/.test(v.pin) ? v.pin : null
-  return { stations, favs: cleanFavs(v?.favs), focusMix: mix, benSees: v?.benSees === true, lyrics: v?.lyrics !== false, pillLyric: v?.pillLyric === true, eqMode: v?.eqMode === 'pitch' ? 'pitch' : 'beat', pin, hiddenStarters: cleanHiddenStarters(v?.hiddenStarters), nowToast: v?.nowToast !== false }
+  const pin = typeof v?.pin === 'string' && /^(sc|scweb|sys:[A-Za-z0-9._!\- ]{1,200})$/.test(v.pin) ? v.pin : null
+  return { stations, favs: cleanFavs(v?.favs), focusMix: mix, benSees: v?.benSees === true, lyrics: v?.lyrics !== false, pillLyric: v?.pillLyric === true, eqMode: v?.eqMode === 'pitch' ? 'pitch' : 'beat', pin, hiddenStarters: cleanHiddenStarters(v?.hiddenStarters), nowToast: v?.nowToast !== false, scUser: cleanScUser(v?.scUser) }
 }
 
 /** Star or unstar a track (newest first). */
@@ -343,7 +345,7 @@ export function musicNowContext(v: unknown, now: number): string | null {
 // ---- several players: SoundCloud here, and the players on the PC ----
 
 export interface PlayerInfo {
-  /** 'sc' or 'sys:<Windows id>'. */
+  /** 'sc' (the embed player), 'scweb' (SoundCloud signed in, desktop) or 'sys:<Windows id>'. */
   id: string
   name: string
   playing: boolean

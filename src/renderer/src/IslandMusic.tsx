@@ -20,6 +20,8 @@ import { Eq, EqMode, lyricNow, MuIcon, posNow, Scroller, useTint, tintStyle } fr
 import { useLyrics } from './music/players'
 import { useTicker } from './music/hooks'
 import { NowPlayingToast, useTrackToast } from './music/IslandMusicFx'
+import { scWebAsSc, scWebHas, scWebOp, useScWeb, useScWebRules } from './music/scWeb'
+import type { ScState } from './music/engine'
 import './music/music.css'
 
 export { playStation, sc } from './music/engine'
@@ -77,6 +79,8 @@ export function ScHost({ call, running, pauseInFocus, music }: { call: boolean; 
     return () => clearTimeout(t)
   }, [locked])
   const mix = music?.focusMix ? music.stations.find((x) => x.id === music.focusMix) ?? null : null
+  // The same rules for SoundCloud signed in (desktop), and never two players at once.
+  useScWebRules({ call, locked, running, pauseInFocus, mix: !!mix, ourPlaying: s.playing, pauseOurs: () => sc.pause() })
   useEffect(() => {
     const focusStarted = running && !wasRunning.current
     wasRunning.current = running
@@ -101,9 +105,19 @@ export function ScHost({ call, running, pauseInFocus, music }: { call: boolean; 
   return <iframe ref={ref} className="di-sc-host" src={bound.current ?? src} title="SoundCloud player" allow="autoplay" aria-hidden tabIndex={-1} />
 }
 
+/**
+ * What the pill and the peek show: our own player, or SoundCloud signed in
+ * (desktop) when ours isn't loaded, or it is pinned.
+ */
+function usePillSc(music?: MusicKit): { s: ScState; web: boolean } {
+  const own = useSc()
+  const w = useScWeb()
+  if (scWebHas(w) && (!own.loaded || !own.station || (music?.pin === 'scweb' || (w.now.playing && !own.playing)))) return { s: scWebAsSc(w), web: true }
+  return { s: own, web: false }
+}
+
 /** The artwork in a progress ring (the pill's and the peek's). */
-function RingArt({ size = 24 }: { size?: number }) {
-  const s = useSc()
+function RingArt({ size = 24, s }: { size?: number; s: ScState }) {
   useTicker(s.playing, 5000)
   const p = s.dur ? Math.min(1, posNow(s) / s.dur) : 0
   const r = size / 2 - 1.5
@@ -121,7 +135,7 @@ function RingArt({ size = 24 }: { size?: number }) {
 
 /** The pill's now playing: the artwork in its progress ring, a small equalizer, and (if you want) the lyric line. */
 export function ScPillBadge({ music, title = false }: { music?: MusicKit; title?: boolean }) {
-  const s = useSc()
+  const { s } = usePillSc(music)
   const tint = useTint(s, '#d4ff3f')
   const lines = useLyrics(s.title, s.artist, s.dur, !!music?.lyrics && !!music?.pillLyric && s.loaded)
   useTicker(!!lines && s.playing, 1000)
@@ -130,7 +144,7 @@ export function ScPillBadge({ music, title = false }: { music?: MusicKit; title?
   const lyric = toast ? null : lyricNow(s, lines)
   return (
     <span className={`di-sc-pill mu ${s.playing ? 'playing' : ''}`} style={tintStyle(tint.rgb, s)} title={s.title || s.station.name} aria-label={s.playing ? `Playing ${s.title || s.station.name}` : 'Music paused'}>
-      <RingArt />
+      <RingArt s={s} />
       <EqMode on={s.playing} mode={music?.eqMode ?? 'beat'} />
       {toast && <NowPlayingToast t={toast} />}
       {toast ? null : lyric ? <Scroller key={lyric} className="di-mp-lyric" text={lyric} /> : title && (s.title || s.station.name) ? <Scroller key={s.title || s.station.name} className="di-mp-lyric di-mp-title" text={s.title || s.station.name} /> : null}
@@ -139,23 +153,25 @@ export function ScPillBadge({ music, title = false }: { music?: MusicKit; title?
 }
 
 /** The peek's mini player: artwork with its ring, the title, the equalizer, play and next. */
-export function ScPeekRow() {
-  const s = useSc()
+export function ScPeekRow({ music }: { music?: MusicKit } = {}) {
+  const { s, web } = usePillSc(music)
+  const toggle = () => (web ? void scWebOp('op', 'toggle') : sc.toggle())
+  const next = () => (web ? void scWebOp('op', 'next') : sc.next())
   const tint = useTint(s, '#d4ff3f')
   if (!s.loaded || !s.station) return null
   return (
     <div className="di-mu-peek mu" style={tintStyle(tint.rgb, s)} onPointerDown={(e) => e.stopPropagation()}>
-      <RingArt size={34} />
+      <RingArt size={34} s={s} />
       <div className="mid">
         <Scroller text={s.title || s.station.name} className="t" />
         <small>
           <Eq on={s.playing} /> {s.artist || s.station.name}
         </small>
       </div>
-      <button className="mu-ic" aria-label={s.playing ? 'Pause' : 'Play'} {...tp('mu:peek:toggle', () => (uiTick(), sc.toggle()))}>
+      <button className="mu-ic" aria-label={s.playing ? 'Pause' : 'Play'} {...tp('mu:peek:toggle', () => (uiTick(), toggle()))}>
         {s.playing ? <MuIcon d="pause" size={15} /> : <svg width={14} height={14} viewBox="0 0 24 24" aria-hidden><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" /></svg>}
       </button>
-      <button className="mu-ic" aria-label="Next" {...tp('mu:peek:next', () => (uiTick(), sc.next()))}>
+      <button className="mu-ic" aria-label="Next" {...tp('mu:peek:next', () => (uiTick(), next()))}>
         <MuIcon d="next" size={15} fill />
       </button>
     </div>

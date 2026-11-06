@@ -10,6 +10,8 @@ import type { MediaOp, MediaSession } from '@core/pcMedia'
 import { itunesArt, itunesUrl, lyricsFrom, lrclibGetUrl, lrclibSearchUrl, safeCover, songOf, type LyricLine } from '@core/lyrics'
 import { IDLE, type MusicOp, type ScState } from './engine'
 import type { MusicCtl } from './remote'
+import type { ScWebState } from '@core/scAccount'
+import { SCWEB_NAME, scWebAsSc, scWebHas, scWebRun } from './scWeb'
 
 const pcx = () => (typeof window !== 'undefined' ? window.desktop?.pcx : undefined)
 
@@ -107,7 +109,8 @@ export function useLyrics(title: string, artist: string, durMs: number, on: bool
 export interface Followed {
   /** What the views show and drive. */
   ctl: MusicCtl
-  kind: 'sc' | 'sys' | 'none'
+  /** 'web': SoundCloud signed in (desktop), drawn like a PC player plus ♥. */
+  kind: 'sc' | 'sys' | 'web' | 'none'
   players: PlayerInfo[]
   current: PlayerInfo | null
 }
@@ -117,18 +120,27 @@ export interface Followed {
  * player dressed the same way (no waveform, queue, shuffle or volume: Windows
  * doesn't offer those to other apps).
  */
-export function useFollowed(sc: MusicCtl, sys: ReturnType<typeof useSystemPlayers>, pin: string | null): Followed {
+export function useFollowed(sc: MusicCtl, sys: ReturnType<typeof useSystemPlayers>, pin: string | null, web: ScWebState | null = null): Followed {
   const scOn = sc.s.loaded && !!sc.s.station
+  const webOn = scWebHas(web)
   const players: PlayerInfo[] = useMemo(
     () => [
       ...(scOn ? [{ id: 'sc', name: 'SoundCloud', playing: sc.s.playing, title: sc.s.title || sc.s.station?.name || '', artist: sc.s.artist }] : []),
-      ...sys.list.filter((x) => x.title || x.playing).map((x) => ({ id: `sys:${x.id}`, name: x.app || 'Player', playing: x.playing, title: x.title, artist: x.artist }))
+      ...(webOn ? [{ id: 'scweb', name: SCWEB_NAME, playing: web!.now.playing, title: web!.now.title, artist: web!.now.artist }] : []),
+      // Our own players also show up in Windows' list (as this app): not twice.
+      ...sys.list.filter((x) => (x.title || x.playing) && !(/lifesystem|electron/i.test(x.id) && (x.title === web?.now.title || x.title === sc.s.title))).map((x) => ({ id: `sys:${x.id}`, name: x.app || 'Player', playing: x.playing, title: x.title, artist: x.artist }))
     ],
-    [scOn, sc.s.playing, sc.s.title, sc.s.artist, sc.s.station?.name, sys.list]
+    [scOn, sc.s.playing, sc.s.title, sc.s.artist, sc.s.station?.name, sys.list, webOn, web?.now.playing, web?.now.title, web?.now.artist]
   )
   const current = pickPlayer(players, pin)
   const sess = current?.id.startsWith('sys:') ? sys.list.find((x) => `sys:${x.id}` === current.id) ?? null : null
   const cover = useCover(sess?.title ?? '', sess?.artist ?? '', !!sess)
+  if (current?.id === 'scweb' && webOn) {
+    const run = (c: MusicOp) => {
+      if (!scWebRun(c)) sc.run(c)
+    }
+    return { ctl: { s: scWebAsSc(web!), run, remote: sc.remote, probing: false }, kind: 'web', players, current }
+  }
   if (!sess) return { ctl: sc, kind: scOn ? 'sc' : 'none', players, current }
   const s: ScState = {
     ...IDLE,

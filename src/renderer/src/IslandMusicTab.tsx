@@ -16,6 +16,8 @@ import { rememberStationArt } from './music/hooks'
 import { looksLikeWorkout, type NowCtx } from '@core/starterStations'
 import type { IslandSnapshot } from '@core/islandModel'
 import { VibeGrid } from './music/VibeGrid'
+import { useScWeb } from './music/scWeb'
+import { LikeButton, YourMixes, YourScRow } from './music/YourSoundCloud'
 import { Ambient, Artwork, EqMode, Lyrics, PlayerPicker, Scroller, SleepTimer, StarButton, StationTile, SysTransport, ThinBar, Times, TrackList, Transport, UpNext, useRememberArt, useTint, tintStyle, Volume, Waveform, type Press } from './music/MusicUi'
 
 const press: Press = (id, fn) => tp(id, () => fn())
@@ -33,7 +35,8 @@ export function IslandMusicTab({ k, onBack, snap }: { k: KitState; onBack: () =>
   const music = k.kit.music
   const saveMusic = (m: Partial<MusicKit>) => k.save({ ...k.kit, music: { ...music, ...m } })
   const sys = useSystemPlayers(true)
-  const f = useFollowed(sc, sys, music.pin)
+  const web = useScWeb()
+  const f = useFollowed(sc, sys, music.pin, web)
   const { ctl } = f
   const s = ctl.s
   const tint = useTint(s, '#d4ff3f')
@@ -78,6 +81,8 @@ export function IslandMusicTab({ k, onBack, snap }: { k: KitState; onBack: () =>
         {sc.s.loaded && <button className="mu-ic sm" aria-label="Stop the player" title="Stop (unloads the player)" {...tp('mu:stop', () => sc.run({ op: 'stop' }))}>■</button>}
       </div>
       <PlayerPicker players={f.players} current={f.current} pin={music.pin} onPin={(pin) => saveMusic({ pin })} press={press} prefix="mu:isl" />
+      <YourScRow music={music} save={saveMusic} ctl={sc} press={press} prefix="mu:isl" compact />
+      <YourMixes press={press} prefix="mu:isl" />
 
       {f.kind === 'none' ? (
         <VibeGrid music={music} save={saveMusic} ctl={sc} press={press} prefix="mu:isl" now={now} paste={pasteForm} />
@@ -100,7 +105,7 @@ export function IslandMusicTab({ k, onBack, snap }: { k: KitState; onBack: () =>
           </div>
           {isSc ? <Transport ctl={ctl} press={press} size={50} prefix="mu:isl" /> : <SysTransport ctl={ctl} press={press} size={50} prefix="mu:isl" />}
           <div className="di-mu-row">
-            {isSc ? <StarButton s={s} favs={music.favs} press={press} id="mu:isl:star" onToggle={(x) => saveMusic({ favs: toggleFav(music.favs, x) })} /> : <span />}
+            {isSc ? <StarButton s={s} favs={music.favs} press={press} id="mu:isl:star" onToggle={(x) => saveMusic({ favs: toggleFav(music.favs, x) })} /> : f.kind === 'web' ? <LikeButton press={press} id="mu:isl:like" /> : <span />}
             {isSc && <Volume ctl={ctl} />}
             {isSc && <SleepTimer ctl={ctl} press={press} prefix="mu:isl" />}
           </div>

@@ -239,6 +239,16 @@ try {
     await pg.waitForSelector('.mup-manage li', { timeout: 5000 })
     if (!/Smoke mix/.test(await pg.locator('.mup-manage').innerText())) throw new Error('the new station is not listed')
   })
+  // "Your SoundCloud": connect by username (a made-up profile) shows your Likes and tracks as cards.
+  await step('Music: connect by username shows "Your SoundCloud" with Likes and tracks', async () => {
+    await pg.fill('.ysc-connect input', 'https://soundcloud.com/example-listener/likes')
+    await pg.locator('.ysc-connect .mu-btn').click()
+    await pg.waitForSelector('.ysc-card', { timeout: 5000 })
+    const t = await pg.locator('.ysc').first().innerText()
+    if (!/@example-listener/.test(t) || !/Your likes/.test(t) || !/Your tracks/.test(t)) throw new Error(`the row shows ${t.slice(0, 120)}`)
+    await pg.getByRole('button', { name: 'Disconnect' }).click()
+    await pg.waitForSelector('.ysc-connect input', { timeout: 5000 })
+  })
   await step('Calendar shows the week with its events', async () => {
     await open('calendar')
     await pg.waitForSelector('.cal-item', { timeout: 15000 })

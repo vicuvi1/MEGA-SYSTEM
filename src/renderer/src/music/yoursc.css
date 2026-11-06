@@ -1,0 +1,46 @@
+/* "Your SoundCloud" (YourSoundCloud.tsx): the row of cards, "Your mixes",
+   the ♥ button and the signed-in tab. Motion is transform and opacity only. */
+
+.ysc { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.ysc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.ysc-head h4 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu-sub); }
+.ysc-head h4 span { margin-left: 6px; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--mu-fg); }
+.ysc-acts { display: inline-flex; gap: 12px; align-items: baseline; }
+.ysc-connect { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.ysc-connect input { flex: 1; min-width: 160px; height: 34px; padding: 0 12px; border: 1px solid var(--mu-line); border-radius: 10px; background: rgb(var(--ink, 255 255 255) / 0.05); color: var(--mu-fg); font: inherit; font-size: 13px; outline: none; user-select: text; }
+.ysc-connect input:focus { border-color: rgb(var(--mu-rgb) / 0.7); }
+.ysc-cta { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1px dashed var(--mu-line); border-radius: 12px; background: var(--mu-chip); color: var(--mu-fg); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; transition: transform 0.2s var(--mu-spring, ease); }
+.ysc-cta:hover { transform: translateY(-1px); }
+
+.ysc-row { display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 2px 2px 8px; scrollbar-width: thin; }
+.ysc.compact .ysc-row { grid-auto-columns: 80px; gap: 9px; }
+.ysc-card { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; transition: transform 0.24s var(--mu-spring, ease); }
+.ysc-card:hover { transform: translateY(-3px); }
+.ysc-card:active { transform: scale(0.97); }
+.ysc-art { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 1; border-radius: 12px; overflow: hidden; background: linear-gradient(140deg, hsl(var(--ysc-h, 20) 70% 52%), hsl(calc(var(--ysc-h, 20) + 50) 70% 30%)); box-shadow: 0 10px 22px -16px rgb(0 0 0 / 0.8), inset 0 0 0 1px rgb(255 255 255 / 0.1); }
+.ysc-art img { width: 100%; height: 100%; object-fit: cover; }
+.ysc-art i { font-style: normal; font-size: 30px; font-weight: 800; color: rgb(255 255 255 / 0.92); text-shadow: 0 4px 10px rgb(0 0 0 / 0.3); }
+.ysc.compact .ysc-art i { font-size: 22px; }
+.ysc-card.on .ysc-art { box-shadow: 0 0 0 2px rgb(var(--mu-rgb)), 0 10px 22px -14px rgb(var(--mu-rgb)); }
+.ysc-play { position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgb(255 255 255 / 0.94); color: #111; opacity: 0; transform: scale(0.85); transition: opacity 0.2s ease, transform 0.24s var(--mu-spring, ease); }
+.ysc-card:hover .ysc-play, .ysc-card:focus-visible .ysc-play, .ysc-card.on .ysc-play { opacity: 1; transform: none; }
+.ysc-card b { margin-top: 5px; font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ysc-card small { font-size: 11.5px; color: var(--mu-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ysc.compact .ysc-card b { font-size: 12px; }
+
+.ysc-like-wrap { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.ysc-like.on { color: #ff5a36; }
+.ysc-note { font-size: 11.5px; color: var(--mu-sub); white-space: nowrap; }
+
+/* ---- the Music page's tabs and the signed-in tab ---- */
+.mup-tabs { display: flex; gap: 6px; }
+.ysw { display: flex; flex-direction: column; gap: 10px; }
+.ysw-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ysw-zoom { display: inline-flex; align-items: center; gap: 4px; }
+.ysw-zoom small { min-width: 38px; text-align: center; color: var(--mu-sub); font-size: 12px; }
+.ysw-now { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--mu-sub); font-size: 12.5px; }
+.ysw-box { position: relative; display: grid; place-items: center; height: calc(100vh - 190px); min-height: 360px; border-radius: 14px; overflow: hidden; background: #121212; border: 1px solid var(--mu-line); color: var(--mu-sub); }
+.ysw-intro { max-width: 720px; }
+.ysw-intro p, .ysw-intro li { color: var(--mu-sub); line-height: 1.5; font-size: 13.5px; }
+.ysw-intro ul { margin: 8px 0 14px; padding-left: 18px; }
+.ysw-signin { align-self: flex-start; width: auto; height: 40px; padding: 0 18px; background: #ff5500; color: #fff; }

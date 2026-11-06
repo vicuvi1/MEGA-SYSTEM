@@ -15,6 +15,7 @@ import { PLACEMENT_LABEL, PLACEMENTS } from './islandWin'
 import { PROFILE_IDS, PROFILE_LABEL } from '../core/islandControlPrefs'
 import { createBackups } from './backups'
 import { createVault } from './vault'
+import { createScWeb } from './scWeb'
 import { createPc } from './pc'
 import { registerPcExtras } from './pc/index'
 import { registerSysmon } from './sysmon/index'
@@ -323,6 +324,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   await registerPcExtras({ dir, win, origin }).catch(() => {})
   // Island pages: System (CPU, memory, apps…) and AI usage (off until switched on).
   await registerSysmon({ dir, origin }).catch(() => {})
+  // "Sign in to SoundCloud": its own isolated view (off until you sign in; nothing loads before).
+  createScWeb({ dir, origin, appWindow: win })
   // Automation hub: local webhooks / n8n (safeStorage), scripts, workspaces, sensors (only those in use).
   await registerAutomations({ dir, win, origin }).catch(() => {})
   eyes.attach(win, () => refreshTray(), () => pc.prefs().goalWords ?? [])

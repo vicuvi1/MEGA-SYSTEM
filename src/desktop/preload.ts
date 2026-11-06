@@ -125,6 +125,13 @@ const api: DesktopApi = {
   meetings: meetPreload(ipcRenderer),
   // Voice: the PC locked / idle (the mic closes), and the media keys.
   onVoicePower: (cb) => void ipcRenderer.on('voice:power', (_e, s) => cb({ locked: !!s?.locked, idleSec: Number(s?.idleSec) || 0 })),
-  voiceMedia: (key) => ipcRenderer.invoke('voice:media', String(key))
+  voiceMedia: (key) => ipcRenderer.invoke('voice:media', String(key)),
+  // "Sign in to SoundCloud": its own isolated view in the main process (one channel), and what it plays.
+  scweb: (op, arg) => ipcRenderer.invoke('scweb', String(op), arg),
+  onScWeb: (cb) => {
+    const f = (_e: unknown, s: unknown) => cb(s)
+    ipcRenderer.on('scweb:state', f)
+    return () => void ipcRenderer.removeListener('scweb:state', f)
+  }
 }
 contextBridge.exposeInMainWorld('desktop', api)
