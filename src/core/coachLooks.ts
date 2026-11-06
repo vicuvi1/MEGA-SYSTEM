@@ -55,3 +55,24 @@ export function benStatus(x: { busy: boolean; streaming: boolean; step?: string 
   const part = h < 5 ? 'Up late with you' : h < 11 ? 'Planning your morning' : h < 17 ? 'Watching your afternoon' : h < 22 ? 'Planning your evening' : 'Winding down with you'
   return { text: part, live: false }
 }
+
+/**
+ * Coach UI v3: a step as "what Ben is doing right now" ("Read your calendar"
+ * → "Checking your calendar"), for the thinking line in the chat.
+ */
+export function doingNow(step: string | null | undefined): string {
+  const s = (step ?? '').replace(/…$/, '').trim()
+  if (!s) return 'Thinking'
+  const rules: [RegExp, string][] = [
+    [/^Read (?:all )?your calendar$/i, 'Checking your calendar'],
+    [/^Read (?:all )?your Todoist$/i, 'Going through your Todoist'],
+    [/^Looked up (.+)$/i, 'Looking up $1'],
+    [/^Searched (.+)$/i, 'Searching $1'],
+    [/^Checked (.+)$/i, 'Checking $1'],
+    [/^Asked (.+)$/i, 'Asking $1'],
+    [/^Read (.+)$/i, 'Reading $1'],
+    [/^Answered from your data$/i, 'Writing it up']
+  ]
+  for (const [re, to] of rules) if (re.test(s)) return s.replace(re, to)
+  return s
+}

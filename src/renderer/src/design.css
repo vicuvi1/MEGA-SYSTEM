@@ -880,6 +880,16 @@
 /* ===== Coach Phase 2: premium chat ===== */
 .cx-rich b { font-weight: 700; color: var(--text); }
 .cx-msg-me .cx-rich b { color: inherit; }
+/* Coach UI v3: Ben's little markdown (core/richText.ts) */
+.cx-rich .rx-p { display: block; }
+.cx-rich .rx-p + .rx-p, .cx-rich .rx-p + .rx-list, .cx-rich .rx-list + .rx-p, .cx-rich .rx-list + .rx-list { margin-top: 0.7em; }
+.cx-rich .rx-list { display: grid; gap: 0.3em; }
+.cx-rich .rx-li { display: block; position: relative; padding-left: 1.35em; }
+.cx-rich .rx-ul > .rx-li::before { content: ''; position: absolute; left: 0.4em; top: 0.66em; width: 0.36em; height: 0.36em; border-radius: 50%; background: var(--accent); }
+.cx-rich .rx-ol > .rx-li::before { content: attr(data-n); position: absolute; left: 0; color: var(--muted); font-weight: 650; font-variant-numeric: tabular-nums; }
+.cx-rich .rx-b { font-weight: 700; color: var(--text); }
+.cx-rich .rx-i { font-style: italic; }
+.cx-rich .rx-code { font-family: var(--mono, ui-monospace, monospace); font-size: 0.88em; padding: 0.1em 0.4em; border-radius: 6px; background: rgb(var(--ink) / 0.08); }
 .cx-rich mark { background: color-mix(in srgb, var(--accent) 40%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 .cx-caret { display: inline-block; width: 7px; height: 14px; margin-left: 2px; vertical-align: -2px; background: var(--accent); border-radius: 2px; animation: co-blink 0.9s infinite; }
 .cx-actions { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }

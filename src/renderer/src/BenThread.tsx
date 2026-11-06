@@ -8,6 +8,7 @@ import type { CoachStatus } from './web/coachStatus'
 import { readDo } from '@core/coachButtons'
 import type { NudgeInfo, NudgeKind } from '@core/chatFeed'
 import { CoachPlan } from './CoachPlan'
+import { parseRich, type Inline } from '@core/richText'
 
 /** One chat message (the Coach page's log entry). */
 export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string }
@@ -19,29 +20,59 @@ const NUM = /(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\
 /** CL5: at most `maxBold` numbers in bold (the ones that matter come first). */
 /** AF13: the text is split and bolded once; a new reply reveals word by word
  *  with a CSS stagger (opacity only), so typing costs no re-renders. */
+/** Coach UI v3: a little markdown too (bold, italic, code, lists: core/richText). */
 export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity }: { text: string; reveal?: boolean; highlight?: string; maxBold?: number }) {
   const animate = reveal && !(typeof window === 'undefined' || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
   const h = highlight.trim().toLowerCase()
   const { nodes, words } = useMemo(() => {
     let w = 0
-    const word = (str: string, key: string): ReactNode[] =>
+    let bold = 0
+    let key = 0
+    const word = (str: string): ReactNode[] =>
       animate
-        ? str.split(/(\s+)/).map((t, j) => (!t || /^\s+$/.test(t) ? t : <span key={`${key}.${j}`} className="cx-w" style={{ ['--i' as string]: w++ }}>{t}</span>))
+        ? str.split(/(\s+)/).map((t) => (!t || /^\s+$/.test(t) ? t : <span key={key++} className="cx-w" style={{ ['--i' as string]: w++ }}>{t}</span>))
         : [str]
-    const parts = text.split(NUM)
-    const out = parts.map((p, i) => {
-      const hit = h && p.toLowerCase().includes(h)
-      if (i % 2 === 1 && (i - 1) / 2 < maxBold) return <b key={i} className={`${hit ? 'hit' : ''}${animate ? ' cx-w' : ''}`} style={animate ? { ['--i' as string]: w++ } : undefined}>{p}</b>
-      if (!hit) return <Fragment key={i}>{word(p, String(i))}</Fragment>
-      const k = p.toLowerCase().indexOf(h)
-      return (
-        <span key={i}>
-          {p.slice(0, k)}
-          <mark>{p.slice(k, k + h.length)}</mark>
-          {p.slice(k + h.length)}
-        </span>
+    const plain = (str: string): ReactNode[] =>
+      str.split(NUM).map((p, i) => {
+        if (!p) return null
+        const hit = h && p.toLowerCase().includes(h)
+        if (i % 2 === 1 && bold < maxBold) {
+          bold++
+          return <b key={key++} className={`${hit ? 'hit' : ''}${animate ? ' cx-w' : ''}`} style={animate ? { ['--i' as string]: w++ } : undefined}>{p}</b>
+        }
+        if (!hit) return <Fragment key={key++}>{word(p)}</Fragment>
+        const k = p.toLowerCase().indexOf(h)
+        return (
+          <span key={key++}>
+            {p.slice(0, k)}
+            <mark>{p.slice(k, k + h.length)}</mark>
+            {p.slice(k + h.length)}
+          </span>
+        )
+      })
+    const inline = (line: Inline[]): ReactNode[] =>
+      line.map((x) =>
+        x.k === 'text' ? <Fragment key={key++}>{plain(x.s)}</Fragment> : x.k === 'b' ? <strong key={key++} className="rx-b">{word(x.s)}</strong> : x.k === 'i' ? <em key={key++} className="rx-i">{word(x.s)}</em> : <code key={key++} className="rx-code">{x.s}</code>
       )
-    })
+    const lines = (ls: Inline[][]): ReactNode[] => ls.map((l, i) => <Fragment key={key++}>{i > 0 && <br />}{inline(l)}</Fragment>)
+    const blocks = parseRich(text)
+    // One paragraph stays inline, so short lines sit anywhere a plain text did.
+    const out: ReactNode =
+      blocks.length === 1 && blocks[0].k === 'p'
+        ? lines(blocks[0].lines)
+        : blocks.map((b) =>
+            b.k === 'p' ? (
+              <span key={key++} className="rx-p">{lines(b.lines)}</span>
+            ) : (
+              <span key={key++} className={`rx-list rx-${b.k}`} role="list">
+                {b.items.map((it, k) => (
+                  <span key={key++} className="rx-li" role="listitem" data-n={b.k === 'ol' ? `${(b.start ?? 1) + k}.` : undefined}>
+                    {inline(it)}
+                  </span>
+                ))}
+              </span>
+            )
+          )
     return { nodes: out, words: w }
   }, [text, h, maxBold, animate])
   // ~1.2 s for a whole reply, 12–40 ms between words.

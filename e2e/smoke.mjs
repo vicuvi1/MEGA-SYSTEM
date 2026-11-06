@@ -111,6 +111,26 @@ try {
     await pg.fill('.cf-input textarea', '/wa')
     if (!(await pg.$('.cf-slash'))) throw new Error('no / shortcuts')
     await pg.fill('.cf-input textarea', '')
+    // Coach UI v3: Ben's face once per group, results with Undo, the plan card, ↑ edits.
+    await pg.waitForSelector('.cf-plan.live .cf-plan-list li', { timeout: 10000 })
+    if (!(await pg.$('.cf-plan.live .cf-plan-track .bar i'))) throw new Error('no timeline on the plan card')
+    if (!(await pg.locator('.cf-plan.live .cf-btns button', { hasText: 'Approve' }).count())) throw new Error('no Approve on the plan card')
+    if (!(await pg.$('.cf-result button'))) throw new Error('no result card with Undo')
+    if (!(await pg.$('.cf-daycard'))) throw new Error('no day card')
+    if (!(await pg.$('.cf-row.ben.first .cf-who-line'))) throw new Error("no name line at the start of Ben's messages")
+    if (await pg.$('.cf-row.ben.grouped .cf-mark:not(.ghost)')) throw new Error("Ben's face repeats inside a group")
+    await pg.evaluate(() => document.querySelector('.cf-stream')?.scrollTo({ top: 0 }))
+    await pg.locator('.cf-now button', { hasText: 'See the plan' }).click()
+    await pg.waitForFunction(() => {
+      const cards = document.querySelectorAll('.cf-col .cf-plan.live')
+      const r = cards[cards.length - 1]?.getBoundingClientRect()
+      return !!r && r.bottom > 0 && r.top < window.innerHeight
+    }, null, { timeout: 5000 })
+    await pg.click('.cf-input textarea')
+    await pg.keyboard.press('ArrowUp')
+    if (!/Rename Deep block 1/.test(await pg.inputValue('.cf-input textarea'))) throw new Error('↑ did not bring back the last message')
+    await pg.keyboard.press('Escape')
+    if (await pg.inputValue('.cf-input textarea')) throw new Error('Escape did not clear the edit')
   })
   await step('Settings: every section opens with content', async () => {
     await open('settings')

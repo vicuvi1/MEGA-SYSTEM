@@ -5,7 +5,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { life } from './bridge'
 import { useAction } from './ui'
-import { CoachPlan } from './CoachPlan'
+import { BlockCard, PlanCard } from './CoachCards'
 import { Rich, type Entry } from './BenThread'
 import type { CoachStatus } from './web/coachStatus'
 import type { DeskView } from './web/benDesk'
@@ -15,6 +15,8 @@ import { tidyText, type FeedItem, type NudgeInfo, type NudgeKind } from '@core/c
 import { barFill } from './motionKit'
 import { BenAvatar, type Presence } from './BenAvatar'
 import { createPortal } from 'react-dom'
+import { doingNow } from '@core/coachLooks'
+import { plainRich } from '@core/richText'
 
 const hm = (iso: string | number) => new Date(iso).toTimeString().slice(0, 5)
 
@@ -22,7 +24,7 @@ const hm = (iso: string | number) => new Date(iso).toTimeString().slice(0, 5)
 export function BenMark({ ghost = false, big = false, state }: { ghost?: boolean; big?: boolean; state?: Presence }) {
   return (
     <span className={`cf-mark ${ghost ? 'ghost' : ''} ${big ? 'big' : ''}`} aria-hidden>
-      {!ghost && <BenAvatar size={big ? 44 : 34} state={state} ring={!!state && state !== 'idle'} />}
+      {!ghost && <BenAvatar size={big ? 44 : 32} state={state} ring={!!state && state !== 'idle'} />}
     </span>
   )
 }
@@ -44,29 +46,52 @@ export function Meta({ m, label }: { m: Entry; label?: string }) {
 
 const KIND_LABEL: Record<NudgeKind, string> = { plan: 'Plan', water: 'Water', block: 'Focus block', calendar: 'Calendar', mood: 'Check-in', idle: 'Nudge', slip: 'Nudge', reminder: 'Reminder', other: 'From Ben' }
 
-/** CC5: things Ben logged, as short lines with Undo. */
+const LEAD_ICON = /^(\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*)\s*/u
+
+/** One result line: its emoji as the icon, "A → B" with a real arrow. */
+function ResultText({ text }: { text: string }) {
+  const parts = text.split(/\s(?:→|->)\s/)
+  return (
+    <span className="tx">
+      {parts.map((p, k) => (
+        <span key={k}>
+          {k > 0 && <i className="arr">→</i>}
+          {k > 0 ? <b>{p}</b> : p}
+        </span>
+      ))}
+    </span>
+  )
+}
+
+/** CC5 + Coach UI v3: what Ben did, as small result cards with Undo (not talk). */
 export function Receipts({ m, onUndo }: { m: Entry; onUndo: (index?: number) => void }) {
   if (!m.done?.length) return null
   const open = (m.undo ?? []).filter((op, k) => op && !m.undone?.[k]).length
   return (
-    <ul className="cf-receipts">
+    <ul className="cf-results" aria-label="What Ben did">
       {m.done.map((d, k) => {
         const can = !!m.undo?.[k] && !m.undone?.[k]
+        const warn = d.startsWith('⚠️')
+        const lead = LEAD_ICON.exec(d)
+        const text = lead ? d.slice(lead[0].length) : d
         return (
-          <li key={k} className={`${m.undone?.[k] ? 'undone' : ''} ${d.startsWith('⚠️') ? 'warn' : ''}`}>
-            <span>{d}</span>
+          <li key={k} className={`cf-result ${m.undone?.[k] ? 'undone' : ''} ${warn ? 'warn' : ''}`} style={{ '--k': k } as CSSProperties}>
+            <span className="badge" aria-hidden>
+              {warn ? '!' : lead?.[1] ?? '✓'}
+            </span>
+            <ResultText text={text} />
             {can && (
               <button onClick={() => onUndo(k)} title="Take this back">
-                Undo
+                ↶ Undo
               </button>
             )}
-            {m.undone?.[k] && <em>undone</em>}
+            {m.undone?.[k] && <em>Undone</em>}
           </li>
         )
       })}
       {m.done.length > 1 && open > 1 && (
-        <li className="all">
-          <button onClick={() => onUndo()}>Undo all {open}</button>
+        <li className="cf-result all">
+          <button onClick={() => onUndo()}>↶ Undo all {open}</button>
         </li>
       )}
     </ul>
@@ -154,9 +179,12 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
           <p className="cf-quiet">{st === 'approved' && today ? 'Blocks are in your calendar and the must-dos are on Today.' : <Rich text={t.text.split('\n')[0]} maxBold={1} />}</p>
         </Card>
       )
+    if (st === 'proposed') return <PlanCard onChange={onChange} />
     return (
       <Card tone="plan" icon="🗓" title="Today's plan" note={remindedNote(repeats)}>
-        {st === 'proposed' ? <CoachPlan onChange={onChange} oneApprove hideReview /> : <p className="cf-text"><Rich text={t.text} maxBold={2} /></p>}
+        <p className="cf-text">
+          <Rich text={t.text} maxBold={2} />
+        </p>
       </Card>
     )
   }
@@ -199,47 +227,13 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
   }
 
   if (kind === 'block') {
-    const left = minutesTo(info.time, now)
     if (settled || !today)
       return (
         <Card tone="block" icon="🎯" title={info.title ?? 'Focus block'} settled>
           <p className="cf-quiet">{info.time ? `Was at ${info.time}` : 'Time has passed'}{(status?.today.focusMin ?? 0) > 0 ? ` · ${status!.today.focusMin} min of focus today` : ''}</p>
         </Card>
       )
-    const subject = (info.title ?? 'Focus').replace(/\(.*?\)/g, '').trim().slice(0, 28)
-    const start = async () => {
-      if (await act(() => life.focus.start(subject, info.minutes ?? 25, null), `Focus started: ${subject}`)) {
-        setDone('Timer running')
-        onChange()
-      }
-    }
-    return (
-      <Card tone="block" icon="🎯" title={info.title ?? 'Focus block'} note={left != null ? (left > 0 ? `in ${left} min` : 'now') : undefined}>
-        <div className="cf-when">
-          <Ring value={left != null && left > 0 ? 1 - Math.min(60, left) / 60 : 1} size={46} tone="block">
-            {left != null && left > 0 ? `${left}m` : 'Now'}
-          </Ring>
-          <p className="cf-quiet">
-            {info.time ? <b>{info.time}</b> : null}
-            {info.time && info.minutes ? ' · ' : ''}
-            {info.minutes ? `${info.minutes} min of focus` : ''}
-            <br />
-            <span>{left != null && left > 0 ? 'Get ready: water, phone away.' : 'Starts now. One tap and go.'}</span>
-          </p>
-        </div>
-        {done ? (
-          <small className="cf-done">✓ {done}</small>
-        ) : (
-          <div className="cf-btns">
-            <button className="p" onClick={() => void start()}>
-              Start the timer
-            </button>
-            <button onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'calendar' }))}>Move</button>
-            <button onClick={() => setDone('Skipped for now')}>Skip</button>
-          </div>
-        )}
-      </Card>
-    )
+    return <BlockCard title={info.title ?? 'Focus block'} time={info.time} minutes={info.minutes} note={repeats > 0 ? remindedNote(repeats) : undefined} onChange={onChange} />
   }
 
   if (kind === 'calendar') {
@@ -307,7 +301,8 @@ export const kindLabel = (k: NudgeKind) => KIND_LABEL[k]
 /** CN2: the one next thing, right above the message box. */
 export function NowCard({ status, busy, onDo, onNotYet }: { status: CoachStatus; busy: boolean; onDo: () => void; onNotYet: () => void }) {
   const mv = status.move
-  const label: Record<string, string> = { focus: 'Start', running: 'Stop & log', approve: 'Approve', plan: 'Plan it', answer: 'Done', ask: 'Ask Ben' }
+  // Coach UI v3: "Approve" opens the plan card first; you approve what you can see.
+  const label: Record<string, string> = { focus: 'Start', running: 'Stop & log', approve: 'See the plan', plan: 'Plan it', answer: 'Done', ask: 'Ask Ben' }
   return (
     <div className={`cf-now move-${mv.kind}`} role="region" aria-label="Now" title={mv.sub}>
       <span className="k" aria-hidden>
@@ -393,34 +388,59 @@ export function SuggestChip({ text, disabled, onClick }: { text: string; disable
   )
 }
 
-/** Ben's words while they stream in: the new part fades in. */
+/**
+ * Ben's words while they stream in: finished lines already look like the
+ * final reply (bold, lists), the line being written fades in word by word,
+ * with a soft caret at the end.
+ */
 export function StreamText({ text }: { text: string }) {
   const shown = useRef(0)
   const cut = Math.min(shown.current, text.length)
   useEffect(() => {
     shown.current = text.length
   }, [text])
+  const nl = text.lastIndexOf('\n')
+  const done = nl >= 0 ? text.slice(0, nl) : ''
+  const line = nl >= 0 ? text.slice(nl + 1) : text
+  const lineCut = Math.max(0, cut - (nl + 1))
   return (
     <span className="cf-streamtx">
-      {text.slice(0, cut)}
+      {done && <Rich text={done} />}
+      {done && <br />}
+      <span>{plainRich(line.slice(0, lineCut))}</span>
       <span key={cut} className="cf-fresh">
-        {text.slice(cut)}
+        {plainRich(line.slice(lineCut))}
       </span>
-      <i className="cx-caret" />
+      <i className="cf-caret" aria-hidden />
     </span>
   )
 }
 
-/** Three dots that bounce while Ben thinks, with what he is doing now. */
-export function TypingBubble({ step }: { step?: string }) {
+/** Ben is thinking: what he is doing now (shimmering), the steps he finished above it. */
+export function TypingBubble({ step, steps = [] }: { step?: string; steps?: string[] }) {
+  const past = steps.slice(0, -1).filter((x) => !/^Reading your day$/.test(x)).slice(-3)
   return (
-    <div className="cf-bubble ben tail cf-typing" aria-live="polite" aria-label="Ben is typing">
-      <span className="cf-dots" aria-hidden>
-        <i />
-        <i />
-        <i />
-      </span>
-      {step && <span className="cf-step">{step}…</span>}
+    <div className="cf-think" aria-live="polite" aria-label={`Ben is ${doingNow(step).toLowerCase()}`}>
+      {past.length > 0 && (
+        <ul className="cf-think-done">
+          {past.map((x) => (
+            <li key={x}>
+              <i aria-hidden>✓</i>
+              {x}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className="cf-think-now">
+        <span className="cf-orbs" aria-hidden>
+          <i />
+          <i />
+          <i />
+        </span>
+        <span className="cf-shimmer" key={step ?? ''}>
+          {doingNow(step)}…
+        </span>
+      </div>
     </div>
   )
 }

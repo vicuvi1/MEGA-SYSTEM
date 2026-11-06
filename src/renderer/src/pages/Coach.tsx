@@ -23,6 +23,9 @@ import { BenMark, FoldLine, Meta, NowCard, NudgeCard, Receipts } from '../CoachF
 import { Bubble, CoachAmbient, GlyphIcon, Ring, StreamText, SuggestChip, TypingBubble } from '../CoachFeed'
 import { BenAvatar, MeAvatar, avatarFromFile, useCoachLooks, type Presence } from '../BenAvatar'
 import { CoachSide } from '../CoachSide'
+import { PlanCard, ShowCards, cardKind } from '../CoachCards'
+import { play } from '../soundKit'
+import { reducedMotion } from '../motionKit'
 import { useToastDock } from '../coachToastDock'
 import { benStatus } from '@core/coachLooks'
 import { buildFeed, momentChips, readSlash, SLASH, type Filter } from '@core/chatFeed'
@@ -92,6 +95,17 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     }
   }, [])
   const [listening, setListening] = useState(false)
+  // Coach UI v3: the plan card opened from "Now: Approve" (when no reply shows it yet).
+  const [planSpot, setPlanSpot] = useState(false)
+  // ↑ in an empty box brings back your last message to edit and send again.
+  const [editingLast, setEditingLast] = useState(false)
+  const boxRef = useRef<HTMLTextAreaElement>(null)
+  const grow = (el: HTMLTextAreaElement | null) => {
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(240, el.scrollHeight)}px`
+  }
+  useEffect(() => grow(boxRef.current), [text])
   const fileRef = useRef<HTMLInputElement>(null)
   const undoLine = async (m: Entry, index?: number) => {
     if (!life.coach?.undo) return
@@ -266,8 +280,14 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     const el = streamRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
     let stuck = true
+    let lastTop = el.scrollTop
     const onScroll = () => {
-      stuck = el.scrollHeight - el.scrollTop - el.clientHeight < 140
+      const near = el.scrollHeight - el.scrollTop - el.clientHeight < 140
+      // Only scrolling UP lets go of the bottom: cards that load in (the plan,
+      // the tasks) make the page taller mid-scroll and must not unstick it.
+      if (near) stuck = true
+      else if (el.scrollTop < lastTop - 4) stuck = false
+      lastTop = el.scrollTop
       stuckRef.current = stuck
       if (stuck) setUnseen(0)
     }
@@ -306,6 +326,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     const t = q && base ? `About your message "${q.text.replace(/\s+/g, ' ').slice(0, 120)}": ${base}` : base
     const pic = photo
     if ((!t && !pic) || busy || !life.coach) return
+    setEditingLast(false)
+    play('click')
     setText('')
     setPhoto(null)
     setBusy(true)
@@ -331,6 +353,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
         }
       )
       readAloud.end(r.reply)
+      play('tick')
       setLog((l) => [...(l ?? []).filter((x) => !x.pending), { role: 'coach', bot: 'mega', via: 'app', text: r.reply, done: r.done, mood: r.mood, at: r.at ?? new Date().toISOString(), undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, fresh: !streamed, steps: seen.filter((x) => !/^Reading your day$/.test(x)) }])
       // One face for Ben (K6): the header shows the mood of his latest reply.
       if (r.mood && MOOD_FACE[r.mood as Mood]) setStatus((s) => (s ? { ...s, mood: r.mood as any, face: MOOD_FACE[r.mood as Mood] } : s))
@@ -365,7 +388,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     } else if (m.kind === 'running') {
       if (await act(() => life.focus.stop(), 'Logged')) loadStatus()
     } else if (m.kind === 'approve') {
-      if (await act(() => life.coach!.rhythm!('approve'), 'Approved: blocks in your calendar, must-dos on Today')) loadStatus()
+      focusPlan()
     } else if (m.kind === 'plan') {
       setBusy(true)
       await act(() => life.coach!.rhythm!('propose'), 'Your plan is ready: see Plan')
@@ -377,6 +400,21 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     else void send(m.kind === 'ask' && new Date().getHours() >= 21 ? 'How did today go? Review my day.' : 'What should I do right now? One thing.')
   }
   const face = status?.face ?? '✦'
+  // Coach UI v3: scroll to the live plan card (or open one at the bottom) and make it glow once.
+  const focusPlan = () => {
+    const smooth: ScrollBehavior = reducedMotion() ? 'auto' : 'smooth'
+    const cards = document.querySelectorAll<HTMLElement>('.cf-col .cf-plan.live')
+    const el = cards[cards.length - 1]
+    if (el) {
+      el.scrollIntoView({ behavior: smooth, block: 'center' })
+      el.classList.remove('flash')
+      void el.offsetWidth
+      el.classList.add('flash')
+      return
+    }
+    setPlanSpot(true)
+    setTimeout(() => document.querySelector('.cf-plan.spot')?.scrollIntoView({ behavior: smooth, block: 'center' }), 120)
+  }
   // U10: search hits (indexes in the log), newest first.
   const hits = query?.trim() ? (log ?? []).map((m, k) => (m.text.toLowerCase().includes(query.trim().toLowerCase()) ? k : -1)).filter((k) => k >= 0).reverse() : []
   const jump = (n: number) => {
@@ -411,6 +449,9 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     return null
   })()
   const lastEntry = lastReply >= 0 ? log![lastReply] : null
+  // Coach UI v3: the newest card of each kind is the live one; older ones settle.
+  const liveCard: Record<string, number> = {}
+  ;(log ?? []).forEach((x, k) => x.role === 'coach' && x.show?.forEach((w) => cardKind(w) && (liveCard[cardKind(w)!] = k)))
   const chips = momentChips({
     hour: new Date().getHours(),
     planStatus: status?.plan.status ?? 'none',
@@ -621,7 +662,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                   if (label === 'Should I buy it?') {
                     setExtras(false)
                     setText('Should I buy ')
-                    setTimeout(() => (document.querySelector('.cx-composer textarea') as HTMLTextAreaElement | null)?.focus(), 30)
+                    setTimeout(() => boxRef.current?.focus(), 30)
                     return
                   }
                   setTab(t)
@@ -681,12 +722,13 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 const i = it.i
                 const m = log[i]
                 const flash = hits[hit] === i && query?.trim() ? 'flash' : ''
+                const firstOfGroup = !it.grouped
+                const reply = () => (setQuote(m), setTimeout(() => boxRef.current?.focus(), 30))
                 const replyBtn = !m.pending && (
-                  <button className="cf-reply" onClick={() => (setQuote(m), setTimeout(() => (document.querySelector('.cx-composer textarea') as HTMLTextAreaElement | null)?.focus(), 30))} title="Reply to this message">
+                  <button className="cf-reply" onClick={reply} title="Reply to this message">
                     ↩ Reply
                   </button>
                 )
-                const reply = () => (setQuote(m), setTimeout(() => (document.querySelector('.cx-composer textarea') as HTMLTextAreaElement | null)?.focus(), 30))
                 if (m.role === 'me')
                   return (
                     <div key={it.key} id={`cx-m${i}`} className={`cf-row me ${it.grouped ? 'grouped' : ''} ${lastOfGroup ? 'last' : ''} ${flash}`}>
@@ -696,7 +738,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                           {m.photo && <img className="cx-photo" src={m.photo} alt="Your photo" />}
                           <Rich text={m.text} highlight={query ?? ''} />
                         </Bubble>
-                        {lastOfGroup ? <MeAvatar size={30} onPick={() => meFile.current?.click()} /> : <span className="cf-me-gap" />}
+                        {firstOfGroup ? <MeAvatar size={26} onPick={() => meFile.current?.click()} /> : <span className="cf-me-gap" />}
                       </div>
                       {m.failed ? (
                         <span className="cx-failed" title={m.failed}>
@@ -718,39 +760,51 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                       )}
                     </div>
                   )
+                // Ben: his face and name only at the start of a group, then clean text.
+                const who = firstOfGroup && (
+                  <div className="cf-who-line">
+                    <b>Ben</b>
+                    <Meta m={m} />
+                  </div>
+                )
                 if (it.kind !== 'talk')
                   return (
-                    <div key={it.key} id={`cx-m${i}`} className={`cf-row ben nudge ${it.grouped ? 'grouped' : ''} ${lastOfGroup ? 'last' : ''} ${flash}`}>
-                      <BenMark ghost={!lastOfGroup} />
+                    <div key={it.key} id={`cx-m${i}`} className={`cf-row ben nudge ${it.grouped ? 'grouped' : 'first'} ${lastOfGroup ? 'last' : ''} ${flash}`}>
+                      <BenMark ghost={!firstOfGroup} />
                       <div className="cf-ben">
+                        {who}
                         <NudgeCard m={m} kind={it.kind} info={it.info} repeats={it.repeats} settled={it.settled} latest={latestOf[it.kind] === i} status={status} deck={deck} onChange={() => (loadStatus(), onWallet())} />
                         <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
                         <div className="cf-foot">
-                          <Meta m={m} />
+                          {!firstOfGroup && <Meta m={m} />}
                           {replyBtn}
                         </div>
                       </div>
                     </div>
                   )
+                const cards = (m.show ?? []).filter((w) => cardKind(w))
+                const widgets = (m.show ?? []).filter((w) => !cardKind(w))
                 return (
-                  <div key={it.key} id={`cx-m${i}`} className={`cf-row ben ${it.grouped ? 'grouped' : ''} ${lastOfGroup || m.pending ? 'last' : ''} ${flash}`}>
-                    {m.pending ? <BenMark state={presence} /> : <BenMark ghost={!lastOfGroup} />}
+                  <div key={it.key} id={`cx-m${i}`} className={`cf-row ben ${it.grouped && !m.pending ? 'grouped' : 'first'} ${lastOfGroup || m.pending ? 'last' : ''} ${flash}`}>
+                    {m.pending ? <BenMark state={presence} /> : <BenMark ghost={!firstOfGroup} />}
                     <div className={`cf-ben ${m.pending ? 'pending' : ''}`}>
                       {m.pending ? (
-                        // CM6: typing, with one short line about what Ben is doing; then his words stream in.
-                        <div className="cf-thinking">
+                        // CM6: what Ben is doing ("Checking your calendar…"); then his words stream in.
+                        <>
+                          <div className="cf-who-line">
+                            <b>Ben</b>
+                          </div>
                           {m.streamed && m.text ? (
-                            <Bubble m={m} tail>
-                              <div className="cf-text">
-                                <StreamText text={m.text} />
-                              </div>
-                            </Bubble>
+                            <div className="cf-text cf-streaming">
+                              <StreamText text={m.text} />
+                            </div>
                           ) : (
-                            <TypingBubble step={m.steps?.length ? m.steps[m.steps.length - 1] : undefined} />
+                            <TypingBubble step={m.steps?.length ? m.steps[m.steps.length - 1] : undefined} steps={m.steps} />
                           )}
-                        </div>
+                        </>
                       ) : (
                         <>
+                          {who}
                           {m.photo && <img className="cx-photo" src={m.photo} alt="" />}
                           <Bubble m={m} tail={lastOfGroup} onReply={reply} onUndo={() => void undoLine(m)}>
                             <div className="cf-text">
@@ -758,9 +812,10 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                             </div>
                           </Bubble>
                           <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
-                          {(!!m.buttons?.length || !!m.show?.length) && <ReplyExtras m={m} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
+                          {cards.length > 0 && <ShowCards show={cards} live={(k) => liveCard[k] === i} status={status} onChange={() => (loadStatus(), onWallet())} onOpenPlan={focusPlan} />}
+                          {(!!m.buttons?.length || !!widgets.length) && <ReplyExtras m={{ ...m, show: widgets }} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
                           <div className="cf-foot">
-                            {lastOfGroup && <Meta m={m} />}
+                            {!firstOfGroup && <Meta m={m} />}
                             {!!m.steps?.length && (
                               <details className="cf-steps">
                                 <summary>
@@ -782,6 +837,20 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                   </div>
                 )
               })}
+            {planSpot && (
+              <div className="cf-row ben first last cf-spot">
+                <BenMark />
+                <div className="cf-ben">
+                  <div className="cf-who-line">
+                    <b>Ben</b>
+                  </div>
+                  <div className="cf-text">Here is today&apos;s plan. Look it over, then approve it or tell me what to change.</div>
+                  <div className="cf-cards">
+                    <PlanCard live spotlight onChange={() => (loadStatus(), onWallet())} />
+                  </div>
+                </div>
+              </div>
+            )}
             <div ref={end} />
           </div>
         </div>
@@ -803,7 +872,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             <ul className="cf-slash" role="listbox" aria-label="Shortcuts">
               {slashHits.map((x) => (
                 <li key={x.cmd}>
-                  <button type="button" onClick={() => (setText(`${x.cmd} `), (document.querySelector('.cx-composer textarea') as HTMLTextAreaElement | null)?.focus())}>
+                  <button type="button" onClick={() => (setText(`${x.cmd} `), boxRef.current?.focus())}>
                     <b>{x.cmd}</b> {x.hint}
                   </button>
                 </li>
@@ -827,25 +896,31 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 </button>
               </div>
             )}
-            <div className="cf-input">
-              {photo && (
+            {editingLast && (
+              <div className="cf-quote edit">
+                <span>Editing your last message · Enter sends it again</span>
+                <button type="button" onClick={() => (setEditingLast(false), setText(''))} aria-label="Stop editing">
+                  ✕
+                </button>
+              </div>
+            )}
+            {photo && (
+              <div className="cf-attachments">
                 <span className="cx-attach">
                   <img src={photo.url} alt="" />
                   <button type="button" onClick={() => setPhoto(null)} aria-label="Remove photo">
                     ✕
                   </button>
                 </span>
-              )}
-              <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0]).then(() => (e.target.value = ''))} />
-              <button type="button" className="cx-tool" onClick={() => fileRef.current?.click()} aria-label="Send a photo" title="Photo (a receipt, a meal…)">
-                <Icon name="plus" />
-              </button>
+              </div>
+            )}
+            <div className="cf-input">
               <textarea
+                ref={boxRef}
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value)
-                  e.target.style.height = 'auto'
-                  e.target.style.height = `${Math.min(200, e.target.scrollHeight)}px`
+                  grow(e.target)
                 }}
                 placeholder={listening ? 'Listening…' : typeof window !== 'undefined' && window.innerWidth < 600 ? 'Message Ben…' : 'Message Ben…  (type / for shortcuts)'}
                 rows={1}
@@ -854,28 +929,53 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 onBlur={() => setTyping(false)}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape' && quote) setQuote(null)
+                  if (e.key === 'Escape' && editingLast) (setEditingLast(false), setText(''))
                   if (e.key === 'Tab' && slashHits.length) {
                     e.preventDefault()
                     setText(`${slashHits[0].cmd} `)
                   }
-                  if (e.key === 'Enter' && !e.shiftKey) {
+                  // ↑ in an empty box: your last message comes back to edit.
+                  if (e.key === 'ArrowUp' && !text && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+                    const last = [...(log ?? [])].reverse().find((x) => x.role === 'me' && x.text)
+                    if (last) {
+                      e.preventDefault()
+                      setText(last.text)
+                      setEditingLast(true)
+                      requestAnimationFrame(() => {
+                        const el = boxRef.current
+                        if (el) el.selectionStart = el.selectionEnd = el.value.length
+                      })
+                    }
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
                     e.preventDefault()
                     void send()
                   }
                 }}
               />
-              {/* JV7: push-to-talk (sends when you stop) and 🔊 read-aloud. */}
-              <CoachMic base={text} disabled={busy} onListening={setListening} onText={(t, final) => (final ? void send(t) : setText(t))} />
-              <ReadAloudToggle />
-              <button className={`cf-send ${busy ? 'busy' : text.trim() || photo ? 'ready' : ''}`} disabled={busy || (!text.trim() && !photo)} aria-label="Send" title="Send (Enter) · new line: Shift+Enter">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" />
-                </svg>
-              </button>
+              <div className="cf-tools-row">
+                <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => void pickPhoto(e.target.files?.[0]).then(() => (e.target.value = ''))} />
+                <button type="button" className="cx-tool cf-attach" onClick={() => fileRef.current?.click()} aria-label="Send a photo" title="Photo (a receipt, a meal…)">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="m20.5 11.5-8.3 8.3a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.4 8.4a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6" />
+                  </svg>
+                </button>
+                <span className="cf-hint" aria-hidden>
+                  <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>↑</kbd> edit last
+                </span>
+                {/* JV7: push-to-talk (sends when you stop) and 🔊 read-aloud. */}
+                <CoachMic base={text} disabled={busy} onListening={setListening} onText={(t, final) => (final ? void send(t) : setText(t))} />
+                <ReadAloudToggle />
+                <button className={`cf-send ${busy ? 'busy' : text.trim() || photo ? 'ready' : ''}`} disabled={busy || (!text.trim() && !photo)} aria-label="Send" title="Send (Enter) · new line: Shift+Enter">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <path d="M12 19V5M5.5 11.5 12 5l6.5 6.5" />
+                  </svg>
+                </button>
+              </div>
             </div>
           </form>
         </div>
-        {status && side && <CoachSide status={status} onClose={() => setSide(false)} onOpen={(t) => (setTab(t), setInfo(true))} onWater={() => void addWater()} onFocus={() => void (status.move.kind === 'focus' || status.move.kind === 'running' ? doMove() : send('Start a 25 minute focus block on my most important task.'))} />}
+        {status && side && <CoachSide status={status} onClose={() => setSide(false)} onPlan={focusPlan} onOpen={(t) => (setTab(t), setInfo(true))} onWater={() => void addWater()} onFocus={() => void (status.move.kind === 'focus' || status.move.kind === 'running' ? doMove() : send('Start a 25 minute focus block on my most important task.'))} />}
         <input ref={meFile} type="file" accept="image/*" hidden onChange={(e) => void pickMe(e.target.files?.[0]).then(() => (e.target.value = ''))} />
       </section>
 

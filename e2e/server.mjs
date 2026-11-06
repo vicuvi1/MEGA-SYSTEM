@@ -57,9 +57,43 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
     { role: 'me', bot: 'mega', via: 'app', text: 'Just finished 20 min of reading', at: ago(3) },
     { role: 'me', bot: 'mega', via: 'app', text: 'What should I do before the block?', at: ago(3) },
     { role: 'coach', bot: 'mega', via: 'app', text: 'Good work. Reading is 20/30 min, so 10 min left for tonight.', at: ago(2), done: ['📚 Reading +20 min · 20/30 today'], undo: [{ op: 'demo' }] },
-    { role: 'coach', bot: 'mega', via: 'app', text: 'Before the block: one glass of water, phone in the other room, and open the study notes. You start in 9 min.', at: ago(2), chips: ['Start the block now', 'Log 250 ml water'] }
+    { role: 'coach', bot: 'mega', via: 'app', text: 'Before the block: one glass of water, phone in the other room, and open the study notes. You start in 9 min.', at: ago(2), chips: ['Start the block now', 'Log 250 ml water'], show: ['day'] },
+    // Coach UI v3: an action result with Undo and the plan card (`show: ['plan']`).
+    { role: 'me', bot: 'mega', via: 'app', text: 'Rename Deep block 1 to App dev and redo the rest of my day', at: ago(1) },
+    {
+      role: 'coach',
+      bot: 'mega',
+      via: 'app',
+      text: 'Done. **App dev** goes first while your head is fresh, study after lunch.\n\n- 3 blocks, the longest one first\n- Gym at the end, so you leave the desk on time\n\nLook it over and approve it.',
+      at: ago(0.5),
+      done: ['✏️ Renamed Deep block 1 → App dev', '🗓 Plan v2 ready · 3 blocks'],
+      undo: [{ op: 'demo' }, null],
+      show: ['plan'],
+      chips: ['Approve the plan', 'Make the gym later']
+    }
   ]
   db.run("INSERT INTO settings (key, value) VALUES ('coach_log', ?)", [JSON.stringify(log)])
+  // Today's made-up plan, waiting for approval: blocks around now, so the timeline shows "now".
+  const appDay = (() => {
+    const d = new Date(Date.now() - 4 * 3600e3)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
+  const nowM = new Date().getHours() * 60 + new Date().getMinutes()
+  const base = Math.min(Math.max(0, Math.floor((nowM - 50) / 15) * 15), 23 * 60 - 480)
+  const hm = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
+  const plan = {
+    day: appDay,
+    headline: 'App dev first, study after lunch, the gym to close the day',
+    mustdos: ['Ship the settings screen', 'Revise algebra chapter 4', 'Gym: legs'],
+    blocks: [
+      { title: 'App dev', start: hm(base), minutes: 100 },
+      { title: 'Study algebra', start: hm(base + 150), minutes: 90 },
+      { title: 'Read 20 pages', start: hm(base + 270), minutes: 30 }
+    ],
+    training: { time: hm(base + 360), what: 'Gym: legs' },
+    waterMl: 2700
+  }
+  db.run("INSERT INTO settings (key, value) VALUES ('coach_rhythm', ?)", [JSON.stringify({ day: appDay, water: [], briefing: { status: 'proposed', sentAt: ago(30), plan, version: 2 } })])
 }
 // Made-up Finance Helper data (Night 11 Money hub): two months of everyday
 // spending, a salary, rent, a monthly limit and two savings goals. Nothing real.

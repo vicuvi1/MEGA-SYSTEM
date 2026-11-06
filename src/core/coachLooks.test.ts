@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AVATAR_MAX_CHARS, benStatus, cleanLooks, initials, okAvatar } from './coachLooks'
+import { AVATAR_MAX_CHARS, benStatus, cleanLooks, doingNow, initials, okAvatar } from './coachLooks'
 
 describe('coach looks', () => {
   it('keeps a known look and a small photo', () => {
@@ -27,5 +27,14 @@ describe('coach looks', () => {
     expect(benStatus({ busy: false, streaming: false, running: 'Study', hour: 9 }).text).toBe('Focusing with you · Study')
     expect(benStatus({ busy: false, streaming: false, hour: 19 }).text).toBe('Planning your evening')
     expect(benStatus({ busy: false, streaming: false, hour: 2 }).text).toBe('Up late with you')
+  })
+})
+
+describe('doingNow', () => {
+  it('says what Ben is doing now', () => {
+    expect(doingNow('Read your calendar')).toBe('Checking your calendar')
+    expect(doingNow('Looked up your history')).toBe('Looking up your history')
+    expect(doingNow('Reading your day')).toBe('Reading your day')
+    expect(doingNow(undefined)).toBe('Thinking')
   })
 })
