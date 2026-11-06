@@ -24,7 +24,8 @@ describe("Ben's test harness", () => {
       'receipt from Linella: total 245.50 lei': { reply: 'Logged.', actions: ['log: groceries Linella 245.50'] },
       // BQ: the model says nothing about showing; the code still shows the plan card.
       'how can i aporve the paln if i dont see it haha': { reply: 'Here it is.', actions: [] },
-      'потратил 80 лей на такси': { reply: 'Ок.', actions: ['log: taxi 80'] }
+      'потратил 80 лей на такси': { reply: 'Ок.', actions: ['log: taxi 80'] },
+      'how am I doing on my goals': { reply: 'Algebra is behind by 2h; the rest is on track.', actions: [] }
     }
     const model = async (prompt: string) => {
       const said = /Victor's message: (.*)$/m.exec(prompt)?.[1]?.trim() ?? ''
@@ -32,6 +33,9 @@ describe("Ben's test harness", () => {
       // BQ1: the "already said" list must reach the prompt, or this stub lectures about sleep again.
       if (said === 'ok and how do i split the lab report into parts?') return JSON.stringify({ remember: [], reply: /Already said[\s\S]*sleep/.test(prompt) ? 'Three parts: intro, method, results. Start with the intro.' : 'Look, Victor, sleep first.', actions: [] })
       if (said === 'what should I focus on today?') return JSON.stringify({ remember: [], reply: prompt.includes('Etica exam on Friday') ? 'Etica first: chapters 3 to 5.' : 'Hmm.', actions: [] })
+      // Coach power: the review gets yesterday's numbers up front; several asks get the "do all of them" note.
+      if (said.startsWith('Review yesterday')) return JSON.stringify({ remember: [], reply: /Yesterday \(\d{4}-\d{2}-\d{2}\) from his data/.test(prompt) && /THIS MESSAGE IS A REVIEW/.test(prompt) ? 'Went well: little. Slipped: focus. One change: 25 minutes first.' : 'Hmm.', actions: [] })
+      if (said.startsWith('move my gym to 19:30')) return JSON.stringify({ remember: [], reply: 'Both done.', actions: /SEVERAL THINGS/.test(prompt) ? [`move: E3 | ${today} 19:30`, `event: Reading | ${today} 21:30 | 20`] : [`move: E3 | ${today} 19:30`] })
       return JSON.stringify({ remember: [], ...(script[said] ?? { reply: 'Hmm.', actions: [] }) })
     }
     const r = await runBenEval(SQL, model, 20_000)
@@ -46,6 +50,9 @@ describe("Ben's test harness", () => {
     expect(ok('memory').ok, ok('memory').trace).toBe(true)
     // BQ: no repeat, show the plan, act on one block, chips for two, the pick, typos, ro / ru.
     for (const id of ['no-repeat', 'show-plan', 'rename-one', 'rename-ambiguous', 'rename-pick', 'typo-move', 'ro-rename', 'ru-rename', 'ru-spend']) expect(ok(id).ok, `${id}: ${ok(id).trace} ${ok(id).error ?? ''}`).toBe(true)
-    expect(r.total).toBe(36)
+    // Coach power: a review with one button, the plan card, two things at once, the goals.
+    for (const id of ['review', 'plan-day', 'multi', 'goals']) expect(ok(id).ok, `${id}: ${ok(id).trace} ${ok(id).error ?? ''}`).toBe(true)
+    expect(ok('review').trace).toMatch(/REPLY: Went well/)
+    expect(r.total).toBe(40)
   }, 30_000)
 })

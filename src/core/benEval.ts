@@ -73,7 +73,12 @@ export const EVAL_CASES: EvalCase[] = [
   { id: 'typo-move', say: 'pls mvoe my deep blcok to 11', want: 'reads the typos and moves the Deep block to 11:00', must: [/calendar\.move g1 [^\n]*T11:00/] },
   { id: 'ro-rename', say: 'schimbă blocul gym în fotbal', want: 'Romanian: renames the Gym block to Fotbal', must: [/calendar\.update g3 title=Fotbal/] },
   { id: 'ru-rename', say: 'переименуй блок gym в футбол', want: 'Russian: renames the Gym block to Футбол', must: [/calendar\.update g3 title=Футбол/] },
-  { id: 'ru-spend', say: 'потратил 80 лей на такси', want: 'understands Russian: logs an 80 lei taxi', must: [/Logged:[^\n]*80/i] }
+  { id: 'ru-spend', say: 'потратил 80 лей на такси', want: 'understands Russian: logs an 80 lei taxi', must: [/Logged:[^\n]*80/i] },
+  // Coach fix + power: several steps in one go, with the right data.
+  { id: 'review', say: 'Review yesterday for me: what went well, what slipped, and one change for today.', want: "uses yesterday's numbers and ends with one change he can tap", must: [/REPLY: \S/, /BUTTONS: \S/], never: [/calendar\.(create|move|remove)|todoist\.(close|remove)/i] },
+  { id: 'plan-day', say: 'plan my day', want: "makes today's plan and shows the card with Approve and Change", must: [/SHOW:[^\n]*plan/, /BUTTONS:[^\n]*approve/, /BUTTONS:[^\n]*change/], never: [/calendar\.(create|move|remove)/i] },
+  { id: 'multi', say: 'move my gym to 19:30 and add 20 min reading tonight', want: 'does both: moves the Gym block to 19:30 and books 20 minutes of reading', must: [/calendar\.move g3 [^\n]*T19:30/i, /calendar\.create[^\n]*reading/i] },
+  { id: 'goals', say: 'how am I doing on my goals', want: 'answers with the goals and their status, and shows the goals card', must: [/REPLY: \S/, /SHOW:[^\n]*goals/], never: [/calendar\.(create|move|remove)/i] }
 ]
 
 export interface EvalResult {

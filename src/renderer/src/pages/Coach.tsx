@@ -2,7 +2,7 @@
 // bots, so the conversation continues wherever you are), what it remembers
 // about you (edit or delete), and the goals & rules it holds you to.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { CoachMic, ReadAloudToggle, readAloud, stopReading } from '../voice/CoachMic'
+import { CoachMic, ReadAloudMenuItem, readAloud, stopReading } from '../voice/CoachMic'
 import { calendarDay, dayKey } from '@core/dates'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -38,6 +38,13 @@ type Profile = { about: string; goals: string[]; rules: string[] }
 
 /** Ben couldn't answer (timeout, server hiccup): one friendly line, never the raw error. */
 const FAIL_LINE = "Ben couldn't answer in time"
+/** When today's app day began (it turns at 04:00). */
+const appDayStart = (now = new Date()) => {
+  const d = new Date(now)
+  if (d.getHours() < 4) d.setDate(d.getDate() - 1)
+  d.setHours(4, 0, 0, 0)
+  return d.getTime()
+}
 const BOT_LABEL: Record<string, string> = { mega: 'Ben', finance: 'Finance', waky: 'Waky', sport: 'Sport' }
 const CARDS: { title: string; sub: string; ask: string }[] = [
   { title: 'What now?', sub: 'The one thing that matters most right now', ask: 'What should I focus on right now? Be specific.' },
@@ -198,17 +205,36 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const [quote, setQuote] = useState<Entry | null>(null)
   const [menu, setMenu] = useState(false)
   // Ben's view of today (wide screens): open unless you folded it away.
+  // Coach fix: folded by default under 1600 px (the chat gets the room); your choice is remembered.
   const [side, setSideRaw] = useState(() => {
     try {
-      return localStorage.getItem('ls.coachSide') !== '0'
+      const v = localStorage.getItem('ls.coachSide2')
+      if (v === '1' || v === '0') return v === '1'
     } catch {
-      return true
+      /* default below */
     }
+    return typeof window !== 'undefined' && window.innerWidth >= 1600
   })
   const setSide = (v: boolean) => {
     setSideRaw(v)
     try {
-      localStorage.setItem('ls.coachSide', v ? '1' : '0')
+      localStorage.setItem('ls.coachSide2', v ? '1' : '0')
+    } catch {
+      /* fine */
+    }
+  }
+  // Ben's automatic updates folded into "3 earlier updates" lines: hidden unless you want them (⋯ menu).
+  const [showUpdates, setShowUpdatesRaw] = useState(() => {
+    try {
+      return localStorage.getItem('ls.coachUpdates') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setShowUpdates = (v: boolean) => {
+    setShowUpdatesRaw(v)
+    try {
+      localStorage.setItem('ls.coachUpdates', v ? '1' : '0')
     } catch {
       /* fine */
     }
@@ -282,6 +308,33 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     return () => clearInterval(t)
   }, [loadStatus])
   useLive(loadStatus)
+  // Last night's draft expired (or an older planner made it): a fresh morning plan with
+  // today's planner, once a day, so "See the plan" and Approve always mean today's.
+  const planState = status?.plan.status
+  useEffect(() => {
+    if (planState !== 'none' || !life.coach?.rhythm) return
+    const h = new Date().getHours()
+    if (h < 5 || h >= 15) return
+    let cancelled = false
+    life.coach
+      .rhythm('state')
+      .then(async (r) => {
+        if (cancelled || r.state.briefing || !r.state.expired) return
+        const key = `ls.autoPlan`
+        try {
+          if (localStorage.getItem(key) === r.state.day) return
+          localStorage.setItem(key, r.state.day)
+        } catch {
+          /* private window: still fine to make one */
+        }
+        await life.coach!.rhythm!('propose')
+        if (!cancelled) loadStatus()
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [planState, loadStatus])
   // Today's plan approved during this visit (here, by a button, or by Ben): a big moment.
   const planWas = useRef<string | null>(null)
   useEffect(() => {
@@ -551,15 +604,19 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   })()
   const lastEntry = lastReply >= 0 ? log![lastReply] : null
   // Coach UI v3: the newest card of each kind is the live one; older ones settle.
+  // A card from before the app day turned (04:00) is never live: it is last night's draft.
+  const dayStart = appDayStart()
+  const fromToday = (x: { at: string }) => Date.parse(x.at) >= dayStart
   const liveCard: Record<string, number> = {}
-  ;(log ?? []).forEach((x, k) => x.role === 'coach' && x.show?.forEach((w) => cardKind(w) && (liveCard[cardKind(w)!] = k)))
+  ;(log ?? []).forEach((x, k) => x.role === 'coach' && fromToday(x) && x.show?.forEach((w) => cardKind(w) && (liveCard[cardKind(w)!] = k)))
   const chips = momentChips({
     hour: new Date().getHours(),
     planStatus: status?.plan.status ?? 'none',
     blockSoon: soon,
     mustLeft: status ? status.today.mustTotal - status.today.mustDone : 0,
     replyChips: lastEntry && Date.now() - Date.parse(lastEntry.at) < 20 * 60000 ? lastEntry.chips : undefined
-  })
+    // One Approve only (on the plan card): no "Approve the plan" chip beside it.
+  }).filter((c) => !/\bapprove\b/i.test(c))
   const slashOpen = text.startsWith('/') && !/\s/.test(text)
   const slashHits = slashOpen ? SLASH.filter((x) => x.cmd.startsWith(text.toLowerCase())) : []
   const openBrain = () => {
@@ -651,18 +708,45 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 <GlyphIcon kind="review" />
               </button>
             )}
-            <button className={`icon-btn ${query != null ? 'on' : ''}`} onClick={() => (closeHero(), setQuery((q) => (q == null ? '' : null)))} aria-label="Search the chat" title="Search and filter">
-              <Icon name="search" />
-            </button>
-            <button className={`icon-btn ${menu ? 'on' : ''}`} onClick={() => setMenu((v) => !v)} aria-label="More" aria-expanded={menu} title="More">
+            <button className={`icon-btn ${menu ? 'on' : ''}`} onClick={() => setMenu((v) => !v)} aria-label="More" aria-haspopup="menu" aria-expanded={menu} title="Search, filters and more">
               ⋯
             </button>
             {menu && (
               <div className="cf-menu" role="menu" onClick={() => setMenu(false)}>
-                <button role="menuitem" onClick={() => setInfo(true)}>Plan, goals and about you</button>
-                <button role="menuitem" onClick={() => setExtras((v) => !v)}>{extras ? 'Hide shortcuts' : 'Show shortcuts'}</button>
-                <button role="menuitem" onClick={openBrain}>Ben's brain (model and cost)</button>
-                <button role="menuitem" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'notebook' }))}>Notebook</button>
+                <button role="menuitem" onClick={() => (closeHero(), setQuery(''))}>
+                  Search the chat
+                </button>
+                <div className="cf-menu-group" role="group" aria-label="Show in the chat">
+                  <small>Show</small>
+                  {(
+                    [
+                      ['all', 'Everything'],
+                      ['talk', 'Only our conversation'],
+                      ['nudges', "Only Ben's nudges"],
+                      ['logged', 'Only what was logged']
+                    ] as const
+                  ).map(([k, l]) => (
+                    <button key={k} role="menuitemradio" aria-checked={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
+                <button role="menuitemcheckbox" aria-checked={showUpdates} onClick={() => setShowUpdates(!showUpdates)}>
+                  {showUpdates ? '✓ ' : ''}Ben's automatic updates
+                </button>
+                <ReadAloudMenuItem />
+                <button role="menuitem" onClick={() => setExtras((v) => !v)}>
+                  {extras ? 'Hide more things Ben can do' : 'More things Ben can do'}
+                </button>
+                <button role="menuitem" onClick={() => setInfo(true)}>
+                  Plan, goals and about you
+                </button>
+                <button role="menuitem" onClick={openBrain}>
+                  Ben's brain (model and cost)
+                </button>
+                <button role="menuitem" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'notebook' }))}>
+                  Notebook
+                </button>
               </div>
             )}
           </div>
@@ -692,21 +776,9 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                 </button>
               </>
             )}
-            {/* CM5: filters */}
-            <div className="cf-filters" role="tablist" aria-label="Show">
-              {(
-                [
-                  ['all', 'All'],
-                  ['talk', 'Conversation'],
-                  ['nudges', "Ben's nudges"],
-                  ['logged', 'Logged']
-                ] as const
-              ).map(([k, l]) => (
-                <button key={k} role="tab" aria-selected={filter === k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k)}>
-                  {l}
-                </button>
-              ))}
-            </div>
+            <button type="button" className="icon-btn" onClick={() => setQuery(null)} aria-label="Close search">
+              ✕
+            </button>
           </div>
         )}
         {query != null && query.trim() && hits.length > 0 && (
@@ -732,29 +804,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           </ul>
         )}
 
-        {status && query == null && (!log?.length || extras) && (
-          <div className="cx-strip cf-wide" role="list">
-            <button role="listitem" className="cx-card" onClick={() => (setTab('plan'), setInfo(true))}>
-              <small>Plan</small>
-              <b>{status.plan.status === 'approved' ? 'Approved' : status.plan.status === 'proposed' ? 'Waiting for you' : 'Not yet'}</b>
-              <span>{status.plan.score != null ? `Day score ${status.plan.score}/100` : status.plan.status === 'none' ? 'Tap “Plan it”' : `${status.plan.mustdos} must-dos · ${status.plan.blocks} blocks`}</span>
-            </button>
-            <button role="listitem" className={`cx-card ${status.promises.missed ? 'warn' : ''}`} onClick={() => (setTab('today'), setInfo(true))}>
-              <small>Promises · 7 days</small>
-              <b>
-                {status.promises.kept} kept · {status.promises.missed} missed
-              </b>
-              <span>{status.promises.awaiting.length ? `${status.promises.awaiting.length} waiting for your answer` : 'Nothing waiting'}</span>
-            </button>
-            <button role="listitem" className="cx-card" onClick={() => (setTab('goals'), setInfo(true))}>
-              <small>Goals</small>
-              <b>{status.goals.length ? `${status.goals.length} active` : 'None yet'}</b>
-              <span>{status.goals.length ? status.goals.slice(0, 2).map((g) => `${g.subject} ${g.pct}%`).join(' · ') : 'Add one with a deadline'}</span>
-            </button>
-          </div>
-        )}
-
-        {query == null && (!log?.length || extras) && (
+        {query == null && extras && (
           <div className="cx-deck cf-wide" role="toolbar" aria-label="Ben's big moves">
             {(
               [
@@ -854,7 +904,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                       <span>New since {it.since}</span>
                     </div>
                   )
-                if (it.t === 'fold') return <FoldLine key={it.key} item={it} log={log} open={!!openFolds[it.key]} onToggle={() => setOpenFolds((o) => ({ ...o, [it.key]: !o[it.key] }))} />
+                if (it.t === 'fold') return showUpdates && <FoldLine key={it.key} item={it} log={log} open={!!openFolds[it.key]} onToggle={() => setOpenFolds((o) => ({ ...o, [it.key]: !o[it.key] }))} />
                 const i = it.i
                 const m = log[i]
                 const flash = hits[hit] === i && query?.trim() ? 'flash' : ''
@@ -920,6 +970,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                   )
                 const cards = (m.show ?? []).filter((w) => cardKind(w))
                 const widgets = (m.show ?? []).filter((w) => !cardKind(w))
+                // One Approve only: the plan card has its own, and an old message never approves today's plan.
+                const btns = (m.buttons ?? []).filter((b) => !((b.do === 'approve' || b.do === 'change') && (cards.some((w) => cardKind(w) === 'plan') || !fromToday(m))))
                 return (
                   <div key={it.key} id={`cx-m${i}`} className={`cf-row ben ${it.grouped && !m.pending ? 'grouped' : 'first'} ${lastOfGroup || m.pending ? 'last' : ''} ${flash}`}>
                     {m.pending ? <BenMark state={presence} /> : <BenMark ghost={!firstOfGroup} />}
@@ -956,8 +1008,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                             </span>
                           )}
                           <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
-                          {cards.length > 0 && <ShowCards show={cards} live={(k) => liveCard[k] === i} status={status} onChange={() => (loadStatus(), onWallet())} onOpenPlan={focusPlan} />}
-                          {(!!m.buttons?.length || !!widgets.length) && <ReplyExtras m={{ ...m, show: widgets }} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
+                          {cards.length > 0 && <ShowCards show={cards} live={(k) => liveCard[k] === i} expired={!fromToday(m)} status={status} onChange={() => (loadStatus(), onWallet())} onOpenPlan={focusPlan} />}
+                          {(!!btns.length || !!widgets.length) && <ReplyExtras m={{ ...m, show: widgets, buttons: btns }} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
                           <div className="cf-foot">
                             {!firstOfGroup && <Meta m={m} />}
                             {!!m.steps?.length && (
@@ -1011,8 +1063,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
           {!!log?.length && (
             <div className="cf-sugg cf-rail" role="toolbar" aria-label="Suggestions">
               {status && query == null && filter === 'all' && <NowCard status={status} busy={busy} onDo={() => void doMove()} onNotYet={() => void send(`Not yet: ${(status.move as any).promise}`)} />}
-              {!busy && hero === 'off' && !logMode && chips.map((q) => <SuggestChip key={q} text={q} disabled={busy} onClick={() => void send(q)} />)}
-              {!busy && logMode && LOG_EXAMPLES.map((q) => <SuggestChip key={q} text={q} onClick={() => (setText(q), boxRef.current?.focus())} />)}
+              {!busy && hero === 'off' && !logMode && chips.slice(0, status && query == null && filter === 'all' ? 2 : 3).map((q) => <SuggestChip key={q} text={q} disabled={busy} onClick={() => void send(q)} />)}
+              {!busy && logMode && LOG_EXAMPLES.slice(0, 3).map((q) => <SuggestChip key={q} text={q} onClick={() => (setText(q), boxRef.current?.focus())} />)}
             </div>
           )}
           {slashHits.length > 0 && (
@@ -1123,12 +1175,9 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                     <path d="m20.5 11.5-8.3 8.3a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.4 8.4a1.7 1.7 0 0 1-2.4-2.4l7.6-7.6" />
                   </svg>
                 </button>
-                <span className="cf-hint" aria-hidden>
-                  <kbd>Enter</kbd> send · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>↑</kbd> edit last
-                </span>
-                {/* JV7: push-to-talk (sends when you stop) and 🔊 read-aloud. */}
+                <span className="cf-grow" aria-hidden />
+                {/* JV7: push-to-talk (sends when you stop); reading aloud is in the ⋯ menu. */}
                 <CoachMic base={text} disabled={busy} onListening={setListening} onText={(t, final) => (final ? void send(t) : setText(t))} />
-                <ReadAloudToggle />
                 <button
                   type={busy ? 'button' : 'submit'}
                   className={`cf-send ${busy ? 'stop' : text.trim() || photo ? 'ready' : ''}`}

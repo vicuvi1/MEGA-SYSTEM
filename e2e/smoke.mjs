@@ -25,7 +25,7 @@ const step = async (name, fn) => {
     console.log(`✓ ${name}`)
   } catch (e) {
     fails.push(name)
-    console.log(`✗ ${name}: ${e.message.split('\n')[0]}`)
+    console.log(`✗ ${name}: ${process.env.SMOKE_FULL ? e.message : e.message.split('\n')[0]}`)
   }
 }
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {})
@@ -117,7 +117,15 @@ try {
   await step("Coach: Ben's chat with folded updates and cards", async () => {
     await open('coach')
     await pg.waitForSelector('.cf-col .cf-row', { timeout: 15000 })
-    if (!(await pg.$('.cf-fold'))) throw new Error('no folded updates line')
+    // Coach fix: Ben's automatic updates are folded away until you ask for them in the ⋯ menu.
+    if (await pg.$('.cf-fold')) throw new Error('the folded updates show without being asked for')
+    await pg.click('.cf-head-tools button[aria-label="More"]')
+    await pg.locator('.cf-menu button', { hasText: "Ben's automatic updates" }).click()
+    await pg.waitForSelector('.cf-fold', { timeout: 3000 })
+    // One menu holds search and filters; the header has no separate search button.
+    if (await pg.$('.cf-head-tools button[aria-label="Search the chat"]')) throw new Error('search is still its own button')
+    // Under 1600 px the side panel starts folded.
+    if (await pg.$('.cf-side')) throw new Error('the side panel is open by default at 1440 px')
     if (!(await pg.$('.cf-card'))) throw new Error('no card')
     if (!(await pg.$('.cf-head .ba-face'))) throw new Error("no face for Ben in the header")
     if (!(await pg.$('.cf-rail .cf-now'))) throw new Error('no Now pill above the message box')
@@ -133,6 +141,18 @@ try {
     await pg.fill('.cf-input textarea', '')
     // Coach UI v3: Ben's face once per group, results with Undo, the plan card, ↑ edits.
     await pg.waitForSelector('.cf-plan.live .cf-plan-list li', { timeout: 10000 })
+    // Coach fix: last night's plan card is folded as expired; only today's card is live, with the one Approve.
+    if (!/Expired · last night's draft/.test((await pg.locator('.cf-plan.expired').first().innerText().catch(() => '')) ?? '')) throw new Error("last night's plan card is not marked expired")
+    if ((await pg.$$('.cf-plan.live')).length !== 1) throw new Error('more than one live plan card')
+    if (await pg.locator('.cx-extras button', { hasText: /Approve/ }).count()) throw new Error('Approve shows twice (a reply button and the plan card)')
+    // The day labels are light: a small pill on a see-through hairline, no band.
+    const band = await pg.evaluate(() => {
+      const d = document.querySelector('.cf-divider')
+      return d ? getComputedStyle(d).backgroundImage + '|' + getComputedStyle(d).backgroundColor : null
+    })
+    if (band && !/^none\|rgba\(0, 0, 0, 0\)$/.test(band)) throw new Error(`the day label still has a band: ${band}`)
+    // One suggestion row, three items at most.
+    if ((await pg.$$('.cf-rail > *')).length > 3) throw new Error('more than three suggestions above the box')
     if (!(await pg.$('.cf-plan.live .cf-plan-track .bar i'))) throw new Error('no timeline on the plan card')
     if (!(await pg.locator('.cf-plan.live .cf-btns button', { hasText: 'Approve' }).count())) throw new Error('no Approve on the plan card')
     // DP1: the whole day: the reason, block tasks, and "Also today" with ticks that can be undone.

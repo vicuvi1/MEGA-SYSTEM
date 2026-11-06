@@ -193,7 +193,7 @@ export function CoachHero({ title, line, status, asks, ben, closing, onClose }: 
       <div className="ch-inner">
         <div className="ch-ben">{ben}</div>
         <h2 className="ch-title">{title}</h2>
-        <p className="ch-line">{line}</p>
+        <p className="ch-line">{next ? `${line} Next: ${next.title}, ${next.when}.` : line}</p>
         {t && (
           <div className="ch-stats">
             <HeroStat icon="done" tone="must" label="Must-dos" value={t.mustTotal ? `${Math.round(must)}/${t.mustTotal}` : '—'} sub={t.mustTotal ? (t.mustDone >= t.mustTotal ? 'all done' : `${t.mustTotal - t.mustDone} left`) : 'none yet'} ring={t.mustTotal ? t.mustDone / t.mustTotal : 0} />
@@ -201,24 +201,13 @@ export function CoachHero({ title, line, status, asks, ben, closing, onClose }: 
             <HeroStat icon="focus" tone="focus" label="Focus" value={fmtMin(Math.round(focus))} sub="today" ring={Math.min(1, (t.focusMin || 0) / 120)} />
           </div>
         )}
-        <div className={`ch-next ${next === undefined ? 'wait' : ''}`}>
-          <GlyphIcon kind="plan" size={16} />
-          {next ? (
-            <span>
-              <small>Next</small> <b>{next.title}</b> <em>{next.when}</em>
-            </span>
-          ) : (
-            <span>{next === null ? 'Nothing else on your calendar today' : 'Looking at your day…'}</span>
-          )}
-        </div>
         <div className="ch-asks">
           {asks.map((a, k) => (
-            <button key={a.key} type="button" className={`ch-ask k-${a.icon}`} style={{ '--k': k } as CSSProperties} onClick={a.run}>
+            <button key={a.key} type="button" className={`ch-ask k-${a.icon}`} style={{ '--k': k } as CSSProperties} onClick={a.run} title={a.sub}>
               <span className="ic">
-                <GlyphIcon kind={a.icon} size={20} />
+                <GlyphIcon kind={a.icon} size={18} />
               </span>
               <b>{a.title}</b>
-              <small>{a.sub}</small>
             </button>
           ))}
         </div>

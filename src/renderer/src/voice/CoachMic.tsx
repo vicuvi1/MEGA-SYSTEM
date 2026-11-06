@@ -96,6 +96,17 @@ export function ReadAloudToggle() {
   )
 }
 
+/** The same switch as a line in the Coach page's ⋯ menu. */
+export function ReadAloudMenuItem() {
+  const [p, setP] = useVoicePrefs()
+  if (typeof speechSynthesis === 'undefined' && !p.on) return null
+  return (
+    <button type="button" role="menuitemcheckbox" aria-checked={p.readAloud} onClick={() => (p.readAloud && stopReading(), setP({ readAloud: !p.readAloud }))}>
+      {p.readAloud ? '✓ ' : ''}Read Ben's replies aloud
+    </button>
+  )
+}
+
 let speaker: Speaker | null = null
 let stream: SentenceStream | null = null
 /** The Coach page reads Ben's reply aloud as it streams (when 🔊 is on). */

@@ -68,10 +68,12 @@
 /* The day header sticks to the top while you scroll through that day (CN7) */
 /* Each day/time section holds its own divider: only the current one sticks, the next one pushes it away. */
 .cf-sec { display: flex; flex-direction: column; gap: 0; min-width: 0; }
-.cf-divider { position: sticky; top: 0; z-index: 4; display: flex; justify-content: center; margin: 18px 0 4px; padding: 8px 0 10px; pointer-events: none; background: linear-gradient(to bottom, var(--surface) 72%, transparent); }
-:root[data-theme='light'] .cf-divider { background: linear-gradient(to bottom, #fbfcfe 72%, transparent); }
-.cf-divider span { pointer-events: auto; padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 650; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); box-shadow: 0 8px 22px -12px rgb(0 0 0 / 0.55); white-space: nowrap; }
-:root[data-theme='light'] .cf-divider span { background: #fff; }
+/* Coach fix: a light day label: a small pill on a hairline. Sticky only inside its own
+   section (one label at a time), and see-through except the pill itself. */
+.cf-divider { position: sticky; top: 6px; z-index: 4; display: flex; justify-content: center; align-items: center; margin: 16px 0 6px; padding: 0; pointer-events: none; background: none; }
+.cf-divider::before { content: ''; position: absolute; left: 50%; width: min(420px, 70%); top: 50%; height: 1px; transform: translateX(-50%); background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--border) 80%, transparent) 25%, color-mix(in srgb, var(--border) 80%, transparent) 75%, transparent); }
+.cf-divider span { position: relative; pointer-events: auto; padding: 2px 10px; border-radius: 999px; font-size: 10.5px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: color-mix(in srgb, var(--surface-2) 88%, transparent); border: 1px solid var(--border); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); white-space: nowrap; }
+:root[data-theme='light'] .cf-divider span { background: rgb(255 255 255 / 0.9); }
 .cf-new { display: flex; align-items: center; gap: 12px; margin: 22px 0 4px; color: var(--accent-text); font-size: var(--t-xs); font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase; }
 .cf-new::before, .cf-new::after { content: ''; flex: 1; height: 1px; background: color-mix(in srgb, var(--accent) 45%, transparent); }
 

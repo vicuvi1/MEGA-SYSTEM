@@ -25,7 +25,7 @@ import {
   type DayProposal,
   type DayResult,
   type RhythmPrefs,
-  type RhythmState, blocksKept, editPlan, lightenForSleep, draftFits, bookBig3, fromMin, toMin } from '@core/rhythm'
+  type RhythmState, blocksKept, editPlan, lightenForSleep, draftFits, bookBig3, fromMin, toMin, PLANNER_VERSION } from '@core/rhythm'
 import { getSetting, setSetting, readSetting } from '../../../main/settings'
 import { COACH_SELFREVIEW, COACH_STORY, financeStateFrom, lifeContext, loadFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStory, pickFacts, saveLetter, saveMind, sportState, loadStyle, saveStyle } from './botBrain'
 import { REMINDERS, promiseLine, promiseStats } from '@core/coachKit'
@@ -256,7 +256,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         if (!edited) return null
         const plan = relinkAlso(edited)
         const version = (cur.version ?? 0) + 1
-        save(db, { ...st, briefing: { status: 'proposed', sentAt: new Date().toISOString(), plan, version } })
+        save(db, { ...st, expired: undefined, briefing: { status: 'proposed', sentAt: new Date().toISOString(), plan, version, planner: PLANNER_VERSION } })
         return { plan, version }
       })
       if (edited) return edited
@@ -419,7 +419,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     return mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1
-      save(db, { ...st, briefing: { status: 'proposed', sentAt: new Date().toISOString(), plan, version } })
+      save(db, { ...st, expired: undefined, briefing: { status: 'proposed', sentAt: new Date().toISOString(), plan, version, planner: PLANNER_VERSION } })
       history(db, plan.day, { plan: 'proposed' })
       return { plan, version }
     })

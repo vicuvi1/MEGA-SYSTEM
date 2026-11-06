@@ -921,6 +921,27 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
       if (local) step(localEdit === 'act' ? 'Found the block' : 'Found more than one block')
     }
+    // "Plan my day": today's planner packs all of today's tasks around the calendar, and the
+    // plan card comes with the reply (no chat model call; an approved plan goes to the model).
+    let planMade = false
+    if (!preset && !local && !media && !direct && route.intent === 'plan' && plan?.status !== 'approved') {
+      step('Packing your tasks around your calendar')
+      try {
+        const made = await rhythm.propose('')
+        const p = made.plan
+        const focusMin = p.blocks.reduce((t, b) => t + b.minutes, 0)
+        planMade = true
+        local = {
+          reply: `Here's today's plan${made.version > 1 ? ` (v${made.version})` : ''}: ${p.blocks.length} block${p.blocks.length === 1 ? '' : 's'}, ${hm(focusMin)} of focus${p.mustdos.length ? `, ${p.mustdos.length} must-do${p.mustdos.length === 1 ? '' : 's'}` : ''}. Look it over, then approve it or tell me what to change.`,
+          actions: [],
+          remember: [],
+          show: ['plan'],
+          steps: ['Made your plan for today']
+        }
+      } catch {
+        /* the model plans it below */
+      }
+    }
     let out: BrainOut
     try {
       if (preset) out = { reply: preset.reply, actions: direct ? direct.lines : [], remember: [], chips: preset.chips, buttons: preset.buttons }
@@ -1014,10 +1035,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (out.reply && !preset) out.reply = tidyReply(out.reply, prevCoach, 'Victor')
     // BQ2: he asked to SEE the plan, his day or his tasks: the card comes with the reply.
     const see = preset || localEdit ? [] : wantsToSee(clean)
+    // "How am I doing on my goals": the goals card with the answer.
+    if (route.intent === 'goals' && !preset && !(out.show ?? []).includes('goals')) out.show = [...(out.show ?? []), 'goals'].slice(0, 2)
     if (see.length) out.show = [...new Set([...see, ...(out.show ?? [])])].slice(0, 2)
     if (out.show?.includes('plan')) {
       const b = out.buttons ?? []
-      if (plan?.status === 'proposed') {
+      if (plan?.status === 'proposed' || planMade) {
         if (!b.some((x) => x.do === 'approve')) b.push({ label: '✅ Approve', do: 'approve' })
         if (!b.some((x) => x.do === 'change')) b.push({ label: '✏️ Change', do: 'change' })
       } else if (!plan && !b.some((x) => x.do === 'plan')) b.push({ label: "☀️ Make today's plan", do: 'plan' })

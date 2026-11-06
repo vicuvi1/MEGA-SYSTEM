@@ -75,7 +75,10 @@ export interface RhythmState {
   booking?: { title: string; day: string; start: string; end: string }[]
   /** The honest end-of-day check-out (W6): what you say you did, never paid. */
   checkout?: { items: string[]; marks: (null | 'k' | 'p' | 'x')[] }
-  briefing?: { status: 'proposed' | 'approved'; sentAt: string; plan: DayProposal; version: number }
+  /** `planner`: which day planner made it (an older one's draft expires, see PLANNER_VERSION). */
+  briefing?: { status: 'proposed' | 'approved'; sentAt: string; plan: DayProposal; version: number; planner?: number }
+  /** A draft that was never approved and has expired (last night's, or from an older planner): shown folded. */
+  expired?: { sentAt: string; version: number; headline: string; why: 'night' | 'planner' }
   evening?: { sentAt: string; score: number; top3: string[]; lesson?: string }
   water: string[]
   training?: boolean
@@ -115,11 +118,33 @@ export function cleanPrefs(p: any): RhythmPrefs {
 }
 
 /** Today's state: a new day keeps only tomorrow's top 3 and the weekly review. */
+/**
+ * The day planner's version. 2 = the packer that fits ALL of today's tasks
+ * (core/dayPacker, Nov 2026). A plan still waiting for an OK that an older
+ * planner made expires, so the morning gets a fresh one.
+ */
+export const PLANNER_VERSION = 2
+
+const expiredOf = (b: any, why: 'night' | 'planner'): RhythmState['expired'] => ({ sentAt: String(b.sentAt ?? ''), version: Number(b.version) || 1, headline: String(b.plan?.headline ?? '').slice(0, 160), why })
+
 export function rhythmFor(state: any, today: string): RhythmState {
   const s = state && typeof state === 'object' ? state : {}
-  if (s.day === today) return { ...s, water: Array.isArray(s.water) ? s.water : [] }
-  return { day: today, water: [], ...(s.tomorrow ? { tomorrow: s.tomorrow } : {}), ...(s.weekly ? { weekly: s.weekly } : {}) }
+  if (s.day === today) {
+    const out: RhythmState = { ...s, water: Array.isArray(s.water) ? s.water : [] }
+    // A draft from an older planner never stays live: it expires and a fresh one is made.
+    if (out.briefing?.status === 'proposed' && (Number(out.briefing.planner) || 1) < PLANNER_VERSION) {
+      out.expired = expiredOf(out.briefing, 'planner')
+      delete out.briefing
+    }
+    return out
+  }
+  // The app day turned (04:00): last night's draft that was never approved expires.
+  const exp = s.briefing?.status === 'proposed' ? expiredOf(s.briefing, 'night') : undefined
+  return { day: today, water: [], ...(s.tomorrow ? { tomorrow: s.tomorrow } : {}), ...(s.weekly ? { weekly: s.weekly } : {}), ...(exp ? { expired: exp } : {}) }
 }
+
+/** The words for an expired draft (the folded card). */
+export const expiredLabel = (e: { why: 'night' | 'planner' }) => (e.why === 'night' ? "Expired · last night's draft" : 'Expired · made by the old planner')
 
 export interface RhythmFacts {
   today: string

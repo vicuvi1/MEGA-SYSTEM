@@ -44,7 +44,17 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
   const ago = (min) => new Date(Date.now() - min * 60000).toISOString()
   const hmIn = (min) => new Date(Date.now() + min * 60000).toTimeString().slice(0, 5)
   const ben = (min, text) => ({ role: 'coach', bot: 'mega', via: 'telegram', text, at: ago(min), proactive: true, mood: 'chill' })
+  // Coach fix: last night's plan card (before the app day turned at 04:00): it must show as expired.
+  const dayStartMs = (() => {
+    const d = new Date()
+    if (d.getHours() < 4) d.setDate(d.getDate() - 1)
+    d.setHours(4, 0, 0, 0)
+    return d.getTime()
+  })()
+  const lastNight = (min) => new Date(dayStartMs - min * 60000).toISOString()
   const log = [
+    { role: 'me', bot: 'mega', via: 'app', text: 'plan tomorrow for me, short night', at: lastNight(150) },
+    { role: 'coach', bot: 'mega', via: 'app', text: 'Short night, so a lighter day: one 40-minute block for now. See you in the morning.', at: lastNight(149), show: ['plan'] },
     { role: 'me', bot: 'mega', via: 'telegram', text: '30 pushups', at: ago(420) },
     { role: 'coach', bot: 'mega', via: 'telegram', text: 'Good. Water 750/2700, push-ups 30/130. 3 sets of 10 more today.', at: ago(419), done: ['💪 Push-ups +30 · 30/130 today'] },
     ben(400, '🌅 Your day · 45-min study focus first; 20-min sport, 10-min read\n\nMust-dos\n1. 45-min focus block on the study project\n2. Sport 20 min\n3. Read 10 min\n\nApprove, change it, or ask for another one.'),
@@ -110,7 +120,7 @@ db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
     ],
     why: '11 tasks and 2 classes, 7h free: 5 blocks (6h10), small tasks batched.'
   }
-  db.run("INSERT INTO settings (key, value) VALUES ('coach_rhythm', ?)", [JSON.stringify({ day: appDay, water: [], briefing: { status: 'proposed', sentAt: ago(30), plan, version: 2 } })])
+  db.run("INSERT INTO settings (key, value) VALUES ('coach_rhythm', ?)", [JSON.stringify({ day: appDay, water: [], briefing: { status: 'proposed', sentAt: ago(30), plan, version: 2, planner: 2 } })])
 }
 // Made-up Finance Helper data (Night 11 Money hub): two months of everyday
 // spending, a salary, rent, a monthly limit and two savings goals. Nothing real.

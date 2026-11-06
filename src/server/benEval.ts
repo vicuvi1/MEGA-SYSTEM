@@ -3,7 +3,7 @@
 // record what Ben does. Your real data is never touched.
 import type { SqlJsStatic } from 'sql.js'
 import { EVAL_CASES, judge, type EvalCase, type EvalResult } from '@core/benEval'
-import { RHYTHM } from '@core/rhythm'
+import { PLANNER_VERSION, RHYTHM } from '@core/rhythm'
 import { MIGRATIONS } from '@core/schema'
 import type { CalEvent } from '@core/dayTime'
 import type { TodoTask } from '@core/todoist'
@@ -66,7 +66,7 @@ export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalC
     await mirror.write((db) => setSetting(db as any, 'coach_memory', JSON.stringify({ facts: (c.facts ?? []).map((f) => ({ t: f, at: today })), chat: (c.chat ?? []).map((x) => ({ role: x.role, bot: 'mega', text: x.text, at: t })) })))
   }
   // BQ2: a plan Ben proposed this morning that waits for an OK.
-  if (c.plan) await mirror.write((db) => setSetting(db as any, RHYTHM, JSON.stringify({ day: today, water: [], briefing: { status: 'proposed', sentAt: new Date().toISOString(), version: 1, plan: { day: today, headline: 'Lab first, then the gym', mustdos: ['laborator 4 PC'], blocks: [{ title: 'Lab report', start: '10:00', minutes: 90 }, { title: 'Study algebra', start: '16:00', minutes: 50 }], training: null, waterMl: 2500 } } })))
+  if (c.plan) await mirror.write((db) => setSetting(db as any, RHYTHM, JSON.stringify({ day: today, water: [], briefing: { status: 'proposed', sentAt: new Date().toISOString(), version: 1, planner: PLANNER_VERSION, plan: { day: today, headline: 'Lab first, then the gym', mustdos: ['laborator 4 PC'], blocks: [{ title: 'Lab report', start: '10:00', minutes: 90 }, { title: 'Study algebra', start: '16:00', minutes: 50 }], training: null, waterMl: 2500 } } })))
   const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model, ...(timing ? { timing } : {}) })
   return { bots, log, mirror, services, today }
 }

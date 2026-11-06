@@ -9,7 +9,7 @@ import { life } from './bridge'
 import { useAction } from './ui'
 import { useLive } from './live'
 import type { CoachStatus } from './web/coachStatus'
-import type { RhythmPrefs, RhythmState } from '@core/rhythm'
+import { expiredLabel, type RhythmPrefs, type RhythmState } from '@core/rhythm'
 import type { TodoTask } from '@core/todoist'
 import { fmtMinutes, planTimeline, type PlanItem } from '@core/planView'
 import { barFill } from './motionKit'
@@ -88,7 +88,7 @@ export function PlanTrack({ items, now, from, to, compact = false }: { items: Pl
  * The PLAN card: headline, the timeline, each block, must-dos and Approve /
  * Change / Regenerate. `live` is false on older messages (one quiet line).
  */
-export function PlanCard({ live = true, spotlight = false, onChange }: { live?: boolean; spotlight?: boolean; onChange?: () => void }) {
+export function PlanCard({ live = true, spotlight = false, expired = false, onChange, onOpenPlan }: { live?: boolean; spotlight?: boolean; expired?: boolean; onChange?: () => void; onOpenPlan?: () => void }) {
   const act = useAction()
   const [data, setData] = useRhythm()
   const [busy, setBusy] = useState<string | null>(null)
@@ -114,10 +114,24 @@ export function PlanCard({ live = true, spotlight = false, onChange }: { live?: 
     }
   }
 
+  // A card from before the app day turned (04:00), or an older planner's draft: folded, never live.
+  if (!live && expired)
+    return (
+      <div className="cf-card cf-plan t-plan settled expired">
+        <CardHead icon="🗓" title="Expired · last night's draft" sub={b ? "Today's plan is the live one" : 'A fresh plan for today replaces it'} />
+        {onOpenPlan && (
+          <div className="cf-btns">
+            <button type="button" onClick={onOpenPlan}>
+              See today's plan
+            </button>
+          </div>
+        )}
+      </div>
+    )
   if (!live)
     return (
       <div className="cf-card cf-plan t-plan settled">
-        <CardHead icon="🗓" title={b ? `Plan${b.version > 1 ? ` v${b.version}` : ''}` : "Today's plan"} sub={b?.plan.headline || 'An earlier version'} />
+        <CardHead icon="🗓" title="An earlier version of the plan" sub="The newest one below is up to date" />
       </div>
     )
 
@@ -132,6 +146,7 @@ export function PlanCard({ live = true, spotlight = false, onChange }: { live?: 
   if (!b)
     return (
       <div className={`cf-card cf-plan t-plan live ${spotlight ? 'spot' : ''}`}>
+        {data.state.expired && <small className="cf-plan-expired">{expiredLabel(data.state.expired)}</small>}
         <CardHead icon="🗓" title="No plan for today yet" sub="Must-dos, blocks in your free time, training and water. You approve." />
         <div className="cf-btns">
           <button className="p" disabled={!!busy} onClick={() => void run('propose', undefined, 'Planning…')}>
@@ -386,13 +401,13 @@ export function TaskListCard({ status, onChange }: { status: CoachStatus | null;
 /** The cards a reply asked for (`show`), in order. */
 const SETTLED: Record<Exclude<CardKind, 'plan'>, [string, string]> = { day: ['☀️', 'Your day, as it was then'], tasks: ['✅', 'Your tasks, as they were then'], block: ['🎯', 'A focus block, earlier'] }
 
-export function ShowCards({ show, live, status, onChange, onOpenPlan }: { show: string[]; live: (k: CardKind) => boolean; status: CoachStatus | null; onChange: () => void; onOpenPlan?: () => void }) {
+export function ShowCards({ show, live, expired = false, status, onChange, onOpenPlan }: { show: string[]; live: (k: CardKind) => boolean; expired?: boolean; status: CoachStatus | null; onChange: () => void; onOpenPlan?: () => void }) {
   const kinds = [...new Set(show.map(cardKind).filter((k): k is CardKind => !!k))]
   if (!kinds.length) return null
   return (
     <div className="cf-cards">
       {kinds.map((k) => {
-        if (k === 'plan') return <PlanCard key={k} live={live(k)} onChange={onChange} />
+        if (k === 'plan') return <PlanCard key={k} live={live(k)} expired={expired && !live(k)} onChange={onChange} onOpenPlan={onOpenPlan} />
         // Live numbers on an old message would mislead: only the newest card of a kind is live.
         if (!live(k))
           return (

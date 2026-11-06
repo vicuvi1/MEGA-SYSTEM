@@ -23330,18 +23330,32 @@ function cleanPrefs$1(p) {
 		training: p?.training !== false
 	};
 }
-/** Today's state: a new day keeps only tomorrow's top 3 and the weekly review. */
+var expiredOf = (b, why) => ({
+	sentAt: String(b.sentAt ?? ""),
+	version: Number(b.version) || 1,
+	headline: String(b.plan?.headline ?? "").slice(0, 160),
+	why
+});
 function rhythmFor(state, today) {
 	const s = state && typeof state === "object" ? state : {};
-	if (s.day === today) return {
-		...s,
-		water: Array.isArray(s.water) ? s.water : []
-	};
+	if (s.day === today) {
+		const out = {
+			...s,
+			water: Array.isArray(s.water) ? s.water : []
+		};
+		if (out.briefing?.status === "proposed" && (Number(out.briefing.planner) || 1) < 2) {
+			out.expired = expiredOf(out.briefing, "planner");
+			delete out.briefing;
+		}
+		return out;
+	}
+	const exp = s.briefing?.status === "proposed" ? expiredOf(s.briefing, "night") : void 0;
 	return {
 		day: today,
 		water: [],
 		...s.tomorrow ? { tomorrow: s.tomorrow } : {},
-		...s.weekly ? { weekly: s.weekly } : {}
+		...s.weekly ? { weekly: s.weekly } : {},
+		...exp ? { expired: exp } : {}
 	};
 }
 /** What the coach should send now (in order). */
@@ -25478,11 +25492,13 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				const version = (cur.version ?? 0) + 1;
 				save(db, {
 					...st,
+					expired: void 0,
 					briefing: {
 						status: "proposed",
 						sentAt: (/* @__PURE__ */ new Date()).toISOString(),
 						plan,
-						version
+						version,
+						planner: 2
 					}
 				});
 				return {
@@ -25707,11 +25723,13 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const version = (st.briefing?.version ?? 0) + 1;
 			save(db, {
 				...st,
+				expired: void 0,
 				briefing: {
 					status: "proposed",
 					sentAt: (/* @__PURE__ */ new Date()).toISOString(),
 					plan,
-					version
+					version,
+					planner: 2
 				}
 			});
 			history(db, plan.day, { plan: "proposed" });
@@ -29316,6 +29334,23 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			}
 			if (local) step(localEdit === "act" ? "Found the block" : "Found more than one block");
 		}
+		let planMade = false;
+		if (!preset && !local && !media && !direct && route.intent === "plan" && plan?.status !== "approved") {
+			step("Packing your tasks around your calendar");
+			try {
+				const made = await rhythm.propose("");
+				const p = made.plan;
+				const focusMin = p.blocks.reduce((t, b) => t + b.minutes, 0);
+				planMade = true;
+				local = {
+					reply: `Here's today's plan${made.version > 1 ? ` (v${made.version})` : ""}: ${p.blocks.length} block${p.blocks.length === 1 ? "" : "s"}, ${hm$6(focusMin)} of focus${p.mustdos.length ? `, ${p.mustdos.length} must-do${p.mustdos.length === 1 ? "" : "s"}` : ""}. Look it over, then approve it or tell me what to change.`,
+					actions: [],
+					remember: [],
+					show: ["plan"],
+					steps: ["Made your plan for today"]
+				};
+			} catch {}
+		}
 		let out;
 		try {
 			if (preset) out = {
@@ -29416,10 +29451,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const prevCoach = memory.chat.filter((c) => c.role === "coach").map((c) => c.text);
 		if (out.reply && !preset) out.reply = tidyReply(out.reply, prevCoach, "Victor");
 		const see = preset || localEdit ? [] : wantsToSee(clean);
+		if (route.intent === "goals" && !preset && !(out.show ?? []).includes("goals")) out.show = [...out.show ?? [], "goals"].slice(0, 2);
 		if (see.length) out.show = [.../* @__PURE__ */ new Set([...see, ...out.show ?? []])].slice(0, 2);
 		if (out.show?.includes("plan")) {
 			const b = out.buttons ?? [];
-			if (plan?.status === "proposed") {
+			if (plan?.status === "proposed" || planMade) {
 				if (!b.some((x) => x.do === "approve")) b.push({
 					label: "✅ Approve",
 					do: "approve"
@@ -36303,6 +36339,37 @@ var EVAL_CASES = [
 		say: "потратил 80 лей на такси",
 		want: "understands Russian: logs an 80 lei taxi",
 		must: [/Logged:[^\n]*80/i]
+	},
+	{
+		id: "review",
+		say: "Review yesterday for me: what went well, what slipped, and one change for today.",
+		want: "uses yesterday's numbers and ends with one change he can tap",
+		must: [/REPLY: \S/, /BUTTONS: \S/],
+		never: [/calendar\.(create|move|remove)|todoist\.(close|remove)/i]
+	},
+	{
+		id: "plan-day",
+		say: "plan my day",
+		want: "makes today's plan and shows the card with Approve and Change",
+		must: [
+			/SHOW:[^\n]*plan/,
+			/BUTTONS:[^\n]*approve/,
+			/BUTTONS:[^\n]*change/
+		],
+		never: [/calendar\.(create|move|remove)/i]
+	},
+	{
+		id: "multi",
+		say: "move my gym to 19:30 and add 20 min reading tonight",
+		want: "does both: moves the Gym block to 19:30 and books 20 minutes of reading",
+		must: [/calendar\.move g3 [^\n]*T19:30/i, /calendar\.create[^\n]*reading/i]
+	},
+	{
+		id: "goals",
+		say: "how am I doing on my goals",
+		want: "answers with the goals and their status, and shows the goals card",
+		must: [/REPLY: \S/, /SHOW:[^\n]*goals/],
+		never: [/calendar\.(create|move|remove)/i]
 	}
 ];
 /** Pass or fail for one case, from its trace. */
@@ -36552,6 +36619,7 @@ async function evalWorld(SQL, model, c = {}, timing) {
 			status: "proposed",
 			sentAt: (/* @__PURE__ */ new Date()).toISOString(),
 			version: 1,
+			planner: 2,
 			plan: {
 				day: today,
 				headline: "Lab first, then the gym",

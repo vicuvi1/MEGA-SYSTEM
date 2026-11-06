@@ -327,3 +327,37 @@ html.calm .cf-send.stop::after { animation-iteration-count: infinite !important;
   .bl-lean, .bl .ba-look, .bl .ba-lid, .bl .ba-smile, .cf-amb-set, .cf-amb-mood, .cf-stage > .cf-stream, .cx.cf .cf-composer { transition: none !important; }
   .bl-ping, .bl-wave, .bl-z, .cf-amb-burst { display: none; }
 }
+
+/* Coach fix: a lighter start screen: greeting, three numbers, four buttons. */
+.ch-inner { max-width: 680px; gap: 12px; }
+.ch-title { font-size: clamp(24px, 2.6vw, 32px); }
+.ch-line { font-size: 14.5px; margin: -2px 0 2px; }
+.ch-stats { max-width: 560px; gap: 8px; }
+.ch-stat { padding: 8px 12px; gap: 10px; border-radius: 14px; background: color-mix(in srgb, var(--surface-2) 45%, transparent); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.ch-stat b { font-size: 17px; }
+.ch-stat em { font-size: 12px; }
+.ch-asks { gap: 8px; }
+.ch-ask { min-height: 0; grid-auto-flow: column; justify-content: start; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 14px; box-shadow: none; background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.ch-ask .ic { width: 30px; height: 30px; margin: 0; border-radius: 9px; }
+.ch-ask b { font-size: 13.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ch-ask::before { opacity: 0.45; }
+.ch-ask:hover { transform: translateY(-2px); }
+@media (max-width: 760px) { .ch-asks { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+/* The ⋯ menu: search, what the chat shows, updates, reading aloud. */
+.cf-menu-group { display: grid; margin: 4px 0; padding: 4px 0; border-block: 1px solid var(--border); }
+.cf-menu-group small { padding: 4px 10px 2px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.cf-menu button[aria-checked='true'] { color: var(--accent-text); font-weight: 650; }
+.cf-menu-group button[aria-checked='true']::before { content: '✓ '; }
+/* An expired plan card: one quiet line. */
+.cf-card.cf-plan.expired { opacity: 0.72; }
+.cf-card.cf-plan.expired .cf-btns { margin-top: 6px; }
+.cf-plan-expired { display: block; margin-bottom: 6px; font-size: 11.5px; font-weight: 650; color: var(--muted); }
+@media (min-width: 761px) { .ch-ben .bl { --ba: 76px !important; } }
+/* The ⋯ menu opens over the start screen (the header sits above the stage). */
+.cx.cf .cf-head { position: relative; z-index: 8; }
+/* The tools row: attach on the left, the mic and send on the right. */
+.cf-tools-row .cf-grow { flex: 1; }
+/* The start screen shows today's numbers: the header pills step aside while it is open. */
+.cx.cf.hero-on .cf-head .cf-chips { display: none; }
+.ch-ask b { white-space: normal; line-height: 1.2; }
+@media (max-width: 760px) { .cf-tools-row .cf-grow { display: none; } }

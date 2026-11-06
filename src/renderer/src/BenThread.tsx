@@ -14,7 +14,7 @@ import { parseRich, type Inline } from '@core/richText'
 export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string; stopped?: boolean; full?: string; fly?: boolean }
 
 // Numbers with their unit in bold ("25 min", "1.9/2.7", "750 ml"), never half a word ("10 min|utes").
-const NUM = /(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu
+const NUM = /(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|m|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu
 
 /** Coach text with numbers in bold (and search hits marked); a new reply types itself out. */
 /** CL5: at most `maxBold` numbers in bold (the ones that matter come first). */
