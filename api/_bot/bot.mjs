@@ -12184,7 +12184,8 @@ var Mirror = class Mirror {
 	writeDesktop(fn) {
 		return this.lock(async () => {
 			if (!this.store) throw new MirrorError("Local storage is unavailable");
-			if (!this.pending().length) try {
+			const fresh = this.syncedAt && Date.now() - Date.parse(this.syncedAt) < 15e3;
+			if (!this.pending().length && !fresh) try {
 				await this.catchUp();
 			} catch {}
 			const before = this.current.raw.export();
@@ -12222,7 +12223,7 @@ var Mirror = class Mirror {
 			}
 			this.emit();
 			this.desktopStatus();
-			await this.flushDesktop().catch(() => {});
+			this.lock(() => this.flushDesktop()).catch(() => {});
 			return result;
 		});
 	}
