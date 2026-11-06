@@ -186,6 +186,7 @@ export const SETTINGS = {
   sleep_weekend_target: text('weekend wake target (HH:MM)'),
   // ---- discipline ----
   discipline_stealth: flag('stealth mode: neutral words everywhere ("1" on)'),
+  discipline_why: text('your reason for the streak, in your words (shown in the urge crusher)'),
   discipline_triggers: json<unknown[]>('urge triggers you logged', []),
   discipline_undone_resets: json<unknown[]>('resets you took back', []),
   discipline_warned: json<Record<string, unknown> | null>('risk warnings already sent', null),

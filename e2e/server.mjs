@@ -33,8 +33,22 @@ const db = new SQL.Database()
 for (const m of [...readFileSync(join(repo, 'src/core/schema.ts'), 'utf8').matchAll(/`([\s\S]*?)`/g)].map((x) => x[1])) db.exec(m)
 const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
 db.run("INSERT INTO ledger (ts, day, module, kind, coins, xp, note) VALUES (?, ?, 'quests', 'adjust', 500, 0, 'starting coins')", [new Date().toISOString(), day(3)])
-db.run("INSERT INTO discipline_events (kind, day, ts) VALUES ('start', ?, ?)", [day(10), new Date().toISOString()])
+if (process.env.E2E_DISCIPLINE !== 'demo') db.run("INSERT INTO discipline_events (kind, day, ts) VALUES ('start', ?, ?)", [day(10), new Date().toISOString()])
 db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
+// E2E_DISCIPLINE=demo: a made-up 5-month Discipline history (check-ins, urges, two
+// honest resets) for screenshots of the Discipline page.
+if (process.env.E2E_DISCIPLINE === 'demo') {
+  const ins = db.prepare('INSERT INTO discipline_events (kind, day, ts) VALUES (?, ?, ?)')
+  const at = (n, h) => `${day(n)}T${String(h).padStart(2, '0')}:10:00.000Z`
+  ins.run(['start', day(160), at(160, 12)])
+  for (let n = 159; n >= 1; n--) {
+    if (n === 118 || n === 18) ins.run(['reset', day(n), at(n, 23)])
+    else if (n % 9 !== 4) ins.run(['checkin', day(n), at(n, 21)])
+    if (n % 5 === 2 || n % 11 === 3) ins.run(['urge', day(n), at(n, n % 3 ? 22 : 15)])
+  }
+  ins.free()
+  db.run("INSERT INTO settings (key, value) VALUES ('discipline_why', 'To be clear-headed and proud of who I am becoming.')")
+}
 // Speed tests (e2e/perf.mjs): E2E_LEDGER_ROWS made-up points rows spread over
 // the last two years, about 1 in 40 undone, to see how the app copes with a long history.
 {

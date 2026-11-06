@@ -267,6 +267,12 @@ export interface DisciplineState {
   history?: { day: string; kind: 'start' | 'reset' | 'checkin' | 'oath' | 'urge'; hour: number }[]
   /** MN7: a reset can be taken back until this time (10 minutes). */
   undoResetUntil?: string | null
+  /** The first start date (before any reset), for the calendar. */
+  startedOn?: string | null
+  /** Every streak from the start, split at the resets (oldest first). */
+  runs?: { from: string; to: string; days: number; ended: 'reset' | 'now' }[]
+  /** Your reason, in your words (the urge crusher shows it). */
+  why?: string | null
 }
 
 export type ConnectionKind = 'waky' | 'finance' | 'man'
@@ -601,6 +607,8 @@ export interface LifeApi {
     finishUrge(): Promise<DisciplineState>
     cancelUrge(): Promise<DisciplineState>
     setStealth(on: boolean): Promise<DisciplineState>
+    /** Save your reason ("your why"); empty clears it. */
+    setWhy?(text: string): Promise<DisciplineState>
     /** What set off an urge / a reset (Ben learns your patterns from it). */
     note?(kind: 'urge' | 'reset', trigger: string, extra?: { before?: number; after?: number; action?: string }): Promise<void>
     /** After a reset: the 72-hour comeback plan (Ben's check-ins are set; tasks are returned for Todoist). */

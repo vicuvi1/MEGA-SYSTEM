@@ -143,12 +143,28 @@ describe('discipline service', () => {
     expect(() => d.undoReset(t('2026-10-25T21:20:00Z'))).toThrow('first 10 minutes')
   })
 
-  it('MN3/MN25: says when the check-in opens, and keeps 12 weeks of history', () => {
+  it('MN3/MN25: says when the check-in opens, and keeps 6 months of history', () => {
     d.setStart('2026-10-15', oct25)
     expect(d.state(t('2026-10-25T14:00:00Z')).checkIn?.mode).toBe('wait')
     expect(d.state(oct25).checkIn?.mode).toBe('today')
     d.checkIn(oct25)
     expect(d.state(oct25).checkIn?.mode).toBe('done')
     expect(d.state(oct25).history?.some((h) => h.kind === 'checkin' && h.day === '2026-10-25')).toBe(true)
+  })
+
+  it('the page gets your runs, the first start date and your why', () => {
+    d.setStart('2026-10-01', oct25)
+    d.reset(t('2026-10-20T20:00:00Z'))
+    const s = d.state(oct25)
+    expect(s.startedOn).toBe('2026-10-01')
+    expect(s.runs).toEqual([
+      { from: '2026-10-01', to: '2026-10-20', days: 19, ended: 'reset' },
+      { from: '2026-10-20', to: '2026-10-25', days: 5, ended: 'now' }
+    ])
+    expect(s.why).toBeNull()
+    d.setWhy('  To be present for the people I love.  ')
+    expect(d.state(oct25).why).toBe('To be present for the people I love.')
+    d.setWhy('')
+    expect(d.state(oct25).why).toBeNull()
   })
 })

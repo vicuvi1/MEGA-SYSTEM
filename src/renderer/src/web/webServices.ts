@@ -370,7 +370,8 @@ export function createWebServices(mirror: Mirror) {
       finishUrge: () => write((s) => (s.discipline.finishUrge(), s.discipline.state()), W, D),
       cancelUrge: () => write((s) => (s.discipline.cancelUrge(), s.discipline.state()), W, D),
       claim: (days: number) => write((s) => ({ coins: s.discipline.claim(days), state: s.discipline.state() }), W, D),
-      setStealth: (on: boolean) => write((s) => (s.discipline.setStealth(on), s.discipline.state()))
+      setStealth: (on: boolean) => write((s) => (s.discipline.setStealth(on), s.discipline.state())),
+      setWhy: (text: string) => write((s) => (s.discipline.setWhy(text), s.discipline.state()))
     },
     body: {
       state: () => read((s) => s.body.state()),

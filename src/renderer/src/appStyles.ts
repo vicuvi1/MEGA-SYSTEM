@@ -3,6 +3,7 @@
 import './styles.css'
 import './plan.css'
 import './discipline.css'
+import './disciplinePage.css'
 import './shell.css'
 import './extras.css'
 import './light.css'

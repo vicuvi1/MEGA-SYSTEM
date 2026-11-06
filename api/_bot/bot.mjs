@@ -1922,6 +1922,7 @@ var SETTINGS = {
 	sleep_weekday_target: text("weekday wake target (HH:MM)"),
 	sleep_weekend_target: text("weekend wake target (HH:MM)"),
 	discipline_stealth: flag("stealth mode: neutral words everywhere (\"1\" on)"),
+	discipline_why: text("your reason for the streak, in your words (shown in the urge crusher)"),
 	discipline_triggers: json$5("urge triggers you logged", []),
 	discipline_undone_resets: json$5("resets you took back", []),
 	discipline_warned: json$5("risk warnings already sent", null),
@@ -3853,6 +3854,21 @@ function resetUndoable(events, today, now) {
 	if (!r || r.day !== today) return null;
 	return now.getTime() - Date.parse(r.ts) <= 6e5 ? r : null;
 }
+// src/core/disciplineView.ts
+/** Every streak from your start date, split at the resets (oldest first). */
+function streakRuns(start, resets, today) {
+	if (!start) return [];
+	const cuts = [...new Set(resets.filter((d) => d >= start && d <= today))].sort();
+	return [start, ...cuts].map((from, i) => {
+		const to = cuts[i] ?? today;
+		return {
+			from,
+			to,
+			days: Math.max(0, daysBetween$2(from, to)),
+			ended: i < cuts.length ? "reset" : "now"
+		};
+	});
+}
 // src/main/discipline.ts
 var UNDONE_KEY = "discipline_undone_resets";
 /** Resets that were taken back in their first 10 minutes (MN7). */
@@ -3923,7 +3939,7 @@ var Discipline = class {
 					day: w.day
 				};
 			})(),
-			history: events.filter((e) => e.day >= addDays$5(today, -84) && e.kind !== "start").map((e) => ({
+			history: events.filter((e) => e.day >= addDays$5(today, -189) && e.kind !== "start").map((e) => ({
 				day: e.day,
 				kind: e.kind,
 				hour: new Date(e.ts).getHours()
@@ -3931,7 +3947,10 @@ var Discipline = class {
 			undoResetUntil: (() => {
 				const r = resetUndoable(events, today, now);
 				return r ? new Date(Date.parse(r.ts) + 6e5).toISOString() : null;
-			})()
+			})(),
+			startedOn: startOf(events)?.day ?? null,
+			runs: streakRuns(startOf(events)?.day ?? null, events.filter((e) => e.kind === "reset").map((e) => e.day), today),
+			why: getSetting(this.db, "discipline_why") || null
 		};
 	}
 	/**
@@ -4075,6 +4094,10 @@ var Discipline = class {
 	}
 	setStealth(on) {
 		writeSetting(this.db, "discipline_stealth", on);
+	}
+	/** Your reason for the streak, in your words (up to 300 characters). */
+	setWhy(text) {
+		setSetting(this.db, "discipline_why", String(text ?? "").trim().slice(0, 300));
 	}
 };
 function loadTriggers(db) {
@@ -21417,7 +21440,8 @@ syncFinance: (recordDays) => write((s) => {
 				coins: s.discipline.claim(days),
 				state: s.discipline.state()
 			}), W, D),
-			setStealth: (on) => write((s) => (s.discipline.setStealth(on), s.discipline.state()))
+			setStealth: (on) => write((s) => (s.discipline.setStealth(on), s.discipline.state())),
+			setWhy: (text) => write((s) => (s.discipline.setWhy(text), s.discipline.state()))
 		},
 		body: {
 			state: () => read((s) => s.body.state()),

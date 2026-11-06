@@ -320,6 +320,16 @@ try {
     await open('discipline')
     await pg.waitForSelector('.discipline, .setup, .stealth-cover', { timeout: 10000 })
     if (await pg.evaluate(() => !![...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent && /man/.test(e.getAttribute('src') ?? '')))) throw new Error('MAN is still embedded')
+    // Everything on one page, no tabs: hero, numbers, milestones, history, urge tools, settings.
+    if (await pg.$('.discipline')) {
+      if (await pg.$('.discipline .ptabs')) throw new Error('Discipline still has tabs')
+      for (const sel of ['.dx-hero', '.dx-stats', '.dx-miles', '.dx-history .dx-heat', '.dx-tools', '.dx-settings']) if (!(await pg.$(sel))) throw new Error(`Discipline has no ${sel}`)
+      // The urge crusher opens as one focused panel; "Stop the timer" closes it.
+      await pg.click('.dx-crush')
+      await pg.waitForSelector('.dx-urge .dx-breath', { timeout: 5000 })
+      await pg.locator('.dx-urge button', { hasText: 'Stop the timer' }).click()
+      await pg.waitForSelector('.dx-urge', { state: 'detached', timeout: 5000 })
+    }
   })
   // Night 11: Rewards shows the wallet, Ben's line, the tabs and the reward cards.
   await step('Rewards: wallet, tabs and reward cards', async () => {
@@ -1845,14 +1855,13 @@ try {
   })
   // The same switch on every long page: each tab about one laptop screen.
   // Run at 10:00: how long Insights → Week is depends on what's left of today's calendar.
-  await step('Long pages: Insights, Goals, Money, Discipline, Music, Rewards and long Settings sections fit by tabs', () => atTime('10:00', async () => {
+  await step('Long pages: Insights, Goals, Money, Music, Rewards and long Settings sections fit by tabs', () => atTime('10:00', async () => {
     await pg.setViewportSize({ width: 1280, height: 720 })
     const report = []
     const pages = [
       ['progress', '.pg', ['week', 'areas', 'streaks', 'focus', 'look'], { week: 2.2 }],
       ['goals', '.gx', ['goals', 'hours', 'path'], { goals: 2.6 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
-      ['discipline', '.discipline', ['today', 'milestones', 'history'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],
       ['shop', '.rx', ['now', 'saving', 'all', 'history', 'earn'], { all: 2 }]
     ]

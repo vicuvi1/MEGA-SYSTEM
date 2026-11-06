@@ -18,6 +18,7 @@ export function createMockDiscipline(ctx: Ctx): Pick<LifeApi, 'discipline'> {
   let id = 1
   let urgeStartedAt: string | null = null
   let stealth = false
+  let why: string | null = null
   const record = (kind: DisciplineEvent['kind'], day = today()) => events.push({ id: id++, kind, day, ts: new Date().toISOString() })
   const award = (ruleId: string) => {
     const rule = ctx.rules().find((r) => r.id === ruleId)
@@ -54,7 +55,8 @@ export function createMockDiscipline(ctx: Ctx): Pick<LifeApi, 'discipline'> {
       urgeStartedAt,
       urgesThisWeek: events.filter((e) => e.kind === 'urge' && e.day >= addDays(t, -6)).length,
       stealth,
-      quote: quoteFor(t)
+      quote: quoteFor(t),
+      why
     }
   }
 
@@ -109,6 +111,10 @@ export function createMockDiscipline(ctx: Ctx): Pick<LifeApi, 'discipline'> {
       },
       setStealth: async (on) => {
         stealth = on
+        return state()
+      },
+      setWhy: async (text) => {
+        why = text.trim().slice(0, 300) || null
         return state()
       }
     }

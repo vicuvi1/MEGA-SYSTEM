@@ -45,8 +45,6 @@ export const TAB_LINKS: TabLink[] = [
   { page: 'goals', tab: 'path', label: 'Cyber security path', hint: 'Goals → Path: CTFs, Rust, crypto' },
   { page: 'money', tab: 'month', label: 'Where money goes', hint: 'Money → Month: categories and forecast' },
   { page: 'money', tab: 'goals', label: 'Savings goals and fun budget', hint: 'Money → Goals' },
-  { page: 'discipline', tab: 'milestones', label: 'Discipline milestones', hint: 'Discipline → Milestones: the 90-day campaign' },
-  { page: 'discipline', tab: 'history', label: 'Discipline reflection', hint: 'Discipline → History: last 12 weeks and reflection' },
   { page: 'music', tab: 'library', label: 'Music stations and favourites', hint: 'Music → Library' },
   { page: 'shop', tab: 'earn', label: 'Daily quests and badges', hint: 'Rewards → Quests: quests, challenge, earnings, badges' }
 ]

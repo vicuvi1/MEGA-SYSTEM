@@ -3,6 +3,7 @@ import {
   checkInWindow, dayNumber, milestoneRef, milestonesOf, planCheckIn, planUrgeFinish, quoteFor, rankFor, resetUndoable, RESET_UNDO_MINUTES, startOf, statsOf, validateStart,
   type DisciplineEvent, type DisciplineKind
 } from '@core/discipline'
+import { streakRuns } from '@core/disciplineView'
 import { LedgerError } from '@core/ledger'
 import type { DisciplineState } from '@shared/api'
 import type { DB } from './db'
@@ -74,12 +75,15 @@ export class Discipline {
         return { mode: done && w.mode !== 'wait' ? ('done' as const) : w.mode, day: w.day }
       })(),
       history: events
-        .filter((e) => e.day >= addDays(today, -7 * 12) && e.kind !== 'start')
+        .filter((e) => e.day >= addDays(today, -7 * 27) && e.kind !== 'start')
         .map((e) => ({ day: e.day, kind: e.kind, hour: new Date(e.ts).getHours() })),
       undoResetUntil: (() => {
         const r = resetUndoable(events, today, now)
         return r ? new Date(Date.parse(r.ts) + RESET_UNDO_MINUTES * 60_000).toISOString() : null
-      })()
+      })(),
+      startedOn: startOf(events)?.day ?? null,
+      runs: streakRuns(startOf(events)?.day ?? null, events.filter((e) => e.kind === 'reset').map((e) => e.day), today),
+      why: getSetting(this.db, 'discipline_why') || null
     }
   }
 
@@ -229,5 +233,10 @@ export class Discipline {
 
   setStealth(on: boolean): void {
     writeSetting(this.db, 'discipline_stealth', on)
+  }
+
+  /** Your reason for the streak, in your words (up to 300 characters). */
+  setWhy(text: string): void {
+    setSetting(this.db, 'discipline_why', String(text ?? '').trim().slice(0, 300))
   }
 }
