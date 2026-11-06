@@ -476,6 +476,44 @@ try {
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'nudge' && a.op.op === 'close' && a.op.alertId === 'eyes:1'), null, { timeout: 3000 })
     await ip.context().close()
   })
+  // MT1–MT3: in a call, Caption starts captions; the strip shows the newest lines; Stop wipes them.
+  await step('Desktop island meetings: Caption in a call, the caption strip, Stop', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 560, height: 520 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = { at: now, locked: false, ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] }, running: null, now: null, next: null, call: { title: 'Study group', end: now + 40 * 60_000 }, mustdos: [], water: { ml: 500, target: 2000 }, reps: [], alert: null }
+      let st = { windows: true, live: true, inCall: true, captioning: false, starting: false, lines: [], words: 0, startedAt: 0, note: '', replyApp: null, private: false }
+      window.__meet = { cbs, calls: [] }
+      window.desktop = new Proxy({
+        islandHot: () => {}, islandTakeClicks: () => {}, islandAction: () => {}, setIslandPrefs: async () => null,
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle'),
+        meetings: {
+          status: async () => st,
+          start: async (title) => { window.__meet.calls.push(['start', title]); st = { ...st, captioning: true, startedAt: Date.now(), words: 9, lines: ['Okay everyone, let us look at the second question.'] }; setTimeout(() => cbs.meet?.(st), 50); return { ok: true, said: '' } },
+          stop: async () => { window.__meet.calls.push(['stop']); st = { ...st, captioning: false, words: 0, lines: [] }; setTimeout(() => cbs.meet?.(st), 50); return true },
+          transcript: async () => null,
+          readReply: async () => ({ ok: false, said: 'no' }),
+          onState: (cb) => { cbs.meet = cb }
+        }
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill, .di-moon-pill', { timeout: 15000 })
+    await ip.evaluate(() => window.__meet.cbs.hover?.(true))
+    await ip.waitForSelector('[data-tap="meet:caption"]', { timeout: 5000 })
+    await ip.waitForTimeout(400)
+    await ip.click('[data-tap="meet:caption"]')
+    await ip.waitForSelector('.di-meet-strip p.now', { timeout: 4000 })
+    if (!(await ip.evaluate(() => window.__meet.calls.some((c) => c[0] === 'start' && c[1] === 'Study group')))) throw new Error('Caption did not start with the meeting title')
+    if (!/second question/.test(await ip.textContent('.di-meet-strip'))) throw new Error('the strip does not show the caption')
+    await ip.click('[data-tap="meet:stop"]')
+    await ip.waitForSelector('.di-meet-strip', { state: 'detached', timeout: 4000 })
+    await ip.context().close()
+  })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

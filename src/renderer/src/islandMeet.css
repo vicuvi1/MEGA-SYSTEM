@@ -1,0 +1,33 @@
+/* Meetings on the island (MT1–MT3, AI17): the bar and the caption strip under the pill. Motion: opacity only. */
+.di-meet { position: absolute; top: calc(100% + 6px); left: 50%; translate: -50% 0; width: max-content; max-width: calc(100vw - 16px); display: grid; justify-items: center; gap: 6px; z-index: 3; }
+/* Under the eyes' badge when it shows (same corner). */
+.di:has(.di-eyes) .di-meet { top: calc(100% + 38px); }
+.di.at-left .di-meet, .di.at-top-left .di-meet { left: 0; translate: none; justify-items: start; }
+.di.at-right .di-meet, .di.at-top-right .di-meet { left: auto; right: 0; translate: none; justify-items: end; }
+.di-meet-row { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 6px; }
+.di-meet button { height: 26px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--bg); color: var(--fg); font-family: inherit; font-weight: 600; font-size: 11.5px; line-height: 1; box-shadow: 0 6px 18px rgb(0 0 0 / 0.4), 0 0 0 1px var(--line); cursor: pointer; white-space: nowrap; transition: opacity 0.15s; }
+.di-meet button:hover:not(:disabled):not(.primary) { background: rgb(255 255 255 / 0.1); }
+.di-meet button:disabled { opacity: 0.5; cursor: default; }
+.di-meet button.primary { background: var(--accent, #d4ff3f); color: #0b0d12; box-shadow: 0 6px 18px rgb(0 0 0 / 0.4); }
+.di-meet-cc b { display: inline-block; margin-right: 4px; padding: 1px 4px; border-radius: 4px; border: 1.5px solid currentColor; font-size: 9.5px; }
+.di-meet-live, .di-meet-off { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 10px; border-radius: 999px; background: var(--bg); color: var(--fg); font-family: inherit; font-weight: 600; font-size: 11.5px; line-height: 1; box-shadow: 0 6px 18px rgb(0 0 0 / 0.4), 0 0 0 1px var(--line); }
+.di-meet-off { color: var(--muted, #9aa0a8); font-weight: 500; white-space: normal; height: auto; min-height: 26px; padding: 5px 10px; }
+.di-meet-live i { position: relative; width: 8px; height: 8px; border-radius: 50%; background: #ff4d4f; }
+.di-meet-live i::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; background: #ff4d4f; opacity: 0.35; animation: di-meet-pulse 1.6s ease-in-out infinite; }
+@keyframes di-meet-pulse { 50% { opacity: 0; transform: scale(1.6); } }
+.di-meet-strip { width: 380px; max-width: calc(100vw - 16px); box-sizing: border-box; padding: 8px 12px; border-radius: 14px; background: rgb(8 10 14 / 0.92); color: #f5f5f6; box-shadow: 0 8px 24px rgb(0 0 0 / 0.45), 0 0 0 1px var(--line); font-family: inherit; font-weight: 500; font-size: 13px; line-height: 1.4; }
+.di-meet-strip p { margin: 0; overflow-wrap: anywhere; opacity: 0.6; }
+.di-meet-strip p.now { opacity: 1; }
+.di-meet-strip p.wait { opacity: 0.7; font-style: italic; }
+.di-meet-note { max-width: 360px; padding: 7px 12px; border-radius: 12px; font-size: 12px; background: var(--bg); color: var(--fg); box-shadow: 0 6px 18px rgb(0 0 0 / 0.4), 0 0 0 1px var(--line); overflow-wrap: anywhere; }
+.di-meet-card { width: 380px; max-width: calc(100vw - 16px); box-sizing: border-box; display: grid; gap: 8px; padding: 10px 12px; border-radius: 14px; background: var(--bg); color: var(--fg); box-shadow: 0 8px 24px rgb(0 0 0 / 0.45), 0 0 0 1px var(--line); font-size: 12.5px; line-height: 1.4; }
+.di-meet-card p { margin: 0; }
+.di-meet-card .di-meet-row button { box-shadow: 0 0 0 1px var(--line); }
+.di-meet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.di-meet-head button.x { width: 24px; height: 24px; padding: 0; box-shadow: none; background: transparent; font-size: 15px; }
+.di-meet-replies q { display: block; color: var(--muted, #9aa0a8); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.di-meet-reply { display: grid; gap: 6px; padding: 8px 0 2px; border-top: 1px solid var(--line, rgb(127 127 127 / 0.2)); }
+.di-meet-reply > span:first-child { overflow-wrap: anywhere; }
+.di-meet-btns, .di-meet-ask { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.di-meet-ask { color: var(--muted, #9aa0a8); font-size: 12px; }
+.di-meet-reply button { height: 24px; box-shadow: 0 0 0 1px var(--line); }

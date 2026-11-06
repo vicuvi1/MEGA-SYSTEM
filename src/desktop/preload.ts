@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { DesktopApi } from '../shared/desktop'
 import { eyesPreload } from './eyes/preloadEyes'
+import { meetPreload } from './meetings/preloadMeet'
 
 const api: DesktopApi = {
   load: () => ipcRenderer.invoke('desktop:load'),
@@ -112,6 +113,8 @@ const api: DesktopApi = {
   onIslandVoice: (cb) => void ipcRenderer.on('island:voice', () => cb()),
   // Island eyes (EY1–EY6)
   eyes: eyesPreload(ipcRenderer),
+  // Meetings: captions in a call, and Help me reply (MT1–MT3, AI17).
+  meetings: meetPreload(ipcRenderer),
   // Voice: the PC locked / idle (the mic closes), and the media keys.
   onVoicePower: (cb) => void ipcRenderer.on('voice:power', (_e, s) => cb({ locked: !!s?.locked, idleSec: Number(s?.idleSec) || 0 })),
   voiceMedia: (key) => ipcRenderer.invoke('voice:media', String(key))

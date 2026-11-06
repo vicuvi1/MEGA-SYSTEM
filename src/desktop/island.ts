@@ -1198,6 +1198,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     voice: () => openFor('voice'),
     restartWatcher,
     enabled: () => enabled,
+    /** Meetings (MT1): in a call now (mic / camera, or a calendar meeting). */
+    inCall,
     /** Island 2 (islandKit.ts): an event for the page, is this the page, the island's own shortcuts, shown now. */
     kit: {
       send: (ev: Record<string, unknown>) => { if (win && !win.isDestroyed() && ready) win.webContents.send('islandKit', ev) },

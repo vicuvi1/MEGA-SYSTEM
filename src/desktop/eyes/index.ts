@@ -36,6 +36,8 @@ export interface EyesHandle {
   noteWindow(proc: string, title: string | null): void
   /** Tray menu items (Pause the eyes…), only when the eyes are on. */
   trayItems(refresh: () => void): MenuItemConstructorOptions[]
+  /** The eyes' settings now (Pause, your private list): meetings and Help me reply use the same gate. */
+  prefs(): EyesPrefs
 }
 
 export function createEyes(o: { dir: string; origin: string }): EyesHandle {
@@ -317,6 +319,7 @@ export function createEyes(o: { dir: string; origin: string }): EyesHandle {
       })
     },
     noteWindow,
+    prefs: () => prefs,
     trayItems(refresh) {
       if (!prefs.on) return []
       const until = prefs.pausedUntil > Date.now() ? prefs.pausedUntil : 0

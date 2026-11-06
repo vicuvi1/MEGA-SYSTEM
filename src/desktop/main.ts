@@ -17,6 +17,7 @@ import { createVault } from './vault'
 import { createPc } from './pc'
 import { registerPcExtras } from './pc/index'
 import { createEyes } from './eyes'
+import { createMeetings } from './meetings'
 import { setupVoice } from './voice'
 import { installNow, memoryReloadDue } from '../core/nightCare'
 
@@ -282,11 +283,14 @@ if (firstCopy) void app.whenReady().then(async () => {
     onApp: (proc, title, seconds) => {
       pcRef.current?.sample(proc, title, seconds)
       eyes.noteWindow(proc, title)
+      meetings?.noteFg(proc, title)
     },
-    onFg: (proc) => (eyes.noteWindow(proc, null), islandKit?.noteFg(proc))
+    onFg: (proc) => (eyes.noteWindow(proc, null), islandKit?.noteFg(proc), meetings?.noteFg(proc, null))
   })
   // Island 2: tiles' shortcuts, your own profiles, the mini dock, the clipboard tray, the file shelf.
   const islandKit = createIslandKit({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, dir, island: island.kit })
+  // Meetings: captions in a call and Help me reply (the watcher runs only while you caption).
+  const meetings = createMeetings({ origin, inCall: island.inCall, eyesPrefs: eyes.prefs })
   // AF1: a light clock for the island. While the app window is hidden its own
   // timers are slowed down, but a message from here still runs at once, so
   // every 15 s it sends the island a fresh snapshot (only if the island is on).

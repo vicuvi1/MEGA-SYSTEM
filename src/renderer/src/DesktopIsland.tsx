@@ -40,6 +40,7 @@ import { cursorNear } from '../../desktop/islandPlace'
 import { IslandParticles, burstFrom, setParticlesAllowed } from './IslandParticles'
 import { CalendarCap, Crescent, DropCap, LiquidBorder, Sky, TodayRing, pageTurn } from './islandShapes'
 import { IslandEyesBadge } from './IslandEyesBadge'
+import { IslandMeet } from './IslandMeet'
 import { IslandMoveBadge, IslandNudgeCard, IslandNudgePill, type NudgeRun } from './IslandNudgeCard'
 import { NUDGE_CLOSES, nudgeTapLabel } from '@core/islandNudges'
 import { BenThinking, EveningScene, LiveStack, MomentPill, PillEditor, RECAP_MS, SnapGhost, ThinkWave, leanFor, makeJelly, snapBounceIn } from './islandWidgets'
@@ -2162,6 +2163,8 @@ export function DesktopIsland() {
             {mv.moveMode && <MoveModeBar />}
             {/* Island eyes: the eye (reading / paused / Pause button), only with the eyes on. */}
             <IslandEyesBadge near={ui.over || ui.view === 'expanded'} onLayout={() => sendHot(true)} />
+            {/* Meetings: Caption in a call, the caption strip, Help me reply (MT1–MT3, AI17). */}
+            <IslandMeet inCall={inCall} title={s.call?.title ?? null} near={ui.over || ui.view !== 'compact'} onLayout={() => sendHot(true)} />
             <AnimatePresence>
               {toast && (
                 <motion.div key="toast" data-hot className={`di-toast ${toast.state}`} role="status" initial={{ opacity: 0, y: f.moves ? -6 : 0 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: f.moves ? -6 : 0 }} transition={f.pop} onAnimationStart={() => pump(500)} onAnimationComplete={() => sendHot(true)}>
