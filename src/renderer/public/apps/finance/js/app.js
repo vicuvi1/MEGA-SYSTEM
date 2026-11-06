@@ -362,7 +362,14 @@ function renderLifeTabs() {
   if (!nav.dataset.ready) {
     nav.dataset.ready = '1';
     nav.hidden = false;
-    nav.innerHTML = `<div class="lt-scroll">${LIFE_TABS.map(([tab, label]) => `<a href="#${tab}" data-tab="${tab}">${label}</a>`).join('')}<button type="button" class="lt-more" data-act="more" aria-label="More sections">More</button></div>
+    // Each section keeps its sidebar icon and colour, so it's quick to spot.
+    const icon = (tab) => {
+      const a = document.querySelector(`a[data-tab="${tab}"] .ni svg`)?.closest('a');
+      const svg = a?.querySelector('.ni svg')?.outerHTML ?? '';
+      return { svg, color: a?.style.getPropertyValue('--nc') || 'var(--text-2)' };
+    };
+    const dots = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>';
+    nav.innerHTML = `<div class="lt-scroll">${LIFE_TABS.map(([tab, label]) => { const i = icon(tab); return `<a href="#${tab}" data-tab="${tab}" style="--nc:${i.color}">${i.svg ? `<span class="lt-i">${i.svg}</span>` : ''}<span>${label}</span></a>`; }).join('')}<button type="button" class="lt-more" data-act="more" aria-label="More sections"><span class="lt-i">${dots}</span><span>More</span></button></div>
       <button type="button" class="lt-add" data-act="add" aria-label="Add a record"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>`;
   }
   const cur = NAV_PARENT[ui.tab] || ui.tab;

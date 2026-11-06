@@ -5746,7 +5746,17 @@ html[data-in-life] .lt-more {
   flex: none; padding: 7px 12px; border-radius: 9px; border: 0; background: none;
   color: var(--muted); font-size: 13.5px; font-weight: 550; text-decoration: none; white-space: nowrap;
   transition: background-color 0.15s, color 0.15s;
+  display: inline-flex; align-items: center; gap: 7px;
 }
+html[data-in-life] .lt-i {
+  display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 7px;
+  color: var(--nc, var(--muted)); background: color-mix(in srgb, var(--nc, var(--muted)) 14%, transparent);
+  transition: transform 0.15s, background-color 0.15s;
+}
+html[data-in-life] .lt-i svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+html[data-in-life] .lt-more .lt-i svg { fill: currentColor; stroke: none; }
+html[data-in-life] .lt-scroll > a:hover .lt-i { transform: scale(1.08); }
+html[data-in-life] .lt-scroll > a[aria-current] .lt-i { background: color-mix(in srgb, var(--nc, var(--muted)) 26%, transparent); }
 html[data-in-life] .lt-scroll > a:hover,
 html[data-in-life] .lt-more:hover { color: var(--text); background: var(--surface-2); }
 html[data-in-life] .lt-scroll > a[aria-current],
