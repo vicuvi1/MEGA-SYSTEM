@@ -6,6 +6,7 @@
 import { createAppSync, type AppSyncSpec } from './appSync'
 import type { Mirror } from './mirror'
 import { sportFromLog } from '../../../main/bodyLog'
+import { mergeSets } from '../../../core/sportSets'
 
 export const SPORT_KEY = 'life_sport_tracker_v1'
 const SETTING = 'sport_tracker_json'
@@ -69,6 +70,16 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
     for (const [k, v] of Object.entries(newer.badges ?? {})) seen[k] = seen[k] && seen[k] < String(v) ? seen[k] : String(v)
     out.badges = seen
   }
+  // SP3: sets from both devices (each set once, by its id), the best set per
+  // exercise (the higher), level ups already shown and Telegram imports.
+  if (a.sets || b.sets) out.sets = mergeSets(older.sets, newer.sets)
+  if (a.setsImported || b.setsImported) out.setsImported = true
+  if (a.best || b.best) {
+    const best: Record<string, any> = { ...(older.best ?? {}) }
+    for (const [k, v] of Object.entries<any>(newer.best ?? {})) if (!best[k] || (Number(v?.score) || 0) >= (Number(best[k]?.score) || 0)) best[k] = v
+    out.best = best
+  }
+  if (a.levelSeen || b.levelSeen) out.levelSeen = { ...(older.levelSeen ?? {}), ...(newer.levelSeen ?? {}) }
   if (a.notYet || b.notYet) {
     const later: Record<string, string> = { ...(older.notYet ?? {}) }
     for (const [k, v] of Object.entries(newer.notYet ?? {})) later[k] = later[k] && later[k] > String(v) ? later[k] : String(v)

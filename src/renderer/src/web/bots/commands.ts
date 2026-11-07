@@ -14,6 +14,7 @@ import type { Services } from '../webServices'
 import { answerLocal, financeStateFrom } from '../botBrain'
 import { esc } from './telegram'
 import { sleepKeyboard, STOP_KEYBOARD, stoppedReply, ruleCoins } from './helpers'
+import { setsText } from '@core/sportSets'
 
 const store = typeof localStorage !== 'undefined' ? localStorage : null
 
@@ -141,12 +142,13 @@ export function runCommand(s: Services, parsed: ReturnType<typeof parseTelegramT
     case 'workout': {
       const name = parsed.exerciseName || 'pushups'
       const amount = parsed.exerciseAmount || 20 // like the desktop: "/pushups" alone is 20
+      const sets = parsed.exerciseSets
       const res = s.body.logWorkout({
-        title: `${name} (+${amount})`,
-        items: [{ exerciseId: name.toLowerCase(), name, amount, unit: 'reps' }],
+        title: sets ? `${name} ${setsText(sets, parsed.exerciseUnit)}` : `${name} (+${amount})`,
+        items: [{ exerciseId: name.toLowerCase(), name, amount, unit: parsed.exerciseUnit === 'sec' ? 'sec' : 'reps', ...(sets ? { sets: sets.map((reps) => ({ reps, weight: 0 })) } : {}) } as any],
         note: 'Logged via Telegram'
       })
-      return { reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0), sport: { name, amount } }
+      return { reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0) + (sets ? `\nSets: <b>${setsText(sets, parsed.exerciseUnit)}</b> · best set <b>${Math.max(...sets)}</b>` : ''), sport: { name, amount, ...(sets ? { sets } : {}) } }
     }
     case 'sport': {
       const name = parsed.exerciseName || 'Workout'

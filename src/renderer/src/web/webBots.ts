@@ -58,6 +58,7 @@ import type { BotContext } from './bots/context'
 
 export { focusKeyboard }
 import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
+import { logBotSets } from '@core/sportBot'
 import { defaultSport, removeExercise, setExercise, waterCard, workoutCard } from '@core/sportCards'
 import { cleanRecipes, recipeText } from '@core/recipes'
 import { addAsk, cleanPcState, deskReady, pcActText, pcDenied, PC_ACTIONS_HELP } from '@core/pcActions'
@@ -72,13 +73,16 @@ const LOGS_KEY = 'life_bot_logs'
 const store = typeof localStorage !== 'undefined' ? localStorage : null
 
 /** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
-function addRepsToSportTrack(name: string, amount: number): { done: number; target: number } | null {
-  let prog: { done: number; target: number } | null = null
+function addRepsToSportTrack(name: string, amount: number, sets?: number[]): { done: number; target: number; line?: string } | null {
+  let prog: { done: number; target: number; line?: string } | null = null
   updateSport((st) => {
     const ex = findExercise(st, name)
     if (!ex) return
     ex.doneToday = (Number(ex.doneToday) || 0) + amount
     prog = { done: ex.doneToday, target: Number(ex.target) || 0 }
+    // SP3: sets ("3x15 push-ups") also go into Sport Track's sets, with the best set and the next level.
+    const r = sets?.length ? logBotSets(st, name, sets, sportToday()) : null
+    if (r) { st.sets = r.st.sets; prog.line = r.line }
   })
   return prog
 }
@@ -87,13 +91,16 @@ function addRepsToSportTrack(name: string, amount: number): { done: number; targ
  * Sport Track's data in Turso (settings.sport_tracker_json, see sportSync.ts),
  * for the server: reps land there and every device picks them up.
  */
-function addRepsInDb(db: any, name: string, amount: number): { done: number; target: number } | null {
+function addRepsInDb(db: any, name: string, amount: number, sets?: number[]): { done: number; target: number; line?: string } | null {
   const st = sportState(db)
   if (!st || !Array.isArray(st.exercises)) return null
   // Your local day, like Sport Track and the rest of the bot (was the UTC date: N7).
   const r = logReps(db, name, amount, 'telegram')
   if (!r) return null
-  return { done: r.exercise.done, target: r.exercise.target }
+  // SP3: sets also go into Sport Track's sets (the totals above are already logged).
+  const withSets = sets?.length ? logBotSets(r.st, name, sets, sportToday()) : null
+  if (withSets) saveSport(db, withSets.st, 'telegram')
+  return { done: r.exercise.done, target: r.exercise.target, line: withSets?.line }
 }
 
 export interface WebBotsDeps {
@@ -550,8 +557,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return db.transaction(() => {
       const out = run(svc, text, key)
       if (server && out.sport) {
-        const prog = addRepsInDb(db, out.sport.name, out.sport.amount)
+        const prog = addRepsInDb(db, out.sport.name, out.sport.amount, (out.sport as any).sets)
         if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
+        if (prog?.line) out.reply += `\n${prog.line}`
         out.sport = undefined
       }
       // Finance Helper gets it too (see financeInbox.ts).
@@ -2016,8 +2024,9 @@ His note: ${note}`,
         if (ai && 'unknown' in out && out.unknown && !text.startsWith('/')) return handleBrain(botId, update, cfg, text, key)
         processed++
         if (out.ok && 'sport' in out && out.sport) {
-          const prog = addRepsToSportTrack(out.sport.name, out.sport.amount)
+          const prog = addRepsToSportTrack(out.sport.name, out.sport.amount, (out.sport as any).sets)
           if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
+          if (prog?.line) out.reply += `\n${prog.line}`
         }
         if (out.ok && 'expense' in out && out.expense) onExpense?.()
         addLog(text, chat, out.ok, out.reply)

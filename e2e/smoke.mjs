@@ -255,23 +255,29 @@ try {
     await open('body')
     await pg.locator('.seg-switch button').first().click()
     await pg.waitForTimeout(2500)
-    const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+    let frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
     await frame.click('.st-tab[data-tab="today"]')
     await frame.waitForSelector('#hero-ring .ring-fill', { timeout: 5000 })
-    await frame.waitForSelector('.ex', { timeout: 5000 })
+    // SP3: on a rest day in the week plan, "Train anyway" brings the next workout.
+    if (await frame.locator('#hero-next-btn[data-train="1"]').isVisible()) await frame.click('#hero-next-btn')
+    await frame.waitForSelector('.ex', { timeout: 10000 }) // slower Windows runners
     if (!(await frame.locator('#btn-workout-mode').isVisible())) throw new Error('no Start workout button')
     // Besides its demo ("How to"), a card has only quick-add, Done and ⋯.
     const most = await frame.evaluate(() => Math.max(...[...document.querySelectorAll('.ex')].map((c) => c.querySelectorAll('button:not([data-howto])').length)))
     if (most > 3) throw new Error(`an exercise card has ${most} buttons (want: quick-add, Done, ⋯)`)
-    // A library exercise shows its animated demo, drawn (not an empty picture).
-    await frame.waitForSelector('.ex .ex-demo svg.fig path[data-p="torso"][d]', { state: 'attached', timeout: 5000 })
+    // A library exercise shows its demo: two real photo frames, or the drawn figure (not an empty picture).
+    await frame.waitForSelector('.ex .ex-demo svg.fig path[data-p="torso"][d], .ex .ex-demo .ph img.ph-b', { state: 'attached', timeout: 10000 })
+    const shut = async () => { if (await frame.locator('#cel.open').count()) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await frame.waitForSelector('#cel', { state: 'hidden', timeout: 5000 }) } }
     // A quick-add sends the change to Life System's log.
     await pg.evaluate(() => { window.__sportLog = []; window.addEventListener('message', (e) => e.data?.action === 'SPORT_LOG' && window.__sportLog.push(e.data.payload)) })
     const before = await frame.locator('.ex .ex-count b').first().innerText()
     await frame.locator('.ex [data-action="add"]').first().click()
     await frame.waitForFunction((b) => document.querySelector('.ex .ex-count b')?.textContent !== b, before, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
     await pg.waitForFunction(() => window.__sportLog.some((p) => p.changes.some((c) => c.kind.startsWith('reps:') && c.amount > 0)), null, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
+    // A set can finish an exercise or set a record: its celebration closes with a tap.
+    await pg.waitForTimeout(600)
+    await shut()
     // Water: a glass and its undo.
     const w0 = await frame.locator('#water-display-ml').innerText()
     await frame.click('#water-glass')
@@ -280,6 +286,7 @@ try {
     await frame.waitForFunction((w) => document.querySelector('#water-display-ml')?.innerText === w, w0, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
     // Logging can earn a badge: it pops up with "Nice!" (checked a moment after a change).
     await pg.waitForTimeout(1000)
+    await shut()
     if (await frame.locator('#unlock.open').count()) await frame.click('#unlock-ok')
     // The ⋯ menu opens and Esc closes it; the rest timer opens from it.
     await frame.locator('.ex .ex-more').first().click()
@@ -303,6 +310,38 @@ try {
     await frame.click('.st-tab[data-tab="library"]')
     await frame.waitForSelector('.mv svg.fig path[data-p="torso"][d]', { state: 'attached', timeout: 5000 })
     if ((await frame.locator('.mv').count()) < 40) throw new Error('the library shows fewer than 40 moves')
+    if ((await frame.locator('.mv .ph img').count()) < 40) throw new Error('fewer than 20 moves have photo demos') // two frames each
+    // SP3: the week plan (7 days, a session that fits the minutes) and the Strength view.
+    await frame.click('.st-tab[data-tab="plan"]')
+    await frame.waitForSelector('#pg-week .pg-day', { timeout: 10000 })
+    if ((await frame.locator('#pg-week .pg-day').count()) !== 7) throw new Error('the week plan does not show 7 days')
+    await frame.click('#pg-minutes [data-min="20"]')
+    await frame.waitForFunction(() => /20 min/.test(document.querySelector('#pg-meta')?.textContent ?? ''), null, { timeout: 5000 })
+    await frame.click('.st-tab[data-tab="progress"]')
+    await frame.waitForSelector('#str-hero h2', { timeout: 10000 })
+    await frame.waitForSelector('#str-muscles .mus-row', { timeout: 5000 })
+    // Workout mode follows the sets: set 1 of 3, Set done, then the rest ring.
+    await frame.click('.st-tab[data-tab="today"]')
+    await frame.locator('.ex .ex-demo').first().waitFor({ timeout: 10000 })
+    await frame.evaluate(() => openWM())
+    await frame.waitForSelector('#wm-body #wm-set', { timeout: 10000 })
+    if (await frame.locator('.wm-rest').count()) await frame.click('.wm-rest [data-rest="0"]') // the warm-up
+    await frame.click('#wm-set')
+    await shut()
+    await frame.waitForSelector('#wm-body .wm-rest, .wm-finish', { timeout: 10000 })
+    await shut()
+    await frame.evaluate(() => closeWM())
+    await frame.waitForSelector('#workout-mode', { state: 'hidden', timeout: 5000 })
+    // Finishing the day logs the workout in Life System, which can reload the page: find it again.
+    await pg.waitForTimeout(1500)
+    frame = pg.frames().find((f) => f.url().includes('/apps/sport/') && !f.isDetached()) ?? frame
+    await frame.waitForSelector('.st-tab[data-tab="history"]', { timeout: 10000 })
+    // Import from Telegram: a made-up export shows its days to pick (nothing is uploaded).
+    await frame.click('.st-tab[data-tab="history"]')
+    const fake = '<div class="history"><div class="message default clearfix" id="message2"><div class="body"><div class="pull_right date details" title="02.02.2025 20:00:00 UTC+03:00">20:00</div><div class="from_name">Demo Bot</div><div class="text">Push-ups (30/40 reps)<br>Sit-ups (20/20 reps)</div></div></div></div>'
+    await frame.setInputFiles('#tg-file', { name: 'messages.html', mimeType: 'text/html', buffer: Buffer.from(fake) })
+    await frame.waitForSelector('#modal-tg.open .tg-day input[data-day="2025-02-02"]', { timeout: 10000 })
+    await frame.click('#tg-cancel')
     await frame.click('.st-tab[data-tab="badges"]')
     await frame.waitForSelector('.bd .medal', { timeout: 5000 })
     await frame.click('.st-tab[data-tab="today"]')

@@ -344,6 +344,2615 @@ function musicNowContext(v, now) {
 	if (!m || now - m.at > 12e5 || m.at - now > 6e4) return null;
 	return `Music playing on SoundCloud now: ${m.line}.`;
 }
+// src/core/sportMoves.ts
+/** Each family's ladder, easiest first. */
+var FAMILIES = {
+	pushup: {
+		name: "Push-ups",
+		steps: [
+			"incline_pushup",
+			"knee_pushup",
+			"pushup",
+			"wide_pushup",
+			"diamond_pushup",
+			"decline_pushup",
+			"archer_pushup",
+			"planche_pushup"
+		]
+	},
+	pike: {
+		name: "Shoulder push",
+		steps: ["pike_pushup", "elevated_pike"]
+	},
+	dips: {
+		name: "Dips",
+		steps: ["chair_dip"]
+	},
+	row: {
+		name: "Rows",
+		steps: [
+			"door_row",
+			"table_row_bent",
+			"table_row"
+		]
+	},
+	back: {
+		name: "Back",
+		steps: ["superman", "swimmer"]
+	},
+	core: {
+		name: "Abs",
+		steps: [
+			"crunch",
+			"situp",
+			"leg_raise",
+			"hollow_hold",
+			"v_up",
+			"dragon_flag"
+		]
+	},
+	deadbug: {
+		name: "Dead bug",
+		steps: ["dead_bug"]
+	},
+	plank: {
+		name: "Plank",
+		steps: [
+			"plank",
+			"side_plank",
+			"shoulder_taps",
+			"plank_updown"
+		]
+	},
+	squat: {
+		name: "Squats",
+		steps: [
+			"squat",
+			"jump_squat",
+			"split_squat",
+			"bulgarian_squat",
+			"shrimp_squat",
+			"pistol_squat"
+		]
+	},
+	lunge: {
+		name: "Lunges",
+		steps: [
+			"reverse_lunge",
+			"lunge",
+			"jump_lunge"
+		]
+	},
+	bridge: {
+		name: "Glute bridge",
+		steps: ["glute_bridge", "single_leg_bridge"]
+	},
+	wallsit: {
+		name: "Wall sit",
+		steps: ["wall_sit"]
+	},
+	calf: {
+		name: "Calves",
+		steps: ["calf_raise", "single_calf_raise"]
+	},
+	jacks: {
+		name: "Jumps",
+		steps: ["jumping_jack", "star_jump"]
+	},
+	knees: {
+		name: "High knees",
+		steps: ["high_knees"]
+	},
+	climber: {
+		name: "Mountain climbers",
+		steps: ["mountain_climber", "cross_climber"]
+	},
+	burpee: {
+		name: "Burpees",
+		steps: [
+			"half_burpee",
+			"burpee",
+			"pushup_burpee"
+		]
+	},
+	catcow: {
+		name: "Cat-cow",
+		steps: ["cat_cow"]
+	},
+	dog: {
+		name: "Downward dog",
+		steps: ["down_dog"]
+	},
+	wgs: {
+		name: "Lunge stretch",
+		steps: ["worlds_greatest"]
+	},
+	circles: {
+		name: "Arm circles",
+		steps: ["arm_circles"]
+	},
+	child: {
+		name: "Child's pose",
+		steps: ["childs_pose"]
+	},
+	cobra: {
+		name: "Cobra",
+		steps: ["cobra"]
+	},
+	hinge: {
+		name: "Good morning",
+		steps: ["good_morning"]
+	}
+};
+var D2R = Math.PI / 180;
+/** A point `r` away from `p` at `deg` degrees. */
+var at$1 = (p, r, deg) => [+(p[0] + r * Math.cos(deg * D2R)).toFixed(2), +(p[1] + r * Math.sin(deg * D2R)).toFixed(2)];
+/** Shoulders of a straight body from the ankles (planks, push-ups): 25 torso + 36.5 leg. */
+var body = (ankle, deg, r = 61.5) => at$1(ankle, r, deg);
+var ST_ANKLES = [[62, 81.5], [57.5, 81.5]];
+/** Standing, facing right, arms down. */
+var stand = (o = {}) => ({
+	h: [60, 46.5],
+	s: [60.5, 21.5],
+	a: [[63, 46], [59.5, 46.5]],
+	f: ST_ANKLES,
+	...o
+});
+/** Up by `dy` (calf raises, jumps). */
+var up = (p, dy) => {
+	const m = (q) => [q[0], q[1] - dy];
+	return {
+		...p,
+		h: p.h && m(p.h),
+		s: m(p.s),
+		a: p.a && [m(p.a[0]), m(p.a[1])],
+		f: [m(p.f[0]), m(p.f[1])],
+		kn: p.kn && [p.kn[0] && m(p.kn[0]), p.kn[1] && m(p.kn[1])]
+	};
+};
+var PL_ANKLE = [24, 79.5];
+/** A straight-arm plank (push-up position): shoulders at `deg` from the ankles. */
+var plank = (deg, o = {}) => ({
+	s: body(PL_ANKLE, deg),
+	line: true,
+	a: [[83, 82.5], [81, 82.5]],
+	f: [PL_ANKLE, [25, 79.5]],
+	ft: [68, 68],
+	...o
+});
+/** Lying on the back, head to the right, knees bent and feet flat. */
+var backKnees = (o = {}) => ({
+	h: [52, 79.5],
+	s: [77, 79.5],
+	f: [[33, 81.5], [34.5, 81.5]],
+	kb: [1, 1],
+	ft: [0, 0],
+	a: [[58, 82.5], [56, 82.5]],
+	...o
+});
+/** Crouched with hands on the floor (the start of a burpee). */
+var crouch = (o = {}) => ({
+	h: [54, 66],
+	s: at$1([54, 66], 25, -22),
+	a: [[80, 82.5], [78, 82.5]],
+	f: [[59, 80.5], [56, 80.5]],
+	ft: [40, 40],
+	...o
+});
+var jumpUp = (o = {}) => ({
+	h: [60, 38],
+	s: [60.5, 13],
+	a: [[66, -3], [62, -2]],
+	f: [[62, 74.5], [57, 73.5]],
+	ft: [62, 62],
+	eb: [-1, -1],
+	...o
+});
+/** Seconds per pose change, and how long to stay. */
+var k = (p, t, hold = 0) => ({
+	p,
+	t,
+	hold
+});
+var PU_TOP = -21;
+var PU_LOW = -8;
+var pushAnim = (o) => ({
+	hands: o.hands ?? "normal",
+	keys: [k(plank(o.top ?? PU_TOP, o.a ? { a: o.a } : {}), .9, .35), k(plank(o.low ?? PU_LOW, o.lowA ? { a: o.lowA } : o.a ? { a: o.a } : {}), 1, .12)]
+});
+var MOVES = [
+	{
+		id: "incline_pushup",
+		name: "Incline push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 1,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Chest",
+			"Triceps",
+			"Shoulders"
+		],
+		steps: [
+			"Put your hands on a sturdy chair, sofa or table, a little wider than your shoulders.",
+			"Walk your feet back until your body is one straight line.",
+			"Lower your chest to the edge, then push back up."
+		],
+		mistake: "Letting the hips sag: squeeze your glutes and keep the line straight.",
+		alias: [
+			"incline push up",
+			"incline pushups",
+			"wall pushups"
+		],
+		anim: {
+			props: [{
+				k: "box",
+				x: 76,
+				y: 60,
+				w: 26
+			}],
+			keys: [k({
+				s: body([40, 80.5], -44),
+				line: true,
+				a: [[89, 58.5], [87, 58.5]],
+				f: [[40, 80.5], [41, 80.5]],
+				ft: [55, 55]
+			}, .9, .3), k({
+				s: body([40, 80.5], -32.5),
+				line: true,
+				a: [[89, 58.5], [87, 58.5]],
+				f: [[40, 80.5], [41, 80.5]],
+				ft: [55, 55]
+			}, 1, .1)]
+		}
+	},
+	{
+		id: "knee_pushup",
+		name: "Knee push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 1,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Chest",
+			"Triceps",
+			"Shoulders"
+		],
+		steps: [
+			"Start on your hands and knees, hands under your shoulders.",
+			"Walk the hands forward so your body is straight from the knees to the head.",
+			"Bend the elbows to bring your chest close to the floor, then push up."
+		],
+		mistake: "Bending at the hips: knees, hips and shoulders stay in one line.",
+		alias: [
+			"knee push up",
+			"knee pushups",
+			"kneeling pushups"
+		],
+		anim: { keys: [k({
+			s: at$1([46, 82], 43.5, -32),
+			line: true,
+			kn: [[46, 82], [47, 82]],
+			a: [[84, 82.5], [82, 82.5]],
+			f: [[30, 71], [31, 70]],
+			ft: [160, 160]
+		}, .9, .3), k({
+			s: at$1([46, 82], 43.5, -12),
+			line: true,
+			kn: [[46, 82], [47, 82]],
+			a: [[84, 82.5], [82, 82.5]],
+			f: [[30, 71], [31, 70]],
+			ft: [160, 160]
+		}, 1, .1)] }
+	},
+	{
+		id: "pushup",
+		name: "Push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 2,
+		unit: "reps",
+		start: 50,
+		set: 12,
+		muscles: [
+			"Chest",
+			"Triceps",
+			"Shoulders",
+			"Core"
+		],
+		steps: [
+			"Hands on the floor under your shoulders, legs straight, on your toes.",
+			"Lower your whole body as one until the chest is a fist above the floor.",
+			"Push the floor away until your arms are straight."
+		],
+		mistake: "Elbows flaring straight out to the sides: keep them about 45° from your body.",
+		alias: [
+			"push ups",
+			"pushups",
+			"push-up",
+			"press ups",
+			"press-ups"
+		],
+		anim: pushAnim({})
+	},
+	{
+		id: "wide_pushup",
+		name: "Wide push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 2,
+		unit: "reps",
+		start: 40,
+		set: 10,
+		muscles: [
+			"Chest",
+			"Shoulders",
+			"Triceps"
+		],
+		steps: [
+			"Set your hands about one and a half shoulder widths apart.",
+			"Lower slowly, elbows pointing out and back.",
+			"Press up to straight arms; keep your body in one line."
+		],
+		mistake: "Going too wide: if your shoulders hurt, bring the hands in a little.",
+		alias: ["wide grip pushups"],
+		anim: pushAnim({
+			hands: "wide",
+			a: [[85, 82.5], [83, 82.5]]
+		})
+	},
+	{
+		id: "diamond_pushup",
+		name: "Diamond push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 3,
+		unit: "reps",
+		start: 30,
+		set: 8,
+		muscles: [
+			"Triceps",
+			"Chest",
+			"Shoulders"
+		],
+		steps: [
+			"Put your hands together under your chest, thumbs and index fingers making a diamond.",
+			"Lower your chest to your hands, elbows close to your sides.",
+			"Push back up to straight arms."
+		],
+		mistake: "Hips piking up to make it easier: keep the line straight from heels to head.",
+		alias: [
+			"diamond pushups",
+			"triangle pushups",
+			"close grip pushups"
+		],
+		anim: pushAnim({
+			hands: "diamond",
+			a: [[79, 82.5], [78, 82.5]],
+			low: -9
+		})
+	},
+	{
+		id: "decline_pushup",
+		name: "Decline push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 3,
+		unit: "reps",
+		start: 30,
+		set: 8,
+		muscles: [
+			"Upper chest",
+			"Shoulders",
+			"Triceps"
+		],
+		steps: [
+			"Put your feet on a chair or the sofa, hands on the floor.",
+			"Keep your body straight and lower your chest towards the floor.",
+			"Push up until your arms are straight."
+		],
+		mistake: "Letting the lower back sag: brace your abs like someone will poke them.",
+		alias: ["decline pushups", "feet elevated pushups"],
+		anim: {
+			props: [{
+				k: "box",
+				x: 8,
+				y: 60,
+				w: 30
+			}],
+			keys: [k({
+				s: body([28, 57.5], 1.5),
+				line: true,
+				a: [[88, 82.5], [86, 82.5]],
+				f: [[28, 57.5], [29, 57.5]],
+				ft: [70, 70]
+			}, .9, .3), k({
+				s: body([28, 57.5], 13),
+				line: true,
+				a: [[88, 82.5], [86, 82.5]],
+				f: [[28, 57.5], [29, 57.5]],
+				ft: [70, 70]
+			}, 1, .1)]
+		}
+	},
+	{
+		id: "archer_pushup",
+		name: "Archer push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 4,
+		unit: "reps",
+		start: 16,
+		set: 6,
+		muscles: [
+			"Chest",
+			"Triceps",
+			"Shoulders"
+		],
+		steps: [
+			"Hands very wide, fingers turned out.",
+			"Lower towards one hand while the other arm stays straight.",
+			"Push back to the middle and do the other side."
+		],
+		mistake: "Rushing it: go slow, the straight arm only helps a little.",
+		alias: ["archer pushups"],
+		anim: pushAnim({
+			hands: "archer",
+			a: [[82, 82.5], [104, 82.5]],
+			low: -7,
+			lowA: [[82, 82.5], [104, 82.5]]
+		})
+	},
+	{
+		id: "planche_pushup",
+		name: "Pseudo-planche push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 5,
+		unit: "reps",
+		start: 12,
+		set: 5,
+		muscles: [
+			"Shoulders",
+			"Chest",
+			"Biceps",
+			"Core"
+		],
+		steps: [
+			"Hands by your waist, fingers turned out to the sides.",
+			"Lean forward so your shoulders are well past your hands.",
+			"Lower and push up while keeping that lean."
+		],
+		mistake: "Losing the lean on the way up: the shoulders stay in front of the hands.",
+		alias: [
+			"pseudo planche pushups",
+			"planche pushups",
+			"pseudo planche"
+		],
+		anim: pushAnim({
+			hands: "narrow",
+			a: [[70, 82.5], [68.5, 82.5]],
+			top: -19,
+			low: -7
+		})
+	},
+	{
+		id: "pike_pushup",
+		name: "Pike push-ups",
+		group: "push",
+		family: "pike",
+		diff: 3,
+		unit: "reps",
+		start: 24,
+		set: 8,
+		muscles: [
+			"Shoulders",
+			"Triceps",
+			"Upper back"
+		],
+		steps: [
+			"Start in a push-up and walk your feet in so your hips go up: an upside-down V.",
+			"Bend the elbows to bring the top of your head towards the floor between your hands.",
+			"Push back up to straight arms."
+		],
+		mistake: "Moving the head straight down: it goes a little forward of your hands, like a triangle.",
+		alias: ["pike pushups", "pike push up"],
+		anim: { keys: [k({
+			h: [61, 43],
+			s: at$1([61, 43], 25, 42),
+			a: [[86, 82.5], [84, 82.5]],
+			f: [[46, 80.5], [47, 80.5]],
+			ft: [30, 30]
+		}, .9, .3), k({
+			h: [62, 47],
+			s: at$1([62, 47], 25, 78),
+			a: [[86, 82.5], [84, 82.5]],
+			f: [[46, 80.5], [47, 80.5]],
+			ft: [30, 30]
+		}, 1, .1)] }
+	},
+	{
+		id: "elevated_pike",
+		name: "Feet-up pike push-ups",
+		group: "push",
+		family: "pike",
+		diff: 4,
+		unit: "reps",
+		start: 16,
+		set: 6,
+		muscles: [
+			"Shoulders",
+			"Triceps",
+			"Upper back"
+		],
+		steps: [
+			"Put your feet on a chair and walk your hands back until your hips are over your shoulders.",
+			"Lower your head towards the floor between your hands.",
+			"Press back up, like a handstand push-up made easier."
+		],
+		mistake: "A rounded back: push the floor away and keep your hips high.",
+		alias: ["elevated pike pushups", "feet elevated pike"],
+		anim: {
+			props: [{
+				k: "box",
+				x: 18,
+				y: 58,
+				w: 28
+			}],
+			keys: [k({
+				h: [58, 37],
+				s: at$1([58, 37], 25, 70),
+				a: [[70, 82.5], [68.5, 82.5]],
+				f: [[38, 55.5], [39, 55.5]],
+				ft: [80, 80]
+			}, .9, .3), k({
+				h: [60, 43],
+				s: at$1([60, 43], 25, 92),
+				a: [[70, 82.5], [68.5, 82.5]],
+				f: [[38, 55.5], [39, 55.5]],
+				ft: [80, 80]
+			}, 1, .1)]
+		}
+	},
+	{
+		id: "chair_dip",
+		name: "Chair dips",
+		group: "push",
+		family: "dips",
+		diff: 2,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Triceps",
+			"Shoulders",
+			"Chest"
+		],
+		steps: [
+			"Sit on the edge of a sturdy chair, hands next to your hips, and slide off it.",
+			"Bend your elbows straight back to lower your hips towards the floor.",
+			"Push up until your arms are straight."
+		],
+		mistake: "Shrugging the shoulders up to the ears: keep them down and back.",
+		alias: [
+			"dips",
+			"bench dips",
+			"tricep dips",
+			"triceps dips"
+		],
+		anim: {
+			props: [{
+				k: "box",
+				x: 20,
+				y: 58,
+				w: 28
+			}],
+			keys: [k({
+				h: [52, 55],
+				s: [50, 30.5],
+				a: [[47, 56.5], [45.5, 56.5]],
+				f: [[74, 81.5], [72, 81.5]]
+			}, .9, .3), k({
+				h: [53, 68],
+				s: [51, 43.5],
+				a: [[47, 56.5], [45.5, 56.5]],
+				f: [[74, 81.5], [72, 81.5]]
+			}, 1, .1)]
+		}
+	},
+	{
+		id: "door_row",
+		name: "Doorway rows",
+		group: "pull",
+		family: "row",
+		diff: 1,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Upper back",
+			"Biceps",
+			"Rear shoulders"
+		],
+		steps: [
+			"Stand in an open doorway and hold both sides of the frame at chest height.",
+			"Walk your feet in and lean back with straight arms, body straight.",
+			"Pull your chest to the frame, squeezing your shoulder blades, then lower slowly."
+		],
+		mistake: "Pulling with the arms only: start each rep by squeezing your shoulder blades together.",
+		alias: [
+			"door rows",
+			"door frame rows",
+			"towel rows"
+		],
+		anim: {
+			props: [{
+				k: "door",
+				x: 92
+			}],
+			keys: [k({
+				s: at$1([82, 81.5], 61.5, -110),
+				line: true,
+				a: [[89.5, 27], [88.5, 28]],
+				f: [[82, 81.5], [80, 81.5]]
+			}, .9, .3), k({
+				s: at$1([82, 81.5], 61.5, -98),
+				line: true,
+				a: [[89.5, 27], [88.5, 28]],
+				f: [[82, 81.5], [80, 81.5]]
+			}, .9, .3)]
+		}
+	},
+	{
+		id: "table_row_bent",
+		name: "Table rows, knees bent",
+		group: "pull",
+		family: "row",
+		diff: 2,
+		unit: "reps",
+		start: 24,
+		set: 8,
+		muscles: [
+			"Back",
+			"Biceps",
+			"Rear shoulders"
+		],
+		steps: [
+			"Lie under a sturdy table and hold its edge with both hands.",
+			"Bend your knees, feet flat, and lift your hips so your body is straight.",
+			"Pull your chest up to the table, then lower with control."
+		],
+		mistake: "Using a table that can tip: test it first, or use a low bar or the edge of a solid desk.",
+		alias: [
+			"table rows",
+			"inverted rows bent knees",
+			"bodyweight rows"
+		],
+		anim: {
+			props: [{
+				k: "table",
+				x: 66,
+				y: 40,
+				w: 50
+			}],
+			keys: [k({
+				s: [86, 68],
+				line: true,
+				kn: [[44, 63], [45, 63.5]],
+				a: [[86, 42], [85, 42]],
+				f: [[36, 80.5], [37, 80.5]],
+				eb: [1, 1],
+				ft: [0, 0]
+			}, .9, .3), k({
+				s: [86, 52.5],
+				line: true,
+				kn: [[44, 63], [45, 63.5]],
+				a: [[86, 42], [85, 42]],
+				f: [[36, 80.5], [37, 80.5]],
+				eb: [1, 1],
+				ft: [0, 0]
+			}, .9, .3)]
+		}
+	},
+	{
+		id: "table_row",
+		name: "Table rows",
+		group: "pull",
+		family: "row",
+		diff: 3,
+		unit: "reps",
+		start: 20,
+		set: 8,
+		muscles: [
+			"Back",
+			"Biceps",
+			"Rear shoulders",
+			"Core"
+		],
+		steps: [
+			"Lie under a sturdy table and hold its edge.",
+			"Straighten your legs, heels on the floor, body like a plank.",
+			"Pull your chest to the edge, pause, and lower slowly."
+		],
+		mistake: "Hips dropping on the way up: keep the body one straight line.",
+		alias: [
+			"inverted rows",
+			"australian pullups",
+			"australian pull ups"
+		],
+		anim: {
+			props: [{
+				k: "table",
+				x: 66,
+				y: 40,
+				w: 50
+			}],
+			keys: [k({
+				s: body([26, 79], -10.3),
+				line: true,
+				a: [[86, 42], [85, 42]],
+				f: [[26, 79], [27, 79]],
+				eb: [1, 1],
+				ft: [-62, -62]
+			}, .9, .3), k({
+				s: body([26, 79], -24),
+				line: true,
+				a: [[86, 42], [85, 42]],
+				f: [[26, 79], [27, 79]],
+				eb: [1, 1],
+				ft: [-62, -62]
+			}, .9, .3)]
+		}
+	},
+	{
+		id: "superman",
+		name: "Superman",
+		group: "pull",
+		family: "back",
+		diff: 1,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Lower back",
+			"Glutes",
+			"Upper back"
+		],
+		steps: [
+			"Lie face down, arms stretched out in front of you.",
+			"Lift your arms, chest and legs a few centimetres off the floor.",
+			"Hold for a breath, then lower slowly."
+		],
+		mistake: "Cranking the neck up: look at the floor just in front of you.",
+		alias: [
+			"supermans",
+			"superman hold",
+			"back extensions"
+		],
+		anim: { keys: [k({
+			h: [56, 79.5],
+			s: [81, 79.5],
+			a: [[106, 80.5], [105, 80.5]],
+			f: [[20, 80.5], [21, 80.5]],
+			ft: [175, 175],
+			hd: 8
+		}, .8, .3), k({
+			h: [56, 79.5],
+			s: [80.5, 74.5],
+			a: [[104, 69], [103, 70]],
+			f: [[21, 73], [22, 74]],
+			ft: [170, 170],
+			hd: -4
+		}, .8, .6)] }
+	},
+	{
+		id: "swimmer",
+		name: "Swimmers",
+		group: "pull",
+		family: "back",
+		diff: 2,
+		unit: "reps",
+		start: 30,
+		set: 12,
+		muscles: [
+			"Lower back",
+			"Upper back",
+			"Glutes",
+			"Shoulders"
+		],
+		steps: [
+			"Lie face down and lift your arms, chest and legs a little, like a superman.",
+			"Lift the right arm and left leg higher, then switch, like slow swimming.",
+			"Keep switching without touching down."
+		],
+		mistake: "Kicking fast: slow, small and controlled works the back more.",
+		alias: ["swimmers", "flutter swimmers"],
+		anim: { keys: [k({
+			h: [56, 79.5],
+			s: [80.5, 75],
+			a: [[104, 68], [104.5, 76]],
+			f: [[21, 77], [22, 71]],
+			ft: [170, 170],
+			hd: -4
+		}, .55), k({
+			h: [56, 79.5],
+			s: [80.5, 75],
+			a: [[104.5, 76], [104, 68]],
+			f: [[21, 71], [22, 77]],
+			ft: [170, 170],
+			hd: -4
+		}, .55)] }
+	},
+	{
+		id: "crunch",
+		name: "Crunches",
+		group: "core",
+		family: "core",
+		diff: 1,
+		unit: "reps",
+		start: 40,
+		set: 15,
+		muscles: ["Abs"],
+		steps: [
+			"Lie on your back, knees bent, feet flat, fingertips behind your ears.",
+			"Curl your shoulders off the floor, pressing your lower back down.",
+			"Lower slowly, without resting on the floor."
+		],
+		mistake: "Pulling on your head: the hands only touch it, the abs do the work.",
+		alias: [
+			"crunches",
+			"press",
+			"abs",
+			"ab crunches",
+			"pres"
+		],
+		anim: { keys: [k(backKnees({
+			ar: [[7, -5], [6, -4]],
+			eb: [1, 1]
+		}), .7, .2), k(backKnees({
+			s: at$1([52, 79.5], 25, -27),
+			ar: [[7, -5], [6, -4]],
+			eb: [1, 1],
+			bow: 2
+		}), .7, .25)] }
+	},
+	{
+		id: "situp",
+		name: "Sit-ups",
+		group: "core",
+		family: "core",
+		diff: 2,
+		unit: "reps",
+		start: 40,
+		set: 15,
+		muscles: ["Abs", "Hip flexors"],
+		steps: [
+			"Lie on your back, knees bent, feet flat or tucked under something.",
+			"Cross your arms on your chest and sit all the way up.",
+			"Roll back down one part of the spine at a time."
+		],
+		mistake: "Throwing yourself up with momentum: come up and down at the same steady speed.",
+		alias: [
+			"sit ups",
+			"situps",
+			"sit-up"
+		],
+		anim: { keys: [k(backKnees({ ar: [[3, 6], [1, 5]] }), .9, .15), k(backKnees({
+			s: at$1([52, 79.5], 25, -72),
+			ar: [[8, 6], [7, 5]],
+			bow: 3
+		}), .9, .2)] }
+	},
+	{
+		id: "leg_raise",
+		name: "Leg raises",
+		group: "core",
+		family: "core",
+		diff: 2,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: ["Lower abs", "Hip flexors"],
+		steps: [
+			"Lie on your back, legs straight, hands flat by your hips.",
+			"Keep the legs straight and lift them until they point at the ceiling.",
+			"Lower them slowly and stop just above the floor."
+		],
+		mistake: "The lower back arching off the floor: lower only as far as you can keep it down.",
+		alias: [
+			"leg raises",
+			"lying leg raises",
+			"leg lifts"
+		],
+		anim: { keys: [k({
+			h: [58, 79.5],
+			s: [83, 79.5],
+			a: [[64, 82.5], [62, 82.5]],
+			f: [[22, 78.5], [23, 78.5]],
+			ft: [-95, -95]
+		}, 1, .15), k({
+			h: [58, 79.5],
+			s: [83, 79.5],
+			a: [[64, 82.5], [62, 82.5]],
+			f: [at$1([58, 79.5], 36.3, -97), at$1([58, 79.5], 36.3, -95)],
+			ft: [-185, -185]
+		}, 1.1, .25)] }
+	},
+	{
+		id: "hollow_hold",
+		name: "Hollow hold",
+		group: "core",
+		family: "core",
+		diff: 3,
+		unit: "sec",
+		start: 60,
+		set: 20,
+		muscles: [
+			"Abs",
+			"Hip flexors",
+			"Core"
+		],
+		steps: [
+			"Lie on your back and press your lower back into the floor.",
+			"Lift your shoulders, arms and straight legs a little off the floor, like a banana.",
+			"Hold it and keep breathing."
+		],
+		mistake: "The lower back lifting: raise the legs higher or bend the knees until it stays down.",
+		alias: [
+			"hollow body hold",
+			"hollow body",
+			"hollow"
+		],
+		anim: { keys: [k({
+			h: [58, 79.5],
+			s: [82.5, 74],
+			a: [[107, 67], [106, 68]],
+			f: [[23, 72], [24, 73]],
+			ft: [-150, -150],
+			bow: -2
+		}, 1.6), k({
+			h: [58, 79.5],
+			s: [82.5, 75],
+			a: [[107, 68.5], [106, 69.5]],
+			f: [[23, 73.5], [24, 74.5]],
+			ft: [-150, -150],
+			bow: -2
+		}, 1.6)] }
+	},
+	{
+		id: "v_up",
+		name: "V-ups",
+		group: "core",
+		family: "core",
+		diff: 3,
+		unit: "reps",
+		start: 24,
+		set: 8,
+		muscles: ["Abs", "Hip flexors"],
+		steps: [
+			"Lie flat, arms stretched over your head.",
+			"Lift your arms and straight legs at the same time and reach for your toes.",
+			"Lower both slowly back to the floor."
+		],
+		mistake: "Bending the knees a lot to cheat: keep the legs as straight as you can.",
+		alias: [
+			"v ups",
+			"vups",
+			"v-up",
+			"jackknife"
+		],
+		anim: { keys: [k({
+			h: [60, 80],
+			s: [85, 79.5],
+			a: [[110, 78.5], [109, 79]],
+			f: [[24, 79], [25, 79]],
+			ft: [-95, -95]
+		}, .8, .15), k({
+			h: [60, 80],
+			s: at$1([60, 80], 25, -55),
+			a: [[47, 51], [48, 52]],
+			f: [at$1([60, 80], 36.3, -124), at$1([60, 80], 36.3, -123)],
+			ft: [-160, -160],
+			bow: 3
+		}, .75, .2)] }
+	},
+	{
+		id: "dragon_flag",
+		name: "Dragon flag (lowering)",
+		group: "core",
+		family: "core",
+		diff: 5,
+		unit: "reps",
+		start: 10,
+		set: 3,
+		muscles: [
+			"Abs",
+			"Core",
+			"Lats"
+		],
+		steps: [
+			"Lie on a bench or the floor and hold something solid behind your head.",
+			"Swing your body up onto your upper back, straight from shoulders to toes.",
+			"Lower the straight body as slowly as you can."
+		],
+		mistake: "Bending at the hips: if you fold, bend the knees and lower that way first.",
+		alias: ["dragon flags", "dragon flag negatives"],
+		anim: {
+			props: [{
+				k: "box",
+				x: 44,
+				y: 72,
+				w: 62
+			}],
+			keys: [k({
+				s: [80, 68],
+				line: true,
+				a: [[100, 71], [99, 71]],
+				f: [at$1([80, 68], 61.5, -125), at$1([80, 68], 61.5, -124)],
+				eb: [-1, -1],
+				ft: [-125, -124]
+			}, .9, .3), k({
+				s: [80, 68],
+				line: true,
+				a: [[100, 71], [99, 71]],
+				f: [at$1([80, 68], 61.5, -165), at$1([80, 68], 61.5, -164)],
+				eb: [-1, -1],
+				ft: [-165, -164]
+			}, 2.4, .2)]
+		}
+	},
+	{
+		id: "dead_bug",
+		name: "Dead bug",
+		group: "core",
+		family: "deadbug",
+		diff: 1,
+		unit: "reps",
+		start: 20,
+		set: 10,
+		muscles: ["Abs", "Core"],
+		steps: [
+			"Lie on your back, arms pointing at the ceiling, knees bent at 90° above your hips.",
+			"Lower one arm behind you and the opposite leg towards the floor.",
+			"Come back and switch sides, lower back flat on the floor."
+		],
+		mistake: "Moving fast: slow reps, and breathe out as you reach.",
+		alias: ["dead bugs", "deadbug"],
+		anim: { keys: [
+			k({
+				h: [58, 79.5],
+				s: [83, 79.5],
+				a: [[84, 54], [83, 55]],
+				f: [[40, 61], [41, 61.5]],
+				kn: [[58, 61], [59, 61.5]],
+				ft: [-90, -90]
+			}, .8, .15),
+			k({
+				h: [58, 79.5],
+				s: [83, 79.5],
+				a: [[108, 77], [83, 55]],
+				f: [[40, 61], [22.5, 75.5]],
+				kn: [[58, 61], [40, 77.5]],
+				ft: [-90, -110]
+			}, .9, .2),
+			k({
+				h: [58, 79.5],
+				s: [83, 79.5],
+				a: [[84, 54], [83, 55]],
+				f: [[40, 61], [41, 61.5]],
+				kn: [[58, 61], [59, 61.5]],
+				ft: [-90, -90]
+			}, .8, .15),
+			k({
+				h: [58, 79.5],
+				s: [83, 79.5],
+				a: [[84, 54], [108, 77]],
+				f: [[22.5, 75.5], [41, 61.5]],
+				kn: [[40, 77.5], [59, 61.5]],
+				ft: [-110, -90]
+			}, .9, .2)
+		] }
+	},
+	{
+		id: "plank",
+		name: "Plank",
+		group: "core",
+		family: "plank",
+		diff: 1,
+		unit: "sec",
+		start: 90,
+		set: 30,
+		muscles: [
+			"Core",
+			"Shoulders",
+			"Glutes"
+		],
+		steps: [
+			"Forearms on the floor, elbows under your shoulders.",
+			"Lift your body on your toes, straight from heels to head.",
+			"Squeeze glutes and abs and hold, breathing slowly."
+		],
+		mistake: "Hips too high or sagging: imagine a broom stick along your back.",
+		alias: [
+			"planks",
+			"forearm plank",
+			"elbow plank"
+		],
+		anim: { keys: [k({
+			s: [80, 69.5],
+			line: true,
+			a: [[93, 83], [92, 83]],
+			f: [[19, 79.5], [20, 79.5]],
+			ft: [68, 68]
+		}, 1.8), k({
+			s: [80, 68.8],
+			line: true,
+			a: [[93, 83], [92, 83]],
+			f: [[19, 79.5], [20, 79.5]],
+			ft: [68, 68]
+		}, 1.8)] }
+	},
+	{
+		id: "side_plank",
+		name: "Side plank",
+		group: "core",
+		family: "plank",
+		diff: 2,
+		unit: "sec",
+		start: 60,
+		set: 20,
+		muscles: [
+			"Side abs (obliques)",
+			"Core",
+			"Shoulders"
+		],
+		steps: [
+			"Lie on your side, elbow under your shoulder, feet stacked.",
+			"Lift your hips until your body is a straight line.",
+			"Hold; reach the top arm up. Then the other side."
+		],
+		mistake: "Letting the hips drop towards the floor: push them up and keep them there.",
+		alias: ["side planks"],
+		anim: { keys: [k({
+			s: [78, 62],
+			line: true,
+			a: [[88, 83], [77, 36]],
+			f: [[21, 80.5], [22, 79.5]],
+			ft: [20, 20]
+		}, 1.6), k({
+			s: [78, 63.5],
+			h: [53.5, 70],
+			a: [[88, 83], [77, 37]],
+			f: [[21, 80.5], [22, 79.5]],
+			ft: [20, 20]
+		}, 1.6)] }
+	},
+	{
+		id: "shoulder_taps",
+		name: "Plank shoulder taps",
+		group: "core",
+		family: "plank",
+		diff: 2,
+		unit: "reps",
+		start: 30,
+		set: 12,
+		muscles: [
+			"Core",
+			"Shoulders",
+			"Chest"
+		],
+		steps: [
+			"Start at the top of a push-up, feet a bit wider than usual.",
+			"Lift one hand and tap the opposite shoulder.",
+			"Put it back and tap with the other hand; keep the hips still."
+		],
+		mistake: "Hips rocking side to side: go slower and widen your feet.",
+		alias: ["shoulder taps", "plank taps"],
+		anim: { keys: [
+			plank(PU_TOP, { a: [[83, 82.5], [81, 82.5]] }),
+			plank(PU_TOP, {
+				a: [[82, 62], [81, 82.5]],
+				eb: [1, 1]
+			}),
+			plank(PU_TOP, { a: [[83, 82.5], [81, 82.5]] }),
+			plank(PU_TOP, { a: [[83, 82.5], [82, 62]] })
+		].map((p, i) => k(p, .35, i % 2 ? .15 : .05)) }
+	},
+	{
+		id: "plank_updown",
+		name: "Plank up-downs",
+		group: "core",
+		family: "plank",
+		diff: 3,
+		unit: "reps",
+		start: 20,
+		set: 8,
+		muscles: [
+			"Core",
+			"Triceps",
+			"Shoulders"
+		],
+		steps: [
+			"Start in a forearm plank.",
+			"Put one hand down, then the other, and push up into a push-up position.",
+			"Lower back to the forearms one arm at a time. Switch the lead arm."
+		],
+		mistake: "Swinging the hips: keep them level the whole time.",
+		alias: [
+			"up downs",
+			"up-downs",
+			"plank walk ups",
+			"commandos"
+		],
+		anim: { keys: [
+			k({
+				s: [80, 69.5],
+				line: true,
+				a: [[93, 83], [92, 83]],
+				f: [[19, 79.5], [20, 79.5]],
+				ft: [68, 68]
+			}, .5, .2),
+			k({
+				s: [78.5, 64],
+				line: true,
+				a: [[81, 82.5], [92, 83]],
+				f: [[19, 79.5], [20, 79.5]],
+				ft: [68, 68]
+			}, .45, .05),
+			k({
+				s: body([19, 79.5], -22),
+				line: true,
+				a: [[81, 82.5], [79.5, 82.5]],
+				f: [[19, 79.5], [20, 79.5]],
+				ft: [68, 68]
+			}, .45, .2),
+			k({
+				s: [78.5, 64],
+				line: true,
+				a: [[81, 82.5], [92, 83]],
+				f: [[19, 79.5], [20, 79.5]],
+				ft: [68, 68]
+			}, .45, .05)
+		] }
+	},
+	{
+		id: "squat",
+		name: "Squats",
+		group: "legs",
+		family: "squat",
+		diff: 1,
+		unit: "reps",
+		start: 50,
+		set: 15,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Hamstrings"
+		],
+		steps: [
+			"Feet shoulder-width apart, toes turned out a little.",
+			"Sit back and down like into a chair, arms forward, chest up.",
+			"Go until your thighs are level with the floor, then stand up."
+		],
+		mistake: "Knees falling inwards: push them out over your toes.",
+		alias: [
+			"squats",
+			"air squats",
+			"bodyweight squats",
+			"sit ups chair"
+		],
+		anim: { keys: [k(stand(), .9, .3), k({
+			h: [46, 62],
+			s: at$1([46, 62], 25, -56),
+			a: [[86, 38], [85, 39]],
+			f: ST_ANKLES,
+			eb: [-1, -1]
+		}, 1, .1)] }
+	},
+	{
+		id: "jump_squat",
+		name: "Jump squats",
+		group: "legs",
+		family: "squat",
+		diff: 2,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Calves"
+		],
+		steps: [
+			"Squat down with your arms back.",
+			"Jump up as high as you can, arms swinging up.",
+			"Land softly on your toes and sink straight into the next squat."
+		],
+		mistake: "Landing with straight, stiff legs: land quietly with bent knees.",
+		alias: ["squat jumps", "jumping squats"],
+		anim: { keys: [
+			k({
+				h: [46, 62],
+				s: at$1([46, 62], 25, -50),
+				a: [[44, 60], [43, 60]],
+				f: ST_ANKLES
+			}, .6, .12),
+			k(jumpUp(), .32, .06),
+			k(stand({
+				a: [[70, 33], [68, 34]],
+				eb: [-1, -1]
+			}), .3)
+		] }
+	},
+	{
+		id: "split_squat",
+		name: "Split squats",
+		group: "legs",
+		family: "squat",
+		diff: 2,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: ["Thighs (quads)", "Glutes"],
+		steps: [
+			"Take a long step forward and stay there, back heel up.",
+			"Lower straight down until the back knee almost touches the floor.",
+			"Push up through the front foot. Do all reps, then switch legs."
+		],
+		mistake: "The front knee shooting past the toes: step a bit longer and go straight down.",
+		alias: ["split squat", "static lunges"],
+		anim: { keys: [k({
+			h: [58, 48],
+			s: [59, 23],
+			ar: [[6, 21], [4, 21]],
+			f: [[77, 81.5], [40, 80.5]],
+			ft: [12, 60]
+		}, .9, .25), k({
+			h: [58, 63],
+			s: [59.5, 38],
+			ar: [[6, 21], [4, 21]],
+			f: [[77, 81.5], [40, 80.5]],
+			ft: [12, 60]
+		}, 1, .1)] }
+	},
+	{
+		id: "bulgarian_squat",
+		name: "Bulgarian split squats",
+		group: "legs",
+		family: "squat",
+		diff: 3,
+		unit: "reps",
+		start: 24,
+		set: 8,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Balance"
+		],
+		steps: [
+			"Stand a big step in front of a chair, the top of your back foot on the seat.",
+			"Lower straight down on the front leg.",
+			"Push back up through the front heel. Then the other leg."
+		],
+		mistake: "Standing too close to the chair: you need room for the front shin to stay upright.",
+		alias: [
+			"bulgarian split squat",
+			"bulgarians",
+			"rear foot elevated split squat"
+		],
+		anim: {
+			props: [{
+				k: "box",
+				x: 12,
+				y: 66,
+				w: 28
+			}],
+			keys: [k({
+				h: [56, 49],
+				s: [57.5, 24],
+				ar: [[6, 21], [4, 21]],
+				f: [[75, 81.5], [33, 63]],
+				ft: [12, 175]
+			}, .9, .25), k({
+				h: [55, 63],
+				s: [58, 38.5],
+				ar: [[6, 21], [4, 21]],
+				f: [[75, 81.5], [33, 63]],
+				ft: [12, 175]
+			}, 1, .1)]
+		}
+	},
+	{
+		id: "shrimp_squat",
+		name: "Shrimp squats",
+		group: "legs",
+		family: "squat",
+		diff: 4,
+		unit: "reps",
+		start: 16,
+		set: 5,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Balance"
+		],
+		steps: [
+			"Stand on one leg and bend the other knee so that foot is behind you.",
+			"Lower on the standing leg until the back knee touches the floor.",
+			"Stand back up without the back foot touching down."
+		],
+		mistake: "Leaning far forward to cheat: keep the chest up, use a wall for balance at first.",
+		alias: ["shrimp squat"],
+		anim: { keys: [k({
+			h: [60, 47],
+			s: [61.5, 22],
+			a: [[86, 30], [52, 54]],
+			f: [[62, 81.5], [41, 61]],
+			kn: [null, [56, 64]],
+			ft: [12, 190]
+		}, .9, .3), k({
+			h: [53, 66],
+			s: at$1([53, 66], 25, -63),
+			a: [[88, 45], [46, 70]],
+			f: [[62, 81.5], [31, 79.5]],
+			kn: [null, [48.5, 81.5]],
+			ft: [12, 185]
+		}, 1.1, .1)] }
+	},
+	{
+		id: "pistol_squat",
+		name: "Pistol squats",
+		group: "legs",
+		family: "squat",
+		diff: 5,
+		unit: "reps",
+		start: 12,
+		set: 4,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Balance",
+			"Core"
+		],
+		steps: [
+			"Stand on one leg, the other leg straight out in front, arms forward.",
+			"Squat all the way down on the standing leg, the free leg off the floor.",
+			"Stand back up. Hold a door frame at first if you need to."
+		],
+		mistake: "The standing heel lifting: keep the whole foot flat and go down slowly.",
+		alias: [
+			"pistol squat",
+			"pistols",
+			"one leg squat",
+			"single leg squat"
+		],
+		anim: { keys: [k({
+			h: [60, 46.5],
+			s: [61, 21.5],
+			a: [[86, 26], [85, 27]],
+			f: [[62, 81.5], at$1([60, 46.5], 36.3, 38)],
+			ft: [12, -45],
+			eb: [-1, -1]
+		}, 1, .3), k({
+			h: [51, 69],
+			s: at$1([51, 69], 25, -62),
+			a: [[90, 47], [89, 48]],
+			f: [[62, 81.5], at$1([51, 69], 36.3, -3)],
+			ft: [12, -80],
+			eb: [-1, -1]
+		}, 1.2, .1)] }
+	},
+	{
+		id: "reverse_lunge",
+		name: "Reverse lunges",
+		group: "legs",
+		family: "lunge",
+		diff: 1,
+		unit: "reps",
+		start: 30,
+		set: 12,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Hamstrings"
+		],
+		steps: [
+			"Stand tall, hands on your hips.",
+			"Step one foot back and lower until both knees are bent about 90°.",
+			"Push off the back foot to stand up. Switch legs each rep."
+		],
+		mistake: "Stepping too short: the back step should be long enough that the front knee stays over the ankle.",
+		alias: ["reverse lunge", "back lunges"],
+		anim: { keys: [
+			k(stand({
+				ar: [[6, 21], [4, 21]],
+				a: void 0
+			}), .7, .15),
+			k({
+				h: [53, 63],
+				s: [54.5, 38],
+				ar: [[6, 21], [4, 21]],
+				f: [[64, 81.5], [33, 80.5]],
+				ft: [12, 60]
+			}, .8, .1),
+			k(stand({
+				ar: [[6, 21], [4, 21]],
+				a: void 0
+			}), .7, .15),
+			k({
+				h: [53, 63],
+				s: [54.5, 38],
+				ar: [[6, 21], [4, 21]],
+				f: [[33, 80.5], [64, 81.5]],
+				ft: [60, 12]
+			}, .8, .1)
+		] }
+	},
+	{
+		id: "lunge",
+		name: "Lunges",
+		group: "legs",
+		family: "lunge",
+		diff: 2,
+		unit: "reps",
+		start: 30,
+		set: 12,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Balance"
+		],
+		steps: [
+			"Stand tall with your hands on your hips.",
+			"Take a long step forward and lower the back knee towards the floor.",
+			"Push off the front foot back to standing. Switch legs."
+		],
+		mistake: "Leaning the body forward: keep the chest up and the body straight above the hips.",
+		alias: [
+			"lunges",
+			"forward lunges",
+			"walking lunges"
+		],
+		anim: { keys: [
+			k(stand({
+				h: [50, 46.5],
+				s: [50.5, 21.5],
+				ar: [[6, 21], [4, 21]],
+				a: void 0,
+				f: [[52, 81.5], [47.5, 81.5]]
+			}), .7, .15),
+			k({
+				h: [62, 63],
+				s: [63, 38],
+				ar: [[6, 21], [4, 21]],
+				f: [[80, 81.5], [45, 80.5]],
+				ft: [12, 60]
+			}, .8, .1),
+			k(stand({
+				h: [50, 46.5],
+				s: [50.5, 21.5],
+				ar: [[6, 21], [4, 21]],
+				a: void 0,
+				f: [[52, 81.5], [47.5, 81.5]]
+			}), .7, .15),
+			k({
+				h: [62, 63],
+				s: [63, 38],
+				ar: [[6, 21], [4, 21]],
+				f: [[45, 80.5], [80, 81.5]],
+				ft: [60, 12]
+			}, .8, .1)
+		] }
+	},
+	{
+		id: "jump_lunge",
+		name: "Jump lunges",
+		group: "legs",
+		family: "lunge",
+		diff: 4,
+		unit: "reps",
+		start: 20,
+		set: 8,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Calves"
+		],
+		steps: [
+			"Start in a lunge, one foot forward.",
+			"Jump up and switch legs in the air.",
+			"Land softly in a lunge with the other foot forward and keep going."
+		],
+		mistake: "Landing on a straight front leg: land softly with the knee bent.",
+		alias: [
+			"jumping lunges",
+			"lunge jumps",
+			"split jumps"
+		],
+		anim: { keys: [
+			k({
+				h: [62, 63],
+				s: [63.5, 38],
+				a: [[56, 55], [76, 44]],
+				f: [[80, 81.5], [45, 80.5]],
+				ft: [12, 60],
+				eb: [1, -1]
+			}, .35, .15),
+			k({
+				h: [62, 45],
+				s: [63, 20],
+				a: [[70, 32], [56, 38]],
+				f: [[68, 73], [55, 72]],
+				ft: [50, 50],
+				eb: [-1, 1]
+			}, .28),
+			k({
+				h: [62, 63],
+				s: [63.5, 38],
+				a: [[76, 44], [56, 55]],
+				f: [[45, 80.5], [80, 81.5]],
+				ft: [60, 12],
+				eb: [-1, 1]
+			}, .28, .15),
+			k({
+				h: [62, 45],
+				s: [63, 20],
+				a: [[56, 38], [70, 32]],
+				f: [[55, 72], [68, 73]],
+				ft: [50, 50],
+				eb: [1, -1]
+			}, .28)
+		] }
+	},
+	{
+		id: "glute_bridge",
+		name: "Glute bridge",
+		group: "legs",
+		family: "bridge",
+		diff: 1,
+		unit: "reps",
+		start: 30,
+		set: 15,
+		muscles: [
+			"Glutes",
+			"Hamstrings",
+			"Lower back"
+		],
+		steps: [
+			"Lie on your back, knees bent, feet flat near your hips.",
+			"Push through your heels and lift your hips until knees, hips and shoulders line up.",
+			"Squeeze your glutes at the top, then lower slowly."
+		],
+		mistake: "Arching the lower back at the top: the lift comes from the glutes, not the back.",
+		alias: [
+			"glute bridges",
+			"hip bridge",
+			"bridges",
+			"hip thrusts"
+		],
+		anim: { keys: [k(backKnees({
+			h: [56, 79.5],
+			s: [81, 79.5],
+			f: [[35, 81.5], [36, 81.5]],
+			a: [[62, 82.5], [60, 82.5]]
+		}), .8, .2), k(backKnees({
+			h: [57, 64],
+			s: [80.5, 76],
+			f: [[35, 81.5], [36, 81.5]],
+			a: [[64, 82.5], [62, 82.5]]
+		}), .8, .4)] }
+	},
+	{
+		id: "single_leg_bridge",
+		name: "Single-leg glute bridge",
+		group: "legs",
+		family: "bridge",
+		diff: 3,
+		unit: "reps",
+		start: 24,
+		set: 10,
+		muscles: [
+			"Glutes",
+			"Hamstrings",
+			"Core"
+		],
+		steps: [
+			"Lie on your back, one foot flat, the other leg straight up in the air.",
+			"Push through the heel on the floor to lift your hips.",
+			"Lower slowly. Do all reps, then the other leg."
+		],
+		mistake: "The hips tilting to one side: keep both hip bones level.",
+		alias: [
+			"single leg glute bridge",
+			"one leg bridge",
+			"single leg bridge"
+		],
+		anim: { keys: [k(backKnees({
+			h: [56, 79.5],
+			s: [81, 79.5],
+			f: [[35, 81.5], at$1([56, 79.5], 36.3, -128)],
+			kn: [null, null],
+			a: [[62, 82.5], [60, 82.5]],
+			ft: [0, -40]
+		}), .8, .2), k(backKnees({
+			h: [57, 64],
+			s: [80.5, 76],
+			f: [[35, 81.5], at$1([57, 64], 36.3, -160)],
+			a: [[64, 82.5], [62, 82.5]],
+			ft: [0, -70]
+		}), .8, .4)] }
+	},
+	{
+		id: "wall_sit",
+		name: "Wall sit",
+		group: "legs",
+		family: "wallsit",
+		diff: 2,
+		unit: "sec",
+		start: 90,
+		set: 30,
+		muscles: ["Thighs (quads)", "Glutes"],
+		steps: [
+			"Stand with your back flat against a wall.",
+			"Slide down until your knees are bent at 90°, like sitting on an invisible chair.",
+			"Hold, back on the wall, and keep breathing."
+		],
+		mistake: "Feet too close to the wall: your knees should be over your ankles, not past your toes.",
+		alias: ["wall sits", "wall squat"],
+		anim: {
+			props: [{
+				k: "wall",
+				x: 34
+			}],
+			keys: [k({
+				h: [40.5, 63],
+				s: [40.5, 38],
+				a: [[56, 60.5], [54, 61]],
+				f: [[59.5, 81.5], [58, 81.5]],
+				kn: [[59, 63], [57.5, 63.5]]
+			}, 1.8), k({
+				h: [40.5, 63],
+				s: [40.5, 38.8],
+				a: [[56, 61], [54, 61.5]],
+				f: [[59.5, 81.5], [58, 81.5]],
+				kn: [[59, 63], [57.5, 63.5]]
+			}, 1.8)]
+		}
+	},
+	{
+		id: "calf_raise",
+		name: "Calf raises",
+		group: "legs",
+		family: "calf",
+		diff: 1,
+		unit: "reps",
+		start: 50,
+		set: 20,
+		muscles: ["Calves"],
+		steps: [
+			"Stand tall, feet hip-width apart; hold a wall for balance if you like.",
+			"Rise onto the balls of your feet as high as you can.",
+			"Pause at the top, then lower slowly."
+		],
+		mistake: "Bouncing fast: the slow lowering is what builds the calves.",
+		alias: [
+			"calf raises",
+			"calves",
+			"heel raises",
+			"toe raises"
+		],
+		anim: { keys: [k(stand(), .6, .15), k(up(stand({ ft: [52, 52] }), 4), .6, .35)] }
+	},
+	{
+		id: "single_calf_raise",
+		name: "Single-leg calf raises",
+		group: "legs",
+		family: "calf",
+		diff: 2,
+		unit: "reps",
+		start: 40,
+		set: 15,
+		muscles: ["Calves", "Balance"],
+		steps: [
+			"Stand on one foot, the other bent behind you, a hand on a wall.",
+			"Rise as high as you can on the standing foot.",
+			"Lower slowly. Then the other leg."
+		],
+		mistake: "Only going halfway: full height at the top, heel all the way down at the bottom.",
+		alias: ["single leg calf raises", "one leg calf raises"],
+		anim: { keys: [k(stand({
+			f: [[61, 81.5], [48, 66]],
+			ft: [12, 120]
+		}), .6, .15), k(up(stand({
+			f: [[61, 81.5], [48, 66]],
+			ft: [52, 120]
+		}), 4), .6, .35)] }
+	},
+	{
+		id: "jumping_jack",
+		name: "Jumping jacks",
+		group: "cardio",
+		family: "jacks",
+		diff: 1,
+		unit: "reps",
+		start: 60,
+		set: 30,
+		muscles: [
+			"Whole body",
+			"Calves",
+			"Shoulders"
+		],
+		steps: [
+			"Stand with your feet together, arms by your sides.",
+			"Jump your feet out wide while your arms swing up over your head.",
+			"Jump back to the start and keep a steady rhythm."
+		],
+		mistake: "Landing flat-footed: stay light on the balls of your feet.",
+		alias: [
+			"jumping jacks",
+			"star jumps easy",
+			"jacks"
+		],
+		anim: {
+			front: true,
+			keys: [k({
+				h: [60, 46.5],
+				s: [60, 21.5],
+				w: 6.5,
+				hw: 3.5,
+				a: [at$1([53.5, 21.5], 26.4, 95), at$1([66.5, 21.5], 26.4, 85)],
+				f: [[57, 81.5], [63, 81.5]],
+				ft: [170, 10]
+			}, .3, .05), k({
+				h: [60, 43.5],
+				s: [60, 18.5],
+				w: 6.5,
+				hw: 3.5,
+				a: [at$1([53.5, 18.5], 26.4, -114), at$1([66.5, 18.5], 26.4, -66)],
+				f: [[46, 79.5], [74, 79.5]],
+				ft: [170, 10]
+			}, .3, .05)]
+		}
+	},
+	{
+		id: "star_jump",
+		name: "Star jumps",
+		group: "cardio",
+		family: "jacks",
+		diff: 3,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Whole body",
+			"Thighs",
+			"Calves"
+		],
+		steps: [
+			"Squat down a little, hands near your knees.",
+			"Explode up and spread your arms and legs wide like a star.",
+			"Land softly with bent knees and go straight into the next one."
+		],
+		mistake: "Landing with locked knees: land softly and absorb it.",
+		alias: ["star jumps", "star jump"],
+		anim: {
+			front: true,
+			keys: [
+				k({
+					h: [60, 59],
+					s: [60, 34.5],
+					w: 6.5,
+					hw: 3.5,
+					a: [[53, 58], [67, 58]],
+					f: [[53, 81.5], [67, 81.5]],
+					ft: [170, 10],
+					kb: [1, -1],
+					eb: [1, -1]
+				}, .4, .12),
+				k({
+					h: [60, 38],
+					s: [60, 13],
+					w: 6.5,
+					hw: 3.5,
+					a: [[39, -3], [81, -3]],
+					f: [[40, 70], [80, 70]],
+					ft: [160, 20],
+					kb: [1, -1],
+					eb: [1, -1]
+				}, .32, .08),
+				k({
+					h: [60, 47.5],
+					s: [60, 22.5],
+					w: 6.5,
+					hw: 3.5,
+					a: [[52, 46.5], [68, 46.5]],
+					f: [[55, 81.5], [65, 81.5]],
+					ft: [170, 10],
+					kb: [1, -1],
+					eb: [1, -1]
+				}, .3)
+			]
+		}
+	},
+	{
+		id: "high_knees",
+		name: "High knees",
+		group: "cardio",
+		family: "knees",
+		diff: 2,
+		unit: "reps",
+		start: 60,
+		set: 30,
+		muscles: [
+			"Hip flexors",
+			"Thighs",
+			"Calves"
+		],
+		steps: [
+			"Run on the spot, bringing each knee up to hip height.",
+			"Pump your arms like a sprinter.",
+			"Stay on the balls of your feet and keep it quick."
+		],
+		mistake: "Leaning back: keep the body tall or slightly forward.",
+		alias: [
+			"high knee",
+			"running in place",
+			"run in place"
+		],
+		anim: { keys: [k({
+			h: [60, 45.5],
+			s: [61, 20.5],
+			a: [[52, 36], [74, 29]],
+			f: [[76, 63], [59, 80.5]],
+			ft: [40, 55],
+			eb: [1, -1]
+		}, .25, .03), k({
+			h: [60, 45.5],
+			s: [61, 20.5],
+			a: [[74, 29], [52, 36]],
+			f: [[59, 80.5], [76, 63]],
+			ft: [55, 40],
+			eb: [-1, 1]
+		}, .25, .03)] }
+	},
+	{
+		id: "mountain_climber",
+		name: "Mountain climbers",
+		group: "cardio",
+		family: "climber",
+		diff: 2,
+		unit: "reps",
+		start: 60,
+		set: 30,
+		muscles: [
+			"Core",
+			"Shoulders",
+			"Hip flexors"
+		],
+		steps: [
+			"Start at the top of a push-up.",
+			"Drive one knee towards your chest, then switch legs quickly.",
+			"Keep your hips low and your hands under your shoulders."
+		],
+		mistake: "Hips bouncing up high: keep them in line with the shoulders.",
+		alias: ["mountain climbers", "climbers"],
+		anim: { keys: [k({
+			h: [58, 65.5],
+			s: body(PL_ANKLE, PU_TOP),
+			a: [[83, 82.5], [81, 82.5]],
+			f: [[57, 76], [25, 79.5]],
+			ft: [55, 68]
+		}, .22, .04), k({
+			h: [58, 65.5],
+			s: body(PL_ANKLE, PU_TOP),
+			a: [[83, 82.5], [81, 82.5]],
+			f: [[25, 79.5], [57, 76]],
+			ft: [68, 55]
+		}, .22, .04)] }
+	},
+	{
+		id: "cross_climber",
+		name: "Cross-body mountain climbers",
+		group: "cardio",
+		family: "climber",
+		diff: 3,
+		unit: "reps",
+		start: 40,
+		set: 20,
+		muscles: [
+			"Side abs (obliques)",
+			"Core",
+			"Shoulders"
+		],
+		steps: [
+			"Start at the top of a push-up.",
+			"Drive one knee across your body towards the opposite elbow.",
+			"Switch legs quickly, hips low."
+		],
+		mistake: "Shoulders drifting back behind the hands: keep them stacked over the wrists.",
+		alias: [
+			"cross body mountain climbers",
+			"cross climbers",
+			"twisting mountain climbers"
+		],
+		anim: { keys: [k({
+			h: [58, 66],
+			s: body(PL_ANKLE, PU_TOP),
+			a: [[83, 82.5], [81, 82.5]],
+			f: [[63, 74.5], [25, 79.5]],
+			ft: [55, 68],
+			bow: 1.5
+		}, .3, .06), k({
+			h: [58, 66],
+			s: body(PL_ANKLE, PU_TOP),
+			a: [[83, 82.5], [81, 82.5]],
+			f: [[25, 79.5], [63, 74.5]],
+			ft: [68, 55],
+			bow: 1.5
+		}, .3, .06)] }
+	},
+	{
+		id: "half_burpee",
+		name: "Squat thrusts",
+		group: "cardio",
+		family: "burpee",
+		diff: 2,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Whole body",
+			"Core",
+			"Thighs"
+		],
+		steps: [
+			"Squat down and put your hands on the floor.",
+			"Jump your feet back into a push-up position.",
+			"Jump them back in to the squat, and repeat."
+		],
+		mistake: "Hips sagging when the feet land back: brace like a plank.",
+		alias: [
+			"squat thrust",
+			"half burpees",
+			"burpees no jump"
+		],
+		anim: { keys: [k(crouch(), .4, .12), k({
+			s: body([22, 79.5], -21.5),
+			line: true,
+			a: [[80, 82.5], [78, 82.5]],
+			f: [[22, 79.5], [23, 79.5]],
+			ft: [68, 68]
+		}, .35, .15)] }
+	},
+	{
+		id: "burpee",
+		name: "Burpees",
+		group: "cardio",
+		family: "burpee",
+		diff: 3,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Whole body",
+			"Chest",
+			"Thighs"
+		],
+		steps: [
+			"From standing, squat and put your hands on the floor.",
+			"Jump your feet back to a plank, then jump them back in.",
+			"Jump up with your arms over your head. Land softly and repeat."
+		],
+		mistake: "Collapsing in the plank: keep a straight line before jumping in.",
+		alias: ["burpees", "burpee"],
+		anim: {
+			still: 1,
+			keys: [
+				k(stand({
+					a: [[64, 36], [62, 37]],
+					eb: [-1, -1]
+				}), .3, .05),
+				k(crouch(), .38, .05),
+				k({
+					s: body([22, 79.5], -21.5),
+					line: true,
+					a: [[80, 82.5], [78, 82.5]],
+					f: [[22, 79.5], [23, 79.5]],
+					ft: [68, 68]
+				}, .32, .12),
+				k(crouch(), .32, .05),
+				k(jumpUp(), .38, .05)
+			]
+		}
+	},
+	{
+		id: "pushup_burpee",
+		name: "Push-up burpees",
+		group: "cardio",
+		family: "burpee",
+		diff: 4,
+		unit: "reps",
+		start: 20,
+		set: 8,
+		muscles: [
+			"Whole body",
+			"Chest",
+			"Triceps",
+			"Thighs"
+		],
+		steps: [
+			"Squat, hands down, and jump your feet back to a plank.",
+			"Do one full push-up.",
+			"Jump the feet in and jump up with your arms high."
+		],
+		mistake: "Half push-ups when tired: do fewer burpees, but full push-ups.",
+		alias: [
+			"burpees with pushup",
+			"burpee pushups",
+			"full burpees"
+		],
+		anim: {
+			still: 2,
+			keys: [
+				k(stand({
+					a: [[64, 36], [62, 37]],
+					eb: [-1, -1]
+				}), .3, .05),
+				k(crouch(), .38, .05),
+				k({
+					s: body([22, 79.5], -21.5),
+					line: true,
+					a: [[80, 82.5], [78, 82.5]],
+					f: [[22, 79.5], [23, 79.5]],
+					ft: [68, 68]
+				}, .32, .08),
+				k({
+					s: body([22, 79.5], -8),
+					line: true,
+					a: [[80, 82.5], [78, 82.5]],
+					f: [[22, 79.5], [23, 79.5]],
+					ft: [68, 68]
+				}, .45, .05),
+				k({
+					s: body([22, 79.5], -21.5),
+					line: true,
+					a: [[80, 82.5], [78, 82.5]],
+					f: [[22, 79.5], [23, 79.5]],
+					ft: [68, 68]
+				}, .42, .05),
+				k(crouch(), .32, .05),
+				k(jumpUp(), .38, .05)
+			]
+		}
+	},
+	{
+		id: "cat_cow",
+		name: "Cat-cow",
+		group: "mobility",
+		family: "catcow",
+		diff: 1,
+		unit: "reps",
+		start: 10,
+		set: 10,
+		muscles: [
+			"Spine",
+			"Back",
+			"Neck"
+		],
+		steps: [
+			"On hands and knees, hands under shoulders, knees under hips.",
+			"Breathe in: let the belly drop and look up (cow).",
+			"Breathe out: round your back up and tuck the chin (cat)."
+		],
+		mistake: "Rushing: move slowly with your breath.",
+		alias: ["cat cow", "cat camel"],
+		anim: { keys: [k({
+			h: [56, 64],
+			s: [81, 57.5],
+			a: [[82, 82.5], [81, 82.5]],
+			kn: [[56, 82.5], [57, 82.5]],
+			f: [[38, 82], [39, 82]],
+			ft: [185, 185],
+			bow: 5,
+			hd: 35
+		}, 1.4, .3), k({
+			h: [56, 64],
+			s: [81, 57.5],
+			a: [[82, 82.5], [81, 82.5]],
+			kn: [[56, 82.5], [57, 82.5]],
+			f: [[38, 82], [39, 82]],
+			ft: [185, 185],
+			bow: -5,
+			hd: -30
+		}, 1.4, .3)] }
+	},
+	{
+		id: "down_dog",
+		name: "Downward dog",
+		group: "mobility",
+		family: "dog",
+		diff: 1,
+		unit: "sec",
+		start: 60,
+		set: 30,
+		muscles: [
+			"Hamstrings",
+			"Calves",
+			"Shoulders",
+			"Back"
+		],
+		steps: [
+			"From hands and knees, lift your hips up and back into an upside-down V.",
+			"Push the floor away, long back, heels reaching down.",
+			"Pedal your heels slowly and breathe."
+		],
+		mistake: "A round back to get the heels down: bend the knees a little and keep the back long.",
+		alias: [
+			"downward dog",
+			"down dog",
+			"downward facing dog"
+		],
+		anim: { keys: [k({
+			h: [64, 46],
+			s: at$1([64, 46], 25, 52),
+			a: [[92, 83], [91, 83]],
+			f: [[47.5, 80.5], [48, 79.5]],
+			ft: [5, 45]
+		}, .9, .3), k({
+			h: [64, 46],
+			s: at$1([64, 46], 25, 52),
+			a: [[92, 83], [91, 83]],
+			f: [[48, 79.5], [47.5, 80.5]],
+			ft: [45, 5]
+		}, .9, .3)] }
+	},
+	{
+		id: "worlds_greatest",
+		name: "Lunge with a twist",
+		group: "mobility",
+		family: "wgs",
+		diff: 2,
+		unit: "reps",
+		start: 10,
+		set: 10,
+		muscles: [
+			"Hips",
+			"Hamstrings",
+			"Upper back"
+		],
+		steps: [
+			"Step into a long lunge and put both hands on the floor inside the front foot.",
+			"Lift the arm on the front-leg side and twist it up to the ceiling.",
+			"Bring it down and switch sides after a few."
+		],
+		mistake: "Letting the back knee carry you: keep the back leg long and strong.",
+		alias: [
+			"world's greatest stretch",
+			"worlds greatest stretch",
+			"lunge twist",
+			"spiderman lunge"
+		],
+		anim: { keys: [k({
+			h: [57, 66],
+			s: at$1([57, 66], 25, -22),
+			a: [[79, 82.5], [77, 82.5]],
+			f: [[80, 81.5], [30, 79.5]],
+			ft: [12, 60],
+			hd: 20
+		}, .9, .3), k({
+			h: [57, 66],
+			s: at$1([57, 66], 25, -30),
+			a: [[76, 22], [77, 82.5]],
+			f: [[80, 81.5], [30, 79.5]],
+			ft: [12, 60],
+			hd: -70,
+			eb: [-1, 1]
+		}, 1, .5)] }
+	},
+	{
+		id: "arm_circles",
+		name: "Arm circles",
+		group: "mobility",
+		family: "circles",
+		diff: 1,
+		unit: "reps",
+		start: 20,
+		set: 10,
+		muscles: ["Shoulders", "Upper back"],
+		steps: [
+			"Stand tall with your arms straight.",
+			"Draw big, slow circles with your arms, forward.",
+			"After 10, change direction."
+		],
+		mistake: "Shrugging: keep the shoulders down away from your ears.",
+		alias: ["arm circle", "shoulder circles"],
+		anim: { keys: [
+			0,
+			-45,
+			-90,
+			-135,
+			180,
+			135,
+			90,
+			45
+		].map((deg) => k(stand({
+			a: [at$1([60.5, 21.5], 26, deg), at$1([60.5, 21.5], 26, deg - 12)],
+			eb: [-1, -1]
+		}), .28)) }
+	},
+	{
+		id: "childs_pose",
+		name: "Child's pose",
+		group: "mobility",
+		family: "child",
+		diff: 1,
+		unit: "sec",
+		start: 60,
+		set: 30,
+		muscles: [
+			"Lower back",
+			"Hips",
+			"Shoulders"
+		],
+		steps: [
+			"Kneel and sit back on your heels.",
+			"Fold forward and stretch your arms out in front on the floor.",
+			"Rest your forehead down and breathe into your back."
+		],
+		mistake: "Holding your breath: slow breaths in and out through the nose.",
+		alias: [
+			"childs pose",
+			"child pose",
+			"rest pose"
+		],
+		anim: { keys: [k({
+			h: [40, 70],
+			s: at$1([40, 70], 25, 14),
+			a: [[90, 82.5], [89, 82.5]],
+			kn: [[57, 82.5], [58, 82.5]],
+			f: [[38.5, 82.5], [39.5, 82.5]],
+			ft: [180, 180],
+			bow: 3,
+			hd: 8
+		}, 2), k({
+			h: [40.5, 69],
+			s: at$1([40.5, 69], 25, 12),
+			a: [[90, 82.5], [89, 82.5]],
+			kn: [[57, 82.5], [58, 82.5]],
+			f: [[38.5, 82.5], [39.5, 82.5]],
+			ft: [180, 180],
+			bow: 4.5,
+			hd: 8
+		}, 2)] }
+	},
+	{
+		id: "cobra",
+		name: "Cobra stretch",
+		group: "mobility",
+		family: "cobra",
+		diff: 1,
+		unit: "reps",
+		start: 10,
+		set: 10,
+		muscles: [
+			"Abs",
+			"Lower back",
+			"Chest"
+		],
+		steps: [
+			"Lie face down, hands under your shoulders.",
+			"Press up slowly, lifting your chest, hips staying on the floor.",
+			"Hold a breath at the top and lower down."
+		],
+		mistake: "Pushing too high and pinching the lower back: only go as far as feels good.",
+		alias: [
+			"cobra",
+			"seal stretch",
+			"upward dog"
+		],
+		anim: { keys: [k({
+			h: [54, 80],
+			s: [79, 79.5],
+			a: [[80, 82.5], [79, 82.5]],
+			f: [[18, 80.5], [19, 80.5]],
+			ft: [178, 178],
+			hd: 10
+		}, 1.1, .3), k({
+			h: [54, 80],
+			s: at$1([54, 80], 25, -52),
+			a: [[74, 82.5], [73, 82.5]],
+			f: [[18, 80.5], [19, 80.5]],
+			ft: [178, 178],
+			bow: -3,
+			hd: -25
+		}, 1.1, .7)] }
+	},
+	{
+		id: "good_morning",
+		name: "Good mornings",
+		group: "mobility",
+		family: "hinge",
+		diff: 1,
+		unit: "reps",
+		start: 20,
+		set: 10,
+		muscles: [
+			"Hamstrings",
+			"Glutes",
+			"Lower back"
+		],
+		steps: [
+			"Stand with feet hip-width, hands crossed on your chest.",
+			"With soft knees and a flat back, push your hips back and lean forward.",
+			"Stop when you feel the back of your legs, then stand tall."
+		],
+		mistake: "Rounding the back: the movement is at the hips, the back stays flat.",
+		alias: [
+			"good morning",
+			"hip hinge",
+			"hinges"
+		],
+		anim: { keys: [k(stand({
+			ar: [[4, 6], [2, 6]],
+			a: void 0
+		}), 1, .2), k({
+			h: [52, 49],
+			s: at$1([52, 49], 25, -8),
+			ar: [[4, 6], [2, 6]],
+			f: ST_ANKLES
+		}, 1.1, .3)] }
+	}
+];
+var BY_ID = new Map(MOVES.map((m) => [m.id, m]));
+var moveById = (id) => id ? BY_ID.get(id) ?? null : null;
+/** "Push-ups", "pushups", "PRESS" → the library move it is, or null. */
+function matchMove(name) {
+	const norm = (s) => s.toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+	const n = norm(String(name ?? ""));
+	if (!n) return null;
+	const squash = (s) => norm(s).replace(/ /g, "");
+	const sq = n.replace(/ /g, "");
+	for (const m of MOVES) {
+		if (squash(m.name) === sq || squash(m.id) === sq) return m;
+		if ((m.alias ?? []).some((a) => squash(a) === sq)) return m;
+	}
+	let best = null;
+	let bestLen = 0;
+	const words = ` ${n} `;
+	for (const m of MOVES) for (const a of [m.name, ...m.alias ?? []]) {
+		const s = norm(a);
+		if (s.length >= 6 && words.includes(` ${s} `) && s.length > bestLen) {
+			best = m;
+			bestLen = s.length;
+		}
+	}
+	return best;
+}
+// src/core/sportLadders.ts
+/** The library move an exercise is: the one it was added as, else by its name. */
+var moveOf = (ex) => moveById(ex.move) ?? matchMove(ex.name);
+function nextStep$1(move) {
+	const f = FAMILIES[move.family];
+	const i = f ? f.steps.indexOf(move.id) : -1;
+	return i >= 0 && i < f.steps.length - 1 ? moveById(f.steps[i + 1]) : null;
+}
+function prevStep(move) {
+	const f = FAMILIES[move.family];
+	const i = f ? f.steps.indexOf(move.id) : -1;
+	return i > 0 ? moveById(f.steps[i - 1]) : null;
+}
+// src/core/sportSets.ts
+var clean$1 = (n) => Math.max(0, Math.min(2e3, Math.round(Number(n) || 0)));
+/** The sets of one exercise on one day (a copy, only real ones). */
+function setsOn(log, day, exId) {
+	const l = log?.[day]?.[exId];
+	return Array.isArray(l) ? l.filter((s) => s && clean$1(s.reps) > 0) : [];
+}
+/** A set to store: whole numbers, an id and a time. */
+function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
+	const s = {
+		reps: clean$1(reps),
+		at: now,
+		id: `${now.toString(36)}${salt || Math.random().toString(36).slice(2, 6)}`
+	};
+	if (kg > 0) s.kg = Math.round(kg * 2) / 2;
+	return s;
+}
+/** Adds sets to a log (a new log; the old one is not changed). */
+function addSets(log, day, exId, reps, now = Date.now()) {
+	const out = JSON.parse(JSON.stringify(log ?? {}));
+	const list = (out[day] ??= {})[exId] ?? [];
+	reps.map(clean$1).filter((r) => r > 0).forEach((r, i) => list.push(makeSet(r, now + i, 0, `${i}${exId.length}`)));
+	if (list.length) out[day][exId] = list;
+	return out;
+}
+/** The days with sets of an exercise, oldest first (only up to `until`, if given). */
+function sessionsOf$1(log, exId, until) {
+	return Object.keys(log ?? {}).filter((d) => !until || d <= until).sort().map((day) => ({
+		day,
+		reps: setsOn(log, day, exId).map((s) => clean$1(s.reps))
+	})).filter((s) => s.reps.length > 0);
+}
+/** Your best single set of an exercise (reps or seconds), and the day; null without sets. */
+function bestSet(log, exId, until) {
+	let best = null;
+	for (const s of sessionsOf$1(log, exId, until)) for (const r of s.reps) if (!best || r > best.reps) best = {
+		reps: r,
+		day: s.day
+	};
+	return best;
+}
+/**
+* Sets in a message: "3x15 push-ups", "push-ups 3×15", "push-ups 15 14 12",
+* "pushups 15, 14, 12", "15 14 12 squats", "plank 3x45s", "plank 60s 45s".
+* One number alone ("50 pushups") is a total, not sets: null.
+*/
+function parseSets$1(text) {
+	const t = String(text ?? "").trim().replace(/^\//, "").replace(/[×*]/g, "x").replace(/\s+/g, " ");
+	if (!t || t.length > 80) return null;
+	const name = (s) => s.replace(/[:,.\-–]+$/, "").replace(/^[:,.\-–]+/, "").trim();
+	const isName = (s) => /^[a-zA-ZÀ-ž][a-zA-ZÀ-ž' _-]{1,40}$/.test(s.trim());
+	const nx = /^(\d{1,2})\s?x\s?(\d{1,3})\s?(s|sec|secs|seconds)?\s+(.+)$/i.exec(t) ?? null;
+	const xn = /^(.+?)\s+(\d{1,2})\s?x\s?(\d{1,3})\s?(s|sec|secs|seconds)?$/i.exec(t) ?? null;
+	if (nx && isName(nx[4])) {
+		const n = Number(nx[1]), r = Number(nx[2]);
+		if (n >= 1 && n <= 12 && r >= 1) return {
+			name: name(nx[4]),
+			reps: Array(n).fill(r),
+			unit: nx[3] ? "sec" : "reps"
+		};
+	}
+	if (xn && isName(xn[1])) {
+		const n = Number(xn[2]), r = Number(xn[3]);
+		if (n >= 1 && n <= 12 && r >= 1) return {
+			name: name(xn[1]),
+			reps: Array(n).fill(r),
+			unit: xn[4] ? "sec" : "reps"
+		};
+	}
+	const nums = String.raw`((?:\d{1,3}\s?(?:s|sec)?\s?[,;/ ]\s?)+\d{1,3}\s?(?:s|sec)?)`;
+	const after = new RegExp(String.raw`^(.+?)[: ]+${nums}$`, "i").exec(t);
+	const before = new RegExp(String.raw`^${nums}\s+(.+)$`, "i").exec(t);
+	const pick = after && isName(after[1]) ? {
+		n: after[1],
+		list: after[2]
+	} : before && isName(before[2]) ? {
+		n: before[2],
+		list: before[1]
+	} : null;
+	if (!pick) return null;
+	const parts = pick.list.split(/[,;/ ]+/).filter(Boolean);
+	const vals = [];
+	let sec = false;
+	for (let i = 0; i < parts.length; i++) {
+		const p = parts[i];
+		if (/^(s|sec)$/i.test(p)) {
+			sec = true;
+			continue;
+		}
+		const m = /^(\d{1,3})(s|sec)?$/i.exec(p);
+		if (!m) return null;
+		if (m[2]) sec = true;
+		vals.push(Number(m[1]));
+	}
+	if (vals.length < 2 || vals.length > 12 || vals.some((v) => v < 1)) return null;
+	return {
+		name: name(pick.n),
+		reps: vals,
+		unit: sec ? "sec" : "reps"
+	};
+}
+/** "15 · 14 · 12" or "3 × 15" for a list of sets (with "s" for holds). */
+function setsText(reps, unit = "reps") {
+	const u = unit === "sec" ? " s" : "";
+	if (!reps.length) return "";
+	if (reps.length > 1 && reps.every((r) => r === reps[0])) return `${reps.length} × ${reps[0]}${u}`;
+	return reps.join(" · ") + u;
+}
 // src/core/botCommands.ts
 function parseAmountAndUnit(str, defaultUnit = "reps") {
 	if (!str) return {
@@ -491,6 +3100,19 @@ function parseTelegramText(text) {
 		raw: trimmed,
 		period: /yesterday|ieri|вчера/.test(q) ? "yesterday" : /week|saptaman|недел/.test(q) ? "week" : /month|luna|месяц/.test(q) ? "month" : "today"
 	};
+	const sets = parseSets$1(trimmed);
+	if (sets && (matchMove(sets.name) || /^(press|pushups?|situps?|squats?|pullups?|dips?|plank|flotari|abdomene|genuflexiuni|tractiuni)$/i.test(sets.name.replace(/[^a-z]/gi, "")))) {
+		const total = sets.reps.reduce((a, b) => a + b, 0);
+		return {
+			type: "workout",
+			args: [],
+			raw: trimmed,
+			exerciseName: sets.name,
+			exerciseAmount: total,
+			exerciseUnit: sets.unit,
+			exerciseSets: sets.reps
+		};
+	}
 	const words = args.filter((a) => !/\d/.test(a));
 	if (!parts[0].startsWith("/") && !/^\d/.test(cmd) && args.length && (words.length === args.length || words.length > 2)) cmd = "\0";
 	const exerciseShortcuts = {
@@ -1500,7 +4122,7 @@ function toUtc(day) {
 	return Date.UTC(y, m - 1, d);
 }
 /** Whole days from a to b (b - a). */
-function daysBetween$2(a, b) {
+function daysBetween$3(a, b) {
 	return Math.round((toUtc(b) - toUtc(a)) / 864e5);
 }
 function addDays$5(day, n) {
@@ -1612,9 +4234,9 @@ function parsePlan(text) {
 }
 /** Where a goal stands: hours done, the weekly target from here, ahead or behind. */
 function goalProgress$1(g, doneMin, today) {
-	const total = Math.max(1, daysBetween$2(g.createdDay, g.deadline));
-	const elapsed = Math.min(total, Math.max(0, daysBetween$2(g.createdDay, today)));
-	const daysLeft = Math.max(0, daysBetween$2(today, g.deadline));
+	const total = Math.max(1, daysBetween$3(g.createdDay, g.deadline));
+	const elapsed = Math.min(total, Math.max(0, daysBetween$3(g.createdDay, today)));
+	const daysLeft = Math.max(0, daysBetween$3(today, g.deadline));
 	const leftH = Math.max(0, g.hours - doneMin / 60);
 	const perWeekH = leftH === 0 ? 0 : leftH / Math.max(1, daysLeft / 7);
 	const expectedH = g.hours * elapsed / total;
@@ -2881,7 +5503,7 @@ var perDay = (leftMin, days) => leftMin <= 0 ? 0 : round5(leftMin / Math.max(1, 
 /** The plan for one goal, from its progress (hours done) and today's focus on it. */
 function planGoal(g, today, todayMin = 0) {
 	const leftMin = Math.max(0, Math.round(g.hours * 60 - g.doneMin));
-	const daysLeft = Math.max(0, daysBetween$2(today, g.deadline));
+	const daysLeft = Math.max(0, daysBetween$3(today, g.deadline));
 	const pd = perDay(leftMin + todayMin, daysLeft);
 	const status = leftMin === 0 ? "done" : daysLeft === 0 ? "late" : g.aheadH >= 1 ? "ahead" : g.aheadH <= -1 ? "behind" : "on track";
 	const milestones = [];
@@ -2893,7 +5515,7 @@ function planGoal(g, today, todayMin = 0) {
 			const wd = (/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay();
 			const sunday = addDays$5(d, (7 - wd) % 7);
 			const by = sunday < last ? sunday : last;
-			const daysTo = daysBetween$2(today, by) + 1;
+			const daysTo = daysBetween$3(today, by) + 1;
 			const target = Math.min(g.hours, doneH + (leftMin + todayMin) / 60 * (daysTo / daysLeft) - todayMin / 60);
 			milestones.push({
 				by,
@@ -3078,7 +5700,7 @@ function bestDayStreak(doneDays, restDays = []) {
 	let best = 0;
 	let run = 0;
 	for (let i = 0; i < days.length; i++) {
-		if (i > 0 && daysBetween$2(days[i - 1], days[i]) !== 1) run = 0;
+		if (i > 0 && daysBetween$3(days[i - 1], days[i]) !== 1) run = 0;
 		if (done.has(days[i])) run++;
 		best = Math.max(best, run);
 	}
@@ -3103,7 +5725,7 @@ function cleanStats(start, relapses, today) {
 		today
 	];
 	const segments = [];
-	for (let i = 0; i < points.length - 1; i++) segments.push(Math.max(0, daysBetween$2(points[i], points[i + 1])));
+	for (let i = 0; i < points.length - 1; i++) segments.push(Math.max(0, daysBetween$3(points[i], points[i + 1])));
 	const since = resets.length ? resets[resets.length - 1] : start;
 	return {
 		current: segments[segments.length - 1] ?? 0,
@@ -3382,8 +6004,8 @@ function modeRules(book, today) {
 		...MODES[m.kind],
 		kind: m.kind,
 		until: m.until,
-		dayN: daysBetween$2(m.from, today) + 1,
-		days: daysBetween$2(m.from, m.until) + 1
+		dayN: daysBetween$3(m.from, today) + 1,
+		days: daysBetween$3(m.from, m.until) + 1
 	};
 }
 /** Days (up to today) that keep the workout streak: sick and travel days. */
@@ -3553,7 +6175,7 @@ function learnLadders(list) {
 function nextSubject(list, today) {
 	if (!list.length) return null;
 	const v = [...learnLadders(list)].sort((a, b) => (a.lastDay ?? "").localeCompare(b.lastDay ?? ""))[0];
-	const ago = v.lastDay ? daysBetween$2(v.lastDay, today) : null;
+	const ago = v.lastDay ? daysBetween$3(v.lastDay, today) : null;
 	const toNext = v.next ? `${v.next.at - v.count} more to "${v.next.name}"` : "ladder complete";
 	return {
 		track: v.track,
@@ -4171,7 +6793,7 @@ var QUOTES = [
 	"The streak is the proof. Keep stacking days."
 ];
 function quoteFor(day) {
-	return QUOTES[(daysBetween$2("2026-01-01", day) % QUOTES.length + QUOTES.length) % QUOTES.length];
+	return QUOTES[(daysBetween$3("2026-01-01", day) % QUOTES.length + QUOTES.length) % QUOTES.length];
 }
 function rankFor(days) {
 	let i = 0;
@@ -4229,7 +6851,7 @@ function milestonesOf$1(events, today, claimedRefs, setupDay) {
 function validateStart(day, today, events) {
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new LedgerError("Pick a date");
 	if (day > today) throw new LedgerError("The start date cannot be in the future");
-	if (daysBetween$2(day, today) > 3650) throw new LedgerError("That date is too far back");
+	if (daysBetween$3(day, today) > 3650) throw new LedgerError("That date is too far back");
 	if (events.some((e) => e.kind === "reset")) throw new LedgerError("After a reset the date comes from the reset itself");
 }
 function planCheckIn(events, today) {
@@ -4286,7 +6908,7 @@ function streakRuns(start, resets, today) {
 		return {
 			from,
 			to,
-			days: Math.max(0, daysBetween$2(from, to)),
+			days: Math.max(0, daysBetween$3(from, to)),
 			ended: i < cuts.length ? "reset" : "now"
 		};
 	});
@@ -5265,7 +7887,7 @@ var addDays$4 = (day, n) => {
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
 };
-var daysBetween$1 = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5);
+var daysBetween$2 = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5);
 /** GitHub's events list → last commit day, commits this week and the repos touched. */
 function commitStats(events, today) {
 	const pushes = (Array.isArray(events) ? events : []).filter((e) => e?.type === "PushEvent" && typeof e.created_at === "string");
@@ -5308,7 +7930,7 @@ var dm = (iso) => new Date(iso).toLocaleDateString("en-GB", {
 var hours$1 = (e) => Math.round((Date.parse(e.finish) - Date.parse(e.start)) / 36e5);
 /** One line for what Ben knows. */
 function githubLine(d, today) {
-	const since = d.lastCommit ? daysBetween$1(d.lastCommit, today) : null;
+	const since = d.lastCommit ? daysBetween$2(d.lastCommit, today) : null;
 	const commit = since == null ? `no commits seen lately` : since === 0 ? "committed today" : `${since} day${since === 1 ? "" : "s"} without a commit (last ${d.lastCommit})`;
 	const week = `${d.week} commit${d.week === 1 ? "" : "s"} in the last 7 days${d.repos.length ? ` (${d.repos.join(", ")})` : ""}`;
 	const nudge = since != null && since >= 3 ? " Nudge him: one small commit today." : "";
@@ -7860,9 +10482,9 @@ function bend(t, curve) {
 }
 /** Share of the time used on `day` (0 at the start day, 1 on the deadline). */
 function timeShare(g, day) {
-	const total = daysBetween$2(g.startDay, g.deadline);
+	const total = daysBetween$3(g.startDay, g.deadline);
 	if (total <= 0) return 1;
-	return clamp01(daysBetween$2(g.startDay, day) / total);
+	return clamp01(daysBetween$3(g.startDay, day) / total);
 }
 /** Where you should be on `day` on the pace line. */
 function expectedAt(g, day) {
@@ -7890,12 +10512,12 @@ function goalStatus$1(g, value, today) {
 	return timeShare(g, today) >= .9 ? "at risk" : "behind";
 }
 /** Days left to the deadline (0 on the day itself). */
-var daysLeftOf = (g, today) => Math.max(0, daysBetween$2(today, g.deadline));
+var daysLeftOf = (g, today) => Math.max(0, daysBetween$3(today, g.deadline));
 /** What it takes per day from here to make it (positive = up, negative = down), or 0 when done. */
 function requiredPerDay(g, value, today) {
 	const left = g.target - value;
 	if (goingDown(g) ? left >= 0 : left <= 0) return 0;
-	return left / Math.max(1, daysBetween$2(today, g.deadline));
+	return left / Math.max(1, daysBetween$3(today, g.deadline));
 }
 /**
 * Your real pace per day: the change over the last 28 days when there is a
@@ -7906,9 +10528,9 @@ function currentPerDay(g, checkins, today) {
 	const real = checkins.filter((c) => c.by !== "skip").sort((a, b) => a.at.localeCompare(b.at));
 	const now = currentValue(g, real);
 	const windowFrom = addDays$5(today, -28);
-	const old = real.filter((c) => c.day >= windowFrom && daysBetween$2(c.day, today) >= 7)[0];
-	if (old) return (now - old.value) / Math.max(1, daysBetween$2(old.day, today));
-	const days = daysBetween$2(g.startDay, today);
+	const old = real.filter((c) => c.day >= windowFrom && daysBetween$3(c.day, today) >= 7)[0];
+	if (old) return (now - old.value) / Math.max(1, daysBetween$3(old.day, today));
+	const days = daysBetween$3(g.startDay, today);
 	if (days < 3) return null;
 	return (now - g.start) / days;
 }
@@ -7972,7 +10594,7 @@ function periodKey(cadence, day, startDay = day) {
 	const mon = mondayOf$3(day);
 	if (cadence === "weekly") return `w${mon}`;
 	const base = mondayOf$3(startDay);
-	const weeks = Math.floor(daysBetween$2(base, mon) / 7);
+	const weeks = Math.floor(daysBetween$3(base, mon) / 7);
 	return `b${addDays$5(base, Math.floor(weeks / 2) * 14)}`;
 }
 /** Check-ins that count for the rhythm: yours or Ben's (a skip counts as answered). */
@@ -8368,8 +10990,8 @@ function periodInfo(type, per, target, daily, startDay, today, dayMin = 1, keep 
 	const past = rows.slice(0, -1);
 	const pool = type === "limit" ? past : rows;
 	const best = pool.length ? pool.reduce((b, r) => type === "limit" ? r.value < b.value ? r : b : r.value > b.value ? r : b) : null;
-	const len = daysBetween$2(cur.from, cur.to) + 1;
-	const daysLeft = daysBetween$2(today, cur.to) + 1;
+	const len = daysBetween$3(cur.from, cur.to) + 1;
+	const daysLeft = daysBetween$3(today, cur.to) + 1;
 	const todayValue = Math.round((daily[today] ?? 0) * 100) / 100;
 	const passed = Math.max(1, len - daysLeft + 1);
 	const projected = mode === "days" ? Math.min(len, Math.round(now.value / passed * len)) : Math.round(now.value / passed * len * 10) / 10;
@@ -8421,7 +11043,7 @@ function periodStatusAt(type, pi) {
 }
 function daysInPeriod(pi) {
 	const last = pi.history[pi.history.length - 1];
-	return last ? daysBetween$2(last.from, last.to) + 1 : 30;
+	return last ? daysBetween$3(last.from, last.to) + 1 : 30;
 }
 /**
 * How many days you are behind (+) or ahead (−) of the pace line: how long
@@ -8432,13 +11054,13 @@ function daysOffLine(g, value, today) {
 	const pv = progressOf(g, value);
 	const pe = progressOf(g, expectedAt(g, today));
 	if (Math.abs(pv - pe) < 1e-9) return 0;
-	const total = Math.max(1, daysBetween$2(g.startDay, g.deadline));
+	const total = Math.max(1, daysBetween$3(g.startDay, g.deadline));
 	if (pv < pe) {
 		for (let k = 1; k <= total; k++) if (progressOf(g, expectedAt(g, addDays$5(today, -k))) <= pv + 1e-9) return k;
-		return daysBetween$2(g.startDay, today);
+		return daysBetween$3(g.startDay, today);
 	}
 	for (let k = 1; k <= total; k++) if (progressOf(g, expectedAt(g, addDays$5(today, k))) >= pv - 1e-9) return -k;
-	return -daysBetween$2(today, g.deadline);
+	return -daysBetween$3(today, g.deadline);
 }
 /** The best calendar week so far (the biggest move toward the target), from the daily series. */
 function bestWeek(g, series, today) {
@@ -8993,7 +11615,7 @@ function parseGoalText(raw, today) {
 	let rest = dl ? text.replace(new RegExp(`\\s*(?:by|until|till|before|on|in)?\\s*(?:the\\s+end\\s+of\\s+)?${dl.match.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&")}`, "i"), "") : text;
 	rest = rest.replace(/[.!]+$/, "").trim();
 	const lower = rest.toLowerCase();
-	const deadline = dl && daysBetween$2(today, dl.day) >= 1 ? dl.day : null;
+	const deadline = dl && daysBetween$3(today, dl.day) >= 1 ? dl.day : null;
 	const base = {
 		deadline,
 		curve: "line",
@@ -9452,7 +12074,7 @@ function parseKinds(rest, deadline) {
 /** The check-in rhythm that fits the time you have: daily under 3 weeks, monthly over 6 months. */
 function suggestCadence(today, deadline) {
 	if (!deadline) return "weekly";
-	const d = daysBetween$2(today, deadline);
+	const d = daysBetween$3(today, deadline);
 	return d <= 21 ? "daily" : d > 180 ? "monthly" : "weekly";
 }
 /** "Profit 5,000 lei a month · by 31 Dec · Finance Helper" for a confirm card. */
@@ -18247,7 +20869,7 @@ var isRewardCategory = (c) => REWARD_CATEGORIES.some((x) => x.id === c);
 function repeatBlocker(r, buys, today) {
 	const cd = Math.max(0, Math.floor(r.cooldownDays ?? 0));
 	if (cd > 0 && buys.length) {
-		const wait = cd - daysBetween$2([...buys].sort().at(-1), today);
+		const wait = cd - daysBetween$3([...buys].sort().at(-1), today);
 		if (wait > 0) return wait === 1 ? "You can get it again tomorrow" : `You can get it again in ${wait} days`;
 	}
 	const lim = Math.max(0, Math.floor(r.monthLimit ?? 0));
@@ -19053,7 +21675,7 @@ function challengeState(area, week, entries, today) {
 		done: progress >= c.goal,
 		paid: live.some((e) => e.ref === challengeRef(week)),
 		bonus: 40,
-		daysLeft: Math.max(0, daysBetween$2(today, end) + 1)
+		daysLeft: Math.max(0, daysBetween$3(today, end) + 1)
 	};
 }
 var BADGES = [
@@ -19147,7 +21769,7 @@ function bestStreak$1(days) {
 	let best = 0;
 	let run = 0;
 	for (let i = 0; i < sorted.length; i++) {
-		run = i && daysBetween$2(sorted[i - 1], sorted[i]) === 1 ? run + 1 : 1;
+		run = i && daysBetween$3(sorted[i - 1], sorted[i]) === 1 ? run + 1 : 1;
 		best = Math.max(best, run);
 	}
 	return best;
@@ -20738,7 +23360,7 @@ var isDay$1 = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
 function wakyFill(waky, logs, today, horizon = 14) {
 	const w = waky && typeof waky === "object" ? waky : {};
 	const byDay = new Map(logs.map((l) => [l.day, l]));
-	const recent = (d) => isDay$1(d) && d <= today && daysBetween$2(d, today) <= horizon;
+	const recent = (d) => isDay$1(d) && d <= today && daysBetween$3(d, today) <= horizon;
 	const wakes = [];
 	for (const [day, rec] of Object.entries(w.days ?? {})) {
 		const time = cleanTime(rec?.time);
@@ -20873,7 +23495,7 @@ var SleepService = class {
 		if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) throw new LedgerError("Use a time like 06:45");
 		const wakeTime = `${m[1].padStart(2, "0")}:${m[2]}`;
 		if (day > today) throw new LedgerError("That day has not come yet");
-		if (daysBetween$2(day, today) > 14) throw new LedgerError("Only the last 14 days can be changed");
+		if (daysBetween$3(day, today) > 14) throw new LedgerError("Only the last 14 days can be changed");
 		if (day === today) return this.logWake(wakeTime, void 0, now);
 		const target = targetForDay(day, this.weekdayTarget(), this.weekendTarget());
 		const onTime = isWakeOnTime(wakeTime, target);
@@ -25788,7 +28410,7 @@ function addDays(iso, n) {
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
 }
-var daysBetween = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
+var daysBetween$1 = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
 function weekday(iso) {
 	return utc(iso).getUTCDay();
 }
@@ -26848,7 +29470,7 @@ function safeToSpend(state, today) {
 	const ahead = upcomingItems(state, today, 45);
 	const inc = pay ? null : ahead.find((x) => x.rule.type === "income");
 	const payday = pay ? pay.next : inc ? inc.date : `${addMonths(monthKey(today), 1)}-01`;
-	const days = Math.max(1, daysBetween(today, payday));
+	const days = Math.max(1, daysBetween$1(today, payday));
 	const bills = [...dueItems(state, today), ...ahead.filter((x) => x.date < payday)].filter((x) => x.rule.type !== "income").map((x) => ({
 		label: x.rule.note || "Bill",
 		date: x.date,
@@ -27315,7 +29937,7 @@ function goalPlan(g, today) {
 		eta = monthYear(addDays$5(today, Math.round(months * 30.4)));
 	}
 	const by = (g.deadline && g.deadline > today ? g.deadline : null) ?? addDays$5(today, 84);
-	const weeks = Math.max(1, Math.ceil(daysBetween$2(today, by) / 7));
+	const weeks = Math.max(1, Math.ceil(daysBetween$3(today, by) / 7));
 	const perWeek = left > 0 ? Math.ceil(left / weeks / 1e3) * 1e3 : 0;
 	const line = left === 0 ? "Reached" : `Put ${leiText(perWeek)} a week to get there by ${shortDate(by)}`;
 	return {
@@ -33004,21 +35626,27 @@ function runCommand(s, parsed, text, env) {
 		case "workout": {
 			const name = parsed.exerciseName || "pushups";
 			const amount = parsed.exerciseAmount || 20;
+			const sets = parsed.exerciseSets;
 			const res = s.body.logWorkout({
-				title: `${name} (+${amount})`,
+				title: sets ? `${name} ${setsText(sets, parsed.exerciseUnit)}` : `${name} (+${amount})`,
 				items: [{
 					exerciseId: name.toLowerCase(),
 					name,
 					amount,
-					unit: "reps"
+					unit: parsed.exerciseUnit === "sec" ? "sec" : "reps",
+					...sets ? { sets: sets.map((reps) => ({
+						reps,
+						weight: 0
+					})) } : {}
 				}],
 				note: "Logged via Telegram"
 			});
 			return {
-				reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0),
+				reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0) + (sets ? `\nSets: <b>${setsText(sets, parsed.exerciseUnit)}</b> · best set <b>${Math.max(...sets)}</b>` : ""),
 				sport: {
 					name,
-					amount
+					amount,
+					...sets ? { sets } : {}
 				}
 			};
 		}
@@ -33332,6 +35960,196 @@ async function undoReply(c, at, index) {
 	return {
 		ok: ok.length > 0,
 		lines
+	};
+}
+// src/core/sportProgress.ts
+/** Holds: how long a set should last, by move. */
+var HOLDS = {
+	plank: [30, 60],
+	side_plank: [20, 45],
+	hollow_hold: [15, 40],
+	wall_sit: [30, 75],
+	down_dog: [30, 60],
+	childs_pose: [30, 60]
+};
+/** The rep range for a move. */
+function rangeFor(move) {
+	if (!move) return {
+		lo: 8,
+		hi: 15,
+		sets: 3,
+		unit: "reps"
+	};
+	if (move.unit === "sec") {
+		const [lo, hi] = HOLDS[move.id] ?? [20, 60];
+		return {
+			lo,
+			hi,
+			sets: 3,
+			unit: "sec"
+		};
+	}
+	if (move.group === "push" || move.group === "pull") return {
+		lo: move.diff >= 4 ? 5 : 8,
+		hi: move.diff >= 4 ? 12 : 15,
+		sets: 3,
+		unit: "reps"
+	};
+	if (move.group === "legs" || move.group === "core") return {
+		lo: move.diff >= 4 ? 6 : 10,
+		hi: move.diff >= 4 ? 15 : 20,
+		sets: 3,
+		unit: "reps"
+	};
+	if (move.group === "cardio") return {
+		lo: 15,
+		hi: 30,
+		sets: 3,
+		unit: "reps"
+	};
+	return {
+		lo: 8,
+		hi: 12,
+		sets: 2,
+		unit: "reps"
+	};
+}
+/** A session's working sets: the first `n` (a warm-up isn't logged as a set here). */
+var working = (s, n) => s.reps.slice(0, n);
+/** Every working set reached the top. */
+var atTop = (s, r) => s.reps.length >= r.sets && working(s, r.sets).every((x) => x >= r.hi);
+/** Not even one set reached the bottom. */
+var belowBottom = (s, r) => Math.max(...s.reps) < r.lo;
+var daysBetween = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+var clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+var u = (r) => r.unit === "sec" ? " s" : "";
+/**
+* Where an exercise stands and what to aim for today. `log` is every set
+* logged; `exId` the exercise; sessions before `today` set today's goal, and
+* today's own sets count for "ready" as soon as they're logged.
+*/
+function progressFor(input) {
+	const { log, exId, move, today } = input;
+	const r = rangeFor(move);
+	const all = sessionsOf$1(log, exId, today);
+	const past = all.filter((s) => s.day < today);
+	const todays = all.find((s) => s.day === today) ?? null;
+	const last = past[past.length - 1] ?? null;
+	const daysSince = last ? daysBetween(last.day, today) : null;
+	const next = move ? nextStep$1(move) : null;
+	const prev = move ? prevStep(move) : null;
+	const nextAt = `${r.sets}×${r.hi}${u(r)}`;
+	const base = {
+		range: r,
+		sets: r.sets,
+		nextAt,
+		need: 2,
+		daysSince,
+		last,
+		today: todays?.reps ?? [],
+		next: null,
+		prev: null
+	};
+	const recent = [...past, ...todays && todays.reps.length >= r.sets ? [todays] : []];
+	let hits = 0;
+	for (let i = recent.length - 1; i >= 0 && atTop(recent[i], r); i--) hits++;
+	const first = recent.length === 1 && Math.max(...recent[0].reps) >= Math.ceil(r.hi * 1.5);
+	if (hits >= 2 || first) {
+		const n = Math.max(hits, first ? 2 : 0);
+		return next ? {
+			...base,
+			status: "ready",
+			goal: r.hi,
+			hits: n,
+			next,
+			line: `Level up: ${next.name} is unlocked. Start it at ${r.sets}×${rangeFor(next).lo}${u(rangeFor(next))}.`
+		} : {
+			...base,
+			status: "top",
+			goal: r.hi,
+			hits: n,
+			line: `Top of the ladder. Add a 4th set, or go slower (3 seconds down).`
+		};
+	}
+	if (!last) return {
+		...base,
+		status: "new",
+		goal: r.lo,
+		hits,
+		line: `First time: ${r.sets} sets of ${r.lo}–${r.hi}${u(r)}. Stop 1–2 reps before you can't do another.`
+	};
+	const lastMin = Math.min(...working(last, r.sets));
+	const peak = Math.max(...past.slice(-6).flatMap((s) => working(s, r.sets).length >= r.sets ? [Math.min(...working(s, r.sets))] : []), lastMin);
+	if (daysSince !== null && daysSince >= 10) {
+		const back = Math.round(peak * .7);
+		if (back < r.lo && prev && daysSince >= 21) return {
+			...base,
+			status: "comeback",
+			goal: r.lo,
+			hits: 0,
+			prev,
+			line: `Welcome back after ${daysSince} days. Start one step easier (${prev.name}) or ${r.sets}×${r.lo}${u(r)}, and build up fast.`
+		};
+		return {
+			...base,
+			status: "comeback",
+			goal: clamp(back, r.lo, r.hi),
+			hits: 0,
+			line: `Welcome back after ${daysSince} days: start at ${r.sets}×${clamp(back, r.lo, r.hi)}${u(r)} (about 70%), then build up fast.`
+		};
+	}
+	const misses = past.slice(-2);
+	if (misses.length === 2 && misses.every((s) => belowBottom(s, r))) return prev ? {
+		...base,
+		status: "stuck",
+		goal: r.lo,
+		hits: 0,
+		prev,
+		line: `Under ${r.lo}${u(r)} twice: step back to ${prev.name} for a while, or rest 2–3 minutes between sets.`
+	} : {
+		...base,
+		status: "stuck",
+		goal: r.lo,
+		hits: 0,
+		line: `Under ${r.lo}${u(r)} twice: rest 2–3 minutes between sets and sleep well. You'll get there.`
+	};
+	let breakAt = -1;
+	for (let j = Math.max(1, past.length - 3); j < past.length; j++) if (daysBetween(past[j - 1].day, past[j].day) >= 10) breakAt = j;
+	const mins = (list) => list.flatMap((s) => working(s, r.sets).length >= r.sets ? [Math.min(...working(s, r.sets))] : []);
+	const oldPeak = breakAt > 0 ? Math.max(0, ...mins(past.slice(0, breakAt))) : 0;
+	const step = r.unit === "sec" ? 5 : 1;
+	const goal = clamp(breakAt > 0 && lastMin < oldPeak ? Math.min(oldPeak, lastMin + 3 * step) : lastMin + step, r.lo, r.hi);
+	return {
+		...base,
+		status: "building",
+		goal,
+		hits,
+		line: hits ? `${hits} of 2 sessions at the top. One more and the next level unlocks.` : `Aim for ${r.sets}×${goal}${u(r)} today. Next level at ${nextAt}.`
+	};
+}
+// src/core/sportBot.ts
+/** The state with the sets added (or null if there's no such exercise), and one reply line. */
+function logBotSets(st, name, reps, day, now = Date.now()) {
+	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : null;
+	const ex = s && findSharedExercise(s, name);
+	if (!ex || !reps.length) return null;
+	const id = String(ex.id ?? ex.name);
+	const before = bestSet(s.sets, id);
+	s.sets = addSets(s.sets, day, id, reps, now);
+	const top = Math.max(...reps);
+	const move = moveOf({
+		name: String(ex.name ?? ""),
+		move: ex.move
+	});
+	const p = move ? progressFor({
+		log: s.sets,
+		exId: id,
+		move,
+		today: day
+	}) : null;
+	return {
+		st: s,
+		line: (before && top > before.reps ? `🏆 New best set: <b>${top}</b> (was ${before.reps})` : `Best set today: <b>${top}</b>${before ? ` · all-time ${Math.max(before.reps, top)}` : ""}`) + (!p ? "" : p.status === "ready" && p.next ? `\n⬆️ Level up: <b>${p.next.name}</b> is unlocked. Open Sport Track to move up.` : p.status === "building" || p.status === "new" ? `\n🎯 Next level at <b>${p.nextAt}</b>${p.hits ? ` (${p.hits} of ${p.need} sessions there)` : ""}` : `\n${p.line}`)
 	};
 }
 // src/core/benRoute.ts
@@ -33802,7 +36620,7 @@ function timingLine(t) {
 var LOGS_KEY = "life_bot_logs";
 var store = typeof localStorage !== "undefined" ? localStorage : null;
 /** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
-function addRepsToSportTrack(name, amount) {
+function addRepsToSportTrack(name, amount, sets) {
 	let prog = null;
 	updateSport((st) => {
 		const ex = findExercise(st, name);
@@ -33812,6 +36630,11 @@ function addRepsToSportTrack(name, amount) {
 			done: ex.doneToday,
 			target: Number(ex.target) || 0
 		};
+		const r = sets?.length ? logBotSets(st, name, sets, sportToday()) : null;
+		if (r) {
+			st.sets = r.st.sets;
+			prog.line = r.line;
+		}
 	});
 	return prog;
 }
@@ -33819,14 +36642,17 @@ function addRepsToSportTrack(name, amount) {
 * Sport Track's data in Turso (settings.sport_tracker_json, see sportSync.ts),
 * for the server: reps land there and every device picks them up.
 */
-function addRepsInDb(db, name, amount) {
+function addRepsInDb(db, name, amount, sets) {
 	const st = sportState(db);
 	if (!st || !Array.isArray(st.exercises)) return null;
 	const r = logReps(db, name, amount, "telegram");
 	if (!r) return null;
+	const withSets = sets?.length ? logBotSets(r.st, name, sets, sportToday()) : null;
+	if (withSets) saveSport(db, withSets.st, "telegram");
 	return {
 		done: r.exercise.done,
-		target: r.exercise.target
+		target: r.exercise.target,
+		line: withSets?.line
 	};
 }
 /** "tool weather_now {"city":"Chisinau"}" → name and arguments; null when it isn't one. */
@@ -34266,8 +37092,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		return db.transaction(() => {
 			const out = run(svc, text, key);
 			if (server && out.sport) {
-				const prog = addRepsInDb(db, out.sport.name, out.sport.amount);
+				const prog = addRepsInDb(db, out.sport.name, out.sport.amount, out.sport.sets);
 				if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round(prog.done / prog.target * 100)}%)`;
+				if (prog?.line) out.reply += `\n${prog.line}`;
 				out.sport = void 0;
 			}
 			if (out.expense) {
@@ -36067,8 +38894,9 @@ His note: ${note}`, { json: true }));
 			if (ai && "unknown" in out && out.unknown && !text.startsWith("/")) return handleBrain(botId, update, cfg, text, key);
 			processed++;
 			if (out.ok && "sport" in out && out.sport) {
-				const prog = addRepsToSportTrack(out.sport.name, out.sport.amount);
+				const prog = addRepsToSportTrack(out.sport.name, out.sport.amount, out.sport.sets);
 				if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round(prog.done / prog.target * 100)}%)`;
+				if (prog?.line) out.reply += `\n${prog.line}`;
 			}
 			if (out.ok && "expense" in out && out.expense) onExpense?.();
 			addLog(text, chat, out.ok, out.reply);

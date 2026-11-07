@@ -2,6 +2,13 @@
 // bundled into apps/sport/sportkit.js as window.SportKit (npm run build:sport;
 // a test fails when the bundle is out of date).
 export { FLOOR, BONES, frameAt, stillFrame, loopLength, boxOf } from './sportFigure'
+export { figureShapes } from './sportDraw'
 export { MOVES, GROUPS, FAMILIES, moveById, matchMove } from './sportMoves'
 export { moveOf, levelOf, nextStep, prevStep, startTarget, targetRun, suggestHarder, loggedMoves, ladderOf } from './sportLadders'
 export { computeBadges, newBadges, activeDays, bestRun } from './sportBadges'
+export { PHOTOS, PHOTO_SOURCE, photoOf } from './sportPhotos'
+export { MUSCLES, WEEKLY_SETS, muscleOf, setsOn, makeSet, addSets, mergeSets, sessionsOf, bestSet, hardSets, hardSetsByMuscle, weeklyVolume, importSets, parseSets, setsText, mondayOf } from './sportSets'
+export { rangeFor, progressFor, growTarget, enduranceStep, BREAK_DAYS, NEED } from './sportProgress'
+export { loadOf, setScore, familySeries, familiesWithSets, strengthChange, strengthScore, isRecord } from './sportStrength'
+export { weekPlan, todaysSession, buildSession, estimateMinutes, splitOf, growTips, TRAIN_DAYS } from './sportProgram'
+export { parseTelegramExport, mergeTelegramDays, matchExercise } from './sportTelegramImport'

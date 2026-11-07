@@ -141,3 +141,16 @@ describe('mergeSport: badges and "not yet"', () => {
     expect(mergeSport({ lastDate: '2026-11-06' }, { lastDate: '2026-11-06' }, true).badges).toBeUndefined()
   })
 })
+
+describe('mergeSport: sets (SP3)', () => {
+  it('keeps every set from both devices once, the higher best, and level ups shown', () => {
+    const s = (id: string, reps: number, at: number) => ({ id, reps, at })
+    const a = { lastDate: '2026-03-10', exercises: [], sets: { '2026-03-10': { ex_p: [s('a1', 15, 1), s('a2', 14, 3)] } }, best: { ex_p: { score: 15, label: '15 in one set' } }, levelSeen: { 'ex_p>wide_pushup': '2026-03-10' } }
+    const b = { lastDate: '2026-03-10', exercises: [], sets: { '2026-03-10': { ex_p: [s('a1', 15, 1), s('b1', 13, 2)] }, '2026-03-08': { ex_s: [s('b2', 20, 0)] } }, best: { ex_p: { score: 12 } } }
+    const m = mergeSport(a, b, false)
+    expect(m.sets['2026-03-10'].ex_p.map((x: any) => x.reps)).toEqual([15, 13, 14])
+    expect(m.sets['2026-03-08'].ex_s).toHaveLength(1)
+    expect(m.best.ex_p.score).toBe(15)
+    expect(m.levelSeen['ex_p>wide_pushup']).toBe('2026-03-10')
+  })
+})

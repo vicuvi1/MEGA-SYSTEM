@@ -12,12 +12,12 @@ var SportKit = (function(exports) {
 		head: 6,
 		foot: 5.5
 	};
-	var add = (p, q) => [p[0] + q[0], p[1] + q[1]];
-	var sub = (p, q) => [p[0] - q[0], p[1] - q[1]];
-	var mul = (p, k) => [p[0] * k, p[1] * k];
-	var len = (p) => Math.hypot(p[0], p[1]);
-	var unit = (p) => {
-		const l = len(p);
+	var add$1 = (p, q) => [p[0] + q[0], p[1] + q[1]];
+	var sub$1 = (p, q) => [p[0] - q[0], p[1] - q[1]];
+	var mul$1 = (p, k) => [p[0] * k, p[1] * k];
+	var len$1 = (p) => Math.hypot(p[0], p[1]);
+	var unit$1 = (p) => {
+		const l = len$1(p);
 		return l > 1e-9 ? [p[0] / l, p[1] / l] : [0, -1];
 	};
 	var rot = (p, deg) => {
@@ -28,32 +28,32 @@ var SportKit = (function(exports) {
 	};
 	var lerp = (a, b, k) => a + (b - a) * k;
 	var lerpPt = (a, b, k) => [lerp(a[0], b[0], k), lerp(a[1], b[1], k)];
-	var dist = (a, b) => len(sub(a, b));
+	var dist = (a, b) => len$1(sub$1(a, b));
 	/**
 	* Two bones from `root` towards `target`: returns the middle joint and the end.
 	* Too far: the limb points straight at it. `bend` picks the side the joint goes.
 	*/
 	function ik(root, target, l1, l2, bend, mid) {
 		if (mid) {
-			const j = add(root, mul(unit(sub(mid, root)), l1));
-			return [j, add(j, mul(unit(sub(target, j)), l2))];
+			const j = add$1(root, mul$1(unit$1(sub$1(mid, root)), l1));
+			return [j, add$1(j, mul$1(unit$1(sub$1(target, j)), l2))];
 		}
 		const d0 = dist(root, target);
 		const d = Math.max(Math.abs(l1 - l2) + .01, Math.min(l1 + l2 - .01, d0));
-		const u = unit(sub(target, root));
+		const u = unit$1(sub$1(target, root));
 		const cos = (l1 * l1 + d * d - l2 * l2) / (2 * l1 * d);
-		const j = add(root, mul(rot(u, bend * (Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI)), l1));
-		return [j, add(j, mul(unit(sub(add(root, mul(u, d)), j)), l2))];
+		const j = add$1(root, mul$1(rot(u, bend * (Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI)), l1));
+		return [j, add$1(j, mul$1(unit$1(sub$1(add$1(root, mul$1(u, d)), j)), l2))];
 	}
 	function flatten(p) {
 		const B = BONES;
 		let h = p.h;
 		if (!h) {
 			const to = (p.kn && p.kn[0] && p.kn[1] ? lerpPt(p.kn[0], p.kn[1], .5) : null) ?? lerpPt(p.f[0], p.f[1], .5);
-			h = add(p.s, mul(unit(sub(to, p.s)), B.torso));
+			h = add$1(p.s, mul$1(unit$1(sub$1(to, p.s)), B.torso));
 		}
-		const s = add(h, mul(unit(sub(p.s, h)), B.torso));
-		const hands = p.a ? [p.a[0], p.a[1]] : p.ar ? [add(s, p.ar[0]), add(s, p.ar[1])] : [add(s, [2, 24]), add(s, [-1, 24])];
+		const s = add$1(h, mul$1(unit$1(sub$1(p.s, h)), B.torso));
+		const hands = p.a ? [p.a[0], p.a[1]] : p.ar ? [add$1(s, p.ar[0]), add$1(s, p.ar[1])] : [add$1(s, [2, 24]), add$1(s, [-1, 24])];
 		return {
 			h,
 			s,
@@ -71,12 +71,12 @@ var SportKit = (function(exports) {
 	}
 	/** Where an arm (or leg) starts: the shoulders (hips), apart by w (hw) in a front view. */
 	function roots(f) {
-		const dir = unit(sub(f.s, f.h));
-		const s = add(f.h, mul(dir, BONES.torso));
+		const dir = unit$1(sub$1(f.s, f.h));
+		const s = add$1(f.h, mul$1(dir, BONES.torso));
 		const perp = rot(dir, 90);
 		return {
-			arm: [add(s, mul(perp, -f.w)), add(s, mul(perp, f.w))],
-			leg: [add(f.h, mul(perp, -f.hw)), add(f.h, mul(perp, f.hw))]
+			arm: [add$1(s, mul$1(perp, -f.w)), add$1(s, mul$1(perp, f.w))],
+			leg: [add$1(f.h, mul$1(perp, -f.hw)), add$1(f.h, mul$1(perp, f.hw))]
 		};
 	}
 	/**
@@ -86,15 +86,15 @@ var SportKit = (function(exports) {
 	*/
 	function limbTarget(ta, tb, ra, rb, r, k) {
 		if (dist(ta, tb) < 4) return lerpPt(ta, tb, k);
-		const va = sub(ta, ra);
-		const vb = sub(tb, rb);
+		const va = sub$1(ta, ra);
+		const vb = sub$1(tb, rb);
 		const aa = Math.atan2(va[1], va[0]);
 		let d = Math.atan2(vb[1], vb[0]) - aa;
 		while (d > Math.PI) d -= 2 * Math.PI;
 		while (d < -Math.PI) d += 2 * Math.PI;
 		const ang = aa + d * k;
-		const l = lerp(len(va), len(vb), k);
-		const t = add(r, [Math.cos(ang) * l, Math.sin(ang) * l]);
+		const l = lerp(len$1(va), len$1(vb), k);
+		const t = add$1(r, [Math.cos(ang) * l, Math.sin(ang) * l]);
 		return [t[0], Math.min(t[1], Math.max(ta[1], tb[1]))];
 	}
 	function mix(a, b, k) {
@@ -123,11 +123,11 @@ var SportKit = (function(exports) {
 	/** The points to draw for one worked-out pose. */
 	function draw(f) {
 		const B = BONES;
-		const dir = unit(sub(f.s, f.h));
-		const s = add(f.h, mul(dir, B.torso));
+		const dir = unit$1(sub$1(f.s, f.h));
+		const s = add$1(f.h, mul$1(dir, B.torso));
 		const r = roots(f);
-		const mid = add(lerpPt(f.h, s, .5), mul(rot(dir, -90), f.bow));
-		const head = add(s, mul(unit(rot(f.bow ? sub(s, mid) : dir, f.hd)), B.neck + B.head));
+		const mid = add$1(lerpPt(f.h, s, .5), mul$1(rot(dir, -90), f.bow));
+		const head = add$1(s, mul$1(unit$1(rot(f.bow ? sub$1(s, mid) : dir, f.hd)), B.neck + B.head));
 		const arm = (i) => {
 			const root = r.arm[i];
 			const [el, hand] = ik(root, f.hands[i], B.upperArm, B.foreArm, f.eb[i]);
@@ -140,7 +140,7 @@ var SportKit = (function(exports) {
 		const leg = (i) => {
 			const root = r.leg[i];
 			const [kn, ankle] = ik(root, f.feet[i], B.thigh, B.shin, f.kb[i], f.kn[i]);
-			const t = add(ankle, mul(rot([1, 0], f.ft[i]), B.foot));
+			const t = add$1(ankle, mul$1(rot([1, 0], f.ft[i]), B.foot));
 			return [
 				root,
 				kn,
@@ -254,6 +254,84 @@ var SportKit = (function(exports) {
 	/** The still picture (a card that isn't playing). */
 	function stillFrame(anim) {
 		return draw(flatten(anim.keys[anim.still ?? 0].p));
+	}
+	// src/core/sportDraw.ts
+	var f1 = (n) => (Math.round(n * 10) / 10).toString();
+	var P = (p) => `${f1(p[0])} ${f1(p[1])}`;
+	var sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+	var add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+	var mul = (a, k) => [a[0] * k, a[1] * k];
+	var len = (a) => Math.hypot(a[0], a[1]);
+	var unit = (a) => {
+		const l = len(a);
+		return l > 1e-6 ? [a[0] / l, a[1] / l] : [0, -1];
+	};
+	var perp = (a) => [-a[1], a[0]];
+	/** A tapered capsule from p (radius r1) to q (radius r2), as one closed path. */
+	function capsule(p, q, r1, r2) {
+		const n = perp(unit(sub(q, p)));
+		const a1 = add(p, mul(n, r1));
+		const a2 = add(q, mul(n, r2));
+		const b2 = add(q, mul(n, -r2));
+		const b1 = add(p, mul(n, -r1));
+		return `M${P(a1)}L${P(a2)}A${f1(r2)} ${f1(r2)} 0 0 0 ${P(b2)}L${P(b1)}A${f1(r1)} ${f1(r1)} 0 0 0 ${P(a1)}Z`;
+	}
+	var circle = (c, r) => `M${f1(c[0] - r)} ${f1(c[1])}a${f1(r)} ${f1(r)} 0 1 0 ${f1(2 * r)} 0a${f1(r)} ${f1(r)} 0 1 0 ${f1(-2 * r)} 0Z`;
+	/** Limb thickness (radius) at each joint: shoulder, elbow, wrist / hip, knee, ankle. */
+	var THICK = {
+		shoulder: 3.3,
+		elbow: 2.4,
+		wrist: 1.8,
+		hip: 4.2,
+		knee: 3,
+		ankle: 2.1
+	};
+	/** One arm: upper arm, forearm, a round hand. */
+	function arm(pts) {
+		const [s, e, h] = pts;
+		const hand = add(h, mul(unit(sub(h, e)), 1.2));
+		return capsule(s, e, THICK.shoulder, THICK.elbow) + capsule(e, h, THICK.elbow, THICK.wrist) + circle(hand, 2.1);
+	}
+	/** One leg: thigh, shin and a foot from the ankle to the toes (a heel behind). */
+	function leg(pts) {
+		const [hp, k, a, toe] = pts;
+		const fd = unit(sub(toe, a));
+		const heel = add(a, mul(fd, -1.6));
+		const tip = add(toe, mul(fd, .6));
+		return capsule(hp, k, THICK.hip, THICK.knee) + capsule(k, a, THICK.knee, THICK.ankle) + capsule(heel, tip, 1.9, 1.3);
+	}
+	/**
+	* The torso: from the hips to the chest along the back's curve (hip, bend,
+	* shoulders), wider at the chest than the waist, plus the neck.
+	*/
+	function torso(fr) {
+		const [h, c, s] = fr.torso;
+		const steps = 8;
+		const L = [];
+		const R = [];
+		const half = (t) => t < .45 ? 4.3 - .9 * (t / .45) : 3.4 + 1.5 * Math.sin((t - .45) / .55 * Math.PI * .55);
+		for (let i = 0; i <= steps; i++) {
+			const t = i / steps;
+			const p = [(1 - t) * (1 - t) * h[0] + 2 * (1 - t) * t * c[0] + t * t * s[0], (1 - t) * (1 - t) * h[1] + 2 * (1 - t) * t * c[1] + t * t * s[1]];
+			const n = perp(unit([2 * (1 - t) * (c[0] - h[0]) + 2 * t * (s[0] - c[0]), 2 * (1 - t) * (c[1] - h[1]) + 2 * t * (s[1] - c[1])]));
+			L.push(add(p, mul(n, half(t))));
+			R.push(add(p, mul(n, -half(t))));
+		}
+		const cap = add(s, mul(unit(sub(s, c)), 2.2));
+		return `M${P(L[0])}${L.slice(1).map((p) => `L${P(p)}`).join("")}Q${P(cap)} ${P(R[R.length - 1])}${R.slice(0, -1).reverse().map((p) => `L${P(p)}`).join("")}A4.3 4.3 0 0 1 ${P(L[0])}Z` + capsule(s, add(s, mul(unit(sub(fr.head, s)), 4.2)), 1.7, 1.5);
+	}
+	/** Everything to fill for one frame. */
+	function figureShapes(fr) {
+		const head = fr.head;
+		return {
+			armFar: arm(fr.arms[1]),
+			legFar: leg(fr.legs[1]),
+			torso: torso(fr),
+			head: circle(head, 5.6),
+			legNear: leg(fr.legs[0]),
+			armNear: arm(fr.arms[0]),
+			joints: circle(fr.legs[0][1], .9) + circle(fr.arms[0][1], .75)
+		};
 	}
 	// src/core/sportMoves.ts
 	var GROUPS = [
@@ -2873,13 +2951,13 @@ var SportKit = (function(exports) {
 		}));
 	}
 	// src/core/sportBadges.ts
-	var shift = (day, n) => {
+	var shift$1 = (day, n) => {
 		const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
 		d.setUTCDate(d.getUTCDate() + n);
 		return d.toISOString().slice(0, 10);
 	};
 	var weekday = (day) => ((/* @__PURE__ */ new Date(day + "T12:00:00Z")).getUTCDay() + 6) % 7;
-	var monday = (day) => shift(day, -weekday(day));
+	var monday = (day) => shift$1(day, -weekday(day));
 	/** Days with any logged work, oldest first (the day log and your sessions). */
 	function activeDays(input) {
 		const s = /* @__PURE__ */ new Set();
@@ -2901,8 +2979,8 @@ var SportKit = (function(exports) {
 		for (const d of active) {
 			let gapOk = false;
 			if (prev) {
-				let c = shift(d, -1);
-				while (c > prev && off.has(c)) c = shift(c, -1);
+				let c = shift$1(d, -1);
+				while (c > prev && off.has(c)) c = shift$1(c, -1);
 				gapOk = c === prev;
 			}
 			run = gapOk ? run + 1 : 1;
@@ -3144,7 +3222,7 @@ var SportKit = (function(exports) {
 			day: rounderDay
 		});
 		let weekendDay = null;
-		for (const d of active) if (weekday(d) === 6 && active.includes(shift(d, -1))) {
+		for (const d of active) if (weekday(d) === 6 && active.includes(shift$1(d, -1))) {
 			weekendDay = d;
 			break;
 		}
@@ -3159,7 +3237,7 @@ var SportKit = (function(exports) {
 			day: weekendDay
 		});
 		let comeback = null;
-		for (let i = 1; i < active.length; i++) if (active[i] >= shift(active[i - 1], 8)) {
+		for (let i = 1; i < active.length; i++) if (active[i] >= shift$1(active[i - 1], 8)) {
 			comeback = active[i];
 			break;
 		}
@@ -3234,29 +3312,1310 @@ var SportKit = (function(exports) {
 	function newBadges(badges, seen) {
 		return badges.filter((b) => b.done && !(seen && seen[b.id]));
 	}
+	// src/core/sportPhotos.ts
+	var PHOTOS = {
+		incline_pushup: {
+			src: "Incline_Push-Up",
+			crop: [
+				.2,
+				.2,
+				.66
+			]
+		},
+		pushup: {
+			src: "Pushups",
+			crop: [
+				.17,
+				.08,
+				.8
+			]
+		},
+		wide_pushup: {
+			src: "Push-Up_Wide",
+			crop: [
+				0,
+				.3,
+				1
+			]
+		},
+		diamond_pushup: {
+			src: "Push-Ups_-_Close_Triceps_Position",
+			crop: [
+				.03,
+				.05,
+				.8
+			]
+		},
+		decline_pushup: {
+			src: "Push-Ups_With_Feet_Elevated",
+			crop: [
+				.16,
+				0,
+				.82
+			]
+		},
+		chair_dip: {
+			src: "Bench_Dips",
+			crop: [
+				.22,
+				0,
+				.76
+			]
+		},
+		table_row: {
+			src: "Inverted_Row",
+			crop: [
+				.1,
+				0,
+				.83
+			]
+		},
+		superman: {
+			src: "Superman",
+			crop: [
+				.1,
+				.12,
+				.8
+			]
+		},
+		crunch: {
+			src: "Crunches",
+			crop: [
+				.27,
+				.27,
+				.6
+			]
+		},
+		situp: {
+			src: "Sit-Up",
+			crop: [
+				.12,
+				.03,
+				.8
+			]
+		},
+		leg_raise: {
+			src: "Flat_Bench_Lying_Leg_Raise",
+			crop: [
+				.2,
+				.08,
+				.72
+			]
+		},
+		v_up: {
+			src: "Jackknife_Sit-Up",
+			crop: [
+				.18,
+				.06,
+				.78
+			]
+		},
+		dead_bug: {
+			src: "Dead_Bug",
+			crop: [
+				.1,
+				0,
+				.83
+			]
+		},
+		plank: {
+			src: "Plank",
+			crop: [
+				.2,
+				.08,
+				.76
+			]
+		},
+		side_plank: {
+			src: "Side_Bridge",
+			crop: [
+				.06,
+				.04,
+				.8
+			]
+		},
+		squat: {
+			src: "Bodyweight_Squat",
+			crop: [
+				.11,
+				.03,
+				.78
+			]
+		},
+		split_squat: {
+			src: "Split_Squats",
+			crop: [
+				.12,
+				.02,
+				.8
+			]
+		},
+		lunge: {
+			src: "Bodyweight_Walking_Lunge",
+			crop: [
+				0,
+				.16,
+				.7
+			]
+		},
+		jump_lunge: {
+			src: "Split_Jump",
+			crop: [
+				.13,
+				.06,
+				.76
+			]
+		},
+		glute_bridge: {
+			src: "Butt_Lift_Bridge",
+			crop: [
+				.1,
+				.04,
+				.82
+			]
+		},
+		single_leg_bridge: {
+			src: "Single_Leg_Glute_Bridge",
+			crop: [
+				.08,
+				0,
+				.82
+			]
+		},
+		star_jump: {
+			src: "Star_Jump",
+			crop: [
+				.12,
+				0,
+				.8
+			]
+		},
+		mountain_climber: {
+			src: "Mountain_Climbers",
+			crop: [
+				.06,
+				0,
+				.83
+			]
+		},
+		cat_cow: {
+			src: "Cat_Stretch",
+			crop: [
+				.04,
+				.02,
+				.82
+			]
+		},
+		worlds_greatest: {
+			src: "Worlds_Greatest_Stretch",
+			crop: [
+				.15,
+				.02,
+				.8
+			]
+		},
+		arm_circles: {
+			src: "Arm_Circles",
+			crop: [
+				.1,
+				.02,
+				.8
+			]
+		},
+		childs_pose: {
+			src: "Childs_Pose",
+			crop: [
+				.18,
+				.1,
+				.78
+			]
+		}
+	};
+	var PHOTO_SOURCE = {
+		name: "Free Exercise DB",
+		url: "https://github.com/yuhonas/free-exercise-db",
+		license: "The Unlicense (public domain)"
+	};
+	/** The two frames of a move's photo demo (paths next to the Sport Track page), or null when it is drawn. */
+	function photoOf(moveId) {
+		if (!moveId || !Object.prototype.hasOwnProperty.call(PHOTOS, moveId)) return null;
+		return {
+			start: `photos/${moveId}-0.webp`,
+			end: `photos/${moveId}-1.webp`
+		};
+	}
+	// src/core/sportSets.ts
+	var MUSCLES = [
+		{
+			id: "push",
+			name: "Chest, shoulders, triceps",
+			short: "Push"
+		},
+		{
+			id: "pull",
+			name: "Back and biceps",
+			short: "Pull"
+		},
+		{
+			id: "core",
+			name: "Core",
+			short: "Core"
+		},
+		{
+			id: "legs",
+			name: "Legs and glutes",
+			short: "Legs"
+		}
+	];
+	/** Hard sets a week per muscle group that grow muscle (about 10 to 20). */
+	var WEEKLY_SETS = {
+		lo: 10,
+		hi: 20
+	};
+	/** Which muscle group a library group trains (cardio and stretches: none). */
+	var muscleOf = (g) => g === "push" || g === "pull" || g === "core" || g === "legs" ? g : null;
+	var clean = (n) => Math.max(0, Math.min(2e3, Math.round(Number(n) || 0)));
+	/** The sets of one exercise on one day (a copy, only real ones). */
+	function setsOn(log, day, exId) {
+		const l = log?.[day]?.[exId];
+		return Array.isArray(l) ? l.filter((s) => s && clean(s.reps) > 0) : [];
+	}
+	/** A set to store: whole numbers, an id and a time. */
+	function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
+		const s = {
+			reps: clean(reps),
+			at: now,
+			id: `${now.toString(36)}${salt || Math.random().toString(36).slice(2, 6)}`
+		};
+		if (kg > 0) s.kg = Math.round(kg * 2) / 2;
+		return s;
+	}
+	/** Adds sets to a log (a new log; the old one is not changed). */
+	function addSets(log, day, exId, reps, now = Date.now()) {
+		const out = JSON.parse(JSON.stringify(log ?? {}));
+		const list = (out[day] ?? (out[day] = {}))[exId] ?? [];
+		reps.map(clean).filter((r) => r > 0).forEach((r, i) => list.push(makeSet(r, now + i, 0, `${i}${exId.length}`)));
+		if (list.length) out[day][exId] = list;
+		return out;
+	}
+	/**
+	* Two devices' set logs as one: per day and exercise, sets with an id are
+	* joined (each once); lists without ids keep the longer one.
+	*/
+	function mergeSets(a, b) {
+		const out = {};
+		for (const day of /* @__PURE__ */ new Set([...Object.keys(a ?? {}), ...Object.keys(b ?? {})])) {
+			const A = a?.[day] ?? {};
+			const B = b?.[day] ?? {};
+			for (const ex of /* @__PURE__ */ new Set([...Object.keys(A), ...Object.keys(B)])) {
+				const x = Array.isArray(A[ex]) ? A[ex] : [];
+				const y = Array.isArray(B[ex]) ? B[ex] : [];
+				let list;
+				if (x.every((s) => s?.id) && y.every((s) => s?.id)) {
+					const seen = /* @__PURE__ */ new Map();
+					for (const s of [...x, ...y]) if (!seen.has(s.id)) seen.set(s.id, s);
+					list = [...seen.values()].sort((p, q) => (Number(p.at) || 0) - (Number(q.at) || 0));
+				} else list = x.length >= y.length ? x : y;
+				if (list.length) (out[day] ?? (out[day] = {}))[ex] = list;
+			}
+		}
+		return out;
+	}
+	/** The days with sets of an exercise, oldest first (only up to `until`, if given). */
+	function sessionsOf(log, exId, until) {
+		return Object.keys(log ?? {}).filter((d) => !until || d <= until).sort().map((day) => ({
+			day,
+			reps: setsOn(log, day, exId).map((s) => clean(s.reps))
+		})).filter((s) => s.reps.length > 0);
+	}
+	/** Your best single set of an exercise (reps or seconds), and the day; null without sets. */
+	function bestSet(log, exId, until) {
+		let best = null;
+		for (const s of sessionsOf(log, exId, until)) for (const r of s.reps) if (!best || r > best.reps) best = {
+			reps: r,
+			day: s.day
+		};
+		return best;
+	}
+	/** Monday of the week a day is in. */
+	function mondayOf(day) {
+		const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
+		d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+		return d.toISOString().slice(0, 10);
+	}
+	function shiftDay(day, n) {
+		const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
+		d.setUTCDate(d.getUTCDate() + n);
+		return d.toISOString().slice(0, 10);
+	}
+	/**
+	* A hard set: one close to what you can do that day, at least 5 reps (or
+	* 15 seconds) and at least 70% of the day's best set of that exercise.
+	* (A warm-up or a few easy extra reps don't count.)
+	*/
+	function hardSets(reps, unit = "reps") {
+		const top = Math.max(0, ...reps);
+		const min = unit === "sec" ? 15 : 5;
+		return reps.filter((r) => r >= min && r >= top * .7).length;
+	}
+	/** Hard sets per muscle group from `from` to `to` (inclusive). */
+	function hardSetsByMuscle(log, exercises, from, to) {
+		const out = {
+			push: 0,
+			pull: 0,
+			core: 0,
+			legs: 0
+		};
+		const byId = new Map(exercises.map((e) => [String(e.id), e]));
+		for (const [day, m] of Object.entries(log ?? {})) {
+			if (day < from || day > to) continue;
+			for (const id of Object.keys(m ?? {})) {
+				const ex = byId.get(id);
+				const mv = ex ? moveOf(ex) : null;
+				const mu = muscleOf(mv?.group);
+				if (!mu) continue;
+				out[mu] += hardSets(setsOn(log, day, id).map((s) => s.reps), mv?.unit ?? ex?.unit);
+			}
+		}
+		return out;
+	}
+	/** Reps (or seconds) per week, the last `weeks` weeks up to `today`, oldest first: from the day totals, so old days count too. */
+	function weeklyVolume(days, exIds, today, weeks = 8) {
+		const ids = exIds ? new Set(exIds.map(String)) : null;
+		const mon = mondayOf(today);
+		return Array.from({ length: weeks }, (_, k) => {
+			const monday = shiftDay(mon, -7 * (weeks - 1 - k));
+			let total = 0;
+			for (let d = 0; d < 7; d++) for (const [id, v] of Object.entries(days?.[shiftDay(monday, d)] ?? {})) if (!ids || ids.has(id)) total += Number(v) || 0;
+			return {
+				monday,
+				total
+			};
+		});
+	}
+	/**
+	* Sets from what was already saved, for days that have none yet: sessions
+	* logged with sets (history items) and records ("15 in one set"). Day totals
+	* are never turned into sets: they stay volume only.
+	*/
+	function importSets(st) {
+		let out = JSON.parse(JSON.stringify(st.sets ?? {}));
+		for (const h of Array.isArray(st.history) ? st.history : []) {
+			const day = typeof h?.day === "string" ? h.day : null;
+			if (!day || !Array.isArray(h.items)) continue;
+			for (const it of h.items) {
+				const id = String(it?.exerciseId ?? "");
+				if (!id || !Array.isArray(it.sets) || !it.sets.length || setsOn(out, day, id).length) continue;
+				const reps = it.sets.map((x) => clean(x?.reps)).filter((r) => r > 0);
+				if (reps.length) out = addSets(out, day, id, reps, Number(h.id) > 0xe8d4a51000 ? Number(h.id) : Date.parse(day + "T12:00:00Z"));
+			}
+		}
+		for (const [id, b] of Object.entries(st.best ?? {})) {
+			const m = /^(\d+)\s*s?\s+in one set$/.exec(String(b?.label ?? ""));
+			const day = b?.day;
+			if (!m || !day || setsOn(out, day, id).length) continue;
+			out = addSets(out, day, id, [Number(m[1])], Date.parse(day + "T12:00:00Z"));
+		}
+		return out;
+	}
+	/**
+	* Sets in a message: "3x15 push-ups", "push-ups 3×15", "push-ups 15 14 12",
+	* "pushups 15, 14, 12", "15 14 12 squats", "plank 3x45s", "plank 60s 45s".
+	* One number alone ("50 pushups") is a total, not sets: null.
+	*/
+	function parseSets(text) {
+		const t = String(text ?? "").trim().replace(/^\//, "").replace(/[×*]/g, "x").replace(/\s+/g, " ");
+		if (!t || t.length > 80) return null;
+		const name = (s) => s.replace(/[:,.\-–]+$/, "").replace(/^[:,.\-–]+/, "").trim();
+		const isName = (s) => /^[a-zA-ZÀ-ž][a-zA-ZÀ-ž' _-]{1,40}$/.test(s.trim());
+		const nx = /^(\d{1,2})\s?x\s?(\d{1,3})\s?(s|sec|secs|seconds)?\s+(.+)$/i.exec(t) ?? null;
+		const xn = /^(.+?)\s+(\d{1,2})\s?x\s?(\d{1,3})\s?(s|sec|secs|seconds)?$/i.exec(t) ?? null;
+		if (nx && isName(nx[4])) {
+			const n = Number(nx[1]), r = Number(nx[2]);
+			if (n >= 1 && n <= 12 && r >= 1) return {
+				name: name(nx[4]),
+				reps: Array(n).fill(r),
+				unit: nx[3] ? "sec" : "reps"
+			};
+		}
+		if (xn && isName(xn[1])) {
+			const n = Number(xn[2]), r = Number(xn[3]);
+			if (n >= 1 && n <= 12 && r >= 1) return {
+				name: name(xn[1]),
+				reps: Array(n).fill(r),
+				unit: xn[4] ? "sec" : "reps"
+			};
+		}
+		const nums = String.raw`((?:\d{1,3}\s?(?:s|sec)?\s?[,;/ ]\s?)+\d{1,3}\s?(?:s|sec)?)`;
+		const after = new RegExp(String.raw`^(.+?)[: ]+${nums}$`, "i").exec(t);
+		const before = new RegExp(String.raw`^${nums}\s+(.+)$`, "i").exec(t);
+		const pick = after && isName(after[1]) ? {
+			n: after[1],
+			list: after[2]
+		} : before && isName(before[2]) ? {
+			n: before[2],
+			list: before[1]
+		} : null;
+		if (!pick) return null;
+		const parts = pick.list.split(/[,;/ ]+/).filter(Boolean);
+		const vals = [];
+		let sec = false;
+		for (let i = 0; i < parts.length; i++) {
+			const p = parts[i];
+			if (/^(s|sec)$/i.test(p)) {
+				sec = true;
+				continue;
+			}
+			const m = /^(\d{1,3})(s|sec)?$/i.exec(p);
+			if (!m) return null;
+			if (m[2]) sec = true;
+			vals.push(Number(m[1]));
+		}
+		if (vals.length < 2 || vals.length > 12 || vals.some((v) => v < 1)) return null;
+		return {
+			name: name(pick.n),
+			reps: vals,
+			unit: sec ? "sec" : "reps"
+		};
+	}
+	/** "15 · 14 · 12" or "3 × 15" for a list of sets (with "s" for holds). */
+	function setsText(reps, unit = "reps") {
+		const u = unit === "sec" ? " s" : "";
+		if (!reps.length) return "";
+		if (reps.length > 1 && reps.every((r) => r === reps[0])) return `${reps.length} × ${reps[0]}${u}`;
+		return reps.join(" · ") + u;
+	}
+	// src/core/sportProgress.ts
+	/** Holds: how long a set should last, by move. */
+	var HOLDS = {
+		plank: [30, 60],
+		side_plank: [20, 45],
+		hollow_hold: [15, 40],
+		wall_sit: [30, 75],
+		down_dog: [30, 60],
+		childs_pose: [30, 60]
+	};
+	/** The rep range for a move. */
+	function rangeFor(move) {
+		if (!move) return {
+			lo: 8,
+			hi: 15,
+			sets: 3,
+			unit: "reps"
+		};
+		if (move.unit === "sec") {
+			const [lo, hi] = HOLDS[move.id] ?? [20, 60];
+			return {
+				lo,
+				hi,
+				sets: 3,
+				unit: "sec"
+			};
+		}
+		if (move.group === "push" || move.group === "pull") return {
+			lo: move.diff >= 4 ? 5 : 8,
+			hi: move.diff >= 4 ? 12 : 15,
+			sets: 3,
+			unit: "reps"
+		};
+		if (move.group === "legs" || move.group === "core") return {
+			lo: move.diff >= 4 ? 6 : 10,
+			hi: move.diff >= 4 ? 15 : 20,
+			sets: 3,
+			unit: "reps"
+		};
+		if (move.group === "cardio") return {
+			lo: 15,
+			hi: 30,
+			sets: 3,
+			unit: "reps"
+		};
+		return {
+			lo: 8,
+			hi: 12,
+			sets: 2,
+			unit: "reps"
+		};
+	}
+	/** A session's working sets: the first `n` (a warm-up isn't logged as a set here). */
+	var working = (s, n) => s.reps.slice(0, n);
+	/** Every working set reached the top. */
+	var atTop = (s, r) => s.reps.length >= r.sets && working(s, r.sets).every((x) => x >= r.hi);
+	/** Not even one set reached the bottom. */
+	var belowBottom = (s, r) => Math.max(...s.reps) < r.lo;
+	var daysBetween = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+	/** A long break: this many days without the move. */
+	var BREAK_DAYS = 10;
+	/** Sessions in a row at the top before the next step unlocks. */
+	var NEED = 2;
+	var clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+	var u = (r) => r.unit === "sec" ? " s" : "";
+	/**
+	* Where an exercise stands and what to aim for today. `log` is every set
+	* logged; `exId` the exercise; sessions before `today` set today's goal, and
+	* today's own sets count for "ready" as soon as they're logged.
+	*/
+	function progressFor(input) {
+		const { log, exId, move, today } = input;
+		const r = rangeFor(move);
+		const all = sessionsOf(log, exId, today);
+		const past = all.filter((s) => s.day < today);
+		const todays = all.find((s) => s.day === today) ?? null;
+		const last = past[past.length - 1] ?? null;
+		const daysSince = last ? daysBetween(last.day, today) : null;
+		const next = move ? nextStep(move) : null;
+		const prev = move ? prevStep(move) : null;
+		const nextAt = `${r.sets}×${r.hi}${u(r)}`;
+		const base = {
+			range: r,
+			sets: r.sets,
+			nextAt,
+			need: 2,
+			daysSince,
+			last,
+			today: todays?.reps ?? [],
+			next: null,
+			prev: null
+		};
+		const recent = [...past, ...todays && todays.reps.length >= r.sets ? [todays] : []];
+		let hits = 0;
+		for (let i = recent.length - 1; i >= 0 && atTop(recent[i], r); i--) hits++;
+		const first = recent.length === 1 && Math.max(...recent[0].reps) >= Math.ceil(r.hi * 1.5);
+		if (hits >= 2 || first) {
+			const n = Math.max(hits, first ? 2 : 0);
+			return next ? {
+				...base,
+				status: "ready",
+				goal: r.hi,
+				hits: n,
+				next,
+				line: `Level up: ${next.name} is unlocked. Start it at ${r.sets}×${rangeFor(next).lo}${u(rangeFor(next))}.`
+			} : {
+				...base,
+				status: "top",
+				goal: r.hi,
+				hits: n,
+				line: `Top of the ladder. Add a 4th set, or go slower (3 seconds down).`
+			};
+		}
+		if (!last) return {
+			...base,
+			status: "new",
+			goal: r.lo,
+			hits,
+			line: `First time: ${r.sets} sets of ${r.lo}–${r.hi}${u(r)}. Stop 1–2 reps before you can't do another.`
+		};
+		const lastMin = Math.min(...working(last, r.sets));
+		const peak = Math.max(...past.slice(-6).flatMap((s) => working(s, r.sets).length >= r.sets ? [Math.min(...working(s, r.sets))] : []), lastMin);
+		if (daysSince !== null && daysSince >= 10) {
+			const back = Math.round(peak * .7);
+			if (back < r.lo && prev && daysSince >= 21) return {
+				...base,
+				status: "comeback",
+				goal: r.lo,
+				hits: 0,
+				prev,
+				line: `Welcome back after ${daysSince} days. Start one step easier (${prev.name}) or ${r.sets}×${r.lo}${u(r)}, and build up fast.`
+			};
+			return {
+				...base,
+				status: "comeback",
+				goal: clamp(back, r.lo, r.hi),
+				hits: 0,
+				line: `Welcome back after ${daysSince} days: start at ${r.sets}×${clamp(back, r.lo, r.hi)}${u(r)} (about 70%), then build up fast.`
+			};
+		}
+		const misses = past.slice(-2);
+		if (misses.length === 2 && misses.every((s) => belowBottom(s, r))) return prev ? {
+			...base,
+			status: "stuck",
+			goal: r.lo,
+			hits: 0,
+			prev,
+			line: `Under ${r.lo}${u(r)} twice: step back to ${prev.name} for a while, or rest 2–3 minutes between sets.`
+		} : {
+			...base,
+			status: "stuck",
+			goal: r.lo,
+			hits: 0,
+			line: `Under ${r.lo}${u(r)} twice: rest 2–3 minutes between sets and sleep well. You'll get there.`
+		};
+		let breakAt = -1;
+		for (let j = Math.max(1, past.length - 3); j < past.length; j++) if (daysBetween(past[j - 1].day, past[j].day) >= 10) breakAt = j;
+		const mins = (list) => list.flatMap((s) => working(s, r.sets).length >= r.sets ? [Math.min(...working(s, r.sets))] : []);
+		const oldPeak = breakAt > 0 ? Math.max(0, ...mins(past.slice(0, breakAt))) : 0;
+		const step = r.unit === "sec" ? 5 : 1;
+		const goal = clamp(breakAt > 0 && lastMin < oldPeak ? Math.min(oldPeak, lastMin + 3 * step) : lastMin + step, r.lo, r.hi);
+		return {
+			...base,
+			status: "building",
+			goal,
+			hits,
+			line: hits ? `${hits} of 2 sessions at the top. One more and the next level unlocks.` : `Aim for ${r.sets}×${goal}${u(r)} today. Next level at ${nextAt}.`
+		};
+	}
+	/** The day's total this plan asks for (sets × goal): what the card's bar fills to. */
+	var growTarget = (p) => p.sets * p.goal;
+	/** "Endurance" (the old step-up): +5% to every target after 3 full days in a row. */
+	function enduranceStep(targets) {
+		return targets.map((t) => Math.max(t + 1, Math.round(t * 1.05)));
+	}
+	// src/core/sportStrength.ts
+	/** How hard a move is compared with the first step of its ladder. */
+	function loadOf(move) {
+		const steps = FAMILIES[move.family]?.steps ?? [];
+		const i = Math.max(0, steps.indexOf(move.id));
+		return Math.pow(1.2, i);
+	}
+	/** One set's strength score: 100 × load × (1 + reps / 30). Holds count 3 seconds as a rep. */
+	function setScore(move, reps) {
+		const r = move.unit === "sec" ? reps / 3 : reps;
+		return Math.round(100 * loadOf(move) * (1 + Math.max(0, r) / 30));
+	}
+	/** Exercises (by id) grouped by ladder family, from the library move each one is. */
+	function byFamily(exercises) {
+		const out = /* @__PURE__ */ new Map();
+		for (const ex of exercises) {
+			const move = moveOf(ex);
+			if (!move) continue;
+			const l = out.get(move.family) ?? [];
+			l.push({
+				ex,
+				move
+			});
+			out.set(move.family, l);
+		}
+		return out;
+	}
+	/** The best set per session day for one ladder family (every step of it), oldest first. */
+	function familySeries(log, exercises, family, until) {
+		const list = byFamily(exercises).get(family) ?? [];
+		const best = /* @__PURE__ */ new Map();
+		for (const { ex, move } of list) for (const s of sessionsOf(log, String(ex.id), until)) {
+			const top = Math.max(...s.reps);
+			const score = setScore(move, top);
+			const was = best.get(s.day);
+			if (!was || score > was.score) best.set(s.day, {
+				day: s.day,
+				reps: top,
+				move: move.id,
+				score
+			});
+		}
+		return [...best.values()].sort((a, b) => a.day.localeCompare(b.day));
+	}
+	/** The ladder families you have sets for. */
+	function familiesWithSets(log, exercises) {
+		return [...byFamily(exercises).keys()].filter((f) => familySeries(log, exercises, f).length > 0);
+	}
+	var bestIn = (pts, from, to) => pts.filter((p) => p.day >= from && p.day <= to).reduce((b, p) => !b || p.score > b.score ? p : b, null);
+	/**
+	* "You're 12% stronger than 4 weeks ago": per family, your best set in the
+	* last 2 weeks against your best in the 2 weeks around 4 weeks ago (or your
+	* first week of sets, when that's newer but at least a week old).
+	*/
+	function strengthChange(log, exercises, today, weeks = 4) {
+		const nowFrom = shiftDay(today, -13);
+		const fams = [];
+		let since = null;
+		for (const f of familiesWithSets(log, exercises)) {
+			const pts = familySeries(log, exercises, f, today);
+			const now = bestIn(pts, nowFrom, today);
+			if (!now) continue;
+			const thenTo = shiftDay(today, -7 * weeks + 7);
+			let then = bestIn(pts, shiftDay(today, -7 * weeks - 7), thenTo);
+			if (!then) {
+				const first = pts[0];
+				if (!first || first.day > shiftDay(today, -7)) continue;
+				then = bestIn(pts, first.day, shiftDay(first.day, 6));
+			}
+			if (!then || then.day >= now.day) continue;
+			if (!since || then.day < since) since = then.day;
+			fams.push({
+				family: f,
+				name: FAMILIES[f]?.name ?? f,
+				then,
+				now,
+				pct: Math.round((now.score / then.score - 1) * 100)
+			});
+		}
+		return {
+			pct: fams.length ? Math.round(fams.reduce((t, x) => t + x.pct, 0) / fams.length) : null,
+			since,
+			families: fams.sort((a, b) => b.pct - a.pct)
+		};
+	}
+	/** Your strength score per muscle group (the best family's best set in the last 4 weeks) and in all. */
+	function strengthScore(log, exercises, today) {
+		const by = {
+			push: 0,
+			pull: 0,
+			core: 0,
+			legs: 0
+		};
+		const from = shiftDay(today, -27);
+		for (const f of familiesWithSets(log, exercises)) {
+			const best = bestIn(familySeries(log, exercises, f, today), from, today);
+			const mu = muscleOf((best && moveById(best.move))?.group);
+			if (best && mu) by[mu] = Math.max(by[mu], best.score);
+		}
+		return {
+			total: by.push + by.pull + by.core + by.legs,
+			by
+		};
+	}
+	/**
+	* A new record: a set (not logged yet) that beats every set logged before it
+	* in the same family, by score. The very first set isn't a record.
+	*/
+	function isRecord(log, exercises, move, reps, day) {
+		const prevBest = Math.max(0, ...familySeries(log, exercises, move.family, day).map((p) => p.score));
+		return prevBest > 0 && setScore(move, reps) > prevBest;
+	}
+	// src/core/sportProgram.ts
+	/** Families for each slot, the first you do wins (else the first step listed here). */
+	var SLOTS = {
+		push: {
+			fams: ["pushup"],
+			start: ["pushup"]
+		},
+		shoulders: {
+			fams: ["pike", "dips"],
+			start: ["pike_pushup", "chair_dip"]
+		},
+		pull: {
+			fams: ["row"],
+			start: ["table_row_bent"]
+		},
+		back: {
+			fams: ["back"],
+			start: ["superman"]
+		},
+		squat: {
+			fams: ["squat"],
+			start: ["squat"]
+		},
+		lunge: {
+			fams: ["lunge"],
+			start: ["reverse_lunge"]
+		},
+		hinge: {
+			fams: ["bridge"],
+			start: ["glute_bridge"]
+		},
+		calves: {
+			fams: ["calf"],
+			start: ["calf_raise"]
+		},
+		abs: {
+			fams: ["core"],
+			start: ["crunch"]
+		},
+		plank: {
+			fams: ["plank", "deadbug"],
+			start: ["plank"]
+		}
+	};
+	/** The slots of each session, most important first (4 to 6 are used, by the time you have). */
+	var SESSIONS = {
+		full_a: {
+			name: "Full body A",
+			slots: [
+				"push",
+				"squat",
+				"pull",
+				"abs",
+				"hinge",
+				"shoulders"
+			]
+		},
+		full_b: {
+			name: "Full body B",
+			slots: [
+				"shoulders",
+				"lunge",
+				"pull",
+				"plank",
+				"push",
+				"back"
+			]
+		},
+		upper: {
+			name: "Upper body",
+			slots: [
+				"push",
+				"pull",
+				"shoulders",
+				"back",
+				"abs",
+				"plank"
+			]
+		},
+		lower: {
+			name: "Lower body",
+			slots: [
+				"squat",
+				"lunge",
+				"hinge",
+				"plank",
+				"calves",
+				"abs"
+			]
+		}
+	};
+	/** Training days (0 = Monday) for 3 or 4 sessions a week, with rest days between. */
+	var TRAIN_DAYS = {
+		2: [0, 3],
+		3: [
+			0,
+			2,
+			4
+		],
+		4: [
+			0,
+			1,
+			3,
+			4
+		],
+		5: [
+			0,
+			1,
+			2,
+			4,
+			5
+		]
+	};
+	var WARMUP_MIN = 3;
+	var COOLDOWN_MIN = 3;
+	/** Seconds a rep takes (about 1 s up, 2 s down). */
+	var REP_SEC = 3;
+	var SWITCH_SEC = 20;
+	/** The move for a slot: yours on that ladder (the hardest you do), else the library's start. */
+	function pickMove(slot, mine, used) {
+		const spec = SLOTS[slot];
+		for (const f of spec.fams) {
+			const have = mine.filter((m) => m.move.family === f && !used.has(m.move.id)).sort((a, b) => FAMILIES[f].steps.indexOf(b.move.id) - FAMILIES[f].steps.indexOf(a.move.id))[0];
+			if (have) return {
+				move: have.move,
+				exId: String(have.ex.id)
+			};
+		}
+		for (const id of spec.start) {
+			const m = moveById(id);
+			if (m && !used.has(m.id)) return {
+				move: m,
+				exId: null
+			};
+		}
+		return null;
+	}
+	/** Seconds of work in one set of an item (the middle of its range). */
+	var workSec = (it) => {
+		const mid = (it.lo + it.hi) / 2;
+		return it.unit === "sec" ? mid : mid * REP_SEC;
+	};
+	/** Estimated minutes for a list of items (pairs rest once per round), warm-up and cool-down included. */
+	function estimateMinutes(items, warmup = WARMUP_MIN, cooldown = 0) {
+		let sec = 0;
+		for (let i = 0; i < items.length; i++) {
+			const it = items[i];
+			if (it.pairNext && items[i + 1]) {
+				const b = items[i + 1];
+				const rounds = Math.max(it.sets, b.sets);
+				sec += rounds * (workSec(it) + SWITCH_SEC + workSec(b)) + (rounds - 1) * it.rest + 40;
+				i++;
+			} else sec += it.sets * workSec(it) + (it.sets - 1) * it.rest + 40;
+		}
+		return Math.round(sec / 60 + warmup + cooldown);
+	}
+	/** One session that fits `minutes`: as many exercises (4–6) and as much rest (60–120 s) as fit; pairs when time is short. */
+	function buildSession(kind, exercises, prefs) {
+		const mine = exercises.filter((e) => e.active !== false).map((ex) => ({
+			ex,
+			move: moveOf(ex)
+		})).filter((x) => !!x.move);
+		const used = /* @__PURE__ */ new Set();
+		const picks = [];
+		for (const slot of SESSIONS[kind].slots) {
+			const p = pickMove(slot, mine, used);
+			if (p) {
+				picks.push(p);
+				used.add(p.move.id);
+			}
+		}
+		const cooldown = prefs.coolDown ? COOLDOWN_MIN : 0;
+		const minutes = Math.max(15, Math.min(60, prefs.minutes || 30));
+		const make = (n, rest, paired) => picks.slice(0, n).map((p, i, arr) => {
+			const r = rangeFor(p.move);
+			return {
+				move: p.move,
+				exId: p.exId,
+				sets: 3,
+				lo: r.lo,
+				hi: r.hi,
+				unit: r.unit,
+				rest,
+				...paired && i % 2 === 0 && i + 1 < arr.length ? { pairNext: true } : {}
+			};
+		});
+		const tries = [];
+		for (const n of [
+			6,
+			5,
+			4
+		]) for (const rest of [
+			120,
+			90,
+			75,
+			60
+		]) tries.push([
+			n,
+			rest,
+			false
+		]);
+		for (const n of [
+			6,
+			5,
+			4
+		]) for (const rest of [
+			90,
+			75,
+			60
+		]) tries.push([
+			n,
+			rest,
+			true
+		]);
+		let items = make(4, 60, true);
+		for (const [n, rest, paired] of tries) {
+			if (n > picks.length) continue;
+			const it = make(n, rest, paired);
+			if (estimateMinutes(it, WARMUP_MIN, cooldown) <= minutes) {
+				items = it;
+				break;
+			}
+		}
+		return {
+			kind,
+			name: SESSIONS[kind].name,
+			items,
+			warmup: WARMUP_MIN,
+			cooldown,
+			minutes: estimateMinutes(items, WARMUP_MIN, cooldown)
+		};
+	}
+	/** The split to use: upper / lower with 4 or more sessions a week unless you chose full body. */
+	var splitOf = (p) => p.split === "full" || p.split === "upper_lower" ? p.perWeek >= 4 ? p.split : "full" : p.perWeek >= 4 ? "upper_lower" : "full";
+	/** This week (Monday to Sunday) with a session on the training days and rest on the others. */
+	function weekPlan(exercises, prefs, today) {
+		const per = Math.max(2, Math.min(5, Math.round(prefs.perWeek || 3)));
+		const days = TRAIN_DAYS[per];
+		const split = splitOf({
+			...prefs,
+			perWeek: per
+		});
+		const weekNo = Math.floor(Date.parse(mondayOf(today) + "T12:00:00Z") / 6048e5);
+		const kinds = split === "upper_lower" ? ["upper", "lower"] : weekNo % 2 ? ["full_b", "full_a"] : ["full_a", "full_b"];
+		const cache = /* @__PURE__ */ new Map();
+		const mon = mondayOf(today);
+		return Array.from({ length: 7 }, (_, dow) => {
+			const k = days.indexOf(dow);
+			const kind = k >= 0 ? kinds[k % 2] : null;
+			if (kind && !cache.has(kind)) cache.set(kind, buildSession(kind, exercises, prefs));
+			return {
+				day: shiftDay(mon, dow),
+				dow,
+				session: kind ? cache.get(kind) : null
+			};
+		});
+	}
+	/** Today's session, or null on a rest day. */
+	function todaysSession(exercises, prefs, today) {
+		return weekPlan(exercises, prefs, today).find((d) => d.day === today)?.session ?? null;
+	}
+	/** Short tips for growing muscle at home (shown with the plan). */
+	function growTips(weightKg) {
+		const g = weightKg && weightKg >= 35 && weightKg <= 200 ? Math.round(weightKg * 1.6) : null;
+		return [
+			g ? `Protein: about 1.6 g per kg a day (${g} g for you), spread over 3–4 meals.` : "Protein: about 1.6 g per kg of body weight a day, spread over 3–4 meals.",
+			"Go close to failure: stop each set when 1–2 more good reps would be the most you could do.",
+			"Sleep 7–9 hours: muscle grows while you rest, not while you train.",
+			"Same rest each time (60–120 s), and slow on the way down."
+		];
+	}
+	// src/core/sportTelegramImport.ts
+	var ENT = {
+		amp: "&",
+		lt: "<",
+		gt: ">",
+		quot: "\"",
+		apos: "'",
+		nbsp: " ",
+		"#39": "'"
+	};
+	var decode = (s) => s.replace(/&(#x?[0-9a-f]+|\w+);/gi, (m, e) => e[0] === "#" ? String.fromCodePoint(e[1] === "x" || e[1] === "X" ? parseInt(e.slice(2), 16) : Number(e.slice(1))) : ENT[e.toLowerCase()] ?? m);
+	var plain = (html) => decode(html.replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")).replace(/[ \t]+/g, " ");
+	/** "Push-ups", "push ups", "pushups" → "pushup" (one key per exercise). */
+	var nameKey = (n) => n.toLowerCase().replace(/[^a-z]/g, "").replace(/([^s])s$/, "$1");
+	var shift = (day, n) => {
+		const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
+		d.setUTCDate(d.getUTCDate() + n);
+		return d.toISOString().slice(0, 10);
+	};
+	/** The messages in a Telegram Desktop HTML export (div.message.default with .date[title], .from_name, .text). */
+	function readMessages(html) {
+		const out = [];
+		let from = "";
+		const parts = String(html ?? "").split(/<div class="message default\b/).slice(1);
+		for (const chunk of parts) {
+			const date = /class="[^"]*\bdate\b[^"]*"\s+title="(\d{2})\.(\d{2})\.(\d{4}) (\d{2}):(\d{2})/.exec(chunk);
+			if (!date) continue;
+			const fn = /<div class="from_name">\s*([\s\S]*?)\s*<\/div>/.exec(chunk);
+			if (fn) from = plain(fn[1]).trim();
+			const tx = /<div class="text">([\s\S]*?)<\/div>/.exec(chunk);
+			if (!tx) continue;
+			let day = `${date[3]}-${date[2]}-${date[1]}`;
+			if (Number(date[4]) < 4) day = shift(day, -1);
+			out.push({
+				day,
+				from,
+				text: plain(tx[1]).trim()
+			});
+		}
+		return out;
+	}
+	var NAME = String.raw`([A-Za-z][A-Za-z' -]{0,28}[A-Za-z])`;
+	/** "Push-ups (123/117 reps)", "Plank (60/60 sec)". */
+	var CARD = new RegExp(String.raw`${NAME}\s*\(\s*(\d{1,4})\s*/\s*(\d{1,4})\s*(reps?|sec|s)?\s*\)`, "g");
+	/** "press 0 / 35", "Push-ups 0 / 91 reps". */
+	var SLASH = new RegExp(String.raw`${NAME}\s+(\d{1,4})\s*/\s*(\d{1,4})\s*(reps?|sec|s)?\b`, "g");
+	/** Your own log: "103 push ups", "47pushups", "+20 squats". */
+	var LOG = new RegExp(String.raw`^\+?(\d{1,4})\s*${NAME}$`);
+	var WORDS = /^(today|still|time|done|left|target|workout|total|streak|day|days|water|of|reps|sec)$/i;
+	var NOT_SPORT = /water|glass|sleep|spent|lei|focus|coffee|task|minute|hour|step/;
+	var KNOWN = /press|pushup|situp|squat|pullup|dip|plank|lunge|crunch|burpee|abs/;
+	/**
+	* Counts per day from the messages: the bot's done/target lines (the highest
+	* done that day) and your own logs (added up that day); the day's number is
+	* the higher of the two. "Today's Workout (YYYY-MM-DD)" sets the day of its card.
+	*/
+	function parseTelegramExport(htmls) {
+		const msgs = (Array.isArray(htmls) ? htmls : [htmls]).flatMap(readMessages);
+		const card = {};
+		const logs = {};
+		const put = (to, day, c, add) => {
+			const k = nameKey(c.name);
+			if (!k || k.length < 3 || WORDS.test(c.name.trim()) || NOT_SPORT.test(k)) return;
+			if (add && !matchMove(c.name) && !KNOWN.test(k)) return;
+			const m = to[day] ?? (to[day] = {});
+			const was = m[k];
+			if (!was) m[k] = { ...c };
+			else if (add) was.done += c.done;
+			else {
+				if (c.done > was.done) was.done = c.done;
+				if (c.target != null) was.target = Math.max(was.target ?? 0, c.target);
+				if (/^[A-Z]/.test(c.name) && !/^[A-Z]/.test(was.name)) was.name = c.name;
+			}
+		};
+		for (const msg of msgs) {
+			const dated = /\((\d{4}-\d{2}-\d{2})\)/.exec(msg.text);
+			const day = dated && /workout/i.test(msg.text) ? dated[1] : msg.day;
+			let found = false;
+			for (const line of msg.text.split("\n")) {
+				const l = line.replace(/[^\x20-\x7E]/g, " ").trim();
+				if (!l) continue;
+				let hit = false;
+				for (const re of [CARD, SLASH]) {
+					re.lastIndex = 0;
+					let m;
+					while (m = re.exec(l)) {
+						hit = true;
+						const unit = m[4] && /^s(ec)?$/i.test(m[4]) ? "sec" : "reps";
+						put(card, day, {
+							name: m[1].trim(),
+							done: Number(m[2]),
+							target: Number(m[3]),
+							unit
+						}, false);
+					}
+					if (hit) break;
+				}
+				if (hit) {
+					found = true;
+					continue;
+				}
+				const lg = LOG.exec(l);
+				if (lg && !found) put(logs, msg.day, {
+					name: lg[2].trim(),
+					done: Number(lg[1]),
+					target: null,
+					unit: "reps"
+				}, true);
+			}
+		}
+		const days = JSON.parse(JSON.stringify(card));
+		for (const [d, m] of Object.entries(logs)) for (const [k, c] of Object.entries(m)) {
+			const t = days[d] ?? (days[d] = {});
+			if (!t[k]) t[k] = c;
+			else if (c.done > t[k].done) t[k].done = c.done;
+		}
+		for (const d of Object.keys(days)) {
+			for (const k of Object.keys(days[d])) if (!(days[d][k].done > 0)) delete days[d][k];
+			if (!Object.keys(days[d]).length) delete days[d];
+		}
+		const list = Object.keys(days).sort();
+		return {
+			days,
+			first: list[0] ?? null,
+			last: list[list.length - 1] ?? null,
+			messages: msgs.length
+		};
+	}
+	/** Which of your exercises a name is: the same name ("press" is your "press"), else the same library move, else null (a new one). */
+	function matchExercise(name, exercises) {
+		const k = nameKey(name);
+		const same = exercises.find((e) => nameKey(e.name) === k || nameKey(String(e.id)) === k || nameKey(String(e.id).replace(/^ex_/, "")) === k);
+		if (same) return same;
+		const mv = matchMove(name);
+		return mv && exercises.find((e) => moveOf(e)?.id === mv.id) || null;
+	}
+	/**
+	* Adds the picked days to the sport state: the day log keeps the higher
+	* number per exercise, and each day gets one history entry marked
+	* source "telegram import" (a full day when every target was reached). Today
+	* and later are skipped (only past days), and nothing here pays points.
+	*/
+	function mergeTelegramDays(st, days, pick, today, now = Date.now()) {
+		const out = JSON.parse(JSON.stringify(st ?? {}));
+		out.exercises = Array.isArray(out.exercises) ? out.exercises : [];
+		out.days = out.days && typeof out.days === "object" ? out.days : {};
+		out.history = Array.isArray(out.history) ? out.history : [];
+		const added = [];
+		const done = [];
+		for (const day of [...new Set(pick)].sort()) {
+			if (day >= today || !days[day]) continue;
+			const items = [];
+			let full = true;
+			for (const c of Object.values(days[day])) {
+				var _out$days;
+				let ex = matchExercise(c.name, out.exercises);
+				if (!ex) {
+					const mv = matchMove(c.name);
+					ex = {
+						id: "ex_tg_" + nameKey(c.name),
+						name: c.name,
+						target: c.target ?? c.done,
+						unit: c.unit,
+						active: false,
+						...mv ? { move: mv.id } : {}
+					};
+					out.exercises.push({
+						...ex,
+						doneToday: 0
+					});
+					added.push(c.name);
+				}
+				const id = String(ex.id);
+				const m = (_out$days = out.days)[day] ?? (_out$days[day] = {});
+				m[id] = Math.max(Number(m[id]) || 0, c.done);
+				if (c.target != null && c.done < c.target) full = false;
+				items.push({
+					exerciseId: id,
+					name: ex.name,
+					unit: c.unit,
+					amount: m[id]
+				});
+			}
+			const summary = items.map((i) => `${i.amount} ${i.name}`).join(", ");
+			const entry = {
+				id: Date.parse(day + "T12:00:00Z"),
+				day,
+				category: "Calisthenics",
+				title: `${full ? "Daily routine" : "Partial day"}: ${summary}`,
+				amount: `${items.length} exercises`,
+				source: "telegram import",
+				imported: now,
+				paid: 0,
+				items
+			};
+			const at = out.history.findIndex((h) => h?.day === day && h?.source === "telegram import");
+			if (at >= 0) out.history[at] = entry;
+			else if (!out.history.some((h) => h?.day === day && /^Daily routine/.test(String(h?.title ?? "")))) out.history.push(entry);
+			done.push(day);
+		}
+		out.history.sort((a, b) => (Number(b?.id) || 0) - (Number(a?.id) || 0));
+		return {
+			st: out,
+			days: done,
+			added
+		};
+	}
 	exports.BONES = BONES;
+	exports.BREAK_DAYS = BREAK_DAYS;
 	exports.FAMILIES = FAMILIES;
 	exports.FLOOR = FLOOR;
 	exports.GROUPS = GROUPS;
 	exports.MOVES = MOVES;
+	exports.MUSCLES = MUSCLES;
+	exports.NEED = NEED;
+	exports.PHOTOS = PHOTOS;
+	exports.PHOTO_SOURCE = PHOTO_SOURCE;
+	exports.TRAIN_DAYS = TRAIN_DAYS;
+	exports.WEEKLY_SETS = WEEKLY_SETS;
 	exports.activeDays = activeDays;
+	exports.addSets = addSets;
 	exports.bestRun = bestRun;
+	exports.bestSet = bestSet;
 	exports.boxOf = boxOf;
+	exports.buildSession = buildSession;
 	exports.computeBadges = computeBadges;
+	exports.enduranceStep = enduranceStep;
+	exports.estimateMinutes = estimateMinutes;
+	exports.familiesWithSets = familiesWithSets;
+	exports.familySeries = familySeries;
+	exports.figureShapes = figureShapes;
 	exports.frameAt = frameAt;
+	exports.growTarget = growTarget;
+	exports.growTips = growTips;
+	exports.hardSets = hardSets;
+	exports.hardSetsByMuscle = hardSetsByMuscle;
+	exports.importSets = importSets;
+	exports.isRecord = isRecord;
 	exports.ladderOf = ladderOf;
 	exports.levelOf = levelOf;
+	exports.loadOf = loadOf;
 	exports.loggedMoves = loggedMoves;
 	exports.loopLength = loopLength;
+	exports.makeSet = makeSet;
+	exports.matchExercise = matchExercise;
 	exports.matchMove = matchMove;
+	exports.mergeSets = mergeSets;
+	exports.mergeTelegramDays = mergeTelegramDays;
+	exports.mondayOf = mondayOf;
 	exports.moveById = moveById;
 	exports.moveOf = moveOf;
+	exports.muscleOf = muscleOf;
 	exports.newBadges = newBadges;
 	exports.nextStep = nextStep;
+	exports.parseSets = parseSets;
+	exports.parseTelegramExport = parseTelegramExport;
+	exports.photoOf = photoOf;
 	exports.prevStep = prevStep;
+	exports.progressFor = progressFor;
+	exports.rangeFor = rangeFor;
+	exports.sessionsOf = sessionsOf;
+	exports.setScore = setScore;
+	exports.setsOn = setsOn;
+	exports.setsText = setsText;
+	exports.splitOf = splitOf;
 	exports.startTarget = startTarget;
 	exports.stillFrame = stillFrame;
+	exports.strengthChange = strengthChange;
+	exports.strengthScore = strengthScore;
 	exports.suggestHarder = suggestHarder;
 	exports.targetRun = targetRun;
+	exports.todaysSession = todaysSession;
+	exports.weekPlan = weekPlan;
+	exports.weeklyVolume = weeklyVolume;
 	return exports;
 })({});

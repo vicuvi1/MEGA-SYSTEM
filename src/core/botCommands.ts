@@ -1,3 +1,5 @@
+import { parseSets } from './sportSets'
+import { matchMove } from './sportMoves'
 export type BotCommandType =
   | 'today'
   | 'why'
@@ -29,6 +31,8 @@ export interface ParsedCommand {
   exerciseName?: string
   exerciseAmount?: number
   exerciseUnit?: string
+  /** Sets as typed ("3x15 push-ups", "push-ups 15 14 12"): reps (or seconds) per set. */
+  exerciseSets?: number[]
   metricWeight?: number
   metricWaist?: number
   prExercise?: string
@@ -192,6 +196,13 @@ export function parseTelegramText(text: string): ParsedCommand {
   if (/(how\s+much.*spen[dt]|spent\b.*\?|cat\s+am\s+cheltuit|cheltuieli|сколько.*потрат)/.test(q) && !/\d{2,}/.test(q)) {
     const period = /yesterday|ieri|вчера/.test(q) ? 'yesterday' : /week|saptaman|недел/.test(q) ? 'week' : /month|luna|месяц/.test(q) ? 'month' : 'today'
     return { type: 'spent', args: [], raw: trimmed, period }
+  }
+
+  // Sets: "3x15 push-ups", "push-ups 15 14 12", "plank 3x45s" (one number alone stays a total).
+  const sets = parseSets(trimmed)
+  if (sets && (matchMove(sets.name) || /^(press|pushups?|situps?|squats?|pullups?|dips?|plank|flotari|abdomene|genuflexiuni|tractiuni)$/i.test(sets.name.replace(/[^a-z]/gi, '')))) {
+    const total = sets.reps.reduce((a, b) => a + b, 0)
+    return { type: 'workout', args: [], raw: trimmed, exerciseName: sets.name, exerciseAmount: total, exerciseUnit: sets.unit, exerciseSets: sets.reps }
   }
 
   // Without a slash, a command word counts only alone or with a number:
