@@ -11,6 +11,7 @@
 import { freeGaps, type CalEvent } from './dayTime'
 import { fromMin, toMin, type AlsoItem, type DayProposal, type DeferredItem, type PlanBlock } from './rhythm'
 import type { WorkToday } from './lifeFit'
+import { pickWorkoutSlot, slotTitle } from './workoutSlot'
 
 export interface PlanTask {
   id?: string
@@ -59,6 +60,13 @@ export interface PackInputs {
   estimate?: (t: PlanTask) => number
   /** ME2: hours he usually skips: hard work goes elsewhere when it can. */
   avoid?: number[]
+  /**
+   * BD8: the home workout's length (Sport Track's 20–45 min plan, already at
+   * today's dose). With it, training goes in the best free slot: 12:00–16:00
+   * first (before an evening shift), never ending after 22:00, never in the
+   * work window or a class. Without it, the old evening slot.
+   */
+  train?: { minutes: number; easy?: boolean } | null
 }
 
 const QUICK = /\b(check|email|e-mail|mail|reply|answer|call|text|message|pay|buy|order|send|book|sign|print|upload|submit|confirm|cancel|renew|schedule|remind|ask|tidy|water)\b/i
@@ -303,14 +311,25 @@ export function packDay(p: PackInputs): DayProposal {
   }
   // Goals, must-dos and what he asked for today first; a quick batch holding one of his asks right after.
   const pinnedQuick = !!quickChunk && quick.slice(0, 8).some(pinned)
+  // BD8: the workout's best slot (12:00–16:00) is kept first; elsewhere only after the important work.
+  let training: DayProposal['training'] = null
+  const book = (onlyPreferred: boolean) => {
+    if (p.workoutDone || !p.train || training) return
+    const slot = pickWorkoutSlot(wins, { minutes: short ? Math.min(p.train.minutes, 30) : p.train.minutes })
+    if (!slot || (onlyPreferred && !slot.preferred)) return
+    training = { time: fromMin(slot.start), what: slotTitle(slot.minutes, { easy: short || p.train.easy }), minutes: slot.minutes }
+    const w = wins.find((x) => !x.light && x.s <= slot.start && x.e >= slot.start + slot.minutes)!
+    wins.splice(wins.indexOf(w), 1, ...[{ ...w, e: slot.start - 10 }, { ...w, s: slot.start + slot.minutes + 10 }].filter((x) => x.e - x.s >= 20))
+  }
+  book(true)
   for (const c of [...chunks, ...pinnedChunks]) fit(c)
   if (quickChunk && pinnedQuick) fit(quickChunk)
   for (const c of groupChunks.filter((c) => c.hard)) fit(c)
   if (quickChunk && !pinnedQuick) fit(quickChunk)
 
   // Training in the evening when there's room (kept before the lower tasks fill the day).
-  let training: DayProposal['training'] = null
-  if (!p.workoutDone) {
+  book(false)
+  if (!p.workoutDone && !p.train) {
     for (const w of wins.filter((x) => !x.light && x.e > toMin('17:00'))) {
       const s = Math.ceil(Math.max(w.s, toMin('17:00')) / 15) * 15
       if (s + 45 <= w.e) {

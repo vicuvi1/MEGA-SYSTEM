@@ -1,4 +1,5 @@
 import { notMoney } from '@core/moneyGuess'
+import { foodById, matchFood } from '@core/protein'
 import { musicNowContext } from '@core/music'
 import { parseTelegramText } from '@core/botCommands'
 // The coach's brain: a message that isn't a simple log or a command goes to
@@ -128,6 +129,8 @@ export function saveProfile(db: any, p: CoachProfile): CoachProfile {
 export type UndoOp =
   // BG3: the day it was logged on, so undo changes that day (not today).
   | { k: 'water'; ml: number; day?: string }
+  /** BD1: a protein row in the body log: Undo removes it (a cancel row). */
+  | { k: 'protein'; id: string }
   | { k: 'reps'; ex: string; amount: number; workout?: number; day?: string }
   | { k: 'money'; id: string }
   | { k: 'event'; cal: string; id: string }
@@ -683,6 +686,7 @@ const ACT_GROUPS: Record<'body' | 'money' | 'calendar' | 'todoist', string> = {
   body: `Body, sleep and habits (one shared log with Sport Track and Sporty):
 - "sets: <exercise> <sets>x<reps>x<kg>" a strength workout with sets ("sets: bench 3x8x60", "sets: pullups 3x10" for body weight). Use it when he gives sets.
 - "water: <ml>" add water (a glass is 250, negative removes). "reps: <exercise> | <amount>" reps on today's checklist (pushups, squats…; counts as a workout).
+- "protein: <grams> | <food>" protein he ATE (food = egg, chicken, cottage, yogurt, milk, tuna, beans, lentils, whey… or other): "2 eggs" → "protein: 12 | egg". ONLY for food he says he ate.
 - "sleep: <YYYY-MM-DD> | wake=HH:MM; bed=HH:MM; quality=1-5" fix or fill a night (any of the three; the date is the morning).
 - "habit: oath" / "habit: clean" (clean-day check-in) / "habit: skincare".
 - "habit: nospend" ONLY when he says he spent nothing today (it counts once the day is over). "habit: cooked" ONLY when he says he cooked at home today. Never guess either.
@@ -962,6 +966,8 @@ export type BrainAction =
   | { kind: 'remind'; day: string; time: string; text: string }
   | { kind: 'checkin'; minutes: number; text: string }
   | { kind: 'water'; ml: number }
+  /** BD1: protein eaten (grams), with the food id ("egg", "chicken"… or "other"). */
+  | { kind: 'protein'; g: number; food: string; label: string }
   | { kind: 'reps'; exercise: string; amount: number }
   | { kind: 'sleep'; day: string; wake?: string; bed?: string; quality?: number }
   | { kind: 'habit'; habit: 'oath' | 'clean' | 'skincare' | 'nospend' | 'cooked' }
@@ -1023,7 +1029,7 @@ export function readAction(line: string): BrainAction | null {
     const minutes = Number(ext[1])
     return minutes >= 1 && minutes <= 120 ? { kind: 'extendfocus', minutes } : null
   }
-  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout|rename)\s*:\s*([\s\S]+)$/i.exec(line)
+  const m = /^\s*(log|mustdo|focus|fun|task|goal|event|move|resize|delete|shift|edit|taskmove|done|star|unstar|deltask|remind|checkin|water|protein|reps|sleep|habit|reward|week|bigdone|delmoney|editmoney|kept|broken|book|exercise|noexercise|target|style|workout|rename)\s*:\s*([\s\S]+)$/i.exec(line)
   if (!m) return null
   const kind = m[1].toLowerCase()
   const arg = m[2].trim().slice(0, 400)
@@ -1108,6 +1114,11 @@ export function readAction(line: string): BrainAction | null {
       if (k === 'date' && DATE_RE.test(v)) out.date = v
     }
     return out.amount || out.category || out.account || out.note != null || out.date ? out : null
+  }
+  if (kind === 'protein') {
+    const g = Math.round(Number(/\d{1,3}/.exec(parts[0] ?? '')?.[0]))
+    const food = foodById(String(parts[1] ?? '').trim().toLowerCase()) ?? matchFood(String(parts[1] ?? ''))
+    return g >= 1 && g <= 300 ? { kind: 'protein', g, food: food?.id ?? 'other', label: food?.name ?? 'Protein' } : null
   }
   if (kind === 'water') {
     const ml = Math.round(Number(/^[+-]?\d{1,4}/.exec(arg.replace(/\s+/g, ''))?.[0]))

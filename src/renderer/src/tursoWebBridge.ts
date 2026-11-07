@@ -61,6 +61,7 @@ import { neutral } from '@core/stealth'
 import { sportToday } from '@core/sportShared'
 import { WATER_KIND, deviceSource } from '@core/bodyLog'
 import { logChanges, logEntries, logWater, repairFromLog, toggleEntry } from '../../main/bodyLog'
+import { bodyPlusBridge } from './web/bodyPlusBridge'
 /** Where a glass or a set logged on this device came from (the water history shows it). */
 const thisDevice = () => deviceSource(typeof navigator !== 'undefined' ? navigator : undefined, typeof window !== 'undefined' && !!(window as any).desktop)
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, sportyView, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
@@ -807,6 +808,8 @@ export function createTursoWebBridge(): Bridge {
         },
         repair: async () => (await svcP).write((s) => repairFromLog(s.db as any))
       },
+      // BD1–BD18: protein, meals, supplements, tape, today's training dose, the weekly body report.
+      bodyPlus: bodyPlusBridge(svcP as any, thisDevice),
       // HD: your reminders (the same list Ben's ⏰ uses): read, add, Done, Snooze. The server sends each to Telegram once.
       reminders: async () =>
         (await svcP).read((s) => {

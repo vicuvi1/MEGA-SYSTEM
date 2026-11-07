@@ -63,6 +63,7 @@ import { IslandEyesBadge } from './IslandEyesBadge'
 import { IslandMeet } from './IslandMeet'
 import { IslandNudgeCard, IslandNudgePill, type NudgeRun } from './IslandNudgeCard'
 import { HealthBadge, HealthCard, WeekHealthCard, WindDownCard } from './IslandHealth'
+import { ProteinRing } from './body/ProteinRing'
 import { calmStationOf } from '@core/healthyDay'
 import { STARTER_STATIONS } from '@core/starterStations'
 import { NUDGE_CLOSES, nudgeTapLabel } from '@core/islandNudges'
@@ -2404,6 +2405,18 @@ export function DesktopIsland() {
           {s.windMode && <WindDownCard mode={s.windMode} tap={tap} playing={!!sc.playing} />}
           {s.health && <HealthCard health={s.health.today} evening={new Date(now).getHours() >= 18} />}
           {s.health?.week && <WeekHealthCard week={s.health.week} />}
+          {s.protein && s.protein.goal > 0 && (
+            // BD1: today's protein ring (log it from Today, Body, Telegram or by telling Ben).
+            <div className="di-protein" title="Protein today: log it on Today or Body, or tell Ben (&quot;2 eggs&quot;)">
+              <ProteinRing g={s.protein.g} goal={s.protein.goal} size={44} label={false} />
+              <span className="di-protein-text">
+                <b>
+                  {s.protein.g} / {s.protein.goal} g protein
+                </b>
+                <small>{s.protein.g >= s.protein.goal ? 'Goal reached today' : `${s.protein.goal - s.protein.g} g to go`}</small>
+              </span>
+            </div>
+          )}
           {s.doing && (
             // SI1: what Ben thinks you're doing (a kind, never a title); tap to fix it.
             <button className="di-doing" title="That's not right? Tap to fix" {...tp('doing', () => tap({ kind: 'ctxFix', app: s.doing!.app }))}>

@@ -1766,7 +1766,13 @@
     const svgI = (id) => `<svg aria-hidden="true"><use href="#i-${id}"/></svg>`;
     const lsGet = (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } };
     /** How much today: your full targets, a lighter day (70%) or short on time (50%). */
-    const planMode = () => (state.sportySettings.shortOnTime ? 'short' : lsGet('st_light_' + localDay()) === 'on' ? 'light' : 'full');
+    /** BD7: today's dose from Life System's readiness (sleep, soreness, yesterday's sets), when you haven't picked one here today. */
+    const autoDose = () => { try { const b = JSON.parse(localStorage.getItem('life_body') || 'null'); const r = b && b.ready; return r && r.day === localDay() && ['full', 'light', 'short'].includes(r.mode) ? r : null; } catch (e) { return null; } };
+    /** Your own pick today (Full / Lighter / Short here or on Body) wins over the automatic one. */
+    const pickedToday = () => state.sportySettings.shortOnTime || lsGet('st_light_' + localDay()) != null || (autoDose() && autoDose().auto === false);
+    /** Hold progression today (under 6 h of sleep): same reps as last time, no level-ups. */
+    const doseHold = () => !!(autoDose() && autoDose().hold);
+    const planMode = () => (state.sportySettings.shortOnTime ? 'short' : lsGet('st_light_' + localDay()) === 'on' ? 'light' : lsGet('st_light_' + localDay()) === 'no' ? 'full' : autoDose()?.mode || 'full');
 
     // Today's plan line: what's left today (SP21), in plain words.
     function updateCoachQuote(customQuote = null) {
@@ -2340,7 +2346,10 @@
       if (!mode || mode === planMode()) return;
       audio.playClick();
       state.sportySettings.shortOnTime = mode === 'short';
-      try { if (mode !== 'short') localStorage.setItem('st_light_' + localDay(), mode === 'light' ? 'on' : 'no'); } catch (err) {}
+      try { localStorage.setItem('st_light_' + localDay(), mode === 'light' ? 'on' : 'no'); } catch (err) {}
+      // BD7: your pick goes to Life System too (Body's readiness card shows it; it wins over the automatic one today).
+      window.parent?.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_DOSE', payload: { day: localDay(), mode } }, location.origin);
+      progKey = '';
       saveState(state);
       if (typeof renderSleepHint === 'function') renderSleepHint();
       renderTodayRoutine();
@@ -3110,8 +3119,18 @@
       if (!m || (u !== 'reps' && u !== 'sec')) return null;
       const key = localDay() + JSON.stringify((state.sets || {})).length + ':' + Object.keys(state.sets || {}).length;
       if (key !== progKey) { progCache = new Map(); progKey = key; }
-      const k = ex.id + '|' + m.id + '|' + JSON.stringify(todaySets(ex.id).map((x) => x.reps));
-      if (!progCache.has(k)) progCache.set(k, SK.progressFor({ log: state.sets || {}, exId: ex.id, move: m, today: localDay() }));
+      const hold = doseHold();
+      const k = ex.id + '|' + m.id + '|' + JSON.stringify(todaySets(ex.id).map((x) => x.reps)) + (hold ? '|hold' : '');
+      if (!progCache.has(k)) {
+        let p = SK.progressFor({ log: state.sets || {}, exId: ex.id, move: m, today: localDay() });
+        // BD7: after a short night, repeat last time: no +1 rep, no level-up today.
+        if (hold && p.last && (p.status === 'building' || p.status === 'ready')) {
+          const lastMin = Math.min(...p.last.reps.slice(0, p.sets));
+          const goal = Math.max(p.range.lo, Math.min(p.range.hi, lastMin));
+          p = { ...p, status: 'building', goal, next: null, line: `Short night: repeat ${p.sets}×${goal}${p.range.unit === 'sec' ? ' s' : ''} like last time. Progress waits for a good night.` };
+        }
+        progCache.set(k, p);
+      }
       return progCache.get(k);
     }
     /** Logs one set (reps, or seconds for a hold): the set and the day's total. Returns what changed. */
@@ -3762,7 +3781,11 @@
     // The choice lives in today's plan (Full · Lighter · Short); the sleep note sits beside it.
     const lightKey = () => 'st_light_' + localDay();
     const origTarget = getEffectiveTarget;
-    getEffectiveTarget = (ex) => (lsGet(lightKey()) === 'on' && !state.sportySettings.shortOnTime && !growOf(ex) ? Math.max(1, Math.round(ex.target * 0.7)) : origTarget(ex));
+    getEffectiveTarget = (ex) => {
+      if (growOf(ex) || state.sportySettings.shortOnTime) return origTarget(ex);
+      const mode = planMode();
+      return mode === 'light' ? Math.max(1, Math.round(ex.target * 0.7)) : mode === 'short' ? Math.max(1, Math.round(ex.target * 0.5)) : origTarget(ex);
+    };
     function renderSleepHint() {
       const el = document.getElementById('sleep-hint');
       const b = lifeBody();
@@ -3771,6 +3794,14 @@
       const lightBtn = document.querySelector('#plan-mode [data-mode="light"]');
       const short = m && m < 360;
       lightBtn.classList.toggle('hint', !!short && !choice && planMode() === 'full');
+      // BD7: the dose Life System set by itself (sleep, soreness, yesterday's sets), until you pick one.
+      const auto = autoDose();
+      if (auto && !pickedToday() && (auto.mode !== 'full' || auto.hold)) {
+        el.hidden = false;
+        el.innerHTML = `<span class="sleep">Readiness: ${auto.mode === 'light' ? 'Lighter 70%' : auto.mode === 'short' ? 'Short 50%' : 'Full'}</span>${auto.hold ? ' · same reps as last time' : ''}`;
+        el.title = String(auto.line || '');
+        return;
+      }
       if (!short || choice === 'no') { el.hidden = true; return; }
       el.hidden = false;
       const h = `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`;
@@ -4073,7 +4104,15 @@
     renderSleepHint();
     renderTodayRoutine();
     updateCoachQuote();
-    window.addEventListener('storage', (e) => { if (e.key === 'life_body') { renderSleepHint(); updateHunterStats(); } });
+    // BD7: redraw today's cards only when the dose (or the hold) really changed.
+    let doseSeen = JSON.stringify(autoDose());
+    window.addEventListener('storage', (e) => {
+      if (e.key !== 'life_body') return;
+      renderSleepHint();
+      updateHunterStats();
+      const now = JSON.stringify(autoDose());
+      if (now !== doseSeen) { doseSeen = now; progKey = ''; if (typeof renderTodayRoutine === 'function') renderTodayRoutine(); updateCoachQuote(); }
+    });
   </script>
   <script>
     // ---- SP3: celebrations, logging sets, level ups, the Plan and Strength tabs ----

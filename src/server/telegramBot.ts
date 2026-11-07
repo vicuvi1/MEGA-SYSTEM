@@ -3,6 +3,7 @@
 // handled exactly like the app does (same services, same Turso transaction
 // with its "seen" mark), on a copy of the Turso database kept warm between
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
+import { bodyWeekReport } from '../main/bodyPlus'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { calendarChanges, type Seen } from '../core/calWatch'
 import { loadFeedback } from '../renderer/src/web/botBrain'
@@ -1500,7 +1501,9 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const head = card ? weeklyHtml(card, fit?.areas?.study ?? 'normal', { focus: focusName(w.focus), note: w.note, big3: w.big3 }) : weeklyText(w)
       const push = card ? { type: 'weekly', key: `weekly:${f.facts.today}`, title: 'Your week', lines: weeklyCardText(card).split('\n'), weekly: card } : undefined
       // HD: the week for your body (water, moves, breaks, bedtimes).
-      await send(head + (week ? `\n\n💸 ${escapeHtml(week)}` : '') + `\n\n${weeklyHealthText(f.body.week)}`, WEEKLY_KEYBOARD, push ? { push } : undefined)
+      // BD18: and the training side (protein, weight trend, sets per muscle, sleep, steps, one focus), in the same message.
+      const bodyWeek = await mirror.read((db) => bodyWeekReport(db as any)).catch(() => null)
+      await send(head + (week ? `\n\n💸 ${escapeHtml(week)}` : '') + `\n\n${weeklyHealthText(f.body.week)}` + (bodyWeek ? `\n\n${bodyWeek.html}` : ''), WEEKLY_KEYBOARD, push ? { push } : undefined)
       // Then: "Pick your top 3 for this week", chips from his goals and projects (the same big 3 as the Goals page).
       const ask = await bots.rhythm.top3Ask(w.big3).catch(() => null)
       if (ask) await send(ask.text, ask.keyboard, { always: true }).catch(() => null)

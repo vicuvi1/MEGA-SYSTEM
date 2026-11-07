@@ -3,7 +3,7 @@
 import { REMINDERS, type Reminder } from '@core/coachKit'
 import { addReps, addWater, sportToday } from '@core/sportShared'
 import { readSetting, writeSetting } from '../../../../main/settings'
-import { saveSport } from '../../../../main/bodyLog'
+import { saveSport, toggleEntry } from '../../../../main/bodyLog'
 import { undoPluginAction } from '../../../../plugins'
 import { loadLog, saveLog, sportState } from '../botBrain'
 import { deleteMoney } from '../financeBot'
@@ -66,6 +66,11 @@ export async function undoReply(c: UndoDeps, at: string, index?: number): Promis
       } else {
         const line = await mirror.write((db) => {
           const svc = services.services(db)
+          if (op.k === 'protein') {
+            // BD1: a cancel row (nothing deleted), so every device agrees.
+            const r = toggleEntry(db as any, op.id, 'telegram')
+            return r ? (r.removed ? '↩ Protein removed' : '⚠️ That protein was already removed') : '⚠️ That protein entry is gone'
+          }
           if (op.k === 'water' || op.k === 'reps') {
             const st = sportState(db)
             if (!st) return '⚠️ Sport Track data is gone'

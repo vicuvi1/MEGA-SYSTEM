@@ -94,6 +94,17 @@ let moneyCache: { at: number; v: { left: number; level: string } | null } = { at
 let sagaCache: { at: number; v: IslandSnapshot['saga'] } = { at: 0, v: null }
 if (typeof window !== 'undefined') window.addEventListener('life-saga-changed', () => (sagaCache.at = 0))
 if (typeof window !== 'undefined') window.addEventListener('life-wallet-changed', () => (sagaCache.at = Math.min(sagaCache.at, Date.now() - 4 * 60_000)))
+// BD1: today's protein for the island's ring (read at most once a minute, or after a log).
+let proteinCache: { at: number; v: { g: number; goal: number } | null } = { at: 0, v: null }
+if (typeof window !== 'undefined') window.addEventListener('life-body-changed', () => (proteinCache.at = 0))
+async function proteinNow(now: number): Promise<{ g: number; goal: number } | null> {
+  if (now - proteinCache.at > 60_000) {
+    proteinCache.at = now
+    const v = await life.coach?.bodyPlus?.view().catch(() => null)
+    proteinCache.v = v ? { g: v.today, goal: v.goal.g } : proteinCache.v
+  }
+  return proteinCache.v
+}
 if (typeof window !== 'undefined') window.addEventListener('life-money-changed', () => (moneyCache.at = 0))
 function bodyTick(sec: number) {
   const now = Date.now()
@@ -692,6 +703,7 @@ export function IslandFeed() {
       health: healthView ? { today: healthView.today, week } : null,
       windMode: ct ? ct.windMode : windDownMode(now, bedTarget, bedLogged),
       afterShift: ct?.afterShift ?? null,
+      protein: await proteinNow(now),
       call: (() => {
         const c = running ? null : callNow(blocks.current.list, now)
         return c ? { title: c.title, end: c.end } : null

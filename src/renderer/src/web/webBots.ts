@@ -65,6 +65,8 @@ import type { BotContext } from './bots/context'
 
 export { focusKeyboard }
 import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
+import { parseProtein } from '@core/protein'
+import { bodyPlusView, logProtein } from '../../../main/bodyPlus'
 import { logBotSets } from '@core/sportBot'
 import { defaultSport, removeExercise, setExercise, waterCard, workoutCard } from '@core/sportCards'
 import { cleanRecipes, recipeText } from '@core/recipes'
@@ -457,6 +459,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const next = saveSport(s.db, addWater(st, ml, day), 'telegram')
       const c = waterCard(next, day, waterToday(s.db, s).target)
       return { reply: `💧 <b>${ml > 0 ? '+' : ''}${ml} ml</b> logged.\n\n${c.text}`, keyboard: c.keyboard }
+    }
+    // BD1: "protein 30", "2 eggs", "chicken 150g": the body log, never a food expense.
+    const prot = text.startsWith('/') && !/^\/(protein|p)\b/i.test(text) ? null : parseProtein(text)
+    if (prot) {
+      logProtein(s.db as any, prot, 'telegram')
+      const v = bodyPlusView(s.db as any)
+      const left = Math.max(0, v.goal.g - v.today)
+      return { reply: `🍗 <b>+${prot.g} g protein</b> (${esc(prot.label)}).\nToday: <b>${v.today} of ${v.goal.g} g</b>${left ? ` · ${left} g to go` : ' · goal reached 💪'}` }
     }
     const viaFocus = runFocus(s, text, focusEnded)
     if (viaFocus) return viaFocus
@@ -884,6 +894,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           step('Logged in code')
           preset = { reply: r.reply, acts: [], chips: ['How did I sleep this week?', 'What now?'] }
         }
+      }
+    }
+    // BD1: "protein 30", "2 eggs", "chicken 150g": logged in code, no model call (same action and Undo as when Ben logs it).
+    if (!preset && !media && text && !direct) {
+      const p = /[?]|\b(yesterday|ieri|вчера|not|wrong|undo|remove|delete|how|should)\b/i.test(clean) ? null : parseProtein(clean)
+      const act = p ? readAction(`protein: ${p.g} | ${p.food}`) : null
+      if (p && act) {
+        step('Logged in code')
+        preset = { reply: `🍗 ${p.label}: +${p.g} g protein.`, acts: [act], chips: ['How much protein today?', 'What now?'] }
       }
     }
     // My life: "short shift tonight" / "no work tonight" opens the free part of the work window for today.
@@ -1502,9 +1521,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const risk = riskOf(a as any)
       if (confirmed || direct || !risk || (askedFor(text, risk) && (risk !== 'log' || loggedInText(text, a as any)))) return true
       const what =
-        a.kind === 'delevent' ? (made.refs.events.get(a.ref)?.title ?? 'that event') : a.kind === 'deltask' ? (made.refs.tasks.get(a.ref)?.content ?? 'that task') : a.kind === 'delmoney' ? 'that money record' : a.kind === 'shift' ? `${a.refs.length} blocks` : a.kind === 'reward' ? a.title : a.kind === 'habit' ? a.habit : a.kind === 'reps' ? `${a.amount} ${a.exercise}` : a.kind === 'water' ? `${a.ml} ml water` : a.kind === 'log' ? a.text.replace(/^\/\w+\s*/, '') : ''
+        a.kind === 'delevent' ? (made.refs.events.get(a.ref)?.title ?? 'that event') : a.kind === 'deltask' ? (made.refs.tasks.get(a.ref)?.content ?? 'that task') : a.kind === 'delmoney' ? 'that money record' : a.kind === 'shift' ? `${a.refs.length} blocks` : a.kind === 'reward' ? a.title : a.kind === 'habit' ? a.habit : a.kind === 'reps' ? `${a.amount} ${a.exercise}` : a.kind === 'water' ? `${a.ml} ml water` : a.kind === 'protein' ? `${a.g} g protein` : a.kind === 'log' ? a.text.replace(/^\/\w+\s*/, '') : ''
       // Actions that don't point at a list (logs, habits, rewards) are kept, so the tap runs exactly this one.
-      const id = a.kind === 'reps' || a.kind === 'water' || a.kind === 'log' || a.kind === 'habit' || a.kind === 'reward' ? `${Date.now().toString(36).slice(-6)}${toKeep.length}` : undefined
+      const id = a.kind === 'reps' || a.kind === 'water' || a.kind === 'protein' || a.kind === 'log' || a.kind === 'habit' || a.kind === 'reward' ? `${Date.now().toString(36).slice(-6)}${toKeep.length}` : undefined
       if (id) toKeep.push({ id, a })
       out.buttons = [...(out.buttons ?? []), confirmButton(risk, what, id)].slice(0, 3)
       return false
@@ -1879,6 +1898,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const w = p.sets[0].weight
               const vs = before && w ? (w > before.bestWeight ? ` · +${Math.round((w - before.bestWeight) * 10) / 10} kg vs your best 🏅` : w === before.bestWeight ? ' · same weight as your best' : ` · best is ${before.bestWeight} kg`) : ''
               return `💪 ${p.name}: ${p.sets.length}×${p.sets[0].reps}${w ? ` @ ${w} kg` : ''}${vs}${r.awarded ? ' · workout counted' : ''}`
+            })
+            done.push(line)
+            continue
+          }
+          if (a.kind === 'protein') {
+            // BD1: a row in the one body log (no points: food is information).
+            const line = await mirror.write((db) => {
+              const id = logProtein(db as any, { food: a.food, g: a.g }, 'ben')
+              opNow = { k: 'protein', id }
+              const v = bodyPlusView(db as any)
+              return `🍗 +${a.g} g protein (${a.label}) · ${v.today} of ${v.goal.g} g today`
             })
             done.push(line)
             continue

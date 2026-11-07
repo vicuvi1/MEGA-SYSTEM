@@ -1,4 +1,7 @@
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { ProteinCard } from '../body/ProteinCard'
+import { BodyWeekCard } from '../body/BodyWeekCard'
+import '../body/body-plus.css'
 import { bookMinutes, bookTask } from '../booking'
 import { isFlowRule } from '@core/rules'
 import type { BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
@@ -238,6 +241,9 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
               <SleepToday sleep={sleep} onOpen={() => onGo('sleep')} />
             </div>
             {has('reps') && <SoloDailyQuestBanner body={body ?? null} summary={summary} onRefresh={() => onChange()} onGo={onGo} />}
+            {/* BD1 + BD9: today's protein ring, quick picks and the pre-shift fuel card; BD18 on Sundays. */}
+            <ProteinCard compact />
+            {new Date().getDay() === 0 && <BodyWeekCard sunday />}
           </TabPanel>
           <TabPanel page="today" id="week" value={tab}>
             <WeekStrip />

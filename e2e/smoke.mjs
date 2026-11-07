@@ -368,6 +368,170 @@ try {
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
   }, { retries: 1 })
+  // BD1–BD18: Body → Metrics & Workouts in four tabs. The protein ring and a quick log, readiness setting
+  // Sport Track's dose, sets per muscle, the weight trend, measurements, progress photos that stay on this
+  // device (made-up drawn silhouettes, never a real photo) and the weekly body card.
+  // BODY_SHOTS=<dir> saves screenshots (E2E_BODY_DEMO=1 gives the made-up six weeks of data).
+  await step('Body boost: protein ring and quick log, readiness dose, sets per muscle, weight trend, tape, photos on this device, weekly card', async () => {
+    const shots = process.env.BODY_SHOTS
+    const shot = async (sel, name) => {
+      if (!shots) return
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(500)
+      await pg.locator(sel).first().screenshot({ path: `${shots}/${name}.png` })
+    }
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
+    // Food: "2 eggs" in the quick log puts 12 g on the ring; a quick pick adds more; Remove takes it off.
+    await pg.click('.body-page .ptabs [data-tab="food"]')
+    const food = '#ptp-body-food'
+    await pg.waitForSelector(`${food} .pr-ring-num b`, { timeout: 20000 })
+    const ringNow = () => pg.evaluate((p) => Number(document.querySelector(`${p} .pr-ring-num b`)?.textContent), food)
+    const before = await ringNow()
+    await pg.fill(`${food} .pr-quick input`, '2 eggs')
+    await pg.waitForFunction((p) => /\+12 g/.test(document.querySelector(`${p} .pr-quick button`)?.textContent ?? ''), food, { timeout: 5000 })
+    await pg.click(`${food} .pr-quick button`)
+    await pg.waitForFunction(([p, b]) => Number(document.querySelector(`${p} .pr-ring-num b`)?.textContent) === b + 12, [food, before], { timeout: 15000 })
+    await pg.locator(`${food} .pr-pick`).first().click()
+    await pg.waitForFunction(([p, b]) => Number(document.querySelector(`${p} .pr-ring-num b`)?.textContent) > b + 12, [food, before], { timeout: 15000 })
+    const n = await pg.locator(`${food} .pr-entries li`).count()
+    if (n < 2) throw new Error(`today's protein list shows ${n} entries`)
+    const withPick = await ringNow()
+    await pg.locator(`${food} .pr-entries li`).last().locator('button').click()
+    await pg.waitForFunction(([p, v]) => Number(document.querySelector(`${p} .pr-ring-num b`)?.textContent) < v, [food, withPick], { timeout: 15000 })
+    await pg.locator(`${food} .pr-entries li.removed`).first().waitFor({ timeout: 5000 })
+    await shot(`${food} .pr-card`, 'protein-ring-and-quick-log')
+    // Today: readiness picks the dose; tapping Short tells Sport Track (life_body) and says it's your pick.
+    await pg.click('.body-page .ptabs [data-tab="today"]')
+    const today = '#ptp-body-today'
+    await pg.waitForSelector(`${today} .rd-plan button[role="radio"] .rd-auto`, { timeout: 20000 })
+    await pg.waitForSelector(`${today} .pr-card.compact .pr-ring`, { timeout: 10000 })
+    if (process.env.E2E_BODY_DEMO) {
+      // A made-up short night (5h25): a lighter day, progression on hold, chosen by itself.
+      await pg.waitForSelector(`${today} .rd-hold`, { timeout: 10000 })
+      await shot(`${today} .rd-card`, 'readiness-auto-lighter')
+    }
+    await pg.locator(`${today} .rd-plan button[role="radio"]`).nth(2).click()
+    await pg.waitForFunction(() => JSON.parse(localStorage.getItem('life_body') || 'null')?.ready?.mode === 'short', null, { timeout: 15000 })
+    await pg.waitForSelector(`${today} .rd-plan button[role="radio"].on`, { timeout: 5000 })
+    if (!/You picked it|Short/.test(await pg.locator(`${today} .rd-card`).innerText())) throw new Error('the readiness card does not show the pick')
+    await shot(`${today} .rd-card`, 'readiness-your-pick-short')
+    await pg.click(`${today} .rd-plan .btn`) // back to automatic
+    await pg.waitForFunction(() => JSON.parse(localStorage.getItem('life_body') || 'null')?.ready?.auto === true, null, { timeout: 15000 })
+    // Training: hard sets per muscle (done / planned, 10–20) and the next step for each move.
+    await pg.click('.body-page .ptabs [data-tab="training"]')
+    await pg.waitForSelector('#ptp-body-training .mw-row', { timeout: 15000 })
+    if ((await pg.locator('#ptp-body-training .mw-row').count()) !== 4) throw new Error('sets per muscle does not show 4 muscles')
+    await pg.waitForSelector('#ptp-body-training .mw-moves li', { timeout: 5000 })
+    await shot('#ptp-body-training .mw-card', 'sets-per-muscle')
+    // Progress: the weight trend and its nudge, measurements, photos, the weekly card.
+    await pg.click('.body-page .ptabs [data-tab="progress"]')
+    const prog = '#ptp-body-progress'
+    await pg.waitForSelector(`${prog} .wt-card .wt-nudge`, { timeout: 15000 })
+    await shot(`${prog} .wt-card`, 'weight-trend-and-nudge')
+    await pg.click(`${prog} .tp-card .card-head .btn`)
+    await pg.fill(`${prog} .tp-form input >> nth=0`, '33')
+    await pg.click(`${prog} .tp-form .btn`)
+    await pg.waitForFunction((p) => /33 cm/.test(document.querySelector(`${p} .tp-grid`)?.textContent ?? ''), prog, { timeout: 15000 })
+    await shot(`${prog} .tp-card`, 'measurements')
+    await pg.waitForSelector(`${prog} .bw-card .bw-focus`, { timeout: 15000 })
+    await shot(`${prog} .bw-card`, 'weekly-body-card')
+    if (!/stay on this device/.test(await pg.locator(`${prog} .ph-lock`).innerText())) throw new Error('the photo card does not say photos stay on this device')
+    // Two made-up drawn silhouettes in this device's photo store (8 weeks apart), then a new one: the ghost overlay.
+    const drawn = await pg.evaluate(async (days) => {
+      const figure = (broad, ink = '#c9d2e3') => {
+        const c = document.createElement('canvas')
+        c.width = 300
+        c.height = 400
+        const g = c.getContext('2d')
+        const bg = g.createLinearGradient(0, 0, 0, 400)
+        bg.addColorStop(0, '#2b3446')
+        bg.addColorStop(1, '#151a24')
+        g.fillStyle = bg
+        g.fillRect(0, 0, 300, 400)
+        g.fillStyle = ink
+        const cx = 150
+        const sh = 62 * broad
+        g.beginPath()
+        g.arc(cx, 70, 26, 0, Math.PI * 2)
+        g.fill()
+        g.fillRect(cx - 10, 92, 20, 16)
+        g.beginPath()
+        g.moveTo(cx - sh, 112)
+        g.quadraticCurveTo(cx, 100, cx + sh, 112)
+        g.lineTo(cx + 36, 230)
+        g.lineTo(cx - 36, 230)
+        g.closePath()
+        g.fill()
+        for (const s of [-1, 1]) {
+          g.beginPath()
+          g.moveTo(cx + s * sh, 114)
+          g.lineTo(cx + s * (sh + 16 * broad), 120)
+          g.lineTo(cx + s * (sh + 22), 236)
+          g.lineTo(cx + s * (sh + 6), 236)
+          g.closePath()
+          g.fill()
+          g.beginPath()
+          g.moveTo(cx + s * 34, 228)
+          g.lineTo(cx + s * 6, 228)
+          g.lineTo(cx + s * 12, 380)
+          g.lineTo(cx + s * 32, 380)
+          g.closePath()
+          g.fill()
+        }
+        return new Promise((ok) => c.toBlob(ok, 'image/png'))
+      }
+      const db = await new Promise((ok, no) => {
+        const r = indexedDB.open('life-body-photos', 1)
+        r.onupgradeneeded = () => r.result.objectStoreNames.contains('photos') || r.result.createObjectStore('photos', { keyPath: 'id' })
+        r.onsuccess = () => ok(r.result)
+        r.onerror = () => no(r.error)
+      })
+      const put = (p) => new Promise((ok, no) => {
+        const t = db.transaction('photos', 'readwrite')
+        t.objectStore('photos').put(p)
+        t.oncomplete = ok
+        t.onerror = () => no(t.error)
+      })
+      await put({ id: 'ph-demo-a', day: days[0], at: 1, blob: await figure(1), w: 300, h: 400 })
+      await put({ id: 'ph-demo-b', day: days[1], at: 2, blob: await figure(1.07), w: 300, h: 400 })
+      db.close()
+      window.dispatchEvent(new CustomEvent('life-photos-changed'))
+      const next = await figure(1.12, '#e9b27a')
+      return Array.from(new Uint8Array(await next.arrayBuffer()))
+    }, [70, 14].map((n) => new Date(fakeNow() - n * 864e5).toISOString().slice(0, 10)))
+    await pg.waitForFunction((p) => document.querySelectorAll(`${p} .ph-strip li`).length === 2, prog, { timeout: 10000 })
+    await pg.setInputFiles(`${prog} .ph-card input[type="file"]`, { name: 'checkin.png', mimeType: 'image/png', buffer: Buffer.from(drawn) })
+    await pg.waitForSelector(`${prog} .ph-card .ph-ghost`, { timeout: 10000 })
+    await pg.locator(`${prog} .ph-card`).scrollIntoViewIfNeeded()
+    await shot(`${prog} .ph-card`, 'photo-checkin-ghost-overlay')
+    await pg.click(`${prog} .ph-card .ph-actions .btn.primary`)
+    await pg.waitForFunction((p) => document.querySelectorAll(`${p} .ph-strip li`).length === 3, prog, { timeout: 10000 })
+    await pg.locator(`${prog} .ph-card .ph-actions .btn`, { hasText: 'Compare' }).click()
+    await pg.waitForSelector(`${prog} .ph-card .ph-compare .ph-after`, { timeout: 5000 })
+    await pg.locator(`${prog} .ph-card input[type="range"]`).fill('62')
+    await shot(`${prog} .ph-card`, 'photo-compare-slider')
+    await pg.locator(`${prog} .ph-card .ph-actions .btn`, { hasText: 'Done' }).click()
+    // The photos never left this device: nothing image-like reached the (fake) server's database.
+    const leaked = await pg.evaluate(async () => {
+      const s = localStorage.getItem('life_web_session') ?? ''
+      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%image/%' OR value LIKE '%ph-demo%' OR key LIKE '%photo%' AND key != 'look_wallpaper_photo'", args: [] } }, { type: 'close' }] }) })
+      const j = await r.json()
+      return Number(j.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? -1)
+    })
+    if (leaked !== 0) throw new Error(`photo data reached the server (${leaked})`)
+    // No sideways scroll at a laptop size or on a phone.
+    for (const [w, h] of [[1280, 720], [390, 844]]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.waitForTimeout(400)
+      const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (over > 1) throw new Error(`Body scrolls sideways at ${w}px (${over}px)`)
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    // Back to the tracker for the steps after this one.
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
+  })
   // MN24: Discipline is one built-in page (no embedded MAN copy).
   await step('Discipline is one page with its own content', async () => {
     await open('discipline')

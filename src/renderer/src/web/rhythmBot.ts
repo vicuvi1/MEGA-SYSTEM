@@ -60,6 +60,7 @@ import { promisesFor, type PromiseReminder } from '@core/benPromise'
 import { learnedRhythm, loadKnow } from './benMind'
 import { ensureIds, keptAsEvents, mergeKept, replanFromNow } from '@core/planEdit'
 import { fixPlan } from '@core/planCheck'
+import { trainSlotInput } from '../../../main/bodyPlus'
 
 /** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
 const localHm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
@@ -370,7 +371,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         bed = '23:30'
       }
       // ME3: the hour after a long shift is quick-tasks-only too.
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, know, promised, bed }
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, know, promised, bed, train: trainSlotInput(db as any) }
     })
     // PE6: pinned blocks (and approved ones already in the calendar) stay where they are: planned around like events.
     const prevPlan = base.st.briefing?.plan.day === base.today ? base.st.briefing.plan : null
@@ -407,7 +408,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       work: base.work,
       // ME2 + LS6: what he told Ben first, then his real pace; hard work away from the hours he skips.
       estimate: (t) => learnedEstimate(t, base.learned ?? { mult: {}, n: {}, best: [], skip: [], ready: false }, prefDuration(base.know, t.content)),
-      avoid: base.learned?.skip ?? []
+      avoid: base.learned?.skip ?? [],
+      // BD8: the home workout in its best free slot (12:00–16:00 first, never after 22:00), at today's dose.
+      train: base.train
     })
     // A life mode: sick = no blocks (the list stays), travel = one short block.
     const fallback = !mode

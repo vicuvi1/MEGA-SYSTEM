@@ -223,6 +223,8 @@ export interface IslandSnapshot {
   afterShift?: { minutesLeft: number; lightsOut: string } | null
   /** This week's top 3 (the big 3) and the parked ones, quiet (core/weekPlan.ts weekTop3View). */
   week?: { top: { i: number; text: string; done: boolean }[]; parked: string[] } | null
+  /** BD1: today's protein against the goal (the ring on the Day page). */
+  protein?: { g: number; goal: number } | null
   /** My life: today's work window and tonight's shift (a work day only), for the one-tap buttons. */
   work?: { from: string; to: string; mode: 'normal' | 'short' | 'off' } | null
 }

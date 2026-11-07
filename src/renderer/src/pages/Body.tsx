@@ -2,7 +2,7 @@ import { askConfirm } from '../confirmSheet'
 import { RestDayCard } from '../RestDay'
 import { usePoints } from '../usePoints'
 import { dayKey } from '@core/dates'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { BodyMetricInput, BodyState, Exercise, WorkoutExerciseItem, WorkoutInput } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -17,6 +17,23 @@ import '../body.css'
 import { WATER_TARGET_ML } from '@core/defaults'
 import { celebrate } from '../fx'
 import { Select } from '../Select'
+import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
+import { ProteinCard } from '../body/ProteinCard'
+import { WeightTrendCard } from '../body/WeightTrendCard'
+import { MuscleWeekCard } from '../body/MuscleWeekCard'
+import { SuppCard } from '../body/SuppCard'
+import { TapeCard } from '../body/TapeCard'
+import { PhotoCheckin } from '../body/PhotoCheckin'
+import { BodyWeekCard } from '../body/BodyWeekCard'
+import { readSoreness, useBodyPlus } from '../body/useBodyPlus'
+import '../body/body-plus.css'
+
+const BODY_TABS = [
+  { id: 'today', label: 'Today', title: 'Readiness, protein, supplements and water' },
+  { id: 'food', label: 'Food', title: 'Protein: goal, quick log, saved meals' },
+  { id: 'training', label: 'Training', title: 'Sets per muscle, next steps, strength, workouts' },
+  { id: 'progress', label: 'Progress', title: 'Weight trend, measurements, photos, your week' }
+]
 
 export function Body({
   state,
@@ -35,6 +52,20 @@ export function Body({
   const [metricOpen, setMetricOpen] = useState(false)
   const [exerciseOpen, setExerciseOpen] = useState(false)
   const [shortOnTime, setShortOnTime] = useState(false)
+  const [tab, setTab] = usePageTab('body', BODY_TABS.map((t) => t.id), 'today')
+  const [plus, setPlus] = useBodyPlus()
+  // BD7: progression holds after a short night (the next steps say "repeat").
+  const [hold, setHold] = useState(false)
+  useEffect(() => {
+    const load = () =>
+      void life.coach?.bodyPlus
+        ?.ready(readSoreness(dayKey(new Date())))
+        .then((r) => setHold(r.hold))
+        .catch(() => {})
+    load()
+    window.addEventListener('life-body-changed', load)
+    return () => window.removeEventListener('life-body-changed', load)
+  }, [])
 
   // The app's day (turns at 04:00, like workouts and points: N8).
   const todayKey = dayKey(new Date())
@@ -136,178 +167,177 @@ export function Body({
 
   return (
     <div className="body-page">
-      <RestDayCard />
-      <section className="stats four">
-        <div className="stat hero pink">
-          <span className="label">Workout streak</span>
-          <div className="big">{state.streak} {state.streak === 1 ? 'day' : 'days'}</div>
-          <span className="sub">
-            {state.workoutDoneToday
-              ? `Completed today (+${pts('body.workout_done', 10)} points paid)`
-              : state.restToday
-                ? `😴 Rest day · streak kept · best ${state.bestStreak}`
-                : `Best streak: ${state.bestStreak} days · Ready for today`}
-          </span>
-        </div>
-
-        <div className="stat">
-          <span className="label">This week</span>
-          <div className="big">{state.workoutsThisWeek}</div>
-          <span className="sub">{state.totalWorkouts} total workouts logged</span>
-        </div>
-
-        <div className="stat">
-          <span className="label">Latest weight</span>
-          <div className="big small-big">
-            {state.latestWeight ? `${state.latestWeight} kg` : '–'}
+      <PageTabs page="body" label="Body views" tabs={BODY_TABS.map((t) => ({ ...t, count: t.id === 'food' && plus ? `${plus.today}/${plus.goal.g}` : null }))} value={tab} onChange={setTab} />
+      <TabPanel page="body" id="today" value={tab} className="body-tab">
+        <RestDayCard />
+        <section className="stats four">
+          <div className="stat hero pink">
+            <span className="label">Workout streak</span>
+            <div className="big">{state.streak} {state.streak === 1 ? 'day' : 'days'}</div>
+            <span className="sub">
+              {state.workoutDoneToday
+                ? `Completed today (+${pts('body.workout_done', 10)} points paid)`
+                : state.restToday
+                  ? `😴 Rest day · streak kept · best ${state.bestStreak}`
+                  : `Best streak: ${state.bestStreak} days · Ready for today`}
+            </span>
           </div>
-          <span className="sub">
-            {latestAvg ? `Weekly avg: ${latestAvg} kg` : 'Daily swings smoothed'}
-            {diffWeight != null && (
-              <b style={{ marginLeft: 6, color: diffWeight <= 0 ? 'var(--lime)' : 'var(--orange)' }}>
-                {diffWeight > 0 ? `+${diffWeight}` : diffWeight} kg
-              </b>
-            )}
-          </span>
-        </div>
 
-        <div className="stat">
-          <span className="label">Waist</span>
-          <div className="big small-big">
-            {state.latestWaist ? `${state.latestWaist} cm` : '–'}
+          <div className="stat">
+            <span className="label">This week</span>
+            <div className="big">{state.workoutsThisWeek}</div>
+            <span className="sub">{state.totalWorkouts} total workouts logged</span>
           </div>
-          <span className="sub">Morning measurement</span>
-        </div>
-      </section>
 
-      <div className="body-actions">
-        {onOpenSportApp && (
-          <button className="btn sub" onClick={onOpenSportApp} title="Today's exercises, water and the rest timer">
-            <Icon name="bolt" size={15} />
-            Open the tracker
-          </button>
-        )}
-        <button className="btn primary" onClick={() => setWorkoutOpen(true)}>
-          <Icon name="plus" size={15} />
-          Log workout
-        </button>
-        <button className="btn" onClick={() => setMetricOpen(true)}>
-          <Icon name="sliders" size={15} />
-          Log weight & waist
-        </button>
-        <button className="btn sub" onClick={() => setExerciseOpen(true)}>
-          <Icon name="tasks" size={15} />
-          Add exercise
-        </button>
-        {state.recentWorkouts.length > 0 && (
-          <button
-            className="btn ghost body-undo"
-            onClick={handleUndoLast}
-            title={`Undo last workout: "${state.recentWorkouts[0]?.title}"`}
-          >
-            <Icon name="undo" size={15} />
-            Undo last workout
-          </button>
-        )}
-      </div>
-
-      {/* SP6: the daily checklist and water live in Sport Track only (one routine panel, not two). */}
-      <section className="card">
-        <WaterHistory />
-      </section>
-
-      {/* READINESS: sleep + soreness → full / light / rest (H4) */}
-      <ReadinessCard workoutDone={!!state.workoutDoneToday} />
-
-      {/* STRENGTH: sets × reps × kg, records, estimated max (H2) */}
-      <StrengthCard state={state} onChange={(s2) => (onState(s2), onWallet())} />
-      <SkillPaths state={state} />
-
-
-      <div className="cols">
-        <section className="panel">
-          <header className="panel-head">
-            <h2>Recent workouts</h2>
-            <span className="hint">Logs feed into your streaks and earn {pts('body.workout_done', 10)} points.</span>
-          </header>
-
-          {state.recentWorkouts.length === 0 ? (
-            <div className="empty">
-              No workouts logged yet. Tap <b>Log workout</b> above to record today's session!
+          <div className="stat">
+            <span className="label">Latest weight</span>
+            <div className="big small-big">
+              {state.latestWeight ? `${state.latestWeight} kg` : '–'}
             </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-              {state.recentWorkouts.map((w) => (
-                <div key={w.id} className="workout-card">
-                  <div className="workout-card-head">
-                    <div className="workout-card-title">
-                      <Icon name="bolt" size={16} />
-                      {w.title}
-                    </div>
-                    <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                      <small style={{ color: 'var(--muted)' }}>{w.day}</small>
-                      <button className="btn small ghost body-undo" title="Undo / delete this workout record" onClick={() => handleDelete(w.id)}>
-                        <Icon name="undo" size={12} />
-                        Undo
-                      </button>
-                    </div>
-                  </div>
+            <span className="sub">
+              {latestAvg ? `Weekly avg: ${latestAvg} kg` : 'Daily swings smoothed'}
+              {diffWeight != null && (
+                <b style={{ marginLeft: 6, color: diffWeight <= 0 ? 'var(--lime)' : 'var(--orange)' }}>
+                  {diffWeight > 0 ? `+${diffWeight}` : diffWeight} kg
+                </b>
+              )}
+            </span>
+          </div>
 
-                  <div className="workout-items-chips">
-                    {w.items.map((it, idx) => (
-                      <span key={idx} className="workout-chip">
-                        {it.amount} {it.unit} {it.name}
-                      </span>
-                    ))}
-                  </div>
-
-                  {w.note && <div className="workout-note">"{w.note}"</div>}
-                </div>
-              ))}
+          <div className="stat">
+            <span className="label">Waist</span>
+            <div className="big small-big">
+              {state.latestWaist ? `${state.latestWaist} cm` : '–'}
             </div>
-          )}
+            <span className="sub">Morning measurement</span>
+          </div>
         </section>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div className="body-actions">
+          {onOpenSportApp && (
+            <button className="btn sub" onClick={onOpenSportApp} title="Today's exercises, water and the rest timer">
+              <Icon name="bolt" size={15} />
+              Open the tracker
+            </button>
+          )}
+          <button className="btn primary" onClick={() => setWorkoutOpen(true)}>
+            <Icon name="plus" size={15} />
+            Log workout
+          </button>
+          <button className="btn" onClick={() => setMetricOpen(true)}>
+            <Icon name="sliders" size={15} />
+            Log weight & waist
+          </button>
+          <button className="btn sub" onClick={() => setExerciseOpen(true)}>
+            <Icon name="tasks" size={15} />
+            Add exercise
+          </button>
+          {state.recentWorkouts.length > 0 && (
+            <button
+              className="btn ghost body-undo"
+              onClick={handleUndoLast}
+              title={`Undo last workout: "${state.recentWorkouts[0]?.title}"`}
+            >
+              <Icon name="undo" size={15} />
+              Undo last workout
+            </button>
+          )}
+        </div>
+
+        {/* READINESS (BD7): sleep + soreness + yesterday's sets → Full / Lighter 70% / Short 50% in Sport Track */}
+        <ReadinessCard workoutDone={!!state.workoutDoneToday} />
+        <div className="bp-grid">
+          <ProteinCard compact />
+          {plus && <SuppCard v={plus} onView={setPlus} />}
+        </div>
+        {/* SP6: the daily checklist and water live in Sport Track only (one routine panel, not two). */}
+        <section className="card">
+          <WaterHistory />
+        </section>
+      </TabPanel>
+
+      <TabPanel page="body" id="food" value={tab} className="body-tab">
+        <ProteinCard />
+      </TabPanel>
+
+      <TabPanel page="body" id="training" value={tab} className="body-tab">
+        {/* BD3: hard sets per muscle against the plan and 10–20, the next step for each move */}
+        <MuscleWeekCard hold={hold} />
+        {/* STRENGTH: sets × reps × kg, records, estimated max (H2) */}
+        <StrengthCard state={state} onChange={(s2) => (onState(s2), onWallet())} />
+        <SkillPaths state={state} />
+        <div className="cols">
           <section className="panel">
             <header className="panel-head">
-              <h2>Weekly weight trend</h2>
-              <span className="hint">Smooths daily water swings.</span>
+              <h2>Recent workouts</h2>
+              <span className="hint">Logs feed into your streaks and earn {pts('body.workout_done', 10)} points.</span>
             </header>
 
-            {state.weeklyAverages.length === 0 ? (
-              <div className="empty">Log your weight to see weekly averages.</div>
+            {state.recentWorkouts.length === 0 ? (
+              <div className="empty">
+                No workouts logged yet. Tap <b>Log workout</b> above to record today's session!
+              </div>
             ) : (
-              <div style={{ marginTop: 8 }}>
-                {state.weeklyAverages.slice(-8).map((wa) => (
-                  <div key={wa.week} className="weight-row">
-                    <span style={{ color: 'var(--muted)' }}>Week of {wa.week}</span>
-                    <span style={{ fontWeight: 700 }}>
-                      {wa.avg} kg <small style={{ color: 'var(--muted)', fontWeight: 400 }}>({wa.count}x)</small>
-                    </span>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
+                {state.recentWorkouts.map((w) => (
+                  <div key={w.id} className="workout-card">
+                    <div className="workout-card-head">
+                      <div className="workout-card-title">
+                        <Icon name="bolt" size={16} />
+                        {w.title}
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                        <small style={{ color: 'var(--muted)' }}>{w.day}</small>
+                        <button className="btn small ghost body-undo" title="Undo / delete this workout record" onClick={() => handleDelete(w.id)}>
+                          <Icon name="undo" size={12} />
+                          Undo
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="workout-items-chips">
+                      {w.items.map((it, idx) => (
+                        <span key={idx} className="workout-chip">
+                          {it.amount} {it.unit} {it.name}
+                        </span>
+                      ))}
+                    </div>
+
+                    {w.note && <div className="workout-note">"{w.note}"</div>}
                   </div>
                 ))}
               </div>
             )}
           </section>
 
-          <section className="panel">
-            <header className="panel-head">
-              <h2>Exercise targets</h2>
-            </header>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-              {state.exercises.map((ex) => (
-                <div key={ex.id} className="weight-row">
-                  <span style={{ fontWeight: 600 }}>{ex.name ? ex.name[0].toUpperCase() + ex.name.slice(1) : ex.name}</span>
-                  <span className="chip-text" style={{ color: 'var(--muted)', fontWeight: 600 }}>
-                    {ex.target} {ex.unit} a day
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <section className="panel">
+              <header className="panel-head">
+                <h2>Exercise targets</h2>
+              </header>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
+                {state.exercises.map((ex) => (
+                  <div key={ex.id} className="weight-row">
+                    <span style={{ fontWeight: 600 }}>{ex.name ? ex.name[0].toUpperCase() + ex.name.slice(1) : ex.name}</span>
+                    <span className="chip-text" style={{ color: 'var(--muted)', fontWeight: 600 }}>
+                      {ex.target} {ex.unit} a day
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </div>
         </div>
-      </div>
+      </TabPanel>
+
+      <TabPanel page="body" id="progress" value={tab} className="body-tab">
+        {plus && <WeightTrendCard trend={plus.trend} today={plus.day} onLog={() => setMetricOpen(true)} />}
+        <div className="bp-grid">
+          {plus && <TapeCard v={plus} waist={state.latestWaist} onView={setPlus} />}
+          <BodyWeekCard />
+        </div>
+        <PhotoCheckin every={plus?.prefs.photoEvery ?? 14} />
+      </TabPanel>
 
       {workoutOpen && (
         <WorkoutModal

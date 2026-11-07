@@ -243,6 +243,54 @@ if (!process.env.E2E_NO_GOALS) {
 // E2E_SAGA_DEMO=1: the Season page on made-up data (e2e/sagaDemo.mjs).
 if (process.env.E2E_SAGA_DEMO) (await import(pathToFileURL(join(repo, 'e2e/sagaDemo.mjs')).href)).seedSaga(db, day)
 
+// E2E_BODY_DEMO=1: six weeks of made-up body data (weigh-ins, protein, tape,
+// sets, a short night), for looking at Body (screenshots). Off for the smoke test.
+if (process.env.E2E_BODY_DEMO) {
+  const w = db.prepare('INSERT OR REPLACE INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, ?, NULL, ?)')
+  for (let n = 41; n >= 0; n--) if (n % 2 === 0 || n % 7 === 3) w.run([day(n), Math.round((68.6 + (41 - n) * 0.004 + Math.sin(n * 1.7) * 0.35) * 10) / 10, n % 7 === 0 ? 79.5 : null, new Date().toISOString()])
+  const p = db.prepare('INSERT INTO body_log (id, at, day, kind, amount, source) VALUES (?, ?, ?, ?, ?, ?)')
+  const meals = [['egg', 18], ['cottage', 28], ['chicken', 46], ['whey', 24], ['lentils', 18]]
+  for (let n = 6; n >= 1; n--) meals.slice(0, 3 + (n % 3)).forEach(([k, g], i) => p.run([`demo-p${n}-${i}`, `${day(n)}T${String(8 + i * 3).padStart(2, '0')}:00:00.000Z`, day(n), `protein:${k}`, g - (n % 2) * 4, 'web']))
+  p.run(['demo-p0-0', `${day(0)}T06:00:00.000Z`, day(0), 'protein:egg', 18, 'phone'])
+  p.run(['demo-p0-1', `${day(0)}T06:10:00.000Z`, day(0), 'protein:cottage', 28, 'phone'])
+  p.run(['demo-p0-2', `${day(0)}T06:20:00.000Z`, day(0), 'supp:creatine', 1, 'phone'])
+  for (let n = 1; n <= 5; n++) p.run([`demo-s${n}`, `${day(n)}T07:00:00.000Z`, day(n), 'supp:creatine', 1, 'web'])
+  const sl = db.prepare('INSERT OR REPLACE INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+  for (let n = 6; n >= 1; n--) sl.run([day(n), '06:30', '06:30', 1, n % 2 ? '00:40' : '00:15', '23:30', 0, new Date().toISOString()])
+  sl.run([day(0), '06:30', '06:30', 1, '01:05', '23:30', 0, new Date().toISOString()])
+  const set = (k, v) => db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [k, JSON.stringify(v)])
+  set('body_tape', [
+    { day: day(40), arm: 31.5, chest: 92, shoulders: 108, thigh: 53 },
+    { day: day(20), arm: 32, chest: 93, shoulders: 109.5, thigh: 53.5 },
+    { day: day(2), arm: 32.5, chest: 94, shoulders: 110.5, thigh: 54 }
+  ])
+  set('body_plus', { gPerKg: 1.8, meals: [{ id: 'meal-bfast', name: 'Breakfast', items: [{ food: 'egg', qty: 3 }, { food: 'cottage', qty: 2 }] }], favs: ['egg', 'cottage'], supps: ['creatine', 'vitd'], fuelLead: 60, photoEvery: 14 })
+  set('life_fit', { work: { on: true, days: [0, 1, 2, 3, 4, 5, 6], from: '17:00', to: '24:00', minH: 2, maxH: 3 } })
+  // Sport Track: three home moves with sets over three weeks (push-ups stall, squats climb).
+  const sets = {}
+  const add = (n, id, reps) => ((sets[day(n)] ??= {})[id] = reps.map((r, i) => ({ reps: r, at: Date.now() - n * 864e5 + i * 1000, id: `d${n}${id}${i}` })))
+  for (const n of [20, 17, 13, 10, 6, 3, 1]) {
+    add(n, 'pushups', n > 12 ? [12, 11, 10] : [12, 11, 11])
+    add(n, 'squats', [14 + Math.round((20 - n) / 3), 13 + Math.round((20 - n) / 3), 12 + Math.round((20 - n) / 3)])
+    if (n % 2) add(n, 'rows', [9, 8, 8])
+  }
+  set('sport_tracker_json', {
+    savedAt: Date.now(),
+    data: {
+      lastDate: day(0),
+      exercises: [
+        { id: 'pushups', name: 'Push-ups', target: 36, unit: 'reps', active: true, move: 'pushup', doneToday: 0 },
+        { id: 'squats', name: 'Squats', target: 45, unit: 'reps', active: true, move: 'squat', doneToday: 0 },
+        { id: 'rows', name: 'Table rows', target: 27, unit: 'reps', active: true, move: 'table_row_bent', doneToday: 0 }
+      ],
+      water: { currentMl: 0, targetMl: 2500, glassSizeMl: 250 },
+      history: [],
+      sets,
+      sportySettings: { autoProgression: true, progressMode: 'grow', planMinutes: 30, planPerWeek: 3 }
+    }
+  })
+}
+
 // E2E_REWARDS_DEMO=1: a month of made-up points and a few made-up rewards, for
 // looking at the Rewards page (screenshots). Off for the smoke test.
 if (process.env.E2E_REWARDS_DEMO) {

@@ -114,6 +114,8 @@ export const SETTINGS = {
   sporty_status: json<Record<string, unknown> | null>("Sporty's last status", null),
   sporty_update_request: json<Record<string, unknown> | null>('a change waiting for Sporty to pick up', null),
   sport_rest_days: json<unknown[]>('days marked as rest days', []),
+  body_plus: json<Record<string, unknown> | null>("Body: protein goal (g per kg), saved meals and favourites, supplements you track, today's training dose if you picked one, the pre-shift fuel card (src/main/bodyPlus.ts)", null),
+  body_tape: json<unknown[]>('Body: tape measurements (arm, chest, shoulders, thigh in cm) by day; waist stays in body_metrics', []),
   ben_workouts: json<unknown[]>('workouts Ben logged', []),
   app_sync_finance: json<Record<string, unknown> | null>('Finance Helper data synced into Life System', null),
   app_sync_waky: json<Record<string, unknown> | null>('Waky (sleep) data synced into Life System', null),

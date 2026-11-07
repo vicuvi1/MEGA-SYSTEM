@@ -1,0 +1,14 @@
+/* The protein ring (Body, Today, the island). The arc is drawn once; nothing animates. */
+.pr-ring { position: relative; display: inline-grid; place-items: center; flex: none; }
+.pr-ring svg { position: absolute; inset: 0; }
+.pr-ring-bg { fill: none; stroke: rgb(var(--ink) / 0.09); stroke-width: 7; }
+.pr-ring-fg { fill: none; stroke: var(--accent); stroke-width: 7; stroke-linecap: round; }
+.pr-ring.done .pr-ring-fg { stroke: var(--lime, var(--accent)); }
+.pr-ring-num { position: relative; display: flex; flex-direction: column; align-items: center; line-height: 1.05; }
+.pr-ring-num b { font-size: 20px; letter-spacing: -0.02em; }
+.pr-ring-num small { font-size: 10px; color: var(--muted); }
+.pr-card.compact .pr-ring-num b { font-size: 16px; }
+
+.di-protein { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgb(var(--ink, 255 255 255) / 0.05); }
+.di-protein span.di-protein-text { display: flex; flex-direction: column; line-height: 1.2; }
+.di-protein small { opacity: 0.7; }

@@ -16,7 +16,8 @@ const MAN_FIT_CSS = `
   .app-container { max-width: 1080px !important; margin: 0 auto !important; padding-top: 12px !important; }
   .audio-banner, .version-footer { display: none !important; }
 `
-import { addDays } from '@core/dates'
+import { addDays, dayKey } from '@core/dates'
+import { readSoreness } from './body/useBodyPlus'
 import { embedPhoneCss, embedThemeCss, readTokens } from '@core/embedTheme'
 import { hostCall, parseBridgeLine, parseBridgeMessage } from '@core/embedBridge'
 import { isSoundName } from '@core/sounds'
@@ -100,6 +101,14 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         const day = typeof data.payload?.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.payload.day) ? data.payload.day : null
         await life.body.setRest?.(day, true).catch(() => null)
         window.dispatchEvent(new CustomEvent('life-body-changed'))
+      }
+
+      // BD7: you picked Full / Lighter / Short in Sport Track: it wins over the automatic dose today (synced).
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_DOSE') {
+        const mode = data.payload?.mode
+        if (mode === 'full' || mode === 'light' || mode === 'short') {
+          await life.coach?.bodyPlus?.setDose(mode, readSoreness(dayKey(new Date()))).catch(() => null)
+        }
       }
 
       // Waky checked you in: the Sleep section logs the wake-up and pays
@@ -356,7 +365,9 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         const t = sleep?.todayLog
         const toM = (x: string) => Number(x.slice(0, 2)) * 60 + Number(x.slice(3, 5))
         const slept = t?.bedTime && t.wakeTime ? (toM(t.wakeTime) - toM(t.bedTime) + 1440) % 1440 : null
-        const data = JSON.stringify({ restDays: (body as any).restDays ?? [], sleptMin: slept && slept >= 120 && slept <= 960 ? slept : null, at: Date.now() })
+        // BD7: today's dose (Full / Lighter 70% / Short 50%) and whether progression holds after a short night.
+        const ready = await life.coach?.bodyPlus?.ready(readSoreness(dayKey(new Date())), t?.quality ?? null).catch(() => null)
+        const data = JSON.stringify({ restDays: (body as any).restDays ?? [], sleptMin: slept && slept >= 120 && slept <= 960 ? slept : null, ready: ready ? { day: dayKey(new Date()), mode: ready.mode, hold: ready.hold, auto: ready.auto, line: ready.line } : null, at: Date.now() })
         if (gone) return
         try {
           localStorage.setItem('life_body', data)

@@ -173,3 +173,24 @@ describe('the whole-day plan (DP1)', () => {
     expect(t).toContain('12 tasks')
   })
 })
+
+describe('the workout slot in the plan (BD8)', () => {
+  const shift = { from: '17:00', to: '23:59', mode: 'normal' as const, busy: { from: '17:00', to: '23:59' }, light: null }
+  const end = (start: string, m: number) => {
+    const t = toMin(start) + m
+    return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+  }
+  it('books the workout before the evening shift, around the classes, as the plan training block', () => {
+    const p = packDay({ ...base, work: shift, train: { minutes: 30 } })
+    expect(p.training).toMatchObject({ what: 'Workout · 30 min', minutes: 30 })
+    const t = toMin(p.training!.time)
+    expect(t).toBeGreaterThanOrEqual(toMin('12:00'))
+    expect(t + 30).toBeLessThanOrEqual(toMin('16:30'))
+    for (const c of classes) expect(overlaps({ start: p.training!.time, minutes: 30 }, c.start.slice(11, 16), c.end.slice(11, 16))).toBe(false)
+    for (const b of p.blocks) expect(overlaps(b, p.training!.time, end(p.training!.time, 30))).toBe(false)
+  })
+  it('no workout once it is done, and never after 22:00', () => {
+    expect(packDay({ ...base, workoutDone: true, train: { minutes: 30 } }).training).toBeNull()
+    expect(packDay({ ...base, now: '21:40', train: { minutes: 30 } }).training).toBeNull()
+  })
+})
