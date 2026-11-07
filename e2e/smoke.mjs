@@ -330,11 +330,12 @@ try {
     await shut()
     await frame.waitForSelector('#wm-body .wm-rest, .wm-finish', { timeout: 10000 })
     await shut()
-    await frame.evaluate(() => closeWM())
-    await frame.waitForSelector('#workout-mode', { state: 'hidden', timeout: 5000 })
-    // Finishing the day logs the workout in Life System, which can reload the page: find it again.
+    // Close with the page's own button. Finishing the day logs the workout in Life System, which can
+    // reload the page at any moment (slow Windows runners), so a failed click is fine: find it again.
+    await frame.evaluate(() => (document.getElementById('wm-finish-ok') ?? document.getElementById('wm-close'))?.click()).catch(() => {})
     await pg.waitForTimeout(1500)
     frame = pg.frames().find((f) => f.url().includes('/apps/sport/') && !f.isDetached()) ?? frame
+    await frame.waitForSelector('#workout-mode', { state: 'hidden', timeout: 10000 })
     await frame.waitForSelector('.st-tab[data-tab="history"]', { timeout: 10000 })
     // Import from Telegram: a made-up export shows its days to pick (nothing is uploaded).
     await frame.click('.st-tab[data-tab="history"]')
