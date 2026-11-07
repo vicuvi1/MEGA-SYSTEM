@@ -192,10 +192,11 @@
    "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-    "SMOKE_ONLY=\"Sport Track Today\" npm run smoke"
+    "SMOKE_ONLY=\"Sport Track Today\" npm run smoke",
+    "SMOKE_ONLY=\"Sport Track strength coach\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net. Coach (levels, feedback, forecasts, programs, 4 tabs) added 2026-11-07; UX5 (Ben's note after a workout, push kind workoutNote) and PG4 (why a move stalled: protein, sleep, readiness) done 2026-11-07; smoke step \"Sport Track note\". Strength coach logic (2026-11-07, page work still to do): best-set placement, strength default (5-8 reps, 3-5 sets, 2-3 min rest, 3x8 unlocks the next move), harder ladder steps, too easy / too hard taps and effort ratings; see docs/areas/sport.md."
+   "notes": "Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net. Coach (levels, feedback, forecasts, programs, 4 tabs) added 2026-11-07; UX5 (Ben's note after a workout, push kind workoutNote) and PG4 (why a move stalled: protein, sleep, readiness) done 2026-11-07; smoke step \"Sport Track note\". Strength coach (2026-11-07, logic and page done; smoke step \"Sport Track strength coach\"): best-set placement, strength default (5-8 reps, 3-5 sets, 2-3 min rest, 3x8 unlocks the next move), harder ladder steps, too easy / too hard taps and effort ratings; see docs/areas/sport.md."
   },
   {
    "id": "F015",

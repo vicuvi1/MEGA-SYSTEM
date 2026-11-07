@@ -301,7 +301,7 @@ try {
     for (const sel of ['.ex .lvl, .ex .tag', '.ex .ex-target b', '.ex .log-big', '.ex .log-chips .chip', '.ex form.log-type input']) if (!(await frame.locator(sel).first().count())) throw new Error(`an exercise card lacks ${sel}`)
     // A library exercise shows its demo: two real photo frames, or the drawn figure (not an empty picture).
     await frame.waitForSelector('.ex .ex-demo svg.fig path[data-p="torso"][d], .ex .ex-demo .ph img.ph-b', { state: 'attached', timeout: 10000 })
-    const shut = async () => { if (await frame.locator('#cel.open').count()) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await frame.waitForSelector('#cel', { state: 'hidden', timeout: 5000 }) } }
+    const shut = async () => { for (let k = 0; k < 4 && (await frame.locator('#cel.open').count()); k++) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await pg.waitForTimeout(500) } await frame.waitForSelector('#cel', { state: 'hidden', timeout: 5000 }) }
     // A quick-add sends the change to Life System's log.
     await pg.evaluate(() => { window.__sportLog = []; window.addEventListener('message', (e) => e.data?.action === 'SPORT_LOG' && window.__sportLog.push(e.data.payload)) })
     // Quick log: type "15 14 12" on the first card; the coach answers with a line and the next target.
@@ -417,6 +417,56 @@ try {
       if (over > 1) throw new Error(`Sport Track scrolls sideways at ${w}px (${over}px)`)
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
+  }, { retries: 1 })
+  // The strength coach on Sport Track: a big level at the top, Strength by default, Too easy / Too hard with a plain answer,
+  // the strength target with its rest, and an effort rating after a set. SPORT_SHOTS=<dir> saves 2 screenshots.
+  await step('Sport Track strength coach: hero level, strength default, Too easy and Too hard, effort', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch button').first().click()
+    await pg.waitForTimeout(2500)
+    const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+    if (!frame) throw new Error('no Sport Track frame')
+    await frame.click('.st-tab[data-tab="today"]')
+    await frame.waitForSelector('.ex.coach', { timeout: 10000 })
+    const shut = async () => { for (let k = 0; k < 4 && (await frame.locator('#cel.open').count()); k++) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await pg.waitForTimeout(500) } if (await frame.locator('#unlock.open').count()) await frame.click('#unlock-ok') }
+    // Strength is the default way to progress.
+    const mode = await frame.evaluate(() => { document.getElementById('setting-progress-mode'); return document.getElementById('setting-progress-mode')?.value })
+    if (mode !== 'strength') throw new Error(`Strength should be the default, got ${mode}`)
+    const opts = await frame.locator('#setting-progress-mode option').allInnerTexts()
+    if (opts.length !== 3 || !/Strength/.test(opts[0]) || !/Build muscle/.test(opts[1]) || !/Simple totals/.test(opts[2])) throw new Error(`want Strength / Build muscle / Simple totals, got ${opts.join('|')}`)
+    // One big set of push-ups places you on a hard variation, shown big at the top.
+    const push = frame.locator('.ex.coach', { has: frame.locator('.ex-name', { hasText: /push-ups/i }) }).first()
+    await push.locator('form.log-type input').fill('50')
+    await push.locator('form.log-type input').press('Enter')
+    await frame.waitForSelector('#hero-level:not([hidden]) .hl-main', { timeout: 10000 })
+    await shut()
+    const hero = await frame.locator('#hero-level').innerText()
+    const lvl = /level (\d+)/i.exec(hero)
+    if (!lvl || Number(lvl[1]) < 10) throw new Error(`50 push-ups in one set should show a hard variation (got: ${hero})`)
+    if (!/Overall rank/i.test(hero)) throw new Error(`the hero lacks the overall rank (got: ${hero})`)
+    // The card: level name, the strength target with rest, Too easy / Too hard, effort.
+    const card = frame.locator('.ex.coach', { has: frame.locator('.ex-name', { hasText: /push-ups/i }) }).first()
+    const cardText = await card.innerText()
+    if (!/\d × \d+-\d+.*rest \d+:\d\d/.test(cardText)) throw new Error(`no strength target with rest on the card (got: ${cardText})`)
+    if (!(await card.locator('[data-effort="3"]').count())) throw new Error('no effort rating after a set')
+    await card.locator('[data-effort="4"]').click()
+    await frame.waitForSelector('.ex.coach [data-effort="4"].on', { timeout: 5000 })
+    const toastOf = async () => frame.locator('#toast-text').innerText()
+    await card.locator('[data-feel="easy"]').click()
+    await frame.waitForSelector('#toast.show', { timeout: 5000 })
+    if (!/easy/i.test(await toastOf())) throw new Error(`Too easy gave no plain answer (got: ${await toastOf()})`)
+    await frame.locator('.ex.coach', { has: frame.locator('.ex-name', { hasText: /push-ups/i }) }).first().locator('[data-feel="hard"]').click()
+    await frame.waitForFunction(() => /hard|light|lower/i.test(document.getElementById('toast-text')?.textContent || ''), null, { timeout: 5000 })
+    const st = await frame.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => /sport/i.test(k) && localStorage.getItem(k).includes('"exercises"')) || '') || '{}'))
+    if (!st.feel || !Object.keys(st.feel).length) throw new Error('the Too easy / Too hard taps were not saved')
+    if (!st.effort || !Object.keys(st.effort).length) throw new Error('the effort rating was not saved')
+    if (process.env.SPORT_SHOTS) {
+      await frame.evaluate(() => window.scrollTo(0, 0))
+      await pg.screenshot({ path: `${process.env.SPORT_SHOTS}/today-hero.png` })
+      await frame.locator('.ex.coach').first().scrollIntoViewIfNeeded()
+      await frame.locator('.ex.coach').first().screenshot({ path: `${process.env.SPORT_SHOTS}/card-buttons.png` })
+    }
   }, { retries: 1 })
   // BD1–BD18: Body → Metrics & Workouts in four tabs. The protein ring and a quick log, readiness setting
   // Sport Track's dose, sets per muscle, the weight trend, measurements, progress photos that stay on this

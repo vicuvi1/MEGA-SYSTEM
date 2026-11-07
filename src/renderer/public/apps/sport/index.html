@@ -144,6 +144,24 @@
     .hero-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
     .hero-title { font-size: 30px; font-weight: 750; letter-spacing: -0.03em; line-height: 1.15; }
     .hero-title span { color: var(--st-muted); font-weight: 600; }
+    .hero-level { display: grid; gap: 6px; padding: 0 0 16px; margin-bottom: 16px; border-bottom: 1px solid var(--st-line); }
+    .hero-level .hl-rank { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--st-muted); font-size: 13px; font-weight: 600; }
+    .hero-level .hl-rank b { color: var(--st-accent-text); font-size: 14px; letter-spacing: 0.02em; text-transform: uppercase; }
+    .hero-level .hl-main { font-size: clamp(26px, 6.2vw, 40px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; overflow-wrap: anywhere; }
+    .hero-level .hl-main span { color: var(--st-accent-text); }
+    .hero-level .hl-bar { height: 8px; border-radius: 99px; background: var(--st-line); overflow: hidden; }
+    .hero-level .hl-bar i { display: block; height: 100%; width: var(--p, 0%); border-radius: 99px; background: var(--st-accent-text); transition: width 0.5s var(--ease); }
+    .hero-level .hl-next { color: var(--st-muted); font-size: 13.5px; line-height: 1.4; }
+    .hero-level .hl-hard { color: var(--st-text); font-size: 13.5px; font-weight: 600; }
+    .fb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+    .fb-row .fb-lab { color: var(--st-muted); font-size: 12.5px; font-weight: 600; margin-right: 2px; }
+    .fb-row .btn.small { min-height: 34px; }
+    .fb-row .btn.on { border-color: var(--st-accent-text); color: var(--st-accent-text); }
+    .effort-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+    .effort-row .chip { min-width: 38px; min-height: 34px; }
+    .effort-row .chip.on { border-color: var(--st-accent-text); color: var(--st-accent-text); font-weight: 700; }
+    .ex-aim { color: var(--st-muted); font-size: 13px; font-weight: 600; }
+    @media (prefers-reduced-motion: reduce) { .hero-level .hl-bar i { transition: none; } }
     .hero-next { color: var(--st-muted); font-size: 15px; }
     .hero-next b { color: var(--st-text); font-weight: 650; }
     .hero-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
@@ -1185,6 +1203,8 @@
       <!-- ===================== TODAY ===================== -->
       <div class="today" data-panel="today">
         <section class="card hero" id="routine-section">
+          <!-- Your level, big: overall rank, the main lift and how close the next level is -->
+          <div class="hero-level" id="hero-level" aria-live="polite" hidden></div>
           <div class="hero-main">
             <div class="ring" id="hero-ring">
               <svg viewBox="0 0 140 140" aria-hidden="true"><circle class="ring-track" cx="70" cy="70" r="58"/><circle class="ring-fill" id="hero-ring-fill" cx="70" cy="70" r="58" stroke-dasharray="364.4" stroke-dashoffset="364.4"/></svg>
@@ -1311,7 +1331,7 @@
             <label>Time per workout<div class="seg" id="pg-minutes" role="radiogroup" aria-label="Minutes per workout"><button role="radio" data-min="20">20 min</button><button role="radio" data-min="30">30 min</button><button role="radio" data-min="45">45 min</button></div></label>
             <label>Workouts a week<div class="seg" id="pg-per" role="radiogroup" aria-label="Workouts a week"><button role="radio" data-per="3">3</button><button role="radio" data-per="4">4</button></div></label>
             <label>Cool-down<div class="seg" id="pg-cool" role="radiogroup" aria-label="Cool-down"><button role="radio" data-cool="0">No</button><button role="radio" data-cool="1">3 min</button></div></label>
-            <label>How you progress<div class="seg" id="pg-mode" role="radiogroup" aria-label="How you progress"><button role="radio" data-pmode="grow" title="Levels, next targets and a line after every log; harder moves unlock">Coach</button><button role="radio" data-pmode="endurance" title="Plain daily totals that go up 5% after 3 full days">Simple totals</button></div></label>
+            <label>How you progress<div class="seg" id="pg-mode" role="radiogroup" aria-label="How you progress"><button role="radio" data-pmode="strength" title="Heavier variations: 5-8 reps, 3-5 sets, rest 2-3 minutes">Strength</button><button role="radio" data-pmode="grow" title="More reps first, then a harder move unlocks">Build muscle</button><button role="radio" data-pmode="endurance" title="Plain daily totals that go up 5% after 3 full days">Simple totals</button></div></label>
           </div>
           <div class="pg-week" id="pg-week"></div>
         </section>
@@ -1559,7 +1579,8 @@
       <div class="input-group">
         <label for="setting-progress-mode">How you progress</label>
         <select id="setting-progress-mode">
-          <option value="grow">Coach: levels, next targets and a line after every log</option>
+          <option value="strength">Strength: heavier variations, 5-8 reps, long rests</option>
+          <option value="grow">Build muscle: more reps, then a harder move</option>
           <option value="endurance">Simple totals: daily totals that step up 5%</option>
         </select>
       </div>
@@ -2028,7 +2049,32 @@
       const step = (now) => { const k = Math.min(1, (now - t0) / 600); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))) + '%'; if (k < 1 && el.isConnected) requestAnimationFrame(step); };
       requestAnimationFrame(step);
     }
+    /** 150 -> "2:30" (the strength rest). */
+    const restText = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
+    /** The big level display: overall rank, the main lift (push-ups first), progress to the next level. */
+    function renderHeroLevel() {
+      const el = document.getElementById('hero-level');
+      if (!el) return;
+      if (!SK || !SK.heroLevel || !state.exercises.some((e) => e.active)) { el.hidden = true; return; }
+      let h = null;
+      try { h = SK.heroLevel(histInput()); } catch (e) { h = null; }
+      if (!h || !h.places.length) { el.hidden = true; return; }
+      const placed = h.places.filter((x) => x.level > 0);
+      const main = placed.find((x) => x.family === 'pushup') || placed.sort((a, b) => ((b.level - 1 + b.frac) / b.of) - ((a.level - 1 + a.frac) / a.of))[0] || null;
+      const rank = h.rank;
+      const rankLine = `<div class="hl-rank">Overall rank <b>${esc(rank.rank.name)}</b>${rank.next ? `<span>${rank.need} points to ${esc(rank.next.name)}</span>` : ''}</div>`;
+      if (!main) { el.innerHTML = `${rankLine}<div class="hl-main">Log a set to find your level</div>`; el.hidden = false; return; }
+      const hard = main.best && main.best.level >= main.level && main.lv && SK.moveById(main.lv.move) && SK.moveById(main.lv.move).diff >= 3;
+      const pct = Math.round(Math.max(0, Math.min(1, main.frac || 0)) * 100);
+      el.innerHTML = `${rankLine}
+        <div class="hl-main">${esc(main.track.name)}: <span>${esc(main.lv.name)}</span>, level ${main.level}</div>
+        ${hard ? `<div class="hl-hard">Your best set puts you on a hard variation: ${esc(main.lv.req)}.</div>` : ''}
+        <div class="hl-bar" role="progressbar" aria-label="Progress to the next level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="--p:${pct}%"></i></div>
+        <div class="hl-next">${main.next ? `${pct}% of the way to level ${main.next.n}, ${esc(main.next.name)}: ${esc(main.next.req)}` : 'You are at the top level of this track.'}</div>`;
+      el.hidden = false;
+    }
     function renderHero() {
+      renderHeroLevel();
       const active = todayList();
       let tot = 0, got = 0;
       const units = new Set();
@@ -2231,6 +2277,26 @@
     }
     let prevCount = {}; // each card's last number, so it rolls to the new one
     let cardsEntered = false; // the cards slide in once, when the page opens
+    /** Too easy / Too hard and the 1-5 effort rating for a card. */
+    function feelHTML(ex, c, showEffort) {
+      const today = localDay();
+      const mine = ((state.feel || {})[ex.id] || []).filter((x) => x.d === today && x.v !== 'ok').map((x) => x.v);
+      const eff = (state.effort || {})[today + ':' + ex.id];
+      return `<div class="ex-feel">
+        <div class="fb-row" role="group" aria-label="How did it feel?"><span class="fb-lab">How did it feel?</span>
+          <button class="btn small ${mine.includes('easy') ? 'on' : ''}" data-feel="easy" aria-pressed="${mine.includes('easy')}">Too easy</button>
+          <button class="btn small ${mine.includes('hard') ? 'on' : ''}" data-feel="hard" aria-pressed="${mine.includes('hard')}">Too hard</button></div>
+        ${showEffort ? `<div class="effort-row" role="group" aria-label="How hard was it, 1 easy to 5 all out"><span class="fb-lab">Effort</span>${[1, 2, 3, 4, 5].map((n) => `<button class="chip ${eff === n ? 'on' : ''}" data-effort="${n}" aria-pressed="${eff === n}" title="${['Very light', 'Light', 'Solid', 'Hard', 'All out'][n - 1]}">${n}</button>`).join('')}<span class="fb-lab">1 easy, 5 all out</span></div>` : ''}
+      </div>`;
+    }
+    /** What the coach will do next after a tap (plain words). */
+    function feelToast(ex, v) {
+      const c = SK.coachFor(coachInput({ exId: ex.id }));
+      const sg = c && c.signal;
+      if (!c || !sg || !sg.kind) return v === 'easy' ? 'Noted. Tap "Too easy" once more and the coach makes it harder.' : 'Noted. The coach will keep today a bit lighter.';
+      if (v === 'easy') return c.ready ? `Too easy twice. Next: ${c.ready.to.name}. Tap "Try the harder move".` : `Too easy twice. The coach adds reps or a set (${c.next.label} next time).`;
+      return sg.strong ? (c.stepBack && c.stepBack.to ? `Too hard twice. The coach suggests ${c.stepBack.to.name}.` : 'Too hard twice. The coach lowers your plan.') : `Noted. The coach lowers today to ${c.goal} per set.`;
+    }
     function renderTodayRoutine() {
       const container = document.getElementById('routine-list');
       const active = todayList();
@@ -2281,7 +2347,7 @@
           const rest = c.chips.slice(list.length);
           const logList = isDone || !rest.length ? [p.goal] : rest;
           const sugCls = c.status === 'ready' || c.status === 'top' ? 'ready' : c.status === 'stuck' || c.status === 'comeback' ? 'warn' : '';
-          const sugBtns = c.ready && !(state.notYet || {})[c.ready.to.id] ? `<span class="sug-btns"><button class="btn small primary" data-lu="add" data-ex="${esc(ex.id)}" data-to="${c.ready.to.id}">Try</button><button class="btn small ghost" data-lu="later" data-to="${c.ready.to.id}">Not yet</button></span>`
+          const sugBtns = c.ready && !(state.notYet || {})[c.ready.to.id] ? `<span class="sug-btns"><button class="btn small primary" data-lu="add" data-ex="${esc(ex.id)}" data-to="${c.ready.to.id}" title="Add ${esc(c.ready.to.name)} to today">${svgI('up')}Try the harder move: ${esc(c.ready.to.name)}</button><button class="btn small ghost" data-lu="later" data-to="${c.ready.to.id}">Not yet</button></span>`
             : c.stepBack && c.stepBack.to && (state.stepKeep || {})[ex.id] !== localDay() ? `<span class="sug-btns"><button class="btn small" data-lu="swap" data-ex="${esc(ex.id)}" data-to="${c.stepBack.to.id}">Step back</button><button class="btn small ghost" data-sb="keep">Keep going</button></span>` : '';
           const fb = fbOf[ex.id] && fbOf[ex.id].day === localDay() ? fbOf[ex.id] : null;
           const fbHTML = fb ? `<div class="ex-fb ${fb.tone}" role="status"><b>${esc(fb.text)}</b><span>${esc(fb.next)}</span>${fb.tip ? `<em>${svgI('warn')}${esc(fb.tip)}</em>` : ''}</div>` : '';
@@ -2291,7 +2357,7 @@
             <div class="ex-main">
               ${head}
               <div class="ex-tags">${lvTag}${dotsHTML(m.diff)}</div>
-              <div class="ex-target num"><span>Today</span><b>${sets}×${p.goal}${u}</b><em>${list.length}/${sets} sets${p.last ? (p.last.est ? ` · last about ${Math.round(p.last.reps.reduce((t, x) => t + x, 0) / p.last.reps.length)}${u} a set` : ` · last ${p.last.reps.join(' · ')}${u}`) : ''}</em></div>
+              <div class="ex-target num"><span>Today</span><b>${sets}×${p.goal}${u}</b><em>${list.length}/${sets} sets${strengthOn() ? ` · ${sets} × ${p.range.lo}-${p.range.hi}${u}, rest ${restText(p.rest)}` : ''}${p.last ? (p.last.est ? ` · last about ${Math.round(p.last.reps.reduce((t, x) => t + x, 0) / p.last.reps.length)}${u} a set` : ` · last ${p.last.reps.join(' · ')}${u}`) : ''}</em></div>
               <div class="ex-sets num" aria-label="Today's sets">${chipsDone}</div>
             </div>
             <div class="bar ${isDone ? 'good' : ''}"><i style="--p: ${from}" data-p="${fill}"></i></div>
@@ -2303,6 +2369,7 @@
               </div>
             </div>
             <div class="ex-sug ${sugCls}">${p.status === 'ready' ? svgI('up') : ''}<span>${esc(c.line)}</span>${sugBtns}</div>
+            ${strengthOn() || list.length ? feelHTML(ex, c, list.length > 0) : ''}
             <div class="ex-why" id="why-${esc(ex.id)}" hidden>${pl ? esc(pl.why) : ''}</div>
             ${fbHTML}
           </div>`;
@@ -2388,6 +2455,22 @@
       if (btn.dataset.why) {
         const w = document.getElementById('why-' + ex.id);
         if (w) { w.hidden = !w.hidden; btn.setAttribute('aria-expanded', String(!w.hidden)); }
+        return;
+      }
+      if (btn.dataset.feel && SK) {
+        state.feel = SK.addFeel(state.feel, ex.id, btn.dataset.feel, localDay());
+        saveState(state);
+        progKey = '';
+        showToast(feelToast(ex, btn.dataset.feel));
+        renderTodayRoutine();
+        return;
+      }
+      if (btn.dataset.effort && SK) {
+        state.effort = SK.setEffort(state.effort, localDay(), Number(btn.dataset.effort), ex.id);
+        saveState(state);
+        progKey = '';
+        showToast(`Effort ${btn.dataset.effort} saved. The coach uses it for your next target.`);
+        renderTodayRoutine();
         return;
       }
       if (btn.dataset.sb === 'keep') { state.stepKeep = { ...(state.stepKeep || {}), [ex.id]: localDay() }; saveState(state); renderTodayRoutine(); return; }
@@ -2903,7 +2986,7 @@
       audio.playClick();
       document.getElementById('setting-coach-persona').value = state.sportySettings.coach || 'beast';
       document.getElementById('setting-auto-progression').checked = !!state.sportySettings.autoProgression;
-      document.getElementById('setting-progress-mode').value = growMode() ? 'grow' : 'endurance';
+      document.getElementById('setting-progress-mode').value = coachMode();
       document.getElementById('setting-water-target').value = state.water.targetMl || 2700;
       document.getElementById('setting-glass-size').value = state.water.glassSizeMl || 250;
       document.getElementById('setting-body-weight').value = state.sportySettings.bodyWeight || 75;
@@ -2924,7 +3007,7 @@
       audio.playChime();
       state.sportySettings.coach = document.getElementById('setting-coach-persona').value;
       state.sportySettings.autoProgression = document.getElementById('setting-auto-progression').checked;
-      state.sportySettings.progressMode = document.getElementById('setting-progress-mode').value === 'endurance' ? 'endurance' : 'grow';
+      { const pm = document.getElementById('setting-progress-mode').value; state.sportySettings.progressMode = pm === 'endurance' ? 'endurance' : pm === 'grow' ? 'grow' : 'strength'; }
       syncGrowTargets();
       renderTodayRoutine();
       state.water.targetMl = parseInt(document.getElementById('setting-water-target').value, 10) || 2700;
@@ -3367,7 +3450,12 @@
 
     // ---- SP3: sets, Build muscle (double progression) or Endurance ----
     /** The coach (default) or "Simple totals" (the old daily totals with a 5% step-up). */
-    function growMode() { return !!SK && state.sportySettings.progressMode !== 'endurance'; }
+    function coachMode() { return SK && SK.modeOf ? SK.modeOf(state.sportySettings) : (state.sportySettings.progressMode === 'endurance' ? 'endurance' : state.sportySettings.progressMode === 'grow' ? 'grow' : 'strength'); }
+    /** Strength (default) and Build muscle both use the coach; only Simple totals does not. */
+    function growMode() { return !!SK && coachMode() !== 'endurance'; }
+    const strengthOn = () => coachMode() === 'strength';
+    /** What the coach reads, with the mode and your Too easy / Too hard taps and effort ratings. */
+    const coachInput = (extra) => ({ ...histInput(), mode: coachMode(), feel: state.feel || {}, effort: state.effort || {}, notYet: state.notYet || {}, deload: deloadOn(), ...extra });
     /** Today's sets of an exercise (never creates anything). */
     function todaySets(id) { const l = ((state.sets || {})[localDay()] || {})[id]; return Array.isArray(l) ? l : []; }
     /** What the coach reads: your exercises, the day totals (Telegram days too), the sets and today. */
@@ -3387,11 +3475,11 @@
       const key = localDay() + JSON.stringify((state.sets || {})).length + ':' + Object.keys(state.sets || {}).length + ':' + JSON.stringify((state.days || {})[localDay()] || {}).length + ':' + state.exercises.length + (deloadOn() ? 'd' : '');
       if (key !== progKey) { progCache = new Map(); progKey = key; }
       const hold = doseHold();
-      const k = ex.id + '|' + m.id + '|' + JSON.stringify(todaySets(ex.id).map((x) => x.reps)) + (hold ? '|hold' : '') + '|' + JSON.stringify(state.notYet || {});
+      const k = ex.id + '|' + m.id + '|' + JSON.stringify(todaySets(ex.id).map((x) => x.reps)) + (hold ? '|hold' : '') + '|' + JSON.stringify(state.notYet || {}) + '|' + coachMode() + '|' + JSON.stringify((state.feel || {})[ex.id] || []) + '|' + JSON.stringify(state.effort || {}).length;
       if (!progCache.has(k)) {
-        const c = SK.coachFor({ ...histInput(), exId: ex.id, notYet: state.notYet || {}, deload: deloadOn() });
+        const c = SK.coachFor(coachInput({ exId: ex.id }));
         if (!c) { progCache.set(k, null); return null; }
-        let p = { status: c.status === 'deload' ? 'building' : c.status, range: { lo: c.lo, hi: c.hi, sets: c.sets, unit: c.unit }, goal: c.goal, sets: c.sets, nextAt: `${c.sets}×${c.hi}${c.unit === 'sec' ? ' s' : ''}`, next: c.ready ? c.ready.to : null, prev: c.stepBack ? c.stepBack.to : null, hits: c.hits, need: 2, daysSince: null, last: c.last ? { day: c.last.day, reps: c.last.reps, est: c.last.est } : null, line: c.line, today: c.today, coach: c };
+        let p = { status: c.status === 'deload' ? 'building' : c.status, range: { lo: c.lo, hi: c.hi, sets: c.sets, unit: c.unit }, goal: c.goal, sets: c.sets, nextAt: `${c.sets}×${c.hi}${c.unit === 'sec' ? ' s' : ''}`, next: c.ready ? c.ready.to : null, prev: c.stepBack ? c.stepBack.to : null, hits: c.hits, need: 2, daysSince: null, last: c.last ? { day: c.last.day, reps: c.last.reps, est: c.last.est } : null, line: c.line, today: c.today, rest: c.rest, label: c.label, coach: c };
         // BD7: after a short night, repeat last time: no +1 rep, no level-up today.
         if (hold && p.last && (p.status === 'building' || p.status === 'ready')) {
           const lastMin = Math.min(...p.last.reps.slice(0, p.sets));
@@ -3437,7 +3525,7 @@
     /** The coach's line after a log: stored for the card (and workout mode). */
     function setFeedback(ex) {
       if (!SK || !SK.feedbackFor || !growOf(ex)) return null;
-      const f = SK.feedbackFor({ ...histInput(), exId: ex.id, notYet: state.notYet || {}, deload: deloadOn() });
+      const f = SK.feedbackFor(coachInput({ exId: ex.id }));
       if (f) fbOf[ex.id] = { ...f, day: localDay() };
       return f;
     }
@@ -3490,13 +3578,13 @@
       }
       if (changed) saveState(state);
     }
-    const restFor = (ex) => { const m = moveOfEx(ex); const it = planItemFor(ex); return it ? it.rest : !m ? 90 : m.unit === 'sec' || m.group === 'core' ? 60 : m.group === 'cardio' || m.group === 'mobility' ? 45 : 90; };
+    const restFor = (ex) => { const m = moveOfEx(ex); const it = planItemFor(ex); const gp = strengthOn() ? growOf(ex) : null; return gp && gp.rest ? gp.rest : it ? it.rest : !m ? 90 : m.unit === 'sec' || m.group === 'core' ? 60 : m.group === 'cardio' || m.group === 'mobility' ? 45 : 90; };
     const uS = (u) => (u === 'sec' ? ' s' : '');
 
     // ---- SP3: the week plan (sportProgram.ts) ----
     function planPrefs() {
       const ss = state.sportySettings;
-      return { minutes: [20, 30, 45].includes(ss.planMinutes) ? ss.planMinutes : 30, perWeek: ss.planPerWeek === 4 ? 4 : 3, coolDown: !!ss.planCool };
+      return { minutes: [20, 30, 45].includes(ss.planMinutes) ? ss.planMinutes : 30, perWeek: ss.planPerWeek === 4 ? 4 : 3, coolDown: !!ss.planCool, mode: coachMode() === 'endurance' ? 'grow' : coachMode() };
     }
     /** Today follows the plan (Build muscle and "Today shows: the plan"). */
     const planOn = () => growMode() && state.sportySettings.planFollow === true && !!SK;
@@ -3746,9 +3834,10 @@
       if (!b) return;
       const to = SK && SK.moveById(b.dataset.to);
       if (!to) return;
-      const gr = SK.rangeFor(to);
+      const gr = SK.rangeFor(to, coachMode() === 'endurance' ? 'grow' : coachMode());
       const s = suggestions.find((x) => x.to.id === to.id) || (growMode() ? { trySet: gr.lo, swapTarget: gr.sets * gr.lo } : { trySet: to.set, swapTarget: to.start });
       if (b.closest('#cel')) closeCelebrate();
+      if (SK && SK.resetFeel && b.dataset.ex && (b.dataset.lu === 'add' || b.dataset.lu === 'swap')) { state.feel = SK.resetFeel(state.feel, b.dataset.ex, localDay()); progKey = ''; }
       const old = state.exercises.find((x) => x.id === b.dataset.ex);
       const u = (n) => `${n} ${unitWord(to.unit, n)}`;
       if (b.dataset.lu === 'later') {
@@ -4325,10 +4414,21 @@
         <h2>Workout done</h2>
         <div class="hero-stats num"><div><b>${sets}</b><small>${sets === 1 ? 'set' : 'sets'}</small></div><div><b>${reps.toLocaleString()}</b><small>reps</small>${vsTxt}</div><div><b>${min}</b><small>minutes</small></div>${wm.records ? `<div><b>${wm.records}</b><small>${wm.records === 1 ? 'new record' : 'new records'}</small></div>` : ''}</div>
         ${wmResults(list)}
+        <div class="effort-row" id="wm-effort" role="group" aria-label="How hard was this workout, 1 easy to 5 all out"><span class="fb-lab">How hard was it?</span>${[1, 2, 3, 4, 5].map((n) => `<button class="chip ${((state.effort || {})[localDay()] === n) ? 'on' : ''}" data-wm-effort="${n}" title="${['Very light', 'Light', 'Solid', 'Hard', 'All out'][n - 1]}">${n}</button>`).join('')}<span class="fb-lab">1 easy, 5 all out</span></div>
         <button class="btn primary big" id="wm-finish-ok">${svgI('check')}Finish</button>`;
       document.getElementById('workout-mode').appendChild(box);
       postSummary('workout mode', min);
       document.getElementById('wm-finish-ok').addEventListener('click', closeWM);
+      document.getElementById('wm-effort').addEventListener('click', (ev) => {
+        const b = ev.target.closest('[data-wm-effort]');
+        if (!b || !SK) return;
+        state.effort = SK.setEffort(state.effort, localDay(), Number(b.dataset.wmEffort));
+        // The same rating counts for each exercise you did, so the coach can read it per move.
+        list.filter((e) => todaySets(e.id).length && !(state.effort || {})[localDay() + ':' + e.id]).forEach((e) => { state.effort = SK.setEffort(state.effort, localDay(), Number(b.dataset.wmEffort), e.id); });
+        saveState(state);
+        document.querySelectorAll('#wm-effort .chip').forEach((c) => c.classList.toggle('on', c === b));
+        showToast('Effort saved. The coach uses it for your next workout.');
+      });
       const banners = [];
       if (wm.records) banners.push({ t: wm.records > 1 ? `${wm.records} new records!` : 'New record!', k: 'rec' });
       if (wm.levels) banners.push({ t: 'Level up!', k: 'lv' });
@@ -4730,7 +4830,7 @@
       segOn('pg-minutes', 'data-min', pr.minutes);
       segOn('pg-per', 'data-per', pr.perWeek);
       segOn('pg-cool', 'data-cool', pr.coolDown ? 1 : 0);
-      segOn('pg-mode', 'data-pmode', growMode() ? 'grow' : 'endurance');
+      segOn('pg-mode', 'data-pmode', coachMode());
       let follow = document.getElementById('pg-follow');
       if (!follow) {
         const l = document.createElement('label');
@@ -4767,7 +4867,7 @@
             }).join('')}
             ${s.cooldown ? `<div class="pg-warm">${svgI('moon')}<span><b>Cool-down, 3 min:</b> child's pose, cobra, a slow lunge stretch.</span></div>` : ''}
           </div>
-          ${growMode() ? '' : '<p class="mus-note">This plan uses Build muscle. Switch "How you progress" above to follow it on Today.</p>'}`;
+          ${growMode() ? '' : '<p class="mus-note">This plan uses the coach. Switch "How you progress" above to follow it on Today.</p>'}`;
         figHydrate(box);
       }
       document.getElementById('pg-tips').innerHTML = SK.growTips(state.sportySettings.bodyWeight).map((t) => `<li>${esc(t)}</li>`).join('');
@@ -4781,7 +4881,7 @@
       else if (b.dataset.per) ss.planPerWeek = Number(b.dataset.per);
       else if (b.dataset.cool) ss.planCool = b.dataset.cool === '1';
       else if (b.dataset.follow) ss.planFollow = b.dataset.follow === '1';
-      else if (b.dataset.pmode) { ss.progressMode = b.dataset.pmode; syncGrowTargets(); showToast(b.dataset.pmode === 'grow' ? 'Coach on: next targets and levels.' : 'Simple totals: daily totals that step up 5%.'); }
+      else if (b.dataset.pmode) { ss.progressMode = b.dataset.pmode; syncGrowTargets(); showToast(b.dataset.pmode === 'strength' ? 'Strength: harder variations, fewer reps, longer rests.' : b.dataset.pmode === 'grow' ? 'Build muscle: more reps first, then a harder move.' : 'Simple totals: daily totals that step up 5%.'); }
       else return;
       audio.playClick();
       saveState(state);
@@ -4795,7 +4895,7 @@
       if (!b) return;
       if (b.dataset.planStart !== localDay()) { try { localStorage.setItem('st_train_' + localDay(), '1'); } catch (err) {} }
       // Starting the plan's session is choosing the plan: Today follows it from now on (switch back with My routine).
-      if (!growMode() || state.sportySettings.planFollow !== true) { state.sportySettings.progressMode = 'grow'; state.sportySettings.planFollow = true; syncGrowTargets(); saveState(state); renderPlan(); }
+      if (!growMode() || state.sportySettings.planFollow !== true) { if (!growMode()) state.sportySettings.progressMode = 'strength'; state.sportySettings.planFollow = true; syncGrowTargets(); saveState(state); renderPlan(); }
       renderTodayRoutine();
       openWM(undefined, todaysPlanIds());
     });
