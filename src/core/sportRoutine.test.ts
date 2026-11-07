@@ -15,7 +15,7 @@ describe('migrateRoutine', () => {
   it('turns the plan off and gives back the old exercises and targets', () => {
     const s = migrateRoutine(base())
     expect(s.sportySettings.planFollow).toBe(false)
-    expect(s.sportySettings.progressMode).toBe('grow') // the coach is the default now
+    expect(s.sportySettings.progressMode).toBe('strength') // strength is the default now (nothing was saved)
     expect(s.exercises.filter((e) => e.active).map((e) => e.name)).toEqual(['Push-ups', 'Sit-ups', 'press'])
     expect(s.exercises.map((e) => e.target)).toEqual([123, 60, 50, 30])
     expect(s.exercises[0].endTarget).toBeUndefined()
@@ -34,9 +34,20 @@ describe('migrateRoutine', () => {
     b.exercises[0].target = 123
     const s = migrateRoutine(b)
     expect(s.sportySettings.progressMode).toBe('grow')
-    expect(s.sportySettings.routineV).toBe(3)
+    expect(s.sportySettings.routineV).toBe(4)
     expect(s.exercises.map((e) => e.target)).toEqual([123, 60, 50, 30].map((_, i) => b.exercises[i].target))
     expect(s.exercises.filter((e) => e.active).length).toBe(3)
+  })
+  it('keeps a saved choice and gives strength to an unset one', () => {
+    const grow = base()
+    grow.sportySettings = { routineV: 3, progressMode: 'grow' }
+    expect(migrateRoutine(grow).sportySettings.progressMode).toBe('grow')
+    const endurance = base()
+    endurance.sportySettings = { routineV: 4, progressMode: 'endurance' }
+    expect(migrateRoutine(endurance).sportySettings.progressMode).toBe('endurance')
+    const unset = base()
+    unset.sportySettings = { routineV: 3 }
+    expect(migrateRoutine(unset).sportySettings.progressMode).toBe('strength')
   })
   it('keeps a plan chosen on purpose', () => {
     const b = base()
