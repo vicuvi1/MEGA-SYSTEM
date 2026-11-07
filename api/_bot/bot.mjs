@@ -6638,6 +6638,42 @@ function planStartAt(now, bufferMin = 5) {
 	const m = toMin$7(now);
 	return fromMin$1(Math.min(1435, Math.ceil(m / 5) * 5 + bufferMin));
 }
+/** At least this share of the free time stays unplanned, unless My life says otherwise. */
+var FREE_SHARE = .15;
+var MEAL_WINDOW = {
+	from: "12:00",
+	to: "14:00",
+	minutes: 30
+};
+var cleanShare = (x) => typeof x === "number" && Number.isFinite(x) ? Math.max(0, Math.min(.5, x)) : FREE_SHARE;
+/**
+* Keeps a lunch break free: the free window that runs through lunchtime loses
+* `minutes` there (12:30 when it can), unless something already leaves that
+* much free time in the window (a gap between events). Mutates `wins`.
+*/
+function keepMeal(wins, meal) {
+	const a = toMin$7(meal.from);
+	const b = toMin$7(meal.to);
+	const inside = wins.filter((w) => w.e > a && w.s < b);
+	if (!inside.length) return null;
+	const w = inside.find((x) => !x.light && Math.min(x.e, b) - Math.max(x.s, a) >= meal.minutes);
+	if (!w) return null;
+	const start = Math.max(w.s, Math.min(toMin$7("12:30"), Math.min(w.e, b) - meal.minutes));
+	const parts = [];
+	if (start - w.s >= 20) parts.push({
+		...w,
+		e: start
+	});
+	if (w.e - (start + meal.minutes) >= 20) parts.push({
+		...w,
+		s: start + meal.minutes
+	});
+	wins.splice(wins.indexOf(w), 1, ...parts);
+	return {
+		start,
+		minutes: meal.minutes
+	};
+}
 var QUICK = /\b(check|email|e-mail|mail|reply|answer|call|text|message|pay|buy|order|send|book|sign|print|upload|submit|confirm|cancel|renew|schedule|remind|ask|tidy|water)\b/i;
 var LONG = /\b(study|learn|revise|exam|homework|project|write|essay|report|thesis|lab|code|build|refactor|implement|course|lecture|practice|ctf|research|prepare|read)\b/i;
 var MEDIUM = /\b(watch|video|youtube|review|fix|clean|plan|problem|cv|resume|apply)\b/i;
@@ -6718,18 +6754,20 @@ function place(wins, c, best, minMin, avoid = []) {
 	const take = (w, start, minutes) => {
 		const i = wins.indexOf(w);
 		const parts = [];
+		const rest = c.kind !== "quick" && minutes >= 60 ? 15 : 10;
 		if (start - 10 - w.s >= 20) parts.push({
 			...w,
 			e: start - 10
 		});
-		if (w.e - (start + minutes + 10) >= 20) parts.push({
+		if (w.e - (start + minutes + rest) >= 20) parts.push({
 			...w,
-			s: start + minutes + 10
+			s: start + minutes + rest
 		});
 		wins.splice(i, 1, ...parts);
 		return {
 			start,
-			minutes
+			minutes,
+			...w.light ? { light: true } : {}
 		};
 	};
 	if (c.kind === "quick") {
@@ -6874,8 +6912,11 @@ function packDay(p) {
 	})() : null;
 	const wins = withWork(freeWindows(p.events, p.today, after, endBy), p.work);
 	const freeMin = wins.filter((w) => !w.light).reduce((s, w) => s + w.e - w.s, 0);
+	const meal = p.meal === null ? null : keepMeal(wins, p.meal ?? MEAL_WINDOW);
+	const share = cleanShare(p.freeShare);
 	const maxBlocks = short ? 5 : 8;
-	const budget = short ? 240 : 390;
+	const budget = Math.min(short ? 240 : 390, Math.floor((freeMin * (1 - share) - (meal?.minutes ?? 0)) / 5) * 5);
+	let trainMin = 0;
 	const firsts = [
 		...chunks,
 		...pinnedChunks,
@@ -6886,14 +6927,15 @@ function packDay(p) {
 	const placed = [];
 	let used = 0;
 	const tryPlace = (c) => {
-		if (placed.length >= maxBlocks || budget - used < 25) return false;
-		const want = {
+		const inWork = c.kind === "quick" && wins.some((w) => w.light && w.e - w.s >= c.minutes);
+		if (placed.length >= maxBlocks || !inWork && budget - used - trainMin < 25) return false;
+		const want = inWork ? c : {
 			...c,
-			minutes: Math.min(c.minutes, budget - used)
+			minutes: Math.min(c.minutes, budget - used - trainMin)
 		};
 		const at = place(wins, want, p.best ?? [], 25, p.avoid ?? []);
 		if (!at) return false;
-		used += at.minutes;
+		if (!at.light) used += at.minutes;
 		placed.push({
 			title: c.title.slice(0, 80),
 			start: fromMin$1(at.start),
@@ -6925,6 +6967,7 @@ function packDay(p) {
 			what: slotTitle(slot.minutes, { easy: short || p.train.easy }),
 			minutes: slot.minutes
 		};
+		trainMin = slot.minutes;
 		const w = wins.find((x) => !x.light && x.s <= slot.start && x.e >= slot.start + slot.minutes);
 		wins.splice(wins.indexOf(w), 1, ...[{
 			...w,
@@ -6947,6 +6990,7 @@ function packDay(p) {
 				time: fromMin$1(s),
 				what: short ? "easy: Workout · 30 min" : "Workout · 45 min"
 			};
+			trainMin = 45;
 			const i = wins.indexOf(w);
 			wins.splice(i, 1, ...[{
 				...w,
@@ -7012,7 +7056,7 @@ function packDay(p) {
 	const blocks = placed.map(({ chunk: _c, ...b }) => b);
 	const inBlock = /* @__PURE__ */ new Map();
 	for (const b of placed) for (const t of b.chunk.tasks) inBlock.set(key$2(t.title), b.start);
-	const full = used >= budget - 25 ? `today already has ${fmtMin(used)} of focus` : placed.length >= maxBlocks ? `today already has ${placed.length} blocks` : "no free time left between your events";
+	const full = used + trainMin >= budget - 25 ? `today already has ${fmtMin(used)} of focus and some free time is kept` : placed.length >= maxBlocks ? `today already has ${placed.length} blocks` : "no free time left between your events";
 	const also = [];
 	const deferred = [];
 	for (const t of tasks) {
@@ -7053,7 +7097,7 @@ function packDay(p) {
 	const focus = blocks.reduce((s, b) => s + b.minutes, 0);
 	const total = tasks.length;
 	const classes = p.events.filter((e) => !e.allDay).length;
-	const why = !blocks.length ? freeMin < 25 ? "No free time between your events today, so the must-dos fit where they can." : "Nothing to plan today: pick one thing that matters." : `${total} task${total === 1 ? "" : "s"}${classes ? ` and ${classes} event${classes === 1 ? "" : "s"}` : ""}, ${hm$8(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? "" : "s"} (${fmtMin(focus)})${quick.length ? ", small tasks batched" : ""}${short ? `. Short night (${hm$8(p.sleptMin)}), so shorter blocks and an earlier end` : ""}.`;
+	const why = !blocks.length ? freeMin < 25 ? "No free time between your events today, so the must-dos fit where they can." : "Nothing to plan today: pick one thing that matters." : `${total} task${total === 1 ? "" : "s"}${classes ? ` and ${classes} event${classes === 1 ? "" : "s"}` : ""}, ${hm$8(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? "" : "s"} (${fmtMin(focus)})${quick.length ? ", small tasks batched" : ""}${meal ? `, lunch at ${fromMin$1(meal.start)} kept free` : ""}, ${fmtMin(Math.max(0, freeMin - focus - trainMin))} left free${short ? `. Short night (${hm$8(p.sleptMin)}), so shorter blocks and an earlier end` : ""}.`;
 	const headline = mustdos.length ? `${mustdos.length} must-do${mustdos.length === 1 ? "" : "s"} · ${blocks.length} block${blocks.length === 1 ? "" : "s"} · ${fmtMin(focus)} focus${also.length ? ` · ${also.length} more on the list` : ""}` : "A light day: pick one thing that matters";
 	return {
 		day: p.today,
@@ -7079,8 +7123,14 @@ function packDay(p) {
 * (estimates, priority, ids), and the packer's plan when the model gave too
 * little (far fewer blocks or far less focus than the day has room for).
 */
-function checkModelPlan(model, packed, tasks, work) {
+function checkModelPlan(model, packed, tasks, work, freeShare) {
 	if (workClash(model.blocks, work)) return {
+		...packed,
+		headline: packed.headline
+	};
+	const freeTotal = (packed.free ?? []).reduce((s, w) => s + toMin$7(w.end) - toMin$7(w.start), 0);
+	const modelMin = model.blocks.reduce((s, b) => s + b.minutes, 0) + (model.training ? model.training.minutes ?? 45 : 0);
+	if (freeTotal >= 60 && modelMin > freeTotal * (1 - cleanShare(freeShare)) + 15) return {
 		...packed,
 		headline: packed.headline
 	};
@@ -13932,6 +13982,7 @@ function cleanLifeFit(raw) {
 		push,
 		areas: cleanAreas(o.areas, push),
 		pushes: cleanPushPrefs(o.pushes),
+		...typeof o.freeShare === "number" && Number.isFinite(o.freeShare) ? { freeShare: Math.max(0, Math.min(.5, Math.round(o.freeShare * 20) / 20)) } : {},
 		tonight: t && typeof t.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.day) && (t.mode === "short" || t.mode === "off" || t.mode === "normal") ? {
 			day: t.day,
 			mode: t.mode
@@ -42345,6 +42396,91 @@ function undoTool(svc, op) {
 	untapHabit(svc, op.id);
 	return "↩ Habit unticked";
 }
+// src/core/planLook.ts
+/**
+* Google's palette: 1 Lavender, 2 Sage, 3 Grape, 4 Flamingo, 5 Banana,
+* 6 Tangerine, 7 Peacock, 8 Graphite, 9 Blueberry, 10 Basil, 11 Tomato.
+*/
+var LOOKS = {
+	deep: {
+		kind: "deep",
+		emoji: "🎯",
+		colorId: "9"
+	},
+	study: {
+		kind: "study",
+		emoji: "📚",
+		colorId: "7"
+	},
+	chores: {
+		kind: "chores",
+		emoji: "🧹",
+		colorId: "5"
+	},
+	sport: {
+		kind: "sport",
+		emoji: "💪",
+		colorId: "10"
+	},
+	break: {
+		kind: "break",
+		emoji: "☕",
+		colorId: "2"
+	},
+	meal: {
+		kind: "meal",
+		emoji: "🍽️",
+		colorId: "6"
+	}
+};
+var SPORT = /\b(workout|training|train|gym|run|running|jog|sport|stretch|yoga|swim|bike|cycling|push-?ups?|squats?|lift)\b/i;
+var BREAK = /\b(break|pause|rest|walk|nap|breather|recharge)\b/i;
+var MEAL$1 = /\b(lunch|dinner|breakfast|brunch|meal|eat|snack|cook)\b/i;
+var CHORES = /\b(quick tasks?|chores?|clean|tidy|laundry|dishes|errands?|shopping|groceries|admin|emails?|inbox|bills?|pay)\b/i;
+var STUDY = /\b(study|learn|revise|revision|exam|homework|lecture|course|chapter|flashcards?|read|reading|notes|practice|essay|thesis)\b/i;
+/** A block's look from its plan kind and its title. */
+function blockLook(title, kind, train = false) {
+	const t = title.replace(LEAD$1, "");
+	if (train || SPORT.test(t)) return LOOKS.sport;
+	if (MEAL$1.test(t)) return LOOKS.meal;
+	if (BREAK.test(t)) return LOOKS.break;
+	if (kind === "quick" || CHORES.test(t)) return LOOKS.chores;
+	if (kind === "goal" || STUDY.test(t)) return LOOKS.study;
+	return LOOKS.deep;
+}
+/** Any emoji (with its variation mark) and the spaces after it at the start of a title. */
+var LEAD$1 = /^(?:\p{Extended_Pictographic}️?‍?)+\s*/u;
+/** The event's title: the kind's emoji in front (a title that already starts with an emoji keeps it). */
+function lookTitle(title, kind, train = false) {
+	const t = title.trim();
+	if (LEAD$1.test(t)) return t;
+	return `${blockLook(t, kind, train).emoji} ${t}`;
+}
+/** The block's own title from an event title (the emoji the app put in front taken off). */
+function plainTitle(title) {
+	return title.replace(LEAD$1, "").trim();
+}
+/** Same block title, with or without the emoji in front. */
+var sameTitle = (a, b) => plainTitle(a) === plainTitle(b);
+function fnv(s, seed) {
+	let h = seed >>> 0;
+	for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+	return h >>> 0;
+}
+/**
+* The Google event id for a block: the same day and block always give the
+* same id. Google takes ids of 5–1024 characters from a–v and 0–9, so this is
+* "ls", the day's digits and 16 hex digits.
+*/
+function planEventId(day, blockId) {
+	const k = `${day}|${blockId}`;
+	const a = fnv(k, 2166136261).toString(16).padStart(8, "0");
+	const b = fnv(k, 2654435769).toString(16).padStart(8, "0");
+	return `ls${day.replace(/\D/g, "")}${a}${b}`;
+}
+// src/core/planSync.ts
+/** The event's notes: where it came from and its tasks. */
+var eventNotes = (b) => ["Planned with your coach in Life System", ...b.tasks?.length ? ["", ...b.tasks.map((t) => `- ${t}`)] : []].join("\n");
 var BREAK_MIN = 10;
 var MEAL = {
 	from: toMin$7("11:30"),
@@ -42467,6 +42603,16 @@ function checkPlan(plan, ctx) {
 		ids: [],
 		fixable: false
 	});
+	else if (free >= 60) {
+		const share = typeof ctx.freeShare === "number" && Number.isFinite(ctx.freeShare) ? Math.max(0, Math.min(.5, ctx.freeShare)) : FREE_SHARE;
+		const left = free - planned;
+		if (share > 0 && left < free * share - 5) out.push({
+			code: "nofree",
+			text: left < 15 ? "No free time left" : `Only ${Math.round(left / 5) * 5} min free`,
+			ids: [],
+			fixable: false
+		});
+	}
 	return out;
 }
 /**
@@ -42957,7 +43103,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				know,
 				promised,
 				bed,
-				train: trainSlotInput(db)
+				train: trainSlotInput(db),
+				freeShare: fit.freeShare
 			};
 		});
 		const prevPlan = base.st.briefing?.plan.day === base.today ? base.st.briefing.plan : null;
@@ -43018,7 +43165,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				ready: false
 			}, prefDuration(base.know, t.content)),
 			avoid: base.learned?.skip ?? [],
-			train: base.train
+			train: base.train,
+			freeShare: base.freeShare
 		});
 		const fallback = !mode ? packed : mode.kind === "sick" ? relinkAlso({
 			...packed,
@@ -43118,7 +43266,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				kind: "plan"
 			}), 35e3);
 			const json = String(raw).match(/\{[\s\S]*\}/)?.[0];
-			plan = checkModelPlan(cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now)), fallback, planTasks, base.work);
+			plan = checkModelPlan(cleanProposal(json ? JSON.parse(json) : null, fallback, events, hmNow(now)), fallback, planTasks, base.work, base.freeShare);
 		} catch {
 			plan = fallback;
 		}
@@ -43155,7 +43303,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		plan = relinkAlso(fixPlan(plan, {
 			now: hmNow(/* @__PURE__ */ new Date()),
 			events: calEvents.filter((e) => !keptIds.has(e.id)),
-			bedtime: base.bed
+			bedtime: base.bed,
+			freeShare: base.freeShare
 		}).plan);
 		const made = await mirror.write((db) => {
 			const st = load(db, plan.day);
@@ -43229,7 +43378,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		};
 		const events = calendar ? await calendar.events(...dayBounds()).catch(() => []) : [];
 		const p = b0.plan;
-		const mine = (e) => p.blocks.some((b) => b.sync?.eventId === e.id) || b0.status === "approved" && p.blocks.some((b) => e.title === b.title && localDay$1(e.start) === p.day && hmOf(e.start) === b.start);
+		const mine = (e) => p.blocks.some((b) => b.sync?.eventId === e.id) || b0.status === "approved" && p.blocks.some((b) => sameTitle(e.title, b.title) && localDay$1(e.start) === p.day && hmOf(e.start) === b.start);
 		const r = shiftPlan(p, {
 			now: hmNow(now),
 			events: events.filter((e) => !mine(e)),
@@ -43246,7 +43395,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			let moved = 0;
 			for (const m of r.moves) {
 				const mem = p.blocks.find((b) => b.title === m.title && b.start === m.from)?.sync;
-				const e = mem?.eventId && events.find((x) => x.id === mem.eventId) || events.find((x) => x.title === m.title && localDay$1(x.start) === p.day && hmOf(x.start) === m.from);
+				const e = mem?.eventId && events.find((x) => x.id === mem.eventId) || events.find((x) => sameTitle(x.title, m.title) && localDay$1(x.start) === p.day && hmOf(x.start) === m.from);
 				if (!e) continue;
 				const start = /* @__PURE__ */ new Date(`${p.day}T${m.to}:00`);
 				if (await calendar.move(e.calendarId, e.id, start.toISOString(), new Date(start.getTime() + m.minutes * 6e4).toISOString()).then(() => true, () => false)) {
@@ -43373,7 +43522,11 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			plan
 		};
 	}
-	/** Approved: blocks and training into the calendar, must-dos on Today (starred in Todoist). */
+	/**
+	* Approved: blocks and training into the calendar, must-dos on Today (starred in Todoist).
+	* Safe to run twice (or at the same moment as the plan editor): each block's event has the
+	* block's own id (planEventId), so a second write updates that event instead of making another.
+	*/
 	async function approve() {
 		const cur = await mirror.read((db) => load(db, services.services(db).wallet.today()).briefing);
 		if (!cur) return {
@@ -43385,7 +43538,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			done: ["Already approved"],
 			plan: cur.plan
 		};
-		const p = cur.plan;
+		const p = ensureIds(cur.plan);
 		const done = [];
 		await mirror.write((db) => {
 			const st = load(db, p.day);
@@ -43393,36 +43546,39 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				...st,
 				briefing: {
 					...st.briefing,
-					status: "approved"
+					status: "approved",
+					plan: ensureIds(st.briefing.plan)
 				}
 			});
 			history(db, p.day, { plan: "approved" });
 		});
 		if (calendar) {
 			let made = 0;
-			const items = [...p.blocks.map((b, i) => ({
-				b,
-				key: b.id ?? `#${i}`
-			})).filter((x) => !x.b.sync?.eventId).map(({ b, key }) => ({
-				key,
-				title: b.title,
+			const trainMin = (t) => t.minutes ?? (Number(/(\d+)\s*min/.exec(t.what)?.[1]) || 45);
+			const items = [...p.blocks.filter((b) => !b.sync?.eventId).map((b) => ({
+				key: b.id,
+				title: lookTitle(b.title, b.kind),
 				start: b.start,
 				minutes: b.minutes,
-				tasks: b.tasks
+				tasks: b.tasks,
+				colorId: blockLook(b.title, b.kind).colorId
 			})), ...p.training && !p.training.sync?.eventId ? [{
-				key: "train",
-				title: `💪 ${p.training.what}`,
+				key: TRAIN_ID,
+				title: lookTitle(p.training.what, null, true),
 				start: p.training.time,
-				minutes: p.training.minutes ?? (Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45)
+				minutes: trainMin(p.training),
+				colorId: blockLook(p.training.what, null, true).colorId
 			}] : []].filter((b) => (/* @__PURE__ */ new Date(`${p.day}T${b.start}:00`)).getTime() + b.minutes * 6e4 > Date.now());
 			const made_ = {};
 			for (const b of items) {
 				const start = /* @__PURE__ */ new Date(`${p.day}T${b.start}:00`);
 				const ev = await calendar.create({
+					id: planEventId(p.day, b.key),
+					colorId: b.colorId,
 					title: b.title,
 					start: start.toISOString(),
 					end: new Date(start.getTime() + b.minutes * 6e4).toISOString(),
-					description: ["Planned with your coach in Life System", ...b.tasks?.length ? ["", ...b.tasks.map((t) => `- ${t}`)] : []].join("\n")
+					description: eventNotes(b)
 				}).catch(() => null);
 				if (ev) {
 					made++;
@@ -43435,9 +43591,9 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			if (Object.keys(made_).length) await mirror.write((db) => {
 				const st = load(db, p.day);
 				if (!st.briefing) return;
-				const pl = st.briefing.plan;
-				const blocks = pl.blocks.map((b, i) => {
-					const m = made_[b.id ?? `#${i}`];
+				const pl = ensureIds(st.briefing.plan);
+				const blocks = pl.blocks.map((b) => {
+					const m = made_[b.id];
 					return m && !b.sync?.eventId ? {
 						...b,
 						sync: {
@@ -43451,13 +43607,13 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 					} : b;
 				});
 				const t = pl.training;
-				const training = t && made_.train && !t.sync?.eventId ? {
+				const training = t && made_["train"] && !t.sync?.eventId ? {
 					...t,
 					sync: {
-						eventId: made_.train.id,
-						calendarId: made_.train.calendarId,
+						eventId: made_[TRAIN_ID].id,
+						calendarId: made_[TRAIN_ID].calendarId,
 						start: t.time,
-						minutes: t.minutes ?? (Number(/(\d+)\s*min/.exec(t.what)?.[1]) || 45),
+						minutes: trainMin(t),
 						title: t.what
 					}
 				} : t;
@@ -50372,7 +50528,11 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 		});
 		if (res.status === 204) return null;
 		const j = await res.json().catch(() => ({}));
-		if (!res.ok) throw new Error(`Google Calendar ${res.status}: ${j?.error?.message ?? "request failed"}`);
+		if (!res.ok) {
+			const err = /* @__PURE__ */ new Error(`Google Calendar ${res.status}: ${j?.error?.message ?? "request failed"}`);
+			err.status = res.status;
+			throw err;
+		}
 		return j;
 	};
 	let cals = null;
@@ -50423,6 +50583,11 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 			return (await Promise.all(list.map((c) => call(`/calendars/${encodeURIComponent(c.id)}/events?singleEvents=true&orderBy=startTime&maxResults=250&timeMin=${encodeURIComponent(fromIso)}&timeMax=${encodeURIComponent(toIso)}`).then((j) => (j.items ?? []).filter((e) => e.status !== "cancelled").map((e) => toEvent(e, c))).catch(() => [])))).flat().sort((a, b) => a.start.localeCompare(b.start));
 		},
 		/** A new event (in your chosen calendar), marked as made by Life System. */
+		/**
+		* With `id` (a plan block's own id, see core/planLook planEventId) the write is
+		* safe to repeat: when that event exists already (made a moment ago by another
+		* write, or deleted earlier) it is updated and brought back, never made twice.
+		*/
 		async create(e) {
 			const calId = e.calendarId || await target();
 			const allDay = /^\d{4}-\d{2}-\d{2}$/.test(e.start);
@@ -50449,10 +50614,26 @@ function createCalendarApi(env, stored, fetchImpl = fetch) {
 				...e.recurrence?.length ? { recurrence: e.recurrence.filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2) } : {},
 				extendedProperties: { private: { lifeSystem: "1" } }
 			};
-			const j = await call(`/calendars/${encodeURIComponent(calId)}/events`, {
-				method: "POST",
-				body: JSON.stringify(body)
-			});
+			const id = e.id && /^[a-v0-9]{5,1024}$/.test(e.id) ? e.id : null;
+			let j;
+			try {
+				j = await call(`/calendars/${encodeURIComponent(calId)}/events`, {
+					method: "POST",
+					body: JSON.stringify(id ? {
+						...body,
+						id
+					} : body)
+				});
+			} catch (err) {
+				if (!id || err?.status !== 409) throw err;
+				j = await call(`/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(id)}`, {
+					method: "PATCH",
+					body: JSON.stringify({
+						...body,
+						status: "confirmed"
+					})
+				});
+			}
 			const cal = (await calendars()).find((c) => c.id === calId) ?? {
 				id: calId,
 				name: "",

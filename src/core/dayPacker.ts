@@ -67,6 +67,41 @@ export interface PackInputs {
    * work window or a class. Without it, the old evening slot.
    */
   train?: { minutes: number; easy?: boolean } | null
+  /**
+   * The share of the free time that stays unplanned (default 0.15, My life):
+   * the plan never fills the day to the minute.
+   */
+  freeShare?: number
+  /** A lunch break kept free (default 30 min between 12:00 and 14:00; null: none). */
+  meal?: { from: string; to: string; minutes: number } | null
+}
+
+/** At least this share of the free time stays unplanned, unless My life says otherwise. */
+export const FREE_SHARE = 0.15
+export const MEAL_WINDOW = { from: '12:00', to: '14:00', minutes: 30 }
+/** The break after a long deep block (60 min or more); shorter blocks get the usual 10. */
+export const LONG_BREAK = 15
+const cleanShare = (x: number | undefined) => (typeof x === 'number' && Number.isFinite(x) ? Math.max(0, Math.min(0.5, x)) : FREE_SHARE)
+
+/**
+ * Keeps a lunch break free: the free window that runs through lunchtime loses
+ * `minutes` there (12:30 when it can), unless something already leaves that
+ * much free time in the window (a gap between events). Mutates `wins`.
+ */
+export function keepMeal(wins: Win[], meal: { from: string; to: string; minutes: number }): { start: number; minutes: number } | null {
+  const a = toMin(meal.from)
+  const b = toMin(meal.to)
+  // Lunch is already free when part of the window is not in any free window (an event-free gap wouldn't count).
+  const inside = wins.filter((w) => w.e > a && w.s < b)
+  if (!inside.length) return null
+  const w = inside.find((x) => !x.light && Math.min(x.e, b) - Math.max(x.s, a) >= meal.minutes)
+  if (!w) return null
+  const start = Math.max(w.s, Math.min(toMin('12:30'), Math.min(w.e, b) - meal.minutes))
+  const parts: Win[] = []
+  if (start - w.s >= 20) parts.push({ ...w, e: start })
+  if (w.e - (start + meal.minutes) >= 20) parts.push({ ...w, s: start + meal.minutes })
+  wins.splice(wins.indexOf(w), 1, ...parts)
+  return { start, minutes: meal.minutes }
 }
 
 const QUICK = /\b(check|email|e-mail|mail|reply|answer|call|text|message|pay|buy|order|send|book|sign|print|upload|submit|confirm|cancel|renew|schedule|remind|ask|tidy|water)\b/i
@@ -159,15 +194,17 @@ interface Chunk {
 }
 
 /** Puts one chunk in a window (best hours first for hard work, the afternoon for quick tasks). Mutates `wins`. */
-function place(wins: Win[], c: Chunk, best: number[], minMin: number, avoid: number[] = []): { start: number; minutes: number } | null {
+function place(wins: Win[], c: Chunk, best: number[], minMin: number, avoid: number[] = []): { start: number; minutes: number; light?: boolean } | null {
   const fits = (w: Win, need: number) => w.e - w.s >= need
   const take = (w: Win, start: number, minutes: number) => {
     const i = wins.indexOf(w)
     const parts: Win[] = []
+    // A real break after each block: 15 minutes after an hour or more of deep work, else 10.
+    const rest = c.kind !== 'quick' && minutes >= 60 ? LONG_BREAK : 10
     if (start - 10 - w.s >= 20) parts.push({ ...w, e: start - 10 })
-    if (w.e - (start + minutes + 10) >= 20) parts.push({ ...w, s: start + minutes + 10 })
+    if (w.e - (start + minutes + rest) >= 20) parts.push({ ...w, s: start + minutes + rest })
     wins.splice(i, 1, ...parts)
-    return { start, minutes }
+    return { start, minutes, ...(w.light ? { light: true } : {}) }
   }
   if (c.kind === 'quick') {
     // Quick wins fit the work window (light time), so the free day stays for deep work.
@@ -287,8 +324,12 @@ export function packDay(p: PackInputs): DayProposal {
   // Place them: goals and must-dos, the urgent work, the quick batch, training, then the rest until the day is full.
   const wins = withWork(freeWindows(p.events, p.today, after, endBy), p.work)
   const freeMin = wins.filter((w) => !w.light).reduce((s, w) => s + w.e - w.s, 0)
+  // Lunch stays free, and a share of the free time stays unplanned (never a day packed to the minute).
+  const meal = p.meal === null ? null : keepMeal(wins, p.meal ?? MEAL_WINDOW)
+  const share = cleanShare(p.freeShare)
   const maxBlocks = short ? 5 : 8
-  const budget = short ? 240 : 390
+  const budget = Math.min(short ? 240 : 390, Math.floor((freeMin * (1 - share) - (meal?.minutes ?? 0)) / 5) * 5)
+  let trainMin = 0
   const firsts = [...chunks, ...pinnedChunks, ...groupChunks.filter((c) => c.hard)]
   const rest = groupChunks.filter((c) => !c.hard)
   // A short night: shorter blocks (75%, at least 25 min).
@@ -296,11 +337,14 @@ export function packDay(p: PackInputs): DayProposal {
   const placed: (PlanBlock & { chunk: Chunk })[] = []
   let used = 0
   const tryPlace = (c: Chunk): boolean => {
-    if (placed.length >= maxBlocks || budget - used < 25) return false
-    const want = { ...c, minutes: Math.min(c.minutes, budget - used) }
+    // Quick tasks that fit the work window don't take free time (see below).
+    const inWork = c.kind === 'quick' && wins.some((w) => w.light && w.e - w.s >= c.minutes)
+    if (placed.length >= maxBlocks || (!inWork && budget - used - trainMin < 25)) return false
+    const want = inWork ? c : { ...c, minutes: Math.min(c.minutes, budget - used - trainMin) }
     const at = place(wins, want, p.best ?? [], 25, p.avoid ?? [])
     if (!at) return false
-    used += at.minutes
+    // Quick tasks in the work window use time that was never free: they don't count against the free time.
+    if (!at.light) used += at.minutes
     placed.push({ title: c.title.slice(0, 80), start: fromMin(at.start), minutes: at.minutes, kind: c.kind, tasks: c.tasks.map((t) => t.title), chunk: c })
     return true
   }
@@ -318,6 +362,7 @@ export function packDay(p: PackInputs): DayProposal {
     const slot = pickWorkoutSlot(wins, { minutes: short ? Math.min(p.train.minutes, 30) : p.train.minutes })
     if (!slot || (onlyPreferred && !slot.preferred)) return
     training = { time: fromMin(slot.start), what: slotTitle(slot.minutes, { easy: short || p.train.easy }), minutes: slot.minutes }
+    trainMin = slot.minutes
     const w = wins.find((x) => !x.light && x.s <= slot.start && x.e >= slot.start + slot.minutes)!
     wins.splice(wins.indexOf(w), 1, ...[{ ...w, e: slot.start - 10 }, { ...w, s: slot.start + slot.minutes + 10 }].filter((x) => x.e - x.s >= 20))
   }
@@ -334,6 +379,7 @@ export function packDay(p: PackInputs): DayProposal {
       const s = Math.ceil(Math.max(w.s, toMin('17:00')) / 15) * 15
       if (s + 45 <= w.e) {
         training = { time: fromMin(s), what: short ? 'easy: Workout · 30 min' : 'Workout · 45 min' }
+        trainMin = 45
         const i = wins.indexOf(w)
         wins.splice(i, 1, ...[{ ...w, e: s - 10 }, { ...w, s: s + 55 }].filter((x) => x.e - x.s >= 20))
         break
@@ -371,7 +417,7 @@ export function packDay(p: PackInputs): DayProposal {
   for (const b of placed) for (const t of b.chunk.tasks) inBlock.set(key(t.title), b.start)
 
   // Every other task: in "Also today" with its block. Only when the day is really full does a task move to tomorrow, with the reason.
-  const full = used >= budget - 25 ? `today already has ${fmtMin(used)} of focus` : placed.length >= maxBlocks ? `today already has ${placed.length} blocks` : 'no free time left between your events'
+  const full = used + trainMin >= budget - 25 ? `today already has ${fmtMin(used)} of focus and some free time is kept` : placed.length >= maxBlocks ? `today already has ${placed.length} blocks` : 'no free time left between your events'
   const also: AlsoItem[] = []
   const deferred: DeferredItem[] = []
   for (const t of tasks) {
@@ -394,7 +440,7 @@ export function packDay(p: PackInputs): DayProposal {
     ? freeMin < 25
       ? 'No free time between your events today, so the must-dos fit where they can.'
       : 'Nothing to plan today: pick one thing that matters.'
-    : `${total} task${total === 1 ? '' : 's'}${classes ? ` and ${classes} event${classes === 1 ? '' : 's'}` : ''}, ${hm(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? '' : 's'} (${fmtMin(focus)})${quick.length ? ', small tasks batched' : ''}${short ? `. Short night (${hm(p.sleptMin!)}), so shorter blocks and an earlier end` : ''}.`
+    : `${total} task${total === 1 ? '' : 's'}${classes ? ` and ${classes} event${classes === 1 ? '' : 's'}` : ''}, ${hm(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? '' : 's'} (${fmtMin(focus)})${quick.length ? ', small tasks batched' : ''}${meal ? `, lunch at ${fromMin(meal.start)} kept free` : ''}, ${fmtMin(Math.max(0, freeMin - focus - trainMin))} left free${short ? `. Short night (${hm(p.sleptMin!)}), so shorter blocks and an earlier end` : ''}.`
   const headline = mustdos.length
     ? `${mustdos.length} must-do${mustdos.length === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'} · ${fmtMin(focus)} focus${also.length ? ` · ${also.length} more on the list` : ''}`
     : 'A light day: pick one thing that matters'
@@ -427,9 +473,13 @@ export function unaccounted(plan: Pick<DayProposal, 'mustdos' | 'blocks' | 'also
  * (estimates, priority, ids), and the packer's plan when the model gave too
  * little (far fewer blocks or far less focus than the day has room for).
  */
-export function checkModelPlan(model: DayProposal, packed: DayProposal, tasks: PlanTask[], work?: WorkToday | null): DayProposal {
+export function checkModelPlan(model: DayProposal, packed: DayProposal, tasks: PlanTask[], work?: WorkToday | null, freeShare?: number): DayProposal {
   // Deep focus in the work window (or in a short shift's busy part): the packer's plan instead.
   if (workClash(model.blocks, work)) return { ...packed, headline: packed.headline }
+  // A model plan that fills the free time (no share left unplanned): the packer's plan, which keeps it.
+  const freeTotal = (packed.free ?? []).reduce((s, w) => s + toMin(w.end) - toMin(w.start), 0)
+  const modelMin = model.blocks.reduce((s, b) => s + b.minutes, 0) + (model.training ? (model.training.minutes ?? 45) : 0)
+  if (freeTotal >= 60 && modelMin > freeTotal * (1 - cleanShare(freeShare)) + 15) return { ...packed, headline: packed.headline }
   const enough = packed.blocks.length < 3 || (model.blocks.length >= Math.ceil(packed.blocks.length / 2) + 1 && model.blocks.reduce((s, b) => s + b.minutes, 0) >= packed.blocks.reduce((s, b) => s + b.minutes, 0) * 0.5)
   if (!enough) return { ...packed, headline: packed.headline }
   const byKey = new Map(tasks.map((t) => [key(t.content), t]))

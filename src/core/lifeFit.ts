@@ -40,6 +40,8 @@ export interface LifeFit {
   pushes?: PushPrefs
   /** A one-day change to the work window ("short shift tonight"). */
   tonight?: { day: string; mode: ShiftMode } | null
+  /** The share of free time the day planner leaves unplanned (0–0.5; default 0.15). */
+  freeShare?: number
 }
 
 export const LIFE_FIT_KEY = 'life_fit'
@@ -75,6 +77,7 @@ export function cleanLifeFit(raw: unknown): LifeFit {
     // Older saves have only the one push level: every area starts there.
     areas: cleanAreas(o.areas, push),
     pushes: cleanPushPrefs(o.pushes),
+    ...(typeof o.freeShare === 'number' && Number.isFinite(o.freeShare) ? { freeShare: Math.max(0, Math.min(0.5, Math.round(o.freeShare * 20) / 20)) } : {}),
     tonight: t && typeof t.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.day) && (t.mode === 'short' || t.mode === 'off' || t.mode === 'normal') ? { day: t.day, mode: t.mode } : null
   }
 }

@@ -16,6 +16,7 @@ import { useAction, useToast } from '../ui'
 import type { CleanChange } from '@core/todoistClean'
 import { useSwipeRows } from '../swipe'
 import { useLive } from '../live'
+import { SyncButton } from '../plan/SyncButton'
 import { Select } from '../Select'
 
 /** A touch screen: no keyboard-shortcut hints in placeholders (U6). */
@@ -360,6 +361,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
           </button>
         </form>
         <div className="ta-bar">
+          <SyncButton className="ta-sync" />
           <div className="ta-tabs" role="tablist">
             {(
               [

@@ -8,6 +8,7 @@
 import { applyEdit, editLabel, ensureIds, isApproved, planItems, type PlanEdit } from '@core/planEdit'
 import { createDebounce, linkEvents, mergeRemote, pending, planJobs, settle, type BlockJob, type JobResult, type TodoOp } from '@core/planSync'
 import { rebase, UndoStack } from '@core/planUndo'
+import { appDuplicates } from '@core/planLook'
 import type { DayProposal, RhythmState } from '@core/rhythm'
 import type { TodoTask } from '@core/todoist'
 import { life } from '../bridge'
@@ -89,10 +90,12 @@ export function attach(state: RhythmState) {
   emit()
   // Just approved: the task times go to Todoist (the calendar events were made by the approval).
   // A plan changed somewhere else (Ben, another device) with edits Google doesn't have yet: send them.
-  if (nowApproved || cur.plan.removed?.length || planItems(cur.plan).some((x) => isApproved(x, cur!.status) && pending(x))) sender.poke()
+  // While our own "Approve all" runs, its half-written state (approved, events not yet saved) is not sent:
+  // approveAll pokes once it is done.
+  if ((nowApproved && !approving) || cur.plan.removed?.length || planItems(cur.plan).some((x) => isApproved(x, cur!.status) && pending(x))) sender.poke()
   if (!linked && life.google) {
     linked = true
-    void linkOld()
+    void linkOld().then(cleanOnce)
   }
 }
 
@@ -160,15 +163,49 @@ export function undoLast(): string | null {
   return e.label
 }
 
+let approving = false
 /** "✓ Approve all": the server's approve (must-dos, the calendar), then the task times. */
 export async function approveAll() {
-  const r = await life.coach?.rhythm?.('approve').catch((err) => {
-    say({ text: (err as Error).message || 'Could not approve', tone: 'bad' })
-    return null
-  })
-  if (r?.state) attach(r.state)
-  sender.poke()
-  return r
+  if (approving) return null // a second tap while the first is still writing
+  approving = true
+  try {
+    const r = await life.coach?.rhythm?.('approve').catch((err) => {
+      say({ text: (err as Error).message || 'Could not approve', tone: 'bad' })
+      return null
+    })
+    if (r?.state) attach(r.state)
+    return r
+  } finally {
+    approving = false
+    sender.poke()
+  }
+}
+
+/**
+ * Once a day on this device, quietly: copies of plan blocks the app itself put
+ * in today's calendar twice (same title, start and end, marked as made by Life
+ * System) are removed. The block's own event stays; events you made are never touched.
+ */
+async function cleanOnce() {
+  if (!cur || !life.google) return
+  const k = 'ls.planDupesCleaned'
+  try {
+    if (localStorage.getItem(k) === cur.plan.day) return
+  } catch {
+    /* no storage: run, it is harmless */
+  }
+  const events = await todayEvents().catch(() => null)
+  if (!events || !cur) return
+  const keep = new Set(planItems(cur.plan).map((b) => b.sync?.eventId).filter((x): x is string => !!x))
+  const extra = appDuplicates(events, keep)
+  let removed = 0
+  for (const e of extra) if (await life.google.remove(e.calendarId, e.id).then(() => true, () => false)) removed++
+  try {
+    localStorage.setItem(k, cur.plan.day)
+  } catch {
+    /* fine */
+  }
+  if (removed) window.dispatchEvent(new CustomEvent('life-external-changed'))
 }
 
 /** Retry now (the ⚠ chip). */
@@ -183,7 +220,8 @@ async function runGoogle(j: BlockJob): Promise<{ id: string; calendarId: string 
   const g = j.google
   if (!g || !life.google) return undefined
   if (g.kind === 'create') {
-    const e = await life.google.create({ title: g.title, start: g.start, end: g.end, description: g.description })
+    // The block's own event id: if the approval (or another device) already made it, Google updates that one.
+    const e = await life.google.create({ id: g.id, title: g.title, start: g.start, end: g.end, description: g.description, colorId: g.colorId })
     return { id: e.id, calendarId: e.calendarId || 'primary' }
   }
   if (g.kind === 'remove') {
@@ -193,7 +231,7 @@ async function runGoogle(j: BlockJob): Promise<{ id: string; calendarId: string 
     })
     return undefined
   }
-  const patch = { ...(g.title ? { title: g.title } : {}), ...(g.start ? { start: g.start, end: g.end } : {}), ...(g.description ? { description: g.description } : {}) }
+  const patch = { ...(g.title ? { title: g.title } : {}), ...(g.colorId ? { colorId: g.colorId } : {}), ...(g.start ? { start: g.start, end: g.end } : {}), ...(g.description ? { description: g.description } : {}) }
   if (life.google.update) await life.google.update(g.calendarId, g.eventId, patch)
   else if (g.start && g.end) await life.google.move(g.calendarId, g.eventId, g.start, g.end)
   return undefined

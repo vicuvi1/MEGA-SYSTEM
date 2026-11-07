@@ -2902,7 +2902,7 @@ try {
     }
     // Approve just this block: it goes into the calendar, the rest stays a draft.
     await blk.locator('.pe-ok').check()
-    await until(async () => (await api('google', 'log')).some((x) => x.op === 'create' && x.title === 'Draft the networking lab report'), 'approving one block made no calendar event')
+    await until(async () => (await api('google', 'log')).some((x) => x.op === 'create' && /Draft the networking lab report$/.test(x.title)), 'approving one block made no calendar event')
     await blk.locator('.pe-st', { hasText: '✓' }).waitFor({ timeout: 15000 })
     // Drag it 30 minutes later (78 px an hour: 39 px), in small steps like a hand.
     const before = (await blk.locator('.pe-time').innerText()).slice(0, 5)
@@ -2932,6 +2932,46 @@ try {
     await until(async () => (await blk.locator('.pe-time').innerText()).startsWith(before), 'Undo did not move the block back')
     await until(async () => (await api('google', 'log')).some((x) => x.op === 'update' && x.start === isoAt(before)), 'Undo did not move the calendar event back')
     await until(async () => (await api('todoist', 'peek')).some((t) => t.id === 't4' && t.dueTime === before), 'Undo did not put the task time back')
+  })
+  await step('Sync: approving the whole plan makes one event per block; a task added in Todoist shows after Sync', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    await pg.locator('section.cp .pe-block').first().waitFor({ timeout: 15000 })
+    const call = async (n, body) => (await fetch(`http://127.0.0.1:${port}/api/${n}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
+    const until = async (fn, what, ms = 20000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    // Approve every block at once (the editor and the approval both write: the calendar must still get each block once).
+    await pg.locator('section.cp .pe-approve input[type="time"]').fill('23:45')
+    await pg.locator('section.cp .pe-approve .pe-btn', { hasText: 'Approve until' }).click()
+    const plain = (t) => t.replace(/^(?:\p{Extended_Pictographic}\uFE0F?)+\s*/u, '').trim()
+    const hm = (iso) => new Date(iso).toTimeString().slice(0, 5)
+    const blocks = async () =>
+      pg.$$eval('section.cp .pe-block:not(.past)', (els) => els.map((el) => ({ title: (el.querySelector('.pe-name')?.textContent || '').replace(/^💪\s*/u, '').trim(), start: (el.querySelector('.pe-time')?.textContent || '').slice(0, 5) })))
+    const count = async () => {
+      const evs = await call('google', { op: 'peek' })
+      return (await blocks()).map((b) => evs.filter((e) => plain(e.title) === b.title && hm(e.start) === b.start).length)
+    }
+    await until(async () => (await count()).every((n) => n >= 1), 'not every approved block reached the calendar')
+    // Give a second write time to land, then count again: exactly one each (N events, not 2N).
+    await new Promise((ok) => setTimeout(ok, 1500))
+    const n = await count()
+    if (!n.length || n.some((x) => x !== 1)) throw new Error(`events per block: ${n.join(', ')}`)
+    // A task added in Todoist itself shows up on Today → Now after Sync.
+    await call('todoist', { op: 'testAdd', content: 'Water the balcony plants' })
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    const sync = pg.locator('.ot-head .sync-btn button').first()
+    await sync.waitFor({ timeout: 15000 })
+    await sync.click()
+    await pg.locator('.ot-list .ot-t', { hasText: 'Water the balcony plants' }).first().waitFor({ timeout: 15000 })
+    await pg.locator('.ot-head .sync-at', { hasText: /Synced \d\d:\d\d/ }).first().waitFor({ timeout: 10000 })
   })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {

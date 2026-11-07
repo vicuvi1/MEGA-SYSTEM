@@ -23,6 +23,7 @@ import { financeSummary } from '@core/moneyDays'
 import { createWebAuth } from './web/webAuth'
 import { createFinanceInbox } from './web/financeInbox'
 import { payTodoist } from './web/todoistCoins'
+import { createChangeWatch } from './web/todoRefresh'
 import { setSportLogger, sportDay } from './sportTrack'
 import type { TodoCompleted, TodoTask } from '@core/todoist'
 import { SPORT } from './web/sportSync'
@@ -332,13 +333,16 @@ export function createTursoWebBridge(): Bridge {
   // what you press yourself always goes through.
   const POLLING = new Set(['changes', 'today', 'upcoming', 'everything', 'events', 'status'])
   const todoistBreak = breaker()
+  // The 5-second "anything new?" check has its own pause: when it fails, reading the list still works.
+  const changesBreak = breaker()
   const googleBreak = breaker()
   const paused = (who: string, b: ReturnType<typeof breaker>) => new Error(`${who} is not answering: trying again at ${new Date(b.pausedUntil).toTimeString().slice(0, 5)}`)
   // Todoist through the server (the token stays there).
   const todoistCall = async (op: string, extra: Record<string, unknown> = {}): Promise<any> => {
     if (direct) return { connected: false }
     const poll = POLLING.has(op)
-    if (poll && !todoistBreak.allow()) throw paused('Todoist', todoistBreak)
+    const brk = op === 'changes' ? changesBreak : todoistBreak
+    if (poll && !brk.allow()) throw paused('Todoist', brk)
     try {
       const r = await fetch('/api/todoist', {
         method: 'POST',
@@ -347,10 +351,10 @@ export function createTursoWebBridge(): Bridge {
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(j.error || httpProblem('Todoist', r.status))
-      todoistBreak.ok()
+      brk.ok()
       return j
     } catch (e) {
-      if (poll) todoistBreak.fail()
+      if (poll) brk.fail()
       throw e
     }
   }
@@ -470,6 +474,8 @@ export function createTursoWebBridge(): Bridge {
   // bot, the phone or another tab changed something, the copy reloads and
   // every screen redraws by itself. Fast (3 s) while you use the app, slower
   // when it sits in the background, paused when the tab is hidden.
+  // The Sync button: set by the live loop below (Todoist, Google, then every list reads again).
+  let pullOutside: (() => Promise<number>) | null = null
   if (typeof window !== 'undefined') {
     let lastUse = Date.now()
     // Back after a while: look for changes right away (not at the next slow round).
@@ -515,18 +521,21 @@ export function createTursoWebBridge(): Bridge {
     let todoAt = 0
     let tickAt = 0
     let todoQuickAt = 0
-    // Todoist's sync token: null = not started, '' = Todoist off or failing (stop asking).
-    let todoToken: string | null = null
+    // Todoist's "anything new since…?" check (web/todoRefresh.ts).
+    const todoWatch = createChangeWatch((token) => todoistCall('changes', { token }))
     const todoistChanged = async (): Promise<boolean> => {
-      if (todoToken === '' || !(await todoistOnP)) return false
-      try {
-        const j = await todoistCall('changes', { token: todoToken ?? '*' })
-        const first = todoToken === null
-        todoToken = String(j.token || '') || null
-        return !first && Number(j.changed) > 0
-      } catch {
-        return false
-      }
+      if (!(await todoistOnP)) return false
+      return todoWatch.check()
+    }
+    // The Sync button and coming back to the window: Todoist and Google now, then every list reads again.
+    pullOutside = async () => {
+      forgetCalendar()
+      todoQuickAt = Date.now()
+      todoAt = Date.now()
+      await todoistChanged()
+      window.dispatchEvent(new CustomEvent('life-external-changed'))
+      await bridge.todoist?.sync(true).catch(() => 0)
+      return Date.now()
     }
     // How lively to be: you're using it (every 3 s), it's open but you're away
     // (every 20 s), away for long (every 60 s), in the background (5 min). Fewer
@@ -540,7 +549,8 @@ export function createTursoWebBridge(): Bridge {
       if (document.visibilityState !== 'visible') return { db: 300_000, todo: Infinity, ext: Infinity, tick: Infinity }
       if (idle < 3 * 60_000 && document.hasFocus()) return { db: 3000, todo: 5000, ext: 30_000, tick: 120_000 }
       if (idle < 15 * 60_000) return { db: 20_000, todo: 60_000, ext: 120_000, tick: 120_000 }
-      return { db: 90_000, todo: 600_000, ext: 600_000, tick: 600_000 }
+      // Away from this page for long (maybe adding tasks in Todoist itself): Todoist is still asked every minute.
+      return { db: 90_000, todo: 60_000, ext: 600_000, tick: 600_000 }
     }
     // CL7: the server not answering: wait longer each time (5 s … 4 min), not every few seconds.
     // (Saving a change in between waits too: see Mirror.flushOffline.)
@@ -571,6 +581,10 @@ export function createTursoWebBridge(): Bridge {
           window.dispatchEvent(new CustomEvent('life-external-changed'))
           bridge.todoist?.sync().catch(() => 0)
         }
+      } else if (window.desktop && !direct && Date.now() - todoQuickAt > 5 * 60_000) {
+        // The desktop app in the tray: a light Todoist check every 5 minutes, so the island stays right.
+        todoQuickAt = Date.now()
+        void todoistChanged().then((changed) => changed && window.dispatchEvent(new CustomEvent('life-external-changed')))
       }
       setTimeout(loop, fails ? Math.max(pace().db, retryDelay(fails - 1, { max: 4 * 60_000 })) : pace().db)
     }
@@ -582,6 +596,16 @@ export function createTursoWebBridge(): Bridge {
         fails = 0
         void check(true)
       }
+    })
+    // Back from another window (the Todoist app, the phone's web page): the page stays "visible" then,
+    // so focus is the sign. Todoist and Google are looked at now, not at the next round.
+    let focusAt = 0
+    window.addEventListener('focus', () => {
+      if (Date.now() - focusAt < 10_000) return
+      focusAt = Date.now()
+      todoAt = 0
+      todoQuickAt = 0
+      void pullOutside?.()
     })
   }
 
@@ -1170,6 +1194,7 @@ export function createTursoWebBridge(): Bridge {
     },
     // Your Todoist: today's tasks, complete (+coins), quick add, and coins for
     // what you completed in Todoist itself (checked at most every 5 minutes).
+    syncNow: async () => (pullOutside ? pullOutside() : Date.now()),
     todoist: {
       status: async () => ({ connected: await todoistOnP }),
       today: async () => ((await todoistOnP) ? todoist.today() : []),

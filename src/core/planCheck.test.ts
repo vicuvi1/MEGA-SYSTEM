@@ -83,4 +83,16 @@ describe('a fix never throws away a block it only pushed', () => {
     const out = fixPlan(p, { now: '08:00', bedtime: '22:00', events: [ev('Call', '21:00', '22:00')] }).plan
     expect(out.blocks.map((x) => x.title)).toEqual(['Essay', 'Maths'])
   })
+
+  it('flags a plan with no free time left', () => {
+    // 08:00 → 22:15 (bed 23:00 minus the wind-down): blocks back to back all day.
+    const packed = mk(Array.from({ length: 9 }, (_, i) => b(i % 2 ? 'Quick tasks' : 'Essay', `${String(8 + i * 1.5 >= 10 ? Math.floor(8 + i * 1.5) : `0${Math.floor(8 + i * 1.5)}`)}:${(i * 90) % 60 === 0 ? '00' : '30'}`, 85, i % 2 ? { kind: 'quick' } : {})))
+    const issues = checkPlan(packed, { now: '08:00', bedtime: '23:00' })
+    expect(issues.map((i) => i.code)).toContain('nofree')
+    expect(issueChip(issues.filter((i) => i.code === 'nofree'))).toMatch(/free/)
+    // A plan with room left is fine; a bigger share in My life asks for more room.
+    const light = mk([b('Essay', '09:00', 90), b('Maths', '11:00', 60), b('Read', '15:00', 45)])
+    expect(codes(light)).not.toContain('nofree')
+    expect(codes(light, { freeShare: 0.5 })).not.toContain('nofree')
+  })
 })

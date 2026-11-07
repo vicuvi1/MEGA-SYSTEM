@@ -4,12 +4,12 @@
 // deep work, a plan that runs into the wind-down, no water goal) and leaves
 // the rest as a warning chip on the card ("2 blocks overlap — fix?").
 // Pinned blocks are never moved by a fix; the others make room.
-import { planStartAt } from './dayPacker'
+import { FREE_SHARE, planStartAt } from './dayPacker'
 import { ensureIds, planItems, minOfDay, TRAIN_ID, type EditItem } from './planEdit'
 import { fromMin, toMin, type DayProposal } from './rhythm'
 import type { CalEvent } from './dayTime'
 
-export type IssueCode = 'overlap' | 'breaks' | 'meal' | 'water' | 'late' | 'toomuch' | 'past'
+export type IssueCode = 'overlap' | 'breaks' | 'meal' | 'water' | 'late' | 'toomuch' | 'nofree' | 'past'
 
 export interface PlanIssue {
   code: IssueCode
@@ -32,6 +32,8 @@ export interface CheckCtx {
   events?: CalEvent[]
   /** The water reminders are on (Coach rhythm prefs). */
   water?: boolean
+  /** The share of the free time that should stay unplanned (My life; default 0.15). */
+  freeShare?: number
 }
 
 export const DEEP_MAX = 90
@@ -120,6 +122,12 @@ export function checkPlan(plan: DayProposal, ctx: CheckCtx): PlanIssue[] {
   const free = Math.max(0, end - from - busy)
   const planned = mine.filter((x) => x.e > from).reduce((t, x) => t + x.e - Math.max(x.s, from), 0)
   if (planned > free + 5) out.push({ code: 'toomuch', text: `${Math.round((planned - free) / 5) * 5} min more than your free time`, ids: [], fixable: false })
+  // No free time: a plan should leave some of the free time unplanned (15% unless My life says otherwise).
+  else if (free >= 60) {
+    const share = typeof ctx.freeShare === 'number' && Number.isFinite(ctx.freeShare) ? Math.max(0, Math.min(0.5, ctx.freeShare)) : FREE_SHARE
+    const left = free - planned
+    if (share > 0 && left < free * share - 5) out.push({ code: 'nofree', text: left < 15 ? 'No free time left' : `Only ${Math.round(left / 5) * 5} min free`, ids: [], fixable: false })
+  }
   return out
 }
 

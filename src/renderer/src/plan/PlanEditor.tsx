@@ -38,6 +38,7 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
   const [s, setS] = useState<PlanSnap | null>(null)
   const [events, setEvents] = useState<CalEvent[]>([])
   const [bed, setBed] = useState('23:30')
+  const [freeShare, setFreeShare] = useState<number | undefined>(undefined)
   const [preview, setPreview] = useState<{ id: string; start: number; minutes: number } | null>(null)
   const [renaming, setRenaming] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
@@ -60,7 +61,10 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
   useEffect(() => {
     life.coach
       ?.lifeFit?.()
-      .then((f) => f?.bed && setBed(f.bed))
+      .then((f) => {
+        if (f?.bed) setBed(f.bed)
+        if (typeof f?.freeShare === 'number') setFreeShare(f.freeShare)
+      })
       .catch(() => {})
   }, [])
   // Today's calendar: fixed events are drawn (pinned) behind the plan.
@@ -111,7 +115,7 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
   const items = useMemo(() => (s ? planItems(s.plan) : []), [s])
   const mine = useMemo(() => new Set(items.map((b) => b.sync?.eventId).filter(Boolean) as string[]), [items])
   const fixed = useMemo(() => (day ? events.filter((e) => !e.allDay && !e.declined && !mine.has(e.id) && minOfDay(e.end, day) > 0 && minOfDay(e.start, day) < 24 * 60) : []), [events, mine, day])
-  const issues = useMemo(() => (s ? checkPlan(s.plan, { now: hm(t), bedtime: bed, events: fixed, water }) : []), [s, t, bed, fixed, water])
+  const issues = useMemo(() => (s ? checkPlan(s.plan, { now: hm(t), bedtime: bed, events: fixed, water, freeShare }) : []), [s, t, bed, fixed, water, freeShare])
 
   if (!s || !day) return null
   const status = s.status

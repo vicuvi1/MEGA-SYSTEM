@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { TodoTask } from '@core/todoist'
 import type { BodyState, ConnectionsState, DisciplineState, Rule, Summary } from '@shared/api'
 import { life } from '../bridge'
+import { createTodayList } from '../web/todoRefresh'
 import type { PageId } from '../modules'
 import { play } from '../soundKit'
 import { useAction } from '../ui'
@@ -28,11 +29,14 @@ export interface DayFlowProps {
   onCounts?: (c: { tasks: number; late: number; mustDone: number; mustTotal: number }) => void
 }
 
+const todayList = createTodayList(() => life.todoist!.today())
+
 export function useTodoist() {
   const [tasks, setTasks] = useState<TodoTask[] | null>(null)
   const load = useCallback(async () => {
     if (!life.todoist || !(await life.todoist.status()).connected) return setTasks(null)
-    setTasks(await life.todoist.today().catch(() => []))
+    // Every load asks Todoist again; a failed read keeps the last list instead of emptying it.
+    setTasks(await todayList.refresh().catch(() => []))
   }, [])
   useEffect(() => {
     void load()

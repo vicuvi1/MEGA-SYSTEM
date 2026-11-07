@@ -537,10 +537,15 @@ const gcal = (() => {
     if (b.op === 'status') return send({ configured: true, connected: true, calendars: [{ id: 'primary', name: 'Test calendar', color: '#7cc4ff', canWrite: true, on: true }] })
     if (b.op === 'events') return send({ events: events.filter((e) => e.end > b.from && e.start < b.to) })
     if (b.op === 'create') {
-      const e = { id: `ev${++n}`, calendarId: b.calendarId || 'primary', title: b.title, start: b.start, end: b.end, allDay: false, ours: true, description: b.description ?? null, location: b.location ?? null }
+      // Like Google: an event id given by the app is made once; writing it again updates that event.
+      const had = b.id && events.find((x) => x.id === b.id)
+      if (had) return (Object.assign(had, { title: b.title, start: b.start, end: b.end, description: b.description ?? null, colorId: b.colorId ?? had.colorId ?? null }), send({ event: had }))
+      const e = { id: b.id || `ev${++n}`, calendarId: b.calendarId || 'primary', title: b.title, start: b.start, end: b.end, allDay: false, ours: true, description: b.description ?? null, location: b.location ?? null, colorId: b.colorId ?? null }
       events.push(e)
       return send({ event: e })
     }
+    // The smoke test reads today's events made by the app.
+    if (b.op === 'peek') return send(events.filter((e) => e.ours))
     const e = events.find((x) => x.id === b.id)
     if (b.op === 'move' && e) return (Object.assign(e, { start: b.start, end: b.end }), send({ ok: true }))
     if (b.op === 'update' && e) {
@@ -557,6 +562,7 @@ const gcal = (() => {
 const todo = (() => {
   const day = new Date().toISOString().slice(0, 10)
   const t = (id, content, due, dueTime) => ({ id, content, priority: 1, due, dueTime, project: 'Inbox', section: null, recurring: false, projectId: 'p1', sectionId: null, labels: [], duration: null })
+  let changed = 0
   const tasks = [t('t1', 'Pay the internet bill', day, null), t('t2', 'Email the lab partner', day, '16:00'), t('t3', 'Read chapter 4', null, null), t('t4', 'Draft the networking lab report', day, null), t('t5', 'Update the CV projects section', day, null), t('t6', 'Try one beginner CTF challenge', day, null), t('t7', 'Book the dentist', day, null), t('t8', 'Watch the refactoring talk, part 1', day, null)]
   return (q, r) => {
     const b = q.body || {}
@@ -565,7 +571,11 @@ const todo = (() => {
     if (b.op === 'status') return send({ connected: true })
     if (b.op === 'everything') return send({ tasks: open, areas: [{ key: 'p:p1', kind: 'project', id: 'p1', projectId: 'p1', name: 'Inbox' }] })
     if (b.op === 'today' || b.op === 'upcoming') return send({ connected: true, tasks: open.filter((x) => x.due) })
-    if (b.op === 'changes') return send({ token: 'x', changed: 0 })
+    if (b.op === 'changes') {
+      const c = changed
+      changed = 0
+      return send({ token: 'x', changed: c })
+    }
     const x = tasks.find((y) => y.id === b.id)
     if (b.op === 'update' && x) {
       if (b.due) [x.due, x.dueTime] = b.due === 'no date' ? [null, null] : [b.due.slice(0, 10), b.due.slice(11, 16) || null]
@@ -574,6 +584,13 @@ const todo = (() => {
     }
     if (b.op === 'close' && x) return ((x.done = true), send({ ok: true }))
     if (b.op === 'peek') return send(tasks)
+    // A task added in Todoist itself (the phone): the smoke test adds one, then presses Sync.
+    if (b.op === 'testAdd') {
+      const x = t(`t${tasks.length + 1}`, String(b.content || 'New task'), day, null)
+      tasks.push(x)
+      changed++
+      return send({ ok: true, task: x })
+    }
     return send({ ok: true, tasks: [], items: [] })
   }
 })()

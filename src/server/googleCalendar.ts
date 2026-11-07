@@ -123,7 +123,11 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
     })
     if (res.status === 204) return null
     const j: any = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(`Google Calendar ${res.status}: ${j?.error?.message ?? 'request failed'}`)
+    if (!res.ok) {
+      const err: any = new Error(`Google Calendar ${res.status}: ${j?.error?.message ?? 'request failed'}`)
+      err.status = res.status
+      throw err
+    }
     return j
   }
   let cals: CalendarInfo[] | null = null
@@ -182,7 +186,12 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
       return all.flat().sort((a, b) => a.start.localeCompare(b.start))
     },
     /** A new event (in your chosen calendar), marked as made by Life System. */
-    async create(e: { title: string; start: string; end: string; description?: string; location?: string; calendarId?: string; colorId?: string; recurrence?: string[]; timeZone?: string; reminder?: number | null }): Promise<CalEvent> {
+    /**
+     * With `id` (a plan block's own id, see core/planLook planEventId) the write is
+     * safe to repeat: when that event exists already (made a moment ago by another
+     * write, or deleted earlier) it is updated and brought back, never made twice.
+     */
+    async create(e: { title: string; start: string; end: string; description?: string; location?: string; calendarId?: string; colorId?: string; recurrence?: string[]; timeZone?: string; reminder?: number | null; id?: string }): Promise<CalEvent> {
       const calId = e.calendarId || (await target())
       const allDay = /^\d{4}-\d{2}-\d{2}$/.test(e.start)
       const body = {
@@ -198,7 +207,15 @@ export function createCalendarApi(env: GoogleEnv, stored: GoogleStored, fetchImp
         ...(e.recurrence?.length ? { recurrence: e.recurrence.filter((r) => /^RRULE:[A-Z0-9=;,]+$/.test(r)).slice(0, 2) } : {}),
         extendedProperties: { private: { lifeSystem: '1' } }
       }
-      const j = await call(`/calendars/${encodeURIComponent(calId)}/events`, { method: 'POST', body: JSON.stringify(body) })
+      const id = e.id && /^[a-v0-9]{5,1024}$/.test(e.id) ? e.id : null
+      let j: any
+      try {
+        j = await call(`/calendars/${encodeURIComponent(calId)}/events`, { method: 'POST', body: JSON.stringify(id ? { ...body, id } : body) })
+      } catch (err: any) {
+        if (!id || err?.status !== 409) throw err
+        // Already there: the same block written again. Update it (and undelete it).
+        j = await call(`/calendars/${encodeURIComponent(calId)}/events/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify({ ...body, status: 'confirmed' }) })
+      }
       const cal = (await calendars()).find((c) => c.id === calId) ?? { id: calId, name: '', color: '#C8F135', primary: false, canWrite: true }
       return toEvent(j, cal)
     },

@@ -144,7 +144,7 @@ export type Bridge = LifeApi & {
     status(): Promise<GoogleStatus>
     connect(): Promise<void>
     events(fromIso: string, toIso: string): Promise<CalEvent[]>
-    create(e: { title: string; start: string; end: string; description?: string; location?: string; calendarId?: string; recurrence?: string[]; reminder?: number | null }): Promise<CalEvent>
+    create(e: { title: string; start: string; end: string; description?: string; location?: string; calendarId?: string; recurrence?: string[]; reminder?: number | null; colorId?: string; id?: string }): Promise<CalEvent>
     update?(calendarId: string, id: string, patch: { title?: string; start?: string; end?: string; description?: string; location?: string; colorId?: string | null; recurrence?: string[] | null; moveTo?: string; scope?: 'one' | 'all'; recurringEventId?: string | null; reminder?: number | null }): Promise<void>
     move(calendarId: string, id: string, start: string, end: string): Promise<void>
     remove(calendarId: string, id: string): Promise<void>
@@ -190,6 +190,8 @@ export type Bridge = LifeApi & {
   /** The Money hub (Finance Helper's numbers) and one-line quick add. */
   finance?: import('./web/moneyApi').MoneyApi
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
+  /** The Sync button: pulls Todoist and Google Calendar now, then every list reads again. Resolves with the time. */
+  syncNow?: () => Promise<number>
   /** Your Todoist (web, when TODOIST_TOKEN is set on the server). */
   todoist?: {
     status(): Promise<{ connected: boolean }>

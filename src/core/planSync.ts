@@ -17,10 +17,12 @@ import { fromMin, toMin, type BlockSync, type DayProposal } from './rhythm'
 import { isApproved, minOfDay, planItems, TRAIN_ID, type EditItem } from './planEdit'
 import type { CalEvent } from './dayTime'
 import type { TodoTask } from './todoist'
+import { blockLook, lookTitle, planEventId, plainTitle, sameTitle } from './planLook'
 
 export type GoogleOp =
-  | { kind: 'create'; title: string; start: string; end: string; description: string }
-  | { kind: 'update'; eventId: string; calendarId: string; title?: string; start?: string; end?: string; description?: string }
+  /** `id`: the block's own event id (planEventId), so a second write finds the first event instead of making another. */
+  | { kind: 'create'; id: string; title: string; start: string; end: string; description: string; colorId: string }
+  | { kind: 'update'; eventId: string; calendarId: string; title?: string; start?: string; end?: string; description?: string; colorId?: string }
   | { kind: 'remove'; eventId: string; calendarId: string }
 
 export type TodoOp =
@@ -113,13 +115,15 @@ export function planJobs(plan: DayProposal, ctx: SyncCtx): SyncPlan {
       continue
     }
     const tasks = desired.get(b.id) ?? []
-    const title = b.train ? `💪 ${b.title}` : b.title
+    // The event's look: an emoji by kind in front of the title, and the kind's colour.
+    const title = lookTitle(b.title, b.kind, b.train)
+    const colorId = blockLook(b.title, b.kind, b.train).colorId
     const names = b.train ? [] : (b.tasks ?? [])
     const snap: BlockSync = { start: b.start, minutes: b.minutes, title: b.title, ...(tasks.length ? { tasks } : {}), ...(names.length ? { names } : {}) }
     let google: GoogleOp | undefined
     if (!prev?.eventId) {
       const ended = ctx.nowMin != null && toMin(b.start) + b.minutes <= ctx.nowMin
-      if (!ended) google = { kind: 'create', title, start: iso(plan.day, b.start), end: iso(plan.day, b.start, b.minutes), description: b.train ? 'Planned with your coach in Life System' : eventNotes(b) }
+      if (!ended) google = { kind: 'create', id: planEventId(plan.day, b.id), colorId, title, start: iso(plan.day, b.start), end: iso(plan.day, b.start, b.minutes), description: b.train ? 'Planned with your coach in Life System' : eventNotes(b) }
     } else {
       snap.eventId = prev.eventId
       snap.calendarId = prev.calendarId
@@ -134,7 +138,7 @@ export function planJobs(plan: DayProposal, ctx: SyncCtx): SyncPlan {
           eventId: prev.eventId,
           calendarId: prev.calendarId ?? 'primary',
           ...(moved ? { start: iso(plan.day, b.start), end: iso(plan.day, b.start, b.minutes) } : {}),
-          ...(renamed ? { title } : {}),
+          ...(renamed ? { title, colorId } : {}),
           ...(notes ? { description: eventNotes(b) } : {})
         }
     }
@@ -248,7 +252,8 @@ export function mergeRemote(plan: DayProposal, events: CalEvent[] | null, tasks:
     if (e.allDay) continue
     const start = fromMin(minOfDay(e.start, plan.day))
     const minutes = Math.max(5, minOfDay(e.end, plan.day) - minOfDay(e.start, plan.day))
-    const title = b.train ? e.title.replace(/^💪\s*/u, '') : e.title
+    // The emoji the app puts in front of the title is not part of the block's name.
+    const title = sameTitle(e.title, s.title) ? s.title : plainTitle(e.title)
     if (start === s.start && minutes === s.minutes && title === s.title) continue
     put(b.id, (x) => ({ ...x, start, minutes, title, sync: { ...s, start, minutes, title } }))
     notes.push(start !== s.start ? `${title} moved to ${start} in Google Calendar` : title !== s.title ? `${s.title} renamed to ${title} in Google Calendar` : `${title} is now ${minutes} min in Google Calendar`)
@@ -348,8 +353,7 @@ export function linkEvents(plan: DayProposal, status: 'proposed' | 'approved', e
   let p = plan
   for (const b of items) {
     if (b.sync?.eventId || !isApproved(b, status)) continue
-    const name = b.train ? `💪 ${b.title}` : b.title
-    const e = events.find((x) => !taken.has(x.id) && !x.allDay && x.title === name && fromMin(minOfDay(x.start, plan.day)) === b.start)
+    const e = events.find((x) => !taken.has(x.id) && !x.allDay && plainTitle(x.title) === plainTitle(b.title) && fromMin(minOfDay(x.start, plan.day)) === b.start)
     if (!e) continue
     taken.add(e.id)
     const sync: BlockSync = { eventId: e.id, calendarId: e.calendarId, start: b.start, minutes: Math.max(5, minOfDay(e.end, plan.day) - minOfDay(e.start, plan.day)), title: b.title }

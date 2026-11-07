@@ -69,6 +69,19 @@ export function LifeFitPanel() {
       </div>
       <small className="hint">Wind-down starts an hour before bedtime. After your latest bedtime the late-night nudges get firm.</small>
 
+      <h3 className="lf-sub">Free time</h3>
+      <label>
+        Keep free in the day plan
+        <select value={String(Math.round((v.freeShare ?? 0.15) * 100))} onChange={(e) => void save({ freeShare: Number(e.target.value) / 100 }, 'Free time saved')}>
+          {[10, 15, 20, 25, 30].map((n) => (
+            <option key={n} value={n}>
+              {n}% of your free time
+            </option>
+          ))}
+        </select>
+      </label>
+      <small className="hint">Ben never fills the whole day: this much of your free time stays unplanned, besides lunch and the breaks.</small>
+
       <h3 className="lf-sub">Work</h3>
       <label className="check toggle-row">
         <input type="checkbox" checked={w.on} onChange={(e) => work({ on: e.target.checked })} />

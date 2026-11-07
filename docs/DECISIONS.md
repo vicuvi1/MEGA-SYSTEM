@@ -40,6 +40,11 @@ entry that says why.
   for today are placed first; older, lower-priority tasks move to tomorrow instead.
 - **Why:** this was the owner's explicit request.
 
+### Plan blocks have their own Google event ids (2026-11-07)
+- **Decision:** a plan block's calendar event id is `planEventId(day, blockId)`; every writer (approval, plan editor, other devices) uses it, and a create with an existing id updates that event.
+- **Why:** two writers made every block twice. Dedupe by a stable key, not by timing.
+- **Rules out:** creating plan events without the id, or a clean-up that touches events not marked as made by Life System.
+
 ### The repo is public: no personal data, ever
 - **Decision:** use made-up data in code, tests, docs and screenshots. Personal profile notes live
   only in the private database (Settings → Ben).

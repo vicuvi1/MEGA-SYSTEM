@@ -172,7 +172,8 @@ export function readToolCall(line: string): { name: string; args: Record<string,
 /** Your Google Calendar (server, when signed in): the coach reads and adds events. */
 export interface CalendarLike {
   events(fromIso: string, toIso: string): Promise<CalEvent[]>
-  create(e: { title: string; start: string; end: string; description?: string }): Promise<CalEvent>
+  /** `id`: a plan block's own event id (writing it twice updates, never duplicates); `colorId`: Google's colour. */
+  create(e: { title: string; start: string; end: string; description?: string; colorId?: string; id?: string }): Promise<CalEvent>
   move?(calendarId: string, id: string, start: string, end: string): Promise<void>
   /** BQ3: a new title for a block (rename / re-subject it). */
   update?(calendarId: string, id: string, patch: { title?: string }): Promise<void>

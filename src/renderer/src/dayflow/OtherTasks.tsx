@@ -3,6 +3,7 @@
 // completes it (Todoist too), ☆ moves it up to the Top 3, one line adds a
 // task for today. Late ones are only marked softly. Full editing (dates,
 // areas, priority) stays on the Tasks tab.
+import { SyncButton } from '../plan/SyncButton'
 import { useState, type ReactNode } from 'react'
 import { Tick } from '../motionKit'
 
@@ -44,6 +45,7 @@ export function OtherTasks({ items, onAdd, canAdd, empty, starFull }: { items: O
       <div className="ot-head">
         <h3>Other tasks</h3>
         {items.length > 0 && <span className="ot-count">{items.length}</span>}
+        <SyncButton />
       </div>
       {items.length === 0 && <p className="ot-empty">{empty}</p>}
       <ul className="ot-list">

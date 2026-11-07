@@ -35,7 +35,9 @@ describe('the whole-day plan (DP1)', () => {
     expect(p.blocks.every((b) => b.start >= '07:30' && toMin(b.start) + b.minutes <= toMin('22:00'))).toBe(true)
     // Every other task is in "Also today" (nothing is lost).
     expect((p.also ?? []).length + (p.deferred ?? []).length).toBe(9)
-    expect(p.also).toHaveLength(9)
+    // Lunch and a share of free time are kept: at most one lower task waits for tomorrow, with the reason.
+    expect((p.also ?? []).length).toBeGreaterThanOrEqual(8)
+    expect((p.deferred ?? []).every((d) => d.why.length > 0)).toBe(true)
     expect(unaccounted(p, tasks)).toEqual([])
     // Sorted by priority, each with a time estimate.
     const pr = (p.also ?? []).map((a) => a.priority)
@@ -91,7 +93,8 @@ describe('the whole-day plan (DP1)', () => {
 
   it('a really full day: urgent work first, the rest moves to tomorrow with the reason', () => {
     const busy = [ev('Lectures', '07:00', '12:00'), ev('Work shift', '13:30', '22:00')]
-    const p = packDay({ ...base, events: busy })
+    // (Lunch is tested on its own: here the one gap at noon is for work.)
+    const p = packDay({ ...base, events: busy, meal: null })
     expect(p.blocks.length).toBeGreaterThan(0)
     expect((p.also ?? []).every((a) => !!a.at)).toBe(true)
     const placedPrio = (p.also ?? []).map((a) => a.priority)
@@ -154,7 +157,8 @@ describe('the whole-day plan (DP1)', () => {
     const walk = editPlan(p, 'add a walk this evening 30 min')!
     const block = walk.blocks.find((b) => b.title === 'walk')!
     expect(block.start >= '18:00').toBe(true)
-    const first = p.blocks.find((b) => b.start < '12:00' && (b.tasks?.length ?? 0) <= 1)!
+    // A day block short enough for the evening's free time.
+    const first = p.blocks.find((b) => b.start < '17:00' && b.minutes <= 45 && (b.tasks?.length ?? 0) <= 1)!
     const moved = editPlan(p, `move ${first.title} to the evening`)!
     const after = moved.blocks.find((b) => b.title === first.title)!
     expect(after.start >= '18:00').toBe(true)
@@ -168,8 +172,9 @@ describe('the whole-day plan (DP1)', () => {
   })
 
   it('the Telegram text lists "Also today" and the reason', () => {
-    const t = proposalText(packDay(base))
-    expect(t).toContain('Also today (9)')
+    const p = packDay(base)
+    const t = proposalText(p)
+    expect(t).toContain(`Also today (${(p.also ?? []).length})`)
     expect(t).toContain('12 tasks')
   })
 })
@@ -192,5 +197,44 @@ describe('the workout slot in the plan (BD8)', () => {
   it('no workout once it is done, and never after 22:00', () => {
     expect(packDay({ ...base, workoutDone: true, train: { minutes: 30 } }).training).toBeNull()
     expect(packDay({ ...base, now: '21:40', train: { minutes: 30 } }).training).toBeNull()
+  })
+
+  it('always leaves free time, a lunch break and a real break after long deep work', () => {
+    // Lots of work and a nearly empty day (the "6h10 of focus in 7h free" case).
+    const many: PlanTask[] = Array.from({ length: 14 }, (_, i) => ({ id: `w${i}`, content: `Write chapter ${i + 1} of the report`, priority: 3, project: 'University', due: today, duration: 90 }))
+    for (const [events, now] of [[[], '09:00'], [[ev('Shift', '16:00', '19:00')], '10:00'], [classes, '07:30']] as const) {
+      const p = packDay({ ...base, now, events: [...events], tasks: many, workoutDone: true })
+      const freeMin = (p.free ?? []).reduce((t, w) => t + toMin(w.end) - toMin(w.start), 0)
+      const focus = p.blocks.reduce((t, b) => t + b.minutes, 0)
+      // At least 15% of the free time stays unplanned.
+      expect(focus).toBeLessThanOrEqual(freeMin * 0.85)
+      // Lunch: 30 free minutes between 12:00 and 14:00 when the plan runs through it.
+      const lunchBusy = p.blocks.filter((b) => toMin(b.start) < toMin('14:00') && toMin(b.start) + b.minutes > toMin('12:00'))
+      if (lunchBusy.length) {
+        const spans = [...lunchBusy.map((b) => [toMin(b.start), toMin(b.start) + b.minutes]), ...events.map((e) => [toMin(e.start.slice(11, 16)), toMin(e.end.slice(11, 16))])].sort((a, c) => a[0] - c[0])
+        let at = toMin('12:00')
+        let gap = 0
+        for (const [s0, e0] of spans) {
+          gap = Math.max(gap, Math.min(s0, toMin('14:00')) - at)
+          at = Math.max(at, e0)
+        }
+        gap = Math.max(gap, toMin('14:00') - at)
+        expect(gap).toBeGreaterThanOrEqual(30)
+      }
+      // Never back to back: 15 min after a block of an hour or more, 10 after a shorter one.
+      const sorted = [...p.blocks].sort((a, c) => a.start.localeCompare(c.start))
+      for (let i = 1; i < sorted.length; i++) {
+        const prev = sorted[i - 1]
+        const gapMin = toMin(sorted[i].start) - (toMin(prev.start) + prev.minutes)
+        expect(gapMin).toBeGreaterThanOrEqual(prev.minutes >= 60 && prev.kind !== 'quick' ? 15 : 10)
+      }
+      expect(p.why).toMatch(/left free/)
+    }
+  })
+
+  it('the free share comes from My life', () => {
+    const many: PlanTask[] = Array.from({ length: 14 }, (_, i) => ({ id: `w${i}`, content: `Write chapter ${i + 1}`, priority: 3, due: today, duration: 90 }))
+    const focusOf = (share?: number) => packDay({ ...base, now: '09:00', events: [], tasks: many, workoutDone: true, endBy: '17:00', freeShare: share }).blocks.reduce((t, b) => t + b.minutes, 0)
+    expect(focusOf(0.3)).toBeLessThan(focusOf(0.1))
   })
 })

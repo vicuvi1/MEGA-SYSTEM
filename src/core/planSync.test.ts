@@ -76,7 +76,7 @@ describe('what the plan sends', () => {
     const essay = idOf(plan, 'Write the essay')
     plan = applyEdit(plan, { op: 'rename', id: essay, title: 'Essay draft' })
     let s = planJobs(plan, { status: 'approved', taskId })
-    expect(s.jobs[0].google).toMatchObject({ kind: 'update', title: 'Essay draft' })
+    expect(s.jobs[0].google).toMatchObject({ kind: 'update', title: '📚 Essay draft', colorId: '7' })
     expect(s.jobs[0].todo).toEqual([{ kind: 'rename', taskId: 't1', content: 'Essay draft' }])
     plan = runAll(plan).plan
     plan = applyEdit(plan, { op: 'remove', id: idOf(plan, 'Quick tasks') })
