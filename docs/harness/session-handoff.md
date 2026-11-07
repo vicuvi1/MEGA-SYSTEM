@@ -23,14 +23,16 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-07)
+### Current handoff (2026-11-07, evening)
 ```
-Milestone:   Life boost picks + context-efficiency Phase 1
-Completed:   sleep care, seasons, focus boost, body, career 2cf9ced; Phase 1 docs dfeab9f
-Active:      Sport Track smoke-step fix (builder, owns the smoke step + sport workout mode)
-Blockers:    Sport Track smoke step flaky on the Windows runner (passes on retry)
-Next action: land the Sport fix, confirm release, run model comparisons
-Files:       docs/INDEX.md, docs/harness/progress.md, docs/harness/feature_list.json, docs/areas/sport.md
+Milestone:   Sport Track → real strength coach (owner's goal: get much, much stronger)
+Completed:   bug round, island alive + game time, plan/Todoist sync, Coach readability, sport levels/coach/forecasts/programs (aa5dbb4, 8b29dd5); full smoke green on 8b29dd5
+Active:      one builder (worktree) on sport: big level hero on Today, auto-switch to harder variations,
+             Too easy / Too hard, effort rating, "best set" placement (owner does ~50 push-ups in one set),
+             new default Strength mode (5–8 reps, 3–5 sets, 2–3 min rest, next variation at 3×8)
+Blockers:    none known. New worktrees lack some node_modules files: symlink /home/user/MEGA-SYSTEM/node_modules
+Next action: check that builder's commit on main (git log), run SMOKE_ONLY="Sport Track" npm run smoke, then release status
+Files:       docs/INDEX.md, docs/areas/sport.md, docs/harness/progress.md, docs/harness/feature_list.json
 ```
 
 ## Builder report format (≤ ~250 words)
