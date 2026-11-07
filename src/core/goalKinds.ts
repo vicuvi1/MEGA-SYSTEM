@@ -86,6 +86,8 @@ export interface GoalMeta {
   pinned: boolean
   /** Your own order (lower first); null: the default order. */
   order: number | null
+  /** The vision card this goal serves (LF4, src/core/vision.ts), or null. */
+  card: string | null
 }
 
 export const defaultMeta = (type: GoalType = 'target'): GoalMeta => ({
@@ -101,7 +103,8 @@ export const defaultMeta = (type: GoalType = 'target'): GoalMeta => ({
   reward: null,
   paused: false,
   pinned: false,
-  order: null
+  order: null,
+  card: null
 })
 
 const TYPES = GOAL_TYPES.map((t) => t.id)
@@ -133,7 +136,8 @@ export function cleanMeta(raw: unknown): GoalMeta {
     reward: rw,
     paused: !!r.paused,
     pinned: !!r.pinned,
-    order: Number.isFinite(Number(r.order)) && r.order !== null ? Number(r.order) : null
+    order: Number.isFinite(Number(r.order)) && r.order !== null ? Number(r.order) : null,
+    card: typeof r.card === 'string' && /^[\w-]{1,24}$/.test(r.card) ? r.card : null
   }
 }
 

@@ -64,6 +64,16 @@ export function addPoint(c: Convo, text: string, day: string, now = new Date(), 
   return { ...c, points: [...c.points, { at: now.toISOString(), day, kind, text: clean, ...(via ? { via } : {}) }].slice(-POINTS_MAX) }
 }
 
+/**
+ * LF12: a big moment you shared with Ben (a boss beaten, a season closed),
+ * kept as a win with `via: 'moment'` so his arc can bring it up. Never twice.
+ */
+export function addMoment(c: Convo, text: string, day: string, now = new Date()): Convo {
+  const clean = String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 160)
+  if (!clean || c.points.some((p) => p.via === 'moment' && normalize(p.text) === normalize(clean))) return c
+  return { ...c, points: [...c.points, { at: now.toISOString(), day, kind: 'win' as const, text: clean, via: 'moment' }].slice(-POINTS_MAX) }
+}
+
 const addDays = (d: string, n: number) => {
   const x = new Date(`${d}T12:00:00Z`)
   x.setUTCDate(x.getUTCDate() + n)

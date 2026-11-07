@@ -5,7 +5,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:
 import { lookup } from "node:dns/promises";
 // src/core/calWatch.ts
 var hm$10 = (iso) => new Date(iso).toTimeString().slice(0, 5);
-var day = (iso, now) => {
+var day$1 = (iso, now) => {
 	const d = new Date(iso);
 	const t = new Date(now);
 	return d.toDateString() === t.toDateString() ? "today" : "tomorrow";
@@ -17,7 +17,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 	for (const [id, e] of Object.entries(now)) if (!prev[id] && live(e)) out.push({
 		kind: "added",
 		ev: e,
-		text: `📅 New in your calendar: <b>${e.title}</b> ${day(e.start, at)} at ${hm$10(e.start)}. I'll plan around it.`
+		text: `📅 New in your calendar: <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$10(e.start)}. I'll plan around it.`
 	});
 	for (const [id, e] of Object.entries(prev)) if (!now[id] && live(e) && Date.parse(e.start) > at.getTime()) {
 		const freeMin = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 6e4);
@@ -25,7 +25,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 			kind: "cancelled",
 			ev: e,
 			freeMin,
-			text: `❌ <b>${e.title}</b> ${day(e.start, at)} at ${hm$10(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
+			text: `❌ <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$10(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
 		});
 	}
 	return out.slice(0, 3);
@@ -4796,6 +4796,14 @@ var SETTINGS = {
 	coach_looks: json$5("how the chat looks: Ben's face and your photo (small data URL)", null),
 	look_wallpaper: json$5("the wallpaper: which picture, how strong, blur, shade, where, motion (src/core/wallpaper.ts)", null),
 	look_wallpaper_photo: text("your own wallpaper picture, made small on the device (a data URL)"),
+	saga_seasons: json$5("your 8-week seasons: name, theme, cover, three main quests and the boss (src/core/season.ts)", null),
+	saga_vision: json$5("the vision board: word of the year, who you are becoming, 6–9 cards (src/core/vision.ts)", null),
+	saga_vision_photos: json$5("pictures on vision cards, made small on the device (card id → data URL)", null),
+	saga_identity: json$5("your \"I am someone who…\" lines and what counts as a vote (src/core/identityVotes.ts)", null),
+	saga_side: json$5("the weekly side quest's weeks and your adventures log, no photos (src/core/sideQuest.ts)", null),
+	saga_wins: json$5("wins you added by hand and auto wins you hid (src/core/winsWall.ts)", null),
+	saga_wheel: json$5("your life wheel ratings by quarter (src/core/lifeWheel.ts)", null),
+	saga_arc: json$5("Ben's arc: the chapter reveal you saw, his outfit, cinematics already played (src/core/benArc.ts)", null),
 	coach_adapt: json$5("how Ben adapts the plan to how it went", null),
 	goal_booking: json$5("goal blocks booked into the calendar", null),
 	goal_asks: json$5("Ben's goal check-ins: what he asked this period, today's count, auto goals' last number", null),
@@ -5685,6 +5693,3441 @@ var BARS = "▁▂▃▄▅▆▇█";
 function sparkline(values) {
 	const max = Math.max(1, ...values);
 	return values.map((v) => v <= 0 ? "·" : BARS[Math.min(7, Math.round(v / max * 7))]).join("");
+}
+// src/core/ledger.ts
+var LedgerError = class extends Error {
+	name = "LedgerError";
+};
+/** Rows that still count: not undo rows and not undone. */
+function effective(entries) {
+	const undone = /* @__PURE__ */ new Set();
+	for (const e of entries) if (e.kind === "undo" && e.undoOf != null) undone.add(e.undoOf);
+	return entries.filter((e) => e.kind !== "undo" && !undone.has(e.id));
+}
+function balance(entries) {
+	return effective(entries).reduce((s, e) => s + e.coins, 0);
+}
+/** XP only ever goes up; undoing an earn is the one way it is corrected. */
+function totalXp(entries) {
+	return effective(entries).reduce((s, e) => s + Math.max(0, e.xp), 0);
+}
+/**
+* Penalties dock coins but never push the balance below zero, so one bad day
+* can't wipe out the wallet.
+*/
+function clampPenalty(currentBalance, coins) {
+	if (coins >= 0) return coins;
+	return Math.max(coins, -Math.max(0, currentBalance));
+}
+/** Validates an undo and returns the row to insert. */
+function planUndo(entries, id, note, ts, day) {
+	if (!note.trim()) throw new LedgerError("An undo needs a reason");
+	const target = entries.find((e) => e.id === id);
+	if (!target) throw new LedgerError("Entry not found");
+	if (target.kind === "undo") throw new LedgerError("Cannot undo an undo");
+	if (target.ref?.startsWith("chest:")) throw new LedgerError("Chest prizes are final");
+	if (target.coins < 0 && /^(bank:|goal:)/.test(target.ref ?? "")) throw new LedgerError("Take them back out of the bank or goal instead");
+	if (entries.some((e) => e.kind === "undo" && e.undoOf === id)) throw new LedgerError("Already undone");
+	if (balance(entries) - target.coins < 0) throw new LedgerError("Those coins were already spent");
+	return {
+		ts,
+		day,
+		module: target.module,
+		kind: "undo",
+		coins: 0,
+		xp: 0,
+		ruleId: target.ruleId ?? null,
+		ref: target.ref ?? null,
+		note,
+		undoOf: id
+	};
+}
+// src/core/quests.ts
+var rule = (id) => (day) => day.filter((e) => e.ruleId === id).length;
+var QUEST_POOL = [
+	{
+		id: "study2",
+		title: "Finish 2 study blocks",
+		goal: 2,
+		count: (d) => d.filter((e) => e.ruleId === "study.block_done" || e.ruleId === "focus.session").length
+	},
+	{
+		id: "wake",
+		title: "Wake up on time",
+		goal: 1,
+		count: rule("sleep.up_on_time")
+	},
+	{
+		id: "bed",
+		title: "Be in bed on time",
+		goal: 1,
+		count: rule("sleep.bed_on_time")
+	},
+	{
+		id: "money",
+		title: "Log your spending",
+		goal: 1,
+		count: rule("money.logged")
+	},
+	{
+		id: "tasks3",
+		title: "Complete 3 tasks",
+		goal: 3,
+		count: (d) => d.filter((e) => e.ref?.startsWith("task:")).length
+	},
+	{
+		id: "clean",
+		title: "Check in clean",
+		goal: 1,
+		count: rule("discipline.clean_day")
+	},
+	{
+		id: "workout",
+		title: "Work out",
+		goal: 1,
+		count: rule("body.workout_done")
+	},
+	{
+		id: "face",
+		title: "Do your skincare",
+		goal: 1,
+		count: rule("face.routine_done")
+	},
+	{
+		id: "earn60",
+		title: "Earn 60 coins",
+		goal: 60,
+		count: (d) => d.reduce((s, e) => s + Math.max(0, e.coins), 0)
+	}
+];
+var QUEST_BONUS = {
+	coins: 30,
+	xp: 50
+};
+function hash$2(s) {
+	let h = 2166136261;
+	for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+	return h >>> 0;
+}
+/** The day's three quests, always the same for the same day. */
+function questsFor(day) {
+	return QUEST_POOL.map((q) => ({
+		q,
+		k: hash$2(`${day}:${q.id}`)
+	})).sort((a, b) => a.k - b.k).slice(0, 3).map((x) => x.q);
+}
+var questRef = (day) => `quest:${day}`;
+function questState(day, entries) {
+	const live = effective(entries);
+	const today = live.filter((e) => e.day === day && !e.ref?.startsWith("quest:"));
+	const quests = questsFor(day).map((q) => {
+		const progress = Math.min(q.goal, q.count(today));
+		return {
+			id: q.id,
+			title: q.title,
+			goal: q.goal,
+			progress,
+			done: progress >= q.goal
+		};
+	});
+	return {
+		day,
+		quests,
+		allDone: quests.every((q) => q.done),
+		claimed: live.some((e) => e.ref === questRef(day)),
+		bonus: QUEST_BONUS
+	};
+}
+function xpToNext(level) {
+	return Math.round(80 * Math.pow(level, 1.3));
+}
+var RANKS = [
+	{
+		minLevel: 1,
+		name: "Recruit (E-Rank)",
+		title: "The Weakest Hunter",
+		grade: "E-Rank",
+		badge: "⚔️",
+		color: "#8A93A6",
+		auraGlow: "rgba(138, 147, 166, 0.4)",
+		desc: "You have awakened at the bottom of the world. Even if called the weakest, the System has chosen you. Take your daily quest and begin your ascent.",
+		perk: "Awakening Spark: +10% XP on first daily ritual",
+		dailyQuestBonus: 5
+	},
+	{
+		minLevel: 3,
+		name: "E-Rank Scout",
+		title: "Dungeon Scout",
+		grade: "E-Rank",
+		badge: "🗡️",
+		color: "#A0AEC0",
+		auraGlow: "rgba(160, 174, 192, 0.4)",
+		desc: "Learning the terrain of your mind. You spot old addictive triggers and complacency before they strike.",
+		perk: "Pattern Sense: +5% Urge Resistance",
+		dailyQuestBonus: 5
+	},
+	{
+		minLevel: 5,
+		name: "D-Rank Survivor",
+		title: "Dungeon Survivor",
+		grade: "D-Rank",
+		badge: "🛡️",
+		color: "#4ADE80",
+		auraGlow: "rgba(74, 222, 128, 0.4)",
+		desc: "You no longer panic when habits get hard. Workouts and clean days are becoming your new normal.",
+		perk: "Iron Will: Workout fatigue reduced by 10%",
+		dailyQuestBonus: 8
+	},
+	{
+		minLevel: 8,
+		name: "D-Rank Gate Clearer",
+		title: "Gate Breaker",
+		grade: "D-Rank",
+		badge: "⚡",
+		color: "#52E38B",
+		auraGlow: "rgba(82, 227, 139, 0.4)",
+		desc: "Entering basic habit dungeons with certainty. Morning wake-ups and focused blocks are completed with steady rhythm.",
+		perk: "Momentum Pulse: +5 coins on completed focus blocks",
+		dailyQuestBonus: 8
+	},
+	{
+		minLevel: 10,
+		name: "C-Rank Striker",
+		title: "Dungeon Striker",
+		grade: "C-Rank",
+		badge: "🏹",
+		color: "#38BDF8",
+		auraGlow: "rgba(56, 189, 248, 0.45)",
+		desc: "You possess real destructive power against procrastination. The gap between your intentions and execution has shrunk dramatically.",
+		perk: "Striking Velocity: Tasks completed before noon pay +20% XP",
+		dailyQuestBonus: 10
+	},
+	{
+		minLevel: 14,
+		name: "C-Rank Raid Vanguard",
+		title: "Raid Vanguard",
+		grade: "C-Rank",
+		badge: "🔱",
+		color: "#0EA5E9",
+		auraGlow: "rgba(14, 165, 233, 0.45)",
+		desc: "First through the gate. When adversity strikes your schedule, you spearhead the solution instead of retreating.",
+		perk: "Frontline Fortitude: Streak Shield durability increased",
+		dailyQuestBonus: 12
+	},
+	{
+		minLevel: 18,
+		name: "B-Rank Raider",
+		title: "Dungeon Raider",
+		grade: "B-Rank",
+		badge: "🔮",
+		color: "#818CF8",
+		auraGlow: "rgba(129, 140, 248, 0.45)",
+		desc: "A respected warrior. Common temptations, binge spending, and impulse distractions no longer defeat you in standard encounters.",
+		perk: "Budget Fortification: Daily budget remaining bonus +10%",
+		dailyQuestBonus: 15
+	},
+	{
+		minLevel: 22,
+		name: "B-Rank High Striker",
+		title: "High Striker",
+		grade: "B-Rank",
+		badge: "💥",
+		color: "#6366F1",
+		auraGlow: "rgba(99, 102, 241, 0.5)",
+		desc: "High workout volume and intense focus sessions feel second nature. Your daily output outclasses 95% of your peers.",
+		perk: "Dual Strike: Double XP on days with 2+ completed study blocks",
+		dailyQuestBonus: 15
+	},
+	{
+		minLevel: 26,
+		name: "B-Rank Raid Commander",
+		title: "Tactical Commander",
+		grade: "B-Rank",
+		badge: "🦅",
+		color: "#A855F7",
+		auraGlow: "rgba(168, 85, 247, 0.5)",
+		desc: "Orchestrating every hour with tactical clarity. No time is wasted in mindless scrolling or hesitation.",
+		perk: "Commander Domain: All 5 daily rituals completed grants +15 bonus coins",
+		dailyQuestBonus: 18
+	},
+	{
+		minLevel: 30,
+		name: "A-Rank Elite Vanguard",
+		title: "Red Gate Conqueror",
+		grade: "A-Rank",
+		badge: "🔥",
+		color: "#C084FC",
+		auraGlow: "rgba(192, 132, 252, 0.5)",
+		desc: "You enter red gates without fear. Extreme workloads and intense physical challenges are systematically conquered.",
+		perk: "Red Gate Resilience: Missed block penalty reduced by 50%",
+		dailyQuestBonus: 20
+	},
+	{
+		minLevel: 35,
+		name: "A-Rank Shadow Assassin",
+		title: "Stealth Infiltrator",
+		grade: "A-Rank",
+		badge: "🥷",
+		color: "#E879F9",
+		auraGlow: "rgba(232, 121, 249, 0.5)",
+		desc: "Moving silently through your goals. Stealth discipline mode: results speak so loudly that explanations are unnecessary.",
+		perk: "Silent Mastery: Stealth check-ins yield +10 XP",
+		dailyQuestBonus: 22
+	},
+	{
+		minLevel: 40,
+		name: "A-Rank Master of Iron",
+		title: "Ironclad Titan",
+		grade: "A-Rank",
+		badge: "🦾",
+		color: "#F43F5E",
+		auraGlow: "rgba(244, 63, 94, 0.55)",
+		desc: "The physical temple is hardened. Heavy weights, push-up sets, and cold discipline have sculpted an unbreakable warrior body.",
+		perk: "Muscle Memory: Workouts logged award +5 extra coins",
+		dailyQuestBonus: 25
+	},
+	{
+		minLevel: 45,
+		name: "A-Rank Apex Hunter",
+		title: "Guild Champion",
+		grade: "A-Rank",
+		badge: "👑",
+		color: "#FB7185",
+		auraGlow: "rgba(251, 113, 133, 0.55)",
+		desc: "Standing at the peak of standard humanity. Every project and financial challenge is conquered before the deadline.",
+		perk: "Apex Will: Task streaks award +25 bonus coins",
+		dailyQuestBonus: 28
+	},
+	{
+		minLevel: 50,
+		name: "S-Rank Calamity Buster",
+		title: "National Awakening",
+		grade: "S-Rank",
+		badge: "⭐",
+		color: "#F5C84B",
+		auraGlow: "rgba(245, 200, 75, 0.6)",
+		desc: "THE MAGIC MEASURING DEVICE SHATTERS. You have entered the realm of S-Rank Hunters. Your discipline bends reality to your favor.",
+		perk: "S-Rank Authority: +25% permanent multiplier across all coin earnings",
+		dailyQuestBonus: 35
+	},
+	{
+		minLevel: 55,
+		name: "S-Rank Demon Castle Pioneer",
+		title: "Demon Slayer",
+		grade: "S-Rank",
+		badge: "👹",
+		color: "#EAB308",
+		auraGlow: "rgba(234, 179, 8, 0.6)",
+		desc: "Ascending the 100 floors of the Demon Castle. The demons of past addiction, regret, and low self-worth are permanently slain.",
+		perk: "Demon Slayer Will: Urge crusher completions award double coins",
+		dailyQuestBonus: 38
+	},
+	{
+		minLevel: 60,
+		name: "S-Rank Sovereign Striker",
+		title: "Apex Sovereign",
+		grade: "S-Rank",
+		badge: "☄️",
+		color: "#FACC15",
+		auraGlow: "rgba(250, 204, 21, 0.65)",
+		desc: "Speed, power, precision. Circadian wake-ups are clockwork; spending is surgically controlled; fitness is non-negotiable.",
+		perk: "Apex Focus: On-time wakeups award +15 coins",
+		dailyQuestBonus: 40
+	},
+	{
+		minLevel: 65,
+		name: "National Level Hunter",
+		title: "World Authority",
+		grade: "National Level",
+		badge: "🌍",
+		color: "#00D2FF",
+		auraGlow: "rgba(0, 210, 255, 0.7)",
+		desc: "Possessing power rivaling entire nations. You control your fate with absolute sovereignty. A beacon of relentless self-discipline.",
+		perk: "National Authority: Level mystery chests guarantee rare loot drops",
+		dailyQuestBonus: 50
+	},
+	{
+		minLevel: 70,
+		name: "National Level Titan",
+		title: "Living Monolith",
+		grade: "National Level",
+		badge: "🏛️",
+		color: "#38BDF8",
+		auraGlow: "rgba(56, 189, 248, 0.7)",
+		desc: "Unshakable by peer pressure, immune to dopamine traps. You stand as an indestructible monolith of habit execution.",
+		perk: "Titan Shield: 1 free Streak Shield awarded upon reaching this rank",
+		dailyQuestBonus: 55
+	},
+	{
+		minLevel: 75,
+		name: "Ruler’s Vessel",
+		title: "Vessel of the Brilliant Light",
+		grade: "National Level",
+		badge: "☀️",
+		color: "#67E8F9",
+		auraGlow: "rgba(103, 232, 249, 0.75)",
+		desc: "Channeling divine power. Telekinetic mastery over your focus: distractions bounce off your attention span like dust.",
+		perk: "Ruler’s Reach: Focus timers flow effortlessly with zero mental friction",
+		dailyQuestBonus: 60
+	},
+	{
+		minLevel: 80,
+		name: "Monarch Candidate",
+		title: "Shadow Heir",
+		grade: "Monarch Candidate",
+		badge: "🌑",
+		color: "#7C3AED",
+		auraGlow: "rgba(124, 58, 237, 0.8)",
+		desc: "The System chooses you. You stand between the world of light and sovereign darkness. Your past failures become soldiers in your shadow army.",
+		perk: "Arise Extraction: Every past slip converted into permanent wisdom and XP",
+		dailyQuestBonus: 70
+	},
+	{
+		minLevel: 85,
+		name: "Commander of Shadows",
+		title: "Lord of the Undead",
+		grade: "Monarch Candidate",
+		badge: "💀",
+		color: "#6D28D9",
+		auraGlow: "rgba(109, 40, 217, 0.8)",
+		desc: "Summoning Igris, Tank, and Iron. Your daily routines march forward automatically without conscious willpower strain.",
+		perk: "Shadow Army: Recurring habits execute with zero friction",
+		dailyQuestBonus: 75
+	},
+	{
+		minLevel: 90,
+		name: "Sovereign of the Abyss",
+		title: "Void Sovereign",
+		grade: "Monarch",
+		badge: "🌌",
+		color: "#5B21B6",
+		auraGlow: "rgba(91, 33, 182, 0.85)",
+		desc: "Master of the infinite expanse. Time bends to your priorities. When you decide a goal is done, the universe aligns.",
+		perk: "Void Mastery: Reward Vault surplus earns 5% monthly dividend",
+		dailyQuestBonus: 80
+	},
+	{
+		minLevel: 95,
+		name: "Shadow Monarch",
+		title: "Monarch of Shadows (True Form)",
+		grade: "Monarch",
+		badge: "👑",
+		color: "#9D4EDD",
+		auraGlow: "rgba(157, 78, 221, 0.9)",
+		desc: "\"ARISE.\" The true Shadow Monarch awakens. Death of bad habits is permanent; resurrection of your highest potential is absolute.",
+		perk: "True Monarch Domain: 2x permanent coin multiplier on all discipline rituals",
+		dailyQuestBonus: 100
+	},
+	{
+		minLevel: 100,
+		name: "Sovereign of Eternal Rebirth",
+		title: "Centennial Monarch",
+		grade: "Monarch",
+		badge: "♾️",
+		color: "#C77DFF",
+		auraGlow: "rgba(199, 125, 255, 0.9)",
+		desc: "Centennial titan. One hundred levels of relentless sweat, restraint, and calculated focus. You rule your mind with iron certainty.",
+		perk: "Centennial Aura: Level 100 Legendary Chest unlocked with guaranteed mega drop",
+		dailyQuestBonus: 110
+	},
+	{
+		minLevel: 110,
+		name: "Transcendent Sovereign",
+		title: "Master of Dimensions",
+		grade: "Transcendent",
+		badge: "🌀",
+		color: "#E0AAFF",
+		auraGlow: "rgba(224, 170, 255, 0.95)",
+		desc: "You operate across dimensions of financial wealth, physical elite status, and spiritual alignment. A master of total life architecture.",
+		perk: "Dimensional Vault: Real-money reward budget cap removed",
+		dailyQuestBonus: 125
+	},
+	{
+		minLevel: 120,
+		name: "Monarch of Total Sovereignty",
+		title: "Unbreakable Ruler",
+		grade: "Transcendent",
+		badge: "🩸",
+		color: "#FF3366",
+		auraGlow: "rgba(255, 51, 102, 0.95)",
+		desc: "The entire system recognizes your supremacy. No urge can breach your armor; no financial turbulence can shake your foundation.",
+		perk: "Supreme Will: Complete urge immunity protocol",
+		dailyQuestBonus: 140
+	},
+	{
+		minLevel: 130,
+		name: "Absolute Being Avatar",
+		title: "Divine Creator",
+		grade: "Divine Sovereign",
+		badge: "✨",
+		color: "#C8F135",
+		auraGlow: "rgba(200, 241, 53, 0.95)",
+		desc: "Possessing the spark of the creator. Every daily action creates ripples of excellence across your university, fitness, and family life.",
+		perk: "Divine Spark: Triple XP on all master goals",
+		dailyQuestBonus: 160
+	},
+	{
+		minLevel: 140,
+		name: "Primordial Architect",
+		title: "Forge of Destiny",
+		grade: "Divine Sovereign",
+		badge: "⚜️",
+		color: "#FFD700",
+		auraGlow: "rgba(255, 215, 0, 1.0)",
+		desc: "You do not adapt to the world; the world adapts to your discipline. A mastercraft of relentless execution.",
+		perk: "Destiny Forge: Max daily coin cap increased to 500 coins",
+		dailyQuestBonus: 180
+	},
+	{
+		minLevel: 145,
+		name: "Eternal Monarch of the Cosmos",
+		title: "Cosmic Ruler",
+		grade: "Divine Sovereign",
+		badge: "🌠",
+		color: "#00FFFF",
+		auraGlow: "rgba(0, 255, 255, 1.0)",
+		desc: "A legendary myth made flesh. The weakest E-Rank has conquered the cosmos of his own mind and soul.",
+		perk: "Cosmic Dominion: Permanent 3x multiplier on all study and body blocks",
+		dailyQuestBonus: 200
+	},
+	{
+		minLevel: 150,
+		name: "The Apex Sovereign (Unrivaled)",
+		title: "Omnipotent Ruler of Fate",
+		grade: "Absolute Supreme",
+		badge: "🏆",
+		color: "#FF0055",
+		auraGlow: "rgba(255, 0, 85, 1.0)",
+		desc: "MAX LEVEL 150. The summit of human potential. You have completed the System's grand purpose: becoming the supreme ruler of your own destiny.",
+		perk: "Omnipotent Sovereign: Master of all domains, permanently crowned in eternal glory.",
+		dailyQuestBonus: 250
+	}
+];
+function hunterDefFor(level) {
+	let def = RANKS[0];
+	for (const r of RANKS) if (level >= r.minLevel) def = r;
+	return def;
+}
+function nextHunterRank(level) {
+	for (const r of RANKS) if (r.minLevel > level) return r;
+	return null;
+}
+function totalStatPointsForLevel(level) {
+	if (level <= 1) return 0;
+	let total = 0;
+	for (let l = 2; l <= level; l++) if (l <= 10) total += 1;
+	else if (l <= 25) total += 2;
+	else total += 3;
+	return total;
+}
+var HUNTER_PERK_DEFINITIONS = [
+	{
+		id: "awakening_spark",
+		name: "Awakening Spark",
+		category: "combat",
+		reqDesc: "Level 1",
+		levelReq: 1,
+		icon: "⚡",
+		color: "#8A93A6",
+		desc: "Awakened spark grants +10% bonus XP on the first ritual completed each day."
+	},
+	{
+		id: "sprint_velocity",
+		name: "Sprint Velocity",
+		category: "mind",
+		reqDesc: "AGI 20",
+		statReq: {
+			stat: "agi",
+			value: 20
+		},
+		icon: "💨",
+		color: "#38bdf8",
+		desc: "Morning circadian momentum: on-time wakeups yield +5 bonus coins."
+	},
+	{
+		id: "iron_focus",
+		name: "Iron Focus",
+		category: "mind",
+		reqDesc: "INT 25",
+		statReq: {
+			stat: "int",
+			value: 25
+		},
+		icon: "🧠",
+		color: "#a78bfa",
+		desc: "Hyper-focused cognition: planned study and focus blocks yield +20% bonus coins."
+	},
+	{
+		id: "indomitable_bastion",
+		name: "Indomitable Bastion",
+		category: "recovery",
+		reqDesc: "VIT 25",
+		statReq: {
+			stat: "vit",
+			value: 25
+		},
+		icon: "🛡️",
+		color: "#4ade80",
+		desc: "Metabolic resilience: healthy sleep quality and budget discipline reinforce streak fortitude."
+	},
+	{
+		id: "bloodlust",
+		name: "Bloodlust Strike",
+		category: "combat",
+		reqDesc: "STR 30",
+		statReq: {
+			stat: "str",
+			value: 30
+		},
+		icon: "⚔️",
+		color: "#f87171",
+		desc: "Relentless physical intensity: workout sessions award +25% bonus XP toward leveling."
+	},
+	{
+		id: "rulers_authority",
+		name: "Ruler's Authority",
+		category: "sovereign",
+		reqDesc: "SEN 30",
+		statReq: {
+			stat: "sen",
+			value: 30
+		},
+		icon: "👑",
+		color: "#fbbf24",
+		desc: "Sovereign willpower barrier: urge reset coin penalties are permanently reduced by 50%."
+	},
+	{
+		id: "shadow_monarch_extraction",
+		name: "Shadow Monarch's Extraction",
+		category: "sovereign",
+		reqDesc: "Level 50",
+		levelReq: 50,
+		icon: "🌑",
+		color: "#c084fc",
+		desc: "Extracting shadow remnants: completing 7 consecutive Priority 1 (P1) tasks refunds 1 streak shield."
+	}
+];
+function computeHunterPerks(level, attributes) {
+	return HUNTER_PERK_DEFINITIONS.map((def) => {
+		let unlocked = false;
+		let progressPct = 0;
+		if (def.levelReq != null) {
+			unlocked = level >= def.levelReq;
+			progressPct = Math.min(100, Math.round(level / def.levelReq * 100));
+		} else if (def.statReq != null) {
+			const currentStat = attributes[def.statReq.stat];
+			unlocked = currentStat >= def.statReq.value;
+			progressPct = Math.min(100, Math.round(currentStat / def.statReq.value * 100));
+		}
+		return {
+			...def,
+			unlocked,
+			progressPct
+		};
+	});
+}
+function calculateHunterAttributes(level, params) {
+	const base = Math.max(10, Math.floor(level * 2.5));
+	const strBonus = Math.floor((params?.workoutCount ?? 0) * 1.5);
+	const senBonus = Math.floor((params?.cleanStreakDays ?? 0) * 2);
+	const intBonus = Math.floor((params?.focusBlocksCount ?? 0) * 1.8);
+	const agiBonus = Math.floor((params?.onTimeWakeups ?? 0) * 1.2);
+	const vitBonus = Math.floor((params?.budgetDays ?? 0) * 1);
+	const allocated = {
+		str: Math.max(0, Math.floor(params?.allocated?.str ?? 0)),
+		agi: Math.max(0, Math.floor(params?.allocated?.agi ?? 0)),
+		vit: Math.max(0, Math.floor(params?.allocated?.vit ?? 0)),
+		int: Math.max(0, Math.floor(params?.allocated?.int ?? 0)),
+		sen: Math.max(0, Math.floor(params?.allocated?.sen ?? 0))
+	};
+	const str = base + strBonus + allocated.str;
+	const sen = base + senBonus + allocated.sen;
+	const int = base + intBonus + allocated.int;
+	const agi = base + agiBonus + allocated.agi;
+	const vit = base + vitBonus + allocated.vit;
+	const totalCombatPower = str * 3 + agi * 2 + vit * 2 + int * 3 + sen * 4;
+	const totalEarnedPoints = totalStatPointsForLevel(level);
+	const spent = allocated.str + allocated.agi + allocated.vit + allocated.int + allocated.sen;
+	return {
+		str,
+		agi,
+		vit,
+		int,
+		sen,
+		totalCombatPower,
+		allocated,
+		unallocatedPoints: Math.max(0, totalEarnedPoints - spent),
+		totalEarnedPoints
+	};
+}
+function levelInfo(totalXp, hunterStatsInput) {
+	let level = 1;
+	let left = Number.isFinite(totalXp) ? Math.max(0, Math.floor(totalXp)) : 0;
+	while (level < 150 && left >= xpToNext(level)) {
+		left -= xpToNext(level);
+		level++;
+	}
+	const xpForNext = level >= 150 ? 0 : xpToNext(level);
+	const def = hunterDefFor(level);
+	const next = nextHunterRank(level);
+	const attributes = calculateHunterAttributes(level, hunterStatsInput);
+	const perks = computeHunterPerks(level, attributes);
+	return {
+		level,
+		xpIntoLevel: left,
+		xpForNext,
+		progress: xpForNext ? left / xpForNext : 1,
+		rank: def.name,
+		hunterTitle: def.title,
+		hunterGrade: def.grade,
+		rankBadge: def.badge,
+		rankColor: def.color,
+		rankAura: def.auraGlow,
+		rankDesc: def.desc,
+		rankPerk: def.perk,
+		attributes,
+		perks,
+		nextRank: next,
+		allRanks: RANKS
+	};
+}
+var BOSS_KINDS = [
+	{
+		id: "exam",
+		label: "An exam",
+		icon: "📜"
+	},
+	{
+		id: "ctf",
+		label: "A CTF",
+		icon: "🚩"
+	},
+	{
+		id: "fitness",
+		label: "A fitness test",
+		icon: "💪"
+	},
+	{
+		id: "project",
+		label: "A launch or project",
+		icon: "🚀"
+	},
+	{
+		id: "other",
+		label: "Something else",
+		icon: "⚔️"
+	}
+];
+var SEASON_THEMES = [
+	{
+		id: "iron",
+		area: "body",
+		name: "The Iron Path",
+		theme: "Forge a body that keeps up with your mind.",
+		cover: "dojo-dawn",
+		color: "#ff9f43",
+		boss: {
+			title: "Fitness test: 50 push-ups in one go",
+			kind: "fitness"
+		},
+		quests: [
+			"Train 3 times a week",
+			"Sleep before midnight",
+			"Walk 8,000 steps a day"
+		]
+	},
+	{
+		id: "shadow",
+		area: "career",
+		name: "Shadow Code",
+		theme: "Become the hacker you keep reading about.",
+		cover: "neon-rain",
+		color: "#ff3ea5",
+		boss: {
+			title: "Finish a weekend CTF in the top half",
+			kind: "ctf"
+		},
+		quests: [
+			"Solve 20 practice boxes",
+			"Write up every solve",
+			"Ship one security tool"
+		]
+	},
+	{
+		id: "temple",
+		area: "faith",
+		name: "The Quiet Temple",
+		theme: "Make faith the steady centre of the day.",
+		cover: "torii-mist",
+		color: "#d0442c",
+		boss: {
+			title: "A full month without missing the daily practice",
+			kind: "other"
+		},
+		quests: [
+			"Daily practice on time",
+			"Read a little every day",
+			"One act of service a week"
+		]
+	},
+	{
+		id: "clan",
+		area: "family",
+		name: "The Clan",
+		theme: "Show up for the people who raised you.",
+		cover: "sakura-hill",
+		color: "#ec8db0",
+		boss: {
+			title: "Plan and host a family day",
+			kind: "project"
+		},
+		quests: [
+			"Call home twice a week",
+			"One family meal a week",
+			"Help with one real problem"
+		]
+	},
+	{
+		id: "bonds",
+		area: "friends",
+		name: "Bonds of the Road",
+		theme: "Fewer screens, more people.",
+		cover: "train-crossing",
+		color: "#ff9a6a",
+		boss: {
+			title: "Organise a trip with friends",
+			kind: "project"
+		},
+		quests: [
+			"Meet a friend every week",
+			"Reach out to one old friend",
+			"Join one group or club"
+		]
+	},
+	{
+		id: "library",
+		area: "mind",
+		name: "The Night Library",
+		theme: "Read, think and learn on purpose.",
+		cover: "lofi-room",
+		color: "#ffb066",
+		boss: {
+			title: "Pass the end-of-term exam",
+			kind: "exam"
+		},
+		quests: [
+			"Study 2 focused blocks a day",
+			"Finish 2 books",
+			"Teach one topic to someone"
+		]
+	},
+	{
+		id: "gold",
+		area: "money",
+		name: "The Gold Road",
+		theme: "Every lei with a job, savings that grow.",
+		cover: "katana-sun",
+		color: "#f5c84b",
+		boss: {
+			title: "Hit the savings target",
+			kind: "project"
+		},
+		quests: [
+			"Log every spend",
+			"Cook at home 4 days a week",
+			"Find one new income stream"
+		]
+	},
+	{
+		id: "wanderer",
+		area: "fun",
+		name: "The Wanderer",
+		theme: "Collect real adventures, not just scrolls.",
+		cover: "floating-island",
+		color: "#3b8fe8",
+		boss: {
+			title: "A cheap trip somewhere new",
+			kind: "other"
+		},
+		quests: [
+			"One side quest every week",
+			"Learn a fun skill",
+			"Phone-free Sunday"
+		]
+	},
+	{
+		id: "starfall",
+		area: "career",
+		name: "Starfall",
+		theme: "Ship the thing that changes your next year.",
+		cover: "twin-suns",
+		color: "#f4c27c",
+		boss: {
+			title: "Launch day",
+			kind: "project"
+		},
+		quests: [
+			"Build every weekday",
+			"Show it to 10 people",
+			"Fix the top 5 problems they find"
+		]
+	}
+];
+var CHAPTERS = [
+	"The Call",
+	"First Steps",
+	"Training Arc",
+	"The Trial",
+	"Turning Point",
+	"Darkest Hour",
+	"The Climb",
+	"Final Battle"
+];
+var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
+var str$6 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var hex = (v, d) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d;
+var day = (v) => typeof v === "string" && DAY$8.test(v) ? v : null;
+/** The Monday of the week holding `d` (or `d` itself on a Monday). */
+function mondayOf$5(d) {
+	return addDays$7(d, -(((/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay() + 6) % 7));
+}
+var seasonEnd = (s) => addDays$7(s.start, 55);
+function cleanQuest(q, i) {
+	const title = str$6(q?.title, 80);
+	if (!title) return null;
+	const gid = Number(q?.goalId);
+	return {
+		id: str$6(q?.id, 24) || `q${i + 1}`,
+		title,
+		goalId: Number.isInteger(gid) && gid > 0 ? gid : null,
+		cardId: q?.cardId ? str$6(q.cardId, 24) : null,
+		done: day(q?.done)
+	};
+}
+function cleanSeason(raw) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const name = str$6(r.name, 48);
+	const start = day(r.start);
+	if (!name || !start) return null;
+	const b = r.boss && typeof r.boss === "object" ? r.boss : {};
+	const kind = BOSS_KINDS.some((k) => k.id === b.kind) ? b.kind : "other";
+	const end = seasonEnd({ start });
+	let bossDay = day(b.day) ?? addDays$7(start, 54);
+	if (bossDay < start) bossDay = start;
+	if (bossDay > end) bossDay = end;
+	const quests = (Array.isArray(r.quests) ? r.quests : []).map(cleanQuest).filter((q) => !!q).slice(0, 3);
+	return {
+		id: str$6(r.id, 24) || `s${start.replace(/-/g, "")}`,
+		name,
+		theme: str$6(r.theme, 160),
+		cover: str$6(r.cover, 32) || "ronin-moon",
+		color: hex(r.color, "#c8f135"),
+		area: r.area ? str$6(r.area, 16) : null,
+		start,
+		quests,
+		boss: {
+			title: str$6(b.title, 80) || "The final test",
+			kind,
+			day: bossDay,
+			result: b.result === "won" || b.result === "lost" ? b.result : null,
+			resultDay: day(b.resultDay)
+		},
+		closed: day(r.closed)
+	};
+}
+function cleanSeasonBook(raw) {
+	const list = Array.isArray(raw?.seasons) ? raw.seasons : [];
+	const seen = /* @__PURE__ */ new Set();
+	return { seasons: list.map(cleanSeason).filter((s) => !!s && !seen.has(s.id) && !!seen.add(s.id)).sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0).slice(-24) };
+}
+/** The season you are in (or the latest one that hasn't been closed), else null. */
+function currentSeason(book, today) {
+	const open = book.seasons.filter((s) => !s.closed && s.start <= addDays$7(today, 7));
+	const inside = open.filter((s) => s.start <= today && today <= seasonEnd(s));
+	if (inside.length) return inside[inside.length - 1];
+	return open.length ? open[open.length - 1] : null;
+}
+/** Seasons finished: closed, or past their last day. */
+function finishedSeasons(book, today) {
+	return book.seasons.filter((s) => s.closed || seasonEnd(s) < today);
+}
+function seasonProgress(s, today) {
+	const end = seasonEnd(s);
+	const idx = daysBetween$3(s.start, today);
+	const daysToBoss = daysBetween$3(today, s.boss.day);
+	if (idx < 0) return {
+		phase: "before",
+		week: 0,
+		chapter: "Coming soon",
+		dayIndex: idx,
+		daysLeft: 56,
+		time: 0,
+		daysToBoss
+	};
+	if (today > end || s.closed) return {
+		phase: "over",
+		week: 8,
+		chapter: "The end",
+		dayIndex: Math.min(idx, 55),
+		daysLeft: 0,
+		time: 1,
+		daysToBoss
+	};
+	const week = Math.floor(idx / 7) + 1;
+	return {
+		phase: week === 8 || daysToBoss <= 6 ? "boss-week" : "active",
+		week,
+		chapter: CHAPTERS[week - 1],
+		dayIndex: idx,
+		daysLeft: daysBetween$3(today, end) + 1,
+		time: (idx + 1) / 56,
+		daysToBoss
+	};
+}
+var BOSS_WEIGHTS = {
+	quests: 55,
+	perfectDays: 20,
+	xp: 15
+};
+/** 20 perfect days and 2,000 XP max out their parts. */
+var BOSS_TARGETS = {
+	perfectDays: 20,
+	xp: 2e3
+};
+/** The boss's HP: 100 minus the hits from quests, perfect days and XP; never below the final blow until you win. */
+function bossHp(s, input) {
+	if (s.boss.result === "won") return {
+		hp: 0,
+		max: 100,
+		hits: [],
+		ready: true,
+		result: "won"
+	};
+	const qs = input.questPcts.slice(0, 3);
+	while (qs.length < 3) qs.push(0);
+	const clamp01 = (n) => Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0;
+	const quests = qs.reduce((t, p) => t + clamp01(p / 100), 0) / 3 * BOSS_WEIGHTS.quests;
+	const days = clamp01(input.perfectDays / BOSS_TARGETS.perfectDays) * BOSS_WEIGHTS.perfectDays;
+	const xp = clamp01(input.xp / BOSS_TARGETS.xp) * BOSS_WEIGHTS.xp;
+	const hits = [
+		{
+			id: "quests",
+			label: "Main quests",
+			hp: Math.round(quests)
+		},
+		{
+			id: "days",
+			label: "Perfect quest days",
+			hp: Math.round(days)
+		},
+		{
+			id: "xp",
+			label: "XP this season",
+			hp: Math.round(xp)
+		}
+	].filter((h) => h.hp > 0).sort((a, b) => b.hp - a.hp);
+	const dealt = hits.reduce((t, h) => t + h.hp, 0);
+	const hp = Math.max(10, 100 - dealt);
+	return {
+		hp,
+		max: 100,
+		hits,
+		ready: hp <= 10,
+		result: s.boss.result
+	};
+}
+/** A quest's progress from its goal's % (or its tick). */
+function questPct(q, goalPct) {
+	if (q.done) return 100;
+	if (q.goalId != null) {
+		const p = goalPct(q.goalId);
+		return p == null ? 0 : Math.max(0, Math.min(100, p));
+	}
+	return 0;
+}
+function seasonMoments(s, p, boss) {
+	const out = [];
+	if (p.phase === "before") return out;
+	out.push({
+		id: `season:${s.id}:start`,
+		kind: "season-start",
+		title: s.name,
+		sub: s.theme || "A new season begins"
+	});
+	if (p.week >= 5) out.push({
+		id: `season:${s.id}:half`,
+		kind: "season-half",
+		title: "Halfway",
+		sub: `${s.name} · chapter ${p.week}: ${p.chapter}`
+	});
+	if (boss.ready && !boss.result) out.push({
+		id: `season:${s.id}:ready`,
+		kind: "boss-ready",
+		title: "The boss is weak",
+		sub: `Only the real fight is left: ${s.boss.title}`
+	});
+	if (boss.result === "won") out.push({
+		id: `season:${s.id}:won`,
+		kind: "boss-won",
+		title: "Boss defeated",
+		sub: s.boss.title
+	});
+	return out;
+}
+function seasonRecap(s, input, today) {
+	const questsDone = input.questPcts.slice(0, s.quests.length).filter((p) => p >= 100).length;
+	const weeks = Math.min(8, Math.max(0, Math.ceil((Math.min(daysBetween$3(s.start, today), 55) + 1) / 7)));
+	const lines = [
+		`${questsDone} of ${s.quests.length} main quests done`,
+		`${input.perfectDays} perfect daily-quest days`,
+		`${input.xp.toLocaleString("en-GB")} XP earned`,
+		input.workouts ? `${input.workouts} workouts` : "",
+		input.focusHours ? `${Math.round(input.focusHours)} h of focus` : "",
+		input.adventures ? `${input.adventures} side quest${input.adventures === 1 ? "" : "s"} lived` : "",
+		s.boss.result === "won" ? `Boss defeated: ${s.boss.title}` : s.boss.result === "lost" ? `The boss won this time: ${s.boss.title}. Rematch next season.` : `Boss not fought yet: ${s.boss.title}`
+	].filter(Boolean);
+	const score = questsDone * 2 + (s.boss.result === "won" ? 3 : 0) + Math.min(2, Math.floor(input.perfectDays / 10));
+	const verdict = score >= 8 ? "Legend" : score >= 5 ? "Hero" : score >= 2 ? "Survivor" : "Wanderer";
+	return {
+		name: s.name,
+		weeks,
+		questsDone,
+		questsTotal: s.quests.length,
+		perfectDays: input.perfectDays,
+		xp: input.xp,
+		boss: s.boss.result,
+		bossTitle: s.boss.title,
+		lines,
+		verdict
+	};
+}
+/** One line for Ben's prompt (empty without a season). */
+function seasonLine(s, p, boss, questPcts = []) {
+	if (!s || !p || !boss) return "";
+	if (p.phase === "before") return `Season "${s.name}" starts ${s.start} (theme: ${s.theme}).`;
+	const qs = s.quests.map((q, i) => `${q.title} ${Math.round(questPcts[i] ?? 0)}%`).join("; ");
+	return `Season "${s.name}" (8-week arc, theme: ${s.theme}): week ${p.week} "${p.chapter}", ${p.daysLeft} days left. Main quests: ${qs || "none set"}. Boss: ${s.boss.title} on ${s.boss.day} (${boss.result === "won" ? "DEFEATED" : boss.result === "lost" ? "lost this time" : `HP ${boss.hp}/${boss.max}${boss.ready ? ", only the real fight left" : ""}`}). Talk about his effort as chapters of this arc when it fits; never invent progress.`;
+}
+var ART_IDS = [
+	{
+		id: "summit",
+		label: "Summit",
+		colors: ["#2b3a67", "#f4a261"]
+	},
+	{
+		id: "blade",
+		label: "Blade",
+		colors: ["#1b1f3b", "#38d8ff"]
+	},
+	{
+		id: "temple",
+		label: "Temple",
+		colors: ["#3a1f2b", "#e76f51"]
+	},
+	{
+		id: "scroll",
+		label: "Scroll",
+		colors: ["#2d2a24", "#e9c46a"]
+	},
+	{
+		id: "iron",
+		label: "Iron",
+		colors: ["#1f2a2e", "#ff9f43"]
+	},
+	{
+		id: "flag",
+		label: "Flag",
+		colors: ["#24123a", "#ff3ea5"]
+	},
+	{
+		id: "home",
+		label: "Home",
+		colors: ["#2a1d2e", "#ec8db0"]
+	},
+	{
+		id: "star",
+		label: "Star",
+		colors: ["#0d1b2a", "#c8f135"]
+	},
+	{
+		id: "wave",
+		label: "Wave",
+		colors: ["#0f2540", "#7fd8ff"]
+	},
+	{
+		id: "sunrise",
+		label: "Sunrise",
+		colors: ["#3d1e2e", "#ffc98f"]
+	},
+	{
+		id: "shield",
+		label: "Shield",
+		colors: ["#16222e", "#b892ff"]
+	},
+	{
+		id: "key",
+		label: "Key",
+		colors: ["#21201a", "#f5c84b"]
+	},
+	{
+		id: "crescent",
+		label: "Crescent",
+		colors: ["#0e2226", "#7fd8c4"]
+	},
+	{
+		id: "coin",
+		label: "Coin",
+		colors: ["#272012", "#f5c84b"]
+	}
+].map((a) => a.id);
+var str$5 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+function cleanVision(raw, year) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const y = Math.round(Number(r.year));
+	const seen = /* @__PURE__ */ new Set();
+	const cards = (Array.isArray(r.cards) ? r.cards : []).map((c, i) => ({
+		id: str$5(c?.id, 24) || `v${i + 1}`,
+		text: str$5(c?.text, 80),
+		art: ART_IDS.includes(c?.art) ? c.art : ART_IDS[i % ART_IDS.length],
+		photo: !!c?.photo
+	})).filter((c) => c.text && !seen.has(c.id) && !!seen.add(c.id)).slice(0, 9);
+	return {
+		year: Number.isFinite(y) && y > 2e3 && y < 3e3 ? y : year,
+		word: str$5(r.word, 24),
+		becoming: str$5(r.becoming, 140),
+		cards
+	};
+}
+function okVisionPhoto(v) {
+	return typeof v === "string" && /^data:image\/(jpeg|png|webp);base64,/.test(v) && v.length <= 12e4;
+}
+function cleanVisionPhotos(raw, cards) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const ids = new Set(cards.map((c) => c.id));
+	const out = {};
+	for (const [k, v] of Object.entries(r)) if (ids.has(k) && okVisionPhoto(v)) out[k] = v;
+	return out;
+}
+/** Today's card for the morning (a different one each day, same all day). */
+function cardOfDay(book, day) {
+	if (!book.cards.length) return null;
+	const n = Math.round(Date.parse(`${day}T12:00:00Z`) / 864e5);
+	return book.cards[(n % book.cards.length + book.cards.length) % book.cards.length];
+}
+/** Is the board filled enough to show (a word or 1+ card)? */
+var hasVision = (b) => !!(b.word || b.becoming || b.cards.length);
+/** Ben's line (empty when there is no board yet). */
+function visionLine(b) {
+	if (!hasVision(b)) return "";
+	return `His year (${b.year})${b.word ? `, word of the year: "${b.word}"` : ""}${b.becoming ? `; who he's becoming: "${b.becoming}"` : ""}${b.cards.length ? `; vision cards: ${b.cards.map((c) => c.text).join("; ")}` : ""}. Tie hard days back to this why, briefly, in his own words.`;
+}
+var KIND_IDS = [
+	{
+		id: "focus",
+		label: "Focus & study",
+		icon: "🎯",
+		hint: "focus sessions and study blocks"
+	},
+	{
+		id: "body",
+		label: "Training",
+		icon: "💪",
+		hint: "workouts, move breaks, healthy days"
+	},
+	{
+		id: "sleep",
+		label: "Sleep",
+		icon: "🌙",
+		hint: "up and in bed on time"
+	},
+	{
+		id: "discipline",
+		label: "Discipline",
+		icon: "🛡️",
+		hint: "clean days and urges beaten"
+	},
+	{
+		id: "tasks",
+		label: "Tasks",
+		icon: "✅",
+		hint: "Todoist tasks and must-dos done"
+	},
+	{
+		id: "habits",
+		label: "Habits",
+		icon: "🔁",
+		hint: "your own habits"
+	},
+	{
+		id: "money",
+		label: "Money",
+		icon: "🪙",
+		hint: "logged spending, under budget"
+	},
+	{
+		id: "goals",
+		label: "Goals",
+		icon: "🏔️",
+		hint: "goal check-ins and milestones"
+	},
+	{
+		id: "kind",
+		label: "Kind deeds",
+		icon: "🤍",
+		hint: "kind things you wrote on the wins wall"
+	}
+].map((k) => k.id);
+var str$4 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+function cleanIdentity(raw) {
+	const list = Array.isArray(raw?.lines) ? raw.lines : [];
+	const lines = [];
+	for (const [i, l] of list.entries()) {
+		const text = str$4(l?.text, 70);
+		if (!text) continue;
+		const kinds = (Array.isArray(l?.kinds) ? l.kinds : []).filter((k) => KIND_IDS.includes(k));
+		const words = (Array.isArray(l?.words) ? l.words : []).map((w) => str$4(w, 24).toLowerCase()).filter((w) => w.length >= 2).slice(0, 8);
+		const t = Math.round(Number(l?.target));
+		lines.push({
+			id: str$4(l?.id, 24) || `i${i + 1}`,
+			text,
+			emoji: str$4(l?.emoji, 8) || "✦",
+			kinds: [...new Set(kinds)],
+			words,
+			target: Number.isFinite(t) && t >= 1 && t <= 100 ? t : 10
+		});
+		if (lines.length >= 5) break;
+	}
+	return { lines };
+}
+/** The kinds of vote one ledger row casts (none for spends, penalties and undos). */
+function voteKindsOf(e) {
+	if (e.kind !== "earn" || e.coins <= 0 && e.xp <= 0) return [];
+	const r = e.ruleId ?? "";
+	const ref = e.ref ?? "";
+	if (ref.startsWith("quest:") || ref.startsWith("chest:")) return [];
+	const out = /* @__PURE__ */ new Set();
+	if (/^(study|focus)\./.test(r) || e.module === "focus" || e.module === "schedule") out.add("focus");
+	if (/^body\./.test(r) || e.module === "body" && !r) out.add("body");
+	if (/^sleep\./.test(r)) out.add("sleep");
+	if (/^discipline\./.test(r) && r !== "discipline.reset") out.add("discipline");
+	if (r === "tasks.todoist_done" || ref.startsWith("task:") || ref.startsWith("mustdo:") || /^mustdo/.test(r)) out.add("tasks");
+	if (r === "habit.own" || r === "face.routine_done") out.add("habits");
+	if (/^money\./.test(r)) out.add("money");
+	if (/^goal\./.test(r)) out.add("goals");
+	return [...out];
+}
+var matches = (l, kinds, text) => {
+	if (kinds.some((k) => l.kinds.includes(k))) return true;
+	if (!l.words.length || !text) return false;
+	const t = text.toLowerCase();
+	return l.words.some((w) => t.includes(w));
+};
+/** Each line's votes: this week (Monday on), last week and the last 4 weeks. */
+function identityVotes(book, entries, today, extra = []) {
+	const mon = mondayOf$5(today);
+	const starts = [
+		addDays$7(mon, -21),
+		addDays$7(mon, -14),
+		addDays$7(mon, -7),
+		mon
+	];
+	const from = starts[0];
+	const casts = [...effective(entries).filter((e) => e.day >= from && e.day <= today).map((e) => ({
+		day: e.day,
+		kinds: voteKindsOf(e),
+		text: `${e.note ?? ""} ${e.ref ?? ""}`
+	})).filter((c) => c.kinds.length || c.text.trim()), ...extra.filter((x) => x.day >= from && x.day <= today)];
+	return book.lines.map((l) => {
+		const weeks = starts.map((s, i) => {
+			const end = i < 3 ? addDays$7(starts[i + 1], -1) : today;
+			return casts.filter((c) => c.day >= s && c.day <= end && matches(l, c.kinds, c.text)).length;
+		});
+		const week = weeks[3];
+		const lastWeek = weeks[2];
+		return {
+			id: l.id,
+			text: l.text,
+			emoji: l.emoji,
+			week,
+			lastWeek,
+			weeks,
+			total28: weeks.reduce((t, x) => t + x, 0),
+			target: l.target,
+			fill: Math.min(1, week / Math.max(1, l.target)),
+			line: `${week} vote${week === 1 ? "" : "s"} this week for: ${l.text}`,
+			trend: week > lastWeek ? "up" : week < lastWeek ? "down" : "same"
+		};
+	});
+}
+/** The line with the most proof this week (for praise), or null. */
+function strongestLine(v) {
+	return [...v].filter((x) => x.week > 0).sort((a, b) => b.fill - a.fill || b.week - a.week)[0] ?? null;
+}
+/** Ben's line: the votes, and the one he can praise with (never more than the proof). */
+function identityLine(v) {
+	if (!v.length) return "";
+	const best = strongestLine(v);
+	return `Who he's becoming (his identity lines; each real log is a vote): ${v.map((x) => `"${x.text}" ${x.week} this week (last week ${x.lastWeek})`).join("; ")}.${best ? ` When you praise him, praise the identity with the proof, e.g. "${best.week} votes this week for '${best.text}'. That's who you are now."` : ""}`;
+}
+// src/core/sideQuest.ts
+var SIDE_QUESTS = [
+	{
+		id: "cafe",
+		title: "Try a café you've never been to",
+		emoji: "☕",
+		cost: 60,
+		minutes: 60,
+		when: "evening",
+		outdoor: false,
+		tags: ["food", "calm"],
+		tip: "Bring a notebook, not the laptop."
+	},
+	{
+		id: "sunrise",
+		title: "Sunrise walk to the highest point nearby",
+		emoji: "🌅",
+		cost: 0,
+		minutes: 75,
+		when: "morning",
+		outdoor: true,
+		tags: [
+			"nature",
+			"body",
+			"calm"
+		],
+		tip: "Leave 30 min before sunrise; take tea in a flask."
+	},
+	{
+		id: "mosque",
+		title: "Pray in a mosque you've never visited",
+		emoji: "🕌",
+		cost: 0,
+		minutes: 60,
+		when: "day",
+		outdoor: false,
+		tags: ["faith", "calm"],
+		tip: "Go for one prayer and stay ten minutes after."
+	},
+	{
+		id: "meetup",
+		title: "Go to a tech meetup or a CTF night",
+		emoji: "🚩",
+		cost: 0,
+		minutes: 150,
+		when: "evening",
+		outdoor: false,
+		tags: ["learn", "social"],
+		tip: "Ask one person what they are working on."
+	},
+	{
+		id: "daytrip",
+		title: "Cheap day trip to a town you have never seen",
+		emoji: "🚆",
+		cost: 180,
+		minutes: 480,
+		when: "day",
+		outdoor: true,
+		tags: ["culture", "nature"],
+		tip: "Take the earliest bus; eat where the locals eat."
+	},
+	{
+		id: "cook",
+		title: "Cook a dish from a country you have never tasted",
+		emoji: "🍜",
+		cost: 90,
+		minutes: 90,
+		when: "evening",
+		outdoor: false,
+		tags: ["food", "learn"],
+		tip: "Pick one with five ingredients or fewer."
+	},
+	{
+		id: "museum",
+		title: "Museum or gallery you keep walking past",
+		emoji: "🏛️",
+		cost: 40,
+		minutes: 120,
+		when: "day",
+		outdoor: false,
+		tags: ["culture", "learn"],
+		tip: "Pick one room and read every label in it."
+	},
+	{
+		id: "lake",
+		title: "Bike or walk to a lake and back",
+		emoji: "🚲",
+		cost: 0,
+		minutes: 150,
+		when: "day",
+		outdoor: true,
+		tags: ["nature", "body"],
+		tip: "Water, a snack, phone on silent."
+	},
+	{
+		id: "boardgame",
+		title: "Board-game evening with a friend",
+		emoji: "🎲",
+		cost: 70,
+		minutes: 150,
+		when: "evening",
+		outdoor: false,
+		tags: ["social"],
+		tip: "Invite the friend you have not seen the longest."
+	},
+	{
+		id: "library",
+		title: "An afternoon in a library you have never used",
+		emoji: "📚",
+		cost: 0,
+		minutes: 150,
+		when: "day",
+		outdoor: false,
+		tags: ["learn", "calm"],
+		tip: "Read something outside your field for one hour."
+	},
+	{
+		id: "stars",
+		title: "Stargazing outside the city lights",
+		emoji: "🌌",
+		cost: 30,
+		minutes: 120,
+		when: "evening",
+		outdoor: true,
+		tags: ["nature", "calm"],
+		tip: "Clear night, warm jacket, a star map app in red mode."
+	},
+	{
+		id: "climb",
+		title: "A taster session at a climbing gym",
+		emoji: "🧗",
+		cost: 120,
+		minutes: 120,
+		when: "evening",
+		outdoor: false,
+		tags: ["body", "social"],
+		tip: "Book the beginner slot; they lend the shoes."
+	},
+	{
+		id: "volunteer",
+		title: "Volunteer for one hour",
+		emoji: "🤲",
+		cost: 0,
+		minutes: 90,
+		when: "day",
+		outdoor: false,
+		tags: ["social", "faith"],
+		tip: "A food bank or an animal shelter is an easy start."
+	},
+	{
+		id: "oldfriend",
+		title: "Meet an old friend for tea",
+		emoji: "🫖",
+		cost: 40,
+		minutes: 90,
+		when: "evening",
+		outdoor: false,
+		tags: ["social"],
+		tip: "Message them today; suggest a day, not \"sometime\"."
+	},
+	{
+		id: "photowalk",
+		title: "Photo walk: 10 photos of one colour",
+		emoji: "📷",
+		cost: 0,
+		minutes: 60,
+		when: "day",
+		outdoor: true,
+		tags: ["culture", "calm"],
+		tip: "Pick the colour before you leave."
+	},
+	{
+		id: "market",
+		title: "Saturday morning at the open-air market",
+		emoji: "🧺",
+		cost: 60,
+		minutes: 75,
+		when: "morning",
+		outdoor: true,
+		tags: ["food", "culture"],
+		tip: "Buy one fruit you have never tried."
+	},
+	{
+		id: "swim",
+		title: "Swim at a public pool",
+		emoji: "🏊",
+		cost: 60,
+		minutes: 75,
+		when: "evening",
+		outdoor: false,
+		tags: ["body"],
+		tip: "Ten lengths, then just float for five minutes."
+	},
+	{
+		id: "sunset",
+		title: "Watch the sunset from a hill or rooftop",
+		emoji: "🌇",
+		cost: 0,
+		minutes: 60,
+		when: "evening",
+		outdoor: true,
+		tags: ["nature", "calm"],
+		tip: "Arrive 20 minutes early; no phone for the last 10."
+	},
+	{
+		id: "class",
+		title: "Try one class of a sport you have never done",
+		emoji: "🥋",
+		cost: 100,
+		minutes: 90,
+		when: "evening",
+		outdoor: false,
+		tags: ["body", "learn"],
+		tip: "Tell the coach it is your first time."
+	},
+	{
+		id: "picnic",
+		title: "Picnic in a park you rarely go to",
+		emoji: "🧃",
+		cost: 60,
+		minutes: 120,
+		when: "day",
+		outdoor: true,
+		tags: [
+			"nature",
+			"social",
+			"food"
+		],
+		tip: "Bring a friend or a book. Or both."
+	},
+	{
+		id: "bookshop",
+		title: "Browse a second-hand bookshop, buy one book",
+		emoji: "📖",
+		cost: 50,
+		minutes: 60,
+		when: "day",
+		outdoor: false,
+		tags: ["learn", "calm"],
+		tip: "Pick it by the first page, not the cover."
+	},
+	{
+		id: "monument",
+		title: "Visit a monument and learn its story",
+		emoji: "🗿",
+		cost: 0,
+		minutes: 60,
+		when: "day",
+		outdoor: true,
+		tags: ["culture", "learn"],
+		tip: "Read about it on the spot, not before."
+	},
+	{
+		id: "newroute",
+		title: "Walk a route in your city you have never walked",
+		emoji: "🧭",
+		cost: 0,
+		minutes: 60,
+		when: "evening",
+		outdoor: true,
+		tags: ["body", "calm"],
+		tip: "Turn left whenever you are unsure."
+	},
+	{
+		id: "workshop",
+		title: "A hands-on workshop (pottery, wood, a repair café)",
+		emoji: "🏺",
+		cost: 150,
+		minutes: 150,
+		when: "day",
+		outdoor: false,
+		tags: ["learn", "social"],
+		tip: "Make something small you can keep on the desk."
+	},
+	{
+		id: "hike",
+		title: "A short hike on a marked trail",
+		emoji: "🥾",
+		cost: 40,
+		minutes: 240,
+		when: "day",
+		outdoor: true,
+		tags: ["nature", "body"],
+		tip: "Check the trail length; turn back at half your energy."
+	},
+	{
+		id: "concert",
+		title: "A free concert or open-mic night",
+		emoji: "🎻",
+		cost: 0,
+		minutes: 120,
+		when: "evening",
+		outdoor: false,
+		tags: ["culture", "social"],
+		tip: "Sit near the front."
+	},
+	{
+		id: "teahouse",
+		title: "Tea ceremony or a quiet teahouse",
+		emoji: "🍵",
+		cost: 70,
+		minutes: 75,
+		when: "evening",
+		outdoor: false,
+		tags: ["calm", "culture"],
+		tip: "Order the one you cannot pronounce."
+	},
+	{
+		id: "nightwalk",
+		title: "Night walk by the river with music off",
+		emoji: "🌉",
+		cost: 0,
+		minutes: 45,
+		when: "evening",
+		outdoor: true,
+		tags: ["calm", "nature"],
+		tip: "Listen for five different sounds."
+	}
+];
+function hash$1(s) {
+	let h = 2166136261;
+	for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+	return h >>> 0;
+}
+/** Why a quest doesn't fit this week (null when it does). */
+function unfit(q, i) {
+	if (i.budget != null && q.cost > Math.max(0, i.budget) * .5) return "over budget";
+	if (q.outdoor && i.weather === "rain") return "rain";
+	if (q.when === "evening" && i.freeEvenings === 0) return "no free evening";
+	if (q.when === "day" && i.freeDay === false) return "no free day";
+	if (i.recent.includes(q.id)) return "done lately";
+	if (i.passed.includes(q.id)) return "passed";
+	return null;
+}
+/** This week's side quest: the fitting ones in a fixed order for the week; null if nothing fits. */
+function pickSideQuest(i, pool = SIDE_QUESTS) {
+	const fits = pool.filter((q) => !unfit(q, i));
+	const tight = i.budget != null && i.budget < 100 || i.freeEvenings === 1;
+	const q = fits.map((q) => ({
+		q,
+		k: hash$1(`${i.week}:${q.id}`) / 2 ** 32 + (tight && (q.cost > 50 || q.minutes > 120) ? 1 : 0) + (i.weather === "cold" && q.outdoor ? .6 : 0) + (i.weather === "clear" && q.outdoor ? -.3 : 0)
+	})).sort((a, b) => a.k - b.k)[0]?.q;
+	if (!q) return null;
+	return {
+		quest: q,
+		why: `Fits: ${[
+			q.cost === 0 ? "costs nothing" : i.budget != null ? `about ${q.cost} lei of your ${Math.max(0, Math.round(i.budget))} lei fun money` : `about ${q.cost} lei`,
+			i.weather === "clear" && q.outdoor ? "a dry weekend" : i.weather === "rain" && !q.outdoor ? "indoors, away from the rain" : "",
+			q.when === "evening" && i.freeEvenings ? `your ${i.freeEvenings} free evening${i.freeEvenings === 1 ? "" : "s"}` : q.when === "day" && i.freeDay ? "a free weekend day" : q.when === "morning" ? "one early morning" : ""
+		].filter(Boolean).join(", ")}.`
+	};
+}
+var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
+var str$3 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+function cleanSide(raw) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const weeks = {};
+	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$7.test(k)).sort().slice(-26)) {
+		const w = r.weeks[k] ?? {};
+		weeks[k] = {
+			passed: (Array.isArray(w.passed) ? w.passed : []).map((x) => str$3(x, 24)).filter(Boolean).slice(0, 10),
+			status: w.status === "done" || w.status === "skipped" ? w.status : "open"
+		};
+	}
+	return {
+		weeks,
+		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$3(a.title, 90) && DAY$7.test(String(a.day))).map((a, i) => ({
+			id: str$3(a.id, 24) || `a${i + 1}`,
+			questId: a.questId ? str$3(a.questId, 24) : null,
+			title: str$3(a.title, 90),
+			emoji: str$3(a.emoji, 8) || "🧭",
+			day: String(a.day),
+			place: str$3(a.place, 60),
+			note: str$3(a.note, 280),
+			photo: !!a.photo
+		})).sort((a, b) => a.day < b.day ? -1 : a.day > b.day ? 1 : 0).slice(-300)
+	};
+}
+/** The quests done in the 8 weeks before `today` (not suggested again yet). */
+function recentQuests(book, today) {
+	const from = addDays$7(today, -56);
+	return book.log.filter((a) => a.questId && a.day >= from).map((a) => a.questId);
+}
+/** The input for this week's pick from the book and the outside facts. */
+function pickInput(book, today, facts) {
+	const week = mondayOf$5(today);
+	return {
+		week,
+		...facts,
+		recent: recentQuests(book, today),
+		passed: book.weeks[week]?.passed ?? []
+	};
+}
+function adventureStats(book, today) {
+	const year = today.slice(0, 4);
+	const weeksWith = new Set(book.log.map((a) => mondayOf$5(a.day)));
+	let n = 0;
+	let w = mondayOf$5(today);
+	if (!weeksWith.has(w)) w = addDays$7(w, -7);
+	while (weeksWith.has(w)) {
+		n++;
+		w = addDays$7(w, -7);
+	}
+	const tags = {};
+	for (const a of book.log) {
+		const def = SIDE_QUESTS.find((q) => q.id === a.questId);
+		for (const t of def?.tags ?? []) tags[t] = (tags[t] ?? 0) + 1;
+	}
+	return {
+		total: book.log.length,
+		thisYear: book.log.filter((a) => a.day.startsWith(year)).length,
+		weeksInARow: n,
+		tags
+	};
+}
+var MANUAL = [
+	{
+		id: "ctf",
+		label: "Flag captured",
+		icon: "🚩",
+		color: "#ff3ea5",
+		manual: true
+	},
+	{
+		id: "record",
+		label: "Personal record",
+		icon: "🏆",
+		color: "#f5c84b",
+		manual: true
+	},
+	{
+		id: "kind",
+		label: "Kind deed",
+		icon: "🤍",
+		color: "#ec8db0",
+		manual: true
+	},
+	{
+		id: "message",
+		label: "Nice message",
+		icon: "💌",
+		color: "#b892ff",
+		manual: true
+	},
+	{
+		id: "other",
+		label: "Other win",
+		icon: "✨",
+		color: "#c8f135",
+		manual: true
+	},
+	{
+		id: "workout",
+		label: "Training",
+		icon: "💪",
+		color: "#ff9f43",
+		manual: false
+	},
+	{
+		id: "sleep",
+		label: "Nights on time",
+		icon: "🌙",
+		color: "#6ee7d8",
+		manual: false
+	},
+	{
+		id: "focus",
+		label: "Deep work",
+		icon: "🎯",
+		color: "#5aa8ff",
+		manual: false
+	},
+	{
+		id: "goal",
+		label: "Goal milestone",
+		icon: "🏔️",
+		color: "#c8f135",
+		manual: false
+	},
+	{
+		id: "season",
+		label: "Season",
+		icon: "⚔️",
+		color: "#f4c27c",
+		manual: false
+	},
+	{
+		id: "adventure",
+		label: "Adventure",
+		icon: "🧭",
+		color: "#3b8fe8",
+		manual: false
+	}
+].filter((k) => k.manual).map((k) => k.id);
+var DAY$6 = /^\d{4}-\d{2}-\d{2}$/;
+var str$2 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+function cleanWins(raw) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	return {
+		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$2(w.title, 120) && DAY$6.test(String(w.day))).map((w, i) => ({
+			id: str$2(w.id, 24) || `w${i + 1}`,
+			day: String(w.day),
+			kind: MANUAL.includes(w.kind) ? w.kind : "other",
+			title: str$2(w.title, 120),
+			detail: str$2(w.detail, 280),
+			auto: false,
+			weight: [
+				1,
+				2,
+				3
+			].includes(w.weight) ? w.weight : 2
+		})).slice(-400),
+		hidden: (Array.isArray(r.hidden) ? r.hidden : []).map((x) => str$2(x, 60)).filter(Boolean).slice(-400)
+	};
+}
+var CTF = /\b(ctf|flag|htb|hack ?the ?box|tryhackme|thm|pwn|exploit|writeup)\b/i;
+var MILESTONES$2 = [
+	10,
+	25,
+	50,
+	100,
+	150,
+	200,
+	300,
+	500
+];
+/** Every win on the wall, newest first (auto ones you hid are left out). */
+function collectWins(src) {
+	const out = [];
+	const live = effective(src.entries).filter((e) => e.kind === "earn");
+	const byDay = [...live].sort((a, b) => a.ts < b.ts ? -1 : 1);
+	let n = 0;
+	for (const e of byDay) {
+		if (e.ruleId !== "body.workout_done") continue;
+		n++;
+		if (MILESTONES$2.includes(n)) out.push({
+			id: `auto:workouts:${n}`,
+			day: e.day,
+			kind: "workout",
+			title: `${n} workouts done`,
+			detail: e.note ? `The ${n}th: ${e.note}` : "Every one of them logged",
+			auto: true,
+			weight: n >= 50 ? 3 : 2
+		});
+	}
+	const beds = [...new Set(live.filter((e) => e.ruleId === "sleep.bed_on_time").map((e) => e.day))].sort();
+	let runStart = 0;
+	for (let i = 1; i <= beds.length; i++) {
+		if (i < beds.length && addDays$7(beds[i - 1], 1) === beds[i]) continue;
+		const len = i - runStart;
+		if (len >= 5) out.push({
+			id: `auto:sleep:${beds[runStart]}`,
+			day: beds[i - 1],
+			kind: "sleep",
+			title: `${len} nights on time in a row`,
+			detail: `${beds[runStart].slice(5)} to ${beds[i - 1].slice(5)}`,
+			auto: true,
+			weight: len >= 14 ? 3 : 2
+		});
+		runStart = i;
+	}
+	const ctfWeeks = /* @__PURE__ */ new Map();
+	for (const e of live) {
+		if (!(e.ruleId?.startsWith("focus.") || e.ruleId?.startsWith("study.") || e.module === "focus")) continue;
+		if (!CTF.test(`${e.note ?? ""}`)) continue;
+		const wd = (/* @__PURE__ */ new Date(`${e.day}T12:00:00Z`)).getUTCDay();
+		const mon = addDays$7(e.day, -((wd + 6) % 7));
+		ctfWeeks.set(mon, [...ctfWeeks.get(mon) ?? [], e]);
+	}
+	for (const [mon, list] of ctfWeeks) {
+		const last = list[list.length - 1];
+		const name = (e) => (e.note ?? "").replace(/\s+/g, " ").trim().slice(0, 80) || "CTF session";
+		out.push(list.length === 1 ? {
+			id: `auto:ctf:${last.id}`,
+			day: last.day,
+			kind: "ctf",
+			title: name(last),
+			detail: "Logged as a focus session",
+			auto: true,
+			weight: 1
+		} : {
+			id: `auto:ctf:w${mon}`,
+			day: last.day,
+			kind: "ctf",
+			title: `${list.length} CTF sessions in one week`,
+			detail: [...new Set(list.map(name))].slice(0, 3).join(" · "),
+			auto: true,
+			weight: list.length >= 4 ? 2 : 1
+		});
+	}
+	const focusDays = /* @__PURE__ */ new Map();
+	for (const e of live) if (e.ruleId === "focus.session" || e.ruleId === "study.block_done") focusDays.set(e.day, (focusDays.get(e.day) ?? 0) + 1);
+	for (const [day, k] of focusDays) if (k >= 4) out.push({
+		id: `auto:focus:${day}`,
+		day,
+		kind: "focus",
+		title: `${k} deep-work sessions in one day`,
+		detail: "A full day of real work",
+		auto: true,
+		weight: k >= 6 ? 3 : 2
+	});
+	for (const e of live) if (e.ruleId === "goal.milestone") out.push({
+		id: `auto:goal:${e.id}`,
+		day: e.day,
+		kind: "goal",
+		title: (e.note || "Goal milestone").slice(0, 90),
+		detail: "Reached with your own check-ins",
+		auto: true,
+		weight: 2
+	});
+	for (const s of src.seasons ?? []) out.push({
+		id: `auto:season:${s.id}`,
+		day: s.day,
+		kind: "season",
+		title: s.won ? `Boss defeated: ${s.boss}` : `Season finished: ${s.name}`,
+		detail: s.won ? s.name : "Eight weeks, start to finish",
+		auto: true,
+		weight: s.won ? 3 : 2
+	});
+	for (const a of src.adventures ?? []) out.push({
+		id: `auto:adv:${a.id}`,
+		day: a.day,
+		kind: "adventure",
+		title: a.title,
+		detail: a.place,
+		auto: true,
+		weight: 1
+	});
+	const hidden = new Set(src.book.hidden);
+	return [...out.filter((w) => !hidden.has(w.id)), ...src.book.mine].sort((a, b) => a.day < b.day ? 1 : a.day > b.day ? -1 : a.id < b.id ? 1 : -1);
+}
+/** A low day: a sad mood check-in, a slip, an empty yesterday, or a week score that fell hard. */
+function isLowDay(s) {
+	if (s.mood != null && s.mood <= 2) return true;
+	if (s.slipped) return true;
+	if (s.yesterday <= 0) return true;
+	if (s.score != null && s.prevScore != null && s.prevScore - s.score >= 15) return true;
+	return false;
+}
+/** The win to bring back on a low day: big and personal first, never the same one two days running. */
+function pickWin(wins, day) {
+	if (!wins.length) return null;
+	const score = (w) => w.weight * 2 + (w.auto ? 0 : 2) + (w.kind === "message" || w.kind === "kind" ? 1 : 0);
+	const best = [...wins].sort((a, b) => score(b) - score(a) || (a.day < b.day ? 1 : -1)).slice(0, 7);
+	return best[(Math.round(Date.parse(`${day}T12:00:00Z`) / 864e5) % best.length + best.length) % best.length];
+}
+/** Ben's line: the size of the bank always; one real win to recall on a low day. */
+function winsLine(wins, low, day) {
+	if (!wins.length) return "";
+	const w = low ? pickWin(wins, day) : null;
+	const recent = wins.filter((x) => x.day >= addDays$7(day, -30)).length;
+	return `Wins wall (his proof, ${wins.length} wins, ${recent} in the last 30 days).${w ? ` TODAY LOOKS LIKE A LOW DAY: remind him once, warmly, of a real win: "${w.title}"${w.detail ? ` (${w.detail})` : ""} on ${w.day}. Never invent one.` : ""}`;
+}
+// src/core/lifeWheel.ts
+var WHEEL_AREAS = [
+	{
+		id: "faith",
+		label: "Faith",
+		icon: "🕌",
+		color: "#7fd8c4",
+		ask: "Do you feel close to what you believe?"
+	},
+	{
+		id: "family",
+		label: "Family",
+		icon: "🏠",
+		color: "#ec8db0",
+		ask: "Are you there for your family?"
+	},
+	{
+		id: "friends",
+		label: "Friends",
+		icon: "🤝",
+		color: "#ff9a6a",
+		ask: "Do you have people to laugh with?"
+	},
+	{
+		id: "body",
+		label: "Body",
+		icon: "💪",
+		color: "#ff9f43",
+		ask: "Strong, rested, moving?"
+	},
+	{
+		id: "mind",
+		label: "Mind",
+		icon: "🧠",
+		color: "#b892ff",
+		ask: "Calm, curious, learning?"
+	},
+	{
+		id: "career",
+		label: "Career",
+		icon: "🛡️",
+		color: "#5aa8ff",
+		ask: "Moving toward the work you want?"
+	},
+	{
+		id: "money",
+		label: "Money",
+		icon: "🪙",
+		color: "#f5c84b",
+		ask: "In control of your money?"
+	},
+	{
+		id: "fun",
+		label: "Fun",
+		icon: "🎈",
+		color: "#c8f135",
+		ask: "Enjoying life, not only grinding?"
+	}
+];
+var AREA_IDS = WHEEL_AREAS.map((a) => a.id);
+var QKEY = /^\d{4}-Q[1-4]$/;
+/** "2026-Q4" for a day. */
+function quarterOf(day) {
+	const m = Number(day.slice(5, 7));
+	return `${day.slice(0, 4)}-Q${Math.floor((m - 1) / 3) + 1}`;
+}
+/** "Oct–Dec 2026". */
+function quarterLabel(q) {
+	return `${[
+		"Jan–Mar",
+		"Apr–Jun",
+		"Jul–Sep",
+		"Oct–Dec"
+	][Number(q.slice(-1)) - 1] ?? q} ${q.slice(0, 4)}`;
+}
+var rating = (v) => {
+	const n = Math.round(Number(v));
+	return Number.isFinite(n) && n >= 1 && n <= 10 ? n : null;
+};
+function cleanRatings(raw) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const out = {};
+	for (const a of AREA_IDS) {
+		const v = rating(r[a]);
+		if (v != null) out[a] = v;
+	}
+	return out;
+}
+function cleanWheel(raw) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const quarters = {};
+	const at = {};
+	const keys = Object.keys(r.quarters && typeof r.quarters === "object" ? r.quarters : {}).filter((k) => QKEY.test(k)).sort().slice(-16);
+	for (const k of keys) {
+		const rt = cleanRatings(r.quarters[k]);
+		if (Object.keys(rt).length) quarters[k] = rt;
+		if (typeof r.at?.[k] === "string") at[k] = String(r.at[k]).slice(0, 30);
+	}
+	return {
+		quarters,
+		at
+	};
+}
+/** Every rated quarter, oldest first. */
+function wheelHistory(book) {
+	return Object.keys(book.quarters).sort().map((q) => ({
+		q,
+		ratings: book.quarters[q],
+		avg: average(book.quarters[q])
+	}));
+}
+function average(r) {
+	const v = AREA_IDS.map((a) => r[a]).filter((x) => typeof x === "number");
+	return v.length ? Math.round(v.reduce((t, x) => t + x, 0) / v.length * 10) / 10 : 0;
+}
+/** Is this quarter still to rate? (and how many days of it are left) */
+function wheelDue(book, today) {
+	const q = quarterOf(today);
+	const y = Number(q.slice(0, 4));
+	const n = Number(q.slice(-1));
+	const end = n === 4 ? `${y}-12-31` : new Date(Date.UTC(y, n * 3, 0)).toISOString().slice(0, 10);
+	const daysLeft = Math.round((Date.parse(`${end}T12:00:00Z`) - Date.parse(`${today}T12:00:00Z`)) / 864e5) + 1;
+	return {
+		due: !(Object.keys(book.quarters[q] ?? {}).length === AREA_IDS.length),
+		quarter: q,
+		daysLeft
+	};
+}
+/** The area changes since the quarter before (+2, −1 …), only where both have a number. */
+function wheelChange(cur, prev) {
+	const out = {};
+	if (!prev) return out;
+	for (const a of AREA_IDS) if (cur[a] != null && prev[a] != null) out[a] = cur[a] - prev[a];
+	return out;
+}
+/**
+* The weakest areas, lowest first. Ties go to the one that dropped the most
+* since last quarter, then to the wheel's order.
+*/
+function weakestAreas(cur, prev) {
+	const ch = wheelChange(cur, prev);
+	return AREA_IDS.filter((a) => cur[a] != null).sort((a, b) => cur[a] - cur[b] || (ch[a] ?? 0) - (ch[b] ?? 0) || AREA_IDS.indexOf(a) - AREA_IDS.indexOf(b));
+}
+/** The next season's theme from the weakest area, with the reason in plain words. */
+function suggestTheme(cur, prev) {
+	const weak = weakestAreas(cur, prev);
+	if (!weak.length) return null;
+	const area = weak[0];
+	const theme = SEASON_THEMES.find((t) => t.area === area) ?? SEASON_THEMES[0];
+	const label = WHEEL_AREAS.find((a) => a.id === area).label;
+	const drop = wheelChange(cur, prev)[area];
+	return {
+		theme,
+		area,
+		why: `${label} is your lowest area (${cur[area]}/10${drop && drop < 0 ? `, down ${-drop} since last quarter` : ""}). A season about it moves the whole wheel.`
+	};
+}
+/** One line for Ben (empty before the first rating). */
+function wheelLine(book, today) {
+	const hist = wheelHistory(book);
+	if (!hist.length) return "";
+	const last = hist[hist.length - 1];
+	const prev = hist.length > 1 ? hist[hist.length - 2].ratings : null;
+	const weak = weakestAreas(last.ratings, prev).slice(0, 2);
+	const s = suggestTheme(last.ratings, prev);
+	const due = wheelDue(book, today);
+	return `Life wheel (${quarterLabel(last.q)}, his own 1–10): ${AREA_IDS.filter((a) => last.ratings[a] != null).map((a) => `${a} ${last.ratings[a]}`).join(", ")}. Weakest: ${weak.join(", ")}${s ? `; suggested next season: "${s.theme.name}"` : ""}.${due.due ? ` This quarter isn't rated yet (${due.daysLeft} days left).` : ""}`;
+}
+// src/core/benArc.ts
+var ARC = [
+	{
+		n: 1,
+		title: "The stranger at the gate",
+		at: 0,
+		outfit: "traveler",
+		outfitLabel: "Travelling cloak",
+		aura: "#8a93a6",
+		voice: "a blunt stranger who saw potential and decided to stay",
+		lines: ["Show me, don't tell me.", "The first season is the hardest one to start."]
+	},
+	{
+		n: 2,
+		title: "First lessons",
+		at: 1,
+		outfit: "gi",
+		outfitLabel: "Training gi",
+		aura: "#c8f135",
+		voice: "a coach who has seen one full season of your work and trusts it a little",
+		lines: ["We did one arc together. The second is where it sticks.", "Again. Slower. Better."]
+	},
+	{
+		n: 3,
+		title: "The sensei",
+		at: 2,
+		outfit: "haori",
+		outfitLabel: "Crested haori",
+		aura: "#ff9f43",
+		voice: "a sensei: calm, few words, expects excellence because he knows you can",
+		lines: ["A blade is sharpened one stroke at a time.", "You do not rise to the level of your goals. You fall to the level of your training."]
+	},
+	{
+		n: 4,
+		title: "Old comrades",
+		at: 3,
+		outfit: "armor",
+		outfitLabel: "Lacquered armour",
+		aura: "#ff3ea5",
+		voice: "a comrade who has fought three bosses beside you and remembers each one",
+		lines: ["Three arcs. I remember the first night you almost quit.", "We have been here before. We know how this ends."]
+	},
+	{
+		n: 5,
+		title: "Twin blades",
+		at: 4,
+		outfit: "starcloak",
+		outfitLabel: "Star-path cloak",
+		aura: "#38d8ff",
+		voice: "an equal: still demanding, now asking your opinion as often as giving his",
+		lines: ["Two blades, one path.", "What would you tell a younger you right now?"]
+	},
+	{
+		n: 6,
+		title: "Master and student",
+		at: 6,
+		outfit: "master",
+		outfitLabel: "Master's robe",
+		aura: "#f5c84b",
+		voice: "a master proud of a student who is becoming a master",
+		lines: ["The student is ready. The master steps back.", "One day you will coach someone. Remember this season."]
+	}
+];
+/** The chapter for a number of finished seasons. */
+function chapterFor(seasonsDone) {
+	let c = ARC[0];
+	for (const ch of ARC) if (seasonsDone >= ch.at) c = ch;
+	return c;
+}
+function arcState(seasonsDone, pick) {
+	const chapter = chapterFor(seasonsDone);
+	const next = ARC.find((c) => c.at > seasonsDone) ?? null;
+	const unlocked = ARC.filter((c) => c.at <= seasonsDone);
+	const outfit = pick && unlocked.some((c) => c.outfit === pick) ? pick : chapter.outfit;
+	return {
+		chapter,
+		next,
+		toNext: next ? next.at - seasonsDone : 0,
+		unlocked,
+		outfit
+	};
+}
+var OUTFITS = ARC.map((c) => c.outfit);
+function cleanArc(raw) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const n = Math.round(Number(r.seenChapter));
+	return {
+		seenChapter: Number.isFinite(n) && n >= 1 && n <= ARC.length ? n : 1,
+		outfit: OUTFITS.includes(r.outfit) ? r.outfit : null,
+		played: (Array.isArray(r.played) ? r.played : []).map((x) => String(x ?? "").slice(0, 80)).filter(Boolean).slice(-200)
+	};
+}
+/** A chapter just opened that you haven't seen yet (the unlock reveal), or null. */
+function newChapter(book, state) {
+	return state.chapter.n > book.seenChapter ? state.chapter : null;
+}
+/** His prompt line: the chapter's voice, one line he may use, and up to two shared moments. */
+function arcLine(state, moments, day) {
+	const c = state.chapter;
+	const n = Math.round(Date.parse(`${day}T12:00:00Z`) / 864e5);
+	const line = c.lines[(n % c.lines.length + c.lines.length) % c.lines.length];
+	const ms = moments.slice(-2).map((m) => `${m.day}: ${m.text}`);
+	return `Your own arc (you are his mentor): chapter ${c.n} "${c.title}". Sound like ${c.voice}. A line of this chapter you may use once in a while: "${line}".${ms.length ? ` Big moments you shared (bring one up only when it truly fits): ${ms.join("; ")}.` : ""}`;
+}
+// src/core/levelCine.ts
+/** A new rank between two levels (null for an ordinary level-up). */
+function rankUp(prevLevel, level) {
+	if (!(level > prevLevel) || prevLevel < 1) return null;
+	const a = hunterDefFor(prevLevel);
+	const b = hunterDefFor(level);
+	if (a.name === b.name) return null;
+	return {
+		id: `rank:${b.minLevel}`,
+		kind: "rank",
+		over: `New rank · Level ${level}`,
+		title: b.title,
+		sub: b.name,
+		color: b.color,
+		badge: b.badge
+	};
+}
+var SEASON_LOOK = {
+	"season-start": {
+		over: "A new season begins",
+		badge: "⛩️"
+	},
+	"season-half": {
+		over: "Season · halfway",
+		badge: "🌗"
+	},
+	"boss-ready": {
+		over: "Boss weakened",
+		badge: "⚔️"
+	},
+	"boss-won": {
+		over: "Victory",
+		badge: "🏆"
+	},
+	"season-end": {
+		over: "Season complete",
+		badge: "📜"
+	}
+};
+function seasonCinematic(m, color) {
+	const look = SEASON_LOOK[m.kind];
+	return {
+		id: m.id,
+		kind: m.kind,
+		over: look.over,
+		title: m.title,
+		sub: m.sub,
+		color,
+		badge: look.badge
+	};
+}
+/** The next one to play: the first not played yet (a rank first, then season moments in order). */
+function nextCinematic(candidates, played) {
+	const seen = new Set(played);
+	const order = (c) => c.kind === "rank" ? 0 : 1;
+	return [...candidates].sort((a, b) => order(a) - order(b)).find((c) => !seen.has(c.id)) ?? null;
+}
+// src/core/benTalk.ts
+/** A regex with Unicode word edges: \\b only knows ASCII, so "arată" or "второй" would never match. */
+var uw = (src, flags = "") => new RegExp(src.replace(/\\b/g, "(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))"), `${flags}u`);
+var pad$12 = (n) => String(n).padStart(2, "0");
+var ymd$3 = (d) => calendarDay(d);
+var hmOf$7 = (d) => `${pad$12(d.getHours())}:${pad$12(d.getMinutes())}`;
+var label$1 = (d) => d.toLocaleDateString("en-GB", {
+	weekday: "short",
+	day: "numeric",
+	month: "short"
+}).replace(",", "");
+/** The clock and the words for "today", "tonight", "this morning", "tomorrow" right now. */
+function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
+	const h = now.getHours();
+	const afterMidnight = h < startHour;
+	const calDay = ymd$3(now);
+	const app = /* @__PURE__ */ new Date(now.getTime() - startHour * 36e5);
+	const appDay = ymd$3(app);
+	const nextCal = new Date(now);
+	nextCal.setDate(nextCal.getDate() + 1);
+	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$7(now)}, ${label$1(now)}. App day: ${label$1(app)} (the app's day turns at ${pad$12(startHour)}:00).`];
+	if (afterMidnight) {
+		const seven = new Date(now);
+		seven.setHours(7, 0, 0, 0);
+		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label$1(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label$1(now)} from ${pad$12(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label$1(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label$1(app)} until ${pad$12(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label$1(now)}); ask with chips only if it really matters.`);
+	} else if (h >= 18) lines.push(`- "tonight" = this evening (${label$1(now)}). "tomorrow morning" = ${label$1(nextCal)}.`);
+	else if (h < 12) lines.push(`- "this morning" = now (${label$1(now)}). "tonight" = this evening. "tomorrow" = ${label$1(nextCal)}.`);
+	else lines.push(`- "this afternoon" = now. "tonight" = this evening (${label$1(now)}). "tomorrow" = ${label$1(nextCal)}.`);
+	lines.push("When you name a time, add how far it is (\"in 40 min\", \"in 6 h, this morning\").");
+	return {
+		clock: hmOf$7(now),
+		appDay,
+		calDay,
+		afterMidnight,
+		text: lines.join("\n")
+	};
+}
+/** "in 40 min" / "in 6 h 29 min, this morning" / "tomorrow at 09:00" / "an hour ago". */
+function whenWords(at, now = /* @__PURE__ */ new Date(), startHour = 4) {
+	const t = typeof at === "string" ? new Date(at) : at;
+	const diff = Math.round((t.getTime() - now.getTime()) / 6e4);
+	const span = (m) => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
+	if (diff < 0) return diff > -60 ? `${-diff} min ago` : `${span(-diff)} ago`;
+	const sameCal = ymd$3(t) === ymd$3(now);
+	const th = t.getHours();
+	const nowAfterMidnight = now.getHours() < startHour;
+	let part = "";
+	if (sameCal) part = th < 12 ? nowAfterMidnight || now.getHours() < 12 ? "this morning" : "today" : th < 18 ? "this afternoon" : "tonight";
+	else {
+		const tomorrow = new Date(now);
+		tomorrow.setDate(tomorrow.getDate() + 1);
+		part = ymd$3(t) === ymd$3(tomorrow) ? th < 4 ? "tonight, after midnight" : `tomorrow ${th < 12 ? "morning" : th < 18 ? "afternoon" : "evening"}` : label$1(t);
+	}
+	if (diff === 0) return "now";
+	return diff < 120 && sameCal ? `in ${span(diff)}` : `in ${span(diff)}, ${part}`;
+}
+var THEMES = [
+	["sleep", /\b(sleep|slept|sleeping|bed ?time|go to bed|hours? of sleep|tired|rest(ed)?|nap|somn|dormi|сон|спать|выспа)/i],
+	["money", /\b(money|spend|spent|budget|lei|save|saving|bani|деньг)/i],
+	["focus and study", /\b(focus|study|studying|deep work|exam|homework|lab|învăț|учеб)/i],
+	["training", /\b(gym|workout|training|train|pushups?|run|sport|muscle)/i],
+	["phone and scrolling", /\b(phone|scroll|tiktok|youtube|instagram|reels|screen time)/i],
+	["discipline", /\b(discipline|clean streak|urge|relapse|oath)/i],
+	["water", /\b(water|hydrat|apă|вод)/i],
+	["the company / big goals", /\b(company|startup|business|empire|build (a|your) (company|business)|million)/i],
+	["promises", /\b(promise|you said you would|kept|broke)/i]
+];
+var EMOJI = /\p{Extended_Pictographic}/gu;
+/** What Ben's last replies (newest last) keep coming back to, minus what the new message brings up itself. */
+function alreadySaid(coachTexts, message = "", last = 6) {
+	const recent = coachTexts.slice(-last).map((t) => t.split(" | ")[0]);
+	const counts = /* @__PURE__ */ new Map();
+	for (const t of recent) for (const [name, re] of THEMES) if (re.test(t)) counts.set(name, (counts.get(name) ?? 0) + 1);
+	const asked = new Set(THEMES.filter(([, re]) => re.test(message)).map(([n]) => n));
+	return {
+		themes: [...counts.entries()].filter(([n]) => !asked.has(n)).map(([theme, times]) => ({
+			theme,
+			times
+		})).sort((a, b) => b.times - a.times),
+		openers: [...new Set(recent.map((t) => t.replace(EMOJI, "").trim().split(/\s+/).slice(0, 2).join(" ").replace(/[,.!?…]+$/, "")).filter((o) => o.length > 1))],
+		emoji: [...new Set(recent.flatMap((t) => t.match(EMOJI) ?? []))]
+	};
+}
+/** The "already said" block for the prompt (empty when there is nothing to warn about). */
+function alreadySaidText(a) {
+	const out = [];
+	if (a.themes.length) out.push(`- Points you already made: ${a.themes.map((t) => `${t.theme}${t.times > 1 ? ` (${t.times}×)` : ""}`).join(", ")}. Do NOT bring these up again unless he does. Answer what he asked.`);
+	if (a.openers.length) out.push(`- How your last replies started: ${a.openers.slice(-6).map((o) => `"${o}"`).join(", ")}. Start differently.`);
+	if (a.emoji.length) out.push(`- Emoji you used lately: ${a.emoji.slice(-6).join(" ")}. Use none of them this time (zero emoji is fine).`);
+	return out.length ? `== Already said (your last replies) ==\n${out.join("\n")}` : "";
+}
+/** A short "no" / "not now" / "stop": Ben accepts it and stops pushing. */
+function saidNo(message) {
+	const t = message.trim().toLowerCase().replace(/[.!…]+$/, "");
+	return t.length <= 40 && /^(no+|nope|nah|not now|not today|later|stop|leave it|drop it|i don'?t want( to)?|no thanks|nu|nu acum|lasă|lasa|нет|не сейчас|не хочу|отстань|хватит)( thanks| man| bro| ben)?[\s,!.]*$/u.test(t);
+}
+/**
+* The reply, tidied in code (the model sometimes ignores the rules):
+* no "Look, Victor," / "Listen bro," opener, at most one emoji, and none when
+* the last two replies already had one (emoji only sometimes).
+*/
+function tidyReply(reply, prevCoachTexts = [], name = "") {
+	let r = String(reply ?? "").trim();
+	if (!r) return r;
+	const who = name ? `(?:${name.replace(/[^\p{L}]/gu, "")}|bro|man|dude|mate)` : "(?:bro|man|dude|mate|\\p{Lu}\\p{L}+)";
+	const m = new RegExp(`^(\\p{Extended_Pictographic}\\s*)?(look|listen|ok(?:ay)?(?: so)?|alright|so|bro)\\s*,?\\s+${who}\\s*[,.!:—-]+\\s*`, "iu").exec(r);
+	if (m) {
+		const rest = r.slice(m[0].length);
+		r = `${m[1] ?? ""}${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+	}
+	let allowed = prevCoachTexts.slice(-2).filter((t) => /\p{Extended_Pictographic}/u.test(t.split(" | ")[0])).length >= 2 ? 0 : 1;
+	r = r.replace(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu, (e) => allowed-- > 0 ? e : "");
+	return r.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([,.!?])/g, "$1").trim();
+}
+/** Words people type in commands to Ben; typos of these are fixed before the parsers run. */
+var DICT = [
+	"change",
+	"rename",
+	"move",
+	"approve",
+	"plan",
+	"show",
+	"delete",
+	"remove",
+	"block",
+	"blocks",
+	"deep",
+	"developing",
+	"development",
+	"develop",
+	"tomorrow",
+	"today",
+	"tonight",
+	"morning",
+	"evening",
+	"afternoon",
+	"schedule",
+	"calendar",
+	"task",
+	"tasks",
+	"focus",
+	"remind",
+	"reminder",
+	"finished",
+	"cancel",
+	"start",
+	"please",
+	"first",
+	"second",
+	"third",
+	"swap",
+	"replace",
+	"edit",
+	"update",
+	"workout",
+	"water",
+	"done",
+	"study",
+	"studying",
+	"project",
+	"minutes",
+	"hours",
+	"push",
+	"later",
+	"earlier",
+	"session",
+	"meeting",
+	"what",
+	"where",
+	"again"
+];
+/** Real words that look like typos of the ones above: never "fixed". */
+var KEEP$1 = /* @__PURE__ */ new Set([
+	"black",
+	"clock",
+	"flock",
+	"block",
+	"blank",
+	"bloc",
+	"chance",
+	"charge",
+	"changed",
+	"changes",
+	"more",
+	"mode",
+	"love",
+	"live",
+	"shot",
+	"shop",
+	"slow",
+	"snow",
+	"shown",
+	"star",
+	"state",
+	"stay",
+	"store",
+	"story",
+	"start",
+	"smart",
+	"today",
+	"toady",
+	"what",
+	"when",
+	"that",
+	"than",
+	"then",
+	"plain",
+	"plant",
+	"planet",
+	"plans",
+	"play",
+	"place",
+	"plate",
+	"please",
+	"pleased",
+	"focused",
+	"remain",
+	"rename",
+	"reader",
+	"second",
+	"secondly",
+	"deep",
+	"deer",
+	"deeply",
+	"done",
+	"dome",
+	"gone",
+	"none",
+	"tone",
+	"move",
+	"mover",
+	"moved",
+	"moves",
+	"cancer",
+	"meting",
+	"swamp",
+	"swap",
+	"water",
+	"waiter",
+	"later",
+	"latter",
+	"eater",
+	"task",
+	"mask",
+	"tusk",
+	"tasks",
+	"edit",
+	"exit",
+	"sedan",
+	"session",
+	"where",
+	"there",
+	"here",
+	"were",
+	"again",
+	"agian",
+	"push",
+	"posh",
+	"bush",
+	"rush",
+	"study",
+	"sturdy",
+	"show",
+	"stow",
+	"flow",
+	"fast",
+	"first"
+]);
+/** Damerau-Levenshtein (optimal string alignment) distance, capped. */
+function editDistance(a, b, cap = 3) {
+	if (Math.abs(a.length - b.length) > cap) return cap + 1;
+	const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+	for (let j = 1; j <= b.length; j++) d[0][j] = j;
+	for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
+		const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+		d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
+		if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+	}
+	return d[a.length][b.length];
+}
+var sameLetters = (a, b) => a.length === b.length && [...a].sort().join("") === [...b].sort().join("");
+/** One word fixed when it is clearly a typo of a command word ("chagne" → "change"), else as it was. */
+function fixWord(w) {
+	const low = w.toLowerCase();
+	if (low.length < 4 || !/^[a-z]+$/.test(low) || KEEP$1.has(low) || DICT.includes(low)) return w;
+	let best = null;
+	let bestD = 9;
+	for (const word of DICT) {
+		if (word[0] !== low[0]) continue;
+		const allow = word.length <= 4 ? 1 : word.length <= 6 ? 1 : 2;
+		const dist = editDistance(low, word, 3);
+		if (dist > allow) continue;
+		if (word.length <= 4 && !sameLetters(low, word)) continue;
+		if (dist < bestD) {
+			best = word;
+			bestD = dist;
+		}
+	}
+	if (!best) return w;
+	return w[0] === w[0].toUpperCase() ? best[0].toUpperCase() + best.slice(1) : best;
+}
+/** The whole message with typos of command words fixed ("aporve the paln" → "approve the plan"). */
+function fixTypos(text) {
+	return String(text ?? "").replace(/[A-Za-z]+/g, (w) => fixWord(w));
+}
+/** "how can I approve the plan if I don't see it" → the plan card. */
+function wantsToSee(text) {
+	const t = fixTypos(text).toLowerCase();
+	const out = [];
+	const look = uw("\\b(show|see|view|look|display|where'?s|where is|what'?s|what is|what does|send|give me|let me see|approve|check|arată|arata|vezi|văd|покажи|посмотреть|вижу|где)\\b");
+	if (uw("\\b(plan|planul|plan-ul|план|плана)\\b").test(t) && (look.test(t) || /\bplan\s*\?/.test(t))) out.push("plan");
+	if (uw("\\b(my day|the day|today|schedule|calendar|agenda|ziua|programul|день|расписание)\\b").test(t) && look.test(t) && !out.includes("plan")) out.push("day");
+	if (uw("\\b(tasks?|to-?dos?|todoist|sarcini|sarcinile|задачи)\\b").test(t) && uw("\\b(show|see|list|view|what are|what'?s left|what is left|which|arată|arata|покажи|какие)\\b").test(t)) out.push("tasks");
+	return out.slice(0, 2);
+}
+var ORD = [
+	[uw("\\b(first|1st|one|primul|prima|первый|первую|первое)\\b"), 0],
+	[uw("\\b(second|2nd|two|al doilea|a doua|второй|вторую|второе)\\b"), 1],
+	[uw("\\b(third|3rd|three|al treilea|a treia|третий|третью)\\b"), 2],
+	[uw("\\b(last|ultimul|ultima|последний|последнюю)\\b"), -1]
+];
+var timeOf$1 = (s) => {
+	const m = /^(?:at\s+|la\s+|в\s+)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i.exec(s.trim());
+	if (!m) return null;
+	let h = Number(m[1]);
+	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
+	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
+	const mi = Number(m[2] ?? 0);
+	return h < 24 && mi < 60 ? `${pad$12(h)}:${pad$12(mi)}` : null;
+};
+var BLOCK = "(?:block|blocks|blocul|blocului|блок|блока)";
+/**
+* "please change the deep block to developing my app" → rename "deep" → "Developing my app".
+* "move the first deep block to 11" → move. Only when a block is named (never "change my bedtime").
+*/
+function readBlockEdit(text) {
+	const t = fixTypos(text).trim().replace(/[.!?]+$/, "").replace(/\s+/g, " ");
+	const verbs = "(?:please\\s+|pls\\s+|can you\\s+|could you\\s+)?(change|rename|swap|switch|make|turn|replace|set|move|push|shift|put|schimbă|schimba|redenumește|redenumeste|mută|muta|поменяй|переименуй|измени|замени|перенеси|сделай)";
+	const prep = "(?:to|into|for|with|in|în|на|в|la)";
+	const named = new RegExp(`^${verbs}\\s+(?:the\\s+|my\\s+|that\\s+|this\\s+)?(.{0,40}?)\\s*${BLOCK}\\s*(\\d)?\\s+${prep}\\s+(.{1,60})$`, "iu").exec(t);
+	const after = named ? null : new RegExp(`^${verbs}\\s+(?:the\\s+|my\\s+)?${BLOCK}\\s+(.{1,40}?)\\s*(\\d)?\\s+${prep}\\s+(.{1,60})$`, "iu").exec(t);
+	const m = named ?? after;
+	if (!m) return null;
+	const verbWord = m[1].toLowerCase();
+	let target = m[2].trim().toLowerCase();
+	const num = m[3] ? Number(m[3]) - 1 : void 0;
+	const raw = m[4].trim().replace(/^(?:be\s+|be about\s+|about\s+)/i, "");
+	let nth = num;
+	for (const [r, n] of ORD) if (r.test(target)) {
+		nth = n;
+		target = target.replace(r, "").trim();
+	}
+	target = target.replace(/\b(the|my|a|an|blocul|focus)\b/g, "").replace(/\s+/g, " ").trim();
+	const when = timeOf$1(raw);
+	const moving = /^(move|push|shift|put|mută|muta|перенеси)$/.test(verbWord);
+	if (when && (moving || /^(at|la|в)\s/i.test(raw) || /^\d{1,2}([:.]\d{2})?$/.test(raw))) return {
+		verb: "move",
+		target,
+		...nth != null ? { nth } : {},
+		value: when
+	};
+	if (moving) return null;
+	const title = raw.replace(/\s+(please|pls|thanks|thank you|haha|lol)$/i, "").trim();
+	if (!title) return null;
+	if (/^\d+\s*(h|hrs?|hours?|min|mins|minutes?|m)\b/i.test(title) || uw("\\b(tomorrow|today|tonight|later|earlier|longer|shorter|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|mâine|maine|azi|завтра|сегодня|позже)\\b", "i").test(title)) return null;
+	return {
+		verb: "rename",
+		target,
+		...nth != null ? { nth } : {},
+		value: title.charAt(0).toUpperCase() + title.slice(1)
+	};
+}
+/** The blocks a request can mean: title words match (prefix), upcoming first, by time. */
+/**
+* Speed: "move gym to 18:00" (no word "block") read in code too. Only a move to a clock
+* time with a real name ("gym", "lab"), never "it", "everything" or "the rest".
+*/
+function readMoveEdit(text) {
+	const t = fixTypos(text).trim().replace(/[.!?]+$/, "").replace(/\s+/g, " ");
+	const m = /^(?:please\s+|pls\s+|can you\s+|could you\s+)?(?:move|push|shift|put)\s+(?:the\s+|my\s+)?(.{3,30}?)\s+(?:to|at)\s+(\S+(?:\s*[ap]m)?)$/i.exec(t);
+	if (!m) return null;
+	const target = m[1].toLowerCase().replace(/\b(the|my|a|an|today'?s?|session|event)\b/g, "").replace(/\s+/g, " ").trim();
+	if (!target || target.length < 3 || /\b(it|that|this|them|everything|all|rest|day|plan|tasks?|meeting|next|tomorrow)\b/.test(target)) return null;
+	const value = timeOf$1(m[2]);
+	return value ? {
+		verb: "move",
+		target,
+		value
+	} : null;
+}
+function matchBlocks(edit, blocks) {
+	const words = edit.target.split(/\s+/).filter((w) => w.length >= 3).map((w) => w.slice(0, 4));
+	const hits = blocks.filter((b) => {
+		const title = b.title.toLowerCase();
+		return words.every((w) => title.split(/[^\p{L}\p{N}]+/u).some((x) => x.startsWith(w)));
+	}).sort((a, b) => a.start.localeCompare(b.start));
+	if (edit.nth == null) return hits;
+	const pick = edit.nth < 0 ? hits[hits.length - 1] : hits[edit.nth];
+	return pick ? [pick] : hits;
+}
+/** The chip for one option: "Deep block 1 · 07:00". */
+var optionLabel = (o) => `${o.title.slice(0, 28)} · ${o.start}`;
+/** Which of the offered chips his answer picks ("first one", "2", "the 14:00 one", the chip itself); null when unclear. */
+function pickChoice(text, labels) {
+	const t = fixTypos(text).trim().toLowerCase().replace(/[.!?]+$/, "");
+	if (!t || t.length > 60) return null;
+	const exact = labels.findIndex((l) => l.toLowerCase() === t);
+	if (exact >= 0) return exact;
+	const time = /\b(\d{1,2})[:.](\d{2})\b/.exec(t) ?? /\b(?:at|la|в)\s+(\d{1,2})\b/.exec(t);
+	if (time) {
+		const hm = `${pad$12(Number(time[1]))}:${time[2] ?? "00"}`;
+		const k = labels.findIndex((l) => l.endsWith(hm));
+		if (k >= 0) return k;
+	}
+	for (const [r, n] of ORD) if (r.test(t)) return n < 0 ? labels.length - 1 : n < labels.length ? n : null;
+	const num = /^(?:#|nr\.?\s*|number\s+)?(\d)$/.exec(t);
+	if (num) {
+		const n = Number(num[1]) - 1;
+		return n >= 0 && n < labels.length ? n : null;
+	}
+	const words = t.split(/\s+/).filter((w) => w.length >= 3 && !/^(the|one|block|that|this)$/.test(w));
+	const only = labels.map((l, i) => words.some((w) => l.toLowerCase().includes(w)) ? i : -1).filter((i) => i >= 0);
+	return only.length === 1 ? only[0] : null;
+}
+/** The language a short message is in, for Ben's own one-liners: Cyrillic → ru, Romanian letters or words → ro. */
+function langOf(text) {
+	const t = String(text ?? "");
+	if (/[\u0400-\u04FF]/.test(t)) return "ru";
+	if (/[ăâîșşțţ]/i.test(t) || uw("\\b(schimba|muta|blocul|planul|azi|maine|vreau|te rog|primul|prima|doilea|doua|treilea|ultimul|cat|gata|nu)\\b", "i").test(t)) return "ro";
+	return "en";
+}
+/** Ben's own short lines (after a local edit) in his language. */
+function shortLine(kind, lang, n = 2, what = "") {
+	return {
+		en: {
+			done: "Done.",
+			failed: `That didn't work: ${what}.`,
+			which: `${n} blocks fit. Which one${what ? ` ${what}` : ""}?`
+		},
+		ro: {
+			done: "Gata.",
+			failed: `N-a mers: ${what}.`,
+			which: `Se potrivesc ${n} blocuri. Care?`
+		},
+		ru: {
+			done: "Готово.",
+			failed: `Не получилось: ${what}.`,
+			which: `Подходят ${n} блока. Какой?`
+		}
+	}[lang][kind];
+}
+/** "I'll swap it", "renamed it", "done, moved": a reply that says something changed. */
+function claimsDone(reply) {
+	return /\b(i('ll| will|'ve| have)? ?(just )?(swap(ped)?|chang(e|ed)|renam(e|ed)|mov(e|ed)|book(ed)?|add(ed)?|delet(e|ed)|updat(e|ed)|replac(e|ed))\b|\b(renamed|swapped|moved|changed|updated|replaced) (it|that|the|your|deep)\b|\bdone[,.!]? (it'?s|i)\b)/i.test(String(reply ?? ""));
+}
+/** BQ3: one block of today's waiting plan gets a new title or start; the old one comes back for Undo. */
+function editPlanBlock(st, index, patch) {
+	const b = st.briefing;
+	if (!b) return {
+		state: null,
+		old: null,
+		error: "There is no plan for today yet"
+	};
+	if (b.status !== "proposed") return {
+		state: null,
+		old: null,
+		error: "The plan is already approved: its blocks are in your calendar now"
+	};
+	const old = b.plan.blocks[index];
+	if (!old) return {
+		state: null,
+		old: null,
+		error: "That plan block is gone"
+	};
+	if (patch.start && !/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.start)) return {
+		state: null,
+		old: null,
+		error: `${patch.start} isn't a time`
+	};
+	const blocks = b.plan.blocks.map((x, i) => i === index ? {
+		...x,
+		...patch.title ? { title: patch.title.slice(0, 80) } : {},
+		...patch.start ? { start: patch.start } : {}
+	} : x);
+	if (patch.start) blocks.sort((x, y) => x.start.localeCompare(y.start));
+	return {
+		state: {
+			...st,
+			briefing: {
+				...b,
+				plan: {
+					...b.plan,
+					blocks
+				}
+			}
+		},
+		old: { ...old }
+	};
+}
+// src/core/benNormalize.ts
+/** Romanian (and other Latin) diacritics off: "curăță" → "curata", "ș"/"ş" → "s". Cyrillic stays. */
+function stripMarks(s) {
+	return String(s ?? "").normalize("NFD").replace(/([A-Za-z])[\u0300-\u036f]+/g, "$1").normalize("NFC").replace(/[șş]/g, "s").replace(/[ȘŞ]/g, "S").replace(/[țţ]/g, "t").replace(/[ȚŢ]/g, "T").replace(/ё/g, "е").replace(/Ё/g, "Е");
+}
+/** Lower case, no diacritics, quotes and stray symbols gone, spaces squeezed. Keeps ":", "-", "." and "," (times and lists). */
+function normalize$1(s) {
+	return stripMarks(s).toLowerCase().replace(/[’`´]/g, "'").replace(/[“”«»"]/g, " ").replace(/[^\p{L}\p{N}\s:'.,;\-+/?!]/gu, " ").replace(/\s+/g, " ").trim();
+}
+var L = "(?<![\\p{L}\\p{N}])";
+var R = "(?![\\p{L}\\p{N}])";
+var w = (src) => new RegExp(`${L}(?:${src})${R}`, "giu");
+/**
+* Phrase → plain English, applied in order on the normalised text. Only words
+* that steer what Ben does (verbs, days, times, linking words); names and
+* objects stay as typed ("curata camera" stays, it's the task's name).
+*/
+var PHRASES = [
+	[w("fa-?mi ziua|fa-?mi planul( zilei)?|fa planul( zilei| pe azi)?|planifica-?mi ziua|planul zilei|planul pe azi|organizeaza-?mi ziua"), "plan my day"],
+	[w("спланируй( мой| мне)? день|составь( мне)? план( на (день|сегодня))?|план на (день|сегодня)|распланируй день"), "plan my day"],
+	[w("plan ma day|plan mah day|plan muh day|plan my dya|pln my day|plan teh day"), "plan my day"],
+	[w("aminteste-?mi( sa)?|adu-?mi aminte( sa)?|aminteste-?ma( sa)?"), "remind me to"],
+	[w("напомни( мне)?( чтобы)?"), "remind me to"],
+	[w("adauga|adaug|pune"), "add"],
+	[w("добавь|запиши"), "add"],
+	[w("muta|mut-?o|mut-?l|muta-?l|muta-?o"), "move"],
+	[w("перенеси|передвинь|сдвинь"), "move"],
+	[w("sterge|elimina"), "delete"],
+	[w("удали|убери"), "delete"],
+	[w("imparte|sparge"), "break down"],
+	[w("разбей|раздели"), "break down"],
+	[w("azi|astazi"), "today"],
+	[w("poimaine"), "in 2 days"],
+	[w("maine"), "tomorrow"],
+	[w("diseara|deseara|in seara asta|la noapte"), "tonight"],
+	[w("сегодня"), "today"],
+	[w("послезавтра"), "in 2 days"],
+	[w("завтра"), "tomorrow"],
+	[w("вечером|сегодня вечером"), "tonight"],
+	[w("tmrw|tmr|tmrrw|tomoz|2moro|2morrow|tomorow|tommorow|tomorroww|tomorro"), "tomorrow"],
+	[w("tonite|2nite|tn"), "tonight"],
+	[w("rn"), "now"],
+	[new RegExp(`${L}(?:la|в|во|к|ora|в час)\\s+(\\d{1,2}(?:[:.]\\d{2})?)${R}`, "giu"), "at $1"],
+	[new RegExp(`${L}на\\s+(\\d{1,2}(?:[:.]\\d{2})?)${R}`, "giu"), "to $1"],
+	[w("si|și|и"), "and"],
+	[w("apoi|dupa aceea|потом|затем"), "then"],
+	[w("pls|plz|plez"), "please"],
+	[w("gonna"), "going to"],
+	[w("wanna"), "want to"],
+	[w("ur"), "your"],
+	[w("u"), "you"],
+	[w("w/"), "with"],
+	[w("hw"), "homework"]
+];
+/**
+* Built-in name aliases (a word he types for a thing Ben knows by another
+* name). His own aliases (LS6, "by sala I mean gym") come first.
+*/
+var BUILTIN_ALIASES = {
+	sala: "gym",
+	"sala de forta": "gym",
+	спортзал: "gym",
+	зал: "gym",
+	тренировка: "workout",
+	antrenament: "workout",
+	laborator: "lab",
+	лаба: "lab",
+	лабу: "lab",
+	лабораторная: "lab",
+	examen: "exam",
+	экзамен: "exam",
+	eseu: "essay",
+	эссе: "essay"
+};
+var langOfRaw = (t) => /[Ѐ-ӿ]/.test(t) ? "ru" : /[ăâîșşțţ]/i.test(t) || w("fa-?mi|azi|maine|diseara|aminteste|adauga|muta|sterge|curata|vreau|te rog|si|la").test(stripMarks(t).toLowerCase()) ? "ro" : "en";
+/** Aliases replaced as whole words ("sala" → "gym"), his own first. */
+function applyAliases(text, aliases = {}) {
+	const all = {
+		...BUILTIN_ALIASES,
+		...Object.fromEntries(Object.entries(aliases).map(([k, v]) => [normalize$1(k), v]))
+	};
+	let out = text;
+	for (const k of Object.keys(all).sort((a, b) => b.length - a.length)) {
+		if (!k) continue;
+		out = out.replace(new RegExp(`${L}${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${R}`, "giu"), all[k]);
+	}
+	return out;
+}
+/** The message read as plain English commands (see PHRASES). */
+function canon(text, aliases = {}) {
+	const raw = String(text ?? "");
+	let t = normalize$1(raw);
+	for (const [re, to] of PHRASES) t = t.replace(re, to);
+	t = applyAliases(t, aliases).replace(/\s+/g, " ").trim();
+	return {
+		text: t,
+		lang: langOfRaw(raw),
+		changed: t !== raw.toLowerCase().replace(/\s+/g, " ").trim()
+	};
+}
+var words$2 = (s) => normalize$1(s).split(/[^\p{L}\p{N}]+/u).filter((x) => x.length >= 2);
+var STOP$3 = /* @__PURE__ */ new Set([
+	"the",
+	"my",
+	"a",
+	"an",
+	"to",
+	"at",
+	"of",
+	"for",
+	"and",
+	"in",
+	"on",
+	"la",
+	"de",
+	"cu",
+	"pe",
+	"si",
+	"и",
+	"в",
+	"на"
+]);
+/** How well one typed word fits one name word (0..1): exact, prefix, or a typo away. */
+function wordFit(a, b) {
+	if (a === b) return 1;
+	if (a.length >= 3 && b.startsWith(a)) return .92;
+	if (b.length >= 3 && a.startsWith(b)) return .85;
+	const longer = Math.max(a.length, b.length);
+	if (longer < 4) return 0;
+	const d = editDistance(a, b, 3);
+	if (d > 3) return 0;
+	return d <= (longer <= 5 ? 1 : longer <= 8 ? 2 : 3) ? Math.max(0, .9 - d / longer * 1.2) : 0;
+}
+/**
+* How well a typed name fits a real one, 0..1: every typed word must find a
+* word in the name (typos allowed); extra words in the name cost a little.
+*/
+function similarity(query, name) {
+	const q = words$2(query).filter((x) => !STOP$3.has(x));
+	const n = words$2(name).filter((x) => !STOP$3.has(x));
+	if (!q.length || !n.length) return 0;
+	if (normalize$1(query) === normalize$1(name)) return 1;
+	let sum = 0;
+	for (const a of q) {
+		let best = 0;
+		for (const b of n) best = Math.max(best, wordFit(a, b));
+		if (best === 0) return 0;
+		sum += best;
+	}
+	const cover = sum / q.length;
+	const extra = Math.max(0, n.length - q.length);
+	return Math.max(0, Math.min(1, cover - extra * .04));
+}
+var COMMANDS = [
+	{
+		cmd: "plan my day",
+		say: [
+			"plan my day",
+			"plan today",
+			"make my plan",
+			"plan the day"
+		]
+	},
+	{
+		cmd: "what now",
+		say: [
+			"what now",
+			"what should i do now",
+			"what next"
+		]
+	},
+	{
+		cmd: "review yesterday",
+		say: [
+			"review yesterday",
+			"review my day",
+			"how did yesterday go"
+		]
+	},
+	{
+		cmd: "show my tasks",
+		say: [
+			"show my tasks",
+			"my tasks",
+			"what are my tasks"
+		]
+	},
+	{
+		cmd: "show my day",
+		say: [
+			"show my day",
+			"my day",
+			"show my calendar"
+		]
+	},
+	{
+		cmd: "approve",
+		say: [
+			"approve the plan",
+			"approve",
+			"approve plan"
+		]
+	}
+];
+/** A short message that is a command typed badly ("pln my dya" → "plan my day"), else null. */
+function commandOf(text) {
+	const t = normalize$1(text).replace(/[?!.]+$/, "");
+	if (!t || t.split(" ").length > 5) return null;
+	let best = null;
+	for (const c of COMMANDS) for (const s of c.say) {
+		if (t === s) return c.cmd;
+		if (Math.abs(t.length - s.length) > 3) continue;
+		const d = editDistance(t, s, 3);
+		if (d <= (s.length <= 8 ? 1 : s.length <= 14 ? 2 : 3) && (!best || d < best.d)) best = {
+			cmd: c.cmd,
+			d
+		};
+	}
+	return best?.cmd ?? null;
+}
+// src/core/benConvo.ts
+var BEN_CONVO = "ben_convo";
+function cleanConvo(raw) {
+	const o = raw && typeof raw === "object" ? raw : {};
+	return {
+		points: (Array.isArray(o.points) ? o.points : []).filter((p) => !!p && typeof p.text === "string" && (p.kind === "decision" || p.kind === "struggle" || p.kind === "win") && typeof p.day === "string").slice(-150),
+		summary: typeof o.summary === "string" ? o.summary.slice(0, 600) : "",
+		summaryDay: typeof o.summaryDay === "string" ? o.summaryDay : null
+	};
+}
+var WIN = /\b(i (?:finally )?(?:finished|completed|passed|nailed|shipped|submitted|got|won|did it|made it|hit)|finished the|passed the|got an? (?:a|10|9)|am terminat|am trecut|am luat|am reusit|я (?:сделал|закончил|сдал)|сдал)\b/i;
+var STRUGGLE = /\b(hard|difficult|struggl\w*|can'?t focus|cannot focus|no motivation|unmotivated|stressed|overwhelmed|stuck|tired of|burn(?:ed|t)? out|procrastinat\w*|e greu|greu|nu ma pot concentra|n-am chef|obosit|stresat|тяжело|трудно|не могу сосредоточиться|устал|нет мотивации)\b/i;
+var DECISION = /\b(i(?:'ve| have)? decided|from now on|i'?m going to stop|i'?ll stop|i will stop|no more|starting (?:today|tomorrow|monday)|am decis|de acum|я решил|с завтрашнего дня|больше не буду)\b/i;
+/** The key point in one message of his, or null (most messages have none). */
+function pointOf(text) {
+	const t = String(text ?? "");
+	if (t.length < 8 || t.length > 400 || /^\s*\//.test(t)) return null;
+	if (DECISION.test(t)) return "decision";
+	if (WIN.test(t)) return "win";
+	if (STRUGGLE.test(t)) return "struggle";
+	return null;
+}
+/** Adds the point in his message (if any), never the same words twice in a day. */
+function addPoint(c, text, day, now = /* @__PURE__ */ new Date(), via) {
+	const kind = pointOf(text);
+	if (!kind) return c;
+	const clean = String(text).replace(/\s+/g, " ").trim().slice(0, 160);
+	if (c.points.some((p) => p.day === day && normalize$1(p.text) === normalize$1(clean))) return c;
+	return {
+		...c,
+		points: [...c.points, {
+			at: now.toISOString(),
+			day,
+			kind,
+			text: clean,
+			...via ? { via } : {}
+		}].slice(-150)
+	};
+}
+var addDays$6 = (d, n) => {
+	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
+	x.setUTCDate(x.getUTCDate() + n);
+	return x.toISOString().slice(0, 10);
+};
+/** The rolling summary from the last 4 weeks of points (newest first within each kind). */
+function rollSummary(c, today) {
+	const recent = c.points.filter((p) => p.day >= addDays$6(today, -28));
+	const pick = (k, n) => recent.filter((p) => p.kind === k).slice(-n).reverse().map((p) => `${p.text.slice(0, 70)} (${p.day.slice(5)})`);
+	const parts = [
+		pick("decision", 3).length ? `Decided: ${pick("decision", 3).join("; ")}` : "",
+		pick("struggle", 3).length ? `Found hard: ${pick("struggle", 3).join("; ")}` : "",
+		pick("win", 3).length ? `Wins: ${pick("win", 3).join("; ")}` : ""
+	].filter(Boolean);
+	return {
+		...c,
+		summary: parts.join(". ").slice(0, 600),
+		summaryDay: today
+	};
+}
+/** Points about what he wrote now (shared words, typos allowed), newest first. */
+function searchPoints(c, query, k = 5) {
+	const q = normalize$1(query).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4);
+	if (!q.length) return [];
+	return c.points.map((p, i) => ({
+		p,
+		i,
+		s: q.filter((w) => normalize$1(p.text).includes(w.slice(0, 5)) || similarity(w, p.text) >= .85).length
+	})).filter((x) => x.s > 0).sort((a, b) => b.s - a.s || b.i - a.i).slice(0, k).map((x) => x.p);
+}
+var ago$1 = (day, today) => {
+	const d = Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${day}T12:00:00Z`)) / 864e5);
+	return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 7 ? `${d} days ago` : d < 14 ? "last week" : `${Math.round(d / 7)} weeks ago`;
+};
+/**
+* One or two lines for his prompt: the points that fit this message (with
+* when), else nothing. Kept small on purpose.
+*/
+function pastLine(c, text, today) {
+	const hits = searchPoints(c, text, 2).filter((p) => p.day < today);
+	if (!hits.length) return "";
+	return `From past chats (mention briefly only if it helps, e.g. "Last week the essay felt hard…"): ${hits.map((p) => `${ago$1(p.day, today)} he said (${p.kind}): "${p.text.slice(0, 100)}"`).join("; ")}.`;
+}
+// src/renderer/src/web/sagaStore.ts
+var SAGA_SEASONS = "saga_seasons";
+var SAGA_VISION = "saga_vision";
+var SAGA_VISION_PHOTOS = "saga_vision_photos";
+var SAGA_IDENTITY = "saga_identity";
+var SAGA_SIDE = "saga_side";
+var SAGA_WINS = "saga_wins";
+var SAGA_WHEEL = "saga_wheel";
+var SAGA_ARC = "saga_arc";
+var read$2 = (db, key) => {
+	try {
+		return JSON.parse(getSetting(db, key) || "null");
+	} catch {
+		return null;
+	}
+};
+var yearOf = (today) => Number(today.slice(0, 4));
+var loadSeasons = (db) => cleanSeasonBook(read$2(db, SAGA_SEASONS));
+var loadVision = (db, today) => cleanVision(read$2(db, SAGA_VISION), yearOf(today));
+var loadVisionPhotos = (db, cards) => cleanVisionPhotos(read$2(db, SAGA_VISION_PHOTOS), cards);
+var loadIdentity = (db) => cleanIdentity(read$2(db, SAGA_IDENTITY));
+var loadSide = (db) => cleanSide(read$2(db, SAGA_SIDE));
+var loadWins = (db) => cleanWins(read$2(db, SAGA_WINS));
+var loadWheel = (db) => cleanWheel(read$2(db, SAGA_WHEEL));
+var loadArc = (db) => cleanArc(read$2(db, SAGA_ARC));
+var extraVotes = (wins) => wins.mine.map((w) => ({
+	day: w.day,
+	kinds: w.kind === "kind" ? ["kind"] : [],
+	text: `${w.title} ${w.detail}`
+}));
+function seasonFacts(s, book, entries, today, goalPct) {
+	const progress = seasonProgress(s, today);
+	const end = seasonEnd(s);
+	const to = today < end ? today : end;
+	const live = effective(entries).filter((e) => e.day >= s.start && e.day <= to);
+	let perfectDays = 0;
+	if (progress.phase !== "before") {
+		for (let d = s.start; d <= to; d = addDays$7(d, 1)) if (questState(d, live.filter((e) => e.day === d)).allDone) perfectDays++;
+	}
+	const xp = live.reduce((t, e) => t + Math.max(0, e.xp), 0);
+	const questGoals = s.quests.map((q) => q.goalId != null ? ((g) => g ? {
+		id: q.goalId,
+		...g
+	} : null)(goalPct(q.goalId)) : null);
+	const questPcts = s.quests.map((q) => questPct(q, (id) => goalPct(id)?.pct ?? null));
+	const boss = bossHp(s, {
+		questPcts,
+		perfectDays,
+		xp
+	});
+	const q = questState(today, effective(entries).filter((e) => e.day === today));
+	const workouts = live.filter((e) => e.ruleId === "body.workout_done").length;
+	return {
+		season: s,
+		number: book.seasons.findIndex((x) => x.id === s.id) + 1,
+		progress,
+		boss,
+		questPcts,
+		questGoals,
+		perfectDays,
+		xp,
+		today: {
+			quests: q.quests.map((x) => ({
+				title: x.title,
+				progress: x.progress,
+				goal: x.goal,
+				done: x.done
+			})),
+			allDone: q.allDone
+		},
+		recap: progress.phase === "over" || s.boss.result ? seasonRecap(s, {
+			questPcts,
+			perfectDays,
+			xp,
+			workouts
+		}, today) : null
+	};
+}
+function goalsOf(s, finance, now) {
+	try {
+		return s.goals.cards(now, finance, { paused: true }).map((c) => ({
+			id: c.goal.id,
+			title: c.goal.title,
+			pct: Math.round(c.pct),
+			card: c.meta?.card ?? null
+		}));
+	} catch {
+		return [];
+	}
+}
+/** The weekend's weather from the weather plugin's saved data (null without it). */
+function weekendWeather(db, today) {
+	try {
+		if (!JSON.parse(getSetting(db, "plugins_on") || "{}")?.weather) return null;
+		const data = JSON.parse(getSetting(db, "plugin_weather_data") || "null");
+		const wknd = (Array.isArray(data?.days) ? data.days : []).filter((d) => d.day >= today && [0, 6].includes((/* @__PURE__ */ new Date(`${d.day}T12:00:00Z`)).getUTCDay()));
+		if (!wknd.length) return null;
+		if (wknd.every((d) => (d.rain?.length ?? 0) > 0)) return "rain";
+		if (wknd.every((d) => d.tmax != null && d.tmax < 4)) return "cold";
+		return "clear";
+	} catch {
+		return null;
+	}
+}
+function sagaView(s, opts = {}) {
+	const now = opts.now ?? /* @__PURE__ */ new Date();
+	const db = s.db;
+	const today = s.wallet.today(now);
+	const entries = s.wallet.entries();
+	const sum = s.wallet.summary(now);
+	const lv = sum.level.level;
+	const def = hunterDefFor(lv);
+	const nx = nextHunterRank(lv);
+	const goals = goalsOf(s, opts.finance, now);
+	const goalPct = (id) => {
+		const g = goals.find((x) => x.id === id);
+		return g ? {
+			title: g.title,
+			pct: g.pct
+		} : null;
+	};
+	const seasons = loadSeasons(db);
+	const cur = currentSeason(seasons, today);
+	const current = cur ? seasonFacts(cur, seasons, entries, today, goalPct) : null;
+	const done = finishedSeasons(seasons, today);
+	const vision = loadVision(db, today);
+	const identity = loadIdentity(db);
+	const winsBook = loadWins(db);
+	const side = loadSide(db);
+	let budget = opts.side?.budget;
+	if (budget === void 0) try {
+		budget = s.shop.value({ finance: opts.finance }, now).funLeftLei;
+	} catch {
+		budget = null;
+	}
+	const sidePick = pickSideQuest(pickInput(side, today, {
+		budget: budget ?? null,
+		weather: opts.side?.weather ?? weekendWeather(db, today),
+		freeEvenings: opts.side?.freeEvenings ?? null,
+		freeDay: opts.side?.freeDay ?? null
+	}));
+	const week = pickInput(side, today, {
+		budget: null,
+		weather: null,
+		freeEvenings: null,
+		freeDay: null
+	}).week;
+	const wins = collectWins({
+		entries,
+		book: winsBook,
+		seasons: done.map((x) => ({
+			id: x.id,
+			name: x.name,
+			boss: x.boss.title,
+			won: x.boss.result === "won",
+			day: x.boss.resultDay ?? x.closed ?? seasonEnd(x)
+		})),
+		adventures: side.log.map((a) => ({
+			id: a.id,
+			title: a.title,
+			emoji: a.emoji,
+			day: a.day,
+			place: a.place
+		}))
+	});
+	const low = lowDay(db, entries, today);
+	const wheel = loadWheel(db);
+	const hist = wheelHistory(wheel);
+	const last = hist[hist.length - 1];
+	const arcBook = loadArc(db);
+	const arc = arcState(done.length, arcBook.outfit);
+	const moments = sharedMoments(db);
+	const cands = [];
+	const lastRank = arcBook.played.filter((p) => p.startsWith("rank:")).map((p) => Number(p.slice(5))).sort((a, b) => b - a)[0];
+	const r = rankUp(lastRank ?? 1, lv);
+	if (r && lastRank != null) cands.push(r);
+	if (current) for (const m of seasonMoments(current.season, current.progress, current.boss)) cands.push(seasonCinematic(m, current.season.color));
+	return {
+		today,
+		level: {
+			level: lv,
+			rank: def.name,
+			title: def.title,
+			color: def.color,
+			badge: def.badge,
+			next: nx ? {
+				name: nx.name,
+				minLevel: nx.minLevel
+			} : null,
+			progress: sum.level.progress
+		},
+		seasons,
+		current,
+		finished: done.length,
+		vision,
+		photos: loadVisionPhotos(db, vision.cards),
+		cardToday: cardOfDay(vision, today),
+		identity,
+		votes: identityVotes(identity, entries, today, extraVotes(winsBook)),
+		side,
+		sidePick,
+		sideStatus: side.weeks[week]?.status ?? "open",
+		sideStats: adventureStats(side, today),
+		wins,
+		winsBook,
+		low,
+		winToday: low ? pickWin(wins, today) : null,
+		wheel,
+		wheelDue: wheelDue(wheel, today),
+		suggestion: last ? suggestTheme(last.ratings, hist.length > 1 ? hist[hist.length - 2].ratings : null) : null,
+		arc,
+		arcBook,
+		arcNew: newChapter(arcBook, arc),
+		moments,
+		cinematic: nextCinematic(cands, arcBook.played),
+		goals
+	};
+}
+function lowDay(db, entries, today) {
+	try {
+		const live = effective(entries);
+		const y = addDays$7(today, -1);
+		if (!live.some((e) => daysBetween$3(e.day, today) >= 2)) return false;
+		const yesterday = live.filter((e) => e.day === y).reduce((t, e) => t + Math.max(0, e.coins), 0);
+		const slipped = live.some((e) => e.day === y && e.ruleId === "discipline.reset");
+		let mood = null;
+		try {
+			const desk = JSON.parse(getSetting(db, "ben_desk") || "null");
+			const m = (Array.isArray(desk?.moods) ? desk.moods : []).filter((x) => x?.day === today).pop();
+			mood = m && Number.isFinite(Number(m.mood)) ? Number(m.mood) : null;
+		} catch {
+			mood = null;
+		}
+		return isLowDay({
+			mood,
+			yesterday,
+			score: null,
+			prevScore: null,
+			slipped
+		});
+	} catch {
+		return false;
+	}
+}
+/** Big moments you shared with Ben, from his memory store (ben_convo points kept as moments). */
+function sharedMoments(db) {
+	try {
+		return cleanConvo(JSON.parse(getSetting(db, "ben_convo") || "null")).points.filter((p) => p.via === "moment").map((p) => ({
+			day: p.day,
+			text: p.text
+		}));
+	} catch {
+		return [];
+	}
+}
+/** Ben's lines about all this (only the parts that have something). */
+function sagaContext(s, db, finance, now = /* @__PURE__ */ new Date()) {
+	try {
+		const v = sagaView(s, {
+			finance,
+			now,
+			side: { budget: null }
+		});
+		const c = v.current;
+		return [
+			seasonLine(c?.season ?? null, c?.progress ?? null, c?.boss ?? null, c?.questPcts ?? []),
+			visionLine(v.vision),
+			identityLine(v.votes),
+			winsLine(v.wins, v.low, v.today),
+			wheelLine(v.wheel, v.today),
+			v.sidePick && v.sideStatus === "open" ? `This week's side quest (a small offline adventure he can choose to do): ${v.sidePick.quest.title}.` : "",
+			arcLine(v.arc, v.moments, v.today)
+		].filter(Boolean);
+	} catch {
+		return [];
+	}
 }
 // src/core/streaks.ts
 /**
@@ -6611,7 +10054,7 @@ var DAYS$4 = [
 	"Fri",
 	"Sat"
 ];
-var pad$12 = (n) => String(n % 24).padStart(2, "0");
+var pad$11 = (n) => String(n % 24).padStart(2, "0");
 var W = {
 	urge: 1,
 	reset: 3
@@ -6650,8 +10093,8 @@ function riskWindows(events, now = /* @__PURE__ */ new Date(), max = 3) {
 	const win = (slot, weekday, a) => ({
 		slot,
 		weekday,
-		from: `${pad$12(slot * 2)}:00`,
-		to: `${pad$12(slot * 2 + 2)}:00`,
+		from: `${pad$11(slot * 2)}:00`,
+		to: `${pad$11(slot * 2 + 2)}:00`,
 		urges: a.urges,
 		resets: a.resets,
 		score: a.score
@@ -6709,54 +10152,6 @@ function warningText(w, topTrigger, stealth = false) {
 	const tip = topTrigger && TIP[topTrigger] || "Decide now what you will do instead, and keep your phone away.";
 	const what = [w.urges ? `${w.urges} urge${w.urges === 1 ? "" : "s"}` : "", w.resets ? `${w.resets} reset${w.resets === 1 ? "" : "s"}` : ""].filter(Boolean).join(", ");
 	return `🛡️ <b>Heads-up</b>: ${w.from}–${w.to} is your risky time lately (${what}). ${tip}\nIf an urge hits: open the urge crusher, 3 minutes, you win.`;
-}
-// src/core/ledger.ts
-var LedgerError = class extends Error {
-	name = "LedgerError";
-};
-/** Rows that still count: not undo rows and not undone. */
-function effective(entries) {
-	const undone = /* @__PURE__ */ new Set();
-	for (const e of entries) if (e.kind === "undo" && e.undoOf != null) undone.add(e.undoOf);
-	return entries.filter((e) => e.kind !== "undo" && !undone.has(e.id));
-}
-function balance(entries) {
-	return effective(entries).reduce((s, e) => s + e.coins, 0);
-}
-/** XP only ever goes up; undoing an earn is the one way it is corrected. */
-function totalXp(entries) {
-	return effective(entries).reduce((s, e) => s + Math.max(0, e.xp), 0);
-}
-/**
-* Penalties dock coins but never push the balance below zero, so one bad day
-* can't wipe out the wallet.
-*/
-function clampPenalty(currentBalance, coins) {
-	if (coins >= 0) return coins;
-	return Math.max(coins, -Math.max(0, currentBalance));
-}
-/** Validates an undo and returns the row to insert. */
-function planUndo(entries, id, note, ts, day) {
-	if (!note.trim()) throw new LedgerError("An undo needs a reason");
-	const target = entries.find((e) => e.id === id);
-	if (!target) throw new LedgerError("Entry not found");
-	if (target.kind === "undo") throw new LedgerError("Cannot undo an undo");
-	if (target.ref?.startsWith("chest:")) throw new LedgerError("Chest prizes are final");
-	if (target.coins < 0 && /^(bank:|goal:)/.test(target.ref ?? "")) throw new LedgerError("Take them back out of the bank or goal instead");
-	if (entries.some((e) => e.kind === "undo" && e.undoOf === id)) throw new LedgerError("Already undone");
-	if (balance(entries) - target.coins < 0) throw new LedgerError("Those coins were already spent");
-	return {
-		ts,
-		day,
-		module: target.module,
-		kind: "undo",
-		coins: 0,
-		xp: 0,
-		ruleId: target.ruleId ?? null,
-		ref: target.ref ?? null,
-		note,
-		undoOf: id
-	};
 }
 // src/core/discipline.ts
 var MILESTONES$1 = [
@@ -7765,7 +11160,7 @@ function listOf(v) {
 // src/plugins/types.ts
 var definePlugin = (p) => p;
 // src/plugins/weather/weather.ts
-var hmOf$7 = (iso) => {
+var hmOf$6 = (iso) => {
 	const m = /T(\d{2}:\d{2})/.exec(String(iso ?? ""));
 	return m ? m[1] : null;
 };
@@ -7786,7 +11181,7 @@ function summarizeDay(json, day) {
 		if (!t.startsWith(day)) return;
 		const prob = num$2(h.precipitation_probability?.[k]);
 		if (!rainy(prob, num$2(h.precipitation?.[k]))) return;
-		const from = hmOf$7(t);
+		const from = hmOf$6(t);
 		const last = spans[spans.length - 1];
 		if (last && last.to === from) {
 			last.to = fromMin$1(toMin$7(from) + 60);
@@ -7798,11 +11193,11 @@ function summarizeDay(json, day) {
 		});
 	});
 	const r = (v) => v == null ? null : Math.round(v);
-	const clouds = times.map((t, k) => t.startsWith(day) && Number(hmOf$7(t)?.slice(0, 2)) >= 8 && Number(hmOf$7(t)?.slice(0, 2)) < 12 ? num$2(h.cloudcover?.[k]) : null).filter((v) => v != null);
+	const clouds = times.map((t, k) => t.startsWith(day) && Number(hmOf$6(t)?.slice(0, 2)) >= 8 && Number(hmOf$6(t)?.slice(0, 2)) < 12 ? num$2(h.cloudcover?.[k]) : null).filter((v) => v != null);
 	return {
 		day,
-		sunrise: hmOf$7(d.sunrise?.[i]),
-		sunset: hmOf$7(d.sunset?.[i]),
+		sunrise: hmOf$6(d.sunrise?.[i]),
+		sunset: hmOf$6(d.sunset?.[i]),
 		tmin: r(num$2(d.temperature_2m_min?.[i])),
 		tmax: r(num$2(d.temperature_2m_max?.[i])),
 		rain: spans,
@@ -7859,7 +11254,7 @@ function readCoords(text) {
 // src/plugins/weather/index.ts
 var WEATHER = "weather";
 var dayOf$7 = (d) => calendarDay(d);
-var hmOf$6 = (d) => d.toTimeString().slice(0, 5);
+var hmOf$5 = (d) => d.toTimeString().slice(0, 5);
 var job$2 = async (ctx) => {
 	const cfg = JSON.parse(await ctx.get(`plugin_weather`) || "{}");
 	const city = String(cfg.city ?? "").trim();
@@ -7912,7 +11307,7 @@ var weather_default = definePlugin({
 	}] },
 	context(db, now) {
 		const data = readData(db, WEATHER);
-		return data ? weatherLine(data, dayOf$7(now), hmOf$6(now)) : null;
+		return data ? weatherLine(data, dayOf$7(now), hmOf$5(now)) : null;
 	},
 	commands: { weather: {
 		help: "Today’s weather and daylight",
@@ -7920,7 +11315,7 @@ var weather_default = definePlugin({
 			const data = readData(db, WEATHER);
 			const w = data?.days.find((d) => d.day === dayOf$7(now));
 			if (!data || !w) return readConfig(db, "weather").city ? "🌤 No forecast yet. It comes with the next check (every few hours)." : "🌤 Set your city in Settings → Plugins → Weather first.";
-			const advice = weatherAdvice(w, hmOf$6(now));
+			const advice = weatherAdvice(w, hmOf$5(now));
 			return [
 				`🌤 <b>${data.place}</b>: ${w.tmin}–${w.tmax}°C`,
 				w.sunrise && w.sunset ? `Sunrise ${w.sunrise} · sunset ${w.sunset}` : "",
@@ -7945,7 +11340,7 @@ var weather_default = definePlugin({
 });
 // src/plugins/github/github.ts
 var localDay = (iso) => calendarDay(new Date(iso));
-var addDays$6 = (day, n) => {
+var addDays$5 = (day, n) => {
 	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
@@ -7954,7 +11349,7 @@ var daysBetween$2 = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Da
 /** GitHub's events list → last commit day, commits this week and the repos touched. */
 function commitStats(events, today) {
 	const pushes = (Array.isArray(events) ? events : []).filter((e) => e?.type === "PushEvent" && typeof e.created_at === "string");
-	const weekFrom = addDays$6(today, -6);
+	const weekFrom = addDays$5(today, -6);
 	let lastCommit = null;
 	let week = 0;
 	const repos = /* @__PURE__ */ new Set();
@@ -8198,13 +11593,13 @@ function parseDigest(text) {
 		from: String(x.from ?? "").replace(/[<>]/g, "").slice(0, 60)
 	}));
 }
-var label$1 = (k) => ({
+var label = (k) => ({
 	deadline: "Deadline",
 	exam: "Exam",
 	bill: "Bill",
 	change: "Change"
 })[k];
-var itemText = (x) => `${label$1(x.kind)}: ${x.title}${x.date ? ` (${x.date})` : ""}${x.from ? ` · from ${x.from}` : ""}`;
+var itemText = (x) => `${label(x.kind)}: ${x.title}${x.date ? ` (${x.date})` : ""}${x.from ? ` · from ${x.from}` : ""}`;
 /** One line for what Ben knows (only while the digest is fresh: today or yesterday). */
 function gmailLine(d, today, yesterday) {
 	if (!d.items.length || d.day !== today && d.day !== yesterday) return null;
@@ -8634,7 +12029,7 @@ var bank_default = definePlugin({
 	}
 });
 // src/plugins/health/health.ts
-var addDays$5 = (day, n) => {
+var addDays$4 = (day, n) => {
 	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
@@ -8653,7 +12048,7 @@ function cleanHealth(body, today) {
 		error: "Send JSON: {\"weight\"?, \"steps\"?, \"sleepHours\"?, \"day\"?}"
 	};
 	const day = body.day == null || body.day === "" ? today : String(body.day).slice(0, 10);
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < addDays$5(today, -14)) return {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < addDays$4(today, -14)) return {
 		ok: false,
 		error: "day must be YYYY-MM-DD, within the last 14 days"
 	};
@@ -8707,7 +12102,7 @@ function mergeDay(data, input, at) {
 /** One line for what Ben knows: today's steps, last night's sleep and the 7-day average. */
 function healthLine(data, today) {
 	if (!data) return null;
-	const week = Array.from({ length: 7 }, (_, i) => addDays$5(today, -i));
+	const week = Array.from({ length: 7 }, (_, i) => addDays$4(today, -i));
 	const t = data.days[today];
 	const steps = week.map((d) => data.days[d]?.steps).filter((x) => x != null);
 	if (!t && !steps.length) return null;
@@ -9836,725 +13231,6 @@ function cleanPcState(v, now) {
 }
 /** A desktop app with Ben's actions on was seen in the last 30 minutes. */
 var deskReady = (s, now) => !!s.desk?.on && now - s.desk.at < 18e5;
-// src/core/benTalk.ts
-/** A regex with Unicode word edges: \\b only knows ASCII, so "arată" or "второй" would never match. */
-var uw = (src, flags = "") => new RegExp(src.replace(/\\b/g, "(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))"), `${flags}u`);
-var pad$11 = (n) => String(n).padStart(2, "0");
-var ymd$3 = (d) => calendarDay(d);
-var hmOf$5 = (d) => `${pad$11(d.getHours())}:${pad$11(d.getMinutes())}`;
-var label = (d) => d.toLocaleDateString("en-GB", {
-	weekday: "short",
-	day: "numeric",
-	month: "short"
-}).replace(",", "");
-/** The clock and the words for "today", "tonight", "this morning", "tomorrow" right now. */
-function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
-	const h = now.getHours();
-	const afterMidnight = h < startHour;
-	const calDay = ymd$3(now);
-	const app = /* @__PURE__ */ new Date(now.getTime() - startHour * 36e5);
-	const appDay = ymd$3(app);
-	const nextCal = new Date(now);
-	nextCal.setDate(nextCal.getDate() + 1);
-	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$5(now)}, ${label(now)}. App day: ${label(app)} (the app's day turns at ${pad$11(startHour)}:00).`];
-	if (afterMidnight) {
-		const seven = new Date(now);
-		seven.setHours(7, 0, 0, 0);
-		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label(now)} from ${pad$11(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label(app)} until ${pad$11(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label(now)}); ask with chips only if it really matters.`);
-	} else if (h >= 18) lines.push(`- "tonight" = this evening (${label(now)}). "tomorrow morning" = ${label(nextCal)}.`);
-	else if (h < 12) lines.push(`- "this morning" = now (${label(now)}). "tonight" = this evening. "tomorrow" = ${label(nextCal)}.`);
-	else lines.push(`- "this afternoon" = now. "tonight" = this evening (${label(now)}). "tomorrow" = ${label(nextCal)}.`);
-	lines.push("When you name a time, add how far it is (\"in 40 min\", \"in 6 h, this morning\").");
-	return {
-		clock: hmOf$5(now),
-		appDay,
-		calDay,
-		afterMidnight,
-		text: lines.join("\n")
-	};
-}
-/** "in 40 min" / "in 6 h 29 min, this morning" / "tomorrow at 09:00" / "an hour ago". */
-function whenWords(at, now = /* @__PURE__ */ new Date(), startHour = 4) {
-	const t = typeof at === "string" ? new Date(at) : at;
-	const diff = Math.round((t.getTime() - now.getTime()) / 6e4);
-	const span = (m) => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ""}`;
-	if (diff < 0) return diff > -60 ? `${-diff} min ago` : `${span(-diff)} ago`;
-	const sameCal = ymd$3(t) === ymd$3(now);
-	const th = t.getHours();
-	const nowAfterMidnight = now.getHours() < startHour;
-	let part = "";
-	if (sameCal) part = th < 12 ? nowAfterMidnight || now.getHours() < 12 ? "this morning" : "today" : th < 18 ? "this afternoon" : "tonight";
-	else {
-		const tomorrow = new Date(now);
-		tomorrow.setDate(tomorrow.getDate() + 1);
-		part = ymd$3(t) === ymd$3(tomorrow) ? th < 4 ? "tonight, after midnight" : `tomorrow ${th < 12 ? "morning" : th < 18 ? "afternoon" : "evening"}` : label(t);
-	}
-	if (diff === 0) return "now";
-	return diff < 120 && sameCal ? `in ${span(diff)}` : `in ${span(diff)}, ${part}`;
-}
-var THEMES = [
-	["sleep", /\b(sleep|slept|sleeping|bed ?time|go to bed|hours? of sleep|tired|rest(ed)?|nap|somn|dormi|сон|спать|выспа)/i],
-	["money", /\b(money|spend|spent|budget|lei|save|saving|bani|деньг)/i],
-	["focus and study", /\b(focus|study|studying|deep work|exam|homework|lab|învăț|учеб)/i],
-	["training", /\b(gym|workout|training|train|pushups?|run|sport|muscle)/i],
-	["phone and scrolling", /\b(phone|scroll|tiktok|youtube|instagram|reels|screen time)/i],
-	["discipline", /\b(discipline|clean streak|urge|relapse|oath)/i],
-	["water", /\b(water|hydrat|apă|вод)/i],
-	["the company / big goals", /\b(company|startup|business|empire|build (a|your) (company|business)|million)/i],
-	["promises", /\b(promise|you said you would|kept|broke)/i]
-];
-var EMOJI = /\p{Extended_Pictographic}/gu;
-/** What Ben's last replies (newest last) keep coming back to, minus what the new message brings up itself. */
-function alreadySaid(coachTexts, message = "", last = 6) {
-	const recent = coachTexts.slice(-last).map((t) => t.split(" | ")[0]);
-	const counts = /* @__PURE__ */ new Map();
-	for (const t of recent) for (const [name, re] of THEMES) if (re.test(t)) counts.set(name, (counts.get(name) ?? 0) + 1);
-	const asked = new Set(THEMES.filter(([, re]) => re.test(message)).map(([n]) => n));
-	return {
-		themes: [...counts.entries()].filter(([n]) => !asked.has(n)).map(([theme, times]) => ({
-			theme,
-			times
-		})).sort((a, b) => b.times - a.times),
-		openers: [...new Set(recent.map((t) => t.replace(EMOJI, "").trim().split(/\s+/).slice(0, 2).join(" ").replace(/[,.!?…]+$/, "")).filter((o) => o.length > 1))],
-		emoji: [...new Set(recent.flatMap((t) => t.match(EMOJI) ?? []))]
-	};
-}
-/** The "already said" block for the prompt (empty when there is nothing to warn about). */
-function alreadySaidText(a) {
-	const out = [];
-	if (a.themes.length) out.push(`- Points you already made: ${a.themes.map((t) => `${t.theme}${t.times > 1 ? ` (${t.times}×)` : ""}`).join(", ")}. Do NOT bring these up again unless he does. Answer what he asked.`);
-	if (a.openers.length) out.push(`- How your last replies started: ${a.openers.slice(-6).map((o) => `"${o}"`).join(", ")}. Start differently.`);
-	if (a.emoji.length) out.push(`- Emoji you used lately: ${a.emoji.slice(-6).join(" ")}. Use none of them this time (zero emoji is fine).`);
-	return out.length ? `== Already said (your last replies) ==\n${out.join("\n")}` : "";
-}
-/** A short "no" / "not now" / "stop": Ben accepts it and stops pushing. */
-function saidNo(message) {
-	const t = message.trim().toLowerCase().replace(/[.!…]+$/, "");
-	return t.length <= 40 && /^(no+|nope|nah|not now|not today|later|stop|leave it|drop it|i don'?t want( to)?|no thanks|nu|nu acum|lasă|lasa|нет|не сейчас|не хочу|отстань|хватит)( thanks| man| bro| ben)?[\s,!.]*$/u.test(t);
-}
-/**
-* The reply, tidied in code (the model sometimes ignores the rules):
-* no "Look, Victor," / "Listen bro," opener, at most one emoji, and none when
-* the last two replies already had one (emoji only sometimes).
-*/
-function tidyReply(reply, prevCoachTexts = [], name = "") {
-	let r = String(reply ?? "").trim();
-	if (!r) return r;
-	const who = name ? `(?:${name.replace(/[^\p{L}]/gu, "")}|bro|man|dude|mate)` : "(?:bro|man|dude|mate|\\p{Lu}\\p{L}+)";
-	const m = new RegExp(`^(\\p{Extended_Pictographic}\\s*)?(look|listen|ok(?:ay)?(?: so)?|alright|so|bro)\\s*,?\\s+${who}\\s*[,.!:—-]+\\s*`, "iu").exec(r);
-	if (m) {
-		const rest = r.slice(m[0].length);
-		r = `${m[1] ?? ""}${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
-	}
-	let allowed = prevCoachTexts.slice(-2).filter((t) => /\p{Extended_Pictographic}/u.test(t.split(" | ")[0])).length >= 2 ? 0 : 1;
-	r = r.replace(/\p{Extended_Pictographic}(?:\uFE0F|\u200D\p{Extended_Pictographic})*/gu, (e) => allowed-- > 0 ? e : "");
-	return r.replace(/[ \t]{2,}/g, " ").replace(/[ \t]+([,.!?])/g, "$1").trim();
-}
-/** Words people type in commands to Ben; typos of these are fixed before the parsers run. */
-var DICT = [
-	"change",
-	"rename",
-	"move",
-	"approve",
-	"plan",
-	"show",
-	"delete",
-	"remove",
-	"block",
-	"blocks",
-	"deep",
-	"developing",
-	"development",
-	"develop",
-	"tomorrow",
-	"today",
-	"tonight",
-	"morning",
-	"evening",
-	"afternoon",
-	"schedule",
-	"calendar",
-	"task",
-	"tasks",
-	"focus",
-	"remind",
-	"reminder",
-	"finished",
-	"cancel",
-	"start",
-	"please",
-	"first",
-	"second",
-	"third",
-	"swap",
-	"replace",
-	"edit",
-	"update",
-	"workout",
-	"water",
-	"done",
-	"study",
-	"studying",
-	"project",
-	"minutes",
-	"hours",
-	"push",
-	"later",
-	"earlier",
-	"session",
-	"meeting",
-	"what",
-	"where",
-	"again"
-];
-/** Real words that look like typos of the ones above: never "fixed". */
-var KEEP$1 = /* @__PURE__ */ new Set([
-	"black",
-	"clock",
-	"flock",
-	"block",
-	"blank",
-	"bloc",
-	"chance",
-	"charge",
-	"changed",
-	"changes",
-	"more",
-	"mode",
-	"love",
-	"live",
-	"shot",
-	"shop",
-	"slow",
-	"snow",
-	"shown",
-	"star",
-	"state",
-	"stay",
-	"store",
-	"story",
-	"start",
-	"smart",
-	"today",
-	"toady",
-	"what",
-	"when",
-	"that",
-	"than",
-	"then",
-	"plain",
-	"plant",
-	"planet",
-	"plans",
-	"play",
-	"place",
-	"plate",
-	"please",
-	"pleased",
-	"focused",
-	"remain",
-	"rename",
-	"reader",
-	"second",
-	"secondly",
-	"deep",
-	"deer",
-	"deeply",
-	"done",
-	"dome",
-	"gone",
-	"none",
-	"tone",
-	"move",
-	"mover",
-	"moved",
-	"moves",
-	"cancer",
-	"meting",
-	"swamp",
-	"swap",
-	"water",
-	"waiter",
-	"later",
-	"latter",
-	"eater",
-	"task",
-	"mask",
-	"tusk",
-	"tasks",
-	"edit",
-	"exit",
-	"sedan",
-	"session",
-	"where",
-	"there",
-	"here",
-	"were",
-	"again",
-	"agian",
-	"push",
-	"posh",
-	"bush",
-	"rush",
-	"study",
-	"sturdy",
-	"show",
-	"stow",
-	"flow",
-	"fast",
-	"first"
-]);
-/** Damerau-Levenshtein (optimal string alignment) distance, capped. */
-function editDistance(a, b, cap = 3) {
-	if (Math.abs(a.length - b.length) > cap) return cap + 1;
-	const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
-	for (let j = 1; j <= b.length; j++) d[0][j] = j;
-	for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++) {
-		const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-		d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + cost);
-		if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
-	}
-	return d[a.length][b.length];
-}
-var sameLetters = (a, b) => a.length === b.length && [...a].sort().join("") === [...b].sort().join("");
-/** One word fixed when it is clearly a typo of a command word ("chagne" → "change"), else as it was. */
-function fixWord(w) {
-	const low = w.toLowerCase();
-	if (low.length < 4 || !/^[a-z]+$/.test(low) || KEEP$1.has(low) || DICT.includes(low)) return w;
-	let best = null;
-	let bestD = 9;
-	for (const word of DICT) {
-		if (word[0] !== low[0]) continue;
-		const allow = word.length <= 4 ? 1 : word.length <= 6 ? 1 : 2;
-		const dist = editDistance(low, word, 3);
-		if (dist > allow) continue;
-		if (word.length <= 4 && !sameLetters(low, word)) continue;
-		if (dist < bestD) {
-			best = word;
-			bestD = dist;
-		}
-	}
-	if (!best) return w;
-	return w[0] === w[0].toUpperCase() ? best[0].toUpperCase() + best.slice(1) : best;
-}
-/** The whole message with typos of command words fixed ("aporve the paln" → "approve the plan"). */
-function fixTypos(text) {
-	return String(text ?? "").replace(/[A-Za-z]+/g, (w) => fixWord(w));
-}
-/** "how can I approve the plan if I don't see it" → the plan card. */
-function wantsToSee(text) {
-	const t = fixTypos(text).toLowerCase();
-	const out = [];
-	const look = uw("\\b(show|see|view|look|display|where'?s|where is|what'?s|what is|what does|send|give me|let me see|approve|check|arată|arata|vezi|văd|покажи|посмотреть|вижу|где)\\b");
-	if (uw("\\b(plan|planul|plan-ul|план|плана)\\b").test(t) && (look.test(t) || /\bplan\s*\?/.test(t))) out.push("plan");
-	if (uw("\\b(my day|the day|today|schedule|calendar|agenda|ziua|programul|день|расписание)\\b").test(t) && look.test(t) && !out.includes("plan")) out.push("day");
-	if (uw("\\b(tasks?|to-?dos?|todoist|sarcini|sarcinile|задачи)\\b").test(t) && uw("\\b(show|see|list|view|what are|what'?s left|what is left|which|arată|arata|покажи|какие)\\b").test(t)) out.push("tasks");
-	return out.slice(0, 2);
-}
-var ORD = [
-	[uw("\\b(first|1st|one|primul|prima|первый|первую|первое)\\b"), 0],
-	[uw("\\b(second|2nd|two|al doilea|a doua|второй|вторую|второе)\\b"), 1],
-	[uw("\\b(third|3rd|three|al treilea|a treia|третий|третью)\\b"), 2],
-	[uw("\\b(last|ultimul|ultima|последний|последнюю)\\b"), -1]
-];
-var timeOf$1 = (s) => {
-	const m = /^(?:at\s+|la\s+|в\s+)?(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i.exec(s.trim());
-	if (!m) return null;
-	let h = Number(m[1]);
-	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
-	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
-	const mi = Number(m[2] ?? 0);
-	return h < 24 && mi < 60 ? `${pad$11(h)}:${pad$11(mi)}` : null;
-};
-var BLOCK = "(?:block|blocks|blocul|blocului|блок|блока)";
-/**
-* "please change the deep block to developing my app" → rename "deep" → "Developing my app".
-* "move the first deep block to 11" → move. Only when a block is named (never "change my bedtime").
-*/
-function readBlockEdit(text) {
-	const t = fixTypos(text).trim().replace(/[.!?]+$/, "").replace(/\s+/g, " ");
-	const verbs = "(?:please\\s+|pls\\s+|can you\\s+|could you\\s+)?(change|rename|swap|switch|make|turn|replace|set|move|push|shift|put|schimbă|schimba|redenumește|redenumeste|mută|muta|поменяй|переименуй|измени|замени|перенеси|сделай)";
-	const prep = "(?:to|into|for|with|in|în|на|в|la)";
-	const named = new RegExp(`^${verbs}\\s+(?:the\\s+|my\\s+|that\\s+|this\\s+)?(.{0,40}?)\\s*${BLOCK}\\s*(\\d)?\\s+${prep}\\s+(.{1,60})$`, "iu").exec(t);
-	const after = named ? null : new RegExp(`^${verbs}\\s+(?:the\\s+|my\\s+)?${BLOCK}\\s+(.{1,40}?)\\s*(\\d)?\\s+${prep}\\s+(.{1,60})$`, "iu").exec(t);
-	const m = named ?? after;
-	if (!m) return null;
-	const verbWord = m[1].toLowerCase();
-	let target = m[2].trim().toLowerCase();
-	const num = m[3] ? Number(m[3]) - 1 : void 0;
-	const raw = m[4].trim().replace(/^(?:be\s+|be about\s+|about\s+)/i, "");
-	let nth = num;
-	for (const [r, n] of ORD) if (r.test(target)) {
-		nth = n;
-		target = target.replace(r, "").trim();
-	}
-	target = target.replace(/\b(the|my|a|an|blocul|focus)\b/g, "").replace(/\s+/g, " ").trim();
-	const when = timeOf$1(raw);
-	const moving = /^(move|push|shift|put|mută|muta|перенеси)$/.test(verbWord);
-	if (when && (moving || /^(at|la|в)\s/i.test(raw) || /^\d{1,2}([:.]\d{2})?$/.test(raw))) return {
-		verb: "move",
-		target,
-		...nth != null ? { nth } : {},
-		value: when
-	};
-	if (moving) return null;
-	const title = raw.replace(/\s+(please|pls|thanks|thank you|haha|lol)$/i, "").trim();
-	if (!title) return null;
-	if (/^\d+\s*(h|hrs?|hours?|min|mins|minutes?|m)\b/i.test(title) || uw("\\b(tomorrow|today|tonight|later|earlier|longer|shorter|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next week|mâine|maine|azi|завтра|сегодня|позже)\\b", "i").test(title)) return null;
-	return {
-		verb: "rename",
-		target,
-		...nth != null ? { nth } : {},
-		value: title.charAt(0).toUpperCase() + title.slice(1)
-	};
-}
-/** The blocks a request can mean: title words match (prefix), upcoming first, by time. */
-/**
-* Speed: "move gym to 18:00" (no word "block") read in code too. Only a move to a clock
-* time with a real name ("gym", "lab"), never "it", "everything" or "the rest".
-*/
-function readMoveEdit(text) {
-	const t = fixTypos(text).trim().replace(/[.!?]+$/, "").replace(/\s+/g, " ");
-	const m = /^(?:please\s+|pls\s+|can you\s+|could you\s+)?(?:move|push|shift|put)\s+(?:the\s+|my\s+)?(.{3,30}?)\s+(?:to|at)\s+(\S+(?:\s*[ap]m)?)$/i.exec(t);
-	if (!m) return null;
-	const target = m[1].toLowerCase().replace(/\b(the|my|a|an|today'?s?|session|event)\b/g, "").replace(/\s+/g, " ").trim();
-	if (!target || target.length < 3 || /\b(it|that|this|them|everything|all|rest|day|plan|tasks?|meeting|next|tomorrow)\b/.test(target)) return null;
-	const value = timeOf$1(m[2]);
-	return value ? {
-		verb: "move",
-		target,
-		value
-	} : null;
-}
-function matchBlocks(edit, blocks) {
-	const words = edit.target.split(/\s+/).filter((w) => w.length >= 3).map((w) => w.slice(0, 4));
-	const hits = blocks.filter((b) => {
-		const title = b.title.toLowerCase();
-		return words.every((w) => title.split(/[^\p{L}\p{N}]+/u).some((x) => x.startsWith(w)));
-	}).sort((a, b) => a.start.localeCompare(b.start));
-	if (edit.nth == null) return hits;
-	const pick = edit.nth < 0 ? hits[hits.length - 1] : hits[edit.nth];
-	return pick ? [pick] : hits;
-}
-/** The chip for one option: "Deep block 1 · 07:00". */
-var optionLabel = (o) => `${o.title.slice(0, 28)} · ${o.start}`;
-/** Which of the offered chips his answer picks ("first one", "2", "the 14:00 one", the chip itself); null when unclear. */
-function pickChoice(text, labels) {
-	const t = fixTypos(text).trim().toLowerCase().replace(/[.!?]+$/, "");
-	if (!t || t.length > 60) return null;
-	const exact = labels.findIndex((l) => l.toLowerCase() === t);
-	if (exact >= 0) return exact;
-	const time = /\b(\d{1,2})[:.](\d{2})\b/.exec(t) ?? /\b(?:at|la|в)\s+(\d{1,2})\b/.exec(t);
-	if (time) {
-		const hm = `${pad$11(Number(time[1]))}:${time[2] ?? "00"}`;
-		const k = labels.findIndex((l) => l.endsWith(hm));
-		if (k >= 0) return k;
-	}
-	for (const [r, n] of ORD) if (r.test(t)) return n < 0 ? labels.length - 1 : n < labels.length ? n : null;
-	const num = /^(?:#|nr\.?\s*|number\s+)?(\d)$/.exec(t);
-	if (num) {
-		const n = Number(num[1]) - 1;
-		return n >= 0 && n < labels.length ? n : null;
-	}
-	const words = t.split(/\s+/).filter((w) => w.length >= 3 && !/^(the|one|block|that|this)$/.test(w));
-	const only = labels.map((l, i) => words.some((w) => l.toLowerCase().includes(w)) ? i : -1).filter((i) => i >= 0);
-	return only.length === 1 ? only[0] : null;
-}
-/** The language a short message is in, for Ben's own one-liners: Cyrillic → ru, Romanian letters or words → ro. */
-function langOf(text) {
-	const t = String(text ?? "");
-	if (/[\u0400-\u04FF]/.test(t)) return "ru";
-	if (/[ăâîșşțţ]/i.test(t) || uw("\\b(schimba|muta|blocul|planul|azi|maine|vreau|te rog|primul|prima|doilea|doua|treilea|ultimul|cat|gata|nu)\\b", "i").test(t)) return "ro";
-	return "en";
-}
-/** Ben's own short lines (after a local edit) in his language. */
-function shortLine(kind, lang, n = 2, what = "") {
-	return {
-		en: {
-			done: "Done.",
-			failed: `That didn't work: ${what}.`,
-			which: `${n} blocks fit. Which one${what ? ` ${what}` : ""}?`
-		},
-		ro: {
-			done: "Gata.",
-			failed: `N-a mers: ${what}.`,
-			which: `Se potrivesc ${n} blocuri. Care?`
-		},
-		ru: {
-			done: "Готово.",
-			failed: `Не получилось: ${what}.`,
-			which: `Подходят ${n} блока. Какой?`
-		}
-	}[lang][kind];
-}
-/** "I'll swap it", "renamed it", "done, moved": a reply that says something changed. */
-function claimsDone(reply) {
-	return /\b(i('ll| will|'ve| have)? ?(just )?(swap(ped)?|chang(e|ed)|renam(e|ed)|mov(e|ed)|book(ed)?|add(ed)?|delet(e|ed)|updat(e|ed)|replac(e|ed))\b|\b(renamed|swapped|moved|changed|updated|replaced) (it|that|the|your|deep)\b|\bdone[,.!]? (it'?s|i)\b)/i.test(String(reply ?? ""));
-}
-/** BQ3: one block of today's waiting plan gets a new title or start; the old one comes back for Undo. */
-function editPlanBlock(st, index, patch) {
-	const b = st.briefing;
-	if (!b) return {
-		state: null,
-		old: null,
-		error: "There is no plan for today yet"
-	};
-	if (b.status !== "proposed") return {
-		state: null,
-		old: null,
-		error: "The plan is already approved: its blocks are in your calendar now"
-	};
-	const old = b.plan.blocks[index];
-	if (!old) return {
-		state: null,
-		old: null,
-		error: "That plan block is gone"
-	};
-	if (patch.start && !/^([01]\d|2[0-3]):[0-5]\d$/.test(patch.start)) return {
-		state: null,
-		old: null,
-		error: `${patch.start} isn't a time`
-	};
-	const blocks = b.plan.blocks.map((x, i) => i === index ? {
-		...x,
-		...patch.title ? { title: patch.title.slice(0, 80) } : {},
-		...patch.start ? { start: patch.start } : {}
-	} : x);
-	if (patch.start) blocks.sort((x, y) => x.start.localeCompare(y.start));
-	return {
-		state: {
-			...st,
-			briefing: {
-				...b,
-				plan: {
-					...b.plan,
-					blocks
-				}
-			}
-		},
-		old: { ...old }
-	};
-}
-// src/core/benNormalize.ts
-/** Romanian (and other Latin) diacritics off: "curăță" → "curata", "ș"/"ş" → "s". Cyrillic stays. */
-function stripMarks(s) {
-	return String(s ?? "").normalize("NFD").replace(/([A-Za-z])[\u0300-\u036f]+/g, "$1").normalize("NFC").replace(/[șş]/g, "s").replace(/[ȘŞ]/g, "S").replace(/[țţ]/g, "t").replace(/[ȚŢ]/g, "T").replace(/ё/g, "е").replace(/Ё/g, "Е");
-}
-/** Lower case, no diacritics, quotes and stray symbols gone, spaces squeezed. Keeps ":", "-", "." and "," (times and lists). */
-function normalize$1(s) {
-	return stripMarks(s).toLowerCase().replace(/[’`´]/g, "'").replace(/[“”«»"]/g, " ").replace(/[^\p{L}\p{N}\s:'.,;\-+/?!]/gu, " ").replace(/\s+/g, " ").trim();
-}
-var L = "(?<![\\p{L}\\p{N}])";
-var R = "(?![\\p{L}\\p{N}])";
-var w = (src) => new RegExp(`${L}(?:${src})${R}`, "giu");
-/**
-* Phrase → plain English, applied in order on the normalised text. Only words
-* that steer what Ben does (verbs, days, times, linking words); names and
-* objects stay as typed ("curata camera" stays, it's the task's name).
-*/
-var PHRASES = [
-	[w("fa-?mi ziua|fa-?mi planul( zilei)?|fa planul( zilei| pe azi)?|planifica-?mi ziua|planul zilei|planul pe azi|organizeaza-?mi ziua"), "plan my day"],
-	[w("спланируй( мой| мне)? день|составь( мне)? план( на (день|сегодня))?|план на (день|сегодня)|распланируй день"), "plan my day"],
-	[w("plan ma day|plan mah day|plan muh day|plan my dya|pln my day|plan teh day"), "plan my day"],
-	[w("aminteste-?mi( sa)?|adu-?mi aminte( sa)?|aminteste-?ma( sa)?"), "remind me to"],
-	[w("напомни( мне)?( чтобы)?"), "remind me to"],
-	[w("adauga|adaug|pune"), "add"],
-	[w("добавь|запиши"), "add"],
-	[w("muta|mut-?o|mut-?l|muta-?l|muta-?o"), "move"],
-	[w("перенеси|передвинь|сдвинь"), "move"],
-	[w("sterge|elimina"), "delete"],
-	[w("удали|убери"), "delete"],
-	[w("imparte|sparge"), "break down"],
-	[w("разбей|раздели"), "break down"],
-	[w("azi|astazi"), "today"],
-	[w("poimaine"), "in 2 days"],
-	[w("maine"), "tomorrow"],
-	[w("diseara|deseara|in seara asta|la noapte"), "tonight"],
-	[w("сегодня"), "today"],
-	[w("послезавтра"), "in 2 days"],
-	[w("завтра"), "tomorrow"],
-	[w("вечером|сегодня вечером"), "tonight"],
-	[w("tmrw|tmr|tmrrw|tomoz|2moro|2morrow|tomorow|tommorow|tomorroww|tomorro"), "tomorrow"],
-	[w("tonite|2nite|tn"), "tonight"],
-	[w("rn"), "now"],
-	[new RegExp(`${L}(?:la|в|во|к|ora|в час)\\s+(\\d{1,2}(?:[:.]\\d{2})?)${R}`, "giu"), "at $1"],
-	[new RegExp(`${L}на\\s+(\\d{1,2}(?:[:.]\\d{2})?)${R}`, "giu"), "to $1"],
-	[w("si|și|и"), "and"],
-	[w("apoi|dupa aceea|потом|затем"), "then"],
-	[w("pls|plz|plez"), "please"],
-	[w("gonna"), "going to"],
-	[w("wanna"), "want to"],
-	[w("ur"), "your"],
-	[w("u"), "you"],
-	[w("w/"), "with"],
-	[w("hw"), "homework"]
-];
-/**
-* Built-in name aliases (a word he types for a thing Ben knows by another
-* name). His own aliases (LS6, "by sala I mean gym") come first.
-*/
-var BUILTIN_ALIASES = {
-	sala: "gym",
-	"sala de forta": "gym",
-	спортзал: "gym",
-	зал: "gym",
-	тренировка: "workout",
-	antrenament: "workout",
-	laborator: "lab",
-	лаба: "lab",
-	лабу: "lab",
-	лабораторная: "lab",
-	examen: "exam",
-	экзамен: "exam",
-	eseu: "essay",
-	эссе: "essay"
-};
-var langOfRaw = (t) => /[Ѐ-ӿ]/.test(t) ? "ru" : /[ăâîșşțţ]/i.test(t) || w("fa-?mi|azi|maine|diseara|aminteste|adauga|muta|sterge|curata|vreau|te rog|si|la").test(stripMarks(t).toLowerCase()) ? "ro" : "en";
-/** Aliases replaced as whole words ("sala" → "gym"), his own first. */
-function applyAliases(text, aliases = {}) {
-	const all = {
-		...BUILTIN_ALIASES,
-		...Object.fromEntries(Object.entries(aliases).map(([k, v]) => [normalize$1(k), v]))
-	};
-	let out = text;
-	for (const k of Object.keys(all).sort((a, b) => b.length - a.length)) {
-		if (!k) continue;
-		out = out.replace(new RegExp(`${L}${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${R}`, "giu"), all[k]);
-	}
-	return out;
-}
-/** The message read as plain English commands (see PHRASES). */
-function canon(text, aliases = {}) {
-	const raw = String(text ?? "");
-	let t = normalize$1(raw);
-	for (const [re, to] of PHRASES) t = t.replace(re, to);
-	t = applyAliases(t, aliases).replace(/\s+/g, " ").trim();
-	return {
-		text: t,
-		lang: langOfRaw(raw),
-		changed: t !== raw.toLowerCase().replace(/\s+/g, " ").trim()
-	};
-}
-var words$2 = (s) => normalize$1(s).split(/[^\p{L}\p{N}]+/u).filter((x) => x.length >= 2);
-var STOP$3 = /* @__PURE__ */ new Set([
-	"the",
-	"my",
-	"a",
-	"an",
-	"to",
-	"at",
-	"of",
-	"for",
-	"and",
-	"in",
-	"on",
-	"la",
-	"de",
-	"cu",
-	"pe",
-	"si",
-	"и",
-	"в",
-	"на"
-]);
-/** How well one typed word fits one name word (0..1): exact, prefix, or a typo away. */
-function wordFit(a, b) {
-	if (a === b) return 1;
-	if (a.length >= 3 && b.startsWith(a)) return .92;
-	if (b.length >= 3 && a.startsWith(b)) return .85;
-	const longer = Math.max(a.length, b.length);
-	if (longer < 4) return 0;
-	const d = editDistance(a, b, 3);
-	if (d > 3) return 0;
-	return d <= (longer <= 5 ? 1 : longer <= 8 ? 2 : 3) ? Math.max(0, .9 - d / longer * 1.2) : 0;
-}
-/**
-* How well a typed name fits a real one, 0..1: every typed word must find a
-* word in the name (typos allowed); extra words in the name cost a little.
-*/
-function similarity(query, name) {
-	const q = words$2(query).filter((x) => !STOP$3.has(x));
-	const n = words$2(name).filter((x) => !STOP$3.has(x));
-	if (!q.length || !n.length) return 0;
-	if (normalize$1(query) === normalize$1(name)) return 1;
-	let sum = 0;
-	for (const a of q) {
-		let best = 0;
-		for (const b of n) best = Math.max(best, wordFit(a, b));
-		if (best === 0) return 0;
-		sum += best;
-	}
-	const cover = sum / q.length;
-	const extra = Math.max(0, n.length - q.length);
-	return Math.max(0, Math.min(1, cover - extra * .04));
-}
-var COMMANDS = [
-	{
-		cmd: "plan my day",
-		say: [
-			"plan my day",
-			"plan today",
-			"make my plan",
-			"plan the day"
-		]
-	},
-	{
-		cmd: "what now",
-		say: [
-			"what now",
-			"what should i do now",
-			"what next"
-		]
-	},
-	{
-		cmd: "review yesterday",
-		say: [
-			"review yesterday",
-			"review my day",
-			"how did yesterday go"
-		]
-	},
-	{
-		cmd: "show my tasks",
-		say: [
-			"show my tasks",
-			"my tasks",
-			"what are my tasks"
-		]
-	},
-	{
-		cmd: "show my day",
-		say: [
-			"show my day",
-			"my day",
-			"show my calendar"
-		]
-	},
-	{
-		cmd: "approve",
-		say: [
-			"approve the plan",
-			"approve",
-			"approve plan"
-		]
-	}
-];
-/** A short message that is a command typed badly ("pln my dya" → "plan my day"), else null. */
-function commandOf(text) {
-	const t = normalize$1(text).replace(/[?!.]+$/, "");
-	if (!t || t.split(" ").length > 5) return null;
-	let best = null;
-	for (const c of COMMANDS) for (const s of c.say) {
-		if (t === s) return c.cmd;
-		if (Math.abs(t.length - s.length) > 3) continue;
-		const d = editDistance(t, s, 3);
-		if (d <= (s.length <= 8 ? 1 : s.length <= 14 ? 2 : 3) && (!best || d < best.d)) best = {
-			cmd: c.cmd,
-			d
-		};
-	}
-	return best?.cmd ?? null;
-}
 // src/core/benTools.ts
 /** "buy: Movie night" / "myhabit: Read 10 pages" → the action, or null. */
 function readToolAction(line) {
@@ -11158,7 +13834,8 @@ var defaultMeta = (type = "target") => ({
 	reward: null,
 	paused: false,
 	pinned: false,
-	order: null
+	order: null,
+	card: null
 });
 var TYPES = GOAL_TYPES.map((t) => t.id);
 var str$1 = (v, n) => String(v ?? "").trim().slice(0, n);
@@ -11193,7 +13870,8 @@ function cleanMeta(raw) {
 		reward: rw,
 		paused: !!r.paused,
 		pinned: !!r.pinned,
-		order: Number.isFinite(Number(r.order)) && r.order !== null ? Number(r.order) : null
+		order: Number.isFinite(Number(r.order)) && r.order !== null ? Number(r.order) : null,
+		card: typeof r.card === "string" && /^[\w-]{1,24}$/.test(r.card) ? r.card : null
 	};
 }
 /** Share of a project done (0–100), by weight. */
@@ -14001,7 +16679,8 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		`Training: workout streak ${body.streak}, ${body.workoutsThisWeek} workouts this week, total ${body.totalWorkouts}${body.latestWeight ? `, weight ${body.latestWeight} kg` : ""}. Recent: ${s.body.workouts(6).map((w) => `${w.day.slice(5)} ${w.title}`).join("; ") || "none"}.`,
 		moneyContext(extra.finance, today),
 		...moreContext(s, db, extra.finance, today, input, sum.todayRules ?? [], disc),
-		...extrasContext(db, today, body.restDays ?? [])
+		...extrasContext(db, today, body.restDays ?? []),
+		...sagaContext(s, db, extra.finance, now)
 	];
 	if (extra.events) {
 		const nowHM = now.toTimeString().slice(0, 5);
@@ -19017,7 +21696,7 @@ var big = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6)
 var COLD_READS_WARN = 3e8;
 /** Vercel's free plan answers about a million function calls a month; warn well before (CL2). */
 var API_CALLS_WARN = 7e5;
-var ago$1 = (now, iso) => {
+var ago = (now, iso) => {
 	const m = Math.round((now.getTime() - Date.parse(iso)) / 6e4);
 	return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 2880 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} days ago`;
 };
@@ -19052,14 +21731,14 @@ function okErr(id, label, b, now, never) {
 		id,
 		label,
 		ok: false,
-		detail: hint ? `${hint}. Since ${ago$1(now, b.err.at)}: ${b.err.msg.slice(0, 80)}` : `Failing since ${ago$1(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
+		detail: hint ? `${hint}. Since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 80)}` : `Failing since ${ago(now, b.err.at)}: ${b.err.msg.slice(0, 140)}`,
 		since: b.err.at
 	};
 	return {
 		id,
 		label,
 		ok: true,
-		detail: `OK, last ${ago$1(now, b.ok)}`
+		detail: `OK, last ${ago(now, b.ok)}`
 	};
 }
 function healthChecks(i) {
@@ -19079,7 +21758,7 @@ function healthChecks(i) {
 			id: "tick",
 			label: "Ben's server",
 			ok: !late,
-			detail: late ? `Last ran ${ago$1(now, tick)} (should be every 10 min)` : `Ran ${ago$1(now, tick)}`,
+			detail: late ? `Last ran ${ago(now, tick)} (should be every 10 min)` : `Ran ${ago(now, tick)}`,
 			...late ? { since: new Date(Date.parse(tick) + 6e5).toISOString() } : {}
 		});
 	}
@@ -19090,7 +21769,7 @@ function healthChecks(i) {
 			id: "timer",
 			label: "Ben's timer",
 			ok: !late,
-			detail: late ? `Last ran ${ago$1(now, timer)}: check the "Coach tick" workflow on GitHub (Actions) or your second pinger` : `Last ran ${ago$1(now, timer)}`,
+			detail: late ? `Last ran ${ago(now, timer)}: check the "Coach tick" workflow on GitHub (Actions) or your second pinger` : `Last ran ${ago(now, timer)}`,
 			...late ? { since: new Date(Date.parse(timer) + 18e5).toISOString() } : {}
 		});
 	}
@@ -19104,7 +21783,7 @@ function healthChecks(i) {
 			id: "sporty",
 			label: "Sporty",
 			ok: !off,
-			detail: off ? `Not heard from since ${ago$1(now, i.sportySeen)}` : `Seen ${ago$1(now, i.sportySeen)}`,
+			detail: off ? `Not heard from since ${ago(now, i.sportySeen)}` : `Seen ${ago(now, i.sportySeen)}`,
 			...off ? { since: new Date(Date.parse(i.sportySeen) + 936e5).toISOString() } : {}
 		});
 	}
@@ -19125,7 +21804,7 @@ function healthChecks(i) {
 			id: "desktopBackup",
 			label: "PC / Drive backup",
 			ok: !old,
-			detail: old ? `Last backup file ${ago$1(now, pc)}` : `Backup file ${ago$1(now, pc)}`,
+			detail: old ? `Last backup file ${ago(now, pc)}` : `Backup file ${ago(now, pc)}`,
 			...old ? { since: new Date(Date.parse(pc) + 2592e5).toISOString() } : {}
 		});
 	}
@@ -19163,7 +21842,7 @@ function healthChecks(i) {
 			id: "selfcheck",
 			label: "Daily self-check",
 			ok: !stale,
-			detail: stale ? `Has not run since ${ago$1(now, sc.at)}` : String(sc.line ?? `Ran ${ago$1(now, sc.at)}`),
+			detail: stale ? `Has not run since ${ago(now, sc.at)}` : String(sc.line ?? `Ran ${ago(now, sc.at)}`),
 			...stale ? { since: new Date(Date.parse(sc.at) + 936e5).toISOString() } : {}
 		});
 		const alerted = i.notes?.alerted ?? {};
@@ -19728,14 +22407,14 @@ var EXPERIMENTS = [
 		unit: "lei spent"
 	}
 ];
-var addDays$4 = (d, n) => {
+var addDays$3 = (d, n) => {
 	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
 	x.setUTCDate(x.getUTCDate() + n);
 	return x.toISOString().slice(0, 10);
 };
 var avg = (s, from, to, countEmpty) => {
 	const days = [];
-	for (let d = from; d <= to; d = addDays$4(d, 1)) if (countEmpty || s[d] != null) days.push(s[d] ?? 0);
+	for (let d = from; d <= to; d = addDays$3(d, 1)) if (countEmpty || s[d] != null) days.push(s[d] ?? 0);
 	return days.length ? days.reduce((a, b) => a + b, 0) / days.length : null;
 };
 /** The experiment for your weakest area: how far each area is below its usual level (0 = fine, 1 = far off). */
@@ -19749,11 +22428,11 @@ function measureExperiment(state, series, today) {
 	if (!exp) return null;
 	const day = Math.min(7, Math.max(1, Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${state.start}T12:00:00Z`)) / 864e5) + 1));
 	const counted = exp.metric === "workouts" || exp.metric === "spend" || exp.metric === "focus";
-	const before = avg(series, addDays$4(state.start, -14), addDays$4(state.start, -1), counted);
-	const end = addDays$4(state.start, 6) < today ? addDays$4(state.start, 6) : today;
+	const before = avg(series, addDays$3(state.start, -14), addDays$3(state.start, -1), counted);
+	const end = addDays$3(state.start, 6) < today ? addDays$3(state.start, 6) : today;
 	const during = avg(series, state.start, end, counted);
 	const changePct = before && during != null ? Math.round((during - before) / before * 100) : null;
-	const done = addDays$4(state.start, 6) < today;
+	const done = addDays$3(state.start, 6) < today;
 	const good = changePct != null && (exp.better === "up" ? changePct >= 5 : changePct <= -5);
 	const bad = changePct != null && (exp.better === "up" ? changePct <= -5 : changePct >= 5);
 	const verdict = changePct == null ? "Not enough data yet to compare." : good ? `It works: ${Math.abs(changePct)}% ${exp.better === "up" ? "more" : "less"} ${exp.unit} than before. Keep it.` : bad ? `It didn't help (${changePct > 0 ? "+" : ""}${changePct}%). Drop it and try another.` : `About the same (${changePct > 0 ? "+" : ""}${changePct}%). Keep it if it felt good.`;
@@ -19768,7 +22447,7 @@ function measureExperiment(state, series, today) {
 	};
 }
 // src/core/lifeReview.ts
-var addDays$3 = (d, n) => {
+var addDays$2 = (d, n) => {
 	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
 	x.setUTCDate(x.getUTCDate() + n);
 	return x.toISOString().slice(0, 10);
@@ -19776,7 +22455,7 @@ var addDays$3 = (d, n) => {
 var sum = (s, today, from, to, counted) => {
 	const vals = [];
 	for (let k = from; k <= to; k++) {
-		const v = s[addDays$3(today, -k)];
+		const v = s[addDays$2(today, -k)];
 		if (v != null || counted) vals.push(v ?? 0);
 	}
 	return {
@@ -22973,559 +25652,6 @@ function earnPerDay(entries, today) {
 	for (const e of entries) if (e.kind === "earn" && e.coins > 0 && e.day >= start && e.day <= today) byDay.set(e.day, (byDay.get(e.day) ?? 0) + e.coins);
 	if (byDay.size < 3) return 0;
 	return Math.round([...byDay.values()].reduce((a, b) => a + b, 0) / byDay.size);
-}
-function xpToNext(level) {
-	return Math.round(80 * Math.pow(level, 1.3));
-}
-var RANKS = [
-	{
-		minLevel: 1,
-		name: "Recruit (E-Rank)",
-		title: "The Weakest Hunter",
-		grade: "E-Rank",
-		badge: "⚔️",
-		color: "#8A93A6",
-		auraGlow: "rgba(138, 147, 166, 0.4)",
-		desc: "You have awakened at the bottom of the world. Even if called the weakest, the System has chosen you. Take your daily quest and begin your ascent.",
-		perk: "Awakening Spark: +10% XP on first daily ritual",
-		dailyQuestBonus: 5
-	},
-	{
-		minLevel: 3,
-		name: "E-Rank Scout",
-		title: "Dungeon Scout",
-		grade: "E-Rank",
-		badge: "🗡️",
-		color: "#A0AEC0",
-		auraGlow: "rgba(160, 174, 192, 0.4)",
-		desc: "Learning the terrain of your mind. You spot old addictive triggers and complacency before they strike.",
-		perk: "Pattern Sense: +5% Urge Resistance",
-		dailyQuestBonus: 5
-	},
-	{
-		minLevel: 5,
-		name: "D-Rank Survivor",
-		title: "Dungeon Survivor",
-		grade: "D-Rank",
-		badge: "🛡️",
-		color: "#4ADE80",
-		auraGlow: "rgba(74, 222, 128, 0.4)",
-		desc: "You no longer panic when habits get hard. Workouts and clean days are becoming your new normal.",
-		perk: "Iron Will: Workout fatigue reduced by 10%",
-		dailyQuestBonus: 8
-	},
-	{
-		minLevel: 8,
-		name: "D-Rank Gate Clearer",
-		title: "Gate Breaker",
-		grade: "D-Rank",
-		badge: "⚡",
-		color: "#52E38B",
-		auraGlow: "rgba(82, 227, 139, 0.4)",
-		desc: "Entering basic habit dungeons with certainty. Morning wake-ups and focused blocks are completed with steady rhythm.",
-		perk: "Momentum Pulse: +5 coins on completed focus blocks",
-		dailyQuestBonus: 8
-	},
-	{
-		minLevel: 10,
-		name: "C-Rank Striker",
-		title: "Dungeon Striker",
-		grade: "C-Rank",
-		badge: "🏹",
-		color: "#38BDF8",
-		auraGlow: "rgba(56, 189, 248, 0.45)",
-		desc: "You possess real destructive power against procrastination. The gap between your intentions and execution has shrunk dramatically.",
-		perk: "Striking Velocity: Tasks completed before noon pay +20% XP",
-		dailyQuestBonus: 10
-	},
-	{
-		minLevel: 14,
-		name: "C-Rank Raid Vanguard",
-		title: "Raid Vanguard",
-		grade: "C-Rank",
-		badge: "🔱",
-		color: "#0EA5E9",
-		auraGlow: "rgba(14, 165, 233, 0.45)",
-		desc: "First through the gate. When adversity strikes your schedule, you spearhead the solution instead of retreating.",
-		perk: "Frontline Fortitude: Streak Shield durability increased",
-		dailyQuestBonus: 12
-	},
-	{
-		minLevel: 18,
-		name: "B-Rank Raider",
-		title: "Dungeon Raider",
-		grade: "B-Rank",
-		badge: "🔮",
-		color: "#818CF8",
-		auraGlow: "rgba(129, 140, 248, 0.45)",
-		desc: "A respected warrior. Common temptations, binge spending, and impulse distractions no longer defeat you in standard encounters.",
-		perk: "Budget Fortification: Daily budget remaining bonus +10%",
-		dailyQuestBonus: 15
-	},
-	{
-		minLevel: 22,
-		name: "B-Rank High Striker",
-		title: "High Striker",
-		grade: "B-Rank",
-		badge: "💥",
-		color: "#6366F1",
-		auraGlow: "rgba(99, 102, 241, 0.5)",
-		desc: "High workout volume and intense focus sessions feel second nature. Your daily output outclasses 95% of your peers.",
-		perk: "Dual Strike: Double XP on days with 2+ completed study blocks",
-		dailyQuestBonus: 15
-	},
-	{
-		minLevel: 26,
-		name: "B-Rank Raid Commander",
-		title: "Tactical Commander",
-		grade: "B-Rank",
-		badge: "🦅",
-		color: "#A855F7",
-		auraGlow: "rgba(168, 85, 247, 0.5)",
-		desc: "Orchestrating every hour with tactical clarity. No time is wasted in mindless scrolling or hesitation.",
-		perk: "Commander Domain: All 5 daily rituals completed grants +15 bonus coins",
-		dailyQuestBonus: 18
-	},
-	{
-		minLevel: 30,
-		name: "A-Rank Elite Vanguard",
-		title: "Red Gate Conqueror",
-		grade: "A-Rank",
-		badge: "🔥",
-		color: "#C084FC",
-		auraGlow: "rgba(192, 132, 252, 0.5)",
-		desc: "You enter red gates without fear. Extreme workloads and intense physical challenges are systematically conquered.",
-		perk: "Red Gate Resilience: Missed block penalty reduced by 50%",
-		dailyQuestBonus: 20
-	},
-	{
-		minLevel: 35,
-		name: "A-Rank Shadow Assassin",
-		title: "Stealth Infiltrator",
-		grade: "A-Rank",
-		badge: "🥷",
-		color: "#E879F9",
-		auraGlow: "rgba(232, 121, 249, 0.5)",
-		desc: "Moving silently through your goals. Stealth discipline mode: results speak so loudly that explanations are unnecessary.",
-		perk: "Silent Mastery: Stealth check-ins yield +10 XP",
-		dailyQuestBonus: 22
-	},
-	{
-		minLevel: 40,
-		name: "A-Rank Master of Iron",
-		title: "Ironclad Titan",
-		grade: "A-Rank",
-		badge: "🦾",
-		color: "#F43F5E",
-		auraGlow: "rgba(244, 63, 94, 0.55)",
-		desc: "The physical temple is hardened. Heavy weights, push-up sets, and cold discipline have sculpted an unbreakable warrior body.",
-		perk: "Muscle Memory: Workouts logged award +5 extra coins",
-		dailyQuestBonus: 25
-	},
-	{
-		minLevel: 45,
-		name: "A-Rank Apex Hunter",
-		title: "Guild Champion",
-		grade: "A-Rank",
-		badge: "👑",
-		color: "#FB7185",
-		auraGlow: "rgba(251, 113, 133, 0.55)",
-		desc: "Standing at the peak of standard humanity. Every project and financial challenge is conquered before the deadline.",
-		perk: "Apex Will: Task streaks award +25 bonus coins",
-		dailyQuestBonus: 28
-	},
-	{
-		minLevel: 50,
-		name: "S-Rank Calamity Buster",
-		title: "National Awakening",
-		grade: "S-Rank",
-		badge: "⭐",
-		color: "#F5C84B",
-		auraGlow: "rgba(245, 200, 75, 0.6)",
-		desc: "THE MAGIC MEASURING DEVICE SHATTERS. You have entered the realm of S-Rank Hunters. Your discipline bends reality to your favor.",
-		perk: "S-Rank Authority: +25% permanent multiplier across all coin earnings",
-		dailyQuestBonus: 35
-	},
-	{
-		minLevel: 55,
-		name: "S-Rank Demon Castle Pioneer",
-		title: "Demon Slayer",
-		grade: "S-Rank",
-		badge: "👹",
-		color: "#EAB308",
-		auraGlow: "rgba(234, 179, 8, 0.6)",
-		desc: "Ascending the 100 floors of the Demon Castle. The demons of past addiction, regret, and low self-worth are permanently slain.",
-		perk: "Demon Slayer Will: Urge crusher completions award double coins",
-		dailyQuestBonus: 38
-	},
-	{
-		minLevel: 60,
-		name: "S-Rank Sovereign Striker",
-		title: "Apex Sovereign",
-		grade: "S-Rank",
-		badge: "☄️",
-		color: "#FACC15",
-		auraGlow: "rgba(250, 204, 21, 0.65)",
-		desc: "Speed, power, precision. Circadian wake-ups are clockwork; spending is surgically controlled; fitness is non-negotiable.",
-		perk: "Apex Focus: On-time wakeups award +15 coins",
-		dailyQuestBonus: 40
-	},
-	{
-		minLevel: 65,
-		name: "National Level Hunter",
-		title: "World Authority",
-		grade: "National Level",
-		badge: "🌍",
-		color: "#00D2FF",
-		auraGlow: "rgba(0, 210, 255, 0.7)",
-		desc: "Possessing power rivaling entire nations. You control your fate with absolute sovereignty. A beacon of relentless self-discipline.",
-		perk: "National Authority: Level mystery chests guarantee rare loot drops",
-		dailyQuestBonus: 50
-	},
-	{
-		minLevel: 70,
-		name: "National Level Titan",
-		title: "Living Monolith",
-		grade: "National Level",
-		badge: "🏛️",
-		color: "#38BDF8",
-		auraGlow: "rgba(56, 189, 248, 0.7)",
-		desc: "Unshakable by peer pressure, immune to dopamine traps. You stand as an indestructible monolith of habit execution.",
-		perk: "Titan Shield: 1 free Streak Shield awarded upon reaching this rank",
-		dailyQuestBonus: 55
-	},
-	{
-		minLevel: 75,
-		name: "Ruler’s Vessel",
-		title: "Vessel of the Brilliant Light",
-		grade: "National Level",
-		badge: "☀️",
-		color: "#67E8F9",
-		auraGlow: "rgba(103, 232, 249, 0.75)",
-		desc: "Channeling divine power. Telekinetic mastery over your focus: distractions bounce off your attention span like dust.",
-		perk: "Ruler’s Reach: Focus timers flow effortlessly with zero mental friction",
-		dailyQuestBonus: 60
-	},
-	{
-		minLevel: 80,
-		name: "Monarch Candidate",
-		title: "Shadow Heir",
-		grade: "Monarch Candidate",
-		badge: "🌑",
-		color: "#7C3AED",
-		auraGlow: "rgba(124, 58, 237, 0.8)",
-		desc: "The System chooses you. You stand between the world of light and sovereign darkness. Your past failures become soldiers in your shadow army.",
-		perk: "Arise Extraction: Every past slip converted into permanent wisdom and XP",
-		dailyQuestBonus: 70
-	},
-	{
-		minLevel: 85,
-		name: "Commander of Shadows",
-		title: "Lord of the Undead",
-		grade: "Monarch Candidate",
-		badge: "💀",
-		color: "#6D28D9",
-		auraGlow: "rgba(109, 40, 217, 0.8)",
-		desc: "Summoning Igris, Tank, and Iron. Your daily routines march forward automatically without conscious willpower strain.",
-		perk: "Shadow Army: Recurring habits execute with zero friction",
-		dailyQuestBonus: 75
-	},
-	{
-		minLevel: 90,
-		name: "Sovereign of the Abyss",
-		title: "Void Sovereign",
-		grade: "Monarch",
-		badge: "🌌",
-		color: "#5B21B6",
-		auraGlow: "rgba(91, 33, 182, 0.85)",
-		desc: "Master of the infinite expanse. Time bends to your priorities. When you decide a goal is done, the universe aligns.",
-		perk: "Void Mastery: Reward Vault surplus earns 5% monthly dividend",
-		dailyQuestBonus: 80
-	},
-	{
-		minLevel: 95,
-		name: "Shadow Monarch",
-		title: "Monarch of Shadows (True Form)",
-		grade: "Monarch",
-		badge: "👑",
-		color: "#9D4EDD",
-		auraGlow: "rgba(157, 78, 221, 0.9)",
-		desc: "\"ARISE.\" The true Shadow Monarch awakens. Death of bad habits is permanent; resurrection of your highest potential is absolute.",
-		perk: "True Monarch Domain: 2x permanent coin multiplier on all discipline rituals",
-		dailyQuestBonus: 100
-	},
-	{
-		minLevel: 100,
-		name: "Sovereign of Eternal Rebirth",
-		title: "Centennial Monarch",
-		grade: "Monarch",
-		badge: "♾️",
-		color: "#C77DFF",
-		auraGlow: "rgba(199, 125, 255, 0.9)",
-		desc: "Centennial titan. One hundred levels of relentless sweat, restraint, and calculated focus. You rule your mind with iron certainty.",
-		perk: "Centennial Aura: Level 100 Legendary Chest unlocked with guaranteed mega drop",
-		dailyQuestBonus: 110
-	},
-	{
-		minLevel: 110,
-		name: "Transcendent Sovereign",
-		title: "Master of Dimensions",
-		grade: "Transcendent",
-		badge: "🌀",
-		color: "#E0AAFF",
-		auraGlow: "rgba(224, 170, 255, 0.95)",
-		desc: "You operate across dimensions of financial wealth, physical elite status, and spiritual alignment. A master of total life architecture.",
-		perk: "Dimensional Vault: Real-money reward budget cap removed",
-		dailyQuestBonus: 125
-	},
-	{
-		minLevel: 120,
-		name: "Monarch of Total Sovereignty",
-		title: "Unbreakable Ruler",
-		grade: "Transcendent",
-		badge: "🩸",
-		color: "#FF3366",
-		auraGlow: "rgba(255, 51, 102, 0.95)",
-		desc: "The entire system recognizes your supremacy. No urge can breach your armor; no financial turbulence can shake your foundation.",
-		perk: "Supreme Will: Complete urge immunity protocol",
-		dailyQuestBonus: 140
-	},
-	{
-		minLevel: 130,
-		name: "Absolute Being Avatar",
-		title: "Divine Creator",
-		grade: "Divine Sovereign",
-		badge: "✨",
-		color: "#C8F135",
-		auraGlow: "rgba(200, 241, 53, 0.95)",
-		desc: "Possessing the spark of the creator. Every daily action creates ripples of excellence across your university, fitness, and family life.",
-		perk: "Divine Spark: Triple XP on all master goals",
-		dailyQuestBonus: 160
-	},
-	{
-		minLevel: 140,
-		name: "Primordial Architect",
-		title: "Forge of Destiny",
-		grade: "Divine Sovereign",
-		badge: "⚜️",
-		color: "#FFD700",
-		auraGlow: "rgba(255, 215, 0, 1.0)",
-		desc: "You do not adapt to the world; the world adapts to your discipline. A mastercraft of relentless execution.",
-		perk: "Destiny Forge: Max daily coin cap increased to 500 coins",
-		dailyQuestBonus: 180
-	},
-	{
-		minLevel: 145,
-		name: "Eternal Monarch of the Cosmos",
-		title: "Cosmic Ruler",
-		grade: "Divine Sovereign",
-		badge: "🌠",
-		color: "#00FFFF",
-		auraGlow: "rgba(0, 255, 255, 1.0)",
-		desc: "A legendary myth made flesh. The weakest E-Rank has conquered the cosmos of his own mind and soul.",
-		perk: "Cosmic Dominion: Permanent 3x multiplier on all study and body blocks",
-		dailyQuestBonus: 200
-	},
-	{
-		minLevel: 150,
-		name: "The Apex Sovereign (Unrivaled)",
-		title: "Omnipotent Ruler of Fate",
-		grade: "Absolute Supreme",
-		badge: "🏆",
-		color: "#FF0055",
-		auraGlow: "rgba(255, 0, 85, 1.0)",
-		desc: "MAX LEVEL 150. The summit of human potential. You have completed the System's grand purpose: becoming the supreme ruler of your own destiny.",
-		perk: "Omnipotent Sovereign: Master of all domains, permanently crowned in eternal glory.",
-		dailyQuestBonus: 250
-	}
-];
-function hunterDefFor(level) {
-	let def = RANKS[0];
-	for (const r of RANKS) if (level >= r.minLevel) def = r;
-	return def;
-}
-function nextHunterRank(level) {
-	for (const r of RANKS) if (r.minLevel > level) return r;
-	return null;
-}
-function totalStatPointsForLevel(level) {
-	if (level <= 1) return 0;
-	let total = 0;
-	for (let l = 2; l <= level; l++) if (l <= 10) total += 1;
-	else if (l <= 25) total += 2;
-	else total += 3;
-	return total;
-}
-var HUNTER_PERK_DEFINITIONS = [
-	{
-		id: "awakening_spark",
-		name: "Awakening Spark",
-		category: "combat",
-		reqDesc: "Level 1",
-		levelReq: 1,
-		icon: "⚡",
-		color: "#8A93A6",
-		desc: "Awakened spark grants +10% bonus XP on the first ritual completed each day."
-	},
-	{
-		id: "sprint_velocity",
-		name: "Sprint Velocity",
-		category: "mind",
-		reqDesc: "AGI 20",
-		statReq: {
-			stat: "agi",
-			value: 20
-		},
-		icon: "💨",
-		color: "#38bdf8",
-		desc: "Morning circadian momentum: on-time wakeups yield +5 bonus coins."
-	},
-	{
-		id: "iron_focus",
-		name: "Iron Focus",
-		category: "mind",
-		reqDesc: "INT 25",
-		statReq: {
-			stat: "int",
-			value: 25
-		},
-		icon: "🧠",
-		color: "#a78bfa",
-		desc: "Hyper-focused cognition: planned study and focus blocks yield +20% bonus coins."
-	},
-	{
-		id: "indomitable_bastion",
-		name: "Indomitable Bastion",
-		category: "recovery",
-		reqDesc: "VIT 25",
-		statReq: {
-			stat: "vit",
-			value: 25
-		},
-		icon: "🛡️",
-		color: "#4ade80",
-		desc: "Metabolic resilience: healthy sleep quality and budget discipline reinforce streak fortitude."
-	},
-	{
-		id: "bloodlust",
-		name: "Bloodlust Strike",
-		category: "combat",
-		reqDesc: "STR 30",
-		statReq: {
-			stat: "str",
-			value: 30
-		},
-		icon: "⚔️",
-		color: "#f87171",
-		desc: "Relentless physical intensity: workout sessions award +25% bonus XP toward leveling."
-	},
-	{
-		id: "rulers_authority",
-		name: "Ruler's Authority",
-		category: "sovereign",
-		reqDesc: "SEN 30",
-		statReq: {
-			stat: "sen",
-			value: 30
-		},
-		icon: "👑",
-		color: "#fbbf24",
-		desc: "Sovereign willpower barrier: urge reset coin penalties are permanently reduced by 50%."
-	},
-	{
-		id: "shadow_monarch_extraction",
-		name: "Shadow Monarch's Extraction",
-		category: "sovereign",
-		reqDesc: "Level 50",
-		levelReq: 50,
-		icon: "🌑",
-		color: "#c084fc",
-		desc: "Extracting shadow remnants: completing 7 consecutive Priority 1 (P1) tasks refunds 1 streak shield."
-	}
-];
-function computeHunterPerks(level, attributes) {
-	return HUNTER_PERK_DEFINITIONS.map((def) => {
-		let unlocked = false;
-		let progressPct = 0;
-		if (def.levelReq != null) {
-			unlocked = level >= def.levelReq;
-			progressPct = Math.min(100, Math.round(level / def.levelReq * 100));
-		} else if (def.statReq != null) {
-			const currentStat = attributes[def.statReq.stat];
-			unlocked = currentStat >= def.statReq.value;
-			progressPct = Math.min(100, Math.round(currentStat / def.statReq.value * 100));
-		}
-		return {
-			...def,
-			unlocked,
-			progressPct
-		};
-	});
-}
-function calculateHunterAttributes(level, params) {
-	const base = Math.max(10, Math.floor(level * 2.5));
-	const strBonus = Math.floor((params?.workoutCount ?? 0) * 1.5);
-	const senBonus = Math.floor((params?.cleanStreakDays ?? 0) * 2);
-	const intBonus = Math.floor((params?.focusBlocksCount ?? 0) * 1.8);
-	const agiBonus = Math.floor((params?.onTimeWakeups ?? 0) * 1.2);
-	const vitBonus = Math.floor((params?.budgetDays ?? 0) * 1);
-	const allocated = {
-		str: Math.max(0, Math.floor(params?.allocated?.str ?? 0)),
-		agi: Math.max(0, Math.floor(params?.allocated?.agi ?? 0)),
-		vit: Math.max(0, Math.floor(params?.allocated?.vit ?? 0)),
-		int: Math.max(0, Math.floor(params?.allocated?.int ?? 0)),
-		sen: Math.max(0, Math.floor(params?.allocated?.sen ?? 0))
-	};
-	const str = base + strBonus + allocated.str;
-	const sen = base + senBonus + allocated.sen;
-	const int = base + intBonus + allocated.int;
-	const agi = base + agiBonus + allocated.agi;
-	const vit = base + vitBonus + allocated.vit;
-	const totalCombatPower = str * 3 + agi * 2 + vit * 2 + int * 3 + sen * 4;
-	const totalEarnedPoints = totalStatPointsForLevel(level);
-	const spent = allocated.str + allocated.agi + allocated.vit + allocated.int + allocated.sen;
-	return {
-		str,
-		agi,
-		vit,
-		int,
-		sen,
-		totalCombatPower,
-		allocated,
-		unallocatedPoints: Math.max(0, totalEarnedPoints - spent),
-		totalEarnedPoints
-	};
-}
-function levelInfo(totalXp, hunterStatsInput) {
-	let level = 1;
-	let left = Number.isFinite(totalXp) ? Math.max(0, Math.floor(totalXp)) : 0;
-	while (level < 150 && left >= xpToNext(level)) {
-		left -= xpToNext(level);
-		level++;
-	}
-	const xpForNext = level >= 150 ? 0 : xpToNext(level);
-	const def = hunterDefFor(level);
-	const next = nextHunterRank(level);
-	const attributes = calculateHunterAttributes(level, hunterStatsInput);
-	const perks = computeHunterPerks(level, attributes);
-	return {
-		level,
-		xpIntoLevel: left,
-		xpForNext,
-		progress: xpForNext ? left / xpForNext : 1,
-		rank: def.name,
-		hunterTitle: def.title,
-		hunterGrade: def.grade,
-		rankBadge: def.badge,
-		rankColor: def.color,
-		rankAura: def.auraGlow,
-		rankDesc: def.desc,
-		rankPerk: def.perk,
-		attributes,
-		perks,
-		nextRank: next,
-		allRanks: RANKS
-	};
 }
 focusCoins(50);
 /** The ref of a small extra paid on top of one ledger row; undoing the row undoes it too. */
@@ -28142,102 +30268,6 @@ var UnifiedEconomyService = class {
 		return this.getEconomyConfig();
 	}
 };
-// src/core/quests.ts
-var rule = (id) => (day) => day.filter((e) => e.ruleId === id).length;
-var QUEST_POOL = [
-	{
-		id: "study2",
-		title: "Finish 2 study blocks",
-		goal: 2,
-		count: (d) => d.filter((e) => e.ruleId === "study.block_done" || e.ruleId === "focus.session").length
-	},
-	{
-		id: "wake",
-		title: "Wake up on time",
-		goal: 1,
-		count: rule("sleep.up_on_time")
-	},
-	{
-		id: "bed",
-		title: "Be in bed on time",
-		goal: 1,
-		count: rule("sleep.bed_on_time")
-	},
-	{
-		id: "money",
-		title: "Log your spending",
-		goal: 1,
-		count: rule("money.logged")
-	},
-	{
-		id: "tasks3",
-		title: "Complete 3 tasks",
-		goal: 3,
-		count: (d) => d.filter((e) => e.ref?.startsWith("task:")).length
-	},
-	{
-		id: "clean",
-		title: "Check in clean",
-		goal: 1,
-		count: rule("discipline.clean_day")
-	},
-	{
-		id: "workout",
-		title: "Work out",
-		goal: 1,
-		count: rule("body.workout_done")
-	},
-	{
-		id: "face",
-		title: "Do your skincare",
-		goal: 1,
-		count: rule("face.routine_done")
-	},
-	{
-		id: "earn60",
-		title: "Earn 60 coins",
-		goal: 60,
-		count: (d) => d.reduce((s, e) => s + Math.max(0, e.coins), 0)
-	}
-];
-var QUEST_BONUS = {
-	coins: 30,
-	xp: 50
-};
-function hash$1(s) {
-	let h = 2166136261;
-	for (const c of s) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
-	return h >>> 0;
-}
-/** The day's three quests, always the same for the same day. */
-function questsFor(day) {
-	return QUEST_POOL.map((q) => ({
-		q,
-		k: hash$1(`${day}:${q.id}`)
-	})).sort((a, b) => a.k - b.k).slice(0, 3).map((x) => x.q);
-}
-var questRef = (day) => `quest:${day}`;
-function questState(day, entries) {
-	const live = effective(entries);
-	const today = live.filter((e) => e.day === day && !e.ref?.startsWith("quest:"));
-	const quests = questsFor(day).map((q) => {
-		const progress = Math.min(q.goal, q.count(today));
-		return {
-			id: q.id,
-			title: q.title,
-			goal: q.goal,
-			progress,
-			done: progress >= q.goal
-		};
-	});
-	return {
-		day,
-		quests,
-		allDone: quests.every((q) => q.done),
-		claimed: live.some((e) => e.ref === questRef(day)),
-		bonus: QUEST_BONUS
-	};
-}
 // src/main/wallet.ts
 var toEntry = (r) => ({
 	id: r.id,
@@ -30508,7 +32538,7 @@ function utc(iso) {
 	const [y, m, d] = iso.split("-").map(Number);
 	return new Date(Date.UTC(y, m - 1, d));
 }
-function addDays$2(iso, n) {
+function addDays$1(iso, n) {
 	const d = utc(iso);
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
@@ -30570,8 +32600,8 @@ var MONTHS$3 = {
 var pad$7 = (n) => String(n).padStart(2, "0");
 function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
-	if (rule.every === "week") return addDays$2(rule.start, 7 * n);
-	if (rule.every === "2weeks") return addDays$2(rule.start, 14 * n);
+	if (rule.every === "week") return addDays$1(rule.start, 7 * n);
+	if (rule.every === "2weeks") return addDays$1(rule.start, 14 * n);
 	const key = addMonths(monthKey(rule.start), (MONTHS$3[rule.every] || 1) * n);
 	return `${key}-${pad$7(Math.min(Number(rule.start.slice(8, 10)), daysInMonth$1(key)))}`;
 }
@@ -30590,7 +32620,7 @@ var sortItems = (a, b) => a.date.localeCompare(b.date) || (a.rule.note || "").lo
 function dueItems(state, today) {
 	const out = [];
 	for (const rule of active(state)) {
-		const from = rule.lastDone ? addDays$2(rule.lastDone, 1) : rule.start;
+		const from = rule.lastDone ? addDays$1(rule.lastDone, 1) : rule.start;
 		for (const date of occurrences(rule, from, today, 60)) out.push({
 			rule,
 			date
@@ -30600,9 +32630,9 @@ function dueItems(state, today) {
 }
 function upcomingItems(state, today, days = 30) {
 	const out = [];
-	const to = addDays$2(today, days);
+	const to = addDays$1(today, days);
 	for (const rule of active(state)) {
-		const from = addDays$2(rule.lastDone && rule.lastDone > today ? rule.lastDone : today, 1);
+		const from = addDays$1(rule.lastDone && rule.lastDone > today ? rule.lastDone : today, 1);
 		for (const date of occurrences(rule, from, to, 60)) out.push({
 			rule,
 			date
@@ -31205,7 +33235,7 @@ function goalStatus(state, today, goal = mainGoal(state)) {
 			pace = Math.round(growth.reduce((a, b) => a + b, 0) / months.length);
 		} else if (active.has(thisMonth)) pace = goalValueAt(state, today, goal) - goalValueAt(state, end(addMonths(thisMonth, -1)), goal);
 	} else if (goal.history?.length) {
-		const since = addDays$2(today, -90);
+		const since = addDays$1(today, -90);
 		const added = goal.history.filter((h) => h.date >= since).reduce((a, h) => a + h.amount, 0);
 		pace = added ? Math.round(added / 3) : null;
 	}
@@ -31509,7 +33539,7 @@ function payStatus(state, today) {
 // src/renderer/public/apps/finance/js/forecast.js
 var isLiquid = (a) => !a.archived && !a.savings && a.kind !== "savings" && a.kind !== "crypto";
 function spentFrom(state, today, window = 60) {
-	const since = addDays$2(today, -window + 1);
+	const since = addDays$1(today, -window + 1);
 	const by = /* @__PURE__ */ new Map();
 	let total = 0;
 	for (const t of state.tx) {
@@ -31545,7 +33575,7 @@ function limitStatus(state, today) {
 	const amount = state.settings.limit.amount;
 	const key = monthKey(today);
 	const daysLeft = daysInMonth$1(key) - Number(today.slice(8)) + 1;
-	const before = everydaySpent(state, `${key}-01`, addDays$2(today, -1));
+	const before = everydaySpent(state, `${key}-01`, addDays$1(today, -1));
 	const spentToday = everydaySpent(state, today, today);
 	const leftBefore = amount - before;
 	const perDay = leftBefore > 0 ? lei$2(leftBefore / daysLeft) : 0;
@@ -31718,7 +33748,7 @@ function parseQuick(text, state) {
 function subFor(state, note, category) {
 	return suggestSub(state, note, { category })?.sub || null;
 }
-var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays$2(sentDay, -f.daysAgo) : sentDay;
+var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays$1(sentDay, -f.daysAgo) : sentDay;
 function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = Date.now() }) {
 	return {
 		id: `tg-${updateId}`,
@@ -35202,88 +37232,6 @@ function answerPromise(list, id, op, now = /* @__PURE__ */ new Date()) {
 /** Promises due on `day` (still open): they go into that day's plan. */
 function promisesFor(list, day) {
 	return list.filter((r) => r.promise && !r.done && ymd$1(new Date(r.at)) === day).map((r) => r.promise.what);
-}
-// src/core/benConvo.ts
-var BEN_CONVO = "ben_convo";
-function cleanConvo(raw) {
-	const o = raw && typeof raw === "object" ? raw : {};
-	return {
-		points: (Array.isArray(o.points) ? o.points : []).filter((p) => !!p && typeof p.text === "string" && (p.kind === "decision" || p.kind === "struggle" || p.kind === "win") && typeof p.day === "string").slice(-150),
-		summary: typeof o.summary === "string" ? o.summary.slice(0, 600) : "",
-		summaryDay: typeof o.summaryDay === "string" ? o.summaryDay : null
-	};
-}
-var WIN = /\b(i (?:finally )?(?:finished|completed|passed|nailed|shipped|submitted|got|won|did it|made it|hit)|finished the|passed the|got an? (?:a|10|9)|am terminat|am trecut|am luat|am reusit|я (?:сделал|закончил|сдал)|сдал)\b/i;
-var STRUGGLE = /\b(hard|difficult|struggl\w*|can'?t focus|cannot focus|no motivation|unmotivated|stressed|overwhelmed|stuck|tired of|burn(?:ed|t)? out|procrastinat\w*|e greu|greu|nu ma pot concentra|n-am chef|obosit|stresat|тяжело|трудно|не могу сосредоточиться|устал|нет мотивации)\b/i;
-var DECISION = /\b(i(?:'ve| have)? decided|from now on|i'?m going to stop|i'?ll stop|i will stop|no more|starting (?:today|tomorrow|monday)|am decis|de acum|я решил|с завтрашнего дня|больше не буду)\b/i;
-/** The key point in one message of his, or null (most messages have none). */
-function pointOf(text) {
-	const t = String(text ?? "");
-	if (t.length < 8 || t.length > 400 || /^\s*\//.test(t)) return null;
-	if (DECISION.test(t)) return "decision";
-	if (WIN.test(t)) return "win";
-	if (STRUGGLE.test(t)) return "struggle";
-	return null;
-}
-/** Adds the point in his message (if any), never the same words twice in a day. */
-function addPoint(c, text, day, now = /* @__PURE__ */ new Date(), via) {
-	const kind = pointOf(text);
-	if (!kind) return c;
-	const clean = String(text).replace(/\s+/g, " ").trim().slice(0, 160);
-	if (c.points.some((p) => p.day === day && normalize$1(p.text) === normalize$1(clean))) return c;
-	return {
-		...c,
-		points: [...c.points, {
-			at: now.toISOString(),
-			day,
-			kind,
-			text: clean,
-			...via ? { via } : {}
-		}].slice(-150)
-	};
-}
-var addDays$1 = (d, n) => {
-	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
-	x.setUTCDate(x.getUTCDate() + n);
-	return x.toISOString().slice(0, 10);
-};
-/** The rolling summary from the last 4 weeks of points (newest first within each kind). */
-function rollSummary(c, today) {
-	const recent = c.points.filter((p) => p.day >= addDays$1(today, -28));
-	const pick = (k, n) => recent.filter((p) => p.kind === k).slice(-n).reverse().map((p) => `${p.text.slice(0, 70)} (${p.day.slice(5)})`);
-	const parts = [
-		pick("decision", 3).length ? `Decided: ${pick("decision", 3).join("; ")}` : "",
-		pick("struggle", 3).length ? `Found hard: ${pick("struggle", 3).join("; ")}` : "",
-		pick("win", 3).length ? `Wins: ${pick("win", 3).join("; ")}` : ""
-	].filter(Boolean);
-	return {
-		...c,
-		summary: parts.join(". ").slice(0, 600),
-		summaryDay: today
-	};
-}
-/** Points about what he wrote now (shared words, typos allowed), newest first. */
-function searchPoints(c, query, k = 5) {
-	const q = normalize$1(query).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 4);
-	if (!q.length) return [];
-	return c.points.map((p, i) => ({
-		p,
-		i,
-		s: q.filter((w) => normalize$1(p.text).includes(w.slice(0, 5)) || similarity(w, p.text) >= .85).length
-	})).filter((x) => x.s > 0).sort((a, b) => b.s - a.s || b.i - a.i).slice(0, k).map((x) => x.p);
-}
-var ago = (day, today) => {
-	const d = Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${day}T12:00:00Z`)) / 864e5);
-	return d <= 0 ? "today" : d === 1 ? "yesterday" : d < 7 ? `${d} days ago` : d < 14 ? "last week" : `${Math.round(d / 7)} weeks ago`;
-};
-/**
-* One or two lines for his prompt: the points that fit this message (with
-* when), else nothing. Kept small on purpose.
-*/
-function pastLine(c, text, today) {
-	const hits = searchPoints(c, text, 2).filter((p) => p.day < today);
-	if (!hits.length) return "";
-	return `From past chats (mention briefly only if it helps, e.g. "Last week the essay felt hard…"): ${hits.map((p) => `${ago(p.day, today)} he said (${p.kind}): "${p.text.slice(0, 100)}"`).join("; ")}.`;
 }
 // src/core/benBreak.ts
 /** "break down X", "split X into steps", "imparte X in pasi", "разбей X" → X, or null. */

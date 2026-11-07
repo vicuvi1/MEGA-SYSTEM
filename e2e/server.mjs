@@ -240,6 +240,9 @@ if (!process.env.E2E_NO_GOALS) {
   c.free()
 }
 
+// E2E_SAGA_DEMO=1: the Season page on made-up data (e2e/sagaDemo.mjs).
+if (process.env.E2E_SAGA_DEMO) (await import(pathToFileURL(join(repo, 'e2e/sagaDemo.mjs')).href)).seedSaga(db, day)
+
 // E2E_REWARDS_DEMO=1: a month of made-up points and a few made-up rewards, for
 // looking at the Rewards page (screenshots). Off for the smoke test.
 if (process.env.E2E_REWARDS_DEMO) {

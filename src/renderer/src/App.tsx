@@ -37,6 +37,7 @@ import { useAddMoney } from './MoneyQuick'
 import type { TodoTask } from '@core/todoist'
 import { play, soundTick, stopAllSounds, soundFanfare, soundCoin, soundWarning } from './soundKit'
 import { countdown, nextUp } from '@core/dayGlance'
+import { rankUp } from '@core/levelCine'
 import { useTodayEvents } from './todayEvents'
 import { storageWakesApp } from './islandLog'
 import { watchDayTurn } from './dayTurn'
@@ -88,6 +89,8 @@ const Notebook = lazyNamed(() => import('./pages/Notebook'), 'Notebook')
 const Music = lazyNamed(() => import('./pages/Music'), 'Music')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const Goals = lazyNamed(() => import('./pages/Goals'), 'Goals')
+const Season = lazyNamed(() => import('./pages/Season'), 'Season')
+const CinematicHost = lazyNamed(() => import('./saga/Cinematics'), 'CinematicHost')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
@@ -469,7 +472,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     if (typeof lv !== 'number') return
     const prev = lastLevel.current
     lastLevel.current = lv
-    if (prev !== null && lv > prev) play('levelUp')
+    // LF7: a new rank gets the full cinematic (it has its own sound); other levels keep the fanfare.
+    if (prev !== null && lv > prev && !rankUp(prev, lv)) play('levelUp')
   }, [summary?.level?.level])
 
   // A page that no longer exists (Schedule, Journey, Game Rules) opens Today.
@@ -842,6 +846,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {(page === 'progress' || page === 'focus') && <Progress onGo={setPage} onWallet={onWallet} />}
             {page === 'calendar' && <CalendarPage onGo={setPage} />}
             {page === 'goals' && <Goals onGo={setPage} />}
+            {page === 'season' && <Season />}
             {page === 'coach' && <Coach onWallet={onWallet} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}
@@ -850,6 +855,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </ErrorBoundary>
           </main>
         )}
+        {/* LF7: the level-up cinematic (new ranks and season moments, once each). */}
+        <Suspense fallback={null}>{summary && life.saga && <CinematicHost level={summary.level?.level ?? null} />}</Suspense>
         <Suspense fallback={null}>
           {quickCommandOpen && <QuickCommandBar open onClose={() => setQuickCommandOpen(false)} onRefreshWallet={onWallet} />}
         </Suspense>

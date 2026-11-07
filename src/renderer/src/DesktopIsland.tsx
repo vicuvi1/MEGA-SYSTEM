@@ -1545,6 +1545,25 @@ export function DesktopIsland() {
   // IF10: your quick chips.
   const repN = prefs.chips.reps[0] ?? 10
   const focusMin = prefs.chips.focus[0] ?? 25
+  // LF4 / LF15: the morning card's "why" (word of the year, today's vision card) and, on a low day, "Open your wins".
+  const sg = s.saga
+  const sagaMorning = !!sg && new Date(now).getHours() >= 4 && new Date(now).getHours() < 12 && !!(sg.word || sg.card)
+  const sagaCard = sg && (sagaMorning || (sg.low && sg.win)) ? (
+    <section className="di-saga">
+      {sagaMorning && (
+        <div className="di-saga-why">
+          {sg.word && <b className="di-saga-word">{sg.word}</b>}
+          <small>{sg.card ? `Today's why: ${sg.card}` : sg.becoming}</small>
+          {sg.season && <small className="di-saga-season">⛩ {sg.season}</small>}
+        </div>
+      )}
+      {sg.low && sg.win && (
+        <button className="di-saga-wins" {...tp('wins', () => tap({ kind: 'open', page: 'season:wins' }))} title={`Remember: ${sg.win}`}>
+          🏆 Open your wins
+        </button>
+      )}
+    </section>
+  ) : null
   const blocks: Record<IslandSection, ReactNode> = {
     tasks: s.tasks?.length ? (<section className="di-tasks">
                   <span className="di-label">Todoist · next up{s.tasksStale && s.tasksAt ? ` · updated ${Math.max(1, Math.round((now - s.tasksAt) / 60000))} min ago` : ''}</span>
@@ -1557,7 +1576,7 @@ export function DesktopIsland() {
                   ))}
                 </section>) : null,
     // One morning card: while the good-morning card shows, it carries the wake-up ask (no second "I'm up").
-    sleep: s.sleep?.bed || (s.sleep?.wake && s.alert?.kind !== 'morning') ? (<section className={`di-sleep ${s.sleep?.bed ? 'night' : 'day'} ${moon ? 'going' : ''}`}>
+    sleep: <>{s.sleep?.bed || (s.sleep?.wake && s.alert?.kind !== 'morning') ? (<section className={`di-sleep ${s.sleep?.bed ? 'night' : 'day'} ${moon ? 'going' : ''}`}>
                   {s.sleep?.bed ? (
                     <>
                       <span className="di-moon" aria-hidden>🌙<i>✦</i><i>✦</i><i>✦</i></span>
@@ -1584,7 +1603,7 @@ export function DesktopIsland() {
                       <button className="primary" {...tp('wake', () => tap({ kind: 'wake' }))}>☀️ I'm up</button>
                     </>
                   )}
-                </section>) : null,
+                </section>) : null}{sagaCard}</>,
     points: pts ? (<section className="di-points">
                   <span className="di-pts"><Roll text={String(pts.balance)} up /> pts</span>
                   {pts.goal ? (

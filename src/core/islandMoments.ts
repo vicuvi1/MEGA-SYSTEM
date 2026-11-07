@@ -6,7 +6,7 @@ import type { IslandAlert, IslandRecap, IslandSnapshot } from './islandModel'
 /** IM4: something worth a short burst and a wide pill. */
 export interface Moment {
   id: string
-  kind: 'mustdos' | 'water' | 'focus' | 'streak' | 'move'
+  kind: 'mustdos' | 'water' | 'focus' | 'streak' | 'move' | 'rank'
   icon: string
   text: string
   /** The burst's colours. */
@@ -46,6 +46,10 @@ export function momentsFrom(prev: IslandSnapshot | null, cur: IslandSnapshot, no
   const m1 = cur.move
   if (m0 && m1 && m1.best > m0.best && m1.streak >= m1.best && m1.streak > 1) out.push({ id: `movestreak:${m1.streak}`, kind: 'move', icon: '🔥', text: `Best move streak: ${m1.streak} days`, colors: GOLD })
   if (m0?.challenge && m1?.challenge && m0.challenge.done < m0.challenge.target && m1.challenge.done >= m1.challenge.target) out.push({ id: `challenge:${day}`, kind: 'move', icon: '🏆', text: `Challenge done: ${m1.challenge.target} ${m1.challenge.name}`, colors: GOLD })
+  // LF7: a new Hunter rank flashes the island in the rank's colour.
+  const r0 = prev.saga?.rank
+  const r1 = cur.saga?.rank
+  if (r0 && r1 && r1.level > r0.level && r1.name !== r0.name) out.push({ id: `rank:${r1.name}`, kind: 'rank', icon: '⚔️', text: `New rank: ${r1.name}`, colors: [r1.color, '#ffffff', r1.color] })
   return out
 }
 

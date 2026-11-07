@@ -2,7 +2,7 @@ import type { IconName } from './Icon'
 
 export type PageId =
   | 'today' | 'focus' | 'progress' | 'goals' | 'calendar' | 'coach' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
-  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music'
+  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season'
 
 export interface ModuleDef {
   id: PageId
@@ -20,6 +20,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'coach', label: 'Coach', icon: 'spark', color: 'var(--lime)', phase: 0, blurb: 'Talk to your coach; your goals, rules and what it remembers' },
   { id: 'calendar', label: 'Calendar', icon: 'calendar', color: '#B892FF', phase: 0, blurb: 'Your Google Calendar and timed tasks, by week or day' },
   { id: 'goals', label: 'Goals', icon: 'trophy', color: 'var(--lime)', phase: 0, blurb: 'Every goal in one list: deadline, hours left, this week, today, and your cyber security path' },
+  { id: 'season', label: 'Season', icon: 'gate', color: '#ff9f43', phase: 0, blurb: 'Your 8-week arc and its boss, vision board, identity votes, wins wall, adventures and life wheel' },
   { id: 'progress', label: 'Insights', icon: 'chart', color: 'var(--lime)', phase: 0, blurb: 'Am I improving? Week score, streaks, your year and focus goals' },
   { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'Your Todoist, by area' },
   { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes from Waky' },

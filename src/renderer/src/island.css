@@ -518,3 +518,11 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di select, .di-dock select { color-scheme: dark; }
 .di select option, .di select optgroup, .di-dock select option { background-color: #16181d; color: #f5f5f6; }
 .di select option:disabled, .di-dock select option:disabled { color: #9aa0ab; }
+
+/* LF4 / LF15: the saga line on the morning card, and "Open your wins" on a low day. */
+.di-saga { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 12px; background: linear-gradient(90deg, rgb(255 159 67 / 0.14), transparent); border: 1px solid rgb(255 159 67 / 0.25); }
+.di-saga-why { display: grid; gap: 2px; min-width: 0; }
+.di-saga-word { font: 800 13px var(--display, inherit); letter-spacing: 0.22em; text-transform: uppercase; color: #ffb066; }
+.di-saga-why small { color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.di-saga-season { font-size: 11px; }
+.di-saga-wins { flex: none; border-radius: 999px; padding: 5px 12px; }

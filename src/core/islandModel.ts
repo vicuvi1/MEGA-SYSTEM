@@ -185,6 +185,12 @@ export interface IslandSnapshot {
   autoFocus?: boolean
   /** The running focus so far: how much of it you were actually at the PC. */
   focusGuard?: { pct: number; idleMin: number } | null
+  /**
+   * LF4 / LF7 / LF15: the saga on the island. The morning card shows the word
+   * of the year and today's vision card; on a low day it offers "Open your
+   * wins"; `rank` changing makes the island flash the new rank's colour.
+   */
+  saga?: { word: string; becoming: string; card: string | null; season: string | null; low: boolean; win: string | null; rank: { name: string; color: string; level: number } } | null
   /** Your points and the reward you're working toward. */
   points?: { balance: number; goal: { title: string; price: number } | null }
   /** MF11: what's left of today's safe-to-spend (bani; negative = over), from Finance Helper. */

@@ -54,6 +54,8 @@ export interface Form {
   photo: string | null
   vision: string
   reward: RewardLink | null
+  /** LF4: the vision card this goal serves. */
+  card?: string | null
 }
 
 const sid = () => `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
@@ -88,7 +90,8 @@ export function formFromCard(c: GoalCard): Form {
     cover: mt?.cover ?? 'aurora',
     photo: mt?.photo ?? null,
     vision: mt?.vision ?? '',
-    reward: mt?.reward ?? null
+    reward: mt?.reward ?? null,
+    card: mt?.card ?? null
   }
 }
 
@@ -125,6 +128,11 @@ const dayMinLabel = (k: GoalSource['kind']) => (k === 'water' ? 'ml that make a 
 export function GoalSheet({ today, initial, words, template, onClose, onSaved }: { today: string; initial?: Form | null; words?: string; template?: GoalTemplate | null; onClose: () => void; onSaved: (title: string) => void }) {
   const act = useAction()
   const [f, setF] = useState<Form>(() => initial ?? blankForm(today))
+  // LF4: your vision cards, so a goal can serve one.
+  const [cards, setCards] = useState<{ id: string; text: string }[]>([])
+  useEffect(() => {
+    void life.saga?.view({ budget: null }).then((v) => setCards(v.vision.cards.map((c) => ({ id: c.id, text: c.text })))).catch(() => {})
+  }, [])
   const [said, setSaid] = useState(words ?? '')
   const [heard, setHeard] = useState<string | null>(null)
   const [autoNow, setAutoNow] = useState<number | null>(null)
@@ -234,7 +242,7 @@ export function GoalSheet({ today, initial, words, template, onClose, onSaved }:
   const save = async () => {
     if (!valid || saving) return
     setSaving(true)
-    const meta = { type: f.type, per: f.per, dayMin: Number(f.dayMin) > 0 ? Number(f.dayMin) : 1, steps: f.steps, emoji: f.emoji, color: f.color, cover: f.cover, photo: f.photo, vision: f.vision, reward: f.reward }
+    const meta = { type: f.type, per: f.per, dayMin: Number(f.dayMin) > 0 ? Number(f.dayMin) : 1, steps: f.steps, emoji: f.emoji, color: f.color, cover: f.cover, photo: f.photo, vision: f.vision, reward: f.reward, card: f.card ?? null }
     const src: GoalSource = f.source.kind === 'manual' ? f.source : { kind: f.source.kind, ...((f.source.arg || f.subject).trim() ? { arg: (f.source.arg || f.subject).trim() } : {}) }
     const saved =
       f.kind === 'hours' && f.type === 'target'
@@ -530,6 +538,15 @@ export function GoalSheet({ today, initial, words, template, onClose, onSaved }:
                 <span>Future you: what life looks like when you get there</span>
                 <textarea value={f.vision} onChange={(e) => set({ vision: e.target.value })} placeholder="e.g. I walk into the exam calm, I know this stuff, and the job offers come to me." maxLength={200} rows={2} />
               </label>
+              {cards.length > 0 && (
+                <label className="wide">
+                  <span>The vision card it serves</span>
+                  <Select value={f.card ?? ''} onChange={(e) => set({ card: e.target.value || null })}>
+                    <option value="">None</option>
+                    {cards.map((c) => <option key={c.id} value={c.id}>{c.text}</option>)}
+                  </Select>
+                </label>
+              )}
               <label className="wide">
                 <span>Reward when you reach it</span>
                 <Select

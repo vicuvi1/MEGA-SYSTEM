@@ -2432,6 +2432,33 @@ try {
     await until(async () => (await api('google', 'log')).some((x) => x.op === 'update' && x.start === isoAt(before)), 'Undo did not move the calendar event back')
     await until(async () => (await api('todoist', 'peek')).some((t) => t.id === 't4' && t.dueTime === before), 'Undo did not put the task time back')
   })
+  // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
+  await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('season')
+    await pg.waitForSelector('.sg .ptabs [data-tab="season"]', { timeout: 15000 })
+    await pg.click('.sg .ptabs [data-tab="season"]')
+    await pg.waitForSelector('.sg-theme-card', { state: 'visible', timeout: 10000 })
+    await pg.locator('.sg-themes .sg-theme-card', { hasText: 'Shadow Code' }).first().click()
+    await pg.waitForSelector('.sg-sheet .sg-form', { timeout: 5000 })
+    await pg.locator('.sg-sheet .btn.primary', { hasText: 'Begin the season' }).click()
+    await pg.waitForSelector('.cn-intro', { timeout: 8000 })
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('.cn-intro', { state: 'detached', timeout: 5000 })
+    await pg.waitForSelector('.sg-hero .sg-title', { timeout: 10000 })
+    if (!/Shadow Code/.test(await pg.locator('.sg-hero .sg-title').innerText())) throw new Error('the season title is missing')
+    const hp = await pg.locator('.sg-hp').getAttribute('aria-valuenow')
+    if (!(Number(hp) > 0 && Number(hp) <= 100)) throw new Error(`boss HP is ${hp}`)
+    if ((await pg.locator('.sg-quest').count()) !== 3) throw new Error('not three main quests')
+    for (const [id, sel] of [['vision', '.sg-vcard.add'], ['identity', '.sg-id-add'], ['wins', '.sg-wins-head'], ['adventures', '.sg-side'], ['wheel', '.sg-wheel']]) {
+      await pg.click(`.sg .ptabs [data-tab="${id}"]`)
+      await pg.waitForSelector(sel, { state: 'visible', timeout: 8000 })
+    }
+    // A life-wheel rating saves and the tab no longer asks for it.
+    await pg.locator('.sg-wheel-side .btn.primary').click()
+    await pg.waitForFunction(() => !/!/.test(document.querySelector('.sg .ptabs [data-tab="wheel"]')?.textContent ?? '!'), null, { timeout: 8000 })
+    await pg.click('.sg .ptabs [data-tab="season"]')
+  })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

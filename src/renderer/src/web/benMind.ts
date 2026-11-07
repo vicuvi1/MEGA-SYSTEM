@@ -15,7 +15,7 @@
 // - `coach_reminders`: promises and smart reminders, with the other check-ins.
 import { getSetting, setSetting } from '../../../main/settings'
 import { BEN_KNOW, addOffer, addPref, cleanKnow, forgetPlan, prefText, readCorrection, takeOffer, type Know, type Offer, type Pref, type Source } from '@core/benFacts'
-import { BEN_CONVO, addPoint, cleanConvo, rollSummary, searchPoints, type Convo, type ConvoPoint } from '@core/benConvo'
+import { BEN_CONVO, addMoment, addPoint, cleanConvo, rollSummary, searchPoints, type Convo, type ConvoPoint } from '@core/benConvo'
 import { BEN_LEARN, cleanLearn, keepPlan, learnRhythm, plannedRows, type BlockResult, type Rhythm, type SessionRow } from '@core/benLearn'
 import { BEN_PUSHBACKS, cleanPushbacks, notePushbacks, staleBig } from '@core/benBreak'
 import { askedToBuy, pickByName, saidHabit, type ToolAction } from '@core/benTools'
@@ -212,6 +212,13 @@ export function notePast(db: any, text: string, day: string, now = new Date(), v
   const before = loadConvo(db)
   let c = addPoint(before, text, day, now, via)
   if (c.summaryDay !== day && c.points.length) c = rollSummary(c, day)
+  if (c !== before) saveConvo(db, c)
+}
+
+/** LF12: a big shared moment (boss beaten, season closed) kept in his memory store for his arc. */
+export function noteMoment(db: any, text: string, day: string, now = new Date()): void {
+  const before = loadConvo(db)
+  const c = addMoment(before, text, day, now)
   if (c !== before) saveConvo(db, c)
 }
 

@@ -33,7 +33,8 @@ describe('page tabs', () => {
       goals: 'pages/Goals.tsx',
       money: 'pages/Money.tsx',
       music: 'pages/Music.tsx',
-      shop: 'pages/Rewards.tsx'
+      shop: 'pages/Rewards.tsx',
+      season: 'pages/Season.tsx'
     }
     for (const l of TAB_LINKS) {
       expect(file[l.page], l.page).toBeTruthy()

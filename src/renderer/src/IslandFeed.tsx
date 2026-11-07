@@ -42,6 +42,7 @@ import { todoistErrorText } from '@core/islandErrors'
 import { addWater } from './water'
 import { findExercise, readSport, updateSport } from './sportTrack'
 import { calendarDay, dayKey } from '@core/dates'
+import { tabKey } from '@core/pageTabs'
 import { WATER_TARGET_ML } from '@core/defaults'
 import { preferSlot, workHours } from '@core/bestHours'
 import { doingForBreaks, doingNow, noteAway, realityOf, refresh as refreshSmart, shareGoalWords, smartAct, smartNotice, smartOn, smartSuggestion, smartTick, startSmart } from './smartIsland'
@@ -87,6 +88,10 @@ const CELEBRATED = 'ls.rewardCelebrated'
 let todoCache: { at: number; okAt: number; failed: boolean; list: { id: string; content: string; time: string | null }[]; full: Record<string, TodoTask> } = { at: 0, okAt: 0, failed: false, list: [], full: {} }
 /** MF11: today's money left (Finance Helper), read at most once a minute or when money changes. */
 let moneyCache: { at: number; v: { left: number; level: string } | null } = { at: 0, v: null }
+// LF4 / LF15: the saga's morning line, low-day wins and rank (read at most every 5 minutes).
+let sagaCache: { at: number; v: IslandSnapshot['saga'] } = { at: 0, v: null }
+if (typeof window !== 'undefined') window.addEventListener('life-saga-changed', () => (sagaCache.at = 0))
+if (typeof window !== 'undefined') window.addEventListener('life-wallet-changed', () => (sagaCache.at = Math.min(sagaCache.at, Date.now() - 4 * 60_000)))
 if (typeof window !== 'undefined') window.addEventListener('life-money-changed', () => (moneyCache.at = 0))
 function bodyTick(sec: number) {
   const now = Date.now()
@@ -437,6 +442,11 @@ export function IslandFeed() {
         todoCache = { at: now, okAt: now, failed: false, list: top.map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null })), full: { ...todoCache.full, ...Object.fromEntries(list.map((t) => [t.id, t])) } }
       } else todoCache.failed = true
     }
+    if (now - sagaCache.at > 5 * 60_000 && life.saga) {
+      sagaCache.at = now
+      const v = await life.saga.view({ budget: null }).catch(() => null)
+      sagaCache.v = v ? { word: v.vision.word, becoming: v.vision.becoming, card: v.cardToday?.text ?? null, season: v.current ? `${v.current.season.name} · week ${Math.max(1, v.current.progress.week)} of 8` : null, low: v.low && v.wins.length > 0, win: v.winToday?.title ?? null, rank: { name: v.level.rank, color: v.level.color, level: v.level.level } } : sagaCache.v
+    }
     if (now - moneyCache.at > 60_000 && life.finance) {
       moneyCache.at = now
       const h = await life.finance.hub().catch(() => null)
@@ -699,6 +709,7 @@ export function IslandFeed() {
         return { bed: showBedButton(d, target, bedLoggedTonight(logs, d)), wake: showWakeButton(d, wakeLogged), target }
       })(),
       money: moneyCache.v,
+      saga: sagaCache.v,
       points: (() => {
         if (!shop) return undefined
         const rewards = shop.rewards.filter((r) => !r.archived && r.price > 0)
@@ -1155,7 +1166,17 @@ export function IslandFeed() {
           }
           case 'open':
             if (a.page === 'coach') put(SEEN, Date.now())
-            if (a.page) window.dispatchEvent(new CustomEvent('life-open-page', { detail: a.page }))
+            // "season:wins" opens a page on one of its tabs (LF15: Open your wins).
+            if (a.page?.includes(':')) {
+              const [page, tab] = a.page.split(':')
+              try {
+                localStorage.setItem(tabKey(page), tab)
+              } catch {
+                /* private window */
+              }
+              window.dispatchEvent(new CustomEvent('life-open-page', { detail: page }))
+              window.dispatchEvent(new CustomEvent('life-open-tab', { detail: { page, tab } }))
+            } else if (a.page) window.dispatchEvent(new CustomEvent('life-open-page', { detail: a.page }))
             break
           case 'chat': {
             // The command bar: "focus 50 algebra" starts a timer; the rules do
