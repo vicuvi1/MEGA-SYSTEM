@@ -4,7 +4,7 @@ import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { lookup } from "node:dns/promises";
 // src/core/settingsKeys.ts
-function json$5(about, fallback) {
+function json$6(about, fallback) {
 	return {
 		about,
 		type: "json",
@@ -57,127 +57,134 @@ var SETTINGS = {
 	coach_tick_at: num$4("old place of the tick clock (now in sys_kv); never written to settings"),
 	pin_hash: text("old device PIN hash (the PIN lives on the server now)"),
 	theme: text("the app look (dark / light)"),
-	bot_bridge_config: json$5("Telegram bot tokens and chat ids saved in the app", null),
-	notif_settings: json$5("quiet hours, event warnings, travel times (N2, N3, N6)", null),
-	milestones_seen: json$5("milestones already celebrated", []),
-	island_day_log: json$5("the island's log of the day", null),
-	island_nudges: json$5("Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)", null),
-	island_recipes: json$5("Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)", []),
-	island_widgets: json$5("PL1–PL8: installed widgets (pinned hashes, permissions), island pages, script tiles, the island look and the synced layout (src/core/widgets/settings.ts)", null),
-	island_kit: json$5("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)", null),
-	music_now: json$5("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
-	sport_tracker_json: json$5("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
-	sport_sync_seen: json$5("when Sporty last synced water and workouts", null),
-	sporty_status: json$5("Sporty's last status", null),
-	sporty_update_request: json$5("a change waiting for Sporty to pick up", null),
-	sport_rest_days: json$5("days marked as rest days", []),
-	body_plus: json$5("Body: protein goal (g per kg), saved meals and favourites, supplements you track, today's training dose if you picked one, the pre-shift fuel card (src/main/bodyPlus.ts)", null),
-	body_tape: json$5("Body: tape measurements (arm, chest, shoulders, thigh in cm) by day; waist stays in body_metrics", []),
-	ben_workouts: json$5("workouts Ben logged", []),
-	app_sync_finance: json$5("Finance Helper data synced into Life System", null),
-	app_sync_waky: json$5("Waky (sleep) data synced into Life System", null),
-	finance_backup_json: json$5("older copy of the Finance Helper data", null),
-	waky_backup_json: json$5("older copy of the Waky data", null),
-	finance_inbox_json: json$5("bank lines waiting to be sorted in Finance Helper", []),
-	fin_tx_links: json$5("money entries linked to Finance Helper transactions", null),
-	tg_expense_links: json$5("Telegram messages linked to the expenses they logged", null),
+	bot_bridge_config: json$6("Telegram bot tokens and chat ids saved in the app", null),
+	notif_settings: json$6("quiet hours, event warnings, travel times (N2, N3, N6)", null),
+	milestones_seen: json$6("milestones already celebrated", []),
+	island_day_log: json$6("the island's log of the day", null),
+	island_nudges: json$6("Island 2 nudges: settings, people to call, daily tallies, move breaks to undo (src/core/islandNudges.ts)", null),
+	island_recipes: json$6("Smart island recipes: when → if → then, safe actions only (src/core/recipes.ts)", []),
+	island_widgets: json$6("PL1–PL8: installed widgets (pinned hashes, permissions), island pages, script tiles, the island look and the synced layout (src/core/widgets/settings.ts)", null),
+	island_kit: json$6("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)", null),
+	music_now: json$6("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
+	sport_tracker_json: json$6("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
+	sport_sync_seen: json$6("when Sporty last synced water and workouts", null),
+	sporty_status: json$6("Sporty's last status", null),
+	sporty_update_request: json$6("a change waiting for Sporty to pick up", null),
+	sport_rest_days: json$6("days marked as rest days", []),
+	body_plus: json$6("Body: protein goal (g per kg), saved meals and favourites, supplements you track, today's training dose if you picked one, the pre-shift fuel card (src/main/bodyPlus.ts)", null),
+	body_tape: json$6("Body: tape measurements (arm, chest, shoulders, thigh in cm) by day; waist stays in body_metrics", []),
+	ben_workouts: json$6("workouts Ben logged", []),
+	app_sync_finance: json$6("Finance Helper data synced into Life System", null),
+	app_sync_waky: json$6("Waky (sleep) data synced into Life System", null),
+	finance_backup_json: json$6("older copy of the Finance Helper data", null),
+	waky_backup_json: json$6("older copy of the Waky data", null),
+	finance_inbox_json: json$6("bank lines waiting to be sorted in Finance Helper", []),
+	fin_tx_links: json$6("money entries linked to Finance Helper transactions", null),
+	tg_expense_links: json$6("Telegram messages linked to the expenses they logged", null),
 	conn_finance_since: text("when Finance Helper was first connected"),
-	money_ask: json$5("a money question Ben is waiting on", null),
+	money_ask: json$6("a money question Ben is waiting on", null),
 	money_currency: text("currency for money (MDL)"),
 	money_daily_budget: num$4("daily spending budget"),
-	money_nothing_spent: json$5("days you tapped \"Nothing spent today\"", []),
-	money_cooked_days: json$5("days you confirmed you cooked at home", []),
-	coach_log: json$5("Ben's chat (newest 200 entries)", []),
-	coach_memory: json$5("Ben's memory: facts and recent chat", null),
-	coach_profile: json$5("about you, as Ben knows it", null),
-	coach_mind: json$5("long-term memory: goals, people, what works", null),
-	coach_reminders: json$5("reminders and check-ins Ben will send", []),
-	coach_nudges: json$5("nudge state (paused today, last sent)", null),
-	coach_rhythm: json$5("the daily rhythm: morning plan, reviews", null),
-	coach_rhythm_prefs: json$5("daily rhythm settings", null),
-	coach_history: json$5("past days Ben looks back on", []),
-	coach_letters: json$5("Ben's weekly letters", []),
-	coach_feedback: json$5("your thumbs up / down on replies (with an optional reason)", []),
-	coach_pins: json$5("messages you pinned in the chat, with a copy of their text (CH4)", []),
-	coach_answer_meta: json$5("which model answered each of Ben's replies and roughly what it cost (QA4)", {}),
-	coach_selfreview: json$5("Ben's review of his own week", null),
-	coach_story: json$5("the story of your weeks", null),
-	coach_blocks: json$5("Ben's notes about you: About you, Goals now, How to coach you, People (BR4)", []),
-	coach_memory_changes: json$5("recent changes to Ben's memory, with what was there before (undo)", []),
-	coach_style: json$5("Ben's tone and style", null),
-	coach_looks: json$5("how the chat looks: Ben's face and your photo (small data URL)", null),
-	look_wallpaper: json$5("the wallpaper: which picture, how strong, blur, shade, where, motion (src/core/wallpaper.ts)", null),
+	money_nothing_spent: json$6("days you tapped \"Nothing spent today\"", []),
+	money_cooked_days: json$6("days you confirmed you cooked at home", []),
+	coach_log: json$6("Ben's chat (newest 200 entries)", []),
+	coach_memory: json$6("Ben's memory: facts and recent chat", null),
+	coach_profile: json$6("about you, as Ben knows it", null),
+	coach_mind: json$6("long-term memory: goals, people, what works", null),
+	coach_reminders: json$6("reminders and check-ins Ben will send", []),
+	coach_nudges: json$6("nudge state (paused today, last sent)", null),
+	coach_rhythm: json$6("the daily rhythm: morning plan, reviews", null),
+	coach_rhythm_prefs: json$6("daily rhythm settings", null),
+	coach_history: json$6("past days Ben looks back on", []),
+	coach_letters: json$6("Ben's weekly letters", []),
+	coach_feedback: json$6("your thumbs up / down on replies (with an optional reason)", []),
+	coach_pins: json$6("messages you pinned in the chat, with a copy of their text (CH4)", []),
+	coach_answer_meta: json$6("which model answered each of Ben's replies and roughly what it cost (QA4)", {}),
+	coach_selfreview: json$6("Ben's review of his own week", null),
+	coach_story: json$6("the story of your weeks", null),
+	coach_blocks: json$6("Ben's notes about you: About you, Goals now, How to coach you, People (BR4)", []),
+	coach_memory_changes: json$6("recent changes to Ben's memory, with what was there before (undo)", []),
+	coach_style: json$6("Ben's tone and style", null),
+	coach_looks: json$6("how the chat looks: Ben's face and your photo (small data URL)", null),
+	look_wallpaper: json$6("the wallpaper: which picture, how strong, blur, shade, where, motion (src/core/wallpaper.ts)", null),
 	look_wallpaper_photo: text("your own wallpaper picture, made small on the device (a data URL)"),
-	saga_seasons: json$5("your 8-week seasons: name, theme, cover, three main quests and the boss (src/core/season.ts)", null),
-	saga_vision: json$5("the vision board: word of the year, who you are becoming, 6–9 cards (src/core/vision.ts)", null),
-	saga_vision_photos: json$5("pictures on vision cards, made small on the device (card id → data URL)", null),
-	saga_identity: json$5("your \"I am someone who…\" lines and what counts as a vote (src/core/identityVotes.ts)", null),
-	saga_side: json$5("the weekly side quest's weeks and your adventures log, no photos (src/core/sideQuest.ts)", null),
-	saga_wins: json$5("wins you added by hand and auto wins you hid (src/core/winsWall.ts)", null),
-	saga_wheel: json$5("your life wheel ratings by quarter (src/core/lifeWheel.ts)", null),
-	saga_arc: json$5("Ben's arc: the chapter reveal you saw, his outfit, cinematics already played (src/core/benArc.ts)", null),
-	coach_adapt: json$5("how Ben adapts the plan to how it went", null),
-	goal_booking: json$5("goal blocks booked into the calendar", null),
-	goal_asks: json$5("Ben's goal check-ins: what he asked this period, today's count, auto goals' last number", null),
-	ben_desk: json$5("Ben's desk: excuses, moods, study, stakes, calls, letters", null),
-	ben_experiment: json$5("the experiment running now", null),
-	ben_why: json$5("why Ben did what he did", []),
-	ben_confirm: json$5("an action waiting for your yes", null),
-	ben_cal_seen: json$5("old place of the calendar events Ben saw (now in sys_kv)", []),
-	ben_outbox: json$5("messages Telegram refused, tried again for 6 hours", []),
-	ben_sent_count: json$5("messages Ben sent on his own today (app day)", null),
-	ben_sent_today: json$5("kinds of message already sent today (app day)", null),
+	saga_seasons: json$6("your 8-week seasons: name, theme, cover, three main quests and the boss (src/core/season.ts)", null),
+	saga_vision: json$6("the vision board: word of the year, who you are becoming, 6–9 cards (src/core/vision.ts)", null),
+	saga_vision_photos: json$6("pictures on vision cards, made small on the device (card id → data URL)", null),
+	saga_identity: json$6("your \"I am someone who…\" lines and what counts as a vote (src/core/identityVotes.ts)", null),
+	saga_side: json$6("the weekly side quest's weeks and your adventures log, no photos (src/core/sideQuest.ts)", null),
+	saga_wins: json$6("wins you added by hand and auto wins you hid (src/core/winsWall.ts)", null),
+	saga_wheel: json$6("your life wheel ratings by quarter (src/core/lifeWheel.ts)", null),
+	saga_arc: json$6("Ben's arc: the chapter reveal you saw, his outfit, cinematics already played (src/core/benArc.ts)", null),
+	coach_adapt: json$6("how Ben adapts the plan to how it went", null),
+	goal_booking: json$6("goal blocks booked into the calendar", null),
+	goal_asks: json$6("Ben's goal check-ins: what he asked this period, today's count, auto goals' last number", null),
+	ben_desk: json$6("Ben's desk: excuses, moods, study, stakes, calls, letters", null),
+	ben_experiment: json$6("the experiment running now", null),
+	ben_why: json$6("why Ben did what he did", []),
+	ben_confirm: json$6("an action waiting for your yes", null),
+	ben_cal_seen: json$6("old place of the calendar events Ben saw (now in sys_kv)", []),
+	ben_outbox: json$6("messages Telegram refused, tried again for 6 hours", []),
+	ben_sent_count: json$6("messages Ben sent on his own today (app day)", null),
+	ben_sent_today: json$6("kinds of message already sent today (app day)", null),
 	ben_misstwice_day: text("app day of the last \"never miss twice\" message"),
-	voiced_kinds: json$5("nudge kinds Ben already wrote in his own words today", null),
+	voiced_kinds: json$6("nudge kinds Ben already wrote in his own words today", null),
 	morning_sent_day: text("day the morning message went out"),
 	wind_down_day: text("day the wind-down message went out"),
-	plan_suggestion: json$5("Ben's suggested plan for today", null),
-	area_words: json$5("words that map tasks to life areas", null),
-	task_area_colors: json$5("colours of the life areas", null),
-	focus_running: json$5("the focus session running now, or null", null),
-	focus_ratings: json$5("how each focus session felt", []),
-	block_marks: json$5("calendar blocks marked done / skipped", null),
-	block_kinds: json$5("calendar items you set as an event or a focus block (by title)", null),
+	plan_suggestion: json$6("Ben's suggested plan for today", null),
+	area_words: json$6("words that map tasks to life areas", null),
+	task_area_colors: json$6("colours of the life areas", null),
+	focus_running: json$6("the focus session running now, or null", null),
+	focus_ratings: json$6("how each focus session felt", []),
+	block_marks: json$6("calendar blocks marked done / skipped", null),
+	block_kinds: json$6("calendar items you set as an event or a focus block (by title)", null),
 	blocks_settled_day: text("day the blocks were last settled"),
-	cal_templates: json$5("saved calendar templates", []),
-	today_order: json$5("the order of Today's cards", []),
-	week_plan: json$5("this week's plan", null),
-	week_plans: json$5("past week plans", null),
-	my_habits: json$5("your own habits", []),
-	habit_board: json$5("Today's habit board: icons, colours and times you set, your order, hidden habits, skipped days (src/core/habitBoard.ts)", null),
-	month_aims: json$5("the month's aims", null),
-	learn_log: json$5("learning path log", []),
-	life_mode: json$5("life mode (exam, holiday, sick…)", null),
-	sleep_care: json$5("Sleep care: your sleep need, the caffeine curfew, and per day the morning light, coffees, the after-shift checklist and the warm screen (src/core/sleepCare.ts)", null),
-	grooming: json$5("Grooming habit: ticked morning and night steps per day, nails and haircut dates, the haircut rhythm, what each day paid (src/core/grooming.ts)", null),
-	life_fit: json$5("My life: latest bedtime, the work window (days, hours, how much you really work), how hard Ben pushes, tonight's shift (src/core/lifeFit.ts)", null),
-	focus_boost: json$5("Focus boost settings: the push ladder, stalling fixes, session goals, launch kits, the morning countdown, Dojo mode and win music (src/core/focusBoost.ts)", null),
-	focus_log: json$5("Focus boost log: each session's goal and Done / Half / Not, and why you stalled (src/core/focusBoost.ts)", null),
-	ben_pushes: json$5("Ben 2's pushes today: one key per check-in, brief, shutdown and drift word (shown on the island or sent on Telegram, and your answer), tonight's shutdown list with your marks, and drift words waiting for Telegram (src/core/benPushes.ts)", null),
-	ben_pc_seen: json$5("whether you are at the PC (written by the desktop app when it changes, at most every 5 minutes): the island or Telegram for Ben's pushes", null),
-	week_top3_ask: json$5("Sunday \"pick your top 3\" on Telegram: the week, the chips offered and the ones tapped so far", null),
+	cal_templates: json$6("saved calendar templates", []),
+	today_order: json$6("the order of Today's cards", []),
+	week_plan: json$6("this week's plan", null),
+	week_plans: json$6("past week plans", null),
+	my_habits: json$6("your own habits", []),
+	habit_board: json$6("Today's habit board: icons, colours and times you set, your order, hidden habits, skipped days (src/core/habitBoard.ts)", null),
+	month_aims: json$6("the month's aims", null),
+	learn_log: json$6("learning path log", []),
+	career_jobs: json$6("Career: the job board (found, applied, interview, offer, no) with follow-up days, and the weekly application quota", null),
+	career_proofs: json$6("Career: the proof-of-work portfolio (CTF writeups, crates, labs, features: problem, what you did, skills, link)", []),
+	career_cards: json$6("Career: flashcards with their spaced-repetition schedule, and the review log", null),
+	career_study: json$6("Career: essays and assignments planned backward into steps, the shift study queue (CTF hints, readings) and which pack is next", null),
+	career_money: json$6("Career: the money plan (emergency fund months, pay-yourself-first %, career fund, income target and moves, the investing projection), your answers to each income and career fund spending", null),
+	career_letters: json$6("Career: the monthly career review letters", []),
+	career_asks: json$6("Career: what the server's tick already asked today (follow-ups, the shift pack, pay yourself first, essays behind, the letter)", null),
+	life_mode: json$6("life mode (exam, holiday, sick…)", null),
+	sleep_care: json$6("Sleep care: your sleep need, the caffeine curfew, and per day the morning light, coffees, the after-shift checklist and the warm screen (src/core/sleepCare.ts)", null),
+	grooming: json$6("Grooming habit: ticked morning and night steps per day, nails and haircut dates, the haircut rhythm, what each day paid (src/core/grooming.ts)", null),
+	life_fit: json$6("My life: latest bedtime, the work window (days, hours, how much you really work), how hard Ben pushes, tonight's shift (src/core/lifeFit.ts)", null),
+	focus_boost: json$6("Focus boost settings: the push ladder, stalling fixes, session goals, launch kits, the morning countdown, Dojo mode and win music (src/core/focusBoost.ts)", null),
+	focus_log: json$6("Focus boost log: each session's goal and Done / Half / Not, and why you stalled (src/core/focusBoost.ts)", null),
+	ben_pushes: json$6("Ben 2's pushes today: one key per check-in, brief, shutdown and drift word (shown on the island or sent on Telegram, and your answer), tonight's shutdown list with your marks, and drift words waiting for Telegram (src/core/benPushes.ts)", null),
+	ben_pc_seen: json$6("whether you are at the PC (written by the desktop app when it changes, at most every 5 minutes): the island or Telegram for Ben's pushes", null),
+	week_top3_ask: json$6("Sunday \"pick your top 3\" on Telegram: the week, the chips offered and the ones tapped so far", null),
 	sleep_bed_target: text("bedtime target (HH:MM)"),
 	sleep_weekday_target: text("weekday wake target (HH:MM)"),
 	sleep_weekend_target: text("weekend wake target (HH:MM)"),
 	discipline_stealth: flag("stealth mode: neutral words everywhere (\"1\" on)"),
 	discipline_why: text("your reason for the streak, in your words (shown in the urge crusher)"),
-	discipline_triggers: json$5("urge triggers you logged", []),
-	discipline_undone_resets: json$5("resets you took back", []),
-	discipline_warned: json$5("risk warnings already sent", null),
+	discipline_triggers: json$6("urge triggers you logged", []),
+	discipline_undone_resets: json$6("resets you took back", []),
+	discipline_warned: json$6("risk warnings already sent", null),
 	urge_started_at: text("when the current urge started (ISO), or empty"),
 	points_v2: text("marker: points moved to version 2"),
 	points_v3: text("marker: points moved to version 3"),
 	"perk.shadow_monarch.p1_streak": num$4("perk: P1 task streak"),
-	"hunter.stat_allocation": json$5("points put into each stat", null),
+	"hunter.stat_allocation": json$6("points put into each stat", null),
 	streak_shields: num$4("streak shields you hold"),
 	reward_budget: num$4("old monthly money for rewards (moved into fun_budget)"),
-	fun_moves: json$5("leftover money moved to a Finance Helper savings goal, by month", {}),
-	fun_budget: json$5("monthly fun budget in lei, typed or from Finance Helper", null),
-	reward_unlocks: json$5("rewards that unlock with a goal or streak", null),
-	reward_rules: json$5("healthy limits per reward: a most-per-day and \"pair it\" (src/core/rewardGuard.ts)", null),
-	reward_coupons: json$5("coupons from level chests and the weekly mystery reward: a free small treat or a discount (src/core/rewardSurprise.ts)", null),
-	reward_suggest_hidden: json$5("suggested rewards you said \"not for me\" to (src/core/rewardSuggest.ts)", null),
-	reward_ready_seen: json$5("rewards whose \"Ready!\" moment was already shown (id:buys)", []),
+	fun_moves: json$6("leftover money moved to a Finance Helper savings goal, by month", {}),
+	fun_budget: json$6("monthly fun budget in lei, typed or from Finance Helper", null),
+	reward_unlocks: json$6("rewards that unlock with a goal or streak", null),
+	reward_rules: json$6("healthy limits per reward: a most-per-day and \"pair it\" (src/core/rewardGuard.ts)", null),
+	reward_coupons: json$6("coupons from level chests and the weekly mystery reward: a free small treat or a discount (src/core/rewardSurprise.ts)", null),
+	reward_suggest_hidden: json$6("suggested rewards you said \"not for me\" to (src/core/rewardSuggest.ts)", null),
+	reward_ready_seen: json$6("rewards whose \"Ready!\" moment was already shown (id:buys)", []),
 	currency: text("old name of the money currency"),
 	coin_exchange_rate: num$4("lei per point"),
 	bank_base_rate: num$4("points bank interest rate"),
@@ -185,18 +192,18 @@ var SETTINGS = {
 	bank_last_interest_day: text("day interest was last paid"),
 	bank_staked_coins: num$4("points in the bank"),
 	bank_total_interest_earned: num$4("interest earned so far"),
-	pc_asks: json$5("Ben's asks to do something on the PC (Allow / Deny on the desktop island), and whether a desktop app can answer", null),
-	pc_last_hour: json$5("the last hour on the PC as app names, sites and minutes (only when shared from the desktop app)", null),
-	automations: json$5("your automations: \"When X, do Y\", island buttons, Ben may run (src/core/automations.ts); never an address or key", null),
-	auto_asks: json$5("Ben's asks to run one of your automations (Allow / Deny on the island)", null),
-	ben_know: json$5("what Ben knows as rules you told him (durations, usual times, aliases) and the memories he asks before saving (Yes / No)", null),
-	ben_convo: json$5("key points of past chats (decisions, struggles, wins) and a rolling summary", null),
-	ben_learn: json$5("the plan of each of the last 30 days, to learn how long things really take", null),
-	ben_pushbacks: json$5("when each open task was first due (big ones that keep moving get a \"Break it down\" chip)", null),
-	plan_asked: json$5("the tasks you asked Ben to add for today ({day, titles}): the day plan never moves them to tomorrow", null),
-	plugins_on: json$5("which plugins are switched on", {}),
-	plugins_status: json$5("how each plugin's last job went", {}),
-	plugin_notes_notion: json$5("the notes plugin: Notion settings", null)
+	pc_asks: json$6("Ben's asks to do something on the PC (Allow / Deny on the desktop island), and whether a desktop app can answer", null),
+	pc_last_hour: json$6("the last hour on the PC as app names, sites and minutes (only when shared from the desktop app)", null),
+	automations: json$6("your automations: \"When X, do Y\", island buttons, Ben may run (src/core/automations.ts); never an address or key", null),
+	auto_asks: json$6("Ben's asks to run one of your automations (Allow / Deny on the island)", null),
+	ben_know: json$6("what Ben knows as rules you told him (durations, usual times, aliases) and the memories he asks before saving (Yes / No)", null),
+	ben_convo: json$6("key points of past chats (decisions, struggles, wins) and a rolling summary", null),
+	ben_learn: json$6("the plan of each of the last 30 days, to learn how long things really take", null),
+	ben_pushbacks: json$6("when each open task was first due (big ones that keep moving get a \"Break it down\" chip)", null),
+	plan_asked: json$6("the tasks you asked Ben to add for today ({day, titles}): the day plan never moves them to tomorrow", null),
+	plugins_on: json$6("which plugins are switched on", {}),
+	plugins_status: json$6("how each plugin's last job went", {}),
+	plugin_notes_notion: json$6("the notes plugin: Notion settings", null)
 };
 function parseSetting(key, raw) {
 	return SETTINGS[key].parse(raw);
@@ -4531,7 +4538,7 @@ var DEFAULT_CARE = {
 var HM$10 = /^([01]\d|2[0-3]):[0-5]\d$/;
 var isHm$4 = (v) => typeof v === "string" && HM$10.test(v);
 var isDay$2 = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
-var toMin$8 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var toMin$10 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 var hmOf$7 = (m) => `${String(Math.floor((m % 1440 + 1440) % 1440 / 60)).padStart(2, "0")}:${String((m % 1440 + 1440) % 1440 % 60).padStart(2, "0")}`;
 var clockOf = (ms) => {
 	const d = new Date(ms);
@@ -4575,7 +4582,7 @@ var addCoffee = (c, day, at, cups = 1) => withDay(c, day, (d) => ({
 }));
 /** The last time for caffeine: `hours` before bedtime ("23:30", 9.5 → "14:00"). */
 function caffeineCurfew(bed, hours = DEFAULT_CARE.curfewH) {
-	return hmOf$7(toMin$8(isHm$4(bed) ? bed : "23:30") - Math.round(hours * 60));
+	return hmOf$7(toMin$10(isHm$4(bed) ? bed : "23:30") - Math.round(hours * 60));
 }
 /** "coffee", "2 coffees", "had an espresso", "☕", "cafea", "кофе" → cups; anything else → null. */
 function parseCoffee(text) {
@@ -4590,7 +4597,7 @@ function parseCoffee(text) {
 function caffeineView(c, day, now, bed) {
 	const curfew = caffeineCurfew(bed, c.curfewH);
 	const cs = careDay(c, day).coffee ?? [];
-	const cm = toMin$8(curfew);
+	const cm = toMin$10(curfew);
 	const isLate = (ms) => {
 		const m = clockOf(ms);
 		return m >= cm || m < 240;
@@ -4663,7 +4670,7 @@ function debtAdvice(d, o) {
 	const napOk = cur >= 240 && cur < 880;
 	const nap = napOk ? "One 20-minute nap before 15:00 (alarm on: 20 min max, longer makes you groggy)." : cur >= 900 || cur < 240 ? "Too late for a nap today (it would push tonight back): go to bed earlier instead." : "Too close to 15:00 for a nap now: an earlier night instead.";
 	const minutes = Math.max(15, Math.min(60, Math.round(d.debtMin / 3 / 15) * 15));
-	const bedM = toMin$8(isHm$4(o.bed) ? o.bed : "23:30");
+	const bedM = toMin$10(isHm$4(o.bed) ? o.bed : "23:30");
 	const tonightOk = (cur < 240 ? cur + 1440 : cur) < (bedM < 720 ? bedM + 1440 : bedM) - minutes;
 	let early = null;
 	for (let k = tonightOk ? 0 : 1; k <= 6 && !early; k++) {
@@ -5632,7 +5639,7 @@ var isAccepted = (e) => !isDeclined(e) && !isInvite(e) && !isTentative(e);
 var takesTime = (e) => !isDeclined(e) && !isInvite(e) && e.eventType !== "workingLocation";
 /** Can be what's on "Now", alert you, or start a focus timer by itself. */
 var canBeNow = (e) => isAccepted(e) && !e.free && !isMarker(e);
-var toMin$7 = (hm) => {
+var toMin$9 = (hm) => {
 	const [h, m] = hm.split(":").map(Number);
 	return h * 60 + (m || 0);
 };
@@ -5650,11 +5657,11 @@ function localDay$1(iso) {
 }
 /** Timed events of one day as minute ranges, clipped to the day window. */
 function busy(events, day, from, to) {
-	const lo = toMin$7(from);
-	const hi = toMin$7(to);
+	const lo = toMin$9(from);
+	const hi = toMin$9(to);
 	return events.filter((e) => !e.allDay && localDay$1(e.start) === day && takesTime(e)).map((e) => {
-		const s = toMin$7(localHM(e.start));
-		const en = localDay$1(e.end) > day ? 1440 : toMin$7(localHM(e.end));
+		const s = toMin$9(localHM(e.start));
+		const en = localDay$1(e.end) > day ? 1440 : toMin$9(localHM(e.end));
 		return [Math.max(lo, s), Math.min(hi, en)];
 	}).filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
 }
@@ -5666,7 +5673,7 @@ function freeGaps(events, day, opts = {}) {
 	const from = opts.from ?? "07:00";
 	const to = opts.to ?? "23:00";
 	const min = opts.minMinutes ?? 25;
-	let cursor = Math.max(toMin$7(from), opts.after ? toMin$7(opts.after) : 0);
+	let cursor = Math.max(toMin$9(from), opts.after ? toMin$9(opts.after) : 0);
 	const out = [];
 	for (const [s, e] of busy(events, day, from, to)) {
 		if (s - cursor >= min) out.push({
@@ -5676,10 +5683,10 @@ function freeGaps(events, day, opts = {}) {
 		});
 		cursor = Math.max(cursor, e);
 	}
-	if (toMin$7(to) - cursor >= min) out.push({
+	if (toMin$9(to) - cursor >= min) out.push({
 		start: fromMin$2(cursor),
 		end: to,
-		minutes: toMin$7(to) - cursor
+		minutes: toMin$9(to) - cursor
 	});
 	return out;
 }
@@ -5689,8 +5696,8 @@ function freeGaps(events, day, opts = {}) {
 */
 function suggestBlocks(gaps, items, breather = 10) {
 	const free = gaps.map((g) => ({
-		s: toMin$7(g.start),
-		e: toMin$7(g.end)
+		s: toMin$9(g.start),
+		e: toMin$9(g.end)
 	}));
 	const out = [];
 	for (const it of items) {
@@ -5728,7 +5735,7 @@ function isFocusBlock(e) {
 function overlapMin(aStart, aEnd, bStart, bEnd) {
 	return Math.max(0, (Math.min(aEnd, bEnd) - Math.max(aStart, bStart)) / 6e4);
 }
-var toMin$6 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+var toMin$8 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 var isHm$3 = (v) => typeof v === "string" && /^\d{2}:\d{2}$/.test(v);
 /** Today's four parts, each 0..1, and a score out of 100 (the ring on the pill and the Day page). */
 function healthyDay(i) {
@@ -5785,7 +5792,7 @@ function sleptOnTime(log, fallbackTarget = "23:00") {
 	if (!log || !isHm$3(log.bedTime)) return null;
 	if (typeof log.bedOnTime === "boolean") return log.bedOnTime;
 	const target = isHm$3(log.bedTarget) ? log.bedTarget : fallbackTarget;
-	return (toMin$6(log.bedTime) - toMin$6(target) + 1440 + 720) % 1440 - 720 <= 15;
+	return (toMin$8(log.bedTime) - toMin$8(target) + 1440 + 720) % 1440 - 720 <= 15;
 }
 /** The evening's "how did your body do today" line (plain words, real numbers). */
 function bodyLine(h) {
@@ -5804,7 +5811,7 @@ function weeklyHealth(days, beds, today) {
 		bedTarget: b.bedTarget ?? null,
 		bedOnTime: b.bedOnTime
 	}) === true).length;
-	const mins = nights.map((b) => (toMin$6(b.bedTime) - 1080 + 1440) % 1440);
+	const mins = nights.map((b) => (toMin$8(b.bedTime) - 1080 + 1440) % 1440);
 	const spread = mins.length >= 2 ? Math.max(...mins) - Math.min(...mins) : null;
 	const r = {
 		days: week.length,
@@ -5867,7 +5874,7 @@ function telegramWindDown(o) {
 function stillQuiet(quiet, now, wakeAt) {
 	if (!quiet) return false;
 	if (!isHm$3(wakeAt) || now.getHours() >= 12) return true;
-	return now.getHours() * 60 + now.getMinutes() < toMin$6(wakeAt);
+	return now.getHours() * 60 + now.getMinutes() < toMin$8(wakeAt);
 }
 /** Telegram's water nudge waits while the island has water covered (its card within 90 min). */
 function islandHasWater(islandWaterAt, now) {
@@ -5905,7 +5912,7 @@ var DEFAULT_RHYTHM_PREFS = {
 	autopilot: "07:30"
 };
 var HM$9 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var toMin$5 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var toMin$7 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 var fromMin$1 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 function cleanPrefs$2(p) {
 	return {
@@ -5949,30 +5956,30 @@ function rhythmFor(state, today) {
 /** What the coach should send now (in order). */
 function dueRhythm(state, prefs, f) {
 	if (!prefs.on || f.asleep) return [];
-	const t = toMin$5(f.time);
+	const t = toMin$7(f.time);
 	const out = [];
-	const auto = Math.max(toMin$5(prefs.autopilot ?? "07:30"), toMin$5(f.wakeTarget));
-	const start = Math.max(toMin$5("06:00"), Math.min(f.wakeAt ? toMin$5(f.wakeAt) + 5 : toMin$5(f.wakeTarget) + 45, auto));
-	if (!state.briefing && t >= start && t < toMin$5("12:00")) out.push("briefing");
-	else if (!state.briefing && !f.paused && f.mode?.replan !== false && t >= Math.max(start, toMin$5("12:00")) && t < toMin$5("16:00")) out.push("replan");
+	const auto = Math.max(toMin$7(prefs.autopilot ?? "07:30"), toMin$7(f.wakeTarget));
+	const start = Math.max(toMin$7("06:00"), Math.min(f.wakeAt ? toMin$7(f.wakeAt) + 5 : toMin$7(f.wakeTarget) + 45, auto));
+	if (!state.briefing && t >= start && t < toMin$7("12:00")) out.push("briefing");
+	else if (!state.briefing && !f.paused && f.mode?.replan !== false && t >= Math.max(start, toMin$7("12:00")) && t < toMin$7("16:00")) out.push("replan");
 	if (!f.paused && !f.busy && prefs.water && !islandHasWater(f.islandWaterAt, f.nowMs ?? 0) && waterBehind(state, f, f.mode?.waterMax ?? 5)) out.push("water");
-	if (!f.paused && !f.busy && prefs.training && f.mode?.training !== false && !f.workoutDone && !state.training && t >= toMin$5("18:00") && t < toMin$5("21:00")) out.push("training");
-	if (f.weekday === (prefs.weeklyDay ?? 0) && t >= toMin$5(prefs.weekly) && state.weekly?.day !== f.today) out.push("weekly");
-	if (f.weekday === 3 && !state.midweek && t >= toMin$5(prefs.evening) - 90 && t < toMin$5(prefs.evening)) out.push("midweek");
-	if (!state.evening && t >= toMin$5(prefs.evening)) out.push("evening");
+	if (!f.paused && !f.busy && prefs.training && f.mode?.training !== false && !f.workoutDone && !state.training && t >= toMin$7("18:00") && t < toMin$7("21:00")) out.push("training");
+	if (f.weekday === (prefs.weeklyDay ?? 0) && t >= toMin$7(prefs.weekly) && state.weekly?.day !== f.today) out.push("weekly");
+	if (f.weekday === 3 && !state.midweek && t >= toMin$7(prefs.evening) - 90 && t < toMin$7(prefs.evening)) out.push("midweek");
+	if (!state.evening && t >= toMin$7(prefs.evening)) out.push("evening");
 	return out;
 }
 /** Water well behind the day's pace (08:00→21:00), at most 5 nudges, 1h50 apart, 11:00–20:30. */
 function waterBehind(state, f, max = 5) {
-	const t = toMin$5(f.time);
-	if (t < toMin$5("11:00") || t > toMin$5("20:30") || f.waterTarget <= 0) return false;
+	const t = toMin$7(f.time);
+	if (t < toMin$7("11:00") || t > toMin$7("20:30") || f.waterTarget <= 0) return false;
 	if (state.water.length >= max) return false;
 	const last = state.water[state.water.length - 1];
-	if (last && t - toMin$5(last) < 110) return false;
-	const pace = Math.min(1, Math.max(0, (t - toMin$5("08:00")) / (toMin$5("21:00") - toMin$5("08:00"))));
+	if (last && t - toMin$7(last) < 110) return false;
+	const pace = Math.min(1, Math.max(0, (t - toMin$7("08:00")) / (toMin$7("21:00") - toMin$7("08:00"))));
 	return f.waterMl < f.waterTarget * pace - f.waterTarget * .25;
 }
-var quarter = (hm) => fromMin$1(Math.ceil(toMin$5(hm) / 15) * 15);
+var quarter = (hm) => fromMin$1(Math.ceil(toMin$7(hm) / 15) * 15);
 /** The model's plan, made safe: real times, no clashes with your calendar or each other, at most 3 must-dos. */
 function cleanProposal(raw, fallback, events, now) {
 	if (!raw || typeof raw !== "object") return fallback;
@@ -5981,7 +5988,7 @@ function cleanProposal(raw, fallback, events, now) {
 		s: minOfIso(e.start),
 		e: minOfIso(e.end)
 	}));
-	const after = toMin$5(quarter(now));
+	const after = toMin$7(quarter(now));
 	const taken = [];
 	const blocks = [];
 	for (const b of Array.isArray(raw.blocks) ? raw.blocks : []) {
@@ -5989,9 +5996,9 @@ function cleanProposal(raw, fallback, events, now) {
 		const minutes = Math.round(Number(b?.minutes));
 		const title = String(b?.title ?? "").trim().slice(0, 80);
 		if (!HM$9.test(start) || !title || !(minutes >= 15 && minutes <= 180)) continue;
-		const s = toMin$5(start);
+		const s = toMin$7(start);
 		const e = s + minutes;
-		if (s < after || e > toMin$5("23:30")) continue;
+		if (s < after || e > toMin$7("23:30")) continue;
 		if ([...busy, ...taken].some((x) => s < x.e && e > x.s)) continue;
 		taken.push({
 			s,
@@ -6012,7 +6019,7 @@ function cleanProposal(raw, fallback, events, now) {
 	let training = null;
 	if (raw.training && HM$9.test(String(raw.training.time ?? "").padStart(5, "0"))) {
 		const t = String(raw.training.time).padStart(5, "0");
-		const s = toMin$5(t);
+		const s = toMin$7(t);
 		if (s >= after && ![...busy, ...taken].some((x) => s < x.e && s + 30 > x.s)) training = {
 			time: t,
 			what: String(raw.training.what ?? "Workout").slice(0, 60) || "Workout"
@@ -6056,7 +6063,7 @@ function proposalText(p, opts = {}) {
 	if (p.mustdos.length) lines.push("", "<b>Must-dos</b>", ...p.mustdos.map((m, i) => `${i + 1}. ${esc(m)}`));
 	const timed = [...p.blocks.map((b) => ({
 		s: b.start,
-		text: `${b.start}–${fromMin$1(toMin$5(b.start) + b.minutes)} ${esc(b.title)}`
+		text: `${b.start}–${fromMin$1(toMin$7(b.start) + b.minutes)} ${esc(b.title)}`
 	})), ...p.training ? [{
 		s: p.training.time,
 		text: `${p.training.time} 💪 ${esc(p.training.what)}`
@@ -6298,7 +6305,7 @@ function bookBig3(big3, events, days, nowIso, perTask = 2, minutes = 50) {
 			minMinutes: minutes + 10
 		})[0];
 		if (!gap) continue;
-		const end = fromMin$1(toMin$5(gap.start) + minutes);
+		const end = fromMin$1(toMin$7(gap.start) + minutes);
 		out.push({
 			title: `🎯 ${title}`.slice(0, 80),
 			day,
@@ -6310,7 +6317,7 @@ function bookBig3(big3, events, days, nowIso, perTask = 2, minutes = 50) {
 			calendarId: "",
 			title,
 			start: (/* @__PURE__ */ new Date(`${day}T${gap.start}:00`)).toISOString(),
-			end: (/* @__PURE__ */ new Date(`${day}T${fromMin$1(toMin$5(gap.start) + minutes + 10)}:00`)).toISOString(),
+			end: (/* @__PURE__ */ new Date(`${day}T${fromMin$1(toMin$7(gap.start) + minutes + 10)}:00`)).toISOString(),
 			allDay: false
 		});
 		left.set(title, (left.get(title) ?? 0) - 1);
@@ -6458,9 +6465,9 @@ var similar = (a, b) => {
 };
 /** The first free start in [from, to) for `minutes`, inside the plan's free time and clear of its blocks (10 min apart). */
 function freeSlot(plan, minutes, from, to, skip = -1) {
-	const free = plan.free?.length ? plan.free.map((f) => [toMin$5(f.start), toMin$5(f.end)]) : [[toMin$5("07:00"), toMin$5("22:30")]];
-	const busy = [...plan.blocks.filter((_, i) => i !== skip).map((b) => [toMin$5(b.start) - 10, toMin$5(b.start) + b.minutes + 10]), ...plan.training ? [[toMin$5(plan.training.time) - 10, toMin$5(plan.training.time) + 60]] : []];
-	for (const [fs, fe] of free) for (let st = Math.ceil(Math.max(fs, toMin$5(from)) / 5) * 5; st + minutes <= Math.min(fe, toMin$5(to)); st += 5) if (!busy.some(([bs, be]) => st < be && st + minutes > bs)) return fromMin$1(st);
+	const free = plan.free?.length ? plan.free.map((f) => [toMin$7(f.start), toMin$7(f.end)]) : [[toMin$7("07:00"), toMin$7("22:30")]];
+	const busy = [...plan.blocks.filter((_, i) => i !== skip).map((b) => [toMin$7(b.start) - 10, toMin$7(b.start) + b.minutes + 10]), ...plan.training ? [[toMin$7(plan.training.time) - 10, toMin$7(plan.training.time) + 60]] : []];
+	for (const [fs, fe] of free) for (let st = Math.ceil(Math.max(fs, toMin$7(from)) / 5) * 5; st + minutes <= Math.min(fe, toMin$7(to)); st += 5) if (!busy.some(([bs, be]) => st < be && st + minutes > bs)) return fromMin$1(st);
 	return null;
 }
 function editDayPart(plan, note) {
@@ -6514,7 +6521,7 @@ function editDayPart(plan, note) {
 		const bi = plan.blocks.findIndex((b) => similar(what, b.title) && (b.tasks?.length ?? 0) <= 1);
 		if (bi >= 0) {
 			const b = plan.blocks[bi];
-			const start = freeSlot(plan, b.minutes, part === "later" ? fromMin$1(toMin$5(b.start) + 15) : from, to, bi);
+			const start = freeSlot(plan, b.minutes, part === "later" ? fromMin$1(toMin$7(b.start) + 15) : from, to, bi);
 			if (!start) return null;
 			const blocks = plan.blocks.map((x, k) => k === bi ? {
 				...x,
@@ -6547,7 +6554,7 @@ function editDayPart(plan, note) {
 		const start = freeSlot({
 			...plan,
 			blocks
-		}, minutes, part === "later" && host >= 0 ? fromMin$1(toMin$5(plan.blocks[host].start) + 15) : from, to);
+		}, minutes, part === "later" && host >= 0 ? fromMin$1(toMin$7(plan.blocks[host].start) + 15) : from, to);
 		if (!start) return null;
 		blocks = sorted([...blocks, {
 			title,
@@ -6628,7 +6635,7 @@ function slotTitle(minutes, opts = {}) {
 // src/core/dayPacker.ts
 /** Where a plan may start: now rounded up to the next 5 minutes, plus `bufferMin` (10:00 → 10:05). */
 function planStartAt(now, bufferMin = 5) {
-	const m = toMin$5(now);
+	const m = toMin$7(now);
 	return fromMin$1(Math.min(1435, Math.ceil(m / 5) * 5 + bufferMin));
 }
 var QUICK = /\b(check|email|e-mail|mail|reply|answer|call|text|message|pay|buy|order|send|book|sign|print|upload|submit|confirm|cancel|renew|schedule|remind|ask|tidy|water)\b/i;
@@ -6657,8 +6664,8 @@ function rankTasks(tasks, today) {
 function withWork(wins, work) {
 	if (!work) return wins;
 	const cut = (list, r, mark) => {
-		const a = toMin$5(r.from);
-		const b = toMin$5(r.to);
+		const a = toMin$7(r.from);
+		const b = toMin$7(r.to);
 		const out = [];
 		for (const w of list) {
 			if (w.e <= a || w.s >= b) {
@@ -6694,13 +6701,13 @@ function freeWindows(events, today, after, endBy) {
 		to: endBy,
 		minMinutes: 20
 	});
-	const a = toMin$5(after);
-	const end = toMin$5(endBy);
+	const a = toMin$7(after);
+	const end = toMin$7(endBy);
 	return gaps.map((g) => {
-		const s = toMin$5(g.start);
-		const e = toMin$5(g.end);
+		const s = toMin$7(g.start);
+		const e = toMin$7(g.end);
 		return {
-			s: s > a && s > toMin$5("07:00") ? s + 10 : s,
+			s: s > a && s > toMin$7("07:00") ? s + 10 : s,
 			e: e < end ? e - 10 : e
 		};
 	}).filter((w) => w.e - w.s >= 20);
@@ -6728,8 +6735,8 @@ function place(wins, c, best, minMin, avoid = []) {
 	if (c.kind === "quick") {
 		const lw = wins.find((w) => w.light && fits(w, c.minutes));
 		if (lw) return take(lw, lw.s, c.minutes);
-		const pm = wins.find((w) => !w.light && w.e - Math.max(w.s, toMin$5("13:00")) >= c.minutes);
-		if (pm) return take(pm, Math.max(pm.s, toMin$5("13:00")), c.minutes);
+		const pm = wins.find((w) => !w.light && w.e - Math.max(w.s, toMin$7("13:00")) >= c.minutes);
+		if (pm) return take(pm, Math.max(pm.s, toMin$7("13:00")), c.minutes);
 	}
 	const all = c.kind === "quick" ? wins : wins.filter((w) => !w.light);
 	const fresh = c.hard && avoid.length ? all.filter((w) => !avoid.includes(Math.floor(w.s / 60))) : all;
@@ -6933,8 +6940,8 @@ function packDay(p) {
 	for (const c of groupChunks.filter((c) => c.hard)) fit(c);
 	if (quickChunk && !pinnedQuick) fit(quickChunk);
 	book(false);
-	if (!p.workoutDone && !p.train) for (const w of wins.filter((x) => !x.light && x.e > toMin$5("17:00"))) {
-		const s = Math.ceil(Math.max(w.s, toMin$5("17:00")) / 15) * 15;
+	if (!p.workoutDone && !p.train) for (const w of wins.filter((x) => !x.light && x.e > toMin$7("17:00"))) {
+		const s = Math.ceil(Math.max(w.s, toMin$7("17:00")) / 15) * 15;
 		if (s + 45 <= w.e) {
 			training = {
 				time: fromMin$1(s),
@@ -7116,7 +7123,7 @@ function checkModelPlan(model, packed, tasks, work) {
 /** A block that breaks the work window rule: deep focus in its light part, anything in its busy part. */
 function workClash(blocks, work) {
 	if (!work) return null;
-	const over = (b, r) => !!r && toMin$5(b.start) < toMin$5(r.to) && toMin$5(b.start) + b.minutes > toMin$5(r.from);
+	const over = (b, r) => !!r && toMin$7(b.start) < toMin$7(r.to) && toMin$7(b.start) + b.minutes > toMin$7(r.from);
 	return blocks.find((b) => over(b, work.busy) || b.kind !== "quick" && over(b, work.light)) ?? null;
 }
 /** After blocks moved: each "Also today" item points at the block that holds it now (or none). */
@@ -7876,7 +7883,7 @@ var median = (xs) => {
 	const m = Math.floor(s.length / 2);
 	return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 };
-var toMin$4 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+var toMin$6 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 /**
 * Learns from past days: each planned block is matched with the focus you
 * really logged that day for it (same words, or the same kind of task, near
@@ -7889,7 +7896,7 @@ function learnRhythm(i) {
 	for (const b of i.planned) {
 		if (!(b.minutes >= 10)) continue;
 		const kind = kindOf(b.title);
-		const fits = i.sessions.filter((s) => s.day === b.day && !used.has(s)).filter((s) => similarity(s.subject, b.title) >= .6 || kind !== "other" && kindOf(s.subject) === kind && Math.abs(new Date(s.startedAt).getHours() * 60 + new Date(s.startedAt).getMinutes() - toMin$4(b.start)) <= 120);
+		const fits = i.sessions.filter((s) => s.day === b.day && !used.has(s)).filter((s) => similarity(s.subject, b.title) >= .6 || kind !== "other" && kindOf(s.subject) === kind && Math.abs(new Date(s.startedAt).getHours() * 60 + new Date(s.startedAt).getMinutes() - toMin$6(b.start)) <= 120);
 		if (!fits.length) continue;
 		for (const s of fits) used.add(s);
 		const real = fits.reduce((t, s) => t + s.minutes, 0);
@@ -7956,8 +7963,8 @@ function rhythmLine(r) {
 */
 function withRest(work) {
 	if (!work || work.mode !== "normal" || !work.light) return work ?? null;
-	if (toMin$4(work.to === "24:00" ? "24:00" : work.to) - toMin$4(work.from) < 240) return work;
-	const end = toMin$4(work.to);
+	if (toMin$6(work.to === "24:00" ? "24:00" : work.to) - toMin$6(work.from) < 240) return work;
+	const end = toMin$6(work.to);
 	if (end >= 1380) return work;
 	const restEnd = Math.min(1440, end + 60);
 	const hm = (m) => m >= 1440 ? "24:00" : `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
@@ -10721,7 +10728,7 @@ var str$6 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var hex = (v, d) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d;
 var day = (v) => typeof v === "string" && DAY$8.test(v) ? v : null;
 /** The Monday of the week holding `d` (or `d` itself on a Monday). */
-function mondayOf$5(d) {
+function mondayOf$6(d) {
 	return addDays$8(d, -(((/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay() + 6) % 7));
 }
 var seasonEnd = (s) => addDays$8(s.start, 55);
@@ -11157,7 +11164,7 @@ var matches = (l, kinds, text) => {
 };
 /** Each line's votes: this week (Monday on), last week and the last 4 weeks. */
 function identityVotes(book, entries, today, extra = []) {
-	const mon = mondayOf$5(today);
+	const mon = mondayOf$6(today);
 	const starts = [
 		addDays$8(mon, -21),
 		addDays$8(mon, -14),
@@ -11587,7 +11594,7 @@ function recentQuests(book, today) {
 }
 /** The input for this week's pick from the book and the outside facts. */
 function pickInput(book, today, facts) {
-	const week = mondayOf$5(today);
+	const week = mondayOf$6(today);
 	return {
 		week,
 		...facts,
@@ -11597,9 +11604,9 @@ function pickInput(book, today, facts) {
 }
 function adventureStats(book, today) {
 	const year = today.slice(0, 4);
-	const weeksWith = new Set(book.log.map((a) => mondayOf$5(a.day)));
+	const weeksWith = new Set(book.log.map((a) => mondayOf$6(a.day)));
 	let n = 0;
-	let w = mondayOf$5(today);
+	let w = mondayOf$6(today);
 	if (!weeksWith.has(w)) w = addDays$8(w, -7);
 	while (weeksWith.has(w)) {
 		n++;
@@ -12543,6 +12550,1525 @@ function sagaContext(s, db, finance, now = /* @__PURE__ */ new Date()) {
 		return [];
 	}
 }
+// src/core/career/jobs.ts
+var STAGES = [
+	"found",
+	"applied",
+	"interview",
+	"offer",
+	"no"
+];
+/** The Monday of a day's week. */
+function mondayOf$5(day) {
+	return addDays$8(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
+}
+var cleanLink$2 = (x) => typeof x === "string" && /^https?:\/\/\S{3,}$/i.test(x.trim()) ? x.trim().slice(0, 300) : null;
+/** You followed up: one more nudge a week later, then it stops (two chases is enough). */
+function followedUp(book, id, today) {
+	return {
+		...book,
+		jobs: book.jobs.map((j) => j.id === id ? {
+			...j,
+			chased: j.chased + 1,
+			followUp: j.chased + 1 >= 2 ? null : addDays$8(today, 7)
+		} : j)
+	};
+}
+function snoozeFollowUp(book, id, today, days = 3) {
+	return {
+		...book,
+		jobs: book.jobs.map((j) => j.id === id && j.followUp ? {
+			...j,
+			followUp: addDays$8(today, days)
+		} : j)
+	};
+}
+var isOpen = (j) => j.stage === "applied" || j.stage === "interview" || j.stage === "offer";
+function followUpsDue(book, today) {
+	return book.jobs.filter((j) => isOpen(j) && j.followUp && j.followUp <= today).sort((a, b) => (a.followUp ?? "").localeCompare(b.followUp ?? ""));
+}
+function appliedIn(book, from, to) {
+	return book.jobs.filter((j) => j.applied && j.applied >= from && j.applied <= to).length;
+}
+function weekStats(book, today) {
+	const monday = mondayOf$5(today);
+	const quota = Math.max(0, book.quota);
+	const sent = appliedIn(book, monday, addDays$8(monday, 6));
+	const elapsed = daysBetween$3(monday, today) + 1;
+	const paceNow = Math.ceil(quota * elapsed / 7);
+	const history = Array.from({ length: 8 }, (_, i) => {
+		const m = addDays$8(monday, -7 * (7 - i));
+		return {
+			monday: m,
+			sent: appliedIn(book, m, addDays$8(m, 6))
+		};
+	});
+	let streak = 0;
+	for (let i = history.length - 2; i >= 0 && quota > 0 && history[i].sent >= quota; i--) streak++;
+	return {
+		monday,
+		sent,
+		quota,
+		left: Math.max(0, quota - sent),
+		daysLeft: 8 - elapsed,
+		paceNow,
+		onPace: sent >= paceNow,
+		streak,
+		history
+	};
+}
+function funnel(book) {
+	const reached = (j, s) => j.moves.some((m) => m.stage === s) || j.stage === s;
+	const applied = book.jobs.filter((j) => j.applied).length;
+	const interviews = book.jobs.filter((j) => reached(j, "interview") || reached(j, "offer")).length;
+	const counts = Object.fromEntries(STAGES.map((s) => [s, book.jobs.filter((j) => j.stage === s).length]));
+	return {
+		applied,
+		interviews,
+		offers: book.jobs.filter((j) => reached(j, "offer")).length,
+		responseRate: applied ? Math.round(interviews / applied * 100) / 100 : null,
+		counts
+	};
+}
+/** One line for Ben's context and the Sunday check. */
+function jobsLine(book, today) {
+	if (!book.jobs.length && !book.quota) return "";
+	const w = weekStats(book, today);
+	const due = followUpsDue(book, today);
+	const f = funnel(book);
+	return [
+		`Job hunt: ${w.sent} of ${w.quota} applications this week${w.left ? ` (${w.left} to go, ${w.daysLeft} day${w.daysLeft === 1 ? "" : "s"} left)` : " ✓"}`,
+		`${f.counts.interview} interview${f.counts.interview === 1 ? "" : "s"} open`,
+		f.counts.offer ? `${f.counts.offer} offer${f.counts.offer === 1 ? "" : "s"}` : "",
+		due.length ? `follow up: ${due.slice(0, 3).map((j) => j.company).join(", ")}` : ""
+	].filter(Boolean).join(" · ");
+}
+function cleanJobs(raw) {
+	const o = raw && typeof raw === "object" ? raw : {};
+	const day = /^\d{4}-\d{2}-\d{2}$/;
+	const jobs = (Array.isArray(o.jobs) ? o.jobs : []).filter((j) => j && typeof j.id === "string" && STAGES.includes(j.stage) && day.test(j.added)).map((j) => ({
+		id: j.id.slice(0, 40),
+		company: String(j.company ?? "").slice(0, 80),
+		role: String(j.role ?? "").slice(0, 80),
+		link: cleanLink$2(j.link),
+		stage: j.stage,
+		added: j.added,
+		applied: day.test(j.applied) ? j.applied : null,
+		followUp: day.test(j.followUp) ? j.followUp : null,
+		chased: Number.isFinite(j.chased) ? Math.max(0, Math.round(j.chased)) : 0,
+		notes: String(j.notes ?? "").slice(0, 500),
+		moves: (Array.isArray(j.moves) ? j.moves : []).filter((m) => m && STAGES.includes(m.stage) && day.test(m.day)).slice(-12)
+	})).slice(0, 400);
+	const q = Number(o.quota);
+	return {
+		quota: Number.isFinite(q) ? Math.max(0, Math.min(30, Math.round(q))) : 3,
+		jobs
+	};
+}
+// src/core/career/portfolio.ts
+var PROOF_KINDS = [
+	"ctf",
+	"crate",
+	"lab",
+	"feature",
+	"writing",
+	"other"
+];
+function parseSkills(text) {
+	const out = [];
+	for (const s of String(text ?? "").split(/[,;#\n]+/)) {
+		const t = s.trim().replace(/\s+/g, " ").slice(0, 30);
+		if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
+	}
+	return out.slice(0, 12);
+}
+var cleanLink$1 = (x) => typeof x === "string" && /^https?:\/\/\S{3,}$/i.test(x.trim()) ? x.trim().slice(0, 300) : null;
+function skillCounts(list) {
+	const m = /* @__PURE__ */ new Map();
+	for (const p of list) for (const s of p.skills) {
+		const k = s.toLowerCase();
+		const cur = m.get(k) ?? {
+			skill: s,
+			n: 0
+		};
+		cur.n++;
+		m.set(k, cur);
+	}
+	return [...m.values()].sort((a, b) => b.n - a.n || a.skill.localeCompare(b.skill));
+}
+/** Cyber path entries that aren't in the portfolio yet: drafts to finish. */
+function fromLearn(learn, list) {
+	const have = new Set(list.map((p) => p.from).filter(Boolean));
+	const titles = new Set(list.map((p) => p.title.toLowerCase()));
+	return learn.filter((e) => !have.has(e.id) && !titles.has(e.title.toLowerCase())).map((e) => ({
+		kind: e.track === "ctf" ? "ctf" : e.track === "rust" ? "crate" : "lab",
+		title: e.title,
+		link: e.link,
+		skills: parseSkills([e.track === "ctf" ? "CTF" : e.track === "rust" ? "Rust" : "Cryptography", e.tag].join(",")),
+		from: e.id,
+		day: e.day
+	})).slice(0, 8);
+}
+function cleanPortfolio(raw) {
+	if (!Array.isArray(raw)) return [];
+	const day = /^\d{4}-\d{2}-\d{2}$/;
+	return raw.filter((p) => p && typeof p.id === "string" && typeof p.title === "string" && day.test(p.day)).map((p) => ({
+		id: p.id.slice(0, 40),
+		kind: PROOF_KINDS.includes(p.kind) ? p.kind : "other",
+		title: p.title.slice(0, 120),
+		problem: String(p.problem ?? "").slice(0, 600),
+		did: String(p.did ?? "").slice(0, 1200),
+		skills: Array.isArray(p.skills) ? parseSkills(p.skills.map(String).join(",")) : [],
+		link: cleanLink$1(p.link),
+		day: p.day,
+		pub: p.pub !== false,
+		...typeof p.from === "string" ? { from: p.from.slice(0, 40) } : {}
+	})).slice(0, 500);
+}
+// src/core/career/srs.ts
+var GRADES = [
+	"again",
+	"hard",
+	"good",
+	"easy"
+];
+var GRADE_LABEL = {
+	again: "Again",
+	hard: "Hard",
+	good: "Good",
+	easy: "Easy"
+};
+var START_EASE = 2.5;
+var MIN_EASE = 1.3;
+var clampEase = (e) => Math.max(MIN_EASE, Math.min(3.2, Math.round(e * 100) / 100));
+var isNew = (c) => c.reps === 0 && c.last === null;
+/** The interval (days) each grade would give, without changing the card. */
+function nextIvl(c, g, today) {
+	if (g === "again") return 1;
+	const late = c.last ? Math.max(0, daysBetween$3(c.due, today)) : 0;
+	const base = c.ivl + Math.floor(late / 2);
+	let ivl;
+	if (g === "hard") ivl = c.reps === 0 ? 1 : Math.max(c.ivl + 1, Math.round(base * 1.2));
+	else if (g === "good") ivl = c.reps === 0 ? 1 : c.reps === 1 ? 3 : Math.max(c.ivl + 1, Math.round(base * c.ease));
+	else ivl = c.reps === 0 ? 3 : c.reps === 1 ? 5 : Math.max(c.ivl + 2, Math.round(base * c.ease * 1.3));
+	return Math.min(365, Math.max(1, ivl));
+}
+/** The card after you graded it today. */
+function grade(c, g, today) {
+	const ivl = nextIvl(c, g, today);
+	if (g === "again") return {
+		...c,
+		ivl,
+		due: addDays$8(today, ivl),
+		reps: 0,
+		lapses: c.lapses + 1,
+		ease: clampEase(c.ease - .2),
+		last: today
+	};
+	const ease = g === "hard" ? clampEase(c.ease - .15) : g === "easy" ? clampEase(c.ease + .15) : c.ease;
+	return {
+		...c,
+		ivl,
+		due: addDays$8(today, ivl),
+		reps: c.reps + 1,
+		ease,
+		last: today
+	};
+}
+/** "1d", "3d", "2w", "4mo": what a grade button says. */
+function ivlText(days) {
+	if (days < 14) return `${days}d`;
+	if (days < 60) return `${Math.round(days / 7)}w`;
+	return `${Math.round(days / 30)}mo`;
+}
+/** New cards already started today (so the daily limit holds across sessions). */
+function newSeenToday(log, today) {
+	const first = /* @__PURE__ */ new Map();
+	for (const m of log) if (!first.has(m.id) || m.day < first.get(m.id)) first.set(m.id, m.day);
+	return [...first.values()].filter((d) => d === today).length;
+}
+/** Today's review queue: due cards first (oldest due first), then new ones up to the daily limit. */
+function dueCards(cards, today, opts = {}) {
+	const live = cards.filter((c) => !c.off && (!opts.deck || c.deck === opts.deck));
+	const due = live.filter((c) => !isNew(c) && c.due <= today).sort((a, b) => a.due.localeCompare(b.due) || a.ivl - b.ivl || a.id.localeCompare(b.id));
+	const room = Math.max(0, (opts.newLimit ?? 12) - (opts.newSeen ?? 0));
+	const fresh = live.filter(isNew).sort((a, b) => a.created.localeCompare(b.created) || a.id.localeCompare(b.id)).slice(0, room);
+	return [...due, ...fresh];
+}
+function deckStats(cards, log, today, newSeen = 0) {
+	const q = dueCards(cards, today, { newSeen });
+	const recent = log.filter((m) => daysBetween$3(m.day, today) < 30);
+	const days = new Set(log.map((m) => m.day));
+	let streak = 0;
+	for (let d = days.has(today) ? today : addDays$8(today, -1); days.has(d); d = addDays$8(d, -1)) streak++;
+	const decks = /* @__PURE__ */ new Map();
+	for (const c of cards.filter((x) => !x.off)) {
+		const d = decks.get(c.deck) ?? {
+			total: 0,
+			due: 0
+		};
+		d.total++;
+		if (q.includes(c)) d.due++;
+		decks.set(c.deck, d);
+	}
+	return {
+		total: cards.filter((c) => !c.off).length,
+		due: q.filter((c) => !isNew(c)).length,
+		fresh: q.filter(isNew).length,
+		mature: cards.filter((c) => !c.off && c.ivl >= 21).length,
+		retention: recent.length >= 10 ? Math.round(recent.filter((m) => m.grade !== "again").length / recent.length * 100) / 100 : null,
+		reviewedToday: log.filter((m) => m.day === today).length,
+		streak,
+		decks: [...decks.entries()].map(([deck, v]) => ({
+			deck,
+			...v
+		})).sort((a, b) => b.due - a.due || b.total - a.total || a.deck.localeCompare(b.deck))
+	};
+}
+function cleanCards(raw) {
+	if (!Array.isArray(raw)) return [];
+	const day = /^\d{4}-\d{2}-\d{2}$/;
+	const out = [];
+	for (const x of raw) {
+		if (!x || typeof x.id !== "string" || typeof x.front !== "string" || typeof x.back !== "string") continue;
+		const created = day.test(x.created) ? x.created : "2026-01-01";
+		out.push({
+			id: x.id.slice(0, 40),
+			front: x.front.slice(0, 300),
+			back: x.back.slice(0, 600),
+			deck: typeof x.deck === "string" && x.deck.trim() ? x.deck.slice(0, 40) : "General",
+			...typeof x.src === "string" ? { src: x.src.slice(0, 80) } : {},
+			created,
+			due: day.test(x.due) ? x.due : created,
+			ivl: Number.isFinite(x.ivl) ? Math.max(0, Math.min(365, Math.round(x.ivl))) : 0,
+			ease: Number.isFinite(x.ease) ? clampEase(x.ease) : START_EASE,
+			reps: Number.isFinite(x.reps) ? Math.max(0, Math.round(x.reps)) : 0,
+			lapses: Number.isFinite(x.lapses) ? Math.max(0, Math.round(x.lapses)) : 0,
+			last: day.test(x.last) ? x.last : null,
+			...x.off === true ? { off: true } : {}
+		});
+	}
+	return out.slice(0, 3e3);
+}
+function cleanMarks(raw) {
+	if (!Array.isArray(raw)) return [];
+	return raw.filter((m) => m && /^\d{4}-\d{2}-\d{2}$/.test(m.day) && typeof m.id === "string" && GRADES.includes(m.grade)).slice(-1500);
+}
+// src/core/career/essays.ts
+var STEP_LABEL$1 = {
+	outline: "Outline",
+	draft: "Draft",
+	edit: "Edit",
+	submit: "Submit"
+};
+var clamp$1 = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+function essayStatus(e, today) {
+	const open = e.steps.filter((s) => !s.done);
+	const behind = open.filter((s) => s.day < today);
+	const total = e.steps.reduce((t, s) => t + s.minutes, 0);
+	const done = e.steps.filter((s) => s.done).reduce((t, s) => t + s.minutes, 0);
+	return {
+		state: !open.length ? "done" : today > e.due ? "late" : behind.length ? "behind" : "on track",
+		next: open[0] ?? null,
+		behind,
+		daysLeft: daysBetween$3(today, e.due),
+		pct: total ? Math.round(done / total * 100) : 0,
+		minutesLeft: total - done
+	};
+}
+/** Behind? The open steps move up to start today, keeping their order and the due day. */
+function replan(e, today) {
+	const open = e.steps.filter((s) => !s.done);
+	if (!open.length) return e;
+	const due = e.due < today ? today : e.due;
+	const span = daysBetween$3(today, due) + 1;
+	const days = open.map((_, i) => addDays$8(today, Math.min(span - 1, Math.floor(i * span / open.length))));
+	days[days.length - 1] = due;
+	const byId = new Map(open.map((s, i) => [s.id, days[i]]));
+	return {
+		...e,
+		tight: span < open.length,
+		steps: e.steps.map((s) => byId.has(s.id) ? {
+			...s,
+			day: byId.get(s.id),
+			taskId: void 0
+		} : s)
+	};
+}
+/** Today's steps across all essays (and the ones you're behind on), for the planner and the study pack. */
+function stepsToday(list, today) {
+	return list.flatMap((e) => e.steps.filter((s) => !s.done && s.day <= today).map((step) => ({
+		essay: e,
+		step
+	}))).sort((a, b) => a.step.day.localeCompare(b.step.day));
+}
+/** The essays you're behind on: what Ben flags. */
+function behindFlags(list, today) {
+	return list.map((e) => ({
+		e,
+		st: essayStatus(e, today)
+	})).filter((x) => x.st.state === "behind" || x.st.state === "late").map(({ e, st }) => `${e.title}: ${st.behind.length} step${st.behind.length === 1 ? "" : "s"} behind (${st.behind.map((s) => s.label).join(", ")}), due ${st.daysLeft < 0 ? `${-st.daysLeft} days ago` : st.daysLeft === 0 ? "today" : `in ${st.daysLeft} day${st.daysLeft === 1 ? "" : "s"}`}`);
+}
+function essaysLine(list, today) {
+	const open = list.filter((e) => essayStatus(e, today).state !== "done");
+	if (!open.length) return "";
+	return `Essays: ${open.slice(0, 3).map((e) => {
+		const st = essayStatus(e, today);
+		return `${e.title} due ${e.due} (${st.state}${st.next ? `, next: ${st.next.label} ${st.next.day === today ? "today" : st.next.day}` : ""})`;
+	}).join("; ")}`;
+}
+function cleanEssays(raw) {
+	const day = /^\d{4}-\d{2}-\d{2}$/;
+	const kinds = [
+		"outline",
+		"draft",
+		"edit",
+		"submit"
+	];
+	return (Array.isArray(raw) ? raw : []).filter((e) => e && typeof e.id === "string" && day.test(e.due) && Array.isArray(e.steps)).map((e) => ({
+		id: e.id.slice(0, 40),
+		title: String(e.title ?? "Essay").slice(0, 100),
+		due: e.due,
+		words: clamp$1(Number(e.words) || 0, 100, 2e4),
+		added: day.test(e.added) ? e.added : e.due,
+		tight: e.tight === true,
+		steps: e.steps.filter((s) => s && typeof s.id === "string" && kinds.includes(s.kind) && day.test(s.day)).map((s) => ({
+			id: s.id.slice(0, 50),
+			kind: s.kind,
+			label: String(s.label ?? STEP_LABEL$1[s.kind]).slice(0, 30),
+			day: s.day,
+			minutes: clamp$1(Math.round(Number(s.minutes) || 25), 5, 240),
+			done: s.done === true,
+			...typeof s.taskId === "string" ? { taskId: s.taskId.slice(0, 40) } : {}
+		}))
+	})).slice(0, 60);
+}
+// src/core/career/studyPack.ts
+var PACK_ICON = {
+	cards: "🃏",
+	ctf: "🚩",
+	reading: "📖",
+	essay: "✍️",
+	notes: "🗒️"
+};
+var PACK_SUBJECT = "Study pack";
+/**
+* A pack that fits `minutes` (10–25): due cards first, then one essay
+* paragraph when a draft step is due, one CTF hint, one reading. `turn`
+* rotates the queue so each pack offers something new.
+*/
+function buildPack(input) {
+	const budget = Math.max(10, Math.min(25, Math.round(input.minutes ?? 20)));
+	const items = [];
+	let left = budget;
+	const add = (it) => {
+		if (left < 3) return;
+		const m = Math.min(it.minutes, left);
+		items.push({
+			...it,
+			minutes: m
+		});
+		left -= m;
+	};
+	if (input.dueCards > 0) add({
+		kind: "cards",
+		text: `${Math.min(input.dueCards, 30)} flashcard${input.dueCards === 1 ? "" : "s"} due`,
+		minutes: Math.min(10, Math.max(3, Math.ceil(Math.min(input.dueCards, 30) / 2)))
+	});
+	const draft = input.essaySteps.find((s) => s.kind === "draft") ?? input.essaySteps.find((s) => s.kind === "outline" || s.kind === "edit");
+	if (draft) add({
+		kind: "essay",
+		text: draft.kind === "draft" ? `Write one paragraph of "${draft.title}"` : draft.kind === "outline" ? `Jot 3 outline points for "${draft.title}"` : `Edit one page of "${draft.title}"`,
+		minutes: 10,
+		ref: draft.ref
+	});
+	const open = input.queue.filter((q) => !q.done);
+	const turn = Math.max(0, input.turn ?? 0);
+	const pick = (k) => {
+		const list = open.filter((q) => q.kind === k);
+		return list.length ? list[turn % list.length] : null;
+	};
+	const ctf = pick("ctf");
+	if (ctf) add({
+		kind: "ctf",
+		text: `Try one hint: ${ctf.text}`,
+		minutes: 8,
+		ref: ctf.id,
+		link: ctf.link
+	});
+	const read = pick("reading") ?? pick("other");
+	if (read) add({
+		kind: "reading",
+		text: read.kind === "reading" ? `Read: ${read.text}` : read.text,
+		minutes: 10,
+		ref: read.id,
+		link: read.link
+	});
+	if (!items.length || left >= 8) add({
+		kind: "notes",
+		text: items.length ? "Reread today's lecture notes and star one thing to remember" : "Reread your latest notes and turn 3 facts into flashcards",
+		minutes: Math.min(10, left)
+	});
+	return {
+		minutes: Math.max(10, items.reduce((t, i) => t + i.minutes, 0)),
+		items
+	};
+}
+var toMin$5 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+/** Is now inside tonight's work window (and the shift isn't off)? `nowMin` is minutes after midnight. */
+function inShift(work, nowMin) {
+	if (!work || work.mode === "off" || !/^\d\d:\d\d$/.test(work.from) || !/^\d\d:\d\d$/.test(work.to)) return false;
+	return nowMin >= toMin$5(work.from) && nowMin < toMin$5(work.to);
+}
+/** The pack as a Telegram / island message (plain text; the caller escapes it). */
+function packText(p) {
+	return [`📚 ${p.minutes}-min study pack for a quiet moment:`, ...p.items.map((i) => `${PACK_ICON[i.kind]} ${i.text} · ${i.minutes} min`)].join("\n");
+}
+/** Finished packs: focus sessions named "Study pack" (the timer is the proof). */
+function packsDone(sessions, from, to) {
+	const list = sessions.filter((s) => s.day >= from && s.day <= to && s.subject.toLowerCase().startsWith("Study pack".toLowerCase()));
+	return {
+		count: list.length,
+		minutes: list.reduce((t, s) => t + s.minutes, 0)
+	};
+}
+function cleanQueue(raw) {
+	const kinds = [
+		"ctf",
+		"reading",
+		"other"
+	];
+	return (Array.isArray(raw) ? raw : []).filter((q) => q && typeof q.id === "string" && typeof q.text === "string" && kinds.includes(q.kind)).map((q) => ({
+		id: q.id.slice(0, 40),
+		kind: q.kind,
+		text: q.text.slice(0, 160),
+		link: typeof q.link === "string" && /^https?:\/\//i.test(q.link) ? q.link.slice(0, 300) : null,
+		done: q.done === true,
+		added: /^\d{4}-\d{2}-\d{2}$/.test(q.added) ? q.added : "2026-01-01"
+	})).slice(0, 200);
+}
+// src/core/career/money.ts
+var DEFAULT_PLAN = {
+	months: 3,
+	payPct: 20,
+	careerPct: 25,
+	careerGoal: null,
+	careerGoalName: "Certificate voucher",
+	investMonthly: 500,
+	investRate: 5,
+	investYears: 10,
+	incomeTarget: null,
+	moves: [],
+	fundStart: 0
+};
+var B$4 = (t) => Math.abs(Number(t?.base ?? t?.amount) || 0);
+var live$1 = (t) => t && !t.deleted && typeof t.date === "string" && /^\d{4}-\d{2}-\d{2}/.test(t.date);
+var lei$5 = (bani) => Math.round(bani / 100);
+var prevMonths = (today, n) => {
+	const first = /* @__PURE__ */ new Date(`${today.slice(0, 7)}-01T12:00:00Z`);
+	return Array.from({ length: n }, (_, i) => {
+		const d = new Date(first);
+		d.setUTCMonth(d.getUTCMonth() - (i + 1));
+		return d.toISOString().slice(0, 7);
+	});
+};
+/** Average spending a month (lei) over the last 3 full months that have records, or null. */
+function monthlyCosts(finance, today) {
+	const tx = Array.isArray(finance?.tx) ? finance.tx.filter(live$1) : [];
+	const months = prevMonths(today, 3);
+	const exp = tx.filter((t) => t.type === "expense" && !t.loan && months.includes(t.date.slice(0, 7)));
+	const active = new Set(exp.map((t) => t.date.slice(0, 7))).size;
+	if (!active) return null;
+	return {
+		lei: Math.round(lei$5(exp.reduce((s, t) => s + B$4(t), 0)) / active),
+		months: active
+	};
+}
+/** What sits in your savings accounts in Finance Helper (lei), or null when there are none. */
+function savingsBalance(finance) {
+	const accounts = (finance?.settings?.accounts ?? []).filter((a) => a && !a.archived && (a.savings === true || a.kind === "savings"));
+	if (!accounts.length) return null;
+	const ids = new Set(accounts.map((a) => a.id));
+	let bal = accounts.reduce((s, a) => s + (Number(a.start) || 0), 0);
+	for (const t of Array.isArray(finance?.tx) ? finance.tx.filter(live$1) : []) {
+		const a = Number(t.amount) || 0;
+		if (t.type === "income" && ids.has(t.account)) bal += a;
+		else if (t.type === "expense" && ids.has(t.account)) bal -= a;
+		else if (t.type === "transfer") {
+			if (ids.has(t.from)) bal -= a;
+			if (ids.has(t.to)) bal += Number(t.toAmount ?? t.amount) || 0;
+		}
+	}
+	return lei$5(bal);
+}
+function careerFund(plan, answers, spends) {
+	const put = Math.round(answers.reduce((s, a) => s + a.moved, 0) * (plan.careerPct / 100));
+	const spent = spends.reduce((s, x) => s + x.lei, 0);
+	const left = Math.max(0, put - spent);
+	return {
+		in: put,
+		spent,
+		left,
+		goal: plan.careerGoal,
+		pct: plan.careerGoal ? Math.min(100, Math.round(left / plan.careerGoal * 100)) : null
+	};
+}
+/**
+* With a savings account in Finance Helper, "saved" is its balance minus the
+* career fund; without one, your own starting number plus what you moved
+* (minus the career share).
+*/
+function emergencyFund(plan, finance, today, fund, moved = 0) {
+	const c = monthlyCosts(finance, today);
+	const bal = savingsBalance(finance);
+	const saved = Math.max(0, bal != null ? bal - fund.left : plan.fundStart + moved - fund.in);
+	const target = c ? c.lei * plan.months : null;
+	return {
+		costs: c?.lei ?? null,
+		target,
+		saved,
+		pct: target ? Math.min(100, Math.round(saved / target * 100)) : null,
+		left: target != null ? Math.max(0, target - saved) : null,
+		monthsCovered: c && c.lei > 0 ? Math.round(saved / c.lei * 10) / 10 : null,
+		source: bal == null ? "your own number" : "savings account",
+		full: target != null && saved >= target
+	};
+}
+/** Incomes from the last 14 days you haven't answered yet, newest first. */
+function payAsks(finance, answers, today, payPct) {
+	const done = new Set(answers.map((a) => a.txId));
+	const from = addDays$8(today, -14);
+	return (Array.isArray(finance?.tx) ? finance.tx.filter(live$1) : []).filter((t) => t.type === "income" && !t.loan && t.date.slice(0, 10) >= from && t.date.slice(0, 10) <= today && !done.has(String(t.id))).sort((a, b) => b.date.localeCompare(a.date)).map((t) => ({
+		txId: String(t.id),
+		day: t.date.slice(0, 10),
+		income: lei$5(B$4(t)),
+		ask: Math.round(lei$5(B$4(t)) * payPct / 100),
+		note: String(t.note || t.category || "Income").slice(0, 40)
+	})).filter((a) => a.income > 0);
+}
+function answerPay(answers, ask, moved, today) {
+	return [...answers.filter((a) => a.txId !== ask.txId), {
+		txId: ask.txId,
+		day: ask.day,
+		moved: Math.max(0, Math.round(moved)),
+		answered: today
+	}].sort((a, b) => a.day.localeCompare(b.day)).slice(-200);
+}
+/** Paid yourself first this many incomes in a row (latest first), and the best run. */
+function payStreak(answers) {
+	const list = [...answers].sort((a, b) => a.day.localeCompare(b.day) || a.answered.localeCompare(b.answered));
+	let run = 0;
+	let best = 0;
+	for (const a of list) {
+		run = a.moved > 0 ? run + 1 : 0;
+		best = Math.max(best, run);
+	}
+	return {
+		now: run,
+		best,
+		total: list.reduce((s, a) => s + a.moved, 0)
+	};
+}
+function incomeSource(t) {
+	const s = `${t.category ?? ""} ${t.sub ?? ""} ${t.note ?? ""}`.toLowerCase();
+	if (/scholar|bursa|bursă|stipend|grant|стипенд/.test(s)) return "scholarship";
+	if (/freelanc|gig|client|invoice|project|upwork|fiverr|factur|заказ/.test(s)) return "freelance";
+	if (/salar|shift|wage|work|job|pay|salariu|tura|tură|зарплат|смен/.test(s)) return "shift";
+	return "other";
+}
+function incomeView(finance, today, target) {
+	const tx = Array.isArray(finance?.tx) ? finance.tx.filter((t) => live$1(t) && t.type === "income" && !t.loan) : [];
+	const month = today.slice(0, 7);
+	const sum = (m) => lei$5(tx.filter((t) => t.date.startsWith(m)).reduce((s, t) => s + B$4(t), 0));
+	const bySource = {
+		shift: 0,
+		freelance: 0,
+		scholarship: 0,
+		other: 0
+	};
+	for (const t of tx.filter((t) => t.date.startsWith(month))) bySource[incomeSource(t)] += lei$5(B$4(t));
+	const total = sum(month);
+	const past = prevMonths(today, 3).map(sum).filter((x) => x > 0);
+	const history = [...prevMonths(today, 5).reverse(), month].map((m) => ({
+		month: m,
+		total: sum(m)
+	}));
+	return {
+		month,
+		total,
+		bySource,
+		target,
+		pct: target ? Math.min(100, Math.round(total / target * 100)) : null,
+		gap: target ? Math.max(0, target - total) : null,
+		avg3: past.length ? Math.round(past.reduce((s, x) => s + x, 0) / past.length) : null,
+		history
+	};
+}
+/**
+* A fixed monthly amount, compounded monthly at an assumed yearly rate (and
+* 2 points lower and higher, to show it isn't a promise). Lei, rounded.
+*/
+function projection(monthly, ratePct, years) {
+	const m = Math.max(0, monthly);
+	const n = Math.max(1, Math.min(40, Math.round(years)));
+	const grow = (r, months) => {
+		const i = Math.max(-.99, r) / 100 / 12;
+		return i === 0 ? m * months : m * ((Math.pow(1 + i, months) - 1) / i) * (1 + i);
+	};
+	return Array.from({ length: n + 1 }, (_, y) => ({
+		year: y,
+		paid: Math.round(m * 12 * y),
+		value: Math.round(grow(ratePct, 12 * y)),
+		low: Math.round(grow(Math.max(0, ratePct - 2), 12 * y)),
+		high: Math.round(grow(ratePct + 2, 12 * y))
+	}));
+}
+/** One line for Ben's context. */
+function moneyPlanLine(plan, ef, streak, income, fund, asks) {
+	const parts = [];
+	if (ef.target) parts.push(`emergency fund ${ef.saved.toLocaleString("en-US")} of ${ef.target.toLocaleString("en-US")} lei (${ef.pct}%, ${plan.months} months of costs)`);
+	if (streak.now) parts.push(`paid himself first ${streak.now}× in a row`);
+	if (asks) parts.push(`${asks} income${asks === 1 ? "" : "s"} waiting for "pay yourself first"`);
+	if (income.target) parts.push(`income ${income.total.toLocaleString("en-US")} of ${income.target.toLocaleString("en-US")} lei this month`);
+	if (fund.goal) parts.push(`career fund ${fund.left} of ${fund.goal} lei`);
+	return parts.length ? `Money plan: ${parts.join(" · ")}` : "";
+}
+function cleanPlan$1(raw) {
+	const o = raw && typeof raw === "object" ? raw : {};
+	const n = (x, d, lo, hi) => typeof x === "number" && Number.isFinite(x) ? Math.max(lo, Math.min(hi, Math.round(x))) : d;
+	const opt = (x) => typeof x === "number" && Number.isFinite(x) && x > 0 ? Math.round(Math.min(x, 1e7)) : null;
+	return {
+		months: n(o.months, DEFAULT_PLAN.months, 1, 12),
+		payPct: n(o.payPct, DEFAULT_PLAN.payPct, 1, 80),
+		careerPct: n(o.careerPct, DEFAULT_PLAN.careerPct, 0, 100),
+		careerGoal: opt(o.careerGoal),
+		careerGoalName: typeof o.careerGoalName === "string" && o.careerGoalName.trim() ? o.careerGoalName.slice(0, 60) : DEFAULT_PLAN.careerGoalName,
+		investMonthly: n(o.investMonthly, DEFAULT_PLAN.investMonthly, 0, 1e6),
+		investRate: typeof o.investRate === "number" && Number.isFinite(o.investRate) ? Math.max(0, Math.min(12, Math.round(o.investRate * 10) / 10)) : DEFAULT_PLAN.investRate,
+		investYears: n(o.investYears, DEFAULT_PLAN.investYears, 1, 40),
+		incomeTarget: opt(o.incomeTarget),
+		moves: (Array.isArray(o.moves) ? o.moves : []).filter((m) => m && typeof m.id === "string" && typeof m.text === "string").map((m) => ({
+			id: m.id.slice(0, 40),
+			text: m.text.slice(0, 120),
+			done: m.done === true
+		})).slice(0, 20),
+		fundStart: n(o.fundStart, 0, 0, 1e8)
+	};
+}
+function cleanAnswers(raw) {
+	const day = /^\d{4}-\d{2}-\d{2}$/;
+	return (Array.isArray(raw) ? raw : []).filter((a) => a && typeof a.txId === "string" && day.test(a.day) && day.test(a.answered) && Number.isFinite(a.moved)).map((a) => ({
+		txId: a.txId.slice(0, 60),
+		day: a.day,
+		moved: Math.max(0, Math.round(a.moved)),
+		answered: a.answered
+	})).slice(-200);
+}
+function cleanSpends(raw) {
+	const day = /^\d{4}-\d{2}-\d{2}$/;
+	return (Array.isArray(raw) ? raw : []).filter((s) => s && typeof s.id === "string" && typeof s.what === "string" && day.test(s.day) && Number.isFinite(s.lei)).map((s) => ({
+		id: s.id.slice(0, 40),
+		what: s.what.slice(0, 80),
+		lei: Math.max(0, Math.round(s.lei)),
+		day: s.day
+	})).slice(-100);
+}
+// src/core/career/letter.ts
+var monthLabel$1 = (month) => (/* @__PURE__ */ new Date(`${month}-15T12:00:00Z`)).toLocaleDateString("en-GB", {
+	month: "long",
+	year: "numeric",
+	timeZone: "UTC"
+});
+var n = (x) => x.toLocaleString("en-US");
+var hours$2 = (min) => min >= 60 ? `${Math.round(min / 60 * 10) / 10} h` : `${min} min`;
+var plural$1 = (k, one, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+/** The days in a month (for the quota: about 4.3 weeks). */
+var weeksIn = (month) => new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate() / 7;
+/** The one change for next month, by what held you back most. */
+function pickChange(f) {
+	const want = Math.round(f.quota * weeksIn(f.month));
+	if (f.quota > 0 && f.applied < want * .6) return `Applications: ${f.applied} of about ${want}. Block 45 minutes every Tuesday and Thursday just for applying, and send ${f.quota} a week before anything else.`;
+	if (!f.proofs.length) return "No portfolio entry this month. After your next CTF or lab, spend 15 minutes writing it up the same day: problem, what you did, the skills.";
+	if (f.essaysLate > 0) return `${plural$1(f.essaysLate, "essay")} went late. Put every assignment in the planner the day you get it, so the outline happens a week early.`;
+	if (f.retention != null && f.retention < .8) return `Your cards stuck ${Math.round(f.retention * 100)}% of the time. Make them smaller: one fact per card, and review every day, even 5 minutes.`;
+	if (f.careerMinutes < 480) return `Only ${hours$2(f.careerMinutes)} of career work. Use two shift packs a night and aim for 3 hours a week of portfolio, labs and applications.`;
+	if (f.incomeTarget && f.income < f.incomeTarget) return `Income was ${n(f.income)} of ${n(f.incomeTarget)} lei. Pick one move from your list and do its first step this week.`;
+	if (f.interviews === 0 && f.applied > 0) return `${plural$1(f.applied, "application")} and no interview yet. Rewrite your CV's top third around your two best portfolio entries and ask one person to check it.`;
+	return `A strong month. Raise the weekly quota to ${f.quota + 1}, or aim one level higher in the roles you apply for.`;
+}
+function careerLetter(f, today) {
+	const want = Math.round(f.quota * weeksIn(f.month));
+	const lines = [];
+	lines.push(f.applied ? `📨 You sent ${plural$1(f.applied, "application")}${f.quota ? ` (the quota asked for about ${want})` : ""}${f.interviews ? `, got ${plural$1(f.interviews, "interview")}` : ""}${f.offers ? ` and ${plural$1(f.offers, "offer")} 🎉` : ""}.` : "📨 No applications this month.");
+	lines.push(f.proofs.length ? `🧾 ${plural$1(f.proofs.length, "portfolio entry", "portfolio entries")}: ${f.proofs.slice(0, 4).map((p) => p.title).join(", ")}${f.proofs.length > 4 ? "…" : ""}.` : "🧾 Nothing new in the portfolio.");
+	if (f.newSkills.length) lines.push(`🧠 New skills on record: ${f.newSkills.slice(0, 6).join(", ")}.`);
+	lines.push(`⏱ ${hours$2(f.careerMinutes)} of career work${f.packs ? `, ${plural$1(f.packs, "shift pack")} included` : ""}.`);
+	if (f.cardsReviewed) lines.push(`🃏 ${n(f.cardsReviewed)} flashcard reviews${f.retention != null ? `, ${Math.round(f.retention * 100)}% remembered` : ""}.`);
+	if (f.essaysDone || f.essaysLate) lines.push(`✍️ ${plural$1(f.essaysDone, "assignment")} done${f.essaysLate ? `, ${f.essaysLate} late` : " on time"}.`);
+	lines.push(f.incomeTarget ? `💸 Income ${n(f.income)} of ${n(f.incomeTarget)} lei (${Math.round(f.income / f.incomeTarget * 100)}%).` : `💸 Income ${n(f.income)} lei.`);
+	if (f.efPct != null) lines.push(`🛟 Emergency fund ${f.efPct}%${f.payStreak ? `, paid yourself first ${f.payStreak}× in a row` : ""}.`);
+	return {
+		month: f.month,
+		written: today,
+		title: `Your career in ${monthLabel$1(f.month)}`,
+		lines,
+		change: pickChange(f)
+	};
+}
+/** The month a letter is due for (last month, in the first week), or null. */
+function letterDue(letters, today) {
+	if (Number(today.slice(8, 10)) > 7) return null;
+	const d = /* @__PURE__ */ new Date(`${today.slice(0, 7)}-01T12:00:00Z`);
+	d.setUTCMonth(d.getUTCMonth() - 1);
+	const month = d.toISOString().slice(0, 7);
+	return letters.some((l) => l.month === month) ? null : month;
+}
+/** The letter as one Telegram message (plain text; the caller escapes it). */
+var letterText = (l) => [
+	`💼 ${l.title}`,
+	"",
+	...l.lines,
+	"",
+	`👉 One change: ${l.change}`
+].join("\n");
+function cleanLetters(raw) {
+	return (Array.isArray(raw) ? raw : []).filter((l) => l && /^\d{4}-\d{2}$/.test(l.month) && Array.isArray(l.lines) && typeof l.change === "string").map((l) => ({
+		month: l.month,
+		written: /^\d{4}-\d{2}-\d{2}$/.test(l.written) ? l.written : `${l.month}-28`,
+		title: String(l.title ?? `Your career in ${monthLabel$1(l.month)}`).slice(0, 80),
+		lines: l.lines.map((x) => String(x).slice(0, 300)).slice(0, 12),
+		change: l.change.slice(0, 400)
+	})).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 24);
+}
+// src/core/benPushes.ts
+var AREAS$1 = [
+	"study",
+	"work",
+	"body",
+	"sleep",
+	"chores",
+	"money"
+];
+/** The old single "how hard Ben pushes" becomes every area's level (until you change one). */
+function levelFromPush(p) {
+	return p === "gentle" ? "soft" : p === "firm" ? "normal" : "hard";
+}
+var isLevel = (x) => x === "soft" || x === "normal" || x === "hard";
+/** Saved levels, checked; a missing area takes the old single push level. */
+function cleanAreas(raw, push) {
+	const o = raw && typeof raw === "object" ? raw : {};
+	const d = levelFromPush(push);
+	return Object.fromEntries(AREAS$1.map((a) => [a, isLevel(o[a]) ? o[a] : d]));
+}
+var TYPE_AREA = {
+	brief: "study",
+	weekly: "study",
+	shutdown: "sleep",
+	winddown: "sleep",
+	bed: "sleep",
+	water: "body",
+	move: "body",
+	eyes: "body",
+	training: "body",
+	money: "money",
+	chores: "chores",
+	work: "work"
+};
+var WORDS = [
+	["work", /\b(work|shift|job|office|client|standup|stand-up|invoice report)\b/i],
+	["body", /\b(gym|workout|training|train|run|running|walk|stretch|yoga|swim|push-?ups|sport)\b/i],
+	["sleep", /\b(sleep|bed|nap|wind[- ]?down)\b/i],
+	["chores", /\b(clean|cleaning|laundry|groceries|grocery|shopping|cook|cooking|dishes|tidy|chores?|errands?|vacuum|declutter)\b/i],
+	["money", /\b(budget|money|bank|bills?|finance|pay|taxes|spending|expenses?)\b/i]
+];
+/** The area a block or task belongs to, from its name (study when nothing else fits: deep work is mostly study). */
+function areaOfTitle(title) {
+	for (const [a, re] of WORDS) if (re.test(title)) return a;
+	return "study";
+}
+/** A nudge's area: from its kind, or for a block (check-in, drift) from the block's name. */
+function areaOf$1(type, title) {
+	if (type === "checkin" || type === "drift") return areaOfTitle(title ?? "");
+	return TYPE_AREA[type];
+}
+var levelFor = (levels, type, title) => levels[areaOf$1(type, title)];
+function areaTuning(l) {
+	if (l === "soft") return {
+		firm: false,
+		firmAfterMin: 15,
+		driftMin: 15,
+		gapScale: 1.5
+	};
+	if (l === "normal") return {
+		firm: true,
+		firmAfterMin: 10,
+		driftMin: 12,
+		gapScale: 1
+	};
+	return {
+		firm: true,
+		firmAfterMin: 10,
+		driftMin: 10,
+		gapScale: .75
+	};
+}
+var DEFAULT_PUSH_PREFS = {
+	checkins: true,
+	brief: true,
+	shutdown: true,
+	weekly: true,
+	shutdownBefore: 30,
+	offDays: []
+};
+function cleanPushPrefs(raw) {
+	const o = raw && typeof raw === "object" ? raw : {};
+	const d = DEFAULT_PUSH_PREFS;
+	const b = (x, def) => typeof x === "boolean" ? x : def;
+	const before = typeof o.shutdownBefore === "number" && Number.isFinite(o.shutdownBefore) ? Math.max(10, Math.min(120, Math.round(o.shutdownBefore / 5) * 5)) : d.shutdownBefore;
+	const offDays = Array.isArray(o.offDays) ? [...new Set(o.offDays.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))].sort() : d.offDays;
+	return {
+		checkins: b(o.checkins, d.checkins),
+		brief: b(o.brief, d.brief),
+		shutdown: b(o.shutdown, d.shutdown),
+		weekly: b(o.weekly, d.weekly),
+		shutdownBefore: before,
+		offDays
+	};
+}
+var weekdayOf$1 = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+/** A day off: one of your days off, or a sick / travel day (Life mode). */
+function isOffDay(prefs, day, mode) {
+	return prefs.offDays.includes(weekdayOf$1(day)) || mode === "sick" || mode === "travel";
+}
+var HM$8 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm$2 = (x) => typeof x === "string" && HM$8.test(x);
+var minOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var localMin = (now) => {
+	const d = new Date(now);
+	return d.getHours() * 60 + d.getMinutes();
+};
+var hmOf$5 = (ms) => new Date(ms).toTimeString().slice(0, 5);
+/** Minutes from now until a clock time tonight (bedtime may be after midnight): negative once it's past (until 05:00). */
+function minutesUntil$1(now, at) {
+	const night = (m) => (m - 720 + 1440) % 1440;
+	return night(minOf(at)) - night(localMin(now));
+}
+var PC_SEEN_KEY = "ben_pc_seen";
+function cleanPcSeen(raw) {
+	const o = raw;
+	return o && typeof o.at === "number" && Number.isFinite(o.at) ? {
+		at: o.at,
+		active: o.active === true
+	} : null;
+}
+/** You're at the PC now (as the server sees it). */
+var pcHere = (p, now) => !!p && p.active && now - p.at < 48e4;
+/** The one channel: the island while you're at the PC, Telegram otherwise. */
+var channelFor = (here) => here ? "island" : "telegram";
+var PUSH_LOG_KEY = "ben_pushes";
+var OPS = [
+	"start",
+	"later",
+	"skip",
+	"plan",
+	"ok",
+	"shutdown",
+	"tomorrow",
+	"drop",
+	"keep",
+	"back",
+	"more5"
+];
+var MARKS = [
+	"tomorrow",
+	"drop",
+	"keep"
+];
+function cleanPushLog(raw, day) {
+	const o = raw && typeof raw === "object" ? raw : {};
+	const recs = {};
+	if (o.day === day && o.recs && typeof o.recs === "object") for (const [k, v] of Object.entries(o.recs).slice(-120)) {
+		if (!v || typeof v !== "object" || typeof v.at !== "number") continue;
+		const r = v;
+		recs[k] = {
+			at: r.at,
+			via: r.via === "telegram" ? "telegram" : "island",
+			...OPS.includes(r.ans) ? { ans: r.ans } : {},
+			...typeof r.until === "number" ? { until: r.until } : {}
+		};
+	}
+	const sd = o.shutdown;
+	const shutdown = sd && sd.day === day && Array.isArray(sd.items) ? {
+		day,
+		items: sd.items.filter((x) => x && typeof x.id === "string" && typeof x.text === "string").slice(0, 8).map((x) => ({
+			id: x.id,
+			text: x.text.slice(0, 140),
+			kind: x.kind === "todo" ? "todo" : "mustdo",
+			...typeof x.ref === "string" ? { ref: x.ref } : {}
+		})),
+		marks: Object.fromEntries(Object.entries(sd.marks ?? {}).filter(([, m]) => MARKS.includes(m)))
+	} : void 0;
+	const outbox = Array.isArray(o.outbox) ? o.outbox.filter((x) => x && typeof x.key === "string" && typeof x.text === "string" && typeof x.at === "number").slice(-10) : [];
+	return {
+		day,
+		recs,
+		...shutdown ? { shutdown } : {},
+		outbox
+	};
+}
+/** Marks a push as shown; false when it already went out (anywhere). */
+function claim(log, key, via, now) {
+	if (log.recs[key]) return {
+		ok: false,
+		log
+	};
+	return {
+		ok: true,
+		log: {
+			...log,
+			recs: {
+				...log.recs,
+				[key]: {
+					at: now,
+					via
+				}
+			}
+		}
+	};
+}
+/** Your answer on a push (from any channel). "later" asks again after `minutes`. */
+function answerPush(log, key, op, now, minutes = 10) {
+	const cur = log.recs[key] ?? {
+		at: now,
+		via: "island"
+	};
+	return {
+		...log,
+		recs: {
+			...log.recs,
+			[key]: {
+				...cur,
+				ans: op,
+				...op === "later" ? { until: now + Math.max(5, Math.min(60, minutes)) * 6e4 } : {}
+			}
+		}
+	};
+}
+/** What the server sends from the outbox now (fresh, not yet sent), and the outbox left. */
+function outboxTake(log, now) {
+	return {
+		send: log.outbox.filter((x) => now - x.at < 9e5 && !log.recs[x.key]),
+		log: {
+			...log,
+			outbox: []
+		}
+	};
+}
+var checkinKey = (id, firm = false) => `${firm ? "checkin-firm" : "checkin"}:${id}`;
+var ASK = {
+	soft: ["{title} starts now. Ready when you are?", "{title} is up next, now. Shall we?"],
+	normal: ["{title} starts now, ready?", "Time for {title}. Ready?"],
+	hard: ["{title} starts now. Ready? Let’s go 💪", "{title}, now. Timer on and go 💪"]
+};
+var FIRM = {
+	soft: ["{title}: ready now?"],
+	normal: ["{title} started {m} min ago and the timer isn’t on. Start now?", "{m} min into {title}. Start it now?"],
+	hard: ["{m} min into {title} and nothing started 😤 Start it now.", "{title} began {m} min ago. No more waiting: start 😤"]
+};
+var pick = (lines, seed) => lines[Math.abs(Math.floor(seed)) % lines.length];
+var fill$1 = (t, v) => t.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
+var left = (b, now) => Math.max(5, Math.min(180, Math.round((b.end - now) / 6e4)));
+/**
+* The check-in now for the block that just started, or null: the ask at the
+* start, one follow-up 10 minutes later (Soft: only after "10 min later"),
+* then nothing. Never in a meeting, quiet hours, while a timer runs, or for
+* an event you go to. The caller sends it only on its own channel.
+*/
+function decideCheckin(i) {
+	if (!i.on || i.meeting || i.quiet || i.running) return null;
+	const b = i.blocks.filter((x) => x.focus && x.start <= i.now && x.end - i.now >= 6e5 && i.now - x.start < 24e5).sort((x, y) => y.start - x.start)[0];
+	if (!b) return null;
+	const level = levelFor(i.levels, "checkin", b.title);
+	const area = areaOfTitle(b.title);
+	const t = areaTuning(level);
+	const ask = i.log.recs[checkinKey(b.id)];
+	const channel = channelFor(i.here);
+	const seed = Math.floor(b.start / 6e4);
+	const startBtn = {
+		label: `▶ Start · ${left(b, i.now)} min`,
+		op: "start",
+		primary: true,
+		arg: b.title,
+		minutes: left(b, i.now)
+	};
+	if (!ask) {
+		if (i.now - b.start > 9e5) return null;
+		return {
+			key: checkinKey(b.id),
+			type: "checkin",
+			area,
+			level,
+			title: `${b.title} · ${hmOf$5(b.start)}`,
+			text: fill$1(pick(ASK[level], seed), { title: b.title }),
+			face: level === "hard" ? "😤" : "🎯",
+			channel,
+			buttons: [
+				startBtn,
+				{
+					label: "⏰ 10 min later",
+					op: "later",
+					minutes: 10
+				},
+				{
+					label: "Skip",
+					op: "skip"
+				}
+			]
+		};
+	}
+	if (ask.ans === "skip" || ask.ans === "start") return null;
+	if (i.log.recs[checkinKey(b.id, true)]) return null;
+	const snoozed = ask.ans === "later";
+	if (!t.firm && !snoozed) return null;
+	const due = snoozed ? ask.until ?? ask.at + 6e5 : ask.at + t.firmAfterMin * 6e4;
+	if (i.now < due) return null;
+	const m = Math.max(1, Math.round((i.now - b.start) / 6e4));
+	const words = snoozed && !t.firm ? fill$1(pick(FIRM.soft, seed), { title: b.title }) : fill$1(pick(FIRM[level === "soft" ? "normal" : level], seed), {
+		title: b.title,
+		m
+	});
+	return {
+		key: checkinKey(b.id, true),
+		type: "checkin",
+		area,
+		level,
+		title: `${b.title} · not started`,
+		text: words,
+		face: level === "hard" ? "😠" : "⏰",
+		channel,
+		buttons: [startBtn, {
+			label: "Skip it today",
+			op: "skip"
+		}]
+	};
+}
+var briefKey = (day) => `brief:${day}`;
+var litres = (ml) => `${(Math.round(ml / 100) / 10).toFixed(1)} L`;
+/** The 3 lines: the must-dos, the first block, the water goal. */
+function briefLines(o) {
+	const md = o.mustDos.filter(Boolean).slice(0, 3);
+	return [
+		md.length ? `✅ Must-dos: ${md.join(" · ")}` : "✅ No must-dos yet: tap Plan my day",
+		o.firstBlock ? `▶ First block: ${o.firstBlock.title} at ${hmOf$5(o.firstBlock.start)}` : "▶ No blocks planned yet",
+		`💧 Water goal: ${litres(o.waterTargetMl || 2e3)} today`
+	];
+}
+/** Due from your wake time for 2 hours, once a day, not on a day off. */
+function decideBrief(i) {
+	if (!i.prefs.brief || i.off || i.quiet || !isHm$2(i.wake)) return null;
+	const m = localMin(i.now);
+	const w = minOf(i.wake);
+	if (m < w || m >= w + 120) return null;
+	if (i.log.recs[briefKey(i.day)]) return null;
+	const level = levelFor(i.levels, "brief");
+	return {
+		key: briefKey(i.day),
+		type: "brief",
+		area: "study",
+		level,
+		title: level === "soft" ? "Good morning ☀️" : level === "normal" ? "Morning. Here’s today" : "Up. Here’s the day 💪",
+		text: briefLines(i).join("\n"),
+		face: "☀️",
+		channel: channelFor(i.here),
+		buttons: [{
+			label: "🗓 Plan my day",
+			op: "plan",
+			primary: true
+		}, {
+			label: "👍 Got it",
+			op: "ok"
+		}]
+	};
+}
+var shutdownKey = (day) => `shutdown:${day}`;
+function shutdownText(o) {
+	const d = o.done.filter(Boolean);
+	const lines = [d.length ? `✅ Done today: ${d.slice(0, 4).join(", ")}${d.length > 4 ? ` +${d.length - 4} more` : ""}` : "✅ Nothing ticked off today. Tomorrow starts with the first one."];
+	if (o.open.length) {
+		lines.push("Still open (each: Tomorrow / Drop / Keep today):");
+		o.open.slice(0, 6).forEach((x, k) => lines.push(`${k + 1}. ${x.text}`));
+	} else lines.push("Nothing left open 👌");
+	const bed = o.level === "soft" ? `🌙 Bed at ${o.bed}. Start winding down.` : o.level === "normal" ? `🌙 Bed at ${o.bed} (in ${o.minutes} min): screens off soon.` : `🌙 Bed at ${o.bed}, in ${o.minutes} min. Save, close, screens off.`;
+	lines.push(bed);
+	return lines.join("\n");
+}
+/** Due from `shutdownBefore` minutes before bed until bedtime, once, unless the day is closed or bed is logged. */
+function decideShutdown(i) {
+	if (!i.prefs.shutdown || i.closed || i.bedLogged || !isHm$2(i.bed)) return null;
+	const until = minutesUntil$1(i.now, i.bed);
+	if (until > i.prefs.shutdownBefore || until <= 0) return null;
+	if (i.log.recs[shutdownKey(i.day)]) return null;
+	const level = levelFor(i.levels, "shutdown");
+	const open = i.open.slice(0, 6);
+	return {
+		key: shutdownKey(i.day),
+		type: "shutdown",
+		area: "sleep",
+		level,
+		title: "Shut down the day",
+		text: shutdownText({
+			bed: i.bed,
+			minutes: until,
+			done: i.done,
+			open,
+			level
+		}),
+		face: "🌙",
+		channel: channelFor(i.here),
+		items: open,
+		buttons: [{
+			label: "🌙 Shut down",
+			op: "shutdown",
+			primary: true
+		}, {
+			label: "All to tomorrow",
+			op: "tomorrow",
+			arg: "*"
+		}]
+	};
+}
+/** Your choice for one open item (or `*`: every one not chosen yet). */
+function markItem(log, id, mark) {
+	const sd = log.shutdown;
+	if (!sd) return log;
+	const ids = id === "*" ? sd.items.filter((x) => !sd.marks[x.id]).map((x) => x.id) : sd.items.some((x) => x.id === id) ? [id] : [];
+	if (!ids.length) return log;
+	return {
+		...log,
+		shutdown: {
+			...sd,
+			marks: {
+				...sd.marks,
+				...Object.fromEntries(ids.map((k) => [k, mark]))
+			}
+		}
+	};
+}
+var MARK_WORD = {
+	tomorrow: "➡️ Tomorrow",
+	drop: "✗ Dropped",
+	keep: "✓ Keep today"
+};
+/** A score, the 3 best areas against their targets (wins) and the weakest one (the fix). */
+function weeklyCard(o) {
+	const ranked = o.metrics.filter((m) => m.target && m.target > 0).map((m) => ({
+		m,
+		k: m.now / m.target
+	})).sort((a, b) => b.k - a.k);
+	const line = (m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText ?? m.target}` : ""}`;
+	const wins = ranked.filter((x) => x.k > 0).slice(0, 3).map((x) => line(x.m));
+	if (o.win && !wins.length) wins.push(o.win);
+	const worst = ranked[ranked.length - 1];
+	const fix = worst && !wins.includes(line(worst.m)) ? line(worst.m) : o.leak || "Not enough data yet: log a full week.";
+	return {
+		score: o.score,
+		delta: o.score - o.prevScore,
+		wins: wins.length ? wins : ["You showed up."],
+		fix
+	};
+}
+function weeklyCardText(c, level = "normal") {
+	const head = `📊 Your week: ${c.score}/100 (${c.delta >= 0 ? "+" : ""}${c.delta} vs last week)`;
+	const fixWord = level === "hard" ? "🔧 Fix this, no excuses" : level === "soft" ? "🔧 One thing to look at" : "🔧 One thing to fix";
+	return [
+		head,
+		"",
+		"🏆 Wins",
+		...c.wins.map((w) => `• ${w}`),
+		"",
+		`${fixWord}: ${c.fix}`
+	].join("\n");
+}
+/** The weekly card for Telegram (HTML), with next week's focus and big 3 from the review under it. */
+function weeklyHtml(c, level, next) {
+	const e = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+	const [head, ...rest] = weeklyCardText(c, level).split("\n");
+	return [
+		`<b>${e(head)}</b>`,
+		...rest.map(e),
+		"",
+		`<b>Next week</b>: focus on ${e(next.focus)}${next.note ? ` (“${e(next.note)}”)` : ""}`,
+		...next.big3.map((b, i) => `${i + 1}. ${e(b)}`)
+	].join("\n");
+}
+var escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/** Callback data for a push button ("bp|<op>|<key or item>"), kept under Telegram's 64 bytes. */
+function pushCallback(op, key, arg) {
+	const c = {
+		later: "l",
+		skip: "s",
+		ok: "o",
+		plan: "p",
+		tomorrow: "t",
+		drop: "d",
+		keep: "k"
+	}[op];
+	if (!c) return null;
+	const d = `bp|${c}|${arg ?? key}`;
+	return d.length <= 64 ? d : null;
+}
+function readPushCallback(data) {
+	const m = /^bp\|([lsoptdk])\|(.+)$/.exec(data);
+	if (!m) return null;
+	return {
+		op: {
+			l: "later",
+			s: "skip",
+			o: "ok",
+			p: "plan",
+			t: "tomorrow",
+			d: "drop",
+			k: "keep"
+		}[m[1]],
+		ref: m[2]
+	};
+}
+/** The Telegram message for a push: HTML text and its buttons. `startData` makes the Start button (the bot's focus callback). */
+function pushTelegram(p, startData) {
+	const rows = [];
+	const top = [];
+	for (const b of p.buttons) if (b.op === "start" && b.arg && startData) top.push({
+		text: b.label,
+		callback_data: startData(b.arg)
+	});
+	else if (b.op === "shutdown") continue;
+	else if (b.op === "tomorrow" && b.arg === "*") top.push({
+		text: b.label,
+		callback_data: "bp|t|*"
+	});
+	else {
+		const cb = pushCallback(b.op, p.key, b.arg);
+		if (cb) top.push({
+			text: b.label,
+			callback_data: cb
+		});
+	}
+	if (p.items?.length) p.items.forEach((_x, k) => rows.push([
+		{
+			text: `${k + 1}. ➡️ Tomorrow`,
+			callback_data: `bp|t|${k}`
+		},
+		{
+			text: "✗ Drop",
+			callback_data: `bp|d|${k}`
+		},
+		{
+			text: "Keep today",
+			callback_data: `bp|k|${k}`
+		}
+	]));
+	if (top.length) rows.unshift(top);
+	const lines = p.text.split("\n").map(escHtml);
+	return {
+		text: [`${p.face} <b>${escHtml(p.title)}</b>`, ...lines].join("\n"),
+		keyboard: { inline_keyboard: rows }
+	};
+}
+var toCard = (p) => ({
+	type: p.type,
+	key: p.key,
+	title: p.title,
+	lines: p.text.split("\n"),
+	...p.items?.length ? { items: p.items } : {}
+});
+// src/core/lifeFit.ts
+var LIFE_FIT_KEY = "life_fit";
+var DEFAULT_BED = "23:30";
+/** The wake target when none is set (the sleep rule's long-standing default). */
+var DEFAULT_WAKE = "07:00";
+var DEFAULT_LIFE_FIT = {
+	latestBed: "00:00",
+	work: {
+		on: false,
+		days: [
+			1,
+			2,
+			3,
+			4,
+			5
+		],
+		from: "18:00",
+		to: "22:00",
+		minH: 1,
+		maxH: 3
+	},
+	push: "push",
+	tonight: null
+};
+var HM$7 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm$1 = (x) => typeof x === "string" && HM$7.test(x);
+var isEnd = (x) => isHm$1(x) || x === "24:00";
+var toMin$4 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var hm$6 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+var hours$1 = (x, d) => typeof x === "number" && Number.isFinite(x) ? Math.max(0, Math.min(12, Math.round(x * 2) / 2)) : d;
+function cleanLifeFit(raw) {
+	const o = raw && typeof raw === "object" ? raw : {};
+	const w = o.work && typeof o.work === "object" ? o.work : {};
+	const d = DEFAULT_LIFE_FIT.work;
+	const days = Array.isArray(w.days) ? [...new Set(w.days.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))].sort() : d.days;
+	const minH = hours$1(w.minH, d.minH);
+	const t = o.tonight;
+	const push = o.push === "gentle" || o.push === "firm" ? o.push : "push";
+	return {
+		latestBed: isHm$1(o.latestBed) ? o.latestBed : DEFAULT_LIFE_FIT.latestBed,
+		work: {
+			on: w.on === true,
+			days,
+			from: isHm$1(w.from) ? w.from : d.from,
+			to: isEnd(w.to) ? w.to : d.to,
+			minH,
+			maxH: Math.max(minH, hours$1(w.maxH, d.maxH))
+		},
+		push,
+		areas: cleanAreas(o.areas, push),
+		pushes: cleanPushPrefs(o.pushes),
+		tonight: t && typeof t.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.day) && (t.mode === "short" || t.mode === "off" || t.mode === "normal") ? {
+			day: t.day,
+			mode: t.mode
+		} : null
+	};
+}
+var weekday$3 = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+function workToday(fit, day) {
+	const w = fit.work;
+	if (!w.on || !w.days.includes(weekday$3(day)) || toMin$4(w.to) <= toMin$4(w.from)) return null;
+	const mode = fit.tonight?.day === day ? fit.tonight.mode : "normal";
+	if (mode === "off") return {
+		from: w.from,
+		to: w.to,
+		mode,
+		busy: null,
+		light: null
+	};
+	if (mode === "short") {
+		const end = Math.min(toMin$4(w.to), toMin$4(w.from) + Math.round(Math.max(.5, w.minH) * 60));
+		return {
+			from: w.from,
+			to: w.to,
+			mode,
+			busy: {
+				from: w.from,
+				to: end >= 1440 ? "24:00" : hm$6(end)
+			},
+			light: null
+		};
+	}
+	return {
+		from: w.from,
+		to: w.to,
+		mode,
+		busy: null,
+		light: {
+			from: w.from,
+			to: w.to
+		}
+	};
+}
+/** "short shift tonight", "no work tonight", "normal shift" (English, Romanian, Russian), or null. */
+function readShift(text) {
+	const t = text.toLowerCase().replace(/\s+/g, " ").trim();
+	if (t.length > 80) return null;
+	if (/\b(no work|not working|day off|no shift|off work|free tonight)\b/.test(t) || /(nu lucrez|liber azi|liber diseară|не работаю|выходной)/.test(t)) return "off";
+	if (/\b(short shift|shorter shift|short work)\b/.test(t) || /(tura scurt|lucrez pu[tț]in|короткая смена)/.test(t)) return "short";
+	if (/\b(normal shift|full shift|working as usual|work as usual)\b/.test(t) || /(tura normal|обычная смена)/.test(t)) return "normal";
+	return null;
+}
+/** Sets (or clears, with 'normal') tonight's change. */
+function setTonight(fit, day, mode) {
+	return {
+		...fit,
+		tonight: mode === "normal" ? null : {
+			day,
+			mode
+		}
+	};
+}
+var DAY_NAMES = [
+	"Sun",
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat"
+];
+var daysText = (days) => days.length === 7 ? "every day" : days.length === 5 && [
+	1,
+	2,
+	3,
+	4,
+	5
+].every((d) => days.includes(d)) ? "Mon–Fri" : days.map((d) => DAY_NAMES[d]).join(", ") || "no days";
+var usualText = (w) => w.minH === w.maxH ? `${w.minH} h` : `${w.minH}–${w.maxH} h`;
+/** The reply when you tell Ben about tonight. */
+function shiftReply(fit, day, mode) {
+	const w = workToday({
+		...fit,
+		tonight: {
+			day,
+			mode
+		}
+	}, day);
+	if (!w) return mode === "normal" ? "Ok, the usual plan." : "Noted. There is no work window set for today (Settings → Ben → My life).";
+	if (mode === "off") return `No work tonight: ${w.from}–${w.to} is free for real work today.`;
+	if (mode === "short") return `Short shift: ${w.busy.from}–${w.busy.to} is work, the rest until ${w.to} is free today.`;
+	return `Normal shift: ${w.from}–${w.to} stays for light tasks only.`;
+}
+/** One line for Ben's prompt: the sleep window, the work window and tonight. */
+function lifeFitLine(fit, day, sleep) {
+	const parts = [`MY LIFE: bed by ${sleep.bed} (latest ${fit.latestBed}), up at ${sleep.wake}.`];
+	const w = fit.work;
+	if (w.on) {
+		parts.push(`Work: ${daysText(w.days)} ${w.from}–${w.to}, but he usually works only ${usualText(w)} of it (it changes). Treat that window as partly busy: never deep focus there, light tasks and quick wins are fine.`);
+		const t = workToday(fit, day);
+		if (t?.mode === "off") parts.push(`Today: no work tonight, so ${t.from}–${t.to} is free.`);
+		else if (t?.mode === "short") parts.push(`Today: a short shift (${t.busy.from}–${t.busy.to}), the rest of the window is free.`);
+		else if (t) parts.push(`Today is a work day. If he says "short shift tonight" or "no work tonight", the free part opens up.`);
+	}
+	return parts.join(" ");
+}
+/** Each level within the existing caps (`maxMessages`, `maxPerHour`): Push is the most, never more. */
+function pushStyle(level, caps = {
+	maxMessages: 15,
+	maxPerHour: 3
+}) {
+	const m = caps.maxMessages;
+	const h = caps.maxPerHour;
+	if (level === "gentle") return {
+		tone: 2,
+		messagesPerDay: Math.min(m, Math.round(m * .5)),
+		perHour: Math.min(h, Math.max(1, h - 1)),
+		escalate: false,
+		label: "Gentle",
+		hint: "Warm, fewer messages, no firm follow-ups"
+	};
+	if (level === "firm") return {
+		tone: 3,
+		messagesPerDay: Math.min(m, Math.round(m * .8)),
+		perHour: h,
+		escalate: false,
+		label: "Firm",
+		hint: "Honest and direct, a normal number of nudges"
+	};
+	return {
+		tone: 4,
+		messagesPerDay: m,
+		perHour: h,
+		escalate: true,
+		label: "Push",
+		hint: "Tough love, all the nudges, firmer follow-ups (still within quiet hours)"
+	};
+}
 // src/core/streaks.ts
 /**
 * Consecutive days ending today. If today isn't done yet the streak is still
@@ -12634,14 +14160,14 @@ var HABIT_COLORS = [
 	"teal",
 	"slate"
 ];
-var HM$8 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var isHm$2 = (v) => typeof v === "string" && HM$8.test(v);
+var HM$6 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm = (v) => typeof v === "string" && HM$6.test(v);
 /** 0 = Monday … 6 = Sunday, for a YYYY-MM-DD day. */
-function weekdayOf$1(day) {
+function weekdayOf(day) {
 	return ((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7;
 }
 /** The Monday of the day's week. */
-var mondayOf$4 = (day) => addDays$8(day, -weekdayOf$1(day));
+var mondayOf$4 = (day) => addDays$8(day, -weekdayOf(day));
 function cleanSchedule(v) {
 	if (v?.kind === "weekdays") return { kind: "weekdays" };
 	if (v?.kind === "perWeek") {
@@ -12657,12 +14183,12 @@ function cleanSchedule(v) {
 function offDays(s, from, to) {
 	if (s.kind !== "weekdays") return [];
 	const out = [];
-	for (let d = from; d <= to; d = addDays$8(d, 1)) if (weekdayOf$1(d) >= 5) out.push(d);
+	for (let d = from; d <= to; d = addDays$8(d, 1)) if (weekdayOf(d) >= 5) out.push(d);
 	return out;
 }
 /** Is it asked for today? "N× a week" is done for the week once N days are in. */
 function dueToday(s, doneDays, today) {
-	if (s.kind === "weekdays") return weekdayOf$1(today) < 5;
+	if (s.kind === "weekdays") return weekdayOf(today) < 5;
 	if (s.kind === "perWeek") {
 		const mon = mondayOf$4(today);
 		return doneDays.filter((d) => d >= mon && d < today).length < s.n;
@@ -12708,7 +14234,7 @@ function cleanLook(v) {
 	if (HABIT_ICONS.includes(v?.icon)) out.icon = v.icon;
 	if (HABIT_COLORS.includes(v?.color)) out.color = v.color;
 	if (v?.slot === "any" || SLOTS.includes(v?.slot)) out.slot = v.slot;
-	if (v?.by === null || isHm$2(v?.by)) out.by = v.by;
+	if (v?.by === null || isHm(v?.by)) out.by = v.by;
 	return out;
 }
 function cleanPrefs$1(v) {
@@ -12827,7 +14353,7 @@ function missedYesterday(b, today, restDays = []) {
 	return b.habits.filter((h) => {
 		if (isLogged(b, h.id, y) || isLogged(b, h.id, today)) return false;
 		const s = h.schedule?.kind ?? "daily";
-		if (s === "perWeek" || s === "weekdays" && weekdayOf$1(y) >= 5) return false;
+		if (s === "perWeek" || s === "weekdays" && weekdayOf(y) >= 5) return false;
 		return Array.from({ length: 7 }, (_, k) => addDays$8(y, -1 - k)).some((d) => isLogged(b, h.id, d));
 	});
 }
@@ -13157,6 +14683,303 @@ function extrasContext(db, today, restDays = []) {
 		out.push(aimLine(loadAims(db), today));
 	} catch {}
 	return out.filter(Boolean);
+}
+// src/renderer/src/web/lifeFitStore.ts
+var HM$5 = /^([01]\d|2[0-3]):[0-5]\d$/;
+function readLifeFit(db) {
+	try {
+		return cleanLifeFit(JSON.parse(getSetting(db, "life_fit") || "null"));
+	} catch {
+		return cleanLifeFit(null);
+	}
+}
+/** Bedtime and wake time: your sleep targets, or the My life defaults when none is set yet. */
+function sleepWindow(db) {
+	const bed = getSetting(db, "sleep_bed_target");
+	const wake = getSetting(db, "sleep_weekday_target");
+	return {
+		bed: bed && HM$5.test(bed) ? bed : DEFAULT_BED,
+		wake: wake && HM$5.test(wake) ? wake : DEFAULT_WAKE
+	};
+}
+var lifeFitView = (db) => ({
+	...readLifeFit(db),
+	...sleepWindow(db)
+});
+/** Saves a change; bedtime and wake time go to the sleep targets. */
+function saveLifeFit(db, patch) {
+	const { bed, wake, ...rest } = patch;
+	const cur = readLifeFit(db);
+	const areas = rest.areas ? {
+		...cur.areas,
+		...rest.areas
+	} : rest.push ? Object.fromEntries(AREAS$1.map((a) => [a, levelFromPush(rest.push)])) : cur.areas;
+	const next = cleanLifeFit({
+		...cur,
+		...rest,
+		areas,
+		pushes: {
+			...cur.pushes,
+			...rest.pushes ?? {}
+		},
+		work: {
+			...cur.work,
+			...rest.work ?? {}
+		}
+	});
+	setSetting(db, LIFE_FIT_KEY, JSON.stringify(next));
+	if (bed && HM$5.test(bed)) setSetting(db, "sleep_bed_target", bed);
+	if (wake && HM$5.test(wake)) {
+		setSetting(db, "sleep_weekday_target", wake);
+		try {
+			db.prepare("UPDATE rules SET title = ? WHERE id = 'sleep.up_on_time'").run(`Up by ${wake}`);
+		} catch {}
+	}
+	return lifeFitView(db);
+}
+/** "Short shift tonight" / "no work tonight" / "normal shift" for the app day `day`. */
+function saveTonight(db, day, mode) {
+	const next = setTonight(readLifeFit(db), day, mode);
+	setSetting(db, LIFE_FIT_KEY, JSON.stringify(next));
+	return next;
+}
+// src/renderer/src/web/career.ts
+var CAREER_JOBS = "career_jobs";
+var CAREER_PROOFS = "career_proofs";
+var CAREER_CARDS = "career_cards";
+var CAREER_STUDY = "career_study";
+var CAREER_MONEY = "career_money";
+var CAREER_LETTERS = "career_letters";
+/** The server tick's once-a-day marks (follow-ups, packs, pay asks, essay flags). */
+var CAREER_ASKS = "career_asks";
+var json$5 = (db, key) => {
+	try {
+		return JSON.parse(getSetting(db, key) || "null");
+	} catch {
+		return null;
+	}
+};
+var put$2 = (db, key, v) => setSetting(db, key, JSON.stringify(v));
+var loadJobs = (db) => cleanJobs(json$5(db, CAREER_JOBS));
+var loadProofs = (db) => cleanPortfolio(json$5(db, CAREER_PROOFS));
+var loadCards = (db) => {
+	const o = json$5(db, "career_cards") ?? {};
+	return {
+		cards: cleanCards(o.cards),
+		log: cleanMarks(o.log)
+	};
+};
+var loadStudy = (db) => {
+	const o = json$5(db, "career_study") ?? {};
+	return {
+		essays: cleanEssays(o.essays),
+		queue: cleanQueue(o.queue),
+		turn: Number.isFinite(o.turn) ? Math.max(0, Math.round(o.turn)) % 1e3 : 0
+	};
+};
+var loadMoney = (db) => {
+	const o = json$5(db, "career_money") ?? {};
+	return {
+		plan: cleanPlan$1(o.plan),
+		answers: cleanAnswers(o.answers),
+		spends: cleanSpends(o.spends)
+	};
+};
+var loadLetters$1 = (db) => cleanLetters(json$5(db, CAREER_LETTERS));
+/** Focus subjects that count as career work (school study is counted elsewhere). */
+var CAREER_SUBJECT = /ctf|rust|crypto|cyber|secur|pentest|hack|lab\b|portfolio|writeup|job|career|\bcv\b|interview|study pack|certif|linux|network/i;
+function focusSessions(db, from, to) {
+	try {
+		return db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ? AND day <= ?").all(from, to);
+	} catch {
+		return [];
+	}
+}
+var careerMinutes = (sessions) => sessions.filter((s) => CAREER_SUBJECT.test(s.subject)).reduce((t, s) => t + s.minutes, 0);
+var monthEnd = (month) => addDays$8(`${month}-01`, new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).getUTCDate() - 1);
+function moneyView(db, finance, today) {
+	const m = loadMoney(db);
+	const fund = careerFund(m.plan, m.answers, m.spends);
+	const streak = payStreak(m.answers);
+	return {
+		plan: m.plan,
+		ef: emergencyFund(m.plan, finance, today, fund, streak.total),
+		asks: payAsks(finance, m.answers, today, m.plan.payPct),
+		streak,
+		fund,
+		spends: m.spends,
+		income: incomeView(finance, today, m.plan.incomeTarget),
+		projection: projection(m.plan.investMonthly, m.plan.investRate, m.plan.investYears)
+	};
+}
+function studyView(db, today, now, due) {
+	const st = loadStudy(db);
+	const w = workToday(readLifeFit(db), today);
+	const nowMin = now.getHours() * 60 + now.getMinutes();
+	return {
+		essays: st.essays.map((essay) => ({
+			essay,
+			status: essayStatus(essay, today)
+		})).sort((a, b) => Number(a.status.state === "done") - Number(b.status.state === "done") || a.essay.due.localeCompare(b.essay.due)),
+		queue: st.queue,
+		pack: buildPack({
+			dueCards: due,
+			queue: st.queue,
+			essaySteps: stepsToday(st.essays, today).map((x) => ({
+				title: x.essay.title,
+				kind: x.step.kind,
+				ref: x.step.id
+			})),
+			minutes: 20,
+			turn: st.turn
+		}),
+		shift: w ? {
+			from: w.from,
+			to: w.to,
+			mode: w.mode,
+			now: inShift(w, nowMin)
+		} : null,
+		packsWeek: packsDone(focusSessions(db, mondayOf$5(today), today), mondayOf$5(today), today)
+	};
+}
+function careerView(s, finance, now = /* @__PURE__ */ new Date()) {
+	const db = s.db;
+	const today = s.wallet.today(now);
+	const jobs = loadJobs(db);
+	const proofs = loadProofs(db);
+	const cb = loadCards(db);
+	const seen = newSeenToday(cb.log, today);
+	const queue = dueCards(cb.cards, today, { newSeen: seen });
+	const stats = deckStats(cb.cards, cb.log, today, seen);
+	const month = focusSessions(db, `${today.slice(0, 7)}-01`, today);
+	const letters = loadLetters$1(db);
+	return {
+		today,
+		jobs,
+		week: weekStats(jobs, today),
+		funnel: funnel(jobs),
+		followUps: followUpsDue(jobs, today),
+		proofs: [...proofs].sort((a, b) => b.day.localeCompare(a.day)),
+		skills: skillCounts(proofs),
+		drafts: fromLearn(loadLearn(db), proofs),
+		cards: {
+			stats,
+			queue,
+			decks: [...new Set(cb.cards.map((c) => c.deck))].sort()
+		},
+		study: studyView(db, today, now, queue.length),
+		money: moneyView(db, finance, today),
+		letters,
+		letterDue: letterDue(letters, today),
+		hours: {
+			week: careerMinutes(focusSessions(db, mondayOf$5(today), today)),
+			month: careerMinutes(month)
+		}
+	};
+}
+/** The numbers behind one month's letter. */
+function monthFacts(db, finance, month, today) {
+	const from = `${month}-01`;
+	const to = monthEnd(month);
+	const jobs = loadJobs(db);
+	const inMonth = (d) => !!d && d >= from && d <= to;
+	const proofs = loadProofs(db);
+	const before = new Set(proofs.filter((p) => p.day < from).flatMap((p) => p.skills.map((x) => x.toLowerCase())));
+	const mine = proofs.filter((p) => inMonth(p.day));
+	const newSkills = [...new Set(mine.flatMap((p) => p.skills).filter((x) => !before.has(x.toLowerCase())))];
+	const log = loadCards(db).log.filter((m) => inMonth(m.day));
+	const sessions = focusSessions(db, from, to);
+	const study = loadStudy(db);
+	const m = moneyView(db, finance, to < today ? to : today);
+	const inc = incomeView(finance, to < today ? to : today, m.plan.incomeTarget);
+	return {
+		month,
+		applied: jobs.jobs.filter((j) => inMonth(j.applied)).length,
+		quota: jobs.quota,
+		interviews: jobs.jobs.filter((j) => j.moves.some((x) => x.stage === "interview" && inMonth(x.day))).length,
+		offers: jobs.jobs.filter((j) => j.moves.some((x) => x.stage === "offer" && inMonth(x.day))).length,
+		proofs: mine.map((p) => ({
+			title: p.title,
+			kind: p.kind
+		})),
+		newSkills,
+		cardsReviewed: log.length,
+		retention: log.length >= 10 ? Math.round(log.filter((x) => x.grade !== "again").length / log.length * 100) / 100 : null,
+		careerMinutes: careerMinutes(sessions),
+		packs: packsDone(sessions, from, to).count,
+		income: inc.total,
+		incomeTarget: m.plan.incomeTarget,
+		efPct: m.ef.pct,
+		payStreak: m.streak.now,
+		essaysDone: study.essays.filter((e) => inMonth(e.due) && e.steps.every((x) => x.done)).length,
+		essaysLate: study.essays.filter((e) => inMonth(e.due) && e.due < today && !e.steps.every((x) => x.done)).length
+	};
+}
+/** Writes (or rewrites) a month's letter and keeps it. */
+function writeLetter(db, finance, month, today) {
+	const l = careerLetter(monthFacts(db, finance, month, today), today);
+	put$2(db, CAREER_LETTERS, [l, ...loadLetters$1(db).filter((x) => x.month !== month)].slice(0, 24));
+	return l;
+}
+/** What Ben reads about your career (only lines that have something). */
+function careerContext(db, today, finance) {
+	try {
+		const out = [];
+		out.push(jobsLine(loadJobs(db), today));
+		const st = loadStudy(db);
+		out.push(essaysLine(st.essays, today));
+		const flags = behindFlags(st.essays, today);
+		if (flags.length) out.push(`Behind on: ${flags.join("; ")}. Say it early and offer to replan.`);
+		const cb = loadCards(db);
+		const due = dueCards(cb.cards, today, { newSeen: newSeenToday(cb.log, today) }).length;
+		if (cb.cards.length) out.push(`Flashcards: ${due} due today of ${cb.cards.length}.`);
+		const m = moneyView(db, finance, today);
+		out.push(moneyPlanLine(m.plan, m.ef, m.streak, m.income, m.fund, m.asks.length));
+		return out.filter(Boolean);
+	} catch {
+		return [];
+	}
+}
+/** One line for the Sunday review. */
+function careerWeekLine(db, today) {
+	try {
+		const jobs = loadJobs(db);
+		const w = weekStats(jobs, today);
+		const proofs = loadProofs(db).filter((p) => p.day >= w.monday).length;
+		const packs = packsDone(focusSessions(db, w.monday, today), w.monday, today);
+		if (!jobs.jobs.length && !proofs && !packs.count) return "";
+		return `💼 Career this week: ${w.sent} of ${w.quota} applications${w.sent >= w.quota && w.quota ? " ✓" : ""}, ${proofs} portfolio entr${proofs === 1 ? "y" : "ies"}, ${packs.count} shift pack${packs.count === 1 ? "" : "s"} (${packs.minutes} min)${followUpsDue(jobs, today).length ? `, ${followUpsDue(jobs, today).length} follow-up(s) waiting` : ""}`;
+	} catch {
+		return "";
+	}
+}
+/** Grades one card (the page, the island and Telegram all come here). */
+function gradeCard(db, id, g, today) {
+	const cb = loadCards(db);
+	const c = cb.cards.find((x) => x.id === id);
+	if (!c) return null;
+	const next = grade(c, g, today);
+	put$2(db, CAREER_CARDS, {
+		cards: cb.cards.map((x) => x.id === id ? next : x),
+		log: [...cb.log, {
+			day: today,
+			id,
+			grade: g
+		}].slice(-1500)
+	});
+	return next;
+}
+/** The next card to review today (for the island and Telegram). */
+function nextCard(db, today, skip = []) {
+	const cb = loadCards(db);
+	const q = dueCards(cb.cards, today, { newSeen: newSeenToday(cb.log, today) }).filter((c) => !skip.includes(c.id));
+	return q.length ? {
+		card: q[0],
+		left: q.length
+	} : null;
+}
+function saveJobs(db, b) {
+	put$2(db, CAREER_JOBS, b);
 }
 // src/core/coachMind.ts
 var MAX = {
@@ -14134,7 +15957,7 @@ function stakeRemindText(s, now) {
 	return `⏳ ${Math.round(left)} min left: "${s.text}" or −${s.points} points. Mark it done when it is.`;
 }
 /** Minutes from now until "HH:MM" (today, or tomorrow if past). */
-function minutesUntil$1(hmText, now) {
+function minutesUntil(hmText, now) {
 	const m = /^(\d{1,2})[:.](\d{2})$/.exec(String(hmText ?? "").trim());
 	if (!m || Number(m[1]) > 23 || Number(m[2]) > 59) return null;
 	const d = new Date(now);
@@ -14574,7 +16397,7 @@ function listOf(v) {
 // src/plugins/types.ts
 var definePlugin = (p) => p;
 // src/plugins/weather/weather.ts
-var hmOf$5 = (iso) => {
+var hmOf$4 = (iso) => {
 	const m = /T(\d{2}:\d{2})/.exec(String(iso ?? ""));
 	return m ? m[1] : null;
 };
@@ -14595,7 +16418,7 @@ function summarizeDay(json, day) {
 		if (!t.startsWith(day)) return;
 		const prob = num$2(h.precipitation_probability?.[k]);
 		if (!rainy(prob, num$2(h.precipitation?.[k]))) return;
-		const from = hmOf$5(t);
+		const from = hmOf$4(t);
 		const last = spans[spans.length - 1];
 		if (last && last.to === from) {
 			last.to = fromMin(toMin$3(from) + 60);
@@ -14607,11 +16430,11 @@ function summarizeDay(json, day) {
 		});
 	});
 	const r = (v) => v == null ? null : Math.round(v);
-	const clouds = times.map((t, k) => t.startsWith(day) && Number(hmOf$5(t)?.slice(0, 2)) >= 8 && Number(hmOf$5(t)?.slice(0, 2)) < 12 ? num$2(h.cloudcover?.[k]) : null).filter((v) => v != null);
+	const clouds = times.map((t, k) => t.startsWith(day) && Number(hmOf$4(t)?.slice(0, 2)) >= 8 && Number(hmOf$4(t)?.slice(0, 2)) < 12 ? num$2(h.cloudcover?.[k]) : null).filter((v) => v != null);
 	return {
 		day,
-		sunrise: hmOf$5(d.sunrise?.[i]),
-		sunset: hmOf$5(d.sunset?.[i]),
+		sunrise: hmOf$4(d.sunrise?.[i]),
+		sunset: hmOf$4(d.sunset?.[i]),
 		tmin: r(num$2(d.temperature_2m_min?.[i])),
 		tmax: r(num$2(d.temperature_2m_max?.[i])),
 		rain: spans,
@@ -14668,7 +16491,7 @@ function readCoords(text) {
 // src/plugins/weather/index.ts
 var WEATHER = "weather";
 var dayOf$7 = (d) => calendarDay(d);
-var hmOf$4 = (d) => d.toTimeString().slice(0, 5);
+var hmOf$3 = (d) => d.toTimeString().slice(0, 5);
 var job$2 = async (ctx) => {
 	const cfg = JSON.parse(await ctx.get(`plugin_weather`) || "{}");
 	const city = String(cfg.city ?? "").trim();
@@ -14721,7 +16544,7 @@ var weather_default = definePlugin({
 	}] },
 	context(db, now) {
 		const data = readData(db, WEATHER);
-		return data ? weatherLine(data, dayOf$7(now), hmOf$4(now)) : null;
+		return data ? weatherLine(data, dayOf$7(now), hmOf$3(now)) : null;
 	},
 	commands: { weather: {
 		help: "Today’s weather and daylight",
@@ -14729,7 +16552,7 @@ var weather_default = definePlugin({
 			const data = readData(db, WEATHER);
 			const w = data?.days.find((d) => d.day === dayOf$7(now));
 			if (!data || !w) return readConfig(db, "weather").city ? "🌤 No forecast yet. It comes with the next check (every few hours)." : "🌤 Set your city in Settings → Plugins → Weather first.";
-			const advice = weatherAdvice(w, hmOf$4(now));
+			const advice = weatherAdvice(w, hmOf$3(now));
 			return [
 				`🌤 <b>${data.place}</b>: ${w.tmin}–${w.tmax}°C`,
 				w.sunrise && w.sunset ? `Sunrise ${w.sunrise} · sunset ${w.sunset}` : "",
@@ -14799,14 +16622,14 @@ var dm = (iso) => new Date(iso).toLocaleDateString("en-GB", {
 	day: "numeric",
 	month: "short"
 });
-var hours$1 = (e) => Math.round((Date.parse(e.finish) - Date.parse(e.start)) / 36e5);
+var hours = (e) => Math.round((Date.parse(e.finish) - Date.parse(e.start)) / 36e5);
 /** One line for what Ben knows. */
 function githubLine(d, today) {
 	const since = d.lastCommit ? daysBetween$2(d.lastCommit, today) : null;
 	const commit = since == null ? `no commits seen lately` : since === 0 ? "committed today" : `${since} day${since === 1 ? "" : "s"} without a commit (last ${d.lastCommit})`;
 	const week = `${d.week} commit${d.week === 1 ? "" : "s"} in the last 7 days${d.repos.length ? ` (${d.repos.join(", ")})` : ""}`;
 	const nudge = since != null && since >= 3 ? " Nudge him: one small commit today." : "";
-	const ctf = d.ctfs.length ? ` Next CTFs (CTFtime, online): ${d.ctfs.map((e) => `${e.title} ${dm(e.start)}${e.format ? ` (${e.format}, ${hours$1(e)}h)` : ""}`).join("; ")}. Suggest one that fits his week.` : "";
+	const ctf = d.ctfs.length ? ` Next CTFs (CTFtime, online): ${d.ctfs.map((e) => `${e.title} ${dm(e.start)}${e.format ? ` (${e.format}, ${hours(e)}h)` : ""}`).join("; ")}. Suggest one that fits his week.` : "";
 	return `GitHub (${d.user}): ${commit}; ${week}.${nudge}${ctf}`;
 }
 var eventsUrl = (user) => `https://api.github.com/users/${encodeURIComponent(user)}/events?per_page=100`;
@@ -15954,7 +17777,7 @@ var SAFE_LABEL = {
 	offerNote: "Offer a meeting note",
 	moveCard: "Show the move-break card (you still confirm)"
 };
-var HM$7 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var HM$4 = /^([01]\d|2[0-3]):[0-5]\d$/;
 var clip$7 = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
 function safeLink(url) {
 	try {
@@ -16029,7 +17852,7 @@ function cleanRecipe(r, i = 0) {
 		when.ctx = r.when.ctx;
 	}
 	if (on === "time") {
-		if (!HM$7.test(String(r.when.at ?? ""))) return null;
+		if (!HM$4.test(String(r.when.at ?? ""))) return null;
 		when.at = r.when.at;
 	}
 	const then = (Array.isArray(r.then) ? r.then : []).map(cleanAction).filter((x) => !!x).slice(0, 5);
@@ -16039,7 +17862,7 @@ function cleanRecipe(r, i = 0) {
 		const days = [...new Set(r.if.days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
 		if (days.length && days.length < 7) iff.days = days;
 	}
-	if (HM$7.test(String(r.if?.from ?? "")) && HM$7.test(String(r.if?.to ?? ""))) {
+	if (HM$4.test(String(r.if?.from ?? "")) && HM$4.test(String(r.if?.to ?? ""))) {
 		iff.from = r.if.from;
 		iff.to = r.if.to;
 	}
@@ -16587,7 +18410,7 @@ function keysToSend(combo) {
 	return key == null ? null : `${mods}${key}`;
 }
 /** The asks list as stored (synced), cleaned, with old ones dropped (20 kept). */
-function cleanAsks$1(v, now) {
+function cleanAsks$2(v, now) {
 	const list = Array.isArray(v) ? v : [];
 	const out = [];
 	for (const x of list) {
@@ -16640,7 +18463,7 @@ function cleanPcState(v, now) {
 			on: d.on === true,
 			at: Number(d.at)
 		} : null,
-		asks: cleanAsks$1(Array.isArray(v) ? v : o.asks, now)
+		asks: cleanAsks$2(Array.isArray(v) ? v : o.asks, now)
 	};
 }
 /** A desktop app with Ben's actions on was seen in the last 30 minutes. */
@@ -17695,7 +19518,7 @@ function cardSummary(c) {
 	const head = pi ? `${g.title}: ${c.kind === "habit" ? `${pi.value} of ${pi.target}` : `${amount(g, pi.value)} of ${amount(g, pi.target)}`} this ${perWord(pi.per)}` : c.kind === "project" ? `${g.title}: ${c.pct}% of the steps by ${shortDay$1(g.deadline)}` : null;
 	return head ? `${head}, ${(c.pace ?? "").toLowerCase()}${pi && pi.streak > 1 ? `, ${pi.streak} in a row` : ""}` : "";
 }
-function cleanAsks(raw, today) {
+function cleanAsks$1(raw, today) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	const asked = r.asked && typeof r.asked === "object" ? Object.fromEntries(Object.entries(r.asked).filter(([, v]) => typeof v === "string").slice(-60)) : {};
 	const seen = r.seen && typeof r.seen === "object" ? Object.fromEntries(Object.entries(r.seen).filter(([, v]) => Number.isFinite(v)).slice(-60)) : {};
@@ -18603,800 +20426,12 @@ function goalTap(s, id, op, now = /* @__PURE__ */ new Date()) {
 	const g = r.card.goal;
 	return `✅ ${g.title}: ${fmtPair(g.unit, r.card.value, g.target, g.unitLabel)} (${r.card.pct}%)${r.done ? " · GOAL REACHED 🏆" : r.milestones.length ? ` · milestone ${r.milestones.map((m) => m.label ?? m.value).join(", ")} 🎉` : ""}${r.paid ? ` · +${r.paid} points` : ""}`;
 }
-// src/core/benPushes.ts
-var AREAS$1 = [
-	"study",
-	"work",
-	"body",
-	"sleep",
-	"chores",
-	"money"
-];
-/** The old single "how hard Ben pushes" becomes every area's level (until you change one). */
-function levelFromPush(p) {
-	return p === "gentle" ? "soft" : p === "firm" ? "normal" : "hard";
-}
-var isLevel = (x) => x === "soft" || x === "normal" || x === "hard";
-/** Saved levels, checked; a missing area takes the old single push level. */
-function cleanAreas(raw, push) {
-	const o = raw && typeof raw === "object" ? raw : {};
-	const d = levelFromPush(push);
-	return Object.fromEntries(AREAS$1.map((a) => [a, isLevel(o[a]) ? o[a] : d]));
-}
-var TYPE_AREA = {
-	brief: "study",
-	weekly: "study",
-	shutdown: "sleep",
-	winddown: "sleep",
-	bed: "sleep",
-	water: "body",
-	move: "body",
-	eyes: "body",
-	training: "body",
-	money: "money",
-	chores: "chores",
-	work: "work"
-};
-var WORDS = [
-	["work", /\b(work|shift|job|office|client|standup|stand-up|invoice report)\b/i],
-	["body", /\b(gym|workout|training|train|run|running|walk|stretch|yoga|swim|push-?ups|sport)\b/i],
-	["sleep", /\b(sleep|bed|nap|wind[- ]?down)\b/i],
-	["chores", /\b(clean|cleaning|laundry|groceries|grocery|shopping|cook|cooking|dishes|tidy|chores?|errands?|vacuum|declutter)\b/i],
-	["money", /\b(budget|money|bank|bills?|finance|pay|taxes|spending|expenses?)\b/i]
-];
-/** The area a block or task belongs to, from its name (study when nothing else fits: deep work is mostly study). */
-function areaOfTitle(title) {
-	for (const [a, re] of WORDS) if (re.test(title)) return a;
-	return "study";
-}
-/** A nudge's area: from its kind, or for a block (check-in, drift) from the block's name. */
-function areaOf$1(type, title) {
-	if (type === "checkin" || type === "drift") return areaOfTitle(title ?? "");
-	return TYPE_AREA[type];
-}
-var levelFor = (levels, type, title) => levels[areaOf$1(type, title)];
-function areaTuning(l) {
-	if (l === "soft") return {
-		firm: false,
-		firmAfterMin: 15,
-		driftMin: 15,
-		gapScale: 1.5
-	};
-	if (l === "normal") return {
-		firm: true,
-		firmAfterMin: 10,
-		driftMin: 12,
-		gapScale: 1
-	};
-	return {
-		firm: true,
-		firmAfterMin: 10,
-		driftMin: 10,
-		gapScale: .75
-	};
-}
-var DEFAULT_PUSH_PREFS = {
-	checkins: true,
-	brief: true,
-	shutdown: true,
-	weekly: true,
-	shutdownBefore: 30,
-	offDays: []
-};
-function cleanPushPrefs(raw) {
-	const o = raw && typeof raw === "object" ? raw : {};
-	const d = DEFAULT_PUSH_PREFS;
-	const b = (x, def) => typeof x === "boolean" ? x : def;
-	const before = typeof o.shutdownBefore === "number" && Number.isFinite(o.shutdownBefore) ? Math.max(10, Math.min(120, Math.round(o.shutdownBefore / 5) * 5)) : d.shutdownBefore;
-	const offDays = Array.isArray(o.offDays) ? [...new Set(o.offDays.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))].sort() : d.offDays;
-	return {
-		checkins: b(o.checkins, d.checkins),
-		brief: b(o.brief, d.brief),
-		shutdown: b(o.shutdown, d.shutdown),
-		weekly: b(o.weekly, d.weekly),
-		shutdownBefore: before,
-		offDays
-	};
-}
-var weekdayOf = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
-/** A day off: one of your days off, or a sick / travel day (Life mode). */
-function isOffDay(prefs, day, mode) {
-	return prefs.offDays.includes(weekdayOf(day)) || mode === "sick" || mode === "travel";
-}
-var HM$6 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var isHm$1 = (x) => typeof x === "string" && HM$6.test(x);
-var minOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-var localMin = (now) => {
-	const d = new Date(now);
-	return d.getHours() * 60 + d.getMinutes();
-};
-var hmOf$3 = (ms) => new Date(ms).toTimeString().slice(0, 5);
-/** Minutes from now until a clock time tonight (bedtime may be after midnight): negative once it's past (until 05:00). */
-function minutesUntil(now, at) {
-	const night = (m) => (m - 720 + 1440) % 1440;
-	return night(minOf(at)) - night(localMin(now));
-}
-var PC_SEEN_KEY = "ben_pc_seen";
-function cleanPcSeen(raw) {
-	const o = raw;
-	return o && typeof o.at === "number" && Number.isFinite(o.at) ? {
-		at: o.at,
-		active: o.active === true
-	} : null;
-}
-/** You're at the PC now (as the server sees it). */
-var pcHere = (p, now) => !!p && p.active && now - p.at < 48e4;
-/** The one channel: the island while you're at the PC, Telegram otherwise. */
-var channelFor = (here) => here ? "island" : "telegram";
-var PUSH_LOG_KEY = "ben_pushes";
-var OPS = [
-	"start",
-	"later",
-	"skip",
-	"plan",
-	"ok",
-	"shutdown",
-	"tomorrow",
-	"drop",
-	"keep",
-	"back",
-	"more5"
-];
-var MARKS = [
-	"tomorrow",
-	"drop",
-	"keep"
-];
-function cleanPushLog(raw, day) {
-	const o = raw && typeof raw === "object" ? raw : {};
-	const recs = {};
-	if (o.day === day && o.recs && typeof o.recs === "object") for (const [k, v] of Object.entries(o.recs).slice(-120)) {
-		if (!v || typeof v !== "object" || typeof v.at !== "number") continue;
-		const r = v;
-		recs[k] = {
-			at: r.at,
-			via: r.via === "telegram" ? "telegram" : "island",
-			...OPS.includes(r.ans) ? { ans: r.ans } : {},
-			...typeof r.until === "number" ? { until: r.until } : {}
-		};
-	}
-	const sd = o.shutdown;
-	const shutdown = sd && sd.day === day && Array.isArray(sd.items) ? {
-		day,
-		items: sd.items.filter((x) => x && typeof x.id === "string" && typeof x.text === "string").slice(0, 8).map((x) => ({
-			id: x.id,
-			text: x.text.slice(0, 140),
-			kind: x.kind === "todo" ? "todo" : "mustdo",
-			...typeof x.ref === "string" ? { ref: x.ref } : {}
-		})),
-		marks: Object.fromEntries(Object.entries(sd.marks ?? {}).filter(([, m]) => MARKS.includes(m)))
-	} : void 0;
-	const outbox = Array.isArray(o.outbox) ? o.outbox.filter((x) => x && typeof x.key === "string" && typeof x.text === "string" && typeof x.at === "number").slice(-10) : [];
-	return {
-		day,
-		recs,
-		...shutdown ? { shutdown } : {},
-		outbox
-	};
-}
-/** Marks a push as shown; false when it already went out (anywhere). */
-function claim(log, key, via, now) {
-	if (log.recs[key]) return {
-		ok: false,
-		log
-	};
-	return {
-		ok: true,
-		log: {
-			...log,
-			recs: {
-				...log.recs,
-				[key]: {
-					at: now,
-					via
-				}
-			}
-		}
-	};
-}
-/** Your answer on a push (from any channel). "later" asks again after `minutes`. */
-function answerPush(log, key, op, now, minutes = 10) {
-	const cur = log.recs[key] ?? {
-		at: now,
-		via: "island"
-	};
-	return {
-		...log,
-		recs: {
-			...log.recs,
-			[key]: {
-				...cur,
-				ans: op,
-				...op === "later" ? { until: now + Math.max(5, Math.min(60, minutes)) * 6e4 } : {}
-			}
-		}
-	};
-}
-/** What the server sends from the outbox now (fresh, not yet sent), and the outbox left. */
-function outboxTake(log, now) {
-	return {
-		send: log.outbox.filter((x) => now - x.at < 9e5 && !log.recs[x.key]),
-		log: {
-			...log,
-			outbox: []
-		}
-	};
-}
-var checkinKey = (id, firm = false) => `${firm ? "checkin-firm" : "checkin"}:${id}`;
-var ASK = {
-	soft: ["{title} starts now. Ready when you are?", "{title} is up next, now. Shall we?"],
-	normal: ["{title} starts now, ready?", "Time for {title}. Ready?"],
-	hard: ["{title} starts now. Ready? Let’s go 💪", "{title}, now. Timer on and go 💪"]
-};
-var FIRM = {
-	soft: ["{title}: ready now?"],
-	normal: ["{title} started {m} min ago and the timer isn’t on. Start now?", "{m} min into {title}. Start it now?"],
-	hard: ["{m} min into {title} and nothing started 😤 Start it now.", "{title} began {m} min ago. No more waiting: start 😤"]
-};
-var pick = (lines, seed) => lines[Math.abs(Math.floor(seed)) % lines.length];
-var fill$1 = (t, v) => t.replace(/\{(\w+)\}/g, (_, k) => String(v[k] ?? ""));
-var left = (b, now) => Math.max(5, Math.min(180, Math.round((b.end - now) / 6e4)));
-/**
-* The check-in now for the block that just started, or null: the ask at the
-* start, one follow-up 10 minutes later (Soft: only after "10 min later"),
-* then nothing. Never in a meeting, quiet hours, while a timer runs, or for
-* an event you go to. The caller sends it only on its own channel.
-*/
-function decideCheckin(i) {
-	if (!i.on || i.meeting || i.quiet || i.running) return null;
-	const b = i.blocks.filter((x) => x.focus && x.start <= i.now && x.end - i.now >= 6e5 && i.now - x.start < 24e5).sort((x, y) => y.start - x.start)[0];
-	if (!b) return null;
-	const level = levelFor(i.levels, "checkin", b.title);
-	const area = areaOfTitle(b.title);
-	const t = areaTuning(level);
-	const ask = i.log.recs[checkinKey(b.id)];
-	const channel = channelFor(i.here);
-	const seed = Math.floor(b.start / 6e4);
-	const startBtn = {
-		label: `▶ Start · ${left(b, i.now)} min`,
-		op: "start",
-		primary: true,
-		arg: b.title,
-		minutes: left(b, i.now)
-	};
-	if (!ask) {
-		if (i.now - b.start > 9e5) return null;
-		return {
-			key: checkinKey(b.id),
-			type: "checkin",
-			area,
-			level,
-			title: `${b.title} · ${hmOf$3(b.start)}`,
-			text: fill$1(pick(ASK[level], seed), { title: b.title }),
-			face: level === "hard" ? "😤" : "🎯",
-			channel,
-			buttons: [
-				startBtn,
-				{
-					label: "⏰ 10 min later",
-					op: "later",
-					minutes: 10
-				},
-				{
-					label: "Skip",
-					op: "skip"
-				}
-			]
-		};
-	}
-	if (ask.ans === "skip" || ask.ans === "start") return null;
-	if (i.log.recs[checkinKey(b.id, true)]) return null;
-	const snoozed = ask.ans === "later";
-	if (!t.firm && !snoozed) return null;
-	const due = snoozed ? ask.until ?? ask.at + 6e5 : ask.at + t.firmAfterMin * 6e4;
-	if (i.now < due) return null;
-	const m = Math.max(1, Math.round((i.now - b.start) / 6e4));
-	const words = snoozed && !t.firm ? fill$1(pick(FIRM.soft, seed), { title: b.title }) : fill$1(pick(FIRM[level === "soft" ? "normal" : level], seed), {
-		title: b.title,
-		m
-	});
-	return {
-		key: checkinKey(b.id, true),
-		type: "checkin",
-		area,
-		level,
-		title: `${b.title} · not started`,
-		text: words,
-		face: level === "hard" ? "😠" : "⏰",
-		channel,
-		buttons: [startBtn, {
-			label: "Skip it today",
-			op: "skip"
-		}]
-	};
-}
-var briefKey = (day) => `brief:${day}`;
-var litres = (ml) => `${(Math.round(ml / 100) / 10).toFixed(1)} L`;
-/** The 3 lines: the must-dos, the first block, the water goal. */
-function briefLines(o) {
-	const md = o.mustDos.filter(Boolean).slice(0, 3);
-	return [
-		md.length ? `✅ Must-dos: ${md.join(" · ")}` : "✅ No must-dos yet: tap Plan my day",
-		o.firstBlock ? `▶ First block: ${o.firstBlock.title} at ${hmOf$3(o.firstBlock.start)}` : "▶ No blocks planned yet",
-		`💧 Water goal: ${litres(o.waterTargetMl || 2e3)} today`
-	];
-}
-/** Due from your wake time for 2 hours, once a day, not on a day off. */
-function decideBrief(i) {
-	if (!i.prefs.brief || i.off || i.quiet || !isHm$1(i.wake)) return null;
-	const m = localMin(i.now);
-	const w = minOf(i.wake);
-	if (m < w || m >= w + 120) return null;
-	if (i.log.recs[briefKey(i.day)]) return null;
-	const level = levelFor(i.levels, "brief");
-	return {
-		key: briefKey(i.day),
-		type: "brief",
-		area: "study",
-		level,
-		title: level === "soft" ? "Good morning ☀️" : level === "normal" ? "Morning. Here’s today" : "Up. Here’s the day 💪",
-		text: briefLines(i).join("\n"),
-		face: "☀️",
-		channel: channelFor(i.here),
-		buttons: [{
-			label: "🗓 Plan my day",
-			op: "plan",
-			primary: true
-		}, {
-			label: "👍 Got it",
-			op: "ok"
-		}]
-	};
-}
-var shutdownKey = (day) => `shutdown:${day}`;
-function shutdownText(o) {
-	const d = o.done.filter(Boolean);
-	const lines = [d.length ? `✅ Done today: ${d.slice(0, 4).join(", ")}${d.length > 4 ? ` +${d.length - 4} more` : ""}` : "✅ Nothing ticked off today. Tomorrow starts with the first one."];
-	if (o.open.length) {
-		lines.push("Still open (each: Tomorrow / Drop / Keep today):");
-		o.open.slice(0, 6).forEach((x, k) => lines.push(`${k + 1}. ${x.text}`));
-	} else lines.push("Nothing left open 👌");
-	const bed = o.level === "soft" ? `🌙 Bed at ${o.bed}. Start winding down.` : o.level === "normal" ? `🌙 Bed at ${o.bed} (in ${o.minutes} min): screens off soon.` : `🌙 Bed at ${o.bed}, in ${o.minutes} min. Save, close, screens off.`;
-	lines.push(bed);
-	return lines.join("\n");
-}
-/** Due from `shutdownBefore` minutes before bed until bedtime, once, unless the day is closed or bed is logged. */
-function decideShutdown(i) {
-	if (!i.prefs.shutdown || i.closed || i.bedLogged || !isHm$1(i.bed)) return null;
-	const until = minutesUntil(i.now, i.bed);
-	if (until > i.prefs.shutdownBefore || until <= 0) return null;
-	if (i.log.recs[shutdownKey(i.day)]) return null;
-	const level = levelFor(i.levels, "shutdown");
-	const open = i.open.slice(0, 6);
-	return {
-		key: shutdownKey(i.day),
-		type: "shutdown",
-		area: "sleep",
-		level,
-		title: "Shut down the day",
-		text: shutdownText({
-			bed: i.bed,
-			minutes: until,
-			done: i.done,
-			open,
-			level
-		}),
-		face: "🌙",
-		channel: channelFor(i.here),
-		items: open,
-		buttons: [{
-			label: "🌙 Shut down",
-			op: "shutdown",
-			primary: true
-		}, {
-			label: "All to tomorrow",
-			op: "tomorrow",
-			arg: "*"
-		}]
-	};
-}
-/** Your choice for one open item (or `*`: every one not chosen yet). */
-function markItem(log, id, mark) {
-	const sd = log.shutdown;
-	if (!sd) return log;
-	const ids = id === "*" ? sd.items.filter((x) => !sd.marks[x.id]).map((x) => x.id) : sd.items.some((x) => x.id === id) ? [id] : [];
-	if (!ids.length) return log;
-	return {
-		...log,
-		shutdown: {
-			...sd,
-			marks: {
-				...sd.marks,
-				...Object.fromEntries(ids.map((k) => [k, mark]))
-			}
-		}
-	};
-}
-var MARK_WORD = {
-	tomorrow: "➡️ Tomorrow",
-	drop: "✗ Dropped",
-	keep: "✓ Keep today"
-};
-/** A score, the 3 best areas against their targets (wins) and the weakest one (the fix). */
-function weeklyCard(o) {
-	const ranked = o.metrics.filter((m) => m.target && m.target > 0).map((m) => ({
-		m,
-		k: m.now / m.target
-	})).sort((a, b) => b.k - a.k);
-	const line = (m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText ?? m.target}` : ""}`;
-	const wins = ranked.filter((x) => x.k > 0).slice(0, 3).map((x) => line(x.m));
-	if (o.win && !wins.length) wins.push(o.win);
-	const worst = ranked[ranked.length - 1];
-	const fix = worst && !wins.includes(line(worst.m)) ? line(worst.m) : o.leak || "Not enough data yet: log a full week.";
-	return {
-		score: o.score,
-		delta: o.score - o.prevScore,
-		wins: wins.length ? wins : ["You showed up."],
-		fix
-	};
-}
-function weeklyCardText(c, level = "normal") {
-	const head = `📊 Your week: ${c.score}/100 (${c.delta >= 0 ? "+" : ""}${c.delta} vs last week)`;
-	const fixWord = level === "hard" ? "🔧 Fix this, no excuses" : level === "soft" ? "🔧 One thing to look at" : "🔧 One thing to fix";
-	return [
-		head,
-		"",
-		"🏆 Wins",
-		...c.wins.map((w) => `• ${w}`),
-		"",
-		`${fixWord}: ${c.fix}`
-	].join("\n");
-}
-/** The weekly card for Telegram (HTML), with next week's focus and big 3 from the review under it. */
-function weeklyHtml(c, level, next) {
-	const e = (x) => x.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-	const [head, ...rest] = weeklyCardText(c, level).split("\n");
-	return [
-		`<b>${e(head)}</b>`,
-		...rest.map(e),
-		"",
-		`<b>Next week</b>: focus on ${e(next.focus)}${next.note ? ` (“${e(next.note)}”)` : ""}`,
-		...next.big3.map((b, i) => `${i + 1}. ${e(b)}`)
-	].join("\n");
-}
-var escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-/** Callback data for a push button ("bp|<op>|<key or item>"), kept under Telegram's 64 bytes. */
-function pushCallback(op, key, arg) {
-	const c = {
-		later: "l",
-		skip: "s",
-		ok: "o",
-		plan: "p",
-		tomorrow: "t",
-		drop: "d",
-		keep: "k"
-	}[op];
-	if (!c) return null;
-	const d = `bp|${c}|${arg ?? key}`;
-	return d.length <= 64 ? d : null;
-}
-function readPushCallback(data) {
-	const m = /^bp\|([lsoptdk])\|(.+)$/.exec(data);
-	if (!m) return null;
-	return {
-		op: {
-			l: "later",
-			s: "skip",
-			o: "ok",
-			p: "plan",
-			t: "tomorrow",
-			d: "drop",
-			k: "keep"
-		}[m[1]],
-		ref: m[2]
-	};
-}
-/** The Telegram message for a push: HTML text and its buttons. `startData` makes the Start button (the bot's focus callback). */
-function pushTelegram(p, startData) {
-	const rows = [];
-	const top = [];
-	for (const b of p.buttons) if (b.op === "start" && b.arg && startData) top.push({
-		text: b.label,
-		callback_data: startData(b.arg)
-	});
-	else if (b.op === "shutdown") continue;
-	else if (b.op === "tomorrow" && b.arg === "*") top.push({
-		text: b.label,
-		callback_data: "bp|t|*"
-	});
-	else {
-		const cb = pushCallback(b.op, p.key, b.arg);
-		if (cb) top.push({
-			text: b.label,
-			callback_data: cb
-		});
-	}
-	if (p.items?.length) p.items.forEach((_x, k) => rows.push([
-		{
-			text: `${k + 1}. ➡️ Tomorrow`,
-			callback_data: `bp|t|${k}`
-		},
-		{
-			text: "✗ Drop",
-			callback_data: `bp|d|${k}`
-		},
-		{
-			text: "Keep today",
-			callback_data: `bp|k|${k}`
-		}
-	]));
-	if (top.length) rows.unshift(top);
-	const lines = p.text.split("\n").map(escHtml);
-	return {
-		text: [`${p.face} <b>${escHtml(p.title)}</b>`, ...lines].join("\n"),
-		keyboard: { inline_keyboard: rows }
-	};
-}
-var toCard = (p) => ({
-	type: p.type,
-	key: p.key,
-	title: p.title,
-	lines: p.text.split("\n"),
-	...p.items?.length ? { items: p.items } : {}
-});
-// src/core/lifeFit.ts
-var LIFE_FIT_KEY = "life_fit";
-var DEFAULT_BED = "23:30";
-/** The wake target when none is set (the sleep rule's long-standing default). */
-var DEFAULT_WAKE = "07:00";
-var DEFAULT_LIFE_FIT = {
-	latestBed: "00:00",
-	work: {
-		on: false,
-		days: [
-			1,
-			2,
-			3,
-			4,
-			5
-		],
-		from: "18:00",
-		to: "22:00",
-		minH: 1,
-		maxH: 3
-	},
-	push: "push",
-	tonight: null
-};
-var HM$5 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var isHm = (x) => typeof x === "string" && HM$5.test(x);
-var isEnd = (x) => isHm(x) || x === "24:00";
-var toMin$2 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-var hm$6 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
-var hours = (x, d) => typeof x === "number" && Number.isFinite(x) ? Math.max(0, Math.min(12, Math.round(x * 2) / 2)) : d;
-function cleanLifeFit(raw) {
-	const o = raw && typeof raw === "object" ? raw : {};
-	const w = o.work && typeof o.work === "object" ? o.work : {};
-	const d = DEFAULT_LIFE_FIT.work;
-	const days = Array.isArray(w.days) ? [...new Set(w.days.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))].sort() : d.days;
-	const minH = hours(w.minH, d.minH);
-	const t = o.tonight;
-	const push = o.push === "gentle" || o.push === "firm" ? o.push : "push";
-	return {
-		latestBed: isHm(o.latestBed) ? o.latestBed : DEFAULT_LIFE_FIT.latestBed,
-		work: {
-			on: w.on === true,
-			days,
-			from: isHm(w.from) ? w.from : d.from,
-			to: isEnd(w.to) ? w.to : d.to,
-			minH,
-			maxH: Math.max(minH, hours(w.maxH, d.maxH))
-		},
-		push,
-		areas: cleanAreas(o.areas, push),
-		pushes: cleanPushPrefs(o.pushes),
-		tonight: t && typeof t.day === "string" && /^\d{4}-\d{2}-\d{2}$/.test(t.day) && (t.mode === "short" || t.mode === "off" || t.mode === "normal") ? {
-			day: t.day,
-			mode: t.mode
-		} : null
-	};
-}
-var weekday$3 = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
-function workToday(fit, day) {
-	const w = fit.work;
-	if (!w.on || !w.days.includes(weekday$3(day)) || toMin$2(w.to) <= toMin$2(w.from)) return null;
-	const mode = fit.tonight?.day === day ? fit.tonight.mode : "normal";
-	if (mode === "off") return {
-		from: w.from,
-		to: w.to,
-		mode,
-		busy: null,
-		light: null
-	};
-	if (mode === "short") {
-		const end = Math.min(toMin$2(w.to), toMin$2(w.from) + Math.round(Math.max(.5, w.minH) * 60));
-		return {
-			from: w.from,
-			to: w.to,
-			mode,
-			busy: {
-				from: w.from,
-				to: end >= 1440 ? "24:00" : hm$6(end)
-			},
-			light: null
-		};
-	}
-	return {
-		from: w.from,
-		to: w.to,
-		mode,
-		busy: null,
-		light: {
-			from: w.from,
-			to: w.to
-		}
-	};
-}
-/** "short shift tonight", "no work tonight", "normal shift" (English, Romanian, Russian), or null. */
-function readShift(text) {
-	const t = text.toLowerCase().replace(/\s+/g, " ").trim();
-	if (t.length > 80) return null;
-	if (/\b(no work|not working|day off|no shift|off work|free tonight)\b/.test(t) || /(nu lucrez|liber azi|liber diseară|не работаю|выходной)/.test(t)) return "off";
-	if (/\b(short shift|shorter shift|short work)\b/.test(t) || /(tura scurt|lucrez pu[tț]in|короткая смена)/.test(t)) return "short";
-	if (/\b(normal shift|full shift|working as usual|work as usual)\b/.test(t) || /(tura normal|обычная смена)/.test(t)) return "normal";
-	return null;
-}
-/** Sets (or clears, with 'normal') tonight's change. */
-function setTonight(fit, day, mode) {
-	return {
-		...fit,
-		tonight: mode === "normal" ? null : {
-			day,
-			mode
-		}
-	};
-}
-var DAY_NAMES = [
-	"Sun",
-	"Mon",
-	"Tue",
-	"Wed",
-	"Thu",
-	"Fri",
-	"Sat"
-];
-var daysText = (days) => days.length === 7 ? "every day" : days.length === 5 && [
-	1,
-	2,
-	3,
-	4,
-	5
-].every((d) => days.includes(d)) ? "Mon–Fri" : days.map((d) => DAY_NAMES[d]).join(", ") || "no days";
-var usualText = (w) => w.minH === w.maxH ? `${w.minH} h` : `${w.minH}–${w.maxH} h`;
-/** The reply when you tell Ben about tonight. */
-function shiftReply(fit, day, mode) {
-	const w = workToday({
-		...fit,
-		tonight: {
-			day,
-			mode
-		}
-	}, day);
-	if (!w) return mode === "normal" ? "Ok, the usual plan." : "Noted. There is no work window set for today (Settings → Ben → My life).";
-	if (mode === "off") return `No work tonight: ${w.from}–${w.to} is free for real work today.`;
-	if (mode === "short") return `Short shift: ${w.busy.from}–${w.busy.to} is work, the rest until ${w.to} is free today.`;
-	return `Normal shift: ${w.from}–${w.to} stays for light tasks only.`;
-}
-/** One line for Ben's prompt: the sleep window, the work window and tonight. */
-function lifeFitLine(fit, day, sleep) {
-	const parts = [`MY LIFE: bed by ${sleep.bed} (latest ${fit.latestBed}), up at ${sleep.wake}.`];
-	const w = fit.work;
-	if (w.on) {
-		parts.push(`Work: ${daysText(w.days)} ${w.from}–${w.to}, but he usually works only ${usualText(w)} of it (it changes). Treat that window as partly busy: never deep focus there, light tasks and quick wins are fine.`);
-		const t = workToday(fit, day);
-		if (t?.mode === "off") parts.push(`Today: no work tonight, so ${t.from}–${t.to} is free.`);
-		else if (t?.mode === "short") parts.push(`Today: a short shift (${t.busy.from}–${t.busy.to}), the rest of the window is free.`);
-		else if (t) parts.push(`Today is a work day. If he says "short shift tonight" or "no work tonight", the free part opens up.`);
-	}
-	return parts.join(" ");
-}
-/** Each level within the existing caps (`maxMessages`, `maxPerHour`): Push is the most, never more. */
-function pushStyle(level, caps = {
-	maxMessages: 15,
-	maxPerHour: 3
-}) {
-	const m = caps.maxMessages;
-	const h = caps.maxPerHour;
-	if (level === "gentle") return {
-		tone: 2,
-		messagesPerDay: Math.min(m, Math.round(m * .5)),
-		perHour: Math.min(h, Math.max(1, h - 1)),
-		escalate: false,
-		label: "Gentle",
-		hint: "Warm, fewer messages, no firm follow-ups"
-	};
-	if (level === "firm") return {
-		tone: 3,
-		messagesPerDay: Math.min(m, Math.round(m * .8)),
-		perHour: h,
-		escalate: false,
-		label: "Firm",
-		hint: "Honest and direct, a normal number of nudges"
-	};
-	return {
-		tone: 4,
-		messagesPerDay: m,
-		perHour: h,
-		escalate: true,
-		label: "Push",
-		hint: "Tough love, all the nudges, firmer follow-ups (still within quiet hours)"
-	};
-}
-// src/renderer/src/web/lifeFitStore.ts
-var HM$4 = /^([01]\d|2[0-3]):[0-5]\d$/;
-function readLifeFit(db) {
-	try {
-		return cleanLifeFit(JSON.parse(getSetting(db, "life_fit") || "null"));
-	} catch {
-		return cleanLifeFit(null);
-	}
-}
-/** Bedtime and wake time: your sleep targets, or the My life defaults when none is set yet. */
-function sleepWindow(db) {
-	const bed = getSetting(db, "sleep_bed_target");
-	const wake = getSetting(db, "sleep_weekday_target");
-	return {
-		bed: bed && HM$4.test(bed) ? bed : DEFAULT_BED,
-		wake: wake && HM$4.test(wake) ? wake : DEFAULT_WAKE
-	};
-}
-var lifeFitView = (db) => ({
-	...readLifeFit(db),
-	...sleepWindow(db)
-});
-/** Saves a change; bedtime and wake time go to the sleep targets. */
-function saveLifeFit(db, patch) {
-	const { bed, wake, ...rest } = patch;
-	const cur = readLifeFit(db);
-	const areas = rest.areas ? {
-		...cur.areas,
-		...rest.areas
-	} : rest.push ? Object.fromEntries(AREAS$1.map((a) => [a, levelFromPush(rest.push)])) : cur.areas;
-	const next = cleanLifeFit({
-		...cur,
-		...rest,
-		areas,
-		pushes: {
-			...cur.pushes,
-			...rest.pushes ?? {}
-		},
-		work: {
-			...cur.work,
-			...rest.work ?? {}
-		}
-	});
-	setSetting(db, LIFE_FIT_KEY, JSON.stringify(next));
-	if (bed && HM$4.test(bed)) setSetting(db, "sleep_bed_target", bed);
-	if (wake && HM$4.test(wake)) {
-		setSetting(db, "sleep_weekday_target", wake);
-		try {
-			db.prepare("UPDATE rules SET title = ? WHERE id = 'sleep.up_on_time'").run(`Up by ${wake}`);
-		} catch {}
-	}
-	return lifeFitView(db);
-}
-/** "Short shift tonight" / "no work tonight" / "normal shift" for the app day `day`. */
-function saveTonight(db, day, mode) {
-	const next = setTonight(readLifeFit(db), day, mode);
-	setSetting(db, LIFE_FIT_KEY, JSON.stringify(next));
-	return next;
-}
 var HM$3 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var toMin$1 = (t) => t === "24:00" ? 1440 : Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var toMin$2 = (t) => t === "24:00" ? 1440 : Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 var hmOf$2 = (m) => `${String(Math.floor((m % 1440 + 1440) % 1440 / 60)).padStart(2, "0")}:${String((m % 1440 + 1440) % 1440 % 60).padStart(2, "0")}`;
 /** Minutes since noon, so one night reads in order: 23:30 (690) < 24:00 (720) < 00:20 (740) < 03:00 (900). */
 var night = (m) => (m - 720 + 1440) % 1440;
-var nightOf = (t) => t === "24:00" ? 720 : night(toMin$1(t));
+var nightOf = (t) => t === "24:00" ? 720 : night(toMin$2(t));
 /**
 * Tonight's after-shift plan for the app day `day`, or null: no work window
 * today, no work tonight, or the shift ends well before bed (more than an
@@ -19410,8 +20445,8 @@ function afterShiftPlan(fit, day, bed) {
 	const e = nightOf(end);
 	if (e > 960 || e < nightOf(bed) - 60) return null;
 	return {
-		start: hmOf$2(toMin$1(end)),
-		lightsOut: hmOf$2(toMin$1(end) + 20),
+		start: hmOf$2(toMin$2(end)),
+		lightsOut: hmOf$2(toMin$2(end) + 20),
 		bed
 	};
 }
@@ -19751,7 +20786,8 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		moneyContext(extra.finance, today),
 		...moreContext(s, db, extra.finance, today, input, sum.todayRules ?? [], disc),
 		...extrasContext(db, today, body.restDays ?? []),
-		...sagaContext(s, db, extra.finance, now)
+		...sagaContext(s, db, extra.finance, now),
+		...careerContext(db, today, extra.finance)
 	];
 	if (extra.events) {
 		const nowHM = now.toTimeString().slice(0, 5);
@@ -20438,7 +21474,7 @@ function readAction(line) {
 	}
 	if (kind === "checkin") {
 		const clock = /^(\d{1,2})[:.](\d{2})$/.exec(parts[0] ?? "");
-		const minutes = clock ? minutesUntil$1(`${clock[1]}:${clock[2]}`, /* @__PURE__ */ new Date()) ?? 0 : Number(parts[0]);
+		const minutes = clock ? minutesUntil(`${clock[1]}:${clock[2]}`, /* @__PURE__ */ new Date()) ?? 0 : Number(parts[0]);
 		return minutes >= 5 && minutes <= 720 && parts[1] ? {
 			kind: "checkin",
 			minutes,
@@ -21161,8 +22197,8 @@ function blockStarted(b, day, sessions) {
 }
 /** Blocks that start before `now` (10 min of grace) and were not started: the plan is late. */
 function lateBlocks(plan, now, sessions = []) {
-	const cut = toMin$5(now) - 10;
-	return plan.blocks.filter((b) => toMin$5(b.start) < cut && !blockStarted(b, plan.day, sessions));
+	const cut = toMin$7(now) - 10;
+	return plan.blocks.filter((b) => toMin$7(b.start) < cut && !blockStarted(b, plan.day, sessions));
 }
 /**
 * Moves the plan's past, unstarted blocks into the time left from planStartAt(now).
@@ -21171,11 +22207,11 @@ function lateBlocks(plan, now, sessions = []) {
 */
 function shiftPlan(plan, o) {
 	const startAt = planStartAt(o.now);
-	const s0 = toMin$5(startAt);
+	const s0 = toMin$7(startAt);
 	const sessions = o.sessions ?? [];
 	const keep = [];
 	const late = [];
-	for (const b of plan.blocks) if (toMin$5(b.start) >= s0 || b.locked || blockStarted(b, plan.day, sessions)) keep.push(b);
+	for (const b of plan.blocks) if (toMin$7(b.start) >= s0 || b.locked || blockStarted(b, plan.day, sessions)) keep.push(b);
 	else late.push(b);
 	if (!late.length) return {
 		plan,
@@ -21200,7 +22236,7 @@ function shiftPlan(plan, o) {
 		allDay: false
 	});
 	keep.forEach((b, i) => busy.push(asEvent(b.start, b.minutes, `keep${i}`)));
-	if (plan.training && toMin$5(plan.training.time) >= s0) busy.push(asEvent(plan.training.time, Number(/(\d+)\s*min/.exec(plan.training.what)?.[1]) || 45, "training"));
+	if (plan.training && toMin$7(plan.training.time) >= s0) busy.push(asEvent(plan.training.time, Number(/(\d+)\s*min/.exec(plan.training.what)?.[1]) || 45, "training"));
 	let wins = freeWindows(busy, plan.day, startAt, o.endBy ?? "22:00");
 	const moves = [];
 	const unplaced = [];
@@ -21245,9 +22281,9 @@ function shiftPlan(plan, o) {
 		});
 	}
 	let training = plan.training;
-	if (training && toMin$5(training.time) < s0 && !training.locked) {
+	if (training && toMin$7(training.time) < s0 && !training.locked) {
 		const len = Number(/(\d+)\s*min/.exec(training.what)?.[1]) || 45;
-		const from = Math.max(s0, toMin$5("17:00"));
+		const from = Math.max(s0, toMin$7("17:00"));
 		const w = wins.find((x) => x.e - Math.max(x.s, from) >= len) ?? wins.find((x) => x.e - x.s >= len);
 		if (w) {
 			const at = w.e - Math.max(w.s, from) >= len ? Math.max(w.s, from) : w.s;
@@ -21355,7 +22391,7 @@ function planItems$1(plan) {
 	}
 	return items.sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
 }
-var endOf = (b) => toMin$5(b.start) + b.minutes;
+var endOf = (b) => toMin$7(b.start) + b.minutes;
 /** Writes one item back (a block, or the training slot). */
 function putItem(plan, id, f) {
 	if (id === "train") {
@@ -21423,7 +22459,7 @@ function applyEdit(plan, e) {
 	switch (e.op) {
 		case "move": {
 			if (!item || item.locked) return p;
-			const s = Math.max(0, Math.min(DAY_END - item.minutes, snap5(toMin$5(e.start))));
+			const s = Math.max(0, Math.min(DAY_END - item.minutes, snap5(toMin$7(e.start))));
 			if (fromMin$1(s) === item.start) return p;
 			return relinkAlso(putItem(p, e.id, (b) => ({
 				...b,
@@ -21432,7 +22468,7 @@ function applyEdit(plan, e) {
 		}
 		case "resize": {
 			if (!item || item.locked) return p;
-			const m = Math.max(15, Math.min(DAY_END - toMin$5(item.start), snap5(e.minutes)));
+			const m = Math.max(15, Math.min(DAY_END - toMin$7(item.start), snap5(e.minutes)));
 			return m === item.minutes ? p : putItem(p, e.id, (b) => ({
 				...b,
 				minutes: m
@@ -21461,8 +22497,8 @@ function applyEdit(plan, e) {
 		case "remove": return item ? putItem(p, e.id, () => null) : p;
 		case "add": {
 			const t = e.title.replace(/\s+/g, " ").trim().slice(0, 80) || "Focus";
-			const start = fromMin$1(Math.max(0, Math.min(1425, snap5(toMin$5(e.start)))));
-			const minutes = Math.max(15, Math.min(DAY_END - toMin$5(start), snap5(e.minutes)));
+			const start = fromMin$1(Math.max(0, Math.min(1425, snap5(toMin$7(e.start)))));
+			const minutes = Math.max(15, Math.min(DAY_END - toMin$7(start), snap5(e.minutes)));
 			const id = e.id ?? `b${hashId(`${p.day}|add|${t}|${start}|${p.blocks.length}`)}`;
 			if (p.blocks.some((b) => b.id === id)) return p;
 			return {
@@ -21558,7 +22594,7 @@ function mergeKept(fresh, prev) {
 	const kept = keptBlocks(prev);
 	if (!kept.length || !prev || prev.day !== fresh.day) return fresh;
 	const keptTasks = new Set(kept.flatMap((b) => b.tasks ?? []).map((t) => t.toLowerCase()));
-	const clash = (b) => kept.some((k) => toMin$5(b.start) < endOf(k) && endOf(b) > toMin$5(k.start));
+	const clash = (b) => kept.some((k) => toMin$7(b.start) < endOf(k) && endOf(b) > toMin$7(k.start));
 	const blocks = fresh.blocks.filter((b) => !clash(b)).filter((b) => !b.tasks?.length || b.tasks.some((t) => !keptTasks.has(t.toLowerCase()))).map((b) => b.tasks?.length ? {
 		...b,
 		tasks: b.tasks.filter((t) => !keptTasks.has(t.toLowerCase()))
@@ -21578,10 +22614,10 @@ function mergeKept(fresh, prev) {
 function replanFromNow(plan, o) {
 	const p = ensureIds(plan);
 	const startAt = planStartAt(o.now);
-	const s0 = toMin$5(startAt);
+	const s0 = toMin$7(startAt);
 	const sessions = o.sessions ?? [];
 	const allTicked = (b) => !!b.tasks?.length && b.tasks.every((t) => (b.done ?? []).some((d) => d.toLowerCase() === t.toLowerCase()));
-	const stays = (b) => !!b.locked || toMin$5(b.start) < s0 && (blockStarted(b, p.day, sessions) || allTicked(b));
+	const stays = (b) => !!b.locked || toMin$7(b.start) < s0 && (blockStarted(b, p.day, sessions) || allTicked(b));
 	const keep = p.blocks.filter(stays);
 	const move = p.blocks.filter((b) => !stays(b)).sort((a, b) => a.start.localeCompare(b.start));
 	const asEvent = (b) => {
@@ -21596,7 +22632,7 @@ function replanFromNow(plan, o) {
 		};
 	};
 	const busy = [...o.events, ...keep.map(asEvent)];
-	if (p.training && (p.training.locked || toMin$5(p.training.time) < s0)) busy.push(asEvent({
+	if (p.training && (p.training.locked || toMin$7(p.training.time) < s0)) busy.push(asEvent({
 		id: TRAIN_ID,
 		title: p.training.what,
 		start: p.training.time,
@@ -21704,7 +22740,7 @@ function readPlanTap(data) {
 var blockMarkId = (b, eventId) => eventId || `plan:${b.start} ${b.title}`.slice(0, 120);
 /** The new start for a ±minutes move, kept inside the day (05:00–23:30), or null when it can't move. */
 function movedStart(b, delta) {
-	const s = toMin$5(b.start) + delta;
+	const s = toMin$7(b.start) + delta;
 	if (s < 300 || s + b.minutes > 1439) return null;
 	return fromMin$1(s);
 }
@@ -24649,7 +25685,7 @@ async function goalsTick(mirror, services, now, send, esc) {
 		}
 		const cards = s.goals.cards(now);
 		if (!cards.length) return null;
-		const st0 = cleanAsks(raw, today);
+		const st0 = cleanAsks$1(raw, today);
 		const st = seedSeen(st0, cards);
 		return {
 			st,
@@ -24674,6 +25710,373 @@ async function goalsTick(mirror, services, now, send, esc) {
 		await send(goalPingText(p, esc), goalKeyboard(p));
 	} catch {}
 	return `${p.kind}:${p.card.goal.id}`;
+}
+// src/renderer/src/web/bots/telegram.ts
+var esc$2 = (s) => s.replace(/[<>&]/g, (c) => ({
+	"<": "&lt;",
+	">": "&gt;",
+	"&": "&amp;"
+})[c]);
+/** Telegram's Bot API, small and with a timeout so a hung call can't stall the app. */
+async function tg(token, method, body) {
+	const ctrl = new AbortController();
+	const t = setTimeout(() => ctrl.abort(), 15e3);
+	try {
+		const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
+			method: body ? "POST" : "GET",
+			headers: body ? { "Content-Type": "application/json" } : void 0,
+			body: body ? JSON.stringify(body) : void 0,
+			signal: ctrl.signal
+		});
+		return await res.json().catch(() => ({
+			ok: false,
+			description: `HTTP ${res.status}`
+		}));
+	} finally {
+		clearTimeout(t);
+	}
+}
+/**
+* A voice note or photo from Telegram, as base64 for Gemini (up to 15 MB;
+* Telegram voice notes are OGG/Opus, photos JPEG).
+*/
+async function downloadFile(token, fileId, kind) {
+	try {
+		const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`);
+		const path = info?.result?.file_path;
+		if (!info?.ok || !path || (info.result.file_size ?? 0) > 15e6) return null;
+		const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`);
+		if (!res.ok) return null;
+		const buf = new Uint8Array(await res.arrayBuffer());
+		let bin = "";
+		for (let i = 0; i < buf.length; i += 32768) bin += String.fromCharCode(...buf.subarray(i, i + 32768));
+		const ext = String(path).split(".").pop()?.toLowerCase();
+		return {
+			kind,
+			mime: kind === "photo" ? ext === "png" ? "image/png" : "image/jpeg" : ext === "mp3" ? "audio/mpeg" : ext === "m4a" ? "audio/mp4" : "audio/ogg",
+			data: btoa(bin)
+		};
+	} catch {
+		return null;
+	}
+}
+/** A small text file sent on Telegram (a bank CSV), read in memory. */
+async function downloadText(token, fileId) {
+	try {
+		const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`);
+		const path = info?.result?.file_path;
+		if (!info?.ok || !path || (info.result.file_size ?? 0) > 2e6) return null;
+		const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`);
+		if (!res.ok) return null;
+		const buf = new Uint8Array(await res.arrayBuffer());
+		const utf = new TextDecoder("utf-8").decode(buf);
+		return utf.includes("�") ? new TextDecoder("windows-1252").decode(buf) : utf;
+	} catch {
+		return null;
+	}
+}
+// src/renderer/src/web/bots/careerBot.ts
+/** The question side of a card, with Show answer. */
+function quizQuestion(c, left) {
+	return {
+		text: `🃏 <b>${esc$2(c.front)}</b>\n<i>${esc$2(c.deck)} · ${left} to go today</i>`,
+		keyboard: { inline_keyboard: [[{
+			text: "👀 Show answer",
+			callback_data: `cr|a|${c.id}`
+		}]] }
+	};
+}
+/** The answer side, with the four grades and when each brings it back. */
+function quizAnswer(c, today) {
+	return {
+		text: `🃏 <b>${esc$2(c.front)}</b>\n\n${esc$2(c.back)}\n\n<i>How well did you know it?</i>`,
+		keyboard: { inline_keyboard: [GRADES.map((g) => ({
+			text: `${GRADE_LABEL[g]} · ${ivlText(nextIvl(c, g, today))}`,
+			callback_data: `cr|g|${c.id}|${g[0]}`
+		}))] }
+	};
+}
+function packKeyboard(p) {
+	return { inline_keyboard: [[{
+		text: `▶ Start ${p.minutes} min`,
+		callback_data: `fo|${p.minutes}|${PACK_SUBJECT}`
+	}, {
+		text: "🃏 Quiz me",
+		callback_data: "cr|q"
+	}]] };
+}
+var DONE = "🎉 No cards left for today. See you tomorrow.";
+/** /quiz, /pack, /jobs (and "quiz me", "study pack"): null when the text is something else. */
+function runCareer(s, text, finance) {
+	const t = text.trim().toLowerCase().replace(/@\w+$/, "");
+	const today = s.wallet.today();
+	if (/^\/quiz$|^quiz me$|^flashcards?$/.test(t)) {
+		const n = nextCard(s.db, today);
+		if (!n) return { reply: DONE };
+		const q = quizQuestion(n.card, n.left);
+		return {
+			reply: q.text,
+			keyboard: q.keyboard
+		};
+	}
+	if (/^\/pack$|^study pack$|^give me a (study )?pack$/.test(t)) {
+		const v = careerView(s, finance());
+		return {
+			reply: esc$2(packText(v.study.pack)),
+			keyboard: packKeyboard(v.study.pack)
+		};
+	}
+	if (/^\/jobs$|^\/career$/.test(t)) {
+		const b = loadJobs(s.db);
+		const due = followUpsDue(b, today);
+		return {
+			reply: `💼 ${esc$2(jobsLine(b, today) || "No jobs on the board yet. Add them on the Career page.")}`,
+			keyboard: due.length ? followKeyboard(due[0].id) : void 0
+		};
+	}
+	return null;
+}
+var followKeyboard = (id) => ({ inline_keyboard: [[{
+	text: "✅ Followed up",
+	callback_data: `cr|f|${id}`
+}, {
+	text: "⏰ In 3 days",
+	callback_data: `cr|z|${id}`
+}]] });
+var payKeyboard = (txId, ask) => ({ inline_keyboard: [[{
+	text: `✅ Moved ${ask} lei`,
+	callback_data: `cr|p|${txId}|${ask}`.slice(0, 64)
+}, {
+	text: "Not this time",
+	callback_data: `cr|p|${txId}|0`.slice(0, 64)
+}]] });
+var gradeOf = (x) => GRADES.find((g) => g[0] === x) ?? null;
+/** The buttons under career messages. */
+var CAREER_CALLBACK = {
+	prefixes: ["cr"],
+	match: (data) => data.startsWith("cr|"),
+	run: async (c, t) => {
+		const { mirror, services, markSeen } = c;
+		const { data, key, answer, edit, cq } = t;
+		const [, op, a, b] = data.split("|");
+		if (op !== "a" && op !== "q" && op !== "l" && !await markSeen(key)) return null;
+		const res = await mirror.write((db) => {
+			const today = services.services(db).wallet.today();
+			if (op === "q") {
+				const n = nextCard(db, today);
+				return n ? {
+					...quizQuestion(n.card, n.left),
+					toast: ""
+				} : {
+					text: DONE,
+					keyboard: void 0,
+					toast: "All done"
+				};
+			}
+			if (op === "a") {
+				const card = loadCards(db).cards.find((x) => x.id === a);
+				return card ? {
+					...quizAnswer(card, today),
+					toast: ""
+				} : {
+					text: "That card is gone.",
+					keyboard: void 0,
+					toast: "Gone"
+				};
+			}
+			if (op === "g") {
+				const g = gradeOf(b ?? "");
+				const done = g ? gradeCard(db, a, g, today) : null;
+				if (!done) return {
+					text: "That card is gone.",
+					keyboard: void 0,
+					toast: "Gone"
+				};
+				const n = nextCard(db, today, [a]);
+				const head = `✓ ${GRADE_LABEL[g]} · back in ${ivlText(done.ivl)}`;
+				if (!n) return {
+					text: `${esc$2(head)}\n\n${DONE}`,
+					keyboard: void 0,
+					toast: head
+				};
+				const q = quizQuestion(n.card, n.left);
+				return {
+					text: `<i>${esc$2(head)}</i>\n\n${q.text}`,
+					keyboard: q.keyboard,
+					toast: head
+				};
+			}
+			if (op === "f" || op === "z") {
+				const book = loadJobs(db);
+				const job = book.jobs.find((j) => j.id === a);
+				if (!job) return {
+					text: `${esc$2(String(cq.message?.text ?? ""))}\n\nThat job is gone.`,
+					keyboard: void 0,
+					toast: "Gone"
+				};
+				saveJobs(db, op === "f" ? followedUp(book, a, today) : snoozeFollowUp(book, a, today, 3));
+				const line = op === "f" ? `✅ Followed up with ${job.company}. Good.` : `⏰ I'll ask again about ${job.company} in 3 days.`;
+				return {
+					text: `${esc$2(String(cq.message?.text ?? ""))}\n\n${esc$2(line)}`,
+					keyboard: void 0,
+					toast: op === "f" ? "Noted" : "Later"
+				};
+			}
+			if (op === "p") {
+				const moved = Math.max(0, Math.round(Number(b) || 0));
+				const fin = financeStateFrom(db, typeof localStorage !== "undefined" ? localStorage : null);
+				const tx = (Array.isArray(fin?.tx) ? fin.tx : []).find((x) => String(x.id) === a);
+				const m = loadMoney(db);
+				setSetting(db, CAREER_MONEY, JSON.stringify({
+					...m,
+					answers: answerPay(m.answers, {
+						txId: a,
+						day: String(tx?.date ?? today).slice(0, 10)
+					}, moved, today)
+				}));
+				const line = moved ? `💪 ${moved} lei to savings first. That's how the safety net grows.` : "OK, not this time. Next income, we try again.";
+				return {
+					text: `${esc$2(String(cq.message?.text ?? ""))}\n\n${esc$2(line)}`,
+					keyboard: void 0,
+					toast: moved ? "Saved first" : "Noted"
+				};
+			}
+			if (op === "e") {
+				const st = loadStudy(db);
+				const e = st.essays.find((x) => x.id === a);
+				if (!e) return {
+					text: "That assignment is gone.",
+					keyboard: void 0,
+					toast: "Gone"
+				};
+				setSetting(db, CAREER_STUDY, JSON.stringify({
+					...st,
+					essays: st.essays.map((x) => x.id === a ? replan(x, today) : x)
+				}));
+				return {
+					text: `${esc$2(String(cq.message?.text ?? ""))}\n\n🗓 Replanned "${esc$2(e.title)}" from today. Check the Career page for the new days.`,
+					keyboard: void 0,
+					toast: "Replanned"
+				};
+			}
+			if (op === "l") {
+				const l = loadLetters$1(db)[0];
+				return {
+					text: l ? esc$2(letterText(l)) : "No letter yet.",
+					keyboard: void 0,
+					toast: ""
+				};
+			}
+			return null;
+		});
+		if (!res) return null;
+		if (res.toast) await answer(res.toast.slice(0, 190));
+		else await answer("");
+		await edit(res.text, res.keyboard);
+		if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-career-changed"));
+		return res.text;
+	}
+};
+// src/server/careerTick.ts
+function cleanAsks(raw, today) {
+	return raw && raw.day === today && Array.isArray(raw.sent) ? {
+		day: today,
+		sent: raw.sent.filter((x) => typeof x === "string").slice(-50)
+	} : {
+		day: today,
+		sent: []
+	};
+}
+var toMin$1 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+/** What to send now, if anything (pure on the view; tested). */
+function pickCareerPing(v, asks, nowMin) {
+	const hour = Math.floor(nowMin / 60);
+	const sent = new Set(asks.sent);
+	if (v.letterDue && hour >= 10 && hour < 20 && !sent.has(`letter:${v.letterDue}`)) return {
+		key: `letter:${v.letterDue}`,
+		kind: "letter"
+	};
+	const pay = v.money.asks[0];
+	if (pay && hour >= 10 && hour < 21 && !sent.has(`pay:${pay.txId}`)) return {
+		key: `pay:${pay.txId}`,
+		kind: "pay",
+		id: pay.txId
+	};
+	const job = v.followUps.find((j) => !sent.has(`fu:${j.id}`));
+	if (job && hour >= 10 && hour < 20) return {
+		key: `fu:${job.id}`,
+		kind: "follow",
+		id: job.id
+	};
+	const behind = v.study.essays.find((e) => e.status.state === "behind");
+	if (behind && hour >= 11 && hour < 21 && !sent.has("essay")) return {
+		key: "essay",
+		kind: "essay",
+		id: behind.essay.id
+	};
+	const sh = v.study.shift;
+	if (sh && sh.now && sh.mode !== "off" && nowMin >= toMin$1(sh.from) + 30 && !sent.has("pack")) return {
+		key: "pack",
+		kind: "pack"
+	};
+	return null;
+}
+async function careerTick(mirror, services, now, nowMin, send, esc) {
+	const plan = await mirror.read((db) => {
+		const s = services.services(db);
+		const today = s.wallet.today(now);
+		let raw = null;
+		try {
+			raw = JSON.parse(getSetting(db, "career_asks") || "null");
+		} catch {
+			raw = null;
+		}
+		const asks = cleanAsks(raw, today);
+		const v = careerView(s, financeStateFrom(db, null), now);
+		const ping = pickCareerPing(v, asks, nowMin);
+		return ping ? {
+			asks,
+			ping,
+			v,
+			today
+		} : null;
+	});
+	if (!plan) return null;
+	const { ping, v, today } = plan;
+	await mirror.write((db) => {
+		const cur = cleanAsks((() => {
+			try {
+				return JSON.parse(getSetting(db, "career_asks") || "null");
+			} catch {
+				return null;
+			}
+		})(), today);
+		setSetting(db, CAREER_ASKS, JSON.stringify({
+			day: today,
+			sent: [...cur.sent, ping.key]
+		}));
+	});
+	try {
+		if (ping.kind === "letter") await send(esc(letterText(await mirror.write((db) => writeLetter(db, financeStateFrom(db, null), v.letterDue, today)))));
+		else if (ping.kind === "pay") {
+			const a = v.money.asks.find((x) => x.txId === ping.id);
+			await send(esc(`💰 ${a.income.toLocaleString("en-US")} lei came in (${a.note}). Pay yourself first: move ${v.money.plan.payPct}% (${a.ask.toLocaleString("en-US")} lei) to savings before anything else?${v.money.streak.now ? ` You're on ${v.money.streak.now} in a row.` : ""}`), payKeyboard(a.txId, a.ask));
+		} else if (ping.kind === "follow") {
+			const j = v.followUps.find((x) => x.id === ping.id);
+			const what = j.stage === "interview" ? "a thank-you and a short follow-up after the interview" : j.stage === "offer" ? "an answer to the offer" : "a short follow-up on your application";
+			await send(esc(`📨 ${j.company} · ${j.role}: time for ${what}. Two lines is enough.`), followKeyboard(j.id));
+		} else if (ping.kind === "essay") {
+			const flag = behindFlags(v.study.essays.map((x) => x.essay), today)[0];
+			await send(esc(`✍️ Heads up, you're behind: ${flag}. Do the next step today, or let me replan it from today.`), { inline_keyboard: [[{
+				text: "🗓 Replan from today",
+				callback_data: `cr|e|${ping.id}`
+			}]] });
+		} else {
+			const p = v.study.pack;
+			await send(esc(`${packText(p)}\n\nFor the quiet bits of the shift. It counts as focus time.`), packKeyboard(p));
+		}
+	} catch {}
+	return ping.key;
 }
 // src/core/health.ts
 /** 1234567 → "1.2M" */
@@ -37826,12 +39229,12 @@ function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = D
 		source: "telegram"
 	};
 }
-var esc$2 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
+var esc$1 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	"&": "&amp;",
 	"<": "&lt;",
 	">": "&gt;"
 })[c]);
-var fm = (state, c) => esc$2(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
+var fm = (state, c) => esc$1(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
 var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B$2(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
@@ -37840,15 +39243,15 @@ function loggedText(state, t, today = null) {
 	const sign = t.type === "income" ? "+" : "−";
 	const alert = budgetAlert(state, t);
 	const work = t.type === "expense" ? workText(state, B$2(t), t.date) : "";
-	const lines = [`✅ <b>${sign}${esc$2(formatMoney(t.amount, t.currency))}</b> · ${esc$2(t.note || c)}`, `${esc$2(c)}${sc ? ` › ${esc$2(sc.emoji ? `${sc.emoji} ` : "")}${esc$2(sc.name)}` : ""} · ${esc$2(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
-	if (work) lines.push(`⏱ ${esc$2(work)} of your work`);
+	const lines = [`✅ <b>${sign}${esc$1(formatMoney(t.amount, t.currency))}</b> · ${esc$1(t.note || c)}`, `${esc$1(c)}${sc ? ` › ${esc$1(sc.emoji ? `${sc.emoji} ` : "")}${esc$1(sc.name)}` : ""} · ${esc$1(a)}${t.date ? ` · ${dayShort(t.date)}` : ""}`];
+	if (work) lines.push(`⏱ ${esc$1(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
 		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B$2(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
-		lines.push(`${esc$2(c || "This category")} this month: ${fm(state, catMonth)}`);
+		lines.push(`${esc$1(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
-	if (alert) lines.push(`⚠️ ${esc$2(alert.text)}`);
+	if (alert) lines.push(`⚠️ ${esc$1(alert.text)}`);
 	if (today && t.type === "expense" && (state.recurring?.length || state.tx.length > 10)) lines.push(safeLine(state, today, (c) => fm(state, c)));
 	return lines.join("\n");
 }
@@ -38545,7 +39948,7 @@ function payTodoist(s, done) {
 	return n;
 }
 // src/core/focusBot.ts
-var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
+var esc = (s) => s.replace(/[<>&]/g, (c) => ({
 	"<": "&lt;",
 	">": "&gt;",
 	"&": "&amp;"
@@ -38555,7 +39958,7 @@ var PLAN_ASK = "What are your 1–3 must-dos today?";
 function morningText(o) {
 	const lines = ["☀️ <b>Good morning!</b>", ""];
 	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$7(o.focusYesterdayMin)}</b> of focus.`);
-	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$1(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
+	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
 	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
 	if (lines.length > 2) lines.push("");
 	lines.push(o.planAlready ? "You already have a plan for today: /plan to see it." : `<b>${PLAN_ASK}</b>\nReply to this message, one per line.`);
@@ -38564,7 +39967,7 @@ function morningText(o) {
 function planText(plan, title = "📝 <b>Today's must-dos</b>") {
 	if (!plan.items.length) return `${title}\n\nNo plan yet. Send <code>/plan essay; gym; call Leo</code>.`;
 	const done = plan.items.filter((i) => i.done).length;
-	const lines = plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$1(it.text)}`);
+	const lines = plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc(it.text)}`);
 	return `${title} (${done}/${plan.items.length})\n\n${lines.join("\n")}\n\n<i>Tap to tick · +10 coins each</i>`;
 }
 /** Buttons under a plan: tick each must-do; in the evening, what got in the way. */
@@ -38587,7 +39990,7 @@ function eveningText(plan, focusMin) {
 	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
 	const done = plan.items.filter((i) => i.done).length;
 	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
-	return `${head}\n\n${plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc$1(it.text)}`).join("\n")}\n\n${verdict}`;
+	return `${head}\n\n${plan.items.map((it, i) => `${it.done ? "✅" : "⬜"} ${i + 1}. ${esc(it.text)}`).join("\n")}\n\n${verdict}`;
 }
 function weekText(w, goals) {
 	const lines = [
@@ -38595,17 +39998,17 @@ function weekText(w, goals) {
 		"",
 		`⏱ Focus: <b>${hm$7(w.totalMin)}</b>`
 	];
-	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$1(s.subject)}: ${hm$7(s.minutes)}`);
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc(s.subject)}: ${hm$7(s.minutes)}`);
 	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
-	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$1(r.reason)} ×${r.count}`).join(", ")}`);
+	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc(r.reason)} ×${r.count}`).join(", ")}`);
 	if (w.funMin) lines.push(`🎮 Fun: ${hm$7(w.funMin)}`);
-	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$1(g.title)}: ${hm$7(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc(g.title)}: ${hm$7(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
 	lines.push("", "<b>One thing to change next week?</b> Reply here.");
 	return lines.join("\n");
 }
 function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
-	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$7(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$7(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/core/benActs.ts
 /** At 10:00–19:59 a proposed plan nobody approved gets approved. */
@@ -38642,7 +40045,7 @@ function nextSlot(events, day, nowHm, minutes) {
 	if (!gap) return null;
 	return {
 		start: gap.start,
-		end: fromMin$1(toMin$5(gap.start) + minutes)
+		end: fromMin$1(toMin$7(gap.start) + minutes)
 	};
 }
 function movedText(title, slot) {
@@ -40939,20 +42342,20 @@ function undoTool(svc, op) {
 }
 var BREAK_MIN = 10;
 var MEAL = {
-	from: toMin$5("11:30"),
-	to: toMin$5("14:30"),
+	from: toMin$7("11:30"),
+	to: toMin$7("14:30"),
 	need: 30
 };
 var deepOf = (b) => !b.train && b.kind !== "quick";
 /** Bed minus the wind-down, in minutes of the day (bed after midnight counts as 24:00+). */
 function lastEnd(ctx) {
-	const bed = toMin$5(ctx.bedtime ?? "23:30");
-	return (bed < toMin$5("12:00") ? bed + 1440 : bed) - (ctx.windDown ?? 45);
+	const bed = toMin$7(ctx.bedtime ?? "23:30");
+	return (bed < toMin$7("12:00") ? bed + 1440 : bed) - (ctx.windDown ?? 45);
 }
 function spans(plan, ctx) {
 	const items = planItems$1(plan).map((b) => ({
-		s: toMin$5(b.start),
-		e: toMin$5(b.start) + b.minutes,
+		s: toMin$7(b.start),
+		e: toMin$7(b.start) + b.minutes,
 		id: b.id,
 		locked: !!b.locked,
 		fixed: false,
@@ -41038,9 +42441,9 @@ function checkPlan(plan, ctx) {
 		fixable: late.some((x) => !x.locked)
 	});
 	if (ctx.now) {
-		const s0 = toMin$5(ctx.now);
-		const past = planItems$1(plan).filter((b) => toMin$5(b.start) < s0 - 10 && toMin$5(b.start) + b.minutes > s0 && !b.locked && !b.sync?.eventId);
-		const gone = planItems$1(plan).filter((b) => toMin$5(b.start) + b.minutes <= s0 && !b.locked && !b.sync && !b.done?.length);
+		const s0 = toMin$7(ctx.now);
+		const past = planItems$1(plan).filter((b) => toMin$7(b.start) < s0 - 10 && toMin$7(b.start) + b.minutes > s0 && !b.locked && !b.sync?.eventId);
+		const gone = planItems$1(plan).filter((b) => toMin$7(b.start) + b.minutes <= s0 && !b.locked && !b.sync && !b.done?.length);
 		const ids = [...past, ...gone].map((b) => b.id);
 		if (ids.length) out.push({
 			code: "past",
@@ -41049,7 +42452,7 @@ function checkPlan(plan, ctx) {
 			fixable: true
 		});
 	}
-	const from = ctx.now ? toMin$5(ctx.now) : Math.min(...mine.map((x) => x.s), end);
+	const from = ctx.now ? toMin$7(ctx.now) : Math.min(...mine.map((x) => x.s), end);
 	const busy = all.filter((x) => x.fixed && x.e > from && x.s < end).reduce((t, x) => t + Math.min(x.e, end) - Math.max(x.s, from), 0);
 	const free = Math.max(0, end - from - busy);
 	const planned = mine.filter((x) => x.e > from).reduce((t, x) => t + x.e - Math.max(x.s, from), 0);
@@ -41076,7 +42479,7 @@ function fixPlan(raw, ctx) {
 	const fixed = /* @__PURE__ */ new Set();
 	const items = planItems$1(plan);
 	const fixedSpans = spans(plan, ctx).filter((x) => x.fixed || x.locked);
-	const startAt = ctx.now ? toMin$5(planStartAt(ctx.now)) : 0;
+	const startAt = ctx.now ? toMin$7(planStartAt(ctx.now)) : 0;
 	const end = lastEnd(ctx);
 	const placed = fixedSpans.map((x) => ({
 		s: x.s,
@@ -41086,9 +42489,9 @@ function fixPlan(raw, ctx) {
 	const out = /* @__PURE__ */ new Map();
 	const moveable = items.filter((b) => !b.locked).sort((a, b) => a.start.localeCompare(b.start));
 	for (const b of moveable) {
-		let s = toMin$5(b.start);
+		let s = toMin$7(b.start);
 		if (ctx.now) {
-			const nowM = toMin$5(ctx.now);
+			const nowM = toMin$7(ctx.now);
 			const ended = s + b.minutes <= nowM;
 			if (ended && (b.sync || b.done?.length) || !ended && s < nowM - 10 && b.sync?.eventId) {
 				placed.push({
@@ -41133,7 +42536,7 @@ function fixPlan(raw, ctx) {
 		}
 		let minutes = b.minutes;
 		if (s + minutes > end) {
-			const own = toMin$5(b.start);
+			const own = toMin$7(b.start);
 			if (end - s >= 25) {
 				minutes = Math.floor((end - s) / 5) * 5;
 				fixed.add("late");
@@ -41907,7 +43310,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		const p = ensureIds(cur.b.plan);
 		const events = calendar ? await calendar.events(...dayBounds()).catch(() => []) : [];
 		const mineIds = new Set([...p.blocks.map((b) => b.sync?.eventId), p.training?.sync?.eventId].filter(Boolean));
-		const bedMin = toMin$5(cur.bed);
+		const bedMin = toMin$7(cur.bed);
 		const endBy = fromMin$1(Math.min(bedMin < 720 ? 1380 : bedMin - 45, 1380));
 		const r = replanFromNow(p, {
 			now: hmNow(now),
@@ -42335,7 +43738,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				line = "fewer nudges: 5 a day at most, so each one counts";
 			} else if (change === "earlier-plan") {
 				const prefs = cleanPrefs$2(readJson$1(db, RHYTHM_PREFS, null));
-				const at = fromMin$1(Math.max(toMin$5("06:30"), toMin$5(prefs.autopilot ?? "07:30") - 30));
+				const at = fromMin$1(Math.max(toMin$7("06:30"), toMin$7(prefs.autopilot ?? "07:30") - 30));
 				setSetting(db, RHYTHM_PREFS, JSON.stringify({
 					...prefs,
 					autopilot: at
@@ -42399,7 +43802,11 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		const extraLines = await mirror.read((db) => {
 			const svc = services.services(db);
 			const fin = financeStateFrom(db, null);
-			return [weekTimeFor(svc, weekEvents, today).line, moodReviewLine(svc, fin)].filter(Boolean);
+			return [
+				weekTimeFor(svc, weekEvents, today).line,
+				moodReviewLine(svc, fin),
+				careerWeekLine(db, today)
+			].filter(Boolean);
 		}).catch(() => []);
 		const lines = [
 			...report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ""} (${m.trend})`),
@@ -42814,70 +44221,6 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		countPromise: (day, key) => mirror.write((db) => countPromise(db, day, key))
 	};
 }
-// src/renderer/src/web/bots/telegram.ts
-var esc = (s) => s.replace(/[<>&]/g, (c) => ({
-	"<": "&lt;",
-	">": "&gt;",
-	"&": "&amp;"
-})[c]);
-/** Telegram's Bot API, small and with a timeout so a hung call can't stall the app. */
-async function tg(token, method, body) {
-	const ctrl = new AbortController();
-	const t = setTimeout(() => ctrl.abort(), 15e3);
-	try {
-		const res = await fetch(`https://api.telegram.org/bot${token}/${method}`, {
-			method: body ? "POST" : "GET",
-			headers: body ? { "Content-Type": "application/json" } : void 0,
-			body: body ? JSON.stringify(body) : void 0,
-			signal: ctrl.signal
-		});
-		return await res.json().catch(() => ({
-			ok: false,
-			description: `HTTP ${res.status}`
-		}));
-	} finally {
-		clearTimeout(t);
-	}
-}
-/**
-* A voice note or photo from Telegram, as base64 for Gemini (up to 15 MB;
-* Telegram voice notes are OGG/Opus, photos JPEG).
-*/
-async function downloadFile(token, fileId, kind) {
-	try {
-		const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`);
-		const path = info?.result?.file_path;
-		if (!info?.ok || !path || (info.result.file_size ?? 0) > 15e6) return null;
-		const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`);
-		if (!res.ok) return null;
-		const buf = new Uint8Array(await res.arrayBuffer());
-		let bin = "";
-		for (let i = 0; i < buf.length; i += 32768) bin += String.fromCharCode(...buf.subarray(i, i + 32768));
-		const ext = String(path).split(".").pop()?.toLowerCase();
-		return {
-			kind,
-			mime: kind === "photo" ? ext === "png" ? "image/png" : "image/jpeg" : ext === "mp3" ? "audio/mpeg" : ext === "m4a" ? "audio/mp4" : "audio/ogg",
-			data: btoa(bin)
-		};
-	} catch {
-		return null;
-	}
-}
-/** A small text file sent on Telegram (a bank CSV), read in memory. */
-async function downloadText(token, fileId) {
-	try {
-		const info = await tg(token, `getFile?file_id=${encodeURIComponent(fileId)}`);
-		const path = info?.result?.file_path;
-		if (!info?.ok || !path || (info.result.file_size ?? 0) > 2e6) return null;
-		const res = await fetch(`https://api.telegram.org/file/bot${token}/${path}`);
-		if (!res.ok) return null;
-		const buf = new Uint8Array(await res.arrayBuffer());
-		const utf = new TextDecoder("utf-8").decode(buf);
-		return utf.includes("�") ? new TextDecoder("windows-1252").decode(buf) : utf;
-	} catch {
-		return null;
-	}
-}
 // src/renderer/src/web/bots/helpers.ts
 /** Which Life System expense a Finance Helper record from Telegram made (for Undo). */
 function linkExpense(db, txId, expenseId) {
@@ -42943,7 +44286,7 @@ function focusKeyboard(subjects) {
 }
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r, plan) {
-	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$7(r.state.todayMin)}`;
+	const head = `✅ <b>${r.session.minutes} min of ${esc$2(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$7(r.state.todayMin)}`;
 	const rate = [
 		1,
 		2,
@@ -42964,7 +44307,7 @@ function stoppedReply(r, plan) {
 	if (t?.kind === "mustdo") {
 		const i = plan.items.findIndex((p) => !p.done && p.text === t.ref);
 		if (i >= 0) return {
-			reply: `${head}\n\nFinished “${esc(t.title)}”? And how did it go?`,
+			reply: `${head}\n\nFinished “${esc$2(t.title)}”? And how did it go?`,
 			keyboard: { inline_keyboard: [[{
 				text: "✅ Yes, tick it",
 				callback_data: `pp|${plan.day}|${i}`
@@ -42972,7 +44315,7 @@ function stoppedReply(r, plan) {
 		};
 	}
 	if (t?.kind === "todoist") return {
-		reply: `${head}\n\nFinished “${esc(t.title)}”? And how did it go?`,
+		reply: `${head}\n\nFinished “${esc$2(t.title)}”? And how did it go?`,
 		keyboard: { inline_keyboard: [[{
 			text: "✅ Yes, done in Todoist",
 			callback_data: `td|${t.ref}`.slice(0, 64)
@@ -43102,7 +44445,7 @@ async function planMessage(c, receipt) {
 		approved: b.status === "approved"
 	});
 	return {
-		text: receipt ? withReceipt(base, esc(receipt)) : base,
+		text: receipt ? withReceipt(base, esc$2(receipt)) : base,
 		keyboard: planKeyboard$1(b.plan, {
 			approved: b.status === "approved",
 			marks: blockMarks(marks ?? {}, b.plan),
@@ -43144,7 +44487,7 @@ async function runPlanTap(c, t) {
 			receipt = receiptLine(tap, blk, ok.length ? "" : r.done[0]?.replace(/^⚠️\s*/, "") || "nothing changed");
 			if (r.at && r.undo?.some(Boolean)) await tg(t.update.__token, "sendMessage", {
 				chat_id: t.chat,
-				text: esc([receipt, ...r.done].join("\n")),
+				text: esc$2([receipt, ...r.done].join("\n")),
 				parse_mode: "HTML",
 				reply_markup: { inline_keyboard: [[{
 					text: "↩ Undo",
@@ -43192,7 +44535,7 @@ async function askStall(c, t, subject) {
 	if (!await stallOn(c)) return;
 	await tg(t.update.__token, "sendMessage", {
 		chat_id: t.chat,
-		text: `What's in the way of <b>${esc(subject)}</b>? One tap, one fix.`,
+		text: `What's in the way of <b>${esc$2(subject)}</b>? One tap, one fix.`,
 		parse_mode: "HTML",
 		reply_markup: stallKeyboard(subject)
 	}).catch(() => null);
@@ -43234,7 +44577,7 @@ var STALL_CALLBACK = {
 		if (fix.action.kind === "split") {
 			const said = `break down ${fix.action.subject}`;
 			const res = await c.act(said, [], "", said).catch(() => ({ done: [] }));
-			const text = `${label.icon} <b>${esc(fix.title)}</b>\n${esc(fix.text)}${res.done.length ? `\n${esc(res.done.slice(0, 6).join("\n"))}` : ""}`;
+			const text = `${label.icon} <b>${esc$2(fix.title)}</b>\n${esc$2(fix.text)}${res.done.length ? `\n${esc$2(res.done.slice(0, 6).join("\n"))}` : ""}`;
 			await tg(t.update.__token, "sendMessage", {
 				chat_id: t.chat,
 				text,
@@ -43244,7 +44587,7 @@ var STALL_CALLBACK = {
 		}
 		const a = fix.action;
 		const start = `fo|${a.minutes}|${a.subject}`.slice(0, 64);
-		const text = `${label.icon} <b>${esc(fix.title)}</b>\n${esc(fix.text)}${fix.action && r.reason === "boring" ? "\n🎵 Your boring-task music starts on the PC when the timer does (Music → mark a station “boring only”)." : ""}`;
+		const text = `${label.icon} <b>${esc$2(fix.title)}</b>\n${esc$2(fix.text)}${fix.action && r.reason === "boring" ? "\n🎵 Your boring-task music starts on the PC when the timer does (Music → mark a station “boring only”)." : ""}`;
 		await tg(t.update.__token, "sendMessage", {
 			chat_id: t.chat,
 			text,
@@ -43259,8 +44602,9 @@ var STALL_CALLBACK = {
 };
 // src/renderer/src/web/bots/callbacks.ts
 /** Every callback data the bots answer (anything else isn't a bot button). */
-var CALLBACK_DATA = /^(f[acbksuoxq]|p[prb]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/;
+var CALLBACK_DATA = /^(cr|f[acbksuoxq]|p[prb]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/;
 var CALLBACKS = [
+	CAREER_CALLBACK,
 	{
 		prefixes: ["pb"],
 		match: (data) => data.startsWith("pb|"),
@@ -43354,7 +44698,7 @@ var CALLBACKS = [
 			if (data.startsWith("gb|")) {
 				const want = data.slice(3).toLowerCase();
 				const ids = (await rhythm.goalPlans()).filter((p) => p.title.toLowerCase().startsWith(want) || want.startsWith(p.title.toLowerCase().slice(0, want.length))).map((p) => p.goalId);
-				const text = (await rhythm.bookGoals(ids.length ? ids : void 0)).lines.map(esc).join("\n");
+				const text = (await rhythm.bookGoals(ids.length ? ids : void 0)).lines.map(esc$2).join("\n");
 				await tg(update.__token, "sendMessage", {
 					chat_id: chat,
 					text,
@@ -43365,7 +44709,7 @@ var CALLBACKS = [
 			const said = data.slice(3);
 			await tg(update.__token, "sendMessage", {
 				chat_id: chat,
-				text: `💬 <i>${esc(readConfirm(said)?.rest ?? said)}</i>`,
+				text: `💬 <i>${esc$2(readConfirm(said)?.rest ?? said)}</i>`,
 				parse_mode: "HTML"
 			}).catch(() => null);
 			return handleBrain(botId, {
@@ -43394,7 +44738,7 @@ var CALLBACKS = [
 				const svc = c.services.services(db);
 				svc.money.nothingSpent(financeDayTx(svc));
 				return "👍 Noted: nothing spent today. It counts as a no-spend day if it stays that way.";
-			}).catch((e) => `⚠️ ${esc(e.message)}`);
+			}).catch((e) => `⚠️ ${esc$2(e.message)}`);
 			await answer(data === "mz|0" ? "Nothing spent" : "Send what you spent");
 			await tg(update.__token, "sendMessage", {
 				chat_id: chat,
@@ -43509,7 +44853,7 @@ var CALLBACKS = [
 				})}`;
 			});
 			await answer(line.slice(0, 190));
-			await edit(`${esc(String(cq.message?.text ?? ""))}\n\n${esc(line)}`);
+			await edit(`${esc$2(String(cq.message?.text ?? ""))}\n\n${esc$2(line)}`);
 			return line;
 		}
 	},
@@ -43523,7 +44867,7 @@ var CALLBACKS = [
 			const [, id, op] = data.split("|");
 			const line = await mirror.write((db) => goalTap(services.services(db), Number(id), op ?? ""));
 			await answer(line.slice(0, 190));
-			await edit(`${esc(String(cq.message?.text ?? ""))}\n\n${esc(line)}`);
+			await edit(`${esc$2(String(cq.message?.text ?? ""))}\n\n${esc$2(line)}`);
 			return line;
 		}
 	},
@@ -43536,7 +44880,7 @@ var CALLBACKS = [
 			if (!await markSeen(key)) return null;
 			const r = await undoReply(new Date(Number(data.slice(3))).toISOString());
 			await answer(r.ok ? "Undone" : r.lines[0] ?? "Nothing to undo");
-			const text = `${esc(String(cq.message?.text ?? ""))}\n\n${r.lines.map(esc).join("\n")}`;
+			const text = `${esc$2(String(cq.message?.text ?? ""))}\n\n${r.lines.map(esc$2).join("\n")}`;
 			await edit(text);
 			return text;
 		}
@@ -43558,13 +44902,13 @@ var CALLBACKS = [
 				if (data === "rb|a") {
 					await answer("Approving…");
 					const r = await rhythm.approve();
-					const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join("\n")}` : esc(r.done.join(" "));
+					const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc$2).join("\n")}` : esc$2(r.done.join(" "));
 					await edit(text, (r.plan ? await planMessage(c).catch(() => null) : null)?.keyboard);
 					return text;
 				}
 				if (data === "rb|r") {
 					await answer("Making another plan…");
-					await edit(`${esc(msg)}\n\n🔄 <i>Making another one…</i>`);
+					await edit(`${esc$2(msg)}\n\n🔄 <i>Making another one…</i>`);
 					return await sendProposal(update.__token, chat);
 				}
 				if (data === "rb|e" || data === "rv|e" || data === "rw|e") {
@@ -43602,14 +44946,14 @@ var CALLBACKS = [
 				if (data === "rv|k") {
 					await answer("Saved for tomorrow");
 					const draft = await rhythm.planTomorrow().catch(() => null);
-					const text = `${esc(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.${draft?.blocks.length ? ` Tomorrow's draft is ready: ${draft.blocks.length} block${draft.blocks.length === 1 ? "" : "s"} from ${draft.blocks[0].start}.` : ""}`;
+					const text = `${esc$2(msg)}\n\n✅ <b>Saved.</b> They're the first must-dos in tomorrow's plan.${draft?.blocks.length ? ` Tomorrow's draft is ready: ${draft.blocks.length} block${draft.blocks.length === 1 ? "" : "s"} from ${draft.blocks[0].start}.` : ""}`;
 					await edit(text);
 					return text;
 				}
 				if (data === "rw|a") {
 					const line = await rhythm.applyWeekly();
 					await answer("Week planned");
-					const text = `${esc(msg)}\n\n✅ ${esc(line)}`;
+					const text = `${esc$2(msg)}\n\n✅ ${esc$2(line)}`;
 					await edit(text, { inline_keyboard: [[{
 						text: "📅 Book the big 3 in my calendar",
 						callback_data: "rw|b"
@@ -43621,7 +44965,7 @@ var CALLBACKS = [
 					if (arg === "ok") {
 						const line = await rhythm.top3Save();
 						await answer("Saved");
-						await edit(esc(line));
+						await edit(esc$2(line));
 						return line;
 					}
 					const r = await rhythm.top3Tap(Number(arg));
@@ -43632,7 +44976,7 @@ var CALLBACKS = [
 				if (data === "rw|b") {
 					const list = await rhythm.bookingPreview();
 					await answer(list.length ? "Here they are" : "No free time found");
-					const text = list.length ? `📅 <b>The big 3 this week</b>, in your free time:\n${list.map((b) => `${(/* @__PURE__ */ new Date(`${b.day}T12:00:00`)).toLocaleDateString("en-GB", { weekday: "short" })} ${b.start}–${b.end} ${esc(b.title)}`).join("\n")}` : "No free time found for the big 3 this week (or they are done).";
+					const text = list.length ? `📅 <b>The big 3 this week</b>, in your free time:\n${list.map((b) => `${(/* @__PURE__ */ new Date(`${b.day}T12:00:00`)).toLocaleDateString("en-GB", { weekday: "short" })} ${b.start}–${b.end} ${esc$2(b.title)}`).join("\n")}` : "No free time found for the big 3 this week (or they are done).";
 					await tg(update.__token, "sendMessage", {
 						chat_id: chat,
 						text,
@@ -43650,7 +44994,7 @@ var CALLBACKS = [
 				if (data === "rw|y" || data === "rw|n") {
 					const done = data === "rw|y" ? await rhythm.bookWeek() : [];
 					await answer(data === "rw|y" ? `Booked ${done.length}` : "Not booked");
-					const text = `${esc(msg)}\n\n${data === "rw|y" ? `✅ Booked ${done.length} block${done.length === 1 ? "" : "s"}.` : "Not booked."}`;
+					const text = `${esc$2(msg)}\n\n${data === "rw|y" ? `✅ Booked ${done.length} block${done.length === 1 ? "" : "s"}.` : "Not booked."}`;
 					await edit(text);
 					return text;
 				}
@@ -43681,7 +45025,7 @@ var CALLBACKS = [
 					content: title
 				}]));
 				await answer(paid ? "+8 points" : "Done");
-				const text = `${String(cq.message?.text ?? "").split("\n\nFinished")[0]}\n\n✅ <b>Done in Todoist:</b> ${esc(title)}${paid ? " · 🪙 +8" : ""}`;
+				const text = `${String(cq.message?.text ?? "").split("\n\nFinished")[0]}\n\n✅ <b>Done in Todoist:</b> ${esc$2(title)}${paid ? " · 🪙 +8" : ""}`;
 				await edit(text);
 				return text;
 			} catch (e) {
@@ -43708,7 +45052,7 @@ var CALLBACKS = [
 			if (sug === void 0) return null;
 			if (data.startsWith("gx|") || !sug || !calendar) {
 				await answer("Okay");
-				await edit(`${esc(String(cq.message?.text ?? ""))}\n\nOkay, no blocks. Start when you're ready: /focus 50`);
+				await edit(`${esc$2(String(cq.message?.text ?? ""))}\n\nOkay, no blocks. Start when you're ready: /focus 50`);
 				return "no blocks";
 			}
 			let made = 0;
@@ -43719,7 +45063,7 @@ var CALLBACKS = [
 				description: "Planned with your coach in Life System"
 			}).then(() => true).catch(() => false)) made++;
 			await answer(made ? `${made} blocks added` : "Calendar failed");
-			const text = `${esc(String(cq.message?.text ?? ""))}\n\n✅ ${made} block${made === 1 ? "" : "s"} in your Google Calendar. When one starts, I'll be here: /focus 50`;
+			const text = `${esc$2(String(cq.message?.text ?? ""))}\n\n✅ ${made} block${made === 1 ? "" : "s"} in your Google Calendar. When one starts, I'll be here: /focus 50`;
 			await edit(text);
 			return text;
 		}
@@ -43743,7 +45087,7 @@ var CALLBACKS = [
 			})) return null;
 			const r = Number(n);
 			await answer(`${n}/5 noted`);
-			const base = esc(String(cq.message?.text ?? "").replace(/\n*(And )?[Hh]ow did it go\?\s*$/, ""));
+			const base = esc$2(String(cq.message?.text ?? "").replace(/\n*(And )?[Hh]ow did it go\?\s*$/, ""));
 			const low = r <= 2;
 			const text = `${base}\n\n${low ? `Session: <b>${r}/5</b>. What got in the way? Tap it, and next time we fix that first.` : r === 3 ? "Session: <b>3/5</b>. Fine. Next one: phone in another room for the first 10 minutes." : `Session: <b>${r}/5</b> 🔥 That's the feeling. Same time tomorrow?`}`;
 			await edit(text, low ? { inline_keyboard: [REASONS$1.slice(0, 3), REASONS$1.slice(3)].map((row, k) => row.map((x, i) => ({
@@ -44092,7 +45436,7 @@ var CALLBACKS = [
 			if (!res) return null;
 			await answer(res.error ?? `Sleep ${n}/5 noted`);
 			if (res.error) return null;
-			const text = `${esc(String(cq.message?.text ?? "").replace(/\n*😴 How did you sleep\?\s*$/, ""))}\n\n😴 Sleep: <b>${n}/5</b>. ${res.tip}`;
+			const text = `${esc$2(String(cq.message?.text ?? "").replace(/\n*😴 How did you sleep\?\s*$/, ""))}\n\n😴 Sleep: <b>${n}/5</b>. ${res.tip}`;
 			await edit(text);
 			return text;
 		}
@@ -44119,7 +45463,7 @@ var CALLBACKS = [
 							title: item.text
 						} : null);
 						return {
-							text: `⏱ <b>Focus started:</b> ${esc(item?.text ?? subject)} · ${minutes} min.\nPhone away. Tap Stop when you finish.`,
+							text: `⏱ <b>Focus started:</b> ${esc$2(item?.text ?? subject)} · ${minutes} min.\nPhone away. Tap Stop when you finish.`,
 							keyboard: STOP_KEYBOARD,
 							toast: "Focus started"
 						};
@@ -44194,7 +45538,7 @@ var CALLBACKS = [
 						if (kind === "pr" && String(cq.message?.text ?? "").includes("What got in the way?")) {
 							const reason = REASONS$1[Number(n)];
 							return {
-								text: `${esc(String(cq.message?.text ?? "").replace(/What got in the way\?[\s\S]*$/, ""))}Noted: <b>${esc(reason)}</b>. The coach will help you fix that first next time.`,
+								text: `${esc$2(String(cq.message?.text ?? "").replace(/What got in the way\?[\s\S]*$/, ""))}Noted: <b>${esc$2(reason)}</b>. The coach will help you fix that first next time.`,
 								keyboard: void 0,
 								toast
 							};
@@ -44277,7 +45621,7 @@ function runFocus(s, text, focusEnded) {
 		if (!arg) {
 			if (st.running) {
 				const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
-				return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
+				return { reply: `⏱ <b>Focusing on ${esc$2(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
 			}
 			return { reply: `⏱ Today: <b>${hm$7(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
 		}
@@ -44285,7 +45629,7 @@ function runFocus(s, text, focusEnded) {
 		const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
 		f.start(subject, minutes);
 		return {
-			reply: `⏱ <b>Focus started:</b> ${esc(subject)} · ${minutes} min.\nPhone away. Tap Stop (or send <code>/stop</code>) when you finish.`,
+			reply: `⏱ <b>Focus started:</b> ${esc$2(subject)} · ${minutes} min.\nPhone away. Tap Stop (or send <code>/stop</code>) when you finish.`,
 			keyboard: STOP_KEYBOARD
 		};
 	}
@@ -44310,7 +45654,7 @@ function runFocus(s, text, focusEnded) {
 		if (!minutes) return { reply: "🎮 How long? e.g. <code>/fun 30 youtube</code> (1 coin a minute)" };
 		const what = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || "Fun";
 		const r = f.fun(minutes, what);
-		return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc(what)}</b> · −${r.cost} points (left: ${r.balance})` };
+		return { reply: `🎮 <b>Enjoy ${minutes} min of ${esc$2(what)}</b> · −${r.cost} points (left: ${r.balance})` };
 	}
 	if (cmd === "review") {
 		if (!arg) return { reply: "📝 Send one line about today, e.g. <code>/review good focus, phone was the problem</code>" };
@@ -44443,7 +45787,7 @@ function runCommand(s, parsed, text, env) {
 			const cat = parsed.expenseCategory || "other";
 			const note = parsed.expenseNote || "";
 			if (cat === "income") return {
-				reply: `💰 <b>Income noted:</b> ${formatMoney$1(cents, "MDL")}${note ? ` · ${esc(note)}` : ""}\n\nAdded to Finance Helper.`,
+				reply: `💰 <b>Income noted:</b> ${formatMoney$1(cents, "MDL")}${note ? ` · ${esc$2(note)}` : ""}\n\nAdded to Finance Helper.`,
 				expense: {
 					amount: cents,
 					category: "income",
@@ -44505,7 +45849,7 @@ function runCommand(s, parsed, text, env) {
 				yesterday: "Yesterday",
 				week: "The last 7 days",
 				month: "This month"
-			}[parsed.period ?? "today"]}</b>\n${esc(line.replace(/^Spending [^:]+: /, ""))}` };
+			}[parsed.period ?? "today"]}</b>\n${esc$2(line.replace(/^Spending [^:]+: /, ""))}` };
 		}
 		case "bed": {
 			const at = parsed.args.find((a) => /^\d{1,2}:\d{2}$/.test(a));
@@ -44514,7 +45858,7 @@ function runCommand(s, parsed, text, env) {
 		}
 		case "tasks": {
 			const open = s.tasks.state().tasks.filter((t) => !t.done).slice(0, 8);
-			return { reply: open.length ? `📋 <b>Open tasks</b>\n\n${open.map((t, i) => `${i + 1}. [${esc(t.category)}] <b>${esc(t.title)}</b>`).join("\n")}\n\n<i>Done one? Send</i> <code>/done 1</code>` : "📋 <b>No open tasks.</b> All clear!" };
+			return { reply: open.length ? `📋 <b>Open tasks</b>\n\n${open.map((t, i) => `${i + 1}. [${esc$2(t.category)}] <b>${esc$2(t.title)}</b>`).join("\n")}\n\n<i>Done one? Send</i> <code>/done 1</code>` : "📋 <b>No open tasks.</b> All clear!" };
 		}
 		case "done": {
 			const open = s.tasks.state().tasks.filter((t) => !t.done);
@@ -44522,7 +45866,7 @@ function runCommand(s, parsed, text, env) {
 			const target = open.find((t) => t.id === num) ?? (num > 0 && num <= open.length ? open[num - 1] : void 0);
 			if (!target) return { reply: "⚠️ No task with that number. Send <code>/tasks</code> to see them." };
 			s.tasks.complete(target.id);
-			return { reply: `✅ Done: <b>${esc(target.title)}</b>` };
+			return { reply: `✅ Done: <b>${esc$2(target.title)}</b>` };
 		}
 		case "vault": {
 			const v = s.economy.getEconomySummary();
@@ -44532,16 +45876,16 @@ function runCommand(s, parsed, text, env) {
 				`🪙 Points: <b>${v.coinsBalance}</b> (≈ ${v.coinsRealValue} ${v.currency})`,
 				`💰 Vault: <b>${v.vaultBalance} ${v.currency}</b>`,
 				`🔥 Multiplier: ${v.multiplier.label}`,
-				v.pinnedGoal ? `🌟 Goal: ${esc(v.pinnedGoal.title)} (${v.pinnedGoal.allocatedCoins}/${v.pinnedGoal.targetCoins} points)` : ""
+				v.pinnedGoal ? `🌟 Goal: ${esc$2(v.pinnedGoal.title)} (${v.pinnedGoal.allocatedCoins}/${v.pinnedGoal.targetCoins} points)` : ""
 			].filter(Boolean).join("\n") };
 		}
 		case "goals": {
 			const goals = s.economy.goals().filter((g) => !g.completed);
-			return { reply: goals.length ? `🎯 <b>Goals</b>\n\n${goals.map((g, i) => `${i + 1}. ${g.pinned ? "⭐ " : ""}<b>${esc(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} points`).join("\n")}` : "🎯 No open goals. Add one in the Shop." };
+			return { reply: goals.length ? `🎯 <b>Goals</b>\n\n${goals.map((g, i) => `${i + 1}. ${g.pinned ? "⭐ " : ""}<b>${esc$2(g.title)}</b> · ${g.allocatedCoins}/${g.targetCoins} points`).join("\n")}` : "🎯 No open goals. Add one in the Shop." };
 		}
 		case "crush": return { reply: formatUrgeResponse() };
 		default: return {
-			reply: `❓ I didn't understand <code>${esc(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.`,
+			reply: `❓ I didn't understand <code>${esc$2(text.slice(0, 60))}</code>.\n\nSend <code>/help</code> for the list.`,
 			unknown: true
 		};
 	}
@@ -46076,7 +47420,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const today = await services.read((s) => s.wallet.today());
 		await tg(token, "sendMessage", {
 			chat_id: chat,
-			text: `☀️ <b>Good morning!</b>${events.length ? `\n🗓 Today: ${esc(agendaText(events, today))}\n` : ""}\n<b>${PLAN_ASK}</b>\nReply to this message, one per line.`,
+			text: `☀️ <b>Good morning!</b>${events.length ? `\n🗓 Today: ${esc$2(agendaText(events, today))}\n` : ""}\n<b>${PLAN_ASK}</b>\nReply to this message, one per line.`,
 			parse_mode: "HTML",
 			reply_markup: {
 				force_reply: true,
@@ -46111,7 +47455,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (!blocks.length) return;
 		await tg(token, "sendMessage", {
 			chat_id: chat,
-			text: `🗓 <b>I can fit them into your free time:</b>\n${blocks.map((b) => `${b.start}–${b.end} · ${esc(b.title)}`).join("\n")}`,
+			text: `🗓 <b>I can fit them into your free time:</b>\n${blocks.map((b) => `${b.start}–${b.end} · ${esc$2(b.title)}`).join("\n")}`,
 			parse_mode: "HTML",
 			reply_markup: { inline_keyboard: [[{
 				text: "✅ Put them in my calendar",
@@ -46142,7 +47486,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		linkExpense(currentDb, t.id, res.expense.id);
 		const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.today());
 		return {
-			reply: money.reply + (insight ? `\n${esc(insight)}` : "") + (res.awarded ? `\n🪙 <b>+${ruleCoins(s, "money.logged", 3)} points</b> (first spending logged today)` : ""),
+			reply: money.reply + (insight ? `\n${esc$2(insight)}` : "") + (res.awarded ? `\n🪙 <b>+${ruleCoins(s, "money.logged", 3)} points</b> (first spending logged today)` : ""),
 			keyboard: money.keyboard
 		};
 	}
@@ -46162,7 +47506,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			};
 		}
 		const cups = text.startsWith("/") ? null : parseCoffee(text);
-		if (cups) return { reply: esc(logCoffee(s, s.db, cups).reply) };
+		if (cups) return { reply: esc$2(logCoffee(s, s.db, cups).reply) };
 		const ml = text.startsWith("/") ? null : parseWater(text);
 		if (ml) {
 			const day = sportToday();
@@ -46178,8 +47522,10 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			logProtein(s.db, prot, "telegram");
 			const v = bodyPlusView(s.db);
 			const left = Math.max(0, v.goal.g - v.today);
-			return { reply: `🍗 <b>+${prot.g} g protein</b> (${esc(prot.label)}).\nToday: <b>${v.today} of ${v.goal.g} g</b>${left ? ` · ${left} g to go` : " · goal reached 💪"}` };
+			return { reply: `🍗 <b>+${prot.g} g protein</b> (${esc$2(prot.label)}).\nToday: <b>${v.today} of ${v.goal.g} g</b>${left ? ` · ${left} g to go` : " · goal reached 💪"}` };
 		}
+		const career = runCareer(s, text, () => financeStateFrom(s.db, server ? null : store));
+		if (career) return career;
 		const viaFocus = runFocus(s, text, focusEnded);
 		if (viaFocus) return viaFocus;
 		const parsed = parseTelegramText(text);
@@ -46189,8 +47535,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				if (p) {
 					const id = keepMoneyAsk(currentDb, text);
 					return {
-						reply: `💸 Log <b>${esc(p.label)}</b>?
-<i>${esc(text.slice(0, 80))}</i>`,
+						reply: `💸 Log <b>${esc$2(p.label)}</b>?
+<i>${esc$2(text.slice(0, 80))}</i>`,
 						keyboard: { inline_keyboard: [[{
 							text: "✅ Log it",
 							callback_data: `ml|${id}`
@@ -46295,7 +47641,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		let reply;
 		let ok = true;
 		if (!allowed(cfg, chat)) {
-			reply = `⛔ This chat (<code>${esc(chat)}</code>) isn't allowed.`;
+			reply = `⛔ This chat (<code>${esc$2(chat)}</code>) isn't allowed.`;
 			ok = false;
 		} else try {
 			const today = await services.read((sv) => sv.wallet.today());
@@ -46303,7 +47649,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				if (!arg) reply = "➕ What should I add? e.g. <code>/task call Leo tomorrow 17:00 p1 #University</code>";
 				else {
 					const t = await todoist.quickAdd(arg);
-					reply = `➕ <b>Added to Todoist:</b> ${esc(t.content || arg)}${t.section ? `\n📂 ${esc(t.section)}` : t.project ? `\n📂 ${esc(t.project)}` : ""}${t.due ? `\n📅 ${t.due === today ? "Today" : t.due}${t.dueTime ? " " + t.dueTime : ""}` : ""}${t.priority > 1 ? ` · ${pLabel(t.priority)}` : ""}`;
+					reply = `➕ <b>Added to Todoist:</b> ${esc$2(t.content || arg)}${t.section ? `\n📂 ${esc$2(t.section)}` : t.project ? `\n📂 ${esc$2(t.project)}` : ""}${t.due ? `\n📅 ${t.due === today ? "Today" : t.due}${t.dueTime ? " " + t.dueTime : ""}` : ""}${t.priority > 1 ? ` · ${pLabel(t.priority)}` : ""}`;
 				}
 			} else if (cmd === "done" && arg) {
 				const list = sortToday(await todoist.today(), today);
@@ -46313,12 +47659,12 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				else {
 					await todoist.close(t.id);
 					const paid = await mirror.write((db) => payTodoist(services.services(db), [t]));
-					reply = `✅ <b>Done in Todoist:</b> ${esc(t.content)}${paid ? "\n🪙 <b>+8 points</b>" : ""}`;
+					reply = `✅ <b>Done in Todoist:</b> ${esc$2(t.content)}${paid ? "\n🪙 <b>+8 points</b>" : ""}`;
 				}
 			} else reply = todayText(await todoist.today(), today);
 		} catch (e) {
 			ok = false;
-			reply = `⚠️ Todoist: ${esc(e.message)}`;
+			reply = `⚠️ Todoist: ${esc$2(e.message)}`;
 		}
 		processed++;
 		addLog(text, chat, ok, reply);
@@ -46343,7 +47689,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				price: buy.price,
 				what: buy.what
 			});
-			return { reply: `${r.verdict === "buy" ? "🟢" : r.verdict === "wait" ? "🟡" : "🔴"} <b>${esc(r.title)}</b>\n${r.lines.map((l) => `• ${esc(l)}`).join("\n")}` };
+			return { reply: `${r.verdict === "buy" ? "🟢" : r.verdict === "wait" ? "🟡" : "🔴"} <b>${esc$2(r.title)}</b>\n${r.lines.map((l) => `• ${esc$2(l)}`).join("\n")}` };
 		}
 		return db.transaction(() => {
 			const out = run(svc, text, key);
@@ -47034,7 +48380,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			ref: `B${i + 1}`,
 			i,
 			b,
-			end: fromMin$1(toMin$5(b.start) + b.minutes)
+			end: fromMin$1(toMin$7(b.start) + b.minutes)
 		})) : [];
 		const planLines = planB.length ? `Today's plan blocks waiting for his OK (use the B-number; once approved they become calendar events):\n${planB.map((x) => `${x.ref} ${x.b.start}–${x.end} ${x.b.title}`).join("\n")}` : "";
 		const hmOfIso = (iso) => new Date(iso).toTimeString().slice(0, 5);
@@ -47742,7 +49088,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 								start: nb.start
 							}
 						};
-						done.push(a.kind === "rename" ? `✏️ Renamed: ${r.old.title} (${r.old.start}–${fromMin$1(toMin$5(r.old.start) + r.old.minutes)}) → ${nb.title}` : `🗓 Moved: ${nb.title} (${r.old.start}) → ${nb.start}–${fromMin$1(toMin$5(nb.start) + nb.minutes)}`);
+						done.push(a.kind === "rename" ? `✏️ Renamed: ${r.old.title} (${r.old.start}–${fromMin$1(toMin$7(r.old.start) + r.old.minutes)}) → ${nb.title}` : `🗓 Moved: ${nb.title} (${r.old.start}) → ${nb.start}–${fromMin$1(toMin$7(nb.start) + nb.minutes)}`);
 						continue;
 					}
 					if (a.kind === "rename") {
@@ -48399,19 +49745,19 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			if (w === "plan" && rh.briefing) {
 				const p = rh.briefing.plan;
 				out.push(`☀️ <b>Today's plan</b>${rh.briefing.status === "approved" ? " (approved)" : " (waiting for your OK)"}`);
-				out.push(...p.blocks.map((b) => `${b.start}–${fromMin$1(toMin$5(b.start) + b.minutes)} ${esc(b.title)}`));
-				if (p.training) out.push(`${p.training.time} 🏋️ ${esc(p.training.what)}`);
-				if (p.mustdos.length) out.push(`Must-dos: ${p.mustdos.map(esc).join(" · ")}`);
+				out.push(...p.blocks.map((b) => `${b.start}–${fromMin$1(toMin$7(b.start) + b.minutes)} ${esc$2(b.title)}`));
+				if (p.training) out.push(`${p.training.time} 🏋️ ${esc$2(p.training.what)}`);
+				if (p.mustdos.length) out.push(`Must-dos: ${p.mustdos.map(esc$2).join(" · ")}`);
 				continue;
 			}
-			if (w === "day") out.push(cards.day?.length ? ["🗓 <b>Your day</b>", ...cards.day.map((e) => `${e.start}–${e.end} ${esc(e.title)}`)].join("\n") : "🗓 Nothing in your calendar today.");
-			if (w === "tasks") out.push(cards.tasks?.length ? ["✅ <b>Tasks</b>", ...cards.tasks.map((t) => `⬜ ${esc(t.text)}${t.late ? " (late)" : ""}`)].join("\n") : "✅ No tasks for today.");
+			if (w === "day") out.push(cards.day?.length ? ["🗓 <b>Your day</b>", ...cards.day.map((e) => `${e.start}–${e.end} ${esc$2(e.title)}`)].join("\n") : "🗓 Nothing in your calendar today.");
+			if (w === "tasks") out.push(cards.tasks?.length ? ["✅ <b>Tasks</b>", ...cards.tasks.map((t) => `⬜ ${esc$2(t.text)}${t.late ? " (late)" : ""}`)].join("\n") : "✅ No tasks for today.");
 			if (w === "focus-week") out.push(`📊 Focus 7 days: <code>${sparkline(st.week.map((d) => d.min))}</code> ${(st.week.reduce((t, d) => t + d.min, 0) / 60).toFixed(1)}h`);
-			if (w === "goals") out.push(...st.goals.map((g) => `🎯 ${esc(g.title)}: ${g.pct}% · ${g.perDayMin} min/day · ${g.daysLeft}d left`));
+			if (w === "goals") out.push(...st.goals.map((g) => `🎯 ${esc$2(g.title)}: ${g.pct}% · ${g.perDayMin} min/day · ${g.daysLeft}d left`));
 			if (w === "plan") out.push(`☀️ Plan: ${st.plan.status === "none" ? "not made yet" : `${st.plan.status}, ${st.plan.mustdos} must-dos, ${st.plan.blocks} blocks`}`);
 			if (w === "water" && st.today.waterTarget) out.push(`💧 ${(st.today.waterMl / 1e3).toFixed(1)} of ${(st.today.waterTarget / 1e3).toFixed(1)} L`);
-			if (w === "mustdos") out.push(...st.mustdos.map((m) => `${m.done ? "✅" : "⬜"} ${esc(m.text)}`));
-			if (w === "promises") out.push(`🤝 Promises 7 days: ${st.promises.kept} kept, ${st.promises.missed} missed${st.promises.awaiting.length ? ` · waiting: ${esc(st.promises.awaiting[st.promises.awaiting.length - 1])}` : ""}`);
+			if (w === "mustdos") out.push(...st.mustdos.map((m) => `${m.done ? "✅" : "⬜"} ${esc$2(m.text)}`));
+			if (w === "promises") out.push(`🤝 Promises 7 days: ${st.promises.kept} kept, ${st.promises.missed} missed${st.promises.awaiting.length ? ` · waiting: ${esc$2(st.promises.awaiting[st.promises.awaiting.length - 1])}` : ""}`);
 		}
 		return out.join("\n");
 	}
@@ -48429,7 +49775,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		try {
 			r = await think(personaFor(botId, cfg), text, key, media).finally(() => clearInterval(typing));
 		} catch (e) {
-			const reply = `⚠️ I couldn't reach your data just now (${esc(e.message || "no connection")}). Send that again in a minute.`;
+			const reply = `⚠️ I couldn't reach your data just now (${esc$2(e.message || "no connection")}). Send that again in a minute.`;
 			addLog(text || `[${media?.kind}]`, chat, false, reply);
 			await tg(update.__token, "sendMessage", {
 				chat_id: chat,
@@ -48438,8 +49784,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			}).catch(() => null);
 			return reply;
 		}
-		const said = r.done.length > 1 && r.receipt ? `\n🧾 ${esc(r.receipt).split("; ").join("\n")}` : r.done.length ? `\n${r.done.map(esc).join("\n")}` : "";
-		const reply = r.ok ? [esc(r.reply), said].join("\n").trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`;
+		const said = r.done.length > 1 && r.receipt ? `\n🧾 ${esc$2(r.receipt).split("; ").join("\n")}` : r.done.length ? `\n${r.done.map(esc$2).join("\n")}` : "";
+		const reply = r.ok ? [esc$2(r.reply), said].join("\n").trim() : `⚠️ ${esc$2(r.reply)} Or use a command like <code>/today</code>.`;
 		addLog(text || `[${media?.kind}]`, chat, r.ok, reply);
 		const rows = [
 			...telegramKeyboard(r.buttons ?? [])?.inline_keyboard ?? [],
@@ -48509,7 +49855,7 @@ His note: ${note}`, { json: true }));
 		})));
 		await tg(token, "sendMessage", {
 			chat_id: chat,
-			text: `💡 <b>Lesson for tomorrow:</b> ${esc(out.reply)}`,
+			text: `💡 <b>Lesson for tomorrow:</b> ${esc$2(out.reply)}`,
 			parse_mode: "HTML"
 		});
 	}
@@ -48533,7 +49879,7 @@ His note: ${note}`, { json: true }));
 					}).catch(() => null);
 					return await sendProposal(update.__token, chat, text);
 				}
-				const reply = asked.includes("Tomorrow's top 3? One per line.") ? `✅ Tomorrow's top 3:\n${(await rhythm.setTop3(text)).map((t, i) => `${i + 1}. ${esc(t)}`).join("\n")}` : `✅ ${esc(await rhythm.applyWeekly(text))}`;
+				const reply = asked.includes("Tomorrow's top 3? One per line.") ? `✅ Tomorrow's top 3:\n${(await rhythm.setTop3(text)).map((t, i) => `${i + 1}. ${esc$2(t)}`).join("\n")}` : `✅ ${esc$2(await rhythm.applyWeekly(text))}`;
 				await tg(update.__token, "sendMessage", {
 					chat_id: chat,
 					text: reply,
@@ -48541,7 +49887,7 @@ His note: ${note}`, { json: true }));
 				}).catch(() => null);
 				return reply;
 			} catch (e) {
-				const reply = `⚠️ ${esc(e.message)}`;
+				const reply = `⚠️ ${esc$2(e.message)}`;
 				await tg(update.__token, "sendMessage", {
 					chat_id: chat,
 					text: reply,
@@ -48573,14 +49919,14 @@ His note: ${note}`, { json: true }));
 					} else {
 						const p = hit.file;
 						const body = (doc.file_size ?? 0) > 2e6 ? null : await downloadText(update.__token, doc.file_id);
-						reply = body == null ? "⚠️ I couldn't open that file (2 MB at most)." : esc(await mirror.write((db) => p.file.run({
+						reply = body == null ? "⚠️ I couldn't open that file (2 MB at most)." : esc$2(await mirror.write((db) => p.file.run({
 							db,
 							now: /* @__PURE__ */ new Date()
 						}, body, String(doc.file_name ?? ""))));
 						if (body != null) onExpense?.();
 					}
 				} catch (e) {
-					reply = `⚠️ ${esc(e.message)}`;
+					reply = `⚠️ ${esc$2(e.message)}`;
 				}
 				await tg(update.__token, "sendMessage", {
 					chat_id: chat,
@@ -48597,7 +49943,7 @@ His note: ${note}`, { json: true }));
 		if (ai && chat && (media || text && !prompted && !isSimpleLog(text))) {
 			if (!await markSeen(key)) return null;
 			if (!allowed(cfg, chat)) {
-				const reply = `⛔ This chat (<code>${esc(chat)}</code>) isn't allowed.`;
+				const reply = `⛔ This chat (<code>${esc$2(chat)}</code>) isn't allowed.`;
 				await tg(update.__token, "sendMessage", {
 					chat_id: chat,
 					text: reply,
@@ -48626,7 +49972,7 @@ His note: ${note}`, { json: true }));
 				if (!text || !chat) return { skip: true };
 				if (!allowed(cfg, chat)) return {
 					skip: false,
-					reply: `⛔ This chat (<code>${esc(chat)}</code>) isn't allowed.`,
+					reply: `⛔ This chat (<code>${esc$2(chat)}</code>) isn't allowed.`,
 					ok: false
 				};
 				const svc = services.services(db);
@@ -48645,7 +49991,7 @@ His note: ${note}`, { json: true }));
 					currentDb = null;
 					return {
 						skip: false,
-						reply: `⚠️ ${esc(e.message)}`,
+						reply: `⚠️ ${esc$2(e.message)}`,
 						ok: false
 					};
 				}
@@ -48766,7 +50112,7 @@ His note: ${note}`, { json: true }));
 			} catch (e) {
 				currentDb = null;
 				return {
-					reply: `⚠️ ${esc(e.message)}`,
+					reply: `⚠️ ${esc$2(e.message)}`,
 					error: true
 				};
 			}
@@ -54926,6 +56272,12 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			if (g) note("sent", `Goal check-in: ${g}`, void 0, "goals");
 		} catch (e) {
 			console.error("goals:", e);
+		}
+		try {
+			const c = await careerTick(mirror, services, now, localMinute(now, tz), send, esc);
+			if (c) note("sent", `Career: ${c}`, void 0, "career");
+		} catch (e) {
+			console.error("career:", e);
 		}
 		try {
 			await backupTick(healthDb, SQL, mirror, now);

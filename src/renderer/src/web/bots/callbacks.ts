@@ -34,6 +34,7 @@ import { answerPushIn, applyMark, readPushLog } from '../benPushStore'
 import { runPlanTap, planMessage } from './planButtons'
 import { askStall, STALL_CALLBACK } from './stallButtons'
 import { subjectFromPush } from '@core/stallFix'
+import { CAREER_CALLBACK } from './careerBot'
 
 export interface CallbackHandler {
   /** The callback-data prefixes it answers ("wa" for "wa|250"), for docs and tests. */
@@ -43,9 +44,11 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(f[acbksuoxq]|p[prb]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/
+export const CALLBACK_DATA = /^(cr|f[acbksuoxq]|p[prb]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
+  // Career: flashcard quiz, follow-ups, pay yourself first, essay replans, the letter (careerBot.ts).
+  CAREER_CALLBACK,
   // TV1: today's plan buttons (move ±30, Done, Skip, Shift to now, Undo a mark).
   {
     prefixes: ['pb'],

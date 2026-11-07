@@ -31,6 +31,7 @@ describe('page tabs', () => {
       today: 'pages/Today.tsx',
       progress: 'pages/Progress.tsx',
       goals: 'pages/Goals.tsx',
+      career: 'pages/Career.tsx',
       money: 'pages/Money.tsx',
       music: 'pages/Music.tsx',
       shop: 'pages/Rewards.tsx',

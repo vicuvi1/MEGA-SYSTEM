@@ -18,6 +18,7 @@ import type { SqlJsStatic } from 'sql.js'
 import type { BotBridgeConfig } from '@shared/api'
 import { Mirror, WRITES_TABLE } from '../renderer/src/web/mirror'
 import { goalsTick } from './goalsTick'
+import { careerTick } from './careerTick'
 import { runSelfCheck, tgSend, timed, type SelfCheckDeps } from './selfCheck'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
@@ -882,6 +883,14 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     if (g) note('sent', `Goal check-in: ${g}`, undefined, 'goals')
   } catch (e) {
     console.error('goals:', e)
+  }
+
+  // Career: the monthly letter, pay yourself first, job follow-ups, essays behind, the shift study pack.
+  try {
+    const c = await careerTick(mirror, services, now, localMinuteOf(now, tz), send, esc)
+    if (c) note('sent', `Career: ${c}`, undefined, 'career')
+  } catch (e) {
+    console.error('career:', e)
   }
 
   // System health: Ben warns you when a part has been broken for 30+ minutes,

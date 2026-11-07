@@ -154,6 +154,30 @@ const CASES: Case[] = [
     check: (w) => expect(w.setting('coach_feedback')?.[0]).toMatchObject({ kind: 'up' })
   },
   {
+    name: 'cr|g grades a flashcard once (the log grows by one), and shows the next card',
+    setup: (w) =>
+      w.mirror.write((db) =>
+        setSetting(db as any, 'career_cards', JSON.stringify({ cards: [{ id: 'k1', front: 'Made-up port?', back: '1234', deck: 'Ports', created: w.day, due: w.day, ivl: 0, ease: 2.5, reps: 0, lapses: 0, last: null }, { id: 'k2', front: 'Second?', back: 'yes', deck: 'Ports', created: w.day, due: w.day, ivl: 0, ease: 2.5, reps: 0, lapses: 0, last: null }], log: [] }))
+      ),
+    data: () => 'cr|g|k1|g',
+    check: (w) => {
+      const v = w.setting('career_cards')
+      expect(v.log).toHaveLength(1)
+      expect(v.cards[0]).toMatchObject({ id: 'k1', reps: 1, ivl: 1, last: w.day })
+      expect(w.sent.some((s) => String(s.body?.text ?? '').includes('Second?'))).toBe(true)
+    }
+  },
+  {
+    name: 'cr|f marks a job follow-up done; cr|p answers "pay yourself first"',
+    setup: (w) => w.mirror.write((db) => setSetting(db as any, 'career_jobs', JSON.stringify({ quota: 3, jobs: [{ id: 'j1', company: 'Made-up Ltd', role: 'Intern', link: null, stage: 'applied', added: '2026-10-01', applied: '2026-10-01', followUp: '2026-10-08', chased: 0, notes: '', moves: [] }] }))),
+    data: () => 'cr|f|j1',
+    check: async (w) => {
+      expect(w.setting('career_jobs').jobs[0]).toMatchObject({ chased: 1 })
+      await w.tap('cr|p|demo-tx|600')
+      expect(w.setting('career_money').answers).toEqual([expect.objectContaining({ txId: 'demo-tx', moved: 600 })])
+    }
+  },
+  {
     name: 'cu| undoes what Ben did in a reply (water back)',
     setup: async (w) => {
       await w.tap('wa|500')

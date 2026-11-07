@@ -60,6 +60,7 @@ import { downloadFile, downloadText, esc, tg } from './bots/telegram'
 import { focusKeyboard, linkExpense, STOP_KEYBOARD, takeLink, ruleCoins } from './bots/helpers'
 import { CALLBACK_DATA, runCallback } from './bots/callbacks'
 import { runCommand, runFocus, type RunOut } from './bots/commands'
+import { runCareer } from './bots/careerBot'
 import { undoReply as undoReplyWith } from './bots/undo'
 import type { BotContext } from './bots/context'
 
@@ -468,6 +469,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const left = Math.max(0, v.goal.g - v.today)
       return { reply: `🍗 <b>+${prot.g} g protein</b> (${esc(prot.label)}).\nToday: <b>${v.today} of ${v.goal.g} g</b>${left ? ` · ${left} g to go` : ' · goal reached 💪'}` }
     }
+    // Career: /quiz, /pack, /jobs (flashcards, the shift study pack, the job board).
+    const career = runCareer(s, text, () => financeStateFrom(s.db, server ? null : store))
+    if (career) return career
     const viaFocus = runFocus(s, text, focusEnded)
     if (viaFocus) return viaFocus
     const parsed = parseTelegramText(text)

@@ -185,6 +185,8 @@ export type Bridge = LifeApi & {
   extras?: import('./web/lifeExtras').ExtrasApi
   /** The Season page: seasons and the boss, vision board, identity votes, side quests, wins, life wheel, Ben's arc. */
   saga?: import('./web/sagaApi').SagaApi
+  /** Career: job board, portfolio, flashcards, essays, shift study kit, money plan, monthly letters (web). */
+  career?: import('./web/career').CareerApi
   /** The Money hub (Finance Helper's numbers) and one-line quick add. */
   finance?: import('./web/moneyApi').MoneyApi
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }

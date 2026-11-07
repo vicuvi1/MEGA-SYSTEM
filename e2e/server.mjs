@@ -209,6 +209,85 @@ if (process.env.E2E_DISCIPLINE === 'demo') {
   db.run("INSERT INTO settings (key, value) VALUES ('app_sync_finance', ?)", [JSON.stringify({ savedAt: Date.now(), data })])
 }
 
+// Made-up career data (Career page smoke and screenshots): companies from the
+// usual sample names, a few flashcards, an essay, a portfolio, a money plan.
+// E2E_CAREER_DEMO=1 also adds a work window and some focus time (screenshots only).
+{
+  const set = (k, v) => db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [k, JSON.stringify(v)])
+  const ahead = (n) => day(-n)
+  const job = (id, company, role, stage, added, applied, followUp, moves) => ({ id, company, role, link: null, stage, added: day(added), applied: applied == null ? null : day(applied), followUp: followUp == null ? null : day(followUp), chased: 0, notes: '', moves: moves.map(([s, n]) => ({ stage: s, day: day(n) })) })
+  set('career_jobs', {
+    quota: 3,
+    jobs: [
+      job('dj1', 'Northwind Labs', 'SOC analyst intern', 'applied', 9, 8, 1, [['found', 9], ['applied', 8]]),
+      job('dj2', 'Contoso Security', 'Junior pentester', 'interview', 20, 18, -1, [['found', 20], ['applied', 18], ['interview', 1]]),
+      job('dj3', 'Fabrikam Cloud', 'Security support intern', 'applied', 3, 1, -6, [['found', 3], ['applied', 1]]),
+      job('dj4', 'Tailspin Games', 'Backend intern (Rust)', 'found', 2, null, null, [['found', 2]]),
+      job('dj5', 'Litware Bank', 'IT security trainee', 'found', 1, null, null, [['found', 1]]),
+      job('dj6', 'Adventure Works', 'Helpdesk + security', 'no', 30, 28, null, [['found', 30], ['applied', 28], ['no', 12]]),
+      job('dj7', 'Proseware', 'Junior analyst', 'applied', 15, 14, -2, [['found', 15], ['applied', 14]]),
+      job('dj8', 'Woodgrove Labs', 'Red team intern', 'offer', 40, 38, -2, [['found', 40], ['applied', 38], ['interview', 20], ['offer', 1]])
+    ]
+  })
+  set('career_proofs', [
+    { id: 'dp1', kind: 'ctf', title: 'Practice CTF: the login that trusted cookies', problem: 'A made-up web challenge where the admin flag sat behind a cookie the server never checked.', did: 'Read the requests in Burp, changed role=user to role=admin and wrote down how to fix it with a signed session.', skills: ['Web security', 'Burp Suite', 'Sessions'], link: 'https://example.com/writeups/cookie', day: day(4), pub: true },
+    { id: 'dp2', kind: 'crate', title: 'tiny-xor: a small Rust crate for XOR ciphers', problem: 'I wanted to understand repeating-key XOR and how it breaks.', did: 'Wrote the cipher, a key-length guesser and tests in Rust; published the code with examples.', skills: ['Rust', 'Cryptography', 'Testing'], link: 'https://example.com/code/tiny-xor', day: day(11), pub: true },
+    { id: 'dp3', kind: 'lab', title: 'Firewall lab: lock down a practice server', problem: 'A university lab: a practice server with every port open.', did: 'Closed all but SSH and HTTPS with nftables, logged the drops and wrote a short report.', skills: ['Linux', 'Networking', 'nftables'], link: null, day: day(19), pub: true },
+    { id: 'dp4', kind: 'feature', title: 'Study packs for quiet moments', problem: 'Idle minutes at work were wasted.', did: 'Built a small planner feature that offers 10–25 minute study packs.', skills: ['TypeScript', 'React'], link: null, day: day(26), pub: false }
+  ])
+  const card = (id, front, back, deck, ivl, reps, dueIn, lastAgo) => ({ id, front, back, deck, created: day(30), due: day(-dueIn), ivl, ease: 2.5, reps, lapses: 0, last: lastAgo == null ? null : day(lastAgo) })
+  set('career_cards', {
+    cards: [
+      card('dc1', 'Which port does SSH use?', '22', 'Ports', 3, 2, 0, 3),
+      card('dc2', 'Which port does HTTPS use?', '443', 'Ports', 8, 3, 0, 8),
+      card('dc3', 'What does XOR of a value with itself give?', '0', 'Crypto', 1, 1, 0, 1),
+      card('dc4', 'In RSA, what is n?', 'The product of the two primes p and q', 'Crypto', 0, 0, 0, null),
+      card('dc5', 'Rust: how many mutable borrows can exist at once?', 'One (and no shared borrows at the same time)', 'Rust', 0, 0, 0, null),
+      card('dc6', 'Which port does DNS use?', '53', 'Ports', 25, 5, 10, 15),
+      card('dc7', 'What does the "S" in HTTPS stand for?', 'Secure (HTTP over TLS)', 'Ports', 30, 6, 12, 18)
+    ],
+    log: Array.from({ length: 24 }, (_, i) => ({ day: day(1 + (i % 9)), id: `dc${1 + (i % 7)}`, grade: i % 6 === 0 ? 'again' : 'good' }))
+  })
+  const essayDue = ahead(6)
+  const steps = [['outline', 'Outline', 2, 40, true], ['draft', 'Draft 1/3', 1, 50, true], ['draft', 'Draft 2/3', 0, 50, false], ['draft', 'Draft 3/3', -1, 50, false], ['edit', 'Edit', -3, 40, false], ['submit', 'Submit', -6, 15, false]]
+  set('career_study', {
+    essays: [
+      { id: 'de1', title: 'Made-up essay: privacy in smart cities', due: essayDue, words: 1400, added: day(4), tight: false, steps: steps.map(([kind, label, n, minutes, done], i) => ({ id: `de1-${i}`, kind, label, day: day(n), minutes, done })) },
+      { id: 'de2', title: 'Lab report: packet capture', due: ahead(2), words: 800, added: day(5), tight: false, steps: [['outline', 'Outline', 3, 30, true], ['draft', 'Draft 1/2', 2, 50, false], ['draft', 'Draft 2/2', 1, 50, false], ['edit', 'Edit', -1, 25, false], ['submit', 'Submit', -2, 15, false]].map(([kind, label, n, minutes, done], i) => ({ id: `de2-${i}`, kind, label, day: day(n), minutes, done })) }
+    ],
+    queue: [
+      { id: 'dq1', kind: 'ctf', text: 'Practice CTF: a format string warm-up', link: null, done: false, added: day(3) },
+      { id: 'dq2', kind: 'reading', text: 'A short guide to the OWASP Top 10: injection', link: null, done: false, added: day(2) }
+    ],
+    turn: 0
+  })
+  set('career_money', {
+    plan: { months: 3, payPct: 20, careerPct: 25, careerGoal: 2500, careerGoalName: 'Certificate exam voucher', investMonthly: 500, investRate: 5, investYears: 10, incomeTarget: 12000, moves: [{ id: 'dm1', text: 'Apply to 2 paid internships', done: true }, { id: 'dm2', text: 'One small freelance bot a month', done: false }], fundStart: 0 },
+    answers: [
+      { txId: 'old-1', day: day(66), moved: 1500, answered: day(66) },
+      { txId: 'old-2', day: day(36), moved: 1800, answered: day(36) }
+    ],
+    spends: [{ id: 'ds1', what: 'A month of a practice lab platform', lei: 180, day: day(20) }]
+  })
+  set('learn_log', [
+    { id: 'dl1', track: 'ctf', title: 'Practice CTF: format string warm-up', tag: 'pwn', link: null, day: day(2) },
+    { id: 'dl2', track: 'rust', title: 'Ch 8: Common collections', tag: '', link: null, day: day(6) }
+  ])
+  const month = (k) => {
+    const d = new Date()
+    d.setUTCDate(15)
+    d.setUTCMonth(d.getUTCMonth() - k)
+    return d.toISOString().slice(0, 7)
+  }
+  set('career_letters', [
+    { month: month(1), written: `${month(0)}-01`, title: `Your career in ${new Date(`${month(1)}-15T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}`, lines: ['📨 You sent 11 applications (the quota asked for about 13), got 2 interviews.', '🧾 3 portfolio entries: Practice CTF: the login that trusted cookies, tiny-xor, Firewall lab.', '🧠 New skills on record: Burp Suite, nftables, Testing.', '⏱ 14.5 h of career work, 9 shift packs included.', '🃏 312 flashcard reviews, 86% remembered.', '✍️ 2 assignments done on time.', '💸 Income 9,000 of 12,000 lei (75%).', '🛟 Emergency fund 38%, paid yourself first 2× in a row.'], change: 'Income was 9,000 of 12,000 lei. Pick one move from your list and do its first step this week.' }
+  ])
+  if (process.env.E2E_CAREER_DEMO) {
+    set('life_fit', { latestBed: '00:30', work: { on: true, days: [0, 1, 2, 3, 4, 5, 6], from: '17:00', to: '24:00', minH: 1, maxH: 3 }, push: 'firm', tonight: null })
+    for (const [n, subject, minutes] of [[1, 'Study pack', 20], [1, 'CTF', 50], [2, 'Study pack', 15], [3, 'Rust', 45], [0, 'Study pack', 20]]) db.run('INSERT INTO focus_sessions (day, subject, minutes, started_at, ended_at, coins) VALUES (?, ?, ?, ?, ?, 0)', [day(n), subject, minutes, `${day(n)}T18:00:00.000Z`, `${day(n)}T18:30:00.000Z`])
+  }
+}
+
 // Made-up goals (Goals page smoke and screenshots): three you can measure with
 // a few weekly check-ins, and one hour goal planned into focus blocks.
 // E2E_NO_GOALS=1: none at all (the empty Goals page).

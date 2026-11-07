@@ -27,6 +27,7 @@ import type { Services } from './webServices'
 import { planGoal, planLine } from '@core/goalPlan'
 import { readButtons, readShow, type ReplyCards } from '@core/coachButtons'
 import { sagaContext } from './sagaStore'
+import { careerContext } from './career'
 import { extrasContext } from './extrasContext'
 import { cleanMind, findPatterns, focusBySubject, sleepDiary, weekAhead, type CoachMind } from '@core/coachMind'
 import { sharedView, sportToday } from '@core/sportShared'
@@ -358,7 +359,9 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
     // Life mode, his own habits, the cyber security path, the month's aim (FT1, FT4, FT8, FT11).
     ...extrasContext(db, today, body.restDays ?? []),
     // LF1, LF4, LF6, LF12, LF15, LF18: the season and its boss, the vision board, identity votes, wins on a low day, the life wheel, his own arc.
-    ...sagaContext(s, db, extra.finance, now)
+    ...sagaContext(s, db, extra.finance, now),
+    // Career: job hunt, essays behind, flashcards due, the money plan (CR1–CR5, CR12–CR14).
+    ...careerContext(db, today, extra.finance)
   ]
   if (extra.events) {
     const nowHM = now.toTimeString().slice(0, 5)

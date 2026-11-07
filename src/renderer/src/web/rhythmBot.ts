@@ -2,6 +2,7 @@
 // the day, puts an approved plan into your calendar and Todoist, writes the
 // evening and Sunday reviews, and the water and training nudges. Used by the
 // tick on the server (Telegram, Mega) and by the app (Today, Coach).
+import { careerWeekLine } from './career'
 import { behindMove, weeklyGoalLines } from '@core/goalsBen'
 import { checkModelPlan, estimateMinutes, packDay, planStartAt, relinkAlso, type PlanTask } from '@core/dayPacker'
 import { PLAN_ASKED, askedToday, isAsked, lateBlocks, shiftPlan, type Span } from '@core/planShift'
@@ -972,7 +973,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       .read((db) => {
         const svc = services.services(db)
         const fin = financeStateFrom(db, null)
-        return [weekTimeFor(svc, weekEvents, today).line, moodReviewLine(svc, fin)].filter(Boolean)
+        return [weekTimeFor(svc, weekEvents, today).line, moodReviewLine(svc, fin), careerWeekLine(db, today)].filter(Boolean)
       })
       .catch(() => [] as string[])
     const lines = [...report.metrics.map((m) => `${m.label}: ${m.text}${m.target ? ` of ${m.targetText}` : ''} (${m.trend})`), ...goalLines, ...extraLines, coachCheck.text, ...(adapt ? [adapt] : []), ...(money ? [`💸 ${money}`] : [])]

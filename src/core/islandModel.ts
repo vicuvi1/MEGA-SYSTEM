@@ -107,6 +107,8 @@ export type IslandAction = { id?: string } & (
   | ({ kind: 'auto' } & import('./automations').AutoIslandOp)
   /** PL1–PL5: a widget's or script's checked call (`widget`: its id, or "script:<id>"); the app window checks it again. */
   | { kind: 'widget'; op: 'fetch' | 'addTask' | 'addNote' | 'notify' | 'save'; widget: string; url?: string; text?: string; setting?: unknown }
+  /** Career: start the study pack (a focus timer), grade the quick flashcard, or another pack (src/core/career/). */
+  | { kind: 'study'; op: 'start' | 'grade' | 'next'; minutes?: number; cardId?: string; grade?: 'again' | 'hard' | 'good' | 'easy' }
   /** Goals: a check-in from the island ("+50", "-0.5", "=3400", "s" same as before, "k" skip: src/core/goalsBen.ts). */
   | { kind: 'goal'; goalId: number; op: string; alertId?: string }
   /** HD: a reminder you set: add one ("remind me to call mom at 18:00"), or Done / Snooze on its card. */
@@ -213,6 +215,8 @@ export interface IslandSnapshot {
   weather?: import('./widgets/weatherPill').IslandWeather | null
   /** Automation hub: your island buttons, runs in progress and their answers, the last runs. */
   auto?: import('./automations').IslandAutoView | null
+  /** Career: the shift study pack and a quick flashcard (src/core/career/studyPack.ts). */
+  study?: import('./career/studyPack').IslandStudy | null
   /** Goals: the top ones with their ring and quick check-in (src/core/goalsIsland.ts). */
   goals?: import('./goalsIsland').IslandGoal[]
   /** HD: today's Healthy day ring (water, moves, breaks, sleep), its streak, and Sunday's weekly card. */

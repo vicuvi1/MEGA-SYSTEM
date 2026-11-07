@@ -2696,14 +2696,91 @@ try {
     if (!(await pg.locator('.ot form.ot-add input[placeholder="Add a task…"]').count())) throw new Error('no "Add a task…" line under Other tasks')
     await pg.setViewportSize({ width: 1440, height: 900 })
   })
+  // Career (made-up data): the job board with its weekly quota, a flashcard review,
+  // the portfolio export, an essay planned backward, pay yourself first, the letter.
+  await step('Career: apply to a job, grade a flashcard, export the portfolio, plan an essay, pay yourself first, the monthly letter', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('career')
+    await pg.waitForSelector('.cr .cr-board .cr-job', { timeout: 15000 })
+    const until = async (fn, what, ms = 10000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 200))
+      }
+    }
+    const tab = async (id) => {
+      await pg.click(`.cr .ptabs [data-tab="${id}"]`)
+      await pg.waitForSelector(`.cr .ptabs [data-tab="${id}"][aria-selected="true"]`, { timeout: 5000 })
+    }
+    await tab('jobs')
+    const sent = async () => Number((await pg.locator('.cr-quota .cr-ring-in b').innerText()).split('/')[0])
+    const before = await sent()
+    await pg.fill('.cr-add input[aria-label="Company"]', 'Made-up Robotics')
+    await pg.fill('.cr-add input[aria-label="Role"]', 'Security intern')
+    await pg.locator('.cr-add [aria-label="Stage"]').click()
+    await pg.locator('.ui-select-list [role=option]', { hasText: 'Applied already' }).click()
+    await pg.click('.cr-add .btn.primary')
+    await until(async () => (await sent()) === before + 1, 'the new application did not count for the week')
+    await pg.locator('.cr-col.s-applied .cr-job', { hasText: 'Made-up Robotics' }).waitFor({ timeout: 5000 })
+    // Move it on with its button: it lands in Interview.
+    await pg.locator('.cr-col.s-applied .cr-job', { hasText: 'Made-up Robotics' }).locator('.btn', { hasText: 'Interview' }).click()
+    await pg.locator('.cr-col.s-interview .cr-job', { hasText: 'Made-up Robotics' }).waitFor({ timeout: 5000 })
+    // Flashcards: Space shows the answer, 3 grades it Good, the queue gets shorter.
+    await tab('cards')
+    await pg.waitForSelector('.cr-face', { timeout: 5000 })
+    const left = async () => Number(/(\d+) left today/.exec(await pg.locator('.cr-flash > small').innerText())?.[1] ?? -1)
+    const n0 = await left()
+    await pg.click('.cr-face')
+    await pg.waitForSelector('.cr-grades', { timeout: 5000 })
+    await pg.locator('.cr-g.good').click()
+    await until(async () => (await left()) === n0 - 1 || (n0 === 1 && (await pg.locator('.cr-review .cr-empty').count()) > 0), 'grading a card did not move the queue on')
+    // Portfolio: the markdown export has the public entries and not the private one.
+    await tab('portfolio')
+    await pg.locator('.cr-exp-btns .btn', { hasText: 'Export markdown' }).click()
+    const md = await pg.locator('.cr-sheet .cr-md').innerText({ timeout: 5000 })
+    if (!/## CTF writeups/.test(md) || /Study packs for quiet moments/.test(md)) throw new Error('the markdown export is wrong')
+    await pg.click('.cr-sheet header .cr-x')
+    await pg.waitForSelector('.cr-sheet', { state: 'detached', timeout: 5000 })
+    // An essay is planned backward into steps, the last on the due day.
+    await tab('study')
+    const due = await pg.evaluate(() => {
+      const d = new Date()
+      d.setDate(d.getDate() + 1)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })
+    await pg.fill('.cr-essays input[aria-label="Title"]', 'Made-up essay on ethics')
+    await pg.fill('.cr-essays input[aria-label="Due date"]', due)
+    await pg.fill('.cr-essays input[aria-label="Words"]', '900')
+    await pg.click('.cr-essays .btn.primary')
+    const essay = pg.locator('.cr-essay', { hasText: 'Made-up essay on ethics' })
+    await essay.waitFor({ timeout: 5000 })
+    if ((await essay.locator('.cr-steps li').count()) < 4) throw new Error('the essay has too few steps')
+    // Pay yourself first: the waiting income is answered and the streak grows.
+    await tab('money')
+    await pg.waitForSelector('.cr-ef .cr-ring', { timeout: 5000 })
+    const streak = async () => Number(/(\d+) in a row/.exec(await pg.locator('.cr-pay .cr-pill').innerText())?.[1] ?? 0)
+    const s0 = await streak()
+    if (await pg.locator('.cr-asks li').count()) {
+      await pg.locator('.cr-asks li').first().locator('.btn.primary').click()
+      await until(async () => (await streak()) === s0 + 1, 'paying yourself first did not grow the streak')
+    }
+    if (!(await pg.locator('.cr-note', { hasText: 'not financial advice' }).count())) throw new Error('the investing plan has no "not financial advice" note')
+    // The monthly letter.
+    await tab('review')
+    await pg.waitForSelector('.cr-letter ul li', { timeout: 5000 })
+    await pg.click('.cr .ptabs [data-tab="jobs"]')
+  })
   // The same switch on every long page: each tab about one laptop screen.
   // Run at 10:00: how long Insights → Week is depends on what's left of today's calendar.
-  await step('Long pages: Insights, Goals, Money, Music, Rewards and long Settings sections fit by tabs', () => atTime('10:00', async () => {
+  await step('Long pages: Insights, Goals, Career, Money, Music, Rewards and long Settings sections fit by tabs', () => atTime('10:00', async () => {
     await pg.setViewportSize({ width: 1280, height: 720 })
     const report = []
     const pages = [
       ['progress', '.pg', ['week', 'areas', 'streaks', 'focus', 'look'], { week: 2.2 }],
       ['goals', '.gx', ['goals', 'week', 'hours', 'path'], { goals: 2.6 }],
+      ['career', '.cr', ['jobs', 'portfolio', 'cards', 'study', 'money', 'review'], { money: 2 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],
       ['shop', '.rx', ['now', 'unlock', 'all', 'history', 'earn'], { now: 2, all: 2, earn: 2 }]

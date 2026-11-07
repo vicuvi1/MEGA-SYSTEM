@@ -40,7 +40,8 @@ const PATHS = {
   pcshield: 'M3 4h18v12H3zM8 20h8M12 16v4M12 7l3 1v2c0 1.6-1.2 2.8-3 3.2-1.8-.4-3-1.6-3-3.2V8z',
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
   // LF1: the Season page, a gate with the sun behind it.
-  gate: 'M3 6c6-1.2 12-1.2 18 0M5 9.5h14M7 6.2V21M17 6.2V21M12 9.5v3'
+  gate: 'M3 6c6-1.2 12-1.2 18 0M5 9.5h14M7 6.2V21M17 6.2V21M12 9.5v3',
+  briefcase: 'M4 8h16v11H4zM9 8V5h6v3M4 13h16M11 13v2h2v-2'
 } as const
 
 // Closed shapes behind the lines, shown softly when an icon is "duo" (the active section).
@@ -71,7 +72,8 @@ const FILLS: Partial<Record<keyof typeof PATHS, string>> = {
   island: 'M3 5h18v14H3z',
   pcshield: 'M3 4h18v12H3z',
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z',
-  gate: 'M7 9.5h10V21H7z'
+  gate: 'M7 9.5h10V21H7z',
+  briefcase: 'M4 8h16v11H4z'
 }
 
 export type IconName = keyof typeof PATHS

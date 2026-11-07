@@ -93,6 +93,7 @@ const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const Goals = lazyNamed(() => import('./pages/Goals'), 'Goals')
 const Season = lazyNamed(() => import('./pages/Season'), 'Season')
 const CinematicHost = lazyNamed(() => import('./saga/Cinematics'), 'CinematicHost')
+const Career = lazyNamed(() => import('./pages/Career'), 'Career')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
@@ -853,6 +854,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'calendar' && <CalendarPage onGo={setPage} />}
             {page === 'goals' && <Goals onGo={setPage} />}
             {page === 'season' && <Season />}
+            {page === 'career' && <Career onGo={setPage} />}
             {page === 'coach' && <Coach onWallet={onWallet} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}

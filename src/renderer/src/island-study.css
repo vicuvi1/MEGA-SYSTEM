@@ -1,0 +1,26 @@
+/* The island's Study page: the shift pack and one quick flashcard. Nothing loops. */
+.is-study { display: flex; flex-direction: column; gap: 10px; }
+.is-pack, .is-card { padding: 10px 12px; border-radius: 14px; background: rgb(var(--ink) / 0.05); border: 1px solid var(--line); }
+.is-pack.live { border-color: color-mix(in srgb, var(--lime) 55%, transparent); background: color-mix(in srgb, var(--lime) 8%, rgb(var(--ink) / 0.04)); }
+.is-pack header { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.is-pack header b { font-size: 13.5px; color: var(--fg); }
+.is-pack header small, .is-deck { font-size: 11.5px; color: var(--sub); }
+.is-pack ul { list-style: none; margin: 6px 0 8px; padding: 0; display: grid; gap: 4px; }
+.is-pack li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 6px; align-items: center; font-size: 12.5px; color: var(--fg); }
+.is-pack li .t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.is-pack li small { color: var(--sub); font-variant-numeric: tabular-nums; }
+.is-row { display: flex; gap: 6px; }
+.is-go, .is-ghost, .is-grades button { border: 0; border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; transition: transform 0.12s ease, background-color 0.15s ease; }
+.is-go { padding: 6px 14px; background: var(--lime); color: var(--lime-ink, #10140a); }
+.is-ghost { padding: 6px 12px; background: rgb(var(--ink) / 0.08); color: var(--fg); }
+.is-go:active, .is-ghost:active, .is-grades button:active { transform: scale(0.95); }
+.is-face { display: grid; gap: 4px; width: 100%; margin-top: 6px; padding: 10px; border: 1px dashed var(--line); border-radius: 12px; background: none; color: var(--fg); font: inherit; text-align: left; cursor: pointer; }
+.is-face b { font-size: 13.5px; }
+.is-face small { font-size: 11.5px; color: var(--sub); }
+.is-back { font-size: 13px; color: var(--lime); font-weight: 600; }
+.is-grades { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 6px; }
+.is-grades button { display: grid; gap: 1px; padding: 5px 4px; background: rgb(var(--ink) / 0.08); color: var(--fg); }
+.is-grades button small { font-size: 10.5px; font-weight: 500; color: var(--sub); }
+.is-grades button.again { background: color-mix(in srgb, var(--red, #f87171) 18%, transparent); }
+.is-grades button.good { background: color-mix(in srgb, var(--lime) 22%, transparent); }
+.is-none { margin: 0; font-size: 12.5px; color: var(--sub); text-align: center; }

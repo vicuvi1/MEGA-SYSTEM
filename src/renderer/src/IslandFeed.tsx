@@ -5,6 +5,7 @@ import { pushStyle, workToday } from '@core/lifeFit'
 import { weekTop3View, type WeekPlan } from '@core/weekPlan'
 import type { LifeFitView } from './web/lifeFitStore'
 import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
+import { studyAct, studyForIsland } from './studyIslandFeed'
 import { briefShownToday, driftAway, pushAct, pushRecs, pushTick as benPushTick } from './benPushFeed'
 import { boostAct, boostTick } from './boost/boostFeed'
 import { atPc } from '@core/benPushes'
@@ -717,6 +718,7 @@ export function IslandFeed() {
       ...(await widgetsForIsland(now)),
       auto: autoIslandView(),
       goals: await goalsForIsland(now),
+      study: await studyForIsland(now),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
       tasks: todoCache.list,
@@ -1089,6 +1091,9 @@ export function IslandFeed() {
           case 'kitCount':
           case 'kitLink':
             said = await kitAct(a)
+            break
+          case 'study':
+            said = await studyAct(a)
             break
           case 'goal': {
             said = await goalAct(a)
