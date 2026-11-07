@@ -7,7 +7,7 @@
 import { moveById, type Move } from './sportMoves'
 import { moveOf, nextStep, prevStep, type SportEx } from './sportLadders'
 import { muscleOf, setsOn, type Muscle } from './sportSets'
-import { placeFamily, trackOf, estimateSets, type HistoryInput, type Placement } from './sportLevels'
+import { placeFamily, trackOf, estimateSets, isImported, type HistoryInput, type Placement } from './sportLevels'
 import { rangeFor } from './sportProgress'
 
 export interface CoachInput extends HistoryInput {
@@ -40,7 +40,7 @@ export function sessionsFor(input: HistoryInput, ex: SportEx, until: string): Se
     const real = setsOn(input.sets, day, String(ex.id)).map((s) => s.reps)
     if (real.length) out.push({ day, reps: real, est: false })
     else {
-      const t = Number(input.days?.[day]?.[String(ex.id)]) || 0
+      const t = isImported(input.imported, day, String(ex.id)) ? 0 : Number(input.days?.[day]?.[String(ex.id)]) || 0
       if (t > 0) out.push({ day, reps: estimateSets(t, move?.unit ?? (ex.unit === 'sec' ? 'sec' : 'reps')), est: true })
     }
   }

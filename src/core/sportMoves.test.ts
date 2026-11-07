@@ -28,7 +28,7 @@ describe('exercise library', () => {
       expect(fam.steps.every((id) => moveById(id)?.family === f), f).toBe(true)
       for (let i = 1; i < diffs.length; i++) expect(diffs[i], `${f} step ${i}`).toBeGreaterThanOrEqual(diffs[i - 1])
     }
-    expect(FAMILIES.pushup.steps).toEqual(['incline_pushup', 'knee_pushup', 'pushup', 'wide_pushup', 'diamond_pushup', 'decline_pushup', 'archer_pushup', 'planche_pushup'])
+    expect(FAMILIES.pushup.steps).toEqual(['incline_pushup', 'knee_pushup', 'pushup', 'wide_pushup', 'diamond_pushup', 'decline_pushup', 'archer_pushup', 'planche_pushup', 'onearm_assist_pushup'])
     expect(FAMILIES.squat.steps.at(-1)).toBe('pistol_squat')
   })
 

@@ -195,7 +195,7 @@
     "SMOKE_ONLY=\"Sport Track Today\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "Too easy means harder (2026-11-07): rank and level strip on Today, automatic harder variation with Undo, Too easy / Too hard, effort, best set, Strength mode, balanced set for a thin routine (see docs/areas/sport.md). Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net. Coach (levels, feedback, forecasts, programs, 4 tabs) added 2026-11-07; UX5 (Ben's note after a workout, push kind workoutNote) and PG4 (why a move stalled: protein, sleep, readiness) done 2026-11-07; smoke step \"Sport Track note\"."
+   "notes": "Too easy means harder (2026-11-07): rank and level strip on Today, automatic harder variation with Undo, Too easy / Too hard, effort, best set, Strength mode, balanced set for a thin routine (see docs/areas/sport.md). Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net. Coach (levels, feedback, forecasts, programs, 4 tabs) added 2026-11-07; UX5 (Ben's note after a workout, push kind workoutNote) and PG4 (why a move stalled: protein, sleep, readiness) done 2026-11-07; smoke step \"Sport Track note\". Growth coach (2026-11-07): rules in code (sportCoachRules.ts), Your coach card, post-session adjuster, weekly AI review, Ask Ben, best-set onboarding, weekly test, weighted sets, Ben logs sport; smoke step \"Sport Track onboarding\"."
   },
   {
    "id": "F015",

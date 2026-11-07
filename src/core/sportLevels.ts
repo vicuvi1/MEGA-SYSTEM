@@ -50,27 +50,27 @@ const TABLES: [string, Row[]][] = [
     ['Starting Line', 'incline_pushup', 3, 6], ['Incline Climber', 'incline_pushup', 3, 12], ['Kneeler', 'knee_pushup', 3, 10], ['Knee Master', 'knee_pushup', 3, 15],
     ['Floor Ready', 'pushup', 3, 5], ['Solid', 'pushup', 3, 10], ['Strong Chest', 'pushup', 3, 15], ['Machine', 'pushup', 3, 20], ['Wide Wings', 'wide_pushup', 3, 15],
     ['Diamond Cutter', 'diamond_pushup', 3, 10], ['Iron Chest', 'diamond_pushup', 3, 15], ['Decline Drive', 'decline_pushup', 3, 10], ['Archer', 'archer_pushup', 3, 6],
-    ['Archer Elite', 'archer_pushup', 3, 10], ['Planche Path', 'planche_pushup', 3, 6]
+    ['Archer Elite', 'archer_pushup', 3, 10], ['One-arm Helper', 'onearm_assist_pushup', 3, 5]
   ]),
   T('squat', [
     ['Starting Line', 'squat', 3, 8], ['Steady Legs', 'squat', 3, 15], ['Squat Habit', 'squat', 3, 20], ['Hundred Club', 'squat', 3, 30], ['Springy', 'jump_squat', 3, 10],
     ['Jump Master', 'jump_squat', 3, 15], ['One Leg Forward', 'split_squat', 3, 10], ['Split Strong', 'split_squat', 3, 15], ['Bulgarian', 'bulgarian_squat', 3, 8],
-    ['Bulgarian Pro', 'bulgarian_squat', 3, 12], ['Shrimp Starter', 'shrimp_squat', 3, 4], ['Shrimp Master', 'shrimp_squat', 3, 8], ['Pistol Path', 'pistol_squat', 3, 2],
+    ['Bulgarian Pro', 'bulgarian_squat', 3, 12], ['Box Pistol', 'box_pistol', 3, 6], ['Shrimp Starter', 'shrimp_squat', 3, 4], ['Shrimp Master', 'shrimp_squat', 3, 8], ['Pistol Path', 'pistol_squat', 3, 2],
     ['Pistol', 'pistol_squat', 3, 5]
   ]),
   T('core', [
     ['Starting Line', 'crunch', 3, 10], ['Crunch Rhythm', 'crunch', 3, 20], ['Sit-up Start', 'situp', 3, 10], ['Sit-up Strong', 'situp', 3, 20], ['Raise Your Legs', 'leg_raise', 3, 8],
-    ['Leg Raise Pro', 'leg_raise', 3, 15], ['Hollow Start', 'hollow_hold', 3, 15], ['Hollow Strong', 'hollow_hold', 3, 30], ['V Shape', 'v_up', 3, 8], ['V-up Pro', 'v_up', 3, 15],
+    ['Leg Raise Pro', 'leg_raise', 3, 15], ['Hollow Start', 'hollow_hold', 3, 15], ['Hollow Strong', 'hollow_hold', 3, 30], ['Hollow Rocker', 'hollow_rock', 3, 15], ['V Shape', 'v_up', 3, 8], ['V-up Pro', 'v_up', 3, 15], ['Negative Start', 'dragon_neg', 3, 3], ['Negative Strong', 'dragon_neg', 3, 6],
     ['Dragon Start', 'dragon_flag', 3, 2], ['Dragon Strong', 'dragon_flag', 3, 5]
   ]),
   T('plank', [
     ['Starting Line', 'plank', 3, 15], ['Half Minute', 'plank', 3, 30], ['Forty-five', 'plank', 3, 45], ['Full Minute', 'plank', 3, 60], ['Side Start', 'side_plank', 3, 20],
     ['Side Steady', 'side_plank', 3, 40], ['Tap Tap', 'shoulder_taps', 3, 20], ['Tap Master', 'shoulder_taps', 3, 40], ['Up and Down', 'plank_updown', 3, 10],
-    ['Up-down Pro', 'plank_updown', 3, 20]
+    ['Up-down Pro', 'plank_updown', 3, 20], ['Lean Start', 'planche_lean', 3, 10], ['Lean Strong', 'planche_lean', 3, 25]
   ]),
   T('row', [
     ['Starting Line', 'door_row', 3, 6], ['Door Puller', 'door_row', 3, 12], ['Door Master', 'door_row', 3, 18], ['Table Start', 'table_row_bent', 3, 6], ['Bent Knee Rower', 'table_row_bent', 3, 12],
-    ['Bent Knee Master', 'table_row_bent', 3, 18], ['Straight Legs', 'table_row', 3, 5], ['Rower', 'table_row', 3, 10], ['Strong Back', 'table_row', 3, 15], ['Back of Steel', 'table_row', 3, 20]
+    ['Bent Knee Master', 'table_row_bent', 3, 18], ['Straight Legs', 'table_row', 3, 5], ['Rower', 'table_row', 3, 10], ['Strong Back', 'table_row', 3, 15], ['Back of Steel', 'table_row', 3, 20], ['Feet-up Rower', 'feet_row', 3, 8], ['Feet-up Strong', 'feet_row', 3, 12], ['One-arm Start', 'onearm_row', 3, 4], ['One-arm Row Pro', 'onearm_row', 3, 8]
   ]),
   T('lunge', [
     ['Starting Line', 'reverse_lunge', 3, 6], ['Backstep', 'reverse_lunge', 3, 10], ['Backstep Strong', 'reverse_lunge', 3, 14], ['Forward Lunge', 'lunge', 3, 8], ['Lunge Steady', 'lunge', 3, 12],
@@ -198,7 +198,12 @@ export interface HistoryInput {
   today: string
   /** Your declared best set per family (placement counts it on its day and the day before). */
   best?: Record<string, BestSet> | null
+  /** Telegram-imported days (day → exercise ids): daily totals only, never level evidence (history, streak and volume only). */
+  imported?: Record<string, string[]> | null
 }
+
+/** A day total that came from the Telegram import: it is never evidence for a level. */
+export const isImported = (imp: Record<string, string[]> | null | undefined, day: string, exId: string) => !!imp?.[day]?.includes(exId)
 
 /** Per day, the entries of one family: real sets, else an estimate from the day total. */
 export function dayEntries(input: HistoryInput, family: string, until?: string): Map<string, DayEntry[]> {
@@ -212,7 +217,7 @@ export function dayEntries(input: HistoryInput, family: string, until?: string):
       let entry: DayEntry | null = null
       if (real.length) entry = { move, reps: real, est: false }
       else {
-        const total = Number(input.days?.[day]?.[String(ex.id)]) || 0
+        const total = isImported(input.imported, day, String(ex.id)) ? 0 : Number(input.days?.[day]?.[String(ex.id)]) || 0
         if (total > 0) entry = { move, reps: estimateSets(total, move.unit), est: true }
       }
       if (entry) (out.get(day) ?? out.set(day, []).get(day)!).push(entry)

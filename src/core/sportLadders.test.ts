@@ -8,9 +8,9 @@ const days = (rows: [string, number][], id = 'ex_p'): DayLog => Object.fromEntri
 describe('ladders', () => {
   it('knows where a move sits and what comes next', () => {
     const p = moveById('pushup')!
-    expect(levelOf(p)).toMatchObject({ level: 3, of: 8, family: 'pushup' })
+    expect(levelOf(p)).toMatchObject({ level: 3, of: 9, family: 'pushup' })
     expect(nextStep(p)?.id).toBe('wide_pushup')
-    expect(nextStep(moveById('planche_pushup')!)).toBeNull()
+    expect(nextStep(moveById('onearm_assist_pushup')!)).toBeNull()
     expect(moveOf({ name: 'pushups' })?.id).toBe('pushup')
     expect(moveOf({ name: 'Anything', move: 'squat' })?.id).toBe('squat')
   })
@@ -59,6 +59,6 @@ describe('ladders', () => {
     const logged = loggedMoves({ '2026-11-01': { ex_k: 20, ex_p: 0 } }, exs)
     expect([...logged]).toEqual(['knee_pushup'])
     const steps = ladderOf('pushup', logged, new Set(['pushup']))
-    expect(steps.map((s) => s.state)).toEqual(['done', 'done', 'current', 'next', 'later', 'later', 'later', 'later'])
+    expect(steps.map((s) => s.state)).toEqual(['done', 'done', 'current', 'next', 'later', 'later', 'later', 'later', 'later'])
   })
 })

@@ -288,6 +288,9 @@ try {
     await pg.waitForTimeout(2500)
     let frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
+    // The first-open best-set screen is its own step below; here it is skipped.
+    await frame.waitForTimeout(900)
+    if (await frame.locator('#modal-onboard.open').count()) await frame.click('#onboard-skip')
     await frame.click('.st-tab[data-tab="today"]')
     await frame.waitForSelector('#hero-ring .ring-fill', { timeout: 5000 })
     // SP3: on a rest day in the week plan, "Train anyway" brings the next workout.
@@ -438,6 +441,40 @@ try {
       if (over > 1) throw new Error(`Sport Track scrolls sideways at ${w}px (${over}px)`)
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
+  }, { retries: 1 })
+  // Best-set onboarding: one short screen on first open (and "Re-check my levels"); 50 push-ups starts on a harder variation.
+  await step('Sport Track onboarding: a best set of 50 push-ups puts Today on a harder variation', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch button').first().click()
+    await pg.waitForTimeout(2500)
+    const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+    if (!frame) throw new Error('no Sport Track frame')
+    const K = 'life_sport_tracker_v1'
+    // A fresh start for this step; the state is put back at the end.
+    await frame.evaluate((k) => { if (!localStorage.getItem('smoke_sport_backup')) localStorage.setItem('smoke_sport_backup', localStorage.getItem(k) ?? ''); const s = JSON.parse(localStorage.getItem(k) || '{}'); delete s.onboarded; localStorage.setItem(k, JSON.stringify(s)); location.reload() }, K)
+    await frame.waitForSelector('#modal-onboard.open', { timeout: 10000 })
+    if (process.env.SPORT_SHOTS) await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/onboarding.png` })
+    await frame.fill('#onb-fields input[name="pushup"]', '50')
+    await frame.click('#onb-go')
+    await frame.waitForSelector('#modal-onboard:not(.open)', { state: 'attached', timeout: 5000 })
+    await frame.waitForFunction(() => /(archer|decline|one-arm)/i.test(document.querySelector('#your-coach .cc-list')?.textContent ?? ''), null, { timeout: 10000 })
+    const session = await frame.locator('#your-coach .cc-list').innerText()
+    if (!/[45]×[5-8]\s+(archer|decline)/i.test(session)) throw new Error(`Today's session is not 4×5–8 of a hard variation (got: ${JSON.stringify(session)})`)
+    if (process.env.SPORT_SHOTS) await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/today-after-onboarding.png` })
+    // It does not come back by itself, and "Re-check my levels" reopens it with your answer.
+    await frame.evaluate(() => location.reload())
+    await frame.waitForSelector('#your-coach:not([hidden])', { timeout: 10000 })
+    await frame.waitForTimeout(1200)
+    if (await frame.locator('#modal-onboard.open').count()) throw new Error('onboarding came back after it was answered')
+    await frame.click('#cc-recheck')
+    await frame.waitForSelector('#modal-onboard.open', { timeout: 3000 })
+    if ((await frame.inputValue('#onb-fields input[name="pushup"]')) !== '50') throw new Error('Re-check should show your last answer')
+    await frame.click('#onboard-skip')
+    // Put the state back.
+    await frame.evaluate((k) => { const b = localStorage.getItem('smoke_sport_backup'); localStorage.removeItem('smoke_sport_backup'); if (b) localStorage.setItem(k, b); else localStorage.removeItem(k); location.reload() }, K)
+    await frame.waitForTimeout(1200)
+    if (await frame.locator('#modal-onboard.open').count()) await frame.click('#onboard-skip')
   }, { retries: 1 })
   // BD1–BD18: Body → Metrics & Workouts in four tabs. The protein ring and a quick log, readiness setting
   // Sport Track's dose, sets per muscle, the weight trend, measurements, progress photos that stay on this

@@ -1,4 +1,5 @@
 import { parseSets } from './sportSets'
+import { isSportName, parseSportSay } from './sportBot'
 import { matchMove } from './sportMoves'
 export type BotCommandType =
   | 'today'
@@ -33,6 +34,10 @@ export interface ParsedCommand {
   exerciseUnit?: string
   /** Sets as typed ("3x15 push-ups", "push-ups 15 14 12"): reps (or seconds) per set. */
   exerciseSets?: number[]
+  /** Backpack weight in kg for the sets ('8 push-ups +10 kg'). */
+  exerciseKg?: number
+  /** 'best set push-ups 50': a declared max set, not a workout. */
+  exerciseBest?: boolean
   metricWeight?: number
   metricWaist?: number
   prExercise?: string
@@ -199,6 +204,12 @@ export function parseTelegramText(text: string): ParsedCommand {
   }
 
   // Sets: "3x15 push-ups", "push-ups 15 14 12", "plank 3x45s" (one number alone stays a total).
+  // Sport lives in Ben: weights ("8 push-ups +10 kg") and best sets ("best set push-ups 50") too.
+  const say = parseSportSay(trimmed)
+  if (say && (say.kind === 'best' || say.kg > 0) && isSportName(say.name)) {
+    const total = say.reps.reduce((a, b) => a + b, 0)
+    return { type: 'workout', args: [], raw: trimmed, exerciseName: say.name, exerciseAmount: say.kind === 'best' ? 0 : total, exerciseUnit: say.unit, exerciseSets: say.reps, ...(say.kg ? { exerciseKg: say.kg } : {}), ...(say.kind === 'best' ? { exerciseBest: true } : {}) }
+  }
   const sets = parseSets(trimmed)
   if (sets && (matchMove(sets.name) || /^(press|pushups?|situps?|squats?|pullups?|dips?|plank|flotari|abdomene|genuflexiuni|tractiuni)$/i.test(sets.name.replace(/[^a-z]/gi, '')))) {
     const total = sets.reps.reduce((a, b) => a + b, 0)

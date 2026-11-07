@@ -961,6 +961,19 @@
     .ls-up svg { width: 22px; height: 22px; flex: none; }
     .ls-up small, .ls-thin small { display: block; color: var(--st-muted, inherit); margin-top: 2px; }
     .ls-best summary { cursor: pointer; font-weight: 650; color: var(--st-muted, inherit); }
+    .coach-card { display: grid; gap: 12px; }
+    .coach-card[hidden] { display: none; }
+    .coach-card .cc-focus { font-size: 19px; line-height: 1.3; font-weight: 800; margin: 0; }
+    .coach-card .cc-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+    .coach-card .cc-list li { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: var(--st-soft); font-weight: 600; }
+    .coach-card .cc-list li small { color: var(--st-muted); font-weight: 500; }
+    .coach-card .cc-why, .coach-card .cc-body, .coach-card .cc-prog { margin: 0; color: var(--st-muted); font-size: 14px; }
+    .coach-card .cc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .onb-fields { display: grid; gap: 10px; margin: 10px 0; }
+    .onb-fields label { display: grid; grid-template-columns: 1fr 96px; gap: 8px; align-items: center; font-weight: 700; }
+    .onb-fields label small { grid-column: 1 / -1; color: var(--st-muted); font-weight: 500; margin-top: -6px; }
+    .onb-fields input { min-height: 42px; border-radius: 10px; padding: 0 10px; background: transparent; color: inherit; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 16px; }
+    .onb-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     .best-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
     .best-form label { font-weight: 700; flex-basis: 100%; }
     .best-form input, .best-form select { min-height: 40px; border-radius: 10px; padding: 0 10px; background: transparent; color: inherit; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); }
@@ -1207,6 +1220,7 @@
           <button role="menuitem" id="btn-open-manage-modal"><svg><use href="#i-list"/></svg>Exercises &amp; targets</button>
           <button role="menuitem" id="btn-open-settings-modal"><svg><use href="#i-gear"/></svg>Settings &amp; coach</button>
           <button role="menuitem" data-open-rest><svg><use href="#i-timer"/></svg>Rest timer</button>
+          <button role="menuitem" id="btn-recheck"><svg><use href="#i-list"/></svg>Re-check my levels</button>
           <button role="menuitem" id="btn-tg-import"><svg><use href="#i-send"/></svg>Import from Telegram…</button>
           <hr>
           <button role="menuitem" id="btn-rest-day" title="A planned rest day keeps your streak"><svg><use href="#i-moon"/></svg>Rest day today</button>
@@ -1218,6 +1232,7 @@
     <div class="dashboard-grid" data-active="today">
       <!-- ===================== TODAY ===================== -->
       <div class="today" data-panel="today">
+        <section class="card coach-card" id="your-coach" aria-label="Your coach" hidden></section>
         <section class="card lv-strip" id="lv-strip" aria-label="Your rank and levels" hidden></section>
         <section class="card hero" id="routine-section">
           <div class="hero-main">
@@ -1667,6 +1682,23 @@
   <div id="toast" role="status" aria-live="polite">
     <span id="toast-text"></span>
     <button id="toast-undo" type="button" hidden>Undo</button>
+  </div>
+
+  <!-- Best-set onboarding: one short screen, max reps in one set -->
+  <div class="sport-modal-backdrop" id="modal-onboard">
+    <div class="sport-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="onb-title">
+      <div class="modal-head"><h3 id="onb-title">What is your best set?</h3><button class="btn-close-modal" id="onb-x" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+      <p class="modal-note">The most you can do in ONE set, with good form and no rest. Leave a move blank to skip it. I will start each exercise on a variation where 5–8 reps is hard.</p>
+      <form id="onb-form"><div id="onb-fields" class="onb-fields"></div><div class="onb-actions"><button class="btn primary big" type="submit" id="onb-go">Place my levels</button><button class="btn ghost" type="button" id="onboard-skip">Skip for now</button></div></form>
+    </div>
+  </div>
+  <!-- The weekly strength test: one max set per main move, no points -->
+  <div class="sport-modal-backdrop" id="modal-test">
+    <div class="sport-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="tst-title">
+      <div class="modal-head"><h3 id="tst-title">Weekly strength test</h3><button class="btn-close-modal" id="tst-x" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+      <p class="modal-note">One max set per move, about a minute in all. Stop 1 rep before your form breaks. It updates your levels and charts and pays no points.</p>
+      <form id="tst-form"><div id="tst-fields" class="onb-fields"></div><div class="onb-actions"><button class="btn primary big" type="submit">Save my test</button></div></form>
+    </div>
   </div>
 
   <!-- Import from Telegram: what was found, days you can untick -->
@@ -2537,10 +2569,14 @@
       e.preventDefault();
       const ex = state.exercises.find((x) => x.id === f.dataset.type);
       const input = f.querySelector('input');
-      const vals = parseTyped(input.value || input.placeholder);
+      // "8 +10 kg": a backpack weight is part of the set.
+      const raw = input.value || input.placeholder;
+      const kgm = /\+?\s*(\d{1,3}(?:[.,]\d)?)\s*kg/i.exec(raw);
+      const kg = kgm ? Number(kgm[1].replace(',', '.')) : 0;
+      const vals = parseTyped(raw.replace(/\+?\s*\d{1,3}(?:[.,]\d)?\s*kg/ig, ''));
       if (!ex || !vals.length) return;
       input.value = '';
-      logMany(ex, vals, null);
+      logMany(ex, vals, null, kg);
     });
     // --- Check if All Exercises Completed ---
     function checkAllCompleted() {
@@ -3417,7 +3453,7 @@
     /** Today's sets of an exercise (never creates anything). */
     function todaySets(id) { const l = ((state.sets || {})[localDay()] || {})[id]; return Array.isArray(l) ? l : []; }
     /** What the coach reads: your exercises, the day totals (Telegram days too), the sets and today. */
-    const histInput = () => ({ exercises: state.exercises, days: state.days || {}, sets: state.sets || {}, today: localDay(), best: state.bestSets || {} });
+    const histInput = () => ({ exercises: state.exercises, days: state.days || {}, sets: state.sets || {}, today: localDay(), best: state.bestSets || {}, imported: state.importedDays || {} });
     /** An easy week (deload) is running. */
     const deloadOn = () => !!state.sportySettings.deloadUntil && state.sportySettings.deloadUntil >= localDay();
     /** The last coach line per exercise ("Good, 2 more than last time"), shown on its card for the day. */
@@ -3564,8 +3600,141 @@
       e.preventDefault();
       saveBestSet(f.querySelector('select').value, f.querySelector('input').value);
     });
+    // ---- The coach: rules in code (sportCoachRules.ts), onboarding, the weekly test ----
+    /** Protein, sleep and readiness from Life System (the host answers LIFE_SPORT_INSIGHT); null on its own. */
+    var coachBody = null;
+    const coachCtx = () => ({ ...histInput(), notYet: state.notYet || {}, strength: strengthMode(), deload: deloadOn(), program: state.weekProgram || null, body: coachBody });
+    /** This week's program: the rules write it once a week; Ben's weekly AI review (in the bots) may rewrite it inside the same limits. */
+    function ensureProgram() {
+      if (!SK || !SK.reviewDue || !SK.reviewDue(state.weekProgram, localDay())) return;
+      try { state.weekProgram = SK.baseProgram(coachCtx()); saveState(state); } catch (e) {}
+    }
+    function renderYourCoach() {
+      const el = document.getElementById('your-coach');
+      if (!el) return;
+      if (!SK || !SK.coachCard || !state.exercises.some((e) => e.active && !e.plan)) { el.hidden = true; return; }
+      // The first draw runs before askInsight's variables exist: ask again a moment later.
+      try { askInsight(); } catch (e) { setTimeout(renderYourCoach, 600); }
+      ensureProgram();
+      let c;
+      try { c = SK.coachCard(coachCtx()); } catch (e) { el.hidden = true; return; }
+      const session = c.session.map((it) => `<li><b>${esc(it.line)}</b>${it.added ? '<small>+1 set: this muscle is behind</small>' : ''}${it.kind === 'harder' ? '<small>harder variation</small>' : it.kind === 'weight' ? '<small>added weight</small>' : it.kind === 'back' ? '<small>step back</small>' : ''}</li>`).join('');
+      const prog = state.weekProgram && state.weekProgram.lines && state.weekProgram.lines.length ? `<p class="cc-prog"><b>This week's plan:</b> ${state.weekProgram.lines.map(esc).join(' ')}</p>` : '';
+      el.innerHTML = `<div class="card-head"><h2>Your coach</h2><span class="grow"></span><span class="tag accent">${c.deload.due ? 'Easy week due' : '10–20 hard sets per muscle'}</span></div>
+        <p class="cc-focus">${esc(c.focus.text)}</p>
+        <ul class="cc-list" aria-label="Today's session">${session}</ul>
+        <p class="cc-why"><b>Why:</b> ${esc(c.why)}</p>
+        ${c.body.length ? `<p class="cc-body">${c.body.map(esc).join(' ')}</p>` : ''}${prog}
+        <div class="cc-actions"><button class="btn tint" id="cc-recheck">Re-check my levels</button>${SK.testDue(state.sets || {}, localDay()) ? '<button class="btn tint" id="cc-test">Weekly strength test (1 min)</button>' : ''}</div>`;
+      el.hidden = false;
+      el.querySelector('#cc-recheck').addEventListener('click', () => openOnboard());
+      const t = el.querySelector('#cc-test');
+      if (t) t.addEventListener('click', openTest);
+    }
+    // ---- Best-set onboarding (first open, and "Re-check my levels") ----
+    const onbModal = document.getElementById('modal-onboard');
+    function openOnboard() {
+      if (!SK || !SK.QUESTIONS) return;
+      const cur = state.bestSets || {};
+      document.getElementById('onb-fields').innerHTML = SK.QUESTIONS.map((q) => `<label>${esc(q.label)}<input type="number" inputmode="numeric" min="0" max="500" name="${q.family}" placeholder="${q.unit === 'sec' ? 'seconds' : 'reps'}" value="${cur[q.family] && cur[q.family].move === q.move ? cur[q.family].reps : ''}" aria-label="${esc(q.label)}: ${esc(q.hint)}"><small>${esc(q.hint)}</small></label>`).join('');
+      onbModal.classList.add('open');
+      setTimeout(() => { const i = document.querySelector('#onb-fields input'); if (i) i.focus(); }, 40);
+    }
+    function closeOnboard(mark) {
+      onbModal.classList.remove('open');
+      if (mark && !state.onboarded) { state.onboarded = mark; saveState(state); }
+    }
+    /** Every answer becomes a best set, and each exercise starts on the variation where 5–8 reps is hard (the old move is only turned off). */
+    function applyOnboarding(answers) {
+      const day = localDay();
+      const placed = SK.placeBestAll(answers);
+      if (!placed.length) { showToast('Type at least one number, or skip for now.'); return false; }
+      state.bestSets = state.bestSets || {};
+      state.tune = state.tune || {};
+      const notes = [];
+      for (const p of placed) {
+        state.bestSets[p.family] = { move: p.base, reps: p.best, day };
+        const inFam = state.exercises.filter((e) => e.active && !e.plan && SK.moveOf(e) && SK.moveOf(e).family === p.family);
+        let ex = inFam.find((e) => SK.moveOf(e).id === p.move.id);
+        if (!ex) {
+          const old = inFam.sort((a, b) => SK.moveOf(b).diff - SK.moveOf(a).diff)[0];
+          // The target is three sets' worth, so the coach's first goal is exactly the placed reps.
+          ex = old ? swapExercise(old, p.move, p.reps * 3) : addExercise({ name: p.move.name, target: p.reps * 3, unit: p.move.unit, move: p.move.id });
+        }
+        state.tune[ex.id] = { day, goal: p.reps, sets: p.sets };
+        notes.push(`${nice(p.move.name)} ${p.sets}×${p.reps}${p.move.unit === 'sec' ? ' s' : ''}`);
+      }
+      state.onboarded = day;
+      state.onboardAnswers = answers;
+      progKey = '';
+      saveState(state);
+      showToast('Placed: ' + notes.join(', ') + '.');
+      renderAll();
+      return true;
+    }
+    document.getElementById('onb-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const answers = {};
+      new FormData(e.target).forEach((v, k) => { if (String(v).trim() !== '') answers[k] = Number(v); });
+      if (applyOnboarding(answers)) closeOnboard();
+    });
+    document.getElementById('onboard-skip').addEventListener('click', () => closeOnboard('skipped'));
+    document.getElementById('onb-x').addEventListener('click', () => closeOnboard('skipped'));
+    document.getElementById('btn-recheck').addEventListener('click', () => { closeMenus(); openOnboard(); });
+    /** On the first open (once), after Today has drawn. */
+    var onbChecked = false;
+    function maybeOnboard() {
+      if (onbChecked || !SK || !SK.QUESTIONS) return;
+      onbChecked = true;
+      if (!state.onboarded) setTimeout(() => { if (!state.onboarded) openOnboard(); }, 500);
+    }
+    // ---- The weekly strength test: one max set per main move, no points ----
+    const tstModal = document.getElementById('modal-test');
+    function testMoves() {
+      const out = [];
+      const seen = new Set();
+      for (const ex of state.exercises.filter((e) => e.active && !e.plan)) {
+        const m = moveOfEx(ex);
+        if (!m || seen.has(m.family) || !SK.QUESTIONS.some((q) => q.family === m.family)) continue;
+        seen.add(m.family);
+        out.push({ ex, m });
+      }
+      return out;
+    }
+    function openTest() {
+      const list = testMoves();
+      if (!list.length) { showToast('Add push-ups, squats, sit-ups, rows or a plank first.'); return; }
+      document.getElementById('tst-fields').innerHTML = list.map(({ ex, m }) => `<label>${esc(nice(m.name))}<input type="number" inputmode="numeric" min="0" max="500" name="${esc(ex.id)}" placeholder="${m.unit === 'sec' ? 'seconds' : 'reps'}" aria-label="Max ${esc(m.name)} in one set"><small>${m.unit === 'sec' ? 'longest hold' : 'most reps in one set'}</small></label>`).join('');
+      tstModal.classList.add('open');
+    }
+    document.getElementById('tst-x').addEventListener('click', () => tstModal.classList.remove('open'));
+    document.getElementById('tst-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      let n = 0;
+      new FormData(e.target).forEach((v, id) => {
+        const reps = Math.round(Number(v));
+        if (!(reps >= 1)) return;
+        // A real set flagged as a test: levels and charts read it, nothing is paid and today's totals stay as they are.
+        state.sets = SK.addSets(state.sets || {}, localDay(), id, [reps], Date.now(), { test: true });
+        n++;
+      });
+      if (!n) { showToast('Type at least one number.'); return; }
+      tstModal.classList.remove('open');
+      progKey = '';
+      saveState(state);
+      showToast(`Test saved (${n} ${n === 1 ? 'move' : 'moves'}): levels and charts updated. No points for tests.`);
+      renderAll();
+    });
+    window.addEventListener('message', (e) => {
+      if (e.origin !== location.origin || !e.data || e.data.type !== 'LIFE_SPORT_INSIGHT') return;
+      const had = !!coachBody;
+      coachBody = e.data.body && typeof e.data.body === 'object' ? e.data.body : null;
+      if (coachBody || had) renderYourCoach();
+    });
     /** The strip at the top of Today: your rank, a big level badge per exercise, the automatic level-up banner and a thin-routine suggestion. */
     function renderLevelStrip() {
+      renderYourCoach();
+      maybeOnboard();
       const el = document.getElementById('lv-strip');
       if (!el) return;
       if (!SK || !SK.placeAll || !SK.levelBadge) { el.hidden = true; return; }
@@ -3671,17 +3840,24 @@
       if (res && res.levelUp) levelUpMoment(ex, res.prog);
     }
     /** Several sets in one go (a tap on the big button, or typed "15 14 12"). */
-    function logMany(ex, vals, btn) {
+    function logMany(ex, vals, btn, kg = 0) {
       let res = null;
       const first = { record: false, levelUp: false };
       vals.forEach((v, k) => {
-        const r = logSet(ex, v);
+        const r = logSet(ex, v, kg);
         if (k === 0) Object.assign(first, { wasDone: r.wasDone, wasAll: r.wasAll });
         res = { ...r, record: first.record || r.record, levelUp: first.levelUp || r.levelUp, wasDone: first.wasDone, wasAll: first.wasAll };
         first.record = res.record;
         first.levelUp = res.levelUp;
       });
-      showToast(`${nice(ex.name)}: ${SK ? SK.setsText(vals, res.prog?.range.unit) : vals.join(' · ')}`);
+      let next = '';
+      try {
+        // Ben adjusts the next session at once (progression, step back, more sets where a muscle is behind).
+        const adj = SK.adjustAfterSession(coachCtx());
+        const mine = adj.adjustments.find((a) => a.exId === ex.id);
+        if (mine) next = ' Next time: ' + mine.text;
+      } catch (e) {}
+      showToast(`${nice(ex.name)}: ${SK ? SK.setsText(vals, res.prog?.range.unit) : vals.join(' · ')}${kg ? ` +${kg} kg` : ''}.${next}`);
       afterSet(ex, res, btn);
     }
     /** "15 14 12", "3x15" or "15, 14, 12" → [15, 14, 12]. */
@@ -5090,12 +5266,14 @@
       // Best set over time, per ladder.
       const charts = document.getElementById('str-charts');
       charts.innerHTML = fams.length ? fams.map((f) => {
-        const pts = SK.familySeries(log, ex, f, today).filter((p) => p.day >= shiftDay(today, -90));
+        const pts = SK.familySeries(log, ex, f, today).filter((p) => p.day >= shiftDay(today, -180));
         if (!pts.length) return '';
         const last = pts[pts.length - 1];
         const mv = SK.moveById(last.move);
         const lv = SK.levelOf(mv);
-        return `<div class="str-chart"><div class="str-chart-head"><b>${esc(SK.FAMILIES[f].name)}</b><small>best now ${last.reps}${uS(mv.unit)} · ${esc(mv.name)}</small><span class="tag accent">Level ${lv.level}/${lv.of}</span></div>${familyChart(f, pts, today)}</div>`;
+        // Best sets and weekly tests only; day totals never count here.
+        const sg = SK.strongerThan(pts, today);
+        return `<div class="str-chart"><div class="str-chart-head"><b>${esc(SK.FAMILIES[f].name)}</b><small>best now ${last.reps}${uS(mv.unit)} · ${esc(mv.name)}</small><span class="tag accent">Level ${lv.level}/${lv.of}</span>${sg ? `<span class="tag good">${sg.pct > 0 ? '+' : ''}${sg.pct}% in ${sg.weeks} ${sg.weeks === 1 ? 'week' : 'weeks'}</span>` : ''}</div>${familyChart(f, pts, today)}</div>`;
       }).join('') : `<p class="str-empty">No sets yet. Log your sets in workout mode or with "Set" on a card, and each move's best set shows here over time, with every level you climb.</p>`;
     }
 

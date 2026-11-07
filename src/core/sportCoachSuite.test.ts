@@ -122,12 +122,12 @@ describe('the overall strength rank', () => {
   })
   it('an untrained group holds the rank down, and top ladders reach Legend', () => {
     const ex = [
-      { id: 'a', name: 'Pseudo-planche push-ups', target: 20, active: true },
+      { id: 'a', name: 'One-arm-assisted push-ups', target: 20, active: true },
       { id: 'b', name: 'Pistol squats', target: 20, active: true },
       { id: 'c', name: 'Dragon flag (lowering)', target: 20, active: true },
-      { id: 'd', name: 'Table rows', move: 'table_row', target: 20, active: true }
+      { id: 'd', name: 'One-arm rows', move: 'onearm_row', target: 20, active: true }
     ]
-    const h = { ...withSets([[0, 'a', [6, 6, 6]], [0, 'b', [5, 5, 5]], [0, 'c', [5, 5, 5]], [0, 'd', [20, 20, 20]]]), exercises: ex }
+    const h = { ...withSets([[0, 'a', [6, 6, 6]], [0, 'b', [5, 5, 5]], [0, 'c', [5, 5, 5]], [0, 'd', [8, 8, 8]]]), exercises: ex }
     const r = overallRank(placeAll(h))
     expect(r.rank.name).toBe('Legend')
     const noPull = overallRank(placeAll({ ...h, exercises: ex.slice(0, 3) }))

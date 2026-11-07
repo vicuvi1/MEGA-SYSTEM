@@ -37,6 +37,7 @@ export const PHOTOS: Record<string, MovePhoto> = {
   plank: { src: 'Plank', crop: [0.2, 0.08, 0.76] },
   side_plank: { src: 'Side_Bridge', crop: [0.06, 0.04, 0.8] },
   squat: { src: 'Bodyweight_Squat', crop: [0.11, 0.03, 0.78] },
+  box_pistol: { src: 'Single-Leg_High_Box_Squat', crop: [0.1, 0.0, 0.8] },
   split_squat: { src: 'Split_Squats', crop: [0.12, 0.02, 0.8] },
   lunge: { src: 'Bodyweight_Walking_Lunge', crop: [0.0, 0.16, 0.7] },
   jump_lunge: { src: 'Split_Jump', crop: [0.13, 0.06, 0.76] },

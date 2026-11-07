@@ -74,6 +74,12 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
   // exercise (the higher), level ups already shown and Telegram imports.
   if (a.sets || b.sets) out.sets = mergeSets(older.sets, newer.sets)
   if (a.setsImported || b.setsImported) out.setsImported = true
+  // Telegram-imported days (day → exercise ids): from both devices.
+  if (a.importedDays || b.importedDays) {
+    const imp: Record<string, string[]> = {}
+    for (const src of [a.importedDays, b.importedDays]) for (const [d, ids] of Object.entries<any>(src ?? {})) imp[d] = [...new Set([...(imp[d] ?? []), ...(Array.isArray(ids) ? ids.map(String) : [])])]
+    out.importedDays = imp
+  }
   if (a.best || b.best) {
     const best: Record<string, any> = { ...(older.best ?? {}) }
     for (const [k, v] of Object.entries<any>(newer.best ?? {})) if (!best[k] || (Number(v?.score) || 0) >= (Number(best[k]?.score) || 0)) best[k] = v

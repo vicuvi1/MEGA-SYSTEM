@@ -10,6 +10,8 @@ export interface SetEntry {
   /** Reps, or seconds for a hold. */
   reps: number
   kg?: number
+  /** A weekly strength test set: it moves levels and the chart, and pays nothing. */
+  test?: boolean
   /** When it was logged (ms), and an id so two devices' sets merge without doubles. */
   at?: number
   id?: string
@@ -46,10 +48,14 @@ export function makeSet(reps: number, now = Date.now(), kg = 0, salt = ''): SetE
 }
 
 /** Adds sets to a log (a new log; the old one is not changed). */
-export function addSets(log: SetLog | null | undefined, day: string, exId: string, reps: number[], now = Date.now()): SetLog {
+export function addSets(log: SetLog | null | undefined, day: string, exId: string, reps: number[], now = Date.now(), extra: { kg?: number; test?: boolean } = {}): SetLog {
   const out: SetLog = JSON.parse(JSON.stringify(log ?? {}))
   const list = (out[day] ??= {})[exId] ?? []
-  reps.map(clean).filter((r) => r > 0).forEach((r, i) => list.push(makeSet(r, now + i, 0, `${i}${exId.length}`)))
+  reps.map(clean).filter((r) => r > 0).forEach((r, i) => {
+    const e = makeSet(r, now + i, extra.kg ?? 0, `${i}${exId.length}`)
+    if (extra.test) e.test = true
+    list.push(e)
+  })
   if (list.length) out[day][exId] = list
   return out
 }

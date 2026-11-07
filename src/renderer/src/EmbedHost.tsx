@@ -90,7 +90,9 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
       // PG4: the Progress tab asks why a move stalled; Ben answers from your protein, sleep and readiness.
       if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_INSIGHT') {
         const ins = await life.coach?.bodyPlus?.insight?.().catch(() => null)
-        ;(e.source as Window | null)?.postMessage({ type: 'LIFE_SPORT_INSIGHT', insight: ins ? { text: ins.text, missing: ins.missing } : null }, window.location.origin)
+        // The coach card reads protein, sleep and readiness from the same data.
+        const bodyData = await life.coach?.bodyPlus?.sportBody?.().catch(() => null)
+        ;(e.source as Window | null)?.postMessage({ type: 'LIFE_SPORT_INSIGHT', insight: ins ? { text: ins.text, missing: ins.missing } : null, body: bodyData ?? null }, window.location.origin)
         return
       }
 
