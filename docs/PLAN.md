@@ -127,4 +127,4 @@ Order rationale: Phases 0-2 give a working wallet, tasks and schedule in the fir
 - **Timers:** twice a year check Actions → "Coach tick" is enabled and
   Settings → System health shows "Ben's timer" green.
 - **Backups:** once a quarter download one "Off-site backup" artifact and
-  decrypt it (docs/AI_HANDOFF.md, "Backups") to prove the passphrase works.
+  decrypt it (docs/areas/ops.md, "Backups") to prove the passphrase works.

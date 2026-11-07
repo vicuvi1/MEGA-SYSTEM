@@ -10,7 +10,7 @@ Use this to score one session's or one builder's output before it is accepted. S
 | **Scope discipline** | Touches unrelated areas or other builders' files | Small extra changes, explained | Only what was asked; shared files get small, additive edits |
 | **Reliability** | Depends on the time of day, the network or order (flaky) | Mostly stable | Pinned clocks, robust waits, works on the slow Windows runner |
 | **Honesty and safety** | Pays points for things not done, leaks data, or weakens a security rule | Minor slips | Points honest, no secrets or personal data, security rules intact |
-| **Handoff readiness** | No notes | Commit message only | Report, docs (`AI_HANDOFF.md`), `progress.md` and `feature_list.json` updated |
+| **Handoff readiness** | No notes | Commit message only | Report, docs (`docs/areas/*.md`), `progress.md` and `feature_list.json` updated |
 
 **Verdict**
 - **Accept:** 10 or more, with no 0 anywhere.

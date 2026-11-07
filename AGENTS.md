@@ -1,65 +1,37 @@
-# AGENTS.md — working on Life System
+# AGENTS.md: working on Life System
 
-**Read `docs/AI_HANDOFF.md` first**, then `docs/harness/progress.md` and `docs/harness/feature_list.json`, and run `bash scripts/init.sh`. Key choices not to undo are in `docs/DECISIONS.md`; end each session with `docs/harness/clean-state-checklist.md`. It is the full, current description of the
-project: who it's for, the repos, the secrets (names only), the architecture,
-Ben (the AI coach), the data, and the rules. This file is the short version.
+This file is the single authority for the working rules. Every AI tool reads it, including Claude
+Code (through `CLAUDE.md`), Codex and the others.
 
-## What it is
+## Read first (progressive, don't read everything)
+1. [`docs/INDEX.md`](docs/INDEX.md): what the project is, the invariants, the commands and the area map.
+2. **One** area file in `docs/areas/` for your task. Read more only if the task really crosses areas.
+3. [`docs/harness/progress.md`](docs/harness/progress.md): where things stand.
+4. If you are about to change one of the choices listed in [`docs/DECISIONS.md`](docs/DECISIONS.md), read it first.
 
-Life System (`vicuvi1/MEGA-SYSTEM`) is one person's life operating system:
-Today (plan, must-dos, habits, focus), Calendar (Google), Tasks (Todoist),
-Insights, Sleep (Waky), Discipline (MAN), Money (Finance Helper), Body (Sport
-Track), Rewards (a points wallet), a Notebook, and **Ben**, an AI coach who
-talks in the app and on Telegram, plans the day and holds you to it.
+The full [`docs/AI_HANDOFF.md`](docs/AI_HANDOFF.md) (about 23k tokens) is the historical reference. Don't read it by default.
 
-It ships three ways from one codebase:
+## Rules
+- **Public repo:** no secrets, ids, emails or the owner's real data anywhere. Use made-up data.
+- **Security rules that must hold:**
+  - `/api/db` refuses the `sys_*` tables and ATTACH/PRAGMA, and pages may only read `cloud_snapshots` (`api/_sqlguard.mjs`).
+  - The PIN lives only on the server (`sys_auth`) and changes through `/api/login {changePin}`.
+  - The bots obey only the owner's chat ids.
+  - A database hiccup is a 503, never a sign-out.
+- **Honest points:** points are paid only for something actually done, logged at the time (see `src/main/sleep.ts` and `src/main/discipline.ts`).
+- **Database:** `src/core/schema.ts` is append-only. Each migration bumps `SCHEMA_VERSION` in `api/_schema.mjs`.
+- **Functions:** add no new files in `api/` (the Hobby plan allows 12 functions).
+- **Writing:** commit messages and UI text are plain, simple English about what changed for the user.
+- **Git:** `git fetch origin main && git rebase origin/main` before pushing. Never force-push. Never commit `node_modules`. Don't redo or undo recent work without reading `git log`.
+- **Read narrowly:** use Grep and line ranges on big files (`DesktopIsland.tsx`, `webBots.ts`, `sport/index.html`, `finance/js/app.js`, `e2e/smoke.mjs`); don't read them whole.
 
-- **Website** (the main product): https://mega-system-ten.vercel.app, PIN login.
-  Every push to `main` deploys to Vercel.
-- **Windows desktop app**: an Electron shell around the same web build, plus a
-  floating "Dynamic Island" command center. Built and published as a GitHub
-  Release on every push to `main` (`.github/workflows/release.yml`).
-- **Telegram bots** (Ben and the specialist bots), answered by the server 24/7.
+## Definition of done
+- `npx tsc --noEmit -p tsconfig.json` is clean, and `npx vitest run` passes. Tests that depend on the hour pin the clock.
+- `npm run smoke` passes. A UI change has a smoke step. Builders may run only their area with `SMOKE_ONLY`; the coordinator or CI runs the full suite.
+- If bot or server code changed: `npm run build:bot`, and commit `api/_bot/bot.mjs`. If `src/core/sport*.ts` changed: `npm run build:sport`, and commit `sportkit.js`.
+- New or changed behaviour is written in the matching `docs/areas/*.md` file.
+- The feature's entry in `docs/harness/feature_list.json` is updated.
 
-## Where things live
-
-```
-api/              Vercel functions (max 12 on the Hobby plan): login (PIN, passkeys,
-                  devices), db (guarded Turso proxy), coach, telegram webhook, cron
-                  (tick, daily jobs, backup, sport), ai, google (+ its sign-in callback), todoist, config,
-                  bot-setup (+ health on GET), mcp (AI apps: MCP tools, tokens, OAuth; logic
-                  in src/server/mcp.ts). Old URLs live on as vercel.json rewrites.
-api/_bot/bot.mjs  The server bundle of src/server/telegramBot.ts (npm run build:bot;
-                  Vercel also rebuilds it on deploy).
-src/core/         Pure TypeScript logic, no DOM/Electron: dates, ledger, rules, streaks,
-                  rhythm (Ben's day), islandModel (island states), sleep, capture…
-src/main/         The services (wallet, focus, sleep, discipline, body, shop, weekPlan,
-                  progress…). They run on the browser's copy of the database.
-src/renderer/     The React 19 app. src/renderer/src/web/ is the data layer: mirror.ts
-                  (sql.js copy of Turso, live sync, offline queue), webServices.ts,
-                  webBots.ts (the bots' brain, shared with the server), session.ts.
-src/renderer/public/apps/  The embedded apps: finance, waky, man, sport.
-src/desktop/      The Electron shell: main.ts, island.ts (the floating island window),
-                  preload.ts. Built with electron.desktop.config.mts.
-src/server/       telegramBot.ts: the server side of the bots, the tick, daily jobs.
-e2e/              smoke.mjs (the real app on fake data) and server.mjs.
-```
-
-## How to work
-
-- Ship: `bash scripts/ship.sh <message-file>` (typecheck, tests, bot bundle,
-  commit, push). UI check: `npm run smoke`.
-- Tests: `npx vitest run`. Types: `npx tsc --noEmit -p tsconfig.json`.
-- Commit messages and UI text: plain, simple English about what changed for the
-  user, not jargon.
-- The repo is **public**: no secrets, no real personal data in code, tests,
-  docs or screenshots. Use made-up data.
-- Database changes: `src/core/schema.ts` is append-only; adding a migration
-  means bumping `SCHEMA_VERSION` in `api/_schema.mjs` (a test checks it).
-- Security rules that must hold: `/api/db` refuses the server-only `sys_*`
-  tables and ATTACH/PRAGMA, and lets pages only read `cloud_snapshots`
-  (`api/_sqlguard.mjs`); the PIN lives only on the
-  server (`sys_auth`) and is changed through `/api/login {changePin}`; the bots
-  obey only your own chat ids; a database hiccup is a 503, never a sign-out.
-- Points must be honest: a habit pays only for something you actually did when
-  you log it (see `src/main/sleep.ts` and `src/main/discipline.ts`).
+## Reports and handoffs
+- A builder ends with a report of **at most about 250 words**: what changed (user-visible), files, tests run and their results, the commit hash, risks, and screenshot paths.
+- The coordinator keeps `docs/harness/progress.md` to 5–8 lines per milestone, and starts a fresh session at milestones (see `docs/harness/session-handoff.md`).

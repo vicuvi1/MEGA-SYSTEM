@@ -314,13 +314,13 @@
    "area": "sleep",
    "title": "Sleep care",
    "user_visible_behavior": "Morning light, caffeine curfew, after-shift wind-down, sleep debt, desk drill, eye care, grooming",
-   "status": "in_progress",
+   "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
     "SMOKE_ONLY=\"Sleep care\" npm run smoke"
    ],
-   "evidence": "",
-   "notes": "Commit d36923c; full smoke not yet re-run after rebase"
+   "evidence": "Commit d36923c; unit tests pass; smoke \"Sleep care\" step passes",
+   "notes": ""
   },
   {
    "id": "F024",
@@ -328,11 +328,12 @@
    "area": "focus",
    "title": "Focus loop and Dojo",
    "user_visible_behavior": "Push ladder, stalling fixes, launch kit, session verdict, workout music, morning countdown, Dojo, victory soundtrack",
-   "status": "in_progress",
+   "status": "passing",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Focus boost\" npm run smoke"
    ],
-   "evidence": "",
+   "evidence": "Commit c8d389e; unit tests pass; smoke \"Focus boost\" step passes alone",
    "notes": ""
   },
   {
@@ -341,11 +342,12 @@
    "area": "body",
    "title": "Food and training",
    "user_visible_behavior": "Protein counter, lean-bulk trend, readiness, workout slot, progress photos, weekly body report",
-   "status": "in_progress",
+   "status": "passing",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Body boost\" npm run smoke"
    ],
-   "evidence": "",
+   "evidence": "Commit 46c63ec; unit tests pass; smoke \"Body boost\" step passes alone",
    "notes": ""
   },
   {
@@ -367,11 +369,12 @@
    "area": "life",
    "title": "Seasons and identity",
    "user_visible_behavior": "8-week seasons with a boss, vision board, side quests, identity votes, level-up cinematic, wins wall, life wheel",
-   "status": "in_progress",
+   "status": "passing",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Season\" npm run smoke"
    ],
-   "evidence": "",
+   "evidence": "Commit dca47bd; unit tests pass; smoke \"Season\" step passes",
    "notes": ""
   }
  ]
