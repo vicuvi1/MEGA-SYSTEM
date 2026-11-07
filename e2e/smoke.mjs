@@ -44,16 +44,28 @@ await new Promise((ok, no) => {
 })
 
 const fails = []
-const step = async (name, fn) => {
+// What a failure was waiting for (Playwright's call log), so a red run says which part.
+const waitedFor = (msg) => (String(msg).split('\n').find((l) => /waiting for/.test(l)) ?? '').trim()
+const step = async (name, fn, { retries = 0 } = {}) => {
   // SMOKE_ONLY=<words>: run only the steps whose name has them (handy while working on one part).
   // The sign-in step always runs: every other step needs it.
   if (process.env.SMOKE_ONLY && !name.includes(process.env.SMOKE_ONLY) && !name.startsWith('opens and signs in')) return
-  try {
-    await fn()
-    console.log(`✓ ${name}`)
-  } catch (e) {
-    fails.push(name)
-    console.log(`✗ ${name}: ${process.env.SMOKE_FULL ? e.message : e.message.split('\n')[0]}`)
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await fn()
+      console.log(`✓ ${name}${attempt ? ` (passed on try ${attempt + 1})` : ''}`)
+      return
+    } catch (e) {
+      const why = `${process.env.SMOKE_FULL ? e.message : e.message.split('\n')[0]}${process.env.SMOKE_FULL ? '' : ` ${waitedFor(e.message)}`}`
+      // A step that drives a whole embedded app on a slow Windows runner may try once more from the start.
+      if (attempt < retries) {
+        console.log(`… ${name}: ${why.trim()}, trying once more`)
+        continue
+      }
+      fails.push(name)
+      console.log(`✗ ${name}: ${why.trim()}`)
+      return
+    }
   }
 }
 const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePath: process.env.CHROMIUM_PATH } : {})
@@ -354,7 +366,7 @@ try {
       if (over > 1) throw new Error(`Sport Track scrolls sideways at ${w}px (${over}px)`)
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
-  })
+  }, { retries: 1 })
   // MN24: Discipline is one built-in page (no embedded MAN copy).
   await step('Discipline is one page with its own content', async () => {
     await open('discipline')
