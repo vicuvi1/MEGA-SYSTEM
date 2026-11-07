@@ -16,6 +16,12 @@ export interface CoachInput extends HistoryInput {
   notYet?: Record<string, string>
   /** An easy week: fewer sets, no new reps. */
   deload?: boolean
+  /** Strength mode: 5–8 reps on the hardest move you can do, 4 sets, harder move once you hit 3×8. */
+  strength?: boolean
+  /** How the sessions of this exercise felt, by day (easy speeds progress up, hard holds it). */
+  efforts?: Record<string, 'easy' | 'good' | 'hard'>
+  /** "Too easy" / "Too hard" today: the goal (and sets) you picked, valid on `day` only. */
+  override?: { goal: number; sets?: number; day: string } | null
 }
 
 export interface Session {
@@ -105,11 +111,13 @@ const workingSets = (s: Session, n: number) => s.reps.slice(0, n)
 const atTop = (s: Session, sets: number, hi: number) => s.reps.length >= sets && workingSets(s, sets).every((r) => r >= hi)
 const missed = (s: Session, lo: number) => Math.max(...s.reps) < lo
 
-function aimAfter(list: Session[], o: { lo: number; hi: number; sets: number; unit: 'reps' | 'sec'; start: number; deload: boolean }): number {
+function aimAfter(list: Session[], o: { lo: number; hi: number; sets: number; unit: 'reps' | 'sec'; start: number; deload: boolean; efforts?: Record<string, 'easy' | 'good' | 'hard'> }): number {
   const last = list[list.length - 1]
   if (!last) return o.start
   const min = Math.min(...workingSets(last, o.sets))
-  const step = o.unit === 'sec' ? 5 : 1
+  const eff = o.efforts?.[last.day]
+  const base = o.unit === 'sec' ? 5 : 1
+  const step = eff === 'hard' ? 0 : eff === 'easy' ? base * 2 : base
   return clamp(o.deload ? min : min + step, o.lo, o.hi + (atTop(last, o.sets, o.hi) ? step : 0))
 }
 
@@ -123,17 +131,19 @@ export function coachFor(input: CoachInput): Coach | null {
   const place = placeFamily(input, move.family)
   const onMove = track ? track.levels.filter((l) => l.move === move.id) : []
   const fallback = rangeFor(move)
-  const lo = onMove[0]?.reps ?? fallback.lo
-  const hi = onMove.length ? onMove[onMove.length - 1].reps : fallback.hi
+  const strong = !!input.strength && move.unit === 'reps'
+  const lo = strong ? 5 : onMove[0]?.reps ?? fallback.lo
+  const hi = strong ? 8 : onMove.length ? onMove[onMove.length - 1].reps : fallback.hi
   const mine = onMove.filter((l) => place && l.n <= place.level).pop() ?? onMove[0]
-  const sets = clamp((input.deload ? (mine?.sets ?? 3) - 1 : mine?.sets ?? 3) || 3, 1, 5)
+  const ov = input.override && input.override.day === input.today ? input.override : null
+  const sets = ov?.sets ? clamp(ov.sets, 1, 6) : clamp((strong ? (input.deload ? 3 : 4) : input.deload ? (mine?.sets ?? 3) - 1 : mine?.sets ?? 3) || 3, 1, 5)
   const all = sessionsFor(input, ex, input.today)
   const past = all.filter((s) => s.day < input.today)
   const todays = all.find((s) => s.day === input.today) ?? null
   const last = past[past.length - 1] ?? null
   const startGoal = place && place.lv && place.lv.move === move.id ? place.lv.reps : clamp(Math.round((Number(ex.target) || lo * 3) / 3), lo, hi)
-  const o = { lo, hi, sets, unit, start: startGoal, deload: !!input.deload }
-  let goal = aimAfter(past, o)
+  const o = { lo, hi, sets, unit, start: startGoal, deload: !!input.deload, efforts: input.efforts }
+  let goal = ov ? Math.max(1, ov.goal) : aimAfter(past, o)
   const nextGoal = aimAfter(todays ? [...past, todays] : past, o)
   const recent = todays && todays.reps.length >= sets ? [...past, todays] : past
 
@@ -144,14 +154,19 @@ export function coachFor(input: CoachInput): Coach | null {
   let tip: string | null = null
 
   // Ready for a harder move: the top of every set, two sessions in a row.
+  // Strength: 3×8 is enough. An easy-rated session at the top counts for both of the 2 sessions.
+  const topSets = strong ? 3 : sets
+  const needTop = strong ? 1 : NEED_TOP
   let run = 0
-  for (let i = recent.length - 1; i >= 0 && atTop(recent[i], sets, hi); i--) run++
+  for (let i = recent.length - 1; i >= 0 && atTop(recent[i], topSets, hi); i--) run++
+  const lastTop = recent[recent.length - 1]
+  if (!strong && run === 1 && lastTop && atTop(lastTop, topSets, hi) && input.efforts?.[lastTop.day] === 'easy') run = NEED_TOP
   const harder = nextStep(move)
   const back = harder && input.notYet?.[harder.id]
-  if (run >= NEED_TOP) {
+  if (run >= needTop) {
     if (harder && !(back && back > input.today)) {
       const firstOn = track?.levels.find((l) => l.move === harder.id)
-      ready = { to: harder, sets: 1, reps: firstOn?.reps ?? harder.set, why: `${sets}×${hi}${u(unit)} ${NEED_TOP} sessions in a row` }
+      ready = { to: harder, sets: 1, reps: firstOn?.reps ?? harder.set, why: strong ? `${topSets}×${hi} reached` : run === 1 ? `${sets}×${hi}${u(unit)} and it felt easy` : `${sets}×${hi}${u(unit)} ${NEED_TOP} sessions in a row` }
       status = 'ready'
       tip = formTip(harder)
       line = `Ready for ${harder.name}? Try 1 set of ${ready.reps}${u(harder.unit)}. You did ${ready.why}.`

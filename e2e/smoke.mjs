@@ -298,7 +298,7 @@ try {
     const names = (await frame.locator('.ex .ex-name').allInnerTexts()).join('|').toLowerCase()
     for (const n of ['push-ups', 'sit-ups', 'press']) if (!names.includes(n)) throw new Error(`Today does not list ${n} (got: ${names})`)
     // The coach card: level, today's target, one big log button (prefilled from last time), set chips and a typed box.
-    for (const sel of ['.ex .lvl, .ex .tag', '.ex .ex-target b', '.ex .log-big', '.ex .log-chips .chip', '.ex form.log-type input']) if (!(await frame.locator(sel).first().count())) throw new Error(`an exercise card lacks ${sel}`)
+    for (const sel of ['.ex .lv-big, .ex .lvl, .ex .tag', '.ex .ex-target b', '.ex .log-big', '.ex .log-chips .chip', '.ex form.log-type input']) if (!(await frame.locator(sel).first().count())) throw new Error(`an exercise card lacks ${sel}`)
     // A library exercise shows its demo: two real photo frames, or the drawn figure (not an empty picture).
     await frame.waitForSelector('.ex .ex-demo svg.fig path[data-p="torso"][d], .ex .ex-demo .ph img.ph-b', { state: 'attached', timeout: 10000 })
     const shut = async () => { if (await frame.locator('#cel.open').count()) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await frame.waitForSelector('#cel', { state: 'hidden', timeout: 5000 }) } }
@@ -409,6 +409,27 @@ try {
     await frame.click('#pr-sub [data-sub="badges"]')
     await frame.waitForSelector('.bd .medal', { timeout: 5000 })
     await frame.click('.st-tab[data-tab="today"]')
+    // The rank and level strip: your rank, a big level per exercise, a best-set box; "Too easy" jumps a level, Undo brings it back.
+    await frame.waitForSelector('#lv-strip .ls-rank-name', { timeout: 5000 })
+    if (!/your rank/i.test(await frame.locator('#lv-strip').innerText())) throw new Error('the level strip has no rank')
+    if (await frame.locator('#lv-strip [data-best-form]').count()) {
+      if (await frame.locator('#lv-strip .ls-best').count()) await frame.click('#lv-strip .ls-best summary')
+      await frame.selectOption('#lv-strip [data-best-form] select', 'pushup')
+      await frame.fill('#lv-strip [data-best-form] input', '50')
+      await frame.click('#lv-strip [data-best-form] button[type="submit"]')
+    }
+    await frame.waitForSelector('#lv-strip .lvb', { timeout: 5000 })
+    const lvText = await frame.locator('#lv-strip').innerText()
+    if (!/Level \d+/.test(lvText) || !/of \d+/.test(lvText) || !/(→|top rank)/.test(await frame.locator('#ls-rank-line').innerText())) throw new Error(`the level strip lacks the rank or levels (got: ${lvText})`)
+    if (!(await frame.locator('.ex .lv-big').count()) || !(await frame.locator('.ex [data-tune="easy"]').count()) || !(await frame.locator('.ex [data-tune="hard"]').count())) throw new Error('cards lack the big level or the Too easy / Too hard buttons')
+    if (process.env.SPORT_SHOTS) { await pg.addStyleTag({ content: '.toasts { display: none !important; }' }); await frame.locator('#lv-strip').screenshot({ path: `${process.env.SPORT_SHOTS}/today-hero.png` }) }
+    const before = await frame.locator('.ex .ex-name').allInnerTexts()
+    await frame.click('.ex [data-tune="easy"]')
+    await frame.waitForFunction(() => /Level \d+|top of the ladder/.test(document.getElementById('toast-text')?.textContent ?? ''), null, { timeout: 5000 })
+    const after = await frame.locator('.ex .ex-name').allInnerTexts()
+    if (JSON.stringify(before) === JSON.stringify(after) && !/top of the ladder/.test(await frame.locator('#toast-text').innerText())) await frame.waitForTimeout(300)
+    if (process.env.SPORT_SHOTS) await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/level-up-applied.png` })
+    if (await frame.locator('#toast-undo').isVisible()) await frame.click('#toast-undo')
     // No sideways scroll at a laptop size or on a phone.
     for (const [w, h] of [[1280, 720], [390, 844]]) {
       await pg.setViewportSize({ width: w, height: h })

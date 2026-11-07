@@ -17,3 +17,4 @@ export { trackOf, MAIN_FAMILIES, placeFamily, placeAll, seriesOf, levelChanges, 
 export { coachFor, feedbackFor, missingGroups, formTip, sessionsFor, NEED_TOP } from './sportCoach'
 export { forecasts, goalPace, weeklyStory, storyWeek, recordsWall, trendLine } from './sportForecast'
 export { PROGRAMS, programById, sessionFor, applyProgram, stopProgram, todayRoutine, balanceCheck, deloadAdvice, deloadWeek, slotMove } from './sportPrograms'
+export { rankLine, levelBadge, autoVariation, shiftLevel, balancedSet, tempoAdvice } from './sportBoost'

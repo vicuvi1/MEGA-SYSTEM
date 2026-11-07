@@ -166,7 +166,20 @@ export interface DayEntry {
   reps: number[]
   /** The sets were estimated from a day total (no set data). */
   est: boolean
+  /** A declared best set: harder moves of the ladder count too, at 70% of the reps per step. */
+  transfer?: boolean
 }
+
+/** One max set you told us about ("my best set: 50"), per exercise family. */
+export interface BestSet {
+  move: string
+  reps: number
+  day: string
+}
+/** Working sets are about 60% of a max set. */
+export const WORKING_OF_MAX = 0.6
+/** Reps on a move that match `reps` on a move `steps` harder on its ladder. */
+export const transferReps = (reps: number, steps: number) => reps * Math.pow(0.7, Math.max(0, steps))
 
 /** How many sets a day total was probably done in. */
 export function estimateSets(total: number, unit: 'reps' | 'sec' = 'reps'): number[] {
@@ -183,6 +196,8 @@ export interface HistoryInput {
   days?: DayLog | null
   sets?: SetLog | null
   today: string
+  /** Your declared best set per family (placement counts it on its day and the day before). */
+  best?: Record<string, BestSet> | null
 }
 
 /** Per day, the entries of one family: real sets, else an estimate from the day total. */
@@ -203,6 +218,13 @@ export function dayEntries(input: HistoryInput, family: string, until?: string):
       if (entry) (out.get(day) ?? out.set(day, []).get(day)!).push(entry)
     }
   }
+  const b = input.best?.[family]
+  const bm = b && moveById(b.move)
+  if (b && bm && b.reps > 0 && b.day <= (until ?? input.today)) {
+    const w = Math.max(1, Math.round(b.reps * WORKING_OF_MAX))
+    const mk = (): DayEntry => ({ move: bm, reps: [w, w, w], est: true, transfer: true })
+    for (const d of [b.day, shiftDay(b.day, -1)]) (out.get(d) ?? out.set(d, []).get(d)!).push(mk())
+  }
   return out
 }
 
@@ -214,7 +236,10 @@ function setsMeeting(entries: DayEntry[], lv: Level): number {
   let n = 0
   for (const e of entries) {
     const hard = stepIdx(e.move)
-    if (hard < li) continue
+    if (hard < li) {
+      if (e.transfer) n += e.reps.filter((r) => transferReps(r, li - hard) >= lv.reps).length
+      continue
+    }
     const need = hard > li ? Math.ceil(lv.reps * 0.7) : lv.reps
     n += e.reps.filter((r) => r >= need).length
   }
