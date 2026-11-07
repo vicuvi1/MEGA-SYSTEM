@@ -264,6 +264,7 @@ try {
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   await step('Sport Track Today: hero, exercise cards, water, menus, fits laptop and phone', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 }) // a retry starts from the usual size
     await open('body')
     await pg.locator('.seg-switch button').first().click()
     await pg.waitForTimeout(2500)
