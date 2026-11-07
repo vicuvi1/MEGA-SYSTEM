@@ -23,14 +23,14 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-07, late)
+### Current handoff (2026-11-07, night)
 ```
-Milestone:   Sport Track strength coach — landed (34d08cf): level hero, auto harder variations, Too easy/Too hard, effort rating, best-set placement, Strength mode default
-Completed:   all of today's work; Sport smoke passes on 34d08cf
+Milestone:   Sport strength coach v2 landed (2e93440): rule engine, "Your coach" card, adjust after every log, weekly AI review, Ask Ben, best-set onboarding, harder moves, kg on sets, strength test + charts
+Completed:   everything requested so far; Sport smoke passes on 2e93440
 Active:      none
 Blockers:    none. New worktrees lack some node_modules files: symlink /home/user/MEGA-SYSTEM/node_modules
-Next action: check 1280×720 + light theme of the sport hero; add harder home moves with demos (one-arm-assisted push-ups, feet-elevated rows, dragon flag)
-Files:       docs/INDEX.md, docs/areas/sport.md, docs/harness/progress.md, src/core/sportBoost.ts
+Next action: hook the weekly sport review into the Sunday rhythm job (now lazy); check 1280×720 + light theme of Sport Today; full smoke on main
+Files:       docs/INDEX.md, docs/areas/sport.md, src/core/sportCoachRules.ts, src/core/sportReview.ts
 ```
 
 ## Builder report format (≤ ~250 words)
