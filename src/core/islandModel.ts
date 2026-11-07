@@ -121,11 +121,13 @@ export type IslandAction = { id?: string } & (
   | { kind: 'benPush'; op: import('./benPushes').PushOp; key: string; alertId: string; arg?: string; minutes?: number }
   /** BD4/BD5/BD12: a tap on a sleep-care card (morning light, coffee, warm screen, the after-shift checklist: src/core/sleepCare.ts). */
   | { kind: 'care'; op: import('./sleepCare').CareOp; alertId: string }
+  /** Alive island: accept the Lively preset (balanced / lively), "later" (no thanks, ask never again), or back to Calm (put the old values back). */
+  | { kind: 'alive'; op: 'balanced' | 'lively' | 'later' | 'calm'; alertId?: string }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown' | 'push1' | 'push2' | 'push3' | 'launch' | 'win' | 'pulse' | 'countdown' | 'streakRisk' | 'mirror'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown' | 'push1' | 'push2' | 'push3' | 'launch' | 'win' | 'pulse' | 'countdown' | 'streakRisk' | 'mirror' | 'gaming'
   title: string
   text: string
   face?: string
@@ -138,10 +140,12 @@ export interface IslandAlert {
   recap?: IslandRecap
   /** Island 2: the interactive nudge card's data (count picker, countdown, faces…). */
   nudge?: import('./islandNudges').Nudge
+  /** Alive island: how long this peek stays (ms), shorter than the usual peek (the hourly pulse: 3000). */
+  peekMs?: number
 }
 
 /** IC14: the day in a few numbers, told as a short story in the evening. */
-export interface IslandRecap { mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; focusMin: number; focusGoal: number; streak?: number }
+export interface IslandRecap { gamingMin?: number; mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; focusMin: number; focusGoal: number; streak?: number }
 
 export interface IslandSnapshot {
   at: number
@@ -245,6 +249,10 @@ export interface IslandSnapshot {
   /** The day's story, from 23:00. */
   story?: { lines: string[]; stats: { focusMin: number; waterMl: number; done: number } }
   /** Quick numbers for the hover peek / widgets (named `glance` because `widgets` is the widget settings above). */
+  /** Sunrise / sunset tint and one line ("Rain at 17:00") from the weather plugin. */
+  /** Game time (src/core/gaming.ts): `on` while a game is in front (a short look away keeps it), the session so far, today, this week, and the nearest limit you set. Null/absent when the counter is off. */
+  gaming?: { on: boolean; app: string; sessionMin: number; todayMin: number; weekMin: number; limitMin?: number } | null
+  moment?: { tint: 'dawn' | 'day' | 'dusk' | 'night'; line: string | null }
   glance?: { waterMl: number; waterGoal: number; habitsDone: number; habitsTotal: number; moneyLeft: number | null; proteinG: number; proteinGoal: number }
 }
 
@@ -905,7 +913,7 @@ export type AlertPriority = 'urgent' | 'normal' | 'ambient'
 /** Time-up is urgent; plans, Ben and rewards are normal; body nudges are background. */
 export function alertPriority(kind: string): AlertPriority {
   if (kind === 'over') return 'urgent'
-  if (kind === 'water' || kind === 'move' || kind === 'eyes' || kind === 'highlight' || kind === 'clip') return 'ambient'
+  if (kind === 'water' || kind === 'move' || kind === 'eyes' || kind === 'highlight' || kind === 'clip' || kind === 'pulse' || kind === 'mirror' || kind === 'streakRisk' || kind === 'gaming') return 'ambient'
   return 'normal'
 }
 /** peek: drop down (with its sound); silent: only a dot, it waits in the panel; drop: not shown at all. */

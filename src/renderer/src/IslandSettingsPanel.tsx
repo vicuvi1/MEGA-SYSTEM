@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cleanIslandPrefs, CLICK_LABEL, HIDE_SEC, KIND_LABEL, PILL_LABEL, SECTION_LABEL, SIZE_LIMITS, type AlertKindPref, type AlertRule, type ClickAction, type IslandPrefs } from '@core/islandModel'
 import { autoLabel, PICK_PANEL_W } from '@core/islandFit'
+import { IslandAlivePanel } from './IslandAlivePanel'
 import { BALANCED_PEEKS, ISLAND_MODES, MODE_HINT, MODE_LABEL, PEEK_KINDS, PEEK_LABEL, type IslandMode, type PeekKind } from '@core/islandCalm'
 import { hideText, SHOWN } from '@core/islandMove'
 import { isAltGrCombo, keyLabel, pressToAccelerator, shortcutClash } from '@core/islandKeys'
@@ -280,6 +281,7 @@ export function IslandSettingsPanel() {
           </div>
         </>
       )}
+      <IslandAlivePanel />
       {desk.islandHide && (
         <Row title="Hide it for a while" hint={p.hidden && p.hidden.mode !== 'shown' ? hideText(p.hidden, Date.now()) : 'Gone completely; it comes back by itself'}>
           <span className="is-hide-btns">

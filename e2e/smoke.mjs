@@ -1437,6 +1437,111 @@ try {
     if (dup.length) throw new Error(`to-dos shown twice: ${dup.join(', ')} (rows: ${rows.join(' | ')})`)
     await ip.context().close()
   })
+  // Alive island (core/islandAlive.ts and core/gaming.ts, the real code, bundled here): accept the
+  // preset, an hourly pulse peek, a countdown peek, the focus shield's held count and its one summary,
+  // and the game counter with its end peek.
+  await step('Desktop island alive: accept the preset, a pulse peek, a countdown peek, the shield held count, the game counter', async () => {
+    const { build } = await import('rolldown')
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const dir = await mkdtemp(join(tmpdir(), 'alive-'))
+    const entry = join(dir, 'entry.ts')
+    await writeFile(entry, `export * from ${JSON.stringify(join(repo, 'src/core/islandAlive.ts'))}\nexport * as G from ${JSON.stringify(join(repo, 'src/core/gaming.ts'))}\n`)
+    const out = await build({ input: entry, write: false, output: { format: 'esm' } })
+    await writeFile(join(dir, 'alive.mjs'), out.output[0].code)
+    const A = await import((await import('node:url')).pathToFileURL(join(dir, 'alive.mjs')).href)
+    await rm(dir, { recursive: true, force: true })
+    const at = (h, m = 0, s = 0) => new Date(2026, 10, 9, h, m, s).getTime()
+    // The preset: Calm stays until accepted; accepting turns everything on, and Back to Calm restores.
+    const before = { mode: 'calm', sound: 'subtle', coach: false, wins: false, push: 'gentle', brief: false, shutdown: true, peekAlive: false, alive: A.DEFAULT_ALIVE }
+    if (!A.shouldOffer(A.EMPTY_PRESET, 'calm')) throw new Error('the preset card is not offered on Calm')
+    const on = A.startPreset(A.EMPTY_PRESET, before, 'lively')
+    if (on.apply.sound !== 'full' || !on.apply.coach || !on.apply.wins || on.apply.push !== 'firm' || !A.ALIVE_KINDS.every((k) => on.apply.alive[k])) throw new Error(`the preset sets ${JSON.stringify(on.apply)}`)
+    if (JSON.stringify(A.restorePreset(on.state).apply) !== JSON.stringify(before)) throw new Error('Back to Calm did not restore the old values')
+    const input = (now, o = {}) => ({ now, prefs: on.apply.alive, base: null, ctx: { meeting: false, focus: false, quiet: false, asleep: false }, stats: { mustDone: 2, mustTotal: 3, waterMl: 1200, focusMin: 45 }, blocks: [], streak: null, mirror: [], weather: null, hasKit: () => true, ...o })
+    const pulse = A.aliveStep(input(at(14, 0, 10)), A.EMPTY_ALIVE).alert
+    if (pulse?.kind !== 'pulse' || pulse.text !== '2/3 must-dos · 1.2 L · 45 min focus') throw new Error(`pulse: ${JSON.stringify(pulse)}`)
+    const blocks = [{ title: 'Study', start: at(15, 0), end: at(16, 0) }]
+    const count = A.aliveStep(input(at(14, 50), { blocks }), A.EMPTY_ALIVE).alert
+    if (count?.kind !== 'countdown' || count.text !== 'Start the kit?') throw new Error(`countdown: ${JSON.stringify(count)}`)
+    // The shield: two cards held during focus (counted), then one summary.
+    const water = { id: 'water:1', kind: 'water', title: 'Time for water', text: '', actions: [] }
+    const ben = { id: 'ben:1', kind: 'ben', title: "Ben's message", text: '', actions: [] }
+    const foc = { meeting: false, focus: true, quiet: false, asleep: false }
+    let r = A.aliveStep(input(at(16, 10), { base: water, ctx: foc }), A.EMPTY_ALIVE)
+    r = A.aliveStep(input(at(16, 12), { base: ben, ctx: foc }), r.state)
+    if (r.alert || r.held !== 2) throw new Error(`the shield held ${r.held}, alert ${JSON.stringify(r.alert)}`)
+    const summary = A.aliveStep(input(at(16, 40)), r.state).alert
+    if (!summary || !summary.title.startsWith('2 waited')) throw new Error(`no shield summary: ${JSON.stringify(summary)}`)
+    // The game counter: Fortnite by its process name, 42 minutes, then the end peek.
+    const game = A.G.gameOf('FortniteClient-Win64-Shipping.exe')
+    if (game !== 'Fortnite') throw new Error(`Fortnite is "${game}"`)
+    let gs = A.G.EMPTY_GAMING
+    for (let t = at(18); t <= at(18, 42); t += 15_000) gs = A.G.gamingStep(gs, { now: t, game }).state
+    const counter = A.G.counterText(A.G.gamingView(gs, { ...A.G.DEFAULT_GAMING, on: true }, at(18, 42)))
+    if (!/^🎮 Fortnite · 4[23] min$/.test(counter)) throw new Error(`counter says "${counter}"`)
+    let ended = null
+    for (let t = at(18, 43); t <= at(18, 50); t += 15_000) {
+      const g = A.G.gamingStep(gs, { now: t, game: null })
+      gs = g.state
+      ended = g.ended ?? ended
+    }
+    if (!ended) throw new Error('the game session did not end')
+    const endPeek = A.G.endedAlert({ label: 'Fortnite', sessionMin: 70, todayMin: 70, weekMin: 200 }, at(19))
+
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island alive: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null, mustdos: [], water: { ml: 1200, target: 2000 }, reps: [], alert: null
+      }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {}, islandTakeClicks: () => {}, islandAction: (a) => { window.__island.actions.push(a) },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'lively', peekSec: 3, gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di', { timeout: 15000 })
+    // The island's first look at start-up peeks once; wait until it has gone, then send the cards.
+    await ip.evaluate(() => window.__island.send('hover', false))
+    await ip.waitForTimeout(6000)
+    let tick = 0
+    const send = (alert, more = {}) => ip.evaluate(([a, m, n]) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + n, alert: a, ...m }), [alert, more, ++tick])
+    // The pulse peek.
+    await send(pulse)
+    await ip.waitForSelector('.di-peek.kind-pulse', { timeout: 5000 })
+    if (!(await ip.textContent('.di-peek.kind-pulse')).includes('2/3 must-dos')) throw new Error('the pulse peek has no numbers')
+    await send(null)
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 })
+    // The countdown peek with "Start the kit".
+    await send(count)
+    await ip.waitForSelector('.di-peek.kind-countdown', { timeout: 5000 })
+    if (!(await ip.textContent('.di-peek.kind-countdown')).includes('Start the kit')) throw new Error('the countdown peek has no kit button')
+    await send(null)
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 })
+    // The shield: two held (no peek, the count rides in the snapshot), then the one summary.
+    await send(null, { shield: { on: true, held: r.held } })
+    await ip.waitForTimeout(400)
+    if ((await ip.locator('.di-peek').count()) !== 0) throw new Error('a peek showed while the shield held')
+    await send(summary, { shield: { on: false, held: 0 } })
+    await ip.waitForSelector('.di-peek.kind-pulse', { timeout: 5000 })
+    if (!(await ip.textContent('.di-peek.kind-pulse')).includes('2 waited while you focused')) throw new Error('no shield summary peek')
+    await send(null)
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 })
+    // The end of a game session.
+    await send(endPeek)
+    await ip.waitForSelector('.di-peek.kind-gaming', { timeout: 5000 })
+    if (!(await ip.textContent('.di-peek.kind-gaming')).includes('1h 10m today')) throw new Error('the game end peek has no totals')
+    await ip.context().close()
+  })
   // Ben on your PC (core/pcCoach.ts, the real decision code, bundled here): made-up
   // activity → a praise peek after 50 min of coding, then a break card whose
   // "10 push-ups" button sends the tap (the app window logs it, only on that tap).

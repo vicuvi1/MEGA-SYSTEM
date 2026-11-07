@@ -206,6 +206,13 @@ export async function boostAct(a: Extract<IslandAction, { kind: 'boost' }>, ctx:
   const prefs = await loadBoost().catch(() => boostNow())
   const ls = ladderStore(day)
   const clearCard = () => write(LADDER, { ...ladderStore(day), card: null })
+  // Alive island: the countdown card's "Start the kit" (opens the kit for that block; nothing is logged).
+  if (a.op === 'kitOpen') {
+    const kit = a.arg ? kitFor(prefs.kits, a.arg) : null
+    if (!kit) return { said: null }
+    void openKit(kit)
+    return { said: `🚀 ${kit.name ?? 'Kit'} opened` }
+  }
   if (a.op === 'ladderStart') {
     const subject = (a.arg ?? 'Focus').slice(0, 40)
     await life.focus.start(subject, Math.max(5, Math.min(180, a.minutes ?? 25)), null)

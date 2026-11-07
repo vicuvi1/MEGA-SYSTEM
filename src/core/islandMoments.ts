@@ -98,7 +98,8 @@ export function recapLine(r: IslandRecap): string {
   const parts = [
     r.mustTotal ? `${r.mustDone} of ${r.mustTotal} must-dos` : null,
     r.waterTarget ? `${(r.waterMl / 1000).toFixed(1)} of ${(r.waterTarget / 1000).toFixed(1)} L water` : null,
-    `${r.focusMin} min focus`
+    `${r.focusMin} min focus`,
+    r.gamingMin ? `${r.gamingMin >= 60 ? `${Math.floor(r.gamingMin / 60)}h ${r.gamingMin % 60}m` : `${r.gamingMin} min`} gaming` : null
   ].filter(Boolean)
   return parts.join(' · ')
 }

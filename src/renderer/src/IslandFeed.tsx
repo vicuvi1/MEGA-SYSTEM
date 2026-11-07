@@ -40,6 +40,9 @@ import { capture } from './capture'
 import { parseCapture } from '@core/capture'
 import { useLive } from './live'
 import { logIsland } from './islandLog'
+import { gamingLineNow, gamingTick } from './gamingFeed'
+import { alivePrefs, aliveAct, aliveQuiet, aliveTick, islandModeNow, presetOfferAlert } from './islandAliveFeed'
+import { dayState, dayStory, glance, mirrorNew, next3h, pointsFx, top3Of, voiceReceipt, weatherMoment, type MirrorItem } from '@core/islandAlive'
 import { snapshotKey } from '@core/islandClicks'
 import { startIslandThemeSync } from './islandTheme'
 import { todoistErrorText } from '@core/islandErrors'
@@ -89,7 +92,9 @@ const CLIP = 'ls.islandClip'
 /** Phase 4: rewards already celebrated (id → first shown). */
 const CELEBRATED = 'ls.rewardCelebrated'
 /** IS19: the list, when it was last fetched fine, whether the last try failed, and the real tasks (completing passes those). */
-let todoCache: { at: number; okAt: number; failed: boolean; list: { id: string; content: string; time: string | null }[]; full: Record<string, TodoTask> } = { at: 0, okAt: 0, failed: false, list: [], full: {} }
+let todoCache: { at: number; okAt: number; failed: boolean; list: { id: string; content: string; time: string | null }[]; full: Record<string, TodoTask>; /** Every task of today at the last fetch (the mirror's "added" check). */ all?: { id: string; content: string }[] } = { at: 0, okAt: 0, failed: false, list: [], full: {} }
+/** Alive island: last points balance and the flash that follows a real payout. */
+let pointsWatch: { balance: number | null; fx: { id: string; delta: number; label: string; until: number } | null } = { balance: null, fx: null }
 /** MF11: today's money left (Finance Helper), read at most once a minute or when money changes. */
 let moneyCache: { at: number; v: { left: number; level: string } | null } = { at: 0, v: null }
 // LF4 / LF15: the saga's morning line, low-day wins and rank (read at most every 5 minutes).
@@ -392,7 +397,8 @@ export function IslandFeed() {
         const p = await window.desktop!.pcGetPrefs!().catch(() => null)
         if (!p?.prefs.shareTotals) return
         const t = await window.desktop!.pcToday?.().catch(() => null)
-        if (t?.line) await life.dayLog?.setPc?.(localDayOf(now), t.line).catch(() => {})
+        const gl = gamingLineNow(now)
+        if (t?.line) await life.dayLog?.setPc?.(localDayOf(now), gl ? `${t.line}; ${gl}` : t.line).catch(() => {})
       })()
       // MC11: minutes on listed sites from the browser history, one line for the evening review (only with that switch on).
       void (async () => {
@@ -455,7 +461,7 @@ export function IslandFeed() {
         const top = dedupeTodoist(list).slice(0, 8)
         // `full` keeps every task of today (not just the 3 shown): a tap on a row the island still
         // shows from an older list must find its task even after the top 3 changed.
-        todoCache = { at: now, okAt: now, failed: false, list: top.map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null })), full: { ...todoCache.full, ...Object.fromEntries(list.map((t) => [t.id, t])) } }
+        todoCache = { at: now, okAt: now, failed: false, list: top.map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null })), all: list.map((t) => ({ id: t.id, content: t.content })), full: { ...todoCache.full, ...Object.fromEntries(list.map((t) => [t.id, t])) } }
       } else todoCache.failed = true
     }
     if (now - sagaCache.at > 5 * 60_000 && life.saga) {
@@ -496,6 +502,9 @@ export function IslandFeed() {
     // HD: one set of rules for every body and day nudge (core/healthyDay.ts, core/dayNudges.ts).
     const classOn = blocks.current.list.some((b) => b.kind === 'event' && !b.call && !b.maybe && b.mark !== 'skip' && b.start <= now && now < b.end)
     const govCtx: GovernCtx = { now, call: !!callOn, focus: !!focusRun && !focusRun.pausedAt, event: classOn, asleep: bedLogged }
+    // Game time: the counter, the peek when a session ends, gentle limit notes (gamingFeed.ts, off until you switch it on).
+    const gdoing = doingNow()
+    const gm = gamingTick({ now, doing: gdoing ? { app: gdoing.app, ctx: gdoing.ctx } : null, push: fit?.push ?? 'push', quiet: aliveQuiet(now), busy: !!callOn || classOn || (!!focusRun && !focusRun.pausedAt) })
     let shown = get<Shown[]>(SHOWN, [])
     // Ben's Telegram messages (they show in the island's log too) count as nudges that reached you.
     for (const e of log) if (e.role === 'coach' && e.via === 'telegram' && now - Date.parse(e.at) < 4 * 3600_000) shown = noteMessage(shown, e.text, Date.parse(e.at))
@@ -537,7 +546,7 @@ export function IslandFeed() {
           snooze: nudges.snooze,
           water: { ml: localWater, target: waterTarget },
           eveningAt: evAt,
-          recap: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined },
+          recap: { gamingMin: gm.todayMin || undefined, mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined },
           eveningSent: log.some((e) => e.role === 'coach' && e.via === 'telegram' && localDayOf(Date.parse(e.at)) === localDayOf(now) && textTopic(e.text) === 'evening'),
           ...(ct ? { care: ct.care } : {})
         })
@@ -608,7 +617,8 @@ export function IslandFeed() {
       mustdos: status.mustdos,
       wokeAt: wakeLogged && sleep?.todayLog?.wakeTime ? new Date(`${sleep.todayLog.day}T${sleep.todayLog.wakeTime}:00`).getTime() : null
     }).catch(() => null)
-    const alertNow = (() => {
+    const wf = await widgetsForIsland(now)
+    const alertBase = (() => {
       // Paused: its time is never up (the end moves on with the pause).
       // Your reminders show as their own card (Done / Snooze), not as a copy of Ben's ⏰ message.
       const pick = pickAlert({ now, running: focusRun?.pausedAt ? { ...focusRun, endsAt: focusRun.endsAt + now - focusRun.pausedAt } : focusRun, blocks: blocks.current.list, log: log.filter((e) => !/^\s*⏰/u.test(e.text)).map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
@@ -666,6 +676,25 @@ export function IslandFeed() {
         (call ? null : pick?.kind === 'ben' ? govern(pick, govCtx, shown).show : pick)
       )
     })()
+    // Alive island: the one-time preset card, then the shield and the free-slot cards (islandAlive.ts).
+    const aliveMode = await islandModeNow(now).catch(() => 'calm' as const)
+    const repPick = reps.find((x: { name: string }) => /push/i.test(x.name)) ?? reps[0]
+    const mirrorItems: MirrorItem[] = [
+      ...(todoCache.all ?? todoCache.list).map((t): MirrorItem => ({ id: `td:${t.id}`, title: t.content, src: 'todoist' })),
+      // A must-do that appears right after a Telegram message from Ben is "added by Telegram"; the rest are the app's own.
+      ...status.mustdos.map((m): MirrorItem => ({ id: `md:${m.text.trim().toLowerCase()}`, title: m.text, src: log.some((e) => e.role === 'coach' && e.via === 'telegram' && now - Date.parse(e.at) < 3 * 60_000) ? 'telegram' : 'app' }))
+    ]
+    const aliveOut = aliveTick({
+      now,
+      base: alertBase ?? presetOfferAlert(aliveMode) ?? gm.alert,
+      ctx: { meeting: !!callOn || classOn, focus: !!focusRun && !focusRun.pausedAt, quiet: aliveQuiet(now), asleep: bedLogged },
+      stats: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, focusMin: status.today.focusMin },
+      blocks: blocks.current.list,
+      streak: sportStreak > 0 ? { days: sportStreak, doneToday: !!status.today.workoutDone, rep: repPick ? { id: repPick.id, name: repPick.name, n: Math.max(5, Math.min(10, repPick.target - repPick.done || 10)) } : null } : null,
+      mirror: mirrorItems,
+      weather: wf.weather
+    })
+    const alertNow = aliveOut.alert
     // HD: what reached you, for the governor (a card that just came up counts; the island's water and wind-down tell Telegram).
     const appeared = !!alertNow && alertNow.id !== lastAlertId
     lastAlertId = alertNow?.id ?? null
@@ -679,6 +708,35 @@ export function IslandFeed() {
     // One to-do shows once: Todoist id, then title, across must-dos, this week's top 3, Todoist and the plan's tasks.
     const weekTop3 = weekTop3View(fitCache.week, dayKey(new Date(now)))
     const todos = dedupeTodos({ mustdos: status.mustdos, top: weekTop3?.top ?? [], todoist: todoCache.list, plan: blocks.current.list.filter((b) => !b.call && !b.maybe && b.kind !== 'event').map((b) => b.title) })
+    // Alive island data for the island's look (all optional on the snapshot).
+    const proteinV = await proteinNow(now)
+    const aliveData = (): Partial<IslandSnapshot> => {
+      const balance = shop?.balance ?? null
+      if (balance != null) {
+        const fx = pointsFx(pointsWatch.balance, balance, nudges?.move?.plus && now - nudges.move.plus.at < 15_000 ? 'Move break' : 'Points', now)
+        if (fx) pointsWatch.fx = { ...fx, until: now + 8000 }
+        pointsWatch.balance = balance
+      }
+      if (pointsWatch.fx && pointsWatch.fx.until < now) pointsWatch.fx = null
+      const wk = fit ? workToday(fit, dayKey(new Date(now))) : null
+      const drifting = !!driftNow(now)
+      return {
+        dayState: dayState({ now, dayPct: live.score, mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, restDay: !!wk && wk.mode === 'off', drifting }),
+        top3: top3Of({ mustdos: todos.mustdos, top: weekTop3?.top ?? [], todoist: todos.todoist }),
+        next3h: next3h({ now, blocks: blocks.current.list, reminders: remindCache.list.filter((r) => !r.done && r.kind === 'remind').map((r) => ({ at: Date.parse(r.at), text: r.text })).filter((r) => Number.isFinite(r.at)), tasks: todos.todoist.map((t) => ({ content: t.content, at: t.time ? new Date(`${localDayOf(now)}T${t.time}:00`).getTime() : null })) }),
+        ...(pointsWatch.fx ? { pointsFx: { id: pointsWatch.fx.id, delta: pointsWatch.fx.delta, label: pointsWatch.fx.label } } : {}),
+        shield: { on: !!focusRun && !focusRun.pausedAt && alivePrefs().shield, held: aliveOut.held },
+        ...(() => {
+          const story = dayStory({ now, focusMin: status.today.focusMin, waterMl: localWater, waterTarget, mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, streak: sportStreak })
+          return story ? { story } : {}
+        })(),
+        glance: glance({ waterMl: localWater, waterGoal: waterTarget, reps, moneyLeft: moneyCache.v?.left ?? null, proteinG: proteinV?.g ?? 0, proteinGoal: proteinV?.goal ?? 0 }),
+        ...(() => {
+          const moment = weatherMoment(wf.weather, now)
+          return moment ? { moment } : {}
+        })()
+      }
+    }
     return {
       at: now,
       locked: false,
@@ -706,10 +764,12 @@ export function IslandFeed() {
       water: { ml: localWater, target: waterTarget },
       reps,
       alert: alertNow,
+      ...aliveData(),
+      gaming: gm.view,
       health: healthView ? { today: healthView.today, week } : null,
       windMode: ct ? ct.windMode : windDownMode(now, bedTarget, bedLogged),
       afterShift: ct?.afterShift ?? null,
-      protein: await proteinNow(now),
+      protein: proteinV,
       call: (() => {
         const c = running ? null : callNow(blocks.current.list, now)
         return c ? { title: c.title, end: c.end } : null
@@ -720,7 +780,7 @@ export function IslandFeed() {
       // Island 2: your tiles and buttons, today's blocks for the mini calendar, the music's focus pause.
       ...(await kitForIsland(blocks.current.list)),
       // PL1–PL8, LF1/LF2: your widgets and layout, today's rain and sunset.
-      ...(await widgetsForIsland(now)),
+      ...wf,
       auto: autoIslandView(),
       goals: await goalsForIsland(now),
       study: await studyForIsland(now),
@@ -970,6 +1030,10 @@ export function IslandFeed() {
           case 'eyeBreaks':
             put(EYES, a.on)
             break
+          case 'alive':
+            // Alive island: accept the Lively preset, no thanks, or back to Calm (islandAliveFeed.ts).
+            said = await aliveAct(a)
+            break
           case 'care':
             // Sleep care (careFeed.ts): morning light, coffee, warm screen, the after-shift checklist.
             said = (await careAct(a)) ?? said
@@ -1060,7 +1124,9 @@ export function IslandFeed() {
                 if (!busy.current.steps.includes(st)) busy.current.steps = [...busy.current.steps, st]
                 void send()
               }, { mime: a.mime, data: a.data })
-              said = r.reply.replace(/<[^>]+>/g, '').slice(0, 140)
+              // "add gym tomorrow 18": the receipt is what Ben really saved (✓ …), else his words.
+              said = voiceReceipt(r)
+              window.dispatchEvent(new CustomEvent('life-external-changed'))
             } finally {
               busy.current = { on: false, steps: [] }
               put(SEEN, Date.now())
@@ -1366,11 +1432,18 @@ export function IslandFeed() {
       void send()
     }, 15_000)
     const on = () => void send()
+    // A task added in Todoist (the Sync loop) or by Ben shows up on the island at once (the mirror).
+    const ext = () => {
+      todoCache.at = 0
+      void send()
+    }
+    window.addEventListener('life-external-changed', ext)
     window.addEventListener('life-focus-changed', on)
     window.addEventListener('life-sport-changed', on)
     window.addEventListener('life-island-refresh', on)
     return () => {
       clearInterval(t)
+      window.removeEventListener('life-external-changed', ext)
       window.removeEventListener('life-focus-changed', on)
       window.removeEventListener('life-sport-changed', on)
       window.removeEventListener('life-island-refresh', on)

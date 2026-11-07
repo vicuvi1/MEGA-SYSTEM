@@ -378,6 +378,20 @@
    ],
    "evidence": "Commit dca47bd; unit tests pass; smoke \"Season\" step passes",
    "notes": ""
+  },
+  {
+   "id": "F900",
+   "priority": 2,
+   "area": "island",
+   "title": "Alive island: Lively preset, pulse, countdowns, streak saves, mirror, focus shield, game time",
+   "user_visible_behavior": "One-time card (and Settings → Desktop island → Alive island) sets Balanced or Lively, Full sounds, live coach, win music, normal pushes and every alive card; Back to Calm restores the old values exactly. Per-kind switches, all off until accepted. Game time counter with optional limits (off by default).",
+   "status": "in_progress",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Desktop island\" npm run smoke"
+   ],
+   "evidence": "Unit tests islandAlive.test.ts and gaming.test.ts; smoke step Desktop island alive",
+   "notes": "Visuals for the new snapshot fields are builder B's (DesktopIsland.tsx)."
   }
  ]
 }

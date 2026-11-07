@@ -25,8 +25,8 @@ export const isIslandMode = (v: unknown): v is IslandMode => typeof v === 'strin
 export type CalmRest = 'line' | 'none'
 
 /** The kinds of things that may peek by themselves in Calm and Balanced. */
-export type PeekKind = 'ben' | 'remind' | 'water' | 'move' | 'eyes' | 'timer' | 'meeting' | 'bed' | 'coach'
-export const PEEK_KINDS: readonly PeekKind[] = ['ben', 'remind', 'water', 'move', 'eyes', 'timer', 'meeting', 'bed', 'coach']
+export type PeekKind = 'ben' | 'remind' | 'water' | 'move' | 'eyes' | 'timer' | 'meeting' | 'bed' | 'coach' | 'alive'
+export const PEEK_KINDS: readonly PeekKind[] = ['ben', 'remind', 'water', 'move', 'eyes', 'timer', 'meeting', 'bed', 'coach', 'alive']
 export const PEEK_LABEL: Record<PeekKind, string> = {
   ben: "Ben's messages",
   remind: 'Reminders you set',
@@ -36,12 +36,13 @@ export const PEEK_LABEL: Record<PeekKind, string> = {
   timer: 'Timer ending',
   meeting: 'Meeting starting',
   bed: 'Bedtime wind-down',
-  coach: 'Ben on your PC (praise, back to it)'
+  coach: 'Ben on your PC (praise, back to it)',
+  alive: 'Alive moments (pulse, countdown, streak, added tasks, rain)'
 }
 /** All on, except eye breaks (every 20 minutes is a lot): they wait as a dot. */
-export const DEFAULT_PEEK_FOR: Record<PeekKind, boolean> = { ben: true, remind: true, water: true, move: true, eyes: false, timer: true, meeting: true, bed: true, coach: true }
+export const DEFAULT_PEEK_FOR: Record<PeekKind, boolean> = { ben: true, remind: true, water: true, move: true, eyes: false, timer: true, meeting: true, bed: true, coach: true, alive: false }
 /** What Balanced lets drop down by itself (and only when it's on in "Peek for"). */
-export const BALANCED_PEEKS: ReadonlySet<PeekKind> = new Set<PeekKind>(['remind', 'timer', 'meeting', 'bed'])
+export const BALANCED_PEEKS: ReadonlySet<PeekKind> = new Set<PeekKind>(['remind', 'timer', 'meeting', 'bed', 'alive'])
 
 export function cleanPeekFor(p: unknown): Record<PeekKind, boolean> {
   const src = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>
@@ -61,6 +62,7 @@ export function peekKind(kind: string, meeting = false): PeekKind | null {
   if (kind === 'winddown' || kind === 'bed' || kind === 'late' || kind === 'sleep') return 'bed'
   if (kind === 'praise' || kind === 'refocus' || kind === 'coach' || kind === 'push1' || kind === 'push2' || kind === 'push3') return 'coach'
   if (kind === 'launch' || kind === 'win') return 'ben'
+  if (kind === 'pulse' || kind === 'countdown' || kind === 'streakRisk' || kind === 'mirror' || kind === 'weather' || kind === 'gaming') return 'alive'
   return null
 }
 
@@ -85,6 +87,7 @@ export function dotColor(kind: string, meeting = false): DotColor {
   const k = peekKind(kind, meeting)
   if (k === 'water') return 'blue'
   if (k === 'move' || k === 'eyes') return 'green'
+  if (k === 'alive') return kind === 'weather' || kind === 'pulse' ? 'blue' : 'amber'
   if (k === 'ben' || k === 'coach') return 'lime'
   if (k === 'remind' || k === 'meeting' || k === 'timer' || k === 'bed' || kind === 'block') return 'amber'
   return 'grey'
