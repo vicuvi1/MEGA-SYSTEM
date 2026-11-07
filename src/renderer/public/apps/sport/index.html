@@ -931,6 +931,187 @@
     @media (max-width: 960px) { .strength, .plan-tab { grid-template-columns: minmax(0, 1fr); } .str-hero { grid-template-columns: minmax(0, 1fr); } .mus { grid-template-columns: minmax(0, 1fr); } }
     @media (max-width: 640px) { .pg-week { grid-template-columns: repeat(4, minmax(0, 1fr)); } .str-big { font-size: 48px; } .pg-item { grid-template-columns: 76px minmax(0, 1fr) auto; } .pg-item .stage { width: 76px; height: 61px; } .st-tab { padding: 8px 0; font-size: 12px; } }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+
+    /* ---------- the coach: Today card, levels, programs, progress views ---------- */
+    .ex.coach { grid-template-areas: "demo main" "bar bar" "log log" "sug sug" "why why" "fb fb"; }
+    .ex.coach > .ex-log { grid-area: log; display: flex; flex-direction: column; gap: 10px; }
+    .ex.coach > .ex-sug { grid-area: sug; }
+    .ex.coach > .ex-why { grid-area: why; }
+    .ex.coach > .ex-fb { grid-area: fb; }
+    .ex-target { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .ex-target span { color: var(--st-muted); font-size: 12.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; }
+    .ex-target b { font-size: 30px; line-height: 1.05; font-weight: 800; letter-spacing: -0.03em; }
+    .ex-target em { font-style: normal; color: var(--st-muted); font-size: 13px; font-weight: 550; }
+    .tag.lvl { border: 0; cursor: pointer; }
+    .tag.lvl:hover { background: color-mix(in srgb, var(--st-accent) 24%, transparent); }
+    .log-big { width: 100%; min-height: 54px; font-size: 17px; font-weight: 750; letter-spacing: -0.01em; justify-content: center; }
+    .log-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .log-chips { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+    .chip { min-width: 46px; min-height: 36px; padding: 0 12px; border-radius: 99px; border: 1px solid var(--st-border); background: var(--st-surface); color: var(--st-text); font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; transition: background 0.15s, transform 0.12s; }
+    .chip:hover { background: var(--st-soft); }
+    .chip:active { transform: scale(0.94); }
+    .log-type { display: flex; gap: 6px; margin-left: auto; min-width: 0; flex: 1 1 150px; max-width: 240px; }
+    .log-type input { flex: 1; min-width: 0; height: 36px; border-radius: 10px; border: 1px solid var(--st-border); background: var(--st-bg); padding: 0 11px; font-size: 14px; font-variant-numeric: tabular-nums; }
+    .ex-sug { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13.5px; color: var(--st-muted); line-height: 1.4; }
+    .ex-sug svg { width: 15px; height: 15px; flex: none; color: var(--st-accent-text); }
+    .ex-sug span { flex: 1 1 200px; min-width: 0; }
+    .ex-sug.ready { color: var(--st-text); }
+    .ex-sug.warn { color: var(--st-warn); }
+    .sug-btns { display: inline-flex; gap: 6px; }
+    .ex-why { font-size: 13px; line-height: 1.45; color: var(--st-muted); background: var(--st-bg); border-radius: 12px; padding: 10px 12px; }
+    .ex-fb { display: flex; flex-direction: column; gap: 3px; padding: 11px 13px; border-radius: 12px; background: var(--st-soft); border-left: 3px solid var(--st-accent); animation: fbIn 0.35s var(--ease); }
+    .ex-fb b { font-size: 14.5px; font-weight: 700; }
+    .ex-fb span { font-size: 13.5px; color: var(--st-accent-text); font-weight: 700; }
+    .ex-fb em { font-style: normal; font-size: 12.5px; color: var(--st-muted); display: flex; gap: 6px; align-items: flex-start; }
+    .ex-fb em svg { width: 13px; height: 13px; flex: none; margin-top: 2px; }
+    .ex-fb.ease { background: color-mix(in srgb, var(--st-warn) 12%, transparent); border-left-color: var(--st-warn); }
+    .ex-fb.top, .ex-fb.easy { background: color-mix(in srgb, var(--st-good) 14%, transparent); border-left-color: var(--st-good); }
+    @keyframes fbIn { from { opacity: 0; transform: translateY(6px); } }
+    @media (prefers-reduced-motion: reduce) { .ex-fb { animation: none; } }
+    .wm-coach { text-align: center; max-width: 420px; font-size: 14px; color: var(--st-muted); }
+    .wm-coach b { color: var(--st-text); }
+    .wm-results { list-style: none; display: grid; gap: 8px; width: min(520px, 92vw); margin: 4px 0 16px; text-align: left; }
+    .wm-results li { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 10px 12px; border-radius: 12px; background: var(--st-surface-2); border: 1px solid var(--st-border); font-size: 14px; }
+    .wm-results em { grid-column: 1 / -1; font-style: normal; font-size: 12.5px; color: var(--st-muted); }
+
+    /* the coach card */
+    #coach-card .cc-rank { display: flex; align-items: center; gap: 14px; }
+    .rk-badge { --p: 0; flex: none; width: 64px; height: 64px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--st-accent) calc(var(--p) * 1%), var(--st-track) 0); }
+    .rk-badge i { width: 50px; height: 50px; border-radius: 50%; background: var(--st-surface); display: grid; place-items: center; font-style: normal; font-weight: 800; font-size: 20px; letter-spacing: -0.03em; color: var(--st-accent-text); }
+    .cc-rank b { font-size: 19px; font-weight: 800; letter-spacing: -0.02em; display: block; }
+    .cc-rank small { color: var(--st-muted); font-size: 13px; }
+    .cc-note { display: flex; gap: 10px; align-items: flex-start; padding: 11px 0 0; margin-top: 11px; border-top: 1px solid var(--st-line); font-size: 13.5px; line-height: 1.45; }
+    .cc-note > svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--st-accent-text); }
+    .cc-note.warn > svg { color: var(--st-warn); }
+    .cc-note p { flex: 1; min-width: 0; }
+    .cc-note .row { display: flex; gap: 6px; margin-top: 7px; flex-wrap: wrap; }
+
+    /* progress views */
+    .progress-tab { gap: 18px; align-content: start; }
+    .pr-sub { justify-self: start; max-width: 100%; overflow-x: auto; }
+    .progress-tab > .sub { display: none; gap: 20px; align-items: start; min-width: 0; }
+    .progress-tab[data-sub="levels"] > .sub[data-sub="levels"],
+    .progress-tab[data-sub="records"] > .sub[data-sub="records"],
+    .progress-tab[data-sub="badges"] > .sub[data-sub="badges"],
+    .progress-tab[data-sub="history"] > .sub[data-sub="history"],
+    .progress-tab[data-sub="charts"] > .sub[data-sub="charts"] { display: grid; animation: panelIn 0.28s var(--ease); }
+    .lv-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .lv-grid > .full, .rec-grid > .full { grid-column: 1 / -1; }
+    .rec-grid { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+    .muted { color: var(--st-muted); }
+    /* rank */
+    .rk { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(220px, 300px); gap: 28px; align-items: center; }
+    .rk .rk-badge { width: 112px; height: 112px; }
+    .rk .rk-badge i { width: 90px; height: 90px; font-size: 34px; }
+    .rk h2 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; }
+    .rk p { color: var(--st-muted); font-size: 14.5px; margin-top: 4px; }
+    .rk-steps { display: flex; gap: 4px; margin-top: 14px; }
+    .rk-steps span { flex: 1; text-align: center; font-size: 11.5px; font-weight: 650; color: var(--st-muted); }
+    .rk-steps span::before { content: ''; display: block; height: 6px; border-radius: 4px; background: var(--st-track); margin-bottom: 6px; }
+    .rk-steps span.on { color: var(--st-text); }
+    .rk-steps span.on::before { background: var(--st-accent); }
+    .rk-steps span.cur { color: var(--st-accent-text); font-weight: 800; }
+    .rk-by { display: grid; gap: 9px; }
+    .rk-by div { display: grid; grid-template-columns: 52px minmax(0, 1fr) 30px; gap: 10px; align-items: center; font-size: 13px; color: var(--st-muted); font-weight: 600; }
+    .rk-by .bar { height: 8px; }
+    @media (max-width: 900px) { .lv-grid, .rec-grid { grid-template-columns: minmax(0, 1fr); } .rk { grid-template-columns: auto minmax(0, 1fr); } .rk-by { grid-column: 1 / -1; } }
+    @media (max-width: 480px) { .rk .rk-badge { width: 84px; height: 84px; } .rk .rk-badge i { width: 66px; height: 66px; font-size: 26px; } .rk h2 { font-size: 24px; } .rk { gap: 16px; } }
+    /* why this level */
+    .why-list { display: grid; gap: 10px; }
+    .why-row { display: grid; gap: 4px; padding: 12px 14px; border-radius: 14px; background: var(--st-surface-2); border: 1px solid var(--st-border); }
+    .why-row b { font-size: 14.5px; }
+    .why-row p { font-size: 13.5px; line-height: 1.5; color: var(--st-muted); }
+    .why-row .top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    /* level map */
+    .lm-list { columns: 2 340px; column-gap: 36px; margin-top: 8px; }
+    .lm-row { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px; padding: 0 0 14px; position: relative; break-inside: avoid; }
+    .lm-row::before { content: ''; position: absolute; left: 14px; top: 28px; bottom: -2px; width: 2px; background: var(--st-track); }
+    .lm-row:last-child::before { display: none; }
+    .lm-dot { width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--st-track); color: var(--st-muted); font-size: 12.5px; font-weight: 800; position: relative; z-index: 1; }
+    .lm-dot svg { width: 14px; height: 14px; }
+    .lm-row.done .lm-dot { background: var(--st-accent); color: var(--st-accent-ink, #10140a); }
+    .lm-row.done::before { background: var(--st-accent); }
+    .lm-row.cur .lm-dot { background: var(--st-accent); color: var(--st-accent-ink, #10140a); box-shadow: 0 0 0 4px color-mix(in srgb, var(--st-accent) 28%, transparent), 0 0 22px color-mix(in srgb, var(--st-accent) 55%, transparent); animation: lmGlow 2.2s ease-in-out infinite; }
+    @keyframes lmGlow { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--st-accent) 14%, transparent), 0 0 30px color-mix(in srgb, var(--st-accent) 70%, transparent); } }
+    @media (prefers-reduced-motion: reduce) { .lm-row.cur .lm-dot { animation: none; } }
+    .lm-row.locked { opacity: 0.72; }
+    .lm-name { font-weight: 750; font-size: 14.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .lm-req { color: var(--st-muted); font-size: 13px; }
+    .lm-mean { font-size: 13px; margin-top: 3px; color: var(--st-text); line-height: 1.45; }
+    .lm-row.cur .lm-name { color: var(--st-accent-text); }
+    /* compare, forecast, milestones */
+    .cmp-row, .fc-row { display: grid; gap: 2px; padding: 11px 0; border-top: 1px solid var(--st-line); }
+    .cmp-row:first-of-type, .fc-row:first-of-type { border-top: 0; padding-top: 0; }
+    .cmp-row b, .fc-row b { font-size: 14.5px; }
+    .cmp-row span, .fc-row span { font-size: 13.5px; color: var(--st-muted); }
+    .fc-row .steps2 { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+    .goal-row { display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px; background: var(--st-surface-2); border: 1px solid var(--st-border); margin-top: 10px; }
+    .goal-row .top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .goal-row .top b { font-size: 14.5px; }
+    .goal-row p { font-size: 13.5px; color: var(--st-muted); line-height: 1.45; }
+    .goal-row .today { color: var(--st-text); font-weight: 600; }
+    .ms-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+    .ms { padding: 12px 14px; border-radius: 14px; background: var(--st-surface-2); border: 1px solid var(--st-border); display: flex; flex-direction: column; gap: 3px; }
+    .ms b { font-size: 14px; display: flex; gap: 7px; align-items: center; }
+    .ms b svg { width: 15px; height: 15px; color: var(--st-accent-text); }
+    .ms small { color: var(--st-muted); font-size: 12.5px; line-height: 1.4; }
+    .ms.todo { opacity: 0.6; }
+    .ms.todo b svg { color: var(--st-muted); }
+    .story { display: grid; gap: 6px; }
+    .story h2 { font-size: 20px; letter-spacing: -0.02em; }
+    .story p { color: var(--st-muted); font-size: 14px; }
+    .story .focus { color: var(--st-text); font-weight: 650; }
+    .story .stats { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 4px; }
+    .story .stats div b { display: block; font-size: 24px; font-weight: 800; letter-spacing: -0.02em; }
+    .story .stats div small { color: var(--st-muted); font-size: 12.5px; }
+    /* charts */
+    .cx-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+    .cx-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 20px; }
+    @media (max-width: 900px) { .cx-grid { grid-template-columns: minmax(0, 1fr); } }
+    .cx-svg { width: 100%; height: auto; display: block; overflow: visible; }
+    .cx-svg text { fill: var(--st-muted); font-size: 11px; font-family: var(--st-font); }
+    .cx-svg .ln { fill: none; stroke: var(--st-accent); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+    .cx-svg .area { fill: color-mix(in srgb, var(--st-accent) 12%, transparent); }
+    .cx-svg .dot { fill: var(--st-surface); stroke: var(--st-accent); stroke-width: 2; }
+    .cx-svg .dot.est { stroke: var(--st-muted); fill: var(--st-surface); r: 2.6px; }
+    .cx-svg .grid { stroke: var(--st-track); stroke-width: 1; }
+    .cx-svg .lvl { stroke: var(--st-good); stroke-width: 1.5; stroke-dasharray: 4 3; }
+    .cx-svg .lvl-t { fill: var(--st-good); font-weight: 800; font-size: 11.5px; }
+    .cx-svg .bar-w { fill: color-mix(in srgb, var(--st-accent) 70%, transparent); }
+    .cx-svg .bar-w.cur { fill: var(--st-accent); }
+    .cx-cap { color: var(--st-muted); font-size: 12.5px; margin-top: 8px; }
+    /* records wall */
+    .rw { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+    .rw-card { padding: 16px; border-radius: 16px; background: var(--st-surface-2); border: 1px solid var(--st-border); display: grid; gap: 4px; position: relative; overflow: hidden; }
+    .rw-card h3 { font-size: 14px; font-weight: 700; color: var(--st-muted); }
+    .rw-card .big { font-size: 34px; line-height: 1.05; font-weight: 800; letter-spacing: -0.03em; }
+    .rw-card .big small { font-size: 15px; font-weight: 650; color: var(--st-muted); margin-left: 3px; }
+    .rw-card .sub2 { font-size: 13px; color: var(--st-muted); }
+    .rw-card .sub2 b { color: var(--st-text); }
+    .rw-card.fresh { border-color: color-mix(in srgb, var(--st-accent) 55%, transparent); box-shadow: 0 0 0 1px var(--st-soft), 0 12px 34px -18px color-mix(in srgb, var(--st-accent) 60%, transparent); }
+    .rw-card.fresh::after { content: 'New'; position: absolute; top: 12px; right: 12px; background: var(--st-accent); color: var(--st-accent-ink, #10140a); font-size: 11.5px; font-weight: 800; padding: 2px 9px; border-radius: 99px; animation: rwFlash 1.6s ease-in-out 3; }
+    @keyframes rwFlash { 50% { transform: scale(1.12); box-shadow: 0 0 18px var(--st-accent); } }
+    @media (prefers-reduced-motion: reduce) { .rw-card.fresh::after { animation: none; } }
+    /* programs */
+    .prog-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .prog { padding: 18px; border-radius: 16px; background: var(--st-surface-2); border: 1px solid var(--st-border); display: flex; flex-direction: column; gap: 10px; }
+    .prog.on { border-color: color-mix(in srgb, var(--st-accent) 60%, transparent); box-shadow: 0 0 0 1px var(--st-soft); }
+    .prog h3 { font-size: 16.5px; letter-spacing: -0.015em; }
+    .prog p { color: var(--st-muted); font-size: 13.5px; line-height: 1.5; }
+    .prog .days { display: flex; gap: 4px; }
+    .prog .days i { flex: 1; text-align: center; font-style: normal; font-size: 11.5px; font-weight: 700; padding: 5px 0; border-radius: 8px; background: var(--st-track); color: var(--st-muted); }
+    .prog .days i.on { background: var(--st-soft); color: var(--st-accent-text); }
+    .prog ul { list-style: none; display: grid; gap: 3px; font-size: 13px; color: var(--st-muted); }
+    .prog .row { display: flex; gap: 8px; margin-top: auto; flex-wrap: wrap; }
+    .prog-ask { display: grid; gap: 10px; margin-top: 12px; padding: 14px; border-radius: 14px; background: var(--st-bg); border: 1px solid var(--st-border); }
+    .prog-ask p { font-size: 13.5px; }
+    .bal-row { display: flex; gap: 10px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--st-line); font-size: 13.5px; line-height: 1.45; }
+    .bal-row:first-of-type { border-top: 0; padding-top: 0; }
+    .bal-row svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--st-warn); }
+    .bal-row.ok svg { color: var(--st-good); }
+    .goal-form { display: grid; gap: 12px; }
+    .goal-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 650; color: var(--st-muted); }
+    .goal-form input, .goal-form select { height: 44px; border-radius: 12px; border: 1px solid var(--st-border); background: var(--st-bg); padding: 0 12px; font-size: 15px; color: var(--st-text); }
   </style>
 </head>
 <body>
@@ -981,10 +1162,8 @@
       <nav class="st-tabs" role="tablist" aria-label="Sport Track">
         <button class="st-tab on" data-tab="today" role="tab">Today</button>
         <button class="st-tab" data-tab="plan" role="tab">Plan</button>
+        <button class="st-tab" data-tab="progress" role="tab">Progress</button>
         <button class="st-tab" data-tab="library" role="tab">Library</button>
-        <button class="st-tab" data-tab="badges" role="tab">Badges</button>
-        <button class="st-tab" data-tab="history" role="tab">History</button>
-        <button class="st-tab" data-tab="progress" role="tab">Strength</button>
       </nav>
       <span class="spacer"></span>
       <span class="st-day" id="st-day"></span>
@@ -1058,6 +1237,8 @@
         </section>
 
         <aside class="today-side">
+        <!-- Your coach: rank, a missing muscle group, the balance, an easy week, the Sunday story -->
+        <section class="card" id="coach-card" hidden></section>
         <!-- Try something harder: you reached your target a few sessions in a row -->
         <section class="card levelup" id="levelup-card" hidden></section>
         <section class="card water" id="hydration-card">
@@ -1120,18 +1301,24 @@
 
       <!-- ===================== PLAN: a week that fits your minutes ===================== -->
       <div class="plan-tab" data-panel="plan">
+        <section class="card full" id="prog-card">
+          <div class="card-head"><h2>Programs</h2><span class="meta">Ready-made home programs. Your own exercises stay unless you say so.</span><span class="grow"></span></div>
+          <div class="prog-list" id="prog-list"></div>
+        </section>
         <section class="card full" id="pg-head">
           <div class="card-head"><h2>Your week</h2><span class="meta" id="pg-meta"></span><span class="grow"></span></div>
           <div class="pg-controls">
             <label>Time per workout<div class="seg" id="pg-minutes" role="radiogroup" aria-label="Minutes per workout"><button role="radio" data-min="20">20 min</button><button role="radio" data-min="30">30 min</button><button role="radio" data-min="45">45 min</button></div></label>
             <label>Workouts a week<div class="seg" id="pg-per" role="radiogroup" aria-label="Workouts a week"><button role="radio" data-per="3">3</button><button role="radio" data-per="4">4</button></div></label>
             <label>Cool-down<div class="seg" id="pg-cool" role="radiogroup" aria-label="Cool-down"><button role="radio" data-cool="0">No</button><button role="radio" data-cool="1">3 min</button></div></label>
-            <label>How you progress<div class="seg" id="pg-mode" role="radiogroup" aria-label="How you progress"><button role="radio" data-pmode="grow" title="3 hard sets in a rep range; harder moves unlock">Build muscle</button><button role="radio" data-pmode="endurance" title="Daily totals that go up 5% after 3 full days">Endurance</button></div></label>
+            <label>How you progress<div class="seg" id="pg-mode" role="radiogroup" aria-label="How you progress"><button role="radio" data-pmode="grow" title="Levels, next targets and a line after every log; harder moves unlock">Coach</button><button role="radio" data-pmode="endurance" title="Plain daily totals that go up 5% after 3 full days">Simple totals</button></div></label>
           </div>
           <div class="pg-week" id="pg-week"></div>
         </section>
         <section class="card" id="pg-session"></section>
         <div class="stack">
+          <section class="card" id="bal-card"></section>
+          <section class="card" id="deload-card"></section>
           <section class="card" id="pg-tips-card"><div class="card-head"><h2>Grow muscle at home</h2></div><ul class="pg-tips" id="pg-tips"></ul></section>
           <section class="card" id="pg-how"><div class="card-head"><h2>How levels work</h2></div><p class="str-empty" id="pg-how-text"></p></section>
         </div>
@@ -1150,14 +1337,42 @@
         </section>
       </div>
 
-      <!-- ===================== BADGES ===================== -->
-      <div class="badges" data-panel="badges">
+      <!-- ===================== PROGRESS: Levels · Charts · Records · Badges · History ===================== -->
+      <div class="progress-tab" data-panel="progress" data-sub="levels">
+      <nav class="seg pr-sub" id="pr-sub" role="tablist" aria-label="Progress views">
+        <button role="tab" data-sub="levels">Levels</button>
+        <button role="tab" data-sub="charts">Charts</button>
+        <button role="tab" data-sub="records">Records</button>
+        <button role="tab" data-sub="badges">Badges</button>
+        <button role="tab" data-sub="history">History</button>
+      </nav>
+      <div class="sub lv-grid" data-sub="levels">
+        <section class="card full" id="lv-story" hidden></section>
+        <section class="card full" id="lv-rank"></section>
+        <section class="card" id="lv-why"></section>
+        <section class="card" id="lv-forecast"></section>
+        <section class="card full" id="lv-map"></section>
+        <section class="card" id="lv-compare"></section>
+        <section class="card" id="lv-ms"></section>
+      </div>
+      <div class="sub rec-grid" data-sub="records">
+        <section class="card" id="rec-wall"></section>
+        <section class="card" id="rec-pr">
+          <div class="card-head">
+            <h2>Records you added</h2>
+            <span class="grow"></span>
+            <button class="btn small" id="btn-add-pr"><svg><use href="#i-plus"/></svg>Add a record</button>
+          </div>
+          <div class="pr-grid" id="pr-container"></div>
+        </section>
+      </div>
+      <div class="badges sub" data-sub="badges">
         <section class="card bd-hero" id="bd-hero"></section>
         <section class="card" id="bd-list"></section>
       </div>
 
       <!-- ===================== HISTORY ===================== -->
-      <div class="two" data-panel="history">
+      <div class="two sub" data-sub="history">
         <section class="card" id="cal-section">
           <div class="card-head">
             <h2>Training calendar</h2>
@@ -1236,7 +1451,8 @@
       </div>
 
       <!-- ===================== PROGRESS ===================== -->
-      <div class="two strength" data-panel="progress">
+      <div class="two strength sub" data-sub="charts">
+        <section class="card full" id="cx-card"></section>
         <section class="card full str-hero" id="str-hero"></section>
         <section class="card" id="str-charts-card">
           <div class="card-head"><h2>Best set over time</h2><span class="meta">one line per ladder: harder steps count more</span></div>
@@ -1251,14 +1467,6 @@
           <div id="charts"></div>
         </section>
         <div class="stack">
-          <section class="card">
-            <div class="card-head">
-              <h2>Personal records</h2>
-              <span class="grow"></span>
-              <button class="btn small" id="btn-add-pr"><svg><use href="#i-plus"/></svg>Add a record</button>
-            </div>
-            <div class="pr-grid" id="pr-container"></div>
-          </section>
           <section class="card">
             <div class="tg-head">
               <div class="tg-logo"><svg><use href="#i-send"/></svg></div>
@@ -1275,6 +1483,21 @@
           </section>
         </div>
       </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- A goal with a date -->
+  <div class="sport-modal-backdrop" id="modal-goal">
+    <div class="sport-modal-dialog">
+      <div class="modal-head"><h3>A goal with a date</h3><button class="btn ghost icon-btn small" id="goal-close" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+      <p class="modal-note">Pick one exercise, how many in one set, and the day. I will tell you if you are on pace.</p>
+      <form id="goal-form" class="goal-form">
+        <label>Exercise<select id="goal-ex"></select></label>
+        <label>In one set<input type="number" id="goal-reps" min="2" max="500" inputmode="numeric" value="50"></label>
+        <label>By<input type="date" id="goal-by"></label>
+        <button class="btn primary big" type="submit">Set the goal</button>
+      </form>
     </div>
   </div>
 
@@ -1335,8 +1558,8 @@
       <div class="input-group">
         <label for="setting-progress-mode">How you progress</label>
         <select id="setting-progress-mode">
-          <option value="grow">Build muscle: 3 hard sets in a rep range, harder moves unlock</option>
-          <option value="endurance">Endurance: daily totals that step up 5%</option>
+          <option value="grow">Coach: levels, next targets and a line after every log</option>
+          <option value="endurance">Simple totals: daily totals that step up 5%</option>
         </select>
       </div>
       <div class="setting-row">
@@ -1967,7 +2190,7 @@
       // Auto-progression, said once in today's plan.
       const pBadge = document.getElementById('progression-badge');
       const n = state.sportySettings.progressionStreak || 0;
-      pBadge.textContent = growMode() ? 'Build muscle: 3 hard sets in the range; the top in 2 sessions unlocks the next level.' : state.sportySettings.autoProgression ? `Step-up: ${n} of 3 full days, then targets go up 5%.` : '';
+      pBadge.textContent = growMode() ? 'Coach on: beat last time by a rep; the top of the range in 2 sessions unlocks the next move.' : state.sportySettings.autoProgression ? `Step-up: ${n} of 3 full days, then targets go up 5%.` : '';
     }
 
     // A small in-page box that asks for a number. The desktop app has no browser
@@ -2044,32 +2267,43 @@
         const head = `<div class="ex-top"><span class="ex-name">${name}</span>${isDone ? `<span class="ex-check ${pop ? 'pop' : ''}" title="Done">${svgI('check')}</span>` : ''}
                 <button class="btn ghost icon-btn small ex-more" data-action="menu" aria-label="More for ${name}" aria-haspopup="menu" title="Log a set, take one back, edit">${svgI('more')}</button></div>`;
         if (p) {
-          // Build muscle: today's sets against the aim, the goal for the next level.
+          // The coach card: level, today's target, one big log button (prefilled from last time), chips, a typed box, the suggestion and the feedback.
+          const c = p.coach;
           const sets = planMode() === 'full' ? p.sets : Math.max(1, p.sets - 1);
           const list = todaySets(ex.id).map((x) => x.reps);
           const fill = Math.min(1, list.length / sets);
           const from = Math.min(1, prevPct[ex.id] ?? 0);
           const u = uS(p.range.unit);
-          const chips = list.map((r) => `<span class="${r >= p.range.hi ? 'top' : ''}">${r}${u}</span>`).join('') + Array.from({ length: Math.max(0, sets - list.length) }, () => `<span class="todo">${p.goal}${u}</span>`).join('');
-          const goalCls = p.status === 'ready' || p.status === 'top' ? 'ready' : p.status === 'stuck' || p.status === 'comeback' ? 'warn' : '';
-          const goal = p.status === 'ready' ? `${svgI('up').replace('<svg', '<svg style="width:12px;height:12px;display:inline;vertical-align:-1px"')} Level up: <b>${esc(p.next.name)}</b> unlocked`
-            : p.status === 'building' || p.status === 'new' ? `Aim <b>${sets}×${p.goal}${u}</b> · next level at <b>${p.nextAt}</b>${p.hits ? ` (${p.hits} of ${p.need})` : ''}`
-            : esc(p.line);
+          const chipsDone = list.map((r) => `<span class="${r >= p.range.hi ? 'top' : ''}">${r}${u}</span>`).join('') + Array.from({ length: Math.max(0, sets - list.length) }, () => `<span class="todo">${p.goal}${u}</span>`).join('');
+          const pl = c.place;
+          const lvTag = pl && pl.level ? `<button class="tag accent lvl" data-why="${esc(ex.id)}" aria-expanded="false" title="Why this level">${svgI('up')}Level ${pl.level} · ${esc(pl.lv.name)}${pl.comeback && pl.comeback.hits < pl.comeback.need ? ' · comeback' : ''}</button>` : `<span class="tag">${esc(c.move.name)}</span>`;
+          const rest = c.chips.slice(list.length);
+          const logList = isDone || !rest.length ? [p.goal] : rest;
+          const sugCls = c.status === 'ready' || c.status === 'top' ? 'ready' : c.status === 'stuck' || c.status === 'comeback' ? 'warn' : '';
+          const sugBtns = c.ready && !(state.notYet || {})[c.ready.to.id] ? `<span class="sug-btns"><button class="btn small primary" data-lu="add" data-ex="${esc(ex.id)}" data-to="${c.ready.to.id}">Try</button><button class="btn small ghost" data-lu="later" data-to="${c.ready.to.id}">Not yet</button></span>`
+            : c.stepBack && c.stepBack.to && (state.stepKeep || {})[ex.id] !== localDay() ? `<span class="sug-btns"><button class="btn small" data-lu="swap" data-ex="${esc(ex.id)}" data-to="${c.stepBack.to.id}">Step back</button><button class="btn small ghost" data-sb="keep">Keep going</button></span>` : '';
+          const fb = fbOf[ex.id] && fbOf[ex.id].day === localDay() ? fbOf[ex.id] : null;
+          const fbHTML = fb ? `<div class="ex-fb ${fb.tone}" role="status"><b>${esc(fb.text)}</b><span>${esc(fb.next)}</span>${fb.tip ? `<em>${svgI('warn')}${esc(fb.tip)}</em>` : ''}</div>` : '';
           return `
-          <div class="ex grow ${isDone ? 'done' : ''} ${cardsEntered ? '' : 'enter'} ${pop ? 'just-done' : ''}" data-id="${esc(ex.id)}" style="--i:${i}">
+          <div class="ex coach ${isDone ? 'done' : ''} ${cardsEntered ? '' : 'enter'} ${pop ? 'just-done' : ''}" data-id="${esc(ex.id)}" style="--i:${i}">
             ${demo}
             <div class="ex-main">
               ${head}
-              ${tags}
-              <div class="ex-count num"><b data-from="${prevCount[ex.id] ?? ''}">${list.length}</b><span>/ ${sets} sets</span><em>${isDone ? 'Done' : `range ${p.range.lo}–${p.range.hi}${u}`}</em></div>
-              <div class="ex-sets num" aria-label="Today's sets">${chips}</div>
-              <div class="ex-goal ${goalCls}">${goal}</div>
+              <div class="ex-tags">${lvTag}${dotsHTML(m.diff)}</div>
+              <div class="ex-target num"><span>Today</span><b>${sets}×${p.goal}${u}</b><em>${list.length}/${sets} sets${p.last ? (p.last.est ? ` · last about ${Math.round(p.last.reps.reduce((t, x) => t + x, 0) / p.last.reps.length)}${u} a set` : ` · last ${p.last.reps.join(' · ')}${u}`) : ''}</em></div>
+              <div class="ex-sets num" aria-label="Today's sets">${chipsDone}</div>
             </div>
             <div class="bar ${isDone ? 'good' : ''}"><i style="--p: ${from}" data-p="${fill}"></i></div>
-            <div class="ex-actions">
-              <button class="btn ${isDone ? '' : 'tint'}" data-action="add" data-amount="${p.goal}" title="Log one set of ${p.goal}${u}">${svgI('plus')}Set: ${p.goal}${u}</button>
-              ${isDone ? '' : `<button class="btn" data-action="sets-form" title="Type the sets you did">${svgI('check')}Sets…</button>`}
+            <div class="ex-log">
+              <button class="btn primary big log-big" data-action="log-list" data-list="${logList.join(',')}" title="Log these sets">${svgI('plus')}${isDone ? 'Add a set' : 'Log'} ${logList.map((n) => n + u).join(' · ')}</button>
+              <div class="log-row">
+                <span class="log-chips" aria-label="Log one set">${[Math.max(1, p.goal - 2), p.goal - 1 > 0 ? p.goal - 1 : p.goal, p.goal, p.goal + 1].filter((n, k, a) => a.indexOf(n) === k).map((n) => `<button class="chip" data-action="add" data-amount="${n}" title="One set of ${n}${u}">${n}${u}</button>`).join('')}</span>
+                <form class="log-type" data-type="${esc(ex.id)}"><input type="text" inputmode="numeric" autocomplete="off" placeholder="${logList.join(' ')}" aria-label="Type your sets, like ${logList.join(' ')}"><button class="btn small" type="submit" title="Log the sets you typed">Log</button></form>
+              </div>
             </div>
+            <div class="ex-sug ${sugCls}">${p.status === 'ready' ? svgI('up') : ''}<span>${esc(c.line)}</span>${sugBtns}</div>
+            <div class="ex-why" id="why-${esc(ex.id)}" hidden>${pl ? esc(pl.why) : ''}</div>
+            ${fbHTML}
           </div>`;
         }
         const step = stepOf(target, done);
@@ -2150,6 +2384,17 @@
       const action = btn.dataset.action;
       const target = getEffectiveTarget(ex);
 
+      if (btn.dataset.why) {
+        const w = document.getElementById('why-' + ex.id);
+        if (w) { w.hidden = !w.hidden; btn.setAttribute('aria-expanded', String(!w.hidden)); }
+        return;
+      }
+      if (btn.dataset.sb === 'keep') { state.stepKeep = { ...(state.stepKeep || {}), [ex.id]: localDay() }; saveState(state); renderTodayRoutine(); return; }
+      if (action === 'log-list') {
+        const vals = String(btn.dataset.list || '').split(',').map(Number).filter((n) => n > 0);
+        if (vals.length) logMany(ex, vals, btn);
+        return;
+      }
       if (action === 'menu') {
         const open = itemEl.querySelector('.ex-menu');
         closeMenus();
@@ -2239,6 +2484,18 @@
         openEditInline(ex.id);
       }
     });
+    // "15 14 12" typed on a card: one set each.
+    document.getElementById('routine-list').addEventListener('submit', (e) => {
+      const f = e.target.closest('form.log-type');
+      if (!f) return;
+      e.preventDefault();
+      const ex = state.exercises.find((x) => x.id === f.dataset.type);
+      const input = f.querySelector('input');
+      const vals = parseTyped(input.value || input.placeholder);
+      if (!ex || !vals.length) return;
+      input.value = '';
+      logMany(ex, vals, null);
+    });
     // --- Check if All Exercises Completed ---
     function checkAllCompleted() {
       const active = todayList();
@@ -2302,6 +2559,7 @@
       if (window.parent && window.parent !== window) {
         window.parent.postMessage({ type: 'SPORT_WORKOUT_LOGGED', workout: record }, location.origin);
       }
+      postSummary(extra ? 'extra round' : 'routine');
     }
 
     // --- Complete All Button (Supports Multiple Click Extra Rounds) ---
@@ -3107,29 +3365,38 @@
     const moveOfEx = (ex) => (SK && ex ? SK.moveOf(ex) : null);
 
     // ---- SP3: sets, Build muscle (double progression) or Endurance ----
-    /** Build muscle (default) or Endurance (the old daily totals with a 5% step-up). */
-    function growMode() { return state.sportySettings.progressMode === 'grow'; }
+    /** The coach (default) or "Simple totals" (the old daily totals with a 5% step-up). */
+    function growMode() { return !!SK && state.sportySettings.progressMode !== 'endurance'; }
     /** Today's sets of an exercise (never creates anything). */
     function todaySets(id) { const l = ((state.sets || {})[localDay()] || {})[id]; return Array.isArray(l) ? l : []; }
+    /** What the coach reads: your exercises, the day totals (Telegram days too), the sets and today. */
+    const histInput = () => ({ exercises: state.exercises, days: state.days || {}, sets: state.sets || {}, today: localDay() });
+    /** An easy week (deload) is running. */
+    const deloadOn = () => !!state.sportySettings.deloadUntil && state.sportySettings.deloadUntil >= localDay();
+    /** The last coach line per exercise ("Good, 2 more than last time"), shown on its card for the day. */
+    var fbOf = {};
     var progCache = new Map();
     var progKey = '';
-    /** Where an exercise stands (sportProgress.ts), or null in Endurance / for your own non-library exercises. */
+    /** Where an exercise stands (sportCoach.ts, shaped like the old progress object), or null for your own non-library exercises. */
     function growOf(ex) {
       if (!SK || !ex || !growMode()) return null;
       const m = moveOfEx(ex);
       const u = unitOf(ex);
       if (!m || (u !== 'reps' && u !== 'sec')) return null;
-      const key = localDay() + JSON.stringify((state.sets || {})).length + ':' + Object.keys(state.sets || {}).length;
+      const key = localDay() + JSON.stringify((state.sets || {})).length + ':' + Object.keys(state.sets || {}).length + ':' + JSON.stringify((state.days || {})[localDay()] || {}).length + ':' + state.exercises.length + (deloadOn() ? 'd' : '');
       if (key !== progKey) { progCache = new Map(); progKey = key; }
       const hold = doseHold();
-      const k = ex.id + '|' + m.id + '|' + JSON.stringify(todaySets(ex.id).map((x) => x.reps)) + (hold ? '|hold' : '');
+      const k = ex.id + '|' + m.id + '|' + JSON.stringify(todaySets(ex.id).map((x) => x.reps)) + (hold ? '|hold' : '') + '|' + JSON.stringify(state.notYet || {});
       if (!progCache.has(k)) {
-        let p = SK.progressFor({ log: state.sets || {}, exId: ex.id, move: m, today: localDay() });
+        const c = SK.coachFor({ ...histInput(), exId: ex.id, notYet: state.notYet || {}, deload: deloadOn() });
+        if (!c) { progCache.set(k, null); return null; }
+        let p = { status: c.status === 'deload' ? 'building' : c.status, range: { lo: c.lo, hi: c.hi, sets: c.sets, unit: c.unit }, goal: c.goal, sets: c.sets, nextAt: `${c.sets}×${c.hi}${c.unit === 'sec' ? ' s' : ''}`, next: c.ready ? c.ready.to : null, prev: c.stepBack ? c.stepBack.to : null, hits: c.hits, need: 2, daysSince: null, last: c.last ? { day: c.last.day, reps: c.last.reps, est: c.last.est } : null, line: c.line, today: c.today, coach: c };
         // BD7: after a short night, repeat last time: no +1 rep, no level-up today.
         if (hold && p.last && (p.status === 'building' || p.status === 'ready')) {
           const lastMin = Math.min(...p.last.reps.slice(0, p.sets));
           const goal = Math.max(p.range.lo, Math.min(p.range.hi, lastMin));
-          p = { ...p, status: 'building', goal, next: null, line: `Short night: repeat ${p.sets}×${goal}${p.range.unit === 'sec' ? ' s' : ''} like last time. Progress waits for a good night.` };
+          const line = `Short night: repeat ${p.sets}×${goal}${p.range.unit === 'sec' ? ' s' : ''} like last time. Progress waits for a good night.`;
+          p = { ...p, status: 'building', goal, next: null, line, coach: { ...c, goal, ready: null, status: 'building', line } };
         }
         progCache.set(k, p);
       }
@@ -3148,7 +3415,67 @@
       progKey = '';
       const after = growOf(ex);
       const levelUp = !!(after && after.status === 'ready' && after.next && (!before || before.status !== 'ready'));
+      const ups = levelUps();
+      if (ups.length) pendingLv.push(...ups);
       return { reps: n, record, levelUp, prog: after, move: m, wasDone, wasAll };
+    }
+    // ---- RK3 / LV3: your placed level, re-read after every log; a rise is the big moment ----
+    var pendingLv = [];
+    /** Families whose placed level went up since the last time we looked (the first look only notes the level). */
+    function levelUps() {
+      if (!SK || !SK.placeAll) return [];
+      state.lvSeen = state.lvSeen || {};
+      const out = [];
+      for (const p of SK.placeAll(histInput())) {
+        const seen = state.lvSeen[p.family];
+        if (seen == null) { state.lvSeen[p.family] = p.level; continue; }
+        if (p.level > seen && !(p.comeback && p.comeback.hits < p.comeback.need)) { out.push({ p, from: seen }); state.lvSeen[p.family] = p.level; }
+      }
+      return out;
+    }
+    /** The coach's line after a log: stored for the card (and workout mode). */
+    function setFeedback(ex) {
+      if (!SK || !SK.feedbackFor || !growOf(ex)) return null;
+      const f = SK.feedbackFor({ ...histInput(), exId: ex.id, notYet: state.notYet || {}, deload: deloadOn() });
+      if (f) fbOf[ex.id] = { ...f, day: localDay() };
+      return f;
+    }
+    /** The level-up moment: the new level's name, requirement, what it means and a form tip. */
+    function levelMoment(up) {
+      const p = up.p;
+      const lv = p.lv;
+      const tip = SK.formTip(SK.moveById(lv.move));
+      return celebrate({ kind: 'level', eyebrow: `${p.track.name} · Level ${lv.n} of ${p.of}`, title: `Level ${lv.n}: ${lv.name}`, move: lv.move,
+        sub: `${lv.req}. ${lv.meaning} Tip: ${tip}`,
+        banners: [{ t: 'Level up!', k: 'lv' }, ...(p.next ? [{ t: `Next: ${p.next.req}`, k: 'rec' }] : [])] });
+    }
+    /** After a set or sets: the level-up moment if the level rose, else the old "move up" moment. */
+    function levelMoments(ex, res) {
+      const up = pendingLv.shift();
+      pendingLv.length = 0;
+      if (up) return levelMoment(up);
+      if (res && res.levelUp) levelUpMoment(ex, res.prog);
+    }
+    /** Several sets in one go (a tap on the big button, or typed "15 14 12"). */
+    function logMany(ex, vals, btn) {
+      let res = null;
+      const first = { record: false, levelUp: false };
+      vals.forEach((v, k) => {
+        const r = logSet(ex, v);
+        if (k === 0) Object.assign(first, { wasDone: r.wasDone, wasAll: r.wasAll });
+        res = { ...r, record: first.record || r.record, levelUp: first.levelUp || r.levelUp, wasDone: first.wasDone, wasAll: first.wasAll };
+        first.record = res.record;
+        first.levelUp = res.levelUp;
+      });
+      showToast(`${nice(ex.name)}: ${SK ? SK.setsText(vals, res.prog?.range.unit) : vals.join(' · ')}`);
+      afterSet(ex, res, btn);
+    }
+    /** "15 14 12", "3x15" or "15, 14, 12" → [15, 14, 12]. */
+    function parseTyped(text) {
+      const t = String(text || '').toLowerCase().replace(/[×*]/g, 'x');
+      const m = /^\s*(\d{1,2})\s*x\s*(\d{1,3})\s*(?:s|sec)?\s*$/.exec(t);
+      if (m) return Array(Math.min(12, +m[1])).fill(+m[2]);
+      return (t.match(/\d{1,3}/g) || []).map(Number).filter((n) => n > 0).slice(0, 12);
     }
     /** Keeps each exercise's daily target in step with its plan (Ben and Telegram read it). */
     function syncGrowTargets() {
@@ -3200,7 +3527,7 @@
     /** What Today shows and counts: today's plan session, else your routine (exercises that are on). */
     function todayList() {
       const s = planSession();
-      if (!s) return planOn() && planRestDay() ? [] : state.exercises.filter((e) => e.active);
+      if (!s) return planOn() && planRestDay() ? [] : SK && SK.todayRoutine ? SK.todayRoutine(state.exercises, state.program, localDay()).list : state.exercises.filter((e) => e.active);
       let made = false;
       const out = s.items.map((it) => { const had = exForItem(it, false); const ex = had || exForItem(it, true); if (!had) made = true; return ex; }).filter(Boolean);
       if (made) saveState(state);
@@ -3378,7 +3705,8 @@
           const back = (state.notYet || {})[p.next.id];
           if (back && back > localDay()) continue;
           const r = SK.rangeFor(p.next);
-          out.push({ exId: ex.id, from: moveOfEx(ex), to: p.next, run: p.hits, trySet: r.lo, swapTarget: r.sets * r.lo, grow: true, nextAt: p.nextAt });
+          const tryReps = p.coach && p.coach.ready ? p.coach.ready.reps : r.lo;
+          out.push({ exId: ex.id, from: moveOfEx(ex), to: p.next, run: p.hits, trySet: tryReps, swapTarget: 3 * tryReps, grow: true, nextAt: p.nextAt, why: p.coach && p.coach.ready ? p.coach.ready.why : '' });
         }
         return out;
       }
@@ -3393,10 +3721,10 @@
         <div class="lu-body">
           <button class="stage" data-howto="${s.to.id}" aria-label="How to do ${esc(s.to.name)}" style="padding:0">${figSvg(s.to.id, 'play')}</button>
           <div><p class="lu-title">Ready for ${esc(s.to.name)}?</p>
-          <p class="lu-sub">${s.grow ? `You did ${s.nextAt} of ${esc(nice(ex ? ex.name : s.from.name))} in ${s.run} sessions. Start the new one at 3×${s.trySet}${u}.` : `You reached your ${esc(nice(ex ? ex.name : s.from.name))} target ${s.run} times in a row. Try 1 set of ${s.trySet}${u}.`}</p></div>
+          <p class="lu-sub">${s.grow ? `${esc(nice(ex ? ex.name : s.from.name))}: you did ${s.why || s.nextAt}. Try 1 set of ${s.trySet}${u} first, or level up and start at 3×${s.trySet}${u}.` : `You reached your ${esc(nice(ex ? ex.name : s.from.name))} target ${s.run} times in a row. Try 1 set of ${s.trySet}${u}.`}</p></div>
         </div>
         <div class="lu-actions">
-          <button class="btn primary" data-lu="add" data-ex="${esc(s.exId)}" data-to="${s.to.id}" title="Add one set of ${esc(s.to.name)} to today, keep ${esc(nice(ex ? ex.name : ''))}">${svgI('plus')}Add 1 set</button>
+          <button class="btn primary" data-lu="add" data-ex="${esc(s.exId)}" data-to="${s.to.id}" title="Add one set of ${esc(s.to.name)} to today, keep ${esc(nice(ex ? ex.name : ''))}">${svgI('plus')}Try 1 set</button>
           <button class="btn ${s.grow ? 'primary' : ''}" data-lu="swap" data-ex="${esc(s.exId)}" data-to="${s.to.id}" title="${esc(s.to.name)} instead of ${esc(nice(ex ? ex.name : ''))}">${svgI(s.grow ? 'up' : 'swap')}${s.grow ? 'Level up' : 'Swap'}</button>
           <button class="btn ghost" data-lu="later" data-to="${s.to.id}" title="Ask again in a week">Not yet</button>
         </div>
@@ -3502,7 +3830,7 @@
       setTimeout(() => { const m = box.querySelector('.medal'); if (m) { const [x, y] = centerOf(m); confetti(x, y, 34); } }, 260);
       document.getElementById('unlock-ok').onclick = () => {
         closeUnlock();
-        if (more) document.querySelector('.st-tab[data-tab="badges"]')?.click();
+        if (more) gotoTab('progress', 'badges');
       };
       document.getElementById('unlock-ok').focus();
     }
@@ -3520,11 +3848,11 @@
       const near = locked.slice().sort((a, b) => b.cur / b.goal - a.cur / a.goal)[0];
       card.hidden = false;
       card.innerHTML = `<div class="card-head" style="margin-bottom:12px"><h2>Next badge</h2><span class="grow"></span><span class="meta num">${got} of ${all.length}</span></div>
-        <button class="nb-row" data-tab-go="badges" title="See all your badges">${medalHTML({ ...near, done: true })}
+        <button class="nb-row" data-tab-go="progress:badges" title="See all your badges">${medalHTML({ ...near, done: true })}
           <div style="flex:1;min-width:0"><b>${esc(near.name)}</b><small>${esc(near.desc)}</small>
           <div class="bar"><i style="--p:${Math.min(1, near.cur / near.goal)}"></i></div></div></button>`;
     }
-    document.addEventListener('click', (e) => { const t = e.target.closest('[data-tab-go]'); if (t) document.querySelector(`.st-tab[data-tab="${t.dataset.tabGo}"]`)?.click(); });
+    document.addEventListener('click', (e) => { const t = e.target.closest('[data-tab-go]'); if (t) { const [tab, sub] = t.dataset.tabGo.split(':'); gotoTab(tab, sub); } });
 
     function renderBadges() {
       const all = computeBadgesNow();
@@ -3658,6 +3986,7 @@
 
     /** The right-hand column: level-up, next badge. */
     function renderSide() {
+      if (typeof renderCoachCard === 'function') renderCoachCard();
       renderLevelUp();
       computeBadgesNow();
       renderNextBadge();
@@ -3676,7 +4005,7 @@
       renderSide();
       const tab = document.querySelector('.dashboard-grid').dataset.active;
       if (tab === 'library') renderLibrary();
-      if (tab === 'badges') renderBadges();
+      if (tab === 'progress' && typeof showSub === 'function') showSub();
     }
     window.addEventListener('storage', (e) => {
       if (e.key !== STORAGE_KEY) return;
@@ -3752,13 +4081,17 @@
       document.querySelectorAll('.st-tab').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); });
       closeMenus();
       document.querySelector('.dashboard-grid').dataset.active = b.dataset.tab;
-      if (b.dataset.tab === 'progress') renderCharts();
+      if (b.dataset.tab === 'progress' && typeof showSub === 'function') showSub();
       if (b.dataset.tab === 'library') renderLibrary();
-      if (b.dataset.tab === 'badges') renderBadges();
       if (b.dataset.tab === 'today') figHydrate(document.querySelector('[data-panel="today"]'));
       try { localStorage.setItem('st_tab', b.dataset.tab); } catch (e) {}
     }));
-    try { const t = localStorage.getItem('st_tab'); if (t) document.querySelector(`.st-tab[data-tab="${t}"]`)?.click(); } catch (e) {}
+    try {
+      let t = localStorage.getItem('st_tab');
+      // Badges and History now live inside Progress.
+      if (t === 'badges' || t === 'history') { try { localStorage.setItem('st_sub', t); } catch (e) {} t = 'progress'; }
+      if (t && document.querySelector(`.st-tab[data-tab="${t}"]`)) document.querySelector(`.st-tab[data-tab="${t}"]`).click();
+    } catch (e) {}
 
     // SP15: tap the weekly pill to set your goal.
     document.getElementById('week-goal-pill').addEventListener('click', async () => {
@@ -3861,7 +4194,8 @@
       const setNo = sets.length + 1;
       const line = p
         ? `<div class="wm-dots" aria-hidden="true">${Array.from({ length: Math.max(p.sets, sets.length) }, (_, k) => `<i class="${k < sets.length ? 'on' : k === sets.length ? 'now' : ''}"></i>`).join('')}</div>
-           <div class="wm-setline num"><b>Set ${setNo} of ${p.sets}</b> · aim <b>${p.goal}${u}</b> <span class="tag">${p.range.lo}–${p.range.hi}${u}</span>${best ? ` <span class="tag">best ${esc(best.label)}</span>` : ''}</div>`
+           <div class="wm-setline num"><b>Set ${setNo} of ${p.sets}</b> · aim <b>${p.goal}${u}</b> <span class="tag">${p.range.lo}–${p.range.hi}${u}</span>${best ? ` <span class="tag">best ${esc(best.label)}</span>` : ''}</div>
+           ${wmCoach(ex, p, sets)}`
         : `<div class="wm-progress num">${done} / ${target} ${esc(unitOf(ex))} · set ${setNo}${best ? ` · best ${esc(best.label)}` : ''}</div>`;
       body.innerHTML = `${stage}
         <div class="wm-ctrl">
@@ -3878,6 +4212,15 @@
       if (fig && sameEx && wm.figT != null) fig._t = wm.figT;
       figHydrate(body);
     }
+    /** The coach in workout mode: what you did last time on this set, the nudge, and the line after a set. */
+    function wmCoach(ex, p, sets) {
+      const fb = wm.fb && wm.fb.id === ex.id && sets.length ? wm.fb : null;
+      const k = sets.length;
+      const u = uS(p.range.unit);
+      const last = p.last ? p.last.reps[Math.min(k, p.last.reps.length - 1)] : null;
+      const nudge = k >= p.sets && fb ? fb.next : last == null ? 'First time: find a pace you can repeat.' : p.goal > last ? `Last time: ${last}${u}. One more rep than last time!` : `Last time: ${last}${u}. Match it with clean form.`;
+      return `<p class="wm-coach">${fb ? `<b>${esc(fb.text)}</b> ` : ''}<span>${esc(nudge)}</span></p>`;
+    }
     function wmStartRep(fig) { if (fig) wm.figT = fig._t || 0; }
     /** Opens workout mode: on an exercise, or a whole plan session (`ids`, with a warm-up first). */
     function openWM(exId, ids = null) {
@@ -3892,6 +4235,8 @@
       wm.repsNow = 0;
       wm.records = 0;
       wm.levels = 0;
+      wm.fb = null;
+      wm.results = {};
       wm.finished = false;
       wm.restEnds = 0;
       wm.warm = false;
@@ -3978,14 +4323,51 @@
           <div class="ring-mid">${svgI('check')}</div></div>
         <h2>Workout done</h2>
         <div class="hero-stats num"><div><b>${sets}</b><small>${sets === 1 ? 'set' : 'sets'}</small></div><div><b>${reps.toLocaleString()}</b><small>reps</small>${vsTxt}</div><div><b>${min}</b><small>minutes</small></div>${wm.records ? `<div><b>${wm.records}</b><small>${wm.records === 1 ? 'new record' : 'new records'}</small></div>` : ''}</div>
+        ${wmResults(list)}
         <button class="btn primary big" id="wm-finish-ok">${svgI('check')}Finish</button>`;
       document.getElementById('workout-mode').appendChild(box);
+      postSummary('workout mode', min);
       document.getElementById('wm-finish-ok').addEventListener('click', closeWM);
       const banners = [];
       if (wm.records) banners.push({ t: wm.records > 1 ? `${wm.records} new records!` : 'New record!', k: 'rec' });
       if (wm.levels) banners.push({ t: 'Level up!', k: 'lv' });
       celebrate({ kind: 'workout', eyebrow: 'Workout complete', title: 'You did it', sub: last ? `Stronger than standing still. ${min} minutes well spent.` : `${min} minutes well spent.`,
         stats: [{ v: sets, l: sets === 1 ? 'set' : 'sets' }, { v: reps, l: 'reps', d: vs }, { v: min, l: 'minutes' }], banners }).then(() => document.getElementById('wm-finish-ok')?.focus());
+    }
+    /** The result for each exercise at the end of a workout: your sets and the coach's line. */
+    function wmResults(list) {
+      const rows = list.filter((e) => todaySets(e.id).length).map((e) => {
+        const f = (wm.results || {})[e.id] || fbOf[e.id];
+        const p = growOf(e);
+        return `<li><b>${esc(nice(e.name))}</b><span class="num">${todaySets(e.id).map((x) => x.reps).join(' · ')}${p && p.range.unit === 'sec' ? ' s' : ''}</span>${f ? `<em>${esc(f.text)} ${esc(f.next)}</em>` : ''}</li>`;
+      });
+      return rows.length ? `<ul class="wm-results">${rows.join('')}</ul>` : '';
+    }
+    /**
+     * The workout summary the host can use (a hook for Ben's comment after a workout): what you did, how it went, levels and records.
+     * Nothing here pays points; the host only reads it.
+     */
+    function workoutSummary(source, minutes) {
+      const list = todayList();
+      return {
+        day: localDay(), source, minutes: minutes || null, at: Date.now(),
+        sets: list.reduce((t, e) => t + todaySets(e.id).length, 0),
+        reps: list.filter((e) => unitOf(e) === 'reps').reduce((t, e) => t + (e.doneToday || 0), 0),
+        records: wm.records || 0, levelUps: wm.levels || 0,
+        rank: SK && SK.overallRank ? (() => { const r = SK.overallRank(SK.placeAll(histInput())); return { name: r.rank.name, score: r.score }; })() : null,
+        exercises: list.filter((e) => todaySets(e.id).length || (e.doneToday || 0) > 0).map((e) => {
+          const f = fbOf[e.id] && fbOf[e.id].day === localDay() ? fbOf[e.id] : null;
+          const pl = SK && moveOfEx(e) ? SK.placeFamily(histInput(), moveOfEx(e).family) : null;
+          return { id: e.id, name: e.name, move: e.move || (moveOfEx(e) || {}).id || null, sets: todaySets(e.id).map((x) => x.reps), level: pl ? pl.level : null, feedback: f ? f.text : null, tone: f ? f.tone : null, next: f ? f.next : null };
+        })
+      };
+    }
+    function postSummary(source, minutes) {
+      try {
+        const payload = workoutSummary(source, minutes);
+        state.lastSummary = payload;
+        if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_SUMMARY', payload }, location.origin);
+      } catch (e) {}
     }
     document.getElementById('btn-workout-mode').addEventListener('click', () => { const s = growMode() ? todaysPlanIds() : null; openWM(undefined, s); });
     document.getElementById('wm-close').addEventListener('click', closeWM);
@@ -4024,6 +4406,8 @@
         wm.kg = Number(document.getElementById('wm-kg')?.value) || 0;
         const wasDone = (ex.doneToday || 0) >= getEffectiveTarget(ex);
         const res = logSet(ex, wm.reps, wm.kg);
+        const fbx = setFeedback(ex);
+        if (fbx) { wm.fb = { id: ex.id, ...fbx }; (wm.results = wm.results || {})[ex.id] = fbx; }
         wm.setsDone++;
         wm.repsNow += res.reps;
         // SP9: the old record list still gets your best (weight × reps, or reps in one set). No extra points.
@@ -4057,7 +4441,7 @@
           if (res.record) banners.push({ t: 'New record!', k: 'rec' });
           if (res.levelUp) banners.push({ t: `Level up: ${res.prog.next.name}`, k: 'lv' });
           celebrate({ kind: 'exercise', eyebrow: 'Exercise done', title: nice(ex.name), sub: res.prog ? res.prog.line : '', stats: [{ v: n.length, l: n.length === 1 ? 'set' : 'sets' }, { v: n.reduce((t, x) => t + x.reps, 0), l: res.prog?.range.unit === 'sec' ? 'seconds' : 'reps' }, { v: Math.max(...n.map((x) => x.reps)), l: 'best set' }], banners })
-            .then(() => { if (res.levelUp) levelUpMoment(ex, res.prog); restTimer(restFor(ex)); });
+            .then(() => { levelMoments(ex, res); restTimer(restFor(ex)); });
           return;
         }
         wmStartRep(document.querySelector('#wm-body svg.fig'));
@@ -4251,12 +4635,13 @@
         setTimeout(() => { f.remove(); pulse.remove(); }, 950);
       }
       if (!(audio.enabled && lifeSound('habit'))) audio.playClick();
-      if (res.record) celebrate({ kind: 'record', eyebrow: 'New record', title: `${res.reps}${res.prog?.range.unit === 'sec' ? ' s' : ''} in one set`, sub: `${nice(ex.name)}: your strongest set yet.`, banners: [{ t: 'New record!', k: 'rec' }] }).then(() => { if (res.levelUp) levelUpMoment(ex, res.prog); });
-      else if (res.levelUp) levelUpMoment(ex, res.prog);
+      if (res.record) celebrate({ kind: 'record', eyebrow: 'New record', title: `${res.reps}${res.prog?.range.unit === 'sec' ? ' s' : ''} in one set`, sub: `${nice(ex.name)}: your strongest set yet.`, banners: [{ t: 'New record!', k: 'rec' }] }).then(() => levelMoments(ex, res));
+      else levelMoments(ex, res);
     }
 
     /** After a set from a card: save, redraw, and the right moment (workout, exercise, record, or a small "+N"). */
     function afterSet(ex, res, btn) {
+      setFeedback(ex);
       saveState(state);
       renderCalendar();
       renderTodayRoutine();
@@ -4264,7 +4649,7 @@
       const allNow = allDoneToday();
       const exNow = (ex.doneToday || 0) >= getEffectiveTarget(ex);
       checkAllCompleted();
-      const then = () => { if (res.levelUp) levelUpMoment(ex, res.prog); };
+      const then = () => levelMoments(ex, res);
       const banners = [];
       if (res.record) banners.push({ t: 'New record!', k: 'rec' });
       if (allNow && !res.wasAll) {
@@ -4395,7 +4780,7 @@
       else if (b.dataset.per) ss.planPerWeek = Number(b.dataset.per);
       else if (b.dataset.cool) ss.planCool = b.dataset.cool === '1';
       else if (b.dataset.follow) ss.planFollow = b.dataset.follow === '1';
-      else if (b.dataset.pmode) { ss.progressMode = b.dataset.pmode; syncGrowTargets(); showToast(b.dataset.pmode === 'grow' ? 'Build muscle: 3 hard sets, harder moves unlock.' : 'Endurance: daily totals that step up 5%.'); }
+      else if (b.dataset.pmode) { ss.progressMode = b.dataset.pmode; syncGrowTargets(); showToast(b.dataset.pmode === 'grow' ? 'Coach on: next targets and levels.' : 'Simple totals: daily totals that step up 5%.'); }
       else return;
       audio.playClick();
       saveState(state);
@@ -4572,6 +4957,345 @@
       if (right && m && !right.querySelector('.credit')) right.insertAdjacentHTML('beforeend', `<p class="credit">Photos: <a href="${SK.PHOTO_SOURCE.url}" target="_blank" rel="noopener">${SK.PHOTO_SOURCE.name}</a>, public domain.</p>`);
     });
     howtoObs.observe(document.getElementById('howto-body'), { childList: true });
+  </script>
+  <script>
+    // ---- The coach layer: levels, forecasts, goals, programs, the Progress views (sportLevels / sportCoach / sportForecast / sportPrograms) ----
+    // Nothing here pays points. Levels, records and forecasts are read from what you logged.
+    const byId = (id) => document.getElementById(id);
+    const sub2 = (n) => String(n).padStart(2, '0');
+    const fmtD = (d) => { try { return new Date(d + 'T12:00:00').toLocaleDateString(undefined, { day: 'numeric', month: 'short' }); } catch (e) { return d; } };
+    const unitTxt = (u) => (u === 'sec' ? ' s' : '');
+    const MU = { push: 'Push', pull: 'Pull', core: 'Core', legs: 'Legs' };
+    const STARTER = { legs: 'squat', pull: 'door_row', core: 'plank', push: 'pushup' };
+    let lvFam = null;
+    let cxFam = null;
+    let progAsk = null;
+    const sundayNow = () => new Date(localDay() + 'T12:00:00').getDay() === 0;
+
+    // ---------- tabs: Progress has Levels · Charts · Records · Badges · History ----------
+    function gotoTab(tab, sub) {
+      if (sub) { try { localStorage.setItem('st_sub', sub); } catch (e) {} }
+      const b = document.querySelector(`.st-tab[data-tab="${tab}"]`);
+      if (b && !b.classList.contains('on')) b.click();
+      else if (tab === 'progress') showSub(sub);
+    }
+    function showSub(sub) {
+      const panel = document.querySelector('.progress-tab');
+      if (!panel) return;
+      let want = sub;
+      try { want = want || localStorage.getItem('st_sub'); } catch (e) {}
+      if (!['levels', 'charts', 'records', 'badges', 'history'].includes(want)) want = 'levels';
+      panel.dataset.sub = want;
+      document.querySelectorAll('#pr-sub [data-sub]').forEach((x) => { const on = x.dataset.sub === want; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); });
+      try { localStorage.setItem('st_sub', want); } catch (e) {}
+      if (want === 'levels') renderLevels();
+      if (want === 'charts') { renderCoachCharts(); renderCharts(); if (typeof renderStrength === 'function') renderStrength(); }
+      if (want === 'records') { renderRecords(); renderPRs(); }
+      if (want === 'badges') renderBadges();
+      if (want === 'history') { renderHistory(); renderCalendar(); }
+    }
+    byId('pr-sub').addEventListener('click', (e) => { const b = e.target.closest('[data-sub]'); if (b) showSub(b.dataset.sub); });
+    const progressOpen = () => document.querySelector('.dashboard-grid').dataset.active === 'progress';
+
+    // ---------- the Today coach card ----------
+    function addStarter(muscle) {
+      const m = SK.moveById(STARTER[muscle]);
+      if (!m) return;
+      addExercise({ name: m.name, target: m.start, unit: m.unit, move: m.id });
+      audio.playLevelUp();
+      showToast(`Added ${m.name} to your routine.`);
+    }
+    function deloadInfo() {
+      return SK.deloadAdvice({ ...histInput(), lastDeload: state.sportySettings.lastDeload || null, until: state.sportySettings.deloadUntil || null });
+    }
+    function renderCoachCard() {
+      const el = byId('coach-card');
+      if (!el) return;
+      if (!SK || !SK.placeAll) { el.hidden = true; return; }
+      const h = histInput();
+      const places = SK.placeAll(h);
+      const rank = SK.overallRank(places);
+      const notes = [];
+      const today = SK.todayRoutine ? SK.todayRoutine(state.exercises, state.program, localDay()) : null;
+      const prog = state.program ? SK.programById(state.program.id) : null;
+      if (prog && today && today.restDay) notes.push(`<div class="cc-note"><svg><use href="#i-moon"/></svg><p><b>Rest day in ${esc(prog.name)}.</b> These are optional: an easy round, or take the day off.</p></div>`);
+      else if (prog && today && today.session) notes.push(`<div class="cc-note"><svg><use href="#i-calendar"/></svg><p><b>${esc(today.session.name)}</b> from ${esc(prog.name)}.</p></div>`);
+      const dl = deloadInfo();
+      const skipDl = (state.sportySettings.deloadSkip || '') > localDay();
+      if (dl.state === 'active') notes.push(`<div class="cc-note"><svg><use href="#i-sun"/></svg><p>${esc(dl.text)}<span class="row"><button class="btn small ghost" data-cc="deload-stop">End it</button></span></p></div>`);
+      else if ((dl.state === 'suggest' || dl.state === 'overdue') && !skipDl) notes.push(`<div class="cc-note warn"><svg><use href="#i-sun"/></svg><p><b>Easy week?</b> ${esc(dl.text)}<span class="row"><button class="btn small primary" data-cc="deload-start">Start an easy week</button><button class="btn small ghost" data-cc="deload-skip">Not now</button></span></p></div>`);
+      const miss = SK.missingGroups({ ...h, notYet: state.notYet || {} }).filter(() => state.exercises.some((e) => e.active));
+      if (miss[0]) notes.push(`<div class="cc-note"><svg><use href="#i-plus"/></svg><p>${esc(miss[0].text)}<span class="row"><button class="btn small primary" data-cc="add-miss" data-muscle="${miss[0].muscle}">Add ${esc(miss[0].move.name)}</button><button class="btn small ghost" data-cc="skip-miss" data-muscle="${miss[0].muscle}">Not now</button></span></p></div>`);
+      const over = SK.balanceCheck({ exercises: state.exercises, sets: state.sets || {}, today: localDay() }).filter((b) => b.kind === 'over')[0];
+      if (over) notes.push(`<div class="cc-note warn"><svg><use href="#i-warn"/></svg><p>${esc(over.text)}</p></div>`);
+      if (sundayNow()) {
+        const st = SK.weeklyStory(h, miss.map((m) => m.text));
+        if (st.any) notes.push(`<div class="cc-note"><svg><use href="#i-star"/></svg><p><b>${esc(st.headline)}</b><span class="row"><button class="btn small" data-tab-go="progress:levels">See the story</button></span></p></div>`);
+      }
+      el.hidden = false;
+      const first = !places.length;
+      el.innerHTML = `<div class="cc-rank"><span class="rk-badge" style="--p:${rank.score}" aria-hidden="true"><i>${esc(rank.rank.name[0])}</i></span><div><b>${esc(rank.rank.name)}</b><small>${first ? 'Log your first sets and your levels appear.' : rank.next ? `${rank.need} ${rank.need === 1 ? 'point' : 'points'} to ${esc(rank.next.name)}` : 'The top rank'} · <button class="btn ghost small" style="min-height:0;padding:0 2px" data-tab-go="progress:levels">Levels</button></small></div></div>${notes.join('')}`;
+    }
+    byId('coach-card').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cc]');
+      if (!b) return;
+      const a = b.dataset.cc;
+      if (a === 'add-miss') addStarter(b.dataset.muscle);
+      else if (a === 'skip-miss') { state.notYet = { ...(state.notYet || {}), ['miss_' + b.dataset.muscle]: shiftDay(localDay(), 14) }; }
+      else if (a === 'deload-start') startDeload();
+      else if (a === 'deload-skip') state.sportySettings.deloadSkip = shiftDay(localDay(), 7);
+      else if (a === 'deload-stop') state.sportySettings.deloadUntil = '';
+      saveState(state);
+      renderAll();
+    });
+    function startDeload() {
+      const w = SK.deloadWeek(localDay());
+      state.sportySettings.deloadUntil = w.to;
+      state.sportySettings.lastDeload = w.from;
+      showToast(`Easy week until ${fmtD(w.to)}. One set less, stop 3 reps short.`);
+    }
+
+    // ---------- Plan: programs, the balance checker, the easy week ----------
+    const DOW2 = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    function renderPrograms() {
+      const el = byId('prog-list');
+      if (!el || !SK || !SK.PROGRAMS) return;
+      const places = SK.placeAll(histInput());
+      const cur = state.program && state.program.id;
+      el.innerHTML = SK.PROGRAMS.map((p) => {
+        const on = cur === p.id;
+        const sess = p.sessions[0];
+        const items = sess.slots.map((sl) => { const r = SK.slotMove(sl, state.exercises, places); return `<li>${esc(r.move.name)} ${sl.sets}×${r.reps}${unitTxt(r.move.unit)}</li>`; }).join('');
+        const ask = progAsk === p.id ? `<div class="prog-ask"><p><b>Add it to your routine?</b> Your own exercises stay as they are. Or replace them for now: they are only turned off, and come back when you stop the program.</p><div class="row"><button class="btn primary" data-prog="add" data-id="${p.id}">Add to my routine</button><button class="btn" data-prog="replace" data-id="${p.id}">Replace my routine</button><button class="btn ghost" data-prog="cancel">Cancel</button></div></div>` : '';
+        return `<div class="prog ${on ? 'on' : ''}"><div><h3>${esc(p.name)}</h3>${on ? '<span class="tag accent">Active</span>' : `<span class="tag">${p.minutes} min</span>`}</div><p>${esc(p.tagline)}</p>
+          <div class="days" aria-label="Training days">${DOW2.map((d, i) => `<i class="${p.days.includes(i) ? 'on' : ''}">${d[0]}</i>`).join('')}</div>
+          <ul><li><b>${esc(sess.name)}</b></li>${items}</ul>
+          <div class="row">${on ? `<button class="btn" data-prog="stop">Stop this program</button>` : `<button class="btn primary" data-prog="pick" data-id="${p.id}">Use this program</button>`}</div>${on ? '' : ask}</div>`;
+      }).join('');
+    }
+    byId('prog-list').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-prog]');
+      if (!b) return;
+      const a = b.dataset.prog;
+      if (a === 'pick') { progAsk = b.dataset.id; renderPrograms(); return; }
+      if (a === 'cancel') { progAsk = null; renderPrograms(); return; }
+      if (a === 'stop') {
+        state.exercises = SK.stopProgram(state.exercises);
+        state.program = null;
+        showToast('Program stopped. Your own routine is back.');
+      } else if (a === 'add' || a === 'replace') {
+        const p = SK.programById(b.dataset.id);
+        const r = SK.applyProgram(state.exercises, p, SK.placeAll(histInput()), { replace: a === 'replace', today: localDay() });
+        state.exercises = r.exercises;
+        state.program = { id: p.id, startedOn: localDay(), replaced: a === 'replace' };
+        showToast(`${p.name}: ${r.added.length} new ${r.added.length === 1 ? 'exercise' : 'exercises'} on your routine${a === 'replace' ? '. Your own are paused.' : '. Yours are kept.'}`);
+      }
+      progAsk = null;
+      saveState(state);
+      renderAll();
+    });
+    function renderBalance() {
+      const el = byId('bal-card');
+      if (!el || !SK || !SK.balanceCheck) return;
+      const list = SK.balanceCheck({ exercises: state.exercises, sets: state.sets || {}, today: localDay() });
+      const rows = list.length ? list.map((b) => `<div class="bal-row">${svgI('warn')}<div style="flex:1"><b>${MU[b.muscle]}</b>: ${esc(b.text)}${b.kind === 'missing' ? `<div style="margin-top:7px"><button class="btn small primary" data-cc2="add" data-muscle="${b.muscle}">Add ${esc(SK.moveById(STARTER[b.muscle]).name)}</button></div>` : ''}</div></div>`).join('')
+        : `<div class="bal-row ok">${svgI('check')}<div>Balanced: push, pull, core and legs are all in your routine, and none is over-trained this week.</div></div>`;
+      el.innerHTML = `<div class="card-head"><h2>Balanced routine</h2></div>${rows}`;
+    }
+    byId('bal-card').addEventListener('click', (e) => { const b = e.target.closest('[data-cc2="add"]'); if (b) { addStarter(b.dataset.muscle); renderAll(); } });
+    function renderDeload() {
+      const el = byId('deload-card');
+      if (!el || !SK || !SK.deloadAdvice) return;
+      const d = deloadInfo();
+      const btn = d.state === 'active' ? '<button class="btn" data-dl="stop">End the easy week</button>' : `<button class="btn ${d.state === 'none' ? '' : 'primary'}" data-dl="start">Start an easy week</button>`;
+      el.innerHTML = `<div class="card-head"><h2>Easy week</h2>${d.state === 'suggest' || d.state === 'overdue' ? '<span class="tag accent">Suggested</span>' : ''}</div><p class="str-empty" style="margin-bottom:12px">${esc(d.text)}</p><p class="str-empty" style="margin-bottom:12px">${esc(d.plan)}</p>${btn}`;
+    }
+    byId('deload-card').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-dl]');
+      if (!b) return;
+      if (b.dataset.dl === 'start') startDeload(); else state.sportySettings.deloadUntil = '';
+      saveState(state);
+      renderAll();
+    });
+    // draw them with the Plan tab
+    const renderPlanBase = renderPlan;
+    renderPlan = () => { renderPlanBase(); renderPrograms(); renderBalance(); renderDeload(); };
+
+    // ---------- Progress → Levels ----------
+    function famsShown(h, places) {
+      const list = places.map((p) => p.family);
+      for (const f of SK.MAIN_FAMILIES) if (!list.includes(f)) list.push(f);
+      return list;
+    }
+    function trendWord(t) { return t === 'up' ? 'trending up' : t === 'down' ? 'a little down' : t === 'new' ? 'just started' : 'steady'; }
+    const goalUnit = (g) => { const ex = state.exercises.find((e) => e.id === g.exId); const m = ex && SK.moveOf(ex); return m ? m.unit : 'reps'; };
+    function renderLevels() {
+      if (!SK || !SK.placeAll) return;
+      const h = histInput();
+      const places = SK.placeAll(h);
+      const rank = SK.overallRank(places);
+      // The weekly story (Sundays: this week; other days: last week)
+      const miss = SK.missingGroups({ ...h, notYet: state.notYet || {} }).map((m) => m.text);
+      const st = SK.weeklyStory(h, miss);
+      const story = byId('lv-story');
+      story.hidden = !st.any && !places.length;
+      story.innerHTML = `<div class="story"><span class="eyebrow">${sundayNow() ? 'Sunday story' : 'Your week'}</span><h2>${esc(st.headline)}</h2>
+        <div class="stats num"><div><b>${st.sessions}</b><small>${st.sessions === 1 ? 'session' : 'sessions'}</small></div><div><b>${st.totalReps.toLocaleString()}</b><small>reps${st.vsBefore == null ? '' : ` (${st.vsBefore >= 0 ? '+' : ''}${st.vsBefore}% vs the week before)`}</small></div>${st.levelUps.length ? `<div><b>${st.levelUps.length}</b><small>level ${st.levelUps.length === 1 ? 'up' : 'ups'}</small></div>` : ''}</div>
+        ${st.gains.length ? `<p>${st.gains.slice(0, 3).map((g) => `${esc(nice(g.name))}: best set ${g.from} → ${g.to}${unitTxt(g.unit)}`).join(' · ')}</p>` : ''}
+        <p class="focus">${esc(st.focus)}</p></div>`;
+      // The rank
+      const byBars = ['push', 'pull', 'core', 'legs'].map((m) => `<div><span>${MU[m]}</span><div class="bar good"><i style="--p:${Math.min(1, rank.by[m] / 100)}"></i></div><b class="num">${Math.round(rank.by[m])}</b></div>`).join('');
+      byId('lv-rank').innerHTML = `<div class="rk"><span class="rk-badge" style="--p:${rank.score}"><i>${esc(rank.rank.name[0])}</i></span>
+        <div><span class="eyebrow">Strength rank</span><h2>${esc(rank.rank.name)} <small class="muted num" style="font-size:16px;font-weight:650">${rank.score} / 100</small></h2><p>${esc(rank.rank.line)}</p>
+        <div class="rk-steps">${SK.RANKS.map((r, i) => `<span class="${i <= rank.index ? 'on' : ''} ${i === rank.index ? 'cur' : ''}">${esc(r.name)}</span>`).join('')}</div>
+        <p style="margin-top:10px">${rank.next ? `<b>${esc(rank.next.name)}</b> needs ${rank.next.from} points: ${rank.need} to go. ${esc(rank.hint)}` : esc(rank.hint)}</p></div>
+        <div class="rk-by" aria-label="Score per muscle group">${byBars}</div></div>`;
+      // Why this level: one line per exercise
+      byId('lv-why').innerHTML = `<div class="card-head"><h2>Why this level</h2><span class="meta">from what you logged: no test</span></div>` + (places.length
+        ? `<div class="why-list">${places.map((p) => `<div class="why-row"><div class="top"><span class="tag accent">Level ${p.level} of ${p.of}</span><b>${esc(p.track.name)} · ${esc(p.lv.name)}</b>${p.comeback && p.comeback.hits < p.comeback.need ? '<span class="tag">Comeback level</span>' : ''}</div><p>${esc(p.why)}</p></div>`).join('')}</div>`
+        : '<p class="str-empty">No levels yet. Log one day (like <b>15 14 12</b> push-ups) and I place you on the ladder. Telegram days count too.</p>');
+      // Forecasts and goals
+      const fcs = SK.forecasts(h);
+      const goals = (state.goals || []).map((g) => SK.goalPace(h, g)).filter(Boolean);
+      const statusTag = { done: ['good', 'Reached'], ahead: ['good', 'Ahead'], on: ['accent', 'On pace'], behind: ['', 'Behind'], late: ['', 'Date passed'], start: ['', 'Starting'] };
+      byId('lv-forecast').innerHTML = `<div class="card-head"><h2>When will I get there?</h2><span class="grow"></span><button class="btn small" id="lv-add-goal">${svgI('plus')}Add a goal</button></div>`
+        + (fcs.length ? fcs.map((f) => `<div class="fc-row"><b>${esc(f.text)}</b><span>${f.steps.map((s) => `Level ${s.level} ${esc(s.name)}: ${esc(s.req)}`).join(' → ')}</span></div>`).join('') : '<p class="str-empty">Your forecast appears after you log a few sessions.</p>')
+        + goals.map((g) => `<div class="goal-row"><div class="top"><b>${g.goal.reps}${unitTxt(goalUnit(g.goal))} ${esc(nice(g.name).toLowerCase())} in one set by ${fmtD(g.goal.by)}</b><span class="tag ${statusTag[g.status][0]}">${statusTag[g.status][1]}</span><button class="btn ghost icon-btn small" data-goal-del="${esc(g.goal.id)}" aria-label="Remove this goal" style="margin-left:auto">${svgI('x')}</button></div>
+          <p>${esc(g.text)}${g.eta && g.status !== 'done' ? ` At your pace: about ${fmtD(g.eta)}.` : ''}</p>${g.status !== 'done' && g.status !== 'late' ? `<p class="today">${esc(g.today)}</p>` : ''}</div>`).join('');
+      // The level map
+      const fams = famsShown(h, places);
+      if (!lvFam || !fams.includes(lvFam)) lvFam = fams[0];
+      const chips = fams.map((f) => { const pl = places.find((p) => p.family === f); const t = SK.trackOf(f); return `<button class="cat-btn ${lvFam === f ? 'active' : ''}" data-fam="${f}">${esc(t.name)}${pl ? ` <small class="num">L${pl.level}</small>` : ''}</button>`; }).join('');
+      const place = SK.placeFamily(h, lvFam);
+      const track = SK.trackOf(lvFam);
+      const lvl = place ? place.level : 0;
+      const fc = fcs.find((f) => f.family === lvFam);
+      const rows = track.levels.map((l) => {
+        const st2 = lvl && l.n < lvl ? 'done' : l.n === lvl ? 'cur' : 'locked';
+        const dot = st2 === 'done' ? svgI('check') : st2 === 'cur' ? l.n : l.n === lvl + 1 ? l.n : svgI('lock');
+        const nextDays = fc && fc.steps[0] && fc.steps[0].level === l.n && fc.steps[0].days ? ` · about ${fc.steps[0].days} days` : '';
+        return `<div class="lm-row ${st2}"><span class="lm-dot num">${dot}</span><div><div class="lm-name">${l.n} · ${esc(l.name)}${st2 === 'cur' ? '<span class="tag accent">You are here</span>' : l.n === lvl + 1 ? `<span class="tag">Next${nextDays}</span>` : ''}</div><div class="lm-req">${esc(l.req)}</div>${st2 === 'cur' || l.n === lvl + 1 || (!lvl && l.n === 1) ? `<div class="lm-mean">${esc(l.meaning)}</div>` : ''}</div></div>`;
+      }).join('');
+      byId('lv-map').innerHTML = `<div class="card-head"><h2>Level map</h2><span class="meta">${esc(track.name)}: ${track.levels.length} levels</span></div><div class="category-pills" id="lm-fams" style="margin-bottom:14px">${chips}</div>
+        ${lvl ? '' : '<p class="str-empty" style="margin-bottom:8px">Not placed yet: log this exercise once and the map shows where you stand.</p>'}<div class="lm-list">${rows}</div>`;
+      // You 30 days ago vs now
+      const cmp = SK.compareThen(h);
+      byId('lv-compare').innerHTML = `<div class="card-head"><h2>You 30 days ago vs now</h2></div>` + (cmp.length ? cmp.map((c) => `<div class="cmp-row"><b>${esc(c.name)}</b><span>${esc(c.line)}</span></div>`).join('') : '<p class="str-empty">Once you have a month of logs, you will see how far you came.</p>');
+      // Milestone titles
+      const ms = SK.milestones(h);
+      const earned = ms.filter((m) => m.day);
+      const todo = ms.filter((m) => !m.day).slice(0, 6);
+      byId('lv-ms').innerHTML = `<div class="card-head"><h2>Milestones</h2><span class="meta num">${earned.length} earned</span></div><div class="ms-grid">${[...earned, ...todo].map((m) => `<div class="ms ${m.day ? '' : 'todo'}"><b>${svgI(m.day ? 'trophy' : 'lock')}${esc(m.title)}</b><small>${m.day ? `${fmtD(m.day)}: ${esc(m.line)}` : `${esc(m.line)}${m.progress ? ' (' + esc(m.progress) + ')' : ''}`}</small></div>`).join('')}</div>`;
+    }
+    byId('lv-map').addEventListener('click', (e) => { const b = e.target.closest('[data-fam]'); if (b) { lvFam = b.dataset.fam; renderLevels(); } });
+    byId('lv-forecast').addEventListener('click', (e) => {
+      if (e.target.closest('#lv-add-goal')) return openGoal();
+      const d = e.target.closest('[data-goal-del]');
+      if (d) { state.goals = (state.goals || []).filter((g) => g.id !== d.dataset.goalDel); saveState(state); renderLevels(); }
+    });
+    function openGoal() {
+      const list = state.exercises.filter((e) => moveOfEx(e) && (unitOf(e) === 'reps' || unitOf(e) === 'sec'));
+      if (!list.length) return showToast('Add an exercise first.');
+      byId('goal-ex').innerHTML = list.map((e) => `<option value="${esc(e.id)}">${esc(nice(e.name))}</option>`).join('');
+      const fill = () => {
+        const ex = state.exercises.find((e) => e.id === byId('goal-ex').value);
+        const rec = SK.recordsWall(histInput()).find((r) => r.exId === (ex && ex.id));
+        const best = rec ? rec.bestSet : 0;
+        byId('goal-reps').value = String(Math.max(10, Math.ceil((best * 1.5) / 5) * 5 || 50));
+      };
+      byId('goal-ex').onchange = fill;
+      fill();
+      byId('goal-by').value = shiftDay(localDay(), 60);
+      byId('goal-by').min = shiftDay(localDay(), 1);
+      byId('modal-goal').classList.add('open');
+    }
+    byId('goal-close').addEventListener('click', () => byId('modal-goal').classList.remove('open'));
+    byId('goal-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const reps = parseInt(byId('goal-reps').value, 10);
+      const by = byId('goal-by').value;
+      if (!(reps >= 2) || !/^\d{4}-\d{2}-\d{2}$/.test(by)) return;
+      state.goals = [...(state.goals || []), { id: 'g' + Date.now().toString(36), exId: byId('goal-ex').value, reps, by, created: localDay() }];
+      saveState(state);
+      byId('modal-goal').classList.remove('open');
+      showToast('Goal set. I will tell you if you are on pace.');
+      renderLevels();
+    });
+
+    // ---------- Progress → Charts: best set over time with level changes, and reps per week ----------
+    function bestSetChart(series, changes) {
+      const W = 640, H = 250, L = 40, R = 14, T = 16, B = 30;
+      const pts = series.slice(-90);
+      if (pts.length < 2) return '<p class="str-empty">Log this exercise on two different days and the chart appears.</p>';
+      const t0 = Date.parse(pts[0].day + 'T12:00:00Z');
+      const t1 = Date.parse(pts[pts.length - 1].day + 'T12:00:00Z');
+      const max = Math.max(...pts.map((p) => p.top));
+      const top = Math.max(5, Math.ceil(max / 5) * 5);
+      const x = (d) => L + ((Date.parse(d + 'T12:00:00Z') - t0) / Math.max(1, t1 - t0)) * (W - L - R);
+      const y = (v) => T + (1 - v / top) * (H - T - B);
+      const grid = [0, 0.5, 1].map((f) => `<line class="grid" x1="${L}" x2="${W - R}" y1="${y(top * f)}" y2="${y(top * f)}"/><text x="${L - 8}" y="${y(top * f) + 4}" text-anchor="end">${Math.round(top * f)}</text>`).join('');
+      const line = pts.map((p) => `${x(p.day).toFixed(1)},${y(p.top).toFixed(1)}`).join(' ');
+      const area = `<polygon class="area" points="${L},${y(0)} ${line} ${x(pts[pts.length - 1].day).toFixed(1)},${y(0)}"/>`;
+      const marks = changes.filter((c) => c.day >= pts[0].day).map((c) => `<line class="lvl" x1="${x(c.day)}" x2="${x(c.day)}" y1="${T}" y2="${H - B}"/><text class="lvl-t" x="${x(c.day) + 4}" y="${T + 10}">L${c.level}</text>`).join('');
+      const dots = pts.map((p) => `<circle class="dot ${p.est ? 'est' : ''}" cx="${x(p.day).toFixed(1)}" cy="${y(p.top).toFixed(1)}" r="3.6"><title>${fmtD(p.day)}: ${p.top}${p.est ? ' (estimated from the day total)' : ''}</title></circle>`).join('');
+      const xl = `<text x="${L}" y="${H - 8}">${fmtD(pts[0].day)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end">${fmtD(pts[pts.length - 1].day)}</text>`;
+      return `<svg class="cx-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Best set over time">${grid}${area}${marks}<polyline class="ln" points="${line}"/>${dots}${xl}</svg>`;
+    }
+    function weeklyChart(vol) {
+      const W = 420, H = 250, L = 8, R = 8, T = 22, B = 28;
+      const max = Math.max(10, ...vol.map((v) => v.total));
+      const bw = (W - L - R) / vol.length;
+      const bars = vol.map((v, i) => { const hgt = (v.total / max) * (H - T - B); const cur = i === vol.length - 1; return `<rect class="bar-w ${cur ? 'cur' : ''}" x="${(L + i * bw + bw * 0.16).toFixed(1)}" y="${(H - B - hgt).toFixed(1)}" width="${(bw * 0.68).toFixed(1)}" height="${Math.max(2, hgt).toFixed(1)}" rx="5"><title>Week of ${fmtD(v.monday)}: ${v.total}</title></rect><text x="${(L + i * bw + bw / 2).toFixed(1)}" y="${(H - B - hgt - 6).toFixed(1)}" text-anchor="middle">${v.total || ''}</text><text x="${(L + i * bw + bw / 2).toFixed(1)}" y="${H - 8}" text-anchor="middle">${fmtD(v.monday).replace(/ .*/, '')}</text>`; }).join('');
+      return `<svg class="cx-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Total reps per week">${bars}</svg>`;
+    }
+    function renderCoachCharts() {
+      const el = byId('cx-card');
+      if (!el || !SK || !SK.seriesOf) return;
+      const h = histInput();
+      const places = SK.placeAll(h);
+      if (!places.length) { el.innerHTML = `<div class="card-head"><h2>Your progress</h2></div><p class="str-empty">Log some sets and the charts appear: best set over time, reps per week and your level-ups.</p>`; return; }
+      if (!cxFam || !places.some((p) => p.family === cxFam)) cxFam = places[0].family;
+      const series = SK.seriesOf(h, cxFam);
+      const changes = SK.levelChanges(series);
+      const ids = state.exercises.filter((e) => moveOfEx(e) && moveOfEx(e).family === cxFam).map((e) => e.id);
+      const vol = SK.weeklyVolume(state.days || {}, ids, localDay(), 8);
+      const chips = places.map((p) => `<button class="cat-btn ${cxFam === p.family ? 'active' : ''}" data-cx="${p.family}">${esc(p.track.name)}</button>`).join('');
+      el.innerHTML = `<div class="card-head"><h2>Best set and reps per week</h2><span class="meta">one exercise at a time</span></div><div class="cx-chips category-pills">${chips}</div>
+        <div class="cx-grid"><div><h3 style="font-size:14px;margin-bottom:6px">Best set over time</h3>${bestSetChart(series, changes)}<p class="cx-cap">Green dashed lines are level-ups. Hollow gray dots are days estimated from a total.</p></div>
+        <div><h3 style="font-size:14px;margin-bottom:6px">Total reps per week</h3>${weeklyChart(vol)}<p class="cx-cap">Last 8 weeks, this week on the right.</p></div></div>`;
+    }
+    byId('cx-card').addEventListener('click', (e) => { const b = e.target.closest('[data-cx]'); if (b) { cxFam = b.dataset.cx; renderCoachCharts(); } });
+
+    // ---------- Progress → Records: the wall ----------
+    function renderRecords() {
+      const el = byId('rec-wall');
+      if (!el || !SK || !SK.recordsWall) return;
+      const rows = SK.recordsWall(histInput());
+      el.innerHTML = `<div class="card-head"><h2>Personal records wall</h2><span class="meta">best set and best day, with dates</span></div>` + (rows.length
+        ? `<div class="rw">${rows.map((r) => `<div class="rw-card ${r.fresh ? 'fresh' : ''}"><h3>${esc(nice(r.name))}</h3><div class="big num">${r.bestSet}<small>${r.unit === 'sec' ? 's in one hold' : 'in one set'}</small></div><div class="sub2">${fmtD(r.bestSetDay)}${r.est ? ' · estimated from a day total' : ''}</div><div class="sub2">Best day: <b class="num">${r.bestDay}</b> on ${fmtD(r.bestDayDay)}</div></div>`).join('')}</div>`
+        : '<p class="str-empty">Your records appear here as you log. A new best flashes when you beat one.</p>');
+    }
+
+    // ---------- milestones: a quiet note when you earn one ----------
+    function announceMilestones() {
+      if (!SK || !SK.milestones) return;
+      const ids = SK.milestones(histInput()).filter((m) => m.day);
+      state.msSeen = state.msSeen || null;
+      if (!state.msSeen) { state.msSeen = Object.fromEntries(ids.map((m) => [m.id, m.day])); return; }
+      const fresh = ids.filter((m) => !state.msSeen[m.id]);
+      for (const m of fresh) state.msSeen[m.id] = m.day;
+      if (fresh.length) { saveState(state); setTimeout(() => showToast(`Milestone: ${fresh[0].title}!`), 2600); }
+    }
+    const afterSetBase = afterSet;
+    afterSet = (ex, res, btn) => { afterSetBase(ex, res, btn); announceMilestones(); if (progressOpen()) showSub(); };
+
+    // ---------- keep the views fresh ----------
+    const renderAllCoach = renderAll;
+    renderAll = () => { renderAllCoach(); const t = document.querySelector('.dashboard-grid').dataset.active; if (t === 'progress') showSub(); };
+    // quiet baselines: existing levels and milestones are not "new"
+    try { levelUps(); announceMilestones(); saveState(state); } catch (e) {}
+    renderSide();
+    { const t = document.querySelector('.dashboard-grid').dataset.active; if (t === 'progress') showSub(); if (t === 'plan') renderPlan(); }
   </script>
 </body>
 </html>

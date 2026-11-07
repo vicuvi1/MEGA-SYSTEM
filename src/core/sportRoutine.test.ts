@@ -15,7 +15,7 @@ describe('migrateRoutine', () => {
   it('turns the plan off and gives back the old exercises and targets', () => {
     const s = migrateRoutine(base())
     expect(s.sportySettings.planFollow).toBe(false)
-    expect(s.sportySettings.progressMode).toBe('endurance')
+    expect(s.sportySettings.progressMode).toBe('grow') // the coach is the default now
     expect(s.exercises.filter((e) => e.active).map((e) => e.name)).toEqual(['Push-ups', 'Sit-ups', 'press'])
     expect(s.exercises.map((e) => e.target)).toEqual([123, 60, 50, 30])
     expect(s.exercises[0].endTarget).toBeUndefined()
@@ -27,6 +27,16 @@ describe('migrateRoutine', () => {
     const again = migrateRoutine(s)
     expect(again.sportySettings.planFollow).toBe(true)
     expect(again.sportySettings.progressMode).toBe('grow')
+  })
+  it('an older v2 routine gets the coach, with its exercises and targets untouched', () => {
+    const b = base()
+    b.sportySettings = { routineV: 2, progressMode: 'endurance', planFollow: false }
+    b.exercises[0].target = 123
+    const s = migrateRoutine(b)
+    expect(s.sportySettings.progressMode).toBe('grow')
+    expect(s.sportySettings.routineV).toBe(3)
+    expect(s.exercises.map((e) => e.target)).toEqual([123, 60, 50, 30].map((_, i) => b.exercises[i].target))
+    expect(s.exercises.filter((e) => e.active).length).toBe(3)
   })
   it('keeps a plan chosen on purpose', () => {
     const b = base()

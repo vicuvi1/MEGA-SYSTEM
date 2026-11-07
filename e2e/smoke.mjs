@@ -279,17 +279,22 @@ try {
     // The default routine is back on Today: push-ups, sit-ups and press (your own exercises, not a generated plan).
     const names = (await frame.locator('.ex .ex-name').allInnerTexts()).join('|').toLowerCase()
     for (const n of ['push-ups', 'sit-ups', 'press']) if (!names.includes(n)) throw new Error(`Today does not list ${n} (got: ${names})`)
-    // Besides its demo ("How to"), a card has only quick-add, Done and ⋯.
-    const most = await frame.evaluate(() => Math.max(...[...document.querySelectorAll('.ex')].map((c) => c.querySelectorAll('button:not([data-howto])').length)))
-    if (most > 3) throw new Error(`an exercise card has ${most} buttons (want: quick-add, Done, ⋯)`)
+    // The coach card: level, today's target, one big log button (prefilled from last time), set chips and a typed box.
+    for (const sel of ['.ex .lvl, .ex .tag', '.ex .ex-target b', '.ex .log-big', '.ex .log-chips .chip', '.ex form.log-type input']) if (!(await frame.locator(sel).first().count())) throw new Error(`an exercise card lacks ${sel}`)
     // A library exercise shows its demo: two real photo frames, or the drawn figure (not an empty picture).
     await frame.waitForSelector('.ex .ex-demo svg.fig path[data-p="torso"][d], .ex .ex-demo .ph img.ph-b', { state: 'attached', timeout: 10000 })
     const shut = async () => { if (await frame.locator('#cel.open').count()) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await frame.waitForSelector('#cel', { state: 'hidden', timeout: 5000 }) } }
     // A quick-add sends the change to Life System's log.
     await pg.evaluate(() => { window.__sportLog = []; window.addEventListener('message', (e) => e.data?.action === 'SPORT_LOG' && window.__sportLog.push(e.data.payload)) })
-    const before = await frame.locator('.ex .ex-count b').first().innerText()
-    await frame.locator('.ex [data-action="add"]').first().click()
-    await frame.waitForFunction((b) => document.querySelector('.ex .ex-count b')?.textContent !== b, before, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
+    // Quick log: type "15 14 12" on the first card; the coach answers with a line and the next target.
+    await frame.fill('.ex form.log-type input', '15 14 12')
+    await frame.press('.ex form.log-type input', 'Enter')
+    await frame.waitForSelector('.ex .ex-fb', { timeout: 10000 })
+    const fbText = await frame.locator('.ex .ex-fb').first().innerText()
+    if (!/Next: \d+×\d+/.test(fbText) || !/(First log|more than last|Same as last|fewer than last|top of the range|Easier than usual)/.test(fbText)) throw new Error(`no coach feedback after logging 15 14 12 (got: ${fbText})`)
+    if ((await frame.locator('.ex .ex-sets span').first().innerText()).trim() !== '15') throw new Error('the typed sets 15 14 12 were not logged as three sets')
+    await shut()
+    if (await frame.locator('#unlock.open').count()) await frame.click('#unlock-ok')
     await pg.waitForFunction(() => window.__sportLog.some((p) => p.changes.some((c) => c.kind.startsWith('reps:') && c.amount > 0)), null, { timeout: 10000 }) // slower Windows runners: the numbers roll and the demos draw
     // A set can finish an exercise or set a record: its celebration closes with a tap.
     await pg.waitForTimeout(600)
@@ -334,6 +339,15 @@ try {
     await frame.click('#pg-minutes [data-min="20"]')
     await frame.waitForFunction(() => /20 min/.test(document.querySelector('#pg-meta')?.textContent ?? ''), null, { timeout: 5000 })
     await frame.click('.st-tab[data-tab="progress"]')
+    // Progress → Levels: the rank, why each level, the level map and the forecast; then Charts and Records.
+    await frame.waitForSelector('#lv-rank .rk h2', { timeout: 10000 })
+    await frame.waitForSelector('#lv-why .why-row', { timeout: 5000 })
+    await frame.waitForSelector('#lv-map .lm-row.cur', { timeout: 5000 })
+    if ((await frame.locator('#lv-map .lm-row').count()) < 10) throw new Error('the level map shows fewer than 10 levels')
+    await frame.click('#pr-sub [data-sub="records"]')
+    await frame.waitForSelector('#rec-wall .rw-card', { timeout: 5000 })
+    await frame.click('#pr-sub [data-sub="charts"]')
+    await frame.waitForSelector('#cx-card .cx-svg', { timeout: 5000 })
     await frame.waitForSelector('#str-hero h2', { timeout: 10000 })
     await frame.waitForSelector('#str-muscles .mus-row', { timeout: 5000 })
     // Workout mode follows the sets: set 1 of 3, Set done, then the rest ring.
@@ -356,14 +370,25 @@ try {
     await frame.evaluate(() => (document.getElementById('wm-finish-ok') ?? document.getElementById('wm-close'))?.click())
     frame = pg.frames().find((f) => f.url().includes('/apps/sport/') && !f.isDetached()) ?? frame
     await frame.waitForSelector('#workout-mode', { state: 'hidden', timeout: 10000 })
-    await frame.waitForSelector('.st-tab[data-tab="history"]', { timeout: 10000 })
+    await frame.waitForSelector('.st-tab[data-tab="progress"]', { timeout: 10000 })
+    // Four tabs only; Badges and History are inside Progress.
+    if ((await frame.locator('.st-tab').count()) !== 4) throw new Error('Sport Track should have 4 tabs: Today, Plan, Progress, Library')
+    // Plan: ready-made programs, the balance check and the easy week.
+    await frame.click('.st-tab[data-tab="plan"]')
+    await frame.waitForSelector('#prog-list .prog', { timeout: 5000 })
+    if ((await frame.locator('#prog-list .prog').count()) !== 3) throw new Error('want 3 programs')
+    await frame.click('#prog-list [data-prog="pick"] >> nth=0')
+    await frame.waitForSelector('#prog-list .prog-ask [data-prog="add"]', { timeout: 3000 })
+    await frame.click('#prog-list [data-prog="cancel"]')
+    await frame.waitForSelector('#bal-card .bal-row', { timeout: 3000 })
     // Import from Telegram: a made-up export shows its days to pick (nothing is uploaded).
-    await frame.click('.st-tab[data-tab="history"]')
+    await frame.click('.st-tab[data-tab="progress"]')
+    await frame.click('#pr-sub [data-sub="history"]')
     const fake = '<div class="history"><div class="message default clearfix" id="message2"><div class="body"><div class="pull_right date details" title="02.02.2025 20:00:00 UTC+03:00">20:00</div><div class="from_name">Demo Bot</div><div class="text">Push-ups (30/40 reps)<br>Sit-ups (20/20 reps)</div></div></div></div>'
     await frame.setInputFiles('#tg-file', { name: 'messages.html', mimeType: 'text/html', buffer: Buffer.from(fake) })
     await frame.waitForSelector('#modal-tg.open .tg-day input[data-day="2025-02-02"]', { timeout: 10000 })
     await frame.click('#tg-cancel')
-    await frame.click('.st-tab[data-tab="badges"]')
+    await frame.click('#pr-sub [data-sub="badges"]')
     await frame.waitForSelector('.bd .medal', { timeout: 5000 })
     await frame.click('.st-tab[data-tab="today"]')
     // No sideways scroll at a laptop size or on a phone.

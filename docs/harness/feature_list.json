@@ -195,7 +195,7 @@
     "SMOKE_ONLY=\"Sport Track Today\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net."
+   "notes": "Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net. Coach (levels, feedback, forecasts, programs, 4 tabs) added 2026-11-07; UX5 (Ben comment) and PG4 (protein/sleep) are left: the page posts a SPORT_SUMMARY workoutSummary to the host."
   },
   {
    "id": "F015",

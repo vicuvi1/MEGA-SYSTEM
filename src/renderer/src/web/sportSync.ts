@@ -79,6 +79,14 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
     for (const [k, v] of Object.entries<any>(newer.best ?? {})) if (!best[k] || (Number(v?.score) || 0) >= (Number(best[k]?.score) || 0)) best[k] = v
     out.best = best
   }
+  // Coach: the levels already shown (the higher per ladder) and milestones already noted, so neither pops twice.
+  // Goals, the program and the easy week follow the newer device.
+  if (a.lvSeen || b.lvSeen) {
+    const lv: Record<string, number> = { ...(older.lvSeen ?? {}) }
+    for (const [k, v] of Object.entries(newer.lvSeen ?? {})) lv[k] = Math.max(Number(lv[k]) || 0, Number(v) || 0)
+    out.lvSeen = lv
+  }
+  if (a.msSeen || b.msSeen) out.msSeen = { ...(older.msSeen ?? {}), ...(newer.msSeen ?? {}) }
   if (a.levelSeen || b.levelSeen) out.levelSeen = { ...(older.levelSeen ?? {}), ...(newer.levelSeen ?? {}) }
   if (a.notYet || b.notYet) {
     const later: Record<string, string> = { ...(older.notYet ?? {}) }
