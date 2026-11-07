@@ -16,7 +16,7 @@ const EX = [
 describe('weekly program', () => {
   it.each([20, 30, 45])('a %i-minute session fits, with 4–6 exercises of 3 sets and 60–120 s rest', (min) => {
     for (const kind of ['full_a', 'full_b', 'upper', 'lower'] as const) {
-      const s = buildSession(kind, EX, { minutes: min, perWeek: 3 })
+      const s = buildSession(kind, EX, { minutes: min, perWeek: 3, mode: 'grow' })
       expect(s.minutes).toBeLessThanOrEqual(min)
       expect(s.items.length).toBeGreaterThanOrEqual(4)
       expect(s.items.length).toBeLessThanOrEqual(6)

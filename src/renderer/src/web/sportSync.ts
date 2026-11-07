@@ -7,6 +7,7 @@ import { createAppSync, type AppSyncSpec } from './appSync'
 import type { Mirror } from './mirror'
 import { sportFromLog } from '../../../main/bodyLog'
 import { mergeSets } from '../../../core/sportSets'
+import { mergeFeel, mergeEffort } from '../../../core/sportCoach'
 
 export const SPORT_KEY = 'life_sport_tracker_v1'
 const SETTING = 'sport_tracker_json'
@@ -88,6 +89,9 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
   }
   if (a.msSeen || b.msSeen) out.msSeen = { ...(older.msSeen ?? {}), ...(newer.msSeen ?? {}) }
   if (a.levelSeen || b.levelSeen) out.levelSeen = { ...(older.levelSeen ?? {}), ...(newer.levelSeen ?? {}) }
+  // Coach feedback: "too easy / too hard" taps from both devices (joined), effort ratings (newer wins a day).
+  if (a.feel || b.feel) out.feel = mergeFeel(a.feel, b.feel)
+  if (a.effort || b.effort) out.effort = mergeEffort(older.effort, newer.effort)
   if (a.notYet || b.notYet) {
     const later: Record<string, string> = { ...(older.notYet ?? {}) }
     for (const [k, v] of Object.entries(newer.notYet ?? {})) later[k] = later[k] && later[k] > String(v) ? later[k] : String(v)

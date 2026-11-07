@@ -2,7 +2,7 @@
 // Today shows. The generated plan session and "Build muscle" are opt-in. Pure, so it is tested.
 
 /** Bump when a new routine migration is needed. */
-export const ROUTINE_VERSION = 3
+export const ROUTINE_VERSION = 4
 
 /**
  * One time: anyone whose Today turned into the plan (or an empty rest day) gets "My routine" back, with
@@ -30,7 +30,9 @@ export function migrateRoutine<T extends { exercises?: any[]; sportySettings?: a
   }
   }
   // v3: the coach (levels, next targets, feedback on every log) is on for everyone; "Simple totals" in the Plan tab turns it off.
-  if (from < 3) settings.progressMode = 'grow'
+  // v4: strength is the new default; a choice already saved (grow, endurance, strength) is kept, only an unset one becomes strength.
+  if (from < 3) settings.progressMode = ss.progressMode == null ? 'strength' : 'grow'
+  if (settings.progressMode == null) settings.progressMode = 'strength'
   // Never an empty routine: if everything of yours is off, your own exercises come back on.
   if (!exercises.some((e) => e.active) && exercises.length) for (const e of exercises) if (!e.plan) e.active = true
   return { ...state, exercises, sportySettings: settings }
