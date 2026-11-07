@@ -23,16 +23,14 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-07, evening)
+### Current handoff (2026-11-07, late)
 ```
-Milestone:   Sport Track → real strength coach (owner's goal: get much, much stronger)
-Completed:   bug round, island alive + game time, plan/Todoist sync, Coach readability, sport levels/coach/forecasts/programs (aa5dbb4, 8b29dd5); full smoke green on 8b29dd5
-Active:      one builder (worktree) on sport: big level hero on Today, auto-switch to harder variations,
-             Too easy / Too hard, effort rating, "best set" placement (owner does ~50 push-ups in one set),
-             new default Strength mode (5–8 reps, 3–5 sets, 2–3 min rest, next variation at 3×8)
-Blockers:    none known. New worktrees lack some node_modules files: symlink /home/user/MEGA-SYSTEM/node_modules
-Next action: check that builder's commit on main (git log), run SMOKE_ONLY="Sport Track" npm run smoke, then release status
-Files:       docs/INDEX.md, docs/areas/sport.md, docs/harness/progress.md, docs/harness/feature_list.json
+Milestone:   Sport Track strength coach — landed (34d08cf): level hero, auto harder variations, Too easy/Too hard, effort rating, best-set placement, Strength mode default
+Completed:   all of today's work; Sport smoke passes on 34d08cf
+Active:      none
+Blockers:    none. New worktrees lack some node_modules files: symlink /home/user/MEGA-SYSTEM/node_modules
+Next action: check 1280×720 + light theme of the sport hero; add harder home moves with demos (one-arm-assisted push-ups, feet-elevated rows, dragon flag)
+Files:       docs/INDEX.md, docs/areas/sport.md, docs/harness/progress.md, src/core/sportBoost.ts
 ```
 
 ## Builder report format (≤ ~250 words)
