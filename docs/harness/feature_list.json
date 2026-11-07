@@ -1,0 +1,378 @@
+{
+ "project": "Life System",
+ "rules": "Only one item in_progress per session; passing only with verification run and evidence recorded.",
+ "features": [
+  {
+   "id": "F001",
+   "priority": 1,
+   "area": "auth",
+   "title": "PIN sign-in and 14-day session",
+   "user_visible_behavior": "Sign in with the PIN; a database hiccup is a 503, never a sign-out",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"opens and signs in\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F002",
+   "priority": 1,
+   "area": "today",
+   "title": "Today Now tab",
+   "user_visible_behavior": "Slim top line, Top 3 (must-dos), other tasks, simple habit tracker",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Today Now\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F003",
+   "priority": 1,
+   "area": "today",
+   "title": "Today tabs fit a laptop",
+   "user_visible_behavior": "Now · Plan · Tasks · Body · Week, each about one laptop screen",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Today tabs\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F004",
+   "priority": 1,
+   "area": "planner",
+   "title": "Plan editor with live sync",
+   "user_visible_behavior": "Drag/resize/rename blocks; Google Calendar and Todoist follow; undo; pin; partial approve",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"plan editor\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F005",
+   "priority": 1,
+   "area": "planner",
+   "title": "Plans start from now; today's asks stay today",
+   "user_visible_behavior": "Late plans shift to now; your 'today' asks never go to tomorrow",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": "Unit tests: src/core/planShift.test.ts"
+  },
+  {
+   "id": "F006",
+   "priority": 1,
+   "area": "ben",
+   "title": "Ben chat: answers, receipts, chips, search, pins",
+   "user_visible_behavior": "Flowing replies, receipts with Undo all, answer chips, search, pins",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Coach\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F007",
+   "priority": 1,
+   "area": "ben",
+   "title": "Ben pushes",
+   "user_visible_behavior": "Block check-ins, morning brief, evening shutdown, weekly card, per-area push level",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Ben 2\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F008",
+   "priority": 2,
+   "area": "ben",
+   "title": "Ben memory page",
+   "user_visible_behavior": "Settings → Ben → Memory; Yes/No before saving guesses",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Settings: every section\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F009",
+   "priority": 2,
+   "area": "ben",
+   "title": "Ben speed budgets",
+   "user_visible_behavior": "Instant answers for simple asks; plan in about 1.5 s",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": "Unit tests: src/server/benSpeed.test.ts"
+  },
+  {
+   "id": "F010",
+   "priority": 1,
+   "area": "island",
+   "title": "Desktop island basics",
+   "user_visible_behavior": "Pill → panel → Escape; hover peeks; Stop & log",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Desktop island: pill\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F011",
+   "priority": 2,
+   "area": "island",
+   "title": "Calm mode",
+   "user_visible_behavior": "Faint line at rest, pill on hover, panel only on click, peeks then dots",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Desktop island Calm\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F012",
+   "priority": 2,
+   "area": "island",
+   "title": "Ben on your PC (live coach)",
+   "user_visible_behavior": "Praise for real work, drift nudges, break card",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Ben on your PC\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F013",
+   "priority": 3,
+   "area": "island",
+   "title": "World clock",
+   "user_visible_behavior": "Tap the clock to cycle chosen time zones",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Desktop island world clock\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F014",
+   "priority": 1,
+   "area": "sport",
+   "title": "Sport Track v3",
+   "user_visible_behavior": "Photo demos, sets, levels, plan, Strength tab, celebrations, Telegram import",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Sport Track Today\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": "Flaky on the Windows runner; has 1 retry"
+  },
+  {
+   "id": "F015",
+   "priority": 2,
+   "area": "money",
+   "title": "Money: Finance Helper + subcategories",
+   "user_visible_behavior": "Subcategories, auto-sort, Where it went treemap, drill-down",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money hub\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F016",
+   "priority": 2,
+   "area": "rewards",
+   "title": "Rewards v2",
+   "user_visible_behavior": "Suggestions from activity, unlock by doing, limits, honest surprises",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Rewards\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F017",
+   "priority": 2,
+   "area": "goals",
+   "title": "Goals of every kind",
+   "user_visible_behavior": "Number, habit, do-less, monthly, project goals with pace line and celebrations",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Goals\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F018",
+   "priority": 2,
+   "area": "discipline",
+   "title": "Discipline one page",
+   "user_visible_behavior": "Streak, rank, milestones, history heatmap, urge crusher",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Discipline is one page\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F019",
+   "priority": 3,
+   "area": "look",
+   "title": "Wallpapers",
+   "user_visible_behavior": "24 original wallpapers plus your own picture, readable scrim",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Wallpaper\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F020",
+   "priority": 3,
+   "area": "music",
+   "title": "Music and Your SoundCloud",
+   "user_visible_behavior": "Stations, library, signed-in SoundCloud filling the tab",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Music\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F021",
+   "priority": 2,
+   "area": "calendar",
+   "title": "Calendar overlaps and editing",
+   "user_visible_behavior": "Side-by-side overlaps, click for details, edit saves to Google",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Calendar: events\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F022",
+   "priority": 3,
+   "area": "settings",
+   "title": "Zoom",
+   "user_visible_behavior": "Settings → Look zooms the app and keeps it",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Zoom\" npm run smoke"
+   ],
+   "evidence": "Release v1.4.1366 green; smoke step passes",
+   "notes": ""
+  },
+  {
+   "id": "F023",
+   "priority": 2,
+   "area": "sleep",
+   "title": "Sleep care",
+   "user_visible_behavior": "Morning light, caffeine curfew, after-shift wind-down, sleep debt, desk drill, eye care, grooming",
+   "status": "in_progress",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Sleep care\" npm run smoke"
+   ],
+   "evidence": "",
+   "notes": "Commit d36923c; full smoke not yet re-run after rebase"
+  },
+  {
+   "id": "F024",
+   "priority": 2,
+   "area": "focus",
+   "title": "Focus loop and Dojo",
+   "user_visible_behavior": "Push ladder, stalling fixes, launch kit, session verdict, workout music, morning countdown, Dojo, victory soundtrack",
+   "status": "in_progress",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+   ],
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "F025",
+   "priority": 2,
+   "area": "body",
+   "title": "Food and training",
+   "user_visible_behavior": "Protein counter, lean-bulk trend, readiness, workout slot, progress photos, weekly body report",
+   "status": "in_progress",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+   ],
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "F026",
+   "priority": 2,
+   "area": "career",
+   "title": "Career and money",
+   "user_visible_behavior": "Job board, portfolio, flashcards (SRS), shift study kit, emergency fund, essay planner, career letter",
+   "status": "in_progress",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+   ],
+   "evidence": "",
+   "notes": ""
+  },
+  {
+   "id": "F027",
+   "priority": 2,
+   "area": "life",
+   "title": "Seasons and identity",
+   "user_visible_behavior": "8-week seasons with a boss, vision board, side quests, identity votes, level-up cinematic, wins wall, life wheel",
+   "status": "in_progress",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+   ],
+   "evidence": "",
+   "notes": ""
+  }
+ ]
+}

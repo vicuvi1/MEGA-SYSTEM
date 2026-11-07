@@ -1,6 +1,6 @@
 # AGENTS.md — working on Life System
 
-**Read `docs/AI_HANDOFF.md` first.** It is the full, current description of the
+**Read `docs/AI_HANDOFF.md` first**, then `docs/harness/progress.md` and `docs/harness/feature_list.json`, and run `bash scripts/init.sh`. Key choices not to undo are in `docs/DECISIONS.md`; end each session with `docs/harness/clean-state-checklist.md`. It is the full, current description of the
 project: who it's for, the repos, the secrets (names only), the architecture,
 Ben (the AI coach), the data, and the rules. This file is the short version.
 
