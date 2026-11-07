@@ -1271,6 +1271,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
       trace.mark('plan')
     }
+    // PE8: "re-plan from now" packs only the time left again (done and pinned blocks stay), in code.
+    if (!preset && !local && !media && !direct && plan && /\b(re-?plan|re-?pack|redo)\b.{0,30}\b(from now|the rest( of (the|my) day)?|what'?s left)\b/i.test(clean)) {
+      step('Re-planning the time that is left')
+      const r = await rhythm.replanNow().catch(() => null)
+      if (r?.ok && r.plan) {
+        local = { reply: 'Done: the rest of the day is packed again from now. Done and pinned blocks stayed where they were.', actions: [], remember: [], show: ['plan'], steps: r.done }
+        trace.mark('replan')
+      }
+    }
     // He asks for the plan again and the approved one is late (its first blocks are gone, not
     // started): it moves to start from now, in code, with its calendar blocks.
     if (!preset && !local && !media && !direct && route.intent === 'plan' && plan?.status === 'approved' && (await rhythm.late().catch(() => 0)) > 0) {

@@ -16,6 +16,7 @@ import { barFill } from './motionKit'
 import { Ring } from './CoachFeed'
 import { PlanAlso } from './PlanAlso'
 import { PlanShiftOffer } from './PlanShiftOffer'
+import { PlanEditor } from './plan/PlanEditor'
 import './coachFeed.css'
 
 /** The kinds of `show` that are cards here (the rest are ReplyExtras' small widgets). */
@@ -167,29 +168,8 @@ export function PlanCard({ live = true, spotlight = false, expired = false, onCh
       <PlanShiftOffer state={data.state} late={data.late} onDone={(r) => (setData(r), onChange?.())} />
       {p.why && <p className="plan-why">{p.why}</p>}
       <PlanTrack items={tl.items} now={tl.now} from={tl.from} to={tl.to} />
-      {tl.items.length > 0 && (
-        <ol className="cf-plan-list">
-          {tl.items.map((x, k) => (
-            <li key={k} className={`tone-${x.tone} s-${x.state}`} style={{ '--k': k } as CSSProperties}>
-              <span className="tm">
-                {x.start}
-                <small>{x.train ? '' : x.end}</small>
-              </span>
-              <i className="dot" aria-hidden />
-              <span className="tt">
-                <b>{x.train ? `💪 ${x.title}` : x.title}</b>
-                <small>{x.train ? 'Training' : fmtMinutes(x.minutes)}{x.state === 'now' ? ' · now' : x.state === 'next' ? ` · in ${fmtMinutes(Math.max(1, toMinutes(x.start) - t))}` : ''}</small>
-                {x.tasks && <small className="plan-tasks">{x.tasks.join(' · ')}</small>}
-              </span>
-              {!approved && (
-                <button type="button" className="drop" disabled={!!busy} title="Drop this block" aria-label={`Drop ${x.title}`} onClick={() => void run('propose', x.train ? 'no training' : `drop ${x.title.replace(/[,;]/g, ' ')}`, 'Dropping…')}>
-                  ✕
-                </button>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
+      {/* PE1: edit the plan right here (drag, resize, rename, pin, approve part of it); edits sync to Google and Todoist. */}
+      <PlanEditor state={data.state} water={data.prefs.water} />
       {p.mustdos.length > 0 && (
         <div className="cf-plan-must">
           <small>Must-dos</small>

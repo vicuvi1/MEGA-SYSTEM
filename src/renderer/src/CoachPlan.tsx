@@ -9,6 +9,7 @@ import { useAction } from './ui'
 import { useLive } from './live'
 import { PlanAlso } from './PlanAlso'
 import { PlanShiftOffer } from './PlanShiftOffer'
+import { PlanEditor } from './plan/PlanEditor'
 
 /** `oneApprove`: on Today, where "Do this now" already shows Approve, the card doesn't repeat it. */
 export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: { onChange?: () => void; oneApprove?: boolean; hideReview?: boolean }) {
@@ -119,40 +120,9 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
             </ol>
           </div>
         )}
-        {timed.length > 0 && (
-          <div>
-            <h3 className="cp-sub">Blocks</h3>
-            <ul className="cp-blocks">
-              {timed.map((x) => (
-                <li key={x.s + x.t} className={`${x.train ? 'train' : ''} ${!approved ? 'edit' : ''}`}>
-                  {approved ? (
-                    <span className="cp-time">{x.e ? `${x.s}–${x.e}` : x.s}</span>
-                  ) : (
-                    // U3: change a time or drop a block right here (done in code, no AI: B22).
-                    <input
-                      type="time"
-                      className="cp-time-in"
-                      defaultValue={x.s}
-                      step={900}
-                      aria-label={`Start of ${x.t}`}
-                      onBlur={(e) => e.target.value && e.target.value !== x.s && void run('propose', x.train ? `move training to ${e.target.value}` : `move ${x.t.replace(/[,;]/g, ' ')} to ${e.target.value}`, 'Moving…')}
-                    />
-                  )}
-                  <span>
-                    {x.train ? `💪 ${x.t}` : x.t}
-                    {x.tasks && <small className="plan-tasks">{x.tasks.join(' · ')}</small>}
-                  </span>
-                  {!approved && (
-                    <button className="cp-drop" disabled={!!busy} title="Drop this block" aria-label={`Drop ${x.t}`} onClick={() => void run('propose', x.train ? 'no training' : `drop ${x.t.replace(/[,;]/g, ' ')}`, 'Dropping…')}>
-                      ✕
-                    </button>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
+      {/* PE1: the blocks, editable right here; edits sync to Google Calendar and Todoist. */}
+      {timed.length > 0 && <PlanEditor state={state} water={data.prefs.water} />}
       <PlanAlso plan={p} />
       <p className="hint small">💧 Water goal {(p.waterMl / 1000).toFixed(1)} L</p>
       {!approved && (

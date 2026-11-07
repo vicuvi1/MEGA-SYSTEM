@@ -42,7 +42,7 @@ import { addFact, answerOffer, editKnowItem, forgetAbout, knowView, removeKnowIt
 import { financeStateFrom, addFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStyle, saveMemory, saveMind, saveProfile, saveStyle, type CoachStyle } from './web/botBrain'
 import { deskChange, deskView, type DeskOp } from './web/benDesk'
 import type { CoachMind } from '@core/coachMind'
-import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
+import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor, type DayProposal } from '@core/rhythm'
 import { lateBlocks } from '@core/planShift'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus, waterToday } from './web/coachStatus'
@@ -934,6 +934,21 @@ export function createTursoWebBridge(): Bridge {
         void syncNow().catch(() => null)
         return j
       },
+      // PE1: the plan editor saves today's plan here (instant; the server sees it on the next sync).
+      planSave: async (plan: DayProposal) =>
+        (await svcP).write((s) => {
+          let raw: any = null
+          try {
+            raw = JSON.parse(getSetting(s.db, RHYTHM) || 'null')
+          } catch {
+            raw = null
+          }
+          const st = rhythmFor(raw, s.wallet.today())
+          if (!st.briefing || st.briefing.plan.day !== plan.day) return null
+          const next = { ...st, briefing: { ...st.briefing, plan, version: (st.briefing.version ?? 0) + 1 } }
+          setSetting(s.db, RHYTHM, JSON.stringify(next))
+          return next
+        }),
       setMind: async (m: CoachMind) => {
         await (await svcP).write((s) => saveMind(s.db, m))
       },
@@ -1128,6 +1143,13 @@ export function createTursoWebBridge(): Bridge {
       },
       reopen: async (id: string) => {
         await todoistCall('reopen', { id })
+        // Points stay honest: a task taken back gives back what it paid.
+        await (await svcP)
+          .write((s) => {
+            const paid = s.wallet.effective().find((e: any) => e.ref === `todoist:${id}` && e.coins > 0)
+            if (paid) s.wallet.undo(paid.id, 'Task reopened')
+          }, 'life-wallet-changed')
+          .catch(() => null)
       },
       remove: async (id: string) => {
         await todoistCall('remove', { id })

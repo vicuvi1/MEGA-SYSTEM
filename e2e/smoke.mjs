@@ -455,7 +455,7 @@ try {
     if (!(await pg.$('.cf-slash'))) throw new Error('no / shortcuts')
     await pg.fill('.cf-input textarea', '')
     // Coach UI v3: Ben's face once per group, results with Undo, the plan card, ↑ edits.
-    await pg.waitForSelector('.cf-plan.live .cf-plan-list li', { timeout: 10000 })
+    await pg.waitForSelector('.cf-plan.live .pe-block', { timeout: 10000 })
     // Coach fix: last night's plan card is folded as expired; only today's card is live, with the one Approve.
     if (!/Expired · last night's draft/.test((await pg.locator('.cf-plan.expired').first().innerText().catch(() => '')) ?? '')) throw new Error("last night's plan card is not marked expired")
     if ((await pg.$$('.cf-plan.live')).length !== 1) throw new Error('more than one live plan card')
@@ -2283,6 +2283,61 @@ try {
     await pg.setViewportSize({ width: 1440, height: 900 })
     console.log(`  ${report.join('\n  ')}`)
   }))
+  // PE1–PE3, PE7: the plan is edited right in its card; an approved block's new time goes to Google and Todoist.
+  await step('plan editor: approve one block, drag it, Google and Todoist get the new time, undo', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    const blk = pg.locator('section.cp .pe-block', { hasText: 'Draft the networking lab report' }).first()
+    await blk.waitFor({ timeout: 15000 })
+    const api = async (n, op) => (await fetch(`http://127.0.0.1:${port}/api/${n}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op }) })).json()
+    // Waits for a condition (slow Windows runners: generous, polling).
+    const until = async (fn, what, ms = 20000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    const hmAdd = (hm, m) => {
+      const t = Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5)) + m
+      return `${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`
+    }
+    // Approve just this block: it goes into the calendar, the rest stays a draft.
+    await blk.locator('.pe-ok').check()
+    await until(async () => (await api('google', 'log')).some((x) => x.op === 'create' && x.title === 'Draft the networking lab report'), 'approving one block made no calendar event')
+    await blk.locator('.pe-st', { hasText: '✓' }).waitFor({ timeout: 15000 })
+    // Drag it 30 minutes later (78 px an hour: 39 px), in small steps like a hand.
+    const before = (await blk.locator('.pe-time').innerText()).slice(0, 5)
+    const want = hmAdd(before, 30)
+    await blk.scrollIntoViewIfNeeded()
+    const box = await blk.boundingBox()
+    const x = box.x + box.width * 0.6
+    await pg.mouse.move(x, box.y + 12)
+    await pg.mouse.down()
+    for (let i = 1; i <= 6; i++) await pg.mouse.move(x, box.y + 12 + i * 6.5)
+    await pg.mouse.up()
+    await until(async () => (await blk.locator('.pe-time').innerText()).startsWith(want), `the block did not move to ${want}`)
+    const dayOf = await pg.evaluate(() => {
+      const d = new Date()
+      if (d.getHours() < 4) d.setDate(d.getDate() - 1)
+      return d.toDateString()
+    })
+    const isoAt = (hm) => {
+      const d = new Date(dayOf)
+      d.setHours(Number(hm.slice(0, 2)), Number(hm.slice(3, 5)), 0, 0)
+      return d.toISOString()
+    }
+    await until(async () => (await api('google', 'log')).some((x) => x.op === 'update' && x.start === isoAt(want)), `Google Calendar got no move to ${want}`)
+    await until(async () => (await api('todoist', 'peek')).some((t) => t.id === 't4' && t.dueTime === want), `Todoist got no ${want} for the task`)
+    // Undo: the block, the event and the task go back.
+    await pg.locator('section.cp .pe-btn', { hasText: 'Undo' }).click()
+    await until(async () => (await blk.locator('.pe-time').innerText()).startsWith(before), 'Undo did not move the block back')
+    await until(async () => (await api('google', 'log')).some((x) => x.op === 'update' && x.start === isoAt(before)), 'Undo did not move the calendar event back')
+    await until(async () => (await api('todoist', 'peek')).some((t) => t.id === 't4' && t.dueTime === before), 'Undo did not put the task time back')
+  })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

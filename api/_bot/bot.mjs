@@ -32951,7 +32951,7 @@ function shiftPlan(plan, o) {
 	const sessions = o.sessions ?? [];
 	const keep = [];
 	const late = [];
-	for (const b of plan.blocks) if (toMin$2(b.start) >= s0 || blockStarted(b, plan.day, sessions)) keep.push(b);
+	for (const b of plan.blocks) if (toMin$2(b.start) >= s0 || b.locked || blockStarted(b, plan.day, sessions)) keep.push(b);
 	else late.push(b);
 	if (!late.length) return {
 		plan,
@@ -33021,7 +33021,7 @@ function shiftPlan(plan, o) {
 		});
 	}
 	let training = plan.training;
-	if (training && toMin$2(training.time) < s0) {
+	if (training && toMin$2(training.time) < s0 && !training.locked) {
 		const len = Number(/(\d+)\s*min/.exec(training.what)?.[1]) || 45;
 		const from = Math.max(s0, toMin$2("17:00"));
 		const w = wins.find((x) => x.e - Math.max(x.s, from) >= len) ?? wins.find((x) => x.e - x.s >= len);
@@ -34469,6 +34469,464 @@ function undoTool(svc, op) {
 	untapHabit(svc, op.id);
 	return "↩ Habit unticked";
 }
+var TRAIN_ID = "train";
+var DAY_END = 1440;
+/** A short stable id from text (the same block gets the same id on every device). */
+function hashId(s) {
+	let h = 2166136261;
+	for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+	return (h >>> 0).toString(36);
+}
+/** Each block gets an id (kept when it has one; two blocks never share one). */
+function ensureIds(plan) {
+	const seen = /* @__PURE__ */ new Set();
+	let changed = false;
+	const blocks = plan.blocks.map((b, i) => {
+		let id = b.id && !seen.has(b.id) ? b.id : `b${hashId(`${plan.day}|${b.title}|${b.start}|${i}`)}`;
+		while (seen.has(id)) id = `${id}x`;
+		seen.add(id);
+		if (id === b.id) return b;
+		changed = true;
+		return {
+			...b,
+			id
+		};
+	});
+	return changed ? {
+		...plan,
+		blocks
+	} : plan;
+}
+var trainMinutes = (t) => t.minutes ?? (Number(/(\d+)\s*min/.exec(t.what)?.[1]) || 45);
+/** The blocks and the training slot, sorted by time, each with an id. */
+function planItems$1(plan) {
+	const p = ensureIds(plan);
+	const items = p.blocks.map((b) => ({
+		...b,
+		id: b.id
+	}));
+	if (p.training) {
+		const t = p.training;
+		items.push({
+			id: TRAIN_ID,
+			train: true,
+			title: t.what,
+			start: t.time,
+			minutes: trainMinutes(t),
+			locked: t.locked,
+			ok: t.ok,
+			sync: t.sync
+		});
+	}
+	return items.sort((a, b) => a.start.localeCompare(b.start) || a.id.localeCompare(b.id));
+}
+var endOf = (b) => toMin$2(b.start) + b.minutes;
+/** Minute of the plan's day for an ISO time (before the day: 0, after it: 24:00). */
+function minOfDay(iso, day) {
+	if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso <= day ? 0 : DAY_END;
+	const d = new Date(iso);
+	const local = localDay$1(iso);
+	if (local < day) return 0;
+	if (local > day) return DAY_END;
+	return d.getHours() * 60 + d.getMinutes();
+}
+/** Blocks a fresh plan must keep where they are: pinned ones, and approved ones already in the calendar. */
+function keptBlocks(prev) {
+	return (prev?.blocks ?? []).filter((b) => b.locked || b.ok && b.sync?.eventId);
+}
+/** Kept blocks as fixed calendar events (the packer plans around them). */
+function keptAsEvents(prev) {
+	if (!prev) return [];
+	return keptBlocks(prev).map((b) => {
+		const s = /* @__PURE__ */ new Date(`${prev.day}T${b.start}:00`);
+		return {
+			id: `kept-${b.id ?? b.start}`,
+			calendarId: "plan",
+			title: b.title,
+			start: s.toISOString(),
+			end: new Date(s.getTime() + b.minutes * 6e4).toISOString(),
+			allDay: false
+		};
+	});
+}
+/** A fresh plan with the old plan's kept blocks put back (new blocks on top of them, and their tasks, give way). */
+function mergeKept(fresh, prev) {
+	const kept = keptBlocks(prev);
+	if (!kept.length || !prev || prev.day !== fresh.day) return fresh;
+	const keptTasks = new Set(kept.flatMap((b) => b.tasks ?? []).map((t) => t.toLowerCase()));
+	const clash = (b) => kept.some((k) => toMin$2(b.start) < endOf(k) && endOf(b) > toMin$2(k.start));
+	const blocks = fresh.blocks.filter((b) => !clash(b)).filter((b) => !b.tasks?.length || b.tasks.some((t) => !keptTasks.has(t.toLowerCase()))).map((b) => b.tasks?.length ? {
+		...b,
+		tasks: b.tasks.filter((t) => !keptTasks.has(t.toLowerCase()))
+	} : b);
+	return relinkAlso(ensureIds({
+		...fresh,
+		blocks: [...blocks, ...kept].sort((a, b) => a.start.localeCompare(b.start)),
+		removed: prev.removed,
+		closed: prev.closed
+	}));
+}
+/**
+* Re-packs only the time that is left: blocks already done (ended, or started
+* with a focus session) and pinned blocks stay; the rest are packed again, in
+* their order, into the free time from now (around the calendar's events).
+*/
+function replanFromNow(plan, o) {
+	const p = ensureIds(plan);
+	const startAt = planStartAt(o.now);
+	const s0 = toMin$2(startAt);
+	const sessions = o.sessions ?? [];
+	const allTicked = (b) => !!b.tasks?.length && b.tasks.every((t) => (b.done ?? []).some((d) => d.toLowerCase() === t.toLowerCase()));
+	const stays = (b) => !!b.locked || toMin$2(b.start) < s0 && (blockStarted(b, p.day, sessions) || allTicked(b));
+	const keep = p.blocks.filter(stays);
+	const move = p.blocks.filter((b) => !stays(b)).sort((a, b) => a.start.localeCompare(b.start));
+	const asEvent = (b) => {
+		const s = /* @__PURE__ */ new Date(`${p.day}T${b.start}:00`);
+		return {
+			id: `keep-${b.id}`,
+			calendarId: "plan",
+			title: b.title,
+			start: s.toISOString(),
+			end: new Date(s.getTime() + b.minutes * 6e4).toISOString(),
+			allDay: false
+		};
+	};
+	const busy = [...o.events, ...keep.map(asEvent)];
+	if (p.training && (p.training.locked || toMin$2(p.training.time) < s0)) busy.push(asEvent({
+		id: TRAIN_ID,
+		title: p.training.what,
+		start: p.training.time,
+		minutes: trainMinutes(p.training)
+	}));
+	let wins = freeWindows(busy, p.day, startAt, o.endBy ?? "22:00");
+	const placed = [];
+	const unplaced = [];
+	let moved = 0;
+	for (const b of move) {
+		const w = wins.find((x) => x.e - x.s >= b.minutes);
+		if (!w) {
+			unplaced.push(b.title);
+			continue;
+		}
+		const at = Math.ceil(w.s / 5) * 5;
+		if (fromMin(at) !== b.start) moved++;
+		placed.push({
+			...b,
+			start: fromMin(at)
+		});
+		const parts = [{
+			...w,
+			e: at - 10
+		}, {
+			...w,
+			s: at + b.minutes + 10
+		}].filter((x) => x.e - x.s >= 15);
+		wins = [
+			...wins.slice(0, wins.indexOf(w)),
+			...parts,
+			...wins.slice(wins.indexOf(w) + 1)
+		];
+	}
+	const gone = move.filter((b) => unplaced.includes(b.title));
+	const removed = [...p.removed ?? [], ...gone.filter((b) => b.sync?.eventId || b.sync?.tasks?.length).map((b) => ({
+		id: b.id,
+		eventId: b.sync?.eventId,
+		calendarId: b.sync?.calendarId,
+		tasks: b.sync?.tasks?.map((t) => ({
+			id: t.id,
+			title: t.title
+		}))
+	}))];
+	const also = [...p.also ?? []];
+	const lower = (s) => s.trim().toLowerCase();
+	const must = new Set(p.mustdos.map(lower));
+	for (const b of gone) for (const t of b.tasks?.length ? b.tasks : [b.title]) if (!must.has(lower(t)) && !also.some((a) => lower(a.title) === lower(t))) also.push({
+		title: t,
+		minutes: Math.round(b.minutes / Math.max(1, b.tasks?.length ?? 1)),
+		priority: 1
+	});
+	const blocks = [...keep, ...placed].sort((a, b) => a.start.localeCompare(b.start));
+	return {
+		plan: relinkAlso({
+			...p,
+			blocks,
+			also,
+			removed
+		}),
+		moved,
+		unplaced
+	};
+}
+var BREAK_MIN = 10;
+var MEAL = {
+	from: toMin$2("11:30"),
+	to: toMin$2("14:30"),
+	need: 30
+};
+var deepOf = (b) => !b.train && b.kind !== "quick";
+/** Bed minus the wind-down, in minutes of the day (bed after midnight counts as 24:00+). */
+function lastEnd(ctx) {
+	const bed = toMin$2(ctx.bedtime ?? "23:30");
+	return (bed < toMin$2("12:00") ? bed + 1440 : bed) - (ctx.windDown ?? 45);
+}
+function spans(plan, ctx) {
+	const items = planItems$1(plan).map((b) => ({
+		s: toMin$2(b.start),
+		e: toMin$2(b.start) + b.minutes,
+		id: b.id,
+		locked: !!b.locked,
+		fixed: false,
+		deep: deepOf(b),
+		title: b.title
+	}));
+	const ev = (ctx.events ?? []).filter((e) => !e.allDay && !e.declined).map((e) => ({
+		s: minOfDay(e.start, plan.day),
+		e: minOfDay(e.end, plan.day),
+		id: `ev:${e.id}`,
+		locked: true,
+		fixed: true,
+		deep: false,
+		title: e.title
+	})).filter((x) => x.e > x.s && x.e - x.s < 720);
+	return [...items, ...ev].sort((a, b) => a.s - b.s || a.e - b.e);
+}
+/** Every problem with the plan (empty: it's fine). */
+function checkPlan(plan, ctx) {
+	const out = [];
+	const all = spans(plan, ctx);
+	const mine = all.filter((x) => !x.fixed);
+	const clash = /* @__PURE__ */ new Set();
+	for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length && all[j].s < all[i].e; j++) {
+		if (all[i].fixed && all[j].fixed) continue;
+		if (all[j].s < all[i].e && all[i].s < all[j].e) {
+			if (!all[i].fixed) clash.add(all[i].id);
+			if (!all[j].fixed) clash.add(all[j].id);
+		}
+	}
+	if (clash.size) out.push({
+		code: "overlap",
+		text: `${clash.size} blocks overlap`,
+		ids: [...clash],
+		fixable: [...clash].some((id) => !mine.find((m) => m.id === id)?.locked)
+	});
+	const tired = [];
+	let run = 0;
+	let lastE = -1;
+	for (const x of mine) {
+		if (!x.deep) {
+			run = 0;
+			lastE = x.e;
+			continue;
+		}
+		run = x.s - lastE >= BREAK_MIN || lastE < 0 ? x.e - x.s : run + (x.e - Math.max(x.s, lastE));
+		if (run > 90 && x.e - x.s <= 90) tired.push(x.id);
+		lastE = x.e;
+	}
+	if (tired.length) out.push({
+		code: "breaks",
+		text: `No break after 90 min of deep work`,
+		ids: tired,
+		fixable: true
+	});
+	if (mine.some((x) => x.s < MEAL.to && x.e > MEAL.from)) {
+		let free = 0;
+		let at = MEAL.from;
+		for (const x of all.filter((y) => y.e > MEAL.from && y.s < MEAL.to)) {
+			free = Math.max(free, Math.min(x.s, MEAL.to) - at);
+			at = Math.max(at, x.e);
+		}
+		free = Math.max(free, MEAL.to - at);
+		if (free < MEAL.need) out.push({
+			code: "meal",
+			text: "No time for lunch",
+			ids: mine.filter((x) => x.s < MEAL.to && x.e > MEAL.from).map((x) => x.id),
+			fixable: false
+		});
+	}
+	if (ctx.water !== false && !(plan.waterMl > 0)) out.push({
+		code: "water",
+		text: "No water goal",
+		ids: [],
+		fixable: true
+	});
+	const end = lastEnd(ctx);
+	const late = mine.filter((x) => x.e > end);
+	if (late.length) out.push({
+		code: "late",
+		text: `Runs past ${fromMin(Math.min(end, 1435) % 1440)} (wind-down)`,
+		ids: late.map((x) => x.id),
+		fixable: late.some((x) => !x.locked)
+	});
+	if (ctx.now) {
+		const s0 = toMin$2(ctx.now);
+		const past = planItems$1(plan).filter((b) => toMin$2(b.start) < s0 - 10 && toMin$2(b.start) + b.minutes > s0 && !b.locked && !b.sync?.eventId);
+		const gone = planItems$1(plan).filter((b) => toMin$2(b.start) + b.minutes <= s0 && !b.locked && !b.sync && !b.done?.length);
+		const ids = [...past, ...gone].map((b) => b.id);
+		if (ids.length) out.push({
+			code: "past",
+			text: `${ids.length} block${ids.length === 1 ? " is" : "s are"} in the past`,
+			ids,
+			fixable: true
+		});
+	}
+	const from = ctx.now ? toMin$2(ctx.now) : Math.min(...mine.map((x) => x.s), end);
+	const busy = all.filter((x) => x.fixed && x.e > from && x.s < end).reduce((t, x) => t + Math.min(x.e, end) - Math.max(x.s, from), 0);
+	const free = Math.max(0, end - from - busy);
+	const planned = mine.filter((x) => x.e > from).reduce((t, x) => t + x.e - Math.max(x.s, from), 0);
+	if (planned > free + 5) out.push({
+		code: "toomuch",
+		text: `${Math.round((planned - free) / 5) * 5} min more than your free time`,
+		ids: [],
+		fixable: false
+	});
+	return out;
+}
+/**
+* Fixes what can be fixed: past blocks start from now, each block that sits on
+* an earlier one (or on a fixed event) moves after it, a 10-minute break goes
+* in after 90 minutes of deep work, what runs into the wind-down is trimmed or
+* dropped (its tasks stay on today's list), no water goal gets 2.5 L.
+*/
+function fixPlan(raw, ctx) {
+	const plan = ensureIds(raw);
+	if (!checkPlan(plan, ctx).some((i) => i.fixable)) return {
+		plan: raw,
+		fixed: []
+	};
+	const fixed = /* @__PURE__ */ new Set();
+	const items = planItems$1(plan);
+	const fixedSpans = spans(plan, ctx).filter((x) => x.fixed || x.locked);
+	const startAt = ctx.now ? toMin$2(planStartAt(ctx.now)) : 0;
+	const end = lastEnd(ctx);
+	const placed = fixedSpans.map((x) => ({
+		s: x.s,
+		e: x.e,
+		deep: x.deep
+	}));
+	const out = /* @__PURE__ */ new Map();
+	const moveable = items.filter((b) => !b.locked).sort((a, b) => a.start.localeCompare(b.start));
+	for (const b of moveable) {
+		let s = toMin$2(b.start);
+		if (ctx.now) {
+			const nowM = toMin$2(ctx.now);
+			const ended = s + b.minutes <= nowM;
+			if (ended && (b.sync || b.done?.length) || !ended && s < nowM - 10 && b.sync?.eventId) {
+				placed.push({
+					s,
+					e: s + b.minutes,
+					deep: deepOf(b)
+				});
+				continue;
+			}
+			if (ended || s < nowM - 10) {
+				s = startAt;
+				fixed.add("past");
+			}
+		}
+		for (let guard = 0; guard < 50; guard++) {
+			const e = s + b.minutes;
+			const hit = placed.find((x) => s < x.e && x.s < e);
+			if (hit) {
+				s = Math.ceil(hit.e / 5) * 5;
+				fixed.add("overlap");
+				continue;
+			}
+			if (deepOf(b)) {
+				let run = b.minutes;
+				let at = s;
+				for (;;) {
+					const prev = placed.filter((x) => x.e <= at && at - x.e < BREAK_MIN).sort((a, c) => c.e - a.e)[0];
+					if (!prev || !prev.deep) break;
+					run += prev.e - prev.s;
+					at = prev.s;
+				}
+				if (run > 90 && b.minutes <= 90) {
+					const prev = placed.filter((x) => x.e <= s && s - x.e < BREAK_MIN).sort((a, c) => c.e - a.e)[0];
+					if (prev) {
+						s = Math.ceil((prev.e + BREAK_MIN) / 5) * 5;
+						fixed.add("breaks");
+						continue;
+					}
+				}
+			}
+			break;
+		}
+		let minutes = b.minutes;
+		if (s + minutes > end) {
+			const own = toMin$2(b.start);
+			if (end - s >= 25) {
+				minutes = Math.floor((end - s) / 5) * 5;
+				fixed.add("late");
+			} else if (own >= end && !b.sync?.eventId && !b.train) {
+				out.set(b.id, null);
+				fixed.add("late");
+				continue;
+			} else {
+				placed.push({
+					s: own,
+					e: own + b.minutes,
+					deep: deepOf(b)
+				});
+				continue;
+			}
+		}
+		placed.push({
+			s,
+			e: s + minutes,
+			deep: deepOf(b)
+		});
+		if (fromMin(s) !== b.start || minutes !== b.minutes) out.set(b.id, {
+			start: fromMin(s),
+			minutes
+		});
+	}
+	if (!out.size) fixed.clear();
+	let p = { ...plan };
+	if (out.size) {
+		const dropped = items.filter((b) => out.get(b.id) === null && b.id !== "train");
+		p.blocks = plan.blocks.filter((b) => !(b.id && out.get(b.id) === null)).map((b) => {
+			const n = b.id ? out.get(b.id) : void 0;
+			return n ? {
+				...b,
+				...n
+			} : b;
+		}).sort((a, b) => a.start.localeCompare(b.start));
+		if (plan.training) {
+			const n = out.get(TRAIN_ID);
+			p.training = n === null ? null : n ? {
+				...plan.training,
+				time: n.start,
+				...n.minutes !== items.find((x) => x.id === "train")?.minutes ? { minutes: n.minutes } : {}
+			} : plan.training;
+		}
+		const lower = (s) => s.trim().toLowerCase();
+		const also = [...p.also ?? []];
+		for (const b of dropped) for (const t of b.tasks ?? []) if (!also.some((a) => lower(a.title) === lower(t))) also.push({
+			title: t,
+			minutes: Math.round(b.minutes / Math.max(1, b.tasks.length)),
+			priority: 1
+		});
+		p.also = also.length ? also : p.also;
+		const rm = dropped.filter((b) => b.sync?.eventId || b.sync?.tasks?.length).map((b) => ({
+			id: b.id,
+			eventId: b.sync?.eventId,
+			calendarId: b.sync?.calendarId,
+			tasks: b.sync?.tasks?.map((t) => ({
+				id: t.id,
+				title: t.title
+			}))
+		}));
+		if (rm.length) p.removed = [...p.removed ?? [], ...rm];
+	}
+	if (ctx.water !== false && !(p.waterMl > 0)) {
+		p.waterMl = 2500;
+		fixed.add("water");
+	}
+	return {
+		plan: p,
+		fixed: [...fixed]
+	};
+}
 // src/renderer/src/web/rhythmBot.ts
 var TOP3_ASK = "week_top3_ask";
 /** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
@@ -34733,7 +35191,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			});
 			if (edited) return edited;
 		}
-		const [events, tasks, upcoming] = await Promise.all([
+		const [calEvents, tasks, upcoming] = await Promise.all([
 			calendar ? calendar.events(...dayBounds()).catch(() => []) : Promise.resolve([]),
 			todoist ? todoist.today().catch(() => []) : Promise.resolve([]),
 			todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null)
@@ -34789,6 +35247,12 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			}
 			const know = loadKnow(db);
 			const promised = promisesFor(readJson$1(db, REMINDERS, []), today);
+			let bed = "23:30";
+			try {
+				bed = sleepWindow(db).bed;
+			} catch {
+				bed = "23:30";
+			}
 			return {
 				today,
 				st,
@@ -34803,9 +35267,14 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				asked: askedToday(readJson$1(db, PLAN_ASKED, null), today),
 				learned,
 				know,
-				promised
+				promised,
+				bed
 			};
 		});
+		const prevPlan = base.st.briefing?.plan.day === base.today ? base.st.briefing.plan : null;
+		const kept = keptAsEvents(prevPlan);
+		const keptIds = new Set(prevPlan?.blocks.filter((b) => b.sync?.eventId).map((b) => b.sync.eventId) ?? []);
+		const events = [...calEvents.filter((e) => !keptIds.has(e.id)), ...kept];
 		const fixedCount = events.filter((e) => !e.allDay).length;
 		step(`Packing ${tasks.length} task${tasks.length === 1 ? "" : "s"} around ${fixedCount} event${fixedCount === 1 ? "" : "s"}`);
 		const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : "";
@@ -34992,7 +35461,12 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			events,
 			asked: base.asked
 		}).plan;
-		plan = relinkAlso(plan);
+		plan = mergeKept(relinkAlso(plan), prevPlan);
+		plan = relinkAlso(fixPlan(plan, {
+			now: hmNow(/* @__PURE__ */ new Date()),
+			events: calEvents.filter((e) => !keptIds.has(e.id)),
+			bedtime: base.bed
+		}).plan);
 		const made = await mirror.write((db) => {
 			const st = load(db, plan.day);
 			const version = (st.briefing?.version ?? 0) + 1;
@@ -35065,7 +35539,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		};
 		const events = calendar ? await calendar.events(...dayBounds()).catch(() => []) : [];
 		const p = b0.plan;
-		const mine = (e) => b0.status === "approved" && p.blocks.some((b) => e.title === b.title && localDay$1(e.start) === p.day && hmOf(e.start) === b.start);
+		const mine = (e) => p.blocks.some((b) => b.sync?.eventId === e.id) || b0.status === "approved" && p.blocks.some((b) => e.title === b.title && localDay$1(e.start) === p.day && hmOf(e.start) === b.start);
 		const r = shiftPlan(p, {
 			now: hmNow(now),
 			events: events.filter((e) => !mine(e)),
@@ -35078,13 +35552,24 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			plan: p
 		};
 		const done = [];
-		if (b0.status === "approved" && calendar?.move) {
+		if ((b0.status === "approved" || p.blocks.some((b) => b.sync?.eventId)) && calendar?.move) {
 			let moved = 0;
 			for (const m of r.moves) {
-				const e = events.find((x) => x.title === m.title && localDay$1(x.start) === p.day && hmOf(x.start) === m.from);
+				const mem = p.blocks.find((b) => b.title === m.title && b.start === m.from)?.sync;
+				const e = mem?.eventId && events.find((x) => x.id === mem.eventId) || events.find((x) => x.title === m.title && localDay$1(x.start) === p.day && hmOf(x.start) === m.from);
 				if (!e) continue;
 				const start = /* @__PURE__ */ new Date(`${p.day}T${m.to}:00`);
-				if (await calendar.move(e.calendarId, e.id, start.toISOString(), new Date(start.getTime() + m.minutes * 6e4).toISOString()).then(() => true, () => false)) moved++;
+				if (await calendar.move(e.calendarId, e.id, start.toISOString(), new Date(start.getTime() + m.minutes * 6e4).toISOString()).then(() => true, () => false)) {
+					moved++;
+					r.plan.blocks = r.plan.blocks.map((b) => b.title === m.title && b.start === m.to && b.sync ? {
+						...b,
+						sync: {
+							...b.sync,
+							start: m.to,
+							minutes: m.minutes
+						}
+					} : b);
+				}
 			}
 			done.push(moved ? `🗓 ${moved} block${moved === 1 ? "" : "s"} moved in your calendar` : "⚠️ Calendar: blocks not moved");
 		}
@@ -35113,6 +35598,91 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			return b ? lateBlocks(b.plan, hmNow(), sessionSpans(db)).length : 0;
 		});
 	}
+	/**
+	* PE8 "Re-plan from now": only the time that is left is packed again. Done blocks (worked
+	* on, or every task ticked) and pinned ones stay; blocks already in the calendar move there too.
+	*/
+	async function replanNow() {
+		const now = /* @__PURE__ */ new Date();
+		const cur = await mirror.read((db) => {
+			const today = services.services(db).wallet.today(now);
+			let bed = "23:30";
+			try {
+				bed = sleepWindow(db).bed;
+			} catch {
+				bed = "23:30";
+			}
+			return {
+				b: load(db, today).briefing,
+				sessions: sessionSpans(db),
+				bed
+			};
+		});
+		if (!cur.b) return {
+			ok: false,
+			done: ["No plan for today yet"]
+		};
+		const p = ensureIds(cur.b.plan);
+		const events = calendar ? await calendar.events(...dayBounds()).catch(() => []) : [];
+		const mineIds = new Set([...p.blocks.map((b) => b.sync?.eventId), p.training?.sync?.eventId].filter(Boolean));
+		const bedMin = toMin$2(cur.bed);
+		const endBy = fromMin(Math.min(bedMin < 720 ? 1380 : bedMin - 45, 1380));
+		const r = replanFromNow(p, {
+			now: hmNow(now),
+			events: events.filter((e) => !mineIds.has(e.id)),
+			sessions: cur.sessions,
+			endBy
+		});
+		let plan = r.plan;
+		const done = [];
+		if (calendar?.move) {
+			let moved = 0;
+			plan = {
+				...plan,
+				blocks: await Promise.all(plan.blocks.map(async (b) => {
+					const s = b.sync;
+					if (!s?.eventId || !s.calendarId || s.start === b.start && s.minutes === b.minutes) return b;
+					const at = /* @__PURE__ */ new Date(`${p.day}T${b.start}:00`);
+					const ok = await calendar.move(s.calendarId, s.eventId, at.toISOString(), new Date(at.getTime() + b.minutes * 6e4).toISOString()).then(() => true, () => false);
+					if (ok) moved++;
+					return ok ? {
+						...b,
+						sync: {
+							...s,
+							start: b.start,
+							minutes: b.minutes
+						}
+					} : b;
+				}))
+			};
+			if (calendar.remove) for (const x of plan.removed ?? []) {
+				if (!x.eventId || !x.calendarId || x.tasks?.length) continue;
+				if (await calendar.remove(x.calendarId, x.eventId).then(() => true, () => false)) plan = {
+					...plan,
+					removed: (plan.removed ?? []).filter((y) => y !== x)
+				};
+			}
+			if (moved) done.push(`🗓 ${moved} block${moved === 1 ? "" : "s"} moved in your calendar`);
+		}
+		plan = relinkAlso(plan);
+		await mirror.write((db) => {
+			const st = load(db, p.day);
+			if (st.briefing) save(db, {
+				...st,
+				briefing: {
+					...st.briefing,
+					plan,
+					version: (st.briefing.version ?? 0) + 1
+				}
+			});
+		});
+		done.unshift(`⏩ Re-planned from ${planStartAt(hmNow(now))}: ${r.moved} block${r.moved === 1 ? "" : "s"} moved${r.unplaced.length ? `, ${r.unplaced.length} back on today's list` : ""}`);
+		return {
+			ok: true,
+			done,
+			plan
+		};
+	}
 	/** Approved: blocks and training into the calendar, must-dos on Today (starred in Todoist). */
 	async function approve() {
 		const cur = await mirror.read((db) => load(db, services.services(db).wallet.today()).briefing);
@@ -35140,25 +35710,79 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		});
 		if (calendar) {
 			let made = 0;
-			const items = [...p.blocks.map((b) => ({
+			const items = [...p.blocks.map((b, i) => ({
+				b,
+				key: b.id ?? `#${i}`
+			})).filter((x) => !x.b.sync?.eventId).map(({ b, key }) => ({
+				key,
 				title: b.title,
 				start: b.start,
 				minutes: b.minutes,
 				tasks: b.tasks
-			})), ...p.training ? [{
+			})), ...p.training && !p.training.sync?.eventId ? [{
+				key: "train",
 				title: `💪 ${p.training.what}`,
 				start: p.training.time,
-				minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45
+				minutes: p.training.minutes ?? (Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45)
 			}] : []].filter((b) => (/* @__PURE__ */ new Date(`${p.day}T${b.start}:00`)).getTime() + b.minutes * 6e4 > Date.now());
+			const made_ = {};
 			for (const b of items) {
 				const start = /* @__PURE__ */ new Date(`${p.day}T${b.start}:00`);
-				if (await calendar.create({
+				const ev = await calendar.create({
 					title: b.title,
 					start: start.toISOString(),
 					end: new Date(start.getTime() + b.minutes * 6e4).toISOString(),
 					description: ["Planned with your coach in Life System", ...b.tasks?.length ? ["", ...b.tasks.map((t) => `- ${t}`)] : []].join("\n")
-				}).then(() => true).catch(() => false)) made++;
+				}).catch(() => null);
+				if (ev) {
+					made++;
+					if (ev.id) made_[b.key] = {
+						id: ev.id,
+						calendarId: ev.calendarId || "primary"
+					};
+				}
 			}
+			if (Object.keys(made_).length) await mirror.write((db) => {
+				const st = load(db, p.day);
+				if (!st.briefing) return;
+				const pl = st.briefing.plan;
+				const blocks = pl.blocks.map((b, i) => {
+					const m = made_[b.id ?? `#${i}`];
+					return m && !b.sync?.eventId ? {
+						...b,
+						sync: {
+							eventId: m.id,
+							calendarId: m.calendarId,
+							start: b.start,
+							minutes: b.minutes,
+							title: b.title,
+							...b.tasks?.length ? { names: b.tasks } : {}
+						}
+					} : b;
+				});
+				const t = pl.training;
+				const training = t && made_.train && !t.sync?.eventId ? {
+					...t,
+					sync: {
+						eventId: made_.train.id,
+						calendarId: made_.train.calendarId,
+						start: t.time,
+						minutes: t.minutes ?? (Number(/(\d+)\s*min/.exec(t.what)?.[1]) || 45),
+						title: t.what
+					}
+				} : t;
+				save(db, {
+					...st,
+					briefing: {
+						...st.briefing,
+						plan: {
+							...pl,
+							blocks,
+							training
+						}
+					}
+				});
+			});
 			if (items.length) done.push(made ? `🗓 ${made} block${made === 1 ? "" : "s"} in your calendar` : "⚠️ Calendar: blocks not added");
 		} else if (p.blocks.length) done.push("⚠️ Connect Google Calendar to get the blocks in your calendar");
 		if (p.mustdos.length) {
@@ -35878,6 +36502,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		setPrefs,
 		propose,
 		shift,
+		replanNow,
 		late,
 		settle,
 		approve,
@@ -40171,6 +40796,20 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				if (stale.length && local) local.chips = [...local.chips ?? [], `Break down "${stale[0].slice(0, 26)}"`].slice(0, 4);
 			} catch {}
 			trace.mark("plan");
+		}
+		if (!preset && !local && !media && !direct && plan && /\b(re-?plan|re-?pack|redo)\b.{0,30}\b(from now|the rest( of (the|my) day)?|what'?s left)\b/i.test(clean)) {
+			step("Re-planning the time that is left");
+			const r = await rhythm.replanNow().catch(() => null);
+			if (r?.ok && r.plan) {
+				local = {
+					reply: "Done: the rest of the day is packed again from now. Done and pinned blocks stayed where they were.",
+					actions: [],
+					remember: [],
+					show: ["plan"],
+					steps: r.done
+				};
+				trace.mark("replan");
+			}
 		}
 		if (!preset && !local && !media && !direct && route.intent === "plan" && plan?.status === "approved" && await rhythm.late().catch(() => 0) > 0) {
 			step("Moving the plan to start from now");

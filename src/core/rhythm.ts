@@ -17,6 +17,29 @@ export interface PlanBlock {
   kind?: 'goal' | 'focus' | 'quick'
   /** DP1: the tasks it covers (their exact Todoist titles). */
   tasks?: string[]
+  /** PE: a stable id for edits, undo and sync (core/planEdit ensureIds). */
+  id?: string
+  /** PE6: pinned: re-planning, shift and Regenerate never move it. */
+  locked?: boolean
+  /** PE5: this block is approved on its own (it syncs) while the rest stays a draft. */
+  ok?: boolean
+  /** PE3: tasks of this block ticked in the plan (their titles). */
+  done?: string[]
+  /** PE2/PE3: what Google Calendar and Todoist hold for it, as last synced (core/planSync). */
+  sync?: BlockSync
+}
+
+/** What the outside apps hold for a block, as last synced. */
+export interface BlockSync {
+  eventId?: string
+  calendarId?: string
+  start: string
+  minutes: number
+  title: string
+  /** Its Todoist tasks and the time each was given. */
+  tasks?: { id: string; title: string; at: string; minutes: number }[]
+  /** The block's task list as written into the event's notes. */
+  names?: string[]
 }
 
 /** DP1: one of today's other tasks (not a must-do), for the "Also today" list. */
@@ -47,8 +70,12 @@ export interface DayProposal {
   headline: string
   mustdos: string[]
   blocks: PlanBlock[]
-  training: { time: string; what: string } | null
+  training: { time: string; what: string; minutes?: number; locked?: boolean; ok?: boolean; sync?: BlockSync } | null
   waterMl: number
+  /** PE2: blocks deleted from an approved plan whose calendar event / task times still need clearing. */
+  removed?: { id: string; eventId?: string; calendarId?: string; tasks?: { id: string; title: string }[] }[]
+  /** PE3: Todoist tasks the plan has closed (ids), so a tick is sent once and an untick reopens it. */
+  closed?: string[]
   /** DP1: every other task of the day, most important first. */
   also?: AlsoItem[]
   /** DP1: tasks that don't fit today, each with its reason. */

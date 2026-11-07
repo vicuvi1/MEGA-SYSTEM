@@ -382,9 +382,13 @@ const gcal = (() => {
     ev(1, '17:00', '17:30', 'Sport (20 min)', '#fbbf24'),
     { ...ev(1, '20:00', '21:00', 'Weekly review', '#a78bfa'), recurringEventId: 'series1' }
   ]
+  // Every change asked of the calendar, in order (the smoke test reads it with op 'log').
+  const log = []
   return (q, r) => {
     const b = q.body || {}
     const send = (j) => (r.setHeader('Content-Type', 'application/json'), r.end(JSON.stringify(j)))
+    if (['create', 'move', 'update', 'remove'].includes(b.op)) log.push({ ...b, at: Date.now() })
+    if (b.op === 'log') return send(log)
     if (b.op === 'status') return send({ configured: true, connected: true, calendars: [{ id: 'primary', name: 'Test calendar', color: '#7cc4ff', canWrite: true, on: true }] })
     if (b.op === 'events') return send({ events: events.filter((e) => e.end > b.from && e.start < b.to) })
     if (b.op === 'create') {

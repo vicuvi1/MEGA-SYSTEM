@@ -53,11 +53,13 @@ import { workToday } from '@core/lifeFit'
 import { planFromPicks, planWeek, toggleChip, top3Chips, top3Keyboard, top3Text } from '@core/weekPlan'
 
 const TOP3_ASK = 'week_top3_ask'
-import { readLifeFit } from './lifeFitStore'
+import { readLifeFit, sleepWindow } from './lifeFitStore'
 import { learnedEstimate, withRest } from '@core/benLearn'
 import { prefDuration } from '@core/benFacts'
 import { promisesFor, type PromiseReminder } from '@core/benPromise'
 import { learnedRhythm, loadKnow } from './benMind'
+import { ensureIds, keptAsEvents, mergeKept, replanFromNow } from '@core/planEdit'
+import { fixPlan } from '@core/planCheck'
 
 /** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
 const localHm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
@@ -307,7 +309,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       })
       if (edited) return edited
     }
-    const [events, tasks, upcoming] = await Promise.all([
+    const [calEvents, tasks, upcoming] = await Promise.all([
       calendar ? calendar.events(...dayBounds()).catch(() => []) : Promise.resolve([]),
       todoist ? todoist.today().catch(() => [] as TodoTask[]) : Promise.resolve([] as TodoTask[]),
       todoist?.upcoming ? todoist.upcoming(7).catch(() => null) : Promise.resolve(null)
@@ -361,9 +363,20 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       }
       const know = loadKnow(db)
       const promised = promisesFor(readJson(db, REMINDERS, []) as PromiseReminder[], today)
+      let bed = '23:30'
+      try {
+        bed = sleepWindow(db).bed
+      } catch {
+        bed = '23:30'
+      }
       // ME3: the hour after a long shift is quick-tasks-only too.
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, know, promised }
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, know, promised, bed }
     })
+    // PE6: pinned blocks (and approved ones already in the calendar) stay where they are: planned around like events.
+    const prevPlan = base.st.briefing?.plan.day === base.today ? base.st.briefing.plan : null
+    const kept = keptAsEvents(prevPlan)
+    const keptIds = new Set(prevPlan?.blocks.filter((b) => b.sync?.eventId).map((b) => b.sync!.eventId) ?? [])
+    const events = [...calEvents.filter((e) => !keptIds.has(e.id)), ...kept]
     const fixedCount = events.filter((e) => !e.allDay).length
     step(`Packing ${tasks.length} task${tasks.length === 1 ? '' : 's'} around ${fixedCount} event${fixedCount === 1 ? '' : 's'}`)
     const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : ''
@@ -498,7 +511,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     }
     // A plan always starts from now: anything the model (or a redo) put in the past moves to the time left.
     plan = shiftPlan(plan, { now: hmNow(new Date()), events, asked: base.asked }).plan
-    plan = relinkAlso(plan)
+    plan = mergeKept(relinkAlso(plan), prevPlan)
+    // QA1: Ben checks his own plan before it is saved (overlaps, breaks, the wind-down, past blocks).
+    plan = relinkAlso(fixPlan(plan, { now: hmNow(new Date()), events: calEvents.filter((e) => !keptIds.has(e.id)), bedtime: base.bed }).plan)
     const made = await mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1
@@ -544,21 +559,26 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const events = calendar ? await calendar.events(...dayBounds()).catch(() => [] as CalEvent[]) : []
     const p = b0.plan
     // An approved plan's own blocks are in the calendar: they are not fixed events for the shift.
-    const mine = (e: CalEvent) => b0.status === 'approved' && p.blocks.some((b) => e.title === b.title && localDay(e.start) === p.day && hmOf(e.start) === b.start)
+    const mine = (e: CalEvent) => p.blocks.some((b) => b.sync?.eventId === e.id) || (b0.status === 'approved' && p.blocks.some((b) => e.title === b.title && localDay(e.start) === p.day && hmOf(e.start) === b.start))
     const r = shiftPlan(p, { now: hmNow(now), events: events.filter((e) => !mine(e)), sessions: cur.sessions, asked: cur.asked })
     if (!r.moves.length) return { ok: true, done: ['Nothing to shift: the plan is on time'], plan: p }
     const done: string[] = []
-    if (b0.status === 'approved' && calendar?.move) {
+    if ((b0.status === 'approved' || p.blocks.some((b) => b.sync?.eventId)) && calendar?.move) {
       let moved = 0
       for (const m of r.moves) {
-        const e = events.find((x) => x.title === m.title && localDay(x.start) === p.day && hmOf(x.start) === m.from)
+        const mem = p.blocks.find((b) => b.title === m.title && b.start === m.from)?.sync
+        const e = (mem?.eventId && events.find((x) => x.id === mem.eventId)) || events.find((x) => x.title === m.title && localDay(x.start) === p.day && hmOf(x.start) === m.from)
         if (!e) continue
         const start = new Date(`${p.day}T${m.to}:00`)
         const ok = await calendar.move(e.calendarId, e.id, start.toISOString(), new Date(start.getTime() + m.minutes * 60000).toISOString()).then(
           () => true,
           () => false
         )
-        if (ok) moved++
+        if (ok) {
+          moved++
+          // The block's calendar memory follows, so the plan editor doesn't move it a second time.
+          r.plan.blocks = r.plan.blocks.map((b) => (b.title === m.title && b.start === m.to && b.sync ? { ...b, sync: { ...b.sync, start: m.to, minutes: m.minutes } } : b))
+        }
       }
       done.push(moved ? `🗓 ${moved} block${moved === 1 ? '' : 's'} moved in your calendar` : '⚠️ Calendar: blocks not moved')
     }
@@ -578,6 +598,59 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
+  /**
+   * PE8 "Re-plan from now": only the time that is left is packed again. Done blocks (worked
+   * on, or every task ticked) and pinned ones stay; blocks already in the calendar move there too.
+   */
+  async function replanNow(): Promise<{ ok: boolean; done: string[]; plan?: DayProposal }> {
+    const now = new Date()
+    const cur = await mirror.read((db) => {
+      const today = services.services(db).wallet.today(now)
+      let bed = '23:30'
+      try {
+        bed = sleepWindow(db).bed
+      } catch {
+        bed = '23:30'
+      }
+      return { b: load(db, today).briefing, sessions: sessionSpans(db), bed }
+    })
+    if (!cur.b) return { ok: false, done: ['No plan for today yet'] }
+    const p = ensureIds(cur.b.plan)
+    const events = calendar ? await calendar.events(...dayBounds()).catch(() => [] as CalEvent[]) : []
+    const mineIds = new Set([...p.blocks.map((b) => b.sync?.eventId), p.training?.sync?.eventId].filter(Boolean))
+    const bedMin = toMin(cur.bed)
+    const endBy = fromMin(Math.min(bedMin < 12 * 60 ? 23 * 60 : bedMin - 45, 23 * 60))
+    const r = replanFromNow(p, { now: hmNow(now), events: events.filter((e) => !mineIds.has(e.id)), sessions: cur.sessions, endBy })
+    let plan = r.plan
+    const done: string[] = []
+    // The calendar follows: moved blocks move, blocks that left the plan leave the calendar.
+    if (calendar?.move) {
+      let moved = 0
+      plan = { ...plan, blocks: await Promise.all(plan.blocks.map(async (b) => {
+        const s = b.sync
+        if (!s?.eventId || !s.calendarId || (s.start === b.start && s.minutes === b.minutes)) return b
+        const at = new Date(`${p.day}T${b.start}:00`)
+        const ok = await calendar.move!(s.calendarId, s.eventId, at.toISOString(), new Date(at.getTime() + b.minutes * 60000).toISOString()).then(() => true, () => false)
+        if (ok) moved++
+        return ok ? { ...b, sync: { ...s, start: b.start, minutes: b.minutes } } : b
+      })) }
+      if (calendar.remove)
+        for (const x of plan.removed ?? []) {
+          if (!x.eventId || !x.calendarId || x.tasks?.length) continue
+          const ok = await calendar.remove(x.calendarId, x.eventId).then(() => true, () => false)
+          if (ok) plan = { ...plan, removed: (plan.removed ?? []).filter((y) => y !== x) }
+        }
+      if (moved) done.push(`🗓 ${moved} block${moved === 1 ? '' : 's'} moved in your calendar`)
+    }
+    plan = relinkAlso(plan)
+    await mirror.write((db) => {
+      const st = load(db, p.day)
+      if (st.briefing) save(db, { ...st, briefing: { ...st.briefing, plan, version: (st.briefing.version ?? 0) + 1 } })
+    })
+    done.unshift(`⏩ Re-planned from ${planStartAt(hmNow(now))}: ${r.moved} block${r.moved === 1 ? '' : 's'} moved${r.unplaced.length ? `, ${r.unplaced.length} back on today's list` : ''}`)
+    return { ok: true, done, plan }
+  }
+
   /** Approved: blocks and training into the calendar, must-dos on Today (starred in Todoist). */
   async function approve(): Promise<{ ok: boolean; done: string[]; plan?: DayProposal }> {
     const cur = await mirror.read((db) => load(db, services.services(db).wallet.today()).briefing)
@@ -594,15 +667,33 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     if (calendar) {
       let made = 0
       // Blocks that already ended (approved late) don't go into the calendar.
-      const items: { title: string; start: string; minutes: number; tasks?: string[] }[] = [...p.blocks.map((b) => ({ title: b.title, start: b.start, minutes: b.minutes, tasks: b.tasks })), ...(p.training ? [{ title: `💪 ${p.training.what}`, start: p.training.time, minutes: Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45 }] : [])].filter((b) => new Date(`${p.day}T${b.start}:00`).getTime() + b.minutes * 60000 > Date.now())
+      // PE5: blocks approved on their own are already in the calendar (they have an event): not made twice.
+      const items: { key: string; title: string; start: string; minutes: number; tasks?: string[] }[] = [...p.blocks.map((b, i) => ({ b, key: b.id ?? `#${i}` })).filter((x) => !x.b.sync?.eventId).map(({ b, key }) => ({ key, title: b.title, start: b.start, minutes: b.minutes, tasks: b.tasks })), ...(p.training && !p.training.sync?.eventId ? [{ key: 'train', title: `💪 ${p.training.what}`, start: p.training.time, minutes: p.training.minutes ?? (Number(/(\d+)\s*min/.exec(p.training.what)?.[1]) || 45) }] : [])].filter((b) => new Date(`${p.day}T${b.start}:00`).getTime() + b.minutes * 60000 > Date.now())
+      const made_: Record<string, { id: string; calendarId: string }> = {}
       for (const b of items) {
         const start = new Date(`${p.day}T${b.start}:00`)
-        const ok = await calendar
+        const ev = await calendar
           .create({ title: b.title, start: start.toISOString(), end: new Date(start.getTime() + b.minutes * 60000).toISOString(), description: ['Planned with your coach in Life System', ...(b.tasks?.length ? ['', ...b.tasks.map((t) => `- ${t}`)] : [])].join('\n') })
-          .then(() => true)
-          .catch(() => false)
-        if (ok) made++
+          .catch(() => null)
+        if (ev) {
+          made++
+          if (ev.id) made_[b.key] = { id: ev.id, calendarId: ev.calendarId || 'primary' }
+        }
       }
+      // PE2: each block remembers its event, so editing the plan later moves the real event.
+      if (Object.keys(made_).length)
+        await mirror.write((db) => {
+          const st = load(db, p.day)
+          if (!st.briefing) return
+          const pl = st.briefing.plan
+          const blocks = pl.blocks.map((b, i) => {
+            const m = made_[b.id ?? `#${i}`]
+            return m && !b.sync?.eventId ? { ...b, sync: { eventId: m.id, calendarId: m.calendarId, start: b.start, minutes: b.minutes, title: b.title, ...(b.tasks?.length ? { names: b.tasks } : {}) } } : b
+          })
+          const t = pl.training
+          const training = t && made_.train && !t.sync?.eventId ? { ...t, sync: { eventId: made_.train.id, calendarId: made_.train.calendarId, start: t.time, minutes: t.minutes ?? (Number(/(\d+)\s*min/.exec(t.what)?.[1]) || 45), title: t.what } } : t
+          save(db, { ...st, briefing: { ...st.briefing, plan: { ...pl, blocks, training } } })
+        })
       if (items.length) done.push(made ? `🗓 ${made} block${made === 1 ? '' : 's'} in your calendar` : '⚠️ Calendar: blocks not added')
     } else if (p.blocks.length) done.push('⚠️ Connect Google Calendar to get the blocks in your calendar')
     if (p.mustdos.length) {
@@ -1187,7 +1278,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, shift, late, settle, approve, dayResult, evening, setTop3, weekly, applyWeekly, top3Ask, top3Tap, top3Save, writeStory, checkoutStart, checkoutMark, planTomorrow, midweek, bookingPreview, bookWeek, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, shift, replanNow, late, settle, approve, dayResult, evening, setTop3, weekly, applyWeekly, top3Ask, top3Tap, top3Save, writeStory, checkoutStart, checkoutMark, planTomorrow, midweek, bookingPreview, bookWeek, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

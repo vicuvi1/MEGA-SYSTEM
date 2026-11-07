@@ -1,0 +1,87 @@
+/* PE1: the editable day plan (Coach plan card, Today → Plan). Dark and light from the theme tokens. */
+.pe { position: relative; display: grid; gap: 8px; margin: 6px 0 4px; user-select: none; -webkit-user-select: none; }
+.pe-bar, .pe-approve, .pe-hint { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pe-space { flex: 1; }
+.pe-btn { border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: var(--t-xs); font-weight: 600; padding: 5px 10px; border-radius: 999px; cursor: pointer; transition: background 0.15s, transform 0.15s; }
+.pe-btn:hover:not(:disabled) { background: rgb(var(--ink) / 0.08); }
+.pe-btn:active:not(:disabled) { transform: scale(0.97); }
+.pe-btn:disabled { opacity: 0.45; cursor: default; }
+.pe-btn.ghost { margin-left: auto; }
+.pe-sync { font-size: var(--t-xs); font-weight: 600; padding: 4px 9px; border-radius: 999px; background: rgb(var(--ink) / 0.05); color: var(--muted); }
+.pe-sync.ok { color: var(--green); }
+.pe-sync.wait { color: var(--amber); }
+.pe-sync.err { background: color-mix(in srgb, var(--red) 14%, transparent); }
+.pe-sync button, .pe-st button { all: unset; cursor: pointer; color: var(--red); font-weight: 700; }
+.pe-warn { border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent); background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--text); font: inherit; font-size: var(--t-xs); font-weight: 600; padding: 4px 10px; border-radius: 999px; cursor: pointer; animation: pe-pop 0.3s var(--ease-out, ease-out) both; }
+.pe-approve { font-size: var(--t-xs); color: var(--muted); padding: 4px 8px; border-radius: 12px; background: rgb(var(--ink) / 0.03); }
+.pe-approve input[type='time'] { font: inherit; font-size: var(--t-xs); color: var(--text); background: rgb(var(--ink) / 0.05); border: 1px solid var(--border); border-radius: 8px; padding: 3px 6px; color-scheme: light dark; }
+.pe-scroll { max-height: min(46vh, 520px); overflow-y: auto; overscroll-behavior: contain; border-radius: 12px; background: rgb(var(--ink) / 0.02); }
+.pe-col { position: relative; list-style: none; margin: 0; padding: 0; min-height: 120px; }
+.pe-hour { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed rgb(var(--ink) / 0.08); pointer-events: none; }
+.pe-hour small { position: absolute; left: 8px; top: -8px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; background: var(--surface, var(--panel)); padding: 0 3px; border-radius: 4px; }
+.pe-now { position: absolute; left: 48px; right: 4px; height: 2px; background: var(--red); border-radius: 2px; pointer-events: none; z-index: 3; box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 18%, transparent); }
+.pe-now::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+.pe-ev { position: absolute; left: 52px; right: 4px; border-radius: 10px; background: repeating-linear-gradient(135deg, rgb(var(--ink) / 0.05) 0 6px, rgb(var(--ink) / 0.025) 6px 12px); border: 1px dashed rgb(var(--ink) / 0.14); pointer-events: none; overflow: hidden; }
+.pe-ev small { display: block; padding: 3px 8px; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.pe-add { position: absolute; left: 56px; border: 1px dashed rgb(var(--ink) / 0.18); background: transparent; color: var(--muted); font: inherit; font-size: 11px; padding: 2px 9px; border-radius: 999px; cursor: pointer; opacity: 0.55; transition: opacity 0.15s, background 0.15s, color 0.15s; z-index: 1; }
+.pe-add:hover, .pe-add:focus-visible { opacity: 1; background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
+@media (hover: none) { .pe-add { opacity: 0.9; } }
+
+.pe-block { --c: #7cc4ff; position: absolute; box-sizing: border-box; display: flex; flex-direction: column; gap: 2px; padding: 5px 8px 8px 10px; border-radius: 11px; background: color-mix(in srgb, var(--c) 17%, var(--surface, #15161a)); border: 1px solid color-mix(in srgb, var(--c) 40%, transparent); border-left: 4px solid var(--c); color: var(--text); cursor: grab; touch-action: none; overflow: hidden; z-index: 2; outline: none;
+  top: 0; transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s, scale 0.18s; animation: pe-fade 0.3s ease-out both; }
+.pe-block.tone-build { --c: #a78bfa; }
+.pe-block.tone-study { --c: #7cc4ff; }
+.pe-block.tone-train { --c: #fb923c; }
+.pe-block.tone-read { --c: #5eead4; }
+.pe-block.tone-life { --c: #c3e86b; }
+.pe-block.draft { border-style: dashed; border-left-style: solid; background: color-mix(in srgb, var(--c) 10%, var(--surface, #15161a)); }
+.pe-block.past { opacity: 0.62; }
+.pe-block.locked { cursor: default; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 30%, transparent); }
+.pe-block:focus-visible, .pe-block.picked { box-shadow: 0 0 0 2px var(--accent), 0 8px 22px -14px rgb(0 0 0 / 0.6); }
+.pe-block.dragging { transition: none; cursor: grabbing; z-index: 6; scale: 1.015; box-shadow: 0 16px 34px -14px rgb(0 0 0 / 0.55), 0 0 0 2px var(--c); }
+.pe-block.drop { box-shadow: 0 0 0 2px var(--accent), 0 0 0 6px var(--accent-soft); }
+.pe-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.pe-ok { flex: none; width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+.pe-name { flex: 0 1 auto; min-width: 0; font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-name-in { flex: 1; min-width: 60px; font: inherit; font-size: var(--t-sm); font-weight: 700; color: var(--text); background: rgb(var(--ink) / 0.08); border: 1px solid var(--accent); border-radius: 6px; padding: 1px 6px; user-select: text; }
+.pe-time { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pe-st { flex: none; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgb(var(--ink) / 0.07); }
+.pe-st.ok { color: var(--green); }
+.pe-st.wait { color: var(--amber); animation: pe-pulse 1.2s ease-in-out infinite; }
+.pe-st.err { background: color-mix(in srgb, var(--red) 16%, transparent); }
+.pe-pin, .pe-x { flex: none; margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 12px; line-height: 1; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; opacity: 0.4; filter: grayscale(1); transition: opacity 0.15s, background 0.15s; }
+.pe-x { margin-left: 0; }
+.pe-pin.on { opacity: 1; filter: none; }
+.pe-block:hover .pe-pin, .pe-block:hover .pe-x, .pe-block:focus-within .pe-pin, .pe-block:focus-within .pe-x { opacity: 0.9; }
+.pe-pin:hover, .pe-x:hover { background: rgb(var(--ink) / 0.1); }
+@media (hover: none) { .pe-pin, .pe-x { opacity: 0.8; } }
+.pe-resize { position: absolute; left: 0; right: 0; bottom: 0; height: 9px; cursor: ns-resize; touch-action: none; }
+.pe-resize::after { content: ''; position: absolute; left: 50%; bottom: 3px; width: 26px; height: 3px; margin-left: -13px; border-radius: 2px; background: color-mix(in srgb, var(--c) 70%, transparent); opacity: 0; transition: opacity 0.15s; }
+.pe-block:hover .pe-resize::after, .pe-block.dragging .pe-resize::after { opacity: 1; }
+@media (hover: none) { .pe-resize { height: 16px; } .pe-resize::after { opacity: 0.8; } }
+.pe-tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; min-width: 0; }
+.pe-task { display: flex; align-items: center; gap: 6px; font-size: 11.5px; min-height: 19px; padding: 0 2px; border-radius: 6px; cursor: grab; touch-action: none; }
+.pe-task:hover { background: rgb(var(--ink) / 0.06); }
+.pe-task span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-task.done span { text-decoration: line-through; color: var(--muted); }
+.pe-tick { flex: none; width: 14px; height: 14px; padding: 0; border-radius: 4px; border: 1.5px solid rgb(var(--ink) / 0.35); background: transparent; color: var(--accent-ink, #000); font-size: 10px; line-height: 1; cursor: pointer; }
+.pe-task.done .pe-tick { background: var(--accent); border-color: var(--accent); }
+.pe-grip { flex: none; font-style: normal; color: var(--muted); opacity: 0.5; font-size: 10px; letter-spacing: -2px; }
+.pe-more button { all: unset; cursor: pointer; font-size: 11px; color: var(--muted); }
+.pe-tray { padding: 8px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.04); display: grid; gap: 4px; animation: pe-in 0.25s ease-out both; }
+.pe-tray > small { color: var(--muted); font-size: 11px; }
+.pe-tray .pe-task { font-size: var(--t-xs); min-height: 24px; }
+.pe-hint small { color: var(--muted); font-size: 11px; }
+.pe-ghost { position: fixed; z-index: 1000; pointer-events: none; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; background: var(--accent); color: var(--accent-ink, #000); box-shadow: 0 10px 24px -10px rgb(0 0 0 / 0.5); white-space: nowrap; }
+.pe.task-drag, .pe.task-drag * { cursor: grabbing !important; }
+
+:root[data-theme='light'] .pe-block { background: color-mix(in srgb, var(--c) 16%, #fff); border-color: color-mix(in srgb, var(--c) 55%, transparent); }
+:root[data-theme='light'] .pe-block.draft { background: color-mix(in srgb, var(--c) 9%, #fff); }
+:root[data-theme='light'] .pe-block.tone-life { --c: #7fa316; }
+:root[data-theme='light'] .pe-block.tone-read { --c: #0f9d8a; }
+
+@keyframes pe-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes pe-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pe-pop { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes pe-pulse { 50% { opacity: 0.5; } }
+@media (prefers-reduced-motion: reduce) { .pe-block, .pe-warn, .pe-tray { transition: none; animation: none; } .pe-st.wait { animation: none; } }

@@ -51,7 +51,8 @@ export function shiftPlan(plan: DayProposal, o: { now: string; events: CalEvent[
   const keep: PlanBlock[] = []
   const late: PlanBlock[] = []
   for (const b of plan.blocks) {
-    if (toMin(b.start) >= s0 || blockStarted(b, plan.day, sessions)) keep.push(b)
+    // A pinned block (PE6) never moves.
+    if (toMin(b.start) >= s0 || b.locked || blockStarted(b, plan.day, sessions)) keep.push(b)
     else late.push(b)
   }
   if (!late.length) return { plan, moves: [], unplaced: [] }
@@ -96,7 +97,7 @@ export function shiftPlan(plan: DayProposal, o: { now: string; events: CalEvent[
   }
   // Training that was planned for earlier: the first free 45 minutes from 17:00 (or from now).
   let training = plan.training
-  if (training && toMin(training.time) < s0) {
+  if (training && toMin(training.time) < s0 && !training.locked) {
     const len = Number(/(\d+)\s*min/.exec(training.what)?.[1]) || 45
     const from = Math.max(s0, toMin('17:00'))
     const w = wins.find((x) => x.e - Math.max(x.s, from) >= len) ?? wins.find((x) => x.e - x.s >= len)
