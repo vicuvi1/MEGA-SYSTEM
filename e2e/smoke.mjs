@@ -632,13 +632,41 @@ try {
     // Coach UI v4: the start screen (greeting, numbers, four big asks), Ben beside the box, "Ben will…".
     await pg.waitForSelector('.ch-hero .ch-title', { timeout: 5000 })
     if ((await pg.$$('.ch-hero .ch-ask')).length !== 4) throw new Error('the start screen needs four big suggestions')
-    if (!(await pg.$('.cf-compose-row .bl .ba-face'))) throw new Error("no live Ben beside the message box")
+    // One live Ben on the page: the header's. Nothing beside the message box.
+    if (await pg.$('.cf-compose-row .bl, .cf-compose-row .ba')) throw new Error('a second Ben sits beside the message box')
     await pg.fill('.cf-input textarea', 'water 500')
     await pg.waitForFunction(() => /Log 500 ml of water/.test(document.querySelector('.cf-will')?.textContent ?? ''), null, { timeout: 3000 })
     await pg.waitForSelector('.ch-hero', { state: 'detached', timeout: 3000 })
     await pg.fill('.cf-input textarea', '/wa')
     if (!(await pg.$('.cf-slash'))) throw new Error('no / shortcuts')
     await pg.fill('.cf-input textarea', '')
+    // Exactly one animated Ben, and the chip bar sits above the box, flush with its left edge,
+    // never on top of it (1280×720 is a 1920×1080 screen at 150%; and 1920 wide).
+    const coachLayout = () =>
+      pg.evaluate(() => {
+        const roots = new Set()
+        for (const a of document.getAnimations()) {
+          if (a.playState !== 'running') continue
+          let av = a.effect?.target?.closest?.('.ba, .bl')
+          while (av?.parentElement?.closest('.ba, .bl')) av = av.parentElement.closest('.ba, .bl')
+          if (av) roots.add(av)
+        }
+        const rail = document.querySelector('.cf-rail')?.getBoundingClientRect()
+        const first = document.querySelector('.cf-rail > *')?.getBoundingClientRect()
+        const box = document.querySelector('.cf-composer')?.getBoundingClientRect()
+        return { animated: roots.size, rail: rail && { top: rail.top, bottom: rail.bottom, left: rail.left }, first: first && { left: first.left, bottom: first.bottom }, box: box && { top: box.top, left: box.left } }
+      })
+    for (const [w, h] of [[1280, 720], [1920, 1080], [1440, 900]]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.waitForSelector('.cf-rail > *', { timeout: 5000 })
+      await pg.waitForTimeout(450)
+      const l = await coachLayout()
+      if (l.animated !== 1) throw new Error(`${l.animated} animated Ben avatars at ${w}×${h} (want exactly 1)`)
+      if (!l.rail || !l.box || !l.first) throw new Error(`no chip bar or message box at ${w}×${h}`)
+      if (l.rail.bottom > l.box.top + 0.5 || l.first.bottom > l.box.top + 0.5) throw new Error(`the chip bar overlaps the message box at ${w}×${h} (bar ends ${Math.round(l.rail.bottom)}, box starts ${Math.round(l.box.top)})`)
+      if (Math.abs(l.first.left - l.box.left) > 2) throw new Error(`the chip bar is not aligned with the box at ${w}×${h} (chip ${Math.round(l.first.left)}, box ${Math.round(l.box.left)})`)
+      if (process.env.COACH_SHOTS) await pg.screenshot({ path: `${process.env.COACH_SHOTS}/coach-${w}.png` })
+    }
     // Coach UI v3: Ben's face once per group, results with Undo, the plan card, ↑ edits.
     await pg.waitForSelector('.cf-plan.live .pe-block', { timeout: 10000 })
     // Coach fix: last night's plan card is folded as expired; only today's card is live, with the one Approve.

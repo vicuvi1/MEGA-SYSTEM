@@ -52,7 +52,7 @@ describe('Ben self-review: a day of 10 messages', () => {
     }
 
     const t1 = await say(8, 30, 'plan my day')
-    expect(t1.reply).toMatch(/^Here's today's plan, starting \d\d:\d\d: \d+ blocks?/)
+    expect(t1.reply).toMatch(/^Here's today's plan, starting at \d\d:\d\d\.\nIt has \d+ sessions?/)
     expect(t1.made).toEqual([])
     // He taps ✅ Approve on the card (the same call the app makes).
     at(8, 31)

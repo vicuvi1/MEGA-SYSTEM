@@ -84,7 +84,7 @@
     "SMOKE_ONLY=\"Coach\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "2026-11-07: replies are grounded (benGround.ts); what now / starting now / finished / coffee answered in code; one plan summary; golden tests in src/server/benCoachBugs.test.ts and benSelfReview.test.ts"
+   "notes": "2026-11-07: replies are grounded (benGround.ts); what now / starting now / finished / coffee answered in code; one plan summary; golden tests in src/server/benCoachBugs.test.ts and benSelfReview.test.ts. v1.4.1379 fix: plain, easy-to-read replies (benPlain.ts, benReadable.test.ts), \"how is my day going?\" answered in code at once, one live Ben avatar and the chip bar aligned above the box (smoke checks at 1280x720 and 1920x1080)"
   },
   {
    "id": "F007",

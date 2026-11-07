@@ -1,4 +1,5 @@
 import { calendarDay } from './dates'
+import { asksDaySoFar, atIn, dur } from './benPlain'
 // Ben answers without the AI when he can (pure, tested):
 // - B3: common short questions ("what now?", "water?", "my streak?", "spent
 //   this week?", "focus this month?") come from your own data, instantly;
@@ -73,7 +74,7 @@ export function preLookups(text: string, today: string): string[] {
   return topic && r ? [`${topic} ${r.from} ${r.to}`] : []
 }
 
-export type Quick = { kind: 'now' } | { kind: 'water' } | { kind: 'streak' } | { kind: 'wrong' } | { kind: 'lookup'; need: string; label: string; topic: Topic }
+export type Quick = { kind: 'now' } | { kind: 'day' } | { kind: 'water' } | { kind: 'streak' } | { kind: 'wrong' } | { kind: 'lookup'; need: string; label: string; topic: Topic }
 
 /**
  * B3: a short, plain question Ben can answer from the data. Anything with a
@@ -87,6 +88,8 @@ export function quickKind(text: string, today: string): Quick | null {
   // "What should I do now?" is answered from the data ("Do this now"): checked before the
   // words below ("should") send it to the thinking model (that took ~17 s).
   const q0 = t.replace(/[?!.…]+$/g, '').trim()
+  // "How is my day going?": a summary from the numbers, in code (it waited ~20 s on the model).
+  if (asksDaySoFar(t)) return { kind: 'day' }
   if (/^(ok |so |and )?(what now|now what|what('s| is) next|next|what should i do( now| next)?|what do i do( now| next)?|ce fac( acum)?|ce urmeaza|что делать( сейчас)?)$/.test(q0)) return { kind: 'now' }
   // "What should I focus on right now?", "what should I be doing now?": the same, from the data
   // (the model once answered it with a made-up "meeting" at 19:50).
@@ -186,15 +189,21 @@ export function biggestLeak(doing: string | null): { kind: string; text: string;
   return list.filter((x): x is NonNullable<typeof x> => !!x && ['video', 'gaming', 'social'].includes(x.kind) && x.min >= 15).sort((a, b) => b.min - a.min)[0] ?? null
 }
 
-/** SI23: numbers first, then the one thing to fix, then one push (a button). */
+/** SI23: the one thing to fix first, then the numbers (one per line), then one step with a button. */
 export function wrongReply(w: NonNullable<QuickData['wrong']>): QuickReply {
-  const nums = [`⏱ focus ${mm(w.focusMin)} of ${mm(w.focusGoal)}`, `✅ must-dos ${w.mustDone}/${w.mustTotal}`, ...(w.doing ? [`🖥 ${w.doing}`] : [])].join(' · ')
   const leak = biggestLeak(w.doing)
   const behind = w.focusMin < w.focusGoal * 0.5
-  const what = leak ? `Biggest leak: ${leak.text} of ${leak.kind}. That's your focus gap right there.` : behind ? `You're under half your focus goal.` : w.mustDone < w.mustTotal ? 'Focus is fine, but must-dos are open.' : "Honestly? Not much. Don't get cocky."
+  const what = leak
+    ? `The main problem today is ${leak.kind}: ${dur(leak.min)} of it. That is where your focus time went.`
+    : behind
+      ? 'The main problem today: you are under half of your focus goal.'
+      : w.mustDone < w.mustTotal
+        ? 'Your focus is fine. The problem is the must-dos that are still open.'
+        : 'Honestly, not much. Keep going like this.'
+  const nums = [`• Focus: ${dur(w.focusMin)} of your ${dur(w.focusGoal)} goal.`, `• Must-dos: ${w.mustDone} of ${w.mustTotal} done.`, ...(w.doing ? [`• On your PC: ${w.doing}.`] : [])]
   const target = w.nextMust ?? null
   return {
-    reply: `${nums}\n${what}${target ? ` One push: 25 min on “${target}”, now.` : ' One push: 25 minutes, now.'}`,
+    reply: [what, ...nums, target ? `One step now: 25 min on “${target}”.` : 'One step now: 25 minutes of focus.'].join('\n'),
     chips: ['What now?'],
     buttons: [{ label: `▶ 25 min ${target ?? 'Focus'}`.slice(0, 32), do: `focus:25:${target ?? 'Focus'}` }]
   }
@@ -212,11 +221,14 @@ export function quickReply(q: Quick, d: QuickData, now = new Date()): QuickReply
     const m = d.move
     if (!m) return null
     const sl = d.slots
-    const nextLine = sl?.next ? ` Next: ${sl.next.title} at ${sl.next.start}.` : sl && sl.calendarKnown ? ' Nothing else on your calendar or plan today.' : ''
+    // What really comes next, on its own line: "Next: Gym at 19:00 (in 49 min)."
+    const nextLine = sl?.next ? `\nNext: ${sl.next.title} ${atIn(sl.next.start, now)}.` : sl && sl.calendarKnown ? '\nNothing else is on your calendar or plan today.' : ''
     // A running timer comes first: its real end time, then the real next item.
     if (m.kind === 'running') {
       const ends = m.endsAt ? hmOf(new Date(m.endsAt)) : null
-      return { reply: `🎯 ${m.title}. ${m.sub.replace(/\.$/, '')}${ends && /min left/.test(m.sub) ? ` (until ${ends})` : ''}.${nextLine}`, chips: ['Give me 10 min', 'Something else?'], buttons: [] }
+      const left = /(\d+) min left/.exec(m.sub)?.[1]
+      const end = left ? `Your timer ends${ends ? ` at ${ends}` : ''} (${left} min left).` : 'Your time is up: stop the timer and log it.'
+      return { reply: `🎯 ${m.title} for now.\n${end}${nextLine}`, chips: ['Give me 10 min', 'Something else?'], buttons: [] }
     }
     // In a plan block (or a calendar event) now: that is the answer, with its real times.
     const cur = sl?.current
@@ -224,13 +236,13 @@ export function quickReply(q: Quick, d: QuickData, now = new Date()): QuickReply
       const left = Math.max(5, minOf(cur.end) - (now.getHours() * 60 + now.getMinutes()))
       const subject = cur.title.replace(/\(.*?\)/g, '').trim().slice(0, 28) || 'Focus'
       return cur.kind === 'block'
-        ? { reply: `🎯 Now: ${cur.title} (${cur.start}–${cur.end}), ${left} min left.${nextLine}`, chips: ['Something else?', 'Give me 10 min'], buttons: [{ label: `▶ ${Math.min(left, 90)} min ${subject}`.slice(0, 32), do: `focus:${Math.min(left, 90)}:${subject}` }] }
-        : { reply: `🎯 You're in ${cur.title} until ${cur.end}.${nextLine}`, chips: ['Something else?'], buttons: [] }
+        ? { reply: `🎯 Right now: ${cur.title}.\nIt is on your plan until ${cur.end} (${left} min left).${nextLine}\nStart a timer for it below.`, chips: ['Something else?', 'Give me 10 min'], buttons: [{ label: `▶ ${Math.min(left, 90)} min ${subject}`.slice(0, 32), do: `focus:${Math.min(left, 90)}:${subject}` }] }
+        : { reply: `🎯 You are in ${cur.title} until ${cur.end}.${nextLine}`, chips: ['Something else?'], buttons: [] }
     }
     // The next plan block IS the suggested work: say so once, with its real time.
     if (m.kind === 'focus' && sl?.next?.kind === 'block' && m.subject && sl.next.title.toLowerCase().includes(m.subject.toLowerCase().split(' ')[0])) {
       const minutes = m.minutes ?? 25
-      return { reply: `🎯 ${sl.next.title} is next on your plan at ${sl.next.start}. Start it now: ${minutes} min?`, chips: ['Something else?', 'Give me 10 min'], buttons: [{ label: `▶ ${minutes} min ${m.subject}`.slice(0, 32), do: `focus:${minutes}:${m.subject}` }] }
+      return { reply: `🎯 Start ${sl.next.title} now.\nIt is next on your plan ${atIn(sl.next.start, now)}, so you get a head start.\nTap below for a ${minutes}-min timer.`, chips: ['Something else?', 'Give me 10 min'], buttons: [{ label: `▶ ${minutes} min ${m.subject}`.slice(0, 32), do: `focus:${minutes}:${m.subject}` }] }
     }
     const buttons =
       m.kind === 'focus' && m.subject && m.minutes
@@ -240,8 +252,19 @@ export function quickReply(q: Quick, d: QuickData, now = new Date()): QuickReply
           : m.kind === 'plan'
             ? [{ label: '🗓 Plan my day', do: 'plan' }]
             : []
-    return { reply: `🎯 ${m.title}. ${m.sub}${nextLine}`, chips: m.kind === 'answer' ? ['Done ✅', 'Not yet'] : ['Something else?', 'Give me 10 min'], buttons }
+    const body =
+      m.kind === 'approve'
+        ? "🎯 Approve today's plan first.\nThen its times go into your calendar and the must-dos onto Today."
+        : m.kind === 'plan'
+          ? "🎯 Make today's plan first.\nI'll fit your must-dos, training and water into your free time."
+          : m.kind === 'focus'
+            ? `🎯 Do ${m.title.replace(/^(\d+) min: /, '$1 min on ')} now.\n${m.sub}`
+            : m.kind === 'answer'
+              ? `🎯 First: ${m.title}.\nYou promised this. Did you do it?`
+              : `🎯 ${m.title}\n${m.sub}`
+    return { reply: `${body}${nextLine}`, chips: m.kind === 'answer' ? ['Done ✅', 'Not yet'] : ['Something else?', 'Give me 10 min'], buttons }
   }
+  if (q.kind === 'day') return null // answered by daySoFar() with today's numbers (webBots.ts)
   if (q.kind === 'wrong') return d.wrong ? wrongReply(d.wrong) : null
   if (q.kind === 'water') {
     const w = d.water
@@ -251,7 +274,7 @@ export function quickReply(q: Quick, d: QuickData, now = new Date()): QuickReply
     const behind = w.ml < w.target * pace - 250
     const left = Math.max(0, w.target - w.ml)
     return {
-      reply: `💧 ${(w.ml / 1000).toFixed(1)} of ${(w.target / 1000).toFixed(1)} L today.${left ? (behind ? ` You're behind: a glass now, and ${Math.ceil(left / 250)} more through the day.` : ` ${(left / 1000).toFixed(1)} L to go, you're on pace.`) : ' Goal done 🔥'}`,
+      reply: `💧 You've had ${(w.ml / 1000).toFixed(1)} L of your ${(w.target / 1000).toFixed(1)} L today.${left ? (behind ? `\nYou're behind. Drink a glass now, then about ${Math.ceil(left / 250)} more through the day.` : `\nYou're on pace: ${(left / 1000).toFixed(1)} L to go.`) : '\nYou reached your goal 🔥'}`,
       chips: left ? ['Water 250', 'Water 500'] : ['Nice'],
       buttons: []
     }
@@ -260,8 +283,9 @@ export function quickReply(q: Quick, d: QuickData, now = new Date()): QuickReply
     const s = d.streaks
     if (!s) return null
     const fh = s.focusWeekMin >= 60 ? `${Math.floor(s.focusWeekMin / 60)}h${s.focusWeekMin % 60 ? ` ${s.focusWeekMin % 60}m` : ''}` : `${s.focusWeekMin} min`
-    const best = s.training >= 3 || s.clean >= 7 ? ' 🔥 Keep it alive today.' : ' One good day starts the next streak.'
-    return { reply: `🔥 Training ${s.training} day${s.training === 1 ? '' : 's'} · clean ${s.clean} day${s.clean === 1 ? '' : 's'} · focus this week ${fh}${s.wakeOnTime ? ` · wake-ups ${s.wakeOnTime}` : ''}.${best}`, chips: ['What now?', 'Plan my day'], buttons: [] }
+    const best = s.training >= 3 || s.clean >= 7 ? 'Keep them alive today 🔥' : 'One good day starts the next streak.'
+    const days = (n: number) => `${n} day${n === 1 ? '' : 's'}`
+    return { reply: [`🔥 Training: ${days(s.training)} in a row. Clean: ${days(s.clean)}.`, `Focus this week: ${fh}.${s.wakeOnTime ? ` Wake-ups: ${s.wakeOnTime}.` : ''}`, best].join('\n'), chips: ['What now?', 'Plan my day'], buttons: [] }
   }
   if (!d.found || /not available|give dates/.test(d.found)) return null
   return { reply: `${ICON[q.topic]} ${d.found}`, chips: q.topic === 'spending' ? ['Where can I cut?', 'Last week?'] : ['Compare last week', 'What now?'], buttons: [] }

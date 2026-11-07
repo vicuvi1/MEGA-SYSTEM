@@ -174,12 +174,11 @@ html.calm .bl .bl-body, html.calm .bl.live .ba-eyes, html.calm .bl .bl-aura, htm
 .ch-down span { display: inline-block; margin-left: 4px; animation: ch-nudge 1.8s ease-in-out 3; }
 @keyframes ch-nudge { 50% { transform: translateY(3px); } }
 
-/* ======================= The composer row: Ben beside the box ======================= */
+/* ======================= The composer row ======================= */
+/* One live Ben on the page (the header's); the box takes the full row, so the chip bar
+   above it starts at the same left edge. */
 .cf-compose-row { display: flex; align-items: flex-end; gap: 14px; }
-.cf-compose-row > .cf-composer { flex: 1; }
-.cf-compose-row > .bl { margin-bottom: 6px; }
-.cx.cf.hero-on .cf-compose-row > .bl { opacity: 0; transform: scale(0.6); }
-.cf-compose-row > .bl { transition: opacity 0.35s, transform 0.45s var(--ease-spring); }
+.cf-compose-row > .cf-composer { flex: 1; min-width: 0; }
 
 /* The box glows and lifts on focus (the glow is drawn once and fades in). */
 .cx.cf .cf-composer { position: relative; transition: border-color 0.2s, transform 0.35s var(--ease-spring); }
@@ -269,7 +268,6 @@ html.calm .cf-send.stop::after { animation-iteration-count: infinite !important;
 
 /* ======================= Phone ======================= */
 @media (max-width: 760px) {
-  .cf-compose-row > .bl { display: none; }
   .cf-head .cf-who .bl { --ba: 42px !important; }
   .ch-hero { padding: 6px 12px 4px; }
   .ch-inner { gap: 9px; }

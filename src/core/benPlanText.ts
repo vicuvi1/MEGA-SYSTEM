@@ -1,3 +1,4 @@
+import { dur } from './benPlain'
 // One summary of today's plan, used by Ben's chat line and the plan card, so the
 // headline, the card and the chat never disagree (pure, tested).
 //
@@ -14,7 +15,6 @@ export interface PlanLike {
   headline?: string
 }
 
-const hm = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, '0') : ''}` : `${m} min`)
 
 /** Blocks, focus minutes and must-dos, counted the way the plan card counts them. */
 export function planSummary(p: PlanLike): { blocks: number; focusMin: number; mustdos: number; start: string | null; text: string } {
@@ -22,7 +22,9 @@ export function planSummary(p: PlanLike): { blocks: number; focusMin: number; mu
   const focusMin = p.blocks.reduce((t, b) => t + Math.max(5, b.minutes || 0), 0)
   const mustdos = p.mustdos.length
   const start = [...p.blocks].map((b) => b.start).filter((s) => /^\d{1,2}:\d{2}$/.test(s)).sort()[0] ?? null
-  const text = [`${blocks} block${blocks === 1 ? '' : 's'}`, `${hm(focusMin)} of focus`, mustdos ? `${mustdos} must-do${mustdos === 1 ? '' : 's'}` : ''].filter(Boolean).join(', ')
+  // Plain words for the chat (no "blocks"): "4 sessions, 3 h 5 min of focus and 3 must-dos".
+  const bits = [`${blocks} session${blocks === 1 ? '' : 's'}`, `${dur(focusMin)} of focus`, mustdos ? `${mustdos} must-do${mustdos === 1 ? '' : 's'}` : ''].filter(Boolean)
+  const text = bits.length > 1 ? `${bits.slice(0, -1).join(', ')} and ${bits[bits.length - 1]}` : bits.join('')
   return { blocks, focusMin, mustdos, start, text }
 }
 
@@ -51,11 +53,11 @@ export function liveHeadline(headline: string | undefined, p: PlanLike): string 
 /** The chat line for a new plan: the same numbers as the card, no version number. */
 export function planMadeLine(p: PlanLike, ask = ''): string {
   const s = planSummary(p)
-  return `Here's today's plan, starting ${s.start ?? 'now'}: ${s.text}.${ask || ' Look it over, then approve it or tell me what to change.'}`
+  return `Here's today's plan, starting ${s.start ? `at ${s.start}` : 'now'}.\nIt has ${s.text}.\n${(ask || 'Look it over, then approve it or tell me what to change.').trim()}`
 }
 
 /** He asks for a new plan while one is approved: asked first, never replaced silently. */
-export const REPLACE_ASK = "Today's plan is already approved. Replace it with a new one from now? Done and pinned blocks stay where they are."
+export const REPLACE_ASK = "Today's plan is already approved. Do you want a new plan from now on?\nAnything done or pinned stays where it is."
 export const REPLACE_CHIPS = ['Yes, replace it', 'No, keep it']
 
 /** "create a new plan", "make me a fresh plan", "redo my day": a new plan, not the current one. */

@@ -328,7 +328,8 @@ html.calm .cf-orbs i, html.calm .cf-shimmer::after, html.calm .cf-caret, html.ca
 /* ---------- The dock: suggestions that change with the moment, shortcuts, the composer ---------- */
 .cf-dock { position: relative; padding: 4px 32px 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
 .cf-dock > * { width: 100%; min-width: 0; max-width: var(--cf-col); margin-inline: auto; box-sizing: border-box; }
-.cf-rail { display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 4px 2px; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
+/* The chip bar: its own row above the box, flush with the box's left edge, never on top of it. */
+.cf-rail { position: relative; z-index: 0; display: flex; align-items: center; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 4px 0; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 28px), transparent); }
 .cf-rail::-webkit-scrollbar { display: none; }
 .cf-rail:empty { display: none; }
 .cf-chip { flex: none; display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 15px 0 12px; border-radius: 999px; font: inherit; font-size: 13.5px; font-weight: 560; color: var(--text); background: color-mix(in srgb, var(--surface-2) 80%, transparent); border: 1px solid var(--border); cursor: pointer; white-space: nowrap; animation: cf-pop 0.36s var(--ease-spring) both; transition: transform 0.2s var(--ease-spring), border-color 0.15s, background-color 0.15s; }

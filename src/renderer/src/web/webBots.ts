@@ -58,6 +58,8 @@ import { groundReply } from '@core/benGround'
 import { blockFor, meansTimer, readFinished, readStartingNow, startNowReply } from '@core/benNow'
 import { REPLACE_ASK, REPLACE_CHIPS, planMadeLine, planSummary, replaceAnswer, wantsNewPlan } from '@core/benPlanText'
 import { amountIn, codeFix, nowSlots, preLookups, quickKind, quickReply } from '@core/benQuick'
+import { coffeePlain, daySoFar, plainTidy } from '@core/benPlain'
+import { similarity } from '@core/benNormalize'
 import { createRhythm } from './rhythmBot'
 import { downloadFile, downloadText, esc, tg } from './bots/telegram'
 import { focusKeyboard, linkExpense, STOP_KEYBOARD, takeLink, ruleCoins } from './bots/helpers'
@@ -915,7 +917,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const r = await mirror.write((db) => logCoffee(services.services(db), db, cups)).catch(() => null)
         if (r) {
           step('Logged in code')
-          preset = { reply: r.reply, acts: [], chips: ['How did I sleep this week?', 'What now?'] }
+          preset = { reply: r.view?.caffeine ? coffeePlain(r.view.caffeine, r.view.bed) : r.reply, acts: [], chips: ['How did I sleep this week?', 'What now?'] }
         }
       }
     }
@@ -993,6 +995,27 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const monday = addDays(today, -dow)
               const wakes = inp.wakes.filter((w: any) => w.day >= monday)
               return quickReply(q, { streaks: { training: svc.body.state().streak ?? 0, clean: svc.discipline.state().current ?? 0, focusWeekMin: inp.focus.filter((x: any) => x.day >= monday).reduce((t: number, x: any) => t + x.minutes, 0), wakeOnTime: wakes.length ? `${wakes.filter((w: any) => w.onTime).length}/${wakes.length} on time` : undefined } })
+            }
+            if (q.kind === 'day') {
+              // "How is my day going?": done vs planned, focus, must-dos, water and what's next, from
+              // this device's data only (no Todoist / calendar wait, no model): instant.
+              const nowAt = new Date()
+              const nowMin = nowAt.getHours() * 60 + nowAt.getMinutes()
+              const brief = rhythmFor(readSetting(db as any, RHYTHM), today).briefing
+              const blocks = brief && brief.plan.day === today ? brief.plan.blocks : []
+              const sessions = svc.focus.state(nowAt).todaySessions ?? []
+              const isDone = (b: any) => (b.tasks?.length && (b.done?.length ?? 0) >= b.tasks.length) || sessions.some((x: any) => { const a = String(x.subject).toLowerCase(); const t = String(b.title).toLowerCase(); return t.includes(a) || a.includes(t) || similarity(a, t) >= 0.7 })
+              const startOf = (b: any) => { const m = /^(\d{1,2}):(\d{2})$/.exec(b.start); return m ? Number(m[1]) * 60 + Number(m[2]) : -1 }
+              const done = blocks.filter(isDone).length
+              const ahead = blocks.filter((b: any) => !isDone(b) && startOf(b) > nowMin).length
+              const mid = new Date(nowAt)
+              mid.setHours(0, 0, 0, 0)
+              const cal = calendar ? peek<CalEvent[]>(`calendar:${mid.toISOString()}`) : null
+              const sl = nowSlots(blocks, cal, nowAt, (st.move as any)?.endsAt)
+              const mv = st.move as any
+              const running = mv?.kind === 'running' ? { subject: String(mv.title).replace(/^Focus on /, ''), leftMin: Math.max(0, Math.round(((mv.endsAt ?? Date.now()) - Date.now()) / 60000)) } : null
+              const open = st.mustdos.filter((x) => !x.done)
+              return daySoFar({ planDone: done, planTotal: blocks.length, planAhead: ahead, focusMin: st.today.focusMin, focusGoal: Math.max(0, st.goals.reduce((t, g) => t + g.perDayMin, 0)), waterMl: st.today.waterMl, waterTarget: st.today.waterTarget, mustDone: st.today.mustDone, mustTotal: st.today.mustTotal, nextMust: open[0]?.text ?? null, next: sl.next ? { title: sl.next.title, start: sl.next.start } : null, running }, nowAt)
             }
             if (q.kind === 'wrong') {
               // SI23: today's numbers, the day by activity (only if he shares it from the desktop), one push.
@@ -1427,7 +1450,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       step('Re-planning from now')
       const r = await rhythm.replanNow().catch(() => null)
       if (r?.ok && r.plan) {
-        local = { reply: `New version of today's plan from ${hmOfIso(new Date().toISOString())}: ${planSummary(r.plan).text}. Done and pinned blocks stayed where they were.`, actions: [], remember: [], show: ['plan'], steps: r.done }
+        local = { reply: `Here's a new plan for the rest of today, from ${hmOfIso(new Date().toISOString())}.\nIt has ${planSummary(r.plan).text}.\nAnything done or pinned stayed where it was.`, actions: [], remember: [], show: ['plan'], steps: r.done }
         trace.mark('replan')
       }
     } else if (!preset && !local && !media && !direct && route.intent === 'plan' && plan?.status === 'approved' && wantsNewPlan(clean)) {
@@ -1559,6 +1582,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         out.reply = g.reply
       }
     }
+    // Easy to read: app words out, shorthand spelled out, 3+ sentences on their own lines (benPlain.ts).
+    if (out.reply && !preset && !local) out.reply = plainTidy(out.reply)
     // BQ2: he asked to SEE the plan, his day or his tasks: the card comes with the reply.
     const see = preset || localEdit ? [] : wantsToSee(clean)
     // "How am I doing on my goals": the goals card with the answer.

@@ -72,7 +72,7 @@ export function startNowReply(what: string, o: { block: StartBlock | null; runni
   const start = { label: `▶ Start ${minutes} min ${short}`.slice(0, 32), do: `focus:${minutes}:${short}` }
   if (o.running) {
     return {
-      reply: `You have "${o.running.subject}" running (${o.running.leftMin} min left). Switch to ${what} now? I'll stop the timer and start ${minutes} min for it.`,
+      reply: `You have "${o.running.subject}" running (${o.running.leftMin} min left).\nSwitch to ${what} now? I'll stop that timer and start ${minutes} min for this.`,
       chips: ['Later', 'Finish the timer first'],
       buttons: [{ label: '⏹ Stop timer', do: 'say:stop' }, start]
     }
@@ -81,9 +81,9 @@ export function startNowReply(what: string, o: { block: StartBlock | null; runni
   if (b) {
     const s = toMin(b.start)
     const e = s + b.minutes
-    where = s > nowMin + 5 ? ` It's on the plan for ${b.start}–${fromMin(e)}, so it moves up to now.` : s <= nowMin && e > nowMin ? ` That's your block now (until ${fromMin(e)}).` : ''
+    where = s > nowMin + 5 ? `\nIt was on your plan for ${b.start}–${fromMin(e)}, so it moves up to now.` : s <= nowMin && e > nowMin ? `\nIt's on your plan for now anyway (until ${fromMin(e)}).` : ''
   }
-  return { reply: `Good, ${what} now.${where} Start a ${minutes}-min timer so it counts?`, chips: ['Later'], buttons: [start] }
+  return { reply: `Good, ${what} now.${where}\nStart a ${minutes}-min timer so it counts?`, chips: ['Later'], buttons: [start] }
 }
 
 /** "I finished the lab report", "done with algebra", "lab report done": what he finished, or null. */

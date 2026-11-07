@@ -29,8 +29,10 @@ describe('Smart island extras', () => {
     expect(quickKind('What am I doing wrong today?', '2026-11-04')).toEqual({ kind: 'wrong' })
     expect(biggestLeak('coding 35m, video 1h10, social 20m')).toMatchObject({ kind: 'video', min: 70 })
     const r = quickReply({ kind: 'wrong' }, { wrong: { focusMin: 40, focusGoal: 120, mustDone: 1, mustTotal: 3, nextMust: 'Essay intro', doing: 'video 1h10, coding 35m' } })
-    expect(r?.reply.split('\n')[0]).toBe('⏱ focus 40m of 2h · ✅ must-dos 1/3 · 🖥 video 1h10, coding 35m')
-    expect(r?.reply).toContain('Biggest leak: video 1h10')
+    // The answer first (the leak), then one number per line, then one step.
+    expect(r?.reply.split('\n')[0]).toBe('The main problem today is video: 1 h 10 min of it. That is where your focus time went.')
+    expect(r?.reply).toContain('• Focus: 40 min of your 2 h goal.')
+    expect(r?.reply).toContain('• Must-dos: 1 of 3 done.')
     expect(r?.buttons[0].do).toBe('focus:25:Essay intro')
   })
   it('SI6: a dot-only alert never drops down', () => {

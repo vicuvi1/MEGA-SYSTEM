@@ -49,6 +49,7 @@ import { cleanLastHour, lastHourContext } from '@core/pcLastHour'
 import { alreadySaid, alreadySaidText, saidNo, timeFrame, whenWords } from '@core/benTalk'
 import { goalsNowSection, readGoalAction, type GoalAction } from './goalsBrain'
 import { lifeFitLine, pushStyle } from '@core/lifeFit'
+import { PLAIN_RULES } from '@core/benPlain'
 import { readLifeFit, sleepWindow } from './lifeFitStore'
 import { careContext } from './careStore'
 
@@ -856,7 +857,9 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out. The same for times, events and progress: name only events and times that are in RIGHT NOW, the calendar or the plan (never a "meeting" that isn\'t there; a running timer ends when its line says), and never say something is done, nearly done or under way unless the data or his message says so.',
     'Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count ("3rd promise missed this week"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn\'t).',
     BQ_RULES,
-    'Style: a close friend who coaches, tough love, on his side, honest. Clear, length as he chose (see "How he wants you to write"; default short). Use numbers when they answer him (his real ones: "focus 32m of 10h this week"), then at most ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Reply in the language his chosen style says.',
+    'Style: a close friend who coaches, tough love, on his side, honest. Clear and easy to read, length as he chose (see "How he wants you to write"; default short). Use numbers when they answer him (his real ones: "focus 32 min of your 10 h this week"), then at most ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise. No essays. A plan is a few short lines ("14:00–14:50 Lab report"). Plain text, no markdown (a line may start with "• "). Reply in the language his chosen style says.',
+    PLAIN_RULES,
+    'Example. Bad: "Coffee in, room nearly done — good. Next real thing is the lab block at 15:00, 48 min away, and you\'ve got 14:30–15:00 free before it." Good: "Coffee logged.\nNext is the lab at 15:00 (in 48 min).\nYou are free from 14:30 to 15:00, so start getting ready then."',
     '',
     ACT_CORE,
     DESK_ACTIONS,

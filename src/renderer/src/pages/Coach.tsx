@@ -927,7 +927,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             asks={heroAsks}
             closing={hero === 'closing'}
             onClose={closeHero}
-            ben={<BenLive size={104} act={benAct} feel={feel} pulse={pulse} talk={talk} gaze="down" />}
+            ben={<BenAvatar size={104} />}
           />
         )}
         <div className="co-stream cx-stream cf-stream" ref={streamRef}>
@@ -941,7 +941,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
             )}
             {log?.length === 0 && (
               <div className="co-hero cf-hero">
-                <BenAvatar size={88} ring online live />
+                <BenAvatar size={88} />
                 <h3>Talk to me like a friend.</h3>
                 <p>I see your day, calendar, Todoist, sleep, training and money, and I can act: log things, plan blocks, book goals, hold you to promises.</p>
                 <div className="co-cards">
@@ -1165,8 +1165,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
               ))}
             </ul>
           )}
+          {/* One live Ben on the page: the header's (it shows his state). None beside the box. */}
           <div className="cf-compose-row">
-          <BenLive size={64} act={benAct} feel={feel} pulse={pulse} talk={talk} gaze="right" />
           <form
             className="co-composer cx-composer cf-composer"
             onSubmit={(e) => {
