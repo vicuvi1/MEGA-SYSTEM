@@ -19,7 +19,7 @@ import { useLive } from '../live'
 import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
-import { DeepWork, MissTwiceCard, NextUpBar, WeekStrip } from '../TodayExtras'
+import { DeepWork, MissTwiceCard, WeekStrip } from '../TodayExtras'
 import { PageTabs, TabPanel, usePageTab, type PageTab } from '../PageTabs'
 import { HealthyToday, SleepToday, useHealthyToday } from '../TodayBody'
 import '../todayTabs.css'
@@ -173,7 +173,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   const showDay = narrow && has('timeline')
   const tabs: PageTab[] = [
     // Must-dos are counted on the Now tab itself (the top row and the list), so its tab has no number.
-    { id: 'now', label: 'Now', title: "What's on now, your must-dos and habits (1)" },
+    { id: 'now', label: 'Now', title: "What's on now, your Top 3, today's tasks and habits (1)" },
     { id: 'plan', label: 'Plan', title: "Ben's plan for today (2)" },
     { id: 'tasks', label: 'Tasks', count: counts ? counts.tasks : null, title: `Everything else today${counts?.late ? `, ${counts.late} late` : ''}, and coming up (3)` },
     { id: 'body', label: 'Body', count: health ? `${health.met}/4` : null, title: 'Reps, water, sleep and your healthy day (4)' },
@@ -207,14 +207,17 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         <div className="cmd-main">
           <PageTabs page="today" label="Today views" tabs={tabs} value={tab} onChange={setTab} />
           <TabPanel page="today" id="now" value={tab}>
-            <TodayHero name={ui.name} onGo={(p) => onGo(p)} />
-            <MoneyPill />
-            <NextUpBar />
-            <ShiftButtons />
+            {/* One slim line on top (what's on, what's next, the plan to approve, ⋯), then the lists. */}
+            <div className="now-top">
+              <TodayHero slim name={ui.name} onGo={(p) => onGo(p)} />
+              <ShiftButtons compact />
+            </div>
+            {/* The money pill sits in the habits header on Now (next to "Log spending"). */}
+            {!has('day') && <MoneyPill />}
             <WeekTop3Pick />
             {has('day') && (
               <>
-                <LifeModeCard compact />
+                <LifeModeCard compact quiet />
                 <YearOffer onOpen={() => openYear(onGo)} />
                 <MissTwiceCard />
                 <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} tasksSlot={tasksEl} weekSlot={weekEl} onCounts={setCounts} />

@@ -1,19 +1,20 @@
-// Today's habit board: one tile per habit (icon, colour, a big ring to tick
-// it, its streak and last 7 days, what it pays, when it's due), grouped into
-// Morning, Day and Evening. Auto habits (Sport Track, the focus timer,
-// Finance) show live progress and a tap only opens what really counts: a tap
-// never pays for something that didn't happen. Long-press or ⋯: skip today,
-// edit, move, hide, details. The pure parts are in src/core/habitBoard.ts.
+// Today's habits: a simple tracker. One row per habit (its icon, the name,
+// what's left or when it's due, the last 7 days as dots, the streak and a
+// circle to tick it), or the same habits as a compact grid (⋯ → Show as a
+// grid). Auto habits (Sport Track, the focus timer, Finance) show live
+// progress and a tap only opens what really counts: a tap never pays for
+// something that didn't happen. Long-press or ⋯: skip today, edit, move,
+// hide, details. The pure parts are in src/core/habitBoard.ts.
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import {
   boardCount,
   EMPTY_PREFS,
   goodDayRun,
-  groupTiles,
   habitStreak,
   HABIT_COLORS,
   HABIT_ICONS,
+  listTiles,
   lookOf,
   moveBefore,
   nudge,
@@ -66,6 +67,7 @@ interface Tile {
 }
 
 type Sheet = { kind: 'add' } | { kind: 'edit'; id: string } | { kind: 'details'; id: string }
+type View = 'list' | 'grid'
 
 const storeGet = (k: string) => {
   try {
@@ -102,9 +104,9 @@ export interface HabitBoardProps {
   reloadOwn: () => void
   onChange: () => void
   focusTarget: number
-  /** Plan and Shut down, on the right of the header. */
+  /** Extra buttons on the right of the header (before ⋯). */
   actions?: ReactNode
-  /** Under the tiles (never miss twice). */
+  /** Under the list (never miss twice, the spending line). */
   children?: ReactNode
 }
 
@@ -145,21 +147,12 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
   const [showHidden, setShowHidden] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropOn, setDropOn] = useState<string | null>(null)
-  // Folded parts of the day you opened or closed yourself (this device, today).
-  const [fold, setFoldRaw] = useState<Record<string, boolean>>(() => {
-    try {
-      const v = JSON.parse(storeGet('ls.hbFold') || 'null')
-      return v?.day === dayKey(new Date()) ? v.fold : {}
-    } catch {
-      return {}
-    }
-  })
-  const setFold = (slot: Slot, open: boolean) =>
-    setFoldRaw((f) => {
-      const next = { ...f, [slot]: open }
-      storeSet('ls.hbFold', JSON.stringify({ day: dayKey(new Date()), fold: next }))
-      return next
-    })
+  // A list (the default) or a compact grid: your pick on this device.
+  const [mode, setModeRaw] = useState<View>(() => (storeGet('ls.hbView') === 'grid' ? 'grid' : 'list'))
+  const setMode = (v: View) => {
+    setModeRaw(v)
+    storeSet('ls.hbView', v)
+  }
 
   const tiles: Tile[] = useMemo(
     () =>
@@ -200,19 +193,13 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
   const shown = tiles.filter((t) => showHidden || !t.hidden)
   const counted = tiles.filter((t) => !t.hidden)
   const count = boardCount(counted)
-  // Ordering: a tile ticked a moment ago still counts as open, so it doesn't jump away mid-animation.
-  const groups = groupTiles(
+  // One list. A tile ticked a moment ago still counts as open, so it doesn't jump away mid-animation.
+  const list = listTiles(
     shown.map((t) => ({ ...t, done: t.done && !recent.includes(t.id) })),
-    nowMin,
     prefs.order,
     prefs.fixed
-  ).map((g) => {
-    const real = g.tiles.map((t) => byId.get(t.id)!)
-    const c = real.filter((t) => !t.skipped && !t.off && !t.hidden)
-    const done = c.filter((t) => t.done).length
-    return { ...g, tiles: real, done, total: c.length, settled: done === c.length && real.every((t) => !recent.includes(t.id)) }
-  })
-  const flatIds = groups.flatMap((g) => g.tiles.map((t) => t.id))
+  ).map((t) => byId.get(t.id)!)
+  const flatIds = list.map((t) => t.id)
   const run = useMemo(
     () =>
       goodDayRun(
@@ -245,8 +232,8 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
     return () => clearTimeout(t)
   }, [view, count.perfect, today])
 
-  // Tiles glide to their new place (done ones to the end).
-  const boardRef = useRef<HTMLDivElement>(null)
+  // Rows glide to their new place (done ones to the end).
+  const boardRef = useRef<HTMLUListElement>(null)
   const rects = useRef(new Map<string, DOMRect>())
   useLayoutEffect(() => {
     const el = boardRef.current
@@ -271,15 +258,11 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
     const r = await act(() => life.extras!.saveHabitBoard(patch))
     if (r) setPrefs(r)
   }
-  const saveLook = async (t: Tile, look: Partial<HabitLook>) => {
-    if (t.habit.ownId) {
-      if (await act(() => life.extras!.editHabits({ op: 'update', id: t.habit.ownId!, look }))) reloadOwn()
-    } else await savePrefs({ looks: { ...prefs.looks, [t.id]: { ...(prefs.looks[t.id] ?? {}), ...look } } })
-  }
 
   const tick = async (t: Tile, el: HTMLElement) => {
     if (t.done || t.off) return
     if (t.skipped) return setMenu(null)
+    // An auto habit: the tap opens what really counts (the app, the timer); it never ticks here.
     if (t.habit.auto) return void t.habit.run()
     const ok = await t.habit.run()
     if (ok === false) return
@@ -314,15 +297,12 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
       onChange()
     }
   }
-  const drop = async (targetId: string | null, slot: Slot) => {
+  const drop = async (targetId: string | null) => {
     const id = dragId
     setDragId(null)
     setDropOn(null)
-    if (!id || id === targetId) return
-    const t = byId.get(id)
-    if (!t) return
+    if (!id || id === targetId || !byId.has(id)) return
     await savePrefs({ order: moveBefore(flatIds, id, targetId) })
-    if (t.slot !== slot) await saveLook(t, { slot, by: null })
   }
 
   // Close menus with Esc or a tap elsewhere.
@@ -346,43 +326,28 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
   const sheetTile = sheet && sheet.kind !== 'add' ? byId.get(sheet.id) : undefined
   const hiddenTiles = tiles.filter((t) => t.hidden)
   const pct = count.total ? count.done / count.total : 0
-  // "+ Your habit": a dashed column at the end on a wide board, a slim row under it otherwise.
-  const addTile = life.extras ? (
-    <button type="button" className="hb-add" onClick={() => setSheet({ kind: 'add' })}>
-      <span aria-hidden="true">+</span> Your habit
-    </button>
-  ) : null
 
   return (
-    <div className={`hb ${count.perfect ? 'perfect' : ''}`} aria-label="Habits">
+    <div className={`hb ${mode === 'grid' ? 'grid' : 'list'} ${count.perfect ? 'perfect' : ''}`} aria-label="Habits">
       <header className="hb-head">
-        <div className={`hb-ring-big ${count.perfect ? 'all' : ''}`} style={{ ['--p' as string]: pct }} aria-hidden="true">
-          <svg className="rg" viewBox="0 0 44 44">
-            <circle className="tr" cx="22" cy="22" r="18" />
-            <circle className="fg" cx="22" cy="22" r="18" pathLength="100" />
-          </svg>
-          {count.perfect ? <HabitIcon name="check" size={18} /> : <b>{Math.round(pct * 100)}%</b>}
-        </div>
-        <div className="hb-title">
-          <h2>
-            Today <span className="hb-count">· {count.done} of {count.total} habits</span>
-          </h2>
-          <p className="hb-sub">
-            {count.perfect ? (
-              <span className="hb-perfect">Perfect day · every habit done</span>
-            ) : (
-              <span>{count.total - count.done === 1 ? '1 habit left' : `${count.total - count.done} habits left`}</span>
-            )}
-            {run > 0 && (
-              <span className="hb-run" title="Days in a row with at least two thirds of your habits done">
-                <i aria-hidden="true">🔥</i> {run} good {run === 1 ? 'day' : 'days'} in a row
-              </span>
-            )}
-          </p>
-        </div>
+        <h2>
+          Habits{' '}
+          <span className="hb-count">
+            {count.done} of {count.total}
+          </span>
+        </h2>
+        <span className={`hb-bar ${count.perfect ? 'all' : ''}`} aria-hidden="true">
+          <i style={{ transform: `scaleX(${pct})` }} />
+        </span>
+        {run > 0 && (
+          <span className="hb-run" title={`${run} good ${run === 1 ? 'day' : 'days'} in a row (at least two thirds of your habits done)`}>
+            <i aria-hidden="true">🔥</i> {run}
+          </span>
+        )}
+        {count.perfect && <span className="hb-perfect">Perfect day</span>}
         <div className="hb-actions">
           {actions}
-          <button type="button" className="hb-more" aria-label="Habit board options" aria-expanded={boardMenu} onClick={(e) => (e.stopPropagation(), setBoardMenu((x) => !x))}>
+          <button type="button" className="hb-more" aria-label="Habit options" aria-expanded={boardMenu} onClick={(e) => (e.stopPropagation(), setBoardMenu((x) => !x))}>
             ⋯
           </button>
           {boardMenu && (
@@ -392,6 +357,9 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
                   + Add a habit
                 </button>
               )}
+              <button role="menuitem" onClick={() => (setBoardMenu(false), setMode(mode === 'grid' ? 'list' : 'grid'))}>
+                {mode === 'grid' ? 'Show as a list' : 'Show as a grid'}
+              </button>
               <button role="menuitemcheckbox" aria-checked={prefs.fixed} onClick={() => (setBoardMenu(false), void savePrefs({ fixed: !prefs.fixed }))}>
                 {prefs.fixed ? '✓ ' : ''}Keep the order fixed
               </button>
@@ -406,88 +374,53 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
         {confetti && <Confetti />}
       </header>
 
-      <div className="hb-board" ref={boardRef} style={{ ['--groups' as string]: groups.length }}>
-        {groups.map((g) => {
-          const open = fold[g.slot] ?? !g.settled
-          return (
-            <section
-              key={g.slot}
-              className={`hb-group ${g.current ? 'now' : ''} ${open ? 'open' : 'folded'} ${dragId ? 'dragging' : ''}`}
-              style={{ ['--n' as string]: open ? Math.max(1, g.tiles.length) : 1 }}
-              aria-label={`${g.label} habits`}
-              onDragOver={(e) => dragId && e.preventDefault()}
-              onDrop={(e) => {
+      <ul className="hb-list" ref={boardRef} onDragOver={(e) => dragId && e.preventDefault()} onDrop={(e) => (e.preventDefault(), void drop(null))}>
+        {list.map((t) => (
+          <HabitRow
+            key={t.id}
+            t={t}
+            pop={pop === t.id}
+            dropping={dropOn === t.id && dragId !== t.id}
+            onTick={(el) => void tick(t, el)}
+            onMenu={(x, y) => setMenu({ id: t.id, x, y })}
+            drag={{
+              draggable: true,
+              onDragStart: (e) => {
+                e.dataTransfer.effectAllowed = 'move'
+                e.dataTransfer.setData('text/x-habit', t.id)
+                setDragId(t.id)
+              },
+              onDragEnd: () => (setDragId(null), setDropOn(null)),
+              onDragOver: (e) => {
+                if (!dragId) return
                 e.preventDefault()
-                void drop(null, g.slot)
-              }}
-            >
-              <button type="button" className="hb-ghead" aria-expanded={open} onClick={() => setFold(g.slot, !open)}>
-                <span className="hb-glabel">{g.label}</span>
-                {g.current && <span className="hb-gnow">now</span>}
-                <span className={`hb-gcount ${g.settled && g.total ? 'all' : ''}`}>
-                  {g.settled && g.total ? '✓ ' : ''}
-                  {g.done}/{g.total}
-                </span>
-                <span className="hb-chev" aria-hidden="true">
-                  ›
-                </span>
-              </button>
-              {open ? (
-                <div className="hb-tiles">
-                  {g.tiles.map((t) => (
-                    <HabitTile
-                      key={t.id}
-                      t={t}
-                      pop={pop === t.id}
-                      dropping={dropOn === t.id && dragId !== t.id}
-                      onTick={(el) => void tick(t, el)}
-                      onMenu={(x, y) => setMenu({ id: t.id, x, y })}
-                      drag={{
-                        draggable: true,
-                        onDragStart: (e) => {
-                          e.dataTransfer.effectAllowed = 'move'
-                          e.dataTransfer.setData('text/x-habit', t.id)
-                          setDragId(t.id)
-                        },
-                        onDragEnd: () => (setDragId(null), setDropOn(null)),
-                        onDragOver: (e) => {
-                          if (!dragId) return
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setDropOn(t.id)
-                        },
-                        onDrop: (e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          void drop(t.id, g.slot)
-                        }
-                      }}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <button type="button" className="hb-folded" onClick={() => setFold(g.slot, true)} aria-label={`Show ${g.label.toLowerCase()} habits`}>
-                  {g.tiles.map((t) => (
-                    <span key={t.id} className={`hb-mini ${t.done ? 'done' : t.skipped ? 'skip' : ''}`} style={{ ['--hc' as string]: COLOR_HEX[t.look.color] }} title={`${t.name}: ${t.due.hint}`}>
-                      <HabitIcon name={t.done ? 'check' : t.look.icon} size={12} />
-                    </span>
-                  ))}
-                  <small>{g.settled && g.total ? 'All done' : 'Show'}</small>
-                </button>
-              )}
-            </section>
-          )
-        })}
-        {addTile}
-      </div>
-      {hiddenTiles.length > 0 && !showHidden && (
-        <p className="hb-hidden-line">
-          Hidden: {hiddenTiles.map((t) => t.name).join(', ')}{' '}
-          <button type="button" className="hb-link" onClick={() => setShowHidden(true)}>
-            Show
+                e.stopPropagation()
+                setDropOn(t.id)
+              },
+              onDrop: (e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                void drop(t.id)
+              }
+            }}
+          />
+        ))}
+      </ul>
+      <div className="hb-foot-line">
+        {life.extras && (
+          <button type="button" className="hb-add" onClick={() => setSheet({ kind: 'add' })}>
+            + Add a habit
           </button>
-        </p>
-      )}
+        )}
+        {hiddenTiles.length > 0 && !showHidden && (
+          <span className="hb-hidden-line">
+            {hiddenTiles.length} hidden ·{' '}
+            <button type="button" className="hb-link" onClick={() => setShowHidden(true)}>
+              Show
+            </button>
+          </span>
+        )}
+      </div>
       {children}
 
       {menu && menuTile && (
@@ -563,9 +496,9 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
   )
 }
 
-// ------------------------------------------------------------------ a tile
+// ------------------------------------------------------------------ one row
 
-function HabitTile({
+function HabitRow({
   t,
   pop,
   dropping,
@@ -578,7 +511,7 @@ function HabitTile({
   dropping: boolean
   onTick: (el: HTMLElement) => void
   onMenu: (x: number, y: number) => void
-  drag: Pick<React.HTMLAttributes<HTMLDivElement>, 'onDragStart' | 'onDragEnd' | 'onDragOver' | 'onDrop'> & { draggable: boolean }
+  drag: Pick<React.HTMLAttributes<HTMLLIElement>, 'onDragStart' | 'onDragEnd' | 'onDragOver' | 'onDrop'> & { draggable: boolean }
 }) {
   const h = t.habit
   const press = useRef<{ timer: number; x: number; y: number; fired: boolean } | null>(null)
@@ -586,7 +519,18 @@ function HabitTile({
   const p = h.progress
   const frac = t.done ? 1 : p && p.target ? Math.min(1, p.value / p.target) : 0
   const state = t.done ? 'done' : t.skipped ? 'skipped' : t.off ? 'off' : t.due.state
-  const paysLine = t.done ? (t.paid ? `+${t.paid} paid` : h.auto || !h.pays ? 'done' : 'done · nothing paid') : t.skipped || t.off ? '' : h.pays
+  // One quiet line under the name: live progress, else when it's due; what it paid once done.
+  const meta = t.done
+    ? t.paid
+      ? `+${t.paid} paid`
+      : 'done'
+    : t.skipped
+      ? 'skipped today'
+      : t.off
+        ? 'not today'
+        : h.auto && p
+          ? `${p.value}/${p.target} ${p.unit}`
+          : t.due.hint
   const label = t.done
     ? `${t.name}: done${t.paid ? `, +${t.paid} paid` : ''}`
     : t.skipped
@@ -595,7 +539,7 @@ function HabitTile({
         ? `${t.name}: ${h.action ?? 'open'}${p ? ` (${p.value} of ${p.target} ${p.unit})` : ''}. It ticks by itself.`
         : `Tick ${t.name}${h.pays ? ` (${h.pays})` : ''}`
   const startPress = (e: React.PointerEvent) => {
-    if (e.button !== 0) return
+    if (e.button !== 0 || (e.target as Element).closest?.('.hb-dots-btn')) return
     const x = e.clientX
     const y = e.clientY
     press.current = {
@@ -617,28 +561,64 @@ function HabitTile({
     if (press.current) clearTimeout(press.current.timer)
   }
   return (
-    <div
-      className={`hb-tile s-${state} ${h.auto ? 'auto' : ''} ${pop ? 'pop' : ''} ${t.hidden ? 'is-hidden' : ''} ${dropping ? 'drop-before' : ''}`}
+    <li
+      className={`hb-row s-${state} ${h.auto ? 'auto' : ''} ${pop ? 'pop' : ''} ${t.hidden ? 'is-hidden' : ''} ${dropping ? 'drop-before' : ''}`}
       data-hb-id={t.id}
       style={{ ['--hc' as string]: COLOR_HEX[t.look.color] ?? COLOR_HEX.violet, ['--f' as string]: frac }}
       onContextMenu={(e) => {
         e.preventDefault()
         onMenu(e.clientX, e.clientY)
       }}
+      onPointerDown={startPress}
+      onPointerUp={endPress}
+      onPointerLeave={endPress}
+      onPointerMove={(e) => {
+        if (press.current && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 8) endPress()
+      }}
       {...drag}
     >
+      <span className="hb-badge" aria-hidden="true">
+        <HabitIcon name={t.look.icon} size={15} />
+      </span>
+      <span className="hb-body">
+        <span className="hb-name">{t.name}</span>
+        <span className={`hb-meta d-${t.due.state} ${t.done && t.paid ? 'paid' : ''} ${h.auto && p && !t.done ? 'prog' : ''}`}>
+          {meta}
+          {!t.done && !t.skipped && !t.off && h.pays && <span className="hb-pts">{h.pays}</span>}
+        </span>
+      </span>
+      <span className="hb-dots" aria-label={`Last 7 days: ${t.dots.filter((d) => d.state === 'done').length} done`}>
+        {t.dots.map((d) => (
+          <i key={d.day} className={`dot ${d.state}`} title={`${d.day}: ${d.state}`} />
+        ))}
+      </span>
+      <span className={`hb-streak ${t.streak.n ? '' : 'none'}`} title={t.streak.n ? `${t.streak.n}-${t.streak.unit} streak` : 'No streak yet'}>
+        {t.streak.n > 0 && (
+          <>
+            <i aria-hidden="true">🔥</i>
+            {t.streak.n}
+            {t.streak.unit === 'week' ? 'w' : ''}
+          </>
+        )}
+      </span>
+      <button
+        type="button"
+        className="hb-dots-btn"
+        aria-label={`More for ${t.name}`}
+        onClick={(e) => {
+          e.stopPropagation()
+          const r = e.currentTarget.getBoundingClientRect()
+          onMenu(r.right, r.bottom)
+        }}
+      >
+        ⋯
+      </button>
       <button
         type="button"
         className="hb-hit"
         aria-label={label}
         aria-disabled={t.done || t.off || undefined}
-        title={h.auto && !t.done ? `${h.action}: it ticks by itself from ${h.source}` : t.done ? 'Done' : undefined}
-        onPointerDown={startPress}
-        onPointerUp={endPress}
-        onPointerLeave={endPress}
-        onPointerMove={(e) => {
-          if (press.current && Math.hypot(e.clientX - press.current.x, e.clientY - press.current.y) > 8) endPress()
-        }}
+        title={h.auto && !t.done ? `${h.action}: it ticks by itself from ${h.source}` : t.done ? 'Done' : 'Tap when you did it'}
         onClick={(e) => {
           if (press.current?.fired) {
             press.current = null
@@ -654,56 +634,11 @@ function HabitTile({
             <circle className="fg" cx="22" cy="22" r="19" pathLength="100" />
           </svg>
           <span className="hb-face">
-            <HabitIcon name={t.done ? 'check' : t.skipped ? 'skip' : t.look.icon} size={t.done ? 20 : 18} />
-          </span>
-          {h.auto && !t.done && (
-            <span className="hb-go">
-              <HabitIcon name={h.id === 'focus' ? 'play' : 'arrow'} size={9} />
-            </span>
-          )}
-        </span>
-        <span className="hb-body">
-          <span className="hb-name">{t.name}</span>
-          <span className="hb-meta">
-            {h.auto && !t.done && p ? (
-              <span className="hb-prog">
-                {p.value}/{p.target} {p.unit}
-              </span>
-            ) : (
-              <span className={`hb-due d-${t.due.state}`}>{t.due.hint}</span>
-            )}
-            {paysLine && <span className={`hb-pts ${t.done && t.paid ? 'paid' : ''}`}>{paysLine}</span>}
-          </span>
-          <span className="hb-foot">
-            <span className="hb-dots" aria-label={`Last 7 days: ${t.dots.filter((d) => d.state === 'done').length} done`}>
-              {t.dots.map((d) => (
-                <i key={d.day} className={`dot ${d.state}`} title={`${d.day}: ${d.state}`} />
-              ))}
-            </span>
-            {h.auto && <span className="hb-auto">auto</span>}
-            {t.streak.n > 0 && (
-              <span className="hb-streak" title={`${t.streak.n}-${t.streak.unit} streak`}>
-                <i aria-hidden="true">🔥</i>
-                {t.streak.n}
-                {t.streak.unit === 'week' ? 'w' : ''}
-              </span>
-            )}
+            {t.done ? <HabitIcon name="check" size={15} /> : t.skipped ? <HabitIcon name="skip" size={12} /> : h.auto ? <HabitIcon name={h.id === 'focus' ? 'play' : 'arrow'} size={12} /> : <span className="hb-face-ico"><HabitIcon name={t.look.icon} size={14} /></span>}
           </span>
         </span>
       </button>
-      <button
-        type="button"
-        className="hb-dots-btn"
-        aria-label={`More for ${t.name}`}
-        onClick={(e) => {
-          e.stopPropagation()
-          const r = e.currentTarget.getBoundingClientRect()
-          onMenu(r.right, r.bottom)
-        }}
-      >
-        ⋯
-      </button>
-    </div>
+    </li>
   )
 }
 

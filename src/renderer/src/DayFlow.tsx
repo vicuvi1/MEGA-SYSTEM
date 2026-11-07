@@ -31,7 +31,9 @@ import { PLAN_ITEM_COINS, isPlanFor, type PlanItem } from '@core/focus'
 import { BIG3_POINTS } from '../../main/points'
 import { MissTwiceNote, useMyHabits } from './MyHabits'
 import { HabitBoard } from './habits/HabitBoard'
-import { MustDos } from './habits/MustDos'
+import { MustDos, type TopItem } from './habits/MustDos'
+import { OtherTasks, type OtherItem } from './dayflow/OtherTasks'
+import { moveBefore } from '@core/habitBoard'
 import { useLifeMode } from './LifeMode'
 import { modeTarget } from '@core/lifeMode'
 import { type DayFlowProps, useTodoist, useHabits } from './dayflow/hooks'
@@ -39,6 +41,7 @@ import { subjectOf, todoSubject, clock, tomorrowOf, storeGet, storeSet } from '.
 import { ShutDown } from './dayflow/ShutDown'
 import { AreaAdd, type TodoTab, TabList, RunningClock, useSlowTick } from './dayflow/parts'
 import { celebrate } from './fx'
+import { MoneyPill } from './MoneyQuick'
 import { Tick } from './motionKit'
 
 
@@ -174,8 +177,14 @@ export function DayFlow(props: DayFlowProps) {
       setForced('evening')
       setTimeout(() => shutRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 80)
     }
+    // "Plan my day" in the ⋯ on Today's top line opens the morning card.
+    const plan = () => setForced('morning')
     window.addEventListener('life-close-day', on)
-    return () => window.removeEventListener('life-close-day', on)
+    window.addEventListener('life-plan-day', plan)
+    return () => {
+      window.removeEventListener('life-close-day', on)
+      window.removeEventListener('life-plan-day', plan)
+    }
   }, [])
   // Only the clock redraws every second (RunningClock below); the list needs a slow tick.
   const tick = useSlowTick(!!st?.running)
@@ -684,20 +693,119 @@ export function DayFlow(props: DayFlowProps) {
   const openLeft = [...plan.map((p, i) => ({ p, i })).filter((x) => !x.p.done)]
   const doneToday = plan.filter((p) => p.done).length
 
+  // Small muted text on a task row: its time, how long, its area.
+  const taskMeta = (t: TodoTask) => {
+    const parts: string[] = []
+    if (t.dueTime) parts.push(t.dueTime)
+    if (t.duration) parts.push(t.duration >= 60 ? `${Math.floor(t.duration / 60)}h${t.duration % 60 ? ` ${t.duration % 60}m` : ''}` : `${t.duration} min`)
+    const area = plainName(t.section || (t.project && t.project !== 'Inbox' ? t.project : '') || '')
+    if (area) parts.push(area)
+    return parts.join(' · ')
+  }
+  /** Drag in the Top 3: the day plan in its new order (done ones stay done). */
+  const reorderTop = async (key: string, before: string | null) => {
+    const ids = plan.map((_, i) => `p${i}`)
+    if (!ids.includes(key)) return
+    const next = moveBefore(ids, key, before && ids.includes(before) ? before : null).map((k) => plan[Number(k.slice(1))])
+    if (await act(() => life.focus.setPlan(keepPlan(next)))) refresh()
+  }
+  const removeTop = async (i: number) => {
+    if (await act(() => life.focus.setPlan(keepPlan(plan.filter((_, k) => k !== i))), `Out of the Top 3: ${plan[i].text}`)) refresh()
+  }
+  // The Top 3 are the day plan's must-dos (Ben, the island and Telegram read the same list);
+  // a ⭐ Todoist task is ticked in Todoist too. Starred tasks not in the plan yet come after.
+  const linked = (p: PlanItem) => (todo ?? []).find((t) => isPlanFor(p, t))
+  const topItems: TopItem[] = [
+    ...plan.map((p, i): TopItem => {
+      const t = p.done ? undefined : linked(p)
+      return {
+        key: `p${i}`,
+        text: p.text,
+        done: p.done,
+        pts: i < 3 ? `+${PLAN_ITEM_COINS}` : '',
+        meta: t ? taskMeta(t) : undefined,
+        swipe: t ? `star:${t.id}` : `must:${i}`,
+        movable: true,
+        onTick: () => void (t ? doneStarred(t) : tickMustDo(i)),
+        onUnstar: t ? () => void unstar(t) : plan.length > 1 ? () => void removeTop(i) : undefined,
+        play: playBtn(p.text, t ? todoSubject(t) : subjectOf(p.text), t ? { kind: 'todoist', ref: t.id, title: t.content } : { kind: 'mustdo', ref: p.text, title: p.text })
+      }
+    }),
+    ...starred
+      .filter((t) => !plan.some((p) => isPlanFor(p, t)))
+      .map((t): TopItem => ({
+        key: `s${t.id}`,
+        text: t.content,
+        done: false,
+        pts: `+${taskPts}`,
+        meta: taskMeta(t),
+        swipe: `star:${t.id}`,
+        onTick: () => void doneStarred(t),
+        onUnstar: () => void unstar(t),
+        play: playBtn(t.content, todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content })
+      }))
+  ]
+  const bigNamed = bigOpen.filter((b) => b.text)
   const mustDos = (
     <MustDos
-      starred={starred.map((t) => taskRow(t, true, null))}
-      items={planOnly.map(({ p, i }) => ({ key: `m${i}`, text: p.text, done: p.done, onTick: () => void tickMustDo(i), play: playBtn(p.text, subjectOf(p.text), { kind: 'mustdo', ref: p.text, title: p.text }) }))}
-      done={mustDone}
-      total={mustTotal}
+      items={topItems}
       coins={PLAN_ITEM_COINS}
-      canAdd={plan.length < 5}
+      canAdd={topItems.length < 3}
       adding={adding}
       setAdding={setAdding}
       onAdd={() => void addMustDo()}
       hasTodoist={!!life.todoist && todo !== null}
-      bigDone={bigOpen.length > 0 && bigOpen.every((b) => b.done)}
+      week={bigNamed.length ? { done: bigNamed.filter((b) => b.done).length, total: bigNamed.length, names: bigNamed.map((b) => b.text) } : null}
+      onReorder={(k, b) => void reorderTop(k, b)}
     />
+  )
+  // Everything else due today in one list: the week's open big 3, then Todoist (late and urgent first).
+  const otherItems: OtherItem[] = [
+    ...bigNamed
+      .filter((b) => !b.done)
+      .map((b): OtherItem => ({ key: `b${b.i}`, text: b.text, tag: 'This week', pts: `+${BIG3_POINTS}`, swipe: `big:${b.i}`, onDone: () => void toggleBig(b.i), play: playBtn(b.text, subjectOf(b.text), null) })),
+    ...loose.map(
+      (t): OtherItem => ({
+        key: t.id,
+        text: t.content,
+        meta: taskMeta(t),
+        late: !!t.due && t.due < today,
+        pts: `+${taskPts}`,
+        swipe: `todo:${t.id}`,
+        leaving: leaving.includes(t.id),
+        onDone: () => void doneTodo(t),
+        onStar: () => void star(t),
+        play: playBtn(t.content, todoSubject(t), { kind: 'todoist', ref: t.id, title: t.content })
+      })
+    )
+  ]
+  const addTask = async (v: string) => {
+    if (!life.todoist) return false
+    const ok = await act(() => life.todoist!.quickAdd(withToday(v)).then(() => true), `Added for today: ${v}`)
+    if (ok) {
+      void loadTodo()
+      void loadAll()
+    }
+    return !!ok
+  }
+  const habitBoard = (
+    <HabitBoard habits={habits} own={own} reloadOwn={reloadOwn} onChange={() => props.onChange()} focusTarget={focusTarget} actions={slotted ? <MoneyPill /> : undefined}>
+      <MissTwiceNote v={own} />
+      {spendOpen && (
+        <form
+          className="spend-line"
+          onSubmit={(e) => {
+            e.preventDefault()
+            void saveSpend()
+          }}
+        >
+          <input autoFocus value={spendText} onChange={(e) => setSpendText(e.target.value)} placeholder="45 lunch · 120 groceries · 30 taxi" aria-label="What you spent" onKeyDown={(e) => e.key === 'Escape' && setSpendOpen(false)} />
+          <button className="btn primary small" disabled={!spendText.trim() || spendBusy}>{spendBusy ? 'Saving…' : 'Log'}</button>
+          <button type="button" className="btn ghost small" onClick={() => props.onOpenApp('money')} title="Open Finance Helper">Finance Helper</button>
+          <button type="button" className="btn ghost small" onClick={() => setSpendOpen(false)} aria-label="Close">✕</button>
+        </form>
+      )}
+    </HabitBoard>
   )
 
   // Today's Todoist shows this many first (late and P1 on top).
@@ -858,74 +966,23 @@ export function DayFlow(props: DayFlowProps) {
         </section>
       )}
 
-      <section className="card day-list" aria-label="Today's list" ref={listRef}>
-        <HabitBoard
-          habits={habits}
-          own={own}
-          reloadOwn={reloadOwn}
-          onChange={() => props.onChange()}
-          focusTarget={focusTarget}
-          actions={
-            <>
-              {mode !== 'morning' && (
-                <button className="btn small" onClick={() => setForced('morning')} title="Plan your day in 2 minutes">
-                  <Icon name="sun" size={13} /> <span className="lbl">Plan</span>
-                </button>
-              )}
-              {mode !== 'evening' && (
-                <button className="btn small" onClick={() => setForced('evening')} title="Shut down your day in 2 minutes">
-                  <Icon name="moon" size={13} /> <span className="lbl">Shut down</span>
-                </button>
-              )}
-            </>
-          }
-        >
-          <MissTwiceNote v={own} />
-        </HabitBoard>
-
-        {spendOpen && (
-          <form
-            className="spend-line"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void saveSpend()
-            }}
-          >
-            <input autoFocus value={spendText} onChange={(e) => setSpendText(e.target.value)} placeholder="45 lunch · 120 groceries Linella · 30 taxi" aria-label="What you spent" onKeyDown={(e) => e.key === 'Escape' && setSpendOpen(false)} />
-            <button className="btn primary small" disabled={!spendText.trim() || spendBusy}>{spendBusy ? 'Saving…' : 'Log'}</button>
-            <button type="button" className="btn ghost small" onClick={() => props.onOpenApp('money')} title="Open Finance Helper">Finance Helper</button>
-            <button type="button" className="btn ghost small" onClick={() => setSpendOpen(false)} aria-label="Close">✕</button>
-          </form>
-        )}
-        {slotted ? (
-          <>
-        {mustDos}
-        {bigOpen.length > 0 && !bigOpen.every((b) => b.done) && (
-          <div className="dl-group" style={{ ['--c' as string]: 'var(--gold)' }}>
-            <h3 className="dl-head">
-              <i /> This week's big 3 <small>+25 each</small>
-            </h3>
-            <ul className="dl">
-              {bigOpen.map((b) => (
-                <li key={`b${b.i}`} className={b.done ? 'done' : ''} data-swipe={b.done ? undefined : `big:${b.i}`}>
-                  <button className="dl-check" aria-label={b.done ? `Untick ${b.text}` : `Tick ${b.text}`} onClick={() => void toggleBig(b.i)}>
-                    {b.done ? <Tick /> : ''}
-                  </button>
-                  <span className="dl-text">{b.text}</span>
-                  <span className="tt-pts">+{BIG3_POINTS} ⭐</span>
-                  {!b.done && playBtn(b.text, subjectOf(b.text), null)}
-                </li>
-              ))}
-            </ul>
+      {slotted ? (
+        <section className="now-grid" aria-label="Today's list" ref={listRef}>
+          <div className="card now-list">
+            {mustDos}
+            <OtherTasks
+              items={otherItems}
+              canAdd={!!life.todoist && todo !== null}
+              onAdd={addTask}
+              starFull={topItems.length >= 3}
+              empty={todo === null ? 'Connect Todoist in Settings to see your tasks here.' : todoList && todoList.length === 0 ? 'Nothing else due today.' : 'All your tasks for today are in the Top 3.'}
+            />
           </div>
-        )}
-        {bigOpen.length > 0 && !!week?.parked?.length && (
-          <p className="dl-parked" title="You picked these for later this week: still here, Ben won't push them">
-            Parked: {week.parked.join(' · ')}
-          </p>
-        )}
-          </>
-        ) : (
+          <div className="card now-habits">{habitBoard}</div>
+        </section>
+      ) : (
+      <section className="card day-list" aria-label="Today's list" ref={listRef}>
+        {habitBoard}
           <>
         <div className="dl-tabs" role="tablist" aria-label="Which tasks">
           {TODO_TABS.map(([id, label]) => (
@@ -1048,8 +1105,8 @@ export function DayFlow(props: DayFlowProps) {
           </p>
         )}
           </>
-        )}
       </section>
+      )}
       {slotted && props.tasksSlot && createPortal(
         <section className="card day-list dl-tasks" aria-label="Today's tasks" ref={tasksRef}>
         <div className="dl-tabs" role="tablist" aria-label="Which tasks">

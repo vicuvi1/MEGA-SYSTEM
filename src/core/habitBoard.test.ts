@@ -8,6 +8,7 @@ import {
   EMPTY_PREFS,
   goodDayRun,
   groupTiles,
+  listTiles,
   habitStreak,
   lookOf,
   moveBefore,
@@ -131,6 +132,11 @@ describe('order and groups', () => {
       ['day', 1, 3, true, false],
       ['evening', 0, 1, false, false]
     ])
+  })
+  it('one list for the simple tracker: morning, day, evening, done ones last, your order first', () => {
+    expect(listTiles(tiles).map((t) => t.id)).toEqual(['focus', 'read', 'spend', 'oath', 'workout', 'skin'])
+    expect(listTiles(tiles, [], true).map((t) => t.id)).toEqual(['oath', 'focus', 'workout', 'skin', 'read', 'spend'])
+    expect(listTiles(tiles, ['spend', 'read']).map((t) => t.id)).toEqual(['spend', 'read', 'focus', 'oath', 'workout', 'skin'])
   })
   it('the count and the perfect day (a skip is not perfect)', () => {
     expect(boardCount(tiles)).toEqual({ done: 2, total: 5, perfect: false })

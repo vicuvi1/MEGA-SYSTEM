@@ -1,6 +1,9 @@
 // Today's top, one thin row: Ben (click to talk), what's on now and its one
 // button, the bar to the reward you're working toward, and
 // the day's numbers (score, focus, must-dos; water lives in its own card).
+// `slim` (Today → Now): one calm line instead: what's on, what's next in the
+// calendar, "Plan not approved [Approve]", the reward, and a ⋯ menu with
+// Plan my day, Shut down and Life mode. The lists below carry the numbers.
 import { appHour, dayKey } from '@core/dates'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CoachStatus } from './web/coachStatus'
@@ -12,7 +15,7 @@ import { useTodayEvents } from './todayEvents'
 import { blockSubject, localDay } from '@core/dayTime'
 import { focusStreak, liveScore } from '@core/liveScore'
 import { runSharedNow, skipSharedNow, useSharedNow } from './nowStore'
-import { meetingNow } from '@core/dayGlance'
+import { countdown, daySummary, meetingNow, nextUp } from '@core/dayGlance'
 import { useCountUp } from './motionKit'
 
 /** A number that counts up to its value (shared, AF7). */
@@ -23,7 +26,7 @@ const greet = () => {
   return h < 5 ? 'Late night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'
 }
 
-export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' | 'shop') => void }) {
+export function TodayHero({ name, onGo, slim = false }: { name?: string; onGo: (page: 'coach' | 'shop') => void; /** Today → Now: one slim line (what's on, what's next, the plan to approve, a ⋯ menu). */ slim?: boolean }) {
   const act = useAction()
   const [st, setSt] = useState<CoachStatus | null>(null)
   const [busy, setBusy] = useState(false)
@@ -85,7 +88,42 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   const nowBlock = timed.filter((e) => Date.parse(e.start) <= tick && Date.parse(e.end) > tick).sort((a, b) => Date.parse(a.end) - Date.parse(a.start) - (Date.parse(b.end) - Date.parse(b.start)))[0]
   const nextBlock = timed.filter((e) => Date.parse(e.start) > tick).sort((a, b) => a.start.localeCompare(b.start))[0]
   const hm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-  if (!life.coach?.status || !st) return null
+  // The ⋯ menu on the slim line.
+  const [menu, setMenu] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menu) return
+    const off = (e: Event) => {
+      if (e instanceof KeyboardEvent ? e.key === 'Escape' : !menuRef.current?.contains(e.target as Node)) setMenu(false)
+    }
+    window.addEventListener('pointerdown', off)
+    window.addEventListener('keydown', off)
+    return () => {
+      window.removeEventListener('pointerdown', off)
+      window.removeEventListener('keydown', off)
+    }
+  }, [menu])
+  const nowMenu = (
+    <div className="thb-menu-wrap" ref={menuRef}>
+      <button type="button" className="thb-more" aria-label="More for today" aria-expanded={menu} onClick={() => setMenu((x) => !x)}>
+        ⋯
+      </button>
+      {menu && (
+        <div className="thb-menu" role="menu">
+          <button role="menuitem" onClick={() => (setMenu(false), window.dispatchEvent(new CustomEvent('life-plan-day')))}>
+            Plan my day <small>2 minutes</small>
+          </button>
+          <button role="menuitem" onClick={() => (setMenu(false), window.dispatchEvent(new CustomEvent('life-close-day')))}>
+            Shut down my day <small>the evening review</small>
+          </button>
+          <button role="menuitem" onClick={() => (setMenu(false), window.dispatchEvent(new CustomEvent('life-mode-open')))}>
+            Life mode… <small>Exam week · Sick · Travel</small>
+          </button>
+        </div>
+      )}
+    </div>
+  )
+  if (!life.coach?.status || !st) return slim ? <section className="thb slim">{nowMenu}</section> : null
   const m = st.move
   const run = async () => {
     if (busy) return
@@ -150,6 +188,78 @@ export function TodayHero({ name, onGo }: { name?: string; onGo: (page: 'coach' 
   const balance = shop?.balance ?? 0
   const goal = rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b2) => a.price - b2.price).find((r) => r.price > balance) ?? [...rewards].sort((a, b2) => b2.price - a.price)[0]
   const fm = Math.round(focusMin)
+  if (slim) {
+    // The plan waiting for you: said once, with its button, whatever else is on.
+    const pending = !inMeeting && m.kind !== 'running' && (shared ? shared.kind === 'approve' : m.kind === 'approve')
+    const nowIsPlan = pending && (shared ? shared.kind === 'approve' : !evening && !b)
+    const todays = timed
+    const next = nextUp(todays, tick)
+    // "Next" unless the line already says it (a block starting soon, the meeting you're in).
+    const showNext = next && !(b && b.id === next.id) && !(inMeeting && inMeeting.id === next.id)
+    const approve = async () => {
+      if (busy) return
+      setBusy(true)
+      try {
+        await act(() => life.coach!.rhythm!('approve'), 'Approved: blocks in your calendar, must-dos on Today')
+        window.dispatchEvent(new CustomEvent('life-external-changed'))
+      } finally {
+        setBusy(false)
+        load()
+      }
+    }
+    return (
+      <section className={`thb slim mood-${st.mood}`}>
+        <button className={`thb-face mood-${st.mood}`} onClick={() => onGo('coach')} title={`${greet()}${name ? `, ${name}` : ''}. Ben is ${st.mood}: ${st.why}. Click to talk to Ben.`} aria-label="Talk to Ben">
+          {st.face}
+        </button>
+        <div className="thb-line">
+          {!nowIsPlan && (
+            <span className={`thb-now ${evening ? 'evening' : ''} ${m.kind === 'running' ? 'running' : ''}`} title={'why' in now && now.why ? `${now.title}: ${now.why}` : now.title}>
+              <small>{now.tag}</small> <b>{now.title}</b>
+            </span>
+          )}
+          {showNext && (
+            <span className="thb-next" title={`${next.title} · ${hm(next.start)}–${hm(next.end)} · ${daySummary(todays, tick, null).text}`}>
+              Next: <b>{next.title}</b> {hm(next.start)} <i>{countdown(Date.parse(next.start) - tick)}</i>
+            </span>
+          )}
+          {pending && <span className="thb-plan">Plan not approved</span>}
+          {!showNext && nowIsPlan && <span className="thb-next">Nothing more in your calendar today</span>}
+        </div>
+        <div className="thb-act">
+          {m.kind === 'running' && (
+            <button className="btn small ghost" onClick={() => window.dispatchEvent(new CustomEvent('life-deep-work'))}>
+              ⛶ Deep work
+            </button>
+          )}
+          {pending && (
+            <button className="btn small primary" disabled={busy} onClick={() => void approve()}>
+              ✓ Approve
+            </button>
+          )}
+          {!nowIsPlan && now.btn && (
+            <button className={`btn small ${pending ? 'ghost' : 'primary'}`} disabled={busy} onClick={now.go}>
+              {now.btn}
+            </button>
+          )}
+          {shared && shared.kind !== 'running' && shared.kind !== 'approve' && shared.key !== 'action:done:All done for today 🎉' && (
+            <button className="btn small ghost" onClick={skipSharedNow} title="Not now: show the next thing (comes back tomorrow)">
+              Skip
+            </button>
+          )}
+        </div>
+        {goal && (
+          <button className={`thb-reward mini ${balance >= goal.price ? 'ready' : ''}`} onClick={() => onGo('shop')} title={balance >= goal.price ? `Ready: ${goal.title}` : `${goal.price - balance} points to ${goal.title}`}>
+            <span className="thb-goal">
+              <i style={{ ['--p' as string]: `${Math.min(100, (balance / goal.price) * 100)}%` }} />
+              <small>{balance >= goal.price ? `Ready: ${goal.title} 🎉` : `${goal.price - balance} to ${goal.title}`}</small>
+            </span>
+          </button>
+        )}
+        {nowMenu}
+      </section>
+    )
+  }
   return (
     <section className={`thb mood-${st.mood}`}>
       <button className={`thb-face mood-${st.mood}`} onClick={() => onGo('coach')} title={`${greet()}${name ? `, ${name}` : ''}. Ben is ${st.mood}: ${st.why}. Click to talk to Ben.`} aria-label="Talk to Ben">

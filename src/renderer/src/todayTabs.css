@@ -33,3 +33,51 @@
 .tb-sleep-row > span.good b { color: var(--green, #34d399); }
 .tb-sleep-row > span.late b { color: var(--orange, #ff8a3d); }
 .td-day .ds-v .ds-scroll { max-height: calc(100vh - 230px); }
+
+/* Today → Now's top: one slim line (TodayHero slim) with the money pill and
+   tonight's shift beside it when they show. */
+.now-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; container: nowtop / inline-size; }
+.now-top > .thb.slim { flex: 1 1 420px; margin: 0; }
+.now-top .shift-pill { margin: 0; }
+.now-top .money-pill-wrap { flex: none; }
+.td-tabs .thb.slim { flex-wrap: nowrap; gap: 10px; min-height: 48px; padding: 6px 8px; border-radius: 14px; }
+.thb.slim .thb-face { width: 32px; height: 32px; font-size: 18px; }
+.thb-line { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 4px 14px; overflow: hidden; white-space: nowrap; font-size: 13px; color: var(--muted); }
+.thb.slim .thb-now { flex: 0 0 auto; max-width: 58%; display: inline; min-width: 0; padding: 0 0 0 8px; border-left-width: 2px; overflow: hidden; text-overflow: ellipsis; }
+.thb.slim .thb-now small { font-size: 12px; }
+.thb.slim .thb-now b { font-size: 13.5px; color: var(--text); }
+.thb-next { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.thb-next b { font-weight: 650; color: var(--text); }
+.thb-next i { font-style: normal; font-weight: 650; color: var(--accent-text); font-variant-numeric: tabular-nums; }
+.thb-plan { flex: none; display: inline-flex; align-items: center; gap: 6px; color: var(--text); font-weight: 600; }
+.thb-plan::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--gold, #f5b53d); }
+.thb.slim .thb-act .btn { height: 30px; }
+.thb-reward.mini { flex: 0 1 190px; min-width: 120px; padding: 4px 10px; border-radius: 10px; }
+.thb-reward.mini .thb-goal i { height: 4px; }
+.thb-reward.mini .thb-goal small { font-size: 11px; }
+.thb-menu-wrap { position: relative; flex: none; }
+.thb-more { width: 30px; height: 30px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }
+.thb-more:hover, .thb-more[aria-expanded='true'] { background: rgb(var(--ink) / 0.06); color: var(--text); }
+.thb-menu { position: absolute; z-index: 60; top: calc(100% + 6px); right: 0; min-width: 220px; display: grid; gap: 1px; padding: 6px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow-2); }
+.thb-menu button { display: grid; gap: 1px; padding: 8px 10px; border: 0; border-radius: 9px; background: none; color: var(--text); font: inherit; font-size: var(--t-sm, 12.5px); font-weight: 550; text-align: left; cursor: pointer; }
+.thb-menu button small { font-size: 11px; font-weight: 500; color: var(--faint); }
+.thb-menu button:hover, .thb-menu button:focus-visible { background: var(--surface-2); outline: none; }
+@container nowtop (max-width: 760px) { .thb-reward.mini { display: none; } }
+@container nowtop (max-width: 560px) { .thb.slim .thb-plan, .thb.slim .thb-next { display: none; } }
+@container nowtop (max-width: 700px) { .thb.slim .thb-now small, .thb-next i { display: none; } }
+/* Never miss twice on Now: one quiet strip, not a big box. */
+[data-tabpanel='now'] .miss-twice { margin: 0; padding: 6px 8px 6px 14px; gap: 8px 12px; border-radius: 12px; flex-wrap: nowrap; }
+[data-tabpanel='now'] .miss-twice > div:first-child { display: flex; align-items: baseline; gap: 8px; min-width: 0; overflow: hidden; white-space: nowrap; }
+[data-tabpanel='now'] .miss-twice small { overflow: hidden; text-overflow: ellipsis; }
+[data-tabpanel='now'] .miss-twice .row { flex: none; gap: 4px; }
+/* Phone: the line keeps its words; the buttons go under it. */
+@container nowtop (max-width: 560px) {
+  .td-tabs .thb.slim { flex-wrap: wrap; row-gap: 6px; }
+  .thb.slim .thb-line { flex: 1 1 calc(100% - 90px); }
+  .thb.slim .thb-now { max-width: none; }
+  .thb.slim .thb-act { margin-left: 42px; }
+}
+@media (max-width: 640px) {
+  [data-tabpanel='now'] .miss-twice { flex-wrap: wrap; }
+  [data-tabpanel='now'] .miss-twice > div:first-child { display: grid; gap: 2px; flex: 1 1 100%; white-space: normal; }
+}

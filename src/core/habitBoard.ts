@@ -236,6 +236,23 @@ export function groupTiles<T extends TileLike>(tiles: T[], nowMin: number, order
   }).filter((g) => g.tiles.length > 0)
 }
 
+/**
+ * The simple tracker's one list (no Morning · Day · Evening boxes): your
+ * order first (ids you dragged), else morning, day, evening as they come;
+ * done, skipped and "not today" ones at the end unless the order is fixed.
+ */
+export function listTiles<T extends TileLike>(tiles: T[], order: string[] = [], fixed = false): T[] {
+  const pos = (id: string) => {
+    const i = order.indexOf(id)
+    return i < 0 ? order.length : i
+  }
+  const settled = (t: T) => (fixed ? 0 : t.done ? 1 : t.skipped || t.off ? 2 : 0)
+  return tiles
+    .map((t, i) => ({ t, i }))
+    .sort((a, b) => settled(a.t) - settled(b.t) || pos(a.t.id) - pos(b.t.id) || SLOTS.indexOf(a.t.slot) - SLOTS.indexOf(b.t.slot) || a.i - b.i)
+    .map((x) => x.t)
+}
+
 /** Today's count: done of the habits asked for today (skipped and "not today" left out). */
 export function boardCount(tiles: TileLike[]): { done: number; total: number; perfect: boolean } {
   const counted = tiles.filter((t) => !t.skipped && !t.off)

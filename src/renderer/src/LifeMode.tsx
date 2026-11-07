@@ -22,10 +22,17 @@ export function useLifeMode(): [ModeView | null, () => void] {
   return [v, load]
 }
 
-export function LifeModeCard({ compact = false }: { compact?: boolean }) {
+/** `quiet`: on a normal day nothing shows until "Life mode…" in Today's ⋯ menu opens the picker. */
+export function LifeModeCard({ compact = false, quiet = false }: { compact?: boolean; quiet?: boolean }) {
   const act = useAction()
   const [v, reload] = useLifeMode()
   const [open, setOpen] = useState(false)
+  useEffect(() => {
+    if (!quiet) return
+    const on = () => setOpen(true)
+    window.addEventListener('life-mode-open', on)
+    return () => window.removeEventListener('life-mode-open', on)
+  }, [quiet])
   const [pick, setPick] = useState<ModeKind>('exam')
   const [days, setDays] = useState(7)
   if (!life.extras || !v) return null
@@ -61,6 +68,7 @@ export function LifeModeCard({ compact = false }: { compact?: boolean }) {
     )
   }
   if (!open) {
+    if (quiet) return null
     return (
       <button className={`lm-open ${compact ? 'compact' : ''}`} onClick={() => setOpen(true)} title="Exam week, sick or travelling: change targets and nudges for a few days">
         <span aria-hidden="true">🎚</span> Life mode: normal <small>Exam week · Sick · Travel</small>
