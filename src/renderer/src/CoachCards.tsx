@@ -3,6 +3,7 @@
 // the day's plan as a timeline with Approve / Change / Regenerate, the day at
 // a glance, today's tasks to tick, and the next block with Start / Move / Skip.
 // Only the newest card of a kind is live; older ones settle into one line.
+import { liveHeadline, planSummary } from '@core/benPlanText'
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import { coachCheer } from './coachCheer'
 import { life } from './bridge'
@@ -160,11 +161,14 @@ export function PlanCard({ live = true, spotlight = false, expired = false, onCh
 
   const p = b.plan
   const tl = planTimeline(p, t)
+  // One summary for the card, the chat and the headline (benPlanText.ts): stale counts leave the headline.
+  const sum = planSummary(p)
+  const head = liveHeadline(p.headline, p)
   const approved = b.status === 'approved'
   return (
     <div className={`cf-card cf-plan t-plan live ${approved ? 'ok' : 'waiting'} ${spotlight ? 'spot' : ''} ${cheer ? 'cheer' : ''}`}>
-      <CardHead icon="🗓" title={approved ? "Today's plan" : 'Your plan for today'} sub={[tl.items.length ? `${tl.items.filter((x) => !x.train).length} blocks · ${fmtMinutes(tl.totalMin)} of focus` : '', b.version > 1 ? `v${b.version}` : ''].filter(Boolean).join(' · ')} chip={approved ? '✓ Approved' : 'Waiting for you'} chipTone={approved ? 'ok' : 'wait'} />
-      {p.headline && <p className="cf-plan-head">{p.headline}</p>}
+      <CardHead icon="🗓" title={approved ? "Today's plan" : 'Your plan for today'} sub={[sum.blocks ? `${sum.blocks} block${sum.blocks === 1 ? '' : 's'} · ${fmtMinutes(sum.focusMin)} of focus` : '', sum.mustdos ? `${sum.mustdos} must-do${sum.mustdos === 1 ? '' : 's'}` : '', b.version > 1 ? `v${b.version}` : ''].filter(Boolean).join(' · ')} chip={approved ? '✓ Approved' : 'Waiting for you'} chipTone={approved ? 'ok' : 'wait'} />
+      {head && <p className="cf-plan-head">{head}</p>}
       <PlanShiftOffer state={data.state} late={data.late} onDone={(r) => (setData(r), onChange?.())} />
       {p.why && <p className="plan-why">{p.why}</p>}
       <PlanTrack items={tl.items} now={tl.now} from={tl.from} to={tl.to} />

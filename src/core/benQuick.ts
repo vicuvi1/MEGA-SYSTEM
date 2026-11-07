@@ -88,6 +88,10 @@ export function quickKind(text: string, today: string): Quick | null {
   // words below ("should") send it to the thinking model (that took ~17 s).
   const q0 = t.replace(/[?!.…]+$/g, '').trim()
   if (/^(ok |so |and )?(what now|now what|what('s| is) next|next|what should i do( now| next)?|what do i do( now| next)?|ce fac( acum)?|ce urmeaza|что делать( сейчас)?)$/.test(q0)) return { kind: 'now' }
+  // "What should I focus on right now?", "what should I be doing now?": the same, from the data
+  // (the model once answered it with a made-up "meeting" at 19:50).
+  if (/^(ok |so |and )?(what|which thing) (should|do|shall|must) i (focus on|work on|be doing|be working on|do)( (right )?now| at the moment| next)?$/.test(q0)) return { kind: 'now' }
+  if (/^(what('s| is) (my|the) (focus|priority|one thing)( (right )?now)?|what am i (supposed|meant) to (be doing|do)( (right )?now)?)$/.test(q0)) return { kind: 'now' }
   if (!t || /\d/.test(t) || t.split(' ').length > 8 || /\b(why|should|plan|move|add|log|book|remind|help|but|because|and then)\b/.test(t)) return null
   const q = q0
   if (/^((how much )?water( today)?|how much water( have i (had|drunk))?( today)?|my water|apa( azi)?)$/.test(q)) return { kind: 'water' }
@@ -103,8 +107,63 @@ export function quickKind(text: string, today: string): Quick | null {
 
 const ICON: Record<Topic, string> = { spending: '💸', focus: '⏱', workouts: '💪', sleep: '😴', tasks: '✅', points: '🪙' }
 
+/** A plan block or calendar event, in local "HH:MM" (what "now" answers from). */
+export interface NowSlot {
+  title: string
+  start: string
+  end: string
+  kind: 'block' | 'event'
+}
+
+const hmOf = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+const minOf = (hm: string) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(hm)
+  return m ? Number(m[1]) * 60 + Number(m[2]) : NaN
+}
+
+/**
+ * Where he is now and what really comes next, from today's plan blocks and the calendar he
+ * has (null = calendar not known). Only these real items are named; nothing is guessed.
+ * `after` (ms): look for "next" after this moment (a running timer's end).
+ */
+export function nowSlots(
+  blocks: { title: string; start: string; minutes: number }[],
+  events: { title: string; start: string; end: string; allDay?: boolean }[] | null,
+  now: Date,
+  after?: number
+): { current: NowSlot | null; next: NowSlot | null } {
+  const day = ymd(now)
+  const all: (NowSlot & { s: number; e: number })[] = []
+  for (const b of blocks) {
+    const s = minOf(b.start)
+    if (!Number.isFinite(s)) continue
+    const e = s + Math.max(5, b.minutes || 0)
+    all.push({ title: b.title, start: b.start, end: `${pad(Math.floor(e / 60) % 24)}:${pad(e % 60)}`, kind: 'block', s, e })
+  }
+  for (const ev of events ?? []) {
+    if (ev.allDay) continue
+    const st = new Date(ev.start)
+    const en = new Date(ev.end)
+    if (!Number.isFinite(st.getTime()) || ymd(st) !== day) continue
+    const s = st.getHours() * 60 + st.getMinutes()
+    const e = Number.isFinite(en.getTime()) ? (ymd(en) === day ? en.getHours() * 60 + en.getMinutes() : 24 * 60) : s + 30
+    // The plan's own block in the calendar is the same thing once.
+    if (all.some((x) => x.s === s && x.title.toLowerCase() === ev.title.toLowerCase())) continue
+    all.push({ title: ev.title, start: hmOf(st), end: hmOf(en), kind: 'event', s, e })
+  }
+  all.sort((a, b) => a.s - b.s || (a.kind === 'event' ? -1 : 1))
+  const t = now.getHours() * 60 + now.getMinutes()
+  const from = after != null ? Math.max(t, new Date(after).getHours() * 60 + new Date(after).getMinutes()) : t
+  const current = all.find((x) => x.s <= t && x.e > t) ?? null
+  const next = all.find((x) => x.s >= from && x !== current && x.s > t) ?? null
+  const strip = (x: (typeof all)[number] | null): NowSlot | null => (x ? { title: x.title, start: x.start, end: x.end, kind: x.kind } : null)
+  return { current: strip(current), next: strip(next) }
+}
+
 export interface QuickData {
-  move?: { kind: string; title: string; sub: string; subject?: string; minutes?: number }
+  move?: { kind: string; title: string; sub: string; subject?: string; minutes?: number; endsAt?: number }
+  /** "What now?": the plan block or event he is in, and the real next one (never guessed). */
+  slots?: { current: NowSlot | null; next: NowSlot | null; calendarKnown: boolean }
   water?: { ml: number; target: number }
   streaks?: { training: number; clean: number; focusWeekMin: number; wakeOnTime?: string }
   /** The looked-up answer for a lookup (answerLocal). */
@@ -152,6 +211,27 @@ export function quickReply(q: Quick, d: QuickData, now = new Date()): QuickReply
   if (q.kind === 'now') {
     const m = d.move
     if (!m) return null
+    const sl = d.slots
+    const nextLine = sl?.next ? ` Next: ${sl.next.title} at ${sl.next.start}.` : sl && sl.calendarKnown ? ' Nothing else on your calendar or plan today.' : ''
+    // A running timer comes first: its real end time, then the real next item.
+    if (m.kind === 'running') {
+      const ends = m.endsAt ? hmOf(new Date(m.endsAt)) : null
+      return { reply: `🎯 ${m.title}. ${m.sub.replace(/\.$/, '')}${ends && /min left/.test(m.sub) ? ` (until ${ends})` : ''}.${nextLine}`, chips: ['Give me 10 min', 'Something else?'], buttons: [] }
+    }
+    // In a plan block (or a calendar event) now: that is the answer, with its real times.
+    const cur = sl?.current
+    if (cur && m.kind !== 'answer' && m.kind !== 'approve') {
+      const left = Math.max(5, minOf(cur.end) - (now.getHours() * 60 + now.getMinutes()))
+      const subject = cur.title.replace(/\(.*?\)/g, '').trim().slice(0, 28) || 'Focus'
+      return cur.kind === 'block'
+        ? { reply: `🎯 Now: ${cur.title} (${cur.start}–${cur.end}), ${left} min left.${nextLine}`, chips: ['Something else?', 'Give me 10 min'], buttons: [{ label: `▶ ${Math.min(left, 90)} min ${subject}`.slice(0, 32), do: `focus:${Math.min(left, 90)}:${subject}` }] }
+        : { reply: `🎯 You're in ${cur.title} until ${cur.end}.${nextLine}`, chips: ['Something else?'], buttons: [] }
+    }
+    // The next plan block IS the suggested work: say so once, with its real time.
+    if (m.kind === 'focus' && sl?.next?.kind === 'block' && m.subject && sl.next.title.toLowerCase().includes(m.subject.toLowerCase().split(' ')[0])) {
+      const minutes = m.minutes ?? 25
+      return { reply: `🎯 ${sl.next.title} is next on your plan at ${sl.next.start}. Start it now: ${minutes} min?`, chips: ['Something else?', 'Give me 10 min'], buttons: [{ label: `▶ ${minutes} min ${m.subject}`.slice(0, 32), do: `focus:${minutes}:${m.subject}` }] }
+    }
     const buttons =
       m.kind === 'focus' && m.subject && m.minutes
         ? [{ label: `▶ ${m.minutes} min ${m.subject}`.slice(0, 32), do: `focus:${m.minutes}:${m.subject}` }]
@@ -160,7 +240,7 @@ export function quickReply(q: Quick, d: QuickData, now = new Date()): QuickReply
           : m.kind === 'plan'
             ? [{ label: '🗓 Plan my day', do: 'plan' }]
             : []
-    return { reply: `🎯 ${m.title}. ${m.sub}`, chips: m.kind === 'answer' ? ['Done ✅', 'Not yet'] : ['Something else?', 'Give me 10 min'], buttons }
+    return { reply: `🎯 ${m.title}. ${m.sub}${nextLine}`, chips: m.kind === 'answer' ? ['Done ✅', 'Not yet'] : ['Something else?', 'Give me 10 min'], buttons }
   }
   if (q.kind === 'wrong') return d.wrong ? wrongReply(d.wrong) : null
   if (q.kind === 'water') {

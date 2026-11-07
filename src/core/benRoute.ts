@@ -90,10 +90,10 @@ export const FRIENDLY_FAIL = "Sorry, I couldn't finish that answer in time. Tap 
 // ---- The prompt diet: only the part of his day this message needs ----------
 
 const KEEP: Record<Exclude<Trim, 'full'>, RegExp> = {
-  review: /^(Now:|Coins:|Focus today|Today's must-dos|Goals planned|Goals now|Measurable goals|Week score|Last 7 days|Sleep:|Discipline:|Training:|Money|Water today|Habits today|RIGHT NOW|This week's chosen focus|Focus by subject)/,
-  plan: /^(Now:|Focus today|Today's must-dos|Goals planned|Goals now|Measurable goals|Sleep:|Training:|Water today|Calendar|Free time|Todoist today|Deadlines soon|RIGHT NOW|This week's chosen focus)/,
-  goals: /^(Now:|Focus today|Goals planned|Goals now|Measurable goals|Week score|Last 7 days|This week's chosen focus|Focus by subject|Deadlines soon)/,
-  light: /^(Now:|Coins:|Focus today|Today's must-dos|Water today|Habits today|RIGHT NOW|HIS DAY SO FAR|Money \(MDL\))/
+  review: /^(Now:|Coins:|Focus timer|Focus today|Today's must-dos|Goals planned|Goals now|Measurable goals|Week score|Last 7 days|Sleep:|Discipline:|Training:|Money|Water today|Habits today|RIGHT NOW|This week's chosen focus|Focus by subject)/,
+  plan: /^(Now:|Focus timer|Focus today|Today's must-dos|Goals planned|Goals now|Measurable goals|Sleep:|Training:|Water today|Calendar|Free time|Todoist today|Deadlines soon|RIGHT NOW|This week's chosen focus)/,
+  goals: /^(Now:|Focus timer|Focus today|Goals planned|Goals now|Measurable goals|Week score|Last 7 days|This week's chosen focus|Focus by subject|Deadlines soon)/,
+  light: /^(Now:|Coins:|Focus timer|Focus today|Today's must-dos|Water today|Habits today|RIGHT NOW|HIS DAY SO FAR|Money \(MDL\))/
 }
 
 /**

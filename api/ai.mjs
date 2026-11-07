@@ -296,23 +296,33 @@ export async function pingModel(env = process.env, fetchImpl = fetch) {
   const budget = b ? { spent: b.spent, budget: b.budget } : null
   if (!key) return { ai: (env.GEMINI_API_KEY || '').trim() ? null : { ok: false, error: 'No AI key on the server' }, budget }
   const model = await openRouterModel(env, fetchImpl)
-  const t0 = Date.now()
-  try {
-    const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'Life System' },
-      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Say OK.' }], max_tokens: 1, temperature: 0 }),
-      signal: AbortSignal.timeout(10_000)
-    })
-    if (!r.ok) return { ai: { ok: false, model, error: `OpenRouter ${r.status}: ${(await r.text().catch(() => '')).slice(0, 120)}` }, budget }
-    return { ai: { ok: true, model, ms: Date.now() - t0 }, budget }
-  } catch (e) {
-    return { ai: { ok: false, model, error: e.message }, budget }
+  // One slow answer is not an outage: a timeout or a 5xx is asked once more (15 s) before it counts.
+  let last = null
+  for (const ms of [10_000, 15_000]) {
+    const t0 = Date.now()
+    try {
+      const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'Life System' },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Say OK.' }], max_tokens: 1, temperature: 0 }),
+        signal: AbortSignal.timeout(ms)
+      })
+      if (r.ok) return { ai: { ok: true, model, ms: Date.now() - t0 }, budget }
+      last = { ok: false, model, error: `OpenRouter ${r.status}: ${(await r.text().catch(() => '')).slice(0, 120)}` }
+      if (r.status < 500 && r.status !== 429) break
+    } catch (e) {
+      last = { ok: false, model, error: e.message }
+    }
   }
+  return { ai: last, budget }
 }
 
 /** Asks OpenRouter (text only). opts.json: answer as a JSON object; opts.strong: the strong model (flash if it fails). */
 export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, env = process.env) {
+  // The caller's thinking cap (thinkMs) runs from now: the budget and model lookups below
+  // take time too. Before, the cap started after them, so the chat's own timer gave up first,
+  // moved on to the quick model, and this call timed out later as a stray "AI failing" error.
+  const askedAt = Date.now()
   // A test run (Settings → Test Ben) asks one exact model, with no fallback.
   // Even a test run respects a used-up budget (A7).
   if (opts.model) {
@@ -331,7 +341,8 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
     const flash = pick.chat || (await openRouterModel(env, fetchImpl))
     const deep = mine || (await strongModel(env, fetchImpl))
     // opts.thinkMs: the caller's cap on thinking (Ben's chat keeps time for its own quick retry).
-    const t = thinkSlot(Math.min(mine ? 60_000 : 35_000, opts.thinkMs || Infinity), opts.deadline)
+    const capLeft = opts.thinkMs ? opts.thinkMs - (Date.now() - askedAt) : Infinity
+    const t = capLeft < 1500 ? 0 : thinkSlot(Math.min(mine ? 60_000 : 35_000, capLeft), opts.deadline)
     if (deep && t) {
       try {
         // A chat answer thinks a little (fast); plans and reviews from the rhythm think more.

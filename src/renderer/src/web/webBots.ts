@@ -54,7 +54,10 @@ import { coachStatus, waterToday } from './coachStatus'
 import { nextSlot } from '@core/benActs'
 import { parseSets, strengthSummary } from '@core/strength'
 import { AREA_WORDS, learnAreaWords } from '@core/areaWords'
-import { amountIn, codeFix, preLookups, quickKind, quickReply } from '@core/benQuick'
+import { groundReply } from '@core/benGround'
+import { blockFor, meansTimer, readFinished, readStartingNow, startNowReply } from '@core/benNow'
+import { REPLACE_ASK, REPLACE_CHIPS, planMadeLine, planSummary, replaceAnswer, wantsNewPlan } from '@core/benPlanText'
+import { amountIn, codeFix, nowSlots, preLookups, quickKind, quickReply } from '@core/benQuick'
 import { createRhythm } from './rhythmBot'
 import { downloadFile, downloadText, esc, tg } from './bots/telegram'
 import { focusKeyboard, linkExpense, STOP_KEYBOARD, takeLink, ruleCoins } from './bots/helpers'
@@ -234,6 +237,16 @@ function moneyFactsOf(db: any, svc: Services) {
   return moneyFacts(financeStateFrom(db, store), today, fun)
 }
 
+/** The data part of Ben's prompt (his day, calendar, plan, lookups), minus Ben's own earlier words. */
+export function factsOf(prompt: string): string {
+  const i = prompt.indexOf('== Victor right now ==')
+  const data = i >= 0 ? prompt.slice(i) : prompt.slice(Math.max(0, prompt.indexOf('<<<LIVE>>>')))
+  return data
+    .split('\n')
+    .filter((l) => !/^\s*(Ben|Coach \(\w+\)):/.test(l))
+    .join('\n')
+}
+
 export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist: todoistIn = null, ai = null, calendar: calendarIn = null, recall = null, tools = null, timing = {}, web = null }: WebBotsDeps) {
   const BUDGET = timing.budgetMs ?? THINK_BUDGET_MS
   // Speed: what Todoist and the calendar said a moment ago answers a follow-up (45 s), and
@@ -247,6 +260,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (hit && Date.now() - hit.at < FRESH_MS) return Promise.resolve(hit.v)
     const p = run().then((v) => (fresh.set(key, { at: Date.now(), v }), v))
     return withTimeout(p, slowMs).catch(() => (hit && Date.now() - hit.at < STALE_MS ? hit.v : null))
+  }
+  /** What Todoist or the calendar said lately (up to 30 min old), without asking again; null when nothing. */
+  function peek<T>(key: string): T | null {
+    const hit = fresh.get(key) as { at: number; v: T } | undefined
+    return hit && Date.now() - hit.at < STALE_MS ? hit.v : null
   }
   const forgetting = <T extends object>(api: T | null, reads: string[]): T | null =>
     api
@@ -927,6 +945,39 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         }
       }
     }
+    // "I finished the lab report" while its timer runs: the timer stops and logs (the same "stop" Ben uses).
+    if (!preset && !media && text && !direct) {
+      const fin = readFinished(clean)
+      const run = fin ? await mirror.read((db) => services.services(db).focus.state().running).catch(() => null) : null
+      const act = fin && run && meansTimer(fin, run.subject) ? readAction('stop') : null
+      if (act) {
+        step('Stopped your timer')
+        preset = { reply: `Nice, ${run!.subject} done. Timer stopped and logged.`, acts: [act], chips: ['What now?', 'Take a break'] }
+      }
+    }
+    // "now I am going to clean up the room": he starts it now. Ben offers ▶ Start (a timer for
+    // it, its plan block's length) and Later, instead of re-telling the plan (benNow.ts).
+    if (!preset && !media && text && !direct) {
+      const what = readStartingNow(clean)
+      if (what) {
+        const sr = await mirror
+          .read((db) => {
+            const svc = services.services(db)
+            const today = svc.wallet.today()
+            const brief = rhythmFor(readSetting(db as any, RHYTHM), today).briefing
+            const blocks = brief && brief.plan.day === today ? brief.plan.blocks : []
+            const st = coachStatus(svc)
+            const mv = st.move as any
+            const running = mv?.kind === 'running' ? { subject: String(mv.title).replace(/^Focus on /, ''), leftMin: Math.max(0, Math.round(((mv.endsAt ?? Date.now()) - Date.now()) / 60000)) } : null
+            return startNowReply(what, { block: blockFor(what, blocks), running, now: new Date() })
+          })
+          .catch(() => null)
+        if (sr) {
+          step('Read what you are starting')
+          preset = { reply: sr.reply, acts: [], chips: sr.chips, buttons: sr.buttons }
+        }
+      }
+    }
     if (!preset && !media && text) {
       const q = await mirror.read((db) => quickKind(clean, services.services(db).wallet.today()))
       if (q) {
@@ -948,7 +999,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               const open = st.mustdos.filter((x) => !x.done)
               return quickReply(q, { wrong: { focusMin: st.today.focusMin, focusGoal: Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0)), mustDone: st.today.mustDone, mustTotal: st.today.mustTotal, nextMust: open[0]?.text ?? null, doing: dayLog(db, today).doing ?? null } })
             }
-            return quickReply(q, { move: st.move as any, water: { ml: st.today.waterMl, target: st.today.waterTarget } })
+            // "What now?": the plan block or event he's in and the real next one (the calendar
+            // only from what it said lately: this answer never waits for Google).
+            const nowAt = new Date()
+            const mid = new Date(nowAt)
+            mid.setHours(0, 0, 0, 0)
+            const cal = calendar ? peek<CalEvent[]>(`calendar:${mid.toISOString()}`) : null
+            const brief = rhythmFor(readSetting(db as any, RHYTHM), today).briefing
+            const blocks = brief && brief.plan.day === today ? brief.plan.blocks : []
+            const slots = { ...nowSlots(blocks, cal, nowAt, (st.move as any)?.endsAt), calendarKnown: !!cal }
+            return quickReply(q, { move: st.move as any, slots, water: { ml: st.today.waterMl, target: st.today.waterTarget } }, nowAt)
           })
           .catch(() => null)
         if (qr) {
@@ -1193,8 +1253,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
      * a failed quick try is retried once, silently, while there is time.
      */
     let fellBack = false
+    // What the model was given about his day (for the check that it invented nothing).
+    let givenFacts = ''
     const ask = async (found?: string, extraNote = '', kind = media ? 'media' : big ? 'chat-deep' : 'chat'): Promise<string> => {
       const prompt = promptFor(found, extraNote)
+      givenFacts = factsOf(prompt)
       const base = { json: true, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind, deadline, ...(onStep && (kind === 'chat' || kind === 'chat-deep' || kind === 'lookup') ? { onDelta: (t: string) => step(`\u0001${t}`) } : {}) }
       const slot = route.strong ? strongSlot(Date.now(), deadline, route.capMs || 16_000, RESERVE, MIN_TRY) : 0
       if (slot) {
@@ -1326,8 +1389,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         // The day is full and one of his own asks has no slot: he chooses (never moved silently).
         const sq = p.squeeze
         const ask = sq ? (sq.drop ? ` The day is full: drop "${sq.drop}" or do "${sq.keep}" tomorrow?` : ` The day is full: "${sq.keep}" is on today's list without a slot.`) : ''
+        void focusMin
         local = {
-          reply: `Here's today's plan${made.version > 1 ? ` (v${made.version})` : ''}, starting ${p.blocks[0]?.start ?? 'now'}: ${p.blocks.length} block${p.blocks.length === 1 ? '' : 's'}, ${hm(focusMin)} of focus${p.mustdos.length ? `, ${p.mustdos.length} must-do${p.mustdos.length === 1 ? '' : 's'}` : ''}.${ask || ' Look it over, then approve it or tell me what to change.'}`,
+          // The same numbers as the plan card (benPlanText.ts); the card shows the live version.
+          reply: planMadeLine(p, ask),
           actions: [],
           remember: [],
           show: ['plan'],
@@ -1351,6 +1416,22 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         local = { reply: 'Done: the rest of the day is packed again from now. Done and pinned blocks stayed where they were.', actions: [], remember: [], show: ['plan'], steps: r.done }
         trace.mark('replan')
       }
+    }
+    // A new plan while today's is approved: asked first ("Replace the approved plan?"); yes
+    // re-plans from now, keeping done and pinned blocks (and their calendar events).
+    const lastCoach = [...memory.chat].reverse().find((c) => c.role === 'coach')?.text ?? ''
+    const replace = plan?.status === 'approved' && lastCoach.includes(REPLACE_ASK.slice(0, 30)) ? replaceAnswer(clean) : null
+    if (!preset && !local && !media && !direct && replace === 'no') {
+      local = { reply: 'OK, the approved plan stays as it is.', actions: [], remember: [], show: ['plan'] }
+    } else if (!preset && !local && !media && !direct && replace === 'yes') {
+      step('Re-planning from now')
+      const r = await rhythm.replanNow().catch(() => null)
+      if (r?.ok && r.plan) {
+        local = { reply: `New version of today's plan from ${hmOfIso(new Date().toISOString())}: ${planSummary(r.plan).text}. Done and pinned blocks stayed where they were.`, actions: [], remember: [], show: ['plan'], steps: r.done }
+        trace.mark('replan')
+      }
+    } else if (!preset && !local && !media && !direct && route.intent === 'plan' && plan?.status === 'approved' && wantsNewPlan(clean)) {
+      local = { reply: REPLACE_ASK, actions: [], remember: [], show: ['plan'], chips: [...REPLACE_CHIPS] }
     }
     // He asks for the plan again and the approved one is late (its first blocks are gone, not
     // started): it moves to start from now, in code, with its calendar blocks.
@@ -1470,6 +1551,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // and keeps at most one emoji, none when his last two replies already had one.
     const prevCoach = memory.chat.filter((c) => c.role === 'coach').map((c) => c.text)
     if (out.reply && !preset) out.reply = tidyReply(out.reply, prevCoach, 'Victor')
+    // He never states a time, a meeting or progress that isn't in his data (benGround.ts).
+    if (out.reply && !preset && !local && givenFacts) {
+      const g = groundReply(out.reply, { facts: givenFacts, said: text, now: new Date() })
+      if (g.dropped.length) {
+        console.warn('coach: took out made-up parts:', g.dropped.join(' | ').slice(0, 200))
+        out.reply = g.reply
+      }
+    }
     // BQ2: he asked to SEE the plan, his day or his tasks: the card comes with the reply.
     const see = preset || localEdit ? [] : wantsToSee(clean)
     // "How am I doing on my goals": the goals card with the answer.

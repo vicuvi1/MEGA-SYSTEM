@@ -175,7 +175,8 @@ export function parseCoffee(text: string): number | null {
   if (!t || t.length > 40 || /\?|\b(no|not|without|skip|decaf|stop|undo)\b/.test(t)) return null
   if (/^(☕\s*)+$/u.test(t)) return Math.min(4, [...t].filter((c) => c === '☕').length)
   const drink = '(coffees?|espressos?|lattes?|cappuccinos?|americanos?|flat whites?|energy drinks?|red bulls?|cafea|cafele|кофе)'
-  const m = new RegExp(`^(?:(?:i )?(?:had|drank|just had|got)\\s+)?(?:(a|an|one|1|two|2|three|3|o|un|una|două|doua)\\s+)?(?:cup of |cups of |ceașcă de |ceasca de )?${drink}(?: now| just now)?[.!]*$`).exec(t)
+  // "just drunk a cup of coffee", "I've had 2 espressos", "drinking a latte" (was missed: Ben guessed instead of logging).
+  const m = new RegExp(`^(?:(?:i(?:'ve| have)?|i'm|i am)\\s+)?(?:just\\s+)?(?:(?:had|drank|drunk|got|grabbed|finished|having|drinking)\\s+)?(?:(a|an|one|1|two|2|three|3|o|un|una|două|doua)\\s+)?(?:cup of |cups of |mug of |ceașcă de |ceasca de )?${drink}(?: now| just now)?[.!]*$`).exec(t)
   if (!m) return null
   const n = m[1]
   return n === 'two' || n === '2' || n === 'două' || n === 'doua' ? 2 : n === 'three' || n === '3' ? 3 : 1

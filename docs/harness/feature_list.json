@@ -84,7 +84,7 @@
     "SMOKE_ONLY=\"Coach\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": ""
+   "notes": "2026-11-07: replies are grounded (benGround.ts); what now / starting now / finished / coffee answered in code; one plan summary; golden tests in src/server/benCoachBugs.test.ts and benSelfReview.test.ts"
   },
   {
    "id": "F007",

@@ -2,7 +2,20 @@
 // this turns them into checks, decides when Ben warns you (broken 30+ min)
 // and when he says it's fixed, and writes the weekly report. Pure and tested.
 
-export interface Beat { ok?: string; err?: { at: string; msg: string } }
+export interface Beat {
+  ok?: string
+  err?: { at: string; msg: string }
+  /** Failed calls in a row since the last OK, and when the first of them failed (sys_health "<part>:fails"). */
+  fails?: { n: number; since: string }
+}
+
+/**
+ * A part counts as broken only after this many failed calls in a row (a refused
+ * key at once). One timed-out AI call followed by silence is a blip, not an
+ * outage: before, a single timeout with no call after it turned into
+ * "Failing since 34 min ago".
+ */
+export const FAILS_TO_BREAK = 3
 export type Beats = Record<string, Beat>
 export interface ErrorEntry { at: string; source: string; msg: string; stack?: string; version?: string; place?: string }
 
@@ -47,6 +60,19 @@ const addDaysISO = (day: string, n: number) => {
   return d.toISOString().slice(0, 10)
 }
 
+/**
+ * Does a failed AI call count against Ben's AI health? Not when the caller capped it on
+ * purpose and retries itself (Ben's chat gives the thinking model `thinkMs` with `noFallback`,
+ * then asks the quick model), and not when another call answered after this one started (the
+ * chat already moved on; its late timeout is noise). Everything else counts.
+ */
+export function aiFailureCounts(e: { message?: string; timeUp?: boolean } | null | undefined, opts: { thinkMs?: number; noFallback?: boolean } | undefined, startedAt: number, lastOkAt: number): boolean {
+  if (lastOkAt >= startedAt) return false
+  const timeout = /abort|timed? ?out|took too long|time is up/i.test(String(e?.message ?? '')) || !!e?.timeUp
+  if (timeout && opts?.noFallback && opts?.thinkMs) return false
+  return true
+}
+
 /** Where to fix a key that was refused (revoked, expired, wrong). */
 const KEY_FIX: Record<string, string> = {
   telegram: 'Ben\'s bot token was refused: make a new one in @BotFather (/revoke), then update TELEGRAM_BOT_TOKEN in Vercel',
@@ -61,12 +87,19 @@ export function keyHint(id: string, msg: string): string | null {
   return KEY_FIX[id] && REFUSED.test(msg) ? KEY_FIX[id] : null
 }
 
-/** A part that reports OK/errors: broken when its last error is newer than its last OK. */
-function okErr(id: string, label: string, b: Beat | undefined, now: Date, never: string): Check | null {
+/**
+ * A part that reports OK/errors: broken when its last error is newer than its last OK
+ * AND it failed `need` times in a row (a refused key: at once). Fewer failures show as OK
+ * with a note, so the card only appears for a real, sustained failure and clears with the next OK.
+ */
+function okErr(id: string, label: string, b: Beat | undefined, now: Date, never: string, need = FAILS_TO_BREAK): Check | null {
   if (!b || (!b.ok && !b.err)) return { id, label, ok: true, detail: never }
   const errNewer = !!b.err && (!b.ok || b.err.at > b.ok)
   const hint = errNewer ? keyHint(id, b.err!.msg) : null
-  if (errNewer) return { id, label, ok: false, detail: hint ? `${hint}. Since ${ago(now, b.err!.at)}: ${b.err!.msg.slice(0, 80)}` : `Failing since ${ago(now, b.err!.at)}: ${b.err!.msg.slice(0, 140)}`, since: b.err!.at }
+  const n = Math.max(1, b.fails?.n ?? 1)
+  const since = b.fails?.since && (!b.ok || b.fails.since > b.ok) ? b.fails.since : b.err?.at
+  if (errNewer && (hint || n >= need)) return { id, label, ok: false, detail: hint ? `${hint}. Since ${ago(now, since!)}: ${b.err!.msg.slice(0, 80)}` : `Failing since ${ago(now, since!)} (${n} failed in a row): ${b.err!.msg.slice(0, 140)}`, since }
+  if (errNewer) return { id, label, ok: true, detail: `${b.ok ? `OK, last ${ago(now, b.ok)}; ` : ''}${n === 1 ? 'one call' : `${n} calls`} failed ${ago(now, b.err!.at)} (${b.err!.msg.slice(0, 80)}), not a pattern yet` }
   return { id, label, ok: true, detail: `OK, last ${ago(now, b.ok!)}` }
 }
 
@@ -104,7 +137,7 @@ export function healthChecks(i: HealthInput): Check[] {
     out.push({ id: 'desktopBackup', label: 'PC / Drive backup', ok: !old, detail: old ? `Last backup file ${ago(now, pc)}` : `Backup file ${ago(now, pc)}`, ...(old ? { since: new Date(Date.parse(pc) + 3 * 86400000).toISOString() } : {}) })
   }
   const drill = beats.restoreDrill
-  if (drill?.ok || drill?.err) out.push(okErr('restoreDrill', 'Restore drill', drill, now, '')!)
+  if (drill?.ok || drill?.err) out.push(okErr('restoreDrill', 'Restore drill', drill, now, '', 1)!)
   // LT7: each cold server start downloads the whole database; this month's total.
   const cold = i.notes?.[`coldreads:${now.toISOString().slice(0, 7)}`]
   if (cold && Number.isFinite(Number(cold.rows))) {

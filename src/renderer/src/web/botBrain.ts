@@ -1,3 +1,4 @@
+import { focusEndsAt } from '@core/focus'
 import { notMoney } from '@core/moneyGuess'
 import { foodById, matchFood } from '@core/protein'
 import { musicNowContext } from '@core/music'
@@ -324,7 +325,9 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
   const lines = [
     `Now: ${now.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}, ${now.toTimeString().slice(0, 5)}.`,
     `Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
-    `Focus today: ${hm(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ''}. Last 7 days ${hm(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(', ') || 'none yet'}.`,
+    // Its own line: a line ending "none yet" is left out of the prompt (compactContext), and the timer must never be.
+    f.running ? `Focus timer RUNNING now on "${f.running.subject}" (${f.running.planned} min planned, ${runningEnd(f.running, now)}).` : '',
+    `Focus today: ${hm(f.todayMin)}${f.running ? ` (+ the running timer)` : ''}. Last 7 days ${hm(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(', ') || 'none yet'}.`,
     `Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? '[done]' : '[open]'} ${x.text}`).join('; ') : 'none written yet'}.`,
     f.goals.length
       ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals
@@ -415,6 +418,18 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
 }
 
 const hmOf = (d: Date) => d.toTimeString().slice(0, 5)
+
+/** The running timer's real end ("ends 18:15, 4 min left"), so Ben never guesses it. */
+function runningEnd(r: any, now: Date): string {
+  try {
+    const end = focusEndsAt(r) + (r.pausedAt ? Math.max(0, now.getTime() - Date.parse(r.pausedAt)) : 0)
+    if (!Number.isFinite(end)) return 'end time unknown'
+    const left = Math.round((end - now.getTime()) / 60000)
+    return left > 0 ? `ends ${hmOf(new Date(end))}, ${left} min left${r.pausedAt ? ', paused' : ''}` : `its time ran out at ${hmOf(new Date(end))}`
+  } catch {
+    return 'end time unknown'
+  }
+}
 
 /**
  * Ben's "right now": where he is in his calendar, what he did in the last
@@ -838,7 +853,7 @@ export function brainPrompt(persona: Persona, context: string, memory: Memory, m
     PERSONA[persona],
     'Use RIGHT NOW and HIS DAY SO FAR: answer about his actual moment (where he is, what he just did, what he said this morning), never generic. When he asks "why"/"how come" about a number, explain exactly where it comes from (DATA SOURCES: what was logged, when, where); if it truly is unknown, ask ONE precise question.',
     UNTRUSTED_NOTE,
-    'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out.',
+    'Facts: every number you write must come from the data below (or his message). Check it before you write it. If you don\'t have a number, don\'t make one up; ask for it with "need" or leave it out. The same for times, events and progress: name only events and times that are in RIGHT NOW, the calendar or the plan (never a "meeting" that isn\'t there; a running timer ends when its line says), and never say something is done, nearly done or under way unless the data or his message says so.',
     'Accountability: you are not a cheerleader. When he broke or ignored promises this week, name it with the count ("3rd promise missed this week"), and make the next step smaller and timed. When he keeps them, say so in one short line and raise the bar a little. Tie today to his big goals and deadlines: say how today moves the goal (or doesn\'t).',
     BQ_RULES,
     'Style: a close friend who coaches, tough love, on his side, honest. Clear, length as he chose (see "How he wants you to write"; default short). Use numbers when they answer him (his real ones: "focus 32m of 10h this week"), then at most ONE push: one next step with a time or a duration. Use the patterns and what works for him when you advise. No essays, no lists unless he asks for a plan (then a few short lines "14:00–14:50 Lab report"). Plain text, no markdown. Reply in the language his chosen style says.',

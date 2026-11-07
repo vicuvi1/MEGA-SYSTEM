@@ -78,3 +78,15 @@ entry that says why.
 - **Decision:** a desktop write saves to the local copy and returns. The upload runs next in line,
   and catch-up is skipped when the copy was checked in the last 15 seconds.
 - **Why:** island taps were slow because they waited on the internet twice.
+
+### Health alerts need a sustained failure (2026-11-07)
+- **Decision:** a part is "broken" only after 3 failed calls in a row (a refused key at once) and
+  30 minutes from the first; the next OK clears it. Capped tries the caller retries itself don't count.
+- **Why:** one timed-out AI call followed by silence became "Failing since 34 min ago".
+- **Rules out:** alerting on a single error, or counting the chat's own planned fallbacks as outages.
+
+### Ben states only what his data holds (2026-11-07)
+- **Decision:** every model reply passes `src/core/benGround.ts`: times, events and progress claims
+  that aren't in his context or your message are taken out. "What now?" is answered in code.
+- **Why:** he told you about a "meeting" at 19:50 that didn't exist.
+

@@ -14,14 +14,31 @@ const ENSURE = [
 const put = (key: string, at: string, msg: string | null) => ({ sql: 'INSERT INTO sys_health (key, at, msg) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = excluded.msg', args: [key, at, msg] })
 
 const lastOk = new Map<string, number>()
+/** Parts that failed on this server since their last OK write (their OK must clear the streak). */
+const failed = new Set<string>()
 
-/** A part worked (ok) or failed (with why). Never throws. OKs are written at most every 5 minutes. */
+/**
+ * A part worked (ok) or failed (with why). Never throws. OKs are written at most every 5
+ * minutes, except the first OK after a failure, which also clears the failure streak
+ * ("<part>:fails": when the streak began, and how many failed in a row).
+ */
 export async function beat(t: TursoHttp, key: string, ok: boolean, msg?: string, now = new Date()): Promise<void> {
   if (ok) {
-    if (now.getTime() - (lastOk.get(key) ?? 0) < 5 * 60000) return
+    if (!failed.has(key) && now.getTime() - (lastOk.get(key) ?? 0) < 5 * 60000) return
     lastOk.set(key, now.getTime())
-  } else lastOk.delete(key)
-  await t.writeAtomic([...ENSURE, put(`${key}:${ok ? 'ok' : 'err'}`, now.toISOString(), ok ? null : String(msg ?? 'failed').slice(0, 300))] as any).catch(() => {})
+    failed.delete(key)
+    await t.writeAtomic([...ENSURE, put(`${key}:ok`, now.toISOString(), null), { sql: 'DELETE FROM sys_health WHERE key = ?', args: [`${key}:fails`] }] as any).catch(() => {})
+    return
+  }
+  lastOk.delete(key)
+  failed.add(key)
+  await t
+    .writeAtomic([
+      ...ENSURE,
+      put(`${key}:err`, now.toISOString(), String(msg ?? 'failed').slice(0, 300)),
+      { sql: "INSERT INTO sys_health (key, at, msg) VALUES (?, ?, '1') ON CONFLICT(key) DO UPDATE SET msg = CAST(COALESCE(sys_health.msg, '0') AS INTEGER) + 1", args: [`${key}:fails`, now.toISOString()] }
+    ] as any)
+    .catch(() => {})
 }
 
 /** One error for the log: what, where in the code (stack), which build, which screen. */
@@ -74,6 +91,7 @@ export async function readHealth(t: TursoHttp): Promise<{ beats: Beats; errors: 
       const [part, kind] = String(k).split(':')
       const b = (beats[part] ??= {})
       if (kind === 'ok') b.ok = String(at)
+      else if (kind === 'fails') b.fails = { n: Math.max(1, Number(msg) || 1), since: String(at) }
       else b.err = { at: String(at), msg: String(msg ?? '') }
     }
   }

@@ -47,7 +47,7 @@ import { telegramKeyboard as benKeyboard } from '@core/coachButtons'
 import { messageKind, sendOnce, type SentToday } from '../core/benOnce'
 import { cleanVoice, voiceKind, voicePrompt } from '../core/benVoice'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
-import { alertDecisions, alertText, healthChecks, weeklyReport } from '@core/health'
+import { aiFailureCounts, alertDecisions, alertText, healthChecks, weeklyReport } from '@core/health'
 import { beat, logBen, logError, readHealth, setNote, type BenLogEntry } from '../renderer/src/web/systemHealth'
 import { restoreDrill, snapshotOf } from '../renderer/src/web/restoreDrill'
 import { loadTriggers, urgeEvents } from '../renderer/src/web/disciplinePatterns'
@@ -219,14 +219,20 @@ async function botsFor(env: BotEnv) {
   // New tasks from the bots go to their area too (words first, then Gemini).
   // Every AI answer (or failure) is a health beat: Ben tells you when his AI stops working.
   const healthDb = new TursoHttp(env.tursoUrl, env.tursoToken)
+  // Only real failures count: a capped "thinking" try that Ben's chat retries with the quick
+  // model, and a call that ends after a later call already answered (the chat moved on), are
+  // the plan working, not the AI failing (aiFailureCounts).
+  let lastAiOk = 0
   const model: BotEnv['model'] = env.model
     ? async (prompt, opts) => {
+        const started = Date.now()
         try {
           const r = await (liveModel ?? env.model)!(prompt, opts)
+          lastAiOk = Date.now()
           void beat(healthDb, 'ai', true)
           return r
         } catch (e) {
-          void beat(healthDb, 'ai', false, (e as Error).message)
+          if (aiFailureCounts(e as Error, opts as any, started, lastAiOk)) void beat(healthDb, 'ai', false, (e as Error).message)
           throw e
         }
       }
