@@ -4,7 +4,7 @@ import initSqlJs from "sql.js";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { lookup } from "node:dns/promises";
 // src/core/calWatch.ts
-var hm$9 = (iso) => new Date(iso).toTimeString().slice(0, 5);
+var hm$10 = (iso) => new Date(iso).toTimeString().slice(0, 5);
 var day = (iso, now) => {
 	const d = new Date(iso);
 	const t = new Date(now);
@@ -17,7 +17,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 	for (const [id, e] of Object.entries(now)) if (!prev[id] && live(e)) out.push({
 		kind: "added",
 		ev: e,
-		text: `📅 New in your calendar: <b>${e.title}</b> ${day(e.start, at)} at ${hm$9(e.start)}. I'll plan around it.`
+		text: `📅 New in your calendar: <b>${e.title}</b> ${day(e.start, at)} at ${hm$10(e.start)}. I'll plan around it.`
 	});
 	for (const [id, e] of Object.entries(prev)) if (!now[id] && live(e) && Date.parse(e.start) > at.getTime()) {
 		const freeMin = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 6e4);
@@ -25,7 +25,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 			kind: "cancelled",
 			ev: e,
 			freeMin,
-			text: `❌ <b>${e.title}</b> ${day(e.start, at)} at ${hm$9(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
+			text: `❌ <b>${e.title}</b> ${day(e.start, at)} at ${hm$10(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
 		});
 	}
 	return out.slice(0, 3);
@@ -4284,7 +4284,7 @@ function weekReport(sessions, plans, funMin, today) {
 	};
 }
 /** "2h 05m", "45m". */
-var hm$8 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
+var hm$9 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
 // src/core/progress.ts
 var WEEKS = 6;
 /** Sum of `value` for days in [from, to]. */
@@ -4321,8 +4321,8 @@ function progressReport(i) {
 			label: "Focus time",
 			higherBetter: true,
 			f: (a, b) => sum$1(i.focus, a, b, (r) => r.minutes),
-			text: hm$8,
-			day: (v) => v ? hm$8(v) : "·",
+			text: hm$9,
+			day: (v) => v ? hm$9(v) : "·",
 			target: 600,
 			unit: 30
 		},
@@ -4597,7 +4597,7 @@ var isAccepted = (e) => !isDeclined(e) && !isInvite(e) && !isTentative(e);
 var takesTime = (e) => !isDeclined(e) && !isInvite(e) && e.eventType !== "workingLocation";
 /** Can be what's on "Now", alert you, or start a focus timer by itself. */
 var canBeNow = (e) => isAccepted(e) && !e.free && !isMarker(e);
-var toMin$6 = (hm) => {
+var toMin$8 = (hm) => {
 	const [h, m] = hm.split(":").map(Number);
 	return h * 60 + (m || 0);
 };
@@ -4615,11 +4615,11 @@ function localDay$1(iso) {
 }
 /** Timed events of one day as minute ranges, clipped to the day window. */
 function busy(events, day, from, to) {
-	const lo = toMin$6(from);
-	const hi = toMin$6(to);
+	const lo = toMin$8(from);
+	const hi = toMin$8(to);
 	return events.filter((e) => !e.allDay && localDay$1(e.start) === day && takesTime(e)).map((e) => {
-		const s = toMin$6(localHM(e.start));
-		const en = localDay$1(e.end) > day ? 1440 : toMin$6(localHM(e.end));
+		const s = toMin$8(localHM(e.start));
+		const en = localDay$1(e.end) > day ? 1440 : toMin$8(localHM(e.end));
 		return [Math.max(lo, s), Math.min(hi, en)];
 	}).filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
 }
@@ -4631,7 +4631,7 @@ function freeGaps(events, day, opts = {}) {
 	const from = opts.from ?? "07:00";
 	const to = opts.to ?? "23:00";
 	const min = opts.minMinutes ?? 25;
-	let cursor = Math.max(toMin$6(from), opts.after ? toMin$6(opts.after) : 0);
+	let cursor = Math.max(toMin$8(from), opts.after ? toMin$8(opts.after) : 0);
 	const out = [];
 	for (const [s, e] of busy(events, day, from, to)) {
 		if (s - cursor >= min) out.push({
@@ -4641,10 +4641,10 @@ function freeGaps(events, day, opts = {}) {
 		});
 		cursor = Math.max(cursor, e);
 	}
-	if (toMin$6(to) - cursor >= min) out.push({
+	if (toMin$8(to) - cursor >= min) out.push({
 		start: fromMin$2(cursor),
 		end: to,
-		minutes: toMin$6(to) - cursor
+		minutes: toMin$8(to) - cursor
 	});
 	return out;
 }
@@ -4654,8 +4654,8 @@ function freeGaps(events, day, opts = {}) {
 */
 function suggestBlocks(gaps, items, breather = 10) {
 	const free = gaps.map((g) => ({
-		s: toMin$6(g.start),
-		e: toMin$6(g.end)
+		s: toMin$8(g.start),
+		e: toMin$8(g.end)
 	}));
 	const out = [];
 	for (const it of items) {
@@ -4828,6 +4828,8 @@ var SETTINGS = {
 	month_aims: json$5("the month's aims", null),
 	learn_log: json$5("learning path log", []),
 	life_mode: json$5("life mode (exam, holiday, sick…)", null),
+	sleep_care: json$5("Sleep care: your sleep need, the caffeine curfew, and per day the morning light, coffees, the after-shift checklist and the warm screen (src/core/sleepCare.ts)", null),
+	grooming: json$5("Grooming habit: ticked morning and night steps per day, nails and haircut dates, the haircut rhythm, what each day paid (src/core/grooming.ts)", null),
 	life_fit: json$5("My life: latest bedtime, the work window (days, hours, how much you really work), how hard Ben pushes, tonight's shift (src/core/lifeFit.ts)", null),
 	ben_pushes: json$5("Ben 2's pushes today: one key per check-in, brief, shutdown and drift word (shown on the island or sent on Telegram, and your answer), tonight's shutdown list with your marks, and drift words waiting for Telegram (src/core/benPushes.ts)", null),
 	ben_pc_seen: json$5("whether you are at the PC (written by the desktop app when it changes, at most every 5 minutes): the island or Telegram for Ben's pushes", null),
@@ -5775,8 +5777,8 @@ var HABIT_COLORS = [
 	"teal",
 	"slate"
 ];
-var HM$8 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var isHm$3 = (v) => typeof v === "string" && HM$8.test(v);
+var HM$10 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm$4 = (v) => typeof v === "string" && HM$10.test(v);
 /** 0 = Monday … 6 = Sunday, for a YYYY-MM-DD day. */
 function weekdayOf$1(day) {
 	return ((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7;
@@ -5849,7 +5851,7 @@ function cleanLook(v) {
 	if (HABIT_ICONS.includes(v?.icon)) out.icon = v.icon;
 	if (HABIT_COLORS.includes(v?.color)) out.color = v.color;
 	if (v?.slot === "any" || SLOTS.includes(v?.slot)) out.slot = v.slot;
-	if (v?.by === null || isHm$3(v?.by)) out.by = v.by;
+	if (v?.by === null || isHm$4(v?.by)) out.by = v.by;
 	return out;
 }
 function cleanPrefs$2(v) {
@@ -7763,12 +7765,12 @@ function listOf(v) {
 // src/plugins/types.ts
 var definePlugin = (p) => p;
 // src/plugins/weather/weather.ts
-var hmOf$5 = (iso) => {
+var hmOf$7 = (iso) => {
 	const m = /T(\d{2}:\d{2})/.exec(String(iso ?? ""));
 	return m ? m[1] : null;
 };
 var num$2 = (v) => typeof v === "number" && Number.isFinite(v) ? v : null;
-var toMin$5 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+var toMin$7 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 var fromMin$1 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 /** An hour counts as rainy at 50%+ with at least a little rain, or at 70%+ either way. */
 var rainy = (prob, mm) => (prob ?? 0) >= 70 || (prob ?? 0) >= 50 && (mm ?? 0) >= .2;
@@ -7784,45 +7786,47 @@ function summarizeDay(json, day) {
 		if (!t.startsWith(day)) return;
 		const prob = num$2(h.precipitation_probability?.[k]);
 		if (!rainy(prob, num$2(h.precipitation?.[k]))) return;
-		const from = hmOf$5(t);
+		const from = hmOf$7(t);
 		const last = spans[spans.length - 1];
 		if (last && last.to === from) {
-			last.to = fromMin$1(toMin$5(from) + 60);
+			last.to = fromMin$1(toMin$7(from) + 60);
 			last.prob = Math.max(last.prob, prob ?? 0);
 		} else spans.push({
 			from,
-			to: fromMin$1(toMin$5(from) + 60),
+			to: fromMin$1(toMin$7(from) + 60),
 			prob: prob ?? 0
 		});
 	});
 	const r = (v) => v == null ? null : Math.round(v);
+	const clouds = times.map((t, k) => t.startsWith(day) && Number(hmOf$7(t)?.slice(0, 2)) >= 8 && Number(hmOf$7(t)?.slice(0, 2)) < 12 ? num$2(h.cloudcover?.[k]) : null).filter((v) => v != null);
 	return {
 		day,
-		sunrise: hmOf$5(d.sunrise?.[i]),
-		sunset: hmOf$5(d.sunset?.[i]),
+		sunrise: hmOf$7(d.sunrise?.[i]),
+		sunset: hmOf$7(d.sunset?.[i]),
 		tmin: r(num$2(d.temperature_2m_min?.[i])),
 		tmax: r(num$2(d.temperature_2m_max?.[i])),
-		rain: spans
+		rain: spans,
+		...clouds.length ? { cloud: Math.round(clouds.reduce((t, v) => t + v, 0) / clouds.length) } : {}
 	};
 }
 /** "Get daylight before 15:00": 90 minutes before sunset, on the half hour before. */
 function daylightBy(sunset) {
-	const m = toMin$5(sunset) - 90;
+	const m = toMin$7(sunset) - 90;
 	return fromMin$1(Math.max(0, m - m % 30));
 }
 /** The advice for the rest of the day (from `nowHM`); empty when there's nothing to say. */
 function weatherAdvice(w, nowHM = "00:00") {
 	const out = [];
-	const now = toMin$5(nowHM);
-	const next = w.rain.find((s) => toMin$5(s.to) > now);
+	const now = toMin$7(nowHM);
+	const next = w.rain.find((s) => toMin$7(s.to) > now);
 	if (next) {
-		const long = toMin$5(next.to) - toMin$5(next.from) > 60;
-		out.push(`${long ? `Rain ${toMin$5(next.from) <= now ? "now" : `from ${next.from}`} to ${next.to}` : `Rain at ${next.from}`} (${next.prob}%), move the run indoors or go before`);
+		const long = toMin$7(next.to) - toMin$7(next.from) > 60;
+		out.push(`${long ? `Rain ${toMin$7(next.from) <= now ? "now" : `from ${next.from}`} to ${next.to}` : `Rain at ${next.from}`} (${next.prob}%), move the run indoors or go before`);
 	}
-	if (w.sunset && toMin$5(w.sunset) <= 1110) {
+	if (w.sunset && toMin$7(w.sunset) <= 1110) {
 		const by = daylightBy(w.sunset);
-		if (now < toMin$5(by)) out.push(`Sunset ${w.sunset}, get daylight before ${by}`);
-		else if (now < toMin$5(w.sunset)) out.push(`Sunset ${w.sunset}, light is almost gone`);
+		if (now < toMin$7(by)) out.push(`Sunset ${w.sunset}, get daylight before ${by}`);
+		else if (now < toMin$7(w.sunset)) out.push(`Sunset ${w.sunset}, light is almost gone`);
 	}
 	return out;
 }
@@ -7839,7 +7843,7 @@ function weatherLine(data, today, nowHM) {
 		...advice
 	].filter(Boolean).join("; ")}.`;
 }
-var forecastUrl = (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&hourly=precipitation_probability,precipitation&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=2`;
+var forecastUrl = (lat, lon) => `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&hourly=precipitation_probability,precipitation,cloudcover&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=2`;
 var geocodeUrl = (city) => `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
 /** "47.0, 28.8" → coordinates (when you type them instead of a city). */
 function readCoords(text) {
@@ -7855,7 +7859,7 @@ function readCoords(text) {
 // src/plugins/weather/index.ts
 var WEATHER = "weather";
 var dayOf$7 = (d) => calendarDay(d);
-var hmOf$4 = (d) => d.toTimeString().slice(0, 5);
+var hmOf$6 = (d) => d.toTimeString().slice(0, 5);
 var job$2 = async (ctx) => {
 	const cfg = JSON.parse(await ctx.get(`plugin_weather`) || "{}");
 	const city = String(cfg.city ?? "").trim();
@@ -7908,7 +7912,7 @@ var weather_default = definePlugin({
 	}] },
 	context(db, now) {
 		const data = readData(db, WEATHER);
-		return data ? weatherLine(data, dayOf$7(now), hmOf$4(now)) : null;
+		return data ? weatherLine(data, dayOf$7(now), hmOf$6(now)) : null;
 	},
 	commands: { weather: {
 		help: "Today’s weather and daylight",
@@ -7916,7 +7920,7 @@ var weather_default = definePlugin({
 			const data = readData(db, WEATHER);
 			const w = data?.days.find((d) => d.day === dayOf$7(now));
 			if (!data || !w) return readConfig(db, "weather").city ? "🌤 No forecast yet. It comes with the next check (every few hours)." : "🌤 Set your city in Settings → Plugins → Weather first.";
-			const advice = weatherAdvice(w, hmOf$4(now));
+			const advice = weatherAdvice(w, hmOf$6(now));
 			return [
 				`🌤 <b>${data.place}</b>: ${w.tmin}–${w.tmax}°C`,
 				w.sunrise && w.sunset ? `Sunrise ${w.sunrise} · sunset ${w.sunset}` : "",
@@ -9141,7 +9145,7 @@ var SAFE_LABEL = {
 	offerNote: "Offer a meeting note",
 	moveCard: "Show the move-break card (you still confirm)"
 };
-var HM$7 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var HM$9 = /^([01]\d|2[0-3]):[0-5]\d$/;
 var clip$4 = (s, n) => String(s ?? "").replace(/[\r\n\t]+/g, " ").trim().slice(0, n);
 function safeLink(url) {
 	try {
@@ -9216,7 +9220,7 @@ function cleanRecipe(r, i = 0) {
 		when.ctx = r.when.ctx;
 	}
 	if (on === "time") {
-		if (!HM$7.test(String(r.when.at ?? ""))) return null;
+		if (!HM$9.test(String(r.when.at ?? ""))) return null;
 		when.at = r.when.at;
 	}
 	const then = (Array.isArray(r.then) ? r.then : []).map(cleanAction).filter((x) => !!x).slice(0, 5);
@@ -9226,7 +9230,7 @@ function cleanRecipe(r, i = 0) {
 		const days = [...new Set(r.if.days.map(Number).filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
 		if (days.length && days.length < 7) iff.days = days;
 	}
-	if (HM$7.test(String(r.if?.from ?? "")) && HM$7.test(String(r.if?.to ?? ""))) {
+	if (HM$9.test(String(r.if?.from ?? "")) && HM$9.test(String(r.if?.to ?? ""))) {
 		iff.from = r.if.from;
 		iff.to = r.if.to;
 	}
@@ -9837,7 +9841,7 @@ var deskReady = (s, now) => !!s.desk?.on && now - s.desk.at < 18e5;
 var uw = (src, flags = "") => new RegExp(src.replace(/\\b/g, "(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))"), `${flags}u`);
 var pad$11 = (n) => String(n).padStart(2, "0");
 var ymd$3 = (d) => calendarDay(d);
-var hmOf$3 = (d) => `${pad$11(d.getHours())}:${pad$11(d.getMinutes())}`;
+var hmOf$5 = (d) => `${pad$11(d.getHours())}:${pad$11(d.getMinutes())}`;
 var label = (d) => d.toLocaleDateString("en-GB", {
 	weekday: "short",
 	day: "numeric",
@@ -9852,7 +9856,7 @@ function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
 	const appDay = ymd$3(app);
 	const nextCal = new Date(now);
 	nextCal.setDate(nextCal.getDate() + 1);
-	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$3(now)}, ${label(now)}. App day: ${label(app)} (the app's day turns at ${pad$11(startHour)}:00).`];
+	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$5(now)}, ${label(now)}. App day: ${label(app)} (the app's day turns at ${pad$11(startHour)}:00).`];
 	if (afterMidnight) {
 		const seven = new Date(now);
 		seven.setHours(7, 0, 0, 0);
@@ -9862,7 +9866,7 @@ function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
 	else lines.push(`- "this afternoon" = now. "tonight" = this evening (${label(now)}). "tomorrow" = ${label(nextCal)}.`);
 	lines.push("When you name a time, add how far it is (\"in 40 min\", \"in 6 h, this morning\").");
 	return {
-		clock: hmOf$3(now),
+		clock: hmOf$5(now),
 		appDay,
 		calDay,
 		afterMidnight,
@@ -12607,14 +12611,14 @@ var weekdayOf = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDa
 function isOffDay(prefs, day, mode) {
 	return prefs.offDays.includes(weekdayOf(day)) || mode === "sick" || mode === "travel";
 }
-var HM$6 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var isHm$2 = (x) => typeof x === "string" && HM$6.test(x);
+var HM$8 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm$3 = (x) => typeof x === "string" && HM$8.test(x);
 var minOf = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 var localMin = (now) => {
 	const d = new Date(now);
 	return d.getHours() * 60 + d.getMinutes();
 };
-var hmOf$2 = (ms) => new Date(ms).toTimeString().slice(0, 5);
+var hmOf$4 = (ms) => new Date(ms).toTimeString().slice(0, 5);
 /** Minutes from now until a clock time tonight (bedtime may be after midnight): negative once it's past (until 05:00). */
 function minutesUntil(now, at) {
 	const night = (m) => (m - 720 + 1440) % 1440;
@@ -12775,7 +12779,7 @@ function decideCheckin(i) {
 			type: "checkin",
 			area,
 			level,
-			title: `${b.title} · ${hmOf$2(b.start)}`,
+			title: `${b.title} · ${hmOf$4(b.start)}`,
 			text: fill$1(pick(ASK[level], seed), { title: b.title }),
 			face: level === "hard" ? "😤" : "🎯",
 			channel,
@@ -12826,13 +12830,13 @@ function briefLines(o) {
 	const md = o.mustDos.filter(Boolean).slice(0, 3);
 	return [
 		md.length ? `✅ Must-dos: ${md.join(" · ")}` : "✅ No must-dos yet: tap Plan my day",
-		o.firstBlock ? `▶ First block: ${o.firstBlock.title} at ${hmOf$2(o.firstBlock.start)}` : "▶ No blocks planned yet",
+		o.firstBlock ? `▶ First block: ${o.firstBlock.title} at ${hmOf$4(o.firstBlock.start)}` : "▶ No blocks planned yet",
 		`💧 Water goal: ${litres(o.waterTargetMl || 2e3)} today`
 	];
 }
 /** Due from your wake time for 2 hours, once a day, not on a day off. */
 function decideBrief(i) {
-	if (!i.prefs.brief || i.off || i.quiet || !isHm$2(i.wake)) return null;
+	if (!i.prefs.brief || i.off || i.quiet || !isHm$3(i.wake)) return null;
 	const m = localMin(i.now);
 	const w = minOf(i.wake);
 	if (m < w || m >= w + 120) return null;
@@ -12871,7 +12875,7 @@ function shutdownText(o) {
 }
 /** Due from `shutdownBefore` minutes before bed until bedtime, once, unless the day is closed or bed is logged. */
 function decideShutdown(i) {
-	if (!i.prefs.shutdown || i.closed || i.bedLogged || !isHm$2(i.bed)) return null;
+	if (!i.prefs.shutdown || i.closed || i.bedLogged || !isHm$3(i.bed)) return null;
 	const until = minutesUntil(i.now, i.bed);
 	if (until > i.prefs.shutdownBefore || until <= 0) return null;
 	if (i.log.recs[shutdownKey(i.day)]) return null;
@@ -13072,11 +13076,11 @@ var DEFAULT_LIFE_FIT = {
 	push: "push",
 	tonight: null
 };
-var HM$5 = /^([01]\d|2[0-3]):[0-5]\d$/;
-var isHm$1 = (x) => typeof x === "string" && HM$5.test(x);
-var isEnd = (x) => isHm$1(x) || x === "24:00";
-var toMin$4 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-var hm$7 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+var HM$7 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm$2 = (x) => typeof x === "string" && HM$7.test(x);
+var isEnd = (x) => isHm$2(x) || x === "24:00";
+var toMin$6 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var hm$8 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 var hours = (x, d) => typeof x === "number" && Number.isFinite(x) ? Math.max(0, Math.min(12, Math.round(x * 2) / 2)) : d;
 function cleanLifeFit(raw) {
 	const o = raw && typeof raw === "object" ? raw : {};
@@ -13087,11 +13091,11 @@ function cleanLifeFit(raw) {
 	const t = o.tonight;
 	const push = o.push === "gentle" || o.push === "firm" ? o.push : "push";
 	return {
-		latestBed: isHm$1(o.latestBed) ? o.latestBed : DEFAULT_LIFE_FIT.latestBed,
+		latestBed: isHm$2(o.latestBed) ? o.latestBed : DEFAULT_LIFE_FIT.latestBed,
 		work: {
 			on: w.on === true,
 			days,
-			from: isHm$1(w.from) ? w.from : d.from,
+			from: isHm$2(w.from) ? w.from : d.from,
 			to: isEnd(w.to) ? w.to : d.to,
 			minH,
 			maxH: Math.max(minH, hours(w.maxH, d.maxH))
@@ -13108,7 +13112,7 @@ function cleanLifeFit(raw) {
 var weekday$3 = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
 function workToday(fit, day) {
 	const w = fit.work;
-	if (!w.on || !w.days.includes(weekday$3(day)) || toMin$4(w.to) <= toMin$4(w.from)) return null;
+	if (!w.on || !w.days.includes(weekday$3(day)) || toMin$6(w.to) <= toMin$6(w.from)) return null;
 	const mode = fit.tonight?.day === day ? fit.tonight.mode : "normal";
 	if (mode === "off") return {
 		from: w.from,
@@ -13118,14 +13122,14 @@ function workToday(fit, day) {
 		light: null
 	};
 	if (mode === "short") {
-		const end = Math.min(toMin$4(w.to), toMin$4(w.from) + Math.round(Math.max(.5, w.minH) * 60));
+		const end = Math.min(toMin$6(w.to), toMin$6(w.from) + Math.round(Math.max(.5, w.minH) * 60));
 		return {
 			from: w.from,
 			to: w.to,
 			mode,
 			busy: {
 				from: w.from,
-				to: end >= 1440 ? "24:00" : hm$7(end)
+				to: end >= 1440 ? "24:00" : hm$8(end)
 			},
 			light: null
 		};
@@ -13237,7 +13241,7 @@ function pushStyle(level, caps = {
 	};
 }
 // src/renderer/src/web/lifeFitStore.ts
-var HM$4 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var HM$6 = /^([01]\d|2[0-3]):[0-5]\d$/;
 function readLifeFit(db) {
 	try {
 		return cleanLifeFit(JSON.parse(getSetting(db, "life_fit") || "null"));
@@ -13250,8 +13254,8 @@ function sleepWindow(db) {
 	const bed = getSetting(db, "sleep_bed_target");
 	const wake = getSetting(db, "sleep_weekday_target");
 	return {
-		bed: bed && HM$4.test(bed) ? bed : DEFAULT_BED,
-		wake: wake && HM$4.test(wake) ? wake : DEFAULT_WAKE
+		bed: bed && HM$6.test(bed) ? bed : DEFAULT_BED,
+		wake: wake && HM$6.test(wake) ? wake : DEFAULT_WAKE
 	};
 }
 var lifeFitView = (db) => ({
@@ -13280,8 +13284,8 @@ function saveLifeFit(db, patch) {
 		}
 	});
 	setSetting(db, LIFE_FIT_KEY, JSON.stringify(next));
-	if (bed && HM$4.test(bed)) setSetting(db, "sleep_bed_target", bed);
-	if (wake && HM$4.test(wake)) {
+	if (bed && HM$6.test(bed)) setSetting(db, "sleep_bed_target", bed);
+	if (wake && HM$6.test(wake)) {
 		setSetting(db, "sleep_weekday_target", wake);
 		try {
 			db.prepare("UPDATE rules SET title = ? WHERE id = 'sleep.up_on_time'").run(`Up by ${wake}`);
@@ -13294,6 +13298,504 @@ function saveTonight(db, day, mode) {
 	const next = setTonight(readLifeFit(db), day, mode);
 	setSetting(db, LIFE_FIT_KEY, JSON.stringify(next));
 	return next;
+}
+// src/core/readiness.ts
+/** Hours actually slept that night: bedtime and wake-up on the same morning's row. */
+function nightMinutes(log) {
+	if (!log?.bedTime || !log.wakeTime) return null;
+	const toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+	let m = toM(log.wakeTime) - toM(log.bedTime);
+	if (m <= 0) m += 1440;
+	return m >= 120 && m <= 960 ? m : null;
+}
+// src/core/sleepCare.ts
+var SLEEP_CARE_KEY = "sleep_care";
+var DEFAULT_CARE = {
+	needH: 8,
+	curfewH: 9.5,
+	days: {}
+};
+var HM$5 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var isHm$1 = (v) => typeof v === "string" && HM$5.test(v);
+var isDay$2 = (v) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v);
+var toMin$5 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var hmOf$3 = (m) => `${String(Math.floor((m % 1440 + 1440) % 1440 / 60)).padStart(2, "0")}:${String((m % 1440 + 1440) % 1440 % 60).padStart(2, "0")}`;
+var clockOf = (ms) => {
+	const d = new Date(ms);
+	return d.getHours() * 60 + d.getMinutes();
+};
+var halves = (v, d, lo, hi) => typeof v === "number" && Number.isFinite(v) ? Math.max(lo, Math.min(hi, Math.round(v * 2) / 2)) : d;
+var times = (v) => Array.isArray(v) ? v.filter((x) => typeof x === "number" && Number.isFinite(x)).slice(-12) : [];
+/** Saved value → valid; keeps the last 21 days. */
+function cleanCare(raw) {
+	const o = raw && typeof raw === "object" ? raw : {};
+	const days = {};
+	const src = o.days && typeof o.days === "object" ? o.days : {};
+	for (const k of Object.keys(src).filter(isDay$2).sort().slice(-21)) {
+		const d = src[k] ?? {};
+		const coffee = times(d.coffee);
+		const shift = Array.isArray(d.shift) ? [...new Set(d.shift.filter((x) => typeof x === "string" && x.length <= 20))].slice(0, 8) : [];
+		days[k] = {
+			...Number.isFinite(d.light) ? { light: d.light } : {},
+			...coffee.length ? { coffee } : {},
+			...shift.length ? { shift } : {},
+			...Number.isFinite(d.warm) ? { warm: d.warm } : {}
+		};
+	}
+	return {
+		needH: halves(o.needH, DEFAULT_CARE.needH, 6, 10),
+		curfewH: halves(o.curfewH, DEFAULT_CARE.curfewH, 8, 10),
+		days
+	};
+}
+var careDay = (c, day) => c.days[day] ?? {};
+var withDay = (c, day, f) => ({
+	...c,
+	days: {
+		...c.days,
+		[day]: f(careDay(c, day))
+	}
+});
+var addCoffee = (c, day, at, cups = 1) => withDay(c, day, (d) => ({
+	...d,
+	coffee: [...d.coffee ?? [], ...Array.from({ length: Math.max(1, Math.min(4, Math.round(cups))) }, () => at)].slice(-12)
+}));
+/** The last time for caffeine: `hours` before bedtime ("23:30", 9.5 → "14:00"). */
+function caffeineCurfew(bed, hours = DEFAULT_CARE.curfewH) {
+	return hmOf$3(toMin$5(isHm$1(bed) ? bed : "23:30") - Math.round(hours * 60));
+}
+/** "coffee", "2 coffees", "had an espresso", "☕", "cafea", "кофе" → cups; anything else → null. */
+function parseCoffee(text) {
+	const t = String(text ?? "").toLowerCase().replace(/\s+/g, " ").trim();
+	if (!t || t.length > 40 || /\?|\b(no|not|without|skip|decaf|stop|undo)\b/.test(t)) return null;
+	if (/^(☕\s*)+$/u.test(t)) return Math.min(4, [...t].filter((c) => c === "☕").length);
+	const m = new RegExp(`^(?:(?:i )?(?:had|drank|just had|got)\\s+)?(?:(a|an|one|1|two|2|three|3|o|un|una|două|doua)\\s+)?(?:cup of |cups of |ceașcă de |ceasca de )?(coffees?|espressos?|lattes?|cappuccinos?|americanos?|flat whites?|energy drinks?|red bulls?|cafea|cafele|кофе)(?: now| just now)?[.!]*$`).exec(t);
+	if (!m) return null;
+	const n = m[1];
+	return n === "two" || n === "2" || n === "două" || n === "doua" ? 2 : n === "three" || n === "3" ? 3 : 1;
+}
+function caffeineView(c, day, now, bed) {
+	const curfew = caffeineCurfew(bed, c.curfewH);
+	const cs = careDay(c, day).coffee ?? [];
+	const cm = toMin$5(curfew);
+	const isLate = (ms) => {
+		const m = clockOf(ms);
+		return m >= cm || m < 240;
+	};
+	const late = cs.filter(isLate).length;
+	const cur = clockOf(now);
+	const left = (cur < 240 ? cur + 1440 : cur) >= cm ? -((cur < 240 ? cur + 1440 : cur) - cm) : cm - cur;
+	const last = cs.length ? hmOf$3(clockOf(cs[cs.length - 1])) : null;
+	const line = left > 0 ? `Last caffeine by ${curfew}${cs.length ? ` · ${cs.length} today, last ${last}` : ""}` : `Caffeine curfew passed (${curfew})${late ? ` · ${late} after it today` : cs.length ? ` · ${cs.length} today, all before it` : ""}`;
+	return {
+		curfew,
+		cups: cs.length,
+		last,
+		late,
+		left,
+		line
+	};
+}
+/** The reply to a coffee log (Telegram, Ben's chat, the Sleep page). */
+function coffeeReply(v, bed) {
+	const nth = v.cups === 1 ? "first" : v.cups === 2 ? "2nd" : v.cups === 3 ? "3rd" : `${v.cups}th`;
+	if (v.left <= 0) return `☕ Logged (${nth} today). That one is after your ${v.curfew} curfew: about half of it is still in you at ${bed}. Water from here on.`;
+	return `☕ Logged (${nth} today). Last caffeine by ${v.curfew} (bed ${bed}).`;
+}
+/** The rolling 7-night debt against `needH`, from the bed and wake times of each morning's row. */
+function sleepDebt(logs, today, needH = DEFAULT_CARE.needH) {
+	const needMin = Math.round(needH * 60);
+	const byDay = new Map(logs.map((l) => [l.day, l]));
+	const nights = Array.from({ length: 7 }, (_, k) => {
+		const day = addDays$7(today, k - 6);
+		return {
+			day,
+			min: nightMinutes(byDay.get(day))
+		};
+	});
+	const got = nights.filter((n) => n.min != null);
+	const debtMin = Math.max(0, got.reduce((t, n) => t + (needMin - n.min), 0));
+	return {
+		needMin,
+		nights,
+		logged: got.length,
+		debtMin,
+		level: debtMin >= 180 ? "high" : debtMin >= 60 ? "behind" : "ok"
+	};
+}
+var hm$7 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${String(min % 60).padStart(2, "0")}` : ""}` : `${min} min`;
+var WEEKDAY = [
+	"Sunday",
+	"Monday",
+	"Tuesday",
+	"Wednesday",
+	"Thursday",
+	"Friday",
+	"Saturday"
+];
+/**
+* What to do about it: one 20-minute nap before 15:00 (after that: no nap,
+* an earlier night instead), and bed earlier on the next free evening
+* (`free(day)`: no work window that day). Earlier by a third of the debt,
+* 15 to 60 minutes.
+*/
+function debtAdvice(d, o) {
+	if (d.level === "ok") return {
+		nap: null,
+		napOk: false,
+		early: null,
+		line: d.logged ? `On track: ${d.debtMin ? `${hm$7(d.debtMin)} behind` : "no debt"} over the last ${d.logged} nights.` : "Log a few nights (bed and wake-up) to see your sleep debt."
+	};
+	const cur = clockOf(o.now);
+	const napOk = cur >= 240 && cur < 880;
+	const nap = napOk ? "One 20-minute nap before 15:00 (alarm on: 20 min max, longer makes you groggy)." : cur >= 900 || cur < 240 ? "Too late for a nap today (it would push tonight back): go to bed earlier instead." : "Too close to 15:00 for a nap now: an earlier night instead.";
+	const minutes = Math.max(15, Math.min(60, Math.round(d.debtMin / 3 / 15) * 15));
+	const bedM = toMin$5(isHm$1(o.bed) ? o.bed : "23:30");
+	const tonightOk = (cur < 240 ? cur + 1440 : cur) < (bedM < 720 ? bedM + 1440 : bedM) - minutes;
+	let early = null;
+	for (let k = tonightOk ? 0 : 1; k <= 6 && !early; k++) {
+		const day = addDays$7(o.today, k);
+		if (!o.free(day)) continue;
+		early = {
+			day,
+			label: k === 0 ? "tonight" : k === 1 ? "tomorrow" : WEEKDAY[(/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay()],
+			bed: hmOf$3(bedM - minutes),
+			minutes
+		};
+	}
+	const line = `${hm$7(d.debtMin)} behind over the last ${d.logged} nights.${early ? ` Bed at ${early.bed} ${early.label === "tonight" || early.label === "tomorrow" ? early.label : `on ${early.label}`} (${minutes} min earlier).` : ""}`;
+	return {
+		nap,
+		napOk,
+		early,
+		line
+	};
+}
+/** One line for Ben's prompt. */
+function debtLine(d, a) {
+	if (!d.logged) return "";
+	if (d.level === "ok") return `SLEEP DEBT: fine (${hm$7(d.debtMin)} behind a ${hm$7(d.needMin)} need over the last ${d.logged} logged nights). Don't bring it up.`;
+	return `SLEEP DEBT: ${hm$7(d.debtMin)} behind a ${hm$7(d.needMin)} need over the last ${d.logged} logged nights.${a.napOk ? " Suggest one 20-min nap before 15:00." : " No nap today (too late)."}${a.early ? ` Suggest bed at ${a.early.bed} ${a.early.label === "tonight" || a.early.label === "tomorrow" ? a.early.label : `on ${a.early.label}`} (his next free evening).` : ""} Say it once, not every message.`;
+}
+var toMin$4 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+var isHm = (v) => typeof v === "string" && /^\d{2}:\d{2}$/.test(v);
+/** Today's four parts, each 0..1, and a score out of 100 (the ring on the pill and the Day page). */
+function healthyDay(i) {
+	const mg = Math.max(1, i.moveGoal ?? 3);
+	const bg = Math.max(1, i.breakGoal ?? 3);
+	const clamp = (n) => Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
+	const water = i.waterTarget > 0 ? clamp(i.waterMl / i.waterTarget) : 0;
+	const parts = [
+		{
+			id: "water",
+			icon: "💧",
+			label: "Water",
+			done: i.waterTarget > 0 && i.waterMl >= i.waterTarget,
+			pct: water,
+			text: `${(i.waterMl / 1e3).toFixed(1)} of ${(i.waterTarget / 1e3).toFixed(1)} L`
+		},
+		{
+			id: "move",
+			icon: "💪",
+			label: "Moves",
+			done: i.moves >= mg,
+			pct: clamp(i.moves / mg),
+			text: `${i.moves} of ${mg} move breaks`
+		},
+		{
+			id: "breaks",
+			icon: "👁️",
+			label: "Breaks",
+			done: i.breaks >= bg,
+			pct: clamp(i.breaks / bg),
+			text: `${i.breaks} of ${bg} screen breaks`
+		},
+		{
+			id: "sleep",
+			icon: "🌙",
+			label: "Sleep",
+			done: i.sleptOnTime === true,
+			pct: i.sleptOnTime ? 1 : 0,
+			text: i.sleptOnTime == null ? "No bedtime logged last night" : i.sleptOnTime ? "In bed on time last night" : "Late to bed last night"
+		}
+	];
+	const met = parts.filter((p) => p.done).length;
+	return {
+		parts,
+		score: Math.round(parts.reduce((t, p) => t + p.pct, 0) / 4 * 100),
+		met,
+		all: met === 4
+	};
+}
+/** Screen breaks in a nudge day (eyes, calm, tidy, walks). */
+var screenBreaks = (d) => d ? d.eyes + d.calm + d.tidy + d.walks : 0;
+/** Last night's bedtime on time? From the row of the morning the night ended in (15 min grace). */
+function sleptOnTime(log, fallbackTarget = "23:00") {
+	if (!log || !isHm(log.bedTime)) return null;
+	if (typeof log.bedOnTime === "boolean") return log.bedOnTime;
+	const target = isHm(log.bedTarget) ? log.bedTarget : fallbackTarget;
+	return (toMin$4(log.bedTime) - toMin$4(target) + 1440 + 720) % 1440 - 720 <= 15;
+}
+/** The evening's "how did your body do today" line (plain words, real numbers). */
+function bodyLine(h) {
+	const [w, m, b, s] = h.parts;
+	const tail = h.all ? "All four: a healthy day. 💚" : h.met === 3 ? `3 of 4. Missing: ${h.parts.find((p) => !p.done).label.toLowerCase()}.` : `${h.met} of 4 healthy.`;
+	return `Body today: ${w.text} water, ${m.text}, ${b.text}, ${s.done ? "bed on time last night" : s.text.charAt(0).toLowerCase() + s.text.slice(1)}. ${tail}`;
+}
+/** The last 7 days (ending today) from the island's tallies and Waky's bedtimes. */
+function weeklyHealth(days, beds, today) {
+	const from = addDays$7(today, -6);
+	const week = days.filter((d) => d.day >= from && d.day <= today);
+	const watered = week.filter((d) => (d.waterMl ?? 0) > 0);
+	const nights = beds.filter((b) => b.day >= from && b.day <= today && isHm(b.bedTime));
+	const onTime = nights.filter((b) => sleptOnTime({
+		bedTime: b.bedTime,
+		bedTarget: b.bedTarget ?? null,
+		bedOnTime: b.bedOnTime
+	}) === true).length;
+	const mins = nights.map((b) => (toMin$4(b.bedTime) - 1080 + 1440) % 1440);
+	const spread = mins.length >= 2 ? Math.max(...mins) - Math.min(...mins) : null;
+	const r = {
+		days: week.length,
+		waterAvgMl: watered.length ? Math.round(watered.reduce((t, d) => t + (d.waterMl ?? 0), 0) / watered.length) : 0,
+		waterDaysMet: week.filter((d) => (d.waterTarget ?? 0) > 0 && (d.waterMl ?? 0) >= (d.waterTarget ?? 0)).length,
+		moves: week.reduce((t, d) => t + d.moves, 0),
+		breaks: week.reduce((t, d) => t + d.breaks, 0),
+		bedOnTime: onTime,
+		bedNights: nights.length,
+		bedSpreadMin: spread,
+		healthyDays: week.filter((d) => d.healthy).length
+	};
+	const lines = [
+		`💧 Water: ${(r.waterAvgMl / 1e3).toFixed(1)} L a day on average, goal reached ${r.waterDaysMet} of 7 days`,
+		`💪 Moves: ${r.moves} move break${r.moves === 1 ? "" : "s"} · 👁️ ${r.breaks} screen break${r.breaks === 1 ? "" : "s"}`,
+		`🌙 Bedtime: on time ${r.bedOnTime} of ${r.bedNights} night${r.bedNights === 1 ? "" : "s"}${spread != null ? ` · ${spread <= 30 ? "steady" : spread <= 75 ? "a bit all over" : "all over the place"} (${Math.floor(spread / 60)}h${String(spread % 60).padStart(2, "0")} between earliest and latest)` : ""}`,
+		`💚 Healthy days: ${r.healthyDays} of 7`
+	];
+	return {
+		...r,
+		lines
+	};
+}
+/** The Sunday card's text (Telegram and the island). */
+function weeklyHealthText(w) {
+	return `🩺 <b>Your body this week</b>\n${w.lines.join("\n")}`;
+}
+/** The week from the island's nudge store (water is saved there each day the island runs). */
+function weekDaysFromStore(s, today) {
+	const out = [];
+	for (let i = 6; i >= 0; i--) {
+		const day = addDays$7(today, -i);
+		const d = s.days[day];
+		if (!d) continue;
+		out.push({
+			day,
+			waterMl: d.water ?? 0,
+			waterTarget: d.waterTarget ?? 0,
+			moves: d.moves,
+			breaks: screenBreaks(d),
+			healthy: !!d.healthy
+		});
+	}
+	return out;
+}
+/**
+* Telegram's wind-down message (25–50 min before bed): not when the bed is
+* already logged, and not when the island just showed its own wind-down
+* (you're at the PC and saw it).
+*/
+function telegramWindDown(o) {
+	if (o.bedLogged || o.minutesBefore < 25 || o.minutesBefore > 50) return false;
+	return !(o.islandBedAt && o.now - o.islandBedAt < 36e5);
+}
+/**
+* Quiet hours end once you're up: after you log the wake-up (Telegram, Waky,
+* the island) the morning part of the quiet hours is over, so the morning
+* plan comes at once instead of waiting in the bell.
+*/
+function stillQuiet(quiet, now, wakeAt) {
+	if (!quiet) return false;
+	if (!isHm(wakeAt) || now.getHours() >= 12) return true;
+	return now.getHours() * 60 + now.getMinutes() < toMin$4(wakeAt);
+}
+/** Telegram's water nudge waits while the island has water covered (its card within 90 min). */
+function islandHasWater(islandWaterAt, now) {
+	return !!islandWaterAt && now - islandWaterAt < 54e5;
+}
+/** Done: it's answered everywhere (the island card goes, Telegram won't send it). */
+function reminderDone(list, id, now) {
+	return list.map((r) => r.id === id ? {
+		...r,
+		done: true,
+		handled: true,
+		answeredAt: new Date(now).toISOString()
+	} : r);
+}
+/** Snooze: it comes back once on both, this many minutes from now. */
+function reminderSnooze(list, id, minutes, now) {
+	const m = Math.max(1, Math.min(1440, Math.round(minutes)));
+	return list.map((r) => r.id === id ? {
+		...r,
+		at: new Date(now + m * 6e4).toISOString(),
+		done: false,
+		handled: false,
+		sentAt: null
+	} : r);
+}
+var HM$4 = /^([01]\d|2[0-3]):[0-5]\d$/;
+var toMin$3 = (t) => t === "24:00" ? 1440 : Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var hmOf$2 = (m) => `${String(Math.floor((m % 1440 + 1440) % 1440 / 60)).padStart(2, "0")}:${String((m % 1440 + 1440) % 1440 % 60).padStart(2, "0")}`;
+/** Minutes since noon, so one night reads in order: 23:30 (690) < 24:00 (720) < 00:20 (740) < 03:00 (900). */
+var night = (m) => (m - 720 + 1440) % 1440;
+var nightOf = (t) => t === "24:00" ? 720 : night(toMin$3(t));
+/**
+* Tonight's after-shift plan for the app day `day`, or null: no work window
+* today, no work tonight, or the shift ends well before bed (more than an
+* hour: a normal evening, the usual wind-down).
+*/
+function afterShiftPlan(fit, day, bed) {
+	if (!fit || !HM$4.test(bed)) return null;
+	const w = workToday(fit, day);
+	if (!w || w.mode === "off") return null;
+	const end = w.mode === "short" && w.busy ? w.busy.to : w.to;
+	const e = nightOf(end);
+	if (e > 960 || e < nightOf(bed) - 60) return null;
+	return {
+		start: hmOf$2(toMin$3(end)),
+		lightsOut: hmOf$2(toMin$3(end) + 20),
+		bed
+	};
+}
+/**
+* The evening shutdown on an after-shift night: it comes at the shift's end
+* (bed = lights out, due the 20 minutes before it), never in the middle of
+* the shift. Other nights: as it was.
+*/
+function shutdownFor(plan, bed, prefs) {
+	if (!plan) return {
+		bed,
+		prefs
+	};
+	return {
+		bed: plan.lightsOut,
+		prefs: {
+			...prefs,
+			shutdownBefore: 20
+		}
+	};
+}
+/** One line for Ben's prompt on an after-shift night. */
+function afterShiftLine(plan) {
+	return plan ? `Tonight the shift ends ${plan.start}: wind-down from then (20 min: teeth, skin, alarm, phone away), lights out ${plan.lightsOut}. Don't push the usual bedtime wind-down during the shift.` : "";
+}
+new Set([
+	{
+		id: "wash_am",
+		label: "Wash face",
+		part: "morning"
+	},
+	{
+		id: "moist_am",
+		label: "Moisturiser",
+		part: "morning"
+	},
+	{
+		id: "spf",
+		label: "SPF",
+		part: "morning",
+		sunny: true
+	},
+	{
+		id: "teeth_am",
+		label: "Teeth",
+		part: "morning"
+	},
+	{
+		id: "hair",
+		label: "Hair / beard",
+		part: "morning"
+	},
+	{
+		id: "wash_pm",
+		label: "Wash face",
+		part: "night"
+	},
+	{
+		id: "moist_pm",
+		label: "Moisturiser",
+		part: "night"
+	},
+	{
+		id: "teeth_pm",
+		label: "Teeth",
+		part: "night"
+	}
+].map((s) => s.id));
+// src/renderer/src/web/careStore.ts
+var readCare = (db) => cleanCare(readSetting(db, SLEEP_CARE_KEY));
+var saveCare = (db, c) => {
+	const clean = cleanCare(c);
+	writeSetting(db, SLEEP_CARE_KEY, clean);
+	return clean;
+};
+/** Tonight's bedtime target (the sleep targets, My life's default when none is set). */
+var bedOf = (s, db) => {
+	try {
+		return s.sleep.bedtimeTarget() || sleepWindow(db).bed;
+	} catch {
+		return sleepWindow(db).bed;
+	}
+};
+function careView(s, db, now = /* @__PURE__ */ new Date()) {
+	const today = s.wallet.today(now);
+	const care = readCare(db);
+	const bed = bedOf(s, db);
+	const fit = readLifeFit(db);
+	const debt = sleepDebt(s.sleep.logs(), today, care.needH);
+	const advice = debtAdvice(debt, {
+		now: now.getTime(),
+		today,
+		bed,
+		free: (day) => !workToday(fit, day) || workToday(fit, day)?.mode === "off"
+	});
+	const plan = afterShiftPlan(fit, today, bed);
+	return {
+		today,
+		care,
+		bed,
+		caffeine: caffeineView(care, today, now.getTime(), bed),
+		debt,
+		advice,
+		shift: plan ? {
+			start: plan.start,
+			lightsOut: plan.lightsOut,
+			done: care.days[today]?.shift ?? []
+		} : null
+	};
+}
+/** A coffee logged (☕ on Sleep, the island, "coffee" on Telegram or in Ben's chat); the reply says the curfew. */
+function logCoffee(s, db, cups = 1, now = /* @__PURE__ */ new Date()) {
+	const today = s.wallet.today(now);
+	saveCare(db, addCoffee(readCare(db), today, now.getTime(), cups));
+	const view = careView(s, db, now);
+	return {
+		reply: coffeeReply(view.caffeine, view.bed),
+		view
+	};
+}
+/** Ben's prompt: the sleep debt (and what to do) and tonight's after-shift plan. */
+function careContext(s, db, now = /* @__PURE__ */ new Date()) {
+	try {
+		const v = careView(s, db, now);
+		const fit = readLifeFit(db);
+		return [
+			debtLine(v.debt, v.advice),
+			afterShiftLine(afterShiftPlan(fit, v.today, v.bed)),
+			v.caffeine.cups ? `Caffeine today: ${v.caffeine.line}.` : ""
+		].filter(Boolean);
+	} catch {
+		return [];
+	}
 }
 // src/renderer/src/web/botBrain.ts
 var MEMORY = "coach_memory";
@@ -13472,7 +13974,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 			month: "long"
 		})}, ${now.toTimeString().slice(0, 5)}.`,
 		`Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
-		`Focus today: ${hm$8(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm$8(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
+		`Focus today: ${hm$9(f.todayMin)}${f.running ? `, RUNNING now on "${f.running.subject}" (${f.running.planned} min planned)` : ""}. Last 7 days ${hm$9(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
 		`Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") : "none written yet"}.`,
 		f.goals.length ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals.map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`).join("\n")}` : "No goals with deadlines (offer to set one when he mentions an exam, project or deadline).",
 		goalsNowSection(s, extra.finance, now),
@@ -13486,6 +13988,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 			const ps = pushStyle(fit.push);
 			return `${lifeFitLine(fit, today, sleepWindow(db))} How hard to push: ${ps.label} (his choice: ${ps.hint.toLowerCase()}). Never accuse him of something the data doesn't show.`;
 		})(),
+		...careContext(s, db, now),
 		(() => {
 			const r = focusRatings(db).filter((x) => x.day > addDays$7(today, -7));
 			if (!r.length) return "";
@@ -14459,7 +14962,7 @@ function answerLocal(need, d) {
 		const by = /* @__PURE__ */ new Map();
 		for (const s of list) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
 		const days = new Set(list.map((s) => s.day)).size;
-		return `Focus ${span}: ${hm$8(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$8(m)}`).join(", ")}.` : ""}`;
+		return `Focus ${span}: ${hm$9(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$9(m)}`).join(", ")}.` : ""}`;
 	}
 	if (k === "workouts") {
 		const days = [...new Set(d.input.workouts.filter((w) => inRange(w.day)).map((w) => w.day))].sort();
@@ -14887,171 +15390,6 @@ function serverWeb(fetchImpl = fetch) {
 			return mergeResults(d, w);
 		}
 	};
-}
-var toMin$3 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-var isHm = (v) => typeof v === "string" && /^\d{2}:\d{2}$/.test(v);
-/** Today's four parts, each 0..1, and a score out of 100 (the ring on the pill and the Day page). */
-function healthyDay(i) {
-	const mg = Math.max(1, i.moveGoal ?? 3);
-	const bg = Math.max(1, i.breakGoal ?? 3);
-	const clamp = (n) => Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : 0;
-	const water = i.waterTarget > 0 ? clamp(i.waterMl / i.waterTarget) : 0;
-	const parts = [
-		{
-			id: "water",
-			icon: "💧",
-			label: "Water",
-			done: i.waterTarget > 0 && i.waterMl >= i.waterTarget,
-			pct: water,
-			text: `${(i.waterMl / 1e3).toFixed(1)} of ${(i.waterTarget / 1e3).toFixed(1)} L`
-		},
-		{
-			id: "move",
-			icon: "💪",
-			label: "Moves",
-			done: i.moves >= mg,
-			pct: clamp(i.moves / mg),
-			text: `${i.moves} of ${mg} move breaks`
-		},
-		{
-			id: "breaks",
-			icon: "👁️",
-			label: "Breaks",
-			done: i.breaks >= bg,
-			pct: clamp(i.breaks / bg),
-			text: `${i.breaks} of ${bg} screen breaks`
-		},
-		{
-			id: "sleep",
-			icon: "🌙",
-			label: "Sleep",
-			done: i.sleptOnTime === true,
-			pct: i.sleptOnTime ? 1 : 0,
-			text: i.sleptOnTime == null ? "No bedtime logged last night" : i.sleptOnTime ? "In bed on time last night" : "Late to bed last night"
-		}
-	];
-	const met = parts.filter((p) => p.done).length;
-	return {
-		parts,
-		score: Math.round(parts.reduce((t, p) => t + p.pct, 0) / 4 * 100),
-		met,
-		all: met === 4
-	};
-}
-/** Screen breaks in a nudge day (eyes, calm, tidy, walks). */
-var screenBreaks = (d) => d ? d.eyes + d.calm + d.tidy + d.walks : 0;
-/** Last night's bedtime on time? From the row of the morning the night ended in (15 min grace). */
-function sleptOnTime(log, fallbackTarget = "23:00") {
-	if (!log || !isHm(log.bedTime)) return null;
-	if (typeof log.bedOnTime === "boolean") return log.bedOnTime;
-	const target = isHm(log.bedTarget) ? log.bedTarget : fallbackTarget;
-	return (toMin$3(log.bedTime) - toMin$3(target) + 1440 + 720) % 1440 - 720 <= 15;
-}
-/** The evening's "how did your body do today" line (plain words, real numbers). */
-function bodyLine(h) {
-	const [w, m, b, s] = h.parts;
-	const tail = h.all ? "All four: a healthy day. 💚" : h.met === 3 ? `3 of 4. Missing: ${h.parts.find((p) => !p.done).label.toLowerCase()}.` : `${h.met} of 4 healthy.`;
-	return `Body today: ${w.text} water, ${m.text}, ${b.text}, ${s.done ? "bed on time last night" : s.text.charAt(0).toLowerCase() + s.text.slice(1)}. ${tail}`;
-}
-/** The last 7 days (ending today) from the island's tallies and Waky's bedtimes. */
-function weeklyHealth(days, beds, today) {
-	const from = addDays$7(today, -6);
-	const week = days.filter((d) => d.day >= from && d.day <= today);
-	const watered = week.filter((d) => (d.waterMl ?? 0) > 0);
-	const nights = beds.filter((b) => b.day >= from && b.day <= today && isHm(b.bedTime));
-	const onTime = nights.filter((b) => sleptOnTime({
-		bedTime: b.bedTime,
-		bedTarget: b.bedTarget ?? null,
-		bedOnTime: b.bedOnTime
-	}) === true).length;
-	const mins = nights.map((b) => (toMin$3(b.bedTime) - 1080 + 1440) % 1440);
-	const spread = mins.length >= 2 ? Math.max(...mins) - Math.min(...mins) : null;
-	const r = {
-		days: week.length,
-		waterAvgMl: watered.length ? Math.round(watered.reduce((t, d) => t + (d.waterMl ?? 0), 0) / watered.length) : 0,
-		waterDaysMet: week.filter((d) => (d.waterTarget ?? 0) > 0 && (d.waterMl ?? 0) >= (d.waterTarget ?? 0)).length,
-		moves: week.reduce((t, d) => t + d.moves, 0),
-		breaks: week.reduce((t, d) => t + d.breaks, 0),
-		bedOnTime: onTime,
-		bedNights: nights.length,
-		bedSpreadMin: spread,
-		healthyDays: week.filter((d) => d.healthy).length
-	};
-	const lines = [
-		`💧 Water: ${(r.waterAvgMl / 1e3).toFixed(1)} L a day on average, goal reached ${r.waterDaysMet} of 7 days`,
-		`💪 Moves: ${r.moves} move break${r.moves === 1 ? "" : "s"} · 👁️ ${r.breaks} screen break${r.breaks === 1 ? "" : "s"}`,
-		`🌙 Bedtime: on time ${r.bedOnTime} of ${r.bedNights} night${r.bedNights === 1 ? "" : "s"}${spread != null ? ` · ${spread <= 30 ? "steady" : spread <= 75 ? "a bit all over" : "all over the place"} (${Math.floor(spread / 60)}h${String(spread % 60).padStart(2, "0")} between earliest and latest)` : ""}`,
-		`💚 Healthy days: ${r.healthyDays} of 7`
-	];
-	return {
-		...r,
-		lines
-	};
-}
-/** The Sunday card's text (Telegram and the island). */
-function weeklyHealthText(w) {
-	return `🩺 <b>Your body this week</b>\n${w.lines.join("\n")}`;
-}
-/** The week from the island's nudge store (water is saved there each day the island runs). */
-function weekDaysFromStore(s, today) {
-	const out = [];
-	for (let i = 6; i >= 0; i--) {
-		const day = addDays$7(today, -i);
-		const d = s.days[day];
-		if (!d) continue;
-		out.push({
-			day,
-			waterMl: d.water ?? 0,
-			waterTarget: d.waterTarget ?? 0,
-			moves: d.moves,
-			breaks: screenBreaks(d),
-			healthy: !!d.healthy
-		});
-	}
-	return out;
-}
-/**
-* Telegram's wind-down message (25–50 min before bed): not when the bed is
-* already logged, and not when the island just showed its own wind-down
-* (you're at the PC and saw it).
-*/
-function telegramWindDown(o) {
-	if (o.bedLogged || o.minutesBefore < 25 || o.minutesBefore > 50) return false;
-	return !(o.islandBedAt && o.now - o.islandBedAt < 36e5);
-}
-/**
-* Quiet hours end once you're up: after you log the wake-up (Telegram, Waky,
-* the island) the morning part of the quiet hours is over, so the morning
-* plan comes at once instead of waiting in the bell.
-*/
-function stillQuiet(quiet, now, wakeAt) {
-	if (!quiet) return false;
-	if (!isHm(wakeAt) || now.getHours() >= 12) return true;
-	return now.getHours() * 60 + now.getMinutes() < toMin$3(wakeAt);
-}
-/** Telegram's water nudge waits while the island has water covered (its card within 90 min). */
-function islandHasWater(islandWaterAt, now) {
-	return !!islandWaterAt && now - islandWaterAt < 54e5;
-}
-/** Done: it's answered everywhere (the island card goes, Telegram won't send it). */
-function reminderDone(list, id, now) {
-	return list.map((r) => r.id === id ? {
-		...r,
-		done: true,
-		handled: true,
-		answeredAt: new Date(now).toISOString()
-	} : r);
-}
-/** Snooze: it comes back once on both, this many minutes from now. */
-function reminderSnooze(list, id, minutes, now) {
-	const m = Math.max(1, Math.min(1440, Math.round(minutes)));
-	return list.map((r) => r.id === id ? {
-		...r,
-		at: new Date(now + m * 6e4).toISOString(),
-		done: false,
-		handled: false,
-		sentAt: null
-	} : r);
 }
 // src/core/rhythm.ts
 var RHYTHM = "coach_rhythm";
@@ -15893,15 +16231,6 @@ function quietRules(feedback, now = /* @__PURE__ */ new Date()) {
 }
 /** The rule that keeps Ben quiet now, if any. */
 var quietNow$1 = (rules, now = /* @__PURE__ */ new Date()) => rules.find((r) => r.days.includes(now.getDay()) && now.getHours() >= r.fromH && now.getHours() < r.toH) ?? null;
-// src/core/readiness.ts
-/** Hours actually slept that night: bedtime and wake-up on the same morning's row. */
-function nightMinutes(log) {
-	if (!log?.bedTime || !log.wakeTime) return null;
-	const toM = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-	let m = toM(log.wakeTime) - toM(log.bedTime);
-	if (m <= 0) m += 1440;
-	return m >= 120 && m <= 960 ? m : null;
-}
 // src/core/sleepRegularity.ts
 var toM$1 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 /** Minutes around midnight-noon, so 23:30 and 00:30 are an hour apart (not 23). */
@@ -32136,7 +32465,7 @@ var esc$1 = (s) => s.replace(/[<>&]/g, (c) => ({
 var PLAN_ASK = "What are your 1–3 must-dos today?";
 function morningText(o) {
 	const lines = ["☀️ <b>Good morning!</b>", ""];
-	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$8(o.focusYesterdayMin)}</b> of focus.`);
+	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$9(o.focusYesterdayMin)}</b> of focus.`);
 	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc$1(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
 	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
 	if (lines.length > 2) lines.push("");
@@ -32165,7 +32494,7 @@ function planKeyboard(plan, withReasons) {
 	return { inline_keyboard: rows };
 }
 function eveningText(plan, focusMin) {
-	const head = `🌙 <b>Evening review</b> · ${hm$8(focusMin)} of focus today`;
+	const head = `🌙 <b>Evening review</b> · ${hm$9(focusMin)} of focus today`;
 	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
 	const done = plan.items.filter((i) => i.done).length;
 	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
@@ -32175,19 +32504,19 @@ function weekText(w, goals) {
 	const lines = [
 		`📊 <b>Your week</b> (${w.from.slice(5)} → ${w.to.slice(5)})`,
 		"",
-		`⏱ Focus: <b>${hm$8(w.totalMin)}</b>`
+		`⏱ Focus: <b>${hm$9(w.totalMin)}</b>`
 	];
-	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$1(s.subject)}: ${hm$8(s.minutes)}`);
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc$1(s.subject)}: ${hm$9(s.minutes)}`);
 	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
 	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc$1(r.reason)} ×${r.count}`).join(", ")}`);
-	if (w.funMin) lines.push(`🎮 Fun: ${hm$8(w.funMin)}`);
-	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$1(g.title)}: ${hm$8(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	if (w.funMin) lines.push(`🎮 Fun: ${hm$9(w.funMin)}`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc$1(g.title)}: ${hm$9(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
 	lines.push("", "<b>One thing to change next week?</b> Reply here.");
 	return lines.join("\n");
 }
 function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
-	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$8(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc$1(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$9(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/core/benActs.ts
 /** At 10:00–19:59 a proposed plan nobody approved gets approved. */
@@ -37573,7 +37902,7 @@ function focusKeyboard(subjects) {
 }
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r, plan) {
-	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$8(r.state.todayMin)}`;
+	const head = `✅ <b>${r.session.minutes} min of ${esc(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$9(r.state.todayMin)}`;
 	const rate = [
 		1,
 		2,
@@ -38836,7 +39165,7 @@ function runFocus(s, text, focusEnded) {
 				const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
 				return { reply: `⏱ <b>Focusing on ${esc(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
 			}
-			return { reply: `⏱ Today: <b>${hm$8(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
+			return { reply: `⏱ Today: <b>${hm$9(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
 		}
 		const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
 		const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
@@ -40714,6 +41043,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				keyboard: c.keyboard
 			};
 		}
+		const cups = text.startsWith("/") ? null : parseCoffee(text);
+		if (cups) return { reply: esc(logCoffee(s, s.db, cups).reply) };
 		const ml = text.startsWith("/") ? null : parseWater(text);
 		if (ml) {
 			const day = sportToday();
@@ -41148,7 +41479,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			const total = steps.reduce((t, x) => t + x.minutes, 0);
 			const list = steps.map((x, i) => `${i + 1}. ${x.title} (${x.minutes} min)`).join("\n");
 			return {
-				reply: `"${big}" in ${steps.length} steps, about ${hm$8(total)} in all:\n${list}${todoist ? "" : "\n(Todoist isn't connected, so they are only here.)"}`,
+				reply: `"${big}" in ${steps.length} steps, about ${hm$9(total)} in all:\n${list}${todoist ? "" : "\n(Todoist isn't connected, so they are only here.)"}`,
 				pre,
 				chips: ["Plan my day", "Start step 1"],
 				buttons: [{
@@ -41276,6 +41607,20 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 					acts: [act],
 					chips: ["How much water today?", "What now?"]
 				};
+			}
+		}
+		if (!preset && !media && text && !direct) {
+			const cups = parseCoffee(clean);
+			if (cups) {
+				const r = await mirror.write((db) => logCoffee(services.services(db), db, cups)).catch(() => null);
+				if (r) {
+					step("Logged in code");
+					preset = {
+						reply: r.reply,
+						acts: [],
+						chips: ["How did I sleep this week?", "What now?"]
+					};
+				}
 			}
 		}
 		if (!preset && !media && text && !direct) {
@@ -41866,7 +42211,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				const sq = p.squeeze;
 				const ask = sq ? sq.drop ? ` The day is full: drop "${sq.drop}" or do "${sq.keep}" tomorrow?` : ` The day is full: "${sq.keep}" is on today's list without a slot.` : "";
 				local = {
-					reply: `Here's today's plan${made.version > 1 ? ` (v${made.version})` : ""}, starting ${p.blocks[0]?.start ?? "now"}: ${p.blocks.length} block${p.blocks.length === 1 ? "" : "s"}, ${hm$8(focusMin)} of focus${p.mustdos.length ? `, ${p.mustdos.length} must-do${p.mustdos.length === 1 ? "" : "s"}` : ""}.${ask || " Look it over, then approve it or tell me what to change."}`,
+					reply: `Here's today's plan${made.version > 1 ? ` (v${made.version})` : ""}, starting ${p.blocks[0]?.start ?? "now"}: ${p.blocks.length} block${p.blocks.length === 1 ? "" : "s"}, ${hm$9(focusMin)} of focus${p.mustdos.length ? `, ${p.mustdos.length} must-do${p.mustdos.length === 1 ? "" : "s"}` : ""}.${ask || " Look it over, then approve it or tell me what to change."}`,
 					actions: [],
 					remember: [],
 					show: ["plan"],
@@ -41934,7 +42279,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				if (pre.length) step(digest ? "Read yesterday" : route.intent === "goals" ? "Checked your goals" : "Looked up your history");
 				if (tool?.found.length) pre.push(...tool.found);
 				if (digest && onStep && !/\bweek\b/i.test(clean)) step(`\u0001${reviewFromData(digest)}`);
-				else if (week && onStep) step(`\u0001This week so far: ${hm$8(week.focusMin)} of focus, ${week.workouts} workout${week.workouts === 1 ? "" : "s"}, ${week.tasks} task${week.tasks === 1 ? "" : "s"} done, ${week.daysLeft} day${week.daysLeft === 1 ? "" : "s"} left. The full review is coming…`);
+				else if (week && onStep) step(`\u0001This week so far: ${hm$9(week.focusMin)} of focus, ${week.workouts} workout${week.workouts === 1 ? "" : "s"}, ${week.tasks} task${week.tasks === 1 ? "" : "s"} done, ${week.daysLeft} day${week.daysLeft === 1 ? "" : "s"} left. The full review is coming…`);
 				out = parseBrain(await ask(pre.length ? pre.join("\n") : void 0, tool?.note ?? ""));
 				trace.mark("model");
 			}
@@ -42989,7 +43334,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	async function lessonOfDay(token, chat, botId, cfg, note) {
 		const ctx = await mirror.read((db) => {
 			const f = services.services(db).focus.state();
-			return `Focus today ${hm$8(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
+			return `Focus today ${hm$9(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
 		});
 		const out = parseBrain(await ai(`You are Victor's coach. Here is his day and his evening note. Write ONE short lesson for tomorrow (max 25 words, concrete, kind, in the language of his note) as "reply", and the same lesson as one item in "remember" starting with "Lesson ${(/* @__PURE__ */ new Date()).toISOString().slice(5, 10)}:". Answer only JSON {"reply": string, "actions": [], "remember": string[]}.
 
@@ -44353,6 +44698,7 @@ function cleanDay(x) {
 		...Number.isFinite(x?.waterTarget) ? { waterTarget: num(x.waterTarget, 0, 0, 2e4) } : {},
 		...x?.healthy ? { healthy: true } : {},
 		...Number.isFinite(x?.healthyPaid) ? { healthyPaid: x.healthyPaid } : {},
+		...Number.isFinite(x?.mobility) && x.mobility > 0 ? { mobility: num(x.mobility, 0, 0, 100) } : {},
 		...ch && ch.ex ? { challenge: {
 			ex: str(ch.ex, 40),
 			name: str(ch.name, 40),
@@ -48395,11 +48741,12 @@ async function pushTick(c) {
 		});
 		if (p) await go(p);
 	}
+	const sdAt = shutdownFor(afterShiftPlan(f.fit, f.today, f.bed), f.bed, prefs);
 	const sdBase = {
 		now,
 		day: f.today,
-		bed: f.bed,
-		prefs,
+		bed: sdAt.bed,
+		prefs: sdAt.prefs,
 		closed: f.closed || c.paused,
 		bedLogged: f.bedLogged,
 		done: [.../* @__PURE__ */ new Set([...f.plan.filter((x) => x.done).map((x) => x.text), ...f.sessions])],
@@ -50647,7 +50994,9 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		if (JSON.stringify(nudge) !== JSON.stringify(st.nudge)) await mirror.write((db) => setSetting(db, NUDGES, JSON.stringify(nudge)));
 		try {
 			const bed = await mirror.read((db) => services.services(db).sleep.bedtimeTarget());
-			const before = (Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5)) - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440;
+			const lateShift = await mirror.read((db) => afterShiftPlan(readLifeFit(db), today0, bed)).catch(() => null);
+			const bm = Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5));
+			const before = lateShift ? -1 : (bm - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440;
 			const seen = before >= 25 && before <= 50 ? await mirror.read((db) => bodyFacts(db, services.services(db), today0, now)).catch(() => null) : null;
 			if (telegramWindDown({
 				minutesBefore: before,

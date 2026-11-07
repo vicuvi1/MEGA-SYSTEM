@@ -9,6 +9,7 @@ import { useAction } from '../ui'
 import { useLive } from '../live'
 import { useTapHabit } from '../MyHabits'
 import type { HabitsView } from '../web/lifeExtras'
+import { GROOMING_OPEN, useGrooming } from '../habits/GroomingSheet'
 
 export interface DayFlowProps {
   summary: Summary
@@ -68,10 +69,13 @@ export interface Habit {
   ownId?: string
   /** A shorter name for the tile ("Focus 50 min"). */
   short?: string
+  /** A tap opens its checklist (Grooming), done or not; the steps pay, never the tap. */
+  sheet?: boolean
 }
 
 export function useHabits({ summary, discipline, connections, body, onChange, onGo, rules }: DayFlowProps, focusMin: number, onSpend: () => void, own: HabitsView | null, reloadOwn: () => void, focusTarget = 50): Habit[] {
   const act = useAction()
+  const groom = useGrooming()
   const tapOwn = useTapHabit(() => {
     reloadOwn()
     onChange()
@@ -96,7 +100,10 @@ export function useHabits({ summary, discipline, connections, body, onChange, on
     { id: 'clean', label: 'Clean day check-in', short: 'Clean day', hint: discipline?.setup ? `day ${discipline.day ?? discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), pays: pts('discipline.clean_day', 3), source: discipline?.setup ? `Discipline · day ${discipline.day ?? discipline.current}` : 'Discipline', done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
     { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), pays: pts('body.workout_done', 3), auto: true, source: 'Sport Track', action: 'Open Sport Track', done: !!(body?.workoutDoneToday || body?.restToday || r.includes('body.workout_done')), run: () => onGo('body') },
     { id: 'focus', label: `${focusTarget} minutes of focus`, short: `Focus ${focusTarget} min`, hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', pays: '+3 / 10 min', auto: true, source: 'Focus timer', action: `Start ${focusMins} min`, progress: { value: Math.min(focusMin, focusTarget), target: focusTarget, unit: 'min' }, done: focusMin >= focusTarget || r.includes('study.block_done'), run: () => void act(() => life.focus.start('Focus', focusMins), `Focus started: ${focusMins} minutes`).then((ok) => ok && onChange()) },
-    { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), pays: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
+    // BD15: one habit with steps (morning and night, weekly nails and haircut); it pays once, when every step is ticked.
+    life.care
+      ? { id: 'skincare', label: 'Grooming', hint: pts('face.routine_done', 2), pays: pts('face.routine_done', 2), source: 'Morning and night steps', sheet: true, ...(groom ? { progress: { value: groom.day.done, target: groom.day.total, unit: 'steps' } } : {}), done: r.includes('face.routine_done') || !!groom?.day.complete, run: () => (window.dispatchEvent(new CustomEvent(GROOMING_OPEN)), Promise.resolve(false)) }
+      : { id: 'skincare', label: 'Skincare', hint: pts('face.routine_done', 2), pays: pts('face.routine_done', 2), done: r.includes('face.routine_done'), run: () => done(act(() => life.wallet.award('face.routine_done'), 'Skincare done')) },
     { id: 'spending', label: "Log today's spending", short: 'Log spending', hint: pts('money.logged', 1), pays: pts('money.logged', 1), auto: true, source: 'Finance', action: 'Log spending', done: !!(connections?.finance.today?.logged || r.includes('money.logged')), run: onSpend },
     // Your own habits (FT1): +2 only for the tap, once a day each.
     ...(own?.rows ?? []).map((h) => ({ id: `own:${h.id}`, ownId: h.id, label: h.name, hint: `${own?.pays ? `+${own.pays}` : ''}${h.streak ? ` · 🔥${h.streak}` : ''}`.replace(/^ · /, '') || 'tap when done', pays: own?.pays ? `+${own.pays}` : '', source: 'Your habit', done: h.done, run: () => tapOwn(h.id, h.name).then((ok) => (ok && pluck(), ok)) }))

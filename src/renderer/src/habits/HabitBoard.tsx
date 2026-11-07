@@ -45,6 +45,7 @@ import type { Habit } from '../dayflow/hooks'
 import type { HabitsView, BoardView } from '../web/lifeExtras'
 import { COLOR_HEX, HabitIcon } from './habitIcons'
 import './habits.css'
+import { GroomingSheet, GROOMING_OPEN } from './GroomingSheet'
 
 interface Tile {
   id: string
@@ -144,6 +145,13 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null)
   const [boardMenu, setBoardMenu] = useState(false)
   const [sheet, setSheet] = useState<Sheet | null>(null)
+  // BD15: the Grooming tile opens its checklist.
+  const [groomOpen, setGroomOpen] = useState(false)
+  useEffect(() => {
+    const open = () => setGroomOpen(true)
+    window.addEventListener(GROOMING_OPEN, open)
+    return () => window.removeEventListener(GROOMING_OPEN, open)
+  }, [])
   const [showHidden, setShowHidden] = useState(false)
   const [dragId, setDragId] = useState<string | null>(null)
   const [dropOn, setDropOn] = useState<string | null>(null)
@@ -260,6 +268,8 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
   }
 
   const tick = async (t: Tile, el: HTMLElement) => {
+    // A habit with steps (Grooming): a tap opens its checklist, done or not.
+    if (t.habit.sheet) return void t.habit.run()
     if (t.done || t.off) return
     if (t.skipped) return setMenu(null)
     // An auto habit: the tap opens what really counts (the app, the timer); it never ticks here.
@@ -482,6 +492,15 @@ export function HabitBoard({ habits, own, reloadOwn, onChange, focusTarget, acti
           }}
         />
       )}
+      {groomOpen && (
+        <GroomingSheet
+          onClose={() => setGroomOpen(false)}
+          onChange={() => {
+            load()
+            onChange()
+          }}
+        />
+      )}
       {sheet?.kind === 'details' && sheetTile && (
         <DetailsSheet
           t={sheetTile}
@@ -528,10 +547,12 @@ function HabitRow({
       ? 'skipped today'
       : t.off
         ? 'not today'
-        : h.auto && p
+        : p
           ? `${p.value}/${p.target} ${p.unit}`
           : t.due.hint
-  const label = t.done
+  const label = h.sheet
+    ? `${t.name}: open the checklist (${p ? `${p.value} of ${p.target} ${p.unit}` : meta})`
+    : t.done
     ? `${t.name}: done${t.paid ? `, +${t.paid} paid` : ''}`
     : t.skipped
       ? `${t.name}: skipped today`
@@ -617,8 +638,8 @@ function HabitRow({
         type="button"
         className="hb-hit"
         aria-label={label}
-        aria-disabled={t.done || t.off || undefined}
-        title={h.auto && !t.done ? `${h.action}: it ticks by itself from ${h.source}` : t.done ? 'Done' : 'Tap when you did it'}
+        aria-disabled={(!h.sheet && (t.done || t.off)) || undefined}
+        title={h.sheet ? 'Open the checklist' : h.auto && !t.done ? `${h.action}: it ticks by itself from ${h.source}` : t.done ? 'Done' : 'Tap when you did it'}
         onClick={(e) => {
           if (press.current?.fired) {
             press.current = null
@@ -717,7 +738,7 @@ function TileMenu({
 
 // ------------------------------------------------------------------ sheets
 
-function SheetFrame({ title, onClose, children, label }: { title: ReactNode; onClose: () => void; children: ReactNode; label: string }) {
+export function SheetFrame({ title, onClose, children, label }: { title: ReactNode; onClose: () => void; children: ReactNode; label: string }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const before = document.activeElement as HTMLElement | null

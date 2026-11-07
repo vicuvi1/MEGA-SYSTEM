@@ -15,6 +15,8 @@ export interface WeatherDay {
   tmin: number | null
   tmax: number | null
   rain: RainSpan[]
+  /** Morning cloud cover (08–12), %, when the forecast has it (sleep care: longer morning light on grey days). */
+  cloud?: number
 }
 
 export interface WeatherData {
@@ -56,7 +58,8 @@ export function summarizeDay(json: any, day: string): WeatherDay | null {
     } else spans.push({ from, to: fromMin(toMin(from) + 60), prob: prob ?? 0 })
   })
   const r = (v: number | null) => (v == null ? null : Math.round(v))
-  return { day, sunrise: hmOf(d.sunrise?.[i]), sunset: hmOf(d.sunset?.[i]), tmin: r(num(d.temperature_2m_min?.[i])), tmax: r(num(d.temperature_2m_max?.[i])), rain: spans }
+  const clouds = times.map((t, k) => (t.startsWith(day) && Number(hmOf(t)?.slice(0, 2)) >= 8 && Number(hmOf(t)?.slice(0, 2)) < 12 ? num(h.cloudcover?.[k]) : null)).filter((v): v is number => v != null)
+  return { day, sunrise: hmOf(d.sunrise?.[i]), sunset: hmOf(d.sunset?.[i]), tmin: r(num(d.temperature_2m_min?.[i])), tmax: r(num(d.temperature_2m_max?.[i])), rain: spans, ...(clouds.length ? { cloud: Math.round(clouds.reduce((t, v) => t + v, 0) / clouds.length) } : {}) }
 }
 
 /** "Get daylight before 15:00": 90 minutes before sunset, on the half hour before. */
@@ -94,7 +97,7 @@ export function weatherLine(data: WeatherData, today: string, nowHM: string): st
 }
 
 export const forecastUrl = (lat: number, lon: number) =>
-  `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&hourly=precipitation_probability,precipitation&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=2`
+  `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(3)}&longitude=${lon.toFixed(3)}&hourly=precipitation_probability,precipitation,cloudcover&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=2`
 
 export const geocodeUrl = (city: string) => `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(city)}&count=1&language=en&format=json`
 

@@ -7,6 +7,7 @@
 import { channelFor, decideBrief, decideCheckin, decideShutdown, isOffDay, outboxTake, pcHere, pushTelegram, toCard, type CheckinBlock, type PushCard, type PushOut, type ShutdownItem } from '@core/benPushes'
 import { blockSubject, isFocusBlock, type CalEvent } from '@core/dayTime'
 import { targetForDay } from '@core/sleep'
+import { afterShiftPlan, shutdownFor } from '@core/afterShift'
 import { bedLoggedTonight } from '@core/bedSense'
 import { sharedView, sportToday } from '@core/sportShared'
 import { RHYTHM, rhythmFor } from '@core/rhythm'
@@ -126,7 +127,9 @@ export async function pushTick(c: Ctx): Promise<{ checkins: boolean; sent: strin
   }
 
   // PR4: the evening shutdown, ~30 min before bed: done, open (Tomorrow / Drop / Keep today), bed.
-  const sdBase = { now, day: f.today, bed: f.bed, prefs, closed: f.closed || c.paused, bedLogged: f.bedLogged, done: [...new Set([...f.plan.filter((x) => x.done).map((x) => x.text), ...f.sessions])], levels, log: f.log, here }
+  // BD5: after a late shift the shutdown comes at the shift's end (lights out 20 min later), not in the middle of it.
+  const sdAt = shutdownFor(afterShiftPlan(f.fit, f.today, f.bed), f.bed, prefs)
+  const sdBase = { now, day: f.today, bed: sdAt.bed, prefs: sdAt.prefs, closed: f.closed || c.paused, bedLogged: f.bedLogged, done: [...new Set([...f.plan.filter((x) => x.done).map((x) => x.text), ...f.sessions])], levels, log: f.log, here }
   if (decideShutdown({ ...sdBase, open: [] }) && !here) {
     const tasks = c.todoist ? await c.todoist().catch(() => []) : []
     const open: ShutdownItem[] = [

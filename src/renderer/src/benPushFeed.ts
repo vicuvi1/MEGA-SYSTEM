@@ -5,6 +5,7 @@
 // island cards, each claimed by its one key so Telegram never sends it too.
 // The server's tick sends them on Telegram when you're away. A drift word the
 // island wouldn't show (Calm keeps it as a dot) is handed to Telegram.
+import { afterShiftPlan, shutdownFor } from '@core/afterShift'
 import { atPc, channelFor, pushAlert, decideBrief, decideCheckin, decideShutdown, driftToTelegram, isOffDay, pcSeenNext, type CheckinBlock, type PcSeen, type PushLog, type PushOp, type PushOut, type ShutdownItem } from '@core/benPushes'
 import type { IslandAction, IslandAlert, IslandBlock } from '@core/islandModel'
 export { pushAlert }
@@ -92,7 +93,9 @@ export async function pushTick(o: PushIslandInput): Promise<IslandAlert | null> 
     ...o.mustdos.filter((m) => !m.done).map((m): ShutdownItem => ({ id: `m:${m.text}`.slice(0, 80), text: m.text, kind: 'mustdo' })),
     ...o.todo.filter((t) => !o.mustdos.some((m) => m.text === t.content)).slice(0, 4).map((t): ShutdownItem => ({ id: `t:${t.id}`, text: t.content, kind: 'todo', ref: t.id }))
   ].slice(0, 6)
-  const sd = decideShutdown({ now: o.now, day, bed: o.fit.bed, prefs, closed: o.dayClosed, bedLogged: o.bedLogged, done: o.done, open, levels, log, here: true })
+  // BD5: after a late shift the shutdown comes at the shift's end, not in the middle of it.
+  const sdAt = shutdownFor(afterShiftPlan(o.fit, day, o.fit.bed), o.fit.bed, prefs)
+  const sd = decideShutdown({ now: o.now, day, bed: sdAt.bed, prefs: sdAt.prefs, closed: o.dayClosed, bedLogged: o.bedLogged, done: o.done, open, levels, log, here: true })
   return show(sd, async () => void (await life.coach!.pushes!.shutdown(open).catch(() => {})))
 }
 

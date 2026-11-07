@@ -261,3 +261,26 @@
   .hb *, .hb-sheet, .hb-back, .hb-menu, .t3 *, .ot * { animation: none !important; transition: none !important; }
   .hb-confetti { display: none; }
 }
+
+/* BD15: the grooming checklist (the Grooming tile opens it). */
+.gr { display: grid; gap: 12px; }
+.gr-sum { margin: 0; padding: 9px 12px; border-radius: 10px; background: rgb(var(--ink) / 0.05); font-size: 13.5px; }
+.gr-sum.done { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.gr-parts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.gr-part { display: grid; gap: 6px; align-content: start; margin: 0; padding: 10px; border: 1px solid rgb(var(--ink) / 0.09); border-radius: 12px; }
+.gr-part legend { padding: 0 4px; font-size: 12px; font-weight: 650; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.gr-step { display: flex; align-items: center; gap: 9px; padding: 8px 10px; border-radius: 10px; border: 1px solid rgb(var(--ink) / 0.1); background: rgb(var(--ink) / 0.03); color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; transition: background-color 0.15s ease, border-color 0.15s ease; }
+.gr-step > i { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid rgb(var(--ink) / 0.3); font-style: normal; font-size: 12px; }
+.gr-step small { margin-left: auto; font-size: 11px; color: var(--muted); }
+.gr-step.on { background: color-mix(in srgb, #ff6fae 12%, transparent); border-color: color-mix(in srgb, #ff6fae 45%, transparent); }
+.gr-step.on > i { background: #ff6fae; border-color: transparent; color: #1a0610; }
+.gr-weekly { gap: 8px; }
+.gr-week { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.gr-week b { display: block; font-size: 13.5px; }
+.gr-week small { display: block; font-size: 12px; color: var(--muted); }
+.gr-week.s-due b::after { content: ' · due'; color: var(--orange); font-weight: 600; }
+.gr-rhythm { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12.5px; color: var(--muted); }
+.gr-rhythm span { display: inline-flex; gap: 4px; }
+.gr-rhythm button { padding: 4px 10px; border-radius: 999px; border: 1px solid rgb(var(--ink) / 0.14); background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+.gr-rhythm button.on { background: rgb(var(--ink) / 0.1); border-color: rgb(var(--ink) / 0.3); }
+@media (max-width: 520px) { .gr-parts { grid-template-columns: minmax(0, 1fr); } }

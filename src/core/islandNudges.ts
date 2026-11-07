@@ -124,6 +124,8 @@ export interface NudgeDay {
   /** HD: all four parts of a healthy day met, and the bonus payment (ledger id). */
   healthy?: boolean
   healthyPaid?: number | null
+  /** BD11: 60-second desk drills done today (logged only on your tap). */
+  mobility?: number
 }
 
 export interface NudgeStore {
@@ -196,6 +198,7 @@ function cleanDay(x: any): NudgeDay {
     ...(Number.isFinite(x?.waterTarget) ? { waterTarget: num(x.waterTarget, 0, 0, 20000) } : {}),
     ...(x?.healthy ? { healthy: true } : {}),
     ...(Number.isFinite(x?.healthyPaid) ? { healthyPaid: x.healthyPaid } : {}),
+    ...(Number.isFinite(x?.mobility) && x.mobility > 0 ? { mobility: num(x.mobility, 0, 0, 100) } : {}),
     ...(ch && ch.ex ? { challenge: { ex: str(ch.ex, 40), name: str(ch.name, 40), target: num(ch.target, 50, 1, 1000), paid: Number.isFinite(ch.paid) ? ch.paid : null, said: Array.isArray(ch.said) ? ch.said.filter((v: unknown) => Number.isFinite(v)).slice(0, 4) : [] } } : {})
   }
 }
@@ -350,8 +353,12 @@ export interface MoveOption { ex: string; name: string; n: number; left: number 
 export type Nudge =
   | { type: 'move'; kind: 'move'; options: MoveOption[]; pick: string; count: number; hint: string | null; level: NudgeLevel; postponed: number; coins: number; tidy: boolean; snooze: { c: SnoozeChoice; label: string }[]; challenge: string | null }
   | { type: 'moveDone'; kind: 'move'; logId: string; name: string; n: number; coins: number; water: boolean; line: string | null }
-  | { type: 'timer'; kind: 'eyes' | 'tidy'; seconds: number; postponed: number; snooze: { c: SnoozeChoice; label: string }[] }
+  | { type: 'timer'; kind: 'eyes' | 'tidy'; seconds: number; postponed: number; snooze: { c: SnoozeChoice; label: string }[]; /** BD12: the eye break's tip (blink and look far, screen check, warm screen). */ tip?: 'blink' | 'distance' | 'warm' }
   | { type: 'posture'; kind: 'posture' }
+  /** BD11: the posture nudge as a 60-second desk drill (deskMobility.ts), logged only on your tap. */
+  | { type: 'drill'; kind: 'posture'; seconds: number }
+  /** BD5: the after-shift checklist (afterShift.ts); taps go through the island's 'care' action. */
+  | { type: 'checklist'; kind: 'bed'; steps: { id: string; label: string; done: boolean }[]; minutesLeft: number; lightsOut: string }
   | { type: 'breathe'; kind: 'breathe'; pattern: 'box' | '478'; seconds: number }
   | { type: 'mood'; kind: 'mood' }
   | { type: 'gratitude'; kind: 'gratitude' }
@@ -367,6 +374,8 @@ export type NudgeOp =
   | { op: 'snooze'; kind: NudgeKind; alertId: string; choice: SnoozeChoice }
   | { op: 'skip'; kind: NudgeKind; alertId: string }
   | { op: 'tally'; kind: 'eyes' | 'posture' | 'breathe' | 'tidy'; ok: boolean; alertId: string }
+  /** BD11: the 60-second desk drill, done (only from your tap at its end). */
+  | { op: 'drill'; alertId: string }
   | { op: 'mood'; mood: number; alertId: string }
   | { op: 'gratitude'; text: string; alertId: string }
   | { op: 'focus'; answer: FocusAnswer; subject: string; startedAt: number; alertId: string }
@@ -375,7 +384,7 @@ export type NudgeOp =
   | { op: 'close'; alertId: string }
 
 /** Taps that end the card (the island goes back to the pill). */
-export const NUDGE_CLOSES = new Set<NudgeOp['op']>(['snooze', 'skip', 'tally', 'mood', 'gratitude', 'focus', 'person', 'away', 'close'])
+export const NUDGE_CLOSES = new Set<NudgeOp['op']>(['snooze', 'skip', 'tally', 'drill', 'mood', 'gratitude', 'focus', 'person', 'away', 'close'])
 
 const act = (op: NudgeOp): IslandAction => ({ kind: 'nudge', op })
 const hm = (t: number) => new Date(t).toTimeString().slice(0, 5)
@@ -481,19 +490,20 @@ const hidden = (c: DayCtx, id: string) => (c.dismissed[id] ?? 0) > c.now
 const hourOf = (now: number) => new Date(now).getHours() + new Date(now).getMinutes() / 60
 
 /** IN11: the 20-20-20 eye break, with a real 20 s countdown (only with eye breaks on). */
-export function eyesNudge(c: DayCtx & { eyeBreaks: boolean; lastEyesAt: number }): IslandAlert | null {
-  if (!c.eyeBreaks || c.busy || sitting(c) < 20 || c.now - c.lastEyesAt < 20 * 60_000) return null
-  const id = `eyes:${Math.floor(c.now / (20 * 60_000))}`
+export function eyesNudge(c: DayCtx & { eyeBreaks: boolean; lastEyesAt: number; /** BD12: minutes between breaks (today's screen time, eyeCare.ts). */ everyMin?: number; tip?: { kind: 'blink' | 'distance' | 'warm'; title: string; text: string } | null }): IslandAlert | null {
+  const every = Math.max(10, Math.min(30, c.everyMin ?? 20))
+  if (!c.eyeBreaks || c.busy || sitting(c) < every || c.now - c.lastEyesAt < every * 60_000) return null
+  const id = `eyes:${Math.floor(c.now / (every * 60_000))}`
   if (hidden(c, id)) return null
   const postponed = dayOf(c.store, c.day).postponed.eyes ?? 0
   return {
     id,
     kind: 'eyes',
-    title: '20-20-20',
-    text: `Look at something 6 m away for 20 seconds.${postponed ? ` · ${postponedText(postponed)}` : ''}`,
+    title: c.tip?.title ?? '20-20-20',
+    text: `${c.tip?.text ?? 'Look at something 6 m away for 20 seconds.'}${postponed ? ` · ${postponedText(postponed)}` : ''}`,
     face: '👁️',
     actions: [{ label: '▶ Start 20 s', action: act({ op: 'tally', kind: 'eyes', ok: true, alertId: id }), primary: true }],
-    nudge: { type: 'timer', kind: 'eyes', seconds: 20, postponed, snooze: snoozeChoices(c.snooze) }
+    nudge: { type: 'timer', kind: 'eyes', seconds: 20, postponed, snooze: snoozeChoices(c.snooze), ...(c.tip ? { tip: c.tip.kind } : {}) }
   }
 }
 
@@ -514,12 +524,22 @@ export function tidyNudge(c: DayCtx): IslandAlert | null {
 }
 
 /** IN12: "Shoulders back, feet flat?" every hour or so while you sit (09–22, at most 4 a day). */
-export function postureNudge(c: DayCtx): IslandAlert | null {
+export function postureNudge(c: DayCtx & { /** BD11: offer the 60-second desk drill instead of only asking. */ drill?: boolean }): IslandAlert | null {
   const h = hourOf(c.now)
   const d = dayOf(c.store, c.day)
-  if (c.busy || h < 9 || h >= 22 || sitting(c) < 25 || d.posture + d.postureFix >= 4 || !spaced(c, 'posture', 60)) return null
+  if (c.busy || h < 9 || h >= 22 || sitting(c) < 25 || d.posture + d.postureFix + (d.mobility ?? 0) >= 4 || !spaced(c, 'posture', 60)) return null
   const id = `posture:${c.day}:${Math.floor(h)}`
   if (hidden(c, id)) return null
+  if (c.drill)
+    return {
+      id,
+      kind: 'move',
+      title: 'Desk mobility · 60 s',
+      text: 'Long sit: chin tucks, chest, hips, wall angels. Follow the figure.',
+      face: '🧍',
+      actions: [{ label: '▶ Start 60 s', action: act({ op: 'tally', kind: 'posture', ok: false, alertId: id }), primary: true }],
+      nudge: { type: 'drill', kind: 'posture', seconds: 60 }
+    }
   return {
     id,
     kind: 'move',
@@ -710,11 +730,11 @@ export function setLog(s: NudgeStore, logId: string, patch: Partial<MoveLog>): N
   return { ...s, logs: s.logs.map((l) => (l.id === logId ? { ...l, ...patch } : l)) }
 }
 
-export type TallyKind = 'eyes' | 'posture' | 'postureFix' | 'calm' | 'tidy' | 'walk' | 'mood' | 'gratitude'
+export type TallyKind = 'eyes' | 'posture' | 'postureFix' | 'calm' | 'tidy' | 'walk' | 'mood' | 'gratitude' | 'drill'
 /** A quiet tally (no points by itself). Minutes moved: tidy 1, calm 1, a walk its minutes. */
 export function tally(s: NudgeStore, day: string, k: TallyKind, now: number, minutes = 0): NudgeStore {
   return withDay(s, day, (d) => {
-    const lastKey = k === 'postureFix' ? 'posture' : k === 'calm' ? 'breathe' : k === 'walk' ? 'away' : k
+    const lastKey = k === 'postureFix' || k === 'drill' ? 'posture' : k === 'calm' ? 'breathe' : k === 'walk' ? 'away' : k
     const base = { ...d, lastAt: { ...d.lastAt, [lastKey]: now } }
     if (k === 'eyes') return { ...base, eyes: d.eyes + 1 }
     if (k === 'posture') return { ...base, posture: d.posture + 1 }
@@ -723,6 +743,7 @@ export function tally(s: NudgeStore, day: string, k: TallyKind, now: number, min
     if (k === 'tidy') return { ...base, tidy: d.tidy + 1, minutes: d.minutes + 1 }
     if (k === 'walk') return { ...base, walks: d.walks + 1, minutes: d.minutes + Math.max(0, Math.round(minutes)) }
     if (k === 'mood') return { ...base, moods: d.moods + 1 }
+    if (k === 'drill') return { ...base, mobility: (d.mobility ?? 0) + 1, minutes: d.minutes + 1 }
     return { ...base, gratitude: true }
   })
 }
@@ -840,6 +861,8 @@ export function nudgeTapLabel(op: NudgeOp): string | null {
       return '⏰ Later'
     case 'tally':
       return op.kind === 'eyes' ? '👁️ Eye break' : op.kind === 'posture' ? '🪑 Noted' : op.kind === 'breathe' ? '🫧 Calm minute' : '🧹 Tidy minute'
+    case 'drill':
+      return '🧍 Drill done'
     case 'mood':
       return 'Mood noted'
     case 'gratitude':

@@ -28,7 +28,9 @@ import {
   type SnoozeCtx
 } from './islandNudges'
 import { recapAlert } from './islandMoments'
-import { govern, lateAlert, windDownMode, queueAdd, queueRelease, reminderAlert, type GovernCtx, type Queued, type ReminderItem, type Shown } from './healthyDay'
+import { govern, lateAlert, queueAdd, queueRelease, reminderAlert, type GovernCtx, type Queued, type ReminderItem, type Shown } from './healthyDay'
+import { afterShiftAlert, effectiveBed, windModeTonight, type AfterShiftPlan } from './afterShift'
+import type { EyeTip } from './eyeCare'
 
 export interface DayNudgeInput {
   now: number
@@ -74,6 +76,19 @@ export interface DayNudgeInput {
   recap: IslandRecap
   /** Ben's evening review already went to Telegram today (the island's story would say it twice). */
   eveningSent: boolean
+  /** Sleep care (BD4, BD5, BD11, BD12), all optional. */
+  care?: {
+    /** The morning light card (sleepCare.ts lightCard), made by the app window. */
+    light?: IslandAlert | null
+    /** The caffeine curfew's soft warning (sleepCare.ts caffeineAlert). */
+    caffeine?: IslandAlert | null
+    /** A late shift tonight: the wind-down starts from its end (afterShift.ts). */
+    afterShift?: { plan: AfterShiftPlan | null; done: string[]; ctf: boolean }
+    /** Eye breaks as often as today's screen time asks, with a tip (eyeCare.ts). */
+    eyes?: { everyMin: number; tip: EyeTip | null }
+    /** The posture nudge offers the 60-second desk drill (deskMobility.ts). */
+    drill?: boolean
+  }
 }
 
 export interface DayNudge {
@@ -105,9 +120,12 @@ export function dayNudge(i: DayNudgeInput): DayNudge {
   const s = i.store
   const c = { now: i.now, day: i.day, busy: false, idleSec: i.idleSec, activeSince: i.activeSince, store: s, dismissed: i.dismissed, snooze: i.snooze }
   const busy = i.ctx.call || i.ctx.focus || i.ctx.event
-  const wd = windDown(i.now, i.bedTarget, i.bedLogged)
-  // From bedtime − 60 min until bed is logged: only bed things (healthyDay.ts govern).
-  const night = windDownMode(i.now, i.bedTarget, i.bedLogged)
+  // BD5: on a late-shift night the after-shift card is the wind-down, and the late nudges count from lights out.
+  const shift = i.care?.afterShift?.plan ?? null
+  const bedTarget = effectiveBed(shift, i.bedTarget)
+  const wd = shift ? null : windDown(i.now, i.bedTarget, i.bedLogged)
+  // From bedtime − 60 min until bed is logged: only bed things (healthyDay.ts govern); after a late shift, from its end.
+  const night = windModeTonight(shift, i.now, i.bedTarget, i.bedLogged)
   const ctx: GovernCtx = { ...i.ctx, windDown: i.ctx.windDown ?? !!night, ...(i.push ? { perHour: i.push.perHour } : {}) }
   const morning = () => morningAlert({ now: i.now, firstActiveAt: i.firstActiveAt, wakeLogged: i.wakeLogged, wakeTime: i.wakeTime, firstBlock: i.firstBlock, blockStarted: i.blockStarted, dismissed: i.dismissed, bedAuto: i.bedAuto?.time ?? null })
   const morningId = `morning:${new Date(i.now).toDateString()}`
@@ -136,18 +154,21 @@ export function dayNudge(i: DayNudgeInput): DayNudge {
       queue = r.rest
       return r.alert
     },
-    () => (i.running ? null : lateAlert({ now: i.now, bedTarget: i.bedTarget, latest: i.latestBed, idleSec: i.idleSec, bedLogged: i.bedLogged, dismissed: i.dismissed, day: i.day })),
+    () => (i.running ? null : lateAlert({ now: i.now, bedTarget, latest: shift ? undefined : i.latestBed, idleSec: i.idleSec, bedLogged: i.bedLogged, dismissed: i.dismissed, day: i.day })),
+    () => (busy || !i.care?.afterShift ? null : afterShiftAlert({ plan: shift, now: i.now, day: i.day, bedLogged: i.bedLogged, done: i.care.afterShift.done, ctf: i.care.afterShift.ctf, dismissed: i.dismissed })),
     () => (busy ? null : windDownAlert(wd, i.now, i.dismissed)),
     morning,
+    () => i.care?.light ?? null,
     () => bedAutoAlert({ bed: i.bedAuto, now: i.now, running: !!i.running, wakeLogged: i.wakeLogged, morningShown, dismissed: i.dismissed }),
     move,
+    () => i.care?.caffeine ?? null,
     () => learnAlert(personNudge(c), s, 'people', i.now),
     () => learnAlert(moodNudge({ ...c, moodSlotsDone: i.moodSlots }), s, 'mood', i.now),
     () => learnAlert(gratitudeNudge(c), s, 'gratitude', i.now),
     () => learnAlert(tidyNudge(c), s, 'tidy', i.now),
-    () => learnAlert(postureNudge(c), s, 'posture', i.now),
+    () => learnAlert(postureNudge({ ...c, drill: i.care?.drill }), s, 'posture', i.now),
     () => learnAlert(breatheNudge({ ...c, lowMood: i.lowMood }), s, 'breathe', i.now),
-    () => learnAlert(eyesNudge({ ...c, eyeBreaks: i.eyeBreaks, lastEyesAt: i.lastEyesAt }), s, 'eyes', i.now),
+    () => learnAlert(eyesNudge({ ...c, eyeBreaks: i.eyeBreaks, lastEyesAt: i.lastEyesAt, everyMin: i.care?.eyes?.everyMin, tip: i.care?.eyes?.tip }), s, 'eyes', i.now),
     () => waterNudge(waterAlert({ now: i.now, busy: false, idleSec: i.idleSec, activeSince: i.activeSince, water: i.water, lastWaterAt: i.lastWaterAt, lastMoveAt: i.lastMoveAt, lastEyesAt: i.lastEyesAt, eyeBreaks: i.eyeBreaks, dismissed: i.dismissed }), s, i.now, i.day),
     () => (busy ? null : recap())
   ]

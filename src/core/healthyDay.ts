@@ -60,6 +60,9 @@ export function textTopic(text: string): string | null {
 export function alertTopic(a: IslandAlert | null): string | null {
   if (!a) return null
   if (a.id.startsWith('remind:')) return 'reminder'
+  // Sleep care (sleepCare.ts): the morning light and the caffeine curfew are their own topics.
+  if (a.id.startsWith('light:')) return 'light'
+  if (a.id.startsWith('caffeine:')) return 'caffeine'
   const n = a.nudge
   if (n) {
     if (n.type === 'moveDone' || n.type === 'focus') return null

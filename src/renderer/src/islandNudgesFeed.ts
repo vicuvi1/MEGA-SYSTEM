@@ -436,6 +436,13 @@ export async function nudgeAct(a: IslandAction, o: { moved: () => void }): Promi
       save(tally(s, day, 'tidy', now))
       return '🧹 Desk tidy, noted'
     }
+    case 'drill': {
+      // BD11: the 60-second desk drill, logged because you tapped Done (no points: a quiet tally, a minute moved).
+      dismiss(op.alertId, now + 864e5)
+      yes('posture')
+      save(tally(s, day, 'drill', now))
+      return '🧍 Desk drill done: chest, hips and neck opened up'
+    }
     case 'mood': {
       const mood = Math.max(1, Math.min(5, Math.round(op.mood)))
       if (!life.coach?.deskDo) throw new Error('Mood check-ins are not available here')

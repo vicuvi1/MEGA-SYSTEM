@@ -1215,6 +1215,73 @@ try {
   // Ben on your PC (core/pcCoach.ts, the real decision code, bundled here): made-up
   // activity → a praise peek after 50 min of coding, then a break card whose
   // "10 push-ups" button sends the tap (the app window logs it, only on that tap).
+  // BD4–BD6, BD11, BD15: sleep care. Sleep shows the debt meter and logs a coffee
+  // (the curfew line follows); the Grooming tile opens its checklist and a tick
+  // sticks; the island's desk drill starts from its card, and the after-shift
+  // checklist sends its tap.
+  await step('Sleep care: the sleep debt meter and a coffee on Sleep, the Grooming checklist on Today, the desk drill and the after-shift checklist on the island', async () => {
+    await open('sleep')
+    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Points & stats' }).click({ timeout: 15000 })
+    await pg.waitForSelector('.sc-debt .sc-meter', { timeout: 15000 })
+    const before = await pg.locator('.sc-day').innerText()
+    if (!/Caffeine curfew/.test(before)) throw new Error('no caffeine curfew line')
+    await pg.locator('.sc-day button', { hasText: 'Coffee now' }).click()
+    await pg.waitForFunction(() => /\d+ today, last at/.test(document.querySelector('.sc-day')?.textContent ?? ''), null, { timeout: 8000 })
+    await pg.locator('.sc-day button', { hasText: 'Undo' }).click()
+    await pg.waitForFunction(() => /No coffee logged today/.test(document.querySelector('.sc-day')?.textContent ?? ''), null, { timeout: 8000 })
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]').catch(() => {})
+    const tile = pg.locator('.hb-row[data-hb-id="skincare"]')
+    await tile.waitFor({ timeout: 15000 })
+    await tile.locator('.hb-hit').click()
+    await pg.waitForSelector('.gr .gr-step', { timeout: 10000 })
+    const first = pg.locator('.gr-step').first()
+    const was = await first.getAttribute('aria-checked')
+    await first.click()
+    await pg.waitForFunction((w) => document.querySelector('.gr .gr-step')?.getAttribute('aria-checked') !== w, was, { timeout: 8000 })
+    await first.click()
+    await pg.waitForFunction((w) => document.querySelector('.gr .gr-step')?.getAttribute('aria-checked') === w, was, { timeout: 8000 })
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('.gr', { state: 'detached', timeout: 5000 })
+
+    const ip = await (await browser.newContext({ viewport: { width: 560, height: 520 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island care: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const snap = { at: Date.now(), locked: false, ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] }, running: null, now: null, next: null, mustdos: [], water: { ml: 0, target: 2000 }, reps: [], alert: null }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {}, islandTakeClicks: () => {}, islandAction: (a) => { window.__island.actions.push(a) }, setIslandPrefs: async () => null,
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill', { timeout: 15000 })
+    await ip.evaluate(() => window.__island.send('prefs', { size: 'normal', gapMin: 0 }))
+    // The first picture can land after ours (it comes 50 ms after start): send again until the card shows.
+    const sendUntil = async (x, sel) => {
+      for (let i = 0; ; i++) {
+        await ip.evaluate((v) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, ...v }), x)
+        if (await ip.waitForSelector(sel, { timeout: 2500 }).then(() => true, () => false)) return
+        if (i >= 3) throw new Error(`the island never showed ${sel}`)
+      }
+    }
+    await sendUntil({ alert: { id: 'posture:smoke', kind: 'move', title: 'Desk mobility · 60 s', text: 'Follow the figure.', face: '🧍', actions: [], nudge: { type: 'drill', kind: 'posture', seconds: 60 } } }, '.dr-strip figure')
+    if ((await ip.locator('.dr-strip figure').count()) !== 4) throw new Error('the drill should show four moves')
+    await ip.locator('.dr .primary').click()
+    await ip.waitForSelector('.dr-run .dr-fig path', { timeout: 5000 })
+    const d1 = await ip.locator('.dr-run .dr-body').getAttribute('d')
+    await ip.waitForFunction((d) => document.querySelector('.dr-run .dr-body')?.getAttribute('d') !== d, d1, { timeout: 5000 })
+    if (await ip.evaluate(() => window.__island.actions.some((a) => a.kind === 'nudge' && a.op.op === 'drill'))) throw new Error('the drill was logged without a tap')
+    await ip.locator('.dr-run button', { hasText: 'Stop' }).click()
+    await ip.waitForSelector('.dr-strip', { timeout: 5000 })
+    await sendUntil({ afterShift: { minutesLeft: 14, lightsOut: '00:20' }, alert: { id: 'aftershift:smoke', kind: 'winddown', title: 'After the shift · lights out 00:20', text: '14 min', face: '🌙', actions: [{ label: '🌙 Going to bed', action: { kind: 'bed' } }], nudge: { type: 'checklist', kind: 'bed', minutesLeft: 14, lightsOut: '00:20', steps: [{ id: 'teeth', label: 'Teeth', done: false }, { id: 'skin', label: 'Skin', done: false }, { id: 'alarm', label: 'Alarm set', done: false }, { id: 'phone', label: 'Phone away', done: false }] } } }, '.di.aftershift .nd-check')
+    await ip.locator('.nd-check button', { hasText: 'Alarm set' }).click()
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'care' && a.op.op === 'shiftStep' && a.op.step === 'alarm' && a.op.on), null, { timeout: 3000 })
+    await ip.context().close()
+  })
   await step('Ben on your PC: 50 min of coding peeks a praise line, an hour at the PC brings a break card with water and push-ups', async () => {
     const shots = process.env.COACH_SHOTS
     const { build } = await import('rolldown')
@@ -2148,8 +2215,8 @@ try {
       if (!m) throw new Error('no "N of M" in the habits header')
       return [Number(m[1]), Number(m[2])]
     }
-    for (const n of ['Morning oath', 'Workout', 'Skincare', 'Log spending']) if (!(await row(n).count())) throw new Error(`no ${n} row`)
-    if ((await row('Skincare').locator('.hb-dots .dot').count()) !== 7) throw new Error('a habit row does not show the last 7 days')
+    for (const n of ['Morning oath', 'Workout', 'Grooming', 'Log spending']) if (!(await row(n).count())) throw new Error(`no ${n} row`)
+    if ((await row('Grooming').locator('.hb-dots .dot').count()) !== 7) throw new Error('a habit row does not show the last 7 days')
     // An auto habit: the tap opens the spending line and the row stays open (no points for a tap).
     if (!/\bauto\b/.test(await cls('Log spending'))) throw new Error('Log spending is not marked auto')
     // (The Money step may have logged spending already: then it ticked by itself, from Finance.)
@@ -2159,21 +2226,34 @@ try {
       await pg.locator('.spend-line input').press('Escape')
       if (/s-done/.test(await cls('Log spending'))) throw new Error('a tap ticked an auto habit')
     }
-    // A tap habit: done, paid once, the count goes up; a second tap does nothing.
+    // A habit with steps (Grooming): a tap opens its checklist; done and paid once every step is ticked; opening it again pays nothing.
     const [d0, t0] = await count()
-    await row('Skincare').locator('.hb-hit').click()
+    await row('Grooming').locator('.hb-hit').click()
+    await pg.waitForSelector('.gr .gr-step', { timeout: 10000 })
+    for (let k = 0; k < 12; k++) {
+      const open = pg.locator('.gr-step[aria-checked="false"]').filter({ hasNotText: 'if sunny' })
+      if (!(await open.count())) break
+      const before = await open.count()
+      await open.first().click()
+      await pg.waitForFunction((b) => [...document.querySelectorAll('.gr-step[aria-checked="false"]')].filter((x) => !x.textContent.includes('if sunny')).length < b, before, { timeout: 8000 })
+    }
+    await pg.waitForFunction(() => /All done today/.test(document.querySelector('.gr-sum')?.textContent ?? ''), null, { timeout: 8000 })
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('.gr', { state: 'detached', timeout: 5000 })
     const rowHas = (name, re) => pg.waitForFunction(([n, r]) => new RegExp(r).test([...document.querySelectorAll('.hb-row')].find((t) => t.textContent.includes(n))?.[r === 's-done' ? 'className' : 'textContent'] ?? ''), [name, re], { timeout: 8000 })
-    await rowHas('Skincare', 's-done').catch(() => {
+    await rowHas('Grooming', 's-done').catch(() => {
       throw new Error('Skincare did not tick')
     })
-    await rowHas('Skincare', '\\+\\d+ paid').catch(() => {
+    await rowHas('Grooming', '\\+\\d+ paid').catch(() => {
       throw new Error('Skincare does not say what it paid')
     })
     const [d1, t1] = await count()
     if (d1 !== d0 + 1 || t1 !== t0) throw new Error(`count went ${d0}/${t0} → ${d1}/${t1}`)
     await pg.waitForTimeout(1500) // the balance counts up
     const bal = await pg.evaluate(() => document.querySelector('.topbar')?.textContent ?? '')
-    await row('Skincare').locator('.hb-hit').click({ force: true })
+    await row('Grooming').locator('.hb-hit').click({ force: true })
+    await pg.waitForSelector('.gr .gr-step', { timeout: 10000 })
+    await pg.keyboard.press('Escape')
     await pg.waitForTimeout(1500)
     if ((await pg.evaluate(() => document.querySelector('.topbar')?.textContent ?? '')) !== bal) throw new Error('a second tap paid again')
     // Skip today from the ⋯ menu: no points, out of the count; and back on.

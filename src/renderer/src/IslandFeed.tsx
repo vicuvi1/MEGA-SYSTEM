@@ -17,6 +17,8 @@ import { coachAnswer, coachTick } from './pcCoachFeed'
 import { DEFAULT_WAKE, toMin as fitMin } from '@core/lifeFit'
 import { windDown } from '@core/islandBody'
 import { dayNudge } from '@core/dayNudges'
+import { dayOf as nudgeDayOf } from '@core/islandNudges'
+import { careAct, careTick } from './careFeed'
 import { alertTopic, govern, noteMessage, noteShown, sleptOnTime, textTopic, waterSeen, weekDaysFromStore, weeklyHealth, windDownMode, type GovernCtx, type Queued, type ReminderItem, type Shown } from '@core/healthyDay'
 import { wakeLoggedToday } from '@core/sleep'
 import { blockKindOf, type BlockKinds } from '@core/blockKind'
@@ -472,6 +474,8 @@ export function IslandFeed() {
     // Ben's Telegram messages (they show in the island's log too) count as nudges that reached you.
     for (const e of log) if (e.role === 'coach' && e.via === 'telegram' && now - Date.parse(e.at) < 4 * 3600_000) shown = noteMessage(shown, e.text, Date.parse(e.at))
     const first = get<{ day: string; at: number } | null>(FIRST, null)
+    // Sleep care: morning light, the caffeine curfew, the after-shift wind-down, eye breaks by screen time, the desk drill.
+    const ct = await careTick({ now, day: dayKey(new Date(now)), fit, wakeTarget: fit?.wake ?? DEFAULT_WAKE, bedTarget, bedLogged, wakeTime: wakeLogged ? (sleep?.todayLog?.wakeTime ?? null) : null, dismissed, eyesToday: nudges ? nudgeDayOf(nudges.store, dayKey(new Date(now))).eyes : 0 }).catch(() => null)
     const health = nudges
       ? dayNudge({
           now,
@@ -508,7 +512,8 @@ export function IslandFeed() {
           water: { ml: localWater, target: waterTarget },
           eveningAt: evAt,
           recap: { mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: localWater, waterTarget, focusMin: status.today.focusMin, focusGoal, streak: sportStreak || undefined },
-          eveningSent: log.some((e) => e.role === 'coach' && e.via === 'telegram' && localDayOf(Date.parse(e.at)) === localDayOf(now) && textTopic(e.text) === 'evening')
+          eveningSent: log.some((e) => e.role === 'coach' && e.via === 'telegram' && localDayOf(Date.parse(e.at)) === localDayOf(now) && textTopic(e.text) === 'evening'),
+          ...(ct ? { care: ct.care } : {})
         })
       : null
     if (health) put(QUEUE, health.queue)
@@ -531,8 +536,9 @@ export function IslandFeed() {
         block: wb && !wb.call ? { title: wb.title, end: wb.end } : null,
         workHour: !!w && w.mode !== 'off' && hmNow >= fitMin(w.from) && hmNow < fitMin(w.to),
         meeting: !!callOn,
-        bedTarget,
-        latestBed: fit?.latestBed,
+        // BD5: after a late shift, bedtime is lights out (no bedtime guard in the middle of the shift).
+        bedTarget: ct?.bed ?? bedTarget,
+        latestBed: ct?.plan ? undefined : fit?.latestBed,
         wakeTime: fit?.wake ?? DEFAULT_WAKE,
         bedLogged,
         nextUp: nextBlock ? { title: nextBlock.title, minutes: Math.round((nextBlock.end - nextBlock.start) / 60000) } : mustdo ? { title: mustdo.text } : null,
@@ -655,7 +661,8 @@ export function IslandFeed() {
       reps,
       alert: alertNow,
       health: healthView ? { today: healthView.today, week } : null,
-      windMode: windDownMode(now, bedTarget, bedLogged),
+      windMode: ct ? ct.windMode : windDownMode(now, bedTarget, bedLogged),
+      afterShift: ct?.afterShift ?? null,
       call: (() => {
         const c = running ? null : callNow(blocks.current.list, now)
         return c ? { title: c.title, end: c.end } : null
@@ -678,7 +685,7 @@ export function IslandFeed() {
       today: { focusMin: status.today.focusMin, focusGoal },
       // IM4: a new best streak is celebrated on the island.
       streak: body && body.streak > 0 ? { days: body.streak, kind: 'sport', atRisk: false, best: Number((body as { bestStreak?: number }).bestStreak) || body.streak } : null,
-      windDown: windDown(now, bedTarget, bedLogged),
+      windDown: ct?.plan ? null : windDown(now, bedTarget, bedLogged),
       focusGuard: (() => {
         const gg = get<Guard | null>(GUARD, null)
         if (!running || !gg || gg.startedAt !== running.startedAt) return null
@@ -913,6 +920,10 @@ export function IslandFeed() {
           }
           case 'eyeBreaks':
             put(EYES, a.on)
+            break
+          case 'care':
+            // Sleep care (careFeed.ts): morning light, coffee, warm screen, the after-shift checklist.
+            said = (await careAct(a)) ?? said
             break
           case 'shift': {
             const r = await life.coach?.setTonight?.(a.mode)

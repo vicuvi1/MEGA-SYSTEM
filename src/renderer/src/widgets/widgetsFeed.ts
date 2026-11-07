@@ -29,6 +29,9 @@ async function weatherNow(now: number): Promise<IslandWeather | null> {
   return (wx.v = weatherForIsland(data, calendarDay(new Date(now))))
 }
 
+/** Today's weather (the plugin's saved forecast) for sleep care: rain, sunrise, sunset, morning clouds. */
+export const weatherToday = (now: number) => weatherNow(now)
+
 /** Your widget setting (someone who never chose a look and already set up the island keeps today's capsule). */
 export async function readWidgets(force = false): Promise<WidgetsSetting> {
   if (!force && ws.v && Date.now() - ws.at < 30_000) return ws.v

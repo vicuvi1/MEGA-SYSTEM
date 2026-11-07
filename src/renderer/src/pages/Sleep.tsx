@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SleepSteady } from '../SleepSteady'
+import { SleepCarePanel } from '../SleepCare'
 import { usePoints } from '../usePoints'
 import type { ConnectionsState, SleepLog, SleepSummary } from '@shared/api'
 import { life } from '../bridge'
@@ -31,6 +32,7 @@ export function Sleep({ state, onState, onWallet, openEditor = 0 }: { state: Con
           </button>
         </div>
         <WakeEditor state={state} onState={onState} onWallet={onWallet} openSignal={openEditor} />
+        <SleepCarePanel />
         <WakySleepView w={w} />
       </div>
     )
@@ -46,6 +48,7 @@ export function Sleep({ state, onState, onWallet, openEditor = 0 }: { state: Con
         </div>
       )}
       <WakeEditor state={state} onState={onState} onWallet={onWallet} openSignal={openEditor} />
+      <SleepCarePanel />
       <NativeSleepView onWallet={onWallet} />
       {!hasWaky && (
         <section className="panel" style={{ marginTop: '20px' }}>

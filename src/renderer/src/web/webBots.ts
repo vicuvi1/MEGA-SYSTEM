@@ -48,6 +48,8 @@ import { docsFrom, factChanges, addMemLog, loadBlocks, runBlockOps } from './mem
 import { EDIT_ASK, PROPOSAL_KEYBOARD, RHYTHM, TOP3_ASK, WEEK_ASK, fromMin, proposalText, rhythmFor, toMin } from '@core/rhythm'
 import { sparkline, telegramKeyboard, type ReplyCards } from '@core/coachButtons'
 import { claimsDone, editPlanBlock, fixTypos, langOf, shortLine, matchBlocks, optionLabel, pickChoice, readBlockEdit, readMoveEdit, tidyReply, wantsToSee, type BlockOption } from '@core/benTalk'
+import { parseCoffee } from '@core/sleepCare'
+import { logCoffee } from './careStore'
 import { coachStatus, waterToday } from './coachStatus'
 import { nextSlot } from '@core/benActs'
 import { parseSets, strengthSummary } from '@core/strength'
@@ -444,6 +446,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const c = /^water$/i.test(cmd[1]) ? waterCard(st, day) : workoutCard(st, day)
       return { reply: c.text, keyboard: c.keyboard }
     }
+    // "coffee", "2 coffees", "☕": the coffee log and the caffeine curfew (sleepCare.ts), never an expense.
+    const cups = text.startsWith('/') ? null : parseCoffee(text)
+    if (cups) return { reply: esc(logCoffee(s, s.db, cups).reply) }
     // "water 500", "+250ml": the shared water log, never a food expense.
     const ml = text.startsWith('/') ? null : parseWater(text)
     if (ml) {
@@ -868,6 +873,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       if (act) {
         step('Logged in code')
         preset = { reply: ml! > 0 ? `💧 ${ml} ml in. Keep sipping.` : `💧 ${-ml!} ml taken off.`, acts: [act], chips: ['How much water today?', 'What now?'] }
+      }
+    }
+    // "coffee", "had an espresso", "☕": logged in code (the caffeine curfew in the reply), no model call.
+    if (!preset && !media && text && !direct) {
+      const cups = parseCoffee(clean)
+      if (cups) {
+        const r = await mirror.write((db) => logCoffee(services.services(db), db, cups)).catch(() => null)
+        if (r) {
+          step('Logged in code')
+          preset = { reply: r.reply, acts: [], chips: ['How did I sleep this week?', 'What now?'] }
+        }
       }
     }
     // My life: "short shift tonight" / "no work tonight" opens the free part of the work window for today.

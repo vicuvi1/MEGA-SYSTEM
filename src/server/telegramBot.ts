@@ -91,6 +91,7 @@ import { HEALTH } from '../plugins/health'
 import { BEN_DAILY_MESSAGES, DEFAULT_TZ } from '@core/defaults'
 import { pushStyle } from '@core/lifeFit'
 import { readLifeFit } from '../renderer/src/web/lifeFitStore'
+import { afterShiftPlan } from '@core/afterShift'
 import { pushTick } from './benPushTick'
 import { weeklyCard, weeklyCardText, weeklyHtml } from '@core/benPushes'
 import { tagNudge } from '@core/chatFeed'
@@ -1080,8 +1081,10 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // drifted an hour with daylight saving), once a day.
   try {
     const bed = await mirror.read((db) => services.services(db).sleep.bedtimeTarget())
+    // BD5: on a late-shift night the shutdown at the shift's end carries the wind-down: no second message mid-shift.
+    const lateShift = await mirror.read((db) => afterShiftPlan(readLifeFit(db as any), today0, bed)).catch(() => null)
     const bm = Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5))
-    const before = (bm - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440
+    const before = lateShift ? -1 : (bm - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440
     // HD: not when bed is logged, nor when the island just showed its own wind-down (you saw it at the PC).
     const seen = before >= 25 && before <= 50 ? await mirror.read((db) => bodyFacts(db as any, services.services(db), today0, now)).catch(() => null) : null
     if (telegramWindDown({ minutesBefore: before, bedLogged: !!seen?.bedLogged, islandBedAt: seen?.bedAt ?? null, now: now.getTime() })) {

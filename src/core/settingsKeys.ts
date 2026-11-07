@@ -183,6 +183,8 @@ export const SETTINGS = {
   month_aims: json<Record<string, unknown> | null>("the month's aims", null),
   learn_log: json<unknown[]>('learning path log', []),
   life_mode: json<Record<string, unknown> | null>('life mode (exam, holiday, sick…)', null),
+  sleep_care: json<Record<string, unknown> | null>('Sleep care: your sleep need, the caffeine curfew, and per day the morning light, coffees, the after-shift checklist and the warm screen (src/core/sleepCare.ts)', null),
+  grooming: json<Record<string, unknown> | null>('Grooming habit: ticked morning and night steps per day, nails and haircut dates, the haircut rhythm, what each day paid (src/core/grooming.ts)', null),
   life_fit: json<Record<string, unknown> | null>("My life: latest bedtime, the work window (days, hours, how much you really work), how hard Ben pushes, tonight's shift (src/core/lifeFit.ts)", null),
   ben_pushes: json<Record<string, unknown> | null>("Ben 2's pushes today: one key per check-in, brief, shutdown and drift word (shown on the island or sent on Telegram, and your answer), tonight's shutdown list with your marks, and drift words waiting for Telegram (src/core/benPushes.ts)", null),
   ben_pc_seen: json<Record<string, unknown> | null>('whether you are at the PC (written by the desktop app when it changes, at most every 5 minutes): the island or Telegram for Ben\'s pushes', null),

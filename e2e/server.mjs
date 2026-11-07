@@ -298,6 +298,21 @@ if (process.env.E2E_REWARDS_DEMO) {
   set('week_plans', { [monday]: { week: monday, focus: 'focus', note: '', big3: [{ text: 'Finish the Rust parser', done: true }, { text: 'Two CTF rooms', done: true }, { text: 'Three workouts', done: true }], savedAt: new Date().toISOString() } })
 }
 
+// E2E_CARE_DEMO=1: a made-up week of short nights, two coffees today, an evening
+// job 17:00–24:00 and half a grooming routine, for the sleep care screenshots
+// (e2e/careShots.mjs). Off for the smoke test.
+if (process.env.E2E_CARE_DEMO) {
+  const nights = [['23:40', '06:35'], ['00:50', '06:30'], ['23:30', '07:20'], ['01:10', '06:40'], [null, '06:30'], ['00:20', '06:30'], ['23:50', '06:35']]
+  nights.forEach(([bed, wake], k) => db.run('INSERT OR IGNORE INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [day(6 - k), wake, '06:30', wake <= '06:35' ? 1 : 0, bed, '23:30', bed && bed <= '23:45' && bed >= '12:00' ? 1 : 0, new Date().toISOString()]))
+  const set = (k, v) => db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [k, typeof v === 'string' ? v : JSON.stringify(v)])
+  set('sleep_bed_target', '23:30')
+  set('sleep_weekday_target', '06:30')
+  set('life_fit', { latestBed: '00:00', work: { on: true, days: [1, 2, 3, 4, 5], from: '17:00', to: '24:00', minH: 2, maxH: 4 }, push: 'push' })
+  const at = (hm) => new Date(`${day(0)}T${hm}:00`).getTime()
+  set('sleep_care', { needH: 8, curfewH: 9.5, days: { [day(0)]: { coffee: [at('08:10'), at('12:40')] } } })
+  set('grooming', { days: { [day(0)]: ['wash_am', 'moist_am', 'teeth_am'] }, nails: day(9), haircut: day(33), haircutWeeks: 4, paid: {} })
+}
+
 Object.assign(process.env, { TURSO_URL: `http://127.0.0.1:${port}`, TURSO_TOKEN: 'fake-turso-key', SESSION_SECRET: 'e2e-secret' })
 const api = {}
 for (const n of ['login', 'db', 'config', 'mcp']) api[n] = (await import(pathToFileURL(join(repo, 'api', `${n}.mjs`)).href)).default

@@ -13,6 +13,8 @@ export interface IslandWeather {
   rain: RainSpan[]
   sunrise: string | null
   sunset: string | null
+  /** Morning cloud cover, % (sleep care), when known. */
+  cloud?: number
 }
 
 const HM = /^([01]\d|2[0-3]):([0-5]\d)$/
@@ -27,7 +29,8 @@ export function weatherForIsland(data: WeatherData | null | undefined, today: st
     .filter((r) => r && hm(r.from) && (hm(r.to) || r.to === '24:00'))
     .slice(0, 8)
     .map((r) => ({ from: r.from, to: r.to, prob: Math.max(0, Math.min(100, Math.round(Number(r.prob) || 0))) }))
-  return { day: d.day, rain, sunrise: hm(d.sunrise), sunset: hm(d.sunset) }
+  const cloud = typeof d.cloud === 'number' && Number.isFinite(d.cloud) ? Math.max(0, Math.min(100, Math.round(d.cloud))) : null
+  return { day: d.day, rain, sunrise: hm(d.sunrise), sunset: hm(d.sunset), ...(cloud != null ? { cloud } : {}) }
 }
 
 /** "17:00" on the day of `now` → ms (local time). */

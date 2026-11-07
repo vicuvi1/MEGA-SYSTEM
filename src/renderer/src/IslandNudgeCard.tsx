@@ -8,8 +8,11 @@ import { useEffect, useRef, useState } from 'react'
 import { breathAt, breathSteps, stepCount, type MovePill, type Nudge, type NudgeOp } from '@core/islandNudges'
 import type { IslandAction, IslandAlert } from '@core/islandModel'
 import { tp } from './islandTap'
-import { barFill } from './motionKit'
+import { barFill, reducedMotion } from './motionKit'
 import { playReminder } from './soundKit'
+import { DRILL, DRILL_SECONDS, drillAt } from '@core/deskMobility'
+import { stillFrame } from '@core/sportFigure'
+import { FigureSvg, useClock } from './DrillFigure'
 import './islandNudges.css'
 
 export type NudgeRun = { kind: 'eyes' | 'tidy' | 'breathe'; seconds: number; alertId: string; pattern?: 'box' | '478'; startedAt: number }
@@ -124,6 +127,101 @@ function Gratitude({ a, tap }: { a: IslandAlert; tap: Tap }) {
 }
 
 /**
+ * BD11: the 60-second desk drill. Start → the figure moves through the four
+ * moves (15 s each) with the cue and the seconds; at the end it asks, and
+ * only "✓ Done" logs it (it pays nothing). Stop takes you back, nothing noted.
+ */
+// A running drill survives the card folding to the pill and coming back (by its card's id).
+const drillStarts = new Map<string, number>()
+
+function DrillCard({ a, tap }: { a: IslandAlert; tap: Tap }) {
+  const [start, setStartRaw] = useState<number | null>(() => drillStarts.get(a.id) ?? null)
+  const setStart = (v: number | null) => {
+    if (v == null) drillStarts.delete(a.id)
+    else drillStarts.set(a.id, v)
+    setStartRaw(v)
+  }
+  const [ended, setEnded] = useState(false)
+  const t = useClock(start != null && !ended ? start : null)
+  const d = drillAt(start != null ? t : 0)
+  useEffect(() => {
+    if (start != null && d.done && !ended) setEnded(true)
+  }, [d.done, start, ended])
+  if (ended)
+    return (
+      <div className="dr dr-end">
+        <p className="nd-hint">All four done? It counts only if you did them.</p>
+        <div className="di-actions nd-row">
+          <button className="primary" {...tp(`nd:${a.id}:drilldone`, () => tap(nudge({ op: 'drill', alertId: a.id })))}>✓ Done</button>
+          <button {...tp(`nd:${a.id}:drillno`, () => tap(nudge({ op: 'skip', kind: 'posture', alertId: a.id })))}>Not this time</button>
+        </div>
+      </div>
+    )
+  if (start == null)
+    return (
+      <div className="dr">
+        <div className="dr-strip" aria-label="Chin tucks, doorway chest stretch, hip-flexor stretch, wall angels">
+          {DRILL.map((m) => (
+            <figure key={m.id}>
+              <FigureSvg anim={m.anim} size={50} />
+              <figcaption>{m.name}</figcaption>
+            </figure>
+          ))}
+        </div>
+        <div className="di-actions nd-row">
+          <button className="primary" {...tp(`nd:${a.id}:drill`, () => setStart(Date.now()))}>▶ Start {DRILL_SECONDS} s</button>
+          <button {...tp(`nd:${a.id}:straight`, () => tap(nudge({ op: 'tally', kind: 'posture', ok: true, alertId: a.id })))}>✓ Sitting straight</button>
+          <button {...tp(`nd:${a.id}:later`, () => tap(nudge({ op: 'skip', kind: 'posture', alertId: a.id })))}>Later</button>
+        </div>
+      </div>
+    )
+  const still = reducedMotion()
+  return (
+    <div className="dr dr-run" aria-live="polite">
+      <div className="dr-stage">
+        <FigureSvg anim={d.move.anim} frame={still ? stillFrame(d.move.anim) : d.frame} size={124} />
+        <div className="dr-say">
+          <span className="dr-steps" aria-hidden>
+            {DRILL.map((m, i) => (
+              <i key={m.id} className={i < d.index ? 'done' : i === d.index ? 'on' : ''} />
+            ))}
+          </span>
+          <b>{d.move.name}</b>
+          <p>{d.move.cue}</p>
+          <span className="dr-left">
+            {d.left}s <small>· {d.total}s left</small>
+          </span>
+        </div>
+      </div>
+      <div className="di-actions nd-row">
+        <button {...tp(`nd:${a.id}:drillstop`, () => setStart(null))}>Stop</button>
+      </div>
+    </div>
+  )
+}
+
+/** BD5: the after-shift checklist (teeth, skin, alarm, phone away); each tap ticks or unticks a step. */
+function Checklist({ a, n: d, tap }: { a: IslandAlert; n: Extract<Nudge, { type: 'checklist' }>; tap: Tap }) {
+  return (
+    <div className="nd-check" role="group" aria-label="After-shift checklist">
+      {d.steps.map((s) => (
+        <button key={s.id} role="checkbox" aria-checked={s.done} className={s.done ? 'on' : ''} {...tp(`nd:${a.id}:st:${s.id}`, () => tap({ kind: 'care', op: { op: 'shiftStep', step: s.id, on: !s.done }, alertId: a.id }))}>
+          <i aria-hidden>{s.done ? '✓' : ''}</i>
+          {s.label}
+        </button>
+      ))}
+      <div className="di-actions nd-row">
+        {a.actions.map((x) => (
+          <button key={x.label} className={x.primary ? 'primary' : ''} {...tp(`nd:${a.id}:${x.label}`, () => tap(x.action, x.label))}>
+            {x.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
  * The card's body for an alert with a nudge (under its title and text).
  * `onRun` starts a countdown or a breathing minute on the pill.
  */
@@ -153,9 +251,12 @@ export function IslandNudgeCard({ a, tap, onRun, sound, volume }: { a: IslandAle
       {d.type === 'timer' && (
         <div className="di-actions nd-row">
           <button className="primary" {...tp(`nd:${a.id}:go`, () => onRun({ kind: d.kind, seconds: d.seconds, alertId: a.id, startedAt: Date.now() }))}>▶ Start {d.seconds} s</button>
+          {d.tip === 'warm' && <button {...tp(`nd:${a.id}:warm`, () => tap({ kind: 'care', op: { op: 'warm' }, alertId: a.id }))}>✓ Night light on</button>}
           <Later id={a.id} kind={d.kind} alertId={a.id} choices={d.snooze} tap={tap} />
         </div>
       )}
+      {d.type === 'drill' && <DrillCard a={a} tap={tap} />}
+      {d.type === 'checklist' && <Checklist a={a} n={d} tap={tap} />}
       {d.type === 'posture' &&
         row([
           ['yes', '✓ Yes', nudge({ op: 'tally', kind: 'posture', ok: true, alertId: a.id }), true],
@@ -253,8 +354,18 @@ export function IslandNudgePill({ run, onEnd }: { run: NudgeRun; onEnd: (done: b
   }
   return (
     <div className="di-pill nd-pill nd-count-pill" role="button" tabIndex={0} aria-label="Countdown: tap to stop" {...tp('nd:pill:stop', () => onEnd(false))}>
-      <span className="di-face-sm">{run.kind === 'eyes' ? '👁️' : '🧹'}</span>
-      <span className="di-pill-text">{run.kind === 'eyes' ? 'Look 6 m away' : 'Tidy the desk'}</span>
+      {run.kind === 'eyes' ? (
+        <span className="nd-eye" aria-hidden>
+          <svg width="22" height="14" viewBox="0 0 22 14">
+            <path className="nd-eye-white" d="M1 7C4.5 1.5 17.5 1.5 21 7C17.5 12.5 4.5 12.5 1 7Z" />
+            <circle className="nd-eye-iris" cx="11" cy="7" r="3.4" />
+          </svg>
+          <i className="nd-lid" />
+        </span>
+      ) : (
+        <span className="di-face-sm">🧹</span>
+      )}
+      <span className="di-pill-text">{run.kind === 'eyes' ? (t < 8 ? 'Blink slowly…' : 'Look 6 m away') : 'Tidy the desk'}</span>
       <span className="di-pill-time">{left}s</span>
       <span className="pbar nd-drain" aria-hidden>
         <i style={{ ...barFill(drain), transitionDuration: `${run.seconds}s` }} />

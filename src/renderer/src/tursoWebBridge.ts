@@ -28,6 +28,7 @@ import { SPORT } from './web/sportSync'
 import { MAN, WAKY, createAppSync } from './web/appSync'
 import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
+import { careApi } from './web/careApi'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../main/settings'
 import { cleanLooks, type CoachLooks } from '@core/coachLooks'
 import { cleanWallpaper, okWallpaperPhoto, type WallpaperPrefs } from '@core/wallpaper'
@@ -1463,6 +1464,8 @@ export function createTursoWebBridge(): Bridge {
         await (await mirrorP).write((db) => writeSetting(db as any, 'pc_last_hour', h))
       }
     },
+    // BD4–BD6, BD12, BD15: sleep care and the grooming habit (web/careStore.ts).
+    care: careApi(svcP),
     // Island 2: your nudges (settings, people, today's tallies, move breaks to undo), synced.
     nudges: {
       get: async () => (await mirrorP).read((db) => cleanNudgeStore(readSetting(db as any, 'island_nudges'), dayKey(new Date()))),

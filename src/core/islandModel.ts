@@ -115,6 +115,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'calmMusic' }
   /** Ben 2: a tap on a push (a block check-in, the morning brief, the evening shutdown: src/core/benPushes.ts). `arg`: the block (Start) or a shutdown item ('*' for all). */
   | { kind: 'benPush'; op: import('./benPushes').PushOp; key: string; alertId: string; arg?: string; minutes?: number }
+  /** BD4/BD5/BD12: a tap on a sleep-care card (morning light, coffee, warm screen, the after-shift checklist: src/core/sleepCare.ts). */
+  | { kind: 'care'; op: import('./sleepCare').CareOp; alertId: string }
 )
 
 export interface IslandAlert {
@@ -209,6 +211,8 @@ export interface IslandSnapshot {
   health?: { today: import('./healthyDay').HealthyView; week?: import('./healthyDay').WeeklyHealth | null } | null
   /** HD: wind-down mode (the island dims, counts down, says close the laptop). */
   windMode?: import('./healthyDay').WindDownMode | null
+  /** BD5: the 20 minutes after a late shift: the island goes dim and warm (core/afterShift.ts). */
+  afterShift?: { minutesLeft: number; lightsOut: string } | null
   /** This week's top 3 (the big 3) and the parked ones, quiet (core/weekPlan.ts weekTop3View). */
   week?: { top: { i: number; text: string; done: boolean }[]; parked: string[] } | null
   /** My life: today's work window and tonight's shift (a work day only), for the one-tap buttons. */

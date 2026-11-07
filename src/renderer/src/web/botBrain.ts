@@ -46,6 +46,7 @@ import { alreadySaid, alreadySaidText, saidNo, timeFrame, whenWords } from '@cor
 import { goalsNowSection, readGoalAction, type GoalAction } from './goalsBrain'
 import { lifeFitLine, pushStyle } from '@core/lifeFit'
 import { readLifeFit, sleepWindow } from './lifeFitStore'
+import { careContext } from './careStore'
 
 export type Persona = 'mega' | 'finance' | 'waky' | 'sport'
 
@@ -336,6 +337,8 @@ export function lifeContext(s: Services, db: any, extra: { finance: any; todoTod
       const ps = pushStyle(fit.push)
       return `${lifeFitLine(fit, today, sleepWindow(db))} How hard to push: ${ps.label} (his choice: ${ps.hint.toLowerCase()}). Never accuse him of something the data doesn't show.`
     })(),
+    // Sleep care: the sleep debt and what to do about it, tonight's after-shift plan, today's caffeine (careStore.ts).
+    ...careContext(s, db, now),
     (() => {
       const r = focusRatings(db).filter((x) => x.day > addDays(today, -7))
       if (!r.length) return ''

@@ -482,6 +482,21 @@ export interface LifeApi {
     get(): Promise<import('@core/islandNudges').NudgeStore>
     save(n: import('@core/islandNudges').NudgeStore): Promise<import('@core/islandNudges').NudgeStore>
   }
+  /** BD4–BD6, BD12, BD15: sleep care (light, coffee, debt, after-shift) and the grooming habit (synced settings sleep_care, grooming). */
+  care?: {
+    state(): Promise<import('@core/sleepCare').CareView>
+    coffee(cups?: number): Promise<{ reply: string; view: import('@core/sleepCare').CareView }>
+    undoCoffee(): Promise<import('@core/sleepCare').CareView>
+    light(): Promise<import('@core/sleepCare').CareView>
+    warm(): Promise<import('@core/sleepCare').CareView>
+    prefs(p: { needH?: number; curfewH?: number }): Promise<import('@core/sleepCare').CareView>
+    shiftStep(step: string, on: boolean): Promise<import('@core/sleepCare').CareView>
+    groom(sunny: boolean | null): Promise<import('@core/grooming').GroomView>
+    /** Ticks a step; pays the day's one habit when every step is done (coins: what it paid now). */
+    groomStep(id: string, on: boolean, sunny: boolean | null): Promise<import('@core/grooming').GroomView & { coins: number }>
+    groomWeekly(id: 'nails' | 'haircut', done: boolean, sunny: boolean | null): Promise<import('@core/grooming').GroomView>
+    groomRhythm(weeks: number, sunny: boolean | null): Promise<import('@core/grooming').GroomView>
+  }
   /** AU2 / AU7: Ben's asks for the PC and the last hour's summary (synced settings pc_asks, pc_last_hour). */
   pcAuto?: {
     state(): Promise<import('@core/pcActions').PcState>

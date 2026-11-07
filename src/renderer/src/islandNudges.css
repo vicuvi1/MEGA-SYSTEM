@@ -44,3 +44,50 @@
   .nd-bubble, .nd-drain > i { transition: none; }
   .di.nudge-breathe .di-shade, .nd-plus-pop { animation: none; }
 }
+
+/* BD11: the 60-second desk drill (Sport Track's figure, drawn in SVG; the figure's
+   points change by requestAnimationFrame, nothing here animates layout). */
+.dr { display: grid; gap: 8px; }
+.dr-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+.dr-strip figure { margin: 0; display: grid; justify-items: center; gap: 2px; padding: 4px 2px; border-radius: 10px; background: rgb(var(--ink) / 0.05); }
+.dr-strip figcaption { font-size: 10.5px; line-height: 1.2; text-align: center; color: rgb(var(--ink) / 0.72); }
+.dr-fig { display: block; }
+.dr-body { fill: rgb(var(--ink) / 0.9); stroke: rgb(0 0 0 / 0.25); stroke-width: 0.4; }
+.dr-far { fill: rgb(var(--ink) / 0.45); }
+.dr-prop { fill: rgb(var(--ink) / 0.22); }
+.dr-floor { stroke: rgb(var(--ink) / 0.2); stroke-width: 0.8; }
+.dr-stage { display: flex; align-items: center; gap: 12px; padding: 6px 8px; border-radius: 14px; background: rgb(var(--ink) / 0.05); }
+.dr-run .dr-body { fill: var(--lime, #d4ff3f); }
+.dr-say { display: grid; gap: 3px; min-width: 0; }
+.dr-say b { font-size: 14px; }
+.dr-say p { margin: 0; font-size: 12px; line-height: 1.35; color: rgb(var(--ink) / 0.78); }
+.dr-left { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dr-left small { font-size: 11.5px; font-weight: 500; color: rgb(var(--ink) / 0.6); }
+.dr-steps { display: inline-flex; gap: 4px; }
+.dr-steps i { width: 14px; height: 4px; border-radius: 2px; background: rgb(var(--ink) / 0.16); }
+.dr-steps i.done { background: rgb(var(--ink) / 0.55); }
+.dr-steps i.on { background: var(--lime, #d4ff3f); }
+
+/* BD5: the after-shift checklist. */
+.nd-check { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.nd-check > .di-actions { grid-column: 1 / -1; }
+.nd-check > button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgb(255 190 120 / 0.22); background: rgb(255 170 80 / 0.07); color: inherit; font: inherit; font-size: 13px; cursor: pointer; text-align: left; }
+.nd-check > button > i { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 6px; border: 1.5px solid rgb(255 190 120 / 0.55); font-style: normal; font-size: 12px; }
+.nd-check > button.on { background: rgb(255 170 80 / 0.18); border-color: rgb(255 190 120 / 0.5); }
+.nd-check > button.on > i { background: rgb(255 180 100 / 0.9); color: #1d1206; border-color: transparent; }
+
+/* BD12: the eye break's blink (a lid that closes and opens: transform only). */
+.nd-eye { position: relative; flex: none; display: inline-grid; place-items: center; width: 24px; height: 16px; overflow: hidden; border-radius: 50%; }
+.nd-eye-white { fill: rgb(235 245 255 / 0.92); }
+.nd-eye-iris { fill: #4fa0ff; }
+.nd-lid { position: absolute; inset: 0; background: rgb(var(--ink) / 0.85); transform: scaleY(0); transform-origin: top; animation: nd-blink 1.6s ease-in-out 5; }
+@keyframes nd-blink { 0%, 70%, 100% { transform: scaleY(0); } 82% { transform: scaleY(1); } }
+
+/* BD5: after a late shift the island goes dim and warm for its 20 minutes. */
+.di.aftershift { --glow: rgb(255 150 60 / 0.4); --bg: rgb(26 13 4 / var(--di-alpha, 1)); --lime: #ffb469; }
+.di.aftershift .di-shape { opacity: 0.8; transition: opacity 0.4s ease; }
+.di.aftershift.view-expanded .di-shape, .di.aftershift.is-hover .di-shape { opacity: 0.94; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nd-lid { animation: none; }
+}
