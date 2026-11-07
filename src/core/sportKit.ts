@@ -12,3 +12,4 @@ export { rangeFor, progressFor, growTarget, enduranceStep, BREAK_DAYS, NEED } fr
 export { loadOf, setScore, familySeries, familiesWithSets, strengthChange, strengthScore, isRecord } from './sportStrength'
 export { weekPlan, todaysSession, buildSession, estimateMinutes, splitOf, growTips, TRAIN_DAYS } from './sportProgram'
 export { parseTelegramExport, mergeTelegramDays, matchExercise } from './sportTelegramImport'
+export { migrateRoutine, ROUTINE_VERSION } from './sportRoutine'

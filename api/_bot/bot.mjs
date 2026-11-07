@@ -40110,12 +40110,14 @@ function updateSport(fn, opts = {}) {
 	if (!s) return null;
 	const before = JSON.parse(JSON.stringify(s));
 	fn(s);
+	const next = JSON.stringify(s);
+	if (opts.echo && next === JSON.stringify(before)) return s;
 	try {
-		localStorage.setItem(KEY, JSON.stringify(s));
+		localStorage.setItem(KEY, next);
 	} catch {
 		return null;
 	}
-	if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-sport-changed"));
+	if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-sport-changed", { detail: opts.echo ? { echo: true } : void 0 }));
 	const changes = opts.log === false || !logger ? [] : numberDeltas(before, s);
 	if (changes.length) logShared(changes, opts.source ?? "");
 	return s;
@@ -40132,7 +40134,10 @@ function applyShared(shared) {
 	const day = sportDay();
 	if (!shared || String(shared.lastDate ?? "") !== day) return;
 	const nums = sportNumbers(shared);
-	updateSport((d) => void Object.assign(d, withTotals(d, day, nums)), { log: false });
+	updateSport((d) => void Object.assign(d, withTotals(d, day, nums)), {
+		log: false,
+		echo: true
+	});
 }
 /** The exercise a name like "pushups", "Push-ups" or "ex_situps" means. */
 function findExercise(s, name) {

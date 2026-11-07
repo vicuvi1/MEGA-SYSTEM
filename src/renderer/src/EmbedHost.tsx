@@ -284,8 +284,12 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
   useEffect(() => {
     const event = ({ sport: 'life-sport-changed', finance: 'life-finance-changed', waky: 'life-waky-changed', man: 'life-man-changed' } as Record<string, string>)[appKey] ?? null
     if (!event) return
-    const onChange = () => {
+    const onChange = (ev?: Event) => {
       const el = ref.current as any
+      // A sync write, or the log's sums echoed back, from this very page: the iframe is same-origin and already
+      // listens for the 'storage' event, so it picks the new copy up in place. Reloading here threw away the
+      // open workout screen in the middle of a set.
+      if (((ev as CustomEvent | undefined)?.detail?.fromSync || (ev as CustomEvent | undefined)?.detail?.echo) && typeof el?.reload !== 'function' && el?.contentWindow) return
       try {
         if (typeof el?.reload === 'function') el.reload()
         else el?.contentWindow?.location.reload()

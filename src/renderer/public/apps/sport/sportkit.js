@@ -4550,6 +4550,39 @@ var SportKit = (function(exports) {
 			added
 		};
 	}
+	// src/core/sportRoutine.ts
+	/** Bump when a new routine migration is needed. */
+	var ROUTINE_VERSION = 2;
+	/**
+	* One time: anyone whose Today turned into the plan (or an empty rest day) gets "My routine" back, with
+	* their own exercises and the daily targets they had. A choice made on purpose is kept: "The plan" or
+	* "Build muscle" picked after this version (they are stored as `true` / `'grow'` then).
+	*/
+	function migrateRoutine(state) {
+		const ss = state.sportySettings ?? {};
+		if (Number(ss.routineV) >= 2) return state;
+		const exercises = (state.exercises ?? []).map((e) => ({ ...e }));
+		const settings = {
+			...ss,
+			routineV: 2
+		};
+		if (settings.planFollow !== true) settings.planFollow = false;
+		if (settings.progressMode == null || settings.progressMode === "grow") {
+			settings.progressMode = "endurance";
+			for (const e of exercises) if (e.endTarget != null) {
+				e.target = e.endTarget;
+				delete e.endTarget;
+			}
+		}
+		if (!exercises.some((e) => e.active) && exercises.length) {
+			for (const e of exercises) if (!e.plan) e.active = true;
+		}
+		return {
+			...state,
+			exercises,
+			sportySettings: settings
+		};
+	}
 	exports.BONES = BONES;
 	exports.BREAK_DAYS = BREAK_DAYS;
 	exports.FAMILIES = FAMILIES;
@@ -4560,6 +4593,7 @@ var SportKit = (function(exports) {
 	exports.NEED = NEED;
 	exports.PHOTOS = PHOTOS;
 	exports.PHOTO_SOURCE = PHOTO_SOURCE;
+	exports.ROUTINE_VERSION = ROUTINE_VERSION;
 	exports.TRAIN_DAYS = TRAIN_DAYS;
 	exports.WEEKLY_SETS = WEEKLY_SETS;
 	exports.activeDays = activeDays;
@@ -4591,6 +4625,7 @@ var SportKit = (function(exports) {
 	exports.matchMove = matchMove;
 	exports.mergeSets = mergeSets;
 	exports.mergeTelegramDays = mergeTelegramDays;
+	exports.migrateRoutine = migrateRoutine;
 	exports.mondayOf = mondayOf;
 	exports.moveById = moveById;
 	exports.moveOf = moveOf;

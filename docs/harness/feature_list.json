@@ -194,7 +194,7 @@
     "SMOKE_ONLY=\"Sport Track Today\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "Flaky on the Windows runner; has 1 retry"
+   "notes": "Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net."
   },
   {
    "id": "F015",

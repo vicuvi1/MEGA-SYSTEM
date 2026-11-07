@@ -1638,7 +1638,7 @@
         const FAKE_PRS = { bench: '85 kg', run5k: '23m 15s', pullups: '18 reps', pushups: '55 reps' };
         const prs = (Array.isArray(parsed.prs) ? parsed.prs : []).filter((p) => !(FAKE_PRS[p.id] && FAKE_PRS[p.id] === p.value));
         const history = (Array.isArray(parsed.history) ? parsed.history : []).filter((h) => !(h.id === 1 && h.title === 'Upper Body Power & Bench'));
-        return {
+        const loaded = {
           ...DEFAULT_STATE,
           ...parsed,
           exercises: (Array.isArray(parsed.exercises) && parsed.exercises.length > 0 ? parsed.exercises : DEFAULT_EXERCISES).map(e => ({ ...e, unit: (!e.unit || e.unit === '1') ? 'reps' : e.unit })),
@@ -1648,6 +1648,8 @@
           history,
           days: parsed.days && typeof parsed.days === 'object' ? parsed.days : {}
         };
+        // Your own exercises are Today's routine; the plan session and Build muscle are opt-in.
+        return window.SportKit && window.SportKit.migrateRoutine ? window.SportKit.migrateRoutine(loaded) : loaded;
       } catch (e) {
         return JSON.parse(JSON.stringify(DEFAULT_STATE));
       }
@@ -3106,7 +3108,7 @@
 
     // ---- SP3: sets, Build muscle (double progression) or Endurance ----
     /** Build muscle (default) or Endurance (the old daily totals with a 5% step-up). */
-    function growMode() { return (state.sportySettings.progressMode || 'grow') === 'grow'; }
+    function growMode() { return state.sportySettings.progressMode === 'grow'; }
     /** Today's sets of an exercise (never creates anything). */
     function todaySets(id) { const l = ((state.sets || {})[localDay()] || {})[id]; return Array.isArray(l) ? l : []; }
     var progCache = new Map();
@@ -3169,7 +3171,7 @@
       return { minutes: [20, 30, 45].includes(ss.planMinutes) ? ss.planMinutes : 30, perWeek: ss.planPerWeek === 4 ? 4 : 3, coolDown: !!ss.planCool };
     }
     /** Today follows the plan (Build muscle and "Today shows: the plan"). */
-    const planOn = () => growMode() && state.sportySettings.planFollow !== false && !!SK;
+    const planOn = () => growMode() && state.sportySettings.planFollow === true && !!SK;
     function planWeek() { return SK ? SK.weekPlan(state.exercises.filter((e) => e.active || e.plan).map((e) => ({ ...e, active: true })), planPrefs(), localDay()) : []; }
     /** Today's session; on a rest day, the next one if you chose to train anyway. */
     function planSession() {
@@ -4346,11 +4348,11 @@
       let follow = document.getElementById('pg-follow');
       if (!follow) {
         const l = document.createElement('label');
-        l.innerHTML = 'Today shows<div class="seg" id="pg-follow" role="radiogroup" aria-label="What Today shows"><button role="radio" data-follow="1">The plan</button><button role="radio" data-follow="0">My routine</button></div>';
+        l.innerHTML = 'Today shows<div class="seg" id="pg-follow" role="radiogroup" aria-label="What Today shows"><button role="radio" data-follow="0">My routine</button><button role="radio" data-follow="1">Use the plan on Today</button></div>';
         document.querySelector('.pg-controls').appendChild(l);
         follow = document.getElementById('pg-follow');
       }
-      segOn('pg-follow', 'data-follow', state.sportySettings.planFollow === false ? 0 : 1);
+      segOn('pg-follow', 'data-follow', state.sportySettings.planFollow === true ? 1 : 0);
       const week = planWeek();
       const today = localDay();
       document.getElementById('pg-meta').textContent = `${pr.perWeek} workouts · ${pr.minutes} min each · ${SK.splitOf(pr) === 'upper_lower' ? 'upper / lower' : 'full body'}`;
@@ -4406,7 +4408,8 @@
       const b = e.target.closest('[data-plan-start]');
       if (!b) return;
       if (b.dataset.planStart !== localDay()) { try { localStorage.setItem('st_train_' + localDay(), '1'); } catch (err) {} }
-      if (!growMode()) { state.sportySettings.progressMode = 'grow'; syncGrowTargets(); saveState(state); }
+      // Starting the plan's session is choosing the plan: Today follows it from now on (switch back with My routine).
+      if (!growMode() || state.sportySettings.planFollow !== true) { state.sportySettings.progressMode = 'grow'; state.sportySettings.planFollow = true; syncGrowTargets(); saveState(state); renderPlan(); }
       renderTodayRoutine();
       openWM(undefined, todaysPlanIds());
     });

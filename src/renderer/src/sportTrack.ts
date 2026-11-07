@@ -44,17 +44,22 @@ export function setSportLogger(fn: SportLogger | null): void {
  * it adds or takes back are logged (`source`: where, e.g. 'island'); `log: false`
  * when the change already came from the log.
  */
-export function updateSport(fn: (s: any) => void, opts: { log?: boolean; source?: string } = {}): any | null {
+export function updateSport(fn: (s: any) => void, opts: { log?: boolean; source?: string; echo?: boolean } = {}): any | null {
   const s = readSport()
   if (!s) return null
   const before = JSON.parse(JSON.stringify(s))
   fn(s)
+  const next = JSON.stringify(s)
+  // The log's sums coming back with nothing new: nothing to write, nothing to tell the open page.
+  if (opts.echo && next === JSON.stringify(before)) return s
   try {
-    localStorage.setItem(KEY, JSON.stringify(s))
+    localStorage.setItem(KEY, next)
   } catch {
     return null
   }
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-sport-changed'))
+  // `echo`: the log's sums coming back. The open page hears the storage change and updates in place, so it
+  // must not be reloaded (that closed the workout screen in the middle of a set).
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-sport-changed', { detail: opts.echo ? { echo: true } : undefined }))
   const changes = opts.log === false || !logger ? [] : numberDeltas(before, s)
   if (changes.length) void logShared(changes, opts.source ?? '')
   return s
@@ -73,7 +78,7 @@ export function applyShared(shared: any): void {
   const day = sportDay()
   if (!shared || String(shared.lastDate ?? '') !== day) return
   const nums = sportNumbers(shared)
-  updateSport((d) => void Object.assign(d, withTotals(d, day, nums)), { log: false })
+  updateSport((d) => void Object.assign(d, withTotals(d, day, nums)), { log: false, echo: true })
 }
 
 /** The exercise a name like "pushups", "Push-ups" or "ex_situps" means. */

@@ -276,6 +276,9 @@ try {
     if (await frame.locator('#hero-next-btn[data-train="1"]').isVisible()) await frame.click('#hero-next-btn')
     await frame.waitForSelector('.ex', { timeout: 10000 }) // slower Windows runners
     if (!(await frame.locator('#btn-workout-mode').isVisible())) throw new Error('no Start workout button')
+    // The default routine is back on Today: push-ups, sit-ups and press (your own exercises, not a generated plan).
+    const names = (await frame.locator('.ex .ex-name').allInnerTexts()).join('|').toLowerCase()
+    for (const n of ['push-ups', 'sit-ups', 'press']) if (!names.includes(n)) throw new Error(`Today does not list ${n} (got: ${names})`)
     // Besides its demo ("How to"), a card has only quick-add, Done and ⋯.
     const most = await frame.evaluate(() => Math.max(...[...document.querySelectorAll('.ex')].map((c) => c.querySelectorAll('button:not([data-howto])').length)))
     if (most > 3) throw new Error(`an exercise card has ${most} buttons (want: quick-add, Done, ⋯)`)
@@ -339,14 +342,18 @@ try {
     await frame.evaluate(() => openWM())
     await frame.waitForSelector('#wm-body #wm-set', { timeout: 10000 })
     if (await frame.locator('.wm-rest').count()) await frame.click('.wm-rest [data-rest="0"]') // the warm-up
+    // A logged set is echoed back by Life System; the page must keep workout mode open (no reload).
+    await frame.evaluate(() => { window.__noReload = true })
     await frame.click('#wm-set')
     await shut()
-    await frame.waitForSelector('#wm-body .wm-rest, .wm-finish', { timeout: 10000 })
+    await frame.waitForSelector('#wm-body .wm-rest, .wm-finish', { timeout: 20000 })
     await shut()
-    // Close with the page's own button. Finishing the day logs the workout in Life System, which can
-    // reload the page at any moment (slow Windows runners), so a failed click is fine: find it again.
-    await frame.evaluate(() => (document.getElementById('wm-finish-ok') ?? document.getElementById('wm-close'))?.click()).catch(() => {})
+    // Wait for the log to reach Life System and its echo to settle, then check the page was not reloaded.
+    await pg.waitForFunction(() => window.__sportLog.some((p) => p.changes.some((c) => c.kind.startsWith('reps:'))), null, { timeout: 20000 })
     await pg.waitForTimeout(1500)
+    if (!(await frame.evaluate(() => window.__noReload === true && !document.getElementById('workout-mode').hidden))) throw new Error('Sport Track reloaded or closed workout mode after a set was logged')
+    // Close with the page's own button.
+    await frame.evaluate(() => (document.getElementById('wm-finish-ok') ?? document.getElementById('wm-close'))?.click())
     frame = pg.frames().find((f) => f.url().includes('/apps/sport/') && !f.isDetached()) ?? frame
     await frame.waitForSelector('#workout-mode', { state: 'hidden', timeout: 10000 })
     await frame.waitForSelector('.st-tab[data-tab="history"]', { timeout: 10000 })
