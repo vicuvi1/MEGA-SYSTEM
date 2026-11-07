@@ -2,3 +2,9 @@
 # checkout (Windows included), or the hash would not match.
 widgets/** text eol=lf
 widgets/**/*.png binary
+
+# Build outputs that are committed on purpose (Vercel and the desktop app use them as they are).
+# Rebuild them with npm run build:bot / build:sport instead of editing; diffs stay hidden so they
+# don't flood reviews and AI context. CI still checks that bot.mjs is up to date.
+api/_bot/bot.mjs linguist-generated=true -diff
+src/renderer/public/apps/sport/sportkit.js linguist-generated=true -diff

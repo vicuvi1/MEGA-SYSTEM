@@ -4,6 +4,16 @@ Choices that a later session could easily undo by accident. Each entry gives the
 was made, and what it rules out. Newest entries go on top. Don't reverse one without writing a new
 entry that says why.
 
+### Generated bundles are marked generated (2026-11-07)
+- **Decision:** `api/_bot/bot.mjs` and `sportkit.js` are still committed, but `.gitattributes` marks them `linguist-generated -diff`.
+- **Why:** their diffs flooded reviews and AI context. Rebuild them, never hand-merge them.
+- **What stays the same:** the deploy, and CI's freshness check (`git diff --exit-code` still fails when they're stale).
+
+### Area docs over the big handoff (2026-11-07)
+- **Decision:** agents read `docs/INDEX.md` plus one `docs/areas/*.md` file. New documentation goes into the area file.
+- **Why:** the 94 KB `AI_HANDOFF.md` was read in full by most agents.
+- **Rules out:** appending new sections to `AI_HANDOFF.md`. It stays as the historical reference.
+
 ### Smoke steps may retry once, but only on purpose (2026-11-07)
 - **Decision:** `step(name, fn, { retries: 1 })` is allowed for steps that drive a whole embedded
   app. A failure prints its "waiting for …" line.

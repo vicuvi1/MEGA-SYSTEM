@@ -61,11 +61,13 @@ must pin the clock: `vi.useFakeTimers({ toFake: ['Date'] })` plus `vi.setSystemT
 | Day planner, plan editor, calendar | [areas/planner.md](areas/planner.md) | `src/core/dayPacker.ts`, `planShift.ts`, `planEdit.ts`, `planSync.ts`, `src/renderer/src/plan/` |
 | Today page | [areas/today.md](areas/today.md) | `DayFlow.tsx`, `dayflow/`, `habits/` |
 | Goals and Season | [areas/goals.md](areas/goals.md) | `pages/Goals.tsx`, `pages/Season.tsx`, `src/core/goal*.ts` |
+| Career (jobs, portfolio, flashcards, study, money plan) | [areas/career.md](areas/career.md) | `pages/Career.tsx`, `src/renderer/src/career/`, `src/core/career/` |
+| Focus boost (push ladder, launch kits, Dojo, win music) | [areas/focus.md](areas/focus.md) | `src/renderer/src/boost/`, `src/core/pushLadder.ts` |
 | Healthy day, sleep care, My life | [areas/health.md](areas/health.md) | `src/core/healthyDay.ts`, `sleepCare.ts`, `lifeFit.ts` |
 | Desktop island | [areas/island.md](areas/island.md) | `src/desktop/island.ts`, `DesktopIsland.tsx`, `IslandFeed.tsx`, `src/core/island*.ts` |
 | Voice | [areas/voice.md](areas/voice.md) | `src/renderer/src/voice/`, `src/core/voice*.ts` |
 | Music | [areas/music.md](areas/music.md) | `src/renderer/src/music/`, `src/desktop/scWeb.ts` |
-| Sport Track | [areas/sport.md](areas/sport.md) | `src/renderer/public/apps/sport/`, `src/core/sport*.ts` |
+| Sport Track and the Body page (protein, weight, readiness, photos) | [areas/sport.md](areas/sport.md) | `src/renderer/public/apps/sport/`, `src/core/sport*.ts`, `src/renderer/src/body/` |
 | Rewards and money | [areas/rewards-money.md](areas/rewards-money.md) | `pages/Rewards.tsx`, `src/main/shop.ts`, `public/apps/finance/` |
 | Plugins and PC automation | [areas/plugins-pc.md](areas/plugins-pc.md), [pc-automation.md](pc-automation.md) | `src/plugins/` |
 | Operations (tick, backups, cost, CI) | [areas/ops.md](areas/ops.md) | `api/cron.mjs`, `.github/workflows/` |
@@ -76,9 +78,7 @@ Other docs:
 - [PLAN.md](PLAN.md) for long-term tasks;
 - [DECISIONS.md](DECISIONS.md) for choices not to undo.
 
-**Docs drift note:** builders that were running on 2026-11-07 may have appended new sections to
-`AI_HANDOFF.md`. Move those into the matching area file when it is next touched. From now on,
-update the area file instead of the big handoff.
+**Keep docs in their area:** update the matching `docs/areas/*.md` file, not `AI_HANDOFF.md`. All handoff sections up to 2026-11-07 (Career and Body included) are already in the area files.
 
 ## Working state and process
 - Where things stand: [harness/progress.md](harness/progress.md). What works and how it is checked: [harness/feature_list.json](harness/feature_list.json).

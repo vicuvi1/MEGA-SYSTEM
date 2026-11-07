@@ -27,9 +27,9 @@ Files:       <the 3–6 files/docs the next session needs first>
 ```
 Milestone:   Life boost picks + context-efficiency Phase 1
 Completed:   sleep care, seasons, focus boost, body, career 2cf9ced; Phase 1 docs dfeab9f
-Active:      none
+Active:      Sport Track smoke-step fix (builder, owns the smoke step + sport workout mode)
 Blockers:    Sport Track smoke step flaky on the Windows runner (passes on retry)
-Next action: confirm release, fold new AI_HANDOFF sections into docs/areas/, run model comparisons
+Next action: land the Sport fix, confirm release, run model comparisons
 Files:       docs/INDEX.md, docs/harness/progress.md, docs/harness/feature_list.json, docs/areas/sport.md
 ```
 

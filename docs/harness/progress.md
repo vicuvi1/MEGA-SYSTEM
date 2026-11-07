@@ -6,9 +6,9 @@ Keep it short and true: anything written here is what the next session will trus
 ## Current verified state (keep to 5–8 lines)
 - **Milestone:** Life boost picks + context-efficiency Phase 1 (docs/INDEX.md, docs/areas/, routing, ship skill).
 - **Landed:** sleep care d36923c · seasons dca47bd · focus boost c8d389e · body 46c63ec · career 2cf9ced. All 41 Life boost picks done. Last green release v1.4.1366.
-- **Active:** none. New AI_HANDOFF.md sections (sleep care, seasons, focus boost, body, career) still need folding into docs/areas/.
+- **Active:** Sport Track smoke-step fix (builder). Docs: all handoff sections are now in docs/areas/ (career.md, focus.md, sport.md Body).
 - **Blocker:** the "Sport Track Today" smoke step is flaky on the Windows runner (1 retry; root cause: page reload after a logged workout).
-- **Next:** confirm the release → fold new AI_HANDOFF sections into areas → run the model comparison tasks.
+- **Next:** confirm the release → land the Sport smoke fix → run the model comparison tasks.
 - **Verify:** `bash scripts/init.sh` · `npm run smoke` · `bash scripts/release-status.sh`.
 
 ## Session record
