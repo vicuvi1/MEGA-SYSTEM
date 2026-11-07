@@ -356,11 +356,12 @@
    "area": "career",
    "title": "Career and money",
    "user_visible_behavior": "Job board, portfolio, flashcards (SRS), shift study kit, emergency fund, essay planner, career letter",
-   "status": "in_progress",
+   "status": "passing",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run"
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Career\" npm run smoke"
    ],
-   "evidence": "",
+   "evidence": "Commit 2cf9ced; 2,622 tests and full smoke pass",
    "notes": ""
   },
   {

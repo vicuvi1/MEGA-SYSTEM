@@ -26,10 +26,10 @@ Files:       <the 3–6 files/docs the next session needs first>
 ### Current handoff (2026-11-07)
 ```
 Milestone:   Life boost picks + context-efficiency Phase 1
-Completed:   sleep care d36923c, seasons dca47bd, focus boost c8d389e, body 46c63ec, Phase 1 docs
-Active:      career & money builder (Career/Money pages)
+Completed:   sleep care, seasons, focus boost, body, career 2cf9ced; Phase 1 docs dfeab9f
+Active:      none
 Blockers:    Sport Track smoke step flaky on the Windows runner (passes on retry)
-Next action: land the career builder, fold their AI_HANDOFF additions into docs/areas/, run full smoke
+Next action: confirm release, fold new AI_HANDOFF sections into docs/areas/, run model comparisons
 Files:       docs/INDEX.md, docs/harness/progress.md, docs/harness/feature_list.json, docs/areas/sport.md
 ```
 
