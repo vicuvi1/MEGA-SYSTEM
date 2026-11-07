@@ -125,7 +125,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown' | 'push1' | 'push2' | 'push3' | 'launch' | 'win'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown' | 'push1' | 'push2' | 'push3' | 'launch' | 'win' | 'pulse' | 'countdown' | 'streakRisk' | 'mirror'
   title: string
   text: string
   face?: string
@@ -231,6 +231,21 @@ export interface IslandSnapshot {
   protein?: { g: number; goal: number } | null
   /** My life: today's work window and tonight's shift (a work day only), for the one-tap buttons. */
   work?: { from: string; to: string; mode: 'normal' | 'short' | 'off' } | null
+  /** Alive island (all optional; the island draws them only when present). */
+  /** How the day is going: on track, behind the plan, drifting off it, or a rest day. */
+  dayState?: 'ontrack' | 'behind' | 'drifting' | 'rest'
+  /** The three things that matter today (must-dos first). */
+  top3?: { title: string; done: boolean }[]
+  /** A points payout that just happened (id changes each time; play a +N flash once per id). */
+  pointsFx?: { id: string; delta: number; label: string }
+  /** The next 3 hours: blocks, events and reminders (for the hover peek). */
+  next3h?: { at: number; title: string; kind: string }[]
+  /** Focus shield: during a focus timer non-urgent alerts are held and counted. */
+  shield?: { on: boolean; held: number }
+  /** The day's story, from 23:00. */
+  story?: { lines: string[]; stats: { focusMin: number; waterMl: number; done: number } }
+  /** Quick numbers for the hover peek / widgets (named `glance` because `widgets` is the widget settings above). */
+  glance?: { waterMl: number; waterGoal: number; habitsDone: number; habitsTotal: number; moneyLeft: number | null; proteinG: number; proteinGoal: number }
 }
 
 export const EMPTY_ISLAND: IslandSnapshot = {
