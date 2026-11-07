@@ -392,6 +392,20 @@
    ],
    "evidence": "Unit tests islandAlive.test.ts and gaming.test.ts; smoke step Desktop island alive",
    "notes": "Visuals for the new snapshot fields are builder B's (DesktopIsland.tsx)."
+  },
+  {
+   "id": "F-ALIVE",
+   "priority": 2,
+   "area": "island",
+   "title": "Alive island visuals",
+   "user_visible_behavior": "Day-state glow, Ben face, orbit dots, liquid timer, hover next-3-hours with swipe gestures, mini widgets, now playing, 23:00 story, gaming counter",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Island visuals\" npm run smoke"
+   ],
+   "evidence": "",
+   "notes": "src/renderer/src/IslandAlive.tsx"
   }
  ]
 }

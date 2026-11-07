@@ -2206,15 +2206,6 @@ export function DesktopIsland() {
           {s.today && <span className="tr-focus"><i />{s.today.focusMin}/{s.today.focusGoal} min focus</span>}
         </p>
       )}
-      {/* Alive: after a 400 ms dwell, the next 3 hours (and the swipe gestures: right = water, left = snooze, hold = focus). */}
-      {!s.locked && (
-        <HoverTimeline
-          s={s}
-          now={now}
-          onLayout={() => pump(600)}
-          g={{ water: () => tap({ kind: 'water', ml: 250 }), snooze: () => setQuiet(30), focus: () => tap({ kind: 'start', subject: s.now?.title ?? 'Focus', minutes: focusMin }) }}
-        />
-      )}
     </div>
   )
 
@@ -2805,7 +2796,18 @@ export function DesktopIsland() {
             </div>
             {/* Alive: "+10 ⚡" flies into Ben (a ripple for a habit, a burst for a must-do); the 23:00 story. */}
             {pfx && ui.view === 'compact' && !calmHidden && <PointsFly key={String(pfx.id)} fx={pfx} />}
-            {story.on && story.story && <DailyStory story={story.story} onEnd={() => (story.end(), pump(500))} />}
+            {/* Alive: hovering the peek for 400 ms hangs the next 3 hours under it (outside the shape, so the peek never resizes). Swipe right = water, left = snooze 30 min, hold = focus. */}
+            {ui.view === 'peek' && !(a && (ui.byAlert || !main || (prefs.mode === 'calm' && calmCard))) && !hushed && !s.locked && !story.on && (
+              <div className="alive-hang" data-hot style={{ top: size.h + 8 }}>
+                <HoverTimeline
+                  s={s}
+                  now={now}
+                  onLayout={() => pump(600)}
+                  g={{ water: () => tap({ kind: 'water', ml: 250 }), snooze: () => setQuiet(30), focus: () => tap({ kind: 'start', subject: s.now?.title ?? 'Focus', minutes: focusMin }) }}
+                />
+              </div>
+            )}
+            {story.on && story.story &&<DailyStory story={story.story} onEnd={() => (story.end(), pump(500))} />}
             {/* IC3: the round menu, around where you hold. */}
             {ringCtl.ring && <RingMenu ring={ringCtl.ring} items={ringList} />}
             <motion.div className="di-follow" style={{ y: mh }}>

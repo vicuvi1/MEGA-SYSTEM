@@ -19,12 +19,10 @@ export type DayState = 'ontrack' | 'behind' | 'drifting' | 'rest'
 export interface AliveFields {
   dayState?: DayState
   top3?: { title: string; done: boolean }[]
-  pointsFx?: { id: string | number; delta: number; label: string }
+  pointsFx?: { id: string; delta: number; label: string }
   next3h?: { at: number | string; title: string; kind: string }[]
   shield?: { on: boolean; held: number }
   story?: { lines: string[]; stats: { focusMin: number; waterMl: number; done: number } }
-  gaming?: { on: boolean; app: string; sessionMin: number; todayMin: number; weekMin: number; limitMin?: number }
-  widgets?: { waterMl: number; waterGoal: number; habitsDone: number; habitsTotal: number; moneyLeft: number; proteinG: number; proteinGoal: number }
 }
 export type AliveSnap = IslandSnapshot & AliveFields
 export const aliveOf = (s: IslandSnapshot) => s as AliveSnap
@@ -138,7 +136,7 @@ export function gamingLevel(sessionMin: number, limitMin?: number): 'ok' | 'near
 }
 const playMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)} h ${m % 60 ? `${m % 60} min` : ''}`.trim() : `${Math.max(0, Math.round(m))} min`)
 
-export function GamingChip({ g }: { g?: AliveFields['gaming'] }) {
+export function GamingChip({ g }: { g?: IslandSnapshot['gaming'] }) {
   if (!g?.on) return null
   const lv = gamingLevel(g.sessionMin, g.limitMin)
   return (
@@ -468,7 +466,7 @@ function Ring({ pct, label, sub }: { pct: number; label: string; sub: string }) 
 }
 
 export function miniCards(s: IslandSnapshot, now: number): MiniCard[] {
-  const w = aliveOf(s).widgets
+  const w = s.glance
   const out: MiniCard[] = []
   const ml = w?.waterMl ?? s.water.ml
   const goal = w?.waterGoal ?? s.water.target
@@ -515,7 +513,7 @@ export function miniCards(s: IslandSnapshot, now: number): MiniCard[] {
       )
     })
   }
-  const money = w?.moneyLeft ?? s.money?.left
+  const money = w?.moneyLeft ?? s.money?.left ?? null
   if (money != null) {
     out.push({
       id: 'money',
@@ -649,7 +647,7 @@ export function DailyStory({ story, onEnd }: { story: NonNullable<AliveFields['s
 }
 
 // ---- the new alert kinds ----
-export const ALIVE_ALERTS = ['pulse', 'countdown', 'streakRisk', 'mirror', 'weather'] as const
+export const ALIVE_ALERTS = ['pulse', 'countdown', 'streakRisk', 'mirror', 'weather', 'gaming'] as const
 export function AlertFx({ kind, text = '' }: { kind: string; text?: string }) {
   if (!(ALIVE_ALERTS as readonly string[]).includes(kind)) return null
   const sunny = kind === 'weather' && /sun|clear|light|warm/i.test(text)
@@ -679,6 +677,14 @@ export function AlertFx({ kind, text = '' }: { kind: string; text?: string }) {
         <svg viewBox="0 0 32 32">
           <rect x="6" y="3" width="20" height="26" rx="10" fill="none" stroke="currentColor" strokeWidth="2" />
           <rect className="sheen" x="-6" y="3" width="6" height="26" fill="currentColor" opacity="0.5" transform="skewX(-18)" />
+        </svg>
+      )}
+      {kind === 'gaming' && (
+        <svg viewBox="0 0 32 32">
+          <rect className="pad" x="4" y="10" width="24" height="13" rx="6.5" fill="currentColor" opacity="0.85" />
+          <path d="M10 13.5 v6 M7 16.5 h6" stroke="#10130a" strokeWidth="1.8" strokeLinecap="round" />
+          <circle cx="21" cy="15" r="1.4" fill="#10130a" />
+          <circle cx="24" cy="18" r="1.4" fill="#10130a" />
         </svg>
       )}
       {kind === 'weather' && !sunny && (

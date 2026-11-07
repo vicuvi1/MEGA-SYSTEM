@@ -22,7 +22,7 @@
 }
 
 /* ---- Ben's face on the pill ---- */
-.alive-ben { display: inline-flex; flex: none; width: 22px; height: 22px; margin-right: 1px; transform-origin: 50% 60%; }
+.alive-ben { pointer-events: none; display: inline-flex; flex: none; width: 22px; height: 22px; margin-right: 1px; transform-origin: 50% 60%; }
 .alive-ben-svg { overflow: visible; display: block; }
 .alive-eyes { transform-box: fill-box; transform-origin: center; animation: alive-blink 5.2s infinite; }
 @keyframes alive-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
@@ -195,3 +195,10 @@
 @media (prefers-reduced-motion: reduce) {
   .di [class*="alive-"], .di [class*="alive-"] * { animation: none !important; transition: none !important; }
 }
+
+/* The hover card hangs under the peek (outside the clipped shape). */
+.alive-hang { position: absolute; left: 50%; translate: -50% 0; width: calc(var(--di-peek-w, 380px) - 24px); z-index: 5; }
+.alive-hang .alive-peekcard { margin: 0; background: rgb(var(--alive-card) / 0.97); box-shadow: 0 14px 36px rgb(0 0 0 / 0.4); }
+.di.look-app.theme-light .alive-hang .alive-peekcard { color: #141922; }
+.alive-afx.k-gaming { color: var(--amber); }
+.alive-afx .pad { transform-box: fill-box; transform-origin: center; animation: alive-snooze 4.4s ease-in-out infinite; }

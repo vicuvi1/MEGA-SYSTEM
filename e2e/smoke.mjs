@@ -1304,6 +1304,57 @@ try {
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'suggest' && a.answer === 'later'), null, { timeout: 3000 })
     await ip.context().close()
   })
+  await step('Island visuals: dayState class, orbit dots, Ben face, hover peek shows the next 3 hours, a swipe logs water, the story can be skipped', async () => {
+    const shots = process.env.ALIVE_SHOTS
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null, mustdos: [], water: { ml: 500, target: 2000 }, reps: [], alert: null,
+        dayState: 'behind', top3: [{ title: 'A', done: true }, { title: 'B', done: false }, { title: 'C', done: false }],
+        next3h: [{ at: now + 30 * 60_000, title: 'Gym', kind: 'event' }, { at: now + 100 * 60_000, title: 'Call mom', kind: 'remind' }],
+        shield: { on: true, held: 3 }, story: { lines: ['A calm day.', 'Nice focus.'], stats: { focusMin: 90, waterMl: 1500, done: 4 } },
+        gaming: { on: true, app: 'Fortnite', sessionMin: 42, todayMin: 60, weekMin: 200, limitMin: 50 }
+      }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandAction: (a) => { window.__island.actions.push(a) },
+        setIslandPrefs: async () => null,
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di.ds-behind .di-pill', { timeout: 15000 })
+    if ((await ip.locator('.alive-dot').count()) !== 3 || (await ip.locator('.alive-dot.done').count()) !== 1) throw new Error('orbit dots wrong')
+    await ip.waitForSelector('.alive-ben', { timeout: 3000 })
+    if (!(await ip.locator('.alive-gaming.lv-near').count())) throw new Error('gaming counter should be amber near the limit')
+    await ip.waitForTimeout(900)
+    if (shots) await ip.screenshot({ path: `${shots}/pill.png`, clip: { x: 100, y: 0, width: 320, height: 60 } })
+    await ip.evaluate(() => window.__island.send('hover', true))
+    await ip.waitForSelector('.di-peek', { timeout: 3000 })
+    await ip.waitForSelector('[data-peekcard]', { timeout: 3000 })
+    const lis = await ip.locator('[data-peekcard] li').count()
+    if (lis !== 2) throw new Error(`peek timeline items: ${lis}`)
+    if (shots) await ip.screenshot({ path: `${shots}/peek.png` })
+    const b = await ip.locator('[data-peekcard]').boundingBox()
+    await ip.mouse.move(b.x + 20, b.y + b.height / 2)
+    await ip.mouse.down()
+    await ip.mouse.move(b.x + 90, b.y + b.height / 2, { steps: 5 })
+    await ip.mouse.up()
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'water'), null, { timeout: 3000 })
+    await ip.evaluate(() => window.__island.send('hover', false))
+    await ip.evaluate(() => window.dispatchEvent(new Event('life-island-story')))
+    await ip.waitForSelector('.alive-story', { timeout: 3000 })
+    await ip.click('.alive-story-skip')
+    await ip.waitForSelector('.alive-story', { state: 'detached', timeout: 3000 })
+    await ip.context().close()
+  })
   // Calm (the default on the desktop): hidden until the mouse rests on its spot,
   // new things peek as one slim line and then wait as a coloured dot.
   await step('Desktop island Calm: only a faint line at rest, hover brings the pill, a nudge peeks then waits as a dot, a quiet kind is only a dot, your reminder peeks, a dot opens its card', async () => {
@@ -2171,7 +2222,7 @@ try {
       await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
       // The mouse is still on it, so it may already peek: a click on the shape opens it either way.
       await ip.waitForTimeout(400)
-      await ip.click('.di-shape', { position: { x: 24, y: 14 } })
+      await ip.click('.di-shape', { position: { x: (await ip.locator('.di-shape').boundingBox()).width / 2, y: 14 } })
       await ip.waitForSelector('.di-panel', { timeout: 5000 })
     }
     await ip.context().close()
@@ -2595,7 +2646,8 @@ try {
             return b.width > 0.5 && b.height > 0.5 && cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05
           }
           const pill = document.querySelector('.di-pill.di-rest')
-          const items = [...pill.children].filter(shown).map((e) => e.className.baseVal ?? e.className)
+          // The alive layer (Ben's face, liquid timer, top-3 dots) is decoration on the pill, not a thing to read.
+          const items = [...pill.children].filter((e) => !/\balive-(ben|liquid|orbit)\b/.test(e.className.baseVal ?? e.className)).filter(shown).map((e) => e.className.baseVal ?? e.className)
           // A ring with nothing in it: a progress circle drawn at 0%.
           const zero = [...pill.querySelectorAll('circle[stroke-dasharray]')].filter((c) => shown(c) && Math.abs(parseFloat(c.getAttribute('stroke-dasharray')) - parseFloat(c.getAttribute('stroke-dashoffset') ?? '0')) < 0.01).length
           const placeholders = [...pill.querySelectorAll('.nd-badge, .nd-chbar, .di-today, .di-cap, .di-dot, .di-dots, .sm-pill-cpu')].filter(shown).map((e) => e.className.baseVal ?? e.className)
