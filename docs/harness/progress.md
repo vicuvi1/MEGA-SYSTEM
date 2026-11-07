@@ -4,11 +4,11 @@ Every session reads this first and adds one entry at the end. Newest entry on to
 Keep it short and true: anything written here is what the next session will trust.
 
 ## Current verified state (keep to 5–8 lines)
-- **Milestone:** Life boost picks + context-efficiency Phase 1 (docs/INDEX.md, docs/areas/, routing, ship skill).
-- **Landed:** sleep care d36923c · seasons dca47bd · focus boost c8d389e · body 46c63ec · career 2cf9ced. All 41 Life boost picks done. Last green release v1.4.1366.
-- **Active:** Sport Track smoke-step fix (builder). Docs: all handoff sections are now in docs/areas/ (career.md, focus.md, sport.md Body).
-- **Blocker:** the "Sport Track Today" smoke step is flaky on the Windows runner (1 retry; root cause: page reload after a logged workout).
-- **Next:** confirm the release → land the Sport smoke fix → run the model comparison tasks.
+- **Milestone:** bug round + island alive + sport coach system — all landed 2026-11-07; full smoke passes on 8b29dd5.
+- **Landed today (latest):** island fixes 93725c8/0cf81dc · plan sync f8e666d · Coach 51d3ae3/f67d311 · water anim 6a5da6b · island alive e5e5f1a/4faed2d · sport coach aa5dbb4/8b29dd5.
+- **Active:** none. Last green release v1.4.1381; run for 8b29dd5 building.
+- **Known gaps:** island Settings panel and live feeds not exercised in a real desktop run; workoutNote reuses the check-in sound.
+- **Next:** start a fresh session (handoff below), run the model comparison tasks, worktree setup script (builders keep missing node_modules).
 - **Verify:** `bash scripts/init.sh` · `npm run smoke` · `bash scripts/release-status.sh`.
 
 ## Session record
