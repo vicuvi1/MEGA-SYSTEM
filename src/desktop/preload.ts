@@ -85,6 +85,8 @@ const api: DesktopApi = {
   onIslandDodge: (cb) => void ipcRenderer.on('island:dodge', (_e, on) => cb(!!on)),
   // Island 2 (IN34–IN48): one channel for tiles' shortcuts, the dock, the clipboard tray and the file shelf.
   islandKit: (op, arg) => ipcRenderer.invoke('islandKit', String(op), arg),
+  // TV3: Voicebox (a local voice app), probe and speak; the desktop makes the call.
+  voicebox: (op, arg) => ipcRenderer.invoke('voice:voicebox', String(op), arg),
   // PL2: a widget's https request (the desktop checks it again).
   widgetFetch: (url, hosts) => ipcRenderer.invoke('widgets:fetch', String(url), Array.isArray(hosts) ? hosts.map(String) : []),
   onIslandKit: (cb) => void ipcRenderer.on('islandKit', (_e, ev) => cb(ev)),

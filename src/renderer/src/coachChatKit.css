@@ -1,0 +1,95 @@
+/* Ben 2 chat pieces (CoachChatKit.tsx): answer chips, rating, pins, search,
+   drafts, basic mode, the cost line. Only colours, opacity and transform move. */
+
+.ak-bar { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 6px; }
+.ak-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.ak-chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 11px; border-radius: 999px; font: inherit; font-size: 12.5px; font-weight: 560; color: var(--text); background: color-mix(in srgb, var(--surface-2) 85%, transparent); border: 1px solid var(--border); cursor: pointer; white-space: nowrap; text-decoration: none; transition: transform 0.16s var(--ease-spring, ease), border-color 0.15s, background-color 0.15s, color 0.15s; }
+.ak-chip:hover:not(:disabled) { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.ak-chip:active:not(:disabled) { transform: scale(0.95); }
+.ak-chip:disabled { opacity: 0.5; cursor: default; }
+.ak-chip.primary { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+.ak-chip.primary:hover:not(:disabled) { border-color: transparent; }
+.ak-chip.ghost { background: transparent; }
+.ak-chip.k-copy { color: var(--muted, inherit); }
+.ak-side { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; }
+.ak-rate { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.ak-rate > button, .ak-pin { width: 28px; height: 28px; border-radius: 8px; border: 1px solid transparent; background: transparent; cursor: pointer; font-size: 14px; opacity: 0.55; filter: grayscale(0.6); transition: opacity 0.15s, transform 0.15s, background-color 0.15s; }
+.ak-rate > button:hover, .ak-pin:hover { opacity: 1; filter: none; background: var(--surface-2); }
+.ak-rate > button.on, .ak-pin.on { opacity: 1; filter: none; background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.ak-why { display: inline-flex; flex-wrap: wrap; gap: 4px; margin-left: 4px; animation: ak-in 0.2s ease both; }
+.ak-why button { height: 26px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; }
+.ak-why button:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
+.ak-why .x { width: 26px; padding: 0; opacity: 0.6; }
+.ak-noted { font-size: 11.5px; color: var(--muted, #8b93a3); margin-left: 4px; }
+/* The model and cost: one muted line, shown when you rest the mouse on the answer (always on touch). */
+.ak-cost { flex-basis: 100%; font-size: 11px; color: var(--muted, #8b93a3); opacity: 0; transform: translateY(-2px); transition: opacity 0.18s, transform 0.18s; font-variant-numeric: tabular-nums; }
+.cf-ben:hover .ak-cost, .ak-bar:focus-within .ak-cost { opacity: 0.85; transform: none; }
+@media (hover: none) { .ak-cost { opacity: 0.7; transform: none; } }
+@keyframes ak-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }
+
+/* Pinned strip at the top of the chat */
+.ak-pins { margin: 6px 14px 0; border: 1px solid var(--border); border-radius: 12px; background: color-mix(in srgb, var(--surface-2) 70%, transparent); overflow: hidden; }
+.ak-pins-head { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; background: none; border: 0; color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; }
+.ak-pins-head b { font-weight: 650; white-space: nowrap; }
+.ak-pins-first { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted, #8b93a3); }
+.ak-pins-head i { margin-left: auto; font-style: normal; opacity: 0.6; }
+.ak-pins ul { list-style: none; margin: 0; padding: 0 6px 6px; display: grid; gap: 2px; max-height: 220px; overflow: auto; }
+.ak-pins li { display: flex; align-items: stretch; gap: 4px; }
+.ak-pin-go { flex: 1; min-width: 0; display: grid; gap: 1px; padding: 6px 8px; border-radius: 8px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.ak-pin-go:hover { background: var(--surface-3); }
+.ak-pin-go small { font-size: 11px; color: var(--muted, #8b93a3); }
+.ak-pin-go span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ak-pin-x { width: 28px; border: 0; border-radius: 8px; background: none; color: var(--muted, #8b93a3); cursor: pointer; }
+.ak-pin-x:hover { background: var(--surface-3); color: var(--text); }
+
+/* Search */
+.ak-search { margin: 6px 14px 0; display: grid; gap: 6px; }
+.ak-search-box { display: flex; align-items: center; gap: 8px; padding: 0 6px 0 12px; height: 38px; border-radius: 12px; border: 1px solid var(--border-strong); background: var(--surface-2); }
+.ak-search-box input, .ak-search-box input:focus { flex: 1; min-width: 0; height: 100%; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; color: var(--text); font: inherit; font-size: 14px; outline: none; }
+.ak-search-box:focus-within { border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
+.ak-search-box small { font-size: 11.5px; color: var(--muted, #8b93a3); white-space: nowrap; }
+.ak-hits { list-style: none; margin: 0; padding: 4px; display: grid; gap: 2px; max-height: 300px; overflow: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.ak-hits button { width: 100%; display: grid; gap: 2px; padding: 7px 9px; border-radius: 8px; border: 0; background: none; color: var(--text); font: inherit; font-size: 13px; text-align: left; cursor: pointer; }
+.ak-hits button:hover, .ak-hits button.on { background: var(--surface-2); }
+.ak-hits button.on { box-shadow: inset 2px 0 0 var(--accent); }
+.ak-hits small { font-size: 11px; color: var(--muted, #8b93a3); }
+.ak-hits mark, .cf-text mark { background: color-mix(in srgb, var(--accent) 32%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.ak-search.compact { margin: 0; }
+.ak-search.compact .ak-hits { max-height: 220px; }
+
+/* Draft */
+.ak-draft { margin-top: 8px; border: 1px solid var(--border-strong); border-radius: 14px; background: var(--surface); overflow: hidden; max-width: 640px; }
+.ak-draft-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.ak-draft-head small { font-size: 11.5px; color: var(--muted, #8b93a3); text-transform: uppercase; letter-spacing: 0.04em; }
+.ak-draft-subject { display: grid; gap: 2px; padding: 10px 12px 4px; }
+.ak-draft-subject small { font-size: 11px; color: var(--muted, #8b93a3); }
+.ak-draft-body { margin: 0; padding: 6px 12px 12px; font: inherit; font-size: 13.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.ak-draft-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 8px 12px 10px; border-top: 1px solid var(--border); }
+.ak-draft-tones { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+
+/* Basic mode */
+.ak-basic { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0 0 6px; padding: 7px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--cf-amber, #f5a524) 45%, transparent); background: color-mix(in srgb, var(--cf-amber, #f5a524) 10%, transparent); font-size: 12.5px; }
+.ak-basic .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--cf-amber, #f5a524); }
+.ak-basic.r-offline .dot { background: #8b93a3; }
+.ak-basic small { color: var(--muted, #8b93a3); }
+.ak-queued { font-style: normal; display: inline-flex; gap: 6px; align-items: center; margin-left: auto; font-weight: 600; }
+.ak-queued button { border: 0; background: none; color: var(--accent-text); font: inherit; cursor: pointer; text-decoration: underline; }
+.cf-basic-note { font-size: 11px; color: var(--muted, #8b93a3); }
+
+/* Side panel */
+.ak-misses ul, .ak-side-pins ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 6px; }
+.ak-misses li { display: grid; gap: 1px; font-size: 12.5px; }
+.ak-misses li small { font-size: 11px; color: var(--muted, #8b93a3); }
+.ak-misses li span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.ak-miss-why { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 0; }
+.ak-miss-why span { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--surface-3); }
+.ak-misses .hd, .ak-side-pins .hd { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ak-misses .hd small, .ak-side-pins .hd small { color: var(--muted, #8b93a3); font-size: 11.5px; white-space: nowrap; }
+.ak-misses .hd b { font-size: 13px; }
+.ak-side-pins button { width: 100%; text-align: left; border: 0; background: none; padding: 4px 6px; border-radius: 6px; color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ak-side-pins button:hover { background: var(--surface-3); }
+.ak-side-search { padding-top: 10px; }
+
+/* Push to talk + Ben's voice */
+.cf-mute { font-size: 15px; }
+.cf-ptt-hint { font-size: 11px; color: var(--muted, #8b93a3); }

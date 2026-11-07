@@ -447,8 +447,12 @@ const fakeAi = (q, r) => {
       { id: 'meta/llama-free', name: 'Meta: Llama (free)', in: 0, out: 0, context: 64000, tools: false, reasoning: false }
     ] })
   if (b.op === 'setModels') return ((aiChosen = { chat: b.chat || null, deep: b.deep || null }), send({ ok: true, chosen: aiChosen }))
+  // QA4: this month's spend against the budget (E2E_BUDGET=used: used up, so the chat is in basic mode).
+  const budget = process.env.E2E_BUDGET === 'used' ? { budget: 10, spent: 10.02, tier: 'minimal' } : { budget: 10, spent: 8.6, tier: 'save' }
+  if (b.op === 'budget') return send({ budget })
+  if (b.op === 'setBudget') return send({ ok: true, budget: { ...budget, budget: Number(b.usd) || 0 } })
   if (b.op === 'usage')
-    return send({ today: { calls: 14, cost: 0.083, tokens: 112000 }, week: { calls: 96, cost: 0.61, tokens: 790000 }, month: { calls: 380, cost: 2.4, tokens: 3100000 }, byModel: [{ model: 'deepseek/deepseek-v4.1-flash', calls: 340, cost: 0.9, tokens: 2800000 }, { model: 'anthropic/claude-sonnet-5.5', calls: 40, cost: 1.5, tokens: 300000 }], recent: [{ at: new Date().toISOString(), model: 'anthropic/claude-sonnet-5.5', kind: 'chat', prompt: 8200, completion: 420, cost: 0.031 }], credits: { total: 20, used: 7.5, left: 12.5 } })
+    return send({ today: { calls: 14, cost: 0.083, tokens: 112000 }, week: { calls: 96, cost: 0.61, tokens: 790000 }, month: { calls: 380, cost: 2.4, tokens: 3100000 }, byModel: [{ model: 'deepseek/deepseek-v4.1-flash', calls: 340, cost: 0.9, tokens: 2800000 }, { model: 'anthropic/claude-sonnet-5.5', calls: 40, cost: 1.5, tokens: 300000 }], recent: [{ at: new Date().toISOString(), model: 'anthropic/claude-sonnet-5.5', kind: 'chat', prompt: 8200, completion: 420, cost: 0.031 }], credits: { total: 20, used: 7.5, left: 12.5 }, budget })
   if (b.op === 'eval')
     return send({ model: b.model || 'deepseek/deepseek-v4.1-flash', passed: 17, total: 20, cost: 0.042, calls: 23, results: [
       { id: 'spend', say: 'spent 50 lei on lunch', want: 'logs a 50 lei expense', ok: true, trace: '✅ Logged: lunch 50\nREPLY: Logged.', ms: 3200 },

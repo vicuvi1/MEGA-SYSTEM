@@ -3,6 +3,7 @@
 // keys for "pause music" / "next song" (Windows only, one short PowerShell).
 import { BrowserWindow, ipcMain, powerMonitor } from 'electron'
 import { spawn } from 'node:child_process'
+import { PROBE_MS, SPEAK_MS, VOICEBOX_CLIENT, VOICEBOX_ORIGIN, profileNames, speakBody } from '../core/voicebox'
 
 const KEYS: Record<string, number> = { playpause: 0xb3, next: 0xb0, prev: 0xb1, mute: 0xad, voldown: 0xae, volup: 0xaf }
 
@@ -23,6 +24,26 @@ export function setupVoice(): void {
   powerMonitor.on('unlock-screen', () => ((locked = false), send()))
   powerMonitor.on('resume', () => ((locked = false), send()))
   setInterval(send, 20_000)
+  // TV3: Voicebox, a local voice studio, when it runs on this PC (its documented REST API on 127.0.0.1:17493).
+  ipcMain.handle('voice:voicebox', async (e, op: unknown, arg: unknown) => {
+    if (!String(e.senderFrame?.url ?? '').startsWith('life-system://app/')) return null
+    try {
+      if (op === 'probe') {
+        const r = await fetch(`${VOICEBOX_ORIGIN}/profiles`, { signal: AbortSignal.timeout(PROBE_MS) })
+        return r.ok ? { ok: true, profiles: profileNames(await r.json().catch(() => null)) } : { ok: false }
+      }
+      if (op === 'speak') {
+        const a = (arg ?? {}) as { text?: unknown; profile?: unknown }
+        const body = speakBody(String(a.text ?? ''), String(a.profile ?? ''))
+        if (!body.text) return { ok: false }
+        const r = await fetch(`${VOICEBOX_ORIGIN}/speak`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Voicebox-Client-Id': VOICEBOX_CLIENT }, body: JSON.stringify(body), signal: AbortSignal.timeout(SPEAK_MS) })
+        return { ok: r.ok }
+      }
+    } catch {
+      /* not running: Ben uses his normal voice */
+    }
+    return { ok: false }
+  })
   ipcMain.handle('voice:media', (e, key: unknown) => {
     if (!String(e.senderFrame?.url ?? '').startsWith('life-system://app/')) return false
     const vk = KEYS[String(key)]

@@ -30,6 +30,8 @@ export function CoachMic({ base, onText, onListening, disabled }: { base: string
   const engine = useMemo(() => (local ? new VoiceEngine({ onText: (t) => onTextRef.current(t, true) }, () => false) : null), [local])
   const onTextRef = useRef(onText)
   onTextRef.current = onText
+  const onRef = useRef(on)
+  onRef.current = on
   useEffect(() => {
     if (!engine) return
     engine.enable()
@@ -41,26 +43,26 @@ export function CoachMic({ base, onText, onListening, disabled }: { base: string
     return () => (off(), engine.destroy())
   }, [engine]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => rec.current?.abort?.(), [])
-  if (!web && !local) return null
-  const toggle = () => {
+  const start = () => {
+    if (onRef.current) return
     if (engine) return engine.ptt()
-    if (on) return rec.current?.stop()
     const R = Recognition()
+    if (!R) return
     const r = new R()
     r.lang = navigator.language || 'en-US'
     r.interimResults = true
     r.continuous = false
-    const start = base ? `${base.trim()} ` : ''
+    const first = base ? `${base.trim()} ` : ''
     let finalText = ''
     r.onresult = (e: any) => {
       const all = Array.from(e.results as ArrayLike<any>)
       finalText = all.map((x: any) => x[0].transcript).join('')
-      onText(start + finalText, false)
+      onTextRef.current(first + finalText, false)
     }
     r.onend = () => {
       setOn(false)
       onListening(false)
-      if (finalText.trim()) onText(start + finalText, true)
+      if (finalText.trim()) onTextRef.current(first + finalText, true)
     }
     r.onerror = () => (setOn(false), onListening(false))
     rec.current = r
@@ -68,8 +70,53 @@ export function CoachMic({ base, onText, onListening, disabled }: { base: string
     onListening(true)
     r.start()
   }
+  const finish = () => {
+    if (!onRef.current) return
+    if (engine) return engine.ptt()
+    rec.current?.stop()
+  }
+  const toggle = () => (onRef.current ? finish() : start())
+  // TV3: push to talk. Hold Ctrl+Space anywhere on the page (or hold the button): talk, let go to send.
+  const held = useRef<{ at: number; key: boolean; stop?: boolean } | null>(null)
+  useEffect(() => {
+    if (!web && !local) return
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'Space' || !e.ctrlKey || e.repeat || disabled) return
+      e.preventDefault()
+      held.current = { at: Date.now(), key: true }
+      start()
+    }
+    const up = (e: KeyboardEvent) => {
+      if (!held.current?.key || (e.code !== 'Space' && e.key !== 'Control')) return
+      held.current = null
+      finish()
+    }
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    return () => (window.removeEventListener('keydown', down), window.removeEventListener('keyup', up))
+  }) // eslint-disable-line react-hooks/exhaustive-deps
+  if (!web && !local) return null
   return (
-    <button type="button" className={`cx-tool ${on ? 'rec' : ''}`} onClick={toggle} disabled={disabled} aria-label={on ? 'Stop and send' : 'Talk to Ben'} title={on ? 'Listening… tap to send' : 'Talk to Ben (tap, speak, it sends when you stop)'}>
+    <button
+      type="button"
+      className={`cx-tool ${on ? 'rec' : ''}`}
+      disabled={disabled}
+      aria-label={on ? 'Stop and send' : 'Talk to Ben'}
+      title={on ? 'Listening… let go (or tap) to send' : 'Talk to Ben: hold to talk (or Ctrl+Space), or tap, speak, and it sends when you stop'}
+      onPointerDown={() => {
+        // Listening already: this tap stops and sends. Else start, and see how long it's held.
+        held.current = { at: Date.now(), key: false, stop: onRef.current }
+        if (!onRef.current) start()
+      }}
+      onPointerUp={() => {
+        const h = held.current
+        held.current = null
+        // Held for a moment: letting go sends. A quick tap keeps listening until you stop talking (or tap again).
+        if (h && (h.stop || Date.now() - h.at > 450)) finish()
+      }}
+      onPointerLeave={() => held.current && !held.current.stop && Date.now() - held.current.at > 450 && ((held.current = null), finish())}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), toggle())}
+    >
       {on ? (
         <span className="cf-wave" aria-hidden>
           <i />
@@ -81,6 +128,17 @@ export function CoachMic({ base, onText, onListening, disabled }: { base: string
       ) : (
         '🎙'
       )}
+    </button>
+  )
+}
+
+/** TV3: Ben's voice on / off (a reply to something you said by voice is read aloud unless he's muted). */
+export function BenMute() {
+  const [p, setP] = useVoicePrefs()
+  if (typeof speechSynthesis === 'undefined' && !p.on) return null
+  return (
+    <button type="button" className={`cx-tool cf-mute ${p.muted ? '' : 'voice-on'}`} onClick={() => (!p.muted && stopReading(), setP({ muted: !p.muted, ...(p.muted ? {} : { readAloud: false }) }))} aria-pressed={!p.muted} aria-label={p.muted ? "Ben's voice is off" : "Ben's voice is on"} title={p.muted ? "Ben's voice is off: tap to hear him again" : 'Ben answers out loud when you talk to him: tap to mute'}>
+      {p.muted ? '🔇' : '🔊'}
     </button>
   )
 }
@@ -111,8 +169,10 @@ let speaker: Speaker | null = null
 let stream: SentenceStream | null = null
 /** The Coach page reads Ben's reply aloud as it streams (when 🔊 is on). */
 export const readAloud = {
-  start(): void {
-    if (!voicePrefs().readAloud) {
+  /** `voice`: you said it by voice, so Ben answers out loud too (unless he's muted). */
+  start(voice = false): void {
+    const v = voicePrefs()
+    if (v.muted || (!v.readAloud && !voice)) {
       stream = null
       return
     }

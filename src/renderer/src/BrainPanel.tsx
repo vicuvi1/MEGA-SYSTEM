@@ -41,8 +41,8 @@ interface Usage {
 
 const TIER_TEXT = {
   normal: 'Normal: your models, the strong one for plans and reviews.',
-  save: 'Saving: close to the limit, so no strong model; plans use your chat model.',
-  minimal: 'Used up: only the cheap automatic model; nudges and letters use their fixed text.'
+  save: 'Near the limit: Ben uses the cheaper chat model, no thinking model.',
+  minimal: 'Used up: Ben is in basic mode in the chat (logs, done, focus and tasks without AI; the rest waits, or ask the AI anyway). Nudges and letters use their fixed text.'
 } as const
 
 /** The monthly AI budget: spent so far, the limit, and what Ben does near it. */

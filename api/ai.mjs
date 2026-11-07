@@ -4,6 +4,10 @@
 // (GEMINI_API_KEY in Vercel). The page builds the prompt from your data.
 import { bearer, config, getSetting, readBody, send, requireSession, setSetting, turso, countCall } from './_lib.mjs'
 import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, costOf, monthStart } from './_budget.mjs'
+import { AsyncLocalStorage } from 'node:async_hooks'
+
+/** QA4: the usage rows of one request (Ben's answer shows its model and cost). Run a request inside usageScope.run([], …). */
+export const usageScope = new AsyncLocalStorage()
 
 const MODELS = ['gemini-3.5-flash', 'gemini-3.1-flash-lite', 'gemini-3.8-flash']
 const API = 'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -197,6 +201,7 @@ const t = (v) => (v == null ? { type: 'null' } : typeof v === 'number' ? (Number
 export async function recordUsage(u, env = process.env, fetchImpl = fetch) {
   // No reported cost (Gemini, some OpenRouter models): estimate it from the tokens (A7).
   u = { ...u, cost: costOf(u.model, u.prompt, u.completion, u.cost) }
+  usageScope.getStore()?.push(u)
   // The minute-long budget cache counts this call straight away.
   if (budgetCache && u.cost) {
     const spent = budgetCache.v.spent + u.cost
@@ -548,6 +553,8 @@ export default async function handler(req, res) {
     chosenAt = Date.now()
     return send(res, 200, { ok: true, chosen: v })
   }
+  // QA4: just this month's spend and budget (the chat's budget chip; cheap: one cached read).
+  if (body?.op === 'budget') return send(res, 200, { budget: await budgetState() })
   if (body?.op === 'usage') return send(res, 200, { ...(await usageReport(orKey)), budget: await budgetState() })
   if (body?.op === 'setBudget') {
     const usd = Number(body.usd)

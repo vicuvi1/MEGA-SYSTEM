@@ -226,6 +226,8 @@ export interface DesktopApi {
   onIslandDodge?(cb: (on: boolean) => void): void
   /** Island 2 (IN34–IN48): tiles' shortcuts, the dock, the clipboard tray, the file shelf. */
   islandKit?(op: string, arg?: unknown): Promise<any>
+  /** TV3: Voicebox, a local voice app (probe / speak), when it runs on this PC. */
+  voicebox?(op: string, arg?: unknown): Promise<{ ok: boolean; profiles?: string[] } | null>
   /** PL2: App window: a widget's https request to one of the hosts you allowed it (checked again by the desktop). */
   widgetFetch?(url: string, hosts: string[]): Promise<{ status: number; type: string; body: string }>
   onIslandKit?(cb: (ev: { type: string; [k: string]: unknown }) => void): void

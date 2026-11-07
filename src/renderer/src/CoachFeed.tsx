@@ -507,13 +507,13 @@ type Rated = 'up' | 'down' | null
  * A message bubble with its actions: a small toolbar on hover (desktop) and a
  * menu on a long press (phone). Copy, reply, 👍 / 👎 on Ben's replies, undo.
  */
-export function Bubble({ m, mine = false, tail = false, onReply, onUndo, className = '', children }: { m: Entry; mine?: boolean; tail?: boolean; onReply?: () => void; onUndo?: () => void; className?: string; children: ReactNode }) {
+export function Bubble({ m, mine = false, tail = false, onReply, onUndo, className = '', children, noRate = false, pinned = false, onPin }: { m: Entry; mine?: boolean; tail?: boolean; onReply?: () => void; onUndo?: () => void; className?: string; children: ReactNode; noRate?: boolean; pinned?: boolean; onPin?: () => void }) {
   const [copied, setCopied] = useState(false)
   const [rated, setRated] = useState<Rated>(null)
   const [sheet, setSheet] = useState(false)
   const press = useRef<{ t: number; x: number; y: number } | null>(null)
   const canUndo = !!onUndo && (m.undo ?? []).some((op, k) => op && !m.undone?.[k])
-  const canRate = !mine && !m.pending && !!life.coach?.feedback
+  const canRate = !noRate && !mine && !m.pending && !!life.coach?.feedback
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(m.text)
@@ -534,6 +534,7 @@ export function Bubble({ m, mine = false, tail = false, onReply, onUndo, classNa
   const acts: { k: string; label: string; icon: string; run: () => void; on?: boolean }[] = [
     { k: 'copy', label: copied ? 'Copied' : 'Copy', icon: copied ? '✓' : '⧉', run: () => void copy() },
     ...(onReply ? [{ k: 'reply', label: 'Reply', icon: '↩', run: onReply }] : []),
+    ...(onPin ? [{ k: 'pin', label: pinned ? 'Unpin' : 'Pin', icon: '📌', run: onPin, on: pinned }] : []),
     ...(canRate
       ? [
           { k: 'up', label: 'Good reply', icon: '👍', run: () => void rate('up'), on: rated === 'up' },

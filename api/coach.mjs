@@ -4,8 +4,8 @@
 // The app's Coach page talks to the same coach as the Telegram bots: same
 // brain (OpenRouter DeepSeek, Gemini as backup), memory, goals & rules.
 import { bearer, botDefaults, config, readBody, send, requireSession, countCall } from './_lib.mjs'
-import { coachChat, coachRhythm, coachSettle, coachUndo } from './_bot/bot.mjs'
-import { deadlineIn, flushUsage, modelUntil } from './ai.mjs'
+import { coachChat, coachRhythm, coachSettle, coachUndo, answerMeta } from './_bot/bot.mjs'
+import { budgetState, deadlineIn, flushUsage, modelUntil, usageScope } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 
 export default async function handler(req, res) {
@@ -39,10 +39,19 @@ export default async function handler(req, res) {
       return send(res, 500, { error: e.message || 'failed' })
     }
   }
-  const text = String(body?.text || '').trim().slice(0, 4000)
+  // TL4: an attached file's text comes packed in the message (cut on the page): a bigger limit for it.
+  const raw = String(body?.text || '').trim()
+  const text = raw.slice(0, raw.includes('<<<FILE ') ? 12_000 : 4000)
   // A photo from the app (a receipt, a plate, a screen): JPEG/PNG, under ~3 MB.
   const media = body?.media && /^image\/(jpeg|png|webp)$/.test(body.media.mime) && typeof body.media.data === 'string' && body.media.data.length < 4_000_000 ? { kind: 'photo', mime: body.media.mime, data: body.media.data } : undefined
   if (!text && !media) return send(res, 400, { error: 'Say something' })
+  // TL4: pictures need a model that can see (Gemini here). Without it, said plainly instead of failing.
+  if (media && !(process.env.GEMINI_API_KEY || '').trim())
+    return send(res, 200, { ok: true, reply: "I can't look at pictures with the AI set up on the server (it needs a Gemini key). Paste the text, or describe what's in it, and I'll help.", done: [], noVision: true })
+  // QA4: the month's AI budget is used up: basic mode (the page does logs, done, focus and tasks
+  // without AI) unless you chose to go over it for this message.
+  const budget = hasAi ? await budgetState().catch(() => null) : null
+  if (budget?.tier === 'minimal' && !body?.overBudget) return send(res, 200, { ok: false, basic: 'budget', reply: 'Your AI budget for this month is used up, so Ben is in basic mode.', done: [], budget })
   res.statusCode = 200
   res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
@@ -50,8 +59,10 @@ export default async function handler(req, res) {
   const line = (o) => res.write(JSON.stringify(o) + '\n')
   try {
     // A step that starts with \u0001 is the reply so far (U2: real streaming).
-    const r = await coachChat(env, text, (step) => (String(step).startsWith('\u0001') ? line({ delta: String(step).slice(1) }) : line({ step })), media)
-    line(r)
+    const rows = []
+    const r = await usageScope.run(rows, () => coachChat(env, text, (step) => (String(step).startsWith('\u0001') ? line({ delta: String(step).slice(1) }) : line({ step })), media))
+    // QA4: which model answered and roughly what it cost (the same rows as Settings → Ben's brain).
+    line({ ...r, meta: { ...answerMeta(rows), ...(budget ? { tier: budget.tier } : {}) } })
   } catch (e) {
     console.error('coach:', e)
     line({ ok: false, error: e.message || 'The coach failed' })

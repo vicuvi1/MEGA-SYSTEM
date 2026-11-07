@@ -11,7 +11,7 @@ import { CoachPlan } from './CoachPlan'
 import { parseRich, type Inline } from '@core/richText'
 
 /** One chat message (the Coach page's log entry). */
-export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; receipt?: string; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string; stopped?: boolean; full?: string; fly?: boolean }
+export type Entry = { role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; receipt?: string; at: string; pending?: boolean; steps?: string[]; mood?: string; undo?: unknown[]; undone?: boolean[]; chips?: string[]; fresh?: boolean; photo?: string; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; failed?: string; proactive?: boolean; kind?: NudgeKind; info?: NudgeInfo; streamed?: boolean; quote?: string; stopped?: boolean; full?: string; fly?: boolean; basic?: 'offline' | 'ai-down' | 'budget'; queued?: boolean }
 
 // Numbers with their unit in bold ("25 min", "1.9/2.7", "750 ml"), never half a word ("10 min|utes").
 const NUM = /(\d+(?:[.,:]\d+)*(?:\s?(?:min|h|ml|m|L|lei|MDL|km|kg|reps|days?)(?![\p{L}])|%|\/\d+(?:[.,]\d+)?)?)/gu

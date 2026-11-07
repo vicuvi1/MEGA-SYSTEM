@@ -31,6 +31,7 @@ import type { BotContext, Tap } from './context'
 import { goalTap } from '../goalsBrain'
 import { readPushCallback } from '@core/benPushes'
 import { answerPushIn, applyMark, readPushLog } from '../benPushStore'
+import { runPlanTap, planMessage } from './planButtons'
 
 export interface CallbackHandler {
   /** The callback-data prefixes it answers ("wa" for "wa|250"), for docs and tests. */
@@ -40,9 +41,15 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(f[acbksuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|m[lnz])\|/
+export const CALLBACK_DATA = /^(f[acbksuoxq]|p[prb]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
+  // TV1: today's plan buttons (move ±30, Done, Skip, Shift to now, Undo a mark).
+  {
+    prefixes: ['pb'],
+    match: (data) => data.startsWith('pb|'),
+    run: (c, t) => runPlanTap(c, t)
+  },
   // Water and workout cards: a tap updates the shared log and the card.
   {
     prefixes: ['wa', 'wk'],
@@ -270,7 +277,9 @@ export const CALLBACKS: CallbackHandler[] = [
           await answer('Approving…')
           const r = await rhythm.approve()
           const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join('\n')}` : esc(r.done.join(' '))
-          await edit(text)
+          // TV1: the approved plan keeps its block buttons (move, Done, Skip).
+          const msg = r.plan ? await planMessage(c).catch(() => null) : null
+          await edit(text, msg?.keyboard)
           return text
         }
         if (data === 'rb|r') {

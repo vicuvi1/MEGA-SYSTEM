@@ -23,6 +23,12 @@ export interface VoicePrefs {
   speak: boolean
   /** Coach page: read Ben's replies aloud. */
   readAloud: boolean
+  /** TV3: Ben stays silent (no voice replies, also to what you said by voice). */
+  muted: boolean
+  /** TV3: Ben's voice from a local Voicebox app (desktop only; falls back silently). */
+  voicebox: boolean
+  /** The Voicebox voice profile ('' = its default). */
+  voiceboxProfile: string
   /** The mic stops after this many minutes without mouse/keys (0: never). */
   idleStopMin: number
 }
@@ -39,6 +45,9 @@ export const DEFAULT_VOICE: VoicePrefs = {
   speed: 1,
   speak: true,
   readAloud: false,
+  muted: false,
+  voicebox: false,
+  voiceboxProfile: '',
   idleStopMin: 10
 }
 

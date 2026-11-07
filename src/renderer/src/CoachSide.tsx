@@ -2,7 +2,7 @@
 // (1280 px and up). Coach UI v3: the plan as a timeline, must-dos, focus this
 // week and water (points live in the top bar only); it grows on very wide screens instead of leaving
 // empty space. It can be folded away; the choice is remembered on this device.
-import { useCallback, useEffect, useState, type CSSProperties } from 'react'
+import { useCallback, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CoachStatus } from './web/coachStatus'
 import type { RhythmState } from '@core/rhythm'
 import { fmtMinutes, planTimeline } from '@core/planView'
@@ -16,7 +16,7 @@ const fmtMin = (n: number) => (n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m` : `
 const nowMin = () => new Date().getHours() * 60 + new Date().getMinutes()
 
 /** `planShown`: the plan card is on screen in the chat, so the panel keeps only the plan's status line. */
-export function CoachSide({ status, planShown = false, onClose, onOpen, onPlan, onWater, onFocus }: { status: CoachStatus; planShown?: boolean; onClose: () => void; onOpen: (tab: 'plan' | 'today' | 'goals') => void; onPlan?: () => void; onWater: () => void; onFocus: () => void }) {
+export function CoachSide({ status, planShown = false, onClose, onOpen, onPlan, onWater, onFocus, extra }: { status: CoachStatus; planShown?: boolean; onClose: () => void; onOpen: (tab: 'plan' | 'today' | 'goals') => void; onPlan?: () => void; onWater: () => void; onFocus: () => void; extra?: ReactNode }) {
   const t = status.today
   const max = Math.max(30, ...status.week.map((d) => d.min))
   const weekMin = status.week.reduce((a, d) => a + d.min, 0)
@@ -140,6 +140,7 @@ export function CoachSide({ status, planShown = false, onClose, onOpen, onPlan, 
           {status.move.kind === 'running' ? 'Stop & log' : '▶ Start a focus block'}
         </button>
       </section>
+      {extra}
     </aside>
   )
 }

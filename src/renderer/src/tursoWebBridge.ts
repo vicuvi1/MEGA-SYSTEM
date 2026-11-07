@@ -82,6 +82,10 @@ import { createMoneyApi } from './web/moneyApi'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 import { MIGRATIONS } from '@core/schema'
 import { cleanBlockKinds, setBlockKind, type BlockKind, type BlockKinds } from '@core/blockKind'
+import { cleanPins, togglePin, PINS_KEY, type ChatPin } from '@core/chatPins'
+import { searchChat } from '@core/chatSearch'
+import { keepMeta, type AnswerMeta } from '@core/answerCost'
+import { cleanFeedback, weeklyMisses, type FeedbackItem, type FeedbackReason } from '@core/feedbackLearn'
 
 /**
  * /api/db with this page's database version (LT22): when the server is
@@ -684,8 +688,8 @@ export function createTursoWebBridge(): Bridge {
     coach: {
       // The answer streams: live steps ("Reading your calendar…"), then the reply.
       quick: async (text: string) => (await botsP).quick(text),
-      chat: async (text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void) => {
-        const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, ...(media ? { media } : {}) }) })
+      chat: async (text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void, opts?: { overBudget?: boolean }) => {
+        const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, ...(media ? { media } : {}), ...(opts?.overBudget ? { overBudget: true } : {}) }) })
         if (!r.ok || !r.body) {
           const j = await r.json().catch(() => ({}))
           throw new Error(j.error || httpProblem('Ben', r.status))
@@ -735,6 +739,11 @@ export function createTursoWebBridge(): Bridge {
         }
         if (!last) throw new Error('The coach gave no answer')
         if (last.error && !last.reply) throw new Error(last.error)
+        // QA4: which model answered and what it cost, kept with the reply (synced, newest 200).
+        if (last.meta && typeof last.at === 'string') {
+          const meta = last.meta as AnswerMeta
+          void svcP.then((svc) => svc.write((s) => writeSetting(s.db as any, 'coach_answer_meta', keepMeta((readSetting(s.db as any, 'coach_answer_meta') as Record<string, AnswerMeta>) ?? {}, last.at, meta) as any))).catch(() => null)
+        }
         // The coach may have logged, planned or added things: everything refreshes.
         void syncNow().catch(() => null)
         return last
@@ -745,11 +754,39 @@ export function createTursoWebBridge(): Bridge {
       },
       mind: async () => (await svcP).read((s) => loadMind(s.db)),
       // 👍 / 👎 / too long / wrong on one of Ben's replies (saved here; Ben reads it).
-      feedback: async (at: string, kind: 'up' | 'down' | 'long' | 'wrong') =>
+      // QA2: with an optional reason (wrong / too long / didn't do it …) and your own words.
+      feedback: async (at: string, kind: 'up' | 'down' | 'long' | 'wrong', extra?: { reason?: FeedbackReason; note?: string }) =>
         (await svcP).write((s) => {
           const e = loadLog(s.db).find((x) => x.role === 'coach' && x.at === at)
           addFeedback(s.db, { at, kind, text: e?.text ?? '' })
+          if (extra?.reason || extra?.note) {
+            const all = ((readSetting(s.db as any, 'coach_feedback') as unknown[]) ?? []).map(cleanFeedback).filter((x): x is FeedbackItem => !!x)
+            writeSetting(s.db as any, 'coach_feedback', all.map((f) => (f.at === at ? cleanFeedback({ ...f, ...extra }) ?? f : f)) as any)
+          }
         }),
+      feedbackWeek: async () =>
+        (await svcP).read((s) => weeklyMisses(((readSetting(s.db as any, 'coach_feedback') as unknown[]) ?? []).map(cleanFeedback).filter((x): x is FeedbackItem => !!x))),
+      // CH4: pinned messages (each keeps a copy of its text), synced.
+      pins: async () => (await svcP).read((s) => cleanPins(readSetting(s.db as any, PINS_KEY))),
+      pin: async (m: { at: string; role: 'me' | 'coach'; text: string }) =>
+        (await svcP).write((s) => {
+          const next: ChatPin[] = togglePin(cleanPins(readSetting(s.db as any, PINS_KEY)), m)
+          writeSetting(s.db as any, PINS_KEY, next as any)
+          return next
+        }),
+      answerMeta: async () => (await svcP).read((s) => ((readSetting(s.db as any, 'coach_answer_meta') as Record<string, AnswerMeta>) ?? {})),
+      // CH3: the past-conversation store (Ben's key points from older chats), highlighted like the chat log.
+      searchHistory: async (q: string, limit: number) =>
+        (await svcP).read((s) => searchChat(searchPast(s.db, q, 50).map((p) => ({ id: `past:${p.at}`, at: p.at, role: 'me' as const, text: p.text })), q, { limit })),
+      budget: async () => {
+        try {
+          const r = await fetch('/api/ai', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: '{"op":"budget"}' })
+          const j = r.ok ? await r.json() : null
+          return j?.budget ?? null
+        } catch {
+          return null
+        }
+      },
       // The one log (body_log): a row with its own id, then the shared copy from the log's sum.
       water: async (ml: number, opts?: { source?: string; id?: string }) => {
         const w = await (await svcP).write((s) => ({ ml: logWater(s.db as any, ml, opts?.source || thisDevice(), { id: opts?.id }).ml, target: waterToday(s.db, s).target }))

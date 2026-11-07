@@ -9,7 +9,7 @@ import { Icon } from '../Icon'
 import { useVoicePrefs, type VoicePrefs } from './voicePrefs'
 import { deleteVoiceDownloads, getFile, hasFile, hasModel, voiceBytes } from './voiceStore'
 import { preload, unload } from './voiceAi'
-import { Speaker, systemVoices } from './voiceSpeak'
+import { Speaker, probeVoicebox, systemVoices } from './voiceSpeak'
 import './voice.css'
 import { Select } from '../Select'
 
@@ -163,6 +163,7 @@ export function VoiceSettings() {
       <Row title={desktop ? 'Ben answers out loud' : 'Read Ben’s replies aloud'} hint={desktop ? 'Off: his answer shows on the island only.' : 'On the Coach page (🔊 there too).'}>
         <Switch label="Speak replies" on={desktop ? p.speak : p.readAloud} onChange={(v) => set(desktop ? { speak: v } : { readAloud: v })} />
       </Row>
+      {desktop && <VoiceboxRow p={p} set={set} />}
       <Row
         title="Downloads"
         hint={
@@ -199,5 +200,28 @@ export function VoiceSettings() {
         Free and on this device: sherpa-onnx (Apache-2.0), Silero VAD (MIT), Moonshine and Whisper (MIT), Transformers.js (Apache-2.0), ONNX Runtime (MIT), Kokoro (Apache-2.0). Kokoro's phonemizer (eSpeak NG, GPL-3.0) is downloaded from the public CDN when you pick a Kokoro voice, never bundled. What you say is turned into text on this PC; only the text goes to Ben.
       </p>
     </section>
+  )
+}
+
+/** TV3 (optional): Ben's voice from Voicebox, a local voice app, when it runs on this PC. */
+function VoiceboxRow({ p, set }: { p: VoicePrefs; set: (x: Partial<VoicePrefs>) => void }) {
+  const [vb, setVb] = useState<{ ok: boolean; profiles: string[] } | null>(null)
+  useEffect(() => {
+    void probeVoicebox().then(setVb)
+  }, [p.voicebox])
+  return (
+    <Row title="Voice from Voicebox" hint={vb == null ? 'Looking for Voicebox on this PC…' : vb.ok ? `Voicebox is running${vb.profiles.length ? ` · ${vb.profiles.length} voices` : ''}. If it stops, Ben uses the voice above.` : 'Voicebox (a free local voice studio) is not running on this PC. Ben uses the voice above.'}>
+      <Switch label="Use Voicebox" on={p.voicebox} onChange={(v) => set({ voicebox: v })} />
+      {p.voicebox && vb?.ok && vb.profiles.length > 0 && (
+        <Select value={p.voiceboxProfile} onChange={(e) => set({ voiceboxProfile: e.target.value })} aria-label="Voicebox voice">
+          <option value="">Its default voice</option>
+          {vb.profiles.map((n) => (
+            <option key={n} value={n}>
+              {n}
+            </option>
+          ))}
+        </Select>
+      )}
+    </Row>
   )
 }

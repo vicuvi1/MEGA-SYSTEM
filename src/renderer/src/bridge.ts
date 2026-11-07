@@ -43,7 +43,7 @@ export type Bridge = LifeApi & {
   coach?: {
     /** Rules only (no AI): the island's command bar. */
     quick?(text: string): Promise<{ ok: boolean; reply: string } | { unknown: true }>
-    chat(text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards }>
+    chat(text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void, opts?: { overBudget?: boolean }): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards; meta?: import('@core/answerCost').AnswerMeta; basic?: 'budget'; noVision?: boolean }>
     undo?(at: string, index?: number): Promise<{ ok: boolean; lines: string[] }>
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>
@@ -56,7 +56,18 @@ export type Bridge = LifeApi & {
     desk?(): Promise<DeskView>
     /** A change on the desk (mood, stake, study topic, habit stack, coach call). Returns a line for the toast. */
     deskDo?(op: DeskOp): Promise<string>
-    feedback?(at: string, kind: 'up' | 'down' | 'long' | 'wrong'): Promise<void>
+    feedback?(at: string, kind: 'up' | 'down' | 'long' | 'wrong', extra?: { reason?: import('@core/feedbackLearn').FeedbackReason; note?: string }): Promise<void>
+    /** QA2: what Ben got wrong this week (your 👎s and their reasons). */
+    feedbackWeek?(): Promise<ReturnType<typeof import('@core/feedbackLearn').weeklyMisses>>
+    /** CH4: pinned messages (synced). */
+    pins?(): Promise<import('@core/chatPins').ChatPin[]>
+    pin?(m: { at: string; role: 'me' | 'coach'; text: string }): Promise<import('@core/chatPins').ChatPin[]>
+    /** QA4: which model answered each reply and roughly what it cost. */
+    answerMeta?(): Promise<Record<string, import('@core/answerCost').AnswerMeta>>
+    /** QA4: this month's AI spend and budget (null when it can't be read). */
+    budget?(): Promise<{ tier: 'normal' | 'save' | 'minimal'; spent: number; budget: number } | null>
+    /** CH3: past conversations from a store, when one is there (the chat log is searched on the page). */
+    searchHistory?(query: string, limit: number): Promise<import('@core/chatSearch').ChatHit[]>
     style?(): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' }>
     setStyle?(st: Partial<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang: 'en' | 'ro' | 'ru' | 'auto' }>): Promise<{ length: 'short' | 'normal' | 'detailed'; tone: number; lang?: 'en' | 'ro' | 'ru' | 'auto' }>
     status?(): Promise<CoachStatus>

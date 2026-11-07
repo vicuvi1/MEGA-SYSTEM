@@ -25,6 +25,11 @@ export interface BotContext {
   /** Focus sessions stopped from Telegram go into Google Calendar after the reply. */
   flushFocus: () => Promise<void>
   focusEnded: { subject: string; minutes: number }[]
+  /**
+   * TV1: an edit from a button, through Ben's own executor (undo, coach log). `lines` are
+   * action lines run as they are; with `asText`, that text goes through Ben's chat path instead.
+   */
+  act: (said: string, lines: string[], reply: string, asText?: string) => Promise<{ done: string[]; at?: string; undo?: unknown[] }>
   /** A money message logged on this database (inside mirror.write). */
   runMoneyIn: (db: any, text: string, key: string) => { reply: string; keyboard?: any } | null
 }

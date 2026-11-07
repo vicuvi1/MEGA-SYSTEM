@@ -34,6 +34,11 @@ import { startsNow } from '@core/startNow'
 import { notMoney } from '@core/moneyGuess'
 import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
+import { planKeyboard } from '@core/tgPlan'
+import { cleanFeedback, feedbackPrompt, type FeedbackItem } from '@core/feedbackLearn'
+import { prepareTools, webLookupHelp, webNeed, withSources, type WebLike } from './benTools'
+import { moneyFacts } from '@core/moneyCoach'
+import type { WebResult } from '@core/webSearch'
 import { benNote, listNotes, seedNotes } from './notes'
 import { findPluginCommand, pluginActionInText, pluginForFile, runPluginAction } from '../../../plugins'
 import { loadStory, answerLocal, type LookupData, appendLog, loadProfile, type Persona, brainPrompt, financeStateFrom, isSimpleLog, lifeContext, loadMemory, moneyInsight, parseBrain, personaFor, readAction, saveMemory, loadMind, saveMind, sportState, loadLog, type UndoOp, loadStyle, saveStyle, styleText, loadFeedback, feedbackText, loadSelfReview, type Feedback, updateMemory, type BrainAction, type BrainOut, type PendingPick } from './botBrain'
@@ -132,6 +137,8 @@ export interface WebBotsDeps {
   tools?: ExtTools | null
   /** One answer's time budget (tests shrink it): total, the quick model's reserve, the least worth a try. */
   timing?: { budgetMs?: number; reserveMs?: number; minMs?: number }
+  /** TL4/TL7: read a shared link and search the web (the server only; null in the page). */
+  web?: WebLike | null
 }
 
 /** AU10: outside MCP tools Ben may call (one round, short timeout, answer size-capped). */
@@ -208,7 +215,20 @@ export function stripTokens<T extends Record<string, any>>(cfg: T): T {
 }
 const hasTokens = (cfg: Record<string, any>) => Object.entries(cfg ?? {}).some(([k, v]) => /Token$/.test(k) && !!v && v !== 'on-server')
 
-export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist: todoistIn = null, ai = null, calendar: calendarIn = null, recall = null, tools = null, timing = {} }: WebBotsDeps) {
+/** TL6: your money numbers for the money coach (Finance Helper + the fun budget). */
+function moneyFactsOf(db: any, svc: Services) {
+  const today = svc.wallet.today()
+  let fun: { budgetLei: number | null; leftLei: number | null } | null = null
+  try {
+    const v = shopValue(svc)
+    fun = { budgetLei: v.funBudgetLei, leftLei: v.funLeftLei }
+  } catch {
+    fun = null
+  }
+  return moneyFacts(financeStateFrom(db, store), today, fun)
+}
+
+export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist: todoistIn = null, ai = null, calendar: calendarIn = null, recall = null, tools = null, timing = {}, web = null }: WebBotsDeps) {
   const BUDGET = timing.budgetMs ?? THINK_BUDGET_MS
   // Speed: what Todoist and the calendar said a moment ago answers a follow-up (45 s), and
   // answers when they are slow or down (up to 30 min old). Any change made through Ben
@@ -332,7 +352,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   async function sendProposal(token: string, chat: string, note = ''): Promise<string> {
     const { plan, version } = await rhythm.propose(note)
     const text = proposalText(plan, { version })
-    await tg(token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', reply_markup: PROPOSAL_KEYBOARD })
+    // TV1: the plan comes with its buttons (move ±30, Done, Skip, Approve, Shift to now, Change).
+    await tg(token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', reply_markup: plan.blocks.length ? planKeyboard(plan) : PROPOSAL_KEYBOARD })
     return text
   }
   const dayBounds = () => {
@@ -469,6 +490,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     sendProposal: (token, chat, note) => sendProposal(token, chat, note),
     handleBrain: (botId, update, cfg, text, key, media) => handleBrain(botId, update, cfg, text, key, media),
     undoReply: (at, index) => undoReply(at, index),
+    act: async (said, lines, reply, asText) => {
+      const r = asText ? await think('mega', asText, `tg:${Date.now()}`, undefined, 'telegram') : await think('mega', said, `tg:${Date.now()}`, undefined, 'telegram', undefined, { lines, reply })
+      return { done: r.done, at: r.at, undo: r.undo }
+    },
     flushFocus: () => flushFocus(),
     focusEnded,
     runMoneyIn: (db, text, key) => {
@@ -783,6 +808,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const prev = await mirror.read((db) => [...loadMemory(db).chat].reverse().find((c) => c.role === 'me' && !/^\s*think (harder|it through|deeper)/i.test(c.text))?.text).catch(() => undefined)
       if (prev) text = prev
     }
+    // Ben's chat tools (benTools.ts): an attached file, a link, "can I afford…", "search the web…", a draft.
+    const tool = direct || media || harder || !text ? null : await prepareTools(text, { web, hasAi: !!ai, onStep, money: () => mirror.read((db) => moneyFactsOf(db, services.services(db))) })
+    if (tool) text = tool.text || tool.logText
+    const logText = tool?.logText || text
+    const toolBusy = !!tool && !tool.preset && (tool.found.length > 0 || !!tool.note)
+    let webSources: WebResult[] = tool?.sources ?? []
     // BQ5: fast typing ("chagne", "aporve the paln") read as meant; the model sees both.
     const clean = text ? fixTypos(text) : text
     const step = (s: string) => {
@@ -814,7 +845,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // What Ben can do without the AI: a stored confirm, a fix in code (B10), an instant answer (B3).
     let preset: { reply: string; acts: BrainAction[]; chips?: string[]; buttons?: { label: string; do: string }[] } | null = confirmed ? { reply: '👍 Done.', acts: [confirmed] } : null
     if (direct) preset = { reply: direct.reply, acts: direct.lines.map(readAction).filter((a): a is BrainAction => !!a) }
-    if (!preset && !media && text) {
+    if (!preset && tool?.preset) preset = { reply: tool.preset.reply, acts: [], chips: tool.preset.chips }
+    if (!preset && !media && text && !toolBusy) {
       const fix = codeFix(text)
       if (fix) preset = await fixInCode(fix).catch(() => null)
     }
@@ -892,7 +924,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const r0 = routeFor(clean, { correcting: !direct && isCorrection(text), media: !!media })
     // LS3: "fa-mi ziua" / "спланируй мой день" route like "plan my day".
     const route0 = r0.intent === 'chat' && canT !== clean ? routeFor(canT, { correcting: !direct && isCorrection(text), media: !!media }) : r0
-    const route = harder ? { ...route0, strong: true, think: true, capMs: 30_000, trim: 'full' as const, allActions: true } : route0
+    const route = harder ? { ...route0, strong: true, think: true, capMs: 30_000, trim: 'full' as const, allActions: true } : toolBusy ? { intent: 'chat' as const, strong: false, think: false, capMs: 0, trim: 'light' as const, allActions: true } : route0
     // Speed: "plan my day" is packed in code (rhythm.propose reads Todoist and the calendar
     // itself), so the chat's own Todoist/calendar/memory round trip is skipped.
     const planFirst = !preset && !media && !direct && route.intent === 'plan' && (await mirror.read((db) => rhythmFor(readSetting(db as any, RHYTHM), services.services(db).wallet.today()).briefing?.status !== 'approved').catch(() => false))
@@ -969,7 +1001,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           return {
             style: styleText(loadStyle(db)),
             tone: loadStyle(db).tone,
-            feedback: feedbackText(loadFeedback(db)),
+            feedback: feedbackPrompt(loadFeedback(db).map(cleanFeedback).filter((x): x is FeedbackItem => !!x)),
             selfReview: sr && sr.day >= addDays(svc.wallet.today(), -1) ? sr.notes.map((n) => `- ${n}`).join('\n') : '',
             stealth: readSetting(db as any, 'discipline_stealth')
           }
@@ -1112,7 +1144,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         blocks,
         recalled,
         task: route.intent === 'review' ? REVIEW_TASK : route.intent === 'multi' ? MULTI_TASK : route.intent === 'goals' ? GOALS_TASK : undefined,
-        moreLookups: MORE_LOOKUPS,
+        moreLookups: MORE_LOOKUPS + webLookupHelp(web),
         lean: route.trim === 'review' || route.trim === 'goals'
       })
     /**
@@ -1148,7 +1180,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     let localEdit: 'act' | 'ask' | null = null
     let newPick: PendingPick | null = null
     let local: BrainOut | null = null
-    if (!preset && !media && !direct && text) {
+    if (!preset && !media && !direct && text && !toolBusy) {
       const opts = blockOptions()
       const line = (verb: 'rename' | 'move', o: { ref: string; day: string }, value: string) => (verb === 'rename' ? `rename: ${o.ref} | ${value}` : `move: ${o.ref} | ${o.day} ${value}`)
       const picked = pick ? pickChoice(clean, pick.options.map((o) => o.label)) : null
@@ -1303,10 +1335,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           if (g) pre.unshift(g)
         }
         if (pre.length) step(digest ? 'Read yesterday' : route.intent === 'goals' ? 'Checked your goals' : 'Looked up your history')
+        if (tool?.found.length) pre.push(...tool.found)
         // Speed: a review of yesterday shows its numbers at once; Ben's own words replace them as he writes.
         if (digest && onStep && !/\bweek\b/i.test(clean)) step(`\u0001${reviewFromData(digest)}`)
         else if (week && onStep) step(`\u0001This week so far: ${hm(week.focusMin)} of focus, ${week.workouts} workout${week.workouts === 1 ? '' : 's'}, ${week.tasks} task${week.tasks === 1 ? '' : 's'} done, ${week.daysLeft} day${week.daysLeft === 1 ? '' : 's'} left. The full review is coming…`)
-        out = parseBrain(await ask(pre.length ? pre.join('\n') : undefined))
+        out = parseBrain(await ask(pre.length ? pre.join('\n') : undefined, tool?.note ?? ''))
         trace.mark('model')
       }
       // "recall: …" as an action is a lookup too (BR4).
@@ -1326,6 +1359,13 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             continue
           }
           const [k, from, days] = need.trim().split(/\s+/)
+          const wn = /^web$/i.test(k) ? await webNeed(need, web) : null
+          if (wn) {
+            step('Searched the web')
+            found.push(wn.found)
+            webSources = [...webSources, ...wn.sources].slice(0, 5)
+            continue
+          }
           const tc = /^tool$/i.test(k) ? readToolCall(need) : null
           if (tc && tools && extTools.some((t) => t.name === tc.name)) {
             step(`Asked ${tc.name}`)
@@ -2037,6 +2077,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       out.chips = ['Do it', ...(out.chips ?? []).filter((c) => c !== 'Do it')].slice(0, 4)
     }
     if (expense) onExpense?.()
+    // TL7: what the web said is always listed under the reply (never a result without its source).
+    if (webSources.length && out.reply) out.reply = withSources(out.reply, webSources)
     // LS2: one compact receipt from what really happened.
     const receipt = receiptOf(done) ?? undefined
     // ME1: what he asked Ben to remember is saved; what Ben only guessed is asked first (Yes / No).
@@ -2064,7 +2106,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const after = updateMemory(before, {
             facts: out.remember,
             turns: [
-              { role: 'me', bot: persona, text: media ? `[${media.kind}] ${text}`.trim() : text, at },
+              { role: 'me', bot: persona, text: media ? `[${media.kind}] ${text}`.trim() : logText, at },
               { role: 'coach', bot: persona, text: [out.reply, ...(done.length ? done : ['(nothing saved)'])].join(' | '), at }
             ]
           })
@@ -2087,7 +2129,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           /* the action still counts */
         }
         appendLog(db, [
-          { role: 'me', bot: persona, via, text: media ? `[${media.kind === 'voice' ? 'voice note' : 'photo'}] ${text}`.trim() : text, at },
+          { role: 'me', bot: persona, via, text: media ? `[${media.kind === 'voice' ? 'voice note' : 'photo'}] ${text}`.trim() : logText, at },
           { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at, ...(undo.some(Boolean) ? { undo } : {}), ...(out.chips?.length ? { chips: out.chips } : {}), ...(out.buttons?.length ? { buttons: out.buttons } : {}), ...(out.show?.length ? { show: out.show } : {}), ...(cards.day || cards.tasks ? { cards } : {}), ...(newPick ? { pick: newPick } : {}), ...(receipt ? { receipt } : {}) }
         ])
       })

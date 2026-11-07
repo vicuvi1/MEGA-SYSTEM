@@ -33,7 +33,7 @@ export interface IslandVoiceProps {
 export const islandVoiceOn = () => voicePrefs().on
 
 export function IslandVoice(p: IslandVoiceProps) {
-  const [prefs] = useVoicePrefs()
+  const [prefs, setPrefs] = useVoicePrefs()
   const live = useRef(p)
   live.current = p
   const engine = useMemo(
@@ -69,8 +69,27 @@ export function IslandVoice(p: IslandVoiceProps) {
   // The hotkey (Settings → Desktop island → Talk to Ben) and the 🎤 button.
   useEffect(() => {
     const on = () => engine.ptt()
+    // TV3: hold the 🎤 to talk: pressing starts, letting go after a moment sends (a quick tap still waits for you to stop talking).
+    let downAt = 0
+    const down = () => {
+      downAt = Date.now()
+      if (engine.flow.phase !== 'listening') engine.ptt()
+      else downAt = -1
+    }
+    const up = () => {
+      if (downAt === 0) return
+      const held = downAt > 0 ? Date.now() - downAt : Infinity
+      downAt = 0
+      if (held > 450 && engine.flow.phase === 'listening') engine.ptt()
+    }
     window.addEventListener('island-voice-ptt', on)
-    return () => window.removeEventListener('island-voice-ptt', on)
+    window.addEventListener('island-voice-ptt-down', down)
+    window.addEventListener('island-voice-ptt-up', up)
+    return () => {
+      window.removeEventListener('island-voice-ptt', on)
+      window.removeEventListener('island-voice-ptt-down', down)
+      window.removeEventListener('island-voice-ptt-up', up)
+    }
   }, [engine])
   // Heard "Hey Ben": the island peeks.
   const phase = view.flow.phase
@@ -92,6 +111,20 @@ export function IslandVoice(p: IslandVoiceProps) {
         {words && phase !== 'thinking' && <small>{words.replace(/<[^>]+>/g, '').slice(-140)}</small>}
         {view.problem && <small className="di-voice-err">{view.problem}</small>}
       </span>
+      <button
+        type="button"
+        className="di-voice-mute"
+        data-hot
+        aria-pressed={!prefs.speak}
+        title={prefs.speak ? "Mute Ben's voice (he answers in text)" : "Ben's voice is off: tap to hear him"}
+        onClick={(e) => {
+          e.stopPropagation()
+          if (prefs.speak && phase === 'speaking') engine.cancel()
+          setPrefs({ speak: !prefs.speak })
+        }}
+      >
+        {prefs.speak ? '🔊' : '🔇'}
+      </button>
     </div>
   )
 }

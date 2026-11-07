@@ -6,6 +6,19 @@ import { speakable } from '@core/voiceText'
 import { cancelSynth, synth } from './voiceAi'
 import { voiceAudio } from '../soundKit'
 import type { VoicePrefs } from './voicePrefs'
+import { speakMs } from '@core/voicebox'
+
+/** TV3: the desktop's Voicebox bridge, when this is the desktop app. */
+const voicebox = (): ((op: string, arg?: unknown) => Promise<{ ok: boolean; profiles?: string[] } | null>) | null => (typeof window !== 'undefined' && typeof (window as any).desktop?.voicebox === 'function' ? (window as any).desktop.voicebox : null)
+/** Voicebox didn't answer once: this session uses the normal voice. */
+let voiceboxDown = false
+export async function probeVoicebox(): Promise<{ ok: boolean; profiles: string[] }> {
+  const vb = voicebox()
+  if (!vb) return { ok: false, profiles: [] }
+  const r = await vb('probe').catch(() => null)
+  if (r?.ok) voiceboxDown = false
+  return { ok: !!r?.ok, profiles: r?.profiles ?? [] }
+}
 
 export function systemVoices(): SpeechSynthesisVoice[] {
   try {
@@ -31,6 +44,8 @@ export class Speaker {
   private audio: ReturnType<typeof voiceAudio> = null
   private buf = new Float32Array(256)
   private pulse = 0
+  /** TV3: a reply for Voicebox, said in one go at the end. */
+  private vbText: string[] = []
   /** Kokoro: sentences already being made, in order. */
   private making: Promise<{ pcm: Float32Array; sr: number } | null>[] = []
   onStart: () => void = () => {}
@@ -52,6 +67,10 @@ export class Speaker {
   say(sentence: string): void {
     const t = speakable(sentence)
     if (!t) return
+    if (this.prefs().voicebox && voicebox() && !voiceboxDown) {
+      this.vbText.push(t)
+      return
+    }
     if (this.ended && !this.busy) this.ended = false
     if (this.prefs().tts === 'kokoro') {
       const p = this.prefs()
@@ -61,8 +80,31 @@ export class Speaker {
   }
   /** No more sentences in this reply. */
   end(): void {
+    if (this.vbText.length) return void this.voiceboxSay(this.vbText.splice(0).join(' '))
     this.ended = true
     if (!this.busy) this.onEnd()
+  }
+  /** Voicebox speaks the reply itself; if it doesn't answer, the normal voice does (no message). */
+  private async voiceboxSay(text: string): Promise<void> {
+    const gen = this.gen
+    this.playing = true
+    this.onStart()
+    const r = await voicebox()!('speak', { text, profile: this.prefs().voiceboxProfile }).catch(() => null)
+    if (gen !== this.gen) return
+    if (!r?.ok) {
+      voiceboxDown = true
+      this.playing = false
+      for (const s of text.split(/(?<=[.!?])\s+/)) this.say(s)
+      this.ended = true
+      if (!this.busy) this.onEnd()
+      return
+    }
+    // Voicebox plays it: Ben "speaks" for about as long as the words take.
+    await new Promise((ok) => setTimeout(ok, speakMs(text)))
+    if (gen !== this.gen) return
+    this.playing = false
+    this.ended = true
+    this.onEnd()
   }
   /** Say one short thing (a reply in full). */
   sayAll(text: string): void {
@@ -74,6 +116,7 @@ export class Speaker {
   /** Quiet now. */
   stop(): void {
     this.gen++
+    this.vbText = []
     this.queue = []
     this.making = []
     cancelSynth()

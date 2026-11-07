@@ -6,6 +6,8 @@
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { calendarChanges, type Seen } from '../core/calWatch'
 import { loadFeedback } from '../renderer/src/web/botBrain'
+import { serverWeb, type WebTools } from './webTools'
+import { planKeyboard as planButtons } from '@core/tgPlan'
 import { quietNow, quietRules } from '../core/benTiming'
 import { neutral } from '../core/stealth'
 import { examSleepGuard, sleepRegularity } from '../core/sleepRegularity'
@@ -114,6 +116,8 @@ export interface BotEnv {
   google?: GoogleEnv | null
   /** BR1: embeddings for Ben's memory by meaning (default: Gemini with GEMINI_API_KEY; null: off, keywords only). */
   embed?: Embedder | null
+  /** TL4/TL7: read links and search the web (default: the real web; null: off, as in tests). */
+  web?: WebTools | null
 }
 
 /**
@@ -181,7 +185,7 @@ let liveModel: BotEnv['model'] = undefined
 
 async function botsFor(env: BotEnv) {
   liveModel = env.model
-  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '') + (env.embed === null ? '|noembed' : env.embed ? '|embed' : '')
+  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '') + (env.embed === null ? '|noembed' : env.embed ? '|embed' : '') + (env.web === null ? '|noweb' : env.web ? '|web' : '')
   if (warm && warm.key === key) {
     // What the devices changed since the last message (one tiny read); not
     // again within the same few seconds (a tick calls this several times: S2).
@@ -243,7 +247,8 @@ async function botsFor(env: BotEnv) {
   const vectors = embed ? new MemoryVectors(new TursoHttp(env.tursoUrl, env.tursoToken), embed) : null
   const recall = vectors ? (q: string, k: number) => vectors.search(q, k) : null
   // AU10: the tools from your own MCP servers that you allowed (Settings → PC & automation).
-  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: mergeTools(extToolsFor(env), flowToolsFor(env, mirror)) })
+  const web = env.web !== undefined ? env.web : process.env.VITEST ? null : serverWeb()
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: mergeTools(extToolsFor(env), flowToolsFor(env, mirror)), web })
   warm = { key, SQL, bots, mirror, services, calendar, vectors }
   warmAt = Date.now()
   return warm
@@ -1460,14 +1465,14 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const { plan, version } = await bots.rhythm.propose()
       // MF10: safe to spend today rides inside the morning plan (no extra message).
       const money = await moneyFacts().then((m) => (m ? morningMoneyLine(m) : null)).catch(() => null)
-      await send(proposalText(plan, { version }) + (money ? `\n\n${escapeHtml(money)}` : ''), PROPOSAL_KEYBOARD)
+      await send(proposalText(plan, { version }) + (money ? `\n\n${escapeHtml(money)}` : ''), plan.blocks.length ? planButtons(plan) : PROPOSAL_KEYBOARD)
     } else if (job === 'midweek') {
       const text = await bots.rhythm.midweek()
       await send(text, text.includes('Want them booked') ? { inline_keyboard: [[{ text: '📅 Book them', callback_data: 'rw|b' }]] } : undefined)
     } else if (job === 'replan') {
       // W8: no plan by noon: half a day left is still worth a plan.
       const { plan, version } = await bots.rhythm.propose()
-      await send(`🕐 <b>Half a day left</b>: here's a plan for the rest of it.\n\n${proposalText(plan, { version })}`, PROPOSAL_KEYBOARD)
+      await send(`🕐 <b>Half a day left</b>: here's a plan for the rest of it.\n\n${proposalText(plan, { version })}`, plan.blocks.length ? planButtons(plan, { late: true }) : PROPOSAL_KEYBOARD)
     } else if (job === 'water') {
       // Up to 5 a day when you're behind (K2): the cap and spacing live in waterBehind, so it's not "once a day".
       const line = await bots.rhythm.waterLine()
@@ -1664,6 +1669,7 @@ export async function sportShared(env: BotEnv, body: any): Promise<{ ok: boolean
 }
 export { runBenEval } from './benEval'
 export { webhookVerdict } from '@core/selfCheck'
+export { answerMeta } from '@core/answerCost'
 
 /**
  * CL4: the second alarm. The 30-minute warnings run inside Ben's tick; if the

@@ -21,6 +21,8 @@ export interface WorldNet {
   recallMs?: number
   toolsMs?: number
   tasks?: Partial<TodoTask>[]
+  /** TL4/TL7: a stub web (pages and search results). */
+  web?: import('../renderer/src/web/benTools').WebLike | null
 }
 
 /**
@@ -81,7 +83,7 @@ export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalC
   if (c.plan) await mirror.write((db) => setSetting(db as any, RHYTHM, JSON.stringify({ day: today, water: [], briefing: { status: 'proposed', sentAt: new Date().toISOString(), version: 1, planner: PLANNER_VERSION, plan: { day: today, headline: 'Lab first, then the gym', mustdos: ['laborator 4 PC'], blocks: [{ title: 'Lab report', start: '10:00', minutes: 90 }, { title: 'Study algebra', start: '16:00', minutes: 50 }], training: null, waterMl: 2500 } } })))
   const recall = net?.recallMs != null ? (_q: string, _k: number) => slow(net.recallMs, () => [] as { kind: string; text: string }[]) : null
   const tools = net?.toolsMs != null ? { list: () => slow(net.toolsMs, () => [] as { name: string; description: string }[]), call: async () => '' } : null
-  const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model, recall, tools, ...(timing ? { timing } : {}) })
+  const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model, recall, tools, ...(timing ? { timing } : {}), ...(net?.web !== undefined ? { web: net.web } : {}) })
   return { bots, log, mirror, services, today, calls }
 }
 

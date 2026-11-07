@@ -2321,7 +2321,7 @@ export function DesktopIsland() {
         onFocus={() => dispatch({ type: 'typing', on: true })}
         onBlur={() => dispatch({ type: 'typing', on: !!text.trim() })}
       />
-      <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), islandVoiceOn() ? void window.dispatchEvent(new Event('island-voice-ptt')) : void startRec())} onPointerUp={stopRec} onPointerLeave={stopRec}>
+      <button type="button" className={`di-mic ${rec ? 'on' : ''}`} aria-label="Hold to talk to Ben" title="Hold to talk to Ben" disabled={s.ben.busy} onPointerDown={(e) => (e.preventDefault(), islandVoiceOn() ? void window.dispatchEvent(new Event('island-voice-ptt-down')) : void startRec())} onPointerUp={() => (islandVoiceOn() ? void window.dispatchEvent(new Event('island-voice-ptt-up')) : stopRec())} onPointerLeave={() => (islandVoiceOn() ? void window.dispatchEvent(new Event('island-voice-ptt-up')) : stopRec())}>
         {rec ? '●' : '🎤'}
       </button>
       <button type="button" className="di-send" disabled={!text.trim() || s.ben.busy} aria-label="Send" {...tp('send', () => chat())}>↑</button>
