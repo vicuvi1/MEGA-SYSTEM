@@ -99,4 +99,21 @@ describe('server: Telegram webhook and tick (S5)', () => {
     // The count for the app day (the 25th) goes on; at midnight it used to start again.
     expect(JSON.parse(String(q("SELECT value FROM settings WHERE key = 'ben_sent_count'")[0][0]))).toEqual({ day: '2026-10-25', n: 4 })
   }, 30_000)
+
+  it('ME5: a promise is asked as "You said you\'d …" with Done / Tomorrow / Drop, in Telegram and in the app (made-up promise)', async () => {
+    const { env, q, sent } = world()
+    const at = new Date('2026-11-07T10:01:00Z')
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(at)
+    q(`INSERT INTO settings (key, value) VALUES ('notif_settings', '{"quiet":{"on":false}}')`)
+    const list = JSON.stringify([{ id: 'pr1', kind: 'checkin', follow: true, text: 'start the essay', at: new Date(at.getTime() - 60_000).toISOString(), createdAt: '2026-11-06T19:00:00Z', promise: { what: 'start the essay', when: 'tomorrow' } }])
+    q(`INSERT INTO settings (key, value) VALUES ('coach_reminders', '${list}')`)
+    await runTick({ ...env, botToken: TOKEN, chatId: CHAT }, at)
+    const m = sent.find((s) => s.method === 'sendMessage' && /You said you'd start the essay today/.test(s.body?.text))
+    expect(m).toBeTruthy()
+    expect(m!.body.reply_markup.inline_keyboard.flat().map((b: any) => b.callback_data)).toEqual(['cs|Promise done (pr1)', 'cs|Promise tomorrow (pr1)', 'cs|Promise drop (pr1)'])
+    const log = JSON.parse(String(q("SELECT value FROM settings WHERE key = 'coach_log'")[0][0]))
+    expect(log.find((e: any) => /You said you'd/.test(e.text)).buttons.map((b: any) => b.label)).toEqual(['✅ Done', '↪ Tomorrow', '✖ Drop it'])
+    vi.useRealTimers()
+  }, 30_000)
 })

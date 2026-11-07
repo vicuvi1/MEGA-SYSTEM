@@ -68,6 +68,16 @@ import { answerMore, MORE_LOOKUPS, yesterdayDigest } from './benDigest'
 import { benNowLine } from '@core/eyesSense'
 import { createTrace, timingLine, type BenTiming } from '@core/benTrace'
 import { PLAN_ASKED, addAsked, saysToday } from '@core/planShift'
+import { canon, commandOf } from '@core/benNormalize'
+import { receiptOf, undoLabel } from '@core/benReceipt'
+import { bareAdd, dayOf, isAsk, readClause, splitIntents, timeIn, timeQuestion, whichQuestion, type Clause } from '@core/benSplit'
+import { aliasMap, offerButtons, offerQuestion, prefDuration, prefsForPrompt, prefTime, readCorrection, readForget, readOffer, readOfferAnswer, type Know } from '@core/benFacts'
+import { pastLine } from '@core/benConvo'
+import { rhythmLine, learnedEstimate, kindOf } from '@core/benLearn'
+import { answerPromise, promiseReminder, readPromise, readPromiseAnswer, type PromiseReminder } from '@core/benPromise'
+import { readSmartRemind, smartPlan, type SmartReminder } from '@core/benSmartRemind'
+import { breakdownPrompt, parseSteps, readBreakdown, stepTask, templateSteps, type Step } from '@core/benBreak'
+import { answerOffer, forgetAbout, learnedRhythm, loadConvo, loadKnow, notePast, notePlan, pushedBack, queueOffer, runTool, saveCorrection } from './benMind'
 
 const LOGS_KEY = 'life_bot_logs'
 const store = typeof localStorage !== 'undefined' ? localStorage : null
@@ -656,6 +666,98 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return { reply: `💧 Fixed: that was water, not money. Money record removed, ${ml} ml added.`, acts: water ? [water] : [] }
   }
 
+  /**
+   * Ben understands you (LS3–LS6, ME1, ME5, TL2, TL5): what can be done in
+   * code before the model is asked: a memory question answered (Yes / No), a
+   * promise answered (Done / Tomorrow / Drop), "forget everything about X", a
+   * correction he states ("curata camera takes 40 min"), a smart reminder
+   * ("when I get home", "after the lab") and "break down X". Null when none fits.
+   */
+  async function understandInCode(text: string, canT: string, via: string): Promise<{ reply: string; pre: { line: string; op: UndoOp | null }[]; chips?: string[]; buttons?: { label: string; do: string }[]; step: string } | null> {
+    const src = via === 'telegram' ? 'telegram' : via === 'mcp' ? 'ben' : 'app'
+    const lang = langOf(text)
+    const oa = readOfferAnswer(text)
+    if (oa) {
+      const r = await mirror.write((db) => answerOffer(db, oa.id, oa.yes))
+      return { reply: oa.yes ? (r.undo ? 'Got it, I\'ll remember.' : 'That one is already answered.') : 'OK, I won\'t keep that.', pre: [{ line: r.line, op: r.undo ? { k: 'know', op: r.undo } : null }], step: 'Updated my memory' }
+    }
+    const pa = readPromiseAnswer(text)
+    if (pa) {
+      const r = await mirror.write((db) => {
+        const list = (readSetting(db as any, REMINDERS) ?? []) as PromiseReminder[]
+        const res = answerPromise(list, pa.id, pa.op)
+        if (res.r) writeSetting(db as any, REMINDERS, res.list as any)
+        return res.r
+      })
+      if (!r) return { reply: 'That promise is already closed.', pre: [], step: 'Checked your promises' }
+      const what = r.promise?.what ?? r.text
+      if (pa.op === 'done') await rhythm.countPromise(await services.read((sv) => sv.wallet.today()), 'kept').catch(() => null)
+      const line = pa.op === 'done' ? `✅ Promise kept: ${what}` : pa.op === 'tomorrow' ? `↪ Promise moved to tomorrow 10:00: ${what}` : `✖ Promise dropped: ${what}`
+      const reply = pa.op === 'done' ? 'That\'s how it\'s done 😎' : pa.op === 'tomorrow' ? 'Tomorrow then. I\'ll ask at 10:00, and it goes into tomorrow\'s plan.' : 'Dropped. Better than pretending.'
+      return { reply, pre: [{ line, op: null }], step: 'Updated your promise' }
+    }
+    const about = readForget(text)
+    if (about) {
+      const r = await mirror.write((db) => forgetAbout(db, about))
+      return { reply: r.removed ? `Done: I forgot ${r.removed} thing${r.removed === 1 ? '' : 's'} about ${about}.` : `I had nothing about ${about}.`, pre: r.removed ? [{ line: `🧹 Forgot everything about ${about} (${r.removed})`, op: null }] : [], step: 'Cleaned my memory' }
+    }
+    const fix = readCorrection(text) ? await mirror.write((db) => saveCorrection(db, text, src)).catch(() => null) : null
+    if (fix) return { reply: lang === 'ro' ? 'Am notat. Așa planific de acum.' : lang === 'ru' ? 'Запомнил. Буду так планировать.' : "Got it. I'll plan it that way from now on.", pre: [{ line: fix.line, op: { k: 'know', op: fix.undo } }], step: 'Remembered what you said' }
+    const smart = readSmartRemind(canT) ?? readSmartRemind(text)
+    if (smart) {
+      const now = new Date()
+      const start = new Date(now)
+      start.setHours(0, 0, 0, 0)
+      const events = smart.when.kind === 'event' && calendar ? ((await readThrough(`calendar:${start.toISOString()}`, () => calendar.events(start.toISOString(), new Date(start.getTime() + 8 * 86400000).toISOString()), 4_000)) ?? []) : []
+      const plan = smartPlan(smart, now, events)
+      if (!plan) return { reply: `I can't find "${smart.when.kind === 'event' ? smart.when.match : ''}" in today's calendar. Give me a time instead?`, pre: [], chips: ['In 1 hour', 'At 20:00'], step: 'Checked your calendar' }
+      const id = await mirror.write((db) => {
+        const list = (readSetting(db as any, REMINDERS) ?? []) as SmartReminder[]
+        const next = addReminder(list, { at: plan.at, text: smart.text, kind: 'remind', ...(smart.when.kind === 'event' ? {} : { when: { ...smart.when, fallback: plan.at } }) } as any) as SmartReminder[]
+        writeSetting(db as any, REMINDERS, next as any)
+        return next[next.length - 1].id
+      })
+      const hm = new Date(plan.at).toTimeString().slice(0, 5)
+      return { reply: `I'll remind you ${plan.words}.${plan.honest ? ` ${plan.honest}` : ''}`, pre: [{ line: `⏰ Reminder ${hm}: ${smart.text} (${plan.words})`, op: { k: 'remind', id } }], step: 'Set a smart reminder' }
+    }
+    const big = readBreakdown(canT) ?? readBreakdown(text)
+    if (big) {
+      let steps: Step[] | null = null
+      if (timedAi) steps = parseSteps(await withTimeout(timedAi(breakdownPrompt(big, lang), { json: true, strong: false, think: false, kind: 'breakdown' } as any), 8_000).catch(() => '')) ?? null
+      steps ??= templateSteps(big)
+      const pre: { line: string; op: UndoOp | null }[] = []
+      if (todoist) {
+        for (const st of steps) {
+          const t = await todoist.quickAdd(stepTask(big, st)).catch(() => null)
+          pre.push(t ? { line: `➕ Todoist: ${t.content || stepTask(big, st)}`, op: t.id ? { k: 'task', id: t.id } : null } : { line: `⚠️ Todoist didn't take: ${st.title}`, op: null })
+        }
+      }
+      const total = steps.reduce((t, x) => t + x.minutes, 0)
+      const list = steps.map((x, i) => `${i + 1}. ${x.title} (${x.minutes} min)`).join('\n')
+      return { reply: `"${big}" in ${steps.length} steps, about ${hm(total)} in all:\n${list}${todoist ? '' : '\n(Todoist isn\'t connected, so they are only here.)'}`, pre, chips: ['Plan my day', 'Start step 1'], buttons: [{ label: `▶ ${Math.min(45, steps[0].minutes)} min: ${steps[0].title}`.slice(0, 32), do: `focus:${Math.min(45, steps[0].minutes)}:${steps[0].title.slice(0, 50)}` }], step: 'Broke it into steps' }
+    }
+    return null
+  }
+
+  /** LS4/LS6: the action lines for one "add": a Todoist task, and a calendar block when it has a time (his usual time when he gave one). */
+  function addLines(c0: Extract<Clause, { kind: 'add' }>, know: Know | null, now: Date, at?: { day: string; time: string } | null, slot?: (day: string, minutes: number) => string | null): string[] {
+    // "20 min reading" / "reading for 20 min": the length is said, the name is "Reading".
+    const len = /^(\d{1,3})\s*(min|mins|minutes|h|hours?)\s+(?:of\s+)?(.{2,})$/i.exec(c0.title) ?? /^(.{2,}?)\s+for\s+(\d{1,3})\s*(min|mins|minutes|h|hours?)$/i.exec(c0.title)
+    const saidLen = len ? (/^\d/.test(len[1]) ? Number(len[1]) * (/^h/i.test(len[2]) ? 60 : 1) : Number(len[2]) * (/^h/i.test(len[3]) ? 60 : 1)) : null
+    const c = len ? { ...c0, title: (/^\d/.test(len[1]) ? len[3] : len[1]).replace(/^./, (x) => x.toUpperCase()) } : c0
+    const said = saidLen ?? (know ? prefDuration(know, c.title) : null)
+    const minutes = said ?? (kindOf(c.title) === 'sport' ? 60 : learnedEstimate({ content: c.title }, { mult: {}, n: {}, best: [], skip: [], ready: false }))
+    const usual = know ? prefTime(know, c.title) : null
+    // "tonight" with no time: the first free time this evening.
+    const evening = c.dayWord === 'tonight' && slot ? slot(calendarDay(now), minutes) : null
+    const when = at ?? (c.when && !isAsk(c.when) ? c.when : usual ? { day: dayOf(c.dayWord ?? 'today', now), time: usual } : evening ? { day: calendarDay(now), time: evening } : null)
+    const dw = c.dayWord === 'tonight' ? 'today' : c.dayWord
+    const word = when ? (when.day === calendarDay(now) ? 'today' : when.day === addDays(calendarDay(now), 1) ? 'tomorrow' : when.day) : null
+    const lines = [`task: ${c.title}${when ? ` ${word} ${when.time}` : dw ? ` ${dw}` : ''}`]
+    if (when && calendar) lines.unshift(`event: ${c.title} | ${when.day} ${when.time} | ${minutes}`)
+    return lines
+  }
+
   async function think(
     persona: Persona,
     text: string,
@@ -669,7 +771,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
      * `tasks`: the Todoist tasks the lines point at (T1, T2… in this order).
      */
     direct?: { lines: string[]; reply: string; tasks?: TodoTask[] }
-  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood; at?: string; undo?: (UndoOp | null)[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; asking?: boolean; retry?: boolean; timing?: BenTiming }> {
+  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood; at?: string; undo?: (UndoOp | null)[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; asking?: boolean; retry?: boolean; timing?: BenTiming; receipt?: string }> {
     // One budget for the whole answer, from now (the page waits for the server, never less).
     const deadline = Date.now() + BUDGET
     // Speed: where this answer's time goes (logged on the server, read by the speed tests).
@@ -700,12 +802,31 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       // Tapped twice (or too late): never log it a second time.
       if (!confirmed) return { ok: true, reply: '✅ Already done.', done: [], timing: trace.summary('confirm', 'code') }
     }
+    // LS3: messy typing read as plain English commands (Romanian, Russian, slang, his own aliases).
+    const know0 = !direct && !media && text ? await mirror.read((db) => loadKnow(db)).catch(() => null) : null
+    const can = text && know0 ? canon(clean, aliasMap(know0)) : null
+    const cmd = can ? commandOf(can.text) : null
+    const canT = cmd ?? (can?.changed ? can.text : clean)
+    /** LS2: things done in code before the actions run (memory, promises, steps), each with its undo. */
+    const pre: { line: string; op: UndoOp | null }[] = []
+    /** Done in code: the result is the reply, no model call to "repair" it. */
+    let codeMade = false
     // What Ben can do without the AI: a stored confirm, a fix in code (B10), an instant answer (B3).
     let preset: { reply: string; acts: BrainAction[]; chips?: string[]; buttons?: { label: string; do: string }[] } | null = confirmed ? { reply: '👍 Done.', acts: [confirmed] } : null
     if (direct) preset = { reply: direct.reply, acts: direct.lines.map(readAction).filter((a): a is BrainAction => !!a) }
     if (!preset && !media && text) {
       const fix = codeFix(text)
       if (fix) preset = await fixInCode(fix).catch(() => null)
+    }
+    // Ben understands you: memory answers, promises, corrections, smart reminders, break downs.
+    if (!preset && !media && text && !direct) {
+      const code = await understandInCode(text, canT, via).catch((e) => (console.warn('ben: in code:', (e as Error)?.message), null))
+      if (code) {
+        step(code.step)
+        preset = { reply: code.reply, acts: [], chips: code.chips, buttons: code.buttons }
+        pre.push(...code.pre)
+        codeMade = true
+      }
     }
     // Speed: "log 500 ml water", "+250ml", "drank 2 glasses": logged in code, no model call
     // (the same water action, points and Undo as when Ben logs it).
@@ -768,7 +889,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     dayStart.setHours(0, 0, 0, 0)
     trace.mark('instant checks')
     // Route by intent: quick logs → quick model; reviews, plans and advice → strong model, trimmed day.
-    const route0 = routeFor(clean, { correcting: !direct && isCorrection(text), media: !!media })
+    const r0 = routeFor(clean, { correcting: !direct && isCorrection(text), media: !!media })
+    // LS3: "fa-mi ziua" / "спланируй мой день" route like "plan my day".
+    const route0 = r0.intent === 'chat' && canT !== clean ? routeFor(canT, { correcting: !direct && isCorrection(text), media: !!media }) : r0
     const route = harder ? { ...route0, strong: true, think: true, capMs: 30_000, trim: 'full' as const, allActions: true } : route0
     // Speed: "plan my day" is packed in code (rhythm.propose reads Todoist and the calendar
     // itself), so the chat's own Todoist/calendar/memory round trip is skipped.
@@ -811,7 +934,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       })
       .catch(() => null)
     trace.mark('notes')
-    const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk, blocks, plan, pick, digest, week } = await mirror.read((db) => {
+    const { context, memory, profile, look, mind, money, promises, feel, talk, notes, desk, blocks, plan, pick, digest, week, known } = await mirror.read((db) => {
       const svc = services.services(db)
       const finance = financeStateFrom(db, store)
       return {
@@ -887,6 +1010,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           return { ...promiseRefs(list), stats: [promiseLine(promiseStats(list)), promiseReliability(list)].filter(Boolean).join('\n') }
         })(),
         money: recentMoney(db as any, svc.wallet.today()),
+        // ME1/ME2/ME4: only the memories that fit this message (his rules, a past chat, his real pace).
+        known: (() => {
+          try {
+            const today = svc.wallet.today()
+            return [know0 ? prefsForPrompt(know0, canT, route.intent) : '', text && !direct ? pastLine(loadConvo(db), text, today) : '', route.intent === 'plan' || route.intent === 'advice' ? rhythmLine(learnedRhythm(db, today)) : ''].filter(Boolean).join('\n')
+          } catch {
+            return ''
+          }
+        })(),
         notes: (() => {
           try {
             seedNotes(db as any)
@@ -922,6 +1054,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     })
     trace.mark('context')
     const recalled = byMeaning?.length ? recallText(byMeaning, notes) : ''
+    // ME5: "I'll start the essay tomorrow": kept in code as a promise (asked at that time).
+    const promised = !direct && !media && text && !conf && !codeMade ? (readPromise(text) ?? (canT !== clean ? readPromise(canT) : null)) : null
+    const promiseNote = promised ? `He just promised: "${promised.what}" (${promised.when}). It is ALREADY saved and I'll ask him then: do not add a checkin or remind action for it; just acknowledge in a few words.` : ''
     // Tasks and events the coach can point at (E1, T3); grows when it asks for more.
     let allTasks: TodoTask[] = [...(direct?.tasks ?? []), ...(todoToday ?? []), ...(upcoming ?? [])].filter((t, i, a) => a.findIndex((x) => x.id === t.id) === i)
     let allEvents: CalEvent[] = events ?? []
@@ -964,7 +1099,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         now: new Date(),
         meant: clean !== text ? clean : undefined,
         found,
-        mind: [promises.stats, full || route.trim === 'review' ? mind : ''].filter(Boolean).join('\n'),
+        mind: [promises.stats, full || route.trim === 'review' ? mind : '', known, promiseNote].filter(Boolean).join('\n'),
         mood: `${shownMood(feel.mood, talk.tone)} ${MOOD_FACE[shownMood(feel.mood, talk.tone)]} because: ${feel.why}. (Your own call can differ if his message changes things.)`,
         style: talk.style,
         tone: talk.tone,
@@ -1017,14 +1152,35 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       const opts = blockOptions()
       const line = (verb: 'rename' | 'move', o: { ref: string; day: string }, value: string) => (verb === 'rename' ? `rename: ${o.ref} | ${value}` : `move: ${o.ref} | ${o.day} ${value}`)
       const picked = pick ? pickChoice(clean, pick.options.map((o) => o.label)) : null
-      const edit = picked == null ? (readBlockEdit(clean) ?? readMoveEdit(clean)) : null
+      const edit = picked == null ? (readBlockEdit(clean) ?? readMoveEdit(clean) ?? (canT !== clean ? (readBlockEdit(canT) ?? readMoveEdit(canT)) : null)) : null
+      // LS4: what else his message asked for, run after the pick.
+      const restLines = (rest?: PendingPick['rest']) =>
+        (rest ?? []).flatMap((r) => {
+          if (r.line) return [r.line]
+          const o = opts.find((x) => (r.id ? x.id === r.id : x.ref === r.ref))
+          return o && r.value ? [line('move', o, r.value)] : []
+        })
+      const now = new Date()
+      // LS5: "move gym to 8": 08:00 or 20:00? (only an hour with no am/pm, both still ahead today).
+      const moveAsk = edit?.verb === 'move' && !/\d[:.]\d{2}|\b(am|pm)\b|\btonight\b/i.test(canT) ? timeIn(`at ${Number(edit.value.slice(0, 2))}`, now) : null
       if (pick && picked != null) {
         const want = pick.options[picked]
-        const o = opts.find((x) => (want.id ? x.id === want.id : x.ref === want.ref))
-        if (o) {
+        if (want.lines?.length) {
           localEdit = 'act'
-          local = { reply: '', actions: [line(pick.verb, o, pick.value)], remember: [] }
+          codeMade = true
+          local = { reply: '', actions: [...want.lines, ...restLines(pick.rest)], remember: [] }
+        } else {
+          const o = opts.find((x) => (want.id ? x.id === want.id : x.ref === want.ref))
+          if (o) {
+            localEdit = 'act'
+            local = { reply: '', actions: [line(pick.verb === 'rename' ? 'rename' : 'move', o, want.value ?? pick.value), ...restLines(pick.rest)], remember: [] }
+          }
         }
+      } else if (edit && isAsk(moveAsk) && matchBlocks(edit, opts).length === 1) {
+        const o = matchBlocks(edit, opts)[0] as BlockOption & { id?: string }
+        localEdit = 'ask'
+        newPick = { verb: 'move', value: edit.value, options: moveAsk.options.map((x) => ({ label: x.time, ref: o.ref, ...(o.id ? { id: o.id } : {}), value: x.time })) }
+        local = { reply: timeQuestion(o.title, langOf(text)), actions: [], remember: [], chips: newPick.options.map((x) => x.label) }
       } else if (edit) {
         const hits = matchBlocks(edit, opts)
         if (hits.length === 1) {
@@ -1036,8 +1192,54 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           newPick = { verb: edit.verb, value: edit.value, options: list.map((o) => ({ label: optionLabel(o), ref: o.ref, ...(o.id ? { id: o.id } : {}) })) }
           local = { reply: shortLine('which', langOf(text), list.length, edit.verb === 'rename' ? `becomes "${edit.value}"` : `moves to ${edit.value}`), actions: [], remember: [], chips: newPick.options.map((o) => o.label) }
         }
+      } else if (!pick || picked == null) {
+        // LS4: several things in one message, each read in code; LS3: "curata camera azi" (a thing and a day, no verb).
+        const parts = splitIntents(canT)
+        const clauses: Clause[] | null = parts.length ? (parts.map((p) => readClause(p, now)).every(Boolean) ? (parts.map((p) => readClause(p, now)) as Clause[]) : null) : canT !== clean ? ([bareAdd(canT, now)].filter(Boolean) as Clause[]) : null
+        if (clauses?.length) {
+          const eveningSlot = (day: string, minutes: number) => nextSlot(allEvents, day, [new Date().toTimeString().slice(0, 5), '19:00'].sort()[1], minutes)?.start ?? null
+          const lines: string[] = []
+          const rest: NonNullable<PendingPick['rest']> = []
+          let ask: { q: string; pick: PendingPick } | null = null
+          let unreadable = false
+          for (const c of clauses) {
+            const later = (ls: string[]) => (ask ? rest.push(...ls.map((l) => ({ line: l }))) : lines.push(...ls))
+            if (c.kind === 'water') later([`water: ${c.ml}`])
+            else if (c.kind === 'remind') {
+              if (isAsk(c.when)) {
+                const opt = c.when.options.map((w) => ({ label: w.time, ref: '', lines: [`remind: ${w.day} ${w.time} | ${c.text}`] }))
+                if (!ask) ask = { q: timeQuestion(c.text, langOf(text)), pick: { verb: 'run', value: '', options: opt } }
+                else unreadable = true
+              } else later([`remind: ${c.when.day} ${c.when.time} | ${c.text}`])
+            } else if (c.kind === 'add') {
+              if (isAsk(c.when)) {
+                const opt = c.when.options.map((w) => ({ label: w.time, ref: '', lines: addLines(c, know0, now, w) }))
+                if (!ask) ask = { q: timeQuestion(c.title, langOf(text)), pick: { verb: 'run', value: '', options: opt } }
+                else unreadable = true
+              } else later(addLines(c, know0, now, null, eveningSlot))
+            } else {
+              const hits = matchBlocks(c.edit, opts) as (BlockOption & { id?: string; day: string })[]
+              if (hits.length === 1) {
+                if (ask) rest.push({ ...(hits[0].id ? { id: hits[0].id } : {}), ref: hits[0].ref, value: c.edit.value })
+                else lines.push(line(c.edit.verb, hits[0], c.edit.value))
+              } else if (hits.length > 1 && !ask) {
+                ask = { q: whichQuestion(hits.length, hits.slice(0, 3).map((h) => h.title).join(', '), langOf(text)), pick: { verb: c.edit.verb, value: c.edit.value, options: hits.slice(0, 3).map((o) => ({ label: optionLabel(o), ref: o.ref, ...(o.id ? { id: o.id } : {}) })) } }
+              } else unreadable = true
+            }
+          }
+          if (!unreadable && ask) {
+            // Nothing changes until he picks; the rest of his message runs with the pick.
+            localEdit = 'ask'
+            newPick = { ...ask.pick, ...(lines.length || rest.length ? { rest: [...lines.map((l) => ({ line: l })), ...rest] } : {}) }
+            local = { reply: ask.q, actions: [], remember: [], chips: newPick.options.map((o) => o.label) }
+          } else if (!unreadable && lines.length) {
+            localEdit = 'act'
+            codeMade = true
+            local = { reply: '', actions: lines, remember: [] }
+          }
+        }
       }
-      if (local) step(localEdit === 'act' ? 'Found the block' : 'Found more than one block')
+      if (local) step(localEdit === 'act' ? (codeMade ? 'Read what you asked' : 'Found the block') : 'Asked which one')
     }
     // "Plan my day": today's planner packs all of today's tasks around the calendar, and the
     // plan card comes with the reply (no chat model call; an approved plan goes to the model).
@@ -1060,6 +1262,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
           ...(sq?.drop ? { chips: [`Drop ${sq.drop}`.slice(0, 40), `${sq.keep} tomorrow`.slice(0, 40)] } : {}),
           steps: ['Made your plan for today']
         }
+        // TL2: a big task that keeps moving (first due 3+ days ago) gets a "Break it down" chip.
+        const open = [...(p.also ?? []).map((x) => ({ id: x.id, content: x.title, priority: x.priority })), ...(p.deferred ?? []).map((x) => ({ id: x.id, content: x.title }))]
+        const stale = await mirror.write((db) => pushedBack(db, open, services.services(db).wallet.today())).catch(() => [] as string[])
+        if (stale.length && local) local.chips = [...(local.chips ?? []), `Break down "${stale[0].slice(0, 26)}"`].slice(0, 4)
       } catch {
         /* the model plans it below */
       }
@@ -1208,6 +1414,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     let expense = false
     let acts = out.actions.map(readAction).filter((a): a is BrainAction => !!a)
     if (preset) acts = preset.acts
+    // ME5: the promise is already kept in code; the model's own check-in for it would ask twice.
+    if (promised) acts = acts.filter((a) => a.kind !== 'checkin')
     // A focus timer starts only when he asked for it now; otherwise it becomes a ▶ button he can tap.
     // "I'll start at 5" or "later" is not now (X10).
     const askedToStart = !!direct || startsNow(text)
@@ -1305,6 +1513,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const fmtHM = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
     // One undo per thing done (aligned with `done`); null when it can't be undone.
     const undo: (UndoOp | null)[] = done.map(() => null)
+    for (const p of pre) {
+      done.push(p.line)
+      undo.push(p.op)
+    }
     let opNow: UndoOp | null = null
     // Runs the coach's actions; each line in `done` says what really happened.
     const runActs = async (acts: BrainAction[], pfx = '') => {
@@ -1312,6 +1524,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         const mark = done.length
         opNow = null
         try {
+          if (a.kind === 'buy' || a.kind === 'myhabit') {
+            // TL1: the shop's own rules and his own words decide (points stay honest).
+            const r = await mirror.write((db) => runTool(services.services(db), a, text, financeStateFrom(db, store)))
+            done.push(r.line)
+            if (r.undo) opNow = { k: 'tool', op: r.undo }
+            if (a.kind === 'buy') expense = true
+            continue
+          }
           if (a.kind === 'plugin') {
             const r = await mirror.write((db) => runPluginAction({ db: db as any, now: new Date() }, a))
             if (r?.line) {
@@ -1770,9 +1990,24 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     await runActs(acts)
     trace.mark('actions')
+    if (promised && !acts.some((a) => a.kind === 'remind' || a.kind === 'checkin')) {
+      const id = await mirror
+        .write((db) => {
+          const list = (readSetting(db as any, REMINDERS) ?? []) as Reminder[]
+          const next = addReminder(list, promiseReminder(promised) as any)
+          writeSetting(db as any, REMINDERS, next)
+          return next[next.length - 1].id
+        })
+        .catch(() => null)
+      if (id) {
+        const at = new Date(promised.at)
+        done.push(`🤝 Promise noted: ${promised.what} · I'll ask ${promised.when === 'later' || promised.when === 'tonight' || promised.when === 'today' ? `at ${fmtHM(at.toISOString())}` : `${promised.when} ${fmtHM(at.toISOString())}`}`)
+        undo.push({ k: 'remind', id })
+      }
+    }
     // Act → check → fix: when something failed, the coach sees the results and
     // tries once more (another time, the right item), or says plainly what didn't work.
-    if (!direct && done.some((d) => d.startsWith('⚠️'))) {
+    if (!direct && !codeMade && done.some((d) => d.startsWith('⚠️'))) {
       step('Fixing what failed')
       try {
         const fix = parseBrain(
@@ -1793,6 +2028,26 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       out.chips = ['Do it', ...(out.chips ?? []).filter((c) => c !== 'Do it')].slice(0, 4)
     }
     if (expense) onExpense?.()
+    // LS2: one compact receipt from what really happened.
+    const receipt = receiptOf(done) ?? undefined
+    // ME1: what he asked Ben to remember is saved; what Ben only guessed is asked first (Yes / No).
+    const explicit = !!text && /\b(remember|don'?t forget|keep in mind|note that)\b|ține minte|tine minte|reține|retine|запомни|не забудь/i.test(text)
+    const guessed = explicit || direct ? [] : out.remember
+    if (!explicit && !direct) out.remember = []
+    const offerSeen = !direct && !media && text && !codeMade && !preset ? readOffer(text) : null
+    if (offerSeen || guessed.length) {
+      const src = via === 'telegram' ? 'telegram' : 'app'
+      const first = await mirror
+        .write((db) => {
+          const made = [offerSeen ? queueOffer(db, offerSeen, src) : null, ...guessed.slice(0, 3).map((t) => queueOffer(db, { text: String(t).slice(0, 160), kind: 'fact' }, 'ben'))].filter(Boolean)
+          return made[0] ?? null
+        })
+        .catch(() => null)
+      if (first && (out.buttons ?? []).length <= 1 && !newPick) {
+        out.buttons = [...(out.buttons ?? []), ...offerButtons(first)].slice(0, 3)
+        out.reply = `${out.reply ? `${out.reply.trim()} ` : ''}${offerQuestion(first)}`
+      }
+    }
     const at = new Date().toISOString()
     await mirror
       .write((db) => {
@@ -1805,6 +2060,14 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             ]
           })
         saveMemory(db, after)
+        // ME4: a decision, struggle or win in his message is kept (searchable); ME2: today's plan is kept to learn from.
+        try {
+          const today = services.services(db).wallet.today()
+          if (text && !direct && !conf) notePast(db, text, today, new Date(), via)
+          if (plan?.blocks?.length) notePlan(db, plan.day, plan.blocks)
+        } catch {
+          /* memory extras can wait */
+        }
         // New facts show in Settings → Recent memory changes (with undo).
         if (out.remember.length) addMemLog(db, factChanges(before.facts, after.facts, 'ben'))
         // /why: each thing done keeps your words that led to it and where it came from (N7).
@@ -1816,13 +2079,13 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         }
         appendLog(db, [
           { role: 'me', bot: persona, via, text: media ? `[${media.kind === 'voice' ? 'voice note' : 'photo'}] ${text}`.trim() : text, at },
-          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at, ...(undo.some(Boolean) ? { undo } : {}), ...(out.chips?.length ? { chips: out.chips } : {}), ...(out.buttons?.length ? { buttons: out.buttons } : {}), ...(out.show?.length ? { show: out.show } : {}), ...(cards.day || cards.tasks ? { cards } : {}), ...(newPick ? { pick: newPick } : {}) }
+          { role: 'coach', bot: persona, via, text: out.reply || 'Got it.', done, mood, at, ...(undo.some(Boolean) ? { undo } : {}), ...(out.chips?.length ? { chips: out.chips } : {}), ...(out.buttons?.length ? { buttons: out.buttons } : {}), ...(out.show?.length ? { show: out.show } : {}), ...(cards.day || cards.tasks ? { cards } : {}), ...(newPick ? { pick: newPick } : {}), ...(receipt ? { receipt } : {}) }
         ])
       })
       .catch(() => null)
     processed++
     const timing = logTiming(trace.summary(route.intent, preset ? 'quick' : local ? 'code' : 'model'))
-    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood, at, undo, chips: out.chips, buttons: out.buttons, show: out.show, ...(cards.day || cards.tasks ? { cards } : {}), ...(newPick ? { asking: true } : {}), timing }
+    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood, at, undo, chips: out.chips, buttons: out.buttons, show: out.show, ...(cards.day || cards.tasks ? { cards } : {}), ...(newPick ? { asking: true } : {}), ...(receipt ? { receipt } : {}), timing }
   }
 
   /**
@@ -1878,14 +2141,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML' }).catch(() => null)
       return reply
     }
-    const reply = r.ok ? [esc(r.reply), r.done.length ? `\n${r.done.map(esc).join('\n')}` : ''].join('\n').trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`
+    // LS2: the reply, then what was done: one line, or the combined receipt when several things changed.
+    const said = r.done.length > 1 && r.receipt ? `\n🧾 ${esc(r.receipt).split('; ').join('\n')}` : r.done.length ? `\n${r.done.map(esc).join('\n')}` : ''
+    const reply = r.ok ? [esc(r.reply), said].join('\n').trim() : `⚠️ ${esc(r.reply)} Or use a command like <code>/today</code>.`
     addLog(text || `[${media?.kind}]`, chat, r.ok, reply)
     // Buttons the coach attached (one tap instead of typing), then ↩ Undo.
     const rows = [
       ...(telegramKeyboard(r.buttons ?? [])?.inline_keyboard ?? []),
       // BQ3: "which block?" chips as one-tap answers on Telegram (the number when the label is too long).
       ...(r.asking ? (r.chips ?? []).map((c, k) => [{ text: c, callback_data: new TextEncoder().encode(`cs|${c}`).length <= 64 ? `cs|${c}` : `cs|${k + 1}` }]) : []),
-      ...(r.at && r.undo?.some(Boolean) ? [[{ text: '↩ Undo', callback_data: `cu|${Date.parse(r.at)}` }]] : []),
+      ...(r.at && r.undo?.some(Boolean) ? [[{ text: undoLabel(r.undo.filter(Boolean).length), callback_data: `cu|${Date.parse(r.at)}` }]] : []),
       // Feedback: Ben learns what you like.
       ...(r.ok && r.at ? [[{ text: '👍', callback_data: `bf|${Date.parse(r.at)}|up` }, { text: '👎', callback_data: `bf|${Date.parse(r.at)}|down` }, { text: '📏 Too long', callback_data: `bf|${Date.parse(r.at)}|long` }, { text: '❌ Wrong', callback_data: `bf|${Date.parse(r.at)}|wrong` }]] : [])
     ]

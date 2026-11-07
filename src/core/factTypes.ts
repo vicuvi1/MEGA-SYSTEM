@@ -5,7 +5,8 @@
 // unconfirmed guesses older than 90 days.
 export type FactType = 'person' | 'exam' | 'preference' | 'goal' | 'routine' | 'other'
 /** pin: you pinned it (Settings → Ben): never dropped, changed or tidied away. */
-export interface Fact { t: string; at: string; type?: FactType; conf?: number; until?: string | null; seen?: number; pin?: boolean }
+/** src (ME1): where it came from ("app", "telegram", "you", "ben"), shown on the memory page. */
+export interface Fact { t: string; at: string; type?: FactType; conf?: number; until?: string | null; seen?: number; pin?: boolean; src?: string }
 
 const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 }
 const addDays = (d: string, n: number) => {

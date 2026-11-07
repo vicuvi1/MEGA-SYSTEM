@@ -72,6 +72,17 @@ export function Receipts({ m, onUndo }: { m: Entry; onUndo: (index?: number) => 
   const open = (m.undo ?? []).filter((op, k) => op && !m.undone?.[k]).length
   return (
     <ul className="cf-results" aria-label="What Ben did">
+      {m.receipt && m.done.length > 1 && (
+        <li className="cf-receipt" aria-label="Receipt">
+          🧾 {m.receipt.split('; ').map((p, k) => (
+            <span key={k}>
+              {k > 0 && ' · '}
+              <b>{p.split(' · ')[0]}</b>
+              {p.includes(' · ') ? ` ${p.slice(p.indexOf(' · ') + 3)}` : ''}
+            </span>
+          ))}
+        </li>
+      )}
       {m.done.map((d, k) => {
         const can = !!m.undo?.[k] && !m.undone?.[k]
         const warn = d.startsWith('⚠️')

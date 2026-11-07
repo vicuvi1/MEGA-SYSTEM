@@ -84,7 +84,8 @@ export function Settings(props: SettingsProps) {
         { id: 'pushes', label: 'Pushes', heads: ['pushes'] },
         { id: 'brain', label: 'Brain & test', heads: ["ben's brain", 'test ben'] },
         { id: 'talk', label: 'How he talks', heads: ['faces in the chat', 'how ben talks'] },
-        { id: 'notes', label: 'Notes about you', heads: ['notes about you'] }
+        { id: 'notes', label: 'Notes about you', heads: ['notes about you'] },
+        { id: 'memory', label: 'Memory', heads: ['what ben knows about me'] }
       ],
       body: <BenSection s={s} />
     },

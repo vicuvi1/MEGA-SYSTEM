@@ -224,6 +224,10 @@ export const SETTINGS = {
   automations: json<unknown>('your automations: "When X, do Y", island buttons, Ben may run (src/core/automations.ts); never an address or key', null),
   auto_asks: json<unknown>("Ben's asks to run one of your automations (Allow / Deny on the island)", null),
   // ---- Day plan ----
+  ben_know: json<unknown>('what Ben knows as rules you told him (durations, usual times, aliases) and the memories he asks before saving (Yes / No)', null),
+  ben_convo: json<unknown>('key points of past chats (decisions, struggles, wins) and a rolling summary', null),
+  ben_learn: json<unknown>('the plan of each of the last 30 days, to learn how long things really take', null),
+  ben_pushbacks: json<unknown>('when each open task was first due (big ones that keep moving get a "Break it down" chip)', null),
   plan_asked: json<unknown>('the tasks you asked Ben to add for today ({day, titles}): the day plan never moves them to tomorrow', null),
   // ---- plugins ----
   plugins_on: json<Record<string, boolean>>('which plugins are switched on', {}),

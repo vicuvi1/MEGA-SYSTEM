@@ -39,6 +39,8 @@ import { WATER_MAX_ML } from '@core/defaults'
 import { dayLog } from './dayLog'
 import { parseRecipeLine, type Recipe } from '@core/recipes'
 import { readPcAction, type PcAct } from '@core/pcActions'
+import { readToolAction, TOOL_HELP, type ToolAction } from '@core/benTools'
+import type { KnowUndo, ToolUndo } from './benMind'
 import { cleanLastHour, lastHourContext } from '@core/pcLastHour'
 import { alreadySaid, alreadySaidText, saidNo, timeFrame, whenWords } from '@core/benTalk'
 import { goalsNowSection, readGoalAction, type GoalAction } from './goalsBrain'
@@ -138,6 +140,10 @@ export type UndoOp =
   | { k: 'planblock'; day: string; index: number; title: string; start: string; cur?: { title: string; start: string } }
   /** A plugin's action (src/plugins): its own undo gets `data`. */
   | { k: 'plugin'; plugin: string; verb: string; data: unknown }
+  /** LS6/ME1: a memory change (a preference or a fact he said yes to). */
+  | { k: 'know'; op: KnowUndo }
+  /** TL1: a reward bought, one of his own habits ticked. */
+  | { k: 'tool'; op: ToolUndo }
 
 export interface LogEntry {
   role: 'me' | 'coach'
@@ -164,14 +170,19 @@ export interface LogEntry {
   cards?: ReplyCards
   /** BQ3: Ben asked which block with chips; the next message picks one. */
   pick?: PendingPick
+  /** LS2: what was done, in one compact line ("Added 'Read 10 min' at 21:40 · Calendar ✓ Todoist ✓"). */
+  receipt?: string
   at: string
 }
 
 /** BQ3: an edit waiting for "which one?" (the chips under Ben's reply). */
 export interface PendingPick {
-  verb: 'rename' | 'move'
+  verb: 'rename' | 'move' | 'run'
   value: string
-  options: { label: string; ref: string; id?: string }[]
+  /** LS5: an option may carry its own value (a time) or the action lines to run when picked. */
+  options: { label: string; ref: string; id?: string; value?: string; lines?: string[] }[]
+  /** LS4: the rest of the same message, run after the pick (plain lines, or moves by block id). */
+  rest?: { line?: string; id?: string; ref?: string; value?: string }[]
 }
 
 export function saveLog(db: any, entries: LogEntry[]): void {
@@ -678,7 +689,8 @@ const ACT_GROUPS: Record<'body' | 'money' | 'calendar' | 'todoist', string> = {
 - Water, reps or anything that is NOT money logged as an expense by mistake: "delmoney" it, then log it right ("water: 250").
 Points and the week:
 - "reward: <title> | <points> | <real cost in lei>" a new reward in the shop. With a real cost the app prices it from what a point is really worth (your points are only used when it costs nothing).
-- "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.`,
+- "week: focus=<focus|wake|sport|clean|todoist|spend|mustdo>; note=<his words>; big3=<task> / <task> / <task>" set this week's plan (any part). "bigdone: <1-3>" ticks a big task.
+${TOOL_HELP}`,
   calendar: `Google Calendar (use the E-numbers from the list; never over another event unless he asks):
 - "event: <title> | <YYYY-MM-DD HH:MM> | <minutes>" new block.
 - "move: E3 | <YYYY-MM-DD HH:MM>" move (keeps its length). "resize: E3 | <minutes>" new length. "delete: E3".
@@ -964,6 +976,8 @@ export type BrainAction =
   | { kind: 'pc'; act: PcAct }
   /** Measurable goals: a draft from his words (he confirms) and a check-in (goalsBrain.ts). */
   | GoalAction
+  /** TL1: buy a reward with points, tick one of his own habits (core/benTools.ts). */
+  | ToolAction
 
 const WEEK_FOCUS = ['focus', 'wake', 'sport', 'clean', 'todoist', 'spend', 'mustdo']
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
@@ -981,6 +995,8 @@ export function readAction(line: string): BrainAction | null {
   if (plugin) return plugin
   const goalAct = readGoalAction(line)
   if (goalAct) return goalAct
+  const tool = readToolAction(line)
+  if (tool) return tool
   // AU7: "pc: open spotify": an ask for the desktop island (Allow / Deny).
   if (/^\s*pc\s*:/i.test(line)) {
     const act = readPcAction(line)

@@ -38,6 +38,7 @@ const LIVE_EVENTS = ['life-wallet-changed', 'life-discipline-changed', 'life-bod
 import type { CleanChange } from '@core/todoistClean'
 import { TEMPLATES, upsertTemplate, type DayTemplate } from '@core/calTemplates'
 import { editBlock, memoryView, pinFact, undoMemory } from './web/memoryStore'
+import { addFact, answerOffer, editKnowItem, forgetAbout, knowView, removeKnowItem, searchPast } from './web/benMind'
 import { financeStateFrom, addFeedback, loadLog, loadMemory, loadMind, loadProfile, loadStyle, saveMemory, saveMind, saveProfile, saveStyle, type CoachStyle } from './web/botBrain'
 import { deskChange, deskView, type DeskOp } from './web/benDesk'
 import type { CoachMind } from '@core/coachMind'
@@ -935,6 +936,23 @@ export function createTursoWebBridge(): Bridge {
       },
       setMind: async (m: CoachMind) => {
         await (await svcP).write((s) => saveMind(s.db, m))
+      },
+      know: {
+        view: async () => freshCopy().then(() => svcP).then((svc) => svc.read((s) => knowView(s.db))),
+        edit: async (id: string, text: string) => (await svcP).write((s) => editKnowItem(s.db, id, text)),
+        remove: async (id: string) => (await svcP).write((s) => removeKnowItem(s.db, id)),
+        add: async (text: string) =>
+          (await svcP).write((s) => {
+            addFact(s.db, text, 'you')
+            return knowView(s.db)
+          }),
+        forget: async (about: string) => (await svcP).write((s) => forgetAbout(s.db, about)),
+        answer: async (offerId: string, yes: boolean) =>
+          (await svcP).write((s) => {
+            answerOffer(s.db, offerId, yes)
+            return knowView(s.db)
+          }),
+        past: async (q: string) => (await svcP).read((s) => searchPast(s.db, q))
       },
       brain: {
         view: async () => freshCopy().then(() => svcP).then((svc) => svc.read((s) => memoryView(s.db))),

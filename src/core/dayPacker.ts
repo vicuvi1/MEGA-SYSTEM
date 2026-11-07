@@ -54,7 +54,11 @@ export interface PackInputs {
    * quick-tasks batch; a short shift blocks only its busy part, "no work
    * tonight" frees it all (core/lifeFit.ts workToday).
    */
-  work?: WorkToday | null
+  work?: (WorkToday & { rest?: { from: string; to: string } | null }) | null
+  /** ME2: his real pace (what he told Ben, then the learned multiplier); default estimateMinutes. */
+  estimate?: (t: PlanTask) => number
+  /** ME2: hours he usually skips: hard work goes elsewhere when it can. */
+  avoid?: number[]
 }
 
 const QUICK = /\b(check|email|e-mail|mail|reply|answer|call|text|message|pay|buy|order|send|book|sign|print|upload|submit|confirm|cancel|renew|schedule|remind|ask|tidy|water)\b/i
@@ -99,7 +103,7 @@ interface Win {
 }
 
 /** The free windows with today's work window applied: its busy part cut out, its light part marked. */
-export function withWork(wins: Win[], work: WorkToday | null | undefined): Win[] {
+export function withWork(wins: Win[], work: (WorkToday & { rest?: { from: string; to: string } | null }) | null | undefined): Win[] {
   if (!work) return wins
   const cut = (list: Win[], r: { from: string; to: string }, mark: boolean): Win[] => {
     const a = toMin(r.from)
@@ -119,6 +123,8 @@ export function withWork(wins: Win[], work: WorkToday | null | undefined): Win[]
   let out = wins
   if (work.busy) out = cut(out, work.busy, false)
   if (work.light) out = cut(out, work.light, true)
+  // ME3: the hour after a long shift is light time too (no deep work right after work).
+  if (work.rest) out = cut(out, work.rest, true)
   return out
 }
 
@@ -145,7 +151,7 @@ interface Chunk {
 }
 
 /** Puts one chunk in a window (best hours first for hard work, the afternoon for quick tasks). Mutates `wins`. */
-function place(wins: Win[], c: Chunk, best: number[], minMin: number): { start: number; minutes: number } | null {
+function place(wins: Win[], c: Chunk, best: number[], minMin: number, avoid: number[] = []): { start: number; minutes: number } | null {
   const fits = (w: Win, need: number) => w.e - w.s >= need
   const take = (w: Win, start: number, minutes: number) => {
     const i = wins.indexOf(w)
@@ -163,9 +169,12 @@ function place(wins: Win[], c: Chunk, best: number[], minMin: number): { start: 
     if (pm) return take(pm, Math.max(pm.s, toMin('13:00')), c.minutes)
   }
   // Deep focus never goes into the work window.
-  const open = c.kind === 'quick' ? wins : wins.filter((w) => !w.light)
+  const all = c.kind === 'quick' ? wins : wins.filter((w) => !w.light)
+  // ME2: hard work first tries windows that don't start in an hour he usually skips.
+  const fresh = c.hard && avoid.length ? all.filter((w) => !avoid.includes(Math.floor(w.s / 60))) : all
+  const open = fresh.some((x) => x.e - x.s >= c.minutes) ? fresh : all
   if (c.hard && best.length) {
-    for (const h of best) {
+    for (const h of best.filter((x) => !avoid.includes(x))) {
       const w = open.find((x) => x.s <= h * 60 + 30 && x.e >= Math.max(x.s, h * 60) + c.minutes)
       if (w) return take(w, Math.max(w.s, h * 60), c.minutes)
     }
@@ -198,7 +207,7 @@ export function packDay(p: PackInputs): DayProposal {
     seen.add(k)
     return true
   })
-  const est = new Map(tasks.map((t) => [t, estimateMinutes(t)]))
+  const est = new Map(tasks.map((t) => [t, p.estimate ? p.estimate(t) : estimateMinutes(t)]))
   // What he asked for today (⭐ @today, or added in the chat for today) is never moved to tomorrow.
   const pinned = (t: PlanTask) => !!t.asked || !!t.starred
 
@@ -281,7 +290,7 @@ export function packDay(p: PackInputs): DayProposal {
   const tryPlace = (c: Chunk): boolean => {
     if (placed.length >= maxBlocks || budget - used < 25) return false
     const want = { ...c, minutes: Math.min(c.minutes, budget - used) }
-    const at = place(wins, want, p.best ?? [], 25)
+    const at = place(wins, want, p.best ?? [], 25, p.avoid ?? [])
     if (!at) return false
     used += at.minutes
     placed.push({ title: c.title.slice(0, 80), start: fromMin(at.start), minutes: at.minutes, kind: c.kind, tasks: c.tasks.map((t) => t.title), chunk: c })

@@ -54,6 +54,10 @@ import { planFromPicks, planWeek, toggleChip, top3Chips, top3Keyboard, top3Text 
 
 const TOP3_ASK = 'week_top3_ask'
 import { readLifeFit } from './lifeFitStore'
+import { learnedEstimate, withRest } from '@core/benLearn'
+import { prefDuration } from '@core/benFacts'
+import { promisesFor, type PromiseReminder } from '@core/benPromise'
+import { learnedRhythm, loadKnow } from './benMind'
 
 /** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
 const localHm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
@@ -348,7 +352,17 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       }
       // My life: today's work window (partly busy), tonight's shift and the sleep window.
       const fit = readLifeFit(db)
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: workToday(fit, today), asked: askedToday(readJson(db, PLAN_ASKED, null), today) }
+      // ME2: his real pace and hours; LS6: durations he told Ben; ME5: promises due today.
+      let learned: ReturnType<typeof learnedRhythm> | null = null
+      try {
+        learned = learnedRhythm(db, today)
+      } catch {
+        learned = null
+      }
+      const know = loadKnow(db)
+      const promised = promisesFor(readJson(db, REMINDERS, []) as PromiseReminder[], today)
+      // ME3: the hour after a long shift is quick-tasks-only too.
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, know, promised }
     })
     const fixedCount = events.filter((e) => !e.allDay).length
     step(`Packing ${tasks.length} task${tasks.length === 1 ? '' : 's'} around ${fixedCount} event${fixedCount === 1 ? '' : 's'}`)
@@ -363,6 +377,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     // DP1: ALL of today's work (due today, overdue, starred), packed around the calendar's fixed events.
     // What he asked for today in the chat (or tagged @today) is placed today, never moved to tomorrow.
     const planTasks: PlanTask[] = tasks.map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null, ...(isAsked(t.content, base.asked) ? { asked: true } : {}) }))
+    // ME5: what he promised for today is one of his own asks (unless it's already a task).
+    for (const what of base.promised) if (!planTasks.some((t) => t.content.toLowerCase().includes(what.toLowerCase().slice(0, 12)))) planTasks.push({ content: what.charAt(0).toUpperCase() + what.slice(1), asked: true, priority: 3 })
     const behindGoals = !mode || mode.kind === 'exam' ? base.behind.filter((g) => !goalItems.some((x) => x.title.toLowerCase().includes(g.title.slice(6).toLowerCase()))) : []
     const packed = packDay({
       goals: [...goalItems, ...behindGoals],
@@ -374,8 +390,11 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       waterTarget: base.water,
       workoutDone: base.workoutDone,
       sleptMin: base.slept,
-      best: base.hist.focus.length >= 3 ? bestHours(base.hist.focus) : [],
-      work: base.work
+      best: [...new Set([...(base.hist.focus.length >= 3 ? bestHours(base.hist.focus) : []), ...(base.learned?.best ?? [])])],
+      work: base.work,
+      // ME2 + LS6: what he told Ben first, then his real pace; hard work away from the hours he skips.
+      estimate: (t) => learnedEstimate(t, base.learned ?? { mult: {}, n: {}, best: [], skip: [], ready: false }, prefDuration(base.know, t.content)),
+      avoid: base.learned?.skip ?? []
     })
     // A life mode: sick = no blocks (the list stays), travel = one short block.
     const fallback = !mode

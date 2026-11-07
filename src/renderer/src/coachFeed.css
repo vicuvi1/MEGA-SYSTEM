@@ -537,3 +537,7 @@ html.nt-dock-strip .nt-x { align-self: center; }
   .cf-result { font-size: 13px; }
   .cf-card-head .hd-chip { font-size: 11px; padding: 3px 8px; }
 }
+
+/* LS2: one compact receipt above what Ben did (several things in one reply). */
+.cf-receipt { font-size: 12.5px; color: var(--muted); padding: 2px 4px; overflow-wrap: anywhere; }
+.cf-receipt b { color: var(--text); font-weight: 650; }

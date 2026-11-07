@@ -2262,7 +2262,7 @@ try {
     }
     await open('settings')
     await pg.waitForSelector('.st-item', { timeout: 10000 })
-    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['life', 'pushes', 'brain', 'talk', 'notes']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
+    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['life', 'pushes', 'brain', 'talk', 'notes', 'memory']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
       await pg.locator('.st-item', { hasText: name }).first().click()
       await pg.waitForFunction((n) => document.querySelector('.st-head h1')?.textContent === n, name, { timeout: 5000 })
       await pg.waitForSelector(`.st-tabs .ptabs [data-tab="${ids[0]}"]`, { timeout: 8000 })

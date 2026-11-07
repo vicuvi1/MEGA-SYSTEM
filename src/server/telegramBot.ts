@@ -36,6 +36,10 @@ import { bedLoggedTonight } from '@core/bedSense'
 import { addDays, calendarDay, dayKey } from '@core/dates'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting, readSetting, writeSetting } from '../main/settings'
+import { promiseAsk, promiseButtons, type PromiseReminder } from '@core/benPromise'
+import { armSmart, type SmartReminder } from '@core/benSmartRemind'
+import { cleanPcState } from '@core/pcActions'
+import { telegramKeyboard as benKeyboard } from '@core/coachButtons'
 import { messageKind, sendOnce, type SentToday } from '../core/benOnce'
 import { cleanVoice, voiceKind, voicePrompt } from '../core/benVoice'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
@@ -665,7 +669,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       })
       .catch(() => null))
   /** `notif`: the bell entry to use (fixed id, so the app's own copy isn't doubled). `urgent`: through quiet hours. */
-  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean; notif?: Omit<Notif, 'readAt'>; urgent?: boolean; push?: unknown; throughQuiet?: boolean } = {}): Promise<any> => {
+  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean; notif?: Omit<Notif, 'readAt'>; urgent?: boolean; push?: unknown; throughQuiet?: boolean; buttons?: { label: string; do: string }[] } = {}): Promise<any> => {
     // Quiet hours (N6): only your own reminders (🔔 ⏰) and urgent things go to Telegram; the rest waits in the bell.
     // Ben 2: the morning brief (your wake time) and the shutdown (before your bedtime) are timed by you: they pass.
     if (!opts.urgent && !opts.throughQuiet && stillQuiet(quietNowSet(notifSet, now), now, await wakeAt()) && !/^\s*(🔔|⏰)/u.test(text)) {
@@ -777,7 +781,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
         // LT12: its kind from the fixed template (Ben may have reworded the text).
         const tag = tagNudge(original.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))
         // Ben 2: a push keeps its card (the Coach page draws it with its buttons).
-        appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood, ...tag, ...(opts.push ? ({ push: opts.push } as object) : {}) }])
+        appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood, ...tag, ...(opts.push ? ({ push: opts.push } as object) : {}), ...(opts.buttons?.length ? { buttons: opts.buttons } : {}) }])
         // …and in the bell, with the one thing to do about it.
         const n = opts.notif ?? notifFromMessage(text, reply_markup, new Date())
         if (n) addNotif(db as any, n)
@@ -808,7 +812,19 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       return [] as Reminder[]
     }
   })
+  // TL5: "when I get home" (the desktop app back after 2+ hours away) and "after my workout" (one logged today).
   let list = reminders
+  if (list.some((r: SmartReminder) => r.when && !r.done)) {
+    const sig = await mirror
+      .read((db) => {
+        const desk = cleanPcState(readSetting(db as any, 'pc_asks'), now.getTime()).desk
+        const svc = services.services(db)
+        const workoutAt = Math.max(0, ...svc.wallet.entriesOn(today0).filter((e: any) => e.ruleId === 'body.workout_done' && Number(e.coins) > 0).map((e: any) => Date.parse(e.ts)).filter(Number.isFinite))
+        return { deskAt: desk?.at ?? null, workoutAt: workoutAt || null }
+      })
+      .catch(() => ({ deskAt: null, workoutAt: null }))
+    list = armSmart(list as SmartReminder[], { now, ...sig })
+  }
   // "😴 30 min" and "⏸ Pause today" quiet the check-ins too, not only nudges (T1).
   const hush = await mirror.read((db) => {
     try {
@@ -824,7 +840,9 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     try {
       // Check-ins get sharper each time and name the week's missed promises.
       // HD: your reminder with Done / Snooze (the island's card answers the same reminder).
-      const went = await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : { inline_keyboard: [[{ text: '✓ Done', callback_data: `rm|d|${r.id}` }, { text: '⏰ 10 min', callback_data: `rm|s|${r.id}` }, { text: '1 hour', callback_data: `rm|h|${r.id}` }]] }, { always: true })
+      // ME5: a promise is asked first as "You said you'd …" with Done / Tomorrow / Drop.
+      const pr = r as PromiseReminder
+      const went = pr.promise && !pr.tries ? await send(promiseAsk({ ...pr, promise: { ...pr.promise, what: esc(pr.promise.what) } }, now), benKeyboard(promiseButtons(r.id)) ?? undefined, { always: true, buttons: promiseButtons(r.id) }) : await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : { inline_keyboard: [[{ text: '✓ Done', callback_data: `rm|d|${r.id}` }, { text: '⏰ 10 min', callback_data: `rm|s|${r.id}` }, { text: '1 hour', callback_data: `rm|h|${r.id}` }]] }, { always: true })
       // Only a message that really reached him moves the check-in on (and can count as ignored).
       if (!went) continue
       list = afterSend(list, r.id, now)

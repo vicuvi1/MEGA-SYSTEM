@@ -11,6 +11,7 @@ import { takeLink } from './helpers'
 import { RHYTHM, rhythmFor } from '@core/rhythm'
 import { editPlanBlock } from '@core/benTalk'
 import type { BotContext } from './context'
+import { undoKnow, undoTool } from '../benMind'
 
 export type UndoDeps = Pick<BotContext, 'mirror' | 'services' | 'calendar' | 'todoist' | 'onExpense'>
 
@@ -127,6 +128,14 @@ export async function undoReply(c: UndoDeps, at: string, index?: number): Promis
             return `↩ Plan block back to ${op.title} at ${op.start}`
           }
           if (op.k === 'plugin') return undoPluginAction({ db: db as any, now: new Date() }, op.plugin, op.verb, op.data)
+          if (op.k === 'know') return undoKnow(db, op.op)
+          if (op.k === 'tool') {
+            try {
+              return undoTool(svc, op.op)
+            } catch (e) {
+              return `⚠️ ${(e as Error).message}`
+            }
+          }
           if (op.k === 'mustdo') {
             if (op.day && op.day !== svc.wallet.today()) return `⚠️ That must-do was for ${op.day}: it's gone with that day`
             const p = svc.focus.plan(svc.wallet.today())

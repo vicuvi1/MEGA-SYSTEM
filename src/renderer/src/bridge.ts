@@ -94,6 +94,17 @@ export type Bridge = LifeApi & {
     updateSporty?(): Promise<SportyView>
     scorecard?(): Promise<{ rows: WeekRow[]; verdict: 'working' | 'mixed' | 'not yet' | 'too early'; lines: string[] }>
     setMind?(m: CoachMind): Promise<void>
+    /** ME1: "What Ben knows about me": facts, preferences, habits, goals, people, the questions he asks before remembering, and past-chat points (ME4). */
+    know?: {
+      view(): Promise<import('./web/benMind').KnowView>
+      edit(id: string, text: string): Promise<import('./web/benMind').KnowView>
+      remove(id: string): Promise<import('./web/benMind').KnowView>
+      add(text: string): Promise<import('./web/benMind').KnowView>
+      forget(about: string): Promise<{ removed: number; view: import('./web/benMind').KnowView }>
+      answer(offerId: string, yes: boolean): Promise<import('./web/benMind').KnowView>
+      /** The store the chat search reads: key points of past chats that fit the words. */
+      past(q: string): Promise<import('@core/benConvo').ConvoPoint[]>
+    }
     /** BR4: Ben's notes about you (memory blocks), recent memory changes, pins and undo. */
     brain?: {
       view(): Promise<MemoryView>
@@ -103,7 +114,7 @@ export type Bridge = LifeApi & {
     }
     profile(): Promise<{ about: string; goals: string[]; rules: string[] }>
     saveProfile(p: { about: string; goals: string[]; rules: string[] }): Promise<{ about: string; goals: string[]; rules: string[] }>
-    log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; at: string; mood?: string; proactive?: boolean; undo?: unknown[]; undone?: boolean[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards }[]>
+    log(): Promise<{ role: 'me' | 'coach'; bot: string; via: string; text: string; done?: string[]; receipt?: string; at: string; mood?: string; proactive?: boolean; undo?: unknown[]; undone?: boolean[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards }[]>
     model(): Promise<string | null>
   }
   /** Settings → Look → Wallpaper: the choice and your own picture (synced settings). */

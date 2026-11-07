@@ -966,6 +966,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                         {who}
                         <NudgeCard m={m} kind={it.kind} info={it.info} repeats={it.repeats} settled={it.settled} latest={latestOf[it.kind] === i} status={status} deck={deck} onChange={() => (loadStatus(), onWallet())} />
                         <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
+                        {/* ME5: a follow-up with answers (Done / Tomorrow / Drop) keeps its buttons. */}
+                        {!!m.buttons?.length && fromToday(m) && <ReplyExtras m={{ ...m, show: [] }} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
                         <div className="cf-foot">
                           {!firstOfGroup && <Meta m={m} />}
                           {replyBtn}

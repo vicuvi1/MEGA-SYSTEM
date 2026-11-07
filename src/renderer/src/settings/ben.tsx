@@ -4,6 +4,7 @@ import { features } from '../bridge'
 import { Icon } from '../Icon'
 import { BrainPanel } from '../BrainPanel'
 import { BenNotes } from '../BenNotes'
+import { BenMemory } from '../BenMemory'
 import { CoachLooksPanel } from '../CoachLooksPanel'
 import { BenPushPanel, LifeFitPanel } from '../LifeFitPanel'
 import type { SettingsState } from './useSettingsState'
@@ -18,6 +19,7 @@ export function BenSection({ s }: { s: SettingsState }) {
           <CoachLooksPanel />
           {!features.aiSettings && <BrainPanel />}
           <BenNotes />
+          <BenMemory />
           {onGo && (
             <section className="panel">
               <header className="panel-head">
