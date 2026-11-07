@@ -23,6 +23,7 @@ import { hostCall, parseBridgeLine, parseBridgeMessage } from '@core/embedBridge
 import { isSoundName } from '@core/sounds'
 import { play } from './soundKit'
 import { Icon } from './Icon'
+import { offerWorkoutNote } from './benPushFeed'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
@@ -78,6 +79,19 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         } catch (err) {
           console.error('[EmbedHost Sport] award error:', err)
         }
+      }
+
+      // UX5: a workout finished: Ben's one line about it (the island, or Telegram when you're away).
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_SUMMARY') {
+        offerWorkoutNote(data.payload)
+        return
+      }
+
+      // PG4: the Progress tab asks why a move stalled; Ben answers from your protein, sleep and readiness.
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_INSIGHT') {
+        const ins = await life.coach?.bodyPlus?.insight?.().catch(() => null)
+        ;(e.source as Window | null)?.postMessage({ type: 'LIFE_SPORT_INSIGHT', insight: ins ? { text: ins.text, missing: ins.missing } : null }, window.location.origin)
+        return
       }
 
       // Water and reps tapped in Sport Track: rows in the one log (body_log), like

@@ -130,6 +130,9 @@ export function bodyWeek(i: BodyWeekInput): BodyWeek {
   } else {
     focus = 'Keep it going: same plan, one more rep where you can.'
   }
+  // PG4: a stall with no protein or sleep data says what to log, never a guess.
+  const miss = [p.days === 0 ? 'protein' : '', s.avgMin == null ? 'sleep' : ''].filter(Boolean)
+  if (stall && miss.length) cause = `${cause ? `${cause} ` : ''}Log ${miss.join(' and ')} to see why ${stall.name.toLowerCase()} stalled.`
   const html = `🏋️ <b>Your body this week</b>\n${lines.map((l) => `${l.icon} ${esc(l.label)}: ${esc(l.value)}`).join('\n')}\n🎯 <b>Next week:</b> ${esc(focus)}${cause ? `\n<i>${esc(cause)}</i>` : ''}`
   return { lines, focus, cause, html }
 }

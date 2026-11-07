@@ -4520,6 +4520,8 @@ function bodyWeek(i) {
 		focus = "Eat about 200 kcal more a day: the scale says you are not growing yet.";
 		cause = w.line ?? null;
 	} else focus = "Keep it going: same plan, one more rep where you can.";
+	const miss = [p.days === 0 ? "protein" : "", s.avgMin == null ? "sleep" : ""].filter(Boolean);
+	if (stall && miss.length) cause = `${cause ? `${cause} ` : ""}Log ${miss.join(" and ")} to see why ${stall.name.toLowerCase()} stalled.`;
 	const html = `🏋️ <b>Your body this week</b>\n${lines.map((l) => `${l.icon} ${esc$5(l.label)}: ${esc$5(l.value)}`).join("\n")}\n🎯 <b>Next week:</b> ${esc$5(focus)}${cause ? `\n<i>${esc$5(cause)}</i>` : ""}`;
 	return {
 		lines,
@@ -4696,6 +4698,94 @@ function debtLine(d, a) {
 	if (!d.logged) return "";
 	if (d.level === "ok") return `SLEEP DEBT: fine (${hm$10(d.debtMin)} behind a ${hm$10(d.needMin)} need over the last ${d.logged} logged nights). Don't bring it up.`;
 	return `SLEEP DEBT: ${hm$10(d.debtMin)} behind a ${hm$10(d.needMin)} need over the last ${d.logged} logged nights.${a.napOk ? " Suggest one 20-min nap before 15:00." : " No nap today (too late)."}${a.early ? ` Suggest bed at ${a.early.bed} ${a.early.label === "tonight" || a.early.label === "tomorrow" ? a.early.label : `on ${a.early.label}`} (his next free evening).` : ""} Say it once, not every message.`;
+}
+// src/core/benGround.ts
+var pad$14 = (n) => String(n).padStart(2, "0");
+var TIME$1 = /\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
+var AMPM = /\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s?(am|pm)\b/gi;
+var EVENT$1 = /\b(meetings?|appointments?|interviews?|lectures?|class(?:es)?|seminars?|exams?)\b/gi;
+var PROGRESS = /\b(?:nearly|almost|mostly|half(?:way)?|basically|practically)\s+(?:done|finished|through|complete|there)\b/i;
+var norm$5 = (h, m) => `${pad$14(h)}:${pad$14(m)}`;
+/** Every clock time in a text, as "HH:MM" (am/pm turned into 24 h). */
+function timesIn(text) {
+	const out = [];
+	for (const m of text.matchAll(TIME$1)) out.push(norm$5(Number(m[1]), Number(m[2])));
+	for (const m of text.matchAll(AMPM)) {
+		let h = Number(m[1]) % 12;
+		if (/pm/i.test(m[3])) h += 12;
+		out.push(norm$5(h, Number(m[2] ?? 0)));
+	}
+	return out;
+}
+var stem = (w) => w.toLowerCase().replace(/(ss)es$/, "$1").replace(/([^s])s$/, "$1");
+/** What in one sentence isn't backed by the facts: invented times, events, progress. */
+function ungrounded(sentence, g) {
+	const known = /* @__PURE__ */ new Set([...timesIn(g.facts), ...timesIn(g.said)]);
+	const t = g.now;
+	for (const d of [
+		-1,
+		0,
+		1
+	]) {
+		const x = new Date(t.getTime() + d * 6e4);
+		known.add(norm$5(x.getHours(), x.getMinutes()));
+	}
+	const times = timesIn(sentence).filter((x) => !known.has(x));
+	const where = `${g.facts}\n${g.said}`.toLowerCase();
+	return {
+		times,
+		events: [...sentence.matchAll(EVENT$1)].map((m) => m[1]).filter((w) => !where.includes(stem(w))),
+		progress: PROGRESS.test(sentence) && !/\b(almost|nearly|half|halfway|most of|mostly)\b/i.test(g.said)
+	};
+}
+var sentences$1 = (text) => text.split(/(?<=[.!?…])\s+|\n+/).filter((s) => s.trim());
+/** The reply with every invented time, event and progress claim taken out. `dropped` lists what went. */
+function groundReply(reply, g) {
+	const text = String(reply ?? "").trim();
+	if (!text) return {
+		reply: text,
+		dropped: []
+	};
+	const parts = sentences$1(text);
+	const dropped = [];
+	const kept = [];
+	for (const s of parts) {
+		const u = ungrounded(s, g);
+		if (u.times.length || u.events.length) {
+			dropped.push(s.trim());
+			continue;
+		}
+		if (u.progress) {
+			const clauses = s.split(/\s*(?:,|;|—|–| - )\s*/);
+			const ok = clauses.filter((c) => !PROGRESS.test(c));
+			dropped.push(...clauses.filter((c) => PROGRESS.test(c)).map((c) => c.trim()));
+			if (ok.length) {
+				const joined = ok.join(", ").replace(/\s+([.!?])/g, "$1");
+				kept.push(/[.!?…]$/.test(joined) ? joined : `${joined}.`);
+			}
+			continue;
+		}
+		kept.push(s.trim());
+	}
+	if (!dropped.length) return {
+		reply: text,
+		dropped
+	};
+	if (kept.length) return {
+		reply: kept.join(" ").trim(),
+		dropped
+	};
+	let r = text;
+	for (const s of parts) {
+		const u = ungrounded(s, g);
+		for (const x of u.times) r = r.replace(new RegExp(`\\s*\\b(?:at|until|till|by|from|before|after|around)?\\s*${x.replace(/^0/, "0?")}\\b`, "g"), "");
+		for (const w of u.events) r = r.replace(new RegExp(`\\s*\\b(?:before|until|after)?\\s*(?:the|your|a)?\\s*(?:next\\s+)?${w}\\b`, "gi"), "");
+	}
+	r = r.replace(/\s{2,}/g, " ").replace(/\s+([,.!?])/g, "$1").replace(/,\s*\./g, ".").trim();
+	return {
+		reply: r || text,
+		dropped
+	};
 }
 // src/main/bodyPlus.ts
 var rid$1 = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
@@ -5057,15 +5147,15 @@ var hm$8 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).pad
 // src/core/moneyGuess.ts
 var MONEY = /\b(lei|mdl|ron|usd|eur|euro|dollars?|bani|spent|paid|pay|bought|cost|costs|price|cash|card|maib|vb|victoriabank|cheltuit|plătit|platit|потратил|заплатил|руб)\b|[$€£₽]/iu;
 var MONTH$1 = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?|ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie|январ\p{L}*|феврал\p{L}*|март\p{L}*|апрел\p{L}*|ма[йя]|июн\p{L}*|июл\p{L}*|август\p{L}*|сентябр\p{L}*|октябр\p{L}*|ноябр\p{L}*|декабр\p{L}*)\b/iu;
-var TIME$1 = /\b\d{1,2}[:.]\d{2}\b|\b\d{1,2}\s*(am|pm|a\.m\.|p\.m\.)|\b(at|by|until|till|from|la|ora|в)\s+\d{1,2}\b|\bo'?clock\b/iu;
+var TIME = /\b\d{1,2}[:.]\d{2}\b|\b\d{1,2}\s*(am|pm|a\.m\.|p\.m\.)|\b(at|by|until|till|from|la|ora|в)\s+\d{1,2}\b|\bo'?clock\b/iu;
 var DURATION = /\b\d+(?:[.,]\d+)?\s*(min(ute)?s?|h|hrs?|hours?|ore|минут\p{L}*|час\p{L}*|km|meters?|metres?|kg|kgs?|lbs?|reps?|sets?|cups?|glasses|pages?|days?|weeks?|times?|x)\b/iu;
-var EVENT$1 = /\b(exam|test|deadline|meeting|appointment|class|lecture|lab|due|tomorrow|today|tonight|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next|woke|wake|slept|sleep|bed|nap|up at|examen|mâine|maine|azi|экзамен|завтра|сегодня)\b/iu;
+var EVENT = /\b(exam|test|deadline|meeting|appointment|class|lecture|lab|due|tomorrow|today|tonight|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next|woke|wake|slept|sleep|bed|nap|up at|examen|mâine|maine|azi|экзамен|завтра|сегодня)\b/iu;
 /** True when the number in this message is clearly not an amount of money. */
 function notMoney(text) {
 	const t = String(text ?? "").trim();
 	if (!t || t.startsWith("/")) return false;
 	if (MONEY.test(t)) return false;
-	return MONTH$1.test(t) || TIME$1.test(t) || DURATION.test(t) || EVENT$1.test(t);
+	return MONTH$1.test(t) || TIME.test(t) || DURATION.test(t) || EVENT.test(t);
 }
 var HOSTS = [
 	"soundcloud.com",
@@ -7286,9 +7376,9 @@ function relinkAlso(plan) {
 // src/core/benTalk.ts
 /** A regex with Unicode word edges: \\b only knows ASCII, so "arată" or "второй" would never match. */
 var uw = (src, flags = "") => new RegExp(src.replace(/\\b/g, "(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))"), `${flags}u`);
-var pad$14 = (n) => String(n).padStart(2, "0");
+var pad$13 = (n) => String(n).padStart(2, "0");
 var ymd$3 = (d) => calendarDay(d);
-var hmOf$7 = (d) => `${pad$14(d.getHours())}:${pad$14(d.getMinutes())}`;
+var hmOf$7 = (d) => `${pad$13(d.getHours())}:${pad$13(d.getMinutes())}`;
 var label$1 = (d) => d.toLocaleDateString("en-GB", {
 	weekday: "short",
 	day: "numeric",
@@ -7303,11 +7393,11 @@ function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
 	const appDay = ymd$3(app);
 	const nextCal = new Date(now);
 	nextCal.setDate(nextCal.getDate() + 1);
-	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$7(now)}, ${label$1(now)}. App day: ${label$1(app)} (the app's day turns at ${pad$14(startHour)}:00).`];
+	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$7(now)}, ${label$1(now)}. App day: ${label$1(app)} (the app's day turns at ${pad$13(startHour)}:00).`];
 	if (afterMidnight) {
 		const seven = new Date(now);
 		seven.setHours(7, 0, 0, 0);
-		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label$1(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label$1(now)} from ${pad$14(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label$1(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label$1(app)} until ${pad$14(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label$1(now)}); ask with chips only if it really matters.`);
+		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label$1(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label$1(now)} from ${pad$13(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label$1(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label$1(app)} until ${pad$13(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label$1(now)}); ask with chips only if it really matters.`);
 	} else if (h >= 18) lines.push(`- "tonight" = this evening (${label$1(now)}). "tomorrow morning" = ${label$1(nextCal)}.`);
 	else if (h < 12) lines.push(`- "this morning" = now (${label$1(now)}). "tonight" = this evening. "tomorrow" = ${label$1(nextCal)}.`);
 	else lines.push(`- "this afternoon" = now. "tonight" = this evening (${label$1(now)}). "tomorrow" = ${label$1(nextCal)}.`);
@@ -7611,7 +7701,7 @@ var timeOf$1 = (s) => {
 	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
 	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
 	const mi = Number(m[2] ?? 0);
-	return h < 24 && mi < 60 ? `${pad$14(h)}:${pad$14(mi)}` : null;
+	return h < 24 && mi < 60 ? `${pad$13(h)}:${pad$13(mi)}` : null;
 };
 var BLOCK = "(?:block|blocks|blocul|blocului|блок|блока)";
 /**
@@ -7693,7 +7783,7 @@ function pickChoice(text, labels) {
 	if (exact >= 0) return exact;
 	const time = /\b(\d{1,2})[:.](\d{2})\b/.exec(t) ?? /\b(?:at|la|в)\s+(\d{1,2})\b/.exec(t);
 	if (time) {
-		const hm = `${pad$14(Number(time[1]))}:${time[2] ?? "00"}`;
+		const hm = `${pad$13(Number(time[1]))}:${time[2] ?? "00"}`;
 		const k = labels.findIndex((l) => l.endsWith(hm));
 		if (k >= 0) return k;
 	}
@@ -9052,7 +9142,7 @@ function applyBlockOp(blocks, op, by, now = /* @__PURE__ */ new Date()) {
 function logChanges(log, add) {
 	return [...Array.isArray(log) ? log.filter((c) => c && typeof c.id === "string") : [], ...add.filter((c) => !!c)].slice(-80);
 }
-var norm$5 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+var norm$4 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 /** Keeps at most `max` facts: pinned ones always stay; the weakest, oldest unpinned go first. */
 function capFacts(facts, max) {
 	if (facts.length <= max) return {
@@ -9140,7 +9230,7 @@ function applyTidy(facts, decisions, ids, max, now = /* @__PURE__ */ new Date())
 	const touched = /* @__PURE__ */ new Set();
 	const find = (id) => {
 		const f = id ? ids.get(id) : void 0;
-		return f ? list.findIndex((x) => norm$5(x.t) === norm$5(f.t)) : -1;
+		return f ? list.findIndex((x) => norm$4(x.t) === norm$4(f.t)) : -1;
 	};
 	const log = (before, after, why) => changes.push({
 		id: changeId(now),
@@ -9155,7 +9245,7 @@ function applyTidy(facts, decisions, ids, max, now = /* @__PURE__ */ new Date())
 	for (const d of decisions) {
 		if (d.op === "ADD") {
 			const t = d.text;
-			if (list.some((x) => norm$5(x.t) === norm$5(t))) continue;
+			if (list.some((x) => norm$4(x.t) === norm$4(t))) continue;
 			list.push(toRecord(t, today));
 			log(null, t, d.why);
 			continue;
@@ -9163,19 +9253,19 @@ function applyTidy(facts, decisions, ids, max, now = /* @__PURE__ */ new Date())
 		const i = find(d.id);
 		if (i < 0) continue;
 		const f = list[i];
-		if (f.pin || touched.has(norm$5(f.t))) continue;
-		touched.add(norm$5(f.t));
+		if (f.pin || touched.has(norm$4(f.t))) continue;
+		touched.add(norm$4(f.t));
 		if (d.op === "DELETE") {
 			list.splice(i, 1);
 			log(f.t, null, d.why);
-		} else if (d.op === "UPDATE" && norm$5(d.text) !== norm$5(f.t)) {
-			const dup = list.findIndex((x, k) => k !== i && norm$5(x.t) === norm$5(d.text));
+		} else if (d.op === "UPDATE" && norm$4(d.text) !== norm$4(f.t)) {
+			const dup = list.findIndex((x, k) => k !== i && norm$4(x.t) === norm$4(d.text));
 			list[i] = {
 				...f,
 				t: d.text,
 				at: today
 			};
-			touched.add(norm$5(d.text));
+			touched.add(norm$4(d.text));
 			if (dup >= 0 && !list[dup].pin) list.splice(dup, 1);
 			log(f.t, d.text, d.why);
 		}
@@ -9198,7 +9288,7 @@ function textHash(t) {
 	return (h >>> 0).toString(16).padStart(8, "0");
 }
 /** The id of a fact's piece ("fact:<hash of its words>"). */
-var factDocId = (f) => `fact:${textHash(norm$5(f.t))}`;
+var factDocId = (f) => `fact:${textHash(norm$4(f.t))}`;
 var NOTE_PART = 700;
 /** Every piece of memory worth finding by meaning, at most 600 (newest kept). */
 function memoryDocs(s) {
@@ -9216,9 +9306,9 @@ function memoryDocs(s) {
 	if (m) {
 		for (const p of m.people) add("mind", `p:${textHash(p.name.toLowerCase())}`, `${p.name}: ${p.note}`);
 		for (const g of m.goals) add("mind", `g:${textHash(g.title.toLowerCase())}`, `Goal: ${g.title}${g.deadline ? ` by ${g.deadline}` : ""}${g.weekly ? `, ${g.weekly} a week` : ""}`);
-		for (const x of m.works) add("mind", `w:${textHash(norm$5(x.t))}`, `Works for him: ${x.t}`);
-		for (const x of m.fails) add("mind", `f:${textHash(norm$5(x.t))}`, `Doesn't work for him: ${x.t}`);
-		for (const x of m.patterns) add("mind", `t:${textHash(norm$5(x.t))}`, `Pattern: ${x.t}`);
+		for (const x of m.works) add("mind", `w:${textHash(norm$4(x.t))}`, `Works for him: ${x.t}`);
+		for (const x of m.fails) add("mind", `f:${textHash(norm$4(x.t))}`, `Doesn't work for him: ${x.t}`);
+		for (const x of m.patterns) add("mind", `t:${textHash(norm$4(x.t))}`, `Pattern: ${x.t}`);
 	}
 	for (const n of s.notes ?? []) {
 		const body = n.body.trim();
@@ -9322,8 +9412,8 @@ function keywordRecall(docs, query, k = 6) {
 }
 /** Recalled pieces as prompt lines ("- [note] …"), skipping what the prompt already has. */
 function recallText(hits, already = "") {
-	const have = norm$5(already);
-	return hits.filter((h) => !have.includes(norm$5(h.text).slice(0, 60))).map((h) => `- [${h.kind}] ${h.text.slice(0, 300)}`).join("\n");
+	const have = norm$4(already);
+	return hits.filter((h) => !have.includes(norm$4(h.text).slice(0, 60))).map((h) => `- [${h.kind}] ${h.text.slice(0, 300)}`).join("\n");
 }
 // src/core/stealth.ts
 var SWAPS = [
@@ -13420,6 +13510,7 @@ var TYPE_AREA = {
 	move: "body",
 	eyes: "body",
 	training: "body",
+	workoutNote: "body",
 	money: "money",
 	chores: "chores",
 	work: "work"
@@ -15040,7 +15131,7 @@ var MAX = {
 	patterns: 10,
 	people: 20
 };
-var norm$4 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+var norm$3 = (t) => t.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 var clip$8 = (t, n = 160) => String(t ?? "").trim().slice(0, n);
 function cleanMind(m) {
 	const list = (x) => Array.isArray(x) ? x.filter((e) => e && typeof e.t === "string").map((e) => ({
@@ -15099,8 +15190,8 @@ function readMindOp(line) {
 	};
 }
 var sameIdea = (a, b) => {
-	const x = norm$4(a);
-	const y = norm$4(b);
+	const x = norm$3(a);
+	const y = norm$3(b);
 	return !!x && !!y && (x === y || x.includes(y) || y.includes(x));
 };
 /** Applies one memory change; the newest version of an idea replaces the old one. */
@@ -15342,7 +15433,7 @@ var DAYS$4 = [
 	"Fri",
 	"Sat"
 ];
-var pad$13 = (n) => String(n % 24).padStart(2, "0");
+var pad$12 = (n) => String(n % 24).padStart(2, "0");
 var W = {
 	urge: 1,
 	reset: 3
@@ -15381,8 +15472,8 @@ function riskWindows(events, now = /* @__PURE__ */ new Date(), max = 3) {
 	const win = (slot, weekday, a) => ({
 		slot,
 		weekday,
-		from: `${pad$13(slot * 2)}:00`,
-		to: `${pad$13(slot * 2 + 2)}:00`,
+		from: `${pad$12(slot * 2)}:00`,
+		to: `${pad$12(slot * 2 + 2)}:00`,
 		urges: a.urges,
 		resets: a.resets,
 		score: a.score
@@ -18372,7 +18463,7 @@ var BAD_COMBOS = /* @__PURE__ */ new Set([
 	"ctrl+alt+del",
 	"ctrl+shift+delete"
 ]);
-var norm$3 = (s) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+var norm$2 = (s) => String(s ?? "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 /** Ben's line → an action, or null. "pc: open spotify", "pc: url https://…", "pc: keys ctrl+shift+t". */
 function readPcAction(line) {
 	const m = /^\s*pc\s*:\s*(open|launch|start|url|link|file|type|keys?|press|feature|close|quit)\s*[:\s]\s*(.+)$/i.exec(String(line ?? ""));
@@ -18390,7 +18481,7 @@ function readPcAction(line) {
 }
 /** "open Spotify", "type “hello”", "press Ctrl+Shift+T": what the card says. */
 function pcActText(a) {
-	if (a.kind === "open") return `open ${KNOWN_APPS[norm$3(a.arg)]?.label ?? a.arg}`;
+	if (a.kind === "open") return `open ${KNOWN_APPS[norm$2(a.arg)]?.label ?? a.arg}`;
 	if (a.kind === "url") try {
 		return `open ${new URL(a.arg).hostname.replace(/^www\./, "")}`;
 	} catch {
@@ -18400,11 +18491,11 @@ function pcActText(a) {
 	if (a.kind === "file") return `open the file ${a.arg.split(/[\\/]/).pop()}`;
 	if (a.kind === "type") return `type “${a.arg.length > 40 ? `${a.arg.slice(0, 40)}…` : a.arg}”`;
 	if (a.kind === "keys") return `press ${a.arg.split("+").map((k) => k.trim()).map((k) => k.length <= 3 ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1)).join("+")}`;
-	return `open ${FEATURES[norm$3(a.arg)]?.label ?? a.arg}`;
+	return `open ${FEATURES[norm$2(a.arg)]?.label ?? a.arg}`;
 }
 /** Why this action is refused (deny list, bad link or file, unknown key), or null when it may be asked. */
 function pcDenied(a) {
-	const text = norm$3(a.arg);
+	const text = norm$2(a.arg);
 	const word = DENY_WORDS.find((w) => text.split(" ").some((t) => t.includes(w.replace(/\s+/g, ""))) || text.includes(w));
 	if (word && a.kind !== "type") return `“${word}” is on the never list`;
 	if (a.kind === "type") {
@@ -19211,12 +19302,12 @@ function stepsFromText(text) {
 	}
 	return out.slice(0, 40);
 }
-var pad$12 = (n) => String(n).padStart(2, "0");
+var pad$11 = (n) => String(n).padStart(2, "0");
 var mondayOf$2 = (day) => addDays$8(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
 var lastOfMonth = (day) => {
 	const y = Number(day.slice(0, 4));
 	const m = Number(day.slice(5, 7));
-	return `${y}-${pad$12(m)}-${pad$12(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
+	return `${y}-${pad$11(m)}-${pad$11(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
 };
 /** The week (Monday–Sunday) or month a day is in. */
 function periodOf(per, day) {
@@ -19380,7 +19471,7 @@ var nice$1 = (n, unit) => {
 /** "45 min", "1h30" for hours. */
 var hoursText$1 = (h) => {
 	const m = Math.round(h * 60);
-	return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad$12(m % 60) : ""}`;
+	return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad$11(m % 60) : ""}`;
 };
 var amount = (g, n) => {
 	if (g.unit === "hours") return hoursText$1(n);
@@ -19800,7 +19891,7 @@ var MONTHS$5 = [
 	"dec"
 ];
 var monthOf = (w) => MONTHS$5.indexOf(w.slice(0, 3).toLowerCase());
-var pad$11 = (n) => String(n).padStart(2, "0");
+var pad$10 = (n) => String(n).padStart(2, "0");
 var lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
 var valid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= lastDay(y, m);
 /** The first date in the text after today: "31 Dec", "Dec 31", "31.12", "2026-12-31", "end of month", "in 3 months", "by June". */
@@ -19809,8 +19900,8 @@ function parseDeadline(text, today) {
 	const y0 = Number(today.slice(0, 4));
 	const future = (y, m, d, yearGiven) => {
 		if (!valid(y, m, d)) return null;
-		let day = `${y}-${pad$11(m)}-${pad$11(d)}`;
-		if (!yearGiven && day < today) day = `${y + 1}-${pad$11(m)}-${pad$11(Math.min(d, lastDay(y + 1, m)))}`;
+		let day = `${y}-${pad$10(m)}-${pad$10(d)}`;
+		if (!yearGiven && day < today) day = `${y + 1}-${pad$10(m)}-${pad$10(Math.min(d, lastDay(y + 1, m)))}`;
 		return day;
 	};
 	let m = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(t);
@@ -19847,7 +19938,7 @@ function parseDeadline(text, today) {
 		const y = y0;
 		const mo = Number(today.slice(5, 7));
 		return {
-			day: m[1] === "year" ? `${y}-12-31` : `${y}-${pad$11(mo)}-${pad$11(lastDay(y, mo))}`,
+			day: m[1] === "year" ? `${y}-12-31` : `${y}-${pad$10(mo)}-${pad$10(lastDay(y, mo))}`,
 			match: m[0]
 		};
 	}
@@ -20132,7 +20223,7 @@ var timeOf = (t) => {
 	let h = Number(m[1]);
 	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
 	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
-	return h > 23 ? null : `${pad$11(h)}:${m[2] ?? "00"}`;
+	return h > 23 ? null : `${pad$10(h)}:${m[2] ?? "00"}`;
 };
 var PC_KIND = [
 	[/gam(e|es|ing)|steam|valorant|cs2|lol\b/i, "gaming"],
@@ -20508,7 +20599,7 @@ function atIn(hm, now) {
 /** "1.2 L" from millilitres. */
 var litres = (ml) => `${(Math.max(0, ml) / 1e3).toFixed(1)} L`;
 /** The sentences of a reply (lines and sentence ends). */
-function sentences$1(text) {
+function sentences(text) {
 	return String(text ?? "").split(/\n+/).flatMap((l) => l.replace(/^\s*[•\-–]\s*/, "").split(/(?<=[.!?])\s+(?=[A-Z0-9"“▶])/)).map((s) => s.trim()).filter(Boolean);
 }
 /**
@@ -20522,7 +20613,7 @@ function plainTidy(reply) {
 	if (!t.trim()) return t;
 	t = t.replace(/\s*\(v\d+\)/gi, "").replace(/\b(?:a |the |your )?(?:free |open )window\b/gi, "free time").replace(/\b([Aa]|[Tt]he|[Yy]our|[Tt]his|[Tt]hat|[Nn]ext) ([a-z][a-z-]+) block\b(?!\s*\d)/g, "$1 $2").replace(/\b(your|the|a) next block\b/g, "$1 next thing").replace(/\bNext real thing is\b/g, "Next up is").replace(/\bnext real thing is\b/g, "next up is").replace(/\b(\d+) min away\b/g, "in $1 min");
 	if (!t.includes("\n")) {
-		const s = sentences$1(t);
+		const s = sentences(t);
 		if (s.length >= 3) t = s.join("\n");
 	}
 	return t;
@@ -32285,7 +32376,7 @@ function signals(a) {
 		}
 	};
 }
-var norm$2 = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+var norm$1 = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
 var lowerFirst = (t) => /^[A-Z](?=[a-z ])/.test(t) ? t[0].toLowerCase() + t.slice(1) : t;
 /** A small, stable shuffle per week, so the row changes a little each week. */
 function jitter(key, week) {
@@ -32309,10 +32400,10 @@ function suggest(i) {
 		score: .1,
 		why: null
 	};
-	const have = new Set(i.have.map(norm$2));
+	const have = new Set(i.have.map(norm$1));
 	const hidden = new Set(i.hidden);
 	const limit = i.limit ?? 8;
-	const scored = STARTERS.filter((s) => !hidden.has(s.key) && !have.has(norm$2(s.title)) && (!i.only || i.only(s))).map((s) => {
+	const scored = STARTERS.filter((s) => !hidden.has(s.key) && !have.has(norm$1(s.title)) && (!i.only || i.only(s))).map((s) => {
 		let score = Math.max(...s.tags.map((t) => sig[t].score));
 		if (s.points <= i.balance) score += .3;
 		else if (i.perDay > 0 && s.points <= i.balance + i.perDay * 7) score += .2;
@@ -38209,9 +38300,9 @@ var MONTHS$4 = [
 	"November",
 	"December"
 ];
-var pad$10 = (n) => String(n).padStart(2, "0");
+var pad$9 = (n) => String(n).padStart(2, "0");
 function toISO(d) {
-	return `${d.getFullYear()}-${pad$10(d.getMonth() + 1)}-${pad$10(d.getDate())}`;
+	return `${d.getFullYear()}-${pad$9(d.getMonth() + 1)}-${pad$9(d.getDate())}`;
 }
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
@@ -38222,7 +38313,7 @@ function monthLabel(key, short = false) {
 function addMonths(key, n) {
 	const [y, m] = key.split("-").map(Number);
 	const idx = y * 12 + (m - 1) + n;
-	return `${Math.floor(idx / 12)}-${pad$10(idx % 12 + 1)}`;
+	return `${Math.floor(idx / 12)}-${pad$9(idx % 12 + 1)}`;
 }
 function daysInMonth$1(key) {
 	const [y, m] = key.split("-").map(Number);
@@ -38291,13 +38382,13 @@ var MONTHS$3 = {
 	"3months": 3,
 	year: 12
 };
-var pad$9 = (n) => String(n).padStart(2, "0");
+var pad$8 = (n) => String(n).padStart(2, "0");
 function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
 	if (rule.every === "week") return addDays$1(rule.start, 7 * n);
 	if (rule.every === "2weeks") return addDays$1(rule.start, 14 * n);
 	const key = addMonths(monthKey(rule.start), (MONTHS$3[rule.every] || 1) * n);
-	return `${key}-${pad$9(Math.min(Number(rule.start.slice(8, 10)), daysInMonth$1(key)))}`;
+	return `${key}-${pad$8(Math.min(Number(rule.start.slice(8, 10)), daysInMonth$1(key)))}`;
 }
 function occurrences(rule, from, to, max = 1e3) {
 	const out = [];
@@ -39176,7 +39267,7 @@ function workText(state, amountBase, today) {
 	return formatWork(workHours(amountBase, r.rate));
 }
 // src/renderer/public/apps/finance/js/payyourself.js
-var pad$8 = (n) => String(n).padStart(2, "0");
+var pad$7 = (n) => String(n).padStart(2, "0");
 var toBase = (state, c, cur) => !cur || cur === state.settings.currency ? c : convert(c, cur, state.settings.currency, state.rates);
 function suggestSalary(state, today) {
 	const key = monthKey(today);
@@ -39200,7 +39291,7 @@ function suggestSalary(state, today) {
 		months: months.length
 	};
 }
-var salaryDate = (key, day = 1) => `${key}-${pad$8(Math.min(Math.max(1, day), daysInMonth$1(key)))}`;
+var salaryDate = (key, day = 1) => `${key}-${pad$7(Math.min(Math.max(1, day), daysInMonth$1(key)))}`;
 var salaryOf = (state, key) => state.tx.find((t) => t.type === "transfer" && t.salary === key) || null;
 function payStatus(state, today) {
 	if (!payOn(state)) return {
@@ -41162,94 +41253,6 @@ function learnAreaWords(map, text, area) {
 	const keys = Object.keys(next);
 	if (keys.length > 400) for (const k of keys.slice(0, keys.length - 400)) delete next[k];
 	return next;
-}
-// src/core/benGround.ts
-var pad$7 = (n) => String(n).padStart(2, "0");
-var TIME = /\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
-var AMPM = /\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s?(am|pm)\b/gi;
-var EVENT = /\b(meetings?|appointments?|interviews?|lectures?|class(?:es)?|seminars?|exams?)\b/gi;
-var PROGRESS = /\b(?:nearly|almost|mostly|half(?:way)?|basically|practically)\s+(?:done|finished|through|complete|there)\b/i;
-var norm$1 = (h, m) => `${pad$7(h)}:${pad$7(m)}`;
-/** Every clock time in a text, as "HH:MM" (am/pm turned into 24 h). */
-function timesIn(text) {
-	const out = [];
-	for (const m of text.matchAll(TIME)) out.push(norm$1(Number(m[1]), Number(m[2])));
-	for (const m of text.matchAll(AMPM)) {
-		let h = Number(m[1]) % 12;
-		if (/pm/i.test(m[3])) h += 12;
-		out.push(norm$1(h, Number(m[2] ?? 0)));
-	}
-	return out;
-}
-var stem = (w) => w.toLowerCase().replace(/(ss)es$/, "$1").replace(/([^s])s$/, "$1");
-/** What in one sentence isn't backed by the facts: invented times, events, progress. */
-function ungrounded(sentence, g) {
-	const known = /* @__PURE__ */ new Set([...timesIn(g.facts), ...timesIn(g.said)]);
-	const t = g.now;
-	for (const d of [
-		-1,
-		0,
-		1
-	]) {
-		const x = new Date(t.getTime() + d * 6e4);
-		known.add(norm$1(x.getHours(), x.getMinutes()));
-	}
-	const times = timesIn(sentence).filter((x) => !known.has(x));
-	const where = `${g.facts}\n${g.said}`.toLowerCase();
-	return {
-		times,
-		events: [...sentence.matchAll(EVENT)].map((m) => m[1]).filter((w) => !where.includes(stem(w))),
-		progress: PROGRESS.test(sentence) && !/\b(almost|nearly|half|halfway|most of|mostly)\b/i.test(g.said)
-	};
-}
-var sentences = (text) => text.split(/(?<=[.!?…])\s+|\n+/).filter((s) => s.trim());
-/** The reply with every invented time, event and progress claim taken out. `dropped` lists what went. */
-function groundReply(reply, g) {
-	const text = String(reply ?? "").trim();
-	if (!text) return {
-		reply: text,
-		dropped: []
-	};
-	const parts = sentences(text);
-	const dropped = [];
-	const kept = [];
-	for (const s of parts) {
-		const u = ungrounded(s, g);
-		if (u.times.length || u.events.length) {
-			dropped.push(s.trim());
-			continue;
-		}
-		if (u.progress) {
-			const clauses = s.split(/\s*(?:,|;|—|–| - )\s*/);
-			const ok = clauses.filter((c) => !PROGRESS.test(c));
-			dropped.push(...clauses.filter((c) => PROGRESS.test(c)).map((c) => c.trim()));
-			if (ok.length) {
-				const joined = ok.join(", ").replace(/\s+([.!?])/g, "$1");
-				kept.push(/[.!?…]$/.test(joined) ? joined : `${joined}.`);
-			}
-			continue;
-		}
-		kept.push(s.trim());
-	}
-	if (!dropped.length) return {
-		reply: text,
-		dropped
-	};
-	if (kept.length) return {
-		reply: kept.join(" ").trim(),
-		dropped
-	};
-	let r = text;
-	for (const s of parts) {
-		const u = ungrounded(s, g);
-		for (const x of u.times) r = r.replace(new RegExp(`\\s*\\b(?:at|until|till|by|from|before|after|around)?\\s*${x.replace(/^0/, "0?")}\\b`, "g"), "");
-		for (const w of u.events) r = r.replace(new RegExp(`\\s*\\b(?:before|until|after)?\\s*(?:the|your|a)?\\s*(?:next\\s+)?${w}\\b`, "gi"), "");
-	}
-	r = r.replace(/\s{2,}/g, " ").replace(/\s+([,.!?])/g, "$1").replace(/,\s*\./g, ".").trim();
-	return {
-		reply: r || text,
-		dropped
-	};
 }
 // src/core/benNow.ts
 var LEAD$2 = /^(?:ok(?:ay)?[,.]?\s+|so\s+|right\s+|alright[,.]?\s+)?(?:now\s+|right now\s+)?(?:i\s*(?:'m| am)\s+(?:now\s+)?(?:going to|gonna|about to|starting(?: to)?|off to|heading to)|i\s*(?:'ll| will)\s+(?:go\s+)?(?:do|start)|let me|time to|starting(?: to)?|going to|gonna|about to)\s+(.+)$/i;

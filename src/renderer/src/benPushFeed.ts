@@ -6,7 +6,7 @@
 // The server's tick sends them on Telegram when you're away. A drift word the
 // island wouldn't show (Calm keeps it as a dot) is handed to Telegram.
 import { afterShiftPlan, shutdownFor } from '@core/afterShift'
-import { atPc, channelFor, pushAlert, decideBrief, decideCheckin, decideShutdown, driftToTelegram, isOffDay, pcSeenNext, type CheckinBlock, type PcSeen, type PushLog, type PushOp, type PushOut, type ShutdownItem } from '@core/benPushes'
+import { atPc, channelFor, pushAlert, decideBrief, decideCheckin, decideShutdown, decideWorkoutNote, driftToTelegram, isOffDay, pcSeenNext, type CheckinBlock, type PcSeen, type PushLog, type PushOp, type PushOut, type ShutdownItem } from '@core/benPushes'
 import type { IslandAction, IslandAlert, IslandBlock } from '@core/islandModel'
 export { pushAlert }
 import { modeGate } from '@core/islandCalm'
@@ -21,7 +21,40 @@ let logCache: { at: number; day: string; log: PushLog | null } = { at: 0, day: '
 let active: { alert: IslandAlert; key: string; until: number } | null = null
 let prefsCache: { at: number; mode: string; peekFor: Record<string, boolean> | null } = { at: 0, mode: 'calm', peekFor: null }
 
-const TTL: Record<PushOut['type'], number> = { checkin: 10, brief: 45, shutdown: 30, weekly: 30, drift: 10 }
+const TTL: Record<PushOut['type'], number> = { checkin: 10, brief: 45, shutdown: 30, weekly: 30, drift: 10, workoutNote: 30 }
+
+/** UX5: Sport Track's summary of a workout that just finished, waiting for its one note (kept 30 min: not in a meeting or at night). */
+let pending: { summary: unknown; at: number } | null = null
+export function offerWorkoutNote(summary: unknown, now = Date.now()): void {
+  pending = { summary, at: now }
+  // No island (the web app): Telegram only, now.
+  if (!window.desktop) void workoutNoteStep(now, false, false, false)
+}
+const noted = (p: PushOut) => window.dispatchEvent(new CustomEvent('life-workout-note', { detail: { key: p.key, text: p.text, channel: p.channel } }))
+/** One try at the pending note: queued for Telegram when you're away, or returned to show on the island. */
+async function workoutNoteStep(now: number, here: boolean, meeting: boolean, quiet: boolean): Promise<PushOut | null> {
+  const p = pending
+  if (!p || !life.coach?.pushes) return null
+  if (now - p.at > 30 * 60_000) {
+    pending = null
+    return null
+  }
+  if (meeting || quiet) return null
+  const log = await readLog(now, dayKey(new Date(now)), true)
+  if (!log) return null
+  const out = decideWorkoutNote({ now, summary: p.summary, log, here, meeting, quiet })
+  if (!out) {
+    pending = null
+    return null
+  }
+  if (out.channel === 'island') return out
+  pending = null
+  noted(out)
+  const item = { key: out.key, text: `${out.face} ${out.text}`, at: now }
+  logCache.log = { ...log, outbox: [...log.outbox, item] }
+  await life.coach.pushes.queue(item).catch(() => {})
+  return null
+}
 
 async function readLog(now: number, day: string, fresh = false): Promise<PushLog | null> {
   if (!life.coach?.pushes) return null
@@ -58,6 +91,7 @@ export async function pushTick(o: PushIslandInput): Promise<IslandAlert | null> 
     void life.coach.pushes.seen(next).catch(() => {})
   }
   if (active && (active.until <= o.now || !here)) active = here ? null : active
+  if (!here && pending) await workoutNoteStep(o.now, false, o.meeting, o.bedLogged)
   if (!here || !o.fit) return null
   const day = dayKey(new Date(o.now))
   const log = await readLog(o.now, day)
@@ -77,6 +111,16 @@ export async function pushTick(o: PushIslandInput): Promise<IslandAlert | null> 
     const alert = pushAlert(p)
     active = { alert, key: p.key, until: o.now + TTL[p.type] * 60_000 }
     return alert
+  }
+  // UX5: Ben's one line after a workout, while you're at the PC (away: Telegram, above).
+  if (pending) {
+    const n = await workoutNoteStep(o.now, true, o.meeting, o.bedLogged)
+    const a = n ? await show(n) : null
+    if (a && n) {
+      pending = null
+      noted(n)
+      return a
+    }
   }
   // PR1: a block that just started (the same ids as the calendar, so the server sees the same key).
   if (prefs.checkins) {

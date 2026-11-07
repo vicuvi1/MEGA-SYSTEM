@@ -19,6 +19,7 @@
 // Pure and tested (benPushes.test.ts): no clock of its own, no DOM, no timers.
 import type { PushLevel } from './lifeFit'
 import type { IslandAlert } from './islandModel'
+import { cleanSummary, workoutNote } from './sportInsight'
 
 // ---- areas and their push levels ----
 
@@ -62,7 +63,7 @@ export function cleanAreas(raw: unknown, push: PushLevel | null | undefined): Ar
 }
 
 /** Every kind of nudge Ben sends, and the area it belongs to. */
-export type NudgeType = 'checkin' | 'drift' | 'brief' | 'shutdown' | 'weekly' | 'water' | 'move' | 'eyes' | 'training' | 'winddown' | 'bed' | 'money' | 'chores' | 'work'
+export type NudgeType = 'checkin' | 'drift' | 'brief' | 'shutdown' | 'weekly' | 'water' | 'move' | 'eyes' | 'training' | 'winddown' | 'bed' | 'money' | 'chores' | 'work' | 'workoutNote'
 const TYPE_AREA: Record<Exclude<NudgeType, 'checkin' | 'drift'>, Area> = {
   brief: 'study',
   weekly: 'study',
@@ -73,6 +74,7 @@ const TYPE_AREA: Record<Exclude<NudgeType, 'checkin' | 'drift'>, Area> = {
   move: 'body',
   eyes: 'body',
   training: 'body',
+  workoutNote: 'body',
   money: 'money',
   chores: 'chores',
   work: 'work'
@@ -293,7 +295,7 @@ export interface PushButton {
   arg?: string
   minutes?: number
 }
-export type PushType = 'checkin' | 'brief' | 'shutdown' | 'weekly' | 'drift'
+export type PushType = 'checkin' | 'brief' | 'shutdown' | 'weekly' | 'drift' | 'workoutNote'
 export interface PushOut {
   key: string
   type: PushType
@@ -397,6 +399,31 @@ export function driftToTelegram(o: { alertId: string; title: string; text: strin
   const key = `drift:${o.alertId}`
   if (o.log.recs[key] || o.log.outbox.some((x) => x.key === key)) return null
   return { key, text: `👀 ${o.text}`, at: o.now }
+}
+
+// ---- UX5: Ben's line after a workout ----
+
+export const workoutNoteKey = (day: string, source: string) => `workoutNote:${day}:${source}`
+/** One note per workout: another within this long of the last one is the same session. */
+export const NOTE_GAP_MS = 30 * 60_000
+
+/**
+ * Sport Track's summary (SPORT_SUMMARY) → one plain line, once. Null in a
+ * meeting, in quiet hours, when this workout already got its note (anywhere:
+ * the island or Telegram, the same key), or when there is nothing honest to say.
+ * On the island while you're at the PC; otherwise `channel` is telegram.
+ */
+export function decideWorkoutNote(i: { now: number; summary: unknown; log: PushLog; here: boolean; meeting: boolean; quiet: boolean }): PushOut | null {
+  if (i.meeting || i.quiet) return null
+  const s = cleanSummary(i.summary)
+  if (!s) return null
+  const key = workoutNoteKey(s.day, s.source)
+  if (i.log.recs[key] || i.log.outbox.some((x) => x.key === key)) return null
+  const recent = Object.entries(i.log.recs).some(([k, r]) => k.startsWith('workoutNote:') && i.now - r.at < NOTE_GAP_MS) || i.log.outbox.some((x) => x.key.startsWith('workoutNote:') && i.now - x.at < NOTE_GAP_MS)
+  if (recent) return null
+  const n = workoutNote(s)
+  if (!n) return null
+  return { key, type: 'workoutNote', area: 'body', level: 'normal', title: 'Ben on your workout', text: n.text, face: '💪', channel: channelFor(i.here), buttons: [{ label: '👍 Thanks', op: 'ok', primary: true }] }
 }
 
 // ---- PR3: the morning brief ----
@@ -607,7 +634,7 @@ export const toCard = (p: PushOut): PushCard => ({ type: p.type, key: p.key, tit
 export function pushCardOf(raw: unknown): PushCard | null {
   const o = raw as Partial<PushCard> | null
   if (!o || typeof o !== 'object' || typeof o.key !== 'string' || typeof o.title !== 'string' || !Array.isArray(o.lines)) return null
-  if (!['checkin', 'brief', 'shutdown', 'weekly', 'drift'].includes(o.type as string)) return null
+  if (!['checkin', 'brief', 'shutdown', 'weekly', 'drift', 'workoutNote'].includes(o.type as string)) return null
   return o as PushCard
 }
 

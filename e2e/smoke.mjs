@@ -263,6 +263,24 @@ try {
   }
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
+  // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.
+  await step('Sport Track note: a workout summary makes one note from Ben, once', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch button').first().click()
+    await pg.waitForTimeout(2500)
+    const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+    if (!frame) throw new Error('no Sport Track frame')
+    await pg.evaluate(() => { window.__notes = []; window.addEventListener('life-workout-note', (e) => window.__notes.push(e.detail)) })
+    const post = () => frame.evaluate(() => window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_SUMMARY', payload: { day: '2031-03-04', source: 'smoke', minutes: 20, at: 1, sets: 6, reps: 90, records: 0, levelUps: 1, exercises: [{ name: 'Push-ups', sets: [15, 15, 14], next: 'Next: 3×16' }] } }, location.origin))
+    await post()
+    await pg.waitForFunction(() => window.__notes.length > 0, null, { timeout: 15000 })
+    const note = (await pg.evaluate(() => window.__notes))[0]
+    if (!/level/i.test(note.text) || note.text.length > 140) throw new Error(`odd note: ${note.text}`)
+    await post()
+    await pg.waitForTimeout(1500)
+    if ((await pg.evaluate(() => window.__notes.length)) !== 1) throw new Error('the same workout got a second note')
+  })
   await step('Sport Track Today: hero, exercise cards, water, menus, fits laptop and phone', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 }) // a retry starts from the usual size
     await open('body')

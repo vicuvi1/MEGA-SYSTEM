@@ -17,6 +17,7 @@ import { doseMinutes, trainReadiness, type DoseMode, type TrainReady } from '../
 import { hardSetsByMuscle, mondayOf, shiftDay, type SetLog } from '../core/sportSets'
 import { bodyWeek, sleepWeek, stalledMoves, type BodyWeek, type SleepWeek } from '../core/bodyReport'
 import { cleanCare } from '../core/sleepCare'
+import { stallInsight, stallsOf, type Insight } from '../core/sportInsight'
 
 const rid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 
@@ -271,6 +272,24 @@ export function bodyWeekReport(db: DB, now = new Date()): BodyWeek {
     workouts: Math.max(workouts, setDays),
     stalls: stalledMoves(log, exercises, today)
   })
+}
+
+/** PG4: why a move stalled, from your protein, sleep and today's readiness (null: nothing stalled). */
+export function sportInsightNow(db: DB, now = new Date()): Insight | null {
+  const today = sportToday(now)
+  const blob = sportBlob(db)
+  const stalled = stallsOf((blob?.sets ?? {}) as SetLog, Array.isArray(blob?.exercises) ? blob.exercises : [], today)
+  if (!stalled.length) return null
+  const v = bodyPlusView(db, now)
+  const sl = sleepOfWeek(db, today)
+  let ready: { mode: 'full' | 'light' | 'short'; why: string } | null = null
+  try {
+    const r = readinessNow(db, null, now)
+    ready = { mode: r.mode, why: r.why }
+  } catch {
+    ready = null
+  }
+  return stallInsight(stalled, { protein: { avg: v.week.avg, days: v.week.days, goal: v.goal.g }, sleep: { avgMin: sl.avgMin, nights: sl.nights }, readiness: ready })
 }
 
 /** The Monday of this week (for the "this week" views). */

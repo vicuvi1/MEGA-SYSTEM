@@ -1348,6 +1348,7 @@
       </nav>
       <div class="sub lv-grid" data-sub="levels">
         <section class="card full" id="lv-story" hidden></section>
+        <section class="card full" id="lv-insight" hidden aria-live="polite"></section>
         <section class="card full" id="lv-rank"></section>
         <section class="card" id="lv-why"></section>
         <section class="card" id="lv-forecast"></section>
@@ -5129,7 +5130,22 @@
     }
     function trendWord(t) { return t === 'up' ? 'trending up' : t === 'down' ? 'a little down' : t === 'new' ? 'just started' : 'steady'; }
     const goalUnit = (g) => { const ex = state.exercises.find((e) => e.id === g.exId); const m = ex && SK.moveOf(ex); return m ? m.unit : 'reps'; };
+    // PG4: why a move stalled (Ben reads your protein, sleep and readiness in Life System). Asked when Levels opens; shown only when something stalled.
+    let insightAt = 0;
+    function askInsight() {
+      if (!window.parent || window.parent === window || Date.now() - insightAt < 30000) return;
+      insightAt = Date.now();
+      try { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_INSIGHT' }, location.origin); } catch (e) {}
+    }
+    window.addEventListener('message', (e) => {
+      if (e.origin !== location.origin || !e.data || e.data.type !== 'LIFE_SPORT_INSIGHT') return;
+      const box = byId('lv-insight');
+      const ins = e.data.insight;
+      box.hidden = !(ins && ins.text);
+      if (!box.hidden) box.innerHTML = `<span class="eyebrow">Why it stalled</span><p>${esc(ins.text)}</p>`;
+    });
     function renderLevels() {
+      askInsight();
       if (!SK || !SK.placeAll) return;
       const h = histInput();
       const places = SK.placeAll(h);
