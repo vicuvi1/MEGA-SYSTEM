@@ -6,6 +6,7 @@
 // playing" line Ben may see. No DOM here; tested in music.test.ts.
 import { cleanScUser, cleanStations, parseSoundCloud, type Station } from './soundcloud'
 import { cleanHiddenStarters } from './starterStations'
+import { cleanOnly, type OnlyDuring } from './musicOnly'
 
 // ---- the synced part (island_kit.music) ----
 
@@ -35,6 +36,8 @@ export interface MusicKit {
   nowToast: boolean
   /** "Your SoundCloud": your public profile name ('' = not connected). Only the public name, nothing else. */
   scUser: string
+  /** DX12: stations or tracks that play only while a workout (or a boring task) timer runs (core/musicOnly.ts). */
+  onlyDuring?: Record<string, OnlyDuring>
 }
 export type EqMode = 'beat' | 'pitch'
 export const DEFAULT_MUSIC: MusicKit = { stations: [], favs: [], focusMix: null, benSees: false, lyrics: true, pillLyric: false, eqMode: 'beat', pin: null, hiddenStarters: [], nowToast: true, scUser: '' }
@@ -73,7 +76,11 @@ export function cleanMusicKit(v: any): MusicKit {
   const stations = cleanStations(v?.stations)
   const mix = typeof v?.focusMix === 'string' && stations.some((s) => s.id === v.focusMix) ? v.focusMix : null
   const pin = typeof v?.pin === 'string' && /^(sc|scweb|sys:[A-Za-z0-9._!\- ]{1,200})$/.test(v.pin) ? v.pin : null
-  return { stations, favs: cleanFavs(v?.favs), focusMix: mix, benSees: v?.benSees === true, lyrics: v?.lyrics !== false, pillLyric: v?.pillLyric === true, eqMode: v?.eqMode === 'pitch' ? 'pitch' : 'beat', pin, hiddenStarters: cleanHiddenStarters(v?.hiddenStarters), nowToast: v?.nowToast !== false, scUser: cleanScUser(v?.scUser) }
+  return { stations, favs: cleanFavs(v?.favs), focusMix: mix, benSees: v?.benSees === true, lyrics: v?.lyrics !== false, pillLyric: v?.pillLyric === true, eqMode: v?.eqMode === 'pitch' ? 'pitch' : 'beat', pin, hiddenStarters: cleanHiddenStarters(v?.hiddenStarters), nowToast: v?.nowToast !== false, scUser: cleanScUser(v?.scUser), ...onlyOf(v?.onlyDuring) }
+}
+const onlyOf = (raw: unknown) => {
+  const o = cleanOnly(raw)
+  return Object.keys(o).length ? { onlyDuring: o } : {}
 }
 
 /** Star or unstar a track (newest first). */

@@ -227,6 +227,8 @@ export interface OutItem {
   text: string
   at: number
   buttons?: PushButton[]
+  /** DX4: the push ladder's own Telegram buttons (Start, the stake), sent as they are. */
+  rows?: { text: string; callback_data: string }[][]
 }
 export interface PushLog {
   /** The app day these are for (a new day starts empty, keeping only what's still open). */

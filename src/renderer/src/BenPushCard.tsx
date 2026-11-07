@@ -4,6 +4,7 @@
 // today on each open item (the same marks as Telegram and Today's Shut down),
 // and the weekly card (a score, 3 wins, 1 thing to fix, next week's top 3).
 import { useEffect, useState } from 'react'
+import { askWhyStalling } from './boost/boostBus'
 import { life } from './bridge'
 import { useAction } from './ui'
 import { MARK_WORD, type ItemMark, type PushCard, type PushLog, type PushOp } from '@core/benPushes'
@@ -91,8 +92,8 @@ export function BenPushCard({ card, live, onChange }: { card: PushCard; live: bo
       {can && card.type === 'checkin' && (
         <div className="cf-btns">
           <button className="p" onClick={() => void answer('start', `▶ ${card.title.split(' · ')[0]}`, () => life.focus.start(card.title.split(' · ')[0].slice(0, 40), 50, null))}>▶ Start</button>
-          <button onClick={() => void answer('later', '⏰ Again in 10 min')}>10 min later</button>
-          <button onClick={() => void answer('skip', 'Skipped for today')}>Skip</button>
+          <button onClick={() => void answer('later', '⏰ Again in 10 min').then(() => askWhyStalling(card.title.split(' · ')[0]))}>10 min later</button>
+          <button onClick={() => void answer('skip', 'Skipped for today').then(() => askWhyStalling(card.title.split(' · ')[0]))}>Skip</button>
         </div>
       )}
       {can && card.type === 'brief' && (

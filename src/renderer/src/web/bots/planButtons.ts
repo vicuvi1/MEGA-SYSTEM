@@ -8,7 +8,8 @@
 // The plan message is redrawn with a receipt line and fresh buttons.
 import { calendarDay } from '@core/dates'
 import { proposalText, RHYTHM, rhythmFor, type DayProposal } from '@core/rhythm'
-import { blockMarkId, movedStart, planKeyboard, readPlanTap, receiptLine, withReceipt, type Mark } from '@core/tgPlan'
+import { blockMarkId, planAfterMove, planKeyboard, planMoveCheck, readPlanTap, receiptLine, withReceipt, type Mark } from '@core/tgPlan'
+import { ensureIds } from '@core/planEdit'
 import { applyMark } from '@core/blockKind'
 import { lateBlocks } from '@core/planShift'
 import { readSetting, writeSetting } from '../../../../main/settings'
@@ -74,11 +75,13 @@ export async function runPlanTap(c: BotContext, t: Tap): Promise<string | null> 
     if (!blk) {
       await t.answer('That block is gone: here is the plan as it is now')
     } else if (tap.op === 'move') {
-      const to = movedStart(blk, tap.delta)
-      if (!to) {
-        await t.answer("Can't move it there")
+      // Through the app's plan-edit rules: a pinned block refuses, the id is the one the app syncs by.
+      const chk = planMoveCheck(p, tap.i, tap.delta)
+      if (!chk.ok) {
+        await t.answer(chk.why)
         return null
       }
+      const to = chk.to
       await t.answer(`Moving to ${to}…`)
       // A waiting plan: Ben's own move action (with Undo). An approved one: its calendar block, the chat's way.
       const said = `move ${blk.title} to ${to}`
@@ -90,15 +93,17 @@ export async function runPlanTap(c: BotContext, t: Tap): Promise<string | null> 
       receipt = receiptLine(tap, blk, ok.length ? '' : r.done[0]?.replace(/^⚠️\s*/, '') || 'nothing changed')
       // The receipt with its own ↩ Undo (the same undo as Ben's replies).
       if (r.at && r.undo?.some(Boolean)) await tg(t.update.__token, 'sendMessage', { chat_id: t.chat, text: esc([receipt, ...r.done].join('\n')), parse_mode: 'HTML', reply_markup: { inline_keyboard: [[{ text: '↩ Undo', callback_data: `cu|${Date.parse(r.at)}` }]] } }).catch(() => null)
-      // An approved plan keeps its own copy of the times in step with the calendar.
+      // An approved plan keeps its own copy in step: same id, pins kept, and the sync memory set to
+      // what the calendar now holds, so the app's sync shows it as sent, not as a change waiting.
       if (b.status === 'approved' && ok.length)
         await c.mirror
           .write((db) => {
             const cur = rhythmFor(readSetting(db as any, RHYTHM), p.day)
-            const bb = cur.briefing?.plan.blocks[tap.i]
-            if (!cur.briefing || !bb || bb.title !== blk.title) return
-            const blocks = cur.briefing.plan.blocks.map((x, k) => (k === tap.i ? { ...x, start: to } : x)).sort((a, z) => a.start.localeCompare(z.start))
-            writeSetting(db as any, RHYTHM, { ...cur, briefing: { ...cur.briefing, plan: { ...cur.briefing.plan, blocks } } } as any)
+            if (!cur.briefing) return
+            const plan = ensureIds(cur.briefing.plan)
+            const bb = plan.blocks.find((x) => x.id === chk.id) ?? plan.blocks.find((x) => x.title === blk.title)
+            if (!bb?.id || bb.locked) return
+            writeSetting(db as any, RHYTHM, { ...cur, briefing: { ...cur.briefing, plan: planAfterMove(plan, bb.id, to, true) } } as any)
           })
           .catch(() => null)
     } else {

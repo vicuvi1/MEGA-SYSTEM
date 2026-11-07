@@ -742,7 +742,7 @@ try {
     await pg.locator('.st-item', { hasText: 'Sound' }).first().click()
     await pg.waitForFunction(() => document.querySelector('.st-head h1')?.textContent === 'Sound', null, { timeout: 5000 })
     const n = await pg.locator('.sx-moment').count()
-    if (n !== 14) throw new Error(`${n} sound rows, want 14`)
+    if (n !== 17) throw new Error(`${n} sound rows, want 17`)
     await pg.click('button[aria-label="Sound for Water"]')
     await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
     await pg.locator('.ui-select-list [role=option]', { hasText: 'Pop' }).click()
@@ -1454,6 +1454,214 @@ try {
       await pg.waitForTimeout(600)
       await pg.locator('.bp-card[data-push="weekly"]').screenshot({ path: `${shots}/coach-weekly-card.png` })
     }
+  })
+  // Focus boost (DX4, DX7, DX9, DX10, DX12, DX19, LF14, LF20): the push ladder's 3 steps and the morning
+  // countdown on the island; in the app the session goal, Dojo (Esc leaves), Done / Half / Not at the end,
+  // "why I'm stalling", a launch kit, workout-only music and the victory card. BOOST_SHOTS=<dir> saves pictures.
+  await step('Focus boost: ladder steps and the morning countdown on the island, goal, Dojo, verdict, stalling fixes, launch kits, win music', async () => {
+    const shots = process.env.BOOST_SHOTS
+    const { build } = await import('rolldown')
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const { pathToFileURL } = await import('node:url')
+    const dir = await mkdtemp(join(tmpdir(), 'boost-'))
+    const entry = join(dir, 'entry.ts')
+    await writeFile(entry, ['pushLadder', 'morningLaunch'].map((m) => `export * from ${JSON.stringify(join(repo, `src/core/${m}.ts`))}\n`).join(''))
+    const out = await build({ input: entry, write: false, output: { format: 'esm' } })
+    await writeFile(join(dir, 'boost.mjs'), out.output[0].code)
+    const L = await import(pathToFileURL(join(dir, 'boost.mjs')).href)
+    await rm(dir, { recursive: true, force: true })
+    const now = fakeNow()
+    // The ladder's steps as boost/boostFeed.ts makes them (made-up block "Lab 4").
+    const trig = { key: 'demo1', title: 'Lab 4', why: 'late', since: now - 20 * 60_000 }
+    const ladderAlert = (f) => ({
+      id: `ladder:${f.key}:${f.step}`, kind: `push${f.step}`, title: `${f.head} · step ${f.step}`, text: f.text, face: f.face,
+      actions: [
+        { label: '▶ Start now', primary: true, action: { kind: 'boost', op: 'ladderStart', alertId: `ladder:${f.key}`, arg: f.title, minutes: 25 } },
+        { label: '⏰ 10 min', action: { kind: 'boost', op: 'ladderSnooze', alertId: `ladder:${f.key}`, arg: f.key } },
+        { label: 'Skip it', action: { kind: 'boost', op: 'ladderSkip', alertId: `ladder:${f.key}`, arg: f.key } }
+      ]
+    })
+    let state = null
+    const fires = []
+    for (const m of [0, 8, 16]) {
+      const r = L.ladderTick({ now: trig.since + m * 60_000, prefs: L.cleanLadder(null), level: 'normal', trigger: trig, started: false, quiet: false, meeting: false, state })
+      state = r.state
+      if (r.fire) fires.push(r.fire)
+    }
+    if (fires.map((f) => f.sound).join() !== 'push1,push2,push3') throw new Error(`ladder steps: ${fires.map((f) => f.sound).join()}`)
+    if (!fires[2].telegram || !fires[2].voice) throw new Error('step 3 has no Telegram message or voice line')
+    const day = new Date(now).toISOString().slice(0, 10)
+    let run = L.morningBegin({ run: null, day, now, prefs: L.cleanMorning(null), wokeAt: now - 3 * 60_000, briefOpenedAt: null })
+    const launchAlert = (c) => ({ id: c.id, kind: 'launch', title: c.title, text: c.text, face: c.face, actions: c.buttons.map((b) => ({ label: b.label, primary: !!b.primary, action: { kind: 'boost', op: `m:${b.op}`, alertId: c.id, arg: c.step } })) })
+
+    const ip = await (await browser.newContext({ viewport: { width: 560, height: 720 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island boost: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const snap = { at: Date.now(), locked: false, ben: { face: '😎', mood: 'hyped', why: '', move: null, last: null, unread: 0, busy: false, steps: [] }, running: null, now: null, next: null, mustdos: [], water: { ml: 500, target: 2500 }, reps: [], alert: null }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {}, islandTakeClicks: () => {}, islandAction: (a) => { window.__island.actions.push(a) },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 3, gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    if (shots) await ip.addStyleTag({ content: 'body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(#2b2d33 0 34px, #f4f5f7 34px); }' })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 20000 })
+    const show = async (alert, kind, i) => {
+      await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 }).catch(() => {})
+      await ip.evaluate(([a, k]) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + k, alert: a }), [alert, i])
+      await ip.waitForSelector(`.di-peek.kind-${kind}`, { timeout: 8000 })
+      if (await ip.$(`.di-peek.calm-peek.kind-${kind}`)) await ip.click(`.di-peek.calm-peek.kind-${kind}`)
+      await ip.waitForSelector(`.di-peek.alert.kind-${kind}`, { timeout: 8000 })
+      if (shots) await ip.waitForTimeout(700)
+    }
+    for (const [n, f] of fires.entries()) {
+      await show(ladderAlert(f), `push${f.step}`, n + 1)
+      for (const l of ['▶ Start now', '⏰ 10 min', 'Skip it']) if (!(await ip.$(`.di-peek.alert.kind-push${f.step} [data-tap="peek:alert:${l}"]`))) throw new Error(`ladder step ${f.step} has no "${l}"`)
+      if (shots) await ip.screenshot({ path: `${shots}/island-ladder-step${f.step}.png`, clip: { x: 0, y: 0, width: 560, height: 300 } })
+    }
+    await ip.click('.di-peek.alert.kind-push3 [data-tap="peek:alert:⏰ 10 min"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'boost' && a.op === 'ladderSnooze' && a.arg === 'demo1'), null, { timeout: 4000 })
+    // The morning countdown: water → push-ups → the first must-do in 2 minutes (with its kit).
+    const prefs = L.cleanMorning(null)
+    await show(launchAlert(L.launchCard({ run, now, prefs, mustdo: 'Essay intro', kit: 'Writing' })), 'launch', 10)
+    if (!/Launch 1\/3 · Water/.test(await ip.textContent('.di-peek.alert.kind-launch'))) throw new Error('the countdown does not start with water')
+    if (shots) await ip.screenshot({ path: `${shots}/island-morning-water.png`, clip: { x: 0, y: 0, width: 560, height: 300 } })
+    await ip.click('.di-peek.alert.kind-launch [data-tap="peek:alert:💧 Drank it · 250 ml"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'boost' && a.op === 'm:water'), null, { timeout: 4000 })
+    run = L.markStep(L.markStep(run, 'water', 'done', now), 'pushups', 'done', now + 1000)
+    await show(launchAlert(L.launchCard({ run, now: now + 31_000, prefs, mustdo: 'Essay intro', kit: 'Writing' })), 'launch', 11)
+    const mt = await ip.textContent('.di-peek.alert.kind-launch')
+    if (!/Launch 3\/3 · 1:30/.test(mt) || !/Writing kit/.test(mt)) throw new Error(`the must-do step reads "${mt}"`)
+    if (shots) await ip.screenshot({ path: `${shots}/island-morning-countdown.png`, clip: { x: 0, y: 0, width: 560, height: 300 } })
+    await ip.click('.di-peek.alert.kind-launch [data-tap="peek:alert:▶ Open it + kit"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'boost' && a.op === 'm:open'), null, { timeout: 4000 })
+    await ip.context().close()
+
+    // The app: a station marked "workout only" (DX12), a launch kit, win music.
+    await open('music')
+    // The Music page keeps its last tab: wait for its tabs, not the player hero.
+    await pg.waitForSelector('.mup .ptabs [data-tab="library"]', { timeout: 20000 })
+    await pg.click('.mup .ptabs [data-tab="library"]')
+    await pg.waitForSelector('.mu-add input', { timeout: 10000 })
+    if (!(await pg.locator('.mup-manage li', { hasText: 'Smoke mix' }).count())) {
+      await pg.fill('.mu-add input', 'https://soundcloud.com/example-artist/sets/smoke-mix')
+      await pg.locator('.mu-add .mu-btn').click()
+      await pg.waitForSelector('.mup-manage li', { timeout: 8000 })
+    }
+    const chip = pg.locator('.mup-manage li', { hasText: 'Smoke mix' }).locator('[data-only]')
+    await chip.click()
+    await pg.waitForFunction(() => document.querySelector('.mup-manage [data-only]')?.getAttribute('data-only') === 'workout', null, { timeout: 5000 })
+    await chip.click()
+    await chip.click()
+    await pg.waitForFunction(() => document.querySelector('.mup-manage [data-only]')?.getAttribute('data-only') === 'any', null, { timeout: 5000 })
+
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Ben' }).first().click()
+    await pg.waitForSelector('.st-tabs .ptabs [data-tab="boost"]', { timeout: 8000 })
+    await pg.click('.st-tabs .ptabs [data-tab="boost"]')
+    await pg.waitForSelector('.fbs-panel[data-boost="settings"] .fbs-step', { timeout: 8000 })
+    if ((await pg.locator('.fbs-step').count()) !== 3) throw new Error('the ladder should show 3 steps')
+    await pg.locator('.fbs-panel[data-boost="kits"] button', { hasText: '+ Add a kit' }).click()
+    await pg.waitForSelector('.fbs-kit', { timeout: 5000 })
+    const kit = pg.locator('.fbs-kit').first()
+    await kit.locator('input[aria-label="Kit name"]').fill('Coding')
+    await kit.locator('textarea').nth(0).fill('VS Code\nObsidian')
+    await kit.locator('textarea').nth(1).fill('C:\\Projects\\demo-app')
+    await kit.locator('textarea').nth(2).fill('https://example.com/ctf-practice\nhttps://example.com/docs')
+    await kit.locator('input[aria-label="Kit name"]').click()
+    await pg.waitForFunction(() => /VS Code, Obsidian, 1 folder, 2 links/.test(document.querySelector('.fbs-kit')?.textContent ?? ''), null, { timeout: 5000 })
+    if (shots) {
+      await pg.waitForTimeout(400)
+      await pg.locator('.fbs-panel[data-boost="kits"]').screenshot({ path: `${shots}/settings-launch-kit.png` })
+    }
+    await pg.click('.fbs-panel[data-boost="wins"] button[role="switch"][aria-label="Win music"]')
+    await pg.click('.fbs-panel[data-boost="wins"] [aria-label="Victory track"]')
+    await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
+    await pg.locator('.ui-select-list [role=option]', { hasText: 'Smoke mix' }).first().click()
+    await pg.waitForFunction(() => document.querySelector('.fbs-panel[data-boost="wins"] [aria-label="Victory track"]')?.textContent?.includes('Smoke mix'), null, { timeout: 5000 })
+
+    // A focus timer starts → the one-line goal.
+    await open('today')
+    await pg.waitForSelector('.td2', { timeout: 15000 })
+    await pg.click('.tb-log')
+    await pg.fill('input[placeholder^="Type anything"]', 'focus 25 Essay intro')
+    await pg.keyboard.press('Enter')
+    await pg.waitForSelector('.fb-card[data-boost="goal"]', { timeout: 25000 })
+    await pg.fill('#fb-goal', 'The intro paragraph, 150 words')
+    if (shots) {
+      await pg.waitForTimeout(600)
+      await pg.locator('.fb-card[data-boost="goal"]').screenshot({ path: `${shots}/session-goal.png` })
+    }
+    await pg.keyboard.press('Enter')
+    await pg.waitForSelector('.fb-card[data-boost="goal"]', { state: 'detached', timeout: 8000 })
+    // Dojo: the scene, the ink ring and the goal; Esc leaves (the timer keeps running).
+    await pg.evaluate(() => window.dispatchEvent(new CustomEvent('life-dojo')))
+    await pg.waitForSelector('.dojo .dojo-clock', { timeout: 8000 })
+    if (!/The intro paragraph/.test(await pg.textContent('.dojo-goal'))) throw new Error('Dojo does not show the goal')
+    if (shots) {
+      await pg.waitForTimeout(1200)
+      await pg.screenshot({ path: `${shots}/dojo-scene.png` })
+    }
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('.dojo', { state: 'detached', timeout: 5000 })
+    // The timer ends → Done / Half / Not.
+    await pg.context().clock.fastForward(20 * 60_000)
+    const stop = pg.getByRole('button', { name: /Stop & log/ }).first()
+    await stop.waitFor({ timeout: 15000 })
+    await stop.click()
+    await pg.waitForSelector('.fb-card[data-boost="verdict"]', { timeout: 25000 })
+    if (!/The intro paragraph/.test(await pg.textContent('.fb-card[data-boost="verdict"]'))) throw new Error('the verdict does not repeat the goal')
+    if (shots) {
+      await pg.waitForTimeout(600)
+      await pg.locator('.fb-card[data-boost="verdict"]').screenshot({ path: `${shots}/session-verdict.png` })
+    }
+    await pg.locator('.fb-card[data-boost="verdict"] button', { hasText: 'Done' }).click()
+    await pg.waitForSelector('.fb-card[data-boost="verdict"]', { state: 'detached', timeout: 8000 })
+    // Why I'm stalling: five reasons, each with its fix.
+    await pg.evaluate(() => window.dispatchEvent(new CustomEvent('life-stall', { detail: { subject: 'Lab 4' } })))
+    await pg.waitForSelector('.fb-card[data-boost="stall"] .fb-reason', { timeout: 8000 })
+    if ((await pg.locator('.fb-reason').count()) !== 5) throw new Error('want 5 reasons')
+    if (shots) {
+      await pg.waitForTimeout(500)
+      await pg.locator('.fb-card[data-boost="stall"]').screenshot({ path: `${shots}/stalling-sheet.png` })
+    }
+    await pg.locator('.fb-reason', { hasText: 'Tired' }).click()
+    await pg.waitForSelector('.fb-card[data-boost="fix"]', { timeout: 8000 })
+    if (!/10 min, light/.test(await pg.textContent('.fb-card[data-boost="fix"]'))) throw new Error('the tired fix is not the light version')
+    if (shots) await pg.locator('.fb-card[data-boost="fix"]').screenshot({ path: `${shots}/stalling-fix.png` })
+    await pg.locator('.fb-card[data-boost="fix"] button', { hasText: 'Not now' }).click()
+    // A big win: the victory card while the clip plays (a stand-in SoundCloud player here).
+    await pg.route(/soundcloud\.com/, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>player</title>' }))
+    await pg.evaluate(() => {
+      const fire = {}
+      window.SC = { Widget: Object.assign(() => ({
+        bind: (ev, fn) => { fire[ev] = fn; if (ev === 'ready') setTimeout(fn, 20) },
+        play: () => setTimeout(() => fire.play?.(), 10), pause: () => fire.pause?.(), setVolume: () => {}, load: () => {}, seekTo: () => {},
+        getCurrentSound: (cb) => cb({ title: 'Made-up victory theme', permalink_url: 'https://soundcloud.com/example-artist/victory', user: { username: 'Example' }, duration: 180000 }),
+        getCurrentSoundIndex: (cb) => cb(0), getSounds: (cb) => cb([])
+      }), { Events: { READY: 'ready', PLAY: 'play', PAUSE: 'pause', FINISH: 'finish', ERROR: 'error', PLAY_PROGRESS: 'progress', SEEK: 'seek' } }) }
+      window.dispatchEvent(new CustomEvent('life-win', { detail: { kind: 'workout' } }))
+    })
+    await pg.waitForSelector('.fb-win', { timeout: 8000 })
+    if (!/Workout done/.test(await pg.textContent('.fb-win'))) throw new Error('the victory card does not name the win')
+    if (shots) {
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${shots}/victory-moment.png`, clip: { x: 420, y: 40, width: 600, height: 160 } })
+    }
+    await pg.unroute(/soundcloud\.com/)
+    // Win music off again, so later steps hear nothing new.
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Ben' }).first().click()
+    await pg.click('.st-tabs .ptabs [data-tab="boost"]')
+    await pg.click('.fbs-panel[data-boost="wins"] button[role="switch"][aria-label="Win music"]')
   })
   // The island's controls (IC1–IC4, IC10): pause from the peek (it shows at once,
   // and shakes back when the app says no), the round menu, live suggestions in

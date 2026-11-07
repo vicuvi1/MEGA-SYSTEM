@@ -78,10 +78,11 @@ export function Settings(props: SettingsProps) {
       label: 'Ben',
       icon: 'face',
       hint: 'Your coach: my life (sleep, work), how hard he pushes, his brain, tone',
-      keywords: 'coach ai tone style length nudges rhythm model angry brain openrouter price cost usage claude gpt my life sleep bedtime wake work shift job push gentle firm pushes check-in morning brief shutdown weekly area soft normal hard',
+      keywords: 'coach ai tone style length nudges rhythm model angry brain openrouter price cost usage claude gpt my life sleep bedtime wake work shift job push gentle firm pushes check-in morning brief shutdown weekly area soft normal hard focus boost ladder stalling launch kit dojo session goal verdict win music victory',
       tabs: [
         { id: 'life', label: 'My life', heads: ['my life'] },
         { id: 'pushes', label: 'Pushes', heads: ['pushes'] },
+        { id: 'boost', label: 'Focus boost', heads: ['focus boost', 'launch kits', 'win music'] },
         { id: 'brain', label: 'Brain & test', heads: ["ben's brain", 'test ben'] },
         { id: 'talk', label: 'How he talks', heads: ['faces in the chat', 'how ben talks'] },
         { id: 'notes', label: 'Notes about you', heads: ['notes about you'] },

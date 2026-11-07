@@ -13,6 +13,7 @@ import { modeGate } from '@core/islandCalm'
 import { targetForDay } from '@core/sleep'
 import { dayKey } from '@core/dates'
 import { life } from './bridge'
+import { queueStall } from './boost/boostFeed'
 import type { LifeFitView } from './web/lifeFitStore'
 
 let seen: PcSeen | null = null
@@ -125,6 +126,9 @@ export async function driftAway(card: IslandAlert | null, now: number): Promise<
   }
 }
 
+/** The block's name for a check-in's key (the card that showed names it). */
+const subjectOf = (key: string) => (active?.key === key ? active.alert.title.split(' · ')[0] : 'this block')
+
 /** A tap on a push card. Returns what to say, and a follow-up island action (Plan my day, Shut down). */
 export async function pushAct(a: Extract<IslandAction, { kind: 'benPush' }>): Promise<{ said: string | null; then?: IslandAction }> {
   const p = life.coach?.pushes
@@ -142,9 +146,11 @@ export async function pushAct(a: Extract<IslandAction, { kind: 'benPush' }>): Pr
     }
     case 'later':
       await answer('later')
+      if (a.key.startsWith('checkin')) queueStall(a.arg ?? subjectOf(a.key))
       return { said: '⏰ OK, again in 10 min' }
     case 'skip':
       await answer('skip')
+      if (a.key.startsWith('checkin')) queueStall(a.arg ?? subjectOf(a.key))
       return { said: 'Skipped for today' }
     case 'plan':
       await answer('plan')
@@ -168,3 +174,6 @@ export async function pushAct(a: Extract<IslandAction, { kind: 'benPush' }>): Pr
       return { said: null }
   }
 }
+
+/** DX4: today's push answers as last read (the ladder waits for "10 min later" and never follows a Skip). */
+export const pushRecs = (): PushLog['recs'] => logCache.log?.recs ?? {}

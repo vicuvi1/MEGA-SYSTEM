@@ -2786,7 +2786,7 @@ export function DesktopIsland() {
         </LayoutGroup>
         <IslandParticles />
         {/* IN-SC: the SoundCloud player, hidden, outside the panel so it keeps playing. */}
-        <ScHost call={!!s.call || inCall} running={!!s.running && !s.running.brk} pauseInFocus={!!s.musicPause} music={k.kit.music} />
+        <ScHost call={!!s.call || inCall} running={!!s.running && !s.running.brk} pauseInFocus={!!s.musicPause} music={k.kit.music} subject={s.running?.subject ?? null} />
         {debugOn && <IslandDebug peek={peekBox()} />}
       </MotionConfig>
       </ViewContext.Provider>

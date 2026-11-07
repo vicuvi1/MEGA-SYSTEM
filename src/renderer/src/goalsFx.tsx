@@ -93,6 +93,8 @@ export function Celebration({ card, level, onClose, onGo }: { card: GoalCard; le
   const reward = level === 100 && !card.period ? card.meta?.reward : null
   useEffect(() => {
     if (goalSoundOn()) feedback('reward')
+    // LF20: a goal milestone: your victory clip, if you switched it on.
+    window.dispatchEvent(new CustomEvent('life-win', { detail: { kind: 'goal' } }))
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', k)
     const auto = window.setTimeout(onClose, 9000)

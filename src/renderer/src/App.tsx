@@ -42,6 +42,8 @@ import { useTodayEvents } from './todayEvents'
 import { storageWakesApp } from './islandLog'
 import { watchDayTurn } from './dayTurn'
 import { MusicHost } from './musicHost'
+import { FocusBoost } from './boost/FocusBoost'
+import { winMoment } from './boost/boostBus'
 import { startZoom, ZoomToast } from './zoom'
 import { WallpaperLayer } from './wallpaper/WallpaperLayer'
 
@@ -474,6 +476,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     lastLevel.current = lv
     // LF7: a new rank gets the full cinematic (it has its own sound); other levels keep the fanfare.
     if (prev !== null && lv > prev && !rankUp(prev, lv)) play('levelUp')
+    // LF20: your victory clip on any level up, if you switched it on.
+    if (prev !== null && lv > prev) winMoment('levelUp')
   }, [summary?.level?.level])
 
   // A page that no longer exists (Schedule, Journey, Game Rules) opens Today.
@@ -822,6 +826,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <EmbedHost active={activeEmbed} soundEnabled={ui.sound} />
         {/* MU: the website's SoundCloud player (hidden, only after you press play) and Ben's "now playing" line. */}
         <MusicHost />
+        {/* Focus boost: session goal and verdict, launch kits, Dojo mode, "why I'm stalling", win music. */}
+        <FocusBoost />
 
         {!activeEmbed && (
           <main className={`content ${bbHidden || !life.coach ? '' : 'has-bb'}`}>

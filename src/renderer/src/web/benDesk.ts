@@ -5,6 +5,9 @@
 // code runs in the app (instant, read from the local mirror) and on the
 // server (Ben's prompt, the tick that enforces stakes).
 import { fullHouse, weekOf, type FullHouse } from '@core/fullHouse'
+import { BOOST_LOG_KEY, cleanBoostLog } from '@core/focusBoost'
+import { learnLine, verdictStats } from '@core/sessionGoal'
+import { stallLine } from '@core/stallFix'
 import { sleepRegularity } from '@core/sleepRegularity'
 import { lifeReview, type LifeReview } from '@core/lifeReview'
 import { urgeEvents } from './disciplinePatterns'
@@ -276,6 +279,16 @@ export function deskPrompt(s: Services, finance: any, now = new Date()): string 
   if (v.patterns.length) lines.push(`Weekly patterns (his data):\n${v.patterns.map((p) => `- ${p.text} → try: ${p.change}`).join('\n')}`)
   const ex = excuseLine(d.excuses, v.today)
   if (ex) lines.push(ex)
+  // Focus boost: which sessions he finishes (his own Done / Half / Not) and why he stalls.
+  try {
+    const fl = cleanBoostLog(readSetting(s.db, BOOST_LOG_KEY))
+    const fin = learnLine(verdictStats(fl.sessions, v.today))
+    if (fin) lines.push(`${fin}. Plan kinds he rarely finishes as shorter blocks with a smaller goal.`)
+    const st = stallLine(fl.stalls, v.today)
+    if (st) lines.push(`${st}. Offer the matching fix (light version, next step, split it, music + reward, 5-minute start).`)
+  } catch {
+    /* no focus log yet */
+  }
   const ml = moodLine(d.moods, v.today)
   if (ml) lines.push(ml)
   if (v.sleep.slept != null && v.sleep.level !== 'ok') lines.push(`Sleep link: ${v.sleep.title} ${v.sleep.tips.join(' ')} Plan today lighter before ${v.sleep.lightUntil}.`)

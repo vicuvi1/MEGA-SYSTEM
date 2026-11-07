@@ -5,6 +5,7 @@
 // receipt line on the plan and an ↩ Undo button.
 
 import { fromMin, toMin, type DayProposal } from './rhythm'
+import { applyEdit, ensureIds, planItems, snapshotOf } from './planEdit'
 
 /** Callback data: "pb|m|<i>|<±minutes>", "pb|d|<i>", "pb|s|<i>", "pb|n" (shift to now), "pb|a" (approve), "pb|u|<i>" (undo a mark). */
 export type PlanTap = { op: 'move'; i: number; delta: number } | { op: 'done'; i: number } | { op: 'skip'; i: number } | { op: 'now' } | { op: 'approve' } | { op: 'undo'; i: number }
@@ -40,6 +41,40 @@ export function movedStart(b: { start: string; minutes: number }, delta: number)
   return fromMin(s)
 }
 
+/** What a pinned block answers on Telegram (the app's own rule: a pin never moves). */
+export const PINNED_WORDS = '📌 pinned, unpin it in the app'
+
+/**
+ * A ±minutes tap checked against the plan-edit rules (core/planEdit.ts): a
+ * pinned block refuses, a move off the day refuses, and the block's id (the
+ * one the app, Google and Todoist sync by) comes back with the new start.
+ */
+export function planMoveCheck(plan: DayProposal, i: number, delta: number): { ok: true; id: string; to: string } | { ok: false; why: string } {
+  const p = ensureIds(plan)
+  const b = p.blocks[i]
+  if (!b?.id) return { ok: false, why: 'That block is gone' }
+  if (b.locked) return { ok: false, why: PINNED_WORDS }
+  const to = movedStart(b, delta)
+  if (!to) return { ok: false, why: "Can't move it there" }
+  const after = applyEdit(p, { op: 'move', id: b.id, start: to })
+  if (after === p) return { ok: false, why: PINNED_WORDS }
+  return { ok: true, id: b.id, to }
+}
+
+/**
+ * The plan after a move the calendar already took (an approved block moved
+ * through the chat's path): the block's new start, and its sync memory set to
+ * the same time, so the app's sync sees nothing left to send (no second move,
+ * no "not synced" mark).
+ */
+export function planAfterMove(plan: DayProposal, id: string, to: string, calendarMoved: boolean): DayProposal {
+  const p = applyEdit(ensureIds(plan), { op: 'move', id, start: to })
+  if (!calendarMoved) return p
+  const b = planItems(p).find((x) => x.id === id)
+  if (!b?.sync) return p
+  return { ...p, blocks: p.blocks.map((x) => (x.id === id ? { ...x, sync: snapshotOf(x, x.sync) } : x)) }
+}
+
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
 /**
@@ -52,6 +87,11 @@ export function planKeyboard(p: Pick<DayProposal, 'blocks'>, opts: { approved?: 
     const mark = opts.marks?.[i]
     if (mark) {
       rows.push([{ text: `${mark === 'done' ? '✅' : '⏭'} ${b.start} ${short(b.title, 18)}`, callback_data: `pb|u|${i}` }, { text: '↩ Undo', callback_data: `pb|u|${i}` }])
+      return
+    }
+    // A pinned block can't move (the app's rule): its row says so instead of −30 / +30.
+    if (b.locked) {
+      rows.push([{ text: `📌 ${b.start} ${short(b.title, 16)}`, callback_data: `pb|m|${i}|30` }, { text: '✓ Done', callback_data: `pb|d|${i}` }, { text: 'Skip', callback_data: `pb|s|${i}` }])
       return
     }
     rows.push([

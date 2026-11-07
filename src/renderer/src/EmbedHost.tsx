@@ -68,6 +68,8 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
           // logWorkout pays "Workout done" itself (capped); a second award paid twice.
           const r = await life.body.logWorkout({ title: name, items: sportItems(data.workout), note: 'Sport Track' })
           window.dispatchEvent(new CustomEvent('life-body-changed'))
+          // LF20: a workout done: your victory clip, if you switched it on.
+          window.dispatchEvent(new CustomEvent('life-win', { detail: { kind: 'workout' } }))
           window.dispatchEvent(new CustomEvent('life-wallet-changed'))
           // SP1: Sport Track shows what was really paid (or "already counted today").
           const coins = (await life.rules.list().catch(() => [])).find((x: any) => x.id === 'body.workout_done')?.coins ?? 0

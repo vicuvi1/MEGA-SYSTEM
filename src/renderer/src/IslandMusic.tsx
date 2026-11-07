@@ -16,6 +16,7 @@ import { tp } from './islandTap'
 import { onKitEvent, type KitState } from './IslandTiles'
 import { attachFrame, getState, playStation, run, sc, subscribe, uiTick } from './music/engine'
 import { serveRemote } from './music/remote'
+import { useOnlyDuring } from './boost/musicGate'
 import { Eq, EqMode, lyricNow, MuIcon, posNow, Scroller, useTint, tintStyle } from './music/MusicUi'
 import { useLyrics } from './music/players'
 import { useTicker } from './music/hooks'
@@ -51,12 +52,14 @@ export function musicTile(m: MusicKit) {
  * reloads), and the rules: a call, the PC locking, a focus timer starting
  * (pause, or your focus mix), the media keys while it is loaded.
  */
-export function ScHost({ call, running, pauseInFocus, music }: { call: boolean; running: boolean; pauseInFocus: boolean; music?: MusicKit }) {
+export function ScHost({ call, running, pauseInFocus, music, subject }: { call: boolean; running: boolean; pauseInFocus: boolean; music?: MusicKit; subject?: string | null }) {
   const s = useSc()
   const ref = useRef<HTMLIFrameElement>(null)
   const wasRunning = useRef(running)
   const [locked, setLocked] = useState(false)
   useEffect(() => serveRemote(), [])
+  // DX12: workout-only / boring-only music plays only while that timer runs.
+  useOnlyDuring({ music, running, subject, call })
   useEffect(
     () =>
       onKitEvent((ev) => {

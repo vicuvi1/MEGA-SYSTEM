@@ -84,3 +84,12 @@ export const coachMutedKinds = () => coachMuted(read())
 export function coachTurnBackOn(k: CoachKind) {
   write(coachResume(read(), k))
 }
+
+/** DX4: the drift Ben spoke about, still going (video, games or social in front now): when it began, or null. */
+export function driftNow(now = Date.now()): { since: number } | null {
+  const s = read(now)
+  if (!s.drift) return null
+  const cur = spans(now).slice(-1)[0]
+  const ctx = cur && cur.end >= now - 60_000 ? cur.context : null
+  return ctx && DISTRACT_CONTEXTS.includes(ctx) ? { since: s.drift.start } : null
+}

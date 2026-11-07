@@ -32,6 +32,8 @@ import { goalTap } from '../goalsBrain'
 import { readPushCallback } from '@core/benPushes'
 import { answerPushIn, applyMark, readPushLog } from '../benPushStore'
 import { runPlanTap, planMessage } from './planButtons'
+import { askStall, STALL_CALLBACK } from './stallButtons'
+import { subjectFromPush } from '@core/stallFix'
 
 export interface CallbackHandler {
   /** The callback-data prefixes it answers ("wa" for "wa|250"), for docs and tests. */
@@ -41,7 +43,7 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(f[acbksuoxq]|p[prb]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|m[lnz])\|/
+export const CALLBACK_DATA = /^(f[acbksuoxq]|p[prb]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
   // TV1: today's plan buttons (move ±30, Done, Skip, Shift to now, Undo a mark).
@@ -608,6 +610,8 @@ export const CALLBACKS: CallbackHandler[] = [
         const text = r.op === 'later' ? '⏰ OK, I’ll ask again in 10 min.' : r.op === 'skip' ? 'Skipped for today.' : '👍'
         await answer(text)
         await clear()
+        // DX7: a snoozed or skipped block check-in asks what's in the way (one tap, one fix).
+        if ((r.op === 'later' || r.op === 'skip') && /^checkin/.test(r.ref)) await askStall(c, t, subjectFromPush(cq.message?.text ?? ''))
         return text
       }
       // Tomorrow / Drop / Keep today: the item by its number on tonight's list (or * for all left).
@@ -639,6 +643,8 @@ export const CALLBACKS: CallbackHandler[] = [
       return line
     }
   },
+  // DX7: why you're stalling: the reason's fix, right away.
+  STALL_CALLBACK,
   // W1: "Rescue my day": the rest of today shrunk to fit (recomputed now, so it's current).
   {
     prefixes: ['rs'],

@@ -7,6 +7,7 @@ import { BenNotes } from '../BenNotes'
 import { BenMemory } from '../BenMemory'
 import { CoachLooksPanel } from '../CoachLooksPanel'
 import { BenPushPanel, LifeFitPanel } from '../LifeFitPanel'
+import { FocusBoostPanel, LaunchKitsPanel, WinMusicPanel } from '../boost/BoostSettings'
 import type { SettingsState } from './useSettingsState'
 import { Select } from '../Select'
 
@@ -16,6 +17,9 @@ export function BenSection({ s }: { s: SettingsState }) {
         <>
           <LifeFitPanel />
           <BenPushPanel />
+          <FocusBoostPanel />
+          <LaunchKitsPanel />
+          <WinMusicPanel />
           <CoachLooksPanel />
           {!features.aiSettings && <BrainPanel />}
           <BenNotes />

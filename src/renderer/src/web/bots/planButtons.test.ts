@@ -23,7 +23,7 @@ afterEach(() => vi.unstubAllGlobals())
 const TOKEN = '1:fake'
 const CHAT = 42
 
-async function world() {
+async function world(lockFirst = false) {
   const remote = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
   const sent: { method: string; body: any }[] = []
@@ -41,7 +41,7 @@ async function world() {
   const bots = createWebBots({ mirror, services: w, defaults: { botToken: TOKEN, chatId: String(CHAT) } as any })
   const day = await w.read((s) => s.wallet.today())
   await mirror.write((db: any) =>
-    setSetting(db, RHYTHM, JSON.stringify({ day, water: [], briefing: { status: 'proposed', sentAt: new Date().toISOString(), version: 1, planner: PLANNER_VERSION, plan: { day, headline: 'Essay first', mustdos: ['Essay intro'], blocks: [{ title: 'Essay intro', start: '10:00', minutes: 60 }, { title: 'Lab report', start: '15:00', minutes: 50 }], training: null, waterMl: 2500 } } }))
+    setSetting(db, RHYTHM, JSON.stringify({ day, water: [], briefing: { status: 'proposed', sentAt: new Date().toISOString(), version: 1, planner: PLANNER_VERSION, plan: { day, headline: 'Essay first', mustdos: ['Essay intro'], blocks: [{ title: 'Essay intro', start: '10:00', minutes: 60, ...(lockFirst ? { locked: true, id: 'b1' } : {}) }, { title: 'Lab report', start: '15:00', minutes: 50 }], training: null, waterMl: 2500 } } }))
   )
   const setting = (key: string) => {
     const v = remote.exec(`SELECT value FROM settings WHERE key = '${key}'`)[0]?.values?.[0]?.[0]
@@ -88,5 +88,34 @@ describe('TV1 plan buttons on Telegram', () => {
     const w = await world()
     await w.tap('pb|d|0', 999)
     expect(w.setting('block_marks')).toBeNull()
+  })
+
+  it('a pinned block refuses to move (the plan-edit rule) and its row says so', async () => {
+    const w = await world(true)
+    await w.tap('pb|m|0|30')
+    expect(w.setting(RHYTHM).briefing.plan.blocks[0]).toMatchObject({ title: 'Essay intro', start: '10:00', locked: true })
+    const ans = w.sent.find((s) => s.method === 'answerCallbackQuery')
+    expect(ans?.body.text).toBe('📌 pinned, unpin it in the app')
+    expect(w.sent.some((s) => s.method === 'sendMessage' && /Moved/.test(s.body.text))).toBe(false)
+    // The other block still moves.
+    await w.tap('pb|m|1|-30')
+    expect(w.setting(RHYTHM).briefing.plan.blocks.find((b: any) => b.title === 'Lab report').start).toBe('14:30')
+    const edit = w.sent.filter((s) => s.method === 'editMessageText').pop()
+    expect(edit?.body.reply_markup.inline_keyboard[0][0].text).toBe('📌 10:00 Essay intro')
+  })
+
+  it('DX7: a skipped check-in asks what is in the way; a reason gives its fix and is saved', async () => {
+    const w = await world()
+    await w.tap('bp|s|checkin:ev1')
+    const ask = w.sent.find((s) => s.method === 'sendMessage' && /What's in the way/.test(s.body.text))
+    expect(ask?.body.reply_markup.inline_keyboard.flat().map((b: any) => b.callback_data)).toContain('sl|t|Your day')
+    await w.tap('sl|t|Lab 4')
+    const fix = w.sent.filter((s) => s.method === 'sendMessage').pop()
+    expect(fix?.body.text).toMatch(/Light version, 10 min/)
+    expect(fix?.body.reply_markup.inline_keyboard[0][0]).toEqual({ text: '▶ 10 min, light', callback_data: 'fo|10|Lab 4 (light)' })
+    expect(w.setting('focus_log').stalls).toEqual([expect.objectContaining({ reason: 'tired', subject: 'Lab 4' })])
+    // A stranger's reason does nothing.
+    await w.tap('sl|o|Lab 4', 999)
+    expect(w.setting('focus_log').stalls).toHaveLength(1)
   })
 })

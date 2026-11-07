@@ -5,7 +5,9 @@ import { pushStyle, workToday } from '@core/lifeFit'
 import { weekTop3View, type WeekPlan } from '@core/weekPlan'
 import type { LifeFitView } from './web/lifeFitStore'
 import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
-import { briefShownToday, driftAway, pushAct, pushTick as benPushTick } from './benPushFeed'
+import { briefShownToday, driftAway, pushAct, pushRecs, pushTick as benPushTick } from './benPushFeed'
+import { boostAct, boostTick } from './boost/boostFeed'
+import { atPc } from '@core/benPushes'
 import { levelFor, pushFromLevel } from '@core/benPushes'
 import { focusQualityPc } from '@core/pcActivity'
 import { useCallback, useEffect, useRef } from 'react'
@@ -13,7 +15,7 @@ import { MOOD_FACE, type Mood } from '@core/coachKit'
 import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert, workNow } from '@core/islandSmart'
-import { coachAnswer, coachTick } from './pcCoachFeed'
+import { coachAnswer, coachTick, driftNow } from './pcCoachFeed'
 import { DEFAULT_WAKE, toMin as fitMin } from '@core/lifeFit'
 import { windDown } from '@core/islandBody'
 import { dayNudge } from '@core/dayNudges'
@@ -577,6 +579,21 @@ export function IslandFeed() {
       todo: todoCache.list,
       done: [...new Set([...status.mustdos.filter((m) => m.done).map((m) => m.text), ...(focus.todaySessions ?? []).map((x) => x.subject)])]
     }).catch(() => null)
+    // Focus boost (boost/boostFeed.ts): the push ladder, the morning launch countdown, "why I'm stalling".
+    const boostCard = await boostTick({
+      now,
+      here: atPc(idleSec),
+      blocks: blocks.current.list,
+      running: focusRun && !focusRun.pausedAt ? { subject: focusRun.subject } : null,
+      meeting: !!callOn || classOn,
+      bedLogged,
+      areas: fit?.areas ?? null,
+      recs: pushRecs(),
+      drift: driftNow(now),
+      driftTitle: focusRun?.subject ?? workNow(blocks.current.list, now)?.title ?? null,
+      mustdos: status.mustdos,
+      wokeAt: wakeLogged && sleep?.todayLog?.wakeTime ? new Date(`${sleep.todayLog.day}T${sleep.todayLog.wakeTime}:00`).getTime() : null
+    }).catch(() => null)
     const alertNow = (() => {
       // Paused: its time is never up (the end moves on with the pause).
       // Your reminders show as their own card (Done / Snooze), not as a copy of Ben's ⏰ message.
@@ -604,6 +621,8 @@ export function IslandFeed() {
         distractAlert(focusRun, now, dismissed) ??
         breakOverAlert(now, dismissed, !!run) ??
         qualityAlert(dismissed, now) ??
+        // Focus boost: the push ladder's step, the morning countdown, the stalling fixes.
+        (boostCard && !((dismissed[boostCard.id] ?? 0) > now) ? boostCard : null) ??
         // Ben 2: a planned block starts, the morning brief, the evening shutdown.
         pushCard ??
         // HD: your reminder, then your body and your day's edges, through one governor.
@@ -1106,6 +1125,14 @@ export function IslandFeed() {
               said = `▶ ${a.subject}`
             }
             said = (await coachAnswer(a.ck, a.op, a.minutes)) ?? said
+            break
+          }
+          case 'boost': {
+            // Focus boost: the ladder's Start / 10 min / Skip, the stalling reasons and fixes, the morning steps.
+            const ex = (Array.isArray(readSport()?.exercises) ? readSport().exercises : []).filter((e: any) => !e.archived).map((e: any) => ({ id: String(e.id ?? e.name), name: String(e.name) }))
+            const r = await boostAct(a, { reps: ex })
+            said = r.said
+            for (const x of r.then ?? []) await actRef.current(x)
             break
           }
           case 'benPush': {

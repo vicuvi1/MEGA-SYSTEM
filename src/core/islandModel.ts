@@ -111,6 +111,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'goal'; goalId: number; op: string; alertId?: string }
   /** HD: a reminder you set: add one ("remind me to call mom at 18:00"), or Done / Snooze on its card. */
   | { kind: 'remind'; op: 'add' | 'done' | 'snooze'; id?: string; text?: string; at?: number; minutes?: number }
+  /** Focus boost (src/renderer/src/boost/boostFeed.ts): the push ladder, the morning countdown, the stalling fixes. */
+  | { kind: 'boost'; op: string; alertId: string; arg?: string; minutes?: number }
   /** HD: wind-down mode's calm music (the island's own player). */
   | { kind: 'calmMusic' }
   /** Ben 2: a tap on a push (a block check-in, the morning brief, the evening shutdown: src/core/benPushes.ts). `arg`: the block (Start) or a shutdown item ('*' for all). */
@@ -121,7 +123,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown' | 'push1' | 'push2' | 'push3' | 'launch' | 'win'
   title: string
   text: string
   face?: string
@@ -485,9 +487,9 @@ export function alertPref(kind: string, meeting = false): AlertKindPref | null {
   if (kind === 'move') return 'move'
   if (kind === 'eyes') return 'eyes'
   if (kind === 'ben' || kind === 'remind') return 'ben'
-  if (kind === 'block' || kind === 'drift' || kind === 'end' || kind === 'quality') return 'block'
+  if (kind === 'block' || kind === 'drift' || kind === 'end' || kind === 'quality' || kind === 'push1' || kind === 'push2' || kind === 'push3') return 'block'
   if (kind === 'bed' || kind === 'winddown' || kind === 'sleep') return 'bed'
-  if (kind === 'morning') return 'morning'
+  if (kind === 'morning' || kind === 'launch') return 'morning'
   if (kind === 'highlight' || kind === 'recap') return 'highlight'
   if (kind === 'reward') return 'reward'
   if (kind === 'over') return 'over'

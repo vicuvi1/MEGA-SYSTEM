@@ -101,7 +101,9 @@ export async function pushTick(c: Ctx): Promise<{ checkins: boolean; sent: strin
     for (const o of t.send) {
       const mine = await c.mirror.write((db) => claimPush(db, f.today, o.key, 'telegram', now))
       if (mine) {
-        await c.send(o.text, { inline_keyboard: [[{ text: '↩ Back to it', callback_data: `bp|o|${o.key}`.slice(0, 64) }]] }, { always: true }).catch(() => null)
+        // DX4: the ladder's top step carries its own buttons (Start now, the stake you can take).
+        const rows = Array.isArray(o.rows) && o.rows.length ? o.rows.slice(0, 3).map((r) => r.filter((b) => b && typeof b.text === 'string' && typeof b.callback_data === 'string' && b.callback_data.length <= 64).slice(0, 3)) : [[{ text: '↩ Back to it', callback_data: `bp|o|${o.key}`.slice(0, 64) }]]
+        await c.send(o.text, { inline_keyboard: rows }, { always: true }).catch(() => null)
         sent.push(o.key)
       }
     }

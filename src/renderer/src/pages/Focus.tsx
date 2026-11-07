@@ -8,6 +8,8 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
 import { barFill, useSeen } from '../motionKit'
+import { verdictStats, statsLine, type SessionRec } from '@core/sessionGoal'
+import { dayKey } from '@core/dates'
 
 export function useFocus(): [FocusState | null, () => void, (s: FocusState) => void] {
   const [st, setSt] = useState<FocusState | null>(null)
@@ -58,7 +60,13 @@ export function FocusInsights({ onWallet }: { onWallet: () => void }) {
   const [goal, setGoal] = useState({ title: '', subject: '', deadline: '', hours: 20 })
   const [addMin, setAddMin] = useState({ subject: '', minutes: 30 })
   const [seenRef, seen] = useSeen<HTMLDivElement>()
+  // DX10: finished work, not only minutes (your Done / Half / Not at the end of each session).
+  const [verdicts, setVerdicts] = useState<SessionRec[] | null>(null)
+  useEffect(() => {
+    void life.boost?.log().then((l) => setVerdicts(l.sessions)).catch(() => {})
+  }, [st?.todayMin])
   if (!st) return null
+  const fin = verdicts ? verdictStats(verdicts, dayKey(new Date())) : null
   const w = st.week
   const maxDay = Math.max(60, ...w.byDay.map((d) => d.minutes))
   return (
@@ -89,6 +97,12 @@ export function FocusInsights({ onWallet }: { onWallet: () => void }) {
               <b>{hm(s.minutes)}</b>
             </li>
           ))}
+          {fin && (
+            <li data-boost="finished">
+              <span>Finished work</span>
+              <b title={statsLine(fin)}>{fin.sessions ? `${fin.done}/${fin.sessions} done${fin.half ? ` · ${fin.half} half` : ''} · ${Math.round(fin.finished * 100)}%` : 'answer Done / Half / Not after a timer'}</b>
+            </li>
+          )}
           {w.topReasons.length > 0 && (
             <li>
               <span>What got in the way</span>

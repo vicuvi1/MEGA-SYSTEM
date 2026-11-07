@@ -462,6 +462,8 @@ export interface LifeApi {
     setRemembered?(on: boolean, pin?: string): Promise<boolean>
   }
   /** The notification center (synced across devices). */
+  /** Focus boost: the push ladder, stalling fixes, session goals and verdicts, launch kits, Dojo, win music. */
+  boost?: import('../core/focusBoost').BoostApi
   /** What the desktop island learns about your day (focus quality, blocks checked off). */
   dayLog?: {
     addFocus(day: string, e: { at: string; subject: string; minutes: number; pct: number; workMin?: number; distractMin?: number }): Promise<void>

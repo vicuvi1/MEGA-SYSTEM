@@ -8,6 +8,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import { DEFAULT_KIT, type IslandKit } from '@core/islandTiles'
 import { moveStation, toggleFav, type MusicKit } from '@core/music'
+import { nextOnly, ONLY_LABEL, ONLY_SHORT } from '@core/musicOnly'
 import { addStation, removeStation, renameStation, STATION_KIND_LABEL } from '@core/soundcloud'
 import { life } from '../bridge'
 import { getRecents, subscribeRecents } from '../music/engine'
@@ -182,6 +183,12 @@ export function Music() {
             </div>
             {err && <p className="mu-warn">{err}</p>}
             {!!music.stations.length && (
+              <p className="mu-empty">
+                Tip: mark a station “workout only” or “boring only” and the player keeps it for those timers. That's Rewards' “Pair it” idea, felt every day.{' '}
+                <button className="mu-chip" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'shop' }))}>Open Rewards</button>
+              </p>
+            )}
+            {!!music.stations.length && (
               <ul className="mup-manage">
                 {music.stations.map((x, i) => (
                   <li key={x.id}>
@@ -195,6 +202,18 @@ export function Music() {
                     )}
                     <button className={`mu-chip ${music.focusMix === x.id ? 'on' : ''}`} title="Start this station when a focus timer starts" onClick={() => saveMusic({ focusMix: music.focusMix === x.id ? null : x.id })}>
                       <MuIcon d="bolt" size={13} /> Focus mix
+                    </button>
+                    <button
+                      className={`mu-chip ${music.onlyDuring?.[x.url] ? 'on' : ''}`}
+                      data-only={music.onlyDuring?.[x.url] ?? 'any'}
+                      title={`${music.onlyDuring?.[x.url] ? ONLY_LABEL[music.onlyDuring[x.url]] : 'Plays any time'}. Tap to change: any time → only during workout → only during boring tasks. The island plays it only while that timer runs (a temptation bundle, like Rewards’ “Pair it”).`}
+                      onClick={() => {
+                        const n = nextOnly(music.onlyDuring?.[x.url])
+                        const rest = Object.fromEntries(Object.entries(music.onlyDuring ?? {}).filter(([k]) => k !== x.url))
+                        saveMusic({ onlyDuring: n ? { ...rest, [x.url]: n } : rest })
+                      }}
+                    >
+                      {music.onlyDuring?.[x.url] ? ONLY_SHORT[music.onlyDuring[x.url]] : '⏱ any time'}
                     </button>
                     <button className="mu-ic sm" aria-label={`Rename ${x.name}`} title="Rename" onClick={() => setEditing(x.id)}><MuIcon d="pen" size={14} /></button>
                     <button className="mu-ic sm" aria-label={`Move ${x.name} up`} title="Move up" disabled={i === 0} onClick={() => saveMusic({ stations: moveStation(music.stations, x.id, -1) })}><MuIcon d="up" size={14} /></button>

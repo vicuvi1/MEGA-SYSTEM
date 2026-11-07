@@ -16,6 +16,7 @@ import { createMockApi } from './mock'
 import { addDays, calendarDay, dayKey } from '@core/dates'
 import type { BodyState, BotBridgeConfig, ConnectionsState, DisciplineState, Summary } from '@shared/api'
 import { Mirror, indexedDbStore } from './web/mirror'
+import { createBoostApi } from './web/boostStore'
 import { TursoHttp } from './web/tursoHttp'
 import { createWebServices, financeDayTx, type WebServices } from './web/webServices'
 import { financeSummary } from '@core/moneyDays'
@@ -1469,6 +1470,8 @@ export function createTursoWebBridge(): Bridge {
     },
     // BD4–BD6, BD12, BD15: sleep care and the grooming habit (web/careStore.ts).
     care: careApi(svcP),
+    // Focus boost: the push ladder, stalling fixes, session goals, launch kits, Dojo, win music (synced).
+    boost: createBoostApi(mirrorP as any),
     // Island 2: your nudges (settings, people, today's tallies, move breaks to undo), synced.
     nudges: {
       get: async () => (await mirrorP).read((db) => cleanNudgeStore(readSetting(db as any, 'island_nudges'), dayKey(new Date()))),
