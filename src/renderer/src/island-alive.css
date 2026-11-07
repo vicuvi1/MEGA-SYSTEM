@@ -1,0 +1,197 @@
+/* The island's alive layer (IslandAlive.tsx): transform and opacity only,
+   paused while hidden, still with reduced motion. */
+.di {
+  --alive-ds: 96 214 140; --alive-water: 70 160 255; --alive-acc: var(--lime); --alive-card: 12 13 17;
+}
+.di.look-app.theme-light { --alive-card: 248 249 252; --alive-water: 40 120 220; --alive-acc: #5a8a00; }
+.di.ds-ontrack { --alive-ds: 96 214 140; }
+.di.ds-behind { --alive-ds: 255 181 71; }
+.di.ds-drifting { --alive-ds: 255 90 95; }
+.di.ds-rest { --alive-ds: 110 160 255; }
+
+/* ---- the living glow: a slow breath coloured by how the day is going ---- */
+.di-shade > .di-alive-glow {
+  position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0.3;
+  box-shadow: 0 0 0 1.5px rgb(var(--alive-ds) / 0.55), 0 0 22px -2px rgb(var(--alive-ds) / 0.6);
+  animation: alive-breathe 6s ease-in-out infinite;
+}
+.di.view-expanded .di-alive-glow, .di.calm-hidden .di-alive-glow, .di.tucked .di-alive-glow { display: none; }
+@keyframes alive-breathe {
+  0%, 100% { opacity: 0.22; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.035); }
+}
+
+/* ---- Ben's face on the pill ---- */
+.alive-ben { display: inline-flex; flex: none; width: 22px; height: 22px; margin-right: 1px; transform-origin: 50% 60%; }
+.alive-ben-svg { overflow: visible; display: block; }
+.alive-eyes { transform-box: fill-box; transform-origin: center; animation: alive-blink 5.2s infinite; }
+@keyframes alive-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
+.alive-ben.f-hyped { animation: alive-hop 1.1s ease-in-out infinite; }
+@keyframes alive-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-2px) scale(1.06); } }
+.alive-ben.f-sleepy { animation: alive-snooze 4.4s ease-in-out infinite; }
+@keyframes alive-snooze { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.06) translateY(0.5px); } }
+.alive-ben.f-worried { animation: alive-fret 3.2s ease-in-out infinite; }
+@keyframes alive-fret { 0%, 80%, 100% { transform: translateX(0); } 84% { transform: translateX(-1px); } 88% { transform: translateX(1px); } 92% { transform: translateX(-1px); } }
+.alive-ben.f-thumbs { animation: alive-cheer 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes alive-cheer { 0% { transform: scale(0.8); } 100% { transform: scale(1.12); } }
+.alive-thumb { transform-box: fill-box; transform-origin: 50% 100%; animation: alive-pop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+@keyframes alive-pop { 0% { transform: scale(0) rotate(-24deg); opacity: 0; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
+.alive-z { animation: alive-z 3s ease-in-out infinite; }
+@keyframes alive-z { 0% { transform: translate(-1px, 3px); opacity: 0; } 40% { opacity: 1; } 100% { transform: translate(2px, -3px); opacity: 0; } }
+.alive-sweat { animation: alive-drip 2.4s ease-in infinite; }
+@keyframes alive-drip { 0% { transform: translateY(-1px); opacity: 0; } 25% { opacity: 1; } 100% { transform: translateY(4px); opacity: 0; } }
+.alive-spark { transform-box: fill-box; transform-origin: center; animation: alive-twinkle 1.3s ease-in-out infinite; }
+.alive-spark.s2 { animation-delay: -0.65s; }
+@keyframes alive-twinkle { 0%, 100% { transform: scale(0.4); opacity: 0.3; } 50% { transform: scale(1.2); opacity: 1; } }
+
+/* ---- progress orbit: the top 3 along the pill's lower edge ---- */
+.di .di-pill.di-rest { position: relative; isolation: isolate; }
+.alive-orbit { position: absolute; left: 50%; bottom: 2px; width: 0; height: 4px; pointer-events: none; }
+.alive-dot {
+  position: absolute; left: calc(var(--i) * 9px - 2px); bottom: 0; width: 4px; height: 4px; border-radius: 50%;
+  background: rgb(var(--ink) / 0.26); translate: 0 calc(var(--i) * var(--i) * 0.9px);
+}
+.alive-dot.done { background: rgb(var(--alive-ds) / 1); box-shadow: 0 0 6px 0 rgb(var(--alive-ds) / 0.8); animation: alive-fill 0.36s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+@keyframes alive-fill { 0% { transform: scale(0.3); } 60% { transform: scale(1.7); } 100% { transform: scale(1); } }
+
+/* ---- gaming counter: steady colours, a slow glow-free chip, no flashing ---- */
+.alive-gaming { display: inline-flex; flex: none; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 99px; font-size: 11.5px; font-weight: 600; white-space: nowrap; color: var(--sub); background: rgb(var(--ink) / 0.08); }
+.alive-gaming i { font-style: normal; font-size: 12px; }
+.alive-gaming.lv-near { color: var(--amber); background: rgb(255 181 71 / 0.16); }
+.alive-gaming.lv-over { color: var(--red); background: rgb(255 90 95 / 0.16); }
+.alive-mini-body.lv-near b { color: var(--amber); }
+.alive-mini-body.lv-over b { color: var(--red); }
+
+/* ---- the liquid timer ---- */
+.alive-liquid { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: -1; border-radius: inherit; }
+.alive-level { position: absolute; inset: 0; will-change: transform; }
+.alive-wave { position: absolute; left: 0; top: -7px; width: 200%; height: 8px; fill: rgb(var(--alive-water) / 0.3); }
+.alive-body { position: absolute; left: 0; right: 0; top: 0; bottom: -2px; background: linear-gradient(rgb(var(--alive-water) / 0.3), rgb(var(--alive-water) / 0.14)); }
+.alive-liquid.is-live .alive-wave { animation: alive-slosh 5s linear infinite; }
+@keyframes alive-slosh { to { transform: translateX(-50%); } }
+.alive-liquid.is-break { --alive-water: 96 214 140; }
+
+/* ---- celebrations ---- */
+.alive-fxlayer { position: absolute; left: 50%; top: 0; width: 0; height: var(--di-pill-h, 38px); pointer-events: none; z-index: 7; }
+.alive-ring { position: absolute; left: 0; top: 0; width: 26px; height: 26px; margin: -13px 0 0 -13px; translate: var(--bx, 0px) var(--by, 0px); border-radius: 50%; border: 2px solid var(--lime); animation: alive-ripple 0.4s ease-out both; }
+.alive-ring.burst, .alive-ring.big { border-width: 3px; animation-name: alive-ripple-lg; }
+@keyframes alive-ripple { 0% { transform: scale(0.5); opacity: 0.9; } 100% { transform: scale(1.9); opacity: 0; } }
+@keyframes alive-ripple-lg { 0% { transform: scale(0.5); opacity: 1; } 100% { transform: scale(2.8); opacity: 0; } }
+.alive-burst { position: absolute; left: 0; top: 0; width: 0; height: 0; translate: var(--bx, 0px) var(--by, 0px); }
+.alive-burst i { position: absolute; width: 4px; height: 4px; margin: -2px; border-radius: 50%; background: var(--lime); rotate: var(--a); animation: alive-spray 0.4s ease-out both; }
+.alive-burst.big i:nth-child(even) { background: #ffd451; }
+@keyframes alive-spray { 0% { transform: translateX(4px) scale(1); opacity: 1; } 100% { transform: translateX(24px) scale(0.2); opacity: 0; } }
+.alive-plus {
+  position: absolute; left: 0; top: 0; translate: -50% calc(var(--di-pill-h, 38px) + 6px); padding: 3px 10px; border-radius: 99px;
+  font: 700 13px/1.2 Geist, Inter, system-ui, sans-serif; color: #10130a; background: var(--lime); white-space: nowrap;
+  box-shadow: 0 4px 14px -2px rgb(212 255 63 / 0.55);
+  animation: alive-plus-in 0.25s cubic-bezier(0.2, 1.4, 0.4, 1) both, alive-plus-fly 0.4s ease-in 0.7s forwards;
+}
+@keyframes alive-plus-in { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes alive-plus-fly { to { transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(0.3); opacity: 0; } }
+
+/* ---- hover peek: the next 3 hours ---- */
+.alive-peekcard {
+  position: relative; margin: 8px 0 0; padding: 9px 11px 10px; border-radius: 14px; background: rgb(var(--ink) / 0.06);
+  border: 1px solid var(--line); touch-action: pan-y; animation: alive-in 0.24s ease-out both; will-change: transform;
+}
+@keyframes alive-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.alive-peekhead { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 11.5px; }
+.alive-peekhead b { color: var(--sub); font-weight: 600; letter-spacing: 0.02em; }
+.alive-shield { font-size: 11.5px; padding: 1px 8px; border-radius: 99px; background: rgb(110 160 255 / 0.18); color: #9dbcff; white-space: nowrap; font-weight: 600; }
+.di.look-app.theme-light .alive-shield { color: #2c55b8; }
+.alive-track { position: relative; height: 3px; border-radius: 2px; background: rgb(var(--ink) / 0.14); margin: 11px 4px 9px; }
+.alive-track i { position: absolute; left: var(--x); top: -2.5px; width: 8px; height: 8px; margin-left: -4px; border-radius: 50%; background: var(--alive-acc); box-shadow: 0 0 0 2px var(--bg); }
+.alive-peekcard ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; }
+.alive-peekcard li { display: flex; gap: 9px; font-size: 12.5px; min-width: 0; }
+.alive-peekcard li time { flex: none; width: 40px; color: var(--sub); font-variant-numeric: tabular-nums; }
+.alive-peekcard li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alive-gmsg { position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit; font-weight: 700; font-size: 13px; color: var(--alive-acc); background: rgb(var(--alive-card) / 0.92); opacity: 0; pointer-events: none; transition: opacity 0.2s ease; }
+.alive-gmsg.on { opacity: 1; }
+.alive-hint { display: block; margin-top: 7px; font-size: 10.5px; color: var(--sub); text-align: center; }
+
+/* ---- Now Playing+ ---- */
+.alive-np { display: flex; align-items: center; gap: 10px; margin: 10px 0 2px; padding: 9px 11px; border-radius: 14px; background: rgb(var(--ink) / 0.06); border: 1px solid var(--line); }
+.alive-np-mid { flex: 1; min-width: 0; display: grid; }
+.alive-np-mid b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alive-np-mid small { font-size: 11.5px; color: var(--sub); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alive-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 28px; flex: none; }
+.alive-eq i { width: 3px; height: 100%; border-radius: 2px; background: var(--alive-acc); transform-origin: 50% 100%; transform: scaleY(0.2); }
+.alive-eq.on i { animation: alive-eq var(--p, 0.5s) ease-in-out var(--d, 0s) infinite alternate; }
+.alive-eq.off i { transform: scaleY(calc(var(--hi, 0.5) * 0.3)); opacity: 0.6; }
+@keyframes alive-eq { from { transform: scaleY(calc(var(--hi, 0.6) * 0.3)); } to { transform: scaleY(var(--hi, 0.6)); } }
+.alive-ib { all: unset; box-sizing: border-box; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; cursor: pointer; font-size: 13px; color: var(--fg); background: rgb(var(--ink) / 0.08); }
+.alive-ib:hover { background: rgb(var(--ink) / 0.16); }
+.alive-ib:focus-visible { outline: 2px solid var(--alive-acc); outline-offset: 1px; }
+.alive-ib.like.on { color: #ff6b8a; }
+
+/* ---- mini widgets ---- */
+.alive-minis { margin: 10px 0 2px; }
+.alive-mini-row { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; overscroll-behavior-x: contain; padding: 1px; outline: none; }
+.alive-mini-row::-webkit-scrollbar { display: none; }
+.alive-mini { flex: 0 0 116px; scroll-snap-align: start; height: 98px; border-radius: 16px; padding: 10px; background: rgb(var(--ink) / 0.06); border: 1px solid var(--line); display: flex; }
+.alive-mini-body { display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between; gap: 3px; min-width: 0; width: 100%; }
+.alive-mini-body b { font-size: 16px; font-weight: 700; line-height: 1.1; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.alive-mini-body small { font-size: 11px; color: var(--sub); line-height: 1.2; }
+.alive-mini-body.neg b { color: var(--red); }
+.alive-ico { font-size: 22px; line-height: 1; }
+.alive-glass { position: relative; width: 24px; height: 32px; border-radius: 3px 3px 10px 10px; border: 2px solid rgb(var(--ink) / 0.4); overflow: hidden; }
+.alive-glass i { position: absolute; inset: 0; background: linear-gradient(rgb(var(--alive-water) / 0.9), rgb(var(--alive-water) / 0.65)); transition: transform 0.4s ease; }
+.alive-habits { display: grid; grid-template-columns: repeat(4, 9px); gap: 4px; }
+.alive-habits i { width: 9px; height: 9px; border-radius: 3px; background: rgb(var(--ink) / 0.16); }
+.alive-habits i.on { background: var(--alive-acc); }
+.alive-mini-dots { display: flex; justify-content: center; gap: 5px; margin-top: 6px; }
+.alive-mini-dots i { width: 5px; height: 5px; border-radius: 50%; background: rgb(var(--ink) / 0.2); }
+.alive-mini-dots i.on { background: var(--alive-acc); }
+
+/* ---- the daily story ---- */
+.alive-story {
+  position: absolute; top: calc(var(--di-pill-h, 38px) + 10px); left: 50%; width: 296px; translate: -50% 0; padding: 22px 20px 14px;
+  border-radius: 22px; background: rgb(var(--alive-card) / 0.97); color: var(--fg); text-align: center; z-index: 8;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 0.45), 0 0 0 1px var(--line); animation: alive-in 0.3s ease-out both;
+}
+.di.look-app.theme-light .alive-story { color: #141922; }
+.alive-story-bar { position: absolute; left: 16px; right: 16px; top: 9px; height: 2px; border-radius: 2px; background: var(--alive-acc); transform-origin: 0 50%; animation: alive-story-bar linear both; }
+@keyframes alive-story-bar { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.alive-story-frame { min-height: 74px; display: grid; place-items: center; animation: alive-in 0.32s ease-out both; }
+.alive-story-frame p { margin: 0; font-size: 17px; font-weight: 650; line-height: 1.3; }
+.alive-story-stats { display: flex; gap: 14px; justify-content: center; font-size: 11.5px; color: var(--sub); }
+.alive-story-stats span { display: grid; gap: 2px; }
+.alive-story-stats b { font-size: 22px; color: var(--fg); font-variant-numeric: tabular-nums; }
+.di.look-app.theme-light .alive-story-stats b { color: #141922; }
+.alive-story-skip { all: unset; box-sizing: border-box; cursor: pointer; margin-top: 6px; padding: 4px 14px; border-radius: 99px; font-size: 12px; color: var(--sub); background: rgb(var(--ink) / 0.08); }
+.alive-story-skip:hover { background: rgb(var(--ink) / 0.16); }
+.alive-story-skip:focus-visible { outline: 2px solid var(--alive-acc); }
+
+/* ---- the new alert kinds ---- */
+.di-peek.alert:is(.kind-pulse, .kind-countdown, .kind-streakRisk, .kind-mirror, .kind-weather), .di-alert:is(.kind-pulse, .kind-countdown, .kind-streakRisk, .kind-mirror, .kind-weather) { position: relative; }
+.alive-afx { position: absolute; right: 12px; top: 10px; width: 28px; height: 28px; pointer-events: none; color: var(--amber); }
+.alive-afx svg { width: 100%; height: 100%; overflow: visible; }
+.alive-afx.k-pulse { color: #ff6b8a; }
+.alive-afx.k-streakRisk { color: #ff8a3d; }
+.alive-afx.k-mirror { color: #bcd7ff; }
+.alive-afx.k-weather { color: #cfe6ff; }
+.alive-afx .r1, .alive-afx .r2 { fill: none; stroke: currentColor; stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: alive-ping 1.6s ease-out infinite; }
+.alive-afx .r2 { animation-delay: 0.8s; }
+@keyframes alive-ping { 0% { transform: scale(1); opacity: 0.8; } 100% { transform: scale(2.4); opacity: 0; } }
+.alive-afx .hand { transform-origin: 16px 16px; animation: alive-sweep-hand 6s linear infinite; }
+@keyframes alive-sweep-hand { to { transform: rotate(360deg); } }
+.alive-afx .flame { transform-origin: 16px 28px; animation: alive-flicker 1.1s ease-in-out infinite alternate; }
+.alive-afx .core { transform-origin: 16px 26px; animation: alive-flicker 0.8s ease-in-out infinite alternate-reverse; }
+@keyframes alive-flicker { from { transform: rotate(-3deg) scale(1, 0.95); } to { transform: rotate(3deg) scale(0.96, 1.07); } }
+.alive-afx .sheen { animation: alive-glint 2.6s ease-in-out infinite; }
+@keyframes alive-glint { 0% { transform: translateX(8px); opacity: 0; } 30% { opacity: 0.7; } 100% { transform: translateX(34px); opacity: 0; } }
+.alive-afx .d1, .alive-afx .d2, .alive-afx .d3 { animation: alive-fall 1.1s linear infinite; }
+.alive-afx .d2 { animation-delay: -0.4s; }
+.alive-afx .d3 { animation-delay: -0.75s; }
+@keyframes alive-fall { 0% { transform: translateY(-3px); opacity: 0; } 30% { opacity: 1; } 100% { transform: translateY(6px); opacity: 0; } }
+.alive-afx .rays { transform-origin: 16px 16px; animation: alive-sweep-hand 14s linear infinite; }
+
+/* ---- the motion budget: still when off or hidden, no burst in Calm ---- */
+.di.motion-off [class*="alive-"], .di.motion-off [class*="alive-"] * { animation: none !important; transition: none !important; }
+.di.motion-calm .alive-burst, .di.motion-off .alive-burst, .di.motion-off .alive-ring { display: none; }
+.di.doc-hidden [class*="alive-"], .di.doc-hidden [class*="alive-"] * { animation-play-state: paused !important; }
+.di.motion-off .alive-eq i { transform: scaleY(calc(var(--hi, 0.5) * 0.6)); }
+@media (prefers-reduced-motion: reduce) {
+  .di [class*="alive-"], .di [class*="alive-"] * { animation: none !important; transition: none !important; }
+}

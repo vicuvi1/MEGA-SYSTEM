@@ -56,6 +56,8 @@ import './island-move.css'
 import './island-fit.css'
 import './island-rest.css'
 import './island-calm.css'
+import './island-alive.css'
+import { AlertFx, AliveBen, GamingChip, DailyStory, HoverTimeline, LiquidFill, MiniWidgets, NowPlayingPlus, OrbitDots, PointsFly, aliveOf, dayStateOf, useDailyStory, usePointsFx } from './IslandAlive'
 import { islandSizing, type IslandDensity } from '@core/islandFit'
 import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
 import { cursorNear } from '../../desktop/islandPlace'
@@ -374,6 +376,8 @@ export function DesktopIsland() {
   const exp = useExpected(raw, () => shake(shape.current, fRef.current.mode !== 'off'))
   const s = exp.snap
   const now = useNow(s.running ? 5000 : 15_000)
+  // The alive layer: a fresh point (pointsFx) makes Ben cheer and a "+10 ⚡" fly in.
+  const pfx = usePointsFx(aliveOf(s).pointsFx)
   const [place, setPlace] = useState<IslandPlacement>('top')
   // H1: hidden / tucked into a dot / move mode / out of the way.
   const mv = useIslandMove()
@@ -1999,6 +2003,11 @@ export function DesktopIsland() {
     >
       {/* Shown only while the mouse is on it (it takes no room at rest). */}
       <GripHandle onPointerDown={(e) => { e.stopPropagation(); dragProps.onPointerDown(e, true) }} />
+      {/* Alive: the focus time drains like water behind the text; Ben's face; the top 3 along the lower edge. */}
+      {run && !s.locked && !old && <LiquidFill run={run} now={now} animate={f.mode !== 'off'} />}
+      {!s.locked && !old && place !== 'left' && place !== 'right' && <AliveBen s={s} now={now} fx={!!pfx} />}
+      {!s.locked && !old && <OrbitDots top3={aliveOf(s).top3} />}
+      {!s.locked && !old && <GamingChip g={aliveOf(s).gaming} />}
       <AnimatePresence mode="popLayout" initial={false} custom={dir}>
         <motion.span
           key={s.locked ? 'locked' : old ? 'old' : restKind === 'think' ? 'think' : picked ? picked.key : restMain.key}
@@ -2115,6 +2124,7 @@ export function DesktopIsland() {
   const peek = a && (ui.byAlert || !main || (prefs.mode === 'calm' && calmCard)) ? (
     <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps}>
       {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
+      <AlertFx kind={a.kind} text={a.text} />
       <div className="di-peek-top">
         <span className={`di-peek-face ${a.kind === 'ben' ? 'ben-in' : ''}`}>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
         <div className="di-peek-mid">
@@ -2195,6 +2205,15 @@ export function DesktopIsland() {
           {s.water.target > 0 && <span className="tr-water"><i />{(s.water.ml / 1000).toFixed(1)}/{(s.water.target / 1000).toFixed(1)} L</span>}
           {s.today && <span className="tr-focus"><i />{s.today.focusMin}/{s.today.focusGoal} min focus</span>}
         </p>
+      )}
+      {/* Alive: after a 400 ms dwell, the next 3 hours (and the swipe gestures: right = water, left = snooze, hold = focus). */}
+      {!s.locked && (
+        <HoverTimeline
+          s={s}
+          now={now}
+          onLayout={() => pump(600)}
+          g={{ water: () => tap({ kind: 'water', ml: 250 }), snooze: () => setQuiet(30), focus: () => tap({ kind: 'start', subject: s.now?.title ?? 'Focus', minutes: focusMin }) }}
+        />
       )}
     </div>
   )
@@ -2295,6 +2314,7 @@ export function DesktopIsland() {
   const alertCard = a ? (
     <section className={`di-alert kind-${a.kind}`}>
       {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
+      <AlertFx kind={a.kind} text={a.text} />
       <div className="di-alert-top">
         <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
         <b>{a.title}</b>
@@ -2405,6 +2425,9 @@ export function DesktopIsland() {
           <DayHero greeting={greeting} sub={heroSub} stats={heroStats} />
           <PowerRow tiles={power.map(powerTile)} editing={powerEdit} onTap={doPower} onCycle={(i) => savePower(cyclePower(power, i))} onEdit={setPowerEdit} />
           {alertCard}
+          {/* Alive: the track's levels with skip / like / a lyric line, and the swipeable mini widgets. */}
+          <NowPlayingPlus k={k} />
+          <MiniWidgets s={s} now={now} />
           {/* HD: wind-down mode, today's Healthy day and (Sundays) the week for your body. */}
           {s.windMode && <WindDownCard mode={s.windMode} tap={tap} playing={!!sc.playing} />}
           {s.health && <HealthCard health={s.health.today} evening={new Date(now).getHours() >= 18} />}
@@ -2697,6 +2720,9 @@ export function DesktopIsland() {
     const h = (ui.view === 'peek' ? size.h : 96) * scale
     return finalShapeRect({ anchor, ax: anchor === 'left' ? b.left : anchor === 'right' ? b.right : b.left + b.width / 2, top: sh.getBoundingClientRect().top, w: prefs.peekWidth * scale, h })
   }
+  // Alive: the 23:00 story (once a day, only on a resting pill that is out, never in Calm's hidden line).
+  const story = useDailyStory(s, now, ui.view === 'compact' && !calmHidden && !hushedNow && !s.locked && !old && !hidden)
+  const dayState = dayStateOf(s)
   const benUnread = s.ben.unread > 0 && !hushed && !s.locked
   const origin = place === 'left' || place === 'top-left' ? 0 : place === 'right' || place === 'top-right' ? 1 : 0.5
   // The resting pill draws no lines (no bottom line, no outline): only the peek shows them.
@@ -2726,11 +2752,12 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${s.afterShift ? 'aftershift' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''} mode-${prefs.mode} ${calmHidden ? 'calm-hidden' : ''} ${calmHidden && prefs.calmRest === 'none' ? 'calm-none' : ''}`}
+            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${s.afterShift ? 'aftershift' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''} mode-${prefs.mode} ${calmHidden ? 'calm-hidden' : ''} ${calmHidden && prefs.calmRest === 'none' ? 'calm-none' : ''} ${dayState ? `ds-${dayState}` : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
               <i className="di-glow" />
+              {dayState && !s.locked && <i className="di-alive-glow" />}
             </motion.div>
             <motion.div
               ref={shape}
@@ -2776,6 +2803,9 @@ export function DesktopIsland() {
                 <FlyIn key={fl.id} fl={fl} f={f} />
               ))}
             </div>
+            {/* Alive: "+10 ⚡" flies into Ben (a ripple for a habit, a burst for a must-do); the 23:00 story. */}
+            {pfx && ui.view === 'compact' && !calmHidden && <PointsFly key={String(pfx.id)} fx={pfx} />}
+            {story.on && story.story && <DailyStory story={story.story} onEnd={() => (story.end(), pump(500))} />}
             {/* IC3: the round menu, around where you hold. */}
             {ringCtl.ring && <RingMenu ring={ringCtl.ring} items={ringList} />}
             <motion.div className="di-follow" style={{ y: mh }}>
