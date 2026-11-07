@@ -346,6 +346,12 @@ export async function coachChat(env: BotEnv, text: string, onStep?: (step: strin
   return { ok: r.ok, reply: r.reply, done: r.done, steps: r.steps, mood: r.mood, at: r.at, undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, ...(r.cards ? { cards: r.cards } : {}), ...(r.retry ? { retry: true } : {}) }
 }
 
+/** After the reply is sent: let the work it left running finish (a plan's names), at most `ms`. */
+export async function coachSettle(ms = 9_000): Promise<void> {
+  if (!warm) return
+  await Promise.race([warm.bots.settle(), new Promise((ok) => setTimeout(ok, ms))]).catch(() => null)
+}
+
 /** The app: take back what the coach did in one reply (all, or one line). */
 export async function coachUndo(env: BotEnv, at: string, index?: number): Promise<{ ok: boolean; lines: string[] }> {
   lifeTz(env)
@@ -372,6 +378,8 @@ export async function handleTelegramUpdate(env: BotEnv, token: string, update: u
   }
   const reply = await bots.handleUpdate(token, update)
   await payTodoistDone(env, { minGapMs: 3 * 60_000 }).catch(() => null)
+  // What the answer left running (a plan's block names) finishes before the function stops.
+  await coachSettle().catch(() => null)
   return reply
 }
 
@@ -1479,7 +1487,7 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
 }
 
 /** The app: today's rhythm (state), or an action on it. */
-export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month'; note?: string; prefs?: any }): Promise<any> {
+export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose' | 'shift' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month'; note?: string; prefs?: any }): Promise<any> {
   lifeTz(env)
   const { bots, mirror, services } = await botsFor(env)
   // The month's letter: Ben's honest take on the month's story (saved; the app shows it).
@@ -1507,6 +1515,10 @@ export async function coachRhythm(env: BotEnv, op: { action: 'state' | 'propose'
     return bots.rhythm.bookGoals(Number.isFinite(id) && id > 0 ? [id] : undefined)
   }
   if (op.action === 'propose') await bots.rhythm.propose(String(op.note ?? '').slice(0, 500))
+  if (op.action === 'shift') {
+    const r = await bots.rhythm.shift()
+    return { ...(await bots.rhythm.state()), done: r.done, ok: r.ok }
+  }
   if (op.action === 'approve') {
     const r = await bots.rhythm.approve()
     return { ...(await bots.rhythm.state()), done: r.done }

@@ -20,6 +20,10 @@ describe('Ben without the AI (B3, B9, B10)', () => {
   })
   it('answers short questions from the data, never logs or real asks', () => {
     expect(quickKind('What now?', today)).toEqual({ kind: 'now' })
+    // Speed: "should" no longer sends it to the thinking model.
+    expect(quickKind('what should I do now?', today)).toEqual({ kind: 'now' })
+    expect(quickKind('What should I do next', today)).toEqual({ kind: 'now' })
+    expect(quickKind('what should I do about the exam?', today)).toBeNull()
     expect(quickKind('water?', today)).toEqual({ kind: 'water' })
     expect(quickKind('my streak', today)).toEqual({ kind: 'streak' })
     expect(quickKind('spent this week?', today)).toMatchObject({ kind: 'lookup', need: 'spending 2026-11-02 2026-11-05' })

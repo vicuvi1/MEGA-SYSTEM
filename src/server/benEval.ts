@@ -14,13 +14,25 @@ import { createWebBots, type AskModel } from '../renderer/src/web/webBots'
 import { createWebServices } from '../renderer/src/web/webServices'
 import { setSetting } from '../main/settings'
 
+/** Speed tests: how slow the outside services are (ms), and extra made-up tasks. */
+export interface WorldNet {
+  todoistMs?: number
+  calendarMs?: number
+  recallMs?: number
+  toolsMs?: number
+  tasks?: Partial<TodoTask>[]
+}
+
 /**
  * A throwaway world for one case: a fresh fake database, made-up calendar
  * blocks and Todoist tasks that only record what Ben does (`log`), and Ben.
  * Exported for the stub-model tests (benQuality.test.ts).
  */
-export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalCase, 'facts' | 'chat' | 'extraEvents' | 'plan'> = {}, timing?: { budgetMs?: number; reserveMs?: number; minMs?: number }) {
+export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalCase, 'facts' | 'chat' | 'extraEvents' | 'plan'> = {}, timing?: { budgetMs?: number; reserveMs?: number; minMs?: number }, net?: WorldNet) {
   const log: string[] = []
+  // Speed tests: Todoist, Google and memory recall answer as slowly as the real ones.
+  const slow = <T>(ms: number | undefined, v: () => T): Promise<T> => (ms ? new Promise((ok) => setTimeout(() => ok(v()), ms)) : Promise.resolve(v()))
+  const calls = { todoist: 0, calendar: 0 }
   const remote = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
   const fakeFetch = (async (_url: string, init?: RequestInit) => {
@@ -42,7 +54,7 @@ export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalC
   const task = (id: string, content: string): TodoTask => ({ id, content, priority: 1, due: today, dueTime: null, project: 'Inbox', recurring: false }) as TodoTask
   const tasks = [task('t1', 'etica'), task('t2', 'sport'), task('t3', 'laborator 4 PC')]
   const calendar = {
-    events: async () => events,
+    events: async () => (calls.calendar++, slow(net?.calendarMs, () => events)),
     create: async (e: { title: string; start: string; end: string }) => {
       log.push(`calendar.create ${e.title} ${localIso(e.start)} → ${localIso(e.end)}`)
       return { ...e, id: 'new', calendarId: 'cal', allDay: false } as CalEvent
@@ -52,8 +64,8 @@ export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalC
     remove: async (_cal: string, id: string) => void log.push(`calendar.remove ${id}`)
   }
   const todoist = {
-    today: async () => tasks,
-    upcoming: async () => [],
+    today: async () => (calls.todoist++, slow(net?.todoistMs, () => [...tasks, ...(net?.tasks ?? []).map((t, i) => ({ ...task(`m${i + 1}`, t.content ?? 'task'), ...t }) as TodoTask)])),
+    upcoming: async () => (calls.todoist++, slow(net?.todoistMs, () => [] as TodoTask[])),
     everything: async () => ({ tasks, areas: [{ key: 'p:inbox', name: 'Inbox' }] }),
     close: async (id: string) => void log.push(`todoist.close ${id}`),
     quickAdd: async (text: string) => (log.push(`todoist.quickAdd ${text}`), task('t9', text)),
@@ -67,8 +79,10 @@ export async function evalWorld(SQL: SqlJsStatic, model: AskModel, c: Pick<EvalC
   }
   // BQ2: a plan Ben proposed this morning that waits for an OK.
   if (c.plan) await mirror.write((db) => setSetting(db as any, RHYTHM, JSON.stringify({ day: today, water: [], briefing: { status: 'proposed', sentAt: new Date().toISOString(), version: 1, planner: PLANNER_VERSION, plan: { day: today, headline: 'Lab first, then the gym', mustdos: ['laborator 4 PC'], blocks: [{ title: 'Lab report', start: '10:00', minutes: 90 }, { title: 'Study algebra', start: '16:00', minutes: 50 }], training: null, waterMl: 2500 } } })))
-  const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model, ...(timing ? { timing } : {}) })
-  return { bots, log, mirror, services, today }
+  const recall = net?.recallMs != null ? (_q: string, _k: number) => slow(net.recallMs, () => [] as { kind: string; text: string }[]) : null
+  const tools = net?.toolsMs != null ? { list: () => slow(net.toolsMs, () => [] as { name: string; description: string }[]), call: async () => '' } : null
+  const bots = createWebBots({ mirror, services, defaults: { botToken: '1:eval', chatId: '1' } as any, todoist, calendar, ai: model, recall, tools, ...(timing ? { timing } : {}) })
+  return { bots, log, mirror, services, today, calls }
 }
 
 /** What a reply did, as lines the checks read: calls made, ✅ lines, the reply, cards, chips, buttons. */

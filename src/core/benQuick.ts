@@ -84,9 +84,12 @@ export function quickKind(text: string, today: string): Quick | null {
   const t = text.trim().toLowerCase().replace(/\s+/g, ' ')
   // SI23: "what am I doing wrong (today)?": numbers first, one push.
   if (/^(what am i doing wrong|what('s| is) going wrong|where am i (slipping|failing)|what am i messing up)( today)?[?!. ]*$/.test(t)) return { kind: 'wrong' }
+  // "What should I do now?" is answered from the data ("Do this now"): checked before the
+  // words below ("should") send it to the thinking model (that took ~17 s).
+  const q0 = t.replace(/[?!.…]+$/g, '').trim()
+  if (/^(ok |so |and )?(what now|now what|what('s| is) next|next|what should i do( now| next)?|what do i do( now| next)?|ce fac( acum)?|ce urmeaza|что делать( сейчас)?)$/.test(q0)) return { kind: 'now' }
   if (!t || /\d/.test(t) || t.split(' ').length > 8 || /\b(why|should|plan|move|add|log|book|remind|help|but|because|and then)\b/.test(t)) return null
-  const q = t.replace(/[?!.…]+$/g, '').trim()
-  if (/^(what now|now what|what('s| is) next|next|what should i do( now)?|what do i do( now)?|ce fac( acum)?|ce urmeaza)$/.test(q)) return { kind: 'now' }
+  const q = q0
   if (/^((how much )?water( today)?|how much water( have i (had|drunk))?( today)?|my water|apa( azi)?)$/.test(q)) return { kind: 'water' }
   if (/^((my |show my )?streaks?|how('s| is| are) my streaks?|seria( mea)?)$/.test(q)) return { kind: 'streak' }
   // History only: "left", "open", "due", "tomorrow" ask about what's ahead (the AI knows the open tasks).

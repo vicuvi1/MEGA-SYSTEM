@@ -3,7 +3,8 @@
 // evening and Sunday reviews, and the water and training nudges. Used by the
 // tick on the server (Telegram, Mega) and by the app (Today, Coach).
 import { behindMove, weeklyGoalLines } from '@core/goalsBen'
-import { checkModelPlan, estimateMinutes, packDay, relinkAlso, type PlanTask } from '@core/dayPacker'
+import { checkModelPlan, estimateMinutes, packDay, planStartAt, relinkAlso, type PlanTask } from '@core/dayPacker'
+import { PLAN_ASKED, askedToday, isAsked, lateBlocks, shiftPlan, type Span } from '@core/planShift'
 import { waterToday } from './coachStatus'
 import { withTimeout } from '@core/ai'
 import { addDays, dayKey } from '@core/dates'
@@ -67,6 +68,8 @@ export interface RhythmDeps {
 
 const pad = (n: number) => String(n).padStart(2, '0')
 const hmNow = (d = new Date()) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+/** "HH:MM" of an ISO time, local. */
+const hmOf = (iso: string) => hmNow(new Date(iso))
 const quarterNow = (d = new Date()) => {
   const m = Math.ceil((d.getHours() * 60 + d.getMinutes()) / 15) * 15
   return `${pad(Math.min(23, Math.floor(m / 60)))}:${pad(m % 60)}`
@@ -247,9 +250,43 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  /** A plan for today (a new version when you ask to change or redo it). */
-  async function propose(note = ''): Promise<{ plan: DayProposal; version: number }> {
+  /** Background work an answer started (a plan's names): the server waits for it before it stops. */
+  const pending = new Set<Promise<unknown>>()
+  const later = (p: Promise<unknown>) => {
+    const q: Promise<unknown> = p.catch(() => null).finally(() => pending.delete(q))
+    pending.add(q)
+  }
+  async function settle(): Promise<void> {
+    while (pending.size) await Promise.all([...pending])
+  }
+
+  /** Today's focus sessions as time spans (a block with one was started). */
+  const sessionSpans = (db: any): Span[] => {
+    try {
+      return services
+        .services(db)
+        .focus.state()
+        .todaySessions.filter((x: any) => x.startedAt)
+        .map((x: any) => ({ s: Date.parse(x.startedAt), e: x.endedAt ? Date.parse(x.endedAt) : Date.now() }))
+    } catch {
+      return []
+    }
+  }
+
+  /**
+   * A plan for today (a new version when you ask to change or redo it). It always starts
+   * from now. `fastMs` (the chat): the plan is shown without waiting longer than that for
+   * the model's block names; they arrive a moment later in place. `onStep`: live steps.
+   */
+  async function propose(note = '', opts: { fastMs?: number; onStep?: (s: string) => void } = {}): Promise<{ plan: DayProposal; version: number }> {
     const now = new Date()
+    const step = (s: string) => {
+      try {
+        opts.onStep?.(s)
+      } catch {
+        /* the screen's problem */
+      }
+    }
     // B22: "move gym to 19", "drop the reading block": changed in code, no AI call.
     if (note.trim()) {
       const edited = await mirror.write((db) => {
@@ -311,8 +348,10 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       }
       // My life: today's work window (partly busy), tonight's shift and the sleep window.
       const fit = readLifeFit(db)
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: workToday(fit, today) }
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: workToday(fit, today), asked: askedToday(readJson(db, PLAN_ASKED, null), today) }
     })
+    const fixedCount = events.filter((e) => !e.allDay).length
+    step(`Packing ${tasks.length} task${tasks.length === 1 ? '' : 's'} around ${fixedCount} event${fixedCount === 1 ? '' : 's'}`)
     const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : ''
     const plans = await goalPlans().catch(() => [] as GoalPlan[])
     // Goal blocks already in today's calendar are busy time; only the rest still needs a slot.
@@ -322,7 +361,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const mode = base.mode
     const goalItems = !mode ? allGoalItems : mode.kind === 'sick' ? [] : mode.kind === 'travel' ? allGoalItems.slice(0, 1).map((g) => ({ ...g, minutes: Math.min(45, g.minutes) })) : allGoalItems.map((g) => ({ ...g, minutes: Math.min(90, Math.round((g.minutes * mode.focus) / 5) * 5) }))
     // DP1: ALL of today's work (due today, overdue, starred), packed around the calendar's fixed events.
-    const planTasks: PlanTask[] = tasks.map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null }))
+    // What he asked for today in the chat (or tagged @today) is placed today, never moved to tomorrow.
+    const planTasks: PlanTask[] = tasks.map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null, ...(isAsked(t.content, base.asked) ? { asked: true } : {}) }))
     const behindGoals = !mode || mode.kind === 'exam' ? base.behind.filter((g) => !goalItems.some((x) => x.title.toLowerCase().includes(g.title.slice(6).toLowerCase()))) : []
     const packed = packDay({
       goals: [...goalItems, ...behindGoals],
@@ -346,15 +386,23 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
           ? relinkAlso({ ...packed, blocks: packed.blocks.slice(0, 1).map((b) => ({ ...b, minutes: Math.min(45, b.minutes) })), why: 'Travel day: one short block, the rest on the list.' })
           : packed
     let plan = fallback
+    let namesLater: Promise<DayProposal> | null = null
     // W18: tomorrow's plan was drafted last night: used as it is when nothing new clashes (no AI call).
     const draft = !note && base.st.tomorrow?.day === base.today ? base.st.tomorrow.plan : undefined
-    const useDraft = !!draft && draft.blocks.length > 0 && draftFits(draft, events) && draft.blocks.every((b) => b.start >= hmNow(now))
+    const useDraft = !!draft && draft.blocks.length > 0 && draftFits(draft, events) && draft.blocks.every((b) => b.start >= planStartAt(hmNow(now)))
     if (useDraft) plan = { ...draft!, headline: `Planned last night: ${draft!.headline}`.slice(0, 160) }
     // No change asked: the rules' plan, named and ranked by a quick AI call (N6:
     // never times out; 15 s at most, else the rules' plan as it is).
     if (ai && !note && !useDraft) {
+      step('Naming the blocks')
+      const nameIt = (raw: string): DayProposal => {
+        const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
+        const named = nameAndRank(fallback, json ? JSON.parse(json) : null)
+        // Quick-task blocks keep their plain name (the list is what matters there).
+        return { ...named, blocks: named.blocks.map((b, i) => (b.kind === 'quick' ? fallback.blocks[i] : b)) }
+      }
       try {
-        const raw = await withTimeout(
+        const naming = withTimeout(
           ai(
             [
               "You are BEN, Victor's coach. His day plan is built (times fixed) from ALL of today's tasks. Only: name each block in a few words tied to his goal (a block with several tasks names what they share), rank the must-dos (most important first, use the exact words), and write one short headline with numbers.",
@@ -368,12 +416,17 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
               .join('\n'),
             { json: true, kind: 'plan-names' } as any
           ),
-          15_000
+          10_000
         )
-        const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
-        const named = nameAndRank(fallback, json ? JSON.parse(json) : null)
-        // Quick-task blocks keep their plain name (the list is what matters there).
-        plan = { ...named, blocks: named.blocks.map((b, i) => (b.kind === 'quick' ? fallback.blocks[i] : b)) }
+        if (opts.fastMs != null) {
+          // Speed: the packed plan shows now; the names land in place when the model is done.
+          const fast = await withTimeout(naming, opts.fastMs).catch(() => null)
+          if (fast != null) plan = nameIt(fast)
+          else {
+            plan = fallback
+            namesLater = naming.then((raw) => nameIt(raw))
+          }
+        } else plan = nameIt(await naming)
       } catch {
         plan = fallback
       }
@@ -424,13 +477,85 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const moved = moveLateStudy(plan.blocks, { lastHour: latestHour(base.hist.hours, 'study'), best: bestHours(base.hist.focus), now: hmNow(now), busy, words })
       if (moved.note) plan = { ...plan, blocks: moved.blocks, headline: `${plan.headline} · ${moved.note}`.slice(0, 200) }
     }
+    // A plan always starts from now: anything the model (or a redo) put in the past moves to the time left.
+    plan = shiftPlan(plan, { now: hmNow(new Date()), events, asked: base.asked }).plan
     plan = relinkAlso(plan)
-    return mirror.write((db) => {
+    const made = await mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1
       save(db, { ...st, expired: undefined, briefing: { status: 'proposed', sentAt: new Date().toISOString(), plan, version, planner: PLANNER_VERSION } })
       history(db, plan.day, { plan: 'proposed' })
       return { plan, version }
+    })
+    // The names arrive: same blocks and times; only titles, must-do order and the headline change.
+    if (namesLater) {
+      const shown = made
+      later(
+        namesLater.then((named) =>
+          mirror.write((db) => {
+            const st = load(db, shown.plan.day)
+            const b = st.briefing
+            if (!b || b.version !== shown.version || b.status !== 'proposed') return
+            const blocks = b.plan.blocks.map((x) => {
+              const i = fallback.blocks.findIndex((f) => f.start === x.start && f.minutes === x.minutes && f.title === x.title)
+              return i >= 0 && named.blocks[i] ? { ...x, title: named.blocks[i].title } : x
+            })
+            const mustdos = named.mustdos.length === b.plan.mustdos.length ? named.mustdos : b.plan.mustdos
+            save(db, { ...st, briefing: { ...b, plan: relinkAlso({ ...b.plan, blocks, mustdos, headline: named.headline || b.plan.headline }) } })
+          })
+        )
+      )
+    }
+    return made
+  }
+
+  /**
+   * The plan came back late (opened at 10:00, its first blocks at 07:00 not started): the
+   * past blocks move into the time left from now. Fixed events stay. An approved plan's
+   * calendar blocks move too (the same way approval wrote them).
+   */
+  async function shift(): Promise<{ ok: boolean; done: string[]; plan?: DayProposal }> {
+    const now = new Date()
+    const cur = await mirror.read((db) => {
+      const today = services.services(db).wallet.today(now)
+      return { b: load(db, today).briefing, sessions: sessionSpans(db), asked: askedToday(readJson(db, PLAN_ASKED, null), today) }
+    })
+    const b0 = cur.b
+    if (!b0) return { ok: false, done: ['No plan for today yet'] }
+    const events = calendar ? await calendar.events(...dayBounds()).catch(() => [] as CalEvent[]) : []
+    const p = b0.plan
+    // An approved plan's own blocks are in the calendar: they are not fixed events for the shift.
+    const mine = (e: CalEvent) => b0.status === 'approved' && p.blocks.some((b) => e.title === b.title && localDay(e.start) === p.day && hmOf(e.start) === b.start)
+    const r = shiftPlan(p, { now: hmNow(now), events: events.filter((e) => !mine(e)), sessions: cur.sessions, asked: cur.asked })
+    if (!r.moves.length) return { ok: true, done: ['Nothing to shift: the plan is on time'], plan: p }
+    const done: string[] = []
+    if (b0.status === 'approved' && calendar?.move) {
+      let moved = 0
+      for (const m of r.moves) {
+        const e = events.find((x) => x.title === m.title && localDay(x.start) === p.day && hmOf(x.start) === m.from)
+        if (!e) continue
+        const start = new Date(`${p.day}T${m.to}:00`)
+        const ok = await calendar.move(e.calendarId, e.id, start.toISOString(), new Date(start.getTime() + m.minutes * 60000).toISOString()).then(
+          () => true,
+          () => false
+        )
+        if (ok) moved++
+      }
+      done.push(moved ? `🗓 ${moved} block${moved === 1 ? '' : 's'} moved in your calendar` : '⚠️ Calendar: blocks not moved')
+    }
+    await mirror.write((db) => {
+      const st = load(db, p.day)
+      if (st.briefing) save(db, { ...st, briefing: { ...st.briefing, plan: r.plan, version: (st.briefing.version ?? 0) + 1 } })
+    })
+    done.unshift(`⏩ Plan starts at ${planStartAt(hmNow(now))}: ${r.moves.length} block${r.moves.length === 1 ? '' : 's'} moved${r.unplaced.length ? `, ${r.unplaced.length} on today's list` : ''}`)
+    return { ok: true, done, plan: r.plan }
+  }
+
+  /** How many blocks of today's plan are in the past and not started (for "shift the plan?"). */
+  async function late(): Promise<number> {
+    return mirror.read((db) => {
+      const b = load(db, services.services(db).wallet.today()).briefing
+      return b ? lateBlocks(b.plan, hmNow(), sessionSpans(db)).length : 0
     })
   }
 
@@ -1041,7 +1166,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     })
   }
 
-  return { state, setPrefs, propose, approve, dayResult, evening, setTop3, weekly, applyWeekly, top3Ask, top3Tap, top3Save, writeStory, checkoutStart, checkoutMark, planTomorrow, midweek, bookingPreview, bookWeek, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
+  return { state, setPrefs, propose, shift, late, settle, approve, dayResult, evening, setTop3, weekly, applyWeekly, top3Ask, top3Tap, top3Save, writeStory, checkoutStart, checkoutMark, planTomorrow, midweek, bookingPreview, bookWeek, waterLine, markWater, trainingLine, letter, selfReview, goalPlans, bookGoals, rebookGoals, countPromise: (day: string, key: 'kept' | 'broken' | 'ignored') => mirror.write((db) => countPromise(db, day, key)) }
 }
 
 export type Rhythm = ReturnType<typeof createRhythm>

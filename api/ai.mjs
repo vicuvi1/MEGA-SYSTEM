@@ -457,6 +457,18 @@ async function streamOpenRouter(r, onDelta) {
   return { text, usage, model }
 }
 
+/** Usage rows still being written (the streamed chat): a function awaits flushUsage() before it ends. */
+const usageWrites = new Set()
+function laterUsage(p) {
+  const q = Promise.resolve(p)
+    .catch(() => null)
+    .finally(() => usageWrites.delete(q))
+  usageWrites.add(q)
+}
+export async function flushUsage() {
+  while (usageWrites.size) await Promise.all([...usageWrites])
+}
+
 async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effort = 'low') {
   const streaming = typeof opts.onDelta === 'function'
   const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
@@ -473,7 +485,8 @@ async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effo
   if (streaming && r.ok && r.body) {
     const s = await streamOpenRouter(r, opts.onDelta)
     const u = s.usage ?? {}
-    await recordUsage({ model: s.model || model, kind: opts.kind || (opts.think ? 'deep' : 'chat'), prompt: u.prompt_tokens, completion: u.completion_tokens, cost: typeof u.cost === 'number' ? u.cost : null }, process.env, fetchImpl)
+    // Speed: the app's chat doesn't wait for the usage row; /api/coach writes it before it ends (flushUsage).
+    laterUsage(recordUsage({ model: s.model || model, kind: opts.kind || (opts.think ? 'deep' : 'chat'), prompt: u.prompt_tokens, completion: u.completion_tokens, cost: typeof u.cost === 'number' ? u.cost : null }, process.env, fetchImpl))
     if (!s.text) throw new Error('OpenRouter gave an empty answer')
     return { text: s.text, model: s.model || model }
   }

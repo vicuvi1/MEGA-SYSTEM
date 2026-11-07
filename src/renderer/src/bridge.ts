@@ -48,7 +48,7 @@ export type Bridge = LifeApi & {
     memory(): Promise<{ facts: { t: string; at: string }[] }>
     setFacts(facts: { t: string; at: string }[]): Promise<void>
     mind?(): Promise<CoachMind>
-    rhythm?(action?: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month', note?: string, prefs?: Partial<RhythmPrefs>): Promise<{ state: RhythmState; prefs: RhythmPrefs; done?: string[]; ok?: boolean; lines?: string[]; letter?: string | null }>
+    rhythm?(action?: 'state' | 'propose' | 'shift' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month', note?: string, prefs?: Partial<RhythmPrefs>): Promise<{ state: RhythmState; prefs: RhythmPrefs; late?: number; done?: string[]; ok?: boolean; lines?: string[]; letter?: string | null }>
     profileView?(): Promise<ProfileView>
     /** Ben's desk: patterns, energy map, excuses, mood, study, stacks, stakes, month story, money (read here, instant). */
     desk?(): Promise<DeskView>

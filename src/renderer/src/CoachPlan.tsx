@@ -8,11 +8,12 @@ import { Icon } from './Icon'
 import { useAction } from './ui'
 import { useLive } from './live'
 import { PlanAlso } from './PlanAlso'
+import { PlanShiftOffer } from './PlanShiftOffer'
 
 /** `oneApprove`: on Today, where "Do this now" already shows Approve, the card doesn't repeat it. */
 export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: { onChange?: () => void; oneApprove?: boolean; hideReview?: boolean }) {
   const act = useAction()
-  const [data, setData] = useState<{ state: RhythmState; prefs: RhythmPrefs } | null>(null)
+  const [data, setData] = useState<{ state: RhythmState; prefs: RhythmPrefs; late?: number } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [editing, setEditing] = useState(false)
   const [note, setNote] = useState('')
@@ -105,6 +106,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
         {approved && <span className="chip on">✓ Approved</span>}
       </header>
       <p className="cp-headline">{p.headline}</p>
+      <PlanShiftOffer state={state} late={data.late} onDone={(r) => (setData(r), onChange?.())} />
       {p.why && <p className="plan-why">{p.why}</p>}
       <div className="cp-grid">
         {p.mustdos.length > 0 && (

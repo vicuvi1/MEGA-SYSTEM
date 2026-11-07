@@ -9,7 +9,7 @@
 // really full, tasks moved to tomorrow with the reason. Nothing is dropped
 // silently: every task is a must-do, in "Also today", or deferred.
 import { freeGaps, type CalEvent } from './dayTime'
-import { fromMin, toMin, quarter, type AlsoItem, type DayProposal, type DeferredItem, type PlanBlock } from './rhythm'
+import { fromMin, toMin, type AlsoItem, type DayProposal, type DeferredItem, type PlanBlock } from './rhythm'
 import type { WorkToday } from './lifeFit'
 
 export interface PlanTask {
@@ -23,6 +23,14 @@ export interface PlanTask {
   starred?: boolean
   /** Todoist's duration, when set. */
   duration?: number | null
+  /** He asked for it today (added in the chat for today): placed today, never moved to tomorrow. */
+  asked?: boolean
+}
+
+/** Where a plan may start: now rounded up to the next 5 minutes, plus `bufferMin` (10:00 → 10:05). */
+export function planStartAt(now: string, bufferMin = 5): string {
+  const m = toMin(now)
+  return fromMin(Math.min(23 * 60 + 55, Math.ceil(m / 5) * 5 + bufferMin))
 }
 
 export interface PackInputs {
@@ -170,6 +178,7 @@ function place(wins: Win[], c: Chunk, best: number[], minMin: number): { start: 
   return null
 }
 
+const b_minutes = (b: { minutes: number }) => b.minutes
 const hm = (m: number) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}`
 export const fmtMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, '0') : ''}` : `${m} min`)
 
@@ -178,7 +187,8 @@ export function packDay(p: PackInputs): DayProposal {
   const short = p.sleptMin != null && p.sleptMin < 360
   const cap = short ? 60 : 90
   const endBy = p.endBy ?? (short ? '21:30' : '22:00')
-  const after = quarter(p.now)
+  // A plan always starts from now (10:00 → 10:05), never with blocks already in the past.
+  const after = planStartAt(p.now)
 
   // Every task once (Todoist can repeat a task in "today" and "@today").
   const seen = new Set<string>()
@@ -189,6 +199,8 @@ export function packDay(p: PackInputs): DayProposal {
     return true
   })
   const est = new Map(tasks.map((t) => [t, estimateMinutes(t)]))
+  // What he asked for today (⭐ @today, or added in the chat for today) is never moved to tomorrow.
+  const pinned = (t: PlanTask) => !!t.asked || !!t.starred
 
   // The 3 must-dos: last night's top 3 first, then the most important tasks.
   const mustdos: string[] = []
@@ -212,11 +224,15 @@ export function packDay(p: PackInputs): DayProposal {
     if (t && isQuick(minutes)) quick.push(t)
     else chunks.push({ title: m, minutes: Math.min(cap, Math.max(25, minutes)), kind: 'focus', tasks: [{ title: m, id: t?.id, minutes }], hard: true })
   }
+  const pinnedChunks: Chunk[] = []
   for (const t of tasks) {
     if (mustTasks.has(t)) continue
     if (isQuick(est.get(t)!)) quick.push(t)
+    else if (pinned(t)) pinnedChunks.push({ title: t.content, minutes: Math.min(cap, Math.max(25, est.get(t)!)), kind: 'focus', tasks: [{ title: t.content, id: t.id, minutes: est.get(t)! }], hard: true })
     else others.push(t)
   }
+  // His own asks lead the quick batch (it holds 8).
+  quick.sort((a, b) => Number(pinned(b)) - Number(pinned(a)))
   // Other tasks: by project, highest priority first, a block holds up to `cap` minutes.
   const groups = new Map<string, PlanTask[]>()
   for (const t of others) {
@@ -256,7 +272,7 @@ export function packDay(p: PackInputs): DayProposal {
   const freeMin = wins.filter((w) => !w.light).reduce((s, w) => s + w.e - w.s, 0)
   const maxBlocks = short ? 5 : 8
   const budget = short ? 240 : 390
-  const firsts = [...chunks, ...groupChunks.filter((c) => c.hard)]
+  const firsts = [...chunks, ...pinnedChunks, ...groupChunks.filter((c) => c.hard)]
   const rest = groupChunks.filter((c) => !c.hard)
   // A short night: shorter blocks (75%, at least 25 min).
   if (short) for (const c of [...firsts, ...rest]) c.minutes = Math.max(25, Math.round((c.minutes * 0.75) / 5) * 5)
@@ -276,8 +292,12 @@ export function packDay(p: PackInputs): DayProposal {
     if (tryPlace(c) || c.tasks.length < 2) return
     for (const t of c.tasks) tryPlace({ ...c, title: t.title, minutes: Math.min(cap, Math.max(25, short ? Math.round((t.minutes * 0.75) / 5) * 5 : t.minutes)), tasks: [t] })
   }
-  for (const c of firsts) fit(c)
-  if (quickChunk) fit(quickChunk)
+  // Goals, must-dos and what he asked for today first; a quick batch holding one of his asks right after.
+  const pinnedQuick = !!quickChunk && quick.slice(0, 8).some(pinned)
+  for (const c of [...chunks, ...pinnedChunks]) fit(c)
+  if (quickChunk && pinnedQuick) fit(quickChunk)
+  for (const c of groupChunks.filter((c) => c.hard)) fit(c)
+  if (quickChunk && !pinnedQuick) fit(quickChunk)
 
   // Training in the evening when there's room (kept before the lower tasks fill the day).
   let training: DayProposal['training'] = null
@@ -294,6 +314,29 @@ export function packDay(p: PackInputs): DayProposal {
   }
   for (const c of rest) fit(c)
 
+  // An ask of his still without a slot: an older, lower-priority block makes room (its tasks go to
+  // tomorrow, saying why); with nothing to swap, his ask stays on today's list and the plan asks.
+  const placedKeys = () => new Set(placed.flatMap((b) => b.chunk.tasks.map((t) => key(t.title))))
+  const byTitle = new Map(tasks.map((t) => [key(t.content), t]))
+  const madeRoom: { title: string; for: string }[] = []
+  let squeeze: DayProposal['squeeze'] = undefined
+  for (const t of tasks.filter((x) => pinned(x) && !mustTasks.has(x))) {
+    if (placedKeys().has(key(t.content))) continue
+    const need = Math.max(isQuick(est.get(t)!) ? 15 : 25, Math.min(cap, est.get(t)!))
+    const swappable = placed
+      .filter((b) => b.chunk.kind !== 'goal' && b.chunk.tasks.length > 0 && b.chunk.tasks.every((x) => { const o = byTitle.get(key(x.title)); return !!o && !pinned(o) && !mustTasks.has(o) }))
+      .map((b) => ({ b, os: b.chunk.tasks.map((x) => byTitle.get(key(x.title))!) }))
+      .sort((a, c) => Math.max(...a.os.map((o) => o.priority ?? 1)) - Math.max(...c.os.map((o) => o.priority ?? 1)) || Number(c.os.some(overdue)) - Number(a.os.some(overdue)) || String(a.os[0].due ?? '9').localeCompare(String(c.os[0].due ?? '9')) || b_minutes(c.b) - b_minutes(a.b))
+    const pick = swappable.find((x) => x.b.minutes >= need) ?? null
+    if (pick) {
+      const i = placed.indexOf(pick.b)
+      for (const o of pick.os) madeRoom.push({ title: o.content, for: t.content })
+      placed.splice(i, 1, { ...pick.b, title: t.content.slice(0, 80), minutes: Math.min(pick.b.minutes, Math.max(need, 15)), kind: isQuick(est.get(t)!) ? 'quick' : 'focus', tasks: [t.content], chunk: { title: t.content, minutes: need, kind: 'focus', tasks: [{ title: t.content, id: t.id, minutes: est.get(t)! }], hard: true } })
+    } else if (!squeeze) {
+      const drop = placed.filter((b) => b.chunk.tasks.some((x) => { const o = byTitle.get(key(x.title)); return !!o && !pinned(o) && !mustTasks.has(o) })).flatMap((b) => b.chunk.tasks.map((x) => byTitle.get(key(x.title))!).filter((o) => !!o && !pinned(o) && !mustTasks.has(o))).sort((a, c) => (a.priority ?? 1) - (c.priority ?? 1))[0]
+      squeeze = { keep: t.content, ...(drop ? { drop: drop.content } : {}) }
+    }
+  }
   placed.sort((a, b) => a.start.localeCompare(b.start))
   const blocks: PlanBlock[] = placed.map(({ chunk: _c, ...b }) => b)
   const inBlock = new Map<string, string>()
@@ -307,7 +350,11 @@ export function packDay(p: PackInputs): DayProposal {
     if (mustTasks.has(t)) continue
     const minutes = est.get(t)!
     const at = inBlock.get(key(t.content))
+    const room = madeRoom.find((x) => key(x.title) === key(t.content))
     if (at) also.push({ title: t.content, minutes, priority: t.priority ?? 1, ...(t.id ? { id: t.id } : {}), ...(t.project ? { project: t.project } : {}), at, ...(overdue(t) ? { overdue: true } : {}) })
+    // His own ask for today stays today, on the list, even when the day is full.
+    else if (pinned(t)) also.push({ title: t.content, minutes, priority: t.priority ?? 1, ...(t.id ? { id: t.id } : {}), ...(t.project ? { project: t.project } : {}), asked: true, ...(overdue(t) ? { overdue: true } : {}) })
+    else if (room) deferred.push({ title: t.content, ...(t.id ? { id: t.id } : {}), why: `Made room for "${room.for.slice(0, 40)}" (you asked for it today): tomorrow` })
     else deferred.push({ title: t.content, ...(t.id ? { id: t.id } : {}), why: short ? `Short night, ${full}: tomorrow` : `The day is full (${full}): tomorrow` })
   }
   also.sort((a, b) => b.priority - a.priority || Number(!!b.overdue) - Number(!!a.overdue))
@@ -334,6 +381,7 @@ export function packDay(p: PackInputs): DayProposal {
     deferred,
     why,
     light: short || undefined,
+    ...(squeeze ? { squeeze } : {}),
     free: wins.length || blocks.length ? withWork(freeWindows(p.events, p.today, after, endBy), p.work).filter((w) => !w.light).map((w) => ({ start: fromMin(w.s), end: fromMin(w.e) })) : []
   }
 }

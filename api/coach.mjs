@@ -4,8 +4,8 @@
 // The app's Coach page talks to the same coach as the Telegram bots: same
 // brain (OpenRouter DeepSeek, Gemini as backup), memory, goals & rules.
 import { bearer, botDefaults, config, readBody, send, requireSession, countCall } from './_lib.mjs'
-import { coachChat, coachRhythm, coachUndo } from './_bot/bot.mjs'
-import { deadlineIn, modelUntil } from './ai.mjs'
+import { coachChat, coachRhythm, coachSettle, coachUndo } from './_bot/bot.mjs'
+import { deadlineIn, flushUsage, modelUntil } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 
 export default async function handler(req, res) {
@@ -56,5 +56,8 @@ export default async function handler(req, res) {
     console.error('coach:', e)
     line({ ok: false, error: e.message || 'The coach failed' })
   }
+  // The reply is on screen already; what it left running (a plan's block names, usage rows) finishes now.
+  await coachSettle().catch(() => null)
+  await flushUsage().catch(() => null)
   res.end()
 }

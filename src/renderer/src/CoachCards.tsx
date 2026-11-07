@@ -15,6 +15,7 @@ import { fmtMinutes, planTimeline, type PlanItem } from '@core/planView'
 import { barFill } from './motionKit'
 import { Ring } from './CoachFeed'
 import { PlanAlso } from './PlanAlso'
+import { PlanShiftOffer } from './PlanShiftOffer'
 import './coachFeed.css'
 
 /** The kinds of `show` that are cards here (the rest are ReplyExtras' small widgets). */
@@ -30,7 +31,7 @@ const toMinutes = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(
 
 /** The rhythm state (plan, review) for the cards, live. */
 function useRhythm() {
-  const [data, setData] = useState<{ state: RhythmState; prefs: RhythmPrefs } | null>(null)
+  const [data, setData] = useState<{ state: RhythmState; prefs: RhythmPrefs; late?: number } | null>(null)
   const load = useCallback(() => {
     life.coach?.rhythm?.('state').then(setData).catch(() => {})
   }, [])
@@ -163,6 +164,7 @@ export function PlanCard({ live = true, spotlight = false, expired = false, onCh
     <div className={`cf-card cf-plan t-plan live ${approved ? 'ok' : 'waiting'} ${spotlight ? 'spot' : ''} ${cheer ? 'cheer' : ''}`}>
       <CardHead icon="🗓" title={approved ? "Today's plan" : 'Your plan for today'} sub={[tl.items.length ? `${tl.items.filter((x) => !x.train).length} blocks · ${fmtMinutes(tl.totalMin)} of focus` : '', b.version > 1 ? `v${b.version}` : ''].filter(Boolean).join(' · ')} chip={approved ? '✓ Approved' : 'Waiting for you'} chipTone={approved ? 'ok' : 'wait'} />
       {p.headline && <p className="cf-plan-head">{p.headline}</p>}
+      <PlanShiftOffer state={data.state} late={data.late} onDone={(r) => (setData(r), onChange?.())} />
       {p.why && <p className="plan-why">{p.why}</p>}
       <PlanTrack items={tl.items} now={tl.now} from={tl.from} to={tl.to} />
       {tl.items.length > 0 && (

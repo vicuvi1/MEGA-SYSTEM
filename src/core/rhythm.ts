@@ -31,6 +31,8 @@ export interface AlsoItem {
   /** The start of the block it is packed into, when it is in one. */
   at?: string
   overdue?: boolean
+  /** He asked for it today: it stays today even without a slot. */
+  asked?: boolean
 }
 
 /** DP1: a task moved to tomorrow, with the reason. */
@@ -57,6 +59,8 @@ export interface DayProposal {
   light?: boolean
   /** DP1: the free time between events when it was planned (for "add X" / "move Y to the afternoon"). */
   free?: { start: string; end: string }[]
+  /** The day is full and something he asked for today has no slot: keep it, or drop `drop` for it. */
+  squeeze?: { keep: string; drop?: string }
 }
 
 export interface RhythmState {

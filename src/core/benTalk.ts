@@ -298,6 +298,20 @@ export interface BlockOption {
 }
 
 /** The blocks a request can mean: title words match (prefix), upcoming first, by time. */
+/**
+ * Speed: "move gym to 18:00" (no word "block") read in code too. Only a move to a clock
+ * time with a real name ("gym", "lab"), never "it", "everything" or "the rest".
+ */
+export function readMoveEdit(text: string): BlockEdit | null {
+  const t = fixTypos(text).trim().replace(/[.!?]+$/, '').replace(/\s+/g, ' ')
+  const m = /^(?:please\s+|pls\s+|can you\s+|could you\s+)?(?:move|push|shift|put)\s+(?:the\s+|my\s+)?(.{3,30}?)\s+(?:to|at)\s+(\S+(?:\s*[ap]m)?)$/i.exec(t)
+  if (!m) return null
+  const target = m[1].toLowerCase().replace(/\b(the|my|a|an|today'?s?|session|event)\b/g, '').replace(/\s+/g, ' ').trim()
+  if (!target || target.length < 3 || /\b(it|that|this|them|everything|all|rest|day|plan|tasks?|meeting|next|tomorrow)\b/.test(target)) return null
+  const value = timeOf(m[2])
+  return value ? { verb: 'move', target, value } : null
+}
+
 export function matchBlocks(edit: Pick<BlockEdit, 'target' | 'nth'>, blocks: BlockOption[]): BlockOption[] {
   const words = edit.target.split(/\s+/).filter((w) => w.length >= 3).map((w) => w.slice(0, 4))
   const hits = blocks

@@ -40,6 +40,7 @@ import { financeStateFrom, addFeedback, loadLog, loadMemory, loadMind, loadProfi
 import { deskChange, deskView, type DeskOp } from './web/benDesk'
 import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor } from '@core/rhythm'
+import { lateBlocks } from '@core/planShift'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus, waterToday } from './web/coachStatus'
 import { backupTables, redactRows, restoreStatements } from '@core/backupPlan'
@@ -708,6 +709,19 @@ export function createTursoWebBridge(): Bridge {
             }
           }
           if (done) break
+          // Speed: the answer is here; the server may still finish what it left running (a plan's
+          // block names). Read the rest quietly and refresh once more when it ends.
+          if (last && (typeof last.reply === 'string' || last.error)) {
+            void (async () => {
+              try {
+                for (;;) if ((await reader.read()).done) break
+              } catch {
+                /* the page moved on */
+              }
+              void syncNow().catch(() => null)
+            })()
+            break
+          }
         }
         if (buf.trim()) {
           try {
@@ -851,7 +865,7 @@ export function createTursoWebBridge(): Bridge {
           return { rows, ...impactVerdict(rows) }
         }),
       // The daily rhythm: today's plan from the coach (read here, actions on the server).
-      rhythm: async (action: 'state' | 'propose' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month' = 'state', note?: string, prefs?: Record<string, unknown>) => {
+      rhythm: async (action: 'state' | 'propose' | 'shift' | 'approve' | 'top3' | 'prefs' | 'book' | 'letter' | 'month' = 'state', note?: string, prefs?: Record<string, unknown>) => {
         if (action === 'state') {
           return (await svcP).read((s) => {
             const read = (k: string) => {
@@ -861,7 +875,17 @@ export function createTursoWebBridge(): Bridge {
                 return null
               }
             }
-            return { state: rhythmFor(read(RHYTHM), s.wallet.today()), prefs: cleanPrefs(read(RHYTHM_PREFS)) }
+            const state = rhythmFor(read(RHYTHM), s.wallet.today())
+            // Blocks in the past that weren't started: the card offers to shift the plan to now.
+            let late = 0
+            try {
+              const now = new Date()
+              const spans = s.focus.state().todaySessions.filter((x: any) => x.startedAt).map((x: any) => ({ s: Date.parse(x.startedAt), e: x.endedAt ? Date.parse(x.endedAt) : now.getTime() }))
+              late = state.briefing ? lateBlocks(state.briefing.plan, `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`, spans).length : 0
+            } catch {
+              late = 0
+            }
+            return { state, prefs: cleanPrefs(read(RHYTHM_PREFS)), late }
           })
         }
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'rhythm', action, note, prefs }) })
