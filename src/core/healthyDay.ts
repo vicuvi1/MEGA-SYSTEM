@@ -464,6 +464,18 @@ export function stillQuiet(quiet: boolean, now: Date, wakeAt: string | null | un
   return now.getHours() * 60 + now.getMinutes() < toMin(wakeAt)
 }
 
+/** Behind the day's pace (08:00 to 21:00, in a straight line): at least one glass under where you should be. */
+export function waterBehindPace(now: number, ml: number, target: number): boolean {
+  if (target <= 0 || ml >= target) return false
+  const d = new Date(now)
+  const m = d.getHours() * 60 + d.getMinutes()
+  const pace = Math.min(1, Math.max(0, (m - 8 * 60) / (13 * 60)))
+  return ml + 250 <= target * pace
+}
+
+/** Minutes between two water cards: 60 while behind the day's pace, 90 otherwise. */
+export const WATER_GAP_BEHIND_MIN = 60
+
 /** The last time your water went up, from any device (the island's water card waits 90 minutes after it). */
 export function waterSeen(prev: { ml: number; at: number } | null, ml: number, now: number): { ml: number; at: number } {
   if (!prev) return { ml, at: 0 }

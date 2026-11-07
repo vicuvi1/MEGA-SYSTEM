@@ -28,7 +28,7 @@ import {
   type SnoozeCtx
 } from './islandNudges'
 import { recapAlert } from './islandMoments'
-import { govern, lateAlert, queueAdd, queueRelease, reminderAlert, type GovernCtx, type Queued, type ReminderItem, type Shown } from './healthyDay'
+import { WATER_GAP_BEHIND_MIN, WATER_SHARED_MIN, govern, lateAlert, waterBehindPace, queueAdd, queueRelease, reminderAlert, type GovernCtx, type Queued, type ReminderItem, type Shown } from './healthyDay'
 import { afterShiftAlert, effectiveBed, windModeTonight, type AfterShiftPlan } from './afterShift'
 import type { EyeTip } from './eyeCare'
 
@@ -169,7 +169,7 @@ export function dayNudge(i: DayNudgeInput): DayNudge {
     () => learnAlert(postureNudge({ ...c, drill: i.care?.drill }), s, 'posture', i.now),
     () => learnAlert(breatheNudge({ ...c, lowMood: i.lowMood }), s, 'breathe', i.now),
     () => learnAlert(eyesNudge({ ...c, eyeBreaks: i.eyeBreaks, lastEyesAt: i.lastEyesAt, everyMin: i.care?.eyes?.everyMin, tip: i.care?.eyes?.tip }), s, 'eyes', i.now),
-    () => waterNudge(waterAlert({ now: i.now, busy: false, idleSec: i.idleSec, activeSince: i.activeSince, water: i.water, lastWaterAt: i.lastWaterAt, lastMoveAt: i.lastMoveAt, lastEyesAt: i.lastEyesAt, eyeBreaks: i.eyeBreaks, dismissed: i.dismissed }), s, i.now, i.day),
+    () => waterNudge(waterAlert({ now: i.now, busy: false, idleSec: i.idleSec, activeSince: i.activeSince, water: i.water, lastWaterAt: waterBehindPace(i.now, i.water.ml, i.water.target) ? i.lastWaterAt - (WATER_SHARED_MIN - WATER_GAP_BEHIND_MIN) * 60_000 : i.lastWaterAt, lastMoveAt: i.lastMoveAt, lastEyesAt: i.lastEyesAt, eyeBreaks: i.eyeBreaks, dismissed: i.dismissed }), s, i.now, i.day),
     () => (busy ? null : recap())
   ]
   for (const make of candidates) {
@@ -181,4 +181,60 @@ export function dayNudge(i: DayNudgeInput): DayNudge {
     held.push({ id: a.id, why: v.why })
   }
   return { alert: null, queue, held }
+}
+
+// ---- "Why didn't I get a reminder?" (Settings → Island) ----
+
+export type WhyKind = 'water' | 'move' | 'eyes'
+export const WHY_LABEL: Record<WhyKind, string> = { water: 'Water', move: 'Screen-time break', eyes: 'Eye break' }
+
+/**
+ * The last reason each of these nudges was not on the island, in plain words
+ * (for debugging; the first true reason wins). `r` is what dayNudge() just
+ * returned: a card of that kind showing now says so, and the governor's own
+ * "held back" reasons are used as they are.
+ */
+export function nudgeWhy(i: DayNudgeInput, r: DayNudge): Record<WhyKind, string> {
+  const min = (t: number) => Math.round((i.now - t) / 60_000)
+  const hour = new Date(i.now).getHours()
+  const busyWhy = i.ctx.asleep ? 'bed is logged: only your own reminders' : i.ctx.call ? 'you are in a call' : i.ctx.focus ? 'a focus timer is running' : i.ctx.event ? 'you are in a class or event' : i.ctx.windDown ? 'wind-down: only bed things now' : null
+  const governor = (topic: string) => r.held.find((h) => h.id.startsWith(`${topic}:`))?.why ?? null
+  const showing = (kind: string) => r.alert?.kind === kind
+  const away = i.idleSec == null ? 'no idle reading yet from this PC' : i.idleSec > 300 ? `away from the PC for ${Math.round(i.idleSec / 60)} min` : null
+  const at = (t: number) => new Date(t).toTimeString().slice(0, 5)
+
+  const water = (): string => {
+    if (showing('water')) return r.alert?.dot ? 'showing now as a dot' : 'showing now'
+    if (i.water.target > 0 && i.water.ml >= i.water.target) return "today's water goal is reached"
+    if (!i.store.prefs.on.water) return 'water nudges are off in Settings → Island → Nudges'
+    if ((i.store.snooze.water ?? 0) > i.now) return `snoozed until ${at(i.store.snooze.water!)}`
+    if (busyWhy) return busyWhy
+    if (away) return away
+    if (hour < 9 || hour >= 21) return 'water reminders run 09:00 to 21:00'
+    const gap = waterBehindPace(i.now, i.water.ml, i.water.target) ? WATER_GAP_BEHIND_MIN : WATER_SHARED_MIN
+    if (i.lastWaterAt && min(i.lastWaterAt) < gap) return `last glass or reminder ${min(i.lastWaterAt)} min ago (next after ${gap} min)`
+    return governor('water') ?? (r.alert ? `another card is showing: ${r.alert.kind}` : 'dismissed for this slot, or learning moved it')
+  }
+  const move = (): string => {
+    if (showing('move')) return r.alert?.dot ? 'showing now as a dot' : 'showing now'
+    if (!i.store.prefs.on.move) return 'move breaks are off in Settings → Island → Nudges'
+    if ((i.store.snooze.move ?? 0) > i.now) return `snoozed until ${at(i.store.snooze.move!)}`
+    if (busyWhy) return busyWhy
+    if (away) return away
+    const sitMin = i.store.prefs.sitMin
+    if (!i.activeSince) return 'no active stretch yet (needs input without a 5-minute pause)'
+    const sat = min(i.activeSince)
+    if (sat < sitMin) return `at the PC ${sat} min (break after ${sitMin})`
+    if (min(i.lastMoveAt) < sitMin) return `you moved ${min(i.lastMoveAt)} min ago`
+    return governor('move') ?? (r.alert ? `another card is showing: ${r.alert.kind}` : 'dismissed for this stretch, or waiting for a pause in real work')
+  }
+  const eyes = (): string => {
+    if (showing('eyes')) return r.alert?.dot ? 'showing now as a dot' : 'showing now'
+    if (!i.eyeBreaks && !i.care?.eyes) return 'eye breaks are off (island Day page, 20-20-20)'
+    if (!i.store.prefs.on.eyes) return 'eye breaks are off in Settings → Island → Nudges'
+    if (busyWhy) return busyWhy
+    if (away) return away
+    return governor('eyes') ?? `last eye break ${i.lastEyesAt ? `${min(i.lastEyesAt)} min ago` : 'never today'}`
+  }
+  return { water: water(), move: move(), eyes: eyes() }
 }

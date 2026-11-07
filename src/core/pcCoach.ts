@@ -254,6 +254,12 @@ const BREAK = [
   '{m} min sitting. Your back wants a break.',
   '{m} min straight. Water, push-ups or a stretch: pick one.'
 ]
+/** The screen-time break without the app sensor: only how long you have been at the PC. */
+const SCREEN = [
+  'You’ve been on the screen for {m} min. Water, push-ups or a stretch?',
+  '{m} min on the screen without a pause. Stand up for two minutes?',
+  'That’s {m} min of screen time. Give your eyes and back a break.'
+]
 const BED_SOON = ['Bed at {bed}. Start winding down: save your work, tomorrow’s top 3, screens off.', '{left} min to bed ({bed}). Finish this one thing, then wind down 🌙']
 const BED_NOW: Record<PushLevel, string[]> = {
   gentle: ['It’s {now}, bedtime was {bed}. Time to wrap up 🌙', 'Bedtime ({bed}). You’re up at {wake}. Close up soon?'],
@@ -329,12 +335,27 @@ export function decideCoach(i: CoachInput, prev: CoachState): { reaction: CoachR
   const atPc = i.idleSec != null && i.idleSec < 120
   const t = coachTuning(i.push)
 
-  // Off: only the one-time "switch it on?" card (desktop, a calm moment, at most on 2 days).
+  // Off ("Let Ben see what I'm doing" is off, the default): no app sensor, but the screen-time break still
+  // works from active time alone (idle / active needs no sensor), and the one-time "switch it on?" card stays.
   if (!i.on) {
-    if (s.active?.kind === 'setup' && s.active.until > now) return { reaction: s.active, state: s }
+    if (s.active && s.active.until > now && (s.active.kind === 'setup' || s.active.kind === 'break') && !i.meeting) return { reaction: s.active, state: s }
+    if (s.active) s = { ...s, active: null }
+    const sit = i.activeSince ? (now - i.activeSince) / 60_000 : 0
+    const need = t.breakMin + ((s.less.break ?? 0) > 0 ? 20 : 0)
+    const nightNow = !i.bedLogged && !!bedPhase(now, i.bedTarget, i.latestBed)
+    if (i.desktop && atPc && !i.meeting && !i.focus && !nightNow && !muted(s, 'break', now) && s.count < t.dailyCap && (now - s.lastAt) / 60_000 >= t.gapMin && sit >= need && (now - i.lastMoveAt) / 60_000 >= need && (now - s.breakAt) / 60_000 >= need) {
+      const l = line(s, 'screen', SCREEN, Math.floor(now / 60_000) + s.count)
+      const r = make('break', now, now, 'Screen break', fill(l.text, { m: Math.round(sit) }), '🧍', [
+        { label: '💧 Water', op: 'water', primary: true },
+        { label: '💪 10 push-ups', op: 'pushups' },
+        { label: '🧍 Stretched', op: 'stretch' },
+        { label: '⏰ 15 min', op: 'snooze', minutes: 15 }
+      ])
+      return { reaction: r, state: { ...s, last: l.last, breakAt: now, active: r, lastAt: now, count: s.count + 1 } }
+    }
     const h = new Date(now).getHours()
     const asked = s.setup.asked.length >= 2 && !s.setup.asked.includes(i.day)
-    if (!i.desktop || s.setup.answered || s.setup.later > now || asked || s.setup.asked.includes(i.day) || i.meeting || i.focus || !atPc || h < 9 || h >= 22) return { reaction: null, state: { ...s, active: s.active?.kind === 'setup' ? null : s.active } }
+    if (!i.desktop || s.setup.answered || s.setup.later > now || asked || s.setup.asked.includes(i.day) || i.meeting || i.focus || !atPc || h < 9 || h >= 22) return { reaction: null, state: s }
     const r = make('setup', i.day, now, 'Let Ben see what you’re doing?', 'He’ll cheer real work, call you back from YouTube, remind you to move and to sleep. Only app names, worked out on this PC. Nothing leaves it.', '👁', [
       { label: 'Turn it on', op: 'enable', primary: true },
       { label: 'Not now', op: 'later' },

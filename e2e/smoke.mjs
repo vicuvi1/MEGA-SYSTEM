@@ -1383,6 +1383,51 @@ try {
     if (shots) await ip.screenshot({ path: `${shots}/calm-dot-card.png`, clip: { x: 0, y: 0, width: 520, height: 260 } })
     await ip.context().close()
   })
+  await step('Desktop island reminders: one water peek in Calm and no to-do twice', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 760 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island reminders: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      // The same to-dos sent from two feeds (must-do, top 3 and Todoist): each must show once.
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null,
+        mustdos: [{ i: 0, text: 'Call the bank', done: false }, { i: 1, text: 'call the bank.', done: false }],
+        week: { top: [{ i: 0, text: 'CALL THE BANK', done: false }, { i: 1, text: 'Finish essay', done: false }], parked: [] },
+        tasks: [{ id: 't1', content: 'Finish essay', time: null }, { id: 't2', content: 'Buy milk', time: null }, { id: 't2', content: 'Buy milk', time: null }, { id: 't3', content: '🥛 buy milk', time: null }],
+        water: { ml: 500, target: 2000 }, reps: [], alert: null
+      }
+      window.__island = { send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {}, islandTakeClicks: () => {}, islandAction: () => {},
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 2, gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 15000 })
+    // The water reminder (a default-settings kind) peeks once in Calm, then waits as a blue dot.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: { id: 'water:r1', kind: 'water', title: 'A glass of water?', text: '0.5 of 2.0 L so far', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
+    await ip.waitForSelector('.di-peek.calm-peek', { timeout: 5000 })
+    if ((await ip.locator('.di-peek.calm-peek').count()) !== 1) throw new Error('more than one water peek')
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 6000 })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-dot.dot-blue', { timeout: 4000 })
+    // Open the panel and count the to-do rows by their words.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, alert: null }))
+    const nub = await ip.locator('.di-nub').boundingBox()
+    await ip.mouse.move(nub.x + nub.width / 2, nub.y + 2)
+    await ip.waitForSelector('.di-pill.di-rest', { timeout: 3000 })
+    await ip.click('.di-pill.di-rest')
+    await ip.waitForSelector('.di-panel', { timeout: 3000 })
+    const rows = await ip.evaluate(() => [...document.querySelectorAll('.di-check span, .di-week3-row span, .di-task span')].map((e) => (e.textContent || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()))
+    const dup = rows.filter((r, i) => rows.indexOf(r) !== i)
+    if (dup.length) throw new Error(`to-dos shown twice: ${dup.join(', ')} (rows: ${rows.join(' | ')})`)
+    await ip.context().close()
+  })
   // Ben on your PC (core/pcCoach.ts, the real decision code, bundled here): made-up
   // activity → a praise peek after 50 min of coding, then a break card whose
   // "10 push-ups" button sends the tap (the app window logs it, only on that tap).

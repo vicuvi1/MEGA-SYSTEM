@@ -14,6 +14,7 @@ import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionV
 import { dayPart } from '@core/islandFeel'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
 import { restingView, type RestItem, type RestKind } from '@core/islandRest'
+import { dedupeTodos } from '@core/islandTodos'
 import { CALM_TIMING, calmDots, calmRevealed, calmStep, calmTiming, calmZone, dotColor, inZone, modeGate, peekKind, type CalmDot, type CalmEvent, type CalmPhase } from '@core/islandCalm'
 
 import type { IslandBeat, IslandPlacement, IslandTheme } from '../../shared/desktop'
@@ -1369,7 +1370,9 @@ export function DesktopIsland() {
     clearToastLater(3000)
   }
   const water = s.water
-  const mustOpen = s.mustdos.filter((m) => !m.done).length
+  // Safety net: whatever feed sent the snapshot, a to-do shows once (Todoist id, then title).
+  const rows = useMemo(() => dedupeTodos({ mustdos: s.mustdos, top: s.week?.top ?? [], todoist: s.tasks ?? [], max: 8 }), [s.mustdos, s.week, s.tasks])
+  const mustOpen = rows.mustdos.filter((m) => !m.done).length
   const [moon, setMoon] = useState(false)
   const goToBed = () => {
     setMoon(true)
@@ -1567,9 +1570,9 @@ export function DesktopIsland() {
     </section>
   ) : null
   const blocks: Record<IslandSection, ReactNode> = {
-    tasks: s.tasks?.length ? (<section className="di-tasks">
+    tasks: rows.todoist.length ? (<section className="di-tasks">
                   <span className="di-label">Todoist · next up{s.tasksStale && s.tasksAt ? ` · updated ${Math.max(1, Math.round((now - s.tasksAt) / 60000))} min ago` : ''}</span>
-                  {s.tasks.map((t) => (
+                  {rows.todoist.map((t) => (
                     <button key={t.id} className="di-task" {...tp(`task:${t.id}`, () => send({ kind: 'todoDone', id: t.id, content: t.content }))} title="Done: tick it in Todoist">
                       <i />
                       <span>{t.content}</span>
@@ -1709,18 +1712,18 @@ export function DesktopIsland() {
                   <span>⚡ Start focus by itself when a block begins</span>
                 </label>
               </section>),
-    mustdos: s.mustdos.length || s.week?.top.length || s.work ? (<section className="di-must">
-                  {s.mustdos.length > 0 && <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>}
-                  {s.mustdos.map((m) => (
+    mustdos: rows.mustdos.length || rows.top.length || s.work ? (<section className="di-must">
+                  {rows.mustdos.length > 0 && <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>}
+                  {rows.mustdos.map((m) => (
                     <button key={m.i} className={`di-check ${m.done ? 'done' : ''}`} {...tp(`must:${m.i}`, () => tap({ kind: 'mustdo', i: m.i }))}>
                       <i>{m.done ? '✓' : ''}</i>
                       <span>{m.text}</span>
                     </button>
                   ))}
-                  {!!s.week?.top.length && (
+                  {rows.top.length > 0 && s.week && (
                     <div className="di-week3">
                       <span className="di-label">This week's top 3</span>
-                      {s.week.top.map((b) => (
+                      {rows.top.map((b) => (
                         <div key={b.i} className={`di-week3-row ${b.done ? 'done' : ''}`}>
                           <i>{b.done ? '✓' : '🎯'}</i>
                           <span>{b.text}</span>

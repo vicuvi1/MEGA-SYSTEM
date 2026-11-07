@@ -3,6 +3,7 @@
 // island window itself never opens your data, so there is one owner of it.
 import { pushStyle, workToday } from '@core/lifeFit'
 import { weekTop3View, type WeekPlan } from '@core/weekPlan'
+import { dedupeTodoist, dedupeTodos } from '@core/islandTodos'
 import type { LifeFitView } from './web/lifeFitStore'
 import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
 import { studyAct, studyForIsland } from './studyIslandFeed'
@@ -19,7 +20,7 @@ import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartA
 import { coachAnswer, coachTick, driftNow } from './pcCoachFeed'
 import { DEFAULT_WAKE, toMin as fitMin } from '@core/lifeFit'
 import { windDown } from '@core/islandBody'
-import { dayNudge } from '@core/dayNudges'
+import { dayNudgeLogged } from './nudgeWhy'
 import { dayOf as nudgeDayOf } from '@core/islandNudges'
 import { careAct, careTick } from './careFeed'
 import { alertTopic, govern, noteMessage, noteShown, sleptOnTime, textTopic, waterSeen, weekDaysFromStore, weeklyHealth, windDownMode, type GovernCtx, type Queued, type ReminderItem, type Shown } from '@core/healthyDay'
@@ -450,7 +451,8 @@ export function IslandFeed() {
       todoCache.at = now
       const list = await life.todoist.today().catch(() => null)
       if (list) {
-        const top = list.slice(0, 3)
+        // Up to 8 (no id or title twice); the island shows 3 after must-dos and the top 3 took theirs out.
+        const top = dedupeTodoist(list).slice(0, 8)
         // `full` keeps every task of today (not just the 3 shown): a tap on a row the island still
         // shows from an older list must find its task even after the top 3 changed.
         todoCache = { at: now, okAt: now, failed: false, list: top.map((t) => ({ id: t.id, content: t.content, time: t.dueTime ?? null })), full: { ...todoCache.full, ...Object.fromEntries(list.map((t) => [t.id, t])) } }
@@ -501,7 +503,7 @@ export function IslandFeed() {
     // Sleep care: morning light, the caffeine curfew, the after-shift wind-down, eye breaks by screen time, the desk drill.
     const ct = await careTick({ now, day: dayKey(new Date(now)), fit, wakeTarget: fit?.wake ?? DEFAULT_WAKE, bedTarget, bedLogged, wakeTime: wakeLogged ? (sleep?.todayLog?.wakeTime ?? null) : null, dismissed, eyesToday: nudges ? nudgeDayOf(nudges.store, dayKey(new Date(now))).eyes : 0 }).catch(() => null)
     const health = nudges
-      ? dayNudge({
+      ? dayNudgeLogged({
           now,
           day: dayKey(new Date(now)),
           ctx: govCtx,
@@ -588,7 +590,7 @@ export function IslandFeed() {
       mustdos: status.mustdos,
       waterTarget,
       dayClosed: ((focus as { plan?: { reasons?: string[] } }).plan?.reasons?.length ?? 0) > 0,
-      todo: todoCache.list,
+      todo: todoCache.list.slice(0, 3),
       done: [...new Set([...status.mustdos.filter((m) => m.done).map((m) => m.text), ...(focus.todaySessions ?? []).map((x) => x.subject)])]
     }).catch(() => null)
     // Focus boost (boost/boostFeed.ts): the push ladder, the morning launch countdown, "why I'm stalling".
@@ -674,6 +676,9 @@ export function IslandFeed() {
     // HD: today's Healthy day ring and its bonus; the weekly card on Sundays.
     const healthView = await healthTick(now, { ml: localWater, target: waterTarget }, sleptOnTime(sleep?.todayLog, bedTarget)).catch(() => null)
     const week = healthView && nudges && new Date(now).getDay() === 0 ? weeklyHealth(weekDaysFromStore(nudges.store, dayKey(new Date(now))), sleepLogs, dayKey(new Date(now))) : null
+    // One to-do shows once: Todoist id, then title, across must-dos, this week's top 3, Todoist and the plan's tasks.
+    const weekTop3 = weekTop3View(fitCache.week, dayKey(new Date(now)))
+    const todos = dedupeTodos({ mustdos: status.mustdos, top: weekTop3?.top ?? [], todoist: todoCache.list, plan: blocks.current.list.filter((b) => !b.call && !b.maybe && b.kind !== 'event').map((b) => b.title) })
     return {
       at: now,
       locked: false,
@@ -692,8 +697,8 @@ export function IslandFeed() {
       next,
       // IS6: later today, a maybe or an invite (greyed in the Next list).
       maybe: blocks.current.maybe.filter((b) => b.end > now).sort((x, y) => x.start - y.start).slice(0, 3),
-      mustdos: status.mustdos,
-      week: weekTop3View(fitCache.week, dayKey(new Date(now))),
+      mustdos: todos.mustdos,
+      week: weekTop3 ? { ...weekTop3, top: todos.top } : null,
       work: (() => {
         const w = fit ? workToday(fit, dayKey(new Date(now))) : null
         return w ? { from: w.from, to: w.to, mode: w.mode } : null
@@ -721,7 +726,7 @@ export function IslandFeed() {
       study: await studyForIsland(now),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, false),
-      tasks: todoCache.list,
+      tasks: todos.todoist,
       tasksAt: todoCache.okAt || undefined,
       tasksStale: todoCache.failed,
       dayPct: live.score,

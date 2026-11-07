@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import { canUndo, readAutoLog, readIslandLog, readIslandUiLog, type AutoLogEntry, type IslandLogEntry, type IslandUiLogEntry } from './islandLog'
 import { undoAutomation } from './smartIsland'
 import { Icon } from './Icon'
+import { readNudgeWhy } from './nudgeWhy'
+import { WHY_LABEL, type WhyKind } from '@core/dayNudges'
 
 const keyName = (k: string) => (k ? k.replace('Control', 'Ctrl').replace(/\+/g, '+') : '')
 
@@ -15,11 +17,13 @@ export function IslandLogPanel() {
   const [more, setMore] = useState(false)
   const [autos, setAutos] = useState<AutoLogEntry[]>(readAutoLog)
   const [shortcut, setShortcut] = useState<string | null>(null)
+  const [why, setWhy] = useState(readNudgeWhy)
   useEffect(() => {
     // The desktop keeps its own lines and the island page's together; an older desktop: what the page saved here.
     const load = () => {
       setList(readIslandLog())
       setAutos(readAutoLog())
+      setWhy(readNudgeWhy())
       const get = window.desktop?.islandGetLog
       if (!get) return setSeen(readIslandUiLog())
       get()
@@ -45,6 +49,17 @@ export function IslandLogPanel() {
       <p className="muted bk-note">
         The last 30 taps on the desktop island and what happened. {key ? `${key} opens the island; ` : key === '' ? 'No shortcut is set to open the island; ' : ''}tray → Island position moves it.
       </p>
+      <p className="muted bk-note" data-testid="why-no-reminder">
+        Why didn't I get a reminder? The last reason for each:
+      </p>
+      <ul className="bk-list" data-testid="why-list">
+        {(Object.keys(WHY_LABEL) as WhyKind[]).map((k) => (
+          <li key={k}>
+            <span>{WHY_LABEL[k]}</span>
+            <small style={{ margin: 0 }}>{why[k] ? `${why[k]!.why} (${new Date(why[k]!.at).toLocaleTimeString()})` : 'nothing checked yet'}</small>
+          </li>
+        ))}
+      </ul>
       {list.length > 0 && (
         <ul className="bk-list">
           {[...list].reverse().map((e, i) => (
