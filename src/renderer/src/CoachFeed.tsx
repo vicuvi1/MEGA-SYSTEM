@@ -18,6 +18,8 @@ import { createPortal } from 'react-dom'
 import { doingNow } from '@core/coachLooks'
 import { plainRich } from '@core/richText'
 import { coachCheer } from './coachCheer'
+import { BenPushCard } from './BenPushCard'
+import { pushCardOf } from '@core/benPushes'
 
 const hm = (iso: string | number) => new Date(iso).toTimeString().slice(0, 5)
 
@@ -195,6 +197,9 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
   const [done, setDone] = useState<string | null>(null)
   const t = tidyText(m.text)
   const today = new Date(m.at).toDateString() === new Date().toDateString()
+  // Ben 2: a push (check-in, brief, shutdown, weekly card) keeps its own card and buttons.
+  const push = pushCardOf((m as { push?: unknown }).push)
+  if (push) return <BenPushCard card={push} live={today || (push.type === 'weekly' && Date.now() - Date.parse(m.at) < 2 * 864e5)} onChange={onChange} />
 
   if (kind === 'plan') {
     const st = status?.plan.status

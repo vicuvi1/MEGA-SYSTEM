@@ -65,7 +65,7 @@ import { addReps, addWater, sharedView, sportToday, type SharedSport } from '@co
 import { saveSport, sportNow } from '../main/bodyLog'
 import { focusCoins } from '@core/focus'
 import { defaultSport, workoutCard } from '@core/sportCards'
-import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, type RhythmState, missedTwiceText } from '@core/rhythm'
+import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, focusName, type RhythmState, missedTwiceText } from '@core/rhythm'
 import { missTwiceLine } from '@core/neverMissTwice'
 import { todayMode } from '../renderer/src/web/extrasContext'
 import { coachStatus } from '../renderer/src/web/coachStatus'
@@ -85,6 +85,8 @@ import { HEALTH } from '../plugins/health'
 import { BEN_DAILY_MESSAGES, DEFAULT_TZ } from '@core/defaults'
 import { pushStyle } from '@core/lifeFit'
 import { readLifeFit } from '../renderer/src/web/lifeFitStore'
+import { pushTick } from './benPushTick'
+import { weeklyCard, weeklyCardText, weeklyHtml } from '@core/benPushes'
 import { tagNudge } from '@core/chatFeed'
 import { MemoryVectors, geminiEmbedder, type Embedder } from './memoryVectors'
 import { memoryJobs } from './memoryJobs'
@@ -663,9 +665,10 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       })
       .catch(() => null))
   /** `notif`: the bell entry to use (fixed id, so the app's own copy isn't doubled). `urgent`: through quiet hours. */
-  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean; notif?: Omit<Notif, 'readAt'>; urgent?: boolean } = {}): Promise<any> => {
+  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean; notif?: Omit<Notif, 'readAt'>; urgent?: boolean; push?: unknown; throughQuiet?: boolean } = {}): Promise<any> => {
     // Quiet hours (N6): only your own reminders (🔔 ⏰) and urgent things go to Telegram; the rest waits in the bell.
-    if (!opts.urgent && stillQuiet(quietNowSet(notifSet, now), now, await wakeAt()) && !/^\s*(🔔|⏰)/u.test(text)) {
+    // Ben 2: the morning brief (your wake time) and the shutdown (before your bedtime) are timed by you: they pass.
+    if (!opts.urgent && !opts.throughQuiet && stillQuiet(quietNowSet(notifSet, now), now, await wakeAt()) && !/^\s*(🔔|⏰)/u.test(text)) {
       await mirror.write((db) => {
         const n = opts.notif ?? notifFromMessage(text, reply_markup, new Date())
         if (n) addNotif(db as any, n)
@@ -773,7 +776,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
         const mood = (Object.entries(MOOD_FACE).find(([, f]) => plain.trimStart().startsWith(f)) ?? [plain.trimStart().startsWith('🔔') ? 'annoyed' : 'chill'])[0]
         // LT12: its kind from the fixed template (Ben may have reworded the text).
         const tag = tagNudge(original.replace(/<[^>]+>/g, '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&'))
-        appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood, ...tag }])
+        // Ben 2: a push keeps its card (the Coach page draws it with its buttons).
+        appendLog(db, [{ role: 'coach', bot: 'mega', via: 'telegram', text: plain, at: new Date().toISOString(), proactive: true, mood, ...tag, ...(opts.push ? ({ push: opts.push } as object) : {}) }])
         // …and in the bell, with the one thing to do about it.
         const n = opts.notif ?? notifFromMessage(text, reply_markup, new Date())
         if (n) addNotif(db as any, n)
@@ -964,7 +968,25 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // What's in the calendar around now (a class or meeting means: don't nag).
   const events = calendar ? await calendar.events(new Date(now.getTime() - 4 * 3600_000).toISOString(), new Date(now.getTime() + 15 * 60000).toISOString()).catch(() => []) : []
   const inEvent = events.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime())
-  if (calendar && !st.focus.running && !paused) {
+  // Ben 2: check-ins, the morning brief, the evening shutdown and drift words (benPushTick.ts).
+  // With check-ins on, they replace the two older block messages below.
+  const pushed = await pushTick({
+    mirror,
+    services,
+    calendar,
+    todoist: env.todoistToken ? () => createTodoistApi(env.todoistToken!, todoistFetch(env)).today() : null,
+    now,
+    send,
+    paused,
+    quiet: paused || stillQuiet(quietNowSet(notifSet, now), now, await wakeAt()),
+    events,
+    inEvent
+  }).catch((e) => {
+    console.error('pushes:', (e as Error).message)
+    return { checkins: false, sent: [] as string[] }
+  })
+  if (pushed.sent.length) sent.push(...pushed.sent.map((k) => `push:${k}`))
+  if (calendar && !st.focus.running && !paused && !pushed.checkins) {
     const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
     if (starting) {
       const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 60000)
@@ -997,7 +1019,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // W2: a block that should be running but hasn't started: one nudge about THAT block,
   // and no "nothing done" nudge while a block is on (the plan is the nudge).
   const blockNow = events.find((e) => isFocusBlock(e) && Date.parse(e.start) <= now.getTime() - 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
-  if (blockNow && !st.focus.running && !paused && st.idleMin >= 20 && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
+  if (blockNow && !pushed.checkins && !st.focus.running && !paused && st.idleMin >= 20 && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
     const subject = blockSubject(blockNow.title).slice(0, 28)
     const later = `bx|${blockNow.id}`.length <= 64 ? [{ text: '↪️ Next free time', callback_data: `bx|${blockNow.id}` }] : []
     try {
@@ -1313,7 +1335,7 @@ function bodyFacts(db: any, svc: any, today: string, now: Date) {
   return { line: bodyLine(h), week, waterAt: d.lastAt.water ?? null, bedAt: d.lastAt.bed ?? null, bedLogged: bedLoggedTonight(logs, now) }
 }
 
-async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown, opts?: { always?: boolean }) => Promise<unknown>): Promise<void> {
+async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: unknown, opts?: { always?: boolean; push?: unknown }) => Promise<unknown>): Promise<void> {
   const { bots, services, mirror } = await botsFor(env)
   const f = await mirror.read((db) => {
     const svc = services.services(db)
@@ -1446,8 +1468,13 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const w = await bots.rhythm.weekly()
       // MF10: Sunday, this week's spending against last week's (same days).
       const week = await mirror.read((db) => weekMoneyLine(financeStateFrom(db, null), services.services(db).wallet.today())).catch(() => null)
+      // Ben 2: the weekly accountability card (a score, 3 wins, 1 thing to fix) when it's on; the full review otherwise.
+      const fit = await mirror.read((db) => readLifeFit(db)).catch(() => null)
+      const card = fit?.pushes?.weekly !== false ? weeklyCard({ score: w.score, prevScore: w.prevScore, metrics: w.metrics ?? [], win: w.win, leak: w.leak }) : null
+      const head = card ? weeklyHtml(card, fit?.areas?.study ?? 'normal', { focus: focusName(w.focus), note: w.note, big3: w.big3 }) : weeklyText(w)
+      const push = card ? { type: 'weekly', key: `weekly:${f.facts.today}`, title: 'Your week', lines: weeklyCardText(card).split('\n'), weekly: card } : undefined
       // HD: the week for your body (water, moves, breaks, bedtimes).
-      await send(weeklyText(w) + (week ? `\n\n💸 ${escapeHtml(week)}` : '') + `\n\n${weeklyHealthText(f.body.week)}`, WEEKLY_KEYBOARD)
+      await send(head + (week ? `\n\n💸 ${escapeHtml(week)}` : '') + `\n\n${weeklyHealthText(f.body.week)}`, WEEKLY_KEYBOARD, push ? { push } : undefined)
       // Then: "Pick your top 3 for this week", chips from his goals and projects (the same big 3 as the Goals page).
       const ask = await bots.rhythm.top3Ask(w.big3).catch(() => null)
       if (ask) await send(ask.text, ask.keyboard, { always: true }).catch(() => null)

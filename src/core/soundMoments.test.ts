@@ -7,7 +7,7 @@ import { islandRecipe, islandVoices, ISLAND_PICK_GAIN } from './islandSound'
 
 describe('which sound for what', () => {
   it('has the eleven things, each with its own default sound', () => {
-    expect(MOMENTS.map((m) => m.id)).toEqual(['ben', 'reminder', 'water', 'move', 'eyes', 'timer', 'meeting', 'done', 'points', 'bed', 'error', 'praise', 'drift'])
+    expect(MOMENTS.map((m) => m.id)).toEqual(['ben', 'reminder', 'water', 'move', 'eyes', 'timer', 'meeting', 'done', 'points', 'bed', 'error', 'praise', 'drift', 'checkin'])
     const defaults = Object.values(DEFAULT_MOMENTS)
     expect(new Set(defaults).size).toBe(defaults.length)
     expect(defaults).not.toContain('none')

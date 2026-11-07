@@ -96,6 +96,8 @@ export interface RhythmPrefs {
   on: boolean
   evening: string
   weekly: string
+  /** Ben 2: the weekly review's day (0 = Sunday, the default). */
+  weeklyDay?: number
   water: boolean
   training: boolean
   /** Autopilot: the day's plan is ready by this time (not before your wake-up target). */
@@ -115,6 +117,7 @@ export function cleanPrefs(p: any): RhythmPrefs {
     on: p?.on !== false,
     evening: HM.test(p?.evening) ? p.evening : DEFAULT_RHYTHM_PREFS.evening,
     weekly: HM.test(p?.weekly) ? p.weekly : DEFAULT_RHYTHM_PREFS.weekly,
+    weeklyDay: Number.isInteger(p?.weeklyDay) && p.weeklyDay >= 0 && p.weeklyDay <= 6 ? p.weeklyDay : 0,
     autopilot: HM.test(p?.autopilot) ? p.autopilot : DEFAULT_RHYTHM_PREFS.autopilot,
     water: p?.water !== false,
     training: p?.training !== false
@@ -190,7 +193,7 @@ export function dueRhythm(state: RhythmState, prefs: RhythmPrefs, f: RhythmFacts
   else if (!state.briefing && !f.paused && f.mode?.replan !== false && t >= Math.max(start, toMin('12:00')) && t < toMin('16:00')) out.push('replan')
   if (!f.paused && !f.busy && prefs.water && !islandHasWater(f.islandWaterAt, f.nowMs ?? 0) && waterBehind(state, f, f.mode?.waterMax ?? 5)) out.push('water')
   if (!f.paused && !f.busy && prefs.training && f.mode?.training !== false && !f.workoutDone && !state.training && t >= toMin('18:00') && t < toMin('21:00')) out.push('training')
-  if (f.weekday === 0 && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push('weekly')
+  if (f.weekday === (prefs.weeklyDay ?? 0) && t >= toMin(prefs.weekly) && state.weekly?.day !== f.today) out.push('weekly')
   // W14: Wednesday, 90 minutes before the evening review: where the week stands.
   if (f.weekday === 3 && !state.midweek && t >= toMin(prefs.evening) - 90 && t < toMin(prefs.evening)) out.push('midweek')
   if (!state.evening && t >= toMin(prefs.evening)) out.push('evening')

@@ -143,6 +143,9 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-alert-top { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .di-alert-top span { font-size: 18px; }
 .di-alert p { margin: 4px 0 10px; color: rgb(var(--ink) / 0.86); line-height: 1.45; }
+/* Ben 2: the morning brief and the evening shutdown are a few short lines. */
+.di-alert.kind-brief p, .di-alert.kind-shutdown p { white-space: pre-line; }
+.di-peek.alert.kind-brief .di-peek-mid small, .di-peek.alert.kind-shutdown .di-peek-mid small { white-space: pre-line; -webkit-line-clamp: 9; }
 
 .di-timer { display: flex; align-items: center; gap: 14px; }
 .di-timer-mid { flex: 1; display: grid; }

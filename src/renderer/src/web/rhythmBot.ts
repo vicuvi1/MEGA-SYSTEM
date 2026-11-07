@@ -834,7 +834,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
   }
 
   /** The Sunday review: the week in numbers, a win, a leak, next week's focus and big 3. */
-  async function weekly(): Promise<{ score: number; prevScore: number; lines: string[]; win: string; leak: string; focus: string; note: string; big3: string[] }> {
+  async function weekly(): Promise<{ score: number; prevScore: number; lines: string[]; win: string; leak: string; focus: string; note: string; big3: string[]; metrics: { label: string; text: string; now: number; target?: number | null; targetText?: string }[] }> {
     const { report, today } = await mirror.read((db) => {
       const svc = services.services(db)
       const input = svc.progress.input(financeSpending(financeStateFrom(db, null)))
@@ -873,7 +873,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       leak: ranked.length ? `${ranked[ranked.length - 1].m.label}: ${ranked[ranked.length - 1].m.text}${ranked[ranked.length - 1].m.target ? ` of ${ranked[ranked.length - 1].m.targetText}` : ''}` : 'Not enough data yet.',
       focus: suggestWeekFocus(report.metrics as any),
       note: '',
-      big3: [...upcoming].sort((a, b) => b.priority - a.priority).slice(0, 3).map((t) => t.content)
+      big3: [...upcoming].sort((a, b) => b.priority - a.priority).slice(0, 3).map((t) => t.content),
+      // Ben 2: the week score's areas, for the weekly card's 3 wins and 1 thing to fix.
+      metrics: report.metrics.filter((m) => m.id !== 'spend').map((m) => ({ label: m.label, text: m.text, now: m.now, target: m.target ?? null, targetText: m.targetText ?? undefined }))
     }
     if (ai) {
       try {

@@ -648,7 +648,8 @@ try {
     await pg.waitForSelector('.st-tabs .ptabs [data-tab="life"]', { timeout: 8000 })
     await pg.click('.st-tabs .ptabs [data-tab="life"]')
     await pg.waitForSelector('.lf-panel', { timeout: 8000 })
-    if (!(await pg.locator('.lf-panel input[type="checkbox"]').isChecked())) await pg.locator('.lf-panel input[type="checkbox"]').check()
+    const workOn = pg.locator('.lf-panel > .toggle-row input[type="checkbox"]')
+    if (!(await workOn.isChecked())) await workOn.check()
     await pg.waitForSelector('.lf-panel .lf-days', { timeout: 5000 })
     await pg.click('.lf-push button:has(b:text-is("Firm"))')
     await pg.waitForSelector('.lf-push button.on:has(b:text-is("Firm"))', { timeout: 5000 })
@@ -658,10 +659,37 @@ try {
       await pg.waitForTimeout(500)
       await pg.locator('.lf-panel').screenshot({ path: `${shots}/settings-my-life.png` })
     }
+    // Ben 2 (Settings → Ben → Pushes): a push level per area (it started from the one above), and when Ben writes first.
+    await pg.click('.st-tabs .ptabs [data-tab="pushes"]')
+    await pg.waitForSelector('.bp-areas .bp-area[data-area="body"]', { timeout: 5000 })
+    if ((await pg.$$('.bp-areas .bp-area')).length !== 6) throw new Error('want 6 areas: study, work, body, sleep, chores, money')
+    if ((await pg.$$('.bp-area button.on')).length !== 6 || (await pg.$$('.bp-area button.on:text-is("Hard")')).length !== 6) throw new Error('every area should start at Hard (from Push)')
+    await pg.click('.bp-area[data-area="body"] button:text-is("Soft")')
+    await pg.waitForSelector('.bp-area[data-area="body"] button.on:text-is("Soft")', { timeout: 5000 })
+    await pg.click('.bp-area[data-area="money"] button:text-is("Normal")')
+    await pg.waitForSelector('.bp-area[data-area="money"] button.on:text-is("Normal")', { timeout: 5000 })
+    for (const t of ['Check in when a planned block starts', 'Morning brief at', 'Evening shutdown before bed', 'Weekly check']) if (!(await pg.locator('.bp-settings .toggle-row', { hasText: t }).count())) throw new Error(`no "${t}" switch`)
+    const b2 = process.env.BEN2_SHOTS
+    if (b2) {
+      // A tall window for the picture (the toasts gone, the section in the middle), then back.
+      await pg.setViewportSize({ width: 1440, height: 1500 })
+      await pg.waitForTimeout(3500)
+      await pg.locator('.bp-settings').evaluate((el) => el.scrollIntoView({ block: 'center' }))
+      await pg.waitForTimeout(400)
+      await pg.locator('.bp-settings').screenshot({ path: `${b2}/settings-push-per-area.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    // Back to one level for all (the one switch in My life sets every area).
+    await pg.click('.st-tabs .ptabs [data-tab="life"]')
+    await pg.click('.lf-push button:has(b:text-is("Firm"))')
+    await pg.click('.lf-push button:has(b:text-is("Push"))')
+    await pg.click('.st-tabs .ptabs [data-tab="pushes"]')
+    await pg.waitForSelector('.bp-area[data-area="body"] button.on:text-is("Hard")', { timeout: 5000 })
+    await pg.waitForSelector('.bp-area[data-area="money"] button.on:text-is("Hard")', { timeout: 5000 })
     await pg.locator('.st-item', { hasText: 'Sound' }).first().click()
     await pg.waitForFunction(() => document.querySelector('.st-head h1')?.textContent === 'Sound', null, { timeout: 5000 })
     const n = await pg.locator('.sx-moment').count()
-    if (n !== 13) throw new Error(`${n} sound rows, want 13`)
+    if (n !== 14) throw new Error(`${n} sound rows, want 14`)
     await pg.click('button[aria-label="Sound for Water"]')
     await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
     await pg.locator('.ui-select-list [role=option]', { hasText: 'Pop' }).click()
@@ -1200,6 +1228,112 @@ try {
     await ip.click(pushBtn)
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'coach' && a.op === 'pushups' && a.ck === 'break'), null, { timeout: 3000 })
     await ip.context().close()
+  })
+  // Ben 2: a planned block starts → "Lab 4 starts now, ready?" on the island with
+  // Start / 10 min later / Skip (Start sends the tap), the morning brief and the
+  // evening shutdown as island cards, and the weekly card on the Coach page.
+  await step('Ben 2: a block check-in card on the island, the morning brief, the evening shutdown, the weekly card in Coach', async () => {
+    const shots = process.env.BEN2_SHOTS
+    const { build } = await import('rolldown')
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const dir = await mkdtemp(join(tmpdir(), 'ben2-'))
+    const entry = join(dir, 'entry.ts')
+    await writeFile(entry, `export * from ${JSON.stringify(join(repo, 'src/core/benPushes.ts'))}\n`)
+    const out = await build({ input: entry, write: false, output: { format: 'esm' } })
+    await writeFile(join(dir, 'b2.mjs'), out.output[0].code)
+    const B = await import((await import('node:url')).pathToFileURL(join(dir, 'b2.mjs')).href)
+    await rm(dir, { recursive: true, force: true })
+    const now = fakeNow()
+    const day = new Date(now).toISOString().slice(0, 10)
+    const levels = B.cleanAreas(null, 'firm')
+    const log = B.cleanPushLog(null, day)
+    // A start on an even minute: the plain "starts now, ready?" line.
+    const blockStart = Math.floor((now - 60_000) / 120_000) * 120_000
+    const checkin = B.decideCheckin({ now, on: true, blocks: [{ id: 'demo1', title: 'Lab 4', start: blockStart, end: now + 89 * 60_000, focus: true }], running: false, meeting: false, quiet: false, levels, log, here: true })
+    if (!checkin || checkin.text !== 'Lab 4 starts now, ready?') throw new Error(`no check-in: ${JSON.stringify(checkin)}`)
+    const wake = new Date(now - 60_000).toTimeString().slice(0, 5)
+    const brief = B.decideBrief({ now, day, wake, prefs: B.cleanPushPrefs(null), off: false, mustDos: ['Essay intro', 'Rust chapter 4', 'Call the dentist'], firstBlock: { title: 'Lab 4', start: now + 30 * 60_000 }, waterTargetMl: 2500, levels, log, here: true })
+    if (!brief) throw new Error('no morning brief')
+    const bed = new Date(now + 30 * 60_000).toTimeString().slice(0, 5)
+    const shutdown = B.decideShutdown({ now, day, bed, prefs: B.cleanPushPrefs(null), closed: false, bedLogged: false, done: ['Essay intro', 'Gym'], open: [{ id: 'm:Rust chapter 4', text: 'Rust chapter 4', kind: 'mustdo' }, { id: 't:1', text: 'Reply to the club email', kind: 'todo', ref: '1' }], levels, log, here: true })
+    if (!shutdown) throw new Error('no evening shutdown')
+
+    const ip = await (await browser.newContext({ viewport: { width: 560, height: 720 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island ben2: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '😎', mood: 'hyped', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null,
+        mustdos: [], water: { ml: 750, target: 2500 }, reps: [], alert: null
+      }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {},
+        islandTakeClicks: () => {},
+        islandAction: (a) => { window.__island.actions.push(a) },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 3, gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    if (shots) await ip.addStyleTag({ content: 'body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(#2b2d33 0 34px, #f4f5f7 34px); }' })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 15000 })
+    const card = async (p, kind, i) => {
+      await ip.evaluate(([a, k]) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + k, alert: a }), [B.pushAlert(p), i])
+      // It peeks in Calm (a tap opens it); with the mouse still on the island it opens at once.
+      await ip.waitForSelector(`.di-peek.kind-${kind}`, { timeout: 5000 })
+      if (await ip.$(`.di-peek.calm-peek.kind-${kind}`)) await ip.click(`.di-peek.calm-peek.kind-${kind}`)
+      await ip.waitForSelector(`.di-peek.alert.kind-${kind}`, { timeout: 4000 })
+    }
+    // The check-in peeks in Calm (it falls under "Ben's messages"), a tap opens Start / 10 min later / Skip.
+    await card(checkin, 'checkin', 1)
+    const startBtn = '.di-peek.alert.kind-checkin [data-tap="peek:alert:▶ Start · 89 min"]'
+    await ip.waitForSelector(startBtn, { timeout: 4000 })
+    for (const l of ['⏰ 10 min later', 'Skip']) if (!(await ip.$(`.di-peek.alert.kind-checkin [data-tap="peek:alert:${l}"]`))) throw new Error(`the check-in card has no "${l}"`)
+    if (shots) await ip.waitForTimeout(700)
+    if (shots) await ip.screenshot({ path: `${shots}/island-checkin-card.png`, clip: { x: 0, y: 0, width: 560, height: 300 } })
+    await ip.click(startBtn)
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'benPush' && a.op === 'start' && a.arg === 'Lab 4' && a.key === 'checkin:demo1'), null, { timeout: 3000 })
+    // The morning brief: 3 lines and Plan my day.
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 }).catch(() => {})
+    await card(brief, 'brief', 2)
+    const said = await ip.textContent('.di-peek.alert.kind-brief')
+    for (const t of ['Must-dos: Essay intro', 'First block: Lab 4', 'Water goal: 2.5 L']) if (!said.includes(t)) throw new Error(`the brief has no "${t}"`)
+    if (!(await ip.$('.di-peek.alert.kind-brief [data-tap="peek:alert:🗓 Plan my day"]'))) throw new Error('the brief has no Plan my day')
+    if (shots) await ip.waitForTimeout(700)
+    if (shots) await ip.screenshot({ path: `${shots}/island-morning-brief.png`, clip: { x: 0, y: 0, width: 560, height: 340 } })
+    await ip.click('.di-peek.alert.kind-brief [data-tap="peek:alert:🗓 Plan my day"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'benPush' && a.op === 'plan'), null, { timeout: 3000 })
+    // The evening shutdown: done, open, bed; Shut down opens Today's flow.
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 }).catch(() => {})
+    await card(shutdown, 'shutdown', 3)
+    const sd = await ip.textContent('.di-peek.alert.kind-shutdown')
+    for (const t of ['Done today: Essay intro, Gym', 'Rust chapter 4', `Bed at ${bed}`]) if (!sd.includes(t)) throw new Error(`the shutdown has no "${t}"`)
+    if (shots) await ip.waitForTimeout(700)
+    if (shots) await ip.screenshot({ path: `${shots}/island-evening-shutdown.png`, clip: { x: 0, y: 0, width: 560, height: 400 } })
+    await ip.click('.di-peek.alert.kind-shutdown [data-tap="peek:alert:🌙 Shut down"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'benPush' && a.op === 'shutdown'), null, { timeout: 3000 })
+    await ip.context().close()
+
+    // The weekly card on the Coach page (from last night's push): a score, 3 wins, 1 thing to fix.
+    await open('coach')
+    await pg.waitForSelector('.cf-col .cf-row', { timeout: 15000 })
+    await pg.waitForSelector('.bp-card[data-push="weekly"]', { timeout: 8000 })
+    // The start screen sits over the chat until you ask for it.
+    if (await pg.locator('button', { hasText: 'Show the chat' }).count()) await pg.locator('button', { hasText: 'Show the chat' }).first().click()
+    const wk = await pg.textContent('.bp-card[data-push="weekly"]')
+    for (const t of ['72', 'Training: 4 of 4', 'One thing to fix', 'Wake-ups: 3 of 7']) if (!wk.includes(t)) throw new Error(`the weekly card has no "${t}"`)
+    if (shots) {
+      await pg.locator('.bp-card[data-push="weekly"]').scrollIntoViewIfNeeded()
+      await pg.waitForTimeout(600)
+      await pg.locator('.bp-card[data-push="weekly"]').screenshot({ path: `${shots}/coach-weekly-card.png` })
+    }
   })
   // The island's controls (IC1–IC4, IC10): pause from the peek (it shows at once,
   // and shakes back when the app says no), the round menu, live suggestions in
@@ -2089,7 +2223,7 @@ try {
     }
     await open('settings')
     await pg.waitForSelector('.st-item', { timeout: 10000 })
-    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['life', 'brain', 'talk', 'notes']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
+    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['life', 'pushes', 'brain', 'talk', 'notes']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
       await pg.locator('.st-item', { hasText: name }).first().click()
       await pg.waitForFunction((n) => document.querySelector('.st-head h1')?.textContent === n, name, { timeout: 5000 })
       await pg.waitForSelector(`.st-tabs .ptabs [data-tab="${ids[0]}"]`, { timeout: 8000 })

@@ -5,6 +5,8 @@ import { pushStyle, workToday } from '@core/lifeFit'
 import { weekTop3View, type WeekPlan } from '@core/weekPlan'
 import type { LifeFitView } from './web/lifeFitStore'
 import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
+import { briefShownToday, driftAway, pushAct, pushTick as benPushTick } from './benPushFeed'
+import { levelFor, pushFromLevel } from '@core/benPushes'
 import { focusQualityPc } from '@core/pcActivity'
 import { useCallback, useEffect, useRef } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
@@ -351,7 +353,8 @@ export function IslandFeed() {
       }
     }
     // P12: a block starts and no timer runs: a Windows notification with [Start] [5 min] [Skip], once.
-    if (!running && window.desktop?.notify) {
+    // (Ben 2's check-ins do this on the island and Telegram, with one key: then this stays quiet.)
+    if (!running && window.desktop?.notify && fitCache.fit?.pushes?.checkins === false) {
       const b = blocks.current.list.find((x) => x.start <= now && now - x.start < 3 * 60_000 && x.end - now >= 15 * 60_000)
       const notified = get<Record<string, number>>(BLOCK_NOTIFIED, {})
       if (b && !notified[blockKey(b)]) {
@@ -522,7 +525,8 @@ export function IslandFeed() {
         idleSec,
         activeSince,
         workGoalMin: Math.max(60, focusGoal),
-        push: fit?.push ?? 'push',
+        // Ben 2: the block's own area sets how hard he pushes (study, work, body…).
+        push: fit?.areas ? pushFromLevel(levelFor(fit.areas, 'drift', focusRun?.subject ?? wb?.title ?? null)) : fit?.push ?? 'push',
         focus: focusRun && !focusRun.pausedAt ? { subject: focusRun.subject } : null,
         block: wb && !wb.call ? { title: wb.title, end: wb.end } : null,
         workHour: !!w && w.mode !== 'off' && hmNow >= fitMin(w.from) && hmNow < fitMin(w.to),
@@ -533,12 +537,30 @@ export function IslandFeed() {
         bedLogged,
         nextUp: nextBlock ? { title: nextBlock.title, minutes: Math.round((nextBlock.end - nextBlock.start) / 60000) } : mustdo ? { title: mustdo.text } : null,
         lastMoveAt: movedAt,
-        morningShown: shown.some((x) => x.topic === 'morning' && localDayOf(x.at) === localDayOf(now)),
+        morningShown: briefShownToday(now) || shown.some((x) => x.topic === 'morning' && localDayOf(x.at) === localDayOf(now)),
         eveningAt: evAt
       }).catch(() => null)
+      // Ben 2: a drift word the island wouldn't show by itself goes to Telegram once.
+      await driftAway(card, now).catch(() => {})
       // A break or a bedtime line goes through the same governor as every body nudge.
       return card && (card.kind === 'move' || card.kind === 'late') ? govern(card, govCtx, shown).show : card
     })()
+    // Ben 2: a block check-in, the morning brief, the evening shutdown (benPushFeed.ts), while you're at the PC.
+    const pushCard = await benPushTick({
+      now,
+      idleSec,
+      blocks: blocks.current.list,
+      running: !!focusRun,
+      meeting: !!callOn || classOn,
+      bedLogged,
+      fit,
+      sleep: sleep as { weekdayTarget?: string; weekendTarget?: string } | null,
+      mustdos: status.mustdos,
+      waterTarget,
+      dayClosed: ((focus as { plan?: { reasons?: string[] } }).plan?.reasons?.length ?? 0) > 0,
+      todo: todoCache.list,
+      done: [...new Set([...status.mustdos.filter((m) => m.done).map((m) => m.text), ...(focus.todaySessions ?? []).map((x) => x.subject)])]
+    }).catch(() => null)
     const alertNow = (() => {
       // Paused: its time is never up (the end moves on with the pause).
       // Your reminders show as their own card (Done / Snooze), not as a copy of Ben's ⏰ message.
@@ -566,6 +588,8 @@ export function IslandFeed() {
         distractAlert(focusRun, now, dismissed) ??
         breakOverAlert(now, dismissed, !!run) ??
         qualityAlert(dismissed, now) ??
+        // Ben 2: a planned block starts, the morning brief, the evening shutdown.
+        pushCard ??
         // HD: your reminder, then your body and your day's edges, through one governor.
         health?.alert ??
         // Ben on your PC: one reaction at a time, by his own limits.
@@ -1060,6 +1084,13 @@ export function IslandFeed() {
               said = `▶ ${a.subject}`
             }
             said = (await coachAnswer(a.ck, a.op, a.minutes)) ?? said
+            break
+          }
+          case 'benPush': {
+            // Ben 2: Start / 10 min later / Skip, Plan my day, Shut down, Tomorrow / Drop / Keep today.
+            const r = await pushAct(a)
+            said = r.said
+            if (r.then) await actRef.current(r.then)
             break
           }
           case 'suggest':

@@ -83,7 +83,10 @@ if (process.env.E2E_DISCIPLINE === 'demo') {
     return d.getTime()
   })()
   const lastNight = (min) => new Date(dayStartMs - min * 60000).toISOString()
+  // Ben 2: last night's weekly card (made-up numbers), with its push data for the Coach card.
+  const weekly = { score: 72, delta: 5, wins: ['Training: 4 of 4', 'Focus: 9h of 10h', 'Must-dos: 15 of 21'], fix: 'Wake-ups: 3 of 7' }
   const log = [
+    { role: 'coach', bot: 'mega', via: 'telegram', proactive: true, text: '📊 Your week: 72/100 (+5 vs last week)\n\n🏆 Wins\n• Training: 4 of 4\n• Focus: 9h of 10h\n• Must-dos: 15 of 21\n\n🔧 One thing to fix: Wake-ups: 3 of 7', at: lastNight(170), push: { type: 'weekly', key: 'weekly:demo', title: 'Your week', lines: ['📊 Your week: 72/100 (+5 vs last week)'], weekly } },
     { role: 'me', bot: 'mega', via: 'app', text: 'plan tomorrow for me, short night', at: lastNight(150) },
     { role: 'coach', bot: 'mega', via: 'app', text: 'Short night, so a lighter day: one 40-minute block for now. See you in the morning.', at: lastNight(149), show: ['plan'] },
     { role: 'me', bot: 'mega', via: 'telegram', text: '30 pushups', at: ago(420) },

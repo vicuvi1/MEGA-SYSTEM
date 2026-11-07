@@ -4,6 +4,8 @@
 // same as on the PC: caps, cooldowns, undo, shop, quests, streaks. Things only
 // the web has (embedded apps, Telegram polling, cloud snapshots) are here.
 import { lifeFitView, readLifeFit, saveLifeFit, saveTonight, type LifeFitView } from './web/lifeFitStore'
+import { answerPushIn, applyMark, claimPush, noteMark, queueOut, readPushLog, setShutdownItems, writePcSeen } from './web/benPushStore'
+import type { ItemMark, OutItem, PcSeen, PushOp, ShutdownItem } from '@core/benPushes'
 import { pushStyle, shiftReply, type ShiftMode } from '@core/lifeFit'
 import { cleanMusicNow } from '@core/music'
 import { setupPasskey, unlockWithPasskey } from './web/passkey'
@@ -824,6 +826,43 @@ export function createTursoWebBridge(): Bridge {
           saveTonight(s.db, day, mode)
           return { view: lifeFitView(s.db), line: shiftReply(readLifeFit(s.db), day, mode) }
         }),
+      // Ben 2's pushes: the shared log (one key per push, island and Telegram), synced at once when it changes.
+      pushes: {
+        log: async () => (await svcP).read((s) => readPushLog(s.db, s.wallet.today())),
+        claim: async (key: string) => {
+          const ok = await (await svcP).write((s) => claimPush(s.db, s.wallet.today(), key, 'island', Date.now()))
+          if (ok) void syncNow().catch(() => null)
+          return ok
+        },
+        answer: async (key: string, op: PushOp, minutes?: number) => {
+          await (await svcP).write((s) => answerPushIn(s.db, s.wallet.today(), key, op, Date.now(), minutes))
+          void syncNow().catch(() => null)
+        },
+        seen: async (p: PcSeen) => {
+          await (await svcP).write((s) => writePcSeen(s.db, p))
+          void syncNow().catch(() => null)
+        },
+        queue: async (item: OutItem) => {
+          await (await svcP).write((s) => queueOut(s.db, s.wallet.today(), item))
+          void syncNow().catch(() => null)
+        },
+        shutdown: async (items: ShutdownItem[]) => {
+          await (await svcP).write((s) => setShutdownItems(s.db, s.wallet.today(), items))
+        },
+        mark: async (id: string, mark: ItemMark) => {
+          const svc = await svcP
+          const day = await svc.read((s) => s.wallet.today())
+          const t = new Date(`${day}T12:00:00Z`)
+          t.setUTCDate(t.getUTCDate() + 1)
+          const on = await todoistOnP
+          const line = await applyMark({ day, tomorrow: t.toISOString().slice(0, 10), write: (fn) => svc.write((s) => fn(s.db, s)), todoist: on ? { update: async (tid, patch) => void (await todoistCall('update', { id: tid, ...patch })), quickAdd: (text) => todoist.quickAdd(text) } : null }, id, mark)
+          void syncNow().catch(() => null)
+          return line
+        },
+        note: async (id: string, mark: ItemMark) => {
+          await (await svcP).write((s) => noteMark(s.db, s.wallet.today(), id, mark))
+        }
+      },
       // How the chat looks: Ben's face and your photo (one small synced setting).
       looks: async () => (await svcP).read((s) => cleanLooks(readSetting(s.db, 'coach_looks'))),
       setLooks: async (patch: Partial<CoachLooks>) =>

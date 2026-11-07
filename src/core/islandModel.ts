@@ -113,11 +113,13 @@ export type IslandAction = { id?: string } & (
   | { kind: 'remind'; op: 'add' | 'done' | 'snooze'; id?: string; text?: string; at?: number; minutes?: number }
   /** HD: wind-down mode's calm music (the island's own player). */
   | { kind: 'calmMusic' }
+  /** Ben 2: a tap on a push (a block check-in, the morning brief, the evening shutdown: src/core/benPushes.ts). `arg`: the block (Start) or a shutdown item ('*' for all). */
+  | { kind: 'benPush'; op: import('./benPushes').PushOp; key: string; alertId: string; arg?: string; minutes?: number }
 )
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown'
   title: string
   text: string
   face?: string

@@ -61,7 +61,15 @@ export function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, ope
       onSaved()
     }
   }
-  const left = [...openMustDos.map((m) => ({ id: `m:${m}`, title: m, todo: null as TodoTask | null })), ...openTodo.map((t) => ({ id: t.id, title: t.content, todo: t }))].filter((x) => !moved.includes(x.id))
+  // Ben 2: what you already sorted from the evening shutdown push (Telegram, the island, Coach) stays sorted here.
+  const [sorted, setSorted] = useState<Record<string, string>>({})
+  useEffect(() => {
+    life.coach?.pushes?.log().then((l) => setSorted(l.shutdown?.marks ?? {})).catch(() => {})
+  }, [])
+  const pushId = (x: { id: string; todo: TodoTask | null }) => (x.todo ? `t:${x.todo.id}` : x.id.slice(0, 80))
+  const noteMoved = (x: { id: string; todo: TodoTask | null }) => void life.coach?.pushes?.note(pushId(x), 'tomorrow').catch(() => {})
+  const all = [...openMustDos.map((m) => ({ id: `m:${m}`, title: m, todo: null as TodoTask | null })), ...openTodo.map((t) => ({ id: t.id, title: t.content, todo: t }))]
+  const left = all.filter((x) => !moved.includes(x.id) && sorted[pushId(x)] !== 'tomorrow' && sorted[pushId(x)] !== 'drop')
   // Ben's review of the day (score, lesson, tomorrow's top 3) sits in here, not in a card of its own.
   const [review, setReview] = useState<{ score: number; lesson?: string; top3: string[] } | null>(null)
   useEffect(() => {
@@ -70,7 +78,10 @@ export function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, ope
   const moveAll = async () => {
     const all = left
     setMoved((m) => [...m, ...all.map((x) => x.id)])
-    for (const x of all) await (x.todo ? onTomorrow(x.todo) : onMustDoTomorrow(x.title)).catch(() => null)
+    for (const x of all) {
+      await (x.todo ? onTomorrow(x.todo) : onMustDoTomorrow(x.title)).catch(() => null)
+      noteMoved(x)
+    }
   }
   return (
     <section className="mode-card evening" aria-label="Shut down your day">
@@ -114,6 +125,7 @@ export function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, ope
                     onClick={async () => {
                       setMoved((m) => [...m, x.id])
                       await (x.todo ? onTomorrow(x.todo) : onMustDoTomorrow(x.title))
+                      noteMoved(x)
                     }}
                   >
                     → Tomorrow

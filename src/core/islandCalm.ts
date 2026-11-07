@@ -51,7 +51,8 @@ export function cleanPeekFor(p: unknown): Record<PeekKind, boolean> {
 /** Which "Peek for" switch an island alert falls under (null: none, it only ever waits as a dot in Calm). */
 export function peekKind(kind: string, meeting = false): PeekKind | null {
   if (kind === 'block') return meeting ? 'meeting' : null
-  if (kind === 'ben') return 'ben'
+  if (kind === 'ben' || kind === 'checkin' || kind === 'brief') return 'ben'
+  if (kind === 'shutdown') return 'bed'
   if (kind === 'remind') return 'remind'
   if (kind === 'water') return 'water'
   if (kind === 'move' || kind === 'back') return 'move'

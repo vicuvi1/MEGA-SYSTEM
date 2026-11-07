@@ -398,7 +398,7 @@ export const soundNotify = (kind?: string) => play(notifSound(kind), { ownSwitch
 /** A notification's own sound by its kind (Ben, a reminder, water, a meeting, bedtime…). */
 function notifSound(kind?: string): SoundName {
   if (!kind) return 'notify'
-  const m: Record<MomentId, SoundName> = { ben: 'ben', reminder: 'notify', water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', timer: 'focusEnd', meeting: 'remindMeeting', done: 'success', points: 'coin', bed: 'remindBed', error: 'error', praise: 'remindPraise', drift: 'remindDrift' }
+  const m: Record<MomentId, SoundName> = { ben: 'ben', reminder: 'notify', water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', timer: 'focusEnd', meeting: 'remindMeeting', done: 'success', points: 'coin', bed: 'remindBed', error: 'error', praise: 'remindPraise', drift: 'remindDrift', checkin: 'remindCheckin' }
   return m[momentForNotif(kind)]
 }
 /** Quiet everything now (the context wakes again on the next sound). */

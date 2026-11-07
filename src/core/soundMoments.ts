@@ -8,7 +8,7 @@
 // soundMoments.test.ts. No audio files.
 import type { SoundCategory, SoundName, Voice } from './sounds'
 
-export type MomentId = 'ben' | 'reminder' | 'water' | 'move' | 'eyes' | 'timer' | 'meeting' | 'done' | 'points' | 'bed' | 'error' | 'praise' | 'drift'
+export type MomentId = 'ben' | 'reminder' | 'water' | 'move' | 'eyes' | 'timer' | 'meeting' | 'done' | 'points' | 'bed' | 'error' | 'praise' | 'drift' | 'checkin'
 export type MomentSound = 'chime' | 'bell' | 'pop' | 'marimba' | 'glass' | 'drop' | 'rise' | 'gong' | 'coin' | 'hum' | 'knock' | 'pulse' | 'cheer' | 'tap' | 'none'
 
 export const MOMENTS: { id: MomentId; label: string; icon: string }[] = [
@@ -24,7 +24,8 @@ export const MOMENTS: { id: MomentId; label: string; icon: string }[] = [
   { id: 'bed', label: 'Bedtime and wind-down', icon: '🌙' },
   { id: 'error', label: 'Something went wrong', icon: '⚠️' },
   { id: 'praise', label: 'Ben cheers your work', icon: '🔥' },
-  { id: 'drift', label: 'Ben calls you back to work', icon: '👀' }
+  { id: 'drift', label: 'Ben calls you back to work', icon: '👀' },
+  { id: 'checkin', label: 'A planned block starts', icon: '🎯' }
 ]
 
 /** The built-in sounds to pick from (and None). */
@@ -60,7 +61,8 @@ export const DEFAULT_MOMENTS: Record<MomentId, MomentSound> = {
   bed: 'hum',
   error: 'knock',
   praise: 'cheer',
-  drift: 'tap'
+  drift: 'tap',
+  checkin: 'pop'
 }
 
 const SOUND_IDS = new Set<string>(MOMENT_SOUNDS.map((s) => s.id))
@@ -73,7 +75,7 @@ export function cleanMoments(raw: unknown): Record<MomentId, MomentSound> {
 
 /** Which of your sound switches (Settings → Sound) each moment follows. */
 export const MOMENT_CATEGORY: Record<MomentId, SoundCategory> = {
-  ben: 'alerts', reminder: 'alerts', water: 'alerts', move: 'alerts', eyes: 'alerts', meeting: 'alerts', bed: 'alerts', error: 'alerts', praise: 'alerts', drift: 'alerts',
+  ben: 'alerts', reminder: 'alerts', water: 'alerts', move: 'alerts', eyes: 'alerts', meeting: 'alerts', bed: 'alerts', error: 'alerts', praise: 'alerts', drift: 'alerts', checkin: 'alerts',
   timer: 'focus', done: 'success', points: 'money'
 }
 
@@ -91,6 +93,7 @@ const BY_SOUND: Partial<Record<SoundName, MomentId>> = {
   remindBed: 'bed',
   remindPraise: 'praise',
   remindDrift: 'drift',
+  remindCheckin: 'checkin',
   error: 'error'
 }
 export const momentForSound = (name: SoundName): MomentId | null => BY_SOUND[name] ?? null
@@ -98,7 +101,7 @@ export const momentForSound = (name: SoundName): MomentId | null => BY_SOUND[nam
 /** The moment for an island card (its kind; `meeting`: a calendar meeting starting soon). */
 export function momentForAlert(kind: string, meeting = false): MomentId {
   if (meeting) return 'meeting'
-  const m: Record<string, MomentId> = { ben: 'ben', remind: 'reminder', water: 'water', move: 'move', eyes: 'eyes', over: 'timer', end: 'timer', winddown: 'bed', sleep: 'bed', late: 'bed', reward: 'points', highlight: 'points', praise: 'praise', refocus: 'drift', coach: 'ben' }
+  const m: Record<string, MomentId> = { ben: 'ben', remind: 'reminder', water: 'water', move: 'move', eyes: 'eyes', over: 'timer', end: 'timer', winddown: 'bed', sleep: 'bed', late: 'bed', reward: 'points', highlight: 'points', praise: 'praise', refocus: 'drift', coach: 'ben', checkin: 'checkin', brief: 'ben', shutdown: 'bed' }
   return m[kind] ?? 'reminder'
 }
 

@@ -11,6 +11,8 @@
 // - How hard Ben pushes: Gentle / Firm / Push, mapped onto the tone and the
 //   nudge caps that already exist (never above them, never past quiet hours).
 
+import { cleanAreas, cleanPushPrefs, type AreaLevels, type PushPrefs } from './benPushes'
+
 export type PushLevel = 'gentle' | 'firm' | 'push'
 /** Tonight's shift: as usual, short (only the usual minimum is busy) or none. */
 export type ShiftMode = 'normal' | 'short' | 'off'
@@ -32,6 +34,10 @@ export interface LifeFit {
   latestBed: string
   work: WorkWindow
   push: PushLevel
+  /** Ben 2: how hard Ben pushes in each area (study, work, body…); missing areas take `push` (core/benPushes.ts). */
+  areas?: AreaLevels
+  /** Ben 2: which pushes are on (check-ins, the morning brief, the evening shutdown, the weekly card) and when. */
+  pushes?: PushPrefs
   /** A one-day change to the work window ("short shift tonight"). */
   tonight?: { day: string; mode: ShiftMode } | null
 }
@@ -61,10 +67,14 @@ export function cleanLifeFit(raw: unknown): LifeFit {
   const days = Array.isArray(w.days) ? [...new Set(w.days.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))].sort() : d.days
   const minH = hours(w.minH, d.minH)
   const t = o.tonight
+  const push: PushLevel = o.push === 'gentle' || o.push === 'firm' ? o.push : 'push'
   return {
     latestBed: isHm(o.latestBed) ? o.latestBed : DEFAULT_LIFE_FIT.latestBed,
     work: { on: w.on === true, days, from: isHm(w.from) ? w.from : d.from, to: isEnd(w.to) ? w.to : d.to, minH, maxH: Math.max(minH, hours(w.maxH, d.maxH)) },
-    push: o.push === 'gentle' || o.push === 'firm' ? o.push : 'push',
+    push,
+    // Older saves have only the one push level: every area starts there.
+    areas: cleanAreas(o.areas, push),
+    pushes: cleanPushPrefs(o.pushes),
     tonight: t && typeof t.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(t.day) && (t.mode === 'short' || t.mode === 'off' || t.mode === 'normal') ? { day: t.day, mode: t.mode } : null
   }
 }

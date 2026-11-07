@@ -63,6 +63,17 @@ export type Bridge = LifeApi & {
     setLifeFit?(patch: Partial<import('./web/lifeFitStore').LifeFitView>): Promise<import('./web/lifeFitStore').LifeFitView>
     /** "Short shift tonight" / "no work tonight" / back to normal, for today. */
     setTonight?(mode: import('@core/lifeFit').ShiftMode): Promise<{ view: import('./web/lifeFitStore').LifeFitView; line: string }>
+    /** Ben 2's pushes (core/benPushes.ts): today's shared log, claim one shown here, your answer, at the PC or not, a drift word for Telegram, tonight's shutdown list and Tomorrow / Drop / Keep today. */
+    pushes?: {
+      log(): Promise<import('@core/benPushes').PushLog>
+      claim(key: string): Promise<boolean>
+      answer(key: string, op: import('@core/benPushes').PushOp, minutes?: number): Promise<void>
+      seen(p: import('@core/benPushes').PcSeen): Promise<void>
+      queue(item: import('@core/benPushes').OutItem): Promise<void>
+      shutdown(items: import('@core/benPushes').ShutdownItem[]): Promise<void>
+      mark(id: string, mark: import('@core/benPushes').ItemMark): Promise<string>
+      note(id: string, mark: import('@core/benPushes').ItemMark): Promise<void>
+    }
     /** How the chat looks: Ben's face and your photo (synced). */
     looks?(): Promise<CoachLooks>
     setLooks?(patch: Partial<CoachLooks>): Promise<CoachLooks>

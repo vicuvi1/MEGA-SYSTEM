@@ -29,6 +29,8 @@ import { esc, tg } from './telegram'
 import { takeLink, sleepTip, STOP_KEYBOARD, stoppedReply } from './helpers'
 import type { BotContext, Tap } from './context'
 import { goalTap } from '../goalsBrain'
+import { readPushCallback } from '@core/benPushes'
+import { answerPushIn, applyMark, readPushLog } from '../benPushStore'
 
 export interface CallbackHandler {
   /** The callback-data prefixes it answers ("wa" for "wa|250"), for docs and tests. */
@@ -38,7 +40,7 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(f[acbksuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|rs|sg|m[lnz])\|/
+export const CALLBACK_DATA = /^(f[acbksuoxq]|p[pr]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
   // Water and workout cards: a tap updates the shared log and the card.
@@ -570,6 +572,62 @@ export const CALLBACKS: CallbackHandler[] = [
       await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
       await tg(update.__token, 'sendMessage', { chat_id: chat, text }).catch(() => null)
       return text
+    }
+  },
+  // Ben 2: a push's buttons: 10 min later / Skip / Got it on a check-in or the brief,
+  // Plan my day, and Tomorrow / Drop / Keep today on the evening shutdown's items.
+  // The answer is saved in the shared log, so the island knows it too.
+  {
+    prefixes: ['bp'],
+    match: (data) => data.startsWith('bp|'),
+    run: async (c, t) => {
+      const { mirror, services, todoist, markSeen, sendProposal } = c
+      const { data, chat, key, update, cq, answer } = t
+      if (!(await markSeen(key))) return null
+      const r = readPushCallback(data)
+      if (!r) return null
+      const now = Date.now()
+      const day = await mirror.read((db) => services.services(db).wallet.today())
+      const clear = () => tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      if (r.op === 'plan') {
+        await answer('Planning your day…')
+        await mirror.write((db) => answerPushIn(db, day, r.ref, 'plan', now))
+        return sendProposal(update.__token, chat)
+      }
+      if (r.op === 'later' || r.op === 'skip' || r.op === 'ok') {
+        await mirror.write((db) => answerPushIn(db, day, r.ref, r.op, now, 10))
+        const text = r.op === 'later' ? '⏰ OK, I’ll ask again in 10 min.' : r.op === 'skip' ? 'Skipped for today.' : '👍'
+        await answer(text)
+        await clear()
+        return text
+      }
+      // Tomorrow / Drop / Keep today: the item by its number on tonight's list (or * for all left).
+      const log = await mirror.read((db) => readPushLog(db, day))
+      const items = log.shutdown?.items ?? []
+      const id = r.ref === '*' ? '*' : items[Number(r.ref)]?.id
+      if (!id) {
+        await answer('That list is from another day')
+        return null
+      }
+      const tomorrow = new Date(`${day}T12:00:00Z`)
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+      const line = await applyMark(
+        {
+          day,
+          tomorrow: tomorrow.toISOString().slice(0, 10),
+          write: (fn) => mirror.write((db) => fn(db, services.services(db))),
+          todoist: todoist ? { update: todoist.update?.bind(todoist), quickAdd: (text: string) => todoist.quickAdd(text) } : null
+        },
+        id,
+        r.op as 'tomorrow' | 'drop' | 'keep'
+      )
+      await answer(line.slice(0, 190))
+      // The rows left: only the items not sorted yet.
+      const after = await mirror.read((db) => readPushLog(db, day))
+      const marks = after.shutdown?.marks ?? {}
+      const rows = items.map((x, k) => ({ x, k })).filter(({ x }) => !marks[x.id]).map(({ k }) => [{ text: `${k + 1}. ➡️ Tomorrow`, callback_data: `bp|t|${k}` }, { text: '✗ Drop', callback_data: `bp|d|${k}` }, { text: 'Keep today', callback_data: `bp|k|${k}` }])
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: rows.length > 1 ? [[{ text: 'All to tomorrow', callback_data: 'bp|t|*' }], ...rows] : rows } }).catch(() => null)
+      return line
     }
   },
   // W1: "Rescue my day": the rest of today shrunk to fit (recomputed now, so it's current).

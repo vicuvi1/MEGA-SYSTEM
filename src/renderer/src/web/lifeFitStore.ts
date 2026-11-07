@@ -2,6 +2,7 @@
 // the sleep window it shares with the sleep targets (sleep_bed_target and
 // sleep_weekday_target stay the one place for bedtime and wake time).
 import { cleanLifeFit, DEFAULT_BED, DEFAULT_WAKE, LIFE_FIT_KEY, setTonight, type LifeFit, type ShiftMode } from '@core/lifeFit'
+import { AREAS, levelFromPush } from '@core/benPushes'
 import { getSetting, setSetting } from '../../../main/settings'
 
 const HM = /^([01]\d|2[0-3]):[0-5]\d$/
@@ -32,7 +33,9 @@ export const lifeFitView = (db: any): LifeFitView => ({ ...readLifeFit(db), ...s
 export function saveLifeFit(db: any, patch: Partial<LifeFitView>): LifeFitView {
   const { bed, wake, ...rest } = patch
   const cur = readLifeFit(db)
-  const next = cleanLifeFit({ ...cur, ...rest, work: { ...cur.work, ...(rest.work ?? {}) } })
+  // Ben 2: the one "how hard Ben pushes" sets every area at once; an area changed by itself keeps its own.
+  const areas = rest.areas ? { ...cur.areas, ...rest.areas } : rest.push ? Object.fromEntries(AREAS.map((a) => [a, levelFromPush(rest.push)])) : cur.areas
+  const next = cleanLifeFit({ ...cur, ...rest, areas, pushes: { ...cur.pushes, ...(rest.pushes ?? {}) }, work: { ...cur.work, ...(rest.work ?? {}) } })
   setSetting(db, LIFE_FIT_KEY, JSON.stringify(next))
   if (bed && HM.test(bed)) setSetting(db, 'sleep_bed_target', bed)
   if (wake && HM.test(wake)) {

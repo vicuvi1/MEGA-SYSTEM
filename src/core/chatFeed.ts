@@ -202,7 +202,8 @@ export function buildFeed(log: FeedEntry[], opts: { now?: Date; seenAt?: string 
     }
     for (const i of idx) {
       const e = log[i]
-      if (e.role === 'coach' && e.proactive && !e.pending) run.push(i)
+      // Ben 2: a push (check-in, brief, shutdown, weekly card) has buttons: it never folds away.
+      if (e.role === 'coach' && e.proactive && !e.pending && !(e as { push?: unknown }).push) run.push(i)
       else flush()
     }
     flush()
