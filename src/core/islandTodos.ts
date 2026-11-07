@@ -60,3 +60,48 @@ export function dedupeTodos(o: { mustdos: MustRow[]; top: TopRow[]; todoist: Tod
   const todoist = take(dedupeTodoist(o.todoist), (r) => r.content).slice(0, o.max ?? 3)
   return { mustdos, top, todoist }
 }
+
+/** One row of the single "Today" list on the Day page. */
+export interface TodayRow { key: string; kind: 'now' | 'must' | 'todoist'; text: string; done: boolean; i?: number; id?: string; time?: string | null }
+
+/**
+ * The one Today list: the current block first, then your must-dos, then
+ * Todoist tasks due today. A title shows once (the same rules as
+ * `dedupeTodos`). Done items leave the list and are only counted.
+ * The week's top 3 is never a list: it is a small "n/3" chip.
+ */
+export function buildToday(o: { now?: { title: string } | null; mustdos: MustRow[]; top: TopRow[]; todoist: TodoRow[]; plan?: string[]; max?: number }): { open: TodayRow[]; done: number; week: { done: number; total: number } | null } {
+  const rows = dedupeTodos({ mustdos: o.mustdos, top: o.top, todoist: o.todoist, plan: o.plan, max: o.max ?? 8 })
+  const open: TodayRow[] = []
+  const seen = new Set<string>()
+  const nowTitle = o.now?.title?.trim()
+  if (nowTitle) { open.push({ key: 'now', kind: 'now', text: nowTitle, done: false }); seen.add(normTitle(nowTitle)) }
+  let done = 0
+  for (const m of rows.mustdos) {
+    if (m.done) { done++; continue }
+    const n = normTitle(m.text)
+    if (n && seen.has(n)) continue
+    if (n) seen.add(n)
+    open.push({ key: `must:${m.i}`, kind: 'must', text: m.text, done: false, i: m.i })
+  }
+  for (const t of rows.todoist) {
+    const n = normTitle(t.content)
+    if (n && seen.has(n)) continue
+    if (n) seen.add(n)
+    open.push({ key: `task:${t.id}`, kind: 'todoist', text: t.content, done: false, id: t.id, time: t.time })
+  }
+  const week = rows.top.length ? { done: rows.top.filter((r) => r.done).length, total: rows.top.length } : null
+  return { open, done, week }
+}
+
+/** Ben's last message stays on the Day page for this long. */
+export const BEN_CARD_MS = 2 * 3600_000
+
+/** Show Ben's last message only while it is fresh (under ~2 h) or while Ben is writing a new one. */
+export function benCardVisible(last: { at: string } | null | undefined, busy: boolean, nowMs: number): boolean {
+  if (busy) return true
+  if (!last) return false
+  const t = Date.parse(last.at)
+  if (!Number.isFinite(t)) return false
+  return nowMs - t >= -60_000 && nowMs - t < BEN_CARD_MS
+}

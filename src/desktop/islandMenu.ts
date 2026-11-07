@@ -9,6 +9,7 @@ interface IslandMoveApi {
   setHide(choice: HideChoice | null): void
   readonly hideShortcut: string
   startMove(): void
+  resetPosition(): void
   dodge(): boolean
   setDodge(on: boolean): void
 }
@@ -24,6 +25,7 @@ export function islandMoveMenu(island: IslandMoveApi, refresh: () => void): Menu
   return [
     hideItem,
     { label: 'Move the island (arrow keys, Enter saves)', click: () => { island.startMove(); refresh() } },
+    { label: 'Reset position (top centre)', click: () => { island.resetPosition(); refresh() } },
     { label: 'Slide out of the way when the mouse rushes at it', type: 'checkbox', checked: island.dodge(), click: (item) => { island.setDodge(item.checked); refresh() } }
   ]
 }

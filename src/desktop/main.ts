@@ -378,7 +378,6 @@ if (firstCopy) void app.whenReady().then(async () => {
         ...island.displays().map((d) => ({ label: d.label, type: 'radio' as const, checked: island.monitor() === 'fixed' && d.current, click: () => { island.setMonitor('fixed', d.id); tray.setContextMenu(menu()) } }))
       ]
     },
-    { label: 'Reset island position', click: () => { island.resetPosition(); tray.setContextMenu(menu()) } },
     { label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(), enabled: app.isPackaged, click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); tray.setContextMenu(menu()) } },
     { type: 'separator' },
     { label: 'Quit Life System', click: () => { quitting = true; app.quit() } }

@@ -23,6 +23,31 @@ export function dropPlacement(c: { x: number; y: number }, sb: Box): Placement {
   return dropSpot(c, sb)
 }
 
+/** Within this share of the screen width of the middle, a top drop counts as "top centre". */
+export const CENTER_BAND = 0.06
+
+/**
+ * The spot a drop is saved as. Only the true top centre stays `top` (centred, the one spot a
+ * notch may use). A top drop clearly off-centre is kept where you put it as a floating capsule
+ * (`free`), never pulled back to the middle. Corners and sides keep their own spot.
+ */
+export function savedSpot(spot: Placement, cx: number): { place: Placement; cx: number } {
+  if (spot !== 'top') return { place: spot, cx }
+  return Math.abs(cx - 0.5) <= CENTER_BAND ? { place: 'top', cx: 0.5 } : { place: 'free', cx }
+}
+
+/**
+ * Where the thin Indicator sits: flush with the top, and on the side you put the island
+ * (it used to jump to the middle whenever a window was maximized). Corners stay in their
+ * corner; anything else keeps its share across the screen.
+ */
+export function barHome(wa: Box, width: number, place: Placement, cx: number): { x: number; y: number } {
+  const lo = wa.x
+  const hi = wa.x + wa.width - width
+  const x = place === 'top-left' || place === 'left' ? lo : place === 'top-right' || place === 'right' ? hi : wa.x + (Number.isFinite(cx) ? cx : 0.5) * wa.width - width / 2
+  return { x: Math.round(Math.max(Math.min(lo, hi), Math.min(Math.max(lo, hi), x))), y: Math.round(wa.y) }
+}
+
 /** What the ghost says while you drag. */
 export const SNAP_LABEL: Record<Placement, string> = { 'top-left': 'Top left', top: 'Top center', 'top-right': 'Top right', left: 'Docks left', right: 'Docks right', free: 'Stays here' }
 

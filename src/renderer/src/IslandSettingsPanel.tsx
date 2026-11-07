@@ -300,7 +300,7 @@ export function IslandSettingsPanel() {
 
       {desk.islandDisplays && (<>
       <h3 className="is-sec">Where</h3>
-      <Row title="Position" hint="Drag the island to move it too: drop it on an edge to dock it">
+      <Row title="Position" hint="Drag the island to move it: it stays where you drop it. Near the top it snaps to left, centre or right; the notch look needs the top centre, so anywhere else it shows as a capsule. Reset position is in the island menu.">
         <Select className="sx-select" aria-label="Position" value={p.place ?? 'top'} onChange={(e) => void save({ place: e.target.value as Placement, offset: { x: 0, y: 0 } })}>
           {PLACEMENTS.map((x) => (
             <option key={x} value={x}>

@@ -132,7 +132,7 @@
    "priority": 1,
    "area": "island",
    "title": "Desktop island basics",
-   "user_visible_behavior": "Pill → panel → Escape; hover peeks; Stop & log",
+   "user_visible_behavior": "Pill → panel → Escape; hover peeks; Stop & log; one Today list; Ben card hides after 2 h; a dragged spot stays",
    "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",

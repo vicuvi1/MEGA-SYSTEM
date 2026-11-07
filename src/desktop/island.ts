@@ -32,7 +32,7 @@ import { islandSizing, sizingKey, type IslandSizing } from '../core/islandFit'
 import { applyProfile, autoProfile } from '../core/islandProfiles'
 import { typingFade } from '../core/islandCommands'
 import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs'
-import { cursorNear, snapBounce } from './islandPlace'
+import { barHome, cursorNear, savedSpot, snapBounce } from './islandPlace'
 import { clampFree, PANEL_MAX, resizePanel, dragTo, dropSpot, fitShift, hideFor, hideText, hideTick, rememberSpot, rushing, screenKey, SHOWN, toggleHide, DODGE_MS, type HideChoice, type Rect, type Sample } from '../core/islandMove'
 import {
   barSpot, chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, dragStale, followTick, hideOverApp, hotRects, islandBase, islandSize, isPlacement, migrateShortcuts,
@@ -240,7 +240,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const homeOf = (d: Electron.Display, width: number, height: number) => {
     const wa = d.workArea
     // The thin Indicator: flush with the top, centred on this screen (any spot, any scaling).
-    if (barOn) return barSpot(wa, width)
+    if (barOn) return barHome(wa, width, place, pos.cx)
     if (place === 'free') return clampFree({ x: wa.x + pos.cx * wa.width - width / 2 + desk.offset.x, y: wa.y + pos.top + desk.offset.y }, { width, height }, wa, keepBox(width))
     return placeIsland({ wa, width, height, place, pos, offset: desk.offset, sidePillY: SIDE_PILL_Y * cssScale() * pageZoom() })
   }
@@ -484,6 +484,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     pos.cy = Math.min(1, Math.max(0, (b.y + SIDE_PILL_Y * cssScale() * pageZoom() - wa.y) / wa.height))
     pos.cx = Math.min(1, Math.max(0, (b.x + b.width / 2 - wa.x) / wa.width))
     pos.top = Math.max(0, b.y - wa.y)
+    // Only the true top centre stays "top" (the notch's spot); off-centre at the top it stays put as a capsule.
+    const sv = savedSpot(place, pos.cx)
+    place = sv.place
+    pos.cx = sv.cx
     desk = { ...desk, spots: rememberSpot(desk.spots, screenKey(d), { ...desk.spots[screenKey(d)], place, pos: { ...pos } }) }
     fit = { x: 0, y: 0 }
     savePrefs()
@@ -547,7 +551,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
           const np = dragTo(p, { x: drag.offX, y: drag.offY })
           win.setBounds({ x: np.x, y: np.y, width: drag.w, height: drag.h })
           // IM7: the spot it would snap to, for the ghost (only when it changes).
-          const spot = dropSpot(p, screen.getDisplayNearestPoint(p).bounds)
+          const sbx = screen.getDisplayNearestPoint(p).bounds
+          const spot = savedSpot(dropSpot(p, sbx), (p.x - sbx.x) / Math.max(1, sbx.width)).place
           if (spot !== drag.spot) {
             drag.spot = spot
             win.webContents.send('island:snapGhost', spot)

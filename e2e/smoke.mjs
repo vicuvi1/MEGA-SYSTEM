@@ -2304,12 +2304,14 @@ try {
     }
     // Life fit: the week's top 3 (the rest parked) and tonight's shift on the Day page.
     await ip.evaluate(() => window.__setSnap({ health: null, week: { top: [{ i: 0, text: 'Finish the essay', done: true }, { i: 1, text: 'Side project: login page', done: false }, { i: 2, text: 'Run 3 times', done: false }], parked: ['Read 4 books', 'Learn Spanish'] }, work: { from: '17:00', to: '22:00', mode: 'normal' } }))
-    await ip.waitForSelector('.di-week3', { timeout: 3000 })
-    if (!/Parked: Read 4 books/.test(await ip.locator('.di-week3').innerText())) throw new Error('no parked line on the Day page')
+    await ip.waitForSelector('.di-week-chip', { timeout: 3000 })
+    if (!/1\/3/.test(await ip.locator('.di-week-chip').innerText())) throw new Error('the week top 3 should be a small 1/3 chip')
+    const lists = await ip.evaluate(() => ({ today: document.querySelectorAll('.di-today').length, old: document.querySelectorAll('.di-tasks, .di-plan, .di-week3').length }))
+    if (lists.today !== 1 || lists.old) throw new Error(`the Day page should show one to-do list: ${JSON.stringify(lists)}`)
     await ip.click('[data-tap="shift:short"]')
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'shift' && a.mode === 'short'), null, { timeout: 3000 })
     if (process.env.LIFEFIT_SHOTS) {
-      await ip.locator('.di-week3').scrollIntoViewIfNeeded()
+      await ip.locator('.di-today').scrollIntoViewIfNeeded()
       await ip.waitForTimeout(500)
       await ip.locator('.di-panel').screenshot({ path: `${process.env.LIFEFIT_SHOTS}/island-day-top3.png` })
     }

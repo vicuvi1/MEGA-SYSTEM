@@ -14,7 +14,7 @@ import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionV
 import { dayPart } from '@core/islandFeel'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
 import { restingView, type RestItem, type RestKind } from '@core/islandRest'
-import { dedupeTodos } from '@core/islandTodos'
+import { benCardVisible, buildToday, dedupeTodos } from '@core/islandTodos'
 import { CALM_TIMING, calmDots, calmRevealed, calmStep, calmTiming, calmZone, dotColor, inZone, modeGate, peekKind, type CalmDot, type CalmEvent, type CalmPhase } from '@core/islandCalm'
 
 import type { IslandBeat, IslandPlacement, IslandTheme } from '../../shared/desktop'
@@ -1377,6 +1377,8 @@ export function DesktopIsland() {
   // Safety net: whatever feed sent the snapshot, a to-do shows once (Todoist id, then title).
   const rows = useMemo(() => dedupeTodos({ mustdos: s.mustdos, top: s.week?.top ?? [], todoist: s.tasks ?? [], max: 8 }), [s.mustdos, s.week, s.tasks])
   const mustOpen = rows.mustdos.filter((m) => !m.done).length
+  // One Today list (current block, must-dos, Todoist due today); the week's top 3 is just a chip.
+  const today = useMemo(() => buildToday({ now: s.now ? { title: s.now.title } : null, mustdos: s.mustdos, top: s.week?.top ?? [], todoist: s.tasks ?? [], max: 8 }), [s.now, s.mustdos, s.week, s.tasks])
   const [moon, setMoon] = useState(false)
   const goToBed = () => {
     setMoon(true)
@@ -1574,17 +1576,7 @@ export function DesktopIsland() {
     </section>
   ) : null
   const blocks: Record<IslandSection, ReactNode> = {
-    tasks: rows.todoist.length ? (<section className="di-tasks">
-                  <span className="di-label">Todoist · next up{s.tasksStale && s.tasksAt ? ` · updated ${Math.max(1, Math.round((now - s.tasksAt) / 60000))} min ago` : ''}</span>
-                  {rows.todoist.map((t) => (
-                    <button key={t.id} className="di-task" {...tp(`task:${t.id}`, () => send({ kind: 'todoDone', id: t.id, content: t.content }))} title="Done: tick it in Todoist">
-                      <i />
-                      <span>{t.content}</span>
-                      {t.time && <small>{t.time}</small>}
-                    </button>
-                  ))}
-                </section>) : null,
-    // One morning card: while the good-morning card shows, it carries the wake-up ask (no second "I'm up").
+    tasks: null,
     sleep: <>{s.sleep?.bed || (s.sleep?.wake && s.alert?.kind !== 'morning') ? (<section className={`di-sleep ${s.sleep?.bed ? 'night' : 'day'} ${moon ? 'going' : ''}`}>
                   {s.sleep?.bed ? (
                     <>
@@ -1638,104 +1630,79 @@ export function DesktopIsland() {
                     <button {...tp('panel:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>
                   </div>
                 </section>) : null,
-    plan: (<section className="di-plan">
-                <div className="di-row">
-                  <span className="di-label">Now</span>
-                  {s.now ? (
-                    <div className="di-block">
-                      {run ? <b>{s.now.title}</b> : (
-                        <Fly id={`ti-now:${s.now.start}`} pos className="di-title-fly">
-                          <b>{s.now.title}</b>
-                        </Fly>
-                      )}
-                      <small>
-                        {hhmm(s.now.start)}–{hhmm(s.now.end)} · {minsText(s.now.end - now)} left
-                      </small>
-                      <div className="di-bar pbar"><i style={{ '--p': Math.max(0, Math.min(1, (now - s.now.start) / (s.now.end - s.now.start))) } as React.CSSProperties} /></div>
-                    </div>
-                  ) : (
-                    <div className="di-block muted">
-                      <b>{s.ben.move?.title ?? 'Free time'}</b>
-                      <small>{s.ben.move?.sub ?? 'Nothing planned right now.'}</small>
-                    </div>
-                  )}
-                  {s.now && s.now.kind === 'event' && !s.now.call && (
-                    // An event (a class, a commute): no timer, just ✓ when you're there.
-                    s.now.mark ? (
-                      <button className={`di-ev-mark ${s.now.mark}`} {...tp('plan:evundo', () => tap({ kind: 'eventMark', block: s.now!, mark: null }))} title="Tap to undo">
-                        {s.now.mark === 'done' ? '✓ Done' : "Didn't go"}
-                      </button>
-                    ) : (
-                      <span className="di-ev-btns">
-                        <button className="di-go" {...tp('plan:evdone', () => tap({ kind: 'eventMark', block: s.now!, mark: 'done' }))}>✓ Done</button>
-                        <button className="di-ev-skip" {...tp('plan:evskip', () => tap({ kind: 'eventMark', block: s.now!, mark: 'skip' }))}>Didn't go</button>
-                      </span>
-                    )
-                  )}
-                  {!run && s.now && !s.now.call && s.now.kind !== 'event' && (
-                    <button className="di-go" {...tp('plan:start', () => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) }))}>
-                      Start
-                    </button>
-                  )}
-                  {s.now?.call && s.now.meet && (
-                    <button className="di-go" {...tp('plan:join', () => tap({ kind: 'join', url: s.now!.meet! }))}>
-                      Join
-                    </button>
-                  )}
-                </div>
-                {s.next && (
-                  <div className="di-row">
-                    <span className="di-label">Next</span>
-                    <div className="di-block">
-                      <b>{s.next.title}</b>
-                      <small>
-                        {hhmm(s.next.start)}–{hhmm(s.next.end)} · in {minsText(s.next.start - now)}
-                        {s.next.kind === 'event' ? ' · event' : ''}
-                      </small>
-                    </div>
-                    {s.next.kind === 'event' && !s.next.call && (
-                      <button className={`di-ev-tick ${s.next.mark === 'done' ? 'on' : ''}`} aria-label={s.next.mark === 'done' ? `Undo done: ${s.next.title}` : `Done: ${s.next.title}`} {...tp('plan:nextdone', () => tap({ kind: 'eventMark', block: s.next!, mark: s.next!.mark === 'done' ? null : 'done' }))}>✓</button>
-                    )}
-                  </div>
-                )}
-                {(s.maybe ?? []).map((b) => (
-                  <div key={`${b.id ?? b.title}:${b.start}`} className="di-row di-maybe" title={b.maybe === 'invite' ? "You haven't answered this invite: it doesn't count until you accept it in your calendar" : 'You said maybe: it shows here, but never as Now'}>
-                    <span className="di-label">{b.maybe === 'invite' ? 'Invite' : 'Maybe'}</span>
-                    <div className="di-block">
-                      <b>{b.title}</b>
-                      <small>
-                        {hhmm(b.start)}
-                        {b.start > now ? ` · in ${minsText(b.start - now)}` : ''}
-                        {b.maybe === 'invite' ? ' · Invite: accept?' : ' · maybe'}
-                      </small>
-                    </div>
-                  </div>
-                ))}
-                <label className="di-auto" title="When a block from your calendar begins, its focus timer starts by itself (not for meetings)">
-                  <input type="checkbox" checked={!!s.autoFocus} onChange={(e) => send({ kind: 'autoFocus', on: e.target.checked })} />
-                  <span>⚡ Start focus by itself when a block begins</span>
-                </label>
-              </section>),
-    mustdos: rows.mustdos.length || rows.top.length || s.work ? (<section className="di-must">
-                  {rows.mustdos.length > 0 && <span className="di-label">Must-dos · {mustOpen ? `${mustOpen} left` : 'all done 🎉'}</span>}
-                  {rows.mustdos.map((m) => (
-                    <button key={m.i} className={`di-check ${m.done ? 'done' : ''}`} {...tp(`must:${m.i}`, () => tap({ kind: 'mustdo', i: m.i }))}>
-                      <i>{m.done ? '✓' : ''}</i>
-                      <span>{m.text}</span>
-                    </button>
-                  ))}
-                  {rows.top.length > 0 && s.week && (
-                    <div className="di-week3">
-                      <span className="di-label">This week's top 3</span>
-                      {rows.top.map((b) => (
-                        <div key={b.i} className={`di-week3-row ${b.done ? 'done' : ''}`}>
-                          <i>{b.done ? '✓' : '🎯'}</i>
-                          <span>{b.text}</span>
+    plan: null,
+    // One list: the current block, then must-dos, then Todoist due today. Done items fold into "N done".
+    mustdos: today.open.length || today.done || today.week || s.next || (s.maybe ?? []).length || s.work ? (<section className="di-must di-today">
+                  <span className="di-label">
+                    Today{today.done ? ` · ${today.done} done` : ''}
+                    {today.week && <b className="di-week-chip" title="This week's top 3">🎯 {today.week.done}/{today.week.total}</b>}
+                    {s.tasksStale && s.tasksAt ? ` · updated ${Math.max(1, Math.round((now - s.tasksAt) / 60000))} min ago` : ''}
+                  </span>
+                  {today.open.length === 0 && <small className="di-today-empty">{today.done ? 'All done 🎉' : 'Nothing to do right now.'}</small>}
+                  {today.open.map((r) => {
+                    if (r.kind === 'now') {
+                      return (
+                        <div key={r.key} className="di-check di-today-now">
+                          <i>▶</i>
+                          <span>
+                            {s.now ? s.now.title : r.text}
+                            {s.now && <small> · {hhmm(s.now.start)}–{hhmm(s.now.end)} · {minsText(s.now.end - now)} left</small>}
+                          </span>
+                          {s.now && s.now.kind === 'event' && !s.now.call && (
+                            s.now.mark ? (
+                              <button className={`di-ev-mark ${s.now.mark}`} {...tp('plan:evundo', () => tap({ kind: 'eventMark', block: s.now!, mark: null }))} title="Tap to undo">
+                                {s.now.mark === 'done' ? '✓ Done' : "Didn't go"}
+                              </button>
+                            ) : (
+                              <span className="di-ev-btns">
+                                <button className="di-go" {...tp('plan:evdone', () => tap({ kind: 'eventMark', block: s.now!, mark: 'done' }))}>✓ Done</button>
+                                <button className="di-ev-skip" {...tp('plan:evskip', () => tap({ kind: 'eventMark', block: s.now!, mark: 'skip' }))}>Didn't go</button>
+                              </span>
+                            )
+                          )}
+                          {!run && s.now && !s.now.call && s.now.kind !== 'event' && (
+                            <button className="di-go" {...tp('plan:start', () => tap({ kind: 'start', subject: s.now!.title, minutes: Math.max(5, Math.min(90, Math.round((s.now!.end - now) / 60000))) }))}>Start</button>
+                          )}
+                          {s.now?.call && s.now.meet && (
+                            <button className="di-go" {...tp('plan:join', () => tap({ kind: 'join', url: s.now!.meet! }))}>Join</button>
+                          )}
                         </div>
-                      ))}
-                      {s.week.parked.length > 0 && <small className="di-parked">Parked: {s.week.parked.join(' · ')}</small>}
-                    </div>
+                      )
+                    }
+                    if (r.kind === 'must') {
+                      return (
+                        <button key={r.key} className="di-check" {...tp(r.key, () => tap({ kind: 'mustdo', i: r.i! }))}>
+                          <i />
+                          <span>{r.text}</span>
+                        </button>
+                      )
+                    }
+                    return (
+                      <button key={r.key} className="di-check di-task" {...tp(r.key, () => send({ kind: 'todoDone', id: r.id!, content: r.text }))} title="Done: tick it in Todoist">
+                        <i />
+                        <span>{r.text}</span>
+                        {r.time && <small>{r.time}</small>}
+                      </button>
+                    )
+                  })}
+                  {s.next && (
+                    <small className="di-today-next">
+                      Next · {s.next.title} · {hhmm(s.next.start)} · in {minsText(s.next.start - now)}
+                      {s.next.kind === 'event' && !s.next.call && (
+                        <button className={`di-ev-tick ${s.next.mark === 'done' ? 'on' : ''}`} aria-label={s.next.mark === 'done' ? `Undo done: ${s.next.title}` : `Done: ${s.next.title}`} {...tp('plan:nextdone', () => tap({ kind: 'eventMark', block: s.next!, mark: s.next!.mark === 'done' ? null : 'done' }))}>✓</button>
+                      )}
+                    </small>
                   )}
+                  {(s.maybe ?? []).map((b) => (
+                    <small key={`${b.id ?? b.title}:${b.start}`} className="di-today-next" title={b.maybe === 'invite' ? "You haven't answered this invite: it doesn't count until you accept it in your calendar" : 'You said maybe: it shows here, but never as Now'}>
+                      {b.maybe === 'invite' ? 'Invite' : 'Maybe'} · {b.title} · {hhmm(b.start)}
+                      {b.maybe === 'invite' ? ' · accept?' : ''}
+                    </small>
+                  ))}
+                  <label className="di-auto" title="When a block from your calendar begins, its focus timer starts by itself (not for meetings)">
+                    <input type="checkbox" checked={!!s.autoFocus} onChange={(e) => send({ kind: 'autoFocus', on: e.target.checked })} />
+                    <span>⚡ Start focus by itself when a block begins</span>
+                  </label>
                   {s.work && (
                     <div className="di-shift" role="group" aria-label="Tonight's work">
                       <small>Work {s.work.from}–{s.work.to === '24:00' ? '00:00' : s.work.to}</small>
@@ -1770,7 +1737,8 @@ export function DesktopIsland() {
                 </label>
               </section>),
     // IM3: a slow wave while Ben thinks, then his first words fade in.
-    ben: s.ben.busy || s.ben.last ? (<section className="di-ben">
+    // Ben's last message shows only while it is under ~2 h old; older ones are hidden.
+    ben: benCardVisible(s.ben.last, s.ben.busy, now) ? (<section className="di-ben">
                 <BenThinking busy={s.ben.busy} step={s.ben.steps[s.ben.steps.length - 1]} last={s.ben.last} onReply={focusInput} />
               </section>) : null
   }
@@ -2553,7 +2521,7 @@ export function DesktopIsland() {
   const panelW = sentMaxH ? prefs.panelWidth : localFit.panelW
   const panelMaxH = sentMaxH || localFit.panelH
   // The notch hangs from the top edge (the bar look too): square top corners.
-  const notchOn = bar || (look.style === 'notch' && (place === 'top' || place.startsWith('top')))
+  const notchOn = bar || (look.style === 'notch' && place === 'top')
   // At rest: a capsule is fully round; the notch's bottom corners are a softer, hardware-like curve.
   const restR = notchOn ? (density === 'compact' ? 12 : 14) : Math.max(12, Math.round(size.h / 2))
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : barNow ? ISLAND_SHAPE.compact.radius : restR) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
