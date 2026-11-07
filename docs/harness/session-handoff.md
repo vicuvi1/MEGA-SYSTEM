@@ -23,14 +23,15 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-07, night)
+### Current handoff (2026-11-07, final)
 ```
-Milestone:   Sport strength coach v2 landed (2e93440): rule engine, "Your coach" card, adjust after every log, weekly AI review, Ask Ben, best-set onboarding, harder moves, kg on sets, strength test + charts
-Completed:   everything requested so far; Sport smoke passes on 2e93440
+Milestone:   Sport back to SIMPLE (0a1bb20): own routine restored, Simple mode default, Harder/Easier per exercise; coach features behind "Coach mode" (off)
+OWNER RULE:  Sport must stay simple — his exercises (push-ups, press/abs, sit-ups, squats) + a Harder button. Coach mode stays OFF. Don't add complexity to Sport Today.
 Active:      none
-Blockers:    none. New worktrees lack some node_modules files: symlink /home/user/MEGA-SYSTEM/node_modules
-Next action: hook the weekly sport review into the Sunday rhythm job (now lazy); check 1280×720 + light theme of Sport Today; full smoke on main
-Files:       docs/INDEX.md, docs/areas/sport.md, src/core/sportCoachRules.ts, src/core/sportReview.ts
+Blockers:    "Sport Track onboarding" smoke step passes only on retry (stale synced copy resets coachMode) — fix
+             Squats added on the onboarding day might have been hidden by the restore — check and offer to re-add
+Next action: check the user's Sport Today shows his exercises; fix the coachMode sync race; full smoke on main
+Files:       docs/INDEX.md, docs/areas/sport.md, src/core/sportSimple.ts
 ```
 
 ## Builder report format (≤ ~250 words)
