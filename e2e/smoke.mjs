@@ -1273,6 +1273,15 @@ try {
     // A reminder drops down by itself, and Escape puts it away.
     await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now(), alert: { id: 'water:1', kind: 'water', title: 'Water', text: 'A glass of water?', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
     await ip.waitForSelector('.di-peek.alert', { timeout: 5000 })
+    // One water tap: one ripple and one label at most, both gone within ~1 s.
+    await ip.waitForTimeout(400)
+    await ip.click('.di-peek.alert .di-actions button')
+    await ip.waitForTimeout(150)
+    const fx = await ip.locator('[data-water-fx]').count()
+    if (fx > 2) throw new Error(`one water tap left ${fx} animation elements`)
+    await ip.screenshot({ path: process.env.WATER_SHOTS ? `${process.env.WATER_SHOTS}/frame-${Date.now()}.png` : '/dev/null' }).catch(() => {})
+    await ip.waitForFunction(() => !document.querySelector('[data-water-fx]'), null, { timeout: 1000 })
+    await ip.waitForSelector('.di-peek.alert', { timeout: 5000 }).catch(() => {})
     await ip.keyboard.press('Escape')
     await ip.waitForSelector('.di-peek.alert', { state: 'detached', timeout: 5000 })
     // Smart island: a suggestion drops down with Accept / Not now / Never, and each sends its answer.

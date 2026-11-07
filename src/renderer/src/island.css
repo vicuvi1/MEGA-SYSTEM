@@ -476,7 +476,7 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di.view-peek .glass.live .gl-w, .di.view-expanded .glass.live .gl-w, .di.is-hover .glass.live .gl-w, .glass.live.pouring .gl-w { animation-play-state: running; }
 @keyframes gl-wave { to { transform: translateX(-50%); } }
 .glass.full .gl-edge { stroke: rgb(191 234 255 / 0.85); }
-.gl-label { position: absolute; left: 50%; top: 0; translate: -50% 0; white-space: nowrap; font-size: 11px; line-height: 1; font-weight: 800; color: var(--water-hi); text-shadow: 0 0 8px rgb(71 181 255 / 0.8); pointer-events: none; z-index: 3; }
+.gl-label { position: absolute; left: 50%; top: 18%; translate: -50% 0; white-space: nowrap; font-size: 11px; line-height: 1; font-weight: 800; color: var(--water-hi); text-shadow: 0 0 8px rgb(71 181 255 / 0.8); pointer-events: none; z-index: 3; }
 .di-water { position: relative; }
 .di-water > .glass { margin: -4px 2px -4px 0; }
 .di-bar.water i { width: 100%; transform-origin: left center; transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); }

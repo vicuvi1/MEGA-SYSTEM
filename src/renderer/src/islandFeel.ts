@@ -69,8 +69,8 @@ export function feelFor(mode: MotionMode | undefined, reduce = false): Feel {
     fadeOut: { duration: 0.12, ease: 'easeIn' },
     fly: { type: 'spring', stiffness: 420, damping: 32, mass: 1 },
     pop: { type: 'spring', stiffness: 520, damping: 22, mass: 0.8 },
-    level: { type: 'spring', stiffness: 70, damping: 13, mass: 1 },
-    slosh: { type: 'spring', stiffness: 140, damping: 5, mass: 1 },
+    level: { type: 'spring', stiffness: 70, damping: 17, mass: 1 },
+    slosh: { type: 'spring', stiffness: 140, damping: 24, mass: 1 },
     moves: true,
     extras: true
   }

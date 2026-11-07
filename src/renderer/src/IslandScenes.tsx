@@ -53,8 +53,8 @@ const BACK_WAVE = wavePath(26, 1.6, 7)
 /**
  * Water in a glass (WATER): a real liquid with two sine waves sliding past
  * each other, the level easing to today's amount with a spring, a slosh and
- * rising bubbles when it changes, a drop + splash + "+250 ml" falling in on
- * each tap, and a shimmer once when the day's target is reached.
+ * a soft lean when it changes, one ripple + "+250 ml" on
+ * each new tap (under 700 ms), and a shimmer once when the day's target is reached.
  * Calm: just the eased fill. Off: still.
  */
 export function Glass({ pct, size = 48, splash, shimmer = 0, label = true }: { pct: number; size?: number; splash?: WaterSplash; shimmer?: number; label?: boolean }) {
@@ -78,7 +78,6 @@ export function Glass({ pct, size = 48, splash, shimmer = 0, label = true }: { p
       b()
     }
   }, [tilt, amp])
-  const [bubbles, setBubbles] = useState<{ id: number; x: number; r: number; d: number }[]>([])
   // IC10: the waves move for 3 s after a pour (and in the peek, the panel, on hover: island.css), else still.
   const [pouring, setPouring] = useState(false)
   const before = useRef(level)
@@ -87,31 +86,32 @@ export function Glass({ pct, size = 48, splash, shimmer = 0, label = true }: { p
     before.current = level
     if (!f.extras || Math.abs(level - was) < 0.001) return setPouring(false)
     setPouring(true)
-    const pour = window.setTimeout(() => setPouring(false), 3000)
-    const stopPour = () => clearTimeout(pour)
-    // Slosh: the surface tips toward the pour and rocks back (a loose spring).
-    tilt.set(level > was ? -6 : 4)
-    amp.set(2.4)
+    const pour = window.setTimeout(() => setPouring(false), 1000)
+    // A soft lean toward the pour that settles (no bounce, small).
+    tilt.set(level > was ? -2 : 1.5)
+    amp.set(1.3)
     const a = animate(tilt, 0, f.slosh)
     const b = animate(amp, 1, f.slosh)
-    if (level > was) {
-      const at = Date.now()
-      setBubbles(Array.from({ length: 6 }, (_, i) => ({ id: at + i, x: 12 + ((i * 7.3) % 16), r: 0.8 + (i % 3) * 0.45, d: i * 0.09 })))
-      const t = window.setTimeout(() => setBubbles([]), 1500)
-      return () => {
-        a.stop()
-        b.stop()
-        clearTimeout(t)
-        stopPour()
-      }
-    }
     return () => {
       a.stop()
       b.stop()
-      stopPour()
+      clearTimeout(pour)
     }
   }, [level, f, tilt, amp])
-  const tap = splash && splash.n > 0 && f.extras ? splash : null
+  // One tap = one gentle ripple + "+250 ml" for 650 ms. Only a NEW tap plays it: a glass that mounts later
+  // (the pill, then the panel) or a fresh snapshot never replays an old one, and a quick second tap replaces the first.
+  const seen = useRef(splash?.n ?? 0)
+  const [tap, setTap] = useState<WaterSplash | null>(null)
+  const tapN = splash?.n ?? 0
+  useEffect(() => {
+    if (tapN <= seen.current) return
+    seen.current = tapN
+    if (!f.extras || !splash) return
+    setTap(splash)
+    const t = window.setTimeout(() => setTap(null), 650)
+    return () => clearTimeout(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tapN, f.extras])
   const w = Math.round((size * 40) / 48)
   return (
     <span className={`glass ${f.extras ? 'live' : 'still'} ${pouring ? 'pouring' : ''} ${level >= 1 ? 'full' : ''}`} style={{ width: w, height: size }} aria-hidden>
@@ -141,28 +141,15 @@ export function Glass({ pct, size = 48, splash, shimmer = 0, label = true }: { p
               <rect x="-6" y="2" width="52" height="60" fill={`url(#gw${uid})`} />
             </g>
           </motion.g>
-          {bubbles.map((b) => (
-            <motion.circle key={b.id} cx={b.x} cy={GLASS_BOTTOM - 1} r={b.r} fill="none" stroke="rgb(255 255 255 / 0.85)" strokeWidth="0.6" initial={{ y: 0, opacity: 0 }} animate={{ y: [0, (surface - GLASS_BOTTOM) * 0.5, surface - GLASS_BOTTOM + 2], x: [0, 1.2, -0.8], opacity: [0, 1, 0] }} transition={{ duration: 1, delay: b.d, ease: 'easeOut' }} />
-          ))}
-          {tap && (
-            <g key={`sp${tap.n}`}>
-              <motion.ellipse cx="20" cy={surface} rx="3" ry="0.9" fill="none" stroke="#dff4ff" strokeWidth="0.9" initial={{ scale: 0.3, opacity: 0 }} animate={{ scale: [0.3, 3.2], opacity: [0, 1, 0] }} transition={{ duration: 0.55, delay: 0.3, ease: 'easeOut' }} style={{ originX: 0.5, originY: 0.5 }} />
-              {[-1, 0, 1].map((d) => (
-                <motion.circle key={d} cx={20 + d * 2} cy={surface} r="0.9" fill="#dff4ff" initial={{ opacity: 0 }} animate={{ x: [0, d * 5], y: [0, -6 + Math.abs(d) * 2, 1], opacity: [0, 1, 0] }} transition={{ duration: 0.45, delay: 0.32, ease: 'easeOut' }} />
-              ))}
-            </g>
-          )}
+          {tap && <motion.ellipse key={`sp${tap.n}`} data-water-fx="ripple" cx="20" cy={surface} rx="3" ry="0.9" fill="none" stroke="#dff4ff" strokeWidth="0.9" initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: [0.4, 3], opacity: [0, 0.9, 0] }} transition={{ duration: 0.55, ease: 'easeOut' }} style={{ originX: 0.5, originY: 0.5 }} />}
           {shimmer > 0 && f.extras && <motion.rect key={`sh${shimmer}`} x="-14" y="0" width="12" height="48" fill={`url(#gs${uid})`} transform="skewX(-18)" initial={{ x: 0, opacity: 0 }} animate={{ x: 60, opacity: [0, 1, 1, 0] }} transition={{ duration: 1, ease: 'easeInOut', delay: 0.25 }} />}
         </g>
-        {tap && (
-          <motion.path key={`dr${tap.n}`} d="M20 0 C20 0 17 4.5 17 6.3 A3 3 0 0 0 23 6.3 C23 4.5 20 0 20 0 Z" fill="var(--water-hi, #8fdcff)" initial={{ y: -10, opacity: 0 }} animate={{ y: [-10, surface - 6], opacity: [0, 1, 1, 0] }} transition={{ duration: 0.34, ease: 'easeIn' }} />
-        )}
         <path d={GLASS} fill="none" className="gl-edge" stroke="rgb(255 255 255 / 0.55)" strokeWidth="1.6" strokeLinejoin="round" />
         <path d="M10 9 L11.8 38" stroke="rgb(255 255 255 / 0.22)" strokeWidth="1.4" strokeLinecap="round" />
         {shimmer > 0 && f.extras && <motion.path key={`ed${shimmer}`} d={GLASS} fill="none" stroke="#bfeaff" strokeWidth="2" initial={{ opacity: 0 }} animate={{ opacity: [0, 1, 0] }} transition={{ duration: 1.2, delay: 0.2 }} />}
       </svg>
       {tap && label && (
-        <motion.b key={`lb${tap.n}`} className="gl-label" initial={{ y: -size * 0.45, opacity: 0, scale: 0.8 }} animate={{ y: [-size * 0.45, (surface / 48) * size - 9], opacity: [0, 1, 1, 0], scale: [0.8, 1, 1, 0.7] }} transition={{ duration: 0.62, ease: 'easeIn' }}>
+        <motion.b key={`lb${tap.n}`} data-water-fx="label" className="gl-label" initial={{ y: 0, opacity: 0 }} animate={{ y: [0, -7], opacity: [0, 1, 1, 0] }} transition={{ duration: 0.65, ease: 'easeOut', times: [0, 0.2, 0.7, 1] }}>
           +{tap.ml} ml
         </motion.b>
       )}
