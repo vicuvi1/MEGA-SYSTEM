@@ -488,6 +488,22 @@
     .ex > .ex-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
     .ex > .bar { grid-area: bar; }
     .ex > .ex-actions { grid-area: act; }
+    /* Simple mode (the default): no hero strip, no level badges, no coach UI; Coach mode (body.coach-on) brings them back. */
+    .ex.simple { grid-template-areas: "demo main" "bar bar" "act act" "hard hard"; }
+    .ex.simple.no-demo { grid-template-areas: "main" "bar" "act" "hard"; }
+    .ex.simple > .harder-row { grid-area: hard; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: -4px; }
+    .simple-actions .log-big { flex: 2 1 120px; min-height: 52px; font-size: 17px; }
+    .harder-opts { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+    .harder-opts .btn { flex: 1 1 auto; }
+    .menu-label.lvl-mini { font-size: 11px; font-weight: 500; opacity: 0.8; }
+    body:not(.coach-on) .coach-only { display: none !important; }
+    body.coach-on .simple-only { display: none !important; }
+    body:not(.coach-on) #routine-section .hero-main { display: none; }
+    body:not(.coach-on) #routine-section { padding-top: 14px; }
+    body:not(.coach-on) .plan-tab > :not(#coach-switch) { display: none !important; }
+    body:not(.coach-on) .progress-tab #pr-sub [data-sub="levels"] { display: none; }
+    .coach-switch-row { display: flex; align-items: center; gap: 14px; justify-content: space-between; }
+    .coach-switch-row small { display: block; color: var(--st-muted); margin-top: 2px; }
     .ex-demo { position: relative; width: 104px; height: 84px; padding: 0; border: 1px solid var(--st-border); border-radius: 12px; background: var(--st-surface); overflow: hidden; transition: border-color 0.2s, transform 0.2s var(--ease); }
     .ex-demo .fig { position: absolute; inset: 0; width: 100%; height: 100%; }
     .ex-demo .fig-hint, .lu-body .fig-hint, .mv .fig-hint { display: none; }
@@ -1220,7 +1236,7 @@
           <button role="menuitem" id="btn-open-manage-modal"><svg><use href="#i-list"/></svg>Exercises &amp; targets</button>
           <button role="menuitem" id="btn-open-settings-modal"><svg><use href="#i-gear"/></svg>Settings &amp; coach</button>
           <button role="menuitem" data-open-rest><svg><use href="#i-timer"/></svg>Rest timer</button>
-          <button role="menuitem" id="btn-recheck"><svg><use href="#i-list"/></svg>Re-check my levels</button>
+          <button role="menuitem" id="btn-recheck" class="coach-only"><svg><use href="#i-list"/></svg>Re-check my levels</button>
           <button role="menuitem" id="btn-tg-import"><svg><use href="#i-send"/></svg>Import from Telegram…</button>
           <hr>
           <button role="menuitem" id="btn-rest-day" title="A planned rest day keeps your streak"><svg><use href="#i-moon"/></svg>Rest day today</button>
@@ -1282,6 +1298,7 @@
           <div class="list-foot">
             <button class="btn ghost small" id="btn-quick-add-modal"><svg><use href="#i-plus"/></svg>Add exercise</button>
             <button class="btn ghost small" id="btn-complete-all"><svg><use href="#i-check"/></svg><span>I did all of these…</span></button>
+            <button class="btn ghost small simple-only" id="btn-wm-simple"><svg><use href="#i-play"/></svg>Workout mode</button>
             <button class="btn ghost small" data-open-rest><svg><use href="#i-timer"/></svg>Rest timer</button>
           </div>
         </section>
@@ -1351,6 +1368,12 @@
 
       <!-- ===================== PLAN: a week that fits your minutes ===================== -->
       <div class="plan-tab" data-panel="plan">
+        <section class="card full" id="coach-switch">
+          <div class="coach-switch-row">
+            <div><b>Coach mode (levels, programs, auto-progression)</b><small>Off keeps it simple: your own exercises, your own targets and a small Harder button. Nothing is lost when you switch it back on.</small></div>
+            <label class="toggle-switch"><input type="checkbox" id="coach-mode-toggle" aria-label="Coach mode (levels, programs, auto-progression)"><span class="toggle-slider"></span></label>
+          </div>
+        </section>
         <section class="card full" id="prog-card">
           <div class="card-head"><h2>Programs</h2><span class="meta">Ready-made home programs. Your own exercises stay unless you say so.</span><span class="grow"></span></div>
           <div class="prog-list" id="prog-list"></div>
@@ -1606,7 +1629,7 @@
           <option value="partner">Workout partner: upbeat and kind</option>
         </select>
       </div>
-      <div class="input-group">
+      <div class="input-group coach-only">
         <label for="setting-progress-mode">How you progress</label>
         <select id="setting-progress-mode">
           <option value="strength">Strength: 5–8 reps on your hardest move, 4 sets, long rests</option>
@@ -1908,6 +1931,7 @@
       sportySettings: {
         coach: 'beast',
         autoProgression: true,
+        coachMode: false,
         progressionStreak: 0,
         shortOnTime: false,
         bodyWeight: 75,
@@ -2259,7 +2283,7 @@
       // Auto-progression, said once in today's plan.
       const pBadge = document.getElementById('progression-badge');
       const n = state.sportySettings.progressionStreak || 0;
-      pBadge.textContent = growMode() ? 'Coach on: beat last time by a rep; the top of the range in 2 sessions unlocks the next move.' : state.sportySettings.autoProgression ? `Step-up: ${n} of 3 full days, then targets go up 5%.` : '';
+      pBadge.textContent = !coachOn() ? '' : growMode() ? 'Coach on: beat last time by a rep; the top of the range in 2 sessions unlocks the next move.' : state.sportySettings.autoProgression ? `Step-up: ${n} of 3 full days, then targets go up 5%.` : '';
     }
 
     // A small in-page box that asks for a number. The desktop app has no browser
@@ -2298,6 +2322,30 @@
       return left > 0 && left < s ? left : s;
     }
     let prevCount = {}; // each card's last number, so it rolls to the new one
+    const harderOpen = new Set(); // cards whose small "Harder ▸" choices are open
+    /** Simple mode: Harder (+reps, +1 set, a harder version) and Easier, remembered per exercise (ex.harder). */
+    function simpleHarder(ex, kind) {
+      const r = SK.makeHarder(state.exercises, ex.id, kind, 'ex_' + Date.now() + Math.random().toString(36).slice(2, 5));
+      if (!r) return;
+      const was = ex.target;
+      state.exercises = r.exercises;
+      const now = state.exercises.find((e) => e.id === r.id);
+      harderOpen.delete(ex.id);
+      saveState(state);
+      audio.playClick();
+      showToast(kind === 'version' ? `${nice(ex.name)} is now ${nice(now.name)}, about ${now.target} a day. Easier ▸ goes back.` : `${nice(ex.name)}: ${was} → ${now.target} a day.`);
+      renderTodayRoutine();
+    }
+    function simpleEasier(ex) {
+      const before = ex.target;
+      const r = SK.makeEasier(state.exercises, ex.id);
+      if (!r) return;
+      state.exercises = r.exercises;
+      const now = state.exercises.find((e) => e.id === r.id);
+      saveState(state);
+      showToast(`${nice(now.name)}: ${before} → ${now.target} a day.`);
+      renderTodayRoutine();
+    }
     let cardsEntered = false; // the cards slide in once, when the page opens
     function renderTodayRoutine() {
       const container = document.getElementById('routine-list');
@@ -2381,6 +2429,30 @@
             <div class="ex-sug ${sugCls}">${p.status === 'ready' ? svgI('up') : ''}<span>${esc(c.line)}</span>${sugBtns}</div>
             <div class="ex-why" id="why-${esc(ex.id)}" hidden>${pl ? esc(pl.why) : ''}</div>
             ${fbHTML}
+          </div>`;
+        }
+        if (!coachOn()) {
+          // Simple mode: name, demo, today's target, a big Log, +5/+10, Done, and a small "Harder" control.
+          const sFill = Math.min(1, target > 0 ? done / target : 0);
+          const sFrom = Math.min(1, prevPct[ex.id] ?? 0);
+          const hc = SK ? SK.harderChoices(ex) : null;
+          const hist = Array.isArray(ex.harder) ? ex.harder : [];
+          const opts = hc && harderOpen.has(ex.id) ? `<span class="harder-opts" role="group" aria-label="Make ${name} harder"><button class="btn small tint" data-action="harder" data-kind="reps" title="Raise today's target by ${hc.reps.by}">+${hc.reps.by} reps</button><button class="btn small tint" data-action="harder" data-kind="set" title="Add one set to today's target">+1 set (+${hc.set.by})</button>${hc.version ? `<button class="btn small tint" data-action="harder" data-kind="version" title="Swap ${name} for ${esc(hc.version.name)}, about ${hc.version.target} a day">Harder version: ${esc(hc.version.name)}</button>` : ''}</span>` : '';
+          return `
+          <div class="ex simple ${isDone ? 'done' : ''} ${m ? '' : 'no-demo'} ${cardsEntered ? '' : 'enter'} ${pop ? 'just-done' : ''}" data-id="${esc(ex.id)}" style="--i:${i}">
+            ${demo}
+            <div class="ex-main">
+              ${head}
+              <div class="ex-count num"><b data-from="${prevCount[ex.id] ?? ''}">${done}</b><span>/ ${target} ${esc(unitOf(ex))}</span><em>${isDone ? (done > target ? `+${done - target} extra` : 'Done') : `${target - done} left`}</em></div>
+            </div>
+            <div class="bar ${isDone ? 'good' : ''}"><i style="--p: ${sFrom}" data-p="${sFill}"></i></div>
+            <div class="ex-actions simple-actions">
+              <button class="btn primary big log-big" data-action="custom" title="Log how many you did">${svgI('plus')}Log</button>
+              <button class="btn tint" data-action="add" data-amount="5" title="Add 5">+5</button>
+              <button class="btn tint" data-action="add" data-amount="10" title="Add 10">+10</button>
+              ${isDone ? '' : `<button class="btn" data-action="full" title="I did all ${target}">${svgI('check')}Done</button>`}
+            </div>
+            ${hc ? `<div class="harder-row"><button class="btn ghost small" data-action="harder-toggle" aria-expanded="${harderOpen.has(ex.id)}">Harder ▸</button>${hist.length ? `<button class="btn ghost small" data-action="easier" title="Go back one step">Easier ▸</button>` : ''}${opts}</div>` : ''}
           </div>`;
         }
         const step = stepOf(target, done);
@@ -2467,6 +2539,9 @@
         if (w) { w.hidden = !w.hidden; btn.setAttribute('aria-expanded', String(!w.hidden)); }
         return;
       }
+      if (action === 'harder-toggle') { if (harderOpen.has(ex.id)) harderOpen.delete(ex.id); else harderOpen.add(ex.id); renderTodayRoutine(); return; }
+      if (action === 'harder') { simpleHarder(ex, btn.dataset.kind); return; }
+      if (action === 'easier') { simpleEasier(ex); return; }
       if (btn.dataset.sb === 'keep') { state.stepKeep = { ...(state.stepKeep || {}), [ex.id]: localDay() }; saveState(state); renderTodayRoutine(); return; }
       if (action === 'log-list') {
         const vals = String(btn.dataset.list || '').split(',').map(Number).filter((n) => n > 0);
@@ -2483,7 +2558,9 @@
         const gp = growOf(ex);
         const chipN = gp ? [Math.max(1, gp.goal - (gp.range.unit === 'sec' ? 5 : 2)), gp.goal, gp.goal + (gp.range.unit === 'sec' ? 5 : 2)] : [5, 10, 25];
         const hasSet = todaySets(ex.id).length > 0;
-        m.innerHTML = `<div class="menu-label">Log one set</div>
+        const mv = !coachOn() && SK ? moveOfEx(ex) : null;
+        const lvl = mv ? SK.levelOf(mv) : null;
+        m.innerHTML = `${lvl && lvl.of > 1 ? `<div class="menu-label lvl-mini">Level ${lvl.level} of ${lvl.of}</div>` : ''}<div class="menu-label">Log one set</div>
           <div class="menu-chips">${chipN.map((n) => `<button data-action="add" data-amount="${n}">${gp ? n + uS(gp.range.unit) : '+' + n}</button>`).join('')}</div>
           <button data-action="sets-form">${svgI('check')}Log sets…</button>
           <button data-action="custom">${svgI('plus')}Add a total (no sets)…</button>
@@ -2618,7 +2695,7 @@
       if (!extra) {
         state.routineDay = localDay();
         // Auto-progression: +5% after 3 days of full routines (not on short-on-time days).
-        if (!growMode() && state.sportySettings.autoProgression && !state.sportySettings.shortOnTime) {
+        if (coachOn() && !growMode() && state.sportySettings.autoProgression && !state.sportySettings.shortOnTime) {
           state.sportySettings.progressionStreak = (state.sportySettings.progressionStreak || 0) + 1;
           if (state.sportySettings.progressionStreak >= 3) {
             state.sportySettings.progressionStreak = 0;
@@ -2984,7 +3061,7 @@
       audio.playClick();
       document.getElementById('setting-coach-persona').value = state.sportySettings.coach || 'beast';
       document.getElementById('setting-auto-progression').checked = !!state.sportySettings.autoProgression;
-      document.getElementById('setting-progress-mode').value = strengthMode() ? 'strength' : growMode() ? 'grow' : 'endurance';
+      document.getElementById('setting-progress-mode').value = state.sportySettings.progressMode === 'endurance' ? 'endurance' : state.sportySettings.progressMode === 'grow' ? 'grow' : 'strength';
       document.getElementById('setting-water-target').value = state.water.targetMl || 2700;
       document.getElementById('setting-glass-size').value = state.water.glassSizeMl || 250;
       document.getElementById('setting-body-weight').value = state.sportySettings.bodyWeight || 75;
@@ -3448,8 +3525,10 @@
 
     // ---- SP3: sets, Build muscle (double progression) or Endurance ----
     /** The coach (default) or "Simple totals" (the old daily totals with a 5% step-up). */
-    function growMode() { return !!SK && state.sportySettings.progressMode !== 'endurance'; }
-    function strengthMode() { return !!SK && state.sportySettings.progressMode === 'strength'; }
+    /** Coach mode (levels, programs, auto-progression) is opt-in: off means Simple mode, your own exercises and targets. */
+    function coachOn() { return !!SK && state.sportySettings.coachMode === true; }
+    function growMode() { return coachOn() && state.sportySettings.progressMode !== 'endurance'; }
+    function strengthMode() { return coachOn() && state.sportySettings.progressMode === 'strength'; }
     /** Today's sets of an exercise (never creates anything). */
     function todaySets(id) { const l = ((state.sets || {})[localDay()] || {})[id]; return Array.isArray(l) ? l : []; }
     /** What the coach reads: your exercises, the day totals (Telegram days too), the sets and today. */
@@ -3733,9 +3812,17 @@
     });
     /** The strip at the top of Today: your rank, a big level badge per exercise, the automatic level-up banner and a thin-routine suggestion. */
     function renderLevelStrip() {
+      document.body.classList.toggle('coach-on', coachOn());
+      const el = document.getElementById('lv-strip');
+      if (!coachOn()) {
+        // Simple mode: no coach card, no rank, no level badges, no best-set screen.
+        const yc = document.getElementById('your-coach');
+        if (yc) yc.hidden = true;
+        if (el) el.hidden = true;
+        return;
+      }
       renderYourCoach();
       maybeOnboard();
-      const el = document.getElementById('lv-strip');
       if (!el) return;
       if (!SK || !SK.placeAll || !SK.levelBadge) { el.hidden = true; return; }
       const active = state.exercises.filter((e) => e.active && !e.plan);
@@ -3798,7 +3885,7 @@
       progKey = '';
       const after = growOf(ex);
       const levelUp = !!(after && after.status === 'ready' && after.next && (!before || before.status !== 'ready'));
-      const ups = levelUps();
+      const ups = coachOn() ? levelUps() : [];
       if (ups.length) pendingLv.push(...ups);
       return { reps: n, record, levelUp, prog: after, move: m, wasDone, wasAll };
     }
@@ -3852,6 +3939,7 @@
       });
       let next = '';
       try {
+        if (!coachOn()) throw 0;
         // Ben adjusts the next session at once (progression, step back, more sets where a muscle is behind).
         const adj = SK.adjustAfterSession(coachCtx());
         const mine = adj.adjustments.find((a) => a.exId === ex.id);
@@ -4085,7 +4173,7 @@
     // ---- try something harder ----
     let suggestions = [];
     function computeSuggestions() {
-      if (!SK) return [];
+      if (!SK || !coachOn()) return [];
       if (growMode()) {
         const inRoutine = currentMoves();
         const out = [];
@@ -4376,8 +4464,14 @@
 
     /** The right-hand column: level-up, next badge. */
     function renderSide() {
-      if (typeof renderCoachCard === 'function') renderCoachCard();
-      renderLevelUp();
+      document.body.classList.toggle('coach-on', coachOn());
+      if (!coachOn()) {
+        // Simple mode: no coach card, no "try something harder" card.
+        ['coach-card', 'levelup-card'].forEach((id) => { const el = document.getElementById(id); if (el) { el.hidden = true; el.innerHTML = ''; } });
+      } else {
+        if (typeof renderCoachCard === 'function') renderCoachCard();
+        renderLevelUp();
+      }
       computeBadgesNow();
       renderNextBadge();
       scheduleBadgeCheck();
@@ -4759,6 +4853,7 @@
         if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_SUMMARY', payload }, location.origin);
       } catch (e) {}
     }
+    document.getElementById('btn-wm-simple').addEventListener('click', () => openWM(undefined, null));
     document.getElementById('btn-workout-mode').addEventListener('click', () => { const s = growMode() ? todaysPlanIds() : null; openWM(undefined, s); });
     document.getElementById('wm-close').addEventListener('click', closeWM);
     document.getElementById('wm-prev').addEventListener('click', () => { wm.i--; wm.restEnds = 0; wm.warm = false; clearInterval(wm.tick); const ex = activeEx()[Math.max(0, wm.i)]; if (ex) wm.reps = suggestReps(ex); renderWM(); });
@@ -5112,7 +5207,17 @@
 
     // ===== The Plan tab: a week that fits your minutes =====
     const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    document.getElementById('coach-mode-toggle').addEventListener('change', (e) => {
+      if (!SK) return;
+      state = SK.setCoachMode(state, !!e.target.checked);
+      onbChecked = false;
+      progKey = '';
+      saveState(state);
+      showToast(state.sportySettings.coachMode ? 'Coach mode is on: levels, programs and auto-progression are back.' : 'Coach mode is off. Your own routine is back; nothing was deleted.');
+      renderAll();
+    });
     function renderPlan() {
+      document.getElementById('coach-mode-toggle').checked = coachOn();
       if (!SK) return;
       const pr = planPrefs();
       const segOn = (id, attr, val) => document.querySelectorAll(`#${id} [${attr}]`).forEach((b) => { const on = b.getAttribute(attr) === String(val); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
@@ -5377,6 +5482,7 @@
       let want = sub;
       try { want = want || localStorage.getItem('st_sub'); } catch (e) {}
       if (!['levels', 'charts', 'records', 'badges', 'history'].includes(want)) want = 'levels';
+      if (want === 'levels' && !coachOn()) want = 'records';
       panel.dataset.sub = want;
       document.querySelectorAll('#pr-sub [data-sub]').forEach((x) => { const on = x.dataset.sub === want; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); });
       try { localStorage.setItem('st_sub', want); } catch (e) {}

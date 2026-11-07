@@ -34,8 +34,8 @@ describe('migrateRoutine', () => {
     b.exercises[0].target = 123
     const s = migrateRoutine(b)
     expect(s.sportySettings.progressMode).toBe('strength')
-    expect(s.sportySettings.routineV).toBe(4)
-    expect(s.exercises.map((e) => e.target)).toEqual([123, 60, 50, 30].map((_, i) => b.exercises[i].target))
+    expect(s.sportySettings.routineV).toBe(5)
+    expect(s.exercises.map((e) => e.target)).toEqual([123, 60, 50, 30])
     expect(s.exercises.filter((e) => e.active).length).toBe(3)
   })
   it('v4: a coach user moves to Strength, a Simple totals choice made at v3 stays', () => {

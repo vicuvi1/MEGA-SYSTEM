@@ -1,8 +1,9 @@
-// Sport Track's daily routine (v3: the coach is the default way Today works): your own exercises (push-ups, sit-ups, press, anything you added) are what
+// Sport Track's daily routine (v5: Simple mode is the default, Coach mode is opt-in): your own exercises (push-ups, sit-ups, press, squats, anything you added) are what
 // Today shows. The generated plan session and "Build muscle" are opt-in. Pure, so it is tested.
+import { restoreOwnRoutine } from './sportSimple'
 
 /** Bump when a new routine migration is needed. */
-export const ROUTINE_VERSION = 4
+export const ROUTINE_VERSION = 5
 
 /**
  * One time: anyone whose Today turned into the plan (or an empty rest day) gets "My routine" back, with
@@ -10,11 +11,15 @@ export const ROUTINE_VERSION = 4
  * "Build muscle" picked after this version (they are stored as `true` / `'grow'` then).
  */
 export function migrateRoutine<T extends { exercises?: any[]; sportySettings?: any }>(state: T): T {
+  return toV5(toV4(state))
+}
+
+function toV4<T extends { exercises?: any[]; sportySettings?: any }>(state: T): T {
   const ss = state.sportySettings ?? {}
-  if (Number(ss.routineV) >= ROUTINE_VERSION) return state
+  if (Number(ss.routineV) >= 4) return state
   const from = Number(ss.routineV) || 0
   const exercises = (state.exercises ?? []).map((e) => ({ ...e }))
-  const settings = { ...ss, routineV: ROUTINE_VERSION }
+  const settings = { ...ss, routineV: 4 }
   if (from < 2) {
   // The plan was on by default (no choice stored): back to your own routine.
   if (settings.planFollow !== true) settings.planFollow = false
@@ -36,4 +41,16 @@ export function migrateRoutine<T extends { exercises?: any[]; sportySettings?: a
   // Never an empty routine: if everything of yours is off, your own exercises come back on.
   if (!exercises.some((e) => e.active) && exercises.length) for (const e of exercises) if (!e.plan) e.active = true
   return { ...state, exercises, sportySettings: settings }
+}
+
+/**
+ * v5: the owner wanted the simple way back. Simple mode is the default (`coachMode: false`), their own exercises and
+ * targets come back, and the coach's moves are hidden, not deleted. Coach mode is a switch in the Plan tab.
+ */
+function toV5<T extends { exercises?: any[]; sportySettings?: any }>(state: T): T {
+  const ss = state.sportySettings ?? {}
+  if (Number(ss.routineV) >= ROUTINE_VERSION) return state
+  const restored: any = restoreOwnRoutine(state as any)
+  restored.sportySettings = { ...ss, routineV: ROUTINE_VERSION, coachMode: false }
+  return restored
 }

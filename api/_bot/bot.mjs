@@ -442,7 +442,10 @@ function defaultSport(today) {
 			glassSizeMl: 250
 		},
 		history: [],
-		sportySettings: { autoProgression: true }
+		sportySettings: {
+			autoProgression: true,
+			coachMode: false
+		}
 	};
 }
 function bar(done, target, len = 8) {
@@ -10709,6 +10712,14 @@ function logBotSets(st, name, reps, day, now = Date.now(), opts = {}) {
 	const ex = s && findSharedExercise(s, name);
 	if (!ex || !reps.length) return null;
 	const id = String(ex.id ?? ex.name);
+	if (s.sportySettings?.coachMode === false) {
+		s.sets = addSets(s.sets, day, id, reps, now, { kg: opts.kg });
+		const tgt = Number(ex.target) || 0;
+		return {
+			st: s,
+			line: `✅ Logged <b>${receiptSets(String(ex.name ?? name), reps, opts.unit ?? "reps", opts.kg ?? 0)}</b>.\nToday: <b>${Number(ex.doneToday) || 0}</b>${tgt ? ` of ${tgt}` : ""} ${String(ex.name ?? name).toLowerCase()}.`
+		};
+	}
 	const before = bestSet(s.sets, id);
 	s.sets = addSets(s.sets, day, id, reps, now, { kg: opts.kg });
 	const top = Math.max(...reps);

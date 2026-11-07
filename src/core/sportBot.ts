@@ -96,6 +96,12 @@ export function logBotSets(st: any, name: string, reps: number[], day: string, n
   const ex = s && findSharedExercise(s, name)
   if (!ex || !reps.length) return null
   const id = String(ex.id ?? ex.name)
+  // Simple mode: Ben only confirms the log and gives today's total (the page already counted it in doneToday).
+  if (s.sportySettings?.coachMode === false) {
+    s.sets = addSets(s.sets, day, id, reps, now, { kg: opts.kg })
+    const tgt = Number(ex.target) || 0
+    return { st: s, line: `✅ Logged <b>${receiptSets(String(ex.name ?? name), reps, opts.unit ?? 'reps', opts.kg ?? 0)}</b>.\nToday: <b>${Number(ex.doneToday) || 0}</b>${tgt ? ` of ${tgt}` : ''} ${String(ex.name ?? name).toLowerCase()}.` }
+  }
   const before = bestSet(s.sets, id)
   s.sets = addSets(s.sets, day, id, reps, now, { kg: opts.kg })
   const top = Math.max(...reps)

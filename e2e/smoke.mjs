@@ -281,6 +281,49 @@ try {
     await pg.waitForTimeout(1500)
     if ((await pg.evaluate(() => window.__notes.length)) !== 1) throw new Error('the same workout got a second note')
   })
+  // Simple mode is the default: your own exercises, a big Log, +5/+10, Done and a small "Harder ▸" (+reps, +1 set, a harder version).
+  await step('Sport Track simple Today: your own exercises, Harder raises a target, no coach UI', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch button').first().click()
+    await pg.waitForTimeout(2500)
+    const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+    if (!frame) throw new Error('no Sport Track frame')
+    await frame.click('.st-tab[data-tab="today"]')
+    await frame.waitForSelector('.ex.simple', { timeout: 10000 })
+    const names = (await frame.locator('.ex .ex-name').allInnerTexts()).join('|').toLowerCase()
+    for (const n of ['push-ups', 'sit-ups', 'press']) if (!names.includes(n)) throw new Error(`simple Today does not list ${n} (got: ${names})`)
+    for (const sel of ['.ex .log-big', '.ex [data-amount="5"]', '.ex [data-amount="10"]', '.ex [data-action="full"]', '.ex [data-action="harder-toggle"]', '.ex .ex-demo']) if (!(await frame.locator(sel).first().count())) throw new Error(`a simple card lacks ${sel}`)
+    for (const sel of ['.ex .lv-big', '.ex [data-tune]', '#lv-strip', '#your-coach', '.ex .ex-effort', '#routine-section .hero-main']) if (await frame.locator(sel).first().isVisible().catch(() => false)) throw new Error(`simple mode still shows ${sel}`)
+    if (process.env.SPORT_SHOTS) { await pg.addStyleTag({ content: '.toasts { display: none !important; }' }); await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/simple-today.png` }) }
+    const card = (n) => frame.locator(`.ex.simple:has(.ex-name:text-is("${n}"))`)
+    const targetOf = async (n) => Number((await card(n).locator('.ex-count span').innerText()).replace(/[^0-9]/g, ''))
+    const t0 = await targetOf('Push-ups')
+    const s0 = await targetOf('Sit-ups')
+    // Harder ▸ +reps raises only that target.
+    await card('Push-ups').locator('[data-action="harder-toggle"]').click()
+    await card('Push-ups').locator('[data-action="harder"][data-kind="reps"]').click()
+    await frame.waitForFunction(([t]) => [...document.querySelectorAll('.ex.simple')].some((c) => /Push-ups/.test(c.querySelector('.ex-name')?.textContent ?? '') && Number((c.querySelector('.ex-count span')?.textContent ?? '').replace(/[^0-9]/g, '')) === t + 5), [t0], { timeout: 5000 })
+    if ((await targetOf('Sit-ups')) !== s0) throw new Error('Harder on push-ups changed sit-ups')
+    // Easier ▸ goes back.
+    await card('Push-ups').locator('[data-action="easier"]').click()
+    await frame.waitForFunction(([t]) => [...document.querySelectorAll('.ex.simple')].some((c) => /Push-ups/.test(c.querySelector('.ex-name')?.textContent ?? '') && Number((c.querySelector('.ex-count span')?.textContent ?? '').replace(/[^0-9]/g, '')) === t), [t0], { timeout: 5000 })
+    // Harder ▸ a harder version swaps only that one exercise.
+    await card('Push-ups').locator('[data-action="harder-toggle"]').click()
+    await card('Push-ups').locator('[data-action="harder"][data-kind="version"]').click()
+    await frame.waitForFunction(() => !/(^|\|)push-ups(\||$)/.test([...document.querySelectorAll('.ex .ex-name')].map((n) => n.textContent.trim().toLowerCase()).join('|')), null, { timeout: 5000 })
+    const swapped = (await frame.locator('.ex .ex-name').allInnerTexts()).join('|').toLowerCase()
+    for (const n of ['sit-ups', 'press']) if (!swapped.includes(n)) throw new Error(`the swap changed ${n} too (got: ${swapped})`)
+    // Easier ▸ brings the plain push-ups back.
+    await frame.locator('.ex.simple [data-action="easier"]').first().click()
+    await frame.waitForFunction(() => /(^|\|)push-ups(\||$)/.test([...document.querySelectorAll('.ex .ex-name')].map((n) => n.textContent.trim().toLowerCase()).join('|')), null, { timeout: 5000 })
+    // The Plan tab holds the one switch; the rest of it stays hidden while it is off.
+    await frame.click('.st-tab[data-tab="plan"]')
+    await frame.waitForSelector('#coach-switch', { state: 'visible', timeout: 5000 })
+    if (!/Coach mode \(levels, programs, auto-progression\)/.test(await frame.locator('#coach-switch').innerText())) throw new Error('no Coach mode switch')
+    if (await frame.locator('#prog-card').isVisible()) throw new Error('coach programs show while Coach mode is off')
+    await frame.click('.st-tab[data-tab="today"]')
+  }, { retries: 1 })
   await step('Sport Track Today: hero, exercise cards, water, menus, fits laptop and phone', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 }) // a retry starts from the usual size
     await open('body')
@@ -288,6 +331,10 @@ try {
     await pg.waitForTimeout(2500)
     let frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
+    // The coach steps below need Coach mode: it is off by default, one switch in the Plan tab.
+    await frame.click('.st-tab[data-tab="plan"]')
+    await frame.evaluate(() => { const c = document.getElementById('coach-mode-toggle'); if (!c.checked) c.click() })
+    await frame.waitForSelector('#prog-card', { state: 'visible', timeout: 5000 })
     // The first-open best-set screen is its own step below; here it is skipped.
     await frame.waitForTimeout(900)
     if (await frame.locator('#modal-onboard.open').count()) await frame.click('#onboard-skip')
@@ -452,8 +499,8 @@ try {
     if (!frame) throw new Error('no Sport Track frame')
     const K = 'life_sport_tracker_v1'
     // A fresh start for this step; the state is put back at the end.
-    await frame.evaluate((k) => { if (!localStorage.getItem('smoke_sport_backup')) localStorage.setItem('smoke_sport_backup', localStorage.getItem(k) ?? ''); const s = JSON.parse(localStorage.getItem(k) || '{}'); delete s.onboarded; localStorage.setItem(k, JSON.stringify(s)); location.reload() }, K)
-    await frame.waitForSelector('#modal-onboard.open', { timeout: 10000 })
+    await frame.evaluate((k) => { if (!localStorage.getItem('smoke_sport_backup')) localStorage.setItem('smoke_sport_backup', localStorage.getItem(k) ?? ''); const s = JSON.parse(localStorage.getItem(k) || '{}'); delete s.onboarded; s.sportySettings = { ...(s.sportySettings || {}), coachMode: true }; localStorage.setItem(k, JSON.stringify(s)); location.reload() }, K)
+    await frame.waitForSelector('#modal-onboard.open', { timeout: 10000 }).catch(async (e) => { throw new Error(e.message.split('\n')[0] + ' DEBUG ' + JSON.stringify(await frame.evaluate((k) => ({ ls: JSON.parse(localStorage.getItem(k) || '{}').sportySettings, on: typeof coachOn === 'function' ? coachOn() : 'n/a' }), K))) })
     if (process.env.SPORT_SHOTS) await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/onboarding.png` })
     await frame.fill('#onb-fields input[name="pushup"]', '50')
     await frame.click('#onb-go')

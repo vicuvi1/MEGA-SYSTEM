@@ -4890,15 +4890,242 @@ var SportKit = (function(exports) {
 			added
 		};
 	}
+	// src/core/sportSimple.ts
+	var to5 = (n) => Math.max(5, Math.round(n / 5) * 5);
+	/** How many reps "+1 set" adds: a third of the daily target, in fives (or the size you set). */
+	var setSize = (ex) => Number(ex.setReps) > 0 ? Math.round(Number(ex.setReps)) : to5((Number(ex.target) || 0) / 3);
+	function harderChoices(ex) {
+		const t = Number(ex.target) || 0;
+		const s = setSize(ex);
+		const m = moveOf(ex);
+		const nx = m ? nextStep(m) : null;
+		return {
+			reps: {
+				by: 5,
+				to: t + 5
+			},
+			set: {
+				by: s,
+				to: t + s
+			},
+			version: nx && m ? {
+				moveId: nx.id,
+				name: nx.name,
+				target: startTarget(m, nx, t),
+				unit: nx.unit
+			} : null
+		};
+	}
+	/** Make one exercise harder. Returns a new list; only that exercise (or its swap) changes. A version swap turns the old one off, never deletes it. */
+	function makeHarder(exercises, id, kind, newId = `ex_${Date.now()}`) {
+		const ex = exercises.find((e) => e.id === id);
+		if (!ex) return null;
+		const c = harderChoices(ex);
+		const hist = [...ex.harder ?? []];
+		if (kind === "reps" || kind === "set") {
+			const step = kind === "reps" ? c.reps : c.set;
+			const next = {
+				...ex,
+				target: step.to,
+				harder: [...hist, {
+					kind,
+					by: step.by
+				}]
+			};
+			return {
+				exercises: exercises.map((e) => e.id === id ? next : e),
+				id
+			};
+		}
+		if (!c.version) return null;
+		const fresh = {
+			id: newId,
+			name: c.version.name,
+			target: c.version.target,
+			unit: c.version.unit,
+			active: ex.active !== false,
+			doneToday: 0,
+			move: c.version.moveId,
+			harder: [...hist, {
+				kind: "version",
+				from: ex.id,
+				fromTarget: Number(ex.target) || 0
+			}]
+		};
+		const out = exercises.map((e) => e.id === id ? {
+			...e,
+			active: false
+		} : e);
+		const at = out.findIndex((e) => e.id === id);
+		out.splice(at + 1, 0, fresh);
+		return {
+			exercises: out,
+			id: fresh.id
+		};
+	}
+	/** Go back one step (the last "Harder" you picked on this exercise). */
+	function makeEasier(exercises, id) {
+		const ex = exercises.find((e) => e.id === id);
+		const hist = [...ex?.harder ?? []];
+		const last = hist.pop();
+		if (!ex || !last) return null;
+		if (last.kind === "version") {
+			if (!exercises.some((e) => e.id === last.from)) return null;
+			return {
+				exercises: exercises.map((e) => e.id === last.from ? {
+					...e,
+					active: true,
+					target: last.fromTarget || e.target
+				} : e.id === id ? {
+					...e,
+					active: false,
+					harder: hist
+				} : e),
+				id: last.from
+			};
+		}
+		const next = {
+			...ex,
+			target: Math.max(1, (Number(ex.target) || 0) - last.by),
+			harder: hist
+		};
+		return {
+			exercises: exercises.map((e) => e.id === id ? next : e),
+			id
+		};
+	}
+	/** The base moves of the best-set questions: a plain push-up, squat or sit-up is yours, not the coach's. */
+	var BASE = /* @__PURE__ */ new Set([
+		"pushup",
+		"squat",
+		"situp"
+	]);
+	var tsOf = (id) => {
+		const m = /^ex_(\d{12,})/.exec(String(id));
+		return m ? Number(m[1]) : 0;
+	};
+	/** Moves the coach added: marked, auto-switched, or created on/after best-set onboarding (other than a plain push-up, squat or sit-up). */
+	function coachAdded(state) {
+		const out = /* @__PURE__ */ new Set();
+		const since = /^\d{4}-\d\d-\d\d$/.test(String(state.onboarded ?? "")) ? Date.parse(String(state.onboarded) + "T00:00:00Z") - 1296e5 : null;
+		const auto = new Set((state.autoUp?.items ?? []).map((i) => i.newId));
+		for (const e of state.exercises ?? []) {
+			if (e.plan) continue;
+			if (e.coach === true || auto.has(e.id)) out.add(e.id);
+			else if (since != null && tsOf(e.id) >= since && !BASE.has(String(moveOf(e)?.id))) out.add(e.id);
+		}
+		return out;
+	}
+	/**
+	* One time: your own routine is back. Coach-added moves are hidden (kept, with their history), your own moves the
+	* coach turned off are on again, and your own daily targets (`endTarget`) are restored. Never empties the routine.
+	*/
+	function restoreOwnRoutine(state) {
+		const list = (state.exercises ?? []).map((e) => ({ ...e }));
+		const coach = coachAdded({
+			...state,
+			exercises: list
+		});
+		const fams = /* @__PURE__ */ new Set();
+		for (const e of list) if (coach.has(e.id) && e.active) fams.add(String(moveOf(e)?.family ?? ""));
+		fams.delete("");
+		const on = [];
+		const off = [];
+		for (const e of list) if (coach.has(e.id)) {
+			e.coach = true;
+			if (e.active) on.push(e.id);
+			e.active = false;
+		}
+		for (const f of fams) {
+			const best = list.filter((e) => !coach.has(e.id) && !e.plan && !e.active && moveOf(e)?.family === f).sort((a, b) => (moveOf(a)?.diff ?? 0) - (moveOf(b)?.diff ?? 0)).pop();
+			if (best) {
+				best.active = true;
+				off.push(best.id);
+			}
+		}
+		for (const e of list) if (!coach.has(e.id) && e.endTarget != null) {
+			e.target = e.endTarget;
+			delete e.endTarget;
+		}
+		if (!list.some((e) => e.active) && list.length) {
+			for (const e of list) if (e.coach && on.includes(e.id)) e.active = true;
+			on.length = 0;
+		}
+		return {
+			...state,
+			exercises: list,
+			coachHidden: {
+				on,
+				off,
+				applied: false
+			}
+		};
+	}
+	/** Coach mode on: the coach's moves come back; off: your own routine again. Nothing is deleted either way. */
+	function setCoachMode(state, on) {
+		const ch = state.coachHidden ?? {
+			on: [],
+			off: [],
+			applied: false
+		};
+		const ss = {
+			...state.sportySettings ?? {},
+			coachMode: on
+		};
+		const ex = state.exercises ?? [];
+		if (on && !ch.applied && (ch.on.length || ch.off.length)) {
+			const exercises = ex.map((e) => ch.on.includes(e.id) ? {
+				...e,
+				active: true
+			} : ch.off.includes(e.id) ? {
+				...e,
+				active: false
+			} : e);
+			return {
+				...state,
+				exercises,
+				sportySettings: ss,
+				coachHidden: {
+					...ch,
+					applied: true
+				}
+			};
+		}
+		if (!on && ch.applied) {
+			const exercises = ex.map((e) => ch.on.includes(e.id) ? {
+				...e,
+				active: false
+			} : ch.off.includes(e.id) ? {
+				...e,
+				active: true
+			} : e);
+			return {
+				...state,
+				exercises,
+				sportySettings: ss,
+				coachHidden: {
+					...ch,
+					applied: false
+				}
+			};
+		}
+		return {
+			...state,
+			sportySettings: ss
+		};
+	}
 	// src/core/sportRoutine.ts
 	/** Bump when a new routine migration is needed. */
-	var ROUTINE_VERSION = 4;
+	var ROUTINE_VERSION = 5;
 	/**
 	* One time: anyone whose Today turned into the plan (or an empty rest day) gets "My routine" back, with
 	* their own exercises and the daily targets they had. A choice made on purpose is kept: "The plan" or
 	* "Build muscle" picked after this version (they are stored as `true` / `'grow'` then).
 	*/
 	function migrateRoutine(state) {
+		return toV5(toV4(state));
+	}
+	function toV4(state) {
 		const ss = state.sportySettings ?? {};
 		if (Number(ss.routineV) >= 4) return state;
 		const from = Number(ss.routineV) || 0;
@@ -4927,6 +5154,21 @@ var SportKit = (function(exports) {
 			exercises,
 			sportySettings: settings
 		};
+	}
+	/**
+	* v5: the owner wanted the simple way back. Simple mode is the default (`coachMode: false`), their own exercises and
+	* targets come back, and the coach's moves are hidden, not deleted. Coach mode is a switch in the Plan tab.
+	*/
+	function toV5(state) {
+		const ss = state.sportySettings ?? {};
+		if (Number(ss.routineV) >= 5) return state;
+		const restored = restoreOwnRoutine(state);
+		restored.sportySettings = {
+			...ss,
+			routineV: 5,
+			coachMode: false
+		};
+		return restored;
 	}
 	// src/core/sportLevels.ts
 	var MEANING = [
@@ -8216,6 +8458,7 @@ var SportKit = (function(exports) {
 	exports.bodyLines = bodyLines;
 	exports.boxOf = boxOf;
 	exports.buildSession = buildSession;
+	exports.coachAdded = coachAdded;
 	exports.coachCard = coachCard;
 	exports.coachFor = coachFor;
 	exports.compareThen = compareThen;
@@ -8239,6 +8482,7 @@ var SportKit = (function(exports) {
 	exports.growTips = growTips;
 	exports.hardSets = hardSets;
 	exports.hardSetsByMuscle = hardSetsByMuscle;
+	exports.harderChoices = harderChoices;
 	exports.importSets = importSets;
 	exports.isRecord = isRecord;
 	exports.isTrainingQuestion = isTrainingQuestion;
@@ -8250,6 +8494,8 @@ var SportKit = (function(exports) {
 	exports.loadOf = loadOf;
 	exports.loggedMoves = loggedMoves;
 	exports.loopLength = loopLength;
+	exports.makeEasier = makeEasier;
+	exports.makeHarder = makeHarder;
 	exports.makeSet = makeSet;
 	exports.matchExercise = matchExercise;
 	exports.matchMove = matchMove;
@@ -8284,6 +8530,7 @@ var SportKit = (function(exports) {
 	exports.recordsWall = recordsWall;
 	exports.restFor = restFor;
 	exports.restText = restText;
+	exports.restoreOwnRoutine = restoreOwnRoutine;
 	exports.reviewDue = reviewDue;
 	exports.seriesOf = seriesOf;
 	exports.sessionFor = sessionFor;
@@ -8291,7 +8538,9 @@ var SportKit = (function(exports) {
 	exports.sessionText = sessionText;
 	exports.sessionsFor = sessionsFor;
 	exports.sessionsOf = sessionsOf;
+	exports.setCoachMode = setCoachMode;
 	exports.setScore = setScore;
+	exports.setSize = setSize;
 	exports.setsOn = setsOn;
 	exports.setsText = setsText;
 	exports.shiftLevel = shiftLevel;
