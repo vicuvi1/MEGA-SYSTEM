@@ -75,10 +75,17 @@ export function useWater(): Water & { add: (ml: number) => Promise<Water>; set: 
   const load = useCallback(() => void readWater().then(setW).catch(() => {}), [])
   useEffect(() => {
     load()
+    // Quick add: the ring moves at once; the log's real sum follows when the write lands.
+    const optimistic = (e: Event) => {
+      const ml = Number((e as CustomEvent).detail?.ml) || 0
+      if (ml) setW((cur) => ({ ...cur, ml: Math.max(0, cur.ml + ml) }))
+    }
+    window.addEventListener('life-water-optimistic', optimistic)
     window.addEventListener('life-water-changed', load)
     window.addEventListener('life-sport-changed', load)
     window.addEventListener('focus', load)
     return () => {
+      window.removeEventListener('life-water-optimistic', optimistic)
       window.removeEventListener('life-sport-changed', load)
       window.removeEventListener('life-water-changed', load)
       window.removeEventListener('focus', load)

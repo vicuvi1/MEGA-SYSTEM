@@ -103,6 +103,12 @@ docked on the left or right edge (a small vertical tab that slides out), or
 floating where you dropped it. Idle at an edge it is fully hidden: touch that
 screen edge with the mouse, or press Ctrl+Alt+Space anywhere, to bring it out.
 
+**Quick add from anywhere:** Alt+Space (Ctrl+Shift+Space when another app
+holds it; Settings → Quick add, tray → Quick add) opens a small box over any
+app. Like the island it never opens the data: the line goes to the app window,
+which saves it, and a toast with Undo shows for 5 seconds. Details:
+[areas/workflow.md](areas/workflow.md) ("Quick add from anywhere").
+
 Life System starts with Windows (`--hidden`, tray only) from the first run of
 an installed copy; the tray menu turns that and the island off, and Quit ends
 it for real.

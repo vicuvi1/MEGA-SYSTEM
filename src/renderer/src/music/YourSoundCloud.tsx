@@ -281,7 +281,7 @@ export function LikeButton({ press, id }: { press: Press; id: string }) {
 }
 
 /** What of ours can lie over the page: the view would hide it, so it steps aside while one shows over its box. */
-const OVERLAYS = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], .nt-stack > *, .nv-bar, [role="menu"], [role="listbox"], .palette-back, .quick-command-backdrop, .toasts > *, .zoom-toast, .sheet'
+const OVERLAYS = '[role="dialog"], [role="alertdialog"], [aria-modal="true"], .nt-stack > *, .nv-bar, [role="menu"], [role="listbox"], .palette-back, .qa-back, .toasts > *, .zoom-toast, .sheet'
 function overlayRects(): Rect[] {
   const out: Rect[] = []
   document.querySelectorAll<HTMLElement>(OVERLAYS).forEach((el) => {

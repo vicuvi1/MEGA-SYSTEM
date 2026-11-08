@@ -45,12 +45,15 @@ function insertRow(db: DB, id: string, at: string, day: string, kind: string, am
  * `day` may be a past day (up to 14 days back); it is then marked "added later".
  * Returns the meal, or null when there is nothing to save.
  */
-export function addFoodMeal(db: DB, input: { items: unknown[]; name?: string; day?: string; type?: MealType; supp?: boolean; at?: string }, source: string, now = new Date()): { id: string; day: string; totals: Totals } | null {
+export function addFoodMeal(db: DB, input: { items: unknown[]; name?: string; day?: string; type?: MealType; supp?: boolean; at?: string; id?: string }, source: string, now = new Date()): { id: string; day: string; totals: Totals } | null {
   const items = (Array.isArray(input.items) ? input.items : []).map(cleanItem).filter((x): x is FoodItem => !!x).slice(0, 20)
   if (!items.length) return null
   const today = sportToday(now)
   const day = input.day && /^\d{4}-\d{2}-\d{2}$/.test(input.day) && input.day <= today && input.day >= addDays(today, -PAST_DAYS) ? input.day : today
-  const id = `fd-${rid()}`
+  // Quick add sends its own id, so the same meal sent twice (a retry) is saved once.
+  const own = typeof input.id === 'string' && /^fd-[a-z0-9]{1,24}$/.test(input.id) ? input.id : ''
+  if (own && db.prepare('SELECT 1 FROM body_log WHERE id = ?').get(proteinRowId(own))) return { id: own, day, totals: sumItems(items) }
+  const id = own || `fd-${rid()}`
   const at = input.at && Number.isFinite(new Date(input.at).getTime()) ? new Date(input.at).toISOString() : now.toISOString()
   const totals = sumItems(items)
   insertRow(db, proteinRowId(id), at, day, FOOD_KIND, totals.protein, source)

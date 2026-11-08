@@ -98,7 +98,7 @@ const Career = lazyNamed(() => import('./pages/Career'), 'Career')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
 const CustomCenter = lazyNamed(() => import('./pages/CustomCenter'), 'CustomCenter')
-const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
+const QuickHost = lazyNamed(() => import('./quick/QuickHost'), 'QuickHost')
 
 
 /** Runs `fn` once the page is idle (at the latest after `ms`); returns a cancel. */
@@ -879,7 +879,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         {/* LF7: the level-up cinematic (new ranks and season moments, once each). */}
         <Suspense fallback={null}>{summary && life.saga && <CinematicHost level={summary.level?.level ?? null} />}</Suspense>
         <Suspense fallback={null}>
-          {quickCommandOpen && <QuickCommandBar open onClose={() => setQuickCommandOpen(false)} onRefreshWallet={onWallet} />}
+          <QuickHost open={quickCommandOpen} onClose={() => setQuickCommandOpen(false)} />
         </Suspense>
         <MobileBottomBar page={page} onGo={go} onQuickCommand={() => setQuickCommandOpen(true)} />
       </div>

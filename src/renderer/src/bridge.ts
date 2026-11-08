@@ -112,6 +112,8 @@ export type Bridge = LifeApi & {
       entries(kind?: string, day?: string): Promise<import('@core/bodyLog').LogEntry[]>
       toggle(id: string): Promise<{ removed: boolean; day: string } | null>
       repair(): Promise<{ day: string; what: string; from: number; to: number }[]>
+      /** Sport Track's checklist (id, name) from the shared copy. */
+      exercises?(): Promise<{ id: string; name: string }[]>
     }
     /** BD1–BD18: protein, saved meals, supplements, tape measurements, today's training dose, the weekly body report. */
     bodyPlus?: import('./web/bodyPlusBridge').BodyPlusApi

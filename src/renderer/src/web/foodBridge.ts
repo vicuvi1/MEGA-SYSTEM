@@ -9,7 +9,7 @@ import type { FoodItem, MealType } from '@core/food'
 export interface FoodApi {
   /** Today, or a past day (up to 14 days back) you are editing. */
   view(day?: string): Promise<FoodView>
-  add(meal: { items: FoodItem[]; name?: string; day?: string; type?: MealType }, day?: string): Promise<FoodView>
+  add(meal: { items: FoodItem[]; name?: string; day?: string; type?: MealType; id?: string }, day?: string): Promise<FoodView>
   /** Removes a meal, or brings a removed one back. */
   toggle(mealId: string, day?: string): Promise<FoodView>
   fav(meal: { name: string; items: FoodItem[] }, day?: string): Promise<FoodView>

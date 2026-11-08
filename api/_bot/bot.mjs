@@ -7488,7 +7488,13 @@ function addFoodMeal(db, input, source, now = /* @__PURE__ */ new Date()) {
 	if (!items.length) return null;
 	const today = sportToday(now);
 	const day = input.day && /^\d{4}-\d{2}-\d{2}$/.test(input.day) && input.day <= today && input.day >= addDays$8(today, -14) ? input.day : today;
-	const id = `fd-${rid$1()}`;
+	const own = typeof input.id === "string" && /^fd-[a-z0-9]{1,24}$/.test(input.id) ? input.id : "";
+	if (own && db.prepare("SELECT 1 FROM body_log WHERE id = ?").get(proteinRowId(own))) return {
+		id: own,
+		day,
+		totals: sumItems(items)
+	};
+	const id = own || `fd-${rid$1()}`;
 	const at = input.at && Number.isFinite(new Date(input.at).getTime()) ? new Date(input.at).toISOString() : now.toISOString();
 	const totals = sumItems(items);
 	insertRow(db, proteinRowId(id), at, day, FOOD_KIND, totals.protein, source);
