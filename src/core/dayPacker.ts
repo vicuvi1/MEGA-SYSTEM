@@ -12,6 +12,7 @@ import { freeGaps, type CalEvent } from './dayTime'
 import { fromMin, toMin, type AlsoItem, type DayProposal, type DeferredItem, type PlanBlock } from './rhythm'
 import type { WorkToday } from './lifeFit'
 import { pickWorkoutSlot, slotTitle } from './workoutSlot'
+import { alsoOpen, dedupePlan, dedupeTasks, eventFor, fixedAhead, sameThing, sportAhead } from './planDedupe'
 
 export interface PlanTask {
   id?: string
@@ -244,14 +245,17 @@ export function packDay(p: PackInputs): DayProposal {
   // A plan always starts from now (10:00 → 10:05), never with blocks already in the past.
   const after = planStartAt(p.now)
 
-  // Every task once (Todoist can repeat a task in "today" and "@today").
-  const seen = new Set<string>()
-  const tasks = rankTasks(p.tasks, p.today).filter((t) => {
-    const k = t.id ? `#${t.id}` : key(t.content)
-    if (!t.content.trim() || seen.has(k)) return false
-    seen.add(k)
-    return true
-  })
+  // Every task once: by id (Todoist can repeat a task in "today" and "@today"), then by its words
+  // (an app copy of a Todoist task, "Email Ana" and "email ana."). The most important copy stays.
+  const tasks = dedupeTasks(rankTasks(p.tasks, p.today))
+  // A task that is the same thing as a calendar event still ahead ("gym" and the 17:00 "Gym (45 min)",
+  // "Weekly review: …" and the "Weekly review" event) is done at the event: no block of its own.
+  const fixed = fixedAhead(p.events, p.today, after)
+  const covered = new Map<PlanTask, string>()
+  for (const t of tasks) {
+    const e = eventFor(t.content, fixed)
+    if (e) covered.set(t, e.start)
+  }
   const est = new Map(tasks.map((t) => [t, p.estimate ? p.estimate(t) : estimateMinutes(t)]))
   // What he asked for today (⭐ @today, or added in the chat for today) is never moved to tomorrow.
   const pinned = (t: PlanTask) => !!t.asked || !!t.starred
@@ -260,27 +264,30 @@ export function packDay(p: PackInputs): DayProposal {
   const mustdos: string[] = []
   const mustTasks = new Set<PlanTask>()
   const addMust = (title: string) => {
-    if (mustdos.length >= 3 || !title.trim() || mustdos.some((m) => key(m) === key(title))) return
+    if (mustdos.length >= 3 || !title.trim() || mustdos.some((m) => sameThing(m, title))) return
     mustdos.push(title.trim())
-    const t = tasks.find((x) => key(x.content) === key(title))
+    const t = tasks.find((x) => key(x.content) === key(title)) ?? tasks.find((x) => sameThing(x.content, title))
     if (t) mustTasks.add(t)
   }
   p.top3.forEach(addMust)
-  tasks.forEach((t) => addMust(t.content))
+  // Picked for him: tasks that still need a time (one already at an event is not picked over them).
+  tasks.filter((t) => !covered.has(t)).forEach((t) => addMust(t.content))
 
   // Chunks of work: goals, each must-do on its own, the rest grouped by project, quick ones batched.
   const chunks: Chunk[] = (p.goals ?? []).map((g) => ({ title: g.title, minutes: Math.min(cap, Math.max(25, g.minutes)), kind: 'goal' as const, tasks: [], hard: true }))
   const quick: PlanTask[] = []
   const others: PlanTask[] = []
   for (const m of mustdos) {
-    const t = tasks.find((x) => key(x.content) === key(m))
+    const t = tasks.find((x) => key(x.content) === key(m)) ?? tasks.find((x) => sameThing(x.content, m))
+    // A must-do that is a calendar event happens there: no second block for it.
+    if ((t && covered.has(t)) || eventFor(m, fixed)) continue
     const minutes = t ? est.get(t)! : 50
     if (t && isQuick(minutes)) quick.push(t)
     else chunks.push({ title: m, minutes: Math.min(cap, Math.max(25, minutes)), kind: 'focus', tasks: [{ title: m, id: t?.id, minutes }], hard: true })
   }
   const pinnedChunks: Chunk[] = []
   for (const t of tasks) {
-    if (mustTasks.has(t)) continue
+    if (mustTasks.has(t) || covered.has(t)) continue
     if (isQuick(est.get(t)!)) quick.push(t)
     else if (pinned(t)) pinnedChunks.push({ title: t.content, minutes: Math.min(cap, Math.max(25, est.get(t)!)), kind: 'focus', tasks: [{ title: t.content, id: t.id, minutes: est.get(t)! }], hard: true })
     else others.push(t)
@@ -310,7 +317,8 @@ export function packDay(p: PackInputs): DayProposal {
       cur.tasks.push({ title: t.content, id: t.id, minutes: est.get(t)! })
     }
   }
-  for (const c of groupChunks) c.title = c.tasks.length === 1 ? c.tasks[0].title : `${c.title}: ${c.tasks.map((x) => x.title).join(', ')}`
+  // A group block is named by its project and first task; its tasks are its checkboxes (not repeated in the name).
+  for (const c of groupChunks) c.title = c.tasks.length === 1 ? c.tasks[0].title : `${c.title}: ${c.tasks[0].title} +${c.tasks.length - 1} more`
   // Highest priority and overdue first, then the bigger ones.
   groupChunks.sort((a, b) => b.w - a.w || b.minutes - a.minutes)
   const quickChunk: Chunk | null = quick.length
@@ -357,8 +365,10 @@ export function packDay(p: PackInputs): DayProposal {
   const pinnedQuick = !!quickChunk && quick.slice(0, 8).some(pinned)
   // BD8: the workout's best slot (12:00–16:00) is kept first; elsewhere only after the important work.
   let training: DayProposal['training'] = null
+  // A workout already in the calendar today (a habit, a class): no second training slot.
+  const sportBooked = sportAhead(fixed)
   const book = (onlyPreferred: boolean) => {
-    if (p.workoutDone || !p.train || training) return
+    if (p.workoutDone || !p.train || training || sportBooked) return
     const slot = pickWorkoutSlot(wins, { minutes: short ? Math.min(p.train.minutes, 30) : p.train.minutes })
     if (!slot || (onlyPreferred && !slot.preferred)) return
     training = { time: fromMin(slot.start), what: slotTitle(slot.minutes, { easy: short || p.train.easy }), minutes: slot.minutes }
@@ -374,7 +384,7 @@ export function packDay(p: PackInputs): DayProposal {
 
   // Training in the evening when there's room (kept before the lower tasks fill the day).
   book(false)
-  if (!p.workoutDone && !p.train) {
+  if (!p.workoutDone && !p.train && !sportBooked) {
     for (const w of wins.filter((x) => !x.light && x.e > toMin('17:00'))) {
       const s = Math.ceil(Math.max(w.s, toMin('17:00')) / 15) * 15
       if (s + 45 <= w.e) {
@@ -424,8 +434,11 @@ export function packDay(p: PackInputs): DayProposal {
     if (mustTasks.has(t)) continue
     const minutes = est.get(t)!
     const at = inBlock.get(key(t.content))
+    const ev = covered.get(t)
     const room = madeRoom.find((x) => key(x.title) === key(t.content))
-    if (at) also.push({ title: t.content, minutes, priority: t.priority ?? 1, ...(t.id ? { id: t.id } : {}), ...(t.project ? { project: t.project } : {}), at, ...(overdue(t) ? { overdue: true } : {}) })
+    // At its calendar event: on the list with the event's time (the event is the one block for it).
+    if (ev && !at) also.push({ title: t.content, minutes, priority: t.priority ?? 1, ...(t.id ? { id: t.id } : {}), ...(t.project ? { project: t.project } : {}), event: ev, ...(overdue(t) ? { overdue: true } : {}) })
+    else if (at) also.push({ title: t.content, minutes, priority: t.priority ?? 1, ...(t.id ? { id: t.id } : {}), ...(t.project ? { project: t.project } : {}), at, ...(overdue(t) ? { overdue: true } : {}) })
     // His own ask for today stays today, on the list, even when the day is full.
     else if (pinned(t)) also.push({ title: t.content, minutes, priority: t.priority ?? 1, ...(t.id ? { id: t.id } : {}), ...(t.project ? { project: t.project } : {}), asked: true, ...(overdue(t) ? { overdue: true } : {}) })
     else if (room) deferred.push({ title: t.content, ...(t.id ? { id: t.id } : {}), why: `Made room for "${room.for.slice(0, 40)}" (you asked for it today): tomorrow` })
@@ -442,9 +455,9 @@ export function packDay(p: PackInputs): DayProposal {
       : 'Nothing to plan today: pick one thing that matters.'
     : `${total} task${total === 1 ? '' : 's'}${classes ? ` and ${classes} event${classes === 1 ? '' : 's'}` : ''}, ${hm(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? '' : 's'} (${fmtMin(focus)})${quick.length ? ', small tasks batched' : ''}${meal ? `, lunch at ${fromMin(meal.start)} kept free` : ''}, ${fmtMin(Math.max(0, freeMin - focus - trainMin))} left free${short ? `. Short night (${hm(p.sleptMin!)}), so shorter blocks and an earlier end` : ''}.`
   const headline = mustdos.length
-    ? `${mustdos.length} must-do${mustdos.length === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'} · ${fmtMin(focus)} focus${also.length ? ` · ${also.length} more on the list` : ''}`
+    ? `${mustdos.length} must-do${mustdos.length === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'} · ${fmtMin(focus)} focus${alsoOpen({ also }).length ? ` · ${alsoOpen({ also }).length} more on the list` : ''}`
     : 'A light day: pick one thing that matters'
-  return {
+  return dedupePlan({
     day: p.today,
     headline: short ? `Short night (${hm(p.sleptMin!)}): a lighter day. ${headline}`.slice(0, 160) : headline,
     mustdos,
@@ -457,7 +470,7 @@ export function packDay(p: PackInputs): DayProposal {
     light: short || undefined,
     ...(squeeze ? { squeeze } : {}),
     free: wins.length || blocks.length ? withWork(freeWindows(p.events, p.today, after, endBy), p.work).filter((w) => !w.light).map((w) => ({ start: fromMin(w.s), end: fromMin(w.e) })) : []
-  }
+  }, { events: p.events, after })
 }
 
 /** Every task of the day, found in the plan: a must-do, in a block, in "Also today", or deferred. */

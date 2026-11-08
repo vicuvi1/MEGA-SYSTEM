@@ -1,6 +1,6 @@
 // DP1: the plan's "Also today" list: every task of the day that isn't a
-// must-do, most important first, with its time estimate and the block it sits
-// in. Ticking one closes it in Todoist the usual way, after a few seconds, so
+// must-do or in a block (a block's tasks are its own checkboxes), most
+// important first, with its time estimate (and its calendar event, if it is one). Ticking one closes it in Todoist the usual way, after a few seconds, so
 // Undo really undoes it (no points are paid for a task you take back).
 // Tasks moved to tomorrow are listed under it with the reason.
 import { useEffect, useState } from 'react'
@@ -23,7 +23,8 @@ export function PlanAlso({ plan, startOpen = false }: { plan: Pick<DayProposal, 
   const [open, setOpen] = useState(startOpen)
   const [openIds, setOpenIds] = useState<Set<string> | null>(null)
   const [ticked, setTicked] = useState<Set<string>>(() => new Set([...pending.keys(), ...closedHere]))
-  const also = plan.also ?? []
+  // A task in a block is ticked in the block: listing it here too was a duplicate.
+  const also = (plan.also ?? []).filter((a) => !a.at)
   const deferred = plan.deferred ?? []
 
   // Tasks closed somewhere else drop off the list.
@@ -103,7 +104,7 @@ export function PlanAlso({ plan, startOpen = false }: { plan: Pick<DayProposal, 
                 <span className="pa-tx">
                   {a.title}
                   <small>
-                    {[fmt(a.minutes), a.at ? `in the ${a.at} block` : 'no slot yet', a.project, a.overdue ? 'overdue' : ''].filter(Boolean).join(' · ')}
+                    {[fmt(a.minutes), a.event ? `at the ${a.event} event` : 'no slot yet', a.project, a.overdue ? 'overdue' : ''].filter(Boolean).join(' · ')}
                   </small>
                 </span>
               </li>
