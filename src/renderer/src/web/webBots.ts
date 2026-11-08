@@ -68,6 +68,9 @@ import { planMessageOf } from './bots/planButtons'
 import { addQuickBlock, quickSpot } from './planShared'
 import { runCommand, runFocus, type RunOut } from './bots/commands'
 import { runCareer } from './bots/careerBot'
+import { foodMessage, foodWants, type FoodOut } from './bots/foodBot'
+import { foodDayTotals, whatNextNow } from '../../../main/food'
+import { foodAnswer } from '@core/foodBen'
 import { undoReply as undoReplyWith } from './bots/undo'
 import type { BotContext } from './bots/context'
 
@@ -1090,6 +1093,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
               return earnedAnswer(ak, { income, points: svc.wallet.entries().map((e: any) => ({ day: String(e.day), coins: Number(e.coins) || 0 })) })
             }
             if (ak.kind === 'habits') return habitsAnswer(habitsView(svc).rows as any)
+            // The food counter: what to eat next and today's totals, from the food log.
+            if (ak.kind === 'food') return foodAnswer({ dayLine: foodDayTotals(db as any).line, next: whatNextNow(db as any) })
             const st = coachStatus(svc)
             const brief = rhythmFor(readSetting(db as any, RHYTHM), today0).briefing
             const blocks = brief && brief.plan.day === today0 ? brief.plan.blocks.map((b) => ({ title: b.title, start: b.start })) : []
@@ -2554,6 +2559,18 @@ His note: ${note}`,
     let text = String(update.message?.text ?? update.message?.caption ?? '').trim()
     const said = text
     const chat = String(update.message?.chat?.id ?? '')
+    // The food counter (bots/foodBot.ts): /food, a pasted AI reply (a preview to Save), "chicken 175" on the open preview.
+    if (text && chat && (await mirror.read((db) => foodWants(db, text)).catch(() => false))) {
+      if (!(await markSeen(key))) return null
+      if (!allowed(cfg, chat)) return null
+      const out = await mirror.write((db) => foodMessage(db, text)).catch((e) => ({ reply: `⚠️ ${esc((e as Error).message)}` }) as FoodOut)
+      if (out) {
+        processed++
+        addLog(text.slice(0, 80), chat, true, out.reply)
+        await tg(update.__token, 'sendMessage', { chat_id: chat, text: out.reply, parse_mode: 'HTML', ...(out.keyboard ? { reply_markup: out.keyboard } : {}) }).catch(() => null)
+        return out.reply
+      }
+    }
     // A reply to the morning question is today's plan.
     const asked = String(update.message?.reply_to_message?.text ?? '')
     // Answers to the rhythm's questions: change today's plan, tomorrow's top 3, next week's big 3.

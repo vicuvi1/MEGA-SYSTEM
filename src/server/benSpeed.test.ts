@@ -45,7 +45,7 @@ describe('Review yesterday answers in time', () => {
     }
     const world = await evalWorld(SQL, model)
     await busyDay(world)
-    const chat = await world.bots.think('what should I eat tonight, any idea?', 'speed:chat')
+    const chat = await world.bots.think('what should I do this weekend, any idea?', 'speed:chat')
     expect(chat.ok).toBe(true)
     const r = await world.bots.think(REVIEW, 'speed:review')
     expect(r.ok).toBe(true)

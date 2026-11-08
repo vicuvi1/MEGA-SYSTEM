@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDb, type DB } from './db'
 import { bodyPlusView, logProtein, readPrefs, savePrefs, sportInsightNow } from './bodyPlus'
-import { addFoodMeal, foodDayTotals, foodView, foodWeekNow, leanDefaultOnce, readFoodLog, sportFoodLineNow, toggleFoodFav, toggleFoodMeal, whatNextNow } from './food'
+import { addFoodMeal, addFoodSupp, addFoodWater, adjustNow, answerAdjust, editFoodMeal, foodDayTotals, foodView, foodWeekNow, leanDefaultOnce, readFoodGoals, readFoodLog, saveFoodPrices, sportFoodLineNow, waterNow, toggleFoodFav, toggleFoodMeal, whatNextNow } from './food'
 import { writeSetting } from './settings'
 
 let dir: string
@@ -86,5 +86,97 @@ describe('food counter on the database', () => {
     addFoodMeal(db, { items: [chicken] }, 'web', now)
     expect(bodyPlusView(db, now).week.avg).toBe(46)
     expect(sportInsightNow(db, now)).toBeNull()
+  })
+})
+
+describe('food counter extras on the database', () => {
+  it('water goes into the one water log (no second counter); a past day has no water buttons', () => {
+    expect(waterNow(db, now).ml).toBe(0)
+    addFoodWater(db, 250, 'web', now)
+    const w = addFoodWater(db, 500, 'web', later(1))
+    expect(w.ml).toBe(750)
+    expect(waterNow(db, later(2)).ml).toBe(750)
+    expect(db.prepare("SELECT COUNT(*) AS n, SUM(amount) AS ml FROM body_log WHERE kind = 'water'").get()).toEqual({ n: 2, ml: 750 })
+    expect(addFoodWater(db, 99999, 'web', later(3)).ml).toBe(750) // out of range: nothing
+    expect(foodView(db, later(3)).water?.ml).toBe(750)
+    expect(foodView(db, later(3), '2026-11-07').water).toBeNull()
+  })
+  it('a shake is a supplement entry with protein; creatine ticks its streak; vitamins have no macros; no points', () => {
+    const before = db.prepare('SELECT COUNT(*) AS n FROM ledger').get()
+    addFoodSupp(db, 'shake', 'web', now)
+    addFoodSupp(db, 'creatine', 'web', later(1))
+    addFoodSupp(db, 'vitamins', 'web', later(2))
+    expect(addFoodSupp(db, 'nope', 'web', later(3))).toBeNull()
+    const v = foodView(db, later(4))
+    expect(v.meals.filter((m) => m.supp).length).toBe(3)
+    expect(foodDayTotals(db, later(4)).protein).toBe(24)
+    expect(db.prepare("SELECT COUNT(*) AS n FROM body_log WHERE kind = 'supp:creatine'").get()).toEqual({ n: 1 })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM ledger').get()).toEqual(before)
+    // Supplements are not "your foods".
+    expect(v.own.some((o) => /shake|creatine|vitamin/.test(o.name))).toBe(false)
+  })
+  it('editing a meal replaces it on the same day and time; totals follow; the old one is gone', () => {
+    const m = addFoodMeal(db, { items: [chicken, rice] }, 'web', now)!
+    const e = editFoodMeal(db, m.id, { items: [{ ...chicken, grams: 300, protein: 92, kcal: 460 }], type: 'dinner' }, 'web', later(5))!
+    expect(e.totals.protein).toBe(92)
+    const t = foodDayTotals(db, later(6))
+    expect([t.protein, t.kcal]).toEqual([92, 460])
+    const meals = foodView(db, later(6)).meals
+    expect(meals.length).toBe(1)
+    expect(meals[0]).toMatchObject({ type: 'dinner', at: now.toISOString() })
+    expect(editFoodMeal(db, m.id, { items: [chicken] }, 'web', later(7))).toBeNull() // already replaced
+  })
+  it('carbs and fat targets are in the view and add up to the kcal goal', () => {
+    const t = foodView(db, now).totals.targets
+    expect(t.fat).toBe(60)
+    expect(Math.abs(4 * t.protein + 4 * t.carbs + 9 * t.fat - t.kcal)).toBeLessThanOrEqual(2)
+  })
+  it('the header, "Next" and the macros are all on saved meals', () => {
+    const m = addFoodMeal(db, { items: [chicken] }, 'web', now)!
+    const v = foodView(db, later(1))
+    expect(v.totals.protein).toBe(46)
+    expect(v.carbs).toBe(0)
+    expect(v.fat).toBe(5)
+    expect(v.next.proteinLeft).toBe(v.totals.targets.protein - 46)
+    toggleFoodMeal(db, m.id, 'web', later(2))
+    const w = foodView(db, later(3))
+    expect([w.totals.protein, w.carbs, w.fat]).toEqual([0, 0, 0])
+    expect(w.next.proteinLeft).toBe(w.totals.targets.protein)
+  })
+  it('the weekly weight check: flat weight offers +100, Apply changes the goal once, never silently', () => {
+    const ins = db.prepare("INSERT OR REPLACE INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, NULL, NULL, 'x')")
+    for (const [d, w] of [['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
+    const base = foodView(db, now).totals.targets.kcal
+    expect(adjustNow(db, now).state).toBe('suggest')
+    expect(foodView(db, now).totals.targets.kcal).toBe(base) // nothing changes by itself
+    answerAdjust(db, true, now)
+    expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 100, adjAt: '2026-11-08' })
+    expect(foodView(db, now).totals.targets.kcal).toBe(base + 100)
+    expect(adjustNow(db, now).state).toBe('none') // once a week
+    answerAdjust(db, true, now) // nothing to apply: no double change
+    expect(readFoodGoals(db).kcalAdj).toBe(100)
+  })
+  it('"Not now" only marks the week; prices are saved, cleaned and change the cheap list', () => {
+    const ins = db.prepare("INSERT OR REPLACE INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, NULL, NULL, 'x')")
+    for (const [d, w] of [['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
+    answerAdjust(db, false, now)
+    expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 0, adjAt: '2026-11-08' })
+    const first = foodView(db, now).cheap.find((r) => r.name === 'chicken breast')!
+    saveFoodPrices(db, { 'Chicken  Breast': 50, '': 5, bad: -3 })
+    const after = foodView(db, now).cheap.find((r) => r.name === 'chicken breast')!
+    expect(after).toMatchObject({ edited: true, mdlKg: 50 })
+    expect(after.gPerLei).toBeGreaterThan(first.gPerLei)
+    expect(Object.keys(readFoodGoals(db).prices)).toEqual(['chicken breast'])
+    saveFoodPrices(db, { 'chicken breast': null })
+    expect(readFoodGoals(db).prices).toEqual({})
+  })
+  it('the view has a 7-day chart with the weight line and a shopping list and prep that use the goals', () => {
+    addFoodMeal(db, { items: [chicken, rice] }, 'web', now)
+    const v = foodView(db, later(1))
+    expect(v.chart.days.length).toBe(7)
+    expect(v.chart.days[6].protein).toBe(51)
+    expect(v.chart.days.find((d) => d.day === '2026-11-07')?.weight).toBe(75)
+    expect(v.shopping.text).toMatch(/Protein goal 135 g a day/)
+    expect(v.prep.boxes).toBe(6)
   })
 })

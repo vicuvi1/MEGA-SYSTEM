@@ -4,6 +4,7 @@
 // with its "seen" mark), on a copy of the Turso database kept warm between
 // messages. Bundled into api/_bot/bot.mjs by `npm run build:bot`.
 import { bodyWeekReport } from '../main/bodyPlus'
+import { foodSundayNow } from '../renderer/src/web/bots/foodBot'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import { calendarChanges, type Seen } from '../core/calWatch'
 import { loadFeedback } from '../renderer/src/web/botBrain'
@@ -1524,7 +1525,13 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       // HD: the week for your body (water, moves, breaks, bedtimes).
       // BD18: and the training side (protein, weight trend, sets per muscle, sleep, steps, one focus), in the same message.
       const bodyWeek = await mirror.read((db) => bodyWeekReport(db as any)).catch(() => null)
-      await send(head + (week ? `\n\n💸 ${escapeHtml(week)}` : '') + `\n\n${weeklyHealthText(f.body.week)}` + (bodyWeek ? `\n\n${bodyWeek.html}` : ''), WEEKLY_KEYBOARD, push ? { push } : undefined)
+      // The Sunday food report (core/foodBen.ts): in the same message, under the body week; left out when nothing was logged.
+      const foodWeek = await mirror.read((db) => foodSundayNow(db as any)).catch(() => null)
+      const weekMsg = head + (week ? `\n\n💸 ${escapeHtml(week)}` : '') + `\n\n${weeklyHealthText(f.body.week)}` + (bodyWeek ? `\n\n${bodyWeek.html}` : '')
+      // Telegram takes 4096 characters: a long week sends the food part as its own message.
+      const foodApart = !!foodWeek && weekMsg.length + foodWeek.html.length > 3900
+      await send(weekMsg + (foodWeek && !foodApart ? `\n\n${foodWeek.html}` : ''), WEEKLY_KEYBOARD, push ? { push } : undefined)
+      if (foodWeek && foodApart) await send(foodWeek.html, undefined, { always: true }).catch(() => null)
       // Then: "Pick your top 3 for this week", chips from his goals and projects (the same big 3 as the Goals page).
       const ask = await bots.rhythm.top3Ask(w.big3).catch(() => null)
       if (ask) await send(ask.text, ask.keyboard, { always: true }).catch(() => null)

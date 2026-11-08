@@ -571,15 +571,29 @@
    "id": "F-FOOD",
    "priority": 2,
    "area": "body",
-   "title": "Food counter (photo to any AI app, paste back)",
-   "user_visible_behavior": "Body → Food: Copy prompt, paste the AI app's reply, fix grams and names, save; protein and kcal today against lean goals (2.0 g/kg; maintenance +150 kcal on a training day, +0 on a rest day); what to eat next; same as yesterday; starred meals; one protein line on Sport Track Today that opens the counter. No points, no network, no AI call.",
+   "title": "Food counter (words, photo or label to any AI app, rings, week, plan)",
+   "user_visible_behavior": "Body → Food: Copy prompt, paste the AI app's reply, fix grams and names, save; protein and kcal today against lean goals (2.0 g/kg; maintenance +150 kcal on a training day, +0 on a rest day); what to eat next; same as yesterday; starred meals; one protein line on Sport Track Today that opens the counter. Extras: quick add in words, label prompt, water and supplement buttons (one water log), carbs and fat targets, a one-tap weekly weight check (+/-100 kcal), cheap protein per leu, day rings, meal cards with edit, week chart with weight, shopping list, Sunday meal prep. Header, macros and Next use saved meals; the draft shows apart. No points, no network, no AI call.",
    "status": "in_review",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/food.test.ts src/main/food.test.ts",
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/food.test.ts src/core/foodExtras.test.ts src/main/food.test.ts",
     "SMOKE_ONLY=\"Food counter\" npm run smoke"
    ],
-   "evidence": "2026-11-08: 40 food unit tests; smoke step \"Food counter\" passes",
+   "evidence": "2026-11-08: 40 food unit tests + 24 extras + 8 DB tests; smoke step \"Food counter\" passes (words, supplement, water, rings, week, plan)",
    "notes": "core/food*.ts, main/food.ts, web/foodBridge.ts, body/FoodCounter.tsx. Numbers in body_log (protein:food + kcal:food), details in setting food_log. Telegram/Ben parts are a later builder (see docs/areas/sport.md)."
+  },
+  {
+   "id": "F-FOOD-BEN",
+   "priority": 2,
+   "area": "ben",
+   "title": "Food counter in Ben and on Telegram",
+   "user_visible_behavior": "Paste the AI app's reply to Ben on Telegram: a preview with -/+25 g per food (or type 'chicken 175'), Save / Edit grams / Cancel, Undo after Save; /food sends the prompt. 'What should I eat now?' (also 'how much protein left', 'ce sa mananc') is answered from the food log with no AI call. One food push a day: the evening protein nudge (25 g+ short after dinner) or the dinner reminder (nothing logged after 17:00) with Copy the prompt / Same as yesterday / Mute food nudges for 7 days, on the island at the PC or on Telegram. The Sunday weekly message gets a food part. No points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/foodBen.test.ts src/server/foodBen.server.test.ts",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-08: 15 unit tests + 7 end-to-end tests on a fake Turso and fake Telegram; full vitest and full smoke run",
+   "notes": "core/foodBen.ts (pure), web/bots/foodBot.ts (database + fd| buttons), webBots.ts (route + fast path), benAsk.ts (kind food), benPushes.ts (type food, ops prompt/yesterday/mute), server/benPushTick.ts, telegramBot.ts (Sunday), tursoWebBridge.ts + benPushFeed.ts (island). Setting food_ben: the open preview and the mute."
   }
  ]
 }
