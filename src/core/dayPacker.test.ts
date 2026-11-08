@@ -174,7 +174,12 @@ describe('the whole-day plan (DP1)', () => {
   it('the Telegram text lists "Also today" and the reason', () => {
     const p = packDay(base)
     const t = proposalText(p)
-    expect(t).toContain(`Also today (${(p.also ?? []).length})`)
+    // Only tasks without a block: a task in a block is listed under its block, not again.
+    const open = (p.also ?? []).filter((a) => !a.at).length
+    if (open) expect(t).toContain(`Also today (${open})`)
+    else expect(t).not.toContain('Also today')
+    const group = p.blocks.find((b) => (b.tasks ?? []).length > 1)!
+    for (const x of group.tasks!) expect(t.split(x.replace(/&/g, '&amp;')).length - 1).toBe(1)
     expect(t).toContain('12 tasks')
   })
 })

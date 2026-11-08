@@ -60,6 +60,7 @@ import { prefDuration } from '@core/benFacts'
 import { promisesFor, type PromiseReminder } from '@core/benPromise'
 import { learnedRhythm, loadKnow } from './benMind'
 import { ensureIds, keptAsEvents, mergeKept, replanFromNow, TRAIN_ID } from '@core/planEdit'
+import { dedupePlan, eventFor, fixedAhead, sameThing } from '@core/planDedupe'
 import { eventNotes } from '@core/planSync'
 import { fixPlan } from '@core/planCheck'
 import { blockLook, lookTitle, planEventId, sameTitle } from '@core/planLook'
@@ -380,7 +381,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const prevPlan = base.st.briefing?.plan.day === base.today ? base.st.briefing.plan : null
     const kept = keptAsEvents(prevPlan)
     const keptIds = new Set(prevPlan?.blocks.filter((b) => b.sync?.eventId).map((b) => b.sync!.eventId) ?? [])
-    const events = [...calEvents.filter((e) => !keptIds.has(e.id)), ...kept]
+    // A deleted block's event waits to be cleared: it is not a fixed event (planning around it made the block twice).
+    const removedIds = new Set((prevPlan?.removed ?? []).map((r) => r.eventId).filter(Boolean))
+    const events = [...calEvents.filter((e) => !keptIds.has(e.id) && !removedIds.has(e.id)), ...kept]
     const fixedCount = events.filter((e) => !e.allDay).length
     step(`Packing ${tasks.length} task${tasks.length === 1 ? '' : 's'} around ${fixedCount} event${fixedCount === 1 ? '' : 's'}`)
     const histFacts = base.hist.hours.length >= 3 || base.hist.focus.length >= 3 ? historyFacts(base.hist) : ''
@@ -395,7 +398,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     // What he asked for today in the chat (or tagged @today) is placed today, never moved to tomorrow.
     const planTasks: PlanTask[] = tasks.map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null, ...(isAsked(t.content, base.asked) ? { asked: true } : {}) }))
     // ME5: what he promised for today is one of his own asks (unless it's already a task).
-    for (const what of base.promised) if (!planTasks.some((t) => t.content.toLowerCase().includes(what.toLowerCase().slice(0, 12)))) planTasks.push({ content: what.charAt(0).toUpperCase() + what.slice(1), asked: true, priority: 3 })
+    // A promise that is already a task, or a calendar event ("gym" and the 17:00 Gym), is not added twice.
+    for (const what of base.promised) if (!planTasks.some((t) => t.content.toLowerCase().includes(what.toLowerCase().slice(0, 12)) || sameThing(t.content, what)) && !eventFor(what, fixedAhead(events, base.today, planStartAt(hmNow(now))))) planTasks.push({ content: what.charAt(0).toUpperCase() + what.slice(1), asked: true, priority: 3 })
     const behindGoals = !mode || mode.kind === 'exam' ? base.behind.filter((g) => !goalItems.some((x) => x.title.toLowerCase().includes(g.title.slice(6).toLowerCase()))) : []
     const packed = packDay({
       goals: [...goalItems, ...behindGoals],
@@ -522,6 +526,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     plan = mergeKept(relinkAlso(plan), prevPlan)
     // QA1: Ben checks his own plan before it is saved (overlaps, breaks, the wind-down, past blocks).
     plan = relinkAlso(fixPlan(plan, { now: hmNow(new Date()), events: calEvents.filter((e) => !keptIds.has(e.id)), bedtime: base.bed, freeShare: base.freeShare }).plan)
+    // One thing = one block, whatever made the plan (the packer, the model, last night's draft, kept blocks).
+    plan = dedupePlan(plan, { events: calEvents.filter((e) => !keptIds.has(e.id) && !removedIds.has(e.id)), after: planStartAt(hmNow(new Date())) })
     const made = await mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1

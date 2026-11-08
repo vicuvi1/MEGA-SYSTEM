@@ -133,20 +133,20 @@ if (process.env.E2E_DISCIPLINE === 'demo') {
       { title: 'App dev', start: hm(base), minutes: 100, kind: 'focus', tasks: ['Ship the settings screen'] },
       { title: 'Draft the networking lab report', start: hm(base + 110), minutes: 60, kind: 'focus', tasks: ['Draft the networking lab report'] },
       { title: 'Study algebra', start: hm(base + 180), minutes: 90, kind: 'focus', tasks: ['Revise algebra chapter 4', 'Read chapter 4'] },
-      { title: 'Quick tasks (3)', start: hm(base + 280), minutes: 45, kind: 'quick', tasks: ['Pay the internet bill', 'Email the lab partner', 'Book the dentist'] },
-      { title: 'CV and a CTF challenge', start: hm(base + 335), minutes: 75, kind: 'focus', tasks: ['Update the CV projects section', 'Try one beginner CTF challenge'] }
+      { title: 'Quick tasks (1)', start: hm(base + 280), minutes: 45, kind: 'quick', tasks: ['Pay the internet bill'] },
+      { title: 'A CTF challenge', start: hm(base + 335), minutes: 75, kind: 'focus', tasks: ['Try one beginner CTF challenge'] }
     ],
     training: { time: hm(base + 420), what: 'Gym: legs' },
     waterMl: 2700,
     // DP1: every other task of the day, with estimates (made-up).
     also: [
       { id: 't4', title: 'Draft the networking lab report', minutes: 60, priority: 4, project: 'University', overdue: true, at: hm(base + 110) },
-      { id: 't5', title: 'Update the CV projects section', minutes: 30, priority: 3, project: 'Job & Career', at: hm(base + 335) },
+      { id: 't5', title: 'Update the CV projects section', minutes: 30, priority: 3, project: 'Job & Career' },
       { title: 'Read chapter 4', minutes: 45, priority: 2, project: 'University', at: hm(base + 180) },
       { id: 't6', title: 'Try one beginner CTF challenge', minutes: 45, priority: 2, project: 'Cyber', at: hm(base + 335) },
       { id: 't1', title: 'Pay the internet bill', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 280) },
-      { id: 't2', title: 'Email the lab partner', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 280) },
-      { id: 't7', title: 'Book the dentist', minutes: 15, priority: 1, project: 'Inbox', at: hm(base + 280) }
+      { id: 't2', title: 'Email the lab partner', minutes: 15, priority: 1, project: 'Inbox' },
+      { id: 't7', title: 'Book the dentist', minutes: 15, priority: 1, project: 'Inbox' }
     ],
     deferred: [
       { id: 't8', title: 'Watch the refactoring talk, part 1', why: 'The day is full (today already has 6h10 of focus): tomorrow' },

@@ -837,7 +837,10 @@ try {
     await card.locator('.pa-head', { hasText: 'Also today' }).waitFor({ timeout: 8000 })
     await card.locator('.pa-head', { hasText: 'Also today' }).click()
     await card.locator('.pa-list li').first().waitFor({ timeout: 5000 })
-    if ((await card.locator('.pa-list li').count()) < 6) throw new Error('Also today lists too few tasks')
+    if ((await card.locator('.pa-list li').count()) < 3) throw new Error('Also today lists too few tasks')
+    // One thing = one row: a task in a block is not listed again in "Also today".
+    const alsoRows = await card.locator('.pa-list li .pa-tx').allInnerTexts()
+    if (alsoRows.some((t) => /Pay the internet bill|Read chapter 4|in the \d\d:\d\d block/.test(t))) throw new Error('a task in a block is listed again in Also today')
     if (!(await card.locator('.pa-later').count())) throw new Error('no tasks moved to tomorrow with a reason')
     if (process.env.PLAN_SHOTS) {
       await pg.setViewportSize({ width: 1440, height: 2300 })

@@ -53,6 +53,8 @@ export interface AlsoItem {
   project?: string
   /** The start of the block it is packed into, when it is in one. */
   at?: string
+  /** The start of today's calendar event that is the same thing (the habit, the class): it has no block of its own. */
+  event?: string
   overdue?: boolean
   /** He asked for it today: it stays today even without a slot. */
   asked?: boolean
@@ -361,10 +363,11 @@ export function proposalText(p: DayProposal, opts: { version?: number; approved?
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const lines = [`☀️ <b>Your day${opts.version && opts.version > 1 ? ` (v${opts.version})` : ''}</b> · ${esc(p.headline)}`]
   if (p.mustdos.length) lines.push('', '<b>Must-dos</b>', ...p.mustdos.map((m, i) => `${i + 1}. ${esc(m)}`))
-  const timed = [...p.blocks.map((b) => ({ s: b.start, text: `${b.start}–${fromMin(toMin(b.start) + b.minutes)} ${esc(b.title)}` })), ...(p.training ? [{ s: p.training.time, text: `${p.training.time} 💪 ${esc(p.training.what)}` }] : [])].sort((a, b) => a.s.localeCompare(b.s))
+  const timed = [...p.blocks.map((b) => ({ s: b.start, text: `${b.start}–${fromMin(toMin(b.start) + b.minutes)} ${esc(b.title)}${(b.tasks ?? []).length > 1 ? (b.tasks ?? []).map((t) => `\n   · ${esc(t)}`).join('') : ''}` })), ...(p.training ? [{ s: p.training.time, text: `${p.training.time} 💪 ${esc(p.training.what)}` }] : [])].sort((a, b) => a.s.localeCompare(b.s))
   if (timed.length) lines.push('', '<b>Blocks</b>', ...timed.map((x) => x.text))
-  const also = p.also ?? []
-  if (also.length) lines.push('', `<b>Also today (${also.length})</b>`, ...also.slice(0, 12).map((a) => `· ${esc(a.title)} · ${a.minutes} min${a.at ? ` (in the ${a.at} block)` : ''}`), ...(also.length > 12 ? [`…and ${also.length - 12} more`] : []))
+  // A task in a block is listed with its block, not again here.
+  const also = (p.also ?? []).filter((a) => !a.at)
+  if (also.length) lines.push('', `<b>Also today (${also.length})</b>`, ...also.slice(0, 12).map((a) => `· ${esc(a.title)} · ${a.minutes} min${a.event ? ` (at the ${a.event} event)` : ''}`), ...(also.length > 12 ? [`…and ${also.length - 12} more`] : []))
   if (p.deferred?.length) lines.push('', '<b>Tomorrow</b>', ...p.deferred.slice(0, 6).map((d) => `· ${esc(d.title)}: ${esc(d.why)}`))
   if (p.why) lines.push('', `<i>${esc(p.why)}</i>`)
   lines.push('', `💧 Water: ${(p.waterMl / 1000).toFixed(1)} L`)

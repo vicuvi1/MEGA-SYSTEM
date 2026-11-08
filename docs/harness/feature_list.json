@@ -71,7 +71,7 @@
     "npx tsc --noEmit -p tsconfig.json && npx vitest run"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "Unit tests: src/core/planShift.test.ts"
+   "notes": "Unit tests: src/core/planShift.test.ts. 2026-11-08: one thing = one block (core/planDedupe.ts): a task that is a calendar event ahead gets no block, copies of a task merge by id then title, a task in a block is not listed again in Also today, no second training slot when a workout is in the calendar; tests in src/core/planDupes.test.ts"
   },
   {
    "id": "F006",

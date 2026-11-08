@@ -45,6 +45,11 @@ entry that says why.
 - **Why:** two writers made every block twice. Dedupe by a stable key, not by timing.
 - **Rules out:** creating plan events without the id, or a clean-up that touches events not marked as made by Life System.
 
+### One thing = one block in the day plan (2026-11-08)
+- **Decision:** the plan is cleaned by `core/planDedupe.ts` (in `packDay` and at the end of `propose`). Same thing = same id, else the same normalized title (case, punctuation, emoji, a length like "(20 min)" ignored; the words before ":" count when 2+ words). What wins: a pinned/approved block, then a calendar event still ahead, then the loose copy. Only the plan changes: no task, event or point is touched.
+- **Why:** the owner saw the same task as a must-do, a block and a calendar event, and every task of a group block listed three times.
+- **Rules out:** matching on a single-word heading ("University: …" vs a class), treating different numbers ("chapter 3" vs "chapter 4") as one, or deleting a task or event to remove a copy.
+
 ### The repo is public: no personal data, ever
 - **Decision:** use made-up data in code, tests, docs and screenshots. Personal profile notes live
   only in the private database (Settings → Ben).
