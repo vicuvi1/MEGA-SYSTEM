@@ -32,7 +32,8 @@ window.addEventListener('vite:preloadError', (e) => {
 // data layer), so the app window stays the one owner of your data.
 if (isQuick) {
   // Quick add from anywhere (the desktop's global shortcut): its own small window, no data layer.
-  void Promise.all([import('./styles.css'), import('./light.css'), import('./design.css'), import('./quick/QuickWindow')]).then(([, , , { QuickWindow }]) => root.render(<QuickWindow />))
+  // The app's own style bundle (importing single stylesheets here would change the order of the app's CSS).
+  void Promise.all([import('./appStyles'), import('./quick/QuickWindow')]).then(([, { QuickWindow }]) => root.render(<QuickWindow />))
 } else if (isIsland && search.includes('dock=1')) {
   // IN38: the island's mini dock (its own small window).
   void import('./IslandDock').then(({ IslandDock }) => root.render(<IslandDock />))
