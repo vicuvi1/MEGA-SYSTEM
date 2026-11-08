@@ -13,7 +13,7 @@
 .pe-sync.err { background: color-mix(in srgb, var(--red) 14%, transparent); }
 .pe-sync button, .pe-st button { all: unset; cursor: pointer; color: var(--red); font-weight: 700; }
 .pe-warn { border: 1px solid color-mix(in srgb, var(--amber) 45%, transparent); background: color-mix(in srgb, var(--amber) 13%, transparent); color: var(--text); font: inherit; font-size: var(--t-xs); font-weight: 600; padding: 4px 10px; border-radius: 999px; cursor: pointer; animation: pe-pop 0.3s var(--ease-out, ease-out) both; }
-.pe-approve { font-size: var(--t-xs); color: var(--muted); padding: 4px 8px; border-radius: 12px; background: rgb(var(--ink) / 0.03); }
+.pe-approve { font-size: var(--t-xs); color: var(--muted); padding: 3px 8px; border-radius: 12px; background: rgb(var(--ink) / 0.03); }
 .pe-approve input[type='time'] { font: inherit; font-size: var(--t-xs); color: var(--text); background: rgb(var(--ink) / 0.05); border: 1px solid var(--border); border-radius: 8px; padding: 3px 6px; color-scheme: light dark; }
 .pe-scroll { max-height: min(46vh, 520px); overflow-y: auto; overscroll-behavior: contain; border-radius: 12px; background: rgb(var(--ink) / 0.02); }
 .pe-col { position: relative; list-style: none; margin: 0; padding: 0; min-height: 120px; }
@@ -155,3 +155,41 @@
 .wp-dl li.short { color: var(--amber); }
 @media (max-width: 640px) { .wp-days { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .bd-short { color: var(--amber); }
+
+/* Plan speed: quick-add in words, "Too much today", the ⋯ menus, the fit hint while dragging. */
+.pe-popwrap { position: relative; display: inline-flex; }
+.pe-dots { letter-spacing: 1px; line-height: 1; }
+.pe-btn.pe-dots { padding: 5px 10px; }
+.pe-pop { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; display: grid; min-width: 168px; padding: 4px; border-radius: 12px; background: var(--surface, var(--panel, #15161a)); border: 1px solid var(--border); box-shadow: 0 16px 34px -14px rgb(0 0 0 / 0.55); animation: pe-pop 0.18s var(--ease-out, ease-out) both; }
+.pe-pop button { border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--t-xs); font-weight: 600; text-align: left; padding: 7px 10px; border-radius: 8px; cursor: pointer; white-space: nowrap; }
+.pe-pop button:hover, .pe-pop button:focus-visible { background: rgb(var(--ink) / 0.08); outline: none; }
+.pe-bpop { right: 8px; }
+.pe-bdots { flex: none; margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 13px; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; opacity: 0.55; padding: 0; }
+.pe-bdots + .pe-pin { margin-left: 0; }
+.pe-block:hover .pe-bdots, .pe-block:focus-within .pe-bdots { opacity: 0.95; }
+.pe-bdots:hover { background: rgb(var(--ink) / 0.1); }
+.pe-quick { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.pe-quick input { flex: 1 1 180px; min-width: 0; font: inherit; font-size: var(--t-sm); color: var(--text); background: rgb(var(--ink) / 0.05); border: 1px solid var(--border); border-radius: 999px; padding: 6px 12px; user-select: text; -webkit-user-select: text; }
+.pe-quick input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.pe-quick input::placeholder { color: var(--muted); }
+.pe-qprev { flex-basis: 100%; margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; font-size: var(--t-xs); animation: pe-in 0.2s ease-out both; }
+.pe-qprev small { color: var(--muted); }
+.pe-qprev.ask { color: var(--amber); font-weight: 600; }
+.pe-qchip { padding: 3px 10px; border-radius: 999px; font-weight: 700; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.pe-moved { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; font-size: var(--t-xs); padding: 5px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.04); }
+.pe-moved button { border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-weight: 600; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
+.pe-fit { position: absolute; left: 56px; z-index: 8; pointer-events: none; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; box-shadow: 0 8px 20px -10px rgb(0 0 0 / 0.55); }
+.pe-fit.ok { background: color-mix(in srgb, var(--green) 24%, var(--surface, #15161a)); color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 55%, transparent); }
+.pe-fit.bad { background: color-mix(in srgb, var(--red) 22%, var(--surface, #15161a)); color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 55%, transparent); }
+.pe-slot { position: absolute; left: 52px; right: 4px; z-index: 5; pointer-events: none; border-radius: 10px; border: 2px dashed; }
+.pe-slot.ok { border-color: var(--green); background: color-mix(in srgb, var(--green) 12%, transparent); }
+.pe-slot.bad { border-color: var(--red); background: color-mix(in srgb, var(--red) 12%, transparent); }
+.pe-block.nofit { box-shadow: 0 16px 34px -14px rgb(0 0 0 / 0.55), 0 0 0 2px var(--red); }
+/* Compact notes: the text takes the line, the button sits at its right edge. */
+.pe-audit > span, .pe-auto > span { flex: 1 1 0; min-width: 12ch; }
+.pe-audit, .pe-auto { padding: 4px 10px; flex-wrap: nowrap; }
+.pe-audit button, .pe-auto button { flex: none; padding: 2px 9px; }
+/* One row for the plan bar (status, warning, Sync, Undo, ⋯); Sync's "Auto-sync on" line sits under it, small. */
+.pe-bar .plan-sync { display: contents; }
+.pe-bar .plan-sync-auto { order: 9; flex: 1 0 100%; line-height: 1.2; margin-top: -2px; }
+.pe-bar { gap: 4px 6px; }

@@ -570,7 +570,20 @@ const todo = (() => {
     const open = tasks.filter((x) => !x.done)
     if (b.op === 'status') return send({ connected: true })
     if (b.op === 'everything') return send({ tasks: open, areas: [{ key: 'p:p1', kind: 'project', id: 'p1', projectId: 'p1', name: 'Inbox' }] })
-    if (b.op === 'today' || b.op === 'upcoming') return send({ connected: true, tasks: open.filter((x) => x.due) })
+    if (b.op === 'today') return send({ connected: true, tasks: open.filter((x) => x.due && x.due <= day) })
+    if (b.op === 'upcoming') return send({ connected: true, tasks: open.filter((x) => x.due) })
+    // Todoist's quick add: reads the day, priority and length from the words (the smoke "Plan speed" sends "Lab review tomorrow p1 for 120 min").
+    if (b.op === 'quick') {
+      const text = String(b.text || '')
+      const pr = /\bp([1-4])\b/.exec(text)
+      const mins = /\bfor (\d+) min\b/.exec(text)
+      const due = /\btomorrow\b/.test(text) ? new Date(Date.now() + 86400000).toISOString().slice(0, 10) : day
+      const content = text.replace(/\s+(today|tomorrow|\d{1,2} [A-Z][a-z]{2}|at \d\d:\d\d|p[1-4]|for \d+ min)(?=\s|$)/g, '').trim()
+      const x = { ...t(`t${tasks.length + 1}`, content, due, (/\bat (\d\d:\d\d)\b/.exec(text) || [])[1] || null), priority: pr ? 5 - Number(pr[1]) : 1, duration: mins ? Number(mins[1]) : null, quick: text }
+      tasks.push(x)
+      changed++
+      return send({ ok: true, task: x })
+    }
     if (b.op === 'changes') {
       const c = changed
       changed = 0
@@ -595,6 +608,7 @@ const todo = (() => {
       return send({ ok: true, task: x })
     }
     if (b.op === 'close' && x) return ((x.done = true), send({ ok: true }))
+    if (b.op === 'remove' && x) return ((x.done = true), (x.removed = true), send({ ok: true }))
     if (b.op === 'peek') return send(tasks)
     // A task added in Todoist itself (the phone): the smoke test adds one, then presses Sync.
     if (b.op === 'testAdd') {

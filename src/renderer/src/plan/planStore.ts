@@ -11,6 +11,8 @@ import { rebase, UndoStack } from '@core/planUndo'
 import { appDuplicates } from '@core/planLook'
 import { addDays } from '@core/dates'
 import { auditPlan, moveToTomorrow, type AuditTask, type LeftTask } from '@core/planAudit'
+import { movedLine, placeQuick, tooMuchToday } from '@core/planFit'
+import { todoistText, dayWords, type QuickTask } from '@core/quickAdd'
 import { afterRun, autoAllowed, autoReplan, isFlipFlop, type AutoMeta } from '@core/planAuto'
 import type { Span } from '@core/planShift'
 import { fromMin, type DayProposal, type RhythmState } from '@core/rhythm'
@@ -230,9 +232,9 @@ function keepLimitsNow() {
 }
 
 /** "Move to tomorrow" on the audit line: off today's plan (Undo puts it back), and Todoist gets tomorrow's date. */
-export function moveTomorrow(items: LeftTask[]): string | null {
+export function moveTomorrow(items: Pick<LeftTask, 'title' | 'id'>[], words?: string): string | null {
   if (!cur || !items.length) return null
-  const label = items.length === 1 ? `Moved ${items[0].title} to tomorrow` : `Moved ${items.length} tasks to tomorrow`
+  const label = words ?? (items.length === 1 ? `Moved ${items[0].title} to tomorrow` : `Moved ${items.length} tasks to tomorrow`)
   // Each Todoist task's date before the move, so Undo can put it back exactly.
   const was = new Map((todayTasks?.list ?? []).map((t) => [t.id, t.due] as const))
   const l = edit({ op: 'replace', plan: moveToTomorrow(cur.plan, items), label })
@@ -250,6 +252,79 @@ export function moveTomorrow(items: LeftTask[]): string | null {
     })
   todayTasks = null
   return l
+}
+
+/** The Todoist id for a task title: the plan's own list, today's tasks, what was sent. */
+const idFor = (title: string): string | undefined => taskIds.get(lower(title))
+const toMinOf = (hm: string) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
+
+/**
+ * "Too much today": keeps the must-dos and the most important tasks that fit, moves the rest of the
+ * draft blocks to tomorrow (the same Move to tomorrow as the audit line: Todoist gets tomorrow's
+ * date, Undo gives every old date back). Resolves with the words that say exactly what moved, or
+ * `none` when the day already fits.
+ */
+export async function tooMuch(): Promise<{ line: string } | { none: string } | null> {
+  if (!cur || !ctx) return null
+  await freshTasks().catch(() => null)
+  if (!cur || !ctx) return null
+  const t = tooMuchToday(cur.plan, { now: hmNow(), events: ctx.events, endBy: ctx.endBy, limits: ctx.limits, tasks: asAudit(todayTasks?.list) ?? undefined })
+  if (t.fits) return { none: 'Today already fits: nothing to move' }
+  const items = t.items.map((x) => ({ ...x, id: x.id ?? idFor(x.title) }))
+  const line = movedLine({ items, blocks: t.blocks })
+  return moveTomorrow(items, line) ? { line } : null
+}
+
+/** "Move to tomorrow" on one draft block's menu: its tasks leave today's plan (Undo puts them back, Todoist too). */
+export function moveBlockTomorrow(id: string): string | null {
+  if (!cur) return null
+  const b = planItems(cur.plan).find((x) => x.id === id)
+  if (!b || b.train || b.locked || b.ok || b.sync?.eventId) return null
+  const items = (b.tasks?.length ? b.tasks : [b.title]).map((title) => ({ title, id: idFor(title) ?? cur!.plan.also?.find((a) => lower(a.title) === lower(title))?.id }))
+  return moveTomorrow(items, `Moved ${b.title} to tomorrow`)
+}
+
+export interface QuickAdded {
+  /** One plain line for the toast: what was added and where it went. */
+  line: string
+  /** A draft block was placed in today's plan. */
+  placed: boolean
+  /** Takes it back: the plan edit and the Todoist task. */
+  undo: () => Promise<void>
+}
+
+/**
+ * Quick-add: the parsed line becomes a Todoist task (through the Todoist client's quick add, which
+ * reads the day, priority and length), and a task for today also gets a draft block placed by the
+ * planner within your limits (at the time said when it fits, else the nearest free gap). A time
+ * said for a placed block lives on the block: approving it gives the task that time.
+ */
+export async function quickAddTask(q: QuickTask): Promise<QuickAdded> {
+  if (!life.todoist?.quickAdd) throw new Error('Todoist is not connected')
+  const plan = cur?.plan
+  const forToday = !!plan && q.day === plan.day
+  const placed = forToday && ctx ? placeQuick(plan!, { title: q.title, minutes: q.minutes, time: q.time, priority: q.priority }, { events: ctx.events, endBy: ctx.endBy, limits: ctx.limits, now: hmNow() }) : null
+  const today = plan?.day ?? q.day
+  const t = await life.todoist.quickAdd(todoistText(q, today, { noTime: !!placed }))
+  if (!t?.id) throw new Error('Todoist did not take it')
+  taskIds.set(lower(q.title), t.id)
+  taskIds.set(lower(t.content || q.title), t.id)
+  todayTasks = null
+  let blockId: string | null = null
+  if (placed) {
+    blockId = `q${Date.now().toString(36)}`
+    if (!edit({ op: 'add', id: blockId, start: placed.start, minutes: placed.minutes, title: q.title, tasks: [q.title] })) blockId = null
+  }
+  window.dispatchEvent(new Event('life-external-changed'))
+  const at = placed ? `${placed.start}-${fromMin(Math.min(24 * 60 - 5, toMinOf(placed.start) + placed.minutes))}` : ''
+  const where = blockId && placed ? `placed ${at}${placed.why ? ` (${placed.why})` : ''}` : forToday ? "no room in the plan today, so it is on today's list" : `for ${dayWords(q.day, today)}`
+  const undo = async () => {
+    if (blockId) undoLast()
+    await life.todoist?.remove?.(t.id).catch(() => null)
+    todayTasks = null
+    window.dispatchEvent(new Event('life-external-changed'))
+  }
+  return { line: `Added ${q.title}: ${where}`, placed: !!blockId, undo }
 }
 
 let autoOn = true
