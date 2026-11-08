@@ -15,7 +15,7 @@ import { dayPart } from '@core/islandFeel'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
 import { restingView, type RestItem, type RestKind } from '@core/islandRest'
 import { benCardVisible, buildToday, dedupeTodos } from '@core/islandTodos'
-import { CALM_TIMING, calmDots, calmRevealed, calmStep, calmTiming, calmZone, dotColor, inZone, modeGate, peekKind, type CalmDot, type CalmEvent, type CalmPhase } from '@core/islandCalm'
+import { BODY_CARD_MS, CALM_TIMING, calmDots, firstSight, isBodyCard, presentAs, calmRevealed, calmStep, calmTiming, calmZone, dotColor, inZone, modeGate, peekKind, type CalmDot, type CalmEvent, type CalmPhase } from '@core/islandCalm'
 
 import type { IslandBeat, IslandPlacement, IslandTheme } from '../../shared/desktop'
 import { AlertScene, CountUp, Glass, Marquee, Roll, TypeIn, type WaterSplash } from './IslandScenes'
@@ -354,14 +354,29 @@ const CALM_FACE: Record<string, string> = { water: '💧', move: '🤸', eyes: '
  * small coloured dot for each thing that waits. It takes no clicks: the page
  * watches the zone around it and slides the pill out after a short rest.
  */
-function CalmNub({ dots, rest }: { dots: CalmDot[]; rest: 'line' | 'none' }) {
+/**
+ * Calm at rest: the faint line and its dots. A waiting move break or water card
+ * also says so in a few words under the line ("🏃 Move break waiting · point
+ * here"), and the first time ever it says what the line is. Clicks still pass
+ * through (the mouse resting here brings the island out).
+ */
+const CALM_LINE_HINT = 'ls.calmLineHint'
+function CalmNub({ dots, rest, wait, hint }: { dots: CalmDot[]; rest: 'line' | 'none'; wait?: string | null; hint?: boolean }) {
   const label = dots.length ? `${dots.map((d) => d.label).join(', ')}. Rest the mouse here to see the island.` : 'The island: rest the mouse here to see it.'
   return (
-    <div className={`di-nub-wrap rest-${rest} ${dots.length ? 'has-dots' : ''}`} aria-label={label} title={dots.length ? dots.map((d) => d.label).join(' · ') : undefined}>
-      <i className="di-nub" aria-hidden />
-      {dots.length > 0 && (
-        <span className="di-nub-dots" aria-hidden>
-          {dots.map((d) => <i key={d.key} className={`di-nub-dot dot-${d.color}`} />)}
+    <div className={`di-nub-wrap rest-${rest} ${dots.length ? 'has-dots' : ''} ${wait ? 'has-wait' : ''}`} aria-label={wait ? `${wait}. ${label}` : label} title={dots.length ? dots.map((d) => d.label).join(' · ') : undefined}>
+      <span className="di-nub-row">
+        <i className="di-nub" aria-hidden />
+        {dots.length > 0 && (
+          <span className="di-nub-dots" aria-hidden>
+            {dots.map((d) => <i key={d.key} className={`di-nub-dot dot-${d.color}`} />)}
+          </span>
+        )}
+      </span>
+      {wait && (
+        <span className="di-nub-label" data-calm-wait aria-hidden>
+          {wait} · point here
+          {hint && <small>This line is your island. Rest the mouse on it to open it.</small>}
         </span>
       )}
     </div>
@@ -628,24 +643,33 @@ export function DesktopIsland() {
   const lastPeek = useRef(0)
   const held = useRef(0)
   // Calm / Balanced (core/islandCalm.ts) can only make it quieter: a dot instead of a peek.
-  const gateOf = (kind: string, meeting = false, dot = false) => modeGate({ mode: prefsRef.current.mode, kind, meeting, peekFor: prefsRef.current.peekFor, base: alertGate({ kind, meeting, dot, prefs: prefsRef.current, quiet, call: inCall, lastPeekAt: lastPeek.current, now: Date.now() }) })
+  const gateOf = (kind: string, meeting = false, dot = false, id?: string) => modeGate({ mode: prefsRef.current.mode, kind, id, meeting, peekFor: prefsRef.current.peekFor, base: alertGate({ kind, meeting, dot, prefs: prefsRef.current, quiet, call: inCall, lastPeekAt: lastPeek.current, now: Date.now() }) })
+  // Cards already shown once: coming back after another card, they wait as their dot (core/islandCalm.ts firstSight).
+  const seenIds = useRef<Record<string, number>>({})
   useEffect(() => {
     const a = s.alert
     if (!a || a.id === seenAlert.current) return
     seenAlert.current = a.id
+    const first = firstSight(seenIds.current, a.id, Date.now())
+    seenIds.current = first.seen
+    if (!first.fresh) return
     // SI6: a suggestion you keep ignoring is only a dot.
-    const g = gateOf(a.kind, !!a.meeting, !!a.dot)
+    const g = gateOf(a.kind, !!a.meeting, !!a.dot, a.id)
     if (g !== 'peek') {
       if (quiet || inCall) held.current += 1
       return
     }
     lastPeek.current = Date.now()
+    // The move break and the water card come as the real card and stay (BODY_CARD_MS) until answered, in Calm too.
+    const shows = presentAs({ mode: prefsRef.current.mode, kind: a.kind, id: a.id, meeting: !!a.meeting, gate: g })
+    const body = isBodyCard(a)
+    logIslandUi('alert', `${a.kind} ${a.id}: ${shows === 'card' ? (body ? 'a card that stays until answered' : 'a card') : 'the slim line, then a dot'}`)
     // IC14: the evening story peeks long enough to be told (~10 s).
-    const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : { type: 'alert' }
+    const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : body && shows === 'card' ? { type: 'alert', ms: BODY_CARD_MS } : { type: 'alert' }
     const pref = alertPref(a.kind, !!a.meeting)
     if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume, !!a.meeting)
-    calmCardRef.current = false
-    setCalmCard(false)
+    calmCardRef.current = prefsRef.current.mode === 'calm' && shows === 'card'
+    setCalmCard(calmCardRef.current)
     // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce (not in Calm: it slides out of the line).
     if (uiRef.current.view === 'compact' && fRef.current.moves && prefsRef.current.mode !== 'calm') {
       setStretch(true)
@@ -1940,6 +1964,28 @@ export function DesktopIsland() {
   calmOpts.current = { overTitleBar: !!q.maximized, restW: lastPillW.current, vertical: place === 'left' || place === 'right' }
   const dotAlert = s.alert && gateOf(s.alert.kind, !!s.alert.meeting) !== 'drop' ? s.alert : null
   const dots: CalmDot[] = calm && !s.locked ? calmDots({ alert: dotAlert, benUnread: s.ben.unread }) : []
+  // A move break or water card that waits: a few words under the line, so the green or blue line is clearly the island.
+  const calmWait = calm && !s.locked && dotAlert && isBodyCard(dotAlert) ? (dotAlert.kind === 'water' ? '💧 Water waiting' : '🏃 Move break waiting') : null
+  const [lineHintSeen, setLineHintSeen] = useState(() => {
+    try {
+      return localStorage.getItem(CALM_LINE_HINT) === '1'
+    } catch {
+      return false
+    }
+  })
+  const prevCalmPhase = useRef<CalmPhase>('rest')
+  useEffect(() => {
+    // Once you brought the island out with the mouse while something waited, the one-time hint has done its job.
+    const fromHover = prevCalmPhase.current === 'arming' && calmPhase === 'shown'
+    prevCalmPhase.current = calmPhase
+    if (!calmWait || lineHintSeen || !fromHover) return
+    setLineHintSeen(true)
+    try {
+      localStorage.setItem(CALM_LINE_HINT, '1')
+    } catch {
+      /* fine */
+    }
+  }, [calmWait, lineHintSeen, calmPhase])
   /** A dot: its card (the alert with its buttons), or the panel for Ben's message. */
   const openDot = (d: CalmDot) => {
     if (d.open === 'ben') return dispatch({ type: 'click' })
@@ -2390,6 +2436,8 @@ export function DesktopIsland() {
           {/* HD: wind-down mode, today's Healthy day and (Sundays) the week for your body. */}
           {s.windMode && <WindDownCard mode={s.windMode} tap={tap} playing={!!sc.playing} />}
           {s.health && <HealthCard health={s.health.today} evening={new Date(now).getHours() >= 18} />}
+          {/* "Why no reminder?": the move break's and water's reason right here (Settings → Island log has the full list). */}
+          {s.nudgeWhy && <p className="di-why" data-nudge-why title="Why the move break or water reminder isn't on the island now">Why no reminder? {s.nudgeWhy}</p>}
           {s.health?.week && <WeekHealthCard week={s.health.week} />}
           {s.protein && s.protein.goal > 0 && (
             // BD1: today's protein ring (log it from Today, Body, Telegram or by telling Ben).
@@ -2507,7 +2555,7 @@ export function DesktopIsland() {
     rec: captioning,
     alert: s.alert?.id ?? null
   }
-  const views = { compact: calmHidden ? <CalmNub dots={dots} rest={prefs.calmRest} /> : mv.parked ? <ParkedDot /> : hushed ? moonPill : barNow ? <IslandIndicator info={indInfo} {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : calm && ui.byAlert && !calmCard && a ? calmPeek : peek, expanded }
+  const views = { compact: calmHidden ? <CalmNub dots={dots} rest={prefs.calmRest} wait={calmWait} hint={!lineHintSeen} /> : mv.parked ? <ParkedDot /> : hushed ? moonPill : barNow ? <IslandIndicator info={indInfo} {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : calm && ui.byAlert && !calmCard && a ? calmPeek : peek, expanded }
   // Calm: a peek or the open panel holds the pill out; back on the pill with the mouse away, it hides ~600 ms later.
   useEffect(() => {
     if (prefs.mode !== 'calm') return calmSend({ type: 'reset' })

@@ -28,7 +28,8 @@ import {
   type SnoozeCtx
 } from './islandNudges'
 import { recapAlert } from './islandMoments'
-import { WATER_GAP_BEHIND_MIN, WATER_SHARED_MIN, govern, lateAlert, waterBehindPace, queueAdd, queueRelease, reminderAlert, type GovernCtx, type Queued, type ReminderItem, type Shown } from './healthyDay'
+import { BODY_CARD_MS, isBodyCard } from './islandCalm'
+import { WATER_GAP_BEHIND_MIN, WATER_SHARED_MIN, alertKey, govern, lateAlert, waterBehindPace, queueAdd, queueRelease, reminderAlert, type GovernCtx, type Queued, type ReminderItem, type Shown } from './healthyDay'
 import { afterShiftAlert, effectiveBed, windModeTonight, type AfterShiftPlan } from './afterShift'
 import type { EyeTip } from './eyeCare'
 
@@ -172,15 +173,34 @@ export function dayNudge(i: DayNudgeInput): DayNudge {
     () => waterNudge(waterAlert({ now: i.now, busy: false, idleSec: i.idleSec, activeSince: i.activeSince, water: i.water, lastWaterAt: waterBehindPace(i.now, i.water.ml, i.water.target) ? i.lastWaterAt - (WATER_SHARED_MIN - WATER_GAP_BEHIND_MIN) * 60_000 : i.lastWaterAt, lastMoveAt: i.lastMoveAt, lastEyesAt: i.lastEyesAt, eyeBreaks: i.eyeBreaks, dismissed: i.dismissed }), s, i.now, i.day),
     () => (busy ? null : recap())
   ]
+  // A body card nobody answered (it waits as a dot, or it was up for BODY_CARD_MS)
+  // doesn't block the other body card: an unanswered move break no longer hides
+  // the water card for the rest of the sitting (and the other way round).
+  const waitingCard = (a: IslandAlert) => {
+    if (!isBodyCard(a)) return false
+    if (a.dot) return true
+    const key = alertKey(a)
+    const last = [...i.shown].reverse().find((x) => x.surface === 'island' && x.key === key)
+    return !!last && i.now - last.at >= BODY_CARD_MS
+  }
+  let waiting: IslandAlert | null = null
   for (const make of candidates) {
     const a = make()
     if (!a) continue
     const v = govern(a, ctx, i.shown)
     if (v.queue) queue = queueAdd(queue, v.queue, i.now)
-    if (v.show) return { alert: v.show, queue, held }
+    if (v.show) {
+      if (!waiting && waitingCard(v.show)) {
+        waiting = v.show
+        held.push({ id: a.id, why: 'waiting unanswered: another body card may come first' })
+        continue
+      }
+      if (!waiting || (isBodyCard(v.show) && !waitingCard(v.show))) return { alert: v.show, queue, held }
+      continue
+    }
     held.push({ id: a.id, why: v.why })
   }
-  return { alert: null, queue, held }
+  return { alert: waiting, queue, held }
 }
 
 // ---- "Why didn't I get a reminder?" (Settings → Island) ----
@@ -237,4 +257,19 @@ export function nudgeWhy(i: DayNudgeInput, r: DayNudge): Record<WhyKind, string>
     return governor('eyes') ?? `last eye break ${i.lastEyesAt ? `${min(i.lastEyesAt)} min ago` : 'never today'}`
   }
   return { water: water(), move: move(), eyes: eyes() }
+}
+
+/**
+ * The island panel's small "Why no reminder?" line: the move break's and
+ * water's reasons in one line, or null while both are fine (showing now, or
+ * nothing to say).
+ */
+export function whyNoReminder(w: Partial<Record<WhyKind, string>>): string | null {
+  const parts: string[] = []
+  for (const k of ['move', 'water'] as const) {
+    const why = w[k]
+    if (!why || why === 'showing now') continue
+    parts.push(`${k === 'move' ? 'Move break' : 'Water'}: ${why}`)
+  }
+  return parts.length ? parts.join(' · ') : null
 }

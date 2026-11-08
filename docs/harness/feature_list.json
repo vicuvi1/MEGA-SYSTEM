@@ -148,14 +148,14 @@
    "priority": 2,
    "area": "island",
    "title": "Calm mode",
-   "user_visible_behavior": "Faint line at rest, pill on hover, panel only on click, peeks then dots",
+   "user_visible_behavior": "Faint line at rest, pill on hover, panel only on click, peeks then dots. The move break (about every 50 min of active PC time) and the water card (behind pace) come as the real card in Calm and Balanced and stay up to 3 min until answered, then wait as a dot with a few words under the line (one-time hint: 'This line is your island'). 'Why no reminder?' line on the Day page.",
    "status": "passing",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-    "SMOKE_ONLY=\"Desktop island Calm\" npm run smoke"
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/islandOwnerHour.test.ts src/core/islandReminders.test.ts",
+    "SMOKE_ONLY=\"Desktop island\" npm run smoke"
    ],
-   "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": ""
+   "evidence": "islandOwnerHour.test.ts (the owner's Sunday hour, default settings); smoke steps Desktop island Calm + reminders pass; screenshots kept outside the repo",
+   "notes": "Before: the move break started as a dot for 10 min, Calm turned every peek into a 5 s slim line then a dot, and a waiting move dot hid the water card."
   },
   {
    "id": "F012",

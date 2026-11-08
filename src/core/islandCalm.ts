@@ -41,8 +41,24 @@ export const PEEK_LABEL: Record<PeekKind, string> = {
 }
 /** All on, except eye breaks (every 20 minutes is a lot): they wait as a dot. */
 export const DEFAULT_PEEK_FOR: Record<PeekKind, boolean> = { ben: true, remind: true, water: true, move: true, eyes: false, timer: true, meeting: true, bed: true, coach: true, alive: false }
-/** What Balanced lets drop down by itself (and only when it's on in "Peek for"). */
+/** What Balanced lets drop down by itself (and only when it's on in "Peek for"). The real move break and water card always may (bodyCard). */
 export const BALANCED_PEEKS: ReadonlySet<PeekKind> = new Set<PeekKind>(['remind', 'timer', 'meeting', 'bed', 'alive'])
+
+/**
+ * The body cards that must be seen while you sit at the PC: the real move
+ * break (the island's own, the screen-time break, or the one held back by a
+ * call) and the water card. In Calm and Balanced they come as the full card
+ * and stay until answered or for BODY_CARD_MS, then wait as a dot. Small
+ * nudges that share the move colour (posture, tidy, breathing, "Moved?") stay
+ * Calm's slim line.
+ */
+export function isBodyCard(a: { kind: string; id: string }): boolean {
+  if (a.kind === 'water') return a.id.startsWith('water:')
+  if (a.kind === 'move') return a.id.startsWith('move:') || a.id.startsWith('coach:break:')
+  return false
+}
+/** How long a body card stays up by itself (the mouse on it keeps it; an answer closes it). */
+export const BODY_CARD_MS = 3 * 60_000
 
 export function cleanPeekFor(p: unknown): Record<PeekKind, boolean> {
   const src = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>
@@ -71,11 +87,11 @@ export function peekKind(kind: string, meeting = false): PeekKind | null {
  * focus, the gap between two, and the healthy-day caps already made it a dot
  * or not). The mode can only make it quieter: a dot instead of a peek.
  */
-export function modeGate(o: { mode: IslandMode; kind: string; meeting?: boolean; peekFor: Record<PeekKind, boolean>; base: AlertGate }): AlertGate {
+export function modeGate(o: { mode: IslandMode; kind: string; id?: string; meeting?: boolean; peekFor: Record<PeekKind, boolean>; base: AlertGate }): AlertGate {
   if (o.base !== 'peek' || o.mode === 'lively') return o.base
   const k = peekKind(o.kind, !!o.meeting)
   if (!k || !o.peekFor[k]) return 'silent'
-  if (o.mode === 'balanced' && !BALANCED_PEEKS.has(k)) return 'silent'
+  if (o.mode === 'balanced' && !BALANCED_PEEKS.has(k) && !(o.id != null && isBodyCard({ kind: o.kind, id: o.id }))) return 'silent'
   return 'peek'
 }
 
@@ -175,3 +191,29 @@ export function calmStep(phase: CalmPhase, e: CalmEvent, t: { dwellMs: number; l
 }
 /** The pill is out (shown, or about to hide). */
 export const calmRevealed = (p: CalmPhase) => p === 'shown' || p === 'leaving'
+
+// ---- How a peek looks (what you actually see) ----
+
+/** card: the full card with its buttons; line: Calm's slim one-line peek (a few seconds), then a dot; dot: only a dot; none: not shown. */
+export type Presentation = 'card' | 'line' | 'dot' | 'none'
+
+/** How an alert that passed the gate is drawn. */
+export function presentAs(o: { mode: IslandMode; kind: string; id?: string; meeting?: boolean; gate: AlertGate }): Presentation {
+  if (o.gate === 'drop') return 'none'
+  if (o.gate === 'silent') return 'dot'
+  if (o.mode !== 'calm') return 'card'
+  // Calm: the move break and the water card are real cards; everything else is the slim line.
+  return o.id != null && isBodyCard({ kind: o.kind, id: o.id }) ? 'card' : 'line'
+}
+
+/**
+ * The same card coming back (another card was shown in between, then this one
+ * was again the island's alert) doesn't drop down a second time: it waits as
+ * its dot. Returns whether it is new, and the trimmed list of seen ids.
+ */
+export const SEEN_KEEP_MS = 3 * 3600_000
+export function firstSight(seen: Record<string, number>, id: string, now: number): { fresh: boolean; seen: Record<string, number> } {
+  const kept = Object.fromEntries(Object.entries(seen).filter(([, t]) => now - t < SEEN_KEEP_MS).slice(-40))
+  if (kept[id] != null) return { fresh: false, seen: kept }
+  return { fresh: true, seen: { ...kept, [id]: now } }
+}

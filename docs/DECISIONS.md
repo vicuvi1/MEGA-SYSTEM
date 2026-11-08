@@ -149,3 +149,14 @@ entry that says why.
   ping asks the quick model with thinking off (5 tokens, 8 s then 12 s).
 - **Why:** the thinking model took the first 35 s, the quick model got ~12 s and timed out too, and later
   calls in the same tick failed at once: three "failures" in one tick made "Ben's AI: Failing".
+
+### Move breaks and water are real cards, even in Calm (2026-11-08)
+- **Decision:** the island's real move break and water card (`isBodyCard`, `core/islandCalm.ts`) come
+  as the full card in Calm and Balanced and stay 3 min or until answered, then wait as a dot with a
+  few words under the line. The move break no longer starts as a dot. Everything else in Calm stays
+  the slim line or a dot.
+- **Why:** with default settings the owner sat an hour at the PC and saw only a thin green line: the
+  break started as a dot, Calm made its peek a 5 s line, and the waiting dot hid the water card.
+- **Rules out:** making Balanced or Lively the default, or turning more kinds into cards in Calm.
+  Spam is held by the existing governor (30-min gap, 3 different cards an hour, calls, focus,
+  classes, quiet hours, bedtime) and `firstSight` (no card shown twice).

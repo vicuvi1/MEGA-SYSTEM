@@ -224,6 +224,8 @@ export interface IslandSnapshot {
   /** Goals: the top ones with their ring and quick check-in (src/core/goalsIsland.ts). */
   goals?: import('./goalsIsland').IslandGoal[]
   /** HD: today's Healthy day ring (water, moves, breaks, sleep), its streak, and Sunday's weekly card. */
+  /** "Why no reminder?": the move break's and water's last reason, one short line for the panel (dayNudges.ts whyNoReminder). */
+  nudgeWhy?: string | null
   health?: { today: import('./healthyDay').HealthyView; week?: import('./healthyDay').WeeklyHealth | null } | null
   /** HD: wind-down mode (the island dims, counts down, says close the laptop). */
   windMode?: import('./healthyDay').WindDownMode | null

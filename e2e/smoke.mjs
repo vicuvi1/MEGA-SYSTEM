@@ -1613,14 +1613,16 @@ try {
     await ip.waitForSelector('.di-nub-dot.dot-green', { timeout: 5000 })
     await ip.waitForTimeout(500)
     if (await ip.$('.di-peek')) throw new Error('an eye break popped up in Calm')
-    // Water (on): a slim one-line peek, never the panel, then a blue dot on the line.
-    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: { id: 'water:1', kind: 'water', title: 'Water', text: '2 glasses behind', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
+    // A small nudge (posture): a slim one-line peek, never the panel, then a green dot on the line.
+    // (The move break and water card are real cards: step "Desktop island reminders".)
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: { id: 'posture:1', kind: 'move', title: 'Posture check', text: 'Shoulders down, screen at eye level', actions: [{ label: '✓ Fixed', action: { kind: 'dismiss', id: 'posture:1' }, primary: true }] } }))
     await ip.waitForSelector('.di-peek.calm-peek', { timeout: 5000 })
-    if (await ip.$('.di-panel') || await ip.$('.di-peek.alert')) throw new Error('the water nudge opened more than the slim peek')
+    if (await ip.$('.di-panel') || await ip.$('.di-peek.alert')) throw new Error('the posture nudge opened more than the slim peek')
     if (shots) await ip.waitForTimeout(700)
     if (shots) await ip.screenshot({ path: `${shots}/calm-peek.png`, clip: { x: 0, y: 0, width: 520, height: 120 } })
     await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 6000 })
-    await ip.waitForSelector('.di.calm-hidden .di-nub-dot.dot-blue', { timeout: 4000 })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-dot.dot-green', { timeout: 4000 })
+    if (await ip.$('[data-calm-wait]')) throw new Error('a posture dot got the "waiting" label (only move breaks and water do)')
     if (shots) await ip.screenshot({ path: `${shots}/calm-dot.png`, clip: { x: 0, y: 0, width: 520, height: 90 } })
     // A reminder you set still peeks by itself.
     await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, alert: { id: 'remind:1', kind: 'remind', title: 'Reminder', text: 'Call the dentist', actions: [{ label: '✓ Done', action: { kind: 'dismiss', id: 'remind:1' }, primary: true }] } }))
@@ -1642,7 +1644,37 @@ try {
     if (shots) await ip.screenshot({ path: `${shots}/calm-dot-card.png`, clip: { x: 0, y: 0, width: 520, height: 260 } })
     await ip.context().close()
   })
-  await step('Desktop island reminders: one water peek in Calm and no to-do twice', async () => {
+  await step('Desktop island reminders: after an hour at the PC a real move-break card and water card in Calm, they stay, a "why" line, no to-do twice', async () => {
+    // The island's real chain (core/dayNudges.ts, bundled here) makes the cards from simulated active time.
+    const { build } = await import('rolldown')
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const dir = await mkdtemp(join(tmpdir(), 'nudge-'))
+    const entry = join(dir, 'entry.ts')
+    await writeFile(entry, `export * from ${JSON.stringify(join(repo, 'src/core/dayNudges.ts'))}\nexport { cleanNudgeStore } from ${JSON.stringify(join(repo, 'src/core/islandNudges.ts'))}\n`)
+    const out = await build({ input: entry, write: false, output: { format: 'esm' } })
+    await writeFile(join(dir, 'nudges.mjs'), out.output[0].code)
+    const N = await import((await import('node:url')).pathToFileURL(join(dir, 'nudges.mjs')).href)
+    await rm(dir, { recursive: true, force: true })
+    const at = (h, m = 0) => new Date(2026, 10, 8, h, m).getTime()
+    const chain = (now, o = {}) => N.dayNudge({
+      now, day: '2026-11-08', ctx: { now, call: false, focus: false, event: false, asleep: false }, shown: [], queue: [], dismissed: {}, reminders: [],
+      idleSec: 5, activeSince: at(14, 0), firstActiveAt: at(9, 30), wakeLogged: true, wakeTime: '09:00', firstBlock: null, blockStarted: false, bedAuto: null,
+      bedTarget: '23:30', bedLogged: false, push: { perHour: 3, escalate: true }, store: N.cleanNudgeStore(null), lastMoveAt: 0, lastEyesAt: 0, lastWaterAt: at(14, 30),
+      exercises: [{ id: 'pushups', name: 'Push-ups', target: 50, done: 0, unit: 'reps' }, { id: 'squats', name: 'Squats', target: 60, done: 20, unit: 'reps' }], coins: 3, doing: null, eyeBreaks: false, running: null,
+      moodSlots: ['noon', 'evening'], lowMood: false, snooze: { now }, water: { ml: 500, target: 2500 }, eveningAt: '21:00',
+      recap: { mustDone: 0, mustTotal: 0, waterMl: 500, waterTarget: 2500, focusMin: 0, focusGoal: 100 }, eveningSent: true, ...o
+    })
+    // 55 minutes at the PC, no move break yet: the move break, as a peek (not a dot).
+    const move = chain(at(14, 55)).alert
+    if (move?.kind !== 'move' || move.dot || move.nudge?.type !== 'move') throw new Error(`after 55 min at the PC: ${JSON.stringify(move)}`)
+    // Behind on water, the move break answered a while ago: the water card.
+    const water = chain(at(15, 40), { lastMoveAt: at(15, 30), activeSince: at(15, 30) }).alert
+    if (water?.kind !== 'water' || water.dot) throw new Error(`behind on water: ${JSON.stringify(water)}`)
+    // In a call: neither.
+    if (['move', 'water'].includes(chain(at(14, 55), { ctx: { now: at(14, 55), call: true, focus: false, event: false, asleep: false } }).alert?.kind)) throw new Error('a body card in a call')
+
+    const shots = process.env.NUDGE_SHOTS
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 760 } })).newPage()
     ip.on('pageerror', (e) => errors.push(`island reminders: ${e.message}`))
     await ip.addInitScript(() => {
@@ -1657,11 +1689,12 @@ try {
         mustdos: [{ i: 0, text: 'Call the bank', done: false }, { i: 1, text: 'call the bank.', done: false }],
         week: { top: [{ i: 0, text: 'CALL THE BANK', done: false }, { i: 1, text: 'Finish essay', done: false }], parked: [] },
         tasks: [{ id: 't1', content: 'Finish essay', time: null }, { id: 't2', content: 'Buy milk', time: null }, { id: 't2', content: 'Buy milk', time: null }, { id: 't3', content: '🥛 buy milk', time: null }],
-        water: { ml: 500, target: 2000 }, reps: [], alert: null
+        water: { ml: 500, target: 2000 }, reps: [], alert: null,
+        nudgeWhy: 'Move break: at the PC 12 min (break after 50) · Water: last glass or reminder 20 min ago (next after 60 min)'
       }
-      window.__island = { send: (name, v) => cbs[name]?.(v), snap }
+      window.__island = { send: (name, v) => cbs[name]?.(v), snap, actions: [] }
       window.desktop = new Proxy({
-        islandHot: () => {}, islandTakeClicks: () => {}, islandAction: () => {},
+        islandHot: () => {}, islandTakeClicks: () => {}, islandAction: (a) => { window.__island.actions.push(a) },
         onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
         onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 2, gapMin: 0 }), 60) },
         onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
@@ -1669,12 +1702,51 @@ try {
     })
     await ip.goto(`http://127.0.0.1:${port}/?island=1`)
     await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 15000 })
-    // The water reminder (a default-settings kind) peeks once in Calm, then waits as a blue dot.
-    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: { id: 'water:r1', kind: 'water', title: 'A glass of water?', text: '0.5 of 2.0 L so far', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
-    await ip.waitForSelector('.di-peek.calm-peek', { timeout: 5000 })
-    if ((await ip.locator('.di-peek.calm-peek').count()) !== 1) throw new Error('more than one water peek')
-    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 6000 })
-    await ip.waitForSelector('.di.calm-hidden .di-nub-dot.dot-blue', { timeout: 4000 })
+    // The move break in Calm: the full card with the exercise picker, not the slim line, and it stays past the peek time (2 s here).
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: a }), move)
+    await ip.waitForSelector('.di-peek.alert.kind-move .nd-ex', { timeout: 5000 })
+    if (await ip.$('.di-peek.calm-peek')) throw new Error('the move break came as the slim line')
+    await ip.waitForTimeout(3500)
+    if (!(await ip.$('.di-peek.alert.kind-move .nd-ex'))) throw new Error('the move-break card went away after a few seconds')
+    if (shots) await ip.screenshot({ path: `${shots}/calm-move-card.png`, clip: { x: 0, y: 0, width: 520, height: 320 } })
+    // Later ▾ → 15 min snoozes it through the usual path and closes the card.
+    await ip.click(`.di-peek.alert.kind-move [data-tap="nd:${move.id}:later"]`)
+    await ip.click(`.di-peek.alert.kind-move [data-tap="nd:${move.id}:sn:15"]`)
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'nudge' && a.op?.op === 'snooze' && a.op.kind === 'move'), null, { timeout: 4000 })
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
+    // Still the island's alert here (the app would clear it): it waits as a green dot with a few words under the line.
+    await ip.waitForSelector('.di.calm-hidden .di-nub-dot.dot-green', { timeout: 4000 })
+    const wait = await ip.locator('[data-calm-wait]').textContent()
+    if (!/Move break waiting/.test(wait || '') || !/This line is your island/.test(wait || '')) throw new Error(`the waiting label says: ${wait}`)
+    // Readable: really drawn under the line, not clipped away.
+    const wb = await ip.locator('[data-calm-wait]').boundingBox()
+    const seen = await ip.evaluate(() => {
+      // No parent that clips it (overflow hidden) cuts it off, and it isn't see-through.
+      const el = document.querySelector('[data-calm-wait]')
+      if (!el) return false
+      const r = el.getBoundingClientRect()
+      for (let p = el.parentElement; p; p = p.parentElement) {
+        const cs = getComputedStyle(p)
+        if (Number(cs.opacity) < 0.5 || cs.visibility === 'hidden') return `${p.className}: opacity ${cs.opacity} ${cs.visibility}`
+        if (cs.overflow !== 'visible' || cs.overflowX !== 'visible' || cs.overflowY !== 'visible') {
+          const q = p.getBoundingClientRect()
+          if (r.left < q.left - 1 || r.right > q.right + 1 || r.top < q.top - 1 || r.bottom > q.bottom + 1) return `${p.className}: clips it (${Math.round(q.left)},${Math.round(q.top)} ${Math.round(q.width)}×${Math.round(q.height)})`
+        }
+      }
+      return Number(getComputedStyle(el).opacity) > 0.5 ? true : `opacity ${getComputedStyle(el).opacity}`
+    })
+    if (!wb || wb.height < 14 || wb.width < 120 || seen !== true) throw new Error(`the waiting label is not readable: ${JSON.stringify(wb)} seen=${seen}`)
+    if (shots) await ip.waitForTimeout(2500)
+    if (shots) await ip.screenshot({ path: `${shots}/calm-line-waiting.png`, clip: { x: 0, y: 0, width: 520, height: 90 } })
+    // The water card behind pace: the real card too, it stays, +250 ml logs through the usual path.
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, alert: a }), water)
+    await ip.waitForSelector('.di-peek.alert.kind-water', { timeout: 5000 })
+    await ip.waitForTimeout(3000)
+    if ((await ip.locator('.di-peek.alert.kind-water').count()) !== 1) throw new Error('the water card went away after a few seconds, or showed twice')
+    if (shots) await ip.screenshot({ path: `${shots}/calm-water-card.png`, clip: { x: 0, y: 0, width: 520, height: 260 } })
+    await ip.locator('.di-peek.alert.kind-water button', { hasText: '+250 ml' }).first().click()
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'water' && a.ml === 250), null, { timeout: 4000 })
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
     // Open the panel and count the to-do rows by their words.
     await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, alert: null }))
     const nub = await ip.locator('.di-nub').boundingBox()
@@ -1682,6 +1754,9 @@ try {
     await ip.waitForSelector('.di-pill.di-rest', { timeout: 3000 })
     await ip.click('.di-pill.di-rest')
     await ip.waitForSelector('.di-panel', { timeout: 3000 })
+    // "Why no reminder?" on the Day page.
+    const whyLine = await ip.locator('[data-nudge-why]').first().textContent({ timeout: 3000 }).catch(() => null)
+    if (!/Why no reminder\? Move break: at the PC 12 min/.test(whyLine || '')) throw new Error(`the why line says: ${whyLine}`)
     const rows = await ip.evaluate(() => [...document.querySelectorAll('.di-check span, .di-week3-row span, .di-task span')].map((e) => (e.textContent || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()))
     const dup = rows.filter((r, i) => rows.indexOf(r) !== i)
     if (dup.length) throw new Error(`to-dos shown twice: ${dup.join(', ')} (rows: ${rows.join(' | ')})`)
@@ -1916,10 +1991,8 @@ try {
     if (shots) await ip.waitForTimeout(700)
     if (shots) await ip.screenshot({ path: `${shots}/coach-praise-peek.png`, clip: { x: 0, y: 0, width: 520, height: 120 } })
     await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 })
-    // An hour at the PC: the break card; tapping its peek opens the buttons.
+    // An hour at the PC: the break card comes as the real card with its buttons (a body card, Calm too).
     await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: a }), C.coachAlert(brk))
-    await ip.waitForSelector('.di-peek.calm-peek.kind-move', { timeout: 5000 })
-    await ip.click('.di-peek.calm-peek.kind-move')
     const pushBtn = '.di-peek.alert.kind-move [data-tap="peek:alert:💪 10 push-ups"]'
     await ip.waitForSelector(pushBtn, { timeout: 4000 })
     for (const l of ['💧 Water', '🧍 Stretched', '⏰ 15 min']) if (!(await ip.$(`.di-peek.alert.kind-move [data-tap="peek:alert:${l}"]`))) throw new Error(`the break card has no "${l}"`)
@@ -2493,9 +2566,16 @@ try {
       await ip.keyboard.press('Escape')
       await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
       // The mouse is still on it, so it may already peek: a click on the shape opens it either way.
+      // A plain mouse click where the shape is (Playwright's own click waited for the shape to stop moving
+      // while it peeked, and sometimes timed out); tried again if the first one landed mid-animation.
       await ip.waitForTimeout(400)
-      await ip.click('.di-shape', { position: { x: (await ip.locator('.di-shape').boundingBox()).width / 2, y: 14 } })
-      await ip.waitForSelector('.di-panel', { timeout: 5000 })
+      for (let tries = 0; ; tries++) {
+        const box = await ip.locator('.di-shape').boundingBox()
+        if (box) await ip.mouse.click(box.x + box.width / 2, box.y + 14)
+        const opened = await ip.waitForSelector('.di-panel', { timeout: 2500 }).then(() => true, () => false)
+        if (opened) break
+        if (tries >= 2) throw new Error(`the panel did not open on a click (motion ${motion})`)
+      }
     }
     await ip.context().close()
   })
