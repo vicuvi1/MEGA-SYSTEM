@@ -90,7 +90,7 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
     return ctx
   }
 }
-const pg = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+const pg = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(process.env.SMOKE_DSF ? { deviceScaleFactor: Number(process.env.SMOKE_DSF) } : {}) })).newPage()
 const errors = []
 pg.on('pageerror', (e) => errors.push(e.message))
 // LT3: anything the Content-Security-Policy blocks is a failure too (main page and the apps).
@@ -836,6 +836,89 @@ try {
     await frame.click('#food-line')
     await pg.waitForSelector('#ptp-body-food .fd-card', { state: 'visible', timeout: 10000 })
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
+  })
+  // Body → Training: the home program builder (minutes, days, equipment, focus → a 4-week block on your levels),
+  // "Use this program" makes Sport Track's Today follow it, and a challenge with a ring (badges only, no points).
+  // BT_SHOTS=<dir> saves screenshots. The Sport Track state is put back at the end.
+  await step('Body training: build a home program, use it so Today follows it, join a challenge', async () => {
+    const shots = process.env.BT_SHOTS
+    const K = 'life_sport_tracker_v1'
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.evaluate((k) => localStorage.setItem('smoke_bt_backup', localStorage.getItem(k) ?? ''), K)
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="training"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="training"]')
+    const T = '#ptp-body-training'
+    await pg.waitForSelector(`${T} .bt-builder .bt-session`, { timeout: 15000 })
+    // The old Training info is still here ("This week").
+    await pg.waitForSelector(`${T} .bt-week .mw-row`, { timeout: 10000 })
+    // 4 days a week gives upper / lower.
+    await pg.click(`${T} [data-bt="days-4"]`)
+    await pg.waitForFunction((t) => /Upper body/.test(document.querySelector(`${t} .bt-sessions`)?.textContent ?? ''), T, { timeout: 5000 })
+    // 20 minutes, 3 days, a pull-up bar: every session fits, pull-ups come in.
+    await pg.click(`${T} [data-bt="days-3"]`)
+    await pg.click(`${T} [data-bt="min-20"]`)
+    if (!(await pg.locator(`${T} [data-bt="eq-bar"][aria-pressed="true"]`).count())) await pg.click(`${T} [data-bt="eq-bar"]`)
+    await pg.waitForFunction((t) => /pull-ups|chin-ups/i.test(document.querySelector(`${t} .bt-sessions`)?.textContent ?? ''), T, { timeout: 5000 })
+    const mins = (await pg.locator(`${T} .bt-min`).allInnerTexts()).map((s) => Number(s.replace(/\D/g, '')))
+    if (!mins.length || mins.some((m) => !(m > 0 && m <= 20))) throw new Error(`sessions do not fit 20 minutes: ${mins.join(', ')}`)
+    if (!/top of the range in all sets/i.test(await pg.locator(`${T} .bt-rules`).innerText())) throw new Error('the progression rules are not shown')
+    await pg.click(`${T} [data-bt="week-4"]`)
+    if (!/one set less/i.test(await pg.locator(`${T} .bt-aim`).innerText())) throw new Error('week 4 is not the lighter week')
+    await pg.click(`${T} [data-bt="week-1"]`)
+    // Use it: Sport Track's state now carries the program; Today's session is in the hero.
+    await pg.click(`${T} [data-bt="use"]`)
+    await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{}').program?.id === 'home', K, { timeout: 10000 })
+    await pg.waitForSelector(`${T} .bt-inuse`, { timeout: 5000 })
+    await pg.waitForFunction((t) => /Full body|Rest day/.test(document.querySelector(`${t} .bt-hero`)?.textContent ?? ''), T, { timeout: 5000 })
+    // Join "3 workouts this week": a ring, nothing counted from before joining.
+    await pg.click(`${T} [data-chal="week3"] [data-bt="join"]`)
+    await pg.waitForSelector(`${T} .bt-chal.joined[data-chal="week3"] .bt-ring`, { timeout: 5000 })
+    if (shots) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(500)
+      await pg.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach((el) => { if (el.scrollTop) el.scrollTop = 0 }) })
+      await pg.waitForTimeout(300)
+      await pg.screenshot({ path: `${shots}/training-program.png` })
+      await pg.locator(`${T} .bt-challenges`).scrollIntoViewIfNeeded()
+      await pg.screenshot({ path: `${shots}/training-challenges.png` })
+    }
+    // Sport Track's Today follows it: every full-body day has the pull-up move (Monday is one), and on a
+    // training day the open page shows it.
+    const trainDay = /Full body/.test(await pg.locator(`${T} .bt-hero h2`).innerText())
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
+    await pg.waitForTimeout(2500)
+    const sportFrame = () => pg.frames().find((f) => f.url().includes('/apps/sport/') && !f.isDetached())
+    if (!sportFrame()) throw new Error('no Sport Track frame')
+    // The page may reload itself once after the program was saved: ask again if it does.
+    let monday = null
+    for (let i = 0; i < 4 && !monday; i++) {
+      const f = sportFrame()
+      monday = await (f ? f.waitForFunction(() => !!window.SportKit && typeof window.SportKit.todayRoutine === 'function', null, { timeout: 8000 }).then(() => f.evaluate(readMonday, K)) : Promise.reject(new Error('no Sport Track frame'))).catch(async (e) => {
+        if (i === 3) throw e
+        await pg.waitForTimeout(1500)
+        return null
+      })
+    }
+    function readMonday(k) {
+      const s = JSON.parse(localStorage.getItem(k) || '{}')
+      const d = new Date(Date.now() + 86400000 * (((8 - new Date().getDay()) % 7) || 7))
+      const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      const r = window.SportKit.todayRoutine(s.exercises, s.program, day)
+      return { names: r.list.map((e) => e.name), session: r.session && r.session.name }
+    }
+    if (!/^Full body [AB]$/.test(monday.session ?? '') || !monday.names.some((n) => /pull-ups|chin-ups/i.test(n))) throw new Error(`Monday in Sport Track is not the program's session: ${JSON.stringify(monday)}`)
+    if (trainDay) await sportFrame().waitForFunction(() => /pull-ups|chin-ups/i.test(document.body.innerText), null, { timeout: 15000 })
+    // A phone does not scroll sideways.
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await pg.waitForTimeout(400)
+    const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    if (over > 1) throw new Error(`the Training tab scrolls sideways on a phone (${over}px)`)
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    // Put Sport Track back as it was.
+    await pg.evaluate((k) => { const b = localStorage.getItem('smoke_bt_backup'); localStorage.removeItem('smoke_bt_backup'); if (b) localStorage.setItem(k, b); else localStorage.removeItem(k); window.dispatchEvent(new CustomEvent('life-sport-changed')) }, K)
   })
   // MN24: Discipline is one built-in page (no embedded MAN copy).
   await step('Discipline is one page with its own content', async () => {
