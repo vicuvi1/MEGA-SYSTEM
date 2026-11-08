@@ -136,6 +136,8 @@ export type UndoOp =
   | { k: 'protein'; id: string }
   | { k: 'reps'; ex: string; amount: number; workout?: number; day?: string }
   | { k: 'money'; id: string }
+  /** A money record Ben deleted: Undo puts it back as it was. */
+  | { k: 'moneyback'; tx: any }
   | { k: 'event'; cal: string; id: string }
   | { k: 'task'; id: string }
   | { k: 'remind'; id: string }
@@ -995,7 +997,8 @@ export type BrainAction =
   | { kind: 'reward'; title: string; points: number; cost: number }
   | { kind: 'week'; focus?: string; note?: string; big3?: string[] }
   | { kind: 'bigdone'; index: number }
-  | { kind: 'delmoney'; ref: string }
+  /** `id`: the record itself (set only in code, by a confirm tap; the model gives the M-number). */
+  | { kind: 'delmoney'; ref: string; id?: string }
   | { kind: 'promise'; ref: string; outcome: 'kept' | 'broken' }
   | { kind: 'book'; goal: string }
   | { kind: 'exercise'; name: string; target?: number; unit?: string }

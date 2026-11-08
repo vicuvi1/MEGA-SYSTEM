@@ -230,3 +230,13 @@ entry that says why.
   Undo as everywhere else.
 - **Rules out:** the island importing `src/core/custom/*` directly, an island-only way to log reps or water,
   or new points for island taps.
+
+### A reward bought with points is never real spending (2026-11-08)
+- **Decision:** redeeming a reward spends points only. Nothing goes to Finance Helper and nothing counts
+  against the fun budget unless the owner turns on "I paid real money" in the buy sheet and types the
+  amount (`paid` defaults to 0 in `Shop.redeem` and `life.shop.redeem`). A reward's `realCost` is only a
+  price guide. Old `life-reward-…` records leave Finance only through the owner's Remove tap.
+- **Why:** a 15 lei "hour of gaming" bought with points showed up in Finance as real spending and Ben
+  counted it in today's money; the owner: "that's not physical money".
+- **Rules out:** defaulting `paid` to the real cost, sending a points buy to Finance Helper, or deleting
+  reward records from Finance without the owner's confirm.

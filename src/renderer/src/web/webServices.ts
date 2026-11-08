@@ -5,7 +5,7 @@ import { isImported, liveLog, moneyDay, type DayTx } from '@core/moneyDays'
 import { moneyNumbers } from './benDesk'
 import { financeStateFrom } from './botBrain'
 import { queueFinanceExpense, savingTarget } from './financeInbox'
-import { financeFunCategory, leftoverLei, repriceSuggestions, rewardFinId, toLei, txLei } from '@core/funBudget'
+import { financeFunCategory, leftoverLei, repriceSuggestions, rewardFinId, rewardMoneyRows, toLei, txLei, type RewardMoneyRow } from '@core/funBudget'
 import type { Exercise } from '@core/body'
 import type { Rule } from '@core/rules'
 import type {
@@ -52,6 +52,17 @@ export function shopValue(s: Services, now = new Date()) {
   const finance = financeOf(s)
   const hourly = finance ? moneyNumbers(finance, s.wallet.today(now)).hourly : null
   return s.shop.value({ finance, hourlyLei: hourly != null ? hourly / 100 : null }, now)
+}
+
+/** Reward buys in Finance Helper as spending: its records and the inbox entries still waiting. */
+export function rewardMoney(s: Services): RewardMoneyRow[] {
+  let inbox: any[] = []
+  try {
+    inbox = JSON.parse(getSetting(s.db as any, 'finance_inbox_json') || '[]')
+  } catch {
+    inbox = []
+  }
+  return rewardMoneyRows(financeOf(s), Array.isArray(inbox) ? inbox : [])
 }
 
 /**
@@ -275,8 +286,10 @@ export function createWebServices(mirror: Mirror) {
       /**
        * Buying a reward. Order: a goal/streak lock first (FT21), then the fun
        * budget (RL3) and Safe to spend (M1); `force` (the explicit "buy
-       * anyway") skips only those two. What you paid goes to Finance Helper as
-       * Fun under a stable id, so undoing the buy takes it back out (RL4).
+       * anyway") skips only those two. A buy with points is NOT real spending:
+       * nothing goes to Finance Helper. Only real money you say you paid
+       * (`paid` > 0, the "I paid real money" switch) goes there as Fun under a
+       * stable id, so undoing the buy takes it back out (RL4).
        */
       redeem: (id: number, opts: { force?: boolean; paid?: number } = {}) =>
         write((s) => {
@@ -284,7 +297,7 @@ export function createWebServices(mirror: Mirror) {
           const lock = loadUnlocks(s.db)[String(id)]
           const locked = lock ? unlockBlocker(lock, unlockFacts(s)) : null
           if (locked) throw new LedgerError(locked)
-          const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : reward?.realCost ?? 0
+          const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : 0
           const cur = (reward?.currency || 'MDL').toUpperCase()
           const finance = financeOf(s)
           const lei = paid > 0 ? (toLei(paid, cur, finance?.rates) ?? paid) : 0
@@ -301,6 +314,20 @@ export function createWebServices(mirror: Mirror) {
           }
           const money = paid > 0 ? ` · −${paid.toLocaleString('en-US')} ${cur === 'MDL' ? 'lei' : cur} added to Money as Fun` : ''
           return { ...s.shop.state(), lastBuy: { ledgerId, title: reward?.title ?? 'Reward', points: reward?.price ?? 0, paid, currency: cur, toast: `−${(reward?.price ?? 0).toLocaleString('en-US')} points${money}` } }
+        }, W),
+      /** Points-only fix: reward buys that sit in Finance Helper as real spending (the owner sees them before removing). */
+      rewardMoney: () => read((s) => rewardMoney(s)),
+      /**
+       * Takes those records back out of Finance Helper (all, or the ids given),
+       * only after the owner's tap. The buys stay; their points stay spent.
+       */
+      removeRewardMoney: (ids?: string[]) =>
+        write((s) => {
+          const rows = rewardMoney(s).filter((r) => !ids || ids.includes(r.id))
+          const at = Date.now()
+          for (const r of rows) queueFinanceExpense(s.db as any, { id: r.id, amount: 0, category: '', note: '', date: s.wallet.today(), at, remove: true })
+          s.shop.clearPaid(rows.map((r) => r.ledgerId))
+          return { removed: rows.length, lei: Math.round(rows.reduce((t, r) => t + r.lei, 0) * 100) / 100, left: rewardMoney(s) }
         }, W),
       /** RL7: what's left this month (fun budget, else Finance Helper's month limit) and the goal it can go to. */
       leftover: () => read((s) => leftover(s)),

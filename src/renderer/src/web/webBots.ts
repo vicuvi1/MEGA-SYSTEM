@@ -13,7 +13,7 @@ import { addDays, calendarDay } from '@core/dates'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
 import { logReps, saveSport } from '../../../main/bodyLog'
 import { queueFinanceExpense } from './financeInbox'
-import { deleteMoney, editMoney, keepMoneyAsk, logMoney, previewMoney, recentMoney } from './financeBot'
+import { deleteMoney, editMoney, keepMoneyAsk, logMoney, moneyRecord, moneyRows, monthSpend, previewMoney, recentMoney } from './financeBot'
 import { payTodoist } from './todoistCoins'
 import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
 import { hm } from '@core/focus'
@@ -32,7 +32,8 @@ import { draftButton, numberInText, runGoalAction } from './goalsBrain'
 import { draftLine } from '@core/goalsText'
 import { startsNow } from '@core/startNow'
 import { notMoney } from '@core/moneyGuess'
-import { deskChange, deskPrompt, deskView, loadDesk, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
+import { deskChange, deskPrompt, deskView, loadDesk, moneyNumbers, noteExcuse, readDeskOp, refreshProfile } from './benDesk'
+import { deleteAsk, leftAnswer, moneyAsk, monthAnswer, pickToDelete, readSpend, todayAnswer } from '@core/benMoneyAsk'
 import { purchaseCheck, readPurchase } from '@core/benMoney'
 import { planKeyboard } from '@core/tgPlan'
 import { cleanFeedback, feedbackPrompt, type FeedbackItem } from '@core/feedbackLearn'
@@ -959,6 +960,50 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       if (p && act) {
         step('Logged in code')
         preset = { reply: `🍗 ${p.label}: +${p.g} g protein.`, acts: [act], chips: ['How much protein today?', 'What now?'] }
+      }
+    }
+    // Coach chat money fix: "spent 55 lei on food" (logged), "what did I spend today?" / "where
+    // did 70 come from?" (today's records), "delete the gaming one" (a confirm chip with the exact
+    // record, then the delete with Undo) and "how much is left this month?": in code, no model.
+    if (!preset && !media && text && !direct && !toolBusy) {
+      const sp = readSpend(clean)
+      const mq = sp ? null : moneyAsk(clean)
+      if (sp || mq) {
+        const ma = await mirror
+          .write((db) => {
+            const svc = services.services(db)
+            const today = svc.wallet.today()
+            const rows = moneyRows(db as any, today)
+            const lei = (bani: number) => `${Math.round(bani / 100).toLocaleString('en-US')} lei`
+            if (sp) {
+              const line = `${sp.amount} ${sp.note}`
+              const p = previewMoney(db as any, line)
+              const act = p && p.type === 'expense' && p.daysAgo === 0 ? readAction(`log: ${line}`) : null
+              if (!p || !act) return null
+              const before = (rows ?? []).filter((r) => r.date === today && r.type === 'expense').reduce((t, r) => t + r.amount, 0)
+              return { reply: `💸 ${p.label}. Today so far: ${lei(before + p.amount)}.`, acts: [act], chips: ['What did I spend today?', 'How much is left this month?'], read: 'Logged in code' }
+            }
+            if (mq!.kind === 'today') return { ...todayAnswer(rows, today, mq!.mentioned), acts: [] }
+            if (mq!.kind === 'left') {
+              const m = monthSpend(db as any, today)
+              const n = m ? moneyNumbers(financeStateFrom(db, store) ?? { tx: [] }, today) : null
+              return { ...leftAnswer(m ? { spentMonth: m.spentMonth, limit: m.limit, limitLeft: m.limit != null ? m.limit - m.spentMonth : null, safeToday: n?.safeToday ?? null } : null), acts: [] }
+            }
+            if (mq!.kind === 'month') return { ...monthAnswer(monthSpend(db as any, today)), acts: [] }
+            if (mq!.kind !== 'delete' || !rows) return null
+            const pick = pickToDelete(rows, mq!)
+            if (!pick.row) return { reply: pick.why ?? 'I could not find that record.', chips: ['What did I spend today?'], read: 'Read Finance Helper', acts: [] }
+            // Never deleted from his words alone: one tap on the exact record (the delete then has Undo).
+            const tap = `${Date.now().toString(36).slice(-6)}m`
+            keepConfirm(db, tap, { kind: 'delmoney', ref: pick.row.ref, id: pick.row.id })
+            return { ...deleteAsk(pick.row, tap), acts: [] }
+          })
+          .catch((e) => (console.warn('ben: money in code:', (e as Error)?.message), null))
+        if (ma) {
+          step(ma.read)
+          preset = { reply: ma.reply, acts: ma.acts, chips: ma.chips, buttons: (ma as { buttons?: { label: string; do: string }[] }).buttons }
+          codeMade = true
+        }
       }
     }
     // My life: "short shift tonight" / "no work tonight" opens the free part of the work window for today.
@@ -2020,12 +2065,16 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
             continue
           }
           if (a.kind === 'delmoney' || a.kind === 'editmoney') {
-            const id = moneyRefs.get(a.ref)
+            const id = (a.kind === 'delmoney' && a.id) || moneyRefs.get(a.ref)
             if (!id) continue
+            opNow = null
             const line = await mirror.write((db) => {
               if (a.kind === 'delmoney') {
+                const was = moneyRecord(db as any, id)
                 const what = deleteMoney(db as any, id)
                 if (!what) return '⚠️ That money record is already gone'
+                // Undo puts the record back as it was.
+                if (was) opNow = { k: 'moneyback', tx: was }
                 const life = takeLink(db, id)
                 if (life) {
                   try {

@@ -521,7 +521,9 @@ function txRow(t, { showDate = false } = {}) {
     const ty = M.typedAs(t);
     // In another currency: what it was in lei too (at that day's rate).
     const inLei = cur !== state.settings.currency && Number.isInteger(t.base) ? `<small class="typed-as">≈ ${formatMoney(t.base, state.settings.currency)}</small>` : '';
-    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
+    // A reward bought in Life System (life-reward-…): tagged, so you can tell it from real spending.
+    const fromRewards = String(t.id || '').startsWith('life-reward-') ? '<span class="pill" title="Bought with points in Life System Rewards">From Rewards (points)</span> ' : '';
+    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${fromRewards}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
   }
   if (showDate) sub = `${dayLabel(t.date)} · ${sub}`;
   return `<button class="tx" data-act="edit" data-id="${esc(t.id)}">

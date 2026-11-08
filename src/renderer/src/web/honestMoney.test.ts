@@ -189,6 +189,55 @@ describe('buying a reward (RL3, RL4)', () => {
     expect(applyInbox(applied.state, after).state.tx).toEqual([])
   })
 
+  it('a buy with points puts nothing in Finance Helper; "I paid real money" puts in one record', async () => {
+    const remote = fakeTurso()
+    clock('2026-11-05T12:00:00Z')
+    financeOnDevice(baseFinance())
+    const web = await open()
+    await web.write((s) => s.wallet.append({ ts: new Date().toISOString(), day: '2026-11-05', module: 'test', kind: 'earn', coins: 3000, xp: 0 }))
+    await web.shop.setFunBudget({ lei: 500, source: 'manual' })
+    await web.shop.save({ title: 'Made-up game hour', price: 150, tier: 'bronze', realCost: 15, pinned: false, note: null, currency: 'MDL' })
+    const id = (await web.shop.state()).rewards.find((r) => r.title === 'Made-up game hour')!.id
+    const inbox = () => JSON.parse(String(rows(remote, "SELECT value FROM settings WHERE key = 'finance_inbox_json'")[0]?.[0] ?? '[]'))
+    const a = await web.shop.redeem(id)
+    expect(a.lastBuy?.toast).toBe('−150 points')
+    expect(a.lastBuy?.paid).toBe(0)
+    expect(a.balance).toBe(2850)
+    expect(inbox()).toEqual([])
+    expect((await web.shop.value()).funSpentLei).toBe(0)
+    const b = await web.shop.redeem(id, { paid: 15 })
+    expect(b.balance).toBe(2700)
+    expect(inbox()).toEqual([expect.objectContaining({ id: `life-reward-${b.lastBuy!.ledgerId}`, amount: 1500 })])
+    expect((await web.shop.value()).funSpentLei).toBe(15)
+  })
+
+  it('old reward entries in Finance are listed with their buy, and leave only when asked', async () => {
+    const remote = fakeTurso()
+    clock('2026-11-05T12:00:00Z')
+    const store = financeOnDevice(baseFinance())
+    const web = await open()
+    await web.write((s) => s.wallet.append({ ts: new Date().toISOString(), day: '2026-11-05', module: 'test', kind: 'earn', coins: 3000, xp: 0 }))
+    await web.shop.save({ title: 'Made-up game hour', price: 150, tier: 'bronze', realCost: 15, pinned: false, note: null, currency: 'MDL' })
+    const id = (await web.shop.state()).rewards.find((r) => r.title === 'Made-up game hour')!.id
+    // An old buy that went to Finance as Fun (what happened before the fix).
+    const old = await web.shop.redeem(id, { paid: 15 })
+    const fid = `life-reward-${old.lastBuy!.ledgerId}`
+    const inbox = () => JSON.parse(String(rows(remote, "SELECT value FROM settings WHERE key = 'finance_inbox_json'")[0][0]))
+    store.set('finance-helper.state', JSON.stringify(applyInbox(JSON.parse(store.get('finance-helper.state')!), inbox()).state))
+    const listed = await web.shop.rewardMoney!()
+    expect(listed).toEqual([expect.objectContaining({ id: fid, ledgerId: old.lastBuy!.ledgerId, lei: 15, note: 'Reward: Made-up game hour' })])
+    const balance = (await web.shop.state()).balance
+    const r = await web.shop.removeRewardMoney!()
+    expect(r).toMatchObject({ removed: 1, lei: 15, left: [] })
+    expect(inbox().find((e: any) => e.id === fid && e.remove)).toBeTruthy()
+    expect(applyInbox(JSON.parse(store.get('finance-helper.state')!), inbox()).state.tx).toEqual([])
+    // The buy stays, its points stay spent, and it no longer counts as money.
+    const after = await web.shop.state()
+    expect(after.balance).toBe(balance)
+    expect(after.recent[0]).toMatchObject({ title: 'Made-up game hour', realCost: 0, undone: false })
+    expect((await web.shop.value()).funSpentLei).toBe(0)
+  })
+
   it('an empty fun budget asks first; a goal lock is checked before money', async () => {
     fakeTurso()
     clock('2026-11-05T12:00:00Z')
@@ -198,12 +247,13 @@ describe('buying a reward (RL3, RL4)', () => {
     await web.shop.setFunBudget({ lei: 100, source: 'manual' })
     await web.shop.save({ title: 'Concert', price: 800, tier: 'bronze', realCost: 200, pinned: false, note: null, currency: 'MDL' })
     const id = (await web.shop.state()).rewards.find((r) => r.title === 'Concert')!.id
-    await expect(web.shop.redeem(id)).rejects.toThrow(/FUN_EMPTY: Concert costs 200 lei and only 100 lei is left/)
+    // With points only it is not money: the fun budget does not stop it.
+    await expect(web.shop.redeem(id, { paid: 200 })).rejects.toThrow(/FUN_EMPTY: Concert costs 200 lei and only 100 lei is left/)
     // Locked to a 30-day clean streak: that is said first, even with "buy anyway".
     await web.write((s) => s.db.prepare("INSERT INTO settings (key, value) VALUES ('reward_unlocks', ?)").run(JSON.stringify({ [id]: { kind: 'streak', streak: 'clean', days: 30 } })))
-    await expect(web.shop.redeem(id, { force: true })).rejects.toThrow(/clean/i)
+    await expect(web.shop.redeem(id, { paid: 200, force: true })).rejects.toThrow(/clean/i)
     await web.write((s) => s.db.prepare("DELETE FROM settings WHERE key = 'reward_unlocks'").run())
-    const s = await web.shop.redeem(id, { force: true })
+    const s = await web.shop.redeem(id, { paid: 200, force: true })
     expect(s.lastBuy?.paid).toBe(200)
     expect((await web.shop.value()).funLeftLei).toBe(-100)
   })

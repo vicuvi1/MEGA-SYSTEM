@@ -1427,6 +1427,69 @@ try {
     }
     await pg.unroute('**/api/coach')
   }))
+  // Coach money fix: "spent 55 lei on food" is logged in code (no model), fast, with Undo;
+  // "what did I spend today?" lists today's records with their M-numbers.
+  await step('Coach: money said in plain words is logged at once with Undo, and today is listed', async () => {
+    await open('coach')
+    await pg.waitForSelector('.cf-input textarea', { timeout: 15000 })
+    // The made-up server has no /api/coach: answer with the real bot bundle (no AI model) on the made-up database.
+    const { pathToFileURL } = await import('node:url')
+    const bot = await import(pathToFileURL(join(repo, 'api/_bot/bot.mjs')).href)
+    // A model that must not be needed: these answers come from code.
+    // The bot sets process.env.TZ: give it this process's own zone, and put TZ back after the step.
+    const tzBefore = process.env.TZ
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const env = { tursoUrl: `http://127.0.0.1:${port}`, tursoToken: 'fake-turso-key', timeZone: zone, defaults: { skipBotIds: [] }, model: async () => { throw new Error('the model was asked') } }
+    await pg.route('**/api/coach', async (r) => {
+      const b = JSON.parse(r.request().postData() || '{}')
+      if (b.op === 'undo') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(await bot.coachUndo(env, String(b.at || ''), b.index)) })
+      if (b.op || !b.text) return r.fallback()
+      const steps = []
+      const out = await bot.coachChat(env, String(b.text), (s) => steps.push({ step: String(s) }))
+      await r.fulfill({ status: 200, headers: { 'Content-Type': 'application/x-ndjson' }, body: [...steps, out].map((x) => JSON.stringify(x)).join('\n') + '\n' })
+    })
+    const ask = async (text, re) => {
+      const before = await pg.locator('.cf-col .cf-row.ben').count()
+      const t0 = Date.now()
+      await pg.fill('.cf-input textarea', text)
+      await pg.keyboard.press('Enter')
+      await pg.waitForFunction(({ n, src }) => {
+        const rows = [...document.querySelectorAll('.cf-col .cf-row.ben')]
+        return rows.length > n && new RegExp(src).test(rows[rows.length - 1].textContent ?? '') && !rows[rows.length - 1].querySelector('.cf-ben.pending')
+      }, { n: before, src: re.source }, { timeout: 8000 }).catch(async (e) => { throw new Error(`${e.message}: last rows ${(await pg.locator(".cf-col .cf-row").evaluateAll((els) => els.slice(-3).map((e) => e.className + ": " + e.textContent).join(" // ")).catch(() => "?")).slice(0, 600)}`) })
+      return Date.now() - t0
+    }
+    // The bot runs on the real clock, the page on the made-up one: everything this step changed
+    // in the made-up database is put back after it, so later steps see the same data.
+    const sql = async (stmt) => (await (await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt }] }) })).json()).results[0].response?.result
+    const txt = (v) => ({ type: 'text', value: String(v) })
+    const settings = async () => new Map((await sql({ sql: 'SELECT key, value FROM settings', args: [] })).rows.map((r) => [r[0].value, r[1].value]))
+    const maxId = async (t) => Number((await sql({ sql: `SELECT COALESCE(MAX(id), 0) FROM ${t}`, args: [] })).rows[0][0].value)
+    const kept = { settings: await settings(), ledger: await maxId('ledger'), expenses: await maxId('expenses') }
+    const ms = await ask('spent 55 lei on food', /55 MDL · Food/)
+    if (ms > 4000) throw new Error(`logging 55 lei took ${ms} ms`)
+    const last = pg.locator('.cf-col .cf-row.ben').nth((await pg.locator('.cf-col .cf-row.ben').count()) - 1)
+    if (!(await last.locator('.cf-result button', { hasText: 'Undo' }).count())) throw new Error('the logged spending has no Undo')
+    await ask('what did I spend today?', /M\d 55 lei · Food/)
+    // Undo takes the 55 lei back out of Finance Helper (and leaves later steps as they were).
+    const undoTap = pg.waitForRequest((q) => q.url().includes('/api/coach') && /"op":"undo"/.test(q.postData() ?? ''), { timeout: 5000 })
+    await last.locator('.cf-result button', { hasText: 'Undo' }).first().click({ timeout: 5000 })
+    await undoTap
+    await pg.waitForTimeout(400)
+    await bot.coachSettle(3000).catch(() => null)
+    await pg.unroute('**/api/coach')
+    const now = await settings()
+    for (const k of new Set([...kept.settings.keys(), ...now.keys()])) {
+      if (k === 'data_version' || kept.settings.get(k) === now.get(k)) continue
+      await sql(kept.settings.has(k) ? { sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [txt(k), txt(kept.settings.get(k))] } : { sql: 'DELETE FROM settings WHERE key = ?', args: [txt(k)] })
+    }
+    await sql({ sql: 'DELETE FROM ledger WHERE id > ?', args: [{ type: 'integer', value: String(kept.ledger) }] })
+    await sql({ sql: 'DELETE FROM expenses WHERE id > ?', args: [{ type: 'integer', value: String(kept.expenses) }] })
+    if (tzBefore === undefined) delete process.env.TZ
+    else process.env.TZ = tzBefore
+    // A new data version: the page reloads its copy.
+    await sql({ sql: "UPDATE settings SET value = ? WHERE key = 'data_version'", args: [txt(`smoke-${Date.now().toString(36)}`)] })
+  })
   // Goals: made-up goals show as cards with a ring and a pace chart; a clear goal from plain words; a check-in.
   await step('Goals: cards with rings and pace lines, a new goal from words, a check-in, a habit day and a project step', async () => {
     await open('goals')
@@ -4251,7 +4314,16 @@ try {
     if (process.env.POLISH_SHOTS) await pg.screenshot({ path: `${process.env.POLISH_SHOTS}/rewards-top.png` }).catch(() => {})
     await pg.waitForSelector('[data-testid="combo"]', { timeout: 5000 })
     const meter = (await pg.locator('[data-testid="budget-meter"]').innerText()).replace(/\s+/g, ' ')
-    if (!/Spent this month \d+ \/ \d+ lei/.test(meter)) throw new Error(`budget meter reads: ${meter}`)
+    if (!/Real money spent \d+ \/ \d+ lei/.test(meter)) throw new Error(`budget meter reads: ${meter}`)
+    // A buy with points puts nothing in Finance: count the reward records waiting for it before and after.
+    const rewardInbox = () =>
+      pg.evaluate(async () => {
+        const s = localStorage.getItem('life_web_session') ?? ''
+        const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT value FROM settings WHERE key = 'finance_inbox_json'", args: [] } }, { type: 'close' }] }) })
+        const v = (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value
+        return (JSON.parse(v || '[]') ?? []).filter((e) => String(e.id).startsWith('life-reward-') && !e.remove).length
+      })
+    const inboxBefore = await rewardInbox()
     await pg.click('.rx .ptabs [data-tab="now"]')
     await pg.waitForSelector('.sh-shelf', { timeout: 5000 })
     if ((await pg.locator('.sh-shelf').count()) < 6) throw new Error('fewer than 6 shelves')
@@ -4278,8 +4350,12 @@ try {
       await pg.mouse.down()
       await pg.waitForTimeout(1200)
       await pg.mouse.up()
-      // A reward with a real cost first asks what you paid: accept the suggested amount.
-      await pg.getByRole('button', { name: 'Buy it', exact: true }).click({ timeout: 2500 }).catch(() => {})
+      // A reward with a real cost shows the buy sheet: "I paid real money" starts off, so it is points only.
+      const sheetSwitch = pg.locator('[data-testid="cs-switch"] input')
+      if (await sheetSwitch.waitFor({ timeout: 2500 }).then(() => true).catch(() => false)) {
+        if (await sheetSwitch.isChecked()) throw new Error('"I paid real money" is on by default')
+        await pg.getByRole('button', { name: 'Get it', exact: true }).click()
+      }
       // Past the fun budget a sheet says so; "Buy anyway" is its own explicit tap (the budget only warns).
       await pg.getByRole('button', { name: 'Buy anyway', exact: true }).click({ timeout: 1500 }).catch(() => {})
       for (let i = 0; i < 30 && (await bal()) >= before; i++) await pg.waitForTimeout(250)
@@ -4290,6 +4366,7 @@ try {
       await pg.waitForTimeout(600)
       const after = await bal()
       if (before - after !== price) throw new Error(`buy spent ${before - after}, price was ${price}`)
+      if ((await rewardInbox()) !== inboxBefore) throw new Error('a buy with points went into Finance as spending')
       await pg.click('.rx .ptabs [data-tab="history"]')
       await pg.waitForSelector('.rx-history li', { timeout: 5000 })
       await pg.click('.rx .ptabs [data-tab="now"]')

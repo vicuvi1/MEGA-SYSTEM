@@ -84,6 +84,33 @@ export const REWARD_FIN_PREFIX = 'life-reward-'
 /** The stable id of a reward buy's record in Finance Helper (RL4). */
 export const rewardFinId = (ledgerId: number) => `${REWARD_FIN_PREFIX}${ledgerId}`
 
+/** A reward buy that sits in Finance Helper as spending (points-only fix, 2026-11-08). */
+export interface RewardMoneyRow {
+  id: string // life-reward-<ledgerId>
+  ledgerId: number
+  note: string
+  lei: number
+  date: string
+}
+
+/**
+ * Reward buys that went into Finance Helper as real spending: the records it
+ * has, plus those still waiting in Life System's inbox, once each. A record
+ * removed (deleted in Finance Helper, or a remove in the inbox) is not listed.
+ */
+export function rewardMoneyRows(finance: any, inbox: { id: string; amount: number; note: string; date: string; remove?: boolean }[] = []): RewardMoneyRow[] {
+  const out = new Map<string, RewardMoneyRow>()
+  const gone = new Set<string>([...inbox.filter((e) => e?.remove).map((e) => String(e.id)), ...Object.keys(finance?.deleted ?? {})])
+  const ledgerOf = (id: string) => Number(id.slice(REWARD_FIN_PREFIX.length))
+  const add = (id: string, amount: number, note: unknown, date: unknown) => {
+    if (!id.startsWith(REWARD_FIN_PREFIX) || gone.has(id) || out.has(id) || !Number.isInteger(ledgerOf(id))) return
+    out.set(id, { id, ledgerId: ledgerOf(id), note: String(note || 'Reward'), lei: Math.round(Math.abs(Number(amount) || 0)) / 100, date: String(date || '') })
+  }
+  for (const t of Array.isArray(finance?.tx) ? finance.tx : []) if (t && !t.deleted && t.type !== 'transfer') add(String(t.id ?? ''), Number(t.base ?? t.amount), t.note, t.date)
+  for (const e of inbox) if (e && !e.remove) add(String(e.id ?? ''), e.amount, e.note, e.date)
+  return [...out.values()].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.ledgerId - a.ledgerId))
+}
+
 export interface FunSpendInput {
   month: string // YYYY-MM
   /** Rewards bought this month and not undone: what you paid, in lei. */

@@ -1333,7 +1333,7 @@ function proteinGoal(weightKg, gPerKg = GPK.def) {
 	};
 }
 var round1 = (n) => Math.round(n * 10) / 10;
-var NUM$2 = "(\\d{1,4}(?:[.,]\\d)?)";
+var NUM$3 = "(\\d{1,4}(?:[.,]\\d)?)";
 var WORDNUM = {
 	a: 1,
 	an: 1,
@@ -1382,7 +1382,7 @@ var COUNT_UNIT = {
 function parseProtein(text) {
 	let t = norm$9(text).replace(/^\/(protein|p)\b/, "protein").replace(/^(i\s+)?(ate|had|log|add|eaten|just ate|mancat|am mancat|съел)\s+/, "").replace(/[.!]+$/, "");
 	if (!t || t.length > 48 || t.split(" ").length > 6 || /\?/.test(t)) return null;
-	let m = new RegExp(`^(?:protein|proteine|proteina|белок|prot)\\s*:?\\s*\\+?${NUM$2}\\s*g?$`).exec(t) ?? new RegExp(`^\\+?${NUM$2}\\s*g(?:rams?)?\\s*(?:of\\s+)?(?:protein|proteine|proteina|белка|prot)$`).exec(t);
+	let m = new RegExp(`^(?:protein|proteine|proteina|белок|prot)\\s*:?\\s*\\+?${NUM$3}\\s*g?$`).exec(t) ?? new RegExp(`^\\+?${NUM$3}\\s*g(?:rams?)?\\s*(?:of\\s+)?(?:protein|proteine|proteina|белка|prot)$`).exec(t);
 	if (m) {
 		const g = Math.round(Number(m[1].replace(",", ".")));
 		return g >= 1 && g <= 300 ? {
@@ -1393,13 +1393,13 @@ function parseProtein(text) {
 		} : null;
 	}
 	t = t.replace(/^(a\s+)?(can|cans|tin|scoop|scoops|glass|slice|slices|portion|portions|bowl)\s+of\s+/, (x) => /^a\s/.test(x) ? "a " : "").replace(/\bof\s+/g, "");
-	m = new RegExp(`^${NUM$2}\\s*(g|gr|grams?|ml)\\s+(.+)$`).exec(t);
+	m = new RegExp(`^${NUM$3}\\s*(g|gr|grams?|ml)\\s+(.+)$`).exec(t);
 	if (m) {
 		const f = matchFood(m[3]);
 		const grams = Number(m[1].replace(",", "."));
 		return f && f.grams && grams >= 10 && grams <= 2e3 ? logOf(f, { grams }) : null;
 	}
-	m = new RegExp(`^(.+?)\\s+${NUM$2}\\s*(g|gr|grams?|ml)$`).exec(t);
+	m = new RegExp(`^(.+?)\\s+${NUM$3}\\s*(g|gr|grams?|ml)$`).exec(t);
 	if (m) {
 		const f = matchFood(m[1]);
 		const grams = Number(m[2].replace(",", "."));
@@ -4615,16 +4615,16 @@ var WEEKLY_SETS = {
 };
 /** Which muscle group a library group trains (cardio and stretches: none). */
 var muscleOf = (g) => g === "push" || g === "pull" || g === "core" || g === "legs" ? g : null;
-var clean$2 = (n) => Math.max(0, Math.min(2e3, Math.round(Number(n) || 0)));
+var clean$3 = (n) => Math.max(0, Math.min(2e3, Math.round(Number(n) || 0)));
 /** The sets of one exercise on one day (a copy, only real ones). */
 function setsOn(log, day, exId) {
 	const l = log?.[day]?.[exId];
-	return Array.isArray(l) ? l.filter((s) => s && clean$2(s.reps) > 0) : [];
+	return Array.isArray(l) ? l.filter((s) => s && clean$3(s.reps) > 0) : [];
 }
 /** A set to store: whole numbers, an id and a time. */
 function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
 	const s = {
-		reps: clean$2(reps),
+		reps: clean$3(reps),
 		at: now,
 		id: `${now.toString(36)}${salt || Math.random().toString(36).slice(2, 6)}`
 	};
@@ -4635,7 +4635,7 @@ function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
 function addSets(log, day, exId, reps, now = Date.now(), extra = {}) {
 	const out = JSON.parse(JSON.stringify(log ?? {}));
 	const list = (out[day] ??= {})[exId] ?? [];
-	reps.map(clean$2).filter((r) => r > 0).forEach((r, i) => {
+	reps.map(clean$3).filter((r) => r > 0).forEach((r, i) => {
 		const e = makeSet(r, now + i, extra.kg ?? 0, `${i}${exId.length}`);
 		if (extra.test) e.test = true;
 		list.push(e);
@@ -4647,7 +4647,7 @@ function addSets(log, day, exId, reps, now = Date.now(), extra = {}) {
 function sessionsOf$1(log, exId, until) {
 	return Object.keys(log ?? {}).filter((d) => !until || d <= until).sort().map((day) => ({
 		day,
-		reps: setsOn(log, day, exId).map((s) => clean$2(s.reps))
+		reps: setsOn(log, day, exId).map((s) => clean$3(s.reps))
 	})).filter((s) => s.reps.length > 0);
 }
 /** Your best single set of an exercise (reps or seconds), and the day; null without sets. */
@@ -14616,7 +14616,7 @@ var ALIASES = {
 	people: "People",
 	person: "People"
 };
-var clean$1 = (t, n) => String(t ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim().slice(0, n);
+var clean$2 = (t, n) => String(t ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g, "").replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim().slice(0, n);
 /** Always the four blocks, in order, each within its cap. */
 function cleanBlocks(raw) {
 	const list = Array.isArray(raw) ? raw : [];
@@ -14624,7 +14624,7 @@ function cleanBlocks(raw) {
 		const b = list.find((x) => x && x.name === name);
 		return {
 			name,
-			text: clean$1(b?.text, 600),
+			text: clean$2(b?.text, 600),
 			pinned: !!b?.pinned,
 			at: typeof b?.at === "string" ? b.at : ""
 		};
@@ -14655,16 +14655,16 @@ function readBlockOp(line) {
 	if (op === "fix") {
 		const i = rest.indexOf("=>");
 		if (i < 0) return null;
-		const old = clean$1(rest.slice(0, i), 600);
+		const old = clean$2(rest.slice(0, i), 600);
 		if (!old) return null;
 		return {
 			op: "fix",
 			name,
 			old,
-			text: clean$1(rest.slice(i + 2), 600)
+			text: clean$2(rest.slice(i + 2), 600)
 		};
 	}
-	const text = clean$1(rest, 601);
+	const text = clean$2(rest, 601);
 	if (!text || text.length > 600) return null;
 	return op === "add" ? {
 		op: "add",
@@ -14799,8 +14799,8 @@ function parseTidy(raw, ids) {
 	for (const d of list.slice(0, 40)) {
 		const op = String(d?.op ?? "").toUpperCase();
 		const id = typeof d?.id === "string" ? d.id.trim().toUpperCase() : void 0;
-		const text = typeof d?.text === "string" ? clean$1(d.text, 200) : void 0;
-		const why = typeof d?.why === "string" ? clean$1(d.why, 120) : void 0;
+		const text = typeof d?.text === "string" ? clean$2(d.text, 200) : void 0;
+		const why = typeof d?.why === "string" ? clean$2(d.why, 120) : void 0;
 		if (op === "NOOP") continue;
 		if ((op === "UPDATE" || op === "DELETE") && (!id || !ids.has(id))) continue;
 		if ((op === "UPDATE" || op === "ADD") && !text) continue;
@@ -24989,7 +24989,7 @@ function parseDeadline(text, today) {
 	}
 	return null;
 }
-var NUM$1 = String.raw`(\d+(?:[.,]\d+)?)\s*(k(?![a-z]))?`;
+var NUM$2 = String.raw`(\d+(?:[.,]\d+)?)\s*(k(?![a-z]))?`;
 var num$2 = (n, k) => Number(n.replace(",", ".")) * (k ? 1e3 : 1);
 /** The unit a word means. */
 function unitOf(word) {
@@ -25023,7 +25023,7 @@ function parseGoalText(raw, today) {
 	};
 	const kinds = parseKinds(rest, deadline);
 	if (kinds) return kinds;
-	let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM$1}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, "i").exec(rest);
+	let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM$2}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, "i").exec(rest);
 	if (m) {
 		const subject = cap$3(m[3].trim());
 		return {
@@ -25041,7 +25041,7 @@ function parseGoalText(raw, today) {
 			template: "hours"
 		};
 	}
-	m = new RegExp(String.raw`\b(lose|drop|cut|gain|put on)\s+${NUM$1}\s*(kg|kilos?)\b`, "i").exec(rest);
+	m = new RegExp(String.raw`\b(lose|drop|cut|gain|put on)\s+${NUM$2}\s*(kg|kilos?)\b`, "i").exec(rest);
 	if (m) {
 		const n = num$2(m[2], m[3]);
 		const down = !/gain|put on/i.test(m[1]);
@@ -25058,7 +25058,7 @@ function parseGoalText(raw, today) {
 			template: "lose"
 		};
 	}
-	m = new RegExp(String.raw`\b(?:weigh|weight(?: to)?|get (?:down )?to|reach)\s+${NUM$1}\s*(kg|kilos?)\b`, "i").exec(rest);
+	m = new RegExp(String.raw`\b(?:weigh|weight(?: to)?|get (?:down )?to|reach)\s+${NUM$2}\s*(kg|kilos?)\b`, "i").exec(rest);
 	if (m) return {
 		...base,
 		kind: "measure",
@@ -25070,7 +25070,7 @@ function parseGoalText(raw, today) {
 		curve: "front",
 		template: "lose"
 	};
-	const money = new RegExp(String.raw`(?:(€|\$)\s*${NUM$1}|${NUM$1}\s*(lei|leu|mdl|ron|€|eur|euros?|\$|usd|dollars?|kg|km|%|percent))`, "i").exec(rest);
+	const money = new RegExp(String.raw`(?:(€|\$)\s*${NUM$2}|${NUM$2}\s*(lei|leu|mdl|ron|€|eur|euros?|\$|usd|dollars?|kg|km|%|percent))`, "i").exec(rest);
 	const what = /\b(profit|income|revenue|earn(?:ings)?|salary|savings?|save|saved)\b/i.exec(lower)?.[1]?.toLowerCase();
 	if (money) {
 		const n = money[1] ? num$2(money[2], money[3]) : num$2(money[4], money[5]);
@@ -25139,7 +25139,7 @@ function parseGoalText(raw, today) {
 			source: { kind: "manual" }
 		};
 	}
-	m = new RegExp(String.raw`${NUM$1}\s+([\p{L}][\p{L}\s-]{1,30})$`, "iu").exec(rest.replace(/\s+(in total|total)$/i, ""));
+	m = new RegExp(String.raw`${NUM$2}\s+([\p{L}][\p{L}\s-]{1,30})$`, "iu").exec(rest.replace(/\s+(in total|total)$/i, ""));
 	if (m) {
 		const n = num$2(m[1], m[2]);
 		const thing = m[3].trim().replace(/^(more|new)\s+/i, "");
@@ -25200,7 +25200,7 @@ function parseGoalText(raw, today) {
 			template: star ? "stars" : "custom"
 		};
 	}
-	m = new RegExp(String.raw`${NUM$1}`, "i").exec(rest);
+	m = new RegExp(String.raw`${NUM$2}`, "i").exec(rest);
 	if (m && what) {
 		const n = num$2(m[1], m[2]);
 		if (/profit|revenue/.test(what)) return {
@@ -25280,7 +25280,7 @@ function parseKinds(rest, deadline) {
 			steps
 		};
 	}
-	m = new RegExp(String.raw`(?:at most|max(?:imum)?|no more than|less than|under|up to|≤|<=|limit\s+\w+\s+to)\s*${NUM$1}\s*(hours?|hrs?|h|minutes?|mins?|m\b|lei|mdl|€|eur|\$|usd)?\s*(?:of|on)?\s*([\p{L}\s]{0,30}?)\s*${PER}`, "iu").exec(rest);
+	m = new RegExp(String.raw`(?:at most|max(?:imum)?|no more than|less than|under|up to|≤|<=|limit\s+\w+\s+to)\s*${NUM$2}\s*(hours?|hrs?|h|minutes?|mins?|m\b|lei|mdl|€|eur|\$|usd)?\s*(?:of|on)?\s*([\p{L}\s]{0,30}?)\s*${PER}`, "iu").exec(rest);
 	if (m) {
 		let n = num$2(m[1], m[2]);
 		const u = (m[3] ?? "").toLowerCase();
@@ -25423,7 +25423,7 @@ function parseKinds(rest, deadline) {
 			source: { kind: "manual" }
 		};
 	}
-	m = new RegExp(String.raw`(?:(€|\$)\s*${NUM$1}|${NUM$1}\s*([\p{L}€$]+(?:\s[\p{L}]+)?))\s*${PER}`, "iu").exec(rest);
+	m = new RegExp(String.raw`(?:(€|\$)\s*${NUM$2}|${NUM$2}\s*([\p{L}€$]+(?:\s[\p{L}]+)?))\s*${PER}`, "iu").exec(rest);
 	if (m && /\b(save|saving|put aside|set aside|invest|read|write|publish|solve|ship|post|do|finish)\b/i.test(lower)) {
 		if (m[7].toLowerCase() === "day") return null;
 		const per = m[7].toLowerCase() === "week" ? "week" : "month";
@@ -37914,6 +37914,29 @@ function txLei(t, rates, baseCurrency = "MDL") {
 var REWARD_FIN_PREFIX = "life-reward-";
 /** The stable id of a reward buy's record in Finance Helper (RL4). */
 var rewardFinId = (ledgerId) => `${REWARD_FIN_PREFIX}${ledgerId}`;
+/**
+* Reward buys that went into Finance Helper as real spending: the records it
+* has, plus those still waiting in Life System's inbox, once each. A record
+* removed (deleted in Finance Helper, or a remove in the inbox) is not listed.
+*/
+function rewardMoneyRows(finance, inbox = []) {
+	const out = /* @__PURE__ */ new Map();
+	const gone = /* @__PURE__ */ new Set([...inbox.filter((e) => e?.remove).map((e) => String(e.id)), ...Object.keys(finance?.deleted ?? {})]);
+	const ledgerOf = (id) => Number(id.slice(12));
+	const add = (id, amount, note, date) => {
+		if (!id.startsWith("life-reward-") || gone.has(id) || out.has(id) || !Number.isInteger(ledgerOf(id))) return;
+		out.set(id, {
+			id,
+			ledgerId: ledgerOf(id),
+			note: String(note || "Reward"),
+			lei: Math.round(Math.abs(Number(amount) || 0)) / 100,
+			date: String(date || "")
+		});
+	};
+	for (const t of Array.isArray(finance?.tx) ? finance.tx : []) if (t && !t.deleted && t.type !== "transfer") add(String(t.id ?? ""), Number(t.base ?? t.amount), t.note, t.date);
+	for (const e of inbox) if (e && !e.remove) add(String(e.id ?? ""), e.amount, e.note, e.date);
+	return [...out.values()].sort((a, b) => a.date < b.date ? 1 : a.date > b.date ? -1 : b.ledgerId - a.ledgerId);
+}
 /** Lei spent on fun this month. */
 function funSpentLei(i) {
 	let sum = i.rewardBuysLei.reduce((a, b) => a + (b > 0 ? b : 0), 0);
@@ -40791,6 +40814,22 @@ var Shop = class {
 			funSource: budgetLei == null ? null : setting?.source ?? "manual"
 		};
 	}
+	/**
+	* Points-only fix (2026-11-08): buys whose real money was taken back out of
+	* Finance Helper (the owner's "Remove reward entries") count as points only.
+	*/
+	clearPaid(ledgerIds) {
+		return this.db.transaction(() => {
+			let n = 0;
+			for (const id of ledgerIds) {
+				const row = this.db.prepare("SELECT real_cost FROM redemptions WHERE ledger_id = ?").get(id);
+				if (!row || !(row.real_cost > 0)) continue;
+				this.db.prepare("UPDATE redemptions SET real_cost = 0 WHERE ledger_id = ?").run(id);
+				n++;
+			}
+			return n;
+		})();
+	}
 	/** Real money spent on rewards this month, ignoring undone purchases. */
 	monthSpent(day, undoneIds) {
 		return this.db.prepare("SELECT ledger_id, real_cost FROM redemptions WHERE substr(day, 1, 7) = ?").all(monthKey$1(day)).filter((r) => !undoneIds.has(r.ledger_id)).reduce((s, r) => s + r.real_cost, 0);
@@ -41017,7 +41056,8 @@ var Shop = class {
 	}
 	/**
 	* Buys a reward: the points go, and what you paid is recorded (RL4).
-	* `paid`: what you really paid (the reward's currency; default its real cost).
+	* `paid`: real money you really paid (the reward's currency). Default 0: a buy
+	* with points is not real spending (the reward's real cost is only its price guide).
 	* `force`: buy even though the fun budget is empty (the explicit second tap).
 	*/
 	redeem(id, now = /* @__PURE__ */ new Date(), opts = {}) {
@@ -41047,7 +41087,7 @@ var Shop = class {
 				buys: this.buys(undone)[id] ?? [],
 				today: day
 			});
-			const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : reward.realCost;
+			const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : 0;
 			if (!opts.force) {
 				const why = this.funBlocker(id, paid, opts.finance, now);
 				if (why) throw new LedgerError(`FUN_EMPTY: ${why}`);
@@ -45039,6 +45079,16 @@ function shopValue(s, now = /* @__PURE__ */ new Date()) {
 		hourlyLei: hourly != null ? hourly / 100 : null
 	}, now);
 }
+/** Reward buys in Finance Helper as spending: its records and the inbox entries still waiting. */
+function rewardMoney(s) {
+	let inbox = [];
+	try {
+		inbox = JSON.parse(getSetting(s.db, "finance_inbox_json") || "[]");
+	} catch {
+		inbox = [];
+	}
+	return rewardMoneyRows(financeOf(s), Array.isArray(inbox) ? inbox : []);
+}
 /**
 * After a points entry is undone: a reward buy's expense (RL4) or a move to
 * savings (RL7) comes back out of Finance Helper too.
@@ -45260,15 +45310,17 @@ syncFinance: (recordDays) => write((s) => {
 			/**
 			* Buying a reward. Order: a goal/streak lock first (FT21), then the fun
 			* budget (RL3) and Safe to spend (M1); `force` (the explicit "buy
-			* anyway") skips only those two. What you paid goes to Finance Helper as
-			* Fun under a stable id, so undoing the buy takes it back out (RL4).
+			* anyway") skips only those two. A buy with points is NOT real spending:
+			* nothing goes to Finance Helper. Only real money you say you paid
+			* (`paid` > 0, the "I paid real money" switch) goes there as Fun under a
+			* stable id, so undoing the buy takes it back out (RL4).
 			*/
 			redeem: (id, opts = {}) => write((s) => {
 				const reward = s.shop.state().rewards.find((r) => r.id === id);
 				const lock = loadUnlocks(s.db)[String(id)];
 				const locked = lock ? unlockBlocker(lock, unlockFacts(s)) : null;
 				if (locked) throw new LedgerError(locked);
-				const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : reward?.realCost ?? 0;
+				const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : 0;
 				const cur = (reward?.currency || "MDL").toUpperCase();
 				const finance = financeOf(s);
 				const lei = paid > 0 ? toLei(paid, cur, finance?.rates) ?? paid : 0;
@@ -45305,6 +45357,31 @@ syncFinance: (recordDays) => write((s) => {
 						currency: cur,
 						toast: `−${(reward?.price ?? 0).toLocaleString("en-US")} points${money}`
 					}
+				};
+			}, W),
+			/** Points-only fix: reward buys that sit in Finance Helper as real spending (the owner sees them before removing). */
+			rewardMoney: () => read((s) => rewardMoney(s)),
+			/**
+			* Takes those records back out of Finance Helper (all, or the ids given),
+			* only after the owner's tap. The buys stay; their points stay spent.
+			*/
+			removeRewardMoney: (ids) => write((s) => {
+				const rows = rewardMoney(s).filter((r) => !ids || ids.includes(r.id));
+				const at = Date.now();
+				for (const r of rows) queueFinanceExpense(s.db, {
+					id: r.id,
+					amount: 0,
+					category: "",
+					note: "",
+					date: s.wallet.today(),
+					at,
+					remove: true
+				});
+				s.shop.clearPaid(rows.map((r) => r.ledgerId));
+				return {
+					removed: rows.length,
+					lei: Math.round(rows.reduce((t, r) => t + r.lei, 0) * 100) / 100,
+					left: rewardMoney(s)
 				};
 			}, W),
 			/** RL7: what's left this month (fun budget, else Finance Helper's month limit) and the goal it can go to. */
@@ -45714,7 +45791,7 @@ function group(n) {
 	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
 }
 // src/renderer/public/apps/finance/js/cattree.js
-var fold$3 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var fold$4 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 var SUB_DEFAULTS = [
 	{
 		key: "groceries",
@@ -46030,7 +46107,7 @@ var PARENT_NAMES = [
 function parentKeyOf(c) {
 	if (!c || c.type !== "expense") return null;
 	if (PARENT_IDS[c.id]) return PARENT_IDS[c.id];
-	const n = fold$3(c.name);
+	const n = fold$4(c.name);
 	return PARENT_NAMES.find(([, re]) => re.test(n))?.[0] || null;
 }
 var ADD_IF_MISSING = {
@@ -46109,7 +46186,7 @@ function setSub(state, t, id, { learn = true, now = Date.now() } = {}) {
 	return true;
 }
 var STOP$3 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store at in on of la de si cu pe some a an my lei mdl usd eur today yesterday azi ieri".split(" "));
-var noteWords = (note) => (fold$3(String(note || "").replace(/#[\p{L}\p{N}_-]+/gu, " ")).match(/[\p{L}]{2,}/gu) || []).filter((w) => !STOP$3.has(w));
+var noteWords = (note) => (fold$4(String(note || "").replace(/#[\p{L}\p{N}_-]+/gu, " ")).match(/[\p{L}]{2,}/gu) || []).filter((w) => !STOP$3.has(w));
 function merchantKey(note) {
 	return [...new Set(noteWords(note))].slice(0, 3).join(" ");
 }
@@ -46191,7 +46268,7 @@ var KEYWORDS$1 = [
 	["stocks", "stock$, stocks$, actiuni, etf$, broker, акци"],
 	["crypto", "crypto, bitcoin, btc$, binance, крипт, usdt$"]
 ].map(([key, text]) => {
-	const items = text.split(",").map((x) => fold$3(x.trim())).filter(Boolean);
+	const items = text.split(",").map((x) => fold$4(x.trim())).filter(Boolean);
 	return {
 		key,
 		phrases: items.filter((x) => x.includes(" ")),
@@ -46200,7 +46277,7 @@ var KEYWORDS$1 = [
 	};
 });
 function keywordKeys(note) {
-	const text = ` ${fold$3(note).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+	const text = ` ${fold$4(note).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
 	const words = text.trim().split(" ").filter(Boolean);
 	const out = [];
 	for (const k of KEYWORDS$1) if (k.phrases.some((p) => text.includes(` ${p} `)) || k.exact.some((x) => words.includes(x)) || k.stems.some((x) => words.some((w) => w.startsWith(x)))) out.push(k.key);
@@ -46229,7 +46306,7 @@ function pastIndex(state) {
 		if (t.type !== "expense" || !t.sub) continue;
 		const s = subOf(state, t);
 		if (!s) continue;
-		const k = fold$3(t.note).trim();
+		const k = fold$4(t.note).trim();
 		const prev = map.get(k);
 		if (!prev || (t.updatedAt || 0) > (prev.t.updatedAt || 0)) map.set(k, {
 			t,
@@ -46251,7 +46328,7 @@ function suggestSub(state, note, { category = null } = {}) {
 		sub: mem,
 		source: "memory"
 	};
-	const past = pastIndex(state).get(fold$3(note).trim());
+	const past = pastIndex(state).get(fold$4(note).trim());
 	if (past && ok(past.s)) return {
 		sub: past.s,
 		source: "past"
@@ -47103,13 +47180,13 @@ var KEYWORDS = {
 		["gift-in", /gift|cadou|birthday|подар/i]
 	]
 };
-var fold$2 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+var fold$3 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 var STOP$2 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store magazin".split(" "));
-var words = (note) => [...new Set(fold$2(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP$2.has(w));
+var words = (note) => [...new Set(fold$3(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP$2.has(w));
 function matchRule(state, note, type) {
-	const n = fold$2(note);
+	const n = fold$3(note);
 	if (!n) return null;
-	return (state.settings.rules || []).filter((r) => r.match && (r.type === type || r.type === "any") && n.includes(fold$2(r.match))).sort((a, b) => b.match.length - a.match.length)[0] || null;
+	return (state.settings.rules || []).filter((r) => r.match && (r.type === type || r.type === "any") && n.includes(fold$3(r.match))).sort((a, b) => b.match.length - a.match.length)[0] || null;
 }
 var statsCache = /* @__PURE__ */ new WeakMap();
 function wordStats(state, type) {
@@ -47447,7 +47524,7 @@ var shortDay = (iso) => `${Number(iso.slice(8))} ${[
 	"Dec"
 ][Number(iso.slice(5, 7)) - 1]}`;
 // src/renderer/public/apps/finance/js/telegram.js
-var fold$1 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var fold$2 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 var INCOME_WORDS = /^(\+|got|earned|income|salary|salariu|venit|primit|зарплата|получил|доход)$/;
 var stripIcons = (s) => s.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "").trim();
 function findAccount(state, words) {
@@ -47458,7 +47535,7 @@ function findAccount(state, words) {
 		a.bank,
 		a.kind === "cash" ? "cash" : null
 	].filter(Boolean)) {
-		const n = fold$1(name);
+		const n = fold$2(name);
 		if (n.length < 3) continue;
 		if (words.join(" ").includes(n) && (!best || n.length > best.len)) best = {
 			id: a.id,
@@ -47486,7 +47563,7 @@ function parseQuick(text, state) {
 	const amount = evalAmount(m[2].replace(/\s+/g, ""));
 	if (!amount || amount <= 0) return null;
 	let rest = `${t.slice(0, m.index)} ${t.slice(m.index + m[0].length)}`.replace(/\b(lei|mdl)\b/gi, "").replace(/\s+/g, " ").trim();
-	let words = fold$1(rest).split(" ").filter(Boolean);
+	let words = fold$2(rest).split(" ").filter(Boolean);
 	if (words.length && INCOME_WORDS.test(words[0]) && words[0] !== "salary" && words[0] !== "salariu" && words[0] !== "зарплата") {
 		type = "income";
 		words = words.slice(1);
@@ -47501,7 +47578,7 @@ function parseQuick(text, state) {
 	let note = rest;
 	if (acc) note = rest.replace(new RegExp(acc.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"), "").replace(/\s+/g, " ").trim();
 	const recent = sortTx(state.tx).filter((x) => x.type !== "transfer");
-	const same = recent.find((x) => fold$1(x.note) === fold$1(note) && account(state, x.account) && !account(state, x.account).archived);
+	const same = recent.find((x) => fold$2(x.note) === fold$2(note) && account(state, x.account) && !account(state, x.account).archived);
 	const accountId = acc?.id || same?.account || recent[0]?.account || state.settings.accounts[0]?.id;
 	const cat = suggestCategory(state, note, type) || (type === "income" ? "other-in" : "other");
 	const sub = type === "expense" ? subFor(state, note, cat) : null;
@@ -47916,12 +47993,12 @@ function save$1(db, state) {
 		data: toCloud(state, "").data
 	}));
 }
-var fold = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var fold$1 = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 /** "Other" is only a last resort: Life System's keyword list (EN/RO/RU) may know better. */
 function betterCategory(state, f) {
 	const fallback = f.type === "income" ? "other-in" : "other";
 	if (f.category && f.category !== fallback) return f.category;
-	const guess = detectExpenseCategory(fold(String(f.note || "")));
+	const guess = detectExpenseCategory(fold$1(String(f.note || "")));
 	const hit = state.settings.categories.find((c) => c.id === guess && c.type === f.type && !c.archived);
 	return hit ? hit.id : f.category || fallback;
 }
@@ -48159,6 +48236,72 @@ function recentMoney(db, today, n = 8) {
 		line: `${t.date.slice(5)} ${t.type === "income" ? "+" : "−"}${Math.round(Number(t.amount) / 100)} ${t.currency || state.settings.currency} · ${category(state, t.category)?.name || "Other"}${t.note ? ` "${String(t.note).slice(0, 40)}"` : ""} · ${account(state, t.account)?.name || ""}`
 	}));
 }
+/**
+* The same records as recentMoney (same order, so M1 = newest, as in Ben's
+* prompt), as data for the money answers in code (core/benMoneyAsk.ts).
+* null: Finance Helper was never synced on this device.
+*/
+function moneyRows(db, today, n = 8) {
+	const state = financeState(db);
+	if (!state) return null;
+	const from = (/* @__PURE__ */ new Date(Date.parse(`${today}T12:00:00Z`) - 2592e5)).toISOString().slice(0, 10);
+	return state.tx.filter((t) => typeof t.date === "string" && t.date >= from && (t.type === "expense" || t.type === "income")).sort((a, b) => (b.date + String(b.createdAt ?? 0)).localeCompare(a.date + String(a.createdAt ?? 0)) || Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0)).slice(0, n).map((t, i) => ({
+		id: String(t.id),
+		ref: `M${i + 1}`,
+		date: t.date.slice(0, 10),
+		amount: Math.abs(Number(t.amount) || 0),
+		currency: t.currency || state.settings.currency || "MDL",
+		category: category(state, t.category)?.name || "Other",
+		note: String(t.note ?? ""),
+		type: t.type,
+		...String(t.id).startsWith("life-reward-") ? { fromRewards: true } : {}
+	}));
+}
+/** This month's spending in bani (main currency), by category, and Finance Helper's monthly limit. */
+function monthSpend(db, today) {
+	const state = financeState(db);
+	if (!state) return null;
+	const month = today.slice(0, 7);
+	const list = state.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string" && t.date.startsWith(month));
+	const by = /* @__PURE__ */ new Map();
+	let spentMonth = 0;
+	for (const t of list) {
+		const v = Math.abs(Number(t.base ?? t.amount) || 0);
+		spentMonth += v;
+		const name = category(state, t.category)?.name || "Other";
+		by.set(name, (by.get(name) ?? 0) + v);
+	}
+	const lim = state.settings?.limit;
+	return {
+		spentMonth,
+		limit: lim?.on && Number(lim.amount) > 0 ? Number(lim.amount) : null,
+		byCategory: [...by].map(([name, amount]) => ({
+			name,
+			amount
+		})),
+		records: list.length
+	};
+}
+/** A deleted record, as it was (for Undo). */
+function moneyRecord(db, id) {
+	const t = financeState(db)?.tx.find((x) => x.id === id);
+	return t ? JSON.parse(JSON.stringify(t)) : null;
+}
+/** Undo of a delete: the record comes back as it was (and is no longer marked deleted). */
+function restoreMoney(db, tx) {
+	const state = financeState(db);
+	if (!state || !tx?.id) return null;
+	if (state.tx.some((x) => x.id === tx.id)) return "already there";
+	const deleted = { ...state.deleted || {} };
+	delete deleted[tx.id];
+	state.tx.push({
+		...tx,
+		updatedAt: Date.now()
+	});
+	state.deleted = deleted;
+	save$1(db, state);
+	return `${tx.type === "income" ? "+" : "−"}${Math.round(Number(tx.amount) / 100)} ${tx.currency || state.settings.currency} ${tx.note || category(state, tx.category)?.name || ""}`.trim();
+}
 /** Removes a record (it syncs as deleted to every device). */
 function deleteMoney(db, id) {
 	const state = financeState(db);
@@ -48173,9 +48316,9 @@ function deleteMoney(db, id) {
 	return `${t.type === "income" ? "+" : "−"}${Math.round(Number(t.amount) / 100)} ${t.currency || state.settings.currency} ${t.note || category(state, t.category)?.name || ""}`.trim();
 }
 var fuzzy = (list, name) => {
-	const w = fold(name).replace(/[^\p{L}\p{N} ]/gu, "").trim();
+	const w = fold$1(name).replace(/[^\p{L}\p{N} ]/gu, "").trim();
 	if (!w) return null;
-	return list.find((x) => fold(x.name).replace(/[^\p{L}\p{N} ]/gu, "").trim() === w) ?? list.find((x) => fold(x.name).includes(w) || w.includes(fold(x.name))) ?? null;
+	return list.find((x) => fold$1(x.name).replace(/[^\p{L}\p{N} ]/gu, "").trim() === w) ?? list.find((x) => fold$1(x.name).includes(w) || w.includes(fold$1(x.name))) ?? null;
 };
 /** Changes a record: amount (in whole units), category, account (by name), note, date. */
 function editMoney(db, id, patch) {
@@ -48445,6 +48588,207 @@ function startsNow(text) {
 	if (!START.test(t)) return false;
 	if (/\b(now|right now|acum|сейчас)\b/i.test(t)) return true;
 	return !FUTURE.test(t);
+}
+// src/core/benMoneyAsk.ts
+var fold = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var clean$1 = (s) => fold(s).replace(/[!?.…]+$/g, "").replace(/\s+/g, " ").trim();
+/** Words for "money in your own currency" (lei); other currencies go to the model. */
+var LEI = "(?:lei|leu|mdl|ron|лей|леи|леев|лея)";
+var NUM$1 = "(\\d{1,6}(?:[.,]\\d{1,2})?)";
+/** Not a spending day we can be sure of: the model decides. */
+var OTHER_DAY = /\b(yesterday|ieri|alaltaieri|tomorrow|maine|last (week|month|night)|on (mon|tue|wed|thu|fri|sat|sun))\w*|вчера|завтра/;
+var OTHER_CUR = /(\$|€|£|\b(usd|eur|euro|dollars?|gbp|rub|рубл))/;
+var NOT_A_LOG = /\b(how|what|why|should|could|would|can|did|do i|budget|left|afford|plan|limit|income|earn(ed)?|salary|got paid|save|saving|owe|lend|lent|borrow)\b|\?/;
+/**
+* A spending he logs: "spent 55 lei on food", "add that I spent 55 mdl today for
+* food", "add 55 mdl food", "55 food", "food 55 lei", "am cheltuit 55 lei pe
+* mancare", "потратил 55 лей на еду". Null for anything else (a question,
+* another day, another currency, water, reps…).
+*/
+function readSpend(text) {
+	const raw = String(text ?? "").trim();
+	if (!raw || raw.length > 90 || raw.startsWith("/")) return null;
+	const t = clean$1(raw).replace(/^(ok|okay|hey|ben|please|pls)[,\s]+/, "");
+	if (NOT_A_LOG.test(t) || OTHER_DAY.test(t) || OTHER_CUR.test(t)) return null;
+	if ((t.match(/\d+(?:[.,]\d+)?/g) ?? []).length !== 1) return null;
+	if (/\d\s*(min|mins|minutes?|h|hrs?|hours?|ore|km|kg|g|ml|l|reps?|sets?|times|steps|pages|x)\b|\b(water|apa|protein|pushups?|squats?|plank|sleep|slept|focus|study|studied)\b|вод|минут|час/.test(t)) return null;
+	const s = t.replace(/\s*\b(today|azi|astazi)\b|\s*сегодня/g, " ").replace(/\s+/g, " ").trim();
+	if (notMoney(s)) return null;
+	const forWord = "(?:on|for|at|pe|la|pentru|на|за)";
+	const lead = "(?:(?:please |pls )?(?:add|log|note|put|write|record|track)(?: (?:down|in))?(?: (?:that|it))?(?: i)? )?";
+	const spent = "(?:i )?(?:spent|spend|paid|pay|bought|am cheltuit|cheltuit|am dat|am platit|platit|am luat|потратил[аи]?|трата|заплатил[аи]?|купил[аи]?)";
+	const pats = [
+		new RegExp(`^${lead}${spent} ${NUM$1}(?: ?${LEI})? (?:${forWord} )?(.{2,40})$`),
+		new RegExp(`^(?:add|log|track|put|note|record) ${NUM$1}(?: ?${LEI})? (?:${forWord} )?(.{2,40})$`),
+		new RegExp(`^${NUM$1}(?: ?${LEI})? (?:${forWord} )?([\\p{L}][\\p{L} '-]{1,24})$`, "u"),
+		new RegExp(`^(?:${spent} )?(?:${forWord} )?([\\p{L}][\\p{L} '-]{1,24}?) ${NUM$1}(?: ?${LEI})?$`, "u")
+	];
+	for (let i = 0; i < pats.length; i++) {
+		const m = pats[i].exec(s);
+		if (!m) continue;
+		const [num, what] = i === 3 ? [m[2], m[1]] : [m[1], m[2]];
+		const amount = Math.round(Number(num.replace(",", ".")) * 100) / 100;
+		const note = what.replace(new RegExp(`\\b${LEI}\\b|^${LEI}\\s|\\s${LEI}$`, "g"), " ").replace(/^(the|a|an|some)\s+/, "").replace(/\s+/g, " ").trim();
+		if (!(amount > 0) || amount > 2e5 || !note || note.split(" ").length > 4) return null;
+		if (i >= 2 && /\b(min|mins|minutes|h|hours?|km|kg|g|ml|l|reps?|pushups?|squats?|times|steps|pages|lei)\b/.test(note)) return null;
+		return {
+			amount,
+			note
+		};
+	}
+	return null;
+}
+/** A simple money question or delete Ben answers in code; null for anything else. */
+function moneyAsk(text) {
+	const raw = String(text ?? "").trim();
+	if (!raw || raw.length > 90) return null;
+	const t = clean$1(raw).replace(/^(ok|okay|hey|ben|wait|hm+|so|and)[,\s]+/, "").replace(/^(ok|okay|wait)[,\s]+/, "");
+	if (t.split(" ").length > 14) return null;
+	if (/\b(why|should|could|would|tips?|advice|improve|cut|reduce|plan|week|yesterday|ieri|вчера|last month)\b/.test(t)) return null;
+	const del = /^(?:please |pls )?(?:delete|remove|erase|sterge|șterge|удали(?:ть)?)(?: it| that| this)?(?: (?:one|record|entry|expense|spending))?(?: (.*))?$/.exec(t);
+	if (del) {
+		let hint = (del[1] ?? "").replace(/^(the|that|this)\s+/, "").replace(/\b(one|record|entry|expense|spending|from (finance|money)( helper)?|please)\b/g, " ").replace(/\s+/g, " ").trim();
+		if (/^(last|latest|newest)$|^(last|latest) (one|record)$/.test(hint)) hint = "last";
+		if (/\b(task|event|habit|reminder|note|block|goal|reward|todo|meeting|alarm|memory)\b/.test(hint)) return null;
+		const am = /^m\d{1,2}$/.test(hint.replace(/\s+/g, "")) ? null : /(\d{1,6})(?:\s?(?:lei|mdl|leu))?/.exec(hint);
+		return {
+			kind: "delete",
+			hint: am ? hint.replace(am[0], "").trim() : hint,
+			amount: am ? Number(am[1]) : null
+		};
+	}
+	if (/\b(left|remaining|ramas|can i (still )?spend|safe to spend)\b|осталось/.test(t) && /\b(month|budget|spend|money|lei|luna|limit)\b|месяц|бюджет/.test(t) && !/\b(water|protein|habits?|tasks?|focus|points?)\b/.test(t)) return { kind: "left" };
+	if (/^(?:how much|what) (?:did|have) i (?:spend|spent)(?: so far)? this month$|^(?:my )?spending this month$|^(?:cat|ce) am cheltuit (?:luna asta|in luna asta)$|^сколько (?:я )?потратил[аи]? (?:в этом месяце|за месяц)$/.test(t)) return { kind: "month" };
+	const from = /\bwhere\b.*?(\d{1,6})(?:\s?(?:lei|mdl))?\b.*\bfrom\b|\bwhat(?:'s| is| are)? (?:the|that|those) (\d{1,6})(?:\s?(?:lei|mdl))?\b/.exec(t);
+	if (from) return {
+		kind: "today",
+		mentioned: Number(from[1] ?? from[2])
+	};
+	if (/^(?:what|how much|show|list|which)\b.*\b(spen[dt]|spending|expenses?|bought|records?|paid)\b.*\btoday\b|^(?:my |today'?s? )(spending|expenses)( today)?$|^(?:ce|cat) am cheltuit azi|^сколько (?:я )?потратил[аи]? сегодня/.test(t)) return {
+		kind: "today",
+		mentioned: null
+	};
+	return null;
+}
+var money = (bani, cur = "MDL") => {
+	const v = Math.round(Math.abs(bani)) / 100;
+	return `${Number.isInteger(v) ? v.toLocaleString("en-US") : v.toFixed(2)} ${cur === "MDL" ? "lei" : cur}`;
+};
+var rowLine = (r) => `${r.ref} ${money(r.amount, r.currency)} · ${r.category}${r.note && r.note.toLowerCase() !== r.category.toLowerCase() ? ` "${r.note.slice(0, 40)}"` : ""}${r.fromRewards ? " (from Rewards, points)" : ""}`;
+/** "Today: 70 lei in 2 records: M1 55 lei · Food, M2 15 lei · Reward." */
+function todayAnswer(rows, today, mentioned) {
+	if (!rows) return {
+		reply: "I can't see your Finance Helper data on this device, so I can't list today's spending.",
+		chips: ["What now?"],
+		read: "Finance Helper data not available"
+	};
+	const list = rows.filter((r) => r.date === today && r.type === "expense");
+	if (!list.length) return {
+		reply: "You have no spending recorded today.",
+		chips: ["How much is left this month?"],
+		read: "Read Finance Helper (no records today)"
+	};
+	const total = list.reduce((t, r) => t + Math.abs(r.amount), 0);
+	const lines = [mentioned != null && Math.round(total / 100) === mentioned ? `Today's ${money(total)} is ${list.length === 1 ? "one record" : `${list.length} records`}:` : `Today you spent ${money(total)} in ${list.length === 1 ? "one record" : `${list.length} records`}:`, ...list.map((r) => `• ${rowLine(r)}`)];
+	if (mentioned != null && Math.round(total / 100) !== mentioned) {
+		const hit = list.find((r) => Math.round(Math.abs(r.amount) / 100) === mentioned);
+		lines.push(hit ? `The ${mentioned} lei is ${hit.ref}.` : `None of today's records add up to ${mentioned} lei.`);
+	}
+	const pts = list.filter((r) => r.fromRewards);
+	if (pts.length) lines.push(`${pts.map((r) => r.ref).join(", ")} came from a Rewards buy with points, not real money. Say "delete ${pts[0].ref}" to take it out.`);
+	return {
+		reply: lines.join("\n"),
+		chips: [`Delete ${list[0].ref}`, "How much is left this month?"],
+		read: `Read Finance Helper (${list.length} record${list.length === 1 ? "" : "s"} today)`
+	};
+}
+/** Which record "delete the gaming one" / "delete that one" / "delete M2" means: one row, or null with a reason. */
+function pickToDelete(rows, ask) {
+	if (!rows.length) return {
+		row: null,
+		why: "I see no money records from the last few days to delete."
+	};
+	const ref = /^m(\d{1,2})$/.exec(ask.hint.replace(/\s+/g, ""));
+	if (ref) {
+		const r = rows.find((x) => x.ref.toLowerCase() === `m${ref[1]}`);
+		return r ? { row: r } : {
+			row: null,
+			why: `There is no ${ask.hint.toUpperCase()} in your recent records.`
+		};
+	}
+	let list = rows;
+	if (ask.amount != null) list = list.filter((r) => Math.round(Math.abs(r.amount) / 100) === ask.amount);
+	const words = fold(ask.hint).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3 && ![
+		"last",
+		"that",
+		"this",
+		"the",
+		"one"
+	].includes(w));
+	if (words.length) {
+		const stem = (w) => w.replace(/(ing|ed|es|s)$/, "");
+		list = list.filter((r) => {
+			const hay = fold(`${r.note} ${r.category}${r.fromRewards ? " reward rewards points" : ""}`);
+			return words.some((w) => hay.includes(stem(w)) || hay.split(/[^\p{L}\p{N}]+/u).some((h) => h.length >= 3 && stem(w).startsWith(stem(h))));
+		});
+	}
+	if (!list.length) return {
+		row: null,
+		why: `I can't find a record like "${[ask.amount != null ? `${ask.amount} lei` : "", ask.hint].filter(Boolean).join(" ")}" in the last few days.`
+	};
+	return { row: list[0] };
+}
+/** The confirm card before a delete: the exact record, and one tap to delete it. */
+function deleteAsk(row, tapId) {
+	const what = `${money(row.amount, row.currency)} · ${row.category}${row.note && row.note.toLowerCase() !== row.category.toLowerCase() ? ` "${row.note.slice(0, 30)}"` : ""}`;
+	return {
+		reply: `Delete this record from Finance Helper?\n• ${row.ref} ${what} (${row.date})${row.fromRewards ? "\nIt came from a Rewards buy with points, so it is not real spending." : ""}`,
+		chips: ["No, keep it"],
+		read: "Read Finance Helper (found the record)",
+		buttons: [{
+			label: `🗑 Yes, delete ${row.ref}`.slice(0, 40),
+			do: `say:✓${tapId} Yes, delete ${row.ref} ${what}`.slice(0, 120)
+		}]
+	};
+}
+/** "How much is left this month": Finance Helper's monthly limit, spent so far, safe per day. Amounts in bani. */
+function leftAnswer(d) {
+	if (!d) return {
+		reply: "I can't see your Finance Helper data on this device, so I don't know what is left.",
+		chips: ["What now?"],
+		read: "Finance Helper data not available"
+	};
+	if (d.limit == null || d.limitLeft == null) return {
+		reply: `You spent ${money(d.spentMonth)} this month. You have no monthly limit set in Finance Helper, so I can't say what is left.\nSet one in Finance Helper → Plan and I'll count down from it.`,
+		chips: ["What did I spend today?"],
+		read: "Read Finance Helper (no monthly limit)"
+	};
+	return {
+		reply: (d.limitLeft >= 0 ? [`You have ${money(d.limitLeft)} left this month (spent ${money(d.spentMonth)} of ${money(d.limit)}).`, ...d.safeToday != null ? [`That is about ${money(d.safeToday)} a day until the month ends.`] : []] : [`You are ${money(-d.limitLeft)} over this month's limit (spent ${money(d.spentMonth)} of ${money(d.limit)}).`, "Try a no-spend day tomorrow."]).join("\n"),
+		chips: ["What did I spend today?"],
+		read: "Read Finance Helper (this month)"
+	};
+}
+/** "You spent 1,900 lei this month: Food 1,200 lei, Transport 400 lei…" Amounts in bani. */
+function monthAnswer(d) {
+	if (!d) return {
+		reply: "I can't see your Finance Helper data on this device, so I can't add up this month.",
+		chips: ["What now?"],
+		read: "Finance Helper data not available"
+	};
+	if (!d.records) return {
+		reply: "You have no spending recorded this month yet.",
+		chips: ["What did I spend today?"],
+		read: "Read Finance Helper (no records this month)"
+	};
+	const top = [...d.byCategory].sort((a, b) => b.amount - a.amount).slice(0, 3).map((c) => `${c.name} ${money(c.amount)}`);
+	const lines = [`You spent ${money(d.spentMonth)} this month (${d.records} record${d.records === 1 ? "" : "s"}).`, ...top.length ? [`Most of it: ${top.join(", ")}.`] : []];
+	if (d.limit != null) lines.push(d.spentMonth <= d.limit ? `That leaves ${money(d.limit - d.spentMonth)} of your ${money(d.limit)} limit.` : `That is ${money(d.spentMonth - d.limit)} over your ${money(d.limit)} limit.`);
+	return {
+		reply: lines.join("\n"),
+		chips: ["What did I spend today?", "How much is left this month?"],
+		read: `Read Finance Helper (${d.records} record${d.records === 1 ? "" : "s"} this month)`
+	};
 }
 // src/core/feedbackLearn.ts
 var REASONS = [
@@ -54528,6 +54872,10 @@ async function undoReply(c, at, index) {
 						} catch {}
 						return what ? `↩ Removed: ${what}` : "⚠️ That money record is already gone";
 					}
+					if (op.k === "moneyback") {
+						const what = restoreMoney(db, op.tx);
+						return what === "already there" ? "⚠️ That money record is already back" : what ? `↩ Back in Finance Helper: ${what}` : "⚠️ Finance Helper is not on this device";
+					}
 					if (op.k === "remind") {
 						let list = [];
 						try {
@@ -57052,6 +57400,79 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				};
 			}
 		}
+		if (!preset && !media && text && !direct && !toolBusy) {
+			const sp = readSpend(clean);
+			const mq = sp ? null : moneyAsk(clean);
+			if (sp || mq) {
+				const ma = await mirror.write((db) => {
+					const today = services.services(db).wallet.today();
+					const rows = moneyRows(db, today);
+					const lei = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
+					if (sp) {
+						const line = `${sp.amount} ${sp.note}`;
+						const p = previewMoney(db, line);
+						const act = p && p.type === "expense" && p.daysAgo === 0 ? readAction(`log: ${line}`) : null;
+						if (!p || !act) return null;
+						const before = (rows ?? []).filter((r) => r.date === today && r.type === "expense").reduce((t, r) => t + r.amount, 0);
+						return {
+							reply: `💸 ${p.label}. Today so far: ${lei(before + p.amount)}.`,
+							acts: [act],
+							chips: ["What did I spend today?", "How much is left this month?"],
+							read: "Logged in code"
+						};
+					}
+					if (mq.kind === "today") return {
+						...todayAnswer(rows, today, mq.mentioned),
+						acts: []
+					};
+					if (mq.kind === "left") {
+						const m = monthSpend(db, today);
+						const n = m ? moneyNumbers(financeStateFrom(db, store) ?? { tx: [] }, today) : null;
+						return {
+							...leftAnswer(m ? {
+								spentMonth: m.spentMonth,
+								limit: m.limit,
+								limitLeft: m.limit != null ? m.limit - m.spentMonth : null,
+								safeToday: n?.safeToday ?? null
+							} : null),
+							acts: []
+						};
+					}
+					if (mq.kind === "month") return {
+						...monthAnswer(monthSpend(db, today)),
+						acts: []
+					};
+					if (mq.kind !== "delete" || !rows) return null;
+					const pick = pickToDelete(rows, mq);
+					if (!pick.row) return {
+						reply: pick.why ?? "I could not find that record.",
+						chips: ["What did I spend today?"],
+						read: "Read Finance Helper",
+						acts: []
+					};
+					const tap = `${Date.now().toString(36).slice(-6)}m`;
+					keepConfirm(db, tap, {
+						kind: "delmoney",
+						ref: pick.row.ref,
+						id: pick.row.id
+					});
+					return {
+						...deleteAsk(pick.row, tap),
+						acts: []
+					};
+				}).catch((e) => (console.warn("ben: money in code:", e?.message), null));
+				if (ma) {
+					step(ma.read);
+					preset = {
+						reply: ma.reply,
+						acts: ma.acts,
+						chips: ma.chips,
+						buttons: ma.buttons
+					};
+					codeMade = true;
+				}
+			}
+		}
 		if (!preset && !media && text && !direct) {
 			const shift = readShift(clean);
 			if (shift) {
@@ -58443,12 +58864,18 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 						continue;
 					}
 					if (a.kind === "delmoney" || a.kind === "editmoney") {
-						const id = moneyRefs.get(a.ref);
+						const id = a.kind === "delmoney" && a.id || moneyRefs.get(a.ref);
 						if (!id) continue;
+						opNow = null;
 						const line = await mirror.write((db) => {
 							if (a.kind === "delmoney") {
+								const was = moneyRecord(db, id);
 								const what = deleteMoney(db, id);
 								if (!what) return "⚠️ That money record is already gone";
+								if (was) opNow = {
+									k: "moneyback",
+									tx: was
+								};
 								const life = takeLink(db, id);
 								if (life) try {
 									services.services(db).money.deleteExpense(life);
