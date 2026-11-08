@@ -78,8 +78,8 @@
 
 /* ---------- Saving for, with milestones ---------- */
 .rx-goals { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.rx-goalrow { display: grid; grid-template-columns: 58px minmax(0, 1fr); align-items: center; gap: 14px; padding: 10px 14px 10px 10px; border-radius: 18px; border: 1px solid var(--border); background: var(--rx-glass); }
-.rx-goalrow:first-child { border-color: color-mix(in srgb, var(--rx-gold) 40%, var(--border)); }
+.rx-goalrow { display: grid; grid-template-columns: 46px minmax(0, 1fr); align-items: center; gap: 12px; padding: 6px 14px 6px 8px; border-radius: 18px; border: 1px solid var(--border); background: var(--rx-glass); }
+.rx-goalrow.main { border-color: color-mix(in srgb, var(--rx-gold) 55%, var(--border)); background: linear-gradient(120deg, color-mix(in srgb, var(--rx-gold) 12%, var(--rx-glass)), var(--rx-glass)); }
 .rx-goalrow.done { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
 .rx-goalrow-main { display: grid; gap: 4px; min-width: 0; }
 .rx-goalrow-head { display: flex; align-items: baseline; gap: 10px; }

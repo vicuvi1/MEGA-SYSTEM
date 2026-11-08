@@ -3337,7 +3337,8 @@ try {
   // The Rewards shop: goal bar, combo, monthly budget meter, shelves, rarity, a buy that spends exactly the price, and it fits laptop and phone.
   await step('Rewards: shop shelves, budget meter and buy', async () => {
     await open('shop')
-    await pg.waitForSelector('[data-testid="goal-bar"], .sh-goal', { timeout: 10000 })
+    await pg.waitForSelector('.rx-goalrow, .rx-slim-empty', { timeout: 10000 })
+    if (process.env.POLISH_SHOTS) await pg.screenshot({ path: `${process.env.POLISH_SHOTS}/rewards-top.png` }).catch(() => {})
     await pg.waitForSelector('[data-testid="combo"]', { timeout: 5000 })
     const meter = (await pg.locator('[data-testid="budget-meter"]').innerText()).replace(/\s+/g, ' ')
     if (!/Spent this month \d+ \/ \d+ lei/.test(meter)) throw new Error(`budget meter reads: ${meter}`)
@@ -3571,6 +3572,8 @@ try {
     if ((await peek()).length !== before) throw new Error('an unclear line was saved')
 
     // 3. A task for today also gets a draft block, placed in a free gap (the preview says where).
+    // Earlier toasts first fade out, so this Undo is the only one (toasts merge: "2 changes").
+    await until(async () => (await pg.locator('.toasts .toast').count()) === 0, 'toasts did not fade out', 12000)
     await box.fill('tidy desk 20m')
     await prev.locator('.pe-qchip', { hasText: 'Tidy desk · today · 20 min' }).waitFor({ timeout: 5000 })
     if (!/goes \d\d:\d\d–\d\d:\d\d/.test(await prev.innerText())) throw new Error(`no place in the preview: ${await prev.innerText()}`)
@@ -3580,6 +3583,10 @@ try {
     if ((await read.getAttribute('data-min')) !== '20') throw new Error(`the Tidy desk block is ${await read.getAttribute('data-min')} min`)
     if (!(await read.getAttribute('class')).includes('draft')) throw new Error('the placed block is not a draft')
     await pg.screenshot({ path: `${shots}/plan-quick-add.png` }).catch(() => {})
+    if (process.env.POLISH_SHOTS) await pg.screenshot({ path: `${process.env.POLISH_SHOTS}/your-day-after-move.png` }).catch(() => {})
+    // Calm toasts: never more than 2 on screen; "Your day" shows each thing once.
+    if ((await pg.locator('.toasts .toast').count()) > 2) throw new Error('more than 2 toasts on screen')
+    if ((await pg.locator('.ds-block[aria-label^="Draft the networking lab report"]').count()) > 1) throw new Error('"Your day" shows the lab report twice')
     // Undo takes the block and the Todoist task back.
     await pg.locator('.toast', { hasText: 'Added Tidy desk' }).locator('button', { hasText: 'Undo' }).first().click()
     await until(async () => (await card.locator('.pe-block', { has: pg.locator('.pe-name', { hasText: /^Tidy desk$/ }) }).count()) === 0, 'Undo did not take the Tidy desk block back')

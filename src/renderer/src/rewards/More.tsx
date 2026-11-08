@@ -55,12 +55,13 @@ function GoalRow({ g, balance, perDay, today, main }: { g: Reward; balance: numb
   const sooner = main && left > 0 ? soonerWith(left, perDay, 2) : null
   const next = MILESTONES.find((m) => frac < m)
   return (
-    <li className={`rx-goalrow ${left <= 0 ? 'done' : ''}`}>
-      <Ring frac={grown} size={58}>
+    <li className={`rx-goalrow ${main ? 'main' : ''} ${left <= 0 ? 'done' : ''}`}>
+      <Ring frac={grown} size={46}>
         <Cover r={g} small />
       </Ring>
       <div className="rx-goalrow-main">
         <div className="rx-goalrow-head">
+          {main && <span className="rx-kicker">Saving for</span>}
           <b>{g.title}</b>
           <span className="num">
             {Math.min(have, g.price).toLocaleString()} / {g.price.toLocaleString()}
@@ -94,7 +95,7 @@ function GoalRow({ g, balance, perDay, today, main }: { g: Reward; balance: numb
 
 export function SavingFor({ goals, balance, perDay, today, onAll }: { goals: Reward[]; balance: number; perDay: number; today: string; onAll: () => void }) {
   return (
-    <Section title="Saving for" sub={goals.length ? 'Milestones at ¼, ½ and ¾' : undefined}>
+    <section className="rx-sec rx-saving" aria-label="Saving for" data-testid="saving-for">
       {goals.length ? (
         <ul className="rx-goals">
           {goals.map((g, i) => (
@@ -109,7 +110,7 @@ export function SavingFor({ goals, balance, perDay, today, onAll }: { goals: Rew
           </button>
         </div>
       )}
-    </Section>
+    </section>
   )
 }
 

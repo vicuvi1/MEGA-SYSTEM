@@ -4,10 +4,11 @@ import { useFlip, useLeaving, useSwipeDismiss } from './toastMotion'
 import type { LedgerEntry } from '@shared/api'
 import { play } from './soundKit'
 import { useCountUp } from './motionKit'
+import { addToast, type ToastItem } from '@core/toastQueue'
 
 /** A toast may carry one action (e.g. Undo); it then stays a little longer. */
 export type ToastAction = { label: string; run: () => void }
-type Toast = { id: number; text: string; tone: 'good' | 'bad' | 'info'; action?: ToastAction }
+type Toast = ToastItem
 const ToastCtx = createContext<(text: string, tone?: Toast['tone'], action?: ToastAction) => void>(() => {})
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -18,7 +19,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     const id = Date.now() + Math.random()
     // Something went wrong: a soft low thud (and a short buzz on phones).
     if (tone === 'bad') play('error')
-    setToasts((t) => [...t, { id, text, tone, action }])
+    setToasts((t) => addToast(t, { id, text, tone, action }))
     setTimeout(() => drop(id), action ? 6500 : 3200)
   }, [drop])
   const box = useRef<HTMLDivElement>(null)

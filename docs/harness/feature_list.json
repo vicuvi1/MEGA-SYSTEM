@@ -494,6 +494,20 @@
    ],
    "evidence": "",
    "notes": "src/renderer/src/IslandAlive.tsx"
+  },
+  {
+   "id": "F-POLISH-DUPES",
+   "priority": 2,
+   "area": "today",
+   "title": "No duplicates: Your day, toasts, Rewards goal",
+   "user_visible_behavior": "Your day shows each item once; at most 2 toasts, Undo toasts merge; the main saving goal shows once at the top of Rewards",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-08: dayColumn and toastQueue unit tests; full smoke green",
+   "notes": "src/core/dayColumn.ts, src/core/toastQueue.ts, rewards/More.tsx"
   }
  ]
 }
