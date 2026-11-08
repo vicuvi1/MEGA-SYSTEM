@@ -192,6 +192,22 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         }
       }
 
+      // Finance Helper's "No spending today": the same free day as on Today → Now (ticks Log spending once).
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'FINANCE_FREE_DAY') {
+        const op = data.payload?.op
+        let out: { days: string[]; paid?: number; error?: string } = { days: [] }
+        try {
+          if (op === 'mark') out = await life.finance!.freeDay()
+          else if (op === 'undo') out = await life.finance!.undoFreeDay()
+          else out = { days: (await life.finance?.freeDays()) ?? [] }
+          if (op === 'mark' || op === 'undo') window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+        } catch (err) {
+          out = { days: (await life.finance?.freeDays().catch(() => [])) ?? [], error: (err as Error).message }
+        }
+        ;(e.source as Window | null)?.postMessage({ type: 'LIFE_FINANCE_FREE_DAYS', op, ...out }, window.location.origin)
+        return
+      }
+
       // Finance Helper saved: pay "Spending logged" for days with records,
       // through the connection sync (the same refs on PC and web, never twice).
       if (data.type === 'FINANCE_TRANSACTION_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'FINANCE_TRANSACTION_LOGGED')) {

@@ -3130,6 +3130,79 @@ try {
     if (!(await pg.locator('.ot form.ot-add input[placeholder="Add a task…"]').count())) throw new Error('no "Add a task…" line under Other tasks')
     await pg.setViewportSize({ width: 1440, height: 900 })
   })
+  // A free day: "No spending today" ticks Log spending once, a second tap does nothing, undo takes it back.
+  await step('No spending: a free day ticks Log spending once, no second pay, undo takes it back', async () => {
+    await pg.setViewportSize({ width: 1280, height: 720 })
+    // Its own state: the list view (an earlier step may leave the grid), a fresh page, Today → Now.
+    await pg.evaluate(() => localStorage.setItem('ls.hbView', 'list'))
+    await reloadApp()
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.waitForSelector('.hb .hb-row', { timeout: 15000 })
+    const row = pg.locator('.hb-row', { hasText: 'Log spending' }).first()
+    if (!(await row.count())) {
+      // Hidden by an earlier step: show it again from the board's ⋯ menu.
+      await pg.locator('.hb-head .hb-more, .hb-head [aria-label*="More"]').first().click().catch(() => {})
+      throw new Error('the Log spending row is not on the board (hidden or removed)')
+    }
+    const coins = () => pg.evaluate(() => document.querySelector('.topbar .tb-coins')?.textContent?.trim() ?? '')
+    const settled = async () => {
+      let v = await coins()
+      for (let k = 0; k < 20; k++) {
+        await pg.waitForTimeout(400)
+        const b = await coins()
+        if (b === v) return v
+        v = b
+      }
+      return v
+    }
+    // The made-up Finance data has spending every day: this device's copy has none today.
+    const keptFinance = await pg.evaluate(() => {
+      const old = localStorage.getItem('finance-helper.state')
+      localStorage.setItem('finance-helper.state', JSON.stringify({ settings: { currency: 'MDL', categories: [], accounts: [] }, tx: [] }))
+      return old
+    })
+    const already = /s-done/.test((await row.getAttribute('class')) ?? '')
+    // The same way a home-screen shortcut opens the spending line (a ticked row has no tap target).
+    await pg.evaluate(() => window.dispatchEvent(new Event('life-open-spend')))
+    await pg.waitForSelector('.spend-line', { timeout: 3000 })
+    const btn = pg.locator('.spend-line [data-testid="free-day"]')
+    await btn.waitFor({ timeout: 3000 })
+    if (!/No spending today/.test(await btn.innerText())) throw new Error('no "No spending today" button in the spending line')
+    if (already) {
+      // Spending was already paid earlier in this run: a free day must not pay a second time.
+      const was = await settled()
+      await btn.click()
+      await pg.waitForTimeout(1500)
+      if ((await settled()) !== was) throw new Error('a free day paid again on a day that was already paid')
+      await pg.evaluate((old) => (old === null ? localStorage.removeItem('finance-helper.state') : localStorage.setItem('finance-helper.state', old)), keptFinance)
+      return
+    }
+    const before = await settled()
+    await btn.click()
+    await pg.waitForTimeout(1500)
+    const said = (await pg.locator('.toasts').innerText().catch(() => '')).replace(/\s+/g, ' ')
+    await pg.waitForFunction(() => [...document.querySelectorAll('.hb-row')].some((r) => /Log spending/.test(r.textContent) && /s-done/.test(r.className)), null, { timeout: 8000 }).catch(async () => {
+      throw new Error(`"No spending today" did not tick Log spending (toast: ${said})`)
+    })
+    await pg.waitForFunction(() => /✓ No spending today/.test(document.querySelector('.spend-line [data-testid="free-day"]')?.textContent ?? ''), null, { timeout: 5000 })
+    await pg.waitForTimeout(800)
+    const after = await settled()
+    if (after === before) throw new Error(`a free day paid no points (${before})`)
+    // A second tap is Undo, not a second pay: undo takes the points back and un-ticks the habit.
+    await btn.click()
+    await pg.waitForFunction(() => [...document.querySelectorAll('.hb-row')].some((r) => /Log spending/.test(r.textContent) && !/s-done/.test(r.className)), null, { timeout: 8000 }).catch(() => {
+      throw new Error('undo did not un-tick Log spending')
+    })
+    await pg.waitForTimeout(800)
+    if ((await settled()) !== before) throw new Error('undo did not take the points back')
+    // Tap again for the screenshot and leave the day free.
+    await pg.locator('.spend-line [data-testid="free-day"]').click()
+    await pg.waitForFunction(() => /✓ No spending today/.test(document.querySelector('.spend-line [data-testid="free-day"]')?.textContent ?? ''), null, { timeout: 5000 })
+    if (process.env.NOSPEND_SHOTS) await pg.waitForFunction(() => !document.querySelector('.toasts .toast'), null, { timeout: 10000 }).catch(() => {})
+    if (process.env.NOSPEND_SHOTS) await pg.screenshot({ path: join(process.env.NOSPEND_SHOTS, 'free-day.png') })
+    await pg.evaluate((old) => (old === null ? localStorage.removeItem('finance-helper.state') : localStorage.setItem('finance-helper.state', old)), keptFinance)
+  })
   // Career (made-up data): the job board with its weekly quota, a flashcard review,
   // the portfolio export, an essay planned backward, pay yourself first, the letter.
   await step('Career: apply to a job, grade a flashcard, export the portfolio, plan an essay, pay yourself first, the monthly letter', async () => {

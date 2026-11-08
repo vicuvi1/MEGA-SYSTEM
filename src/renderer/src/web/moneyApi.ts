@@ -34,6 +34,18 @@ export interface MoneyApi {
   preview(text: string): Promise<QuickPreview | null>
   quickAdd(text: string): Promise<QuickAdded>
   undo(txId: string, ledgerId?: number | null): Promise<MoneyHubView | null>
+  /** A free day: "No spending today". Ticks Log spending once (same pay as a spend); today only. */
+  freeDay(): Promise<FreeDay>
+  undoFreeDay(): Promise<FreeDay>
+  /** Days marked as free, for Finance Helper's day list. */
+  freeDays(): Promise<string[]>
+}
+
+export interface FreeDay {
+  day: string
+  /** Points paid now (0 when the day was already paid or counted). */
+  paid: number
+  days: string[]
 }
 
 const store = () => (typeof localStorage !== 'undefined' ? localStorage : null)
@@ -52,8 +64,18 @@ export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Pr
       return hubView(state, today)
     })
   }
+  const freeDays = async () => (await svcP).read((s) => s.money.marks().nothingSpent)
   return {
     hub: () => hub(),
+    freeDay: async () => {
+      const r = await (await svcP).money.freeDay()
+      return { day: r.day, paid: r.paid, days: await freeDays() }
+    },
+    undoFreeDay: async () => {
+      const r = await (await svcP).money.undoFreeDay()
+      return { day: r.today.day, paid: 0, days: await freeDays() }
+    },
+    freeDays,
     preview: async (text) => {
       const t = text.trim()
       if (!t || t.length > 120) return null

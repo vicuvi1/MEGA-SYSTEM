@@ -452,6 +452,21 @@
    "notes": "Visuals for the new snapshot fields are builder B's (DesktopIsland.tsx)."
   },
   {
+   "id": "F-FREEDAY",
+   "priority": 2,
+   "area": "money",
+   "title": "Free day (No spending today)",
+   "user_visible_behavior": "A No spending today button in the Today spending line and in Finance Helper's Log ticks Log spending once for today; undo takes the points back; Finance lists the day as No spending",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"No spending\" npm run smoke",
+    "SMOKE_ONLY=\"Today Now\" npm run smoke"
+   ],
+   "evidence": "honestMoney.test.ts 'a free day' (3 tests); smoke step No spending",
+   "notes": "Marker is the synced money_nothing_spent setting, not a transaction; same pay ref as a real spend"
+  },
+  {
    "id": "F-ALIVE",
    "priority": 2,
    "area": "island",

@@ -33494,6 +33494,8 @@ function formatMoney$1(bani, currency = "MDL") {
 	})} ${currency}`;
 }
 // src/main/money.ts
+/** The ledger note of the points a free day paid (so undo only takes back those). */
+var FREE_DAY_NOTE = "Spending logged (free day, no spending)";
 function toExpense(r) {
 	return {
 		id: r.id,
@@ -33658,6 +33660,45 @@ var MoneyService = class {
 			day,
 			already
 		};
+	}
+	/**
+	* A free day: "No spending today". Marks today as a no-spend day and pays
+	* "Spending logged" once, with the same ref a real spend uses (so a spend
+	* logged later the same day never pays again). Only for today, at the time.
+	*/
+	freeDay(other = [], now = /* @__PURE__ */ new Date()) {
+		const day = this.wallet.today(now);
+		if (moneyDay([...this.nativeDayTx(), ...other], day).everydayBani > 0) throw new LedgerError("You already logged spending today, so it is not a free day");
+		const already = this.days("money_nothing_spent").includes(day);
+		if (!already) this.addDay("money_nothing_spent", day);
+		const ref = `fin:logged:${day}`;
+		if (this.wallet.effective().some((e) => e.ref === ref)) return {
+			day,
+			already,
+			paid: 0,
+			ledgerId: null
+		};
+		const before = this.wallet.summary().balance;
+		const ledgerId = this.wallet.awardRule("money.logged", {
+			now,
+			day,
+			ref,
+			note: FREE_DAY_NOTE
+		});
+		return {
+			day,
+			already,
+			paid: this.wallet.summary().balance - before,
+			ledgerId
+		};
+	}
+	/** Takes today's free day back, with the points it paid (a real spend's points stay). */
+	undoFreeDay(now = /* @__PURE__ */ new Date()) {
+		const day = this.wallet.today(now);
+		setSetting(this.db, "money_nothing_spent", JSON.stringify(this.days("money_nothing_spent").filter((d) => d !== day)));
+		const paid = this.wallet.effective().find((e) => e.ref === `fin:logged:${day}` && e.note === "Spending logged (free day, no spending)");
+		if (paid) this.wallet.undo(paid.id, "Free day undone", now);
+		return { day };
 	}
 	/** "I cooked at home today": you confirm it, then it pays (once a day). */
 	confirmCooked(now = /* @__PURE__ */ new Date()) {
@@ -40510,6 +40551,12 @@ syncFinance: (recordDays) => write((s) => {
 			days: () => read((s) => moneyDays(s)),
 			/** FX3: "Nothing spent today" (counts once the day is over, if it stays true). */
 			nothingSpent: () => write((s) => (s.money.nothingSpent(financeDayTx(s)), moneyDays(s)), W),
+			/** A free day: "No spending today" ticks the Log spending habit once (same pay as a spend). */
+			freeDay: () => write((s) => ({
+				...s.money.freeDay(financeDayTx(s)),
+				state: moneyDays(s)
+			}), W),
+			undoFreeDay: () => write((s) => (s.money.undoFreeDay(), moneyDays(s)), W),
 			/** FX3: "I cooked at home today" (you confirm it, it pays). */
 			confirmCooked: () => write((s) => (s.money.confirmCooked(), moneyDays(s)), W)
 		},
