@@ -26,7 +26,8 @@ import { installTaps, isPressed, onPress, tp } from './islandTap'
 import { IslandMedia } from './IslandMedia'
 import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
-import { play, playReminder } from './soundKit'
+import { alertBlock, play, playBodyReminder, playReminder, soundPrefs } from './soundKit'
+import { bodyReminderOf, reminderGain, reminderPlan } from '@core/islandReminderSound'
 import { islandActionSound, play as islandSound, useIslandSoundEvents } from './islandSounds'
 import { useIslandSounds } from './focusSound'
 import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
@@ -646,6 +647,10 @@ export function DesktopIsland() {
   const gateOf = (kind: string, meeting = false, dot = false, id?: string) => modeGate({ mode: prefsRef.current.mode, kind, id, meeting, peekFor: prefsRef.current.peekFor, base: alertGate({ kind, meeting, dot, prefs: prefsRef.current, quiet, call: inCall, lastPeekAt: lastPeek.current, now: Date.now() }) })
   // Cards already shown once: coming back after another card, they wait as their dot (core/islandCalm.ts firstSight).
   const seenIds = useRef<Record<string, number>>({})
+  // Body reminders that already rang (never twice for one card).
+  const rangIds = useRef(new Set<string>())
+  const snapRef = useRef(s)
+  snapRef.current = s
   useEffect(() => {
     const a = s.alert
     if (!a || a.id === seenAlert.current) return
@@ -667,7 +672,20 @@ export function DesktopIsland() {
     // IC14: the evening story peeks long enough to be told (~10 s).
     const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : body && shows === 'card' ? { type: 'alert', ms: BODY_CARD_MS } : { type: 'alert' }
     const pref = alertPref(a.kind, !!a.meeting)
-    if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume, !!a.meeting)
+    // Water, the eye break, the move break and the screen break: their own clear sound, once (core/islandReminderSound.ts).
+    if (bodyReminderOf(a)) {
+      const plan = reminderPlan({
+        mode: prefsRef.current.mode, alert: a, gate: g, islandSound: !!prefsRef.current.sound, kindSound: !pref || prefsRef.current.kinds[pref].sound,
+        prefs: soundPrefs().reminders, hush: snapRef.current.hush ?? null, quiet, call: inCall, blocked: alertBlock(), played: rangIds.current.has(a.id)
+      })
+      if (plan.sound) {
+        if (rangIds.current.size > 200) rangIds.current.clear()
+        rangIds.current.add(a.id)
+        playBodyReminder(plan.sound, soundPrefs().reminders.volume)
+        window.dispatchEvent(new CustomEvent('life-island-reminder-sound', { detail: { kind: plan.sound, id: a.id } }))
+      }
+      logIslandUi('sound', `${a.id}: ${plan.sound ? `the ${plan.sound} sound` : `no sound (${plan.why})`}`)
+    } else if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume, !!a.meeting)
     calmCardRef.current = prefsRef.current.mode === 'calm' && shows === 'card'
     setCalmCard(calmCardRef.current)
     // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce (not in Calm: it slides out of the line).
@@ -1443,6 +1461,12 @@ export function DesktopIsland() {
     setNudgeRun(null)
     if (!r) return
     const kind = r.kind
+    // The 20 s are up: a soft "done" chime (same switches as the eye break's own sound).
+    const rs = soundPrefs().reminders
+    if (done && kind === 'eyes' && prefs.sound && rs.on.eyes && !s.hush && !quiet && !inCall) {
+      play('mustDo', { ownSwitch: true, loud: reminderGain(rs.volume) * 0.7 })
+      window.dispatchEvent(new CustomEvent('life-island-reminder-sound', { detail: { kind: 'eyesDone', id: r.alertId } }))
+    }
     send({ kind: 'nudge', op: done ? { op: 'tally', kind, ok: true, alertId: r.alertId } : { op: 'close', alertId: r.alertId } })
   }
   // IC13: after "Going to bed", the pill becomes the moon until morning.
@@ -1965,7 +1989,7 @@ export function DesktopIsland() {
   const dotAlert = s.alert && gateOf(s.alert.kind, !!s.alert.meeting) !== 'drop' ? s.alert : null
   const dots: CalmDot[] = calm && !s.locked ? calmDots({ alert: dotAlert, benUnread: s.ben.unread }) : []
   // A move break or water card that waits: a few words under the line, so the green or blue line is clearly the island.
-  const calmWait = calm && !s.locked && dotAlert && isBodyCard(dotAlert) ? (dotAlert.kind === 'water' ? '💧 Water waiting' : '🏃 Move break waiting') : null
+  const calmWait = calm && !s.locked && dotAlert && isBodyCard(dotAlert) ? (dotAlert.kind === 'water' ? '💧 Water waiting' : dotAlert.kind === 'eyes' ? '👁️ Eye break waiting' : '🏃 Move break waiting') : null
   const [lineHintSeen, setLineHintSeen] = useState(() => {
     try {
       return localStorage.getItem(CALM_LINE_HINT) === '1'
@@ -2136,7 +2160,7 @@ export function DesktopIsland() {
   const a = s.alert && gateOf(s.alert.kind) !== 'drop' ? s.alert : null
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main || (prefs.mode === 'calm' && calmCard)) ? (
-    <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood}`} {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps}>
+    <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood} ${isBodyCard(a) ? 'body-card' : ''}`} data-body-card={isBodyCard(a) ? (bodyReminderOf(a) ?? undefined) : undefined} {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps}>
       {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
       <AlertFx kind={a.kind} text={a.text} />
       <div className="di-peek-top">

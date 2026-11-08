@@ -1576,8 +1576,11 @@ try {
     await pg.waitForSelector('.bp-area[data-area="money"] button.on:text-is("Hard")', { timeout: 5000 })
     await pg.locator('.st-item', { hasText: 'Sound' }).first().click()
     await pg.waitForFunction(() => document.querySelector('.st-head h1')?.textContent === 'Sound', null, { timeout: 5000 })
-    const n = await pg.locator('.sx-moment').count()
-    if (n !== 17) throw new Error(`${n} sound rows, want 17`)
+    const n = await pg.locator('.sx-moment:not([data-reminder])').count()
+    if (n !== 18) throw new Error(`${n} sound rows, want 18`)
+    // Island reminders: a switch and a test button for water, eye break, move break and screen break.
+    const rem = await pg.locator('[data-reminder-sounds] .sx-moment[data-reminder]').count()
+    if (rem !== 4) throw new Error(`${rem} island reminder rows, want 4`)
     await pg.click('button[aria-label="Sound for Water"]')
     await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
     await pg.locator('.ui-select-list [role=option]', { hasText: 'Pop' }).click()
@@ -2041,7 +2044,7 @@ try {
         islandTakeClicks: (on) => { window.__island.take.push(on) },
         islandAction: (a) => { window.__island.actions.push(a) },
         onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
-        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 2, gapMin: 0 }), 60) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 2, gapMin: 0, peekFor: { eyes: false }, peekForV: 2 }), 60) },
         onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
       }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
     })
@@ -2073,7 +2076,7 @@ try {
     await ip.mouse.move(260, 600, { steps: 3 })
     await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 8000 })
     if (await ip.$('.di-panel')) throw new Error('the panel stayed open')
-    // An eye break (off in "Peek for"): no peek, only a green dot.
+    // An eye break you turned off in "Peek for" (saved after v2): no peek, only a green dot.
     await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now(), alert: { id: 'eyes:1', kind: 'eyes', title: 'Eye break', text: 'Look far away for 20 seconds', actions: [] } }))
     await ip.waitForSelector('.di-nub-dot.dot-green', { timeout: 5000 })
     await ip.waitForTimeout(500)
@@ -2138,6 +2141,9 @@ try {
     if (water?.kind !== 'water' || water.dot) throw new Error(`behind on water: ${JSON.stringify(water)}`)
     // In a call: neither.
     if (['move', 'water'].includes(chain(at(14, 55), { ctx: { now: at(14, 55), call: true, focus: false, event: false, asleep: false } }).alert?.kind)) throw new Error('a body card in a call')
+    // Eye breaks on (the default now): after 25 min at the PC the 20-20-20 card.
+    const eyes = chain(at(14, 25), { eyeBreaks: true, lastWaterAt: at(14, 20), store: N.cleanNudgeStore({ prefs: { on: { posture: false, breathe: false, tidy: false } } }) }).alert
+    if (eyes?.kind !== 'eyes' || eyes.dot || eyes.nudge?.type !== 'timer') throw new Error(`eye break after 25 min: ${JSON.stringify(eyes)}`)
 
     const shots = process.env.NUDGE_SHOTS
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 760 } })).newPage()
@@ -2157,7 +2163,9 @@ try {
         water: { ml: 500, target: 2000 }, reps: [], alert: null,
         nudgeWhy: 'Move break: at the PC 12 min (break after 50) · Water: last glass or reminder 20 min ago (next after 60 min)'
       }
-      window.__island = { send: (name, v) => cbs[name]?.(v), snap, actions: [] }
+      window.__island = { send: (name, v) => cbs[name]?.(v), snap, actions: [], sounds: [] }
+      // The reminder sound hook (core/islandReminderSound.ts): which sound rang, for which card.
+      window.addEventListener('life-island-reminder-sound', (e) => window.__island.sounds.push(e.detail))
       window.desktop = new Proxy({
         islandHot: () => {}, islandTakeClicks: () => {}, islandAction: (a) => { window.__island.actions.push(a) },
         onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
@@ -2167,9 +2175,15 @@ try {
     })
     await ip.goto(`http://127.0.0.1:${port}/?island=1`)
     await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 15000 })
+    const nubBox = await ip.locator('.di-nub').boundingBox()
     // The move break in Calm: the full card with the exercise picker, not the slim line, and it stays past the peek time (2 s here).
     await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: a }), move)
     await ip.waitForSelector('.di-peek.alert.kind-move .nd-ex', { timeout: 5000 })
+    // Its own sound, once (a re-render with the same card doesn't ring again).
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 3, alert: a }), move)
+    await ip.waitForTimeout(300)
+    const moveSounds = await ip.evaluate(() => window.__island.sounds.filter((x) => x.kind === 'move').length)
+    if (moveSounds !== 1) throw new Error(`the move break rang ${moveSounds} times (want 1)`)
     if (await ip.$('.di-peek.calm-peek')) throw new Error('the move break came as the slim line')
     await ip.waitForTimeout(3500)
     if (!(await ip.$('.di-peek.alert.kind-move .nd-ex'))) throw new Error('the move-break card went away after a few seconds')
@@ -2209,9 +2223,43 @@ try {
     await ip.waitForTimeout(3000)
     if ((await ip.locator('.di-peek.alert.kind-water').count()) !== 1) throw new Error('the water card went away after a few seconds, or showed twice')
     if (shots) await ip.screenshot({ path: `${shots}/calm-water-card.png`, clip: { x: 0, y: 0, width: 520, height: 260 } })
+    // The card really grew out of the line (the island expands), with the water drop sound once.
+    const waterBox = await ip.locator('.di-peek.alert.kind-water').boundingBox()
+    if (!waterBox || !nubBox || waterBox.height < nubBox.height * 4 || waterBox.width < 260) throw new Error(`the water card did not expand: ${JSON.stringify(waterBox)} from ${JSON.stringify(nubBox)}`)
+    const waterSounds = await ip.evaluate(() => window.__island.sounds.filter((x) => x.kind === 'water').length)
+    if (waterSounds !== 1) throw new Error(`the water card rang ${waterSounds} times (want 1)`)
+    const isnd = process.env.ISLAND_SOUND_SHOTS
+    if (isnd) await ip.screenshot({ path: `${isnd}/expanded-water-card.png`, clip: { x: 0, y: 0, width: 520, height: Math.ceil(waterBox.y + waterBox.height + 24) } })
     await ip.locator('.di-peek.alert.kind-water button', { hasText: '+250 ml' }).first().click()
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'water' && a.ml === 250), null, { timeout: 4000 })
     await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
+    // The eye break in Calm: the real card (not the slim line) with "Start 20 s", its soft chime once.
+    await ip.mouse.move(500, 740)
+    await ip.waitForTimeout(800)
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 4, alert: a }), eyes)
+    await ip.waitForSelector(`.di-peek.alert.kind-eyes [data-tap="nd:${eyes.id}:go"]`, { timeout: 5000 })
+    if (await ip.$('.di-peek.calm-peek')) throw new Error('the eye break came as the slim line')
+    const eyeBox = await ip.locator('.di-peek.alert.kind-eyes').boundingBox()
+    if (!eyeBox || eyeBox.height < nubBox.height * 4 || eyeBox.width < 260) throw new Error(`the eye card did not expand: ${JSON.stringify(eyeBox)}`)
+    const go = await ip.locator(`[data-tap="nd:${eyes.id}:go"]`).boundingBox()
+    if (!go || go.height < 32) throw new Error(`the Start 20 s button is too small: ${JSON.stringify(go)}`)
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 5, alert: a }), eyes)
+    await ip.waitForTimeout(3000)
+    if (!(await ip.$('.di-peek.alert.kind-eyes'))) throw new Error('the eye card went away after a few seconds')
+    const eyeSounds = await ip.evaluate(() => window.__island.sounds.map((x) => x.kind))
+    if (eyeSounds.filter((k) => k === 'eyes').length !== 1) throw new Error(`the eye break rang wrong: ${eyeSounds.join(',')}`)
+    if (isnd) await ip.screenshot({ path: `${isnd}/expanded-eye-card.png`, clip: { x: 0, y: 0, width: 520, height: Math.ceil(eyeBox.y + eyeBox.height + 24) } })
+    // Start 20 s: the countdown on the pill.
+    await ip.click(`[data-tap="nd:${eyes.id}:go"]`)
+    await ip.waitForSelector('.nd-count-pill', { timeout: 4000 })
+    // A tap stops it (nothing noted), back to the line.
+    await ip.click('.nd-count-pill')
+    await ip.waitForSelector('.nd-count-pill', { state: 'detached', timeout: 4000 })
+    // Mouse away: back to the line.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 6, alert: null }))
+    await ip.mouse.move(260, 200)
+    await ip.mouse.move(480, 720)
+    await ip.waitForSelector('.di.calm-hidden .di-nub', { timeout: 5000 })
     // Open the panel and count the to-do rows by their words.
     await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, alert: null }))
     const nub = await ip.locator('.di-nub').boundingBox()

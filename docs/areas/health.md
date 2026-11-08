@@ -34,6 +34,6 @@ Pure logic in `src/core/sleepCare.ts` (morning light, caffeine curfew, sleep deb
 
 - **Desk drill:** the posture nudge offers a 60-s drill (chin tucks, doorway chest stretch, hip-flexor stretch, wall angels) drawn with Sport Track's figure engine (none of the four is a Sport Track move, so no photos). Logged only on "✓ Done" at the end (`mobility` tally, no points).
 
-- **Eye care:** eye breaks every 25/20/15/12 min by today's screen time on this PC, "blink and look far" (the pill blinks), a screen check every third break, and after sunset the warm-screen (Night light) tip until you tap it on. Points unchanged (`body.eye_break`).
+- **Eye care:** on by default (a saved off stays off). Eye breaks every 25/20/15/12 min by today's screen time on this PC, as a real island card with a soft chime (the governor's 30-min gap and 3 an hour still apply; see island.md "Body reminders come with sound"), "blink and look far" (the pill blinks), a screen check every third break, and after sunset the warm-screen (Night light) tip until you tap it on. Points unchanged (`body.eye_break`).
 
 - **Grooming:** the Skincare tile is now Grooming: a tap opens morning and night steps (SPF only on sunny days), weekly nails and a haircut every 3–5 weeks. It pays `face.routine_done` once (`groom:<day>`), only when every step is ticked; an untick takes it back.

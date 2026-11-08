@@ -2,6 +2,10 @@
    Only transform and opacity move (motionBudget.test.ts). */
 .nd { display: grid; gap: 8px; }
 .nd-row { align-items: center; }
+/* Body reminders (water, eye break, move break, screen break): big, easy buttons on the real card. */
+.di-peek.body-card .di-actions button { min-height: 36px; padding: 7px 14px; font-size: 14px; }
+.di-peek.body-card .nd-count button { width: 34px; height: 34px; font-size: 18px; }
+.di-peek.body-card .nd-ex button { padding: 7px 12px; font-size: 13.5px; }
 .nd-hint { margin: 0; font-size: 12.5px; color: rgb(var(--ink) / 0.72); }
 .nd-ch { color: var(--acc-text, #d4ff3f); }
 .nd-ex { display: flex; flex-wrap: wrap; gap: 6px; }

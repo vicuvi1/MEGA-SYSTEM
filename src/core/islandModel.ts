@@ -7,7 +7,7 @@ import type { ContextKind } from './activityContext'
 import type { SafeAction } from './recipes'
 import { cleanControls, DEFAULT_CONTROLS, type IslandControls } from './islandControlPrefs'
 import { rainItem, sunItem } from './widgets/weatherPill'
-import { cleanPeekFor, DEFAULT_PEEK_FOR, isIslandMode, type CalmRest, type IslandMode, type PeekKind } from './islandCalm'
+import { cleanPeekFor, DEFAULT_PEEK_FOR, isIslandMode, PEEK_FOR_V, type CalmRest, type IslandMode, type PeekKind } from './islandCalm'
 
 export interface IslandBlock {
   title: string
@@ -189,6 +189,8 @@ export interface IslandSnapshot {
   tasksStale?: boolean
   /** 20-20-20 eye breaks on? */
   eyeBreaks?: boolean
+  /** Why body reminder sounds stay silent right now: a call, a focus timer, a class, after bed (core/islandReminderSound.ts). */
+  hush?: 'call' | 'focus' | 'class' | 'bed' | null
   /** Start focus by itself when a calendar block begins. */
   autoFocus?: boolean
   /** The running focus so far: how much of it you were actually at the PC. */
@@ -489,6 +491,8 @@ export interface IslandPrefs {
   calmRest: CalmRest
   /** Calm and Balanced: which things may still peek by themselves. */
   peekFor: Record<PeekKind, boolean>
+  /** The "Peek for" defaults version (PEEK_FOR_V): v2 turned eye breaks on for set-ups that never chose. */
+  peekForV?: number
 }
 
 /** peek: it drops down; dot: a dot only (it waits in the panel); never: not shown (IF5). */
@@ -570,7 +574,8 @@ export const DEFAULT_ISLAND_PREFS: IslandPrefs = {
   controls: DEFAULT_CONTROLS,
   mode: 'calm',
   calmRest: 'line',
-  peekFor: DEFAULT_PEEK_FOR
+  peekFor: DEFAULT_PEEK_FOR,
+  peekForV: PEEK_FOR_V
 }
 /** The zoom of each pick when the desktop doesn't send one (Compact is tighter by its density, not smaller). */
 export const ISLAND_ZOOM: Record<IslandPrefs['size'], number> = { auto: 1, compact: 1, normal: 1, large: 1.15 }
@@ -632,7 +637,8 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
     // Calm is the default (also for set-ups saved before it existed: they had no mode).
     mode: isIslandMode(p?.mode) ? p.mode : d.mode,
     calmRest: p?.calmRest === 'none' ? 'none' : 'line',
-    peekFor: cleanPeekFor(p?.peekFor)
+    peekFor: cleanPeekFor(p?.peekFor, p?.peekForV),
+    peekForV: PEEK_FOR_V
   }
 }
 

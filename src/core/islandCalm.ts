@@ -39,30 +39,40 @@ export const PEEK_LABEL: Record<PeekKind, string> = {
   coach: 'Ben on your PC (praise, back to it)',
   alive: 'Alive moments (pulse, countdown, streak, added tasks, rain)'
 }
-/** All on, except eye breaks (every 20 minutes is a lot): they wait as a dot. */
-export const DEFAULT_PEEK_FOR: Record<PeekKind, boolean> = { ben: true, remind: true, water: true, move: true, eyes: false, timer: true, meeting: true, bed: true, coach: true, alive: false }
+/** All on except the alive moments. Eye breaks are on too (they come as a real card with a sound, like water and move breaks). */
+export const DEFAULT_PEEK_FOR: Record<PeekKind, boolean> = { ben: true, remind: true, water: true, move: true, eyes: true, timer: true, meeting: true, bed: true, coach: true, alive: false }
+/**
+ * The version of the "Peek for" defaults. Before v2, eye breaks were off by
+ * default and every saved set-up stored that `false`, so a saved `false` from
+ * before v2 can't be told from "never touched": it is read as on once. A
+ * choice saved from v2 on is kept.
+ */
+export const PEEK_FOR_V = 2
 /** What Balanced lets drop down by itself (and only when it's on in "Peek for"). The real move break and water card always may (bodyCard). */
 export const BALANCED_PEEKS: ReadonlySet<PeekKind> = new Set<PeekKind>(['remind', 'timer', 'meeting', 'bed', 'alive'])
 
 /**
  * The body cards that must be seen while you sit at the PC: the real move
  * break (the island's own, the screen-time break, or the one held back by a
- * call) and the water card. In Calm and Balanced they come as the full card
- * and stay until answered or for BODY_CARD_MS, then wait as a dot. Small
- * nudges that share the move colour (posture, tidy, breathing, "Moved?") stay
- * Calm's slim line.
+ * call), the water card and the 20-20-20 eye break. In Calm and Balanced they
+ * come as the full card and stay until answered or for BODY_CARD_MS, then wait
+ * as a dot. Small nudges that share the move colour (posture, tidy,
+ * breathing, "Moved?") stay Calm's slim line.
  */
 export function isBodyCard(a: { kind: string; id: string }): boolean {
   if (a.kind === 'water') return a.id.startsWith('water:')
+  if (a.kind === 'eyes') return a.id.startsWith('eyes:')
   if (a.kind === 'move') return a.id.startsWith('move:') || a.id.startsWith('coach:break:')
   return false
 }
 /** How long a body card stays up by itself (the mouse on it keeps it; an answer closes it). */
 export const BODY_CARD_MS = 3 * 60_000
 
-export function cleanPeekFor(p: unknown): Record<PeekKind, boolean> {
+/** `v`: the saved PEEK_FOR_V (missing: saved before v2, so a stored eye-break `false` was only the old default). */
+export function cleanPeekFor(p: unknown, v?: unknown): Record<PeekKind, boolean> {
   const src = (p && typeof p === 'object' ? p : {}) as Record<string, unknown>
-  return Object.fromEntries(PEEK_KINDS.map((k) => [k, typeof src[k] === 'boolean' ? (src[k] as boolean) : DEFAULT_PEEK_FOR[k]])) as Record<PeekKind, boolean>
+  const old = !(typeof v === 'number' && v >= PEEK_FOR_V)
+  return Object.fromEntries(PEEK_KINDS.map((k) => [k, k === 'eyes' && old ? DEFAULT_PEEK_FOR.eyes : typeof src[k] === 'boolean' ? (src[k] as boolean) : DEFAULT_PEEK_FOR[k]])) as Record<PeekKind, boolean>
 }
 
 /** Which "Peek for" switch an island alert falls under (null: none, it only ever waits as a dot in Calm). */

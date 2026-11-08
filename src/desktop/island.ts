@@ -344,7 +344,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       // Not focusable: clicking it never takes the keyboard from your app (only typing in it does).
       fullscreenable: false, skipTaskbar: true, hasShadow: false, show: false, alwaysOnTop: true, backgroundColor: '#00000000', focusable: false,
       type: process.platform === 'win32' ? 'toolbar' : undefined, title: 'Life System island',
-      webPreferences: { preload: o.preload, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false }
+      // Reminder sounds must play without a click first: Calm passes every click through, so the
+      // island page almost never gets the gesture Chromium waits for before its audio may start.
+      webPreferences: { preload: o.preload, contextIsolation: true, sandbox: true, nodeIntegration: false, backgroundThrottling: false, autoplayPolicy: 'no-user-gesture-required' }
     })
     const w = win
     onTop()

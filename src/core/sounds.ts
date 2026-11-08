@@ -4,6 +4,7 @@
 // renderer's soundKit.ts turns these notes into WebAudio. No audio files.
 import { inQuietHours } from './notifyRules'
 import { cleanMoments, DEFAULT_MOMENTS, type MomentId, type MomentSound } from './soundMoments'
+import { cleanReminderSounds, DEFAULT_REMINDER_SOUNDS, type ReminderSounds } from './islandReminderSound'
 
 export type SoundCategory = 'ui' | 'success' | 'money' | 'focus' | 'alerts'
 export const SOUND_CATEGORIES: { id: SoundCategory; label: string; hint: string }[] = [
@@ -34,8 +35,10 @@ export interface SoundPrefs {
   islandFocusQuiet: boolean
   /** Which sound for what (Ben, reminders, water, timer…), or None (core/soundMoments.ts). */
   moments: Record<MomentId, MomentSound>
+  /** The island's body reminders (water, eye break, move break, screen break): a switch each and one volume (core/islandReminderSound.ts). */
+  reminders: ReminderSounds
 }
-export const DEFAULT_SOUND_PREFS: SoundPrefs = { cats: { ui: true, success: true, money: true, focus: true, alerts: true }, theme: 'soft', haptics: true, bed: 'off', bedVolume: 40, lastTen: true, island: 'subtle', islandFocusQuiet: false, moments: { ...DEFAULT_MOMENTS } }
+export const DEFAULT_SOUND_PREFS: SoundPrefs = { cats: { ui: true, success: true, money: true, focus: true, alerts: true }, theme: 'soft', haptics: true, bed: 'off', bedVolume: 40, lastTen: true, island: 'subtle', islandFocusQuiet: false, moments: { ...DEFAULT_MOMENTS }, reminders: DEFAULT_REMINDER_SOUNDS }
 
 export function cleanSoundPrefs(p: unknown): SoundPrefs {
   const o = (p && typeof p === 'object' ? p : {}) as Partial<SoundPrefs>
@@ -50,7 +53,8 @@ export function cleanSoundPrefs(p: unknown): SoundPrefs {
     lastTen: o.lastTen !== false,
     island: o.island === 'off' || o.island === 'full' ? o.island : 'subtle',
     islandFocusQuiet: o.islandFocusQuiet === true,
-    moments: cleanMoments(o.moments)
+    moments: cleanMoments(o.moments),
+    reminders: cleanReminderSounds(o.reminders)
   }
 }
 
@@ -60,7 +64,7 @@ export type SoundName =
   | 'coin' | 'spend' | 'reward'
   | 'focusStart' | 'focusEnd' | 'lastTick'
   | 'error' | 'notify' | 'ben'
-  | 'remind' | 'remindWater' | 'remindMove' | 'remindEyes' | 'remindBed' | 'remindReward' | 'remindMeeting' | 'remindPraise' | 'remindDrift' | 'remindCheckin' | 'remindPush1' | 'remindPush2' | 'remindPush3'
+  | 'remind' | 'remindWater' | 'remindMove' | 'remindEyes' | 'remindScreen' | 'remindBed' | 'remindReward' | 'remindMeeting' | 'remindPraise' | 'remindDrift' | 'remindCheckin' | 'remindPush1' | 'remindPush2' | 'remindPush3'
 
 export const SOUND_CATEGORY: Record<SoundName, SoundCategory> = {
   tick: 'ui', click: 'ui',
@@ -68,7 +72,7 @@ export const SOUND_CATEGORY: Record<SoundName, SoundCategory> = {
   coin: 'money', spend: 'money', reward: 'money',
   focusStart: 'focus', focusEnd: 'focus', lastTick: 'focus',
   error: 'alerts', notify: 'alerts', ben: 'alerts',
-  remind: 'alerts', remindWater: 'alerts', remindMove: 'alerts', remindEyes: 'alerts', remindBed: 'alerts', remindReward: 'alerts', remindMeeting: 'alerts', remindPraise: 'alerts', remindDrift: 'alerts', remindCheckin: 'alerts', remindPush1: 'alerts', remindPush2: 'alerts', remindPush3: 'alerts'
+  remind: 'alerts', remindWater: 'alerts', remindMove: 'alerts', remindEyes: 'alerts', remindScreen: 'alerts', remindBed: 'alerts', remindReward: 'alerts', remindMeeting: 'alerts', remindPraise: 'alerts', remindDrift: 'alerts', remindCheckin: 'alerts', remindPush1: 'alerts', remindPush2: 'alerts', remindPush3: 'alerts'
 }
 export const SOUND_NAMES = Object.keys(SOUND_CATEGORY) as SoundName[]
 export const isSoundName = (x: unknown): x is SoundName => typeof x === 'string' && x in SOUND_CATEGORY
@@ -202,6 +206,7 @@ export function recipe(name: SoundName, step = 0): Voice[] {
     case 'remindWater': return [v(880, 0, 0.12, 0.1), v(520, 0.08, 0.22, 0.1)]
     case 'remindMove': return [v(523, 0, 0.14, 0.1, { wave: 'triangle' }), v(659, 0.1, 0.14, 0.1, { wave: 'triangle' }), v(784, 0.2, 0.22, 0.1, { wave: 'triangle' })]
     case 'remindEyes': return [v(700, 0, 0.18, 0.1), v(700, 0.25, 0.18, 0.1)]
+    case 'remindScreen': return [v(523.25, 0, 1.1, 0.12, { attack: 0.004 }), v(1046.5, 0, 0.6, 0.035, { attack: 0.004 })]
     case 'remindBed': return [v(330, 0, 0.7, 0.1)]
     case 'remindMeeting': return [0, 0.17, 0.34].map((t) => v(987.77, t, 0.09, 0.08, { attack: 0.004 }))
     case 'remindPraise': return [v(783.99, 0, 0.1, 0.08), v(1046.5, 0.08, 0.1, 0.08), v(1567.98, 0.16, 0.38, 0.09)]

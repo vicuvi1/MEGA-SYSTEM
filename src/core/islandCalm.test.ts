@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calmDots, calmRevealed, calmStep, calmTiming, calmZone, cleanPeekFor, DEFAULT_PEEK_FOR, dotColor, inZone, modeGate, peekKind, type CalmEvent, type CalmPhase } from './islandCalm'
+import { calmDots, calmRevealed, calmStep, calmTiming, calmZone, cleanPeekFor, DEFAULT_PEEK_FOR, PEEK_FOR_V, dotColor, inZone, modeGate, peekKind, type CalmEvent, type CalmPhase } from './islandCalm'
 import { alertGate, cleanIslandPrefs, DEFAULT_ISLAND_PREFS } from './islandModel'
 
 const peekFor = DEFAULT_PEEK_FOR
@@ -13,10 +13,19 @@ describe('island mode: what may peek by itself', () => {
     expect(cleanIslandPrefs(null).calmRest).toBe('line')
     expect(cleanIslandPrefs({ calmRest: 'none' }).calmRest).toBe('none')
   })
-  it('Peek for: all on except eye breaks; your choices are kept', () => {
-    expect(peekFor.water && peekFor.move && peekFor.ben && peekFor.remind && peekFor.timer && peekFor.meeting && peekFor.bed).toBe(true)
-    expect(peekFor.eyes).toBe(false)
-    expect(cleanPeekFor({ water: false, junk: true })).toEqual({ ...DEFAULT_PEEK_FOR, water: false })
+  it('Peek for: all on (eye breaks too) except alive moments; your choices are kept', () => {
+    expect(peekFor.water && peekFor.move && peekFor.ben && peekFor.remind && peekFor.timer && peekFor.meeting && peekFor.bed && peekFor.eyes).toBe(true)
+    expect(cleanPeekFor({ water: false, junk: true }, PEEK_FOR_V)).toEqual({ ...DEFAULT_PEEK_FOR, water: false })
+  })
+  it('eye breaks: a saved "off" from before v2 was only the old default, so it turns on; a choice from v2 on is kept', () => {
+    expect(cleanPeekFor({ eyes: false, water: false }).eyes).toBe(true)
+    expect(cleanPeekFor({ eyes: false, water: false }, undefined).water).toBe(false)
+    expect(cleanPeekFor({ eyes: false }, PEEK_FOR_V).eyes).toBe(false)
+    expect(cleanIslandPrefs({ peekFor: { eyes: false } }).peekFor.eyes).toBe(true)
+    expect(cleanIslandPrefs({ peekFor: { eyes: false }, peekForV: 2 }).peekFor.eyes).toBe(false)
+    // Cleaning what was cleaned keeps your choice.
+    const once = cleanIslandPrefs({ peekFor: { eyes: false }, peekForV: 2 })
+    expect(cleanIslandPrefs(once).peekFor.eyes).toBe(false)
   })
   it('maps alerts to their switch', () => {
     expect(peekKind('block', true)).toBe('meeting')
@@ -32,7 +41,8 @@ describe('island mode: what may peek by itself', () => {
   it('Calm: the kinds you keep on peek; the rest becomes a dot', () => {
     expect(modeGate({ mode: 'calm', kind: 'water', peekFor, base: 'peek' })).toBe('peek')
     expect(modeGate({ mode: 'calm', kind: 'remind', peekFor, base: 'peek' })).toBe('peek')
-    expect(modeGate({ mode: 'calm', kind: 'eyes', peekFor, base: 'peek' })).toBe('silent')
+    expect(modeGate({ mode: 'calm', kind: 'eyes', peekFor, base: 'peek' })).toBe('peek')
+    expect(modeGate({ mode: 'calm', kind: 'eyes', peekFor: { ...peekFor, eyes: false }, base: 'peek' })).toBe('silent')
     expect(modeGate({ mode: 'calm', kind: 'highlight', peekFor, base: 'peek' })).toBe('silent')
     expect(modeGate({ mode: 'calm', kind: 'suggest', peekFor, base: 'peek' })).toBe('silent')
     expect(modeGate({ mode: 'calm', kind: 'water', peekFor: { ...peekFor, water: false }, base: 'peek' })).toBe('silent')
