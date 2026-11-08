@@ -599,6 +599,8 @@ try {
     // Progress: the weight trend and its nudge, measurements, photos, the weekly card.
     await pg.click('.body-page .ptabs [data-tab="progress"]')
     const prog = '#ptp-body-progress'
+    await pg.waitForSelector(`${prog} .bpg-more`, { timeout: 15000 })
+    await pg.evaluate(() => { document.querySelector('#ptp-body-progress .bpg-more').open = true }) // the older cards sit under "More"
     await pg.waitForSelector(`${prog} .wt-card .wt-nudge`, { timeout: 15000 })
     await shot(`${prog} .wt-card`, 'weight-trend-and-nudge')
     await pg.click(`${prog} .tp-card .card-head .btn`)
@@ -701,6 +703,96 @@ try {
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
     // Back to the tracker for the steps after this one.
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
+  })
+  // Body → Progress: the strength chart per move, weight and waist with a plain verdict, the monthly report,
+  // the records wall and two made-up drawn photos side by side. BODY_SHOTS=<dir> saves screenshots.
+  await step('Body progress: strength chart, weight and waist verdict, records wall, monthly report, photos side by side', async () => {
+    const shots = process.env.BODY_SHOTS
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="progress"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="progress"]')
+    const prog = '#ptp-body-progress'
+    await pg.waitForSelector(`${prog} .bpg-hero .bpg-big`, { timeout: 20000 })
+    // Strength: a big number, a drawn chart with a named variation band, pills switch the move.
+    if (!/%|Getting started/.test(await pg.locator(`${prog} .bpg-hero .bpg-big`).innerText())) throw new Error('the strength number is missing')
+    // The plain run has no sets (the empty state says so); the demo run draws the chart.
+    await pg.waitForSelector(process.env.E2E_BODY_DEMO ? `${prog} .bpg-hero svg.bpg-chart .bpg-line` : `${prog} .bpg-hero svg.bpg-chart, ${prog} .bpg-hero .bpg-empty`, { timeout: 10000 })
+    if (process.env.E2E_BODY_DEMO && !/Diamond push-ups/.test(await pg.locator(`${prog} .bpg-hero .bpg-legend`).innerText())) throw new Error('the chart does not name the harder variation')
+    await pg.locator(`${prog} .bpg-pill`, { hasText: 'Squats' }).click()
+    await pg.waitForSelector(`${prog} .bpg-hero .bpg-pill.on`, { timeout: 5000 })
+    // Weight and waist: a verdict written from the numbers (or the empty prompt).
+    await pg.waitForSelector(`${prog} .bpg-verdict, ${prog} .bpg-empty`, { timeout: 10000 })
+    if (process.env.E2E_BODY_DEMO && !/kg in \d+ weeks?|Log weight and waist weekly/.test(await pg.locator(`${prog} .bpg-verdict`).innerText())) throw new Error('the verdict has no numbers')
+    // Records and the monthly report.
+    await pg.waitForSelector(process.env.E2E_BODY_DEMO ? `${prog} .bpg-trophy` : `${prog} .bpg-trophy, ${prog} section[aria-label="Personal records"] .bpg-empty`, { timeout: 10000 })
+    await pg.waitForSelector(`${prog} .bpg-tiles`, { timeout: 10000 })
+    if (!/next goal/i.test(await pg.locator(`${prog} .bpg-goal`).innerText())) throw new Error('the monthly report has no next goal')
+    await pg.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
+    await pg.locator(`${prog} .bpg-card[aria-label="Monthly body report"] .btn`).click()
+    await pg.waitForFunction((p) => /Copied/.test(document.querySelector(`${p} .bpg-card[aria-label="Monthly body report"] .btn`)?.textContent ?? ''), prog, { timeout: 5000 }).catch(() => {})
+    // Two made-up drawn silhouettes (never a real photo) on this device, then the slider and side by side.
+    await pg.evaluate(async () => {
+      const figure = (broad) => {
+        const c = document.createElement('canvas')
+        c.width = 300
+        c.height = 400
+        const g = c.getContext('2d')
+        g.fillStyle = '#222b3b'
+        g.fillRect(0, 0, 300, 400)
+        g.fillStyle = '#c9d2e3'
+        g.beginPath()
+        g.arc(150, 70, 26, 0, Math.PI * 2)
+        g.fill()
+        g.fillRect(150 - 62 * broad, 112, 124 * broad, 120)
+        g.fillRect(120, 232, 24, 150)
+        g.fillRect(156, 232, 24, 150)
+        return new Promise((ok) => c.toBlob(ok, 'image/png'))
+      }
+      const db = await new Promise((ok, no) => {
+        const r = indexedDB.open('life-body-photos', 1)
+        r.onupgradeneeded = () => r.result.objectStoreNames.contains('photos') || r.result.createObjectStore('photos', { keyPath: 'id' })
+        r.onsuccess = () => ok(r.result)
+        r.onerror = () => no(r.error)
+      })
+      const put = (p) => new Promise((ok, no) => {
+        const t = db.transaction('photos', 'readwrite')
+        t.objectStore('photos').put(p)
+        t.oncomplete = ok
+        t.onerror = () => no(t.error)
+      })
+      await put({ id: 'ph-bp-a', day: '2026-09-01', at: 1, blob: await figure(0.95), w: 300, h: 400 })
+      await put({ id: 'ph-bp-b', day: '2026-11-01', at: 2, blob: await figure(1.1), w: 300, h: 400 })
+      db.close()
+      window.dispatchEvent(new CustomEvent('life-photos-changed'))
+    })
+    await pg.waitForSelector(`${prog} .bpg-ph-frame .after`, { timeout: 10000 })
+    await pg.locator(`${prog} .bpg-ph-range input`).fill('60')
+    await pg.locator(`${prog} .bpg-seg button`, { hasText: 'Side by side' }).click()
+    await pg.waitForFunction((p) => document.querySelectorAll(`${p} .bpg-ph-two img`).length === 2, prog, { timeout: 5000 })
+    await pg.locator(`${prog} .bpg-seg button`, { hasText: 'Slider' }).click()
+    if (shots) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(500)
+      await pg.locator(`${prog}`).screenshot({ path: `${shots}/body-progress-full.png` })
+      await pg.screenshot({ path: `${shots}/body-progress-top.png` })
+    }
+    // Clean up the drawn photos so the other steps start as before.
+    await pg.evaluate(async () => {
+      const db = await new Promise((ok) => { const r = indexedDB.open('life-body-photos', 1); r.onsuccess = () => ok(r.result) })
+      await new Promise((ok) => { const t = db.transaction('photos', 'readwrite'); t.objectStore('photos').delete('ph-bp-a'); t.objectStore('photos').delete('ph-bp-b'); t.oncomplete = ok })
+      db.close()
+    })
+    // No sideways scroll on a laptop or a phone.
+    for (const [w, h] of [[1280, 720], [390, 844]]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.waitForTimeout(300)
+      const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (over > 1) throw new Error(`Body progress scrolls sideways at ${w}px (${over}px)`)
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
   await step('Food counter: copy the prompt, paste a reply, fix grams, save, totals, what to eat next, same as yesterday, quick words, a supplement, water, rings, week chart, plan, the Sport Track line', async () => {

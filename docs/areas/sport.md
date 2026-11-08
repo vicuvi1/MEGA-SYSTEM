@@ -99,3 +99,13 @@ The counter is now three views inside the card: **Today · Week · Plan**. No po
 
 Tests: `core/foodExtras.test.ts` (words, label prompt, carbs/fat, auto-adjust, per-leu ranking and tie-breaker, shopping and prep amounts, header basis, rings, week chart), more in `main/food.test.ts` (water is one log, supplements, edit, weight check once a week, prices, view). Smoke step "Food counter" also covers words, a supplement, water, rings, meal cards, week chart and plan.
 
+
+## Body → Progress tab (2026-11-08)
+
+One calm page, no points. Pure logic in `core/bodyProgress.ts` (tests `bodyProgress.test.ts`, made-up data, pinned dates); UI in `src/renderer/src/body/progress/` (`BodyProgress.tsx`, `progress.css`, token-based with `--bpg-*` variables so it is easy to align with the Body theme later). It reads Sport Track's data on this device (`readSport()`: sets, exercises, day log), `state.metrics` (weight, waist) and `state.recentWorkouts`, and writes nothing.
+- **Strength per move**: hero number "+X% stronger than 4 weeks ago" (average over push-ups, rows, squats, core that have data); pills pick the move; a chart of the best set per day drawn to scale on the strength score (a harder variation sits higher), one shaded band and legend name per variation. Falls back to "your first week" when the history is newer; no percent with too little data.
+- **Weight and waist**: 7-day average line, lean-gain zone (+0.1 to +0.25 kg a week from 4 weeks ago), waist line on its own scale, and one verdict from the numbers ("+0.4 kg in 4 weeks, waist the same: likely muscle", "waist up 1.5 cm: slow the surplus", flat, losing, no waist yet). Needs 14+ days of weigh-ins, else "Log weight and waist weekly" with a Log button.
+- **Records wall**: max reps per move, longest hold, best day total (from the day log), first time on each harder variation, with dates; records from the last 7 days are marked New.
+- **Monthly report**: this month, or last month in the first 7 days: strength % against the month before, weight and waist change, workout days, protein goal days (last 7 days of the food counter, only with a food log), one next goal, Copy report.
+- **Photos side by side**: pick two dates (first and latest by default), slider or side by side. Photos stay in this device's IndexedDB; nothing is uploaded.
+- The older cards (weight advice, measurements, weekly body card, taking a photo) are folded under "More". Smoke step "Body progress"; `e2e/bodyProgressShots.mjs` takes screenshots on demo data (`E2E_BODY_DEMO` now also seeds a diamond push-up step).

@@ -594,6 +594,20 @@
    ],
    "evidence": "2026-11-08: 15 unit tests + 7 end-to-end tests on a fake Turso and fake Telegram; full vitest and full smoke run",
    "notes": "core/foodBen.ts (pure), web/bots/foodBot.ts (database + fd| buttons), webBots.ts (route + fast path), benAsk.ts (kind food), benPushes.ts (type food, ops prompt/yesterday/mute), server/benPushTick.ts, telegramBot.ts (Sunday), tursoWebBridge.ts + benPushFeed.ts (island). Setting food_ben: the open preview and the mute."
+  },
+  {
+   "id": "F-BODY-PROGRESS",
+   "priority": 2,
+   "area": "body",
+   "title": "Body Progress tab",
+   "user_visible_behavior": "Body → Progress: strength chart per move with variation bands and % stronger than 4 weeks ago, weight and waist trend with a plain verdict and the lean-gain zone, records wall, monthly body report (copyable), progress photos side by side (local only). No points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/bodyProgress.test.ts",
+    "SMOKE_ONLY=\"Body progress\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: 16 unit tests; smoke step \"Body progress\" passes",
+   "notes": "core/bodyProgress.ts, body/progress/*"
   }
  ]
 }

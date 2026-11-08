@@ -28,6 +28,7 @@ import { PhotoCheckin } from '../body/PhotoCheckin'
 import { BodyWeekCard } from '../body/BodyWeekCard'
 import { readSoreness, useBodyPlus } from '../body/useBodyPlus'
 import '../body/body-plus.css'
+import { BodyProgress } from '../body/progress/BodyProgress'
 
 const BODY_TABS = [
   { id: 'today', label: 'Today', title: 'Readiness, protein, supplements and water' },
@@ -333,12 +334,7 @@ export function Body({
       </TabPanel>
 
       <TabPanel page="body" id="progress" value={tab} className="body-tab">
-        {plus && <WeightTrendCard trend={plus.trend} today={plus.day} onLog={() => setMetricOpen(true)} />}
-        <div className="bp-grid">
-          {plus && <TapeCard v={plus} waist={state.latestWaist} onView={setPlus} />}
-          <BodyWeekCard />
-        </div>
-        <PhotoCheckin every={plus?.prefs.photoEvery ?? 14} />
+        <BodyProgress state={state} onLog={() => setMetricOpen(true)} />
       </TabPanel>
 
       {workoutOpen && (

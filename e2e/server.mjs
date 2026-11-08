@@ -352,6 +352,8 @@ if (process.env.E2E_BODY_DEMO) {
     add(n, 'pushups', n > 12 ? [12, 11, 10] : [12, 11, 11])
     add(n, 'squats', [14 + Math.round((20 - n) / 3), 13 + Math.round((20 - n) / 3), 12 + Math.round((20 - n) / 3)])
     if (n % 2) add(n, 'rows', [9, 8, 8])
+    // A harder step (diamond push-ups) over the last week: the Progress chart's variation band.
+    if (n <= 6) add(n, 'diamond', n > 3 ? [8, 7, 6] : [9, 8, 7])
   }
   set('sport_tracker_json', {
     savedAt: Date.now(),
@@ -360,7 +362,8 @@ if (process.env.E2E_BODY_DEMO) {
       exercises: [
         { id: 'pushups', name: 'Push-ups', target: 36, unit: 'reps', active: true, move: 'pushup', doneToday: 0 },
         { id: 'squats', name: 'Squats', target: 45, unit: 'reps', active: true, move: 'squat', doneToday: 0 },
-        { id: 'rows', name: 'Table rows', target: 27, unit: 'reps', active: true, move: 'table_row_bent', doneToday: 0 }
+        { id: 'rows', name: 'Table rows', target: 27, unit: 'reps', active: true, move: 'table_row_bent', doneToday: 0 },
+        { id: 'diamond', name: 'Diamond push-ups', target: 24, unit: 'reps', active: true, move: 'diamond_pushup', doneToday: 0 }
       ],
       water: { currentMl: 0, targetMl: 2500, glassSizeMl: 250 },
       history: [],
