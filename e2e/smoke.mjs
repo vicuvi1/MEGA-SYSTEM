@@ -3317,6 +3317,19 @@ try {
     await pg.locator('.ot-list .ot-t', { hasText: 'Water the balcony plants' }).first().waitFor({ timeout: 15000 })
     await pg.locator('.ot-head .sync-at', { hasText: /Synced \d\d:\d\d/ }).first().waitFor({ timeout: 10000 })
   })
+  await step('Sync button: the plan card shows Sync and the auto-sync status; a click updates the Synced time', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    const bar = pg.locator('section.cp [data-sync-bar]').first()
+    await bar.waitFor({ timeout: 15000 })
+    await bar.locator('.plan-sync-auto', { hasText: /Auto-sync on/ }).waitFor({ timeout: 10000 })
+    await bar.locator('button', { hasText: 'Sync' }).click()
+    await bar.locator('.plan-sync-auto', { hasText: /last checked \d\d:\d\d/ }).waitFor({ timeout: 15000 })
+    await bar.locator('.sync-at', { hasText: /Synced \d\d:\d\d/ }).waitFor({ timeout: 15000 })
+    await pg.screenshot({ path: '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/sync/plan-sync.png' })
+  })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })

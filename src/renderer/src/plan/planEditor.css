@@ -92,3 +92,12 @@
 .sync-spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: sync-spin 0.8s linear infinite; vertical-align: -1px; }
 @keyframes sync-spin { to { transform: rotate(1turn); } }
 .ta-bar .ta-sync { order: 9; margin-left: 0; }
+
+.plan-sync { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plan-sync .sync-btn { margin-left: 0; }
+.plan-sync-auto { font-size: 11px; color: var(--muted); }
+.plan-sync-auto.warn, .sync-err { color: var(--warn, #b45309); }
+.sync-err { font-size: 11px; }
+.sync-retry { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
+@media (max-width: 640px) { .plan-sync { width: 100%; } }
+@media (prefers-reduced-motion: reduce) { .sync-spin { animation-duration: 3s; } }

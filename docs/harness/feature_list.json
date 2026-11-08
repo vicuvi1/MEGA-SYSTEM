@@ -54,10 +54,11 @@
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
     "SMOKE_ONLY=\"plan editor\" npm run smoke",
-    "SMOKE_ONLY=\"Sync:\" npm run smoke"
+    "SMOKE_ONLY=\"Sync:\" npm run smoke",
+    "SMOKE_ONLY=\"Sync button\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "2026-11-07: one Google event per block (planEventId, safe to repeat), colour and emoji by kind, quiet duplicate clean-up; the packer keeps lunch, breaks and 15% free time; Sync button and a Todoist refresh on focus. The new Sync smoke step was not run locally (the shared node_modules misses onnxruntime-web files, so build:web fails)."
+   "notes": "2026-11-07: one Google event per block (planEventId, safe to repeat), colour and emoji by kind, quiet duplicate clean-up; the packer keeps lunch, breaks and 15% free time; Sync button and a Todoist refresh on focus; 2026-11-08: the plan card (Coach and Today → Plan) has its own Sync button with an Auto-sync on, last checked line. The new Sync smoke step was not run locally (the shared node_modules misses onnxruntime-web files, so build:web fails)."
   },
   {
    "id": "F005",
