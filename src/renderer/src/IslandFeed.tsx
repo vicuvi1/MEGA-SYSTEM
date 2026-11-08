@@ -20,7 +20,8 @@ import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartA
 import { coachAnswer, coachTick, driftNow } from './pcCoachFeed'
 import { DEFAULT_WAKE, toMin as fitMin } from '@core/lifeFit'
 import { windDown } from '@core/islandBody'
-import { dayNudgeLogged } from './nudgeWhy'
+import { dayNudgeLogged, readNudgeWhy } from './nudgeWhy'
+import { whyNoReminder } from '@core/dayNudges'
 import { dayOf as nudgeDayOf } from '@core/islandNudges'
 import { careAct, careTick } from './careFeed'
 import { alertTopic, govern, noteMessage, noteShown, sleptOnTime, textTopic, waterSeen, weekDaysFromStore, weeklyHealth, windDownMode, type GovernCtx, type Queued, type ReminderItem, type Shown } from '@core/healthyDay'
@@ -767,6 +768,7 @@ export function IslandFeed() {
       ...aliveData(),
       gaming: gm.view,
       health: healthView ? { today: healthView.today, week } : null,
+      nudgeWhy: health ? whyNoReminder(Object.fromEntries(Object.entries(readNudgeWhy()).map(([k, v]) => [k, v?.why ?? '']))) : null,
       windMode: ct ? ct.windMode : windDownMode(now, bedTarget, bedLogged),
       afterShift: ct?.afterShift ?? null,
       protein: proteinV,

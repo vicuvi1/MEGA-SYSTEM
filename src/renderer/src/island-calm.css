@@ -23,12 +23,24 @@
 /* "Show nothing": the spot still works; only waiting dots show. */
 .di.calm-none .di-nub { opacity: 0; }
 .di.calm-none .di-nub-wrap:not(.has-dots) { min-height: 3px; }
+/* A waiting move break or water card: a few words under the line (in the flow, so the island's
+   shape grows to hold it; clicks still pass through, resting the mouse on it brings the island out). */
+.di-nub-row { display: flex; align-items: flex-start; gap: 4px; }
+.di-nub-wrap.has-wait { flex-direction: column; align-items: center; gap: 4px; }
+.di-nub-label {
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  padding: 3px 10px; border-radius: 9px; white-space: nowrap; pointer-events: none;
+  font-size: 11.5px; font-weight: 600; line-height: 1.25; color: #fff;
+  background: rgb(14 16 20 / 0.86); box-shadow: 0 1px 6px rgb(0 0 0 / 0.25);
+}
+.di-nub-label small { font-size: 10.5px; font-weight: 450; opacity: 0.8; }
 .di-nub-dots { display: flex; gap: 3px; padding-top: 1px; }
 .di-nub-dot { display: block; width: 5px; height: 5px; border-radius: 50%; opacity: 0.85; }
 .di.calm-hidden.is-near .di-nub-dot { opacity: 1; }
 
 /* Docked on a side: an upright line. */
 .di.at-left .di-nub-wrap, .di.at-right .di-nub-wrap { flex-direction: column; align-items: center; padding: 2px; }
+.di.at-left .di-nub-row, .di.at-right .di-nub-row { flex-direction: column; align-items: center; }
 .di.at-left .di-nub, .di.at-right .di-nub { width: 3px; height: 48px; border-radius: 3px; }
 .di.at-left .di-nub-dots, .di.at-right .di-nub-dots { flex-direction: column; padding: 0; }
 
@@ -59,3 +71,6 @@
 
 /* Calm has its own coloured dots: no extra red dot in the pill. */
 .di.mode-calm .rest-item .rest-dot:not(.rec) { display: none; }
+
+/* "Why no reminder?" on the Day page: one small line from nudgeWhy. */
+.di-why { margin: 6px 2px 0; font-size: 11.5px; line-height: 1.35; opacity: 0.72; }

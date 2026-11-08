@@ -164,24 +164,24 @@ describe('Island 2: snooze (IN30) and escalation (IN31)', () => {
     expect(learnAlert(a, s, 'move', at('14:05'))).toBeNull()
     expect(learnAlert(a, s, 'move', at('14:20'))).not.toBeNull()
   })
-  it('a dot, then a peek, then a sound, then Ben (never a lock)', () => {
-    expect(escalation(52, 50)).toBe('dot')
+  it('a peek as soon as it is due, then a sound, then Ben (never a lock)', () => {
+    expect(escalation(52, 50)).toBe('peek')
     expect(escalation(65, 50)).toBe('peek')
     expect(escalation(80, 50)).toBe('sound')
     expect(escalation(90, 50)).toBe('ben')
-    expect(moveNudge(moveIn(at('14:00'), { activeSince: at('13:05') }))?.dot).toBe(true)
+    expect(moveNudge(moveIn(at('14:00'), { activeSince: at('13:05') }))?.dot).toBeUndefined()
     const ben = moveNudge(moveIn(at('14:00'), { activeSince: at('12:25') }))!
     expect(ben.dot).toBeUndefined()
     expect(ben.title).toBe('95 min in that chair. Up, now.')
     expect(ben.actions.some((x) => x.action.kind === 'lockPc')).toBe(true)
     expect(ben.actions[0].action.kind).toBe('nudge')
   })
-  it('each step is a new alert (a dot can become a peek); dismissing the sitting hides every step', () => {
+  it('each step is a new alert (a peek can become a sound); dismissing the sitting hides every step', () => {
     const since = at('13:00')
-    const dot = moveNudge(moveIn(at('13:55'), { activeSince: since }))!
-    const peek = moveNudge(moveIn(at('14:05'), { activeSince: since }))!
-    expect(dot.id).not.toBe(peek.id)
-    expect(moveNudge(moveIn(at('14:05'), { activeSince: since, dismissed: { [dot.id]: at('20:00') } }))).toBeNull()
+    const peek = moveNudge(moveIn(at('13:55'), { activeSince: since }))!
+    const sound = moveNudge(moveIn(at('14:20'), { activeSince: since }))!
+    expect(peek.id).not.toBe(sound.id)
+    expect(moveNudge(moveIn(at('14:20'), { activeSince: since, dismissed: { [peek.id]: at('20:00') } }))).toBeNull()
   })
 })
 

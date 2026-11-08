@@ -259,11 +259,15 @@ export function startCount(ex: ExerciseLine | null, last: NudgeStore['last']): {
 // ---- IN31: gentle escalation ------------------------------------------------------
 
 export type NudgeLevel = 'dot' | 'peek' | 'sound' | 'ben'
-/** A dot first, a peek 10 min later, a sound after 25, a firmer Ben line at 90 min. Never a lock without asking. */
+/**
+ * A peek as soon as the break is due, a sound after 25 more minutes, a firmer
+ * Ben line at 90 min. Never a lock without asking. (It used to start as a dot
+ * for 10 minutes: with Calm on top that was invisible. The mode and learning
+ * still make it a dot when they should.)
+ */
 export function escalation(satMin: number, sitMin: number): NudgeLevel {
   if (satMin >= 90) return 'ben'
   const over = satMin - sitMin
-  if (over < 10) return 'dot'
   if (over < 25) return 'peek'
   return 'sound'
 }
