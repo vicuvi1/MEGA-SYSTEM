@@ -20,18 +20,20 @@ import { readDo } from '@core/coachButtons'
 import { BenDesk, type DeskTab } from '../BenDesk'
 import { ReplyExtras, Rich, type Entry } from '../BenThread'
 import { BenMark, FoldLine, Meta, NowCard, NudgeCard, Receipts, feedSections } from '../CoachFeed'
-import { Bubble, GlyphIcon, Ring, StreamText, SuggestChip, TypingBubble } from '../CoachFeed'
+import { Bubble, Elapsed, GlyphIcon, Ring, StreamText, SuggestChip, TypingBubble } from '../CoachFeed'
 import { BenLive, CHEER_EVENT, CoachAtmos, CoachHero, MomentCard, type HeroAsk } from '../CoachAlive'
 import { benFeel, bigMoment, dayPhase, goodNews, greeting, willHint, type BenAct, type Moment } from '@core/coachAlive'
 import { getUiPrefs } from '../uiPrefs'
 import { BenAvatar, MeAvatar, avatarFromFile, useCoachLooks, type Presence } from '../BenAvatar'
 import { CoachSide } from '../CoachSide'
-import { PlanCard, ShowCards, cardKind } from '../CoachCards'
+import { ShowCards, cardKind } from '../CoachCards'
 import { play } from '../soundKit'
 import { reducedMotion } from '../motionKit'
 import { useToastDock } from '../coachToastDock'
 import { benStatus } from '@core/coachLooks'
-import { buildFeed, momentChips, readSlash, SLASH, type Filter } from '@core/chatFeed'
+import { buildFeed, kindOf, momentChips, readSlash, SLASH, type Filter } from '@core/chatFeed'
+import { livePlanAt, orderLog } from '@core/coachOrder'
+import { plainSteps } from '@core/benSteps'
 import { AnswerBar, BasicChip, ChatSearch, DraftCard, PinnedStrip, SidePins, WeekMisses } from '../CoachChatKit'
 import { isPinned, type ChatPin } from '@core/chatPins'
 import type { AnswerMeta } from '@core/answerCost'
@@ -160,8 +162,10 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   // Your message flies from the box into place (FLIP); a reply can be stopped.
   const flyRef = useRef<{ at: string; rect: DOMRect } | null>(null)
   const stopRef = useRef(false)
-  // Coach UI v3: the plan card opened from "Now: Approve" (when no reply shows it yet).
-  const [planSpot, setPlanSpot] = useState(false)
+  // Coach chat fix: the plan card opened from "Now: Approve" when no message shows it yet:
+  // one message at the moment you asked, in time order (never pinned under newer messages).
+  const spotRef = useRef<Entry | null>(null)
+  const withSpot = (l: Entry[]) => orderLog(spotRef.current && !l.some((x) => x.at === spotRef.current!.at) ? [...l, spotRef.current] : l)
   // ↑ in an empty box brings back your last message to edit and send again.
   const [editingLast, setEditingLast] = useState(false)
   const boxRef = useRef<HTMLTextAreaElement>(null)
@@ -383,7 +387,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const load = useCallback(async () => {
     if (!life.coach) return setLog([])
     const [l, m, p] = await Promise.all([life.coach.log().catch(() => []), life.coach.memory().catch(() => ({ facts: [] })), life.coach.profile().catch(() => null)])
-    setLog(l)
+    setLog(withSpot(l))
     setFacts(m.facts)
     if (p) setProfile(p)
     life.coach.mind?.().then(setMind).catch(() => {})
@@ -462,7 +466,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     )
     cards.forEach((c) => io.observe(c))
     return () => io.disconnect()
-  }, [log, planSpot, hero])
+  }, [log, hero])
   // Live: what you and the coach say on Telegram appears here as it happens.
   const busyRef = useRef(false)
   busyRef.current = busy
@@ -470,7 +474,13 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
     if (busyRef.current || !life.coach) return
     life.coach
       .log()
-      .then((l) => setLog((cur) => (busyRef.current || (cur && cur.length === l.length && cur[cur.length - 1]?.at === l[l.length - 1]?.at) ? cur : cur && l.length > cur.length ? l.map((x, k) => (k >= cur.length && x.role === 'coach' ? { ...x, fresh: true } : x)) : l)))
+      .then((l0) => setLog((cur) => {
+        const l = withSpot(l0)
+        if (busyRef.current || (cur && cur.length === l.length && cur[cur.length - 1]?.at === l[l.length - 1]?.at)) return cur
+        // New messages (from Telegram, or Ben's own) light up; matched by time, not by position.
+        const had = new Set((cur ?? []).map((x) => x.at))
+        return cur && l.length > cur.length ? l.map((x) => (!had.has(x.at) && x.role === 'coach' ? { ...x, fresh: true } : x)) : l
+      }))
       .catch(() => {})
     life.coach.memory().then((m) => setFacts(m.facts)).catch(() => {})
     life.coach.mind?.().then(setMind).catch(() => {})
@@ -665,8 +675,12 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
       el.classList.add('flash')
       return
     }
-    setPlanSpot(true)
-    setTimeout(() => document.querySelector('.cf-plan.spot')?.scrollIntoView({ behavior: smooth, block: 'center' }), 120)
+    // No message shows today's plan yet: Ben posts it now, at this moment in the chat.
+    const spot: Entry = { role: 'coach', bot: 'mega', via: 'app', text: "Here is today's plan. Look it over, then approve it or tell me what to change.", at: new Date().toISOString(), show: ['plan'] }
+    spotRef.current = spot
+    stuckRef.current = true
+    setLog((l) => orderLog([...(l ?? []), spot]))
+    setTimeout(() => document.querySelector('.cf-col .cf-plan.live')?.scrollIntoView({ behavior: smooth, block: 'center' }), 160)
   }
   // CH3/CH4: jump to a message (from search or a pin); an older one not in the chat shows as a note.
   const jumpTo = (at: string) => {
@@ -751,6 +765,8 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
   const fromToday = (x: { at: string }) => Date.parse(x.at) >= dayStart
   const liveCard: Record<string, number> = {}
   ;(log ?? []).forEach((x, k) => x.role === 'coach' && fromToday(x) && x.show?.forEach((w) => cardKind(w) && (liveCard[cardKind(w)!] = k)))
+  // One live plan card: the newest message from today with one (a reply's card or the plan message).
+  const livePlan = livePlanAt(log ?? [], dayStart, (x) => x.role === 'coach' && !x.pending && (!!x.show?.some((w) => cardKind(w) === 'plan') || (!!x.proactive && kindOf(x as any) === 'plan')))
   const chips = momentChips({
     hour: new Date().getHours(),
     planStatus: status?.plan.status ?? 'none',
@@ -1028,7 +1044,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                       <BenMark ghost={!firstOfGroup} />
                       <div className="cf-ben">
                         {who}
-                        <NudgeCard m={m} kind={it.kind} info={it.info} repeats={it.repeats} settled={it.settled} latest={latestOf[it.kind] === i} status={status} deck={deck} onChange={() => (loadStatus(), onWallet())} />
+                        <NudgeCard m={m} kind={it.kind} info={it.info} repeats={it.repeats} settled={it.settled} latest={it.kind === 'plan' ? livePlan === i : latestOf[it.kind] === i} status={status} deck={deck} onChange={() => (loadStatus(), onWallet())} />
                         <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
                         {/* ME5: a follow-up with answers (Done / Tomorrow / Drop) keeps its buttons. */}
                         {!!m.buttons?.length && fromToday(m) && <ReplyExtras m={{ ...m, show: [] }} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
@@ -1052,6 +1068,7 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                         <>
                           <div className="cf-who-line">
                             <b>Ben</b>
+                            <Elapsed since={m.at} />
                           </div>
                           {m.streamed && m.text ? (
                             <div className="cf-text cf-streaming">
@@ -1082,22 +1099,11 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                             </span>
                           )}
                           <Receipts m={m} onUndo={(k) => void undoLine(m, k)} />
-                          {cards.length > 0 && <ShowCards show={cards} live={(k) => liveCard[k] === i} expired={!fromToday(m)} status={status} onChange={() => (loadStatus(), onWallet())} onOpenPlan={focusPlan} />}
+                          {cards.length > 0 && <ShowCards show={cards} live={(k) => (k === 'plan' ? livePlan === i : liveCard[k] === i)} expired={!fromToday(m)} status={status} onChange={() => (loadStatus(), onWallet())} onOpenPlan={focusPlan} />}
                           {(!!btns.length || !!widgets.length) && <ReplyExtras m={{ ...m, show: widgets, buttons: btns }} status={status} latest={i === lastReply} busy={busy} onSay={(t) => void send(t)} onOpen={(t) => (setTab(t), setInfo(true))} onDone={() => (loadStatus(), onWallet())} />}
                           <div className="cf-foot">
                             {!firstOfGroup && <Meta m={m} />}
-                            {!!m.steps?.length && (
-                              <details className="cf-steps">
-                                <summary>
-                                  {m.steps.length} step{m.steps.length === 1 ? '' : 's'}
-                                </summary>
-                                <ul>
-                                  {m.steps.map((st, k) => (
-                                    <li key={k}>{st}</li>
-                                  ))}
-                                </ul>
-                              </details>
-                            )}
+                            <AnswerSteps steps={metas[m.at]?.steps ?? plainSteps(m.steps)} reasoning={metas[m.at]?.reasoning} />
                             {replyBtn}
                           </div>
                           {!m.basic && (
@@ -1120,20 +1126,6 @@ export function Coach({ onWallet }: { onWallet: () => void }) {
                   </div>
                 )
               })}
-            {planSpot && (
-              <div className="cf-row ben first last cf-spot">
-                <BenMark />
-                <div className="cf-ben">
-                  <div className="cf-who-line">
-                    <b>Ben</b>
-                  </div>
-                  <div className="cf-text">Here is today&apos;s plan. Look it over, then approve it or tell me what to change.</div>
-                  <div className="cf-cards">
-                    <PlanCard live spotlight onChange={() => (loadStatus(), onWallet())} />
-                  </div>
-                </div>
-              </div>
-            )}
             {moment && <MomentCard key={moment.id} moment={moment} onClose={() => setMoment(null)} />}
             <div ref={end} />
           </div>
@@ -1525,5 +1517,35 @@ function RhythmSettings() {
       )}
       <PlanLimitsEditor />
     </section>
+  )
+}
+
+/**
+ * Coach chat fix: how Ben got to the answer, folded under it ("▸ 3 steps · reasoning"):
+ * the steps in plain English and, when the thinking model gave one, a short summary of
+ * its reasoning. One tap opens it.
+ */
+function AnswerSteps({ steps, reasoning }: { steps: string[]; reasoning?: string }) {
+  if (!steps.length && !reasoning) return null
+  return (
+    <details className="cf-steps" data-answer-steps>
+      <summary>
+        {steps.length ? `${steps.length} step${steps.length === 1 ? '' : 's'}` : 'How I got here'}
+        {reasoning ? ' · reasoning' : ''}
+      </summary>
+      {!!steps.length && (
+        <ol>
+          {steps.map((st, k) => (
+            <li key={k}>{st}</li>
+          ))}
+        </ol>
+      )}
+      {reasoning && (
+        <p className="cf-reasoning">
+          <b>Why: </b>
+          {reasoning}
+        </p>
+      )}
+    </details>
   )
 }

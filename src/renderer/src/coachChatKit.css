@@ -21,8 +21,8 @@
 .ak-why button:hover { border-color: color-mix(in srgb, var(--accent) 50%, transparent); }
 .ak-why .x { width: 26px; padding: 0; opacity: 0.6; }
 .ak-noted { font-size: 11.5px; color: var(--muted, #8b93a3); margin-left: 4px; }
-/* The model and cost: one muted line, shown when you rest the mouse on the answer (always on touch). */
-.ak-cost { flex-basis: 100%; font-size: 11px; color: var(--muted, #8b93a3); opacity: 0; transform: translateY(-2px); transition: opacity 0.18s, transform 0.18s; font-variant-numeric: tabular-nums; }
+/* How long it took, the model and the cost: one muted line, always shown (brighter on hover). */
+.ak-cost { flex-basis: 100%; font-size: 11px; color: var(--muted, #8b93a3); opacity: 0.7; transform: none; transition: opacity 0.18s, transform 0.18s; font-variant-numeric: tabular-nums; }
 .cf-ben:hover .ak-cost, .ak-bar:focus-within .ak-cost { opacity: 0.85; transform: none; }
 @media (hover: none) { .ak-cost { opacity: 0.7; transform: none; } }
 @keyframes ak-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: none; } }

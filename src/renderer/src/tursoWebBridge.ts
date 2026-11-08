@@ -97,6 +97,7 @@ import { cleanBlockKinds, setBlockKind, type BlockKind, type BlockKinds } from '
 import { cleanPins, togglePin, PINS_KEY, type ChatPin } from '@core/chatPins'
 import { searchChat } from '@core/chatSearch'
 import { keepMeta, type AnswerMeta } from '@core/answerCost'
+import { plainSteps } from '@core/benSteps'
 import { cleanFeedback, weeklyMisses, type FeedbackItem, type FeedbackReason } from '@core/feedbackLearn'
 
 /**
@@ -727,6 +728,10 @@ export function createTursoWebBridge(): Bridge {
       // The answer streams: live steps ("Reading your calendar…"), then the reply.
       quick: async (text: string) => (await botsP).quick(text),
       chat: async (text: string, onStep?: (step: string) => void, media?: { mime: string; data: string }, onDelta?: (replySoFar: string) => void, opts?: { overBudget?: boolean }) => {
+        // Coach chat fix: how long the answer took (from the tap to the last word) and its steps.
+        const t0 = Date.now()
+        let firstMs: number | null = null
+        const seenSteps: string[] = []
         const r = await fetch('/api/coach', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ text, ...(media ? { media } : {}), ...(opts?.overBudget ? { overBudget: true } : {}) }) })
         if (!r.ok || !r.body) {
           const j = await r.json().catch(() => ({}))
@@ -746,8 +751,8 @@ export function createTursoWebBridge(): Bridge {
             if (!raw) continue
             try {
               const o = JSON.parse(raw)
-              if (typeof o.step === 'string') onStep?.(o.step)
-              else if (typeof o.delta === 'string') onDelta?.(o.delta)
+              if (typeof o.step === 'string') (seenSteps.push(o.step), onStep?.(o.step))
+              else if (typeof o.delta === 'string') ((firstMs ??= Date.now() - t0), onDelta?.(o.delta))
               else last = o
             } catch {
               /* a broken line: skip */
@@ -779,6 +784,8 @@ export function createTursoWebBridge(): Bridge {
         if (last.error && !last.reply) throw new Error(last.error)
         // QA4: which model answered and what it cost, kept with the reply (synced, newest 200).
         if (last.meta && typeof last.at === 'string') {
+          const steps = plainSteps(seenSteps)
+          last.meta = { ...last.meta, ms: Date.now() - t0, firstMs: firstMs ?? Date.now() - t0, ...(steps.length ? { steps } : {}), ...(typeof last.reasoning === 'string' && last.reasoning ? { reasoning: last.reasoning.slice(0, 600) } : {}) }
           const meta = last.meta as AnswerMeta
           void svcP.then((svc) => svc.write((s) => writeSetting(s.db as any, 'coach_answer_meta', keepMeta((readSetting(s.db as any, 'coach_answer_meta') as Record<string, AnswerMeta>) ?? {}, last.at, meta) as any))).catch(() => null)
         }

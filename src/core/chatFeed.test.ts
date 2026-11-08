@@ -53,9 +53,10 @@ describe('chat feed (Night 7)', () => {
     ]
     const f = buildFeed(log, { now: new Date(at(13, 40)) })
     const msgs = f.filter((x) => x.t === 'msg')
-    expect(msgs.map((x) => (x as any).i)).toEqual([4])
-    const plan = f.find((x) => x.t === 'fold' && x.entries.includes(1))
-    expect(plan).toBeTruthy()
+    // Coach chat fix: the plan message stays in place (its card is the live plan); the rest fold.
+    expect(msgs.map((x) => (x as any).i)).toEqual([1, 4])
+    expect(f.some((x) => x.t === 'fold' && x.entries.includes(1))).toBe(false)
+    expect(f.find((x) => x.t === 'fold' && x.entries.includes(2) && x.entries.includes(3))).toBeTruthy()
     // the first plan message is replaced by the later one, which counts it
     expect(f.some((x) => x.t === 'fold' && x.entries.includes(0))).toBe(false)
   })

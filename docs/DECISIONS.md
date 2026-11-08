@@ -160,3 +160,17 @@ entry that says why.
 - **Rules out:** making Balanced or Lively the default, or turning more kinds into cards in Calm.
   Spam is held by the existing governor (30-min gap, 3 different cards an hour, calls, focus,
   classes, quiet hours, bedtime) and `firstSight` (no card shown twice).
+
+### The Coach chat is in time order with one live plan card (2026-11-08)
+- **Decision:** the chat is always drawn oldest first by message time (`core/coachOrder.ts`); a reply
+  stays under its question and the answer being written stays last. Only the newest message from
+  today with a plan card shows it live; older ones are one "Plan updated" line. "See the plan" scrolls
+  to that card, or posts the card as a message at that moment. Nothing is ever pinned under the newest
+  messages. Simple data questions (sleep average, money earned, habits, today's tasks) are answered in
+  code from the data (`core/benAsk.ts`), and every answer shows how long it took.
+- **Why:** the owner saw the morning's plan card drawn below the afternoon's questions (a card
+  appended after all messages) and a second partial plan card higher up; "how much did I earn this
+  month" took about 17 s on the thinking model.
+- **Rules out:** a plan card (or any card) rendered after the message list; more than one live plan
+  card; sending simple data questions to the model when the data answers them.
+

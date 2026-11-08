@@ -103,7 +103,11 @@ const KEEP: Record<Exclude<Trim, 'full'>, RegExp> = {
  */
 export function trimContext(context: string, trim: Trim): string {
   if (trim === 'full') return context
-  const keep = KEEP[trim]
+  return keepLines(context, KEEP[trim])
+}
+
+/** Only the context sections whose heading matches `keep` (with their "- " lines). */
+export function keepLines(context: string, keep: RegExp): string {
   const out: string[] = []
   let on = false
   for (const line of String(context ?? '').split('\n')) {

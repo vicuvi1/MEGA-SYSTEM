@@ -290,7 +290,7 @@ describe('QA4 cost and budget', () => {
     ])
     expect(m).toEqual({ model: 'deepseek-v4.1-flash', calls: 2, tokens: 4300, cost: 0.0004 })
     expect(costLine(m)).toBe('deepseek-v4.1-flash · 2 calls · 4.3k tokens · $0.0004')
-    expect(costLine(answerMeta([]))).toBe('Answered in code · no AI · $0')
+    expect(costLine(answerMeta([]))).toBe('Answered from your data · no AI · $0')
     expect(shortModel('google/gemini-3.5-flash')).toBe('gemini-3.5-flash')
     expect(money(0.00001)).toBe('<$0.0001')
   })

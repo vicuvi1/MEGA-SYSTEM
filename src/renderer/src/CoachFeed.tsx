@@ -16,6 +16,7 @@ import { barFill } from './motionKit'
 import { BenAvatar, type Presence } from './BenAvatar'
 import { createPortal } from 'react-dom'
 import { doingNow } from '@core/coachLooks'
+import { plainStep, plainSteps } from '@core/benSteps'
 import { plainRich } from '@core/richText'
 import { coachCheer } from './coachCheer'
 import { BenPushCard } from './BenPushCard'
@@ -214,6 +215,13 @@ export function NudgeCard({ m, kind, info, repeats, settled, latest, status, dec
 
   if (kind === 'plan') {
     const st = status?.plan.status
+    // Coach chat fix: an older plan message from today is one "Plan updated" line (one live card).
+    if (!latest && today)
+      return (
+        <div className="cf-plan-line settled" data-plan-old>
+          <span>🗓 Plan updated · the newest version is further down</span>
+        </div>
+      )
     if (st === 'approved' || !latest || !today)
       return (
         <Card tone="plan" icon="🗓" title={st === 'approved' && today ? 'Plan approved' : "Today's plan"} settled>
@@ -473,11 +481,29 @@ function freshWords(text: string, at: number): ReactNode[] {
   return text.split(/(\s+)/).map((w, k) => (!w || /^\s+$/.test(w) ? w : <span key={`${at}-${k}`} className="cf-sw" data-w={w} style={{ '--i': n++ } as CSSProperties}>{w}</span>))
 }
 
+/** Coach chat fix: the seconds count up while Ben works, so a slow answer never looks stuck. */
+export function Elapsed({ since }: { since: string }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const t = setInterval(() => tick((n) => n + 1), 200)
+    return () => clearInterval(t)
+  }, [since])
+  const start = Date.parse(since)
+  if (!Number.isFinite(start)) return null
+  const ms = Math.max(0, Date.now() - start)
+  return (
+    <small className="cf-think-time" data-think-time aria-label="Seconds so far">
+      {(ms / 1000).toFixed(ms < 10_000 ? 1 : 0)} s
+    </small>
+  )
+}
+
 /** Ben is thinking: what he is doing now (shimmering), the steps he finished above it. */
 export function TypingBubble({ step, steps = [] }: { step?: string; steps?: string[] }) {
-  const past = steps.slice(0, -1).filter((x) => !/^Reading your day$/.test(x)).slice(-3)
+  const past = plainSteps(steps.slice(0, -1)).filter((x) => x !== 'Read your day').slice(-3)
+  const now = doingNow(plainStep(step ?? '') || step)
   return (
-    <div className="cf-think" aria-live="polite" aria-label={`Ben is ${doingNow(step).toLowerCase()}`}>
+    <div className="cf-think" aria-live="polite" aria-label={`Ben is ${now.toLowerCase()}`}>
       {past.length > 0 && (
         <ul className="cf-think-done">
           {past.map((x) => (
@@ -495,7 +521,7 @@ export function TypingBubble({ step, steps = [] }: { step?: string; steps?: stri
           <i />
         </span>
         <span className="cf-shimmer" key={step ?? ''}>
-          {doingNow(step)}…
+          {now}…
         </span>
       </div>
     </div>

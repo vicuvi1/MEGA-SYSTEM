@@ -551,6 +551,21 @@
    ],
    "evidence": "2026-11-08: dayColumn and toastQueue unit tests; full smoke green",
    "notes": "src/core/dayColumn.ts, src/core/toastQueue.ts, rewards/More.tsx"
+  },
+  {
+   "id": "F-COACH-CHAT",
+   "priority": 1,
+   "area": "ben",
+   "title": "Coach chat: time order, one plan card, time and steps, fast data answers",
+   "user_visible_behavior": "New questions and answers always land at the bottom; the plan card stays where it was posted and only one is live (older ones are a 'Plan updated' line); each answer shows how long it took and opens its steps and a short reasoning summary; seconds count while Ben works; sleep average, money earned, habits and today's tasks are answered from your data at once",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/server/benAskSpeed.test.ts src/core/benAsk.test.ts src/core/coachOrder.test.ts",
+    "SMOKE_ONLY=\"Coach\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests, speed table before/after, Coach smoke steps pass",
+   "notes": "src/core/coachOrder.ts, benAsk.ts, benSteps.ts; pages/Coach.tsx, CoachFeed.tsx (Elapsed), CoachCards.tsx; webBots.ts fast paths + askTrim; api/ai.mjs onReasoning; tursoWebBridge measures time"
   }
  ]
 }
