@@ -106,6 +106,10 @@ export interface RhythmState {
   asked?: string[]
   /** "Rescue my day" offered today (W1). */
   rescued?: boolean
+  /** Auto-rescue: the last rescue offered for a late block, kept for Accept (core/planRescue). */
+  rescue?: import('./planRescue').RescueOffer
+  /** The last plan change made from Telegram or a push (Too much today, Move to tomorrow, a rescue), for its Undo. */
+  planUndo?: { at: number; label: string; before: DayProposal; dates: { id: string; due: string }[] }
   /** The midweek check went out (W14, Wednesdays). */
   midweek?: boolean
   /** Big-3 blocks Ben proposed for the week, waiting for "Book them" (W13). */

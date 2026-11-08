@@ -31,7 +31,9 @@ import type { BotContext, Tap } from './context'
 import { goalTap } from '../goalsBrain'
 import { readPushCallback } from '@core/benPushes'
 import { answerPushIn, applyMark, readPushLog } from '../benPushStore'
-import { runPlanTap, planMessage } from './planButtons'
+import { runPlanTap, planMessage, planDeps, runReviewTap } from './planButtons'
+import { rescueAnswer } from '../planShared'
+import { isRescueKey } from '@core/planRescue'
 import { askStall, STALL_CALLBACK } from './stallButtons'
 import { subjectFromPush } from '@core/stallFix'
 import { CAREER_CALLBACK } from './careerBot'
@@ -44,16 +46,23 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(cr|f[acbksuoxq]|p[prb]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/
+export const CALLBACK_DATA = /^(cr|f[acbksuoxq]|p[prbc]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/
 
 export const CALLBACKS: CallbackHandler[] = [
   // Career: flashcard quiz, follow-ups, pay yourself first, essay replans, the letter (careerBot.ts).
   CAREER_CALLBACK,
-  // TV1: today's plan buttons (move ±30, Done, Skip, Shift to now, Undo a mark).
+  // TV1: today's plan buttons (move ±30, Done, Skip, Shift to now, Undo a mark, Re-plan from now,
+  // Too much today, Move a block to tomorrow, Undo that, Check the day).
   {
     prefixes: ['pb'],
     match: (data) => data.startsWith('pb|'),
     run: (c, t) => runPlanTap(c, t)
+  },
+  // The end-of-day check on Telegram: Done / Partly / Tomorrow / Drop per block (planShared.markReviewOn).
+  {
+    prefixes: ['pc'],
+    match: (data) => data.startsWith('pc|'),
+    run: (c, t) => runReviewTap(c, t)
   },
   // Water and workout cards: a tap updates the shared log and the card.
   {
@@ -281,9 +290,9 @@ export const CALLBACKS: CallbackHandler[] = [
         if (data === 'rb|a') {
           await answer('Approving…')
           const r = await rhythm.approve()
-          const text = r.plan ? `${proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join('\n')}` : esc(r.done.join(' '))
-          // TV1: the approved plan keeps its block buttons (move, Done, Skip).
+          // TV1: the approved plan keeps its block buttons (move, Done, Skip); the text is the app card's.
           const msg = r.plan ? await planMessage(c).catch(() => null) : null
+          const text = r.plan ? `${msg?.text ?? proposalText(r.plan, { approved: true })}\n${r.done.map(esc).join('\n')}` : esc(r.done.join(' '))
           await edit(text, msg?.keyboard)
           return text
         }
@@ -603,6 +612,16 @@ export const CALLBACKS: CallbackHandler[] = [
       const now = Date.now()
       const day = await mirror.read((db) => services.services(db).wallet.today())
       const clear = () => tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      // Auto-rescue: Accept / Not now (15 min, once) / Skip today, and Undo after Accept (core/planRescue).
+      if (isRescueKey(r.ref) && (r.op === 'accept' || r.op === 'later' || r.op === 'skip' || r.op === 'undo')) {
+        const res = await rescueAnswer(planDeps(c), r.ref, r.op)
+        await answer(res.line.slice(0, 190))
+        if (r.op === 'accept' && res.ok) {
+          await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [[{ text: '↩ Undo', callback_data: `bp|u|${r.ref}`.slice(0, 64) }]] } }).catch(() => null)
+          await tg(update.__token, 'sendMessage', { chat_id: chat, text: `🛟 ${esc(res.line)}`, parse_mode: 'HTML' }).catch(() => null)
+        } else if (res.ok) await clear()
+        return res.line
+      }
       if (r.op === 'plan') {
         await answer('Planning your day…')
         await mirror.write((db) => answerPushIn(db, day, r.ref, 'plan', now))

@@ -2035,6 +2035,79 @@ try {
       await pg.locator('.bp-card[data-push="weekly"]').screenshot({ path: `${shots}/coach-weekly-card.png` })
     }
   })
+  // Auto-rescue (core/planRescue.ts): a plan block 30 min late and not started → one rescue card on the
+  // island (Accept / Not now / Skip today); Accept then shows "Rescue on" with ↩ Undo. The plan the card
+  // offers comes from the real rules (re-plan + Too much today inside the limits). Screenshots go to the
+  // scratchpad when RESCUE_SHOTS=<dir> is set.
+  await step('Plan rescue: a late block gets one rescue card on the island, Accept, then Undo', async () => {
+    const shots = process.env.RESCUE_SHOTS
+    const { build } = await import('rolldown')
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const dir = await mkdtemp(join(tmpdir(), 'rescue-'))
+    const entry = join(dir, 'entry.ts')
+    await writeFile(entry, `export * from ${JSON.stringify(join(repo, 'src/core/planRescue.ts'))}\nexport { cleanPushLog, pushAlert } from ${JSON.stringify(join(repo, 'src/core/benPushes.ts'))}\n`)
+    const out = await build({ input: entry, write: false, output: { format: 'esm' } })
+    await writeFile(join(dir, 'r.mjs'), out.output[0].code)
+    const R = await import((await import('node:url')).pathToFileURL(join(dir, 'r.mjs')).href)
+    await rm(dir, { recursive: true, force: true })
+    const now = fakeNow()
+    const day = new Date(now).toLocaleDateString('sv-SE')
+    const hm = (ms) => new Date(ms).toTimeString().slice(0, 5)
+    const start = hm(Math.floor((now - 35 * 60_000) / 300_000) * 300_000)
+    const later = hm(Math.ceil((now + 3 * 3600_000) / 300_000) * 300_000)
+    // A made-up draft plan: "Lab report" started 35 min ago and nothing ran; a 2h work limit.
+    const plan = { day, headline: 'Lab first', mustdos: ['Lab report'], training: null, waterMl: 2500, blocks: [{ id: 'lab', title: 'Lab report', start, minutes: 60, kind: 'focus', tasks: ['Lab report'] }, { id: 'read', title: 'Read chapter 3', start: later, minutes: 60, kind: 'focus', tasks: ['Read chapter 3'] }, { id: 'tidy', title: 'Tidy notes', start: hm(Math.ceil((now + 5 * 3600_000) / 300_000) * 300_000), minutes: 45, kind: 'focus', tasks: ['Tidy notes'] }], also: [] }
+    const r = R.decideRescue({ now, day, on: true, plan, status: 'proposed', version: 1, running: false, meeting: false, quiet: false, log: R.cleanPushLog(null, day), here: true, ctx: { events: [], sessions: [], endBy: '23:00', limits: { maxFocusMin: 120, offAt: null, protect: [], caps: [] } } })
+    if (!r) throw new Error('no rescue for a block 35 min late')
+    if (!/^Rescue: start 'Lab report' now for \d+ min, move 'Tidy notes' to tomorrow\.$/.test(r.push.text)) throw new Error(`rescue text: ${r.push.text}`)
+    if (R.decideRescue({ now, day, on: true, plan, status: 'proposed', version: 1, running: true, meeting: false, quiet: false, log: R.cleanPushLog(null, day), here: true, ctx: { events: [] } })) throw new Error('a rescue while a timer runs')
+
+    const ip = await (await browser.newContext({ viewport: { width: 560, height: 720 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island rescue: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const snap = { at: Date.now(), locked: false, ben: { face: '😎', mood: 'hyped', why: '', move: null, last: null, unread: 0, busy: false, steps: [] }, running: null, now: null, next: null, mustdos: [], water: { ml: 750, target: 2500 }, reps: [], alert: null }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {},
+        islandTakeClicks: () => {},
+        islandAction: (a) => { window.__island.actions.push(a) },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 3, gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    if (shots) await ip.addStyleTag({ content: 'body::before { content: ""; position: fixed; inset: 0; z-index: -1; background: linear-gradient(#2b2d33 0 34px, #f4f5f7 34px); }' })
+    await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 15000 })
+    const show = async (alert, k) => {
+      await ip.evaluate(([a, i]) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + i, alert: a }), [alert, k])
+      await ip.waitForSelector('.di-peek.kind-checkin', { timeout: 5000 })
+      if (await ip.$('.di-peek.calm-peek.kind-checkin')) await ip.click('.di-peek.calm-peek.kind-checkin')
+      await ip.waitForSelector('.di-peek.alert.kind-checkin', { timeout: 4000 })
+    }
+    await show(R.pushAlert(r.push), 1)
+    const said = await ip.textContent('.di-peek.alert.kind-checkin')
+    if (!said.includes("Rescue: start 'Lab report' now")) throw new Error(`the rescue card says: ${said}`)
+    for (const l of ['✅ Accept', 'Not now', 'Skip today']) if (!(await ip.$(`.di-peek.alert.kind-checkin [data-tap="peek:alert:${l}"]`))) throw new Error(`the rescue card has no "${l}"`)
+    await ip.waitForTimeout(600)
+    await ip.screenshot({ path: `${shots || '/tmp'}/island-rescue-card.png`, clip: { x: 0, y: 0, width: 560, height: 320 } }).catch(() => {})
+    await ip.click('.di-peek.alert.kind-checkin [data-tap="peek:alert:✅ Accept"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'benPush' && a.op === 'accept' && a.key === 'rescue:lab'), null, { timeout: 3000 })
+    // After Accept the app window shows "Rescue on" with ↩ Undo for 2 minutes (benPushFeed.pushAct).
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 8000 }).catch(() => {})
+    const id = 'push:rescue:lab:undo'
+    const line = R.acceptLine(r.offer)
+    await show({ id, kind: 'checkin', title: 'Rescue on', text: line, face: '🛟', actions: [{ label: '↩ Undo', action: { kind: 'benPush', op: 'undo', key: 'rescue:lab', alertId: id } }] }, 2)
+    if (!(await ip.textContent('.di-peek.alert.kind-checkin')).includes("Rescue on: 'Lab report' now at")) throw new Error('no "Rescue on" line after Accept')
+    await ip.waitForTimeout(600)
+    await ip.screenshot({ path: `${shots || '/tmp'}/island-rescue-undo.png`, clip: { x: 0, y: 0, width: 560, height: 300 } }).catch(() => {})
+    await ip.click('.di-peek.alert.kind-checkin [data-tap="peek:alert:↩ Undo"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'benPush' && a.op === 'undo' && a.key === 'rescue:lab'), null, { timeout: 3000 })
+    await ip.context().close()
+  })
   // Focus boost (DX4, DX7, DX9, DX10, DX12, DX19, LF14, LF20): the push ladder's 3 steps and the morning
   // countdown on the island; in the app the session goal, Dojo (Esc leaves), Done / Half / Not at the end,
   // "why I'm stalling", a launch kit, workout-only music and the victory card. BOOST_SHOTS=<dir> saves pictures.

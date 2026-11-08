@@ -71,6 +71,11 @@ entry that says why.
 - **Why:** the owner wants a work planner that learns from what really happened without guessing or rewarding a review; a learned length that chased its own output would drift, and a guessed "done in the planned time" would teach the planner nothing true.
 - **Rules out:** points for reviewing or for the score, learning from blocks with no real number, energy or mood questions, deleting a task or event when a block is dropped or slipped.
 
+### One rescue per late block, drafts only; Telegram edits the same plan (2026-11-08)
+- **Decision:** a work block 30 min late and not started gets ONE rescue push (`core/planRescue.ts`): built only from the existing rules (the automatic re-plan for drafts in the way, Too much today for what no longer fits, inside `plan_limits`), on the one push channel with one key in `ben_pushes`, at most once per block and 2 a day, never in a meeting, quiet hours or while a timer runs; Accept moves only drafts and has one Undo. Telegram's plan buttons (Too much today, Move to tomorrow, the end-of-day check, a quick-add for today, a rescue's Accept) change today's plan in `coach_rhythm` directly (`web/planShared.ts`, version bumped, one Undo slot `planUndo`), so the app card takes the change on its next look; the Telegram text is the app card's (`core/tgPlanText.ts`, cleaned by planDedupe).
+- **Why:** the owner wants a work planner that catches a slipping day without nagging and that works the same from the phone as from the PC; a second copy of the plan or a different rule set on Telegram would show different plans in two places.
+- **Rules out:** more than one rescue for a block, a rescue that moves approved, pinned or calendar blocks or breaks a limit, a separate Telegram plan or plan logic, energy or mood questions, points for a rescue.
+
 ### Every task of the day has a place or a stated reason (2026-11-08)
 - **Decision:** `core/planAudit.ts` runs after a plan is built or edited: a task the plan lost goes back on today's list; what has no room shows as one plain line with "Move to tomorrow". Block "why" lines come only from data the plan or Todoist holds.
 - **Why:** a task silently missing from the plan breaks trust in the whole plan.

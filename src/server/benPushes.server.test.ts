@@ -89,6 +89,26 @@ describe('Ben 2 on the tick', () => {
     expect(w.setting('ben_pushes').recs['shutdown:2030-03-12'].via).toBe('telegram')
   })
 
+  it('auto-rescue: a plan block 30 min late goes to Telegram once (Accept / Not now / Skip today), not while you are at the PC', async () => {
+    const plan = { day: '2030-03-12', headline: 'Lab first', mustdos: [], training: null, waterMl: 2500, blocks: [{ id: 'lab', title: 'Lab report', start: '10:00', minutes: 60, kind: 'focus', tasks: ['Lab report'] }] }
+    const rhythm = { day: '2030-03-12', water: [], briefing: { status: 'proposed', sentAt: '2030-03-12T07:00:00Z', version: 1, planner: 2, plan } }
+    const w = world({ ...base, coach_rhythm: rhythm })
+    await runTick(w.env as any, at('2030-03-12T10:20:00'))
+    expect(msgs(w.sent).filter((m) => /Rescue:/.test(m.text))).toHaveLength(0)
+    await runTick(w.env as any, at('2030-03-12T10:31:00'))
+    const r = msgs(w.sent).filter((m) => /Rescue:/.test(m.text))
+    expect(r).toHaveLength(1)
+    expect(r[0].text).toMatch(/Rescue: start 'Lab report' now for 60 min\./)
+    expect(r[0].reply_markup.inline_keyboard[0].map((b: any) => b.callback_data)).toEqual(['bp|a|rescue:lab', 'bp|l|rescue:lab', 'bp|s|rescue:lab'])
+    expect(w.setting('coach_rhythm').rescue.key).toBe('rescue:lab')
+    await runTick(w.env as any, at('2030-03-12T10:40:00'))
+    expect(msgs(w.sent).filter((m) => /Rescue:/.test(m.text))).toHaveLength(1)
+    // At the PC: the island shows it instead.
+    const pc = world({ ...base, coach_rhythm: rhythm, ben_pc_seen: { at: new Date('2030-03-12T10:30:00').getTime(), active: true } })
+    await runTick(pc.env as any, at('2030-03-12T10:31:00'))
+    expect(msgs(pc.sent).filter((m) => /Rescue:/.test(m.text))).toHaveLength(0)
+  })
+
   it('sends a drift word the island handed over, once', async () => {
     const now = new Date('2030-03-12T17:00:00').getTime()
     const w = world({ ...base, ben_pushes: { day: '2030-03-12', recs: {}, outbox: [{ key: 'drift:coach:drift:1:1', text: '👀 25 min of video during English essay. Back to it?', at: now - 60_000 }] } })

@@ -4,11 +4,26 @@
 // "move: B1 | …" action, done/skip are the Today timeline's marks), shows a
 // receipt line on the plan and an ↩ Undo button.
 
-import { fromMin, toMin, type DayProposal } from './rhythm'
+import { fromMin, toMin, type DayProposal, type PlanBlock } from './rhythm'
 import { applyEdit, ensureIds, planItems, snapshotOf } from './planEdit'
 
-/** Callback data: "pb|m|<i>|<±minutes>", "pb|d|<i>", "pb|s|<i>", "pb|n" (shift to now), "pb|a" (approve), "pb|u|<i>" (undo a mark). */
-export type PlanTap = { op: 'move'; i: number; delta: number } | { op: 'done'; i: number } | { op: 'skip'; i: number } | { op: 'now' } | { op: 'approve' } | { op: 'undo'; i: number }
+/**
+ * Callback data: "pb|m|<i>|<±minutes>", "pb|d|<i>", "pb|s|<i>", "pb|n" (shift to now), "pb|a" (approve),
+ * "pb|u|<i>" (undo a mark), "pb|r" (re-plan from now), "pb|t" (too much today), "pb|w|<i>" (move the
+ * block to tomorrow), "pb|z|<at>" (undo the last of those), "pb|c" (the end-of-day check).
+ */
+export type PlanTap =
+  | { op: 'move'; i: number; delta: number }
+  | { op: 'done'; i: number }
+  | { op: 'skip'; i: number }
+  | { op: 'now' }
+  | { op: 'approve' }
+  | { op: 'undo'; i: number }
+  | { op: 'replan' }
+  | { op: 'toomuch' }
+  | { op: 'tomorrow'; i: number }
+  | { op: 'back'; at: number }
+  | { op: 'check' }
 
 export const PLAN_TAP = /^pb\|/
 
@@ -24,6 +39,11 @@ export function readPlanTap(data: string): PlanTap | null {
   if (p[1] === 'd' && okI) return { op: 'done', i }
   if (p[1] === 's' && okI) return { op: 'skip', i }
   if (p[1] === 'u' && okI) return { op: 'undo', i }
+  if (p[1] === 'w' && okI) return { op: 'tomorrow', i }
+  if (p[1] === 'z' && /^[0-9a-z]{1,12}$/.test(p[2] ?? '')) return { op: 'back', at: parseInt(p[2], 36) }
+  if (p[1] === 'r' && p.length === 2) return { op: 'replan' }
+  if (p[1] === 't' && p.length === 2) return { op: 'toomuch' }
+  if (p[1] === 'c' && p.length === 2) return { op: 'check' }
   if (p[1] === 'n' && p.length === 2) return { op: 'now' }
   if (p[1] === 'a' && p.length === 2) return { op: 'approve' }
   return null
@@ -77,32 +97,41 @@ export function planAfterMove(plan: DayProposal, id: string, to: string, calenda
 
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
+/** A draft block (not pinned, not approved, not in the calendar): it can move to tomorrow. */
+export const draftBlock = (b: Pick<PlanBlock, 'locked' | 'ok' | 'sync'>, approved?: boolean) => !approved && !b.locked && !b.ok && !b.sync?.eventId
+
 /**
- * The keyboard under the plan. Up to 5 blocks get a row; a marked block shows
- * its mark and an Undo. Approved plans don't show Approve again.
+ * The keyboard under the plan, the same actions as the app's plan card: up to 5 blocks get a row
+ * (−30 · +30 · ✓ Done · Skip, and ➡️ Tomorrow on a draft); a marked block shows its mark and an
+ * Undo. Then Approve · Change, Re-plan from now · Too much today, and "Check the day" once the last
+ * work block is over. `shown`: the block indexes to list (the deduped plan's), in order.
  */
-export function planKeyboard(p: Pick<DayProposal, 'blocks'>, opts: { approved?: boolean; marks?: Record<number, Mark>; late?: boolean } = {}): { inline_keyboard: { text: string; callback_data: string }[][] } {
+export function planKeyboard(p: Pick<DayProposal, 'blocks'>, opts: { approved?: boolean; marks?: Record<number, Mark>; late?: boolean; shown?: number[]; check?: boolean } = {}): { inline_keyboard: { text: string; callback_data: string }[][] } {
   const rows: { text: string; callback_data: string }[][] = []
-  p.blocks.slice(0, 5).forEach((b, i) => {
+  const idx = (opts.shown ?? p.blocks.map((_b, i) => i)).filter((i) => i >= 0 && i < Math.min(12, p.blocks.length)).slice(0, 5)
+  for (const i of idx) {
+    const b = p.blocks[i]
     const mark = opts.marks?.[i]
     if (mark) {
       rows.push([{ text: `${mark === 'done' ? '✅' : '⏭'} ${b.start} ${short(b.title, 18)}`, callback_data: `pb|u|${i}` }, { text: '↩ Undo', callback_data: `pb|u|${i}` }])
-      return
+      continue
     }
     // A pinned block can't move (the app's rule): its row says so instead of −30 / +30.
     if (b.locked) {
       rows.push([{ text: `📌 ${b.start} ${short(b.title, 16)}`, callback_data: `pb|m|${i}|30` }, { text: '✓ Done', callback_data: `pb|d|${i}` }, { text: 'Skip', callback_data: `pb|s|${i}` }])
-      return
+      continue
     }
     rows.push([
       { text: `${b.start} −30`, callback_data: `pb|m|${i}|-30` },
       { text: '+30', callback_data: `pb|m|${i}|30` },
       { text: '✓ Done', callback_data: `pb|d|${i}` },
-      { text: 'Skip', callback_data: `pb|s|${i}` }
+      { text: 'Skip', callback_data: `pb|s|${i}` },
+      ...(draftBlock(b, opts.approved) ? [{ text: '➡️ Tmrw', callback_data: `pb|w|${i}` }] : [])
     ])
-  })
-  const last = [...(opts.approved ? [] : [{ text: '✅ Approve', callback_data: 'rb|a' }]), { text: opts.late ? '⏩ Shift to now' : '⏩ Start from now', callback_data: 'pb|n' }, { text: '✏️ Change', callback_data: 'rb|e' }]
-  rows.push(last)
+  }
+  rows.push([...(opts.approved ? [] : [{ text: '✅ Approve', callback_data: 'rb|a' }]), ...(opts.late ? [{ text: '⏩ Shift to now', callback_data: 'pb|n' }] : []), { text: '✏️ Change', callback_data: 'rb|e' }])
+  rows.push([{ text: '🔄 Re-plan from now', callback_data: 'pb|r' }, { text: '📦 Too much today', callback_data: 'pb|t' }])
+  if (opts.check) rows.push([{ text: '✓ Check the day', callback_data: 'pb|c' }])
   return { inline_keyboard: rows }
 }
 
@@ -114,6 +143,8 @@ export function receiptLine(t: PlanTap, b?: { start: string; title: string } | n
   if (t.op === 'skip') return `⏭ Skipped: ${name}`
   if (t.op === 'undo') return `↩ Undone: ${name}`
   if (t.op === 'now') return extra ? `⏩ ${extra}` : '⏩ The plan now starts from now'
+  if (t.op === 'tomorrow') return `➡️ ${extra ?? `Moved ${name} to tomorrow`}`
+  if (t.op === 'replan' || t.op === 'toomuch' || t.op === 'back' || t.op === 'check') return extra ?? ''
   return extra ?? '✅ Approved'
 }
 

@@ -11,7 +11,7 @@ import { MARK_WORD, type ItemMark, type PushCard, type PushLog, type PushOp } fr
 import { WeekTop3Pick } from './WeekTop3'
 import './benPush.css'
 
-const ICON: Record<PushCard['type'], string> = { checkin: '🎯', brief: '☀️', shutdown: '🌙', weekly: '📊', drift: '👀', workoutNote: '💪' }
+const ICON: Record<PushCard['type'], string> = { checkin: '🎯', brief: '☀️', shutdown: '🌙', weekly: '📊', drift: '👀', workoutNote: '💪', rescue: '🛟' }
 
 export function BenPushCard({ card, live, onChange }: { card: PushCard; live: boolean; onChange?: () => void }) {
   const act = useAction()
@@ -36,6 +36,14 @@ export function BenPushCard({ card, live, onChange }: { card: PushCard; live: bo
   const mark = async (id: string, m: ItemMark) => {
     const r = await act(() => life.coach!.pushes!.mark(id, m), (x) => x)
     if (r) setSaid(r)
+  }
+  // Auto-rescue: Accept / Not now / Skip today, then Undo (the same answers as the island and Telegram).
+  const rescue = async (op: 'accept' | 'later' | 'skip' | 'undo') => {
+    const r = await act(() => life.coach!.pushes!.rescue!(op, card.key), (x) => x)
+    if (r) {
+      setSaid(r)
+      onChange?.()
+    }
   }
   const can = live && !!life.coach?.pushes && !answered
   const marks = log?.shutdown?.marks ?? {}
@@ -113,6 +121,18 @@ export function BenPushCard({ card, live, onChange }: { card: PushCard; live: bo
           >
             🌙 Shut down
           </button>
+        </div>
+      )}
+      {can && card.type === 'rescue' && life.coach?.pushes?.rescue && (
+        <div className="cf-btns">
+          <button className="p" onClick={() => void rescue('accept')}>✅ Accept</button>
+          {!card.key.endsWith(':again') && <button onClick={() => void rescue('later')}>Not now</button>}
+          <button onClick={() => void rescue('skip')}>Skip today</button>
+        </div>
+      )}
+      {live && card.type === 'rescue' && answered === 'accept' && life.coach?.pushes?.rescue && (
+        <div className="cf-btns">
+          <button onClick={() => void rescue('undo')}>↩ Undo</button>
         </div>
       )}
       {live && card.type === 'weekly' && <WeekTop3Pick />}
