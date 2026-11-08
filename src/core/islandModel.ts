@@ -32,6 +32,16 @@ export interface IslandAck { id: string; ok: boolean; error?: string; /** What h
 
 export type IslandAction = { id?: string } & (
   | { kind: 'water'; ml: number }
+  /**
+   * Custom Center on the island (core/islandCenter.ts): a counter's step (its
+   * route logs it: water, reps, or only the Center), a checklist tick, a mode
+   * tap, a timer widget's start, or Done / In 10 min on a custom reminder.
+   */
+  | { kind: 'center'; op: 'count'; widget: string; amount: number }
+  | { kind: 'center'; op: 'check'; widget: string; item: string }
+  | { kind: 'center'; op: 'mode'; mode: string }
+  | { kind: 'center'; op: 'timer'; widget: string }
+  | { kind: 'center'; op: 'remind'; rule: string; answer: 'done' | 'later'; alertId: string }
   /** Ben on your PC (pcCoach.ts): a tap on one of his cards (praise, back to it, a break, bedtime…). */
   | { kind: 'coach'; op: import('./pcCoach').CoachOp; ck: import('./pcCoach').CoachKind; alertId: string; subject?: string; minutes?: number }
   /** `ex`: the exercise id again (the tap's own id may take `id`'s place on the way). */
@@ -217,6 +227,8 @@ export interface IslandSnapshot {
   musicPause?: boolean
   /** PL1–PL8: your widgets, pages and layout (synced setting island_widgets) and the read-only widget data (src/core/widgets). */
   widgets?: unknown
+  /** Custom Center: the mode on now, its looks and your widgets for the pill and the open island (core/islandCenter.ts). */
+  center?: import('./islandCenter').CenterIsland | null
   /** LF1/LF2: today's rain and daylight from the weather plugin (src/core/widgets/weatherPill.ts). */
   weather?: import('./widgets/weatherPill').IslandWeather | null
   /** Automation hub: your island buttons, runs in progress and their answers, the last runs. */

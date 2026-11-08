@@ -107,3 +107,12 @@
 .sh-combo { padding: 6px 12px; }
 .sh-combo-x { font-size: 22px; }
 .sh-budget { padding: 6px 12px; gap: 4px; }
+
+/* Points-only fix: old reward buys that sit in Finance as spending. */
+.sh-moneyfix { display: grid; gap: 8px; margin: 12px 0; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
+.sh-moneyfix small { color: var(--muted); }
+.sh-moneyfix ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.sh-moneyfix li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.sh-moneyfix-what { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sh-moneyfix-tag { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: var(--surface-2, var(--border)); color: var(--muted); }
+.sh-moneyfix > .rx-btn { justify-self: start; }

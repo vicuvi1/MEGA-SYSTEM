@@ -113,6 +113,10 @@ Life System starts with Windows (`--hidden`, tray only) from the first run of
 an installed copy; the tray menu turns that and the island off, and Quit ends
 it for real.
 
+### Windows wallpaper per mode (Custom Center)
+
+`src/desktop/wallpaper.ts`, IPC `wallpaper` (app window only), prefs in `wallpaper.json` on that PC. Off by default: Custom Center → Modes → "Change my Windows wallpaper". Switching it on keeps your current wallpaper (read from `HKCU\Control Panel\Desktop`) and switching it off puts it back. When the mode changes, the app window sends the mode's picture (from this device's IndexedDB) and the desktop writes it into its own `wallpapers` folder; or the desktop picks the next picture from a folder you picked for that mode with the Windows folder dialog (images directly inside it, by name, every 15 min to once a day). Safety: one fixed PowerShell script calls `SystemParametersInfo(SPI_SETDESKWALLPAPER)`; the picture's path is handed over in the `LS_WALLPAPER` environment variable, never in the command line, through `execFile` without a shell; only absolute local `.jpg .jpeg .png .bmp` paths without forbidden characters or `..` pass `validImagePath`; nothing is downloaded. Tests: `wallpaper.test.ts` (a fake execFile).
+
 ## Where the data is, and backups
 
 - **Main copy: Turso** (the cloud database). Website, Ben/Telegram, Sporty's sync

@@ -571,7 +571,8 @@ export interface LifeApi {
     archive(id: number): Promise<ShopState>
     /**
      * `force`: buy even over Safe to spend or an empty fun budget (the explicit "buy anyway").
-     * `paid`: what you actually paid, in the reward's currency (default its real cost).
+     * `paid`: real money you actually paid, in the reward's currency. Default 0: a buy
+     * with points is not real spending and never goes to Finance Helper.
      * Errors start with OVER_SAFE: or FUN_EMPTY: when "buy anyway" may be offered.
      */
     redeem(id: number, opts?: { force?: boolean; paid?: number }): Promise<ShopState>
@@ -605,6 +606,10 @@ export interface LifeApi {
     openChestPrize?(level: number): Promise<{ prize: import('@core/rewardSurprise').ChestPrize; state: ShopState }>
     claimMystery?(): Promise<{ prize: import('@core/rewardSurprise').ChestPrize; state: ShopState }>
     markReady?(keys: string[]): Promise<void>
+    /** Reward buys that went into Finance Helper as real spending (before the points-only fix). */
+    rewardMoney?(): Promise<import('@core/funBudget').RewardMoneyRow[]>
+    /** Takes them (all, or these ids) back out of Finance Helper, after the owner's tap. */
+    removeRewardMoney?(ids?: string[]): Promise<{ removed: number; lei: number; left: import('@core/funBudget').RewardMoneyRow[] }>
   }
   tasks: {
     state(): Promise<TasksState>

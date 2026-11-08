@@ -181,11 +181,16 @@ export interface SoundPack {
 }
 
 export type MotionStyle = 'spring' | 'smooth' | 'snappy' | 'off'
+export type IslandPosition = 'auto' | 'top-center' | 'top-left' | 'top-right'
 export type MotionEvent = 'open' | 'notify' | 'celebrate'
 
 /** How the island and the app look. Every part is optional in a mode (it falls back to the base). */
 export interface Looks {
-  island: { size: 's' | 'm' | 'l'; shape: 'notch' | 'capsule' | 'bar'; radius: number }
+  /**
+   * The island: its size, shape and corners, where it sits ('auto' = where you
+   * dragged it) and the open island's size in px (0 = fits your screen).
+   */
+  island: { size: 's' | 'm' | 'l'; shape: 'notch' | 'capsule' | 'bar'; radius: number; position: IslandPosition; openW: number; openH: number }
   motion: { style: MotionStyle; speed: number; bounce: number; events: Record<MotionEvent, MotionStyle> }
   colors: { accent: string; glow: number; blur: number; theme: 'auto' | 'dark' | 'light' }
   font: { family: 'system' | 'rounded' | 'mono' | 'serif'; numbers: 'plain' | 'tabular' | 'segment' }
@@ -208,9 +213,16 @@ export interface Background {
   strength: number
 }
 
-/** The Windows wallpaper for a mode: stored now, applied by a later desktop phase. */
+/**
+ * The Windows wallpaper for a mode (desktop app only, and only with "Change
+ * my Windows wallpaper" on): a picture kept on this device, and an optional
+ * second one for the evening (20:00–06:00). A folder to rotate through is
+ * picked on each PC and kept there (src/desktop/wallpaper.ts), never synced.
+ */
 export interface DesktopWallpaper {
   image: string
+  /** "local:<id>" for the evening, or '' for the same picture all day. */
+  night: string
 }
 
 export interface Mode {
@@ -261,7 +273,7 @@ export const DEFAULT_SOUNDS: SoundPack = {
 }
 
 export const DEFAULT_LOOKS: Looks = {
-  island: { size: 'm', shape: 'notch', radius: 18 },
+  island: { size: 'm', shape: 'notch', radius: 18, position: 'auto', openW: 0, openH: 0 },
   motion: { style: 'spring', speed: 1, bounce: 0.3, events: { open: 'spring', notify: 'smooth', celebrate: 'spring' } },
   colors: { accent: '#b8f53d', glow: 0.4, blur: 10, theme: 'auto' },
   font: { family: 'system', numbers: 'tabular' },

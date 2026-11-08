@@ -22,6 +22,8 @@ import { playLocal, saveImage, saveSound } from '../custom/localFiles'
 import { backgroundCss } from '../custom/CustomBackground'
 import { useLive } from '../live'
 import { life } from '../bridge'
+import { wallpaperChanged } from '../custom/centerFeed'
+import type { WallpaperOp, WallpaperState } from '../../../desktop/wallpaper'
 import '../custom/custom.css'
 
 const TABS: PageTab[] = [
@@ -591,6 +593,7 @@ function DaysPicker({ days, onChange }: { days: number[]; onChange: (d: number[]
 // ---------------------------------------------------------------- Modes
 
 function ModesTab({ setup, activeId, change, changeMode }: { setup: CustomSetup; activeId: string; change: Change; changeMode: ChangeMode }) {
+  const [wp, setWp] = useWallpaper()
   const add = () => {
     const id = newId('m')
     void change((s) => ({ ...s, modes: [...s.modes, { id, name: 'New mode', icon: '✦', layout: { pill: [], island: [], home: [] }, looks: {}, background: null, desktopWallpaper: null, reminders: [], schedule: [] }] }), 'Mode added')
@@ -598,6 +601,7 @@ function ModesTab({ setup, activeId, change, changeMode }: { setup: CustomSetup;
   return (
     <div className="cc-col">
       <p className="hint block">A mode switches the whole look: its widgets, looks, sounds, background and reminders. It turns on by its times, or with one tap at the top. A mode you tap stays on until the next scheduled one starts.</p>
+      <WallpaperSwitch wp={wp} setWp={setWp} />
       {setup.modes.map((m) => (
         <section key={m.id} className={`panel cc-mode ${m.id === activeId ? 'is-on' : ''}`} data-mode={m.id}>
           <header className="panel-head">
@@ -628,9 +632,7 @@ function ModesTab({ setup, activeId, change, changeMode }: { setup: CustomSetup;
             </div>
           </Row>
           <Row title="Widgets" hint={`${m.layout.pill.length} in the pill · ${m.layout.island.length} in the open island · ${m.layout.home.length} on home (Build tab)`} />
-          <Row title="Windows wallpaper" hint={m.desktopWallpaper ? 'Picked; the desktop app will use it in a later update' : 'Saved for a later desktop update'}>
-            <ImagePick label="Pick a picture" onPicked={(ref) => void changeMode(m.id, (x) => ({ ...x, desktopWallpaper: { image: ref } }), 'Wallpaper saved for this mode')} />
-          </Row>
+          <WallpaperRows m={m} wp={wp} setWp={setWp} changeMode={changeMode} />
         </section>
       ))}
       <button type="button" className="btn" onClick={add} disabled={setup.modes.length >= 8}>+ New mode</button>
@@ -666,6 +668,86 @@ function ImagePick({ label, onPicked }: { label: string; onPicked: (ref: string)
         }
       }} />
     </label>
+  )
+}
+
+// ---------------------------------------------------------------- Windows wallpaper (desktop app)
+
+/** The desktop's wallpaper state (null on the website or an older desktop app). */
+function useWallpaper(): [WallpaperState | null, (s: WallpaperState | null) => void] {
+  const [wp, setWp] = useState<WallpaperState | null>(null)
+  useEffect(() => {
+    let on = true
+    void window.desktop?.wallpaper?.({ op: 'get' }).then((s) => on && setWp(s ?? null)).catch(() => {})
+    return () => {
+      on = false
+    }
+  }, [])
+  return [wp, setWp]
+}
+
+function WallpaperSwitch({ wp, setWp }: { wp: WallpaperState | null; setWp: (s: WallpaperState | null) => void }) {
+  const toast = useToast()
+  if (!wp?.available) return null
+  return (
+    <section className="panel" data-testid="cc-wallpaper">
+      <Row title="Change my Windows wallpaper" hint={wp.on ? 'Each mode can set its own picture. Switching this off puts your old wallpaper back' : 'Off: your Windows wallpaper stays as it is'}>
+        <Switch
+          label="Change my Windows wallpaper"
+          on={wp.on}
+          onChange={async (v) => {
+            const s = await window.desktop?.wallpaper?.({ op: 'setOn', on: v }).catch(() => null)
+            if (s) setWp(s)
+            wallpaperChanged()
+            if (s?.said) toast(s.said, 'info')
+          }}
+        />
+      </Row>
+    </section>
+  )
+}
+
+function WallpaperRows({ m, wp, setWp, changeMode }: { m: Mode; wp: WallpaperState | null; setWp: (s: WallpaperState | null) => void; changeMode: ChangeMode }) {
+  const toast = useToast()
+  const w = m.desktopWallpaper
+  const folder = wp?.folders[m.id]
+  const ask = async (a: WallpaperOp) => {
+    const s = await window.desktop?.wallpaper?.(a).catch(() => null)
+    if (s) setWp(s)
+    wallpaperChanged()
+    if (s?.said) toast(s.said, 'info')
+  }
+  const desktopHint = !wp?.available ? 'Used by the desktop app on Windows' : wp.on ? 'Set when this mode starts' : 'Switch on "Change my Windows wallpaper" above to use it'
+  return (
+    <>
+      <Row title="Windows wallpaper" hint={w ? `Picked · ${desktopHint}` : desktopHint}>
+        <span className="cc-inline">
+          <ImagePick label={w ? 'Change picture' : 'Pick a picture'} onPicked={(ref) => void changeMode(m.id, (x) => ({ ...x, desktopWallpaper: { image: ref, night: x.desktopWallpaper?.night ?? '' } }), 'Wallpaper saved for this mode')} />
+          {w && <button type="button" className="btn ghost" onClick={() => void changeMode(m.id, (x) => ({ ...x, desktopWallpaper: null }), 'Wallpaper removed from this mode')}>Remove</button>}
+        </span>
+      </Row>
+      {w && (
+        <Row title="Evening picture" hint={w.night ? 'From 20:00 to 06:00' : 'Optional: another picture from 20:00 to 06:00'}>
+          <span className="cc-inline">
+            <ImagePick label={w.night ? 'Change' : 'Pick'} onPicked={(ref) => void changeMode(m.id, (x) => ({ ...x, desktopWallpaper: x.desktopWallpaper ? { ...x.desktopWallpaper, night: ref } : null }), 'Evening picture saved')} />
+            {w.night && <button type="button" className="btn ghost" onClick={() => void changeMode(m.id, (x) => ({ ...x, desktopWallpaper: x.desktopWallpaper ? { ...x.desktopWallpaper, night: '' } : null }), 'Evening picture removed')}>Remove</button>}
+          </span>
+        </Row>
+      )}
+      {wp?.available && (
+        <Row title="Or rotate a folder" hint={folder ? `${folder.name}: ${folder.count} picture${folder.count === 1 ? '' : 's'} on this PC` : 'Pictures from one folder on this PC, one after another'}>
+          <span className="cc-inline">
+            <button type="button" className="btn" onClick={() => void ask({ op: 'pickFolder', mode: m.id })}>{folder ? 'Change folder' : 'Pick a folder'}</button>
+            {folder && (
+              <Select aria-label="Change every" value={String(folder.everyMin)} onChange={(e) => void ask({ op: 'every', mode: m.id, minutes: Number(e.target.value) })}>
+                {[15, 30, 60, 180, 1440].map((n) => <option key={n} value={n}>{n < 60 ? `Every ${n} min` : n === 1440 ? 'Once a day' : `Every ${n / 60} h`}</option>)}
+              </Select>
+            )}
+            {folder && <button type="button" className="btn ghost" onClick={() => void ask({ op: 'clearFolder', mode: m.id })}>Stop rotating</button>}
+          </span>
+        </Row>
+      )}
+    </>
   )
 }
 
@@ -722,7 +804,16 @@ function LooksTab({ setup, change, changeMode, toast }: { setup: CustomSetup; ch
         <header className="panel-head"><h2>Island</h2></header>
         <Row title="Size"><Segmented label="Size" value={L.island.size} options={[['s', 'Small'], ['m', 'Medium'], ['l', 'Large']]} onChange={(v) => void setPart('island', { ...L.island, size: v })} /></Row>
         <Row title="Shape"><Segmented label="Shape" value={L.island.shape} options={[['notch', 'Notch'], ['capsule', 'Capsule'], ['bar', 'Thin bar']]} onChange={(v) => void setPart('island', { ...L.island, shape: v })} /></Row>
-        <Row title="Corners"><input type="range" min={0} max={32} value={L.island.radius} aria-label="Corners" onChange={(e) => void setPart('island', { ...L.island, radius: Number(e.target.value) })} /></Row>
+        <Row title="Corners" hint={`${L.island.radius} px`}><input type="range" min={0} max={32} value={L.island.radius} aria-label="Corners" onChange={(e) => void setPart('island', { ...L.island, radius: Number(e.target.value) })} /></Row>
+        <Row title="Where it sits" hint="Where you dragged it, or a spot at the top of the screen (dragging it later still works)">
+          <Segmented label="Island position" value={L.island.position} options={[['auto', 'Where I put it'], ['top-left', 'Top left'], ['top-center', 'Top centre'], ['top-right', 'Top right']]} onChange={(v) => void setPart('island', { ...L.island, position: v })} />
+        </Row>
+        <Row title="Open island width" hint="Never wider than your screen">
+          <Segmented label="Open island width" value={L.island.openW} options={[[0, 'Fit my screen'], [480, 'Narrow'], [600, 'Normal'], [760, 'Wide']]} onChange={(v) => void setPart('island', { ...L.island, openW: v })} />
+        </Row>
+        <Row title="Open island height" hint="Never taller than your screen">
+          <Segmented label="Open island height" value={L.island.openH} options={[[0, 'Fit my screen'], [420, 'Short'], [560, 'Normal'], [720, 'Tall']]} onChange={(v) => void setPart('island', { ...L.island, openH: v })} />
+        </Row>
       </section>
 
       <section className="panel">

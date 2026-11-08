@@ -32,7 +32,7 @@ export const TEMPLATES: Template[] = [
       { id: 'timer', kind: 'timer', title: 'Study timer', icon: '⏱', color: null, focusMin: 50, breakMin: 10, restMin: 20, subject: 'Study' },
       { id: 'exam', kind: 'countdown', title: 'Exam', icon: '🎓', color: '#7cc4ff', date: '2030-06-15' },
       { id: 'list', kind: 'checklist', title: 'Study list', icon: '✅', color: null, resetAt: '04:00', items: [{ id: 'read', text: 'Read one chapter' }, { id: 'cards', text: '20 flashcards' }, { id: 'notes', text: 'Clean up notes' }] },
-      { id: 'ring', kind: 'ring', title: 'Study list', icon: '🎯', color: null, of: 'list' }
+      { id: 'ring', kind: 'ring', title: 'Study progress', icon: '🎯', color: null, of: 'list' }
     ],
     actions: [{ id: 'start', name: 'Start study', icon: '📚', steps: [{ do: 'focus', minutes: 50, subject: 'Study' }, { do: 'music', station: 'Lo-fi' }, { do: 'quiet', minutes: 50 }] }],
     reminders: [rule({ id: 'stand', text: 'Stand up and stretch', icon: '🧍', everyMin: 45 })],
@@ -47,7 +47,7 @@ export const TEMPLATES: Template[] = [
       { id: 'push', kind: 'counter', title: 'Push-ups', icon: '💪', color: '#ff8a3d', goal: 100, steps: [10, 25, 50], unit: 'reps', resetAt: '04:00', track: 'reps', exercise: 'pushups' },
       { id: 'water', kind: 'counter', title: 'Water', icon: '💧', color: '#4cc9f0', goal: 2500, steps: [250, 500], unit: 'ml', resetAt: '04:00', track: 'water', exercise: '' },
       { id: 'rest', kind: 'timer', title: 'Rest timer', icon: '⏱', color: null, focusMin: 45, breakMin: 2, restMin: 0, subject: 'Workout' },
-      { id: 'ring', kind: 'ring', title: 'Push-ups', icon: '🎯', color: '#ff8a3d', of: 'push' }
+      { id: 'ring', kind: 'ring', title: 'Push-up goal', icon: '🎯', color: '#ff8a3d', of: 'push' }
     ],
     actions: [{ id: 'go', name: 'Start workout', icon: '🏋', steps: [{ do: 'focus', minutes: 45, subject: 'Workout' }, { do: 'music', station: 'Workout' }] }],
     reminders: [rule({ id: 'drink', text: 'Drink some water', icon: '💧', everyMin: 30, atPc: false, cap: 4, log: { widget: 'water', amount: 250 } })],

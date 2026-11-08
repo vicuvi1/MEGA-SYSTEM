@@ -93,6 +93,31 @@ export interface Expected {
 /** The snapshot with this tap's effect already on it (unknown taps change nothing). */
 export function expectPatch(s: IslandSnapshot, a: IslandAction, at: number): IslandSnapshot {
   switch (a.kind) {
+    case 'center': {
+      // Custom Center: a counter step, a checklist tick or a mode tap shows at once (the next snapshot has the real numbers).
+      const c = s.center
+      if (!c) return s
+      type Card = (typeof c.pill)[number]
+      const each = (f: (w: Card) => Card) => ({ ...s, center: { ...c, pill: c.pill.map(f), island: c.island.map(f) } })
+      if (a.op === 'count')
+        return each((w) => {
+          if (w.id !== a.widget || w.kind !== 'counter') return w
+          const n = Math.max(0, (w.n ?? (Number(w.value) || 0)) + a.amount)
+          return { ...w, n, value: String(n), progress: w.goal ? Math.min(1, n / w.goal) : w.progress, done: !!w.goal && n >= w.goal }
+        })
+      if (a.op === 'check')
+        return each((w) => {
+          if (w.id !== a.widget || !w.items) return w
+          const items = w.items.map((it) => (it.id === a.item ? { ...it, done: !it.done } : it))
+          const done = items.filter((it) => it.done).length
+          return { ...w, items, value: `${done}/${items.length}`, sub: done >= items.length ? 'All done' : `${items.length - done} left`, progress: items.length ? done / items.length : 0, done: items.length > 0 && done >= items.length }
+        })
+      if (a.op === 'mode') {
+        const m = c.modes.find((x) => x.id === a.mode)
+        return m ? { ...s, center: { ...c, mode: { ...m, why: 'manual' } } } : s
+      }
+      return s
+    }
     case 'water':
       return { ...s, water: { ...s.water, ml: Math.max(0, s.water.ml + a.ml) } }
     case 'reps': {
@@ -444,10 +469,10 @@ export const UNDO_SHOW_MS = 5000
 export const UNDO_KEEP_MS = 60_000
 /** Taps that log something that can be taken back. */
 export function canUndo(a: IslandAction): boolean {
-  return a.kind === 'water' || a.kind === 'reps' || a.kind === 'mustdo' || a.kind === 'extend' || a.kind === 'start' || a.kind === 'moveBreak' || (a.kind === 'nudge' && a.op.op === 'move') || (a.kind === 'eventMark' && !!a.mark)
+  return a.kind === 'water' || a.kind === 'reps' || (a.kind === 'center' && a.op === 'count') || a.kind === 'mustdo' || a.kind === 'extend' || a.kind === 'start' || a.kind === 'moveBreak' || (a.kind === 'nudge' && a.op.op === 'move') || (a.kind === 'eventMark' && !!a.mark)
 }
 export function undoLabel(a: IslandAction): string {
-  return a.kind === 'eventMark' ? (a.mark === 'skip' ? "didn't go" : 'done') : a.kind === 'water' ? `+${a.ml} ml` : a.kind === 'reps' ? `+${a.n} ${a.name}` : a.kind === 'mustdo' ? 'the must-do' : a.kind === 'extend' ? `+${a.minutes} min` : a.kind === 'start' ? 'the timer' : a.kind === 'moveBreak' ? `+${a.n} ${a.name}` : a.kind === 'nudge' && a.op.op === 'move' ? `+${a.op.n} ${a.op.name}` : 'that'
+  return a.kind === 'center' && a.op === 'count' ? `${a.amount > 0 ? '+' : ''}${a.amount}` : a.kind === 'eventMark' ? (a.mark === 'skip' ? "didn't go" : 'done') : a.kind === 'water' ? `+${a.ml} ml` : a.kind === 'reps' ? `+${a.n} ${a.name}` : a.kind === 'mustdo' ? 'the must-do' : a.kind === 'extend' ? `+${a.minutes} min` : a.kind === 'start' ? 'the timer' : a.kind === 'moveBreak' ? `+${a.n} ${a.name}` : a.kind === 'nudge' && a.op.op === 'move' ? `+${a.op.n} ${a.op.name}` : 'that'
 }
 
 // ---- IC19: fade while you type in another app --------------------------------------

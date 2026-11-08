@@ -679,6 +679,35 @@
    ],
    "evidence": "2026-11-08: unit tests (router phrasings and typos, optimistic queue with undo, retry, idempotency and a < 100 ms timing budget, shortcut binding with a fake globalShortcut); smoke step \"Quick add\" passes (toast 76 ms after Enter); full vitest and full smoke run",
    "notes": "Pure: core/quickRoute.ts (one line → one route, reuses quickAdd.ts and foodWords.ts), core/quickQueue.ts (optimistic queue). App: renderer/src/quick/ (QuickHost in App.tsx replaces QuickCommandBar; quickRun.ts maps routes to the existing writes; QuickWindow is the desktop box). Desktop: desktop/quickWin.ts (pre-made hidden window, IPC to the app window), desktop/quickKeys.ts. main/food.ts addFoodMeal takes an optional meal id (same id twice = one meal)."
+  },
+  {
+   "id": "F037",
+   "priority": 2,
+   "area": "custom",
+   "title": "Custom Center on the desktop island (phase 3) and the Windows wallpaper per mode",
+   "user_visible_behavior": "The island follows your Custom Center: its size, corners, spot, open size, clock style (digital/analog, 12/24 h, seconds, date, second zone), celebration and sound pack with your own sounds; your counters, timers, countdowns, checklists, rings and clock in the pill and the open island (step buttons, scroll to a number, tick items, start a timer); one tap switches mode and the island swaps everything with a short glow; your reminder rules fire as real cards with a sound (calls, focus, quiet, bedtime, the gap and caps hold them back); optional Windows wallpaper per mode (picture, evening picture or a folder to rotate), off by default; widgets in one layout never share a name",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/islandCenter.test.ts src/core/islandLooks.test.ts src/core/custom src/desktop/wallpaper.test.ts",
+    "SMOKE_ONLY=\"Custom Center\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests (pinned clock) in islandCenter.test.ts, islandLooks.test.ts, custom.test.ts, wallpaper.test.ts; smoke steps \"Desktop island Custom Center\" and \"Custom Center\"; full vitest and full smoke",
+   "notes": "App window: renderer/src/custom/centerFeed.ts builds snap.center (core/islandCenter.ts) and answers {kind: center} taps with the Center runner (counterRoute; custom counters pay nothing). Island: island/centerLook.ts (setLookSource + looksChanged), island/CenterWidgets.tsx, island/center.css, core/islandCenterCard.ts. Desktop: src/desktop/wallpaper.ts (IPC wallpaper, fixed PowerShell script, path in LS_WALLPAPER), island:lookOpen in island.ts. CENTER_SHOTS=<dir> for screenshots."
+  },
+  {
+   "id": "F-MONEY-FAST",
+   "priority": 1,
+   "area": "rewards",
+   "title": "Points buys are not spending; money in the Coach chat answered at once",
+   "user_visible_behavior": "Buying a reward with points no longer adds a Finance record; the buy sheet has an 'I paid real money' switch (off) for real purchases, and the meter reads 'Real money spent' (this month). Old reward entries in Finance are listed on Rewards with a 'From Rewards (points)' tag and removed only after you confirm (one, or all). In the Coach chat, 'spent 55 lei on food' (also Romanian and Russian), 'what did I spend today', 'where did 70 come from', 'how much did I spend this month', 'how much is left this month' and 'delete the gaming one' (a confirm card, then delete with Undo) answer in well under a second with no AI call.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/benMoneyAsk.test.ts src/server/benAskSpeed.test.ts src/main/shop.test.ts src/renderer/src/web/honestMoney.test.ts",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests (parser, answers, redeem with and without real money, cleanup), speed table (money asks 0 model calls, under 1 s), smoke steps Rewards buy and Coach money",
+   "notes": "main/shop.ts (paid default 0, clearPaid), web/webServices.ts (redeem, rewardMoney, removeRewardMoney), core/funBudget.ts rewardMoneyRows, redeem.ts + confirmSheet.tsx askSwitch, rewards/Shop.tsx RewardMoneyFix, apps/finance/js/app.js tag; core/benMoneyAsk.ts, web/financeBot.ts (moneyRows, monthSpend, restoreMoney), webBots.ts route, botBrain.ts UndoOp moneyback, bots/undo.ts"
   }
  ]
 }

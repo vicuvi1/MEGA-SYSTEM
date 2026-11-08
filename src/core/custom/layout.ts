@@ -145,6 +145,44 @@ export function widgetState(w: Widget, ctx: { setup: Pick<CustomSetup, 'widgets'
   }
 }
 
+// ---------------------------------------------------------------- names
+
+/** A name that isn't taken yet: "Study list" → "Study list 2" (then 3…), kept to `max` characters. */
+export function uniqueName(title: string, taken: Iterable<string>, max = 40): string {
+  const used = new Set([...taken].map((t) => t.trim().toLowerCase()))
+  const base = title.trim() || 'My widget'
+  if (!used.has(base.toLowerCase())) return base
+  for (let n = 2; n < 100; n++) {
+    const tail = ` ${n}`
+    const t = `${base.slice(0, max - tail.length).trimEnd()}${tail}`
+    if (!used.has(t.toLowerCase())) return t
+  }
+  return base
+}
+
+/**
+ * No two widgets with the same name in one mode's layout (pill, open island
+ * and home together): a later one gets " 2", " 3"… Widgets only in other
+ * modes keep their names. Returns new widget objects only where a name changed.
+ */
+export function uniqueLayoutNames<W extends { id: string; title: string }>(widgets: W[], modes: { layout: Layout }[]): W[] {
+  const title = new Map(widgets.map((w) => [w.id, w.title]))
+  // Twice: a new name could meet a widget of an earlier mode (rare; the second pass settles it).
+  for (let pass = 0; pass < 2; pass++) {
+    for (const m of modes) {
+      const seen: string[] = []
+      for (const id of [...m.layout.pill, ...m.layout.island, ...m.layout.home]) {
+        const t = title.get(id)
+        if (t == null) continue
+        const next = seen.some((x) => x.toLowerCase() === t.trim().toLowerCase()) ? uniqueName(t, [...seen, ...title.values()]) : t
+        if (next !== t) title.set(id, next)
+        seen.push(next)
+      }
+    }
+  }
+  return widgets.map((w) => (title.get(w.id) === w.title ? w : { ...w, title: title.get(w.id)! }))
+}
+
 // ---------------------------------------------------------------- layout edits (drag and drop, keyboard)
 
 /** Where a widget sits in a layout, or null. */

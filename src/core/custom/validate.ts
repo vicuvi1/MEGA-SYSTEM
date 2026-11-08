@@ -8,6 +8,7 @@ import {
   type ActionStep, type Background, type CustomAction, type CustomSetup, type CustomState, type DesktopWallpaper, type Layout, type Looks, type Mode, type ModeWindow, type MotionStyle, type ReminderRule, type SoundPack, type Widget
 } from './model'
 import { MAX_SHOW_THROUGH } from '../wallpaper'
+import { uniqueLayoutNames } from './layout'
 
 // ---------------------------------------------------------------- small cleaners
 
@@ -174,7 +175,15 @@ export function cleanLooks(raw: unknown, base: Looks = DEFAULT_LOOKS): Looks {
   const f = obj(l.font)
   const k = obj(l.clock)
   return {
-    island: { size: pick(i.size, ['s', 'm', 'l'] as const, base.island.size), shape: pick(i.shape, ['notch', 'capsule', 'bar'] as const, base.island.shape), radius: int(i.radius, 0, 32, base.island.radius) },
+    island: {
+      size: pick(i.size, ['s', 'm', 'l'] as const, base.island.size),
+      shape: pick(i.shape, ['notch', 'capsule', 'bar'] as const, base.island.shape),
+      radius: int(i.radius, 0, 32, base.island.radius),
+      position: pick(i.position, ['auto', 'top-center', 'top-left', 'top-right'] as const, base.island.position ?? 'auto'),
+      // 0 = fits your screen; otherwise inside what an island can be.
+      openW: Number(i.openW) > 0 ? int(i.openW, 360, 900, 600) : 0,
+      openH: Number(i.openH) > 0 ? int(i.openH, 240, 900, 560) : 0
+    },
     motion: {
       style: pick(m.style, MOTION, base.motion.style),
       speed: num(m.speed, 0.5, 2, base.motion.speed, 0.05),
@@ -210,7 +219,7 @@ export function cleanBackground(raw: unknown): Background {
 
 function cleanWallpaper(raw: unknown): DesktopWallpaper | null {
   const image = local(obj(raw).image)
-  return image ? { image } : null
+  return image ? { image, night: local(obj(raw).night) } : null
 }
 
 // ---------------------------------------------------------------- modes and layout
@@ -274,7 +283,8 @@ export function cleanSetup(raw: unknown): CustomSetup {
   const manual = obj(s.manual)
   return {
     version: CUSTOM_VERSION,
-    widgets,
+    // Two widgets with the same name in one layout would be impossible to tell apart: the later one gets " 2".
+    widgets: uniqueLayoutNames(widgets, modes),
     actions: actions.filter((a) => a.steps.length),
     reminders,
     modes,

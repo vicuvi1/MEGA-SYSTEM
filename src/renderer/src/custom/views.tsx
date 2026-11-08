@@ -3,6 +3,7 @@
 // island rebuild draws its own; these are the live preview on the page.
 import type { CSSProperties, ReactNode } from 'react'
 import type { Looks, WidgetView } from '@core/custom'
+import { centerLooksToIsland } from '@core/islandCenter'
 
 /** A small progress ring (SVG), drawn once; no animation. */
 export function Ring({ value, size = 34, stroke = 4, color }: { value: number; size?: number; stroke?: number; color?: string }) {
@@ -53,8 +54,10 @@ export function WidgetCard({ v, numbers, children }: { v: WidgetView; numbers?: 
 /** The island pill as it would look, with its widgets side by side. */
 export function PillPreview({ items, looks, open }: { items: WidgetView[]; looks: Looks; open?: WidgetView[] }) {
   const { shape, size } = looks.island
+  // What the desktop island gets from these looks (the same conversion the island uses).
+  const isl = centerLooksToIsland(looks)
   return (
-    <div className={`cc-pill-wrap cc-shape-${shape} cc-size-${size}`} style={looksStyle(looks)} data-testid="cc-pill-preview">
+    <div className={`cc-pill-wrap cc-shape-${shape} cc-size-${size}`} style={looksStyle(looks)} data-testid="cc-pill-preview" data-island-size={isl.size ?? 'medium'} data-island-radius={isl.radius ?? ''}>
       <div className="cc-pill" role="img" aria-label={items.length ? `Island pill: ${items.map((v) => `${v.title} ${v.value}`).join(', ')}` : 'Island pill: empty'}>
         {items.length ? (
           items.map((v) => (

@@ -1427,6 +1427,69 @@ try {
     }
     await pg.unroute('**/api/coach')
   }))
+  // Coach money fix: "spent 55 lei on food" is logged in code (no model), fast, with Undo;
+  // "what did I spend today?" lists today's records with their M-numbers.
+  await step('Coach: money said in plain words is logged at once with Undo, and today is listed', async () => {
+    await open('coach')
+    await pg.waitForSelector('.cf-input textarea', { timeout: 15000 })
+    // The made-up server has no /api/coach: answer with the real bot bundle (no AI model) on the made-up database.
+    const { pathToFileURL } = await import('node:url')
+    const bot = await import(pathToFileURL(join(repo, 'api/_bot/bot.mjs')).href)
+    // A model that must not be needed: these answers come from code.
+    // The bot sets process.env.TZ: give it this process's own zone, and put TZ back after the step.
+    const tzBefore = process.env.TZ
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const env = { tursoUrl: `http://127.0.0.1:${port}`, tursoToken: 'fake-turso-key', timeZone: zone, defaults: { skipBotIds: [] }, model: async () => { throw new Error('the model was asked') } }
+    await pg.route('**/api/coach', async (r) => {
+      const b = JSON.parse(r.request().postData() || '{}')
+      if (b.op === 'undo') return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(await bot.coachUndo(env, String(b.at || ''), b.index)) })
+      if (b.op || !b.text) return r.fallback()
+      const steps = []
+      const out = await bot.coachChat(env, String(b.text), (s) => steps.push({ step: String(s) }))
+      await r.fulfill({ status: 200, headers: { 'Content-Type': 'application/x-ndjson' }, body: [...steps, out].map((x) => JSON.stringify(x)).join('\n') + '\n' })
+    })
+    const ask = async (text, re) => {
+      const before = await pg.locator('.cf-col .cf-row.ben').count()
+      const t0 = Date.now()
+      await pg.fill('.cf-input textarea', text)
+      await pg.keyboard.press('Enter')
+      await pg.waitForFunction(({ n, src }) => {
+        const rows = [...document.querySelectorAll('.cf-col .cf-row.ben')]
+        return rows.length > n && new RegExp(src).test(rows[rows.length - 1].textContent ?? '') && !rows[rows.length - 1].querySelector('.cf-ben.pending')
+      }, { n: before, src: re.source }, { timeout: 8000 }).catch(async (e) => { throw new Error(`${e.message}: last rows ${(await pg.locator(".cf-col .cf-row").evaluateAll((els) => els.slice(-3).map((e) => e.className + ": " + e.textContent).join(" // ")).catch(() => "?")).slice(0, 600)}`) })
+      return Date.now() - t0
+    }
+    // The bot runs on the real clock, the page on the made-up one: everything this step changed
+    // in the made-up database is put back after it, so later steps see the same data.
+    const sql = async (stmt) => (await (await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt }] }) })).json()).results[0].response?.result
+    const txt = (v) => ({ type: 'text', value: String(v) })
+    const settings = async () => new Map((await sql({ sql: 'SELECT key, value FROM settings', args: [] })).rows.map((r) => [r[0].value, r[1].value]))
+    const maxId = async (t) => Number((await sql({ sql: `SELECT COALESCE(MAX(id), 0) FROM ${t}`, args: [] })).rows[0][0].value)
+    const kept = { settings: await settings(), ledger: await maxId('ledger'), expenses: await maxId('expenses') }
+    const ms = await ask('spent 55 lei on food', /55 MDL · Food/)
+    if (ms > 4000) throw new Error(`logging 55 lei took ${ms} ms`)
+    const last = pg.locator('.cf-col .cf-row.ben').nth((await pg.locator('.cf-col .cf-row.ben').count()) - 1)
+    if (!(await last.locator('.cf-result button', { hasText: 'Undo' }).count())) throw new Error('the logged spending has no Undo')
+    await ask('what did I spend today?', /M\d 55 lei · Food/)
+    // Undo takes the 55 lei back out of Finance Helper (and leaves later steps as they were).
+    const undoTap = pg.waitForRequest((q) => q.url().includes('/api/coach') && /"op":"undo"/.test(q.postData() ?? ''), { timeout: 5000 })
+    await last.locator('.cf-result button', { hasText: 'Undo' }).first().click({ timeout: 5000 })
+    await undoTap
+    await pg.waitForTimeout(400)
+    await bot.coachSettle(3000).catch(() => null)
+    await pg.unroute('**/api/coach')
+    const now = await settings()
+    for (const k of new Set([...kept.settings.keys(), ...now.keys()])) {
+      if (k === 'data_version' || kept.settings.get(k) === now.get(k)) continue
+      await sql(kept.settings.has(k) ? { sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [txt(k), txt(kept.settings.get(k))] } : { sql: 'DELETE FROM settings WHERE key = ?', args: [txt(k)] })
+    }
+    await sql({ sql: 'DELETE FROM ledger WHERE id > ?', args: [{ type: 'integer', value: String(kept.ledger) }] })
+    await sql({ sql: 'DELETE FROM expenses WHERE id > ?', args: [{ type: 'integer', value: String(kept.expenses) }] })
+    if (tzBefore === undefined) delete process.env.TZ
+    else process.env.TZ = tzBefore
+    // A new data version: the page reloads its copy.
+    await sql({ sql: "UPDATE settings SET value = ? WHERE key = 'data_version'", args: [txt(`smoke-${Date.now().toString(36)}`)] })
+  })
   // Goals: made-up goals show as cards with a ring and a pace chart; a clear goal from plain words; a check-in.
   await step('Goals: cards with rings and pace lines, a new goal from words, a check-in, a habit day and a project step', async () => {
     await open('goals')
@@ -2114,6 +2177,105 @@ try {
     })
     if (overlap) throw new Error(`a label sits on the eye card: ${overlap}`)
     await shot('notification-eye-card', '.di-shape', 18)
+    await ctx.close()
+  })
+  await step('Desktop island Custom Center: your counter in the pill logs, size and corners from the Center resize it, a mode switch swaps the widgets, your reminder fires as a card with its sound', async () => {
+    const shots = process.env.CENTER_SHOTS
+    const ctx = await browser.newContext({ viewport: { width: 700, height: 620 }, deviceScaleFactor: 2 })
+    const ip = await ctx.newPage()
+    ip.on('pageerror', (e) => errors.push(`island center: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const push = { id: 'push', kind: 'counter', title: 'Push-ups', icon: '💪', color: '#ff8a3d', value: '10', sub: 'of 100 reps', progress: 0.1, done: false, steps: [10, 25], unit: 'reps', goal: 100, track: 'none', n: 10 }
+      const list = { id: 'list', kind: 'checklist', title: 'Study list', icon: '✅', color: null, value: '0/2', sub: '2 left', progress: 0, done: false, items: [{ id: 'read', text: 'Read one chapter', done: false }, { id: 'cards', text: '20 flashcards', done: false }] }
+      const ring = { id: 'ring', kind: 'ring', title: 'Study progress', icon: '🎯', color: null, value: '0%', sub: 'Study list', progress: 0, done: false }
+      const timer = { id: 'rest', kind: 'timer', title: 'Rest timer', icon: '⏱', color: null, value: '45:00', sub: 'Focus 45 · break 2', progress: null, done: false, endsAt: null, focusMin: 45, subject: 'Workout' }
+      const modes = [{ id: 'everyday', name: 'Everyday', icon: '🌤' }, { id: 'gym', name: 'Gym', icon: '🏋' }]
+      const center = { key: 'everyday:1', mode: { id: 'everyday', name: 'Everyday', icon: '🌤', why: 'base' }, modes, looks: {}, pill: [push], island: [list, ring] }
+      const gym = { key: 'gym:1', mode: { id: 'gym', name: 'Gym', icon: '🏋', why: 'manual' }, modes, looks: { accent: '#ff8a3d' }, pill: [timer], island: [push] }
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null, mustdos: [], water: { ml: 500, target: 2000 }, alert: null, reps: [], center
+      }
+      window.__island = { actions: [], sounds: [], send: (name, v) => cbs[name]?.(v), snap, center, gym }
+      window.addEventListener('life-island-reminder-sound', (e) => window.__island.sounds.push(e.detail))
+      window.desktop = new Proxy({
+        islandHot: () => {}, islandTakeClicks: () => {},
+        islandAction: (a) => { window.__island.actions.push(a) },
+        islandLookOpen: (v) => { window.__island.lookOpen = v },
+        setIslandPrefs: async () => null,
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandAck: on('ack'),
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'lively', gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    if (shots) await ip.addStyleTag({ content: "body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(160deg, #2a3140, #12151c); }" })
+    // Your Center counter sits in the calm pill; a tap adds its first step through the counter's own route.
+    await ip.waitForSelector('.di-pill [data-center-chip="push"]', { timeout: 15000 })
+    await ip.mouse.move(690, 610)
+    await ip.waitForTimeout(700)
+    const box0 = await ip.locator('.di-shape').boundingBox()
+    if (shots) await ip.screenshot({ path: `${shots}/center-pill.png`, clip: { x: 0, y: 0, width: 700, height: Math.ceil(box0.y + box0.height + 30) } })
+    await ip.click('.di-pill [data-center-chip="push"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'count' && a.widget === 'push' && a.amount === 10), null, { timeout: 4000 })
+    // It shows at once (10 → 20) before the app answers.
+    await ip.waitForFunction(() => /20/.test(document.querySelector('[data-center-chip="push"]')?.textContent ?? ''), null, { timeout: 3000 })
+    // The Center's size and corners: Large with 6 px corners makes the pill taller with those corners.
+    await ip.mouse.move(690, 610)
+    await ip.waitForTimeout(900)
+    const r0 = await ip.evaluate(() => getComputedStyle(document.querySelector('.di-shape')).borderBottomLeftRadius)
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, center: { ...window.__island.center, key: 'everyday:2', looks: { size: 'large', radius: 6, openSize: { width: 480, height: null } } } }))
+    await ip.waitForFunction((h) => (document.querySelector('.di-shape')?.getBoundingClientRect().height ?? 0) > h + 2, box0.height, { timeout: 4000 })
+    await ip.waitForFunction(() => getComputedStyle(document.querySelector('.di-shape')).borderBottomLeftRadius === '6px', null, { timeout: 4000 }).catch(async () => {
+      throw new Error(`the corners stayed ${await ip.evaluate(() => getComputedStyle(document.querySelector('.di-shape')).borderBottomLeftRadius)} (were ${r0})`)
+    })
+    const sent = await ip.evaluate(() => window.__island.lookOpen)
+    if (!sent || sent.w !== 480) throw new Error(`the open size did not go to the desktop: ${JSON.stringify(sent)}`)
+    // Back to medium: smaller again.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, center: { ...window.__island.center, key: 'everyday:3', looks: { size: 'small' } } }))
+    await ip.waitForFunction((h) => (document.querySelector('.di-shape')?.getBoundingClientRect().height ?? 99) < h - 1, box0.height, { timeout: 4000 })
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 3 }))
+    // Open the island: the mode chips and your open-island widgets; tick an item, add 25, switch mode.
+    await ip.evaluate(() => window.__island.send('toggle'))
+    await ip.waitForSelector('.di-panel [data-center-panel="everyday"]', { timeout: 5000 })
+    await ip.click('[data-center-item="list:read"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'check' && a.item === 'read'), null, { timeout: 3000 })
+    await ip.waitForSelector('[data-center-item="list:read"].on', { timeout: 3000 })
+    await ip.waitForTimeout(500)
+    if (shots) {
+      const pb = await ip.locator('.di-shape').boundingBox()
+      await ip.screenshot({ path: `${shots}/center-open-island.png`, clip: { x: Math.max(0, pb.x - 12), y: 0, width: Math.min(700 - Math.max(0, pb.x - 12), pb.width + 24), height: Math.min(620, pb.y + pb.height + 16) } })
+    }
+    await ip.click('[data-center-mode="gym"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'mode' && a.mode === 'gym'), null, { timeout: 3000 })
+    // The app answers with the Gym mode: its widgets take over, with the short glow.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 4, center: window.__island.gym }))
+    await ip.waitForSelector('[data-center-panel="gym"] [data-center-card="push"]', { timeout: 4000 })
+    await ip.waitForSelector('[data-center-step="push:25"]', { timeout: 3000 })
+    await ip.click('[data-center-step="push:25"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'count' && a.amount === 25), null, { timeout: 3000 })
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+    await ip.waitForSelector('.di-pill [data-center-pill="gym"] [data-center-chip="rest"]', { timeout: 4000 })
+    if (await ip.$('.di-pill [data-center-chip="push"]')) throw new Error('the Everyday counter is still in the pill after the switch')
+    // Your reminder fires as a real card (not the slim line) with its sound, once; Done goes back to the app.
+    const rem = { id: 'custom:stand:1', kind: 'remind', face: '🧍', title: 'Stand up and stretch', text: 'Your reminder', actions: [{ label: '✓ Done', action: { kind: 'center', op: 'remind', rule: 'stand', answer: 'done', alertId: 'custom:stand:1' }, primary: true }, { label: 'In 10 min', action: { kind: 'center', op: 'remind', rule: 'stand', answer: 'later', alertId: 'custom:stand:1' } }] }
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 5, center: window.__island.gym, alert: a }), rem)
+    await ip.waitForSelector('.di-peek.alert.kind-remind', { timeout: 5000 })
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 6, center: window.__island.gym, alert: a }), rem)
+    await ip.waitForTimeout(400)
+    const rings = await ip.evaluate(() => window.__island.sounds.filter((x) => x.kind === 'center').length)
+    if (rings !== 1) throw new Error(`your reminder rang ${rings} times (want 1)`)
+    const card = await ip.locator('.di-peek.alert.kind-remind').boundingBox()
+    if (!card || card.height < 60) throw new Error(`your reminder did not open as a card: ${JSON.stringify(card)}`)
+    if (shots) await ip.screenshot({ path: `${shots}/center-reminder-card.png`, clip: { x: 0, y: 0, width: 700, height: Math.ceil(card.y + card.height + 24) } })
+    await ip.locator('.di-peek.alert.kind-remind button', { hasText: 'Done' }).first().click()
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'remind' && a.answer === 'done'), null, { timeout: 3000 })
     await ctx.close()
   })
   await step('Island visuals: dayState class, orbit dots, Ben face, hover peek shows the next 3 hours, a swipe logs water, the story can be skipped', async () => {
@@ -4152,7 +4314,16 @@ try {
     if (process.env.POLISH_SHOTS) await pg.screenshot({ path: `${process.env.POLISH_SHOTS}/rewards-top.png` }).catch(() => {})
     await pg.waitForSelector('[data-testid="combo"]', { timeout: 5000 })
     const meter = (await pg.locator('[data-testid="budget-meter"]').innerText()).replace(/\s+/g, ' ')
-    if (!/Spent this month \d+ \/ \d+ lei/.test(meter)) throw new Error(`budget meter reads: ${meter}`)
+    if (!/Real money spent \d+ \/ \d+ lei/.test(meter)) throw new Error(`budget meter reads: ${meter}`)
+    // A buy with points puts nothing in Finance: count the reward records waiting for it before and after.
+    const rewardInbox = () =>
+      pg.evaluate(async () => {
+        const s = localStorage.getItem('life_web_session') ?? ''
+        const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT value FROM settings WHERE key = 'finance_inbox_json'", args: [] } }, { type: 'close' }] }) })
+        const v = (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value
+        return (JSON.parse(v || '[]') ?? []).filter((e) => String(e.id).startsWith('life-reward-') && !e.remove).length
+      })
+    const inboxBefore = await rewardInbox()
     await pg.click('.rx .ptabs [data-tab="now"]')
     await pg.waitForSelector('.sh-shelf', { timeout: 5000 })
     if ((await pg.locator('.sh-shelf').count()) < 6) throw new Error('fewer than 6 shelves')
@@ -4179,8 +4350,12 @@ try {
       await pg.mouse.down()
       await pg.waitForTimeout(1200)
       await pg.mouse.up()
-      // A reward with a real cost first asks what you paid: accept the suggested amount.
-      await pg.getByRole('button', { name: 'Buy it', exact: true }).click({ timeout: 2500 }).catch(() => {})
+      // A reward with a real cost shows the buy sheet: "I paid real money" starts off, so it is points only.
+      const sheetSwitch = pg.locator('[data-testid="cs-switch"] input')
+      if (await sheetSwitch.waitFor({ timeout: 2500 }).then(() => true).catch(() => false)) {
+        if (await sheetSwitch.isChecked()) throw new Error('"I paid real money" is on by default')
+        await pg.getByRole('button', { name: 'Get it', exact: true }).click()
+      }
       // Past the fun budget a sheet says so; "Buy anyway" is its own explicit tap (the budget only warns).
       await pg.getByRole('button', { name: 'Buy anyway', exact: true }).click({ timeout: 1500 }).catch(() => {})
       for (let i = 0; i < 30 && (await bal()) >= before; i++) await pg.waitForTimeout(250)
@@ -4191,6 +4366,7 @@ try {
       await pg.waitForTimeout(600)
       const after = await bal()
       if (before - after !== price) throw new Error(`buy spent ${before - after}, price was ${price}`)
+      if ((await rewardInbox()) !== inboxBefore) throw new Error('a buy with points went into Finance as spending')
       await pg.click('.rx .ptabs [data-tab="history"]')
       await pg.waitForSelector('.rx-history li', { timeout: 5000 })
       await pg.click('.rx .ptabs [data-tab="now"]')
@@ -4802,6 +4978,29 @@ try {
     await pg.waitForSelector('.cc-mode-chip.on:has-text("Study")', { timeout: 5000 })
     await pg.waitForFunction(() => document.documentElement.classList.contains('has-cbg'), null, { timeout: 5000 })
     if (!/Study timer/.test((await pg.locator('[data-testid="cc-pill-preview"] .cc-pill').getAttribute('aria-label')) ?? '')) throw new Error('the Study pill is not in the preview')
+    // Two widgets never share a name in one layout: the Study checklist and its ring have their own names.
+    await pg.click('.cc-page .ptabs [data-tab="build"]')
+    const studyNames = await pg.$$eval('[data-zone="pill"] .cc-chip, [data-zone="island"] .cc-chip, [data-zone="home"] .cc-chip', (els) => els.map((e) => (e.textContent || '').trim()))
+    if (studyNames.filter((t) => /Study list(?! \d)/.test(t) && !/progress/.test(t)).length !== 1 || !studyNames.some((t) => /Study progress/.test(t))) throw new Error(`the Study widgets are named: ${studyNames.join(' | ')}`)
+    // The island's size, corners, spot and open size: what the desktop island gets follows at once.
+    await pg.click('.cc-page .ptabs [data-tab="looks"]')
+    await pg.locator('[role="radiogroup"][aria-label="Size"] button', { hasText: 'Large' }).click()
+    await pg.locator('input[aria-label="Corners"]').fill('6')
+    await pg.locator('[role="radiogroup"][aria-label="Island position"] button', { hasText: 'Top right' }).click()
+    await pg.locator('[role="radiogroup"][aria-label="Open island width"] button', { hasText: 'Wide' }).click()
+    await pg.click('.cc-page .ptabs [data-tab="build"]')
+    await pg.waitForFunction(() => {
+      const p = document.querySelector('[data-testid="cc-pill-preview"]')
+      return p?.getAttribute('data-island-size') === 'large' && p?.getAttribute('data-island-radius') === '6'
+    }, null, { timeout: 5000 })
+    // Back to the usual island for the next steps.
+    await pg.click('.cc-page .ptabs [data-tab="looks"]')
+    await pg.locator('[role="radiogroup"][aria-label="Size"] button', { hasText: 'Medium' }).click()
+    await pg.locator('input[aria-label="Corners"]').fill('18')
+    await pg.locator('[role="radiogroup"][aria-label="Island position"] button', { hasText: 'Where I put it' }).click()
+    await pg.locator('[role="radiogroup"][aria-label="Open island width"] button', { hasText: 'Fit my screen' }).click()
+    await pg.click('.cc-page .ptabs [data-tab="build"]')
+    await pg.waitForFunction(() => document.querySelector('[data-testid="cc-pill-preview"]')?.getAttribute('data-island-size') === 'medium', null, { timeout: 5000 })
     if (process.env.CUSTOM_SHOTS) {
       await pg.locator('.fb-card .fb-x').click({ timeout: 1500 }).catch(() => {})
       await pg.waitForFunction(() => !document.querySelector('.toast'), null, { timeout: 12000 }).catch(() => {})

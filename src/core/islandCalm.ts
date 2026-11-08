@@ -212,8 +212,8 @@ export function presentAs(o: { mode: IslandMode; kind: string; id?: string; meet
   if (o.gate === 'drop') return 'none'
   if (o.gate === 'silent') return 'dot'
   if (o.mode !== 'calm') return 'card'
-  // Calm: the move break and the water card are real cards; everything else is the slim line.
-  return o.id != null && isBodyCard({ kind: o.kind, id: o.id }) ? 'card' : 'line'
+  // Calm: the move break, the water card and your own Custom Center reminders are real cards; everything else is the slim line.
+  return o.id != null && (isBodyCard({ kind: o.kind, id: o.id }) || (o.kind === 'remind' && o.id.startsWith('custom:'))) ? 'card' : 'line'
 }
 
 /**

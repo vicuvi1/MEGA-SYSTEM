@@ -28,7 +28,7 @@ import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
 import { alertBlock, play, playBodyReminder, playReminder, soundPrefs } from './soundKit'
 import { bodyReminderOf, reminderGain, reminderPlan } from '@core/islandReminderSound'
-import { islandActionSound, play as islandSound, useIslandSoundEvents } from './islandSounds'
+import { islandActionSound, play as islandSound, setIslandSoundLook, useIslandSoundEvents } from './islandSounds'
 import { useIslandSounds } from './focusSound'
 import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
 import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
@@ -55,6 +55,12 @@ import { inverseAction } from '@core/islandInstant'
 import { gestureAction, wheelSwipe } from '@core/islandGestures'
 import { waterBehindPace } from '@core/healthyDay'
 import { lookStyle, lookV2Classes, useIslandLookAdapter, withLookFeel } from './island/lookAdapter'
+import { useCenterLooks } from './island/centerLook'
+import { CenterPanel, CenterPeekRow, CenterPill, ClockFace } from './island/CenterWidgets'
+import './island/center.css'
+import { celebrationPlan, DEFAULT_LOOKS, openSizeOf, pillHeight, restRadius } from '@core/islandLooks'
+import { CENTER_CARD_MS, centerReminderSound, isCenterReminder } from '@core/islandCenterCard'
+import { playLocal } from './custom/localFiles'
 import { SplitPillView } from './island/LivePill'
 import { InstantBar } from './island/InstantBar'
 import { DropZoneView, canTake, dropDataOf, dropTarget, parseDrop, type DropTo } from './island/DropZone'
@@ -72,6 +78,7 @@ import { islandSizing, type IslandDensity } from '@core/islandFit'
 import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
 import { cursorNear } from '../../desktop/islandPlace'
 import { IslandParticles, burstFrom, setParticlesAllowed } from './IslandParticles'
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 import { Crescent, LiquidBorder, Sky, TodayRing } from './islandShapes'
 import { IslandEyesBadge } from './IslandEyesBadge'
 import { IslandMeet } from './IslandMeet'
@@ -436,7 +443,33 @@ export function DesktopIsland() {
   const reduce = useReducedMotion()
   // IA3, IA6: one feel for every motion (Full / Calm / Off; the system's reduce-motion means Off).
   // Island v2: looks and widget switches come from ONE adapter (built-in defaults until the Custom Center plugs in).
+  // Custom Center: the mode's looks go into the adapter (setLookSource + looksChanged on every change).
+  const center = !s.locked ? s.center ?? null : null
+  useCenterLooks(center)
   const { looks, widgets } = useIslandLookAdapter(Math.floor(now / 60_000))
+  const looksRef = useRef(looks)
+  looksRef.current = looks
+  // The look's sound pack, volume per kind and your own sounds for every island sound.
+  useEffect(() => setIslandSoundLook(looks), [looks])
+  // The look's open-island size goes to the desktop (it makes room, never past the screen).
+  const openKey = `${looks.openSize.width ?? ''}x${looks.openSize.height ?? ''}`
+  useEffect(() => {
+    desk()?.islandLookOpen?.(looks.openSize.width || looks.openSize.height ? { w: looks.openSize.width, h: looks.openSize.height } : null)
+  }, [openKey]) // eslint-disable-line react-hooks/exhaustive-deps
+  // A new mode (by its times or a tap): the island swaps its widgets and looks with a short glow.
+  const [morph, setMorph] = useState(0)
+  const centerMode = center?.mode.id ?? ''
+  const lastMode = useRef(centerMode)
+  useEffect(() => {
+    if (lastMode.current === centerMode) return
+    const first = !lastMode.current
+    lastMode.current = centerMode
+    if (first || !centerMode) return
+    logIslandUi('center', `mode: ${center?.mode.name ?? centerMode}`)
+    setMorph(Date.now())
+    const t = window.setTimeout(() => setMorph(0), 650)
+    return () => clearTimeout(t)
+  }, [centerMode]) // eslint-disable-line react-hooks/exhaustive-deps
   const f = useMemo(() => withLookFeel(feelFor(prefs.motion, !!reduce), looks), [prefs.motion, reduce, looks])
   const fRef = useRef(f)
   fRef.current = f
@@ -681,10 +714,25 @@ export function DesktopIsland() {
     const body = isBodyCard(a)
     logIslandUi('alert', `${a.kind} ${a.id}: ${shows === 'card' ? (body ? 'a card that stays until answered' : 'a card') : 'the slim line, then a dot'}`)
     // IC14: the evening story peeks long enough to be told (~10 s).
-    const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : body && shows === 'card' ? { type: 'alert', ms: BODY_CARD_MS } : { type: 'alert' }
+    const stays = (body || isCenterReminder(a)) && shows === 'card'
+    const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : stays ? { type: 'alert', ms: isCenterReminder(a) ? CENTER_CARD_MS : BODY_CARD_MS } : { type: 'alert' }
     const pref = alertPref(a.kind, !!a.meeting)
     // Water, the eye break, the move break and the screen break: their own clear sound, once (core/islandReminderSound.ts).
-    if (bodyReminderOf(a)) {
+    if (isCenterReminder(a)) {
+      // Your Custom Center reminder: your own sound (this device) or the reminder bell, once, at your reminder volume.
+      const lk = looksRef.current
+      const vol = soundPrefs().reminders.volume
+      const plan = centerReminderSound({ gate: g, played: rangIds.current.has(a.id), islandSound: !!prefsRef.current.sound && lk.sound.pack !== 'none', volume: vol * lk.sound.volume.reminder, hush: snapRef.current.hush ?? null, quiet, call: inCall, blocked: alertBlock() })
+      if (plan.ring) {
+        rangIds.current.add(a.id)
+        const own = lk.sound.files.reminder
+        const gain = reminderGain(vol) * (lk.sound.volume.reminder / DEFAULT_LOOKS.sound.volume.reminder)
+        if (own) void playLocal(own, Math.min(1, gain / 2)).then((ok) => ok || playSound('remind', gain))
+        else playSound('remind', gain)
+        window.dispatchEvent(new CustomEvent('life-island-reminder-sound', { detail: { kind: 'center', id: a.id } }))
+      }
+      logIslandUi('sound', `${a.id}: ${plan.ring ? 'your reminder sound' : `no sound (${plan.why})`}`)
+    } else if (bodyReminderOf(a)) {
       const plan = reminderPlan({
         mode: prefsRef.current.mode, alert: a, gate: g, islandSound: !!prefsRef.current.sound, kindSound: !pref || prefsRef.current.kinds[pref].sound,
         prefs: soundPrefs().reminders, hush: snapRef.current.hush ?? null, quiet, call: inCall, blocked: alertBlock(), played: rangIds.current.has(a.id)
@@ -696,7 +744,12 @@ export function DesktopIsland() {
         window.dispatchEvent(new CustomEvent('life-island-reminder-sound', { detail: { kind: plan.sound, id: a.id } }))
       }
       logIslandUi('sound', `${a.id}: ${plan.sound ? `the ${plan.sound} sound` : `no sound (${plan.why})`}`)
-    } else if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') playSound(a.kind, prefsRef.current.volume, !!a.meeting)
+    } else if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') {
+      // Time's up: your own timer sound when you uploaded one (Custom Center → Looks → Sounds).
+      const own = a.kind === 'over' ? looksRef.current.sound.files.timer : null
+      if (own) void playLocal(own, Math.min(1, prefsRef.current.volume)).then((ok) => ok || playSound(a.kind, prefsRef.current.volume, !!a.meeting))
+      else playSound(a.kind, prefsRef.current.volume, !!a.meeting)
+    }
     calmCardRef.current = prefsRef.current.mode === 'calm' && shows === 'card'
     setCalmCard(calmCardRef.current)
     // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce (not in Calm: it slides out of the line).
@@ -1229,6 +1282,7 @@ export function DesktopIsland() {
     : a.kind === 'setEnd' ? 'New end time'
     : a.kind === 'rename' ? `✎ ${a.subject}`
     : a.kind === 'undo' ? '↶ Undoing'
+    : a.kind === 'center' ? (a.op === 'count' ? `${a.amount > 0 ? '+' : ''}${a.amount}` : a.op === 'check' ? '✓ Ticking' : a.op === 'mode' ? 'Switching mode' : a.op === 'timer' ? '⏱ Starting' : a.answer === 'done' ? '✓ Done' : 'Later')
     : a.kind === 'drop' ? (a.file ? 'Adding to today’s note' : 'Saving the link')
     : a.kind === 'nudge' ? nudgeTapLabel(a.op)
     : null
@@ -1329,7 +1383,7 @@ export function DesktopIsland() {
       close()
     }
     // Answered the thing that peeked: it goes back to the pill.
-    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'water', 'coach'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)))) close()
+    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'water', 'coach'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)) || (a.kind === 'center' && a.op === 'remind'))) close()
   }
   tapRef.current = tap
   // IC4: what Enter will do, live while you type (the same rules as the command bar).
@@ -1502,8 +1556,32 @@ export function DesktopIsland() {
     setMoment(m)
     clearTimeout(momentT.current)
     momentT.current = window.setTimeout(() => setMoment(null), 2600)
-    window.setTimeout(() => burstFrom(shape.current, m.colors, 60), 160)
+    window.setTimeout(() => celebrate(m.colors), 160)
   }, [s])
+  /** The look's celebration: confetti, a burst, a glow, a ripple or nothing (Full motion only; never while hidden). */
+  const [celCls, setCelCls] = useState<string | null>(null)
+  const celebrate = (colors: string[]) => {
+    const plan = celebrationPlan(looksRef.current.celebration)
+    if (plan.particles) burstFrom(shape.current, colors, plan.particles.n, { power: 340 * plan.particles.power, spread: Math.PI * 0.9 * plan.particles.spread })
+    if (plan.cls) {
+      setCelCls(plan.cls)
+      window.setTimeout(() => setCelCls(null), plan.ms)
+    }
+  }
+  // A Custom Center counter or checklist reaching its goal is celebrated too (once per goal a day).
+  const centerDone = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    const day = new Date().toDateString()
+    const cards = [...(center?.pill ?? []), ...(center?.island ?? [])].filter((w) => (w.kind === 'counter' || w.kind === 'checklist') && w.done)
+    const before = centerDone.current
+    centerDone.current = new Set(cards.map((w) => `${w.id}:${day}`))
+    if (!before || !fRef.current.extras || uiRef.current.view === 'expanded') return
+    const fresh = cards.find((w) => !before.has(`${w.id}:${day}`))
+    if (fresh) {
+      logIslandUi('moment', `${fresh.title}: goal reached`)
+      celebrate([fresh.color ?? '#d4ff3f', '#ffffff', '#ffd166'])
+    }
+  }, [center]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => clearTimeout(momentT.current), [])
   useIslandSoundEvents({ view: ui.view, snap: s, momentId: moment?.id, toastErr: toast?.state === 'err' ? `${toast.id}:${toast.text}` : null, over: ui.over })
   // Island 2: an eye break / tidy minute countdown or a breathing minute runs on the pill; done, it's noted.
@@ -1963,6 +2041,8 @@ export function DesktopIsland() {
   const restMain = restView.primary
   const restSecond = restView.secondary
   const restKind = s.locked ? 'locked' : old ? 'old' : s.ben.busy && !run ? 'think' : picked ? picked.kind : restMain.kind
+  // Custom Center: your clock style (digital / analog, 12 h, seconds, date, a second zone) once you changed it there.
+  const clockMine = !sameJson(looks.clock, DEFAULT_LOOKS.clock)
   const restBody = (r: RestItem) => {
     switch (r.kind) {
       case 'timer':
@@ -2024,7 +2104,7 @@ export function DesktopIsland() {
           </>
         )
       case 'time':
-        return <IslandClock kind={look.clock === 'off' ? 'simple' : look.clock} color={look.clockColor || undefined} zones={look.zones} back={look.zoneBack} onTap={holdHover} />
+        return clockMine ? <ClockFace clock={looks.clock} /> : <IslandClock kind={look.clock === 'off' ? 'simple' : look.clock} color={look.clockColor || undefined} zones={look.zones} back={look.zoneBack} onTap={holdHover} />
       default:
         return null
     }
@@ -2041,7 +2121,7 @@ export function DesktopIsland() {
     if (r.kind === 'captions') return <i className="rest-dot rec" />
     if (r.kind === 'alert') return <i className="rest-dot" />
     if (r.kind === 'winddown') return <b className="rest-num moon">{r.time}</b>
-    if (r.kind === 'clock') return <IslandClock kind={look.clock} color={look.clockColor || undefined} zones={look.zones} back={look.zoneBack} onTap={holdHover} />
+    if (r.kind === 'clock') return clockMine ? <ClockFace clock={looks.clock} compact /> : <IslandClock kind={look.clock} color={look.clockColor || undefined} zones={look.zones} back={look.zoneBack} onTap={holdHover} />
     return null
   }
   const restLabel = s.locked ? 'Open Life System' : picked ? `${picked.text} ${picked.sub}` : restMain.tip
@@ -2097,6 +2177,8 @@ export function DesktopIsland() {
   ) : null
   // Island v2: two live things at once share the pill (the main one left, its companion right).
   const splitOn = !!split.left && !!split.right && !s.locked && !old && restKind !== 'think' && !picked
+  // Custom Center: your pill widgets take the calm pill (anything live, like a timer or a meeting, still comes first).
+  const centerPillOn = !!center?.pill.length && !REST_LIVE.includes(restMain.kind) && !picked && restKind !== 'think' && !s.locked && !old && !splitOn
   const compact = (
     <div
       className={`di-pill di-rest kind-${splitOn ? 'split' : restKind} ${restSecond && !splitOn ? 'has-second' : ''} ${splitOn ? 'is-split' : ''}`}
@@ -2132,8 +2214,8 @@ export function DesktopIsland() {
       {splitOn ? <SplitPillView split={split} np={np} paused={!visible} onTap={onLobe} /> : <>
       <AnimatePresence mode="popLayout" initial={false} custom={dir}>
         <motion.span
-          key={s.locked ? 'locked' : old ? 'old' : restKind === 'think' ? 'think' : picked ? picked.key : restMain.key}
-          className={`rest-item rest-primary rest-k-${restKind}`}
+          key={s.locked ? 'locked' : old ? 'old' : restKind === 'think' ? 'think' : picked ? picked.key : centerPillOn ? `center:${center!.mode.id}` : restMain.key}
+          className={`rest-item rest-primary rest-k-${centerPillOn ? 'center' : restKind}`}
           custom={dir}
           initial={f.mode === 'off' ? false : { opacity: 0, y: f.moves ? 6 : 0 }}
           animate={{ opacity: 1, y: 0 }}
@@ -2160,13 +2242,15 @@ export function DesktopIsland() {
               <Marquee className="rest-text" text={picked.kind === 'timer' ? picked.sub : picked.kind === 'next' ? `Next: ${picked.text}` : picked.text} />
               {pillTime(picked)}
             </>
+          ) : centerPillOn ? (
+            <CenterPill c={center!} now={now} clock={looks.clock} send={tap} />
           ) : (
             restBody(restMain)
           )}
         </motion.span>
       </AnimatePresence>
       <AnimatePresence initial={false}>
-        {restSecond && !s.locked && !old && restKind !== 'think' && !picked && (
+        {restSecond && !centerPillOn && !s.locked && !old && restKind !== 'think' && !picked && (
           <motion.span
             key={restSecond.key}
             className={`rest-item rest-secondary rest-k-${restSecond.kind}`}
@@ -2321,6 +2405,8 @@ export function DesktopIsland() {
       <ScPeekRow music={k.kit.music} />
       {/* Island v2: one click logs (+10/+25/+50 push-ups, +250 ml, 25 min focus); scroll a counter to change it. */}
       {!s.locked && widgets.instant.length > 0 && <InstantBar s={s} ids={widgets.instant} scrub={widgets.scrub} onLog={instantLog} />}
+      {/* Custom Center: your pill counters with their buttons. */}
+      {center && <CenterPeekRow c={center} clock={looks.clock} send={tap} />}
       {/* IN35: your one-tap buttons. */}
       {!s.locked && <PillKitButtons k={k} />}
       {/* IC5: today in three numbers (the rings' colours). */}
@@ -2541,6 +2627,8 @@ export function DesktopIsland() {
           <DayHero greeting={greeting} sub={heroSub} stats={heroStats} />
           <PowerRow tiles={power.map(powerTile)} editing={powerEdit} onTap={doPower} onCycle={(i) => savePower(cyclePower(power, i))} onEdit={setPowerEdit} />
           {!s.locked && widgets.instant.length > 0 && <InstantBar s={s} ids={widgets.instant} scrub={widgets.scrub} onLog={instantLog} />}
+          {/* Custom Center: the mode on now (one tap to switch) and your widgets for the open island. */}
+          {center && <CenterPanel c={center} now={now} clock={looks.clock} send={tap} scrub={widgets.scrub} />}
           {alertCard}
           {/* Alive: the track's levels with skip / like / a lyric line, and the swipeable mini widgets. */}
           <NowPlayingPlus k={k} />
@@ -2678,12 +2766,15 @@ export function DesktopIsland() {
   const sentMaxH = (prefs as { panelMaxH?: number }).panelMaxH
   const localFit = islandSizing({ pick: prefs.size, area: { width: window.screen?.availWidth, height: window.screen?.availHeight }, panelWidth: prefs.panelWidth })
   const density: IslandDensity = sentDensity ?? localFit.density
-  const panelW = sentMaxH ? prefs.panelWidth : localFit.panelW
-  const panelMaxH = sentMaxH || localFit.panelH
+  // Custom Center's open size, inside what this screen gives (the desktop already made room for it).
+  const openFit = openSizeOf(looks, { w: sentMaxH ? prefs.panelWidth : localFit.panelW, h: sentMaxH || localFit.panelH })
+  const panelW = openFit.w
+  const panelMaxH = openFit.h
   // The notch hangs from the top edge (the bar look too): square top corners.
   const notchOn = bar || (look.style === 'notch' && place === 'top')
   // At rest: a capsule is fully round; the notch's bottom corners are a softer, hardware-like curve.
-  const restR = notchOn ? (density === 'compact' ? 12 : 14) : Math.max(12, Math.round(size.h / 2))
+  // Custom Center: the look's corner radius for the resting pill (never past half its height).
+  const restR = restRadius(looks, notchOn ? (density === 'compact' ? 12 : 14) : Math.max(12, Math.round(size.h / 2)), size.h)
   const radius = ui.view === 'compact' ? (place === 'left' || place === 'right' ? 20 : barNow ? ISLAND_SHAPE.compact.radius : restR) : ui.view === 'peek' ? ISLAND_SHAPE.peek.radius : ISLAND_SHAPE.expanded.radius
   // IA3 / IL3: one feel: snappy open, softer close, a bouncy landing for a new alert, a quick stretch before it.
   const transition = stretch ? { type: 'spring' as const, stiffness: 700, damping: 26 } : ui.view === 'compact' ? f.close : dropping2 && ui.view === 'peek' ? f.drop : f.open
@@ -2861,7 +2952,7 @@ export function DesktopIsland() {
               ['--di-alpha' as string]: String(prefs.opacity),
               scale: scale === 1 ? undefined : String(scale),
               // IF3: your sizes.
-              ['--di-pill-h' as string]: `${prefs.pillHeight}px`,
+              ['--di-pill-h' as string]: `${pillHeight(looks, prefs.pillHeight)}px`,
               ['--di-peek-w' as string]: `${prefs.peekWidth}px`,
               ['--di-panel-w' as string]: `${panelW}px`,
               // The glow follows the music's colour while something plays.
@@ -2873,7 +2964,7 @@ export function DesktopIsland() {
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${s.afterShift ? 'aftershift' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''} mode-${prefs.mode} ${calmHidden ? 'calm-hidden' : ''} ${calmHidden && prefs.calmRest === 'none' ? 'calm-none' : ''} ${dayState ? `ds-${dayState}` : ''} ${lookV2Classes(looks)} ${splitOn && ui.view === 'compact' ? 'has-split' : ''}`}
+            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${s.afterShift ? 'aftershift' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''} mode-${prefs.mode} ${calmHidden ? 'calm-hidden' : ''} ${calmHidden && prefs.calmRest === 'none' ? 'calm-none' : ''} ${dayState ? `ds-${dayState}` : ''} ${lookV2Classes(looks)} ${splitOn && ui.view === 'compact' ? 'has-split' : ''} ${centerPillOn && ui.view === 'compact' ? 'has-center' : ''} ${morph ? 'v2c-morph' : ''} ${celCls ?? ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -2887,6 +2978,7 @@ export function DesktopIsland() {
               style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), clipPath: clip, scale: lift, scaleX: jx, scaleY: jy, originX: origin, originY: 0 }}
             >
               <Sky />
+              {morph > 0 && f.mode !== 'off' && <i key={morph} className="v2c-flash" aria-hidden />}
               <AnimatePresence mode="popLayout" initial={false}>
                 <motion.div
                   key={ui.view}

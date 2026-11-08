@@ -29,7 +29,7 @@ import { AffordRow, Badges, BenLine, Challenge, HowToEarn, Quests } from '../rew
 import { MysteryCard, PointsFrom, Rail, Reveal, RulesEditor, SavingFor, Section, SuggestRow, Surprises } from '../rewards/More'
 import { LockEditor, useUnlocks } from '../rewards/LockEditor'
 import { stillMode, useRewardsData } from '../rewards/useRewards'
-import { BudgetMeter, Combo, Shelf, Unwrap } from '../rewards/Shop'
+import { BudgetMeter, Combo, RewardMoneyFix, Shelf, Unwrap } from '../rewards/Shop'
 import '../lifeExtras.css'
 import '../rewards/rewards.css'
 import '../rewards/rewards2.css'
@@ -255,6 +255,18 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
       onWallet()
       setJarFor(null)
     }
+  }
+  // Points-only fix: old reward buys in Finance as spending leave only after a yes.
+  const removeRewardMoney = async (ids?: string[]): Promise<boolean> => {
+    if (!life.shop.removeRewardMoney) return false
+    const one = ids?.length === 1
+    const ok = await askConfirm(one ? 'Remove this reward entry from Finance? The buy stays in your History and its points stay spent.' : 'Remove all reward entries from Finance? They were bought with points, not real money. The buys stay in your History and their points stay spent.', { ok: one ? 'Remove it' : 'Remove all' })
+    if (!ok) return false
+    const r = await act(() => life.shop.removeRewardMoney!(ids))
+    if (!r) return false
+    toast(`Removed ${r.removed} reward entr${r.removed === 1 ? 'y' : 'ies'} from Finance (${Math.round(r.lei)} lei)`, 'good')
+    void reload()
+    return true
   }
   const setBudget = async (lei: number) => {
     if (!life.shop.setFunBudget) return
@@ -514,6 +526,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
         <Combo days={insights?.focusStreak ?? 0} />
         <BudgetMeter spent={shopValue?.funSpentLei ?? monthSpendLei(state.recent, today.slice(0, 7))} budget={shopValue?.funBudgetLei ?? null} onSet={(n) => void setBudget(n)} />
       </div>
+      <RewardMoneyFix onRemove={removeRewardMoney} />
 
       <div className="rx-layout rx-one">
         <div className="rx-main">

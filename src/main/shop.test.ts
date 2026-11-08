@@ -42,9 +42,25 @@ describe('shop service', () => {
     expect(s.currency).toBe('MDL')
   })
 
+  it('a buy with points is not real spending: only money you say you paid counts', () => {
+    grant(1000)
+    shop.setFunBudget({ lei: 500, source: 'manual' })
+    shop.redeem(cream().id, now)
+    expect(shop.state(now).balance).toBe(700)
+    expect(shop.state(now).recent[0].realCost).toBe(0)
+    expect(shop.state(now).monthSpent).toBe(0)
+    expect(shop.value({}, now)).toMatchObject({ funSpentLei: 0, funLeftLei: 500 })
+    shop.redeem(cream().id, new Date('2026-10-28T12:00:00Z'), { paid: 30 })
+    expect(shop.value({}, new Date('2026-10-28T12:00:00Z'))).toMatchObject({ funSpentLei: 30, funLeftLei: 470 })
+    // Taken back out of Finance by the owner: it counts as points only from then on.
+    const last = shop.state(now).recent[0].ledgerId!
+    expect(shop.clearPaid([last, 99999])).toBe(1)
+    expect(shop.value({}, new Date('2026-10-28T12:00:00Z')).funSpentLei).toBe(0)
+  })
+
   it('redeems, records real cost and refunds on undo', () => {
     grant(400)
-    const ledgerId = shop.redeem(cream().id, now)
+    const ledgerId = shop.redeem(cream().id, now, { paid: 30 })
     let s = shop.state(now)
     expect(s.balance).toBe(100)
     expect(s.monthSpent).toBe(30)
@@ -62,12 +78,14 @@ describe('shop service', () => {
     grant(2000)
     db.prepare("INSERT INTO settings (key, value) VALUES ('reward_budget', '50') ON CONFLICT(key) DO UPDATE SET value = excluded.value").run()
     expect(shop.value({}, now).funBudgetLei).toBe(50)
-    shop.redeem(cream().id, now)
+    shop.redeem(cream().id, now, { paid: 30 })
     // Moved once: the old key is cleared.
     expect(db.prepare("SELECT value FROM settings WHERE key = 'fun_budget'").get()).toMatchObject({ value: '{"lei":50,"source":"manual"}' })
     expect(shop.value({}, now)).toMatchObject({ funSpentLei: 30, funLeftLei: 20 })
-    expect(() => shop.redeem(cream().id, now)).toThrow(/FUN_EMPTY: Face cream costs 30 lei and only 20 lei is left/)
-    expect(() => shop.redeem(cream().id, now, { force: true })).not.toThrow()
+    expect(() => shop.redeem(cream().id, now, { paid: 30 })).toThrow(/FUN_EMPTY: Face cream costs 30 lei and only 20 lei is left/)
+    // With points only it is not money, so the fun budget has nothing to say.
+    expect(shop.funBlocker(cream().id, 0, undefined, now)).toBeNull()
+    expect(() => shop.redeem(cream().id, now, { paid: 30, force: true })).not.toThrow()
     // A new month starts fresh
     expect(() => shop.redeem(cream().id, new Date('2026-11-02T12:00:00Z'))).not.toThrow()
     expect(() => shop.setBudget(-1)).toThrow()
@@ -80,7 +98,7 @@ describe('shop service', () => {
     expect(shop.state(now).recent[0].realCost).toBe(45)
     shop.save({ title: 'Game', price: 300, tier: 'bronze', realCost: 10, currency: 'USD', pinned: false, note: null })
     const game = shop.state(now).rewards.find((r) => r.title === 'Game')!
-    shop.redeem(game.id, now, { finance: { rates: { usd: { USD: 1, MDL: 18 } } } })
+    shop.redeem(game.id, now, { paid: 10, finance: { rates: { usd: { USD: 1, MDL: 18 } } } })
     expect(shop.value({ finance: { rates: { usd: { USD: 1, MDL: 18 } } } }, now).funSpentLei).toBe(45 + 180)
   })
 
