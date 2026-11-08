@@ -83,8 +83,11 @@ import { defaultSport, removeExercise, setExercise, waterCard, workoutCard } fro
 import { cleanRecipes, recipeText } from '@core/recipes'
 import { addAsk, cleanPcState, deskReady, pcActText, pcDenied, PC_ACTIONS_HELP } from '@core/pcActions'
 import { dayLog } from './dayLog'
-import { FRIENDLY_FAIL, GOALS_TASK, MULTI_TASK, REVIEW_TASK, MIN_THINK_MS, QUICK_RESERVE_MS, THINK_BUDGET_MS, canRetry, digestText, reviewChange, reviewFromData, routeFor, strongSlot, trimContext, type DayDigest } from '@core/benRoute'
+import { FRIENDLY_FAIL, GOALS_TASK, MULTI_TASK, REVIEW_TASK, MIN_THINK_MS, QUICK_RESERVE_MS, THINK_BUDGET_MS, canRetry, digestText, reviewChange, reviewFromData, routeFor, strongSlot, trimContext, keepLines, type DayDigest } from '@core/benRoute'
 import { answerMore, MORE_LOOKUPS, yesterdayDigest } from './benDigest'
+import { askKind, askTrim, earnedAnswer, habitsAnswer, sleepAnswer, tasksAnswer } from '@core/benAsk'
+import { habitsView } from './lifeExtras'
+import { reasoningSummary } from '@core/benSteps'
 import { benNowLine } from '@core/eyesSense'
 import { createTrace, timingLine, type BenTiming } from '@core/benTrace'
 import { PLAN_ASKED, addAsked, saysToday } from '@core/planShift'
@@ -222,6 +225,8 @@ export type AskModel = (
     thinkMs?: number
     /** Ben retries with the quick model himself: the server must not fall back on its own. */
     noFallback?: boolean
+    /** A thinking model's reasoning, when it returns one (the app shows a short summary). */
+    onReasoning?: (reasoning: string) => void
   }
 ) => Promise<string>
 
@@ -859,7 +864,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
      * `tasks`: the Todoist tasks the lines point at (T1, T2… in this order).
      */
     direct?: { lines: string[]; reply: string; tasks?: TodoTask[] }
-  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; mood?: Mood; at?: string; undo?: (UndoOp | null)[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; asking?: boolean; retry?: boolean; timing?: BenTiming; receipt?: string }> {
+  ): Promise<{ ok: boolean; reply: string; done: string[]; keyboard?: any; steps?: string[]; reasoning?: string; mood?: Mood; at?: string; undo?: (UndoOp | null)[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: ReplyCards; asking?: boolean; retry?: boolean; timing?: BenTiming; receipt?: string }> {
     // One budget for the whole answer, from now (the page waits for the server, never less).
     const deadline = Date.now() + BUDGET
     // Speed: where this answer's time goes (logged on the server, read by the speed tests).
@@ -1063,6 +1068,41 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         }
       }
     }
+    // Coach chat fix: "how much do I sleep on average?", "how much have I earned this month?",
+    // "how are my habits?", "what are my tasks today?": from the data in code, no model call.
+    /** "What are my tasks today?" answered in code: today's Todoist list for the task card. */
+    let askTasks: TodoTask[] | null = null
+    if (!preset && !media && text && !direct) {
+      const today0 = await mirror.read((db) => services.services(db).wallet.today()).catch(() => calendarDay(new Date()))
+      const ak = askKind(clean, today0)
+      if (ak) {
+        // Today's Todoist list: what it said lately, else one short read (never the long wait).
+        const mid = new Date()
+        mid.setHours(0, 0, 0, 0)
+        const todo = ak.kind === 'tasks' && todoist ? (peek<TodoTask[]>('todoist:today') ?? (await readThrough('todoist:today', () => todoist.today(), 1_200))) : null
+        const ans = await mirror
+          .read((db) => {
+            const svc = services.services(db)
+            if (ak.kind === 'sleep') return sleepAnswer(ak, svc.sleep.logs().map((l: any) => ({ day: l.day, bedTime: l.bedTime ?? null, wakeTime: l.wakeTime ?? null })))
+            if (ak.kind === 'earned') {
+              const fin = financeStateFrom(db, store)
+              const income = fin && Array.isArray(fin.tx) ? financeDayTx(svc, fin, true).filter((t) => t.type === 'income').map((t) => ({ date: t.date, amount: t.amount, category: t.category })) : null
+              return earnedAnswer(ak, { income, points: svc.wallet.entries().map((e: any) => ({ day: String(e.day), coins: Number(e.coins) || 0 })) })
+            }
+            if (ak.kind === 'habits') return habitsAnswer(habitsView(svc).rows as any)
+            const st = coachStatus(svc)
+            const brief = rhythmFor(readSetting(db as any, RHYTHM), today0).briefing
+            const blocks = brief && brief.plan.day === today0 ? brief.plan.blocks.map((b) => ({ title: b.title, start: b.start })) : []
+            return tasksAnswer({ mustdos: st.mustdos.map((m) => ({ text: m.text, done: !!m.done })), todoist: todo, blocks, card: !!todo?.length })
+          })
+          .catch((e) => (console.warn('ben: ask in code:', (e as Error)?.message), null))
+        if (ans) {
+          step(ans.read)
+          preset = { reply: ans.reply, acts: [], chips: ans.chips }
+          if (ak.kind === 'tasks' && todo?.length) askTasks = todo
+        }
+      }
+    }
     const dayStart = new Date()
     dayStart.setHours(0, 0, 0, 0)
     trace.mark('instant checks')
@@ -1070,7 +1110,10 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const r0 = routeFor(clean, { correcting: !direct && isCorrection(text), media: !!media })
     // LS3: "fa-mi ziua" / "спланируй мой день" route like "plan my day".
     const route0 = r0.intent === 'chat' && canT !== clean ? routeFor(canT, { correcting: !direct && isCorrection(text), media: !!media }) : r0
-    const route = harder ? { ...route0, strong: true, think: true, capMs: 30_000, trim: 'full' as const, allActions: true } : toolBusy ? { intent: 'chat' as const, strong: false, think: false, capMs: 0, trim: 'light' as const, allActions: true } : route0
+    // Coach chat fix: a short question ("how much did I spend this month?", "should I rest
+    // tonight?") goes to the quick model with only the part of his day it is about.
+    const asking = !harder && !toolBusy && !direct && !media && !preset && !conf ? askTrim(clean, route0.intent) : null
+    const route = harder ? { ...route0, strong: true, think: true, capMs: 30_000, trim: 'full' as const, allActions: true } : toolBusy ? { intent: 'chat' as const, strong: false, think: false, capMs: 0, trim: 'light' as const, allActions: true } : asking ? { intent: 'chat' as const, strong: false, think: false, capMs: 0, trim: 'light' as const, allActions: false } : route0
     // Speed: "plan my day" is packed in code (rhythm.propose reads Todoist and the calendar
     // itself), so the chat's own Todoist/calendar/memory round trip is skipped.
     const planFirst = !preset && !media && !direct && route.intent === 'plan' && (await mirror.read((db) => rhythmFor(readSetting(db as any, RHYTHM), services.services(db).wallet.today()).briefing?.status !== 'approved').catch(() => false))
@@ -1080,10 +1123,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     const findMemory = (q: string, k: number) => (recall ? withTimeout(recall(q, k), 2_500).catch(() => null) : Promise.resolve(null))
     const skipFetch = !!preset || planFirst
     // His outside tools are listed while Todoist and the calendar answer (not after).
-    const toolsP = tools && !skipFetch ? tools.list().catch(() => []) : Promise.resolve([])
+    const toolsP = tools && !skipFetch && !asking ? tools.list().catch(() => []) : Promise.resolve([])
     const slowMs = Math.max(1_000, Math.round(BUDGET * 0.15))
-    // A review or a goals check reads his numbers, not the calendar or Todoist (their prompt leaves them out).
-    const noLists = route.trim === 'review' || route.trim === 'goals'
+    // A review or a goals check reads his numbers, not the calendar or Todoist (their prompt leaves
+    // them out); so does a short question that is not about tasks or the calendar.
+    const noLists = route.trim === 'review' || route.trim === 'goals' || (!!asking && !asking.lists)
     const [todoToday, upcoming, events, byMeaning] = skipFetch ? [null, null, null, null] : await Promise.all([
       todoist && !noLists ? readThrough('todoist:today', () => todoist.today(), slowMs) : Promise.resolve(null),
       todoist?.upcoming && !noLists ? readThrough('todoist:upcoming', () => todoist.upcoming!(7), slowMs) : Promise.resolve(null),
@@ -1270,7 +1314,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     trace.mark('tools list')
     // The prompt diet per intent: a review gets yesterday's numbers, not the week's calendar or his PC.
     const full = route.trim === 'full'
-    const dayText = trimContext(context, route.trim)
+    const dayText = asking ? keepLines(context, asking.keep) : trimContext(context, route.trim)
     const promptFor = (found: string | undefined, extraNote: string) =>
       brainPrompt(persona, dayText, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
         refs: [route.trim === 'review' || route.trim === 'goals' ? '' : made.lines, planLines, route.trim === 'review' ? '' : moneyLines, promises.lines, full ? pcHelp : '', full ? toolHelp : ''].filter(Boolean).join('\n'),
@@ -1291,7 +1335,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
         recalled,
         task: route.intent === 'review' ? REVIEW_TASK : route.intent === 'multi' ? MULTI_TASK : route.intent === 'goals' ? GOALS_TASK : undefined,
         moreLookups: MORE_LOOKUPS + webLookupHelp(web),
-        lean: route.trim === 'review' || route.trim === 'goals'
+        lean: route.trim === 'review' || route.trim === 'goals' || !!asking
       })
     /**
      * One model answer inside the budget: the strong model thinks for at most
@@ -1301,10 +1345,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     let fellBack = false
     // What the model was given about his day (for the check that it invented nothing).
     let givenFacts = ''
+    // A thinking model's reasoning: a short readable summary goes with the answer (folded in the app).
+    let thought = ''
     const ask = async (found?: string, extraNote = '', kind = media ? 'media' : big ? 'chat-deep' : 'chat'): Promise<string> => {
       const prompt = promptFor(found, extraNote)
       givenFacts = factsOf(prompt)
-      const base = { json: true, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind, deadline, ...(onStep && (kind === 'chat' || kind === 'chat-deep' || kind === 'lookup') ? { onDelta: (t: string) => step(`\u0001${t}`) } : {}) }
+      const base = { json: true, media: media ? [{ mime: media.mime, data: media.data }] : undefined, kind, deadline, onReasoning: (t: string) => void (thought = t), ...(onStep && (kind === 'chat' || kind === 'chat-deep' || kind === 'lookup') ? { onDelta: (t: string) => step(`\u0001${t}`) } : {}) }
       const slot = route.strong ? strongSlot(Date.now(), deadline, route.capMs || 16_000, RESERVE, MIN_TRY) : 0
       if (slot) {
         try {
@@ -1639,6 +1685,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // "How am I doing on my goals": the goals card with the answer.
     if (route.intent === 'goals' && !preset && !(out.show ?? []).includes('goals')) out.show = [...(out.show ?? []), 'goals'].slice(0, 2)
     if (see.length) out.show = [...new Set([...see, ...(out.show ?? [])])].slice(0, 2)
+    if (askTasks) out.show = [...new Set(['tasks', ...(out.show ?? [])])].slice(0, 2)
     if (out.show?.includes('plan')) {
       const b = out.buttons ?? []
       if (plan?.status === 'proposed' || planMade) {
@@ -1659,7 +1706,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     if (out.show?.includes('tasks')) {
       const today = calendarDay()
-      cards.tasks = (todoToday ?? []).slice(0, 12).map((t) => ({ text: t.content.slice(0, 120), ...(t.due ? { due: t.due } : {}), ...(t.due && t.due < today ? { late: true } : {}) }))
+      cards.tasks = (todoToday ?? askTasks ?? []).slice(0, 12).map((t) => ({ text: t.content.slice(0, 120), ...(t.due ? { due: t.due } : {}), ...(t.due && t.due < today ? { late: true } : {}) }))
     }
     const refs = made.refs
     const done: string[] = []
@@ -2351,7 +2398,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       .catch(() => null)
     processed++
     const timing = logTiming(trace.summary(route.intent, preset ? 'quick' : local ? 'code' : 'model'))
-    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood, at, undo, chips: out.chips, buttons: out.buttons, show: out.show, ...(cards.day || cards.tasks ? { cards } : {}), ...(newPick ? { asking: true } : {}), ...(receipt ? { receipt } : {}), timing }
+    return { ok: true, reply: out.reply || 'Got it.', done, keyboard, steps: out.steps, mood, at, undo, chips: out.chips, buttons: out.buttons, show: out.show, ...(cards.day || cards.tasks ? { cards } : {}), ...(newPick ? { asking: true } : {}), ...(receipt ? { receipt } : {}), ...(thought && reasoningSummary(thought) ? { reasoning: reasoningSummary(thought) } : {}), timing }
   }
 
   /**

@@ -22,6 +22,14 @@ export interface AnswerMeta {
   cost: number | null
   /** No AI call at all (answered in code). */
   code?: boolean
+  /** Coach chat fix: from the tap to the whole answer, and to its first words (ms). */
+  ms?: number
+  firstMs?: number
+  /** The steps in plain English ("Read your sleep log (7 nights)"). */
+  steps?: string[]
+  /** A short summary of the thinking model's reasoning, when it gave one. */
+  reasoning?: string
+  tier?: string
 }
 
 /** "deepseek/deepseek-v4.1-flash" → "deepseek-v4.1-flash"; "google/gemini-x" → "gemini-x". */
@@ -53,9 +61,20 @@ export function money(usd: number | null): string {
 /** The muted line under an answer: "deepseek-v4.1-flash · 2 calls · 3.1k tokens · $0.0006". */
 export function costLine(m: AnswerMeta | null | undefined): string {
   if (!m) return ''
-  if (m.code) return 'Answered in code · no AI · $0'
+  const time = typeof m.ms === 'number' && Number.isFinite(m.ms) && m.ms >= 0 ? secs(m.ms) : ''
+  if (m.code) return [time, 'Answered from your data · no AI · $0'].filter(Boolean).join(' · ')
   const tk = m.tokens >= 1000 ? `${(m.tokens / 1000).toFixed(1)}k tokens` : `${m.tokens} tokens`
-  return [m.model, m.calls > 1 ? `${m.calls} calls` : '', m.tokens ? tk : '', money(m.cost)].filter(Boolean).join(' · ')
+  return [time, m.model, m.calls > 1 ? `${m.calls} calls` : '', m.tokens ? tk : '', money(m.cost)].filter(Boolean).join(' · ')
+}
+
+/** "0.4 s", "3.2 s", "12 s", "1 min 5 s". */
+export function secs(ms: number): string {
+  const s = ms / 1000
+  if (s < 10) return `${s.toFixed(1)} s`
+  if (s < 60) return `${Math.round(s)} s`
+  const m = Math.floor(s / 60)
+  const r = Math.round(s - m * 60)
+  return r ? `${m} min ${r} s` : `${m} min`
 }
 
 export type BudgetMode = 'normal' | 'cheap' | 'basic'

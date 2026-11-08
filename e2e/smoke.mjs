@@ -872,7 +872,16 @@ try {
     await card.locator('.pa-list li .pa-tick').first().click()
     await pg.locator('.toast button', { hasText: 'Undo' }).first().waitFor({ timeout: 4000 })
     await pg.locator('.toast button', { hasText: 'Undo' }).first().click()
-    if (await card.locator('.pa-list li.done').count()) throw new Error('Undo did not untick the task')
+    // Undo saves and the card reloads: wait for it (checking at once was the intermittent failure).
+    await pg
+      .waitForFunction(() => {
+        const cards = document.querySelectorAll('.cf-col .cf-plan.live')
+        const c = cards[cards.length - 1]
+        return !!c && !c.querySelector('.pa-list li.done')
+      }, null, { timeout: 6000 })
+      .catch(() => {
+        throw new Error('Undo did not untick the task')
+      })
     // One sticky day label at a time: each divider lives in its own section.
     if (await pg.$('.cf-col > .cf-divider')) throw new Error('a day divider is outside its section')
     if (process.env.PLAN_SHOTS) {
@@ -962,6 +971,72 @@ try {
     if (!(await pg.locator('.cf-row.me', { hasText: 'what now' }).count())) throw new Error('your message is gone')
     await pg.unroute('**/api/coach')
   })
+  // Coach chat fix: a question asked after the plan card goes to the bottom with its answer
+  // (the plan card stays where it was posted, one live card), the answer shows how long it
+  // took, and its steps (and the reasoning) open with one tap. While Ben works, seconds count.
+  await step('Coach: a new question and its answer go to the bottom, with the time and the steps', () => atTime('10:00', async () => {
+    await open('coach')
+    await pg.waitForSelector('.cf-col .cf-plan.live', { timeout: 15000 })
+    await pg.route('**/api/coach', async (r) => {
+      const b = JSON.parse(r.request().postData() || '{}')
+      if (b.op || !b.text) return r.fallback()
+      await new Promise((ok) => setTimeout(ok, 900))
+      const at = new Date(todayAt('10:00') + 30_000).toISOString()
+      const body = [
+        { step: 'Reading your day' },
+        { step: 'Checked sleep7' },
+        { ok: true, reply: 'On average you sleep 7 h 31 min a night (the last 7 nights).', done: [], at, reasoning: 'He asked for an average. The sleep log has 7 nights.', meta: { model: 'answered in code', calls: 0, tokens: 0, cost: 0, code: true } }
+      ]
+      await r.fulfill({ status: 200, headers: { 'Content-Type': 'application/x-ndjson' }, body: body.map((x) => JSON.stringify(x)).join('\n') + '\n' })
+    })
+    const liveBefore = (await pg.$$('.cf-col .cf-plan.live')).length
+    if (liveBefore !== 1) throw new Error(`${liveBefore} live plan cards before the question`)
+    await pg.fill('.cf-input textarea', 'how much do I sleep on average')
+    await pg.keyboard.press('Enter')
+    // While he works: the seconds count beside his name.
+    await pg.waitForSelector('.cf-row.ben .cf-ben.pending [data-think-time]', { timeout: 3000 })
+    await pg.waitForFunction(() => /7 h 31 min/.test([...document.querySelectorAll('.cf-col .cf-row.ben .cf-text')].pop()?.textContent ?? ''), null, { timeout: 8000 })
+    const order = await pg.evaluate(() => {
+      const rows = [...document.querySelectorAll('.cf-col .cf-row')]
+      const last = rows[rows.length - 1]
+      const prev = rows[rows.length - 2]
+      const plans = [...document.querySelectorAll('.cf-col .cf-plan.live')]
+      const plan = plans[plans.length - 1]
+      return {
+        lastIsAnswer: !!last && last.classList.contains('ben') && /7 h 31 min/.test(last.textContent ?? ''),
+        prevIsQuestion: !!prev && prev.classList.contains('me') && /how much do I sleep/.test(prev.textContent ?? ''),
+        planAbove: !!plan && !!prev && plan.getBoundingClientRect().top < prev.getBoundingClientRect().top,
+        live: plans.length
+      }
+    })
+    if (!order.lastIsAnswer || !order.prevIsQuestion) throw new Error(`the question and its answer are not the last messages (${JSON.stringify(order)})`)
+    if (!order.planAbove) throw new Error('the plan card is drawn under the new question')
+    if (order.live !== 1) throw new Error(`${order.live} live plan cards (want one)`)
+    // The answer says how long it took, next to the model line.
+    const cost = await pg.locator('.cf-col .cf-row.ben').last().locator('.ak-cost').innerText()
+    if (!/^\d+(\.\d)? s · /.test(cost)) throw new Error(`no time on the answer's line: "${cost}"`)
+    // The steps open with one tap, in plain English, with the reasoning.
+    const steps = pg.locator('.cf-col .cf-row.ben').last().locator('[data-answer-steps]')
+    await steps.locator('summary').click()
+    const stepText = await steps.innerText()
+    if (!/Read your sleep log \(7 nights\)/.test(stepText)) throw new Error(`steps are not plain English: ${stepText}`)
+    if (!/Why: He asked for an average/.test(stepText)) throw new Error('the reasoning does not show under the steps')
+    // "See the plan" scrolls up to the one live card; it adds no second card at the bottom.
+    const see = pg.locator('.cf-now button', { hasText: 'See the plan' })
+    if (await see.count()) {
+      await see.first().click()
+      await pg.waitForTimeout(400)
+      if ((await pg.$$('.cf-col .cf-plan.live')).length !== 1) throw new Error('"See the plan" added a second plan card')
+      const lastText = await pg.locator('.cf-col .cf-row').last().innerText()
+      if (!/7 h 31 min/.test(lastText)) throw new Error('"See the plan" put a plan card under the newest answer')
+    }
+    if (process.env.COACH_SHOTS) {
+      await pg.evaluate(() => document.querySelector('.cf-stream')?.scrollTo({ top: 1e6 }))
+      await pg.waitForTimeout(300)
+      await pg.locator('.cx-chat').screenshot({ path: `${process.env.COACH_SHOTS}/coach-question-at-bottom.png` })
+    }
+    await pg.unroute('**/api/coach')
+  }))
   // Goals: made-up goals show as cards with a ring and a pace chart; a clear goal from plain words; a check-in.
   await step('Goals: cards with rings and pace lines, a new goal from words, a check-in, a habit day and a project step', async () => {
     await open('goals')

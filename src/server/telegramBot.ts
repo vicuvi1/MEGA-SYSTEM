@@ -359,12 +359,12 @@ function localMidnight(daysAgo: number): Date {
 }
 
 /** The app's Coach page: one message to the coach (same brain, memory and log as the bots). */
-export async function coachChat(env: BotEnv, text: string, onStep?: (step: string) => void, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards; retry?: boolean }> {
+export async function coachChat(env: BotEnv, text: string, onStep?: (step: string) => void, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<{ ok: boolean; reply: string; done: string[]; steps?: string[]; mood?: string; at?: string; undo?: unknown[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[]; cards?: import('@core/coachButtons').ReplyCards; retry?: boolean; reasoning?: string; serverMs?: number }> {
   lifeTz(env)
   if (!env.model) return { ok: false, reply: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to talk to the coach.', done: [] }
   const { bots } = await botsFor(env)
   const r = await bots.think(text, `app:${Date.now()}`, onStep, media)
-  return { ok: r.ok, reply: r.reply, done: r.done, steps: r.steps, mood: r.mood, at: r.at, undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, ...(r.cards ? { cards: r.cards } : {}), ...(r.retry ? { retry: true } : {}) }
+  return { ok: r.ok, reply: r.reply, done: r.done, steps: r.steps, mood: r.mood, at: r.at, undo: r.undo, chips: r.chips, buttons: r.buttons, show: r.show, ...(r.cards ? { cards: r.cards } : {}), ...(r.retry ? { retry: true } : {}), ...(r.reasoning ? { reasoning: r.reasoning } : {}), ...(r.timing ? { serverMs: r.timing.totalMs } : {}) }
 }
 
 /** After the reply is sent: let the work it left running finish (a plan's names), at most `ms`. */

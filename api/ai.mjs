@@ -475,6 +475,7 @@ async function streamOpenRouter(r, onDelta) {
   const dec = new TextDecoder()
   let buf = ''
   let text = ''
+  let reasoning = ''
   let usage = {}
   let model = null
   let sent = ''
@@ -495,6 +496,9 @@ async function streamOpenRouter(r, onDelta) {
         if (j.usage) usage = j.usage
         const d = j.choices?.[0]?.delta?.content
         if (d) text += d
+        // A thinking model's reasoning (shown folded under the answer in the app).
+        const th = j.choices?.[0]?.delta?.reasoning
+        if (typeof th === 'string') reasoning += th
       } catch {
         /* a keep-alive or a broken line */
       }
@@ -512,7 +516,17 @@ async function streamOpenRouter(r, onDelta) {
     }
     if (done) break
   }
-  return { text, usage, model }
+  return { text, usage, model, reasoning }
+}
+
+/** Hands a thinking model's reasoning to the caller (Ben's chat shows a short summary of it). */
+function giveReasoning(opts, reasoning) {
+  if (typeof opts.onReasoning !== 'function' || typeof reasoning !== 'string' || !reasoning.trim()) return
+  try {
+    opts.onReasoning(reasoning.slice(0, 8000))
+  } catch {
+    /* the listener's problem */
+  }
 }
 
 /** Usage rows still being written (the streamed chat): a function awaits flushUsage() before it ends. */
@@ -557,6 +571,7 @@ async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effo
     // Speed: the app's chat doesn't wait for the usage row; /api/coach writes it before it ends (flushUsage).
     laterUsage(recordUsage({ model: s.model || model, kind: opts.kind || (opts.think ? 'deep' : 'chat'), prompt: u.prompt_tokens, completion: u.completion_tokens, cost: typeof u.cost === 'number' ? u.cost : null }, process.env, fetchImpl))
     if (!s.text) throw new Error('OpenRouter gave an empty answer')
+    giveReasoning(opts, s.reasoning)
     return { text: s.text, model: s.model || model }
   }
   const j = await r.json().catch((e) => {
@@ -568,6 +583,7 @@ async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effo
   const u = j?.usage ?? {}
   await recordUsage({ model: j?.model || model, kind: opts.kind || (opts.think ? 'deep' : 'chat'), prompt: u.prompt_tokens, completion: u.completion_tokens, cost: typeof u.cost === 'number' ? u.cost : null }, process.env, fetchImpl)
   if (!text) throw new Error('OpenRouter gave an empty answer')
+  giveReasoning(opts, j?.choices?.[0]?.message?.reasoning)
   return { text: String(text), model: j?.model || model }
 }
 

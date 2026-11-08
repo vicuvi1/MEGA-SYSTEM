@@ -131,10 +131,16 @@ export function PlanCard({ live = true, spotlight = false, expired = false, onCh
         )}
       </div>
     )
+  // Coach chat fix: one live plan card; an older one is a single "Plan updated" line.
   if (!live)
     return (
-      <div className="cf-card cf-plan t-plan settled">
-        <CardHead icon="🗓" title="An earlier version of the plan" sub="The newest one below is up to date" />
+      <div className="cf-plan-line settled" data-plan-old>
+        <span>🗓 Plan updated · the newest version is further down</span>
+        {onOpenPlan && (
+          <button type="button" onClick={onOpenPlan}>
+            See it
+          </button>
+        )}
       </div>
     )
 

@@ -69,7 +69,7 @@ export function tagNudge(template: string): { kind: NudgeKind; info?: NudgeInfo 
 }
 
 /** The stored kind when there is a valid one, else read from the words (old entries). */
-function kindOf(e: FeedEntry): NudgeKind {
+export function kindOf(e: FeedEntry): NudgeKind {
   return e.kind && NUDGE_KINDS.includes(e.kind) ? e.kind : nudgeKind(e.text)
 }
 
@@ -203,7 +203,8 @@ export function buildFeed(log: FeedEntry[], opts: { now?: Date; seenAt?: string 
     for (const i of idx) {
       const e = log[i]
       // Ben 2: a push (check-in, brief, shutdown, weekly card) has buttons: it never folds away.
-      if (e.role === 'coach' && e.proactive && !e.pending && !(e as { push?: unknown }).push) run.push(i)
+      // Coach chat fix: the plan message never folds away either (its card is the live plan).
+      if (e.role === 'coach' && e.proactive && !e.pending && !(e as { push?: unknown }).push && meta[i].kind !== 'plan') run.push(i)
       else flush()
     }
     flush()
