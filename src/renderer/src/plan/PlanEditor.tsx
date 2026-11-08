@@ -13,12 +13,15 @@ import { fromMin, toMin, type RhythmState } from '@core/rhythm'
 import { idsUntil, isApproved, minOfDay, planGaps, planItems, replanFromNow, snap5, type EditItem, type PlanEdit } from '@core/planEdit'
 import { issueChip } from '@core/planCheck'
 import { auditPlan, blockWhy } from '@core/planAudit'
+import { dropTaskAt, fitVerdict, nearestSlot, placeQuick, type Verdict } from '@core/planFit'
+import { parseQuick } from '@core/quickAdd'
+import { estimateMinutes } from '@core/dayPacker'
 import { pending } from '@core/planSync'
 import { planTone } from '@core/planView'
 import type { CalEvent } from '@core/dayTime'
 import { life } from '../bridge'
 import { useToast } from '../ui'
-import { attach, edit, moveTomorrow, onNotice, retry, setAuto, setContext, setEditing, startLive, subscribe, undoLast, type PlanSnap } from './planStore'
+import { attach, edit, moveBlockTomorrow, moveTomorrow, onNotice, quickAddTask, retry, setAuto, setContext, setEditing, startLive, subscribe, tooMuch, undoLast, type PlanSnap } from './planStore'
 import { PlanSync } from './SyncButton'
 import { useSetup } from './planSetup'
 import { dayRules } from '@core/planWeek'
@@ -36,7 +39,7 @@ const hm = (m: number) => fromMin(Math.max(0, Math.min(24 * 60 - 5, m)))
 const len = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ''}` : `${m} min`)
 
 type Drag = { id: string; kind: 'move' | 'resize'; y0: number; start: number; minutes: number; moved: boolean; pid: number }
-type TaskDrag = { task: string; from: string; x: number; y: number; over: string | null; moved: boolean; x0: number; y0: number }
+type TaskDrag = { task: string; from: string; x: number; y: number; over: string | null; moved: boolean; x0: number; y0: number; /** Minute of the day under the pointer on the empty column (null: not over the column). */ at: number | null }
 
 /** `auto`: Settings -> Re-plan by itself (default on). */
 export function PlanEditor({ state, water = true, auto = true }: { state: RhythmState; water?: boolean; auto?: boolean }) {
@@ -49,6 +52,11 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
   const [renaming, setRenaming] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
   const [taskDrag, setTaskDrag] = useState<TaskDrag | null>(null)
+  const [quick, setQuick] = useState('')
+  const [quickBusy, setQuickBusy] = useState(false)
+  const [menu, setMenu] = useState<string | null>(null)
+  const [barMenu, setBarMenu] = useState(false)
+  const [moved, setMoved] = useState<string | null>(null)
   const [until, setUntil] = useState(() => hm(Math.ceil((nowMin() + 180) / 60) * 60))
   const [t, setT] = useState(nowMin())
   const drag = useRef<Drag | null>(null)
@@ -136,6 +144,26 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
   // The plan audit, before the card shows: what is wrong (the chip) and what has no room (one plain line).
   const audit = useMemo(() => (s ? auditPlan(s.plan, { now: hm(t), bedtime: bed, events: fixed, water, freeShare, tasks: s.tasks ?? undefined, fixTimes: false, limits }) : null), [s, t, bed, fixed, water, freeShare, limits])
   const issues = audit?.issues ?? []
+  // Plan speed: the fit rules for the drop zone, and the quick-add box's reading of what you typed.
+  const fitCtx = useMemo(() => ({ events: fixed, endBy, limits }), [fixed, endBy, limits])
+  const qParsed = useMemo(() => (quick.trim() && day ? parseQuick(quick, { today: day, now: hm(t) }) : null), [quick, day, t])
+  const qPlace = useMemo(() => {
+    if (!s || !day || !qParsed?.ok || qParsed.task.day !== day) return null
+    const q = qParsed.task
+    return placeQuick(s.plan, { title: q.title, minutes: q.minutes, time: q.time, priority: q.priority }, { ...fitCtx, now: hm(t) })
+  }, [s, day, qParsed, fitCtx, t])
+  // The small menus close on a tap anywhere else.
+  useEffect(() => {
+    if (!menu && !barMenu) return
+    const off = (e: PointerEvent) => {
+      if (!(e.target as HTMLElement).closest?.('.pe-pop, .pe-dots')) {
+        setMenu(null)
+        setBarMenu(false)
+      }
+    }
+    document.addEventListener('pointerdown', off)
+    return () => document.removeEventListener('pointerdown', off)
+  }, [menu, barMenu])
 
   if (!s || !day) return null
   const status = s.status
@@ -156,6 +184,19 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
   const syncing = Object.values(s.sync).includes('syncing')
   const failed = Object.values(s.sync).includes('err')
   const chip = issueChip(issues)
+
+  // ---- The fit hint: what the drop zone says while you drag ----
+  const dragItem = preview ? items.find((b) => b.id === preview.id) : undefined
+  const blockVerdict: Verdict | null = preview && dragItem ? fitVerdict(s.plan, { id: dragItem.id, start: hm(preview.start), minutes: preview.minutes, title: dragItem.title, kind: dragItem.kind, train: dragItem.train }, fitCtx) : null
+  const taskMin = (task: string) => Math.max(15, Math.min(90, snap5(estimateMinutes({ content: task, priority: 1 }))))
+  const taskVerdict: (Verdict & { start: number; minutes: number }) | null =
+    taskDrag?.moved && !taskDrag.over && taskDrag.at !== null
+      ? (() => {
+          const minutes = taskMin(taskDrag.task)
+          const start = Math.max(0, Math.min(24 * 60 - minutes, snap5(taskDrag.at)))
+          return { ...fitVerdict(s.plan, { start: hm(start), minutes, title: taskDrag.task }, { ...fitCtx, now: hm(t) }), start, minutes }
+        })()
+      : null
 
   // ---- Dragging a block (mouse, pen, touch) ----
   const startDrag = (ev: RPointerEvent, b: EditItem, kind: Drag['kind']) => {
@@ -184,8 +225,24 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
       setPicked(d.id)
       return
     }
-    if (d.kind === 'move' && p.start !== d.start) doEdit({ op: 'move', id: d.id, start: hm(p.start) })
-    if (d.kind === 'resize' && p.minutes !== d.minutes) doEdit({ op: 'resize', id: d.id, minutes: p.minutes })
+    const it = items.find((b) => b.id === d.id)
+    if (!it) return
+    const input = { id: d.id, start: hm(p.start), minutes: p.minutes, title: it.title, kind: it.kind, train: it.train }
+    const v = fitVerdict(s.plan, input, fitCtx)
+    const why = v.text.replace(/^Doesn't fit: /, '')
+    if (d.kind === 'move' && p.start !== d.start) {
+      // A drop that doesn't fit goes to the nearest free gap, or is refused: never silently on top of something.
+      if (v.fits) doEdit({ op: 'move', id: d.id, start: input.start })
+      else {
+        const near = nearestSlot(s.plan, input, fitCtx)
+        if (near && toMin(near) !== d.start && doEdit({ op: 'move', id: d.id, start: near }, true)) toast(`${cap1(why)} there, so ${it.title} went to ${near}`, 'info', { label: 'Undo', run: () => void undoLast() })
+        else toast(`Didn't move ${it.title}: ${why}. Nowhere else fits today`, 'bad')
+      }
+    }
+    if (d.kind === 'resize' && p.minutes !== d.minutes) {
+      if (v.fits) doEdit({ op: 'resize', id: d.id, minutes: p.minutes })
+      else toast(`Didn't change the length of ${it.title}: ${why}`, 'bad')
+    }
   }
 
   // ---- Dragging a task onto another block ----
@@ -193,18 +250,33 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
     if (ev.button !== 0 || (ev.target as HTMLElement).closest('button')) return
     ev.stopPropagation()
     ;(ev.currentTarget as HTMLElement).setPointerCapture?.(ev.pointerId)
-    setTaskDrag({ task, from, x: ev.clientX, y: ev.clientY, x0: ev.clientX, y0: ev.clientY, over: null, moved: false })
+    setTaskDrag({ task, from, x: ev.clientX, y: ev.clientY, x0: ev.clientX, y0: ev.clientY, over: null, moved: false, at: null })
   }
   const moveTask = (ev: RPointerEvent) => {
     if (!taskDrag) return
     const moved = taskDrag.moved || Math.hypot(ev.clientX - taskDrag.x0, ev.clientY - taskDrag.y0) > 5
     const under = document.elementsFromPoint(ev.clientX, ev.clientY).map((el) => (el as HTMLElement).closest?.('[data-block]') as HTMLElement | null).find((el) => el && el.dataset.block !== taskDrag.from)
-    setTaskDrag({ ...taskDrag, x: ev.clientX, y: ev.clientY, moved, over: under?.dataset.block ?? null })
+    // Over the empty day column: the minute under the pointer (5-minute steps), for the fit hint.
+    const r = col.current?.getBoundingClientRect()
+    const inCol = !!r && ev.clientX >= r.left + 52 && ev.clientX <= r.right && ev.clientY >= r.top && ev.clientY <= r.bottom
+    const at = inCol && !under ? from + (ev.clientY - r!.top) / PX - 10 : null
+    setTaskDrag({ ...taskDrag, x: ev.clientX, y: ev.clientY, moved, over: under?.dataset.block ?? null, at })
   }
   const endTask = () => {
     const d = taskDrag
     setTaskDrag(null)
     if (d?.moved && d.over && d.over !== 'train') doEdit({ op: 'moveTask', task: d.task, from: d.from, to: d.over })
+    else if (d?.moved && !d.over && taskVerdict) {
+      // Dropped on the day column: its own block where it fits, else the nearest free gap, else refused.
+      const input = { start: hm(taskVerdict.start), minutes: taskVerdict.minutes, title: d.task }
+      const near = taskVerdict.fits ? input.start : nearestSlot(s.plan, input, { ...fitCtx, now: hm(t) })
+      if (!near) toast(`Didn't move ${d.task}: ${taskVerdict.text.replace(/^Doesn't fit: /, '')}. Nowhere else fits today`, 'bad')
+      else {
+        const plan = dropTaskAt(s.plan, { task: d.task, from: d.from, start: near, minutes: taskVerdict.minutes, id: `b${Date.now().toString(36)}` })
+        const label = near === input.start ? `Moved ${d.task} to ${near}` : `${cap1(taskVerdict.text.replace(/^Doesn't fit: /, ''))} there, so ${d.task} went to ${near}`
+        if (doEdit({ op: 'replace', plan, label }, true)) toast(label, 'info', { label: 'Undo', run: () => void undoLast() })
+      }
+    }
   }
 
   const keyOn = (ev: RKeyboardEvent, b: EditItem) => {
@@ -248,12 +320,23 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
     if (r.fixed.length && JSON.stringify(r.plan) !== JSON.stringify(s.plan)) doEdit({ op: 'replace', plan: r.plan, label: 'Fixed the plan' })
     else toast('Nothing Ben can fix by himself here: move a block, or ask him', 'info')
   }
+  const cap1 = (x: string) => x.charAt(0).toUpperCase() + x.slice(1)
+  const doTooMuch = () => {
+    void tooMuch().then((r) => {
+      if (!r) toast('Nothing to move right now', 'info')
+      else if ('none' in r) toast(r.none, 'info')
+      else {
+        setMoved(r.line)
+        toast(r.line, 'info', { label: 'Undo', run: () => void undoLast() })
+      }
+    })
+  }
   const sel = picked ? items.find((b) => b.id === picked) : undefined
 
   return (
     <div className={`pe ${taskDrag?.moved ? 'task-drag' : ''}`} onPointerMove={(e) => (taskDrag ? moveTask(e) : onMove(e))} onPointerUp={(e) => (taskDrag ? endTask() : endDrag(e))} onPointerCancel={() => ((drag.current = null), setPreview(null), setTaskDrag(null))}>
       <div className="pe-bar">
-        <span className={`pe-sync ${failed ? 'err' : syncing ? 'wait' : 'ok'}`} title={s.error ?? undefined}>
+        <span className={`pe-sync ${failed ? 'err' : syncing ? 'wait' : 'ok'}`} title={s.error ?? (items.some((b) => isApproved(b, status)) ? 'Google and Todoist are up to date' : 'A draft: it syncs to Google and Todoist once approved')}>
           {failed ? (
             <button type="button" onClick={retry}>
               ⚠ Not synced · Retry
@@ -261,9 +344,9 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
           ) : syncing ? (
             'Syncing…'
           ) : items.some((b) => isApproved(b, status)) ? (
-            '✓ Google and Todoist up to date'
+            '✓ In sync'
           ) : (
-            'Draft: syncs once approved'
+            'Draft'
           )}
         </span>
         {chip && (
@@ -273,13 +356,76 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
         )}
         <span className="pe-space" />
         <PlanSync />
-        <button type="button" className="pe-btn" onClick={replan} title="Re-pack the time that is left (done and pinned blocks stay)">
-          ⏩ Re-plan from now
-        </button>
         <button type="button" className="pe-btn" disabled={!s.canUndo} onClick={doUndo} title="Undo (Ctrl+Z)">
           ↶ Undo
         </button>
+        <span className="pe-popwrap">
+          <button type="button" className="pe-btn pe-dots" aria-label="More plan actions" aria-expanded={barMenu} onClick={() => setBarMenu((v) => !v)}>
+            ⋯
+          </button>
+          {barMenu && (
+            <div className="pe-pop" role="menu">
+              <button
+                type="button"
+                role="menuitem"
+                title="Re-pack the time that is left (done and pinned blocks stay)"
+                onClick={() => {
+                  setBarMenu(false)
+                  replan()
+                }}
+              >
+                ⏩ Re-plan from now
+              </button>
+            </div>
+          )}
+        </span>
       </div>
+      <form
+        className="pe-quick"
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!qParsed?.ok || quickBusy) return
+          setQuickBusy(true)
+          quickAddTask(qParsed.task)
+            .then((r) => {
+              setQuick('')
+              toast(r.line, 'good', { label: 'Undo', run: () => void r.undo() })
+            })
+            .catch((err) => toast(`Couldn't add it: ${err?.message ?? 'try again'}`, 'bad'))
+            .finally(() => setQuickBusy(false))
+        }}
+      >
+        <input value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="Add a task: lab report tomorrow 2h" aria-label="Quick add a task in words" maxLength={140} enterKeyHint="done" disabled={quickBusy} />
+        <button type="button" className="pe-btn pe-toomuch" onClick={doTooMuch} title="Keeps your must-dos and the top tasks that fit, moves the rest of today's draft blocks to tomorrow (Undo brings them back)">
+          Too much today
+        </button>
+        {qParsed && (
+          <p className={`pe-qprev ${qParsed.ok ? 'ok' : 'ask'}`} role="status" aria-live="polite">
+            {qParsed.ok ? (
+              <>
+                <span className="pe-qchip">{qParsed.task.chip}</span>
+                <small>{qParsed.task.day !== day ? 'Enter to add' : qPlace ? `Enter to add · goes ${qPlace.start}–${hm(toMin(qPlace.start) + qPlace.minutes)}` : 'Enter to add · no room in the plan today'}</small>
+              </>
+            ) : (
+              <span>{qParsed.ask}</span>
+            )}
+          </p>
+        )}
+      </form>
+      {moved && (
+        <p className="pe-moved" role="status">
+          <span>{moved}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setMoved(null)
+              doUndo()
+            }}
+          >
+            Undo
+          </button>
+        </p>
+      )}
       {s.autoNote && (
         <p className="pe-auto" role="status">
           <span>↻ {s.autoNote}</span>
@@ -303,8 +449,7 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
         </p>
       )}
       {anyDraft && (
-        <div className="pe-approve" title="Approved blocks go to Google Calendar and Todoist; the rest stays a draft">
-          <span>Tick blocks to approve them, or</span>
+        <div className="pe-approve" title="Tick a block to approve it, or approve everything before a time. Approved blocks go to Google Calendar and Todoist; the rest stays a draft">
           <button type="button" className="pe-btn" onClick={() => doEdit({ op: 'approve', ids: idsUntil(s.plan, until), on: true })}>
             ✓ Approve until
           </button>
@@ -351,7 +496,7 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
                 data-start={b.start}
                 data-min={b.minutes}
                 data-work={!b.train && isWork(b) ? '1' : undefined}
-                className={`pe-block tone-${planTone(b.title, b.train)} ${ok ? 'ok' : 'draft'} ${b.locked ? 'locked' : ''} ${dragging ? 'dragging' : ''} ${taskDrag?.over === b.id ? 'drop' : ''} ${picked === b.id ? 'picked' : ''} ${past ? 'past' : ''}`}
+                className={`pe-block tone-${planTone(b.title, b.train)} ${ok ? 'ok' : 'draft'} ${b.locked ? 'locked' : ''} ${dragging ? 'dragging' : ''} ${dragging && blockVerdict && !blockVerdict.fits ? 'nofit' : ''} ${taskDrag?.over === b.id ? 'drop' : ''} ${picked === b.id ? 'picked' : ''} ${past ? 'past' : ''}`}
                 style={{ transform: `translateY(${top}px)`, height: h, left: `calc(52px + (100% - 56px) * ${left / 100})`, width: `calc((100% - 56px) * ${width / 100} - 4px)` } as CSSProperties}
                 tabIndex={0}
                 aria-label={`${b.title}, ${b.start} to ${hm(toMin(b.start) + b.minutes)}${b.locked ? ', pinned' : ''}${ok ? ', approved' : ', draft'}`}
@@ -399,6 +544,11 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
                       )}
                     </span>
                   )}
+                  {!b.train && !b.locked && !ok && !b.sync?.eventId && (
+                    <button type="button" className="pe-dots pe-bdots" aria-label={`More for ${b.title}`} aria-expanded={menu === b.id} title="More" onClick={() => setMenu(menu === b.id ? null : b.id)}>
+                      ⋯
+                    </button>
+                  )}
                   <button type="button" className={`pe-pin ${b.locked ? 'on' : ''}`} aria-pressed={!!b.locked} aria-label={b.locked ? `Unpin ${b.title}` : `Pin ${b.title}`} title={b.locked ? 'Pinned: re-planning never moves it' : 'Pin: re-planning never moves it'} onClick={() => doEdit({ op: 'lock', id: b.id, on: !b.locked })}>
                     📌
                   </button>
@@ -425,6 +575,48 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
               </li>
             )
           })}
+          {menu && items.find((b) => b.id === menu) && (
+            <div className="pe-pop pe-bpop" role="menu" style={{ top: yOf(toMin(items.find((b) => b.id === menu)!.start)) + 26 }}>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  const id = menu
+                  setMenu(null)
+                  const l = moveBlockTomorrow(id)
+                  if (l) {
+                    setMoved(l)
+                    toast(l, 'info', { label: 'Undo', run: () => void undoLast() })
+                  }
+                }}
+              >
+                Move to tomorrow
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setRenaming(menu)
+                  setMenu(null)
+                }}
+              >
+                Rename
+              </button>
+            </div>
+          )}
+          {preview && blockVerdict && (
+            <span className={`pe-fit ${blockVerdict.fits ? 'ok' : 'bad'}`} role="status" aria-live="polite" style={{ top: Math.max(0, yOf(preview.start) - 24) }}>
+              {blockVerdict.text}
+            </span>
+          )}
+          {taskVerdict && (
+            <>
+              <span className={`pe-slot ${taskVerdict.fits ? 'ok' : 'bad'}`} aria-hidden style={{ top: yOf(taskVerdict.start), height: taskVerdict.minutes * PX }} />
+              <span className={`pe-fit ${taskVerdict.fits ? 'ok' : 'bad'}`} role="status" aria-live="polite" style={{ top: Math.max(0, yOf(taskVerdict.start) - 24) }}>
+                {taskVerdict.text}
+              </span>
+            </>
+          )}
         </ol>
       </div>
       {sel && (sel.tasks?.length ?? 0) > 0 && (

@@ -438,6 +438,21 @@
    "notes": "core/planLimits.ts (cleanLimits, limitsFor, keepLimits, limitBreaks), core/planDeadlines.ts (planDeadlines, sessionsOn), core/planWeek.ts (dayRules, dayRooms, weekSummary). Synced settings plan_limits and plan_week. Telegram parity is for a later builder."
   },
   {
+   "id": "F031",
+   "priority": 1,
+   "area": "planner",
+   "title": "Plan speed: quick-add in words, Too much today, fit hint on drag",
+   "user_visible_behavior": "A box on the plan card turns \"lab report tomorrow 2h\" into a Todoist task (preview chip, Enter saves, an unclear line asks one short question) and, for today, a draft block placed within your limits; the Coach chat takes \"task ...\" or \"+ ...\" the same way; one Too much today button keeps the must-dos and the top tasks that fit and moves the rest of the draft blocks to tomorrow (Undo brings back the plan and the Todoist dates), and a block's ⋯ menu moves one block; dragging a block or a task row shows Fits · 45 min free or Doesn't fit: overlaps Lecture, and a drop that doesn't fit snaps to the nearest free gap or is refused; Today → Plan fits 1.75 screens",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/quickAdd.test.ts src/core/planFit.test.ts src/renderer/src/web/quickAddChat.test.ts",
+    "SMOKE_ONLY=\"Plan speed\" npm run smoke",
+    "SMOKE_ONLY=\"Today tabs\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests pass (parser, fit verdicts, too-much-today selection, chat hook); smoke steps \"Plan speed\" and \"Today tabs\" pass locally",
+   "notes": "core/quickAdd.ts, core/planFit.ts, plan/PlanEditor.tsx and planStore.ts (quickAddTask, tooMuch, moveBlockTomorrow); small hook in web/webBots.ts for the chat. Telegram parity is for a later builder."
+  },
+  {
    "id": "F900",
    "priority": 2,
    "area": "island",

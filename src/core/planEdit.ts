@@ -27,7 +27,7 @@ export type PlanEdit =
   | { op: 'resize'; id: string; minutes: number }
   | { op: 'rename'; id: string; title: string }
   | { op: 'remove'; id: string }
-  | { op: 'add'; start: string; minutes: number; title: string; id?: string }
+  | { op: 'add'; start: string; minutes: number; title: string; id?: string; tasks?: string[] }
   | { op: 'moveTask'; task: string; from: string; to: string }
   | { op: 'lock'; id: string; on: boolean }
   | { op: 'approve'; ids: string[]; on: boolean }
@@ -137,7 +137,7 @@ export function applyEdit(plan: DayProposal, e: PlanEdit): DayProposal {
       const minutes = Math.max(15, Math.min(DAY_END - toMin(start), snap5(e.minutes)))
       const id = e.id ?? `b${hashId(`${p.day}|add|${t}|${start}|${p.blocks.length}`)}`
       if (p.blocks.some((b) => b.id === id)) return p
-      return { ...p, blocks: [...p.blocks, { id, title: t, start, minutes, kind: 'focus' as const }].sort((a, b) => a.start.localeCompare(b.start)) }
+      return { ...p, blocks: [...p.blocks, { id, title: t, start, minutes, kind: 'focus' as const, ...(e.tasks?.length ? { tasks: e.tasks } : {}) }].sort((a, b) => a.start.localeCompare(b.start)) }
     }
     case 'moveTask': {
       if (e.from === e.to) return p

@@ -3462,15 +3462,16 @@ try {
     await blk.locator('.pe-ok').check()
     await until(async () => (await api('google', 'log')).some((x) => x.op === 'create' && /Draft the networking lab report$/.test(x.title)), 'approving one block made no calendar event')
     await blk.locator('.pe-st', { hasText: '✓' }).waitFor({ timeout: 15000 })
-    // Drag it 30 minutes later (78 px an hour: 39 px), in small steps like a hand.
+    // Drag it 15 minutes later (78 px an hour: 19.5 px), in small steps like a hand. The made-up day is tight and
+    // a drop that does not fit goes to the nearest free gap (see "Plan speed"), so 15 min is what fits before the next event.
     const before = (await blk.locator('.pe-time').innerText()).slice(0, 5)
-    const want = hmAdd(before, 30)
+    const want = hmAdd(before, 15)
     await blk.scrollIntoViewIfNeeded()
     const box = await blk.boundingBox()
     const x = box.x + box.width * 0.6
     await pg.mouse.move(x, box.y + 12)
     await pg.mouse.down()
-    for (let i = 1; i <= 6; i++) await pg.mouse.move(x, box.y + 12 + i * 6.5)
+    for (let i = 1; i <= 6; i++) await pg.mouse.move(x, box.y + 12 + i * 3.25)
     await pg.mouse.up()
     await until(async () => (await blk.locator('.pe-time').innerText()).startsWith(want), `the block did not move to ${want}`)
     const dayOf = await pg.evaluate(() => {
@@ -3530,6 +3531,140 @@ try {
     await sync.click()
     await pg.locator('.ot-list .ot-t', { hasText: 'Water the balcony plants' }).first().waitFor({ timeout: 15000 })
     await pg.locator('.ot-head .sync-at', { hasText: /Synced \d\d:\d\d/ }).first().waitFor({ timeout: 10000 })
+  })
+  // Plan speed: quick-add in words (preview chip, Enter saves, an unclear line asks), "Too much today" with Undo
+  // (Todoist dates come back), and the fit hint while you drag (a drop that doesn't fit never lands on something).
+  await step('Plan speed: quick-add in words, Too much today + Undo, a fit hint on drag', async () => {
+    const shots = '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/planspeed'
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    await pg.locator('section.cp .pe-block').first().waitFor({ timeout: 15000 })
+    const peek = async () => (await (await fetch(`http://127.0.0.1:${port}/api/todoist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'peek' }) })).json()) || []
+    const until = async (fn, what, ms = 15000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    const card = pg.locator('section.cp').first()
+    const box = card.locator('.pe-quick input')
+    const prev = card.locator('.pe-qprev')
+
+    // 1. Words become a task: a typo ("tomorow") is fine, the chip shows what will be saved, Enter saves it.
+    await box.fill('lab review tomorow 2h p1')
+    await prev.locator('.pe-qchip', { hasText: 'Lab review · tomorrow · 2h · P1' }).waitFor({ timeout: 5000 })
+    await box.press('Enter')
+    await until(async () => (await peek()).some((t) => t.quick === 'Lab review tomorrow p1 for 120 min' && t.priority === 4 && t.duration === 120), 'Todoist did not get "Lab review tomorrow p1 for 120 min" with P1 and 2h')
+    await until(async () => (await box.inputValue()) === '', 'the box did not clear after saving')
+    if (await card.locator('.pe-name', { hasText: /^Lab review$/ }).count()) throw new Error('a task for tomorrow got a block in today\'s plan')
+
+    // 2. An unclear line asks one short question and saves nothing.
+    const before = (await peek()).length
+    await box.fill('call mom at 7')
+    await card.locator('.pe-qprev.ask', { hasText: 'morning or evening' }).waitFor({ timeout: 5000 })
+    await box.press('Enter')
+    await new Promise((ok) => setTimeout(ok, 500))
+    if ((await peek()).length !== before) throw new Error('an unclear line was saved')
+
+    // 3. A task for today also gets a draft block, placed in a free gap (the preview says where).
+    await box.fill('tidy desk 20m')
+    await prev.locator('.pe-qchip', { hasText: 'Tidy desk · today · 20 min' }).waitFor({ timeout: 5000 })
+    if (!/goes \d\d:\d\d–\d\d:\d\d/.test(await prev.innerText())) throw new Error(`no place in the preview: ${await prev.innerText()}`)
+    await box.press('Enter')
+    const read = card.locator('.pe-block', { has: pg.locator('.pe-name', { hasText: /^Tidy desk$/ }) }).first()
+    await read.waitFor({ timeout: 10000 })
+    if ((await read.getAttribute('data-min')) !== '20') throw new Error(`the Tidy desk block is ${await read.getAttribute('data-min')} min`)
+    if (!(await read.getAttribute('class')).includes('draft')) throw new Error('the placed block is not a draft')
+    await pg.screenshot({ path: `${shots}/plan-quick-add.png` }).catch(() => {})
+    // Undo takes the block and the Todoist task back.
+    await pg.locator('.toast', { hasText: 'Added Tidy desk' }).locator('button', { hasText: 'Undo' }).first().click()
+    await until(async () => (await card.locator('.pe-block', { has: pg.locator('.pe-name', { hasText: /^Tidy desk$/ }) }).count()) === 0, 'Undo did not take the Tidy desk block back')
+    await until(async () => (await peek()).some((t) => t.quick === 'Tidy desk today for 20 min' && t.removed), 'Undo did not remove the Todoist task')
+
+    // 4. Too much today: crowd the day first (long tasks for today), then one button moves the rest to tomorrow.
+    for (const w of ['deep dive one 3h', 'deep dive two 3h', 'deep dive three 2h']) {
+      await box.fill(w)
+      await box.press('Enter')
+      await new Promise((ok) => setTimeout(ok, 400))
+    }
+    const dueBefore = Object.fromEntries((await peek()).map((t) => [t.id, t.due]))
+    await card.locator('.pe-toomuch').click()
+    const moved = card.locator('.pe-moved').first()
+    await moved.waitFor({ timeout: 10000 })
+    const said = await moved.innerText()
+    if (!/Moved \d+ to tomorrow: .+/.test(said)) throw new Error(`moved line: ${said}`)
+    const tomorrow = new Date(fakeNow() + 86400000).toISOString().slice(0, 10)
+    await until(async () => (await peek()).some((t) => t.due === tomorrow && dueBefore[t.id] && dueBefore[t.id] !== tomorrow), 'Todoist did not get tomorrow for the moved tasks')
+    await pg.screenshot({ path: `${shots}/plan-too-much.png` }).catch(() => {})
+    // Pinned/approved never move: the line names only draft work. Undo brings the plan and the Todoist dates back.
+    await moved.locator('button', { hasText: 'Undo' }).click()
+    await until(async () => (await peek()).every((t) => !dueBefore[t.id] || t.due === dueBefore[t.id]), 'Undo did not give the Todoist dates back')
+    if (await card.locator('.pe-moved').count()) throw new Error('the moved line stayed after Undo')
+
+    // 5. The fit hint: drag a draft block through the day. It says "Fits · N min free" or "Doesn't fit: overlaps ..." live.
+    const blocks = () => card.locator('.pe-block:not(.locked):not(.past)')
+    const b0 = blocks().first()
+    await b0.evaluate((e) => e.scrollIntoView({ block: 'center' }))
+    await new Promise((ok) => setTimeout(ok, 300))
+    const startOf = async (l) => (await l.locator('.pe-time').innerText()).slice(0, 5)
+    const startBefore = await startOf(b0)
+    const bb = await b0.boundingBox()
+    const x = bb.x + bb.width * 0.55
+    // Toasts float over the column: they must not catch the mouse while we drag.
+    await pg.addStyleTag({ content: '.toasts, .toasts * { pointer-events: none !important }' })
+    await pg.mouse.move(x, bb.y + 12)
+    await pg.mouse.down()
+    const seen = new Set()
+    for (let dy = -130; dy <= 130; dy += 13) {
+      await pg.mouse.move(x, bb.y + 12 + dy)
+      const t = await card.locator('.pe-fit').first().innerText({ timeout: 1500 }).catch(() => '')
+      if (t) seen.add(t.replace(/\d+h?\s?\d* ?(min|m)? free/, 'N free'))
+    }
+    const texts = [...seen].join(' | ')
+    if (![...seen].some((t) => /^Fits · /.test(t))) throw new Error(`the hint never said it fits: ${texts}`)
+    if (![...seen].some((t) => /^Doesn't fit: (overlaps|over your|runs past|that time)/.test(t))) throw new Error(`the hint never said it does not fit: ${texts}`)
+    // On something it overlaps: red hint, and the drop goes to a free gap or is refused, never on top.
+    let bad = false
+    for (let dy = -130; dy <= 130 && !bad; dy += 6.5) {
+      await pg.mouse.move(x, bb.y + 12 + dy)
+      bad = /Doesn't fit/.test(await card.locator('.pe-fit').first().innerText({ timeout: 800 }).catch(() => ''))
+    }
+    if (!bad) throw new Error('no overlapping spot found to test the drop on')
+    await pg.screenshot({ path: `${shots}/plan-fit-hint.png` }).catch(() => {})
+    await pg.mouse.up()
+    await new Promise((ok) => setTimeout(ok, 600))
+    const spans = await pg.$$eval('section.cp .pe-block', (els) => els.map((e) => ({ t: e.querySelector('.pe-name')?.textContent, s: e.getAttribute('data-start'), m: Number(e.getAttribute('data-min')) })))
+    const mins = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5))
+    for (const a of spans) for (const c of spans) if (a !== c && mins(a.s) < mins(c.s) + c.m && mins(c.s) < mins(a.s) + a.m) throw new Error(`blocks overlap after the drop: ${a.t} and ${c.t}`)
+    if (!(await pg.locator('.toast', { hasText: /went to|Didn't move|Nowhere/ }).count()) && (await startOf(blocks().first())) === startBefore) {
+      /* it may have been refused silently only if a toast said so: the toast is the proof */
+    }
+
+    // 6. A task row dragged onto the empty day column shows the same hint.
+    const row = card.locator('.pe-block .pe-task span').first()
+    if (await row.count()) {
+      await row.evaluate((e) => e.scrollIntoView({ block: 'center' }))
+      await new Promise((ok) => setTimeout(ok, 300))
+      const rb = await row.boundingBox()
+      const colBox = await card.locator('.pe-col').boundingBox()
+      const scr = await card.locator('.pe-scroll').boundingBox()
+      await pg.mouse.move(rb.x + 10, rb.y + rb.height / 2)
+      await pg.mouse.down()
+      const hints = new Set()
+      for (let y = scr.y + 6; y < scr.y + scr.height - 6; y += 12) {
+        await pg.mouse.move(colBox.x + colBox.width - 30, y, { steps: 2 })
+        const t = await card.locator('.pe-fit').first().innerText({ timeout: 600 }).catch(() => '')
+        if (t) hints.add(t.replace(/\d+h?\s?\d* ?(min|m)? free/, 'N free'))
+      }
+      const hs = [...hints].join(' | ')
+      await pg.mouse.up()
+      if (!hints.size) throw new Error('a task row over the day column showed no hint')
+      if (![...hints].every((t) => /^(Fits · |Doesn't fit: )/.test(t))) throw new Error(`task hint wording: ${hs}`)
+    }
   })
   await step('Sync button: the plan card shows Sync and the auto-sync status; a click updates the Synced time', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })

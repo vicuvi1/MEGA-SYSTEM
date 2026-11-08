@@ -86,6 +86,7 @@ import { answerMore, MORE_LOOKUPS, yesterdayDigest } from './benDigest'
 import { benNowLine } from '@core/eyesSense'
 import { createTrace, timingLine, type BenTiming } from '@core/benTrace'
 import { PLAN_ASKED, addAsked, saysToday } from '@core/planShift'
+import { chatQuickAdd, todoistText } from '@core/quickAdd'
 import { canon, commandOf } from '@core/benNormalize'
 import { receiptOf, undoLabel } from '@core/benReceipt'
 import { bareAdd, dayOf, isAsk, readClause, splitIntents, timeIn, timeQuestion, whichQuestion, type Clause } from '@core/benSplit'
@@ -1482,6 +1483,23 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       if (r?.ok && r.plan) {
         local = { reply: `You're starting at ${hmOfIso(new Date().toISOString())}, so the plan now starts from here. Fixed events stay where they are.`, actions: [], remember: [], show: ['plan'], steps: r.done }
         trace.mark('shift')
+      }
+    }
+    // Quick-add in words ("lab report tomorrow 2h", "add gym 18:00 45 min"): a Todoist task, read by core/quickAdd.ts.
+    // An unclear line gets one short question; a task for today stays today and the plan card places it.
+    if (!preset && !local && !media && !direct && todoist && text) {
+      const today = calendarDay()
+      const qa = chatQuickAdd(text, { today, now: hmOfIso(new Date().toISOString()) })
+      if (qa && 'ask' in qa) local = { reply: qa.ask, actions: [], remember: [], show: [] }
+      else if (qa) {
+        const q = qa.task
+        const added = await todoist.quickAdd(todoistText(q, today)).catch(() => null)
+        if (!added) local = { reply: "Todoist didn't take that one. Try again in a moment.", actions: [], remember: [], show: [] }
+        else {
+          const forToday = q.day === today
+          if (forToday) await mirror.write((db) => writeSetting(db as any, PLAN_ASKED, addAsked(readSetting(db as any, PLAN_ASKED), services.services(db).wallet.today(), q.title))).catch(() => null)
+          local = { reply: `Added: ${q.chip}.${forToday ? ' It is on today\'s list; I can give it a slot in the plan.' : ''}`, actions: [], remember: [], show: forToday ? ['plan'] : [], ...(forToday ? { chips: ['Re-plan from now'] } : {}) }
+        }
       }
     }
     let out: BrainOut
