@@ -6,7 +6,7 @@
 // of sleep progression holds (same reps, no level-ups).
 import { useCallback, useEffect, useState } from 'react'
 import { nightMinutes, readiness } from '@core/readiness'
-import { DOSE_LABEL, type DoseMode, type TrainReady } from '@core/trainReadiness'
+import { DOSE_LABEL, trainReadiness, type DoseMode, type TrainReady } from '@core/trainReadiness'
 import { readinessParts, verdictOf, VERDICT_TITLE, type Verdict } from '@core/readinessDay'
 import { dayKey } from '@core/dates'
 import { life } from './bridge'
@@ -126,19 +126,25 @@ export function useReadiness(workoutDone: boolean): ReadinessState {
 
 export function ReadinessCard({ r, ydaySets }: { r: ReadinessState; ydaySets: number }) {
   const parts = readinessParts({ sleptMin: r.sleptMin, needMin: r.needMin, soreness: r.sore, ydaySets })
-  const tone = r.verdict === 'go' ? '' : r.verdict === 'lighter' ? 'ok' : 'low'
+  // The server's number already counts yesterday's sets; without it, count them here too so the
+  // score never disagrees with the "Yesterday" line on the card.
+  const score = r.tr ? r.tr.score : trainReadiness({ sleptMin: r.sleptMin, needMin: r.needMin, soreness: r.sore, ydaySets }).score
+  const verdict = r.tr ? r.verdict : verdictOf(score)
+  const thin = r.sleptMin == null && r.sore == null
+  const tone = verdict === 'go' ? '' : verdict === 'lighter' ? 'ok' : 'low'
   return (
-    <section className={`bdy-card rdy-card rdy-${r.verdict}`} aria-label="Readiness for training today">
+    <section className={`bdy-card rdy-card rdy-${verdict}`} aria-label="Readiness for training today">
       <div className="bdy-head">
         <h2 className="bdy-title">Readiness</h2>
         {r.tr?.hold && <span className="rdy-hold">Progression on hold today</span>}
       </div>
       <div className="rdy-main">
-        <BtRing frac={r.score / 100} size={104} stroke={10} tone={tone} label={`Readiness ${r.score} of 100`}>
-          <b className="bdy-num lg rdy-score">{r.score}</b>
+        <BtRing frac={score / 100} size={104} stroke={10} tone={tone} label={`Readiness ${score} of 100`}>
+          <b className="bdy-num lg rdy-score">{score}</b>
         </BtRing>
         <div className="rdy-verdict">
-          <b className="rdy-verdict-title">{VERDICT_TITLE[r.verdict]}</b>
+          <b className="rdy-verdict-title">{VERDICT_TITLE[verdict]}</b>
+          {thin && <span className="bdy-note rdy-thin">No sleep or soreness logged yet: this only counts yesterday's sets.</span>}
           <ul className="rdy-parts">
             {parts.map((p) => (
               <li key={p.id} className={`rdy-part ${p.tone}`}>
