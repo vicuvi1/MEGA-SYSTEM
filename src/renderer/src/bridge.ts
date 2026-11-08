@@ -153,6 +153,12 @@ export type Bridge = LifeApi & {
     photo(): Promise<string | null>
     setPhoto(dataUrl: string | null): Promise<void>
   }
+  /** Custom Center (src/core/custom): your set-up and today's custom numbers, two synced settings. */
+  custom?: {
+    get(): Promise<{ setup: import('@core/custom').CustomSetup; state: import('@core/custom').CustomState; newer: boolean }>
+    save(setup: import('@core/custom').CustomSetup): Promise<import('@core/custom').CustomSetup>
+    saveState(state: import('@core/custom').CustomState): Promise<import('@core/custom').CustomState>
+  }
   /** Google Calendar through the server (sign in once in Settings). */
   google?: {
     status(): Promise<GoogleStatus>

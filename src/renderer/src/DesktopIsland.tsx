@@ -35,7 +35,7 @@ import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake,
 import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from './IslandMoveBits'
 import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
-import { MusicPanel, ScHost, ScPeekRow, ScPillBadge, usePillMusic, useSc } from './IslandMusic'
+import { MusicPanel, ScHost, ScPeekRow, ScPillBadge, useIslandNowPlaying, usePillMusic, useSc } from './IslandMusic'
 import { IslandBeatGlow } from './music/IslandMusicFx'
 import { run as musicRun } from './music/engine'
 import { useTint } from './music/MusicUi'
@@ -50,6 +50,15 @@ import './IslandGoals'
 import './IslandStudy'
 import { SysPill } from './sysmon/SysPill'
 import { IslandAutomations } from './IslandAutomations'
+import { liveActivities, splitPill, workoutAfterLog, workoutUndo, type LiveActivity, type WorkoutLive } from '@core/islandLive'
+import { inverseAction } from '@core/islandInstant'
+import { gestureAction, wheelSwipe } from '@core/islandGestures'
+import { waterBehindPace } from '@core/healthyDay'
+import { lookStyle, lookV2Classes, useIslandLookAdapter, withLookFeel } from './island/lookAdapter'
+import { SplitPillView } from './island/LivePill'
+import { InstantBar } from './island/InstantBar'
+import { DropZoneView, canTake, dropDataOf, dropTarget, parseDrop, type DropTo } from './island/DropZone'
+import './island/island-v2.css'
 import { lookClasses } from '@core/islandTiles'
 import './island.css'
 import './island-motion.css'
@@ -426,7 +435,9 @@ export function DesktopIsland() {
   const input = useRef<HTMLInputElement>(null)
   const reduce = useReducedMotion()
   // IA3, IA6: one feel for every motion (Full / Calm / Off; the system's reduce-motion means Off).
-  const f = useMemo(() => feelFor(prefs.motion, !!reduce), [prefs.motion, reduce])
+  // Island v2: looks and widget switches come from ONE adapter (built-in defaults until the Custom Center plugs in).
+  const { looks, widgets } = useIslandLookAdapter(Math.floor(now / 60_000))
+  const f = useMemo(() => withLookFeel(feelFor(prefs.motion, !!reduce), looks), [prefs.motion, reduce, looks])
   const fRef = useRef(f)
   fRef.current = f
 
@@ -1245,6 +1256,13 @@ export function DesktopIsland() {
   const lastWater = useRef<string | null>(null)
   const [undo, setUndo] = useState<{ id: string; until: number } | null>(null)
   undoRef.current = undo
+  /** The last taps by id (what an undo takes back). */
+  const sentRef = useRef(new Map<string, IslandAction>())
+  // A new card opening: a finished tap's line goes away, so it never sits on the card (one with Undo stays its 5 s).
+  useEffect(() => {
+    if (!s.alert?.id) return
+    setToast((t) => (t && t.state !== 'err' && !(undoRef.current && undoRef.current.id === t.id) ? null : t))
+  }, [s.alert?.id])
   useEffect(() => {
     if (!undo) return
     const t = window.setTimeout(() => setUndo(null), Math.max(0, undo.until - Date.now()))
@@ -1268,10 +1286,21 @@ export function DesktopIsland() {
       a.kind === 'chat' ? 120_000 : 12_000
     )
     // IC2: what it changes shows now. Reps keep their exercise id in `ex` (the tap's id takes `id`).
-    exp.add(id, a)
+    // v2: an undo shows at once too (the opposite of what it takes back).
+    const was = a.kind === 'undo' ? sentRef.current.get(a.of) : undefined
+    const inv = was ? inverseAction(was) : null
+    exp.add(id, inv ?? a)
+    if (a.kind !== 'undo') sentRef.current.set(id, a.kind === 'reps' ? { ...a, ex: a.ex ?? a.id } : a)
+    if (sentRef.current.size > 20) sentRef.current.delete(sentRef.current.keys().next().value as string)
+    if (was?.kind === 'reps') setWorkout((w) => workoutUndo(w, was.n))
     if (canUndo(a)) undoCand.current = { id }
     if (a.kind === 'water') lastWater.current = id
     desk()?.islandAction?.(a.kind === 'reps' ? { ...a, ex: a.ex ?? a.id, id } : { ...a, id })
+  }
+  /** Island v2: an instant button or a counter: the normal tap (shows at once, Undo), and a set for the live workout. */
+  const instantLog = (a: IslandAction) => {
+    tap(a)
+    if (a.kind === 'reps') setWorkout((w) => workoutAfterLog(w, a.name, a.n, Date.now()))
   }
   const doUndo = (of: string) => {
     setUndo(null)
@@ -1317,6 +1346,33 @@ export function DesktopIsland() {
   // The palette: pages, quick logs, automations, stations and island steps.
   const sc = useSc()
   const muTint = useTint(sc, '#d4ff3f')
+  // ---- Island v2: live activities and the split pill (core/islandLive.ts) ----
+  const np = useIslandNowPlaying(k.kit.music)
+  // The island's own little workout: sets logged from it, then a rest countdown (island memory only).
+  const [workout, setWorkout] = useState<WorkoutLive | null>(null)
+  const live = useMemo(
+    () => liveActivities({ now, running: s.running, current: s.now, next: s.next, music: np ? { playing: np.playing, title: np.title, artist: np.artist } : null, workout, water: s.water, waterBehind: waterBehindPace(now, s.water.ml, s.water.target), allow: { ...widgets.live, water: widgets.live.water && ui.over } }),
+    // Water joins only while the mouse is on the island: the resting island never shows water (islandRest.ts).
+    [now, s.running, s.now, s.next, np?.playing, np?.title, np?.artist, workout, s.water, widgets.live, ui.over] // eslint-disable-line react-hooks/exhaustive-deps
+  )
+  const [swapped, setSwapped] = useState(false)
+  const split = useMemo(() => {
+    const p = splitPill(live, widgets.split)
+    return swapped && p.right ? { left: p.right, right: p.left } : p
+  }, [live, widgets.split, swapped])
+  // A rest that is running: tick again when it ends (no polling: one timeout).
+  useEffect(() => {
+    if (!workout?.restEndsAt) return
+    const t = window.setTimeout(() => setWorkout((w) => (w ? { ...w } : w)), Math.max(0, workout.restEndsAt - Date.now()) + 50)
+    return () => clearTimeout(t)
+  }, [workout?.restEndsAt])
+  const swipeX = useRef(0)
+  /** A tap on one half of the split pill: open its card (the music half opens the Music page). */
+  const onLobe = (_side: 'left' | 'right', a: LiveActivity) => {
+    if (!clicked()) return
+    dispatch({ type: 'click' })
+    if (a.kind === 'music') window.setTimeout(() => window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'music' })), 60)
+  }
   const palAll = useMemo(() => paletteItems({
     pages: registeredPages().map((p) => ({ id: p.id, title: p.title, icon: p.icon })),
     autos: (s.auto?.buttons ?? []).map((b) => ({ id: b.id, name: b.name, icon: b.icon, fields: b.fields.length })),
@@ -1564,17 +1620,28 @@ export function DesktopIsland() {
   // Drop a task (text) on the island: booked in the next free slot today.
   const [dropping, setDropping] = useState(false)
   // IC8: a link (to Notebook, a Todoist task: focus on it), an image or a PDF (today's note) too.
+  // Island v2: the drop zone (core/islandDrop.ts): two targets, Task (left) and Note (right).
+  const [dropOver, setDropOver] = useState<DropTo | null>(null)
   const dropProps = {
     onDragOver: (e: React.DragEvent) => {
-      if ([...e.dataTransfer.types].some((t) => t === 'text/plain' || t === 'text/uri-list' || t === 'Files')) {
-        e.preventDefault()
-        setDropping(true)
-      }
+      if (!canTake(e.dataTransfer)) return
+      e.preventDefault()
+      if (!dropping) setDropping(true)
+      const r = shape.current?.getBoundingClientRect()
+      const to = r && r.width > 0 ? dropTarget(e.clientX, r.left, r.width) : null
+      if (to !== dropOver) setDropOver(to)
     },
-    onDragLeave: () => setDropping(false),
+    onDragLeave: (e: React.DragEvent) => {
+      // Moving between the island's own parts is not leaving it.
+      if (e.relatedTarget && rootEl.current?.contains(e.relatedTarget as Node)) return
+      setDropping(false)
+      setDropOver(null)
+    },
     onDrop: (e: React.DragEvent) => {
       e.preventDefault()
+      const over = dropOver
       setDropping(false)
+      setDropOver(null)
       const dt = e.dataTransfer
       const file = dt.files?.[0] ?? null
       // IN48: with the file shelf on, dropped files are kept there (their place on disk, never a copy).
@@ -1585,19 +1652,23 @@ export function DesktopIsland() {
         })
         return
       }
-      const uris = (dt.getData('text/uri-list') || '').split(/\r?\n/)
-      const text = dt.getData('text/plain').trim()
-      const d = classifyDrop({ uris, text, files: file ? [{ name: file.name, type: file.type, size: file.size }] : [] })
-      if (d.kind === 'refuse') {
-        setToast({ id: 'drop', state: 'err', text: `⚠ ${d.why}` })
+      const plan = parseDrop(dropDataOf(dt))
+      if (plan.kind === 'refuse') {
+        setToast({ id: 'drop', state: 'err', text: `⚠ ${plan.why}` })
         return clearToastLater(4000)
       }
-      if (d.kind === 'text') return send({ kind: 'book', text: d.text })
-      if (d.kind === 'link' || d.kind === 'todoist') return send({ kind: 'drop', link: d.url })
-      if (!file) return
-      const fr = new FileReader()
-      fr.onload = () => send({ kind: 'drop', file: { name: d.name, mime: d.mime, size: d.size, data: String(fr.result).split(',')[1] ?? '' } })
-      fr.readAsDataURL(file)
+      // A Todoist task link: focus on that task (as before).
+      if (plan.kind === 'todoist') return send({ kind: 'drop', link: plan.url })
+      const to: DropTo = widgets.drop ? over ?? plan.best : plan.best
+      // An image or a PDF on Note: into today's note with its picture (as before), if it is small enough.
+      const d = file ? classifyDrop({ files: [{ name: file.name, type: file.type, size: file.size }] }) : null
+      if (file && to === 'note' && d?.kind === 'file') {
+        const fr = new FileReader()
+        fr.onload = () => send({ kind: 'drop', file: { name: d.name, mime: d.mime, size: d.size, data: String(fr.result).split(',')[1] ?? '' } })
+        fr.readAsDataURL(file)
+        return
+      }
+      send({ kind: 'clipSave', to, text: to === 'task' ? plan.task : plan.note, alertId: `drop:${Date.now()}` })
     }
   }
 
@@ -2024,9 +2095,11 @@ export function DesktopIsland() {
       ))}
     </span>
   ) : null
+  // Island v2: two live things at once share the pill (the main one left, its companion right).
+  const splitOn = !!split.left && !!split.right && !s.locked && !old && restKind !== 'think' && !picked
   const compact = (
     <div
-      className={`di-pill di-rest kind-${restKind} ${restSecond ? 'has-second' : ''}`}
+      className={`di-pill di-rest kind-${splitOn ? 'split' : restKind} ${restSecond && !splitOn ? 'has-second' : ''} ${splitOn ? 'is-split' : ''}`}
       role="button"
       tabIndex={0}
       title={restLabel}
@@ -2034,7 +2107,17 @@ export function DesktopIsland() {
       {...clickProps}
       // T: the clock's next time zone (when you set some in Settings → Widgets → Island look).
       onKeyDown={(e) => (e.key === 'Enter' ? dispatch({ type: 'click' }) : e.key === 'ArrowRight' ? cycle(1) : e.key === 'ArrowLeft' ? cycle(-1) : (e.key === 't' || e.key === 'T') && look.zones.length ? nextClockZone(look.zones.length, look.zoneBack) : undefined)}
-      onWheel={onWheel}
+      onWheel={(e) => {
+        // The split pill: a sideways swipe (trackpad) swaps its halves.
+        if (splitOn && !e.shiftKey) {
+          const w = wheelSwipe(swipeX.current, e.deltaX, e.deltaY)
+          swipeX.current = w.acc
+          const act = w.gesture ? gestureAction(w.gesture, 'pill', { split: true, enabled: widgets.gestures }) : null
+          if (act?.do === 'swap') return setSwapped((x) => !x)
+          if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return
+        }
+        onWheel(e)
+      }}
       // H1: a double-click tucks it into a small dot (a click on the dot brings it back).
       onDoubleClick={(e) => { e.preventDefault(); dispatch({ type: 'close' }); desk()?.islandHide?.('dot') }}
       aria-label={`${restLabel}. Open the island (drag to move it, double-click to tuck it away, arrows or the mouse wheel switch)`}
@@ -2042,10 +2125,11 @@ export function DesktopIsland() {
       {/* Shown only while the mouse is on it (it takes no room at rest). */}
       <GripHandle onPointerDown={(e) => { e.stopPropagation(); dragProps.onPointerDown(e, true) }} />
       {/* Alive: the focus time drains like water behind the text; Ben's face; the top 3 along the lower edge. */}
-      {run && !s.locked && !old && <LiquidFill run={run} now={now} animate={f.mode !== 'off'} />}
-      {!s.locked && !old && place !== 'left' && place !== 'right' && <AliveBen s={s} now={now} fx={!!pfx} />}
+      {run && !s.locked && !old && !splitOn && <LiquidFill run={run} now={now} animate={f.mode !== 'off'} />}
+      {!s.locked && !old && !splitOn && place !== 'left' && place !== 'right' && <AliveBen s={s} now={now} fx={!!pfx} />}
       {!s.locked && !old && <OrbitDots top3={aliveOf(s).top3} />}
       {!s.locked && !old && <GamingChip g={aliveOf(s).gaming} />}
+      {splitOn ? <SplitPillView split={split} np={np} paused={!visible} onTap={onLobe} /> : <>
       <AnimatePresence mode="popLayout" initial={false} custom={dir}>
         <motion.span
           key={s.locked ? 'locked' : old ? 'old' : restKind === 'think' ? 'think' : picked ? picked.key : restMain.key}
@@ -2097,6 +2181,7 @@ export function DesktopIsland() {
           </motion.span>
         )}
       </AnimatePresence>
+      </>}
       {/* Hover: a hint of what else there is, the switch dots, CPU / usage, your one-tap buttons. */}
       {ui.over && !s.locked && !old && (restView.hint || picked) && <span className="rest-hint">{picked ? restMain.tip : restView.hint}</span>}
       {ui.over && acts.length > 1 && !s.locked && (
@@ -2133,7 +2218,7 @@ export function DesktopIsland() {
     )
   const hushedNow = q.until > Date.now() || (inCall && prefs.callMode === 'dot') || (q.fullscreen && q.fullscreenMode === 'dot')
   // At rest the pill holds everything (one main thing, one small extra); the bubble shows on hover.
-  const bubbleOn = !!bubble && ui.over && ui.view === 'compact' && !hushedNow && !s.locked && !old
+  const bubbleOn = !!bubble && ui.over && ui.view === 'compact' && !hushedNow && !s.locked && !old && !splitOn
   const bubbleEl = bubbleOn && bubble ? (
     <motion.button
       key="bubble"
@@ -2234,6 +2319,8 @@ export function DesktopIsland() {
       </div>
       {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><Marquee className="di-peek-ben-text" text={benLine} /></p>}
       <ScPeekRow music={k.kit.music} />
+      {/* Island v2: one click logs (+10/+25/+50 push-ups, +250 ml, 25 min focus); scroll a counter to change it. */}
+      {!s.locked && widgets.instant.length > 0 && <InstantBar s={s} ids={widgets.instant} scrub={widgets.scrub} onLog={instantLog} />}
       {/* IN35: your one-tap buttons. */}
       {!s.locked && <PillKitButtons k={k} />}
       {/* IC5: today in three numbers (the rings' colours). */}
@@ -2453,6 +2540,7 @@ export function DesktopIsland() {
         day={<>
           <DayHero greeting={greeting} sub={heroSub} stats={heroStats} />
           <PowerRow tiles={power.map(powerTile)} editing={powerEdit} onTap={doPower} onCycle={(i) => savePower(cyclePower(power, i))} onEdit={setPowerEdit} />
+          {!s.locked && widgets.instant.length > 0 && <InstantBar s={s} ids={widgets.instant} scrub={widgets.scrub} onLog={instantLog} />}
           {alertCard}
           {/* Alive: the track's levels with skip / like / a lyric line, and the swipeable mini widgets. */}
           <NowPlayingPlus k={k} />
@@ -2579,7 +2667,7 @@ export function DesktopIsland() {
     rec: captioning,
     alert: s.alert?.id ?? null
   }
-  const views = { compact: calmHidden ? <CalmNub dots={dots} rest={prefs.calmRest} wait={calmWait} hint={!lineHintSeen} /> : mv.parked ? <ParkedDot /> : hushed ? moonPill : barNow ? <IslandIndicator info={indInfo} {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : calm && ui.byAlert && !calmCard && a ? calmPeek : peek, expanded }
+  const views = { compact: dropping && widgets.drop ? <DropZoneView card over={dropOver} /> : calmHidden ? <CalmNub dots={dots} rest={prefs.calmRest} wait={calmWait} hint={!lineHintSeen} /> : mv.parked ? <ParkedDot /> : hushed ? moonPill : barNow ? <IslandIndicator info={indInfo} {...dragProps} {...clickProps} /> : nudgeRun ? <IslandNudgePill run={nudgeRun} onEnd={endNudgeRun} /> : showMoment ? <MomentPill m={moment!} /> : asleep && !main?.kind.match(/timer|now/) ? sleepPill : tuck === 'dot' ? tuckDot : compact, peek: hushed ? moonPeek : calm && ui.byAlert && !calmCard && a ? calmPeek : peek, expanded }
   // Calm: a peek or the open panel holds the pill out; back on the pill with the mouse away, it hides ~600 ms later.
   useEffect(() => {
     if (prefs.mode !== 'calm') return calmSend({ type: 'reset' })
@@ -2677,7 +2765,7 @@ export function DesktopIsland() {
     if (shape.current) shape.current.style.transform = 'none'
   }, [ui.view, lift])
   // The click area follows every new shape: the stretch, the bubble, the toast (IA1).
-  const stackOn = stack.length >= 2 && ui.over && (ui.view === 'compact' || (ui.view === 'peek' && !ui.byAlert)) && !hushedNow && !s.locked && !old && !showMoment
+  const stackOn = !splitOn && stack.length >= 2 && ui.over && (ui.view === 'compact' || (ui.view === 'peek' && !ui.byAlert)) && !hushedNow && !s.locked && !old && !showMoment
   const stackOpen = stackOn && ui.over
   useEffect(() => {
     pump(700)
@@ -2778,12 +2866,14 @@ export function DesktopIsland() {
               ['--di-panel-w' as string]: `${panelW}px`,
               // The glow follows the music's colour while something plays.
               ...(sc.playing ? { ['--mu-aura' as string]: `${muTint.rgb.r} ${muTint.rgb.g} ${muTint.rgb.b}` } : {}),
+              // Island v2: the look (accent, font, numbers, glow…): empty with the defaults.
+              ...lookStyle(looks, np?.playing ? np.rgb : null),
               // IN39: the panel's own height on this screen (drag its corner).
               ['--di-panel-maxh' as string]: `${panelMaxH}px`,
               // IP4: the app's colours.
               ...(prefs.look === 'app' && theme ? { ['--app-surface' as string]: theme.surface, ['--app-text' as string]: theme.text, ['--app-accent' as string]: theme.accent, ['--app-accent-text' as string]: theme.accentText } : {})
             }}
-            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${s.afterShift ? 'aftershift' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''} mode-${prefs.mode} ${calmHidden ? 'calm-hidden' : ''} ${calmHidden && prefs.calmRest === 'none' ? 'calm-none' : ''} ${dayState ? `ds-${dayState}` : ''}`}
+            className={`di dens-${density} at-${place} ${place.startsWith('top') ? 'at-topbar' : ''} look-${prefs.look} ${prefs.look === 'app' && theme && !theme.dark ? 'theme-light' : ''} ${tuck !== 'none' ? `tucked tuck-${tuck}` : ''} view-${ui.view} mood-${s.ben.mood} motion-${f.mode} ${ui.over ? 'is-hover' : ''} ${benUnread ? 'ben-unread' : ''} ${hidden ? 'doc-hidden' : ''} ${run ? 'has-timer' : ''} ${run && !run.pausedAt && now > run.endsAt ? 'is-over' : ''} ${run?.pausedAt ? 'is-paused' : ''} ${run?.brk ? 'is-break' : ''} ${kbd ? 'kbd' : ''} ${typingAway && ui.view === 'compact' && !ui.over ? 'typing-away' : ''} ${s.call ? 'in-call' : ''} ${s.windDown ? 'winddown' : ''} ${s.windMode ? `windmode wind-${s.windMode.phase}` : ''} ${s.afterShift ? 'aftershift' : ''} ${dropping ? 'dropping' : ''} ${moving ? 'moving' : ''} ${old ? 'is-old' : ''} tod-${dayPart(now)} ${run ? 'has-border' : ''} ${showMoment ? 'has-moment' : ''} ${mv.classes} ${nudgeRun ? `nudge-${nudgeRun.kind}` : ''} ${lookClasses(k.kit.look, new Date(now))} ${lookRootClasses(look, place, barNow, bar)} ${sc.playing ? 'has-music' : ''} rest-${restView.primary.kind} ${REST_LIVE.includes(restView.primary.kind) ? 'rest-live' : ''} mode-${prefs.mode} ${calmHidden ? 'calm-hidden' : ''} ${calmHidden && prefs.calmRest === 'none' ? 'calm-none' : ''} ${dayState ? `ds-${dayState}` : ''} ${lookV2Classes(looks)} ${splitOn && ui.view === 'compact' ? 'has-split' : ''}`}
           >
             <motion.div className="di-shade" style={{ width: box.w, height: box.h, borderRadius: notchRadius(notchOn, radius), scaleX: shadeX, scaleY: shadeY, originX: origin, originY: 0 }} aria-hidden>
               <i className="di-breath" />
@@ -2813,6 +2903,7 @@ export function DesktopIsland() {
                 </motion.div>
               </AnimatePresence>
               {border}
+              <AnimatePresence>{dropping && widgets.drop && ui.view !== 'compact' && <DropZoneView key="drop" over={dropOver} />}</AnimatePresence>
               <motion.div className="di-follow" style={{ y: mh }}>{sweep}</motion.div>
             </motion.div>
             {/* The notch's shoulders: the concave curves where it meets the top edge, like a hardware notch. */}

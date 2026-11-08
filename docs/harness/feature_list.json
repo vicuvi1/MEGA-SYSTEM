@@ -158,6 +158,20 @@
    "notes": "Before: the move break started as a dot for 10 min, Calm turned every peek into a 5 s slim line then a dot, and a waiting move dot hid the water card. 2026-11-08: no reminder sound because the island window had no autoplay permission (Calm passes clicks through, so audio never unlocked); eye breaks were off by default. core/islandReminderSound.ts reminderPlan."
   },
   {
+   "id": "F-ISLAND-V2",
+   "priority": 2,
+   "area": "island",
+   "title": "Island v2: split pill, live activities, instant buttons, scroll counters, drop zone",
+   "user_visible_behavior": "Two live things share the pill (a timer, a rest or a meeting soon on the left; music, or water while the mouse is on it, on the right). Music shows previous / play-pause / next and glows in the album's colour. A sideways trackpad swipe swaps the halves; a tap on a half opens its card (music opens the Music page). The hover peek and the Day page have one-click buttons (+10/+25/+50 push-ups, +250 ml, 25 min focus) and counters you scroll to a number and click to log; each logs once through the usual reps / water / timer path with Undo, and the change shows at once (Undo too). Push-ups from the island start a 90 s rest countdown in the pill. Drag a link, text or a file onto the island: it grows into Task | Note and saves where you let go (Todoist or Notebook Inbox; files by name, small images and PDFs into today's note as before). A tap's line no longer stays on a new reminder card. Looks and widget switches come from one adapter (island/lookAdapter.ts) whose defaults keep the island as it was.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/islandLive.test.ts src/core/islandGestures.test.ts src/core/islandScrub.test.ts src/core/islandDrop.test.ts src/core/islandInstant.test.ts src/core/islandLooks.test.ts",
+    "SMOKE_ONLY=\"Desktop island v2\" npm run smoke"
+   ],
+   "evidence": "smoke step 'Desktop island v2' (morph, split pill timer + music, +25 once with Undo, scroll to 37, link to note and task, no label on the eye card); screenshots kept outside the repo",
+   "notes": "No new points or action kinds: reps / water / start / clipSave / undo only. No new polling: the split pill ticks once a second only while a half counts down and the island is shown. Custom Center wiring is one setLookSource call."
+  },
+  {
    "id": "F012",
    "priority": 2,
    "area": "island",
@@ -637,6 +651,20 @@
    ],
    "evidence": "2026-11-08: unit tests for readiness verdict, sleep need, smart rest day and body-map zones; smoke step \"Body Today\"; full vitest and full smoke run",
    "notes": "pages/Body.tsx is a shell (one component per tab: body/today/TodayTab.tsx, FoodCounter, body/training/BodyTraining.tsx, body/progress/BodyProgress.tsx). Shared look: body/body-theme.css (bt-* classes). Pure: core/readinessDay.ts, core/bodyMap.ts; readiness counts sleep against Sleep care's need (core/readiness.ts needMin, main/bodyPlus.ts readinessNow). Start: sportStart.ts + EmbedHost clicks Sport Track's own Start workout."
+  },
+  {
+   "id": "F036",
+   "priority": 2,
+   "area": "custom",
+   "title": "Custom Center (phase 1: model, page, app background)",
+   "user_visible_behavior": "Build your own counters, timers, countdowns, checklists, rings and clocks; drag them into the island pill, the open island or the app home (keyboard and tap too) with a live preview; one-tap actions (focus + music + quiet); your reminder rules with their next time; modes with schedules (one tap switches); templates Study, Gym, Night, Gaming; looks stored for the island; app background (gradient or picture, or none); export / import a file; every change has Undo",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/custom",
+    "SMOKE_ONLY=\"Custom Center\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: 27 unit tests (pinned clock) in src/core/custom/custom.test.ts; smoke step \"Custom Center\" passes",
+   "notes": "Pure logic src/core/custom/*; page pages/CustomCenter.tsx + renderer/src/custom/*. Synced settings custom_setup (versioned, 48 KB cap) and custom_state. The island rebuild (phase 2) reads activeLayout / widgetState / reminderGate."
   }
  ]
 }

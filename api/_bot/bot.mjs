@@ -122,6 +122,8 @@ var SETTINGS = {
 	coach_looks: json$7("how the chat looks: Ben's face and your photo (small data URL)", null),
 	look_wallpaper: json$7("the wallpaper: which picture, how strong, blur, shade, where, motion (src/core/wallpaper.ts)", null),
 	look_wallpaper_photo: text("your own wallpaper picture, made small on the device (a data URL)"),
+	custom_setup: json$7("Custom Center: your widgets, where they sit (pill, open island, home), actions, reminder rules, modes and their schedules, and the looks; versioned, at most 48 KB (core/custom)", null),
+	custom_state: json$7("Custom Center: today's numbers of your own counters and checklists, and when each reminder rule last fired (core/custom); counters that track water or reps keep no number here", null),
 	saga_seasons: json$7("your 8-week seasons: name, theme, cover, three main quests and the boss (src/core/season.ts)", null),
 	saga_vision: json$7("the vision board: word of the year, who you are becoming, 6–9 cards (src/core/vision.ts)", null),
 	saga_vision_photos: json$7("pictures on vision cards, made small on the device (card id → data URL)", null),
