@@ -6,6 +6,8 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import { RARITY_LABEL, SHELVES, STARTERS, budgetMeter, rarityOf, type ShelfId } from '@core/shopShelves'
 import { barFill } from '../motionKit'
 import { Rail } from './More'
+import { life } from '../bridge'
+import type { RewardMoneyRow } from '@core/funBudget'
 
 /** "On a roll": the days in a row you did real work, shown like a game combo. */
 export function Combo({ days }: { days: number }) {
@@ -20,17 +22,20 @@ export function Combo({ days }: { days: number }) {
   )
 }
 
-/** Spent this month against the budget. A soft warning: it never blocks a buy. */
+/**
+ * Real money spent on fun this month against the budget (buys with points only
+ * do not count: they are not money). A soft warning: it never blocks a buy.
+ */
 export function BudgetMeter({ spent, budget, onSet }: { spent: number; budget: number | null; onSet: (lei: number) => void }) {
   const m = budgetMeter(spent, budget)
   const total = budget != null && budget > 0 ? budget : 500
   const [edit, setEdit] = useState(false)
   const [v, setV] = useState('')
   return (
-    <div className={`sh-budget ${m.state}`} data-testid="budget-meter">
+    <div className={`sh-budget ${m.state}`} data-testid="budget-meter" title="Real money spent on fun this month. Only money you really paid counts: buying with points is not spending.">
       <div className="sh-budget-head">
         <b>
-          Spent this month <span className="num">{Math.round(spent).toLocaleString()} / {total.toLocaleString()} lei</span>
+          Real money spent <span className="num">{Math.round(spent).toLocaleString()} / {total.toLocaleString()} lei</span>
         </b>
         {!edit && (
           <button type="button" className="rx-btn small ghost" onClick={() => { setV(String(total)); setEdit(true) }}>
@@ -141,5 +146,47 @@ export function Unwrap({ emoji, title, onDone }: { emoji: string; title: string;
       </div>
       <b className="sh-unwrap-t">{title}</b>
     </div>
+  )
+}
+
+/**
+ * Points-only fix (2026-11-08): reward buys that went into Finance Helper as
+ * real spending before. Shown to you with a "From Rewards (points)" tag; they
+ * leave Finance only when you tap Remove and say yes (never silently).
+ */
+export function RewardMoneyFix({ onRemove }: { onRemove: (ids?: string[]) => Promise<boolean> }) {
+  const [rows, setRows] = useState<RewardMoneyRow[] | null>(null)
+  const load = () => void life.shop.rewardMoney?.().then(setRows).catch(() => setRows([]))
+  useEffect(load, [])
+  if (!rows?.length) return null
+  const total = Math.round(rows.reduce((t, r) => t + r.lei, 0))
+  const go = async (ids?: string[]) => {
+    if (await onRemove(ids)) load()
+  }
+  return (
+    <section className="sh-moneyfix" data-testid="reward-money-fix" aria-label="Reward buys in Finance">
+      <b>
+        {rows.length} reward buy{rows.length === 1 ? ' is' : 's are'} in Finance as real spending ({total.toLocaleString('en-US')} lei)
+      </b>
+      <small>Buying with points is not real money, so these should not count as spending. Keep any you really paid for.</small>
+      <ul>
+        {rows.slice(0, 12).map((r) => (
+          <li key={r.id}>
+            <span className="sh-moneyfix-tag">From Rewards (points)</span>
+            <span className="sh-moneyfix-what">
+              {r.date.slice(5)} · {r.note.replace(/^Reward:\s*/, '')}
+            </span>
+            <span className="num">{r.lei.toLocaleString('en-US')} lei</span>
+            <button type="button" className="rx-btn small ghost" onClick={() => void go([r.id])}>
+              Remove
+            </button>
+          </li>
+        ))}
+      </ul>
+      {rows.length > 12 && <small>and {rows.length - 12} more</small>}
+      <button type="button" className="rx-btn small primary" onClick={() => void go()}>
+        Remove all reward entries from Finance
+      </button>
+    </section>
   )
 }

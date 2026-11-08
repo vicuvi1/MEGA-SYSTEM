@@ -6,7 +6,7 @@ import { readSetting, writeSetting } from '../../../../main/settings'
 import { saveSport, toggleEntry } from '../../../../main/bodyLog'
 import { undoPluginAction } from '../../../../plugins'
 import { loadLog, saveLog, sportState } from '../botBrain'
-import { deleteMoney } from '../financeBot'
+import { deleteMoney, restoreMoney } from '../financeBot'
 import { takeLink } from './helpers'
 import { RHYTHM, rhythmFor } from '@core/rhythm'
 import { editPlanBlock } from '@core/benTalk'
@@ -108,6 +108,10 @@ export async function undoReply(c: UndoDeps, at: string, index?: number): Promis
               }
             }
             return what ? `↩ Removed: ${what}` : '⚠️ That money record is already gone'
+          }
+          if (op.k === 'moneyback') {
+            const what = restoreMoney(db as any, op.tx)
+            return what === 'already there' ? '⚠️ That money record is already back' : what ? `↩ Back in Finance Helper: ${what}` : '⚠️ Finance Helper is not on this device'
           }
           if (op.k === 'remind') {
             let list: Reminder[] = []

@@ -183,13 +183,13 @@ export function createMockApi(): Bridge {
         rewards = rewards.map((r) => (r.id === rid ? { ...r, archived: true, pinned: false } : r))
         return shop()
       },
-      redeem: async (rid) => {
+      redeem: async (rid, opts = {}) => {
         const s = shop()
         const reward = rewards.find((r) => r.id === rid)!
         planRedeem({ reward, balance: s.balance, level: s.level, monthSpent: s.monthSpent, budget })
         const now = new Date()
         const ledgerId = add({ ts: now.toISOString(), day: dayKey(now), module: 'shop', kind: 'spend', coins: -reward.price, xp: 0, ref: `reward:${rid}`, note: reward.title })
-        bought.push({ ledgerId, title: reward.title, realCost: reward.realCost, day: dayKey(now) })
+        bought.push({ ledgerId, title: reward.title, realCost: Math.max(0, Math.round(Number(opts.paid) || 0)), day: dayKey(now) })
         return shop()
       },
       openChest: async (level) => {

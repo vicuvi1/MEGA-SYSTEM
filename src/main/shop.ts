@@ -201,6 +201,23 @@ export class Shop {
     }
   }
 
+  /**
+   * Points-only fix (2026-11-08): buys whose real money was taken back out of
+   * Finance Helper (the owner's "Remove reward entries") count as points only.
+   */
+  clearPaid(ledgerIds: number[]): number {
+    return this.db.transaction(() => {
+      let n = 0
+      for (const id of ledgerIds) {
+        const row = this.db.prepare('SELECT real_cost FROM redemptions WHERE ledger_id = ?').get(id) as { real_cost: number } | undefined
+        if (!row || !(row.real_cost > 0)) continue
+        this.db.prepare('UPDATE redemptions SET real_cost = 0 WHERE ledger_id = ?').run(id)
+        n++
+      }
+      return n
+    })()
+  }
+
   /** Real money spent on rewards this month, ignoring undone purchases. */
   private monthSpent(day: string, undoneIds: Set<number>): number {
     const rows = this.db.prepare('SELECT ledger_id, real_cost FROM redemptions WHERE substr(day, 1, 7) = ?').all(monthKey(day)) as { ledger_id: number; real_cost: number }[]
@@ -460,7 +477,8 @@ export class Shop {
 
   /**
    * Buys a reward: the points go, and what you paid is recorded (RL4).
-   * `paid`: what you really paid (the reward's currency; default its real cost).
+   * `paid`: real money you really paid (the reward's currency). Default 0: a buy
+   * with points is not real spending (the reward's real cost is only its price guide).
    * `force`: buy even though the fun budget is empty (the explicit second tap).
    */
   redeem(id: number, now = new Date(), opts: { paid?: number; force?: boolean; finance?: any; noCoupon?: boolean } = {}): number {
@@ -485,7 +503,7 @@ export class Shop {
         buys: this.buys(undone)[id] ?? [],
         today: day
       })
-      const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : reward.realCost
+      const paid = opts.paid != null && Number.isFinite(Number(opts.paid)) ? Math.max(0, Math.round(Number(opts.paid))) : 0
       if (!opts.force) {
         const why = this.funBlocker(id, paid, opts.finance, now)
         if (why) throw new LedgerError(`FUN_EMPTY: ${why}`)

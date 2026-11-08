@@ -241,6 +241,69 @@ export function recentMoney(db: Db, today: string, n = 8): MoneyRef[] {
     }))
 }
 
+/**
+ * The same records as recentMoney (same order, so M1 = newest, as in Ben's
+ * prompt), as data for the money answers in code (core/benMoneyAsk.ts).
+ * null: Finance Helper was never synced on this device.
+ */
+export function moneyRows(db: Db, today: string, n = 8): import('@core/benMoneyAsk').MoneyRow[] | null {
+  const state = financeState(db)
+  if (!state) return null
+  const from = new Date(Date.parse(`${today}T12:00:00Z`) - 3 * 86400000).toISOString().slice(0, 10)
+  return state.tx
+    .filter((t: any) => typeof t.date === 'string' && t.date >= from && (t.type === 'expense' || t.type === 'income'))
+    .sort((a: any, b: any) => (b.date + String(b.createdAt ?? 0)).localeCompare(a.date + String(a.createdAt ?? 0)) || Number(b.createdAt ?? 0) - Number(a.createdAt ?? 0))
+    .slice(0, n)
+    .map((t: any, i: number) => ({
+      id: String(t.id),
+      ref: `M${i + 1}`,
+      date: t.date.slice(0, 10),
+      amount: Math.abs(Number(t.amount) || 0),
+      currency: t.currency || state.settings.currency || 'MDL',
+      category: catOf(state, t.category)?.name || 'Other',
+      note: String(t.note ?? ''),
+      type: t.type,
+      ...(String(t.id).startsWith('life-reward-') ? { fromRewards: true } : {})
+    }))
+}
+
+/** This month's spending in bani (main currency), by category, and Finance Helper's monthly limit. */
+export function monthSpend(db: Db, today: string): { spentMonth: number; limit: number | null; byCategory: { name: string; amount: number }[]; records: number } | null {
+  const state = financeState(db)
+  if (!state) return null
+  const month = today.slice(0, 7)
+  const list = state.tx.filter((t: any) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string' && t.date.startsWith(month))
+  const by = new Map<string, number>()
+  let spentMonth = 0
+  for (const t of list) {
+    const v = Math.abs(Number(t.base ?? t.amount) || 0)
+    spentMonth += v
+    const name = catOf(state, t.category)?.name || 'Other'
+    by.set(name, (by.get(name) ?? 0) + v)
+  }
+  const lim = state.settings?.limit
+  return { spentMonth, limit: lim?.on && Number(lim.amount) > 0 ? Number(lim.amount) : null, byCategory: [...by].map(([name, amount]) => ({ name, amount })), records: list.length }
+}
+
+/** A deleted record, as it was (for Undo). */
+export function moneyRecord(db: Db, id: string): any | null {
+  const t = financeState(db)?.tx.find((x: any) => x.id === id)
+  return t ? JSON.parse(JSON.stringify(t)) : null
+}
+
+/** Undo of a delete: the record comes back as it was (and is no longer marked deleted). */
+export function restoreMoney(db: Db, tx: any): string | null {
+  const state = financeState(db)
+  if (!state || !tx?.id) return null
+  if (state.tx.some((x: any) => x.id === tx.id)) return 'already there'
+  const deleted = { ...(state.deleted || {}) }
+  delete deleted[tx.id]
+  state.tx.push({ ...tx, updatedAt: Date.now() })
+  state.deleted = deleted
+  save(db, state)
+  return `${tx.type === 'income' ? '+' : '−'}${Math.round(Number(tx.amount) / 100)} ${tx.currency || state.settings.currency} ${tx.note || catOf(state, tx.category)?.name || ''}`.trim()
+}
+
 /** Removes a record (it syncs as deleted to every device). */
 export function deleteMoney(db: Db, id: string): string | null {
   const state = financeState(db)

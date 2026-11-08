@@ -1937,6 +1937,9 @@ input.nb-title { border: 0 !important; background: transparent !important; box-s
 .cs-sheet p { margin: 0 0 14px; line-height: 1.45; }
 .cs-row { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
 .cs-input { width: 100%; box-sizing: border-box; margin: 0 0 14px; padding: 10px 12px; font: inherit; color: var(--text); background: var(--surface-2, var(--surface)); border: 1px solid var(--border); border-radius: 10px; }
+.cs-switch { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; cursor: pointer; }
+.cs-switch input { width: 18px; height: 18px; accent-color: var(--accent, currentColor); }
+.cs-hint { display: block; margin: 0 0 14px; color: var(--muted); }
 @media (min-width: 700px) { .cs-back { align-items: center; } }
 @keyframes cs-fade { from { opacity: 0; } }
 @keyframes cs-up { from { transform: translateY(16px); opacity: 0; } }
