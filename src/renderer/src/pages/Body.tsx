@@ -19,6 +19,7 @@ import { celebrate } from '../fx'
 import { Select } from '../Select'
 import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
 import { ProteinCard } from '../body/ProteinCard'
+import { FoodCounter } from '../body/FoodCounter'
 import { WeightTrendCard } from '../body/WeightTrendCard'
 import { MuscleWeekCard } from '../body/MuscleWeekCard'
 import { SuppCard } from '../body/SuppCard'
@@ -30,7 +31,7 @@ import '../body/body-plus.css'
 
 const BODY_TABS = [
   { id: 'today', label: 'Today', title: 'Readiness, protein, supplements and water' },
-  { id: 'food', label: 'Food', title: 'Protein: goal, quick log, saved meals' },
+  { id: 'food', label: 'Food', title: 'Food counter (photo to AI, paste back), protein and kcal goals, quick protein log' },
   { id: 'training', label: 'Training', title: 'Sets per muscle, next steps, strength, workouts' },
   { id: 'progress', label: 'Progress', title: 'Weight trend, measurements, photos, your week' }
 ]
@@ -257,6 +258,7 @@ export function Body({
       </TabPanel>
 
       <TabPanel page="body" id="food" value={tab} className="body-tab">
+        <FoodCounter />
         <ProteinCard />
       </TabPanel>
 

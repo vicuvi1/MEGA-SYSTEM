@@ -231,7 +231,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   useEffect(() => {
     const on = (e: Event) => setPage((e as CustomEvent).detail as PageId)
     window.addEventListener('life-open-page', on)
-    return () => window.removeEventListener('life-open-page', on)
+    // An embedded app asks for Life System's own view of a page (e.g. Sport Track → Body → Food).
+    const sys = (e: Event) => {
+      const p = (e as CustomEvent).detail as PageId
+      setView((v) => ({ ...v, [p]: 'system' }))
+    }
+    window.addEventListener('life-open-system', sys)
+    return () => {
+      window.removeEventListener('life-open-page', on)
+      window.removeEventListener('life-open-system', sys)
+    }
   }, [])
   const [wakeEdit, setWakeEdit] = useState(0) // "Fix wake-up" taps: opens the editor on Sleep
 

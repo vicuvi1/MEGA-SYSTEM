@@ -24,6 +24,7 @@ import { isSoundName } from '@core/sounds'
 import { play } from './soundKit'
 import { Icon } from './Icon'
 import { offerWorkoutNote } from './benPushFeed'
+import { openTab } from './PageTabs'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
@@ -117,6 +118,12 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         const day = typeof data.payload?.day === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(data.payload.day) ? data.payload.day : null
         await life.body.setRest?.(day, true).catch(() => null)
         window.dispatchEvent(new CustomEvent('life-body-changed'))
+      }
+
+      // Food counter: the protein line on Sport Track's Today was tapped: open Body → Food.
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_OPEN_FOOD') {
+        openFoodCounter()
+        return
       }
 
       // BD7: you picked Full / Lighter / Short in Sport Track: it wins over the automatic dose today (synced).
@@ -295,6 +302,12 @@ function embedSound(p: Record<string, unknown>): void {
   if (isSoundName(p.name)) play(p.name, { step: Math.max(0, Math.min(10, Number(p.step) || 0)) })
 }
 
+/** Opens Body (Life System's view, not the tracker) on the Food tab. */
+function openFoodCounter() {
+  window.dispatchEvent(new CustomEvent('life-open-system', { detail: 'body' }))
+  openTab('body', 'food')
+}
+
 function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { appKey: EmbedKind; name: string; url: string; partition: string; visible: boolean; soundEnabled: boolean }) {
   const ref = useRef<WebviewEl | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
@@ -306,6 +319,7 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     const onLine = (e: any) => {
       const m = parseBridgeLine(e.message || '')
       if (m?.action === 'SOUND' && visible) embedSound(m.payload)
+      if (m?.action === 'SPORT_OPEN_FOOD' && visible) openFoodCounter()
     }
     el.addEventListener('console-message', onLine)
     return () => el.removeEventListener('console-message', onLine)
@@ -403,7 +417,9 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
         const slept = t?.bedTime && t.wakeTime ? (toM(t.wakeTime) - toM(t.bedTime) + 1440) % 1440 : null
         // BD7: today's dose (Full / Lighter 70% / Short 50%) and whether progression holds after a short night.
         const ready = await life.coach?.bodyPlus?.ready(readSoreness(dayKey(new Date())), t?.quality ?? null).catch(() => null)
-        const data = JSON.stringify({ restDays: (body as any).restDays ?? [], sleptMin: slept && slept >= 120 && slept <= 960 ? slept : null, ready: ready ? { day: dayKey(new Date()), mode: ready.mode, hold: ready.hold, auto: ready.auto, line: ready.line } : null, at: Date.now() })
+        // Food counter: one line on Sport Track's Today ("Protein 92 / 150 g today · trained: +30 g").
+        const food = await life.coach?.food?.view().then((v) => ({ day: v.today, line: v.sport })).catch(() => null)
+        const data = JSON.stringify({ food: food ?? null, restDays: (body as any).restDays ?? [], sleptMin: slept && slept >= 120 && slept <= 960 ? slept : null, ready: ready ? { day: dayKey(new Date()), mode: ready.mode, hold: ready.hold, auto: ready.auto, line: ready.line } : null, at: Date.now() })
         if (gone) return
         try {
           localStorage.setItem('life_body', data)

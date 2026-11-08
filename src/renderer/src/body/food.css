@@ -1,0 +1,59 @@
+/* Food counter (Body → Food). Uses the app's tokens, so light and dark both work.
+   Motion: transform and opacity only. */
+.fd-card { display: flex; flex-direction: column; gap: 10px; }
+.fd-head-actions { display: flex; gap: 6px; align-items: center; }
+.fd-day { min-width: 120px; }
+.fd-line { margin: 0; font-size: 17px; }
+.fd-line b { font-variant-numeric: tabular-nums; }
+.fd-bars { display: flex; flex-direction: column; gap: 4px; }
+.fd-bar { position: relative; display: block; height: 6px; border-radius: 99px; background: rgb(var(--ink) / 0.08); overflow: hidden; }
+.fd-bar::after { content: ''; position: absolute; inset: 0; border-radius: inherit; transform-origin: left; transform: scaleX(var(--w, 0)); transition: transform 0.4s ease; }
+.fd-bar.p::after { background: var(--accent); }
+.fd-bar.k::after { background: var(--orange); }
+.fd-why { display: block; }
+.fd-past { margin: 0; padding: 6px 10px; border-radius: 10px; background: color-mix(in srgb, var(--orange) 14%, transparent); }
+.fd-next { margin: 0; padding: 8px 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); }
+.fd-step { display: flex; flex-direction: column; gap: 6px; }
+.fd-step-head { display: flex; flex-direction: column; gap: 2px; }
+.fd-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.fd-prompt summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.fd-prompt pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 10px; background: rgb(var(--ink) / 0.05); margin: 6px 0 0; }
+.fd-paste { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; font: inherit; font-size: 13px; }
+.fd-err { margin: 0; color: var(--red, #e5484d); font-weight: 600; }
+.fd-draft { border: 1px dashed var(--border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fd-q { margin: 0; }
+.fd-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fd-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'name grams del' 'macros macros macros'; gap: 2px 8px; align-items: center; }
+.fd-name { grid-area: name; min-width: 0; }
+.fd-grams { grid-area: grams; display: inline-flex; align-items: center; gap: 4px; }
+.fd-grams b { min-width: 58px; text-align: center; font-variant-numeric: tabular-nums; }
+.fd-macros { grid-area: macros; color: var(--muted); }
+.fd-del { grid-area: del; }
+.fd-conf { margin-left: 4px; padding: 1px 6px; border-radius: 99px; font-size: 11px; background: rgb(var(--ink) / 0.06); }
+.fd-conf.guess { background: color-mix(in srgb, var(--orange) 20%, transparent); }
+.fd-conf.sure { background: color-mix(in srgb, var(--lime, #7bd88f) 20%, transparent); }
+.fd-save-row { justify-content: flex-end; }
+.fd-draft-total { flex: 1 1 220px; }
+.fd-type { min-width: 110px; }
+.fd-quick { display: flex; flex-direction: column; gap: 8px; }
+.fd-again { display: flex; flex-direction: column; gap: 4px; }
+.fd-meals { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.fd-meals li { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 8px; align-items: center; padding: 4px 0; border-top: 1px solid var(--border); }
+.fd-meals li.removed { opacity: 0.5; }
+.fd-meals li.removed .fd-meal-name b { text-decoration: line-through; }
+.fd-time { color: var(--muted); font-variant-numeric: tabular-nums; }
+.fd-meal-name { display: flex; flex-direction: column; min-width: 0; }
+.fd-meal-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-star { color: var(--muted); }
+.fd-star.on { color: var(--orange); }
+.fd-goals { border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.fd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px 12px; }
+.fd-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.fd-field > span:first-child { color: var(--muted); }
+.fd-field input { min-width: 0; }
+@media (max-width: 520px) {
+  .fd-line { font-size: 15px; }
+  .fd-meals li { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .fd-meals li .btn { grid-column: 2 / -1; justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) { .fd-bar::after { transition: none; } }

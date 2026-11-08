@@ -4,7 +4,7 @@
 // here, only from our own origin and only for known actions. Out: Life
 // System sends {action, ...} to MAN's one entry point (window.__lifeHost);
 // the data is JSON, so no code is ever built from it.
-export const BRIDGE_ACTIONS = ['MAN_CHECKIN', 'MAN_OATH', 'MAN_RESET', 'MAN_SET_STREAK', 'MAN_DIARY', 'MAN_INIT', 'SPORT_WORKOUT_LOGGED', 'WAKY_CHECKIN_LOGGED', 'WAKY_BED_LOGGED', 'WAKY_DAY_EDITED', 'WAKY_TARGETS', 'WAKY_MOOD', 'SPORT_REST', 'SPORT_DOSE', 'SOUND'] as const
+export const BRIDGE_ACTIONS = ['MAN_CHECKIN', 'MAN_OATH', 'MAN_RESET', 'MAN_SET_STREAK', 'MAN_DIARY', 'MAN_INIT', 'SPORT_WORKOUT_LOGGED', 'WAKY_CHECKIN_LOGGED', 'WAKY_BED_LOGGED', 'WAKY_DAY_EDITED', 'WAKY_TARGETS', 'WAKY_MOOD', 'SPORT_REST', 'SPORT_DOSE', 'SPORT_OPEN_FOOD', 'SOUND'] as const
 export type BridgeAction = (typeof BRIDGE_ACTIONS)[number]
 export interface BridgeMsg { action: BridgeAction; payload: Record<string, unknown> }
 

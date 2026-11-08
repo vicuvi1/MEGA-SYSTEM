@@ -174,3 +174,8 @@ entry that says why.
 - **Rules out:** a plan card (or any card) rendered after the message list; more than one live plan
   card; sending simple data questions to the model when the data answers them.
 
+
+### Food counter: numbers in body_log, details in a capped setting, no image AI (2026-11-08)
+- **Decision:** a meal is two rows in the one body log (`protein:food`, `kcal:food`, ids `<meal>-p` / `<meal>-k`) and its foods in the synced setting `food_log` (45 days, 400 meals, 20 stars). Protein stays ONE number (`proteinOfDay` of every `protein:*` row). The app never calls an AI for food: it copies a prompt and parses the pasted reply with code. Goals are lean (2.0 g/kg; maintenance +150 kcal on a training day, +0 on a rest day).
+- **Why:** body_log already merges across devices by row id and feeds the ring, the weekly report and "why it stalled"; a new table would need a schema bump and a bot bundle rebuild. The owner wants no image-AI cost and no fat gain.
+- **Rules out:** a second protein total, a kcal or meal table without a migration plan, a paid vision call, or a bulk-sized surplus by default.

@@ -111,6 +111,8 @@ export type Bridge = LifeApi & {
     }
     /** BD1–BD18: protein, saved meals, supplements, tape measurements, today's training dose, the weekly body report. */
     bodyPlus?: import('./web/bodyPlusBridge').BodyPlusApi
+    /** Food counter: meals from your AI app's reply, day totals, goals, what to eat next, favourites. */
+    food?: import('./web/foodBridge').FoodApi
     /** HD: your reminders (the list Ben's ⏰ uses), and add / Done / Snooze from the island. */
     reminders?(): Promise<import('@core/healthyDay').ReminderItem[]>
     remind?(op: { op: 'add'; text: string; at: number } | { op: 'done'; id: string } | { op: 'snooze'; id: string; minutes: number }): Promise<string>

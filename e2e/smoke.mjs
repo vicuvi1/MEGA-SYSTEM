@@ -703,6 +703,95 @@ try {
     // Back to the tracker for the steps after this one.
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
+  await step('Food counter: copy the prompt, paste a reply, fix grams, save, totals, what to eat next, same as yesterday, the Sport Track line', async () => {
+    const shots = process.env.FOOD_SHOTS
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await pg.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="food"]')
+    const fc = '#ptp-body-food .fd-card'
+    await pg.waitForSelector(`${fc} .fd-line`, { timeout: 20000 })
+    if (!/Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(await pg.locator(`${fc} .fd-line`).innerText())) throw new Error('the food line is missing protein or kcal')
+    await pg.click(`${fc} .fd-copy`)
+    await pg.waitForFunction((s) => /Copied/.test(document.querySelector(`${s} .fd-copy`)?.textContent ?? ''), fc, { timeout: 5000 })
+    // A reply it cannot read: a clear message and "Copy the prompt again".
+    await pg.fill(`${fc} .fd-paste`, 'Sorry, I cannot see a photo.')
+    await pg.click(`${fc} .fd-read`)
+    await pg.waitForSelector(`${fc} .fd-err`, { timeout: 5000 })
+    if (!(await pg.locator(`${fc} button`, { hasText: 'Copy the prompt again' }).count())) throw new Error('no "Copy the prompt again" after a bad reply')
+    // A made-up reply, with chatter and a decimal comma.
+    const reply = 'Here you go:\n```json\n{"items":[{"name":"chicken breast","grams":150,"protein_g":46,"carbs_g":0,"fat_g":5,"kcal":230,"confidence":"roughly"},{"name":"rice","grams":200,"protein_g":"5,2","carbs_g":56,"fat_g":1,"confidence":"sure"}],"question":"Was it cooked in oil?"}\n```'
+    await pg.fill(`${fc} .fd-paste`, reply)
+    await pg.click(`${fc} .fd-read`)
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-item`).length === 2, fc, { timeout: 5000 })
+    if (!/cooked in oil/.test(await pg.locator(`${fc} .fd-q`).innerText())) throw new Error("the AI's question is not shown")
+    const draft = () => pg.locator(`${fc} .fd-draft-total`).innerText()
+    if (!/51 g protein/.test(await draft())) throw new Error(`draft total: ${await draft()}`)
+    await pg.locator(`${fc} .fd-item`).first().locator('.fd-plus').click()
+    await pg.waitForFunction((s) => /175 g/.test(document.querySelector(`${s} .fd-item .fd-grams`)?.textContent ?? ''), fc, { timeout: 3000 })
+    if (!/59 g protein/.test(await draft())) throw new Error(`after +25 g the draft is ${await draft()}`)
+    await pg.locator(`${fc} .fd-item .fd-name`).nth(1).fill('white rice')
+    if (shots) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; } .body-page .ptabs { visibility: hidden !important; }' })
+      await pg.setViewportSize({ width: 1280, height: 1600 })
+      await pg.waitForTimeout(400)
+      await pg.locator(fc).screenshot({ path: `${shots}/food-counter-paste.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    const mealsBefore = await pg.locator(`${fc} .fd-meals li`).count()
+    await pg.click(`${fc} .fd-save`)
+    await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li`).length === n + 1, [fc, mealsBefore], { timeout: 15000 })
+    if (!/White rice/.test(await pg.locator(`${fc} .fd-meals`).innerText())) throw new Error('the renamed food is not in the saved meal')
+    await pg.waitForFunction((s) => /g protein left|Protein done/.test(document.querySelector(`${s} .fd-next`)?.textContent ?? ''), fc, { timeout: 10000 })
+    // One protein number: the protein ring's list shows the meal too.
+    await pg.waitForFunction(() => /Food counter meal/.test(document.querySelector('#ptp-body-food .pr-entries')?.textContent ?? ''), null, { timeout: 10000 })
+    // Yesterday: add a meal there (marked "added later"), then "Same as yesterday" brings it to today.
+    await pg.click(`${fc} .fd-day`)
+    await pg.locator('.ui-select-list [role="option"]', { hasText: 'Yesterday' }).click()
+    await pg.waitForSelector(`${fc} .fd-past`, { timeout: 10000 })
+    await pg.fill(`${fc} .fd-paste`, '{"items":[{"name":"skyr","grams":250,"protein_g":27,"carbs_g":10,"fat_g":0,"kcal":160}]}')
+    await pg.click(`${fc} .fd-read`)
+    await pg.waitForSelector(`${fc} .fd-item`, { timeout: 5000 })
+    await pg.click(`${fc} .fd-save`)
+    await pg.waitForFunction((s) => /added later/.test(document.querySelector(`${s} .fd-meals`)?.textContent ?? ''), fc, { timeout: 15000 })
+    await pg.click(`${fc} .fd-day`)
+    await pg.locator('.ui-select-list [role="option"]', { hasText: 'Today' }).click()
+    await pg.waitForSelector(`${fc} .fd-yday`, { timeout: 10000 })
+    const n2 = await pg.locator(`${fc} .fd-meals li`).count()
+    await pg.locator(`${fc} .fd-yday`, { hasText: 'Skyr' }).click()
+    await pg.waitForSelector(`${fc} .fd-item`, { timeout: 5000 })
+    await pg.click(`${fc} .fd-save`)
+    await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li`).length === n + 1, [fc, n2], { timeout: 15000 })
+    // A star makes it one tap next time.
+    await pg.locator(`${fc} .fd-meals li .fd-star`).last().click()
+    await pg.waitForSelector(`${fc} .fd-favchip`, { timeout: 10000 })
+    // The Goals sheet says lean muscle.
+    await pg.locator(`${fc} .card-head .btn`, { hasText: 'Goals' }).click()
+    if (!/Lean muscle \(no fat gain\)/.test(await pg.locator(`${fc} .fd-goals`).innerText())) throw new Error('the Goals sheet does not say lean muscle')
+    await pg.locator(`${fc} .card-head .btn`, { hasText: 'Goals' }).click()
+    if (shots) {
+      await pg.setViewportSize({ width: 1280, height: 1600 })
+      await pg.waitForTimeout(400)
+      await pg.locator(fc).screenshot({ path: `${shots}/food-counter-day.png` })
+    }
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await pg.waitForTimeout(400)
+    const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    if (over > 1) throw new Error(`the food counter scrolls sideways on a phone (${over}px)`)
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    // Sport Track Today shows one protein line; a tap opens Body → Food.
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
+    await pg.waitForTimeout(2500)
+    const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+    if (!frame) throw new Error('no Sport Track frame')
+    await frame.click('.st-tab[data-tab="today"]')
+    await frame.waitForFunction(() => { const el = document.getElementById('food-line'); return !!el && !el.hidden && /^Protein \d+ \/ \d+ g today/.test(el.textContent || '') }, null, { timeout: 15000 })
+    await frame.click('#food-line')
+    await pg.waitForSelector('#ptp-body-food .fd-card', { state: 'visible', timeout: 10000 })
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
+  })
   // MN24: Discipline is one built-in page (no embedded MAN copy).
   await step('Discipline is one page with its own content', async () => {
     await open('discipline')
