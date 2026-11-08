@@ -3133,10 +3133,18 @@ try {
   // A free day: "No spending today" ticks Log spending once, a second tap does nothing, undo takes it back.
   await step('No spending: a free day ticks Log spending once, no second pay, undo takes it back', async () => {
     await pg.setViewportSize({ width: 1280, height: 720 })
+    // Its own state: the list view (an earlier step may leave the grid), a fresh page, Today → Now.
+    await pg.evaluate(() => localStorage.setItem('ls.hbView', 'list'))
+    await reloadApp()
     await open('today')
     await pg.click('.td2 .ptabs [data-tab="now"]')
     await pg.waitForSelector('.hb .hb-row', { timeout: 15000 })
     const row = pg.locator('.hb-row', { hasText: 'Log spending' }).first()
+    if (!(await row.count())) {
+      // Hidden by an earlier step: show it again from the board's ⋯ menu.
+      await pg.locator('.hb-head .hb-more, .hb-head [aria-label*="More"]').first().click().catch(() => {})
+      throw new Error('the Log spending row is not on the board (hidden or removed)')
+    }
     const coins = () => pg.evaluate(() => document.querySelector('.topbar .tb-coins')?.textContent?.trim() ?? '')
     const settled = async () => {
       let v = await coins()
@@ -3155,12 +3163,21 @@ try {
       return old
     })
     const already = /s-done/.test((await row.getAttribute('class')) ?? '')
-    await row.locator('.hb-hit').click()
+    // The same way a home-screen shortcut opens the spending line (a ticked row has no tap target).
+    await pg.evaluate(() => window.dispatchEvent(new Event('life-open-spend')))
     await pg.waitForSelector('.spend-line', { timeout: 3000 })
     const btn = pg.locator('.spend-line [data-testid="free-day"]')
     await btn.waitFor({ timeout: 3000 })
     if (!/No spending today/.test(await btn.innerText())) throw new Error('no "No spending today" button in the spending line')
-    if (already) return // a real spend was logged earlier in this run: the day already has spending
+    if (already) {
+      // Spending was already paid earlier in this run: a free day must not pay a second time.
+      const was = await settled()
+      await btn.click()
+      await pg.waitForTimeout(1500)
+      if ((await settled()) !== was) throw new Error('a free day paid again on a day that was already paid')
+      await pg.evaluate((old) => (old === null ? localStorage.removeItem('finance-helper.state') : localStorage.setItem('finance-helper.state', old)), keptFinance)
+      return
+    }
     const before = await settled()
     await btn.click()
     await pg.waitForTimeout(1500)
@@ -3182,6 +3199,7 @@ try {
     // Tap again for the screenshot and leave the day free.
     await pg.locator('.spend-line [data-testid="free-day"]').click()
     await pg.waitForFunction(() => /✓ No spending today/.test(document.querySelector('.spend-line [data-testid="free-day"]')?.textContent ?? ''), null, { timeout: 5000 })
+    if (process.env.NOSPEND_SHOTS) await pg.waitForFunction(() => !document.querySelector('.toasts .toast'), null, { timeout: 10000 }).catch(() => {})
     if (process.env.NOSPEND_SHOTS) await pg.screenshot({ path: join(process.env.NOSPEND_SHOTS, 'free-day.png') })
     await pg.evaluate((old) => (old === null ? localStorage.removeItem('finance-helper.state') : localStorage.setItem('finance-helper.state', old)), keptFinance)
   })
