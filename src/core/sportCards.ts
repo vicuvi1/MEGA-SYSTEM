@@ -13,7 +13,7 @@ export const DEFAULT_EXERCISES = [
 
 /** A fresh Sport Track state when there is none yet (so Ben works from day one). */
 export function defaultSport(today: string): any {
-  return { lastDate: today, exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })), water: { currentMl: 0, targetMl: WATER_TARGET_ML, glassSizeMl: WATER_GLASS_ML }, history: [], sportySettings: { autoProgression: true } }
+  return { lastDate: today, exercises: DEFAULT_EXERCISES.map((e) => ({ ...e })), water: { currentMl: 0, targetMl: WATER_TARGET_ML, glassSizeMl: WATER_GLASS_ML }, history: [], sportySettings: { autoProgression: true, coachMode: false } }
 }
 
 export function bar(done: number, target: number, len = 8): string {

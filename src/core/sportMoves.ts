@@ -39,15 +39,15 @@ export const GROUPS: { id: Group; name: string; blurb: string }[] = [
 
 /** Each family's ladder, easiest first. */
 export const FAMILIES: Record<string, { name: string; steps: string[] }> = {
-  pushup: { name: 'Push-ups', steps: ['incline_pushup', 'knee_pushup', 'pushup', 'wide_pushup', 'diamond_pushup', 'decline_pushup', 'archer_pushup', 'planche_pushup', 'one_arm_pushup'] },
+  pushup: { name: 'Push-ups', steps: ['incline_pushup', 'knee_pushup', 'pushup', 'wide_pushup', 'diamond_pushup', 'decline_pushup', 'archer_pushup', 'planche_pushup', 'onearm_assist_pushup'] },
   pike: { name: 'Shoulder push', steps: ['pike_pushup', 'elevated_pike'] },
   dips: { name: 'Dips', steps: ['chair_dip'] },
-  row: { name: 'Rows', steps: ['door_row', 'table_row_bent', 'table_row', 'feet_up_row', 'one_arm_row'] },
+  row: { name: 'Rows', steps: ['door_row', 'table_row_bent', 'table_row', 'feet_row', 'onearm_row'] },
   back: { name: 'Back', steps: ['superman', 'swimmer'] },
-  core: { name: 'Abs', steps: ['crunch', 'situp', 'leg_raise', 'hollow_hold', 'v_up', 'dragon_flag', 'dragon_flag_full'] },
+  core: { name: 'Abs', steps: ['crunch', 'situp', 'leg_raise', 'hollow_hold', 'hollow_rock', 'v_up', 'dragon_neg', 'dragon_flag'] },
   deadbug: { name: 'Dead bug', steps: ['dead_bug'] },
-  plank: { name: 'Plank', steps: ['plank', 'side_plank', 'shoulder_taps', 'plank_updown'] },
-  squat: { name: 'Squats', steps: ['squat', 'jump_squat', 'split_squat', 'bulgarian_squat', 'shrimp_squat', 'pistol_squat', 'jumping_pistol'] },
+  plank: { name: 'Plank', steps: ['plank', 'side_plank', 'shoulder_taps', 'plank_updown', 'planche_lean'] },
+  squat: { name: 'Squats', steps: ['squat', 'jump_squat', 'split_squat', 'bulgarian_squat', 'box_pistol', 'shrimp_squat', 'pistol_squat'] },
   lunge: { name: 'Lunges', steps: ['reverse_lunge', 'lunge', 'jump_lunge'] },
   bridge: { name: 'Glute bridge', steps: ['glute_bridge', 'single_leg_bridge'] },
   wallsit: { name: 'Wall sit', steps: ['wall_sit'] },
@@ -172,7 +172,7 @@ export const MOVES: Move[] = [
     muscles: ['Chest', 'Triceps', 'Shoulders'],
     steps: ['Hands very wide, fingers turned out.', 'Lower towards one hand while the other arm stays straight.', 'Push back to the middle and do the other side.'],
     mistake: 'Rushing it: go slow, the straight arm only helps a little.',
-    alias: ['archer pushups'],
+    alias: ['archer pushups', 'archer', 'archers', 'archer push ups'],
     anim: pushAnim({ hands: 'archer', a: [[82, 82.5], [104, 82.5]], low: -7, lowA: [[82, 82.5], [104, 82.5]] })
   },
   {
@@ -184,12 +184,18 @@ export const MOVES: Move[] = [
     anim: pushAnim({ hands: 'narrow', a: [[70, 82.5], [68.5, 82.5]], top: -19, low: -7 })
   },
   {
-    id: 'one_arm_pushup', name: 'One-arm push-ups', group: 'push', family: 'pushup', diff: 5, unit: 'reps', start: 6, set: 3,
+    id: 'onearm_assist_pushup', name: 'One-arm-assisted push-ups', group: 'push', family: 'pushup', diff: 5, unit: 'reps', start: 12, set: 4,
     muscles: ['Chest', 'Triceps', 'Shoulders', 'Core'],
-    steps: ['Feet wide apart, one hand under your chest, the other behind your back.', 'Lower slowly, keeping your hips and shoulders square to the floor.', 'Push back up. Do the same number on each side.'],
-    mistake: 'Twisting your body: keep the hips level, and start with your hand on a step if the floor is too hard.',
-    alias: ['one arm pushups', 'one arm push ups', 'single arm pushups'],
-    anim: pushAnim({ hands: 'narrow', a: [[80, 82.5], [80, 82.5]], low: -7 })
+    steps: ['Put one hand on a box or thick book, a long reach to the side. The other hand is on the floor under your chest.', 'Lower on the floor arm and use the other hand only as a light helper.', 'Push up, then swap hands. Use the helper less and less each week.'],
+    mistake: 'Pushing hard with the helper hand: it should only touch, like a fingertip on a table.',
+    alias: ['one arm assisted pushups', 'assisted one arm pushups', 'one arm pushup progression'],
+    anim: {
+      props: [{ k: 'box', x: 94, y: 70, w: 24 }],
+      keys: [
+        k(plank(PU_TOP, { a: [[80, 82.5], [104, 68.5]] }), 0.9, 0.35),
+        k(plank(-6, { a: [[80, 82.5], [104, 68.5]] }), 1.2, 0.15)
+      ]
+    }
   },
   {
     id: 'pike_pushup', name: 'Pike push-ups', group: 'push', family: 'pike', diff: 3, unit: 'reps', start: 24, set: 8,
@@ -276,30 +282,30 @@ export const MOVES: Move[] = [
     }
   },
   {
-    id: 'feet_up_row', name: 'Feet-up table rows', group: 'pull', family: 'row', diff: 4, unit: 'reps', start: 15, set: 6,
+    id: 'feet_row', name: 'Feet-elevated rows', group: 'pull', family: 'row', diff: 4, unit: 'reps', start: 16, set: 6,
     muscles: ['Back', 'Biceps', 'Rear shoulders', 'Core'],
-    steps: ['Lie under a sturdy table, hold its edge, and put your heels on a low chair.', 'Keep your body one straight line, like a plank.', 'Pull your chest to the edge, pause, and lower slowly.'],
-    mistake: 'Hips sagging: squeeze your glutes and keep the line from head to heels.',
-    alias: ['feet elevated rows', 'feet up rows', 'elevated inverted rows'],
+    steps: ['Lie under a sturdy table, hold its edge, and put your heels on a chair or box.', 'Keep the body one straight line, a little above flat.', 'Pull your chest to the edge, pause, and lower for 2 seconds.'],
+    mistake: 'Hips sagging as you tire: stop the set when the line breaks.',
+    alias: ['feet elevated rows', 'elevated feet rows', 'feet up rows', 'inverted rows feet elevated'],
     anim: {
-      props: [{ k: 'table', x: 66, y: 40, w: 50 }],
+      props: [{ k: 'table', x: 66, y: 40, w: 50 }, { k: 'box', x: 8, y: 64, w: 26 }],
       keys: [
-        k({ s: body([26, 79], -10.3), line: true, a: [[86, 42], [85, 42]], f: [[26, 79], [27, 79]], eb: [1, 1], ft: [-62, -62] }, 0.9, 0.3),
-        k({ s: body([26, 79], -24), line: true, a: [[86, 42], [85, 42]], f: [[26, 79], [27, 79]], eb: [1, 1], ft: [-62, -62] }, 0.9, 0.3)
+        k({ s: body([26, 62.5], 5), line: true, a: [[86, 42], [85, 42]], f: [[26, 62.5], [27, 62.5]], eb: [1, 1], ft: [-62, -62] }, 0.9, 0.3),
+        k({ s: body([26, 62.5], -9.5), line: true, a: [[86, 42], [85, 42]], f: [[26, 62.5], [27, 62.5]], eb: [1, 1], ft: [-62, -62] }, 0.9, 0.3)
       ]
     }
   },
   {
-    id: 'one_arm_row', name: 'One-arm table rows', group: 'pull', family: 'row', diff: 5, unit: 'reps', start: 8, set: 3,
-    muscles: ['Back', 'Biceps', 'Grip', 'Core'],
-    steps: ['Lie under a sturdy table and hold its edge with one hand, the other arm across your chest.', 'Keep your hips and shoulders square, feet wide for balance.', 'Pull yourself up with one arm, then lower slowly. Do both sides.'],
-    mistake: 'Twisting towards the pulling arm: keep your chest facing the ceiling.',
-    alias: ['one arm rows', 'single arm rows', 'one arm inverted rows'],
+    id: 'onearm_row', name: 'One-arm rows (table or door)', group: 'pull', family: 'row', diff: 5, unit: 'reps', start: 10, set: 4,
+    muscles: ['Back', 'Biceps', 'Core', 'Grip'],
+    steps: ['Lie under a sturdy table or hold a door frame low, with one hand only. The other hand rests on your hip.', 'Keep your hips square and your body straight.', 'Pull your chest to the hand, lower slowly, finish one side, then swap.'],
+    mistake: 'Twisting the body to cheat: the chest stays facing the ceiling.',
+    alias: ['one arm rows', 'one arm inverted row', 'single arm rows', 'one arm door row'],
     anim: {
       props: [{ k: 'table', x: 66, y: 40, w: 50 }],
       keys: [
-        k({ s: body([26, 79], -10.3), line: true, a: [[86, 42], [85, 42]], f: [[26, 79], [27, 79]], eb: [1, 1], ft: [-62, -62] }, 0.9, 0.3),
-        k({ s: body([26, 79], -24), line: true, a: [[86, 42], [85, 42]], f: [[26, 79], [27, 79]], eb: [1, 1], ft: [-62, -62] }, 0.9, 0.3)
+        k({ s: body([26, 79], -10.3), line: true, a: [[86, 42], [74, 74]], f: [[26, 79], [27, 79]], ft: [-62, -62] }, 0.9, 0.3),
+        k({ s: body([26, 79], -24), line: true, a: [[86, 42], [72, 64]], f: [[26, 79], [27, 79]], ft: [-62, -62] }, 0.9, 0.3)
       ]
     }
   },
@@ -383,6 +389,19 @@ export const MOVES: Move[] = [
     }
   },
   {
+    id: 'hollow_rock', name: 'Hollow body rocks', group: 'core', family: 'core', diff: 3, unit: 'reps', start: 30, set: 10,
+    muscles: ['Abs', 'Hip flexors', 'Core'],
+    steps: ['Get into the hollow hold: lower back pressed down, arms and straight legs a little off the floor.', 'Rock back and forth like a boat, keeping the banana shape.', 'Count one rep for each full rock. Stop if your lower back lifts.'],
+    mistake: 'Letting the shape go loose: if the lower back lifts, make the rocks smaller.',
+    alias: ['hollow rocks', 'hollow body rock', 'hollow rock'],
+    anim: {
+      keys: [
+        k({ h: [58, 78], s: [82.5, 72], a: [[107, 65], [106, 66]], f: [[23, 76.5], [24, 77.5]], ft: [-150, -150], bow: -2 }, 0.7),
+        k({ h: [58, 80], s: [82.5, 76], a: [[107, 70], [106, 71]], f: [[23, 69], [24, 70]], ft: [-150, -150], bow: -2 }, 0.7)
+      ]
+    }
+  },
+  {
     id: 'v_up', name: 'V-ups', group: 'core', family: 'core', diff: 3, unit: 'reps', start: 24, set: 8,
     muscles: ['Abs', 'Hip flexors'],
     steps: ['Lie flat, arms stretched over your head.', 'Lift your arms and straight legs at the same time and reach for your toes.', 'Lower both slowly back to the floor.'],
@@ -396,24 +415,24 @@ export const MOVES: Move[] = [
     }
   },
   {
-    id: 'dragon_flag', name: 'Dragon flag (lowering)', group: 'core', family: 'core', diff: 5, unit: 'reps', start: 10, set: 3,
+    id: 'dragon_neg', name: 'Dragon flag negatives', group: 'core', family: 'core', diff: 4, unit: 'reps', start: 8, set: 3,
     muscles: ['Abs', 'Core', 'Lats'],
-    steps: ['Lie on a bench or the floor and hold something solid behind your head.', 'Swing your body up onto your upper back, straight from shoulders to toes.', 'Lower the straight body as slowly as you can.'],
-    mistake: 'Bending at the hips: if you fold, bend the knees and lower that way first.',
-    alias: ['dragon flags', 'dragon flag negatives'],
+    steps: ['Lie on a bench or the floor and hold something solid behind your head.', 'Get your straight body up on your upper back (kick up if you need to).', 'Lower slowly for 5 seconds and stop a hand above the floor, then reset.'],
+    mistake: 'Dropping fast or folding at the hips: slow and straight, or bend the knees.',
+    alias: ['dragon flag negative', 'dragon negatives', 'dragon flag lowering'],
     anim: {
       props: [{ k: 'box', x: 44, y: 72, w: 62 }],
       keys: [
         k({ s: [80, 68], line: true, a: [[100, 71], [99, 71]], f: [at([80, 68], 61.5, -125), at([80, 68], 61.5, -124)], eb: [-1, -1], ft: [-125, -124] }, 0.9, 0.3),
-        k({ s: [80, 68], line: true, a: [[100, 71], [99, 71]], f: [at([80, 68], 61.5, -165), at([80, 68], 61.5, -164)], eb: [-1, -1], ft: [-165, -164] }, 2.4, 0.2)
+        k({ s: [80, 68], line: true, a: [[100, 71], [99, 71]], f: [at([80, 68], 61.5, -150), at([80, 68], 61.5, -149)], eb: [-1, -1], ft: [-150, -149] }, 2.0, 0.2)
       ]
     }
   },
   {
-    id: 'dragon_flag_full', name: 'Full dragon flags', group: 'core', family: 'core', diff: 5, unit: 'reps', start: 6, set: 2,
+    id: 'dragon_flag', name: 'Dragon flag (lowering)', group: 'core', family: 'core', diff: 5, unit: 'reps', start: 10, set: 3,
     muscles: ['Abs', 'Core', 'Lats'],
-    steps: ['Lie on a bench or the floor and hold something solid behind your head.', 'Swing your body up onto your upper back, straight from shoulders to toes.', 'Lower the straight body slowly, then raise it back up without bending at the hips.'],
-    mistake: 'Folding at the hips on the way up: the whole body rises as one straight line.',
+    steps: ['Lie on a bench or the floor and hold something solid behind your head.', 'Swing your body up onto your upper back, straight from shoulders to toes.', 'Lower the straight body as slowly as you can.'],
+    mistake: 'Bending at the hips: if you fold, bend the knees and lower that way first.',
     alias: ['dragon flags', 'full dragon flag'],
     anim: {
       props: [{ k: 'box', x: 44, y: 72, w: 62 }],
@@ -494,6 +513,19 @@ export const MOVES: Move[] = [
       ]
     }
   },
+  {
+    id: 'planche_lean', name: 'Pseudo-planche leans', group: 'core', family: 'plank', diff: 4, unit: 'sec', start: 40, set: 10,
+    muscles: ['Shoulders', 'Chest', 'Core', 'Wrists'],
+    steps: ['Get in a push-up position with your hands by your waist, fingers turned out.', 'Lean forward until your shoulders are well in front of your hands. Arms stay straight.', 'Hold the lean and keep breathing. Warm up your wrists first.'],
+    mistake: 'Bending the elbows or letting the hips pike up: straight arms, straight body.',
+    alias: ['planche lean', 'pseudo planche lean', 'planche leans'],
+    anim: {
+      keys: [
+        k(plank(-17, { a: [[66, 82.5], [64.5, 82.5]] }), 1.6),
+        k(plank(-19, { a: [[66, 82.5], [64.5, 82.5]] }), 1.6)
+      ]
+    }
+  },
   // ---------------- LEGS ----------------
   {
     id: 'squat', name: 'Squats', group: 'legs', family: 'squat', diff: 1, unit: 'reps', start: 50, set: 15,
@@ -550,6 +582,20 @@ export const MOVES: Move[] = [
     }
   },
   {
+    id: 'box_pistol', name: 'Box pistol squats', group: 'legs', family: 'squat', diff: 4, unit: 'reps', start: 14, set: 5,
+    muscles: ['Thighs (quads)', 'Glutes', 'Balance', 'Core'],
+    steps: ['Stand on one leg in front of a box or chair, the other leg straight out in front.', 'Sit back onto the box slowly on the standing leg, free leg off the floor.', 'Stand up without swinging. Use a lower box each week until it is a full pistol.'],
+    mistake: 'Dropping onto the box: lower slowly, then stand without rocking.',
+    alias: ['box pistol', 'box pistols', 'assisted pistol squat', 'pistol to box'],
+    anim: {
+      props: [{ k: 'box', x: 34, y: 68, w: 26 }],
+      keys: [
+        k({ h: [60, 46.5], s: [61, 21.5], a: [[86, 26], [85, 27]], f: [[62, 81.5], at([60, 46.5], 36.3, 38)], ft: [12, -45], eb: [-1, -1] }, 1.0, 0.3),
+        k({ h: [51, 66], s: at([51, 66], 25, -62), a: [[90, 44], [89, 45]], f: [[62, 81.5], at([51, 66], 36.3, -3)], ft: [12, -80], eb: [-1, -1] }, 1.2, 0.2)
+      ]
+    }
+  },
+  {
     id: 'shrimp_squat', name: 'Shrimp squats', group: 'legs', family: 'squat', diff: 4, unit: 'reps', start: 16, set: 5,
     muscles: ['Thighs (quads)', 'Glutes', 'Balance'],
     steps: ['Stand on one leg and bend the other knee so that foot is behind you.', 'Lower on the standing leg until the back knee touches the floor.', 'Stand back up without the back foot touching down.'],
@@ -568,19 +614,6 @@ export const MOVES: Move[] = [
     steps: ['Stand on one leg, the other leg straight out in front, arms forward.', 'Squat all the way down on the standing leg, the free leg off the floor.', 'Stand back up. Hold a door frame at first if you need to.'],
     mistake: 'The standing heel lifting: keep the whole foot flat and go down slowly.',
     alias: ['pistol squat', 'pistols', 'one leg squat', 'single leg squat'],
-    anim: {
-      keys: [
-        k({ h: [60, 46.5], s: [61, 21.5], a: [[86, 26], [85, 27]], f: [[62, 81.5], at([60, 46.5], 36.3, 38)], ft: [12, -45], eb: [-1, -1] }, 1.0, 0.3),
-        k({ h: [51, 69], s: at([51, 69], 25, -62), a: [[90, 47], [89, 48]], f: [[62, 81.5], at([51, 69], 36.3, -3)], ft: [12, -80], eb: [-1, -1] }, 1.2, 0.1)
-      ]
-    }
-  },
-  {
-    id: 'jumping_pistol', name: 'Jumping pistol squats', group: 'legs', family: 'squat', diff: 5, unit: 'reps', start: 6, set: 3,
-    muscles: ['Thighs (quads)', 'Glutes', 'Calves', 'Balance'],
-    steps: ['Stand on one leg, the other leg straight out in front.', 'Squat down on the standing leg, then drive up hard so the foot leaves the floor.', 'Land softly on the same foot and go straight into the next one.'],
-    mistake: 'Landing stiff: absorb the landing with a bent knee, and only jump once your normal pistol is smooth.',
-    alias: ['jump pistols', 'pistol jumps', 'plyo pistol'],
     anim: {
       keys: [
         k({ h: [60, 46.5], s: [61, 21.5], a: [[86, 26], [85, 27]], f: [[62, 81.5], at([60, 46.5], 36.3, 38)], ft: [12, -45], eb: [-1, -1] }, 1.0, 0.3),

@@ -17,7 +17,7 @@ import { doseMinutes, trainReadiness, type DoseMode, type TrainReady } from '../
 import { hardSetsByMuscle, mondayOf, shiftDay, type SetLog } from '../core/sportSets'
 import { bodyWeek, sleepWeek, stalledMoves, type BodyWeek, type SleepWeek } from '../core/bodyReport'
 import { cleanCare } from '../core/sleepCare'
-import { stallInsight, stallsOf, type Insight } from '../core/sportInsight'
+import { stallInsight, stallsOf, type Insight, type InsightData } from '../core/sportInsight'
 
 const rid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`
 
@@ -290,6 +290,21 @@ export function sportInsightNow(db: DB, now = new Date()): Insight | null {
     ready = null
   }
   return stallInsight(stalled, { protein: { avg: v.week.avg, days: v.week.days, goal: v.goal.g }, sleep: { avgMin: sl.avgMin, nights: sl.nights }, readiness: ready })
+}
+
+/** Sport coach: protein, sleep and readiness as plain data (for the rules in sportCoachRules.ts). */
+export function sportBodyNow(db: DB, now = new Date()): InsightData {
+  const today = sportToday(now)
+  const v = bodyPlusView(db, now)
+  const sl = sleepOfWeek(db, today)
+  let ready: { mode: 'full' | 'light' | 'short'; why: string } | null = null
+  try {
+    const r = readinessNow(db, null, now)
+    ready = { mode: r.mode, why: r.why }
+  } catch {
+    ready = null
+  }
+  return { protein: { avg: v.week.avg, days: v.week.days, goal: v.goal.g }, sleep: { avgMin: sl.avgMin, nights: sl.nights }, readiness: ready }
 }
 
 /** The Monday of this week (for the "this week" views). */

@@ -11,18 +11,7 @@ import { nextStep, prevStep } from './sportLadders'
 import type { Move } from './sportMoves'
 import { sessionsOf, shiftDay, type SetLog, type Session } from './sportSets'
 
-/** strength (default): 5–8 reps, 3–5 sets, 2–3 min rest. grow: 8–15 reps for muscle size. endurance: daily totals. */
-export type ProgMode = 'strength' | 'grow' | 'endurance'
-
-/** The mode from the saved settings: nothing saved means strength, a saved choice is kept. */
-export function modeOf(settings?: { progressMode?: unknown } | null): ProgMode {
-  const m = settings?.progressMode
-  return m === 'grow' || m === 'endurance' || m === 'strength' ? m : 'strength'
-}
-
-/** Strength: a set of 5–8 reps; 3×8 clean sets unlock the next variation. */
-export const STRENGTH_LO = 5
-export const STRENGTH_HI = 8
+export type ProgMode = 'grow' | 'endurance'
 
 export interface RepRange {
   lo: number
@@ -43,13 +32,7 @@ const HOLDS: Record<string, [number, number]> = {
 }
 
 /** The rep range for a move. */
-export function rangeFor(move: Pick<Move, 'id' | 'group' | 'unit' | 'diff'> | null, mode: ProgMode = 'grow'): RepRange {
-  if (mode === 'strength') {
-    const base = rangeFor(move, 'grow')
-    // Holds stay in seconds; cardio and mobility keep their own range.
-    if (base.unit === 'sec' || !move || move.group === 'cardio' || move.group === 'mobility') return base
-    return { lo: STRENGTH_LO, hi: STRENGTH_HI, sets: 3, unit: 'reps' }
-  }
+export function rangeFor(move: Pick<Move, 'id' | 'group' | 'unit' | 'diff'> | null): RepRange {
   if (!move) return { lo: 8, hi: 15, sets: 3, unit: 'reps' }
   if (move.unit === 'sec') {
     const [lo, hi] = HOLDS[move.id] ?? [20, 60]
@@ -98,31 +81,8 @@ const daysBetween = (a: string, b: string) => Math.round((Date.parse(b + 'T12:00
 
 /** A long break: this many days without the move. */
 export const BREAK_DAYS = 10
-/** Sessions in a row at the top before the next step unlocks (strength: one session of 3×8 is enough). */
+/** Sessions in a row at the top before the next step unlocks. */
 export const NEED = 2
-export const needFor = (mode: ProgMode = 'grow') => (mode === 'strength' ? 1 : NEED)
-
-/** Working sets for a strength session: 3 to start, 4 when the move is hard or you are at the top, up to 5. */
-export function strengthSets(move: Pick<Move, 'diff'> | null, extra = 0): number {
-  return clamp((move && move.diff >= 4 ? 4 : 3) + extra, 3, 5)
-}
-
-/** Rest between sets in seconds: strength 2–3 min (harder moves rest longer), grow 60–120 s, endurance 45 s. */
-export function restFor(move: Pick<Move, 'diff' | 'unit'> | null, mode: ProgMode = 'strength'): number {
-  const d = move?.diff ?? 2
-  if (mode === 'endurance') return 45
-  if (mode === 'grow') return d >= 4 ? 120 : d >= 3 ? 90 : 60
-  return d >= 5 ? 180 : d >= 3 ? 150 : 120
-}
-
-/** The strength target for a move: "3×5–8" with how long to rest. */
-export function strengthTarget(move: Pick<Move, 'id' | 'group' | 'unit' | 'diff'> | null): { sets: number; lo: number; hi: number; unit: 'reps' | 'sec'; rest: number; label: string } {
-  const r = rangeFor(move, 'strength')
-  const sets = strengthSets(move)
-  const rest = restFor(move as Move | null, 'strength')
-  const s = r.unit === 'sec' ? ' s' : ''
-  return { sets, lo: r.lo, hi: r.hi, unit: r.unit, rest, label: `${sets}×${r.lo}–${r.hi}${s}` }
-}
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n))
 const u = (r: RepRange) => (r.unit === 'sec' ? ' s' : '')
@@ -132,11 +92,9 @@ const u = (r: RepRange) => (r.unit === 'sec' ? ' s' : '')
  * logged; `exId` the exercise; sessions before `today` set today's goal, and
  * today's own sets count for "ready" as soon as they're logged.
  */
-export function progressFor(input: { log: SetLog | null | undefined; exId: string; move: Move | null; today: string; mode?: ProgMode }): Progress {
+export function progressFor(input: { log: SetLog | null | undefined; exId: string; move: Move | null; today: string }): Progress {
   const { log, exId, move, today } = input
-  const mode = input.mode ?? 'grow'
-  const need = needFor(mode)
-  const r = rangeFor(move, mode)
+  const r = rangeFor(move)
   const all = sessionsOf(log, exId, today)
   const past = all.filter((s) => s.day < today)
   const todays = all.find((s) => s.day === today) ?? null
@@ -145,7 +103,7 @@ export function progressFor(input: { log: SetLog | null | undefined; exId: strin
   const next = move ? nextStep(move) : null
   const prev = move ? prevStep(move) : null
   const nextAt = `${r.sets}×${r.hi}${u(r)}`
-  const base = { range: r, sets: r.sets, nextAt, need, daysSince, last, today: todays?.reps ?? [], next: null as Move | null, prev: null as Move | null }
+  const base = { range: r, sets: r.sets, nextAt, need: NEED, daysSince, last, today: todays?.reps ?? [], next: null as Move | null, prev: null as Move | null }
 
   // Ready: the top of the range in the last 2 sessions (today's counts once it has all its sets).
   const recent = [...past, ...(todays && todays.reps.length >= r.sets ? [todays] : [])]
@@ -153,10 +111,10 @@ export function progressFor(input: { log: SetLog | null | undefined; exId: strin
   for (let i = recent.length - 1; i >= 0 && atTop(recent[i], r); i--) hits++
   // Way above the range on the very first try: this move is too easy, go up now.
   const first = recent.length === 1 && Math.max(...recent[0].reps) >= Math.ceil(r.hi * 1.5)
-  if (hits >= need || first) {
-    const n = Math.max(hits, first ? need : 0)
+  if (hits >= NEED || first) {
+    const n = Math.max(hits, first ? NEED : 0)
     return next
-      ? { ...base, status: 'ready', goal: r.hi, hits: n, next, line: `Level up: ${next.name} is unlocked. Start it at ${r.sets}×${rangeFor(next, mode).lo}${u(rangeFor(next, mode))}.` }
+      ? { ...base, status: 'ready', goal: r.hi, hits: n, next, line: `Level up: ${next.name} is unlocked. Start it at ${r.sets}×${rangeFor(next).lo}${u(rangeFor(next))}.` }
       : { ...base, status: 'top', goal: r.hi, hits: n, line: `Top of the ladder. Add a 4th set, or go slower (3 seconds down).` }
   }
 
@@ -192,7 +150,7 @@ export function progressFor(input: { log: SetLog | null | undefined; exId: strin
   const step = r.unit === 'sec' ? 5 : 1
   const fast = breakAt > 0 && lastMin < oldPeak
   const goal = clamp(fast ? Math.min(oldPeak, lastMin + 3 * step) : lastMin + step, r.lo, r.hi)
-  return { ...base, status: 'building', goal, hits, line: hits ? `${hits} of ${need} sessions at the top. One more and the next level unlocks.` : `Aim for ${r.sets}×${goal}${u(r)} today. Next level at ${nextAt}.` }
+  return { ...base, status: 'building', goal, hits, line: hits ? `${hits} of ${NEED} sessions at the top. One more and the next level unlocks.` : `Aim for ${r.sets}×${goal}${u(r)} today. Next level at ${nextAt}.` }
 }
 
 /** The day's total this plan asks for (sets × goal): what the card's bar fills to. */

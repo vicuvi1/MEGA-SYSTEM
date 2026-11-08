@@ -30,11 +30,11 @@ function withSets(rows: [number, string, number[]][]): HistoryInput {
 }
 
 describe('the level tables', () => {
-  it('every main exercise has 10–18 levels with a name, a requirement and a meaning', () => {
+  it('every main exercise has 10–15 levels with a name, a requirement and a meaning', () => {
     for (const f of MAIN_FAMILIES) {
       const t = trackOf(f)!
       expect(t.levels.length, f).toBeGreaterThanOrEqual(10)
-      expect(t.levels.length, f).toBeLessThanOrEqual(18)
+      expect(t.levels.length, f).toBeLessThanOrEqual(15)
       for (const l of t.levels) {
         expect(l.name && l.req && l.meaning).toBeTruthy()
         expect(l.req).toMatch(/^\d+×\d+/)
@@ -116,18 +116,18 @@ describe('the overall strength rank', () => {
     expect(RANKS.map((r) => r.name)).toEqual(['Recruit', 'Trainee', 'Fighter', 'Warrior', 'Elite', 'Legend'])
     expect(overallRank([]).rank.name).toBe('Recruit')
     const some = overallRank(placeAll(withSets([[0, 'pu', [15, 14, 12]], [0, 'sq', [30, 30, 30]], [0, 'su', [20, 20, 20]]])))
-    expect(['Trainee', 'Fighter', 'Warrior']).toContain(some.rank.name)
+    expect(['Trainee', 'Fighter']).toContain(some.rank.name)
     expect(some.next).not.toBeNull()
     expect(some.hint).toMatch(/Fastest way up/)
   })
   it('an untrained group holds the rank down, and top ladders reach Legend', () => {
     const ex = [
-      { id: 'a', name: 'One-arm push-ups', target: 20, active: true },
-      { id: 'b', name: 'Jumping pistol squats', target: 20, active: true },
-      { id: 'c', name: 'Full dragon flags', target: 20, active: true },
-      { id: 'd', name: 'One-arm table rows', move: 'one_arm_row', target: 20, active: true }
+      { id: 'a', name: 'One-arm-assisted push-ups', target: 20, active: true },
+      { id: 'b', name: 'Pistol squats', target: 20, active: true },
+      { id: 'c', name: 'Dragon flag (lowering)', target: 20, active: true },
+      { id: 'd', name: 'One-arm rows', move: 'onearm_row', target: 20, active: true }
     ]
-    const h = { ...withSets([[0, 'a', [6, 6, 6]], [0, 'b', [6, 6, 6]], [0, 'c', [5, 5, 5]], [0, 'd', [6, 6, 6]]]), exercises: ex }
+    const h = { ...withSets([[0, 'a', [6, 6, 6]], [0, 'b', [5, 5, 5]], [0, 'c', [5, 5, 5]], [0, 'd', [8, 8, 8]]]), exercises: ex }
     const r = overallRank(placeAll(h))
     expect(r.rank.name).toBe('Legend')
     const noPull = overallRank(placeAll({ ...h, exercises: ex.slice(0, 3) }))
@@ -150,7 +150,7 @@ describe('the overall strength rank', () => {
 })
 
 describe('the coach: double progression, feedback, step back', () => {
-  const base = (rows: [number, string, number[]][]) => ({ ...withSets(rows), exId: 'pu', mode: 'grow' as const })
+  const base = (rows: [number, string, number[]][]) => ({ ...withSets(rows), exId: 'pu' })
   it('aims for one more rep than your lowest set last time', () => {
     const c = coachFor(base([[2, 'pu', [15, 14, 12]]]))!
     expect(c.goal).toBe(13)

@@ -7,7 +7,6 @@ import { createAppSync, type AppSyncSpec } from './appSync'
 import type { Mirror } from './mirror'
 import { sportFromLog } from '../../../main/bodyLog'
 import { mergeSets } from '../../../core/sportSets'
-import { mergeFeel, mergeEffort } from '../../../core/sportCoach'
 
 export const SPORT_KEY = 'life_sport_tracker_v1'
 const SETTING = 'sport_tracker_json'
@@ -75,6 +74,12 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
   // exercise (the higher), level ups already shown and Telegram imports.
   if (a.sets || b.sets) out.sets = mergeSets(older.sets, newer.sets)
   if (a.setsImported || b.setsImported) out.setsImported = true
+  // Telegram-imported days (day → exercise ids): from both devices.
+  if (a.importedDays || b.importedDays) {
+    const imp: Record<string, string[]> = {}
+    for (const src of [a.importedDays, b.importedDays]) for (const [d, ids] of Object.entries<any>(src ?? {})) imp[d] = [...new Set([...(imp[d] ?? []), ...(Array.isArray(ids) ? ids.map(String) : [])])]
+    out.importedDays = imp
+  }
   if (a.best || b.best) {
     const best: Record<string, any> = { ...(older.best ?? {}) }
     for (const [k, v] of Object.entries<any>(newer.best ?? {})) if (!best[k] || (Number(v?.score) || 0) >= (Number(best[k]?.score) || 0)) best[k] = v
@@ -89,9 +94,6 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
   }
   if (a.msSeen || b.msSeen) out.msSeen = { ...(older.msSeen ?? {}), ...(newer.msSeen ?? {}) }
   if (a.levelSeen || b.levelSeen) out.levelSeen = { ...(older.levelSeen ?? {}), ...(newer.levelSeen ?? {}) }
-  // Coach feedback: "too easy / too hard" taps from both devices (joined), effort ratings (newer wins a day).
-  if (a.feel || b.feel) out.feel = mergeFeel(a.feel, b.feel)
-  if (a.effort || b.effort) out.effort = mergeEffort(older.effort, newer.effort)
   if (a.notYet || b.notYet) {
     const later: Record<string, string> = { ...(older.notYet ?? {}) }
     for (const [k, v] of Object.entries(newer.notYet ?? {})) later[k] = later[k] && later[k] > String(v) ? later[k] : String(v)

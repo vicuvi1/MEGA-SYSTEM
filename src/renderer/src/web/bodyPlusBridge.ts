@@ -3,11 +3,11 @@
 // of the database (src/main/bodyPlus.ts). Writes go through the services'
 // write (synced like everything else); photos are NOT here: they stay on
 // this device only (bodyPhotos.ts).
-import { bodyPlusView, bodyWeekReport, sportInsightNow, logMeal, logProtein, readinessNow, savePrefs, saveTape, tickSupp, type BodyPlusView, type BodyPrefs, type Tape } from '../../../main/bodyPlus'
+import { bodyPlusView, bodyWeekReport, sportInsightNow, sportBodyNow, logMeal, logProtein, readinessNow, savePrefs, saveTape, tickSupp, type BodyPlusView, type BodyPrefs, type Tape } from '../../../main/bodyPlus'
 import { toggleEntry } from '../../../main/bodyLog'
 import type { DoseMode, TrainReady } from '@core/trainReadiness'
 import type { BodyWeek } from '@core/bodyReport'
-import type { Insight } from '@core/sportInsight'
+import type { Insight, InsightData } from '@core/sportInsight'
 import { sportToday } from '@core/sportShared'
 
 export interface BodyPlusApi {
@@ -26,6 +26,8 @@ export interface BodyPlusApi {
   week(): Promise<BodyWeek>
   /** PG4: why a move stalled (null: nothing stalled). */
   insight(): Promise<Insight | null>
+  /** Sport coach: protein, sleep and readiness as data. */
+  sportBody(): Promise<InsightData>
 }
 
 type Svc = { read<T>(f: (s: any) => T): Promise<T>; write<T>(f: (s: any) => T): Promise<T> }
@@ -67,6 +69,7 @@ export function bodyPlusBridge(svcP: Promise<Svc>, device: () => string): BodyPl
         return readinessNow(db, soreness)
       }),
     week: async () => (await svcP).read((s) => bodyWeekReport(s.db)),
-    insight: async () => (await svcP).read((s) => sportInsightNow(s.db))
+    insight: async () => (await svcP).read((s) => sportInsightNow(s.db)),
+    sportBody: async () => (await svcP).read((s) => sportBodyNow(s.db))
   }
 }

@@ -144,24 +144,6 @@
     .hero-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 6px; }
     .hero-title { font-size: 30px; font-weight: 750; letter-spacing: -0.03em; line-height: 1.15; }
     .hero-title span { color: var(--st-muted); font-weight: 600; }
-    .hero-level { display: grid; gap: 6px; padding: 0 0 16px; margin-bottom: 16px; border-bottom: 1px solid var(--st-line); }
-    .hero-level .hl-rank { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--st-muted); font-size: 13px; font-weight: 600; }
-    .hero-level .hl-rank b { color: var(--st-accent-text); font-size: 14px; letter-spacing: 0.02em; text-transform: uppercase; }
-    .hero-level .hl-main { font-size: clamp(26px, 6.2vw, 40px); font-weight: 800; letter-spacing: -0.03em; line-height: 1.1; overflow-wrap: anywhere; }
-    .hero-level .hl-main span { color: var(--st-accent-text); }
-    .hero-level .hl-bar { height: 8px; border-radius: 99px; background: var(--st-line); overflow: hidden; }
-    .hero-level .hl-bar i { display: block; height: 100%; width: var(--p, 0%); border-radius: 99px; background: var(--st-accent-text); transition: width 0.5s var(--ease); }
-    .hero-level .hl-next { color: var(--st-muted); font-size: 13.5px; line-height: 1.4; }
-    .hero-level .hl-hard { color: var(--st-text); font-size: 13.5px; font-weight: 600; }
-    .fb-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
-    .fb-row .fb-lab { color: var(--st-muted); font-size: 12.5px; font-weight: 600; margin-right: 2px; }
-    .fb-row .btn.small { min-height: 34px; }
-    .fb-row .btn.on { border-color: var(--st-accent-text); color: var(--st-accent-text); }
-    .effort-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
-    .effort-row .chip { min-width: 38px; min-height: 34px; }
-    .effort-row .chip.on { border-color: var(--st-accent-text); color: var(--st-accent-text); font-weight: 700; }
-    .ex-aim { color: var(--st-muted); font-size: 13px; font-weight: 600; }
-    @media (prefers-reduced-motion: reduce) { .hero-level .hl-bar i { transition: none; } }
     .hero-next { color: var(--st-muted); font-size: 15px; }
     .hero-next b { color: var(--st-text); font-weight: 650; }
     .hero-cta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
@@ -506,6 +488,22 @@
     .ex > .ex-main { grid-area: main; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
     .ex > .bar { grid-area: bar; }
     .ex > .ex-actions { grid-area: act; }
+    /* Simple mode (the default): no hero strip, no level badges, no coach UI; Coach mode (body.coach-on) brings them back. */
+    .ex.simple { grid-template-areas: "demo main" "bar bar" "act act" "hard hard"; }
+    .ex.simple.no-demo { grid-template-areas: "main" "bar" "act" "hard"; }
+    .ex.simple > .harder-row { grid-area: hard; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: -4px; }
+    .simple-actions .log-big { flex: 2 1 120px; min-height: 52px; font-size: 17px; }
+    .harder-opts { display: flex; flex-wrap: wrap; gap: 6px; width: 100%; }
+    .harder-opts .btn { flex: 1 1 auto; }
+    .menu-label.lvl-mini { font-size: 11px; font-weight: 500; opacity: 0.8; }
+    body:not(.coach-on) .coach-only { display: none !important; }
+    body.coach-on .simple-only { display: none !important; }
+    body:not(.coach-on) #routine-section .hero-main { display: none; }
+    body:not(.coach-on) #routine-section { padding-top: 14px; }
+    body:not(.coach-on) .plan-tab > :not(#coach-switch) { display: none !important; }
+    body:not(.coach-on) .progress-tab #pr-sub [data-sub="levels"] { display: none; }
+    .coach-switch-row { display: flex; align-items: center; gap: 14px; justify-content: space-between; }
+    .coach-switch-row small { display: block; color: var(--st-muted); margin-top: 2px; }
     .ex-demo { position: relative; width: 104px; height: 84px; padding: 0; border: 1px solid var(--st-border); border-radius: 12px; background: var(--st-surface); overflow: hidden; transition: border-color 0.2s, transform 0.2s var(--ease); }
     .ex-demo .fig { position: absolute; inset: 0; width: 100%; height: 100%; }
     .ex-demo .fig-hint, .lu-body .fig-hint, .mv .fig-hint { display: none; }
@@ -951,7 +949,54 @@
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
     /* ---------- the coach: Today card, levels, programs, progress views ---------- */
-    .ex.coach { grid-template-areas: "demo main" "bar bar" "log log" "sug sug" "why why" "fb fb"; }
+    /* Level strip: rank + big level badges, readable at a glance */
+    .lv-strip { display: grid; gap: 14px; }
+    .lv-strip[hidden] { display: none; }
+    .ls-rank { display: flex; align-items: center; gap: 16px; }
+    .ls-rank .rk-badge.big { width: 64px; height: 64px; flex: none; }
+    .ls-rank .rk-badge.big i { font-size: 30px; }
+    .ls-rank-name { display: block; font-size: 24px; line-height: 1.15; font-weight: 800; color: var(--st-text, inherit); }
+    .ls-rank small { display: block; color: var(--st-muted, inherit); margin-top: 2px; }
+    .ls-levels { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; }
+    .lvb { all: unset; box-sizing: border-box; cursor: pointer; display: grid; gap: 6px; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--st-accent, #6aa) 12%, transparent); border: 1px solid color-mix(in srgb, var(--st-accent, #6aa) 35%, transparent); }
+    .lvb:focus-visible, .lv-big:focus-visible { outline: 2px solid var(--st-accent, #6aa); outline-offset: 2px; }
+    .lvb-top { display: flex; align-items: baseline; gap: 6px; }
+    .lvb-n { font-size: 28px; font-weight: 850; line-height: 1; color: var(--st-text, inherit); }
+    .lvb-of { color: var(--st-muted, inherit); font-weight: 650; }
+    .lvb-t { font-weight: 700; font-size: 14px; color: var(--st-text, inherit); }
+    .lvb small { color: var(--st-muted, inherit); font-size: 12.5px; }
+    .lv-big { all: unset; box-sizing: border-box; cursor: pointer; display: inline-flex; align-items: baseline; gap: 10px; padding: 6px 12px; border-radius: 12px; background: color-mix(in srgb, var(--st-accent, #6aa) 16%, transparent); border: 1px solid color-mix(in srgb, var(--st-accent, #6aa) 40%, transparent); }
+    .lv-big b { font-size: 24px; font-weight: 850; color: var(--st-text, inherit); }
+    .lv-big b small { font-size: 13px; font-weight: 650; color: var(--st-muted, inherit); }
+    .lv-big span { font-weight: 700; font-size: 15px; color: var(--st-text, inherit); }
+    .ex-tune { display: flex; gap: 8px; flex-wrap: wrap; }
+    .ex-effort { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; color: var(--st-muted, inherit); }
+    .ex-effort .chip.on { background: var(--st-accent, #6aa); color: var(--st-on-accent, #fff); }
+    .ls-up, .ls-thin { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: color-mix(in srgb, var(--st-accent, #6aa) 14%, transparent); border: 1px solid color-mix(in srgb, var(--st-accent, #6aa) 40%, transparent); flex-wrap: wrap; }
+    .ls-up > div, .ls-thin > div { flex: 1 1 260px; min-width: 0; }
+    .ls-up svg { width: 22px; height: 22px; flex: none; }
+    .ls-up small, .ls-thin small { display: block; color: var(--st-muted, inherit); margin-top: 2px; }
+    .ls-best summary { cursor: pointer; font-weight: 650; color: var(--st-muted, inherit); }
+    .coach-card { display: grid; gap: 12px; }
+    .coach-card[hidden] { display: none; }
+    .coach-card .cc-focus { font-size: 19px; line-height: 1.3; font-weight: 800; margin: 0; }
+    .coach-card .cc-list { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+    .coach-card .cc-list li { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: var(--st-soft); font-weight: 600; }
+    .coach-card .cc-list li small { color: var(--st-muted); font-weight: 500; }
+    .coach-card .cc-why, .coach-card .cc-body, .coach-card .cc-prog { margin: 0; color: var(--st-muted); font-size: 14px; }
+    .coach-card .cc-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .onb-fields { display: grid; gap: 10px; margin: 10px 0; }
+    .onb-fields label { display: grid; grid-template-columns: 1fr 96px; gap: 8px; align-items: center; font-weight: 700; }
+    .onb-fields label small { grid-column: 1 / -1; color: var(--st-muted); font-weight: 500; margin-top: -6px; }
+    .onb-fields input { min-height: 42px; border-radius: 10px; padding: 0 10px; background: transparent; color: inherit; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); font-size: 16px; }
+    .onb-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .best-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+    .best-form label { font-weight: 700; flex-basis: 100%; }
+    .best-form input, .best-form select { min-height: 40px; border-radius: 10px; padding: 0 10px; background: transparent; color: inherit; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); }
+    .best-form input { width: 90px; }
+    .ex.coach { grid-template-areas: "demo main" "bar bar" "log log" "tune tune" "effort effort" "sug sug" "why why" "fb fb"; }
+    .ex.coach > .ex-tune { grid-area: tune; }
+    .ex.coach > .ex-effort { grid-area: effort; }
     .ex.coach > .ex-log { grid-area: log; display: flex; flex-direction: column; gap: 10px; }
     .ex.coach > .ex-sug { grid-area: sug; }
     .ex.coach > .ex-why { grid-area: why; }
@@ -1191,6 +1236,7 @@
           <button role="menuitem" id="btn-open-manage-modal"><svg><use href="#i-list"/></svg>Exercises &amp; targets</button>
           <button role="menuitem" id="btn-open-settings-modal"><svg><use href="#i-gear"/></svg>Settings &amp; coach</button>
           <button role="menuitem" data-open-rest><svg><use href="#i-timer"/></svg>Rest timer</button>
+          <button role="menuitem" id="btn-recheck" class="coach-only"><svg><use href="#i-list"/></svg>Re-check my levels</button>
           <button role="menuitem" id="btn-tg-import"><svg><use href="#i-send"/></svg>Import from Telegram…</button>
           <hr>
           <button role="menuitem" id="btn-rest-day" title="A planned rest day keeps your streak"><svg><use href="#i-moon"/></svg>Rest day today</button>
@@ -1202,9 +1248,9 @@
     <div class="dashboard-grid" data-active="today">
       <!-- ===================== TODAY ===================== -->
       <div class="today" data-panel="today">
+        <section class="card coach-card" id="your-coach" aria-label="Your coach" hidden></section>
+        <section class="card lv-strip" id="lv-strip" aria-label="Your rank and levels" hidden></section>
         <section class="card hero" id="routine-section">
-          <!-- Your level, big: overall rank, the main lift and how close the next level is -->
-          <div class="hero-level" id="hero-level" aria-live="polite" hidden></div>
           <div class="hero-main">
             <div class="ring" id="hero-ring">
               <svg viewBox="0 0 140 140" aria-hidden="true"><circle class="ring-track" cx="70" cy="70" r="58"/><circle class="ring-fill" id="hero-ring-fill" cx="70" cy="70" r="58" stroke-dasharray="364.4" stroke-dashoffset="364.4"/></svg>
@@ -1252,6 +1298,7 @@
           <div class="list-foot">
             <button class="btn ghost small" id="btn-quick-add-modal"><svg><use href="#i-plus"/></svg>Add exercise</button>
             <button class="btn ghost small" id="btn-complete-all"><svg><use href="#i-check"/></svg><span>I did all of these…</span></button>
+            <button class="btn ghost small simple-only" id="btn-wm-simple"><svg><use href="#i-play"/></svg>Workout mode</button>
             <button class="btn ghost small" data-open-rest><svg><use href="#i-timer"/></svg>Rest timer</button>
           </div>
         </section>
@@ -1321,6 +1368,12 @@
 
       <!-- ===================== PLAN: a week that fits your minutes ===================== -->
       <div class="plan-tab" data-panel="plan">
+        <section class="card full" id="coach-switch">
+          <div class="coach-switch-row">
+            <div><b>Coach mode (levels, programs, auto-progression)</b><small>Off keeps it simple: your own exercises, your own targets and a small Harder button. Nothing is lost when you switch it back on.</small></div>
+            <label class="toggle-switch"><input type="checkbox" id="coach-mode-toggle" aria-label="Coach mode (levels, programs, auto-progression)"><span class="toggle-slider"></span></label>
+          </div>
+        </section>
         <section class="card full" id="prog-card">
           <div class="card-head"><h2>Programs</h2><span class="meta">Ready-made home programs. Your own exercises stay unless you say so.</span><span class="grow"></span></div>
           <div class="prog-list" id="prog-list"></div>
@@ -1331,7 +1384,7 @@
             <label>Time per workout<div class="seg" id="pg-minutes" role="radiogroup" aria-label="Minutes per workout"><button role="radio" data-min="20">20 min</button><button role="radio" data-min="30">30 min</button><button role="radio" data-min="45">45 min</button></div></label>
             <label>Workouts a week<div class="seg" id="pg-per" role="radiogroup" aria-label="Workouts a week"><button role="radio" data-per="3">3</button><button role="radio" data-per="4">4</button></div></label>
             <label>Cool-down<div class="seg" id="pg-cool" role="radiogroup" aria-label="Cool-down"><button role="radio" data-cool="0">No</button><button role="radio" data-cool="1">3 min</button></div></label>
-            <label>How you progress<div class="seg" id="pg-mode" role="radiogroup" aria-label="How you progress"><button role="radio" data-pmode="strength" title="Heavier variations: 5-8 reps, 3-5 sets, rest 2-3 minutes">Strength</button><button role="radio" data-pmode="grow" title="More reps first, then a harder move unlocks">Build muscle</button><button role="radio" data-pmode="endurance" title="Plain daily totals that go up 5% after 3 full days">Simple totals</button></div></label>
+            <label>How you progress<div class="seg" id="pg-mode" role="radiogroup" aria-label="How you progress"><button role="radio" data-pmode="strength" title="5–8 reps on the hardest move you can do, 4 sets, 2–3 min rests; a harder move at 3×8">Strength</button><button role="radio" data-pmode="grow" title="Levels, next targets and a line after every log; harder moves unlock">Build muscle</button><button role="radio" data-pmode="endurance" title="Plain daily totals that go up 5% after 3 full days">Simple totals</button></div></label>
           </div>
           <div class="pg-week" id="pg-week"></div>
         </section>
@@ -1576,11 +1629,11 @@
           <option value="partner">Workout partner: upbeat and kind</option>
         </select>
       </div>
-      <div class="input-group">
+      <div class="input-group coach-only">
         <label for="setting-progress-mode">How you progress</label>
         <select id="setting-progress-mode">
-          <option value="strength">Strength: heavier variations, 5-8 reps, long rests</option>
-          <option value="grow">Build muscle: more reps, then a harder move</option>
+          <option value="strength">Strength: 5–8 reps on your hardest move, 4 sets, long rests</option>
+          <option value="grow">Build muscle: levels, next targets and a line after every log</option>
           <option value="endurance">Simple totals: daily totals that step up 5%</option>
         </select>
       </div>
@@ -1652,6 +1705,23 @@
   <div id="toast" role="status" aria-live="polite">
     <span id="toast-text"></span>
     <button id="toast-undo" type="button" hidden>Undo</button>
+  </div>
+
+  <!-- Best-set onboarding: one short screen, max reps in one set -->
+  <div class="sport-modal-backdrop" id="modal-onboard">
+    <div class="sport-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="onb-title">
+      <div class="modal-head"><h3 id="onb-title">What is your best set?</h3><button class="btn-close-modal" id="onb-x" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+      <p class="modal-note">The most you can do in ONE set, with good form and no rest. Leave a move blank to skip it. I will start each exercise on a variation where 5–8 reps is hard.</p>
+      <form id="onb-form"><div id="onb-fields" class="onb-fields"></div><div class="onb-actions"><button class="btn primary big" type="submit" id="onb-go">Place my levels</button><button class="btn ghost" type="button" id="onboard-skip">Skip for now</button></div></form>
+    </div>
+  </div>
+  <!-- The weekly strength test: one max set per main move, no points -->
+  <div class="sport-modal-backdrop" id="modal-test">
+    <div class="sport-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="tst-title">
+      <div class="modal-head"><h3 id="tst-title">Weekly strength test</h3><button class="btn-close-modal" id="tst-x" aria-label="Close"><svg><use href="#i-x"/></svg></button></div>
+      <p class="modal-note">One max set per move, about a minute in all. Stop 1 rep before your form breaks. It updates your levels and charts and pays no points.</p>
+      <form id="tst-form"><div id="tst-fields" class="onb-fields"></div><div class="onb-actions"><button class="btn primary big" type="submit">Save my test</button></div></form>
+    </div>
   </div>
 
   <!-- Import from Telegram: what was found, days you can untick -->
@@ -1861,6 +1931,7 @@
       sportySettings: {
         coach: 'beast',
         autoProgression: true,
+        coachMode: false,
         progressionStreak: 0,
         shortOnTime: false,
         bodyWeight: 75,
@@ -2049,32 +2120,7 @@
       const step = (now) => { const k = Math.min(1, (now - t0) / 600); el.textContent = Math.round(from + (to - from) * (1 - Math.pow(1 - k, 3))) + '%'; if (k < 1 && el.isConnected) requestAnimationFrame(step); };
       requestAnimationFrame(step);
     }
-    /** 150 -> "2:30" (the strength rest). */
-    const restText = (sec) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, '0')}`;
-    /** The big level display: overall rank, the main lift (push-ups first), progress to the next level. */
-    function renderHeroLevel() {
-      const el = document.getElementById('hero-level');
-      if (!el) return;
-      if (!SK || !SK.heroLevel || !state.exercises.some((e) => e.active)) { el.hidden = true; return; }
-      let h = null;
-      try { h = SK.heroLevel(histInput()); } catch (e) { h = null; }
-      if (!h || !h.places.length) { el.hidden = true; return; }
-      const placed = h.places.filter((x) => x.level > 0);
-      const main = placed.find((x) => x.family === 'pushup') || placed.sort((a, b) => ((b.level - 1 + b.frac) / b.of) - ((a.level - 1 + a.frac) / a.of))[0] || null;
-      const rank = h.rank;
-      const rankLine = `<div class="hl-rank">Overall rank <b>${esc(rank.rank.name)}</b>${rank.next ? `<span>${rank.need} points to ${esc(rank.next.name)}</span>` : ''}</div>`;
-      if (!main) { el.innerHTML = `${rankLine}<div class="hl-main">Log a set to find your level</div>`; el.hidden = false; return; }
-      const hard = main.best && main.best.level >= main.level && main.lv && SK.moveById(main.lv.move) && SK.moveById(main.lv.move).diff >= 3;
-      const pct = Math.round(Math.max(0, Math.min(1, main.frac || 0)) * 100);
-      el.innerHTML = `${rankLine}
-        <div class="hl-main">${esc(main.track.name)}: <span>${esc(main.lv.name)}</span>, level ${main.level}</div>
-        ${hard ? `<div class="hl-hard">Your best set puts you on a hard variation: ${esc(main.lv.req)}.</div>` : ''}
-        <div class="hl-bar" role="progressbar" aria-label="Progress to the next level" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="--p:${pct}%"></i></div>
-        <div class="hl-next">${main.next ? `${pct}% of the way to level ${main.next.n}, ${esc(main.next.name)}: ${esc(main.next.req)}` : 'You are at the top level of this track.'}</div>`;
-      el.hidden = false;
-    }
     function renderHero() {
-      renderHeroLevel();
       const active = todayList();
       let tot = 0, got = 0;
       const units = new Set();
@@ -2237,7 +2283,7 @@
       // Auto-progression, said once in today's plan.
       const pBadge = document.getElementById('progression-badge');
       const n = state.sportySettings.progressionStreak || 0;
-      pBadge.textContent = growMode() ? 'Coach on: beat last time by a rep; the top of the range in 2 sessions unlocks the next move.' : state.sportySettings.autoProgression ? `Step-up: ${n} of 3 full days, then targets go up 5%.` : '';
+      pBadge.textContent = !coachOn() ? '' : growMode() ? 'Coach on: beat last time by a rep; the top of the range in 2 sessions unlocks the next move.' : state.sportySettings.autoProgression ? `Step-up: ${n} of 3 full days, then targets go up 5%.` : '';
     }
 
     // A small in-page box that asks for a number. The desktop app has no browser
@@ -2276,30 +2322,34 @@
       return left > 0 && left < s ? left : s;
     }
     let prevCount = {}; // each card's last number, so it rolls to the new one
+    const harderOpen = new Set(); // cards whose small "Harder ▸" choices are open
+    /** Simple mode: Harder (+reps, +1 set, a harder version) and Easier, remembered per exercise (ex.harder). */
+    function simpleHarder(ex, kind) {
+      const r = SK.makeHarder(state.exercises, ex.id, kind, 'ex_' + Date.now() + Math.random().toString(36).slice(2, 5));
+      if (!r) return;
+      const was = ex.target;
+      state.exercises = r.exercises;
+      const now = state.exercises.find((e) => e.id === r.id);
+      harderOpen.delete(ex.id);
+      saveState(state);
+      audio.playClick();
+      showToast(kind === 'version' ? `${nice(ex.name)} is now ${nice(now.name)}, about ${now.target} a day. Easier ▸ goes back.` : `${nice(ex.name)}: ${was} → ${now.target} a day.`);
+      renderTodayRoutine();
+    }
+    function simpleEasier(ex) {
+      const before = ex.target;
+      const r = SK.makeEasier(state.exercises, ex.id);
+      if (!r) return;
+      state.exercises = r.exercises;
+      const now = state.exercises.find((e) => e.id === r.id);
+      saveState(state);
+      showToast(`${nice(now.name)}: ${before} → ${now.target} a day.`);
+      renderTodayRoutine();
+    }
     let cardsEntered = false; // the cards slide in once, when the page opens
-    /** Too easy / Too hard and the 1-5 effort rating for a card. */
-    function feelHTML(ex, c, showEffort) {
-      const today = localDay();
-      const mine = ((state.feel || {})[ex.id] || []).filter((x) => x.d === today && x.v !== 'ok').map((x) => x.v);
-      const eff = (state.effort || {})[today + ':' + ex.id];
-      return `<div class="ex-feel">
-        <div class="fb-row" role="group" aria-label="How did it feel?"><span class="fb-lab">How did it feel?</span>
-          <button class="btn small ${mine.includes('easy') ? 'on' : ''}" data-feel="easy" aria-pressed="${mine.includes('easy')}">Too easy</button>
-          <button class="btn small ${mine.includes('hard') ? 'on' : ''}" data-feel="hard" aria-pressed="${mine.includes('hard')}">Too hard</button></div>
-        ${showEffort ? `<div class="effort-row" role="group" aria-label="How hard was it, 1 easy to 5 all out"><span class="fb-lab">Effort</span>${[1, 2, 3, 4, 5].map((n) => `<button class="chip ${eff === n ? 'on' : ''}" data-effort="${n}" aria-pressed="${eff === n}" title="${['Very light', 'Light', 'Solid', 'Hard', 'All out'][n - 1]}">${n}</button>`).join('')}<span class="fb-lab">1 easy, 5 all out</span></div>` : ''}
-      </div>`;
-    }
-    /** What the coach will do next after a tap (plain words). */
-    function feelToast(ex, v) {
-      const c = SK.coachFor(coachInput({ exId: ex.id }));
-      const sg = c && c.signal;
-      if (!c || !sg || !sg.kind) return v === 'easy' ? 'Noted. Tap "Too easy" once more and the coach makes it harder.' : 'Noted. The coach will keep today a bit lighter.';
-      if (v === 'easy') return c.ready ? `Too easy twice. Next: ${c.ready.to.name}. Tap "Try the harder move".` : `Too easy twice. The coach adds reps or a set (${c.next.label} next time).`;
-      return sg.strong ? (c.stepBack && c.stepBack.to ? `Too hard twice. The coach suggests ${c.stepBack.to.name}.` : 'Too hard twice. The coach lowers your plan.') : `Noted. The coach lowers today to ${c.goal} per set.`;
-    }
     function renderTodayRoutine() {
       const container = document.getElementById('routine-list');
-      const active = todayList();
+      let active = todayList();
       const mode = planMode();
       document.querySelectorAll('#plan-mode [data-mode]').forEach((b) => { const on = b.dataset.mode === mode; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
 
@@ -2308,12 +2358,16 @@
         document.getElementById('btn-empty-manage').addEventListener('click', openManageModal);
         document.getElementById('btn-empty-lib').addEventListener('click', () => document.querySelector('.st-tab[data-tab="library"]')?.click());
         document.getElementById('ex-meta').textContent = '';
+        renderLevelStrip();
         renderHero();
         renderSide();
         return;
       }
 
+      applyAutoVariations();
+      active = todayList();
       syncGrowTargets();
+      renderLevelStrip();
       const ready = new Map(computeSuggestions().slice(0, 1).map((s) => [s.exId, s]));
       const nowDone = new Set();
       const justDone = [];
@@ -2343,11 +2397,14 @@
           const u = uS(p.range.unit);
           const chipsDone = list.map((r) => `<span class="${r >= p.range.hi ? 'top' : ''}">${r}${u}</span>`).join('') + Array.from({ length: Math.max(0, sets - list.length) }, () => `<span class="todo">${p.goal}${u}</span>`).join('');
           const pl = c.place;
-          const lvTag = pl && pl.level ? `<button class="tag accent lvl" data-why="${esc(ex.id)}" aria-expanded="false" title="Why this level">${svgI('up')}Level ${pl.level} · ${esc(pl.lv.name)}${pl.comeback && pl.comeback.hits < pl.comeback.need ? ' · comeback' : ''}</button>` : `<span class="tag">${esc(c.move.name)}</span>`;
+          const lvTag = pl && pl.level ? `<button class="lv-big" data-lvfam="${esc(c.move.family)}" title="Open the level map: ${esc(pl.why)}"><b class="num">Level ${pl.level}<small> of ${pl.of}</small></b><span>${esc(pl.lv.name)}${pl.comeback && pl.comeback.hits < pl.comeback.need ? ' · comeback' : ''}</span></button>` : `<span class="tag">${esc(c.move.name)}</span>`;
+          const effDone = (state.effort || {})[localDay()] && state.effort[localDay()][ex.id];
+          const effHTML = list.length >= sets ? `<div class="ex-effort" role="group" aria-label="How did it feel?"><span>How did it feel?</span>${['easy', 'good', 'hard'].map((k) => `<button class="chip ${effDone === k ? 'on' : ''}" data-effort="${k}" data-ex="${esc(ex.id)}" aria-pressed="${effDone === k}">${nice(k)}</button>`).join('')}</div>` : '';
+          const tuneHTML = `<div class="ex-tune"><button class="btn small" data-tune="easy" data-ex="${esc(ex.id)}" title="Jump up one level (two if you tap it twice in a week)">${svgI('up')}Too easy</button><button class="btn small ghost" data-tune="hard" data-ex="${esc(ex.id)}" title="Step back one level">Too hard</button></div>`;
           const rest = c.chips.slice(list.length);
           const logList = isDone || !rest.length ? [p.goal] : rest;
           const sugCls = c.status === 'ready' || c.status === 'top' ? 'ready' : c.status === 'stuck' || c.status === 'comeback' ? 'warn' : '';
-          const sugBtns = c.ready && !(state.notYet || {})[c.ready.to.id] ? `<span class="sug-btns"><button class="btn small primary" data-lu="add" data-ex="${esc(ex.id)}" data-to="${c.ready.to.id}" title="Add ${esc(c.ready.to.name)} to today">${svgI('up')}Try the harder move: ${esc(c.ready.to.name)}</button><button class="btn small ghost" data-lu="later" data-to="${c.ready.to.id}">Not yet</button></span>`
+          const sugBtns = c.ready && !(state.notYet || {})[c.ready.to.id] ? `<span class="sug-btns"><button class="btn small primary" data-lu="add" data-ex="${esc(ex.id)}" data-to="${c.ready.to.id}">Try</button><button class="btn small ghost" data-lu="later" data-to="${c.ready.to.id}">Not yet</button></span>`
             : c.stepBack && c.stepBack.to && (state.stepKeep || {})[ex.id] !== localDay() ? `<span class="sug-btns"><button class="btn small" data-lu="swap" data-ex="${esc(ex.id)}" data-to="${c.stepBack.to.id}">Step back</button><button class="btn small ghost" data-sb="keep">Keep going</button></span>` : '';
           const fb = fbOf[ex.id] && fbOf[ex.id].day === localDay() ? fbOf[ex.id] : null;
           const fbHTML = fb ? `<div class="ex-fb ${fb.tone}" role="status"><b>${esc(fb.text)}</b><span>${esc(fb.next)}</span>${fb.tip ? `<em>${svgI('warn')}${esc(fb.tip)}</em>` : ''}</div>` : '';
@@ -2357,7 +2414,7 @@
             <div class="ex-main">
               ${head}
               <div class="ex-tags">${lvTag}${dotsHTML(m.diff)}</div>
-              <div class="ex-target num"><span>Today</span><b>${sets}×${p.goal}${u}</b><em>${list.length}/${sets} sets${strengthOn() ? ` · ${sets} × ${p.range.lo}-${p.range.hi}${u}, rest ${restText(p.rest)}` : ''}${p.last ? (p.last.est ? ` · last about ${Math.round(p.last.reps.reduce((t, x) => t + x, 0) / p.last.reps.length)}${u} a set` : ` · last ${p.last.reps.join(' · ')}${u}`) : ''}</em></div>
+              <div class="ex-target num"><span>Today</span><b>${sets}×${p.goal}${u}</b><em>${list.length}/${sets} sets${p.last ? (p.last.est ? ` · last about ${Math.round(p.last.reps.reduce((t, x) => t + x, 0) / p.last.reps.length)}${u} a set` : ` · last ${p.last.reps.join(' · ')}${u}`) : ''}</em></div>
               <div class="ex-sets num" aria-label="Today's sets">${chipsDone}</div>
             </div>
             <div class="bar ${isDone ? 'good' : ''}"><i style="--p: ${from}" data-p="${fill}"></i></div>
@@ -2368,10 +2425,34 @@
                 <form class="log-type" data-type="${esc(ex.id)}"><input type="text" inputmode="numeric" autocomplete="off" placeholder="${logList.join(' ')}" aria-label="Type your sets, like ${logList.join(' ')}"><button class="btn small" type="submit" title="Log the sets you typed">Log</button></form>
               </div>
             </div>
+            ${tuneHTML}${effHTML}
             <div class="ex-sug ${sugCls}">${p.status === 'ready' ? svgI('up') : ''}<span>${esc(c.line)}</span>${sugBtns}</div>
-            ${strengthOn() || list.length ? feelHTML(ex, c, list.length > 0) : ''}
             <div class="ex-why" id="why-${esc(ex.id)}" hidden>${pl ? esc(pl.why) : ''}</div>
             ${fbHTML}
+          </div>`;
+        }
+        if (!coachOn()) {
+          // Simple mode: name, demo, today's target, a big Log, +5/+10, Done, and a small "Harder" control.
+          const sFill = Math.min(1, target > 0 ? done / target : 0);
+          const sFrom = Math.min(1, prevPct[ex.id] ?? 0);
+          const hc = SK ? SK.harderChoices(ex) : null;
+          const hist = Array.isArray(ex.harder) ? ex.harder : [];
+          const opts = hc && harderOpen.has(ex.id) ? `<span class="harder-opts" role="group" aria-label="Make ${name} harder"><button class="btn small tint" data-action="harder" data-kind="reps" title="Raise today's target by ${hc.reps.by}">+${hc.reps.by} reps</button><button class="btn small tint" data-action="harder" data-kind="set" title="Add one set to today's target">+1 set (+${hc.set.by})</button>${hc.version ? `<button class="btn small tint" data-action="harder" data-kind="version" title="Swap ${name} for ${esc(hc.version.name)}, about ${hc.version.target} a day">Harder version: ${esc(hc.version.name)}</button>` : ''}</span>` : '';
+          return `
+          <div class="ex simple ${isDone ? 'done' : ''} ${m ? '' : 'no-demo'} ${cardsEntered ? '' : 'enter'} ${pop ? 'just-done' : ''}" data-id="${esc(ex.id)}" style="--i:${i}">
+            ${demo}
+            <div class="ex-main">
+              ${head}
+              <div class="ex-count num"><b data-from="${prevCount[ex.id] ?? ''}">${done}</b><span>/ ${target} ${esc(unitOf(ex))}</span><em>${isDone ? (done > target ? `+${done - target} extra` : 'Done') : `${target - done} left`}</em></div>
+            </div>
+            <div class="bar ${isDone ? 'good' : ''}"><i style="--p: ${sFrom}" data-p="${sFill}"></i></div>
+            <div class="ex-actions simple-actions">
+              <button class="btn primary big log-big" data-action="custom" title="Log how many you did">${svgI('plus')}Log</button>
+              <button class="btn tint" data-action="add" data-amount="5" title="Add 5">+5</button>
+              <button class="btn tint" data-action="add" data-amount="10" title="Add 10">+10</button>
+              ${isDone ? '' : `<button class="btn" data-action="full" title="I did all ${target}">${svgI('check')}Done</button>`}
+            </div>
+            ${hc ? `<div class="harder-row"><button class="btn ghost small" data-action="harder-toggle" aria-expanded="${harderOpen.has(ex.id)}">Harder ▸</button>${hist.length ? `<button class="btn ghost small" data-action="easier" title="Go back one step">Easier ▸</button>` : ''}${opts}</div>` : ''}
           </div>`;
         }
         const step = stepOf(target, done);
@@ -2389,6 +2470,7 @@
             </div>
             <div class="bar ${isDone ? 'good' : ''}"><i style="--p: ${from}" data-p="${fill}"></i></div>
             <div class="ex-actions">
+              ${m ? `<button class="btn small" data-tune="easy" data-ex="${esc(ex.id)}" title="Jump up one level">Too easy</button><button class="btn small ghost" data-tune="hard" data-ex="${esc(ex.id)}" title="Step back one level">Too hard</button>` : ''}
               <button class="btn ${isDone ? '' : 'tint'}" data-action="add" data-amount="${step}" title="Add a set of ${step}">+${step}</button>
               ${isDone ? '' : `<button class="btn" data-action="full" title="I did all ${target}">${svgI('check')}Done</button>`}
             </div>
@@ -2457,22 +2539,9 @@
         if (w) { w.hidden = !w.hidden; btn.setAttribute('aria-expanded', String(!w.hidden)); }
         return;
       }
-      if (btn.dataset.feel && SK) {
-        state.feel = SK.addFeel(state.feel, ex.id, btn.dataset.feel, localDay());
-        saveState(state);
-        progKey = '';
-        showToast(feelToast(ex, btn.dataset.feel));
-        renderTodayRoutine();
-        return;
-      }
-      if (btn.dataset.effort && SK) {
-        state.effort = SK.setEffort(state.effort, localDay(), Number(btn.dataset.effort), ex.id);
-        saveState(state);
-        progKey = '';
-        showToast(`Effort ${btn.dataset.effort} saved. The coach uses it for your next target.`);
-        renderTodayRoutine();
-        return;
-      }
+      if (action === 'harder-toggle') { if (harderOpen.has(ex.id)) harderOpen.delete(ex.id); else harderOpen.add(ex.id); renderTodayRoutine(); return; }
+      if (action === 'harder') { simpleHarder(ex, btn.dataset.kind); return; }
+      if (action === 'easier') { simpleEasier(ex); return; }
       if (btn.dataset.sb === 'keep') { state.stepKeep = { ...(state.stepKeep || {}), [ex.id]: localDay() }; saveState(state); renderTodayRoutine(); return; }
       if (action === 'log-list') {
         const vals = String(btn.dataset.list || '').split(',').map(Number).filter((n) => n > 0);
@@ -2489,7 +2558,9 @@
         const gp = growOf(ex);
         const chipN = gp ? [Math.max(1, gp.goal - (gp.range.unit === 'sec' ? 5 : 2)), gp.goal, gp.goal + (gp.range.unit === 'sec' ? 5 : 2)] : [5, 10, 25];
         const hasSet = todaySets(ex.id).length > 0;
-        m.innerHTML = `<div class="menu-label">Log one set</div>
+        const mv = !coachOn() && SK ? moveOfEx(ex) : null;
+        const lvl = mv ? SK.levelOf(mv) : null;
+        m.innerHTML = `${lvl && lvl.of > 1 ? `<div class="menu-label lvl-mini">Level ${lvl.level} of ${lvl.of}</div>` : ''}<div class="menu-label">Log one set</div>
           <div class="menu-chips">${chipN.map((n) => `<button data-action="add" data-amount="${n}">${gp ? n + uS(gp.range.unit) : '+' + n}</button>`).join('')}</div>
           <button data-action="sets-form">${svgI('check')}Log sets…</button>
           <button data-action="custom">${svgI('plus')}Add a total (no sets)…</button>
@@ -2575,10 +2646,14 @@
       e.preventDefault();
       const ex = state.exercises.find((x) => x.id === f.dataset.type);
       const input = f.querySelector('input');
-      const vals = parseTyped(input.value || input.placeholder);
+      // "8 +10 kg": a backpack weight is part of the set.
+      const raw = input.value || input.placeholder;
+      const kgm = /\+?\s*(\d{1,3}(?:[.,]\d)?)\s*kg/i.exec(raw);
+      const kg = kgm ? Number(kgm[1].replace(',', '.')) : 0;
+      const vals = parseTyped(raw.replace(/\+?\s*\d{1,3}(?:[.,]\d)?\s*kg/ig, ''));
       if (!ex || !vals.length) return;
       input.value = '';
-      logMany(ex, vals, null);
+      logMany(ex, vals, null, kg);
     });
     // --- Check if All Exercises Completed ---
     function checkAllCompleted() {
@@ -2620,7 +2695,7 @@
       if (!extra) {
         state.routineDay = localDay();
         // Auto-progression: +5% after 3 days of full routines (not on short-on-time days).
-        if (!growMode() && state.sportySettings.autoProgression && !state.sportySettings.shortOnTime) {
+        if (coachOn() && !growMode() && state.sportySettings.autoProgression && !state.sportySettings.shortOnTime) {
           state.sportySettings.progressionStreak = (state.sportySettings.progressionStreak || 0) + 1;
           if (state.sportySettings.progressionStreak >= 3) {
             state.sportySettings.progressionStreak = 0;
@@ -2986,7 +3061,7 @@
       audio.playClick();
       document.getElementById('setting-coach-persona').value = state.sportySettings.coach || 'beast';
       document.getElementById('setting-auto-progression').checked = !!state.sportySettings.autoProgression;
-      document.getElementById('setting-progress-mode').value = coachMode();
+      document.getElementById('setting-progress-mode').value = state.sportySettings.progressMode === 'endurance' ? 'endurance' : state.sportySettings.progressMode === 'grow' ? 'grow' : 'strength';
       document.getElementById('setting-water-target').value = state.water.targetMl || 2700;
       document.getElementById('setting-glass-size').value = state.water.glassSizeMl || 250;
       document.getElementById('setting-body-weight').value = state.sportySettings.bodyWeight || 75;
@@ -3007,7 +3082,7 @@
       audio.playChime();
       state.sportySettings.coach = document.getElementById('setting-coach-persona').value;
       state.sportySettings.autoProgression = document.getElementById('setting-auto-progression').checked;
-      { const pm = document.getElementById('setting-progress-mode').value; state.sportySettings.progressMode = pm === 'endurance' ? 'endurance' : pm === 'grow' ? 'grow' : 'strength'; }
+      { const pm = document.getElementById('setting-progress-mode').value; state.sportySettings.progressMode = pm === 'endurance' ? 'endurance' : pm === 'strength' ? 'strength' : 'grow'; }
       syncGrowTargets();
       renderTodayRoutine();
       state.water.targetMl = parseInt(document.getElementById('setting-water-target').value, 10) || 2700;
@@ -3450,16 +3525,14 @@
 
     // ---- SP3: sets, Build muscle (double progression) or Endurance ----
     /** The coach (default) or "Simple totals" (the old daily totals with a 5% step-up). */
-    function coachMode() { return SK && SK.modeOf ? SK.modeOf(state.sportySettings) : (state.sportySettings.progressMode === 'endurance' ? 'endurance' : state.sportySettings.progressMode === 'grow' ? 'grow' : 'strength'); }
-    /** Strength (default) and Build muscle both use the coach; only Simple totals does not. */
-    function growMode() { return !!SK && coachMode() !== 'endurance'; }
-    const strengthOn = () => coachMode() === 'strength';
-    /** What the coach reads, with the mode and your Too easy / Too hard taps and effort ratings. */
-    const coachInput = (extra) => ({ ...histInput(), mode: coachMode(), feel: state.feel || {}, effort: state.effort || {}, notYet: state.notYet || {}, deload: deloadOn(), ...extra });
+    /** Coach mode (levels, programs, auto-progression) is opt-in: off means Simple mode, your own exercises and targets. */
+    function coachOn() { return !!SK && state.sportySettings.coachMode === true; }
+    function growMode() { return coachOn() && state.sportySettings.progressMode !== 'endurance'; }
+    function strengthMode() { return coachOn() && state.sportySettings.progressMode === 'strength'; }
     /** Today's sets of an exercise (never creates anything). */
     function todaySets(id) { const l = ((state.sets || {})[localDay()] || {})[id]; return Array.isArray(l) ? l : []; }
     /** What the coach reads: your exercises, the day totals (Telegram days too), the sets and today. */
-    const histInput = () => ({ exercises: state.exercises, days: state.days || {}, sets: state.sets || {}, today: localDay() });
+    const histInput = () => ({ exercises: state.exercises, days: state.days || {}, sets: state.sets || {}, today: localDay(), best: state.bestSets || {}, imported: state.importedDays || {} });
     /** An easy week (deload) is running. */
     const deloadOn = () => !!state.sportySettings.deloadUntil && state.sportySettings.deloadUntil >= localDay();
     /** The last coach line per exercise ("Good, 2 more than last time"), shown on its card for the day. */
@@ -3475,11 +3548,11 @@
       const key = localDay() + JSON.stringify((state.sets || {})).length + ':' + Object.keys(state.sets || {}).length + ':' + JSON.stringify((state.days || {})[localDay()] || {}).length + ':' + state.exercises.length + (deloadOn() ? 'd' : '');
       if (key !== progKey) { progCache = new Map(); progKey = key; }
       const hold = doseHold();
-      const k = ex.id + '|' + m.id + '|' + JSON.stringify(todaySets(ex.id).map((x) => x.reps)) + (hold ? '|hold' : '') + '|' + JSON.stringify(state.notYet || {}) + '|' + coachMode() + '|' + JSON.stringify((state.feel || {})[ex.id] || []) + '|' + JSON.stringify(state.effort || {}).length;
+      const k = ex.id + '|' + (strengthMode() ? 's|' : '') + JSON.stringify(effortsOf(ex.id)) + JSON.stringify((state.tune || {})[ex.id] || 0) + JSON.stringify(state.bestSets || {}) + m.id + '|' + JSON.stringify(todaySets(ex.id).map((x) => x.reps)) + (hold ? '|hold' : '') + '|' + JSON.stringify(state.notYet || {});
       if (!progCache.has(k)) {
-        const c = SK.coachFor(coachInput({ exId: ex.id }));
+        const c = SK.coachFor({ ...histInput(), exId: ex.id, notYet: state.notYet || {}, deload: deloadOn(), strength: strengthMode(), efforts: effortsOf(ex.id), override: (state.tune || {})[ex.id] || null });
         if (!c) { progCache.set(k, null); return null; }
-        let p = { status: c.status === 'deload' ? 'building' : c.status, range: { lo: c.lo, hi: c.hi, sets: c.sets, unit: c.unit }, goal: c.goal, sets: c.sets, nextAt: `${c.sets}×${c.hi}${c.unit === 'sec' ? ' s' : ''}`, next: c.ready ? c.ready.to : null, prev: c.stepBack ? c.stepBack.to : null, hits: c.hits, need: 2, daysSince: null, last: c.last ? { day: c.last.day, reps: c.last.reps, est: c.last.est } : null, line: c.line, today: c.today, rest: c.rest, label: c.label, coach: c };
+        let p = { status: c.status === 'deload' ? 'building' : c.status, range: { lo: c.lo, hi: c.hi, sets: c.sets, unit: c.unit }, goal: c.goal, sets: c.sets, nextAt: `${c.sets}×${c.hi}${c.unit === 'sec' ? ' s' : ''}`, next: c.ready ? c.ready.to : null, prev: c.stepBack ? c.stepBack.to : null, hits: c.hits, need: 2, daysSince: null, last: c.last ? { day: c.last.day, reps: c.last.reps, est: c.last.est } : null, line: c.line, today: c.today, coach: c };
         // BD7: after a short night, repeat last time: no +1 rep, no level-up today.
         if (hold && p.last && (p.status === 'building' || p.status === 'ready')) {
           const lastMin = Math.min(...p.last.reps.slice(0, p.sets));
@@ -3491,6 +3564,314 @@
       }
       return progCache.get(k);
     }
+    // ---- Level strip, harder variations, Too easy / Too hard, effort, best set, a thin routine ----
+    /** How your sessions felt: state.effort = { day: { exId: 'easy'|'good'|'hard' } }. For one exercise: { day: effort }. */
+    function effortsOf(exId) { const out = {}; for (const [d, m] of Object.entries(state.effort || {})) if (m && m[exId]) out[d] = m[exId]; return out; }
+    const famOfEx = (ex) => { const m = moveOfEx(ex); return m ? m.family : null; };
+    /** Swap an exercise for a harder or easier move: the old one is turned off (its history stays). Returns the new one. */
+    function swapExercise(old, to, target) {
+      const wasOn = old.active;
+      const ex = addExercise({ name: to.name, target, unit: to.unit, move: to.id });
+      old.active = false;
+      if (!wasOn && old.plan) ex.active = false, ex.plan = true;
+      return ex;
+    }
+    /** Today's automatic harder variation: when a target is above its range, switch (once a day, never mid-workout). Undo is on the banner. */
+    function applyAutoVariations() {
+      if (!growMode() || deloadOn() || planOn()) return;
+      state.autoUp = state.autoUp && state.autoUp.day === localDay() ? state.autoUp : { day: localDay(), items: [] };
+      let changed = false;
+      for (const ex of state.exercises.filter((e) => e.active && !e.plan)) {
+        if ((ex.doneToday || 0) > 0 || state.autoUp.items.some((i) => i.oldId === ex.id || i.newId === ex.id)) continue;
+        let v = null;
+        try { v = SK.autoVariation({ ...histInput(), exId: ex.id, notYet: state.notYet || {}, strength: strengthMode(), efforts: effortsOf(ex.id), override: (state.tune || {})[ex.id] || null }); } catch (e) {}
+        if (!v) continue;
+        const nx = swapExercise(ex, v.to, v.sets * v.reps);
+        state.autoUp.items.push({ oldId: ex.id, newId: nx.id, toId: v.to.id, text: v.text, after: v.after, tempo: v.tempo });
+        changed = true;
+      }
+      if (changed) { progKey = ''; saveState(state); }
+    }
+    function undoAuto(newId) {
+      const it = ((state.autoUp || {}).items || []).find((i) => i.newId === newId);
+      if (!it) return;
+      const old = state.exercises.find((e) => e.id === it.oldId);
+      const nx = state.exercises.find((e) => e.id === it.newId);
+      if (old) old.active = true;
+      if (nx) { if ((nx.doneToday || 0) > 0) nx.active = false; else state.exercises = state.exercises.filter((e) => e.id !== nx.id); }
+      state.notYet = { ...(state.notYet || {}), [it.toId]: shiftDay(localDay(), 7) };
+      state.autoUp.items = state.autoUp.items.filter((i) => i !== it);
+      progKey = '';
+      saveState(state);
+      renderTodayRoutine();
+      renderSide();
+    }
+    /** "Too easy" / "Too hard" on a card: jump a level (two in a week for a second "Too easy"), set the new target, offer Undo. */
+    function tuneLevel(ex, dir) {
+      const fam = famOfEx(ex);
+      if (!SK || !fam) return;
+      const day = localDay();
+      const hist = ((state.tooEasy || {})[fam] || []).filter((d) => d > shiftDay(day, -7));
+      const taps = dir === 'easy' ? hist.length + 1 : 1;
+      const sh = SK.shiftLevel({ ...histInput(), exId: ex.id, notYet: state.notYet || {}, strength: strengthMode(), efforts: effortsOf(ex.id) }, dir, taps);
+      if (!sh) { showToast(dir === 'easy' ? 'This is the top of the ladder: slow the tempo (3 seconds down) to make it harder.' : 'This is the first level.'); return; }
+      const prevTune = (state.tune || {})[ex.id] || null;
+      const prevTaps = (state.tooEasy || {})[fam] || [];
+      if (dir === 'easy') state.tooEasy = { ...(state.tooEasy || {}), [fam]: [...hist, day] };
+      let nx = null;
+      const prevTarget = ex.target;
+      if (sh.sameMove) {
+        state.tune = { ...(state.tune || {}), [ex.id]: { day, goal: sh.reps, sets: sh.sets } };
+        if (!growMode()) ex.target = sh.sets * sh.reps;
+      } else {
+        nx = swapExercise(ex, sh.to, sh.sets * sh.reps);
+        state.tune = { ...(state.tune || {}), [nx.id]: { day, goal: sh.reps, sets: sh.sets } };
+      }
+      progKey = '';
+      saveState(state);
+      audio.playLevelUp();
+      undoToast(sh.text + (nx ? ` ${nice(ex.name)} is off (its history stays).` : ''), () => {
+        if (nx) { state.exercises = state.exercises.filter((e) => e.id !== nx.id || (e.doneToday || 0) > 0); ex.active = true; }
+        const t = { ...(state.tune || {}) };
+        if (prevTune) t[ex.id] = prevTune; else delete t[ex.id];
+        if (nx) delete t[nx.id];
+        state.tune = t;
+        ex.target = prevTarget;
+        state.tooEasy = { ...(state.tooEasy || {}), [fam]: prevTaps };
+        progKey = '';
+        saveState(state);
+        renderTodayRoutine();
+        renderSide();
+      });
+      renderTodayRoutine();
+      renderSide();
+    }
+    function rateEffort(ex, eff) {
+      state.effort = { ...(state.effort || {}), [localDay()]: { ...((state.effort || {})[localDay()] || {}), [ex.id]: eff } };
+      progKey = '';
+      saveState(state);
+      showToast(eff === 'easy' ? 'Easy: next time you move up faster.' : eff === 'hard' ? 'Hard: you will repeat this next time. Good call.' : 'Good: right on target.');
+      renderTodayRoutine();
+    }
+    /** Your declared best set per family ("my best set: 50"): places you at once. */
+    function saveBestSet(fam, reps) {
+      const ex = state.exercises.filter((e) => e.active && famOfEx(e) === fam).sort((a, b) => moveOfEx(b).diff - moveOfEx(a).diff)[0];
+      const m = ex ? moveOfEx(ex) : null;
+      const n = Math.max(0, Math.min(500, Math.round(Number(reps)) || 0));
+      if (!m || n < 1) { showToast('Type your best single set, like 50.'); return; }
+      state.bestSets = { ...(state.bestSets || {}), [fam]: { move: m.id, reps: n, day: localDay() } };
+      progKey = '';
+      saveState(state);
+      showToast(`Best set saved: ${n} ${m.name.toLowerCase()}. Your level is placed from it.`);
+      renderAll();
+    }
+    function bestFormHTML() {
+      const fams = [...new Set(state.exercises.filter((e) => e.active && famOfEx(e) && SK.trackOf(famOfEx(e))).map(famOfEx))];
+      if (!fams.length) return '';
+      const cur = state.bestSets || {};
+      return `<form class="best-form" data-best-form><label>Your best set <small>(one go, no rest)</small></label>
+        <select aria-label="Exercise">${fams.map((f) => `<option value="${f}">${esc(SK.trackOf(f).name)}${cur[f] ? ` (now ${cur[f].reps})` : ''}</option>`).join('')}</select>
+        <input type="number" inputmode="numeric" min="1" max="500" placeholder="50" aria-label="Reps in your best single set"><button class="btn small primary" type="submit">Set my best</button></form>`;
+    }
+    document.addEventListener('submit', (e) => {
+      const f = e.target.closest('[data-best-form]');
+      if (!f) return;
+      e.preventDefault();
+      saveBestSet(f.querySelector('select').value, f.querySelector('input').value);
+    });
+    // ---- The coach: rules in code (sportCoachRules.ts), onboarding, the weekly test ----
+    /** Protein, sleep and readiness from Life System (the host answers LIFE_SPORT_INSIGHT); null on its own. */
+    var coachBody = null;
+    const coachCtx = () => ({ ...histInput(), notYet: state.notYet || {}, strength: strengthMode(), deload: deloadOn(), program: state.weekProgram || null, body: coachBody });
+    /** This week's program: the rules write it once a week; Ben's weekly AI review (in the bots) may rewrite it inside the same limits. */
+    function ensureProgram() {
+      if (!SK || !SK.reviewDue || !SK.reviewDue(state.weekProgram, localDay())) return;
+      try { state.weekProgram = SK.baseProgram(coachCtx()); saveState(state); } catch (e) {}
+    }
+    function renderYourCoach() {
+      const el = document.getElementById('your-coach');
+      if (!el) return;
+      if (!SK || !SK.coachCard || !state.exercises.some((e) => e.active && !e.plan)) { el.hidden = true; return; }
+      // The first draw runs before askInsight's variables exist: ask again a moment later.
+      try { askInsight(); } catch (e) { setTimeout(renderYourCoach, 600); }
+      ensureProgram();
+      let c;
+      try { c = SK.coachCard(coachCtx()); } catch (e) { el.hidden = true; return; }
+      const session = c.session.map((it) => `<li><b>${esc(it.line)}</b>${it.added ? '<small>+1 set: this muscle is behind</small>' : ''}${it.kind === 'harder' ? '<small>harder variation</small>' : it.kind === 'weight' ? '<small>added weight</small>' : it.kind === 'back' ? '<small>step back</small>' : ''}</li>`).join('');
+      const prog = state.weekProgram && state.weekProgram.lines && state.weekProgram.lines.length ? `<p class="cc-prog"><b>This week's plan:</b> ${state.weekProgram.lines.map(esc).join(' ')}</p>` : '';
+      el.innerHTML = `<div class="card-head"><h2>Your coach</h2><span class="grow"></span><span class="tag accent">${c.deload.due ? 'Easy week due' : '10–20 hard sets per muscle'}</span></div>
+        <p class="cc-focus">${esc(c.focus.text)}</p>
+        <ul class="cc-list" aria-label="Today's session">${session}</ul>
+        <p class="cc-why"><b>Why:</b> ${esc(c.why)}</p>
+        ${c.body.length ? `<p class="cc-body">${c.body.map(esc).join(' ')}</p>` : ''}${prog}
+        <div class="cc-actions"><button class="btn tint" id="cc-recheck">Re-check my levels</button>${SK.testDue(state.sets || {}, localDay()) ? '<button class="btn tint" id="cc-test">Weekly strength test (1 min)</button>' : ''}</div>`;
+      el.hidden = false;
+      el.querySelector('#cc-recheck').addEventListener('click', () => openOnboard());
+      const t = el.querySelector('#cc-test');
+      if (t) t.addEventListener('click', openTest);
+    }
+    // ---- Best-set onboarding (first open, and "Re-check my levels") ----
+    const onbModal = document.getElementById('modal-onboard');
+    function openOnboard() {
+      if (!SK || !SK.QUESTIONS) return;
+      const cur = state.bestSets || {};
+      document.getElementById('onb-fields').innerHTML = SK.QUESTIONS.map((q) => `<label>${esc(q.label)}<input type="number" inputmode="numeric" min="0" max="500" name="${q.family}" placeholder="${q.unit === 'sec' ? 'seconds' : 'reps'}" value="${cur[q.family] && cur[q.family].move === q.move ? cur[q.family].reps : ''}" aria-label="${esc(q.label)}: ${esc(q.hint)}"><small>${esc(q.hint)}</small></label>`).join('');
+      onbModal.classList.add('open');
+      setTimeout(() => { const i = document.querySelector('#onb-fields input'); if (i) i.focus(); }, 40);
+    }
+    function closeOnboard(mark) {
+      onbModal.classList.remove('open');
+      if (mark && !state.onboarded) { state.onboarded = mark; saveState(state); }
+    }
+    /** Every answer becomes a best set, and each exercise starts on the variation where 5–8 reps is hard (the old move is only turned off). */
+    function applyOnboarding(answers) {
+      const day = localDay();
+      const placed = SK.placeBestAll(answers);
+      if (!placed.length) { showToast('Type at least one number, or skip for now.'); return false; }
+      state.bestSets = state.bestSets || {};
+      state.tune = state.tune || {};
+      const notes = [];
+      for (const p of placed) {
+        state.bestSets[p.family] = { move: p.base, reps: p.best, day };
+        const inFam = state.exercises.filter((e) => e.active && !e.plan && SK.moveOf(e) && SK.moveOf(e).family === p.family);
+        let ex = inFam.find((e) => SK.moveOf(e).id === p.move.id);
+        if (!ex) {
+          const old = inFam.sort((a, b) => SK.moveOf(b).diff - SK.moveOf(a).diff)[0];
+          // The target is three sets' worth, so the coach's first goal is exactly the placed reps.
+          ex = old ? swapExercise(old, p.move, p.reps * 3) : addExercise({ name: p.move.name, target: p.reps * 3, unit: p.move.unit, move: p.move.id });
+        }
+        state.tune[ex.id] = { day, goal: p.reps, sets: p.sets };
+        notes.push(`${nice(p.move.name)} ${p.sets}×${p.reps}${p.move.unit === 'sec' ? ' s' : ''}`);
+      }
+      state.onboarded = day;
+      state.onboardAnswers = answers;
+      progKey = '';
+      saveState(state);
+      showToast('Placed: ' + notes.join(', ') + '.');
+      renderAll();
+      return true;
+    }
+    document.getElementById('onb-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const answers = {};
+      new FormData(e.target).forEach((v, k) => { if (String(v).trim() !== '') answers[k] = Number(v); });
+      if (applyOnboarding(answers)) closeOnboard();
+    });
+    document.getElementById('onboard-skip').addEventListener('click', () => closeOnboard('skipped'));
+    document.getElementById('onb-x').addEventListener('click', () => closeOnboard('skipped'));
+    document.getElementById('btn-recheck').addEventListener('click', () => { closeMenus(); openOnboard(); });
+    /** On the first open (once), after Today has drawn. */
+    var onbChecked = false;
+    function maybeOnboard() {
+      if (onbChecked || !SK || !SK.QUESTIONS) return;
+      onbChecked = true;
+      if (!state.onboarded) setTimeout(() => { if (!state.onboarded) openOnboard(); }, 500);
+    }
+    // ---- The weekly strength test: one max set per main move, no points ----
+    const tstModal = document.getElementById('modal-test');
+    function testMoves() {
+      const out = [];
+      const seen = new Set();
+      for (const ex of state.exercises.filter((e) => e.active && !e.plan)) {
+        const m = moveOfEx(ex);
+        if (!m || seen.has(m.family) || !SK.QUESTIONS.some((q) => q.family === m.family)) continue;
+        seen.add(m.family);
+        out.push({ ex, m });
+      }
+      return out;
+    }
+    function openTest() {
+      const list = testMoves();
+      if (!list.length) { showToast('Add push-ups, squats, sit-ups, rows or a plank first.'); return; }
+      document.getElementById('tst-fields').innerHTML = list.map(({ ex, m }) => `<label>${esc(nice(m.name))}<input type="number" inputmode="numeric" min="0" max="500" name="${esc(ex.id)}" placeholder="${m.unit === 'sec' ? 'seconds' : 'reps'}" aria-label="Max ${esc(m.name)} in one set"><small>${m.unit === 'sec' ? 'longest hold' : 'most reps in one set'}</small></label>`).join('');
+      tstModal.classList.add('open');
+    }
+    document.getElementById('tst-x').addEventListener('click', () => tstModal.classList.remove('open'));
+    document.getElementById('tst-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      let n = 0;
+      new FormData(e.target).forEach((v, id) => {
+        const reps = Math.round(Number(v));
+        if (!(reps >= 1)) return;
+        // A real set flagged as a test: levels and charts read it, nothing is paid and today's totals stay as they are.
+        state.sets = SK.addSets(state.sets || {}, localDay(), id, [reps], Date.now(), { test: true });
+        n++;
+      });
+      if (!n) { showToast('Type at least one number.'); return; }
+      tstModal.classList.remove('open');
+      progKey = '';
+      saveState(state);
+      showToast(`Test saved (${n} ${n === 1 ? 'move' : 'moves'}): levels and charts updated. No points for tests.`);
+      renderAll();
+    });
+    window.addEventListener('message', (e) => {
+      if (e.origin !== location.origin || !e.data || e.data.type !== 'LIFE_SPORT_INSIGHT') return;
+      const had = !!coachBody;
+      coachBody = e.data.body && typeof e.data.body === 'object' ? e.data.body : null;
+      if (coachBody || had) renderYourCoach();
+    });
+    /** The strip at the top of Today: your rank, a big level badge per exercise, the automatic level-up banner and a thin-routine suggestion. */
+    function renderLevelStrip() {
+      document.body.classList.toggle('coach-on', coachOn());
+      const el = document.getElementById('lv-strip');
+      if (!coachOn()) {
+        // Simple mode: no coach card, no rank, no level badges, no best-set screen.
+        const yc = document.getElementById('your-coach');
+        if (yc) yc.hidden = true;
+        if (el) el.hidden = true;
+        return;
+      }
+      renderYourCoach();
+      maybeOnboard();
+      if (!el) return;
+      if (!SK || !SK.placeAll || !SK.levelBadge) { el.hidden = true; return; }
+      const active = state.exercises.filter((e) => e.active && !e.plan);
+      const places = SK.placeAll(histInput());
+      const rank = SK.overallRank(places);
+      const seen = new Set();
+      const badges = [];
+      for (const ex of active) {
+        const fam = famOfEx(ex);
+        if (!fam || seen.has(fam)) continue;
+        seen.add(fam);
+        const p = places.find((x) => x.family === fam);
+        if (p) badges.push({ fam, b: SK.levelBadge(p, nice(SK.trackOf(fam).name)), p });
+      }
+      const rankHTML = `<div class="ls-rank"><span class="rk-badge big" style="--p:${rank.score}" aria-hidden="true"><i>${esc(rank.rank.name[0])}</i></span>
+        <div><span class="eyebrow">Your rank</span><b class="ls-rank-name" id="ls-rank-line">${places.length ? esc(SK.rankLine(rank)) : esc(rank.rank.name)}</b>
+        <small>${places.length ? esc(rank.hint) : 'Tell me your best set, or log one workout, and your levels appear.'}</small></div></div>`;
+      const bHTML = badges.length ? `<div class="ls-levels">${badges.map(({ fam, b, p }) => `<button class="lvb" data-lvfam="${fam}" title="Open the level map: ${esc(p.why)}"><span class="lvb-top"><b class="lvb-n num">Level ${b.level}</b><span class="lvb-of">of ${b.of}</span></span><span class="lvb-t">${esc(b.title)}</span><span class="bar good"><i style="--p:${b.frac}"></i></span><small>${esc(b.nextLine)}</small></button>`).join('')}</div>` : '';
+      const ups = ((state.autoUp || {}).day === localDay() ? state.autoUp.items : []);
+      const upHTML = ups.map((i) => `<div class="ls-up" role="status">${svgI('up')}<div><b>${esc(i.text)}</b><small>${esc(i.after)}${i.tempo ? ` · ${esc(i.tempo)}` : ''}</small></div><button class="btn small" data-undo-auto="${esc(i.newId)}">Undo</button></div>`).join('');
+      let thin = '';
+      const skip = (state.sportySettings.thinSkip || '') > localDay();
+      const set = !skip ? SK.balancedSet(state.exercises, strengthMode()) : [];
+      if (set.length && active.length) thin = `<div class="ls-thin"><div><b>Your routine has only ${active.length} ${active.length === 1 ? 'move' : 'moves'}.</b><small>A balanced ${active.length + set.length}-move set also trains your back, legs and core: ${set.map((s) => esc(s.move.name)).join(', ')}.</small></div><span class="row"><button class="btn small primary" data-thin="add">Add these ${set.length}</button><button class="btn small ghost" data-thin="skip">Not now</button></span></div>`;
+      el.hidden = false;
+      el.innerHTML = `${rankHTML}${bHTML}${upHTML}${thin}${places.length ? `<details class="ls-best"><summary>Set your best set (places your level at once)</summary>${bestFormHTML()}</details>` : bestFormHTML()}`;
+    }
+    document.addEventListener('click', (e) => {
+      const lv = e.target.closest('[data-lvfam]');
+      if (lv) { lvFam = lv.dataset.lvfam; gotoTab('progress', 'levels'); if (typeof showSub === 'function') showSub('levels'); return; }
+      const ua = e.target.closest('[data-undo-auto]');
+      if (ua) { undoAuto(ua.dataset.undoAuto); return; }
+      const th = e.target.closest('[data-thin]');
+      if (th) {
+        if (th.dataset.thin === 'skip') { state.sportySettings.thinSkip = shiftDay(localDay(), 7); saveState(state); renderLevelStrip(); return; }
+        const set = SK.balancedSet(state.exercises, strengthMode());
+        set.forEach((s) => addExercise({ name: s.move.name, target: s.sets * s.reps, unit: s.move.unit, move: s.move.id }));
+        audio.playLevelUp();
+        showToast(`Added ${set.length} moves: ${set.map((s) => s.move.name).join(', ')}.`);
+        progKey = '';
+        renderTodayRoutine();
+        renderSide();
+        return;
+      }
+      const tu = e.target.closest('[data-tune]');
+      if (tu) { const ex = state.exercises.find((x) => x.id === tu.dataset.ex); if (ex) tuneLevel(ex, tu.dataset.tune); return; }
+      const ef = e.target.closest('[data-effort]');
+      if (ef) { const ex = state.exercises.find((x) => x.id === ef.dataset.ex); if (ex) rateEffort(ex, ef.dataset.effort); }
+    });
     /** Logs one set (reps, or seconds for a hold): the set and the day's total. Returns what changed. */
     function logSet(ex, reps, kg = 0) {
       const n = Math.max(1, Math.min(2000, Math.round(reps) || 0));
@@ -3504,7 +3885,7 @@
       progKey = '';
       const after = growOf(ex);
       const levelUp = !!(after && after.status === 'ready' && after.next && (!before || before.status !== 'ready'));
-      const ups = levelUps();
+      const ups = coachOn() ? levelUps() : [];
       if (ups.length) pendingLv.push(...ups);
       return { reps: n, record, levelUp, prog: after, move: m, wasDone, wasAll };
     }
@@ -3525,7 +3906,7 @@
     /** The coach's line after a log: stored for the card (and workout mode). */
     function setFeedback(ex) {
       if (!SK || !SK.feedbackFor || !growOf(ex)) return null;
-      const f = SK.feedbackFor(coachInput({ exId: ex.id }));
+      const f = SK.feedbackFor({ ...histInput(), exId: ex.id, notYet: state.notYet || {}, deload: deloadOn(), strength: strengthMode(), efforts: effortsOf(ex.id) });
       if (f) fbOf[ex.id] = { ...f, day: localDay() };
       return f;
     }
@@ -3546,17 +3927,25 @@
       if (res && res.levelUp) levelUpMoment(ex, res.prog);
     }
     /** Several sets in one go (a tap on the big button, or typed "15 14 12"). */
-    function logMany(ex, vals, btn) {
+    function logMany(ex, vals, btn, kg = 0) {
       let res = null;
       const first = { record: false, levelUp: false };
       vals.forEach((v, k) => {
-        const r = logSet(ex, v);
+        const r = logSet(ex, v, kg);
         if (k === 0) Object.assign(first, { wasDone: r.wasDone, wasAll: r.wasAll });
         res = { ...r, record: first.record || r.record, levelUp: first.levelUp || r.levelUp, wasDone: first.wasDone, wasAll: first.wasAll };
         first.record = res.record;
         first.levelUp = res.levelUp;
       });
-      showToast(`${nice(ex.name)}: ${SK ? SK.setsText(vals, res.prog?.range.unit) : vals.join(' · ')}`);
+      let next = '';
+      try {
+        if (!coachOn()) throw 0;
+        // Ben adjusts the next session at once (progression, step back, more sets where a muscle is behind).
+        const adj = SK.adjustAfterSession(coachCtx());
+        const mine = adj.adjustments.find((a) => a.exId === ex.id);
+        if (mine) next = ' Next time: ' + mine.text;
+      } catch (e) {}
+      showToast(`${nice(ex.name)}: ${SK ? SK.setsText(vals, res.prog?.range.unit) : vals.join(' · ')}${kg ? ` +${kg} kg` : ''}.${next}`);
       afterSet(ex, res, btn);
     }
     /** "15 14 12", "3x15" or "15, 14, 12" → [15, 14, 12]. */
@@ -3578,13 +3967,13 @@
       }
       if (changed) saveState(state);
     }
-    const restFor = (ex) => { const m = moveOfEx(ex); const it = planItemFor(ex); const gp = strengthOn() ? growOf(ex) : null; return gp && gp.rest ? gp.rest : it ? it.rest : !m ? 90 : m.unit === 'sec' || m.group === 'core' ? 60 : m.group === 'cardio' || m.group === 'mobility' ? 45 : 90; };
+    const restFor = (ex) => { const m = moveOfEx(ex); const it = planItemFor(ex); return strengthMode() && m && m.unit === 'reps' ? 150 : it ? it.rest : !m ? 90 : m.unit === 'sec' || m.group === 'core' ? 60 : m.group === 'cardio' || m.group === 'mobility' ? 45 : 90; };
     const uS = (u) => (u === 'sec' ? ' s' : '');
 
     // ---- SP3: the week plan (sportProgram.ts) ----
     function planPrefs() {
       const ss = state.sportySettings;
-      return { minutes: [20, 30, 45].includes(ss.planMinutes) ? ss.planMinutes : 30, perWeek: ss.planPerWeek === 4 ? 4 : 3, coolDown: !!ss.planCool, mode: coachMode() === 'endurance' ? 'grow' : coachMode() };
+      return { minutes: [20, 30, 45].includes(ss.planMinutes) ? ss.planMinutes : 30, perWeek: ss.planPerWeek === 4 ? 4 : 3, coolDown: !!ss.planCool };
     }
     /** Today follows the plan (Build muscle and "Today shows: the plan"). */
     const planOn = () => growMode() && state.sportySettings.planFollow === true && !!SK;
@@ -3784,7 +4173,7 @@
     // ---- try something harder ----
     let suggestions = [];
     function computeSuggestions() {
-      if (!SK) return [];
+      if (!SK || !coachOn()) return [];
       if (growMode()) {
         const inRoutine = currentMoves();
         const out = [];
@@ -3834,10 +4223,9 @@
       if (!b) return;
       const to = SK && SK.moveById(b.dataset.to);
       if (!to) return;
-      const gr = SK.rangeFor(to, coachMode() === 'endurance' ? 'grow' : coachMode());
+      const gr = SK.rangeFor(to);
       const s = suggestions.find((x) => x.to.id === to.id) || (growMode() ? { trySet: gr.lo, swapTarget: gr.sets * gr.lo } : { trySet: to.set, swapTarget: to.start });
       if (b.closest('#cel')) closeCelebrate();
-      if (SK && SK.resetFeel && b.dataset.ex && (b.dataset.lu === 'add' || b.dataset.lu === 'swap')) { state.feel = SK.resetFeel(state.feel, b.dataset.ex, localDay()); progKey = ''; }
       const old = state.exercises.find((x) => x.id === b.dataset.ex);
       const u = (n) => `${n} ${unitWord(to.unit, n)}`;
       if (b.dataset.lu === 'later') {
@@ -4076,8 +4464,14 @@
 
     /** The right-hand column: level-up, next badge. */
     function renderSide() {
-      if (typeof renderCoachCard === 'function') renderCoachCard();
-      renderLevelUp();
+      document.body.classList.toggle('coach-on', coachOn());
+      if (!coachOn()) {
+        // Simple mode: no coach card, no "try something harder" card.
+        ['coach-card', 'levelup-card'].forEach((id) => { const el = document.getElementById(id); if (el) { el.hidden = true; el.innerHTML = ''; } });
+      } else {
+        if (typeof renderCoachCard === 'function') renderCoachCard();
+        renderLevelUp();
+      }
       computeBadgesNow();
       renderNextBadge();
       scheduleBadgeCheck();
@@ -4414,21 +4808,10 @@
         <h2>Workout done</h2>
         <div class="hero-stats num"><div><b>${sets}</b><small>${sets === 1 ? 'set' : 'sets'}</small></div><div><b>${reps.toLocaleString()}</b><small>reps</small>${vsTxt}</div><div><b>${min}</b><small>minutes</small></div>${wm.records ? `<div><b>${wm.records}</b><small>${wm.records === 1 ? 'new record' : 'new records'}</small></div>` : ''}</div>
         ${wmResults(list)}
-        <div class="effort-row" id="wm-effort" role="group" aria-label="How hard was this workout, 1 easy to 5 all out"><span class="fb-lab">How hard was it?</span>${[1, 2, 3, 4, 5].map((n) => `<button class="chip ${((state.effort || {})[localDay()] === n) ? 'on' : ''}" data-wm-effort="${n}" title="${['Very light', 'Light', 'Solid', 'Hard', 'All out'][n - 1]}">${n}</button>`).join('')}<span class="fb-lab">1 easy, 5 all out</span></div>
         <button class="btn primary big" id="wm-finish-ok">${svgI('check')}Finish</button>`;
       document.getElementById('workout-mode').appendChild(box);
       postSummary('workout mode', min);
       document.getElementById('wm-finish-ok').addEventListener('click', closeWM);
-      document.getElementById('wm-effort').addEventListener('click', (ev) => {
-        const b = ev.target.closest('[data-wm-effort]');
-        if (!b || !SK) return;
-        state.effort = SK.setEffort(state.effort, localDay(), Number(b.dataset.wmEffort));
-        // The same rating counts for each exercise you did, so the coach can read it per move.
-        list.filter((e) => todaySets(e.id).length && !(state.effort || {})[localDay() + ':' + e.id]).forEach((e) => { state.effort = SK.setEffort(state.effort, localDay(), Number(b.dataset.wmEffort), e.id); });
-        saveState(state);
-        document.querySelectorAll('#wm-effort .chip').forEach((c) => c.classList.toggle('on', c === b));
-        showToast('Effort saved. The coach uses it for your next workout.');
-      });
       const banners = [];
       if (wm.records) banners.push({ t: wm.records > 1 ? `${wm.records} new records!` : 'New record!', k: 'rec' });
       if (wm.levels) banners.push({ t: 'Level up!', k: 'lv' });
@@ -4470,6 +4853,7 @@
         if (window.parent && window.parent !== window) window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_SUMMARY', payload }, location.origin);
       } catch (e) {}
     }
+    document.getElementById('btn-wm-simple').addEventListener('click', () => openWM(undefined, null));
     document.getElementById('btn-workout-mode').addEventListener('click', () => { const s = growMode() ? todaysPlanIds() : null; openWM(undefined, s); });
     document.getElementById('wm-close').addEventListener('click', closeWM);
     document.getElementById('wm-prev').addEventListener('click', () => { wm.i--; wm.restEnds = 0; wm.warm = false; clearInterval(wm.tick); const ex = activeEx()[Math.max(0, wm.i)]; if (ex) wm.reps = suggestReps(ex); renderWM(); });
@@ -4823,14 +5207,24 @@
 
     // ===== The Plan tab: a week that fits your minutes =====
     const DOW = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    document.getElementById('coach-mode-toggle').addEventListener('change', (e) => {
+      if (!SK) return;
+      state = SK.setCoachMode(state, !!e.target.checked);
+      onbChecked = false;
+      progKey = '';
+      saveState(state);
+      showToast(state.sportySettings.coachMode ? 'Coach mode is on: levels, programs and auto-progression are back.' : 'Coach mode is off. Your own routine is back; nothing was deleted.');
+      renderAll();
+    });
     function renderPlan() {
+      document.getElementById('coach-mode-toggle').checked = coachOn();
       if (!SK) return;
       const pr = planPrefs();
       const segOn = (id, attr, val) => document.querySelectorAll(`#${id} [${attr}]`).forEach((b) => { const on = b.getAttribute(attr) === String(val); b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
       segOn('pg-minutes', 'data-min', pr.minutes);
       segOn('pg-per', 'data-per', pr.perWeek);
       segOn('pg-cool', 'data-cool', pr.coolDown ? 1 : 0);
-      segOn('pg-mode', 'data-pmode', coachMode());
+      segOn('pg-mode', 'data-pmode', strengthMode() ? 'strength' : growMode() ? 'grow' : 'endurance');
       let follow = document.getElementById('pg-follow');
       if (!follow) {
         const l = document.createElement('label');
@@ -4867,7 +5261,7 @@
             }).join('')}
             ${s.cooldown ? `<div class="pg-warm">${svgI('moon')}<span><b>Cool-down, 3 min:</b> child's pose, cobra, a slow lunge stretch.</span></div>` : ''}
           </div>
-          ${growMode() ? '' : '<p class="mus-note">This plan uses the coach. Switch "How you progress" above to follow it on Today.</p>'}`;
+          ${growMode() ? '' : '<p class="mus-note">This plan uses Build muscle. Switch "How you progress" above to follow it on Today.</p>'}`;
         figHydrate(box);
       }
       document.getElementById('pg-tips').innerHTML = SK.growTips(state.sportySettings.bodyWeight).map((t) => `<li>${esc(t)}</li>`).join('');
@@ -4881,7 +5275,7 @@
       else if (b.dataset.per) ss.planPerWeek = Number(b.dataset.per);
       else if (b.dataset.cool) ss.planCool = b.dataset.cool === '1';
       else if (b.dataset.follow) ss.planFollow = b.dataset.follow === '1';
-      else if (b.dataset.pmode) { ss.progressMode = b.dataset.pmode; syncGrowTargets(); showToast(b.dataset.pmode === 'strength' ? 'Strength: harder variations, fewer reps, longer rests.' : b.dataset.pmode === 'grow' ? 'Build muscle: more reps first, then a harder move.' : 'Simple totals: daily totals that step up 5%.'); }
+      else if (b.dataset.pmode) { ss.progressMode = b.dataset.pmode; syncGrowTargets(); showToast(b.dataset.pmode === 'strength' ? 'Strength: 5–8 reps, 4 sets, a harder move at 3×8.' : b.dataset.pmode === 'grow' ? 'Build muscle: next targets and levels.' : 'Simple totals: daily totals that step up 5%.'); }
       else return;
       audio.playClick();
       saveState(state);
@@ -4895,7 +5289,7 @@
       if (!b) return;
       if (b.dataset.planStart !== localDay()) { try { localStorage.setItem('st_train_' + localDay(), '1'); } catch (err) {} }
       // Starting the plan's session is choosing the plan: Today follows it from now on (switch back with My routine).
-      if (!growMode() || state.sportySettings.planFollow !== true) { if (!growMode()) state.sportySettings.progressMode = 'strength'; state.sportySettings.planFollow = true; syncGrowTargets(); saveState(state); renderPlan(); }
+      if (!growMode() || state.sportySettings.planFollow !== true) { state.sportySettings.progressMode = 'grow'; state.sportySettings.planFollow = true; syncGrowTargets(); saveState(state); renderPlan(); }
       renderTodayRoutine();
       openWM(undefined, todaysPlanIds());
     });
@@ -4977,12 +5371,14 @@
       // Best set over time, per ladder.
       const charts = document.getElementById('str-charts');
       charts.innerHTML = fams.length ? fams.map((f) => {
-        const pts = SK.familySeries(log, ex, f, today).filter((p) => p.day >= shiftDay(today, -90));
+        const pts = SK.familySeries(log, ex, f, today).filter((p) => p.day >= shiftDay(today, -180));
         if (!pts.length) return '';
         const last = pts[pts.length - 1];
         const mv = SK.moveById(last.move);
         const lv = SK.levelOf(mv);
-        return `<div class="str-chart"><div class="str-chart-head"><b>${esc(SK.FAMILIES[f].name)}</b><small>best now ${last.reps}${uS(mv.unit)} · ${esc(mv.name)}</small><span class="tag accent">Level ${lv.level}/${lv.of}</span></div>${familyChart(f, pts, today)}</div>`;
+        // Best sets and weekly tests only; day totals never count here.
+        const sg = SK.strongerThan(pts, today);
+        return `<div class="str-chart"><div class="str-chart-head"><b>${esc(SK.FAMILIES[f].name)}</b><small>best now ${last.reps}${uS(mv.unit)} · ${esc(mv.name)}</small><span class="tag accent">Level ${lv.level}/${lv.of}</span>${sg ? `<span class="tag good">${sg.pct > 0 ? '+' : ''}${sg.pct}% in ${sg.weeks} ${sg.weeks === 1 ? 'week' : 'weeks'}</span>` : ''}</div>${familyChart(f, pts, today)}</div>`;
       }).join('') : `<p class="str-empty">No sets yet. Log your sets in workout mode or with "Set" on a card, and each move's best set shows here over time, with every level you climb.</p>`;
     }
 
@@ -5086,6 +5482,7 @@
       let want = sub;
       try { want = want || localStorage.getItem('st_sub'); } catch (e) {}
       if (!['levels', 'charts', 'records', 'badges', 'history'].includes(want)) want = 'levels';
+      if (want === 'levels' && !coachOn()) want = 'records';
       panel.dataset.sub = want;
       document.querySelectorAll('#pr-sub [data-sub]').forEach((x) => { const on = x.dataset.sub === want; x.classList.toggle('on', on); x.setAttribute('aria-selected', String(on)); });
       try { localStorage.setItem('st_sub', want); } catch (e) {}
@@ -5269,7 +5666,7 @@
       // Why this level: one line per exercise
       byId('lv-why').innerHTML = `<div class="card-head"><h2>Why this level</h2><span class="meta">from what you logged: no test</span></div>` + (places.length
         ? `<div class="why-list">${places.map((p) => `<div class="why-row"><div class="top"><span class="tag accent">Level ${p.level} of ${p.of}</span><b>${esc(p.track.name)} · ${esc(p.lv.name)}</b>${p.comeback && p.comeback.hits < p.comeback.need ? '<span class="tag">Comeback level</span>' : ''}</div><p>${esc(p.why)}</p></div>`).join('')}</div>`
-        : '<p class="str-empty">No levels yet. Log one day (like <b>15 14 12</b> push-ups) and I place you on the ladder. Telegram days count too.</p>');
+        : '<p class="str-empty">No levels yet. Log one day (like <b>15 14 12</b> push-ups) and I place you on the ladder. Telegram days count too.</p>' + bestFormHTML());
       // Forecasts and goals
       const fcs = SK.forecasts(h);
       const goals = (state.goals || []).map((g) => SK.goalPace(h, g)).filter(Boolean);

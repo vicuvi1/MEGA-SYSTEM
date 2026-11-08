@@ -47,13 +47,6 @@ async function device(store: Storage) {
 }
 
 describe('Sport Track sync', () => {
-  it('keeps the "too easy / too hard" taps and effort ratings from both devices', () => {
-    const a = { ...sport('2026-11-06', 5), feel: { ex_pushups: [{ d: '2026-11-04', v: 'easy' }] }, effort: { '2026-11-04:ex_pushups': 2 } }
-    const b = { ...sport('2026-11-06', 5), feel: { ex_pushups: [{ d: '2026-11-05', v: 'easy' }] }, effort: { '2026-11-05:ex_pushups': 1 } }
-    const m = mergeSport(a, b, true)
-    expect(m.feel.ex_pushups.map((x: any) => x.d)).toEqual(['2026-11-04', '2026-11-05'])
-    expect(m.effort).toEqual({ '2026-11-04:ex_pushups': 2, '2026-11-05:ex_pushups': 1 })
-  })
   it('merges two versions of the same day: higher reps, history from both', () => {
     const a = sport('2026-10-31', 30, [{ id: 2, title: 'run' }])
     const b = sport('2026-10-31', 50, [{ id: 1, title: 'gym' }])

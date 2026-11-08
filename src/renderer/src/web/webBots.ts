@@ -72,8 +72,11 @@ import type { BotContext } from './bots/context'
 export { focusKeyboard }
 import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
 import { parseProtein } from '@core/protein'
-import { bodyPlusView, logProtein } from '../../../main/bodyPlus'
-import { logBotSets } from '@core/sportBot'
+import { bodyPlusView, logProtein, sportBodyNow } from '../../../main/bodyPlus'
+import { declareBest, logBotSets } from '@core/sportBot'
+import { answerTraining, isTrainingQuestion } from '@core/sportAsk'
+import { reviewDue, weeklyReview } from '@core/sportReview'
+import type { CoachCtx } from '@core/sportCoachRules'
 import { defaultSport, removeExercise, setExercise, waterCard, workoutCard } from '@core/sportCards'
 import { cleanRecipes, recipeText } from '@core/recipes'
 import { addAsk, cleanPcState, deskReady, pcActText, pcDenied, PC_ACTIONS_HELP } from '@core/pcActions'
@@ -97,16 +100,25 @@ import { answerOffer, forgetAbout, learnedRhythm, loadConvo, loadKnow, notePast,
 const LOGS_KEY = 'life_bot_logs'
 const store = typeof localStorage !== 'undefined' ? localStorage : null
 
+/** Extra bits of a sport message: backpack weight, a declared best set, hold or reps. */
+interface SportExtra { kg?: number; best?: boolean; unit?: string }
+
 /** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
-function addRepsToSportTrack(name: string, amount: number, sets?: number[]): { done: number; target: number; line?: string } | null {
+function addRepsToSportTrack(name: string, amount: number, sets?: number[], extra?: SportExtra): { done: number; target: number; line?: string } | null {
   let prog: { done: number; target: number; line?: string } | null = null
   updateSport((st) => {
+    // "best set push-ups 50": remembered, nothing added to today.
+    if (extra?.best && sets?.[0]) {
+      const b = declareBest(st, name, sets[0], sportToday())
+      if (b) { st.bestSets = b.st.bestSets; prog = { done: 0, target: 0, line: b.line } }
+      return
+    }
     const ex = findExercise(st, name)
     if (!ex) return
     ex.doneToday = (Number(ex.doneToday) || 0) + amount
     prog = { done: ex.doneToday, target: Number(ex.target) || 0 }
     // SP3: sets ("3x15 push-ups") also go into Sport Track's sets, with the best set and the next level.
-    const r = sets?.length ? logBotSets(st, name, sets, sportToday()) : null
+    const r = sets?.length ? logBotSets(st, name, sets, sportToday(), Date.now(), { kg: extra?.kg, unit: extra?.unit }) : null
     if (r) { st.sets = r.st.sets; prog.line = r.line }
   })
   return prog
@@ -116,14 +128,20 @@ function addRepsToSportTrack(name: string, amount: number, sets?: number[]): { d
  * Sport Track's data in Turso (settings.sport_tracker_json, see sportSync.ts),
  * for the server: reps land there and every device picks them up.
  */
-function addRepsInDb(db: any, name: string, amount: number, sets?: number[]): { done: number; target: number; line?: string } | null {
+function addRepsInDb(db: any, name: string, amount: number, sets?: number[], extra?: SportExtra): { done: number; target: number; line?: string } | null {
   const st = sportState(db)
   if (!st || !Array.isArray(st.exercises)) return null
+  if (extra?.best && sets?.[0]) {
+    const b = declareBest(st, name, sets[0], sportToday())
+    if (!b) return null
+    saveSport(db, b.st, 'telegram')
+    return { done: 0, target: 0, line: b.line }
+  }
   // Your local day, like Sport Track and the rest of the bot (was the UTC date: N7).
   const r = logReps(db, name, amount, 'telegram')
   if (!r) return null
   // SP3: sets also go into Sport Track's sets (the totals above are already logged).
-  const withSets = sets?.length ? logBotSets(r.st, name, sets, sportToday()) : null
+  const withSets = sets?.length ? logBotSets(r.st, name, sets, sportToday(), Date.now(), { kg: extra?.kg, unit: extra?.unit, body: (() => { try { return sportBodyNow(db) } catch { return null } })() }) : null
   if (withSets) saveSport(db, withSets.st, 'telegram')
   return { done: r.exercise.done, target: r.exercise.target, line: withSets?.line }
 }
@@ -632,7 +650,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return db.transaction(() => {
       const out = run(svc, text, key)
       if (server && out.sport) {
-        const prog = addRepsInDb(db, out.sport.name, out.sport.amount, (out.sport as any).sets)
+        const prog = addRepsInDb(db, out.sport.name, out.sport.amount, (out.sport as any).sets, out.sport as any)
         if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
         if (prog?.line) out.reply += `\n${prog.line}`
         out.sport = undefined
@@ -2341,6 +2359,55 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return out.join('\n')
   }
 
+  /** The coach's context from Sport Track's state, Body data and this week's program. */
+  const sportCtx = (st: any, body: any): CoachCtx => ({
+    exercises: Array.isArray(st.exercises) ? st.exercises : [],
+    days: st.days ?? {},
+    sets: st.sets ?? {},
+    today: sportToday(),
+    best: st.bestSets ?? {},
+    imported: st.importedDays ?? {},
+    notYet: st.notYet ?? {},
+    strength: st.sportySettings?.progressMode === 'strength',
+    deload: !!st.sportySettings?.deloadUntil && st.sportySettings.deloadUntil >= sportToday(),
+    program: st.weekProgram ?? null,
+    body
+  })
+  /**
+   * "why am I not growing?", "is 4×8 archer enough?", "sport review": answered in code from the sets, Body data and the rules.
+   * Once a week the strong model rewrites the week's program inside those rules (sportReview.ts); with no model, the code does.
+   */
+  async function trainingReply(text: string): Promise<string | null> {
+    const review = /^(?:sport|training|strength|weekly)\s+(?:weekly\s+)?review\??$/i.test(text.trim())
+    if (!review && !isTrainingQuestion(text)) return null
+    const ctx = await mirror.read((db) => {
+      const st = sportState(db)
+      if (!st) return null
+      let body: any = null
+      try { body = sportBodyNow(db as any) } catch { body = null }
+      return { st, body }
+    })
+    if (!ctx) return null
+    let c = sportCtx(ctx.st, ctx.body)
+    let extra = ''
+    // The page writes the rules' program on Monday (source 'code'); the first training question of the week lets the strong model improve it, once a day at most.
+    const prog0: any = c.program
+    if (review || reviewDue(prog0, c.today) || (prog0?.source === 'code' && prog0.tried !== c.today)) {
+      if (review || ai) {
+        const prog = await weeklyReview(c, timedAi ? (p, o) => withTimeout(timedAi(p, o as any), 30_000) : null)
+        await mirror.write((db) => {
+          const cur = sportState(db)
+          if (cur) saveSport(db as any, { ...cur, weekProgram: { ...prog, tried: c.today } }, 'ben')
+        }).catch(() => null)
+        c = { ...c, program: prog }
+        if (review) extra = prog.lines.map((l) => `• ${esc(l)}`).join('\n')
+      }
+    }
+    if (review) return `🧠 <b>This week's plan</b>\n${extra}`
+    const a = answerTraining(text, c)
+    return a ? esc(a) : null
+  }
+
   async function handleBrain(botId: string, update: any, cfg: BotBridgeConfig, text: string, key: string, media?: { kind: 'voice' | 'photo'; mime: string; data: string }): Promise<string | null> {
     const chat = String(update.message?.chat?.id ?? '')
     void tg(update.__token, 'sendChatAction', { chat_id: chat, action: 'typing' }).catch(() => null)
@@ -2502,10 +2569,19 @@ His note: ${note}`,
         })
         if (out.skip) return null
         // Not understood by the rules: the coach's brain tries (already marked seen).
+        // Sport lives in Ben: a training question or "sport review" is answered from his data and the coach's rules.
+        if ('unknown' in out && out.unknown && !text.startsWith('/')) {
+          const said = await trainingReply(text).catch(() => null)
+          if (said) {
+            addLog(text, chat, true, said)
+            await tg(update.__token, 'sendMessage', { chat_id: chat, text: said, parse_mode: 'HTML' }).catch(() => null)
+            return said
+          }
+        }
         if (ai && 'unknown' in out && out.unknown && !text.startsWith('/')) return handleBrain(botId, update, cfg, text, key)
         processed++
         if (out.ok && 'sport' in out && out.sport) {
-          const prog = addRepsToSportTrack(out.sport.name, out.sport.amount, (out.sport as any).sets)
+          const prog = addRepsToSportTrack(out.sport.name, out.sport.amount, (out.sport as any).sets, out.sport as any)
           if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round((prog.done / prog.target) * 100)}%)`
           if (prog?.line) out.reply += `\n${prog.line}`
         }

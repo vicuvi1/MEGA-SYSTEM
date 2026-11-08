@@ -54,10 +54,11 @@
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
     "SMOKE_ONLY=\"plan editor\" npm run smoke",
-    "SMOKE_ONLY=\"Sync:\" npm run smoke"
+    "SMOKE_ONLY=\"Sync:\" npm run smoke",
+    "SMOKE_ONLY=\"Sync button\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "2026-11-07: one Google event per block (planEventId, safe to repeat), colour and emoji by kind, quiet duplicate clean-up; the packer keeps lunch, breaks and 15% free time; Sync button and a Todoist refresh on focus. The new Sync smoke step was not run locally (the shared node_modules misses onnxruntime-web files, so build:web fails)."
+   "notes": "2026-11-07: one Google event per block (planEventId, safe to repeat), colour and emoji by kind, quiet duplicate clean-up; the packer keeps lunch, breaks and 15% free time; Sync button and a Todoist refresh on focus; 2026-11-08: the plan card (Coach and Today → Plan) has its own Sync button with an Auto-sync on, last checked line. The new Sync smoke step was not run locally (the shared node_modules misses onnxruntime-web files, so build:web fails)."
   },
   {
    "id": "F005",
@@ -192,11 +193,10 @@
    "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-    "SMOKE_ONLY=\"Sport Track Today\" npm run smoke",
-    "SMOKE_ONLY=\"Sport Track strength coach\" npm run smoke"
+    "SMOKE_ONLY=\"Sport Track Today\" npm run smoke"
    ],
    "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": "Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net. Coach (levels, feedback, forecasts, programs, 4 tabs) added 2026-11-07; UX5 (Ben's note after a workout, push kind workoutNote) and PG4 (why a move stalled: protein, sleep, readiness) done 2026-11-07; smoke step \"Sport Track note\". Strength coach (2026-11-07, logic and page done; smoke step \"Sport Track strength coach\"): best-set placement, strength default (5-8 reps, 3-5 sets, 2-3 min rest, 3x8 unlocks the next move), harder ladder steps, too easy / too hard taps and effort ratings; see docs/areas/sport.md."
+   "notes": "Simple mode default, Coach mode opt-in (2026-11-07): simple cards with Harder ▸ (+reps, +1 set, harder version) and Easier ▸, routine restore migration v5, Ben only confirms in Simple mode; smoke step \"Sport Track simple Today\". Too easy means harder (2026-11-07): rank and level strip on Today, automatic harder variation with Undo, Too easy / Too hard, effort, best set, Strength mode, balanced set for a thin routine (see docs/areas/sport.md). Today shows your own routine by default (plan opt-in); a logged set no longer reloads the page (echo event). Keeps 1 retry as a safety net. Coach (levels, feedback, forecasts, programs, 4 tabs) added 2026-11-07; UX5 (Ben's note after a workout, push kind workoutNote) and PG4 (why a move stalled: protein, sleep, readiness) done 2026-11-07; smoke step \"Sport Track note\". Growth coach (2026-11-07): rules in code (sportCoachRules.ts), Your coach card, post-session adjuster, weekly AI review, Ask Ben, best-set onboarding, weekly test, weighted sets, Ben logs sport; smoke step \"Sport Track onboarding\"."
   },
   {
    "id": "F015",

@@ -18,6 +18,7 @@ import type { CalEvent } from '@core/dayTime'
 import { life } from '../bridge'
 import { useToast } from '../ui'
 import { attach, edit, onNotice, retry, startLive, subscribe, undoLast, type PlanSnap } from './planStore'
+import { PlanSync } from './SyncButton'
 import './planEditor.css'
 
 const HOUR_PX = 78
@@ -252,6 +253,7 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
           </button>
         )}
         <span className="pe-space" />
+        <PlanSync />
         <button type="button" className="pe-btn" onClick={replan} title="Re-pack the time that is left (done and pinned blocks stay)">
           ⏩ Re-plan from now
         </button>

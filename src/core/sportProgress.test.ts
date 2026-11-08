@@ -51,7 +51,7 @@ describe('double progression', () => {
   })
 
   it('the top of a ladder says add a set or go slower', () => {
-    const top = moveById('one_arm_pushup')!
+    const top = moveById('onearm_assist_pushup')!
     const p = prog([['2026-03-04', [12, 12, 12]], ['2026-03-06', [12, 12, 12]]], '2026-03-08', top)
     expect(p.status).toBe('top')
     expect(p.next).toBeNull()

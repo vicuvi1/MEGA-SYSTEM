@@ -281,6 +281,49 @@ try {
     await pg.waitForTimeout(1500)
     if ((await pg.evaluate(() => window.__notes.length)) !== 1) throw new Error('the same workout got a second note')
   })
+  // Simple mode is the default: your own exercises, a big Log, +5/+10, Done and a small "Harder ▸" (+reps, +1 set, a harder version).
+  await step('Sport Track simple Today: your own exercises, Harder raises a target, no coach UI', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch button').first().click()
+    await pg.waitForTimeout(2500)
+    const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+    if (!frame) throw new Error('no Sport Track frame')
+    await frame.click('.st-tab[data-tab="today"]')
+    await frame.waitForSelector('.ex.simple', { timeout: 10000 })
+    const names = (await frame.locator('.ex .ex-name').allInnerTexts()).join('|').toLowerCase()
+    for (const n of ['push-ups', 'sit-ups', 'press']) if (!names.includes(n)) throw new Error(`simple Today does not list ${n} (got: ${names})`)
+    for (const sel of ['.ex .log-big', '.ex [data-amount="5"]', '.ex [data-amount="10"]', '.ex [data-action="full"]', '.ex [data-action="harder-toggle"]', '.ex .ex-demo']) if (!(await frame.locator(sel).first().count())) throw new Error(`a simple card lacks ${sel}`)
+    for (const sel of ['.ex .lv-big', '.ex [data-tune]', '#lv-strip', '#your-coach', '.ex .ex-effort', '#routine-section .hero-main']) if (await frame.locator(sel).first().isVisible().catch(() => false)) throw new Error(`simple mode still shows ${sel}`)
+    if (process.env.SPORT_SHOTS) { await pg.addStyleTag({ content: '.toasts { display: none !important; }' }); await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/simple-today.png` }) }
+    const card = (n) => frame.locator(`.ex.simple:has(.ex-name:text-is("${n}"))`)
+    const targetOf = async (n) => Number((await card(n).locator('.ex-count span').innerText()).replace(/[^0-9]/g, ''))
+    const t0 = await targetOf('Push-ups')
+    const s0 = await targetOf('Sit-ups')
+    // Harder ▸ +reps raises only that target.
+    await card('Push-ups').locator('[data-action="harder-toggle"]').click()
+    await card('Push-ups').locator('[data-action="harder"][data-kind="reps"]').click()
+    await frame.waitForFunction(([t]) => [...document.querySelectorAll('.ex.simple')].some((c) => /Push-ups/.test(c.querySelector('.ex-name')?.textContent ?? '') && Number((c.querySelector('.ex-count span')?.textContent ?? '').replace(/[^0-9]/g, '')) === t + 5), [t0], { timeout: 5000 })
+    if ((await targetOf('Sit-ups')) !== s0) throw new Error('Harder on push-ups changed sit-ups')
+    // Easier ▸ goes back.
+    await card('Push-ups').locator('[data-action="easier"]').click()
+    await frame.waitForFunction(([t]) => [...document.querySelectorAll('.ex.simple')].some((c) => /Push-ups/.test(c.querySelector('.ex-name')?.textContent ?? '') && Number((c.querySelector('.ex-count span')?.textContent ?? '').replace(/[^0-9]/g, '')) === t), [t0], { timeout: 5000 })
+    // Harder ▸ a harder version swaps only that one exercise.
+    await card('Push-ups').locator('[data-action="harder-toggle"]').click()
+    await card('Push-ups').locator('[data-action="harder"][data-kind="version"]').click()
+    await frame.waitForFunction(() => !/(^|\|)push-ups(\||$)/.test([...document.querySelectorAll('.ex .ex-name')].map((n) => n.textContent.trim().toLowerCase()).join('|')), null, { timeout: 5000 })
+    const swapped = (await frame.locator('.ex .ex-name').allInnerTexts()).join('|').toLowerCase()
+    for (const n of ['sit-ups', 'press']) if (!swapped.includes(n)) throw new Error(`the swap changed ${n} too (got: ${swapped})`)
+    // Easier ▸ brings the plain push-ups back.
+    await frame.locator('.ex.simple [data-action="easier"]').first().click()
+    await frame.waitForFunction(() => /(^|\|)push-ups(\||$)/.test([...document.querySelectorAll('.ex .ex-name')].map((n) => n.textContent.trim().toLowerCase()).join('|')), null, { timeout: 5000 })
+    // The Plan tab holds the one switch; the rest of it stays hidden while it is off.
+    await frame.click('.st-tab[data-tab="plan"]')
+    await frame.waitForSelector('#coach-switch', { state: 'visible', timeout: 5000 })
+    if (!/Coach mode \(levels, programs, auto-progression\)/.test(await frame.locator('#coach-switch').innerText())) throw new Error('no Coach mode switch')
+    if (await frame.locator('#prog-card').isVisible()) throw new Error('coach programs show while Coach mode is off')
+    await frame.click('.st-tab[data-tab="today"]')
+  }, { retries: 1 })
   await step('Sport Track Today: hero, exercise cards, water, menus, fits laptop and phone', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 }) // a retry starts from the usual size
     await open('body')
@@ -288,6 +331,13 @@ try {
     await pg.waitForTimeout(2500)
     let frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
+    // The coach steps below need Coach mode: it is off by default, one switch in the Plan tab.
+    await frame.click('.st-tab[data-tab="plan"]')
+    await frame.evaluate(() => { const c = document.getElementById('coach-mode-toggle'); if (!c.checked) c.click() })
+    await frame.waitForSelector('#prog-card', { state: 'visible', timeout: 5000 })
+    // The first-open best-set screen is its own step below; here it is skipped.
+    await frame.waitForTimeout(900)
+    if (await frame.locator('#modal-onboard.open').count()) await frame.click('#onboard-skip')
     await frame.click('.st-tab[data-tab="today"]')
     await frame.waitForSelector('#hero-ring .ring-fill', { timeout: 5000 })
     // SP3: on a rest day in the week plan, "Train anyway" brings the next workout.
@@ -298,10 +348,10 @@ try {
     const names = (await frame.locator('.ex .ex-name').allInnerTexts()).join('|').toLowerCase()
     for (const n of ['push-ups', 'sit-ups', 'press']) if (!names.includes(n)) throw new Error(`Today does not list ${n} (got: ${names})`)
     // The coach card: level, today's target, one big log button (prefilled from last time), set chips and a typed box.
-    for (const sel of ['.ex .lvl, .ex .tag', '.ex .ex-target b', '.ex .log-big', '.ex .log-chips .chip', '.ex form.log-type input']) if (!(await frame.locator(sel).first().count())) throw new Error(`an exercise card lacks ${sel}`)
+    for (const sel of ['.ex .lv-big, .ex .lvl, .ex .tag', '.ex .ex-target b', '.ex .log-big', '.ex .log-chips .chip', '.ex form.log-type input']) if (!(await frame.locator(sel).first().count())) throw new Error(`an exercise card lacks ${sel}`)
     // A library exercise shows its demo: two real photo frames, or the drawn figure (not an empty picture).
     await frame.waitForSelector('.ex .ex-demo svg.fig path[data-p="torso"][d], .ex .ex-demo .ph img.ph-b', { state: 'attached', timeout: 10000 })
-    const shut = async () => { for (let k = 0; k < 4 && (await frame.locator('#cel.open').count()); k++) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await pg.waitForTimeout(500) } await frame.waitForSelector('#cel', { state: 'hidden', timeout: 5000 }) }
+    const shut = async () => { if (await frame.locator('#cel.open').count()) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await frame.waitForSelector('#cel', { state: 'hidden', timeout: 5000 }) } }
     // A quick-add sends the change to Life System's log.
     await pg.evaluate(() => { window.__sportLog = []; window.addEventListener('message', (e) => e.data?.action === 'SPORT_LOG' && window.__sportLog.push(e.data.payload)) })
     // Quick log: type "15 14 12" on the first card; the coach answers with a line and the next target.
@@ -409,6 +459,27 @@ try {
     await frame.click('#pr-sub [data-sub="badges"]')
     await frame.waitForSelector('.bd .medal', { timeout: 5000 })
     await frame.click('.st-tab[data-tab="today"]')
+    // The rank and level strip: your rank, a big level per exercise, a best-set box; "Too easy" jumps a level, Undo brings it back.
+    await frame.waitForSelector('#lv-strip .ls-rank-name', { timeout: 5000 })
+    if (!/your rank/i.test(await frame.locator('#lv-strip').innerText())) throw new Error('the level strip has no rank')
+    if (await frame.locator('#lv-strip [data-best-form]').count()) {
+      if (await frame.locator('#lv-strip .ls-best').count()) await frame.click('#lv-strip .ls-best summary')
+      await frame.selectOption('#lv-strip [data-best-form] select', 'pushup')
+      await frame.fill('#lv-strip [data-best-form] input', '50')
+      await frame.click('#lv-strip [data-best-form] button[type="submit"]')
+    }
+    await frame.waitForSelector('#lv-strip .lvb', { timeout: 5000 })
+    const lvText = await frame.locator('#lv-strip').innerText()
+    if (!/Level \d+/.test(lvText) || !/of \d+/.test(lvText) || !/(→|top rank)/.test(await frame.locator('#ls-rank-line').innerText())) throw new Error(`the level strip lacks the rank or levels (got: ${lvText})`)
+    if (!(await frame.locator('.ex .lv-big').count()) || !(await frame.locator('.ex [data-tune="easy"]').count()) || !(await frame.locator('.ex [data-tune="hard"]').count())) throw new Error('cards lack the big level or the Too easy / Too hard buttons')
+    if (process.env.SPORT_SHOTS) { await pg.addStyleTag({ content: '.toasts { display: none !important; }' }); await frame.locator('#lv-strip').screenshot({ path: `${process.env.SPORT_SHOTS}/today-hero.png` }) }
+    const before = await frame.locator('.ex .ex-name').allInnerTexts()
+    await frame.click('.ex [data-tune="easy"]')
+    await frame.waitForFunction(() => /Level \d+|top of the ladder/.test(document.getElementById('toast-text')?.textContent ?? ''), null, { timeout: 5000 })
+    const after = await frame.locator('.ex .ex-name').allInnerTexts()
+    if (JSON.stringify(before) === JSON.stringify(after) && !/top of the ladder/.test(await frame.locator('#toast-text').innerText())) await frame.waitForTimeout(300)
+    if (process.env.SPORT_SHOTS) await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/level-up-applied.png` })
+    if (await frame.locator('#toast-undo').isVisible()) await frame.click('#toast-undo')
     // No sideways scroll at a laptop size or on a phone.
     for (const [w, h] of [[1280, 720], [390, 844]]) {
       await pg.setViewportSize({ width: w, height: h })
@@ -418,55 +489,39 @@ try {
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
   }, { retries: 1 })
-  // The strength coach on Sport Track: a big level at the top, Strength by default, Too easy / Too hard with a plain answer,
-  // the strength target with its rest, and an effort rating after a set. SPORT_SHOTS=<dir> saves 2 screenshots.
-  await step('Sport Track strength coach: hero level, strength default, Too easy and Too hard, effort', async () => {
+  // Best-set onboarding: one short screen on first open (and "Re-check my levels"); 50 push-ups starts on a harder variation.
+  await step('Sport Track onboarding: a best set of 50 push-ups puts Today on a harder variation', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
     await pg.locator('.seg-switch button').first().click()
     await pg.waitForTimeout(2500)
     const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
-    await frame.click('.st-tab[data-tab="today"]')
-    await frame.waitForSelector('.ex.coach', { timeout: 10000 })
-    const shut = async () => { for (let k = 0; k < 4 && (await frame.locator('#cel.open').count()); k++) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await pg.waitForTimeout(500) } if (await frame.locator('#unlock.open').count()) await frame.click('#unlock-ok') }
-    // Strength is the default way to progress.
-    const mode = await frame.evaluate(() => { document.getElementById('setting-progress-mode'); return document.getElementById('setting-progress-mode')?.value })
-    if (mode !== 'strength') throw new Error(`Strength should be the default, got ${mode}`)
-    const opts = await frame.locator('#setting-progress-mode option').allInnerTexts()
-    if (opts.length !== 3 || !/Strength/.test(opts[0]) || !/Build muscle/.test(opts[1]) || !/Simple totals/.test(opts[2])) throw new Error(`want Strength / Build muscle / Simple totals, got ${opts.join('|')}`)
-    // One big set of push-ups places you on a hard variation, shown big at the top.
-    const push = frame.locator('.ex.coach', { has: frame.locator('.ex-name', { hasText: /push-ups/i }) }).first()
-    await push.locator('form.log-type input').fill('50')
-    await push.locator('form.log-type input').press('Enter')
-    await frame.waitForSelector('#hero-level:not([hidden]) .hl-main', { timeout: 10000 })
-    await shut()
-    const hero = await frame.locator('#hero-level').innerText()
-    const lvl = /level (\d+)/i.exec(hero)
-    if (!lvl || Number(lvl[1]) < 10) throw new Error(`50 push-ups in one set should show a hard variation (got: ${hero})`)
-    if (!/Overall rank/i.test(hero)) throw new Error(`the hero lacks the overall rank (got: ${hero})`)
-    // The card: level name, the strength target with rest, Too easy / Too hard, effort.
-    const card = frame.locator('.ex.coach', { has: frame.locator('.ex-name', { hasText: /push-ups/i }) }).first()
-    const cardText = await card.innerText()
-    if (!/\d × \d+-\d+.*rest \d+:\d\d/.test(cardText)) throw new Error(`no strength target with rest on the card (got: ${cardText})`)
-    if (!(await card.locator('[data-effort="3"]').count())) throw new Error('no effort rating after a set')
-    await card.locator('[data-effort="4"]').click()
-    await frame.waitForSelector('.ex.coach [data-effort="4"].on', { timeout: 5000 })
-    const toastOf = async () => frame.locator('#toast-text').innerText()
-    await card.locator('[data-feel="easy"]').click()
-    await frame.waitForSelector('#toast.show', { timeout: 5000 })
-    if (!/easy/i.test(await toastOf())) throw new Error(`Too easy gave no plain answer (got: ${await toastOf()})`)
-    await frame.locator('.ex.coach', { has: frame.locator('.ex-name', { hasText: /push-ups/i }) }).first().locator('[data-feel="hard"]').click()
-    await frame.waitForFunction(() => /hard|light|lower/i.test(document.getElementById('toast-text')?.textContent || ''), null, { timeout: 5000 })
-    const st = await frame.evaluate(() => JSON.parse(localStorage.getItem(Object.keys(localStorage).find((k) => /sport/i.test(k) && localStorage.getItem(k).includes('"exercises"')) || '') || '{}'))
-    if (!st.feel || !Object.keys(st.feel).length) throw new Error('the Too easy / Too hard taps were not saved')
-    if (!st.effort || !Object.keys(st.effort).length) throw new Error('the effort rating was not saved')
-    if (process.env.SPORT_SHOTS) {
-      await frame.evaluate(() => window.scrollTo(0, 0))
-      await pg.screenshot({ path: `${process.env.SPORT_SHOTS}/today-hero.png` })
-      await frame.locator('.ex.coach').first().scrollIntoViewIfNeeded()
-      await frame.locator('.ex.coach').first().screenshot({ path: `${process.env.SPORT_SHOTS}/card-buttons.png` })
-    }
+    const K = 'life_sport_tracker_v1'
+    // A fresh start for this step; the state is put back at the end.
+    await frame.evaluate((k) => { if (!localStorage.getItem('smoke_sport_backup')) localStorage.setItem('smoke_sport_backup', localStorage.getItem(k) ?? ''); const s = JSON.parse(localStorage.getItem(k) || '{}'); delete s.onboarded; s.sportySettings = { ...(s.sportySettings || {}), coachMode: true }; localStorage.setItem(k, JSON.stringify(s)); location.reload() }, K)
+    await frame.waitForSelector('#modal-onboard.open', { timeout: 10000 }).catch(async (e) => { throw new Error(e.message.split('\n')[0] + ' DEBUG ' + JSON.stringify(await frame.evaluate((k) => ({ ls: JSON.parse(localStorage.getItem(k) || '{}').sportySettings, on: typeof coachOn === 'function' ? coachOn() : 'n/a' }), K))) })
+    if (process.env.SPORT_SHOTS) await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/onboarding.png` })
+    await frame.fill('#onb-fields input[name="pushup"]', '50')
+    await frame.click('#onb-go')
+    await frame.waitForSelector('#modal-onboard:not(.open)', { state: 'attached', timeout: 5000 })
+    await frame.waitForFunction(() => /(archer|decline|one-arm)/i.test(document.querySelector('#your-coach .cc-list')?.textContent ?? ''), null, { timeout: 10000 })
+    const session = await frame.locator('#your-coach .cc-list').innerText()
+    if (!/[45]×[5-8]\s+(archer|decline)/i.test(session)) throw new Error(`Today's session is not 4×5–8 of a hard variation (got: ${JSON.stringify(session)})`)
+    if (process.env.SPORT_SHOTS) await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/today-after-onboarding.png` })
+    // It does not come back by itself, and "Re-check my levels" reopens it with your answer.
+    await frame.evaluate(() => location.reload())
+    await frame.waitForSelector('#your-coach:not([hidden])', { timeout: 10000 })
+    await frame.waitForTimeout(1200)
+    if (await frame.locator('#modal-onboard.open').count()) throw new Error('onboarding came back after it was answered')
+    await frame.click('#cc-recheck')
+    await frame.waitForSelector('#modal-onboard.open', { timeout: 3000 })
+    if ((await frame.inputValue('#onb-fields input[name="pushup"]')) !== '50') throw new Error('Re-check should show your last answer')
+    await frame.click('#onboard-skip')
+    // Put the state back.
+    await frame.evaluate((k) => { const b = localStorage.getItem('smoke_sport_backup'); localStorage.removeItem('smoke_sport_backup'); if (b) localStorage.setItem(k, b); else localStorage.removeItem(k); location.reload() }, K)
+    await frame.waitForTimeout(1200)
+    if (await frame.locator('#modal-onboard.open').count()) await frame.click('#onboard-skip')
   }, { retries: 1 })
   // BD1–BD18: Body → Metrics & Workouts in four tabs. The protein ring and a quick log, readiness setting
   // Sport Track's dose, sets per muscle, the weight trend, measurements, progress photos that stay on this
@@ -3261,6 +3316,19 @@ try {
     await sync.click()
     await pg.locator('.ot-list .ot-t', { hasText: 'Water the balcony plants' }).first().waitFor({ timeout: 15000 })
     await pg.locator('.ot-head .sync-at', { hasText: /Synced \d\d:\d\d/ }).first().waitFor({ timeout: 10000 })
+  })
+  await step('Sync button: the plan card shows Sync and the auto-sync status; a click updates the Synced time', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    const bar = pg.locator('section.cp [data-sync-bar]').first()
+    await bar.waitFor({ timeout: 15000 })
+    await bar.locator('.plan-sync-auto', { hasText: /Auto-sync on/ }).waitFor({ timeout: 10000 })
+    await bar.locator('button', { hasText: 'Sync' }).click()
+    await bar.locator('.plan-sync-auto', { hasText: /last checked \d\d:\d\d/ }).waitFor({ timeout: 15000 })
+    await bar.locator('.sync-at', { hasText: /Synced \d\d:\d\d/ }).waitFor({ timeout: 15000 })
+    await pg.screenshot({ path: '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/sync/plan-sync.png' })
   })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {

@@ -5,7 +5,7 @@
 // ladder) and fills the gaps from the library. Pure and tested.
 import { FAMILIES, moveById, type Move } from './sportMoves'
 import { moveOf, type SportEx } from './sportLadders'
-import { rangeFor, restFor, strengthSets, type ProgMode } from './sportProgress'
+import { rangeFor } from './sportProgress'
 import { mondayOf, shiftDay } from './sportSets'
 
 export type Split = 'full' | 'upper_lower'
@@ -20,8 +20,6 @@ export interface ProgramPrefs {
   split?: Split | 'auto'
   /** Add a 3-minute cool-down. */
   coolDown?: boolean
-  /** strength (default): 5–8 reps, 3–5 sets, 2–3 min rest. grow: 8–15 reps, 3 sets, 60–120 s rest. */
-  mode?: ProgMode
 }
 
 export interface PlanItem {
@@ -132,28 +130,19 @@ export function buildSession(kind: SessionKind, exercises: SportEx[], prefs: Pro
   }
   const cooldown = prefs.coolDown ? COOLDOWN_MIN : 0
   const minutes = Math.max(15, Math.min(60, prefs.minutes || 30))
-  const mode: ProgMode = prefs.mode ?? 'strength'
-  const strength = mode === 'strength'
-  // `rest` is a cap: each move rests as long as its difficulty asks (strength 2–3 min), but not more than this.
-  const make = (n: number, rest: number, paired: boolean, extraSets = 0): PlanItem[] =>
+  const make = (n: number, rest: number, paired: boolean): PlanItem[] =>
     picks.slice(0, n).map((p, i, arr) => {
-      const r = rangeFor(p.move, mode)
-      const sets = strength ? strengthSets(p.move, extraSets - (p.move.diff >= 4 && extraSets === 0 ? 1 : 0)) : 3
-      return { move: p.move, exId: p.exId, sets, lo: r.lo, hi: r.hi, unit: r.unit, rest: strength ? Math.min(rest, restFor(p.move, mode)) : rest, ...(paired && i % 2 === 0 && i + 1 < arr.length ? { pairNext: true } : {}) }
+      const r = rangeFor(p.move)
+      return { move: p.move, exId: p.exId, sets: 3, lo: r.lo, hi: r.hi, unit: r.unit, rest, ...(paired && i % 2 === 0 && i + 1 < arr.length ? { pairNext: true } : {}) }
     })
-  // Best first: more exercises, straight sets, longer rest (strength: 4 sets, then 3; 3 minutes down to 2, then pairs).
-  const tries: [number, number, boolean, number][] = []
-  if (strength) {
-    for (const n of [5, 4, 3]) for (const extra of [1, 0]) for (const rest of [180, 150, 120]) tries.push([n, rest, false, extra])
-    for (const n of [6, 5, 4, 3]) for (const rest of [150, 120]) tries.push([n, rest, true, 0])
-  } else {
-    for (const n of [6, 5, 4]) for (const rest of [120, 90, 75, 60]) tries.push([n, rest, false, 0])
-    for (const n of [6, 5, 4]) for (const rest of [90, 75, 60]) tries.push([n, rest, true, 0])
-  }
-  let items = strength ? make(3, 120, true) : make(4, 60, true)
-  for (const [n, rest, paired, extra] of tries) {
+  // Best first: more exercises, straight sets, longer rest.
+  const tries: [number, number, boolean][] = []
+  for (const n of [6, 5, 4]) for (const rest of [120, 90, 75, 60]) tries.push([n, rest, false])
+  for (const n of [6, 5, 4]) for (const rest of [90, 75, 60]) tries.push([n, rest, true])
+  let items = make(4, 60, true)
+  for (const [n, rest, paired] of tries) {
     if (n > picks.length) continue
-    const it = make(n, rest, paired, extra)
+    const it = make(n, rest, paired)
     if (estimateMinutes(it, WARMUP_MIN, cooldown) <= minutes) { items = it; break }
   }
   return { kind, name: SESSIONS[kind].name, items, warmup: WARMUP_MIN, cooldown, minutes: estimateMinutes(items, WARMUP_MIN, cooldown) }
@@ -192,6 +181,6 @@ export function growTips(weightKg?: number | null): string[] {
     g ? `Protein: about 1.6 g per kg a day (${g} g for you), spread over 3–4 meals.` : 'Protein: about 1.6 g per kg of body weight a day, spread over 3–4 meals.',
     'Go close to failure: stop each set when 1–2 more good reps would be the most you could do.',
     'Sleep 7–9 hours: muscle grows while you rest, not while you train.',
-    'Rest 2–3 minutes between hard sets (strength), and go slow on the way down.'
+    'Same rest each time (60–120 s), and slow on the way down.'
   ]
 }

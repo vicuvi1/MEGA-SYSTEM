@@ -23,16 +23,15 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-07, evening)
+### Current handoff (2026-11-07, final)
 ```
-Milestone:   Sport Track → real strength coach (owner's goal: get much, much stronger)
-Completed:   bug round, island alive + game time, plan/Todoist sync, Coach readability, sport levels/coach/forecasts/programs (aa5dbb4, 8b29dd5); full smoke green on 8b29dd5
-Active:      one builder (worktree) on sport: big level hero on Today, auto-switch to harder variations,
-             Too easy / Too hard, effort rating, "best set" placement (owner does ~50 push-ups in one set),
-             new default Strength mode (5–8 reps, 3–5 sets, 2–3 min rest, next variation at 3×8)
-Blockers:    none known. New worktrees lack some node_modules files: symlink /home/user/MEGA-SYSTEM/node_modules
-Next action: check that builder's commit on main (git log), run SMOKE_ONLY="Sport Track" npm run smoke, then release status
-Files:       docs/INDEX.md, docs/areas/sport.md, docs/harness/progress.md, docs/harness/feature_list.json
+Milestone:   Sport back to SIMPLE (0a1bb20): own routine restored, Simple mode default, Harder/Easier per exercise; coach features behind "Coach mode" (off)
+OWNER RULE:  Sport must stay simple — his exercises (push-ups, press/abs, sit-ups, squats) + a Harder button. Coach mode stays OFF. Don't add complexity to Sport Today.
+Active:      none
+Blockers:    "Sport Track onboarding" smoke step passes only on retry (stale synced copy resets coachMode) — fix
+             Squats added on the onboarding day might have been hidden by the restore — check and offer to re-add
+Next action: check the user's Sport Today shows his exercises; fix the coachMode sync race; full smoke on main
+Files:       docs/INDEX.md, docs/areas/sport.md, src/core/sportSimple.ts
 ```
 
 ## Builder report format (≤ ~250 words)

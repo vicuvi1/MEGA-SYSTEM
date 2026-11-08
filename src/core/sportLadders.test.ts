@@ -10,7 +10,7 @@ describe('ladders', () => {
     const p = moveById('pushup')!
     expect(levelOf(p)).toMatchObject({ level: 3, of: 9, family: 'pushup' })
     expect(nextStep(p)?.id).toBe('wide_pushup')
-    expect(nextStep(moveById('one_arm_pushup')!)).toBeNull()
+    expect(nextStep(moveById('onearm_assist_pushup')!)).toBeNull()
     expect(moveOf({ name: 'pushups' })?.id).toBe('pushup')
     expect(moveOf({ name: 'Anything', move: 'squat' })?.id).toBe('squat')
   })

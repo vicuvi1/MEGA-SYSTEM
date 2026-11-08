@@ -40,3 +40,7 @@ Which photo each move uses, and its crop, is in `src/core/sportPhotos.ts`;
 `scripts/sport-photos.mjs` remakes the frames. Moves without a matching
 photo are drawn by the app instead. Thank you to the people who made and
 shared these photos.
+
+## Added 2026-11-07
+
+`box_pistol-0/1.webp` come from the same database (`Single-Leg_High_Box_Squat`), same license. The other new moves (one-arm-assisted push-ups, pseudo-planche leans, feet-elevated rows, one-arm rows, dragon flag negatives, hollow body rocks) have no matching public-domain photo, so they are drawn with `sportDraw.ts`.

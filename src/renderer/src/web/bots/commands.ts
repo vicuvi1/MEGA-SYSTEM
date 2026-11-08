@@ -18,7 +18,7 @@ import { setsText } from '@core/sportSets'
 
 const store = typeof localStorage !== 'undefined' ? localStorage : null
 
-export type RunOut = { reply: string; keyboard?: any; sport?: { name: string; amount: number }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' }; unknown?: boolean }
+export type RunOut = { reply: string; keyboard?: any; sport?: { name: string; amount: number; sets?: number[]; kg?: number; best?: boolean; unit?: string }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' }; unknown?: boolean }
 
 /**
  * Finance Helper's accounts, for /balance (own currency each): this device's
@@ -143,12 +143,14 @@ export function runCommand(s: Services, parsed: ReturnType<typeof parseTelegramT
       const name = parsed.exerciseName || 'pushups'
       const amount = parsed.exerciseAmount || 20 // like the desktop: "/pushups" alone is 20
       const sets = parsed.exerciseSets
+      // "best set push-ups 50": a declared max, not a workout (no points, nothing logged in Body).
+      if (parsed.exerciseBest && sets?.length) return { reply: `🏆 Best set noted: <b>${sets[0]}</b> ${esc(name)}.`, sport: { name, amount: 0, sets, best: true, unit: parsed.exerciseUnit } }
       const res = s.body.logWorkout({
         title: sets ? `${name} ${setsText(sets, parsed.exerciseUnit)}` : `${name} (+${amount})`,
         items: [{ exerciseId: name.toLowerCase(), name, amount, unit: parsed.exerciseUnit === 'sec' ? 'sec' : 'reps', ...(sets ? { sets: sets.map((reps) => ({ reps, weight: 0 })) } : {}) } as any],
         note: 'Logged via Telegram'
       })
-      return { reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0) + (sets ? `\nSets: <b>${setsText(sets, parsed.exerciseUnit)}</b> · best set <b>${Math.max(...sets)}</b>` : ''), sport: { name, amount, ...(sets ? { sets } : {}) } }
+      return { reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, 'body.workout_done', 10) : 0) + (sets ? `\nSets: <b>${setsText(sets, parsed.exerciseUnit)}${parsed.exerciseKg ? ` +${parsed.exerciseKg} kg` : ''}</b> · best set <b>${Math.max(...sets)}</b>` : ''), sport: { name, amount, ...(sets ? { sets } : {}), ...(parsed.exerciseKg ? { kg: parsed.exerciseKg } : {}), unit: parsed.exerciseUnit } }
     }
     case 'sport': {
       const name = parsed.exerciseName || 'Workout'

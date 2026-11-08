@@ -159,6 +159,7 @@ export function mergeTelegramDays(st: any, days: TgDays, pick: string[], today: 
   out.exercises = Array.isArray(out.exercises) ? out.exercises : []
   out.days = out.days && typeof out.days === 'object' ? out.days : {}
   out.history = Array.isArray(out.history) ? out.history : []
+  out.importedDays = out.importedDays && typeof out.importedDays === 'object' ? out.importedDays : {}
   const added: string[] = []
   const done: string[] = []
   for (const day of [...new Set(pick)].sort()) {
@@ -175,6 +176,11 @@ export function mergeTelegramDays(st: any, days: TgDays, pick: string[], today: 
       }
       const id = String(ex.id)
       const m = (out.days[day] ??= {})
+      // A day total with no real sets is history, streak and volume only: never evidence for a level.
+      if (!out.sets?.[day]?.[id]?.length) {
+        const l = (out.importedDays[day] ??= [])
+        if (!l.includes(id)) l.push(id)
+      }
       m[id] = Math.max(Number(m[id]) || 0, c.done)
       if (c.target != null && c.done < c.target) full = false
       items.push({ exerciseId: id, name: ex.name, unit: c.unit, amount: m[id] })

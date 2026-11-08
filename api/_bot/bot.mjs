@@ -442,7 +442,10 @@ function defaultSport(today) {
 			glassSizeMl: 250
 		},
 		history: [],
-		sportySettings: { autoProgression: true }
+		sportySettings: {
+			autoProgression: true,
+			coachMode: false
+		}
 	};
 }
 function bar(done, target, len = 8) {
@@ -1310,7 +1313,7 @@ function proteinGoal(weightKg, gPerKg = GPK.def) {
 	};
 }
 var round1 = (n) => Math.round(n * 10) / 10;
-var NUM$1 = "(\\d{1,4}(?:[.,]\\d)?)";
+var NUM$2 = "(\\d{1,4}(?:[.,]\\d)?)";
 var WORDNUM = {
 	a: 1,
 	an: 1,
@@ -1359,7 +1362,7 @@ var COUNT_UNIT = {
 function parseProtein(text) {
 	let t = norm$6(text).replace(/^\/(protein|p)\b/, "protein").replace(/^(i\s+)?(ate|had|log|add|eaten|just ate|mancat|am mancat|съел)\s+/, "").replace(/[.!]+$/, "");
 	if (!t || t.length > 48 || t.split(" ").length > 6 || /\?/.test(t)) return null;
-	let m = new RegExp(`^(?:protein|proteine|proteina|белок|prot)\\s*:?\\s*\\+?${NUM$1}\\s*g?$`).exec(t) ?? new RegExp(`^\\+?${NUM$1}\\s*g(?:rams?)?\\s*(?:of\\s+)?(?:protein|proteine|proteina|белка|prot)$`).exec(t);
+	let m = new RegExp(`^(?:protein|proteine|proteina|белок|prot)\\s*:?\\s*\\+?${NUM$2}\\s*g?$`).exec(t) ?? new RegExp(`^\\+?${NUM$2}\\s*g(?:rams?)?\\s*(?:of\\s+)?(?:protein|proteine|proteina|белка|prot)$`).exec(t);
 	if (m) {
 		const g = Math.round(Number(m[1].replace(",", ".")));
 		return g >= 1 && g <= 300 ? {
@@ -1370,13 +1373,13 @@ function parseProtein(text) {
 		} : null;
 	}
 	t = t.replace(/^(a\s+)?(can|cans|tin|scoop|scoops|glass|slice|slices|portion|portions|bowl)\s+of\s+/, (x) => /^a\s/.test(x) ? "a " : "").replace(/\bof\s+/g, "");
-	m = new RegExp(`^${NUM$1}\\s*(g|gr|grams?|ml)\\s+(.+)$`).exec(t);
+	m = new RegExp(`^${NUM$2}\\s*(g|gr|grams?|ml)\\s+(.+)$`).exec(t);
 	if (m) {
 		const f = matchFood(m[3]);
 		const grams = Number(m[1].replace(",", "."));
 		return f && f.grams && grams >= 10 && grams <= 2e3 ? logOf(f, { grams }) : null;
 	}
-	m = new RegExp(`^(.+?)\\s+${NUM$1}\\s*(g|gr|grams?|ml)$`).exec(t);
+	m = new RegExp(`^(.+?)\\s+${NUM$2}\\s*(g|gr|grams?|ml)$`).exec(t);
 	if (m) {
 		const f = matchFood(m[1]);
 		const grams = Number(m[2].replace(",", "."));
@@ -1750,7 +1753,8 @@ var FAMILIES = {
 			"diamond_pushup",
 			"decline_pushup",
 			"archer_pushup",
-			"planche_pushup"
+			"planche_pushup",
+			"onearm_assist_pushup"
 		]
 	},
 	pike: {
@@ -1766,7 +1770,9 @@ var FAMILIES = {
 		steps: [
 			"door_row",
 			"table_row_bent",
-			"table_row"
+			"table_row",
+			"feet_row",
+			"onearm_row"
 		]
 	},
 	back: {
@@ -1780,7 +1786,9 @@ var FAMILIES = {
 			"situp",
 			"leg_raise",
 			"hollow_hold",
+			"hollow_rock",
 			"v_up",
+			"dragon_neg",
 			"dragon_flag"
 		]
 	},
@@ -1794,7 +1802,8 @@ var FAMILIES = {
 			"plank",
 			"side_plank",
 			"shoulder_taps",
-			"plank_updown"
+			"plank_updown",
+			"planche_lean"
 		]
 	},
 	squat: {
@@ -1804,6 +1813,7 @@ var FAMILIES = {
 			"jump_squat",
 			"split_squat",
 			"bulgarian_squat",
+			"box_pistol",
 			"shrimp_squat",
 			"pistol_squat"
 		]
@@ -2192,7 +2202,12 @@ var MOVES = [
 			"Push back to the middle and do the other side."
 		],
 		mistake: "Rushing it: go slow, the straight arm only helps a little.",
-		alias: ["archer pushups"],
+		alias: [
+			"archer pushups",
+			"archer",
+			"archers",
+			"archer push ups"
+		],
 		anim: pushAnim({
 			hands: "archer",
 			a: [[82, 82.5], [104, 82.5]],
@@ -2232,6 +2247,42 @@ var MOVES = [
 			top: -19,
 			low: -7
 		})
+	},
+	{
+		id: "onearm_assist_pushup",
+		name: "One-arm-assisted push-ups",
+		group: "push",
+		family: "pushup",
+		diff: 5,
+		unit: "reps",
+		start: 12,
+		set: 4,
+		muscles: [
+			"Chest",
+			"Triceps",
+			"Shoulders",
+			"Core"
+		],
+		steps: [
+			"Put one hand on a box or thick book, a long reach to the side. The other hand is on the floor under your chest.",
+			"Lower on the floor arm and use the other hand only as a light helper.",
+			"Push up, then swap hands. Use the helper less and less each week."
+		],
+		mistake: "Pushing hard with the helper hand: it should only touch, like a fingertip on a table.",
+		alias: [
+			"one arm assisted pushups",
+			"assisted one arm pushups",
+			"one arm pushup progression"
+		],
+		anim: {
+			props: [{
+				k: "box",
+				x: 94,
+				y: 70,
+				w: 24
+			}],
+			keys: [k(plank(PU_TOP, { a: [[80, 82.5], [104, 68.5]] }), .9, .35), k(plank(-6, { a: [[80, 82.5], [104, 68.5]] }), 1.2, .15)]
+		}
 	},
 	{
 		id: "pike_pushup",
@@ -2502,6 +2553,111 @@ var MOVES = [
 		}
 	},
 	{
+		id: "feet_row",
+		name: "Feet-elevated rows",
+		group: "pull",
+		family: "row",
+		diff: 4,
+		unit: "reps",
+		start: 16,
+		set: 6,
+		muscles: [
+			"Back",
+			"Biceps",
+			"Rear shoulders",
+			"Core"
+		],
+		steps: [
+			"Lie under a sturdy table, hold its edge, and put your heels on a chair or box.",
+			"Keep the body one straight line, a little above flat.",
+			"Pull your chest to the edge, pause, and lower for 2 seconds."
+		],
+		mistake: "Hips sagging as you tire: stop the set when the line breaks.",
+		alias: [
+			"feet elevated rows",
+			"elevated feet rows",
+			"feet up rows",
+			"inverted rows feet elevated"
+		],
+		anim: {
+			props: [{
+				k: "table",
+				x: 66,
+				y: 40,
+				w: 50
+			}, {
+				k: "box",
+				x: 8,
+				y: 64,
+				w: 26
+			}],
+			keys: [k({
+				s: body([26, 62.5], 5),
+				line: true,
+				a: [[86, 42], [85, 42]],
+				f: [[26, 62.5], [27, 62.5]],
+				eb: [1, 1],
+				ft: [-62, -62]
+			}, .9, .3), k({
+				s: body([26, 62.5], -9.5),
+				line: true,
+				a: [[86, 42], [85, 42]],
+				f: [[26, 62.5], [27, 62.5]],
+				eb: [1, 1],
+				ft: [-62, -62]
+			}, .9, .3)]
+		}
+	},
+	{
+		id: "onearm_row",
+		name: "One-arm rows (table or door)",
+		group: "pull",
+		family: "row",
+		diff: 5,
+		unit: "reps",
+		start: 10,
+		set: 4,
+		muscles: [
+			"Back",
+			"Biceps",
+			"Core",
+			"Grip"
+		],
+		steps: [
+			"Lie under a sturdy table or hold a door frame low, with one hand only. The other hand rests on your hip.",
+			"Keep your hips square and your body straight.",
+			"Pull your chest to the hand, lower slowly, finish one side, then swap."
+		],
+		mistake: "Twisting the body to cheat: the chest stays facing the ceiling.",
+		alias: [
+			"one arm rows",
+			"one arm inverted row",
+			"single arm rows",
+			"one arm door row"
+		],
+		anim: {
+			props: [{
+				k: "table",
+				x: 66,
+				y: 40,
+				w: 50
+			}],
+			keys: [k({
+				s: body([26, 79], -10.3),
+				line: true,
+				a: [[86, 42], [74, 74]],
+				f: [[26, 79], [27, 79]],
+				ft: [-62, -62]
+			}, .9, .3), k({
+				s: body([26, 79], -24),
+				line: true,
+				a: [[86, 42], [72, 64]],
+				f: [[26, 79], [27, 79]],
+				ft: [-62, -62]
+			}, .9, .3)]
+		}
+	},
+	{
 		id: "superman",
 		name: "Superman",
 		group: "pull",
@@ -2717,6 +2873,47 @@ var MOVES = [
 		}, 1.6)] }
 	},
 	{
+		id: "hollow_rock",
+		name: "Hollow body rocks",
+		group: "core",
+		family: "core",
+		diff: 3,
+		unit: "reps",
+		start: 30,
+		set: 10,
+		muscles: [
+			"Abs",
+			"Hip flexors",
+			"Core"
+		],
+		steps: [
+			"Get into the hollow hold: lower back pressed down, arms and straight legs a little off the floor.",
+			"Rock back and forth like a boat, keeping the banana shape.",
+			"Count one rep for each full rock. Stop if your lower back lifts."
+		],
+		mistake: "Letting the shape go loose: if the lower back lifts, make the rocks smaller.",
+		alias: [
+			"hollow rocks",
+			"hollow body rock",
+			"hollow rock"
+		],
+		anim: { keys: [k({
+			h: [58, 78],
+			s: [82.5, 72],
+			a: [[107, 65], [106, 66]],
+			f: [[23, 76.5], [24, 77.5]],
+			ft: [-150, -150],
+			bow: -2
+		}, .7), k({
+			h: [58, 80],
+			s: [82.5, 76],
+			a: [[107, 70], [106, 71]],
+			f: [[23, 69], [24, 70]],
+			ft: [-150, -150],
+			bow: -2
+		}, .7)] }
+	},
+	{
 		id: "v_up",
 		name: "V-ups",
 		group: "core",
@@ -2754,6 +2951,55 @@ var MOVES = [
 		}, .75, .2)] }
 	},
 	{
+		id: "dragon_neg",
+		name: "Dragon flag negatives",
+		group: "core",
+		family: "core",
+		diff: 4,
+		unit: "reps",
+		start: 8,
+		set: 3,
+		muscles: [
+			"Abs",
+			"Core",
+			"Lats"
+		],
+		steps: [
+			"Lie on a bench or the floor and hold something solid behind your head.",
+			"Get your straight body up on your upper back (kick up if you need to).",
+			"Lower slowly for 5 seconds and stop a hand above the floor, then reset."
+		],
+		mistake: "Dropping fast or folding at the hips: slow and straight, or bend the knees.",
+		alias: [
+			"dragon flag negative",
+			"dragon negatives",
+			"dragon flag lowering"
+		],
+		anim: {
+			props: [{
+				k: "box",
+				x: 44,
+				y: 72,
+				w: 62
+			}],
+			keys: [k({
+				s: [80, 68],
+				line: true,
+				a: [[100, 71], [99, 71]],
+				f: [at$2([80, 68], 61.5, -125), at$2([80, 68], 61.5, -124)],
+				eb: [-1, -1],
+				ft: [-125, -124]
+			}, .9, .3), k({
+				s: [80, 68],
+				line: true,
+				a: [[100, 71], [99, 71]],
+				f: [at$2([80, 68], 61.5, -150), at$2([80, 68], 61.5, -149)],
+				eb: [-1, -1],
+				ft: [-150, -149]
+			}, 2, .2)]
+		}
+	},
+	{
 		id: "dragon_flag",
 		name: "Dragon flag (lowering)",
 		group: "core",
@@ -2773,7 +3019,7 @@ var MOVES = [
 			"Lower the straight body as slowly as you can."
 		],
 		mistake: "Bending at the hips: if you fold, bend the knees and lower that way first.",
-		alias: ["dragon flags", "dragon flag negatives"],
+		alias: ["dragon flags", "full dragon flag"],
 		anim: {
 			props: [{
 				k: "box",
@@ -3013,6 +3259,34 @@ var MOVES = [
 		] }
 	},
 	{
+		id: "planche_lean",
+		name: "Pseudo-planche leans",
+		group: "core",
+		family: "plank",
+		diff: 4,
+		unit: "sec",
+		start: 40,
+		set: 10,
+		muscles: [
+			"Shoulders",
+			"Chest",
+			"Core",
+			"Wrists"
+		],
+		steps: [
+			"Get in a push-up position with your hands by your waist, fingers turned out.",
+			"Lean forward until your shoulders are well in front of your hands. Arms stay straight.",
+			"Hold the lean and keep breathing. Warm up your wrists first."
+		],
+		mistake: "Bending the elbows or letting the hips pike up: straight arms, straight body.",
+		alias: [
+			"planche lean",
+			"pseudo planche lean",
+			"planche leans"
+		],
+		anim: { keys: [k(plank(-17, { a: [[66, 82.5], [64.5, 82.5]] }), 1.6), k(plank(-19, { a: [[66, 82.5], [64.5, 82.5]] }), 1.6)] }
+	},
+	{
 		id: "squat",
 		name: "Squats",
 		group: "legs",
@@ -3157,6 +3431,57 @@ var MOVES = [
 				f: [[75, 81.5], [33, 63]],
 				ft: [12, 175]
 			}, 1, .1)]
+		}
+	},
+	{
+		id: "box_pistol",
+		name: "Box pistol squats",
+		group: "legs",
+		family: "squat",
+		diff: 4,
+		unit: "reps",
+		start: 14,
+		set: 5,
+		muscles: [
+			"Thighs (quads)",
+			"Glutes",
+			"Balance",
+			"Core"
+		],
+		steps: [
+			"Stand on one leg in front of a box or chair, the other leg straight out in front.",
+			"Sit back onto the box slowly on the standing leg, free leg off the floor.",
+			"Stand up without swinging. Use a lower box each week until it is a full pistol."
+		],
+		mistake: "Dropping onto the box: lower slowly, then stand without rocking.",
+		alias: [
+			"box pistol",
+			"box pistols",
+			"assisted pistol squat",
+			"pistol to box"
+		],
+		anim: {
+			props: [{
+				k: "box",
+				x: 34,
+				y: 68,
+				w: 26
+			}],
+			keys: [k({
+				h: [60, 46.5],
+				s: [61, 21.5],
+				a: [[86, 26], [85, 27]],
+				f: [[62, 81.5], at$2([60, 46.5], 36.3, 38)],
+				ft: [12, -45],
+				eb: [-1, -1]
+			}, 1, .3), k({
+				h: [51, 66],
+				s: at$2([51, 66], 25, -62),
+				a: [[90, 44], [89, 45]],
+				f: [[62, 81.5], at$2([51, 66], 36.3, -3)],
+				ft: [12, -80],
+				eb: [-1, -1]
+			}, 1.2, .2)]
 		}
 	},
 	{
@@ -4285,10 +4610,14 @@ function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
 	return s;
 }
 /** Adds sets to a log (a new log; the old one is not changed). */
-function addSets(log, day, exId, reps, now = Date.now()) {
+function addSets(log, day, exId, reps, now = Date.now(), extra = {}) {
 	const out = JSON.parse(JSON.stringify(log ?? {}));
 	const list = (out[day] ??= {})[exId] ?? [];
-	reps.map(clean$2).filter((r) => r > 0).forEach((r, i) => list.push(makeSet(r, now + i, 0, `${i}${exId.length}`)));
+	reps.map(clean$2).filter((r) => r > 0).forEach((r, i) => {
+		const e = makeSet(r, now + i, extra.kg ?? 0, `${i}${exId.length}`);
+		if (extra.test) e.test = true;
+		list.push(e);
+	});
 	if (list.length) out[day][exId] = list;
 	return out;
 }
@@ -4307,6 +4636,12 @@ function bestSet(log, exId, until) {
 		day: s.day
 	};
 	return best;
+}
+/** Monday of the week a day is in. */
+function mondayOf$7(day) {
+	const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
+	d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
+	return d.toISOString().slice(0, 10);
 }
 function shiftDay(day, n) {
 	const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
@@ -4787,6 +5122,26 @@ function groundReply(reply, g) {
 		dropped
 	};
 }
+// src/core/sportInsight.ts
+/** Moves with no rep gain in 2+ sessions in a row (needs 3 sessions; the last one within 14 days). */
+function stallsOf(log, exercises, today) {
+	const out = [];
+	for (const ex of exercises) {
+		if (ex.active === false) continue;
+		const s = sessionsOf$1(log, String(ex.id), today);
+		if (s.length < 3 || s[s.length - 1].day < addDays$8(today, -14)) continue;
+		const best = s.map((x) => Math.max(...x.reps));
+		let n = 0;
+		for (let i = best.length - 1; i >= 1; i--) if (best[i] <= Math.max(...best.slice(0, i))) n++;
+		else break;
+		if (n >= 2) out.push({
+			name: moveOf(ex)?.name ?? ex.name,
+			sessions: n,
+			best: Math.max(...best)
+		});
+	}
+	return out.sort((a, b) => b.sessions - a.sessions);
+}
 // src/main/bodyPlus.ts
 var rid$1 = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
 var DEFAULT_PREFS = {
@@ -5026,6 +5381,34 @@ function bodyWeekReport(db, now = /* @__PURE__ */ new Date()) {
 		workouts: Math.max(workouts, setDays),
 		stalls: stalledMoves(log, exercises, today)
 	});
+}
+/** Sport coach: protein, sleep and readiness as plain data (for the rules in sportCoachRules.ts). */
+function sportBodyNow(db, now = /* @__PURE__ */ new Date()) {
+	const today = sportToday(now);
+	const v = bodyPlusView(db, now);
+	const sl = sleepOfWeek(db, today);
+	let ready = null;
+	try {
+		const r = readinessNow(db, null, now);
+		ready = {
+			mode: r.mode,
+			why: r.why
+		};
+	} catch {
+		ready = null;
+	}
+	return {
+		protein: {
+			avg: v.week.avg,
+			days: v.week.days,
+			goal: v.goal.g
+		},
+		sleep: {
+			avgMin: sl.avgMin,
+			nights: sl.nights
+		},
+		readiness: ready
+	};
 }
 // src/core/calWatch.ts
 var hm$9 = (iso) => new Date(iso).toTimeString().slice(0, 5);
@@ -8317,6 +8700,2059 @@ function musicNowContext(v, now) {
 	if (!m || now - m.at > 12e5 || m.at - now > 6e4) return null;
 	return `Music playing on SoundCloud now: ${m.line}.`;
 }
+// src/core/sportProgress.ts
+/** Holds: how long a set should last, by move. */
+var HOLDS = {
+	plank: [30, 60],
+	side_plank: [20, 45],
+	hollow_hold: [15, 40],
+	wall_sit: [30, 75],
+	down_dog: [30, 60],
+	childs_pose: [30, 60]
+};
+/** The rep range for a move. */
+function rangeFor(move) {
+	if (!move) return {
+		lo: 8,
+		hi: 15,
+		sets: 3,
+		unit: "reps"
+	};
+	if (move.unit === "sec") {
+		const [lo, hi] = HOLDS[move.id] ?? [20, 60];
+		return {
+			lo,
+			hi,
+			sets: 3,
+			unit: "sec"
+		};
+	}
+	if (move.group === "push" || move.group === "pull") return {
+		lo: move.diff >= 4 ? 5 : 8,
+		hi: move.diff >= 4 ? 12 : 15,
+		sets: 3,
+		unit: "reps"
+	};
+	if (move.group === "legs" || move.group === "core") return {
+		lo: move.diff >= 4 ? 6 : 10,
+		hi: move.diff >= 4 ? 15 : 20,
+		sets: 3,
+		unit: "reps"
+	};
+	if (move.group === "cardio") return {
+		lo: 15,
+		hi: 30,
+		sets: 3,
+		unit: "reps"
+	};
+	return {
+		lo: 8,
+		hi: 12,
+		sets: 2,
+		unit: "reps"
+	};
+}
+/** A session's working sets: the first `n` (a warm-up isn't logged as a set here). */
+var working = (s, n) => s.reps.slice(0, n);
+/** Every working set reached the top. */
+var atTop$1 = (s, r) => s.reps.length >= r.sets && working(s, r.sets).every((x) => x >= r.hi);
+/** Not even one set reached the bottom. */
+var belowBottom = (s, r) => Math.max(...s.reps) < r.lo;
+var daysBetween$2 = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+var clamp$3 = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+var u$2 = (r) => r.unit === "sec" ? " s" : "";
+/**
+* Where an exercise stands and what to aim for today. `log` is every set
+* logged; `exId` the exercise; sessions before `today` set today's goal, and
+* today's own sets count for "ready" as soon as they're logged.
+*/
+function progressFor(input) {
+	const { log, exId, move, today } = input;
+	const r = rangeFor(move);
+	const all = sessionsOf$1(log, exId, today);
+	const past = all.filter((s) => s.day < today);
+	const todays = all.find((s) => s.day === today) ?? null;
+	const last = past[past.length - 1] ?? null;
+	const daysSince = last ? daysBetween$2(last.day, today) : null;
+	const next = move ? nextStep$1(move) : null;
+	const prev = move ? prevStep(move) : null;
+	const nextAt = `${r.sets}×${r.hi}${u$2(r)}`;
+	const base = {
+		range: r,
+		sets: r.sets,
+		nextAt,
+		need: 2,
+		daysSince,
+		last,
+		today: todays?.reps ?? [],
+		next: null,
+		prev: null
+	};
+	const recent = [...past, ...todays && todays.reps.length >= r.sets ? [todays] : []];
+	let hits = 0;
+	for (let i = recent.length - 1; i >= 0 && atTop$1(recent[i], r); i--) hits++;
+	const first = recent.length === 1 && Math.max(...recent[0].reps) >= Math.ceil(r.hi * 1.5);
+	if (hits >= 2 || first) {
+		const n = Math.max(hits, first ? 2 : 0);
+		return next ? {
+			...base,
+			status: "ready",
+			goal: r.hi,
+			hits: n,
+			next,
+			line: `Level up: ${next.name} is unlocked. Start it at ${r.sets}×${rangeFor(next).lo}${u$2(rangeFor(next))}.`
+		} : {
+			...base,
+			status: "top",
+			goal: r.hi,
+			hits: n,
+			line: `Top of the ladder. Add a 4th set, or go slower (3 seconds down).`
+		};
+	}
+	if (!last) return {
+		...base,
+		status: "new",
+		goal: r.lo,
+		hits,
+		line: `First time: ${r.sets} sets of ${r.lo}–${r.hi}${u$2(r)}. Stop 1–2 reps before you can't do another.`
+	};
+	const lastMin = Math.min(...working(last, r.sets));
+	const peak = Math.max(...past.slice(-6).flatMap((s) => working(s, r.sets).length >= r.sets ? [Math.min(...working(s, r.sets))] : []), lastMin);
+	if (daysSince !== null && daysSince >= 10) {
+		const back = Math.round(peak * .7);
+		if (back < r.lo && prev && daysSince >= 21) return {
+			...base,
+			status: "comeback",
+			goal: r.lo,
+			hits: 0,
+			prev,
+			line: `Welcome back after ${daysSince} days. Start one step easier (${prev.name}) or ${r.sets}×${r.lo}${u$2(r)}, and build up fast.`
+		};
+		return {
+			...base,
+			status: "comeback",
+			goal: clamp$3(back, r.lo, r.hi),
+			hits: 0,
+			line: `Welcome back after ${daysSince} days: start at ${r.sets}×${clamp$3(back, r.lo, r.hi)}${u$2(r)} (about 70%), then build up fast.`
+		};
+	}
+	const misses = past.slice(-2);
+	if (misses.length === 2 && misses.every((s) => belowBottom(s, r))) return prev ? {
+		...base,
+		status: "stuck",
+		goal: r.lo,
+		hits: 0,
+		prev,
+		line: `Under ${r.lo}${u$2(r)} twice: step back to ${prev.name} for a while, or rest 2–3 minutes between sets.`
+	} : {
+		...base,
+		status: "stuck",
+		goal: r.lo,
+		hits: 0,
+		line: `Under ${r.lo}${u$2(r)} twice: rest 2–3 minutes between sets and sleep well. You'll get there.`
+	};
+	let breakAt = -1;
+	for (let j = Math.max(1, past.length - 3); j < past.length; j++) if (daysBetween$2(past[j - 1].day, past[j].day) >= 10) breakAt = j;
+	const mins = (list) => list.flatMap((s) => working(s, r.sets).length >= r.sets ? [Math.min(...working(s, r.sets))] : []);
+	const oldPeak = breakAt > 0 ? Math.max(0, ...mins(past.slice(0, breakAt))) : 0;
+	const step = r.unit === "sec" ? 5 : 1;
+	const goal = clamp$3(breakAt > 0 && lastMin < oldPeak ? Math.min(oldPeak, lastMin + 3 * step) : lastMin + step, r.lo, r.hi);
+	return {
+		...base,
+		status: "building",
+		goal,
+		hits,
+		line: hits ? `${hits} of 2 sessions at the top. One more and the next level unlocks.` : `Aim for ${r.sets}×${goal}${u$2(r)} today. Next level at ${nextAt}.`
+	};
+}
+// src/core/sportLevels.ts
+var MEANING = [
+	["Everyone starts here. Showing up is the hard part.", "You have started: that already beats most people."],
+	["You are building the base. Your body is learning fast.", "Habits first, strength follows. You are on your way."],
+	["Stronger than most beginners. This is real progress.", "People notice this level. Keep the rhythm."],
+	["A solid, honest level. You train with control.", "You can trust your body here. Time to aim higher."],
+	["Strong. Few people reach this without a gym.", "This is advanced home training. Be proud of it."],
+	["Elite strength. You earned every single rep.", "The top of the ladder: legends are made of days like yours."]
+];
+var T = (family, rows) => [family, rows];
+var TABLES = [
+	T("pushup", [
+		[
+			"Starting Line",
+			"incline_pushup",
+			3,
+			6
+		],
+		[
+			"Incline Climber",
+			"incline_pushup",
+			3,
+			12
+		],
+		[
+			"Kneeler",
+			"knee_pushup",
+			3,
+			10
+		],
+		[
+			"Knee Master",
+			"knee_pushup",
+			3,
+			15
+		],
+		[
+			"Floor Ready",
+			"pushup",
+			3,
+			5
+		],
+		[
+			"Solid",
+			"pushup",
+			3,
+			10
+		],
+		[
+			"Strong Chest",
+			"pushup",
+			3,
+			15
+		],
+		[
+			"Machine",
+			"pushup",
+			3,
+			20
+		],
+		[
+			"Wide Wings",
+			"wide_pushup",
+			3,
+			15
+		],
+		[
+			"Diamond Cutter",
+			"diamond_pushup",
+			3,
+			10
+		],
+		[
+			"Iron Chest",
+			"diamond_pushup",
+			3,
+			15
+		],
+		[
+			"Decline Drive",
+			"decline_pushup",
+			3,
+			10
+		],
+		[
+			"Archer",
+			"archer_pushup",
+			3,
+			6
+		],
+		[
+			"Archer Elite",
+			"archer_pushup",
+			3,
+			10
+		],
+		[
+			"One-arm Helper",
+			"onearm_assist_pushup",
+			3,
+			5
+		]
+	]),
+	T("squat", [
+		[
+			"Starting Line",
+			"squat",
+			3,
+			8
+		],
+		[
+			"Steady Legs",
+			"squat",
+			3,
+			15
+		],
+		[
+			"Squat Habit",
+			"squat",
+			3,
+			20
+		],
+		[
+			"Hundred Club",
+			"squat",
+			3,
+			30
+		],
+		[
+			"Springy",
+			"jump_squat",
+			3,
+			10
+		],
+		[
+			"Jump Master",
+			"jump_squat",
+			3,
+			15
+		],
+		[
+			"One Leg Forward",
+			"split_squat",
+			3,
+			10
+		],
+		[
+			"Split Strong",
+			"split_squat",
+			3,
+			15
+		],
+		[
+			"Bulgarian",
+			"bulgarian_squat",
+			3,
+			8
+		],
+		[
+			"Bulgarian Pro",
+			"bulgarian_squat",
+			3,
+			12
+		],
+		[
+			"Box Pistol",
+			"box_pistol",
+			3,
+			6
+		],
+		[
+			"Shrimp Starter",
+			"shrimp_squat",
+			3,
+			4
+		],
+		[
+			"Shrimp Master",
+			"shrimp_squat",
+			3,
+			8
+		],
+		[
+			"Pistol Path",
+			"pistol_squat",
+			3,
+			2
+		],
+		[
+			"Pistol",
+			"pistol_squat",
+			3,
+			5
+		]
+	]),
+	T("core", [
+		[
+			"Starting Line",
+			"crunch",
+			3,
+			10
+		],
+		[
+			"Crunch Rhythm",
+			"crunch",
+			3,
+			20
+		],
+		[
+			"Sit-up Start",
+			"situp",
+			3,
+			10
+		],
+		[
+			"Sit-up Strong",
+			"situp",
+			3,
+			20
+		],
+		[
+			"Raise Your Legs",
+			"leg_raise",
+			3,
+			8
+		],
+		[
+			"Leg Raise Pro",
+			"leg_raise",
+			3,
+			15
+		],
+		[
+			"Hollow Start",
+			"hollow_hold",
+			3,
+			15
+		],
+		[
+			"Hollow Strong",
+			"hollow_hold",
+			3,
+			30
+		],
+		[
+			"Hollow Rocker",
+			"hollow_rock",
+			3,
+			15
+		],
+		[
+			"V Shape",
+			"v_up",
+			3,
+			8
+		],
+		[
+			"V-up Pro",
+			"v_up",
+			3,
+			15
+		],
+		[
+			"Negative Start",
+			"dragon_neg",
+			3,
+			3
+		],
+		[
+			"Negative Strong",
+			"dragon_neg",
+			3,
+			6
+		],
+		[
+			"Dragon Start",
+			"dragon_flag",
+			3,
+			2
+		],
+		[
+			"Dragon Strong",
+			"dragon_flag",
+			3,
+			5
+		]
+	]),
+	T("plank", [
+		[
+			"Starting Line",
+			"plank",
+			3,
+			15
+		],
+		[
+			"Half Minute",
+			"plank",
+			3,
+			30
+		],
+		[
+			"Forty-five",
+			"plank",
+			3,
+			45
+		],
+		[
+			"Full Minute",
+			"plank",
+			3,
+			60
+		],
+		[
+			"Side Start",
+			"side_plank",
+			3,
+			20
+		],
+		[
+			"Side Steady",
+			"side_plank",
+			3,
+			40
+		],
+		[
+			"Tap Tap",
+			"shoulder_taps",
+			3,
+			20
+		],
+		[
+			"Tap Master",
+			"shoulder_taps",
+			3,
+			40
+		],
+		[
+			"Up and Down",
+			"plank_updown",
+			3,
+			10
+		],
+		[
+			"Up-down Pro",
+			"plank_updown",
+			3,
+			20
+		],
+		[
+			"Lean Start",
+			"planche_lean",
+			3,
+			10
+		],
+		[
+			"Lean Strong",
+			"planche_lean",
+			3,
+			25
+		]
+	]),
+	T("row", [
+		[
+			"Starting Line",
+			"door_row",
+			3,
+			6
+		],
+		[
+			"Door Puller",
+			"door_row",
+			3,
+			12
+		],
+		[
+			"Door Master",
+			"door_row",
+			3,
+			18
+		],
+		[
+			"Table Start",
+			"table_row_bent",
+			3,
+			6
+		],
+		[
+			"Bent Knee Rower",
+			"table_row_bent",
+			3,
+			12
+		],
+		[
+			"Bent Knee Master",
+			"table_row_bent",
+			3,
+			18
+		],
+		[
+			"Straight Legs",
+			"table_row",
+			3,
+			5
+		],
+		[
+			"Rower",
+			"table_row",
+			3,
+			10
+		],
+		[
+			"Strong Back",
+			"table_row",
+			3,
+			15
+		],
+		[
+			"Back of Steel",
+			"table_row",
+			3,
+			20
+		],
+		[
+			"Feet-up Rower",
+			"feet_row",
+			3,
+			8
+		],
+		[
+			"Feet-up Strong",
+			"feet_row",
+			3,
+			12
+		],
+		[
+			"One-arm Start",
+			"onearm_row",
+			3,
+			4
+		],
+		[
+			"One-arm Row Pro",
+			"onearm_row",
+			3,
+			8
+		]
+	]),
+	T("lunge", [
+		[
+			"Starting Line",
+			"reverse_lunge",
+			3,
+			6
+		],
+		[
+			"Backstep",
+			"reverse_lunge",
+			3,
+			10
+		],
+		[
+			"Backstep Strong",
+			"reverse_lunge",
+			3,
+			14
+		],
+		[
+			"Forward Lunge",
+			"lunge",
+			3,
+			8
+		],
+		[
+			"Lunge Steady",
+			"lunge",
+			3,
+			12
+		],
+		[
+			"Lunge Strong",
+			"lunge",
+			3,
+			16
+		],
+		[
+			"Lunge Master",
+			"lunge",
+			3,
+			20
+		],
+		[
+			"Jump Start",
+			"jump_lunge",
+			3,
+			6
+		],
+		[
+			"Jump Lunger",
+			"jump_lunge",
+			3,
+			10
+		],
+		[
+			"Spring Legs",
+			"jump_lunge",
+			3,
+			15
+		]
+	]),
+	T("bridge", [
+		[
+			"Starting Line",
+			"glute_bridge",
+			3,
+			8
+		],
+		[
+			"Bridge Builder",
+			"glute_bridge",
+			3,
+			15
+		],
+		[
+			"Bridge Strong",
+			"glute_bridge",
+			3,
+			20
+		],
+		[
+			"Bridge Master",
+			"glute_bridge",
+			3,
+			30
+		],
+		[
+			"One Leg Start",
+			"single_leg_bridge",
+			3,
+			5
+		],
+		[
+			"One Leg Steady",
+			"single_leg_bridge",
+			3,
+			8
+		],
+		[
+			"One Leg Strong",
+			"single_leg_bridge",
+			3,
+			12
+		],
+		[
+			"One Leg Pro",
+			"single_leg_bridge",
+			3,
+			15
+		],
+		[
+			"Glute Machine",
+			"single_leg_bridge",
+			3,
+			20
+		],
+		[
+			"Glute Legend",
+			"single_leg_bridge",
+			4,
+			20
+		]
+	]),
+	T("calf", [
+		[
+			"Starting Line",
+			"calf_raise",
+			3,
+			10
+		],
+		[
+			"Calf Habit",
+			"calf_raise",
+			3,
+			20
+		],
+		[
+			"Calf Strong",
+			"calf_raise",
+			3,
+			30
+		],
+		[
+			"Calf Master",
+			"calf_raise",
+			3,
+			40
+		],
+		[
+			"One Leg Start",
+			"single_calf_raise",
+			3,
+			6
+		],
+		[
+			"One Leg Steady",
+			"single_calf_raise",
+			3,
+			10
+		],
+		[
+			"One Leg Strong",
+			"single_calf_raise",
+			3,
+			15
+		],
+		[
+			"One Leg Pro",
+			"single_calf_raise",
+			3,
+			20
+		],
+		[
+			"Spring Steel",
+			"single_calf_raise",
+			3,
+			25
+		],
+		[
+			"Calf Legend",
+			"single_calf_raise",
+			3,
+			30
+		]
+	]),
+	T("dips", [
+		[
+			"Starting Line",
+			"chair_dip",
+			3,
+			4
+		],
+		[
+			"Dip Starter",
+			"chair_dip",
+			3,
+			8
+		],
+		[
+			"Dip Steady",
+			"chair_dip",
+			3,
+			12
+		],
+		[
+			"Dip Strong",
+			"chair_dip",
+			3,
+			16
+		],
+		[
+			"Dip Machine",
+			"chair_dip",
+			3,
+			20
+		],
+		[
+			"Dip Pro",
+			"chair_dip",
+			3,
+			25
+		],
+		[
+			"Triceps Tank",
+			"chair_dip",
+			4,
+			20
+		],
+		[
+			"Dip Elite",
+			"chair_dip",
+			4,
+			25
+		],
+		[
+			"Dip Master",
+			"chair_dip",
+			5,
+			20
+		],
+		[
+			"Dip Legend",
+			"chair_dip",
+			5,
+			25
+		]
+	]),
+	T("pike", [
+		[
+			"Starting Line",
+			"pike_pushup",
+			3,
+			4
+		],
+		[
+			"Pike Starter",
+			"pike_pushup",
+			3,
+			8
+		],
+		[
+			"Pike Steady",
+			"pike_pushup",
+			3,
+			12
+		],
+		[
+			"Pike Strong",
+			"pike_pushup",
+			3,
+			15
+		],
+		[
+			"Feet-up Start",
+			"elevated_pike",
+			3,
+			4
+		],
+		[
+			"Feet-up Steady",
+			"elevated_pike",
+			3,
+			8
+		],
+		[
+			"Feet-up Strong",
+			"elevated_pike",
+			3,
+			12
+		],
+		[
+			"Shoulder Tank",
+			"elevated_pike",
+			3,
+			15
+		],
+		[
+			"Shoulder Pro",
+			"elevated_pike",
+			4,
+			15
+		],
+		[
+			"Shoulder Legend",
+			"elevated_pike",
+			5,
+			15
+		]
+	]),
+	T("back", [
+		[
+			"Starting Line",
+			"superman",
+			3,
+			6
+		],
+		[
+			"Superman Steady",
+			"superman",
+			3,
+			12
+		],
+		[
+			"Superman Strong",
+			"superman",
+			3,
+			18
+		],
+		[
+			"Superman Master",
+			"superman",
+			3,
+			24
+		],
+		[
+			"Swimmer Start",
+			"swimmer",
+			3,
+			10
+		],
+		[
+			"Swimmer Steady",
+			"swimmer",
+			3,
+			16
+		],
+		[
+			"Swimmer Strong",
+			"swimmer",
+			3,
+			24
+		],
+		[
+			"Swimmer Pro",
+			"swimmer",
+			3,
+			32
+		],
+		[
+			"Back Tank",
+			"swimmer",
+			4,
+			32
+		],
+		[
+			"Back Legend",
+			"swimmer",
+			5,
+			32
+		]
+	]),
+	T("burpee", [
+		[
+			"Starting Line",
+			"half_burpee",
+			3,
+			5
+		],
+		[
+			"Thruster",
+			"half_burpee",
+			3,
+			10
+		],
+		[
+			"Thruster Strong",
+			"half_burpee",
+			3,
+			15
+		],
+		[
+			"Burpee Start",
+			"burpee",
+			3,
+			5
+		],
+		[
+			"Burpee Steady",
+			"burpee",
+			3,
+			10
+		],
+		[
+			"Burpee Strong",
+			"burpee",
+			3,
+			15
+		],
+		[
+			"Burpee Master",
+			"burpee",
+			3,
+			20
+		],
+		[
+			"Push-up Burpee",
+			"pushup_burpee",
+			3,
+			6
+		],
+		[
+			"Burpee Pro",
+			"pushup_burpee",
+			3,
+			10
+		],
+		[
+			"Burpee Legend",
+			"pushup_burpee",
+			3,
+			15
+		]
+	])
+];
+var REP_LADDER = [
+	6,
+	10,
+	15,
+	20,
+	25,
+	30,
+	40,
+	50,
+	60,
+	80
+];
+/** Words after the ×: "push-ups", "seconds of plank". */
+var reqText = (m, sets, reps) => m.unit === "sec" ? `${sets}×${reps} s ${m.name.toLowerCase()}` : `${sets}×${reps} ${m.name.toLowerCase()}`;
+function build(family, group, name, rows) {
+	const N = rows.length;
+	return {
+		family,
+		name,
+		group,
+		levels: rows.map(([lname, move, sets, reps], i) => {
+			const m = moveById(move);
+			if (!m) throw new Error(`sportLevels: unknown move ${move}`);
+			const tier = Math.min(MEANING.length - 1, Math.floor(i / N * MEANING.length));
+			return {
+				n: i + 1,
+				name: lname,
+				move,
+				sets,
+				reps,
+				req: reqText(m, sets, reps),
+				meaning: MEANING[tier][i % 2]
+			};
+		})
+	};
+}
+/** A track for a family without a hand-made table: each step × a ladder of reps, 10 levels at least. */
+function generic(family) {
+	const f = FAMILIES[family];
+	const steps = (f?.steps ?? []).map((id) => moveById(id)).filter(Boolean);
+	if (!steps.length) return null;
+	const rows = [];
+	const perStep = Math.max(3, Math.ceil(10 / steps.length));
+	steps.forEach((m, si) => {
+		const sec = m.unit === "sec";
+		const base = sec ? [
+			10,
+			20,
+			30,
+			45,
+			60,
+			75,
+			90
+		] : REP_LADDER;
+		const from = si === 0 ? 0 : 1;
+		for (let k = 0; k < perStep; k++) {
+			const r = base[Math.min(base.length - 1, from + k)];
+			rows.push([
+				`${m.name} ${k + 1}`,
+				m.id,
+				3,
+				si === 0 || !sec ? Math.max(3, Math.round(r * (1 - Math.min(.5, si * .12)))) : r
+			]);
+		}
+	});
+	return build(family, steps[0].group, f.name, rows.slice(0, 15).map((r) => [
+		r[0],
+		r[1],
+		r[2],
+		r[3]
+	]));
+}
+var CACHE = /* @__PURE__ */ new Map();
+function trackOf(family) {
+	if (CACHE.has(family)) return CACHE.get(family);
+	let t = null;
+	const table = TABLES.find((x) => x[0] === family);
+	if (table) t = build(family, moveById(table[1][0][1])?.group ?? "push", FAMILIES[family]?.name ?? family, table[1]);
+	else t = generic(family);
+	CACHE.set(family, t);
+	return t;
+}
+TABLES.map((t) => t[0]);
+var stepIdx = (move) => (FAMILIES[move.family]?.steps ?? []).indexOf(move.id);
+/** Working sets are about 60% of a max set. */
+var WORKING_OF_MAX = .6;
+/** Reps on a move that match `reps` on a move `steps` harder on its ladder. */
+var transferReps = (reps, steps) => reps * Math.pow(.7, Math.max(0, steps));
+/** How many sets a day total was probably done in. */
+function estimateSets(total, unit = "reps") {
+	const t = Math.max(0, Math.round(total));
+	if (t <= 0) return [];
+	const n = unit === "sec" ? t > 180 ? 4 : 3 : Math.max(3, Math.min(6, Math.ceil(t / 25)));
+	const base = Math.floor(t / n);
+	const extra = t - base * n;
+	return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
+}
+/** A day total that came from the Telegram import: it is never evidence for a level. */
+var isImported$1 = (imp, day, exId) => !!imp?.[day]?.includes(exId);
+/** Per day, the entries of one family: real sets, else an estimate from the day total. */
+function dayEntries(input, family, until) {
+	const out = /* @__PURE__ */ new Map();
+	const exs = input.exercises.map((ex) => ({
+		ex,
+		move: moveOf(ex)
+	})).filter((x) => x.move && x.move.family === family);
+	const dayKeys = /* @__PURE__ */ new Set([...Object.keys(input.days ?? {}), ...Object.keys(input.sets ?? {})]);
+	for (const day of dayKeys) {
+		if (day > (until ?? input.today)) continue;
+		for (const { ex, move } of exs) {
+			const real = setsOn(input.sets, day, String(ex.id)).map((s) => s.reps);
+			let entry = null;
+			if (real.length) entry = {
+				move,
+				reps: real,
+				est: false
+			};
+			else {
+				const total = isImported$1(input.imported, day, String(ex.id)) ? 0 : Number(input.days?.[day]?.[String(ex.id)]) || 0;
+				if (total > 0) entry = {
+					move,
+					reps: estimateSets(total, move.unit),
+					est: true
+				};
+			}
+			if (entry) (out.get(day) ?? out.set(day, []).get(day)).push(entry);
+		}
+	}
+	const b = input.best?.[family];
+	const bm = b && moveById(b.move);
+	if (b && bm && b.reps > 0 && b.day <= (until ?? input.today)) {
+		const w = Math.max(1, Math.round(b.reps * WORKING_OF_MAX));
+		const mk = () => ({
+			move: bm,
+			reps: [
+				w,
+				w,
+				w
+			],
+			est: true,
+			transfer: true
+		});
+		for (const d of [b.day, shiftDay(b.day, -1)]) (out.get(d) ?? out.set(d, []).get(d)).push(mk());
+	}
+	return out;
+}
+/** How many sets of this entry count towards a level: the move at least as hard, 70% of the reps for a harder move. */
+function setsMeeting(entries, lv) {
+	const lm = moveById(lv.move);
+	if (!lm) return 0;
+	const li = stepIdx(lm);
+	let n = 0;
+	for (const e of entries) {
+		const hard = stepIdx(e.move);
+		if (hard < li) {
+			if (e.transfer) n += e.reps.filter((r) => transferReps(r, li - hard) >= lv.reps).length;
+			continue;
+		}
+		const need = hard > li ? Math.ceil(lv.reps * .7) : lv.reps;
+		n += e.reps.filter((r) => r >= need).length;
+	}
+	return n;
+}
+/** The highest level a day's entries reach (0: none). */
+function levelOfDay(track, entries) {
+	for (let i = track.levels.length - 1; i >= 0; i--) if (setsMeeting(entries, track.levels[i]) >= track.levels[i].sets) return i + 1;
+	return 0;
+}
+/** The day's level with the part of the way to the next one ("6.4"). */
+function valueOfDay(track, entries) {
+	const L = levelOfDay(track, entries);
+	const top = Math.max(0, ...entries.flatMap((e) => e.reps));
+	if (L >= track.levels.length) return L;
+	const cur = L ? track.levels[L - 1] : null;
+	const next = track.levels[L];
+	const nm = moveById(next.move);
+	const best = Math.max(0, ...entries.filter((e) => stepIdx(e.move) >= stepIdx(nm)).flatMap((e) => e.reps), ...entries.flatMap((e) => e.reps).map((r) => r * .7));
+	const lo = cur && cur.move === next.move ? cur.reps : 0;
+	return L + Math.max(0, Math.min(.95, (Math.min(best, top) - lo) / Math.max(1, next.reps - lo)));
+}
+var dayDiff$1 = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+function core(input, track, until) {
+	const rows = [...dayEntries(input, track.family, until).entries()].map(([day, es]) => ({
+		day,
+		es,
+		level: levelOfDay(track, es),
+		value: valueOfDay(track, es)
+	})).sort((a, b) => a.day.localeCompare(b.day));
+	const lastDay = rows.length ? rows[rows.length - 1].day : null;
+	const of = track.levels.length;
+	const base = {
+		family: track.family,
+		track,
+		of,
+		active30: 0,
+		daysLogged: rows.length,
+		trend: "new",
+		lastDay,
+		frac: 0,
+		estimated: false
+	};
+	if (!rows.length) return {
+		...base,
+		level: 0,
+		lv: null,
+		next: track.levels[0],
+		best: null,
+		solid: 0
+	};
+	const win = (n) => rows.filter((r) => dayDiff$1(r.day, until) <= n);
+	const w60 = win(60);
+	const w45 = win(45);
+	const pool = w60.length ? w60 : rows.slice(-1);
+	let bestRow = pool[0];
+	for (const r of pool) if (r.level > bestRow.level || r.level === bestRow.level && r.day > bestRow.day) bestRow = r;
+	let solid = 0;
+	for (let L = of; L >= 1; L--) if (w45.filter((r) => r.level >= L).length >= 2) {
+		solid = L;
+		break;
+	}
+	let level = pool.length <= 2 ? bestRow.level : Math.max(solid, Math.min(bestRow.level, solid + 1));
+	const w21 = win(21);
+	if (w21.length >= 2) {
+		const recentMax = Math.max(...w21.map((r) => r.level));
+		if (recentMax < level - 1) level = recentMax + 1;
+	}
+	level = Math.max(1, Math.min(of, level));
+	const a = win(14);
+	const b = rows.filter((r) => dayDiff$1(r.day, until) > 14 && dayDiff$1(r.day, until) <= 28);
+	const avg = (l) => l.length ? l.reduce((t, r) => t + r.value, 0) / l.length : null;
+	const va = avg(a);
+	const vb = avg(b);
+	const trend = va == null ? "down" : vb == null ? rows.length < 3 ? "new" : "steady" : va - vb > .3 ? "up" : va - vb < -.3 ? "down" : "steady";
+	const top = Math.max(0, ...bestRow.es.flatMap((e) => e.reps));
+	const topEntry = bestRow.es.find((e) => e.reps.includes(top));
+	const recentBest = Math.max(0, ...win(10).map((r) => r.value));
+	const frac = Math.max(0, Math.min(1, recentBest - Math.floor(recentBest))) * (recentBest >= level ? 1 : 0);
+	return {
+		...base,
+		level,
+		lv: track.levels[level - 1],
+		next: track.levels[level] ?? null,
+		best: {
+			level: bestRow.level,
+			day: bestRow.day,
+			top,
+			sets: topEntry.reps.length,
+			est: bestRow.es.some((e) => e.est)
+		},
+		solid,
+		active30: win(30).length,
+		trend,
+		frac,
+		estimated: bestRow.es.every((e) => e.est)
+	};
+}
+/** Where you stand on one family's track. `until` re-places you as you were on that day. */
+function placeFamily(input, family, until) {
+	const track = trackOf(family);
+	if (!track) return null;
+	const day = until ?? input.today;
+	const p = core(input, track, day);
+	let comeback = null;
+	let level = p.level;
+	if (p.lastDay && p.level > 0) {
+		const off = dayDiff$1(p.lastDay, day);
+		if (off >= 10) {
+			comeback = {
+				from: p.level,
+				hits: 0,
+				need: 2,
+				daysOff: off
+			};
+			level = Math.max(1, p.level - (off >= 21 ? 2 : 1));
+		} else {
+			const entries = [...dayEntries(input, family, day).keys()].sort();
+			for (let i = entries.length - 1; i > 0; i--) {
+				if (dayDiff$1(entries[i], day) > 35) break;
+				const gap = dayDiff$1(entries[i - 1], entries[i]);
+				if (gap >= 10) {
+					const old = core(input, track, entries[i - 1]).level;
+					const map = dayEntries(input, family, day);
+					const hits = entries.slice(i).filter((d) => levelOfDay(track, map.get(d) ?? []) >= old).length;
+					if (hits < 2 && old > 1) {
+						comeback = {
+							from: old,
+							hits,
+							need: 2,
+							daysOff: gap
+						};
+						level = Math.min(p.level, Math.max(1, old - (gap >= 21 ? 2 : 1)));
+					}
+					break;
+				}
+			}
+		}
+	}
+	const lv = level ? track.levels[level - 1] : null;
+	const next = track.levels[level] ?? null;
+	const bestTxt = p.best ? `best day ${p.best.sets}×${p.best.top}${p.estimated ? " (from your totals)" : ""}` : "nothing logged yet";
+	const steady = p.active30 >= 12 ? "steady" : p.active30 >= 6 ? "regular" : p.active30 ? "on and off" : "quiet lately";
+	const trendTxt = p.trend === "up" ? "trending up" : p.trend === "down" ? "a little down lately" : p.trend === "new" ? "just started" : "holding steady";
+	const why = !level ? `${track.name}: nothing logged yet. Log one day (like "15 14 12") and your level appears.` : comeback && comeback.hits < comeback.need ? `${track.name}: Comeback level ${level} ${lv.name} after ${comeback.daysOff} days off. Hit Level ${comeback.from} (${track.levels[comeback.from - 1].req}) on ${comeback.need - comeback.hits} more ${comeback.need - comeback.hits === 1 ? "day" : "days"} to get it back.` : `${track.name}: ${bestTxt}, ${p.active30} ${p.active30 === 1 ? "day" : "days"} in 30 (${steady}), ${trendTxt} → Level ${level} ${lv.name}.${next ? ` Next: Level ${next.n} at ${next.req}.` : " You are at the top of this ladder."}`;
+	return {
+		...p,
+		level,
+		lv,
+		next,
+		comeback,
+		why
+	};
+}
+// src/core/sportCoach.ts
+/** One exercise's sessions up to `until`, oldest first: real sets, else an estimate from the day total. */
+function sessionsFor(input, ex, until) {
+	const move = moveOf(ex);
+	const keys = /* @__PURE__ */ new Set([...Object.keys(input.days ?? {}), ...Object.keys(input.sets ?? {})]);
+	const out = [];
+	for (const day of [...keys].sort()) {
+		if (day > until) continue;
+		const real = setsOn(input.sets, day, String(ex.id)).map((s) => s.reps);
+		if (real.length) out.push({
+			day,
+			reps: real,
+			est: false
+		});
+		else {
+			const t = isImported$1(input.imported, day, String(ex.id)) ? 0 : Number(input.days?.[day]?.[String(ex.id)]) || 0;
+			if (t > 0) out.push({
+				day,
+				reps: estimateSets(t, move?.unit ?? (ex.unit === "sec" ? "sec" : "reps")),
+				est: true
+			});
+		}
+	}
+	return out;
+}
+var clamp$2 = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+var u$1 = (unit) => unit === "sec" ? " s" : "";
+var TIPS = {
+	pushup: "Keep one straight line from head to heels, and lower your chest to a fist above the floor.",
+	squat: "Push your knees out over your toes and keep your heels on the floor.",
+	core: "Exhale as you curl up, and never pull on your neck.",
+	plank: "Squeeze your glutes and tuck the ribs in: a short, tight plank beats a long sagging one.",
+	row: "Pull your elbows back and squeeze your shoulder blades together at the top.",
+	lunge: "Take a big step and keep your front knee over your ankle, your chest tall.",
+	bridge: "Push through your heels and squeeze your glutes hard at the top for a second.",
+	calf: "Pause one second at the top and lower slowly, all the way down.",
+	dips: "Keep your back close to the chair and your elbows pointing straight back.",
+	pike: "Make an upside-down V and lower the top of your head between your hands.",
+	back: "Lift with your back, not your neck: look at the floor and move slowly.",
+	burpee: "Land softly and keep your core tight when you drop to the floor."
+};
+/** A one-line form tip for a move: its family tip, else the common mistake. */
+function formTip(move) {
+	return TIPS[move.family] ?? `Watch out: ${move.mistake.replace(/^./, (c) => c.toLowerCase())}`;
+}
+var workingSets = (s, n) => s.reps.slice(0, n);
+var atTop = (s, sets, hi) => s.reps.length >= sets && workingSets(s, sets).every((r) => r >= hi);
+var missed = (s, lo) => Math.max(...s.reps) < lo;
+function aimAfter(list, o) {
+	const last = list[list.length - 1];
+	if (!last) return o.start;
+	const min = Math.min(...workingSets(last, o.sets));
+	const eff = o.efforts?.[last.day];
+	const base = o.unit === "sec" ? 5 : 1;
+	const step = eff === "hard" ? 0 : eff === "easy" ? base * 2 : base;
+	return clamp$2(o.deload ? min : min + step, o.lo, o.hi + (atTop(last, o.sets, o.hi) ? step : 0));
+}
+/** Where an exercise stands and what to aim for. Null for exercises that are not library moves. */
+function coachFor(input) {
+	const ex = input.exercises.find((e) => String(e.id) === String(input.exId));
+	const move = ex && moveOf(ex);
+	if (!ex || !move) return null;
+	const unit = move.unit;
+	const track = trackOf(move.family);
+	const place = placeFamily(input, move.family);
+	const onMove = track ? track.levels.filter((l) => l.move === move.id) : [];
+	const fallback = rangeFor(move);
+	const strong = !!input.strength && move.unit === "reps";
+	const lo = strong ? 5 : onMove[0]?.reps ?? fallback.lo;
+	const hi = strong ? 8 : onMove.length ? onMove[onMove.length - 1].reps : fallback.hi;
+	const mine = onMove.filter((l) => place && l.n <= place.level).pop() ?? onMove[0];
+	const ov = input.override && input.override.day === input.today ? input.override : null;
+	const sets = ov?.sets ? clamp$2(ov.sets, 1, 6) : clamp$2((strong ? input.deload ? 3 : 4 : input.deload ? (mine?.sets ?? 3) - 1 : mine?.sets ?? 3) || 3, 1, 5);
+	const all = sessionsFor(input, ex, input.today);
+	const past = all.filter((s) => s.day < input.today);
+	const todays = all.find((s) => s.day === input.today) ?? null;
+	const last = past[past.length - 1] ?? null;
+	const o = {
+		lo,
+		hi,
+		sets,
+		unit,
+		start: place && place.lv && place.lv.move === move.id ? place.lv.reps : clamp$2(Math.round((Number(ex.target) || lo * 3) / 3), lo, hi),
+		deload: !!input.deload,
+		efforts: input.efforts
+	};
+	let goal = ov ? Math.max(1, ov.goal) : aimAfter(past, o);
+	const nextGoal = aimAfter(todays ? [...past, todays] : past, o);
+	const recent = todays && todays.reps.length >= sets ? [...past, todays] : past;
+	let status = last ? "building" : "new";
+	let line = "";
+	let ready = null;
+	let stepBack = null;
+	let tip = null;
+	const topSets = strong ? 3 : sets;
+	const needTop = strong ? 1 : 2;
+	let run = 0;
+	for (let i = recent.length - 1; i >= 0 && atTop(recent[i], topSets, hi); i--) run++;
+	const lastTop = recent[recent.length - 1];
+	if (!strong && run === 1 && lastTop && atTop(lastTop, topSets, hi) && input.efforts?.[lastTop.day] === "easy") run = 2;
+	const harder = nextStep$1(move);
+	const back = harder && input.notYet?.[harder.id];
+	if (run >= needTop) {
+		if (harder && !(back && back > input.today)) {
+			ready = {
+				to: harder,
+				sets: 1,
+				reps: (track?.levels.find((l) => l.move === harder.id))?.reps ?? harder.set,
+				why: strong ? `${topSets}×${hi} reached` : run === 1 ? `${sets}×${hi}${u$1(unit)} and it felt easy` : `${sets}×${hi}${u$1(unit)} 2 sessions in a row`
+			};
+			status = "ready";
+			tip = formTip(harder);
+			line = `Ready for ${harder.name}? Try 1 set of ${ready.reps}${u$1(harder.unit)}. You did ${ready.why}.`;
+		} else if (!harder) {
+			status = "top";
+			line = "Top of this ladder. Add a 4th set, or lower slowly (3 seconds down).";
+		}
+	}
+	const lastTwo = recent.slice(-2);
+	if (status !== "ready" && lastTwo.length === 2 && lastTwo.every((s) => missed(s, lo))) {
+		const easier = prevStep(move);
+		status = "stuck";
+		goal = lo;
+		stepBack = {
+			to: easier,
+			text: easier ? `Two tough sessions in a row is information, not failure. Smart training: go back to ${easier.name} for a week, or do ${sets}×${lo}${u$1(unit)} with 2–3 min rest.` : `Two tough sessions in a row is information, not failure. Smart training: do ${sets}×${lo}${u$1(unit)} with 2–3 min rest and sleep well.`
+		};
+		tip = formTip(move);
+		line = stepBack.text;
+	}
+	if (status === "building" && place?.comeback && place.comeback.hits < place.comeback.need && last) {
+		status = "comeback";
+		const lastMin = Math.min(...workingSets(last, sets));
+		goal = clamp$2(Math.round(lastMin * .75), lo, hi);
+		const n = place.comeback.need - place.comeback.hits;
+		line = `Welcome back. Start at ${sets}×${goal}${u$1(unit)} (a bit under your best) and build fast: hit your old level ${n} more ${n === 1 ? "time" : "times"}.`;
+	}
+	if (input.deload && status !== "ready" && status !== "stuck") {
+		status = "deload";
+		line = `Easy week: ${sets}×${goal}${u$1(unit)}, stop 3 reps before it gets hard. You grow while you recover.`;
+	}
+	if (status === "new") line = `First time: aim for ${sets}×${goal}${u$1(unit)} and stop 1–2 reps before you can't do another.`;
+	if (status === "building") line = `Beat last time: ${sets}×${goal}${u$1(unit)}${last.est ? "" : ` (last: ${last.reps.join(" · ")})`}.`;
+	const chips = (last ? last.reps.slice(0, Math.max(sets, 1)) : Array.from({ length: sets }, () => goal)).slice(0, 6);
+	return {
+		exId: String(ex.id),
+		move,
+		place,
+		sets,
+		goal,
+		lo,
+		hi,
+		unit,
+		label: `${sets}×${goal}${u$1(unit)}`,
+		last,
+		today: todays?.reps ?? [],
+		next: {
+			sets,
+			goal: nextGoal,
+			label: `${sets}×${nextGoal}${u$1(unit)}`
+		},
+		status,
+		line,
+		chips: chips.length ? chips : [goal],
+		hits: run,
+		ready,
+		stepBack,
+		tip
+	};
+}
+// src/core/sportCoachRules.ts
+var RULES$1 = {
+	setsLo: 10,
+	setsHi: 20,
+	minDays: 2,
+	rir: "1–2 reps before you could not do another",
+	protein: {
+		lo: 1.6,
+		hi: 2.2
+	},
+	sleepHours: 7,
+	deloadWeeks: {
+		lo: 4,
+		hi: 6
+	},
+	/** Added weight steps (kg) when a ladder has no harder move. */
+	kgFirst: 5,
+	kgStep: 2
+};
+var clamp$1 = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+var u = (m) => m.unit === "sec" ? " s" : "";
+/** What to say for each muscle: the move group and the body part. */
+var BODY_PART = {
+	push: {
+		work: "pushing",
+		part: "chest and shoulders",
+		start: "pushup"
+	},
+	pull: {
+		work: "pulling",
+		part: "back",
+		start: "door_row"
+	},
+	legs: {
+		work: "leg work",
+		part: "legs",
+		start: "split_squat"
+	},
+	core: {
+		work: "core work",
+		part: "core",
+		start: "plank"
+	}
+};
+/** Rule 4: seconds of rest for a set of `reps` (or seconds for a hold) on a move. */
+function restFor$1(move, reps) {
+	if (move.unit === "sec") return 60;
+	if (reps <= 8) return move.diff >= 4 ? 180 : 150;
+	if (reps <= 12) return 105;
+	if (reps <= 20) return 75;
+	return 60;
+}
+var restText = (s) => s % 60 === 0 ? `${s / 60} min` : s >= 120 ? `${Math.floor(s / 60)}.${Math.round(s % 60 / 6)} min` : `${s} s`;
+function muscleLoad(ctx) {
+	const from = shiftDay(ctx.today, -6);
+	const sets = {
+		push: 0,
+		pull: 0,
+		core: 0,
+		legs: 0
+	};
+	const dset = {
+		push: /* @__PURE__ */ new Set(),
+		pull: /* @__PURE__ */ new Set(),
+		core: /* @__PURE__ */ new Set(),
+		legs: /* @__PURE__ */ new Set()
+	};
+	for (const ex of ctx.exercises) {
+		const mv = moveOf(ex);
+		const mu = muscleOf(mv?.group);
+		if (!mu) continue;
+		for (const day of Object.keys(ctx.sets ?? {})) {
+			if (day < from || day > ctx.today) continue;
+			const l = setsOn(ctx.sets, day, String(ex.id)).map((s) => s.reps);
+			if (!l.length) continue;
+			sets[mu] += hardSets(l, mv?.unit);
+			dset[mu].add(day);
+		}
+	}
+	const prog = ctx.program && ctx.program.week === mondayOf$7(ctx.today) ? ctx.program.target : null;
+	return MUSCLES.map((m) => {
+		const goal = clamp$1(prog?.[m.id] ?? RULES$1.setsLo, RULES$1.setsLo, RULES$1.setsHi);
+		const n = sets[m.id];
+		return {
+			id: m.id,
+			short: m.short,
+			sets: n,
+			days: dset[m.id].size,
+			goal,
+			status: n < RULES$1.setsLo ? "low" : n > RULES$1.setsHi ? "high" : "ok",
+			freqLow: n > 0 && dset[m.id].size < RULES$1.minDays
+		};
+	});
+}
+/** Weeks in a row (counting back from this one) with training on 2+ days. */
+function trainedWeeks(log, today) {
+	let n = 0;
+	let mon = mondayOf$7(today);
+	for (let i = 0; i < 12; i++, mon = shiftDay(mon, -7)) if (Object.keys(log ?? {}).filter((d) => d >= mon && d <= shiftDay(mon, 6) && Object.keys(log[d] ?? {}).length > 0).length >= 2) n++;
+	else if (i === 0) continue;
+	else break;
+	return n;
+}
+function deloadCheck(ctx) {
+	const weeks = trainedWeeks(ctx.sets, ctx.today);
+	if (ctx.deload) return {
+		due: false,
+		weeks,
+		why: "An easy week is already running."
+	};
+	const stalled = stallsOf(ctx.sets, ctx.exercises, ctx.today);
+	if (weeks >= RULES$1.deloadWeeks.hi) return {
+		due: true,
+		weeks,
+		why: `${weeks} hard weeks in a row: time for an easy week.`
+	};
+	if (weeks >= RULES$1.deloadWeeks.lo && stalled.length) return {
+		due: true,
+		weeks,
+		why: `${weeks} hard weeks and ${stalled[0].name.toLowerCase()} stopped improving: an easy week brings it back.`
+	};
+	return {
+		due: false,
+		weeks,
+		why: ""
+	};
+}
+/** The kg you used last in this exercise (0: none). */
+function lastKg(log, exId, until) {
+	for (const day of Object.keys(log ?? {}).filter((d) => d <= until).sort().reverse()) {
+		const k = Math.max(0, ...setsOn(log, day, exId).map((s) => Number(s.kg) || 0));
+		if (k > 0) return k;
+	}
+	return 0;
+}
+/** The next step for one exercise, in the fixed order: reps, then harder or weight, then back to the bottom. */
+function overload(ctx, exId) {
+	const c = coachFor({
+		...ctx,
+		exId
+	});
+	if (!c) return null;
+	const move = c.move;
+	const kg = lastKg(ctx.sets, exId, ctx.today);
+	const base = {
+		move,
+		sets: c.sets,
+		reps: c.goal,
+		kg,
+		tempo: kg ? "2-0-1" : "2-0-1"
+	};
+	const eq = (n) => `${c.sets}×${n}${u(move)}${kg ? ` +${kg} kg` : ""}`;
+	if (c.status === "deload") return {
+		...base,
+		kind: "deload",
+		text: `Easy week: ${eq(c.goal)}, stop 3 reps before it gets hard.`
+	};
+	if (c.status === "new") return {
+		...base,
+		kind: "start",
+		text: `First time: ${eq(c.goal)}, stop ${RULES$1.rir}.`
+	};
+	if (c.status === "stuck") {
+		const back = c.stepBack?.to;
+		return {
+			...base,
+			move: back ?? move,
+			kind: "back",
+			reps: c.lo,
+			tempo: "3-1-1",
+			text: back ? `Two tough sessions: go back to ${back.name.toLowerCase()} at ${c.sets}×${c.lo}${u(back)} and add a slow 3-1-1 tempo.` : `Two tough sessions: ${c.sets}×${c.lo}${u(move)}, 2–3 min rest and a slow 3-1-1 tempo.`
+		};
+	}
+	const reset = c.ready ? ctx.strength && c.ready.to.unit === "reps" ? 5 : rangeFor(c.ready.to).lo : 0;
+	if (c.status === "ready" && c.ready) return {
+		...base,
+		move: c.ready.to,
+		kind: "harder",
+		sets: c.sets,
+		reps: reset,
+		kg: 0,
+		text: `You reached the top of the range, so the next step is ${c.ready.to.name.toLowerCase()} at ${c.sets}×${reset}${u(c.ready.to)} (back to the bottom of its range).`
+	};
+	if (c.status === "top") {
+		const add = kg ? kg + RULES$1.kgStep : RULES$1.kgFirst;
+		return {
+			...base,
+			kind: "weight",
+			kg: add,
+			reps: c.lo,
+			text: `Top of the ladder and the top of the range: add weight. ${c.sets}×${c.lo}${u(move)} +${add} kg in a backpack, then climb back up.`
+		};
+	}
+	return {
+		...base,
+		kind: "reps",
+		text: `${eq(c.goal)}: one more rep than last time, stop ${RULES$1.rir}.`
+	};
+}
+function bodyLines(b) {
+	const lines = [];
+	const low = [];
+	const p = b?.protein;
+	if (p && p.days > 0 && p.goal > 0) {
+		if (p.avg / p.goal < .8) {
+			lines.push(`Protein averaged ${p.avg} g against your ${p.goal} g goal (1.6–2.2 g per kg builds muscle).`);
+			low.push("protein");
+		}
+	}
+	const s = b?.sleep;
+	if (s && s.avgMin != null && s.nights > 0 && s.avgMin < 420) {
+		lines.push(`You slept ${Math.floor(s.avgMin / 60)}h${String(Math.round(s.avgMin % 60)).padStart(2, "0")} on average: muscle grows in sleep, aim for 7 h or more.`);
+		low.push("sleep");
+	}
+	return {
+		lines,
+		low
+	};
+}
+/** The single most important thing this week. */
+function priority(ctx, load = muscleLoad(ctx)) {
+	if (!load.some((l) => l.sets > 0)) return {
+		text: "Do today’s session and log every set: the coach learns from your numbers.",
+		muscle: null,
+		addSets: 0
+	};
+	const dl = deloadCheck(ctx);
+	if (dl.due) return {
+		text: `${dl.why} Cut each exercise by one set and stop 3 reps short for a week.`,
+		muscle: null,
+		addSets: 0
+	};
+	const low = [...load].filter((l) => l.status === "low").sort((a, b) => a.sets / a.goal - b.sets / b.goal)[0];
+	if (low) {
+		const add = clamp$1(low.goal - low.sets, 2, 4);
+		const bp = BODY_PART[low.id];
+		return {
+			text: `Add ${add} sets of ${bp.work}: your ${bp.part} ${low.id === "legs" ? "are" : "is"} behind (${low.sets} of ${low.goal} hard sets this week).`,
+			muscle: low.id,
+			addSets: add
+		};
+	}
+	const freq = load.find((l) => l.freqLow);
+	if (freq) return {
+		text: `Train your ${BODY_PART[freq.id].part} on 2 days a week, not 1: split its sets over two sessions.`,
+		muscle: freq.id,
+		addSets: 0
+	};
+	const b = bodyLines(ctx.body);
+	if (b.low[0] === "protein") return {
+		text: b.lines[0] + " Fix that first.",
+		muscle: null,
+		addSets: 0
+	};
+	if (b.low[0] === "sleep") return {
+		text: b.lines[b.lines.length - 1] + " Fix that first.",
+		muscle: null,
+		addSets: 0
+	};
+	const high = load.find((l) => l.status === "high");
+	if (high) return {
+		text: `${BODY_PART[high.id].part[0].toUpperCase()}${BODY_PART[high.id].part.slice(1)} is over 20 hard sets: more will not grow it faster. Drop a set or two.`,
+		muscle: high.id,
+		addSets: 0
+	};
+	return {
+		text: "Beat last time by one rep on every move, and stop 1–2 reps before failure.",
+		muscle: null,
+		addSets: 0
+	};
+}
+/** Today's exact session: the active exercises with sets × reps, the variation, weight or tempo, rest, and volume added where a muscle is behind. */
+function sessionPlan(ctx, load = muscleLoad(ctx)) {
+	const items = [];
+	const active = ctx.exercises.filter((e) => e.active !== false && !e.plan);
+	for (const ex of active) {
+		const o = overload(ctx, String(ex.id));
+		if (!o) continue;
+		let sets = o.sets;
+		let added = 0;
+		const mu = muscleOf(o.move.group);
+		const l = mu && load.find((x) => x.id === mu);
+		if (l && l.status === "low" && !ctx.deload && o.kind !== "deload" && sets < 5) {
+			added = 1;
+			sets += 1;
+		}
+		const rest = restFor$1(o.move, o.reps);
+		const slow = o.tempo !== "2-0-1" ? `, slow ${o.tempo}` : "";
+		const weight = o.kg > 0 ? ` +${o.kg} kg` : "";
+		items.push({
+			exId: String(ex.id),
+			name: ex.name,
+			move: o.move,
+			sets,
+			reps: o.reps,
+			kg: o.kg,
+			tempo: o.tempo,
+			rest,
+			kind: o.kind,
+			added,
+			line: `${sets}×${o.reps}${u(o.move)} ${o.move.name.toLowerCase()}${weight}, rest ${restText(rest)}${slow}`
+		});
+	}
+	return items;
+}
+function coachCard(ctx) {
+	const load = muscleLoad(ctx);
+	const focus = priority(ctx, load);
+	const session = sessionPlan(ctx, load);
+	const have = new Set(ctx.exercises.filter((e) => e.active !== false).map((e) => muscleOf(moveOf(e)?.group)));
+	const missing = Object.keys(BODY_PART).filter((m) => !have.has(m)).map((m) => ({
+		muscle: m,
+		move: moveById(BODY_PART[m].start)
+	}));
+	const deload = deloadCheck(ctx);
+	const kinds = new Set(session.map((s) => s.kind));
+	return {
+		focus,
+		session,
+		why: kinds.has("harder") ? "You hit the top of the range, so the move gets harder and the reps go back down: that is how muscle keeps growing." : kinds.has("weight") ? "You are at the top of the ladder, so the load goes up with a backpack." : kinds.has("back") ? "Two tough sessions means you need more recovery, not less effort: a step back now gives a bigger jump next week." : ctx.deload || kinds.has("deload") ? "An easy week: the same moves with fewer sets, so your body catches up." : `Each muscle needs ${RULES$1.setsLo}–${RULES$1.setsHi} hard sets a week on 2 or more days, ending 1–2 reps short of failure, and one more rep each time.`,
+		body: bodyLines(ctx.body).lines,
+		missing,
+		deload,
+		load
+	};
+}
+// src/core/sportAdjust.ts
+/** What to change for next time, from the sets logged today (`ctx.today`). Only exercises with sets today. */
+function adjustAfterSession(ctx) {
+	const adjustments = [];
+	for (const ex of ctx.exercises) {
+		const id = String(ex.id);
+		if (!setsOn(ctx.sets, ctx.today, id).length) continue;
+		const mv = moveOf(ex);
+		if (!mv || !coachFor({
+			...ctx,
+			exId: id
+		})) continue;
+		const next = overload({
+			...ctx,
+			today: shiftDay(ctx.today, 1)
+		}, id);
+		if (!next) continue;
+		const kind = next.move.id !== mv.id && next.kind === "back" ? "swap" : next.kind;
+		adjustments.push({
+			exId: id,
+			name: ex.name,
+			kind,
+			toMove: next.move.id,
+			next: {
+				sets: next.sets,
+				reps: next.reps,
+				kg: next.kg
+			},
+			text: `${mv.name}: ${next.text} Rest ${restText(restFor$1(next.move, next.reps))}.`
+		});
+	}
+	const volume = muscleLoad(ctx).filter((l) => l.status === "low" && l.sets > 0 && !ctx.deload).map((l) => ({
+		muscle: l.id,
+		have: l.sets,
+		add: Math.min(3, RULES$1.setsLo - l.sets)
+	}));
+	for (const v of volume) {
+		const a = adjustments.find((x) => muscleOf(moveOf({
+			name: x.name,
+			move: x.toMove
+		})?.group) === v.muscle && x.next.sets < 5);
+		if (a) {
+			a.next.sets += 1;
+			a.text += ` +1 set: your ${BODY_PART[v.muscle].part} has ${v.have} of ${RULES$1.setsLo} hard sets this week.`;
+		}
+	}
+	return {
+		adjustments,
+		lines: adjustments.map((a) => a.text),
+		volume
+	};
+}
+// src/core/sportBot.ts
+var KG = /\s*(?:\+|\bwith\s+|@\s*)\s*(\d{1,3}(?:[.,]\d)?)\s*kg\b/i;
+var NAMES = /^(press|pushups?|situps?|squats?|pullups?|dips?|plank|flotari|abdomene|genuflexiuni|tractiuni)$/i;
+/** A name Ben takes as sport: a library move or one of the plain old names. */
+var isSportName = (name) => !!matchMove(name) || NAMES.test(String(name).replace(/[^a-z]/gi, ""));
+/** "3x15 push-ups", "push-ups 15 14 12", "8 push-ups +10 kg", "plank 3x45s", "best set push-ups 50": what was said, or null. */
+function parseSportSay(text) {
+	let t = String(text ?? "").trim().replace(/^\//, "");
+	if (!t || t.length > 90) return null;
+	let kg = 0;
+	const k = KG.exec(t);
+	if (k) {
+		kg = Math.round(Number(k[1].replace(",", ".")) * 2) / 2;
+		t = t.replace(KG, "").trim();
+	}
+	const best = /^(?:best(?:\s+set)?|max(?:\s+set)?|my\s+max|my\s+best(?:\s+set)?)[:\s-]+(.+?)\s+(\d{1,3})\s*(s|sec|secs|seconds)?$/i.exec(t) ?? /^(.+?)\s+(?:best(?:\s+set)?|max)[:\s-]+(\d{1,3})\s*(s|sec|secs|seconds)?$/i.exec(t);
+	if (best && isSportName(best[1])) return {
+		kind: "best",
+		name: best[1].replace(/[:,.\-–]+$/, "").trim(),
+		reps: [Number(best[2])],
+		unit: best[3] ? "sec" : "reps",
+		kg
+	};
+	const sets = parseSets$1(t);
+	if (sets) return {
+		kind: "sets",
+		name: sets.name,
+		reps: sets.reps,
+		unit: sets.unit,
+		kg
+	};
+	if (kg > 0) {
+		const nameFirst = /^([a-zA-Z][a-zA-Z' _-]{1,40}?)\s+(\d{1,3})$/i.exec(t);
+		const repsFirst = /^(\d{1,3})\s*(?:x\s*|reps?\s+(?:of\s+)?)?([a-zA-Z][a-zA-Z' _-]{1,40})$/i.exec(t);
+		const one = repsFirst ? {
+			1: repsFirst[1],
+			2: repsFirst[2]
+		} : nameFirst ? {
+			1: nameFirst[2],
+			2: nameFirst[1]
+		} : null;
+		if (one && Number(one[1]) >= 1 && isSportName(String(one[2]))) return {
+			kind: "sets",
+			name: String(one[2]).trim(),
+			reps: [Number(one[1])],
+			unit: "reps",
+			kg
+		};
+	}
+	return null;
+}
+/** "8 × push-ups +10 kg" or "3 × 15 push-ups". */
+function receiptSets(name, reps, unit, kg) {
+	const kgText = kg > 0 ? ` +${kg} kg` : "";
+	return `${setsText(reps, unit)} ${name.toLowerCase()}${kgText}`;
+}
+var ctxOf = (s, day, body) => ({
+	exercises: Array.isArray(s.exercises) ? s.exercises : [],
+	days: s.days ?? {},
+	sets: s.sets ?? {},
+	today: day,
+	best: s.bestSets ?? {},
+	imported: s.importedDays ?? {},
+	notYet: s.notYet ?? {},
+	strength: s.sportySettings?.progressMode === "strength",
+	deload: !!s.sportySettings?.deloadUntil && s.sportySettings.deloadUntil >= day,
+	program: s.weekProgram ?? null,
+	body: body ?? null
+});
+/** "best set push-ups 50": remember it (the page places your level from it) and say where it puts you. */
+function declareBest(st, name, reps, day) {
+	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : null;
+	const ex = s && findSharedExercise(s, name);
+	const move = ex && moveOf({
+		name: String(ex.name ?? ""),
+		move: ex.move
+	});
+	if (!ex || !move || !(reps >= 1 && reps <= 500)) return null;
+	s.bestSets = {
+		...s.bestSets ?? {},
+		[move.family]: {
+			move: move.id,
+			reps: Math.round(reps),
+			day
+		}
+	};
+	const p = placeFamily({
+		exercises: s.exercises,
+		days: s.days,
+		sets: s.sets,
+		today: day,
+		best: s.bestSets,
+		imported: s.importedDays
+	}, move.family);
+	return {
+		st: s,
+		line: `🏆 Best set saved: <b>${Math.round(reps)}</b> ${move.name.toLowerCase()}.${p?.lv ? `\n📈 Level <b>${p.level}</b> of ${p.of}: ${p.lv.name}.` : ""}\nOpen Sport Track and use “Re-check my levels” to put every exercise on the right variation.`
+	};
+}
+/** The state with the sets added (or null if there's no such exercise), and one reply line (the receipt). */
+function logBotSets(st, name, reps, day, now = Date.now(), opts = {}) {
+	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : null;
+	const ex = s && findSharedExercise(s, name);
+	if (!ex || !reps.length) return null;
+	const id = String(ex.id ?? ex.name);
+	if (s.sportySettings?.coachMode === false) {
+		s.sets = addSets(s.sets, day, id, reps, now, { kg: opts.kg });
+		const tgt = Number(ex.target) || 0;
+		return {
+			st: s,
+			line: `✅ Logged <b>${receiptSets(String(ex.name ?? name), reps, opts.unit ?? "reps", opts.kg ?? 0)}</b>.\nToday: <b>${Number(ex.doneToday) || 0}</b>${tgt ? ` of ${tgt}` : ""} ${String(ex.name ?? name).toLowerCase()}.`
+		};
+	}
+	const before = bestSet(s.sets, id);
+	s.sets = addSets(s.sets, day, id, reps, now, { kg: opts.kg });
+	const top = Math.max(...reps);
+	const move = moveOf({
+		name: String(ex.name ?? ""),
+		move: ex.move
+	});
+	const p = move ? progressFor({
+		log: s.sets,
+		exId: id,
+		move,
+		today: day
+	}) : null;
+	const best = before && top > before.reps ? `🏆 New best set: <b>${top}</b> (was ${before.reps})` : `Best set today: <b>${top}</b>${before ? ` · all-time ${Math.max(before.reps, top)}` : ""}`;
+	const prog = !p ? "" : p.status === "ready" && p.next ? `\n⬆️ Level up: <b>${p.next.name}</b> is unlocked. Open Sport Track to move up.` : p.status === "building" || p.status === "new" ? `\n🎯 Next level at <b>${p.nextAt}</b>${p.hits ? ` (${p.hits} of ${p.need} sessions there)` : ""}` : `\n${p.line}`;
+	const receipt = `✅ Logged <b>${receiptSets(String(ex.name ?? name), reps, opts.unit ?? "reps", opts.kg ?? 0)}</b>.\n`;
+	let coach = "";
+	try {
+		const c = ctxOf(s, day, opts.body);
+		const lv = move ? placeFamily({
+			...c,
+			exercises: c.exercises
+		}, move.family) : null;
+		const mine = adjustAfterSession(c).adjustments.find((a) => a.exId === id);
+		coach = (lv?.lv ? `\n📈 Level <b>${lv.level}</b> of ${lv.of}: ${lv.lv.name}.` : "") + (mine ? `\n🧠 Next time: ${mine.text}` : "");
+	} catch {
+		coach = "";
+	}
+	return {
+		st: s,
+		line: receipt + best + prog + coach
+	};
+}
 // src/core/botCommands.ts
 function parseAmountAndUnit(str, defaultUnit = "reps") {
 	if (!str) return {
@@ -8464,6 +10900,21 @@ function parseTelegramText(text) {
 		raw: trimmed,
 		period: /yesterday|ieri|вчера/.test(q) ? "yesterday" : /week|saptaman|недел/.test(q) ? "week" : /month|luna|месяц/.test(q) ? "month" : "today"
 	};
+	const say = parseSportSay(trimmed);
+	if (say && (say.kind === "best" || say.kg > 0) && isSportName(say.name)) {
+		const total = say.reps.reduce((a, b) => a + b, 0);
+		return {
+			type: "workout",
+			args: [],
+			raw: trimmed,
+			exerciseName: say.name,
+			exerciseAmount: say.kind === "best" ? 0 : total,
+			exerciseUnit: say.unit,
+			exerciseSets: say.reps,
+			...say.kg ? { exerciseKg: say.kg } : {},
+			...say.kind === "best" ? { exerciseBest: true } : {}
+		};
+	}
 	const sets = parseSets$1(trimmed);
 	if (sets && (matchMove(sets.name) || /^(press|pushups?|situps?|squats?|pullups?|dips?|plank|flotari|abdomene|genuflexiuni|tractiuni)$/i.test(sets.name.replace(/[^a-z]/gi, "")))) {
 		const total = sets.reps.reduce((a, b) => a + b, 0);
@@ -13001,7 +15452,7 @@ var STEP_LABEL$1 = {
 	edit: "Edit",
 	submit: "Submit"
 };
-var clamp$1 = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
+var clamp = (x, lo, hi) => Math.max(lo, Math.min(hi, x));
 function essayStatus(e, today) {
 	const open = e.steps.filter((s) => !s.done);
 	const behind = open.filter((s) => s.day < today);
@@ -13069,7 +15520,7 @@ function cleanEssays(raw) {
 		id: e.id.slice(0, 40),
 		title: String(e.title ?? "Essay").slice(0, 100),
 		due: e.due,
-		words: clamp$1(Number(e.words) || 0, 100, 2e4),
+		words: clamp(Number(e.words) || 0, 100, 2e4),
 		added: day.test(e.added) ? e.added : e.due,
 		tight: e.tight === true,
 		steps: e.steps.filter((s) => s && typeof s.id === "string" && kinds.includes(s.kind) && day.test(s.day)).map((s) => ({
@@ -13077,7 +15528,7 @@ function cleanEssays(raw) {
 			kind: s.kind,
 			label: String(s.label ?? STEP_LABEL$1[s.kind]).slice(0, 30),
 			day: s.day,
-			minutes: clamp$1(Math.round(Number(s.minutes) || 25), 5, 240),
+			minutes: clamp(Math.round(Number(s.minutes) || 25), 5, 240),
 			done: s.done === true,
 			...typeof s.taskId === "string" ? { taskId: s.taskId.slice(0, 40) } : {}
 		}))
@@ -16724,7 +19175,7 @@ var addDays$5 = (day, n) => {
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
 };
-var daysBetween$2 = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5);
+var daysBetween$1 = (from, to) => Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 864e5);
 /** GitHub's events list → last commit day, commits this week and the repos touched. */
 function commitStats(events, today) {
 	const pushes = (Array.isArray(events) ? events : []).filter((e) => e?.type === "PushEvent" && typeof e.created_at === "string");
@@ -16767,7 +19218,7 @@ var dm = (iso) => new Date(iso).toLocaleDateString("en-GB", {
 var hours = (e) => Math.round((Date.parse(e.finish) - Date.parse(e.start)) / 36e5);
 /** One line for what Ben knows. */
 function githubLine(d, today) {
-	const since = d.lastCommit ? daysBetween$2(d.lastCommit, today) : null;
+	const since = d.lastCommit ? daysBetween$1(d.lastCommit, today) : null;
 	const commit = since == null ? `no commits seen lately` : since === 0 ? "committed today" : `${since} day${since === 1 ? "" : "s"} without a commit (last ${d.lastCommit})`;
 	const week = `${d.week} commit${d.week === 1 ? "" : "s"} in the last 7 days${d.repos.length ? ` (${d.repos.join(", ")})` : ""}`;
 	const nudge = since != null && since >= 3 ? " Nudge him: one small commit today." : "";
@@ -19967,7 +22418,7 @@ function parseDeadline(text, today) {
 	}
 	return null;
 }
-var NUM = String.raw`(\d+(?:[.,]\d+)?)\s*(k(?![a-z]))?`;
+var NUM$1 = String.raw`(\d+(?:[.,]\d+)?)\s*(k(?![a-z]))?`;
 var num$1 = (n, k) => Number(n.replace(",", ".")) * (k ? 1e3 : 1);
 /** The unit a word means. */
 function unitOf(word) {
@@ -19981,7 +22432,7 @@ function unitOf(word) {
 	if (/^(h|hours?|hrs?)$/.test(w)) return { unit: "hours" };
 	return null;
 }
-var cap$1 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+var cap$2 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 /**
 * A goal draft from plain words, or null when there's no number to aim at.
 * The deadline may be missing (null): the sheet asks for it.
@@ -20001,9 +22452,9 @@ function parseGoalText(raw, today) {
 	};
 	const kinds = parseKinds(rest, deadline);
 	if (kinds) return kinds;
-	let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, "i").exec(rest);
+	let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM$1}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, "i").exec(rest);
 	if (m) {
-		const subject = cap$1(m[3].trim());
+		const subject = cap$2(m[3].trim());
 		return {
 			...base,
 			kind: "hours",
@@ -20019,7 +22470,7 @@ function parseGoalText(raw, today) {
 			template: "hours"
 		};
 	}
-	m = new RegExp(String.raw`\b(lose|drop|cut|gain|put on)\s+${NUM}\s*(kg|kilos?)\b`, "i").exec(rest);
+	m = new RegExp(String.raw`\b(lose|drop|cut|gain|put on)\s+${NUM$1}\s*(kg|kilos?)\b`, "i").exec(rest);
 	if (m) {
 		const n = num$1(m[2], m[3]);
 		const down = !/gain|put on/i.test(m[1]);
@@ -20036,7 +22487,7 @@ function parseGoalText(raw, today) {
 			template: "lose"
 		};
 	}
-	m = new RegExp(String.raw`\b(?:weigh|weight(?: to)?|get (?:down )?to|reach)\s+${NUM}\s*(kg|kilos?)\b`, "i").exec(rest);
+	m = new RegExp(String.raw`\b(?:weigh|weight(?: to)?|get (?:down )?to|reach)\s+${NUM$1}\s*(kg|kilos?)\b`, "i").exec(rest);
 	if (m) return {
 		...base,
 		kind: "measure",
@@ -20048,7 +22499,7 @@ function parseGoalText(raw, today) {
 		curve: "front",
 		template: "lose"
 	};
-	const money = new RegExp(String.raw`(?:(€|\$)\s*${NUM}|${NUM}\s*(lei|leu|mdl|ron|€|eur|euros?|\$|usd|dollars?|kg|km|%|percent))`, "i").exec(rest);
+	const money = new RegExp(String.raw`(?:(€|\$)\s*${NUM$1}|${NUM$1}\s*(lei|leu|mdl|ron|€|eur|euros?|\$|usd|dollars?|kg|km|%|percent))`, "i").exec(rest);
 	const what = /\b(profit|income|revenue|earn(?:ings)?|salary|savings?|save|saved)\b/i.exec(lower)?.[1]?.toLowerCase();
 	if (money) {
 		const n = money[1] ? num$1(money[2], money[3]) : num$1(money[4], money[5]);
@@ -20110,14 +22561,14 @@ function parseGoalText(raw, today) {
 		if (u.unit === "pct") return {
 			...base,
 			kind: "measure",
-			title: cap$1(rest.replace(/^(raise|get|reach|hit)\s+/i, "")).slice(0, 60),
+			title: cap$2(rest.replace(/^(raise|get|reach|hit)\s+/i, "")).slice(0, 60),
 			unit: "pct",
 			target: n,
 			area: "Life",
 			source: { kind: "manual" }
 		};
 	}
-	m = new RegExp(String.raw`${NUM}\s+([\p{L}][\p{L}\s-]{1,30})$`, "iu").exec(rest.replace(/\s+(in total|total)$/i, ""));
+	m = new RegExp(String.raw`${NUM$1}\s+([\p{L}][\p{L}\s-]{1,30})$`, "iu").exec(rest.replace(/\s+(in total|total)$/i, ""));
 	if (m) {
 		const n = num$1(m[1], m[2]);
 		const thing = m[3].trim().replace(/^(more|new)\s+/i, "");
@@ -20141,7 +22592,7 @@ function parseGoalText(raw, today) {
 			area: "Body",
 			source: {
 				kind: "sport.reps",
-				arg: cap$1(t.split(" ")[0])
+				arg: cap$2(t.split(" ")[0])
 			},
 			template: "reps"
 		};
@@ -20178,7 +22629,7 @@ function parseGoalText(raw, today) {
 			template: star ? "stars" : "custom"
 		};
 	}
-	m = new RegExp(String.raw`${NUM}`, "i").exec(rest);
+	m = new RegExp(String.raw`${NUM$1}`, "i").exec(rest);
 	if (m && what) {
 		const n = num$1(m[1], m[2]);
 		if (/profit|revenue/.test(what)) return {
@@ -20250,7 +22701,7 @@ function parseKinds(rest, deadline) {
 			...base,
 			kind: "measure",
 			type: "project",
-			title: cap$1(m[1].replace(/^(goal|project)\s+/i, "")).slice(0, 60),
+			title: cap$2(m[1].replace(/^(goal|project)\s+/i, "")).slice(0, 60),
 			unit: "pct",
 			target: 100,
 			area: /sec|cert|exam|ctf|course|learn|study/i.test(rest) ? "Study" : "Life",
@@ -20258,7 +22709,7 @@ function parseKinds(rest, deadline) {
 			steps
 		};
 	}
-	m = new RegExp(String.raw`(?:at most|max(?:imum)?|no more than|less than|under|up to|≤|<=|limit\s+\w+\s+to)\s*${NUM}\s*(hours?|hrs?|h|minutes?|mins?|m\b|lei|mdl|€|eur|\$|usd)?\s*(?:of|on)?\s*([\p{L}\s]{0,30}?)\s*${PER}`, "iu").exec(rest);
+	m = new RegExp(String.raw`(?:at most|max(?:imum)?|no more than|less than|under|up to|≤|<=|limit\s+\w+\s+to)\s*${NUM$1}\s*(hours?|hrs?|h|minutes?|mins?|m\b|lei|mdl|€|eur|\$|usd)?\s*(?:of|on)?\s*([\p{L}\s]{0,30}?)\s*${PER}`, "iu").exec(rest);
 	if (m) {
 		let n = num$1(m[1], m[2]);
 		const u = (m[3] ?? "").toLowerCase();
@@ -20289,7 +22740,7 @@ function parseKinds(rest, deadline) {
 			kind: "measure",
 			type: "limit",
 			per: per2,
-			title: `${cap$1(thing)}: at most ${n}h a ${per2}`,
+			title: `${cap$2(thing)}: at most ${n}h a ${per2}`,
 			unit: "hours",
 			target: n,
 			area: "Discipline",
@@ -20354,8 +22805,8 @@ function parseKinds(rest, deadline) {
 		const hours = /(\d+(?:[.,]\d+)?)\s*(h|hours?|hrs?|min(?:utes?)?)\b(?:\s+(?:of|on)\s+([\p{L}\d+#.\s-]{2,30}?))?(?=\s*$|\s+\d|\s+(?:a|per|each|every))/iu.exec(lead);
 		if (hours) {
 			const h = /^min/i.test(hours[2]) ? Number(hours[1]) / 60 : Number(hours[1].replace(",", "."));
-			const subject = hours[3] ? cap$1(hours[3].trim()) : /\b(rust|ctf|python|math|study|code|coding)\b/i.exec(lead)?.[1];
-			const subj = subject && !/^(study|code|coding)$/i.test(subject) ? cap$1(subject) : void 0;
+			const subject = hours[3] ? cap$2(hours[3].trim()) : /\b(rust|ctf|python|math|study|code|coding)\b/i.exec(lead)?.[1];
+			const subj = subject && !/^(study|code|coding)$/i.test(subject) ? cap$2(subject) : void 0;
 			return {
 				...base,
 				kind: "measure",
@@ -20384,11 +22835,11 @@ function parseKinds(rest, deadline) {
 			area: "Body",
 			source: {
 				kind: "sport.reps",
-				arg: cap$1(reps[2].toLowerCase().split(" ")[0])
+				arg: cap$2(reps[2].toLowerCase().split(" ")[0])
 			},
 			dayMin: Number(reps[1])
 		};
-		const title = cap$1(lead.replace(/^(i want to|i will|to)\s+/i, "").replace(/\s+/g, " ").trim()) || "My habit";
+		const title = cap$2(lead.replace(/^(i want to|i will|to)\s+/i, "").replace(/\s+/g, " ").trim()) || "My habit";
 		return {
 			...base,
 			kind: "measure",
@@ -20401,7 +22852,7 @@ function parseKinds(rest, deadline) {
 			source: { kind: "manual" }
 		};
 	}
-	m = new RegExp(String.raw`(?:(€|\$)\s*${NUM}|${NUM}\s*([\p{L}€$]+(?:\s[\p{L}]+)?))\s*${PER}`, "iu").exec(rest);
+	m = new RegExp(String.raw`(?:(€|\$)\s*${NUM$1}|${NUM$1}\s*([\p{L}€$]+(?:\s[\p{L}]+)?))\s*${PER}`, "iu").exec(rest);
 	if (m && /\b(save|saving|put aside|set aside|invest|read|write|publish|solve|ship|post|do|finish)\b/i.test(lower)) {
 		if (m[7].toLowerCase() === "day") return null;
 		const per = m[7].toLowerCase() === "week" ? "week" : "month";
@@ -38328,7 +40779,7 @@ function addDays$1(iso, n) {
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
 }
-var daysBetween$1 = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
+var daysBetween = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
 function weekday(iso) {
 	return utc(iso).getUTCDay();
 }
@@ -39388,7 +41839,7 @@ function safeToSpend(state, today) {
 	const ahead = upcomingItems(state, today, 45);
 	const inc = pay ? null : ahead.find((x) => x.rule.type === "income");
 	const payday = pay ? pay.next : inc ? inc.date : `${addMonths(monthKey(today), 1)}-01`;
-	const days = Math.max(1, daysBetween$1(today, payday));
+	const days = Math.max(1, daysBetween(today, payday));
 	const bills = [...dueItems(state, today), ...ahead.filter((x) => x.date < payday)].filter((x) => x.rule.type !== "income").map((x) => ({
 		label: x.rule.note || "Bill",
 		date: x.date,
@@ -46370,6 +48821,16 @@ function runCommand(s, parsed, text, env) {
 			const name = parsed.exerciseName || "pushups";
 			const amount = parsed.exerciseAmount || 20;
 			const sets = parsed.exerciseSets;
+			if (parsed.exerciseBest && sets?.length) return {
+				reply: `🏆 Best set noted: <b>${sets[0]}</b> ${esc$2(name)}.`,
+				sport: {
+					name,
+					amount: 0,
+					sets,
+					best: true,
+					unit: parsed.exerciseUnit
+				}
+			};
 			const res = s.body.logWorkout({
 				title: sets ? `${name} ${setsText(sets, parsed.exerciseUnit)}` : `${name} (+${amount})`,
 				items: [{
@@ -46385,11 +48846,13 @@ function runCommand(s, parsed, text, env) {
 				note: "Logged via Telegram"
 			});
 			return {
-				reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0) + (sets ? `\nSets: <b>${setsText(sets, parsed.exerciseUnit)}</b> · best set <b>${Math.max(...sets)}</b>` : ""),
+				reply: formatWorkoutResponse(name, amount, res.state.streak, res.awarded ? ruleCoins(s, "body.workout_done", 10) : 0) + (sets ? `\nSets: <b>${setsText(sets, parsed.exerciseUnit)}${parsed.exerciseKg ? ` +${parsed.exerciseKg} kg` : ""}</b> · best set <b>${Math.max(...sets)}</b>` : ""),
 				sport: {
 					name,
 					amount,
-					...sets ? { sets } : {}
+					...sets ? { sets } : {},
+					...parsed.exerciseKg ? { kg: parsed.exerciseKg } : {},
+					unit: parsed.exerciseUnit
 				}
 			};
 		}
@@ -46715,196 +49178,255 @@ async function undoReply(c, at, index) {
 		lines
 	};
 }
-// src/core/sportProgress.ts
-/** Holds: how long a set should last, by move. */
-var HOLDS = {
-	plank: [30, 60],
-	side_plank: [20, 45],
-	hollow_hold: [15, 40],
-	wall_sit: [30, 75],
-	down_dog: [30, 60],
-	childs_pose: [30, 60]
-};
-/** The rep range for a move. */
-function rangeFor(move) {
-	if (!move) return {
-		lo: 8,
-		hi: 15,
-		sets: 3,
-		unit: "reps"
-	};
-	if (move.unit === "sec") {
-		const [lo, hi] = HOLDS[move.id] ?? [20, 60];
-		return {
-			lo,
-			hi,
-			sets: 3,
-			unit: "sec"
-		};
-	}
-	if (move.group === "push" || move.group === "pull") return {
-		lo: move.diff >= 4 ? 5 : 8,
-		hi: move.diff >= 4 ? 12 : 15,
-		sets: 3,
-		unit: "reps"
-	};
-	if (move.group === "legs" || move.group === "core") return {
-		lo: move.diff >= 4 ? 6 : 10,
-		hi: move.diff >= 4 ? 15 : 20,
-		sets: 3,
-		unit: "reps"
-	};
-	if (move.group === "cardio") return {
-		lo: 15,
-		hi: 30,
-		sets: 3,
-		unit: "reps"
-	};
-	return {
-		lo: 8,
-		hi: 12,
-		sets: 2,
-		unit: "reps"
-	};
+// src/core/sportAsk.ts
+var TRAIN = /\b(train(?:ing)?|grow(?:ing|th)?|muscle|stronger|strength|sets?|reps?|rest|deload|plateau|stall(?:ed)?|progress(?:ion)?|volume|hypertrophy|push-?ups?|pull-?ups?|squats?|sit-?ups?|rows?|plank|archer|pistol|planche|dragon|protein|sport)\b/i;
+var QUESTION = /\?|^(?:why|how|what|should|is|are|do|does|can|when|which)\b/i;
+/** A question about training (not a log, not a command). */
+function isTrainingQuestion(text) {
+	const t = String(text ?? "").trim();
+	if (!t || t.startsWith("/") || t.length > 200) return false;
+	return TRAIN.test(t) && QUESTION.test(t) && !/\b(spent|spend|euro|lei|todo|remind|meeting)\b/i.test(t);
 }
-/** A session's working sets: the first `n` (a warm-up isn't logged as a set here). */
-var working = (s, n) => s.reps.slice(0, n);
-/** Every working set reached the top. */
-var atTop = (s, r) => s.reps.length >= r.sets && working(s, r.sets).every((x) => x >= r.hi);
-/** Not even one set reached the bottom. */
-var belowBottom = (s, r) => Math.max(...s.reps) < r.lo;
-var daysBetween = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
-var clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-var u = (r) => r.unit === "sec" ? " s" : "";
+var cap$1 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+/** The answer, or null when it is not a training question. */
+function answerTraining(text, ctx) {
+	if (!isTrainingQuestion(text)) return null;
+	const t = text.toLowerCase();
+	const load = muscleLoad(ctx);
+	const body = bodyLines(ctx.body);
+	const stalled = stallsOf(ctx.sets, ctx.exercises, ctx.today);
+	const dl = deloadCheck(ctx);
+	const any = load.some((l) => l.sets > 0);
+	const m = /(\d{1,2})\s*[x×]\s*(\d{1,3})/.exec(t);
+	if (m && /enough|ok(?:ay)?|good|too (?:easy|little)|worth/.test(t)) {
+		const sets = Number(m[1]);
+		const reps = Number(m[2]);
+		const mv = matchMove(t.replace(m[0], " ").replace(/\b(is|enough|ok|okay|good|worth|it|for|me|a|the|\?)\b/g, " ").trim());
+		const mu = muscleOf(mv?.group);
+		const l = mu ? load.find((x) => x.id === mu) : null;
+		const parts = [];
+		parts.push(`${sets}×${reps}${mv ? ` ${mv.name.toLowerCase()}` : ""} is ${sets * reps} reps; what grows muscle is hard sets.`);
+		if (reps > 12 && mv?.unit === "reps") parts.push(`${reps} reps is above the 5–12 range where a set is hard: move to a harder variation instead of adding reps.`);
+		else if (reps < 5) parts.push("Under 5 reps is more strength than size: go up to 5–8 on a variation you can hold for 4 sets.");
+		else parts.push(`${reps} reps is a good range if you stop ${RULES$1.rir}. If you could do 3 or more extra, it is too easy: go to the next variation.`);
+		if (l) parts.push(l.sets >= RULES$1.setsLo ? `Your ${BODY_PART[l.id].part} has ${l.sets} hard sets in the last 7 days, which is in the 10–20 zone.` : `Your ${BODY_PART[l.id].part} has ${l.sets} hard sets in the last 7 days; one session of ${sets} sets is not enough. Aim for 10–20 a week on 2 or more days.`);
+		return parts.join(" ");
+	}
+	if (/rest|between sets/.test(t)) {
+		const mv = matchMove(t.replace(/\b(how|long|much|should|i|rest|between|sets?|the|for|do|a|\?)\b/g, " ").trim());
+		const lines = [`Rest suits the reps: 5–8 reps need 2.5–3 min, 9–12 reps about 1.75 min, 13–20 reps about 1.25 min, and holds 1 min.`];
+		if (mv) lines.push(`For ${mv.name.toLowerCase()} at ${mv.set} reps: ${restText(restFor$1(mv, mv.set))}.`);
+		return lines.join(" ");
+	}
+	if (/protein|eat|sleep/.test(t) && !/why/.test(t)) return [`Muscle needs protein of about ${RULES$1.protein.lo}–${RULES$1.protein.hi} g per kg of body weight and ${RULES$1.sleepHours}+ hours of sleep.`, ...body.lines.length ? body.lines : ["Nothing is low in your Body data right now."]].join(" ");
+	if (/deload|easy week|recover/.test(t)) return dl.due ? `Yes: ${dl.why} Cut one set from every exercise and stop 3 reps short for a week.` : `Not yet. A deload comes every ${RULES$1.deloadWeeks.lo}–${RULES$1.deloadWeeks.hi} weeks, or sooner when progress stalls. You have trained ${dl.weeks} ${dl.weeks === 1 ? "week" : "weeks"} in a row.`;
+	if (/how many sets|how much volume|how often/.test(t)) return `Each muscle group needs ${RULES$1.setsLo}–${RULES$1.setsHi} hard sets a week, spread over at least ${RULES$1.minDays} days. ${load.map((l) => `${l.short}: ${l.sets} in the last 7 days`).join(", ")}.`;
+	if (!any) return "I have no sets from you in the last 7 days, so there is nothing to grow from yet. Log today’s session set by set and I will tell you exactly what to change.";
+	const causes = [];
+	const low = load.filter((l) => l.status === "low");
+	if (low.length) causes.push(`Volume is low: ${low.map((l) => `${BODY_PART[l.id].part} ${l.sets}`).join(", ")} hard sets in the last 7 days (the goal is ${RULES$1.setsLo}–${RULES$1.setsHi} for each).`);
+	for (const l of load) if (l.freqLow) causes.push(`${cap$1(BODY_PART[l.id].part)} was trained on ${l.days} day: split it over ${RULES$1.minDays} days.`);
+	if (stalled.length) causes.push(`${stalled.map((s) => s.name).slice(0, 2).join(" and ")} stopped improving: ${ctx.exercises.length ? "try a slower 3-1-1 tempo or the next variation" : "change the move"}.`);
+	causes.push(...body.lines);
+	if (dl.due) causes.push(dl.why);
+	const card = coachCard(ctx);
+	if (!causes.length) return `Nothing looks wrong: your sets, protein and sleep are in the zone. Keep adding one rep or one harder variation each session, and stop ${RULES$1.rir}. This week's focus: ${card.focus.text}`;
+	return `${causes.slice(0, 4).join(" ")} First fix: ${card.focus.text}`;
+}
+// src/core/sportStrength.ts
+/** How hard a move is compared with the first step of its ladder. */
+function loadOf(move) {
+	const steps = FAMILIES[move.family]?.steps ?? [];
+	const i = Math.max(0, steps.indexOf(move.id));
+	return Math.pow(1.2, i);
+}
+/** One set's strength score: 100 × load × (1 + reps / 30). Holds count 3 seconds as a rep. */
+function setScore(move, reps) {
+	const r = move.unit === "sec" ? reps / 3 : reps;
+	return Math.round(100 * loadOf(move) * (1 + Math.max(0, r) / 30));
+}
+/** Exercises (by id) grouped by ladder family, from the library move each one is. */
+function byFamily(exercises) {
+	const out = /* @__PURE__ */ new Map();
+	for (const ex of exercises) {
+		const move = moveOf(ex);
+		if (!move) continue;
+		const l = out.get(move.family) ?? [];
+		l.push({
+			ex,
+			move
+		});
+		out.set(move.family, l);
+	}
+	return out;
+}
+/** The best set per session day for one ladder family (every step of it), oldest first. */
+function familySeries(log, exercises, family, until) {
+	const list = byFamily(exercises).get(family) ?? [];
+	const best = /* @__PURE__ */ new Map();
+	for (const { ex, move } of list) for (const s of sessionsOf$1(log, String(ex.id), until)) {
+		const top = Math.max(...s.reps);
+		const score = setScore(move, top);
+		const was = best.get(s.day);
+		if (!was || score > was.score) best.set(s.day, {
+			day: s.day,
+			reps: top,
+			move: move.id,
+			score
+		});
+	}
+	return [...best.values()].sort((a, b) => a.day.localeCompare(b.day));
+}
+/** The ladder families you have sets for. */
+function familiesWithSets(log, exercises) {
+	return [...byFamily(exercises).keys()].filter((f) => familySeries(log, exercises, f).length > 0);
+}
+var bestIn = (pts, from, to) => pts.filter((p) => p.day >= from && p.day <= to).reduce((b, p) => !b || p.score > b.score ? p : b, null);
 /**
-* Where an exercise stands and what to aim for today. `log` is every set
-* logged; `exId` the exercise; sessions before `today` set today's goal, and
-* today's own sets count for "ready" as soon as they're logged.
+* "You're 12% stronger than 4 weeks ago": per family, your best set in the
+* last 2 weeks against your best in the 2 weeks around 4 weeks ago (or your
+* first week of sets, when that's newer but at least a week old).
 */
-function progressFor(input) {
-	const { log, exId, move, today } = input;
-	const r = rangeFor(move);
-	const all = sessionsOf$1(log, exId, today);
-	const past = all.filter((s) => s.day < today);
-	const todays = all.find((s) => s.day === today) ?? null;
-	const last = past[past.length - 1] ?? null;
-	const daysSince = last ? daysBetween(last.day, today) : null;
-	const next = move ? nextStep$1(move) : null;
-	const prev = move ? prevStep(move) : null;
-	const nextAt = `${r.sets}×${r.hi}${u(r)}`;
-	const base = {
-		range: r,
-		sets: r.sets,
-		nextAt,
-		need: 2,
-		daysSince,
-		last,
-		today: todays?.reps ?? [],
-		next: null,
-		prev: null
-	};
-	const recent = [...past, ...todays && todays.reps.length >= r.sets ? [todays] : []];
-	let hits = 0;
-	for (let i = recent.length - 1; i >= 0 && atTop(recent[i], r); i--) hits++;
-	const first = recent.length === 1 && Math.max(...recent[0].reps) >= Math.ceil(r.hi * 1.5);
-	if (hits >= 2 || first) {
-		const n = Math.max(hits, first ? 2 : 0);
-		return next ? {
-			...base,
-			status: "ready",
-			goal: r.hi,
-			hits: n,
-			next,
-			line: `Level up: ${next.name} is unlocked. Start it at ${r.sets}×${rangeFor(next).lo}${u(rangeFor(next))}.`
-		} : {
-			...base,
-			status: "top",
-			goal: r.hi,
-			hits: n,
-			line: `Top of the ladder. Add a 4th set, or go slower (3 seconds down).`
-		};
+function strengthChange(log, exercises, today, weeks = 4) {
+	const nowFrom = shiftDay(today, -13);
+	const fams = [];
+	let since = null;
+	for (const f of familiesWithSets(log, exercises)) {
+		const pts = familySeries(log, exercises, f, today);
+		const now = bestIn(pts, nowFrom, today);
+		if (!now) continue;
+		const thenTo = shiftDay(today, -7 * weeks + 7);
+		let then = bestIn(pts, shiftDay(today, -7 * weeks - 7), thenTo);
+		if (!then) {
+			const first = pts[0];
+			if (!first || first.day > shiftDay(today, -7)) continue;
+			then = bestIn(pts, first.day, shiftDay(first.day, 6));
+		}
+		if (!then || then.day >= now.day) continue;
+		if (!since || then.day < since) since = then.day;
+		fams.push({
+			family: f,
+			name: FAMILIES[f]?.name ?? f,
+			then,
+			now,
+			pct: Math.round((now.score / then.score - 1) * 100)
+		});
 	}
-	if (!last) return {
-		...base,
-		status: "new",
-		goal: r.lo,
-		hits,
-		line: `First time: ${r.sets} sets of ${r.lo}–${r.hi}${u(r)}. Stop 1–2 reps before you can't do another.`
-	};
-	const lastMin = Math.min(...working(last, r.sets));
-	const peak = Math.max(...past.slice(-6).flatMap((s) => working(s, r.sets).length >= r.sets ? [Math.min(...working(s, r.sets))] : []), lastMin);
-	if (daysSince !== null && daysSince >= 10) {
-		const back = Math.round(peak * .7);
-		if (back < r.lo && prev && daysSince >= 21) return {
-			...base,
-			status: "comeback",
-			goal: r.lo,
-			hits: 0,
-			prev,
-			line: `Welcome back after ${daysSince} days. Start one step easier (${prev.name}) or ${r.sets}×${r.lo}${u(r)}, and build up fast.`
-		};
-		return {
-			...base,
-			status: "comeback",
-			goal: clamp(back, r.lo, r.hi),
-			hits: 0,
-			line: `Welcome back after ${daysSince} days: start at ${r.sets}×${clamp(back, r.lo, r.hi)}${u(r)} (about 70%), then build up fast.`
-		};
-	}
-	const misses = past.slice(-2);
-	if (misses.length === 2 && misses.every((s) => belowBottom(s, r))) return prev ? {
-		...base,
-		status: "stuck",
-		goal: r.lo,
-		hits: 0,
-		prev,
-		line: `Under ${r.lo}${u(r)} twice: step back to ${prev.name} for a while, or rest 2–3 minutes between sets.`
-	} : {
-		...base,
-		status: "stuck",
-		goal: r.lo,
-		hits: 0,
-		line: `Under ${r.lo}${u(r)} twice: rest 2–3 minutes between sets and sleep well. You'll get there.`
-	};
-	let breakAt = -1;
-	for (let j = Math.max(1, past.length - 3); j < past.length; j++) if (daysBetween(past[j - 1].day, past[j].day) >= 10) breakAt = j;
-	const mins = (list) => list.flatMap((s) => working(s, r.sets).length >= r.sets ? [Math.min(...working(s, r.sets))] : []);
-	const oldPeak = breakAt > 0 ? Math.max(0, ...mins(past.slice(0, breakAt))) : 0;
-	const step = r.unit === "sec" ? 5 : 1;
-	const goal = clamp(breakAt > 0 && lastMin < oldPeak ? Math.min(oldPeak, lastMin + 3 * step) : lastMin + step, r.lo, r.hi);
 	return {
-		...base,
-		status: "building",
-		goal,
-		hits,
-		line: hits ? `${hits} of 2 sessions at the top. One more and the next level unlocks.` : `Aim for ${r.sets}×${goal}${u(r)} today. Next level at ${nextAt}.`
+		pct: fams.length ? Math.round(fams.reduce((t, x) => t + x.pct, 0) / fams.length) : null,
+		since,
+		families: fams.sort((a, b) => b.pct - a.pct)
 	};
 }
-// src/core/sportBot.ts
-/** The state with the sets added (or null if there's no such exercise), and one reply line. */
-function logBotSets(st, name, reps, day, now = Date.now()) {
-	const s = st && typeof st === "object" ? JSON.parse(JSON.stringify(st)) : null;
-	const ex = s && findSharedExercise(s, name);
-	if (!ex || !reps.length) return null;
-	const id = String(ex.id ?? ex.name);
-	const before = bestSet(s.sets, id);
-	s.sets = addSets(s.sets, day, id, reps, now);
-	const top = Math.max(...reps);
-	const move = moveOf({
-		name: String(ex.name ?? ""),
-		move: ex.move
-	});
-	const p = move ? progressFor({
-		log: s.sets,
-		exId: id,
-		move,
-		today: day
-	}) : null;
+// src/core/sportReview.ts
+/** The facts the model gets (and the only numbers it may use). */
+function reviewFacts(ctx) {
+	const load = muscleLoad(ctx);
+	const stalled = stallsOf(ctx.sets, ctx.exercises, ctx.today);
+	const change = strengthChange(ctx.sets, ctx.exercises, ctx.today);
+	const b = ctx.body;
+	const out = [];
+	out.push("Hard sets in the last 7 days: " + load.map((l) => `${l.short} ${l.sets} sets on ${l.days} days`).join("; ") + ".");
+	const bests = ctx.exercises.filter((e) => e.active !== false).map((e) => {
+		const m = moveOf(e);
+		const top = Math.max(0, ...Object.values(ctx.sets ?? {}).flatMap((d) => (d?.[String(e.id)] ?? []).map((s) => s.reps)));
+		return m && top ? `${m.name} best set ${top}` : "";
+	}).filter(Boolean);
+	if (bests.length) out.push("Best sets: " + bests.join("; ") + ".");
+	if (change.pct != null) out.push(`Strength change versus 4 weeks ago: ${change.pct} percent.`);
+	out.push(stalled.length ? "Stalled: " + stalled.map((s) => `${s.name} (${s.sessions} sessions without a better set)`).join("; ") + "." : "Nothing stalled.");
+	out.push(b?.protein && b.protein.days ? `Protein averaged ${b.protein.avg} g a day on ${b.protein.days} days, goal ${b.protein.goal} g.` : "Protein: not logged.");
+	out.push(b?.sleep && b.sleep.avgMin != null ? `Sleep averaged ${Math.round(b.sleep.avgMin / 6) / 10} hours over ${b.sleep.nights} nights.` : "Sleep: not logged.");
+	const dl = deloadCheck(ctx);
+	out.push(`Training weeks in a row: ${dl.weeks}. Deload ${dl.due ? "is due" : "is not due"}.`);
+	return out.join("\n");
+}
+/** The program the rules alone give: low muscles up to 10, the rest one more, a deload when due. */
+function baseProgram(ctx) {
+	const load = muscleLoad(ctx);
+	const dl = deloadCheck(ctx);
+	const target = {};
+	for (const l of load) target[l.id] = Math.max(RULES$1.setsLo, Math.min(RULES$1.setsHi, l.sets < RULES$1.setsLo ? RULES$1.setsLo : l.sets + 1));
+	const lines = [];
+	const low = load.filter((l) => l.status === "low" && l.sets > 0);
+	if (low.length) lines.push(`Your ${low.map((l) => BODY_PART[l.id].part).join(" and ")} got under ${RULES$1.setsLo} hard sets, so this week each gets ${RULES$1.setsLo}.`);
+	if (dl.due) lines.push(dl.why);
+	lines.push(...bodyLines(ctx.body).lines.slice(0, 2));
+	lines.push(`Every muscle is trained on ${RULES$1.minDays} or more days, and each set stops ${RULES$1.rir}.`);
 	return {
-		st: s,
-		line: (before && top > before.reps ? `🏆 New best set: <b>${top}</b> (was ${before.reps})` : `Best set today: <b>${top}</b>${before ? ` · all-time ${Math.max(before.reps, top)}` : ""}`) + (!p ? "" : p.status === "ready" && p.next ? `\n⬆️ Level up: <b>${p.next.name}</b> is unlocked. Open Sport Track to move up.` : p.status === "building" || p.status === "new" ? `\n🎯 Next level at <b>${p.nextAt}</b>${p.hits ? ` (${p.hits} of ${p.need} sessions there)` : ""}` : `\n${p.line}`)
+		week: mondayOf$7(ctx.today),
+		target,
+		sessions: 3,
+		deload: dl.due,
+		lines: lines.slice(0, 4),
+		source: "code"
 	};
 }
+var NUM = /\d+(?:[.,]\d+)?/g;
+/** Keep only the sentences whose numbers are all in `allowed`. */
+function groundNumbers(text, allowed) {
+	const ok = new Set((allowed.match(NUM) ?? []).map((n) => n.replace(",", ".")));
+	return text.split(/(?<=[.!?])\s+|\n+/).map((s) => s.trim()).filter(Boolean).filter((s) => (s.match(NUM) ?? []).every((n) => ok.has(n.replace(",", "."))));
+}
+/** The model's proposal, forced inside the rules. */
+function enforce(raw, ctx, facts, now) {
+	const base = baseProgram(ctx);
+	const p = raw && typeof raw === "object" ? raw : {};
+	const target = { ...base.target };
+	for (const m of MUSCLES) {
+		const n = Math.round(Number(p.target?.[m.id]));
+		if (Number.isFinite(n)) target[m.id] = Math.max(RULES$1.setsLo, Math.min(RULES$1.setsHi, n));
+	}
+	const sessions = Number.isFinite(Number(p.sessions)) ? Math.max(RULES$1.minDays, Math.min(5, Math.round(Number(p.sessions)))) : base.sessions;
+	const dl = deloadCheck(ctx);
+	const allowed = `${facts}\n${Object.values(target).join(" ")} ${sessions} ${RULES$1.setsLo} ${RULES$1.setsHi} ${RULES$1.minDays} ${RULES$1.sleepHours} 1 2 1.6 2.2`;
+	let lines = groundNumbers((Array.isArray(p.lines) ? p.lines : String(p.lines ?? "").split("\n")).map(String).join("\n"), allowed);
+	lines = groundReply(lines.join("\n"), {
+		facts,
+		said: "",
+		now
+	}).reply.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+	lines = lines.filter((l) => !/\b(skip|no|without)\b.*\bdeload\b/i.test(l) && !/\bto failure\b|\bfull failure\b/i.test(l));
+	const ai = lines.length > 0;
+	if (dl.due && !lines.some((l) => /easy week|deload/i.test(l))) lines.unshift(dl.why);
+	return {
+		week: base.week,
+		target,
+		sessions,
+		deload: dl.due,
+		lines: (ai ? lines : base.lines).slice(0, 4),
+		source: ai ? "ai" : "code"
+	};
+}
+function reviewPrompt(facts) {
+	return [
+		"You are BEN, a strength coach for a home bodyweight athlete. The goal is to grow as fast as possible.",
+		"HARD RULES you cannot break: each muscle (push, pull, legs, core) gets 10 to 20 hard sets a week on at least 2 days; sets stop 1-2 reps short of failure; progress in this order: more reps, then a harder variation or added weight, then back to the bottom of the range; deload only when the facts say it is due; protein 1.6-2.2 g/kg and sleep 7+ hours.",
+		"Use ONLY numbers that appear in the facts below. Never invent a time, an event or a number.",
+		"Write this week's program. Answer ONLY with JSON: {\"target\":{\"push\":n,\"pull\":n,\"legs\":n,\"core\":n},\"sessions\":n,\"lines\":[3 or 4 short plain sentences that say what changes and why]}",
+		"",
+		"FACTS",
+		facts
+	].join("\n");
+}
+/** Once a week: ask the strong model, keep it inside the rules. `ask` null or failing gives the code's program. */
+async function weeklyReview(ctx, ask, now = /* @__PURE__ */ new Date()) {
+	if (!ask) return baseProgram(ctx);
+	const facts = reviewFacts(ctx);
+	try {
+		const raw = await ask(reviewPrompt(facts), {
+			json: true,
+			strong: true,
+			think: true,
+			kind: "weekly"
+		});
+		return enforce(JSON.parse(String(raw).match(/\{[\s\S]*\}/)?.[0] ?? "{}"), ctx, facts, now);
+	} catch {
+		return baseProgram(ctx);
+	}
+}
+/** True when there is no review for this week yet (one per Monday-to-Sunday week). */
+var reviewDue = (program, today) => !program || program.week < mondayOf$7(today);
 // src/core/benRoute.ts
 var EDIT_VERB = /\b(move|add|book|schedule|rename|delete|remove|cancel|log|remind|set|start|drop|push|shift|put)\b/gi;
 /** What kind of message it is. Order matters: a review beats a plan ("review my day and plan tomorrow"). */
@@ -47849,9 +50371,21 @@ function armSmart(list, s) {
 var LOGS_KEY = "life_bot_logs";
 var store = typeof localStorage !== "undefined" ? localStorage : null;
 /** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
-function addRepsToSportTrack(name, amount, sets) {
+function addRepsToSportTrack(name, amount, sets, extra) {
 	let prog = null;
 	updateSport((st) => {
+		if (extra?.best && sets?.[0]) {
+			const b = declareBest(st, name, sets[0], sportToday());
+			if (b) {
+				st.bestSets = b.st.bestSets;
+				prog = {
+					done: 0,
+					target: 0,
+					line: b.line
+				};
+			}
+			return;
+		}
 		const ex = findExercise(st, name);
 		if (!ex) return;
 		ex.doneToday = (Number(ex.doneToday) || 0) + amount;
@@ -47859,7 +50393,10 @@ function addRepsToSportTrack(name, amount, sets) {
 			done: ex.doneToday,
 			target: Number(ex.target) || 0
 		};
-		const r = sets?.length ? logBotSets(st, name, sets, sportToday()) : null;
+		const r = sets?.length ? logBotSets(st, name, sets, sportToday(), Date.now(), {
+			kg: extra?.kg,
+			unit: extra?.unit
+		}) : null;
 		if (r) {
 			st.sets = r.st.sets;
 			prog.line = r.line;
@@ -47871,12 +50408,32 @@ function addRepsToSportTrack(name, amount, sets) {
 * Sport Track's data in Turso (settings.sport_tracker_json, see sportSync.ts),
 * for the server: reps land there and every device picks them up.
 */
-function addRepsInDb(db, name, amount, sets) {
+function addRepsInDb(db, name, amount, sets, extra) {
 	const st = sportState(db);
 	if (!st || !Array.isArray(st.exercises)) return null;
+	if (extra?.best && sets?.[0]) {
+		const b = declareBest(st, name, sets[0], sportToday());
+		if (!b) return null;
+		saveSport(db, b.st, "telegram");
+		return {
+			done: 0,
+			target: 0,
+			line: b.line
+		};
+	}
 	const r = logReps(db, name, amount, "telegram");
 	if (!r) return null;
-	const withSets = sets?.length ? logBotSets(r.st, name, sets, sportToday()) : null;
+	const withSets = sets?.length ? logBotSets(r.st, name, sets, sportToday(), Date.now(), {
+		kg: extra?.kg,
+		unit: extra?.unit,
+		body: (() => {
+			try {
+				return sportBodyNow(db);
+			} catch {
+				return null;
+			}
+		})()
+	}) : null;
 	if (withSets) saveSport(db, withSets.st, "telegram");
 	return {
 		done: r.exercise.done,
@@ -48368,7 +50925,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		return db.transaction(() => {
 			const out = run(svc, text, key);
 			if (server && out.sport) {
-				const prog = addRepsInDb(db, out.sport.name, out.sport.amount, out.sport.sets);
+				const prog = addRepsInDb(db, out.sport.name, out.sport.amount, out.sport.sets, out.sport);
 				if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round(prog.done / prog.target * 100)}%)`;
 				if (prog?.line) out.reply += `\n${prog.line}`;
 				out.sport = void 0;
@@ -50572,6 +53129,69 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		}
 		return out.join("\n");
 	}
+	/** The coach's context from Sport Track's state, Body data and this week's program. */
+	const sportCtx = (st, body) => ({
+		exercises: Array.isArray(st.exercises) ? st.exercises : [],
+		days: st.days ?? {},
+		sets: st.sets ?? {},
+		today: sportToday(),
+		best: st.bestSets ?? {},
+		imported: st.importedDays ?? {},
+		notYet: st.notYet ?? {},
+		strength: st.sportySettings?.progressMode === "strength",
+		deload: !!st.sportySettings?.deloadUntil && st.sportySettings.deloadUntil >= sportToday(),
+		program: st.weekProgram ?? null,
+		body
+	});
+	/**
+	* "why am I not growing?", "is 4×8 archer enough?", "sport review": answered in code from the sets, Body data and the rules.
+	* Once a week the strong model rewrites the week's program inside those rules (sportReview.ts); with no model, the code does.
+	*/
+	async function trainingReply(text) {
+		const review = /^(?:sport|training|strength|weekly)\s+(?:weekly\s+)?review\??$/i.test(text.trim());
+		if (!review && !isTrainingQuestion(text)) return null;
+		const ctx = await mirror.read((db) => {
+			const st = sportState(db);
+			if (!st) return null;
+			let body = null;
+			try {
+				body = sportBodyNow(db);
+			} catch {
+				body = null;
+			}
+			return {
+				st,
+				body
+			};
+		});
+		if (!ctx) return null;
+		let c = sportCtx(ctx.st, ctx.body);
+		let extra = "";
+		const prog0 = c.program;
+		if (review || reviewDue(prog0, c.today) || prog0?.source === "code" && prog0.tried !== c.today) {
+			if (review || ai) {
+				const prog = await weeklyReview(c, timedAi ? (p, o) => withTimeout$1(timedAi(p, o), 3e4) : null);
+				await mirror.write((db) => {
+					const cur = sportState(db);
+					if (cur) saveSport(db, {
+						...cur,
+						weekProgram: {
+							...prog,
+							tried: c.today
+						}
+					}, "ben");
+				}).catch(() => null);
+				c = {
+					...c,
+					program: prog
+				};
+				if (review) extra = prog.lines.map((l) => `• ${esc$2(l)}`).join("\n");
+			}
+		}
+		if (review) return `🧠 <b>This week's plan</b>\n${extra}`;
+		const a = answerTraining(text, c);
+		return a ? esc$2(a) : null;
+	}
 	async function handleBrain(botId, update, cfg, text, key, media) {
 		const chat = String(update.message?.chat?.id ?? "");
 		tg(update.__token, "sendChatAction", {
@@ -50808,10 +53428,22 @@ His note: ${note}`, { json: true }));
 				}
 			});
 			if (out.skip) return null;
+			if ("unknown" in out && out.unknown && !text.startsWith("/")) {
+				const said = await trainingReply(text).catch(() => null);
+				if (said) {
+					addLog(text, chat, true, said);
+					await tg(update.__token, "sendMessage", {
+						chat_id: chat,
+						text: said,
+						parse_mode: "HTML"
+					}).catch(() => null);
+					return said;
+				}
+			}
 			if (ai && "unknown" in out && out.unknown && !text.startsWith("/")) return handleBrain(botId, update, cfg, text, key);
 			processed++;
 			if (out.ok && "sport" in out && out.sport) {
-				const prog = addRepsToSportTrack(out.sport.name, out.sport.amount, out.sport.sets);
+				const prog = addRepsToSportTrack(out.sport.name, out.sport.amount, out.sport.sets, out.sport);
 				if (prog && prog.target) out.reply += `\n\n📊 Today: <b>${prog.done}/${prog.target}</b> (${Math.round(prog.done / prog.target * 100)}%)`;
 				if (prog?.line) out.reply += `\n${prog.line}`;
 			}
