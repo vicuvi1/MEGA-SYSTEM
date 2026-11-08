@@ -112,9 +112,14 @@ export interface ProgramState {
   startedOn: string
   /** Your own exercises were turned off for it. */
   replaced?: boolean
+  /** A program built for you (Body → Training, id 'home'), carried in the state itself. */
+  custom?: Program | null
 }
 
-type Ex = SportEx & { prog?: string; progSession?: string[]; progOff?: boolean; doneToday?: number; plan?: boolean; move?: string }
+/** The program a state points at: a built-in one, or the one carried in the state. */
+export const programOf = (p: ProgramState | null | undefined): Program | null => (p ? (p.custom && p.custom.id === p.id ? p.custom : programById(p.id)) : null)
+
+type Ex = SportEx & { prog?: string; progSession?: string[]; progOff?: boolean; doneToday?: number; plan?: boolean; move?: string; homeOwn?: boolean; homeTarget?: number }
 
 /**
  * Picks a program. Adds its exercises (new ones are tagged with the program and the sessions they belong to);
@@ -151,7 +156,8 @@ export function applyProgram(exercises: Ex[], program: Program, places: Placemen
 export function stopProgram(exercises: Ex[]): Ex[] {
   return exercises.map((e) => {
     const x = { ...e }
-    if (x.prog) { x.active = false; delete x.progSession; delete x.prog }
+    // homeOwn: one of your own exercises a built program used; it comes back as it was.
+    if (x.prog) { x.active = !!x.homeOwn; if (x.homeOwn && x.homeTarget != null) x.target = x.homeTarget; delete x.progSession; delete x.prog; delete x.homeOwn; delete x.homeTarget }
     if (x.progOff) { x.active = true; delete x.progOff }
     return x
   })
@@ -162,7 +168,7 @@ export function stopProgram(exercises: Ex[]): Ex[] {
  * Never empty: on a rest day of a program that replaced your routine, your own (turned off) exercises show as an easy option.
  */
 export function todayRoutine<T extends Ex>(exercises: T[], program: ProgramState | null | undefined, day: string): { list: T[]; restDay: boolean; session: ProgSession | null } {
-  const prog = program ? programById(program.id) : null
+  const prog = programOf(program)
   const session = prog ? sessionFor(prog, day) : null
   const mine = exercises.filter((e) => e.active !== false && (!e.prog || (prog && e.prog === prog.id && (!!session && (e.progSession ?? []).includes(session.id)))))
   const extra = prog && prog.daily ? exercises.filter((e) => e.active !== false && e.prog === prog.id && !mine.includes(e)) : []

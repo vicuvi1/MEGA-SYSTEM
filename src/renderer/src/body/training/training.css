@@ -1,0 +1,120 @@
+/* Body → Training: home program builder, challenges, This week.
+   Only theme tokens (light and dark follow them). Motion: transform, opacity
+   and the ring's stroke only; none of it with reduced motion. */
+
+.bt { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.bt h2, .bt h3 { margin: 0; }
+.bt .small { font-size: 12px; }
+.bt-label { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+
+/* ---- ring ---- */
+.bt-ring { position: relative; display: inline-grid; place-items: center; flex: none; }
+.bt-ring svg { display: block; }
+.bt-ring-bg { fill: none; stroke: rgb(var(--ink) / 0.09); }
+.bt-ring-fg { fill: none; stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.6s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.bt-ring.done .bt-ring-fg { stroke: var(--green); }
+.bt-ring.ended .bt-ring-fg { stroke: rgb(var(--ink) / 0.3); }
+.bt-ring-in { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 800; font-variant-numeric: tabular-nums; }
+
+/* ---- hero ---- */
+.bt-hero { display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 18px; flex-wrap: wrap; padding: 18px 20px; background:
+  linear-gradient(120deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 60%), var(--surface, var(--panel)); }
+.bt-hero-week { display: flex; flex-direction: column; align-items: center; line-height: 1; }
+.bt-hero-week b { font-size: 24px; }
+.bt-hero-week small { font-size: 10px; color: var(--muted); font-weight: 700; margin-top: 2px; }
+.bt-hero-text { flex: 1 1 260px; align-self: center; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.bt-hero-text h2 { font-size: 22px; }
+.bt-hero-text p { margin: 2px 0 0; }
+.bt-eyebrow { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); }
+.bt-start { min-height: 44px; padding-inline: 22px; }
+.bt-hero-stats { display: flex; gap: 14px; color: var(--muted); font-size: 13px; }
+.bt-hero-stats b { color: var(--text); font-size: 16px; }
+
+/* ---- builder ---- */
+.bt-builder { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+.bt-controls { display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: flex-end; }
+.bt-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.bt-equip { flex: 1 1 320px; }
+.bt-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; background: rgb(var(--ink) / 0.06); }
+.bt-seg button { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 700; padding: 6px 14px; border-radius: 999px; cursor: pointer; min-height: 32px; }
+.bt-seg button.on { background: var(--accent); color: var(--accent-ink, #111); }
+.bt-seg button:focus-visible, .bt-weeks button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bt-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.bt-levels { margin: 0; font-size: 13px; color: var(--muted); }
+.bt-levels b { color: var(--text); }
+.bt-weeks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.bt-weeks button { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 12px; border-radius: 12px; border: 1px solid var(--border); background: transparent; color: var(--text); font: inherit; cursor: pointer; text-align: left; }
+.bt-weeks button small { color: var(--muted); font-weight: 600; }
+.bt-weeks button.light small { color: var(--green); }
+.bt-weeks button.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.bt-aim { margin: 0; font-size: 13px; color: var(--muted); }
+.bt-sessions { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+.bt-session { border: 1px solid var(--border); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bt-session header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.bt-session h3 { font-size: 15px; }
+.bt-min { font-weight: 800; font-variant-numeric: tabular-nums; color: var(--accent); }
+.bt-warm { margin: 0; font-size: 12px; color: var(--muted); }
+.bt-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.bt-items li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--border); }
+.bt-items li.paired { border-bottom: 0; }
+.bt-items li.paired + li { border-top-style: dashed; }
+.bt-move { display: flex; flex-direction: column; min-width: 0; }
+.bt-move b { font-size: 14px; }
+.bt-move small { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.bt-sets { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bt-kind { font-size: 10px; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; padding: 3px 7px; border-radius: 999px; background: rgb(var(--ink) / 0.06); color: var(--muted); }
+.bt-kind.strength { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
+.bt-kind.hold { background: color-mix(in srgb, var(--cyan, var(--accent)) 14%, transparent); }
+.bt-rules { border-radius: 12px; padding: 10px 14px; background: rgb(var(--ink) / 0.04); }
+.bt-rules h3 { font-size: 13px; margin-bottom: 4px; }
+.bt-rules ul { margin: 0; padding-left: 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2px 20px; font-size: 12.5px; color: var(--muted); }
+.bt-rules li:first-child { color: var(--text); font-weight: 600; }
+.bt-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.bt-inuse { font-weight: 700; color: var(--green); }
+
+/* ---- challenges ---- */
+.bt-challenges { display: flex; flex-direction: column; gap: 12px; }
+.bt-chal-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 8px; }
+.bt-chal { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 10px 12px; border-radius: 14px; border: 1px solid var(--border); min-width: 0; }
+.bt-chal.joined { background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.bt-chal.joined.done { background: color-mix(in srgb, var(--green) 10%, transparent); border-color: color-mix(in srgb, var(--green) 40%, transparent); }
+.bt-chal-text { display: flex; flex-direction: column; min-width: 0; }
+.bt-chal-text small { font-size: 12px; }
+.bt-custom summary { cursor: pointer; font-weight: 700; }
+.bt-custom-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-top: 10px; }
+.bt-custom-form label { display: flex; flex-direction: column; gap: 4px; min-width: 120px; flex: 1 1 120px; }
+.bt-custom-form .input { width: 100%; }
+.bt-badges h3 { font-size: 13px; margin-bottom: 6px; }
+.bt-badges ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+.bt-badge { display: flex; gap: 8px; align-items: center; padding: 6px 12px 6px 6px; border-radius: 999px; background: color-mix(in srgb, var(--gold, var(--orange)) 14%, transparent); }
+.bt-badge span:last-child { display: flex; flex-direction: column; line-height: 1.15; }
+.bt-badge small { color: var(--muted); font-size: 11px; }
+.bt-medal { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--gold, var(--orange)); color: #1a1406; font-size: 14px; animation: bt-pop 0.5s cubic-bezier(0.2, 0.9, 0.3, 1.4) both; }
+@keyframes bt-pop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ---- this week ---- */
+.bt-week { display: flex; flex-direction: column; gap: 12px; }
+.bt-section-title { font-size: 17px; }
+.bt-more > summary { cursor: pointer; font-weight: 700; padding: 10px 14px; border-radius: 12px; border: 1px solid var(--border); list-style-position: inside; }
+.bt-more[open] > summary { margin-bottom: 12px; }
+.bt-more-body { display: flex; flex-direction: column; gap: 16px; }
+.bt-workouts { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.bt-workout-side { display: flex; gap: 10px; align-items: center; }
+.bt-targets { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.bt-target-name { font-weight: 600; }
+
+@media (max-width: 640px) {
+  .bt-hero { padding: 14px; gap: 12px; }
+  .bt-hero-text h2 { font-size: 19px; }
+  .bt-start { width: 100%; }
+  .bt-weeks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bt-sessions, .bt-chal-list { grid-template-columns: minmax(0, 1fr); }
+  .bt-rules ul { grid-template-columns: minmax(0, 1fr); }
+  .bt-items li { grid-template-columns: 1fr auto; }
+  .bt-kind { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bt-ring-fg { transition: none; }
+  .bt-medal { animation: none; }
+}

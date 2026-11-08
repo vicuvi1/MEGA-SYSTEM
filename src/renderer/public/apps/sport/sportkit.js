@@ -7201,6 +7201,8 @@ var SportKit = (function(exports) {
 			reps: place?.lv && here ? Math.max(3, here.reps - 2) : slot.reps
 		};
 	}
+	/** The program a state points at: a built-in one, or the one carried in the state. */
+	var programOf = (p) => p ? p.custom && p.custom.id === p.id ? p.custom : programById(p.id) : null;
 	/**
 	* Picks a program. Adds its exercises (new ones are tagged with the program and the sessions they belong to);
 	* an exercise of yours that is the same move is shared. With `replace`, your other active exercises are turned
@@ -7254,9 +7256,12 @@ var SportKit = (function(exports) {
 		return exercises.map((e) => {
 			const x = { ...e };
 			if (x.prog) {
-				x.active = false;
+				x.active = !!x.homeOwn;
+				if (x.homeOwn && x.homeTarget != null) x.target = x.homeTarget;
 				delete x.progSession;
 				delete x.prog;
+				delete x.homeOwn;
+				delete x.homeTarget;
 			}
 			if (x.progOff) {
 				x.active = true;
@@ -7270,7 +7275,7 @@ var SportKit = (function(exports) {
 	* Never empty: on a rest day of a program that replaced your routine, your own (turned off) exercises show as an easy option.
 	*/
 	function todayRoutine(exercises, program, day) {
-		const prog = program ? programById(program.id) : null;
+		const prog = programOf(program);
 		const session = prog ? sessionFor(prog, day) : null;
 		const mine = exercises.filter((e) => e.active !== false && (!e.prog || prog && e.prog === prog.id && !!session && (e.progSession ?? []).includes(session.id)));
 		const extra = prog && prog.daily ? exercises.filter((e) => e.active !== false && e.prog === prog.id && !mine.includes(e)) : [];
@@ -8524,6 +8529,7 @@ var SportKit = (function(exports) {
 	exports.prevStep = prevStep;
 	exports.priority = priority;
 	exports.programById = programById;
+	exports.programOf = programOf;
 	exports.progressFor = progressFor;
 	exports.rangeFor = rangeFor;
 	exports.rankLine = rankLine;

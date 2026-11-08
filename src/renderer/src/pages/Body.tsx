@@ -9,9 +9,7 @@ import { Icon } from '../Icon'
 import { soundCoin } from '../soundKit'
 import { useWater } from '../water'
 import { WaterHistory } from '../WaterHistory'
-import { StrengthCard } from '../StrengthCard'
 import { ReadinessCard } from '../ReadinessCard'
-import { SkillPaths } from '../SkillPaths'
 import { useAction } from '../ui'
 import '../body.css'
 import { WATER_TARGET_ML } from '@core/defaults'
@@ -21,18 +19,19 @@ import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
 import { ProteinCard } from '../body/ProteinCard'
 import { FoodCounter } from '../body/FoodCounter'
 import { WeightTrendCard } from '../body/WeightTrendCard'
-import { MuscleWeekCard } from '../body/MuscleWeekCard'
 import { SuppCard } from '../body/SuppCard'
 import { TapeCard } from '../body/TapeCard'
 import { PhotoCheckin } from '../body/PhotoCheckin'
 import { BodyWeekCard } from '../body/BodyWeekCard'
 import { readSoreness, useBodyPlus } from '../body/useBodyPlus'
 import '../body/body-plus.css'
+import { BodyTraining } from '../body/training/BodyTraining'
+import { BodyProgress } from '../body/progress/BodyProgress'
 
 const BODY_TABS = [
   { id: 'today', label: 'Today', title: 'Readiness, protein, supplements and water' },
   { id: 'food', label: 'Food', title: 'Food counter (photo to AI, paste back), protein and kcal goals, quick protein log' },
-  { id: 'training', label: 'Training', title: 'Sets per muscle, next steps, strength, workouts' },
+  { id: 'training', label: 'Training', title: 'Home program, challenges, sets per muscle, strength, workouts' },
   { id: 'progress', label: 'Progress', title: 'Weight trend, measurements, photos, your week' }
 ]
 
@@ -157,15 +156,6 @@ export function Body({
       ? state.weeklyAverages[state.weeklyAverages.length - 1].avg
       : null
 
-  const handleDelete = async (id: number) => {
-    if (!await askConfirm('Delete this workout record? Any points earned from it will be taken back.')) return
-    const next = await act(() => life.body.deleteWorkout(id), 'Workout removed')
-    if (next) {
-      onState(next)
-      onWallet()
-    }
-  }
-
   return (
     <div className="body-page">
       <PageTabs page="body" label="Body views" tabs={BODY_TABS.map((t) => ({ ...t, count: t.id === 'food' && plus ? `${plus.today}/${plus.goal.g}` : null }))} value={tab} onChange={setTab} />
@@ -263,82 +253,11 @@ export function Body({
       </TabPanel>
 
       <TabPanel page="body" id="training" value={tab} className="body-tab">
-        {/* BD3: hard sets per muscle against the plan and 10–20, the next step for each move */}
-        <MuscleWeekCard hold={hold} />
-        {/* STRENGTH: sets × reps × kg, records, estimated max (H2) */}
-        <StrengthCard state={state} onChange={(s2) => (onState(s2), onWallet())} />
-        <SkillPaths state={state} />
-        <div className="cols">
-          <section className="panel">
-            <header className="panel-head">
-              <h2>Recent workouts</h2>
-              <span className="hint">Logs feed into your streaks and earn {pts('body.workout_done', 10)} points.</span>
-            </header>
-
-            {state.recentWorkouts.length === 0 ? (
-              <div className="empty">
-                No workouts logged yet. Tap <b>Log workout</b> above to record today's session!
-              </div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10 }}>
-                {state.recentWorkouts.map((w) => (
-                  <div key={w.id} className="workout-card">
-                    <div className="workout-card-head">
-                      <div className="workout-card-title">
-                        <Icon name="bolt" size={16} />
-                        {w.title}
-                      </div>
-                      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                        <small style={{ color: 'var(--muted)' }}>{w.day}</small>
-                        <button className="btn small ghost body-undo" title="Undo / delete this workout record" onClick={() => handleDelete(w.id)}>
-                          <Icon name="undo" size={12} />
-                          Undo
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="workout-items-chips">
-                      {w.items.map((it, idx) => (
-                        <span key={idx} className="workout-chip">
-                          {it.amount} {it.unit} {it.name}
-                        </span>
-                      ))}
-                    </div>
-
-                    {w.note && <div className="workout-note">"{w.note}"</div>}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            <section className="panel">
-              <header className="panel-head">
-                <h2>Exercise targets</h2>
-              </header>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
-                {state.exercises.map((ex) => (
-                  <div key={ex.id} className="weight-row">
-                    <span style={{ fontWeight: 600 }}>{ex.name ? ex.name[0].toUpperCase() + ex.name.slice(1) : ex.name}</span>
-                    <span className="chip-text" style={{ color: 'var(--muted)', fontWeight: 600 }}>
-                      {ex.target} {ex.unit} a day
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          </div>
-        </div>
+        <BodyTraining state={state} onState={onState} onWallet={onWallet} hold={hold} onOpenSportApp={onOpenSportApp} />
       </TabPanel>
 
       <TabPanel page="body" id="progress" value={tab} className="body-tab">
-        {plus && <WeightTrendCard trend={plus.trend} today={plus.day} onLog={() => setMetricOpen(true)} />}
-        <div className="bp-grid">
-          {plus && <TapeCard v={plus} waist={state.latestWaist} onView={setPlus} />}
-          <BodyWeekCard />
-        </div>
-        <PhotoCheckin every={plus?.prefs.photoEvery ?? 14} />
+        <BodyProgress state={state} onLog={() => setMetricOpen(true)} />
       </TabPanel>
 
       {workoutOpen && (
