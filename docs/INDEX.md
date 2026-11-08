@@ -71,6 +71,7 @@ must pin the clock: `vi.useFakeTimers({ toFake: ['Date'] })` plus `vi.setSystemT
 | Rewards and money | [areas/rewards-money.md](areas/rewards-money.md) | `pages/Rewards.tsx`, `src/main/shop.ts`, `public/apps/finance/` |
 | Plugins and PC automation | [areas/plugins-pc.md](areas/plugins-pc.md), [pc-automation.md](pc-automation.md) | `src/plugins/` |
 | Operations (tick, backups, cost, CI) | [areas/ops.md](areas/ops.md) | `api/cron.mjs`, `.github/workflows/` |
+| Custom Center (your widgets, actions, reminders, modes, looks) | [areas/custom.md](areas/custom.md) | `src/core/custom/`, `pages/CustomCenter.tsx`, `src/renderer/src/custom/` |
 | How to work, UI and motion rules | [areas/workflow.md](areas/workflow.md) | `src/renderer/src/motion.css`, `Select.tsx`, `PageTabs.tsx` |
 
 Other docs:

@@ -2,7 +2,7 @@ import type { IconName } from './Icon'
 
 export type PageId =
   | 'today' | 'focus' | 'progress' | 'goals' | 'calendar' | 'coach' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
-  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season' | 'career'
+  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season' | 'career' | 'custom'
 
 export interface ModuleDef {
   id: PageId
@@ -30,6 +30,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 0, blurb: 'Your money, from Finance Helper' },
   { id: 'shop', label: 'Rewards', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend your points: guilt-free fun time and real rewards' },
   { id: 'music', label: 'Music', icon: 'music', color: '#ff7a45', phase: 0, blurb: 'SoundCloud stations, lyrics and the players on your PC' },
+  { id: 'custom', label: 'Custom Center', icon: 'sliders', color: '#B892FF', phase: 0, blurb: 'Build your own widgets, actions, reminders, modes and looks for the island and the app' },
 ]
 
 export const SYSTEM_PAGES: ModuleDef[] = [

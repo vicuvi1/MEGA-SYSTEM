@@ -46,6 +46,7 @@ import { FocusBoost } from './boost/FocusBoost'
 import { winMoment } from './boost/boostBus'
 import { startZoom, ZoomToast } from './zoom'
 import { WallpaperLayer } from './wallpaper/WallpaperLayer'
+import { CustomBackground } from './custom/CustomBackground'
 
 // Pages and pop-ups load when first opened (Today and the lock screen come at
 // once), and every page is fetched in the background once Today is up
@@ -96,6 +97,7 @@ const CinematicHost = lazyNamed(() => import('./saga/Cinematics'), 'CinematicHos
 const Career = lazyNamed(() => import('./pages/Career'), 'Career')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
+const CustomCenter = lazyNamed(() => import('./pages/CustomCenter'), 'CustomCenter')
 const QuickCommandBar = lazyNamed(() => import('./QuickCommandBar'), 'QuickCommandBar')
 
 
@@ -678,6 +680,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   return (
     <div className={`shell ${collapsed ? 'rail' : ''} ${focus ? 'focus' : ''}`}>
       <WallpaperLayer page={page} />
+      <CustomBackground />
       <Palette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
@@ -865,6 +868,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'season' && <Season />}
             {page === 'career' && <Career onGo={setPage} />}
             {page === 'coach' && <Coach onWallet={onWallet} />}
+            {page === 'custom' && <CustomCenter />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}
             {current.phase > 0 && <Soon module={current} />}

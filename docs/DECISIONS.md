@@ -4,6 +4,11 @@ Choices that a later session could easily undo by accident. Each entry gives the
 was made, and what it rules out. Newest entries go on top. Don't reverse one without writing a new
 entry that says why.
 
+### Custom Center is data only, and counters log through the real logs (2026-11-08)
+- **Decision:** the Custom Center set-up (`custom_setup`) is plain, versioned JSON cleaned by `core/custom/validate.ts`; migrations step one version at a time (`migrate.ts`) and a set-up from a newer app is never overwritten. Actions are a closed list of steps that call the app's own operations (focus timer, music station, island quiet, Do Not Disturb, a mode, a page, a counter): no code, no shell, no links. A counter that tracks water or reps writes only to the existing logs (water log, Sport Track reps + workout log), so their own rules decide any points; a purely custom counter pays nothing. Uploaded pictures and sounds stay in this device's IndexedDB, referenced by `local:<id>`, and are dropped from exports. Custom reminders pass `reminderGate` (call, focus, quiet, bedtime, gap, caps).
+- **Why:** imports and synced data must never become a way to run code, and points must stay honest.
+- **Rules out:** script steps, URLs or webhooks in actions; a second water or reps counter; points paid by a counter, action or reminder; pictures or sounds in the synced setting.
+
 ### Food from Telegram is previewed first; one food push a day (2026-11-08)
 - **Decision:** a pasted AI reply on Telegram always becomes a preview (Save / Edit grams / Cancel) and is saved only through the food counter's own `addFoodMeal`, so it is the same data as Body → Food. Ben sends at most ONE food push a day (`food:` keys in `ben_pushes`): the evening protein nudge or the dinner reminder, on the one push channel, never in a meeting, quiet hours or after bed, with "Mute food nudges for 7 days". The Sunday food report rides in the weekly message. Food pays no points.
 - **Why:** an AI's guess saved without a look would put wrong numbers in the one protein number that the ring, the weekly report and "why it stalled" all read; the owner wants food help, not a nag.

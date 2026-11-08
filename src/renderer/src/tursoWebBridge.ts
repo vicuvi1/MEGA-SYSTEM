@@ -37,6 +37,7 @@ import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { careApi } from './web/careApi'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../main/settings'
+import { cleanSetup, cleanState as cleanCustomState, readSetup, CUSTOM_MAX_BYTES, CUSTOM_SETUP_KEY, CUSTOM_STATE_KEY, CUSTOM_VERSION, type CustomSetup, type CustomState } from '@core/custom'
 import { cleanLooks, type CoachLooks } from '@core/coachLooks'
 import { cleanWallpaper, okWallpaperPhoto, type WallpaperPrefs } from '@core/wallpaper'
 import { financeSpending } from '@core/progress'
@@ -1644,6 +1645,30 @@ export function createTursoWebBridge(): Bridge {
         if (url !== null && !okWallpaperPhoto(url)) throw new Error('That picture is too big or not an image')
         await (await mirrorP).write((db) => writeSetting(db as any, 'look_wallpaper_photo', url))
       }
+    },
+    // Custom Center (src/core/custom, docs/areas/custom.md): the set-up and today's custom numbers.
+    custom: {
+      get: async () =>
+        (await mirrorP).read((db) => {
+          const raw = readSetting(db as any, CUSTOM_SETUP_KEY) as any
+          return { setup: readSetup(raw), state: cleanCustomState(readSetting(db as any, CUSTOM_STATE_KEY)), newer: Number(raw?.version) > CUSTOM_VERSION }
+        }),
+      save: async (setup: CustomSetup) =>
+        (await mirrorP).write((db) => {
+          // A set-up saved by a newer app is never overwritten by this one.
+          const cur = readSetting(db as any, CUSTOM_SETUP_KEY) as any
+          if (Number(cur?.version) > CUSTOM_VERSION) throw new Error('Your set-up was saved by a newer version of Life System. Update the app first')
+          const clean = cleanSetup(setup)
+          if (JSON.stringify(clean).length > CUSTOM_MAX_BYTES) throw new Error('Your set-up is too big to keep in sync: remove a few widgets or reminders')
+          writeSetting(db as any, CUSTOM_SETUP_KEY, clean as unknown as Record<string, unknown>)
+          return clean
+        }),
+      saveState: async (state: CustomState) =>
+        (await mirrorP).write((db) => {
+          const clean = cleanCustomState(state)
+          writeSetting(db as any, CUSTOM_STATE_KEY, clean as unknown as Record<string, unknown>)
+          return clean
+        })
     },
     // PL1–PL8: widgets, pages, scripts and the island look, one synced setting (cleaned by the caller, which knows the widgets).
     widgets: {

@@ -155,6 +155,9 @@ export const SETTINGS = {
   coach_looks: json<Record<string, unknown> | null>("how the chat looks: Ben's face and your photo (small data URL)", null),
   look_wallpaper: json<Record<string, unknown> | null>('the wallpaper: which picture, how strong, blur, shade, where, motion (src/core/wallpaper.ts)', null),
   look_wallpaper_photo: text('your own wallpaper picture, made small on the device (a data URL)'),
+  // ---- Custom Center: src/core/custom/ (docs/areas/custom.md) ----
+  custom_setup: json<Record<string, unknown> | null>('Custom Center: your widgets, where they sit (pill, open island, home), actions, reminder rules, modes and their schedules, and the looks; versioned, at most 48 KB (core/custom)', null),
+  custom_state: json<Record<string, unknown> | null>("Custom Center: today's numbers of your own counters and checklists, and when each reminder rule last fired (core/custom); counters that track water or reps keep no number here", null),
   // ---- the saga (LF1, LF4–LF7, LF12, LF15, LF18): src/renderer/src/web/sagaStore.ts ----
   saga_seasons: json<Record<string, unknown> | null>('your 8-week seasons: name, theme, cover, three main quests and the boss (src/core/season.ts)', null),
   saga_vision: json<Record<string, unknown> | null>('the vision board: word of the year, who you are becoming, 6–9 cards (src/core/vision.ts)', null),

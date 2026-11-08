@@ -1,0 +1,25 @@
+/* The Custom Center background (CustomBackground.tsx): behind the whole app,
+   above the Settings wallpaper when both are on (it comes later in the page).
+   A gradient or your picture, under a page-coloured shade (at most 40 % shows
+   through, like the wallpaper). The drift moves by transform only, never with
+   reduced motion, and pauses while the window is hidden (html.doc-hidden). */
+html.has-cbg { background: var(--bg); }
+html.has-cbg body { background: transparent !important; }
+.cbg-layer { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; contain: strict; }
+.cbg-art { position: absolute; inset: 0; background-position: center; background-size: cover; background-repeat: no-repeat; transform: translateZ(0); }
+.cbg-shade { position: absolute; inset: 0; background: var(--bg); }
+html.has-cbg:not([data-theme='light']) { --panel: rgba(14, 18, 28, 0.93); --panel-2: rgba(20, 26, 40, 0.95); }
+html.has-cbg .topbar { background: color-mix(in srgb, var(--bg) 90%, transparent); }
+
+/* The slow drift: a bigger gradient that slides a little, back and forth. */
+.cbg-moving .cbg-art { inset: -20%; animation: cbg-drift 40s ease-in-out infinite alternate; will-change: transform; }
+@keyframes cbg-drift {
+  from { transform: translate3d(-4%, -3%, 0) rotate(0deg); }
+  to { transform: translate3d(4%, 3%, 0) rotate(8deg); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html.calm .cbg-moving .cbg-art { animation-iteration-count: infinite !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbg-moving .cbg-art { animation: none !important; }
+}

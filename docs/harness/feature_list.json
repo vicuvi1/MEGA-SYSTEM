@@ -637,6 +637,20 @@
    ],
    "evidence": "2026-11-08: unit tests for readiness verdict, sleep need, smart rest day and body-map zones; smoke step \"Body Today\"; full vitest and full smoke run",
    "notes": "pages/Body.tsx is a shell (one component per tab: body/today/TodayTab.tsx, FoodCounter, body/training/BodyTraining.tsx, body/progress/BodyProgress.tsx). Shared look: body/body-theme.css (bt-* classes). Pure: core/readinessDay.ts, core/bodyMap.ts; readiness counts sleep against Sleep care's need (core/readiness.ts needMin, main/bodyPlus.ts readinessNow). Start: sportStart.ts + EmbedHost clicks Sport Track's own Start workout."
+  },
+  {
+   "id": "F036",
+   "priority": 2,
+   "area": "custom",
+   "title": "Custom Center (phase 1: model, page, app background)",
+   "user_visible_behavior": "Build your own counters, timers, countdowns, checklists, rings and clocks; drag them into the island pill, the open island or the app home (keyboard and tap too) with a live preview; one-tap actions (focus + music + quiet); your reminder rules with their next time; modes with schedules (one tap switches); templates Study, Gym, Night, Gaming; looks stored for the island; app background (gradient or picture, or none); export / import a file; every change has Undo",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/custom",
+    "SMOKE_ONLY=\"Custom Center\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: 27 unit tests (pinned clock) in src/core/custom/custom.test.ts; smoke step \"Custom Center\" passes",
+   "notes": "Pure logic src/core/custom/*; page pages/CustomCenter.tsx + renderer/src/custom/*. Synced settings custom_setup (versioned, 48 KB cap) and custom_state. The island rebuild (phase 2) reads activeLayout / widgetState / reminderGate."
   }
  ]
 }

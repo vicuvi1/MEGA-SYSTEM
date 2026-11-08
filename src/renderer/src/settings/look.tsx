@@ -32,6 +32,11 @@ export function LookSection({ s }: { s: SettingsState }) {
           <Switch label="Calm mode" on={ui.calm !== false} onChange={(v) => (setUi({ calm: v }), lookSaved())} />
         </Row>
         {!window.desktop && <IslandToggle onSaved={lookSaved} />}
+        <Row title="Custom Center" hint="Your own widgets, actions, reminders, modes, island looks and app background">
+          <button type="button" className="btn" data-testid="open-custom-center" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'custom' }))}>
+            Open Custom Center
+          </button>
+        </Row>
       </section>
       <WallpaperPanel />
       <LayoutEditor />

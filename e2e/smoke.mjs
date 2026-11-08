@@ -4601,6 +4601,103 @@ try {
     await pg.waitForFunction(() => !/!/.test(document.querySelector('.sg .ptabs [data-tab="wheel"]')?.textContent ?? '!'), null, { timeout: 8000 })
     await pg.click('.sg .ptabs [data-tab="season"]')
   })
+  // Custom Center: build a counter, place it by drag and by keyboard, tap it, run an action (and undo it),
+  // apply a template (its mode and background come on), switch mode by one tap, export and import the file.
+  await step('Custom Center: build a counter, place it, run an action, apply a template, export and import', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('custom')
+    await pg.waitForSelector('.cc-page .ptabs', { timeout: 15000 })
+    await pg.click('.cc-page .ptabs [data-tab="build"]')
+    // A counter: Push-ups, goal 100, +10 / +25 / +50 (only here: pays nothing).
+    await pg.click('[data-add="counter"]')
+    const form = pg.locator('[data-testid="cc-widget-form"]')
+    await form.locator('input[name="title"]').fill('Push-ups')
+    await form.locator('input[name="goal"]').fill('100')
+    await form.locator('input[name="steps"]').fill('10, 25, 50')
+    await form.locator('button[type="submit"]').click()
+    const chip = pg.locator('[data-zone="none"] .cc-chip', { hasText: 'Push-ups' }).first()
+    await chip.waitFor({ timeout: 5000 })
+    // Drag it to the app home, then tap +25 there.
+    await chip.dragTo(pg.locator('[data-zone="home"]'))
+    const home = pg.locator('[data-testid="cc-home"] .cc-card', { hasText: 'Push-ups' })
+    await home.waitFor({ timeout: 5000 })
+    await home.getByRole('button', { name: 'Add 25 to Push-ups' }).click()
+    await pg.waitForFunction(() => /25/.test(document.querySelector('[data-testid="cc-home"] .cc-card .cc-value')?.textContent ?? ''), null, { timeout: 5000 })
+    // Keyboard: ← twice moves it from home to the open island, then to the pill.
+    await pg.locator('[data-zone="home"] .cc-chip', { hasText: 'Push-ups' }).focus()
+    await pg.keyboard.press('ArrowLeft')
+    await pg.locator('[data-zone="island"] .cc-chip', { hasText: 'Push-ups' }).waitFor({ timeout: 3000 })
+    await pg.keyboard.press('ArrowLeft')
+    await pg.locator('[data-zone="pill"] .cc-chip', { hasText: 'Push-ups' }).waitFor({ timeout: 3000 })
+    const pill = await pg.locator('[data-testid="cc-pill-preview"] .cc-pill').getAttribute('aria-label')
+    if (!/Push-ups 25/.test(pill ?? '')) throw new Error(`pill preview reads: ${pill}`)
+
+    // An action: Start study = focus 50 + music + quiet; run it, then Undo stops the timer again.
+    await pg.click('.cc-page .ptabs [data-tab="actions"]')
+    await pg.getByRole('button', { name: '+ New action' }).click()
+    const af = pg.locator('[data-testid="cc-action-form"]')
+    await af.locator('[data-step="music"]').click()
+    await af.locator('[data-step="quiet"]').click()
+    await af.getByRole('button', { name: 'Save action' }).click()
+    const row = pg.locator('.cc-list li', { hasText: 'Start study' }).first()
+    await row.waitFor({ timeout: 5000 })
+    await row.getByRole('button', { name: 'Run', exact: true }).click()
+    const ran = pg.locator('[data-testid="cc-ran"]', { hasText: 'Start study: Did: Focus 50 min: Study' })
+    await ran.waitFor({ timeout: 8000 })
+    // The timer's goal card (Focus boost) opens on top: close it, then Undo.
+    await pg.locator('.fb-card[data-boost="goal"] .fb-x').click({ timeout: 6000 }).catch(() => {})
+    // A running timer dims the page (focus dim): a click on it brings everything back.
+    await pg.locator('.focus-dim.on').click({ timeout: 3000 }).catch(() => {})
+    await ran.locator('button', { hasText: 'Undo' }).click()
+    await pg.locator('[data-testid="cc-ran"]').waitFor({ state: 'detached', timeout: 5000 })
+
+    // A template: Study adds its mode and switches to it; its gradient background comes on.
+    await pg.click('.cc-page .ptabs [data-tab="templates"]')
+    await pg.click('[data-template="study"] .btn.primary')
+    await pg.waitForSelector('.cc-mode-chip.on:has-text("Study")', { timeout: 5000 })
+    await pg.waitForFunction(() => document.documentElement.classList.contains('has-cbg'), null, { timeout: 5000 })
+    if (!/Study timer/.test((await pg.locator('[data-testid="cc-pill-preview"] .cc-pill').getAttribute('aria-label')) ?? '')) throw new Error('the Study pill is not in the preview')
+    if (process.env.CUSTOM_SHOTS) {
+      await pg.locator('.fb-card .fb-x').click({ timeout: 1500 }).catch(() => {})
+      await pg.waitForFunction(() => !document.querySelector('.toast'), null, { timeout: 12000 }).catch(() => {})
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${process.env.CUSTOM_SHOTS}/custom-build.png` })
+    }
+    // Change it: its reminder shows its next time.
+    await pg.click('.cc-page .ptabs [data-tab="reminders"]')
+    const next = await pg.locator('[data-testid="cc-next-fire"]').first().innerText()
+    if (!/Next|Due now/.test(next)) throw new Error(`reminder next time reads: ${next}`)
+    await pg.click('.cc-page .ptabs [data-tab="modes"]')
+    await pg.waitForSelector('[data-mode].is-on', { timeout: 5000 })
+    if (process.env.CUSTOM_SHOTS) {
+      await pg.waitForFunction(() => !document.querySelector('.toast'), null, { timeout: 12000 }).catch(() => {})
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${process.env.CUSTOM_SHOTS}/custom-modes.png` })
+    }
+
+    // Export, then import the same file; a broken file is refused with a plain message.
+    await pg.click('.cc-page .ptabs [data-tab="file"]')
+    const [dl] = await Promise.all([pg.waitForEvent('download', { timeout: 8000 }), pg.click('[data-testid="cc-export"]')])
+    const { readFileSync } = await import('node:fs')
+    const text = readFileSync(await dl.path(), 'utf8')
+    if (!/"kind": "life-system\/custom-setup"/.test(text) || !/Push-ups/.test(text)) throw new Error('the exported file is not a set-up')
+    await pg.setInputFiles('[data-testid="cc-import"]', { name: 'broken.json', mimeType: 'application/json', buffer: Buffer.from('{"hello": 1}') })
+    await pg.locator('[data-testid="cc-file-status"]', { hasText: "isn't a Life System" }).waitFor({ timeout: 5000 })
+    await pg.setInputFiles('[data-testid="cc-import"]', { name: 'setup.json', mimeType: 'application/json', buffer: Buffer.from(text) })
+    await pg.locator('[data-testid="cc-file-status"]', { hasText: 'Imported:' }).waitFor({ timeout: 5000 })
+
+    // One tap back to the base mode: no background, so the next steps look as before.
+    await pg.click('.cc-mode-chip:has-text("Everyday")')
+    await pg.waitForFunction(() => !document.documentElement.classList.contains('has-cbg'), null, { timeout: 5000 })
+    for (const [w, h] of [[1280, 720], [390, 800]]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.click('.cc-page .ptabs [data-tab="build"]')
+      await pg.waitForTimeout(250)
+      const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (over > 1) throw new Error(`Custom Center scrolls sideways by ${over}px at ${w}px`)
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
+  })
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })
