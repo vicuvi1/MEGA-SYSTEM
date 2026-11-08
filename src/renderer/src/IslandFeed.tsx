@@ -43,6 +43,7 @@ import { useLive } from './live'
 import { logIsland } from './islandLog'
 import { gamingLineNow, gamingTick } from './gamingFeed'
 import { alivePrefs, aliveAct, aliveQuiet, aliveTick, islandModeNow, presetOfferAlert } from './islandAliveFeed'
+import { applyCenterPlace, centerAct, centerDismiss, centerForIsland, centerReminder, hasCenterUndo, scheduleModeChange, wallpaperTick } from './custom/centerFeed'
 import { EYE_BREAKS_DEFAULT, hushOf } from '@core/islandReminderSound'
 import { dayState, dayStory, glance, mirrorNew, next3h, pointsFx, top3Of, voiceReceipt, weatherMoment, type MirrorItem } from '@core/islandAlive'
 import { snapshotKey } from '@core/islandClicks'
@@ -620,6 +621,20 @@ export function IslandFeed() {
       wokeAt: wakeLogged && sleep?.todayLog?.wakeTime ? new Date(`${sleep.todayLog.day}T${sleep.todayLog.wakeTime}:00`).getTime() : null
     }).catch(() => null)
     const wf = await widgetsForIsland(now)
+    // Custom Center: your mode, its looks and widgets for the island; the desktop's position and wallpaper follow the mode.
+    const centerReal = (() => {
+      const map: Record<string, number> = {}
+      for (const e of Array.isArray(sport?.exercises) ? sport.exercises : []) {
+        const n = Number(e.doneToday) || 0
+        if (e.id != null) map[String(e.id)] = n
+        if (e.name) map[String(e.name).toLowerCase()] = n
+      }
+      return { waterMl: localWater, reps: map, focus: focusRun && !focusRun.pausedAt ? { endsAt: focusRun.endsAt, subject: focusRun.subject } : null }
+    })()
+    const center = await centerForIsland(now, centerReal).catch(() => null)
+    applyCenterPlace(center)
+    scheduleModeChange(now, () => void sendRef.current())
+    void wallpaperTick(now).catch(() => {})
     const alertBase = (() => {
       // Paused: its time is never up (the end moves on with the pause).
       // Your reminders show as their own card (Done / Snooze), not as a copy of Ben's ⏰ message.
@@ -653,6 +668,8 @@ export function IslandFeed() {
         pushCard ??
         // HD: your reminder, then your body and your day's edges, through one governor.
         health?.alert ??
+        // Custom Center: your own reminder rules (their gate: calls, focus, quiet, bedtime, the gap, the caps).
+        centerReminder(now, { activeSince, call: !!callOn || classOn, focus: !!focusRun && !focusRun.pausedAt, quiet: aliveQuiet(now), bedtime: bedTarget, wake: fit?.wake ?? DEFAULT_WAKE, lastInterruptAt: shown.reduce((t, x) => Math.max(t, x.at), 0) }) ??
         // Ben on your PC: one reaction at a time, by his own limits.
         coachCard ??
         // Goals: a check-in that's due (once a period; never during a timer or a call).
@@ -784,6 +801,7 @@ export function IslandFeed() {
       ...(await kitForIsland(blocks.current.list)),
       // PL1–PL8, LF1/LF2: your widgets and layout, today's rain and sunset.
       ...wf,
+      center,
       auto: autoIslandView(),
       goals: await goalsForIsland(now),
       study: await studyForIsland(now),
@@ -877,8 +895,11 @@ export function IslandFeed() {
         // IC1, IC6–IC8, IC10, IC11: pause, the wheel's end, rename, undo, drops, breaks and flow timers.
         // Island 2: nudge cards and move breaks (islandNudgesFeed.ts); undefined: not theirs.
         // Automation hub: its own taps; and what you do by hand, for Ben's "Make this a button?".
-        const isAuto = a.kind === 'auto'
-        if (a.kind === 'auto') said = await autoAct(a)
+        // Custom Center: its counters, checklists, modes, timers and reminders (and Undo of its counter taps).
+        const isCenter = a.kind === 'center' || (a.kind === 'undo' && hasCenterUndo(a.of))
+        const isAuto = a.kind === 'auto' || isCenter
+        if (isCenter) said = await centerAct(a)
+        else if (a.kind === 'auto') said = await autoAct(a)
         else noteDone(a)
         const nd = isAuto ? undefined : await nudgeAct(a, { moved: () => void (activeSince = Date.now()) })
         const ctl = isAuto || nd !== undefined ? null : await controlAct(a, { blocks: blocks.current.list, findTask: (id) => todoCache.full[id] ?? null })
@@ -936,6 +957,7 @@ export function IslandFeed() {
             window.dispatchEvent(new Event('life-focus-changed'))
             break
           case 'dismiss': {
+            centerDismiss(a.id)
             const d = get<Record<string, number>>(DISMISSED, {})
             const now = Date.now()
             for (const k of Object.keys(d)) if (d[k] < now) delete d[k]
@@ -1446,7 +1468,10 @@ export function IslandFeed() {
     window.addEventListener('life-focus-changed', on)
     window.addEventListener('life-sport-changed', on)
     window.addEventListener('life-island-refresh', on)
+    // Custom Center: a change on its page (or a mode tap) shows on the island at once.
+    window.addEventListener('life-custom', on)
     return () => {
+      window.removeEventListener('life-custom', on)
       clearInterval(t)
       window.removeEventListener('life-external-changed', ext)
       window.removeEventListener('life-focus-changed', on)

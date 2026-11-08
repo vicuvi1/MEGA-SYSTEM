@@ -185,6 +185,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     try { win.setIgnoreMouseEvents(ign, { forward: true }) } catch { /* fine */ }
     diag(ign ? 'pass' : 'take', ign ? `Clicks pass through (${why})` : `The island takes clicks (${why})`)
   }
+  /** Custom Center: the open island's size from its look (null parts: fit the screen), sent by the island page. */
+  let lookOpen: { w: number | null; h: number | null } | null = null
   /**
    * The size on the island's screen (core/islandFit.ts): Auto fits the work
    * area (a laptop gets the compact, shorter island), Compact / Normal / Large
@@ -194,7 +196,10 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const d = display()
     let resized: { w: number; h: number } | null = null
     try { resized = desk.spots[screenKey(d)]?.size ?? null } catch { /* none */ }
-    return islandSizing({ pick: prefs.size, area: d.workArea, panelWidth: prefs.panelWidth, resized })
+    const z = islandSizing({ pick: prefs.size, area: d.workArea, panelWidth: prefs.panelWidth, resized })
+    // Custom Center: the open island's own size (still never past the screen).
+    if (!lookOpen) return z
+    return islandSizing({ pick: prefs.size, area: d.workArea, panelWidth: prefs.panelWidth, resized: { w: lookOpen.w ?? z.panelW, h: lookOpen.h ?? z.panelH } })
   }
   /** The size setting, done by the page itself with CSS. */
   const cssScale = () => sizing().zoom
@@ -620,6 +625,17 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     win.setBounds({ ...np, width: b.width, height: b.height })
   })
   ipcMain.on('island:moveEnd', (e, save) => { if (fromIsland(e)) endMove(save === true) })
+  // Custom Center: the open island's size from the look (w 360–900, h 240–900 px, or null to fit the screen).
+  ipcMain.on('island:lookOpen', (e, v) => {
+    if (!fromIsland(e)) return
+    const n = (x: unknown, lo: number, hi: number) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? Math.round(Math.min(hi, Math.max(lo, x))) : null)
+    const next = v && typeof v === 'object' ? { w: n((v as { w?: unknown }).w, 360, 900), h: n((v as { h?: unknown }).h, 240, 900) } : null
+    const clean = next && (next.w != null || next.h != null) ? next : null
+    if (JSON.stringify(clean) === JSON.stringify(lookOpen)) return
+    lookOpen = clean
+    placeWin()
+    sendPrefs()
+  })
   // IN39: the panel resized by its corner: room to grow while you drag, then the size is kept for this screen.
   ipcMain.on('island:panelSize', (e, phase, size) => {
     if (!fromIsland(e) || !win || win.isDestroyed()) return

@@ -2116,6 +2116,105 @@ try {
     await shot('notification-eye-card', '.di-shape', 18)
     await ctx.close()
   })
+  await step('Desktop island Custom Center: your counter in the pill logs, size and corners from the Center resize it, a mode switch swaps the widgets, your reminder fires as a card with its sound', async () => {
+    const shots = process.env.CENTER_SHOTS
+    const ctx = await browser.newContext({ viewport: { width: 700, height: 620 }, deviceScaleFactor: 2 })
+    const ip = await ctx.newPage()
+    ip.on('pageerror', (e) => errors.push(`island center: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const push = { id: 'push', kind: 'counter', title: 'Push-ups', icon: '💪', color: '#ff8a3d', value: '10', sub: 'of 100 reps', progress: 0.1, done: false, steps: [10, 25], unit: 'reps', goal: 100, track: 'none', n: 10 }
+      const list = { id: 'list', kind: 'checklist', title: 'Study list', icon: '✅', color: null, value: '0/2', sub: '2 left', progress: 0, done: false, items: [{ id: 'read', text: 'Read one chapter', done: false }, { id: 'cards', text: '20 flashcards', done: false }] }
+      const ring = { id: 'ring', kind: 'ring', title: 'Study progress', icon: '🎯', color: null, value: '0%', sub: 'Study list', progress: 0, done: false }
+      const timer = { id: 'rest', kind: 'timer', title: 'Rest timer', icon: '⏱', color: null, value: '45:00', sub: 'Focus 45 · break 2', progress: null, done: false, endsAt: null, focusMin: 45, subject: 'Workout' }
+      const modes = [{ id: 'everyday', name: 'Everyday', icon: '🌤' }, { id: 'gym', name: 'Gym', icon: '🏋' }]
+      const center = { key: 'everyday:1', mode: { id: 'everyday', name: 'Everyday', icon: '🌤', why: 'base' }, modes, looks: {}, pill: [push], island: [list, ring] }
+      const gym = { key: 'gym:1', mode: { id: 'gym', name: 'Gym', icon: '🏋', why: 'manual' }, modes, looks: { accent: '#ff8a3d' }, pill: [timer], island: [push] }
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: null, now: null, next: null, mustdos: [], water: { ml: 500, target: 2000 }, alert: null, reps: [], center
+      }
+      window.__island = { actions: [], sounds: [], send: (name, v) => cbs[name]?.(v), snap, center, gym }
+      window.addEventListener('life-island-reminder-sound', (e) => window.__island.sounds.push(e.detail))
+      window.desktop = new Proxy({
+        islandHot: () => {}, islandTakeClicks: () => {},
+        islandAction: (a) => { window.__island.actions.push(a) },
+        islandLookOpen: (v) => { window.__island.lookOpen = v },
+        setIslandPrefs: async () => null,
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandAck: on('ack'),
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'lively', gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    if (shots) await ip.addStyleTag({ content: "body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(160deg, #2a3140, #12151c); }" })
+    // Your Center counter sits in the calm pill; a tap adds its first step through the counter's own route.
+    await ip.waitForSelector('.di-pill [data-center-chip="push"]', { timeout: 15000 })
+    await ip.mouse.move(690, 610)
+    await ip.waitForTimeout(700)
+    const box0 = await ip.locator('.di-shape').boundingBox()
+    if (shots) await ip.screenshot({ path: `${shots}/center-pill.png`, clip: { x: 0, y: 0, width: 700, height: Math.ceil(box0.y + box0.height + 30) } })
+    await ip.click('.di-pill [data-center-chip="push"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'count' && a.widget === 'push' && a.amount === 10), null, { timeout: 4000 })
+    // It shows at once (10 → 20) before the app answers.
+    await ip.waitForFunction(() => /20/.test(document.querySelector('[data-center-chip="push"]')?.textContent ?? ''), null, { timeout: 3000 })
+    // The Center's size and corners: Large with 6 px corners makes the pill taller with those corners.
+    await ip.mouse.move(690, 610)
+    await ip.waitForTimeout(900)
+    const r0 = await ip.evaluate(() => getComputedStyle(document.querySelector('.di-shape')).borderBottomLeftRadius)
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, center: { ...window.__island.center, key: 'everyday:2', looks: { size: 'large', radius: 6, openSize: { width: 480, height: null } } } }))
+    await ip.waitForFunction((h) => (document.querySelector('.di-shape')?.getBoundingClientRect().height ?? 0) > h + 2, box0.height, { timeout: 4000 })
+    await ip.waitForFunction(() => getComputedStyle(document.querySelector('.di-shape')).borderBottomLeftRadius === '6px', null, { timeout: 4000 }).catch(async () => {
+      throw new Error(`the corners stayed ${await ip.evaluate(() => getComputedStyle(document.querySelector('.di-shape')).borderBottomLeftRadius)} (were ${r0})`)
+    })
+    const sent = await ip.evaluate(() => window.__island.lookOpen)
+    if (!sent || sent.w !== 480) throw new Error(`the open size did not go to the desktop: ${JSON.stringify(sent)}`)
+    // Back to medium: smaller again.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, center: { ...window.__island.center, key: 'everyday:3', looks: { size: 'small' } } }))
+    await ip.waitForFunction((h) => (document.querySelector('.di-shape')?.getBoundingClientRect().height ?? 99) < h - 1, box0.height, { timeout: 4000 })
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 3 }))
+    // Open the island: the mode chips and your open-island widgets; tick an item, add 25, switch mode.
+    await ip.evaluate(() => window.__island.send('toggle'))
+    await ip.waitForSelector('.di-panel [data-center-panel="everyday"]', { timeout: 5000 })
+    await ip.click('[data-center-item="list:read"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'check' && a.item === 'read'), null, { timeout: 3000 })
+    await ip.waitForSelector('[data-center-item="list:read"].on', { timeout: 3000 })
+    await ip.waitForTimeout(500)
+    if (shots) {
+      const pb = await ip.locator('.di-shape').boundingBox()
+      await ip.screenshot({ path: `${shots}/center-open-island.png`, clip: { x: Math.max(0, pb.x - 12), y: 0, width: Math.min(700 - Math.max(0, pb.x - 12), pb.width + 24), height: Math.min(620, pb.y + pb.height + 16) } })
+    }
+    await ip.click('[data-center-mode="gym"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'mode' && a.mode === 'gym'), null, { timeout: 3000 })
+    // The app answers with the Gym mode: its widgets take over, with the short glow.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 4, center: window.__island.gym }))
+    await ip.waitForSelector('[data-center-panel="gym"] [data-center-card="push"]', { timeout: 4000 })
+    await ip.waitForSelector('[data-center-step="push:25"]', { timeout: 3000 })
+    await ip.click('[data-center-step="push:25"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'count' && a.amount === 25), null, { timeout: 3000 })
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+    await ip.waitForSelector('.di-pill [data-center-pill="gym"] [data-center-chip="rest"]', { timeout: 4000 })
+    if (await ip.$('.di-pill [data-center-chip="push"]')) throw new Error('the Everyday counter is still in the pill after the switch')
+    // Your reminder fires as a real card (not the slim line) with its sound, once; Done goes back to the app.
+    const rem = { id: 'custom:stand:1', kind: 'remind', face: '🧍', title: 'Stand up and stretch', text: 'Your reminder', actions: [{ label: '✓ Done', action: { kind: 'center', op: 'remind', rule: 'stand', answer: 'done', alertId: 'custom:stand:1' }, primary: true }, { label: 'In 10 min', action: { kind: 'center', op: 'remind', rule: 'stand', answer: 'later', alertId: 'custom:stand:1' } }] }
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 5, center: window.__island.gym, alert: a }), rem)
+    await ip.waitForSelector('.di-peek.alert.kind-remind', { timeout: 5000 })
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 6, center: window.__island.gym, alert: a }), rem)
+    await ip.waitForTimeout(400)
+    const rings = await ip.evaluate(() => window.__island.sounds.filter((x) => x.kind === 'center').length)
+    if (rings !== 1) throw new Error(`your reminder rang ${rings} times (want 1)`)
+    const card = await ip.locator('.di-peek.alert.kind-remind').boundingBox()
+    if (!card || card.height < 60) throw new Error(`your reminder did not open as a card: ${JSON.stringify(card)}`)
+    if (shots) await ip.screenshot({ path: `${shots}/center-reminder-card.png`, clip: { x: 0, y: 0, width: 700, height: Math.ceil(card.y + card.height + 24) } })
+    await ip.locator('.di-peek.alert.kind-remind button', { hasText: 'Done' }).first().click()
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'remind' && a.answer === 'done'), null, { timeout: 3000 })
+    await ctx.close()
+  })
   await step('Island visuals: dayState class, orbit dots, Ben face, hover peek shows the next 3 hours, a swipe logs water, the story can be skipped', async () => {
     const shots = process.env.ALIVE_SHOTS
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
@@ -4802,6 +4901,29 @@ try {
     await pg.waitForSelector('.cc-mode-chip.on:has-text("Study")', { timeout: 5000 })
     await pg.waitForFunction(() => document.documentElement.classList.contains('has-cbg'), null, { timeout: 5000 })
     if (!/Study timer/.test((await pg.locator('[data-testid="cc-pill-preview"] .cc-pill').getAttribute('aria-label')) ?? '')) throw new Error('the Study pill is not in the preview')
+    // Two widgets never share a name in one layout: the Study checklist and its ring have their own names.
+    await pg.click('.cc-page .ptabs [data-tab="build"]')
+    const studyNames = await pg.$$eval('[data-zone="pill"] .cc-chip, [data-zone="island"] .cc-chip, [data-zone="home"] .cc-chip', (els) => els.map((e) => (e.textContent || '').trim()))
+    if (studyNames.filter((t) => /Study list(?! \d)/.test(t) && !/progress/.test(t)).length !== 1 || !studyNames.some((t) => /Study progress/.test(t))) throw new Error(`the Study widgets are named: ${studyNames.join(' | ')}`)
+    // The island's size, corners, spot and open size: what the desktop island gets follows at once.
+    await pg.click('.cc-page .ptabs [data-tab="looks"]')
+    await pg.locator('[role="radiogroup"][aria-label="Size"] button', { hasText: 'Large' }).click()
+    await pg.locator('input[aria-label="Corners"]').fill('6')
+    await pg.locator('[role="radiogroup"][aria-label="Island position"] button', { hasText: 'Top right' }).click()
+    await pg.locator('[role="radiogroup"][aria-label="Open island width"] button', { hasText: 'Wide' }).click()
+    await pg.click('.cc-page .ptabs [data-tab="build"]')
+    await pg.waitForFunction(() => {
+      const p = document.querySelector('[data-testid="cc-pill-preview"]')
+      return p?.getAttribute('data-island-size') === 'large' && p?.getAttribute('data-island-radius') === '6'
+    }, null, { timeout: 5000 })
+    // Back to the usual island for the next steps.
+    await pg.click('.cc-page .ptabs [data-tab="looks"]')
+    await pg.locator('[role="radiogroup"][aria-label="Size"] button', { hasText: 'Medium' }).click()
+    await pg.locator('input[aria-label="Corners"]').fill('18')
+    await pg.locator('[role="radiogroup"][aria-label="Island position"] button', { hasText: 'Where I put it' }).click()
+    await pg.locator('[role="radiogroup"][aria-label="Open island width"] button', { hasText: 'Fit my screen' }).click()
+    await pg.click('.cc-page .ptabs [data-tab="build"]')
+    await pg.waitForFunction(() => document.querySelector('[data-testid="cc-pill-preview"]')?.getAttribute('data-island-size') === 'medium', null, { timeout: 5000 })
     if (process.env.CUSTOM_SHOTS) {
       await pg.locator('.fb-card .fb-x').click({ timeout: 1500 }).catch(() => {})
       await pg.waitForFunction(() => !document.querySelector('.toast'), null, { timeout: 12000 }).catch(() => {})

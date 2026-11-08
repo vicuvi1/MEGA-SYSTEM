@@ -11,6 +11,8 @@ import { useEffect, useRef } from 'react'
 import { createIslandGate, islandGain, islandVoices, ISLAND_SOUND_CATEGORY, ISLAND_SOUND_NAMES, pagePan, soundForAction, soundsFromSnapshots, viewSound, type IslandSoundName } from '@core/islandSound'
 import type { IslandAction, IslandSnapshot } from '@core/islandModel'
 import { playVoices, soundPrefs } from './soundKit'
+import { DEFAULT_LOOKS, fileFor, lookGain, packVoices, type IslandLooks } from '@core/islandLooks'
+import { playLocal } from './custom/localFiles'
 import { getState as musicState } from './music/engine'
 
 export type { IslandSoundName } from '@core/islandSound'
@@ -18,6 +20,11 @@ export type { IslandSoundName } from '@core/islandSound'
 /** What the island knows right now (a call, a focus timer), set by useIslandSounds. */
 const ctx = { call: false, focus: false }
 const gate = createIslandGate()
+/** The island's look (Custom Center): its sound pack, volume per kind and your own sounds. The defaults change nothing. */
+let look: Pick<IslandLooks, 'sound'> = DEFAULT_LOOKS
+export function setIslandSoundLook(l: Pick<IslandLooks, 'sound'>): void {
+  look = l
+}
 
 /** Plays one island sound if it may. `dir`: the swipe's direction for a page tick. */
 export function play(name: IslandSoundName, opts: { dir?: number; preview?: boolean } = {}): void {
@@ -28,8 +35,13 @@ export function play(name: IslandSoundName, opts: { dir?: number; preview?: bool
     // Which sound for what (Settings → Sound): your pick, or None.
     const pick = islandVoices(name, p.moments)
     if (!pick) return
+    const lg = lookGain(look, name)
+    if (lg <= 0) return
     if (!opts.preview && !gate(name, Date.now())) return
-    playVoices(pick.voices, ISLAND_SOUND_CATEGORY[name], { gain: gain * pick.gain, pan: name === 'page' ? pagePan(opts.dir ?? 0) : 0, preview: opts.preview })
+    // Your own sound for this moment (kept on this device), else the built-in one in the pack's voice.
+    const own = fileFor(look, name)
+    if (own) return void playLocal(own, Math.min(1, gain * pick.gain * lg)).then((ok) => ok || playVoices(packVoices(pick.voices, look.sound.pack), ISLAND_SOUND_CATEGORY[name], { gain: gain * pick.gain * lg }))
+    playVoices(packVoices(pick.voices, look.sound.pack), ISLAND_SOUND_CATEGORY[name], { gain: gain * pick.gain * lg, pan: name === 'page' ? pagePan(opts.dir ?? 0) : 0, preview: opts.preview })
   } catch {
     /* no audio here */
   }

@@ -51,6 +51,7 @@ export function instantButtons(ids: InstantId[], s: Pick<IslandSnapshot, 'reps' 
 /** What undoing a tap changes, to show at once until the app's next picture (null: nothing to show). */
 export function inverseAction(a: IslandAction): IslandAction | null {
   if (a.kind === 'water') return { kind: 'water', ml: -a.ml }
+  if (a.kind === 'center' && a.op === 'count') return { ...a, amount: -a.amount }
   if (a.kind === 'reps') return { ...a, n: -a.n }
   if (a.kind === 'start') return { kind: 'stop' }
   if (a.kind === 'extend') return { kind: 'extend', minutes: -a.minutes }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   activeLayout, activeMode, addLocal, applyTemplate, cleanSetup, counterDay, counterRoute, CUSTOM_VERSION, defaultSetup, EMPTY_STATE, exportSetup, fireInput, importSetup, localCount, migrateSetup, nextFire, nextModeChange,
-  noteFired, placeWidget, nudgeWidget, planAction, readSetup, reminderGate, routePays, scheduledMode, toggleCheck, widgetState, windowText, cleanReminder, ruleText,
+  noteFired, placeWidget, nudgeWidget, planAction, readSetup, reminderGate, routePays, scheduledMode, toggleCheck, widgetState, windowText, cleanReminder, ruleText, uniqueName,
   type CustomSetup, type GateContext, type Mode, type ReminderRule
 } from './index'
 
@@ -286,5 +286,36 @@ describe('export and import', () => {
   it('imports a version 1 file through the migration', () => {
     const r = importSetup(JSON.stringify({ kind: 'life-system/custom-setup', version: 1, setup: { widgets: [{ id: 'c', kind: 'counter', goal: 20 }], layout: { home: ['c'] } } }))
     expect(r.ok && r.setup.modes[0].layout.home).toEqual(['c'])
+  })
+})
+
+describe('phase 3: names, island place and size, wallpaper', () => {
+  it('no two widgets with the same name in one layout (auto " 2"); other modes keep theirs', () => {
+    expect(uniqueName('Study list', ['study list'])).toBe('Study list 2')
+    expect(uniqueName('Study list', ['Study list', 'Study list 2'])).toBe('Study list 3')
+    expect(uniqueName('Water', ['Timer'])).toBe('Water')
+    const s = cleanSetup({
+      widgets: [
+        { id: 'a', kind: 'checklist', title: 'Study list', items: [{ id: 'i', text: 'Read' }] },
+        { id: 'b', kind: 'ring', title: 'Study list', of: 'a' },
+        { id: 'c', kind: 'timer', title: 'Timer' },
+        { id: 'd', kind: 'timer', title: 'Timer' }
+      ],
+      modes: [
+        { id: 'm1', layout: { pill: ['a'], island: ['b'], home: ['c'] } },
+        { id: 'm2', layout: { pill: ['d'], island: [], home: [] } }
+      ]
+    })
+    expect(s.widgets.map((w) => w.title)).toEqual(['Study list', 'Study list 2', 'Timer', 'Timer'])
+  })
+  it('island position and open size are kept inside what an island can be', () => {
+    const s = cleanSetup({ looks: { island: { position: 'top-left', openW: 5000, openH: -3 } } })
+    expect(s.looks.island).toMatchObject({ position: 'top-left', openW: 900, openH: 0 })
+    expect(cleanSetup({ looks: { island: { position: 'middle' } } }).looks.island.position).toBe('auto')
+  })
+  it('a mode\'s wallpaper keeps its evening picture (local only)', () => {
+    const s = cleanSetup({ modes: [{ id: 'm', desktopWallpaper: { image: 'local:i1', night: 'C:\\x.jpg' } }, { id: 'n', desktopWallpaper: { image: 'local:i2', night: 'local:i3' } }] })
+    expect(s.modes[0].desktopWallpaper).toEqual({ image: 'local:i1', night: '' })
+    expect(s.modes[1].desktopWallpaper).toEqual({ image: 'local:i2', night: 'local:i3' })
   })
 })

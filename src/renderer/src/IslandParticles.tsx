@@ -100,7 +100,7 @@ const frame = (t: number) => {
 }
 
 /** Throw a burst from (x, y) in page px. Does nothing without a canvas or while paused. */
-export function burst(o: { x: number; y: number; colors: string[]; n?: number; power?: number }) {
+export function burst(o: { x: number; y: number; colors: string[]; n?: number; power?: number; spread?: number }) {
   if (!allowed || !canvas || typeof requestAnimationFrame !== 'function') return
   parts = [...parts, ...makeBurst(o)].slice(-MAX_PARTICLES)
   if (!raf) {
@@ -109,10 +109,10 @@ export function burst(o: { x: number; y: number; colors: string[]; n?: number; p
   }
 }
 /** A burst from the middle of an element's top half (the pill). */
-export function burstFrom(el: Element | null, colors: string[], n = 60) {
+export function burstFrom(el: Element | null, colors: string[], n = 60, shape: { power?: number; spread?: number } = {}) {
   if (!el) return
   const r = el.getBoundingClientRect()
-  burst({ x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 24), colors, n })
+  burst({ x: r.left + r.width / 2, y: r.top + Math.min(r.height / 2, 24), colors, n, ...shape })
 }
 /** Hidden, tucked away or not Full: stop at once and clear. */
 export function setParticlesAllowed(on: boolean) {

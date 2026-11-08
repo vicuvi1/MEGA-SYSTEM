@@ -69,6 +69,8 @@ export interface DesktopApi {
   pcSmartState?(s: { block: string | null; meeting: boolean }): void
   /** Settings → PC & automation (AU1 music, AU2 ActivityWatch, AU7 Ben's actions): one channel, ops in src/desktop/pc/index.ts. */
   /** Island pages: System (sample once a second while open) and AI usage (local logs, read-only). */
+  /** Custom Center: the Windows wallpaper per mode (src/desktop/wallpaper.ts). */
+  wallpaper?(a: import('../desktop/wallpaper').WallpaperOp): Promise<import('../desktop/wallpaper').WallpaperState | null>
   sysmon?(op: 'prefs' | 'setPrefs' | 'sample' | 'stop' | 'light' | 'usage', arg?: unknown): Promise<any>
   onSysmonPrefs?(cb: (p: import('../core/sysmon').SysmonPrefs) => void): void
   pcx?(op: 'media' | 'mediaList' | 'prefs' | 'setPrefs' | 'log' | 'clearLog' | 'lastHour' | 'awCheck' | 'run' | 'deny', arg?: unknown): Promise<any>
@@ -235,6 +237,8 @@ export interface DesktopApi {
   islandFilePath?(f: File): string
   /** IN39: resizing the panel by its corner: 'start' (the window makes room), 'end' (the size is kept for this screen). */
   islandPanelSize?(phase: 'start' | 'end', size: { w: number; h: number }): void
+  /** Custom Center: the open island's size from the look (null parts: fit the screen). */
+  islandLookOpen?(v: { w: number | null; h: number | null } | null): void
   // ---- Quick add from anywhere (the global shortcut's small window) ----
   /** App window: what the quick-add window asks (a line to save, Undo, or the context for its preview). */
   onQuickRun?(cb: (m: QuickRunMsg) => void): void

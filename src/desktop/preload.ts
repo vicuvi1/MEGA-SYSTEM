@@ -95,6 +95,8 @@ const api: DesktopApi = {
   // IN39: the panel's own size (drag its corner): start (room to grow) and end (keep it for this screen).
   islandPanelSize: (phase, size) => ipcRenderer.send('island:panelSize', phase === 'end' ? 'end' : 'start', { w: Number(size?.w) || 0, h: Number(size?.h) || 0 }),
   showApp: (page) => ipcRenderer.send('island:showApp', page),
+  // Custom Center: the open island's size from the look (null: fit the screen).
+  islandLookOpen: (v) => ipcRenderer.send('island:lookOpen', v ? { w: Number(v.w) || null, h: Number(v.h) || null } : null),
   // Ben on this PC (P1–P20)
   pcGetPrefs: () => ipcRenderer.invoke('pc:getPrefs'),
   pcSetPrefs: (p) => ipcRenderer.invoke('pc:setPrefs', p),
@@ -116,6 +118,8 @@ const api: DesktopApi = {
   pcx: (op, arg) => ipcRenderer.invoke('pcx', op, arg),
   // Island pages: System and AI usage (one channel), and their settings changing.
   sysmon: (op, arg) => ipcRenderer.invoke('sysmon', op, arg),
+  // Custom Center: "Change my Windows wallpaper" (one channel; the desktop checks every path).
+  wallpaper: (a) => ipcRenderer.invoke('wallpaper', a),
   onSysmonPrefs: (cb) => void ipcRenderer.on('sysmon:prefs', (_e, p) => cb(p)),
   // Automation hub (AH1–AH22): one channel, and the sensors' events.
   auto: (op, arg) => ipcRenderer.invoke('auto', String(op), arg),
