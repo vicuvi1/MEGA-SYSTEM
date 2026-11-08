@@ -7,10 +7,11 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { REWARD_CATEGORIES, rewardEmoji, type Reward } from '@core/shop'
 import { readyLine } from '@core/rewardsKit'
-import { leiForPoints } from '@core/pointValue'
 import { hoursOfWork } from '@core/funBudget'
 import { barFill, reducedMotion } from '../motionKit'
+import { POINTS_PER_LEI, rarityOf } from '@core/shopShelves'
 import { HoldButton } from './HoldButton'
+import { RarityTag, Ring } from './Shop'
 import { CoverArt } from './CoverArt'
 import { stillMode, useGrowFrom, type ValueInfo } from './useRewards'
 
@@ -74,7 +75,8 @@ export function RewardCard({
   extra,
   onBuy,
   drag,
-  compact = false
+  compact = false,
+  pick = false
 }: {
   r: Reward
   info: CardInfo
@@ -88,6 +90,8 @@ export function RewardCard({
   drag?: { onDragStart: () => void; onDragOver: (e: React.DragEvent) => void; onDrop: () => void; over: boolean }
   /** The smaller card in a row ("Ready now"). */
   compact?: boolean
+  /** Today's pick: a highlighted card on its shelf (shown once). */
+  pick?: boolean
 }) {
   const el = useRef<HTMLElement>(null)
   const [flipped, setFlipped] = useState(false)
@@ -96,8 +100,8 @@ export function RewardCard({
   const have = balance + (r.jar ?? 0)
   const frac = Math.min(1, have / Math.max(1, price))
   const grown = useGrowFrom(`r${r.id}`, frac)
-  const lei = r.realCost > 0 ? r.realCost : leiForPoints(r.price, value.value)
-  const hours = r.realCost > 0 ? hoursOfWork(r.realCost, value.hourlyLei) : null
+  const lei = price / POINTS_PER_LEI
+  const hours = r.realCost > 0 ? hoursOfWork(price / POINTS_PER_LEI, value.hourlyLei) : null
   const ready = !info.blocked
   const locked = !!info.lock && !info.lock.met
   const eta = info.left > 0 ? readyLine(today, info.left, perDay) : null
@@ -138,7 +142,7 @@ export function RewardCard({
   return (
     <article
       ref={el}
-      className={`rx-card ${compact ? 'compact' : ''} ${ready ? 'ready' : ''} ${locked ? 'locked' : ''} ${r.goalRank ? 'goal' : ''} ${flipped ? 'flipped' : ''} ${info.justReady ? 'just-ready' : ''} ${info.unlocking ? 'unlocking' : ''} ${drag?.over ? 'drop-over' : ''}`}
+      className={`rx-card rar-${rarityOf(r.price)} ${pick ? 'pick' : ''} ${compact ? 'compact' : ''} ${ready ? 'ready' : ''} ${locked ? 'locked' : ''} ${r.goalRank ? 'goal' : ''} ${flipped ? 'flipped' : ''} ${info.justReady ? 'just-ready' : ''} ${info.unlocking ? 'unlocking' : ''} ${drag?.over ? 'drop-over' : ''}`}
       draggable={!!drag}
       onDragStart={drag?.onDragStart}
       onDragOver={drag?.onDragOver}
@@ -164,6 +168,9 @@ export function RewardCard({
               </span>
             )}
             <div className="rx-menu-slot">{menu}</div>
+            {pick && <span className="sh-picktag">★ Today's pick</span>}
+            <RarityTag price={r.price} />
+            {!ready && info.left > 0 && <Ring have={have} price={price} />}
           </div>
           <div className="rx-body">
             <b className="rx-title">{r.title}</b>

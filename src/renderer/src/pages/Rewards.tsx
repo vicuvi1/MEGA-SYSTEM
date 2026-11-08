@@ -14,6 +14,7 @@ import { benRewardLine, readyKey, readyLine } from '@core/rewardsKit'
 import { ruleTags, type RewardRules } from '@core/rewardGuard'
 import { couponFor, type ChestPrize } from '@core/rewardSurprise'
 import { dayLabel } from '@core/dates'
+import { SHELVES, STARTERS, featuredPick, monthSpendLei, shelfOf, type ShelfId } from '@core/shopShelves'
 import { life } from '../bridge'
 import { buyToast, redeemReward } from '../redeem'
 import { play, soundSuccess } from '../soundKit'
@@ -28,13 +29,15 @@ import { AffordRow, Badges, BenLine, Challenge, HowToEarn, Quests } from '../rew
 import { MysteryCard, PointsFrom, Rail, Reveal, RulesEditor, SavingFor, Section, SuggestRow, Surprises } from '../rewards/More'
 import { LockEditor, useUnlocks } from '../rewards/LockEditor'
 import { stillMode, useRewardsData } from '../rewards/useRewards'
+import { BudgetMeter, Combo, GoalBar, Shelf, Unwrap } from '../rewards/Shop'
 import '../lifeExtras.css'
 import '../rewards/rewards.css'
 import '../rewards/rewards2.css'
+import '../rewards/shop.css'
 
 type Tab = 'now' | 'unlock' | 'all' | 'history' | 'earn'
 const TABS: { id: Tab; label: string; title: string }[] = [
-  { id: 'now', label: 'For you', title: 'Ready now, what you save for, and rewards that fit what you do (1)' },
+  { id: 'now', label: 'Shop', title: 'Shelves of rewards, today\'s pick and ideas for you (1)' },
   { id: 'unlock', label: 'Unlock by doing', title: 'Rewards that open when you really did the work (2)' },
   { id: 'all', label: 'All', title: 'Every reward (3)' },
   { id: 'history', label: 'History', title: 'What you bought (4)' },
@@ -63,7 +66,17 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   const act = useAction()
   const toast = useToast()
   const [locks, reloadLocks] = useUnlocks()
-  const { insights, quests, value, more, setMore, reload } = useRewardsData(state)
+  const { insights, quests, value, shopValue, setShopValue, more, setMore, reload } = useRewardsData(state)
+  const [unwrap, setUnwrap] = useState<{ emoji: string; title: string; n: number } | null>(null)
+  const [stocking, setStocking] = useState(false)
+  const [openShelves, setOpenShelves] = useState<ShelfId[] | null>(() => {
+    try {
+      const v = JSON.parse(localStorage.getItem('ls.rw.shelves') || 'null')
+      return Array.isArray(v) ? v.map(String).filter((x): x is ShelfId => SHELVES.some((sh) => sh.id === x)) : null
+    } catch {
+      return null
+    }
+  })
   const [ruling, setRuling] = useState<number | null>(null)
   const [reveal, setReveal] = useState<{ prize: ChestPrize; box: 'chest' | 'mystery' } | null>(null)
   const [unlocking, setUnlocking] = useState<Set<number>>(new Set())
@@ -206,6 +219,8 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     celebrate(el, 'reward')
     play('reward')
     setJustBought(r.title)
+    if (!stillMode()) setUnwrap({ emoji: rewardEmoji(r), title: `${r.title}: yours`, n: Date.now() })
+    window.setTimeout(() => play('coin'), 260)
     toast(buyToast(s, `${rewardEmoji(r)} ${r.title}: yours. You earned it.`), 'good')
     if (!stillMode()) {
       setFlipping((x) => new Map(x).set(r.id, r))
@@ -239,6 +254,31 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
       onState(s)
       onWallet()
       setJarFor(null)
+    }
+  }
+  const setBudget = async (lei: number) => {
+    if (!life.shop.setFunBudget) return
+    const v = await act(() => life.shop.setFunBudget({ lei, source: 'manual' }), 'Monthly budget saved')
+    if (v) setShopValue(v)
+  }
+  // An empty shelf: add its starter items one by one (never touches rewards you already have).
+  const stock = async (id: ShelfId) => {
+    setStocking(true)
+    try {
+      const have = new Set(live.map((r) => r.title.trim().toLowerCase()))
+      let last: ShopState | null = null
+      for (const it of STARTERS[id]) {
+        if (have.has(it.title.toLowerCase())) continue
+        last = await life.shop.save({ title: it.title, price: it.price, tier: 'bronze', realCost: it.realCost, pinned: false, note: it.note, emoji: it.emoji, category: it.category, currency: state.currency || 'MDL' })
+      }
+      if (last) {
+        onState(last)
+        toast('Starter items added: change names and prices any time', 'good')
+      }
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not add them', 'bad')
+    } finally {
+      setStocking(false)
     }
   }
   const fun = async (min: number) => {
@@ -348,9 +388,10 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     </>
   )
 
-  const card = (r: Reward, draggable = false, compact = false) => (
+  const card = (r: Reward, draggable = false, compact = false, pick = false) => (
     <RewardCard
       key={r.id}
+      pick={pick}
       compact={compact}
       r={r}
       info={infos.get(r.id) ?? { blocked: null, lock: null, left: 0, justReady: false }}
@@ -411,6 +452,38 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     const left = infos.get(pick.id)!.left
     return { reward: pick, line: !infos.get(pick.id)!.blocked ? 'Ready now' : readyLine(today, left, perDay) ?? `${left.toLocaleString()} to go` }
   })()
+  const shelves = Object.fromEntries(SHELVES.map((sh) => [sh.id, [] as Reward[]])) as Record<ShelfId, Reward[]>
+  for (const r of live) shelves[shelfOf(r)].push(r)
+  for (const id of Object.keys(shelves) as ShelfId[]) shelves[id].sort((a, b) => Number(!!infos.get(a.id)!.blocked) - Number(!!infos.get(b.id)!.blocked) || a.price - b.price)
+  const featured = featuredPick(live.filter((r) => !r.goalRank), today)
+  if (featured) shelves[shelfOf(featured)].sort((a, b) => Number(b.id === featured.id) - Number(a.id === featured.id))
+  const pickShelf = featured ? shelfOf(featured) : null
+  const shelfOpen = new Set<ShelfId>(openShelves ?? [...(pickShelf ? [pickShelf] : []), ...SHELVES.map((sh) => sh.id).filter((id) => id !== pickShelf && shelves[id].length > 0)].slice(0, 1))
+  const toggleShelf = (id: ShelfId) => {
+    const next = new Set(shelfOpen)
+    if (!next.delete(id)) next.add(id)
+    setOpenShelves([...next])
+    try {
+      localStorage.setItem('ls.rw.shelves', JSON.stringify([...next]))
+    } catch {
+      /* a convenience only */
+    }
+  }
+  const [ideasOpen, setIdeasOpen] = useState(() => {
+    try {
+      return localStorage.getItem('ls.rw.ideas') === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleIdeas = () => {
+    setIdeasOpen(!ideasOpen)
+    try {
+      localStorage.setItem('ls.rw.ideas', ideasOpen ? '0' : '1')
+    } catch {
+      /* a convenience only */
+    }
+  }
   const benText = more?.pace.line ?? ben
 
   return (
@@ -434,6 +507,12 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
 
       <WalletHero balance={state.balance} insights={insights} value={value} next={next} coupons={coupons.length} onFun={(m) => void fun(m)} onHow={() => setHow(true)} onAdd={() => setSheet('new')} ben={<BenLine text={benText} />} />
 
+      <div className="sh-top">
+        <GoalBar goal={goal} balance={state.balance} perDay={perDay} today={today} onPick={() => setSheet('new')} />
+        <Combo days={insights?.focusStreak ?? 0} />
+        <BudgetMeter spent={shopValue?.funSpentLei ?? monthSpendLei(state.recent, today.slice(0, 7))} budget={shopValue?.funBudgetLei ?? null} onSet={(n) => void setBudget(n)} />
+      </div>
+
       <div className="rx-layout rx-one">
         <div className="rx-main">
           <Surprises chests={state.chests} mystery={more?.mystery ?? null} coupons={coupons} today={today} onChest={openChest} onMystery={openMystery} />
@@ -450,18 +529,25 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
           />
 
           {shownTab === 'now' && (
-            <div className="rx-foryou" role="tabpanel" data-tabpanel="now">
-              <Section title="Ready now" sub={readyNow.length ? `${readyNow.length} you can get` : undefined}>
-                {readyNow.length ? (
-                  <Rail label="Ready now">{readyNow.map((r) => card(r, false, true))}</Rail>
-                ) : (
-                  <div className="rx-slim-empty">
-                    <span>{next ? `Nothing ready yet. Next: ${next.reward.title}, ${next.line[0].toLowerCase()}${next.line.slice(1)}.` : 'Earn a few points and something will be ready.'}</span>
-                  </div>
-                )}
-              </Section>
-              <SavingFor goals={goals} balance={state.balance} perDay={perDay} today={today} onAll={() => setTab('all')} />
-              {more && <SuggestRow list={more.suggestions} onAdd={addSuggestion} onHide={(k) => void hideSuggestion(k)} />}
+            <div className="rx-foryou sh-more" role="tabpanel" data-tabpanel="now">
+              {goals.length > 1 && <SavingFor goals={goals} balance={state.balance} perDay={perDay} today={today} onAll={() => setTab('all')} />}
+              <div className="sh-shelves">
+              {SHELVES.filter((sh) => sh.id !== 'big' || shelves[sh.id].length > 0).map((sh) => (
+                <Shelf key={sh.id} id={sh.id} cards={shelves[sh.id].map((r) => card(r, false, true, r.id === featured?.id))} preview={shelves[sh.id].slice(0, 4).map((r) => rewardEmoji(r)).join(' ')} open={shelfOpen.has(sh.id)} onToggle={() => toggleShelf(sh.id)} adding={stocking} onStarter={(id) => void stock(id)} onAdd={() => setSheet('new')} />
+              ))}
+              {more && more.suggestions.length > 0 && (
+                <section className={`rx-sec sh-shelf ${ideasOpen ? 'open' : 'shut'}`}>
+                  <header>
+                    <button type="button" className="sh-shelf-head" aria-expanded={ideasOpen} onClick={toggleIdeas}>
+                      <span className="sh-chev" aria-hidden>{ideasOpen ? '▾' : '▸'}</span>
+                      <h3>Suggested for you</h3>
+                      <span className="rx-sub">{more.suggestions.length} ideas from what you did this week</span>
+                    </button>
+                  </header>
+                  {ideasOpen && <SuggestRow list={more.suggestions} onAdd={addSuggestion} onHide={(k) => void hideSuggestion(k)} title="Suggested for you" />}
+                </section>
+              )}
+              </div>
             </div>
           )}
 
@@ -549,6 +635,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
         />
       )}
       {how && <HowToEarn streak={insights?.focusStreak ?? 0} onClose={() => setHow(false)} />}
+      {unwrap && <Unwrap key={unwrap.n} emoji={unwrap.emoji} title={unwrap.title} onDone={() => setUnwrap(null)} />}
       {reveal && <Reveal prize={reveal.prize} box={reveal.box} onClose={() => setReveal(null)} />}
     </div>
   )

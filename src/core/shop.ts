@@ -50,14 +50,19 @@ export interface Reward {
   priceLocked?: boolean
 }
 
-/** The six kinds of reward (RF1). */
+/** The kinds of reward (RF1, then the shop shelves). */
 export const REWARD_CATEGORIES = [
   { id: 'fun', label: 'Fun', emoji: '🎮' },
   { id: 'food', label: 'Food', emoji: '🍕' },
   { id: 'gear', label: 'Gear', emoji: '🎧' },
   { id: 'experience', label: 'Experience', emoji: '🎟️' },
   { id: 'selfcare', label: 'Self-care', emoji: '🧴' },
-  { id: 'big', label: 'Big goal', emoji: '🏔️' }
+  { id: 'big', label: 'Big goal', emoji: '🏔️' },
+  // Shop shelves (2026-11): the older six stay, these four are new.
+  { id: 'games', label: 'Games and screen', emoji: '🕹️' },
+  { id: 'media', label: 'Movies and anime', emoji: '🎬' },
+  { id: 'people', label: 'People', emoji: '💬' },
+  { id: 'treat', label: 'Small treat', emoji: '🍬' }
 ] as const
 export type RewardCategory = (typeof REWARD_CATEGORIES)[number]['id']
 export const isRewardCategory = (c: unknown): c is RewardCategory => REWARD_CATEGORIES.some((x) => x.id === c)

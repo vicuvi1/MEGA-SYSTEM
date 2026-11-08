@@ -154,6 +154,10 @@
 .rx-cover.cat-experience { --c1: #ff5fa2; --c2: #8b5cf6; }
 .rx-cover.cat-selfcare { --c1: #34d399; --c2: #0ea5a4; }
 .rx-cover.cat-big { --c1: #fbbf24; --c2: #f97316; }
+.rx-cover.cat-games { --c1: #6d5dfc; --c2: #00b4d8; }
+.rx-cover.cat-media { --c1: #ef476f; --c2: #7b2ff7; }
+.rx-cover.cat-people { --c1: #ff7eb3; --c2: #ff758c; }
+.rx-cover.cat-treat { --c1: #f9a826; --c2: #ec4899; }
 .rx-badges { position: absolute; left: 10px; top: 10px; right: 84px; display: flex; flex-wrap: wrap; gap: 5px; z-index: 1; }
 .rx-tag { height: 24px; padding: 0 9px; display: inline-flex; align-items: center; border-radius: 999px; font-size: 11.5px; font-weight: 650; color: #fff; background: rgb(10 12 18 / 0.5); border: 1px solid rgb(255 255 255 / 0.14); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); white-space: nowrap; }
 .rx-tag.goal { color: #2a1d00; background: #f5c84b; border-color: transparent; }

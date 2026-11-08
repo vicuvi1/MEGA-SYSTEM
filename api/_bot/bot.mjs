@@ -34311,7 +34311,7 @@ var TIERS = {
 function isTier(t) {
 	return t in TIERS;
 }
-/** The six kinds of reward (RF1). */
+/** The kinds of reward (RF1, then the shop shelves). */
 var REWARD_CATEGORIES = [
 	{
 		id: "fun",
@@ -34342,6 +34342,26 @@ var REWARD_CATEGORIES = [
 		id: "big",
 		label: "Big goal",
 		emoji: "🏔️"
+	},
+	{
+		id: "games",
+		label: "Games and screen",
+		emoji: "🕹️"
+	},
+	{
+		id: "media",
+		label: "Movies and anime",
+		emoji: "🎬"
+	},
+	{
+		id: "people",
+		label: "People",
+		emoji: "💬"
+	},
+	{
+		id: "treat",
+		label: "Small treat",
+		emoji: "🍬"
 	}
 ];
 var isRewardCategory = (c) => REWARD_CATEGORIES.some((x) => x.id === c);

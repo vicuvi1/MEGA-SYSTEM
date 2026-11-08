@@ -43,7 +43,7 @@ export function useRewardsData(state: ShopState) {
   const value: ValueInfo = remote?.value
     ? { value: remote.value, hourlyLei: remote.hourlyLei ?? null }
     : { value: pointValue({ funBudgetLei: null, earnPerDay: state.earnPerDay ?? 0 }), hourlyLei: null }
-  return { insights, quests, value, more, setMore, reload: load }
+  return { insights, quests, value, shopValue: remote, setShopValue: setRemote, more, setMore, reload: load }
 }
 
 /** Calm mode or "reduce motion": the page stays still (no flying coins, no flips). */
