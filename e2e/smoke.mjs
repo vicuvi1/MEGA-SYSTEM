@@ -3215,7 +3215,7 @@ try {
       ['career', '.cr', ['jobs', 'portfolio', 'cards', 'study', 'money', 'review'], { money: 2 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],
-      ['shop', '.rx', ['now', 'unlock', 'all', 'history', 'earn'], { now: 2, all: 2, earn: 2 }]
+      ['shop', '.rx', ['now', 'unlock', 'all', 'history', 'earn'], { now: 3, all: 2, earn: 2 }]
     ]
     for (const [page, scope, ids, wide] of pages) {
       await open(page)
@@ -3258,6 +3258,58 @@ try {
     await pg.setViewportSize({ width: 1440, height: 900 })
     console.log(`  ${report.join('\n  ')}`)
   }))
+  // Runs after the long-pages step on purpose: it adds starter rewards, which make the All tab longer.
+  // The Rewards shop: goal bar, combo, monthly budget meter, shelves, rarity, a buy that spends exactly the price, and it fits laptop and phone.
+  await step('Rewards: shop shelves, budget meter and buy', async () => {
+    await open('shop')
+    await pg.waitForSelector('[data-testid="goal-bar"], .sh-goal', { timeout: 10000 })
+    await pg.waitForSelector('[data-testid="combo"]', { timeout: 5000 })
+    const meter = (await pg.locator('[data-testid="budget-meter"]').innerText()).replace(/\s+/g, ' ')
+    if (!/Spent this month \d+ \/ \d+ lei/.test(meter)) throw new Error(`budget meter reads: ${meter}`)
+    await pg.click('.rx .ptabs [data-tab="now"]')
+    await pg.waitForSelector('.sh-shelf', { timeout: 5000 })
+    if ((await pg.locator('.sh-shelf').count()) < 6) throw new Error('fewer than 6 shelves')
+    // The skincare shelf opens, and an empty one adds its starter items in one tap (saved rewards stay as they are).
+    if ((await pg.locator('.sh-shelf[data-shelf="skin"].shut').count()) > 0) await pg.click('.sh-shelf[data-shelf="skin"] .sh-shelf-head')
+    await pg.waitForSelector('.sh-shelf[data-shelf="skin"].open', { timeout: 3000 })
+    const starter = pg.locator('.sh-shelf[data-shelf="skin"] .sh-empty .rx-btn.primary')
+    if (await starter.count()) {
+      await starter.click()
+      await pg.waitForSelector('.sh-shelf[data-shelf="skin"] .rx-card', { timeout: 8000 })
+      if (!(await pg.locator('.sh-shelf[data-shelf="skin"] .rx-title', { hasText: 'SPF 50 sunscreen' }).count())) throw new Error('starter skincare items missing')
+    }
+    if (!(await pg.locator('.rx-card .sh-rar').count())) throw new Error('no rarity label on the cards')
+    // Buy: hold a ready card; the balance drops by exactly its price (when something is ready).
+    const bal = async () => Number((await pg.locator('header.topbar .tb-me').first().innerText()).replace(/\D/g, ''))
+    const ready = pg.locator('.sh-shelf .rx-card.ready').first()
+    if (await ready.count()) {
+      const price = Number((await ready.locator('.rx-price').first().innerText()).split('·')[0].replace(/\D/g, ''))
+      const before = await bal()
+      await ready.locator('.rx-hold').scrollIntoViewIfNeeded()
+      const box = await ready.locator('.rx-hold').boundingBox()
+      await pg.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      await pg.mouse.down()
+      await pg.waitForTimeout(1200)
+      await pg.mouse.up()
+      // A reward with a real cost first asks what you paid: accept the suggested amount.
+      await pg.getByRole('button', { name: 'Buy it', exact: true }).click({ timeout: 2500 }).catch(() => {})
+      await pg.waitForFunction((b) => Number(document.querySelector('header.topbar .tb-me').textContent.replace(/\D/g, '')) < b, before, { timeout: 8000 })
+      await pg.waitForTimeout(600)
+      const after = await bal()
+      if (before - after !== price) throw new Error(`buy spent ${before - after}, price was ${price}`)
+      await pg.click('.rx .ptabs [data-tab="history"]')
+      await pg.waitForSelector('.rx-history li', { timeout: 5000 })
+      await pg.click('.rx .ptabs [data-tab="now"]')
+    }
+    // Fits the laptop and the phone: no sideways scroll.
+    for (const [w, h] of [[1280, 720], [390, 800]]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.waitForTimeout(250)
+      const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (over > 1) throw new Error(`Rewards scrolls sideways by ${over}px at ${w}px`)
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
+  })
   // PE1–PE3, PE7: the plan is edited right in its card; an approved block's new time goes to Google and Todoist.
   // Plan trust: the audit runs before the card shows (one plain line for what has no room), each block
   // says why it is there, and a block the clock passed without a start moves by itself, with a note and Undo.

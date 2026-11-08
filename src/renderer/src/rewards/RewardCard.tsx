@@ -10,7 +10,9 @@ import { readyLine } from '@core/rewardsKit'
 import { leiForPoints } from '@core/pointValue'
 import { hoursOfWork } from '@core/funBudget'
 import { barFill, reducedMotion } from '../motionKit'
+import { rarityOf } from '@core/shopShelves'
 import { HoldButton } from './HoldButton'
+import { RarityTag, Ring } from './Shop'
 import { CoverArt } from './CoverArt'
 import { stillMode, useGrowFrom, type ValueInfo } from './useRewards'
 
@@ -138,7 +140,7 @@ export function RewardCard({
   return (
     <article
       ref={el}
-      className={`rx-card ${compact ? 'compact' : ''} ${ready ? 'ready' : ''} ${locked ? 'locked' : ''} ${r.goalRank ? 'goal' : ''} ${flipped ? 'flipped' : ''} ${info.justReady ? 'just-ready' : ''} ${info.unlocking ? 'unlocking' : ''} ${drag?.over ? 'drop-over' : ''}`}
+      className={`rx-card rar-${rarityOf(r.price)} ${compact ? 'compact' : ''} ${ready ? 'ready' : ''} ${locked ? 'locked' : ''} ${r.goalRank ? 'goal' : ''} ${flipped ? 'flipped' : ''} ${info.justReady ? 'just-ready' : ''} ${info.unlocking ? 'unlocking' : ''} ${drag?.over ? 'drop-over' : ''}`}
       draggable={!!drag}
       onDragStart={drag?.onDragStart}
       onDragOver={drag?.onDragOver}
@@ -164,6 +166,8 @@ export function RewardCard({
               </span>
             )}
             <div className="rx-menu-slot">{menu}</div>
+            <RarityTag price={r.price} />
+            {!ready && info.left > 0 && <Ring have={have} price={price} />}
           </div>
           <div className="rx-body">
             <b className="rx-title">{r.title}</b>

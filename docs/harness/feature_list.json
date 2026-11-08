@@ -228,6 +228,20 @@
    "notes": ""
   },
   {
+   "id": "F-SHOP",
+   "priority": 2,
+   "area": "rewards",
+   "title": "Rewards game shop",
+   "user_visible_behavior": "Goal bar, combo, monthly budget meter, pick of the day, category shelves with rarity and progress rings, starter items for empty shelves, unwrap moment after a buy",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/shopShelves.test.ts",
+    "SMOKE_ONLY=\"Rewards\" npm run smoke"
+   ],
+   "evidence": "",
+   "notes": "src/core/shopShelves.ts, src/renderer/src/rewards/Shop.tsx"
+  },
+  {
    "id": "F017",
    "priority": 2,
    "area": "goals",

@@ -74,6 +74,49 @@ function Shapes({ cat }: { cat: RewardCategory }) {
           <path d="M-4 18c20-8 34 8 54 0s34-8 54 0 34 8 60 0" stroke={W2} />
         </g>
       )
+    case 'games':
+      // A screen with a play triangle and pixels.
+      return (
+        <g fill={W}>
+          <rect x="96" y="14" width="52" height="34" rx="5" fill={W2} />
+          <path d="M116 22l14 9-14 9z" />
+          <rect x="14" y="64" width="10" height="10" />
+          <rect x="28" y="74" width="10" height="10" fill={W2} />
+          <rect x="120" y="68" width="10" height="10" fill={W2} />
+          <rect x="134" y="78" width="10" height="10" />
+        </g>
+      )
+    case 'media':
+      // A film strip and a spotlight.
+      return (
+        <g fill={W}>
+          <rect x="0" y="12" width="160" height="14" fill={W2} />
+          {[6, 28, 50, 72, 94, 116, 138].map((x) => (
+            <rect key={x} x={x} y="15" width="9" height="8" rx="1.5" fill={W} />
+          ))}
+          <circle cx="40" cy="66" r="14" fill={W2} />
+          <path d="M104 52l26 18-26 18z" />
+        </g>
+      )
+    case 'people':
+      // Two chat bubbles.
+      return (
+        <g fill={W}>
+          <path d="M16 22h56a8 8 0 0 1 8 8v18a8 8 0 0 1-8 8H42l-12 10v-10h-14a8 8 0 0 1-8-8V30a8 8 0 0 1 8-8z" transform="translate(4 0)" />
+          <path d="M96 52h48a8 8 0 0 1 8 8v14a8 8 0 0 1-8 8h-8v9l-11-9H96a8 8 0 0 1-8-8V60a8 8 0 0 1 8-8z" fill={W2} />
+        </g>
+      )
+    case 'treat':
+      // Sprinkles and a candy.
+      return (
+        <g fill={W}>
+          <path d="M30 70l30-16 6 12-30 16z" fill={W2} />
+          <circle cx="120" cy="30" r="10" />
+          <rect x="20" y="20" width="14" height="5" rx="2.5" transform="rotate(30 27 22)" />
+          <rect x="70" y="16" width="14" height="5" rx="2.5" transform="rotate(-40 77 18)" fill={W2} />
+          <rect x="130" y="72" width="14" height="5" rx="2.5" transform="rotate(60 137 74)" />
+        </g>
+      )
     case 'big':
       // Mountains and a sun.
       return (
