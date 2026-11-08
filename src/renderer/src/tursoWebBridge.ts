@@ -24,6 +24,7 @@ import { createWebAuth } from './web/webAuth'
 import { createFinanceInbox } from './web/financeInbox'
 import { payTodoist } from './web/todoistCoins'
 import { createChangeWatch } from './web/todoRefresh'
+import { createTodoistClient, localStore } from './web/todoistClient'
 import { setSportLogger, sportDay } from './sportTrack'
 import type { TodoCompleted, TodoTask } from '@core/todoist'
 import { SPORT } from './web/sportSync'
@@ -450,17 +451,16 @@ export function createTursoWebBridge(): Bridge {
     }
   }
 
-  const todoist = {
-    today: async () => ((await todoistCall('today')).tasks ?? []) as TodoTask[],
-    close: async (id: string) => {
-      await todoistCall('close', { id })
-    },
-    quickAdd: async (text: string, area?: string) => (await todoistCall('quick', { text, area })).task as TodoTask
-  }
+  // One Todoist for every caller (Tasks, Today, the plan card, Ben's quick commands, the island):
+  // edits wait in a queue until Todoist confirms them, and survive a reload (web/todoistClient.ts).
+  const todoist = createTodoistClient(todoistCall, { store: localStore(), onChange: () => window.dispatchEvent(new CustomEvent('life-todoist-pending')) })
+  window.addEventListener('online', () => todoist.retryDue(true))
   const todoistOnP: Promise<boolean> = sessionReady
     .then(() => todoistCall('status'))
     .then((j) => !!j.connected)
     .catch(() => false)
+  // Edits kept from the last visit go out once we know Todoist is there.
+  void todoistOnP.then((on) => on && todoist.retryDue(true))
   let todoistSyncedAt = 0
   // The bots' code (big) loads on first use, not with the app.
   type Bots = ReturnType<typeof import('./web/webBots').createWebBots>
@@ -532,6 +532,8 @@ export function createTursoWebBridge(): Bridge {
       forgetCalendar()
       todoQuickAt = Date.now()
       todoAt = Date.now()
+      // Waiting edits go first, so what is read back already has them.
+      if (todoist.queue.pending) todoist.retryDue(true)
       await todoistChanged()
       window.dispatchEvent(new CustomEvent('life-external-changed'))
       await bridge.todoist?.sync(true).catch(() => 0)
@@ -567,6 +569,8 @@ export function createTursoWebBridge(): Bridge {
         }
         // Todoist: a task added or done in Todoist itself shows up within
         // seconds (a cheap "anything new?" every 5 s while you're here).
+        // A Todoist edit that failed (offline, server busy) is tried again once its wait is over.
+        if (!direct && todoist.queue.pending) todoist.retryDue()
         if (!direct && Date.now() - todoQuickAt > p.todo) {
           todoQuickAt = Date.now()
           void todoistChanged().then((changed) => {
@@ -924,7 +928,7 @@ export function createTursoWebBridge(): Bridge {
           const t = new Date(`${day}T12:00:00Z`)
           t.setUTCDate(t.getUTCDate() + 1)
           const on = await todoistOnP
-          const line = await applyMark({ day, tomorrow: t.toISOString().slice(0, 10), write: (fn) => svc.write((s) => fn(s.db, s)), todoist: on ? { update: async (tid, patch) => void (await todoistCall('update', { id: tid, ...patch })), quickAdd: (text) => todoist.quickAdd(text) } : null }, id, mark)
+          const line = await applyMark({ day, tomorrow: t.toISOString().slice(0, 10), write: (fn) => svc.write((s) => fn(s.db, s)), todoist: on ? { update: (tid, patch) => todoist.update(tid, patch), quickAdd: (text) => todoist.quickAdd(text) } : null }, id, mark)
           void syncNow().catch(() => null)
           return line
         },
@@ -1198,22 +1202,18 @@ export function createTursoWebBridge(): Bridge {
     todoist: {
       status: async () => ({ connected: await todoistOnP }),
       today: async () => ((await todoistOnP) ? todoist.today() : []),
-      upcoming: async () => ((await todoistOnP) ? (((await todoistCall('upcoming')).tasks ?? []) as TodoTask[]) : []),
+      upcoming: async () => ((await todoistOnP) ? todoist.upcoming() : []),
       quickAdd: async (text: string, area?: string) => todoist.quickAdd(text, area),
-      everything: async () => {
-        const j = await todoistCall('everything')
-        return { tasks: (j.tasks ?? []) as TodoTask[], areas: j.areas ?? [] }
-      },
-      update: async (id: string, patch: Record<string, unknown>) => {
-        await todoistCall('update', { id, ...patch })
-      },
+      everything: () => todoist.everything(),
+      // Through the queue: only what changed, "today" as your own date, kept until Todoist confirms.
+      update: (id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[]; duration?: number | null }) => todoist.update(id, patch),
+      pending: async () => todoist.pending(),
+      retry: (id: string) => todoist.retry(id),
       cleanup: async (today: string) => {
         const j = await todoistCall('cleanup', { today })
         return { changes: (j.changes ?? []) as CleanChange[], ai: !!j.ai, error: j.error as string | undefined }
       },
-      move: async (id: string, area: string) => {
-        await todoistCall('move', { id, area })
-      },
+      move: (id: string, area: string) => todoist.move(id, area),
       reopen: async (id: string) => {
         await todoistCall('reopen', { id })
         // Points stay honest: a task taken back gives back what it paid.
@@ -1224,9 +1224,7 @@ export function createTursoWebBridge(): Bridge {
           }, 'life-wallet-changed')
           .catch(() => null)
       },
-      remove: async (id: string) => {
-        await todoistCall('remove', { id })
-      },
+      remove: (id: string) => todoist.remove(id),
       addArea: async (name: string) => (await todoistCall('addArea', { name })).area,
       renameArea: async (area: string, name: string) => {
         await todoistCall('renameArea', { area, name })

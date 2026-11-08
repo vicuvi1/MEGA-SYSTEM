@@ -8,7 +8,7 @@
 //   quick {text}      → {task}           Todoist reads date, time, p1, #project
 //   completed {since} → {items}          completed since an ISO time
 //   everything        → {tasks, areas}   every open task and your areas
-//   update {id, content?, priority?, due?, description?, labels?}
+//   update {id, content?, priority?, due?, description?, labels?, duration?} → {ok, task}
 //   move {id, area}   reopen {id}   remove {id}
 //   addArea {name}  → {area}   renameArea {area, name}
 //   cleanup           → {changes, ai}    suggested fixes to approve (AI, else duplicates/overdue)
@@ -66,9 +66,11 @@ export default async function handler(req, res) {
           return send(res, 200, { changes: localCleanup(tasks, today), ai: false, error: String(e?.message || e) })
         }
       }
-      case 'update':
-        await api.update(String(body.id), { content: body.content, priority: body.priority, due: body.due, description: body.description, labels: Array.isArray(body.labels) ? body.labels : undefined, duration: body.duration === undefined ? undefined : body.duration === null ? null : Number(body.duration) })
-        return send(res, 200, { ok: true })
+      case 'update': {
+        // Answers with the task as Todoist now holds it, so the app shows the confirmed value.
+        const task = await api.updateTask(String(body.id), { content: body.content, priority: body.priority, due: body.due, description: body.description, labels: Array.isArray(body.labels) ? body.labels : undefined, duration: body.duration === undefined ? undefined : body.duration === null ? null : Number(body.duration) })
+        return send(res, 200, { ok: true, task })
+      }
       case 'move':
         await api.move(String(body.id), String(body.area))
         return send(res, 200, { ok: true })

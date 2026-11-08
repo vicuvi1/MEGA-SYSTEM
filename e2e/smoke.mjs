@@ -3379,6 +3379,46 @@ try {
     await bar.locator('.sync-at', { hasText: /Synced \d\d:\d\d/ }).waitFor({ timeout: 15000 })
     await pg.screenshot({ path: '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/sync/plan-sync.png' })
   })
+  await step('Tasks sync: priority and due today reach Todoist, the row says saved, a Todoist change shows after Sync', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    const call = async (n, body) => (await fetch(`http://127.0.0.1:${port}/api/${n}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
+    const until = async (fn, what, ms = 15000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    await open('tasks')
+    const row = pg.locator('.ta-task', { hasText: 'Read chapter 4' }).first()
+    await row.waitFor({ timeout: 15000 })
+    // P1 from the flag menu.
+    await row.hover()
+    await row.locator('button[aria-label="Priority"]').click()
+    await row.locator('.ta-pop-item', { hasText: 'P1' }).click()
+    await row.locator('.ta-flag', { hasText: 'P1' }).waitFor({ timeout: 5000 })
+    // Due today from the date menu.
+    await row.hover()
+    await row.locator('button[aria-label="Date"]').click()
+    await row.locator('.ta-pop-item', { hasText: 'Today' }).click()
+    await row.locator('.ta-due', { hasText: 'today' }).waitFor({ timeout: 5000 })
+    // The fake Todoist got both, each as its own field (priority 4 = P1, the date as a date).
+    const day = await pg.evaluate(() => {
+      const d = new Date()
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })
+    await until(async () => {
+      const t = (await call('todoist', { op: 'peek' })).find((x) => x.id === 't3')
+      return t.priority === 4 && t.due === day
+    }, 'Todoist did not get P1 and due today')
+    await row.locator('.ta-save[data-state="saved"]', { hasText: '✓ saved' }).waitFor({ timeout: 10000 })
+    if (process.env.TASKS_SHOT) await pg.screenshot({ path: process.env.TASKS_SHOT })
+    // A change made in Todoist itself shows after Sync.
+    await call('todoist', { op: 'testEdit', id: 't1', content: 'Pay the internet bill (online)', priority: 3 })
+    await pg.locator('.ta-sync button', { hasText: 'Sync' }).first().click()
+    await pg.locator('.ta-task', { hasText: 'Pay the internet bill (online)' }).first().waitFor({ timeout: 15000 })
+  })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })

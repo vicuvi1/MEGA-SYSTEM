@@ -395,6 +395,20 @@
    "notes": "core/planAudit.ts (auditPlan, leftTasks, blockWhy, moveToTomorrow) and core/planAuto.ts (autoReplan, autoAllowed, isFlipFlop). checkPlan now counts overlapping events once (a call inside a work window was busy twice)."
   },
   {
+   "id": "F029",
+   "priority": 1,
+   "area": "today",
+   "title": "Tasks sync both ways with Todoist",
+   "user_visible_behavior": "Priority, due date (today, tomorrow, a date/time), title, labels and length set anywhere in the app reach Todoist; the row shows saving… / ✓ saved / Couldn't save to Todoist. Retry; a failed save waits and survives a reload; changes made in Todoist show on the next check and at once with Sync",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/todoSync.test.ts src/renderer/src/web/todoistClient.test.ts",
+    "SMOKE_ONLY=\"Tasks sync\" npm run smoke"
+   ],
+   "evidence": "",
+   "notes": "2026-11-08: core/todoSync.ts (edit queue, overlay, resolveDue), web/todoistClient.ts (one Todoist object for every caller, Ben's quick commands and the island included), the server update answers with the task and sends plain dates as due_date."
+  },
+  {
    "id": "F900",
    "priority": 2,
    "area": "island",

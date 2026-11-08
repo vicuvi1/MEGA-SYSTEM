@@ -18,7 +18,7 @@ import { parseSets } from '@core/strength'
 import { hm } from '@core/focus'
 import { progressReport } from '@core/progress'
 import { activePlan } from '@core/weekPlan'
-import { deadlineRadar, whenText, type TodoTask } from '@core/todoist'
+import { deadlineRadar, toApiPriority, whenText, type TodoTask } from '@core/todoist'
 import { financeSpending } from '@core/progress'
 import { agendaText, freeGaps, localDay, type CalEvent } from '@core/dayTime'
 import { canBeNow, isTentative, takesTime } from '@core/calResponse'
@@ -1087,7 +1087,7 @@ export function readAction(line: string): BrainAction | null {
       if (key === 'due' && v) out.due = v.slice(0, 40)
       if (key === 'priority') {
         const p = /^P?([1-4])$/i.exec(v)
-        if (p) out.priority = 5 - Number(p[1])
+        if (p) out.priority = toApiPriority(Number(p[1]))
       }
     }
     return out.title || out.priority || out.due || out.details != null ? out : null

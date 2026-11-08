@@ -136,8 +136,18 @@ export interface TodoCompleted {
 /** The point rule that pays for a completed Todoist task. */
 export const TODOIST_RULE = 'tasks.todoist_done'
 
+const clampP = (n: number) => Math.min(4, Math.max(1, Math.round(Number(n) || 0) || 1))
+
+/**
+ * The one priority mapping (use it everywhere). People say P1 (most urgent) to
+ * P4 (none); Todoist's API stores the opposite: 4 is P1, 1 is P4.
+ */
+export const toApiPriority = (level: number) => 5 - clampP(level)
+/** Todoist's API value → the P level people see (4 → 1, i.e. P1). */
+export const fromApiPriority = (priority: number) => 5 - clampP(priority)
+
 /** Shown as P1…P4 (Todoist's own labels). */
-export const pLabel = (priority: number) => `P${5 - Math.min(4, Math.max(1, priority || 1))}`
+export const pLabel = (priority: number) => `P${fromApiPriority(priority)}`
 
 /** Overdue first, then most urgent, then by time. The bot's /done N uses this order. */
 export function sortToday(tasks: TodoTask[], today: string): TodoTask[] {

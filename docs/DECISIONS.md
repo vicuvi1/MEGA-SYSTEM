@@ -105,3 +105,13 @@ entry that says why.
   that aren't in his context or your message are taken out. "What now?" is answered in code.
 - **Why:** he told you about a "meeting" at 19:50 that didn't exist.
 
+
+### Todoist edits wait for Todoist's answer (2026-11-08)
+- **Decision:** every task edit in the app goes through one queue (`core/todoSync.ts`): only the changed
+  fields are sent, "today"/"tomorrow" are sent as your own date, your edit is shown over any list read
+  until Todoist confirms, and a failed save is kept (also across a reload) and retried, with a visible
+  "Couldn't save to Todoist. Retry" on the row. Priority maps in one place (`toApiPriority`: P1 = 4).
+- **Why:** edits looked saved but a refresh brought the old value back, some callers (Ben's quick
+  commands, the island) had no way to edit at all, and failures only flashed a toast.
+- **Rules out:** writing a task edit straight to `/api/todoist` from a page, reverting a failed save
+  silently, or sending date words for Todoist to read in its own time zone.
