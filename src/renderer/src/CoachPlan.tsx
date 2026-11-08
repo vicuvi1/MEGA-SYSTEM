@@ -107,7 +107,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
         {approved && <span className="chip on">✓ Approved</span>}
       </header>
       <p className="cp-headline">{p.headline}</p>
-      <PlanShiftOffer state={state} late={data.late} onDone={(r) => (setData(r), onChange?.())} />
+      <PlanShiftOffer state={state} late={data.late} auto={data.prefs.autoReplan !== false} onDone={(r) => (setData(r), onChange?.())} />
       {p.why && <p className="plan-why">{p.why}</p>}
       <div className="cp-grid">
         {p.mustdos.length > 0 && (
@@ -122,7 +122,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
         )}
       </div>
       {/* PE1: the blocks, editable right here; edits sync to Google Calendar and Todoist. */}
-      {timed.length > 0 && <PlanEditor state={state} water={data.prefs.water} />}
+      {timed.length > 0 && <PlanEditor state={state} water={data.prefs.water} auto={data.prefs.autoReplan !== false} />}
       <PlanAlso plan={p} />
       <p className="hint small">💧 Water goal {(p.waterMl / 1000).toFixed(1)} L</p>
       {!approved && (

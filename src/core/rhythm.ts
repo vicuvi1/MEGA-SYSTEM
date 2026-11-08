@@ -90,6 +90,8 @@ export interface DayProposal {
   free?: { start: string; end: string }[]
   /** The day is full and something he asked for today has no slot: keep it, or drop `drop` for it. */
   squeeze?: { keep: string; drop?: string }
+  /** Things the user took off the plan by hand today (normalized titles): a re-plan never puts them back. */
+  dropped?: string[]
 }
 
 export interface RhythmState {
@@ -131,6 +133,8 @@ export interface RhythmPrefs {
   training: boolean
   /** Autopilot: the day's plan is ready by this time (not before your wake-up target). */
   autopilot?: string
+  /** Re-plan by itself: the draft part of today's plan re-packs when the day changes (default on). */
+  autoReplan?: boolean
 }
 
 export const RHYTHM = 'coach_rhythm'
@@ -149,7 +153,8 @@ export function cleanPrefs(p: any): RhythmPrefs {
     weeklyDay: Number.isInteger(p?.weeklyDay) && p.weeklyDay >= 0 && p.weeklyDay <= 6 ? p.weeklyDay : 0,
     autopilot: HM.test(p?.autopilot) ? p.autopilot : DEFAULT_RHYTHM_PREFS.autopilot,
     water: p?.water !== false,
-    training: p?.training !== false
+    training: p?.training !== false,
+    autoReplan: p?.autoReplan !== false
   }
 }
 

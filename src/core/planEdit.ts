@@ -10,6 +10,7 @@ import { freeWindows, planStartAt, relinkAlso } from './dayPacker'
 import { blockStarted, type Span } from './planShift'
 import { fromMin, toMin, type BlockSync, type DayProposal, type PlanBlock } from './rhythm'
 import { localDay, type CalEvent } from './dayTime'
+import { normTitle } from './planDedupe'
 
 export const SNAP = 5
 export const TRAIN_ID = 'train'
@@ -32,7 +33,7 @@ export type PlanEdit =
   | { op: 'approve'; ids: string[]; on: boolean }
   | { op: 'tick'; id: string; task: string; on: boolean }
   /** A whole new plan (re-plan from now, the validator's fix). */
-  | { op: 'replace'; plan: DayProposal; label: string }
+  | { op: 'replace'; plan: DayProposal; label: string; auto?: boolean }
 
 /** Minutes rounded to the nearest 5. */
 export const snap5 = (m: number) => Math.round(m / SNAP) * SNAP
@@ -93,7 +94,9 @@ function putItem(plan: DayProposal, id: string, f: (b: EditItem) => EditItem | n
   if (!next) {
     const gone = blocks.splice(i, 1)[0]
     const removed = gone.sync?.eventId || gone.sync?.tasks?.length ? [...(p.removed ?? []), { id, eventId: gone.sync?.eventId, calendarId: gone.sync?.calendarId, tasks: gone.sync?.tasks?.map((t) => ({ id: t.id, title: t.title })) }] : p.removed
-    return relinkAlso({ ...p, blocks, removed })
+    // Taken off by hand: a re-plan (automatic or not) never puts it back today.
+    const dropped = [...new Set([...(p.dropped ?? []), ...[gone.title, ...(gone.tasks ?? [])].map(normTitle).filter(Boolean)])]
+    return relinkAlso({ ...p, blocks, removed, dropped })
   }
   const { train: _t, ...block } = next
   blocks[i] = block

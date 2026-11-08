@@ -101,3 +101,10 @@
 .sync-retry { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
 @media (max-width: 640px) { .plan-sync { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .sync-spin { animation-duration: 3s; } }
+/* The plan audit's one line, the automatic re-plan's note, and each block's short "why". */
+.pe-audit, .pe-auto { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; font-size: var(--t-xs); padding: 5px 10px; border-radius: 12px; }
+.pe-audit { background: color-mix(in srgb, var(--amber) 11%, transparent); color: var(--text); }
+.pe-auto { background: rgb(var(--ink) / 0.04); color: var(--muted); }
+.pe-audit button, .pe-auto button { border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-weight: 600; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
+.pe-audit button:hover, .pe-auto button:hover { background: rgb(var(--ink) / 0.09); }
+.pe-why { display: block; padding: 0 8px; margin-top: -2px; font-size: 10.5px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

@@ -11,13 +11,14 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import { layoutDay, minLenFor } from '@core/calLayout'
 import { fromMin, toMin, type RhythmState } from '@core/rhythm'
 import { idsUntil, isApproved, minOfDay, planGaps, planItems, replanFromNow, snap5, type EditItem, type PlanEdit } from '@core/planEdit'
-import { checkPlan, fixPlan, issueChip } from '@core/planCheck'
+import { issueChip } from '@core/planCheck'
+import { auditPlan, blockWhy } from '@core/planAudit'
 import { pending } from '@core/planSync'
 import { planTone } from '@core/planView'
 import type { CalEvent } from '@core/dayTime'
 import { life } from '../bridge'
 import { useToast } from '../ui'
-import { attach, edit, onNotice, retry, startLive, subscribe, undoLast, type PlanSnap } from './planStore'
+import { attach, edit, moveTomorrow, onNotice, retry, setAuto, setContext, setEditing, startLive, subscribe, undoLast, type PlanSnap } from './planStore'
 import { PlanSync } from './SyncButton'
 import './planEditor.css'
 
@@ -34,7 +35,8 @@ const len = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 
 type Drag = { id: string; kind: 'move' | 'resize'; y0: number; start: number; minutes: number; moved: boolean; pid: number }
 type TaskDrag = { task: string; from: string; x: number; y: number; over: string | null; moved: boolean; x0: number; y0: number }
 
-export function PlanEditor({ state, water = true }: { state: RhythmState; water?: boolean }) {
+/** `auto`: Settings -> Re-plan by itself (default on). */
+export function PlanEditor({ state, water = true, auto = true }: { state: RhythmState; water?: boolean; auto?: boolean }) {
   const toast = useToast()
   const [s, setS] = useState<PlanSnap | null>(null)
   const [events, setEvents] = useState<CalEvent[]>([])
@@ -58,7 +60,13 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
     const id = setInterval(() => setT(nowMin()), 30_000)
     return () => clearInterval(id)
   }, [])
-  useEffect(() => onNotice((n) => toast(n.text, n.tone)), [toast])
+  useEffect(() => onNotice((n) => toast(n.text, n.tone, n.undo ? { label: 'Undo', run: () => void undoLast() } : undefined)), [toast])
+  useEffect(() => setAuto(auto), [auto])
+  // No automatic re-plan while a block is dragged or renamed.
+  useEffect(() => {
+    setEditing(!!preview || !!renaming || !!taskDrag)
+    return () => setEditing(false)
+  }, [preview, renaming, taskDrag])
   useEffect(() => {
     life.coach
       ?.lifeFit?.()
@@ -116,7 +124,11 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
   const items = useMemo(() => (s ? planItems(s.plan) : []), [s])
   const mine = useMemo(() => new Set(items.map((b) => b.sync?.eventId).filter(Boolean) as string[]), [items])
   const fixed = useMemo(() => (day ? events.filter((e) => !e.allDay && !e.declined && !mine.has(e.id) && minOfDay(e.end, day) > 0 && minOfDay(e.start, day) < 24 * 60) : []), [events, mine, day])
-  const issues = useMemo(() => (s ? checkPlan(s.plan, { now: hm(t), bedtime: bed, events: fixed, water, freeShare }) : []), [s, t, bed, fixed, water, freeShare])
+  const endBy = hm(Math.min(toMin(bed) < 12 * 60 ? 24 * 60 - 5 : toMin(bed) - 45, 23 * 60))
+  useEffect(() => setContext({ events: fixed, bedtime: bed, water, freeShare, endBy }), [fixed, bed, water, freeShare, endBy])
+  // The plan audit, before the card shows: what is wrong (the chip) and what has no room (one plain line).
+  const audit = useMemo(() => (s ? auditPlan(s.plan, { now: hm(t), bedtime: bed, events: fixed, water, freeShare, tasks: s.tasks ?? undefined, fixTimes: false }) : null), [s, t, bed, fixed, water, freeShare])
+  const issues = audit?.issues ?? []
 
   if (!s || !day) return null
   const status = s.status
@@ -221,12 +233,12 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
     if (doEdit({ op: 'add', id, start: g.start, minutes: Math.min(45, g.minutes), title: 'New block' })) setRenaming(id)
   }
   const replan = () => {
-    const r = replanFromNow(s.plan, { now: hm(nowMin()), events: fixed, endBy: hm(Math.min(toMin(bed) < 12 * 60 ? 24 * 60 - 5 : toMin(bed) - 45, 23 * 60)) })
+    const r = replanFromNow(s.plan, { now: hm(nowMin()), events: fixed, endBy })
     doEdit({ op: 'replace', plan: r.plan, label: `Re-planned from now: ${r.moved} moved${r.unplaced.length ? `, ${r.unplaced.length} back on the list` : ''}` })
   }
   const fix = () => {
-    const r = fixPlan(s.plan, { now: hm(nowMin()), bedtime: bed, events: fixed, water })
-    if (r.fixed.length) doEdit({ op: 'replace', plan: r.plan, label: 'Fixed the plan' })
+    const r = auditPlan(s.plan, { now: hm(nowMin()), bedtime: bed, events: fixed, water, freeShare, tasks: s.tasks ?? undefined })
+    if (r.fixed.length && JSON.stringify(r.plan) !== JSON.stringify(s.plan)) doEdit({ op: 'replace', plan: r.plan, label: 'Fixed the plan' })
     else toast('Nothing Ben can fix by himself here: move a block, or ask him', 'info')
   }
   const sel = picked ? items.find((b) => b.id === picked) : undefined
@@ -261,6 +273,28 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
           ↶ Undo
         </button>
       </div>
+      {s.autoNote && (
+        <p className="pe-auto" role="status">
+          <span>↻ {s.autoNote}</span>
+          <button type="button" onClick={doUndo}>
+            Undo
+          </button>
+        </p>
+      )}
+      {audit?.line && (
+        <p className="pe-audit" role="status" title={audit.left.map((l) => `${l.title}: ${l.text}`).join(' · ')}>
+          <span>{audit.line}</span>
+          <button
+            type="button"
+            onClick={() => {
+              const l = moveTomorrow(audit.left.filter((x) => x.why === 'room'))
+              if (l) toast(l, 'info', { label: 'Undo', run: () => void undoLast() })
+            }}
+          >
+            Move to tomorrow
+          </button>
+        </p>
+      )}
       {anyDraft && (
         <div className="pe-approve" title="Approved blocks go to Google Calendar and Todoist; the rest stays a draft">
           <span>Tick blocks to approve them, or</span>
@@ -298,10 +332,11 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
             const st = statusOf(b)
             const ok = isApproved(b, status)
             const dragging = preview?.id === b.id
-            const rows = Math.max(0, Math.floor((h - 34) / 20))
+            const rows = Math.max(0, Math.floor((h - 34 - (h >= 44 ? 14 : 0)) / 20))
             const tasks = b.tasks ?? []
             const done = new Set((b.done ?? []).map((x) => x.toLowerCase()))
             const past = toMin(b.start) + b.minutes <= t
+            const why = blockWhy(b, s.plan, s.tasks ?? [])
             return (
               <li
                 key={b.id}
@@ -361,6 +396,7 @@ export function PlanEditor({ state, water = true }: { state: RhythmState; water?
                     ✕
                   </button>
                 </div>
+                {why && h >= 44 && <small className="pe-why">{why}</small>}
                 {tasks.length > 0 && rows > 0 && (
                   <ul className="pe-tasks">
                     {tasks.slice(0, rows).map((x) => (

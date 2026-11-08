@@ -9,7 +9,12 @@ import { applyEdit, editLabel, ensureIds, isApproved, planItems, type PlanEdit }
 import { createDebounce, linkEvents, mergeRemote, pending, planJobs, settle, type BlockJob, type JobResult, type TodoOp } from '@core/planSync'
 import { rebase, UndoStack } from '@core/planUndo'
 import { appDuplicates } from '@core/planLook'
-import type { DayProposal, RhythmState } from '@core/rhythm'
+import { addDays } from '@core/dates'
+import { auditPlan, moveToTomorrow, type AuditTask, type LeftTask } from '@core/planAudit'
+import { afterRun, autoAllowed, autoReplan, isFlipFlop, type AutoMeta } from '@core/planAuto'
+import type { Span } from '@core/planShift'
+import { fromMin, type DayProposal, type RhythmState } from '@core/rhythm'
+import type { CalEvent } from '@core/dayTime'
 import type { TodoTask } from '@core/todoist'
 import { life } from '../bridge'
 
@@ -24,6 +29,10 @@ export interface PlanSnap {
   /** The last sync problem, for the ⚠ chip's tooltip. */
   error: string | null
   canUndo: boolean
+  /** The last automatic re-plan's note ("Moved 'Lab report' to 15:40 because …"), while it can still be undone. */
+  autoNote: string | null
+  /** Today's open Todoist tasks (for the audit and the blocks' "why" lines), when known. */
+  tasks: AuditTask[] | null
 }
 
 type Listener = (s: PlanSnap | null) => void
@@ -40,7 +49,8 @@ const taskIds = new Map<string, string>()
 let todayTasks: { at: number; list: TodoTask[] } | null = null
 let linked = false
 
-const snap = (): PlanSnap | null => (cur ? { ...cur, sync: { ...sync }, error: lastError, canUndo: undo.size > 0 } : null)
+const asAudit = (list: TodoTask[] | undefined | null): AuditTask[] | null => (list ? list.map((t) => ({ id: t.id, content: t.content, priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.project })) : null)
+const snap = (): PlanSnap | null => (cur ? { ...cur, sync: { ...sync }, error: lastError, canUndo: undo.size > 0, autoNote: autoNote && undo.size > 0 ? autoNote.text : null, tasks: asAudit(todayTasks?.list) } : null)
 const emit = () => {
   const s = snap()
   for (const l of listeners) l(s)
@@ -97,6 +107,8 @@ export function attach(state: RhythmState) {
     linked = true
     void linkOld().then(cleanOnce)
   }
+  // A plan just came in (or the day started): a late block moves now, not in a minute.
+  setTimeout(() => void maybeAuto(), 300)
 }
 
 /** An older approved plan: its blocks find their calendar events once. */
@@ -142,8 +154,15 @@ async function save(plan: DayProposal) {
 export function edit(e: PlanEdit): string | null {
   if (!cur) return null
   const before = cur.plan
-  const after = applyEdit(before, e)
+  let after = applyEdit(before, e)
   if (after === before || (e.op === 'replace' && JSON.stringify(after) === JSON.stringify(before))) return null
+  // The audit after a block was placed by hand: that block stays where you put it, the others make room.
+  const placed = e.op === 'move' || e.op === 'resize' ? e.id : e.op === 'add' ? e.id : undefined
+  if (placed && ctx) after = auditPlan(after, { ...ctx, now: hmNow(), keep: [placed], fixPast: false, tasks: asAudit(todayTasks?.list) ?? undefined }).plan
+  if (!(e.op === 'replace' && e.auto)) {
+    manualAt = Date.now()
+    autoNote = null
+  }
   const label = editLabel(e, before)
   undo.push({ label, before, after })
   void save(after)
@@ -160,7 +179,135 @@ export function undoLast(): string | null {
   if (!e) return null
   void save(rebase(e.before, cur.plan))
   sender.poke()
+  // An edit that also changed something outside the plan (Move to tomorrow: Todoist's date) takes that back too.
+  const back = outside.get(e.after)
+  if (back) {
+    outside.delete(e.after)
+    void back()
+  }
   return e.label
+}
+
+/** Undo for what an edit changed outside the plan, by the edit's plan. */
+const outside = new WeakMap<DayProposal, () => Promise<void>>()
+
+// ---- The audit's "Move to tomorrow" and Re-plan by itself ---------------------------
+
+const hmNow = () => {
+  const d = new Date()
+  return fromMin(d.getHours() * 60 + d.getMinutes())
+}
+
+/** What the plan card knows about the day (its fixed events, bedtime, water, free share). */
+type Ctx = { events: CalEvent[]; bedtime: string; water: boolean; freeShare?: number; endBy: string }
+let ctx: Ctx | null = null
+export function setContext(c: Ctx) {
+  ctx = c
+}
+
+/** "Move to tomorrow" on the audit line: off today's plan (Undo puts it back), and Todoist gets tomorrow's date. */
+export function moveTomorrow(items: LeftTask[]): string | null {
+  if (!cur || !items.length) return null
+  const label = items.length === 1 ? `Moved ${items[0].title} to tomorrow` : `Moved ${items.length} tasks to tomorrow`
+  // Each Todoist task's date before the move, so Undo can put it back exactly.
+  const was = new Map((todayTasks?.list ?? []).map((t) => [t.id, t.due] as const))
+  const l = edit({ op: 'replace', plan: moveToTomorrow(cur.plan, items), label })
+  if (!l || !cur) return null
+  const day = cur.plan.day
+  const tomorrow = addDays(day, 1)
+  const ids = items.filter((x) => x.id)
+  for (const x of ids) void life.todoist?.update?.(x.id!, { due: tomorrow }).catch(() => say({ text: `Todoist didn't take the new date for ${x.title}`, tone: 'bad' }))
+  if (ids.length)
+    outside.set(cur.plan, async () => {
+      let failed = 0
+      for (const x of ids) await life.todoist?.update?.(x.id!, { due: was.get(x.id!) || day }).catch(() => failed++)
+      todayTasks = null
+      say(failed ? { text: `Undone in the plan, but Todoist still has tomorrow for ${failed} task${failed === 1 ? '' : 's'}`, tone: 'bad' } : { text: 'Todoist has today again', tone: 'info' })
+    })
+  todayTasks = null
+  return l
+}
+
+let autoOn = true
+let editingNow = false
+let manualAt = 0
+let autoNote: { text: string; at: number } | null = null
+let prevEvents: CalEvent[] | undefined
+let known: string[] | null = null
+let autoBusy = false
+const META = 'ls.planAuto'
+const readMeta = (): AutoMeta | null => {
+  try {
+    return JSON.parse(localStorage.getItem(META) || 'null')
+  } catch {
+    return null
+  }
+}
+const writeMeta = (m: AutoMeta) => {
+  try {
+    localStorage.setItem(META, JSON.stringify(m))
+  } catch {
+    /* no storage: the 2-minute gap still holds while the page is open */
+  }
+}
+let memMeta: AutoMeta | null = null
+
+/** Settings → Re-plan by itself (default on). */
+export function setAuto(on: boolean) {
+  autoOn = on
+}
+/** A block is being dragged or renamed: no automatic re-plan meanwhile. */
+export function setEditing(on: boolean) {
+  editingNow = on
+}
+
+async function sessionsToday(): Promise<Span[]> {
+  try {
+    const f = await life.focus?.state?.()
+    return (f?.todaySessions ?? []).filter((x) => x.startedAt).map((x) => ({ s: Date.parse(x.startedAt!), e: x.endedAt ? Date.parse(x.endedAt) : Date.now() }))
+  } catch {
+    return []
+  }
+}
+
+/**
+ * Re-plan by itself: when the day changed (a block ran long, a task came in,
+ * an event moved, the clock passed a block that didn't start), the draft part
+ * that the change hits moves, with one short note and Undo. Approved and
+ * pinned blocks and calendar events never move, so nothing is sent to Google
+ * or Todoist. At most once in 2 minutes, 5 a day, never while you edit.
+ */
+export async function maybeAuto(): Promise<string | null> {
+  if (!cur || !ctx || autoBusy || checking || sender.pending()) return null
+  const meta = readMeta() ?? memMeta
+  const day = cur.plan.day
+  const gate = autoAllowed({ on: autoOn, editing: editingNow || Date.now() - manualAt < 120_000, meta, day, nowMs: Date.now() })
+  if (!gate.ok) return null
+  autoBusy = true
+  try {
+    const [events, tasks, sessions] = await Promise.all([life.google ? todayEvents().catch(() => null) : Promise.resolve([] as CalEvent[]), freshTasks(), sessionsToday()])
+    if (!cur || cur.plan.day !== day || editingNow) return null
+    const mine = new Set(planItems(cur.plan).map((b) => b.sync?.eventId).filter(Boolean) as string[])
+    const removed = new Set((cur.plan.removed ?? []).map((r) => r.eventId).filter(Boolean) as string[])
+    const fixed = events ? events.filter((e) => !e.allDay && !e.declined && !mine.has(e.id) && !removed.has(e.id)) : ctx.events
+    const list = asAudit(tasks) ?? undefined
+    const r = autoReplan(cur.plan, cur.status, { ...ctx, now: hmNow(), events: fixed, prevEvents, sessions, tasks: list, known: known ?? undefined })
+    prevEvents = fixed
+    if (list) known = list.flatMap((t) => [t.content, ...(t.id ? [t.id] : [])])
+    if (!r.note || r.plan === cur.plan) return null
+    if (isFlipFlop(meta, day, cur.plan, r.plan)) return null
+    const before = cur.plan
+    const label = edit({ op: 'replace', plan: r.plan, label: r.note, auto: true })
+    if (!label) return null
+    memMeta = afterRun(meta, day, Date.now(), before, cur.plan)
+    writeMeta(memMeta)
+    autoNote = { text: r.note, at: Date.now() }
+    emit()
+    say({ text: r.note, tone: 'info', undo: true })
+    return r.note
+  } finally {
+    autoBusy = false
+  }
 }
 
 let approving = false
@@ -330,13 +477,19 @@ export async function checkRemote(force = false) {
   }
 }
 
+/** The live loop's look: Google and Todoist first (they win), then the automatic re-plan. */
+async function look() {
+  await checkRemote()
+  await maybeAuto()
+}
+
 let liveOn = 0
 let timer: ReturnType<typeof setInterval> | null = null
 /** While a plan card is on screen: a light check every 60 s (visible page only), on focus and when the app notices outside changes. */
 export function startLive(): () => void {
   liveOn++
   if (liveOn === 1) {
-    const tick = () => document.visibilityState === 'visible' && void checkRemote()
+    const tick = () => document.visibilityState === 'visible' && void look()
     timer = setInterval(tick, 60_000)
     window.addEventListener('focus', onBack)
     document.addEventListener('visibilitychange', onBack)
@@ -367,7 +520,7 @@ function onKey(e: KeyboardEvent) {
   if (l) say({ text: `Undone: ${l}`, tone: 'info' })
 }
 function onBack() {
-  if (document.visibilityState === 'visible') void checkRemote()
+  if (document.visibilityState === 'visible') void look()
 }
 
 /** For tests: start over. */
@@ -375,5 +528,9 @@ export function _reset() {
   cur = null
   undo.clear()
   linked = false
+  autoNote = null
+  known = null
+  prevEvents = undefined
+  memMeta = null
   for (const k of Object.keys(sync)) delete sync[k]
 }

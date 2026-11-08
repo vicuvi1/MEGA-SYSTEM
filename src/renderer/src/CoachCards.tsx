@@ -169,11 +169,11 @@ export function PlanCard({ live = true, spotlight = false, expired = false, onCh
     <div className={`cf-card cf-plan t-plan live ${approved ? 'ok' : 'waiting'} ${spotlight ? 'spot' : ''} ${cheer ? 'cheer' : ''}`}>
       <CardHead icon="🗓" title={approved ? "Today's plan" : 'Your plan for today'} sub={[sum.blocks ? `${sum.blocks} block${sum.blocks === 1 ? '' : 's'} · ${fmtMinutes(sum.focusMin)} of focus` : '', sum.mustdos ? `${sum.mustdos} must-do${sum.mustdos === 1 ? '' : 's'}` : '', b.version > 1 ? `v${b.version}` : ''].filter(Boolean).join(' · ')} chip={approved ? '✓ Approved' : 'Waiting for you'} chipTone={approved ? 'ok' : 'wait'} />
       {head && <p className="cf-plan-head">{head}</p>}
-      <PlanShiftOffer state={data.state} late={data.late} onDone={(r) => (setData(r), onChange?.())} />
+      <PlanShiftOffer state={data.state} late={data.late} auto={data.prefs.autoReplan !== false} onDone={(r) => (setData(r), onChange?.())} />
       {p.why && <p className="plan-why">{p.why}</p>}
       <PlanTrack items={tl.items} now={tl.now} from={tl.from} to={tl.to} />
       {/* PE1: edit the plan right here (drag, resize, rename, pin, approve part of it); edits sync to Google and Todoist. */}
-      <PlanEditor state={data.state} water={data.prefs.water} />
+      <PlanEditor state={data.state} water={data.prefs.water} auto={data.prefs.autoReplan !== false} />
       {p.mustdos.length > 0 && (
         <div className="cf-plan-must">
           <small>Must-dos</small>

@@ -1,9 +1,13 @@
 // The plan came back late: "You're starting at 10:00, shift the plan?" with
 // Shift / Keep. Shift moves the past blocks that weren't started into the time
 // left (fixed events stay; an approved plan's calendar blocks move too). Keep
-// hides the offer for this version of the plan (on this device).
+// hides the offer for this version of the plan (on this device). With "Re-plan
+// by itself" on, draft blocks move on their own: the offer shows only for late
+// approved blocks (the automatic re-plan never moves those).
 import { useState } from 'react'
 import type { RhythmPrefs, RhythmState } from '@core/rhythm'
+import { isApproved } from '@core/planEdit'
+import { lateBlocks } from '@core/planShift'
 import { life } from './bridge'
 import { useAction } from './ui'
 import './planAlso.css'
@@ -21,12 +25,13 @@ const kept = (id: string) => {
   }
 }
 
-export function PlanShiftOffer({ state, late, onDone }: { state: RhythmState; late?: number; onDone: (r: { state: RhythmState; prefs: RhythmPrefs }) => void }) {
+export function PlanShiftOffer({ state, late: lateAll, auto = false, onDone }: { state: RhythmState; late?: number; auto?: boolean; onDone: (r: { state: RhythmState; prefs: RhythmPrefs }) => void }) {
   const act = useAction()
   const [busy, setBusy] = useState(false)
   const b = state.briefing
   const id = b ? `${state.day}:${b.version}` : ''
   const [hidden, setHidden] = useState(() => kept(id))
+  const late = auto && b ? (lateAll ? lateBlocks({ day: b.plan.day, blocks: b.plan.blocks.filter((x) => isApproved(x, b.status)) }, nowHm()).length : 0) : lateAll
   if (!b || !late || hidden || kept(id) || !life.coach?.rhythm) return null
   const shift = async () => {
     setBusy(true)
