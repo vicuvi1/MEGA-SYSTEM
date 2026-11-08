@@ -194,3 +194,14 @@ entry that says why.
   trained today"; three builders work on the Body tabs in parallel.
 - **Rules out:** a second protein or water counter on Body, a rest-day label computed per card, or
   tab contents written inline in `pages/Body.tsx`.
+
+### Island reminders may play sound without a click; eye breaks on by default (2026-11-08)
+- **Decision:** the island window runs with `autoplayPolicy: 'no-user-gesture-required'`. Body
+  reminders (water, eye break, move break, screen break) open as the full card in every mode and play
+  their own sound once, decided by `reminderPlan` (`core/islandReminderSound.ts`) after the usual gates.
+  Eye breaks are on by default; a saved "Peek for → Eye breaks" off from before `PEEK_FOR_V` 2 is read
+  as on once, and a choice saved after that is kept.
+- **Why:** the owner got no real sound and only faint lines for eye and water reminders. In Calm every
+  click passes through the island, so Chromium never unlocked its audio; eye breaks were off twice.
+- **Rules out:** relying on a user gesture for island audio; playing a reminder sound when the card
+  waits as a dot, in a call, focus, class, quiet hours or after bed; ringing the same card twice.

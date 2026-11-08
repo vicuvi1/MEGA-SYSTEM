@@ -5,6 +5,7 @@
 // core/sounds.ts; nothing here is a file, everything is synthesized.
 import { DEFAULT_SOUND_PREFS, BED_LOWPASS, HAPTICS, SOUND_CATEGORY, bedSamples, cleanSoundPrefs, createDebounce, remindSound, soundBlock, soundLength, themed, themeVoices, type BedKind, type PlayCheck, type SoundCategory, type SoundName, type SoundPrefs, type Voice } from '@core/sounds'
 import { DEFAULT_NOTIF, getUiPrefs } from './uiPrefs'
+import { BODY_REMINDER_SOUND, reminderGain, type BodyReminder } from '@core/islandReminderSound'
 import { MOMENT_CATEGORY, momentForNotif, momentRecipe, pickFor, type MomentId, type MomentSound } from '@core/soundMoments'
 
 type Ctx = AudioContext
@@ -169,6 +170,8 @@ export interface PlayOpts {
   gain?: number
   /** Theme to use instead of yours (the theme picker's preview). */
   theme?: SoundPrefs['theme']
+  /** Loudness above 1 (the island's body reminders, core/islandReminderSound.ts reminderGain); the limiter keeps it clean. */
+  loud?: number
 }
 
 /** Plays one of the app's sounds if it may (SO3), with its phone buzz (SO9). */
@@ -192,7 +195,8 @@ export function play(name: SoundName, opts: PlayOpts = {}): void {
   if (!e) return
   const theme = opts.theme ?? prefs.theme
   const voices = pick === 'own' ? themed(name, theme, opts.step ?? 0) : themeVoices(momentRecipe(pick), theme)
-  schedule(e, voices, cat, opts.gain == null ? 1 : Math.max(0, Math.min(1, opts.gain)), 0)
+  const extra = opts.loud != null ? Math.max(0, Math.min(3, opts.loud)) : opts.gain == null ? 1 : Math.max(0, Math.min(1, opts.gain))
+  schedule(e, voices, cat, extra, 0)
 }
 
 /** Turns notes into sound on a bus, at `extra` loudness, leaning left/right by `pan`. */
@@ -289,6 +293,19 @@ export function playVoices(voices: Voice[], cat: SoundCategory, opts: { gain?: n
 
 /** The island's reminders (water, stretch, eyes, bed, a meeting soon…), at the island's own volume. */
 export const playReminder = (kind: string, volume = 0.7, meeting = false) => volume > 0 && play(remindSound(kind, meeting), { gain: volume, ownSwitch: true })
+
+/**
+ * A body reminder's own clear sound (water, eye break, move break, screen
+ * break) at the "Island reminders" volume (0–100). Its switches were checked
+ * by reminderPlan; quiet hours, a meeting and a muted system still stop it
+ * here (except the Settings test button, `preview`).
+ */
+export function playBodyReminder(kind: BodyReminder, volume: number, opts: { preview?: boolean } = {}): void {
+  if (!(volume > 0)) return
+  play(BODY_REMINDER_SOUND[kind], { loud: reminderGain(volume), ownSwitch: true, preview: opts.preview })
+}
+/** Why the kit would keep an alert sound quiet right now (quiet hours, a meeting, the system muted), or null. */
+export const alertBlock = () => soundBlock('alerts', playCheck(), { ownSwitch: true })
 
 /** Settings' ▶ for one moment: its sound (or `sound` to try another), in quiet hours too. */
 export function previewMoment(id: MomentId, sound?: MomentSound): void {
@@ -398,7 +415,7 @@ export const soundNotify = (kind?: string) => play(notifSound(kind), { ownSwitch
 /** A notification's own sound by its kind (Ben, a reminder, water, a meeting, bedtime…). */
 function notifSound(kind?: string): SoundName {
   if (!kind) return 'notify'
-  const m: Record<MomentId, SoundName> = { ben: 'ben', reminder: 'notify', water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', timer: 'focusEnd', meeting: 'remindMeeting', done: 'success', points: 'coin', bed: 'remindBed', error: 'error', praise: 'remindPraise', drift: 'remindDrift', checkin: 'remindCheckin', push1: 'remindPush1', push2: 'remindPush2', push3: 'remindPush3' }
+  const m: Record<MomentId, SoundName> = { ben: 'ben', reminder: 'notify', water: 'remindWater', move: 'remindMove', eyes: 'remindEyes', screen: 'remindScreen', timer: 'focusEnd', meeting: 'remindMeeting', done: 'success', points: 'coin', bed: 'remindBed', error: 'error', praise: 'remindPraise', drift: 'remindDrift', checkin: 'remindCheckin', push1: 'remindPush1', push2: 'remindPush2', push3: 'remindPush3' }
   return m[momentForNotif(kind)]
 }
 /** Quiet everything now (the context wakes again on the next sound). */

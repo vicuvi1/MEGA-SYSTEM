@@ -6,7 +6,8 @@ import { SOUND_CATEGORIES, SOUND_THEMES, type BedKind, type SoundCategory, type 
 import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { Icon } from '../Icon'
 import { useUiPrefs } from '../uiPrefs'
-import { bedPlaying, play, previewMoment, setBedVolume, soundPrefs, startBed, stopBed, whyQuiet } from '../soundKit'
+import { bedPlaying, play, playBodyReminder, previewMoment, setBedVolume, soundPrefs, startBed, stopBed, whyQuiet } from '../soundKit'
+import { BODY_REMINDERS, BODY_REMINDER_LABEL } from '@core/islandReminderSound'
 import { ISLAND_SOUND_LABEL, ISLAND_SOUND_MODES, type IslandSoundMode, type IslandSoundName } from '@core/islandSound'
 import { soundCheck } from '../islandSounds'
 import { DEFAULT_MOMENTS, MOMENTS, MOMENT_SOUNDS, type MomentId, type MomentSound } from '@core/soundMoments'
@@ -141,6 +142,22 @@ export function SoundSection() {
           </Row>
         </>
       )}
+      <div className="sx-moments" role="group" aria-label="Island reminders" data-reminder-sounds>
+        <h3>Island reminders</h3>
+        <p className="hint">Water, eye breaks, move breaks and screen breaks open as a card on the desktop island with their own sound. Never in a call, a focus timer, a class, quiet hours or after bed. Works even with Sounds off above.</p>
+        {BODY_REMINDERS.map((k) => (
+          <div key={k} className="sx-moment" data-reminder={k}>
+            <span className="sx-moment-name">{BODY_REMINDER_LABEL[k]}</span>
+            <Switch label={`Island reminder sound: ${BODY_REMINDER_LABEL[k]}`} on={p.reminders.on[k]} onChange={(v) => set({ reminders: { ...p.reminders, on: { ...p.reminders.on, [k]: v } } })} />
+            <button type="button" className="btn small ghost sx-play" aria-label={`Test the ${BODY_REMINDER_LABEL[k]} sound`} disabled={!p.reminders.on[k] || p.reminders.volume <= 0} onClick={() => playBodyReminder(k, p.reminders.volume, { preview: true })}>
+              ▶
+            </button>
+          </div>
+        ))}
+        <Row title="Reminder volume" hint={`${p.reminders.volume}%`}>
+          <input className="sx-range" type="range" min={0} max={100} step={5} value={p.reminders.volume} onChange={(e) => set({ reminders: { ...p.reminders, volume: Number(e.target.value) } })} onPointerUp={() => playBodyReminder('water', soundPrefs().reminders.volume, { preview: true })} aria-label="Island reminder volume" />
+        </Row>
+      </div>
       <Row title="Phone buzz" hint="A short buzz with habits, must-dos and errors (phones only)">
         <Switch label="Phone buzz" on={p.haptics} onChange={(v) => set({ haptics: v })} />
       </Row>

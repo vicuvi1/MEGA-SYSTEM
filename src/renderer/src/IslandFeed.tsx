@@ -43,6 +43,7 @@ import { useLive } from './live'
 import { logIsland } from './islandLog'
 import { gamingLineNow, gamingTick } from './gamingFeed'
 import { alivePrefs, aliveAct, aliveQuiet, aliveTick, islandModeNow, presetOfferAlert } from './islandAliveFeed'
+import { EYE_BREAKS_DEFAULT, hushOf } from '@core/islandReminderSound'
 import { dayState, dayStory, glance, mirrorNew, next3h, pointsFx, top3Of, voiceReceipt, weatherMoment, type MirrorItem } from '@core/islandAlive'
 import { snapshotKey } from '@core/islandClicks'
 import { startIslandThemeSync } from './islandTheme'
@@ -477,7 +478,7 @@ export function IslandFeed() {
     }
     // Island 2: the movement ring and the challenge; what the healthy-day chain needs.
     const callOn = callNow(blocks.current.list, now)
-    const nudges = await nudgeTick({ now, busy: !!running || !!callOn, call: !!callOn, idleSec, activeSince, running: focusRun, blockEnd: cur && !cur.call ? cur.end : null, meetingEnd: callOn?.end ?? (next?.call && next.start - now < 15 * 60_000 ? next.end : null), dismissed, eyeBreaks: get<boolean>(EYES, false), doing: doingForBreaks(now) }).catch(() => null)
+    const nudges = await nudgeTick({ now, busy: !!running || !!callOn, call: !!callOn, idleSec, activeSince, running: focusRun, blockEnd: cur && !cur.call ? cur.end : null, meetingEnd: callOn?.end ?? (next?.call && next.start - now < 15 * 60_000 ? next.end : null), dismissed, eyeBreaks: get<boolean>(EYES, EYE_BREAKS_DEFAULT), doing: doingForBreaks(now) }).catch(() => null)
     const sleepLogs = sleep?.recentLogs ?? []
     if (now - fitCache.at > 60_000) {
       fitCache.at = now
@@ -540,7 +541,7 @@ export function IslandFeed() {
           exercises: nudges.exercises,
           coins: nudges.coins,
           doing: doingForBreaks(now),
-          eyeBreaks: get<boolean>(EYES, false),
+          eyeBreaks: get<boolean>(EYES, EYE_BREAKS_DEFAULT),
           running: focusRun,
           moodSlots: nudges.moodSlots,
           lowMood: nudges.lowMood,
@@ -787,7 +788,9 @@ export function IslandFeed() {
       goals: await goalsForIsland(now),
       study: await studyForIsland(now),
       autoFocus: get<boolean>(AUTO, false),
-      eyeBreaks: get<boolean>(EYES, false),
+      eyeBreaks: get<boolean>(EYES, EYE_BREAKS_DEFAULT),
+      // Reminder sounds stay silent in a call, a focus timer, a class and after bed (the card may still wait).
+      hush: hushOf(govCtx),
       tasks: todos.todoist,
       tasksAt: todoCache.okAt || undefined,
       tasksStale: todoCache.failed,

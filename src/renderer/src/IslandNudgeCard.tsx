@@ -9,7 +9,6 @@ import { breathAt, breathSteps, stepCount, type MovePill, type Nudge, type Nudge
 import type { IslandAction, IslandAlert } from '@core/islandModel'
 import { tp } from './islandTap'
 import { barFill, reducedMotion } from './motionKit'
-import { playReminder } from './soundKit'
 import { DRILL, DRILL_SECONDS, drillAt } from '@core/deskMobility'
 import { stillFrame } from '@core/sportFigure'
 import { FigureSvg, useClock } from './DrillFigure'
@@ -225,16 +224,9 @@ function Checklist({ a, n: d, tap }: { a: IslandAlert; n: Extract<Nudge, { type:
  * The card's body for an alert with a nudge (under its title and text).
  * `onRun` starts a countdown or a breathing minute on the pill.
  */
-export function IslandNudgeCard({ a, tap, onRun, sound, volume }: { a: IslandAlert; tap: Tap; onRun: (r: NudgeRun) => void; sound: boolean; volume: number }) {
+// The card's own sound is played once by the island when it drops down (core/islandReminderSound.ts), not here.
+export function IslandNudgeCard({ a, tap, onRun }: { a: IslandAlert; tap: Tap; onRun: (r: NudgeRun) => void; sound?: boolean; volume?: number }) {
   const d = a.nudge!
-  // IN31: the third step of a long sit plays a sound once (with sounds on).
-  const rang = useRef<string | null>(null)
-  useEffect(() => {
-    if (d.type === 'move' && d.level === 'sound' && sound && rang.current !== a.id) {
-      rang.current = a.id
-      playReminder('move', volume)
-    }
-  }, [a.id]) // eslint-disable-line react-hooks/exhaustive-deps
   const row = (btns: [string, string, IslandAction | (() => void), boolean?][]) => (
     <div className="di-actions nd-row">
       {btns.map(([k, label, act, primary]) => (

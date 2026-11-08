@@ -6,8 +6,8 @@ import { cleanSoundPrefs, DEFAULT_SOUND_PREFS, remindSound, SOUND_NAMES, soundLe
 import { islandRecipe, islandVoices, ISLAND_PICK_GAIN } from './islandSound'
 
 describe('which sound for what', () => {
-  it('has the eleven things, each with its own default sound', () => {
-    expect(MOMENTS.map((m) => m.id)).toEqual(['ben', 'reminder', 'water', 'move', 'eyes', 'timer', 'meeting', 'done', 'points', 'bed', 'error', 'praise', 'drift', 'checkin', 'push1', 'push2', 'push3'])
+  it('has each thing, each with its own default sound', () => {
+    expect(MOMENTS.map((m) => m.id)).toEqual(['ben', 'reminder', 'water', 'move', 'eyes', 'screen', 'timer', 'meeting', 'done', 'points', 'bed', 'error', 'praise', 'drift', 'checkin', 'push1', 'push2', 'push3'])
     const defaults = Object.values(DEFAULT_MOMENTS)
     expect(new Set(defaults).size).toBe(defaults.length)
     expect(defaults).not.toContain('none')

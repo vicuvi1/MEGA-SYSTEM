@@ -5,13 +5,16 @@ import { useEffect, useState } from 'react'
 import { betterHour, learnedLevel, NUDGE_KINDS, NUDGE_LABEL, type NudgeKind, type NudgePerson, type NudgePrefs, type NudgeStore } from '@core/islandNudges'
 import { nudgePrefs, onNudges, resetNudgeLearning, setNudgePrefs } from './islandNudgesFeed'
 import { Row, Segmented, Switch } from './settingsUi'
+import { EYE_BREAKS_DEFAULT } from '@core/islandReminderSound'
 
 const EYES = 'ls.eyeBreaks'
+// On unless you turned them off (nothing saved: on).
 const eyesOn = () => {
   try {
-    return JSON.parse(localStorage.getItem(EYES) || 'false') === true
+    const v = localStorage.getItem(EYES)
+    return v == null ? EYE_BREAKS_DEFAULT : JSON.parse(v) === true
   } catch {
-    return false
+    return EYE_BREAKS_DEFAULT
   }
 }
 
