@@ -6,6 +6,8 @@
 import { lifeFitView, readLifeFit, saveLifeFit, saveTonight, type LifeFitView } from './web/lifeFitStore'
 import { answerPushIn, applyMark, claimPush, noteMark, queueOut, readPushLog, setShutdownItems, writePcSeen } from './web/benPushStore'
 import { rescueAnswer, rescueCheck, rescueMaybe } from './web/planShared'
+import { foodFacts, foodPushAct } from './web/bots/foodBot'
+import { decideFoodNudge, foodNudgeDue } from '@core/foodBen'
 import type { CalEvent } from '@core/dayTime'
 import type { ItemMark, OutItem, PcSeen, PushOp, ShutdownItem } from '@core/benPushes'
 import { pushStyle, shiftReply, type ShiftMode } from '@core/lifeFit'
@@ -957,6 +959,28 @@ export function createTursoWebBridge(): Bridge {
           // A cheap read first: only a late block makes it look further (and write the offer).
           if (!(await svc.read((s) => rescueMaybe(s.db, s, new Date(o.now))))) return null
           return svc.write((s) => rescueCheck(s.db, s, { now: new Date(o.now), events: o.events, on: o.on, running: o.running, meeting: o.meeting, quiet: o.quiet, here: true }))
+        },
+        // Food (core/foodBen.ts, web/bots/foodBot.ts): decided on the island's look like the other pushes, one key a day.
+        foodCheck: async (o: { now: number; meeting: boolean; quiet: boolean }) => {
+          if (o.meeting || o.quiet) return null
+          const svc = await svcP
+          return svc.read((s) => {
+            const now = new Date(o.now)
+            const bed = (s.sleep.bedtimeTarget?.() as string | undefined) ?? null
+            if (!foodNudgeDue(now, bed)) return null
+            const day = s.wallet.today(now)
+            return decideFoodNudge({ ...foodFacts(s.db, now), now, day, bed, log: readPushLog(s.db, day), here: true, meeting: o.meeting, quiet: o.quiet })
+          })
+        },
+        food: async (op: 'yesterday' | 'mute', key: string) => {
+          const svc = await svcP
+          const line = await svc.write((s) => {
+            answerPushIn(s.db, s.wallet.today(), key, op, Date.now())
+            return foodPushAct(s.db, op)
+          })
+          void syncNow().catch(() => null)
+          window.dispatchEvent(new Event('life-external-changed'))
+          return line
         },
         rescue: async (op: 'accept' | 'later' | 'skip' | 'undo', key: string) => {
           const svc = await svcP

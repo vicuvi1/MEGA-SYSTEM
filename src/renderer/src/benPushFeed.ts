@@ -17,13 +17,14 @@ import { queueStall } from './boost/boostFeed'
 import type { LifeFitView } from './web/lifeFitStore'
 import type { CalEvent } from '@core/dayTime'
 import { isRescueKey } from '@core/planRescue'
+import { FOOD_PROMPT } from '@core/foodPrompt'
 
 let seen: PcSeen | null = null
 let logCache: { at: number; day: string; log: PushLog | null } = { at: 0, day: '', log: null }
 let active: { alert: IslandAlert; key: string; until: number } | null = null
 let prefsCache: { at: number; mode: string; peekFor: Record<string, boolean> | null } = { at: 0, mode: 'calm', peekFor: null }
 
-const TTL: Record<PushOut['type'], number> = { checkin: 10, brief: 45, shutdown: 30, weekly: 30, drift: 10, workoutNote: 30, rescue: 15 }
+const TTL: Record<PushOut['type'], number> = { checkin: 10, brief: 45, shutdown: 30, weekly: 30, drift: 10, workoutNote: 30, rescue: 15, food: 30 }
 /** How long the "Rescue on · ↩ Undo" card stays after Accept. */
 const UNDO_CARD_MS = 2 * 60_000
 
@@ -152,7 +153,14 @@ export async function pushTick(o: PushIslandInput): Promise<IslandAlert | null> 
   // BD5: after a late shift the shutdown comes at the shift's end, not in the middle of it.
   const sdAt = shutdownFor(afterShiftPlan(o.fit, day, o.fit.bed), o.fit.bed, prefs)
   const sd = decideShutdown({ now: o.now, day, bed: sdAt.bed, prefs: sdAt.prefs, closed: o.dayClosed, bedLogged: o.bedLogged, done: o.done, open, levels, log, here: true })
-  return show(sd, async () => void (await life.coach!.pushes!.shutdown(open).catch(() => {})))
+  const sdA = await show(sd, async () => void (await life.coach!.pushes!.shutdown(open).catch(() => {})))
+  if (sdA) return sdA
+  // Food (core/foodBen.ts): the evening protein nudge or the dinner reminder, one a day.
+  if (life.coach.pushes.foodCheck) {
+    const f = await life.coach.pushes.foodCheck({ now: o.now, meeting: o.meeting, quiet: o.bedLogged }).catch(() => null)
+    return show(f)
+  }
+  return null
 }
 
 /** The brief already came today (anywhere): the PC coach's own "good morning" stays quiet. */
@@ -201,6 +209,13 @@ export async function pushAct(a: Extract<IslandAction, { kind: 'benPush' }>): Pr
     if (a.op === 'undo' && active?.key === `${a.key}:undo`) active = null
     return { said: line }
   }
+  // Food pushes: copy the prompt here; Same as yesterday and the mute are saved by the bridge.
+  if (a.op === 'prompt') {
+    await navigator.clipboard?.writeText(FOOD_PROMPT).catch(() => {})
+    await answer('prompt')
+    return { said: '📋 Prompt copied: paste it with a meal photo into any AI app, then paste the reply in Body → Food.' }
+  }
+  if ((a.op === 'yesterday' || a.op === 'mute') && p.food) return { said: await p.food(a.op, a.key) }
   switch (a.op) {
     case 'start': {
       const subject = (a.arg ?? 'Focus').slice(0, 40)

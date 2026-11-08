@@ -7,12 +7,15 @@
 import { addDays } from './dates'
 import { dur } from './benPlain'
 import { rangeOf } from './benQuick'
+import { asksFood } from './foodBen'
 
 export type Ask =
   | { kind: 'sleep'; from: string; to: string; label: string }
   | { kind: 'earned'; from: string; to: string; label: string }
   | { kind: 'habits' }
   | { kind: 'tasks' }
+  /** "What should I eat now?", "how much protein left", "ce sa mananc": the food log (core/foodBen.ts). */
+  | { kind: 'food' }
 
 const ADVICE = /\b(why|should|could|would|better|improve|tips?|help|fix|plan|how (do|can) i (get|sleep|earn|make)|more|less)\b/
 
@@ -21,6 +24,8 @@ export function askKind(text: string, today: string): Ask | null {
   const t = String(text ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
   if (!t || t.length > 90 || t.split(' ').length > 12) return null
   const q = t.replace(/[?!.…]+$/g, '').trim()
+  // Food: also in Romanian or Russian, so before the English question check.
+  if (asksFood(t)) return { kind: 'food' }
   // Logs and edits are not questions ("slept 7h", "earned 500 today").
   const asks = /^(how|what|whats|what's|show|tell|did|do|am|have|list|my|average)\b/.test(q) || t.endsWith('?')
   if (!asks) return null

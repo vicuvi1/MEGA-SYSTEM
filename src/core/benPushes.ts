@@ -206,7 +206,7 @@ export const channelFor = (here: boolean): Channel => (here ? 'island' : 'telegr
 
 // ---- the shared log: one key per push, across the island and Telegram ----
 
-export type PushOp = 'start' | 'later' | 'skip' | 'plan' | 'ok' | 'shutdown' | 'tomorrow' | 'drop' | 'keep' | 'back' | 'more5' | 'accept' | 'undo'
+export type PushOp = 'start' | 'later' | 'skip' | 'plan' | 'ok' | 'shutdown' | 'tomorrow' | 'drop' | 'keep' | 'back' | 'more5' | 'accept' | 'undo' | 'prompt' | 'yesterday' | 'mute'
 export type ItemMark = 'tomorrow' | 'drop' | 'keep'
 export interface PushRec {
   at: number
@@ -242,7 +242,7 @@ export interface PushLog {
 }
 export const PUSH_LOG_KEY = 'ben_pushes'
 
-const OPS: PushOp[] = ['start', 'later', 'skip', 'plan', 'ok', 'shutdown', 'tomorrow', 'drop', 'keep', 'back', 'more5', 'accept', 'undo']
+const OPS: PushOp[] = ['start', 'later', 'skip', 'plan', 'ok', 'shutdown', 'tomorrow', 'drop', 'keep', 'back', 'more5', 'accept', 'undo', 'prompt', 'yesterday', 'mute']
 const MARKS: ItemMark[] = ['tomorrow', 'drop', 'keep']
 export function cleanPushLog(raw: unknown, day: string): PushLog {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<PushLog>
@@ -295,7 +295,7 @@ export interface PushButton {
   arg?: string
   minutes?: number
 }
-export type PushType = 'checkin' | 'brief' | 'shutdown' | 'weekly' | 'drift' | 'workoutNote' | 'rescue'
+export type PushType = 'checkin' | 'brief' | 'shutdown' | 'weekly' | 'drift' | 'workoutNote' | 'rescue' | 'food'
 export interface PushOut {
   key: string
   type: PushType
@@ -603,6 +603,8 @@ export function pushTelegram(p: PushOut, startData?: (subject: string) => string
     if (b.op === 'start' && b.arg && startData) top.push({ text: b.label, callback_data: startData(b.arg) })
     else if (b.op === 'shutdown') continue
     else if (b.op === 'tomorrow' && b.arg === '*') top.push({ text: b.label, callback_data: 'bp|t|*' })
+    // Food pushes (core/foodBen.ts): the prompt, "Same as yesterday" and the mute are food buttons (web/bots/foodBot.ts).
+    else if (b.op === 'prompt' || b.op === 'yesterday' || b.op === 'mute') rows.push([{ text: b.label, callback_data: `fd|${b.op === 'prompt' ? 'p' : b.op === 'yesterday' ? 'y' : 'm'}|${p.key}`.slice(0, 64) }])
     else {
       const cb = pushCallback(b.op, p.key, b.arg)
       if (cb) top.push({ text: b.label, callback_data: cb })
@@ -634,7 +636,7 @@ export const toCard = (p: PushOut): PushCard => ({ type: p.type, key: p.key, tit
 export function pushCardOf(raw: unknown): PushCard | null {
   const o = raw as Partial<PushCard> | null
   if (!o || typeof o !== 'object' || typeof o.key !== 'string' || typeof o.title !== 'string' || !Array.isArray(o.lines)) return null
-  if (!['checkin', 'brief', 'shutdown', 'weekly', 'drift', 'workoutNote', 'rescue'].includes(o.type as string)) return null
+  if (!['checkin', 'brief', 'shutdown', 'weekly', 'drift', 'workoutNote', 'rescue', 'food'].includes(o.type as string)) return null
   return o as PushCard
 }
 

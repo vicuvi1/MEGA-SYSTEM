@@ -78,6 +78,8 @@ The owner found the coach too complicated ("I want back my push-ups and abs and 
 
 **For the Telegram / Ben builder** (pure or DB-level, no UI): `parseFoodReply(text)` (core/foodParse), `addFoodMeal(db, { items, name?, day?, type? }, source)`, `toggleFoodMeal(db, id, source)`, `foodDayTotals(db)` (`.line` is "Protein 92 / 150 g · 1,850 / 2,700 kcal today"), `whatNextNow(db).line`, `foodWeekNow(db).line` (weekly food report), `sportFoodLineNow(db)`, `foodTargetsNow(db)`, `FOOD_PROMPT` (all in `src/main/food.ts` unless noted). Pure versions: `dayLine`, `sportFoodLine`, `foodWeek`, `whatToEatNext`, `foodTargets`. Ready for later: items carry carbs and fat, meals carry a type and time; water and supplements already have their own body_log kinds (`water`, `supp:<id>`).
 
+**In Ben and on Telegram (2026-11-08):** paste the AI reply to Ben on Telegram (a preview with −/+25 g, Save / Edit grams / Cancel, Undo), `/food` for the prompt, "what should I eat now?" answered from the food log with no AI, one food push a day (the evening protein nudge or the dinner reminder, with Mute for 7 days), and a food part in the Sunday weekly message. Details in [ben.md](ben.md) ("Food in Ben and on Telegram"); code in `core/foodBen.ts` and `web/bots/foodBot.ts`. No points.
+
 Tests: `core/food.test.ts` (prompt, many messy replies, scaling, totals, one protein number, log caps, yesterday, stars, lean goals, what to eat, the week), `main/food.test.ts` (rows, no points, past day, lean default once, training day kcal, Sport line, the week). Smoke step "Food counter" (`FOOD_SHOTS=<dir>` for screenshots).
 
 ### Food counter extras (2026-11-08)

@@ -211,6 +211,7 @@ export const SETTINGS = {
   focus_boost: json<Record<string, unknown> | null>('Focus boost settings: the push ladder, stalling fixes, session goals, launch kits, the morning countdown, Dojo mode and win music (src/core/focusBoost.ts)', null),
   focus_log: json<Record<string, unknown> | null>('Focus boost log: each session\'s goal and Done / Half / Not, and why you stalled (src/core/focusBoost.ts)', null),
   ben_pushes: json<Record<string, unknown> | null>("Ben 2's pushes today: one key per check-in, brief, shutdown and drift word (shown on the island or sent on Telegram, and your answer), tonight's shutdown list with your marks, and drift words waiting for Telegram (src/core/benPushes.ts)", null),
+  food_ben: json<Record<string, unknown> | null>('Food counter on Telegram and in Ben: the meal preview waiting for Save (2 hours) and "Mute food nudges" until when (src/core/foodBen.ts)', null),
   ben_pc_seen: json<Record<string, unknown> | null>('whether you are at the PC (written by the desktop app when it changes, at most every 5 minutes): the island or Telegram for Ben\'s pushes', null),
   week_top3_ask: json<Record<string, unknown> | null>('Sunday "pick your top 3" on Telegram: the week, the chips offered and the ones tapped so far', null),
   // ---- sleep ----

@@ -4,6 +4,11 @@ Choices that a later session could easily undo by accident. Each entry gives the
 was made, and what it rules out. Newest entries go on top. Don't reverse one without writing a new
 entry that says why.
 
+### Food from Telegram is previewed first; one food push a day (2026-11-08)
+- **Decision:** a pasted AI reply on Telegram always becomes a preview (Save / Edit grams / Cancel) and is saved only through the food counter's own `addFoodMeal`, so it is the same data as Body → Food. Ben sends at most ONE food push a day (`food:` keys in `ben_pushes`): the evening protein nudge or the dinner reminder, on the one push channel, never in a meeting, quiet hours or after bed, with "Mute food nudges for 7 days". The Sunday food report rides in the weekly message. Food pays no points.
+- **Why:** an AI's guess saved without a look would put wrong numbers in the one protein number that the ring, the weekly report and "why it stalled" all read; the owner wants food help, not a nag.
+- **Rules out:** saving a pasted reply directly, a second food store or Telegram-only meal format, more than one food push a day, food pushes that ignore the push rules, points for logging food.
+
 ### Generated bundles are marked generated (2026-11-07)
 - **Decision:** `api/_bot/bot.mjs` and `sportkit.js` are still committed, but `.gitattributes` marks them `linguist-generated -diff`.
 - **Why:** their diffs flooded reviews and AI context. Rebuild them, never hand-merge them.
