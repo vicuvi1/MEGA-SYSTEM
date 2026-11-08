@@ -350,6 +350,11 @@ html.calm [class*='loading'] {
 .ta-meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 11.5px; color: var(--muted); align-items: center; }
 .ta-due.late { color: var(--red); }
 .ta-due.today { color: var(--accent-text); }
+/* Todoist save state on a task row: saving… / ✓ saved / couldn't save + Retry. */
+.ta-save { font-size: 11px; color: var(--muted); }
+.ta-save[data-state='saved'] { color: var(--green, var(--accent-text)); }
+.ta-save[data-state='failed'] { color: var(--red); }
+.ta-retry { background: none; border: 0; padding: 0; color: inherit; font: inherit; text-decoration: underline; cursor: pointer; }
 .ta-dl { color: var(--orange); }
 .ta-chip { color: var(--c); border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); border-radius: 999px; padding: 0 7px; }
 .ta-actions { display: flex; gap: 2px; opacity: 0; transition: opacity 0.12s; }

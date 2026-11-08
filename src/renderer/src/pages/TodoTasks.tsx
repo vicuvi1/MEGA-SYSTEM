@@ -7,7 +7,8 @@
 // under the mouse or keyboard focus). Every change goes straight to Todoist.
 import { calendarDay, dayLabel } from '@core/dates'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AREA_COLORS, defaultAreaColor, plainName, sortTasks, type Area, type TodoTask } from '@core/todoist'
+import { AREA_COLORS, defaultAreaColor, fromApiPriority, plainName, sortTasks, toApiPriority, type Area, type TodoTask } from '@core/todoist'
+import { applyPatch, resolveDue, type EditStatus, type TaskPatch } from '@core/todoSync'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { EmptyState, Skeleton } from '../blocks'
@@ -50,15 +51,23 @@ function useTodoistData() {
   const [data, setData] = useState<{ tasks: TodoTask[]; areas: Area[] } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [colors, setColors] = useState<Record<string, string>>({})
+  // Reads can overlap (Sync, the live check, after an edit): only the newest one is shown,
+  // and a failed read keeps the list you have instead of hiding it.
+  const seq = useRef(0)
+  const has = useRef(false)
   const load = useCallback(async () => {
     if (!life.todoist?.everything) return setError('Tasks need Todoist on the website.')
+    const mine = ++seq.current
     try {
       const connected = (await life.todoist.status()).connected
       if (!connected) return setError('Connect Todoist: add TODOIST_TOKEN in Vercel.')
-      setData(await life.todoist.everything())
+      const next = await life.todoist.everything()
+      if (mine !== seq.current) return
+      has.current = true
+      setData(next)
       setError(null)
     } catch (e) {
-      setError((e as Error).message)
+      if (mine === seq.current && !has.current) setError((e as Error).message)
     }
     life.todoist.colors?.().then(setColors).catch(() => {})
   }, [])
@@ -69,10 +78,35 @@ function useTodoistData() {
   return { data, setData, error, load, colors, setColors }
 }
 
+/** Per task: saving… / ✓ saved / couldn't save (from the bridge's edit queue). */
+function useTodoPending() {
+  const [st, setSt] = useState<Record<string, EditStatus>>({})
+  useEffect(() => {
+    let off = false
+    const read = () => void life.todoist?.pending?.().then((v) => !off && setSt(v)).catch(() => {})
+    read()
+    // "✓ saved" fades after a few seconds: read again then.
+    let t: ReturnType<typeof setTimeout> | undefined
+    const on = () => {
+      read()
+      clearTimeout(t)
+      t = setTimeout(read, 4200)
+    }
+    window.addEventListener('life-todoist-pending', on)
+    return () => {
+      off = true
+      clearTimeout(t)
+      window.removeEventListener('life-todoist-pending', on)
+    }
+  }, [])
+  return st
+}
+
 export function TodoTasks({ onWallet }: { onWallet: () => void }) {
   const act = useAction()
   const toast = useToast()
   const { data, setData, error, load, colors, setColors } = useTodoistData()
+  const pending = useTodoPending()
   const [view, setView] = useState<View>('areas')
   const [q, setQ] = useState('')
   const [prio, setPrio] = useState<number | null>(null)
@@ -145,7 +179,21 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
   }
   const moveTo = (t: TodoTask, x: Area) =>
     change(() => life.todoist!.move!(t.id, x.key), (ts) => ts.map((y) => (y.id === t.id ? { ...y, sectionId: x.kind === 'section' ? x.id : null, projectId: x.projectId } : y)), `Moved to ${plainName(x.name)}`)
-  const setPriority = (t: TodoTask, p: number) => change(() => life.todoist!.update!(t.id, { priority: p }), (ts) => ts.map((x) => (x.id === t.id ? { ...x, priority: p } : x)), `${P_LABEL[p]}`)
+  // An edit to a task (text, priority, date): shown at once, sent to Todoist (only what changed), and
+  // kept on the row until Todoist confirms. A failed save stays with "Couldn't save to Todoist. Retry".
+  const edit = async (t: TodoTask, patch: TaskPatch, ok?: string) => {
+    const want = patch.due !== undefined ? { ...patch, due: resolveDue(patch.due) } : patch
+    setData((d) => (d ? { ...d, tasks: d.tasks.map((x) => (x.id === t.id ? applyPatch(x, want) : x)) } : d))
+    try {
+      await life.todoist!.update!(t.id, want)
+      if (ok) toast(ok, 'good')
+    } catch (e) {
+      const st = await life.todoist?.pending?.().catch(() => null)
+      if (st?.[t.id]?.state !== 'failed') toast((e as Error).message, 'bad')
+    }
+    void load()
+  }
+  const setPriority = (t: TodoTask, p: number) => edit(t, { priority: p }, `${P_LABEL[p]}`)
 
   // Shortcuts (not while typing): n, /, and e · 1–4 · x on the task under the pointer.
   // Swipe right on a task to complete it (phone).
@@ -179,7 +227,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
       setEditing(t.id)
     } else if (/^[1-4]$/.test(e.key)) {
       e.preventDefault()
-      void setPriority(t, 5 - Number(e.key))
+      void setPriority(t, toApiPriority(Number(e.key)))
     } else if (e.key === 'x') {
       e.preventDefault()
       void complete(t)
@@ -219,6 +267,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
     const a = areaByKey.get(areaOf(t))
     const due = dueLabel(t, today)
     const open = menu?.id === t.id ? menu.kind : null
+    const sync = pending[t.id]
     return (
       <li
         key={t.id}
@@ -244,7 +293,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
               onBlur={(e) => {
                 setEditing(null)
                 const v = e.target.value.trim()
-                if (v && v !== t.content) void change(() => life.todoist!.update!(t.id, { content: v }), (ts) => ts.map((x) => (x.id === t.id ? { ...x, content: v } : x)), 'Saved')
+                if (v && v !== t.content) void edit(t, { content: v })
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
@@ -260,7 +309,17 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
             {due && <span className={`ta-due ${due.cls}`}>{due.text}</span>}
             {t.recurring && <span title="Repeats">↻</span>}
             {t.deadline && <span className="ta-dl" title="Deadline">⚑ {t.deadline.slice(8)}.{t.deadline.slice(5, 7)}</span>}
-            {t.priority > 1 && <span className="ta-flag" style={{ color: P_COLOR[t.priority] }}>⚑ P{5 - t.priority}</span>}
+            {t.priority > 1 && <span className="ta-flag" style={{ color: P_COLOR[t.priority] }}>⚑ P{fromApiPriority(t.priority)}</span>}
+            {sync?.state === 'saving' && <span className="ta-save" data-state="saving">saving…</span>}
+            {sync?.state === 'saved' && <span className="ta-save" data-state="saved">✓ saved</span>}
+            {sync?.state === 'failed' && (
+              <span className="ta-save" data-state="failed" title={sync.error}>
+                ⚠ Couldn't save to Todoist.{' '}
+                <button type="button" className="ta-retry" onClick={() => void life.todoist?.retry?.(t.id).then(() => load(), () => {})}>
+                  Retry
+                </button>
+              </span>
+            )}
             {showArea && a && (
               <span className="ta-chip" style={{ ['--c' as string]: color(a) }}>
                 {plainName(a.name)}
@@ -290,7 +349,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
           <div className="ta-pop">
             {[4, 3, 2, 1].map((p) => (
               <button key={p} className={`ta-pop-item ${t.priority === p ? 'on' : ''}`} onClick={() => { setMenu(null); void setPriority(t, p) }}>
-                <span style={{ color: P_COLOR[p] }}>⚑</span> {P_LABEL[p]} <kbd>{5 - p}</kbd>
+                <span style={{ color: P_COLOR[p] }}>⚑</span> {P_LABEL[p]} <kbd>{fromApiPriority(p)}</kbd>
               </button>
             ))}
           </div>
@@ -303,7 +362,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
               ['Next week', 'next monday'],
               ['No date', 'no date']
             ].map(([label, val]) => (
-              <button key={val} className="ta-pop-item" onClick={() => { setMenu(null); void change(() => life.todoist!.update!(t.id, { due: val }), (ts) => ts, `Moved to ${label.toLowerCase()}`) }}>
+              <button key={val} className="ta-pop-item" onClick={() => { setMenu(null); void edit(t, { due: val }, `Moved to ${label.toLowerCase()}`) }}>
                 {label}
               </button>
             ))}
@@ -314,7 +373,7 @@ export function TodoTasks({ onWallet }: { onWallet: () => void }) {
                 const v = String(new FormData(e.currentTarget).get('d') || '').trim()
                 if (!v) return
                 setMenu(null)
-                void change(() => life.todoist!.update!(t.id, { due: v }), (ts) => ts, 'Date set')
+                void edit(t, { due: v }, 'Date set')
               }}
             >
               <input name="d" placeholder="friday 18:00, 12 nov…" autoFocus />

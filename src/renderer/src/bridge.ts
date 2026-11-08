@@ -204,7 +204,12 @@ export type Bridge = LifeApi & {
     everything?(): Promise<{ tasks: TodoTask[]; areas: Area[] }>
     /** Suggested fixes for your Todoist (AI, else duplicates and long-overdue tasks), to approve. */
     cleanup?(today: string): Promise<{ changes: CleanChange[]; ai: boolean; error?: string }>
+    /** Sends only what changed; resolves once Todoist confirms. A failed save waits (and is retried) and this throws. */
     update?(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[]; duration?: number | null }): Promise<void>
+    /** Edits on their way to Todoist, per task id: saving / failed (with why) / saved (a few seconds). */
+    pending?(): Promise<Record<string, import('@core/todoSync').EditStatus>>
+    /** Send a failed edit again now. */
+    retry?(id: string): Promise<void>
     /** Your own order of today's tasks (ids), synced. */
     order?(): Promise<string[]>
     setOrder?(ids: string[]): Promise<void>

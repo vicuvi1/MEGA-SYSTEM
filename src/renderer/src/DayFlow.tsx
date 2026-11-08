@@ -10,7 +10,7 @@ import { capture } from './capture'
 import { nowActions, type NowAction } from '@core/nextAction'
 import { decideNow, type DoNow } from '@core/doNow'
 import { publishNow } from './nowStore'
-import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, plainName, sortToday, whenText, type Area, type TodoTask } from '@core/todoist'
+import { TODAY_LABEL, areaKey, deadlineRadar, defaultAreaColor, isStarred, plainName, sortToday, toApiPriority, whenText, type Area, type TodoTask } from '@core/todoist'
 import type { FocusTask } from '@shared/api'
 import { life } from './bridge'
 import { Icon } from './Icon'
@@ -602,7 +602,7 @@ export function DayFlow(props: DayFlowProps) {
     if (!/^[1-4]$/.test(e.key) || !hotRef.current) return
     const t = (todo ?? []).find((x) => x.id === hotRef.current)
     if (!t) return
-    const p = 5 - Number(e.key)
+    const p = toApiPriority(Number(e.key))
     void patchTask(t, { priority: p }, { priority: p }, `P${e.key}`)
   }
   useEffect(() => {

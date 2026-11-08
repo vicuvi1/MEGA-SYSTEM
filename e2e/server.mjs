@@ -580,7 +580,19 @@ const todo = (() => {
     if (b.op === 'update' && x) {
       if (b.due) [x.due, x.dueTime] = b.due === 'no date' ? [null, null] : [b.due.slice(0, 10), b.due.slice(11, 16) || null]
       if (b.duration !== undefined) x.duration = b.duration
-      return send({ ok: true })
+      if (b.priority) x.priority = b.priority
+      if (b.content) x.content = b.content
+      if (Array.isArray(b.labels)) x.labels = b.labels
+      x.writes = [...(x.writes || []), Object.keys(b).filter((k) => k !== 'op' && k !== 'id')]
+      // Like Todoist: the answer is the task as it now is.
+      return send({ ok: true, task: x })
+    }
+    // A change made in Todoist itself (the phone): the smoke test changes a task, then presses Sync.
+    if (b.op === 'testEdit' && x) {
+      if (b.priority) x.priority = b.priority
+      if (b.content) x.content = b.content
+      changed++
+      return send({ ok: true, task: x })
     }
     if (b.op === 'close' && x) return ((x.done = true), send({ ok: true }))
     if (b.op === 'peek') return send(tasks)

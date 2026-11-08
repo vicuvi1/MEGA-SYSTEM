@@ -8,6 +8,8 @@ const V1 = 'https://api.todoist.com/api/v1'
 const V2 = 'https://api.todoist.com/rest/v2'
 const SYNC = 'https://api.todoist.com/sync/v9'
 
+type TaskPatch = { content?: string; priority?: number; due?: string; description?: string; labels?: string[]; duration?: number | null }
+
 /** Optional: a model that picks an area when the words don't (the server passes Gemini). */
 export type AreaPicker = (text: string, areaNames: string[]) => Promise<string | null>
 
@@ -131,6 +133,37 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
     return name ? (choices.find((a) => plainName(a.name).toLowerCase() === name.trim().toLowerCase()) ?? null) : null
   }
 
+  /**
+   * Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or
+   * note. Resolves with the task as Todoist now holds it (null when Todoist
+   * only says "ok"), so the app shows the confirmed value.
+   */
+const updateTask = async (id: string, patch: TaskPatch): Promise<TodoTask | null> => {
+    const body: any = {}
+    if (patch.content != null) body.content = patch.content
+    if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)))
+    if (patch.due != null) {
+      const due = patch.due.trim()
+      // A plain date is sent as a date (the app already turned "today" into your own date).
+      if (/^\d{4}-\d{2}-\d{2}$/.test(due)) body.due_date = due
+      else body.due_string = due || 'no date'
+    }
+    if (patch.description != null) body.description = patch.description
+    if (Array.isArray(patch.labels)) body.labels = patch.labels.map(String).slice(0, 20)
+    // How long it takes (minutes); 0 clears it.
+    if (patch.duration !== undefined) {
+      if (patch.duration && patch.duration > 0) {
+        body.duration = Math.min(1440, Math.round(patch.duration))
+        body.duration_unit = 'minute'
+      } else body.duration = null
+    }
+    const t = await either(
+      () => call(`${V1}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) }),
+      () => call(`${V2}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) })
+    )
+    return t && typeof t === 'object' && t.id != null ? toTask(t, new Map()) : null
+  }
+
   return {
     /** Every open task and your areas (the Tasks page). */
     async everything(): Promise<{ tasks: TodoTask[]; areas: Area[] }> {
@@ -153,25 +186,10 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
       })
       return { token: String(j?.sync_token ?? ''), changed: j?.full_sync ? 0 : Array.isArray(j?.items) ? j.items.length : 0 }
     },
-    /** Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or note. */
-    async update(id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[]; duration?: number | null }): Promise<void> {
-      const body: any = {}
-      if (patch.content != null) body.content = patch.content
-      if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)))
-      if (patch.due != null) body.due_string = patch.due.trim() || 'no date'
-      if (patch.description != null) body.description = patch.description
-      if (Array.isArray(patch.labels)) body.labels = patch.labels.map(String).slice(0, 20)
-      // How long it takes (minutes); 0 clears it.
-      if (patch.duration !== undefined) {
-        if (patch.duration && patch.duration > 0) {
-          body.duration = Math.min(1440, Math.round(patch.duration))
-          body.duration_unit = 'minute'
-        } else body.duration = null
-      }
-      await either(
-        () => call(`${V1}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) }),
-        () => call(`${V2}/tasks/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify(body) })
-      )
+    updateTask,
+    /** The same as updateTask, for callers that only need it done (the bots). */
+    async update(id: string, patch: TaskPatch): Promise<void> {
+      await updateTask(id, patch)
     },
     async move(id: string, areaKey: string): Promise<void> {
       const a = (await areaList()).areas.find((x) => x.key === areaKey)

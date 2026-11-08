@@ -12468,8 +12468,16 @@ function whenText(daysLeft, date) {
 }
 /** The point rule that pays for a completed Todoist task. */
 var TODOIST_RULE = "tasks.todoist_done";
+var clampP = (n) => Math.min(4, Math.max(1, Math.round(Number(n) || 0) || 1));
+/**
+* The one priority mapping (use it everywhere). People say P1 (most urgent) to
+* P4 (none); Todoist's API stores the opposite: 4 is P1, 1 is P4.
+*/
+var toApiPriority = (level) => 5 - clampP(level);
+/** Todoist's API value → the P level people see (4 → 1, i.e. P1). */
+var fromApiPriority = (priority) => 5 - clampP(priority);
 /** Shown as P1…P4 (Todoist's own labels). */
-var pLabel = (priority) => `P${5 - Math.min(4, Math.max(1, priority || 1))}`;
+var pLabel = (priority) => `P${fromApiPriority(priority)}`;
 /** Overdue first, then most urgent, then by time. The bot's /done N uses this order. */
 function sortToday(tasks, today) {
 	return tasks.slice().sort((a, b) => {
@@ -24423,7 +24431,7 @@ function readAction(line) {
 			if (key === "due" && v) out.due = v.slice(0, 40);
 			if (key === "priority") {
 				const p = /^P?([1-4])$/i.exec(v);
-				if (p) out.priority = 5 - Number(p[1]);
+				if (p) out.priority = toApiPriority(Number(p[1]));
 			}
 		}
 		return out.title || out.priority || out.due || out.details != null ? out : null;
@@ -54612,6 +54620,37 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 		const name = await opts.pickArea(text, choices.map((a) => plainName(a.name))).catch(() => null);
 		return name ? choices.find((a) => plainName(a.name).toLowerCase() === name.trim().toLowerCase()) ?? null : null;
 	};
+	/**
+	* Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or
+	* note. Resolves with the task as Todoist now holds it (null when Todoist
+	* only says "ok"), so the app shows the confirmed value.
+	*/
+	const updateTask = async (id, patch) => {
+		const body = {};
+		if (patch.content != null) body.content = patch.content;
+		if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)));
+		if (patch.due != null) {
+			const due = patch.due.trim();
+			if (/^\d{4}-\d{2}-\d{2}$/.test(due)) body.due_date = due;
+			else body.due_string = due || "no date";
+		}
+		if (patch.description != null) body.description = patch.description;
+		if (Array.isArray(patch.labels)) body.labels = patch.labels.map(String).slice(0, 20);
+		if (patch.duration !== void 0) {
+			if (patch.duration && patch.duration > 0) {
+				body.duration = Math.min(1440, Math.round(patch.duration));
+				body.duration_unit = "minute";
+			} else body.duration = null;
+		}
+		const t = await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}`, {
+			method: "POST",
+			body: JSON.stringify(body)
+		}), () => call(`${V2}/tasks/${encodeURIComponent(id)}`, {
+			method: "POST",
+			body: JSON.stringify(body)
+		}));
+		return t && typeof t === "object" && t.id != null ? toTask(t, /* @__PURE__ */ new Map()) : null;
+	};
 	return {
 		/** Every open task and your areas (the Tasks page). */
 		async everything() {
@@ -54643,27 +54682,10 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 				changed: j?.full_sync ? 0 : Array.isArray(j?.items) ? j.items.length : 0
 			};
 		},
-		/** Changes the text, priority (4 = P1), date ("friday 18:00", "no date") or note. */
+		updateTask,
+		/** The same as updateTask, for callers that only need it done (the bots). */
 		async update(id, patch) {
-			const body = {};
-			if (patch.content != null) body.content = patch.content;
-			if (patch.priority != null) body.priority = Math.min(4, Math.max(1, Math.round(patch.priority)));
-			if (patch.due != null) body.due_string = patch.due.trim() || "no date";
-			if (patch.description != null) body.description = patch.description;
-			if (Array.isArray(patch.labels)) body.labels = patch.labels.map(String).slice(0, 20);
-			if (patch.duration !== void 0) {
-				if (patch.duration && patch.duration > 0) {
-					body.duration = Math.min(1440, Math.round(patch.duration));
-					body.duration_unit = "minute";
-				} else body.duration = null;
-			}
-			await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}`, {
-				method: "POST",
-				body: JSON.stringify(body)
-			}), () => call(`${V2}/tasks/${encodeURIComponent(id)}`, {
-				method: "POST",
-				body: JSON.stringify(body)
-			}));
+			await updateTask(id, patch);
 		},
 		async move(id, areaKey) {
 			const a = (await areaList()).areas.find((x) => x.key === areaKey);
