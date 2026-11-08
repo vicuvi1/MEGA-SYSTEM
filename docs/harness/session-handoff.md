@@ -23,15 +23,14 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-07, final)
+### Current handoff (2026-11-08)
 ```
-Milestone:   Sport back to SIMPLE (0a1bb20): own routine restored, Simple mode default, Harder/Easier per exercise; coach features behind "Coach mode" (off)
-OWNER RULE:  Sport must stay simple — his exercises (push-ups, press/abs, sit-ups, squats) + a Harder button. Coach mode stays OFF. Don't add complexity to Sport Today.
+Milestone:   planner much better (no duplicates, self-check, auto re-plan, limits, deadlines, week, quick-add, review, score, rescue, Telegram parity), Tasks↔Todoist two-way, Rewards game shop, no-spend day
+Completed:   see progress.md "Landed today"; full smoke green on 32d115c
 Active:      none
-Blockers:    "Sport Track onboarding" smoke step passes only on retry (stale synced copy resets coachMode) — fix
-             Squats added on the onboarding day might have been hidden by the restore — check and offer to re-add
-Next action: check the user's Sport Today shows his exercises; fix the coachMode sync race; full smoke on main
-Files:       docs/INDEX.md, docs/areas/sport.md, src/core/sportSimple.ts
+Blockers:    owner must set up a second pinger for the tick (cron-job.org/UptimeRobot, header Authorization: Bearer <CRON_SECRET>, X-Life-Timer: pinger)
+Next action: look at the "Ben's AI timeout" alert and make health alerts once a day; then whatever the owner asks
+Files:       docs/INDEX.md, docs/areas/planner.md, docs/areas/ops.md, docs/harness/progress.md
 ```
 
 ## Builder report format (≤ ~250 words)

@@ -4,11 +4,11 @@ Every session reads this first and adds one entry at the end. Newest entry on to
 Keep it short and true: anything written here is what the next session will trust.
 
 ## Current verified state (keep to 5–8 lines)
-- **Milestone:** bug round + island alive + sport coach system — all landed 2026-11-07; full smoke passes on 8b29dd5.
-- **Landed today (latest):** island fixes 93725c8/0cf81dc · plan sync f8e666d · Coach 51d3ae3/f67d311 · water anim 6a5da6b · island alive e5e5f1a/4faed2d · sport coach aa5dbb4/8b29dd5.
-- **Active:** none. Last green release v1.4.1381; run for 8b29dd5 building.
-- **Known gaps:** island Settings panel and live feeds not exercised in a real desktop run; workoutNote reuses the check-in sound.
-- **Next:** start a fresh session (handoff below), run the model comparison tasks, worktree setup script (builders keep missing node_modules).
+- **Milestone:** planner rebuilt + Tasks↔Todoist sync + Rewards shop + no-spend day — landed 2026-11-08; full smoke green on 32d115c.
+- **Landed today:** plan sync button 3779d39 · no duplicates b15185a · plan check + auto re-plan 9ccb0ce · Tasks↔Todoist 79577d6 · limits/deadlines/week 715bbd3 · Sunday smoke fixes 7613df3 · Rewards shop 520021a · no-spend day c310176 · quick-add/too much/fit e5fa16d · Your-day dedupe + toasts fdbcd7e · end-of-day/learned times/score bff6d50 · rescue + Telegram parity 32d115c.
+- **Active:** none.
+- **Known gaps:** Ben's timer runs only every 3–6 h (GitHub throttles the cron): the owner must add a second pinger (docs/areas/ops.md). "Ben's AI timeout" alert not investigated. Desktop island and Coach "Undo" smoke steps are intermittent. A Done→other change on Telegram reopens the Todoist task only at the next app sync.
+- **Next:** AI timeout + once-a-day health alert; maybe a worktree setup script (builders keep missing node_modules).
 - **Verify:** `bash scripts/init.sh` · `npm run smoke` · `bash scripts/release-status.sh`.
 
 ## Session record
