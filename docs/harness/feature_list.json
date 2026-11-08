@@ -665,6 +665,20 @@
    ],
    "evidence": "2026-11-08: 27 unit tests (pinned clock) in src/core/custom/custom.test.ts; smoke step \"Custom Center\" passes",
    "notes": "Pure logic src/core/custom/*; page pages/CustomCenter.tsx + renderer/src/custom/*. Synced settings custom_setup (versioned, 48 KB cap) and custom_state. The island rebuild (phase 2) reads activeLayout / widgetState / reminderGate."
+  },
+  {
+   "id": "F902",
+   "priority": 1,
+   "area": "workflow",
+   "title": "Quick add from anywhere: one key, one line, instant save with Undo",
+   "user_visible_behavior": "Ctrl+Space (or the Log button) in the app and on the website, and Alt+Space anywhere on the Windows PC (Ctrl+Shift+Space when another app has Alt+Space; Settings → Quick add changes it), opens one small box. A live chip says what Enter will do: \"50 pushups\" / \"pushups 50\" / \"+50\" log reps, \"500 ml\" / \"water 2\" add water, \"task lab report tomorrow 2h p1\" makes a Todoist task, \"ate 200g chicken\" logs a meal, \"focus 25\" starts a timer, \"note ...\" saves a note, \"done read\" ticks one of your habits, \"45 lunch\" logs money. Tab shows the other readings, Up repeats the last line, Esc closes; unknown words become a task only after a second Enter. Enter closes the box and a toast shows at once with Undo for 5 s; the write runs right after through the existing paths. A failed save says \"Will sync\" and is retried with the same id (never counted twice, kept across a reload). Words like \"yesterday\" on a log are refused, so nothing can be back-dated; no new points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/quickRoute.test.ts src/core/quickQueue.test.ts src/desktop/quickKeys.test.ts src/main/food.test.ts",
+    "SMOKE_ONLY=\"Quick add\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests (router phrasings and typos, optimistic queue with undo, retry, idempotency and a < 100 ms timing budget, shortcut binding with a fake globalShortcut); smoke step \"Quick add\" passes (toast 76 ms after Enter); full vitest and full smoke run",
+   "notes": "Pure: core/quickRoute.ts (one line → one route, reuses quickAdd.ts and foodWords.ts), core/quickQueue.ts (optimistic queue). App: renderer/src/quick/ (QuickHost in App.tsx replaces QuickCommandBar; quickRun.ts maps routes to the existing writes; QuickWindow is the desktop box). Desktop: desktop/quickWin.ts (pre-made hidden window, IPC to the app window), desktop/quickKeys.ts. main/food.ts addFoodMeal takes an optional meal id (same id twice = one meal)."
   }
  ]
 }

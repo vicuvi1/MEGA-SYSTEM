@@ -851,7 +851,13 @@ export function createTursoWebBridge(): Bridge {
           sportResync()
           return r
         },
-        repair: async () => (await svcP).write((s) => repairFromLog(s.db as any))
+        repair: async () => (await svcP).write((s) => repairFromLog(s.db as any)),
+        // Quick add: Sport Track's checklist from the shared copy (before this device's copy has synced).
+        exercises: async () =>
+          (await svcP).read((s) => {
+            const list = (readSetting(s.db as any, 'sport_tracker_json') as any)?.data?.exercises
+            return Array.isArray(list) ? list.filter((e: any) => e && (e.id || e.name) && !e.archived).map((e: any) => ({ id: String(e.id ?? e.name), name: String(e.name ?? e.id) })) : []
+          })
       },
       // BD1–BD18: protein, meals, supplements, tape, today's training dose, the weekly body report.
       bodyPlus: bodyPlusBridge(svcP as any, thisDevice),

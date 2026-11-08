@@ -10,6 +10,7 @@ import { AiAppsPanel } from '../AiAppsPanel'
 import { PcAutomationPanel } from '../PcAutomationPanel'
 import { SettingsShell, type SettingsGroup } from '../SettingsShell'
 import { NotifSettings } from '../NotifSettings'
+import { QuickSettings } from '../quick/QuickSettings'
 import { PluginsPanel } from '../../../plugins/PluginsPanel'
 import { WidgetsPanel } from '../widgets/WidgetsPanel'
 import { useSettingsState, type SettingsProps } from '../settings/useSettingsState'
@@ -43,6 +44,14 @@ export function Settings(props: SettingsProps) {
       hint: 'Pop-ups, sound, quiet hours',
       keywords: 'notification notifications popup pop-up windows sound chime quiet hours focus disturb alert',
       body: <NotifSettings />
+    },
+    {
+      id: 'quick',
+      label: 'Quick add',
+      icon: 'plus',
+      hint: 'One line from anywhere: reps, water, tasks, food',
+      keywords: 'quick add shortcut alt space ctrl space log fast command box pushups water task food focus note habit counter',
+      body: <QuickSettings />
     },
     {
       id: 'look',

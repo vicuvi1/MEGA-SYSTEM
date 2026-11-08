@@ -1,0 +1,217 @@
+/* Quick add: the box, its chips and the Undo toasts. Uses the app's tokens, so
+   it follows light and dark; motion is transform/opacity only and stops with
+   reduced motion. */
+.qa-back {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding: 18vh 16px 0;
+  background: color-mix(in srgb, var(--bg, #07090e) 55%, transparent);
+}
+.qa-back > div {
+  width: min(640px, 100%);
+}
+.qa-box {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--surface, #0f131b);
+  color: var(--text, #f1f5f9);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.13));
+  border-radius: var(--radius-lg, 18px);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+  padding: 12px 14px;
+  animation: qa-in 140ms ease-out;
+}
+.qa-shake {
+  animation: qa-shake 220ms ease-in-out;
+}
+.qa-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.qa-icon {
+  width: 28px;
+  text-align: center;
+  font-size: 18px;
+  flex: none;
+}
+.qa-input {
+  flex: 1;
+  min-width: 0;
+  border: 0 !important;
+  outline: none;
+  background: transparent !important;
+  color: inherit;
+  font-size: 18px;
+  padding: 8px 0;
+  box-shadow: none !important;
+}
+.qa-input::placeholder {
+  color: var(--muted, #8b9bb4);
+}
+.qa-kbd {
+  flex: none;
+  font-size: var(--t-xs, 11.5px);
+  color: var(--muted, #8b9bb4);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.07));
+  border-radius: 6px;
+  padding: 2px 6px;
+}
+.qa-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  min-height: 28px;
+}
+.qa-chip {
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.07));
+  background: transparent;
+  color: var(--muted, #8b9bb4);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: var(--t-sm, 12.5px);
+  line-height: 1.4;
+  cursor: pointer;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qa-chip.on {
+  background: var(--accent-soft);
+  color: var(--text, #f1f5f9);
+  border-color: var(--accent, #b6f23a);
+}
+.qa-chip.qa-ask.on {
+  background: color-mix(in srgb, #f5a524 18%, transparent);
+  border-color: #f5a524;
+}
+.qa-muted {
+  cursor: default;
+}
+.qa-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(480px, calc(100vw - 32px));
+  pointer-events: none;
+}
+.qa-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface, #0f131b);
+  color: var(--text, #f1f5f9);
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.13));
+  border-radius: 12px;
+  padding: 10px 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  animation: qa-in 160ms ease-out;
+  font-size: var(--t-md, 14px);
+}
+.qa-said {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.qa-state {
+  flex: none;
+  font-size: var(--t-xs, 11.5px);
+  color: var(--muted, #8b9bb4);
+}
+.qa-will-sync .qa-state,
+.qa-unsure .qa-state,
+.qa-refused .qa-state {
+  color: #f5a524;
+}
+.qa-saved .qa-state {
+  color: var(--accent-text, #b6f23a);
+}
+.qa-undone {
+  opacity: 0.7;
+}
+.qa-undo,
+.qa-x {
+  flex: none;
+  border: 1px solid var(--border-strong, rgba(255, 255, 255, 0.13));
+  background: transparent;
+  color: inherit;
+  border-radius: 8px;
+  padding: 3px 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.qa-x {
+  padding: 3px 8px;
+}
+.qa-undo:focus-visible,
+.qa-x:focus-visible,
+.qa-chip:focus-visible {
+  outline: 2px solid var(--accent, #b6f23a);
+  outline-offset: 2px;
+}
+
+/* The desktop's own small window (the global shortcut): see-through around the box. */
+html.qa-win,
+html.qa-win body,
+html.qa-win #root {
+  background: transparent !important;
+  overflow: hidden;
+  margin: 0;
+}
+.qa-win-box {
+  padding: 8px;
+}
+.qa-win-box .qa-box {
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.4);
+}
+.qa-win-say {
+  margin: 6px 4px 0;
+  font-size: var(--t-sm, 12.5px);
+  color: #f5a524;
+}
+.qa-win-toast .qa-toasts {
+  position: static;
+  transform: none;
+  width: auto;
+  padding: 6px;
+}
+
+@keyframes qa-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes qa-shake {
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .qa-box,
+  .qa-toast,
+  .qa-shake {
+    animation: none;
+  }
+}

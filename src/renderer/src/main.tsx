@@ -12,6 +12,7 @@ document.addEventListener('visibilitychange', markHidden)
 const search = typeof window !== 'undefined' ? window.location.search : ''
 const isHud = search.includes('hud=1')
 const isIsland = search.includes('island=1')
+const isQuick = search.includes('quick=1')
 const root = createRoot(document.getElementById('root')!)
 
 // A new version went live while this page was open (its old files are gone):
@@ -29,7 +30,10 @@ window.addEventListener('vite:preloadError', (e) => {
 
 // The desktop island is its own small window: it loads only itself (never the
 // data layer), so the app window stays the one owner of your data.
-if (isIsland && search.includes('dock=1')) {
+if (isQuick) {
+  // Quick add from anywhere (the desktop's global shortcut): its own small window, no data layer.
+  void Promise.all([import('./styles.css'), import('./light.css'), import('./design.css'), import('./quick/QuickWindow')]).then(([, , , { QuickWindow }]) => root.render(<QuickWindow />))
+} else if (isIsland && search.includes('dock=1')) {
   // IN38: the island's mini dock (its own small window).
   void import('./IslandDock').then(({ IslandDock }) => root.render(<IslandDock />))
 } else if (isIsland) {
@@ -66,7 +70,7 @@ if (isIsland && search.includes('dock=1')) {
   )
 }
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !window.life && !window.desktop) {
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !window.life && !window.desktop && !isQuick) {
   window.addEventListener('load', () => {
     // Always check for a newer offline helper; when one takes over (a new
     // version was published), reload once so you see the new version.

@@ -40,6 +40,16 @@ describe('food counter on the database', () => {
     toggleFoodMeal(db, m.id, 'web', later(5))
     expect(foodDayTotals(db, later(6)).protein).toBe(63)
   })
+  it('a meal sent twice with the same id (a quick-add retry) is saved once', () => {
+    const a = addFoodMeal(db, { items: [chicken], id: 'fd-quick1' }, 'web', now)!
+    const b = addFoodMeal(db, { items: [chicken], id: 'fd-quick1' }, 'web', later(1))!
+    expect(a.id).toBe('fd-quick1')
+    expect(b.id).toBe('fd-quick1')
+    expect(foodDayTotals(db, later(2)).protein).toBe(46)
+    expect(readFoodLog(db).meals.filter((m) => m.id === 'fd-quick1')).toHaveLength(1)
+    // A bad id is ignored (a fresh one is made).
+    expect(addFoodMeal(db, { items: [rice], id: 'nope; DROP' }, 'web', later(3))!.id).toMatch(/^fd-/)
+  })
   it('pays no points', () => {
     const before = db.prepare('SELECT COUNT(*) AS n FROM ledger').get()
     addFoodMeal(db, { items: [chicken] }, 'web', now)

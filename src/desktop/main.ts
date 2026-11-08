@@ -8,6 +8,8 @@ import { execFile } from 'node:child_process'
 import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
+import { createQuickAdd } from './quickWin'
+import { keyLabel } from './quickKeys'
 import { islandMoveMenu } from './islandMenu'
 import { createIslandKit } from './islandKit'
 import { widgetFetch } from './widgetNet'
@@ -300,6 +302,9 @@ if (firstCopy) void app.whenReady().then(async () => {
   // PL2: widgets' network, checked again here (only the app window may ask).
   handle('widgets:fetch', (url: unknown, hosts: unknown) => widgetFetch(url, hosts))
   const islandKit = createIslandKit({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, dir, island: island.kit })
+  // Quick add from anywhere: Alt+Space (or the fallback) opens a small box over any app; the lines are saved here.
+  const quick = createQuickAdd({ origin, preload: join(__dirname, '../preload/index.cjs'), appWindow: win, dir, avoid: () => [island.shortcut] })
+  win.on('closed', () => quick.dispose())
   // Meetings: captions in a call and Help me reply (the watcher runs only while you caption).
   const meetings = createMeetings({ origin, inCall: island.inCall, eyesPrefs: eyes.prefs })
   // AF1: a light clock for the island. While the app window is hidden its own
@@ -348,6 +353,7 @@ if (firstCopy) void app.whenReady().then(async () => {
   const startsWithWindows = () => app.getLoginItemSettings({ args: ['--hidden'] }).openAtLogin
   const menu = () => Menu.buildFromTemplate([
     { label: 'Open Life System', click: () => showApp() },
+    { label: `Quick add (${keyLabel(quick.shortcut())})`, click: () => quick.open() },
     { label: `Show the island (${island.shortcut.replace('Control', 'Ctrl')})`, type: 'checkbox', checked: island.enabled(), click: (item) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
     // H1: hide it for a while or bring it back; move it with the arrow keys.
     ...islandMoveMenu(island, () => tray.setContextMenu(menu())),

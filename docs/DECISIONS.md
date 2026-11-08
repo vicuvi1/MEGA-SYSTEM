@@ -4,6 +4,11 @@ Choices that a later session could easily undo by accident. Each entry gives the
 was made, and what it rules out. Newest entries go on top. Don't reverse one without writing a new
 entry that says why.
 
+### Quick add: one router, existing writes, ids from the start (2026-11-08)
+- **Decision:** every quick-add line goes through `core/quickRoute.ts` to an EXISTING write (water, body-log reps, food counter, Todoist quick add, focus, notes, habit tap, the bot's money rules); quick add has no store and pays no points. The toast shows before the write (`core/quickQueue.ts`); each line carries its id from the first try, retries reuse it, and only id-safe routes are replayed after a reload (others show "Not sure it saved"). Log words like "yesterday" are refused. The desktop's global-shortcut window only sends lines; the app window writes them.
+- **Why:** the owner found adding things slow; a second log or a quick-add-only points rule would drift from Sport Track, Food and Habits, and an optimistic retry without a fixed id would count twice.
+- **Rules out:** writing from the quick-add window, a quick-add table or setting for the logs, back-dated quick logs, auto-retrying a task/focus/note after a reload, or a global shortcut that is Ctrl+Alt+<key> or one the island owns.
+
 ### Custom Center is data only, and counters log through the real logs (2026-11-08)
 - **Decision:** the Custom Center set-up (`custom_setup`) is plain, versioned JSON cleaned by `core/custom/validate.ts`; migrations step one version at a time (`migrate.ts`) and a set-up from a newer app is never overwritten. Actions are a closed list of steps that call the app's own operations (focus timer, music station, island quiet, Do Not Disturb, a mode, a page, a counter): no code, no shell, no links. A counter that tracks water or reps writes only to the existing logs (water log, Sport Track reps + workout log), so their own rules decide any points; a purely custom counter pays nothing. Uploaded pictures and sounds stay in this device's IndexedDB, referenced by `local:<id>`, and are dropped from exports. Custom reminders pass `reminderGate` (call, focus, quiet, bedtime, gap, caps).
 - **Why:** imports and synced data must never become a way to run code, and points must stay honest.

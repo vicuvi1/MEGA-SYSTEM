@@ -4843,6 +4843,102 @@ try {
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
   })
+
+  await step('Quick add: Ctrl+Space opens the box, "50 pushups" logs with Undo, "500 ml" adds water, a task line makes a task', async () => {
+    const shots = process.env.QUICK_SHOTS
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.waitForSelector('.td2', { timeout: 15000 })
+    const sql = (q) =>
+      pg.evaluate(async (q) => {
+        const s = localStorage.getItem('life_web_session') ?? ''
+        const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: q, args: [] } }, { type: 'close' }] }) })
+        const j = await r.json()
+        return Number(j.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? -1)
+      }, q)
+    const until = async (fn, what, ms = 10000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 200))
+      }
+    }
+    const peek = async () => (await (await fetch(`http://127.0.0.1:${port}/api/todoist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'peek' }) })).json()) || []
+    const box = pg.locator('.qa-box input')
+    // The chosen chip; on a miss the error says what the chips read.
+    const chip = async (text) => {
+      try {
+        await pg.locator('.qa-chip.on', { hasText: text }).waitFor({ timeout: 5000 })
+      } catch {
+        throw new Error(`no chip ${text}: the chips read "${await pg.locator('.qa-chips').innerText().catch(() => '?')}"`)
+      }
+    }
+    const openBox = async () => {
+      await pg.locator('body').press('Control+Space')
+      await box.waitFor({ timeout: 5000 })
+    }
+
+    // Sport Track's checklist (run alone, no earlier step made one): a made-up one, synced like the app does.
+    if ((await sql("SELECT COUNT(*) FROM settings WHERE key = 'sport_tracker_json'")) < 1) {
+      await pg.evaluate(() => {
+        const day = new Date(Date.now() - 4 * 3600_000).toISOString().slice(0, 10)
+        const st = { lastDate: day, exercises: [{ id: 'pushups', name: 'Push-ups', target: 36, unit: 'reps', active: true, doneToday: 0 }, { id: 'squats', name: 'Squats', target: 45, unit: 'reps', active: true, doneToday: 0 }], water: { currentMl: 0, targetMl: 2500, glassSizeMl: 250 } }
+        localStorage.setItem('life_sport_tracker_v1', JSON.stringify(st))
+        window.dispatchEvent(new CustomEvent('life-sport-changed'))
+      })
+      await until(async () => (await sql("SELECT COUNT(*) FROM settings WHERE key = 'sport_tracker_json'")) === 1, 'Sport Track did not sync', 20000)
+    }
+
+    // 1. The in-page shortcut opens the box; the chip says what Enter will do; Enter logs at once with Undo.
+    await openBox()
+    await box.fill('50 pushups')
+    await chip(/^Log 50 push/i)
+    if (shots) {
+      await pg.waitForTimeout(300)
+      await pg.locator('.qa-box').screenshot({ path: `${shots}/quick-add-box.png` })
+    }
+    const t0 = Date.now()
+    await box.press('Enter')
+    const toast = pg.locator('.qa-toast', { hasText: /50 push.* logged/i }).last()
+    await toast.waitFor({ timeout: 3000 })
+    const shownMs = Date.now() - t0
+    if (await box.count()) throw new Error('the box did not hide after Enter')
+    await toast.locator('.qa-undo', { hasText: 'Undo' }).waitFor({ timeout: 2000 })
+    await until(async () => (await toast.getAttribute('data-status')) === 'saved', `the push-ups did not save (status ${await toast.getAttribute('data-status')})`)
+    await until(async () => (await sql("SELECT COALESCE(SUM(amount), 0) FROM body_log WHERE source = 'quick' AND kind LIKE 'reps:%'")) === 50, 'no 50 reps row in the body log')
+    // Undo takes that one row back (a cancel row; nothing deleted).
+    await toast.locator('.qa-undo').click()
+    await until(async () => (await toast.getAttribute('data-status')) === 'undone', 'Undo did not mark it undone')
+    await until(async () => (await sql("SELECT COUNT(*) FROM body_log WHERE undoes LIKE 'qa-%'")) === 1, 'Undo did not take the reps back')
+
+    // 2. "500 ml" adds water through the one body log.
+    await openBox()
+    await box.fill('500 ml')
+    await chip('Add 500 ml water')
+    await box.press('Enter')
+    await pg.locator('.qa-toast', { hasText: '500 ml water added' }).last().waitFor({ timeout: 3000 })
+    await until(async () => (await sql("SELECT COALESCE(SUM(amount), 0) FROM body_log WHERE source = 'quick' AND kind = 'water'")) === 500, 'no 500 ml water row in the body log')
+
+    // 3. A task line makes a Todoist task (the quick-add words); Up repeats the last line; Esc closes.
+    await openBox()
+    await box.fill('task lab report tomorrow 2h p1')
+    await chip('New task: Lab report · tomorrow · 2h · P1')
+    await box.press('Enter')
+    await until(async () => (await peek()).some((t) => t.quick === 'Lab report tomorrow p1 for 120 min'), 'Todoist did not get "Lab report tomorrow p1 for 120 min"')
+    await openBox()
+    await box.press('ArrowUp')
+    if ((await box.inputValue()) !== 'task lab report tomorrow 2h p1') throw new Error(`Up did not bring back the last line: "${await box.inputValue()}"`)
+    // Unknown words become a task only after a second Enter.
+    await box.fill('buy a birthday card saturday')
+    await chip(/^Add as a task\?/)
+    await box.press('Enter')
+    await pg.locator('.qa-chip.on', { hasText: 'press Enter again' }).waitFor({ timeout: 3000 })
+    await box.press('Escape')
+    await box.waitFor({ state: 'detached', timeout: 3000 })
+    console.log(`  quick add: toast shown ${shownMs} ms after Enter (with Playwright overhead)`)
+  })
+
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

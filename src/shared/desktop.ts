@@ -235,6 +235,35 @@ export interface DesktopApi {
   islandFilePath?(f: File): string
   /** IN39: resizing the panel by its corner: 'start' (the window makes room), 'end' (the size is kept for this screen). */
   islandPanelSize?(phase: 'start' | 'end', size: { w: number; h: number }): void
+  // ---- Quick add from anywhere (the global shortcut's small window) ----
+  /** App window: what the quick-add window asks (a line to save, Undo, or the context for its preview). */
+  onQuickRun?(cb: (m: QuickRunMsg) => void): void
+  /** App window: the answer for the quick-add window. */
+  quickReply?(m: QuickReplyMsg): void
+  /** App window: the global shortcut (Settings → Quick add). */
+  quickPrefs?(): Promise<QuickPrefsView>
+  setQuickPrefs?(p: { shortcut: string }): Promise<QuickPrefsView>
+  /** Quick-add window only. */
+  quickWin?: {
+    submit(line: string, sure: boolean, pick: number): void
+    undo(id: string): void
+    hide(): void
+    onShow(cb: () => void): void
+    onMsg(cb: (m: QuickReplyMsg) => void): void
+  }
+}
+
+export type QuickRunMsg = { op: 'ctx' } | { op: 'line'; line: string; sure: boolean; pick: number } | { op: 'undo'; id: string }
+export type QuickReplyMsg =
+  | { op: 'ctx'; ctx: import('../core/quickRoute').RouteCtx | null; history: string[] }
+  | { op: 'item'; item: import('../core/quickQueue').QItem<import('../core/quickRoute').Route> | null; ok: boolean; say?: string }
+  | { op: 'update'; items: import('../core/quickQueue').QItem<import('../core/quickRoute').Route>[] }
+export interface QuickPrefsView {
+  /** What you picked ('' = off). */
+  shortcut: string
+  /** What works now (the fallback when yours is taken), or null. */
+  active: string | null
+  fellBack: boolean
 }
 
 declare global {

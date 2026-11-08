@@ -133,6 +133,18 @@ const api: DesktopApi = {
   voiceMedia: (key) => ipcRenderer.invoke('voice:media', String(key)),
   // "Sign in to SoundCloud": its own isolated view in the main process (one channel), and what it plays.
   scweb: (op, arg) => ipcRenderer.invoke('scweb', String(op), arg),
+  // Quick add from anywhere: the app window runs the lines, the small window only sends them.
+  onQuickRun: (cb) => void ipcRenderer.on('quick:run', (_e, m) => cb(m)),
+  quickReply: (m) => ipcRenderer.send('quick:reply', m),
+  quickPrefs: () => ipcRenderer.invoke('quick:getPrefs'),
+  setQuickPrefs: (p) => ipcRenderer.invoke('quick:setPrefs', { shortcut: String(p?.shortcut ?? '') }),
+  quickWin: {
+    submit: (line, sure, pick) => ipcRenderer.send('quick:submit', String(line ?? '').slice(0, 500), !!sure, Number(pick) || 0),
+    undo: (id) => ipcRenderer.send('quick:undo', String(id ?? '')),
+    hide: () => ipcRenderer.send('quick:hide'),
+    onShow: (cb) => void ipcRenderer.on('quick:show', () => cb()),
+    onMsg: (cb) => void ipcRenderer.on('quick:msg', (_e, m) => cb(m))
+  },
   onScWeb: (cb) => {
     const f = (_e: unknown, s: unknown) => cb(s)
     ipcRenderer.on('scweb:state', f)
