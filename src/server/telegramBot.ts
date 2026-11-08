@@ -48,7 +48,7 @@ import { telegramKeyboard as benKeyboard } from '@core/coachButtons'
 import { messageKind, sendOnce, type SentToday } from '../core/benOnce'
 import { cleanVoice, voiceKind, voicePrompt } from '../core/benVoice'
 import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgePatterns'
-import { aiFailureCounts, alertDecisions, alertText, healthChecks, weeklyReport } from '@core/health'
+import { aiFailureCounts, alertDecisions, alertKeyboard, alertText, brokenKinds, healthChecks, HEALTH_MUTES, readMutes, weeklyReport } from '@core/health'
 import { beat, logBen, logError, readHealth, setNote, type BenLogEntry } from '../renderer/src/web/systemHealth'
 import { restoreDrill, snapshotOf } from '../renderer/src/web/restoreDrill'
 import { loadTriggers, urgeEvents } from '../renderer/src/web/disciplinePatterns'
@@ -1258,7 +1258,7 @@ async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: D
 let lastHealth: { ok: boolean; broken: string[] } | null = null
 export const tickHealth = () => lastHealth
 
-async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: string) => Promise<unknown>, opts: { weekly?: boolean } = {}): Promise<void> {
+async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: string, markup?: unknown) => Promise<unknown>, opts: { weekly?: boolean; appUrl?: string } = {}): Promise<void> {
   const h = await readHealth(t)
   const local = await mirror.read((db) => ({
     sporty: (() => {
@@ -1268,17 +1268,18 @@ async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: 
         return null
       }
     })(),
-    today: calendarDay(now)
+    today: calendarDay(now),
+    // "Mute this for 7 days" (the button under a warning, settings health_mutes).
+    mutes: readMutes(getSetting(db as any, HEALTH_MUTES))
   }))
   const checks = healthChecks({ now, beats: h.beats, sportySeen: local.sporty, latestSnapshot: h.latestSnapshot, today: local.today, errors: h.errors, notes: h.notes })
-  const d = alertDecisions(checks, h.notes.alerted ?? {}, now)
-  // Broken for 30+ minutes (the same rule as the warnings).
-  const broken = checks.filter((c) => !c.ok && c.since && now.getTime() - Date.parse(c.since) >= 30 * 60000).map((c) => c.id)
+  // Each kind of problem at most once a day (your local day), grouped in one message.
+  const d = alertDecisions(checks, h.notes.alerted ?? {}, now, { today: local.today, mutes: local.mutes })
+  // Broken for 30+ minutes (the same rule as the warnings); a muted kind doesn't fail the GitHub run.
+  const broken = brokenKinds(checks, now, local.mutes)
   lastHealth = { ok: broken.length === 0, broken }
-  if (d.warn.length || d.fixed.length) {
-    await setNote(t, 'alerted', d.next)
-    await send(alertText(d.warn, d.fixed)).catch(() => null)
-  }
+  if (JSON.stringify(d.next) !== JSON.stringify(h.notes.alerted ?? {})) await setNote(t, 'alerted', d.next)
+  if (d.warn.length || d.fixed.length) await send(alertText(d.warn, d.fixed, { appUrl: opts.appUrl }), alertKeyboard(d.warn)).catch(() => null)
   if (opts.weekly === false) return
   // Sunday 21:00–21:59, once a week (after the review and the call: T7).
   const week = `${local.today}`
@@ -1702,10 +1703,10 @@ export { answerMeta } from '@core/answerCost'
  * tick itself stops nobody would hear. The daily Vercel crons (api/cron.mjs)
  * call this too: the same checks, the same "warned once" list.
  */
-export async function healthAlarm(env: BotEnv & { botToken: string; chatId: string }, now = new Date()): Promise<{ ok: boolean; broken: string[] } | null> {
+export async function healthAlarm(env: BotEnv & { botToken: string; chatId: string; appUrl?: string }, now = new Date()): Promise<{ ok: boolean; broken: string[] } | null> {
   lifeTz(env)
   const { mirror } = await botsFor(env)
-  await healthTick(new TursoHttp(env.tursoUrl, env.tursoToken), mirror, now, (text) => tgSend(env.botToken, env.chatId, text), { weekly: false })
+  await healthTick(new TursoHttp(env.tursoUrl, env.tursoToken), mirror, now, (text, markup) => tgSend(env.botToken, env.chatId, text, fetch, markup), { weekly: false, appUrl: env.appUrl })
   return lastHealth
 }
 
@@ -1715,7 +1716,7 @@ export async function healthAlarm(env: BotEnv & { botToken: string; chatId: stri
  * and the AI ping. Results go to Settings → System health; problems to
  * Telegram once.
  */
-export async function selfCheck(env: BotEnv & { botToken: string; chatId: string }, extra: Pick<SelfCheckDeps, 'webhooks' | 'ai' | 'budget'> = {}, now = new Date()) {
+export async function selfCheck(env: BotEnv & { botToken: string; chatId: string; appUrl?: string }, extra: Pick<SelfCheckDeps, 'webhooks' | 'ai' | 'budget'> = {}, now = new Date()) {
   lifeTz(env)
   const { calendar, mirror } = await botsFor(env)
   const connected = calendar ? await mirror.read((db) => !!getSetting(db as any, GSET)).catch(() => false) : false
@@ -1737,7 +1738,10 @@ export async function selfCheck(env: BotEnv & { botToken: string; chatId: string
           return r.ok ? { ok: true } : { ok: false, error: `HTTP ${r.status}` }
         }
       : undefined,
-    send: (text) => tgSend(env.botToken, env.chatId, text)
+    send: (text, markup) => tgSend(env.botToken, env.chatId, text, fetch, markup),
+    mutes: await mirror.read((db) => readMutes(getSetting(db as any, HEALTH_MUTES))).catch(() => ({})),
+    today: calendarDay(now),
+    appUrl: env.appUrl
   })
 }
 

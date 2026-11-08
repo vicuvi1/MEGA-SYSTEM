@@ -73,17 +73,20 @@ describe('the daily self-check (CL3)', () => {
     const r = await runSelfCheck(deps)
     expect(hook.url).toBe('https://life.example/api/telegram?bot=777')
     expect(r.checks.find((c) => c.id === 'sc:bot:MEGA_BOT_TOKEN')).toMatchObject({ ok: true, detail: expect.stringMatching(/set again/) })
-    expect(r.warned).toEqual(expect.arrayContaining(['sc:ai', 'sc:budget', 'sc:snapshot']))
+    expect(r.warned).toEqual(expect.arrayContaining(['ai', 'budget', 'snapshot']))
     expect(texts(sent).filter((t) => /needs a look/.test(t))).toHaveLength(1)
     // Settings → System health shows it.
     const h = await readHealth(new TursoHttp(env.tursoUrl, env.tursoToken))
     const shown = healthChecks({ now, beats: h.beats, sportySeen: null, latestSnapshot: null, today: '2026-11-05', errors: [], notes: h.notes })
     expect(shown.find((c) => c.id === 'selfcheck')).toMatchObject({ ok: true, detail: expect.stringMatching(/need a look/) })
     expect(shown.find((c) => c.id === 'sc:ai')?.ok).toBe(false)
-    // The next day, the same problems: nothing new is sent (the link stays right, no new setWebhook).
+    // Later the same day, the same problems: nothing new is sent.
     sent.length = 0
-    await runSelfCheck({ ...deps, now: new Date(now.getTime() + 86400_000) })
+    await runSelfCheck({ ...deps, now: new Date(now.getTime() + 3 * 3600_000) })
     expect(texts(sent)).toEqual([])
+    // The next day, still broken: one reminder (once a day), and the link stays right (no new setWebhook).
+    await runSelfCheck({ ...deps, now: new Date(now.getTime() + 86400_000) })
+    expect(texts(sent).filter((t) => /needs a look/.test(t))).toHaveLength(1)
     expect(sent.filter((s) => s.method === 'setWebhook')).toHaveLength(0)
   }, 30_000)
 })

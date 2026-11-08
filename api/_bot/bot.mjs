@@ -92,6 +92,7 @@ var SETTINGS = {
 	coach_profile: json$7("about you, as Ben knows it", null),
 	coach_mind: json$7("long-term memory: goals, people, what works", null),
 	coach_reminders: json$7("reminders and check-ins Ben will send", []),
+	health_mutes: json$7("health alert kinds you muted (\"Mute for 7 days\"): kind to until (src/core/health.ts)", {}),
 	coach_nudges: json$7("nudge state (paused today, last sent)", null),
 	coach_rhythm: json$7("the daily rhythm: morning plan, reviews", null),
 	coach_rhythm_prefs: json$7("daily rhythm settings", null),
@@ -32234,6 +32235,7 @@ var addDaysISO = (day, n) => {
 */
 function aiFailureCounts(e, opts, startedAt, lastOkAt) {
 	if (lastOkAt >= startedAt) return false;
+	if (e?.skipped) return false;
 	if ((/abort|timed? ?out|took too long|time is up/i.test(String(e?.message ?? "")) || !!e?.timeUp) && opts?.noFallback && opts?.thinkMs) return false;
 	return true;
 }
@@ -32313,7 +32315,7 @@ function healthChecks(i) {
 			id: "timer",
 			label: "Ben's timer",
 			ok: !late,
-			detail: late ? `Last ran ${ago(now, timer)}: check the "Coach tick" workflow on GitHub (Actions) or your second pinger` : `Last ran ${ago(now, timer)}`,
+			detail: late ? `Last ran ${ago(now, timer)} (should be every 10 min)` : `Last ran ${ago(now, timer)}`,
 			...late ? { since: new Date(Date.parse(timer) + 18e5).toISOString() } : {}
 		});
 	}
@@ -32390,7 +32392,16 @@ function healthChecks(i) {
 			...stale ? { since: new Date(Date.parse(sc.at) + 936e5).toISOString() } : {}
 		});
 		const alerted = i.notes?.alerted ?? {};
-		for (const c of Array.isArray(sc.checks) ? sc.checks : []) if (c && typeof c.id === "string" && (!c.ok || alerted[c.id])) out.push(c);
+		const warnedAbout = (id) => {
+			const v = alerted[alertKey(id)] ?? alerted[id];
+			return typeof v === "string" || !!v?.on;
+		};
+		const live = new Set(out.filter((c) => [
+			"tick",
+			"timer",
+			"ai"
+		].includes(c.id) && c.detail !== "Not used yet").map((c) => c.id));
+		for (const c of Array.isArray(sc.checks) ? sc.checks : []) if (c && typeof c.id === "string" && !live.has(alertKey(c.id)) && (!c.ok || warnedAbout(c.id))) out.push(c);
 	}
 	const day = i.errors.filter((e) => now.getTime() - Date.parse(e.at) < 864e5);
 	out.push({
@@ -32402,20 +32413,84 @@ function healthChecks(i) {
 	});
 	return out;
 }
+/** Settings key (synced, not secret): kind → muted until (ISO). */
+var HEALTH_MUTES = "health_mutes";
+/** Problems Ben tells you about: broken this long. */
+var ALERT_AFTER_MS = 18e5;
 /**
-* What Ben says now: parts broken for 30+ minutes he hasn't warned about yet,
-* and parts he warned about that work again. `alerted` = id → when he warned.
+* One kind of problem, whoever found it: the 30-minute checks ("ai") and the daily
+* self-check ("sc:ai") are the same problem, so they share one warning a day.
 */
-function alertDecisions(checks, alerted, now) {
-	const next = { ...alerted };
+function alertKey(id) {
+	const k = id.replace(/^sc:/, "");
+	if (k.startsWith("bot:")) return "telegram";
+	return {
+		google: "calendar",
+		drill: "restoreDrill"
+	}[k] ?? k;
+}
+var stateOf = (v) => typeof v === "string" ? {
+	at: v,
+	day: v.slice(0, 10),
+	on: true
+} : v;
+/** A kind muted until a time still in the future. */
+var muted = (mutes, key, now) => !!mutes?.[key] && Date.parse(mutes[key]) > now.getTime();
+var brokenLong = (c, now) => !c.ok && !!c.since && now.getTime() - Date.parse(c.since) >= ALERT_AFTER_MS;
+/**
+* What Ben says now. A kind of problem broken 30+ minutes is told at most ONCE A
+* DAY (a new local day may remind you once if it is still broken), never while
+* muted. "Working again" comes only for a kind he warned about, and only once it
+* has stayed OK for an hour (a timer that runs every few hours doesn't flap
+* "broken / fixed / broken"). Checks of the same kind are one line.
+* `next` is the new "alerted" note.
+*/
+function alertDecisions(checks, alerted, now, opts = {}) {
+	const today = opts.today ?? now.toISOString().slice(0, 10);
+	const next = {};
+	for (const [k, v] of Object.entries(alerted ?? {})) {
+		const st = stateOf(v);
+		if (st && (st.on || st.day === today)) next[alertKey(k)] = st;
+	}
+	const groups = /* @__PURE__ */ new Map();
+	for (const c of checks) groups.set(alertKey(c.id), [...groups.get(alertKey(c.id)) ?? [], c]);
 	const warn = [];
 	const fixed = [];
-	for (const c of checks) if (!c.ok && c.since && now.getTime() - Date.parse(c.since) >= 18e5 && !alerted[c.id]) {
-		warn.push(c);
-		next[c.id] = now.toISOString();
-	} else if (c.ok && alerted[c.id]) {
-		fixed.push(c);
-		delete next[c.id];
+	for (const [key, list] of groups) {
+		const st = next[key];
+		if (list.some((c) => !c.ok)) {
+			if (st?.okSince) {
+				const { okSince: _drop, ...rest } = st;
+				next[key] = rest;
+			}
+			const broken = list.filter((c) => brokenLong(c, now));
+			if (!broken.length || muted(opts.mutes, key, now) || st?.day === today) continue;
+			warn.push({
+				...broken[0],
+				id: key
+			});
+			next[key] = {
+				at: now.toISOString(),
+				day: today,
+				on: true
+			};
+		} else if (st?.on) {
+			const okSince = st.okSince ?? now.toISOString();
+			if (now.getTime() - Date.parse(okSince) >= 36e5) {
+				fixed.push({
+					...list[0],
+					id: key
+				});
+				next[key] = {
+					at: st.at,
+					day: st.day,
+					on: false
+				};
+			} else next[key] = {
+				...st,
+				okSince
+			};
+		}
 	}
 	return {
 		warn,
@@ -32423,11 +32498,76 @@ function alertDecisions(checks, alerted, now) {
 		next
 	};
 }
-function alertText(warn, fixed) {
+/** The kinds broken 30+ minutes and not muted (the tick answers health:false for these, so the GitHub run fails). */
+function brokenKinds(checks, now, mutes) {
+	const out = /* @__PURE__ */ new Set();
+	for (const c of checks) if (brokenLong(c, now) && !muted(mutes, alertKey(c.id), now)) out.add(alertKey(c.id));
+	return [...out];
+}
+/** The address an outside pinger calls (the public app URL, never a secret). */
+var DEFAULT_APP_URL = "https://mega-system-ten.vercel.app";
+/** What to do, in plain words, per kind (header NAMES only, never a secret value). */
+function alertHelp(key, appUrl = DEFAULT_APP_URL) {
+	switch (key) {
+		case "timer":
+		case "tick": return `Set up a second pinger (3 steps): 1) make a free account at cron-job.org (or UptimeRobot); 2) add a job that opens ${appUrl.replace(/\/+$/, "")}/api/cron?job=tick every 10 minutes; 3) give it two headers: <code>Authorization</code> = <code>Bearer</code> + your CRON_SECRET (copy it from Vercel → Settings → Environment Variables) and <code>X-Life-Timer</code> = <code>pinger</code>. GitHub runs its timer only every few hours, so it can't do this alone.`;
+		case "ai": return "Usually nothing: Ben answers with the quick model meanwhile. If it lasts a day, check your OpenRouter credits and openrouter.ai/status.";
+		case "telegram": return "Settings → System health shows the bot links; the daily check sets a wrong link again by itself.";
+		case "calendar": return "Settings → Google Calendar → connect again.";
+		case "todoist": return "Copy a fresh token from Todoist → Settings → Integrations → Developer into TODOIST_TOKEN in Vercel.";
+		case "snapshot": return "Ben makes it on his next run; to be safe, download a backup in Settings → Data.";
+		case "budget": return "Raise the budget in Settings → Ben → Brain, or let Ben use cheaper answers.";
+		default: return null;
+	}
+}
+/** The lines to show: the server line folds into the timer's (the same fix). */
+function shownWarnings(warn) {
+	const keys = new Set(warn.map((c) => alertKey(c.id)));
+	return warn.filter((c) => !(alertKey(c.id) === "tick" && keys.has("timer")));
+}
+/** One message for everything broken at once, each with what to do. */
+function alertText(warn, fixed, opts = {}) {
 	const lines = [];
-	if (warn.length) lines.push(`🔧 <b>Something needs a look</b>\n${warn.map((c) => `• ${c.label}: ${c.detail}`).join("\n")}\nSettings → System health has the details.`);
+	const keys = new Set(warn.map((c) => alertKey(c.id)));
+	const shown = shownWarnings(warn);
+	if (shown.length) {
+		const items = shown.map((c) => {
+			const k = alertKey(c.id);
+			const extra = k === "timer" && keys.has("tick") ? " Ben's server stops too while nothing wakes it." : "";
+			const help = alertHelp(k, opts.appUrl);
+			const detail = c.detail.replace(/[.\s]+$/, "");
+			return `• <b>${c.label}</b>: ${detail}.${extra}${help ? `\n  What to do: ${help}` : ""}`;
+		});
+		lines.push(`🔧 <b>Something needs a look</b>\n${items.join("\n")}\nYou'll hear about each problem at most once a day. Settings → System health has the details.`);
+	}
 	if (fixed.length) lines.push(`✅ Working again: ${fixed.map((c) => c.label).join(", ")}.`);
 	return lines.join("\n\n");
+}
+/** "Mute this for 7 days" under a warning: one button per kind (callback hm|<kind>). */
+function alertKeyboard(warn) {
+	const rows = shownWarnings(warn).filter((c) => /^[\w.:-]{1,40}$/.test(alertKey(c.id))).slice(0, 5).map((c) => [{
+		text: `🔕 Mute "${c.label}" for 7 days`.slice(0, 60),
+		callback_data: `hm|${alertKey(c.id)}`
+	}]);
+	return rows.length ? { inline_keyboard: rows } : void 0;
+}
+/** The mutes after a tap on "Mute … for 7 days" (expired ones dropped; the timer's mute covers the server line too). */
+function muteKind(mutes, key, now) {
+	const until = new Date(now.getTime() + 6048e5).toISOString();
+	const out = {};
+	for (const [k, v] of Object.entries(mutes ?? {})) if (Date.parse(v) > now.getTime()) out[k] = v;
+	out[key] = until;
+	if (key === "timer") out.tick = until;
+	return out;
+}
+/** The mutes setting as saved (anything unreadable: none). */
+function readMutes(raw) {
+	try {
+		const v = JSON.parse(raw || "{}");
+		return v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([, x]) => typeof x === "string")) : {};
+	} catch {
+		return {};
+	}
 }
 function weeklyReport(checks, errors, now) {
 	const week = errors.filter((e) => now.getTime() - Date.parse(e.at) < 6048e5);
@@ -32826,18 +32966,19 @@ async function runSelfCheck(d) {
 		checks,
 		fixed
 	});
-	const dec = alertDecisions(confirmed(checks, now), h.notes.alerted ?? {}, now);
-	if ((dec.warn.length || dec.fixed.length) && d.send) {
-		await setNote(t, "alerted", dec.next);
-		await d.send(alertText(dec.warn, dec.fixed)).catch(() => null);
-	}
+	const dec = alertDecisions(confirmed(checks, now), h.notes.alerted ?? {}, now, {
+		today: d.today ?? day,
+		mutes: d.mutes
+	});
+	if (d.send && JSON.stringify(dec.next) !== JSON.stringify(h.notes.alerted ?? {})) await setNote(t, "alerted", dec.next);
+	if ((dec.warn.length || dec.fixed.length) && d.send) await d.send(alertText(dec.warn, dec.fixed, { appUrl: d.appUrl }), alertKeyboard(dec.warn)).catch(() => null);
 	return {
 		checks,
 		warned: dec.warn.map((c) => c.id)
 	};
 }
 /** One plain message from the server's bot (HTML, like Ben's). */
-async function tgSend(token, chatId, text, fetchImpl = fetch) {
+async function tgSend(token, chatId, text, fetchImpl = fetch, markup) {
 	return !!(await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -32845,7 +32986,8 @@ async function tgSend(token, chatId, text, fetchImpl = fetch) {
 			chat_id: chatId,
 			text,
 			parse_mode: "HTML",
-			disable_web_page_preview: true
+			disable_web_page_preview: true,
+			...markup ? { reply_markup: markup } : {}
 		}),
 		signal: AbortSignal.timeout(1e4)
 	}).catch(() => null))?.ok;
@@ -51033,9 +51175,30 @@ var STALL_CALLBACK = {
 };
 // src/renderer/src/web/bots/callbacks.ts
 /** Every callback data the bots answer (anything else isn't a bot button). */
-var CALLBACK_DATA = /^(cr|f[acbksuoxq]|p[prbc]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/;
+var CALLBACK_DATA = /^(cr|f[acbksuoxq]|p[prbc]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz]|hm)\|/;
 var CALLBACKS = [
 	CAREER_CALLBACK,
+	{
+		prefixes: ["hm"],
+		match: (data) => data.startsWith("hm|"),
+		run: async (c, t) => {
+			const { mirror, markSeen } = c;
+			const { data, chat, key, update, cq, answer } = t;
+			if (!await markSeen(key)) return null;
+			const kind = data.slice(3);
+			if (!/^[\w.:-]{1,40}$/.test(kind)) return null;
+			const now = /* @__PURE__ */ new Date();
+			await mirror.write((db) => setSetting(db, HEALTH_MUTES, JSON.stringify(muteKind(readMutes(getSetting(db, HEALTH_MUTES)), kind, now))));
+			const text = `🔕 Muted for 7 days. Settings → System health still shows it.`;
+			await answer(text);
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: { inline_keyboard: [] }
+			}).catch(() => null);
+			return text;
+		}
+	},
 	{
 		prefixes: ["pb"],
 		match: (data) => data.startsWith("pb|"),
@@ -63586,7 +63749,8 @@ async function healthTick(t, mirror, now, send, opts = {}) {
 				return null;
 			}
 		})(),
-		today: calendarDay(now)
+		today: calendarDay(now),
+		mutes: readMutes(getSetting(db, HEALTH_MUTES))
 	}));
 	const checks = healthChecks({
 		now,
@@ -63597,16 +63761,17 @@ async function healthTick(t, mirror, now, send, opts = {}) {
 		errors: h.errors,
 		notes: h.notes
 	});
-	const d = alertDecisions(checks, h.notes.alerted ?? {}, now);
-	const broken = checks.filter((c) => !c.ok && c.since && now.getTime() - Date.parse(c.since) >= 18e5).map((c) => c.id);
+	const d = alertDecisions(checks, h.notes.alerted ?? {}, now, {
+		today: local.today,
+		mutes: local.mutes
+	});
+	const broken = brokenKinds(checks, now, local.mutes);
 	lastHealth = {
 		ok: broken.length === 0,
 		broken
 	};
-	if (d.warn.length || d.fixed.length) {
-		await setNote(t, "alerted", d.next);
-		await send(alertText(d.warn, d.fixed)).catch(() => null);
-	}
+	if (JSON.stringify(d.next) !== JSON.stringify(h.notes.alerted ?? {})) await setNote(t, "alerted", d.next);
+	if (d.warn.length || d.fixed.length) await send(alertText(d.warn, d.fixed, { appUrl: opts.appUrl }), alertKeyboard(d.warn)).catch(() => null);
 	if (opts.weekly === false) return;
 	const week = `${local.today}`;
 	if (now.getDay() === 0 && now.getHours() === 21 && h.notes.weekly !== week) {
@@ -64160,7 +64325,10 @@ async function sportShared(env, body) {
 async function healthAlarm(env, now = /* @__PURE__ */ new Date()) {
 	lifeTz(env);
 	const { mirror } = await botsFor(env);
-	await healthTick(new TursoHttp(env.tursoUrl, env.tursoToken), mirror, now, (text) => tgSend(env.botToken, env.chatId, text), { weekly: false });
+	await healthTick(new TursoHttp(env.tursoUrl, env.tursoToken), mirror, now, (text, markup) => tgSend(env.botToken, env.chatId, text, fetch, markup), {
+		weekly: false,
+		appUrl: env.appUrl
+	});
 	return lastHealth;
 }
 /**
@@ -64194,7 +64362,10 @@ async function selfCheck(env, extra = {}, now = /* @__PURE__ */ new Date()) {
 				error: `HTTP ${r.status}`
 			};
 		} : void 0,
-		send: (text) => tgSend(env.botToken, env.chatId, text)
+		send: (text, markup) => tgSend(env.botToken, env.chatId, text, fetch, markup),
+		mutes: await mirror.read((db) => readMutes(getSetting(db, HEALTH_MUTES))).catch(() => ({})),
+		today: calendarDay(now),
+		appUrl: env.appUrl
 	});
 }
 /** The plugins' jobs with the server's helpers (database, env, AI, Google). */

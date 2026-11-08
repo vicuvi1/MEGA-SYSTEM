@@ -37,6 +37,7 @@ import { isRescueKey } from '@core/planRescue'
 import { askStall, STALL_CALLBACK } from './stallButtons'
 import { subjectFromPush } from '@core/stallFix'
 import { CAREER_CALLBACK } from './careerBot'
+import { HEALTH_MUTES, MUTE_DAYS, muteKind, readMutes } from '@core/health'
 
 export interface CallbackHandler {
   /** The callback-data prefixes it answers ("wa" for "wa|250"), for docs and tests. */
@@ -46,11 +47,29 @@ export interface CallbackHandler {
 }
 
 /** Every callback data the bots answer (anything else isn't a bot button). */
-export const CALLBACK_DATA = /^(cr|f[acbksuoxq]|p[prbc]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz])\|/
+export const CALLBACK_DATA = /^(cr|f[acbksuoxq]|p[prbc]|td|sq|g[pxbc]|n[ps]|r[bvwm]|cu|cs|wa|wk|fb|bf|md|sk|sr|bd|bt|bx|bp|rs|sg|sl|m[lnz]|hm)\|/
 
 export const CALLBACKS: CallbackHandler[] = [
   // Career: flashcard quiz, follow-ups, pay yourself first, essay replans, the letter (careerBot.ts).
   CAREER_CALLBACK,
+  // System health: "Mute … for 7 days" under a "Something needs a look" warning (core/health.ts alertKeyboard).
+  {
+    prefixes: ['hm'],
+    match: (data) => data.startsWith('hm|'),
+    run: async (c, t) => {
+      const { mirror, markSeen } = c
+      const { data, chat, key, update, cq, answer } = t
+      if (!(await markSeen(key))) return null
+      const kind = data.slice(3)
+      if (!/^[\w.:-]{1,40}$/.test(kind)) return null
+      const now = new Date()
+      await mirror.write((db) => setSetting(db as any, HEALTH_MUTES, JSON.stringify(muteKind(readMutes(getSetting(db as any, HEALTH_MUTES)), kind, now))))
+      const text = `🔕 Muted for ${MUTE_DAYS} days. Settings → System health still shows it.`
+      await answer(text)
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: { inline_keyboard: [] } }).catch(() => null)
+      return text
+    }
+  },
   // TV1: today's plan buttons (move ±30, Done, Skip, Shift to now, Undo a mark, Re-plan from now,
   // Too much today, Move a block to tomorrow, Undo that, Check the day).
   {

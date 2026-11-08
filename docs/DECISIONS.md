@@ -130,3 +130,22 @@ entry that says why.
   commands, the island) had no way to edit at all, and failures only flashed a toast.
 - **Rules out:** writing a task edit straight to `/api/todoist` from a page, reverting a failed save
   silently, or sending date words for Todoist to read in its own time zone.
+
+### Health alerts: once a day per problem, with the fix (2026-11-08)
+- **Decision:** each kind of problem (AI, server, outside timer, Telegram, Google, Todoist, backup…)
+  is told on Telegram at most once per local day, all broken kinds in one message with "What to do"
+  and a "Mute for 7 days" button; the daily self-check and the 30-minute checks share one list
+  (`alertKey`: "sc:ai" is "ai"). "Working again" only for a kind that was warned about, and only
+  after it stayed OK for an hour. Muted kinds don't fail the GitHub tick run either.
+- **Why:** a GitHub timer that runs every 3–6 h flapped "broken / working again / broken", and two
+  checkers warned about the same thing (6:59 PM, 8:35 AM twice, 11:10 AM).
+- **Rules out:** a warning per detection, a recovery message for a part nobody was warned about, or
+  putting a secret value in an alert (header names only).
+
+### Background AI calls: short thinking cap, one quick retry (2026-11-08)
+- **Decision:** in the tick the thinking model gets at most `BACKGROUND_THINK_MS` (28 s), the quick model
+  then gets one retry after a 1 s wait through the fastest provider (not for Ben's chat, which retries
+  itself). A call never made because the tick's 50 s were used up is not an AI failure. The self-check
+  ping asks the quick model with thinking off (5 tokens, 8 s then 12 s).
+- **Why:** the thinking model took the first 35 s, the quick model got ~12 s and timed out too, and later
+  calls in the same tick failed at once: three "failures" in one tick made "Ben's AI: Failing".

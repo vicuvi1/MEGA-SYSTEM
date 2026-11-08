@@ -55,6 +55,9 @@ describe('AI health beats', () => {
     expect((await readHealth(t)).beats.ai.fails).toBeUndefined()
     const up = await check(t, at(12, 41))
     expect(up.ok).toBe(true)
-    expect(alertDecisions([up], a.next, at(12, 41)).fixed).toHaveLength(1)
+    // "Working again" once it has stayed OK for an hour.
+    const seen = alertDecisions([up], a.next, at(12, 41))
+    expect(seen.fixed).toHaveLength(0)
+    expect(alertDecisions([up], seen.next, at(13, 41)).fixed).toHaveLength(1)
   })
 })
