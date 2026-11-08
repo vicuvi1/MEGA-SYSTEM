@@ -187,6 +187,22 @@ try {
     if (!(await pg.locator('.td2 .cmd-side .ds').first().isVisible())) throw new Error('"Your day" is not beside the tabs')
     const sizes = []
     for (const id of ids) sizes.push(`${id} ${((await tabFit('.td2', id)).scroll / 654).toFixed(2)}`)
+    // Sunday and Monday (the run follows the real date): "Pick your top 3 for this week" is one slim line on Now; Pick opens the chips.
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    const wk3 = pg.locator('[data-tabpanel="now"] .wk3')
+    if (await wk3.count()) {
+      if (!/wk3-slim/.test((await wk3.getAttribute('class')) ?? '')) throw new Error('the weekly top 3 card on Now is not one slim line')
+      if ((await wk3.boundingBox()).height > 48) throw new Error(`the weekly top 3 line is ${(await wk3.boundingBox()).height}px tall`)
+      await wk3.locator('button', { hasText: 'Pick' }).click()
+      await pg.waitForSelector('[data-tabpanel="now"] .wk3:not(.wk3-slim) .wk3-chips', { timeout: 3000 })
+      await pg.locator('[data-tabpanel="now"] .wk3 button', { hasText: 'Not now' }).click()
+      await pg.waitForFunction(() => !document.querySelector('[data-tabpanel="now"] .wk3'), null, { timeout: 3000 })
+    }
+    // Sundays: Ben's body report on Body is one folded line ("Next week: …"), the whole report on tap.
+    await pg.click('.td2 .ptabs [data-tab="body"]')
+    await pg.waitForTimeout(300)
+    const bw = await pg.locator('[data-tabpanel="body"] .bw-card').evaluateAll((els) => els.map((e) => `${e.className}${e.open ? ' open' : ''}`))
+    if (bw.some((c) => !/bw-fold/.test(c) || / open$/.test(c))) throw new Error(`the Sunday body report on Body is not folded (${bw.join()})`)
     // Each thing once: must-dos on Now, the rest of today on Tasks, water on Body.
     await pg.click('.td2 .ptabs [data-tab="tasks"]')
     if (!(await pg.locator('.td2 .dl-tasks .dl-tabs').isVisible())) throw new Error('the task tabs are not on Tasks')
@@ -3022,13 +3038,24 @@ try {
     })
     const [d1, t1] = await count()
     if (d1 !== d0 + 1 || t1 !== t0) throw new Error(`count went ${d0}/${t0} → ${d1}/${t1}`)
-    await pg.waitForTimeout(1500) // the balance counts up
-    const bal = await pg.evaluate(() => document.querySelector('.topbar')?.textContent ?? '')
+    // Compare the points themselves, once the first payment's "+N" pop (2.6 s) is gone and the number stopped counting.
+    // (The whole top bar includes that pop, so comparing it raced with the pop's timer.)
+    const coins = () => pg.evaluate(() => document.querySelector('.topbar .tb-coins')?.textContent?.trim() ?? '')
+    await pg.waitForFunction(() => !document.querySelector('.topbar .wallet-pop'), null, { timeout: 8000 })
+    let bal = await coins()
+    for (let k = 0; k < 10; k++) {
+      await pg.waitForTimeout(300)
+      const b = await coins()
+      if (b === bal) break
+      bal = b
+    }
+    if (!/\d/.test(bal)) throw new Error(`no balance in the top bar (${bal})`)
     await row('Grooming').locator('.hb-hit').click({ force: true })
     await pg.waitForSelector('.gr .gr-step', { timeout: 10000 })
     await pg.keyboard.press('Escape')
-    await pg.waitForTimeout(1500)
-    if ((await pg.evaluate(() => document.querySelector('.topbar')?.textContent ?? '')) !== bal) throw new Error('a second tap paid again')
+    // A payment would pop "+N" by the balance and change the number.
+    if (await pg.waitForSelector('.topbar .wallet-pop', { timeout: 2000 }).then(() => true, () => false)) throw new Error(`a second tap paid again: ${await pg.locator('.topbar .wallet-pop').first().innerText()}`)
+    if ((await coins()) !== bal) throw new Error(`a second tap paid again: ${bal} → ${await coins()}`)
     // Skip today from the ⋯ menu: no points, out of the count; and back on.
     await row('Clean day').hover()
     await row('Clean day').locator('.hb-dots-btn').click()

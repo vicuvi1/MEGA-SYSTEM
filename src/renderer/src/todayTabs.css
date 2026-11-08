@@ -40,6 +40,7 @@
 .now-top > .thb.slim { flex: 1 1 420px; margin: 0; }
 .now-top .shift-pill { margin: 0; }
 .now-top .money-pill-wrap { flex: none; }
+.now-top > .wk3, .now-top > .wk3-next { flex: 1 1 100%; margin: 0; }
 .td-tabs .thb.slim { flex-wrap: nowrap; gap: 10px; min-height: 48px; padding: 6px 8px; border-radius: 14px; }
 .thb.slim .thb-face { width: 32px; height: 32px; font-size: 18px; }
 .thb-line { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 4px 14px; overflow: hidden; white-space: nowrap; font-size: 13px; color: var(--muted); }

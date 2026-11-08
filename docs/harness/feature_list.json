@@ -21,14 +21,15 @@
    "priority": 1,
    "area": "today",
    "title": "Today Now tab",
-   "user_visible_behavior": "Slim top line, Top 3 (must-dos), other tasks, simple habit tracker",
+   "user_visible_behavior": "Slim top line, Top 3 (must-dos), other tasks, simple habit tracker; on Sunday/Monday the weekly top 3 pick is one slim line, and the Sunday body report on Body is folded",
    "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-    "SMOKE_ONLY=\"Today Now\" npm run smoke"
+    "SMOKE_ONLY=\"Today\" npm run smoke",
+    "E2E_NOW=<a Sunday>T08:30 SMOKE_ONLY=\"Today tabs\" node e2e/smoke.mjs"
    ],
-   "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": ""
+   "evidence": "2026-11-08: Today steps pass with the clock on Sunday, Monday and Friday",
+   "notes": "The second-tap check compares the points number, not the whole top bar (the +N pop raced it)"
   },
   {
    "id": "F003",
