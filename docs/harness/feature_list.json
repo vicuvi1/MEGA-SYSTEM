@@ -608,6 +608,20 @@
    ],
    "evidence": "Branch body-training; unit tests and the smoke step pass",
    "notes": "core/homeProgram.ts, core/challenges.ts, body/training/*. Data in Sport Track's state (homeTraining, program.custom), synced through sport_tracker_json. BT_SHOTS=<dir> for screenshots."
+  },
+  {
+   "id": "F-BODY-PROGRESS",
+   "priority": 2,
+   "area": "body",
+   "title": "Body Progress tab",
+   "user_visible_behavior": "Body → Progress: strength chart per move with variation bands and % stronger than 4 weeks ago, weight and waist trend with a plain verdict and the lean-gain zone, records wall, monthly body report (copyable), progress photos side by side (local only). No points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/bodyProgress.test.ts",
+    "SMOKE_ONLY=\"Body progress\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: 16 unit tests; smoke step \"Body progress\" passes",
+   "notes": "core/bodyProgress.ts, body/progress/*"
   }
  ]
 }
