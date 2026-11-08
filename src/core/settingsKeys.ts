@@ -115,6 +115,8 @@ export const SETTINGS = {
   sporty_update_request: json<Record<string, unknown> | null>('a change waiting for Sporty to pick up', null),
   sport_rest_days: json<unknown[]>('days marked as rest days', []),
   body_plus: json<Record<string, unknown> | null>("Body: protein goal (g per kg), saved meals and favourites, supplements you track, today's training dose if you picked one, the pre-shift fuel card (src/main/bodyPlus.ts)", null),
+  food_log: json<Record<string, unknown> | null>('Food counter: meals (foods, grams, macros) of the last 45 days, at most 400, and starred meals (at most 20); the day totals are rows in body_log (src/main/food.ts)', null),
+  food_goals: json<Record<string, unknown> | null>('Food counter goals (lean muscle): height, age, sex, activity, extra kcal on training and rest days (+150 / +0), your own kcal or protein goal (core/foodGoals.ts)', null),
   body_tape: json<unknown[]>('Body: tape measurements (arm, chest, shoulders, thigh in cm) by day; waist stays in body_metrics', []),
   ben_workouts: json<unknown[]>('workouts Ben logged', []),
   app_sync_finance: json<Record<string, unknown> | null>('Finance Helper data synced into Life System', null),

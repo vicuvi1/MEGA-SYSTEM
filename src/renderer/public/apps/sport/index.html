@@ -156,6 +156,9 @@
     .plan-text small { display: block; color: var(--st-muted); font-size: 13px; margin-top: 2px; }
     .plan-text small .sleep { color: var(--st-warn); font-weight: 600; }
     #sleep-hint:not([hidden]) + #progression-badge:not(:empty)::before { content: ' · '; }
+    .food-line { display: block; width: 100%; margin-top: 8px; padding: 8px 12px; border-radius: 12px; border: 1px dashed var(--st-border); background: none; color: var(--st-muted); font: inherit; font-size: 13px; font-weight: 600; text-align: left; cursor: pointer; }
+    .food-line:hover { color: var(--st-text); border-color: var(--st-accent-text); }
+    .food-line b { color: var(--st-text); }
     .seg { display: inline-flex; flex: none; padding: 3px; gap: 2px; border-radius: 12px; background: var(--st-bg); border: 1px solid var(--st-border); }
     .seg button { border: 0; background: none; color: var(--st-muted); font-size: 13px; font-weight: 600; padding: 7px 12px; border-radius: 9px; white-space: nowrap; transition: background 0.15s, color 0.15s; }
     .seg button small { font-weight: 500; opacity: 0.8; margin-left: 2px; }
@@ -1285,6 +1288,8 @@
               <button role="radio" data-mode="short" id="btn-toggle-short-time" title="Half of every target, for a quick workout">Short <small>50%</small></button>
             </div>
           </div>
+          <!-- Food counter (Life System): today's protein in one line; a tap opens Body → Food -->
+          <button type="button" class="food-line" id="food-line" hidden title="Open the food counter"></button>
         </section>
 
         <section class="card exercises">
@@ -4977,8 +4982,26 @@
     updateCoachQuote();
     // BD7: redraw today's cards only when the dose (or the hold) really changed.
     let doseSeen = JSON.stringify(autoDose());
+    // Food counter line from Life System (life_body.food, written by the host): only today's.
+    function renderFoodLine() {
+      const el = document.getElementById('food-line');
+      if (!el) return;
+      const f = lifeBody()?.food;
+      const ok = f && typeof f.line === 'string' && f.day === localDay();
+      el.hidden = !ok;
+      if (ok) el.textContent = f.line;
+    }
+    document.getElementById('food-line')?.addEventListener('click', () => {
+      try { window.parent?.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'SPORT_OPEN_FOOD', payload: {} }, location.origin); } catch (e) {}
+      try { console.log('LIFE_SYSTEM_BRIDGE:SPORT_OPEN_FOOD:{}'); } catch (e) {}
+    });
+    renderFoodLine();
+    // The desktop host writes life_body inside this page (no storage event), so look again now and then.
+    setInterval(renderFoodLine, 20000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) renderFoodLine(); });
     window.addEventListener('storage', (e) => {
       if (e.key !== 'life_body') return;
+      renderFoodLine();
       renderSleepHint();
       updateHunterStats();
       const now = JSON.stringify(autoDose());

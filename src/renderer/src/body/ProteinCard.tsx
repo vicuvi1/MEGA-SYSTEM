@@ -7,6 +7,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { FOODS, SOURCE_NOTE, fuelCard, logOf, mealGrams, mealText, parseProtein, type Food, type MealItem } from '@core/protein'
 import { workToday, type LifeFit } from '@core/lifeFit'
+import { mealOfRow } from '@core/food'
 import { dayKey } from '@core/dates'
 import { life } from '../bridge'
 import { useAction } from '../ui'
@@ -215,10 +216,22 @@ export function ProteinCard({ compact = false }: { compact?: boolean }) {
                 <li key={e.id} className={e.removed ? 'removed' : ''}>
                   <span>{atHm(e.at)}</span>
                   <span>
-                    {e.emoji} {e.name}
+                    {e.food === 'food' ? '🍽️ Food counter meal' : `${e.emoji} ${e.name}`}
                   </span>
                   <b>{e.g} g</b>
-                  <button type="button" className="btn ghost small" onClick={async () => after(await act(() => api.toggle(e.id)))}>
+                  <button
+                    type="button"
+                    className="btn ghost small"
+                    onClick={async () => {
+                      // A food counter meal is two rows (protein + kcal): both go, or both come back.
+                      const meal = e.food === 'food' ? mealOfRow(e.id) : ''
+                      if (meal && life.coach?.food) {
+                        await act(() => life.coach!.food!.toggle(meal))
+                        return after(await api.view())
+                      }
+                      after(await act(() => api.toggle(e.id)))
+                    }}
+                  >
                     {e.removed ? 'Undo' : 'Remove'}
                   </button>
                 </li>

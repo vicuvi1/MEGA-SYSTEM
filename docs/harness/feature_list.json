@@ -566,6 +566,20 @@
    ],
    "evidence": "2026-11-08: unit tests, speed table before/after, Coach smoke steps pass",
    "notes": "src/core/coachOrder.ts, benAsk.ts, benSteps.ts; pages/Coach.tsx, CoachFeed.tsx (Elapsed), CoachCards.tsx; webBots.ts fast paths + askTrim; api/ai.mjs onReasoning; tursoWebBridge measures time"
+  },
+  {
+   "id": "F-FOOD",
+   "priority": 2,
+   "area": "body",
+   "title": "Food counter (photo to any AI app, paste back)",
+   "user_visible_behavior": "Body → Food: Copy prompt, paste the AI app's reply, fix grams and names, save; protein and kcal today against lean goals (2.0 g/kg; maintenance +150 kcal on a training day, +0 on a rest day); what to eat next; same as yesterday; starred meals; one protein line on Sport Track Today that opens the counter. No points, no network, no AI call.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/food.test.ts src/main/food.test.ts",
+    "SMOKE_ONLY=\"Food counter\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: 40 food unit tests; smoke step \"Food counter\" passes",
+   "notes": "core/food*.ts, main/food.ts, web/foodBridge.ts, body/FoodCounter.tsx. Numbers in body_log (protein:food + kcal:food), details in setting food_log. Telegram/Ben parts are a later builder (see docs/areas/sport.md)."
   }
  ]
 }
