@@ -21,6 +21,7 @@ import { BenLog } from './BenLog'
 import { LifeModeCard } from './LifeMode'
 import { barFill } from './motionKit'
 import { Select } from './Select'
+import { useWeekView } from './plan/WeekPlan'
 
 export type DeskTab = 'today' | 'sunday' | 'plan' | 'you' | 'money' | 'month' | 'log'
 export const DESK_TABS: { id: DeskTab; label: string; icon: string }[] = [
@@ -570,6 +571,8 @@ function WeekCard({ v }: { v: DeskView }) {
 function DeadlinesCard({ v, reload }: { v: DeskView; reload: () => void }) {
   const act = useAction()
   const today = Date.parse(`${v.today}T12:00:00Z`)
+  // Each deadline planned backward into sessions (your limits and the week plan): how many, or how short.
+  const week = useWeekView().view
   return (
     <Card title="Deadlines" icon="⏳" sub="Ben works backward from each date and re-books missed blocks by himself." action={life.coach?.rhythm && !!v.goals.length && <button className="bd-btn" onClick={() => void act(() => life.coach!.rhythm!('book'), 'Re-planned every goal for the next 7 days').then(reload)}>Re-book all</button>}>
       {v.goals.length ? (
@@ -583,6 +586,11 @@ function DeadlinesCard({ v, reload }: { v: DeskView; reload: () => void }) {
                   <small>
                     {days >= 0 ? `${days} days` : `${-days} days late`} · {g.hoursLeft}h left{g.behind ? ' · behind' : ''}
                   </small>
+                  {(() => {
+                    const d = week?.deadlines.find((x) => x.title === g.title && x.deadline === g.deadline)
+                    if (!d) return null
+                    return <small className={d.line ? 'bd-short' : ''} data-deadline-plan>{d.line ? d.line.replace(`${d.title}: `, '') : `${d.sessions} session${d.sessions === 1 ? '' : 's'} planned before it (Today → Week)`}</small>
+                  })()}
                 </span>
                 <span className={`bd-pill ${days <= 3 ? 'hot' : days <= 10 ? 'warm' : ''}`}>{dayName(g.deadline)}</span>
               </li>

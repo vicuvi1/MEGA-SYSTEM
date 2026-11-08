@@ -40,6 +40,7 @@ import { packFile } from '@core/readLinks'
 import { readAttachment, type ReadFile } from '../web/attachFile'
 import { runBasic, useBasicMode, queueAdd } from '../web/basicMode'
 import '../ben.css'
+import { PlanLimitsEditor } from '../plan/PlanLimits'
 
 type Profile = { about: string; goals: string[]; rules: string[] }
 
@@ -1522,6 +1523,7 @@ function RhythmSettings() {
           </label>
         </div>
       )}
+      <PlanLimitsEditor />
     </section>
   )
 }

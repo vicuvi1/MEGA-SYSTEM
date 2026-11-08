@@ -108,3 +108,50 @@
 .pe-audit button, .pe-auto button { border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-weight: 600; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
 .pe-audit button:hover, .pe-auto button:hover { background: rgb(var(--ink) / 0.09); }
 .pe-why { display: block; padding: 0 8px; margin-top: -2px; font-size: 10.5px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Protected time (your limits) in the plan column: a calmer stripe than a calendar event. */
+.pe-ev.protected { border-style: solid; border-color: color-mix(in srgb, var(--green) 40%, transparent); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--green) 10%, transparent) 0 6px, transparent 6px 12px); }
+
+/* Coach → Daily rhythm → Time limits. */
+.pl { display: grid; gap: 6px; margin-top: var(--s-3, 14px); padding-top: var(--s-2, 10px); border-top: 1px solid var(--border); }
+.pl-title { margin: 0; font-size: var(--t-sm); }
+.pl-row { display: flex; gap: 6px; align-items: center; }
+.pl-row input { flex: 1; min-width: 0; }
+.pl-x { all: unset; cursor: pointer; color: var(--muted); padding: 2px 6px; border-radius: 6px; font-size: var(--t-xs); }
+.pl-x:hover, .pl-x:focus-visible { color: var(--red); background: rgb(var(--ink) / 0.06); }
+.pl-prot { display: grid; gap: 6px; margin-top: 6px; font-size: var(--t-xs); }
+.pl-prow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; background: rgb(var(--ink) / 0.03); }
+.pl-pname { font-weight: 600; color: var(--text); }
+.pl-days { display: inline-flex; gap: 2px; margin-left: auto; }
+.pl-days button { all: unset; cursor: pointer; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; font-size: 10.5px; color: var(--muted); background: rgb(var(--ink) / 0.04); }
+.pl-days button.on { color: var(--text); background: var(--accent-soft); font-weight: 700; }
+.pl-days button:focus-visible { outline: 2px solid var(--accent); }
+.pl-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pl-add input { min-width: 0; width: 7.5em; }
+.pl-add input[name='title'] { flex: 1; min-width: 8em; }
+
+/* Today → Week: the week plan and its summary. */
+.wp { display: grid; gap: 8px; }
+.wp-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+.wp-day { display: grid; gap: 4px; padding: 6px; border-radius: 12px; background: rgb(var(--ink) / 0.03); border: 1px solid transparent; font-size: var(--t-xs); min-width: 0; }
+.wp-day.today { border-color: var(--accent); }
+.wp-day.past { opacity: 0.55; }
+.wp-day.over { border-color: color-mix(in srgb, var(--amber) 60%, transparent); }
+.wp-day b { display: flex; justify-content: space-between; gap: 4px; }
+.wp-type, .wp-gym { all: unset; cursor: pointer; text-align: center; padding: 2px 4px; border-radius: 7px; font-size: 10.5px; font-weight: 600; background: rgb(var(--ink) / 0.05); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-type.heavy { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text); }
+.wp-type.light { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--text); }
+.wp-gym.on { background: color-mix(in srgb, var(--green) 26%, transparent); color: var(--text); }
+.wp-type:focus-visible, .wp-gym:focus-visible { outline: 2px solid var(--accent); }
+.wp-type:disabled, .wp-gym:disabled { cursor: default; }
+.wp-h { font-variant-numeric: tabular-nums; color: var(--muted); }
+.wp-h.over { color: var(--amber); font-weight: 700; }
+.wp-bar { height: 4px; border-radius: 4px; background: rgb(var(--ink) / 0.07); overflow: hidden; }
+.wp-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
+.wp-bar.over i { background: var(--amber); }
+.wp-sess { color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-dl { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-xs); }
+.wp-dl li { display: flex; flex-wrap: wrap; gap: 6px; justify-content: space-between; }
+.wp-dl li.short { color: var(--amber); }
+@media (max-width: 640px) { .wp-days { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.bd-short { color: var(--amber); }

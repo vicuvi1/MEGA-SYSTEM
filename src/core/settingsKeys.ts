@@ -254,6 +254,8 @@ export const SETTINGS = {
   ben_learn: json<unknown>('the plan of each of the last 30 days, to learn how long things really take', null),
   ben_pushbacks: json<unknown>('when each open task was first due (big ones that keep moving get a "Break it down" chip)', null),
   plan_asked: json<unknown>('the tasks you asked Ben to add for today ({day, titles}): the day plan never moves them to tomorrow', null),
+  plan_limits: json<Record<string, unknown> | null>('time limits for the planner: most work a day, the off time, protected blocks, a cap per kind (core/planLimits.ts)', null),
+  plan_week: json<Record<string, unknown> | null>('the week plan: heavy, normal or light study day and gym day for each weekday (core/planWeek.ts)', null),
   // ---- plugins ----
   plugins_on: json<Record<string, boolean>>('which plugins are switched on', {}),
   plugins_status: json<Record<string, unknown>>("how each plugin's last job went", {}),

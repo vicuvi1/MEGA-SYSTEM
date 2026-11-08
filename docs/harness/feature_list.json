@@ -409,6 +409,20 @@
    "notes": "2026-11-08: core/todoSync.ts (edit queue, overlay, resolveDue), web/todoistClient.ts (one Todoist object for every caller, Ben's quick commands and the island included), the server update answers with the task and sends plain dates as due_date."
   },
   {
+   "id": "F030",
+   "priority": 1,
+   "area": "planner",
+   "title": "Time limits, deadlines planned backward, and a week plan",
+   "user_visible_behavior": "Coach → Daily rhythm → Time limits (most work a day, an off time, protected blocks on set days, a cap per kind) that the planner never breaks; each deadline goal becomes study sessions over the days before it with a why line (\"exam in 5 days, session 2 of 4\") or a plain \"Not enough room before Friday 20 Nov: 3h short\"; Today → Week sets heavy, normal or light days and gym days and shows the next 7 days against the limits",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/planLimits.test.ts src/core/planDeadlines.test.ts src/core/planWeek.test.ts",
+    "SMOKE_ONLY=\"Plan limits\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests pass; smoke step \"Plan limits\" passes locally",
+   "notes": "core/planLimits.ts (cleanLimits, limitsFor, keepLimits, limitBreaks), core/planDeadlines.ts (planDeadlines, sessionsOn), core/planWeek.ts (dayRules, dayRooms, weekSummary). Synced settings plan_limits and plan_week. Telegram parity is for a later builder."
+  },
+  {
    "id": "F900",
    "priority": 2,
    "area": "island",

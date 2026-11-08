@@ -30,6 +30,7 @@ import { PluginCards } from '../../../plugins/cards'
 import { MoneyPill } from '../MoneyQuick'
 import { ShiftButtons } from '../LifeFitPanel'
 import { WeekTop3Pick } from '../WeekTop3'
+import { WeekPlanCard } from '../plan/WeekPlan'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -246,6 +247,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
             {new Date().getDay() === 0 && <BodyWeekCard sunday />}
           </TabPanel>
           <TabPanel page="today" id="week" value={tab}>
+            <WeekPlanCard />
             <WeekStrip />
             <div ref={setWeekEl} className="td-slot" />
             {has('progress') && <ProgressCard onOpen={() => onGo('progress')} />}
