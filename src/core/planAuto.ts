@@ -19,6 +19,7 @@ import { ensureIds, isApproved, minOfDay, planItems } from './planEdit'
 import type { Span } from './planShift'
 import { fromMin, toMin, type DayProposal, type PlanBlock } from './rhythm'
 import type { CalEvent } from './dayTime'
+import { endWith, underLimits, withProtected } from './planLimits'
 
 export interface AutoCtx extends Omit<AuditCtx, 'now' | 'tasks'> {
   now: string
@@ -79,7 +80,8 @@ export function autoReplan(raw: DayProposal, status: 'proposed' | 'approved', ct
   const day = plan.day
   const nowM = toMin(ctx.now)
   const s0 = toMin(planStartAt(ctx.now))
-  const endM = toMin(ctx.endBy ?? '22:00')
+  // Your off time ends the day when it is earlier (planLimits): nothing is moved past it.
+  const endM = toMin(endWith(ctx.endBy ?? '22:00', ctx.limits))
   const sessions = ctx.sessions ?? []
   // Started here: a focus session began in this block's time (one that runs on into the next block belongs to this one).
   const startedHere = (b: Pick<PlanBlock, 'start' | 'minutes'>) => {
@@ -90,7 +92,8 @@ export function autoReplan(raw: DayProposal, status: 'proposed' | 'approved', ct
 
   // What is busy: fixed events, blocks that can't move, and a started block that runs past its end.
   const busy: Busy[] = []
-  for (const e of ctx.events) {
+  // Protected time (training on its days, meals) is busy like an event.
+  for (const e of withProtected(ctx.events, ctx.limits, day)) {
     if (e.allDay || e.declined) continue
     const s = minOfDay(e.start, day)
     const en = minOfDay(e.end, day)
@@ -242,6 +245,8 @@ export function autoReplan(raw: DayProposal, status: 'proposed' | 'approved', ct
       if ((plan.dropped ?? []).includes(normTitle(t.content)) || (t.id && plan.closed?.includes(t.id))) continue
       if (!((t.priority ?? 1) >= 3 || t.asked)) continue
       const minutes = Math.max(25, Math.min(90, Math.ceil(estimateMinutes(t) / 5) * 5))
+      // Your work limit and caps hold: no room under them means the task stays on the list.
+      if (!underLimits({ ...plan, blocks }, { title: t.content, kind: 'focus', minutes }, ctx.limits)) continue
       const at = spot(minutes)
       if (at == null) continue
       busy.push({ s: at, e: at + minutes, why: '' })
@@ -253,6 +258,7 @@ export function autoReplan(raw: DayProposal, status: 'proposed' | 'approved', ct
     }
   }
 
+  // New blocks keep your limits too: a cap or the off time trims the least important draft (the audit below).
   if (!moves.length) {
     // Nothing to move: the same plan (the card's audit lists a task that arrived without room).
     return { plan: raw, moves: [], note: null }
@@ -261,7 +267,7 @@ export function autoReplan(raw: DayProposal, status: 'proposed' | 'approved', ct
   const next = relinkAlso({ ...plan, blocks, also })
   // The audit tidies up (one thing = one block, every task somewhere); moved blocks keep their new spot.
   const keep = moves.filter((m) => m.to).map((m) => m.id)
-  const done = auditPlan(next, { ...ctx, tasks: ctx.tasks, keep: [...(ctx.keep ?? []), ...keep], fixTimes: false }).plan
+  const done = auditPlan(next, { ...ctx, tasks: ctx.tasks, keep: [...(ctx.keep ?? []), ...keep], fixTimes: false, keepLimits: true }).plan
   const ordered = [...moves.filter((m) => m.to), ...moves.filter((m) => !m.to)]
   return { plan: done, moves: ordered, note: autoNote(ordered, why) }
 }

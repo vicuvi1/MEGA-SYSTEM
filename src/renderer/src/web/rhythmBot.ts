@@ -41,7 +41,11 @@ import { listNotes } from './notes'
 import { applyMind } from '@core/coachMind'
 import { mindText, weekSoFar } from '@core/coachMind'
 import { COACH_HISTORY, bump, cleanHistory, impactVerdict, mondayOf, recordDay, scorecard, type CoachDay } from '@core/coachImpact'
-import { bookBlocks, isGoalBlock, planGoal, planLine, type GoalPlan } from '@core/goalPlan'
+import { goalBlockTitle, isGoalBlock, planGoal, planLine, type BookedBlock, type GoalPlan } from '@core/goalPlan'
+import { freeGaps, suggestBlocks } from '@core/dayTime'
+import { PLAN_LIMITS, cleanLimits, endWith, withProtected } from '@core/planLimits'
+import { PLAN_WEEK, cleanWeek, dayRules, weekDeadlines } from '@core/planWeek'
+import { doneToday, fromGoalPlans, sessionsOn, type DeadlinePlan } from '@core/planDeadlines'
 import type { Mirror } from './mirror'
 import type { AskModel, CalendarLike, TodoistLike } from './webBots'
 import type { WebServices } from './webServices'
@@ -141,8 +145,24 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const stale = events.filter((e) => plans.some((p) => isGoalBlock(e, p)) && Date.parse(e.start) > now.getTime())
     for (const e of stale) await calendar.remove(e.calendarId, e.id).catch(() => null)
     const keep = events.filter((e) => !stale.includes(e))
-    const today = await mirror.read((db) => services.services(db).wallet.today())
-    const blocks = bookBlocks(plans, keep, today, quarterNow(now), 7)
+    const setup = await mirror.read((db) => ({ today: services.services(db).wallet.today(), limits: cleanLimits(readJson(db, PLAN_LIMITS, null)), week: cleanWeek(readJson(db, PLAN_WEEK, null)), freeShare: readLifeFit(db).freeShare }))
+    const today = setup.today
+    // The same sessions the day plan uses (planned backward, within your limits and the week plan),
+    // put in each day's free time before your off time and around protected blocks.
+    const dls = await deadlinePlans(plans, setup, now).catch(() => [] as DeadlinePlan[])
+    const blocks: BookedBlock[] = []
+    for (let i = 0; i < 7; i++) {
+      const day = addDays(today, i)
+      const rules = dayRules(setup.week, setup.limits, day)
+      const items = sessionsOn(dls, day)
+        .map((x) => ({ x, p: plans.find((p) => p.goalId === x.goalId)! }))
+        .filter(({ p }) => !!p)
+        .map(({ x, p }) => ({ title: goalBlockTitle(p), minutes: i === 0 ? x.minutes - doneToday(p) : x.minutes, goalId: p.goalId }))
+        .filter((x) => x.minutes >= 20)
+      if (!items.length) continue
+      const gaps = freeGaps(withProtected(keep, rules.limits, day), day, { from: '08:00', to: endWith('22:00', rules.limits), ...(i === 0 ? { after: quarterNow(now) } : {}), minMinutes: 25 })
+      for (const b of suggestBlocks(gaps, items)) blocks.push({ goalId: items.find((x) => x.title === b.title)!.goalId, title: b.title, day, start: b.start, minutes: b.minutes })
+    }
     let made = 0
     for (const b of blocks) {
       const s = new Date(`${b.day}T${b.start}:00`)
@@ -290,6 +310,20 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
    * from now. `fastMs` (the chat): the plan is shown without waiting longer than that for
    * the model's block names; they arrive a moment later in place. `onStep`: live steps.
    */
+  /** Every open deadline planned backward over the days before it (your limits and the week plan). */
+  async function deadlinePlans(plans: GoalPlan[], base: { today: string; limits: ReturnType<typeof cleanLimits>; week: ReturnType<typeof cleanWeek>; freeShare?: number }, now: Date): Promise<DeadlinePlan[]> {
+    const open = plans.filter((p) => p.leftMin > 0 && p.daysLeft > 0)
+    if (!open.length) return []
+    const last = open.map((p) => p.deadline).sort().pop()!
+    const s0 = new Date(now)
+    s0.setHours(0, 0, 0, 0)
+    const span = Math.min(21, Math.max(1, Math.round((Date.parse(`${last}T12:00:00`) - s0.getTime()) / 86400000)))
+    const events = calendar ? await calendar.events(s0.toISOString(), new Date(s0.getTime() + span * 86400000).toISOString()).catch(() => [] as CalEvent[]) : []
+    // Today's minutes already done count: the sessions spread what is left from the start of today.
+    const goals = fromGoalPlans(open)
+    return weekDeadlines({ today: base.today, now: hmNow(now), goals, events: events.filter((e) => !open.some((p) => isGoalBlock(e, p))), week: base.week, limits: base.limits, freeShare: base.freeShare })
+  }
+
   async function propose(note = '', opts: { fastMs?: number; onStep?: (s: string) => void } = {}): Promise<{ plan: DayProposal; version: number }> {
     const now = new Date()
     const step = (s: string) => {
@@ -376,7 +410,10 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         bed = '23:30'
       }
       // ME3: the hour after a long shift is quick-tasks-only too.
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, know, promised, bed, train: trainSlotInput(db as any), freeShare: fit.freeShare }
+      // Your time limits and the week plan (Today → Week): today's rules (a light day caps work, gym days).
+      const limits = cleanLimits(readJson(db, PLAN_LIMITS, null))
+      const week = cleanWeek(readJson(db, PLAN_WEEK, null))
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, know, promised, bed, train: trainSlotInput(db as any), freeShare: fit.freeShare, limits, week, rules: dayRules(week, limits, today) }
     })
     // PE6: pinned blocks (and approved ones already in the calendar) stay where they are: planned around like events.
     const prevPlan = base.st.briefing?.plan.day === base.today ? base.st.briefing.plan : null
@@ -391,7 +428,14 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const plans = await goalPlans().catch(() => [] as GoalPlan[])
     // Goal blocks already in today's calendar are busy time; only the rest still needs a slot.
     const bookedToday = (p: GoalPlan) => events.some((e) => isGoalBlock(e, p))
-    const allGoalItems = plans.filter((p) => p.todayLeftMin >= 20 && !bookedToday(p)).map((p) => ({ title: `${p.subject}: ${p.title}`, minutes: Math.min(90, p.todayLeftMin) }))
+    // Deadlines planned backward (core/planDeadlines): the hours left as sessions over the days before
+    // each deadline, within your limits and the week plan; today's session is a normal block with its why.
+    const deadlines = await deadlinePlans(plans, base, now).catch(() => [] as DeadlinePlan[])
+    const allGoalItems = sessionsOn(deadlines, base.today)
+      .map((x) => ({ x, p: plans.find((p) => p.goalId === x.goalId) }))
+      .filter(({ p }) => !!p && !bookedToday(p))
+      .map(({ x, p }) => ({ title: x.title, minutes: Math.min(90, x.minutes - doneToday(p!)), id: x.id, why: x.why }))
+      .filter((g) => g.minutes >= 20)
     // A life mode (FT4): sick = no study blocks, travel = one short one, exam week = longer ones.
     const mode = base.mode
     const goalItems = !mode ? allGoalItems : mode.kind === 'sick' ? [] : mode.kind === 'travel' ? allGoalItems.slice(0, 1).map((g) => ({ ...g, minutes: Math.min(45, g.minutes) })) : allGoalItems.map((g) => ({ ...g, minutes: Math.min(90, Math.round((g.minutes * mode.focus) / 5) * 5) }))
@@ -410,7 +454,10 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       tasks: planTasks,
       top3: base.st.tomorrow?.day === base.today ? base.st.tomorrow.top3 : [],
       waterTarget: base.water,
-      workoutDone: base.workoutDone,
+      // The week plan: once gym days are set, the workout slot is planned on those days only.
+      workoutDone: base.workoutDone || !base.rules.train,
+      // Your limits (never broken): the off time, work a day, caps, protected blocks.
+      limits: base.rules.limits,
       sleptMin: base.slept,
       best: [...new Set([...(base.hist.focus.length >= 3 ? bestHours(base.hist.focus) : []), ...(base.learned?.best ?? [])])],
       work: base.work,
@@ -434,7 +481,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     let namesLater: Promise<DayProposal> | null = null
     // W18: tomorrow's plan was drafted last night: used as it is when nothing new clashes (no AI call).
     const draft = !note && base.st.tomorrow?.day === base.today ? base.st.tomorrow.plan : undefined
-    const useDraft = !!draft && draft.blocks.length > 0 && draftFits(draft, events) && draft.blocks.every((b) => b.start >= planStartAt(hmNow(now)))
+    // Last night's draft has no deadline sessions: with one due today, today is planned fresh.
+    const useDraft = !!draft && draft.blocks.length > 0 && draftFits(draft, events) && draft.blocks.every((b) => b.start >= planStartAt(hmNow(now))) && goalItems.every((g) => draft.blocks.some((b) => b.id === g.id || sameThing(b.title, g.title)))
     if (useDraft) plan = { ...draft!, headline: `Planned last night: ${draft!.headline}`.slice(0, 160) }
     // No change asked: the rules' plan, named and ranked by a quick AI call (N6:
     // never times out; 15 s at most, else the rules' plan as it is).
@@ -443,8 +491,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const nameIt = (raw: string): DayProposal => {
         const json = String(raw).match(/\{[\s\S]*\}/)?.[0]
         const named = nameAndRank(fallback, json ? JSON.parse(json) : null)
-        // Quick-task blocks keep their plain name (the list is what matters there).
-        return { ...named, blocks: named.blocks.map((b, i) => (b.kind === 'quick' ? fallback.blocks[i] : b)) }
+        // Quick-task blocks keep their plain name (the list is what matters there); a deadline session keeps
+        // its subject-first name (the focus timer counts it for the deadline).
+        return { ...named, blocks: named.blocks.map((b, i) => (b.kind === 'quick' || fallback.blocks[i]?.why ? fallback.blocks[i] : b)) }
       }
       try {
         const naming = withTimeout(
@@ -526,10 +575,13 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     plan = shiftPlan(plan, { now: hmNow(new Date()), events, asked: base.asked }).plan
     plan = mergeKept(relinkAlso(plan), prevPlan)
     // QA1: Ben checks his own plan before it is saved (overlaps, breaks, the wind-down, past blocks).
-    plan = relinkAlso(fixPlan(plan, { now: hmNow(new Date()), events: calEvents.filter((e) => !keptIds.has(e.id)), bedtime: base.bed, freeShare: base.freeShare }).plan)
+    plan = relinkAlso(fixPlan(plan, { now: hmNow(new Date()), events: calEvents.filter((e) => !keptIds.has(e.id)), bedtime: base.bed, freeShare: base.freeShare, limits: base.rules.limits }).plan)
     // The plan audit: one thing = one block (whatever made the plan), every task of today somewhere
     // (a task the plan lost goes back on the list), not more work than free time, due times kept.
-    plan = auditPlan(plan, { now: hmNow(new Date()), events: calEvents.filter((e) => !keptIds.has(e.id) && !removedIds.has(e.id)), bedtime: base.bed, freeShare: base.freeShare, tasks: planTasks }).plan
+    plan = auditPlan(plan, { now: hmNow(new Date()), events: calEvents.filter((e) => !keptIds.has(e.id) && !removedIds.has(e.id)), bedtime: base.bed, freeShare: base.freeShare, tasks: planTasks, limits: base.rules.limits }).plan
+    // A deadline the days left can't hold is said plainly, under the plan.
+    const short = deadlines.map((d) => d.line).filter(Boolean)
+    if (short.length) plan = { ...plan, why: [plan.why, ...short].filter(Boolean).join(' ').slice(0, 400) }
     const made = await mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1
@@ -863,7 +915,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       const svc = services.services(db)
       const st = load(db, today)
       const top3 = st.tomorrow?.day === day ? st.tomorrow.top3 : []
-      const plan = packDay({ work: workToday(readLifeFit(db), day), today: day, now: '08:00', events, tasks: tasks.filter((t) => t.due === day).map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null })), top3, waterTarget: waterToday(db, svc).target, workoutDone: false })
+      // Tomorrow's limits and week plan hold for the draft too.
+      const rules = dayRules(cleanWeek(readJson(db, PLAN_WEEK, null)), cleanLimits(readJson(db, PLAN_LIMITS, null)), day)
+      const plan = packDay({ work: workToday(readLifeFit(db), day), today: day, now: '08:00', events, tasks: tasks.filter((t) => t.due === day).map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null })), top3, waterTarget: waterToday(db, svc).target, workoutDone: !rules.train, limits: rules.limits })
       save(db, { ...st, tomorrow: { day, top3, plan } })
       return plan
     })

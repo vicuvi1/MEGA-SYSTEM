@@ -27,6 +27,8 @@ export interface PlanBlock {
   done?: string[]
   /** PE2/PE3: what Google Calendar and Todoist hold for it, as last synced (core/planSync). */
   sync?: BlockSync
+  /** A deadline study session's reason ("exam in 5 days, session 2 of 4", core/planDeadlines). */
+  why?: string
 }
 
 /** What the outside apps hold for a block, as last synced. */

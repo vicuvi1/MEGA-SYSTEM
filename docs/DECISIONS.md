@@ -61,6 +61,11 @@ entry that says why.
 - **Why:** the owner wants a work planner that keeps up with the day without asking, and a plan he can trust: no churn, no surprises in his calendar.
 - **Rules out:** re-packing the whole remaining day automatically (the manual "Re-plan from now" does that), moving anything already in the calendar by itself, or re-adding a block the user removed.
 
+### Time limits are hard; deadlines say when they don't fit (2026-11-08)
+- **Decision:** your limits (`plan_limits`: most work a day, off time, protected blocks, a cap per kind) are never broken by the packer, the audit or the automatic re-plan; only draft blocks the planner made are trimmed or go back on the list, pinned/approved/ticked/calendar blocks stay. Deadlines are planned backward into sessions (`core/planDeadlines.ts`) of 25–90 min, one per deadline a day, ids from goal + day; what doesn't fit is reported plainly ("Not enough room before Friday 20 Nov: 3h short"). The week plan (`plan_week`) is a weekday template (heavy/normal/light, gym); a light day caps work at 2h; changing it re-plans only today's draft and the days ahead.
+- **Why:** the owner wants a work planner he can trust with time he protects: a limit squeezed silently to fit a deadline breaks that trust, and a deadline that can't be met is better known early.
+- **Rules out:** breaking a limit to fit more work, cramming a deadline into one day, a second session block of the same deadline on a day, changing an approved plan or a past day because the week changed, energy or mood questions in the planner.
+
 ### Every task of the day has a place or a stated reason (2026-11-08)
 - **Decision:** `core/planAudit.ts` runs after a plan is built or edited: a task the plan lost goes back on today's list; what has no room shows as one plain line with "Move to tomorrow". Block "why" lines come only from data the plan or Todoist holds.
 - **Why:** a task silently missing from the plan breaks trust in the whole plan.

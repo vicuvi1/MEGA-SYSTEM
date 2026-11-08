@@ -2,6 +2,8 @@
 // this week", with chips from your goals and projects. The 3 become the week's
 // big 3 (the same list as Goals → This week's big 3); the rest are parked:
 // still visible, quiet. Telegram asks the same with buttons.
+// On Now it starts as one slim line (`compact`): Pick opens the chips, so the
+// tab still fits a laptop screen on a Sunday.
 import { useEffect, useState } from 'react'
 import { life } from './bridge'
 import { dayKey } from '@core/dates'
@@ -12,11 +14,12 @@ import { useWeekPlan } from './WeekPlanner'
 const appDay = () => dayKey(new Date())
 const LATER = 'ls.top3Later'
 
-export function WeekTop3Pick() {
+export function WeekTop3Pick({ compact = false }: { compact?: boolean } = {}) {
   const act = useAction()
   const [saved, reload] = useWeekPlan()
   const [chips, setChips] = useState<string[] | null>(null)
   const [picked, setPicked] = useState<string[]>([])
+  const [open, setOpen] = useState(!compact)
   const today = appDay()
   const week = planWeek(today)
   const [later, setLater] = useState(() => {
@@ -67,6 +70,18 @@ export function WeekTop3Pick() {
     }
     setLater(true)
   }
+  if (!open)
+    return (
+      <section className="wk3 wk3-slim" aria-label="Pick your top 3 for this week">
+        <span>🎯 Pick your top 3 for this week</span>
+        <button type="button" className="btn primary small" onClick={() => setOpen(true)}>
+          Pick
+        </button>
+        <button type="button" className="btn ghost small" onClick={notNow}>
+          Not now
+        </button>
+      </section>
+    )
   return (
     <section className="wk3" aria-label="Pick your top 3 for this week">
       <h3>🎯 Pick your top 3 for this week</h3>

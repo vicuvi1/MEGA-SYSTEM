@@ -30,6 +30,7 @@ import { PluginCards } from '../../../plugins/cards'
 import { MoneyPill } from '../MoneyQuick'
 import { ShiftButtons } from '../LifeFitPanel'
 import { WeekTop3Pick } from '../WeekTop3'
+import { WeekPlanCard } from '../plan/WeekPlan'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -214,10 +215,11 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
             <div className="now-top">
               <TodayHero slim name={ui.name} onGo={(p) => onGo(p)} />
               <ShiftButtons compact />
+              {/* Sunday and Monday: "Pick your top 3 for this week", one slim line under the top line. */}
+              <WeekTop3Pick compact />
             </div>
             {/* The money pill sits in the habits header on Now (next to "Log spending"). */}
             {!has('day') && <MoneyPill />}
-            <WeekTop3Pick />
             {has('day') && (
               <>
                 <LifeModeCard compact quiet />
@@ -243,9 +245,10 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
             {has('reps') && <SoloDailyQuestBanner body={body ?? null} summary={summary} onRefresh={() => onChange()} onGo={onGo} />}
             {/* BD1 + BD9: today's protein ring, quick picks and the pre-shift fuel card; BD18 on Sundays. */}
             <ProteinCard compact />
-            {new Date().getDay() === 0 && <BodyWeekCard sunday />}
+            {new Date().getDay() === 0 && <BodyWeekCard sunday folded />}
           </TabPanel>
           <TabPanel page="today" id="week" value={tab}>
+            <WeekPlanCard />
             <WeekStrip />
             <div ref={setWeekEl} className="td-slot" />
             {has('progress') && <ProgressCard onOpen={() => onGo('progress')} />}

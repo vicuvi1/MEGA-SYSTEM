@@ -47,6 +47,8 @@ import { financeStateFrom, addFeedback, loadLog, loadMemory, loadMind, loadProfi
 import { deskChange, deskView, type DeskOp } from './web/benDesk'
 import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor, type DayProposal } from '@core/rhythm'
+import { PLAN_LIMITS, cleanLimits, type PlanLimits } from '@core/planLimits'
+import { PLAN_WEEK, cleanWeek, type WeekShape } from '@core/planWeek'
 import { lateBlocks } from '@core/planShift'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus, waterToday } from './web/coachStatus'
@@ -1005,6 +1007,18 @@ export function createTursoWebBridge(): Bridge {
         if (!r.ok) throw new Error(j.error || httpProblem('Ben', r.status))
         void syncNow().catch(() => null)
         return j
+      },
+      // Planner limits and the week plan (synced settings plan_limits, plan_week): read and saved here.
+      planSetup: async (patch?: { limits?: Partial<PlanLimits>; week?: WeekShape }) => {
+        const svc = await svcP
+        const read = (s: any) => ({ limits: cleanLimits(readSetting(s.db as any, PLAN_LIMITS)), week: cleanWeek(readSetting(s.db as any, PLAN_WEEK)) })
+        if (!patch) return svc.read(read)
+        return svc.write((s) => {
+          const cur = read(s)
+          if (patch.limits) writeSetting(s.db as any, PLAN_LIMITS, cleanLimits({ ...cur.limits, ...patch.limits }) as any)
+          if (patch.week) writeSetting(s.db as any, PLAN_WEEK, { ...cleanWeek(patch.week), setOn: s.wallet.today() } as any)
+          return read(s)
+        })
       },
       // PE1: the plan editor saves today's plan here (instant; the server sees it on the next sync).
       planSave: async (plan: DayProposal) =>

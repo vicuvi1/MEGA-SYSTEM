@@ -15,6 +15,7 @@ import { afterRun, autoAllowed, autoReplan, isFlipFlop, type AutoMeta } from '@c
 import type { Span } from '@core/planShift'
 import { fromMin, type DayProposal, type RhythmState } from '@core/rhythm'
 import type { CalEvent } from '@core/dayTime'
+import { limitsLine, type DayLimits } from '@core/planLimits'
 import type { TodoTask } from '@core/todoist'
 import { life } from '../bridge'
 
@@ -109,6 +110,9 @@ export function attach(state: RhythmState) {
   }
   // A plan just came in (or the day started): a late block moves now, not in a minute.
   setTimeout(() => void maybeAuto(), 300)
+  // A plan that came in from elsewhere (Ben, another device, a new day) keeps your limits too.
+  limitsKey = ''
+  setTimeout(keepLimitsNow, 200)
 }
 
 /** An older approved plan: its blocks find their calendar events once. */
@@ -199,10 +203,30 @@ const hmNow = () => {
 }
 
 /** What the plan card knows about the day (its fixed events, bedtime, water, free share). */
-type Ctx = { events: CalEvent[]; bedtime: string; water: boolean; freeShare?: number; endBy: string }
+type Ctx = { events: CalEvent[]; bedtime: string; water: boolean; freeShare?: number; endBy: string; limits?: DayLimits | null }
 let ctx: Ctx | null = null
 export function setContext(c: Ctx) {
   ctx = c
+  keepLimitsNow()
+}
+
+/**
+ * Your limits changed (Coach → Daily rhythm, or a light day on Today → Week), or a new plan came in:
+ * the draft blocks that break them are trimmed or go back on the list, with one note and Undo.
+ * Pinned, approved and ticked blocks are yours and stay; nothing is sent to Google or Todoist (drafts).
+ * Once per plan that comes in and per change of the limits, so Undo is not taken back.
+ */
+let limitsKey = ''
+function keepLimitsNow() {
+  if (!cur || !ctx?.limits || editingNow) return
+  const key = `${cur.plan.day}|${JSON.stringify(ctx.limits)}`
+  if (key === limitsKey) return
+  limitsKey = key
+  const r = auditPlan(cur.plan, { ...ctx, now: hmNow(), fixTimes: false, fixPast: false, keepLimits: true, tasks: asAudit(todayTasks?.list) ?? undefined })
+  const codes = r.fixed.filter((f) => f.startsWith('limit:')).map((f) => f.slice(6))
+  if (!codes.length) return
+  const label = limitsLine(codes, ctx.limits) ?? 'Kept your limits'
+  if (edit({ op: 'replace', plan: r.plan, label })) say({ text: label, tone: 'info', undo: true })
 }
 
 /** "Move to tomorrow" on the audit line: off today's plan (Undo puts it back), and Todoist gets tomorrow's date. */

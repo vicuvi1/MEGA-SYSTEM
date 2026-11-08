@@ -21,14 +21,15 @@
    "priority": 1,
    "area": "today",
    "title": "Today Now tab",
-   "user_visible_behavior": "Slim top line, Top 3 (must-dos), other tasks, simple habit tracker",
+   "user_visible_behavior": "Slim top line, Top 3 (must-dos), other tasks, simple habit tracker; on Sunday/Monday the weekly top 3 pick is one slim line, and the Sunday body report on Body is folded",
    "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-    "SMOKE_ONLY=\"Today Now\" npm run smoke"
+    "SMOKE_ONLY=\"Today\" npm run smoke",
+    "E2E_NOW=<a Sunday>T08:30 SMOKE_ONLY=\"Today tabs\" node e2e/smoke.mjs"
    ],
-   "evidence": "Release v1.4.1366 green; smoke step passes",
-   "notes": ""
+   "evidence": "2026-11-08: Today steps pass with the clock on Sunday, Monday and Friday",
+   "notes": "The second-tap check compares the points number, not the whole top bar (the +N pop raced it)"
   },
   {
    "id": "F003",
@@ -407,6 +408,20 @@
    ],
    "evidence": "",
    "notes": "2026-11-08: core/todoSync.ts (edit queue, overlay, resolveDue), web/todoistClient.ts (one Todoist object for every caller, Ben's quick commands and the island included), the server update answers with the task and sends plain dates as due_date."
+  },
+  {
+   "id": "F030",
+   "priority": 1,
+   "area": "planner",
+   "title": "Time limits, deadlines planned backward, and a week plan",
+   "user_visible_behavior": "Coach → Daily rhythm → Time limits (most work a day, an off time, protected blocks on set days, a cap per kind) that the planner never breaks; each deadline goal becomes study sessions over the days before it with a why line (\"exam in 5 days, session 2 of 4\") or a plain \"Not enough room before Friday 20 Nov: 3h short\"; Today → Week sets heavy, normal or light days and gym days and shows the next 7 days against the limits",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/planLimits.test.ts src/core/planDeadlines.test.ts src/core/planWeek.test.ts",
+    "SMOKE_ONLY=\"Plan limits\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests pass; smoke step \"Plan limits\" passes locally",
+   "notes": "core/planLimits.ts (cleanLimits, limitsFor, keepLimits, limitBreaks), core/planDeadlines.ts (planDeadlines, sessionsOn), core/planWeek.ts (dayRules, dayRooms, weekSummary). Synced settings plan_limits and plan_week. Telegram parity is for a later builder."
   },
   {
    "id": "F900",

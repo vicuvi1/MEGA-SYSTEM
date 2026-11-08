@@ -8,8 +8,9 @@ import { FREE_SHARE, planStartAt } from './dayPacker'
 import { ensureIds, planItems, minOfDay, TRAIN_ID, type EditItem } from './planEdit'
 import { fromMin, toMin, type DayProposal } from './rhythm'
 import type { CalEvent } from './dayTime'
+import { limitBreaks, withProtected, type DayLimits } from './planLimits'
 
-export type IssueCode = 'overlap' | 'breaks' | 'meal' | 'water' | 'late' | 'toomuch' | 'nofree' | 'past'
+export type IssueCode = 'overlap' | 'breaks' | 'meal' | 'water' | 'late' | 'toomuch' | 'nofree' | 'past' | 'limit'
 
 export interface PlanIssue {
   code: IssueCode
@@ -36,6 +37,8 @@ export interface CheckCtx {
   freeShare?: number
   /** Blocks the user just placed: fixPlan treats them as pinned (the others make room). */
   keep?: string[]
+  /** Your time limits for today (core/planLimits): the off time ends the day, protected blocks are fixed time. */
+  limits?: DayLimits | null
 }
 
 export const DEEP_MAX = 90
@@ -50,13 +53,18 @@ const deepOf = (b: EditItem) => !b.train && b.kind !== 'quick'
 function lastEnd(ctx: CheckCtx): number {
   const bed = toMin(ctx.bedtime ?? '23:30')
   const b = bed < toMin('12:00') ? bed + 24 * 60 : bed
-  return b - (ctx.windDown ?? 45)
+  const wind = b - (ctx.windDown ?? 45)
+  // Your off time ends the day when it is earlier.
+  return ctx.limits?.offAt ? Math.min(wind, toMin(ctx.limits.offAt)) : wind
 }
+
+/** The off time is what ends the day (not the wind-down). */
+const offEnds = (ctx: CheckCtx) => !!ctx.limits?.offAt && toMin(ctx.limits.offAt) <= lastEnd({ ...ctx, limits: null })
 
 function spans(plan: DayProposal, ctx: CheckCtx): Span[] {
   const keep = new Set(ctx.keep ?? [])
   const items = planItems(plan).map((b): Span => ({ s: toMin(b.start), e: toMin(b.start) + b.minutes, id: b.id, locked: !!b.locked || keep.has(b.id), fixed: false, deep: deepOf(b), title: b.title }))
-  const ev = (ctx.events ?? [])
+  const ev = withProtected(ctx.events ?? [], ctx.limits, plan.day)
     .filter((e) => !e.allDay && !e.declined)
     .map((e): Span => ({ s: minOfDay(e.start, plan.day), e: minOfDay(e.end, plan.day), id: `ev:${e.id}`, locked: true, fixed: true, deep: false, title: e.title }))
     .filter((x) => x.e > x.s && x.e - x.s < 12 * 60)
@@ -110,7 +118,9 @@ export function checkPlan(plan: DayProposal, ctx: CheckCtx): PlanIssue[] {
   // Ends before bedtime minus the wind-down.
   const end = lastEnd(ctx)
   const late = mine.filter((x) => x.e > end)
-  if (late.length) out.push({ code: 'late', text: `Runs past ${fromMin(Math.min(end, 24 * 60 - 5) % (24 * 60))} (wind-down)`, ids: late.map((x) => x.id), fixable: late.some((x) => !x.locked) })
+  if (late.length) out.push({ code: 'late', text: `Runs past ${fromMin(Math.min(end, 24 * 60 - 5) % (24 * 60))} (${offEnds(ctx) ? 'your off time' : 'wind-down'})`, ids: late.map((x) => x.id), fixable: late.some((x) => !x.locked) })
+  // Your other limits: work a day, a kind's cap, protected time (the off time is the check above).
+  for (const lb of limitBreaks(plan, ctx.limits).filter((x) => x.code === 'focus' || x.code === 'cap')) out.push({ code: 'limit', text: lb.text, ids: lb.ids, fixable: true })
   // In the past.
   if (ctx.now) {
     const s0 = toMin(ctx.now)

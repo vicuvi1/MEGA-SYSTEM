@@ -13,6 +13,7 @@ import { fromMin, toMin, type AlsoItem, type DayProposal, type DeferredItem, typ
 import type { WorkToday } from './lifeFit'
 import { pickWorkoutSlot, slotTitle } from './workoutSlot'
 import { alsoOpen, dedupePlan, dedupeTasks, eventFor, fixedAhead, sameThing, sportAhead } from './planDedupe'
+import { capKind, endWith, isWork, keepLimits, withProtected, type DayLimits } from './planLimits'
 
 export interface PlanTask {
   id?: string
@@ -42,7 +43,7 @@ export interface PackInputs {
   tasks: PlanTask[]
   top3: string[]
   /** Goals that need time today (behind pace, deadline plans), placed first. */
-  goals?: { title: string; minutes: number }[]
+  goals?: { title: string; minutes: number; /** A deadline session's stable id (core/planDeadlines). */ id?: string; /** Its why line. */ why?: string }[]
   waterTarget: number
   workoutDone: boolean
   /** Last night's sleep in minutes, when known (under 6 h = a lighter day). */
@@ -75,6 +76,8 @@ export interface PackInputs {
   freeShare?: number
   /** A lunch break kept free (default 30 min between 12:00 and 14:00; null: none). */
   meal?: { from: string; to: string; minutes: number } | null
+  /** Your time limits for today (core/planLimits): never broken. */
+  limits?: DayLimits | null
 }
 
 /** At least this share of the free time stays unplanned, unless My life says otherwise. */
@@ -192,6 +195,9 @@ interface Chunk {
   kind: 'goal' | 'focus' | 'quick'
   tasks: { title: string; id?: string; minutes: number }[]
   hard: boolean
+  /** A deadline session: its block id and why line. */
+  id?: string
+  why?: string
 }
 
 /** Puts one chunk in a window (best hours first for hard work, the afternoon for quick tasks). Mutates `wins`. */
@@ -241,7 +247,10 @@ export const fmtMin = (m: number) => (m >= 60 ? `${Math.floor(m / 60)}h${m % 60 
 export function packDay(p: PackInputs): DayProposal {
   const short = p.sleptMin != null && p.sleptMin < 360
   const cap = short ? 60 : 90
-  const endBy = p.endBy ?? (short ? '21:30' : '22:00')
+  // Your off time ends the day when it is earlier; protected blocks are fixed time like events.
+  const limits = p.limits ?? null
+  const endBy = endWith(p.endBy ?? (short ? '21:30' : '22:00'), limits)
+  const events = withProtected(p.events, limits, p.today)
   // A plan always starts from now (10:00 → 10:05), never with blocks already in the past.
   const after = planStartAt(p.now)
 
@@ -250,7 +259,7 @@ export function packDay(p: PackInputs): DayProposal {
   const tasks = dedupeTasks(rankTasks(p.tasks, p.today))
   // A task that is the same thing as a calendar event still ahead ("gym" and the 17:00 "Gym (45 min)",
   // "Weekly review: …" and the "Weekly review" event) is done at the event: no block of its own.
-  const fixed = fixedAhead(p.events, p.today, after)
+  const fixed = fixedAhead(events, p.today, after)
   const covered = new Map<PlanTask, string>()
   for (const t of tasks) {
     const e = eventFor(t.content, fixed)
@@ -274,7 +283,7 @@ export function packDay(p: PackInputs): DayProposal {
   tasks.filter((t) => !covered.has(t)).forEach((t) => addMust(t.content))
 
   // Chunks of work: goals, each must-do on its own, the rest grouped by project, quick ones batched.
-  const chunks: Chunk[] = (p.goals ?? []).map((g) => ({ title: g.title, minutes: Math.min(cap, Math.max(25, g.minutes)), kind: 'goal' as const, tasks: [], hard: true }))
+  const chunks: Chunk[] = (p.goals ?? []).map((g) => ({ title: g.title, minutes: Math.min(cap, Math.max(25, g.minutes)), kind: 'goal' as const, tasks: [], hard: true, ...(g.id ? { id: g.id } : {}), ...(g.why ? { why: g.why } : {}) }))
   const quick: PlanTask[] = []
   const others: PlanTask[] = []
   for (const m of mustdos) {
@@ -330,7 +339,7 @@ export function packDay(p: PackInputs): DayProposal {
     : null
 
   // Place them: goals and must-dos, the urgent work, the quick batch, training, then the rest until the day is full.
-  const wins = withWork(freeWindows(p.events, p.today, after, endBy), p.work)
+  const wins = withWork(freeWindows(events, p.today, after, endBy), p.work)
   const freeMin = wins.filter((w) => !w.light).reduce((s, w) => s + w.e - w.s, 0)
   // Lunch stays free, and a share of the free time stays unplanned (never a day packed to the minute).
   const meal = p.meal === null ? null : keepMeal(wins, p.meal ?? MEAL_WINDOW)
@@ -344,16 +353,27 @@ export function packDay(p: PackInputs): DayProposal {
   if (short) for (const c of [...firsts, ...rest]) c.minutes = Math.max(25, Math.round((c.minutes * 0.75) / 5) * 5)
   const placed: (PlanBlock & { chunk: Chunk })[] = []
   let used = 0
+  // Your limits: work a day and each kind's cap (training, breaks and meals don't count).
+  const workUsed = () => placed.filter(isWork).reduce((t, b) => t + b.minutes, 0)
+  const limitLeft = (c: Chunk): number => {
+    if (!limits || !isWork(c)) return Infinity
+    let left = limits.maxFocusMin != null ? limits.maxFocusMin - workUsed() : Infinity
+    const k = capKind(c)
+    const capOf = limits.caps.find((x) => x.kind === k)
+    if (capOf) left = Math.min(left, capOf.minutes - placed.filter((b) => isWork(b) && capKind(b) === k).reduce((t, b) => t + b.minutes, 0))
+    return left
+  }
   const tryPlace = (c: Chunk): boolean => {
-    // Quick tasks that fit the work window don't take free time (see below).
-    const inWork = c.kind === 'quick' && wins.some((w) => w.light && w.e - w.s >= c.minutes)
-    if (placed.length >= maxBlocks || (!inWork && budget - used - trainMin < 25)) return false
-    const want = inWork ? c : { ...c, minutes: Math.min(c.minutes, budget - used - trainMin) }
+    // Quick tasks that fit the work window don't take free time (see below), unless a work limit is set.
+    const inWork = c.kind === 'quick' && limits?.maxFocusMin == null && wins.some((w) => w.light && w.e - w.s >= c.minutes)
+    const lim = limitLeft(c)
+    if (placed.length >= maxBlocks || lim < 25 || (!inWork && budget - used - trainMin < 25)) return false
+    const want = inWork ? { ...c, minutes: Math.min(c.minutes, lim) } : { ...c, minutes: Math.min(c.minutes, budget - used - trainMin, lim) }
     const at = place(wins, want, p.best ?? [], 25, p.avoid ?? [])
     if (!at) return false
     // Quick tasks in the work window use time that was never free: they don't count against the free time.
     if (!at.light) used += at.minutes
-    placed.push({ title: c.title.slice(0, 80), start: fromMin(at.start), minutes: at.minutes, kind: c.kind, tasks: c.tasks.map((t) => t.title), chunk: c })
+    placed.push({ title: c.title.slice(0, 80), start: fromMin(at.start), minutes: at.minutes, kind: c.kind, tasks: c.tasks.map((t) => t.title), ...(c.id ? { id: c.id } : {}), ...(c.why ? { why: c.why } : {}), chunk: c })
     return true
   }
   /** A chunk that doesn't fit whole is tried task by task (most important first). */
@@ -457,7 +477,7 @@ export function packDay(p: PackInputs): DayProposal {
   const headline = mustdos.length
     ? `${mustdos.length} must-do${mustdos.length === 1 ? '' : 's'} · ${blocks.length} block${blocks.length === 1 ? '' : 's'} · ${fmtMin(focus)} focus${alsoOpen({ also }).length ? ` · ${alsoOpen({ also }).length} more on the list` : ''}`
     : 'A light day: pick one thing that matters'
-  return dedupePlan({
+  const result: DayProposal = {
     day: p.today,
     headline: short ? `Short night (${hm(p.sleptMin!)}): a lighter day. ${headline}`.slice(0, 160) : headline,
     mustdos,
@@ -469,8 +489,12 @@ export function packDay(p: PackInputs): DayProposal {
     why,
     light: short || undefined,
     ...(squeeze ? { squeeze } : {}),
-    free: wins.length || blocks.length ? withWork(freeWindows(p.events, p.today, after, endBy), p.work).filter((w) => !w.light).map((w) => ({ start: fromMin(w.s), end: fromMin(w.e) })) : []
-  }, { events: p.events, after })
+    free: wins.length || blocks.length ? withWork(freeWindows(events, p.today, after, endBy), p.work).filter((w) => !w.light).map((w) => ({ start: fromMin(w.s), end: fromMin(w.e) })) : []
+  }
+  // A safety net for the limits (a swap above can change a block's kind): the least important block gives way.
+  const rank = (b: PlanBlock, plan: DayProposal) => (b.kind === 'quick' ? 4 : b.kind === 'goal' ? 2 : (b.tasks ?? [b.title]).some((t) => plan.mustdos.some((m) => sameThing(m, t))) ? 0 : 3)
+  const kept = keepLimits(result, limits, { loose: () => true, rank, toList: (plan, b) => relinkAlso({ ...plan, blocks: plan.blocks.filter((x) => x !== b) }) })
+  return dedupePlan(kept.plan, { events: p.events, after })
 }
 
 /** Every task of the day, found in the plan: a must-do, in a block, in "Also today", or deferred. */

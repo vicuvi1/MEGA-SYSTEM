@@ -76,13 +76,13 @@ describe('goal plans in the calendar', () => {
     expect(lines.some((l) => l.includes('Replaced'))).toBe(true)
     const after = await rhythm.goalPlans()
     expect(after[0].perDayMin).toBe(95) // 840 min over 9 days
-    // 95 min a day: two blocks of 50 each day, for the 7 days from today.
+    // 95 min a day would be needed: one session a deadline a day, at most 90 min (planDeadlines), for the 7 days from today.
     const perDayBooked = new Map<string, number>()
     for (const e of cal.events) {
       const d = new Date(e.start).toDateString()
       perDayBooked.set(d, (perDayBooked.get(d) ?? 0) + (Date.parse(e.end) - Date.parse(e.start)) / 60000)
     }
-    expect([...perDayBooked.values()].slice(-7)).toEqual([100, 100, 100, 100, 100, 100, 100])
+    expect([...perDayBooked.values()].slice(-7)).toEqual([90, 90, 90, 90, 90, 90, 90])
   })
 
   it('records the coach history: plan proposed, approved, the evening score, promises', async () => {

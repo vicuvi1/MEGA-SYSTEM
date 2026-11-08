@@ -2,12 +2,13 @@
 // sets per muscle, sleep and steps side by side, then one focus for next week
 // with the likely cause. On Sunday it also rides along with Ben's weekly
 // check on Telegram (no extra message). Lines slide in one by one (transform
-// and opacity only; none with reduced motion).
+// and opacity only; none with reduced motion). On Today → Body it is one
+// folded line (`folded`): "Next week: <focus>", tap to see the whole report.
 import { useEffect, useState } from 'react'
 import type { BodyWeek } from '@core/bodyReport'
 import { life } from '../bridge'
 
-export function BodyWeekCard({ sunday = false }: { sunday?: boolean }) {
+export function BodyWeekCard({ sunday = false, folded = false }: { sunday?: boolean; folded?: boolean }) {
   const [w, setW] = useState<BodyWeek | null>(null)
   useEffect(() => {
     const load = () =>
@@ -20,25 +21,39 @@ export function BodyWeekCard({ sunday = false }: { sunday?: boolean }) {
     return () => window.removeEventListener('life-body-changed', load)
   }, [])
   if (!w) return null
+  const lines = (
+    <ul className="bw-lines">
+      {w.lines.map((l, i) => (
+        <li key={l.label} className={`bw-line ${l.tone}`} style={{ animationDelay: `${i * 70}ms` }}>
+          <span className="bw-icon" aria-hidden="true">
+            {l.icon}
+          </span>
+          <span>
+            <b>{l.label}</b>
+            <small>{l.value}</small>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+  if (folded)
+    return (
+      <details className={`bw-card bw-fold${sunday ? ' sunday' : ''}`} aria-label="Your body this week">
+        <summary>
+          <span>🏋️ {sunday ? "Ben's Sunday report" : 'Your body this week'}</span>
+          <b>🎯 Next week: {w.focus}</b>
+        </summary>
+        {lines}
+        {w.cause && <p className="bw-cause">{w.cause}</p>}
+      </details>
+    )
   return (
     <section className={`card bw-card${sunday ? ' sunday' : ''}`} aria-label="Your body this week">
       <header className="card-head">
         <h2>🏋️ Your body this week</h2>
         <span className="hint small">{sunday ? "Ben's Sunday report" : 'the last 7 days'}</span>
       </header>
-      <ul className="bw-lines">
-        {w.lines.map((l, i) => (
-          <li key={l.label} className={`bw-line ${l.tone}`} style={{ animationDelay: `${i * 70}ms` }}>
-            <span className="bw-icon" aria-hidden="true">
-              {l.icon}
-            </span>
-            <span>
-              <b>{l.label}</b>
-              <small>{l.value}</small>
-            </span>
-          </li>
-        ))}
-      </ul>
+      {lines}
       <div className="bw-focus" style={{ animationDelay: `${w.lines.length * 70}ms` }}>
         <b>🎯 Next week: {w.focus}</b>
         {w.cause && <p>{w.cause}</p>}

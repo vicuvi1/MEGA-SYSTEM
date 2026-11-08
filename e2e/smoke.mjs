@@ -187,6 +187,22 @@ try {
     if (!(await pg.locator('.td2 .cmd-side .ds').first().isVisible())) throw new Error('"Your day" is not beside the tabs')
     const sizes = []
     for (const id of ids) sizes.push(`${id} ${((await tabFit('.td2', id)).scroll / 654).toFixed(2)}`)
+    // Sunday and Monday (the run follows the real date): "Pick your top 3 for this week" is one slim line on Now; Pick opens the chips.
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    const wk3 = pg.locator('[data-tabpanel="now"] .wk3')
+    if (await wk3.count()) {
+      if (!/wk3-slim/.test((await wk3.getAttribute('class')) ?? '')) throw new Error('the weekly top 3 card on Now is not one slim line')
+      if ((await wk3.boundingBox()).height > 48) throw new Error(`the weekly top 3 line is ${(await wk3.boundingBox()).height}px tall`)
+      await wk3.locator('button', { hasText: 'Pick' }).click()
+      await pg.waitForSelector('[data-tabpanel="now"] .wk3:not(.wk3-slim) .wk3-chips', { timeout: 3000 })
+      await pg.locator('[data-tabpanel="now"] .wk3 button', { hasText: 'Not now' }).click()
+      await pg.waitForFunction(() => !document.querySelector('[data-tabpanel="now"] .wk3'), null, { timeout: 3000 })
+    }
+    // Sundays: Ben's body report on Body is one folded line ("Next week: …"), the whole report on tap.
+    await pg.click('.td2 .ptabs [data-tab="body"]')
+    await pg.waitForTimeout(300)
+    const bw = await pg.locator('[data-tabpanel="body"] .bw-card').evaluateAll((els) => els.map((e) => `${e.className}${e.open ? ' open' : ''}`))
+    if (bw.some((c) => !/bw-fold/.test(c) || / open$/.test(c))) throw new Error(`the Sunday body report on Body is not folded (${bw.join()})`)
     // Each thing once: must-dos on Now, the rest of today on Tasks, water on Body.
     await pg.click('.td2 .ptabs [data-tab="tasks"]')
     if (!(await pg.locator('.td2 .dl-tasks .dl-tabs').isVisible())) throw new Error('the task tabs are not on Tasks')
@@ -3022,13 +3038,28 @@ try {
     })
     const [d1, t1] = await count()
     if (d1 !== d0 + 1 || t1 !== t0) throw new Error(`count went ${d0}/${t0} → ${d1}/${t1}`)
-    await pg.waitForTimeout(1500) // the balance counts up
-    const bal = await pg.evaluate(() => document.querySelector('.topbar')?.textContent ?? '')
+    // Compare the points number itself once it stopped counting up (not the whole top bar: its "+N Skincare
+    // routine" pop stays 2.6 s, so comparing the bar raced with the pop's timer).
+    const coins = () => pg.evaluate(() => document.querySelector('.topbar .tb-coins')?.textContent?.trim() ?? '')
+    const settled = async () => {
+      let v = await coins()
+      for (let k = 0; k < 20; k++) {
+        await pg.waitForTimeout(400)
+        const b = await coins()
+        if (b === v) return v
+        v = b
+      }
+      return v
+    }
+    await pg.waitForTimeout(800)
+    const bal = await settled()
+    if (!/\d/.test(bal)) throw new Error(`no balance in the top bar (${bal})`)
     await row('Grooming').locator('.hb-hit').click({ force: true })
     await pg.waitForSelector('.gr .gr-step', { timeout: 10000 })
     await pg.keyboard.press('Escape')
-    await pg.waitForTimeout(1500)
-    if ((await pg.evaluate(() => document.querySelector('.topbar')?.textContent ?? '')) !== bal) throw new Error('a second tap paid again')
+    await pg.waitForTimeout(2500) // a payment would land and count up by now
+    const after = await settled()
+    if (after !== bal) throw new Error(`a second tap paid again: ${bal} → ${after}`)
     // Skip today from the ⋯ menu: no points, out of the count; and back on.
     await row('Clean day').hover()
     await row('Clean day').locator('.hb-dots-btn').click()
@@ -3418,6 +3449,84 @@ try {
     await call('todoist', { op: 'testEdit', id: 't1', content: 'Pay the internet bill (online)', priority: 3 })
     await pg.locator('.ta-sync button', { hasText: 'Sync' }).first().click()
     await pg.locator('.ta-task', { hasText: 'Pay the internet bill (online)' }).first().waitFor({ timeout: 15000 })
+  })
+  // Planner upgrades: time limits (Coach → Daily rhythm), deadlines planned backward, the week plan (Today → Week).
+  await step('Plan limits: set limits in Coach, the plan keeps them, deadline sessions and the week plan show', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    const limitsBox = async () => {
+      await open('coach')
+      await pg.locator('button[aria-label="More"]').first().click({ timeout: 15000 })
+      await pg.locator('[role="menuitem"]', { hasText: 'Plan, goals and about you' }).click()
+      await pg.locator('.bd-tabs [role="tab"]', { hasText: 'Plan' }).click()
+      await pg.locator('.bd-more summary', { hasText: "Today's plan & daily rhythm" }).waitFor({ timeout: 15000 })
+      if (!(await pg.locator('[data-plan-limits]').first().isVisible().catch(() => false))) await pg.locator('.bd-more summary', { hasText: "Today's plan & daily rhythm" }).click()
+      const box = pg.locator('[data-plan-limits]').first()
+      await box.waitFor({ timeout: 15000 })
+      return box
+    }
+    const saved = async () => {
+      await pg.locator('.toast', { hasText: 'Limits saved' }).last().waitFor({ timeout: 8000 })
+      await new Promise((ok) => setTimeout(ok, 400))
+    }
+    const box = await limitsBox()
+    // The made-up "Rust book" deadline: planned backward into sessions, or said plainly how short it is.
+    const dl = pg.locator('[data-deadline-plan]').first()
+    await dl.waitFor({ timeout: 15000 })
+    if (!/session|short/.test(await dl.innerText())) throw new Error(`deadline line: ${await dl.innerText()}`)
+    await box.locator('[data-limit-focus]').fill('3')
+    await box.locator('[data-limit-focus]').blur()
+    await saved()
+    await box.locator('[data-limit-off]').fill('20:00')
+    await saved()
+    await box.locator('[data-protect-add]').click()
+    await box.locator('[data-protect-title]').fill('Training')
+    await box.locator('[data-protect-start]').fill('17:00')
+    await box.locator('[data-protect-min]').fill('45')
+    await box.locator('.pl-add button', { hasText: 'Add' }).click()
+    await box.locator('[data-protect-row]', { hasText: 'Training' }).waitFor({ timeout: 8000 })
+    // Today → Plan: the draft keeps the limits (at most 3h of work, nothing after 20:00, the protected time shown).
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    await pg.locator('section.cp .pe-block').first().waitFor({ timeout: 15000 })
+    await pg.locator('section.cp .pe-ev.protected').first().waitFor({ state: 'attached', timeout: 10000 })
+    await pg.waitForFunction(() => {
+      const bs = [...document.querySelectorAll('section.cp .pe-block.draft:not(.locked)')]
+      const work = bs.filter((b) => b.getAttribute('data-work')).reduce((t, b) => t + Number(b.getAttribute('data-min')), 0)
+      const late = bs.some((b) => {
+        const [h, m] = (b.getAttribute('data-start') || '00:00').split(':').map(Number)
+        return h * 60 + m + Number(b.getAttribute('data-min')) > 20 * 60
+      })
+      // Approved blocks are yours and stay (earlier steps approve the plan): only the drafts must keep the limits.
+      return work <= 180 && !late
+    }, null, { timeout: 15000 })
+    await pg.locator('section.cp').first().screenshot({ path: '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/planwork/plan-limits.png' }).catch(() => {})
+    // Today → Week: the next 7 days with planned hours against the 3h limit, and the deadline's coverage.
+    await pg.click('.td2 .ptabs [data-tab="week"]')
+    const wk = pg.locator('[data-week-plan]').first()
+    await wk.waitFor({ timeout: 15000 })
+    if ((await wk.locator('[data-week-day]').count()) !== 7) throw new Error('the week plan does not show 7 days')
+    if (!/\/ 3h/.test(await wk.locator('[data-week-day]').first().innerText())) throw new Error(`no limit on the day: ${await wk.locator('[data-week-day]').first().innerText()}`)
+    await wk.locator('[data-week-deadlines]', { hasText: 'Rust book' }).waitFor({ timeout: 10000 })
+    if (!(await wk.locator('[data-week-session]').count())) throw new Error('no deadline sessions in the next 7 days')
+    // Tomorrow becomes a heavy study day (only the days ahead change), then back to normal.
+    const tomorrow = wk.locator('[data-week-day]').nth(1)
+    await tomorrow.locator('[data-week-type]').click()
+    await tomorrow.locator('[data-week-type]', { hasText: 'Heavy study' }).waitFor({ timeout: 8000 })
+    await wk.screenshot({ path: '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/planwork/week-plan.png' }).catch(() => {})
+    await tomorrow.locator('[data-week-type]').click()
+    await tomorrow.locator('[data-week-type]', { hasText: 'Light' }).waitFor({ timeout: 8000 })
+    await tomorrow.locator('[data-week-type]').click()
+    await tomorrow.locator('[data-week-type]', { hasText: 'Normal' }).waitFor({ timeout: 8000 })
+    // Back to no limits, so later steps see the plain planner.
+    const box2 = await limitsBox()
+    await box2.locator('[data-limit-focus]').fill('')
+    await box2.locator('[data-limit-focus]').blur()
+    await saved()
+    await box2.locator('[data-limit-off]').fill('')
+    await saved()
+    await box2.locator('[data-protect-row] .pl-x').first().click()
+    await pg.waitForFunction(() => !document.querySelector('[data-protect-row]'), null, { timeout: 8000 })
   })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {

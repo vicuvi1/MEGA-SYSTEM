@@ -20,6 +20,9 @@ import { life } from '../bridge'
 import { useToast } from '../ui'
 import { attach, edit, moveTomorrow, onNotice, retry, setAuto, setContext, setEditing, startLive, subscribe, undoLast, type PlanSnap } from './planStore'
 import { PlanSync } from './SyncButton'
+import { useSetup } from './planSetup'
+import { dayRules } from '@core/planWeek'
+import { endWith, isWork, PROTECT_ID, withProtected } from '@core/planLimits'
 import './planEditor.css'
 
 const HOUR_PX = 78
@@ -123,11 +126,15 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
   }, [ready])
   const items = useMemo(() => (s ? planItems(s.plan) : []), [s])
   const mine = useMemo(() => new Set(items.map((b) => b.sync?.eventId).filter(Boolean) as string[]), [items])
-  const fixed = useMemo(() => (day ? events.filter((e) => !e.allDay && !e.declined && !mine.has(e.id) && minOfDay(e.end, day) > 0 && minOfDay(e.start, day) < 24 * 60) : []), [events, mine, day])
-  const endBy = hm(Math.min(toMin(bed) < 12 * 60 ? 24 * 60 - 5 : toMin(bed) - 45, 23 * 60))
-  useEffect(() => setContext({ events: fixed, bedtime: bed, water, freeShare, endBy }), [fixed, bed, water, freeShare, endBy])
+  // Your time limits and the week plan for this day (a light day caps work); protected blocks are fixed time.
+  const setup = useSetup()
+  const limitsJson = setup && day ? JSON.stringify(dayRules(setup.week, setup.limits, day).limits) : 'null'
+  const limits = useMemo(() => JSON.parse(limitsJson) as ReturnType<typeof dayRules>['limits'] | null, [limitsJson])
+  const fixed = useMemo(() => (day ? withProtected(events.filter((e) => !e.allDay && !e.declined && !mine.has(e.id) && minOfDay(e.end, day) > 0 && minOfDay(e.start, day) < 24 * 60), limits, day) : []), [events, mine, day, limits])
+  const endBy = endWith(hm(Math.min(toMin(bed) < 12 * 60 ? 24 * 60 - 5 : toMin(bed) - 45, 23 * 60)), limits)
+  useEffect(() => setContext({ events: fixed, bedtime: bed, water, freeShare, endBy, limits }), [fixed, bed, water, freeShare, endBy, limits])
   // The plan audit, before the card shows: what is wrong (the chip) and what has no room (one plain line).
-  const audit = useMemo(() => (s ? auditPlan(s.plan, { now: hm(t), bedtime: bed, events: fixed, water, freeShare, tasks: s.tasks ?? undefined, fixTimes: false }) : null), [s, t, bed, fixed, water, freeShare])
+  const audit = useMemo(() => (s ? auditPlan(s.plan, { now: hm(t), bedtime: bed, events: fixed, water, freeShare, tasks: s.tasks ?? undefined, fixTimes: false, limits }) : null), [s, t, bed, fixed, water, freeShare, limits])
   const issues = audit?.issues ?? []
 
   if (!s || !day) return null
@@ -237,7 +244,7 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
     doEdit({ op: 'replace', plan: r.plan, label: `Re-planned from now: ${r.moved} moved${r.unplaced.length ? `, ${r.unplaced.length} back on the list` : ''}` })
   }
   const fix = () => {
-    const r = auditPlan(s.plan, { now: hm(nowMin()), bedtime: bed, events: fixed, water, freeShare, tasks: s.tasks ?? undefined })
+    const r = auditPlan(s.plan, { now: hm(nowMin()), bedtime: bed, events: fixed, water, freeShare, tasks: s.tasks ?? undefined, limits })
     if (r.fixed.length && JSON.stringify(r.plan) !== JSON.stringify(s.plan)) doEdit({ op: 'replace', plan: r.plan, label: 'Fixed the plan' })
     else toast('Nothing Ben can fix by himself here: move a block, or ask him', 'info')
   }
@@ -313,7 +320,7 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
           ))}
           {t > from && t < to && <span className="pe-now" style={{ top: yOf(t) }} aria-hidden />}
           {fixedIn.map((e) => (
-            <span key={`e${e.id}`} className="pe-ev" style={{ top: yOf(Math.max(from, minOf(e.start))), height: Math.max(18, (Math.min(to, minOf(e.end)) - Math.max(from, minOf(e.start))) * PX) }} title={`${e.title} · fixed in Google Calendar (pinned)`}>
+            <span key={`e${e.id}`} className={`pe-ev${e.id.startsWith(PROTECT_ID) ? ' protected' : ''}`} style={{ top: yOf(Math.max(from, minOf(e.start))), height: Math.max(18, (Math.min(to, minOf(e.end)) - Math.max(from, minOf(e.start))) * PX) }} title={e.id.startsWith(PROTECT_ID) ? `${e.title} · protected time (your limits)` : `${e.title} · fixed in Google Calendar (pinned)`}>
               <small>📌 {e.title}</small>
             </span>
           ))}
@@ -341,6 +348,9 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
               <li
                 key={b.id}
                 data-block={b.id}
+                data-start={b.start}
+                data-min={b.minutes}
+                data-work={!b.train && isWork(b) ? '1' : undefined}
                 className={`pe-block tone-${planTone(b.title, b.train)} ${ok ? 'ok' : 'draft'} ${b.locked ? 'locked' : ''} ${dragging ? 'dragging' : ''} ${taskDrag?.over === b.id ? 'drop' : ''} ${picked === b.id ? 'picked' : ''} ${past ? 'past' : ''}`}
                 style={{ transform: `translateY(${top}px)`, height: h, left: `calc(52px + (100% - 56px) * ${left / 100})`, width: `calc((100% - 56px) * ${width / 100} - 4px)` } as CSSProperties}
                 tabIndex={0}

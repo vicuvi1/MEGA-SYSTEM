@@ -20,6 +20,7 @@ import { checkPlan, fixPlan, type CheckCtx, type PlanIssue } from './planCheck'
 import { alsoOpen, dedupePlan, normTitle, sameThing } from './planDedupe'
 import { ensureIds, planItems, planGaps, TRAIN_ID } from './planEdit'
 import { toMin, type DayProposal, type PlanBlock } from './rhythm'
+import { keepLimits, withProtected } from './planLimits'
 
 /** One of today's open tasks, as Todoist (or the app) has it. */
 export interface AuditTask extends PlanTask {
@@ -33,6 +34,8 @@ export interface AuditCtx extends CheckCtx {
   fixTimes?: boolean
   /** false: blocks in the past are left where they are (the "Shift the plan?" prompt asks). Default true. */
   fixPast?: boolean
+  /** Make the plan keep your limits (draft blocks trimmed or back on the list). Default: as fixTimes. */
+  keepLimits?: boolean
 }
 
 export type LeftWhy = 'room' | 'waiting' | 'event' | 'tomorrow'
@@ -136,7 +139,7 @@ export function auditPlan(raw: DayProposal, ctx: AuditCtx): AuditResult {
       if (!loose(block, keep)) continue
       const from = ctx.now ? planStartAt(ctx.now) : '00:00'
       const others = { ...plan, blocks: plan.blocks.filter((b) => b.id !== block.id) }
-      const gap = planGaps(others, ctx.events ?? [], from, task.dueTime!, block.minutes).find((g) => g.minutes >= block.minutes)
+      const gap = planGaps(others, withProtected(ctx.events ?? [], ctx.limits, plan.day), from, task.dueTime!, block.minutes).find((g) => g.minutes >= block.minutes)
       if (!gap) continue
       plan = { ...plan, blocks: plan.blocks.map((b) => (b.id === block.id ? { ...b, start: gap.start } : b)).sort((a, b) => a.start.localeCompare(b.start)) }
       fixed.add('deadline')
@@ -168,6 +171,15 @@ export function auditPlan(raw: DayProposal, ctx: AuditCtx): AuditResult {
         plan = toList(plan, cand.b)
         fixed.add('trim')
       }
+    }
+  }
+  // 5. Your limits hold (off time, work a day, a kind's cap, protected time): only loose drafts still
+  //    ahead are trimmed or go back on the list, the least important first. Never broken to fit more in.
+  if (ctx.limits && (ctx.keepLimits ?? ctx.fixTimes !== false)) {
+    const r = keepLimits(plan, ctx.limits, { loose: (b) => loose(b, keep), rank: (b, p) => blockRank(b, p, tasks), toList, after: ctx.now ? toMin(ctx.now) : 0 })
+    if (r.changed.length) {
+      plan = r.plan
+      r.changed.forEach((c) => fixed.add(`limit:${c}`))
     }
   }
   plan = relinkAlso(dedupePlan(plan, { events: ctx.events, after }))
@@ -252,6 +264,8 @@ export function blockWhy(b: PlanBlock & { id?: string; train?: boolean }, plan: 
   const also = (t: string) => (plan.also ?? []).find((a) => sameThing(a.title, t))
   const todo = (t: string) => tasks.find((x) => sameThing(x.content, t))
   if (b.locked) parts.push('pinned')
+  // A deadline session says which deadline and which session ("exam in 5 days, session 2 of 4").
+  if (b.why?.trim()) parts.push(b.why.trim())
   if (b.train || b.id === TRAIN_ID) parts.push("today's workout")
   if (names.some((t) => also(t)?.asked || todo(t)?.asked || (plan.squeeze && sameThing(plan.squeeze.keep, t)))) parts.push('you asked for it today')
   const timed = names.map(todo).find((t) => t && ownTime(t, plan))
@@ -266,7 +280,7 @@ export function blockWhy(b: PlanBlock & { id?: string; train?: boolean }, plan: 
   if (names.some((t) => plan.mustdos.some((m) => sameThing(m, t)))) parts.push('must-do')
   const pr = Math.max(0, ...names.map((t) => also(t)?.priority ?? todo(t)?.priority ?? 0))
   if (P_NAME[pr]) parts.push(`from Todoist: ${P_NAME[pr]}`)
-  if (b.kind === 'goal') parts.push('goal time for today')
+  if (b.kind === 'goal' && !b.why?.trim()) parts.push('goal time for today')
   if (b.kind === 'quick' && (b.tasks?.length ?? 0) > 1) parts.push(`${b.tasks!.length} small tasks together`)
   if (!parts.length) {
     const project = names.map((t) => also(t)?.project ?? todo(t)?.project).find(Boolean)
