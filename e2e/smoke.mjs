@@ -703,7 +703,7 @@ try {
     // Back to the tracker for the steps after this one.
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
-  await step('Food counter: copy the prompt, paste a reply, fix grams, save, totals, what to eat next, same as yesterday, the Sport Track line', async () => {
+  await step('Food counter: copy the prompt, paste a reply, fix grams, save, totals, what to eat next, same as yesterday, quick words, a supplement, water, rings, week chart, plan, the Sport Track line', async () => {
     const shots = process.env.FOOD_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await pg.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
@@ -714,6 +714,9 @@ try {
     const fc = '#ptp-body-food .fd-card'
     await pg.waitForSelector(`${fc} .fd-line`, { timeout: 20000 })
     if (!/Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(await pg.locator(`${fc} .fd-line`).innerText())) throw new Error('the food line is missing protein or kcal')
+    const lineBefore = await pg.locator(`${fc} .fd-line`).innerText()
+    // The label prompt for packaged food is a second button.
+    if (!(await pg.locator(`${fc} .fd-copy-label`).count())) throw new Error('no "Copy label prompt" button')
     await pg.click(`${fc} .fd-copy`)
     await pg.waitForFunction((s) => /Copied/.test(document.querySelector(`${s} .fd-copy`)?.textContent ?? ''), fc, { timeout: 5000 })
     // A reply it cannot read: a clear message and "Copy the prompt again".
@@ -732,6 +735,9 @@ try {
     await pg.locator(`${fc} .fd-item`).first().locator('.fd-plus').click()
     await pg.waitForFunction((s) => /175 g/.test(document.querySelector(`${s} .fd-item .fd-grams`)?.textContent ?? ''), fc, { timeout: 3000 })
     if (!/59 g protein/.test(await draft())) throw new Error(`after +25 g the draft is ${await draft()}`)
+    // One basis: the header does not count the unsaved draft; the preview is shown apart.
+    if ((await pg.locator(`${fc} .fd-line`).innerText()) !== lineBefore) throw new Error('the header changed with an unsaved preview')
+    if (!/^\+59 g protein .* if you save$/.test(await pg.locator(`${fc} .fd-preview`).innerText())) throw new Error(`the preview line is: ${await pg.locator(`${fc} .fd-preview`).innerText()}`)
     await pg.locator(`${fc} .fd-item .fd-name`).nth(1).fill('white rice')
     if (shots) {
       await pg.addStyleTag({ content: '.toasts { display: none !important; } .body-page .ptabs { visibility: hidden !important; }' })
@@ -767,6 +773,45 @@ try {
     // A star makes it one tap next time.
     await pg.locator(`${fc} .fd-meals li .fd-star`).last().click()
     await pg.waitForSelector(`${fc} .fd-favchip`, { timeout: 10000 })
+    // Quick add in words: known foods become the draft, an unknown one is asked about.
+    await pg.fill(`${fc} .fd-words`, '200g chicken, 2 eggs, 1 banana, 80g dragonfruit')
+    await pg.click(`${fc} .fd-words-go`)
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-item`).length === 3, fc, { timeout: 5000 })
+    if (!/dragonfruit/.test(await pg.locator(`${fc} .fd-words-say`).innerText())) throw new Error('an unknown word is not asked about')
+    if (!/76 g protein/.test(await draft())) throw new Error(`words draft total: ${await draft()}`)
+    await pg.click(`${fc} .fd-cancel`)
+    // A supplement (a shake has protein) and water (the one water log).
+    await pg.click(`${fc} .fd-supp-shake`)
+    await pg.waitForFunction((s) => /whey protein shake/.test(document.querySelector(`${s} .fd-mcard[data-type="supp"]`)?.textContent ?? ''), fc, { timeout: 10000 })
+    await pg.click(`${fc} .fd-water-glass`)
+    await pg.waitForFunction((s) => /Water\s*250\s*\/\s*[\d,]+\s*ml/.test(document.querySelector(`${s} .fd-water`)?.textContent ?? ''), fc, { timeout: 10000 })
+    // Rings and meal cards; a meal can be edited.
+    if ((await pg.locator(`${fc} .fd-ring`).count()) !== 4) throw new Error('the day needs 4 rings')
+    if (!(await pg.locator(`${fc} .fd-mcard`).count())) throw new Error('no meal cards')
+    if (!/Carbs \d+ \/ [\d,]+ g · Fat \d+ \/ [\d,]+ g/.test(await pg.locator(`${fc} .fd-macros-line`).innerText())) throw new Error('carbs and fat targets are missing')
+    await pg.locator(`${fc} .fd-mcard:not([data-type="supp"]) .fd-edit`).first().click()
+    await pg.waitForFunction((s) => /Changing a saved meal/.test(document.querySelector(`${s} .fd-draft`)?.textContent ?? ''), fc, { timeout: 5000 })
+    await pg.click(`${fc} .fd-cancel`)
+    if (shots) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; } .body-page .ptabs { visibility: hidden !important; }' })
+      await pg.setViewportSize({ width: 1280, height: 1800 })
+      await pg.waitForTimeout(400)
+      await pg.locator(fc).screenshot({ path: `${shots}/food-counter-today.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    // Week: protein and kcal bars against the goal, the goal line; Plan: cheap protein, shopping, Sunday prep.
+    await pg.click(`${fc} [data-sub="week"]`)
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-chart .fd-bar-p`).length === 7 && document.querySelectorAll(`${s} .fd-chart .fd-bar-k`).length === 7 && !!document.querySelector(`${s} .fd-chart .fd-goal`), fc, { timeout: 5000 })
+    if (shots) {
+      await pg.setViewportSize({ width: 1280, height: 900 })
+      await pg.waitForTimeout(300)
+      await pg.locator(fc).screenshot({ path: `${shots}/food-counter-week.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await pg.click(`${fc} [data-sub="plan"]`)
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-cheap-list li`).length > 5 && /Shopping list for 7 days/.test(document.querySelector(`${s} .fd-shop`)?.textContent ?? '') && /Sunday meal prep/.test(document.querySelector(`${s} .fd-prep`)?.textContent ?? ''), fc, { timeout: 5000 })
+    await pg.click(`${fc} [data-sub="today"]`)
+    await pg.waitForSelector(`${fc} .fd-rings`, { timeout: 5000 })
     // The Goals sheet says lean muscle.
     await pg.locator(`${fc} .card-head .btn`, { hasText: 'Goals' }).click()
     if (!/Lean muscle \(no fat gain\)/.test(await pg.locator(`${fc} .fd-goals`).innerText())) throw new Error('the Goals sheet does not say lean muscle')

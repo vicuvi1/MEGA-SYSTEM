@@ -4,6 +4,7 @@
 // skyr, or a shake". Pure and tested. Values are approximate.
 import { addDays } from './dates'
 import type { FoodMeal } from './food'
+import { normFood } from './foodTable'
 
 export interface NextFood {
   name: string
@@ -96,7 +97,7 @@ export interface WhatNext {
  * Up to 3 ideas: one food that covers it, two foods together, and a shake.
  * Ideas over the kcal left (+100) are dropped while leaner ones remain.
  */
-export function whatToEatNext(o: { proteinLeft: number; kcalLeft: number; own?: NextFood[] }): WhatNext {
+export function whatToEatNext(o: { proteinLeft: number; kcalLeft: number; own?: NextFood[]; cheap?: Record<string, number> }): WhatNext {
   const left = Math.max(0, Math.round(o.proteinLeft))
   const kLeft = Math.round(o.kcalLeft)
   if (left <= 0) {
@@ -105,6 +106,13 @@ export function whatToEatNext(o: { proteinLeft: number; kcalLeft: number; own?: 
   }
   const pool: NextFood[] = []
   for (const f of [...(o.own ?? []), ...BUILTIN]) if (!pool.some((p) => norm(p.name) === norm(f.name) || (p.piece && f.piece && p.piece.one === f.piece.one))) pool.push(f)
+  // Tie-breaker: your own foods keep their place; the built-in ones go cheapest protein first (grams per leu).
+  if (o.cheap) {
+    const per = (f: NextFood) => o.cheap![normFood(f.name)] ?? 0
+    const ownPart = pool.filter((f) => f.own)
+    const rest = pool.filter((f) => !f.own).sort((a, b) => per(b) - per(a))
+    pool.splice(0, pool.length, ...ownPart, ...rest)
+  }
   const solid = pool.filter((f) => f.name !== 'shake')
   // A lot left: plan the next meal (about 50 g), not the whole day in one go.
   const aim = left > 60 ? 50 : left

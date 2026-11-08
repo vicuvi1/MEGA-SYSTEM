@@ -63,6 +63,8 @@ export interface FoodMeal {
   items: FoodItem[]
   /** Logged later for a past day (shown as "added later"). */
   late?: boolean
+  /** A supplement (creatine, a shake, vitamins): listed apart, with macros if any. */
+  supp?: boolean
 }
 
 export interface FoodFav {
@@ -168,7 +170,7 @@ export function cleanFoodLog(raw: any, today?: string): FoodLog {
     seen.add(id)
     const at = String(m.at ?? '')
     const type: MealType = MEAL_TYPES.includes(m.type) ? m.type : mealTypeAt(localHm(at))
-    meals.push({ id, at, day: String(m.day), name: String(m.name ?? '').trim().slice(0, 60) || mealName(items), type, items, ...(m.late ? { late: true } : {}) })
+    meals.push({ id, at, day: String(m.day), name: String(m.name ?? '').trim().slice(0, 60) || mealName(items), type, items, ...(m.late ? { late: true } : {}), ...(m.supp ? { supp: true } : {}) })
   }
   meals.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
   const favs: FoodFav[] = []
