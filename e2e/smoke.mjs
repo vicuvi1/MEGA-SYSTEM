@@ -3038,24 +3038,28 @@ try {
     })
     const [d1, t1] = await count()
     if (d1 !== d0 + 1 || t1 !== t0) throw new Error(`count went ${d0}/${t0} → ${d1}/${t1}`)
-    // Compare the points themselves, once the first payment's "+N" pop (2.6 s) is gone and the number stopped counting.
-    // (The whole top bar includes that pop, so comparing it raced with the pop's timer.)
+    // Compare the points number itself once it stopped counting up (not the whole top bar: its "+N Skincare
+    // routine" pop stays 2.6 s, so comparing the bar raced with the pop's timer).
     const coins = () => pg.evaluate(() => document.querySelector('.topbar .tb-coins')?.textContent?.trim() ?? '')
-    await pg.waitForFunction(() => !document.querySelector('.topbar .wallet-pop'), null, { timeout: 8000 })
-    let bal = await coins()
-    for (let k = 0; k < 10; k++) {
-      await pg.waitForTimeout(300)
-      const b = await coins()
-      if (b === bal) break
-      bal = b
+    const settled = async () => {
+      let v = await coins()
+      for (let k = 0; k < 20; k++) {
+        await pg.waitForTimeout(400)
+        const b = await coins()
+        if (b === v) return v
+        v = b
+      }
+      return v
     }
+    await pg.waitForTimeout(800)
+    const bal = await settled()
     if (!/\d/.test(bal)) throw new Error(`no balance in the top bar (${bal})`)
     await row('Grooming').locator('.hb-hit').click({ force: true })
     await pg.waitForSelector('.gr .gr-step', { timeout: 10000 })
     await pg.keyboard.press('Escape')
-    // A payment would pop "+N" by the balance and change the number.
-    if (await pg.waitForSelector('.topbar .wallet-pop', { timeout: 2000 }).then(() => true, () => false)) throw new Error(`a second tap paid again: ${await pg.locator('.topbar .wallet-pop').first().innerText()}`)
-    if ((await coins()) !== bal) throw new Error(`a second tap paid again: ${bal} → ${await coins()}`)
+    await pg.waitForTimeout(2500) // a payment would land and count up by now
+    const after = await settled()
+    if (after !== bal) throw new Error(`a second tap paid again: ${bal} → ${after}`)
     // Skip today from the ⋯ menu: no points, out of the count; and back on.
     await row('Clean day').hover()
     await row('Clean day').locator('.hb-dots-btn').click()
