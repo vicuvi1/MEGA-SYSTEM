@@ -1303,6 +1303,30 @@ function filterPanel() {
     </div></details>`;
 }
 
+// Free days ("No spending today"): kept by Life System (it ticks the Log spending
+// habit once and syncs the days to your other devices); this page only shows and asks.
+const inLife = (() => { try { return window.parent && window.parent !== window; } catch { return false; } })();
+let freeDays = new Set();
+if (inLife) {
+  window.addEventListener('message', (e) => {
+    if (e.origin !== location.origin || !e.data || e.data.type !== 'LIFE_FINANCE_FREE_DAYS') return;
+    freeDays = new Set(Array.isArray(e.data.days) ? e.data.days : []);
+    if (e.data.error) toast(e.data.error);
+    else if (e.data.op === 'mark') toast('No spending today ✓');
+    else if (e.data.op === 'undo') toast('Free day taken back');
+    render();
+  });
+  try { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'FINANCE_FREE_DAY', payload: { op: 'ask' } }, location.origin); } catch {}
+}
+function freeDayStrip() {
+  if (!inLife || ui.month !== monthKey(todayISO())) return '';
+  const on = freeDays.has(todayISO());
+  return `<section class="card free-day" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;padding:10px 14px">
+    <span>${on ? '<b>No spending today ✓</b> <small class="muted">Log spending is done for today.</small>' : '<span>Spent nothing today? Count it as a free day.</span>'}</span>
+    <button type="button" class="btn ${on ? '' : 'primary'}" data-act="free-day" data-op="${on ? 'undo' : 'mark'}">${on ? 'Undo' : 'No spending today'}</button>
+  </section>`;
+}
+
 function viewLog() {
   const s = M.monthSummary(state, ui.month);
   const q = ui.search.trim().toLowerCase();
@@ -1326,10 +1350,13 @@ function viewLog() {
       if (!groups.has(t.date)) groups.set(t.date, []);
       groups.get(t.date).push(t);
     }
-    content = [...groups.entries()].map(([date, items]) => {
+    // A free day with no records shows as its own line: "No spending ✓".
+    if (!q) for (const d of freeDays) if (d.startsWith(ui.month) && !groups.has(d)) groups.set(d, []);
+    const ordered = [...groups.entries()].sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0));
+    content = ordered.map(([date, items]) => {
       const net = items.reduce((a, t) => a + (t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0), 0);
       return `<div class="day dow-${dowIndex(date)}${date === todayISO() ? ' is-today' : ''}"><div class="day-head"><span class="dh">${dayLabelHTML(date, todayISO())}${q ? ` ${date.slice(0, 4)}` : ''}</span><span class="money ${net > 0 ? 'income' : ''}">${net ? money(net, { sign: true }) : ''}</span></div>
-        <div class="list">${items.map((t) => txRow(t)).join('')}</div></div>`;
+        <div class="list">${items.length ? items.map((t) => txRow(t)).join('') : '<div class="row"><b>No spending ✓</b></div>'}</div></div>`;
     }).join('') || `<div class="empty"><b>${q ? 'Nothing found' : 'No records this month'}</b>${q ? `Try: ${esc(SEARCH_HINT)}` : 'Tap + to add one.'}</div>`;
   }
 
@@ -1339,6 +1366,7 @@ function viewLog() {
   ui.monthDir = 0;
   return `<header class="top"><div><h1>Log</h1><div class="sub">${q ? 'Searching all months' : monthLabel(ui.month)}</div></div>${todayChip()}</header>
   ${q || view === 'sheet' ? '' : monthNav()}
+  ${q ? '' : freeDayStrip()}
   <div class="log-body${dir ? ` slide-${dir > 0 ? 'l' : 'r'}` : ''}">
   ${q || view === 'sheet' ? '' : `<section class="card">${stats(s)}${rateBar(s)}</section>`}
   <div class="log-tools">
@@ -3086,6 +3114,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'transfer') openTransferSheet(el.dataset.from);
   else if (act === 'month') goToMonth(addMonths(ui.month, Number(el.dataset.step)));
   else if (act === 'goto-month') goToMonth(el.dataset.month);
+  else if (act === 'free-day') { try { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'FINANCE_FREE_DAY', payload: { op: el.dataset.op === 'undo' ? 'undo' : 'mark' } }, location.origin); } catch {} }
   else if (act === 'year') goToMonth(`${Number(ui.month.slice(0, 4)) + Number(el.dataset.step)}${ui.month.slice(4)}`);
   else if (act === 'year') { ui.year += Number(el.dataset.step); render({ enter: true }); }
   else if (act === 'open-month') { ui.month = el.dataset.key; ui.search = ''; location.hash = '#log'; }

@@ -450,6 +450,9 @@ export function createWebServices(mirror: Mirror) {
       days: () => read((s) => moneyDays(s)),
       /** FX3: "Nothing spent today" (counts once the day is over, if it stays true). */
       nothingSpent: () => write((s) => (s.money.nothingSpent(financeDayTx(s)), moneyDays(s)), W),
+      /** A free day: "No spending today" ticks the Log spending habit once (same pay as a spend). */
+      freeDay: () => write((s) => ({ ...s.money.freeDay(financeDayTx(s)), state: moneyDays(s) }), W),
+      undoFreeDay: () => write((s) => (s.money.undoFreeDay(), moneyDays(s)), W),
       /** FX3: "I cooked at home today" (you confirm it, it pays). */
       confirmCooked: () => write((s) => (s.money.confirmCooked(), moneyDays(s)), W)
     },

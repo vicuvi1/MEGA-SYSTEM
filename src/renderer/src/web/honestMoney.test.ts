@@ -112,6 +112,61 @@ describe('honest money days (FX3)', () => {
   })
 })
 
+describe('a free day: "No spending today"', () => {
+  const paidCount = (remote: SqlJsDatabase) => Number(rows(remote, "SELECT COUNT(*) FROM ledger WHERE rule_id = 'money.logged' AND kind = 'earn'")[0][0])
+
+  it('ticks Log spending once, does not pay again after a spend, and leaves totals alone', async () => {
+    const remote = fakeTurso()
+    clock('2026-11-05T12:00:00Z')
+    financeOnDevice(baseFinance())
+    const web = await open()
+    const before = await web.money.days()
+    const a = await web.money.freeDay()
+    expect(a.paid).toBeGreaterThan(0)
+    expect(a.day).toBe('2026-11-05')
+    expect(paidCount(remote)).toBe(1)
+    // A second tap pays nothing.
+    expect((await web.money.freeDay()).paid).toBe(0)
+    expect(paidCount(remote)).toBe(1)
+    // The marker is no spending: the day's money is unchanged.
+    const after = await web.money.days()
+    expect(after.today.everydayBani).toBe(before.today.everydayBani)
+    expect(after.today.noSpend).toBe(true)
+    // A real expense later the same day: no second pay (same ref), and the connection sync agrees.
+    financeOnDevice(baseFinance([{ id: 't1', type: 'expense', category: 'food', amount: 4000, base: 4000, date: '2026-11-05', createdAt: at('2026-11-05T15:00:00Z') }]))
+    await web.connections.syncFinance(['2026-11-05'])
+    expect(paidCount(remote)).toBe(1)
+  })
+
+  it('is refused after spending, and only today counts (no back-dating)', async () => {
+    const remote = fakeTurso()
+    clock('2026-11-05T12:00:00Z')
+    financeOnDevice(baseFinance([{ id: 't1', type: 'expense', category: 'food', amount: 4000, base: 4000, date: '2026-11-05', createdAt: at('2026-11-05T10:00:00Z') }]))
+    const web = await open()
+    await expect(web.money.freeDay()).rejects.toThrow(/already logged spending/)
+    expect(paidCount(remote)).toBe(0)
+    // Another day, free: pays for that day only, never for yesterday.
+    financeOnDevice(baseFinance())
+    clock('2026-11-06T09:00:00Z')
+    const web2 = await open()
+    await web2.money.freeDay()
+    const days = rows(remote, "SELECT day FROM ledger WHERE rule_id = 'money.logged' AND kind = 'earn'").map((r) => String(r[0]))
+    expect(days).toEqual(['2026-11-06'])
+  })
+
+  it('undo takes the mark and its points back', async () => {
+    const remote = fakeTurso()
+    clock('2026-11-05T12:00:00Z')
+    financeOnDevice(baseFinance())
+    const web = await open()
+    await web.money.freeDay()
+    const d = await web.money.undoFreeDay()
+    expect(d.today.nothingSpentTapped).toBe(false)
+    expect(rows(remote, "SELECT kind FROM ledger WHERE rule_id = 'money.logged' ORDER BY id").map((r) => String(r[0]))).toEqual(['earn', 'undo'])
+    expect((await web.wallet.summary()).balance).toBe(0)
+  })
+})
+
 describe('buying a reward (RL3, RL4)', () => {
   it('logs what you paid as Fun under a fixed id, and undo takes it back out', async () => {
     const remote = fakeTurso()
