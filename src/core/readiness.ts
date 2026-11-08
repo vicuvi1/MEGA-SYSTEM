@@ -11,7 +11,16 @@ export function nightMinutes(log: Pick<SleepLog, 'bedTime' | 'wakeTime'> | null 
   return m >= 120 && m <= 16 * 60 ? m : null
 }
 
-export interface ReadinessInput { sleptMin: number | null; soreness: number | null; quality?: number | null }
+export interface ReadinessInput {
+  sleptMin: number | null
+  soreness: number | null
+  quality?: number | null
+  /** Your sleep need in minutes (Sleep care), default 8 h: the sleep part is how far under it you slept. */
+  needMin?: number | null
+}
+
+/** The usual sleep need when none is set. */
+export const NEED_MIN_DEFAULT = 480
 export interface Readiness { kind: 'full' | 'light' | 'rest'; score: number; why: string }
 
 export function readiness(i: ReadinessInput): Readiness {
@@ -19,9 +28,12 @@ export function readiness(i: ReadinessInput): Readiness {
   const why: string[] = []
   if (i.sleptMin != null) {
     const h = i.sleptMin / 60
-    if (h < 5.5) (score -= 40), why.push(`only ${h.toFixed(1)} h of sleep`)
-    else if (h < 6.5) (score -= 25), why.push(`${h.toFixed(1)} h of sleep`)
-    else if (h < 7) (score -= 10), why.push(`${h.toFixed(1)} h of sleep`)
+    // Hours under your need (8 h need: under 5.5 h, 6.5 h and 7 h are the steps).
+    const need = Number(i.needMin) >= 300 && Number(i.needMin) <= 720 ? Number(i.needMin) : NEED_MIN_DEFAULT
+    const short = (need - i.sleptMin) / 60
+    if (short > 2.5) (score -= 40), why.push(`only ${h.toFixed(1)} h of sleep`)
+    else if (short > 1.5) (score -= 25), why.push(`${h.toFixed(1)} h of sleep`)
+    else if (short > 1) (score -= 10), why.push(`${h.toFixed(1)} h of sleep`)
     else why.push(`${h.toFixed(1)} h of sleep`)
   }
   if (i.soreness != null) {

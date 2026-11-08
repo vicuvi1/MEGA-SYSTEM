@@ -12,6 +12,8 @@ export interface TrainReadyInput {
   sleptMin: number | null
   soreness: number | null
   quality?: number | null
+  /** Your sleep need in minutes (Sleep care); default 8 h. */
+  needMin?: number | null
   /** Hard sets logged yesterday (all muscles). */
   ydaySets?: number | null
   /** Your pick for today (Full / Lighter / Short in Sport Track or on Body), if any. */
@@ -41,7 +43,7 @@ export const DOSE_LABEL: Record<DoseMode, string> = { full: 'Full', light: 'Ligh
 export const HOLD_UNDER_MIN = 360
 
 export function trainReadiness(i: TrainReadyInput): TrainReady {
-  const base = readiness({ sleptMin: i.sleptMin, soreness: i.soreness, quality: i.quality })
+  const base = readiness({ sleptMin: i.sleptMin, soreness: i.soreness, quality: i.quality, needMin: i.needMin })
   let score = base.score
   const why = (/\(([^)]*)\)/.exec(base.why)?.[1] ?? '').split(', ').filter(Boolean)
   const y = Number(i.ydaySets) || 0

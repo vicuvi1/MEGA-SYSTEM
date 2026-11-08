@@ -208,7 +208,16 @@ export function readinessNow(db: DB, soreness: number | null, now = new Date(), 
   const blob = sportBlob(db)
   const yday = shiftDay(day, -1)
   const sets = hardSetsByMuscle(blob?.sets as SetLog, Array.isArray(blob?.exercises) ? blob.exercises : [], yday, yday)
-  return trainReadiness({ sleptMin: last?.minutes ?? null, soreness, quality, ydaySets: sets.push + sets.pull + sets.core + sets.legs, override: prefs.ready?.day === day ? prefs.ready.mode : null })
+  return trainReadiness({ sleptMin: last?.minutes ?? null, needMin: sleepNeedMin(db), soreness, quality, ydaySets: sets.push + sets.pull + sets.core + sets.legs, override: prefs.ready?.day === day ? prefs.ready.mode : null })
+}
+
+/** Your sleep need in minutes from Sleep care (8 h when not set). */
+export function sleepNeedMin(db: DB): number {
+  try {
+    return Math.round(cleanCare(readSetting(db, 'sleep_care')).needH * 60)
+  } catch {
+    return 480
+  }
 }
 
 /** BD8: the workout length for today's plan: Sport Track's 20/30/45 min at today's dose (null: no Sport Track yet). */

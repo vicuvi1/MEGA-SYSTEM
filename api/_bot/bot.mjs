@@ -1697,9 +1697,10 @@ function readiness(i) {
 	const why = [];
 	if (i.sleptMin != null) {
 		const h = i.sleptMin / 60;
-		if (h < 5.5) score -= 40, why.push(`only ${h.toFixed(1)} h of sleep`);
-		else if (h < 6.5) score -= 25, why.push(`${h.toFixed(1)} h of sleep`);
-		else if (h < 7) score -= 10, why.push(`${h.toFixed(1)} h of sleep`);
+		const short = ((Number(i.needMin) >= 300 && Number(i.needMin) <= 720 ? Number(i.needMin) : 480) - i.sleptMin) / 60;
+		if (short > 2.5) score -= 40, why.push(`only ${h.toFixed(1)} h of sleep`);
+		else if (short > 1.5) score -= 25, why.push(`${h.toFixed(1)} h of sleep`);
+		else if (short > 1) score -= 10, why.push(`${h.toFixed(1)} h of sleep`);
 		else why.push(`${h.toFixed(1)} h of sleep`);
 	}
 	if (i.soreness != null) {
@@ -1732,7 +1733,8 @@ function trainReadiness(i) {
 	const base = readiness({
 		sleptMin: i.sleptMin,
 		soreness: i.soreness,
-		quality: i.quality
+		quality: i.quality,
+		needMin: i.needMin
 	});
 	let score = base.score;
 	const why = (/\(([^)]*)\)/.exec(base.why)?.[1] ?? "").split(", ").filter(Boolean);
@@ -5319,11 +5321,20 @@ function readinessNow(db, soreness, now = /* @__PURE__ */ new Date(), quality = 
 	const sets = hardSetsByMuscle(blob?.sets, Array.isArray(blob?.exercises) ? blob.exercises : [], yday, yday);
 	return trainReadiness({
 		sleptMin: last?.minutes ?? null,
+		needMin: sleepNeedMin(db),
 		soreness,
 		quality,
 		ydaySets: sets.push + sets.pull + sets.core + sets.legs,
 		override: prefs.ready?.day === day ? prefs.ready.mode : null
 	});
+}
+/** Your sleep need in minutes from Sleep care (8 h when not set). */
+function sleepNeedMin(db) {
+	try {
+		return Math.round(cleanCare(readSetting(db, "sleep_care")).needH * 60);
+	} catch {
+		return 480;
+	}
 }
 /** BD8: the workout length for today's plan: Sport Track's 20/30/45 min at today's dose (null: no Sport Track yet). */
 function trainSlotInput(db, now = /* @__PURE__ */ new Date()) {

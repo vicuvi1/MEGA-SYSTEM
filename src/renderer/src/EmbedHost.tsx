@@ -25,6 +25,7 @@ import { play } from './soundKit'
 import { Icon } from './Icon'
 import { offerWorkoutNote } from './benPushFeed'
 import { openTab } from './PageTabs'
+import { clearSportStart, SPORT_START_CODE, SPORT_START_EVENT, sportStartPending } from './sportStart'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
@@ -400,6 +401,26 @@ function AppFrame({ appKey, name, url, partition, visible, soundEnabled }: { app
     return () => {
       el.removeEventListener(ev, apply)
       mo.disconnect()
+    }
+  }, [appKey])
+
+  // Body → Today's Start: Sport Track's own workout mode opens once its page is ready.
+  useEffect(() => {
+    if (appKey !== 'sport') return
+    const el = ref.current as any
+    if (!el) return
+    const tryStart = async () => {
+      if (!sportStartPending()) return
+      const ok = await runIn(el, SPORT_START_CODE).catch(() => false)
+      if (ok) clearSportStart()
+    }
+    void tryStart()
+    const ev = typeof el.insertCSS === 'function' ? 'dom-ready' : 'load'
+    el.addEventListener(ev, tryStart)
+    window.addEventListener(SPORT_START_EVENT, tryStart)
+    return () => {
+      el.removeEventListener(ev, tryStart)
+      window.removeEventListener(SPORT_START_EVENT, tryStart)
     }
   }, [appKey])
 
