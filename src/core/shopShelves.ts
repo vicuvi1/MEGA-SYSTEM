@@ -4,6 +4,9 @@
 // still come only from real, logged work, and buying spends them in Shop.redeem.
 import type { Reward, RewardCategory } from './shop'
 
+/** The owner's rule: 10 points = 1 lei, on every card and starter item. */
+export const POINTS_PER_LEI = 10
+
 export type ShelfId = 'big' | 'food' | 'games' | 'media' | 'tech' | 'skin' | 'people' | 'treat'
 export const SHELVES: { id: ShelfId; label: string; emoji: string; cats: RewardCategory[]; blurb: string }[] = [
   { id: 'big', label: 'Big goals', emoji: '🏔️', cats: ['big'], blurb: 'Worth saving up for' },
@@ -71,7 +74,7 @@ export function monthSpendLei(recent: { day: string; realCost?: number | null; u
 
 export interface StarterItem {
   title: string
-  /** Points; 10 points is about 1 lei. The owner edits it. */
+  /** Points. Paid items: points = real price in lei x 10. Free time items cost points only (realCost 0). The owner edits it. */
   price: number
   realCost: number
   emoji: string
@@ -82,34 +85,34 @@ export interface StarterItem {
 export const STARTERS: Record<ShelfId, StarterItem[]> = {
   big: [{ title: 'Big goal: new gear', price: 8000, realCost: 800, emoji: '🏔️', note: 'Name it, then save up in your jar.', category: 'big' }],
   food: [
-    { title: 'Pizza night', price: 800, realCost: 80, emoji: '🍕', note: 'Your favourite pizza.', category: 'food' },
-    { title: 'High-protein dinner out', price: 1100, realCost: 110, emoji: '🥩', note: 'A good meal after a hard week.', category: 'food' },
-    { title: 'Sweets and snacks', price: 200, realCost: 20, emoji: '🍫', note: 'A small guilt-free snack.', category: 'food' }
+    { title: 'Pizza night', price: 1500, realCost: 150, emoji: '🍕', note: 'Your favourite pizza.', category: 'food' },
+    { title: 'High-protein dinner out', price: 1800, realCost: 180, emoji: '🥩', note: 'A good meal after a hard week.', category: 'food' },
+    { title: 'Sweets and snacks', price: 300, realCost: 30, emoji: '🍫', note: 'A small guilt-free snack.', category: 'food' }
   ],
   games: [
     { title: '1 hour of gaming', price: 150, realCost: 0, emoji: '🎮', note: 'Time-boxed, guilt-free.', category: 'games' },
-    { title: 'New PC game', price: 1500, realCost: 150, emoji: '🕹️', note: 'One game from the wish list.', category: 'games' }
+    { title: 'New PC game', price: 2500, realCost: 250, emoji: '🕹️', note: 'One game from the wish list.', category: 'games' }
   ],
   media: [
-    { title: 'Movie night', price: 500, realCost: 50, emoji: '🎬', note: 'Cinema or a film at home.', category: 'media' },
+    { title: 'Movie night', price: 1000, realCost: 100, emoji: '🎬', note: 'Cinema or a film at home.', category: 'media' },
     { title: 'Anime or YouTube, 1 hour', price: 100, realCost: 0, emoji: '📺', note: 'Guilt-free, then stop.', category: 'media' },
-    { title: 'Manga volume', price: 600, realCost: 60, emoji: '📖', note: 'The next volume.', category: 'media' }
+    { title: 'Manga volume', price: 1200, realCost: 120, emoji: '📖', note: 'The next volume.', category: 'media' }
   ],
   tech: [
     { title: 'Headphones', price: 6000, realCost: 600, emoji: '🎧', note: 'Good sound for focus and play.', category: 'gear' },
-    { title: 'SSD', price: 4000, realCost: 400, emoji: '💾', note: 'More fast storage.', category: 'gear' },
-    { title: 'Book or course', price: 1500, realCost: 150, emoji: '📚', note: 'Something that teaches you.', category: 'gear' }
+    { title: 'SSD', price: 5000, realCost: 500, emoji: '💾', note: 'More fast storage.', category: 'gear' },
+    { title: 'Book or course', price: 2500, realCost: 250, emoji: '📚', note: 'Something that teaches you.', category: 'gear' }
   ],
   skin: [
-    { title: 'SPF 50 sunscreen', price: 800, realCost: 80, emoji: '🧴', note: 'The one skincare habit that matters most.', category: 'selfcare' },
-    { title: 'Hydrating gel-cream', price: 900, realCost: 90, emoji: '💧', note: 'Daily moisturiser.', category: 'selfcare' },
-    { title: 'Retinol night cream', price: 1400, realCost: 140, emoji: '🌙', note: 'For the night routine.', category: 'selfcare' },
-    { title: 'Niacinamide serum', price: 700, realCost: 70, emoji: '🧪', note: 'A light daily serum.', category: 'selfcare' },
+    { title: 'SPF 50 sunscreen', price: 2500, realCost: 250, emoji: '🧴', note: 'The one skincare habit that matters most.', category: 'selfcare' },
+    { title: 'Hydrating gel-cream', price: 2000, realCost: 200, emoji: '💧', note: 'Daily moisturiser.', category: 'selfcare' },
+    { title: 'Retinol night cream', price: 2200, realCost: 220, emoji: '🌙', note: 'For the night routine.', category: 'selfcare' },
+    { title: 'Niacinamide serum', price: 1500, realCost: 150, emoji: '🧪', note: 'A light daily serum.', category: 'selfcare' },
     { title: 'Haircut', price: 1200, realCost: 120, emoji: '💈', note: 'Fresh cut.', category: 'selfcare' }
   ],
   people: [{ title: 'Chat with her, 1 hour', price: 200, realCost: 0, emoji: '💬', note: 'Earned time, no guilt.', category: 'people' }],
   treat: [
-    { title: 'Coffee and a pastry', price: 300, realCost: 30, emoji: '☕', note: 'A slow break.', category: 'treat' },
+    { title: 'Coffee and a pastry', price: 400, realCost: 40, emoji: '☕', note: 'A slow break.', category: 'treat' },
     { title: 'A walk and a podcast', price: 80, realCost: 0, emoji: '🎧', note: 'Small and free.', category: 'treat' }
   ]
 }

@@ -728,6 +728,8 @@ try {
     await pg.waitForSelector('.rx-card .rx-title', { timeout: 5000 })
     // Rewards 2: suggestions from what you do, one tap adds one (with its limits and lock).
     await pg.click('.rx .ptabs [data-tab="now"]')
+    // Suggested for you is folded by default: open it.
+    if ((await pg.locator('.sh-shelf-head[aria-expanded="false"]', { hasText: 'Suggested for you' }).count()) > 0) await pg.click('.sh-shelf-head:has-text("Suggested for you")')
     await pg.waitForSelector('.rx-suggest .rx-sug', { timeout: 8000 })
     if ((await pg.locator('.rx-suggest .rx-sug').count()) < 4) throw new Error('fewer than 4 suggestions')
     if (!(await pg.locator('.rx-suggest .rx-sug-why').first().innerText()).trim()) throw new Error('a suggestion has no reason line')
@@ -3215,7 +3217,7 @@ try {
       ['career', '.cr', ['jobs', 'portfolio', 'cards', 'study', 'money', 'review'], { money: 2 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],
-      ['shop', '.rx', ['now', 'unlock', 'all', 'history', 'earn'], { now: 3, all: 2, earn: 2 }]
+      ['shop', '.rx', ['now', 'unlock', 'all', 'history', 'earn'], { now: 2, all: 2, earn: 2 }]
     ]
     for (const [page, scope, ids, wide] of pages) {
       await open(page)
@@ -3280,7 +3282,8 @@ try {
     }
     if (!(await pg.locator('.rx-card .sh-rar').count())) throw new Error('no rarity label on the cards')
     // Buy: hold a ready card; the balance drops by exactly its price (when something is ready).
-    const bal = async () => Number((await pg.locator('header.topbar .tb-me').first().innerText()).replace(/\D/g, ''))
+    // The pill may also show a floating "-60" for a moment: read only its first number.
+    const bal = async () => Number(((await pg.locator('header.topbar .tb-me').first().innerText()).match(/\d[\d,. ]*/)?.[0] ?? '').replace(/\D/g, ''))
     const ready = pg.locator('.sh-shelf .rx-card.ready').first()
     if (await ready.count()) {
       const price = Number((await ready.locator('.rx-price').first().innerText()).split('·')[0].replace(/\D/g, ''))
@@ -3293,7 +3296,13 @@ try {
       await pg.mouse.up()
       // A reward with a real cost first asks what you paid: accept the suggested amount.
       await pg.getByRole('button', { name: 'Buy it', exact: true }).click({ timeout: 2500 }).catch(() => {})
-      await pg.waitForFunction((b) => Number(document.querySelector('header.topbar .tb-me').textContent.replace(/\D/g, '')) < b, before, { timeout: 8000 })
+      // Past the fun budget a sheet says so; "Buy anyway" is its own explicit tap (the budget only warns).
+      await pg.getByRole('button', { name: 'Buy anyway', exact: true }).click({ timeout: 1500 }).catch(() => {})
+      for (let i = 0; i < 30 && (await bal()) >= before; i++) await pg.waitForTimeout(250)
+      if ((await bal()) >= before) {
+        await pg.screenshot({ path: '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/dbg.png' })
+        throw new Error(`the balance did not drop after the buy (${before} now ${await bal()}, price ${price})`)
+      }
       await pg.waitForTimeout(600)
       const after = await bal()
       if (before - after !== price) throw new Error(`buy spent ${before - after}, price was ${price}`)

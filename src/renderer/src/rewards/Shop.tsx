@@ -138,6 +138,7 @@ export function Shelf({ id, cards, preview, open, adding, onToggle, onStarter, o
           <h3>
             <span aria-hidden>{s.emoji}</span> {s.label}
           </h3>
+          {!open && cards.length > 0 && <span className="sh-count num">{cards.length}</span>}
           <span className="rx-sub">{cards.length ? `${cards.length} on the shelf${open ? '' : ` · ${preview}`}` : s.blurb}</span>
         </button>
       </header>

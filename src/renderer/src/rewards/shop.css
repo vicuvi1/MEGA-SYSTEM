@@ -1,7 +1,7 @@
 /* The Rewards shop: top strip (goal, combo, budget, featured), shelves, rarity, rings, the unwrap moment. */
-.sh-top { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 12px; }
+.sh-top { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 0.8fr) minmax(0, 1.1fr); gap: 10px; }
 .sh-top > * { min-width: 0; }
-.sh-goal { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 20px; border: 1px solid var(--border); background: linear-gradient(120deg, color-mix(in srgb, var(--rx-gold) 12%, var(--rx-glass)), var(--rx-glass)); }
+.sh-goal { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 20px; border: 1px solid var(--border); background: linear-gradient(120deg, color-mix(in srgb, var(--rx-gold) 12%, var(--rx-glass)), var(--rx-glass)); }
 .sh-goal-emoji { font-size: 34px; line-height: 1; flex: none; }
 .sh-goal-main { flex: 1; min-width: 0; display: grid; gap: 6px; }
 .sh-goal-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 14px; }
@@ -74,8 +74,36 @@
 @media (prefers-reduced-motion: reduce) { .sh-unwrap { display: none; } }
 .calm .sh-unwrap { display: none; }
 
+@media (max-width: 1100px) {
+  .sh-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .sh-goal { grid-column: 1 / -1; }
+}
 @media (max-width: 860px) {
   .sh-top { grid-template-columns: minmax(0, 1fr); }
   .sh-feature { grid-template-columns: minmax(0, 1fr); }
   .sh-goal { padding: 10px 12px; }
 }
+
+/* Today's pick: one highlighted card on its shelf */
+.rx-card.pick { outline: 2px solid var(--rx-gold); outline-offset: 2px; }
+.sh-picktag { position: absolute; left: 10px; top: 10px; z-index: 3; padding: 0 9px; line-height: 22px; border-radius: 999px; font-size: 11px; font-weight: 800; background: var(--rx-gold); color: var(--rx-gold-ink); }
+.rx-card.pick .rx-badges { top: 38px; }
+
+/* Folded shelves are chips in one wrapping row; an open shelf takes the full row */
+.sh-shelves { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: flex-start; }
+.sh-shelves > .sh-shelf.open { flex: 1 1 100%; min-width: 0; }
+.sh-shelves > .sh-shelf.shut { flex: 0 0 auto; }
+.sh-shelf.shut .sh-shelf-head { width: auto; padding: 0 14px; height: 36px; align-items: center; border: 1px solid var(--border); border-radius: 999px; background: var(--rx-glass); }
+.sh-shelf.shut .sh-shelf-head h3 { font-size: 14px; font-weight: 650; }
+.sh-shelf.shut .sh-shelf-head .rx-sub { display: none; }
+.sh-count { font-size: 12px; font-weight: 700; color: var(--muted); }
+
+/* Compact top strip (the page stays short) */
+.sh-top { gap: 8px; }
+.sh-goal { padding: 8px 14px; gap: 10px; }
+.sh-goal-main { gap: 4px; }
+.sh-goal-emoji { font-size: 28px; }
+.sh-bar { height: 10px; }
+.sh-combo { padding: 6px 12px; }
+.sh-combo-x { font-size: 22px; }
+.sh-budget { padding: 6px 12px; gap: 4px; }

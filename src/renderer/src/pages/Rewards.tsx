@@ -388,9 +388,10 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     </>
   )
 
-  const card = (r: Reward, draggable = false, compact = false) => (
+  const card = (r: Reward, draggable = false, compact = false, pick = false) => (
     <RewardCard
       key={r.id}
+      pick={pick}
       compact={compact}
       r={r}
       info={infos.get(r.id) ?? { blocked: null, lock: null, left: 0, justReady: false }}
@@ -455,13 +456,30 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
   for (const r of live) shelves[shelfOf(r)].push(r)
   for (const id of Object.keys(shelves) as ShelfId[]) shelves[id].sort((a, b) => Number(!!infos.get(a.id)!.blocked) - Number(!!infos.get(b.id)!.blocked) || a.price - b.price)
   const featured = featuredPick(live.filter((r) => !r.goalRank), today)
-  const shelfOpen = new Set<ShelfId>(openShelves ?? SHELVES.map((sh) => sh.id).filter((id) => shelves[id].length > 0).slice(0, 2))
+  if (featured) shelves[shelfOf(featured)].sort((a, b) => Number(b.id === featured.id) - Number(a.id === featured.id))
+  const pickShelf = featured ? shelfOf(featured) : null
+  const shelfOpen = new Set<ShelfId>(openShelves ?? [...(pickShelf ? [pickShelf] : []), ...SHELVES.map((sh) => sh.id).filter((id) => id !== pickShelf && shelves[id].length > 0)].slice(0, 1))
   const toggleShelf = (id: ShelfId) => {
     const next = new Set(shelfOpen)
     if (!next.delete(id)) next.add(id)
     setOpenShelves([...next])
     try {
       localStorage.setItem('ls.rw.shelves', JSON.stringify([...next]))
+    } catch {
+      /* a convenience only */
+    }
+  }
+  const [ideasOpen, setIdeasOpen] = useState(() => {
+    try {
+      return localStorage.getItem('ls.rw.ideas') === '1'
+    } catch {
+      return false
+    }
+  })
+  const toggleIdeas = () => {
+    setIdeasOpen(!ideasOpen)
+    try {
+      localStorage.setItem('ls.rw.ideas', ideasOpen ? '0' : '1')
     } catch {
       /* a convenience only */
     }
@@ -512,22 +530,24 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
 
           {shownTab === 'now' && (
             <div className="rx-foryou sh-more" role="tabpanel" data-tabpanel="now">
-              {featured && (
-                <Section title="Pick of the day" sub="Changes every day. Same price as always.">
-                  <div className="sh-feature" data-testid="featured">
-                    <div>{card(featured)}</div>
-                    <div className="sh-feature-side">
-                      <span className="sh-feature-tag">★ Today's pick</span>
-                      <p>{readyNow.some((x) => x.id === featured.id) ? 'You have the points: hold the button to get it.' : next && next.reward.id === featured.id ? next.line : 'Work toward it, or pick another from the shelves below.'}</p>
-                    </div>
-                  </div>
-                </Section>
-              )}
               {goals.length > 1 && <SavingFor goals={goals} balance={state.balance} perDay={perDay} today={today} onAll={() => setTab('all')} />}
+              <div className="sh-shelves">
               {SHELVES.filter((sh) => sh.id !== 'big' || shelves[sh.id].length > 0).map((sh) => (
-                <Shelf key={sh.id} id={sh.id} cards={shelves[sh.id].map((r) => card(r, false, true))} preview={shelves[sh.id].slice(0, 4).map((r) => rewardEmoji(r)).join(' ')} open={shelfOpen.has(sh.id)} onToggle={() => toggleShelf(sh.id)} adding={stocking} onStarter={(id) => void stock(id)} onAdd={() => setSheet('new')} />
+                <Shelf key={sh.id} id={sh.id} cards={shelves[sh.id].map((r) => card(r, false, true, r.id === featured?.id))} preview={shelves[sh.id].slice(0, 4).map((r) => rewardEmoji(r)).join(' ')} open={shelfOpen.has(sh.id)} onToggle={() => toggleShelf(sh.id)} adding={stocking} onStarter={(id) => void stock(id)} onAdd={() => setSheet('new')} />
               ))}
-              {more && <SuggestRow list={more.suggestions} onAdd={addSuggestion} onHide={(k) => void hideSuggestion(k)} />}
+              {more && more.suggestions.length > 0 && (
+                <section className={`rx-sec sh-shelf ${ideasOpen ? 'open' : 'shut'}`}>
+                  <header>
+                    <button type="button" className="sh-shelf-head" aria-expanded={ideasOpen} onClick={toggleIdeas}>
+                      <span className="sh-chev" aria-hidden>{ideasOpen ? '▾' : '▸'}</span>
+                      <h3>Suggested for you</h3>
+                      <span className="rx-sub">{more.suggestions.length} ideas from what you did this week</span>
+                    </button>
+                  </header>
+                  {ideasOpen && <SuggestRow list={more.suggestions} onAdd={addSuggestion} onHide={(k) => void hideSuggestion(k)} title="Suggested for you" />}
+                </section>
+              )}
+              </div>
             </div>
           )}
 

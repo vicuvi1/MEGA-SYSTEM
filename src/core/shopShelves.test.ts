@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { STARTERS, SHELVES, budgetMeter, featuredPick, monthSpendLei, rarityOf, shelfOf } from './shopShelves'
+import { POINTS_PER_LEI, STARTERS, SHELVES, budgetMeter, featuredPick, monthSpendLei, rarityOf, shelfOf } from './shopShelves'
 import { isRewardCategory } from './shop'
 
 describe('shop shelves', () => {
@@ -12,6 +12,13 @@ describe('shop shelves', () => {
   it('only uses real categories in the shelves and starters', () => {
     for (const s of SHELVES) for (const c of s.cats) expect(isRewardCategory(c)).toBe(true)
     for (const list of Object.values(STARTERS)) for (const it of list) expect(isRewardCategory(it.category) && it.price > 0 && it.title.length > 0).toBe(true)
+  })
+  it('prices every paid starter at exactly 10 points per lei', () => {
+    expect(POINTS_PER_LEI).toBe(10)
+    for (const list of Object.values(STARTERS)) for (const it of list) if (it.realCost > 0) expect(it.price).toBe(it.realCost * POINTS_PER_LEI)
+    const all = Object.values(STARTERS).flat()
+    expect(all.find((i) => i.title === 'Pizza night')!.price).toBe(1500)
+    expect(all.find((i) => i.title === 'SPF 50 sunscreen')!.price).toBe(2500)
   })
   it('sets rarity by price in points', () => {
     expect(rarityOf(120)).toBe('common')
