@@ -622,6 +622,21 @@
    ],
    "evidence": "2026-11-08: 16 unit tests; smoke step \"Body progress\" passes",
    "notes": "core/bodyProgress.ts, body/progress/*"
+  },
+  {
+   "id": "F035",
+   "priority": 2,
+   "area": "body",
+   "title": "Body Today redesign (rank hero, workout, readiness, body map)",
+   "user_visible_behavior": "Body → Metrics & Workouts → Today is one calm page: a hero with the strength rank, a bar to the next rank, the streak and today's quest; today's workout (plan session or your routine, about 20–45 min, the next harder move) with one Start that opens Sport Track's own workout mode; readiness 0–100 (sleep against your need, soreness, yesterday's hard sets) with Ready: go full / Go lighter (70%) / Rest or mobility, which sets Full / Lighter / Short; food rings and Next from the food counter (tap opens Food); a water bottle with +250 / +500 / Undo and the list in Details; creatine, shake and vitamins chips; one Log weight & waist prompt when empty; a drawn front/back body map lit by this week's hard sets (10–20 zone), tap a muscle for its sets and moves; a smart rest day with an 8-minute mobility routine that never says Rest day after you trained (unless you tapped it). The old protein card is gone from Body (one food system). No new points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/readinessDay.test.ts src/core/bodyMap.test.ts",
+    "SMOKE_ONLY=\"Body Today\" npm run smoke",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests for readiness verdict, sleep need, smart rest day and body-map zones; smoke step \"Body Today\"; full vitest and full smoke run",
+   "notes": "pages/Body.tsx is a shell (one component per tab: body/today/TodayTab.tsx, FoodCounter, body/training/BodyTraining.tsx, body/progress/BodyProgress.tsx). Shared look: body/body-theme.css (bt-* classes). Pure: core/readinessDay.ts, core/bodyMap.ts; readiness counts sleep against Sleep care's need (core/readiness.ts needMin, main/bodyPlus.ts readinessNow). Start: sportStart.ts + EmbedHost clicks Sport Track's own Start workout."
   }
  ]
 }

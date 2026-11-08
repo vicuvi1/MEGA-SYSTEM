@@ -280,6 +280,99 @@ try {
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.
+  await step('Body Today: rank hero, workout Start opens workout mode, readiness, food rings, water bottle, body map, one protein counter, fits two screens', async () => {
+    const shots = process.env.BODY_TODAY_SHOTS
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="today"]')
+    const t = '#ptp-body-today'
+    // 1. The hero: a rank, a bar to the next rank, the streak and today's quest.
+    await pg.waitForSelector(`${t} .bdy-hero .bdy-hero-name`, { timeout: 20000 })
+    if (!/Recruit|Trainee|Fighter|Warrior|Elite|Legend/.test(await pg.locator(`${t} .bdy-hero-name`).innerText())) throw new Error('the hero shows no strength rank')
+    if (!(await pg.locator(`${t} .bdy-hero [role="progressbar"]`).count())) throw new Error('the hero has no bar to the next rank')
+    if (!/Today's quest/i.test(await pg.locator(`${t} .bdy-hero`).innerText())) throw new Error("the hero has no today's quest")
+    // 3. Readiness: a score 0–100, a plain verdict and the dose (picking one is checked in "Body boost",
+    // after the Sport Track steps: a Short day would lower their targets).
+    await pg.waitForSelector(`${t} .rdy-card .bdy-seg button[role="radio"] .rdy-auto`, { timeout: 20000 })
+    const score = Number(await pg.locator(`${t} .rdy-score`).innerText())
+    if (!(score >= 0 && score <= 100)) throw new Error(`readiness score is ${score}`)
+    if (!/Ready: go full|Go lighter \(70%\)|Rest or mobility/.test(await pg.locator(`${t} .rdy-verdict-title`).innerText())) throw new Error('no plain readiness verdict')
+    // 4. Food rings from the food counter, and only ONE protein counter on the page (the old protein card is gone).
+    await pg.waitForFunction((p) => document.querySelectorAll(`${p} .fr-card .fd-ring`).length === 4, t, { timeout: 15000 })
+    if (await pg.locator('.body-page .pr-card').count()) throw new Error('the old protein card is still on Body')
+    // 5. Water: the bottle and today's total (+250 / Undo is checked in "Body boost", after the Sport Track steps); the list only in Details.
+    await pg.waitForSelector(`${t} .ws-card .ws-bottle`, { timeout: 5000 })
+    if (await pg.locator(`${t} .water-history`).count()) throw new Error('the raw water list shows on Today')
+    await pg.click(`${t} .ws-details`)
+    await pg.waitForSelector('.sheet .water-history', { timeout: 5000 })
+    await pg.locator('.sheet .sheet-actions .btn').click()
+    // Supplements are chips (creatine, shake, vitamins).
+    if ((await pg.locator(`${t} .ws-supp`).count()) !== 3) throw new Error('no supplement chips')
+    // Weight: one prompt when empty, values when logged (never empty "–" tiles).
+    if ((await pg.locator(`${t} .wt-prompt, ${t} .wt-values`).count()) !== 1) throw new Error('no weight & waist card')
+    if (await pg.locator(`${t} .stat`).count()) throw new Error('the old stat tiles are still on Today')
+    // 7. The body map: tap the chest → Push is picked, with its sets and moves.
+    await pg.waitForSelector(`${t} .bmap-card .bmap-region[data-region="chest"]`, { timeout: 10000 })
+    if ((await pg.locator(`${t} .bmap-region`).count()) < 12) throw new Error('the body map has too few muscles')
+    await pg.locator(`${t} .bmap-region[data-region="chest"] path`).first().click()
+    await pg.waitForSelector(`${t} .bmap-row.on[data-muscle="push"]`, { timeout: 5000 })
+    if (!/hard set|No hard sets/.test(await pg.locator(`${t} .bmap-detail`).innerText())) throw new Error('the picked muscle shows no sets')
+    if (!(await pg.locator(`${t} .bmap-detail .bmap-ideas li, ${t} .bmap-detail .bmap-chips .bdy-chip`).count())) throw new Error('the picked muscle shows no moves')
+    // 6. Never "Rest day" and "You trained today" together.
+    const all = await pg.locator(t).innerText()
+    if (/Rest day/.test(all) && /trained today/i.test(all)) throw new Error('Today says "Rest day" and "You trained today" together')
+    // Fits about two laptop screens.
+    const h = await pg.evaluate((p) => document.querySelector(p).getBoundingClientRect().height, t)
+    if (h > 900 * 2.1) throw new Error(`Body Today is ${Math.round(h)}px tall (more than two screens)`)
+    if (shots) {
+      // Screenshots only: a made-up week of sets (Mon–Sat), so the body map has something to light up.
+      await pg.evaluate((now) => {
+        const st = JSON.parse(localStorage.getItem('life_sport_tracker_v1') || 'null')
+        if (!st) return
+        const add = [{ id: 'demo_row', name: 'Table rows', target: 30, unit: 'reps', active: false, move: 'table_row' }, { id: 'demo_squat', name: 'Squats', target: 60, unit: 'reps', active: false, move: 'squat' }]
+        st.exercises = [...st.exercises.filter((e) => !String(e.id).startsWith('demo_')), ...add]
+        const push = st.exercises.find((e) => /push/i.test(e.name))?.id
+        const core = st.exercises.find((e) => /sit/i.test(e.name))?.id
+        const day = (n) => new Date(now - n * 864e5).toISOString().slice(0, 10)
+        const sets = (reps, k) => Array.from({ length: k }, (_, i) => ({ reps, at: now - i, id: `demo${reps}${k}${i}` }))
+        st.sets = st.sets || {}
+        for (const [n, plan] of [[5, { [push]: sets(15, 5), demo_squat: sets(20, 6), demo_row: sets(10, 2) }], [3, { [push]: sets(14, 5), demo_squat: sets(20, 6), [core]: sets(20, 4) }], [1, { [push]: sets(15, 4), demo_squat: sets(22, 6), demo_row: sets(10, 2), [core]: sets(20, 3) }]]) st.sets[day(n)] = { ...(st.sets[day(n)] || {}), ...plan }
+        localStorage.setItem('life_sport_tracker_v1', JSON.stringify(st))
+        window.dispatchEvent(new CustomEvent('life-body-changed'))
+      }, fakeNow())
+      await pg.locator(`${t} .bmap-region[data-region="chest"] path`).first().click()
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.evaluate(() => document.querySelector('.body-page')?.scrollIntoView())
+      await pg.waitForTimeout(600)
+      await pg.screenshot({ path: `${shots}/body-today-top.png` })
+      await pg.locator(`${t} .bmap-card`).scrollIntoViewIfNeeded()
+      await pg.waitForTimeout(400)
+      await pg.locator(`${t} .bmap-card`).screenshot({ path: `${shots}/body-today-map.png` })
+      // The same page in the light theme (a check, not one of the two shots).
+      const theme = await pg.evaluate(() => { const r = document.documentElement; const was = r.dataset.theme ?? ''; r.dataset.theme = 'light'; window.scrollTo(0, 0); document.querySelector('.body-page')?.scrollIntoView(); return was })
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${shots}/check-light.png` })
+      await pg.evaluate((was) => { if (was) document.documentElement.dataset.theme = was; else delete document.documentElement.dataset.theme }, theme)
+    }
+    // No sideways scroll on a phone.
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await pg.waitForTimeout(400)
+    const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    if (over > 1) throw new Error(`Body Today scrolls sideways on a phone (${over}px)`)
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    // 2. Today's workout: Start opens Sport Track's own workout mode (on a suggested rest day: Train anyway first).
+    if (await pg.locator(`${t} .wo-rest`).count()) await pg.locator(`${t} .wo-rest .bdy-btn`).first().click()
+    if (await pg.locator(`${t} .wo-start`).count()) {
+      await pg.click(`${t} .wo-start`)
+      await pg.waitForFunction(() => [...document.querySelectorAll('iframe')].some((f) => f.src.includes('/apps/sport/') && f.contentDocument?.getElementById('workout-mode') && !f.contentDocument.getElementById('workout-mode').hidden), null, { timeout: 20000 })
+      const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
+      await frame.evaluate(() => document.getElementById('wm-close')?.click())
+      await frame.waitForSelector('#workout-mode', { state: 'hidden', timeout: 10000 })
+    } else if (!/You trained today/.test(await pg.locator(`${t} .wo-card`).innerText())) throw new Error('no Start workout button and not done for today')
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
+  })
   await step('Sport Track note: a workout summary makes one note from Ben, once', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
@@ -543,7 +636,7 @@ try {
   // Sport Track's dose, sets per muscle, the weight trend, measurements, progress photos that stay on this
   // device (made-up drawn silhouettes, never a real photo) and the weekly body card.
   // BODY_SHOTS=<dir> saves screenshots (E2E_BODY_DEMO=1 gives the made-up six weeks of data).
-  await step('Body boost: protein ring and quick log, readiness dose, sets per muscle, weight trend, tape, photos on this device, weekly card', async () => {
+  await step('Body boost: readiness dose, water undo, sets per muscle, weight trend, tape, photos on this device, weekly card', async () => {
     const shots = process.env.BODY_SHOTS
     const shot = async (sel, name) => {
       if (!shots) return
@@ -553,43 +646,27 @@ try {
     }
     await open('body')
     await pg.locator('.seg-switch [role="tab"]').nth(1).click()
-    await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
-    // Food: "2 eggs" in the quick log puts 12 g on the ring; a quick pick adds more; Remove takes it off.
-    await pg.click('.body-page .ptabs [data-tab="food"]')
-    const food = '#ptp-body-food'
-    await pg.waitForSelector(`${food} .pr-ring-num b`, { timeout: 20000 })
-    const ringNow = () => pg.evaluate((p) => Number(document.querySelector(`${p} .pr-ring-num b`)?.textContent), food)
-    const before = await ringNow()
-    await pg.fill(`${food} .pr-quick input`, '2 eggs')
-    await pg.waitForFunction((p) => /\+12 g/.test(document.querySelector(`${p} .pr-quick button`)?.textContent ?? ''), food, { timeout: 5000 })
-    await pg.click(`${food} .pr-quick button`)
-    await pg.waitForFunction(([p, b]) => Number(document.querySelector(`${p} .pr-ring-num b`)?.textContent) === b + 12, [food, before], { timeout: 15000 })
-    await pg.locator(`${food} .pr-pick`).first().click()
-    await pg.waitForFunction(([p, b]) => Number(document.querySelector(`${p} .pr-ring-num b`)?.textContent) > b + 12, [food, before], { timeout: 15000 })
-    const n = await pg.locator(`${food} .pr-entries li`).count()
-    if (n < 2) throw new Error(`today's protein list shows ${n} entries`)
-    const withPick = await ringNow()
-    await pg.locator(`${food} .pr-entries li`).last().locator('button').click()
-    await pg.waitForFunction(([p, v]) => Number(document.querySelector(`${p} .pr-ring-num b`)?.textContent) < v, [food, withPick], { timeout: 15000 })
-    await pg.locator(`${food} .pr-entries li.removed`).first().waitFor({ timeout: 5000 })
-    await shot(`${food} .pr-card`, 'protein-ring-and-quick-log')
-    // Today: readiness picks the dose; tapping Short tells Sport Track (life_body) and says it's your pick.
+    await pg.waitForSelector('.body-page .ptabs [data-tab="training"]', { timeout: 20000 })
+    // Today: readiness sets the dose; tapping Short tells Sport Track (life_body) and says it's your pick; then back to automatic.
     await pg.click('.body-page .ptabs [data-tab="today"]')
     const today = '#ptp-body-today'
-    await pg.waitForSelector(`${today} .rd-plan button[role="radio"] .rd-auto`, { timeout: 20000 })
-    await pg.waitForSelector(`${today} .pr-card.compact .pr-ring`, { timeout: 10000 })
-    if (process.env.E2E_BODY_DEMO) {
-      // A made-up short night (5h25): a lighter day, progression on hold, chosen by itself.
-      await pg.waitForSelector(`${today} .rd-hold`, { timeout: 10000 })
-      await shot(`${today} .rd-card`, 'readiness-auto-lighter')
-    }
-    await pg.locator(`${today} .rd-plan button[role="radio"]`).nth(2).click()
+    await pg.waitForSelector(`${today} .rdy-card .bdy-seg button[role="radio"] .rdy-auto`, { timeout: 20000 })
+    await pg.locator(`${today} .rdy-card .bdy-seg button[role="radio"]`).nth(2).click()
     await pg.waitForFunction(() => JSON.parse(localStorage.getItem('life_body') || 'null')?.ready?.mode === 'short', null, { timeout: 15000 })
-    await pg.waitForSelector(`${today} .rd-plan button[role="radio"].on`, { timeout: 5000 })
-    if (!/You picked it|Short/.test(await pg.locator(`${today} .rd-card`).innerText())) throw new Error('the readiness card does not show the pick')
-    await shot(`${today} .rd-card`, 'readiness-your-pick-short')
-    await pg.click(`${today} .rd-plan .btn`) // back to automatic
+    await pg.waitForSelector(`${today} .rdy-card .bdy-seg button[aria-checked="true"]`, { timeout: 5000 })
+    if (!/Short 50%/.test(await pg.locator(`${today} .rdy-card .bdy-seg button[aria-checked="true"]`).innerText())) throw new Error('the readiness card does not show the pick')
+    await pg.click(`${today} .rdy-back`)
     await pg.waitForFunction(() => JSON.parse(localStorage.getItem('life_body') || 'null')?.ready?.auto === true, null, { timeout: 15000 })
+    // Water: +250 and Undo on the one water log.
+    const ml = async () => Number((await pg.locator(`${today} .ws-total`).innerText()).replace(/[^\d]/g, ''))
+    const w0 = await ml()
+    await pg.locator(`${today} .ws-add`).first().click()
+    await pg.waitForFunction(([p, v]) => Number((document.querySelector(`${p} .ws-total`)?.textContent ?? '').replace(/[^\d]/g, '')) === v + 250, [today, w0], { timeout: 15000 })
+    await pg.click(`${today} .ws-undo`)
+    await pg.waitForFunction(([p, v]) => Number((document.querySelector(`${p} .ws-total`)?.textContent ?? '').replace(/[^\d]/g, '')) === v, [today, w0], { timeout: 15000 })
+    // Trained today (the Sport Track steps logged sets): "Done for today", never "Rest day" next to it.
+    const all = await pg.locator(today).innerText()
+    if (/Rest day/.test(all) && /trained today/i.test(all)) throw new Error('Today says "Rest day" and "You trained today" together')
     // Training: hard sets per muscle (done / planned, 10–20) and the next step for each move.
     await pg.click('.body-page .ptabs [data-tab="training"]')
     await pg.waitForSelector('#ptp-body-training .mw-row', { timeout: 15000 })
@@ -843,8 +920,12 @@ try {
     await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li`).length === n + 1, [fc, mealsBefore], { timeout: 15000 })
     if (!/White rice/.test(await pg.locator(`${fc} .fd-meals`).innerText())) throw new Error('the renamed food is not in the saved meal')
     await pg.waitForFunction((s) => /g protein left|Protein done/.test(document.querySelector(`${s} .fd-next`)?.textContent ?? ''), fc, { timeout: 10000 })
-    // One protein number: the protein ring's list shows the meal too.
-    await pg.waitForFunction(() => /Food counter meal/.test(document.querySelector('#ptp-body-food .pr-entries')?.textContent ?? ''), null, { timeout: 10000 })
+    // One protein number: Body → Today's food rings show the same protein as the counter.
+    await pg.waitForFunction((s) => {
+      const head = /Protein ([\d,]+)/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1]
+      const ring = document.querySelector('#ptp-body-today .fr-card .fd-ring.protein .fd-ring-num b')?.textContent
+      return head != null && ring != null && head === ring
+    }, fc, { timeout: 10000 })
     // Yesterday: add a meal there (marked "added later"), then "Same as yesterday" brings it to today.
     await pg.click(`${fc} .fd-day`)
     await pg.locator('.ui-select-list [role="option"]', { hasText: 'Yesterday' }).click()

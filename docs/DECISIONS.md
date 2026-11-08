@@ -184,3 +184,13 @@ entry that says why.
 - **Decision:** a meal is two rows in the one body log (`protein:food`, `kcal:food`, ids `<meal>-p` / `<meal>-k`) and its foods in the synced setting `food_log` (45 days, 400 meals, 20 stars). Protein stays ONE number (`proteinOfDay` of every `protein:*` row). The app never calls an AI for food: it copies a prompt and parses the pasted reply with code. Goals are lean (2.0 g/kg; maintenance +150 kcal on a training day, +0 on a rest day).
 - **Why:** body_log already merges across devices by row id and feeds the ring, the weekly report and "why it stalled"; a new table would need a schema bump and a bot bundle rebuild. The owner wants no image-AI cost and no fat gain.
 - **Rules out:** a second protein total, a kcal or meal table without a migration plan, a paid vision call, or a bulk-sized surplus by default.
+
+### Body has one food system and a one-line-per-tab shell (2026-11-08)
+- **Decision:** Body → Metrics & Workouts shows food only through the food counter (Food tab, and its
+  rings on Today); the old protein card is not on Body. `pages/Body.tsx` renders each tab as one
+  component, and all Body tabs share `body/body-theme.css`. "Rest day" is decided in one place
+  (`core/readinessDay.ts` `dayState`) and is never shown after a workout today unless you tapped it.
+- **Why:** the owner saw two protein counters ("Protein 0/120" twice) and "Rest day" next to "You
+  trained today"; three builders work on the Body tabs in parallel.
+- **Rules out:** a second protein or water counter on Body, a rest-day label computed per card, or
+  tab contents written inline in `pages/Body.tsx`.
