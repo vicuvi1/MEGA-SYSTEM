@@ -1284,17 +1284,17 @@ var FOODS = [
 		snack: true
 	}
 ];
-var norm$8 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+var norm$9 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
 var foodById = (id) => FOODS.find((f) => f.id === id) ?? null;
 /** The food a word means ("eggs", "brânză", "курица"), longest match first. */
 function matchFood(word) {
-	const w = norm$8(word).replace(/[.!]+$/, "");
+	const w = norm$9(word).replace(/[.!]+$/, "");
 	if (!w) return null;
 	let best = null;
 	for (const f of FOODS) for (const name of [
 		f.id.replace(/_/g, " "),
-		norm$8(f.name),
-		...f.alias.map(norm$8)
+		norm$9(f.name),
+		...f.alias.map(norm$9)
 	]) if (w === name || w === `${name}s` || name.length >= 4 && w.replace(/s$/, "") === name.replace(/s$/, "")) {
 		if (!best || name.length > best.n) best = {
 			f,
@@ -1378,7 +1378,7 @@ var COUNT_UNIT = {
 * stays money); counted foods take at most 12 ("eggs 20" stays money).
 */
 function parseProtein(text) {
-	let t = norm$8(text).replace(/^\/(protein|p)\b/, "protein").replace(/^(i\s+)?(ate|had|log|add|eaten|just ate|mancat|am mancat|съел)\s+/, "").replace(/[.!]+$/, "");
+	let t = norm$9(text).replace(/^\/(protein|p)\b/, "protein").replace(/^(i\s+)?(ate|had|log|add|eaten|just ate|mancat|am mancat|съел)\s+/, "").replace(/[.!]+$/, "");
 	if (!t || t.length > 48 || t.split(" ").length > 6 || /\?/.test(t)) return null;
 	let m = new RegExp(`^(?:protein|proteine|proteina|белок|prot)\\s*:?\\s*\\+?${NUM$2}\\s*g?$`).exec(t) ?? new RegExp(`^\\+?${NUM$2}\\s*g(?:rams?)?\\s*(?:of\\s+)?(?:protein|proteine|proteina|белка|prot)$`).exec(t);
 	if (m) {
@@ -5058,15 +5058,15 @@ var TIME$1 = /\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
 var AMPM = /\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s?(am|pm)\b/gi;
 var EVENT$1 = /\b(meetings?|appointments?|interviews?|lectures?|class(?:es)?|seminars?|exams?)\b/gi;
 var PROGRESS = /\b(?:nearly|almost|mostly|half(?:way)?|basically|practically)\s+(?:done|finished|through|complete|there)\b/i;
-var norm$7 = (h, m) => `${pad$16(h)}:${pad$16(m)}`;
+var norm$8 = (h, m) => `${pad$16(h)}:${pad$16(m)}`;
 /** Every clock time in a text, as "HH:MM" (am/pm turned into 24 h). */
 function timesIn(text) {
 	const out = [];
-	for (const m of text.matchAll(TIME$1)) out.push(norm$7(Number(m[1]), Number(m[2])));
+	for (const m of text.matchAll(TIME$1)) out.push(norm$8(Number(m[1]), Number(m[2])));
 	for (const m of text.matchAll(AMPM)) {
 		let h = Number(m[1]) % 12;
 		if (/pm/i.test(m[3])) h += 12;
-		out.push(norm$7(h, Number(m[2] ?? 0)));
+		out.push(norm$8(h, Number(m[2] ?? 0)));
 	}
 	return out;
 }
@@ -5081,7 +5081,7 @@ function ungrounded(sentence, g) {
 		1
 	]) {
 		const x = new Date(t.getTime() + d * 6e4);
-		known.add(norm$7(x.getHours(), x.getMinutes()));
+		known.add(norm$8(x.getHours(), x.getMinutes()));
 	}
 	const times = timesIn(sentence).filter((x) => !known.has(x));
 	const where = `${g.facts}\n${g.said}`.toLowerCase();
@@ -5431,7 +5431,8 @@ function sportBodyNow(db, now = /* @__PURE__ */ new Date()) {
 // src/core/foodPrompt.ts
 var foodPrompt_exports = /* @__PURE__ */ __exportAll({
 	FOOD_FIELDS: () => FOOD_FIELDS,
-	FOOD_PROMPT: () => FOOD_PROMPT
+	FOOD_PROMPT: () => FOOD_PROMPT,
+	LABEL_PROMPT: () => LABEL_PROMPT
 });
 /** The fields every item in the reply has (the parser reads these names first). */
 var FOOD_FIELDS = [
@@ -5456,6 +5457,26 @@ Reply ONLY with this block, no other text:
 
 \`\`\`json
 {"items":[{"name":"chicken breast","grams":150,"protein_g":46,"carbs_g":0,"fat_g":5,"kcal":230,"confidence":"roughly"}],"question":"Was it cooked in oil?"}
+\`\`\``;
+/**
+* For packaged food: send a photo of the nutrition label and say how much you ate.
+* Same reply format as FOOD_PROMPT, so the same parser and draft are used.
+*/
+var LABEL_PROMPT = `Read the nutrition label in my photo (the table of values per 100 g).
+
+My portion: ____ g (fill this in before you send; if I leave it empty, use the serving size on the label).
+
+Rules:
+- Take the values per 100 g from the label, then work out the numbers for MY portion in grams.
+- Reply with ONE item: the product name, grams = my portion, and the protein, carbs, fat and kcal for that portion (not per 100 g).
+- If the label has only per-serving values, use the serving size to get per 100 g first.
+- confidence is "sure" when the label is clear, otherwise "roughly".
+- If the portion or a value is unclear, ask ONE short question in "question". Otherwise leave it out.
+
+Reply ONLY with this block, no other text:
+
+\`\`\`json
+{"items":[{"name":"protein bar","grams":60,"protein_g":20,"carbs_g":22,"fat_g":8,"kcal":232,"confidence":"sure"}],"question":"How much did you eat?"}
 \`\`\``;
 // src/core/food.ts
 var MEAL_TYPES = [
@@ -5578,7 +5599,8 @@ function cleanFoodLog(raw, today) {
 			name: String(m.name ?? "").trim().slice(0, 60) || mealName(items),
 			type,
 			items,
-			...m.late ? { late: true } : {}
+			...m.late ? { late: true } : {},
+			...m.supp ? { supp: true } : {}
 		});
 	}
 	meals.sort((a, b) => a.at < b.at ? 1 : a.at > b.at ? -1 : 0);
@@ -6798,8 +6820,24 @@ var DEFAULT_GOALS = {
 	restSurplus: 0,
 	kcalOwn: null,
 	proteinOwn: null,
-	leanV: 0
+	leanV: 0,
+	kcalAdj: 0,
+	adjAt: "",
+	prices: {}
 };
+/** Fat in g per kg of body weight (lean plan; carbs are the rest of the kcal). */
+var FAT_GPK = .8;
+/** Own prices: a name (lower case, ≤ 40 chars) → MDL per kg (1–3000), at most 60. */
+function cleanPrices(raw) {
+	const out = {};
+	if (!raw || typeof raw !== "object") return out;
+	for (const [k, v] of Object.entries(raw)) {
+		const key = k.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 40);
+		const n = Number(v);
+		if (key && Number.isFinite(n) && n >= 1 && n <= 3e3 && Object.keys(out).length < 60) out[key] = Math.round(n * 10) / 10;
+	}
+	return out;
+}
 var clampInt = (v, lo, hi, def) => {
 	const n = Number(v);
 	return Number.isFinite(n) && n > 0 ? Math.round(Math.max(lo, Math.min(hi, n))) : def;
@@ -6817,7 +6855,10 @@ function cleanGoals(raw) {
 		restSurplus: sur(o.restSurplus, DEFAULT_GOALS.restSurplus),
 		kcalOwn: own(o.kcalOwn, 1200, 5e3),
 		proteinOwn: own(o.proteinOwn, 40, 350),
-		leanV: o.leanV === 1 ? 1 : 0
+		leanV: o.leanV === 1 ? 1 : 0,
+		kcalAdj: Number.isFinite(Number(o.kcalAdj)) ? Math.round(Math.max(-300, Math.min(300, Number(o.kcalAdj)))) : 0,
+		adjAt: /^\d{4}-\d{2}-\d{2}$/.test(String(o.adjAt ?? "")) ? String(o.adjAt) : "",
+		prices: cleanPrices(o.prices)
 	};
 }
 /** Maintenance kcal (Mifflin–St Jeor × activity), rounded to 50. */
@@ -6830,19 +6871,399 @@ function foodTargets(weightKg, gPerKg, goals, training = false) {
 	const pg = proteinGoal(w, gPerKg);
 	const maint = maintenance(w ?? 75, goals);
 	const surplus = training ? goals.trainSurplus : goals.restSurplus;
-	const kcal = goals.kcalOwn ?? maint + surplus;
+	const kcal = goals.kcalOwn ?? maint + surplus + goals.kcalAdj;
 	const protein = goals.proteinOwn ?? pg.g;
+	const fat = Math.round(FAT_GPK * (w ?? 75));
+	const carbs = Math.max(0, Math.round((kcal - 4 * protein - 9 * fat) / 4));
 	const sur = surplus >= 0 ? `+${surplus}` : String(surplus);
-	const why = [goals.proteinOwn ? `Protein: your own ${protein} g` : w ? `Protein: ${pg.gPerKg} g × ${w} kg` : "Protein: log your weight for a personal goal", goals.kcalOwn ? `kcal: your own ${kcal}` : `kcal: about ${maint} to stay the same, ${sur} on a ${training ? "training" : "rest"} day${w ? "" : ` (until you log a weight, 75 kg is used)`}`].join(" · ");
+	const why = [goals.proteinOwn ? `Protein: your own ${protein} g` : w ? `Protein: ${pg.gPerKg} g × ${w} kg` : "Protein: log your weight for a personal goal", goals.kcalOwn ? `kcal: your own ${kcal}` : `kcal: about ${maint} to stay the same, ${sur} on a ${training ? "training" : "rest"} day${goals.kcalAdj ? `, ${goals.kcalAdj > 0 ? "+" : ""}${goals.kcalAdj} from your weight check` : ""}${w ? "" : ` (until you log a weight, 75 kg is used)`}`].join(" · ");
 	return {
 		protein,
 		kcal,
+		fat,
+		carbs,
 		maintenance: maint,
 		weight: w,
 		gPerKg: pg.gPerKg,
 		training,
 		why
 	};
+}
+// src/core/foodTable.ts
+var F = (name, p, c, f, k, more = {}) => ({
+	name,
+	p,
+	c,
+	f,
+	k,
+	alias: [],
+	...more
+});
+var FOOD_TABLE = [
+	F("chicken breast", 31, 0, 3.6, 165, {
+		alias: [
+			"chicken",
+			"chicken fillet",
+			"fillet"
+		],
+		mdlKg: 95,
+		protein: true
+	}),
+	F("chicken thigh", 26, 0, 9, 190, {
+		alias: [
+			"chicken leg",
+			"chicken drumstick",
+			"drumstick"
+		],
+		mdlKg: 55,
+		protein: true
+	}),
+	F("beef", 26, 0, 15, 250, {
+		alias: [
+			"minced beef",
+			"steak",
+			"mince"
+		],
+		mdlKg: 170,
+		protein: true
+	}),
+	F("pork", 27, 0, 9, 195, {
+		alias: ["pork loin"],
+		mdlKg: 120,
+		protein: true
+	}),
+	F("salmon", 22, 0, 12, 208, {
+		alias: ["fish"],
+		mdlKg: 260,
+		protein: true
+	}),
+	F("tuna", 26, 0, 1, 116, {
+		alias: ["canned tuna", "tuna can"],
+		units: {
+			can: 120,
+			tin: 120
+		},
+		mdlKg: 180,
+		protein: true
+	}),
+	F("egg", 12.5, 1, 10, 143, {
+		alias: ["boiled egg", "fried egg"],
+		units: { egg: 50 },
+		each: "egg",
+		mdlKg: 55,
+		protein: true
+	}),
+	F("skyr", 11, 4, .2, 63, {
+		alias: ["icelandic yogurt"],
+		units: {
+			pot: 150,
+			cup: 150
+		},
+		mdlKg: 120,
+		protein: true
+	}),
+	F("cottage cheese", 12, 3, 4, 98, {
+		alias: ["branza de vaci", "curd"],
+		units: { pot: 200 },
+		mdlKg: 70,
+		protein: true
+	}),
+	F("greek yogurt", 10, 4, 5, 97, {
+		alias: ["greek yoghurt"],
+		units: {
+			pot: 150,
+			cup: 200
+		},
+		mdlKg: 75,
+		protein: true
+	}),
+	F("yogurt", 4, 5, 3, 60, {
+		alias: ["yoghurt"],
+		units: {
+			pot: 150,
+			cup: 200
+		},
+		mdlKg: 40
+	}),
+	F("milk", 3.4, 5, 1.8, 50, {
+		units: {
+			cup: 250,
+			glass: 250
+		},
+		mdlKg: 22,
+		protein: true
+	}),
+	F("kefir", 3.3, 4, 2.5, 52, {
+		units: {
+			cup: 250,
+			glass: 250
+		},
+		mdlKg: 25,
+		protein: true
+	}),
+	F("cheese", 25, 1, 30, 400, {
+		units: { slice: 20 },
+		mdlKg: 150
+	}),
+	F("brinza", 14, 4, 21, 264, {
+		alias: ["feta", "sheep cheese"],
+		mdlKg: 130
+	}),
+	F("sour cream", 2.5, 3, 20, 200, {
+		alias: ["smetana"],
+		units: { tbsp: 20 },
+		mdlKg: 70
+	}),
+	F("rice", 2.7, 28, .3, 130, {
+		alias: ["cooked rice", "white rice"],
+		units: {
+			cup: 160,
+			bowl: 200
+		},
+		mdlKg: 28,
+		carb: true
+	}),
+	F("pasta", 5, 25, 1, 131, {
+		alias: ["spaghetti", "macaroni"],
+		units: {
+			cup: 140,
+			bowl: 200
+		},
+		mdlKg: 30,
+		carb: true
+	}),
+	F("potato", 2, 17, .1, 77, {
+		alias: ["boiled potato"],
+		units: { potato: 150 },
+		each: "potato",
+		mdlKg: 14,
+		carb: true
+	}),
+	F("buckwheat", 3.4, 20, .6, 92, {
+		alias: ["grechka"],
+		units: {
+			cup: 170,
+			bowl: 200
+		},
+		mdlKg: 35,
+		carb: true
+	}),
+	F("polenta", 1.5, 12, .4, 62, {
+		alias: ["mamaliga"],
+		units: { bowl: 250 },
+		mdlKg: 12,
+		carb: true
+	}),
+	F("oats", 13, 66, 7, 380, {
+		alias: ["oatmeal", "porridge oats"],
+		units: { cup: 90 },
+		mdlKg: 30,
+		carb: true
+	}),
+	F("bread", 9, 49, 3, 265, {
+		alias: ["toast"],
+		units: { slice: 30 },
+		each: "slice",
+		mdlKg: 24,
+		carb: true
+	}),
+	F("lentils", 9, 20, .4, 116, {
+		mdlKg: 40,
+		protein: true
+	}),
+	F("beans", 8, 21, .5, 127, {
+		alias: ["white beans"],
+		mdlKg: 45,
+		protein: true
+	}),
+	F("chickpeas", 9, 27, 3, 164, {
+		mdlKg: 50,
+		protein: true
+	}),
+	F("banana", 1, 23, .3, 89, {
+		units: { banana: 120 },
+		each: "banana",
+		mdlKg: 35
+	}),
+	F("apple", .3, 14, .2, 52, {
+		units: { apple: 180 },
+		each: "apple",
+		mdlKg: 18
+	}),
+	F("orange", .9, 12, .1, 47, {
+		units: { orange: 150 },
+		each: "orange",
+		mdlKg: 25
+	}),
+	F("tomato", .9, 3.9, .2, 18, {
+		units: { tomato: 120 },
+		each: "tomato",
+		mdlKg: 30
+	}),
+	F("cucumber", .7, 3.6, .1, 15, {
+		units: { cucumber: 200 },
+		each: "cucumber",
+		mdlKg: 25
+	}),
+	F("vegetables", 2, 5, .3, 30, {
+		alias: [
+			"veg",
+			"salad",
+			"broccoli",
+			"carrot"
+		],
+		mdlKg: 30
+	}),
+	F("peanut butter", 25, 20, 50, 588, {
+		alias: ["peanut paste"],
+		units: {
+			tbsp: 16,
+			spoon: 16
+		},
+		mdlKg: 150
+	}),
+	F("peanuts", 26, 16, 49, 567, {
+		units: { handful: 30 },
+		mdlKg: 80,
+		protein: true
+	}),
+	F("nuts", 21, 22, 50, 579, {
+		alias: ["almonds", "walnuts"],
+		units: { handful: 30 },
+		mdlKg: 200
+	}),
+	F("olive oil", 0, 0, 100, 884, {
+		alias: ["oil", "sunflower oil"],
+		units: {
+			tbsp: 14,
+			tsp: 5
+		},
+		mdlKg: 120
+	}),
+	F("butter", .9, .1, 81, 717, {
+		units: {
+			tbsp: 14,
+			tsp: 5
+		},
+		mdlKg: 160
+	}),
+	F("honey", .3, 82, 0, 304, {
+		units: {
+			tbsp: 21,
+			tsp: 7
+		},
+		mdlKg: 150
+	}),
+	F("chocolate", 5, 60, 30, 540, {
+		units: { square: 10 },
+		mdlKg: 200
+	}),
+	F("whey protein", 80, 8, 6, 390, {
+		alias: [
+			"whey",
+			"protein powder",
+			"protein shake",
+			"shake"
+		],
+		units: {
+			scoop: 30,
+			shake: 30
+		},
+		each: "scoop",
+		mdlKg: 380,
+		protein: true
+	})
+];
+var norm$7 = (s) => s.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
+/** "eggs" → "egg", "potatoes" → "potato" (a light singular). */
+var singular = (w) => w.length > 3 && w.endsWith("ies") ? `${w.slice(0, -3)}y` : w.length > 4 && w.endsWith("oes") ? w.slice(0, -2) : w.length > 3 && w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w;
+var normFood = (s) => norm$7(s).split(" ").map(singular).join(" ");
+/** The owner's own foods (last 45 days of meals) as per-100 g values, most logged first. */
+function ownPer100(meals, today, max = 40) {
+	const from = addDays$8(today, -45);
+	const by = /* @__PURE__ */ new Map();
+	for (const m of meals) {
+		if (m.day < from || m.day > today || m.supp) continue;
+		for (const it of m.items) {
+			const key = normFood(it.name);
+			if (!key || it.grams <= 0) continue;
+			const x = by.get(key) ?? {
+				name: norm$7(it.name),
+				count: 0,
+				p: 0,
+				c: 0,
+				f: 0,
+				k: 0,
+				g: 0
+			};
+			x.count++;
+			x.p += it.protein;
+			x.c += it.carbs;
+			x.f += it.fat;
+			x.k += it.kcal;
+			x.g += it.grams;
+			by.set(key, x);
+		}
+	}
+	const r1 = (n) => Math.round(n * 10) / 10;
+	return [...by.values()].filter((x) => x.g > 0).sort((a, b) => b.count - a.count).slice(0, max).map((x) => ({
+		name: x.name,
+		count: x.count,
+		p: r1(x.p / x.g * 100),
+		c: r1(x.c / x.g * 100),
+		f: r1(x.f / x.g * 100),
+		k: Math.round(x.k / x.g * 100)
+	}));
+}
+// src/core/foodCheap.ts
+/** Grams of protein per leu for a food with `p` g protein per 100 g at `mdlKg` MDL per kg. */
+var proteinPerLei = (p, mdlKg) => mdlKg > 0 ? Math.round(p * 10 / mdlKg * 10) / 10 : 0;
+/**
+* The list, best value first. Table foods flagged as protein foods (or with at
+* least 10 g protein per 100 g) are always in; own foods are in once they have a
+* price in `prices` (keyed by food name) or a table match.
+*/
+function cheapProtein(prices = {}, own = []) {
+	const price = (name) => {
+		const k = normFood(name);
+		for (const [key, v] of Object.entries(prices)) if (normFood(key) === k && v > 0) return v;
+		return 0;
+	};
+	const rows = [];
+	for (const t of FOOD_TABLE) {
+		if (!t.protein && t.p < 10) continue;
+		const mine = price(t.name);
+		const mdlKg = mine || t.mdlKg || 0;
+		if (!mdlKg) continue;
+		rows.push({
+			name: t.name,
+			p: t.p,
+			mdlKg,
+			edited: !!mine,
+			gPerLei: proteinPerLei(t.p, mdlKg),
+			own: false
+		});
+	}
+	for (const o of own) {
+		if (o.p < 10 || rows.some((r) => normFood(r.name) === normFood(o.name))) continue;
+		const mine = price(o.name);
+		if (!mine) continue;
+		rows.push({
+			name: o.name,
+			p: o.p,
+			mdlKg: mine,
+			edited: true,
+			gPerLei: proteinPerLei(o.p, mine),
+			own: true
+		});
+	}
+	return rows.sort((a, b) => b.gPerLei - a.gPerLei || (a.name < b.name ? -1 : 1));
+}
+/** name → grams of protein per leu, for the tie-breaker in "What to eat next". */
+function cheapMap(rows) {
+	const out = {};
+	for (const r of rows) out[normFood(r.name)] = r.gPerLei;
+	return out;
 }
 // src/core/foodNext.ts
 /** Built-in foods (approximate, generic values). */
@@ -6972,6 +7393,12 @@ function whatToEatNext(o) {
 	};
 	const pool = [];
 	for (const f of [...o.own ?? [], ...BUILTIN]) if (!pool.some((p) => norm$6(p.name) === norm$6(f.name) || p.piece && f.piece && p.piece.one === f.piece.one)) pool.push(f);
+	if (o.cheap) {
+		const per = (f) => o.cheap[normFood(f.name)] ?? 0;
+		const ownPart = pool.filter((f) => f.own);
+		const rest = pool.filter((f) => !f.own).sort((a, b) => per(b) - per(a));
+		pool.splice(0, pool.length, ...ownPart, ...rest);
+	}
 	const solid = pool.filter((f) => f.name !== "shake");
 	const aim = left > 60 ? 50 : left;
 	const fits = (kcal) => kLeft <= 0 || kcal <= kLeft + 100;
@@ -7049,7 +7476,7 @@ function addFoodMeal(db, input, source, now = /* @__PURE__ */ new Date()) {
 	const today = sportToday(now);
 	const day = input.day && /^\d{4}-\d{2}-\d{2}$/.test(input.day) && input.day <= today && input.day >= addDays$8(today, -14) ? input.day : today;
 	const id = `fd-${rid$1()}`;
-	const at = now.toISOString();
+	const at = input.at && Number.isFinite(new Date(input.at).getTime()) ? new Date(input.at).toISOString() : now.toISOString();
 	const totals = sumItems(items);
 	insertRow(db, proteinRowId(id), at, day, FOOD_KIND, totals.protein, source);
 	insertRow(db, kcalRowId(id), at, day, KCAL_KIND, totals.kcal, source);
@@ -7063,7 +7490,8 @@ function addFoodMeal(db, input, source, now = /* @__PURE__ */ new Date()) {
 		name,
 		type,
 		items,
-		...day !== today ? { late: true } : {}
+		...day !== today ? { late: true } : {},
+		...input.supp ? { supp: true } : {}
 	}, today));
 	return {
 		id,
@@ -7129,10 +7557,13 @@ function foodDayTotals(db, now = /* @__PURE__ */ new Date(), day) {
 function whatNextNow(db, now = /* @__PURE__ */ new Date()) {
 	const today = sportToday(now);
 	const t = foodDayTotals(db, now);
+	const meals = readFoodLog(db, today).meals;
+	const cheap = cheapMap(cheapProtein(readFoodGoals(db).prices, ownPer100(meals, today)));
 	return whatToEatNext({
 		proteinLeft: t.targets.protein - t.protein,
 		kcalLeft: t.targets.kcal - t.kcal,
-		own: ownFoods(readFoodLog(db, today).meals, today)
+		own: ownFoods(meals.filter((m) => !m.supp), today),
+		cheap
 	});
 }
 /** The last 7 days (weekly food report, Ben's evening nudge). */
