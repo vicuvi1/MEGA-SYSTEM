@@ -136,6 +136,7 @@ export const SETTINGS = {
   coach_profile: json<Record<string, unknown> | null>('about you, as Ben knows it', null),
   coach_mind: json<Record<string, unknown> | null>('long-term memory: goals, people, what works', null),
   coach_reminders: json<Reminder[]>('reminders and check-ins Ben will send', []),
+  health_mutes: json<Record<string, string>>('health alert kinds you muted ("Mute for 7 days"): kind to until (src/core/health.ts)', {}),
   coach_nudges: json<Record<string, unknown> | null>('nudge state (paused today, last sent)', null),
   coach_rhythm: json<Record<string, unknown> | null>('the daily rhythm: morning plan, reviews', null),
   coach_rhythm_prefs: json<Record<string, unknown> | null>('daily rhythm settings', null),

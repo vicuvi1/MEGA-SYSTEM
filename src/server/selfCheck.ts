@@ -4,7 +4,7 @@
 // what is broken to Telegram once (the same "warned about" list as the
 // 30-minute alerts, so nothing is said twice). The judging is in
 // src/core/selfCheck.ts.
-import { alertDecisions, alertText, type Beats, type Check } from '@core/health'
+import { alertDecisions, alertKeyboard, alertText, type Beats, type Check } from '@core/health'
 import { confirmed, selfCheckChecks, selfCheckLine, type BotProbe, type Probe } from '@core/selfCheck'
 import { calendarDay } from '@core/dates'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
@@ -19,8 +19,14 @@ export interface SelfCheckDeps {
   todoist?: () => Promise<Probe | null>
   ai?: () => Promise<(Probe & { model?: string | null }) | null>
   budget?: () => Promise<{ spent: number; budget: number } | null>
-  /** Sends one message to you (Telegram). */
-  send?: (text: string) => Promise<unknown>
+  /** Sends one message to you (Telegram), with optional buttons. */
+  send?: (text: string, markup?: unknown) => Promise<unknown>
+  /** Kinds you muted (settings health_mutes): kind → until (ISO). */
+  mutes?: Record<string, string> | null
+  /** Your local day (YYYY-MM-DD): one warning a day per kind. */
+  today?: string
+  /** The app's public address (for the pinger steps). */
+  appUrl?: string
   now?: Date
 }
 
@@ -69,20 +75,18 @@ export async function runSelfCheck(d: SelfCheckDeps): Promise<{ checks: Check[];
   const fixed = (bots ?? []).filter((b) => b.fixed).length
   await setNote(t, 'selfcheck', { at: now.toISOString(), line: selfCheckLine(checks, now.toISOString(), fixed), checks, fixed })
   // Problems once (alertDecisions remembers what was said); "working again" when a part is fixed.
-  const dec = alertDecisions(confirmed(checks, now), h.notes.alerted ?? {}, now)
-  if ((dec.warn.length || dec.fixed.length) && d.send) {
-    await setNote(t, 'alerted', dec.next)
-    await d.send(alertText(dec.warn, dec.fixed)).catch(() => null)
-  }
+  const dec = alertDecisions(confirmed(checks, now), h.notes.alerted ?? {}, now, { today: d.today ?? day, mutes: d.mutes })
+  if (d.send && JSON.stringify(dec.next) !== JSON.stringify(h.notes.alerted ?? {})) await setNote(t, 'alerted', dec.next)
+  if ((dec.warn.length || dec.fixed.length) && d.send) await d.send(alertText(dec.warn, dec.fixed, { appUrl: d.appUrl }), alertKeyboard(dec.warn)).catch(() => null)
   return { checks, warned: dec.warn.map((c) => c.id) }
 }
 
 /** One plain message from the server's bot (HTML, like Ben's). */
-export async function tgSend(token: string, chatId: string, text: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+export async function tgSend(token: string, chatId: string, text: string, fetchImpl: typeof fetch = fetch, markup?: unknown): Promise<boolean> {
   const r = await fetchImpl(`https://api.telegram.org/bot${token}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true }),
+    body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true, ...(markup ? { reply_markup: markup } : {}) }),
     signal: AbortSignal.timeout(10_000)
   }).catch(() => null)
   return !!r?.ok

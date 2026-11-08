@@ -7,9 +7,10 @@
 # repository after 60 days without a commit. Twice a month the "keepalive" job
 # switches this workflow and the backup workflow on again through the GitHub
 # API. Settings → System health shows "Ben's timer" and warns when it has not
-# run for 30+ minutes. For extra safety add a second pinger (docs/AI_HANDOFF.md,
+# run for 30+ minutes. GitHub throttles this schedule (in practice every 3-6 h),
+# so a second pinger is the real timer (docs/areas/ops.md,
 # "Timers"): cron-job.org or UptimeRobot calling the same URL with the header
-# "Authorization: Bearer <CRON_SECRET>".
+# "Authorization: Bearer <CRON_SECRET>" and "X-Life-Timer: pinger".
 name: Coach tick
 on:
   schedule:

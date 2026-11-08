@@ -66,8 +66,10 @@ const addDaysISO = (day: string, n: number) => {
  * then asks the quick model), and not when another call answered after this one started (the
  * chat already moved on; its late timeout is noise). Everything else counts.
  */
-export function aiFailureCounts(e: { message?: string; timeUp?: boolean } | null | undefined, opts: { thinkMs?: number; noFallback?: boolean } | undefined, startedAt: number, lastOkAt: number): boolean {
+export function aiFailureCounts(e: { message?: string; timeUp?: boolean; skipped?: boolean } | null | undefined, opts: { thinkMs?: number; noFallback?: boolean } | undefined, startedAt: number, lastOkAt: number): boolean {
   if (lastOkAt >= startedAt) return false
+  // No call was made at all: earlier steps of the same tick used up its time (api/ai.mjs slot()).
+  if (e?.skipped) return false
   const timeout = /abort|timed? ?out|took too long|time is up/i.test(String(e?.message ?? '')) || !!e?.timeUp
   if (timeout && opts?.noFallback && opts?.thinkMs) return false
   return true
@@ -117,7 +119,7 @@ export function healthChecks(i: HealthInput): Check[] {
   const timer = beats.timer?.ok
   if (timer) {
     const late = now.getTime() - Date.parse(timer) > 30 * 60000
-    out.push({ id: 'timer', label: "Ben's timer", ok: !late, detail: late ? `Last ran ${ago(now, timer)}: check the "Coach tick" workflow on GitHub (Actions) or your second pinger` : `Last ran ${ago(now, timer)}`, ...(late ? { since: new Date(Date.parse(timer) + 30 * 60000).toISOString() } : {}) })
+    out.push({ id: 'timer', label: "Ben's timer", ok: !late, detail: late ? `Last ran ${ago(now, timer)} (should be every 10 min)` :`Last ran ${ago(now, timer)}`, ...(late ? { since: new Date(Date.parse(timer) + 30 * 60000).toISOString() } : {}) })
   }
   out.push(okErr('telegram', 'Telegram', beats.telegram, now, 'No messages sent yet')!)
   out.push(okErr('ai', "Ben's AI", beats.ai, now, 'Not used yet')!)
@@ -166,7 +168,14 @@ export function healthChecks(i: HealthInput): Check[] {
     const stale = now.getTime() - Date.parse(sc.at) > 26 * 3600_000
     out.push({ id: 'selfcheck', label: 'Daily self-check', ok: !stale, detail: stale ? `Has not run since ${ago(now, sc.at)}` : String(sc.line ?? `Ran ${ago(now, sc.at)}`), ...(stale ? { since: new Date(Date.parse(sc.at) + 26 * 3600_000).toISOString() } : {}) })
     const alerted = i.notes?.alerted ?? {}
-    for (const c of Array.isArray(sc.checks) ? (sc.checks as Check[]) : []) if (c && typeof c.id === 'string' && (!c.ok || alerted[c.id])) out.push(c)
+    const warnedAbout = (id: string) => {
+      const v = alerted[alertKey(id)] ?? alerted[id]
+      return typeof v === 'string' || !!v?.on
+    }
+    // The server, the timer and the AI have live checks, fresher than this morning's answer:
+    // a stale "sc:timer" must not keep the timer broken all day after it is fixed.
+    const live = new Set(out.filter((c) => ['tick', 'timer', 'ai'].includes(c.id) && c.detail !== 'Not used yet').map((c) => c.id))
+    for (const c of Array.isArray(sc.checks) ? (sc.checks as Check[]) : []) if (c && typeof c.id === 'string' && !live.has(alertKey(c.id)) && (!c.ok || warnedAbout(c.id))) out.push(c)
   }
   const day = i.errors.filter((e) => now.getTime() - Date.parse(e.at) < 86400000)
 
@@ -174,31 +183,172 @@ export function healthChecks(i: HealthInput): Check[] {
   return out
 }
 
+/** What Ben remembers about one kind of problem (sys_health note "alerted"). */
+export interface AlertState {
+  /** When he last warned. */
+  at: string
+  /** The local day he last warned (YYYY-MM-DD): at most one warning a day per kind. */
+  day: string
+  /** He warned and hasn't said "working again" yet. */
+  on: boolean
+  /** OK since (ISO): "working again" only after it stays OK for ALERT_STEADY_MS. */
+  okSince?: string
+}
+/** Older notes kept only the time of the warning (a string). */
+export type Alerted = Record<string, AlertState | string>
+/** "Working again" waits until a part has worked this long (a timer that ran once is not fixed). */
+export const ALERT_STEADY_MS = 60 * 60000
+/** "Mute this for 7 days" (the button under a warning). */
+export const MUTE_DAYS = 7
+/** Settings key (synced, not secret): kind → muted until (ISO). */
+export const HEALTH_MUTES = 'health_mutes'
+/** Problems Ben tells you about: broken this long. */
+const ALERT_AFTER_MS = 30 * 60000
+
 /**
- * What Ben says now: parts broken for 30+ minutes he hasn't warned about yet,
- * and parts he warned about that work again. `alerted` = id → when he warned.
+ * One kind of problem, whoever found it: the 30-minute checks ("ai") and the daily
+ * self-check ("sc:ai") are the same problem, so they share one warning a day.
  */
-export function alertDecisions(checks: Check[], alerted: Record<string, string>, now: Date): { warn: Check[]; fixed: Check[]; next: Record<string, string> } {
-  const next = { ...alerted }
+export function alertKey(id: string): string {
+  const k = id.replace(/^sc:/, '')
+  if (k.startsWith('bot:')) return 'telegram'
+  return ({ google: 'calendar', drill: 'restoreDrill' } as Record<string, string>)[k] ?? k
+}
+
+const stateOf = (v: AlertState | string | undefined): AlertState | undefined => (typeof v === 'string' ? { at: v, day: v.slice(0, 10), on: true } : v)
+
+/** A kind muted until a time still in the future. */
+export const muted = (mutes: Record<string, string> | null | undefined, key: string, now: Date): boolean => !!mutes?.[key] && Date.parse(mutes[key]) > now.getTime()
+
+const brokenLong = (c: Check, now: Date) => !c.ok && !!c.since && now.getTime() - Date.parse(c.since) >= ALERT_AFTER_MS
+
+/**
+ * What Ben says now. A kind of problem broken 30+ minutes is told at most ONCE A
+ * DAY (a new local day may remind you once if it is still broken), never while
+ * muted. "Working again" comes only for a kind he warned about, and only once it
+ * has stayed OK for an hour (a timer that runs every few hours doesn't flap
+ * "broken / fixed / broken"). Checks of the same kind are one line.
+ * `next` is the new "alerted" note.
+ */
+export function alertDecisions(checks: Check[], alerted: Alerted, now: Date, opts: { today?: string; mutes?: Record<string, string> | null } = {}): { warn: Check[]; fixed: Check[]; next: Record<string, AlertState> } {
+  const today = opts.today ?? now.toISOString().slice(0, 10)
+  const next: Record<string, AlertState> = {}
+  for (const [k, v] of Object.entries(alerted ?? {})) {
+    const st = stateOf(v)
+    // Settled entries matter only on the day of their warning.
+    if (st && (st.on || st.day === today)) next[alertKey(k)] = st
+  }
+  const groups = new Map<string, Check[]>()
+  for (const c of checks) groups.set(alertKey(c.id), [...(groups.get(alertKey(c.id)) ?? []), c])
   const warn: Check[] = []
   const fixed: Check[] = []
-  for (const c of checks) {
-    if (!c.ok && c.since && now.getTime() - Date.parse(c.since) >= 30 * 60000 && !alerted[c.id]) {
-      warn.push(c)
-      next[c.id] = now.toISOString()
-    } else if (c.ok && alerted[c.id]) {
-      fixed.push(c)
-      delete next[c.id]
+  for (const [key, list] of groups) {
+    const st = next[key]
+    if (list.some((c) => !c.ok)) {
+      if (st?.okSince) {
+        const { okSince: _drop, ...rest } = st
+        next[key] = rest
+      }
+      const broken = list.filter((c) => brokenLong(c, now))
+      if (!broken.length || muted(opts.mutes, key, now) || st?.day === today) continue
+      warn.push({ ...broken[0], id: key })
+      next[key] = { at: now.toISOString(), day: today, on: true }
+    } else if (st?.on) {
+      const okSince = st.okSince ?? now.toISOString()
+      if (now.getTime() - Date.parse(okSince) >= ALERT_STEADY_MS) {
+        fixed.push({ ...list[0], id: key })
+        next[key] = { at: st.at, day: st.day, on: false }
+      } else next[key] = { ...st, okSince }
     }
   }
   return { warn, fixed, next }
 }
 
-export function alertText(warn: Check[], fixed: Check[]): string {
+/** The kinds broken 30+ minutes and not muted (the tick answers health:false for these, so the GitHub run fails). */
+export function brokenKinds(checks: Check[], now: Date, mutes?: Record<string, string> | null): string[] {
+  const out = new Set<string>()
+  for (const c of checks) if (brokenLong(c, now) && !muted(mutes, alertKey(c.id), now)) out.add(alertKey(c.id))
+  return [...out]
+}
+
+/** The address an outside pinger calls (the public app URL, never a secret). */
+export const DEFAULT_APP_URL = 'https://mega-system-ten.vercel.app'
+
+/** What to do, in plain words, per kind (header NAMES only, never a secret value). */
+export function alertHelp(key: string, appUrl: string = DEFAULT_APP_URL): string | null {
+  switch (key) {
+    case 'timer':
+    case 'tick':
+      return `Set up a second pinger (3 steps): 1) make a free account at cron-job.org (or UptimeRobot); 2) add a job that opens ${appUrl.replace(/\/+$/, '')}/api/cron?job=tick every 10 minutes; 3) give it two headers: <code>Authorization</code> = <code>Bearer</code> + your CRON_SECRET (copy it from Vercel → Settings → Environment Variables) and <code>X-Life-Timer</code> = <code>pinger</code>. GitHub runs its timer only every few hours, so it can't do this alone.`
+    case 'ai':
+      return 'Usually nothing: Ben answers with the quick model meanwhile. If it lasts a day, check your OpenRouter credits and openrouter.ai/status.'
+    case 'telegram':
+      return 'Settings → System health shows the bot links; the daily check sets a wrong link again by itself.'
+    case 'calendar':
+      return 'Settings → Google Calendar → connect again.'
+    case 'todoist':
+      return 'Copy a fresh token from Todoist → Settings → Integrations → Developer into TODOIST_TOKEN in Vercel.'
+    case 'snapshot':
+      return 'Ben makes it on his next run; to be safe, download a backup in Settings → Data.'
+    case 'budget':
+      return 'Raise the budget in Settings → Ben → Brain, or let Ben use cheaper answers.'
+    default:
+      return null
+  }
+}
+
+/** The lines to show: the server line folds into the timer's (the same fix). */
+function shownWarnings(warn: Check[]): Check[] {
+  const keys = new Set(warn.map((c) => alertKey(c.id)))
+  return warn.filter((c) => !(alertKey(c.id) === 'tick' && keys.has('timer')))
+}
+
+/** One message for everything broken at once, each with what to do. */
+export function alertText(warn: Check[], fixed: Check[], opts: { appUrl?: string } = {}): string {
   const lines: string[] = []
-  if (warn.length) lines.push(`🔧 <b>Something needs a look</b>\n${warn.map((c) => `• ${c.label}: ${c.detail}`).join('\n')}\nSettings → System health has the details.`)
+  const keys = new Set(warn.map((c) => alertKey(c.id)))
+  const shown = shownWarnings(warn)
+  if (shown.length) {
+    const items = shown.map((c) => {
+      const k = alertKey(c.id)
+      const extra = k === 'timer' && keys.has('tick') ? " Ben's server stops too while nothing wakes it." : ''
+      const help = alertHelp(k, opts.appUrl)
+      const detail = c.detail.replace(/[.\s]+$/, '')
+      return `• <b>${c.label}</b>: ${detail}.${extra}${help ? `\n  What to do: ${help}` : ''}`
+    })
+    lines.push(`🔧 <b>Something needs a look</b>\n${items.join('\n')}\nYou'll hear about each problem at most once a day. Settings → System health has the details.`)
+  }
   if (fixed.length) lines.push(`✅ Working again: ${fixed.map((c) => c.label).join(', ')}.`)
   return lines.join('\n\n')
+}
+
+/** "Mute this for 7 days" under a warning: one button per kind (callback hm|<kind>). */
+export function alertKeyboard(warn: Check[]): { inline_keyboard: { text: string; callback_data: string }[][] } | undefined {
+  const rows = shownWarnings(warn)
+    .filter((c) => /^[\w.:-]{1,40}$/.test(alertKey(c.id)))
+    .slice(0, 5)
+    .map((c) => [{ text: `🔕 Mute "${c.label}" for ${MUTE_DAYS} days`.slice(0, 60), callback_data: `hm|${alertKey(c.id)}` }])
+  return rows.length ? { inline_keyboard: rows } : undefined
+}
+
+/** The mutes after a tap on "Mute … for 7 days" (expired ones dropped; the timer's mute covers the server line too). */
+export function muteKind(mutes: Record<string, string> | null | undefined, key: string, now: Date): Record<string, string> {
+  const until = new Date(now.getTime() + MUTE_DAYS * 86400_000).toISOString()
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(mutes ?? {})) if (Date.parse(v) > now.getTime()) out[k] = v
+  out[key] = until
+  if (key === 'timer') out.tick = until
+  return out
+}
+
+/** The mutes setting as saved (anything unreadable: none). */
+export function readMutes(raw: string | null | undefined): Record<string, string> {
+  try {
+    const v = JSON.parse(raw || '{}')
+    return v && typeof v === 'object' && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).filter(([, x]) => typeof x === 'string')) as Record<string, string> : {}
+  } catch {
+    return {}
+  }
 }
 
 export function weeklyReport(checks: Check[], errors: ErrorEntry[], now: Date): string {

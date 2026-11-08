@@ -67,18 +67,34 @@ const OPENROUTER = 'https://openrouter.ai/api/v1'
 export const AI_DEADLINE_MS = 50_000
 export const deadlineIn = (ms = AI_DEADLINE_MS) => Date.now() + ms
 export class TimeUpError extends Error {
-  constructor() {
+  /** skipped: no call was made at all (earlier steps used the request's time), so the AI did nothing wrong. */
+  constructor(skipped = false) {
     super('Ben took too long to answer. Try again in a moment.')
     this.timeUp = true
+    if (skipped) this.skipped = true
   }
 }
 /** The time this try may take: min(its own limit, time left − 3 s). Throws when time is up. */
 export function slot(limit, deadline) {
   if (!deadline) return limit
   const left = deadline - Date.now() - 3000
-  if (left < 1500) throw new TimeUpError()
+  if (left < 1500) throw new TimeUpError(true)
   return Math.min(limit, left)
 }
+
+/** A call that ran out of its own time limit (fetch's AbortSignal.timeout, or ours). */
+export const isTimeout = (e) => !!e && (e.timeout === true || e.name === 'TimeoutError' || e.name === 'AbortError' || /aborted due to timeout|timed? ?out/i.test(String(e.message ?? '')))
+/** Worth one more try: a time-out, too many requests, or a server error at the provider. */
+export const retryable = (e) => !!e && !e.timeUp && !e.budget && (isTimeout(e) || /\b(429|5\d\d)\b/.test(String(e.message ?? '')))
+/** The wait before the one retry. */
+export const RETRY_BACKOFF_MS = 1000
+const wait = (ms) => new Promise((ok) => setTimeout(ok, ms))
+/**
+ * The thinking model's own cap in background work (the tick's plans and reviews): the
+ * request has 50 s in all, and the quick model must still get a fair try if the thinking
+ * one runs long. Before, it got 35 s, the quick model the last ~12 s, and both timed out.
+ */
+export const BACKGROUND_THINK_MS = 28_000
 /**
  * The time a slow "thinking" model may take while still leaving room for the
  * quick model if it fails or runs long (15 s kept back). 0 = not enough time
@@ -126,7 +142,8 @@ let idsCache = null
 async function modelIds(fetchImpl = fetch) {
   if (idsCache && Date.now() < idsCache.until) return idsCache.ids
   try {
-    const r = await fetchImpl(`${OPENROUTER}/models`)
+    // A hung model list must not hold up every answer (it had no time limit).
+    const r = await fetchImpl(`${OPENROUTER}/models`, { signal: AbortSignal.timeout(5_000) })
     const ids = ((await r.json())?.data ?? []).map((m) => String(m.id))
     idsCache = { ids, until: Date.now() + 3600_000 }
   } catch {
@@ -287,9 +304,12 @@ export async function budgetState(env = process.env, fetchImpl = fetch, now = ne
 }
 
 /**
- * CL3: the daily self-check's ping: one token from the pinned flash model
- * (10 s at most), and how much of the month's budget is used.
+ * CL3: the daily self-check's ping: a few tokens from the quick (flash) model with
+ * its thinking switched off, through the fastest provider (8 s, then once more 12 s
+ * after a short wait), and how much of the month's budget is used. Never the thinking
+ * model, so a slow thinker can't mark Ben's AI as broken.
  */
+export const PING_TIMEOUTS_MS = [8_000, 12_000]
 export async function pingModel(env = process.env, fetchImpl = fetch) {
   const key = (env.OPENROUTER_API_KEY || '').trim()
   const b = await budgetState(env, fetchImpl).catch(() => null)
@@ -298,20 +318,21 @@ export async function pingModel(env = process.env, fetchImpl = fetch) {
   const model = await openRouterModel(env, fetchImpl)
   // One slow answer is not an outage: a timeout or a 5xx is asked once more (15 s) before it counts.
   let last = null
-  for (const ms of [10_000, 15_000]) {
+  for (const [i, ms] of PING_TIMEOUTS_MS.entries()) {
+    if (i) await wait(RETRY_BACKOFF_MS)
     const t0 = Date.now()
     try {
       const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'Life System' },
-        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Say OK.' }], max_tokens: 1, temperature: 0 }),
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Say OK.' }], max_tokens: 5, temperature: 0, reasoning: { enabled: false }, provider: { sort: 'latency' } }),
         signal: AbortSignal.timeout(ms)
       })
       if (r.ok) return { ai: { ok: true, model, ms: Date.now() - t0 }, budget }
       last = { ok: false, model, error: `OpenRouter ${r.status}: ${(await r.text().catch(() => '')).slice(0, 120)}` }
       if (r.status < 500 && r.status !== 429) break
     } catch (e) {
-      last = { ok: false, model, error: e.message }
+      last = { ok: false, model, error: isTimeout(e) ? `no answer in ${ms / 1000} s` : e.message }
     }
   }
   return { ai: last, budget }
@@ -342,7 +363,7 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
     const deep = mine || (await strongModel(env, fetchImpl))
     // opts.thinkMs: the caller's cap on thinking (Ben's chat keeps time for its own quick retry).
     const capLeft = opts.thinkMs ? opts.thinkMs - (Date.now() - askedAt) : Infinity
-    const t = capLeft < 1500 ? 0 : thinkSlot(Math.min(mine ? 60_000 : 35_000, capLeft), opts.deadline)
+    const t = capLeft < 1500 ? 0 : thinkSlot(Math.min(mine ? 60_000 : opts.thinkMs ? 35_000 : BACKGROUND_THINK_MS, capLeft), opts.deadline)
     if (deep && t) {
       try {
         // A chat answer thinks a little (fast); plans and reviews from the rhythm think more.
@@ -354,7 +375,7 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
     }
     if (deep !== flash || !t) {
       try {
-        return await callOpenRouter(key, flash, prompt, fetchImpl, { ...opts, think: false }, slot(25_000, opts.deadline))
+        return await quickCall(key, flash, prompt, fetchImpl, { ...opts, think: false }, 25_000, { fellBack: !!(deep && t) })
       } catch (e) {
         if (e.timeUp || !pick.chat) throw e
         console.warn(`chosen model ${flash} failed, using automatic:`, e.message)
@@ -371,7 +392,7 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
   if (opts.strong) opts = { ...opts, think: false }
   const model = await openRouterModel(env, fetchImpl)
   try {
-    return await callOpenRouter(key, model, prompt, fetchImpl, opts, slot(opts.think ? 40_000 : 30_000, opts.deadline))
+    return await quickCall(key, model, prompt, fetchImpl, opts, opts.think ? 40_000 : 30_000, { fellBack: !!opts.strong })
   } catch (e) {
     if (e.timeUp) throw e
     // The pinned model was refused as unknown: the newest one keeps Ben talking (LT9).
@@ -380,6 +401,27 @@ export async function askOpenRouter(key, prompt, fetchImpl = fetch, opts = {}, e
     if (!backup || backup === model) throw e
     console.warn(`model ${model} failed, using ${backup}:`, e.message)
     return callOpenRouter(key, backup, prompt, fetchImpl, opts, slot(opts.think ? 40_000 : 30_000, opts.deadline))
+  }
+}
+
+/**
+ * The quick model, with at most ONE retry: after a time-out, a 429 or a 5xx it waits a
+ * second and asks again through the fastest provider (not only DeepSeek's own, which is
+ * what queues at busy hours), if enough of the request's time is left (8 s+). The answer
+ * says `fallback: 'quick'` when it stands in for the thinking model.
+ */
+async function quickCall(key, model, prompt, fetchImpl, opts, limit, how = {}) {
+  const mark = (r) => (how.fellBack ? { ...r, fallback: 'quick' } : r)
+  try {
+    return mark(await callOpenRouter(key, model, prompt, fetchImpl, opts, slot(limit, opts.deadline)))
+  } catch (e) {
+    // Ben's chat retries its quick try itself (webBots ask()): no second retry on top of it.
+    if (!retryable(e) || /^(chat|retry|lookup)/.test(opts.kind || '')) throw e
+    const backoff = opts.backoffMs ?? RETRY_BACKOFF_MS
+    if (opts.deadline && opts.deadline - Date.now() - 3000 - backoff < 8000) throw e
+    console.warn(`model ${model} failed (${e.message}), one retry through the fastest provider`)
+    await wait(backoff)
+    return mark(await callOpenRouter(key, model, prompt, fetchImpl, { ...opts, fastRoute: true }, slot(limit, opts.deadline)))
   }
 }
 
@@ -485,28 +527,42 @@ export async function flushUsage() {
   while (usageWrites.size) await Promise.all([...usageWrites])
 }
 
+/** Our own time limit ran out: a plain, short error (not the browser's "The operation was aborted due to timeout"). */
+function timedOut(e, model, timeout, opts) {
+  // Past the request's deadline, no fallback is worth trying.
+  if (opts.deadline && Date.now() >= opts.deadline - 3500) return new TimeUpError()
+  if (!isTimeout(e)) return e
+  return Object.assign(new Error(`${String(model).split('/').pop()} timed out after ${Math.round(timeout / 1000)} s`), { timeout: true })
+}
+
 async function callOpenRouter(key, model, prompt, fetchImpl, opts, timeout, effort = 'low') {
   const streaming = typeof opts.onDelta === 'function'
+  // fastRoute (the one retry): any provider, the fastest first.
+  const provider = opts.fastRoute ? { provider: { sort: 'latency' } } : /^deepseek\//.test(model) ? { provider: { order: ['deepseek'], allow_fallbacks: true } } : {}
   const r = await fetchImpl(`${OPENROUTER}/chat/completions`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'HTTP-Referer': 'https://mega-system-ten.vercel.app', 'X-Title': 'Life System' },
     // opts.think: big asks (plans, reviews, reshuffles) get the model's reasoning.
-    body: JSON.stringify({ model, messages: messagesFor(prompt), ...(/^deepseek\//.test(model) ? { provider: { order: ['deepseek'], allow_fallbacks: true } } : {}), temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, usage: { include: true }, ...(streaming ? { stream: true } : {}), ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
+    body: JSON.stringify({ model, messages: messagesFor(prompt), ...provider, temperature: 0.6, max_tokens: opts.think ? 6000 : 2048, usage: { include: true }, ...(streaming ? { stream: true } : {}), ...(opts.json ? { response_format: { type: 'json_object' } } : {}), ...(opts.think ? { reasoning: { effort } } : {}) }),
     signal: AbortSignal.timeout(timeout)
   }).catch((e) => {
-    // Our own time limit ran out: past the request's deadline, no fallback is worth trying.
-    if (opts.deadline && Date.now() >= opts.deadline - 3500) throw new TimeUpError()
-    throw e
+    throw timedOut(e, model, timeout, opts)
   })
   if (streaming && r.ok && r.body) {
-    const s = await streamOpenRouter(r, opts.onDelta)
+    // The same time limit stops a stream that hangs half way: the same plain error.
+    const s = await streamOpenRouter(r, opts.onDelta).catch((e) => {
+      throw timedOut(e, model, timeout, opts)
+    })
     const u = s.usage ?? {}
     // Speed: the app's chat doesn't wait for the usage row; /api/coach writes it before it ends (flushUsage).
     laterUsage(recordUsage({ model: s.model || model, kind: opts.kind || (opts.think ? 'deep' : 'chat'), prompt: u.prompt_tokens, completion: u.completion_tokens, cost: typeof u.cost === 'number' ? u.cost : null }, process.env, fetchImpl))
     if (!s.text) throw new Error('OpenRouter gave an empty answer')
     return { text: s.text, model: s.model || model }
   }
-  const j = await r.json().catch(() => ({}))
+  const j = await r.json().catch((e) => {
+    if (isTimeout(e)) throw timedOut(e, model, timeout, opts)
+    return {}
+  })
   if (!r.ok) throw new Error(`OpenRouter ${r.status}: ${j?.error?.message || 'request failed'}`)
   const text = j?.choices?.[0]?.message?.content
   const u = j?.usage ?? {}

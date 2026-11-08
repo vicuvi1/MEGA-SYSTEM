@@ -482,6 +482,20 @@
    "notes": "core/planRescue.ts (lateBlock, buildRescue, decideRescue, rescueApplied), core/tgPlanText.ts (tgPlanText, shownBlocks, alsoShown, reviewText/Keyboard), core/tgPlan.ts (new pb| taps), web/planShared.ts (changePlan + undo slot planUndo, tooMuchOn, blockTomorrowOn, rescueCheck/rescueAnswer, markReviewOn, quickSpot/addQuickBlock), bots/planButtons.ts (planMessageOf, runReviewTap), benPushTick.ts (Telegram), benPushFeed.ts + tursoWebBridge pushes.rescueCheck/rescue (island), BenPushCard (Coach card). Push type 'rescue', ops accept/undo (bp|a, bp|u)."
   },
   {
+   "id": "F034",
+   "priority": 1,
+   "area": "ops",
+   "title": "Health alerts once a day, AI time-outs fixed at the root",
+   "user_visible_behavior": "Each broken part is told on Telegram at most once a day, grouped in one message with what to do (the timer: 3 pinger steps with header names) and a Mute for 7 days button; Working again only after it stays OK an hour; background AI falls back to the quick model with one retry; the self-check AI ping uses the quick model",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/health.test.ts src/core/selfCheck.test.ts src/server/aiHealth.test.ts"
+   ],
+   "evidence": "2026-11-08: unit tests with fake fetch and fake timers pass",
+   "notes": "The outside pinger is an owner step (CRON_SECRET lives in Vercel)"
+  },
+  {
    "id": "F900",
    "priority": 2,
    "area": "island",

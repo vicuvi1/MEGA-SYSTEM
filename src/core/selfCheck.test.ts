@@ -44,14 +44,20 @@ describe('the daily self-check (CL3, CL11)', () => {
     expect(c.find((x) => x.id === 'sc:snapshot')!.detail).toMatch(/4\.5 MB/)
     expect(selfCheckChecks({ ...base, snapshot: null }).find((x) => x.id === 'sc:snapshot')!.ok).toBe(false)
   })
-  it('a problem is told once: the next day it is not repeated, and "working again" comes when it is fixed', () => {
+  it('a problem is told once a day (as the same kind as the 30-minute check), and "working again" comes when it stays fixed', () => {
     const broken = selfCheckChecks({ ...base, ai: { ok: false, error: 'down' } })
     const first = alertDecisions(confirmed(broken, now), {}, now)
-    expect(first.warn.map((c) => c.id)).toEqual(['sc:ai'])
+    expect(first.warn.map((c) => c.id)).toEqual(['ai'])
+    // The same day: not again (the 30-minute check of the AI is the same kind).
+    expect(alertDecisions([{ id: 'ai', label: "Ben's AI", ok: false, detail: 'x', since: new Date(now.getTime() - 40 * 60000).toISOString() }], first.next, now).warn).toEqual([])
     const next = new Date(now.getTime() + 86400_000)
     const beats = { tick: { ok: next.toISOString() }, timer: { ok: next.toISOString() } }
-    expect(alertDecisions(confirmed(selfCheckChecks({ ...base, now: next, beats, drillAt: next.toISOString(), ai: { ok: false, error: 'down' } }), next), first.next, next).warn).toEqual([])
-    const fixed = alertDecisions(confirmed(selfCheckChecks({ ...base, now: next, beats, drillAt: next.toISOString(), ai: { ok: true } }), next), first.next, next)
-    expect(fixed.fixed.map((c) => c.id)).toEqual(['sc:ai'])
+    // Still broken on a new day: one reminder.
+    expect(alertDecisions(confirmed(selfCheckChecks({ ...base, now: next, beats, drillAt: next.toISOString(), ai: { ok: false, error: 'down' } }), next), first.next, next).warn.map((c) => c.id)).toEqual(['ai'])
+    const okChecks = (at: Date) => confirmed(selfCheckChecks({ ...base, now: at, beats, drillAt: next.toISOString(), ai: { ok: true } }), at)
+    const seen = alertDecisions(okChecks(next), first.next, next)
+    expect(seen.fixed).toEqual([])
+    const hour = new Date(next.getTime() + 3600_000)
+    expect(alertDecisions(okChecks(hour), seen.next, hour).fixed.map((c) => c.id)).toEqual(['ai'])
   })
 })
