@@ -60,6 +60,8 @@ import { planFromPicks, planWeek, toggleChip, top3Chips, top3Keyboard, top3Text 
 const TOP3_ASK = 'week_top3_ask'
 import { readLifeFit, sleepWindow } from './lifeFitStore'
 import { learnedEstimate, withRest } from '@core/benLearn'
+import { cleanReview, PLAN_REVIEW } from '@core/planReview'
+import { learnTimes, learnedTime } from '@core/taskTimes'
 import { prefDuration } from '@core/benFacts'
 import { promisesFor, type PromiseReminder } from '@core/benPromise'
 import { learnedRhythm, loadKnow } from './benMind'
@@ -413,7 +415,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       // Your time limits and the week plan (Today → Week): today's rules (a light day caps work, gym days).
       const limits = cleanLimits(readJson(db, PLAN_LIMITS, null))
       const week = cleanWeek(readJson(db, PLAN_WEEK, null))
-      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, know, promised, bed, train: trainSlotInput(db as any), freeShare: fit.freeShare, limits, week, rules: dayRules(week, limits, today) }
+      // Learned task times: what the end-of-day checks say each kind of task really takes (core/taskTimes).
+      const times = learnTimes(cleanReview(readJson(db, PLAN_REVIEW, null)), { before: today })
+      return { today, st, water, workoutDone, slept, yday, mode: todayMode(db, today), hist, behind, work: withRest(workToday(fit, today)), asked: askedToday(readJson(db, PLAN_ASKED, null), today), learned, times, know, promised, bed, train: trainSlotInput(db as any), freeShare: fit.freeShare, limits, week, rules: dayRules(week, limits, today) }
     })
     // PE6: pinned blocks (and approved ones already in the calendar) stay where they are: planned around like events.
     const prevPlan = base.st.briefing?.plan.day === base.today ? base.st.briefing.plan : null
@@ -441,7 +445,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     const goalItems = !mode ? allGoalItems : mode.kind === 'sick' ? [] : mode.kind === 'travel' ? allGoalItems.slice(0, 1).map((g) => ({ ...g, minutes: Math.min(45, g.minutes) })) : allGoalItems.map((g) => ({ ...g, minutes: Math.min(90, Math.round((g.minutes * mode.focus) / 5) * 5) }))
     // DP1: ALL of today's work (due today, overdue, starred), packed around the calendar's fixed events.
     // What he asked for today in the chat (or tagged @today) is placed today, never moved to tomorrow.
-    const planTasks: PlanTask[] = tasks.map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null, ...(isAsked(t.content, base.asked) ? { asked: true } : {}) }))
+    const planTasks: PlanTask[] = tasks.map((t) => ({ id: t.id, content: t.content, starred: isStarred(t), priority: t.priority, due: t.due, dueTime: t.dueTime, project: t.section ?? t.project, duration: t.duration ?? null, ...(t.labels?.length ? { labels: t.labels } : {}), ...(isAsked(t.content, base.asked) ? { asked: true } : {}) }))
     // ME5: what he promised for today is one of his own asks (unless it's already a task).
     // A promise that is already a task, or a calendar event ("gym" and the 17:00 Gym), is not added twice.
     for (const what of base.promised) if (!planTasks.some((t) => t.content.toLowerCase().includes(what.toLowerCase().slice(0, 12)) || sameThing(t.content, what)) && !eventFor(what, fixedAhead(events, base.today, planStartAt(hmNow(now))))) planTasks.push({ content: what.charAt(0).toUpperCase() + what.slice(1), asked: true, priority: 3 })
@@ -463,6 +467,8 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       work: base.work,
       // ME2 + LS6: what he told Ben first, then his real pace; hard work away from the hours he skips.
       estimate: (t) => learnedEstimate(t, base.learned ?? { mult: {}, n: {}, best: [], skip: [], ready: false }, prefDuration(base.know, t.content)),
+      // Learned task times (end-of-day check) beat the kind multiplier above; your own numbers beat both.
+      learned: (t) => (t.duration && t.duration > 0) || prefDuration(base.know, t.content) ? null : learnedTime(t, estimateMinutes(t), base.times),
       avoid: base.learned?.skip ?? [],
       // BD8: the home workout in its best free slot (12:00–16:00 first, never after 22:00), at today's dose.
       train: base.train,

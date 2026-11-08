@@ -14,6 +14,8 @@ import type { DayProposal } from '@core/rhythm'
 import { life } from '../bridge'
 import { useAction, useToast } from '../ui'
 import { saveSetup, useSetup } from './planSetup'
+import { useReview } from './planReviewStore'
+import { weekLine, weekScores } from '@core/planScore'
 import './planEditor.css'
 
 const NEXT: Record<DayType, DayType> = { normal: 'heavy', heavy: 'light', light: 'normal' }
@@ -63,7 +65,11 @@ export function WeekPlanCard() {
   const act = useAction()
   const toast = useToast()
   const { setup, data, view, load } = useWeekView()
+  const review = useReview()
   if (!setup || !data || !view) return null
+  // How realistic each day's plan was (the end-of-day check), the last 7 days: shown once a day was checked.
+  const trend = weekScores(review, data.today)
+  const trendLine = weekLine(review, data.today)
 
   const change = async (i: number, patch: Partial<WeekShape['days'][number]>) => {
     const week: WeekShape = { ...setup.week, days: setup.week.days.map((d, j) => (j === i ? { ...d, ...patch } : d)) }
@@ -117,6 +123,16 @@ export function WeekPlanCard() {
           )
         })}
       </div>
+      {trendLine && (
+        <p className="wp-score" data-week-score>
+          <span className="wp-trend" aria-hidden>
+            {trend.map((d) => (
+              <i key={d.day} className={d.score == null ? 'none' : ''} style={{ height: d.score == null ? undefined : `${Math.max(3, Math.round((d.score / 100) * 22))}px` }} title={`${d.day}: ${d.score == null ? 'not checked' : `${d.score}% realistic`}`} />
+            ))}
+          </span>
+          <span>{trendLine}</span>
+        </p>
+      )}
       {view.deadlines.length > 0 ? (
         <ul className="wp-dl" data-week-deadlines>
           {view.deadlines.map((d) => (

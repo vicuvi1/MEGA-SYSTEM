@@ -240,10 +240,11 @@ export function auditLine(left: LeftTask[]): string | null {
  * "Move to tomorrow": these tasks leave today's plan (blocks, must-dos, the
  * list) and go under "Moved to tomorrow" with the reason. Nothing is deleted.
  */
-export function moveToTomorrow(plan: DayProposal, items: Pick<LeftTask, 'title' | 'id'>[]): DayProposal {
+export function moveToTomorrow(plan: DayProposal, items: Pick<LeftTask, 'title' | 'id'>[], o: { keepBlocks?: boolean } = {}): DayProposal {
   if (!items.length) return plan
   const hit = (t: string, id?: string) => items.some((x) => (x.id && id && x.id === id) || sameThing(x.title, t))
-  const blocks = plan.blocks.filter((b) => !(b.tasks?.length ? b.tasks.every((t) => hit(t)) : hit(b.title))).map((b) => (b.tasks?.some((t) => hit(t)) ? { ...b, tasks: b.tasks.filter((t) => !hit(t)) } : b))
+  // The end-of-day check: a block that slipped stays on today's plan as what was planned (its event too).
+  const blocks = o.keepBlocks ? plan.blocks : plan.blocks.filter((b) => !(b.tasks?.length ? b.tasks.every((t) => hit(t)) : hit(b.title))).map((b) => (b.tasks?.some((t) => hit(t)) ? { ...b, tasks: b.tasks.filter((t) => !hit(t)) } : b))
   const deferred = [...(plan.deferred ?? [])]
   for (const x of items) if (!deferred.some((d) => (x.id && d.id === x.id) || sameThing(d.title, x.title))) deferred.push({ title: x.title, ...(x.id ? { id: x.id } : {}), why: 'You moved it to tomorrow' })
   return relinkAlso({ ...plan, blocks, mustdos: plan.mustdos.filter((m) => !hit(m)), also: (plan.also ?? []).filter((a) => !hit(a.title, a.id)), deferred })

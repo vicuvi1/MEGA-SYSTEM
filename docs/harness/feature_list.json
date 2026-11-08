@@ -453,6 +453,21 @@
    "notes": "core/quickAdd.ts, core/planFit.ts, plan/PlanEditor.tsx and planStore.ts (quickAddTask, tooMuch, moveBlockTomorrow); small hook in web/webBots.ts for the chat. Telegram parity is for a later builder."
   },
   {
+   "id": "F032",
+   "priority": 1,
+   "area": "planner",
+   "title": "The planner learns: end-of-day check, learned task times, plan score",
+   "user_visible_behavior": "In the evening (Shut down my day, the plan card's Check the day button after the last block, or its ⋯ menu any time) a sheet lists today's started work blocks, one tap each: Done (closes the Todoist task the usual way), Partly (how many minutes), Tomorrow (the usual Move to tomorrow; the block stays on today's plan), Drop (only noted). Focus timer minutes are filled in; a typed number wins. From Done blocks with real numbers the planner learns how long each kind of task takes you (median of the last 9, needs 3, 0.5x-2.5x) and new blocks get that length with the why line \"usually takes you 1h40\". The plan card shows \"Yesterday's plan: 72% realistic\" and Today → Week a 7-day trend. No points for the check or the score.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/planLearn.test.ts src/core/dayPacker.test.ts",
+    "SMOKE_ONLY=\"Plan review\" npm run smoke",
+    "SMOKE_ONLY=\"Today tabs\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests pass (review records, timer minutes, learned estimate: median, min samples, bounds, packer and why line, score formula and trend); smoke step \"Plan review\" passes locally",
+   "notes": "core/planReview.ts (reviewRows, reviewItem, putItem, mergeReview, reviewLine), core/taskTimes.ts (learnTimes, learnedTime), core/planScore.ts (scoreItems, dayScore, weekScores, yesterdayLine). Synced setting plan_review. plan/PlanReview.tsx, planReviewStore.ts, planStore.reviewBlock. Telegram parity is for the next builder: call reviewRows + reviewItem + putItem, and yesterdayLine."
+  },
+  {
    "id": "F900",
    "priority": 2,
    "area": "island",
@@ -494,6 +509,20 @@
    ],
    "evidence": "",
    "notes": "src/renderer/src/IslandAlive.tsx"
+  },
+  {
+   "id": "F-POLISH-DUPES",
+   "priority": 2,
+   "area": "today",
+   "title": "No duplicates: Your day, toasts, Rewards goal",
+   "user_visible_behavior": "Your day shows each item once; at most 2 toasts, Undo toasts merge; the main saving goal shows once at the top of Rewards",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-08: dayColumn and toastQueue unit tests; full smoke green",
+   "notes": "src/core/dayColumn.ts, src/core/toastQueue.ts, rewards/More.tsx"
   }
  ]
 }

@@ -1,56 +1,11 @@
-// The shop front of Rewards: the saving goal bar with milestones, the "on a
-// roll" combo, the monthly budget meter (a soft warning only), today's
-// featured reward, the category shelves and the unwrap moment after a buy.
+// The shop front of Rewards: the "on a roll" combo, the monthly budget meter
+// (a soft warning only), today's featured reward, the category shelves and the
+// unwrap moment after a buy.
 // All of it shows work you already did; nothing here makes or multiplies points.
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
-import type { Reward } from '@core/shop'
-import { readyLine } from '@core/rewardsKit'
 import { RARITY_LABEL, SHELVES, STARTERS, budgetMeter, rarityOf, type ShelfId } from '@core/shopShelves'
 import { barFill } from '../motionKit'
 import { Rail } from './More'
-
-const MILESTONES = [25, 50, 75]
-
-/** The main saving goal, always visible: a bar with ¼ ½ ¾ marks. */
-export function GoalBar({ goal, balance, perDay, today, onPick }: { goal: Reward | null; balance: number; perDay: number; today: string; onPick: () => void }) {
-  if (!goal)
-    return (
-      <div className="sh-goal empty">
-        <span className="sh-goal-emoji" aria-hidden>🏔️</span>
-        <div className="sh-goal-main">
-          <b>Pick a big goal</b>
-          <small>Something worth saving for. Its bar stays up here.</small>
-        </div>
-        <button type="button" className="rx-btn small" onClick={onPick}>
-          Choose one
-        </button>
-      </div>
-    )
-  const have = balance + (goal.jar ?? 0)
-  const frac = Math.min(1, have / Math.max(1, goal.price))
-  const left = Math.max(0, goal.price - have)
-  const eta = left > 0 ? readyLine(today, left, perDay) : 'Ready: you can get it'
-  return (
-    <div className="sh-goal" data-testid="goal-bar">
-      <span className="sh-goal-emoji" aria-hidden>{goal.emoji?.trim() || '🏔️'}</span>
-      <div className="sh-goal-main">
-        <div className="sh-goal-head">
-          <b>{goal.title}</b>
-          <span className="num">
-            {Math.min(have, goal.price).toLocaleString()} / {goal.price.toLocaleString()} points
-          </span>
-        </div>
-        <div className="sh-bar pbar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(frac * 100)} aria-label={`Saving for ${goal.title}`}>
-          <i style={barFill(frac)} />
-          {MILESTONES.map((m) => (
-            <u key={m} className={frac * 100 >= m ? 'hit' : ''} style={{ left: `${m}%` }} aria-hidden />
-          ))}
-        </div>
-        <small className="sh-goal-eta">{eta ?? `${left.toLocaleString()} to go`}</small>
-      </div>
-    </div>
-  )
-}
 
 /** "On a roll": the days in a row you did real work, shown like a game combo. */
 export function Combo({ days }: { days: number }) {

@@ -29,7 +29,7 @@ import { AffordRow, Badges, BenLine, Challenge, HowToEarn, Quests } from '../rew
 import { MysteryCard, PointsFrom, Rail, Reveal, RulesEditor, SavingFor, Section, SuggestRow, Surprises } from '../rewards/More'
 import { LockEditor, useUnlocks } from '../rewards/LockEditor'
 import { stillMode, useRewardsData } from '../rewards/useRewards'
-import { BudgetMeter, Combo, GoalBar, Shelf, Unwrap } from '../rewards/Shop'
+import { BudgetMeter, Combo, Shelf, Unwrap } from '../rewards/Shop'
 import '../lifeExtras.css'
 import '../rewards/rewards.css'
 import '../rewards/rewards2.css'
@@ -447,7 +447,9 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
       const i = infos.get(r.id)!
       return i.blocked && i.left > 0 && !(i.lock && !i.lock.met)
     })
-    const pick = waiting.sort((a, b) => infos.get(a.id)!.left - infos.get(b.id)!.left)[0] ?? readyList[0]
+    // The main goal has its own row in "Saving for": the small box names a different reward.
+    const mainId = goals[0]?.id
+    const pick = waiting.filter((r) => r.id !== mainId).sort((a, b) => infos.get(a.id)!.left - infos.get(b.id)!.left)[0] ?? readyList.find((r) => r.id !== mainId)
     if (!pick) return null
     const left = infos.get(pick.id)!.left
     return { reward: pick, line: !infos.get(pick.id)!.blocked ? 'Ready now' : readyLine(today, left, perDay) ?? `${left.toLocaleString()} to go` }
@@ -505,10 +507,10 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
         </button>
       </div>
 
-      <WalletHero balance={state.balance} insights={insights} value={value} next={next} coupons={coupons.length} onFun={(m) => void fun(m)} onHow={() => setHow(true)} onAdd={() => setSheet('new')} ben={<BenLine text={benText} />} />
+      <WalletHero balance={state.balance} insights={insights} value={value} next={next} hideEmptyNext={!!goal} coupons={coupons.length} onFun={(m) => void fun(m)} onHow={() => setHow(true)} onAdd={() => setSheet('new')} ben={<BenLine text={benText} />} />
 
       <div className="sh-top">
-        <GoalBar goal={goal} balance={state.balance} perDay={perDay} today={today} onPick={() => setSheet('new')} />
+        <SavingFor goals={goals} balance={state.balance} perDay={perDay} today={today} onAll={() => setTab('all')} />
         <Combo days={insights?.focusStreak ?? 0} />
         <BudgetMeter spent={shopValue?.funSpentLei ?? monthSpendLei(state.recent, today.slice(0, 7))} budget={shopValue?.funBudgetLei ?? null} onSet={(n) => void setBudget(n)} />
       </div>
@@ -530,7 +532,6 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
 
           {shownTab === 'now' && (
             <div className="rx-foryou sh-more" role="tabpanel" data-tabpanel="now">
-              {goals.length > 1 && <SavingFor goals={goals} balance={state.balance} perDay={perDay} today={today} onAll={() => setTab('all')} />}
               <div className="sh-shelves">
               {SHELVES.filter((sh) => sh.id !== 'big' || shelves[sh.id].length > 0).map((sh) => (
                 <Shelf key={sh.id} id={sh.id} cards={shelves[sh.id].map((r) => card(r, false, true, r.id === featured?.id))} preview={shelves[sh.id].slice(0, 4).map((r) => rewardEmoji(r)).join(' ')} open={shelfOpen.has(sh.id)} onToggle={() => toggleShelf(sh.id)} adding={stocking} onStarter={(id) => void stock(id)} onAdd={() => setSheet('new')} />

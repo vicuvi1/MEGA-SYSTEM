@@ -66,6 +66,11 @@ entry that says why.
 - **Why:** the owner wants a work planner he can trust with time he protects: a limit squeezed silently to fit a deadline breaks that trust, and a deadline that can't be met is better known early.
 - **Rules out:** breaking a limit to fit more work, cramming a deadline into one day, a second session block of the same deadline on a day, changing an approved plan or a past day because the week changed, energy or mood questions in the planner.
 
+### The planner learns only from real numbers, and the check pays nothing (2026-11-08)
+- **Decision:** the end-of-day check (`core/planReview.ts`) keeps one record per plan block in the synced setting `plan_review` (no new table): Done goes through the plan's usual tick (Todoist closes the task; points only from that path), Tomorrow through the usual Move to tomorrow (the block stays on today's plan), Drop is only noted. Learned task times (`core/taskTimes.ts`) use only Done blocks with a focus-timer or typed number, compared with the planner's plain guess (never with an already-learned length): median of the last 9, at least 3, bounded 0.5x–2.5x; a Todoist duration or a length you told Ben always wins. The plan score (`core/planScore.ts`) is 50% minutes done, 30% blocks in their time, 20% not slipped; it rates the plan, not effort.
+- **Why:** the owner wants a work planner that learns from what really happened without guessing or rewarding a review; a learned length that chased its own output would drift, and a guessed "done in the planned time" would teach the planner nothing true.
+- **Rules out:** points for reviewing or for the score, learning from blocks with no real number, energy or mood questions, deleting a task or event when a block is dropped or slipped.
+
 ### Every task of the day has a place or a stated reason (2026-11-08)
 - **Decision:** `core/planAudit.ts` runs after a plan is built or edited: a task the plan lost goes back on today's list; what has no room shows as one plain line with "Move to tomorrow". Block "why" lines come only from data the plan or Todoist holds.
 - **Why:** a task silently missing from the plan breaks trust in the whole plan.

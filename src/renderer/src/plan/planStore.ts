@@ -19,7 +19,9 @@ import { fromMin, type DayProposal, type RhythmState } from '@core/rhythm'
 import type { CalEvent } from '@core/dayTime'
 import { limitsLine, type DayLimits } from '@core/planLimits'
 import type { TodoTask } from '@core/todoist'
+import { markLabel, reviewItem, type Outcome, type ReviewItem, type ReviewRow } from '@core/planReview'
 import { life } from '../bridge'
+import { saveReview } from './planReviewStore'
 
 export type BlockStatus = 'syncing' | 'ok' | 'err'
 
@@ -232,12 +234,12 @@ function keepLimitsNow() {
 }
 
 /** "Move to tomorrow" on the audit line: off today's plan (Undo puts it back), and Todoist gets tomorrow's date. */
-export function moveTomorrow(items: Pick<LeftTask, 'title' | 'id'>[], words?: string): string | null {
+export function moveTomorrow(items: Pick<LeftTask, 'title' | 'id'>[], words?: string, o: { keepBlocks?: boolean } = {}): string | null {
   if (!cur || !items.length) return null
   const label = words ?? (items.length === 1 ? `Moved ${items[0].title} to tomorrow` : `Moved ${items.length} tasks to tomorrow`)
   // Each Todoist task's date before the move, so Undo can put it back exactly.
   const was = new Map((todayTasks?.list ?? []).map((t) => [t.id, t.due] as const))
-  const l = edit({ op: 'replace', plan: moveToTomorrow(cur.plan, items), label })
+  const l = edit({ op: 'replace', plan: moveToTomorrow(cur.plan, items, o), label })
   if (!l || !cur) return null
   const day = cur.plan.day
   const tomorrow = addDays(day, 1)
@@ -282,6 +284,64 @@ export function moveBlockTomorrow(id: string): string | null {
   if (!b || b.train || b.locked || b.ok || b.sync?.eventId) return null
   const items = (b.tasks?.length ? b.tasks : [b.title]).map((title) => ({ title, id: idFor(title) ?? cur!.plan.also?.find((a) => lower(a.title) === lower(title))?.id }))
   return moveTomorrow(items, `Moved ${b.title} to tomorrow`)
+}
+
+// ---- The end-of-day check (core/planReview) ------------------------------------------
+
+/** Adds a second thing to undo when an edit is undone (after what is already there). */
+const alsoUndo = (plan: DayProposal, f: () => Promise<void>) => {
+  const before = outside.get(plan)
+  outside.set(plan, async () => {
+    if (before) await before()
+    await f()
+  })
+}
+
+/** Today's Todoist tasks, fresh enough for the check (ids, project, labels, priority). */
+export async function reviewTasks(): Promise<TodoTask[]> {
+  return (await freshTasks().catch(() => null)) ?? todayTasks?.list ?? []
+}
+
+/**
+ * One block in the end-of-day check. Done ticks its tasks (the plan's usual tick closes them in
+ * Todoist, and points come only from that); Slipped moves them to tomorrow (the usual Move to
+ * tomorrow, the block stays on today's plan); Partly and Drop are only written down. A new mark
+ * takes back what the old one did (an untick, today's date again). Undo on the card takes back the
+ * plan edit and the mark together. Resolves with the saved record (null: no plan).
+ */
+export async function reviewBlock(row: ReviewRow, outcome: Outcome, o: { minutes?: number | null } = {}): Promise<ReviewItem | null> {
+  if (!cur) return null
+  const list = await reviewTasks()
+  if (!cur) return null
+  const day = cur.plan.day
+  const prev = row.mark
+  const names = row.tasks.length ? row.tasks : [row.title]
+  const task = (t: string) => list.find((x) => lower(x.content) === lower(t))
+  const ids = names.map((t) => ({ title: t, id: idFor(t) ?? task(t)?.id ?? cur!.plan.also?.find((a) => lower(a.title) === lower(t))?.id }))
+  const one = names.length === 1 ? task(names[0]) : undefined
+  const item = reviewItem(row, outcome, { minutes: o.minutes, at: new Date().toISOString(), project: one ? (one.section ?? one.project ?? null) : null, labels: one?.labels ?? null, priority: one?.priority })
+  // The old mark's effect goes first: a Done that is no longer done is unticked; a slip comes back to today.
+  let plan = cur.plan
+  const tick = (on: boolean) => {
+    for (const t of names) plan = applyEdit(plan, { op: 'tick', id: row.id, task: t, on })
+  }
+  if (prev?.outcome === 'done' && outcome !== 'done') tick(false)
+  if (outcome === 'done') tick(true)
+  const back = prev?.outcome === 'slip' && outcome !== 'slip' ? ids.filter((x) => x.id) : []
+  if (back.length) plan = { ...plan, deferred: (plan.deferred ?? []).filter((d) => !back.some((x) => x.id === d.id || lower(x.title) === lower(d.title))) }
+  const putBack = async () => {
+    await saveReview(prev ? { day, item: prev } : { day, drop: row.id }).catch(() => null)
+  }
+  if (plan !== cur.plan) {
+    const label = outcome === 'done' ? `Done: ${row.title}` : `Marked ${row.title}: ${markLabel(item)}`
+    if (edit({ op: 'replace', plan, label }) && cur) alsoUndo(cur.plan, putBack)
+  }
+  for (const x of back) void life.todoist?.update?.(x.id!, { due: day }).catch(() => say({ text: `Todoist didn't take today's date back for ${x.title}`, tone: 'bad' }))
+  if (outcome === 'slip' && prev?.outcome !== 'slip') {
+    if (moveTomorrow(ids, `Moved ${row.title} to tomorrow`, { keepBlocks: true }) && cur) alsoUndo(cur.plan, putBack)
+  }
+  await saveReview({ day, item })
+  return item
 }
 
 export interface QuickAdded {

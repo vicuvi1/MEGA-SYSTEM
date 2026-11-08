@@ -26,6 +26,10 @@ import { PlanSync } from './SyncButton'
 import { useSetup } from './planSetup'
 import { dayRules } from '@core/planWeek'
 import { endWith, isWork, PROTECT_ID, withProtected } from '@core/planLimits'
+import { reviewOpen } from '@core/planReview'
+import { yesterdayLine } from '@core/planScore'
+import { PlanReview } from './PlanReview'
+import { useReview } from './planReviewStore'
 import './planEditor.css'
 
 const HOUR_PX = 78
@@ -56,6 +60,8 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
   const [quickBusy, setQuickBusy] = useState(false)
   const [menu, setMenu] = useState<string | null>(null)
   const [barMenu, setBarMenu] = useState(false)
+  const [reviewing, setReviewing] = useState(false)
+  const review = useReview()
   const [moved, setMoved] = useState<string | null>(null)
   const [until, setUntil] = useState(() => hm(Math.ceil((nowMin() + 180) / 60) * 60))
   const [t, setT] = useState(nowMin())
@@ -184,6 +190,9 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
   const syncing = Object.values(s.sync).includes('syncing')
   const failed = Object.values(s.sync).includes('err')
   const chip = issueChip(issues)
+  // The end-of-day check: offered on the bar once the last block is over; yesterday's score stays small.
+  const checkNow = reviewOpen(s.plan, hm(t))
+  const yLine = yesterdayLine(review, day)
 
   // ---- The fit hint: what the drop zone says while you drag ----
   const dragItem = preview ? items.find((b) => b.id === preview.id) : undefined
@@ -354,7 +363,17 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
             ⚠ {chip}
           </button>
         )}
+        {yLine && (
+          <span className="pe-score" data-plan-score title="From last night's end-of-day check: planned against done minutes, blocks done in their time and what slipped. Not a judgement of effort">
+            {yLine}
+          </span>
+        )}
         <span className="pe-space" />
+        {checkNow && (
+          <button type="button" className="pe-btn pe-check" onClick={() => setReviewing(true)} title="How did today's blocks go? One tap each">
+            ✓ Check the day
+          </button>
+        )}
         <PlanSync />
         <button type="button" className="pe-btn" disabled={!s.canUndo} onClick={doUndo} title="Undo (Ctrl+Z)">
           ↶ Undo
@@ -375,6 +394,17 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
                 }}
               >
                 ⏩ Re-plan from now
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                title="Done, partly, tomorrow or drop for each block that has started"
+                onClick={() => {
+                  setBarMenu(false)
+                  setReviewing(true)
+                }}
+              >
+                ✓ End-of-day check
               </button>
             </div>
           )}
@@ -641,6 +671,7 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
           {taskDrag.task}
         </span>
       )}
+      {reviewing && <PlanReview onClose={() => setReviewing(false)} />}
     </div>
   )
 }

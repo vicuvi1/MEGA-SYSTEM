@@ -30,6 +30,7 @@ export function WalletHero({
   insights,
   value,
   next,
+  hideEmptyNext,
   coupons,
   onFun,
   onHow,
@@ -40,6 +41,8 @@ export function WalletHero({
   insights: RewardsInsights | null
   value: ValueInfo
   next: NextUp | null
+  /** No "Add something you want" box when a main goal already has its row. */
+  hideEmptyNext?: boolean
   coupons: number
   onFun: (min: number) => void
   onHow: () => void
@@ -78,7 +81,7 @@ export function WalletHero({
         </div>
       </div>
 
-      <div className="rx-next">
+      {(next || !hideEmptyNext) && <div className="rx-next">
         {next ? (
           <>
             <Cover r={next.reward} small />
@@ -95,7 +98,7 @@ export function WalletHero({
             <small>Pick one from Suggested for you</small>
           </span>
         )}
-      </div>
+      </div>}
 
       <div className="rx-hero-acts">
         <button type="button" className="rx-btn primary" onClick={onAdd}>

@@ -7,6 +7,7 @@ import { localToday } from '../todayEvents'
 import { soundSuccess } from '../soundKit'
 import { useAction } from '../ui'
 import { tomorrowOf } from './util'
+import { PlanReview } from '../plan/PlanReview'
 
 export const REASONS = ['Phone', 'Tired', 'Unclear task', 'Too much planned', 'Interrupted', 'Good day']
 
@@ -24,6 +25,8 @@ export function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, ope
   onSaved: () => void
 }) {
   const act = useAction()
+  // The end-of-day check for today's plan blocks (done, partly, tomorrow, drop), in a sheet.
+  const [checking, setChecking] = useState(false)
   const [text, setText] = useState('')
   const [reasons, setReasons] = useState<string[]>([])
   const [moved, setMoved] = useState<string[]>([])
@@ -96,6 +99,15 @@ export function ShutDown({ today, focusMin, doneToday, planLen, openMustDos, ope
       <p className="mode-sum">
         <b>{doneToday}/{planLen || 0}</b> must-dos · <b>{focusMin >= 60 ? `${Math.floor(focusMin / 60)}h ${focusMin % 60}m` : `${focusMin}m`}</b> focus today
       </p>
+      {life.coach?.planReview && (
+        <p className="mode-sum mode-check">
+          <button type="button" className="btn small" data-shutdown-check onClick={() => setChecking(true)}>
+            ✓ Check today's plan blocks
+          </button>{' '}
+          <small className="hint">one tap each: done, partly, tomorrow or drop</small>
+        </p>
+      )}
+      {checking && <PlanReview onClose={() => setChecking(false)} />}
       {review && (
         <div className="mode-review">
           <span className={`mode-score ${review.score >= 70 ? 'good' : ''}`}>{review.score}</span>

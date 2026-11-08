@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { layoutDay, minLenFor } from '@core/calLayout'
 import { EventSheet, type SheetCalendar } from './EventSheet'
+import { dedupeColumn } from '@core/dayColumn'
 import { addBlockTask, blockTasks } from '@core/blockTasks'
 import { blockState, freeGaps, localDay, localHM, planKept, type BlockState, type CalEvent } from '@core/dayTime'
 import type { TodoTask } from '@core/todoist'
@@ -131,11 +132,15 @@ export function DayStrip({ tasks, onBook }: { tasks: TodoTask[]; onBook: (task: 
       return { key: `e:${e.id}`, title: e.title, start: s, end: Math.max(en, s + 15), color: e.color ?? '#7cc4ff', event: e }
     })
     for (const t of tasks) {
-      if (t.due !== today || !t.dueTime || grouped.has(t.id) || todayEvents.some((e) => e.title.trim().toLowerCase() === t.content.trim().toLowerCase())) continue
+      if (t.due !== today || !t.dueTime || grouped.has(t.id)) continue
       const s = toMin(t.dueTime)
       out.push({ key: `t:${t.id}`, title: t.content, start: s, end: s + bookMinutes(t), color: '#94a3b8', task: t })
     }
-    return out.filter((b) => b.end > START_H * 60)
+    // One thing = one entry (an old calendar event next to its moved task, or a copy).
+    const one = dedupeColumn(
+      out.map((b) => ({ ...b, kind: (b.event ? 'event' : 'task') as 'event' | 'task', ours: b.event?.ours, holds: b.event ? blockTasks(b.event.description).map((t) => t.id) : undefined, taskId: b.task?.id }))
+    )
+    return one.filter((b) => b.end > START_H * 60)
   }, [todayEvents, tasks, today, grouped])
   // Side by side when they overlap on screen: a short block counts as tall as it's drawn.
   const minLen = minLenFor(MIN_BLOCK_PX, px)

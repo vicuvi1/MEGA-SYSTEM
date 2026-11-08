@@ -48,6 +48,7 @@ The app should feel alive but stay light on the PC and the battery.
 
 - **No `transition: all`**: name the properties. No transitions on layout properties. No `will-change` on width/height.
 
+- **Toasts stay calm** (`core/toastQueue.ts`, shown by `ui.tsx`): at most 2 at a time; a new note replaces the older note, a new error the older error; Undo toasts merge ("2 changes", one Undo that undoes both, newest first); an error never pushes an Undo toast away.
 - **UI motion takes 400 ms or less** (presses, toasts, page switch, bursts, count-ups). Looping effects are for "something is live right now" only.
 
 - **Nothing animates while hidden:** `html.doc-hidden` pauses every CSS animation; JS motion uses `requestAnimationFrame` (stops by itself in a hidden window), never a fast `setInterval`. The desktop app window is throttled in the tray (`backgroundThrottling: true`); the desktop sends `island:tick` every 15 s so the island stays fresh.

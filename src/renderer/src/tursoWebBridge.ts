@@ -49,6 +49,7 @@ import type { CoachMind } from '@core/coachMind'
 import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor, type DayProposal } from '@core/rhythm'
 import { PLAN_LIMITS, cleanLimits, type PlanLimits } from '@core/planLimits'
 import { PLAN_WEEK, cleanWeek, type WeekShape } from '@core/planWeek'
+import { PLAN_REVIEW, cleanReview, dropItem, putItem, type ReviewItem } from '@core/planReview'
 import { lateBlocks } from '@core/planShift'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus, waterToday } from './web/coachStatus'
@@ -1007,6 +1008,18 @@ export function createTursoWebBridge(): Bridge {
         if (!r.ok) throw new Error(j.error || httpProblem('Ben', r.status))
         void syncNow().catch(() => null)
         return j
+      },
+      // The end-of-day check (synced setting plan_review): one record per block, saved by its id (idempotent).
+      planReview: async (patch?: { day: string; item?: ReviewItem; drop?: string }) => {
+        const svc = await svcP
+        const read = (s: any) => cleanReview(readSetting(s.db as any, PLAN_REVIEW))
+        if (!patch) return svc.read(read)
+        return svc.write((s) => {
+          const cur = read(s)
+          const next = patch.item ? putItem(cur, patch.day, patch.item, s.wallet.today()) : patch.drop ? dropItem(cur, patch.day, patch.drop) : cur
+          if (JSON.stringify(next) !== JSON.stringify(cur)) writeSetting(s.db as any, PLAN_REVIEW, next as any)
+          return next
+        })
       },
       // Planner limits and the week plan (synced settings plan_limits, plan_week): read and saved here.
       planSetup: async (patch?: { limits?: Partial<PlanLimits>; week?: WeekShape }) => {
