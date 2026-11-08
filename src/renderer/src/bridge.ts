@@ -52,6 +52,8 @@ export type Bridge = LifeApi & {
     /** PE1: save today's edited plan (returns the new state, or null when today has no plan). */
     planSave?(plan: import('@core/rhythm').DayProposal): Promise<RhythmState | null>
     /** Planner time limits and the week plan (synced): read, or save a change (returns both). */
+    /** The end-of-day check's records (synced setting plan_review): read, or save / take back one block's mark. */
+    planReview?(patch?: { day: string; item?: import('@core/planReview').ReviewItem; drop?: string }): Promise<import('@core/planReview').ReviewStore>
     planSetup?(patch?: { limits?: Partial<import('@core/planLimits').PlanLimits>; week?: import('@core/planWeek').WeekShape }): Promise<{ limits: import('@core/planLimits').PlanLimits; week: import('@core/planWeek').WeekShape }>
     profileView?(): Promise<ProfileView>
     /** Ben's desk: patterns, energy map, excuses, mood, study, stacks, stakes, month story, money (read here, instant). */

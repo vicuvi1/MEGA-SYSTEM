@@ -28,6 +28,8 @@ export interface PlanTask {
   duration?: number | null
   /** He asked for it today (added in the chat for today): placed today, never moved to tomorrow. */
   asked?: boolean
+  /** Todoist labels (the learned task times look at them). */
+  labels?: string[]
 }
 
 /** Where a plan may start: now rounded up to the next 5 minutes, plus `bufferMin` (10:00 → 10:05). */
@@ -60,6 +62,12 @@ export interface PackInputs {
   work?: (WorkToday & { rest?: { from: string; to: string } | null }) | null
   /** ME2: his real pace (what he told Ben, then the learned multiplier); default estimateMinutes. */
   estimate?: (t: PlanTask) => number
+  /**
+   * Learned task times (core/taskTimes learnedTime, from the end-of-day check): when it gives a
+   * length, the task gets it and its block's why line says so ("usually takes you 1h40").
+   * Return null when your own number (Todoist duration, what you told Ben) should win.
+   */
+  learned?: (t: PlanTask) => { minutes: number; why: string } | null
   /** ME2: hours he usually skips: hard work goes elsewhere when it can. */
   avoid?: number[]
   /**
@@ -265,7 +273,8 @@ export function packDay(p: PackInputs): DayProposal {
     const e = eventFor(t.content, fixed)
     if (e) covered.set(t, e.start)
   }
-  const est = new Map(tasks.map((t) => [t, p.estimate ? p.estimate(t) : estimateMinutes(t)]))
+  const learned = new Map(tasks.map((t) => [t, p.learned?.(t) ?? null]))
+  const est = new Map(tasks.map((t) => [t, learned.get(t)?.minutes ?? (p.estimate ? p.estimate(t) : estimateMinutes(t))]))
   // What he asked for today (⭐ @today, or added in the chat for today) is never moved to tomorrow.
   const pinned = (t: PlanTask) => !!t.asked || !!t.starred
 
@@ -328,6 +337,13 @@ export function packDay(p: PackInputs): DayProposal {
   }
   // A group block is named by its project and first task; its tasks are its checkboxes (not repeated in the name).
   for (const c of groupChunks) c.title = c.tasks.length === 1 ? c.tasks[0].title : `${c.title}: ${c.tasks[0].title} +${c.tasks.length - 1} more`
+  // A block of one task whose length was learned says so ("usually takes you 1h40").
+  for (const c of [...chunks, ...pinnedChunks, ...groupChunks]) {
+    if (c.why || c.tasks.length !== 1) continue
+    const t = tasks.find((x) => (c.tasks[0].id && x.id === c.tasks[0].id) || x.content === c.tasks[0].title)
+    const l = t ? learned.get(t) : null
+    if (l) c.why = l.why
+  }
   // Highest priority and overdue first, then the bigger ones.
   groupChunks.sort((a, b) => b.w - a.w || b.minutes - a.minutes)
   const quickChunk: Chunk | null = quick.length

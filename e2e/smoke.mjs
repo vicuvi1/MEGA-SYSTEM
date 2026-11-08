@@ -3804,6 +3804,110 @@ try {
     await box2.locator('[data-protect-row] .pl-x').first().click()
     await pg.waitForFunction(() => !document.querySelector('[data-protect-row]'), null, { timeout: 8000 })
   })
+  // The planner learns from what happened: the end-of-day check (Done closes the task, Tomorrow moves it), the plan score next day.
+  await step('Plan review: the end-of-day check marks Done and Tomorrow, the score shows the next day', async () => {
+    const shots = '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/planlearn'
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    const peek = async () => (await (await fetch(`http://127.0.0.1:${port}/api/todoist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'peek' }) })).json()) || []
+    const until = async (fn, what, ms = 15000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    const planTab = async () => {
+      await open('today')
+      await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+      await pg.click('.td2 .ptabs [data-tab="plan"]')
+    }
+    const dayOf = (ms) => {
+      const d = new Date(ms)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    }
+    // Its own state: the whole plan approved (an evening check looks back at an approved day; drafts would re-plan by themselves).
+    await planTab()
+    await pg.locator('section.cp .pe-block').first().waitFor({ state: 'attached', timeout: 15000 })
+    const approve = pg.locator('section.cp .pe-approve').first()
+    if (await approve.count()) {
+      await approve.locator('input[type="time"]').fill('23:45')
+      await approve.locator('button', { hasText: 'Approve until' }).click()
+      await pg.waitForFunction(() => !document.querySelector('section.cp .pe-approve'), null, { timeout: 10000 })
+      await new Promise((ok) => setTimeout(ok, 1500))
+    }
+    await atTime('22:00', async () => {
+      // In the evening Ben's day review takes the plan card's place on Today: the check opens from "Shut down my day".
+      await open('today')
+      await pg.waitForSelector('.td2 .ptabs [data-tab="now"]', { timeout: 15000 })
+      await pg.click('.td2 .ptabs [data-tab="now"]')
+      await pg.evaluate(() => window.dispatchEvent(new CustomEvent('life-close-day')))
+      await pg.locator('[data-shutdown-check]').first().click({ timeout: 15000 })
+      const sheet = pg.locator('[data-plan-review]')
+      await sheet.waitFor({ timeout: 8000 })
+      const rows = sheet.locator('[data-review-row]')
+      await rows.first().waitFor({ timeout: 8000 })
+      if ((await rows.count()) < 2) throw new Error(`only ${await rows.count()} block(s) to check`)
+      const titles = await rows.locator('.prv-name b').allInnerTexts()
+      const pick = (re, not) => titles.findIndex((t, i) => re.test(t) && i !== not)
+      let di = pick(/lab report/i)
+      if (di < 0) di = 0
+      let si = pick(/CTF/i, di)
+      if (si < 0) si = titles.findIndex((_, i) => i !== di)
+      // Done: the block's Todoist task is closed through the plan's usual tick.
+      await rows.nth(di).locator('[data-review="done"]').click()
+      await rows.nth(di).locator('[data-review="done"][aria-pressed="true"]').waitFor({ timeout: 8000 })
+      if (/lab report/i.test(titles[di])) await until(async () => (await peek()).some((t) => t.id === 't4' && t.done), 'Done did not close the lab report task in Todoist')
+      // How long it took: a typed number wins over the timer and is kept.
+      await rows.nth(di).locator('.prv-min input').fill('70')
+      await rows.nth(di).locator('.prv-min input').press('Enter')
+      await rows.nth(di).locator('.prv-name small', { hasText: 'Done · 70 min' }).waitFor({ timeout: 8000 })
+      // Tomorrow: the usual Move to tomorrow (Todoist gets tomorrow's date), the block stays on today's plan.
+      const before = Object.fromEntries((await peek()).map((t) => [t.id, t.due]))
+      await rows.nth(si).locator('[data-review="slip"]').click()
+      await rows.nth(si).locator('[data-review="slip"][aria-pressed="true"]').waitFor({ timeout: 8000 })
+      const tomorrow = new Date(fakeNow() + 86400000).toISOString().slice(0, 10)
+      if (/CTF/i.test(titles[si])) await until(async () => (await peek()).some((t) => t.id === 't6' && t.due === tomorrow && before.t6 !== tomorrow), 'Tomorrow did not give the CTF task tomorrow\'s date')
+      // The score for today, live in the sheet (no points: just how realistic the plan was).
+      const score = sheet.locator('[data-review-score]')
+      await until(async () => /Today's plan: \d+% realistic/.test(await score.innerText()), 'no score in the check')
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await new Promise((ok) => setTimeout(ok, 400))
+      await sheet.screenshot({ path: `${shots}/plan-review.png` }).catch(() => {})
+      // Marking again changes nothing (one record per block), and the blocks are all still in today's plan.
+      await rows.nth(di).locator('[data-review="done"]').click()
+      await sheet.locator('button', { hasText: 'Close' }).click()
+      await sheet.waitFor({ state: 'detached', timeout: 5000 })
+      // Opened again: the same blocks (the slipped one stays on today's plan) with their marks kept.
+      const n = titles.length
+      await pg.locator('[data-shutdown-check]').first().click()
+      await sheet.waitFor({ timeout: 8000 })
+      await until(async () => (await rows.count()) === n, `the check lists ${await rows.count()} blocks the second time, not ${n}`)
+      await rows.nth(si).locator('[data-review="slip"][aria-pressed="true"]').waitFor({ timeout: 8000 })
+      await sheet.locator('button', { hasText: 'Close' }).click()
+      await new Promise((ok) => setTimeout(ok, 1200))
+    })
+    // The next morning: yesterday's score on the plan card (when today has a plan) and the 7-day trend on Week.
+    const next = todayAt('09:00') + 86400000
+    await pg.context().clock.setSystemTime(next)
+    await reloadApp()
+    try {
+      await planTab()
+      await new Promise((ok) => setTimeout(ok, 1500))
+      const yl = pg.locator('section.cp [data-plan-score]').first()
+      if (await yl.count()) {
+        if (!/Yesterday's plan: \d+% realistic/.test(await yl.innerText())) throw new Error(`plan card score: ${await yl.innerText()}`)
+      } else console.log(`  (no plan card on ${dayOf(next)} in the made-up data: the Week trend is checked)`)
+      await pg.click('.td2 .ptabs [data-tab="week"]')
+      const ws = pg.locator('[data-week-score]').first()
+      await ws.waitFor({ timeout: 15000 })
+      if (!/Plan realism, last 7 days: \d+% on average \(1 day checked\)/.test(await ws.innerText())) throw new Error(`week score: ${await ws.innerText()}`)
+      await pg.locator('[data-week-plan]').first().screenshot({ path: `${shots}/week-score.png` }).catch(() => {})
+    } finally {
+      await pg.context().clock.setSystemTime(fakeNow())
+      await reloadApp()
+    }
+  })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
