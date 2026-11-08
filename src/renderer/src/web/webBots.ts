@@ -64,6 +64,8 @@ import { createRhythm } from './rhythmBot'
 import { downloadFile, downloadText, esc, tg } from './bots/telegram'
 import { focusKeyboard, linkExpense, STOP_KEYBOARD, takeLink, ruleCoins } from './bots/helpers'
 import { CALLBACK_DATA, runCallback } from './bots/callbacks'
+import { planMessageOf } from './bots/planButtons'
+import { addQuickBlock, quickSpot } from './planShared'
 import { runCommand, runFocus, type RunOut } from './bots/commands'
 import { runCareer } from './bots/careerBot'
 import { undoReply as undoReplyWith } from './bots/undo'
@@ -396,9 +398,11 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   /** Sends today's plan with Approve / Change / Redo. */
   async function sendProposal(token: string, chat: string, note = ''): Promise<string> {
     const { plan, version } = await rhythm.propose(note)
-    const text = proposalText(plan, { version })
-    // TV1: the plan comes with its buttons (move ±30, Done, Skip, Approve, Shift to now, Change).
-    await tg(token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', reply_markup: plan.blocks.length ? planKeyboard(plan) : PROPOSAL_KEYBOARD })
+    // Telegram parity: the app card's text and buttons (move ±30, Done, Skip, Tomorrow, Approve,
+    // Change, Re-plan from now, Too much today), read back from the saved plan.
+    const m = await planMessageOf({ mirror, services }).catch(() => null)
+    const text = m?.text ?? proposalText(plan, { version })
+    await tg(token, 'sendMessage', { chat_id: chat, text, parse_mode: 'HTML', reply_markup: plan.blocks.length ? (m?.keyboard ?? planKeyboard(plan)) : PROPOSAL_KEYBOARD })
     return text
   }
   const dayBounds = () => {
@@ -1493,12 +1497,22 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       if (qa && 'ask' in qa) local = { reply: qa.ask, actions: [], remember: [], show: [] }
       else if (qa) {
         const q = qa.task
-        const added = await todoist.quickAdd(todoistText(q, today)).catch(() => null)
+        // A task for today gets a draft block in today's plan, placed like the plan card's quick-add
+        // (at the time said when it fits, else the nearest gap, within your limits); the time then
+        // lives on the block, so the Todoist task goes without one.
+        let spot: ReturnType<typeof quickSpot> = null
+        if (q.day === today) {
+          const evs = calendar ? await calendar.events(...dayBounds()).catch(() => []) : []
+          spot = await mirror.read((db) => quickSpot(db, services.services(db), q, evs)).catch(() => null)
+        }
+        const added = await todoist.quickAdd(todoistText(q, today, { noTime: !!spot })).catch(() => null)
         if (!added) local = { reply: "Todoist didn't take that one. Try again in a moment.", actions: [], remember: [], show: [] }
         else {
           const forToday = q.day === today
           if (forToday) await mirror.write((db) => writeSetting(db as any, PLAN_ASKED, addAsked(readSetting(db as any, PLAN_ASKED), services.services(db).wallet.today(), q.title))).catch(() => null)
-          local = { reply: `Added: ${q.chip}.${forToday ? ' It is on today\'s list; I can give it a slot in the plan.' : ''}`, actions: [], remember: [], show: forToday ? ['plan'] : [], ...(forToday ? { chips: ['Re-plan from now'] } : {}) }
+          const placed = spot ? await mirror.write((db) => addQuickBlock(db, services.services(db), q.title, spot!)).catch(() => false) : false
+          const where = placed && spot ? ` It is in today's plan at ${spot.start} for ${spot.minutes} min${spot.why ? ` (${spot.why})` : ''}.` : forToday ? " It is on today's list; I can give it a slot in the plan." : ''
+          local = { reply: `Added: ${q.chip}.${where}`, actions: [], remember: [], show: forToday ? ['plan'] : [], ...(forToday && !placed ? { chips: ['Re-plan from now'] } : {}) }
         }
       }
     }

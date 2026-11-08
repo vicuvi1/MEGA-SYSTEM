@@ -465,7 +465,21 @@
     "SMOKE_ONLY=\"Today tabs\" npm run smoke"
    ],
    "evidence": "2026-11-08: unit tests pass (review records, timer minutes, learned estimate: median, min samples, bounds, packer and why line, score formula and trend); smoke step \"Plan review\" passes locally",
-   "notes": "core/planReview.ts (reviewRows, reviewItem, putItem, mergeReview, reviewLine), core/taskTimes.ts (learnTimes, learnedTime), core/planScore.ts (scoreItems, dayScore, weekScores, yesterdayLine). Synced setting plan_review. plan/PlanReview.tsx, planReviewStore.ts, planStore.reviewBlock. Telegram parity is for the next builder: call reviewRows + reviewItem + putItem, and yesterdayLine."
+   "notes": "core/planReview.ts (reviewRows, reviewItem, putItem, mergeReview, reviewLine), core/taskTimes.ts (learnTimes, learnedTime), core/planScore.ts (scoreItems, dayScore, weekScores, yesterdayLine). Synced setting plan_review. plan/PlanReview.tsx, planReviewStore.ts, planStore.reviewBlock. Telegram parity: see F033."
+  },
+  {
+   "id": "F033",
+   "priority": 1,
+   "area": "planner",
+   "title": "Auto-rescue for a late block, and the plan on Telegram matches the app",
+   "user_visible_behavior": "When a planned work block has not started 30 min after its start (no timer, not ticked), and you are not in a meeting, quiet hours or a running timer, Ben offers one short rescue for the rest of the day (\"Rescue: start 'Lab report' now for 45 min, move 'Read' to tomorrow.\") with Accept / Not now / Skip today: on the island while you are at the PC, else on Telegram (and as a Coach card). At most once per block and 2 a day. Accept moves only draft blocks (pinned, approved and calendar blocks never move), gives moved tasks tomorrow's date in Todoist, and has Undo; Not now asks once more 15 min later. On Telegram the plan message now shows what the app card shows (the same blocks, each thing once, must-dos, short why lines, Also today only for tasks without a block with their reason, Moved to tomorrow, your limits, yesterday's plan score) with Approve, Change, Re-plan from now, Too much today and Tomorrow per draft block (each with Undo); \"+ lab report tomorrow 2h\" / \"task ...\" quick-adds work there and a task for today gets a draft block; \"Check the day\" sends the end-of-day check as one message with Done / Partly / Tomorrow / Drop per block. No points except Done closing the Todoist task the usual way.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/planRescue.test.ts src/core/tgPlanText.test.ts src/renderer/src/web/bots/planParity.test.ts src/core/ben2chat.test.ts",
+    "SMOKE_ONLY=\"Plan rescue\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests pass (rescue rules, rescue plan in limits, Telegram text without duplicates, every Telegram button, the check and quick-add on Telegram); smoke step \"Plan rescue\" passes locally",
+   "notes": "core/planRescue.ts (lateBlock, buildRescue, decideRescue, rescueApplied), core/tgPlanText.ts (tgPlanText, shownBlocks, alsoShown, reviewText/Keyboard), core/tgPlan.ts (new pb| taps), web/planShared.ts (changePlan + undo slot planUndo, tooMuchOn, blockTomorrowOn, rescueCheck/rescueAnswer, markReviewOn, quickSpot/addQuickBlock), bots/planButtons.ts (planMessageOf, runReviewTap), benPushTick.ts (Telegram), benPushFeed.ts + tursoWebBridge pushes.rescueCheck/rescue (island), BenPushCard (Coach card). Push type 'rescue', ops accept/undo (bp|a, bp|u)."
   },
   {
    "id": "F900",

@@ -90,6 +90,10 @@ export type Bridge = LifeApi & {
       shutdown(items: import('@core/benPushes').ShutdownItem[]): Promise<void>
       mark(id: string, mark: import('@core/benPushes').ItemMark): Promise<string>
       note(id: string, mark: import('@core/benPushes').ItemMark): Promise<void>
+      /** Auto-rescue (core/planRescue): the rescue for a late block now, if one is due (its offer is kept for Accept). */
+      rescueCheck?(o: { now: number; events: import('@core/dayTime').CalEvent[]; running: boolean; meeting: boolean; quiet: boolean; on: boolean }): Promise<import('@core/benPushes').PushOut | null>
+      /** Accept / Not now / Skip today on a rescue, or Undo an accepted one. Resolves with the line to show. */
+      rescue?(op: 'accept' | 'later' | 'skip' | 'undo', key: string): Promise<string>
     }
     /** How the chat looks: Ben's face and your photo (synced). */
     looks?(): Promise<CoachLooks>

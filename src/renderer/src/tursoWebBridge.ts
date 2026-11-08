@@ -5,6 +5,8 @@
 // the web has (embedded apps, Telegram polling, cloud snapshots) are here.
 import { lifeFitView, readLifeFit, saveLifeFit, saveTonight, type LifeFitView } from './web/lifeFitStore'
 import { answerPushIn, applyMark, claimPush, noteMark, queueOut, readPushLog, setShutdownItems, writePcSeen } from './web/benPushStore'
+import { rescueAnswer, rescueCheck, rescueMaybe } from './web/planShared'
+import type { CalEvent } from '@core/dayTime'
 import type { ItemMark, OutItem, PcSeen, PushOp, ShutdownItem } from '@core/benPushes'
 import { pushStyle, shiftReply, type ShiftMode } from '@core/lifeFit'
 import { cleanMusicNow } from '@core/music'
@@ -937,6 +939,23 @@ export function createTursoWebBridge(): Bridge {
         },
         note: async (id: string, mark: ItemMark) => {
           await (await svcP).write((s) => noteMark(s.db, s.wallet.today(), id, mark))
+        },
+        // Auto-rescue (core/planRescue, web/planShared): decided here on the island's look, answered from any card.
+        rescueCheck: async (o: { now: number; events: CalEvent[]; running: boolean; meeting: boolean; quiet: boolean; on: boolean }) => {
+          if (!o.on || o.running || o.meeting || o.quiet) return null
+          const svc = await svcP
+          // A cheap read first: only a late block makes it look further (and write the offer).
+          if (!(await svc.read((s) => rescueMaybe(s.db, s, new Date(o.now))))) return null
+          return svc.write((s) => rescueCheck(s.db, s, { now: new Date(o.now), events: o.events, on: o.on, running: o.running, meeting: o.meeting, quiet: o.quiet, here: true }))
+        },
+        rescue: async (op: 'accept' | 'later' | 'skip' | 'undo', key: string) => {
+          const svc = await svcP
+          const on = await todoistOnP
+          const r = await rescueAnswer({ read: (fn) => svc.read((s) => fn(s.db, s)), write: (fn) => svc.write((s) => fn(s.db, s)), todoist: on ? { update: (tid, patch) => todoist.update(tid, patch) } : null }, key, op)
+          void syncNow().catch(() => null)
+          window.dispatchEvent(new Event('life-external-changed'))
+          if (!r.ok) throw new Error(r.line)
+          return r.line
         }
       },
       // How the chat looks: Ben's face and your photo (one small synced setting).

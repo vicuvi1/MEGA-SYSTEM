@@ -202,15 +202,24 @@ describe('TV1 Telegram plan buttons', () => {
     expect(readPlanTap('pb|m|1|7')).toBeNull()
     expect(readPlanTap('pb|m|99|30')).toBeNull()
     expect(readPlanTap('rb|a')).toBeNull()
+    expect(readPlanTap('pb|r')).toEqual({ op: 'replan' })
+    expect(readPlanTap('pb|t')).toEqual({ op: 'toomuch' })
+    expect(readPlanTap('pb|w|1')).toEqual({ op: 'tomorrow', i: 1 })
+    expect(readPlanTap('pb|z|abc')).toEqual({ op: 'back', at: parseInt('abc', 36) })
+    expect(readPlanTap('pb|c')).toEqual({ op: 'check' })
   })
   it('one row per block, then Approve · Shift · Change; marked blocks show Undo', () => {
     const k = planKeyboard(plan, { late: true })
-    expect(k.inline_keyboard).toHaveLength(3)
-    expect(k.inline_keyboard[0].map((b) => b.callback_data)).toEqual(['pb|m|0|-30', 'pb|m|0|30', 'pb|d|0', 'pb|s|0'])
+    expect(k.inline_keyboard).toHaveLength(4)
+    // A draft block also moves to tomorrow (the app card's ⋯ menu).
+    expect(k.inline_keyboard[0].map((b) => b.callback_data)).toEqual(['pb|m|0|-30', 'pb|m|0|30', 'pb|d|0', 'pb|s|0', 'pb|w|0'])
     expect(k.inline_keyboard[2].map((b) => b.text)).toEqual(['✅ Approve', '⏩ Shift to now', '✏️ Change'])
+    expect(k.inline_keyboard[3].map((b) => b.callback_data)).toEqual(['pb|r', 'pb|t'])
     const marked = planKeyboard(plan, { approved: true, marks: { 0: 'done' } })
     expect(marked.inline_keyboard[0][1]).toEqual({ text: '↩ Undo', callback_data: 'pb|u|0' })
     expect(marked.inline_keyboard[2].map((b) => b.text)).not.toContain('✅ Approve')
+    // An approved plan has no "Tomorrow" on its blocks (only drafts move).
+    expect(marked.inline_keyboard[1].map((b) => b.callback_data)).not.toContain('pb|w|1')
     expect(k.inline_keyboard.flat().every((b) => fitsCallback(b.callback_data))).toBe(true)
   })
   it('moves stay inside the day; receipts stay short', () => {

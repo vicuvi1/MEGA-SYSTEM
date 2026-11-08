@@ -9,6 +9,7 @@ import { calendarChanges, type Seen } from '../core/calWatch'
 import { loadFeedback } from '../renderer/src/web/botBrain'
 import { serverWeb, type WebTools } from './webTools'
 import { planKeyboard as planButtons } from '@core/tgPlan'
+import { planMessageOf } from '../renderer/src/web/bots/planButtons'
 import { quietNow, quietRules } from '../core/benTiming'
 import { neutral } from '../core/stealth'
 import { examSleepGuard, sleepRegularity } from '../core/sleepRegularity'
@@ -1332,7 +1333,8 @@ async function benActs(env: BotEnv, now: Date, send: (text: string, markup?: unk
   }
   // W1: the day is slipping (2 blocks missed, or at 15:00 under 40% of the focus planned so far):
   // once a day, one card with the rest of today shrunk to fit.
-  if (!state.rescued && time >= '11:00' && time < '20:00') {
+  // A day with a plan has the plan's own auto-rescue instead (core/planRescue, one per late block).
+  if (!state.rescued && !state.briefing && time >= '11:00' && time < '20:00') {
     const ours = events.filter((e) => e.ours && !e.allDay && !e.title.includes('💪'))
     const pastMin = ours.filter((e) => Date.parse(e.end) <= now.getTime()).reduce((t, e) => t + (Date.parse(e.end) - Date.parse(e.start)) / 60000, 0)
     const behind = time >= '15:00' && pastMin >= 50 && focus.todayMin < pastMin * 0.4
@@ -1484,14 +1486,17 @@ async function rhythmTick(env: BotEnv, now: Date, send: (text: string, markup?: 
       const { plan, version } = await bots.rhythm.propose()
       // MF10: safe to spend today rides inside the morning plan (no extra message).
       const money = await moneyFacts().then((m) => (m ? morningMoneyLine(m) : null)).catch(() => null)
-      await send(proposalText(plan, { version }) + (money ? `\n\n${escapeHtml(money)}` : ''), plan.blocks.length ? planButtons(plan) : PROPOSAL_KEYBOARD)
+      // Telegram parity: the app card's text and buttons, read back from the saved plan.
+      const m = await planMessageOf({ mirror, services }).catch(() => null)
+      await send((m?.text ?? proposalText(plan, { version })) + (money ? `\n\n${escapeHtml(money)}` : ''), plan.blocks.length ? (m?.keyboard ?? planButtons(plan)) : PROPOSAL_KEYBOARD)
     } else if (job === 'midweek') {
       const text = await bots.rhythm.midweek()
       await send(text, text.includes('Want them booked') ? { inline_keyboard: [[{ text: '📅 Book them', callback_data: 'rw|b' }]] } : undefined)
     } else if (job === 'replan') {
       // W8: no plan by noon: half a day left is still worth a plan.
       const { plan, version } = await bots.rhythm.propose()
-      await send(`🕐 <b>Half a day left</b>: here's a plan for the rest of it.\n\n${proposalText(plan, { version })}`, plan.blocks.length ? planButtons(plan, { late: true }) : PROPOSAL_KEYBOARD)
+      const m = await planMessageOf({ mirror, services }).catch(() => null)
+      await send(`🕐 <b>Half a day left</b>: here's a plan for the rest of it.\n\n${m?.text ?? proposalText(plan, { version })}`, plan.blocks.length ? (m?.keyboard ?? planButtons(plan, { late: true })) : PROPOSAL_KEYBOARD)
     } else if (job === 'water') {
       // Up to 5 a day when you're behind (K2): the cap and spacing live in waterBehind, so it's not "once a day".
       const line = await bots.rhythm.waterLine()

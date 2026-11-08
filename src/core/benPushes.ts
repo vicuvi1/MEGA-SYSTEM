@@ -206,7 +206,7 @@ export const channelFor = (here: boolean): Channel => (here ? 'island' : 'telegr
 
 // ---- the shared log: one key per push, across the island and Telegram ----
 
-export type PushOp = 'start' | 'later' | 'skip' | 'plan' | 'ok' | 'shutdown' | 'tomorrow' | 'drop' | 'keep' | 'back' | 'more5'
+export type PushOp = 'start' | 'later' | 'skip' | 'plan' | 'ok' | 'shutdown' | 'tomorrow' | 'drop' | 'keep' | 'back' | 'more5' | 'accept' | 'undo'
 export type ItemMark = 'tomorrow' | 'drop' | 'keep'
 export interface PushRec {
   at: number
@@ -242,7 +242,7 @@ export interface PushLog {
 }
 export const PUSH_LOG_KEY = 'ben_pushes'
 
-const OPS: PushOp[] = ['start', 'later', 'skip', 'plan', 'ok', 'shutdown', 'tomorrow', 'drop', 'keep', 'back', 'more5']
+const OPS: PushOp[] = ['start', 'later', 'skip', 'plan', 'ok', 'shutdown', 'tomorrow', 'drop', 'keep', 'back', 'more5', 'accept', 'undo']
 const MARKS: ItemMark[] = ['tomorrow', 'drop', 'keep']
 export function cleanPushLog(raw: unknown, day: string): PushLog {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<PushLog>
@@ -295,7 +295,7 @@ export interface PushButton {
   arg?: string
   minutes?: number
 }
-export type PushType = 'checkin' | 'brief' | 'shutdown' | 'weekly' | 'drift' | 'workoutNote'
+export type PushType = 'checkin' | 'brief' | 'shutdown' | 'weekly' | 'drift' | 'workoutNote' | 'rescue'
 export interface PushOut {
   key: string
   type: PushType
@@ -582,16 +582,16 @@ export function weeklyHtml(c: WeeklyCard, level: AreaLevel, next: { focus: strin
 const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 /** Callback data for a push button ("bp|<op>|<key or item>"), kept under Telegram's 64 bytes. */
 export function pushCallback(op: PushOp, key: string, arg?: string): string | null {
-  const code: Partial<Record<PushOp, string>> = { later: 'l', skip: 's', ok: 'o', plan: 'p', tomorrow: 't', drop: 'd', keep: 'k' }
+  const code: Partial<Record<PushOp, string>> = { later: 'l', skip: 's', ok: 'o', plan: 'p', tomorrow: 't', drop: 'd', keep: 'k', accept: 'a', undo: 'u' }
   const c = code[op]
   if (!c) return null
   const d = `bp|${c}|${arg ?? key}`
   return d.length <= 64 ? d : null
 }
 export function readPushCallback(data: string): { op: PushOp; ref: string } | null {
-  const m = /^bp\|([lsoptdk])\|(.+)$/.exec(data)
+  const m = /^bp\|([lsoptdkau])\|(.+)$/.exec(data)
   if (!m) return null
-  const op = ({ l: 'later', s: 'skip', o: 'ok', p: 'plan', t: 'tomorrow', d: 'drop', k: 'keep' } as const)[m[1] as 'l']
+  const op = ({ l: 'later', s: 'skip', o: 'ok', p: 'plan', t: 'tomorrow', d: 'drop', k: 'keep', a: 'accept', u: 'undo' } as const)[m[1] as 'l']
   return { op, ref: m[2] }
 }
 
@@ -634,7 +634,7 @@ export const toCard = (p: PushOut): PushCard => ({ type: p.type, key: p.key, tit
 export function pushCardOf(raw: unknown): PushCard | null {
   const o = raw as Partial<PushCard> | null
   if (!o || typeof o !== 'object' || typeof o.key !== 'string' || typeof o.title !== 'string' || !Array.isArray(o.lines)) return null
-  if (!['checkin', 'brief', 'shutdown', 'weekly', 'drift', 'workoutNote'].includes(o.type as string)) return null
+  if (!['checkin', 'brief', 'shutdown', 'weekly', 'drift', 'workoutNote', 'rescue'].includes(o.type as string)) return null
   return o as PushCard
 }
 

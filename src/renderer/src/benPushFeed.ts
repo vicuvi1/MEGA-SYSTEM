@@ -15,13 +15,17 @@ import { dayKey } from '@core/dates'
 import { life } from './bridge'
 import { queueStall } from './boost/boostFeed'
 import type { LifeFitView } from './web/lifeFitStore'
+import type { CalEvent } from '@core/dayTime'
+import { isRescueKey } from '@core/planRescue'
 
 let seen: PcSeen | null = null
 let logCache: { at: number; day: string; log: PushLog | null } = { at: 0, day: '', log: null }
 let active: { alert: IslandAlert; key: string; until: number } | null = null
 let prefsCache: { at: number; mode: string; peekFor: Record<string, boolean> | null } = { at: 0, mode: 'calm', peekFor: null }
 
-const TTL: Record<PushOut['type'], number> = { checkin: 10, brief: 45, shutdown: 30, weekly: 30, drift: 10, workoutNote: 30 }
+const TTL: Record<PushOut['type'], number> = { checkin: 10, brief: 45, shutdown: 30, weekly: 30, drift: 10, workoutNote: 30, rescue: 15 }
+/** How long the "Rescue on · ↩ Undo" card stays after Accept. */
+const UNDO_CARD_MS = 2 * 60_000
 
 /** UX5: Sport Track's summary of a workout that just finished, waiting for its one note (kept 30 min: not in a meeting or at night). */
 let pending: { summary: unknown; at: number } | null = null
@@ -127,6 +131,13 @@ export async function pushTick(o: PushIslandInput): Promise<IslandAlert | null> 
     const blocks: CheckinBlock[] = o.blocks.filter((b) => !b.maybe).map((b) => ({ id: b.id ?? `${b.title}@${b.start}`, title: b.title, start: b.start, end: b.end, focus: b.kind !== 'event' && !b.call }))
     const a = await show(decideCheckin({ now: o.now, on: true, blocks, running: o.running, meeting: o.meeting, quiet: o.bedLogged, levels, log, here: true }))
     if (a) return a
+    // Auto-rescue: a plan block 30 min late and not started → one rescue for the rest of the day.
+    if (life.coach.pushes.rescueCheck) {
+      const events: CalEvent[] = o.blocks.filter((b) => !b.maybe).map((b) => ({ id: b.id ?? `${b.title}@${b.start}`, calendarId: b.calendarId ?? 'primary', title: b.title, start: new Date(b.start).toISOString(), end: new Date(b.end).toISOString(), allDay: false }))
+      const r = await life.coach.pushes.rescueCheck({ now: o.now, events, running: o.running, meeting: o.meeting, quiet: o.bedLogged, on: true }).catch(() => null)
+      const ra = await show(r)
+      if (ra) return ra
+    }
   }
   // PR3: the morning brief at your wake time.
   const wake = o.sleep?.weekdayTarget ? targetForDay(day, o.sleep.weekdayTarget, o.sleep.weekendTarget ?? o.sleep.weekdayTarget) : o.fit.wake
@@ -180,6 +191,16 @@ export async function pushAct(a: Extract<IslandAction, { kind: 'benPush' }>): Pr
   if (active?.key === a.key && a.op !== 'tomorrow' && a.op !== 'drop' && a.op !== 'keep') active = null
   logCache.at = 0
   const answer = (op: PushOp) => p.answer(a.key, op, a.minutes)
+  // Auto-rescue: Accept (then a short "↩ Undo" card), Not now (15 min, once), Skip today, Undo.
+  if (isRescueKey(a.key) && p.rescue && (a.op === 'accept' || a.op === 'later' || a.op === 'skip' || a.op === 'undo')) {
+    const line = await p.rescue(a.op, a.key)
+    if (a.op === 'accept') {
+      const id = `push:${a.key}:undo`
+      active = { key: `${a.key}:undo`, until: Date.now() + UNDO_CARD_MS, alert: { id, kind: 'checkin', title: 'Rescue on', text: line, face: '🛟', actions: [{ label: '↩ Undo', action: { kind: 'benPush', op: 'undo', key: a.key, alertId: id } }] } }
+    }
+    if (a.op === 'undo' && active?.key === `${a.key}:undo`) active = null
+    return { said: line }
+  }
   switch (a.op) {
     case 'start': {
       const subject = (a.arg ?? 'Focus').slice(0, 40)

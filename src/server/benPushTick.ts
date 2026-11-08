@@ -16,6 +16,7 @@ import { getSetting } from '../main/settings'
 import { readLifeFit, sleepWindow } from '../renderer/src/web/lifeFitStore'
 import { todayMode } from '../renderer/src/web/extrasContext'
 import { claimPush, readPcSeen, readPushLog, setShutdownItems, writePushLog } from '../renderer/src/web/benPushStore'
+import { rescueCheck, rescueMaybe } from '../renderer/src/web/planShared'
 
 type Send = (text: string, markup?: unknown, opts?: { always?: boolean; push?: PushCard; throughQuiet?: boolean }) => Promise<unknown>
 interface Ctx {
@@ -114,6 +115,19 @@ export async function pushTick(c: Ctx): Promise<{ checkins: boolean; sent: strin
     const blocks: CheckinBlock[] = c.events.filter((e) => !e.allDay).map((e) => ({ id: e.id, title: e.title, start: Date.parse(e.start), end: Date.parse(e.end), focus: isFocusBlock(e) }))
     const p = decideCheckin({ now, on: true, blocks, running: f.running, meeting: c.inEvent, quiet: c.quiet || f.bedLogged, levels, log: f.log, here })
     if (p) await go(p)
+  }
+
+  // Auto-rescue: a plan block 30 min late and not started → one rescue for the rest of the day
+  // (Accept / Not now / Skip today). Only while you're away from the PC (the island shows it there).
+  if (prefs.checkins && channelFor(here) === 'telegram' && !c.paused && !f.running && !c.inEvent && !c.quiet) {
+    const maybe = await c.mirror.read((db) => rescueMaybe(db, c.services.services(db), c.now)).catch(() => false)
+    if (maybe) {
+      const s = new Date(c.now)
+      s.setHours(0, 0, 0, 0)
+      const evs = c.calendar ? await c.calendar.events(s.toISOString(), new Date(s.getTime() + 86400000).toISOString()).catch(() => [] as CalEvent[]) : []
+      const p = await c.mirror.write((db) => rescueCheck(db, c.services.services(db), { now: c.now, events: evs, on: true, running: f.running, meeting: c.inEvent, quiet: c.quiet || f.bedLogged, here })).catch(() => null)
+      if (p) await go(p)
+    }
   }
 
   // PR3: the morning brief at your wake time (not on days off).
