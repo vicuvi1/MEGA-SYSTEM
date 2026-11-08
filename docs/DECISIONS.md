@@ -56,6 +56,16 @@ entry that says why.
 - **Rules out:** committing real numbers from exports, chats or screenshots. Importers parse files
   locally in the browser.
 
+### The plan re-plans by itself, but only its drafts (2026-11-08)
+- **Decision:** when the day changes, `core/planAuto.ts` moves only the draft blocks the change hits (late and not started, or now on an event or an overrun block); approved, pinned, ticked and calendar blocks and events never move. Remote changes are merged first, then the re-plan runs; it never writes to Google or Todoist. At most once in 2 minutes, 5 a day, never while editing, refused if it would undo the last run. Default on; Settings → "Re-plan by itself".
+- **Why:** the owner wants a work planner that keeps up with the day without asking, and a plan he can trust: no churn, no surprises in his calendar.
+- **Rules out:** re-packing the whole remaining day automatically (the manual "Re-plan from now" does that), moving anything already in the calendar by itself, or re-adding a block the user removed.
+
+### Every task of the day has a place or a stated reason (2026-11-08)
+- **Decision:** `core/planAudit.ts` runs after a plan is built or edited: a task the plan lost goes back on today's list; what has no room shows as one plain line with "Move to tomorrow". Block "why" lines come only from data the plan or Todoist holds.
+- **Why:** a task silently missing from the plan breaks trust in the whole plan.
+- **Rules out:** dropping a task without a reason on the card, or a "why" line made up by the model.
+
 ### At most 12 Vercel functions (Hobby plan)
 - **Decision:** new server features are added as ops on existing functions or as `vercel.json`
   rewrites.

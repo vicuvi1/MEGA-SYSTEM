@@ -381,6 +381,20 @@
    "notes": ""
   },
   {
+   "id": "F028",
+   "priority": 1,
+   "area": "planner",
+   "title": "A plan you can trust, that re-plans by itself",
+   "user_visible_behavior": "The plan audit runs before the card shows: one line for tasks with no room (Move to tomorrow), a short why under each block; when the day changes the draft part moves by itself with a note and Undo (Settings: Re-plan by itself)",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/planAudit.test.ts src/core/planAuto.test.ts",
+    "SMOKE_ONLY=\"Plan trust\" npm run smoke"
+   ],
+   "evidence": "2026-11-08: unit tests pass; smoke steps plan, Coach and Sync pass locally",
+   "notes": "core/planAudit.ts (auditPlan, leftTasks, blockWhy, moveToTomorrow) and core/planAuto.ts (autoReplan, autoAllowed, isFlipFlop). checkPlan now counts overlapping events once (a call inside a work window was busy twice)."
+  },
+  {
    "id": "F900",
    "priority": 2,
    "area": "island",

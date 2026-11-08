@@ -3226,6 +3226,50 @@ try {
     console.log(`  ${report.join('\n  ')}`)
   }))
   // PE1–PE3, PE7: the plan is edited right in its card; an approved block's new time goes to Google and Todoist.
+  // Plan trust: the audit runs before the card shows (one plain line for what has no room), each block
+  // says why it is there, and a block the clock passed without a start moves by itself, with a note and Undo.
+  await step('Plan trust: the plan card shows the audit line and why lines, and re-plans by itself after a late block (note + Undo)', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    await pg.locator('section.cp .pe-block').first().waitFor({ timeout: 15000 })
+    // The audit's one line: tasks with no room are listed (never silently dropped), with one tap to move them.
+    const line = pg.locator('section.cp .pe-audit').first()
+    await line.waitFor({ timeout: 10000 })
+    if (!/didn't fit: .+ Move (it|them) to tomorrow\?/.test(await line.innerText())) throw new Error(`audit line: ${await line.innerText()}`)
+    if (!(await line.locator('button', { hasText: 'Move to tomorrow' }).count())) throw new Error('no "Move to tomorrow" on the audit line')
+    // Why lines from real data (the made-up lab report task is overdue and P1 in Todoist).
+    await pg.locator('section.cp .pe-block .pe-why').first().waitFor({ timeout: 10000 })
+    const whys = await pg.$$eval('section.cp .pe-block .pe-why', (els) => els.map((e) => e.textContent || ''))
+    if (!whys.some((w) => /overdue|from Todoist|must-do|pinned|due /.test(w))) throw new Error(`why lines: ${whys.join(' | ')}`)
+    await pg.locator('section.cp').first().screenshot({ path: '/tmp/claude-0/-home-user-MEGA-SYSTEM/67731d19-5483-525e-a142-84be5af4f362/scratchpad/plan/plan-card.png' }).catch(() => {})
+    // A draft block still ahead: the clock passes its start and nobody starts it.
+    await new Promise((ok) => setTimeout(ok, 1000))
+    const drafts = await pg.$$eval('section.cp .pe-block.draft', (els) => els.map((el) => ({ title: el.querySelector('.pe-name')?.textContent?.trim() || '', start: (el.querySelector('.pe-time')?.textContent || '').slice(0, 5) })))
+    const nowHm = new Date(fakeNow()).toTimeString().slice(0, 5)
+    const late = drafts.filter((d) => d.start > nowHm && d.start < '21:00').sort((a, b) => a.start.localeCompare(b.start))[0]
+    if (!late) throw new Error(`no draft block ahead to make late: ${JSON.stringify(drafts)}`)
+    const [h, m] = late.start.split(':').map(Number)
+    const t15 = h * 60 + m + 15
+    const laterHm = `${String(Math.floor(t15 / 60)).padStart(2, '0')}:${String(t15 % 60).padStart(2, '0')}`
+    await pg.evaluate(() => localStorage.removeItem('ls.planAuto'))
+    await atTime(laterHm, async () => {
+      await open('today')
+      await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+      await pg.click('.td2 .ptabs [data-tab="plan"]')
+      const note = pg.locator('section.cp .pe-auto').first()
+      await note.waitFor({ timeout: 15000 })
+      const text = await note.innerText()
+      if (!/didn't start at \d\d:\d\d|because .+ (ran long|moved|was added)|because of /.test(text)) throw new Error(`re-plan note: ${text}`)
+      // Undo takes the automatic re-plan back.
+      await note.locator('button', { hasText: 'Undo' }).click()
+      await pg.waitForFunction(() => !document.querySelector('section.cp .pe-auto'), null, { timeout: 8000 })
+      // The block is back where it was, and the undone plan is saved before the clock goes back.
+      await pg.locator('section.cp .pe-block', { hasText: late.title }).first().waitFor({ timeout: 8000 })
+      await new Promise((ok) => setTimeout(ok, 1500))
+    })
+  })
   await step('plan editor: approve one block, drag it, Google and Todoist get the new time, undo', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('today')

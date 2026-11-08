@@ -34,6 +34,8 @@ export interface CheckCtx {
   water?: boolean
   /** The share of the free time that should stay unplanned (My life; default 0.15). */
   freeShare?: number
+  /** Blocks the user just placed: fixPlan treats them as pinned (the others make room). */
+  keep?: string[]
 }
 
 export const DEEP_MAX = 90
@@ -52,7 +54,8 @@ function lastEnd(ctx: CheckCtx): number {
 }
 
 function spans(plan: DayProposal, ctx: CheckCtx): Span[] {
-  const items = planItems(plan).map((b): Span => ({ s: toMin(b.start), e: toMin(b.start) + b.minutes, id: b.id, locked: !!b.locked, fixed: false, deep: deepOf(b), title: b.title }))
+  const keep = new Set(ctx.keep ?? [])
+  const items = planItems(plan).map((b): Span => ({ s: toMin(b.start), e: toMin(b.start) + b.minutes, id: b.id, locked: !!b.locked || keep.has(b.id), fixed: false, deep: deepOf(b), title: b.title }))
   const ev = (ctx.events ?? [])
     .filter((e) => !e.allDay && !e.declined)
     .map((e): Span => ({ s: minOfDay(e.start, plan.day), e: minOfDay(e.end, plan.day), id: `ev:${e.id}`, locked: true, fixed: true, deep: false, title: e.title }))
@@ -118,7 +121,15 @@ export function checkPlan(plan: DayProposal, ctx: CheckCtx): PlanIssue[] {
   }
   // More planned than the free time.
   const from = ctx.now ? toMin(ctx.now) : Math.min(...mine.map((x) => x.s), end)
-  const busy = all.filter((x) => x.fixed && x.e > from && x.s < end).reduce((t, x) => t + Math.min(x.e, end) - Math.max(x.s, from), 0)
+  // Busy time from fixed events, counted once where events overlap (a call inside a work window is not extra).
+  let busy = 0
+  let reach = from
+  for (const x of all.filter((y) => y.fixed && y.e > from && y.s < end)) {
+    const s = Math.max(x.s, reach)
+    const e = Math.min(x.e, end)
+    if (e > s) busy += e - s
+    reach = Math.max(reach, e)
+  }
   const free = Math.max(0, end - from - busy)
   const planned = mine.filter((x) => x.e > from).reduce((t, x) => t + x.e - Math.max(x.s, from), 0)
   if (planned > free + 5) out.push({ code: 'toomuch', text: `${Math.round((planned - free) / 5) * 5} min more than your free time`, ids: [], fixable: false })
@@ -156,7 +167,8 @@ export function fixPlan(raw: DayProposal, ctx: CheckCtx): { plan: DayProposal; f
   const placed: { s: number; e: number; deep: boolean }[] = fixedSpans.map((x) => ({ s: x.s, e: x.e, deep: x.deep }))
   const out = new Map<string, { start: string; minutes: number } | null>()
   // Moveable blocks in time order; each takes the first spot from where it wants to be.
-  const moveable = items.filter((b) => !b.locked).sort((a, b) => a.start.localeCompare(b.start))
+  const held = new Set(ctx.keep ?? [])
+  const moveable = items.filter((b) => !b.locked && !held.has(b.id)).sort((a, b) => a.start.localeCompare(b.start))
   for (const b of moveable) {
     let s = toMin(b.start)
     if (ctx.now) {

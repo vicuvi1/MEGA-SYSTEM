@@ -6485,7 +6485,8 @@ function cleanPrefs$2(p) {
 		weeklyDay: Number.isInteger(p?.weeklyDay) && p.weeklyDay >= 0 && p.weeklyDay <= 6 ? p.weeklyDay : 0,
 		autopilot: HM$9.test(p?.autopilot) ? p.autopilot : DEFAULT_RHYTHM_PREFS.autopilot,
 		water: p?.water !== false,
-		training: p?.training !== false
+		training: p?.training !== false,
+		autoReplan: p?.autoReplan !== false
 	};
 }
 var expiredOf = (b, why) => ({
@@ -7927,6 +7928,17 @@ function packDay(p) {
 		events: p.events,
 		after
 	});
+}
+/** Every task of the day, found in the plan: a must-do, in a block, in "Also today", or deferred. */
+function unaccounted(plan, tasks) {
+	const known = /* @__PURE__ */ new Set([
+		...plan.mustdos.map(key$2),
+		...(plan.also ?? []).map((a) => key$2(a.title)),
+		...(plan.deferred ?? []).map((d) => key$2(d.title)),
+		...plan.blocks.flatMap((b) => (b.tasks ?? []).map(key$2))
+	]);
+	const ids = new Set([...(plan.also ?? []).map((a) => a.id), ...(plan.deferred ?? []).map((d) => d.id)].filter((x) => !!x));
+	return tasks.filter((t) => !(t.id && ids.has(t.id)) && !known.has(key$2(t.content)));
 }
 /**
 * The model's plan, checked against the packer's: every task accounted for
@@ -25410,10 +25422,12 @@ function putItem(plan, id, f) {
 				title: t.title
 			}))
 		}] : p.removed;
+		const dropped = [.../* @__PURE__ */ new Set([...p.dropped ?? [], ...[gone.title, ...gone.tasks ?? []].map(normTitle).filter(Boolean)])];
 		return relinkAlso({
 			...p,
 			blocks,
-			removed
+			removed,
+			dropped
 		});
 	}
 	const { train: _t, ...block } = next;
@@ -25532,6 +25546,32 @@ function applyEdit(plan, e) {
 		case "replace": return ensureIds(e.plan);
 	}
 }
+/** Free gaps (15 min+) between `from` and `to`, around the plan and the calendar's events: where a block can be added. */
+function planGaps(plan, events, from, to, min = 15) {
+	const busy = [...planItems$1(plan).map((b) => ({
+		s: toMin$9(b.start),
+		e: endOf(b)
+	})), ...events.filter((e) => !e.allDay && !e.declined).map((e) => ({
+		s: minOfDay(e.start, plan.day),
+		e: minOfDay(e.end, plan.day)
+	}))].sort((a, b) => a.s - b.s);
+	const out = [];
+	let at = snapUp(toMin$9(from));
+	const end = toMin$9(to);
+	for (const b of busy) {
+		if (b.s - at >= min && at < end) out.push({
+			start: fromMin$2(at),
+			minutes: Math.min(b.s, end) - at
+		});
+		at = Math.max(at, snapUp(b.e));
+	}
+	if (end - at >= min) out.push({
+		start: fromMin$2(at),
+		minutes: end - at
+	});
+	return out.filter((g) => g.minutes >= min);
+}
+var snapUp = (m) => Math.ceil(m / 5) * 5;
 /** Minute of the plan's day for an ISO time (before the day: 0, after it: 24:00). */
 function minOfDay(iso, day) {
 	if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso <= day ? 0 : DAY_END;
@@ -45614,11 +45654,12 @@ function lastEnd(ctx) {
 	return (bed < toMin$9("12:00") ? bed + 1440 : bed) - (ctx.windDown ?? 45);
 }
 function spans(plan, ctx) {
+	const keep = new Set(ctx.keep ?? []);
 	const items = planItems$1(plan).map((b) => ({
 		s: toMin$9(b.start),
 		e: toMin$9(b.start) + b.minutes,
 		id: b.id,
-		locked: !!b.locked,
+		locked: !!b.locked || keep.has(b.id),
 		fixed: false,
 		deep: deepOf(b),
 		title: b.title
@@ -45714,7 +45755,14 @@ function checkPlan(plan, ctx) {
 		});
 	}
 	const from = ctx.now ? toMin$9(ctx.now) : Math.min(...mine.map((x) => x.s), end);
-	const busy = all.filter((x) => x.fixed && x.e > from && x.s < end).reduce((t, x) => t + Math.min(x.e, end) - Math.max(x.s, from), 0);
+	let busy = 0;
+	let reach = from;
+	for (const x of all.filter((y) => y.fixed && y.e > from && y.s < end)) {
+		const s = Math.max(x.s, reach);
+		const e = Math.min(x.e, end);
+		if (e > s) busy += e - s;
+		reach = Math.max(reach, e);
+	}
 	const free = Math.max(0, end - from - busy);
 	const planned = mine.filter((x) => x.e > from).reduce((t, x) => t + x.e - Math.max(x.s, from), 0);
 	if (planned > free + 5) out.push({
@@ -45758,7 +45806,8 @@ function fixPlan(raw, ctx) {
 		deep: x.deep
 	}));
 	const out = /* @__PURE__ */ new Map();
-	const moveable = items.filter((b) => !b.locked).sort((a, b) => a.start.localeCompare(b.start));
+	const held = new Set(ctx.keep ?? []);
+	const moveable = items.filter((b) => !b.locked && !held.has(b.id)).sort((a, b) => a.start.localeCompare(b.start));
 	for (const b of moveable) {
 		let s = toMin$9(b.start);
 		if (ctx.now) {
@@ -45880,6 +45929,186 @@ function fixPlan(raw, ctx) {
 		plan: p,
 		fixed: [...fixed]
 	};
+}
+// src/core/planAudit.ts
+var lower = (s) => s.trim().toLowerCase();
+var inList = (list, t) => !!list?.length && list.includes(normTitle(t));
+var hmOk = (s) => typeof s === "string" && /^\d\d:\d\d$/.test(s);
+/**
+* A task's own time today, when it is a real one: not a time the plan itself
+* gave the task in Todoist when its block was approved (that is not a deadline).
+*/
+function ownTime(t, plan) {
+	if (!hmOk(t.dueTime) || t.due && t.due !== plan.day) return null;
+	return planItems$1(plan).some((b) => (b.sync?.tasks ?? []).some((x) => t.id && x.id === t.id || x.at === t.dueTime)) ? null : t.dueTime;
+}
+/** Is this block allowed to move or leave (not pinned, not approved, not in the calendar)? */
+var loose = (b, keep) => !b.locked && !b.ok && !b.sync?.eventId && !(b.id && keep.has(b.id)) && !b.done?.length;
+/** Free minutes left from `from` to the end of the day (bed minus wind-down), minus fixed events. */
+function overflow(plan, ctx) {
+	const t = checkPlan(plan, ctx).find((i) => i.code === "toomuch");
+	return t ? Number(/(\d+)/.exec(t.text)?.[1] ?? 0) : 0;
+}
+/** A task with a time today ("by 15:00") planned in a block that ends after it. */
+function lateForDue(plan, tasks) {
+	const out = [];
+	for (const t of tasks) {
+		const due = ownTime(t, plan);
+		if (!due) continue;
+		const b = plan.blocks.find((x) => (x.tasks ?? []).some((y) => sameThing(y, t.content)) || !(x.tasks ?? []).length && sameThing(x.title, t.content));
+		if (b && toMin$9(b.start) + b.minutes > toMin$9(due)) out.push({
+			block: b,
+			task: {
+				...t,
+				dueTime: due
+			}
+		});
+	}
+	return out;
+}
+/**
+* Audits (and fixes) a plan. Idempotent: auditing the result again changes nothing.
+*/
+function auditPlan(raw, ctx) {
+	const fixed = /* @__PURE__ */ new Set();
+	const keep = new Set(ctx.keep ?? []);
+	const tasks = (ctx.tasks ?? []).filter((t) => t.content?.trim());
+	const after = ctx.now ? planStartAt(ctx.now) : "00:00";
+	let plan = ensureIds(dedupePlan(ensureIds(raw), {
+		events: ctx.events,
+		after
+	}));
+	const droppedByHand = (t) => inList(plan.dropped, t.content);
+	const closed = new Set(plan.closed ?? []);
+	const missing = unaccounted(plan, tasks).filter((t) => !droppedByHand(t) && !(t.id && closed.has(t.id)));
+	if (missing.length) {
+		const also = [...plan.also ?? []];
+		for (const t of missing) if (!also.some((a) => t.id && a.id === t.id || sameThing(a.title, t.content))) also.push({
+			title: t.content.trim(),
+			minutes: estimateMinutes(t),
+			priority: t.priority ?? 1,
+			...t.id ? { id: t.id } : {},
+			...t.project ? { project: t.project } : {},
+			...t.due && t.due < plan.day ? { overdue: true } : {}
+		});
+		plan = {
+			...plan,
+			also
+		};
+		fixed.add("missing");
+	}
+	if (ctx.fixTimes !== false) {
+		for (const { block, task } of lateForDue(plan, tasks)) {
+			if (!loose(block, keep)) continue;
+			const from = ctx.now ? planStartAt(ctx.now) : "00:00";
+			const gap = planGaps({
+				...plan,
+				blocks: plan.blocks.filter((b) => b.id !== block.id)
+			}, ctx.events ?? [], from, task.dueTime, block.minutes).find((g) => g.minutes >= block.minutes);
+			if (!gap) continue;
+			plan = {
+				...plan,
+				blocks: plan.blocks.map((b) => b.id === block.id ? {
+					...b,
+					start: gap.start
+				} : b).sort((a, b) => a.start.localeCompare(b.start))
+			};
+			fixed.add("deadline");
+		}
+		const r = fixPlan(plan, ctx.fixPast === false ? {
+			...ctx,
+			now: null
+		} : ctx);
+		plan = r.plan;
+		r.fixed.forEach((f) => fixed.add(f));
+		if (ctx.now) {
+			const must = new Set(plan.mustdos.map(lower));
+			const rank = (b) => [b.title, ...b.tasks ?? []].some((t) => must.has(lower(t))) ? 2 : b.kind === "goal" ? 1 : 0;
+			for (let guard = 0; guard < 20 && overflow(plan, ctx) > 0; guard++) {
+				const nowM = toMin$9(ctx.now);
+				const cand = plan.blocks.filter((b) => loose(b, keep) && toMin$9(b.start) + b.minutes > nowM).sort((a, b) => rank(a) - rank(b) || b.start.localeCompare(a.start))[0];
+				if (!cand) break;
+				plan = toList(plan, cand);
+				fixed.add("trim");
+			}
+		}
+	}
+	plan = relinkAlso(dedupePlan(plan, {
+		events: ctx.events,
+		after
+	}));
+	const issues = [...checkPlan(plan, ctx)];
+	for (const { block, task } of lateForDue(plan, tasks)) issues.push({
+		code: "late",
+		text: `${task.content} is due ${task.dueTime}, planned ${block.start}`,
+		ids: [block.id],
+		fixable: false
+	});
+	const left = leftTasks(plan, tasks);
+	return {
+		plan,
+		fixed: [...fixed],
+		issues,
+		left,
+		line: auditLine(left)
+	};
+}
+/** A block leaves the plan; its tasks (or its title) go on today's list without a time. */
+function toList(plan, b) {
+	const also = [...plan.also ?? []];
+	const must = new Set(plan.mustdos.map(lower));
+	const items = b.tasks?.length ? b.tasks : [b.title];
+	for (const t of items) if (!must.has(lower(t)) && !also.some((a) => sameThing(a.title, t))) also.push({
+		title: t,
+		minutes: Math.round(b.minutes / items.length),
+		priority: 1
+	});
+	return relinkAlso({
+		...plan,
+		blocks: plan.blocks.filter((x) => x !== b),
+		also
+	});
+}
+/** Every task of today without a block, with the reason (the plan's lists, then Todoist's). */
+function leftTasks(plan, tasks = []) {
+	const out = [];
+	const closed = new Set(plan.closed ?? []);
+	const inBlock = (t) => planItems$1(plan).some((b) => (b.tasks ?? []).some((x) => sameThing(x, t)) || sameThing(b.title, t));
+	const seen = (t, id) => out.some((x) => id && x.id === id || sameThing(x.title, t));
+	const waiting = plan.squeeze?.keep;
+	const add = (title, id, why, text) => {
+		if (!title.trim() || seen(title, id) || id && closed.has(id)) return;
+		out.push({
+			title: title.trim(),
+			...id ? { id } : {},
+			why,
+			text
+		});
+	};
+	for (const m of plan.mustdos) {
+		if (inBlock(m)) continue;
+		const a = (plan.also ?? []).find((x) => sameThing(x.title, m));
+		const t = tasks.find((x) => sameThing(x.content, m));
+		if (a?.event) add(m, a.id ?? t?.id, "event", `at the ${a.event} event`);
+		else if (waiting && sameThing(waiting, m)) add(m, a?.id ?? t?.id, "waiting", "waiting on you");
+		else add(m, a?.id ?? t?.id, "room", "no room today");
+	}
+	for (const a of alsoOpen(plan)) {
+		if (inBlock(a.title)) continue;
+		if (a.event) add(a.title, a.id, "event", `at the ${a.event} event`);
+		else if (waiting && sameThing(waiting, a.title)) add(a.title, a.id, "waiting", "waiting on you");
+		else add(a.title, a.id, "room", "no room today");
+	}
+	for (const d of plan.deferred ?? []) add(d.title, d.id, "tomorrow", d.why || "tomorrow");
+	return out;
+}
+/** The card's one plain line about what has no room (null: everything has a place). */
+function auditLine(left) {
+	const room = left.filter((l) => l.why === "room");
+	if (!room.length) return null;
+	if (room.length === 1) return `1 task didn't fit: ${room[0].title}. Move it to tomorrow?`;
+	const names = room.slice(0, 2).map((r) => r.title).join(", ");
+	return `${room.length} tasks didn't fit: ${names}${room.length > 2 ? ` +${room.length - 2} more` : ""}. Move them to tomorrow?`;
 }
 // src/renderer/src/web/rhythmBot.ts
 var TOP3_ASK = "week_top3_ask";
@@ -46427,10 +46656,13 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			bedtime: base.bed,
 			freeShare: base.freeShare
 		}).plan);
-		plan = dedupePlan(plan, {
+		plan = auditPlan(plan, {
+			now: hmNow(/* @__PURE__ */ new Date()),
 			events: calEvents.filter((e) => !keptIds.has(e.id) && !removedIds.has(e.id)),
-			after: planStartAt(hmNow(/* @__PURE__ */ new Date()))
-		});
+			bedtime: base.bed,
+			freeShare: base.freeShare,
+			tasks: planTasks
+		}).plan;
 		const made = await mirror.write((db) => {
 			const st = load(db, plan.day);
 			const version = (st.briefing?.version ?? 0) + 1;

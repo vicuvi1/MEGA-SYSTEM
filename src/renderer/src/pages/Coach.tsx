@@ -1517,6 +1517,9 @@ function RhythmSettings() {
           <label className="co-check">
             <input type="checkbox" checked={prefs.training} onChange={(e) => void save({ training: e.target.checked })} /> Training nudge
           </label>
+          <label className="co-check" title="When the day changes (a block runs long, a task comes in, an event moves), the draft part of the plan moves by itself, with a short note and Undo. Approved and pinned blocks never move. Off: Ben asks 'Shift the plan?' instead.">
+            <input type="checkbox" data-auto-replan checked={prefs.autoReplan !== false} onChange={(e) => void save({ autoReplan: e.target.checked })} /> Re-plan by itself
+          </label>
         </div>
       )}
     </section>

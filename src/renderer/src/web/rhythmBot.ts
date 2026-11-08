@@ -60,9 +60,10 @@ import { prefDuration } from '@core/benFacts'
 import { promisesFor, type PromiseReminder } from '@core/benPromise'
 import { learnedRhythm, loadKnow } from './benMind'
 import { ensureIds, keptAsEvents, mergeKept, replanFromNow, TRAIN_ID } from '@core/planEdit'
-import { dedupePlan, eventFor, fixedAhead, sameThing } from '@core/planDedupe'
+import { eventFor, fixedAhead, sameThing } from '@core/planDedupe'
 import { eventNotes } from '@core/planSync'
 import { fixPlan } from '@core/planCheck'
+import { auditPlan } from '@core/planAudit'
 import { blockLook, lookTitle, planEventId, sameTitle } from '@core/planLook'
 import { trainSlotInput } from '../../../main/bodyPlus'
 
@@ -526,8 +527,9 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
     plan = mergeKept(relinkAlso(plan), prevPlan)
     // QA1: Ben checks his own plan before it is saved (overlaps, breaks, the wind-down, past blocks).
     plan = relinkAlso(fixPlan(plan, { now: hmNow(new Date()), events: calEvents.filter((e) => !keptIds.has(e.id)), bedtime: base.bed, freeShare: base.freeShare }).plan)
-    // One thing = one block, whatever made the plan (the packer, the model, last night's draft, kept blocks).
-    plan = dedupePlan(plan, { events: calEvents.filter((e) => !keptIds.has(e.id) && !removedIds.has(e.id)), after: planStartAt(hmNow(new Date())) })
+    // The plan audit: one thing = one block (whatever made the plan), every task of today somewhere
+    // (a task the plan lost goes back on the list), not more work than free time, due times kept.
+    plan = auditPlan(plan, { now: hmNow(new Date()), events: calEvents.filter((e) => !keptIds.has(e.id) && !removedIds.has(e.id)), bedtime: base.bed, freeShare: base.freeShare, tasks: planTasks }).plan
     const made = await mirror.write((db) => {
       const st = load(db, plan.day)
       const version = (st.briefing?.version ?? 0) + 1
