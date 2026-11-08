@@ -1971,6 +1971,151 @@ try {
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'suggest' && a.answer === 'later'), null, { timeout: 3000 })
     await ip.context().close()
   })
+  // Island v2 (core/islandLive.ts, islandInstant.ts, islandScrub.ts, islandDrop.ts; src/renderer/src/island/):
+  // the pill morphs open, two live things share the pill, instant buttons log once with Undo, a counter
+  // changes with the wheel, a dropped link goes to Task or Note, and no stale label sits on a new card.
+  await step('Desktop island v2: morph opens, split pill with timer and music, +25 push-ups logs once with Undo, scroll changes the number, a dropped link becomes a note or a task, the eye card has no label on it', async () => {
+    const shots = process.env.ISLANDV2_SHOTS
+    const ctx = await browser.newContext({ viewport: { width: 640, height: 460 }, deviceScaleFactor: 2 })
+    const ip = await ctx.newPage()
+    ip.on('pageerror', (e) => errors.push(`island v2: ${e.message}`))
+    await ip.route(/soundcloud\.com/, (r) => r.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>player</title>' }))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const snap = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        running: { subject: 'Write the essay', startedAt: now - 5 * 60_000, endsAt: now + 20 * 60_000 },
+        now: null, next: null, mustdos: [], water: { ml: 500, target: 2000 }, alert: null,
+        reps: [{ id: 'pu', name: 'Push-ups', done: 10, target: 100 }]
+      }
+      // The SoundCloud frame never loads here; a stand-in widget says "playing".
+      let fire = {}
+      window.SC = { Widget: Object.assign(() => ({
+        bind: (ev, fn) => { fire[ev] = fn; if (ev === 'ready') setTimeout(fn, 20) },
+        play: () => setTimeout(() => fire.play?.(), 10), pause: () => fire.pause?.(), setVolume: () => {}, load: () => {},
+        getCurrentSound: (cb) => cb({ title: 'Made-up track', permalink_url: 'https://soundcloud.com/someone/a-track', user: { username: 'Someone' }, duration: 180000 }),
+        getCurrentSoundIndex: (cb) => cb(0), getSounds: (cb) => cb([])
+      }), { Events: { READY: 'ready', PLAY: 'play', PAUSE: 'pause', FINISH: 'finish', ERROR: 'error', PLAY_PROGRESS: 'progress', SEEK: 'seek' } }) }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {}, islandTakeClicks: () => {},
+        islandAction: (a) => { window.__island.actions.push(a) },
+        setIslandPrefs: async () => null,
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandAck: on('ack'),
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill.kind-timer', { timeout: 15000 })
+    const shot = async (name, sel, pad = 14) => {
+      if (!shots) return
+      const b = await ip.locator(sel).first().boundingBox()
+      if (b) await ip.screenshot({ path: `${shots}/${name}.png`, clip: { x: Math.max(0, b.x - pad), y: 0, width: Math.min(640 - Math.max(0, b.x - pad), b.width + pad * 2), height: b.y + b.height + pad } })
+    }
+    if (shots) await ip.addStyleTag({ content: "body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(160deg, #2a3140, #12151c); }" })
+    // The morph: the same shape grows from the pill into the panel and back (one spring, clip-path).
+    const pillBox = await ip.locator('.di-shape').boundingBox()
+    await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel', { timeout: 5000 })
+    await ip.waitForTimeout(700)
+    const openBox = await ip.locator('.di-shape').boundingBox()
+    if (!pillBox || !openBox || openBox.width < pillBox.width * 1.5 || openBox.height < pillBox.height * 3) throw new Error(`the island did not morph open: ${JSON.stringify(pillBox)} → ${JSON.stringify(openBox)}`)
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 })
+    // Music starts: the pill splits, the timer left and the music right.
+    await ip.evaluate(() => new BroadcastChannel('life-music').postMessage({ t: 'cmd', c: { op: 'play', station: { id: 'x', name: 'Lofi', url: 'https://soundcloud.com/someone/sets/lofi' } } }))
+    await ip.waitForSelector('.di-pill.is-split .v2-lobe-left[data-kind="timer"]', { timeout: 6000 })
+    await ip.waitForSelector('.di-pill.is-split .v2-lobe-right[data-kind="music"]', { timeout: 6000 })
+    const lobes = await ip.$$eval('.di-pill.is-split .v2-lobe', (ls) => ls.map((l) => l.textContent))
+    if (lobes.length !== 2 || !/Write the essay/.test(lobes[0]) || !/\d+:\d\d/.test(lobes[0]) || !/Made-up track/.test(lobes[1])) throw new Error(`the split pill shows ${JSON.stringify(lobes)}`)
+    if (await ip.$('.di-beside > *')) throw new Error('the split pill also drew a bubble beside it')
+    await ip.mouse.move(620, 440)
+    await ip.waitForTimeout(600)
+    await shot('split-pill', '.di-shape', 18)
+    // Hover: the peek with the live timer, the music row and the instant buttons.
+    await ip.evaluate(() => window.__island.send('hover', true))
+    await ip.waitForSelector('.di-peek .v2-instant [data-instant="push25"]', { timeout: 4000 })
+    await ip.waitForTimeout(700)
+    await shot('open-island-live', '.di-shape', 18)
+    // +25 push-ups: one click (even a double-click) logs once, through the usual reps action.
+    await ip.evaluate(() => { window.__island.actions = [] })
+    await ip.dblclick('.di-peek [data-instant="push25"]')
+    await ip.waitForTimeout(600)
+    const reps = await ip.evaluate(() => window.__island.actions.filter((a) => a.kind === 'reps'))
+    if (reps.length !== 1 || reps[0].n !== 25 || reps[0].name !== 'Push-ups') throw new Error(`+25 push-ups sent ${JSON.stringify(reps)}`)
+    // The app says it worked: Undo shows, and takes it back through the usual undo.
+    await ip.evaluate((id) => window.__island.send('ack', { id, ok: true, text: '✓ +25 Push-ups' }), reps[0].id)
+    await ip.waitForSelector('.di-toast.ok .di-undo', { timeout: 3000 })
+    await ip.click('.di-toast .di-undo')
+    await ip.waitForFunction((id) => window.__island.actions.some((a) => a.kind === 'undo' && a.of === id), reps[0].id, { timeout: 3000 })
+    // Scroll on the counter: 25 → 37 in twelve notches, then a click logs 37.
+    const scrub = ip.locator('.di-peek [data-scrub="reps"]')
+    const sb = await scrub.boundingBox()
+    await ip.mouse.move(sb.x + sb.width / 2, sb.y + sb.height / 2)
+    for (let i = 0; i < 12; i++) await ip.mouse.wheel(0, -40)
+    await ip.waitForFunction(() => document.querySelector('.di-peek [data-scrub="reps"]')?.getAttribute('data-value') === '37', null, { timeout: 3000 })
+    await ip.waitForTimeout(500)
+    await ip.evaluate(() => { window.__island.actions = [] })
+    await scrub.click()
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'reps' && a.n === 37), null, { timeout: 3000 })
+    // Drop a link: the pill grows into Task | Note; the half under the pointer is where it goes.
+    await ip.evaluate(() => window.__island.send('hover', false))
+    await ip.mouse.move(620, 440)
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
+    await ip.waitForTimeout(1200)
+    const drag = (type, side) => ip.evaluate(([type, side]) => {
+      const dt = new DataTransfer()
+      dt.setData('text/uri-list', 'https://example.com/a-good-read')
+      dt.setData('text/plain', 'https://example.com/a-good-read')
+      const sh = document.querySelector('.di-shape').getBoundingClientRect()
+      const x = side === 'task' ? sh.left + sh.width * 0.2 : sh.left + sh.width * 0.8
+      const el = document.elementFromPoint(x, sh.top + sh.height / 2) ?? document.querySelector('.di-shape')
+      el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt, clientX: x, clientY: sh.top + sh.height / 2 }))
+    }, [type, side])
+    for (const to of ['note', 'task']) {
+      await ip.evaluate(() => { window.__island.actions = [] })
+      await drag('dragover', to)
+      await ip.waitForSelector('[data-drop-zone]', { timeout: 3000 })
+      await ip.waitForTimeout(500)
+      await drag('dragover', to)
+      await ip.waitForSelector(`.v2-drop-t.on[data-drop-target="${to}"]`, { timeout: 3000 })
+      if (to === 'note') await shot('drop-zone', '.di-shape', 18)
+      await drag('drop', to)
+      await ip.waitForFunction((to) => window.__island.actions.some((a) => a.kind === 'clipSave' && a.to === to && a.text.includes('https://example.com/a-good-read')), to, { timeout: 3000 })
+      await ip.waitForSelector('[data-drop-zone]', { state: 'detached', timeout: 3000 })
+      await ip.waitForTimeout(400)
+    }
+    const saved = await ip.evaluate(() => window.__island.actions.find((a) => a.kind === 'clipSave')?.text)
+    if (!/^Read: example\.com\/a-good-read/.test(saved)) throw new Error(`the dropped link as a task reads "${saved}"`)
+    // A water tap (its label still saying "Saving…"), then the eye card: the label never sits on the card.
+    // No 3-minute gap between the two cards, for the test.
+    await ip.evaluate(() => window.__island.send('prefs', { mode: 'lively', gapMin: 0 }))
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now(), alert: { id: 'water:v2', kind: 'water', title: 'Water', text: 'A glass of water?', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
+    await ip.waitForSelector('.di-peek.alert.kind-water', { timeout: 5000 })
+    await ip.waitForTimeout(400)
+    await ip.click('.di-peek.alert .di-actions button')
+    await ip.waitForSelector('.di-toast', { timeout: 3000 })
+    await ip.mouse.move(620, 440)
+    await ip.waitForTimeout(900)
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 2, alert: { id: 'eyes:v2', kind: 'eyes', face: '👀', title: '20-20-20', text: 'Look 6 m away for 20 seconds.', actions: [], nudge: { type: 'timer', kind: 'eyes', seconds: 20, postponed: 0, snooze: [] } } }))
+    await ip.waitForSelector('.di-peek.alert.kind-eyes [data-tap="nd:eyes:v2:go"]', { timeout: 6000 })
+    await ip.waitForTimeout(900)
+    const overlap = await ip.evaluate(() => {
+      const card = document.querySelector('.di-peek.alert.kind-eyes')?.getBoundingClientRect()
+      const t = document.querySelector('.di-toast')?.getBoundingClientRect()
+      if (!card) return 'no card'
+      if (!t) return null
+      if (/water/i.test(document.querySelector('.di-toast').textContent)) return 'the water tap\'s label is still showing on the eye card'
+      return t.top < card.bottom + 2 && t.bottom > card.top ? `toast ${Math.round(t.top)}–${Math.round(t.bottom)} over card ${Math.round(card.top)}–${Math.round(card.bottom)}` : null
+    })
+    if (overlap) throw new Error(`a label sits on the eye card: ${overlap}`)
+    await shot('notification-eye-card', '.di-shape', 18)
+    await ctx.close()
+  })
   await step('Island visuals: dayState class, orbit dots, Ben face, hover peek shows the next 3 hours, a swipe logs water, the story can be skipped', async () => {
     const shots = process.env.ALIVE_SHOTS
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()

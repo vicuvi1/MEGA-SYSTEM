@@ -126,8 +126,31 @@ export function usePillMusic(music?: MusicKit): { playing: boolean; title: strin
   return { playing: !!s.playing, title: s.title || s.station.name }
 }
 
+/**
+ * Island v2: what plays now with its controls and album colour, from the
+ * same source as the pill (the island's own SoundCloud, or the desktop's
+ * SoundCloud view). Null when nothing is loaded.
+ */
+export function useIslandNowPlaying(music?: MusicKit): { s: ScState; playing: boolean; title: string; artist: string; artwork: string; rgb: string; fromArt: boolean; toggle: () => void; next: () => void; prev: () => void } | null {
+  const { s, web } = usePillSc(music)
+  const tint = useTint(s, '#d4ff3f')
+  if (!s.loaded || !s.station) return null
+  return {
+    s,
+    playing: !!s.playing,
+    title: s.title || s.station.name,
+    artist: s.artist || s.station.name,
+    artwork: s.artwork,
+    rgb: `${tint.rgb.r} ${tint.rgb.g} ${tint.rgb.b}`,
+    fromArt: tint.fromArt,
+    toggle: () => (uiTick(), web ? void scWebOp('op', 'toggle') : sc.toggle()),
+    next: () => (uiTick(), web ? void scWebOp('op', 'next') : sc.next()),
+    prev: () => (uiTick(), web ? void scWebOp('op', 'prev') : sc.prev())
+  }
+}
+
 /** The artwork in a progress ring (the pill's and the peek's). */
-function RingArt({ size = 24, s }: { size?: number; s: ScState }) {
+export function RingArt({ size = 24, s }: { size?: number; s: ScState }) {
   useTicker(s.playing, 5000)
   const p = s.dur ? Math.min(1, posNow(s) / s.dur) : 0
   const r = size / 2 - 1.5
@@ -173,10 +196,12 @@ export function ScPeekRow({ music }: { music?: MusicKit } = {}) {
   const { s, web } = usePillSc(music)
   const toggle = () => (web ? void scWebOp('op', 'toggle') : sc.toggle())
   const next = () => (web ? void scWebOp('op', 'next') : sc.next())
+  const prev = () => (web ? void scWebOp('op', 'prev') : sc.prev())
   const tint = useTint(s, '#d4ff3f')
   if (!s.loaded || !s.station) return null
   return (
-    <div className="di-mu-peek mu" style={tintStyle(tint.rgb, s)} onPointerDown={(e) => e.stopPropagation()}>
+    // Island v2: previous / play-pause / next, and a glow in the album's colour while it plays.
+    <div className={`di-mu-peek mu ${s.playing ? 'v2-glow' : ''}`} style={tintStyle(tint.rgb, s)} onPointerDown={(e) => e.stopPropagation()}>
       <RingArt size={34} s={s} />
       <div className="mid">
         <Scroller text={s.title || s.station.name} className="t" />
@@ -184,6 +209,9 @@ export function ScPeekRow({ music }: { music?: MusicKit } = {}) {
           <Eq on={s.playing} /> {s.artist || s.station.name}
         </small>
       </div>
+      <button className="mu-ic" aria-label="Previous" {...tp('mu:peek:prev', () => (uiTick(), prev()))}>
+        <MuIcon d="prev" size={15} fill />
+      </button>
       <button className="mu-ic" aria-label={s.playing ? 'Pause' : 'Play'} {...tp('mu:peek:toggle', () => (uiTick(), toggle()))}>
         {s.playing ? <MuIcon d="pause" size={15} /> : <svg width={14} height={14} viewBox="0 0 24 24" aria-hidden><path d="M8 5.5v13l10.5-6.5z" fill="currentColor" /></svg>}
       </button>

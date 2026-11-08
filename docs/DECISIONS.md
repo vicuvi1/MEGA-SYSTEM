@@ -210,3 +210,13 @@ entry that says why.
   click passes through the island, so Chromium never unlocked its audio; eye breaks were off twice.
 - **Rules out:** relying on a user gesture for island audio; playing a reminder sound when the card
   waits as a dot, in a call, focus, class, quiet hours or after bed; ringing the same card twice.
+
+### Island looks come from one adapter; island buttons use the existing actions (2026-11-08)
+- **Decision:** the island reads every look and widget switch through `src/renderer/src/island/lookAdapter.ts`
+  (types and cleaning in `core/islandLooks.ts`); the Custom Center plugs in with one `setLookSource` call.
+  Instant buttons, counters and the drop zone send only the existing `reps`, `water`, `start`, `clipSave`
+  and `undo` actions.
+- **Why:** the Custom Center is built in parallel, and island taps must keep the same pay rules, caps and
+  Undo as everywhere else.
+- **Rules out:** the island importing `src/core/custom/*` directly, an island-only way to log reps or water,
+  or new points for island taps.
