@@ -79,16 +79,24 @@ describe('the plan audit: every task has a place', () => {
     expect(auditPlan(past, { now: '09:00', bedtime: '23:00', fixPast: false }).plan.blocks[0].start).toBe('07:00')
   })
 
-  it('more work than free time: the last draft blocks go on the list, pinned and approved ones stay', () => {
+  it('more work than free time: only the minimum gives way (shortened first), pinned and approved ones stay', () => {
     const p = mk([b('Essay outline', '19:00', 90, { locked: true }), b('Maths set', '20:40', 60), b('Read chapter 3', '21:50', 30, { ok: true, sync: { eventId: 'e1', start: '21:50', minutes: 30, title: 'Read chapter 3' } })])
     expect(checkPlan(p, { now: '19:00', bedtime: '22:30' }).some((i) => i.code === 'toomuch')).toBe(true)
     const a = auditPlan(p, { now: '19:00', bedtime: '22:30' })
     expect(checkPlan(a.plan, { now: '19:00', bedtime: '22:30' }).some((i) => i.code === 'toomuch')).toBe(false)
     expect(a.plan.blocks.map((x) => x.title)).toContain('Essay outline')
     expect(a.plan.blocks.map((x) => x.title)).toContain('Read chapter 3')
-    // Nothing lost: the trimmed task is on the list and in the line.
-    expect(everywhere(a.plan)).toContain('maths set')
-    expect(a.line).toMatch(/Maths set/)
+    // The draft is shortened by just what is too much (15 min), not taken off.
+    expect(a.plan.blocks.find((x) => x.title === 'Maths set')?.minutes).toBe(45)
+    expect(a.line).toBeNull()
+  })
+
+  it('when shortening is not enough the least important draft leaves (to the list); must-dos never do', () => {
+    const p = mk([b('Lab report', '19:00', 60), b('Maths set', '20:10', 30), b('Read chapter 3', '20:50', 30, { kind: 'quick' })], { mustdos: ['Lab report'] })
+    const a = auditPlan(p, { now: '19:00', bedtime: '21:30' })
+    expect(a.plan.blocks.map((x) => x.title)).toContain('Lab report')
+    expect(everywhere(a.plan)).toContain('read chapter 3')
+    expect(a.left.some((l) => l.title === 'Read chapter 3' && l.why === 'room')).toBe(true)
   })
 
   it('bad case: a call inside a work window was counted twice as busy, so a light plan looked "too much"', () => {

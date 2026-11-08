@@ -13,7 +13,7 @@
 // result changes nothing (no flip-flop). What doesn't fit goes on today's list
 // and shows in the audit line. Only the plan changes; drafts don't sync.
 import { estimateMinutes, planStartAt, relinkAlso } from './dayPacker'
-import { auditPlan, type AuditCtx, type AuditTask } from './planAudit'
+import { auditPlan, blockRank, type AuditCtx, type AuditTask } from './planAudit'
 import { normTitle, sameThing } from './planDedupe'
 import { ensureIds, isApproved, minOfDay, planItems } from './planEdit'
 import type { Span } from './planShift'
@@ -50,7 +50,7 @@ export interface AutoResult {
   note: string | null
 }
 
-type Busy = { s: number; e: number; why: string }
+type Busy = { s: number; e: number; why: string; id?: string }
 
 const GRACE = 10
 const GAP = 10
@@ -123,11 +123,11 @@ export function autoReplan(raw: DayProposal, status: 'proposed' | 'approved', ct
     }
   }
   // Blocks that stay are busy too (the moved ones go around them).
-  for (const b of loose) if (!go.has(b.id!)) busy.push({ s: toMin(b.start), e: toMin(b.start) + b.minutes, why: '' })
+  for (const b of loose) if (!go.has(b.id!)) busy.push({ s: toMin(b.start), e: toMin(b.start) + b.minutes, why: '', id: b.id })
 
   const lower = (s: string) => s.trim().toLowerCase()
   const must = new Set(plan.mustdos.map(lower))
-  const rank = (b: PlanBlock) => ([b.title, ...(b.tasks ?? [])].some((t) => must.has(lower(t))) ? 0 : b.kind === 'goal' ? 1 : b.kind === 'quick' ? 3 : 2)
+  const rank = (b: PlanBlock) => blockRank(b, plan, ctx.tasks)
   const moving = loose.filter((b) => go.has(b.id!)).sort((a, b) => rank(a) - rank(b) || a.start.localeCompare(b.start) || a.id!.localeCompare(b.id!))
 
   // The first free spot from now for `minutes` (10 minutes from anything busy), or null.
@@ -159,27 +159,75 @@ export function autoReplan(raw: DayProposal, status: 'proposed' | 'approved', ct
   const why = new Map<string, string>()
   let blocks = [...plan.blocks]
   const also = [...(plan.also ?? [])]
-  for (const b of moving) {
+  // Free minutes left today (windows of 25 min+). When what has to move is more than that, each moving
+  // block is capped at an hour first, so the important ones all keep a block instead of one taking it all.
+  const freeLeft = (): number => {
+    const sorted = [...busy].sort((a, b) => a.s - b.s)
+    let at = Math.ceil(s0 / 5) * 5
+    let total = 0
+    for (const x of [...sorted, { s: endM + GAP, e: endM + GAP, why: '' }]) {
+      if (x.e + GAP <= at) continue
+      const room = Math.floor((Math.min(x.s - GAP, endM) - at) / 5) * 5
+      if (room >= 25) total += room
+      at = Math.max(at, Math.ceil((x.e + GAP) / 5) * 5)
+    }
+    return total
+  }
+  const crowded = moving.reduce((t, b) => t + b.minutes, 0) > freeLeft()
+  const want = (b: PlanBlock) => (crowded ? Math.min(b.minutes, 60) : b.minutes)
+  const offList = (b: PlanBlock) => {
+    blocks = blocks.filter((x) => x.id !== b.id)
+    const names = b.tasks?.length ? b.tasks : [b.title]
+    for (const t of names) if (!must.has(lower(t)) && !also.some((a) => sameThing(a.title, t))) also.push({ title: t, minutes: Math.round(b.minutes / names.length), priority: 1 })
+  }
+  for (const b0 of moving) {
+    const b = { ...b0, minutes: want(b0) }
     let at = spot(b.minutes)
     let minutes = b.minutes
+    // Shortened, when it keeps at least half of it (and 25 min).
+    if (at == null) {
+      const big = biggest()
+      if (big && big.minutes >= Math.max(25, b.minutes / 2)) {
+        at = big.at
+        minutes = Math.min(b.minutes, big.minutes)
+      }
+    }
+    // Still no room: a less important draft that stays gives way (the least important, latest first).
+    if (at == null) {
+      const losers = loose.filter((x) => !go.has(x.id!) && blocks.some((y) => y.id === x.id) && rank(x) > rank(b)).sort((x, y) => rank(y) - rank(x) || y.start.localeCompare(x.start))
+      for (const l of losers) {
+        const i = busy.findIndex((x) => x.id === l.id)
+        if (i < 0) continue
+        const [held] = busy.splice(i, 1)
+        const fit = spot(b.minutes)
+        const big = fit == null ? biggest() : null
+        if (fit != null || (big && big.minutes >= Math.max(25, b.minutes / 2))) {
+          at = fit ?? big!.at
+          minutes = fit != null ? b.minutes : Math.min(b.minutes, big!.minutes)
+          offList(l)
+          moves.push({ id: l.id!, title: l.title, from: l.start, to: null })
+          why.set(l.id!, `to make room for ${q(b.title)}`)
+          break
+        }
+        busy.splice(i, 0, held)
+      }
+    }
     if (at == null) {
       const big = biggest()
       if (big) {
         at = big.at
-        minutes = big.minutes
+        minutes = Math.min(b.minutes, big.minutes)
       }
     }
     if (at == null) {
       // No room left today: off the plan, its tasks on today's list (the audit line offers tomorrow).
-      blocks = blocks.filter((x) => x.id !== b.id)
-      const names = b.tasks?.length ? b.tasks : [b.title]
-      for (const t of names) if (!must.has(lower(t)) && !also.some((a) => sameThing(a.title, t))) also.push({ title: t, minutes: Math.round(b.minutes / names.length), priority: 1 })
+      offList(b)
       moves.push({ id: b.id!, title: b.title, from: b.start, to: null })
       why.set(b.id!, go.get(b.id!)!)
       continue
     }
     busy.push({ s: at, e: at + minutes, why: '' })
-    if (fromMin(at) === b.start && minutes === b.minutes) continue
+    if (fromMin(at) === b.start && minutes === b0.minutes) continue
     blocks = blocks.map((x) => (x.id === b.id ? { ...x, start: fromMin(at!), minutes } : x))
     moves.push({ id: b.id!, title: b.title, from: b.start, to: fromMin(at) })
     why.set(b.id!, go.get(b.id!)!)

@@ -179,8 +179,17 @@ export function undoLast(): string | null {
   if (!e) return null
   void save(rebase(e.before, cur.plan))
   sender.poke()
+  // An edit that also changed something outside the plan (Move to tomorrow: Todoist's date) takes that back too.
+  const back = outside.get(e.after)
+  if (back) {
+    outside.delete(e.after)
+    void back()
+  }
   return e.label
 }
+
+/** Undo for what an edit changed outside the plan, by the edit's plan. */
+const outside = new WeakMap<DayProposal, () => Promise<void>>()
 
 // ---- The audit's "Move to tomorrow" and Re-plan by itself ---------------------------
 
@@ -200,10 +209,21 @@ export function setContext(c: Ctx) {
 export function moveTomorrow(items: LeftTask[]): string | null {
   if (!cur || !items.length) return null
   const label = items.length === 1 ? `Moved ${items[0].title} to tomorrow` : `Moved ${items.length} tasks to tomorrow`
+  // Each Todoist task's date before the move, so Undo can put it back exactly.
+  const was = new Map((todayTasks?.list ?? []).map((t) => [t.id, t.due] as const))
   const l = edit({ op: 'replace', plan: moveToTomorrow(cur.plan, items), label })
-  if (!l) return null
-  const tomorrow = addDays(cur.plan.day, 1)
-  for (const x of items) if (x.id) void life.todoist?.update?.(x.id, { due: tomorrow }).catch(() => say({ text: `Todoist didn't take the new date for ${x.title}`, tone: 'bad' }))
+  if (!l || !cur) return null
+  const day = cur.plan.day
+  const tomorrow = addDays(day, 1)
+  const ids = items.filter((x) => x.id)
+  for (const x of ids) void life.todoist?.update?.(x.id!, { due: tomorrow }).catch(() => say({ text: `Todoist didn't take the new date for ${x.title}`, tone: 'bad' }))
+  if (ids.length)
+    outside.set(cur.plan, async () => {
+      let failed = 0
+      for (const x of ids) await life.todoist?.update?.(x.id!, { due: was.get(x.id!) || day }).catch(() => failed++)
+      todayTasks = null
+      say(failed ? { text: `Undone in the plan, but Todoist still has tomorrow for ${failed} task${failed === 1 ? '' : 's'}`, tone: 'bad' } : { text: 'Todoist has today again', tone: 'info' })
+    })
   todayTasks = null
   return l
 }

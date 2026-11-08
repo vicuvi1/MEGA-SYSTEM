@@ -840,7 +840,9 @@ try {
     if ((await card.locator('.pa-list li').count()) < 3) throw new Error('Also today lists too few tasks')
     // One thing = one row: a task in a block is not listed again in "Also today".
     const alsoRows = await card.locator('.pa-list li .pa-tx').allInnerTexts()
-    if (alsoRows.some((t) => /Pay the internet bill|Read chapter 4|in the \d\d:\d\d block/.test(t))) throw new Error('a task in a block is listed again in Also today')
+    // (Re-plan by itself may have taken a small-tasks block off this crowded made-up day: then its task is listed, once.)
+    const blockTasks = (await card.locator('.pe-block .pe-task span').allInnerTexts()).map((t) => t.trim())
+    if (alsoRows.some((t) => /in the \d\d:\d\d block/.test(t) || blockTasks.some((bt) => bt && t.startsWith(bt)))) throw new Error('a task in a block is listed again in Also today')
     if (!(await card.locator('.pa-later').count())) throw new Error('no tasks moved to tomorrow with a reason')
     if (process.env.PLAN_SHOTS) {
       await pg.setViewportSize({ width: 1440, height: 2300 })

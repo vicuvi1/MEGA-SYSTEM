@@ -72,6 +72,22 @@ function ownTime(t: AuditTask, plan: DayProposal): string | null {
   return ours ? null : t.dueTime
 }
 
+/**
+ * How much a block matters today (lower first): a must-do or what you asked
+ * for, then overdue / P1–P2 / a task with its own time today, then goal time,
+ * then other focus work, then small tasks. Used to keep the important work in
+ * blocks when the day is too full: the least important block gives way first.
+ */
+export function blockRank(b: PlanBlock, plan: DayProposal, tasks: AuditTask[] = []): number {
+  const names = [b.title, ...(b.tasks ?? [])]
+  const also = (t: string) => (plan.also ?? []).find((a) => sameThing(a.title, t))
+  const todo = (t: string) => tasks.find((x) => sameThing(x.content, t))
+  if (names.some((t) => plan.mustdos.some((m) => sameThing(m, t)) || also(t)?.asked || todo(t)?.asked)) return 0
+  if (names.some((t) => also(t)?.overdue || (also(t)?.priority ?? todo(t)?.priority ?? 1) >= 3 || (todo(t)?.due && todo(t)!.due! < plan.day) || (todo(t) && ownTime(todo(t)!, plan)))) return 1
+  if (b.kind === 'goal') return 2
+  return b.kind === 'quick' ? 4 : 3
+}
+
 /** Is this block allowed to move or leave (not pinned, not approved, not in the calendar)? */
 const loose = (b: PlanBlock, keep: Set<string>) => !b.locked && !b.ok && !b.sync?.eventId && !(b.id && keep.has(b.id)) && !b.done?.length
 
@@ -129,15 +145,27 @@ export function auditPlan(raw: DayProposal, ctx: AuditCtx): AuditResult {
     const r = fixPlan(plan, ctx.fixPast === false ? { ...ctx, now: null } : ctx)
     plan = r.plan
     r.fixed.forEach((f) => fixed.add(f))
-    // 4. More work than free time: the last loose blocks (lowest priority first) leave; their tasks go on the list.
+    // 4. More work than free time: only the minimum gives way. The least important loose block is
+    //    shortened first (never under 25 min); only when that is not enough does it leave the plan (its
+    //    tasks on the list). Must-dos and urgent work (rank 0–1) never leave, and at least one block stays.
     if (ctx.now) {
-      const must = new Set(plan.mustdos.map(lower))
-      const rank = (b: PlanBlock) => ([b.title, ...(b.tasks ?? [])].some((t) => must.has(lower(t))) ? 2 : b.kind === 'goal' ? 1 : 0)
-      for (let guard = 0; guard < 20 && overflow(plan, ctx) > 0; guard++) {
-        const nowM = toMin(ctx.now)
-        const cand = plan.blocks.filter((b) => loose(b, keep) && toMin(b.start) + b.minutes > nowM).sort((a, b) => rank(a) - rank(b) || b.start.localeCompare(a.start))[0]
-        if (!cand) break
-        plan = toList(plan, cand)
+      const nowM = toMin(ctx.now)
+      for (let guard = 0; guard < 20; guard++) {
+        const over = overflow(plan, ctx)
+        if (over <= 0) break
+        const cand = plan.blocks
+          .filter((b) => loose(b, keep) && toMin(b.start) + b.minutes > nowM)
+          .map((b) => ({ b, r: blockRank(b, plan, tasks) }))
+          .filter((x) => x.r >= 2)
+          .sort((a, c) => c.r - a.r || c.b.start.localeCompare(a.b.start))[0]
+        if (!cand || plan.blocks.length <= 1) break
+        const cut = Math.ceil(over / 5) * 5
+        if (cand.b.minutes - cut >= 25) {
+          plan = { ...plan, blocks: plan.blocks.map((x) => (x === cand.b ? { ...x, minutes: x.minutes - cut } : x)) }
+          fixed.add('trim')
+          continue
+        }
+        plan = toList(plan, cand.b)
         fixed.add('trim')
       }
     }
