@@ -766,6 +766,22 @@
    ],
    "evidence": "2026-11-09: 42 unit tests; smoke step \"Food photo\" (canned AI answer, qty change, saved once, reply line, daily limit); full smoke",
    "notes": "core/foodVision.ts (pure validator + numbers), api/_vision.mjs (providers, prompt, schema, retry, sys_kv counter), api/ai.mjs op foodPhoto, body/foodPhotoPrep.ts, body/FoodPhotoReview.tsx (+ food-photo.css), one mount line in FoodCounter.tsx. Env: VISION_PROVIDER, VISION_MODEL, ANTHROPIC_API_KEY (optional)."
+  },
+  {
+   "id": "F-FOOD-TELEGRAM",
+   "priority": 1,
+   "area": "ben",
+   "title": "Telegram food photos, /meals in one tap, meal reminders",
+   "user_visible_behavior": "Send the bot a meal photo (optional note): the same AI read as Body → Food lists the foods with how many, kcal and protein ('not sure, check the portion' on unsure ones); -/+ per food, Swap to a saved food, Save, Cancel; typing 'eggs 2' sets how many. Save logs one 'photo' meal (a double tap logs nothing twice) and replies '3 Egg + 2 Rye bread: ~376 kcal, 24 g protein. Today: ... ~1,300 kcal left; next: ...' with Undo. Over 50 photos a day or the AI budget: a plain message and the copy prompt. The photo is never stored. /meals lists the standard day and saved meals as one-tap buttons (Undo after); 'breakfast' or 'standard day' asks 'Log it now?'. Meal reminders: at breakfast (wake + 45 min), lunch 13:00, afternoon 16:30 and dinner 19:30, when nothing was logged for that meal, one nudge 'Lunch time: log your bulgur salad + bread?' with Log it / 30 min / Skip; max 3 a day, never in meetings, quiet hours or after bed, respects the 7-day food mute; on the island at the PC, else Telegram; switch in Settings -> Ben -> Pushes. No points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/foodTelegram.test.ts src/server/foodTelegram.server.test.ts src/core/foodBen.test.ts src/server/foodBen.server.test.ts",
+    "npm run build:bot",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-09: 12 unit tests + 7 server tests (fake Turso, fake Telegram file API, fake vision read); smoke Ben 2 step checks the Meal reminders switch",
+   "notes": "core/foodBen.ts (photo draft, preview, edits, swap, decideMealReminder), web/bots/foodBot.ts (photo flow, /meals, fd| buttons, mealPushFor, foodPushNow), webBots.ts (photo route), telegramBot.ts + api/telegram.mjs (env.foodPhoto = ai.mjs foodPhoto), benPushes.ts (op log, prefs.meals, fd| buttons for meal pushes), benPushTick.ts, tursoWebBridge.ts/benPushFeed.ts (island), LifeFitPanel.tsx (switch)."
   }
  ]
 }

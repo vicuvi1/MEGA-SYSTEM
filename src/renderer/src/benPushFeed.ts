@@ -215,7 +215,7 @@ export async function pushAct(a: Extract<IslandAction, { kind: 'benPush' }>): Pr
     await answer('prompt')
     return { said: '📋 Prompt copied: paste it with a meal photo into any AI app, then paste the reply in Body → Food.' }
   }
-  if ((a.op === 'yesterday' || a.op === 'mute') && p.food) return { said: await p.food(a.op, a.key) }
+  if ((a.op === 'yesterday' || a.op === 'mute' || a.op === 'log') && p.food) return { said: await p.food(a.op, a.key, a.arg) }
   switch (a.op) {
     case 'start': {
       const subject = (a.arg ?? 'Focus').slice(0, 40)
@@ -227,7 +227,7 @@ export async function pushAct(a: Extract<IslandAction, { kind: 'benPush' }>): Pr
     case 'later':
       await answer('later')
       if (a.key.startsWith('checkin')) queueStall(a.arg ?? subjectOf(a.key))
-      return { said: '⏰ OK, again in 10 min' }
+      return { said: `⏰ OK, again in ${a.minutes ?? 10} min` }
     case 'skip':
       await answer('skip')
       if (a.key.startsWith('checkin')) queueStall(a.arg ?? subjectOf(a.key))

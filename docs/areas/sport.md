@@ -91,6 +91,8 @@ The owner found the coach too complicated ("I want back my push-ups and abs and 
 
 **In Ben and on Telegram (2026-11-08):** paste the AI reply to Ben on Telegram (a preview with −/+25 g, Save / Edit grams / Cancel, Undo), `/food` for the prompt, "what should I eat now?" answered from the food log with no AI, one food push a day (the evening protein nudge or the dinner reminder, with Mute for 7 days), and a food part in the Sunday weekly message. Details in [ben.md](ben.md) ("Food in Ben and on Telegram"); code in `core/foodBen.ts` and `web/bots/foodBot.ts`. No points.
 
+**Telegram food photos and meal reminders (2026-11-09):** send the bot a meal photo (optionally with a note): the server reads it with the same vision call as Body → Food (same validator, 50 a day, AI budget), shows a preview (how many, kcal, protein, "not sure" marks) with −/+, Swap to a saved food, Save, Cancel, and Save logs a 'photo' meal with a summary line from real numbers. The photo is never stored. `/meals` (or "breakfast", "standard day", a saved meal's name) logs saved meals in one tap. Meal reminders nudge once at the standard day's slots when nothing was logged for that meal (Log it / 30 min / Skip; max 3 a day; Settings → Ben → Pushes → Meal reminders). The bot is already linked to the owner, so no linking code is needed. Details in [ben.md](ben.md).
+
 Tests: `core/food.test.ts` (prompt, many messy replies, scaling, totals, one protein number, log caps, yesterday, stars, slow-gain goals, what to eat, the week), `main/food.test.ts` (rows, no points, past day, lean default once, training day kcal, Sport line, the week). Smoke step "Food counter" (`FOOD_SHOTS=<dir>` for screenshots).
 
 ### Food photo logging (2026-11-09)

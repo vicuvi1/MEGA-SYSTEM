@@ -278,3 +278,17 @@ entry that says why.
   already reads `body_metrics` (weight trend, protein and food goals, Telegram) keeps working unchanged.
 - **Rules out:** writing scale data into `body_log` or a setting, a random id for a weigh-in, daily
   weight as the headline number, or red alarms on body numbers.
+
+
+### Telegram meal photos use the website's vision call, in-process, and are never kept (2026-11-09)
+- **Decision:** a meal photo sent to the bot is read by the same `foodPhoto` function as
+  `/api/ai {op:'foodPhoto'}` (api/telegram.mjs hands it to the bot as `env.foodPhoto`), so the
+  50-photos-a-day counter, the monthly AI budget and the `core/foodVision.ts` check are shared. The
+  photo lives only in memory for that one request: never in the database, a setting, a log or a reply.
+  Only the owner's chats get a download or a vision call. Meal reminders share the one food mute and
+  the one push log (`meal:<day>:<kind>`, max 3 a day).
+- **Why:** one limit and one validator for every way of sending a photo; a second path would double
+  the AI spend and drift from the website's numbers. A stored photo would be private data in a synced
+  database for no gain (only the foods you save matter).
+- **Rules out:** a separate vision prompt or provider for Telegram, a new `api/` file for it, caching
+  or saving photos, or meal reminders with their own mute or their own dedupe store.

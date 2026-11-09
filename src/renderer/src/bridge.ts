@@ -94,10 +94,10 @@ export type Bridge = LifeApi & {
       rescueCheck?(o: { now: number; events: import('@core/dayTime').CalEvent[]; running: boolean; meeting: boolean; quiet: boolean; on: boolean }): Promise<import('@core/benPushes').PushOut | null>
       /** Accept / Not now / Skip today on a rescue, or Undo an accepted one. Resolves with the line to show. */
       rescue?(op: 'accept' | 'later' | 'skip' | 'undo', key: string): Promise<string>
-      /** Food (core/foodBen.ts): the evening protein nudge or the dinner reminder for the island now, if one is due. */
+      /** Food (core/foodBen.ts): a meal reminder, the evening protein nudge or the dinner reminder for the island now, if one is due. */
       foodCheck?(o: { now: number; meeting: boolean; quiet: boolean }): Promise<import('@core/benPushes').PushOut | null>
-      /** A food push's button: "Same as yesterday" (saves yesterday's dinner) or "Mute food nudges for 7 days". Resolves with the line to show. */
-      food?(op: 'yesterday' | 'mute', key: string): Promise<string>
+      /** A food push's button: "Same as yesterday" (saves yesterday's dinner), "Mute food nudges for 7 days", or a meal reminder's "Log it" (`arg` 'alt': its swap). Resolves with the line to show. */
+      food?(op: 'yesterday' | 'mute' | 'log', key: string, arg?: string): Promise<string>
     }
     /** How the chat looks: Ben's face and your photo (synced). */
     looks?(): Promise<CoachLooks>

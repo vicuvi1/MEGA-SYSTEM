@@ -1892,7 +1892,7 @@ try {
     await pg.waitForSelector('.bp-area[data-area="body"] button.on:text-is("Soft")', { timeout: 5000 })
     await pg.click('.bp-area[data-area="money"] button:text-is("Normal")')
     await pg.waitForSelector('.bp-area[data-area="money"] button.on:text-is("Normal")', { timeout: 5000 })
-    for (const t of ['Check in when a planned block starts', 'Morning brief at', 'Evening shutdown before bed', 'Weekly check']) if (!(await pg.locator('.bp-settings .toggle-row', { hasText: t }).count())) throw new Error(`no "${t}" switch`)
+    for (const t of ['Check in when a planned block starts', 'Morning brief at', 'Evening shutdown before bed', 'Meal reminders', 'Weekly check']) if (!(await pg.locator('.bp-settings .toggle-row', { hasText: t }).count())) throw new Error(`no "${t}" switch`)
     const b2 = process.env.BEN2_SHOTS
     if (b2) {
       // A tall window for the picture (the toasts gone, the section in the middle), then back.
