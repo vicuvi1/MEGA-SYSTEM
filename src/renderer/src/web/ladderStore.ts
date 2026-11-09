@@ -7,7 +7,12 @@
 // (Waky's sleep logs). Nothing is typed in for the ladder and nothing pays.
 // No browser code: Ben's prompt context (sagaStore) reads it too.
 import { getSetting, setSetting } from '../../../main/settings'
-import { addDays } from '@core/dates'
+import { addDays, daysBetween } from '@core/dates'
+import { ladderStudyGoal, placeStudy } from '@core/ladderPlan'
+import { dayRooms, type WeekShape } from '@core/planWeek'
+import type { PlanLimits } from '@core/planLimits'
+import type { DeadlinePlan } from '@core/planDeadlines'
+import type { CalEvent } from '@core/dayTime'
 import { cleanLadder, EMPTY_FACTS, LADDER_KEY, ladderCards, mondayOf, quarterOf, type Ladder, type LadderCard, type LadderFacts, type Metric, type Quarter } from '@core/goalLadder'
 import { currentSeason } from '@core/season'
 import { trainOf, currentLevel } from '@core/trainLog'
@@ -161,4 +166,21 @@ export function ladderView(s: Services, opts: { finance?: any; now?: Date } = {}
   const from = addDays(quarter.start < mondayOf(today) ? quarter.start : mondayOf(today), -7)
   const facts = ladderFacts(s, from, today, opts.finance)
   return { today, quarter, ladder, facts, cards: ladderCards(ladder, facts, quarter, today) }
+}
+
+/**
+ * Today's draft study session for the quarter's study goal (the planner's
+ * hook, web/rhythmBot propose): the week's focus hours still to do, planned
+ * backward to Monday in the room your real deadlines leave, within your
+ * limits and week plan. null: nothing to place today.
+ */
+export function ladderStudyToday(s: Services, existing: DeadlinePlan[], o: { today: string; limits: PlanLimits; week: WeekShape; freeShare?: number }, now: string, events: CalEvent[]): { title: string; minutes: number; id: string; why: string } | null {
+  const l = loadLadder(s.db)
+  const facts = ladderFacts(s, mondayOf(o.today), o.today)
+  const goal = ladderStudyGoal(l, facts, o.today)
+  if (!goal) return null
+  const rooms = dayRooms({ today: o.today, now, days: Math.max(1, daysBetween(o.today, goal.deadline)), events, week: o.week, limits: o.limits, freeShare: o.freeShare })
+  const today = placeStudy(goal, rooms, existing, o.today)?.sessions.find((x) => x.day === o.today)
+  if (!today || today.minutes < 20) return null
+  return { title: today.title, minutes: Math.min(90, today.minutes), id: today.id, why: `quarter goal: study session ${today.n} of ${today.of} this week` }
 }

@@ -29,6 +29,7 @@ import '../lifeExtras.css'
 import '../goals.css'
 import { Select } from '../Select'
 import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
+import { QuarterTab } from '../ladder/QuarterTab'
 
 const hm = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(min % 60).padStart(2, '0') : ''}` : `${min} min`)
 const dayText = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
@@ -66,7 +67,7 @@ export function Goals({ onGo }: { onGo?: (p: PageId) => void }) {
   const act = useAction()
   const { events } = useTodayEvents()
   const [v, setV] = useState<GoalsView | null>(null)
-  const [tab, setTab] = usePageTab('goals', ['goals', 'week', 'hours', 'path'], 'goals')
+  const [tab, setTab] = usePageTab('goals', ['quarter', 'goals', 'week', 'hours', 'path'], 'quarter')
   const [filter, setFilter] = useState<string>('all')
   const [detail, setDetail] = useState<number | null>(null)
   const [party, setParty] = useState<{ card: GoalCard; level: Level }[]>([])
@@ -210,14 +211,18 @@ export function Goals({ onGo }: { onGo?: (p: PageId) => void }) {
         page="goals"
         label="Goals views"
         tabs={[
-          { id: 'goals', label: 'Goals', count: measures.length || undefined, title: 'Your goals: numbers, habits, limits and projects (1)' },
-          { id: 'week', label: 'This week', count: due.length || undefined, title: "Ben's weekly check-in and your records (2)" },
-          { id: 'hours', label: 'Hours', title: "Hours to put in and this week's big 3 (3)" },
-          { id: 'path', label: 'Cyber path', title: 'CTFs, Rust and crypto: what you finished (4)' }
+          { id: 'quarter', label: 'This quarter', title: 'Up to 3 critical goals for the 12 weeks: milestones, this week and the reviews (1)' },
+          { id: 'goals', label: 'Goals', count: measures.length || undefined, title: 'Your goals: numbers, habits, limits and projects (2)' },
+          { id: 'week', label: 'This week', count: due.length || undefined, title: "Ben's weekly check-in and your records (3)" },
+          { id: 'hours', label: 'Hours', title: "Hours to put in and this week's big 3 (4)" },
+          { id: 'path', label: 'Cyber path', title: 'CTFs, Rust and crypto: what you finished (5)' }
         ]}
         value={tab}
         onChange={setTab}
       />
+      <TabPanel page="goals" id="quarter" value={tab}>
+        {tab === 'quarter' && <QuarterTab onSeason={() => onGo?.('season')} />}
+      </TabPanel>
       <TabPanel page="goals" id="goals" value={tab}>
         {empty ? (
           <EmptyGoals v={v} onPick={(words) => setSheet({ kind: 'new', words })} onTemplate={(t) => setSheet({ kind: 'new', template: t })} onType={() => setSheet({ kind: 'new' })} />

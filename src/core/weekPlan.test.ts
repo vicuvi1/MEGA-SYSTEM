@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { activePlan, cleanPlan, currentWeek, planWeek, shouldPlan } from './weekPlan'
+import { activePlan, cleanPlan, currentWeek, ladderPrefill, planWeek, shouldPlan } from './weekPlan'
 import { weekFocusFact } from './coach'
 import { progressReport } from './progress'
+
+describe('the Sunday top 3, pre-filled from the goal ladder', () => {
+  it('ladder steps come first and start picked; goals and projects follow; no repeats', () => {
+    const p = ladderPrefill(['5 workouts', 'Protein goal on 6 of 7 days', '10 h of focus'], ['Read 12 books', '5 workouts'], ['Inbox', 'Thesis'])
+    expect(p.chips).toEqual(['5 workouts', 'Protein goal on 6 of 7 days', '10 h of focus', 'Read 12 books', 'Thesis'])
+    expect(p.picked).toEqual(['5 workouts', 'Protein goal on 6 of 7 days', '10 h of focus'])
+  })
+  it('picks you already made this week win over the prefill', () => {
+    expect(ladderPrefill(['5 workouts'], [], ['Thesis'], ['Thesis']).picked).toEqual(['Thesis'])
+    expect(ladderPrefill([], ['A goal'], []).picked).toEqual([])
+  })
+})
 
 describe('week plan', () => {
   it('Sunday plans the coming week; other days belong to this week', () => {

@@ -1,6 +1,7 @@
 // Today → Now on Sunday (and Monday if you haven't yet): "Pick your top 3 for
 // this week", with chips from your goals and projects. The 3 become the week's
-// big 3 (the same list as Goals → This week's big 3); the rest are parked:
+// big 3 (the same list as Goals → This week's big 3), pre-filled from the goal
+// ladder's week steps; the rest are parked:
 // still visible, quiet. Telegram asks the same with buttons.
 // On Now it starts as one slim line (`compact`): Pick opens the chips, so the
 // tab still fits a laptop screen on a Sunday.
@@ -8,7 +9,7 @@ import { useEffect, useState } from 'react'
 import { life } from './bridge'
 import { dayKey } from '@core/dates'
 import { useAction } from './ui'
-import { planFromPicks, planWeek, toggleChip, top3AskDue, top3Chips } from '@core/weekPlan'
+import { ladderPrefill, planFromPicks, planWeek, toggleChip, top3AskDue } from '@core/weekPlan'
 import { useWeekPlan } from './WeekPlanner'
 
 const appDay = () => dayKey(new Date())
@@ -38,10 +39,12 @@ export function WeekTop3Pick({ compact = false }: { compact?: boolean } = {}) {
       const all = await life.todoist?.everything?.().catch(() => null)
       const projects = [...new Set((all?.areas ?? []).filter((a) => a.kind === 'project').map((a) => a.name))]
       const prev = saved && saved.week === week ? saved.big3.map((b) => b.text) : []
-      const list = top3Chips([...(goals?.measures ?? []).map((c) => c.goal.title), ...(goals?.goals ?? []).map((g) => g.title)], projects, prev)
+      // The goal ladder's week steps come first and start picked (you can change them).
+      const steps = (await life.saga?.ladder?.top3().catch(() => [] as string[])) ?? []
+      const p = ladderPrefill(steps, [...(goals?.measures ?? []).map((c) => c.goal.title), ...(goals?.goals ?? []).map((g) => g.title)], projects, prev)
       if (!off) {
-        setChips(list)
-        setPicked(prev.filter((p) => list.includes(p)).slice(0, 3))
+        setChips(p.chips)
+        setPicked(p.picked)
       }
     })()
     return () => void (off = true)
