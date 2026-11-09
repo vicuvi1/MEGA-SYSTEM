@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   byMonth, checkFile, checkVideo, cleanIndex, deletePlan, driveProps, emptyIndex, filterItems, folderMovePlan, fromRemote, mergeIndex, notBackedUpLine, planSync,
-  FILE_MAX_BYTES, INDEX_MAX_BYTES, VIDEO_MAX_BYTES, type LocalMeta, type RemoteFile, type VaultIndex
+  FILE_MAX_BYTES, INDEX_MAX_BYTES, knownDuration, VIDEO_MAX_BYTES, type LocalMeta, type RemoteFile, type VaultIndex
 } from './vaultSync'
 
 const NOW = 1_800_000_000_000
@@ -105,7 +105,11 @@ describe('Photo Locker limits and index', () => {
     expect(checkVideo(59.9, 10e6)).toBeNull()
     expect(checkVideo(61, 10e6)).toMatch(/61 seconds long\. Videos can be at most 60 seconds/)
     expect(checkVideo(30, VIDEO_MAX_BYTES + 1)).toMatch(/at most 150 MB/)
-    expect(checkVideo(NaN, 1)).toMatch(/can't be read/)
+    // A length that can't be read is refused, never kept.
+    for (const d of [NaN, Infinity, -Infinity, 0, -3, undefined as unknown as number]) expect(checkVideo(d, 1)).toBe("Couldn't read this video's length; try again.")
+    expect(knownDuration(61)).toBe(true)
+    expect(knownDuration(Infinity)).toBe(false)
+    expect(knownDuration('61')).toBe(false)
   })
   it('files up to 200 MB', () => {
     expect(checkFile(FILE_MAX_BYTES)).toBeNull()

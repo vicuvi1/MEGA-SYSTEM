@@ -335,9 +335,13 @@ export function folderMovePlan(remoteInOld: RemoteFile[], oldId: string | null, 
   return remoteInOld.filter((f) => fromRemote(f) && f.parents.includes(oldId) && !f.parents.includes(newId)).map((f) => ({ fileId: f.fileId, from: oldId }))
 }
 
-/** Checks a video before it is kept. Null = fine, else a plain message. */
+export const VIDEO_LENGTH_UNKNOWN = "Couldn't read this video's length; try again."
+/** A length we can trust: a real number of seconds above 0 (not NaN, Infinity or 0). */
+export const knownDuration = (d: unknown): d is number => typeof d === 'number' && Number.isFinite(d) && d > 0
+
+/** Checks a video before it is kept. Null = fine, else a plain message. An unknown length is refused, never kept. */
 export function checkVideo(durationS: number, sizeBytes: number): string | null {
-  if (!Number.isFinite(durationS) || durationS <= 0) return "This video's length can't be read. Try another file."
+  if (!knownDuration(durationS)) return VIDEO_LENGTH_UNKNOWN
   if (durationS > VIDEO_MAX_SECONDS + 0.5) return `This video is ${Math.round(durationS)} seconds long. Videos can be at most ${VIDEO_MAX_SECONDS} seconds: trim it first.`
   if (sizeBytes > VIDEO_MAX_BYTES) return `This video is ${mb(sizeBytes)}. Videos can be at most ${mb(VIDEO_MAX_BYTES)}.`
   return null

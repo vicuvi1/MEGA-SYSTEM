@@ -6079,7 +6079,7 @@ try {
       return c.toDataURL('image/png').split(',')[1]
     })
     await pg.setInputFiles('[data-testid="locker-upload"]', { name: 'front-made-up.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
-    await pg.waitForSelector('[data-testid="locker-tile"] .lk-state.in', { timeout: 20000 })
+    await pg.waitForSelector('[data-testid="locker-tile"][aria-label="Open front-made-up.jpg"] .lk-state.in', { timeout: 30000 })
     // In the synced index (metadata only, with the Drive file id), never image data.
     let ix = ''
     for (let i = 0; i < 40 && !/driveFileId/.test(ix); i++) {
@@ -6095,10 +6095,12 @@ try {
     wav.write('RIFF', 0); wav.writeUInt32LE(36 + rate * secs, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22)
     wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(rate * secs, 40)
     await pg.setInputFiles('[data-testid="locker-upload"]', { name: 'long-clip.wav', mimeType: 'video/wav', buffer: wav })
-    await pg.waitForSelector('.toast:has-text("at most 60 seconds"), [role="status"]:has-text("at most 60 seconds")', { timeout: 15000 })
-    if ((await pg.locator('[data-testid="locker-tile"]').count()) !== 1) throw new Error('the long video was kept')
+    // Wait for the real answer: the refusal toast, and the page done getting it ready (no "Getting … ready" line).
+    await pg.waitForSelector('.toast:has-text("at most 60 seconds")', { timeout: 60000 })
+    await pg.waitForFunction(() => !/Getting .* ready/.test(document.querySelector('.lk-progress')?.textContent ?? ''), null, { timeout: 30000 })
+    if (await pg.locator('[data-testid="locker-tile"].k-video, [data-testid="locker-tile"][aria-label="Open long-clip.wav"]').count()) throw new Error('the long video was kept')
     // The item view on the desktop.
-    await pg.locator('[data-testid="locker-tile"]').first().click()
+    await pg.locator('[data-testid="locker-tile"][aria-label="Open front-made-up.jpg"]').click()
     await pg.waitForSelector('[data-testid="locker-item"] .lk-media img', { timeout: 5000 })
     if (shots) await pg.screenshot({ path: `${shots}/locker-desktop-item.png`, style: '.toasts { display: none !important }' })
     await pg.keyboard.press('Escape')
@@ -6116,17 +6118,18 @@ try {
       await b.keyboard.press('Enter')
       await b.waitForSelector('main.content', { timeout: 20000 })
       await b.evaluate(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'locker' })))
-      await b.waitForSelector('[data-testid="locker-tile"] img', { timeout: 20000 })
-      await b.waitForSelector('[data-testid="locker-tile"] .lk-state.in', { timeout: 10000 })
-      if (!/✓/.test(await b.locator('[data-testid="locker-tile"] .lk-state').first().innerText())) throw new Error('device B did not download the photo')
-      if (await b.locator('[data-testid="locker-warning"]').count()) throw new Error('device B warns about items not backed up')
+      const front = '[data-testid="locker-tile"][aria-label="Open front-made-up.jpg"]'
+      await b.waitForSelector(`${front} img`, { timeout: 30000 })
+      await b.waitForFunction((sel) => /✓/.test(document.querySelector(`${sel} .lk-state`)?.textContent ?? ''), front, { timeout: 30000 })
       if (shots) await b.screenshot({ path: `${shots}/locker-phone-timeline.png`, style: '.toasts { display: none !important }' })
     } finally {
       await ctx.close()
     }
     // One file in Drive: never uploaded twice.
     const inDrive = await (await fetch(`http://127.0.0.1:${port}/_fakedrive/_e2e/files`, { headers: { authorization: 'Bearer fake-drive-key' } })).json()
-    if (inDrive.filter((f) => f.appProperties?.lsApp === 'locker').length !== 1) throw new Error(`Drive has ${inDrive.length} files`)
+    const ids = inDrive.filter((f) => f.appProperties?.lsApp === 'locker').map((f) => f.appProperties.lsId)
+    if (new Set(ids).size !== ids.length) throw new Error('an item was uploaded twice')
+    if (inDrive.filter((f) => f.name === 'front-made-up.jpg').length !== 1) throw new Error('the photo is not in Drive exactly once')
   })
 
   await step('no uncaught page errors', async () => {

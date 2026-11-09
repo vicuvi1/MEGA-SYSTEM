@@ -5,7 +5,7 @@
 //     720p in a browser is slow and unreliable on phones, so it is not done),
 //     plus a thumbnail from the first second;
 //   - other files: up to 200 MB, kept as they are.
-import { checkFile, checkVideo, fitSide, kindOf, newVaultId, PROGRESS_TAG, type VaultKind } from '@core/vaultSync'
+import { checkFile, checkVideo, fitSide, knownDuration, VIDEO_LENGTH_UNKNOWN, kindOf, newVaultId, PROGRESS_TAG, type VaultKind } from '@core/vaultSync'
 import type { VaultItem } from './vaultStore'
 
 const THUMB_SIDE = 360
@@ -62,17 +62,32 @@ export async function videoInfo(file: Blob): Promise<{ durationS: number; w: num
   v.playsInline = true
   v.src = url
   try {
+    // A busy device can take a while: wait up to 30 s for the first numbers.
     await new Promise<void>((ok, no) => {
-      const t = setTimeout(() => no(new Error("This video's length can't be read. Try another file.")), 15_000)
+      const t = setTimeout(() => no(new Error(VIDEO_LENGTH_UNKNOWN)), 30_000)
       v.onloadedmetadata = () => (clearTimeout(t), ok())
       v.onerror = () => (clearTimeout(t), no(new Error("This video can't be opened in this browser. Try an MP4 file.")))
     })
-    // Some files say Infinity until the end is reached.
-    if (!Number.isFinite(v.duration)) {
-      v.currentTime = 1e9
-      await new Promise((ok) => setTimeout(ok, 400))
+    // Some files say Infinity, NaN or 0 until the end is reached: jump to the end (twice at most) and read again.
+    for (let tries = 0; tries < 2 && !knownDuration(v.duration); tries++) {
+      await new Promise<void>((ok) => {
+        const t = setTimeout(done, 8000)
+        function done() {
+          clearTimeout(t)
+          v.removeEventListener('durationchange', check)
+          v.removeEventListener('seeked', check)
+          ok()
+        }
+        function check() {
+          if (knownDuration(v.duration)) done()
+        }
+        v.addEventListener('durationchange', check)
+        v.addEventListener('seeked', check)
+        v.currentTime = 1e9
+      })
     }
-    const durationS = v.duration
+    // Unknown stays unknown (NaN): checkVideo refuses it, so a video is never kept without a real length.
+    const durationS = knownDuration(v.duration) ? v.duration : NaN
     let thumb: Blob | null = null
     try {
       v.currentTime = Math.min(1, (durationS || 1) / 2)
