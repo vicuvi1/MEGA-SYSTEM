@@ -23,14 +23,14 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-09)
+### Current handoff (2026-11-09, evening)
 ```
-Milestone:   food + training + body composition plans, Custom Center, island v2, quick add — all on main (b022da9)
-Completed:   see progress.md; full smoke green on b022da9
+Milestone:   AI coach + growth + Photo Locker + goal ladder on main; release v1.4.1428 green
+Completed:   see progress.md
 Active:      none
-Blockers:    owner: which scale app (Xiaomi Home EU or Mi Fitness) for Phase 2; GEMINI_API_KEY must be set in Vercel for photo logging
-Next action: scale Phase 2 sync (tools/scale-sync + docs/scale-sync.md) or the UI clean-up pick list
-Files:       docs/INDEX.md, docs/areas/sport.md, docs/areas/custom.md, docs/areas/island.md, docs/harness/progress.md
+Blockers:    owner: Drive API + drive.file scope; which scale app for Phase 2
+Next action: scale Phase 2 (tools/scale-sync + docs/scale-sync.md) or the UI clean-up pick list
+Files:       docs/INDEX.md, docs/areas/coach.md, docs/areas/vault.md, docs/areas/sport.md, docs/harness/progress.md
 ```
 
 ## Builder report format (≤ ~250 words)
