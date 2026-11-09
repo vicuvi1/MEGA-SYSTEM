@@ -1,15 +1,17 @@
-// The food counter (Body → Food). No image AI in the app: "Copy prompt", paste
-// it with a meal photo into any free AI app, paste the reply back; plain code
-// reads it (core/foodParse.ts), you fix grams and names, Save adds the meal.
-// Also: quick add in words, a label prompt for packaged food, water and
-// supplement buttons, day rings, meal cards (edit / remove), the weekly weight
-// check, the week chart and the plan (cheap protein, shopping, Sunday prep),
-// folded into Today · Week · Plan. Day totals, the lean goals (Goals sheet),
-// what to eat next, same as yesterday and starred meals. Protein is ONE number
-// with the protein ring: each meal is one protein row in the body log. The
-// header, the macros and "Next" all use SAVED meals; an unsaved draft is shown
+// The food counter (Body → Food), one calm screen:
+// 1. Today's numbers (kcal big, protein second, ONE line: what is left or the hint).
+// 2. ONE "Log food" button. It opens a sheet with three big choices: Photo (opens
+//    the photo picker at once, up to 6 photos: FoodPhotoReview.tsx), My meals
+//    (saved meals, the standard day, saved foods, same as yesterday, starred:
+//    FoodFast.tsx) and Type it ("2 eggs, 200 g chicken"); quick water and
+//    supplement chips sit at the bottom. Every draft is checked and saved there.
+// 3. Today's meals, one row each (edit, remove; star and "Save as meal" under ⋯).
+// 4. More (folded): carbs and fat rings, what to eat next, the weekly calorie
+//    check, the week chart, cheap protein/shopping/prep, the copy-prompt way.
+// The header, the macros and "Next" all use SAVED meals; an unsaved draft is shown
 // apart ("+59 g if you save"). No points.
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { FOOD_PROMPT, LABEL_PROMPT } from '@core/foodPrompt'
 import { parseFoodWords } from '@core/foodWords'
 import { dayRings, foodHeader } from '@core/foodDisplay'
@@ -25,11 +27,12 @@ import { Rings, WeekChartView } from './FoodViz'
 import { FoodPlan, copyText } from './FoodPlan'
 import { FoodBars, QuickLog } from './FoodFast'
 import { FoodSavedSheet } from './FoodSavedSheet'
-import { FoodPhotoLog } from './FoodPhotoReview'
+import { FoodPhotoLog, type PhotoPicker } from './FoodPhotoReview'
 import { FoodAdjustCard } from './FoodAdjustCard'
 import { adjLogLine } from '@core/foodAdjust'
 import type { FoodView } from '../../../main/food'
 import './food.css'
+import './food-simple.css'
 
 const EVENTS = ['life-body-changed', 'life-sport-changed', 'life-external-changed']
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
@@ -52,11 +55,7 @@ const toRows = (items: FoodItem[]): Row[] => items.map((it) => ({ key: ++rowKey,
 const rowItem = (r: Row): FoodItem => ({ ...scaleItem(r.base, r.grams), name: r.name.trim() || r.base.name })
 
 type Sub = 'today' | 'week' | 'plan'
-const SUBS: { id: Sub; label: string }[] = [
-  { id: 'today', label: 'Today' },
-  { id: 'week', label: 'Week' },
-  { id: 'plan', label: 'Plan' }
-]
+type Sheet = null | 'root' | 'meals' | 'type'
 const itemsText = (items: FoodItem[]) => items.map((i) => `${i.grams} g ${i.name}`).join(', ')
 
 export function FoodCounter() {
@@ -78,7 +77,27 @@ export function FoodCounter() {
   const [copied, setCopied] = useState(false)
   const [copiedLabel, setCopiedLabel] = useState(false)
   const [manage, setManage] = useState(false)
-  const [moreOpen, setMoreOpen] = useState(false)
+  // "More" stays open or closed as you left it (this device).
+  const [moreOpen, setMoreOpenState] = useState(() => {
+    try {
+      return localStorage.getItem('ls.foodMore') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setMoreOpen = (open: boolean) => {
+    setMoreOpenState(open)
+    try {
+      localStorage.setItem('ls.foodMore', open ? '1' : '0')
+    } catch {
+      /* private window */
+    }
+  }
+  // The Log food sheet: its first page (Photo / My meals / Type it), or one of the two pages.
+  const [sheet, setSheet] = useState<Sheet>(null)
+  const [openMeal, setOpenMeal] = useState<string | null>(null)
+  const [justRemoved, setJustRemoved] = useState<string[]>([])
+  const photoRef = useRef<PhotoPicker | null>(null)
 
   useEffect(() => {
     if (!api) return
@@ -122,12 +141,14 @@ export function FoodCounter() {
     setEditing(null)
     setRows(toRows(r.items))
     setQuestion(r.question)
+    setSheet('type')
   }
   const load = (items: FoodItem[]) => {
     setEditing(null)
     setRows(toRows(items))
     setQuestion(null)
     setErr(null)
+    setSheet('type')
   }
   const addWords = () => {
     const r = parseFoodWords(words, v.own)
@@ -147,6 +168,7 @@ export function FoodCounter() {
     setQuestion(null)
     setErr(null)
     setSub('today')
+    setSheet('type')
   }
   const patch = (key: number, p: Partial<Row>) => setRows((list) => (list ? list.map((r) => (r.key === key ? { ...r, ...p } : r)) : list))
   const clearDraft = () => {
@@ -155,6 +177,24 @@ export function FoodCounter() {
     setReply('')
     setQuestion(null)
   }
+  /** Cancel drops the draft and closes the sheet. */
+  const cancelDraft = () => {
+    clearDraft()
+    setSay('')
+    setSheet(null)
+  }
+  /** Remove (or put back) a meal. A removed one shows as a grey "Removed · Undo" line for 6 s, then leaves the list. */
+  const toggleMeal = async (id: string, removing: boolean) => {
+    const next = await act(() => api.toggle(id, day))
+    if (!next) return
+    setV(next)
+    if (removing) {
+      setJustRemoved((l) => [...l, id])
+      window.setTimeout(() => setJustRemoved((l) => l.filter((x) => x !== id)), 6000)
+    } else setJustRemoved((l) => l.filter((x) => x !== id))
+  }
+  /** Closing keeps an unsaved draft: "Finish your meal" opens it again. */
+  const closeSheet = () => setSheet(null)
   const save = async () => {
     if (!draft.length) return
     const before = new Set(v.meals.map((m) => m.id))
@@ -171,20 +211,321 @@ export function FoodCounter() {
       clearDraft()
       setWords('')
       setSay('')
+      setSheet(null)
     }
   }
   const sug = v.adjust.state === 'suggest' ? v.adjust.suggestion : null
   const dayOptions = Array.from({ length: 8 }, (_, i) => addDays(v.today, -i))
 
   // Meal cards by meal type; supplements in their own card.
-  const foodMeals = v.meals.filter((m) => !m.supp)
-  const suppMeals = v.meals.filter((m) => m.supp)
+  // A removed meal leaves the list; only one you just removed shows for a few seconds as a grey line with Undo.
+  const shown = v.meals.filter((m) => !m.removed || justRemoved.includes(m.id))
+  const foodMeals = shown.filter((m) => !m.supp)
+  const suppMeals = shown.filter((m) => m.supp)
+  const liveCount = v.meals.filter((m) => !m.removed).length
   const groups = [...MEAL_TYPES.map((ty) => ({ id: ty as string, label: TYPE_LABEL[ty], list: foodMeals.filter((m) => m.type === ty) })), { id: 'supp', label: 'Supplements', list: suppMeals }].filter((g) => g.list.length)
+
+  // The draft (a typed meal, a pasted reply, "Same as yesterday", Edit): checked and saved in the Log food sheet.
+  const draftEl = rows && (
+    <div className="fd-draft" aria-label="Your meal before saving">
+      {editing && <p className="fd-q">Changing a saved meal. Save replaces it.</p>}
+      {question && (
+        <p className="fd-q">
+          <b>The AI asks:</b> {question} <small className="muted">Fix the grams below if it changes anything.</small>
+        </p>
+      )}
+      <ul className="fd-items">
+        {rows.map((r) => {
+          const it = rowItem(r)
+          return (
+            <li key={r.key} className="fd-item">
+              <input className="fd-name" value={r.name} maxLength={60} aria-label="Food name" onChange={(e) => patch(r.key, { name: e.target.value })} />
+              <span className="fd-grams">
+                <button type="button" className="fdf-step-btn fd-minus" aria-label={`Less ${it.name}`} onClick={() => patch(r.key, { grams: stepGrams(r.grams, -1) })}>
+                  −
+                </button>
+                <b className="num">{r.grams} g</b>
+                <button type="button" className="fdf-step-btn fd-plus" aria-label={`More ${it.name}`} onClick={() => patch(r.key, { grams: stepGrams(r.grams, 1) })}>
+                  +
+                </button>
+              </span>
+              <small className="fd-macros">
+                {Math.round(it.protein)} g protein · {fmt(it.kcal)} kcal <span className={`fd-conf ${it.confidence}`}>{CONF_LABEL[it.confidence]}</span>
+              </small>
+              <button type="button" className="fdf-x fd-del" aria-label={`Remove ${it.name}`} onClick={() => setRows((list) => (list ? list.filter((x) => x.key !== r.key) : list))}>
+                ×
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      <p className="fd-draft-total">
+        This meal: <b>{draftTotals.protein} g protein</b> · {fmt(draftTotals.kcal)} kcal · carbs {draftTotals.carbs} g · fat {draftTotals.fat} g
+      </p>
+      <div className="fd-save-row">
+        <Select className="fd-type" value={type} onChange={(e) => setType(e.target.value as MealType)} title="Which meal">
+          {MEAL_TYPES.map((m) => (
+            <option key={m} value={m}>
+              {TYPE_LABEL[m]}
+            </option>
+          ))}
+        </Select>
+        <button type="button" className="bdy-btn quiet fd-cancel" onClick={cancelDraft}>
+          Cancel
+        </button>
+        <button type="button" className="bdy-btn primary big fd-save" disabled={!draft.length} onClick={save}>
+          {editing ? 'Save changes' : 'Save meal'}
+        </button>
+      </div>
+    </div>
+  )
+
+  const quickAdd = !pastDay && (
+    <div className="fd-quick-add" aria-label="Water and supplements">
+      <span className="bdy-eyebrow">Quick add</span>
+      <div className="fd-row fd-water">
+        <span className="fd-qa-label">
+          Water <b className="num">{fmt(v.water?.ml ?? 0)}</b> / {fmt(v.water?.target ?? 0)} ml
+        </span>
+        {WATER_BUTTONS.map((w) => (
+          <button key={w.id} type="button" className={`bdy-chip fd-water-${w.id}`} onClick={async () => setV((await act(() => api.water(w.ml, day), `+${w.ml} ml water`)) ?? v)}>
+            + {w.label} <small>{w.ml} ml</small>
+          </button>
+        ))}
+      </div>
+      <div className="fd-row fd-supps">
+        <span className="fd-qa-label">Supplements</span>
+        {SUPP_PRESETS.map((p) => (
+          <button key={p.id} type="button" className={`bdy-chip fd-supp-${p.id}`} onClick={async () => setV((await act(() => api.supp(p.id, day), `${p.label} logged`)) ?? v)}>
+            + {p.label}
+            {p.items[0].protein ? <small> +{p.items[0].protein} g</small> : null}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+
+  const sheetTitle = sheet === 'meals' ? 'My meals' : sheet === 'type' ? (rows ? (editing ? 'Change the meal' : 'Check and save') : 'Type what you ate') : pastDay ? `Log food on ${v.day}` : 'Log food'
+  const sheetEl = sheet && (
+    <div className="sheet fdl-sheet" role="dialog" aria-modal="true" aria-label={sheetTitle} onKeyDown={(e) => e.key === 'Escape' && closeSheet()} onClick={(e) => e.target === e.currentTarget && closeSheet()}>
+      <div className="sheet-card fdl-card" data-page={sheet}>
+        <header className="fdl-head">
+          {sheet !== 'root' ? (
+            <button type="button" className="fdl-icon fdl-back" aria-label="Back" onClick={() => setSheet('root')}>
+              ‹
+            </button>
+          ) : (
+            <span className="fdl-icon-gap" aria-hidden="true" />
+          )}
+          <b className="fdl-title">{sheetTitle}</b>
+          <button type="button" className="fdl-icon fdl-close" aria-label="Close" onClick={closeSheet}>
+            ×
+          </button>
+        </header>
+        <div className="fdl-body">
+          {sheet === 'root' && (
+            <>
+              <div className="fdl-choices">
+                {!pastDay && (
+                  <button
+                    type="button"
+                    className="fdl-choice fdl-photo"
+                    autoFocus
+                    onClick={() => {
+                      photoRef.current?.pick()
+                      setSheet(null)
+                    }}
+                  >
+                    <span className="fdl-choice-icon">
+                      <LogIcon kind="photo" />
+                    </span>
+                    <span className="fdl-choice-text">
+                      <b>Photo</b>
+                      <small>Take or pick photos of your meal. The AI lists the food, you check it.</small>
+                    </span>
+                  </button>
+                )}
+                <button type="button" className="fdl-choice fdl-meals" autoFocus={pastDay} onClick={() => setSheet('meals')}>
+                  <span className="fdl-choice-icon">
+                    <LogIcon kind="star" />
+                  </span>
+                  <span className="fdl-choice-text">
+                    <b>My meals</b>
+                    <small>Your saved meals and your standard day. One tap logs one.</small>
+                  </span>
+                </button>
+                <button type="button" className="fdl-choice fdl-type" onClick={() => setSheet('type')}>
+                  <span className="fdl-choice-icon">
+                    <LogIcon kind="pen" />
+                  </span>
+                  <span className="fdl-choice-text">
+                    <b>Type it</b>
+                    <small>"2 eggs, 200 g chicken, 1 banana"</small>
+                  </span>
+                </button>
+              </div>
+              {quickAdd}
+            </>
+          )}
+          {sheet === 'meals' && (
+            <>
+              {pastDay ? <p className="bdy-note">Saved meals log for today only. For {v.day}, use "Type it".</p> : <QuickLog v={v} onView={setV} onManage={() => setManage(true)} />}
+              {(v.yesterday.length > 0 || v.favs.length > 0) && (
+                <div className="fd-quick">
+                  {v.yesterday.length > 0 && (
+                    <div className="fd-again">
+                      <span className="bdy-eyebrow">Same as yesterday</span>
+                      <div className="fdf-chips">
+                        {v.yesterday.map((m) => (
+                          <button key={m.id} type="button" className="bdy-chip fd-yday" onClick={() => load(m.items)} title="Opens it with the grams to fix, then Save">
+                            {m.name} <small>+{m.totals.protein} g</small>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {v.favs.length > 0 && (
+                    <div className="fd-again">
+                      <span className="bdy-eyebrow">Starred</span>
+                      <div className="fdf-chips">
+                        {v.favs.map((f) => (
+                          <button key={f.id} type="button" className="bdy-chip fd-favchip" onClick={() => load(f.items)}>
+                            ★ {f.name} <small>+{sumItems(f.items).protein} g</small>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+          {sheet === 'type' && (
+            <>
+              <div className="fd-words-step">
+                <div className="fd-words-row">
+                  <input
+                    className="fd-words"
+                    value={words}
+                    autoFocus={!rows}
+                    placeholder="2 eggs, 200 g chicken, 1 banana"
+                    aria-label="What you ate, in words"
+                    onChange={(e) => setWords(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && words.trim() && addWords()}
+                  />
+                  <button type="button" className="bdy-btn fd-words-go" disabled={!words.trim()} onClick={addWords}>
+                    Add
+                  </button>
+                </div>
+                {say ? (
+                  <p className="fd-words-say" role="status">
+                    {say}
+                  </p>
+                ) : (
+                  !rows && <small className="bdy-note">Write grams or pieces. Known foods are filled in; you check them before saving.</small>
+                )}
+              </div>
+              {draftEl}
+            </>
+          )}
+        </div>
+        {sheet === 'meals' && (
+          <footer className="fdl-foot">
+            <button type="button" className="bdy-btn big fdl-done" onClick={closeSheet}>
+              Done
+            </button>
+          </footer>
+        )}
+      </div>
+    </div>
+  )
+
+  const moreEl = (
+          <details className="fd-more" open={moreOpen || pastDay} onToggle={(e) => setMoreOpen((e.currentTarget as HTMLDetailsElement).open)}>
+            <summary>
+              <span>More</span>
+              <small>Carbs and fat, what to eat next, weekly check, week chart, shopping</small>
+            </summary>
+            <div className="fd-more-body">
+              <div className="fd-more-sec">
+                <p className="fd-macros-line">{head.macros}</p>
+                <Rings rings={dayRings(saved, goals)} />
+                <small className="muted fd-why">
+                  {GOAL_LABEL} · {GAIN_TEXT}
+                </small>
+              </div>
+              {!pastDay && (
+                <p className="fd-next" role="status">
+                  <b>Next:</b> {v.next.line}
+                </p>
+              )}
+              {!pastDay && <FoodAdjustCard view={v} onView={setV} day={day} where="food" />}
+              <div className="fd-more-links">
+                <button type="button" className="bdy-btn fd-sub-go" data-sub="week" onClick={() => setSub('week')}>
+                  Week chart
+                </button>
+                <button type="button" className="bdy-btn fd-sub-go" data-sub="plan" onClick={() => setSub('plan')}>
+                  Cheap protein, shopping and prep
+                </button>
+                {!pastDay && (
+                  <button type="button" className="bdy-btn fd-manage" onClick={() => setManage(true)}>
+                    Edit saved foods
+                  </button>
+                )}
+              </div>
+              <div className="fd-more-sec fd-other">
+                <span className="bdy-eyebrow">No AI in the app? Use any AI app</span>
+                <small className="muted">Copy the prompt, paste it with a photo of your meal (or of the nutrition label) into any free AI app, then paste its reply here.</small>
+                <div className="fd-row">
+                  <button type="button" className="bdy-btn fd-copy" onClick={copyPrompt}>
+                    {copied ? 'Copied' : 'Copy prompt'}
+                  </button>
+                  <button type="button" className="bdy-btn fd-copy-label" onClick={copyLabel}>
+                    {copiedLabel ? 'Copied' : 'Copy label prompt'}
+                  </button>
+                  <details className="fd-prompt">
+                    <summary>See the prompts</summary>
+                    <pre>{FOOD_PROMPT}</pre>
+                    <pre>{LABEL_PROMPT}</pre>
+                  </details>
+                </div>
+                <textarea
+                  className="fd-paste"
+                  value={reply}
+                  rows={3}
+                  placeholder="Paste the AI app's whole reply here"
+                  aria-label="The AI app's reply"
+                  onChange={(e) => setReply(e.target.value)}
+                  onPaste={(e) => {
+                    const text = e.clipboardData.getData('text')
+                    if (text) setTimeout(() => read(reply ? `${reply}${text}` : text), 0)
+                  }}
+                />
+                <div className="fd-row">
+                  <button type="button" className="bdy-btn fd-read" disabled={!reply.trim()} onClick={() => read()}>
+                    Read reply
+                  </button>
+                  {err && (
+                    <button type="button" className="bdy-btn quiet" onClick={copyPrompt}>
+                      Copy the prompt again
+                    </button>
+                  )}
+                </div>
+                {err && (
+                  <p className="fd-err" role="alert">
+                    {err}
+                  </p>
+                )}
+              </div>
+              <p className="pr-note">Saved foods use common table values; an AI app's numbers are estimates. Fix any amount that looks wrong. Logging food pays no points.</p>
+            </div>
+          </details>
+  )
 
   return (
     <section className="card fd-card" aria-label="Food counter">
-      <div className="card-head">
-        <h2>Food counter</h2>
+      <div className="card-head fd-head">
+        <h2>Food</h2>
         <div className="fd-head-actions">
           <Select className="fd-day" value={v.day} onChange={(e) => setDay(e.target.value === v.today ? undefined : e.target.value)} title="Add or fix meals on a past day">
             {dayOptions.map((d, i) => (
@@ -199,297 +540,161 @@ export function FoodCounter() {
         </div>
       </div>
 
-      <div className="fd-tabs" role="tablist" aria-label="Food counter views">
-        {SUBS.map((s) => (
-          <button key={s.id} type="button" role="tab" className={`fd-tab${sub === s.id ? ' on' : ''}`} aria-selected={sub === s.id} data-sub={s.id} onClick={() => setSub(s.id)}>
-            {s.label}
-          </button>
-        ))}
-      </div>
-
-      {sub === 'today' && (
-        <>
-          <FoodBars progress={v.progress} behind={pastDay ? null : v.behind} />
-          <p className="fd-line sr-only" aria-live="polite">
-            {head.line}
-          </p>
-          {head.preview && (
-            <p className="fd-preview" aria-live="polite">
-              {head.preview}
-            </p>
-          )}
-        </>
-      )}
-      {pastDay && <p className="fd-past">Editing {v.day}: meals you add are marked "added later".</p>}
-
       {goalsOpen && <GoalsSheet v={v} onView={setV} day={day} />}
 
-      {sub === 'today' && !pastDay && sug && <FoodAdjustCard view={v} onView={setV} day={day} where="food" />}
-
       {sub === 'today' && (
-        <>
-          <QuickLog v={v} onView={setV} onManage={() => setManage(true)} />
-          {!pastDay && (
-            <div className="fd-quick-add" aria-label="Water and supplements">
-              <div className="fd-row fd-water">
-                <span>
-                  Water <b className="num">{fmt(v.water?.ml ?? 0)}</b> / {fmt(v.water?.target ?? 0)} ml
-                </span>
-                {WATER_BUTTONS.map((w) => (
-                  <button key={w.id} type="button" className={`chip-btn fd-water-${w.id}`} onClick={async () => setV((await act(() => api.water(w.ml, day), `+${w.ml} ml water`)) ?? v)}>
-                    + {w.label} <small>{w.ml} ml</small>
-                  </button>
-                ))}
-              </div>
-              <div className="fd-row fd-supps">
-                <span>Supplements</span>
-                {SUPP_PRESETS.map((p) => (
-                  <button key={p.id} type="button" className={`chip-btn fd-supp-${p.id}`} onClick={async () => setV((await act(() => api.supp(p.id, day), `${p.label} logged`)) ?? v)}>
-                    + {p.label}
-                    {p.items[0].protein ? <small> +{p.items[0].protein} g</small> : null}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {rows && (
-            <div className="fd-draft" aria-label="Your meal before saving">
-              {editing && <p className="fd-q">Changing a saved meal. Save replaces it.</p>}
-              {question && (
-                <p className="fd-q">
-                  <b>The AI asks:</b> {question} <small className="muted">Fix the grams below if it changes anything.</small>
-                </p>
-              )}
-              <ul className="fd-items">
-                {rows.map((r) => {
-                  const it = rowItem(r)
-                  return (
-                    <li key={r.key} className="fd-item">
-                      <input className="fd-name" value={r.name} maxLength={60} aria-label="Food name" onChange={(e) => patch(r.key, { name: e.target.value })} />
-                      <span className="fd-grams">
-                        <button type="button" className="icon-btn fd-minus" aria-label={`Less ${it.name}`} onClick={() => patch(r.key, { grams: stepGrams(r.grams, -1) })}>
-                          −
-                        </button>
-                        <b className="num">{r.grams} g</b>
-                        <button type="button" className="icon-btn fd-plus" aria-label={`More ${it.name}`} onClick={() => patch(r.key, { grams: stepGrams(r.grams, 1) })}>
-                          +
-                        </button>
-                      </span>
-                      <small className="fd-macros">
-                        {Math.round(it.protein)} g protein · {fmt(it.kcal)} kcal <span className={`fd-conf ${it.confidence}`}>{CONF_LABEL[it.confidence]}</span>
-                      </small>
-                      <button type="button" className="icon-btn fd-del" aria-label={`Remove ${it.name}`} onClick={() => setRows((list) => (list ? list.filter((x) => x.key !== r.key) : list))}>
-                        ×
-                      </button>
-                    </li>
-                  )
-                })}
-              </ul>
-              <div className="fd-row fd-save-row">
-                <span className="fd-draft-total">
-                  This meal: <b>{draftTotals.protein} g protein</b> · {fmt(draftTotals.kcal)} kcal · carbs {draftTotals.carbs} g · fat {draftTotals.fat} g
-                </span>
-                <Select className="fd-type" value={type} onChange={(e) => setType(e.target.value as MealType)} title="Which meal">
-                  {MEAL_TYPES.map((m) => (
-                    <option key={m} value={m}>
-                      {TYPE_LABEL[m]}
-                    </option>
-                  ))}
-                </Select>
-                <button type="button" className="btn primary small fd-save" disabled={!draft.length} onClick={save}>
-                  {editing ? 'Save changes' : 'Save meal'}
-                </button>
-                <button type="button" className="btn ghost small fd-cancel" onClick={clearDraft}>
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-          {!pastDay && <FoodPhotoLog view={v} />}
-          <details className="fd-more" open={moreOpen || pastDay} onToggle={(e) => setMoreOpen((e.currentTarget as HTMLDetailsElement).open)}>
-            <summary>More ways to log: in words, a photo with any AI app, same as yesterday</summary>
-            <div className="fd-more-body">
-              <div className="fd-step fd-words-step">
-                <b>Say what you ate</b>
-                <div className="fd-row">
-                  <input
-                    className="fd-words"
-                    value={words}
-                    placeholder="200g chicken, 150g rice, 2 eggs, 1 banana"
-                    aria-label="What you ate, in words"
-                    onChange={(e) => setWords(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && words.trim() && addWords()}
-                  />
-                  <button type="button" className="btn small fd-words-go" disabled={!words.trim()} onClick={addWords}>
-                    Add
-                  </button>
-                </div>
-                {say && (
-                  <p className="fd-words-say" role="status">
-                    {say}
-                  </p>
-                )}
-              </div>
-              <div className="fd-step">
-                <div className="fd-step-head">
-                  <b>Or send a photo to an AI app</b>
-                  <small className="muted">Copy the prompt, paste it with a photo of your meal (or of the nutrition label on packaged food) into any free AI app (ChatGPT, Gemini, Claude), then paste its reply below.</small>
-                </div>
-                <div className="fd-row">
-                  <button type="button" className="btn primary small fd-copy" onClick={copyPrompt}>
-                    {copied ? 'Copied' : 'Copy prompt'}
-                  </button>
-                  <button type="button" className="btn small fd-copy-label" onClick={copyLabel}>
-                    {copiedLabel ? 'Copied' : 'Copy label prompt'}
-                  </button>
-                  <details className="fd-prompt">
-                    <summary>See the prompts</summary>
-                    <pre>{FOOD_PROMPT}</pre>
-                    <pre>{LABEL_PROMPT}</pre>
-                  </details>
-                </div>
-              </div>
-              <div className="fd-step">
-                <b>Paste the reply</b>
-                <textarea
-                  className="fd-paste"
-                  value={reply}
-                  rows={3}
-                  placeholder="Paste the AI app's whole reply here"
-                  aria-label="The AI app's reply"
-                  onChange={(e) => setReply(e.target.value)}
-                  onPaste={(e) => {
-                    const text = e.clipboardData.getData('text')
-                    if (text) setTimeout(() => read(reply ? `${reply}${text}` : text), 0)
-                  }}
-                />
-                <div className="fd-row">
-                  <button type="button" className="btn small fd-read" disabled={!reply.trim()} onClick={() => read()}>
-                    Read reply
-                  </button>
-                  {err && (
-                    <button type="button" className="btn ghost small" onClick={copyPrompt}>
-                      Copy the prompt again
-                    </button>
-                  )}
-                </div>
-                {err && (
-                  <p className="fd-err" role="alert">
-                    {err}
-                  </p>
-                )}
-              </div>
-              {(v.yesterday.length > 0 || v.favs.length > 0) && !rows && (
-                <div className="fd-quick">
-                  {v.yesterday.length > 0 && (
-                    <div className="fd-again">
-                      <b>Same as yesterday</b>
-                      <div className="pr-chips">
-                        {v.yesterday.map((m) => (
-                          <button key={m.id} type="button" className="chip-btn fd-yday" onClick={() => load(m.items)} title="Opens it with the grams to fix, then Save">
-                            {m.name} <small>+{m.totals.protein} g</small>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {v.favs.length > 0 && (
-                    <div className="fd-again">
-                      <b>Starred</b>
-                      <div className="pr-chips">
-                        {v.favs.map((f) => (
-                          <button key={f.id} type="button" className="chip-btn fd-favchip" onClick={() => load(f.items)}>
-                            ★ {f.name} <small>+{sumItems(f.items).protein} g</small>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </details>
+        <div className="fd-cols">
+          <div className="fd-left">
+          <div className="fd-hero">
+            <FoodBars progress={v.progress} behind={pastDay ? null : v.behind} hero />
+            <p className="fd-line sr-only" aria-live="polite">
+              {head.line}
+            </p>
+            {head.preview && (
+              <p className="fd-preview" aria-live="polite">
+                {head.preview}
+              </p>
+            )}
+          </div>
+          {pastDay && <p className="fd-past">Editing {v.day}: meals you add are marked "added later".</p>}
 
-          {groups.length > 0 && (
-            <div className="fd-meals" aria-label={pastDay ? `Meals on ${v.day}` : "Today's meals"}>
-              {groups.map((g) => {
+          <button type="button" className="bdy-btn primary big fd-log-btn" onClick={() => setSheet(rows ? 'type' : 'root')}>
+            <LogIcon kind="photo" />
+            {rows ? 'Finish your meal' : 'Log food'}
+          </button>
+          {!pastDay && <FoodPhotoLog view={v} bare pickRef={photoRef} />}
+          {moreEl}
+          </div>
+
+          <div className="fd-meals" aria-label={pastDay ? `Meals on ${v.day}` : "Today's meals"}>
+            <div className="fd-meals-head">
+              <h3>{pastDay ? `Meals on ${v.day}` : "Today's meals"}</h3>
+              {liveCount > 0 && <small className="num">{liveCount} logged</small>}
+            </div>
+            {groups.length === 0 ? (
+              <div className="fd-empty">
+                <span className="fd-empty-icon" aria-hidden="true">
+                  <LogIcon kind="plate" />
+                </span>
+                <b>Nothing yet.</b>
+                <small>Tap Log food: a photo, a saved meal or a few words.</small>
+              </div>
+            ) : (
+              groups.map((g) => {
                 const live = g.list.filter((m) => !m.removed)
                 const sum = sumItems(live.flatMap((m) => m.items))
                 return (
                   <section key={g.id} className="fd-mcard" data-type={g.id}>
                     <header>
                       <b>{g.label}</b>
-                      <small className="muted">
-                        {sum.protein} g protein · {fmt(sum.kcal)} kcal
-                        {g.id === 'supp' ? '' : ` · carbs ${sum.carbs} g · fat ${sum.fat} g`}
+                      <small className="num">
+                        {fmt(sum.kcal)} kcal · {sum.protein} g
                       </small>
                     </header>
                     <ul className="fd-mlist">
                       {g.list.map((m) => (
-                        <li key={m.id} className={m.removed ? 'removed' : ''}>
-                          <span className="fd-time">{atHm(m.at)}</span>
-                          <span className="fd-meal-name">
-                            <b>{m.name}</b>
-                            <small className="muted fd-meal-items">{itemsText(m.items)}</small>
-                            <small className="muted">
-                              {m.totals.protein} g protein · {fmt(m.totals.kcal)} kcal · carbs {m.totals.carbs} g · fat {m.totals.fat} g{m.late ? ' · added later' : ''}
-                            </small>
-                          </span>
-                          <span className="fd-meal-actions">
-                            {!m.supp && (
-                              <button type="button" className={`icon-btn fd-star${m.fav ? ' on' : ''}`} aria-pressed={m.fav} aria-label={m.fav ? `Unstar ${m.name}` : `Star ${m.name}`} onClick={async () => setV((await act(() => api.fav({ name: m.name, items: m.items }, day), m.fav ? 'Unstarred' : 'Starred: one tap adds it again')) ?? v)}>
-                                {m.fav ? '★' : '☆'}
+                        <li key={m.id} className={`${m.removed ? 'removed' : ''}${openMeal === m.id ? ' open' : ''}`}>
+                          <div className="fd-mrow">
+                            <span className="fd-meal-name">
+                              {m.removed && <small className="fd-removed-tag">Removed</small>}
+                              <b>{m.name}</b>
+                              <small className="fd-meal-sub">
+                                <span className="num">{atHm(m.at)}</span> · <span className="num">{fmt(m.totals.kcal)} kcal · {m.totals.protein} g protein</span>
+                                {m.late ? ' · added later' : ''}
+                              </small>
+                            </span>
+                            <span className="fd-meal-actions">
+                              {!m.removed && (
+                                <button type="button" className="fdf-x fd-more-btn" aria-expanded={openMeal === m.id} aria-label={`More for ${m.name}`} title="Star, save as meal, see what is in it" onClick={() => setOpenMeal(openMeal === m.id ? null : m.id)}>
+                                  ⋯
+                                </button>
+                              )}
+                              {!m.removed && (
+                                <button type="button" className="fdf-x fd-edit" aria-label={`Edit ${m.name}`} title="Edit" onClick={() => edit(m)}>
+                                  <LogIcon kind="pen" size={18} />
+                                </button>
+                              )}
+                              <button type="button" className={m.removed ? 'bdy-btn quiet fd-remove' : 'fdf-x fd-remove'} aria-label={m.removed ? `Undo removing ${m.name}` : `Remove ${m.name}`} title={m.removed ? 'Undo' : 'Remove'} onClick={() => void toggleMeal(m.id, !m.removed)}>
+                                {m.removed ? 'Undo' : '×'}
                               </button>
-                            )}
-                            {!m.removed && !m.supp && mealSource(m) !== 'saved' && (
-                              <button type="button" className="btn ghost small fd-save-meal" onClick={async () => setV((await act(() => api.saveAsMeal(m.id), 'Saved to your meals: one tap logs it next time')) ?? v)}>
-                                Save as meal
-                              </button>
-                            )}
-                            {!m.removed && (
-                              <button type="button" className="btn ghost small fd-edit" onClick={() => edit(m)}>
-                                Edit
-                              </button>
-                            )}
-                            <button type="button" className="btn ghost small fd-remove" onClick={async () => setV((await act(() => api.toggle(m.id, day))) ?? v)}>
-                              {m.removed ? 'Undo' : 'Remove'}
-                            </button>
-                          </span>
+                            </span>
+                          </div>
+                          {openMeal === m.id && !m.removed && (
+                            <div className="fd-mextra">
+                              <small className="fd-meal-items">{itemsText(m.items)}</small>
+                              <small className="num">
+                                Carbs {m.totals.carbs} g · Fat {m.totals.fat} g
+                              </small>
+                              <span className="fd-row">
+                                {!m.supp && (
+                                  <button type="button" className={`bdy-chip fd-star${m.fav ? ' on' : ''}`} aria-pressed={m.fav} aria-label={m.fav ? `Unstar ${m.name}` : `Star ${m.name}`} onClick={async () => setV((await act(() => api.fav({ name: m.name, items: m.items }, day), m.fav ? 'Unstarred' : 'Starred: one tap adds it again')) ?? v)}>
+                                    {m.fav ? '★ Starred' : '☆ Star'}
+                                  </button>
+                                )}
+                                {!m.supp && mealSource(m) !== 'saved' && (
+                                  <button type="button" className="bdy-chip fd-save-meal" onClick={async () => setV((await act(() => api.saveAsMeal(m.id), 'Saved to your meals: one tap logs it next time')) ?? v)}>
+                                    Save as meal
+                                  </button>
+                                )}
+                              </span>
+                            </div>
+                          )}
                         </li>
                       ))}
                     </ul>
                   </section>
                 )
-              })}
-            </div>
-          )}
-          <p className="fd-macros-line">{head.macros}</p>
-          <Rings rings={dayRings(saved, goals)} />
-          <small className="muted fd-why">
-            {GOAL_LABEL} · {GAIN_TEXT}
-          </small>
-          {!pastDay && (
-            <p className="fd-next" role="status">
-              <b>Next:</b> {v.next.line}
-            </p>
-          )}
-          {!pastDay && !sug && <FoodAdjustCard view={v} onView={setV} day={day} where="food" />}
-          <p className="pr-note">Saved foods use common table values; an AI app's numbers are estimates. Fix any amount that looks wrong. Logging food pays no points.</p>
-        </>
+              })
+            )}
+          </div>
+
+        </div>
       )}
 
+      {sub !== 'today' && (
+        <button type="button" className="bdy-btn quiet fd-back" data-sub="today" onClick={() => setSub('today')}>
+          ‹ Back to today
+        </button>
+      )}
       {sub === 'week' && (
         <div className="fd-week">
+          <h3 className="fd-sub-title">This week</h3>
           <p className="fd-line">{v.week.line}</p>
           <WeekChartView chart={v.chart} />
           {v.adjust.state === 'none' && <small className="muted fd-adjust-note">{v.adjust.why}</small>}
-          {sug && <small className="muted fd-adjust-note">There is a calorie suggestion waiting on Today: {sug.title.toLowerCase()}.</small>}
+          {sug && <small className="muted fd-adjust-note">There is a calorie suggestion waiting under More on Today: {sug.title.toLowerCase()}.</small>}
         </div>
       )}
 
       {sub === 'plan' && <FoodPlan v={v} onView={setV} day={day} />}
+      {/* On top of the whole app (not inside the page's tabs); body-page keeps the Body colours. */}
+      {sheetEl && createPortal(<div className="body-page fdl-portal">{sheetEl}</div>, document.body)}
       {manage && <FoodSavedSheet v={v} onView={setV} onClose={() => setManage(false)} />}
     </section>
+  )
+}
+
+type IconKind = 'photo' | 'star' | 'pen' | 'plate'
+/** Plain line icons for the Log food sheet (drawn here, no icon font). */
+function LogIcon({ kind, size = 24 }: { kind: IconKind; size?: number }) {
+  const p = { fill: 'none', stroke: 'currentColor', strokeWidth: 1.9, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const }
+  return (
+    <svg className="fdl-svg" viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">
+      {kind === 'photo' && (
+        <>
+          <path {...p} d="M4 8.5A2.5 2.5 0 0 1 6.5 6h1.6l1.4-2h5l1.4 2h1.6A2.5 2.5 0 0 1 20 8.5v8A2.5 2.5 0 0 1 17.5 19h-11A2.5 2.5 0 0 1 4 16.5Z" />
+          <circle {...p} cx="12" cy="12.5" r="3.5" />
+        </>
+      )}
+      {kind === 'star' && <path {...p} d="m12 3.8 2.5 5.1 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8Z" />}
+      {kind === 'pen' && <path {...p} d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4ZM13.5 6.5l4 4" />}
+      {kind === 'plate' && (
+        <>
+          <circle {...p} cx="12" cy="12" r="8" />
+          <circle {...p} cx="12" cy="12" r="4.5" />
+        </>
+      )}
+    </svg>
   )
 }
 

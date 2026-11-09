@@ -109,15 +109,17 @@ export function LevelCard({ level }: { level: GrowthLevel }) {
   )
 }
 
-/** The small level chip (Body header, Today). Opens Body → Growth. */
+/** The small level chip (Body header, Today): "Level Seedling". The app's ONE level; opens Body → Growth. */
 export function GrowthChip({ where }: { where: 'body' | 'today' }) {
   const g = useGrowth()
   if (!g) return null
   const l = g.level
   return (
-    <button className={`gr-chip gr-chip-${where}`} onClick={() => openTab('body', 'growth')} title={`Growth level ${l.index + 1}: ${l.name}. ${l.next ? `${l.toNext} XP to ${l.next.name}.` : ''} Open Body → Growth`} aria-label={`Growth level ${l.name}, open Growth`}>
+    <button className={`gr-chip gr-chip-${where}`} onClick={() => openTab('body', 'growth')} title={`Level ${l.index + 1}: ${l.name}. ${l.next ? `${l.toNext} XP to ${l.next.name}.` : ''} Open Body → Growth`} aria-label={`Level ${l.name}, open Growth`}>
       <i className="gr-chip-ring" style={{ ['--p' as any]: `${Math.round(l.progress * 100)}%` }} aria-hidden="true" />
-      <span>{l.name}</span>
+      <span>
+        <small className="gr-chip-k">Level</small> {l.name}
+      </span>
     </button>
   )
 }

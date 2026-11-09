@@ -1,44 +1,6 @@
 /* Body → Today. Shared pieces are in ../body-theme.css; this is only the Today layout. */
 .bdy-today { display: flex; flex-direction: column; gap: var(--bdy-gap); }
 
-/* ---------- hero (the only game-like part) ---------- */
-.bdy-hero.bdy-card {
-  display: grid;
-  grid-template-columns: minmax(0, 1.25fr) auto minmax(0, 1fr);
-  align-items: center;
-  gap: 28px;
-  padding: 22px 26px;
-  border-radius: 24px;
-  background:
-    radial-gradient(120% 140% at 0% 0%, color-mix(in srgb, var(--bdy-accent) 12%, transparent), transparent 55%),
-    var(--bdy-surface);
-}
-.bdy-hero-rank { display: flex; align-items: center; gap: 18px; min-width: 0; }
-.bdy-hero-badge {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 72px;
-  height: 72px;
-  border-radius: 22px;
-  background: var(--bdy-accent);
-  color: var(--bdy-accent-ink);
-  font-size: 34px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  box-shadow: 0 14px 30px -18px color-mix(in srgb, var(--bdy-accent) 80%, transparent);
-}
-.bdy-hero-who { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; }
-.bdy-hero-name { font-size: 30px; font-weight: 780; letter-spacing: -0.03em; line-height: 1.05; }
-.bdy-hero-score { font-size: 15px; font-weight: 650; color: var(--bdy-muted); letter-spacing: 0; margin-left: 4px; font-variant-numeric: tabular-nums; }
-.bdy-hero-xp { display: flex; align-items: center; gap: 10px; }
-.bdy-hero-xp .bdy-bar { flex: 1; max-width: 300px; }
-.bdy-hero-xp .bdy-note { white-space: nowrap; }
-.bdy-hero-stat { display: flex; flex-direction: column; gap: 4px; padding: 0 26px; border-left: 1px solid var(--bdy-border); border-right: 1px solid var(--bdy-border); }
-.bdy-hero-quest { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.bdy-hero-quest-text { font-size: 17px; font-weight: 700; line-height: 1.3; }
-.bdy-hero-quest.done .bdy-hero-quest-text { color: var(--bdy-accent-text); }
-
 /* ---------- workout ---------- */
 .wo-meta { font-size: 14px; color: var(--bdy-muted); }
 .wo-meta b { color: var(--bdy-text); font-weight: 700; }
@@ -161,24 +123,44 @@
 .bmap-ideas { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .bmap-ideas li { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; }
 
-/* ---------- more ---------- */
+/* ---------- More (closed): readiness, food, water, weight, body map ---------- */
 .bdy-more { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; padding-top: 2px; }
+.bdy-today-more { border: 1px solid var(--bdy-border); border-radius: var(--bdy-radius); background: var(--bdy-surface); padding: 0 20px; }
+.bdy-today-more > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; min-height: 68px; padding: 10px 0; }
+.bdy-today-more > summary::-webkit-details-marker { display: none; }
+.bdy-today-more > summary > span { font-size: 17px; font-weight: 700; color: var(--bdy-text); }
+.bdy-today-more > summary > small { grid-column: 1; font-size: 14px; color: var(--bdy-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bdy-today-more > summary::after { content: '›'; grid-column: 2; grid-row: 1 / span 2; font-size: 24px; color: var(--bdy-muted); transition: transform 0.15s ease; }
+.bdy-today-more[open] > summary::after { transform: rotate(90deg); }
+.bdy-today-more > summary:focus-visible { outline: 2px solid var(--bdy-accent); outline-offset: 2px; border-radius: 12px; }
+.bdy-today-more-body { display: flex; flex-direction: column; gap: var(--bdy-gap); padding: 4px 0 20px; }
+.bdy-today-more-body .bdy-card { background: var(--bdy-surface-2); border-color: transparent; box-shadow: none; }
+
+/* ---------- a rest day inside the coach card ---------- */
+.wo-rest, .wo-anyway { display: flex; flex-direction: column; gap: 10px; }
+.wo-rest .wo-mobility { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.wo-rest .wo-mobility li b { font-size: 14.5px; }
+.wo-rest .wo-mobility li small { font-size: 13.5px; }
+.wo-anyway .wo-list li { font-size: 15px; }
+
+/* ---------- Training: strength and streak ---------- */
+.bt-strength.bdy-card { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.bt-strength-stat { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.bt-strength-stat .bdy-bar { max-width: 320px; }
+@media (max-width: 560px) {
+  .bdy-today-more { padding: 0 16px; }
+  .bt-strength.bdy-card { grid-template-columns: minmax(0, 1fr) auto; gap: 16px; }
+  .wo-rest .wo-mobility { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .wo-rest .wo-mobility li { padding: 6px 8px; gap: 6px; }
+}
+@media (prefers-reduced-motion: reduce) { .bdy-today-more > summary::after { transition: none; } }
 
 /* ---------- smaller screens ---------- */
-@media (max-width: 1100px) {
-  .bdy-hero.bdy-card { grid-template-columns: minmax(0, 1fr) auto; }
-  .bdy-hero-quest { grid-column: 1 / -1; }
-  .bdy-hero-stat { border-right: 0; padding-right: 0; }
-}
 @media (max-width: 860px) {
   .bmap-wrap { grid-template-columns: minmax(0, 1fr); }
   .wo-mobility { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 560px) {
-  .bdy-hero.bdy-card { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 18px 16px; }
-  .bdy-hero-stat { border: 0; padding: 0; flex-direction: row; align-items: baseline; gap: 10px; }
-  .bdy-hero-badge { width: 60px; height: 60px; font-size: 28px; border-radius: 18px; }
-  .bdy-hero-name { font-size: 25px; }
   .wo-list { grid-template-columns: minmax(0, 1fr); }
   .wo-start { flex: 1; min-width: 0; }
   .wo-mobility { grid-template-columns: minmax(0, 1fr); }

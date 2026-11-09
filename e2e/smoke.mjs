@@ -163,6 +163,22 @@ try {
       await pg.waitForSelector('main.content', { timeout: 20000 })
     }
   }
+  // SIMPLE_SHOTS=<dir> (with SMOKE_DSF=2): clean phone and desktop shots of one Body tab.
+  const simpleShots = async (panel, name) => {
+    const dir = process.env.SIMPLE_SHOTS
+    if (!dir) return
+    await pg.addStyleTag({ content: '.toasts, .nt-stack { display: none !important; }' })
+    for (const [w, h, tag] of [[1440, 900, 'desktop'], [390, 844, 'phone']]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.waitForTimeout(500)
+      await pg.evaluate((p) => { window.scrollTo(0, 0); document.querySelectorAll('.content, main').forEach((m) => { m.scrollTop = 0 }); document.querySelector(p)?.scrollIntoView({ block: 'start' }) }, panel)
+      await pg.waitForTimeout(400)
+      await pg.screenshot({ path: `${dir}/${name}-${tag}.png` })
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
+  }
+  // Opens folded "More" sections (Body → Today, Body → Food) so their cards can be used.
+  const openFold = (sel) => pg.evaluate((q) => document.querySelectorAll(q).forEach((d) => { d.open = true }), sel)
   const atTime = async (hm, fn) => {
     await pg.context().clock.setSystemTime(todayAt(hm))
     await reloadApp()
@@ -333,7 +349,7 @@ try {
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.
-  await step('Body Today: rank hero, workout Start opens workout mode, readiness, food rings, water bottle, body map, one protein counter, fits two screens', async () => {
+  await step('Body Today: one coach card (no rest/workout contradiction, readiness line, no evening check-in in the morning), one Level in the header, More holds readiness, food rings, water, weight, body map', async () => {
     const shots = process.env.BODY_TODAY_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
@@ -341,11 +357,38 @@ try {
     await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="today"]')
     const t = '#ptp-body-today'
-    // 1. The hero: a rank, a bar to the next rank, the streak and today's quest.
-    await pg.waitForSelector(`${t} .bdy-hero .bdy-hero-name`, { timeout: 20000 })
-    if (!/Recruit|Trainee|Fighter|Warrior|Elite|Legend/.test(await pg.locator(`${t} .bdy-hero-name`).innerText())) throw new Error('the hero shows no strength rank')
-    if (!(await pg.locator(`${t} .bdy-hero [role="progressbar"]`).count())) throw new Error('the hero has no bar to the next rank')
-    if (!/Today's quest/i.test(await pg.locator(`${t} .bdy-hero`).innerText())) throw new Error("the hero has no today's quest")
+    // 1. ONE card is today's plan: training from the split, meals, ticks, the tip.
+    await pg.waitForSelector(`${t} .ct-card.ct-full [data-ct="train"]`, { timeout: 20000 })
+    if ((await pg.locator(`${t} .ct-card`).count()) !== 1) throw new Error('Body Today has more than one coach card')
+    if (await pg.locator(`${t} .bdy-hero, ${t} .wo-card`).count()) throw new Error('the old hero or the separate workout card is still on Body Today')
+    // No contradiction: a rest day shows no Start and no workout list until "Train anyway"; a session day never says "Rest day".
+    const train = await pg.locator(`${t} [data-ct="train"]`).getAttribute('class')
+    if (/ct-rest/.test(train)) {
+      if (await pg.locator(`${t} .ct-start, ${t} .wo-start, ${t} .wo-list`).count()) throw new Error('a rest day also shows a workout to start')
+      if (!(await pg.locator(`${t} .wo-anyway-btn`).count())) throw new Error('a rest day has no "Train anyway"')
+    } else if (/ct-session/.test(train) && /Rest day/.test(await pg.locator(`${t} [data-ct="train"]`).innerText())) throw new Error('a session day says "Rest day"')
+    // Readiness is one line in the card, with Adjust.
+    if (!/Readiness \d+: (ready, go full|go lighter|rest or mobility) today|Readiness: log sleep or tap soreness for a real score/.test(await pg.locator(`${t} .rdy-line`).innerText())) throw new Error(`no readiness line: ${await pg.locator(`${t} .rdy-line`).innerText().catch(() => '')}`)
+    // The clock says 08:30: no evening check-in yet.
+    if (await pg.locator(`${t} .ck-card`).count()) throw new Error('the evening check-in shows in the morning')
+    // ONE level in the header ("Level …"), and no "Strength rank" anywhere on Body Today.
+    if (!/^Level /i.test((await pg.locator('.topbar .gr-chip-body').innerText()).trim())) throw new Error('the header chip does not say Level')
+    if (/Strength rank/i.test(await pg.locator('.body-page').innerText())) throw new Error('Body still says "Strength rank" next to the level')
+    // Short: with More closed the page fits about one and a half laptop screens.
+    if (!(await pg.locator(`${t} .bdy-today-more`).getAttribute('open').then((x) => x != null))) {
+      const h0 = await pg.evaluate((p) => document.querySelector(p).getBoundingClientRect().height, t)
+      if (h0 > 900 * 1.6) throw new Error(`Body Today is ${Math.round(h0)}px tall with More closed`)
+    }
+    await simpleShots('.body-page', 'body-today')
+    if (shots) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.evaluate(() => { window.scrollTo(0, 0); document.querySelector('.body-page')?.scrollIntoView() })
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${shots}/body-today-desktop.png` })
+    }
+    // 2. More: the readiness card, food rings, water, weight & waist, the body map.
+    await pg.click(`${t} .bdy-today-more > summary`)
+    await pg.waitForSelector(`${t} .bdy-today-more[open] .rdy-card`, { timeout: 5000 })
     // 3. Readiness: a score 0–100, a plain verdict and the dose (picking one is checked in "Body boost",
     // after the Sport Track steps: a Short day would lower their targets).
     await pg.waitForSelector(`${t} .rdy-card .bdy-seg button[role="radio"] .rdy-auto`, { timeout: 20000 })
@@ -378,7 +421,7 @@ try {
     if (/Rest day/.test(all) && /trained today/i.test(all)) throw new Error('Today says "Rest day" and "You trained today" together')
     // Fits about two laptop screens.
     const h = await pg.evaluate((p) => document.querySelector(p).getBoundingClientRect().height, t)
-    if (h > 900 * 2.1) throw new Error(`Body Today is ${Math.round(h)}px tall (more than two screens)`)
+    if (h > 900 * 3.2) throw new Error(`Body Today is ${Math.round(h)}px tall with More open`)
     if (shots) {
       // Screenshots only: a made-up week of sets (Mon–Sat), so the body map has something to light up.
       await pg.evaluate((now) => {
@@ -415,15 +458,16 @@ try {
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     if (over > 1) throw new Error(`Body Today scrolls sideways on a phone (${over}px)`)
     await pg.setViewportSize({ width: 1440, height: 900 })
-    // 2. Today's workout: Start opens Sport Track's own workout mode (on a suggested rest day: Train anyway first).
-    if (await pg.locator(`${t} .wo-rest`).count()) await pg.locator(`${t} .wo-rest .bdy-btn`).first().click()
-    if (await pg.locator(`${t} .wo-start`).count()) {
-      await pg.click(`${t} .wo-start`)
+    // 3. Start (in the coach card) opens Sport Track's own workout mode (on a rest day: Train anyway first).
+    if (await pg.locator(`${t} .wo-anyway-btn`).count()) await pg.click(`${t} .wo-anyway-btn`)
+    const go = (await pg.locator(`${t} .wo-start`).count()) ? `${t} .wo-start` : (await pg.locator(`${t} .ct-start`).count()) ? `${t} .ct-start` : null
+    if (go) {
+      await pg.click(go)
       await pg.waitForFunction(() => [...document.querySelectorAll('iframe')].some((f) => f.src.includes('/apps/sport/') && f.contentDocument?.getElementById('workout-mode') && !f.contentDocument.getElementById('workout-mode').hidden), null, { timeout: 20000 })
       const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
       await frame.evaluate(() => document.getElementById('wm-close')?.click())
       await frame.waitForSelector('#workout-mode', { state: 'hidden', timeout: 10000 })
-    } else if (!/You trained today/.test(await pg.locator(`${t} .wo-card`).innerText())) throw new Error('no Start workout button and not done for today')
+    } else if (!(await pg.locator(`${t} .ct-done`).count())) throw new Error('no Start button and not done for today')
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
   await step('Sport Track note: a workout summary makes one note from Ben, once', async () => {
@@ -720,6 +764,7 @@ try {
     // Today: readiness sets the dose; tapping Short tells Sport Track (life_body) and says it's your pick; then back to automatic.
     await pg.click('.body-page .ptabs [data-tab="today"]')
     const today = '#ptp-body-today'
+    await openFold(`${today} .bdy-today-more`)
     await pg.waitForSelector(`${today} .rdy-card .bdy-seg button[role="radio"] .rdy-auto`, { timeout: 20000 })
     await pg.locator(`${today} .rdy-card .bdy-seg button[role="radio"]`).nth(2).click()
     await pg.waitForFunction(() => JSON.parse(localStorage.getItem('life_body') || 'null')?.ready?.mode === 'short', null, { timeout: 15000 })
@@ -953,6 +998,22 @@ try {
     await pg.click('.body-page .ptabs [data-tab="food"]')
     const fc = '#ptp-body-food .fd-card'
     await pg.waitForSelector(`${fc} .fd-line`, { timeout: 20000 })
+    // The main view: today's numbers, exactly ONE primary button ("Log food"), today's meals, More (closed).
+    await pg.evaluate(() => document.querySelectorAll('#ptp-body-food .fd-more').forEach((d) => { d.open = false }))
+    const primaries = await pg.locator('#ptp-body-food :is(.bdy-btn.primary, .btn.primary)').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.textContent.trim()))
+    if (primaries.length !== 1 || !/Log food/.test(primaries[0])) throw new Error(`the Food main view should have one primary "Log food" button, it has: ${JSON.stringify(primaries)}`)
+    if (!(await pg.locator(`${fc} .fd-meals h3`, { hasText: "Today's meals" }).count())) throw new Error('no "Today\'s meals" list')
+    // The Food tab badge uses the same protein goal as the card.
+    const cardGoal = (await pg.locator(`${fc} .fdf-protein .fdf-goal`).innerText()).replace(/[^\d]/g, '')
+    await pg.waitForFunction((g) => new RegExp(`/${g}\\b`).test(document.querySelector('.body-page .ptabs [data-tab="food"]')?.textContent ?? ''), cardGoal, { timeout: 10000 })
+    // Log food opens a sheet with three big choices.
+    await pg.click(`${fc} .fd-log-btn`)
+    await pg.waitForSelector(`.fdl-sheet .fdl-choices`, { timeout: 5000 })
+    const choices = await pg.locator(`.fdl-sheet .fdl-choice b`).allInnerTexts()
+    if (choices.join('|') !== 'Photo|My meals|Type it') throw new Error(`the Log food sheet shows: ${choices.join(', ')}`)
+    await pg.click(`.fdl-sheet .fdl-close`)
+    await pg.waitForSelector(`.fdl-sheet`, { state: 'detached', timeout: 5000 })
+    await openFold(`${fc} .fd-more`)
     if (!/Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(await pg.locator(`${fc} .fd-line`).innerText())) throw new Error('the food line is missing protein or kcal')
     // One-tap logging: the big bars, a saved meal (logged once, Undo), amounts, the standard day and its checklist.
     const kcalNow = async () => Number(((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).split('/')[0] || '').replace(/[^\d]/g, ''))
@@ -965,49 +1026,62 @@ try {
     const k0 = await kcalNow()
     const mealCount = () => pg.locator(`${fc} .fd-meals li`).count()
     const m0 = await mealCount()
-    await pg.click(`${fc} .fdf-tile[data-meal="sm-breakfast"]`)
+    // My meals (in the Log food sheet): one tap logs a saved meal.
+    await pg.click(`${fc} .fd-log-btn`)
+    await pg.click(`.fdl-sheet .fdl-meals`)
+    await pg.click(`.fdl-sheet .fdf-tile[data-meal="sm-breakfast"]`)
     await waitKcal(k0 + 486)
     if ((await mealCount()) !== m0 + 1) throw new Error('one tap did not log exactly one meal')
     await pg.locator('.toasts .toast-act', { hasText: 'Undo' }).last().click()
     await waitKcal(k0)
-    await pg.click(`${fc} .fdf-tile[data-meal="sm-breakfast"]`)
+    await pg.click(`.fdl-sheet .fdf-tile[data-meal="sm-breakfast"]`)
     await waitKcal(k0 + 486)
     // Right after: eggs ×2 instead of ×3.
-    await pg.click(`${fc} .fdf-last-adj`)
-    await pg.waitForSelector(`${fc} .fdf-qty`, { timeout: 5000 })
-    await pg.locator(`${fc} .fdf-qty .fdf-less`).first().click()
-    if (!/×2/.test(await pg.locator(`${fc} .fdf-qty li`).first().innerText())) throw new Error('the egg stepper did not go to ×2')
-    await pg.click(`${fc} .fdf-qty-go`)
+    await pg.click(`.fdl-sheet .fdf-last-adj`)
+    await pg.waitForSelector(`.fdl-sheet .fdf-qty`, { timeout: 5000 })
+    await pg.locator(`.fdl-sheet .fdf-qty .fdf-less`).first().click()
+    if (!/×2/.test(await pg.locator(`.fdl-sheet .fdf-qty li`).first().innerText())) throw new Error('the egg stepper did not go to ×2')
+    await pg.click(`.fdl-sheet .fdf-qty-go`)
     await waitKcal(k0 + 486 - 72)
     // Before logging: the ± on a tile opens the amounts first.
-    await pg.click(`${fc} .fdf-tile-wrap:has([data-meal="sm-branza"]) .fdf-tile-adj`)
-    await pg.waitForSelector(`${fc} .fdf-qty`, { timeout: 5000 })
+    await pg.click(`.fdl-sheet .fdf-tile-wrap:has([data-meal="sm-branza"]) .fdf-tile-adj`)
+    await pg.waitForSelector(`.fdl-sheet .fdf-qty`, { timeout: 5000 })
     await pg.keyboard.press('Escape')
-    await pg.waitForSelector(`${fc} .fdf-qty`, { state: 'detached', timeout: 5000 })
+    await pg.waitForSelector(`.fdl-sheet .fdf-qty`, { state: 'detached', timeout: 5000 })
     // The standard day: every slot at once (about 2,330 kcal), then the checklist with a swap.
     const k1 = await kcalNow()
-    await pg.click(`${fc} .fdf-day-go`)
+    await pg.click(`.fdl-sheet .fdf-day-go`)
     await waitKcal(k1 + 2332)
-    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fdf-check .fdf-check-slot`).length === 5, fc, { timeout: 10000 })
-    await pg.click(`${fc} .fdf-check-slot[data-slot="ds-evening"] .fdf-swap`)
-    await pg.waitForFunction((s) => /Buckwheat/.test(document.querySelector(`${s} .fdf-check-slot[data-slot="ds-evening"]`)?.textContent ?? ''), fc, { timeout: 10000 })
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fdf-check .fdf-check-slot`).length === 5, '.fdl-sheet', { timeout: 10000 })
+    await pg.click(`.fdl-sheet .fdf-check-slot[data-slot="ds-evening"] .fdf-swap`)
+    await pg.waitForFunction((s) => /Buckwheat/.test(document.querySelector(`${s} .fdf-check-slot[data-slot="ds-evening"]`)?.textContent ?? ''), '.fdl-sheet', { timeout: 10000 })
     await waitKcal(k1 + 2332 + 24) // buckwheat + 2 eggs is 24 kcal more than bulgur
     // A saved food chip.
     const k2 = await kcalNow()
-    await pg.click(`${fc} .fdf-chip[data-food="sf-egg"]`)
+    await pg.click(`.fdl-sheet .fdf-chip[data-food="sf-egg"]`)
     await waitKcal(k2 + 72)
+    await pg.click(`.fdl-sheet .fdl-done`)
+    await pg.waitForSelector(`.fdl-sheet`, { state: 'detached', timeout: 5000 })
+    await pg.evaluate(() => document.querySelectorAll('#ptp-body-food .fd-more').forEach((d) => { d.open = false }))
+    await simpleShots('.body-page', 'food')
+    if (process.env.SIMPLE_SHOTS) {
+      await pg.setViewportSize({ width: 390, height: 844 })
+      await pg.click(`${fc} .fd-log-btn`)
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${process.env.SIMPLE_SHOTS}/food-sheet-phone.png` })
+      await pg.click(`.fdl-sheet .fdl-close`)
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await openFold(`${fc} .fd-more`)
     // The same numbers on Body → Today.
     const barFood = (await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim()
     await pg.waitForFunction(([b]) => (document.querySelector('#ptp-body-today .fr-card .fdf-kcal .fdf-bar-label b')?.textContent ?? '').trim() === b, [barFood], { timeout: 15000 })
     if (shots) {
       await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
-      await pg.click(`${fc} .fdf-check-toggle`)
-      await pg.waitForTimeout(300)
       await pg.locator(fc).screenshot({ path: `${shots}/food-fast-desktop.png` })
-      await pg.click(`${fc} .fdf-check-toggle`)
     }
-    // The old ways to log are folded away but still work.
-    await pg.click(`${fc} .fd-more > summary`)
+    // The copy-prompt way is under More and still works.
+    await openFold(`${fc} .fd-more`)
     await pg.waitForSelector(`${fc} .fd-copy`, { state: 'visible', timeout: 5000 })
     const lineBefore = await pg.locator(`${fc} .fd-line`).innerText()
     // The label prompt for packaged food is a second button.
@@ -1023,17 +1097,17 @@ try {
     const reply = 'Here you go:\n```json\n{"items":[{"name":"chicken breast","grams":150,"protein_g":46,"carbs_g":0,"fat_g":5,"kcal":230,"confidence":"roughly"},{"name":"rice","grams":200,"protein_g":"5,2","carbs_g":56,"fat_g":1,"confidence":"sure"}],"question":"Was it cooked in oil?"}\n```'
     await pg.fill(`${fc} .fd-paste`, reply)
     await pg.click(`${fc} .fd-read`)
-    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-item`).length === 2, fc, { timeout: 5000 })
-    if (!/cooked in oil/.test(await pg.locator(`${fc} .fd-q`).innerText())) throw new Error("the AI's question is not shown")
-    const draft = () => pg.locator(`${fc} .fd-draft-total`).innerText()
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-item`).length === 2, '.fdl-sheet', { timeout: 5000 })
+    if (!/cooked in oil/.test(await pg.locator(`.fdl-sheet .fd-q`).innerText())) throw new Error("the AI's question is not shown")
+    const draft = () => pg.locator(`.fdl-sheet .fd-draft-total`).innerText()
     if (!/51 g protein/.test(await draft())) throw new Error(`draft total: ${await draft()}`)
-    await pg.locator(`${fc} .fd-item`).first().locator('.fd-plus').click()
-    await pg.waitForFunction((s) => /175 g/.test(document.querySelector(`${s} .fd-item .fd-grams`)?.textContent ?? ''), fc, { timeout: 3000 })
+    await pg.locator(`.fdl-sheet .fd-item`).first().locator('.fd-plus').click()
+    await pg.waitForFunction((s) => /175 g/.test(document.querySelector(`${s} .fd-item .fd-grams`)?.textContent ?? ''), '.fdl-sheet', { timeout: 3000 })
     if (!/59 g protein/.test(await draft())) throw new Error(`after +25 g the draft is ${await draft()}`)
     // One basis: the header does not count the unsaved draft; the preview is shown apart.
     if ((await pg.locator(`${fc} .fd-line`).innerText()) !== lineBefore) throw new Error('the header changed with an unsaved preview')
     if (!/^\+59 g protein .* if you save$/.test(await pg.locator(`${fc} .fd-preview`).innerText())) throw new Error(`the preview line is: ${await pg.locator(`${fc} .fd-preview`).innerText()}`)
-    await pg.locator(`${fc} .fd-item .fd-name`).nth(1).fill('white rice')
+    await pg.locator(`.fdl-sheet .fd-item .fd-name`).nth(1).fill('white rice')
     if (shots) {
       await pg.addStyleTag({ content: '.toasts { display: none !important; } .body-page .ptabs { visibility: hidden !important; }' })
       await pg.setViewportSize({ width: 1280, height: 1600 })
@@ -1042,7 +1116,7 @@ try {
       await pg.setViewportSize({ width: 1440, height: 900 })
     }
     const mealsBefore = await pg.locator(`${fc} .fd-meals li`).count()
-    await pg.click(`${fc} .fd-save`)
+    await pg.click(`.fdl-sheet .fd-save`)
     await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li`).length === n + 1, [fc, mealsBefore], { timeout: 15000 })
     if (!/White rice/.test(await pg.locator(`${fc} .fd-meals`).innerText())) throw new Error('the renamed food is not in the saved meal')
     await pg.waitForFunction((s) => /g protein left|Protein done|Protein and kcal done/.test(document.querySelector(`${s} .fd-next`)?.textContent ?? ''), fc, { timeout: 10000 })
@@ -1058,39 +1132,49 @@ try {
     await pg.waitForSelector(`${fc} .fd-past`, { timeout: 10000 })
     await pg.fill(`${fc} .fd-paste`, '{"items":[{"name":"skyr","grams":250,"protein_g":27,"carbs_g":10,"fat_g":0,"kcal":160}]}')
     await pg.click(`${fc} .fd-read`)
-    await pg.waitForSelector(`${fc} .fd-item`, { timeout: 5000 })
-    await pg.click(`${fc} .fd-save`)
+    await pg.waitForSelector(`.fdl-sheet .fd-item`, { timeout: 5000 })
+    await pg.click(`.fdl-sheet .fd-save`)
     await pg.waitForFunction((s) => /added later/.test(document.querySelector(`${s} .fd-meals`)?.textContent ?? ''), fc, { timeout: 15000 })
     await pg.click(`${fc} .fd-day`)
     await pg.locator('.ui-select-list [role="option"]', { hasText: 'Today' }).click()
-    await pg.waitForSelector(`${fc} .fd-yday`, { timeout: 10000 })
+    await pg.waitForFunction((s) => !document.querySelector(`${s} .fd-past`), fc, { timeout: 10000 })
+    await pg.click(`${fc} .fd-log-btn`)
+    await pg.click(`.fdl-sheet .fdl-meals`)
+    await pg.waitForSelector(`.fdl-sheet .fd-yday`, { timeout: 10000 })
     const n2 = await pg.locator(`${fc} .fd-meals li`).count()
-    await pg.locator(`${fc} .fd-yday`, { hasText: 'Skyr' }).click()
-    await pg.waitForSelector(`${fc} .fd-item`, { timeout: 5000 })
-    await pg.click(`${fc} .fd-save`)
+    await pg.locator(`.fdl-sheet .fd-yday`, { hasText: 'Skyr' }).click()
+    await pg.waitForSelector(`.fdl-sheet .fd-item`, { timeout: 5000 })
+    await pg.click(`.fdl-sheet .fd-save`)
     await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li`).length === n + 1, [fc, n2], { timeout: 15000 })
-    // A star makes it one tap next time.
-    await pg.locator(`${fc} .fd-meals li .fd-star`).last().click()
-    await pg.waitForSelector(`${fc} .fd-favchip`, { timeout: 10000 })
-    // Quick add in words: known foods become the draft, an unknown one is asked about.
-    await pg.fill(`${fc} .fd-words`, '200g chicken, 2 eggs, 1 banana, 80g dragonfruit')
-    await pg.click(`${fc} .fd-words-go`)
-    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-item`).length === 3, fc, { timeout: 5000 })
-    if (!/dragonfruit/.test(await pg.locator(`${fc} .fd-words-say`).innerText())) throw new Error('an unknown word is not asked about')
+    // A star (under ⋯ on the meal row) makes it one tap next time, in My meals.
+    await pg.locator(`${fc} .fd-mcard:not([data-type="supp"]) .fd-more-btn`).last().click()
+    await pg.locator(`${fc} .fd-mextra .fd-star`).click()
+    await pg.click(`${fc} .fd-log-btn`)
+    await pg.click(`.fdl-sheet .fdl-meals`)
+    await pg.waitForSelector(`.fdl-sheet .fd-favchip`, { timeout: 10000 })
+    // Type it: known foods become the draft, an unknown one is asked about.
+    await pg.click(`.fdl-sheet .fdl-back`)
+    await pg.click(`.fdl-sheet .fdl-type`)
+    await pg.fill(`.fdl-sheet .fd-words`, '200g chicken, 2 eggs, 1 banana, 80g dragonfruit')
+    await pg.click(`.fdl-sheet .fd-words-go`)
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-item`).length === 3, '.fdl-sheet', { timeout: 5000 })
+    if (!/dragonfruit/.test(await pg.locator(`.fdl-sheet .fd-words-say`).innerText())) throw new Error('an unknown word is not asked about')
     if (!/76 g protein/.test(await draft())) throw new Error(`words draft total: ${await draft()}`)
-    await pg.click(`${fc} .fd-cancel`)
-    // A supplement (a shake has protein) and water (the one water log).
-    await pg.click(`${fc} .fd-supp-shake`)
-    await pg.waitForFunction((s) => /whey protein shake/.test(document.querySelector(`${s} .fd-mcard[data-type="supp"]`)?.textContent ?? ''), fc, { timeout: 10000 })
-    await pg.click(`${fc} .fd-water-glass`)
-    await pg.waitForFunction((s) => /Water\s*250\s*\/\s*[\d,]+\s*ml/.test(document.querySelector(`${s} .fd-water`)?.textContent ?? ''), fc, { timeout: 10000 })
+    await pg.click(`.fdl-sheet .fd-cancel`)
+    // Quick add in the Log food sheet: a supplement (a shake has protein) and water (the one water log).
+    await pg.click(`${fc} .fd-log-btn`)
+    await pg.click(`.fdl-sheet .fd-supp-shake`)
+    await pg.waitForFunction((s) => /shake/i.test(document.querySelector(`${s} .fd-mcard[data-type="supp"]`)?.textContent ?? ''), fc, { timeout: 10000 })
+    await pg.click(`.fdl-sheet .fd-water-glass`)
+    await pg.waitForFunction((s) => /Water\s*250\s*\/\s*[\d,]+\s*ml/.test(document.querySelector(`${s} .fd-water`)?.textContent ?? ''), '.fdl-sheet', { timeout: 10000 })
+    await pg.click(`.fdl-sheet .fdl-close`)
     // Rings and meal cards; a meal can be edited.
     if ((await pg.locator(`${fc} .fd-ring`).count()) !== 4) throw new Error('the day needs 4 rings')
     if (!(await pg.locator(`${fc} .fd-mcard`).count())) throw new Error('no meal cards')
     if (!/Carbs \d+ \/ [\d,]+ g · Fat \d+ \/ [\d,]+ g/.test(await pg.locator(`${fc} .fd-macros-line`).innerText())) throw new Error('carbs and fat targets are missing')
     await pg.locator(`${fc} .fd-mcard:not([data-type="supp"]) .fd-edit`).first().click()
-    await pg.waitForFunction((s) => /Changing a saved meal/.test(document.querySelector(`${s} .fd-draft`)?.textContent ?? ''), fc, { timeout: 5000 })
-    await pg.click(`${fc} .fd-cancel`)
+    await pg.waitForFunction((s) => /Changing a saved meal/.test(document.querySelector(`${s} .fd-draft`)?.textContent ?? ''), '.fdl-sheet', { timeout: 5000 })
+    await pg.click(`.fdl-sheet .fd-cancel`)
     if (shots) {
       await pg.addStyleTag({ content: '.toasts { display: none !important; } .body-page .ptabs { visibility: hidden !important; }' })
       await pg.setViewportSize({ width: 1280, height: 1800 })
@@ -1107,6 +1191,7 @@ try {
       await pg.locator(fc).screenshot({ path: `${shots}/food-counter-week.png` })
       await pg.setViewportSize({ width: 1440, height: 900 })
     }
+    await pg.click(`${fc} [data-sub="today"]`)
     await pg.click(`${fc} [data-sub="plan"]`)
     await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-cheap-list li`).length > 5 && /Shopping list for 7 days/.test(document.querySelector(`${s} .fd-shop`)?.textContent ?? '') && /Sunday meal prep/.test(document.querySelector(`${s} .fd-prep`)?.textContent ?? ''), fc, { timeout: 5000 })
     await pg.click(`${fc} [data-sub="today"]`)
@@ -1148,8 +1233,13 @@ try {
     await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="food"]')
     const fc = '#ptp-body-food .fd-card'
-    await pg.waitForSelector(`${fc} .fph-start .fph-snap`, { timeout: 20000 })
-    if (!(await pg.locator(`${fc} .fph-noai`).count())) throw new Error('no "No AI? Copy the prompt instead" link')
+    // Photo is the first choice in the Log food sheet; the picker itself is ready in the page (multi-photo).
+    await pg.waitForSelector(`${fc} .fd-log-btn`, { timeout: 20000 })
+    await pg.click(`${fc} .fd-log-btn`)
+    await pg.waitForSelector(`.fdl-sheet .fdl-choice.fdl-photo`, { timeout: 5000 })
+    await pg.click(`.fdl-sheet .fdl-close`)
+    if (!(await pg.locator(`${fc} input.fph-file[multiple]`).count())) throw new Error('no multi-photo picker')
+    if (!(await pg.locator(`${fc} .fd-copy`).count())) throw new Error('no copy-prompt way for no AI')
     // A made-up "meal photo", drawn in the page (no real photo).
     const draw = async (tint) => Buffer.from(await pg.evaluate((tint) => {
       const c = document.createElement('canvas')
@@ -6109,6 +6199,7 @@ try {
     await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="today"]')
     const t = '#ptp-body-today'
+    await openFold(`${t} .bdy-today-more`)
     await pg.locator(`${t} .wt-log`).first().click()
     await pg.waitForSelector('.blog-sheet', { timeout: 10000 })
     if (!/morning, after the toilet, before eating or drinking/.test(await pg.locator('.blog-hint').innerText())) throw new Error('the sheet has no weigh-in hint')
@@ -6196,6 +6287,7 @@ try {
     // functions (core/bodyComp.ts + core/foodAdjust.ts, bundled here) run on the synced rows.
     const card = `${prog} .fd-adjust-card`
     const foodCard = '#ptp-body-food .fd-adjust-card'
+    await openFold('#ptp-body-food .fd-more')
     const title = (sel) => pg.locator(`${sel} .fd-adjust-title`).innerText()
     await pg.waitForSelector(card, { timeout: 15000 })
     if (!process.env.E2E_BODY_DEMO) {

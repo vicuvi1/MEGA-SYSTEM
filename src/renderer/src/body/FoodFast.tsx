@@ -46,33 +46,55 @@ export function SlotIcon({ slot }: { slot: MealType }) {
 
 // ---------------------------------------------------------------- the big bars
 
-/** "1,900 / 2,700 kcal" and "90 / 130 g protein", "800 kcal · 40 g left", and the protein hint. */
-export function FoodBars({ progress, behind, compact = false }: { progress: DayProgress; behind?: ProteinBehind | null; compact?: boolean }) {
+/** Splits "1,240 / 2,700 kcal" into the eaten number (big) and " / 2,700" (smaller). */
+const split = (line: string, unit: string) => {
+  const [eaten, goal] = line.replace(unit, '').split('/')
+  return { eaten: (eaten ?? '').trim(), goal: (goal ?? '').trim() }
+}
+
+/**
+ * "1,240 / 2,700 kcal" and "62 / 125 g protein" with a bar each, then ONE line:
+ * what is left, or the protein hint when you are behind. `hero` is the big
+ * version at the top of Body → Food; `compact` the small one in cards.
+ */
+export function FoodBars({ progress, behind, compact = false, hero = false }: { progress: DayProgress; behind?: ProteinBehind | null; compact?: boolean; hero?: boolean }) {
   const p = progress
+  const k = split(p.kcalLine, ' kcal')
+  const pr = split(p.proteinLine, ' g protein')
+  const late = !!behind?.behind
   return (
-    <span className={`fdf-bars${compact ? ' compact' : ''}`}>
+    <span className={`fdf-bars${compact ? ' compact' : ''}${hero ? ' hero' : ''}`}>
       <span className="fdf-bar-row fdf-kcal">
         <span className="fdf-bar-label">
-          <b className="num">{p.kcalLine.replace(' kcal', '')}</b> <span>kcal</span>
+          <b className="num">
+            <span className="fdf-eaten">{k.eaten}</span>
+            <span className="fdf-goal"> / {k.goal}</span>
+          </b>{' '}
+          <span>kcal</span>
         </span>
         <span className="bdy-bar" role="progressbar" aria-label="kcal today" aria-valuemin={0} aria-valuemax={p.kcal.goal} aria-valuenow={p.kcal.eaten}>
           <i style={{ ['--p' as string]: p.kcal.frac }} />
         </span>
       </span>
-      <span className={`fdf-bar-row fdf-protein${behind?.behind ? ' behind' : ''}`}>
+      <span className={`fdf-bar-row fdf-protein${late ? ' behind' : ''}`}>
         <span className="fdf-bar-label">
-          <b className="num">{p.proteinLine.replace(' g protein', '')}</b> <span>g protein</span>
+          <b className="num">
+            <span className="fdf-eaten">{pr.eaten}</span>
+            <span className="fdf-goal"> / {pr.goal}</span>
+          </b>{' '}
+          <span>g protein</span>
         </span>
         <span className="bdy-bar" role="progressbar" aria-label="Protein today" aria-valuemin={0} aria-valuemax={p.protein.goal} aria-valuenow={p.protein.eaten}>
           <i style={{ ['--p' as string]: p.protein.frac }} />
         </span>
       </span>
-      <span className="fdf-left" aria-live="polite">
+      {/* One line only: the hint when behind on protein, else what is left. */}
+      <span className={`fdf-left${late ? ' sr-only' : ''}`} aria-live="polite">
         {p.leftLine}
       </span>
-      {behind?.behind && (
+      {late && (
         <span className="fdf-behind" role="status">
-          {behind.hint}
+          {behind!.hint}
         </span>
       )}
     </span>
@@ -99,7 +121,12 @@ function QtyPanel({ title, rows, confirm, onConfirm, onCancel }: { title: string
     box.current?.querySelector<HTMLButtonElement>('button')?.focus()
   }, [])
   const total = rows.reduce((a, r, i) => ({ kcal: a.kcal + r.kcal * qty[i], protein: a.protein + r.protein * qty[i] }), { kcal: 0, protein: 0 })
-  const key = (e: KeyboardEvent) => e.key === 'Escape' && onCancel()
+  // Esc closes only this panel (not the sheet around it).
+  const key = (e: KeyboardEvent) => {
+    if (e.key !== 'Escape') return
+    e.stopPropagation()
+    onCancel()
+  }
   return (
     <div className="fdf-qty" role="group" aria-label={title} ref={box} onKeyDown={key}>
       <b className="fdf-qty-title">{title}</b>
@@ -211,7 +238,10 @@ export function QuickLog({ v, onView, onManage }: { v: FoodView; onView: (v: Foo
         <div className="fdf-day">
           {!dayLogged ? (
             <button type="button" className="bdy-btn primary big fdf-day-go" onClick={logDay}>
-              Log my standard day
+              <span className="fdf-day-name">
+                <b>My standard day</b>
+                <small>Every usual meal at once</small>
+              </span>
               <small className="num">
                 {fmt(v.standard.kcal)} kcal · {v.standard.protein} g
               </small>
@@ -284,7 +314,7 @@ export function QuickLog({ v, onView, onManage }: { v: FoodView; onView: (v: Foo
       )}
 
       <div className="fdf-sec-head">
-        <span className="bdy-eyebrow">Your meals</span>
+        <span className="bdy-eyebrow">My meals · tap to log</span>
         <button type="button" className="bdy-btn quiet fdf-manage" onClick={onManage}>
           Edit saved foods
         </button>

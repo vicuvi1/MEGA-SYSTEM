@@ -1,9 +1,13 @@
-// "Coach today": the one card that says what to do today. Training (with
-// Start), the meal checklist with big ticks, the weigh-in and bed ticks, the
-// morning routine as a small timeline, and the day's line + tip. On Today →
-// Now it is one slim strip (training + Start, the next meal, weigh-in, bed;
-// "Open" shows the whole card); on Body → Today it is full. Ticks pay nothing.
-import { useState } from 'react'
+// "Coach today": the one card that says what to do today, from ONE source (the
+// training split in core/coachPlan.ts): today's session with Start (or "Rest
+// day", with what the page passes in `rest`, e.g. mobility and Train anyway),
+// an optional readiness line, the meal checklist (a tap logs your usual meal),
+// the weigh-in and bed ticks, and the day's line + tip; the morning routine is
+// folded. On Today → Now it is one slim strip (training + Start, the next
+// meal, weigh-in, bed; "Open" shows the whole card); on Body → Today it is
+// full. The evening check-in shows only from 20:30 (or when you tap "Evening
+// check-in") and folds away once saved. Ticks pay nothing.
+import { useState, type ReactNode } from 'react'
 import { life } from '../bridge'
 import { useAction, useToast } from '../ui'
 import { openTab } from '../PageTabs'
@@ -14,19 +18,22 @@ import { CoachSettings } from './CoachSettings'
 import { WeeklyReviewFlow } from './WeeklyReview'
 import { CoachCheckin, checkinTime } from './CoachCheckin'
 import './coach.css'
+import './coach-full.css'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
+const cap = (x: string) => (x ? x[0].toUpperCase() + x.slice(1) : x)
 
-export function CoachToday({ compact = false, moves = true, onStart }: { compact?: boolean; moves?: boolean; onStart?: () => void }) {
+export function CoachToday({ compact = false, moves = true, onStart, readiness, rest }: { compact?: boolean; moves?: boolean; onStart?: () => void; readiness?: ReactNode; rest?: ReactNode }) {
   const { v, set } = useCoach()
   const act = useAction()
   const toast = useToast()
   const [more, setMore] = useState(false)
   const [settings, setSettings] = useState(false)
   const [review, setReview] = useState(false)
+  const [askCheckin, setAskCheckin] = useState(false)
   if (!v) return null
-  // The evening check-in card comes under the coach card after 20:30 (core/coachTalk.ts).
-  const evening = checkinTime() ? <CoachCheckin /> : null
+  // The evening check-in comes under the coach card from 20:30 (core/coachTalk.ts), or when asked for.
+  const evening = checkinTime() || askCheckin ? <CoachCheckin open={askCheckin} /> : null
   const { plan, ticks } = v
   const api = life.coach!.today!
   const t = plan.training
@@ -137,18 +144,15 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
 
   return (
     <>
-    <section className="ct-card" aria-label="Coach today" data-coach="today">
+    <section className="ct-card ct-full" aria-label="Coach today" data-coach="today">
       <header className="ct-head">
         <div className="ct-title">
-          <span className="ct-kicker">Coach today · {weekday}</span>
+          <span className="ct-kicker">Your plan · {weekday}</span>
           <p className="ct-line">{v.line.line}</p>
         </div>
         <span className="ct-count" title="Ticks today (no points: just your day)">
           {done}/{plan.checks.length}
         </span>
-        <button type="button" className={`ct-link ct-week-open${v.weekDue ? ' due' : ''}`} onClick={() => setReview(true)}>
-          Weekly review
-        </button>
         <button type="button" className="ct-icon" aria-label="Coach settings" onClick={() => setSettings(true)}>
           ⚙
         </button>
@@ -159,13 +163,15 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
         )}
       </header>
 
-      {/* Two columns on a wide card (training, ticks, routine | food), one on a phone. */}
+      {/* Two columns on a wide card (training, ticks, tip | food), one on a phone. */}
       <div className="ct-cols">
         <div className="ct-a">
           <div className={`ct-train ct-${t.kind}`} data-ct="train">
             <div className="ct-train-text">
+              <span className="ct-sec">{t.kind === 'rest' ? 'Training' : t.kind === 'done' ? 'Training · done' : 'Training'}</span>
               <b>{t.kind === 'session' ? `${t.title} · ${t.minutes} min` : t.title}</b>
-              <small>{t.line}</small>
+              {/* "Rest day" is already the title: the line says only what to do. */}
+              <small>{t.kind === 'rest' ? cap(t.line.replace(/^Rest day:\s*/i, '')) : t.line}</small>
             </div>
             {t.kind === 'session' && !ticks.workout && (
               <button type="button" className="btn primary ct-start" onClick={start}>
@@ -174,6 +180,8 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
             )}
             {(t.kind === 'done' || ticks.workout) && <span className="ct-done">✓ Done</span>}
           </div>
+          {readiness}
+          {t.kind === 'rest' && rest}
           {moves && t.kind === 'session' && t.moves.length > 0 && (
             <ul className="ct-moves">
               {t.moves.map((m) => (
@@ -184,36 +192,38 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
               ))}
             </ul>
           )}
+          <div className="ct-checks">{checkButtons(false)}</div>
         </div>
 
         <div className="ct-food">
           <div className="ct-food-head">
-            <b>
-              Food: {fmt(plan.food.kcal)} kcal · {plan.food.protein} g protein
+            <span className="ct-sec">Meals</span>
+            <b className="num">
+              {fmt(plan.food.kcal)} kcal · {plan.food.protein} g protein
             </b>
             {plan.food.ramp && <span className="ct-chip">Ramp-up week {plan.food.ramp} of 2</span>}
           </div>
           <ul className="ct-meals" aria-label="Meals">
             {plan.food.meals.map((m) => {
               const tick = ticks[`meal:${m.id}`]
+              const usual = m.id.startsWith('ds-')
               return (
                 <li key={m.id} className={tick ? 'on' : ''} data-meal={m.id}>
-                  <button
-                    type="button"
-                    className="ct-tick"
-                    aria-pressed={!!tick}
-                    aria-label={tick ? `${m.label}: done` : m.id.startsWith('ds-') ? `Log ${m.label}` : `Tick ${m.label}`}
-                    onClick={() => void tapMeal(m)}
-                  >
+                  <button type="button" className="ct-tick" aria-pressed={!!tick} aria-label={tick ? `${m.label}: done` : usual ? `Log ${m.label}` : `Tick ${m.label}`} onClick={() => void tapMeal(m)}>
                     {tick ? '✓' : ''}
                   </button>
                   <span className="ct-meal-text">
                     <b>{m.label}</b>
                     {m.items && <small>{m.items}</small>}
+                    {!tick && usual && (
+                      <button type="button" className="ct-other" title="You ate something else: tick it without logging the usual meal" onClick={() => void ateOther(m)}>
+                        Ate something else
+                      </button>
+                    )}
                   </span>
-                  {!tick && m.id.startsWith('ds-') && (
-                    <button type="button" className="ct-other" title="You ate something else: tick it without logging the usual meal" onClick={() => void ateOther(m)}>
-                      Ate other
+                  {!tick && (
+                    <button type="button" className="ct-log" tabIndex={-1} aria-hidden="true" onClick={() => void tapMeal(m)}>
+                      {usual ? 'Log' : 'Tick'}
                     </button>
                   )}
                 </li>
@@ -228,16 +238,6 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
           )}
         </div>
 
-        <div className="ct-checks">{checkButtons(false)}</div>
-
-        <ol className="ct-routine" aria-label="Morning routine">
-          {plan.morning.map((s) => (
-            <li key={s.id}>
-              <span>{s.label}</span>
-              {s.min ? <small>{s.min} min</small> : null}
-            </li>
-          ))}
-        </ol>
         <div className="ct-tipbox">
           <p className="ct-tip">
             <span aria-hidden>💡</span> {v.line.tip}
@@ -252,6 +252,28 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
               )}
             </p>
           ))}
+        </div>
+
+        <div className="ct-foot">
+          <details className="ct-routine-fold">
+            <summary>Morning routine</summary>
+            <ol className="ct-routine" aria-label="Morning routine">
+              {plan.morning.map((s) => (
+                <li key={s.id}>
+                  <span>{s.label}</span>
+                  {s.min ? <small>{s.min} min</small> : null}
+                </li>
+              ))}
+            </ol>
+          </details>
+          <button type="button" className={`ct-link ct-week-open${v.weekDue ? ' due' : ''}`} onClick={() => setReview(true)}>
+            Weekly review
+          </button>
+          {!evening && (
+            <button type="button" className="ct-link ct-checkin-open" onClick={() => setAskCheckin(true)}>
+              Evening check-in
+            </button>
+          )}
         </div>
       </div>
 

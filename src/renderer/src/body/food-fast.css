@@ -119,13 +119,6 @@
 .fdf-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .fdf-chip { min-height: 40px; }
 
-/* ---------- more ways to log ---------- */
-.fd-more { border-top: 1px solid var(--bdy-border, var(--border)); padding-top: 10px; }
-.fd-more > summary { cursor: pointer; font-weight: 650; color: var(--bdy-muted, var(--muted)); list-style: none; display: flex; align-items: center; gap: 8px; min-height: 36px; }
-.fd-more > summary::-webkit-details-marker { display: none; }
-.fd-more > summary::before { content: '›'; display: inline-block; transition: transform 0.15s ease; font-size: 18px; }
-.fd-more[open] > summary::before { transform: rotate(90deg); }
-.fd-more-body { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
 .fd-week-check { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--bdy-border, var(--border)); background: var(--bdy-surface-2, var(--surface-2)); }
 .fd-week-check.suggest { border-color: color-mix(in srgb, var(--bdy-accent, var(--accent)) 55%, var(--bdy-border, var(--border))); }
 .fd-week-check small { color: var(--bdy-muted, var(--muted)); font-size: 13.5px; }
@@ -166,7 +159,7 @@
   .sheet-card.fdf-sheet-card { max-height: 92vh; padding: 14px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .fdf-tile, .fdf-qty, .fdf-last, .fdf-check, .fd-more > summary::before { transition: none; animation: none; }
+  .fdf-tile, .fdf-qty, .fdf-last, .fdf-check { transition: none; animation: none; }
 }
 
 /* The one weekly calorie check (FoodAdjustCard): same card on Food and Progress. Calm, no red. */

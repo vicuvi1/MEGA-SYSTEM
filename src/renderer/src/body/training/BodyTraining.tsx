@@ -15,6 +15,7 @@ import { Challenges } from './Challenges'
 import { ThisWeek } from './ThisWeek'
 import { TodaySession } from './TodaySession'
 import { Roadmap } from './Roadmap'
+import { StrengthCard } from './StrengthCard'
 import { syncTraining, useTraining } from './trainingStore'
 import './training.css'
 
@@ -60,6 +61,7 @@ export function BodyTraining({ state, onState, onWallet, hold, onOpenSportApp }:
           onWallet()
         }}
       />
+      <StrengthCard state={state} />
       <TrainWarnings st={st ?? {}} today={today} food={food} refresh={refresh} />
       <Roadmap st={st ?? {}} today={today} refresh={refresh} />
       <ProgressDash st={st ?? {}} today={today} />

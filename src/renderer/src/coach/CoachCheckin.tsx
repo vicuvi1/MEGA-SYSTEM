@@ -1,4 +1,5 @@
-// The evening check-in card (on Today → Now and Body → Today after 20:30):
+// The evening check-in card (on Today → Now and Body → Today from 20:30, or
+// when asked for from the coach card; once saved it folds away on the next look):
 // what the logs already say (food against the goal, the workout, the weigh-in,
 // last night's sleep), then 3 quick taps: energy 1–5, soreness 1–5, sleep
 // (prefilled from the sleep log). Saved through life.coach.today.checkinSave;
@@ -12,7 +13,7 @@ import { sleepChoices } from '@core/coachTalk'
 import { sportNow } from './useCoach'
 import type { CheckinView } from './coachApi'
 
-/** After 20:30 (the app day turns at 04:00), or once done today. */
+/** From 20:30 until the app day turns at 04:00. Before that it shows only when asked for. */
 export const checkinTime = (d = new Date()) => {
   const m = d.getHours() * 60 + d.getMinutes()
   return m >= 20 * 60 + 30 || m < 4 * 60
@@ -36,9 +37,11 @@ function Taps({ label, value, set, words, name }: { label: string; value: number
   )
 }
 
-export function CoachCheckin() {
+export function CoachCheckin({ open = false }: { open?: boolean }) {
   const act = useAction()
   const [v, setV] = useState<CheckinView | null>(null)
+  // Saved just now: the answer stays in view. Saved earlier: nothing to show unless asked for.
+  const [justSaved, setJustSaved] = useState(false)
   const [energy, setEnergy] = useState<number | null>(null)
   const [sore, setSore] = useState<number | null>(null)
   const [sleep, setSleep] = useState<number | null>(null)
@@ -61,12 +64,16 @@ export function CoachCheckin() {
     return () => window.removeEventListener('life-coach-changed', reload)
   }, [reload])
   if (!v) return null
+  if (v.done && !justSaved && !open) return null
   const save = async () => {
     if (energy == null || sore == null) return
     setBusy(true)
     const out = await act(() => life.coach!.today!.checkinSave({ energy, soreness: sore, sleep }, sportNow()))
     setBusy(false)
-    if (out) setV(out)
+    if (out) {
+      setJustSaved(true)
+      setV(out)
+    }
   }
   return (
     <section className="ct-card ck-card" aria-label="Evening check-in" data-coach="checkin">
