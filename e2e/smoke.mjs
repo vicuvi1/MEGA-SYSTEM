@@ -1647,6 +1647,12 @@ try {
         if (hid) await pg.evaluate(() => { for (const [x, v] of window.__ctHid ?? []) x.style.visibility = v; delete window.__ctHid })
         await pg.setViewportSize({ width: 1280, height: 720 })
       }
+      // The coach settings sheet has the 3 nudge switches (the same as Settings → Ben → Pushes).
+      await pg.click(`${card} .ct-icon[aria-label="Coach settings"]`)
+      await pg.waitForSelector('.ct-settings legend:has-text("Nudges")', { timeout: 8000 })
+      if ((await pg.locator('.ct-settings fieldset:has(legend:has-text("Nudges")) input[type="checkbox"]').count()) !== 3) throw new Error('the coach settings have no 3 nudge switches')
+      await pg.keyboard.press('Escape')
+      await pg.waitForSelector('.ct-settings', { state: 'detached', timeout: 5000 })
       // 4. The weekly review: the coach's step first (one flow with the goal ladder's), a level-up applied with one tap.
       await pg.click(`${card} .ct-week-open`)
       await pg.waitForSelector('.ql-review .ct-week [data-decision="level:push"]', { timeout: 15000 })
@@ -1678,6 +1684,146 @@ try {
     } finally {
       await pg.evaluate((k) => { const b = localStorage.getItem('smoke_ct_backup'); localStorage.removeItem('smoke_ct_backup'); if (b) localStorage.setItem(k, b); else localStorage.removeItem(k); window.dispatchEvent(new CustomEvent('life-sport-changed')) }, K)
       await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+  })
+  // The coach's evening check-in: after 20:30 a card under the coach card on Today → Now with the logs' lines, then
+  // 3 taps (energy, soreness, sleep) → saved in coach_days with the coach's reply (the rule text: no AI here). No points.
+  await step('Coach check-in: the evening card on Today, 3 taps, then the coach answers', async () => {
+    const shots = process.env.COACH_SHOTS
+    const sql = async (stmt) => (await (await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: stmt, args: [] } }] }) })).json()).results[0].response?.result
+    const kept = (await sql("SELECT value FROM settings WHERE key = 'coach_days'")).rows[0]?.[0]?.value ?? null
+    const ledgerBefore = Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value)
+    try {
+      await atTime('21:10', async () => {
+        await pg.setViewportSize({ width: 390, height: 900 })
+        await open('today')
+        await pg.waitForSelector('.td2 .ptabs [data-tab="now"]', { timeout: 15000 })
+        await pg.click('.td2 .ptabs [data-tab="now"]')
+        const ck = '[data-tabpanel="now"] .ck-card'
+        await pg.waitForSelector(`${ck} .ck-facts li`, { timeout: 15000 })
+        const facts = await pg.locator(`${ck} .ck-facts`).innerText()
+        if (!/Food: [\d,]+ \/ [\d,]+ kcal · \d+ \/ \d+ g protein/.test(facts) || !/Workout: /.test(facts) || !/Weigh-in: /.test(facts)) throw new Error(`the check-in is not filled from the logs: ${facts}`)
+        if (await pg.locator(`${ck} .ck-save`).isEnabled()) throw new Error('Save works before the taps')
+        await pg.locator(`${ck} [data-ck="energy"] .ck-tap`).nth(3).click()
+        await pg.locator(`${ck} [data-ck="soreness"] .ck-tap`).nth(1).click()
+        await pg.locator(`${ck} [data-ck="sleep"] .ck-tap`, { hasText: /^8 h$/ }).click()
+        if (shots) {
+          await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+          const hid = await pg.locator(ck).evaluate((el) => {
+            const out = []
+            for (const x of document.querySelectorAll('body *')) {
+              const p = getComputedStyle(x).position
+              if ((p === 'fixed' || p === 'sticky') && !x.contains(el)) out.push([x, x.style.visibility]), (x.style.visibility = 'hidden')
+            }
+            window.__ckHid = out
+            el.scrollIntoView({ block: 'start' })
+            return out.length
+          })
+          await pg.waitForTimeout(400)
+          await pg.locator(ck).screenshot({ path: `${shots}/coach-checkin-phone.png` })
+          if (hid) await pg.evaluate(() => { for (const [x, v] of window.__ckHid ?? []) x.style.visibility = v; delete window.__ckHid })
+        }
+        await pg.click(`${ck} .ck-save`)
+        await pg.waitForSelector(`${ck} [data-ck="reply"]`, { timeout: 10000 })
+        const reply = await pg.locator(`${ck} [data-ck="reply"]`).innerText()
+        if (!/Tomorrow|Tonight/.test(reply) || reply.split(/[.!?](?:\s|$)/).filter((x) => x && x.trim()).length > 3) throw new Error(`the coach's reply is not 1–2 sentences with one thing for tomorrow: ${reply}`)
+        if (!/Energy 4\/5 · Soreness 2\/5 · Sleep 8 h/.test(await pg.locator(`${ck} .ck-sum`).innerText())) throw new Error('the taps are not shown back')
+        const end = Date.now() + 10000
+        for (;;) {
+          const v = (await sql("SELECT value FROM settings WHERE key = 'coach_days'")).rows[0]?.[0]?.value ?? ''
+          if (/"checkin":\{"energy":4,"soreness":2,"sleep":8,"reply":"/.test(v)) break
+          if (Date.now() > end) throw new Error('the check-in did not reach coach_days')
+          await new Promise((ok) => setTimeout(ok, 250))
+        }
+        if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('the check-in paid points')
+      })
+    } finally {
+      const txt = (v) => ({ type: 'text', value: String(v) })
+      await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: kept == null ? { sql: "DELETE FROM settings WHERE key = 'coach_days'", args: [] } : { sql: "UPDATE settings SET value = ? WHERE key = 'coach_days'", args: [txt(kept)] } }] }) })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+  })
+  // Ask the coach: a reply with a plan-change proposal shows Apply / Not now; nothing changes before Apply; Apply changes
+  // the standard day (food_saved) and offers Undo, which puts it back. The real bot bundle answers, with a made-up model.
+  await step('Coach chat: a proposal with Apply changes the standard day, Undo puts it back', async () => {
+    const shots = process.env.COACH_SHOTS
+    await open('coach')
+    await pg.waitForSelector('.cf-input textarea', { timeout: 15000 })
+    const { pathToFileURL } = await import('node:url')
+    const bot = await import(pathToFileURL(join(repo, 'api/_bot/bot.mjs')).href)
+    const tzBefore = process.env.TZ
+    const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
+    const model = async () => JSON.stringify({ reply: 'Swap the bread in your morning meal for a banana: easy food, a little more each day.', actions: [], remember: [], propose: { kind: 'swap', slot: 'Morning', from: 'Rye bread', to: 'Banana' } })
+    const env = { tursoUrl: `http://127.0.0.1:${port}`, tursoToken: 'fake-turso-key', timeZone: zone, defaults: { skipBotIds: [] }, model }
+    const sql = async (stmt) => (await (await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt }] }) })).json()).results[0].response?.result
+    const txt = (v) => ({ type: 'text', value: String(v) })
+    const settings = async () => new Map((await sql({ sql: 'SELECT key, value FROM settings', args: [] })).rows.map((r) => [r[0].value, r[1].value]))
+    const kept = await settings()
+    const morning = async () => {
+      const v = (await settings()).get('food_saved')
+      const slot = v ? JSON.parse(v).day.slots.find((x) => x.id === 'ds-morning') : null
+      // No saved standard day yet: the app uses its seed (3 eggs, 2 rye bread, a banana, coffee in the morning).
+      return slot ? slot.items.map((x) => x.foodId).join(',') : 'sf-egg,sf-bread,sf-banana,sf-coffee'
+    }
+    const until = async (fn, what, ms = 10000) => {
+      const stop = Date.now() + ms
+      while (!(await fn())) {
+        if (Date.now() > stop) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    try {
+      await pg.route('**/api/coach', async (r) => {
+        const b = JSON.parse(r.request().postData() || '{}')
+        if (b.op || !b.text) return r.fallback()
+        const steps = []
+        const out = await bot.coachChat(env, String(b.text), (s) => steps.push({ step: String(s) }))
+        await r.fulfill({ status: 200, headers: { 'Content-Type': 'application/x-ndjson' }, body: [...steps, out].map((x) => JSON.stringify(x)).join('\n') + '\n' })
+      })
+      const rows = '.cf-col .cf-row.ben'
+      const n0 = await pg.locator(rows).count()
+      await pg.fill('.cf-input textarea', 'can you change my morning meal so I eat more?')
+      await pg.keyboard.press('Enter')
+      await pg.waitForFunction(({ n, sel }) => {
+        const r = [...document.querySelectorAll(sel)]
+        return r.length > n && /Morning: Banana instead of Rye bread/.test(r[r.length - 1].textContent ?? '') && !r[r.length - 1].querySelector('.cf-ben.pending')
+      }, { n: n0, sel: rows }, { timeout: 15000 })
+      const before = await morning()
+      if (!before.includes('sf-bread')) throw new Error(`the standard day changed before Apply: ${before}`)
+      const last = pg.locator(rows).nth((await pg.locator(rows).count()) - 1)
+      if (!(await last.locator('.cx-btn', { hasText: 'Apply' }).count()) || !(await last.locator('.cx-btn', { hasText: 'Not now' }).count())) throw new Error('the proposal has no Apply / Not now')
+      if (shots) {
+        await pg.setViewportSize({ width: 390, height: 844 })
+        await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+        // The words type in: wait until the whole reply is there.
+        await pg.waitForFunction((sel) => { const r = [...document.querySelectorAll(sel)].pop(); return !!r && !r.querySelector('.cx-rich.typing, .cx-caret') }, rows, { timeout: 10000 }).catch(() => null)
+        await last.scrollIntoViewIfNeeded()
+        await pg.waitForTimeout(600)
+        await pg.screenshot({ path: `${shots}/coach-chat-proposal.png` })
+        await pg.setViewportSize({ width: 1440, height: 900 })
+      }
+      // The page's copy gets the bot's proposal on its next refresh: tap Apply until it is there.
+      await sql({ sql: "UPDATE settings SET value = ? WHERE key = 'data_version'", args: [txt(`smoke-${Date.now().toString(36)}`)] })
+      const end = Date.now() + 25000
+      for (;;) {
+        await last.locator('.cx-btn', { hasText: 'Apply' }).click({ timeout: 5000 })
+        if (await last.locator('.cx-btn.used', { hasText: 'Apply' }).waitFor({ timeout: 1500 }).then(() => true, () => false)) break
+        if (Date.now() > end) throw new Error('Apply did not work')
+      }
+      await until(async () => (await morning()).includes('sf-banana') && !(await morning()).includes('sf-bread'), 'Apply did not change the morning slot')
+      await last.locator('[data-coach-undo]').click({ timeout: 5000 })
+      await until(async () => (await morning()) === before, 'Undo did not put the morning slot back')
+    } finally {
+      await pg.unroute('**/api/coach').catch(() => null)
+      await bot.coachSettle(3000).catch(() => null)
+      const now = await settings()
+      for (const k of new Set([...kept.keys(), ...now.keys()])) {
+        if (k === 'data_version' || kept.get(k) === now.get(k)) continue
+        await sql(kept.has(k) ? { sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [txt(k), txt(kept.get(k))] } : { sql: 'DELETE FROM settings WHERE key = ?', args: [txt(k)] })
+      }
+      if (tzBefore === undefined) delete process.env.TZ
+      else process.env.TZ = tzBefore
+      await sql({ sql: "UPDATE settings SET value = ? WHERE key = 'data_version'", args: [txt(`smoke-${Date.now().toString(36)}`)] })
     }
   })
   // MN24: Discipline is one built-in page (no embedded MAN copy).
