@@ -34,7 +34,8 @@ const RATES = [
   [/flash-lite/i, 0.1, 0.4],
   [/gemini.*flash/i, 0.3, 2.5],
   [/gemini.*pro/i, 1.25, 10],
-  [/deepseek/i, 0.3, 1.2]
+  [/deepseek/i, 0.3, 1.2],
+  [/claude.*haiku/i, 1, 5]
 ]
 /** The provider's cost, else an estimate from the tokens (never "free" when tokens were used). */
 export function costOf(model, prompt, completion, reported) {

@@ -1,0 +1,62 @@
+/* Food photo logging (FoodPhotoReview.tsx). Life's tokens, light and dark.
+   Motion: transform and opacity only. Text never under 13 px. */
+.fph { display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--surface-2, rgb(var(--ink) / 0.03)); min-width: 0; }
+.fph-start.drag { border-style: dashed; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.fph-start-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.fph-snap { flex: 1 1 200px; min-height: 52px; font-size: 16px; }
+.fph-upload { min-height: 52px; }
+.fph-note { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; min-height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface, transparent); color: inherit; }
+.fph-hint { font-size: 13px; }
+.fph-noai { align-self: flex-start; border: 0; background: none; padding: 2px 0; color: var(--muted); font: inherit; font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.fph-noai:focus-visible, .fph button:focus-visible, .fph input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.fph-reading { display: flex; align-items: center; gap: 12px; min-height: 64px; font-weight: 650; }
+.fph-spin { width: 22px; height: 22px; border-radius: 50%; border: 3px solid rgb(var(--ink) / 0.12); border-top-color: var(--accent); animation: fph-spin 0.8s linear infinite; }
+@keyframes fph-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .fph-spin { animation-duration: 2.4s; } }
+
+.fph-thumb { width: 88px; height: 88px; object-fit: cover; border-radius: 12px; flex: none; background: rgb(var(--ink) / 0.06); }
+.fph-reading .fph-thumb { width: 64px; height: 64px; }
+.fph-done { margin: 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--accent) 14%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent); font-size: 14px; line-height: 1.45; }
+.fph-fail { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--orange, #f5a623) 14%, transparent); }
+.fph-fail p { margin: 0; font-weight: 600; }
+
+.fph-review-head { display: flex; gap: 12px; align-items: flex-start; }
+.fph-review-sum { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.fph-total { font-size: 20px; font-variant-numeric: tabular-nums; }
+.fph-review-sum small { font-size: 13px; }
+.fph-msg { margin: 4px 0 0; font-size: 14px; color: var(--muted); }
+
+.fph-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.fph-item { display: flex; flex-direction: column; gap: 6px; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface, transparent); min-width: 0; }
+.fph-item.low { border-color: color-mix(in srgb, var(--orange, #f5a623) 60%, transparent); }
+.fph-item-top { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.fph-name { flex: 1 1 auto; min-width: 0; font: inherit; font-weight: 650; font-size: 15px; border: 0; border-bottom: 1px solid transparent; background: transparent; color: inherit; padding: 4px 0; }
+.fph-name:hover, .fph-name:focus { border-bottom-color: var(--border); }
+.fph-conf { flex: none; padding: 2px 8px; border-radius: 99px; font-size: 13px; font-weight: 600; background: rgb(var(--ink) / 0.06); }
+.fph-conf.high { background: color-mix(in srgb, var(--lime, #7bd88f) 22%, transparent); }
+.fph-conf.low { background: color-mix(in srgb, var(--orange, #f5a623) 26%, transparent); }
+.fph-del { flex: none; width: 36px; height: 36px; border-radius: 10px; border: 0; background: transparent; color: var(--muted); font-size: 20px; cursor: pointer; }
+.fph-del:hover { background: rgb(var(--ink) / 0.06); }
+.fph-warn { margin: 0; font-size: 13px; font-weight: 600; color: var(--orange, #c77700); }
+.fph-item-ctl { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.fph-qty { display: inline-flex; align-items: center; gap: 4px; }
+.fph-qty button { width: 36px; height: 36px; border-radius: 10px; border: 1px solid var(--border); background: transparent; color: inherit; font-size: 18px; cursor: pointer; }
+.fph-qty button:active { transform: scale(0.94); }
+.fph-qty-n { min-width: 76px; text-align: center; font-variant-numeric: tabular-nums; font-size: 14px; }
+.fph-grams { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--muted); }
+.fph-grams input { width: 80px; min-height: 34px; box-sizing: border-box; font: inherit; font-size: 14px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border); background: transparent; color: var(--text, inherit); font-variant-numeric: tabular-nums; }
+.fph-macros { font-size: 14px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.fph-swap { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+.fph-swap-sel { min-width: 180px; max-width: 100%; }
+.fph-add { align-self: flex-start; }
+.fph-slot { align-self: flex-start; }
+.fph-actions { display: flex; gap: 8px; justify-content: flex-end; align-items: center; flex-wrap: wrap; }
+.fph-save { flex: 1 1 220px; min-height: 52px; font-size: 16px; }
+
+@media (max-width: 520px) {
+  .fph { padding: 10px; }
+  .fph-thumb { width: 72px; height: 72px; }
+  .fph-actions { flex-direction: column-reverse; align-items: stretch; }
+  .fph-save { flex: none; }
+}

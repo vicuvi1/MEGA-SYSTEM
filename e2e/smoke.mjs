@@ -1064,6 +1064,125 @@ try {
     await pg.waitForSelector('#ptp-body-food .fd-card', { state: 'visible', timeout: 10000 })
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
+  // Food photo: a meal photo is read by the AI (a canned answer here), you check the foods, Save logs it once,
+  // and the reply line is built from the real day totals. Over the daily limit: a clear message and the copy-prompt way.
+  // FOOD_PHOTO_SHOTS=<dir> saves the review screen (desktop and phone). The meal is removed again at the end.
+  await step('Food photo: upload a photo, review the foods, change a qty, save once, the reply line, the daily limit', async () => {
+    const shots = process.env.FOOD_PHOTO_SHOTS
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="food"]')
+    const fc = '#ptp-body-food .fd-card'
+    await pg.waitForSelector(`${fc} .fph-start .fph-snap`, { timeout: 20000 })
+    if (!(await pg.locator(`${fc} .fph-noai`).count())) throw new Error('no "No AI? Copy the prompt instead" link')
+    // A made-up "meal photo", drawn in the page (no real photo).
+    const png = Buffer.from(await pg.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 1600
+      c.height = 1200
+      const x = c.getContext('2d')
+      x.fillStyle = '#e9e2d6'
+      x.fillRect(0, 0, 1600, 1200)
+      x.fillStyle = '#ffffff'
+      x.beginPath()
+      x.arc(800, 600, 460, 0, 7)
+      x.fill()
+      x.fillStyle = '#f5c84b'
+      for (const [cx, cy] of [[620, 480], [760, 430], [690, 600]]) {
+        x.beginPath()
+        x.arc(cx, cy, 70, 0, 7)
+        x.fill()
+      }
+      x.fillStyle = '#c98b4a'
+      x.fillRect(860, 480, 240, 150)
+      x.fillRect(880, 660, 240, 150)
+      return c.toDataURL('image/png').split(',')[1]
+    }), 'base64')
+    const canned = {
+      items: [
+        { name: 'Eggs', matchedSavedFoodId: null, qty: 3, unit: 'egg', grams: 150, kcal: 215, protein: 19, carbs: 1, fat: 15, confidence: 'high' },
+        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low' }
+      ],
+      totals: { kcal: 999, protein: 99 },
+      message: 'Eggs and toast: a good protein start.'
+    }
+    let calls = 0
+    let sent = null
+    let mode = 'ok'
+    await pg.route('**/api/ai', async (r) => {
+      const b = r.request().postDataJSON()
+      if (b?.op !== 'foodPhoto') return r.fallback()
+      calls++
+      sent = b
+      const out = mode === 'limit'
+        ? { ok: false, error: "You've read 50 photos today, the daily limit. It starts again tomorrow.", fallback: 'Use "Copy the prompt" instead.', limit: 'day' }
+        : { ok: true, result: canned }
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(out) })
+    })
+    try {
+      const kcalNow = async () => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(await pg.locator(`${fc} .fd-line`).innerText())?.[1] ?? 'x').replace(/,/g, ''))
+      const kcalBefore = await kcalNow()
+      const liveMeals = () => pg.locator(`${fc} .fd-meals li:not(.removed)`).count()
+      const mealsBefore = await liveMeals()
+      await pg.locator(`${fc} .fph-file`).setInputFiles({ name: 'meal.png', mimeType: 'image/png', buffer: png })
+      await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 2, fc, { timeout: 15000 })
+      // The photo went out small, as JPEG, with today's numbers.
+      if (sent?.image?.mime !== 'image/jpeg' || sent.image.data.length > 400_000) throw new Error(`the photo was not made small: ${sent?.image?.mime} ${sent?.image?.data?.length}`)
+      if (!(sent.targets?.kcal > 0)) throw new Error('the goals were not sent with the photo')
+      // Totals come from the items (not the AI's 999), the low one is flagged, nothing is saved yet.
+      const total = () => pg.locator(`${fc} .fph-total`).innerText()
+      if (!/^375 kcal · 24 g protein$/.test(await total())) throw new Error(`review total: ${await total()}`)
+      if (!/Not sure about the portion: check it/.test(await pg.locator(`${fc} .fph-item`).nth(1).innerText())) throw new Error('the low-confidence item is not flagged')
+      if (!/good protein start/.test(await pg.locator(`${fc} .fph-msg`).innerText())) throw new Error("the AI's message is not shown")
+      if ((await liveMeals()) !== mealsBefore) throw new Error('something was saved before Save')
+      await pg.locator(`${fc} .fph-item`).first().locator('.fph-plus').click()
+      await pg.waitForFunction((s) => /^4 egg$/.test(document.querySelector(`${s} .fph-item .fph-qty-n`)?.textContent?.trim() ?? ''), fc, { timeout: 3000 })
+      if (!/^447 kcal · 30 g protein$/.test(await total())) throw new Error(`after +1 egg the total is ${await total()}`)
+      if (shots) {
+        await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+        await pg.setViewportSize({ width: 1280, height: 1000 })
+        await pg.waitForTimeout(300)
+        await pg.locator(`${fc} .fph-review`).screenshot({ path: `${shots}/food-photo-review-desktop.png` })
+        await pg.setViewportSize({ width: 390, height: 844 })
+        // The sticky tab bar would cover the top of the card in the shot: hidden for the shot only.
+        const tabs = await pg.addStyleTag({ content: '.body-page .ptabs-wrap { visibility: hidden !important; }' })
+        await pg.locator(`${fc} .fph-review`).evaluate((el) => el.scrollIntoView({ block: 'center' }))
+        await pg.waitForTimeout(300)
+        await pg.locator(`${fc} .fph-review`).screenshot({ path: `${shots}/food-photo-review-phone.png` })
+        await tabs.evaluate((el) => el.remove())
+      }
+      await pg.setViewportSize({ width: 390, height: 844 })
+      await pg.waitForTimeout(300)
+      const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (over > 1) throw new Error(`the photo review scrolls sideways on a phone (${over}px)`)
+      await pg.setViewportSize({ width: 1440, height: 900 })
+      await pg.click(`${fc} .fph-save`)
+      await pg.waitForSelector(`${fc} .fph-done`, { timeout: 15000 })
+      const line = await pg.locator(`${fc} .fph-done`).innerText()
+      if (!/^4 Eggs \+ 2 Bread: ~447 kcal, 30 g protein\. Today: [\d,]+ \/ [\d,]+ kcal, \d+ \/ \d+ g\. /.test(line)) throw new Error(`reply line: ${line}`)
+      await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li:not(.removed)`).length === n + 1, [fc, mealsBefore], { timeout: 10000 })
+      await pg.waitForTimeout(800)
+      if ((await liveMeals()) !== mealsBefore + 1) throw new Error('the meal was not logged exactly once')
+      if ((await kcalNow()) !== kcalBefore + 447) throw new Error(`the day kcal went from ${kcalBefore} to ${await kcalNow()}, not +447`)
+      if (!line.includes(`Today: ${(kcalBefore + 447).toLocaleString('en-US')} /`)) throw new Error(`the reply line's day kcal is not the saved total: ${line}`)
+      // Over the daily limit: a plain message and the copy-prompt way, no review.
+      mode = 'limit'
+      await pg.locator(`${fc} .fph-file`).setInputFiles({ name: 'meal.png', mimeType: 'image/png', buffer: png })
+      await pg.waitForSelector(`${fc} .fph-fail`, { timeout: 15000 })
+      if (!/50 photos today/.test(await pg.locator(`${fc} .fph-fail`).innerText())) throw new Error('no daily limit message')
+      if (!(await pg.locator(`${fc} .fph-fail .fph-fallback`).count())) throw new Error('no "Copy the prompt instead" after the limit')
+      if (await pg.locator(`${fc} .fph-review`).count()) throw new Error('a review opened over the limit')
+      if (calls !== 2) throw new Error(`expected 2 photo calls, got ${calls}`)
+      // Clean up: remove the photo meal so later steps see the day as before.
+      await pg.locator(`${fc} .fd-meals li:not(.removed)`).filter({ hasText: 'Eggs' }).first().locator('.fd-remove').click()
+      await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li:not(.removed)`).length === n, [fc, mealsBefore], { timeout: 10000 })
+    } finally {
+      await pg.unroute('**/api/ai')
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+  })
   // Body → Training: today's session from the weekly split (log 3 sets with "same as last time" and effort, the rest
   // timer runs, finish), the roadmap (current level, progress, a level-up after 2 top sessions, move up), then the
   // home program builder (minutes, days, equipment, focus → a 4-week block on your levels), "Use this program" makes

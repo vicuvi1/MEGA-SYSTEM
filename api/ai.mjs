@@ -1,10 +1,13 @@
 // POST /api/ai (session required) {prompt} → {text, model}
 //      {op:'status'}                     → {configured}
+//      {op:'foodPhoto', image, note, saved, today, targets} → {ok, result} | {ok:false, error}
+//        (food photo logging: provider code in _vision.mjs, 50 photos a day)
 // Google Gemini for the website, with the key kept on the server
 // (GEMINI_API_KEY in Vercel). The page builds the prompt from your data.
 import { bearer, config, getSetting, readBody, send, requireSession, setSetting, turso, countCall } from './_lib.mjs'
 import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, costOf, monthStart } from './_budget.mjs'
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { FALLBACK, countPhoto, overLimit, readFoodPhoto, readPhotoRequest, tursoRun, visionProvider } from './_vision.mjs'
 
 /** QA4: the usage rows of one request (Ben's answer shows its model and cost). Run a request inside usageScope.run([], …). */
 export const usageScope = new AsyncLocalStorage()
@@ -662,6 +665,7 @@ export default async function handler(req, res) {
       return send(res, 500, { error: e.message || 'test failed' })
     }
   }
+  if (body?.op === 'foodPhoto') return send(res, 200, await foodPhoto(body))
   if (!key && !orKey) return send(res, 503, { error: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use AI on the website' })
   const prompt = String(body?.prompt || '').slice(0, 60_000)
   if (!prompt.trim()) return send(res, 400, { error: 'Empty prompt' })
@@ -671,6 +675,38 @@ export default async function handler(req, res) {
     send(res, 502, { error: e.message || 'Gemini failed' })
   }
 }
+
+/**
+ * Food photo logging: the checked request, the monthly budget, 50 photos a day,
+ * then the provider. Always 200 with {ok:false, error, fallback} when it can't
+ * be done, so the page shows the message and the copy-prompt way. The photo is
+ * not stored or logged.
+ */
+export async function foodPhoto(body, env = process.env, fetchImpl = fetch, now = new Date()) {
+  const p = visionProvider(env)
+  if (!p) return { ok: false, error: `Photo reading is not set up on the server (${trimmed(env.VISION_PROVIDER).toLowerCase() === 'claude' ? 'ANTHROPIC_API_KEY' : 'GEMINI_API_KEY'} is missing).`, fallback: FALLBACK }
+  const req = readPhotoRequest(body)
+  if (req.error) return { ok: false, error: req.error }
+  if ((await budgetState(env, fetchImpl).catch(() => null))?.tier === 'minimal') return { ok: false, error: "This month's AI budget is used up, so photos can't be read now.", fallback: FALLBACK, limit: 'budget' }
+  if (!testing(env)) {
+    const cfg = config(env)
+    let n
+    try {
+      n = await countPhoto(tursoRun(turso, cfg, fetchImpl), now, trimmed(env.LIFE_TZ))
+    } catch {
+      return { ok: false, error: 'Database not reachable: try again in a moment.', fallback: FALLBACK }
+    }
+    if (overLimit(n)) return { ok: false, error: "You've read 50 photos today, the daily limit. It starts again tomorrow.", fallback: FALLBACK, limit: 'day' }
+  }
+  try {
+    const out = await readFoodPhoto(p, req, { fetchImpl, record: (u) => recordUsage(u, env, fetchImpl) })
+    return { ok: true, result: out.json, model: out.model }
+  } catch (e) {
+    // Only the plain message: never the request (it holds the photo) or a key.
+    return { ok: false, error: e?.timeUp ? e.message : "The photo couldn't be read right now. Try again in a moment.", fallback: FALLBACK }
+  }
+}
+const trimmed = (v) => String(v ?? '').trim()
 
 /** OpenRouter's models with prices per 1M tokens (in USD), newest/popular first. */
 let modelsCache = null

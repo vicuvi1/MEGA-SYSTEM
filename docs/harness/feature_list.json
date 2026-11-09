@@ -751,6 +751,21 @@
    ],
    "evidence": "2026-11-09: unit tests (ranges, dedupe key, first morning weight, weekly averages and count, not enough data, smoothing, band, week-over-week, monthly numbers, body_metrics kept in step, Undo, waist reminder, migration version), smoke step Body log",
    "notes": "schema 023 body_comp, core/bodyComp.ts, main/bodyComp.ts, web/bodyCompBridge.ts (life.coach.bodyComp), body/BodyLogSheet.tsx, body/progress/BodyCompPanel.tsx + MonthCard.tsx; screenshots: E2E_BODY_DEMO=1 BODYSCALE_SHOTS=<dir> SMOKE_ONLY=\"Body log\" npm run smoke. Phase 2 (phone/server sync) and screenshot import come later."
+  },
+  {
+   "id": "F-FOOD-PHOTO",
+   "priority": 1,
+   "area": "sport",
+   "title": "Log a meal from a photo (AI reads it, you check it, then Save)",
+   "user_visible_behavior": "Body → Food: Snap a meal / Upload photo / drop or paste, with an optional note. The AI lists the foods (matching your saved foods); a review screen shows each food with a qty stepper, grams, kcal and protein, a 'Not sure about the portion: check it' badge, swap for a saved food, remove and add; live totals; meal slot; Save meal or Cancel. Nothing is saved before Save. After Save a line with the meal, today's totals and what is left. 50 photos a day and the monthly AI budget; over either, a plain message and 'Copy the prompt instead'. No points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/foodVision.test.ts src/server/foodPhoto.server.test.ts src/renderer/src/body/foodPhotoPrep.test.ts",
+    "SMOKE_ONLY=\"Food photo\" npm run smoke"
+   ],
+   "evidence": "2026-11-09: 42 unit tests; smoke step \"Food photo\" (canned AI answer, qty change, saved once, reply line, daily limit); full smoke",
+   "notes": "core/foodVision.ts (pure validator + numbers), api/_vision.mjs (providers, prompt, schema, retry, sys_kv counter), api/ai.mjs op foodPhoto, body/foodPhotoPrep.ts, body/FoodPhotoReview.tsx (+ food-photo.css), one mount line in FoodCounter.tsx. Env: VISION_PROVIDER, VISION_MODEL, ANTHROPIC_API_KEY (optional)."
   }
  ]
 }
