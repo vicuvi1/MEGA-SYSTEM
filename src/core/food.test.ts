@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { FOOD_FIELDS, FOOD_PROMPT } from './foodPrompt'
 import { numberOf, parseFoodReply } from './foodParse'
 import { addMeal, cleanFoodLog, dayLine, foodWeek, isFav, kcalOf, kcalOfDay, liveMealIds, mealName, mealOfRow, mealTypeAt, mealsOfDay, proteinSince, scaleItem, sportFoodLine, stepGrams, sumItems, toggleFav, yesterdayMeals, type FoodItem, type FoodLog, type FoodMeal } from './food'
-import { DEFAULT_GOALS, GOAL_LABEL, LEAN_GPK, cleanGoals, foodTargets, maintenance } from './foodGoals'
+import { DEFAULT_GOALS, GAIN_GPK, GAIN_TEXT, GOAL_LABEL, LEAN_GPK, cleanGoals, foodTargets, maintenance } from './foodGoals'
 import { BUILTIN, ownFoods, portionFor, whatToEatNext } from './foodNext'
 import { proteinOfDay } from './protein'
 import type { BodyEvent } from './bodyLog'
@@ -196,29 +196,36 @@ describe('the log, yesterday and favourites', () => {
   })
 })
 
-describe('lean goals', () => {
-  it('protein 2.0 g/kg is the lean default, kcal = maintenance +150 on a training day, +0 on a rest day', () => {
+describe('slow muscle gain goals', () => {
+  it('protein 1.8 g/kg by default; kcal = maintenance +350 once weight, height and age are known, else a fixed 2,700', () => {
+    expect(GAIN_GPK).toBe(1.8)
     expect(LEAN_GPK).toBe(2)
-    expect(GOAL_LABEL).toBe('Lean muscle (no fat gain)')
+    expect(GOAL_LABEL).toBe('Slow muscle gain')
+    expect(GAIN_TEXT).toMatch(/\+0\.25–0\.5 kg a week/)
     const g = cleanGoals(null)
     expect(g).toEqual(DEFAULT_GOALS)
-    expect(g.activity).toBe('moderate')
+    expect(g).toMatchObject({ activity: 'moderate', trainSurplus: 350, restSurplus: 350, bodySet: 0, gainV: 0 })
     // 75 kg, 178 cm, 30, male: BMR 10*75 + 6.25*178 - 150 + 5 = 1717.5; × 1.55 = 2662 → 2650
     expect(maintenance(75, g)).toBe(2650)
-    const rest = foodTargets(75, 2, g, false)
-    const train = foodTargets(75, 2, g, true)
-    expect(rest).toMatchObject({ protein: 150, kcal: 2650, maintenance: 2650, training: false })
-    expect(train).toMatchObject({ protein: 150, kcal: 2800, training: true })
-    expect(train.why).toMatch(/\+150 on a training day/)
+    // Height and age not entered yet: the fixed 2,700 kcal (protein from the weight).
+    expect(foodTargets(75, 1.8, g, false)).toMatchObject({ protein: 135, kcal: 2700, fixed: true })
+    // Entered: maintenance + 350 on any day.
+    const mine = cleanGoals({ bodySet: 1 })
+    expect(foodTargets(75, 1.8, mine, false)).toMatchObject({ protein: 135, kcal: 3000, fixed: false, training: false })
+    expect(foodTargets(75, 1.8, mine, true)).toMatchObject({ kcal: 3000, training: true })
+    expect(foodTargets(75, 1.8, mine, false).why).toMatch(/\+350 to grow/)
+    // A made-up 185 cm, 19-year-old at 73.5 kg: 130 g protein, about 2,800 to stay the same, 3,150 to grow.
+    const young = cleanGoals({ heightCm: 185, age: 19, bodySet: 1 })
+    expect(foodTargets(73.5, 1.8, young, false)).toMatchObject({ protein: 130, maintenance: 2800, kcal: 3150 })
   })
-  it('weight drives protein; g/kg stays 1.6–2.2; your own goals win', () => {
-    const g = cleanGoals({})
+  it('no weight: fixed 2,700 kcal and 125 g; g/kg stays 1.6–2.2; your own goals win', () => {
+    const g = cleanGoals({ bodySet: 1 })
     expect(foodTargets(80, 1.8, g).protein).toBe(145)
     expect(foodTargets(80, 3, g).protein).toBe(175)
     expect(foodTargets(80, 1, g).protein).toBe(130)
-    expect(foodTargets(null, 2, g)).toMatchObject({ protein: 120, weight: null })
+    expect(foodTargets(null, 2, g)).toMatchObject({ protein: 125, kcal: 2700, weight: null, fixed: true })
     expect(foodTargets(80, 2, cleanGoals({ kcalOwn: 2500, proteinOwn: 170 }))).toMatchObject({ kcal: 2500, protein: 170 })
-    expect(cleanGoals({ heightCm: 999, age: 5, activity: 'wild', trainSurplus: 9999, restSurplus: '' })).toMatchObject({ heightCm: 230, age: 14, activity: 'moderate', trainSurplus: 600, restSurplus: 0 })
+    expect(cleanGoals({ heightCm: 999, age: 5, activity: 'wild', trainSurplus: 9999, restSurplus: '' })).toMatchObject({ heightCm: 230, age: 14, activity: 'moderate', trainSurplus: 600, restSurplus: 350 })
   })
 })
 

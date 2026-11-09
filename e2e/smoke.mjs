@@ -883,6 +883,60 @@ try {
     const fc = '#ptp-body-food .fd-card'
     await pg.waitForSelector(`${fc} .fd-line`, { timeout: 20000 })
     if (!/Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(await pg.locator(`${fc} .fd-line`).innerText())) throw new Error('the food line is missing protein or kcal')
+    // One-tap logging: the big bars, a saved meal (logged once, Undo), amounts, the standard day and its checklist.
+    const kcalNow = async () => Number(((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).split('/')[0] || '').replace(/[^\d]/g, ''))
+    const waitKcal = (n) => pg.waitForFunction(([s, k]) => Number((document.querySelector(`${s} .fdf-kcal .fdf-bar-label b`)?.textContent ?? '').split('/')[0].replace(/[^\d]/g, '')) === k, [fc, n], { timeout: 15000 })
+    if (!/^[\d,]+ \/ [\d,]+$/.test((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim())) throw new Error('no kcal bar')
+    if (!/\d+ \/ \d+\s*g protein/.test(await pg.locator(`${fc} .fdf-protein`).innerText())) throw new Error('no protein bar')
+    if (!/kcal · \d+ g left|left|Goals reached/.test(await pg.locator(`${fc} .fdf-left`).innerText())) throw new Error('no "left" line')
+    if (!(await pg.locator(`${fc} .fd-week-check`).count())) throw new Error('no weekly weight check card')
+    const k0 = await kcalNow()
+    const mealCount = () => pg.locator(`${fc} .fd-meals li`).count()
+    const m0 = await mealCount()
+    await pg.click(`${fc} .fdf-tile[data-meal="sm-breakfast"]`)
+    await waitKcal(k0 + 486)
+    if ((await mealCount()) !== m0 + 1) throw new Error('one tap did not log exactly one meal')
+    await pg.locator('.toasts .toast-act', { hasText: 'Undo' }).last().click()
+    await waitKcal(k0)
+    await pg.click(`${fc} .fdf-tile[data-meal="sm-breakfast"]`)
+    await waitKcal(k0 + 486)
+    // Right after: eggs ×2 instead of ×3.
+    await pg.click(`${fc} .fdf-last-adj`)
+    await pg.waitForSelector(`${fc} .fdf-qty`, { timeout: 5000 })
+    await pg.locator(`${fc} .fdf-qty .fdf-less`).first().click()
+    if (!/×2/.test(await pg.locator(`${fc} .fdf-qty li`).first().innerText())) throw new Error('the egg stepper did not go to ×2')
+    await pg.click(`${fc} .fdf-qty-go`)
+    await waitKcal(k0 + 486 - 72)
+    // Before logging: the ± on a tile opens the amounts first.
+    await pg.click(`${fc} .fdf-tile-wrap:has([data-meal="sm-branza"]) .fdf-tile-adj`)
+    await pg.waitForSelector(`${fc} .fdf-qty`, { timeout: 5000 })
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector(`${fc} .fdf-qty`, { state: 'detached', timeout: 5000 })
+    // The standard day: every slot at once (about 2,330 kcal), then the checklist with a swap.
+    const k1 = await kcalNow()
+    await pg.click(`${fc} .fdf-day-go`)
+    await waitKcal(k1 + 2332)
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fdf-check .fdf-check-slot`).length === 5, fc, { timeout: 10000 })
+    await pg.click(`${fc} .fdf-check-slot[data-slot="ds-evening"] .fdf-swap`)
+    await pg.waitForFunction((s) => /Buckwheat/.test(document.querySelector(`${s} .fdf-check-slot[data-slot="ds-evening"]`)?.textContent ?? ''), fc, { timeout: 10000 })
+    await waitKcal(k1 + 2332 + 24) // buckwheat + 2 eggs is 24 kcal more than bulgur
+    // A saved food chip.
+    const k2 = await kcalNow()
+    await pg.click(`${fc} .fdf-chip[data-food="sf-egg"]`)
+    await waitKcal(k2 + 72)
+    // The same numbers on Body → Today.
+    const barFood = (await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim()
+    await pg.waitForFunction(([b]) => (document.querySelector('#ptp-body-today .fr-card .fdf-kcal .fdf-bar-label b')?.textContent ?? '').trim() === b, [barFood], { timeout: 15000 })
+    if (shots) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.click(`${fc} .fdf-check-toggle`)
+      await pg.waitForTimeout(300)
+      await pg.locator(fc).screenshot({ path: `${shots}/food-fast-desktop.png` })
+      await pg.click(`${fc} .fdf-check-toggle`)
+    }
+    // The old ways to log are folded away but still work.
+    await pg.click(`${fc} .fd-more > summary`)
+    await pg.waitForSelector(`${fc} .fd-copy`, { state: 'visible', timeout: 5000 })
     const lineBefore = await pg.locator(`${fc} .fd-line`).innerText()
     // The label prompt for packaged food is a second button.
     if (!(await pg.locator(`${fc} .fd-copy-label`).count())) throw new Error('no "Copy label prompt" button')
@@ -919,7 +973,7 @@ try {
     await pg.click(`${fc} .fd-save`)
     await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li`).length === n + 1, [fc, mealsBefore], { timeout: 15000 })
     if (!/White rice/.test(await pg.locator(`${fc} .fd-meals`).innerText())) throw new Error('the renamed food is not in the saved meal')
-    await pg.waitForFunction((s) => /g protein left|Protein done/.test(document.querySelector(`${s} .fd-next`)?.textContent ?? ''), fc, { timeout: 10000 })
+    await pg.waitForFunction((s) => /g protein left|Protein done|Protein and kcal done/.test(document.querySelector(`${s} .fd-next`)?.textContent ?? ''), fc, { timeout: 10000 })
     // One protein number: Body → Today's food rings show the same protein as the counter.
     await pg.waitForFunction((s) => {
       const head = /Protein ([\d,]+)/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1]
@@ -985,9 +1039,9 @@ try {
     await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-cheap-list li`).length > 5 && /Shopping list for 7 days/.test(document.querySelector(`${s} .fd-shop`)?.textContent ?? '') && /Sunday meal prep/.test(document.querySelector(`${s} .fd-prep`)?.textContent ?? ''), fc, { timeout: 5000 })
     await pg.click(`${fc} [data-sub="today"]`)
     await pg.waitForSelector(`${fc} .fd-rings`, { timeout: 5000 })
-    // The Goals sheet says lean muscle.
+    // The Goals sheet says slow muscle gain, with the expected pace.
     await pg.locator(`${fc} .card-head .btn`, { hasText: 'Goals' }).click()
-    if (!/Lean muscle \(no fat gain\)/.test(await pg.locator(`${fc} .fd-goals`).innerText())) throw new Error('the Goals sheet does not say lean muscle')
+    if (!/Slow muscle gain[\s\S]*\+0\.25–0\.5 kg a week/.test(await pg.locator(`${fc} .fd-goals`).innerText())) throw new Error('the Goals sheet does not say slow muscle gain')
     await pg.locator(`${fc} .card-head .btn`, { hasText: 'Goals' }).click()
     if (shots) {
       await pg.setViewportSize({ width: 1280, height: 1600 })
@@ -1005,7 +1059,7 @@ try {
     const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
     await frame.click('.st-tab[data-tab="today"]')
-    await frame.waitForFunction(() => { const el = document.getElementById('food-line'); return !!el && !el.hidden && /^Protein \d+ \/ \d+ g today/.test(el.textContent || '') }, null, { timeout: 15000 })
+    await frame.waitForFunction(() => { const el = document.getElementById('food-line'); return !!el && !el.hidden && /^Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(el.textContent || '') }, null, { timeout: 15000 })
     await frame.click('#food-line')
     await pg.waitForSelector('#ptp-body-food .fd-card', { state: 'visible', timeout: 10000 })
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()

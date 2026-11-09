@@ -1,11 +1,13 @@
-// Daily protein and kcal goals for LEAN muscle (no fat gain; the owner's pick,
-// 2026-11-08). Protein: 2.0 g per kg (editable 1.6–2.2) of the latest logged
-// weight: the same number the protein ring uses (core/protein.ts proteinGoal,
-// g/kg from body_plus; LEAN_GPK is set there once, see main/food.ts).
+// Daily protein and kcal goals for SLOW MUSCLE GAIN (the owner's pick,
+// 2026-11-09: he was eating far too little to grow; the old plan was "lean").
+// Protein: 1.8 g per kg (editable 1.6–2.2) of the latest logged weight: the
+// same number the protein ring uses (core/protein.ts proteinGoal, g/kg from
+// body_plus; GAIN_GPK is set there once, see main/food.ts gainDefaultOnce).
 // kcal: maintenance (Mifflin–St Jeor from weight, height, age and sex, times
-// an activity factor) +150 on a training day, +0 on a rest day. A day is a
-// training day once a workout or a set is logged that day. Everything is
-// editable in the Goals sheet (synced setting `food_goals`). Pure and tested.
+// an activity factor) +350, once a weight is logged and you entered your
+// height and age in Goals; until then a fixed 2,700 kcal (and 125 g protein
+// with no weight). Expected gain: +0.25–0.5 kg a week. Everything is editable
+// in the Goals sheet (synced setting `food_goals`). Pure and tested.
 import { proteinGoal, saneWeight } from './protein'
 
 export type Activity = 'low' | 'light' | 'moderate' | 'high'
@@ -21,9 +23,9 @@ export interface FoodGoals {
   age: number
   sex: 'm' | 'f'
   activity: Activity
-  /** kcal over maintenance on a training day (lean: 150). */
+  /** kcal over maintenance on a training day (slow gain: 350). */
   trainSurplus: number
-  /** kcal over maintenance on a rest day (lean: 0). */
+  /** kcal over maintenance on a rest day (slow gain: 350). */
   restSurplus: number
   /** Your own kcal goal (null: worked out). */
   kcalOwn: number | null
@@ -31,7 +33,11 @@ export interface FoodGoals {
   proteinOwn: number | null
   /** 1 once the protein g/kg was moved from the old 1.8 default to the lean 2.0 (once, main/food.ts). */
   leanV: number
-  /** kcal added by "Apply" on the weekly weight check (−300…+300), on top of everything else but your own kcal goal. */
+  /** 1 once the goals were moved to slow muscle gain (once, main/food.ts gainDefaultOnce). */
+  gainV: number
+  /** 1 once you entered your own height and age (then kcal = maintenance + surplus, else the fixed 2,700). */
+  bodySet: number
+  /** kcal added by "Apply" on the weekly weight check (−600…+600), on top of everything else but your own kcal goal. */
   kcalAdj: number
   /** The day the weekly check was last answered (applied or "not now"), '' when never. */
   adjAt: string
@@ -39,16 +45,25 @@ export interface FoodGoals {
   prices: Record<string, number>
 }
 
-export const DEFAULT_GOALS: FoodGoals = { heightCm: 178, age: 30, sex: 'm', activity: 'moderate', trainSurplus: 150, restSurplus: 0, kcalOwn: null, proteinOwn: null, leanV: 0, kcalAdj: 0, adjAt: '', prices: {} }
+export const DEFAULT_GOALS: FoodGoals = { heightCm: 178, age: 30, sex: 'm', activity: 'moderate', trainSurplus: 350, restSurplus: 350, kcalOwn: null, proteinOwn: null, leanV: 0, gainV: 0, bodySet: 0, kcalAdj: 0, adjAt: '', prices: {} }
 /** The plan's name in the Goals sheet. */
-export const GOAL_LABEL = 'Lean muscle (no fat gain)'
-/** The lean protein default in g per kg (editable 1.6–2.2). */
+export const GOAL_LABEL = 'Slow muscle gain'
+/** What to expect, in the Goals sheet. */
+export const GAIN_TEXT = 'Expect about +0.25–0.5 kg a week.'
+/** The old lean protein default in g per kg (kept for the one-time move, main/food.ts). */
 export const LEAN_GPK = 2.0
+/** The slow-gain protein default in g per kg (editable 1.6–2.2). */
+export const GAIN_GPK = 1.8
+/** The slow-gain surplus over maintenance, kcal a day. */
+export const GAIN_SURPLUS = 350
+/** Until a weight and your height and age are known: fixed goals. */
+export const FIXED_KCAL = 2700
+export const FIXED_PROTEIN = 125
 /** Used for kcal until a weight is logged. */
 export const FALLBACK_KG = 75
 
 /** The most the weight check can move the kcal goal, either way. */
-export const ADJ_MAX = 300
+export const ADJ_MAX = 600
 /** Fat in g per kg of body weight (lean plan; carbs are the rest of the kcal). */
 export const FAT_GPK = 0.8
 
@@ -83,6 +98,8 @@ export function cleanGoals(raw: any): FoodGoals {
     kcalOwn: own(o.kcalOwn, 1200, 5000),
     proteinOwn: own(o.proteinOwn, 40, 350),
     leanV: o.leanV === 1 ? 1 : 0,
+    gainV: o.gainV === 1 ? 1 : 0,
+    bodySet: o.bodySet === 1 ? 1 : 0,
     kcalAdj: Number.isFinite(Number(o.kcalAdj)) ? Math.round(Math.max(-ADJ_MAX, Math.min(ADJ_MAX, Number(o.kcalAdj)))) : 0,
     adjAt: /^\d{4}-\d{2}-\d{2}$/.test(String(o.adjAt ?? '')) ? String(o.adjAt) : '',
     prices: cleanPrices(o.prices)
@@ -107,6 +124,8 @@ export interface FoodTargets {
   gPerKg: number
   /** Today counts as a training day (kcal uses trainSurplus). */
   training: boolean
+  /** kcal is the fixed 2,700 (no weight logged, or height and age not entered yet). */
+  fixed: boolean
   /** How the goals were made, in one line. */
   why: string
 }
@@ -116,14 +135,19 @@ export function foodTargets(weightKg: number | null | undefined, gPerKg: number,
   const pg = proteinGoal(w, gPerKg)
   const maint = maintenance(w ?? FALLBACK_KG, goals)
   const surplus = training ? goals.trainSurplus : goals.restSurplus
-  const kcal = goals.kcalOwn ?? maint + surplus + goals.kcalAdj
-  const protein = goals.proteinOwn ?? pg.g
+  // Maintenance needs a weight and your own height and age; until then a fixed goal.
+  const fixed = !w || goals.bodySet !== 1
+  const kcal = goals.kcalOwn ?? (fixed ? FIXED_KCAL : maint + surplus) + goals.kcalAdj
+  const protein = goals.proteinOwn ?? (w ? pg.g : FIXED_PROTEIN)
   const fat = Math.round(FAT_GPK * (w ?? FALLBACK_KG))
   const carbs = Math.max(0, Math.round((kcal - 4 * protein - 9 * fat) / 4))
   const sur = surplus >= 0 ? `+${surplus}` : String(surplus)
-  const why = [
-    goals.proteinOwn ? `Protein: your own ${protein} g` : w ? `Protein: ${pg.gPerKg} g × ${w} kg` : 'Protein: log your weight for a personal goal',
-    goals.kcalOwn ? `kcal: your own ${kcal}` : `kcal: about ${maint} to stay the same, ${sur} on a ${training ? 'training' : 'rest'} day${goals.kcalAdj ? `, ${goals.kcalAdj > 0 ? '+' : ''}${goals.kcalAdj} from your weight check` : ''}${w ? '' : ` (until you log a weight, ${FALLBACK_KG} kg is used)`}`
-  ].join(' · ')
-  return { protein, kcal, fat, carbs, maintenance: maint, weight: w, gPerKg: pg.gPerKg, training, why }
+  const adj = goals.kcalAdj ? `, ${goals.kcalAdj > 0 ? '+' : ''}${goals.kcalAdj} from your weight check` : ''
+  const kcalWhy = goals.kcalOwn
+    ? `kcal: your own ${kcal}`
+    : fixed
+      ? `kcal: ${FIXED_KCAL.toLocaleString('en-US')} to start${adj} (${w ? 'enter your height and age' : 'log your weight and enter your height and age'} for a personal goal)`
+      : `kcal: about ${maint} to stay the same, ${sur} to grow${adj}`
+  const why = [goals.proteinOwn ? `Protein: your own ${protein} g` : w ? `Protein: ${pg.gPerKg} g × ${w} kg` : `Protein: ${FIXED_PROTEIN} g (log your weight for a personal goal)`, kcalWhy].join(' · ')
+  return { protein, kcal, fat, carbs, maintenance: maint, weight: w, gPerKg: pg.gPerKg, training, fixed, why }
 }

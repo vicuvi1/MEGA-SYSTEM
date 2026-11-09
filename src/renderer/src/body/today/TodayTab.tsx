@@ -19,6 +19,7 @@ import { ReadinessCard, useReadiness } from '../../ReadinessCard'
 import { useRest } from '../../RestDay'
 import { FigureSvg } from '../../DrillFigure'
 import { Rings } from '../FoodViz'
+import { FoodBars } from '../FoodFast'
 import { useBodyPlus } from '../useBodyPlus'
 import { BodyMapCard } from './BodyMapCard'
 import { useSportToday, type SportToday } from './useSportToday'
@@ -294,8 +295,14 @@ function FoodRingsCard({ onOpen }: { onOpen: () => void }) {
         <span className="bdy-title">Food</span>
         <span className="bdy-note">Open ›</span>
       </span>
+      {v?.progress && <FoodBars progress={v.progress} behind={v.behind} compact />}
       {rings ? <Rings rings={rings} /> : <span className="bdy-note">Loading…</span>}
-      {v?.next?.line && (
+      {v?.adjust?.state === 'suggest' && (
+        <span className="fr-check">
+          <b>Weekly check:</b> {v.adjust.suggestion.title.toLowerCase()}. Open to apply.
+        </span>
+      )}
+      {v?.next?.line && !v.behind?.behind && (
         <span className="fr-next">
           <b>Next:</b> {v.next.line}
         </span>

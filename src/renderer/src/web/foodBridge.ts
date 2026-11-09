@@ -2,14 +2,16 @@
 // (src/main/food.ts). Writes go through the services' write (synced like
 // everything else). No network and no AI here: the reply from your AI app is
 // read by core/foodParse.ts in the page.
-import { addFoodMeal, addFoodSupp, addFoodWater, answerAdjust, editFoodMeal, foodView, leanDefaultOnce, needsLeanDefault, saveFoodGoals, saveFoodPrices, toggleFoodFav, toggleFoodMeal, type FoodView } from '../../../main/food'
+import { addFoodMeal, addFoodSupp, addFoodWater, answerAdjust, editFoodMeal, foodView, leanDefaultOnce, readFoodSaved, needsLeanDefault, saveFoodGoals, saveFoodSaved, saveFoodPrices, toggleFoodFav, toggleFoodMeal, type FoodView } from '../../../main/food'
+import { logSavedFood, logSavedMeal, logStandardDay, saveLoggedAsMeal } from '../../../main/foodSaved'
 import type { FoodGoals } from '@core/foodGoals'
-import type { FoodItem, MealType } from '@core/food'
+import type { FoodItem, MealSource, MealType } from '@core/food'
+import type { FoodSaved, SlotChoice } from '@core/foodSaved'
 
 export interface FoodApi {
   /** Today, or a past day (up to 14 days back) you are editing. */
   view(day?: string): Promise<FoodView>
-  add(meal: { items: FoodItem[]; name?: string; day?: string; type?: MealType; id?: string }, day?: string): Promise<FoodView>
+  add(meal: { items: FoodItem[]; name?: string; day?: string; type?: MealType; id?: string; source?: MealSource; slot?: string }, day?: string): Promise<FoodView>
   /** Removes a meal, or brings a removed one back. */
   toggle(mealId: string, day?: string): Promise<FoodView>
   fav(meal: { name: string; items: FoodItem[] }, day?: string): Promise<FoodView>
@@ -24,6 +26,20 @@ export interface FoodApi {
   adjust(accept: boolean, day?: string): Promise<FoodView>
   /** Your prices in MDL per kg by food name (null removes one). */
   prices(patch: Record<string, number | null>, day?: string): Promise<FoodView>
+  /** One tap: a saved food × qty now. `ids` are the new meals (for Undo). */
+  logFood(foodId: string, qty?: number): Promise<{ view: FoodView; ids: string[] }>
+  /** One tap: a saved meal now, some quantities changed first ({ 'sf-egg': 2 }). */
+  logMeal(mealId: string, qty?: Record<string, number> | null): Promise<{ view: FoodView; ids: string[] }>
+  /** "Log my standard day": each slot as its own meal (usual, alternative or skip per slot). */
+  logDay(choices?: Record<string, SlotChoice>): Promise<{ view: FoodView; ids: string[] }>
+  /** Takes several meals back at once (the Undo after a tap). */
+  undo(ids: string[]): Promise<FoodView>
+  /** Saves your saved foods, meals and standard day (the manage sheet). */
+  saved(data: FoodSaved): Promise<FoodView>
+  /** "Save as meal": a logged meal becomes a saved meal. */
+  saveAsMeal(loggedMealId: string, name?: string): Promise<FoodView>
+  /** Just the saved foods, meals and day (for quick add). */
+  savedNow(): Promise<FoodSaved>
 }
 
 type Svc = { read<T>(f: (s: any) => T): Promise<T>; write<T>(f: (s: any) => T): Promise<T> }
@@ -44,7 +60,7 @@ export function foodBridge(svcP: Promise<Svc>, device: () => string): FoodApi {
   }
   const view = async (day?: string) => {
     const svc = await svcP
-    // The lean protein default (2.0 g/kg), once for this database.
+    // The move to slow muscle gain (1.8 g/kg, +350 kcal), once for this database.
     if (await svc.read((s) => needsLeanDefault(s.db))) await write((db) => leanDefaultOnce(db))
     return svc.read((s) => foodView(s.db, new Date(), day))
   }
@@ -58,6 +74,13 @@ export function foodBridge(svcP: Promise<Svc>, device: () => string): FoodApi {
     water: async (ml, day) => write((db) => (addFoodWater(db, ml, device()), foodView(db, new Date(), day))),
     supp: async (id, day) => write((db) => (addFoodSupp(db, id, device()), foodView(db, new Date(), day))),
     adjust: async (accept, day) => write((db) => (answerAdjust(db, accept), foodView(db, new Date(), day))),
-    prices: async (patch, day) => write((db) => (saveFoodPrices(db, patch), foodView(db, new Date(), day)))
+    prices: async (patch, day) => write((db) => (saveFoodPrices(db, patch), foodView(db, new Date(), day))),
+    logFood: async (foodId, qty) => write((db) => ({ ids: logSavedFood(db, foodId, qty ?? 1, device())?.ids ?? [], view: foodView(db, new Date()) })),
+    logMeal: async (mealId, qty) => write((db) => ({ ids: logSavedMeal(db, mealId, qty, device())?.ids ?? [], view: foodView(db, new Date()) })),
+    logDay: async (choices) => write((db) => ({ ids: logStandardDay(db, choices ?? {}, device()).ids, view: foodView(db, new Date()) })),
+    undo: async (ids) => write((db) => (ids.forEach((id) => toggleFoodMeal(db, id, device())), foodView(db, new Date()))),
+    saved: async (data) => write((db) => (saveFoodSaved(db, data), foodView(db, new Date()))),
+    saveAsMeal: async (id, name) => write((db) => (saveLoggedAsMeal(db, id, name), foodView(db, new Date()))),
+    savedNow: async () => (await svcP).read((s) => readFoodSaved(s.db))
   }
 }

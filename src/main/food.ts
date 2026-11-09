@@ -14,9 +14,11 @@ import { readPrefs, savePrefs, tickSupp, weighIns } from './bodyPlus'
 import { proteinOfDay } from '../core/protein'
 import {
   FOOD_KIND, KCAL_KIND, MEAL_TYPES, PAST_DAYS, mealTypeAt, addMeal, cleanFoodLog, cleanItem, dayLine, foodWeek, isFav, kcalOfDay, kcalRowId, mealName, mealsOfDay, proteinRowId, proteinSince, sportFoodLine, sumItems, toggleFav, yesterdayMeals,
-  type DayMeal, type FoodFav, type FoodItem, type FoodLog, type FoodWeek, type MealType, type Totals
+  MEAL_SOURCES, type DayMeal, type FoodFav, type FoodItem, type FoodLog, type FoodWeek, type MealSource, type MealType, type Totals
 } from '../core/food'
-import { LEAN_GPK, cleanGoals, cleanPrices, foodTargets, type FoodGoals, type FoodTargets } from '../core/foodGoals'
+import { DEFAULT_GOALS, GAIN_GPK, GAIN_SURPLUS, LEAN_GPK, cleanGoals, cleanPrices, foodTargets, type FoodGoals, type FoodTargets } from '../core/foodGoals'
+import { cleanSaved, dayTotals, type FoodSaved } from '../core/foodSaved'
+import { dayProgress, proteinBehind, type DayProgress, type ProteinBehind } from '../core/foodProgress'
 import { adjustCheck, applyDelta, type AdjustCheck } from '../core/foodAdjust'
 import { cheapMap, cheapProtein, unpricedOwn, type CheapRow } from '../core/foodCheap'
 import { ownPer100, type OwnFood } from '../core/foodTable'
@@ -29,6 +31,14 @@ const rid = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(
 
 export const readFoodLog = (db: DB, today = sportToday()): FoodLog => cleanFoodLog(readSetting(db, 'food_log'), today)
 export const readFoodGoals = (db: DB): FoodGoals => cleanGoals(readSetting(db, 'food_goals'))
+/** Your saved foods, saved meals and standard day (the seed when none are saved yet). */
+export const readFoodSaved = (db: DB): FoodSaved => cleanSaved(readSetting(db, 'food_saved'))
+/** Saves the whole set (cleaned and capped first). */
+export function saveFoodSaved(db: DB, data: unknown): FoodSaved {
+  const next = cleanSaved(data)
+  writeSetting(db, 'food_saved', next as any)
+  return next
+}
 
 export function saveFoodGoals(db: DB, patch: Partial<FoodGoals>): FoodGoals {
   const next = cleanGoals({ ...readFoodGoals(db), ...patch })
@@ -45,7 +55,12 @@ function insertRow(db: DB, id: string, at: string, day: string, kind: string, am
  * `day` may be a past day (up to 14 days back); it is then marked "added later".
  * Returns the meal, or null when there is nothing to save.
  */
-export function addFoodMeal(db: DB, input: { items: unknown[]; name?: string; day?: string; type?: MealType; supp?: boolean; at?: string; id?: string }, source: string, now = new Date()): { id: string; day: string; totals: Totals } | null {
+export function addFoodMeal(
+  db: DB,
+  input: { items: unknown[]; name?: string; day?: string; type?: MealType; supp?: boolean; at?: string; id?: string; source?: MealSource; slot?: string },
+  source: string,
+  now = new Date()
+): { id: string; day: string; totals: Totals } | null {
   const items = (Array.isArray(input.items) ? input.items : []).map(cleanItem).filter((x): x is FoodItem => !!x).slice(0, 20)
   if (!items.length) return null
   const today = sportToday(now)
@@ -61,7 +76,10 @@ export function addFoodMeal(db: DB, input: { items: unknown[]; name?: string; da
   const name = String(input.name ?? '').trim().slice(0, 60) || mealName(items)
   const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const type: MealType = input.type && MEAL_TYPES.includes(input.type) ? input.type : mealTypeAt(hm)
-  writeSetting(db, 'food_log', addMeal(readFoodLog(db, today), { id, at, day, name, type, items, ...(day !== today ? { late: true } : {}), ...(input.supp ? { supp: true } : {}) }, today) as any)
+  // How it was logged ('saved', 'photo', 'quick-add'); none = 'manual' when read.
+  const via = input.source && MEAL_SOURCES.includes(input.source) ? { source: input.source } : {}
+  const slot = typeof input.slot === 'string' && /^ds-[a-z0-9-]{1,24}$/.test(input.slot) ? { slot: input.slot } : {}
+  writeSetting(db, 'food_log', addMeal(readFoodLog(db, today), { id, at, day, name, type, items, ...(day !== today ? { late: true } : {}), ...(input.supp ? { supp: true } : {}), ...via, ...slot }, today) as any)
   return { id, day, totals }
 }
 
@@ -84,7 +102,7 @@ export function editFoodMeal(db: DB, mealId: string, input: { items: unknown[]; 
   const old = log.meals.find((m) => m.id === mealId)
   if (!old || old.day < addDays(today, -PAST_DAYS)) return null
   if (mealsOfDay(log, bodyEvents(db, addDays(old.day, -1), old.day), old.day).find((m) => m.id === mealId)?.removed) return null
-  const made = addFoodMeal(db, { items: input.items, name: input.name, day: old.day, type: input.type ?? old.type, at: old.at, supp: old.supp }, source, now)
+  const made = addFoodMeal(db, { items: input.items, name: input.name, day: old.day, type: input.type ?? old.type, at: old.at, supp: old.supp, source: old.source, slot: old.slot }, source, now)
   if (!made) return null
   toggleFoodMeal(db, mealId, source, now)
   const cur = readFoodLog(db, today)
@@ -114,14 +132,23 @@ export function addFoodSupp(db: DB, id: string, source: string, now = new Date()
   return r ? { id: r.id, totals: r.totals } : null
 }
 
-/** The weekly weight check (14-day trend vs the goal). */
+/** Waist measurements (cm) from Body → metrics, oldest first. */
+export function waistIns(db: DB, days = 60): { day: string; waist: number }[] {
+  try {
+    return (db.prepare('SELECT day, waist FROM body_metrics WHERE waist IS NOT NULL ORDER BY day DESC LIMIT ?').all(days) as any[]).map((r) => ({ day: String(r.day), waist: Number(r.waist) })).reverse()
+  } catch {
+    return []
+  }
+}
+
+/** The weekly check: weekly-average weight trend and the waist (core/foodAdjust.ts). */
 export function adjustNow(db: DB, now = new Date()): AdjustCheck {
   const today = sportToday(now)
   const g = readFoodGoals(db)
-  return adjustCheck({ weights: weighIns(db, 30), today, adj: g.kcalAdj, adjAt: g.adjAt })
+  return adjustCheck({ weights: weighIns(db, 40), waists: waistIns(db), today, adj: g.kcalAdj, adjAt: g.adjAt })
 }
 
-/** Answers the weekly check: Apply changes the kcal goal by the suggestion (±100, within ±300), "Not now" only marks the week. Re-checked here, never trusted from the page. */
+/** Answers the weekly check: Apply changes the kcal goal by the suggestion (within ±600), "Not now" waits a week. Re-checked here, never trusted from the page. */
 export function answerAdjust(db: DB, accept: boolean, now = new Date()): FoodGoals {
   const g = readFoodGoals(db)
   const chk = adjustNow(db, now)
@@ -152,20 +179,30 @@ export function toggleFoodFav(db: DB, meal: { name: string; items: unknown[] }, 
 }
 
 /**
- * The owner's lean plan (2026-11-08): protein 2.0 g/kg. The g/kg lives in
- * body_plus (one protein number for the ring and the counter), whose old
- * default was 1.8: move a 1.8 to 2.0 ONCE (food_goals.leanV), so a later
- * pick of 1.8 stays. Same result on every device, so two at once is fine.
- * Returns true when it changed something.
+ * The move to SLOW MUSCLE GAIN (2026-11-09), once per database
+ * (food_goals.gainV), never losing what you saved:
+ *  - protein: the lean 2.0 g/kg default becomes 1.8 (body_plus, the one
+ *    number the ring and the counter share); any other pick stays;
+ *  - kcal: the lean surpluses (+150 training / +0 rest) become +350 / +350;
+ *    your own other numbers, own kcal and own protein goals stay;
+ *  - height and age count as yours (bodySet) when they differ from the old
+ *    defaults the app filled in (178 cm, 30), so maintenance is used;
+ *    otherwise the fixed 2,700 kcal shows until you enter them in Goals.
+ * Same result on every device, so two at once is fine. True when it ran.
  */
-export function leanDefaultOnce(db: DB): boolean {
+export function gainDefaultOnce(db: DB): boolean {
   const g = readFoodGoals(db)
-  if (g.leanV === 1) return false
-  if (Math.abs(readPrefs(db).gPerKg - 1.8) < 0.05) savePrefs(db, { gPerKg: LEAN_GPK })
-  saveFoodGoals(db, { leanV: 1 })
+  if (g.gainV === 1) return false
+  const gpk = readPrefs(db).gPerKg
+  if (Math.abs(gpk - LEAN_GPK) < 0.05) savePrefs(db, { gPerKg: GAIN_GPK })
+  const lean = g.trainSurplus === 150 && g.restSurplus === 0
+  const edited = g.heightCm !== DEFAULT_GOALS.heightCm || g.age !== DEFAULT_GOALS.age
+  saveFoodGoals(db, { gainV: 1, leanV: 1, ...(lean ? { trainSurplus: GAIN_SURPLUS, restSurplus: GAIN_SURPLUS } : {}), ...(edited ? { bodySet: 1 } : {}) })
   return true
 }
-export const needsLeanDefault = (db: DB) => readFoodGoals(db).leanV !== 1
+/** Kept for older callers: the one-time goal move is now the slow-gain one. */
+export const leanDefaultOnce = gainDefaultOnce
+export const needsLeanDefault = (db: DB) => readFoodGoals(db).gainV !== 1
 
 /** A training day: a workout or a Sport Track set logged on it. */
 export function isTrainingDay(db: DB, day: string): boolean {
@@ -230,7 +267,7 @@ export function sportFoodLineNow(db: DB, now = new Date()): string {
   const today = sportToday(now)
   const t = foodDayTotals(db, now)
   const at = trainedAt(db, today)
-  return sportFoodLine({ protein: t.protein, proteinGoal: t.targets.protein, trainedAt: at, afterTrain: at ? proteinSince(bodyEvents(db, today), today, at) : 0 })
+  return sportFoodLine({ protein: t.protein, proteinGoal: t.targets.protein, kcal: t.kcal, kcalGoal: t.targets.kcal, trainedAt: at, afterTrain: at ? proteinSince(bodyEvents(db, today), today, at) : 0 })
 }
 
 /** The last 7 days (weekly food report, Ben's evening nudge). */
@@ -266,6 +303,14 @@ export interface FoodView {
   unpriced: OwnFood[]
   shopping: ShoppingList
   prep: PrepPlan
+  /** Saved foods, saved meals and the standard day. */
+  saved: FoodSaved
+  /** The standard day's totals with every slot's usual items. */
+  standard: Totals
+  /** The big bars: eaten / goal and what is left. */
+  progress: DayProgress
+  /** Protein behind for the time of day (today only), with one hint. */
+  behind: ProteinBehind
 }
 
 export function foodView(db: DB, now = new Date(), day?: string): FoodView {
@@ -281,6 +326,7 @@ export function foodView(db: DB, now = new Date(), day?: string): FoodView {
   const week = foodWeekNow(db, now)
   const wk = weighIns(db, 30)
   const t = totals.targets
+  const saved = readFoodSaved(db)
   return {
     today,
     day: d,
@@ -301,6 +347,10 @@ export function foodView(db: DB, now = new Date(), day?: string): FoodView {
     cheap: cheapProtein(goals.prices, own),
     unpriced: unpricedOwn(goals.prices, own),
     shopping: shoppingList({ proteinGoal: t.protein, carbsGoal: t.carbs, own, prices: goals.prices }),
-    prep: prepPlan({ proteinGoal: t.protein, kcalGoal: t.kcal, own, prices: goals.prices })
+    prep: prepPlan({ proteinGoal: t.protein, kcalGoal: t.kcal, own, prices: goals.prices }),
+    saved,
+    standard: dayTotals(saved),
+    progress: dayProgress({ kcal: totals.kcal, protein: totals.protein }, { kcal: t.kcal, protein: t.protein }),
+    behind: d === today ? proteinBehind(now, totals.protein, t.protein, saved.foods) : { behind: false, expected: 0, hint: '' }
   }
 }

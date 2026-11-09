@@ -28,6 +28,10 @@ export interface FoodItem {
   fat: number
   kcal: number
   confidence: Confidence
+  /** Portions, for a food from your saved foods ("3" eggs). */
+  qty?: number
+  /** What one portion is ("1 large"), for a saved food. */
+  unit?: string
 }
 
 export interface Totals {
@@ -65,7 +69,17 @@ export interface FoodMeal {
   late?: boolean
   /** A supplement (creatine, a shake, vitamins): listed apart, with macros if any. */
   supp?: boolean
+  /** How it was logged (old meals have none and read as 'manual': see mealSource). */
+  source?: MealSource
+  /** The standard-day slot it came from (`ds-…`), for the day's checklist. */
+  slot?: string
 }
+
+/** How a meal was logged: a saved meal or food, a photo, typed or pasted, or quick add. */
+export type MealSource = 'saved' | 'photo' | 'manual' | 'quick-add'
+export const MEAL_SOURCES: MealSource[] = ['saved', 'photo', 'manual', 'quick-add']
+/** A meal's source; old meals (saved before sources existed) read as 'manual'. Old data is never rewritten. */
+export const mealSource = (m: { source?: unknown }): MealSource => (MEAL_SOURCES.includes(m.source as MealSource) ? (m.source as MealSource) : 'manual')
 
 export interface FoodFav {
   id: string
@@ -113,7 +127,12 @@ export function cleanItem(raw: any): FoodItem | null {
   const k = Number(raw.kcal)
   const kcal = Number.isFinite(k) && k > 0 ? Math.round(Math.min(k, 8000)) : kcalOf(protein, carbs, fat)
   const confidence: Confidence = raw.confidence === 'sure' || raw.confidence === 'guess' ? raw.confidence : 'roughly'
-  return { name, grams, protein, carbs, fat, kcal, confidence }
+  const out: FoodItem = { name, grams, protein, carbs, fat, kcal, confidence }
+  const qty = Number(raw.qty)
+  if (Number.isFinite(qty) && qty > 0 && qty <= 50) out.qty = Math.round(qty * 2) / 2
+  const unit = String(raw.unit ?? '').trim().slice(0, 30)
+  if (unit) out.unit = unit
+  return out
 }
 
 /** The item at a new weight: macros scale with the grams (5–3000 g). */
@@ -170,7 +189,14 @@ export function cleanFoodLog(raw: any, today?: string): FoodLog {
     seen.add(id)
     const at = String(m.at ?? '')
     const type: MealType = MEAL_TYPES.includes(m.type) ? m.type : mealTypeAt(localHm(at))
-    meals.push({ id, at, day: String(m.day), name: String(m.name ?? '').trim().slice(0, 60) || mealName(items), type, items, ...(m.late ? { late: true } : {}), ...(m.supp ? { supp: true } : {}) })
+    const slot = /^ds-[a-z0-9-]{1,24}$/.test(String(m.slot ?? '')) ? String(m.slot) : ''
+    meals.push({
+      id, at, day: String(m.day), name: String(m.name ?? '').trim().slice(0, 60) || mealName(items), type, items,
+      ...(m.late ? { late: true } : {}),
+      ...(m.supp ? { supp: true } : {}),
+      ...(MEAL_SOURCES.includes(m.source) ? { source: m.source as MealSource } : {}),
+      ...(slot ? { slot } : {})
+    })
   }
   meals.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))
   const favs: FoodFav[] = []
@@ -269,9 +295,13 @@ export function dayLine(o: { protein: number; proteinGoal: number; kcal: number;
   return `Protein ${fmt(o.protein)} / ${fmt(o.proteinGoal)} g · ${fmt(o.kcal)} / ${fmt(o.kcalGoal)} kcal ${when}`.trim()
 }
 
-/** Sport Track's one line: "Protein 92 / 150 g today · trained: +30 g" (after-workout protein, only on a training day). */
-export function sportFoodLine(o: { protein: number; proteinGoal: number; trainedAt: string | null; afterTrain: number }): string {
-  const base = `Protein ${fmt(o.protein)} / ${fmt(o.proteinGoal)} g today`
+/**
+ * Sport Track's one line: "Protein 92 / 150 g today · trained: +30 g" (after-workout protein, only on a training day).
+ * With kcal: "Protein 92 / 130 g · 1,900 / 2,700 kcal today · …" (the same numbers as the food bars).
+ */
+export function sportFoodLine(o: { protein: number; proteinGoal: number; trainedAt: string | null; afterTrain: number; kcal?: number; kcalGoal?: number }): string {
+  const kcal = o.kcal != null && o.kcalGoal ? ` · ${fmt(o.kcal)} / ${fmt(o.kcalGoal)} kcal` : ''
+  const base = `Protein ${fmt(o.protein)} / ${fmt(o.proteinGoal)} g${kcal} today`
   return o.trainedAt ? `${base} · trained: +${fmt(o.afterTrain)} g` : base
 }
 
