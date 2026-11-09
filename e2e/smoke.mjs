@@ -1537,6 +1537,149 @@ try {
     // Put Sport Track back as it was.
     await pg.evaluate((k) => { const b = localStorage.getItem('smoke_bt_backup'); localStorage.removeItem('smoke_bt_backup'); if (b) localStorage.setItem(k, b); else localStorage.removeItem(k); window.dispatchEvent(new CustomEvent('life-sport-changed')) }, K)
   })
+  // The coach (Ben): ONE card that says what to do today. Today → Now has a slim strip (training + Start, the
+  // next meal, weigh-in, bed) that opens into the whole card; Body → Today shows it in full. A meal tick logs the
+  // usual meal for real (Undo), bed is your own tick, nothing pays points. The weekly review is one flow with the
+  // goal ladder's Sunday review, and a decision (a level-up) is applied with one tap. COACH_SHOTS=<dir> saves
+  // coach-today-phone.png and coach-week-desktop.png. Sport Track's state is put back at the end.
+  await step('Coach today: one card with training, meals and ticks; a meal tick logs the usual meal; the weekly review applies a decision', async () => {
+    const shots = process.env.COACH_SHOTS
+    const K = 'life_sport_tracker_v1'
+    const sql = async (stmt) => (await (await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: stmt, args: [] } }] }) })).json()).results[0].response?.result
+    const until = async (fn, what, ms = 15000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    await pg.evaluate((k) => localStorage.setItem('smoke_ct_backup', localStorage.getItem(k) ?? ''), K)
+    try {
+      // Made-up training: today is Upper in the week; diamond push-ups at the top of the range in the last 2 sessions (a level-up waits).
+      await pg.evaluate((k) => {
+        const s = JSON.parse(localStorage.getItem(k) || 'null') || { exercises: [], days: {}, sets: {}, history: [], sportySettings: {} }
+        const d = (n) => { const x = new Date(Date.now() - n * 86400000 - 4 * 3600000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}` }
+        const dow = (new Date(Date.now() - 4 * 3600000).getDay() + 6) % 7
+        const days = ['rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
+        days[dow] = 'upper'
+        days[(dow + 2) % 7] = 'legs'
+        s.trainWeek = { v: 1, days, updatedAt: Date.now() }
+        s.trainLevels = { push: { level: 2, reached: { 2: d(12) }, at: 1 }, pull: { level: 0, reached: {}, at: 1 } }
+        s.trainLog = []
+        s.exercises = (s.exercises || []).filter((e) => e.id !== 'ex_ct_d')
+        s.exercises.push({ id: 'ex_ct_d', name: 'Diamond push-ups', target: 24, unit: 'reps', active: false, doneToday: 0, move: 'diamond_pushup' })
+        s.sets = s.sets || {}
+        delete s.sets[d(0)]
+        const put = (day, id, reps) => { (s.sets[day] ||= {})[id] = reps.map((r, i) => ({ reps: r, at: Date.now() - 86400000 * 20 + i, id: `ct-${id}-${day}-${i}` })) }
+        put(d(5), 'ex_ct_d', [12, 12, 12, 12])
+        put(d(2), 'ex_ct_d', [12, 12, 12, 13])
+        localStorage.setItem(k, JSON.stringify(s))
+        window.dispatchEvent(new CustomEvent('life-sport-changed'))
+      }, K)
+      // 1. Today → Now: one slim strip with today's training and Start, the next meal, weigh-in and bed.
+      await pg.setViewportSize({ width: 1280, height: 720 })
+      await open('today')
+      await pg.waitForSelector('.td2 .ptabs [data-tab="now"]', { timeout: 15000 })
+      await pg.click('.td2 .ptabs [data-tab="now"]')
+      const strip = '[data-tabpanel="now"] .ct-strip'
+      await pg.waitForFunction((s) => /Upper body · \d+ min|Done: /.test(document.querySelector(`${s} [data-ct="train"]`)?.textContent ?? ''), strip, { timeout: 15000 })
+      // Earlier steps may already have logged a workout today (then the coach says done, never "Rest day").
+      const session = /Upper body · \d+ min/.test(await pg.locator(`${strip} [data-ct="train"]`).innerText())
+      if (session && !(await pg.locator(`${strip} .ct-start`).count())) throw new Error('the coach strip has no Start')
+      if (!session && !(await pg.locator(`${strip} .ct-done`).count())) throw new Error('a workout logged today does not show as done')
+      for (const c of ['weigh', 'bed']) if (!(await pg.locator(`${strip} [data-check="${c}"]`).count())) throw new Error(`the coach strip has no ${c} tick`)
+      // The next meal to tick, or "All meals" when the whole standard day is already logged (the Food counter step logs it).
+      if (!(await pg.locator(`${strip} [data-meal]`).count()) && !(await pg.locator(`${strip} .ct-check.on`, { hasText: 'All meals' }).count())) throw new Error('the coach strip has no meal to tick')
+      if ((await pg.locator(strip).boundingBox()).height > 64) throw new Error(`the coach strip is ${(await pg.locator(strip).boundingBox()).height}px tall (one slim line)`)
+      // Each thing once: the workout is the coach's, so the Workout habit is folded out of Now's habits.
+      if ((await pg.locator('[data-tabpanel="now"] .hb-name').allInnerTexts()).some((t) => t.trim() === 'Workout')) throw new Error('the workout shows twice on Now (coach and habits)')
+      // 2. Open: the whole card (moves with last time, meals with big ticks, weigh-in and bed, the morning routine, the line and tip).
+      await pg.click(`${strip} .ct-open`)
+      const card = '[data-tabpanel="now"] .ct-card'
+      await pg.waitForSelector(`${card} .ct-meals li`, { timeout: 5000 })
+      if ((await pg.locator(`${card} .ct-meals li`).count()) < 4) throw new Error('the coach card shows fewer than 4 meals')
+      if (session && !(await pg.locator(`${card} .ct-moves li`).count())) throw new Error('the coach card shows no moves')
+      if (session && !/Last time|First time|reps/.test(await pg.locator(`${card} .ct-moves`).innerText())) throw new Error('the moves have no "beat last time" target')
+      if ((await pg.locator(`${card} .ct-routine li`).count()) < 4) throw new Error('no morning routine timeline')
+      if (!/kcal/.test(await pg.locator(`${card} .ct-line`).innerText())) throw new Error(`the day's line has no plan numbers: ${await pg.locator(`${card} .ct-line`).innerText()}`)
+      if ((await pg.locator(`${card} .ct-tip`).innerText()).trim().length < 10) throw new Error('no tip')
+      // 3. Tick a meal: the usual meal is logged in Food (a real log, with an Undo toast), the tick follows it. No points.
+      const ledgerBefore = Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value)
+      const open0 = await pg.locator(`${card} .ct-meals li:not(.on)`).count()
+      let meal = null
+      if (!open0) {
+        // Every meal is already logged today: each tick came from a real food log.
+        meal = await pg.locator(`${card} .ct-meals li.on`).first().getAttribute('data-meal')
+      } else {
+        meal = await pg.locator(`${card} .ct-meals li:not(.on)`).first().getAttribute('data-meal')
+        await pg.click(`${card} .ct-meals li[data-meal="${meal}"] .ct-tick`)
+        await pg.waitForSelector(`${card} .ct-meals li.on[data-meal="${meal}"]`, { timeout: 10000 })
+        if (!(await pg.locator('.toast.has-action .toast-act').count())) throw new Error('logging a meal has no Undo')
+      }
+      // It was a real food-counter meal, with its standard-day slot.
+      await until(async () => ((await sql("SELECT value FROM settings WHERE key = 'food_log'")).rows[0]?.[0]?.value ?? '').includes(`"slot":"${meal}"`), 'the ticked meal did not reach the food log')
+      // "Ate other": your own tick, nothing logged. Bed is your own tick too.
+      if (open0 > 1) {
+        const other = await pg.locator(`${card} .ct-meals li:not(.on)`).first().getAttribute('data-meal')
+        await pg.click(`${card} .ct-meals li[data-meal="${other}"] .ct-other`)
+        await pg.waitForSelector(`${card} .ct-meals li.on[data-meal="${other}"]`, { timeout: 10000 })
+      }
+      await pg.click(`${card} [data-check="bed"]`)
+      await pg.waitForSelector(`${card} [data-check="bed"].on`, { timeout: 8000 })
+      if (!(Number((await pg.locator(`${card} .ct-count`).innerText()).split('/')[0]) >= 2)) throw new Error('the tick count did not move')
+      if (shots) {
+        await pg.setViewportSize({ width: 390, height: 1500 }) // tall enough for the whole card in one picture
+        await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+        // Screenshot only: bars that stay on screen (tabs, the phone's nav) would cover the card.
+        const hid = await pg.locator(card).evaluate((el) => {
+          const out = []
+          for (const x of document.querySelectorAll('body *')) {
+            const p = getComputedStyle(x).position
+            if ((p === 'fixed' || p === 'sticky') && !x.contains(el)) out.push([x, x.style.visibility]), (x.style.visibility = 'hidden')
+          }
+          window.__ctHid = out
+          el.scrollIntoView({ block: 'start' })
+          return out.length
+        })
+        await pg.waitForTimeout(400)
+        await pg.locator(card).screenshot({ path: `${shots}/coach-today-phone.png` })
+        if (hid) await pg.evaluate(() => { for (const [x, v] of window.__ctHid ?? []) x.style.visibility = v; delete window.__ctHid })
+        await pg.setViewportSize({ width: 1280, height: 720 })
+      }
+      // 4. The weekly review: the coach's step first (one flow with the goal ladder's), a level-up applied with one tap.
+      await pg.click(`${card} .ct-week-open`)
+      await pg.waitForSelector('.ql-review .ct-week [data-decision="level:push"]', { timeout: 15000 })
+      if (!/step 1 of 3/i.test(await pg.locator('.ql-review .ql-kicker').innerText())) throw new Error(`the coach step is not the first step of the Sunday review: ${await pg.locator('.ql-review .ql-kicker').innerText()}`)
+      if (!/\d+\/\d+ workouts/.test(await pg.locator('.ql-review .ct-week-sum').innerText())) throw new Error('no summary line')
+      if (shots) {
+        await pg.setViewportSize({ width: 1440, height: 900 })
+        await pg.waitForTimeout(400)
+        await pg.screenshot({ path: `${shots}/coach-week-desktop.png` })
+      }
+      await pg.locator('.ql-review [data-decision="level:push"] .btn.primary').click()
+      await pg.waitForSelector('.ql-review [data-decision="level:push"].on', { timeout: 10000 })
+      const lv = await pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLevels?.push?.level, K)
+      if (lv !== 3) throw new Error(`the level-up was not applied (push level ${lv})`)
+      await until(async () => ((await sql("SELECT value FROM settings WHERE key = 'coach_weeks'")).rows[0]?.[0]?.value ?? '').includes('level:push'), 'the decision is not saved in coach_weeks')
+      // Next: the goal ladder's step in the same flow.
+      await pg.locator('.ql-review .ct-week-next').click()
+      await pg.waitForFunction(() => /step 2 of 3/i.test(document.querySelector('.ql-review .ql-kicker')?.textContent ?? ''), null, { timeout: 5000 })
+      await pg.keyboard.press('Escape')
+      await pg.waitForSelector('.ql-review', { state: 'detached', timeout: 8000 })
+      if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a coach tick or decision paid points')
+      // 5. Body → Today: the same plan in full.
+      await open('body')
+      await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+      await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
+      await pg.click('.body-page .ptabs [data-tab="today"]')
+      await pg.waitForSelector('#ptp-body-today .ct-card:not(.ct-strip) [data-ct="train"]', { timeout: 15000 })
+      if (!(await pg.locator(`#ptp-body-today .ct-card .ct-meals li.on[data-meal="${meal}"]`).count()) || !(await pg.locator('#ptp-body-today .ct-card [data-check="bed"].on').count())) throw new Error('Body → Today does not show the same ticks')
+    } finally {
+      await pg.evaluate((k) => { const b = localStorage.getItem('smoke_ct_backup'); localStorage.removeItem('smoke_ct_backup'); if (b) localStorage.setItem(k, b); else localStorage.removeItem(k); window.dispatchEvent(new CustomEvent('life-sport-changed')) }, K)
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+  })
   // MN24: Discipline is one built-in page (no embedded MAN copy).
   await step('Discipline is one page with its own content', async () => {
     await open('discipline')
@@ -2020,6 +2163,9 @@ try {
     // The Sunday review: this week's actions per goal, then next week's top 3 pre-filled from the ladder.
     await pg.setViewportSize({ width: 1440, height: 900 })
     await pg.locator('.ql-head-act .btn').first().click()
+    // The coach's body and training step comes first in the same flow.
+    await pg.waitForSelector('.ql-review .ct-week-next', { timeout: 8000 })
+    await pg.locator('.ql-review .ct-week-next').click()
     await pg.waitForSelector('.ql-review .ql-rev-goals li', { timeout: 5000 })
     if ((await pg.locator('.ql-review .ql-rev-goals li').count()) !== 3) throw new Error('the review does not show the 3 goals')
     if (shots) await pg.screenshot({ path: `${shots}/desktop-review.png` })
@@ -4552,7 +4698,9 @@ try {
       if (!m) throw new Error('no "N of M" in the habits header')
       return [Number(m[1]), Number(m[2])]
     }
-    for (const n of ['Morning oath', 'Workout', 'Grooming', 'Log spending']) if (!(await row(n).count())) throw new Error(`no ${n} row`)
+    // Workout is the coach card's on Now (each thing once), so it is folded out of the habits.
+    for (const n of ['Morning oath', 'Grooming', 'Log spending']) if (!(await row(n).count())) throw new Error(`no ${n} row`)
+    if (await row('Workout').count()) throw new Error('Workout shows in the habits and in the coach card')
     if ((await row('Grooming').locator('.hb-dots .dot').count()) !== 7) throw new Error('a habit row does not show the last 7 days')
     // An auto habit: the tap opens the spending line and the row stays open (no points for a tap).
     if (!/\bauto\b/.test(await cls('Log spending'))) throw new Error('Log spending is not marked auto')

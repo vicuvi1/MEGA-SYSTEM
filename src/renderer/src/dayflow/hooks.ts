@@ -27,6 +27,8 @@ export interface DayFlowProps {
   weekSlot?: HTMLElement | null
   /** Today's tabs show small counts. */
   onCounts?: (c: { tasks: number; late: number; mustDone: number; mustTotal: number }) => void
+  /** Habits shown elsewhere on the page (the coach card's workout), folded out of the list. */
+  fold?: string[]
 }
 
 const todayList = createTodayList(() => life.todoist!.today())

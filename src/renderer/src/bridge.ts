@@ -123,6 +123,8 @@ export type Bridge = LifeApi & {
     bodyComp?: import('./web/bodyCompBridge').BodyCompApi
     /** Food counter: meals from your AI app's reply, day totals, goals, what to eat next, favourites. */
     food?: import('./web/foodBridge').FoodApi
+    /** The coach: today's plan, ticks, the day's line and the weekly review (coach/coachApi.ts). */
+    today?: import('./coach/coachApi').CoachApi
     /** HD: your reminders (the list Ben's ⏰ uses), and add / Done / Snooze from the island. */
     reminders?(): Promise<import('@core/healthyDay').ReminderItem[]>
     remind?(op: { op: 'add'; text: string; at: number } | { op: 'done'; id: string } | { op: 'snooze'; id: string; minutes: number }): Promise<string>

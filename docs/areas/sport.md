@@ -219,3 +219,7 @@ A fifth Body tab, **Growth** (Today · Food · Training · Growth · Progress), 
 - **Chip**: the level (ring = progress) in the Body header and one small chip on Today → Now (`GrowthChip`); both open Body → Growth.
 - **Month by month**: weight, waist, strength %, sessions, protein days and the level at the month's end; Copy CSV (`month,weight_kg,waist_cm,strength_pct,sessions,protein_goal_days,growth_level`).
 - Smoke step "Body growth" (tabs, header chip opens Growth, 7 hero numbers, period switch, level bar + what to do + history, 8 charts, monthly rows + CSV, the Log sheet opens, no sideways scroll, Today chip, no points). Screenshots: `E2E_GROWTH_DEMO=1 GROWTH_SHOTS=<dir> SMOKE_ONLY="Body growth" npm run smoke` (six made-up months).
+
+## Coach today on Body → Today (2026-11-09)
+
+The coach card sits at the top of Body → Today in full (training line + Start, meals with big ticks, weigh-in, bed, morning routine, line + tip); the moves stay in the workout card below it. A meal tick logs the usual standard-day meal through `addFoodMeal` (source saved, with its slot). No points. Details: [coach.md](coach.md).

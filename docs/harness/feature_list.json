@@ -913,6 +913,22 @@
    ],
    "evidence": "2026-11-09: unit tests with a fake Drive pass; smoke step Photo Locker (device A uploads, device B downloads, 61 s video refused) passes",
    "notes": "Fakes only so far: needs the Drive API enabled and drive.file on the consent screen, then Connect Google Drive. Videos are not re-encoded."
+  },
+  {
+   "id": "F-COACH-CORE",
+   "priority": 1,
+   "area": "coach",
+   "title": "Coach core: Coach today card, weekly review, hard safety rules",
+   "user_visible_behavior": "One coach (Ben) says what to do today: training with Start (or a rest day), the standard day's meals with big ticks (a tick logs the usual meal), weigh-in and bed ticks, the morning routine, one line + tip (AI once a morning, template otherwise). Today → Now has a slim strip that opens the card; Body → Today shows it in full. The Sunday review starts with body and training and applies a calorie change, level-up or lighter week with one tap. Never under 2,200 kcal, no cut while the weekly weight is not rising, red-flag words stop training. No points.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/coachCore.test.ts",
+    "SMOKE_ONLY=\"Coach today\" npm run smoke",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-09: coachCore.test.ts (30 tests) and full vitest pass; smoke steps Coach today, Today tabs (Now 1.59 screens), Goal ladder, Body Today pass",
+   "notes": "core/coachConfig.ts, coachPlan.ts, coachSafety.ts, coachText.ts, coachWeek.ts; renderer coach/* (life.coach.today); settings coach_config, coach_days, coach_weeks. For the next step: checkinData, coachContext, redFlag, nudgeConditions, checkin()."
   }
  ]
 }
