@@ -427,6 +427,13 @@ export function mergeTrain(a: any, b: any): Record<string, unknown> {
   }
   newer('trainWeek', (v) => Number(v?.updatedAt) || 0)
   newer('trainLadders', (v) => Number(v?.updatedAt) || 0)
+  newer('trainLighter', (v) => Number(v?.at) || 0)
+  // Dismissed warnings: the later day per warning.
+  if (a?.trainWarnDismiss || b?.trainWarnDismiss) {
+    const dm: Record<string, string> = { ...(b?.trainWarnDismiss ?? {}) }
+    for (const [k, v] of Object.entries<any>(a?.trainWarnDismiss ?? {})) if (!dm[k] || String(v) > dm[k]) dm[k] = String(v)
+    out.trainWarnDismiss = dm
+  }
   if (a?.trainLevels || b?.trainLevels) {
     const lv: Record<string, any> = { ...(b?.trainLevels ?? {}) }
     for (const [k, v] of Object.entries<any>(a?.trainLevels ?? {})) if (!lv[k] || (Number(v?.at) || 0) >= (Number(lv[k]?.at) || 0)) lv[k] = v

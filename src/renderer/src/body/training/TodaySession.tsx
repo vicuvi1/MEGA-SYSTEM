@@ -10,7 +10,10 @@ import type { BodyState } from '@shared/api'
 import { DEFAULT_DAYS, SESSION_RULES, SHORT_DAYS, TYPE_NAME, WARMUP, WEEKDAYS, dowOf, todayPlan, validateWeek, type DayType, type SessionType } from '@core/trainWeek'
 import { doneSessions, ensureExercise, exIdsFor, keepLevel, logSet, sameAsLast, saveSession, sessionFromSets, sessionItems, sessionMinutes, trainOf, unlogSet, workoutOf, type Feel, type PlanItem, type TrainSession } from '@core/trainLog'
 import { rangeText } from '@core/trainLadders'
+import { LIGHTER, lighterOn, lighterReps, setLighter } from '@core/trainWarnings'
+import { LIGHT_DAY_KEY } from './TrainWarnings'
 import { life } from '../../bridge'
+import { RecoveryPanel } from './RecoveryPanel'
 import { celebrate } from '../../fx'
 import { soundFanfare } from '../../soundKit'
 import { useToast } from '../../ui'
@@ -60,7 +63,29 @@ const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).
 export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: { st: any; today: string; refresh: () => void; onOpenSportApp?: () => void; onLogged: (s: BodyState) => void }) {
   const toast = useToast()
   const data = useMemo(() => trainOf(st), [st])
-  const plan = useMemo(() => todayPlan(data.week, doneSessions(data.log), today), [data, today])
+  const done = useMemo(() => doneSessions(data.log), [data])
+  const plan = useMemo(() => todayPlan(data.week, done, today), [data, done, today])
+  const lighter = lighterOn(st, today)
+  /** "Same as last time", at 70% during a lighter week. */
+  const fillOf = (it: PlanItem) => sameAsLast(it.last, it.sets, it.level).map((f) => (lighter ? { ...f, reps: lighterReps(f.reps) } : f))
+  // A lighter week sets today's dose to Lighter 70% (the usual dose setting, so Sport Track follows it),
+  // once a day and only when you haven't picked a dose for today yourself.
+  useEffect(() => {
+    if (!lighter) return
+    const key = LIGHT_DAY_KEY
+    try {
+      if (localStorage.getItem(key) === today) return
+      localStorage.setItem(key, today)
+    } catch {
+      return
+    }
+    const bp = life.coach?.bodyPlus
+    if (!bp) return
+    void bp
+      .ready(null)
+      .then((r) => (r.auto ? bp.setDose('light', null).then(() => window.dispatchEvent(new CustomEvent('life-body-changed'))) : undefined))
+      .catch(() => {})
+  }, [lighter, today])
   const [draft, setDraftState] = useState<Draft | null>(() => readDraft(today))
   const setDraft = useCallback((d: Draft | null) => {
     writeDraft(d)
@@ -86,7 +111,7 @@ export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: {
     const list = sessionItems(st, data, t, today)
     const d: Draft = { id: `t${Date.now().toString(36)}`, date: today, type: t, startedAt: null, reps: {}, feel: {}, kg: {}, logged: {}, rest: 90 }
     for (const it of list) {
-      const fill = sameAsLast(it.last, it.sets, it.level)
+      const fill = fillOf(it)
       d.reps[it.ladder.id] = fill.map((f) => f.reps)
       d.feel[it.ladder.id] = fill.map(() => null)
       d.kg[it.ladder.id] = fill[0]?.kg ?? 0
@@ -112,7 +137,7 @@ export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: {
 
   const fillSame = (it: PlanItem) => {
     const d = ensure()
-    const fill = sameAsLast(it.last, it.sets, it.level)
+    const fill = fillOf(it)
     const logged = d.logged[it.ladder.id] ?? []
     const reps = fill.map((f, i) => (logged[i] ? d.reps[it.ladder.id]?.[i] ?? f.reps : f.reps))
     setDraft({ ...d, reps: { ...d.reps, [it.ladder.id]: reps }, kg: { ...d.kg, [it.ladder.id]: fill[0]?.kg ?? d.kg[it.ladder.id] ?? 0 } })
@@ -233,6 +258,8 @@ export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: {
         </button>
       </header>
 
+      {!draft?.startedAt && <RecoveryPanel st={st} plan={plan} week={data.week} done={done} today={today} started={!!draft} onSwap={(t) => setDraft(newDraft(t))} />}
+
       {editWeek && (
         <div className="tr-week-edit" data-tr="week-edit">
           <p className="bdy-note">Tap a day to change it: Upper → Legs + core → Rest. The same muscles never train two days in a row.</p>
@@ -280,6 +307,14 @@ export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: {
             <span>rest 60–90 s</span>
             <span>1–3 reps in reserve</span>
           </div>
+          {lighter && (
+            <p className="tr-lighter" data-tr="lighter">
+              Lighter week until {WEEKDAYS[dowOf(lighter.until)]}: {LIGHTER.pct}% of your usual reps.
+              <button type="button" className="bdy-btn quiet" onClick={() => (saveTraining((s) => setLighter(s, today, Date.now(), false)), refresh())} data-tr="lighter-off">
+                Back to full
+              </button>
+            </p>
+          )}
           <details className="tr-warm">
             <summary>Warm-up · {SESSION_RULES.warmupMin} min</summary>
             <ol>
@@ -317,7 +352,7 @@ export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: {
           <ol className="tr-exlist">
             {items.map((it) => {
               const L = it.ladder.id
-              const reps = draft?.reps[L] ?? sameAsLast(it.last, it.sets, it.level).map((f) => f.reps)
+              const reps = draft?.reps[L] ?? fillOf(it).map((f) => f.reps)
               const feel = draft?.feel[L] ?? []
               const logged = draft?.logged[L] ?? []
               const kg = draft?.kg[L] ?? 0
