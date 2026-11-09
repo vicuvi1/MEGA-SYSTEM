@@ -4,10 +4,10 @@ Every session reads this first and adds one entry at the end. Newest entry on to
 Keep it short and true: anything written here is what the next session will trust.
 
 ## Current verified state (keep to 5–8 lines)
-- **Milestone:** food (saved meals, standard day, AI photo logging in app and Telegram, meal reminders, one weekly calorie check), training (split, Today card, fast logging, roadmap, recovery, progress, warnings), body composition (log sheet, scale screenshot import, dashboard), Custom Center + island v2, quick add (Alt+Space) — landed 2026-11-08/09; full smoke green on b022da9.
-- **Active:** none.
-- **Known gaps:** real Gemini/Claude photo and Xiaomi screenshot reads not tried yet (fakes only); Windows-only parts (global shortcut, island drop zone, wallpaper) not tried on a real PC; seeded standard day = 2,332 kcal (owner adds an item or enters height/age); intermittent smoke steps: Desktop island (v2), Sport Track Today, "no uncaught page errors".
-- **Next:** scale Phase 2 (SmartScaleConnect on the owner's server → /api/cron?job=health with a health key, docs/scale-sync.md) once the owner says Xiaomi Home or Mi Fitness; UI clean-up pick list (toasts under the phone nav, sticky tabs over titles, 17-item sidebar, one shared style).
+- **Milestone:** AI coach (Today card, ramp-up, Sunday review, check-in, nudges ≤3/day, chat with Apply, safety rules), Growth tab + growth levels, Photo Locker (Google Drive), Goal Ladder, Todoist audit, island sound + simpler Day page, finance donut, multi-photo food — all on main; Windows release v1.4.1428 green (eddc11f).
+- **Safeguards:** unit tests also run on Windows in CI; ship steps check the Windows release first; "Desktop updates" health alert; flaky checks fixed at the root (docs/areas/workflow.md).
+- **Known gaps:** real AI replies/photo/scale reads and Google Drive untried (fakes only); owner must enable the Drive API + drive.file scope; Today → Now is ~1.65 screens on Sun/Mon (limit 1.75).
+- **Next:** scale Phase 2 sync once the owner says Xiaomi Home or Mi Fitness; Telegram versions of the Goal Ladder reviews; UI clean-up pick list.
 - **Verify:** `bash scripts/init.sh` · `npm run smoke` · `bash scripts/release-status.sh`.
 
 ## Session record
