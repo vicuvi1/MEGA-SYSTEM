@@ -757,7 +757,7 @@ try {
     await shot(`${prog} .tp-card`, 'measurements')
     await pg.waitForSelector(`${prog} .bw-card .bw-focus`, { timeout: 15000 })
     await shot(`${prog} .bw-card`, 'weekly-body-card')
-    if (!/stay on this device/.test(await pg.locator(`${prog} .ph-lock`).innerText())) throw new Error('the photo card does not say photos stay on this device')
+    if (!/Kept on this device and in Photo Locker.*not encrypted/s.test(await pg.locator(`${prog} .ph-lock`).innerText())) throw new Error('the photo card does not say where photos are kept (this device, Photo Locker, not encrypted)')
     // Two made-up drawn silhouettes in this device's photo store (8 weeks apart), then a new one: the ghost overlay.
     const drawn = await pg.evaluate(async (days) => {
       const figure = (broad, ink = '#c9d2e3') => {
@@ -833,10 +833,11 @@ try {
     await pg.locator(`${prog} .ph-card input[type="range"]`).fill('62')
     await shot(`${prog} .ph-card`, 'photo-compare-slider')
     await pg.locator(`${prog} .ph-card .ph-actions .btn`, { hasText: 'Done' }).click()
-    // The photos never left this device: nothing image-like reached the (fake) server's database.
+    // No photo data reached the (fake) server's database. Photo Locker's index (vault_index) may name
+    // the photo and its type (metadata only, see docs/areas/vault.md), but never holds image data.
     const leaked = await pg.evaluate(async () => {
       const s = localStorage.getItem('life_web_session') ?? ''
-      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%image/%' OR value LIKE '%ph-demo%' OR key LIKE '%photo%' AND key != 'look_wallpaper_photo'", args: [] } }, { type: 'close' }] }) })
+      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%data:image%' OR value LIKE '%;base64,%' OR (key != 'vault_index' AND (value LIKE '%image/%' OR value LIKE '%ph-demo%')) OR (key LIKE '%photo%' AND key != 'look_wallpaper_photo')", args: [] } }, { type: 'close' }] }) })
       const j = await r.json()
       return Number(j.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? -1)
     })
