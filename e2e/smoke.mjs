@@ -1228,6 +1228,8 @@ try {
       s.exercises = (s.exercises || []).filter((e) => e.id !== 'ex_sm_d' && e.id !== 'ex_sm_r')
       s.exercises.push({ id: 'ex_sm_d', name: 'Diamond push-ups', target: 24, unit: 'reps', active: false, doneToday: 0, move: 'diamond_pushup' }, { id: 'ex_sm_r', name: 'Table rows', target: 24, unit: 'reps', active: false, doneToday: 0, move: 'table_row' })
       s.sets = s.sets || {}
+      // Sets from earlier steps today would make the muscles "recovering": start today clean (put back at the end).
+      delete s.sets[d(0)]
       const put = (day, id, reps) => { (s.sets[day] ||= {})[id] = reps.map((r, i) => ({ reps: r, at: Date.now() - 86400000 * 20 + i, id: `sm-${id}-${day}-${i}` })) }
       put(d(5), 'ex_sm_d', [12, 12, 12, 12])
       put(d(2), 'ex_sm_d', [12, 12, 12, 13])
@@ -1241,6 +1243,19 @@ try {
     if (!/Last time: 10 · 9 · 9/.test(await pg.locator(`${pull} [data-tr="last"]`).innerText())) throw new Error('the pull move does not show last time')
     if (!/3 × 8–15/.test(await pg.locator(`${pull} [data-tr="target"]`).innerText())) throw new Error('the pull move has no sets × range')
     if ((await pg.locator(`${T} .tr-ex`).count()) !== 3) throw new Error('upper is not push + pull + shoulders')
+    // Recovery: six groups with a dot each, and the line agrees with the split (back trained yesterday: nearly ready).
+    await pg.waitForSelector(`${T} [data-tr="recovery"] [data-group="back"][data-status="yellow"]`, { timeout: 5000 })
+    if ((await pg.locator(`${T} [data-tr="recovery"] .tr-rec-item`).count()) !== 6) throw new Error('the recovery list does not show six muscle groups')
+    if (!/^Best to train today: Upper/.test(await pg.locator(`${T} [data-tr="recommend"]`).innerText())) throw new Error('the recovery line does not agree with the split')
+    if (shots) {
+      await pg.setViewportSize({ width: 390, height: 844 })
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(500)
+      await pg.evaluate((t) => { document.querySelector(`${t} [data-tr="recovery"]`).scrollIntoView({ block: 'start' }); window.scrollBy(0, -420) }, T)
+      await pg.waitForTimeout(300)
+      await pg.screenshot({ path: `${shots}/train-recovery-phone.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
     if (shots) {
       await pg.setViewportSize({ width: 390, height: 844 })
       await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
@@ -1310,6 +1325,62 @@ try {
     await pg.click(`${road} .tr-ladder[data-ladder="pull"] .tr-node.next button`)
     await pg.waitForSelector(`${T} [data-tr="move-sheet"] .tr-steps li`, { timeout: 5000 })
     await pg.locator(`${T} [data-tr="move-sheet"] .sheet-actions button`, { hasText: 'Close' }).click()
+    // After today's pull sets the back is recovering (red).
+    await pg.waitForSelector(`${T} [data-tr="recovery"] [data-group="back"][data-status="red"]`, { timeout: 5000 })
+    // A calm warning from made-up sets: wide push-ups down 2 sessions in a row. "Hide for a week" hides it;
+    // back again, "Lighter week (70%)" starts a lighter week.
+    const seedDrop = () => pg.evaluate((k) => {
+      const s = JSON.parse(localStorage.getItem(k) || '{}')
+      const d = (n) => { const x = new Date(Date.now() - n * 86400000 - 4 * 3600000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}` }
+      s.exercises = (s.exercises || []).filter((e) => e.id !== 'ex_sm_w')
+      s.exercises.push({ id: 'ex_sm_w', name: 'Wide push-ups', target: 30, unit: 'reps', active: false, doneToday: 0, move: 'wide_pushup' })
+      ;[[8, 14], [6, 13], [3, 11]].forEach(([n, r]) => { (s.sets[d(n)] ||= {}).ex_sm_w = [{ reps: r, at: Date.now() - n * 86400000, id: `sm-w-${n}` }] })
+      delete s.trainWarnDismiss
+      delete s.trainLighter
+      localStorage.setItem(k, JSON.stringify(s))
+      window.dispatchEvent(new CustomEvent('life-sport-changed'))
+    }, K)
+    await seedDrop()
+    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { timeout: 5000 })
+    if (!/went down 2 sessions in a row \(.+\)\. That usually means tired/.test(await pg.locator(`${T} .tr-warn[data-warn="tired"]`).innerText())) throw new Error('the strength warning has the wrong words')
+    await pg.click(`${T} .tr-warn[data-warn="tired"] [data-tr="warn-dismiss"]`)
+    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { state: 'detached', timeout: 5000 })
+    if (!(await pg.evaluate((k) => !!JSON.parse(localStorage.getItem(k) || '{}').trainWarnDismiss?.tired, K))) throw new Error('"Hide for a week" was not saved')
+    await seedDrop()
+    await pg.click(`${T} .tr-warn[data-warn="tired"] [data-tr="warn-lighter"]`)
+    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { state: 'detached', timeout: 5000 })
+    const light = await pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLighter, K)
+    if (!light?.until || light.until <= light.from) throw new Error(`the lighter week was not set: ${JSON.stringify(light)}`)
+    // The progress dashboard (folded): streak, sessions per week, hard sets per muscle, reps, strength and body, photo.
+    const prog = `${T} details[data-tr="dashboard"]`
+    await pg.click(`${prog} > summary`)
+    await pg.waitForSelector(`${prog} [data-tr="streak"] .bdy-num`, { timeout: 5000 })
+    if ((await pg.locator(`${prog} [data-tr="muscles"] .tr-prog-mini`).count()) !== 4) throw new Error('the dashboard has no hard sets per muscle')
+    if ((await pg.locator(`${prog} .tr-bars .tr-bar`).count()) < 3) throw new Error('the dashboard charts have no bars')
+    await pg.waitForSelector(`${prog} [data-tr="strength-body"] .bpg-hero`, { timeout: 5000 })
+    await pg.waitForSelector(`${prog} [data-tr="photo"] [data-tr="photo-open"]`, { timeout: 5000 })
+    if (shots) {
+      await pg.setViewportSize({ width: 1440, height: 1400 })
+      await pg.addStyleTag({ content: '.body-page .ptabs, header.topbar { position: static !important; }' })
+      await pg.waitForTimeout(400)
+      await pg.evaluate((p) => { document.querySelector(p).scrollIntoView({ block: 'start' }); window.scrollBy(0, -120) }, prog)
+      await pg.waitForTimeout(300)
+      await pg.locator(prog).screenshot({ path: `${shots}/train-dashboard-desktop.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await pg.click(`${prog} > summary`)
+    // Body → Today's body map: "Recovery" colours it by recovery, "This week's sets" goes back.
+    await pg.click('.body-page .ptabs [data-tab="today"]')
+    await pg.waitForSelector('.bmap-card [data-bmap="recovery"]', { timeout: 10000 })
+    // The lighter week set today's dose to Lighter: put readiness back to automatic for the steps after this one.
+    await pg.waitForTimeout(500)
+    if (await pg.locator('.rdy-card .rdy-back').count()) await pg.locator('.rdy-card .rdy-back').first().click()
+    await pg.click('.bmap-card [data-bmap="recovery"]')
+    await pg.waitForSelector('.bmap-card .bmap-rec-row[data-group="back"][data-status="red"]', { timeout: 5000 })
+    if (!(await pg.locator('.bmap-card .bmap-region.rec.r-red').count())) throw new Error('the body map is not coloured by recovery')
+    await pg.click('.bmap-card [data-bmap="sets"]')
+    await pg.waitForSelector('.bmap-card .bmap-row', { timeout: 5000 })
+    await pg.click('.body-page .ptabs [data-tab="training"]')
     await pg.waitForSelector(`${T} .bt-builder .bt-session`, { timeout: 15000 })
     // The old Training info is still here ("This week").
     await pg.waitForSelector(`${T} .bt-week .mw-row`, { timeout: 10000 })

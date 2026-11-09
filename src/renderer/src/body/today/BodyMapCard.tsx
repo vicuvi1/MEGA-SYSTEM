@@ -2,8 +2,10 @@
 // shapes, no copied art). Each muscle group lights up by this week's hard sets
 // (Sport Track's sets, core/bodyMap.ts); 10–20 a week is the growth zone. Tap a
 // muscle, on the drawing or in the list: its sets and the moves that train it.
-import { useState, type CSSProperties } from 'react'
+import { useMemo, useState, type CSSProperties } from 'react'
 import { bodyMap, muscleDetail, REGIONS, ZONE_LABEL, type MapGroup } from '@core/bodyMap'
+import { agoText, recoveryMap, REGION_GROUP, STATUS_LABEL, type GroupRecovery } from '@core/recovery'
+import { readSport } from '../../sportTrack'
 import { WEEKLY_SETS, type Muscle } from '@core/sportSets'
 import { FigureSvg } from '../../DrillFigure'
 import type { SportToday } from './useSportToday'
@@ -42,8 +44,9 @@ const SHAPES: Record<string, string[]> = {
   'calves-b': both('M43 200 Q50 195 56 200 L55 232 Q49 236 45 232 Z')
 }
 
-function Side({ side, groups, pick, onPick }: { side: 'front' | 'back'; groups: MapGroup[]; pick: Muscle | null; onPick: (m: Muscle) => void }) {
+function Side({ side, groups, pick, onPick, rec }: { side: 'front' | 'back'; groups: MapGroup[]; pick: Muscle | null; onPick: (m: Muscle) => void; rec: GroupRecovery[] | null }) {
   const by = new Map(groups.map((g) => [g.muscle, g]))
+  const recBy = new Map((rec ?? []).map((r) => [r.id, r]))
   return (
     <figure className="bmap-side">
       <svg viewBox={`0 0 ${W} 252`} className="bmap-svg" role="group" aria-label={`${side === 'front' ? 'Front' : 'Back'} of the body`}>
@@ -57,16 +60,18 @@ function Side({ side, groups, pick, onPick }: { side: 'front' | 'back'; groups: 
         {REGIONS.filter((r) => r.side === side).map((r) => {
           const g = by.get(r.muscle)!
           const style = { ['--h' as any]: g.heat } as CSSProperties
+          const rg = rec ? recBy.get(REGION_GROUP[r.id]) : null
           return (
             <g
               key={r.id}
-              className={`bmap-region z-${g.zone}${pick === r.muscle ? ' on' : ''}`}
+              className={rg ? `bmap-region rec r-${rg.status}` : `bmap-region z-${g.zone}${pick === r.muscle ? ' on' : ''}`}
+              data-status={rg?.status}
               data-region={r.id}
               data-muscle={r.muscle}
               style={style}
               onClick={() => onPick(r.muscle)}
             >
-              <title>{`${r.name}: ${g.sets} hard sets this week`}</title>
+              <title>{rg ? `${r.name}: ${STATUS_LABEL[rg.status]}, last hard set ${agoText(rg.hours)}` : `${r.name}: ${g.sets} hard sets this week`}</title>
               {SHAPES[r.id].map((d, i) => (
                 <path key={i} d={d} />
               ))}
@@ -85,17 +90,42 @@ export function BodyMapCard({ sport }: { sport: SportToday | null }) {
   const sel = pick ?? groups.slice().sort((a, b) => a.sets - b.sets)[0]?.muscle ?? 'push'
   const d = muscleDetail(sel, groups.find((g) => g.muscle === sel)?.sets ?? 0, sport?.exercises ?? [])
   const top = WEEKLY_SETS.hi + 4
+  const [view, setView] = useState<'sets' | 'recovery'>('sets')
+  // Recovery: hours since each group's last hard set (Sport Track's sets on this device).
+  const rec = useMemo(() => (view === 'recovery' ? recoveryMap(readSport(), Date.now(), sport?.today ?? '') : null), [view, sport])
   return (
-    <section className="bdy-card bmap-card" aria-label="Body map: hard sets per muscle this week">
+    <section className="bdy-card bmap-card" aria-label={view === 'recovery' ? 'Body map: muscle recovery' : 'Body map: hard sets per muscle this week'}>
       <div className="bdy-head">
         <h2 className="bdy-title">Body map</h2>
-        <span className="bdy-note">Hard sets this week · aim {WEEKLY_SETS.lo}–{WEEKLY_SETS.hi} per muscle</span>
+        <span className="bdy-note">{view === 'recovery' ? 'Hours since the last hard set · green is ready' : `Hard sets this week · aim ${WEEKLY_SETS.lo}–${WEEKLY_SETS.hi} per muscle`}</span>
+      </div>
+      <div className="bdy-seg bmap-view" role="radiogroup" aria-label="What the map shows">
+        <button type="button" role="radio" aria-checked={view === 'sets'} onClick={() => setView('sets')} data-bmap="sets">
+          This week's sets
+        </button>
+        <button type="button" role="radio" aria-checked={view === 'recovery'} onClick={() => setView('recovery')} data-bmap="recovery">
+          Recovery
+        </button>
       </div>
       <div className="bmap-wrap">
         <div className="bmap-figures">
-          <Side side="front" groups={groups} pick={sel} onPick={setPick} />
-          <Side side="back" groups={groups} pick={sel} onPick={setPick} />
+          <Side side="front" groups={groups} pick={sel} onPick={setPick} rec={rec} />
+          <Side side="back" groups={groups} pick={sel} onPick={setPick} rec={rec} />
         </div>
+        {rec ? (
+          <ul className="bmap-rec" aria-label="Recovery per muscle group">
+            {rec.map((r) => (
+              <li key={r.id} className={`bmap-rec-row r-${r.status}`} data-group={r.id} data-status={r.status}>
+                <i className="bmap-rec-dot" aria-hidden="true" />
+                <b>{r.name}</b>
+                <span className="bdy-note">
+                  {STATUS_LABEL[r.status]} · {agoText(r.hours)}
+                </span>
+              </li>
+            ))}
+            <li className="bdy-note bmap-rec-key">Red: under 24 h · yellow: 24–48 h · green: 48 h or more.</li>
+          </ul>
+        ) : (
         <div className="bmap-side-panel">
           <div className="bmap-list" role="radiogroup" aria-label="Muscle groups">
             {groups.map((g) => (
@@ -143,6 +173,7 @@ export function BodyMapCard({ sport }: { sport: SportToday | null }) {
             )}
           </div>
         </div>
+        )}
       </div>
     </section>
   )

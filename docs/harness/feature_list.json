@@ -652,6 +652,20 @@
    "notes": "core/trainWeek.ts, core/trainLadders.ts, core/trainLog.ts, body/training/TodaySession.tsx, Roadmap.tsx, RestTimer.tsx, MoveSheet.tsx. Data inside Sport Track's state (trainWeek, trainLadders, trainLevels, trainLog; sets gain rir/feel/session), merged in sportSync.ts. Next step: features 4-6."
   },
   {
+   "id": "F903",
+   "priority": 1,
+   "area": "body",
+   "title": "Body -> Training: muscle recovery map, progress dashboard, smart warnings",
+   "user_visible_behavior": "Today's training card shows six muscle groups (chest, back, shoulders, arms, legs, core) with a small dot: red under 24 h since the last hard set, yellow 24-48 h, green 48 h+, and one line like 'Best to train today: Upper (back and chest are ready)' that agrees with the split; after a missed session, or when today's muscles are still red and the other session's are ready, it offers one 'Swap' tap. Body Today's body map has a 'This week's sets' / 'Recovery' toggle. A folded Progress section on Training: streak (rest days never break it, only a missed planned session that wasn't made up within 2 days), sessions per week against the plan, hard sets per muscle per week with the 10-20 zone, total reps per exercise per week, the Progress tab's strength chart next to weekly weight and waist (body_comp, read only), and a monthly progress-photo nudge linking to the local photo compare. Calm warnings, each hidden for a week with one tap: a move weaker 2 sessions in a row or every set 'Hard' for a week -> 'Lighter week (70%)' (7 days at 70% reps, and today's dose set to Lighter in the usual dose setting once a day unless you picked one); under ~2,000 kcal on 3 of the last 5 logged days while training -> 'Open Food'. No points.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/recovery.test.ts src/core/trainStreak.test.ts src/core/trainWarnings.test.ts src/core/trainWeek.test.ts src/core/trainLog.test.ts",
+    "SMOKE_ONLY=\"Body training\" npm run smoke"
+   ],
+   "evidence": "Branch train-more; unit tests, full vitest and the full smoke run pass; screenshots kept outside the repo",
+   "notes": "core/recovery.ts, core/trainStreak.ts, core/trainWarnings.ts, missedSession in core/trainWeek.ts; body/training/RecoveryPanel.tsx, ProgressDash.tsx, TrainWarnings.tsx; body/today/BodyMapCard.tsx toggle. New Sport Track state fields trainLighter {from, until, at} and trainWarnDismiss {id: day}, merged in mergeTrain. BT_SHOTS adds train-recovery-phone.png and train-dashboard-desktop.png."
+  },
+  {
    "id": "F-BODY-PROGRESS",
    "priority": 2,
    "area": "body",

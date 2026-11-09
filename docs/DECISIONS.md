@@ -271,6 +271,18 @@ entry that says why.
   the usual "Workout done", once a day), adding the extra moves to `MOVES` without real demos.
 
 
+### Training warnings stay calm and act only through existing settings (2026-11-09)
+- **Decision:** recovery, the streak and the warnings are pure rules over data already saved (Sport
+  Track's sets, the training log, the food counter's kcal, `body_comp`), read only. The two new pieces of
+  state, `trainLighter` (a 7-day lighter week) and `trainWarnDismiss` (hidden for a week), live in Sport
+  Track's state next to the other training fields. A lighter week changes the dose only through the usual
+  dose setting (`bodyPlus.setDose('light')`, once a day, never over a pick you made that day). Dots are
+  small and soft; the streak is never broken by a rest day.
+- **Why:** no new table, setting key or API file; one place decides today's dose; the owner wants guidance,
+  not alarms.
+- **Rules out:** points for streaks or recovery, red alarm banners, writing food or body data from
+  Training, or a second dose store.
+
 ### Smart-scale weigh-ins live in body_comp; body_metrics stays the day's weight (2026-11-09)
 - **Decision:** each weigh-in is a row in its own table `body_comp` (migration 023), id made from the
   dedupe key (time to the minute in UTC + weight to 0.1 kg), later `updated_at` wins. Every write also
