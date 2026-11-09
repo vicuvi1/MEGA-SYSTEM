@@ -211,9 +211,11 @@ describe('Ask Ben and the Sunday report', () => {
       addFoodMeal(db, { items: [{ name: 'eggs', grams: 120, protein: 15, carbs: 1, fat: 12, kcal: 170 }] }, 'app')
     })
     for (const q of ['what should I eat now?', 'ce sa mananc']) {
+      // "No model call" is what the `calls` check below proves; the wall clock only guards a hang
+      // (500 ms failed when 400 test files ran at once and this file's workers were starved).
       const t0 = Date.now()
       const r = await world.bots.think(q, `food:${q}`, () => {})
-      expect(Date.now() - t0).toBeLessThan(500)
+      expect(Date.now() - t0).toBeLessThan(10_000)
       expect(r.reply).toMatch(/135 g protein left today/)
       expect(r.reply).toMatch(/So far: Protein 15 \/ 150 g · 170 \/ [\d,]+ kcal today\./)
     }

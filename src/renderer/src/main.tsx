@@ -19,6 +19,7 @@ const root = createRoot(document.getElementById('root')!)
 // load the new one instead of failing (U8).
 window.addEventListener('vite:preloadError', (e) => {
   e.preventDefault()
+  console.warn('preload failed:', (e as any).payload?.message ?? '')
   try {
     if (Date.now() - Number(sessionStorage.getItem('ls.staleReload') || 0) < 60_000) return
     sessionStorage.setItem('ls.staleReload', String(Date.now()))
@@ -53,19 +54,25 @@ if (isQuick) {
   // the desktop app; the website never downloads them.
   const desk = window.desktop
   const none = Promise.resolve(null)
+  // When a file fails to preload (the page is being reloaded, or a new version replaced the old files)
+  // the `vite:preloadError` handler above swallows the error and the import resolves to `undefined`:
+  // reading `.App` of it threw "Cannot read properties of undefined (reading 'App')". Try once more
+  // instead, and show nothing (the reload is on its way) if it still fails.
+  const load = <T,>(f: () => Promise<T>): Promise<T> => f().then((m) => m ?? new Promise<T>((r) => setTimeout(r, 300)).then(f))
   void Promise.all([
-    import('./App'),
-    desk ? import('./DesktopBar') : none,
-    desk?.islandState ? import('./IslandFeed') : none,
-    desk?.writeBackup ? import('./DesktopBackups') : none,
-    import('./appStyles')
-  ]).then(([{ App }, bar, feed, backups]) =>
+    load(() => import('./App')),
+    desk ? load(() => import('./DesktopBar')) : none,
+    desk?.islandState ? load(() => import('./IslandFeed')) : none,
+    desk?.writeBackup ? load(() => import('./DesktopBackups')) : none,
+    load(() => import('./appStyles'))
+  ]).then(([appMod, bar, feed, backups]) =>
+    appMod &&
     root.render(
       <StrictMode>
         {bar && <bar.DesktopBar />}
         {feed && <feed.IslandFeed />}
         {backups && <backups.DesktopAutoBackup />}
-        <App />
+        <appMod.App />
       </StrictMode>
     )
   )
