@@ -4573,8 +4573,9 @@ function matchMove(name) {
 	return best;
 }
 // src/core/sportLadders.ts
-/** The library move an exercise is: the one it was added as, else by its name. */
-var moveOf = (ex) => moveById(ex.move) ?? matchMove(ex.name);
+/** The library move an exercise is: the one it was added as, else by its name. A Body Training move
+*  the library doesn't have (`move: 't:<id>'`, trainLadders.ts) is none, never a guess from its name. */
+var moveOf = (ex) => String(ex.move ?? "").startsWith("t:") ? null : moveById(ex.move) ?? matchMove(ex.name);
 function nextStep$1(move) {
 	const f = FAMILIES[move.family];
 	const i = f ? f.steps.indexOf(move.id) : -1;

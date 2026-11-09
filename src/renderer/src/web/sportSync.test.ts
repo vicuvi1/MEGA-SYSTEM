@@ -154,3 +154,14 @@ describe('mergeSport: sets (SP3)', () => {
     expect(m.levelSeen['ex_p>wide_pushup']).toBe('2026-03-10')
   })
 })
+
+describe('Body → Training on two devices', () => {
+  it('keeps effort on sets, joins sessions and takes the newer week', () => {
+    const a = { lastDate: '2026-11-13', exercises: [], sets: { '2026-11-13': { ex_t_pullup: [{ reps: 5, at: 1, id: 'a', rir: 1, feel: 'hard', session: 's1' }] } }, trainLog: [{ id: 's1', date: '2026-11-13', type: 'upper', startedAt: 1, exercises: [] }], trainWeek: { v: 1, days: ['rest', 'upper', 'legs', 'upper', 'rest', 'legs', 'upper'], updatedAt: 2 } }
+    const b = { lastDate: '2026-11-13', exercises: [], sets: { '2026-11-13': { ex_t_pullup: [{ reps: 6, at: 2, id: 'b', rir: 4, feel: 'easy', session: 's2' }] } }, trainLog: [{ id: 's2', date: '2026-11-12', type: 'legs', startedAt: 0, exercises: [] }], trainWeek: { v: 1, days: ['legs', 'upper', 'legs', 'upper', 'rest', 'legs', 'upper'], updatedAt: 1 } }
+    const m = mergeSport(a, b, false)
+    expect(m.sets['2026-11-13'].ex_t_pullup).toEqual([{ reps: 5, at: 1, id: 'a', rir: 1, feel: 'hard', session: 's1' }, { reps: 6, at: 2, id: 'b', rir: 4, feel: 'easy', session: 's2' }])
+    expect(m.trainLog.map((s: any) => s.id)).toEqual(['s1', 's2'])
+    expect(m.trainWeek.updatedAt).toBe(2)
+  })
+})

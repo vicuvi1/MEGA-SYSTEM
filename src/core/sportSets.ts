@@ -15,6 +15,10 @@ export interface SetEntry {
   /** When it was logged (ms), and an id so two devices' sets merge without doubles. */
   at?: number
   id?: string
+  /** Body → Training: reps left in the tank (hard 1, ok 2, easy 4), the raw tap, and the session it was part of. */
+  rir?: number
+  feel?: 'hard' | 'ok' | 'easy'
+  session?: string
 }
 /** { 'YYYY-MM-DD': { exerciseId: [sets] } } */
 export type SetLog = Record<string, Record<string, SetEntry[]>>
