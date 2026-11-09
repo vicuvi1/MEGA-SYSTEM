@@ -884,6 +884,20 @@
    ],
    "evidence": "Unit tests with a fake fetch pass",
    "notes": "The desktop app's update panel does not read this row (it has no cheap access to server health)."
+  },
+  {
+   "id": "F-PHOTO-LOCKER",
+   "priority": 2,
+   "area": "vault",
+   "title": "Photo Locker (Google Drive backup)",
+   "user_visible_behavior": "Sidebar → Life → Photo Locker: progress photos, videos up to 60 s and files up to 200 MB on every device, backed up to a Google Drive folder the owner picks (not encrypted, said plainly); timeline by month, filters, search and tags, item view, pose outline, Drive status, a Not backed up warning; delete asks Delete from Drive too",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/vaultSync.test.ts src/core/vaultBody.test.ts src/renderer/src/vault/driveApi.test.ts src/server/googleDrive.server.test.ts",
+    "SMOKE_ONLY=\"Photo Locker\" npm run smoke"
+   ],
+   "evidence": "2026-11-09: unit tests with a fake Drive pass; smoke step Photo Locker (device A uploads, device B downloads, 61 s video refused) passes",
+   "notes": "Fakes only so far: needs the Drive API enabled and drive.file on the consent screen, then Connect Google Drive. Videos are not re-encoded."
   }
  ]
 }

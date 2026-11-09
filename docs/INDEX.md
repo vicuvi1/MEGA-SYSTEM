@@ -68,6 +68,7 @@ must pin the clock: `vi.useFakeTimers({ toFake: ['Date'] })` plus `vi.setSystemT
 | Voice | [areas/voice.md](areas/voice.md) | `src/renderer/src/voice/`, `src/core/voice*.ts` |
 | Music | [areas/music.md](areas/music.md) | `src/renderer/src/music/`, `src/desktop/scWeb.ts` |
 | Sport Track and the Body page (protein, weight, readiness, photos) | [areas/sport.md](areas/sport.md) | `src/renderer/public/apps/sport/`, `src/core/sport*.ts`, `src/renderer/src/body/` |
+| Photo Locker (photos, videos, files backed up to Google Drive) | [areas/vault.md](areas/vault.md) | `src/core/vaultSync.ts`, `src/renderer/src/vault/`, `api/google.mjs` (`driveToken`) |
 | Rewards and money | [areas/rewards-money.md](areas/rewards-money.md) | `pages/Rewards.tsx`, `src/main/shop.ts`, `public/apps/finance/` |
 | Plugins and PC automation | [areas/plugins-pc.md](areas/plugins-pc.md), [pc-automation.md](pc-automation.md) | `src/plugins/` |
 | Operations (tick, backups, cost, CI) | [areas/ops.md](areas/ops.md) | `api/cron.mjs`, `.github/workflows/` |
