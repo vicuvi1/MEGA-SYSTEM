@@ -67,6 +67,7 @@ must pin the clock: `vi.useFakeTimers({ toFake: ['Date'] })` plus `vi.setSystemT
 | Desktop island | [areas/island.md](areas/island.md) | `src/desktop/island.ts`, `DesktopIsland.tsx`, `IslandFeed.tsx`, `src/core/island*.ts` |
 | Voice | [areas/voice.md](areas/voice.md) | `src/renderer/src/voice/`, `src/core/voice*.ts` |
 | Music | [areas/music.md](areas/music.md) | `src/renderer/src/music/`, `src/desktop/scWeb.ts` |
+| The coach (Coach today card, weekly review, safety rules) | [areas/coach.md](areas/coach.md) | `src/core/coach{Config,Plan,Safety,Text,Week}.ts`, `src/renderer/src/coach/` |
 | Sport Track and the Body page (protein, weight, readiness, photos) | [areas/sport.md](areas/sport.md) | `src/renderer/public/apps/sport/`, `src/core/sport*.ts`, `src/renderer/src/body/` |
 | Rewards and money | [areas/rewards-money.md](areas/rewards-money.md) | `pages/Rewards.tsx`, `src/main/shop.ts`, `public/apps/finance/` |
 | Plugins and PC automation | [areas/plugins-pc.md](areas/plugins-pc.md), [pc-automation.md](pc-automation.md) | `src/plugins/` |
