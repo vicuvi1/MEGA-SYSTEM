@@ -6083,6 +6083,7 @@ try {
     if ((await pg.locator(`${gr} .gr-charts section`).count()) !== 8) throw new Error('not 8 long-run charts')
     if (process.env.E2E_GROWTH_DEMO) {
       await pg.waitForSelector(`${gr} section[aria-label="Weekly average weight"] .gr-band`, { timeout: 5000 })
+      await pg.locator(`${gr} section[aria-label="Weekly average weight"] svg`).scrollIntoViewIfNeeded()
       const box = await pg.locator(`${gr} section[aria-label="Weekly average weight"] svg`).boundingBox()
       await pg.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2)
       await pg.waitForSelector(`${gr} section[aria-label="Weekly average weight"] .gr-tip`, { timeout: 3000 })
@@ -6104,16 +6105,35 @@ try {
     if (shots) {
       await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
       const cdp = await pg.context().newCDPSession(pg)
-      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false })
-      await pg.waitForTimeout(500)
-      await pg.locator(`${gr} .gr-charts`).screenshot({ path: `${shots}/growth-charts-desktop.png` })
+      await pg.addStyleTag({ content: '.gr-shot .body-page .ptabs { visibility: hidden !important; }' })
+      await pg.evaluate(() => document.documentElement.classList.add('gr-shot'))
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1500, deviceScaleFactor: 1, mobile: false })
+      await pg.evaluate((g) => {
+        document.querySelector(`${g} .gr-charts`)?.scrollIntoView({ block: 'start' })
+        const m = document.querySelector('main.content')
+        if (m) m.scrollTop -= 24
+      }, gr)
+      await pg.waitForTimeout(900)
+      const cb = await pg.locator(`${gr} .gr-charts`).boundingBox()
+      await pg.screenshot({ path: `${shots}/growth-charts-desktop.png`, clip: { x: cb.x, y: Math.max(0, cb.y), width: cb.width, height: Math.min(cb.height, 1500 - Math.max(0, cb.y)) } })
+      await cdp.send('Emulation.clearDeviceMetricsOverride')
+      await pg.setViewportSize({ width: 390, height: 844 })
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
-      await pg.waitForTimeout(600)
-      await pg.evaluate((g) => document.querySelector(g)?.scrollIntoView({ block: 'start' }), gr)
-      await pg.locator(`${gr} .gr-hero`).screenshot({ path: `${shots}/growth-hero-phone.png` })
-      await pg.locator(`${gr} .gr-level`).screenshot({ path: `${shots}/growth-level-phone.png` })
+      await pg.waitForTimeout(800)
+      const phoneShot = async (sel, file) => {
+        await pg.evaluate((q) => {
+          document.querySelector(q)?.scrollIntoView({ block: 'start' })
+          const m = document.querySelector('main.content')
+          if (m) m.scrollTop -= 150
+        }, sel)
+        await pg.waitForTimeout(500)
+        await pg.screenshot({ path: `${shots}/${file}` })
+      }
+      await phoneShot(`${gr} .gr-hero`, 'growth-hero-phone.png')
+      await phoneShot(`${gr} .gr-level`, 'growth-level-phone.png')
       await cdp.send('Emulation.clearDeviceMetricsOverride')
       await cdp.detach()
+      await pg.evaluate(() => document.documentElement.classList.remove('gr-shot'))
     }
     // No sideways scroll on a phone or a laptop.
     for (const [w, h] of [[390, 844], [1280, 720]]) {

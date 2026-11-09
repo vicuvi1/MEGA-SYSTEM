@@ -18,16 +18,22 @@ const H = 190
 const PAD = { l: 42, r: 46, t: 12, b: 22 }
 const shortDay = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
 
-/** A smooth path through the points (Catmull–Rom as curves), split where a value is missing. */
+/** A smooth path through the points (Catmull–Rom as curves); a gap of more than 3 weeks breaks the line. */
 function smoothPath(pts: ({ x: number; y: number } | null)[]): string {
   const runs: { x: number; y: number }[][] = []
   let cur: { x: number; y: number }[] = []
+  let gap = 0
   for (const p of pts) {
-    if (p) cur.push(p)
-    else if (cur.length) {
+    if (!p) {
+      gap++
+      continue
+    }
+    if (gap > 3 && cur.length) {
       runs.push(cur)
       cur = []
     }
+    gap = 0
+    cur.push(p)
   }
   if (cur.length) runs.push(cur)
   return runs
@@ -46,6 +52,13 @@ function smoothPath(pts: ({ x: number; y: number } | null)[]): string {
       return d
     })
     .join(' ')
+}
+
+/** End labels pushed apart so they never overlap (at least 12 px between them). */
+function spread(ys: { id: string; y: number }[], min = 12): Map<string, number> {
+  const l = [...ys].sort((a, b) => a.y - b.y)
+  for (let i = 1; i < l.length; i++) if (l[i].y - l[i - 1].y < min) l[i] = { ...l[i], y: l[i - 1].y + min }
+  return new Map(l.map((p) => [p.id, p.y]))
 }
 
 function niceTicks(lo: number, hi: number, n = 4): number[] {
@@ -92,6 +105,8 @@ export function LineChart({
   const x = (i: number) => PAD.l + (n === 1 ? (W - PAD.l - PAD.r) / 2 : (i / (n - 1)) * (W - PAD.l - PAD.r))
   const y = (v: number) => PAD.t + (1 - (v - lo) / (hi - lo)) * (H - PAD.t - PAD.b)
   const ticks = niceTicks(lo, hi)
+  const lastOf = (s: Series) => s.values.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0).pop()
+  const labelY = spread(series.flatMap((s) => { const i = lastOf(s); return i == null ? [] : [{ id: s.id, y: y(s.values[i]!) }] }))
   const xTicks = n <= 1 ? [0] : [0, Math.round((n - 1) / 2), n - 1]
   const bandPath = band
     ? (() => {
@@ -152,14 +167,14 @@ export function LineChart({
         )}
         {series.map((s) => {
           const pts = s.values.map((v, i) => (v == null ? null : { x: x(i), y: y(v) }))
-          const lastI = s.values.map((v, i) => (v == null ? -1 : i)).filter((i) => i >= 0).pop()
+          const lastI = lastOf(s)
           return (
             <g key={s.id} className={`gr-series ${s.cls ?? ''}`}>
               <path className="gr-line" d={smoothPath(pts)} />
               {lastI != null && (
                 <>
                   <circle className="gr-end" cx={x(lastI)} cy={y(s.values[lastI]!)} r={4} />
-                  <text className="gr-end-t" x={x(lastI) + 7} y={y(s.values[lastI]!) + 4}>
+                  <text className="gr-end-t" x={x(lastI) + 7} y={(labelY.get(s.id) ?? y(s.values[lastI]!)) + 4}>
                     {series.length > 1 ? s.label : fmt(s.values[lastI]!)}
                   </text>
                 </>
