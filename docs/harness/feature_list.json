@@ -871,6 +871,19 @@
    ],
    "evidence": "2026-11-09: unit tests (12-week season + 8-week migration, +4 kg → +1.33 kg a month, action scoring, light thresholds, timeline, top 3 prefill, planner placement within limits with stable ids, max 3 and swap, reviews); fake-Turso test (facts from logs, review saves the big 3, no ledger rows); smoke step Goal ladder; full smoke",
    "notes": "core/goalLadder.ts (pure: templates, scoring, milestones, reviews, quarterLine, weeklyReviewData, monthlyReviewData for a later Telegram step), core/ladderPlan.ts (study sessions + workout days, drafts), web/ladderStore.ts (facts from logs, ladderStudyToday for rhythmBot propose), web/ladderApi.ts (life.saga.ladder), ladder/*.tsx, setting goal_ladder."
+  },
+  {
+   "id": "F-DESKTOP-UPDATES-CHECK",
+   "priority": 2,
+   "area": "ops",
+   "title": "Desktop updates health check",
+   "user_visible_behavior": "Settings → System health shows a 'Desktop updates' row; Ben warns once a day (with the run link and a Mute button) when the last 2 Windows release runs failed",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/desktopUpdates.test.ts src/core/health.test.ts"
+   ],
+   "evidence": "Unit tests with a fake fetch pass",
+   "notes": "The desktop app's update panel does not read this row (it has no cheap access to server health)."
   }
  ]
 }

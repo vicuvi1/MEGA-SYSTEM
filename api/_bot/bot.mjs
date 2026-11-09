@@ -38044,6 +38044,57 @@ async function careerTick(mirror, services, now, nowMin, send, esc) {
 	} catch {}
 	return ping.key;
 }
+// src/core/desktopUpdates.ts
+var RELEASE_RUNS_URL = "https://api.github.com/repos/vicuvi1/MEGA-SYSTEM/actions/workflows/release.yml/runs?per_page=5&branch=main";
+var LATEST_RELEASE_URL = "https://api.github.com/repos/vicuvi1/MEGA-SYSTEM/releases/latest";
+/** Judges the newest runs (newest first): cancelled and unfinished runs are ignored. */
+function judgeRuns(runs) {
+	const done = runs.filter((r) => r.status === "completed" && r.conclusion && r.conclusion !== "cancelled" && r.conclusion !== "skipped");
+	let failed = 0;
+	while (failed < done.length && done[failed].conclusion === "failure") failed++;
+	return {
+		broken: failed >= 2,
+		failed,
+		runUrl: failed ? done[0].html_url ?? null : null
+	};
+}
+/** Asks GitHub unless asked within the last hour; an error keeps the old answer ("unknown", never broken). */
+async function refreshDesktopUpdates(prev, now, fetchImpl = fetch) {
+	if (prev?.triedAt && now.getTime() - Date.parse(prev.triedAt) < 36e5) return prev;
+	const base = {
+		...prev ?? {},
+		triedAt: now.toISOString()
+	};
+	const get = async (url) => {
+		const r = await fetchImpl(url, {
+			headers: {
+				"User-Agent": "life-system",
+				Accept: "application/vnd.github+json"
+			},
+			signal: AbortSignal.timeout(5e3)
+		});
+		if (!r.ok) throw new Error(`GitHub ${r.status}`);
+		return r.json();
+	};
+	try {
+		const runs = await get(RELEASE_RUNS_URL);
+		const j = judgeRuns(Array.isArray(runs?.workflow_runs) ? runs.workflow_runs : []);
+		const rel = await get(LATEST_RELEASE_URL).catch(() => null);
+		return {
+			...base,
+			okAt: now.toISOString(),
+			broken: j.broken,
+			failed: j.failed,
+			runUrl: j.runUrl,
+			brokenSince: j.broken ? prev?.brokenSince && prev.broken ? prev.brokenSince : now.toISOString() : void 0,
+			version: rel?.tag_name ? String(rel.tag_name).replace(/^v/, "") : base.version ?? null,
+			builtAt: rel?.published_at ?? rel?.created_at ?? base.builtAt ?? null
+		};
+	} catch {
+		return base;
+	}
+}
+var DESKTOP_ALERT_HELP = "Open the failed run (link above) on GitHub → Actions, or tell your helper to fix the Windows release build. Nothing on your PC is lost; it just stays on the current version until then.";
 /** 1234567 → "1.2M" */
 var big = (n) => n >= 1e9 ? `${(n / 1e9).toFixed(1)}B` : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}k` : String(Math.round(n));
 /** Turso's free plan reads 500M rows a month; warn well before (LT7). */
@@ -38213,6 +38264,30 @@ function healthChecks(i) {
 			detail: `This month: ${big(total)} (about ${Math.round(total / hours)} an hour${top.length ? `: ${top.join(", ")}` : ""})${rows ? `, ${big(rows)} database rows read` : ""}${total >= 7e5 ? " (near Vercel's free monthly limit)" : ""}`
 		});
 	}
+	const du = i.notes?.desktopupdates;
+	if (du && typeof du === "object") {
+		const built = du.version ? `Latest release ${du.version}${du.builtAt ? `, built ${ago(now, du.builtAt)}` : ""}` : "No release found yet";
+		if (!du.okAt) out.push({
+			id: "desktop",
+			label: "Desktop updates",
+			ok: true,
+			unknown: true,
+			detail: "Unknown (GitHub did not answer yet)"
+		});
+		else if (du.broken) out.push({
+			id: "desktop",
+			label: "Desktop updates",
+			ok: false,
+			detail: `Not being built: the last ${du.failed} Windows release runs failed. ${built}${du.runUrl ? `. ${du.runUrl}` : ""}`,
+			since: du.brokenSince ?? du.okAt
+		});
+		else out.push({
+			id: "desktop",
+			label: "Desktop updates",
+			ok: true,
+			detail: built
+		});
+	}
 	const sc = i.notes?.selfcheck;
 	if (sc && typeof sc.at === "string") {
 		const stale = now.getTime() - Date.parse(sc.at) > 936e5;
@@ -38348,6 +38423,7 @@ function alertHelp(key, appUrl = DEFAULT_APP_URL) {
 		case "calendar": return "Settings → Google Calendar → connect again.";
 		case "todoist": return "Copy a fresh token from Todoist → Settings → Integrations → Developer into TODOIST_TOKEN in Vercel.";
 		case "snapshot": return "Ben makes it on his next run; to be safe, download a backup in Settings → Data.";
+		case "desktop": return DESKTOP_ALERT_HELP;
 		case "budget": return "Raise the budget in Settings → Ben → Brain, or let Ben use cheaper answers.";
 		default: return null;
 	}
@@ -38356,6 +38432,12 @@ function alertHelp(key, appUrl = DEFAULT_APP_URL) {
 function shownWarnings(warn) {
 	const keys = new Set(warn.map((c) => alertKey(c.id)));
 	return warn.filter((c) => !(alertKey(c.id) === "tick" && keys.has("timer")));
+}
+/** "Desktop updates are not being built: the last N Windows release runs failed. The app on your PC can't update until it's fixed." + the run link. */
+function desktopAlertDetail(detail) {
+	const n = detail.match(/last (\d+) Windows/)?.[1] ?? "2";
+	const link = detail.match(/https:\/\/\S+/)?.[0];
+	return `Desktop updates are not being built: the last ${n} Windows release runs failed. The app on your PC can't update until it's fixed${link ? `. Run: ${link}` : ""}`;
 }
 /** One message for everything broken at once, each with what to do. */
 function alertText(warn, fixed, opts = {}) {
@@ -38367,7 +38449,7 @@ function alertText(warn, fixed, opts = {}) {
 			const k = alertKey(c.id);
 			const extra = k === "timer" && keys.has("tick") ? " Ben's server stops too while nothing wakes it." : "";
 			const help = alertHelp(k, opts.appUrl);
-			const detail = c.detail.replace(/[.\s]+$/, "");
+			const detail = k === "desktop" ? desktopAlertDetail(c.detail) : c.detail.replace(/[.\s]+$/, "");
 			return `• <b>${c.label}</b>: ${detail}.${extra}${help ? `\n  What to do: ${help}` : ""}`;
 		});
 		lines.push(`🔧 <b>Something needs a look</b>\n${items.join("\n")}\nYou'll hear about each problem at most once a day. Settings → System health has the details.`);
@@ -69995,6 +70077,11 @@ async function healthTick(t, mirror, now, send, opts = {}) {
 		today: calendarDay(now),
 		mutes: readMutes(getSetting(db, HEALTH_MUTES))
 	}));
+	const du = await refreshDesktopUpdates(h.notes.desktopupdates, now).catch(() => h.notes.desktopupdates);
+	if (du && JSON.stringify(du) !== JSON.stringify(h.notes.desktopupdates)) {
+		h.notes.desktopupdates = du;
+		await setNote(t, "desktopupdates", du).catch(() => null);
+	}
 	const checks = healthChecks({
 		now,
 		beats: h.beats,
