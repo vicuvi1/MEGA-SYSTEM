@@ -195,6 +195,11 @@ entry that says why.
   card; sending simple data questions to the model when the data answers them.
 
 
+### Food goals are slow muscle gain; one-tap logging writes the same meals (2026-11-09)
+- **Decision:** the food goals are slow muscle gain: 1.8 g/kg protein, maintenance +350 kcal once a weight and the owner's own height and age are known, else a fixed 2,700 kcal / 125 g; the weekly weight and waist check suggests +200 or −150…−200 kcal (Apply, within ±600). The move from "lean" runs once (`food_goals.gainV`) and keeps every saved value that is not an old app default. Saved foods, saved meals and the standard day live in the synced setting `food_saved`; every tap becomes a normal food-counter meal through `addFoodMeal` (source 'saved'), so Undo, the one protein number and the week all stay one system. Meals carry a `source`; old meals read as 'manual' and are never rewritten. The owner's real height and age are not in code.
+- **Why:** the owner ate about 1,000–1,300 kcal and 45–60 g protein a day and was not growing; the lean plan (+150 / +0) kept him under-fed, and logging had to take one tap.
+- **Rules out:** a second store or meal format for saved meals, points for food, rewriting old meals, putting the owner's body data in code, or a weight-check change applied without a tap. (This replaces "a bulk-sized surplus by default" in the 2026-11-08 food decision: +350 is a slow gain, not a bulk.)
+
 ### Food counter: numbers in body_log, details in a capped setting, no image AI (2026-11-08)
 - **Decision:** a meal is two rows in the one body log (`protein:food`, `kcal:food`, ids `<meal>-p` / `<meal>-k`) and its foods in the synced setting `food_log` (45 days, 400 meals, 20 stars). Protein stays ONE number (`proteinOfDay` of every `protein:*` row). The app never calls an AI for food: it copies a prompt and parses the pasted reply with code. Goals are lean (2.0 g/kg; maintenance +150 kcal on a training day, +0 on a rest day).
 - **Why:** body_log already merges across devices by row id and feeds the ring, the weekly report and "why it stalled"; a new table would need a schema bump and a bot bundle rebuild. The owner wants no image-AI cost and no fat gain.
