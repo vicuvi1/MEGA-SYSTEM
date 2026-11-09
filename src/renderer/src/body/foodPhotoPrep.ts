@@ -102,11 +102,20 @@ export type PhotoAnswer = { ok: true; result: unknown } | { ok: false; error: st
 
 /** Asks the server to read the photo (session required). Never throws: a failure is {ok:false, error}. */
 export async function askFoodPhoto(ask: PhotoAsk, fetchImpl: typeof fetch = fetch): Promise<PhotoAnswer> {
+  return askVision({ op: 'foodPhoto', ...ask }, fetchImpl)
+}
+
+/** Asks the server to read a smart-scale result screenshot (same op, kind 'scale'; the same 50-a-day counter). */
+export async function askScaleShot(image: { mime: string; data: string }, fetchImpl: typeof fetch = fetch): Promise<PhotoAnswer> {
+  return askVision({ op: 'foodPhoto', kind: 'scale', image }, fetchImpl)
+}
+
+async function askVision(body: Record<string, unknown>, fetchImpl: typeof fetch): Promise<PhotoAnswer> {
   try {
     const r = await fetchImpl('/api/ai', {
       method: 'POST',
       headers: { Authorization: `Bearer ${currentSession() ?? ''}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ op: 'foodPhoto', ...ask }),
+      body: JSON.stringify(body),
       signal: AbortSignal.timeout(58_000)
     })
     const j = await r.json().catch(() => ({}))

@@ -9,6 +9,8 @@
 //   container" is matched to his own numbers), today so far and the goals.
 // - Both providers are asked for JSON only (Gemini's JSON mode with a schema,
 //   Claude's forced tool call). One retry at most, inside the request's 50 s.
+// - scalePrompt: kind 'scale' reads a smart-scale result screenshot (numbers only,
+//   checked again by src/core/scaleRead.ts); it shares the same daily counter.
 // - countPhoto: 50 photos a day (the owner's day, LIFE_TZ), counted in sys_kv (server only: /api/db refuses it).
 // The photo is never stored or logged; only the foods the owner saves are kept.
 // The page checks the answer again with src/core/foodVision.ts before showing it.
@@ -46,20 +48,28 @@ const num = (v, hi) => {
 }
 const txt = (v, max) => String(v ?? '').replace(/[\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
 
-/** The request from the page, checked: the photo, a short note, at most 60 saved foods, today and the goals. */
-export function readPhotoRequest(body) {
+/** The picture in a request, checked: a JPEG/PNG/WebP in base64, not too big. */
+function readImage(body) {
   const img = body?.image
   const mime = clean(img?.mime).toLowerCase()
   const data = typeof img?.data === 'string' ? img.data.replace(/^data:[^,]*,/, '') : ''
   if (!MIMES.has(mime)) return { error: 'Send a JPEG, PNG or WebP photo.' }
   if (!data || data.length > MAX_IMAGE_B64 || !/^[A-Za-z0-9+/=\s]+$/.test(data)) return { error: 'The photo is missing or too big. Try again.' }
+  return { image: { mime, data: data.replace(/\s+/g, '') } }
+}
+
+/** The request from the page, checked: the photo, a short note, at most 60 saved foods, today and the goals. */
+export function readPhotoRequest(body) {
+  const img = readImage(body)
+  if (img.error) return img
+  if (body?.kind === 'scale') return { kind: 'scale', image: img.image }
   const saved = (Array.isArray(body.saved) ? body.saved : [])
     .slice(0, 60)
     .map((s) => ({ id: txt(s?.id, 60), name: txt(s?.name, 60), portion: txt(s?.portion, 40), kcal: num(s?.kcal, 5000), protein: num(s?.protein, 400), carbs: num(s?.carbs, 800), fat: num(s?.fat, 400) }))
     .filter((s) => s.id && s.name)
   const today = { kcal: num(body.today?.kcal, 20000), protein: num(body.today?.protein, 1000), items: (Array.isArray(body.today?.items) ? body.today.items : []).slice(0, 20).map((x) => txt(x, 60)).filter(Boolean) }
   const targets = { kcal: num(body.targets?.kcal, 10000), protein: num(body.targets?.protein, 600) }
-  return { image: { mime, data: data.replace(/\s+/g, '') }, note: txt(body.note, 300), saved, today, targets }
+  return { kind: 'food', image: img.image, note: txt(body.note, 300), saved, today, targets }
 }
 
 /** The instructions and the text that goes with the photo. */
@@ -68,7 +78,7 @@ export function foodPhotoPrompt(req) {
 Rules:
 - List each food separately, with how many (qty and unit, e.g. 2 eggs, 1 container, 150 g) and the grams eaten (cooked weight).
 - The owner's note is the truth when it says what something is or how much.
-- If a food is one of the owner's SAVED FOODS, set matchedSavedFoodId to its id and qty to how many portions; its numbers are used as saved.
+- If a food is one of the owner's SAVED FOODS (or SAVED MEALS), set matchedSavedFoodId to its id and qty to how many portions; its numbers are used as saved. Match by meaning, not exact words: "bulgur container" in the note or a container of bulgur in the photo is the saved bulgur container.
 - Otherwise matchedSavedFoodId is null and you estimate kcal, protein, carbs and fat for the whole amount.
 - confidence: "high" when you are sure what it is and how much, "medium" for a fair guess, "low" when the portion is hard to see.
 - message: one short friendly sentence about the meal (no numbers beyond the totals).
@@ -82,6 +92,32 @@ Goals today: ${req.targets.kcal} kcal, ${req.targets.protein} g protein.
 What is in this photo?`
   return { system, user }
 }
+
+/** A smart-scale result screenshot (Xiaomi Home / Mi Fitness / Zepp Life): the numbers on it, nothing guessed. */
+export function scalePrompt() {
+  const system = `You read the numbers on a screenshot of a smart scale's result screen (Xiaomi Home, Mi Fitness, Zepp Life or similar) for a body log.
+Rules:
+- Copy only numbers that are visible on the screen. Never estimate or work out a number that is not shown: use null.
+- weightKg in kg (convert from jin or lb only if the unit is shown). bodyFatPct, waterPct, proteinPct in %. muscleKg and boneKg in kg (muscle mass, not a %). visceralFat is the visceral fat level (a small number like 4). bmr in kcal. heartRate in bpm. bodyScore is the body score out of 100.
+- measuredAt: the date and time of the measurement if shown, as YYYY-MM-DDTHH:MM (local time), else null.
+- If the picture is not a scale result, answer with weightKg null.
+Answer ONLY with JSON in the given shape.`
+  return { system, user: 'Read the scale numbers on this screenshot.' }
+}
+
+const N = { type: 'number', nullable: true }
+const SCALE_KEYS = ['weightKg', 'bodyFatPct', 'muscleKg', 'waterPct', 'proteinPct', 'boneKg', 'visceralFat', 'bmr', 'bmi', 'heartRate', 'bodyScore']
+const SCALE_SHAPE = {
+  type: 'object',
+  properties: { ...Object.fromEntries(SCALE_KEYS.map((k) => [k, N])), measuredAt: { type: 'string', nullable: true } },
+  required: ['weightKg']
+}
+const nullable = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { type: [v.type, 'null'] }]))
+export const GEMINI_SCALE_SCHEMA = (() => {
+  const up = (o) => (Array.isArray(o) ? o.map(up) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, k === 'type' ? String(v).toUpperCase() : k === 'required' ? v : up(v)])) : o)
+  return up(SCALE_SHAPE)
+})()
+export const CLAUDE_SCALE_SCHEMA = { type: 'object', properties: nullable(SCALE_SHAPE.properties), required: ['weightKg'] }
 
 /** The answer's shape (Gemini's responseSchema; Claude's tool input). */
 const ITEM_PROPS = {
@@ -114,7 +150,9 @@ export const CLAUDE_SCHEMA = { ...SHAPE, properties: { ...SHAPE.properties, item
 
 /** The HTTP request for one try (url, headers, body). The key is only in a header. */
 export function buildVisionRequest(p, model, req, think = true) {
-  const { system, user } = foodPhotoPrompt(req)
+  const scale = req.kind === 'scale'
+  const { system, user } = scale ? scalePrompt() : foodPhotoPrompt(req)
+  const tool = scale ? { name: 'log_scale', description: 'The numbers on the scale screenshot, for the body log.', input_schema: CLAUDE_SCALE_SCHEMA } : { name: 'log_meal', description: 'The foods in the photo, for the calorie log.', input_schema: CLAUDE_SCHEMA }
   if (p.name === 'claude') {
     return {
       url: CLAUDE_API,
@@ -124,8 +162,8 @@ export function buildVisionRequest(p, model, req, think = true) {
         max_tokens: 2048,
         temperature: 0.2,
         system,
-        tools: [{ name: 'log_meal', description: 'The foods in the photo, for the calorie log.', input_schema: CLAUDE_SCHEMA }],
-        tool_choice: { type: 'tool', name: 'log_meal' },
+        tools: [tool],
+        tool_choice: { type: 'tool', name: tool.name },
         messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: req.image.mime, data: req.image.data } }, { type: 'text', text: user }] }]
       }
     }
@@ -136,7 +174,7 @@ export function buildVisionRequest(p, model, req, think = true) {
     body: {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ parts: [{ inline_data: { mime_type: req.image.mime, data: req.image.data } }, { text: user }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: GEMINI_SCHEMA, ...(think ? { thinkingConfig: { thinkingBudget: 1024 } } : {}) }
+      generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: scale ? GEMINI_SCALE_SCHEMA : GEMINI_SCHEMA, ...(think ? { thinkingConfig: { thinkingBudget: 1024 } } : {}) }
     }
   }
 }
@@ -189,7 +227,7 @@ export async function readFoodPhoto(p, req, { fetchImpl = fetch, record = async 
       }
       if (!res.ok) throw new Error(`${p.name === 'claude' ? 'Claude' : 'Gemini'} ${res.status}: ${j?.error?.message || 'request failed'}`)
       const out = readVisionReply(p, j)
-      await record({ model: `${p.name === 'claude' ? 'anthropic' : 'google'}/${model}`, kind: 'foodPhoto', prompt: out.prompt, completion: out.completion, cost: null }).catch(() => null)
+      await record({ model: `${p.name === 'claude' ? 'anthropic' : 'google'}/${model}`, kind: req.kind === 'scale' ? 'scaleShot' : 'foodPhoto', prompt: out.prompt, completion: out.completion, cost: null }).catch(() => null)
       return { json: out.json, model }
     } catch (e) {
       if (retried || !worthRetry(e)) throw e

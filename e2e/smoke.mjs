@@ -889,7 +889,8 @@ try {
     if (!/^[\d,]+ \/ [\d,]+$/.test((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim())) throw new Error('no kcal bar')
     if (!/\d+ \/ \d+\s*g protein/.test(await pg.locator(`${fc} .fdf-protein`).innerText())) throw new Error('no protein bar')
     if (!/kcal · \d+ g left|left|Goals reached/.test(await pg.locator(`${fc} .fdf-left`).innerText())) throw new Error('no "left" line')
-    if (!(await pg.locator(`${fc} .fd-week-check`).count())) throw new Error('no weekly weight check card')
+    if (!(await pg.locator(`${fc} .fd-adjust-card .fd-adjust-title`).count())) throw new Error('no weekly calorie check card')
+    if (!/Estimate from weekly average weight/.test(await pg.locator(`${fc} .fd-adjust-card`).innerText())) throw new Error('the calorie check is not labeled as an estimate')
     const k0 = await kcalNow()
     const mealCount = () => pg.locator(`${fc} .fd-meals li`).count()
     const m0 = await mealCount()
@@ -1103,7 +1104,8 @@ try {
     const canned = {
       items: [
         { name: 'Eggs', matchedSavedFoodId: null, qty: 3, unit: 'egg', grams: 150, kcal: 215, protein: 19, carbs: 1, fat: 15, confidence: 'high' },
-        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low' }
+        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low' },
+        { name: 'bulgur container', matchedSavedFoodId: null, qty: 1, unit: 'container', grams: 350, kcal: 520, protein: 14, carbs: 80, fat: 12, confidence: 'medium' }
       ],
       totals: { kcal: 999, protein: 99 },
       message: 'Eggs and toast: a good protein start.'
@@ -1127,12 +1129,24 @@ try {
       const liveMeals = () => pg.locator(`${fc} .fd-meals li:not(.removed)`).count()
       const mealsBefore = await liveMeals()
       await pg.locator(`${fc} .fph-file`).setInputFiles({ name: 'meal.png', mimeType: 'image/png', buffer: png })
-      await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 2, fc, { timeout: 15000 })
+      await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 3, fc, { timeout: 15000 })
       // The photo went out small, as JPEG, with today's numbers.
       if (sent?.image?.mime !== 'image/jpeg' || sent.image.data.length > 400_000) throw new Error(`the photo was not made small: ${sent?.image?.mime} ${sent?.image?.data?.length}`)
       if (!(sent.targets?.kcal > 0)) throw new Error('the goals were not sent with the photo')
       // Totals come from the items (not the AI's 999), the low one is flagged, nothing is saved yet.
       const total = () => pg.locator(`${fc} .fph-total`).innerText()
+      // The AI got the real saved foods (food_saved), so "bulgur container" can match his own item.
+      if (!(sent.saved ?? []).some((x) => x.id === 'sf-bulgur' && /container/.test(x.portion))) throw new Error('the saved foods were not sent with the photo')
+      if (!/^895 kcal · 38 g protein$/.test(await total())) throw new Error(`review total with the bulgur: ${await total()}`)
+      // Swap the guessed bulgur for the saved one: its own numbers (400 kcal, 10 g) replace the AI's.
+      const bulgur = pg.locator(`${fc} .fph-item`).nth(2)
+      await bulgur.locator('.fph-swap-sel').click()
+      await pg.locator('[role="option"]', { hasText: 'Bulgur salad with vegetables' }).first().click()
+      await pg.waitForFunction((s) => /^775 kcal · 34 g protein$/.test(document.querySelector(`${s} .fph-total`)?.textContent?.trim() ?? ''), fc, { timeout: 5000 }).catch(() => null)
+      if (!/^775 kcal · 34 g protein$/.test(await total())) throw new Error(`after the swap to the saved bulgur: ${await total()}`)
+      if (!/Your saved food/.test(await bulgur.innerText())) throw new Error('the swapped item is not marked as a saved food')
+      await bulgur.locator('.fph-del').click()
+      await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 2, fc, { timeout: 5000 })
       if (!/^375 kcal · 24 g protein$/.test(await total())) throw new Error(`review total: ${await total()}`)
       if (!/Not sure about the portion: check it/.test(await pg.locator(`${fc} .fph-item`).nth(1).innerText())) throw new Error('the low-confidence item is not flagged')
       if (!/good protein start/.test(await pg.locator(`${fc} .fph-msg`).innerText())) throw new Error("the AI's message is not shown")
@@ -5412,7 +5426,7 @@ try {
   })
 
   // Last of the data steps on purpose: it logs a weight (72.4 kg today), which earlier steps never expect.
-  await step('Body log: the Log body sheet saves weight, fat and waist with Undo; Progress shows the weekly average, the band, estimate labels and the monthly summary', async () => {
+  await step('Body log: the Log body sheet saves weight, fat and waist with Undo; Progress shows the weekly average, the band, estimate labels and the monthly summary; one calorie suggestion on Progress and Food; a scale screenshot import', async () => {
     const shots = process.env.BODYSCALE_SHOTS
     // The screenshot run (E2E_BODY_DEMO) has six weeks of made-up weigh-ins near 70 kg: log a weight that fits them.
     const kg0 = process.env.E2E_BODY_DEMO ? 70.6 : 72.4
@@ -5535,6 +5549,114 @@ try {
     // 5. A Sunday waist reminder is planned once; body logs pay no points.
     await until(async () => (await sql("SELECT value FROM settings WHERE key = 'coach_reminders'")).rows.some((r) => (r[0].value.match(/"waist:/g) ?? []).length >= 1), 'no Sunday waist reminder')
     if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a body log paid points')
+    // 6. ONE calorie suggestion, the same card on Progress and Food. Last week +0.4 kg: on track.
+    const card = `${prog} .fd-adjust-card`
+    const foodCard = '#ptp-body-food .fd-adjust-card'
+    const title = (sel) => pg.locator(`${sel} .fd-adjust-title`).innerText()
+    await pg.waitForSelector(card, { timeout: 15000 })
+    if (!process.env.E2E_BODY_DEMO) {
+      await until(async () => /On track/.test(await title(card)), 'Progress does not say On track for +0.4 kg a week')
+      await pg.click('.body-page .ptabs [data-tab="food"]')
+      await until(async () => (await title(foodCard)) === (await title(card)), 'Food and Progress show different calorie checks')
+      await pg.click('.body-page .ptabs [data-tab="progress"]')
+      // Make the last two weeks flat (made-up weigh-ins): the card suggests +200 kcal on both tabs.
+      const d = new Date(fakeNow())
+      const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
+      const at = (back, add) => {
+        const x = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() - back + add, 7, 10)
+        return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}T07:10`
+      }
+      for (const [back, add, kg] of [[21, 0, 71.1], [21, 1, 71.1], [21, 2, 71.1], [7, 3, 70.8], [7, 4, 70.8], [7, 5, 70.8], [7, 6, 70.8]]) {
+        await pg.click(`${prog} .bcp-log`)
+        await fillSheet(kg, {}, at(back, add))
+        await save(kg)
+      }
+      await until(async () => /Eat 200 kcal more a day/.test(await title(card)), 'two flat weeks do not suggest +200 kcal')
+      if (!/glass of milk \+ 1 spoon of peanut butter/.test(await pg.locator(card).innerText())) throw new Error('the +200 idea is missing')
+      await pg.click('.body-page .ptabs [data-tab="food"]')
+      await until(async () => /Eat 200 kcal more a day/.test(await title(foodCard)), 'the Food tab does not show the same suggestion')
+      await pg.click('.body-page .ptabs [data-tab="progress"]')
+      if (shots) {
+        await pg.setViewportSize({ width: 390, height: 844 })
+        await pg.addStyleTag({ content: '.ptabs-wrap { position: static !important; } .toasts { display: none !important; }' })
+        await pg.locator(card).evaluate((el) => el.scrollIntoView({ block: 'center' }))
+        await pg.waitForTimeout(400)
+        await pg.locator(card).screenshot({ path: `${shots}/calorie-check-phone.png` })
+        await pg.setViewportSize({ width: 1440, height: 900 })
+      }
+      // One tap accepts: the goal changes once, the change is in the history (Goals), no points.
+      await pg.click(`${card} .fd-adjust-apply`)
+      await until(async () => /Checked this week/.test(await title(card)), 'Accept did not settle the suggestion')
+      if (!/Last change: \d{4}-\d{2}-\d{2} · \+200 kcal · Weight flat for 2 weeks/.test(await pg.locator(card).innerText())) throw new Error('the change is not shown on the card')
+      await until(async () => /"kcalAdj":200/.test((await sql("SELECT value FROM settings WHERE key = 'food_goals'")).rows[0]?.[0]?.value ?? ''), 'the kcal goal did not change', 20000)
+      await pg.click('.body-page .ptabs [data-tab="food"]')
+      await until(async () => /Checked this week/.test(await title(foodCard)), 'the Food tab still shows the suggestion')
+      await pg.locator('#ptp-body-food .fd-card .card-head button', { hasText: 'Goals' }).click()
+      await pg.waitForSelector('#ptp-body-food .fd-adj-history li', { timeout: 10000 })
+      if (!/\+200 kcal · Weight flat for 2 weeks/.test(await pg.locator('#ptp-body-food .fd-adj-history').innerText())) throw new Error('Goals has no calorie change history')
+      await pg.locator('#ptp-body-food .fd-card .card-head button', { hasText: 'Goals' }).click()
+      await pg.click('.body-page .ptabs [data-tab="progress"]')
+      if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('accepting the calorie change paid points')
+    }
+    // 7. Scale screenshot import: upload → the numbers are read → check and fix → saved as "screenshot". The picture is not kept.
+    const shotPng = Buffer.from(await pg.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 540
+      c.height = 1170
+      const x = c.getContext('2d')
+      x.fillStyle = '#f4f6f8'
+      x.fillRect(0, 0, 540, 1170)
+      x.fillStyle = '#222'
+      x.font = 'bold 90px sans-serif'
+      x.fillText('70.9 kg', 110, 260)
+      x.font = '36px sans-serif'
+      for (const [i, t] of ['Body fat 15.1 %', 'Muscle 56.8 kg', 'Water 59.0 %', 'Visceral fat 5', 'BMR 1650 kcal', 'Body score 85'].entries()) x.fillText(t, 60, 420 + i * 90)
+      return c.toDataURL('image/png').split(',')[1]
+    }), 'base64')
+    const old = new Date(fakeNow() - 30 * 86400000)
+    const oldIso = `${old.getFullYear()}-${String(old.getMonth() + 1).padStart(2, '0')}-${String(old.getDate()).padStart(2, '0')}T07:05`
+    let scaleSent = null
+    await pg.route('**/api/ai', async (r) => {
+      const b = r.request().postDataJSON()
+      if (b?.op !== 'foodPhoto' || b?.kind !== 'scale') return r.fallback()
+      scaleSent = b
+      const result = { weightKg: 70.93, bodyFatPct: 15.1, muscleKg: 56.8, waterPct: 59, proteinPct: null, boneKg: 2.9, visceralFat: 5, bmr: 1650, bmi: 22.1, heartRate: 400, bodyScore: 85, measuredAt: oldIso }
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, result }) })
+    })
+    try {
+      await pg.setViewportSize({ width: 390, height: 844 })
+      await pg.click(`${prog} .bcp-log`)
+      await pg.waitForSelector('.blog-sheet .blog-shot-btn', { timeout: 10000 })
+      await pg.locator('.blog-sheet .blog-shot-file').setInputFiles({ name: 'scale.png', mimeType: 'image/png', buffer: shotPng })
+      await pg.waitForSelector('.blog-sheet .blog-shot-review', { timeout: 15000 })
+      if (scaleSent?.image?.mime !== 'image/jpeg' || scaleSent.image.data.length > 400_000) throw new Error('the screenshot was not made small first')
+      if ((await pg.inputValue('.blog-sheet .blog-weight input')) !== '70.93') throw new Error('the weight was not filled from the screenshot')
+      if ((await pg.inputValue('.blog-sheet [data-field="bmr"]')) !== '1650') throw new Error('BMR was not filled from the screenshot')
+      if ((await pg.locator('.blog-sheet .blog-read-tag').count()) < 8) throw new Error('the numbers read from the screenshot are not marked')
+      if (!/Heart rate 400 bpm is not possible/.test(await pg.locator('.blog-sheet .blog-shot-review').innerText())) throw new Error('a wrong number was not left out with a note')
+      if ((await pg.inputValue('.blog-sheet [data-field="heart_rate"]')) !== '') throw new Error('the impossible heart rate was filled in')
+      if ((await pg.inputValue('.blog-sheet .blog-when input')) !== oldIso) throw new Error('the time was not taken from the screenshot')
+      // Fix one number before saving.
+      await pg.fill('.blog-sheet [data-field="body_fat_pct"]', '15.0')
+      if (shots) {
+        const back = await crisp(390, 844, true)
+        await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+        await pg.waitForTimeout(300)
+        await pg.screenshot({ path: `${shots}/scale-review-phone.png` })
+        await back()
+      }
+      await pg.setViewportSize({ width: 1440, height: 900 })
+      await until(async () => (await pg.locator('.toast.has-action').count()) === 0, 'an older Undo toast stays up', 15000)
+      await save(70.93)
+      await until(async () => {
+        const r = (await sql('SELECT body_fat_pct, muscle_kg, bmr, heart_rate, source, raw FROM body_comp WHERE weight_kg = 70.93')).rows
+        return r.length === 1 && Number(r[0][0].value) === 15 && Number(r[0][1].value) === 56.8 && Number(r[0][2].value) === 1650 && r[0][3].type === 'null' && r[0][4].value === 'screenshot' && /"from":"screenshot"/.test(r[0][5].value) && !/base64|image/.test(r[0][5].value)
+      }, 'the screenshot weigh-in is not saved once with source screenshot and its numbers', 15000)
+      if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a screenshot import paid points')
+    } finally {
+      await pg.unroute('**/api/ai')
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
     // No sideways scroll on a phone.
     await pg.setViewportSize({ width: 390, height: 844 })
     await pg.waitForTimeout(300)

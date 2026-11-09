@@ -10,6 +10,7 @@
 // - an answer with no usable item is refused with a plain message.
 // Nothing is saved from here: the owner checks the review screen and taps Save.
 import { kcalOf, mealTypeAt, type FoodItem, type MealType } from './food'
+import { totalsOf, type FoodSaved } from './foodSaved'
 
 /** One of the owner's saved foods or meals, as the AI sees it (numbers per portion). */
 export interface SavedFoodRef {
@@ -160,7 +161,17 @@ const CONF: Record<VisionConfidence, FoodItem['confidence']> = { high: 'sure', m
 export const toFoodItems = (items: VisionItem[]): FoodItem[] =>
   items
     .filter((i) => i.grams >= 1 || i.kcal >= 1)
-    .map((i) => ({ name: i.name, grams: Math.max(1, Math.round(i.grams || 1)), protein: r1(i.protein), carbs: r1(i.carbs), fat: r1(i.fat), kcal: Math.round(i.kcal), confidence: CONF[i.confidence] }))
+    .map((i) => ({
+      name: i.name,
+      grams: Math.max(1, Math.round(i.grams || 1)),
+      protein: r1(i.protein),
+      carbs: r1(i.carbs),
+      fat: r1(i.fat),
+      kcal: Math.round(i.kcal),
+      confidence: CONF[i.confidence],
+      // A saved food keeps how many portions (like a one-tap log).
+      ...(i.matchedSavedFoodId ? { qty: r1(i.qty), unit: i.unit } : {})
+    }))
 
 /** The owner's starred meals as saved foods (one portion = the whole meal). */
 export function savedFromFavs(favs: { id: string; name: string; items: FoodItem[] }[]): SavedFoodRef[] {
@@ -169,6 +180,31 @@ export function savedFromFavs(favs: { id: string; name: string; items: FoodItem[
     const sum = (k: 'kcal' | 'protein' | 'carbs' | 'fat') => r1(f.items.reduce((a, i) => a + (Number(i[k]) || 0), 0))
     return { id: `fav:${f.id}`, name: f.name, portion: `1 portion (${Math.round(grams)} g)`, kcal: Math.round(sum('kcal')), protein: sum('protein'), carbs: sum('carbs'), fat: sum('fat') }
   })
+}
+
+/**
+ * The owner's real saved foods (food_saved) for the AI and the swap list:
+ * each saved food (one portion, "1 container (300 g)"), then each saved meal
+ * (one portion = the whole meal), then starred meals not already there. Ids
+ * are the saved ids (sf-…, sm-…), so a match uses his own numbers × qty.
+ */
+export function savedRefs(saved: FoodSaved | null | undefined, favs: { id: string; name: string; items: FoodItem[] }[] = [], max = 60): SavedFoodRef[] {
+  const out: SavedFoodRef[] = []
+  if (saved) {
+    for (const f of saved.foods) {
+      const label = text(f.portionLabel, 30) || '1 portion'
+      const portion = f.grams && !/\d\s*g\b/i.test(label) ? `${label} (${Math.round(f.grams)} g)` : label
+      out.push({ id: f.id, name: f.name, portion, kcal: Math.round(f.kcal), protein: r1(f.protein), carbs: r1(f.carbs ?? 0), fat: r1(f.fat ?? 0) })
+    }
+    for (const m of saved.meals) {
+      const t = totalsOf(saved, m.items)
+      const grams = m.items.reduce((a, i) => a + (saved.foods.find((f) => f.id === i.foodId)?.grams ?? 0) * i.qty, 0)
+      out.push({ id: m.id, name: m.name, portion: grams ? `1 meal (${Math.round(grams)} g)` : '1 meal', kcal: t.kcal, protein: t.protein, carbs: t.carbs, fat: t.fat })
+    }
+  }
+  const names = new Set(out.map((x) => x.name.toLowerCase()))
+  for (const f of savedFromFavs(favs)) if (!names.has(f.name.toLowerCase())) out.push(f)
+  return out.slice(0, max)
 }
 
 /** The meal slot from the local time (breakfast / lunch / dinner / snack). */

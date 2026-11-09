@@ -1,5 +1,5 @@
-// Progress → weight and waist: the 7-day weight average with the lean-gain
-// zone (+0.1 to +0.25 kg a week from 4 weeks ago), the waist on its own
+// Progress → weight and waist: the 7-day weight average with the target
+// band (+0.25 to +0.5 kg a week from 4 weeks ago), the waist on its own
 // scale, and one plain verdict written from the numbers.
 import { daysBetween } from '@core/dates'
 import { trendView } from '@core/bodyProgress'
@@ -103,7 +103,7 @@ export function TrendPanel({ metrics, today, onLog }: { metrics: { day: string; 
         </li>
         <li className="k-zone">
           <i aria-hidden="true" />
-          Lean-gain zone (+0.1 to +0.25 kg a week)
+          Target band (+0.25 to +0.5 kg a week)
         </li>
         <li className="k-waist">
           <i aria-hidden="true" />

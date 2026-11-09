@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FOOD_PROMPT } from '@core/foodPrompt'
 import { MEAL_TYPES, type MealType } from '@core/food'
-import { fromSaved, photoReplyLine, savedFromFavs, scaleVisionItem, slotNow, stepQty, toFoodItems, validateVision, visionTotals, type SavedFoodRef, type VisionItem } from '@core/foodVision'
+import { fromSaved, photoReplyLine, savedRefs, scaleVisionItem, slotNow, stepQty, toFoodItems, validateVision, visionTotals, type SavedFoodRef, type VisionItem } from '@core/foodVision'
 import { life } from '../bridge'
 import { useToast } from '../ui'
 import { Select } from '../Select'
@@ -56,8 +56,8 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
   const camRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  // Your saved foods (from the saved-foods list when given, else your starred meals).
-  const saved = useMemo(() => savedProp ?? savedFromFavs(view.favs), [savedProp, view.favs])
+  // Your real saved foods and saved meals (food_saved), then starred meals: the AI gets them and the swap list shows them.
+  const saved = useMemo(() => savedProp ?? savedRefs(view.saved, view.favs), [savedProp, view.saved, view.favs])
   const items = rows.map((r) => r.item)
   const totals = visionTotals(items)
 
