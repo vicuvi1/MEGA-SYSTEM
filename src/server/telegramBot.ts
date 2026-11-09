@@ -263,11 +263,19 @@ async function botsFor(env: BotEnv) {
   const recall = vectors ? (q: string, k: number) => vectors.search(q, k) : null
   // AU10: the tools from your own MCP servers that you allowed (Settings → PC & automation).
   const web = env.web !== undefined ? env.web : process.env.VITEST ? null : serverWeb()
-  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: mergeTools(extToolsFor(env), flowToolsFor(env, mirror)), web, foodPhoto: env.foodPhoto ? (body) => (liveFoodPhoto ?? env.foodPhoto!)(body) : null })
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: mergeTools(extToolsFor(env), flowToolsFor(env, mirror)), web, foodPhoto: env.foodPhoto ? (body, opts) => (liveFoodPhoto ?? env.foodPhoto!)(body, opts) : null, photoKv: env.foodPhoto ? photoKvFor(env) : null })
   warm = { key, SQL, bots, mirror, services, calendar, vectors }
   warmAt = Date.now()
   return warm
 }
+
+/**
+ * Short server-only rows for meal photos that belong together (an album sent as
+ * separate updates, or "Add another photo"): one Turso transaction per call, so
+ * parts landing in different function calls at once still meet. Telegram file
+ * ids only, never the picture (bots/foodAlbum.ts).
+ */
+const photoKvFor = (env: BotEnv) => (stmts: Parameters<TursoHttp['writeAtomic']>[0]) => new TursoHttp(env.tursoUrl, env.tursoToken).writeAtomic(stmts)
 
 /** Rows in a Turso pipeline answer (reads and batch steps). */
 export function rowsIn(json: any): number {

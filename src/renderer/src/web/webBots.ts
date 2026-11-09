@@ -70,6 +70,7 @@ import { addQuickBlock, quickSpot } from './planShared'
 import { runCommand, runFocus, type RunOut } from './bots/commands'
 import { runCareer } from './bots/careerBot'
 import { foodMessage, foodPhotoMessage, foodWants, photoWanted, type FoodOut, type FoodPhotoFn } from './bots/foodBot'
+import type { PhotoKv } from './bots/foodAlbum'
 import { foodDayTotals, whatNextNow } from '../../../main/food'
 import { foodAnswer } from '@core/foodBen'
 import { undoReply as undoReplyWith } from './bots/undo'
@@ -179,6 +180,8 @@ export interface WebBotsDeps {
   web?: WebLike | null
   /** A meal photo's vision read (the server only: api/ai.mjs foodPhoto); without it photos go to the coach. */
   foodPhoto?: FoodPhotoFn | null
+  /** Server-only rows for photos of one meal (an album, "Add another photo"): Telegram file ids only (bots/foodAlbum.ts). */
+  photoKv?: PhotoKv | null
 }
 
 /** AU10: outside MCP tools Ben may call (one round, short timeout, answer size-capped). */
@@ -281,7 +284,7 @@ export function factsOf(prompt: string): string {
     .join('\n')
 }
 
-export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist: todoistIn = null, ai = null, calendar: calendarIn = null, recall = null, tools = null, timing = {}, web = null, foodPhoto = null }: WebBotsDeps) {
+export function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist: todoistIn = null, ai = null, calendar: calendarIn = null, recall = null, tools = null, timing = {}, web = null, foodPhoto = null, photoKv = null }: WebBotsDeps) {
   const BUDGET = timing.budgetMs ?? THINK_BUDGET_MS
   // Speed: what Todoist and the calendar said a moment ago answers a follow-up (45 s), and
   // answers when they are slow or down (up to 30 min old). Any change made through Ben
@@ -573,7 +576,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     runMoneyIn: (db, text, key) => {
       currentDb = db
       return runMoney(services.services(db), text, key)
-    }
+    },
+    foodPhoto,
+    photoKv
   }
 
   async function handleButton(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
@@ -2615,8 +2620,9 @@ His note: ${note}`,
       if (!(await markSeen(key))) return null
       if (!allowed(cfg, chat)) return null
       processed++
-      const reply = await foodPhotoMessage({ token: update.__token, chat, photos: update.message.photo, caption: text, mirror, foodPhoto })
-      addLog(`[photo] ${text}`.trim().slice(0, 80), chat, true, reply)
+      // An album's parts (one media_group_id) and photos added to an open preview meet in photoKv: one read, one preview.
+      const reply = await foodPhotoMessage({ token: update.__token, chat, photos: update.message.photo, caption: text, mirror, foodPhoto, kv: photoKv, groupId: update.message.media_group_id ? String(update.message.media_group_id) : null, messageId: update.message.message_id })
+      if (reply) addLog(`[photo] ${text}`.trim().slice(0, 80), chat, true, reply)
       return reply
     }
     // The food counter (bots/foodBot.ts): /food, /meals, a pasted AI reply (a preview to Save), "chicken 175" on the open preview, a saved meal's name.

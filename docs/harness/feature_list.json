@@ -798,6 +798,22 @@
    "notes": "core/foodBen.ts (photo draft, preview, edits, swap, decideMealReminder), web/bots/foodBot.ts (photo flow, /meals, fd| buttons, mealPushFor, foodPushNow), webBots.ts (photo route), telegramBot.ts + api/telegram.mjs (env.foodPhoto = ai.mjs foodPhoto), benPushes.ts (op log, prefs.meals, fd| buttons for meal pushes), benPushTick.ts, tursoWebBridge.ts/benPushFeed.ts (island), LifeFitPanel.tsx (switch)."
   },
   {
+   "id": "F-FOOD-MULTI-PHOTO",
+   "priority": 1,
+   "area": "sport",
+   "title": "Several photos of one meal at once (app and Telegram)",
+   "user_visible_behavior": "Body -> Food: pick, drop or paste up to 6 photos of one meal at once (a plate, a packaged snack, a drink), with one optional note. They go to the AI in ONE request, so it sees the whole meal and lists each food once. The review shows the numbered thumbnails and one combined list (each food says 'Photo 2' where it was seen), the same edit, swap and Save; one meal is saved. Each photo counts toward the 50 a day. Telegram: an album (photos sent together) gets ONE '3 photos read together' preview from ONE AI read; under any photo preview, 'Add another photo' collects more photos for a minute and 'Done, read them' reads all of them together into a new preview ('Stop adding' keeps the old one). Only the owner's chats; no picture is kept; no points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/server/foodAlbum.server.test.ts src/server/foodPhoto.server.test.ts src/core/foodVision.test.ts src/renderer/src/body/foodPhotoPrep.test.ts src/server/foodTelegram.server.test.ts",
+    "npm run build:bot",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-09: server tests on a fake Turso + fake Telegram + fake vision (album of 3 updates -> 1 call -> 1 preview, Add another photo -> Done -> 1 call with both and counted 1, stranger's album untouched, rows deleted after the read and on Save, a late part, the 10-minute sweep), counter (3 photos = 3, re-read counts new ones only, over the limit), request/prompt/provider shapes; smoke step 'Food photo' uploads 3 photos at once -> one request, one review, save once.",
+   "notes": "api/_vision.mjs (images 1-6, MAX_TOTAL_B64, 'Photo n:' labels, prompt rule, item.photo, countPhoto n), api/ai.mjs foodPhoto (counts each photo; opts.counted only in-process from Telegram), api/telegram.mjs (passes opts), core/foodVision.ts (item.photo), body/foodPhotoPrep.ts (imagesFrom, images), body/FoodPhotoReview.tsx (+css strip), web/bots/foodAlbum.ts (sys_kv rows: file ids only), web/bots/foodBot.ts (readMealPhotos, album lead, fd|a fd|r fd|q), bots/context.ts + webBots.ts (photoKv, foodPhoto), server/telegramBot.ts (photoKvFor)."
+  },
+  {
    "id": "F-FOOD-BODY-CHECK",
    "priority": 1,
    "area": "sport",

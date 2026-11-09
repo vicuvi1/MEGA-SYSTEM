@@ -38,6 +38,8 @@ export interface VisionItem {
   carbs: number
   fat: number
   confidence: VisionConfidence
+  /** Which photo it was seen in (1…n), when several photos of one meal were read together. */
+  photo?: number
 }
 
 export interface VisionTotals {
@@ -99,8 +101,14 @@ export function fromSaved(s: SavedFoodRef, qty: number, grams?: number): VisionI
   return { name: text(s.name, 60) || 'Saved food', matchedSavedFoodId: s.id, qty: q, unit: 'portion', grams: per ? Math.round(per * q) : Math.round(grams ?? 0), kcal, protein, carbs, fat, confidence: 'high' }
 }
 
-/** One clean item, or null when it has no name or no amount. */
-export function cleanVisionItem(raw: any, saved: SavedFoodRef[] = []): VisionItem | null {
+/** The photo number (1…photos) an item was seen in; only kept when there are several photos. */
+const photoOf = (raw: any, photos: number): { photo?: number } => {
+  const p = Math.round(Number(raw?.photo))
+  return photos > 1 && Number.isFinite(p) && p >= 1 && p <= photos ? { photo: p } : {}
+}
+
+/** One clean item, or null when it has no name or no amount. `photos`: how many photos were read together. */
+export function cleanVisionItem(raw: any, saved: SavedFoodRef[] = [], photos = 1): VisionItem | null {
   if (!raw || typeof raw !== 'object') return null
   const name = text(raw.name, 60)
   if (!name) return null
@@ -111,7 +119,7 @@ export function cleanVisionItem(raw: any, saved: SavedFoodRef[] = []): VisionIte
   if (match) {
     // Your saved numbers win over the AI's guess; the AI only says how many.
     const it = fromSaved(match, qty, grams)
-    return { ...it, unit: text(raw.unit, 20) || it.unit, confidence }
+    return { ...it, unit: text(raw.unit, 20) || it.unit, confidence, ...photoOf(raw, photos) }
   }
   const protein = r1(clamp(raw.protein, 0, 400))
   const carbs = r1(clamp(raw.carbs, 0, 800))
@@ -119,7 +127,7 @@ export function cleanVisionItem(raw: any, saved: SavedFoodRef[] = []): VisionIte
   const k = clamp(raw.kcal, 0, 8000)
   const kcal = Math.round(k > 0 ? k : kcalOf(protein, carbs, fat))
   if (grams < 1 && kcal < 1) return null
-  return { name, matchedSavedFoodId: null, qty: r1(qty), unit: text(raw.unit, 20) || 'serving', grams, kcal, protein, carbs, fat, confidence }
+  return { name, matchedSavedFoodId: null, qty: r1(qty), unit: text(raw.unit, 20) || 'serving', grams, kcal, protein, carbs, fat, confidence, ...photoOf(raw, photos) }
 }
 
 /** The meal's totals, always added up from the items. */
@@ -132,12 +140,12 @@ export function visionTotals(items: VisionItem[]): VisionTotals {
  * Checks the AI's answer (an object, or text holding one). Refuses an answer it
  * can't read, or one with no food in it, with a plain message.
  */
-export function validateVision(raw: unknown, saved: SavedFoodRef[] = []): VisionCheck {
+export function validateVision(raw: unknown, saved: SavedFoodRef[] = [], photos = 1): VisionCheck {
   const o: any = readVisionJson(raw)
   if (!o || typeof o !== 'object' || Array.isArray(o)) return { ok: false, error: "The AI's answer could not be read. Try again, or copy the prompt instead." }
   if (!Array.isArray(o.items)) return { ok: false, error: "The AI's answer had no list of foods. Try again, or copy the prompt instead." }
-  const items = o.items.map((x: unknown) => cleanVisionItem(x, saved)).filter((x: VisionItem | null): x is VisionItem => !!x).slice(0, MAX_ITEMS)
-  if (!items.length) return { ok: false, error: 'No food was found in the photo. Try a clearer photo, or add the foods by hand.' }
+  const items = o.items.map((x: unknown) => cleanVisionItem(x, saved, photos)).filter((x: VisionItem | null): x is VisionItem => !!x).slice(0, MAX_ITEMS)
+  if (!items.length) return { ok: false, error: photos > 1 ? 'No food was found in the photos. Try clearer photos, or add the foods by hand.' : 'No food was found in the photo. Try a clearer photo, or add the foods by hand.' }
   return { ok: true, result: { items, totals: visionTotals(items), message: text(o.message, 200) } }
 }
 
@@ -145,7 +153,7 @@ export function validateVision(raw: unknown, saved: SavedFoodRef[] = []): Vision
 export function scaleVisionItem(base: VisionItem, factor: number, saved: SavedFoodRef[] = []): VisionItem {
   const f = clamp(factor, 0.05, 20, 1)
   const match = base.matchedSavedFoodId ? saved.find((s) => s.id === base.matchedSavedFoodId) : undefined
-  if (match) return { ...fromSaved(match, base.qty * f, base.grams * f), unit: base.unit, confidence: base.confidence }
+  if (match) return { ...fromSaved(match, base.qty * f, base.grams * f), unit: base.unit, confidence: base.confidence, ...(base.photo ? { photo: base.photo } : {}) }
   return { ...base, qty: r1(base.qty * f), grams: Math.round(base.grams * f), kcal: Math.round(base.kcal * f), protein: r1(base.protein * f), carbs: r1(base.carbs * f), fat: r1(base.fat * f) }
 }
 
@@ -234,5 +242,7 @@ export function photoReplyLine(o: { items: { name: string; qty: number; unit: st
   return `${head} ${today} ${left}`
 }
 
-/** Photos a day, counted on the server (the owner's day, LIFE_TZ). */
+/** Photos a day, counted on the server (the owner's day, LIFE_TZ). Each photo of a request counts. */
 export const PHOTO_DAILY_LIMIT = 50
+/** At most this many photos of one meal are read together (api/_vision.mjs MAX_PHOTOS). */
+export const MAX_PHOTOS = 6

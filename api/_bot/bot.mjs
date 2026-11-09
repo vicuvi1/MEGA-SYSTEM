@@ -4617,16 +4617,16 @@ var WEEKLY_SETS = {
 };
 /** Which muscle group a library group trains (cardio and stretches: none). */
 var muscleOf = (g) => g === "push" || g === "pull" || g === "core" || g === "legs" ? g : null;
-var clean$3 = (n) => Math.max(0, Math.min(2e3, Math.round(Number(n) || 0)));
+var clean$4 = (n) => Math.max(0, Math.min(2e3, Math.round(Number(n) || 0)));
 /** The sets of one exercise on one day (a copy, only real ones). */
 function setsOn(log, day, exId) {
 	const l = log?.[day]?.[exId];
-	return Array.isArray(l) ? l.filter((s) => s && clean$3(s.reps) > 0) : [];
+	return Array.isArray(l) ? l.filter((s) => s && clean$4(s.reps) > 0) : [];
 }
 /** A set to store: whole numbers, an id and a time. */
 function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
 	const s = {
-		reps: clean$3(reps),
+		reps: clean$4(reps),
 		at: now,
 		id: `${now.toString(36)}${salt || Math.random().toString(36).slice(2, 6)}`
 	};
@@ -4637,7 +4637,7 @@ function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
 function addSets(log, day, exId, reps, now = Date.now(), extra = {}) {
 	const out = JSON.parse(JSON.stringify(log ?? {}));
 	const list = (out[day] ??= {})[exId] ?? [];
-	reps.map(clean$3).filter((r) => r > 0).forEach((r, i) => {
+	reps.map(clean$4).filter((r) => r > 0).forEach((r, i) => {
 		const e = makeSet(r, now + i, extra.kg ?? 0, `${i}${exId.length}`);
 		if (extra.test) e.test = true;
 		list.push(e);
@@ -4649,7 +4649,7 @@ function addSets(log, day, exId, reps, now = Date.now(), extra = {}) {
 function sessionsOf$1(log, exId, until) {
 	return Object.keys(log ?? {}).filter((d) => !until || d <= until).sort().map((day) => ({
 		day,
-		reps: setsOn(log, day, exId).map((s) => clean$3(s.reps))
+		reps: setsOn(log, day, exId).map((s) => clean$4(s.reps))
 	})).filter((s) => s.reps.length > 0);
 }
 /** Your best single set of an exercise (reps or seconds), and the day; null without sets. */
@@ -5059,12 +5059,12 @@ function debtLine(d, a) {
 	return `SLEEP DEBT: ${hm$10(d.debtMin)} behind a ${hm$10(d.needMin)} need over the last ${d.logged} logged nights.${a.napOk ? " Suggest one 20-min nap before 15:00." : " No nap today (too late)."}${a.early ? ` Suggest bed at ${a.early.bed} ${a.early.label === "tonight" || a.early.label === "tomorrow" ? a.early.label : `on ${a.early.label}`} (his next free evening).` : ""} Say it once, not every message.`;
 }
 // src/core/benGround.ts
-var pad$16 = (n) => String(n).padStart(2, "0");
+var pad$17 = (n) => String(n).padStart(2, "0");
 var TIME$1 = /\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
 var AMPM = /\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s?(am|pm)\b/gi;
 var EVENT$1 = /\b(meetings?|appointments?|interviews?|lectures?|class(?:es)?|seminars?|exams?)\b/gi;
 var PROGRESS = /\b(?:nearly|almost|mostly|half(?:way)?|basically|practically)\s+(?:done|finished|through|complete|there)\b/i;
-var norm$8 = (h, m) => `${pad$16(h)}:${pad$16(m)}`;
+var norm$8 = (h, m) => `${pad$17(h)}:${pad$17(m)}`;
 /** Every clock time in a text, as "HH:MM" (am/pm turned into 24 h). */
 function timesIn(text) {
 	const out = [];
@@ -6523,8 +6523,13 @@ function fromSaved(s, qty, grams) {
 		confidence: "high"
 	};
 }
-/** One clean item, or null when it has no name or no amount. */
-function cleanVisionItem(raw, saved = []) {
+/** The photo number (1…photos) an item was seen in; only kept when there are several photos. */
+var photoOf$1 = (raw, photos) => {
+	const p = Math.round(Number(raw?.photo));
+	return photos > 1 && Number.isFinite(p) && p >= 1 && p <= photos ? { photo: p } : {};
+};
+/** One clean item, or null when it has no name or no amount. `photos`: how many photos were read together. */
+function cleanVisionItem(raw, saved = [], photos = 1) {
 	if (!raw || typeof raw !== "object") return null;
 	const name = text(raw.name, 60);
 	if (!name) return null;
@@ -6537,7 +6542,8 @@ function cleanVisionItem(raw, saved = []) {
 		return {
 			...it,
 			unit: text(raw.unit, 20) || it.unit,
-			confidence
+			confidence,
+			...photoOf$1(raw, photos)
 		};
 	}
 	const protein = r1(clamp$4(raw.protein, 0, 400));
@@ -6556,7 +6562,8 @@ function cleanVisionItem(raw, saved = []) {
 		protein,
 		carbs,
 		fat,
-		confidence
+		confidence,
+		...photoOf$1(raw, photos)
 	};
 }
 /** The meal's totals, always added up from the items. */
@@ -6583,7 +6590,7 @@ function visionTotals(items) {
 * Checks the AI's answer (an object, or text holding one). Refuses an answer it
 * can't read, or one with no food in it, with a plain message.
 */
-function validateVision(raw, saved = []) {
+function validateVision(raw, saved = [], photos = 1) {
 	const o = readVisionJson(raw);
 	if (!o || typeof o !== "object" || Array.isArray(o)) return {
 		ok: false,
@@ -6593,10 +6600,10 @@ function validateVision(raw, saved = []) {
 		ok: false,
 		error: "The AI's answer had no list of foods. Try again, or copy the prompt instead."
 	};
-	const items = o.items.map((x) => cleanVisionItem(x, saved)).filter((x) => !!x).slice(0, 12);
+	const items = o.items.map((x) => cleanVisionItem(x, saved, photos)).filter((x) => !!x).slice(0, 12);
 	if (!items.length) return {
 		ok: false,
-		error: "No food was found in the photo. Try a clearer photo, or add the foods by hand."
+		error: photos > 1 ? "No food was found in the photos. Try clearer photos, or add the foods by hand." : "No food was found in the photo. Try a clearer photo, or add the foods by hand."
 	};
 	return {
 		ok: true,
@@ -6614,7 +6621,8 @@ function scaleVisionItem(base, factor, saved = []) {
 	if (match) return {
 		...fromSaved(match, base.qty * f, base.grams * f),
 		unit: base.unit,
-		confidence: base.confidence
+		confidence: base.confidence,
+		...base.photo ? { photo: base.photo } : {}
 	};
 	return {
 		...base,
@@ -9059,16 +9067,16 @@ function logStandardDay(db, choices = {}, source = "app", now = /* @__PURE__ */ 
 	return out;
 }
 // src/renderer/src/web/benPushStore.ts
-var parse$3 = (db, key) => {
+var parse$4 = (db, key) => {
 	try {
 		return JSON.parse(getSetting(db, key) || "null");
 	} catch {
 		return null;
 	}
 };
-var readPushLog = (db, day) => cleanPushLog(parse$3(db, PUSH_LOG_KEY), day);
+var readPushLog = (db, day) => cleanPushLog(parse$4(db, PUSH_LOG_KEY), day);
 var writePushLog = (db, log) => setSetting(db, PUSH_LOG_KEY, JSON.stringify(log));
-var readPcSeen = (db) => cleanPcSeen(parse$3(db, PC_SEEN_KEY));
+var readPcSeen = (db) => cleanPcSeen(parse$4(db, PC_SEEN_KEY));
 /** Claims a push (inside one write): false when it already went out anywhere. */
 function claimPush(db, day, key, via, now) {
 	const r = claim(readPushLog(db, day), key, via, now);
@@ -9441,6 +9449,251 @@ async function downloadText(token, fileId) {
 		return null;
 	}
 }
+// src/renderer/src/web/bots/foodAlbum.ts
+/** Rows older than this are removed on the next photo (and never read again). */
+var SET_TTL_MS = 6e5;
+/** How the lead waits for the rest of an album (tests make it short). */
+var albumWait = {
+	pollMs: 500,
+	minPolls: 3,
+	quietPolls: 2,
+	maxPolls: 8
+};
+var TABLE$1 = {
+	sql: "CREATE TABLE IF NOT EXISTS sys_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+	args: []
+};
+var OURS = "(key LIKE 'fdp:%' OR key LIKE 'fdl:%' OR key LIKE 'fda:%' OR key LIKE 'fdd:%')";
+/** Removes every photo row older than 10 minutes. */
+var sweep = (now) => ({
+	sql: `DELETE FROM sys_kv WHERE ${OURS} AND json_valid(value) AND CAST(json_extract(value, '$.at') AS INTEGER) < ?`,
+	args: [now - SET_TTL_MS]
+});
+/** Message ids padded, so the keys sort in the order the photos were sent. */
+var pad$16 = (m) => String(Math.max(0, Math.floor(m) || 0)).padStart(12, "0");
+var clean$3 = (s) => String(s ?? "").replace(/[^\w-]/g, "").slice(0, 40);
+var partPrefix = (chat, set) => `fdp:${clean$3(chat)}:${set}:`;
+var leadKey = (chat, gid) => `fdl:${clean$3(chat)}:g${clean$3(gid)}`;
+var addKey = (chat) => `fda:${clean$3(chat)}`;
+var draftKey = (chat, draft) => `fdd:${clean$3(chat)}:${clean$3(draft)}`;
+var parse$3 = (v) => {
+	try {
+		return typeof v === "string" ? JSON.parse(v) : null;
+	} catch {
+		return null;
+	}
+};
+var partOf$1 = (v) => {
+	const o = parse$3(v);
+	return o && typeof o.f === "string" && o.f ? {
+		f: o.f.slice(0, 200),
+		c: String(o.c ?? "").slice(0, 300),
+		m: Number(o.m) || 0,
+		at: Number(o.at) || 0
+	} : null;
+};
+var partRow = (prefix, p) => ({
+	sql: "INSERT OR REPLACE INTO sys_kv (key, value) VALUES (?, ?)",
+	args: [prefix + pad$16(p.m), JSON.stringify({
+		f: p.f,
+		c: p.c.slice(0, 300),
+		m: p.m,
+		at: p.at
+	})]
+});
+var countParts = (prefix) => ({
+	sql: "SELECT COUNT(*) FROM sys_kv WHERE key >= ? AND key < ?",
+	args: [prefix, prefix + "~"]
+});
+var takeParts = (prefix) => ({
+	sql: "DELETE FROM sys_kv WHERE key >= ? AND key < ? RETURNING key, value",
+	args: [prefix, prefix + "~"]
+});
+var sorted = (rows) => rows.slice().sort((a, b) => String(a[0]).localeCompare(String(b[0]))).map((r) => partOf$1(r[1])).filter((p) => !!p);
+/**
+* One part of an album arrived: its row is written, and the first part to get
+* here is the lead ('lead'). The others answer nothing ('wait'), unless the
+* lead already took the photos ('late': this one is read on its own).
+*/
+async function joinAlbum(kv, chat, gid, part, now) {
+	const prefix = partPrefix(chat, `g${clean$3(gid)}`);
+	const lead = leadKey(chat, gid);
+	const r = await kv([
+		TABLE$1,
+		sweep(now),
+		partRow(prefix, part),
+		{
+			sql: "INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING RETURNING key",
+			args: [lead, JSON.stringify({
+				at: now,
+				st: "wait"
+			})]
+		},
+		{
+			sql: "SELECT value FROM sys_kv WHERE key = ?",
+			args: [lead]
+		}
+	]);
+	if (r[3]?.length) return "lead";
+	if (parse$3(r[4]?.[0]?.[0])?.st !== "taken") return "wait";
+	await kv([{
+		sql: "DELETE FROM sys_kv WHERE key = ?",
+		args: [prefix + pad$16(part.m)]
+	}]);
+	return "late";
+}
+/** The lead waits until no new part came for a moment (or 10 parts, or about 4 s), then takes them all. */
+async function collectAlbum(kv, chat, gid, now, sleep = (ms) => new Promise((ok) => setTimeout(ok, ms))) {
+	const prefix = partPrefix(chat, `g${clean$3(gid)}`);
+	let last = -1;
+	let same = 0;
+	for (let i = 1; i <= albumWait.maxPolls; i++) {
+		await sleep(albumWait.pollMs);
+		const n = Number((await kv([countParts(prefix)]))[0]?.[0]?.[0]) || 0;
+		same = n === last ? same + 1 : 0;
+		last = n;
+		if (n >= 10 || i >= albumWait.minPolls && same >= albumWait.quietPolls) break;
+	}
+	return sorted((await kv([{
+		sql: "UPDATE sys_kv SET value = ? WHERE key = ?",
+		args: [JSON.stringify({
+			at: now(),
+			st: "taken"
+		}), leadKey(chat, gid)]
+	}, takeParts(prefix)]))[1] ?? []);
+}
+/** Keeps the file ids behind a photo preview (10 minutes at most), so more photos can be added to it. */
+async function keepDraftPhotos(kv, chat, draft, fileIds, caption, now) {
+	await kv([
+		TABLE$1,
+		sweep(now),
+		{
+			sql: "DELETE FROM sys_kv WHERE key >= ? AND key < ?",
+			args: [`fdd:${clean$3(chat)}:`, `fdd:${clean$3(chat)}:~`]
+		},
+		{
+			sql: "INSERT OR REPLACE INTO sys_kv (key, value) VALUES (?, ?)",
+			args: [draftKey(chat, draft), JSON.stringify({
+				at: now,
+				f: fileIds.slice(0, 6),
+				c: caption.slice(0, 300)
+			})]
+		}
+	]);
+}
+var addOf = (v) => {
+	const o = parse$3(v);
+	return o && typeof o.d === "string" && Array.isArray(o.f) ? {
+		d: o.d,
+		at: Number(o.at) || 0,
+		f: o.f.filter((x) => typeof x === "string").slice(0, 6),
+		c: String(o.c ?? ""),
+		msg: Number(o.msg) || null
+	} : null;
+};
+/** "Add another photo" on a preview: opens the window. null when the preview's photos are gone (older than 10 minutes). */
+async function startAdd(kv, chat, draft, now) {
+	const kept = parse$3((await kv([
+		TABLE$1,
+		sweep(now),
+		{
+			sql: "SELECT value FROM sys_kv WHERE key = ?",
+			args: [draftKey(chat, draft)]
+		}
+	]))[2]?.[0]?.[0]);
+	if (!kept || !Array.isArray(kept.f) || !kept.f.length) return null;
+	const st = {
+		d: clean$3(draft),
+		at: now,
+		f: kept.f.slice(0, 6),
+		c: String(kept.c ?? ""),
+		msg: null
+	};
+	await kv([takeParts(`fdp:${clean$3(chat)}:a`), {
+		sql: "INSERT OR REPLACE INTO sys_kv (key, value) VALUES (?, ?)",
+		args: [addKey(chat), JSON.stringify(st)]
+	}]);
+	return st;
+}
+/** Remembers the "send the next photo" message (it shows how many came). */
+async function setAddMsg(kv, chat, msg) {
+	await kv([{
+		sql: "UPDATE sys_kv SET value = json_set(value, '$.msg', ?) WHERE key = ?",
+		args: [msg, addKey(chat)]
+	}]);
+}
+/** The open "add another photo" window, or null (none, or more than 60 s since the tap or the last photo). */
+async function openAdd(kv, chat, now) {
+	const st = addOf((await kv([TABLE$1, {
+		sql: "SELECT value FROM sys_kv WHERE key = ?",
+		args: [addKey(chat)]
+	}]))[1]?.[0]?.[0]);
+	return st && now - st.at <= 6e4 && now >= st.at - 6e4 ? st : null;
+}
+/** A photo sent in the window joins the meal; says how many new photos there are now. */
+async function addPart(kv, chat, st, part, now) {
+	const prefix = partPrefix(chat, `a${st.d}`);
+	const r = await kv([
+		partRow(prefix, part),
+		{
+			sql: "UPDATE sys_kv SET value = json_set(value, '$.at', ?) WHERE key = ?",
+			args: [now, addKey(chat)]
+		},
+		countParts(prefix)
+	]);
+	return Number(r[2]?.[0]?.[0]) || 0;
+}
+/** How many new photos came in the window for this preview (0 when none, or the window is for another one). */
+async function addedCount(kv, chat, draft) {
+	const r = await kv([
+		TABLE$1,
+		{
+			sql: "SELECT value FROM sys_kv WHERE key = ?",
+			args: [addKey(chat)]
+		},
+		countParts(partPrefix(chat, `a${clean$3(draft)}`))
+	]);
+	const st = addOf(r[1]?.[0]?.[0]);
+	return st && st.d === clean$3(draft) ? {
+		st,
+		n: Number(r[2]?.[0]?.[0]) || 0
+	} : {
+		st: null,
+		n: 0
+	};
+}
+/** "Done, read them": closes the window and takes the new photos (the earlier ones are in the state). */
+async function takeAdd(kv, chat, draft) {
+	const r = await kv([{
+		sql: "DELETE FROM sys_kv WHERE key = ? RETURNING value",
+		args: [addKey(chat)]
+	}, takeParts(partPrefix(chat, `a${clean$3(draft)}`))]);
+	const st = addOf(r[0]?.[0]?.[0]);
+	if (!st || st.d !== clean$3(draft)) return null;
+	return {
+		st,
+		parts: sorted(r[1] ?? [])
+	};
+}
+/** Removes every photo row of this chat (on Save, Cancel or "Stop adding"). */
+async function dropChatPhotos(kv, chat) {
+	const c = clean$3(chat);
+	await kv([
+		TABLE$1,
+		{
+			sql: "DELETE FROM sys_kv WHERE key = ?",
+			args: [addKey(chat)]
+		},
+		{
+			sql: "DELETE FROM sys_kv WHERE key >= ? AND key < ?",
+			args: [`fdd:${c}:`, `fdd:${c}:~`]
+		},
+		{
+			sql: "DELETE FROM sys_kv WHERE key >= ? AND key < ?",
+			args: [`fdp:${c}:a`, `fdp:${c}:a~`]
+		}
+	]);
+}
 // src/renderer/src/web/bots/foodBot.ts
 var fmt$1 = (n) => Math.round(n).toLocaleString("en-US");
 var shortId = () => Math.random().toString(36).slice(2, 8) || "d";
@@ -9455,10 +9708,23 @@ function labelPrompt() {
 /** A prompt as a Telegram message you can copy (one tap on the block copies it). */
 var promptMessage = (p, what = "a meal photo") => `📋 <b>Copy this, paste it with ${what} into any AI app (ChatGPT, Gemini, Claude), then paste the AI's whole reply here.</b>\n\n<pre>${esc$5(p)}</pre>`;
 var COULD_NOT = (why) => `⚠️ I couldn't read that reply (${esc$5(why)}).\nSend /food for the prompt, ask the AI again, and paste its whole reply here.`;
+/** A photo preview's buttons, with "➕ Add another photo" above Save / Cancel. */
+function photoKeyboard(d) {
+	const rows = photoDraftKeyboard(d).inline_keyboard.slice();
+	const end = rows.pop();
+	return { inline_keyboard: [
+		...rows,
+		[{
+			text: "➕ Add another photo",
+			callback_data: `fd|a|${d.id}`
+		}],
+		...end ? [end] : []
+	] };
+}
 /** The preview of a draft (a photo's or a pasted reply's). */
 var previewOf = (d) => d.photo ? {
 	reply: photoDraftText(d),
-	keyboard: photoDraftKeyboard(d)
+	keyboard: photoKeyboard(d)
 } : {
 	reply: draftText$1(d),
 	keyboard: draftKeyboard(d)
@@ -9618,35 +9884,41 @@ var MAX_B64 = 15e5;
 function photoWanted(message) {
 	return Array.isArray(message?.photo) && message.photo.length > 0 && photoIsMeal(String(message?.caption ?? ""));
 }
-/**
-* A meal photo from the owner's chat (checked before): download one size up to
-* 1280 px, read it with the same vision call as the website (its 50-a-day
-* count and AI budget), check the answer with core/foodVision.ts, and reply
-* with the preview. The photo lives only in this function's memory: it is
-* never written to the database or a log.
-*/
-async function foodPhotoMessage(o) {
-	const now = o.now ?? /* @__PURE__ */ new Date();
-	const statusId = (await tg(o.token, "sendMessage", {
-		chat_id: o.chat,
-		text: "📸 Reading the photo…"
-	}).catch(() => null))?.result?.message_id;
-	const say = async (text, keyboard) => {
-		const body = {
-			chat_id: o.chat,
-			text,
-			parse_mode: "HTML",
-			...keyboard ? { reply_markup: keyboard } : {}
-		};
-		if (!(statusId ? await tg(o.token, "editMessageText", {
-			...body,
-			message_id: statusId
-		}).catch(() => null) : null)?.ok) await tg(o.token, "sendMessage", body).catch(() => null);
-		return text;
+/** Sends a message, or edits `msgId` into it; returns the message id. */
+async function sayIn(token, chat, msgId, text, keyboard) {
+	const body = {
+		chat_id: chat,
+		text,
+		parse_mode: "HTML",
+		...keyboard ? { reply_markup: keyboard } : {}
 	};
-	const size = pickPhotoSize(o.photos);
-	let file = size ? await downloadFile(o.token, size.file_id, "photo") : null;
-	if (!file || file.data.length > MAX_B64) return say("⚠️ I couldn't open that photo. Try again, or send /food for the copy prompt.");
+	if ((msgId ? await tg(token, "editMessageText", {
+		...body,
+		message_id: msgId
+	}).catch(() => null) : null)?.ok) return msgId ?? null;
+	return (await tg(token, "sendMessage", body).catch(() => null))?.result?.message_id ?? null;
+}
+/**
+* Reads the photos of ONE meal (Telegram file ids, 1–6) with ONE vision call
+* (the website's: its 50-a-day count and AI budget), checks the answer with
+* core/foodVision.ts and turns `statusId` into the preview. The photos live
+* only in this function's memory; only their file ids are kept (10 minutes,
+* server-only) so "Add another photo" can read them again with a new one.
+*/
+async function readMealPhotos(o) {
+	const now = o.now ?? /* @__PURE__ */ new Date();
+	const ids = o.fileIds.slice(0, 6);
+	const say = async (text, keyboard) => (await sayIn(o.token, o.chat, o.statusId, text, keyboard), text);
+	const many = ids.length > 1;
+	let files = [];
+	for (const id of ids) {
+		const f = await downloadFile(o.token, id, "photo");
+		if (!f || f.data.length > MAX_B64) return say(many ? "⚠️ I couldn't open one of the photos. Try again, or send /food for the copy prompt." : "⚠️ I couldn't open that photo. Try again, or send /food for the copy prompt.");
+		files.push({
+			mime: f.mime,
+			data: f.data
+		});
+	}
 	const ctx = await o.mirror.read((db) => {
 		const saved = savedRefs(readFoodSaved(db));
 		const t = foodDayTotals(db, now);
@@ -9668,31 +9940,116 @@ async function foodPhotoMessage(o) {
 	let ans;
 	try {
 		ans = await o.foodPhoto({
-			image: {
-				mime: file.mime,
-				data: file.data
-			},
+			images: files,
 			note: o.caption,
 			saved: ctx.saved,
 			today: ctx.today,
 			targets: ctx.targets
-		});
+		}, o.counted ? { counted: o.counted } : void 0);
 	} catch {
 		ans = {
 			ok: false,
 			error: "The photo couldn't be read right now. Try again in a moment."
 		};
 	}
-	file = null;
+	files = null;
 	if (!ans.ok) return say(`⚠️ ${esc$5(String(ans.error || "The photo couldn't be read."))}\nOr send /food for the copy prompt.`);
-	const check = validateVision(ans.result, ctx.saved);
+	const check = validateVision(ans.result, ctx.saved, ids.length);
 	if (!check.ok) return say(`⚠️ ${esc$5(check.error)}`);
-	const d = photoDraft(shortId(), now.getTime(), check.result.items, check.result.message);
+	const msg = many ? `${ids.length} photos read together. ${check.result.message}`.trim().slice(0, 200) : check.result.message;
+	const d = photoDraft(shortId(), now.getTime(), check.result.items, msg);
 	await o.mirror.write((db) => writeFoodBen(db, {
 		...readFoodBen(db),
 		draft: d
 	}));
-	return say(photoDraftText(d), photoDraftKeyboard(d));
+	if (o.kv) await keepDraftPhotos(o.kv, o.chat, d.id, ids, o.caption, now.getTime()).catch(() => null);
+	return say(photoDraftText(d), photoKeyboard(d));
+}
+/** The "send the next photo" message while adding photos to a meal. */
+var addText = (n, before) => n ? `📸 Got ${n === 1 ? "one more photo" : `${n} more photos`} (${before + n} for this meal). Send another within a minute, or tap Done.` : "📸 Send the next photo of this meal now (within a minute). Then tap Done, and I read all of them together.";
+var addKeyboard = (draft) => ({ inline_keyboard: [[{
+	text: "✅ Done, read them",
+	callback_data: `fd|r|${draft}`
+}], [{
+	text: "✗ Stop adding",
+	callback_data: `fd|q|${draft}`
+}]] });
+/**
+* A meal photo from the owner's chat (checked before). With `kv` (the server):
+* a photo sent in an open "Add another photo" window joins that meal; a part
+* of an album waits for its other parts (the first one reads them all in ONE
+* vision call, the rest answer nothing). Otherwise: download one size up to
+* 1280 px, read it, and reply with the preview. The photo lives only in
+* memory: never in the database or a log.
+*/
+async function foodPhotoMessage(o) {
+	const now = o.now ?? /* @__PURE__ */ new Date();
+	const size = pickPhotoSize(o.photos);
+	if (!size) {
+		const text = "⚠️ I couldn't open that photo. Try again, or send /food for the copy prompt.";
+		await sayIn(o.token, o.chat, null, text);
+		return text;
+	}
+	const part = {
+		f: size.file_id,
+		c: o.caption,
+		m: Number(o.messageId) || now.getTime(),
+		at: now.getTime()
+	};
+	const kv = o.kv ?? null;
+	if (kv) {
+		const st = await openAdd(kv, o.chat, now.getTime()).catch(() => null);
+		if (st) {
+			const n = await addPart(kv, o.chat, st, part, now.getTime());
+			const text = st.f.length + n > 6 ? `📸 That makes more than 6 photos: tap Done to read the first 6.` : addText(n, st.f.length);
+			await sayIn(o.token, o.chat, st.msg, text, addKeyboard(st.d));
+			return text;
+		}
+		if (o.groupId) {
+			const role = await joinAlbum(kv, o.chat, o.groupId, part, now.getTime());
+			if (role === "wait") return "";
+			if (role === "lead") {
+				const status = await tg(o.token, "sendMessage", {
+					chat_id: o.chat,
+					text: "📸 Reading the photos…"
+				}).catch(() => null);
+				const parts = await collectAlbum(kv, o.chat, o.groupId, () => Date.now());
+				const list = parts.length ? parts : [part];
+				const caption = [...new Set(list.map((p) => p.c.trim()).filter(Boolean))].join(" · ").slice(0, 300);
+				const out = await readMealPhotos({
+					token: o.token,
+					chat: o.chat,
+					fileIds: list.slice(0, 6).map((p) => p.f),
+					caption,
+					mirror: o.mirror,
+					foodPhoto: o.foodPhoto,
+					kv,
+					statusId: status?.result?.message_id,
+					now
+				});
+				if (list.length > 6) await tg(o.token, "sendMessage", {
+					chat_id: o.chat,
+					text: `Only the first 6 photos were read.`
+				}).catch(() => null);
+				return out;
+			}
+		}
+	}
+	const status = await tg(o.token, "sendMessage", {
+		chat_id: o.chat,
+		text: "📸 Reading the photo…"
+	}).catch(() => null);
+	return readMealPhotos({
+		token: o.token,
+		chat: o.chat,
+		fileIds: [size.file_id],
+		caption: o.caption,
+		mirror: o.mirror,
+		foodPhoto: o.foodPhoto,
+		kv,
+		statusId: status?.result?.message_id,
+		now
+	});
 }
 /**
 * "your evening and anytime meals cover it (~1,250 kcal)": the standard day's
@@ -9859,6 +10216,8 @@ function foodSundayNow(db, now = /* @__PURE__ */ new Date()) {
 * food nudges for 7 days · fd|l|<key>|<0 or 1> Log it (the usual meal or its swap) ·
 * fd|z|<key> 30 min later · fd|k|<key> Skip.
 * Saved meals: fd|g|<meal id or "day"> log it now · fd|n|x No.
+* More photos for a photo preview: fd|a|<draft> Add another photo (60 s) · fd|r|<draft> Done,
+* read them (one vision call with every photo) · fd|q|<draft> Stop adding.
 */
 var FOOD_CALLBACK = {
 	prefixes: ["fd"],
@@ -9868,7 +10227,7 @@ var FOOD_CALLBACK = {
 		const mirror = c.mirror;
 		const { data, chat, key, update, cq, answer, edit } = t;
 		if (!await markSeen(key)) return null;
-		const m = /^fd\|([sx+\-eupymlzkgnvwWb])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data);
+		const m = /^fd\|([sx+\-eupymlzkgnvwWbarq])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data);
 		if (!m) return null;
 		const [, op, ref, idx, idx2] = m;
 		const now = /* @__PURE__ */ new Date();
@@ -10041,6 +10400,65 @@ var FOOD_CALLBACK = {
 			}]] });
 			return text;
 		}
+		if (op === "a" || op === "r" || op === "q") {
+			const kv = c.photoKv;
+			const live = await mirror.write((db) => liveDraft(readFoodBen(db), now.getTime()));
+			if (!kv || !c.foodPhoto || !live?.photo || live.id !== ref) {
+				await answer("That preview is closed. Send all the photos again.");
+				return null;
+			}
+			if (op === "q") {
+				await dropChatPhotos(kv, chat).catch(() => null);
+				await answer("Stopped");
+				await edit("Stopped adding photos. The preview above stays as it was.");
+				return "stop";
+			}
+			if (op === "a") {
+				const st = await startAdd(kv, chat, ref, now.getTime());
+				if (!st) {
+					await answer("Those photos are too old to add to. Send all the photos again.");
+					return null;
+				}
+				if (st.f.length >= 6) {
+					await answer(`6 photos is the most for one meal`);
+					return null;
+				}
+				await answer("Send the next photo");
+				const msgId = (await send(addText(0, st.f.length), addKeyboard(ref)))?.result?.message_id;
+				if (msgId) await setAddMsg(kv, chat, msgId).catch(() => null);
+				return "add";
+			}
+			const peek = await addedCount(kv, chat, ref);
+			if (!peek.st) {
+				await answer("Nothing to read. Tap “Add another photo” first.");
+				return null;
+			}
+			if (!peek.n) {
+				await answer("No new photo yet. Send one, then tap Done.");
+				return null;
+			}
+			const got = await takeAdd(kv, chat, ref);
+			if (!got || !got.parts.length) {
+				await answer("Already read");
+				return null;
+			}
+			await answer("Reading the photos…");
+			const fileIds = [...got.st.f, ...got.parts.map((p) => p.f)].slice(0, 6);
+			const caption = [got.st.c, ...got.parts.map((p) => p.c)].map((x) => x.trim()).filter(Boolean).join(" · ").slice(0, 300);
+			await edit(`📸 Reading ${fileIds.length} photos…`);
+			return readMealPhotos({
+				token: update.__token,
+				chat,
+				fileIds,
+				caption,
+				mirror: c.mirror,
+				foodPhoto: c.foodPhoto,
+				kv,
+				counted: Math.min(got.st.f.length, fileIds.length),
+				statusId: cq.message?.message_id,
+				now
+			});
+		}
 		const res = await mirror.write((db) => {
 			const fb = readFoodBen(db);
 			const d = liveDraft(fb, now.getTime());
@@ -10144,6 +10562,7 @@ var FOOD_CALLBACK = {
 			await clearButtons();
 			return null;
 		}
+		if ((res.kind === "cancel" || res.kind === "saved") && c.photoKv) await dropChatPhotos(c.photoKv, chat).catch(() => null);
 		if (res.kind === "cancel") {
 			await answer("Cancelled");
 			await edit("✗ Cancelled. Nothing saved.");
@@ -58048,7 +58467,7 @@ function factsOf(prompt) {
 	const i = prompt.indexOf("== Victor right now ==");
 	return (i >= 0 ? prompt.slice(i) : prompt.slice(Math.max(0, prompt.indexOf("<<<LIVE>>>")))).split("\n").filter((l) => !/^\s*(Ben|Coach \(\w+\)):/.test(l)).join("\n");
 }
-function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist: todoistIn = null, ai = null, calendar: calendarIn = null, recall = null, tools = null, timing = {}, web = null, foodPhoto = null }) {
+function createWebBots({ mirror, services, defaults, onExpense, server = false, todoist: todoistIn = null, ai = null, calendar: calendarIn = null, recall = null, tools = null, timing = {}, web = null, foodPhoto = null, photoKv = null }) {
 	const BUDGET = timing.budgetMs ?? 44e3;
 	const fresh = /* @__PURE__ */ new Map();
 	const FRESH_MS = 45e3;
@@ -58383,7 +58802,9 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		runMoneyIn: (db, text, key) => {
 			currentDb = db;
 			return runMoney(services.services(db), text, key);
-		}
+		},
+		foodPhoto,
+		photoKv
 	};
 	async function handleButton(botId, update, cfg) {
 		const cq = update.callback_query;
@@ -61068,9 +61489,12 @@ His note: ${note}`, { json: true }));
 				photos: update.message.photo,
 				caption: text,
 				mirror,
-				foodPhoto
+				foodPhoto,
+				kv: photoKv,
+				groupId: update.message.media_group_id ? String(update.message.media_group_id) : null,
+				messageId: update.message.message_id
 			});
-			addLog(`[photo] ${text}`.trim().slice(0, 80), chat, true, reply);
+			if (reply) addLog(`[photo] ${text}`.trim().slice(0, 80), chat, true, reply);
 			return reply;
 		}
 		if (text && chat && await mirror.read((db) => foodWants(db, text)).catch(() => false)) {
@@ -66855,7 +67279,8 @@ async function botsFor(env) {
 			recall,
 			tools: mergeTools(extToolsFor(env), flowToolsFor(env, mirror)),
 			web,
-			foodPhoto: env.foodPhoto ? (body) => (liveFoodPhoto ?? env.foodPhoto)(body) : null
+			foodPhoto: env.foodPhoto ? (body, opts) => (liveFoodPhoto ?? env.foodPhoto)(body, opts) : null,
+			photoKv: env.foodPhoto ? photoKvFor(env) : null
 		}),
 		mirror,
 		services,
@@ -66865,6 +67290,13 @@ async function botsFor(env) {
 	warmAt = Date.now();
 	return warm;
 }
+/**
+* Short server-only rows for meal photos that belong together (an album sent as
+* separate updates, or "Add another photo"): one Turso transaction per call, so
+* parts landing in different function calls at once still meet. Telegram file
+* ids only, never the picture (bots/foodAlbum.ts).
+*/
+var photoKvFor = (env) => (stmts) => new TursoHttp(env.tursoUrl, env.tursoToken).writeAtomic(stmts);
 /** Rows in a Turso pipeline answer (reads and batch steps). */
 function rowsIn(json) {
 	let n = 0;
