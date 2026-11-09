@@ -4,13 +4,14 @@
 // points. Data: life.coach.bodyComp (web/bodyCompBridge.ts → main/bodyComp.ts).
 import { useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
+import { calendarDay } from '@core/dates'
 import { life } from '../bridge'
 import { useToast } from '../ui'
 import './body-log.css'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 /** A Date as the value of an <input type="datetime-local"> (local time). */
-export const localInput = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+export const localInput = (d: Date) => `${calendarDay(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 
 const MORE: { key: 'body_fat_pct' | 'muscle_kg' | 'water_pct' | 'visceral_fat' | 'waist_cm'; label: string; unit: string; step: string; hint: string }[] = [
   { key: 'body_fat_pct', label: 'Body fat', unit: '%', step: '0.1', hint: 'e.g. 15.2' },

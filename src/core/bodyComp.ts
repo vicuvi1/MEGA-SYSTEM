@@ -15,7 +15,7 @@
 // - A week (Monday–Sunday) needs 3 weigh-ins for its average to count.
 // - Body fat % and muscle kg from a home scale are estimates: shown smoothed
 //   (7-day average) and labeled "estimate, watch the trend".
-import { addDays, dayKey, daysBetween } from './dates'
+import { addDays, calendarDay, dayKey, daysBetween } from './dates'
 
 export type CompSource = 'manual' | 'screenshot' | 'sync'
 export const COMP_SOURCES: CompSource[] = ['manual', 'screenshot', 'sync']
@@ -399,7 +399,7 @@ export function waistReminder(now: Date, lastWaistDay: string | null): { id: str
   at.setHours(WAIST_HOUR, 0, 0, 0)
   at.setDate(at.getDate() + ((7 - at.getDay()) % 7))
   if (at.getTime() <= now.getTime()) at.setDate(at.getDate() + 7)
-  const sunday = () => `${at.getFullYear()}-${String(at.getMonth() + 1).padStart(2, '0')}-${String(at.getDate()).padStart(2, '0')}`
+  const sunday = () => calendarDay(at)
   if (lastWaistDay && lastWaistDay >= mondayOf(sunday())) at.setDate(at.getDate() + 7)
   return { id: `waist:${sunday()}`, at: at.toISOString(), day: sunday() }
 }
