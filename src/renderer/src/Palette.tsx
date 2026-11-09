@@ -34,7 +34,7 @@ export function buildCommands(s: Sources): Command[] {
   const out: Command[] = []
   for (const m of [...MODULES, ...SYSTEM_PAGES]) {
     if (m.phase > 0) continue
-    out.push({ id: `go:${m.id}`, label: m.label, hint: m.blurb, group: 'Go to', icon: m.icon, color: m.color, run: () => s.go(m.id) })
+    out.push({ id: `go:${m.id}`, label: m.label, hint: m.more ?? m.blurb, group: 'Go to', icon: m.icon, color: m.color, run: () => s.go(m.id) })
   }
   // A page's own tab, straight away ("water" opens Today on Body).
   for (const l of TAB_LINKS) {

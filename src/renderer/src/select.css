@@ -64,7 +64,7 @@ select option:checked { background-color: color-mix(in srgb, var(--lime, #c8f135
 .ui-select-opt.sel { font-weight: 650; }
 .ui-select-opt.sel svg { color: var(--lime-text, var(--lime)); flex: none; }
 .ui-select-opt.off { color: var(--muted); cursor: default; }
-.ui-select-group { padding: 8px 10px 4px; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.ui-select-group { padding: 8px 10px 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 :root[data-theme='light'] .ui-select-list { background: #ffffff; color: #151922; border-color: #d4d9e2; box-shadow: 0 18px 50px rgb(20 25 34 / 0.18); }
 :root[data-theme='light'] .ui-select-opt { color: #151922; }
 :root[data-theme='light'] .ui-select-opt.active { background: #eef1f6; }

@@ -36,6 +36,35 @@ bash scripts/ship.sh <message-file> # typecheck, tests, bundle, commit, push
 
 - **"Backup missed"** in the top bar means this device's attempt at today's cloud backup failed (`life_snapshot_error`); it clears itself once today's backup is in the cloud (the server makes one every day too). Hover says why; a click opens Settings → Backups & data.
 
+### Design system and app shell (2026-11-09)
+
+The goal is one calm look on every page: clear titles, plenty of space, one accent and the same cards and tabs everywhere.
+
+- **Tokens live in one place**, the `:root` block at the top of `design.css`. Don't start a second set of tokens.
+  - Type scale: `--t-xs` 12 px (small labels and counts only), `--t-sm` 13 px (all secondary text, never smaller), `--t-md` 15 px (body text), `--t-lg` 17, `--t-xl` 22 (page title), `--t-2xl` 30 (big numbers), plus `--t-h1/h2/h3`.
+  - Spacing: `--s-1…--s-8` (4 px steps).
+  - Shell: `--topbar-h` (64 px desktop, 56 phone), `--nav-h` (the phone's bottom nav), `--safe-b` (the safe area), `--content-pt` (the page's top padding), `--card-radius`.
+  - Numbers use tabular figures (`.num`, coins, counts, `.big`).
+  - The app stylesheets (not the island, HUD or Body files) no longer set any text under 12 px; secondary text is 13 px.
+- **App shell rules** are in `shellPolish.css`. It loads after the page styles and before `motion.css`. A stylesheet a page imports itself loads later, so a rule that must beat it goes in that file. `pageTabs.css` and `quick/quick.css` are examples.
+- **Sidebar** (`Sidebar.tsx`, with the pure layout in `navLayout.ts` and tested):
+  - Order: Today on top, then **Pinned**, **Plan** (Calendar, Tasks, Goals, Season), **Body** (Sport Track, Sleep), **Money** (Money, Rewards) and **Me** (Coach, Insights, Discipline).
+  - **More** (folded) holds Career, Notebook, Photo Locker, Custom Center and Music. It stays open while you are on one of its pages.
+  - Hover a page and press the pin to put it under Today (6 at most). Drag pinned pages, or use Alt+↑/↓, to reorder them.
+  - Pins and the More fold are kept on this device (`ls.nav`).
+  - Icons are neutral; only the page you are on uses the accent.
+  - Alt+1…9 follow the order you see.
+  - Pages hidden in Settings stay hidden.
+  - The phone's More sheet uses the same order.
+- **Top bar:** it is the same height on every page, including pages that hold an app, and the page title and its one short line (`blurb` in `modules.ts`) are always on the left. Ctrl+K still finds a page by its longer description (`more`).
+  - Visible: search, Log, sync, bell, Settings and your points.
+  - The cloud backup lives in the sync button: its hover says when the backup was saved, and a dot plus a "Backup missed" chip show only when today's copy failed. The green "Backed up" chip is gone.
+- **Phone:** toasts (the app's own and quick add's Undo toasts) sit 16 px above the bottom nav and its ⚡ button, inside the safe area. The "new version, reload" bar is a slim bar at the very top that pushes the app down, so it never covers content or the nav.
+- **Sticky page tabs** stick at the very top of the scrolling page (`top: -var(--content-pt)`), flush under the top bar, so no strip of the page shows above them. While stuck they get a near-solid backdrop and a hairline.
+- **Smoke steps:**
+  - "Shell: sidebar sections, pins and More; one top bar height".
+  - "Phone: toasts and the new-version bar clear the bottom nav; sticky tabs under the title" (390 px).
+
 ### Motion & sound budget
 
 

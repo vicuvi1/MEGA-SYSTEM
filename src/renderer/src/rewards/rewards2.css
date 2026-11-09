@@ -57,7 +57,7 @@
 .rx-card.locked .rx-cover { filter: saturate(0.55) brightness(0.82); }
 .rx-card.locked .rx-lock { right: auto; left: 50%; top: 50%; width: 48px; height: 48px; margin: -24px 0 0 -24px; font-size: 22px; background: rgb(10 12 18 / 0.55); border: 1px solid rgb(255 255 255 / 0.18); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .rx-lockbar { display: grid; gap: 6px; }
-.rx-lockbar .rx-why { font-size: 12.5px; line-height: 1.35; }
+.rx-lockbar .rx-why { font-size: 13px; line-height: 1.35; }
 .rx-card.locked .rx-togo { border-style: dashed; }
 /* Unlocked just now: the lock shakes, pops off, and the card glows once. */
 .rx-card.unlocking .rx-lock { animation: rx-unlock 1.1s var(--ease-out) both; }
@@ -84,12 +84,12 @@
 .rx-goalrow-main { display: grid; gap: 4px; min-width: 0; }
 .rx-goalrow-head { display: flex; align-items: baseline; gap: 10px; }
 .rx-goalrow-head b { font: 700 15px/1.25 var(--display, inherit); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.rx-goalrow-head span { margin-left: auto; font-size: 12.5px; color: var(--muted); white-space: nowrap; }
-.rx-goalrow-foot { font-size: 12.5px; color: var(--muted); }
+.rx-goalrow-head span { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.rx-goalrow-foot { font-size: 13px; color: var(--muted); }
 .rx-msbar { position: relative; height: 22px; margin: 0 10px 0 0; }
 .rx-msbar .pbar { position: absolute; left: 0; right: 0; top: 8px; height: 6px; border-radius: 999px; background: rgb(var(--ink) / 0.08); overflow: hidden; }
 .rx-msbar .pbar > i { border-radius: 999px; background: linear-gradient(90deg, var(--accent), var(--rx-gold)); transition-duration: 0.8s; }
-.rx-ms { position: absolute; top: 0; width: 22px; height: 22px; margin-left: -11px; display: grid; place-items: center; border-radius: 50%; font-size: 11px; font-weight: 800; color: var(--muted); background: var(--surface-2); border: 1.5px solid var(--border-strong); }
+.rx-ms { position: absolute; top: 0; width: 22px; height: 22px; margin-left: -11px; display: grid; place-items: center; border-radius: 50%; font-size: 12px; font-weight: 800; color: var(--muted); background: var(--surface-2); border: 1.5px solid var(--border-strong); }
 .rx-ms.on { color: #2a1d00; background: var(--rx-gold); border-color: transparent; animation: rx-pop 0.45s var(--ease-spring) both; }
 
 /* ---------- Suggested for you ---------- */
@@ -100,13 +100,13 @@
 .rx-sug-top .rx-emoji { font-size: 44px; }
 .rx-sug-top .rx-tag { position: absolute; left: 10px; top: 10px; z-index: 1; }
 .rx-sug.band-big .rx-sug-top .rx-tag { color: #2a1d00; background: var(--rx-gold); border-color: transparent; }
-.rx-sug-x { position: absolute; right: 8px; top: 8px; z-index: 1; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 0.16); background: rgb(10 12 18 / 0.45); color: #fff; font-size: 12px; cursor: pointer; opacity: 0.75; transition: opacity 0.15s, transform 0.15s var(--ease-out); }
+.rx-sug-x { position: absolute; right: 8px; top: 8px; z-index: 1; width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgb(255 255 255 / 0.16); background: rgb(10 12 18 / 0.45); color: #fff; font-size: 13px; cursor: pointer; opacity: 0.75; transition: opacity 0.15s, transform 0.15s var(--ease-out); }
 .rx-sug-x:hover { opacity: 1; transform: scale(1.08); }
 .rx-sug-body { flex: 1; display: flex; flex-direction: column; gap: 7px; padding: 10px 12px 12px; min-width: 0; }
 .rx-sug-body .rx-title { font-size: 14.5px; }
 .rx-sug-body .rx-price { align-self: flex-start; }
-.rx-sug-why { margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
-.rx-sug-extra { margin: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rx-sug-why { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
+.rx-sug-extra { margin: 0; font-size: 13px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rx-sug-add { margin-top: auto; width: 100%; }
 
 /* ---------- Where my points came from ---------- */
@@ -117,7 +117,7 @@
 .rx-from-ico { font-size: 15px; text-align: center; }
 .rx-from-name { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rx-from-list b { text-align: right; font-weight: 700; }
-.rx-from-list small { text-align: right; color: var(--muted); font-size: 12px; }
+.rx-from-list small { text-align: right; color: var(--muted); font-size: 13px; }
 
 /* ---------- Earn tab ---------- */
 .rx-earn { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
@@ -135,7 +135,7 @@
 .rx-coupon { position: relative; display: grid; gap: 1px; padding: 8px 14px 8px 18px; border-radius: 12px; border: 1.5px dashed color-mix(in srgb, var(--rx-gold) 70%, transparent); background: color-mix(in srgb, var(--rx-gold) 9%, var(--rx-glass-2)); font-size: 13px; }
 .rx-coupon::before { content: ''; position: absolute; left: -7px; top: 50%; width: 12px; height: 12px; margin-top: -6px; border-radius: 50%; background: var(--surface); border-right: 1.5px dashed color-mix(in srgb, var(--rx-gold) 70%, transparent); }
 .rx-coupon b { font-weight: 700; }
-.rx-coupon small { color: var(--muted); font-size: 11.5px; }
+.rx-coupon small { color: var(--muted); font-size: 13px; }
 
 /* The reveal: rays turn, the box shakes and pops, the prize springs in. */
 .rx-reveal-wrap { z-index: 320; }
@@ -174,7 +174,7 @@
 
 /* ---------- Compact on a laptop: the page's top fits in a third of the screen ---------- */
 .rx-hero { padding: 14px 18px; gap: 16px; }
-.rx-kicker { font-size: 11px; }
+.rx-kicker { font-size: 12px; }
 .rx-balance { font-size: 42px; }
 .rx-balance .rx-coin { font-size: 32px; }
 .rx-next { padding: 10px 12px; }
@@ -186,7 +186,7 @@
 .rx-surprise { padding: 8px 12px; }
 .rx-surprise-label { display: grid; gap: 1px; margin-right: 6px; }
 .rx-surprise-label b { font: 700 14.5px/1.2 var(--display, inherit); }
-.rx-surprise-label small { font-size: 11.5px; color: var(--muted); }
+.rx-surprise-label small { font-size: 13px; color: var(--muted); }
 .rx-surprise .rx-chest { width: auto; grid-auto-flow: column; align-items: center; gap: 6px; padding: 6px 12px 6px 8px; border-radius: 14px; }
 .rx-surprise .rx-chest-ico { font-size: 24px; }
 .rx-foryou, .rx-unlock, .rx-all { gap: 14px; }

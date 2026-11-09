@@ -45,7 +45,7 @@
 .thb.slim .thb-face { width: 32px; height: 32px; font-size: 18px; }
 .thb-line { flex: 1 1 auto; min-width: 0; display: flex; align-items: baseline; gap: 4px 14px; overflow: hidden; white-space: nowrap; font-size: 13px; color: var(--muted); }
 .thb.slim .thb-now { flex: 0 0 auto; max-width: 58%; display: inline; min-width: 0; padding: 0 0 0 8px; border-left-width: 2px; overflow: hidden; text-overflow: ellipsis; }
-.thb.slim .thb-now small { font-size: 12px; }
+.thb.slim .thb-now small { font-size: 13px; }
 .thb.slim .thb-now b { font-size: 13.5px; color: var(--text); }
 .thb-next { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .thb-next b { font-weight: 650; color: var(--text); }
@@ -55,13 +55,13 @@
 .thb.slim .thb-act .btn { height: 30px; }
 .thb-reward.mini { flex: 0 1 190px; min-width: 120px; padding: 4px 10px; border-radius: 10px; }
 .thb-reward.mini .thb-goal i { height: 4px; }
-.thb-reward.mini .thb-goal small { font-size: 11px; }
+.thb-reward.mini .thb-goal small { font-size: 12px; }
 .thb-menu-wrap { position: relative; flex: none; }
 .thb-more { width: 30px; height: 30px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); font: inherit; font-size: 16px; line-height: 1; cursor: pointer; }
 .thb-more:hover, .thb-more[aria-expanded='true'] { background: rgb(var(--ink) / 0.06); color: var(--text); }
 .thb-menu { position: absolute; z-index: 60; top: calc(100% + 6px); right: 0; min-width: 220px; display: grid; gap: 1px; padding: 6px; border-radius: 14px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--shadow-2); }
 .thb-menu button { display: grid; gap: 1px; padding: 8px 10px; border: 0; border-radius: 9px; background: none; color: var(--text); font: inherit; font-size: var(--t-sm, 12.5px); font-weight: 550; text-align: left; cursor: pointer; }
-.thb-menu button small { font-size: 11px; font-weight: 500; color: var(--faint); }
+.thb-menu button small { font-size: 12px; font-weight: 500; color: var(--faint); }
 .thb-menu button:hover, .thb-menu button:focus-visible { background: var(--surface-2); outline: none; }
 @container nowtop (max-width: 760px) { .thb-reward.mini { display: none; } }
 @container nowtop (max-width: 560px) { .thb.slim .thb-plan, .thb.slim .thb-next { display: none; } }

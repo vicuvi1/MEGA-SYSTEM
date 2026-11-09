@@ -6,7 +6,7 @@
 .sh-goal-main { flex: 1; min-width: 0; display: grid; gap: 6px; }
 .sh-goal-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; font-size: 14px; }
 .sh-goal-head .num { color: var(--muted); font-size: 13px; }
-.sh-goal-eta, .sh-budget-line { color: var(--muted); font-size: 12.5px; }
+.sh-goal-eta, .sh-budget-line { color: var(--muted); font-size: 13px; }
 .sh-goal.empty .sh-goal-main small { color: var(--muted); }
 .sh-bar { position: relative; height: 14px; border-radius: 999px; background: rgb(var(--ink) / 0.09); }
 .sh-bar.thin { height: 8px; }
@@ -17,7 +17,7 @@
 .sh-combo-x { font: 800 26px/1 var(--display, inherit); color: var(--muted); min-width: 2ch; }
 .sh-combo.on .sh-combo-x { color: #ff8a3d; text-shadow: 0 0 18px rgb(255 138 61 / 0.45); }
 .sh-combo-text { display: grid; gap: 1px; font-size: 14px; }
-.sh-combo-text small, .sh-budget-head .num { color: var(--muted); font-size: 12.5px; font-weight: 500; }
+.sh-combo-text small, .sh-budget-head .num { color: var(--muted); font-size: 13px; font-weight: 500; }
 .sh-budget { display: grid; gap: 6px; padding: 10px 14px; border-radius: 18px; border: 1px solid var(--border); background: var(--rx-glass); }
 .sh-budget-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 14px; flex-wrap: wrap; }
 .sh-budget.close .sh-bar > i { background: linear-gradient(90deg, #f5a524, #ffcf5c); }
@@ -29,7 +29,7 @@
 .sh-feature-side p { margin: 0; color: var(--muted); font-size: 13.5px; }
 
 /* Rarity: a coloured edge and a small label */
-.sh-rar { display: inline-block; padding: 0 8px; line-height: 22px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.03em; background: rgb(0 0 0 / 0.38); color: #fff; }
+.sh-rar { display: inline-block; padding: 0 8px; line-height: 22px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.03em; background: rgb(0 0 0 / 0.38); color: #fff; }
 .sh-rar.rar-rare { background: #2f6fe0; }
 .sh-rar.rar-epic { background: #8b4fe8; }
 .sh-rar.rar-legendary { background: linear-gradient(90deg, #f59e0b, #ef4444); color: #fff; }
@@ -39,14 +39,14 @@
 .rx-card .sh-rar { position: absolute; left: 10px; bottom: 8px; z-index: 2; }
 
 /* A locked item: a ring with "340 / 600" */
-.sh-ring { position: absolute; right: 10px; bottom: 8px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 2px; border-radius: 999px; background: rgb(0 0 0 / 0.52); color: #fff; font-size: 11px; font-weight: 700; }
+.sh-ring { position: absolute; right: 10px; bottom: 8px; z-index: 2; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 2px; border-radius: 999px; background: rgb(0 0 0 / 0.52); color: #fff; font-size: 12px; font-weight: 700; }
 .sh-ring svg { width: 24px; height: 24px; }
 .sh-ring circle { fill: none; stroke-width: 4; }
 .sh-ring .bg { stroke: rgb(255 255 255 / 0.25); }
 .sh-ring .fg { stroke: var(--rx-gold); stroke-linecap: round; }
 .rx-card.locked .rx-cover, .rx-card:not(.ready) .rx-cover .rx-emoji { filter: saturate(0.75); }
 
-.sh-shelf .rx-sub { color: var(--muted); font-size: 12.5px; }
+.sh-shelf .rx-sub { color: var(--muted); font-size: 13px; }
 .sh-shelf-head { display: flex; align-items: baseline; gap: 10px; width: 100%; min-width: 0; padding: 4px 2px; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .sh-shelf-head .rx-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .sh-chev { color: var(--muted); width: 1em; flex: none; }
@@ -86,7 +86,7 @@
 
 /* Today's pick: one highlighted card on its shelf */
 .rx-card.pick { outline: 2px solid var(--rx-gold); outline-offset: 2px; }
-.sh-picktag { position: absolute; left: 10px; top: 10px; z-index: 3; padding: 0 9px; line-height: 22px; border-radius: 999px; font-size: 11px; font-weight: 800; background: var(--rx-gold); color: var(--rx-gold-ink); }
+.sh-picktag { position: absolute; left: 10px; top: 10px; z-index: 3; padding: 0 9px; line-height: 22px; border-radius: 999px; font-size: 12px; font-weight: 800; background: var(--rx-gold); color: var(--rx-gold-ink); }
 .rx-card.pick .rx-badges { top: 38px; }
 
 /* Folded shelves are chips in one wrapping row; an open shelf takes the full row */
@@ -96,7 +96,7 @@
 .sh-shelf.shut .sh-shelf-head { width: auto; padding: 0 14px; height: 36px; align-items: center; border: 1px solid var(--border); border-radius: 999px; background: var(--rx-glass); }
 .sh-shelf.shut .sh-shelf-head h3 { font-size: 14px; font-weight: 650; }
 .sh-shelf.shut .sh-shelf-head .rx-sub { display: none; }
-.sh-count { font-size: 12px; font-weight: 700; color: var(--muted); }
+.sh-count { font-size: 13px; font-weight: 700; color: var(--muted); }
 
 /* Compact top strip (the page stays short) */
 .sh-top { gap: 8px; }
@@ -114,7 +114,7 @@
 .sh-moneyfix ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .sh-moneyfix li { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .sh-moneyfix-what { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sh-moneyfix-tag { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: var(--surface-2, var(--border)); color: var(--muted); }
+.sh-moneyfix-tag { font-size: 12px; padding: 2px 6px; border-radius: 999px; background: var(--surface-2, var(--border)); color: var(--muted); }
 .sh-moneyfix > .rx-btn { justify-self: start; }
 
 /* Shorter pages: folded long lists, tighter rhythm, smaller empty states */

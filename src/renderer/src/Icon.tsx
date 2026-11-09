@@ -41,7 +41,10 @@ const PATHS = {
   eye: 'M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z',
   // LF1: the Season page, a gate with the sun behind it.
   gate: 'M3 6c6-1.2 12-1.2 18 0M5 9.5h14M7 6.2V21M17 6.2V21M12 9.5v3',
-  briefcase: 'M4 8h16v11H4zM9 8V5h6v3M4 13h16M11 13v2h2v-2'
+  briefcase: 'M4 8h16v11H4zM9 8V5h6v3M4 13h16M11 13v2h2v-2',
+  pin: 'M9 4h6l-1 6 3 3H7l3-3zM12 13v7',
+  chevron: 'M9 6l6 6-6 6',
+  dots: 'M5 12h.01M12 12h.01M19 12h.01'
 } as const
 
 // Closed shapes behind the lines, shown softly when an icon is "duo" (the active section).

@@ -35,7 +35,7 @@
 .topbar.compact .lvl-badge { width: 32px; height: 32px; font-size: 13px; }
 .topbar.compact .lvl-badge small { font-size: 7px; margin-bottom: -4px; }
 .topbar.compact .xp { width: 130px; }
-.topbar.compact .xp-row { font-size: 11px; margin-bottom: 3px; }
+.topbar.compact .xp-row { font-size: 12px; margin-bottom: 3px; }
 .topbar.compact .wallet { font-size: 15px; padding-left: 10px; }
 .topbar.compact .chip-text { display: none; }
 .topbar .spacer { flex: 1; }
@@ -71,9 +71,9 @@
 .app-tile:hover { border-color: color-mix(in srgb, var(--c) 45%, var(--line)); }
 .app-tile-icon { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
 .app-tile-body { display: grid; gap: 1px; min-width: 0; }
-.app-tile-body .label { color: var(--muted); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em; }
+.app-tile-body .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; }
 .app-tile-body b { font: 800 22px var(--display); }
-.app-tile-body small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-tile-body small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-tile-go { color: var(--faint); font-size: 22px; }
 .app-tile:hover .app-tile-go { color: var(--c); }
 .small-empty { display: grid; justify-items: center; gap: 10px; }
@@ -123,13 +123,13 @@
 .ritual-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
 .ritual-icon { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 16%, transparent); }
 .ritual-card.done .ritual-icon { color: var(--accent-text); background: color-mix(in srgb, var(--lime) 20%, transparent); }
-.ritual-reward { font-size: 12px; font-weight: 700; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); padding: 2px 7px; border-radius: 6px; }
+.ritual-reward { font-size: 13px; font-weight: 700; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); padding: 2px 7px; border-radius: 6px; }
 .ritual-info { display: flex; flex-direction: column; gap: 2px; margin-bottom: 12px; }
 .ritual-info b { font-size: 14px; font-weight: 700; color: var(--fg); }
-.ritual-info small { font-size: 11.5px; color: var(--muted); line-height: 1.25; }
+.ritual-info small { font-size: 13px; color: var(--muted); line-height: 1.25; }
 .ritual-action { display: flex; justify-content: flex-end; }
-.ritual-badge { font-size: 12px; font-weight: 600; color: var(--accent-text); background: color-mix(in srgb, var(--lime) 15%, transparent); padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; }
-.ritual-btn { width: 100%; justify-content: center; font-size: 12px; padding: 6px 12px; background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--fg); border: 1px solid color-mix(in srgb, var(--c) 35%, var(--line)); }
+.ritual-badge { font-size: 13px; font-weight: 600; color: var(--accent-text); background: color-mix(in srgb, var(--lime) 15%, transparent); padding: 4px 10px; border-radius: 6px; display: inline-flex; align-items: center; gap: 4px; }
+.ritual-btn { width: 100%; justify-content: center; font-size: 13px; padding: 6px 12px; background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--fg); border: 1px solid color-mix(in srgb, var(--c) 35%, var(--line)); }
 .ritual-btn:hover { background: color-mix(in srgb, var(--c) 28%, transparent); border-color: var(--c); }
 
 /* Sleep & Money standalone hubs */
@@ -139,7 +139,7 @@
 .sub-panel { background: color-mix(in srgb, var(--panel) 80%, var(--bg)); border: 1px dashed var(--line); }
 .cat-row { display: grid; grid-template-columns: 110px 1fr 90px; align-items: center; gap: 12px; margin-bottom: 8px; }
 .cat-label { text-transform: capitalize; font-size: 13px; color: var(--muted); }
-.cat-pill { background: color-mix(in srgb, var(--lime) 15%, transparent); color: var(--accent-text); padding: 2px 8px; border-radius: 4px; font-size: 11px; text-transform: uppercase; font-weight: 600; }
+.cat-pill { background: color-mix(in srgb, var(--lime) 15%, transparent); color: var(--accent-text); padding: 2px 8px; border-radius: 4px; font-size: 12px; text-transform: uppercase; font-weight: 600; }
 .delete-btn { opacity: 0.6; transition: opacity 0.15s, color 0.15s; }
 .delete-btn:hover { opacity: 1; color: var(--bad); }
 .shields-card { display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }
@@ -297,7 +297,7 @@
   gap: 8px;
 }
 .grand-slam-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 3px 9px;
   border-radius: 999px;
@@ -360,12 +360,12 @@
   min-width: 0;
 }
 .grand-slam-pillar-name {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: #e2e8f0;
 }
 .grand-slam-pillar-status {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .grand-slam-pillar.done .grand-slam-pillar-status {
@@ -376,7 +376,7 @@
   background: linear-gradient(135deg, #ffd700 0%, #ffb300 50%, #f59e0b 100%);
   color: #000;
   font-weight: 900;
-  font-size: 12.5px;
+  font-size: 13px;
   letter-spacing: 0.02em;
   padding: 8px 18px;
   border-radius: 999px;
@@ -449,7 +449,7 @@
 }
 .pwa-banner-desc {
   margin: 0;
-  font-size: 11.5px;
+  font-size: 13px;
   color: var(--muted);
   line-height: 1.35;
 }
@@ -466,7 +466,7 @@
   background: linear-gradient(135deg, #00d2ff 0%, #0077ff 100%);
   color: #fff;
   font-weight: 800;
-  font-size: 11.5px;
+  font-size: 13px;
   padding: 7px 14px;
   border-radius: 999px;
   border: none;
@@ -511,7 +511,7 @@
     background: rgba(13, 15, 21, 0.96); backdrop-filter: blur(12px); border-bottom: 1px solid rgb(var(--ink) / 0.08);
   }
   body:has(.embed-host.on) .mobile-embed-strip b { font-size: 13px; font-weight: 600; opacity: 0.85; }
-  body:has(.embed-host.on) .mobile-embed-strip button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: rgb(var(--ink) / 0.07); color: inherit; font: inherit; font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 11px; }
+  body:has(.embed-host.on) .mobile-embed-strip button { display: inline-flex; align-items: center; gap: 5px; border: 0; background: rgb(var(--ink) / 0.07); color: inherit; font: inherit; font-size: 13px; font-weight: 600; border-radius: 999px; padding: 6px 11px; }
   /* The top bar keeps only the app / points switch (the strip has the title). */
   body:has(.embed-host.on) .topbar > :not(.seg-switch) { display: none !important; }
   body:has(.embed-host.on) .topbar { padding-top: 6px !important; padding-bottom: 6px !important; min-height: 0 !important; }

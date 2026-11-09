@@ -3,7 +3,7 @@
 /* Settings: a long section shows the cards of one tab. */
 .st-grid-tabs > [data-st-off] { display: none !important; }
 .st-grid-tabs > :not([data-st-off]) { animation: ptab-in 0.22s var(--ease-out, ease-out) both; }
-.st-tabs { position: sticky; top: 0; z-index: 6; }
+.st-tabs { position: sticky; top: calc(-1 * var(--content-pt, 0px)); z-index: 6; }
 .st-tabs .ptabs-wrap { margin-bottom: 4px; }
 .st-body .is-sec { scroll-margin-top: 72px; }
 @media (prefers-reduced-motion: reduce) { .st-grid-tabs > :not([data-st-off]) { animation: none; } }
