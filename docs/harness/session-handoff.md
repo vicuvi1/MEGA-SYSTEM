@@ -23,14 +23,14 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-08)
+### Current handoff (2026-11-09)
 ```
-Milestone:   planner much better (no duplicates, self-check, auto re-plan, limits, deadlines, week, quick-add, review, score, rescue, Telegram parity), Tasks↔Todoist two-way, Rewards game shop, no-spend day
-Completed:   see progress.md "Landed today"; full smoke green on 32d115c
+Milestone:   food + training + body composition plans, Custom Center, island v2, quick add — all on main (b022da9)
+Completed:   see progress.md; full smoke green on b022da9
 Active:      none
-Blockers:    owner must set up a second pinger for the tick (cron-job.org/UptimeRobot, header Authorization: Bearer <CRON_SECRET>, X-Life-Timer: pinger)
-Next action: look at the "Ben's AI timeout" alert and make health alerts once a day; then whatever the owner asks
-Files:       docs/INDEX.md, docs/areas/planner.md, docs/areas/ops.md, docs/harness/progress.md
+Blockers:    owner: which scale app (Xiaomi Home EU or Mi Fitness) for Phase 2; GEMINI_API_KEY must be set in Vercel for photo logging
+Next action: scale Phase 2 sync (tools/scale-sync + docs/scale-sync.md) or the UI clean-up pick list
+Files:       docs/INDEX.md, docs/areas/sport.md, docs/areas/custom.md, docs/areas/island.md, docs/harness/progress.md
 ```
 
 ## Builder report format (≤ ~250 words)

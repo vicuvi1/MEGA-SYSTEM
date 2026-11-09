@@ -4,11 +4,10 @@ Every session reads this first and adds one entry at the end. Newest entry on to
 Keep it short and true: anything written here is what the next session will trust.
 
 ## Current verified state (keep to 5–8 lines)
-- **Milestone:** planner rebuilt + Tasks↔Todoist sync + Rewards shop + no-spend day — landed 2026-11-08; full smoke green on 32d115c.
-- **Landed today:** plan sync button 3779d39 · no duplicates b15185a · plan check + auto re-plan 9ccb0ce · Tasks↔Todoist 79577d6 · limits/deadlines/week 715bbd3 · Sunday smoke fixes 7613df3 · Rewards shop 520021a · no-spend day c310176 · quick-add/too much/fit e5fa16d · Your-day dedupe + toasts fdbcd7e · end-of-day/learned times/score bff6d50 · rescue + Telegram parity 32d115c.
+- **Milestone:** food (saved meals, standard day, AI photo logging in app and Telegram, meal reminders, one weekly calorie check), training (split, Today card, fast logging, roadmap, recovery, progress, warnings), body composition (log sheet, scale screenshot import, dashboard), Custom Center + island v2, quick add (Alt+Space) — landed 2026-11-08/09; full smoke green on b022da9.
 - **Active:** none.
-- **Known gaps:** Ben's timer runs only every 3–6 h (GitHub throttles the cron): the owner must add a second pinger (docs/areas/ops.md). "Ben's AI timeout" alert not investigated. Desktop island and Coach "Undo" smoke steps are intermittent. A Done→other change on Telegram reopens the Todoist task only at the next app sync.
-- **Next:** AI timeout + once-a-day health alert; maybe a worktree setup script (builders keep missing node_modules).
+- **Known gaps:** real Gemini/Claude photo and Xiaomi screenshot reads not tried yet (fakes only); Windows-only parts (global shortcut, island drop zone, wallpaper) not tried on a real PC; seeded standard day = 2,332 kcal (owner adds an item or enters height/age); intermittent smoke steps: Desktop island (v2), Sport Track Today, "no uncaught page errors".
+- **Next:** scale Phase 2 (SmartScaleConnect on the owner's server → /api/cron?job=health with a health key, docs/scale-sync.md) once the owner says Xiaomi Home or Mi Fitness; UI clean-up pick list (toasts under the phone nav, sticky tabs over titles, 17-item sidebar, one shared style).
 - **Verify:** `bash scripts/init.sh` · `npm run smoke` · `bash scripts/release-status.sh`.
 
 ## Session record
