@@ -25,6 +25,7 @@ import { BodyMapCard } from './BodyMapCard'
 import { useBodyLogSheet } from '../BodyLogSheet'
 import { useSportToday, type SportToday } from './useSportToday'
 import { requestSportStart } from '../../sportStart'
+import { CoachToday } from '../../coach/CoachToday'
 import '../food.css'
 import './today.css'
 
@@ -64,6 +65,8 @@ export function TodayTab({
   }
   return (
     <div className="bdy-today">
+      {/* The coach: what to do today, in one card (the same plan as Today → Now; the moves are in the workout card below). */}
+      <CoachToday moves={false} onStart={start} />
       <Hero state={state} sport={sport} day={shown} minutes={workoutMinutes(sport, r.mode)} />
       <div className="bdy-grid wide-left">
         <WorkoutCard

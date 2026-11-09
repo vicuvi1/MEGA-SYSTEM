@@ -10,6 +10,7 @@ import { useAction } from '../ui'
 import { ladderPrefill, toggleChip } from '@core/weekPlan'
 import type { LadderMilestone, TemplateId } from '@core/goalLadder'
 import type { LadderScreen } from '../web/ladderApi'
+import { CoachWeekStep } from '../coach/CoachWeek'
 
 const LIGHT: Record<string, string> = { green: 'On track', yellow: 'Close', red: 'Needs a step', none: 'Nothing to score yet' }
 const fmtWeek = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
@@ -25,7 +26,11 @@ function useEscape(onClose: () => void) {
 export function SundayReview({ v, onClose, onDone }: { v: LadderScreen; onClose: () => void; onDone: () => void }) {
   const act = useAction()
   const r = v.weekly
-  const [step, setStep] = useState<1 | 2>(1)
+  // The coach's body and training step comes first when the coach is there (one weekly review, not two).
+  const coach = !!life.coach?.today
+  const [step, setStep] = useState<0 | 1 | 2>(coach ? 0 : 1)
+  const steps = coach ? 3 : 2
+  const shown = coach ? step + 1 : step
   const [chips, setChips] = useState<string[]>(r.top3)
   const [picked, setPicked] = useState<string[]>(r.top3)
   useEscape(onClose)
@@ -55,10 +60,24 @@ export function SundayReview({ v, onClose, onDone }: { v: LadderScreen; onClose:
     <div className="sheet ql-sheet" role="dialog" aria-modal="true" aria-label="Sunday review" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet-card ql-review">
         <header>
-          <span className="ql-kicker">Sunday review · step {step} of 2</span>
-          <h3>{step === 1 ? `Your week from ${fmtWeek(r.week)}` : `Top 3 for the week of ${fmtWeek(r.next)}`}</h3>
+          <span className="ql-kicker">
+            Sunday review · step {shown} of {steps}
+          </span>
+          <h3>{step === 0 ? 'Body and training' : step === 1 ? `Your week from ${fmtWeek(r.week)}` : `Top 3 for the week of ${fmtWeek(r.next)}`}</h3>
         </header>
-        {step === 1 ? (
+        {step === 0 ? (
+          <>
+            <CoachWeekStep />
+            <div className="sheet-actions">
+              <button type="button" className="btn ghost" onClick={onClose}>
+                Later
+              </button>
+              <button type="button" className="btn primary ct-week-next" onClick={() => setStep(1)}>
+                Next: your goals
+              </button>
+            </div>
+          </>
+        ) : step === 1 ? (
           <>
             <ul className="ql-rev-goals">
               {r.goals.map((g) => (

@@ -112,7 +112,10 @@ export function DayFlow(props: DayFlowProps) {
   const [own, reloadOwn] = useMyHabits()
   const [lifeMode] = useLifeMode()
   const focusTarget = modeTarget(50, lifeMode?.current ?? null)
-  const habits = useHabits(props, st?.todayMin ?? 0, () => setSpendOpen(true), own, reloadOwn, focusTarget)
+  const allHabits = useHabits(props, st?.todayMin ?? 0, () => setSpendOpen(true), own, reloadOwn, focusTarget)
+  // Each thing once: a habit the coach card already shows (the workout) is folded out of the list.
+  const foldKey = (props.fold ?? []).join()
+  const habits = useMemo(() => (foldKey ? allHabits.filter((h) => !foldKey.split(',').includes(h.id)) : allHabits), [allHabits, foldKey])
   // "Log spending" from a home-screen shortcut (FT15) opens the line here.
   useEffect(() => {
     const on = () => setSpendOpen(true)
