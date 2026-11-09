@@ -99,6 +99,7 @@ const Career = lazyNamed(() => import('./pages/Career'), 'Career')
 const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPage')
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
 const CustomCenter = lazyNamed(() => import('./pages/CustomCenter'), 'CustomCenter')
+const PhotoLocker = lazyNamed(() => import('./vault/PhotoLocker'), 'PhotoLocker')
 const QuickHost = lazyNamed(() => import('./quick/QuickHost'), 'QuickHost')
 
 
@@ -156,10 +157,18 @@ function WindowErrors() {
       failed: ['Google sign-in failed: try Connect again', 'bad'],
       'not-configured': ['Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel first', 'bad']
     }
-    const [text, kind] = msg[q] ?? ['Google: ' + q, 'bad']
+    // Back from "Connect Google Drive" (Photo Locker) rather than the calendar's Connect.
+    let after: string | null = null
+    try {
+      after = localStorage.getItem('ls.afterGoogle')
+      localStorage.removeItem('ls.afterGoogle')
+    } catch {
+      after = null
+    }
+    const [text, kind] = after === 'locker' && q === 'connected' ? ['Google Drive connected ✓', 'good' as const] : (msg[q] ?? ['Google: ' + q, 'bad'])
     toast(text, kind)
-    // Shell opens the Calendar page (it may mount a moment later).
-    if (q === 'connected') setTimeout(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'calendar' })), 800)
+    // Shell opens the Calendar page (or Photo Locker) (it may mount a moment later).
+    if (q === 'connected') setTimeout(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: after === 'locker' ? 'locker' : 'calendar' })), 800)
     window.history.replaceState(null, '', window.location.pathname)
   }, [toast])
 
@@ -418,6 +427,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     }).catch(() => {})
     return whenIdle(() => void life.data.saveDailySnapshot?.().catch(() => {}), 4000)
   }, [refresh])
+  // Photo Locker: uploads that were waiting (or cut off by a reload) carry on once the page is idle.
+  useEffect(() => whenIdle(() => void import('./vault/driveSync').then((m) => m.vaultBoot()).catch(() => {}), 20_000), [])
 
   // A connected app paid something in the background.
   useEffect(() => {
@@ -871,6 +882,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'career' && <Career onGo={setPage} />}
             {page === 'coach' && <Coach onWallet={onWallet} />}
             {page === 'custom' && <CustomCenter />}
+            {page === 'locker' && <PhotoLocker />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}
             {current.phase > 0 && <Soon module={current} />}

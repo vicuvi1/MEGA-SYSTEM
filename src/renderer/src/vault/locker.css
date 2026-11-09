@@ -1,0 +1,67 @@
+/* Photo Locker (vault/PhotoLocker.tsx). Uses the app's tokens only. */
+.locker { position: relative; display: grid; gap: 14px; min-width: 0; }
+.locker .lk-plain { margin: 0; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--panel); color: var(--muted); font-size: 13px; }
+.locker .lk-plain b { color: var(--text); }
+.lk-drive .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lk-drive h2 { margin: 0; font-size: 16px; }
+.lk-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.lk-row .hint { margin: 0; flex: 1 1 260px; }
+.lk-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px 16px; margin: 6px 0 0; }
+.lk-facts div { min-width: 0; }
+.lk-facts dt { font-size: 11.5px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.lk-facts dd { margin: 2px 0 0; font-size: 14px; overflow-wrap: anywhere; }
+.lk-facts a { color: var(--text); }
+.lk-drive-actions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; }
+.lk-pick { display: grid; gap: 8px; }
+.lk-pick .hint { margin: 0; }
+.lk-warn { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid color-mix(in srgb, var(--orange) 45%, transparent); background: color-mix(in srgb, var(--orange) 10%, transparent); font-size: 14px; }
+.lk-progress { display: grid; gap: 6px; font-size: 13px; color: var(--muted); }
+.lk-progress progress { width: 100%; height: 6px; accent-color: var(--lime); }
+.lk-error { margin: 0; color: var(--red); font-size: 13px; }
+.lk-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.lk-filters { display: flex; gap: 6px; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
+.lk-chip { flex: none; border: 1px solid var(--line); background: var(--panel); color: var(--muted); border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.lk-chip.on { color: var(--lime-ink, #071006); background: var(--lime); border-color: transparent; }
+.lk-chip small { opacity: 0.7; margin-left: 2px; }
+.lk-search { flex: 1 1 200px; max-width: 320px; min-width: 0; padding: 8px 12px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
+.lk-empty { padding: 28px 16px; border: 1px dashed var(--line); border-radius: var(--radius); text-align: center; color: var(--muted); }
+.lk-empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.lk-month h3 { margin: 6px 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; letter-spacing: 0.02em; }
+.lk-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.lk-tile { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 3 / 4; padding: 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--panel-2); overflow: hidden; cursor: pointer; color: var(--muted); }
+.lk-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lk-tile:focus-visible { outline: 2px solid var(--lime); outline-offset: 2px; }
+.lk-icon { font-size: 28px; }
+.lk-icon.big { font-size: 56px; }
+.lk-dur { position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: 6px; background: rgba(0, 0, 0, 0.6); color: #fff; font-size: 11.5px; font-variant-numeric: tabular-nums; }
+.lk-tile.k-video::after { content: '▶'; position: absolute; color: #fff; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6); font-size: 22px; }
+.lk-fname { position: absolute; left: 6px; right: 6px; bottom: 8px; font-size: 12px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lk-state { position: absolute; top: 6px; right: 6px; width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; background: rgba(0, 0, 0, 0.55); color: #fff; }
+.lk-state.out { background: var(--orange); color: #1a0d00; font-weight: 700; }
+.lk-drop { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(4, 6, 10, 0.6); color: #fff; font-size: 20px; border: 3px dashed var(--lime); pointer-events: none; }
+.lk-sheet { z-index: 40; padding: 12px; }
+.lk-view { width: min(980px, 100%); max-height: calc(100dvh - 24px); overflow: auto; display: grid; gap: 10px; padding: 14px; border-radius: var(--radius-lg); background: var(--bg-2, var(--panel)); border: 1px solid var(--line); }
+.lk-view-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.lk-name { background: none; border: 0; padding: 0; color: var(--text); font: inherit; font-size: 16px; font-weight: 600; text-align: left; cursor: text; overflow-wrap: anywhere; }
+.lk-media { display: grid; place-items: center; min-height: 200px; background: #000; border-radius: var(--radius-sm); overflow: hidden; }
+.lk-media img { max-width: 100%; max-height: 70dvh; object-fit: contain; cursor: zoom-in; }
+.lk-media.zoomed { overflow: auto; place-items: start; max-height: 75dvh; }
+.lk-media.zoomed img { max-width: none; max-height: none; cursor: zoom-out; }
+.lk-media video { width: 100%; max-height: 70dvh; }
+.lk-cloud, .lk-file { display: grid; gap: 12px; place-items: center; padding: 30px 16px; color: #cfd5de; text-align: center; }
+.lk-meta { display: grid; gap: 8px; }
+.lk-sub { margin: 0; font-size: 13px; color: var(--muted); }
+.lk-body { margin: 0; font-size: 14px; color: var(--text); }
+.lk-tags { display: grid; gap: 4px; font-size: 12.5px; color: var(--muted); }
+.lk-tags input { padding: 8px 10px; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--panel); color: var(--text); font: inherit; font-size: 14px; }
+.lk-danger { color: var(--red); }
+.lk-cam-box { position: relative; background: #000; border-radius: var(--radius-sm); overflow: hidden; aspect-ratio: 3 / 4; max-height: 70dvh; margin: 0 auto; width: 100%; max-width: 520px; }
+.lk-cam-box video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.lk-pose { position: absolute; inset: 4% 10%; width: 80%; height: 92%; color: var(--lime); opacity: 0.85; pointer-events: none; }
+@media (max-width: 640px) {
+  .lk-grid { gap: 6px; }
+  .lk-facts { grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+  .lk-facts div:first-child, .lk-drive-actions { grid-column: 1 / -1; }
+  .lk-search { max-width: none; }
+  .lk-view { padding: 10px; }
+}

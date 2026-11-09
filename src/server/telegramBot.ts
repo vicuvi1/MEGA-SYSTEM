@@ -107,7 +107,7 @@ import { memoryJobs } from './memoryJobs'
 const BEN_SENT = 'ben_sent_today'
 
 export { createTodoistApi, todoistOp }
-export { GOOGLE_SETTING, GMAIL_READ_SCOPE, authUrl, createCalendarApi, exchangeCode, keepGooglePrefs, localIso } from './googleCalendar'
+export { GOOGLE_SETTING, GMAIL_READ_SCOPE, DRIVE_FILE_SCOPE, driveAccessToken, authUrl, createCalendarApi, exchangeCode, keepGooglePrefs, localIso } from './googleCalendar'
 
 export interface BotEnv {
   tursoUrl: string
