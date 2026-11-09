@@ -259,3 +259,12 @@
   .cr-weeks { display: none; }
   .cr-proj { grid-template-columns: 1fr; }
 }
+
+/* Compact (2026-11-09 type pass): one-line job cards, so the board fits a laptop screen. */
+.cr-job small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cr-job { padding: 8px 10px; }
+.cr-job-act { margin-top: 2px; }
+.cr-hero { padding: 12px 16px; }
+.cr-jobs { gap: 10px; }
+.cr-row3 .cr-card { padding-block: 12px; }
+.cr > .ptabs-wrap { margin-bottom: 0; }

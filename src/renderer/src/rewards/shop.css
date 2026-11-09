@@ -148,3 +148,20 @@
 .rx-card .rx-top, .rx-card.compact .rx-top { aspect-ratio: 16 / 6; }
 .rx-card .rx-emoji, .rx-card.compact .rx-emoji { font-size: 38px; }
 .rx-card .rx-body, .rx-card.compact .rx-body { gap: 5px; padding: 8px 12px 10px; }
+
+/* Compact (2026-11-09 type pass): slimmer card art, no second "Suggested for you" heading inside
+   its own shelf, and a tighter wallet, so each tab fits its screens with the larger text. */
+.rx-card .rx-top, .rx-card.compact .rx-top { aspect-ratio: 16 / 4.4; }
+.rx-sug-top { aspect-ratio: 16 / 4; }
+.sh-shelf .rx-suggest > header { display: none; }
+.rx-hero { padding: 12px 18px; row-gap: 8px; }
+.rx-balance { font-size: 38px; }
+.rx-balance .rx-coin { font-size: 28px; }
+.sh-top { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1.1fr); }
+.rx-sug-why { -webkit-line-clamp: 1; }
+.rx-sug-body { gap: 4px; padding: 8px 12px 10px; }
+.rx-main { gap: 10px; }
+.rx .ptabs-wrap { margin-bottom: -4px; }
+.rx-body { gap: 6px; padding: 10px 14px 12px; }
+.rx-hold, .rx-togo { height: 38px; }
+.rx-sug-body .rx-title { -webkit-line-clamp: 1; min-height: 1.25em; }

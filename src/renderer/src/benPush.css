@@ -23,11 +23,19 @@
 }
 
 /* Settings → Ben → My life: push level per area and when Ben writes first. */
-.bp-areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px; margin: 6px 0 10px; }
-.bp-area { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; padding: 8px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.035); }
+.bp-areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px; margin: 6px 0 8px; }
+.bp-area { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; padding: 5px 6px 5px 12px; border-radius: 12px; background: rgb(var(--ink) / 0.035); }
 .bp-area-name { display: flex; flex-direction: column; font-size: 14px; font-weight: 600; min-width: 0; }
 .bp-area-name small { font-weight: 400; font-size: 13px; color: var(--muted); }
 .bp-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: rgb(var(--ink) / 0.06); }
 .bp-seg button { border: 0; padding: 6px 10px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: var(--muted); transition: background-color 0.15s, color 0.15s; }
 .bp-seg button.on { background: var(--lime); color: var(--lime-ink); }
 .bp-off { align-self: center; margin-right: 4px; }
+
+/* Settings → Ben → Pushes, compact: the section line sits beside its heading; a setting's
+   own choice (minutes before bed, the weekly day and time) sits on one row under its switch. */
+.bp-settings .lf-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.bp-sub-hint { font-size: var(--t-sm, 13px); font-weight: 400; color: var(--muted); }
+.bp-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: -2px 0 6px 30px; }
+.bp-inline label { display: inline-flex; align-items: center; gap: 8px; }
+.bp-inline .sel, .bp-inline select, .bp-inline input[type='time'] { width: auto; min-width: 120px; }

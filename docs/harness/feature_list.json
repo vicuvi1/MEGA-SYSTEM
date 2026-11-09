@@ -977,8 +977,8 @@
     "SMOKE_ONLY=\"Phone: toasts\" npm run smoke",
     "npm run smoke"
    ],
-   "evidence": "2026-11-09: full vitest passes; full smoke run passed except Long pages (Settings Ben Pushes at 2.01 screens), fixed by tighter Settings help lines (now 1.97), and that step re-run green; before/after screenshots kept outside the repo",
-   "notes": "Tokens: design.css :root. Shell rules: shellPolish.css (loads before motion.css); page-imported files (pageTabs.css, quick.css) carry their own shell rules because they load later. Sidebar layout: navLayout.ts (pure) + navPrefs.ts (ls.nav). App CSS font sizes under 12px were raised (11.5-12.5 to 13, 10.5-11 to 12), except the island, HUD, Body and Photo Locker files. Settings Ben Pushes is close to its 2-screen limit."
+   "evidence": "2026-11-09: full vitest and full smoke pass. Measured in the full run at 1280x720 (screens / limit): Pushes 1.63/2, Brain 1.69/2, Look today 1.92/2.4, Goals 2.27/2.6, Goals week 1.39/1.75, Insights week 1.84/2.2, Career jobs 1.48/1.75, Career money 1.63/2, Rewards shop 1.69/2, Rewards all 1.62/2, Today now 1.47/1.75, Today body 1.44/1.75, Today plan 1.49/1.75. Every tab is at or under 90% of its limit.",
+   "notes": "Tokens: design.css :root. Shell rules: shellPolish.css (loads before motion.css); page-imported files (pageTabs.css, quick.css) carry their own shell rules because they load later. Sidebar layout: navLayout.ts (pure) + navPrefs.ts (ls.nav). App CSS font sizes under 12px were raised (11.5-12.5 to 13, 10.5-11 to 12), except the island, HUD, Body and Photo Locker files."
   }
  ]
 }

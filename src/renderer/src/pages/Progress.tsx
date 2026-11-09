@@ -314,7 +314,7 @@ function WeekInsights({ r }: { r: ReturnType<typeof useProgress> }) {
             {best.length > 0 && <span className="pg-chip better">Best: {best.map((m) => m.label.toLowerCase()).join(', ')}</span>}
             {worst.length > 0 && <span className="pg-chip worse">Fix: {worst.map((m) => m.label.toLowerCase()).join(', ')}</span>}
           </div>
-          <p className="hint">The score is how close your last 7 days came to a good week in each area (the goal under each bar). Arrows compare with the 7 days before.</p>
+          <p className="hint" title="The goal is under each bar. Arrows compare with the 7 days before.">How close your last 7 days came to a good week in each area.</p>
         </div>
       </section>
       {/* The score first, then planning the week (V6). */}

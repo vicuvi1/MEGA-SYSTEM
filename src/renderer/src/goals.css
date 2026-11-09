@@ -568,3 +568,34 @@
   .gx-card.hero > .gx-chart, .gx-card.hero > .gx-bars { align-self: stretch; }
   .gx-card.hero > .gx-bars { max-height: none; }
 }
+
+/* Compact top (2026-11-09 type pass): the hero and today's steps take less height, so every tab
+   still fits its screens with the larger text. Each step is one line: what to do · which goal. */
+.gx-hero { padding: 14px 22px; gap: 20px; }
+.gx-steps-today { gap: 4px; }
+.gx-steps-today button { grid-template-columns: auto auto minmax(0, 1fr); grid-template-rows: auto; column-gap: 8px; padding: 5px 10px; }
+.gx-steps-today button > span[aria-hidden] { grid-row: auto; font-size: 16px; }
+.gx-steps-today small { text-align: left; }
+.gx > .ptabs-wrap { margin-bottom: 0; }
+.gx-board { gap: 12px; }
+/* The focus card: its numbers get the wider column (fewer wrapped lines), tighter rows. */
+@container (min-width: 760px) { .gx-card.hero { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); row-gap: 6px; padding: 14px 18px 10px; } }
+.gx-card.hero .gx-now b { font-size: 30px; }
+.gx-grid { gap: 10px; }
+.gx-grid .gx-card { gap: 8px; }
+.gx-grid .gx-card.hero > .gx-chart svg { min-height: 88px !important; height: 88px; }
+.gx-grid .gx-today { padding: 5px 6px 5px 12px; }
+.gx { gap: 14px; }
+.gx-grid .gx-card:not(.hero) { padding-top: 12px; padding-bottom: 10px; }
+.gx-grid .gx-card.hero .gx-card-body { gap: 12px; }
+.gx-filters button { padding-block: 4px; }
+/* This week, compact: each goal is one line (name · where it stands); records are tighter. */
+.gx-week-rows .mid { display: flex; align-items: baseline; gap: 8px; }
+.gx-week-rows .mid b { flex: 0 1 auto; min-width: 0; }
+.gx-week-rows button { grid-template-columns: auto minmax(0, 1fr) minmax(100px, 160px) auto; }
+.gx-week-rows .mid small { flex: 1 1 60px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gx-week-rows button { padding-block: 7px; }
+.gx-week-rows { gap: 4px; }
+.gx-records ul { gap: 4px; }
+.gx-records li { padding-block: 6px; }
+.gx-sec { gap: 10px; padding-block: 14px; }

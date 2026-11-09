@@ -217,7 +217,7 @@ function TestBen({ models, current }: { models: ModelInfo[]; current: string | n
   }
   return (
     <div className="bt">
-      <p className="hint block">20 messages you'd really send (log money, book a block, move one, finish a task, remember a person…). Run on made-up data, never yours. Compare models before you pick one.</p>
+      <p className="hint block" title="Log money, book a block, move one, finish a task, remember a person…">20 messages you'd really send, run on made-up data (never yours). Compare models before you pick one.</p>
       <div className="bt-row">
         <ModelPicker label="Model to test" value={pick} auto={current} models={models} onPick={setPick} />
         <button className="btn primary" disabled={busy} onClick={() => void run()}>

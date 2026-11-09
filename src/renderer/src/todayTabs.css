@@ -82,3 +82,35 @@
   [data-tabpanel='now'] .miss-twice { flex-wrap: wrap; }
   [data-tabpanel='now'] .miss-twice > div:first-child { display: grid; gap: 2px; flex: 1 1 100%; white-space: normal; }
 }
+
+/* Compact Now (2026-11-09 type pass): each Today tab still fits about one laptop screen with the
+   larger text. The switch's 0-height anchor takes no gap (the switch is the first thing here);
+   the growth chip shares the "Pick your top 3" row; slightly tighter gaps and cards. */
+.td-tabs .cmd-main { position: relative; }
+.td-tabs .cmd-main > .ptabs-anchor { position: absolute; top: 0; }
+.td-tabs .cmd-main { gap: 12px; }
+.td-tabs .ptab-panel { gap: 12px; }
+.now-top > .wk3.wk3-slim { flex: 1 1 360px; }
+.now-top > .gr-chip-today { flex: none; }
+.td-tabs .now-grid { gap: 12px; }
+.td-tabs .ot-item { min-height: 28px; padding-block: 0; }
+.td-tabs .hb-row { min-height: 32px; padding-block: 1px; }
+.td-tabs .t3-head, .td-tabs .ot-head { padding-bottom: 0; }
+.td-tabs .ot { padding-top: 6px; }
+.td-tabs .ot form.ot-add input:not([type='checkbox']):not([type='radio']) { height: 28px; }
+.td-tabs .hb-foot-line { padding-top: 0; }
+.td-tabs .hb-add { padding-block: 2px; }
+.td-tabs .miss-twice { margin-bottom: 0; padding-block: 10px; }
+.td-tabs .ptab-panel, .td-tabs .now-grid { gap: 8px; }
+.td-tabs .now-top { gap: 6px; }
+.td-tabs .cmd-main { gap: 10px; }
+/* No Top 3 yet: the heading and its add line share one row. */
+.td-tabs .t3:not(:has(.t3-item)) { grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 12px; }
+.td-tabs .t3:not(:has(.t3-item)) > .t3-head { padding: 0 2px; }
+/* Today → Body, compact: each rep line is one row (name, count, quick buttons) over its bar
+   (the healthy-day tiles keep their two lines). */
+.td-body .reps-list { gap: var(--s-2); }
+.td-body .reps-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: var(--s-3); row-gap: 5px; }
+.td-body .reps-list li > .reps-top { grid-column: 1; min-width: 0; }
+.td-body .reps-list li > .reps-btns { grid-column: 2; grid-row: 1; }
+.td-body .reps-list li > :not(.reps-top):not(.reps-btns) { grid-column: 1 / -1; }

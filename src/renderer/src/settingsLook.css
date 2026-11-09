@@ -14,9 +14,9 @@
 .st-item.on svg { color: var(--accent-text); opacity: 1; }
 .st-sep { margin: 18px 12px 6px; }
 
-.st-head { margin: 0 0 16px; padding-bottom: 14px; border-bottom: 1px solid var(--border); }
-.st-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
-.st-head p { font-size: 14px; margin-top: 6px; }
+.st-head { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+.st-head h1 { font-size: var(--t-xl, 22px); font-weight: 700; letter-spacing: -0.02em; }
+.st-head p { font-size: var(--t-sm, 13px); margin: 0; }
 .st-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 
 /* Cards inside Settings */
@@ -26,7 +26,9 @@
 .st-body .panel-head h2 svg { color: var(--muted); }
 .st-body .hint { font-size: var(--t-sm); line-height: 1.45; }
 .st-body .hint.small { font-size: 13px; }
-.st-body .hint.block { max-width: 64ch; }
+.st-body .hint.block { max-width: 92ch; margin-bottom: 8px; }
+/* Test Ben shares the class name .bt with Body → Training (its gap is 16px there). */
+.st-body .bt { gap: 10px; }
 .st-body .row { gap: 8px; }
 
 /* Updates: one clear status and one main action */
@@ -82,3 +84,12 @@
 
 /* Settings starts right under the top bar. */
 .st { padding-top: 0; }
+
+/* Ben's brain, compact: the budget's note and its box share one row; the usage tiles keep one line each. */
+.st-body .brain-budget { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; }
+.st-body .brain-budget > .row:first-child, .st-body .brain-budget > .brain-budget-bar { grid-column: 1 / -1; }
+.st-body .brain-budget > p { margin: 0; }
+.st-body .brain-budget input#ai-budget { width: 90px !important; flex: none; }
+.st-body .brain-card em { font-size: var(--t-xs, 12px); }
+/* Look → Pages in the menu: three columns of switches on a laptop. */
+.st-body .sx-pages { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); column-gap: 20px; }

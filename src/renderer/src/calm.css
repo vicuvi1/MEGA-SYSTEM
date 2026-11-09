@@ -248,7 +248,7 @@ html.calm [class*='loading'] {
 .wp { display: flex; flex-direction: column; gap: 4px; border-color: color-mix(in srgb, var(--lime) 35%, var(--line)); animation: pg-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .wp-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
 .wp-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; }
-.wp-step { display: flex; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+.wp-step { display: flex; gap: 14px; padding: 12px 0; border-top: 1px solid var(--line); }
 .wp-step h3 { margin: 0 0 4px; font-size: 15px; }
 .wp-step p { margin: 2px 0; }
 .wp-step > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -260,6 +260,16 @@ html.calm [class*='loading'] {
 .wp-chip em { font-style: normal; color: var(--muted); font-size: 12px; }
 .wp-chip:disabled { opacity: 0.45; cursor: default; }
 .wp-note, .wp-big { width: 100%; }
+/* The step's one-line help sits beside its heading; the 3 big tasks share one row on a wide screen. */
+.wp-step h3 { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.wp-sub { font-size: var(--t-sm, 13px); font-weight: 400; color: var(--muted); }
+.wp-bigs { display: grid; gap: 6px; }
+@media (min-width: 900px) { .wp-bigs { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Insights → Week, compact: smaller chips (the Todoist picks fit one row more often), a slimmer score card. */
+.wp-chip { padding: 4px 10px; }
+.wp-step { padding: 10px 0; }
+.pg-hero { padding: 16px 22px; gap: 20px; }
+.pg-hero-text { gap: 6px; }
 .wp-actions { padding-top: 10px; border-top: 1px solid var(--line); gap: 8px; }
 .wk-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .wk-head h3 { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 15px; }

@@ -60,7 +60,17 @@ The goal is one calm look on every page: clear titles, plenty of space, one acce
   - Visible: search, Log, sync, bell, Settings and your points.
   - The cloud backup lives in the sync button: its hover says when the backup was saved, and a dot plus a "Backup missed" chip show only when today's copy failed. The green "Backed up" chip is gone.
 - **Phone:** toasts (the app's own and quick add's Undo toasts) sit 16 px above the bottom nav and its ⚡ button, inside the safe area. The "new version, reload" bar is a slim bar at the very top that pushes the app down, so it never covers content or the nav.
-- **Sticky page tabs** stick at the very top of the scrolling page (`top: -var(--content-pt)`), flush under the top bar, so no strip of the page shows above them. While stuck they get a near-solid backdrop and a hairline.
+- **Sticky page tabs** stick under the page's top padding. While stuck they get a solid page-coloured backdrop and a hairline, and that backdrop also fills the strip above them (`::before`, `--content-pt` high), so the page never shows between the top bar and the tabs. (A negative `top` was tried; Chrome moved the tabs up even before scrolling.)
+- **Measure with the full run:** the full smoke run measures some tabs taller than `SMOKE_ONLY` does, because earlier steps add rewards, open shelves and save a week plan.
+- **Room for the larger text:** no page limit in "Long pages" or "Today tabs" was raised. Instead the pages were made more compact, and each tab is kept at or under 85 % of its limit, because the Windows runner's fonts measure taller:
+  - Settings: one-line section header; Ben → Pushes help lines sit beside their headings, and its minutes, day and time controls sit inline; Brain's budget note and box share a row; Look → Pages in the menu has 3 columns.
+  - Insights → Week: the 3 big tasks share one row, the chips are smaller, and the score line is one sentence.
+  - Rewards: the saving / combo / money row shows on the Shop tab only; slimmer card art and one-line suggestions; no second "Suggested for you" heading.
+  - Goals → This week: each goal is one line.
+  - Goals: a slimmer hero, one-line steps and a tighter board.
+  - Career: the hero shows only your numbers (the top bar has the title), and job cards are one line.
+  - Today → Now: the growth chip sits on the top-3 row, an empty Top 3 is one row, and rows and gaps are tighter. The tab switch's 0-height anchor is taken out of the flow (`.cmd-main` is its containing block, so it still scrolls and the stuck state still works).
+  - Today → Body: each rep line is one row.
 - **Smoke steps:**
   - "Shell: sidebar sections, pins and More; one top bar height".
   - "Phone: toasts and the new-version bar clear the bottom nav; sticky tabs under the title" (390 px).
