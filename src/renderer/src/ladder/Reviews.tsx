@@ -71,7 +71,7 @@ export function SundayReview({ v, onClose, onDone }: { v: LadderScreen; onClose:
                     {g.emoji} {g.title}
                   </b>
                   <small>{g.actions.join(' · ')}</small>
-                  {g.fix && <small className="ql-fix">For next week: {g.fix}</small>}
+                  {g.fix && <small className="ql-fix">{g.fix}</small>}
                 </li>
               ))}
             </ul>

@@ -400,7 +400,7 @@
    "priority": 2,
    "area": "life",
    "title": "Seasons and identity",
-   "user_visible_behavior": "8-week seasons with a boss, vision board, side quests, identity votes, level-up cinematic, wins wall, life wheel",
+   "user_visible_behavior": "12-week seasons (the quarter; one saved before as 8 weeks keeps its length) with a boss, 6 chapters of 2 weeks, vision board, side quests, identity votes, level-up cinematic, wins wall, life wheel",
    "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
@@ -856,6 +856,21 @@
    ],
    "evidence": "smoke step 'Desktop island reminders' (one Today list, one water control, More, open time, time's up rings once); screenshots kept outside the repo",
    "notes": "Root causes: Electron already allowed autoplay; non-body notifications played at ~5 % loudness; the open panel left the sound to a bell that waited for a click; the AudioContext resume was not awaited; skips were not logged; a failed own sound file reported success. Not tried on a real Windows PC yet."
+  },
+  {
+   "id": "F-GOAL-LADDER",
+   "priority": 1,
+   "area": "goals",
+   "title": "Goal ladder: quarter → month → week → today",
+   "user_visible_behavior": "Goals → This quarter: up to 3 critical goals for the 12-week quarter (the Season), each a card with this month's milestone (worked backward from the quarter target, confirm or edit), this week's actions counted from the app's own data (workouts, protein days, weigh-ins, planned sessions, hard sets, focus hours, study sessions, applications, portfolio, flashcards, money saved, good nights), a traffic light from actions only (results like weight are shown, not scored), one plain next step when behind, the week's steps placed as drafts, and a 12-week strip. 'Not now' holds the other templates (money, career, sleep) with one-tap swap; a 4th is refused. Sunday review (actions per goal, then next week's top 3 pre-filled from the ladder), monthly review (milestone hit? adjust next month), quarter recap link to the Season. One line on Today → Now. The Sunday top 3 and the morning plan (study sessions via the deadline-backwards planner) follow the ladder. No points for goals or reviews; no new pushes.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/goalLadder.test.ts src/renderer/src/web/ladder.test.ts src/core/saga.test.ts src/core/weekPlan.test.ts",
+    "SMOKE_ONLY=\"Goal ladder\" npm run smoke"
+   ],
+   "evidence": "2026-11-09: unit tests (12-week season + 8-week migration, +4 kg → +1.33 kg a month, action scoring, light thresholds, timeline, top 3 prefill, planner placement within limits with stable ids, max 3 and swap, reviews); fake-Turso test (facts from logs, review saves the big 3, no ledger rows); smoke step Goal ladder; full smoke",
+   "notes": "core/goalLadder.ts (pure: templates, scoring, milestones, reviews, quarterLine, weeklyReviewData, monthlyReviewData for a later Telegram step), core/ladderPlan.ts (study sessions + workout days, drafts), web/ladderStore.ts (facts from logs, ladderStudyToday for rhythmBot propose), web/ladderApi.ts (life.saga.ladder), ladder/*.tsx, setting goal_ladder."
   }
  ]
 }

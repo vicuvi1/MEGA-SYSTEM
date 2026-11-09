@@ -168,7 +168,7 @@ describe('the weekly top 3 and the reviews', () => {
     expect(r).toMatchObject({ week: '2026-11-09', next: '2026-11-16', done: false })
     expect(r.goals[0].actions).toEqual(['2/5 workouts', '4/6 protein days', '1/3 weigh-ins'])
     expect(r.goals[0].light).toBe('red')
-    expect(r.goals[0].fix).toBe('Weigh in tomorrow morning, before breakfast.')
+    expect(r.goals[0].fix).toBe('Plan it in from Monday: 3 weigh-ins.')
     expect(r.top3).toHaveLength(3)
     const done = markReviewed(l, r.week)
     expect(weeklyReviewDue(done, sun)).toBe(false)

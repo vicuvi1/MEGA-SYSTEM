@@ -513,8 +513,8 @@ export function quarterLine(cards: LadderCard[]): string {
   return `Quarter goal: ${pick.goal.title}${acts.length ? ` · this week ${acts.join(', ')}` : ''}`
 }
 
-/** The week a Sunday review looks back on: this week on Sunday, last week from Monday on. */
-export const reviewWeek = (today: string) => (new Date(`${today}T12:00:00Z`).getUTCDay() === 0 ? mondayOf(today) : addDays(mondayOf(today), -7))
+/** The week a review looks back on: last week on a Monday (Sunday's review was missed), else this week (on Sunday, the whole of it). */
+export const reviewWeek = (today: string) => (new Date(`${today}T12:00:00Z`).getUTCDay() === 1 ? addDays(today, -7) : mondayOf(today))
 
 /** Sunday, or Monday when Sunday's was missed, and that week isn't reviewed yet. */
 export function weeklyReviewDue(l: Ladder, today: string): boolean {
@@ -538,14 +538,16 @@ export interface WeeklyReview {
 export function weeklyReviewData(l: Ladder, facts: LadderFacts, today: string): WeeklyReview {
   const week = reviewWeek(today)
   const next = addDays(week, 7)
+  const asOf = new Date(`${today}T12:00:00Z`).getUTCDay() === 0 || today > addDays(week, 6) ? next : today
   return {
     week,
     next,
     goals: activeGoals(l).map((g) => {
-      // The whole week counts (on Sunday its last day is still going).
-      const gw = goalWeek(g, facts, week, next)
+      // Sunday or later: the whole week counts (its last day is still going); mid-week: the days so far.
+      const gw = goalWeek(g, facts, week, asOf)
       const worst = gw.actions.filter((a) => a.ratio != null && a.ratio < GREEN_AT).sort((a, b) => a.ratio! - b.ratio!)[0]
-      const fix = gw.light !== 'green' && worst?.target ? METRICS[worst.metric].fix(worst.target, 7) : null
+      // For next week: plan the step in from the start (no today/tomorrow wording here).
+      const fix = gw.light !== 'green' && worst?.target ? `Plan it in from Monday: ${METRICS[worst.metric].step(worst.target)}.` : null
       return { id: g.id, title: g.title, emoji: templateOf(g.id).emoji, light: gw.light, score: gw.score, actions: gw.actions.map((a) => a.text), fix }
     }),
     top3: ladderTop3(l, facts, next, next),

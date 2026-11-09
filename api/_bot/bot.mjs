@@ -41,7 +41,7 @@ function text$2(about) {
 		serialize: (v) => v ?? ""
 	};
 }
-function num$6(about, fallback = 0) {
+function num$7(about, fallback = 0) {
 	return {
 		about,
 		type: "number",
@@ -64,8 +64,8 @@ function flag(about) {
 	};
 }
 var SETTINGS = {
-	data_version: num$6("bumped on every write; devices refresh when it changes"),
-	coach_tick_at: num$6("old place of the tick clock (now in sys_kv); never written to settings"),
+	data_version: num$7("bumped on every write; devices refresh when it changes"),
+	coach_tick_at: num$7("old place of the tick clock (now in sys_kv); never written to settings"),
 	pin_hash: text$2("old device PIN hash (the PIN lives on the server now)"),
 	theme: text$2("the app look (dark / light)"),
 	bot_bridge_config: json$7("Telegram bot tokens and chat ids saved in the app", null),
@@ -98,7 +98,7 @@ var SETTINGS = {
 	conn_finance_since: text$2("when Finance Helper was first connected"),
 	money_ask: json$7("a money question Ben is waiting on", null),
 	money_currency: text$2("currency for money (MDL)"),
-	money_daily_budget: num$6("daily spending budget"),
+	money_daily_budget: num$7("daily spending budget"),
 	money_nothing_spent: json$7("days you tapped \"Nothing spent today\"", []),
 	money_cooked_days: json$7("days you confirmed you cooked at home", []),
 	coach_log: json$7("Ben's chat (newest 200 entries)", []),
@@ -125,7 +125,8 @@ var SETTINGS = {
 	look_wallpaper_photo: text$2("your own wallpaper picture, made small on the device (a data URL)"),
 	custom_setup: json$7("Custom Center: your widgets, where they sit (pill, open island, home), actions, reminder rules, modes and their schedules, and the looks; versioned, at most 48 KB (core/custom)", null),
 	custom_state: json$7("Custom Center: today's numbers of your own counters and checklists, and when each reminder rule last fired (core/custom); counters that track water or reps keep no number here", null),
-	saga_seasons: json$7("your 8-week seasons: name, theme, cover, three main quests and the boss (src/core/season.ts)", null),
+	saga_seasons: json$7("your seasons (12 weeks = the quarter; old ones 8): name, theme, cover, three main quests and the boss (src/core/season.ts)", null),
+	goal_ladder: json$7("the goal ladder: up to 3 critical goals for the quarter, \"Not now\" goals, your weekly targets, confirmed monthly milestones and reviews done (src/core/goalLadder.ts)", null),
 	saga_vision: json$7("the vision board: word of the year, who you are becoming, 6–9 cards (src/core/vision.ts)", null),
 	saga_vision_photos: json$7("pictures on vision cards, made small on the device (card id → data URL)", null),
 	saga_identity: json$7("your \"I am someone who…\" lines and what counts as a vote (src/core/identityVotes.ts)", null),
@@ -192,10 +193,10 @@ var SETTINGS = {
 	urge_started_at: text$2("when the current urge started (ISO), or empty"),
 	points_v2: text$2("marker: points moved to version 2"),
 	points_v3: text$2("marker: points moved to version 3"),
-	"perk.shadow_monarch.p1_streak": num$6("perk: P1 task streak"),
+	"perk.shadow_monarch.p1_streak": num$7("perk: P1 task streak"),
 	"hunter.stat_allocation": json$7("points put into each stat", null),
-	streak_shields: num$6("streak shields you hold"),
-	reward_budget: num$6("old monthly money for rewards (moved into fun_budget)"),
+	streak_shields: num$7("streak shields you hold"),
+	reward_budget: num$7("old monthly money for rewards (moved into fun_budget)"),
 	fun_moves: json$7("leftover money moved to a Finance Helper savings goal, by month", {}),
 	fun_budget: json$7("monthly fun budget in lei, typed or from Finance Helper", null),
 	reward_unlocks: json$7("rewards that unlock with a goal or streak", null),
@@ -204,12 +205,12 @@ var SETTINGS = {
 	reward_suggest_hidden: json$7("suggested rewards you said \"not for me\" to (src/core/rewardSuggest.ts)", null),
 	reward_ready_seen: json$7("rewards whose \"Ready!\" moment was already shown (id:buys)", []),
 	currency: text$2("old name of the money currency"),
-	coin_exchange_rate: num$6("lei per point"),
-	bank_base_rate: num$6("points bank interest rate"),
-	bank_cap_per_level: num$6("points bank cap per level"),
+	coin_exchange_rate: num$7("lei per point"),
+	bank_base_rate: num$7("points bank interest rate"),
+	bank_cap_per_level: num$7("points bank cap per level"),
 	bank_last_interest_day: text$2("day interest was last paid"),
-	bank_staked_coins: num$6("points in the bank"),
-	bank_total_interest_earned: num$6("interest earned so far"),
+	bank_staked_coins: num$7("points in the bank"),
+	bank_total_interest_earned: num$7("interest earned so far"),
 	pc_asks: json$7("Ben's asks to do something on the PC (Allow / Deny on the desktop island), and whether a desktop app can answer", null),
 	pc_last_hour: json$7("the last hour on the PC as app names, sites and minutes (only when shared from the desktop app)", null),
 	automations: json$7("your automations: \"When X, do Y\", island buttons, Ben may run (src/core/automations.ts); never an address or key", null),
@@ -1571,8 +1572,8 @@ var BULK_PACE = {
 	lo: .25,
 	hi: .5
 };
-var r1$3 = (n) => Math.round(n * 10) / 10;
-var r2 = (n) => Math.round(n * 100) / 100;
+var r1$4 = (n) => Math.round(n * 10) / 10;
+var r2$1 = (n) => Math.round(n * 100) / 100;
 /** Clean weigh-ins: one per day (the last one), sane numbers, oldest first. */
 function cleanWeighIns(list) {
 	const byDay = /* @__PURE__ */ new Map();
@@ -1598,7 +1599,7 @@ function trendPoints(list, today, days = 56) {
 		out.push({
 			day: d,
 			weight: byDay.get(d) ?? null,
-			trend: r2(win.reduce((t, x) => t + x.weight, 0) / win.length)
+			trend: r2$1(win.reduce((t, x) => t + x.weight, 0) / win.length)
 		});
 	}
 	return out;
@@ -1632,8 +1633,8 @@ function weightTrend(list, today) {
 	const recentIns = w.filter((x) => x.day > addDays$8(today, -28));
 	const span = recentIns.length ? daysBetween$3(recentIns[0].day, recentIns[recentIns.length - 1].day) : 0;
 	const targetKg = now ? {
-		lo: r2(now * BULK_PACE.lo / 100),
-		hi: r2(now * BULK_PACE.hi / 100)
+		lo: r2$1(now * BULK_PACE.lo / 100),
+		hi: r2$1(now * BULK_PACE.hi / 100)
 	} : null;
 	if (!now || recentIns.length < 5 || span < 14) {
 		const need = Math.max(5 - recentIns.length, 0);
@@ -1648,10 +1649,10 @@ function weightTrend(list, today) {
 			kcal: 0
 		};
 	}
-	const perMonthKg = r2(slope(recent) * 30);
-	const perMonthPct = r2(perMonthKg / now * 100);
+	const perMonthKg = r2$1(slope(recent) * 30);
+	const perMonthPct = r2$1(perMonthKg / now * 100);
 	const tgt = targetKg;
-	const pace = `${perMonthKg >= 0 ? "+" : "−"}${Math.abs(r1$3(perMonthKg))} kg a month`;
+	const pace = `${perMonthKg >= 0 ? "+" : "−"}${Math.abs(r1$4(perMonthKg))} kg a month`;
 	if (perMonthPct < BULK_PACE.lo) {
 		const kcal = perMonthPct < 0 ? 300 : 200;
 		return {
@@ -1662,7 +1663,7 @@ function weightTrend(list, today) {
 			targetKg,
 			nudge: "add",
 			kcal,
-			line: `Trend ${pace}, under the lean-bulk pace (+${r1$3(tgt.lo)}–${r1$3(tgt.hi)} kg). Add about ${kcal} kcal a day: a glass of milk and a banana, or a peanut butter sandwich.`
+			line: `Trend ${pace}, under the lean-bulk pace (+${r1$4(tgt.lo)}–${r1$4(tgt.hi)} kg). Add about ${kcal} kcal a day: a glass of milk and a banana, or a peanut butter sandwich.`
 		};
 	}
 	if (perMonthPct > BULK_PACE.hi * 1.5) return {
@@ -1673,7 +1674,7 @@ function weightTrend(list, today) {
 		targetKg,
 		nudge: "ease",
 		kcal: -150,
-		line: `Trend ${pace}, faster than a lean bulk (+${r1$3(tgt.lo)}–${r1$3(tgt.hi)} kg). Ease off about 150 kcal a day so it stays mostly muscle.`
+		line: `Trend ${pace}, faster than a lean bulk (+${r1$4(tgt.lo)}–${r1$4(tgt.hi)} kg). Ease off about 150 kcal a day so it stays mostly muscle.`
 	};
 	return {
 		points,
@@ -1683,7 +1684,7 @@ function weightTrend(list, today) {
 		targetKg,
 		nudge: "hold",
 		kcal: 0,
-		line: `Trend ${pace}: right on a lean-bulk pace (+${r1$3(tgt.lo)}–${r1$3(tgt.hi)} kg). Hold steady.`
+		line: `Trend ${pace}: right on a lean-bulk pace (+${r1$4(tgt.lo)}–${r1$4(tgt.hi)} kg). Hold steady.`
 	};
 }
 // src/core/readiness.ts
@@ -4662,7 +4663,7 @@ function bestSet(log, exId, until) {
 	return best;
 }
 /** Monday of the week a day is in. */
-function mondayOf$7(day) {
+function mondayOf$9(day) {
 	const d = /* @__PURE__ */ new Date(day + "T12:00:00Z");
 	d.setUTCDate(d.getUTCDate() - (d.getUTCDay() + 6) % 7);
 	return d.toISOString().slice(0, 10);
@@ -4810,7 +4811,7 @@ function sleepWeek(nights, today, needMin = 480) {
 		debtMin: known.reduce((t, n) => t + Math.max(0, needMin - n.minutes), 0)
 	};
 }
-var hm$11 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
+var hm$12 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
 var esc$6 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 function bodyWeek(i) {
 	const lines = [];
@@ -4840,7 +4841,7 @@ function bodyWeek(i) {
 	lines.push({
 		icon: "🌙",
 		label: "Sleep",
-		value: s.avgMin == null ? "No nights logged" : `${hm$11(s.avgMin)} a night on average${s.debtMin >= 30 ? ` · ${hm$11(s.debtMin)} short of your sleep need this week` : ""}`,
+		value: s.avgMin == null ? "No nights logged" : `${hm$12(s.avgMin)} a night on average${s.debtMin >= 30 ? ` · ${hm$12(s.debtMin)} short of your sleep need this week` : ""}`,
 		tone: s.avgMin == null ? "none" : s.avgMin >= 450 ? "good" : s.avgMin >= 390 ? "warn" : "bad"
 	});
 	if (i.steps != null) lines.push({
@@ -4856,10 +4857,10 @@ function bodyWeek(i) {
 	let cause = null;
 	if (stall && lowProtein && shortSleep) {
 		focus = `Protein at every meal (${p.goal} g a day) and lights out 30 min earlier.`;
-		cause = `Low protein (${p.avg} g) and short sleep (${hm$11(s.avgMin)}) are the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
+		cause = `Low protein (${p.avg} g) and short sleep (${hm$12(s.avgMin)}) are the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
 	} else if (stall && shortSleep) {
 		focus = "Sleep first: lights out 30 min earlier on training nights.";
-		cause = `Short sleep (${hm$11(s.avgMin)} a night) is the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
+		cause = `Short sleep (${hm$12(s.avgMin)} a night) is the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
 	} else if (stall && lowProtein) {
 		focus = `Protein: ${p.goal} g a day, a portion at every meal.`;
 		cause = `Low protein (${p.avg} g a day) is the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
@@ -4868,7 +4869,7 @@ function bodyWeek(i) {
 		cause = "Muscle needs the protein to grow from the training.";
 	} else if (shortSleep) {
 		focus = "Sleep: aim for 7 h+ every night this week.";
-		cause = `${hm$11(s.avgMin)} a night on average; muscle grows while you sleep.`;
+		cause = `${hm$12(s.avgMin)} a night on average; muscle grows while you sleep.`;
 	} else if (low.length) {
 		focus = `More sets for ${low.map((m) => m.short.toLowerCase()).join(" and ")}: at least 10 hard sets a week each.`;
 		cause = `${low.map((m) => `${m.short} ${i.sets[m.id]}`).join(", ")} this week, under the 10 that grow muscle.`;
@@ -5004,7 +5005,7 @@ function sleepDebt(logs, today, needH = DEFAULT_CARE.needH) {
 		level: debtMin >= 180 ? "high" : debtMin >= 60 ? "behind" : "ok"
 	};
 }
-var hm$10 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${String(min % 60).padStart(2, "0")}` : ""}` : `${min} min`;
+var hm$11 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${String(min % 60).padStart(2, "0")}` : ""}` : `${min} min`;
 var WEEKDAY = [
 	"Sunday",
 	"Monday",
@@ -5025,7 +5026,7 @@ function debtAdvice(d, o) {
 		nap: null,
 		napOk: false,
 		early: null,
-		line: d.logged ? `On track: ${d.debtMin ? `${hm$10(d.debtMin)} behind` : "no debt"} over the last ${d.logged} nights.` : "Log a few nights (bed and wake-up) to see your sleep debt."
+		line: d.logged ? `On track: ${d.debtMin ? `${hm$11(d.debtMin)} behind` : "no debt"} over the last ${d.logged} nights.` : "Log a few nights (bed and wake-up) to see your sleep debt."
 	};
 	const cur = clockOf(o.now);
 	const napOk = cur >= 240 && cur < 880;
@@ -5044,7 +5045,7 @@ function debtAdvice(d, o) {
 			minutes
 		};
 	}
-	const line = `${hm$10(d.debtMin)} behind over the last ${d.logged} nights.${early ? ` Bed at ${early.bed} ${early.label === "tonight" || early.label === "tomorrow" ? early.label : `on ${early.label}`} (${minutes} min earlier).` : ""}`;
+	const line = `${hm$11(d.debtMin)} behind over the last ${d.logged} nights.${early ? ` Bed at ${early.bed} ${early.label === "tonight" || early.label === "tomorrow" ? early.label : `on ${early.label}`} (${minutes} min earlier).` : ""}`;
 	return {
 		nap,
 		napOk,
@@ -5055,8 +5056,8 @@ function debtAdvice(d, o) {
 /** One line for Ben's prompt. */
 function debtLine(d, a) {
 	if (!d.logged) return "";
-	if (d.level === "ok") return `SLEEP DEBT: fine (${hm$10(d.debtMin)} behind a ${hm$10(d.needMin)} need over the last ${d.logged} logged nights). Don't bring it up.`;
-	return `SLEEP DEBT: ${hm$10(d.debtMin)} behind a ${hm$10(d.needMin)} need over the last ${d.logged} logged nights.${a.napOk ? " Suggest one 20-min nap before 15:00." : " No nap today (too late)."}${a.early ? ` Suggest bed at ${a.early.bed} ${a.early.label === "tonight" || a.early.label === "tomorrow" ? a.early.label : `on ${a.early.label}`} (his next free evening).` : ""} Say it once, not every message.`;
+	if (d.level === "ok") return `SLEEP DEBT: fine (${hm$11(d.debtMin)} behind a ${hm$11(d.needMin)} need over the last ${d.logged} logged nights). Don't bring it up.`;
+	return `SLEEP DEBT: ${hm$11(d.debtMin)} behind a ${hm$11(d.needMin)} need over the last ${d.logged} logged nights.${a.napOk ? " Suggest one 20-min nap before 15:00." : " No nap today (too late)."}${a.early ? ` Suggest bed at ${a.early.bed} ${a.early.label === "tonight" || a.early.label === "tomorrow" ? a.early.label : `on ${a.early.label}`} (his next free evening).` : ""} Say it once, not every message.`;
 }
 // src/core/benGround.ts
 var pad$17 = (n) => String(n).padStart(2, "0");
@@ -5522,8 +5523,8 @@ var proteinRowId = (mealId) => `${mealId}-p`;
 var kcalRowId = (mealId) => `${mealId}-k`;
 /** The meal a body-log row belongs to ("fd-abc-p" → "fd-abc"), or ''. */
 var mealOfRow = (rowId) => /^fd-[a-z0-9]{1,24}-[pk]$/.test(String(rowId)) ? String(rowId).slice(0, -2) : "";
-var r1$2 = (n) => Math.round(n * 10) / 10;
-var num$5 = (v, lo, hi) => {
+var r1$3 = (n) => Math.round(n * 10) / 10;
+var num$6 = (v, lo, hi) => {
 	const n = Number(v);
 	return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo;
 };
@@ -5533,11 +5534,11 @@ var kcalOf = (p, c, f) => Math.round(4 * (p || 0) + 4 * (c || 0) + 9 * (f || 0))
 function cleanItem$1(raw) {
 	if (!raw || typeof raw !== "object") return null;
 	const name = String(raw.name ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
-	const grams = Math.round(num$5(raw.grams, 0, 3e3));
+	const grams = Math.round(num$6(raw.grams, 0, 3e3));
 	if (!name || grams < 1) return null;
-	const protein = r1$2(num$5(raw.protein, 0, 400));
-	const carbs = r1$2(num$5(raw.carbs, 0, 800));
-	const fat = r1$2(num$5(raw.fat, 0, 400));
+	const protein = r1$3(num$6(raw.protein, 0, 400));
+	const carbs = r1$3(num$6(raw.carbs, 0, 800));
+	const fat = r1$3(num$6(raw.fat, 0, 400));
 	const k = Number(raw.kcal);
 	const out = {
 		name,
@@ -5562,9 +5563,9 @@ function scaleItem(item, grams) {
 	return {
 		...item,
 		grams: g,
-		protein: r1$2(item.protein * f),
-		carbs: r1$2(item.carbs * f),
-		fat: r1$2(item.fat * f),
+		protein: r1$3(item.protein * f),
+		carbs: r1$3(item.carbs * f),
+		fat: r1$3(item.fat * f),
 		kcal: Math.round(item.kcal * f)
 	};
 }
@@ -5598,7 +5599,7 @@ var localHm$1 = (iso) => {
 	return Number.isFinite(d.getTime()) ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` : "";
 };
 var cleanItems$1 = (raw) => (Array.isArray(raw) ? raw : []).map(cleanItem$1).filter((x) => !!x).slice(0, 20);
-var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$11 = /^\d{4}-\d{2}-\d{2}$/;
 /**
 * A clean food log: meals with a valid id, day and items, newest first, the
 * last LOG_DAYS days before `today` and at most LOG_MAX; favourites apart
@@ -5606,13 +5607,13 @@ var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
 */
 function cleanFoodLog(raw, today) {
 	const o = raw && typeof raw === "object" ? raw : {};
-	const from = today && DAY$10.test(today) ? addDays$8(today, -45) : "";
+	const from = today && DAY$11.test(today) ? addDays$8(today, -45) : "";
 	const seen = /* @__PURE__ */ new Set();
 	const meals = [];
 	for (const m of Array.isArray(o.meals) ? o.meals : []) {
 		if (!m || typeof m !== "object") continue;
 		const id = String(m.id ?? "");
-		if (!/^fd-[a-z0-9]{1,24}$/.test(id) || seen.has(id) || !DAY$10.test(String(m.day)) || String(m.day) < from) continue;
+		if (!/^fd-[a-z0-9]{1,24}$/.test(id) || seen.has(id) || !DAY$11.test(String(m.day)) || String(m.day) < from) continue;
 		const items = cleanItems$1(m.items);
 		if (!items.length) continue;
 		seen.add(id);
@@ -6291,11 +6292,11 @@ var ID$4 = {
 	slot: /^ds-[a-z0-9-]{1,24}$/
 };
 var text$1 = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
-var r1$1 = (n) => Math.round(n * 10) / 10;
+var r1$2 = (n) => Math.round(n * 10) / 10;
 var numOr = (v, lo, hi, def) => {
 	if (v == null || v === "") return def;
 	const n = Number(v);
-	return Number.isFinite(n) ? r1$1(Math.max(lo, Math.min(hi, n))) : def;
+	return Number.isFinite(n) ? r1$2(Math.max(lo, Math.min(hi, n))) : def;
 };
 /** A quantity in half portions, within 0.5–20. */
 var cleanQty = (v) => {
@@ -6379,9 +6380,9 @@ function itemOf(f, qty) {
 	return {
 		name: f.name,
 		grams: Math.max(1, Math.round((f.grams ?? 100) * q)),
-		protein: r1$1(f.protein * q),
-		carbs: r1$1((f.carbs ?? 0) * q),
-		fat: r1$1((f.fat ?? 0) * q),
+		protein: r1$2(f.protein * q),
+		carbs: r1$2((f.carbs ?? 0) * q),
+		fat: r1$2((f.fat ?? 0) * q),
 		kcal: Math.round(f.kcal * q),
 		confidence: "sure",
 		qty: q,
@@ -6474,7 +6475,7 @@ function matchSaved(line, s) {
 		qty: cleanQty(qty)
 	};
 }
-var r1 = (n) => Math.round(n * 10) / 10;
+var r1$1 = (n) => Math.round(n * 10) / 10;
 var clamp$4 = (v, lo, hi, dflt = lo) => {
 	const n = typeof v === "string" ? Number(v.replace(",", ".").replace(/[^\d.\-]/g, "")) : Number(v);
 	return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt;
@@ -6506,9 +6507,9 @@ var gramsOfPortion = (portion) => {
 function fromSaved(s, qty, grams) {
 	const q = clamp$4(qty, .25, 20, 1);
 	const per = gramsOfPortion(s.portion);
-	const carbs = r1((Number(s.carbs) || 0) * q);
-	const fat = r1((Number(s.fat) || 0) * q);
-	const protein = r1((Number(s.protein) || 0) * q);
+	const carbs = r1$1((Number(s.carbs) || 0) * q);
+	const fat = r1$1((Number(s.fat) || 0) * q);
+	const protein = r1$1((Number(s.protein) || 0) * q);
 	const kcal = Math.round((Number(s.kcal) || kcalOf(s.protein, s.carbs ?? 0, s.fat ?? 0)) * q);
 	return {
 		name: text(s.name, 60) || "Saved food",
@@ -6546,16 +6547,16 @@ function cleanVisionItem(raw, saved = [], photos = 1) {
 			...photoOf$1(raw, photos)
 		};
 	}
-	const protein = r1(clamp$4(raw.protein, 0, 400));
-	const carbs = r1(clamp$4(raw.carbs, 0, 800));
-	const fat = r1(clamp$4(raw.fat, 0, 400));
+	const protein = r1$1(clamp$4(raw.protein, 0, 400));
+	const carbs = r1$1(clamp$4(raw.carbs, 0, 800));
+	const fat = r1$1(clamp$4(raw.fat, 0, 400));
 	const k = clamp$4(raw.kcal, 0, 8e3);
 	const kcal = Math.round(k > 0 ? k : kcalOf(protein, carbs, fat));
 	if (grams < 1 && kcal < 1) return null;
 	return {
 		name,
 		matchedSavedFoodId: null,
-		qty: r1(qty),
+		qty: r1$1(qty),
 		unit: text(raw.unit, 20) || "serving",
 		grams,
 		kcal,
@@ -6626,12 +6627,12 @@ function scaleVisionItem(base, factor, saved = []) {
 	};
 	return {
 		...base,
-		qty: r1(base.qty * f),
+		qty: r1$1(base.qty * f),
 		grams: Math.round(base.grams * f),
 		kcal: Math.round(base.kcal * f),
-		protein: r1(base.protein * f),
-		carbs: r1(base.carbs * f),
-		fat: r1(base.fat * f)
+		protein: r1$1(base.protein * f),
+		carbs: r1$1(base.carbs * f),
+		fat: r1$1(base.fat * f)
 	};
 }
 /** The qty stepper: whole steps, or halves under 1. */
@@ -6649,13 +6650,13 @@ var CONF = {
 var toFoodItems = (items) => items.filter((i) => i.grams >= 1 || i.kcal >= 1).map((i) => ({
 	name: i.name,
 	grams: Math.max(1, Math.round(i.grams || 1)),
-	protein: r1(i.protein),
-	carbs: r1(i.carbs),
-	fat: r1(i.fat),
+	protein: r1$1(i.protein),
+	carbs: r1$1(i.carbs),
+	fat: r1$1(i.fat),
 	kcal: Math.round(i.kcal),
 	confidence: CONF[i.confidence],
 	...i.matchedSavedFoodId ? {
-		qty: r1(i.qty),
+		qty: r1$1(i.qty),
 		unit: i.unit
 	} : {}
 }));
@@ -8025,9 +8026,83 @@ var TARGET_BAND = {
 	lo: .25,
 	hi: .5
 };
+var r2 = (n) => Math.round(n * 100) / 100;
+var localHour = (iso) => new Date(iso).getHours();
+var byAt = (a, b) => a.at < b.at ? -1 : a.at > b.at ? 1 : 0;
+/** The day's first morning weigh-in (04:00–11:59 local), else its first one. */
+function firstMorning(rows, day) {
+	const mine = rows.filter((r) => r.day === day).sort(byAt);
+	return mine.find((r) => localHour(r.at) >= 4 && localHour(r.at) < 12) ?? mine[0] ?? null;
+}
+/** The day's last waist (null when none). */
+function latestWaist(rows, day) {
+	const w = rows.filter((r) => r.day === day && r.waist_cm != null).sort(byAt);
+	return w.length ? w[w.length - 1].waist_cm : null;
+}
+/**
+* One point per day: the first morning weight (and fat/muscle from the same
+* weigh-in, else the day's first that has them), the day's last waist. Days
+* only in body_metrics (old logs, Telegram) are points too.
+*/
+function dailyPoints(rows, metrics = []) {
+	const days = /* @__PURE__ */ new Map();
+	const byDay = /* @__PURE__ */ new Map();
+	for (const r of rows) byDay.set(r.day, [...byDay.get(r.day) ?? [], r]);
+	for (const [day, list] of byDay) {
+		const fm = firstMorning(list, day);
+		const sorted = [...list].sort(byAt);
+		const pick = (k) => fm[k] ?? sorted.find((r) => r[k] != null)?.[k] ?? null;
+		days.set(day, {
+			day,
+			weight: fm.weight_kg,
+			fat: pick("body_fat_pct"),
+			muscle: pick("muscle_kg"),
+			waist: latestWaist(list, day)
+		});
+	}
+	for (const m of metrics) {
+		const w = m.weight != null && Number.isFinite(Number(m.weight)) ? Number(m.weight) : null;
+		const ws = m.waist != null && Number.isFinite(Number(m.waist)) ? Number(m.waist) : null;
+		const have = days.get(m.day);
+		if (!have) {
+			if (w != null || ws != null) days.set(m.day, {
+				day: m.day,
+				weight: w,
+				fat: null,
+				muscle: null,
+				waist: ws
+			});
+		} else if (have.waist == null && ws != null) have.waist = ws;
+	}
+	return [...days.values()].sort((a, b) => a.day < b.day ? -1 : 1);
+}
+/** Monday of the week a day is in. */
+function mondayOf$8(day) {
+	return addDays$8(day, -(((/* @__PURE__ */ new Date(`${day}T00:00:00Z`)).getUTCDay() + 6) % 7));
+}
+/** Weekly averages (Monday–Sunday), oldest first, the week of `today` last. */
+function weeklyAverages(points, today, weeks = 8, key = "weight", kcalByDay = {}) {
+	const out = [];
+	const last = mondayOf$8(today);
+	for (let i = weeks - 1; i >= 0; i--) {
+		const week = addDays$8(last, -7 * i);
+		const end = addDays$8(week, 6);
+		const vals = points.filter((p) => p.day >= week && p.day <= end && p[key] != null).map((p) => p[key]);
+		const k = Object.entries(kcalByDay).filter(([d, v]) => d >= week && d <= end && v > 0);
+		out.push({
+			week,
+			avg: vals.length ? r2(vals.reduce((t, v) => t + v, 0) / vals.length) : null,
+			n: vals.length,
+			enough: vals.length >= 3,
+			kcal: k.length ? Math.round(k.reduce((t, [, v]) => t + v, 0) / k.length) : null,
+			kcalDays: k.length
+		});
+	}
+	return out;
+}
 `${TARGET_BAND.lo}${TARGET_BAND.hi}`;
 // src/core/coachKit.ts
-var hm$9 = (iso) => {
+var hm$10 = (iso) => {
 	const d = new Date(iso);
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
@@ -8042,7 +8117,7 @@ function makeRefs(events, tasks) {
 	};
 	const evLines = events.filter((e) => !e.allDay).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 40).map((e, i) => {
 		refs.events.set(`E${i + 1}`, e);
-		return `E${i + 1} ${dayOf$7(e.start).slice(5)} ${hm$9(e.start)}–${hm$9(e.end)} ${e.title}`;
+		return `E${i + 1} ${dayOf$7(e.start).slice(5)} ${hm$10(e.start)}–${hm$10(e.end)} ${e.title}`;
 	});
 	const tLines = tasks.slice(0, 60).map((t, i) => {
 		refs.tasks.set(`T${i + 1}`, t);
@@ -8305,7 +8380,40 @@ function coachMood(f) {
 		why: why.join(", ") || "a normal day so far"
 	};
 }
-[...COMP_FIELDS];
+// src/main/bodyComp.ts
+var COLS = [
+	"id",
+	"at",
+	"day",
+	"weight_kg",
+	...COMP_FIELDS,
+	"source",
+	"raw",
+	"dedupe",
+	"updated_at"
+];
+function toRow(r) {
+	const out = {
+		id: String(r.id),
+		at: String(r.at),
+		day: String(r.day),
+		weight_kg: Number(r.weight_kg),
+		source: String(r.source ?? "manual"),
+		raw: r.raw == null ? null : String(r.raw),
+		dedupe: String(r.dedupe),
+		updated_at: String(r.updated_at)
+	};
+	for (const k of COMP_FIELDS) out[k] = r[k] == null ? null : Number(r[k]);
+	return out;
+}
+/** Weigh-ins from a day to a day (inclusive), oldest first. */
+function listBodyComp(db, from = "0000-00-00", to = "9999-99-99") {
+	try {
+		return db.prepare(`SELECT ${COLS.join(", ")} FROM body_comp WHERE day >= ? AND day <= ? ORDER BY at, id`).all(from, to).map(toRow);
+	} catch {
+		return [];
+	}
+}
 // src/core/foodTable.ts
 var F = (name, p, c, f, k, more = {}) => ({
 	name,
@@ -8935,6 +9043,21 @@ function toggleFoodMeal(db, mealId, source, now = /* @__PURE__ */ new Date()) {
 	const b = toggleEntry(db, kcalRowId(mealId), source, now);
 	return !!(a || b);
 }
+/** One point per day (first morning weight, waist) from body_comp, with body_metrics as fallback. */
+function bodyPoints(db, today, days = 42) {
+	const from = addDays$8(today, -days);
+	let metrics = [];
+	try {
+		metrics = db.prepare("SELECT day, weight, waist FROM body_metrics WHERE day >= ? AND day <= ?").all(from, today).map((r) => ({
+			day: String(r.day),
+			weight: r.weight == null ? null : Number(r.weight),
+			waist: r.waist == null ? null : Number(r.waist)
+		}));
+	} catch {
+		metrics = [];
+	}
+	return dailyPoints(listBodyComp(db, from, today), metrics);
+}
 /** A training day: a workout or a Sport Track set logged on it. */
 function isTrainingDay(db, day) {
 	if (trainedAt(db, day)) return true;
@@ -9165,7 +9288,7 @@ var HM$10 = /^([01]\d|2[0-3]):[0-5]\d$/;
 var isHm$2 = (x) => typeof x === "string" && HM$10.test(x);
 var isEnd = (x) => isHm$2(x) || x === "24:00";
 var toMin$12 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-var hm$8 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+var hm$9 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 var hours$2 = (x, d) => typeof x === "number" && Number.isFinite(x) ? Math.max(0, Math.min(12, Math.round(x * 2) / 2)) : d;
 function cleanLifeFit(raw) {
 	const o = raw && typeof raw === "object" ? raw : {};
@@ -9215,7 +9338,7 @@ function workToday(fit, day) {
 			mode,
 			busy: {
 				from: w.from,
-				to: end >= 1440 ? "24:00" : hm$8(end)
+				to: end >= 1440 ? "24:00" : hm$9(end)
 			},
 			light: null
 		};
@@ -10598,7 +10721,7 @@ var FOOD_CALLBACK = {
 	}
 };
 // src/core/calWatch.ts
-var hm$7 = (iso) => new Date(iso).toTimeString().slice(0, 5);
+var hm$8 = (iso) => new Date(iso).toTimeString().slice(0, 5);
 var day$1 = (iso, now) => {
 	const d = new Date(iso);
 	const t = new Date(now);
@@ -10611,7 +10734,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 	for (const [id, e] of Object.entries(now)) if (!prev[id] && live(e)) out.push({
 		kind: "added",
 		ev: e,
-		text: `📅 New in your calendar: <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$7(e.start)}. I'll plan around it.`
+		text: `📅 New in your calendar: <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$8(e.start)}. I'll plan around it.`
 	});
 	for (const [id, e] of Object.entries(prev)) if (!now[id] && live(e) && Date.parse(e.start) > at.getTime()) {
 		const freeMin = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 6e4);
@@ -10619,7 +10742,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 			kind: "cancelled",
 			ev: e,
 			freeMin,
-			text: `❌ <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$7(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
+			text: `❌ <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$8(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
 		});
 	}
 	return out.slice(0, 3);
@@ -10713,7 +10836,7 @@ function weekReport(sessions, plans, funMin, today) {
 	};
 }
 /** "2h 05m", "45m". */
-var hm$6 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
+var hm$7 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
 // src/core/moneyGuess.ts
 var MONEY = /\b(lei|mdl|ron|usd|eur|euro|dollars?|bani|spent|paid|pay|bought|cost|costs|price|cash|card|maib|vb|victoriabank|cheltuit|plătit|platit|потратил|заплатил|руб)\b|[$€£₽]/iu;
 var MONTH$1 = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?|ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie|январ\p{L}*|феврал\p{L}*|март\p{L}*|апрел\p{L}*|ма[йя]|июн\p{L}*|июл\p{L}*|август\p{L}*|сентябр\p{L}*|октябр\p{L}*|ноябр\p{L}*|декабр\p{L}*)\b/iu;
@@ -12705,7 +12828,7 @@ function capKind(b) {
 	const k = blockLook(b.title, b.kind).kind;
 	return k === "study" || k === "deep" || k === "chores" ? k : null;
 }
-var fmtH = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m} min`;
+var fmtH$1 = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m} min`;
 /** Every limit the plan breaks (empty: it keeps them all). */
 function limitBreaks(plan, l) {
 	if (!hasLimits(l)) return [];
@@ -12740,7 +12863,7 @@ function limitBreaks(plan, l) {
 		const total = work.reduce((t, b) => t + b.minutes, 0);
 		if (total > l.maxFocusMin) out.push({
 			code: "focus",
-			text: `${fmtH(total)} of work, your limit is ${fmtH(l.maxFocusMin)}`,
+			text: `${fmtH$1(total)} of work, your limit is ${fmtH$1(l.maxFocusMin)}`,
 			ids: work.map((b) => b.id),
 			over: total - l.maxFocusMin
 		});
@@ -12750,7 +12873,7 @@ function limitBreaks(plan, l) {
 		const total = of.reduce((t, b) => t + b.minutes, 0);
 		if (total > c.minutes) out.push({
 			code: "cap",
-			text: `${fmtH(total)} of ${CAP_NAMES[c.kind].toLowerCase()}, your limit is ${fmtH(c.minutes)}`,
+			text: `${fmtH$1(total)} of ${CAP_NAMES[c.kind].toLowerCase()}, your limit is ${fmtH$1(c.minutes)}`,
 			ids: of.map((b) => b.id),
 			over: total - c.minutes
 		});
@@ -13018,7 +13141,7 @@ function place(wins, c, best, minMin, avoid = []) {
 	return null;
 }
 var b_minutes = (b) => b.minutes;
-var hm$5 = (m) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+var hm$6 = (m) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 var fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m} min`;
 /** The whole day packed without the model (also the fallback when the model returns too little). */
 function packDay(p) {
@@ -13367,11 +13490,11 @@ function packDay(p) {
 	const focus = blocks.reduce((s, b) => s + b.minutes, 0);
 	const total = tasks.length;
 	const classes = p.events.filter((e) => !e.allDay).length;
-	const why = !blocks.length ? freeMin < 25 ? "No free time between your events today, so the must-dos fit where they can." : "Nothing to plan today: pick one thing that matters." : `${total} task${total === 1 ? "" : "s"}${classes ? ` and ${classes} event${classes === 1 ? "" : "s"}` : ""}, ${hm$5(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? "" : "s"} (${fmtMin(focus)})${quick.length ? ", small tasks batched" : ""}${meal ? `, lunch at ${fromMin$2(meal.start)} kept free` : ""}, ${fmtMin(Math.max(0, freeMin - focus - trainMin))} left free${short ? `. Short night (${hm$5(p.sleptMin)}), so shorter blocks and an earlier end` : ""}.`;
+	const why = !blocks.length ? freeMin < 25 ? "No free time between your events today, so the must-dos fit where they can." : "Nothing to plan today: pick one thing that matters." : `${total} task${total === 1 ? "" : "s"}${classes ? ` and ${classes} event${classes === 1 ? "" : "s"}` : ""}, ${hm$6(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? "" : "s"} (${fmtMin(focus)})${quick.length ? ", small tasks batched" : ""}${meal ? `, lunch at ${fromMin$2(meal.start)} kept free` : ""}, ${fmtMin(Math.max(0, freeMin - focus - trainMin))} left free${short ? `. Short night (${hm$6(p.sleptMin)}), so shorter blocks and an earlier end` : ""}.`;
 	const headline = mustdos.length ? `${mustdos.length} must-do${mustdos.length === 1 ? "" : "s"} · ${blocks.length} block${blocks.length === 1 ? "" : "s"} · ${fmtMin(focus)} focus${alsoOpen({ also }).length ? ` · ${alsoOpen({ also }).length} more on the list` : ""}` : "A light day: pick one thing that matters";
 	const result = {
 		day: p.today,
-		headline: short ? `Short night (${hm$5(p.sleptMin)}): a lighter day. ${headline}`.slice(0, 160) : headline,
+		headline: short ? `Short night (${hm$6(p.sleptMin)}): a lighter day. ${headline}`.slice(0, 160) : headline,
 		mustdos,
 		blocks,
 		training,
@@ -13994,9 +14117,9 @@ function stripMarks(s) {
 function normalize$1(s) {
 	return stripMarks(s).toLowerCase().replace(/[’`´]/g, "'").replace(/[“”«»"]/g, " ").replace(/[^\p{L}\p{N}\s:'.,;\-+/?!]/gu, " ").replace(/\s+/g, " ").trim();
 }
-var L = "(?<![\\p{L}\\p{N}])";
+var L$1 = "(?<![\\p{L}\\p{N}])";
 var R = "(?![\\p{L}\\p{N}])";
-var w = (src) => new RegExp(`${L}(?:${src})${R}`, "giu");
+var w = (src) => new RegExp(`${L$1}(?:${src})${R}`, "giu");
 /**
 * Phrase → plain English, applied in order on the normalised text. Only words
 * that steer what Ben does (verbs, days, times, linking words); names and
@@ -14027,8 +14150,8 @@ var PHRASES = [
 	[w("tmrw|tmr|tmrrw|tomoz|2moro|2morrow|tomorow|tommorow|tomorroww|tomorro"), "tomorrow"],
 	[w("tonite|2nite|tn"), "tonight"],
 	[w("rn"), "now"],
-	[new RegExp(`${L}(?:la|в|во|к|ora|в час)\\s+(\\d{1,2}(?:[:.]\\d{2})?)${R}`, "giu"), "at $1"],
-	[new RegExp(`${L}на\\s+(\\d{1,2}(?:[:.]\\d{2})?)${R}`, "giu"), "to $1"],
+	[new RegExp(`${L$1}(?:la|в|во|к|ora|в час)\\s+(\\d{1,2}(?:[:.]\\d{2})?)${R}`, "giu"), "at $1"],
+	[new RegExp(`${L$1}на\\s+(\\d{1,2}(?:[:.]\\d{2})?)${R}`, "giu"), "to $1"],
 	[w("si|și|и"), "and"],
 	[w("apoi|dupa aceea|потом|затем"), "then"],
 	[w("pls|plz|plez"), "please"],
@@ -14069,7 +14192,7 @@ function applyAliases(text, aliases = {}) {
 	let out = text;
 	for (const k of Object.keys(all).sort((a, b) => b.length - a.length)) {
 		if (!k) continue;
-		out = out.replace(new RegExp(`${L}${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${R}`, "giu"), all[k]);
+		out = out.replace(new RegExp(`${L$1}${k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${R}`, "giu"), all[k]);
 	}
 	return out;
 }
@@ -16038,7 +16161,7 @@ function muscleLoad(ctx) {
 			dset[mu].add(day);
 		}
 	}
-	const prog = ctx.program && ctx.program.week === mondayOf$7(ctx.today) ? ctx.program.target : null;
+	const prog = ctx.program && ctx.program.week === mondayOf$9(ctx.today) ? ctx.program.target : null;
 	return MUSCLES.map((m) => {
 		const goal = clamp$1(prog?.[m.id] ?? RULES$1.setsLo, RULES$1.setsLo, RULES$1.setsHi);
 		const n = sets[m.id];
@@ -16056,7 +16179,7 @@ function muscleLoad(ctx) {
 /** Weeks in a row (counting back from this one) with training on 2+ days. */
 function trainedWeeks(log, today) {
 	let n = 0;
-	let mon = mondayOf$7(today);
+	let mon = mondayOf$9(today);
 	for (let i = 0; i < 12; i++, mon = shiftDay(mon, -7)) if (Object.keys(log ?? {}).filter((d) => d >= mon && d <= shiftDay(mon, 6) && Object.keys(log[d] ?? {}).length > 0).length >= 2) n++;
 	else if (i === 0) continue;
 	else break;
@@ -17619,13 +17742,13 @@ function neutral(text) {
 /** The line for Ben's prompt while stealth is on. */
 var STEALTH_NOTE = "Stealth mode is on: never name the discipline challenge, urges, relapses, porn or MAN. Say \"the challenge\", \"a tough moment\", \"your streak\". Messages may be seen by others.";
 // src/core/strength.ts
-var num$4 = (s) => Number(s.replace(",", "."));
+var num$5 = (s) => Number(s.replace(",", "."));
 function parseSets(raw) {
 	const t = raw.trim().replace(/\s+/g, " ");
 	const m = /^(.+?)\s+(?:(\d+(?:[.,]\d+)?)\s*kg\s+)?(\d{1,2})\s*[x×]\s*(\d{1,3})(?:\s*(?:[x×]|@)\s*(\d+(?:[.,]\d+)?)\s*(?:kg)?)?$/i.exec(t);
 	if (!m) return null;
 	const name = m[1].trim();
-	const kg = m[2] ? num$4(m[2]) : m[5] ? num$4(m[5]) : void 0;
+	const kg = m[2] ? num$5(m[2]) : m[5] ? num$5(m[5]) : void 0;
 	const sets = Number(m[3]);
 	const reps = Number(m[4]);
 	if (!name || sets < 1 || sets > 20 || reps < 1 || reps > 200 || kg != null && !(kg > 0 && kg < 1e3)) return null;
@@ -17718,8 +17841,8 @@ function progressReport(i) {
 			label: "Focus time",
 			higherBetter: true,
 			f: (a, b) => sum$1(i.focus, a, b, (r) => r.minutes),
-			text: hm$6,
-			day: (v) => v ? hm$6(v) : "·",
+			text: hm$7,
+			day: (v) => v ? hm$7(v) : "·",
 			target: 600,
 			unit: 30
 		},
@@ -19002,6 +19125,7 @@ var SEASON_THEMES = [
 		]
 	}
 ];
+/** The 8 one-week chapters of an old 8-week season. */
 var CHAPTERS = [
 	"The Call",
 	"First Steps",
@@ -19012,50 +19136,70 @@ var CHAPTERS = [
 	"The Climb",
 	"Final Battle"
 ];
-var DAY$9 = /^\d{4}-\d{2}-\d{2}$/;
-var str$6 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+/** A 12-week season has 6 chapters of 2 weeks: two a month, so a chapter never splits a monthly milestone. */
+var CHAPTERS_12 = [
+	"The Call",
+	"Training Arc",
+	"The Trial",
+	"Turning Point",
+	"The Climb",
+	"Final Battle"
+];
+/** The chapter names of a season (6 for 12 weeks, 8 for an old 8-week one). */
+var chaptersOf = (s) => s.weeks === 8 ? CHAPTERS : CHAPTERS_12;
+/** 1-based chapter number for a 1-based week. */
+var chapterNo = (s, week) => s.weeks === 8 ? week : Math.ceil(week / 2);
+var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
+var str$7 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var hex = (v, d) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d;
-var day = (v) => typeof v === "string" && DAY$9.test(v) ? v : null;
+var day = (v) => typeof v === "string" && DAY$10.test(v) ? v : null;
 /** The Monday of the week holding `d` (or `d` itself on a Monday). */
-function mondayOf$6(d) {
+function mondayOf$7(d) {
 	return addDays$8(d, -(((/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay() + 6) % 7));
 }
-var seasonEnd = (s) => addDays$8(s.start, 55);
+/** Days in a season (84 for 12 weeks, 56 for an old one). */
+var seasonDays = (s) => (s.weeks === 8 ? 8 : 12) * 7;
+var seasonEnd = (s) => addDays$8(s.start, seasonDays(s) - 1);
 function cleanQuest(q, i) {
-	const title = str$6(q?.title, 80);
+	const title = str$7(q?.title, 80);
 	if (!title) return null;
 	const gid = Number(q?.goalId);
 	return {
-		id: str$6(q?.id, 24) || `q${i + 1}`,
+		id: str$7(q?.id, 24) || `q${i + 1}`,
 		title,
 		goalId: Number.isInteger(gid) && gid > 0 ? gid : null,
-		cardId: q?.cardId ? str$6(q.cardId, 24) : null,
+		cardId: q?.cardId ? str$7(q.cardId, 24) : null,
 		done: day(q?.done)
 	};
 }
 function cleanSeason(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
-	const name = str$6(r.name, 48);
+	const name = str$7(r.name, 48);
 	const start = day(r.start);
 	if (!name || !start) return null;
 	const b = r.boss && typeof r.boss === "object" ? r.boss : {};
 	const kind = BOSS_KINDS.some((k) => k.id === b.kind) ? b.kind : "other";
-	const end = seasonEnd({ start });
-	let bossDay = day(b.day) ?? addDays$8(start, 54);
+	const weeks = Number(r.weeks) === 12 ? 12 : 8;
+	const end = seasonEnd({
+		start,
+		weeks
+	});
+	let bossDay = day(b.day) ?? addDays$8(start, seasonDays({ weeks }) - 2);
 	if (bossDay < start) bossDay = start;
 	if (bossDay > end) bossDay = end;
 	const quests = (Array.isArray(r.quests) ? r.quests : []).map(cleanQuest).filter((q) => !!q).slice(0, 3);
 	return {
-		id: str$6(r.id, 24) || `s${start.replace(/-/g, "")}`,
+		id: str$7(r.id, 24) || `s${start.replace(/-/g, "")}`,
 		name,
-		theme: str$6(r.theme, 160),
-		cover: str$6(r.cover, 32) || "ronin-moon",
+		theme: str$7(r.theme, 160),
+		cover: str$7(r.cover, 32) || "ronin-moon",
 		color: hex(r.color, "#c8f135"),
-		area: r.area ? str$6(r.area, 16) : null,
+		area: r.area ? str$7(r.area, 16) : null,
 		start,
+		weeks,
 		quests,
 		boss: {
-			title: str$6(b.title, 80) || "The final test",
+			title: str$7(b.title, 80) || "The final test",
 			kind,
 			day: bossDay,
 			result: b.result === "won" || b.result === "lost" ? b.result : null,
@@ -19082,34 +19226,44 @@ function finishedSeasons(book, today) {
 }
 function seasonProgress(s, today) {
 	const end = seasonEnd(s);
+	const days = seasonDays(s);
+	const weeks = days / 7;
+	const chapters = chaptersOf(s);
 	const idx = daysBetween$3(s.start, today);
 	const daysToBoss = daysBetween$3(today, s.boss.day);
 	if (idx < 0) return {
 		phase: "before",
 		week: 0,
+		weeks,
+		chapterNo: 0,
 		chapter: "Coming soon",
 		dayIndex: idx,
-		daysLeft: 56,
+		daysLeft: days,
 		time: 0,
 		daysToBoss
 	};
 	if (today > end || s.closed) return {
 		phase: "over",
-		week: 8,
+		week: weeks,
+		weeks,
+		chapterNo: chapters.length,
 		chapter: "The end",
-		dayIndex: Math.min(idx, 55),
+		dayIndex: Math.min(idx, days - 1),
 		daysLeft: 0,
 		time: 1,
 		daysToBoss
 	};
 	const week = Math.floor(idx / 7) + 1;
+	const no = chapterNo(s, week);
 	return {
-		phase: week === 8 || daysToBoss <= 6 ? "boss-week" : "active",
+		phase: week === weeks || daysToBoss <= 6 ? "boss-week" : "active",
 		week,
-		chapter: CHAPTERS[week - 1],
+		weeks,
+		chapterNo: no,
+		chapter: chapters[no - 1],
 		dayIndex: idx,
 		daysLeft: daysBetween$3(today, end) + 1,
-		time: (idx + 1) / 56,
+		time: (idx + 1) / days,
 		daysToBoss
 	};
 }
@@ -19183,11 +19337,11 @@ function seasonMoments(s, p, boss) {
 		title: s.name,
 		sub: s.theme || "A new season begins"
 	});
-	if (p.week >= 5) out.push({
+	if (p.week > p.weeks / 2) out.push({
 		id: `season:${s.id}:half`,
 		kind: "season-half",
 		title: "Halfway",
-		sub: `${s.name} · chapter ${p.week}: ${p.chapter}`
+		sub: `${s.name} · chapter ${p.chapterNo}: ${p.chapter}`
 	});
 	if (boss.ready && !boss.result) out.push({
 		id: `season:${s.id}:ready`,
@@ -19205,7 +19359,8 @@ function seasonMoments(s, p, boss) {
 }
 function seasonRecap(s, input, today) {
 	const questsDone = input.questPcts.slice(0, s.quests.length).filter((p) => p >= 100).length;
-	const weeks = Math.min(8, Math.max(0, Math.ceil((Math.min(daysBetween$3(s.start, today), 55) + 1) / 7)));
+	const days = seasonDays(s);
+	const weeks = Math.min(days / 7, Math.max(0, Math.ceil((Math.min(daysBetween$3(s.start, today), days - 1) + 1) / 7)));
 	const lines = [
 		`${questsDone} of ${s.quests.length} main quests done`,
 		`${input.perfectDays} perfect daily-quest days`,
@@ -19235,7 +19390,7 @@ function seasonLine(s, p, boss, questPcts = []) {
 	if (!s || !p || !boss) return "";
 	if (p.phase === "before") return `Season "${s.name}" starts ${s.start} (theme: ${s.theme}).`;
 	const qs = s.quests.map((q, i) => `${q.title} ${Math.round(questPcts[i] ?? 0)}%`).join("; ");
-	return `Season "${s.name}" (8-week arc, theme: ${s.theme}): week ${p.week} "${p.chapter}", ${p.daysLeft} days left. Main quests: ${qs || "none set"}. Boss: ${s.boss.title} on ${s.boss.day} (${boss.result === "won" ? "DEFEATED" : boss.result === "lost" ? "lost this time" : `HP ${boss.hp}/${boss.max}${boss.ready ? ", only the real fight left" : ""}`}). Talk about his effort as chapters of this arc when it fits; never invent progress.`;
+	return `Season "${s.name}" (${p.weeks}-week arc, theme: ${s.theme}): week ${p.week} of ${p.weeks}, chapter "${p.chapter}", ${p.daysLeft} days left. Main quests: ${qs || "none set"}. Boss: ${s.boss.title} on ${s.boss.day} (${boss.result === "won" ? "DEFEATED" : boss.result === "lost" ? "lost this time" : `HP ${boss.hp}/${boss.max}${boss.ready ? ", only the real fight left" : ""}`}). Talk about his effort as chapters of this arc when it fits; never invent progress.`;
 }
 var ART_IDS = [
 	{
@@ -19309,21 +19464,21 @@ var ART_IDS = [
 		colors: ["#272012", "#f5c84b"]
 	}
 ].map((a) => a.id);
-var str$5 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var str$6 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanVision(raw, year) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	const y = Math.round(Number(r.year));
 	const seen = /* @__PURE__ */ new Set();
 	const cards = (Array.isArray(r.cards) ? r.cards : []).map((c, i) => ({
-		id: str$5(c?.id, 24) || `v${i + 1}`,
-		text: str$5(c?.text, 80),
+		id: str$6(c?.id, 24) || `v${i + 1}`,
+		text: str$6(c?.text, 80),
 		art: ART_IDS.includes(c?.art) ? c.art : ART_IDS[i % ART_IDS.length],
 		photo: !!c?.photo
 	})).filter((c) => c.text && !seen.has(c.id) && !!seen.add(c.id)).slice(0, 9);
 	return {
 		year: Number.isFinite(y) && y > 2e3 && y < 3e3 ? y : year,
-		word: str$5(r.word, 24),
-		becoming: str$5(r.becoming, 140),
+		word: str$6(r.word, 24),
+		becoming: str$6(r.becoming, 140),
 		cards
 	};
 }
@@ -19406,20 +19561,20 @@ var KIND_IDS$1 = [
 		hint: "kind things you wrote on the wins wall"
 	}
 ].map((k) => k.id);
-var str$4 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var str$5 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanIdentity(raw) {
 	const list = Array.isArray(raw?.lines) ? raw.lines : [];
 	const lines = [];
 	for (const [i, l] of list.entries()) {
-		const text = str$4(l?.text, 70);
+		const text = str$5(l?.text, 70);
 		if (!text) continue;
 		const kinds = (Array.isArray(l?.kinds) ? l.kinds : []).filter((k) => KIND_IDS$1.includes(k));
-		const words = (Array.isArray(l?.words) ? l.words : []).map((w) => str$4(w, 24).toLowerCase()).filter((w) => w.length >= 2).slice(0, 8);
+		const words = (Array.isArray(l?.words) ? l.words : []).map((w) => str$5(w, 24).toLowerCase()).filter((w) => w.length >= 2).slice(0, 8);
 		const t = Math.round(Number(l?.target));
 		lines.push({
-			id: str$4(l?.id, 24) || `i${i + 1}`,
+			id: str$5(l?.id, 24) || `i${i + 1}`,
 			text,
-			emoji: str$4(l?.emoji, 8) || "✦",
+			emoji: str$5(l?.emoji, 8) || "✦",
 			kinds: [...new Set(kinds)],
 			words,
 			target: Number.isFinite(t) && t >= 1 && t <= 100 ? t : 10
@@ -19453,7 +19608,7 @@ var matches = (l, kinds, text) => {
 };
 /** Each line's votes: this week (Monday on), last week and the last 4 weeks. */
 function identityVotes(book, entries, today, extra = []) {
-	const mon = mondayOf$6(today);
+	const mon = mondayOf$7(today);
 	const starts = [
 		addDays$8(mon, -21),
 		addDays$8(mon, -14),
@@ -19850,28 +20005,28 @@ function pickSideQuest(i, pool = SIDE_QUESTS) {
 		].filter(Boolean).join(", ")}.`
 	};
 }
-var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
-var str$3 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var DAY$9 = /^\d{4}-\d{2}-\d{2}$/;
+var str$4 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanSide(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	const weeks = {};
-	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$8.test(k)).sort().slice(-26)) {
+	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$9.test(k)).sort().slice(-26)) {
 		const w = r.weeks[k] ?? {};
 		weeks[k] = {
-			passed: (Array.isArray(w.passed) ? w.passed : []).map((x) => str$3(x, 24)).filter(Boolean).slice(0, 10),
+			passed: (Array.isArray(w.passed) ? w.passed : []).map((x) => str$4(x, 24)).filter(Boolean).slice(0, 10),
 			status: w.status === "done" || w.status === "skipped" ? w.status : "open"
 		};
 	}
 	return {
 		weeks,
-		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$3(a.title, 90) && DAY$8.test(String(a.day))).map((a, i) => ({
-			id: str$3(a.id, 24) || `a${i + 1}`,
-			questId: a.questId ? str$3(a.questId, 24) : null,
-			title: str$3(a.title, 90),
-			emoji: str$3(a.emoji, 8) || "🧭",
+		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$4(a.title, 90) && DAY$9.test(String(a.day))).map((a, i) => ({
+			id: str$4(a.id, 24) || `a${i + 1}`,
+			questId: a.questId ? str$4(a.questId, 24) : null,
+			title: str$4(a.title, 90),
+			emoji: str$4(a.emoji, 8) || "🧭",
 			day: String(a.day),
-			place: str$3(a.place, 60),
-			note: str$3(a.note, 280),
+			place: str$4(a.place, 60),
+			note: str$4(a.note, 280),
 			photo: !!a.photo
 		})).sort((a, b) => a.day < b.day ? -1 : a.day > b.day ? 1 : 0).slice(-300)
 	};
@@ -19883,7 +20038,7 @@ function recentQuests(book, today) {
 }
 /** The input for this week's pick from the book and the outside facts. */
 function pickInput(book, today, facts) {
-	const week = mondayOf$6(today);
+	const week = mondayOf$7(today);
 	return {
 		week,
 		...facts,
@@ -19893,9 +20048,9 @@ function pickInput(book, today, facts) {
 }
 function adventureStats(book, today) {
 	const year = today.slice(0, 4);
-	const weeksWith = new Set(book.log.map((a) => mondayOf$6(a.day)));
+	const weeksWith = new Set(book.log.map((a) => mondayOf$7(a.day)));
 	let n = 0;
-	let w = mondayOf$6(today);
+	let w = mondayOf$7(today);
 	if (!weeksWith.has(w)) w = addDays$8(w, -7);
 	while (weeksWith.has(w)) {
 		n++;
@@ -19992,17 +20147,17 @@ var MANUAL = [
 		manual: false
 	}
 ].filter((k) => k.manual).map((k) => k.id);
-var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
-var str$2 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
+var str$3 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanWins$1(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	return {
-		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$2(w.title, 120) && DAY$7.test(String(w.day))).map((w, i) => ({
-			id: str$2(w.id, 24) || `w${i + 1}`,
+		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$3(w.title, 120) && DAY$8.test(String(w.day))).map((w, i) => ({
+			id: str$3(w.id, 24) || `w${i + 1}`,
 			day: String(w.day),
 			kind: MANUAL.includes(w.kind) ? w.kind : "other",
-			title: str$2(w.title, 120),
-			detail: str$2(w.detail, 280),
+			title: str$3(w.title, 120),
+			detail: str$3(w.detail, 280),
 			auto: false,
 			weight: [
 				1,
@@ -20010,7 +20165,7 @@ function cleanWins$1(raw) {
 				3
 			].includes(w.weight) ? w.weight : 2
 		})).slice(-400),
-		hidden: (Array.isArray(r.hidden) ? r.hidden : []).map((x) => str$2(x, 60)).filter(Boolean).slice(-400)
+		hidden: (Array.isArray(r.hidden) ? r.hidden : []).map((x) => str$3(x, 60)).filter(Boolean).slice(-400)
 	};
 }
 var CTF = /\b(ctf|flag|htb|hack ?the ?box|tryhackme|thm|pwn|exploit|writeup)\b/i;
@@ -20213,7 +20368,7 @@ var WHEEL_AREAS = [
 var AREA_IDS = WHEEL_AREAS.map((a) => a.id);
 var QKEY = /^\d{4}-Q[1-4]$/;
 /** "2026-Q4" for a day. */
-function quarterOf(day) {
+function quarterOf$1(day) {
 	const m = Number(day.slice(5, 7));
 	return `${day.slice(0, 4)}-Q${Math.floor((m - 1) / 3) + 1}`;
 }
@@ -20268,7 +20423,7 @@ function average(r) {
 }
 /** Is this quarter still to rate? (and how many days of it are left) */
 function wheelDue(book, today) {
-	const q = quarterOf(today);
+	const q = quarterOf$1(today);
 	const y = Number(q.slice(0, 4));
 	const n = Number(q.slice(-1));
 	const end = n === 4 ? `${y}-12-31` : new Date(Date.UTC(y, n * 3, 0)).toISOString().slice(0, 10);
@@ -20562,282 +20717,1303 @@ function pastLine(c, text, today) {
 	if (!hits.length) return "";
 	return `From past chats (mention briefly only if it helps, e.g. "Last week the essay felt hard…"): ${hits.map((p) => `${ago$1(p.day, today)} he said (${p.kind}): "${p.text.slice(0, 100)}"`).join("; ")}.`;
 }
-// src/renderer/src/web/sagaStore.ts
-var SAGA_SEASONS = "saga_seasons";
-var SAGA_VISION = "saga_vision";
-var SAGA_VISION_PHOTOS = "saga_vision_photos";
-var SAGA_IDENTITY = "saga_identity";
-var SAGA_SIDE = "saga_side";
-var SAGA_WINS = "saga_wins";
-var SAGA_WHEEL = "saga_wheel";
-var SAGA_ARC = "saga_arc";
-var read$2 = (db, key) => {
-	try {
-		return JSON.parse(getSetting(db, key) || "null");
-	} catch {
-		return null;
+var plural$2 = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+var fmtH = (h) => `${Math.round(h * 10) / 10} h`;
+var METRICS = {
+	workouts: {
+		short: "workouts",
+		step: (t) => plural$2(t, "workout"),
+		fix: (l, d) => l <= d ? `${plural$2(l, "workout")} to go in ${plural$2(d, "day")}: put the next one on tomorrow's plan.` : `${d} days left: every workout you fit in still counts.`
+	},
+	proteinDays: {
+		short: "protein days",
+		step: (t) => `Protein goal on ${t} of 7 days`,
+		fix: () => "Reach the protein goal today: one extra portion or a shake does it."
+	},
+	weighIns: {
+		short: "weigh-ins",
+		step: (t) => plural$2(t, "weigh-in"),
+		fix: () => "Weigh in tomorrow morning, before breakfast."
+	},
+	sessions: {
+		short: "planned sessions",
+		step: (t) => `${plural$2(t, "training session")} from your split`,
+		fix: () => "Do the next session from your split: it is on Body → Training."
+	},
+	hardSets: {
+		short: "hard sets",
+		step: (t) => `${t} hard sets (about ${Math.round(t / 4)} per muscle group)`,
+		fix: () => "Add 2–3 hard sets to your next session."
+	},
+	focusHours: {
+		short: "h focus",
+		hours: true,
+		step: (t) => `${fmtH(t)} of focus`,
+		fix: (l, d) => `${fmtH(l)} of focus left: about ${Math.max(25, Math.round(l * 60 / Math.max(1, d) / 5) * 5)} min a day covers it.`
+	},
+	deadlineSessions: {
+		short: "study sessions",
+		step: (t) => plural$2(t, "planned study session"),
+		fix: () => "Do one planned study session today."
+	},
+	moneySaved: {
+		short: "saved",
+		step: (t) => `Save ${Math.round(t)} this week`,
+		fix: () => "Skip one spend you do not need this week."
+	},
+	applications: {
+		short: "applications",
+		step: (t) => plural$2(t, "job application"),
+		fix: () => "Send one application today: 20 minutes is enough."
+	},
+	portfolio: {
+		short: "portfolio pieces",
+		step: (t) => plural$2(t, "portfolio piece"),
+		fix: () => "Write up one thing you built or solved for the portfolio."
+	},
+	flashcardDays: {
+		short: "flashcard days",
+		step: (t) => `Flashcards on ${t} days`,
+		fix: () => "A 5-minute flashcard review today."
+	},
+	sleepNights: {
+		short: "good nights",
+		step: (t) => `${plural$2(t, "good night")} (in bed on time, 7.5 h)`,
+		fix: () => "In bed on time tonight, for 7.5 hours."
 	}
 };
-var yearOf = (today) => Number(today.slice(0, 4));
-var loadSeasons = (db) => cleanSeasonBook(read$2(db, SAGA_SEASONS));
-var loadVision = (db, today) => cleanVision(read$2(db, SAGA_VISION), yearOf(today));
-var loadVisionPhotos = (db, cards) => cleanVisionPhotos(read$2(db, SAGA_VISION_PHOTOS), cards);
-var loadIdentity = (db) => cleanIdentity(read$2(db, SAGA_IDENTITY));
-var loadSide = (db) => cleanSide(read$2(db, SAGA_SIDE));
-var loadWins = (db) => cleanWins$1(read$2(db, SAGA_WINS));
-var loadWheel = (db) => cleanWheel(read$2(db, SAGA_WHEEL));
-var loadArc = (db) => cleanArc(read$2(db, SAGA_ARC));
-var extraVotes = (wins) => wins.mine.map((w) => ({
-	day: w.day,
-	kinds: w.kind === "kind" ? ["kind"] : [],
-	text: `${w.title} ${w.detail}`
-}));
-function seasonFacts(s, book, entries, today, goalPct) {
-	const progress = seasonProgress(s, today);
-	const end = seasonEnd(s);
-	const to = today < end ? today : end;
-	const live = effective(entries).filter((e) => e.day >= s.start && e.day <= to);
-	let perfectDays = 0;
-	if (progress.phase !== "before") {
-		for (let d = s.start; d <= to; d = addDays$8(d, 1)) if (questState(d, live.filter((e) => e.day === d)).allDone) perfectDays++;
+/** Generic starting templates: no personal numbers (those come from your data at runtime). */
+var TEMPLATES = [
+	{
+		id: "gain",
+		title: "Gain about 4 kg lean",
+		emoji: "⚖️",
+		result: "weight",
+		resultTarget: 4,
+		actions: [
+			{
+				metric: "workouts",
+				target: 5
+			},
+			{
+				metric: "proteinDays",
+				target: 6
+			},
+			{
+				metric: "weighIns",
+				target: 3
+			}
+		],
+		finalText: "+4 kg on the weekly average"
+	},
+	{
+		id: "strong",
+		title: "Get much stronger",
+		emoji: "💪",
+		result: "levels",
+		resultTarget: null,
+		actions: [{
+			metric: "sessions",
+			target: null
+		}, {
+			metric: "hardSets",
+			target: 40
+		}],
+		finalText: "Archer push-ups 3×8 and a first full pull-up"
+	},
+	{
+		id: "study",
+		title: "Study and pass the exams",
+		emoji: "📚",
+		result: "focusTotal",
+		resultTarget: null,
+		actions: [{
+			metric: "focusHours",
+			target: 10
+		}, {
+			metric: "deadlineSessions",
+			target: 4
+		}],
+		finalText: "Every exam prepared on time"
+	},
+	{
+		id: "money",
+		title: "Earn or save money",
+		emoji: "💰",
+		result: "moneyMonth",
+		resultTarget: null,
+		actions: [{
+			metric: "moneySaved",
+			target: null
+		}],
+		finalText: "The monthly savings target, three months in a row"
+	},
+	{
+		id: "career",
+		title: "Career: get the job",
+		emoji: "🧭",
+		result: "applicationsTotal",
+		resultTarget: null,
+		actions: [
+			{
+				metric: "applications",
+				target: 3
+			},
+			{
+				metric: "portfolio",
+				target: 1
+			},
+			{
+				metric: "flashcardDays",
+				target: 5
+			}
+		],
+		finalText: "Applications out every week and a portfolio to show"
+	},
+	{
+		id: "sleep",
+		title: "Sleep better",
+		emoji: "🌙",
+		result: "sleepAvg",
+		resultTarget: null,
+		actions: [{
+			metric: "sleepNights",
+			target: 5
+		}],
+		finalText: "7.5 hours, in bed on time, most nights"
 	}
-	const xp = live.reduce((t, e) => t + Math.max(0, e.xp), 0);
-	const questGoals = s.quests.map((q) => q.goalId != null ? ((g) => g ? {
-		id: q.goalId,
-		...g
-	} : null)(goalPct(q.goalId)) : null);
-	const questPcts = s.quests.map((q) => questPct(q, (id) => goalPct(id)?.pct ?? null));
-	const boss = bossHp(s, {
-		questPcts,
-		perfectDays,
-		xp
-	});
-	const q = questState(today, effective(entries).filter((e) => e.day === today));
-	const workouts = live.filter((e) => e.ruleId === "body.workout_done").length;
-	return {
-		season: s,
-		number: book.seasons.findIndex((x) => x.id === s.id) + 1,
-		progress,
-		boss,
-		questPcts,
-		questGoals,
-		perfectDays,
-		xp,
-		today: {
-			quests: q.quests.map((x) => ({
-				title: x.title,
-				progress: x.progress,
-				goal: x.goal,
-				done: x.done
-			})),
-			allDone: q.allDone
-		},
-		recap: progress.phase === "over" || s.boss.result ? seasonRecap(s, {
-			questPcts,
-			perfectDays,
-			xp,
-			workouts
-		}, today) : null
-	};
+];
+var templateOf = (id) => TEMPLATES.find((t) => t.id === id);
+var DEFAULT_ACTIVE = [
+	"gain",
+	"strong",
+	"study"
+];
+var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
+var str$2 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
+var num$4 = (v) => v === null || v === void 0 || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null;
+var isMetric = (m) => Object.prototype.hasOwnProperty.call(METRICS, m);
+var freshGoal = (t, on) => ({
+	id: t.id,
+	title: t.title,
+	on,
+	targets: {},
+	resultTarget: null,
+	milestones: null
+});
+var defaultLadder = () => ({
+	v: 1,
+	goals: TEMPLATES.map((t) => freshGoal(t, DEFAULT_ACTIVE.includes(t.id))),
+	start: null,
+	reviews: [],
+	monthReviews: []
+});
+function cleanMilestones(raw) {
+	if (!Array.isArray(raw)) return null;
+	const out = raw.map((m) => ({
+		month: Math.round(Number(m?.month)),
+		text: str$2(m?.text, 120),
+		value: num$4(m?.value)
+	})).filter((m) => m.month >= 1 && m.month <= 3 && m.text).slice(0, 3);
+	return out.length ? out : null;
 }
-function goalsOf(s, finance, now) {
-	try {
-		return s.goals.cards(now, finance, { paused: true }).map((c) => ({
-			id: c.goal.id,
-			title: c.goal.title,
-			pct: Math.round(c.pct),
-			card: c.meta?.card ?? null
-		}));
-	} catch {
-		return [];
-	}
-}
-/** The weekend's weather from the weather plugin's saved data (null without it). */
-function weekendWeather(db, today) {
-	try {
-		if (!JSON.parse(getSetting(db, "plugins_on") || "{}")?.weather) return null;
-		const data = JSON.parse(getSetting(db, "plugin_weather_data") || "null");
-		const wknd = (Array.isArray(data?.days) ? data.days : []).filter((d) => d.day >= today && [0, 6].includes((/* @__PURE__ */ new Date(`${d.day}T12:00:00Z`)).getUTCDay()));
-		if (!wknd.length) return null;
-		if (wknd.every((d) => (d.rain?.length ?? 0) > 0)) return "rain";
-		if (wknd.every((d) => d.tmax != null && d.tmax < 4)) return "cold";
-		return "clear";
-	} catch {
-		return null;
-	}
-}
-function sagaView(s, opts = {}) {
-	const now = opts.now ?? /* @__PURE__ */ new Date();
-	const db = s.db;
-	const today = s.wallet.today(now);
-	const entries = s.wallet.entries();
-	const sum = s.wallet.summary(now);
-	const lv = sum.level.level;
-	const def = hunterDefFor(lv);
-	const nx = nextHunterRank(lv);
-	const goals = goalsOf(s, opts.finance, now);
-	const goalPct = (id) => {
-		const g = goals.find((x) => x.id === id);
-		return g ? {
-			title: g.title,
-			pct: g.pct
-		} : null;
-	};
-	const seasons = loadSeasons(db);
-	const cur = currentSeason(seasons, today);
-	const current = cur ? seasonFacts(cur, seasons, entries, today, goalPct) : null;
-	const done = finishedSeasons(seasons, today);
-	const vision = loadVision(db, today);
-	const identity = loadIdentity(db);
-	const winsBook = loadWins(db);
-	const side = loadSide(db);
-	let budget = opts.side?.budget;
-	if (budget === void 0) try {
-		budget = s.shop.value({ finance: opts.finance }, now).funLeftLei;
-	} catch {
-		budget = null;
-	}
-	const sidePick = pickSideQuest(pickInput(side, today, {
-		budget: budget ?? null,
-		weather: opts.side?.weather ?? weekendWeather(db, today),
-		freeEvenings: opts.side?.freeEvenings ?? null,
-		freeDay: opts.side?.freeDay ?? null
-	}));
-	const week = pickInput(side, today, {
-		budget: null,
-		weather: null,
-		freeEvenings: null,
-		freeDay: null
-	}).week;
-	const wins = collectWins({
-		entries,
-		book: winsBook,
-		seasons: done.map((x) => ({
-			id: x.id,
-			name: x.name,
-			boss: x.boss.title,
-			won: x.boss.result === "won",
-			day: x.boss.resultDay ?? x.closed ?? seasonEnd(x)
-		})),
-		adventures: side.log.map((a) => ({
-			id: a.id,
-			title: a.title,
-			emoji: a.emoji,
-			day: a.day,
-			place: a.place
-		}))
-	});
-	const low = lowDay(db, entries, today);
-	const wheel = loadWheel(db);
-	const hist = wheelHistory(wheel);
-	const last = hist[hist.length - 1];
-	const arcBook = loadArc(db);
-	const arc = arcState(done.length, arcBook.outfit);
-	const moments = sharedMoments(db);
-	const cands = [];
-	const lastRank = arcBook.played.filter((p) => p.startsWith("rank:")).map((p) => Number(p.slice(5))).sort((a, b) => b - a)[0];
-	const r = rankUp(lastRank ?? 1, lv);
-	if (r && lastRank != null) cands.push(r);
-	if (current) for (const m of seasonMoments(current.season, current.progress, current.boss)) cands.push(seasonCinematic(m, current.season.color));
-	return {
-		today,
-		level: {
-			level: lv,
-			rank: def.name,
-			title: def.title,
-			color: def.color,
-			badge: def.badge,
-			next: nx ? {
-				name: nx.name,
-				minLevel: nx.minLevel
-			} : null,
-			progress: sum.level.progress
-		},
-		seasons,
-		current,
-		finished: done.length,
-		vision,
-		photos: loadVisionPhotos(db, vision.cards),
-		cardToday: cardOfDay(vision, today),
-		identity,
-		votes: identityVotes(identity, entries, today, extraVotes(winsBook)),
-		side,
-		sidePick,
-		sideStatus: side.weeks[week]?.status ?? "open",
-		sideStats: adventureStats(side, today),
-		wins,
-		winsBook,
-		low,
-		winToday: low ? pickWin(wins, today) : null,
-		wheel,
-		wheelDue: wheelDue(wheel, today),
-		suggestion: last ? suggestTheme(last.ratings, hist.length > 1 ? hist[hist.length - 2].ratings : null) : null,
-		arc,
-		arcBook,
-		arcNew: newChapter(arcBook, arc),
-		moments,
-		cinematic: nextCinematic(cands, arcBook.played),
-		goals
-	};
-}
-function lowDay(db, entries, today) {
-	try {
-		const live = effective(entries);
-		const y = addDays$8(today, -1);
-		if (!live.some((e) => daysBetween$3(e.day, today) >= 2)) return false;
-		const yesterday = live.filter((e) => e.day === y).reduce((t, e) => t + Math.max(0, e.coins), 0);
-		const slipped = live.some((e) => e.day === y && e.ruleId === "discipline.reset");
-		let mood = null;
-		try {
-			const desk = JSON.parse(getSetting(db, "ben_desk") || "null");
-			const m = (Array.isArray(desk?.moods) ? desk.moods : []).filter((x) => x?.day === today).pop();
-			mood = m && Number.isFinite(Number(m.mood)) ? Number(m.mood) : null;
-		} catch {
-			mood = null;
+/** Cleans a saved ladder; every template is always there (the missing ones on "Not now"), at most 3 on. */
+function cleanLadder$1(raw) {
+	const r = raw && typeof raw === "object" ? raw : null;
+	if (!r || !Array.isArray(r.goals)) return defaultLadder();
+	const seen = /* @__PURE__ */ new Set();
+	const goals = [];
+	for (const g of r.goals) {
+		const id = String(g?.id ?? "");
+		if (!TEMPLATES.some((t) => t.id === id) || seen.has(id)) continue;
+		seen.add(id);
+		const targets = {};
+		for (const [k, v] of Object.entries(g?.targets ?? {})) {
+			const n = num$4(v);
+			if (isMetric(k) && n != null && n >= 0 && n <= 1e4) targets[k] = Math.round(n * 10) / 10;
 		}
-		return isLowDay({
-			mood,
-			yesterday,
-			score: null,
-			prevScore: null,
-			slipped
+		const rt = num$4(g?.resultTarget);
+		goals.push({
+			id,
+			title: str$2(g?.title, 60) || templateOf(id).title,
+			on: !!g?.on,
+			targets,
+			resultTarget: rt != null && Math.abs(rt) <= 1e7 ? rt : null,
+			milestones: cleanMilestones(g?.milestones)
 		});
-	} catch {
-		return false;
+	}
+	for (const t of TEMPLATES) if (!seen.has(t.id)) goals.push(freshGoal(t, false));
+	let on = 0;
+	for (const g of goals) if (g.on && ++on > 3) g.on = false;
+	const days = (v, n) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x)).filter((x) => DAY$7.test(x.slice(0, 10))))].sort().slice(-n);
+	return {
+		v: 1,
+		goals,
+		start: typeof r.start === "string" && DAY$7.test(r.start) ? r.start : null,
+		reviews: days(r.reviews, 30),
+		monthReviews: days(r.monthReviews, 12)
+	};
+}
+var activeGoals = (l) => l.goals.filter((g) => g.on);
+var EMPTY_FACTS = {
+	daily: {},
+	weights: [],
+	splitDays: 4,
+	hasDeadlines: false,
+	levels: [],
+	levelUps: 0,
+	sleepAvg: null
+};
+var mondayOf$6 = (d) => addDays$8(d, -(((/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay() + 6) % 7));
+/** The quarter is the current Season; without one, 12 weeks from the ladder's own start (rolling on). */
+function quarterOf(season, ladderStart, today) {
+	let start;
+	let weeks;
+	if (season) {
+		start = season.start;
+		weeks = season.weeks;
+	} else {
+		start = mondayOf$6(ladderStart ?? today);
+		weeks = 12;
+		while (daysBetween$3(start, today) >= weeks * 7) start = addDays$8(start, weeks * 7);
+	}
+	const idx = daysBetween$3(start, today);
+	const week = idx < 0 ? 0 : Math.min(weeks, Math.floor(idx / 7) + 1);
+	return {
+		start,
+		weeks,
+		end: addDays$8(start, weeks * 7 - 1),
+		week,
+		month: week ? Math.ceil(week / 4) : 0,
+		months: Math.ceil(weeks / 4),
+		season: season?.name ?? null
+	};
+}
+/** First and last week (1-based) of a month of the quarter. */
+var monthWeeks = (q, month) => ({
+	from: (month - 1) * 4 + 1,
+	to: Math.min(q.weeks, month * 4)
+});
+/** The weekly target of an action: yours, else the template's, else from your data. */
+function targetOf(g, metric, facts) {
+	if (g.targets[metric] != null) return g.targets[metric];
+	if (metric === "sessions") return facts.splitDays || null;
+	if (metric === "deadlineSessions" && !facts.hasDeadlines) return null;
+	if (metric === "moneySaved") return g.resultTarget != null && g.resultTarget > 0 ? Math.round(g.resultTarget * 12 / 52) : null;
+	return templateOf(g.id).actions.find((a) => a.metric === metric)?.target ?? null;
+}
+var lightOf = (score) => score == null ? "none" : score >= 80 ? "green" : score >= 50 ? "yellow" : "red";
+var fmtNum = (m, n) => METRICS[m].hours ? String(Math.round(n * 10) / 10) : String(Math.round(n));
+/**
+* One goal's week. The current week is judged only on its finished days
+* (Monday counts as on pace until it is over), so a new week starts calm.
+*/
+function goalWeek(g, facts, monday, today) {
+	const sunday = addDays$8(monday, 6);
+	const judged = today > sunday ? 7 : today < monday ? 0 : daysBetween$3(monday, today);
+	const actions = templateOf(g.id).actions.map(({ metric }) => {
+		const byDay = facts.daily[metric] ?? {};
+		let done = 0;
+		for (let d = monday; d <= sunday && d <= today; d = addDays$8(d, 1)) done += Number(byDay[d]) || 0;
+		done = Math.round(done * 10) / 10;
+		const target = targetOf(g, metric, facts);
+		const expected = target != null ? target * judged / 7 : 0;
+		const ratio = target == null || target <= 0 ? null : expected <= 0 ? null : Math.max(0, Math.min(1, done / expected));
+		return {
+			metric,
+			done,
+			target,
+			ratio,
+			text: `${fmtNum(metric, done)}/${target == null ? "?" : fmtNum(metric, target)} ${METRICS[metric].short}`
+		};
+	});
+	const scored = actions.filter((a) => a.ratio != null);
+	const score = scored.length ? Math.round(scored.reduce((t, a) => t + a.ratio, 0) / scored.length * 100) : null;
+	return {
+		week: monday,
+		actions,
+		score,
+		light: lightOf(score)
+	};
+}
+/** One plain fix for the action furthest behind (null when on track). No guilt, just the next step. */
+function fixLine(gw, today) {
+	if (gw.light === "green" || gw.light === "none") return null;
+	const worst = gw.actions.filter((a) => a.ratio != null && a.ratio < .8).sort((a, b) => a.ratio - b.ratio)[0];
+	if (!worst || worst.target == null) return null;
+	const days = Math.max(1, 7 - Math.max(0, daysBetween$3(gw.week, today)));
+	const left = Math.max(0, Math.round((worst.target - worst.done) * 10) / 10);
+	return left > 0 ? METRICS[worst.metric].fix(left, days) : null;
+}
+/** The quarter strip: each week green, yellow or red (weeks to come are "future"). */
+function timeline(g, facts, q, today) {
+	return Array.from({ length: q.weeks }, (_, i) => {
+		const start = addDays$8(q.start, i * 7);
+		return {
+			week: i + 1,
+			start,
+			light: start > today ? "future" : goalWeek(g, facts, start, today).light
+		};
+	});
+}
+var r1 = (n) => Math.round(n * 10) / 10;
+var sumRange = (m, from, to) => Object.entries(m ?? {}).reduce((t, [d, v]) => d >= from && d <= to ? t + (Number(v) || 0) : t, 0);
+/** The weight the quarter started from: the first weekly average in the quarter, else the latest one before it. */
+function startWeight(facts, q) {
+	const inside = facts.weights.find((w) => w.week >= q.start);
+	return [...facts.weights].reverse().find((w) => w.week < q.start)?.avg ?? inside?.avg ?? null;
+}
+function resultOf(g, facts, q, today) {
+	const t = templateOf(g.id);
+	const target = g.resultTarget ?? t.resultTarget;
+	const none = {
+		pct: null,
+		start: null,
+		now: null,
+		target: null
+	};
+	switch (t.result) {
+		case "weight": {
+			const start = startWeight(facts, q);
+			const now = facts.weights.length ? facts.weights[facts.weights.length - 1].avg : null;
+			if (start == null || now == null || target == null) return {
+				line: "Weigh in 3 times a week to see your weekly average",
+				...none
+			};
+			const goal = r1(start + target);
+			const pct = target ? Math.max(0, Math.min(100, Math.round((now - start) / target * 100))) : null;
+			return {
+				line: `${r1(start)} kg → ${r1(now)} kg (target ${goal} kg, weekly average)`,
+				pct,
+				start: r1(start),
+				now: r1(now),
+				target: goal
+			};
+		}
+		case "levels": return {
+			line: [facts.levels.join(" · ") || "Start the training roadmap to see your levels", facts.levelUps ? `${plural$2(facts.levelUps, "level-up")} this quarter` : ""].filter(Boolean).join(" · "),
+			...none
+		};
+		case "focusTotal": {
+			const h = r1(sumRange(facts.daily.focusHours, q.start, today));
+			return {
+				line: `${fmtH(h)} of focus this quarter`,
+				...none,
+				now: h
+			};
+		}
+		case "moneyMonth": {
+			const from = `${today.slice(0, 7)}-01`;
+			const now = Math.round(sumRange(facts.daily.moneySaved, from, today));
+			if (target == null) return {
+				line: `Saved ${now} this month · set a monthly target`,
+				...none,
+				now
+			};
+			return {
+				line: `Saved ${now} of ${Math.round(target)} this month`,
+				pct: target > 0 ? Math.max(0, Math.min(100, Math.round(now / target * 100))) : null,
+				start: 0,
+				now,
+				target
+			};
+		}
+		case "applicationsTotal": {
+			const n = Math.round(sumRange(facts.daily.applications, q.start, today));
+			return {
+				line: `${plural$2(n, "application")} this quarter`,
+				...none,
+				now: n
+			};
+		}
+		case "sleepAvg": return {
+			line: facts.sleepAvg != null ? `${r1(facts.sleepAvg)} h a night lately` : "Log your sleep to see your nights",
+			...none,
+			now: facts.sleepAvg
+		};
 	}
 }
-/** Big moments you shared with Ben, from his memory store (ben_convo points kept as moments). */
-function sharedMoments(db) {
-	try {
-		return cleanConvo(JSON.parse(getSetting(db, "ben_convo") || "null")).points.filter((p) => p.via === "moment").map((p) => ({
-			day: p.day,
-			text: p.text
-		}));
-	} catch {
-		return [];
+/**
+* Monthly milestones worked backward from the quarter's result: an even
+* share of the target per month (+4 kg in 12 weeks → about +1.33 kg a month).
+* Only a suggestion until you confirm or edit it.
+*/
+function suggestMilestones(g, facts, q) {
+	const t = templateOf(g.id);
+	const target = g.resultTarget ?? t.resultTarget;
+	const out = [];
+	for (let m = 1; m <= q.months; m++) {
+		const last = m === q.months;
+		const share = monthWeeks(q, m).to / q.weeks;
+		const weeksIn = monthWeeks(q, m).to;
+		const wk = (metric) => targetOf(g, metric, facts) ?? 0;
+		switch (t.result) {
+			case "weight": {
+				const start = startWeight(facts, q);
+				const gain = target != null ? r1(target * share) : null;
+				const value = start != null && target != null ? r1(start + target * share) : null;
+				out.push({
+					month: m,
+					text: gain == null ? `Month ${m}: weekly average up` : `Month ${m}: +${gain} kg${value != null ? ` (${value} kg weekly average)` : ""}`,
+					value
+				});
+				break;
+			}
+			case "levels":
+				out.push({
+					month: m,
+					text: last ? `Month ${m}: ${t.finalText}` : `Month ${m}: one level up on push and on pull`,
+					value: null
+				});
+				break;
+			case "focusTotal":
+				out.push({
+					month: m,
+					text: `Month ${m}: ${Math.round(wk("focusHours") * weeksIn)} h of focus in total`,
+					value: Math.round(wk("focusHours") * weeksIn)
+				});
+				break;
+			case "moneyMonth":
+				out.push({
+					month: m,
+					text: target != null ? `Month ${m}: ${Math.round(target)} saved this month` : `Month ${m}: set a monthly target first`,
+					value: null
+				});
+				break;
+			case "applicationsTotal":
+				out.push({
+					month: m,
+					text: `Month ${m}: ${Math.round(wk("applications") * weeksIn)} applications in total`,
+					value: Math.round(wk("applications") * weeksIn)
+				});
+				break;
+			case "sleepAvg": out.push({
+				month: m,
+				text: `Month ${m}: ${wk("sleepNights")} good nights in at least 3 of 4 weeks`,
+				value: null
+			});
+		}
 	}
+	return out;
 }
-/** Ben's lines about all this (only the parts that have something). */
-function sagaContext(s, db, finance, now = /* @__PURE__ */ new Date()) {
-	try {
-		const v = sagaView(s, {
-			finance,
-			now,
-			side: { budget: null }
+var milestonesOf$2 = (g, facts, q) => g.milestones ?? suggestMilestones(g, facts, q);
+function ladderCards(l, facts, q, today) {
+	const monday = mondayOf$6(today);
+	return activeGoals(l).map((g) => {
+		const week = goalWeek(g, facts, monday, today);
+		const ms = milestonesOf$2(g, facts, q);
+		return {
+			goal: g,
+			emoji: templateOf(g.id).emoji,
+			week,
+			fix: fixLine(week, today),
+			result: resultOf(g, facts, q, today),
+			milestone: ms.find((m) => m.month === Math.max(1, q.month)) ?? ms[ms.length - 1] ?? null,
+			suggested: !g.milestones,
+			timeline: timeline(g, facts, q, today)
+		};
+	});
+}
+/** One line for Ben's prompt (empty without critical goals). Never invents progress. */
+function ladderBenLine(cards, q) {
+	if (!cards.length) return "";
+	const parts = cards.map((c) => `${c.goal.title} (${c.week.light === "none" ? "new week" : c.week.light}: ${c.week.actions.filter((a) => a.target != null).map((a) => a.text).join(", ")}${c.milestone ? `; month ${c.milestone.month}: ${c.milestone.text.replace(/^Month \d+: /, "")}` : ""})`);
+	return `Quarter (week ${q.week} of ${q.weeks}${q.season ? `, season "${q.season}"` : ""}), up to 3 critical goals, scored on actions this week: ${parts.join("; ")}. Everything else is "Not now": don't push it. Praise actions, not results; no guilt when a light is red, one small next step.`;
+}
+var r5 = (m) => Math.round(m / 5) * 5;
+var DAYS$7 = [
+	"Sunday",
+	"Monday",
+	"Tuesday",
+	"Wednesday",
+	"Thursday",
+	"Friday",
+	"Saturday"
+];
+var MONTHS$8 = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec"
+];
+/** "Friday 20 Nov". */
+function dayLabel(day) {
+	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
+	return `${DAYS$7[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS$8[d.getUTCMonth()]}`;
+}
+/** What kind of deadline, in one word, from its title ("exam", "essay", "report"), else "deadline". */
+function deadlineWord(title) {
+	const m = /\b(exam|test|quiz|essay|report|thesis|project|presentation|assignment|paper)\b/i.exec(title);
+	return m ? m[1].toLowerCase() : "deadline";
+}
+/** The session block's title: the subject first, like the goal blocks (core/goalPlan goalBlockTitle). */
+var sessionTitle = (g) => g.subject?.trim() && g.subject.trim().toLowerCase() !== g.title.trim().toLowerCase() ? `${g.subject.trim()}: ${g.title.trim()}` : g.title.trim();
+/** Session id: goal and day (and the k-th session that day). Letters, digits and dashes only. */
+var sessionId = (goalId, day, k = 0) => `dl-${String(goalId).replace(/[^a-zA-Z0-9]/g, "")}-${day.replace(/-/g, "")}${k ? `-${k}` : ""}`;
+/**
+* Plans every deadline backward. `rooms` covers today and the days after
+* (missing days have no room). Earlier deadlines get room first. Pure: the
+* same inputs give the same sessions.
+*/
+function planDeadlines(goals, rooms, today) {
+	const left = new Map(rooms.filter((r) => r.day >= today).map((r) => [r.day, Math.max(0, Math.floor(r.minutes / 5) * 5)]));
+	const weight = new Map(rooms.map((r) => [r.day, r.weight]));
+	const open = goals.filter((g) => g.leftMin > 0 && g.deadline > today).sort((a, b) => a.deadline.localeCompare(b.deadline) || String(a.id).localeCompare(String(b.id)));
+	const out = [];
+	for (const g of open) {
+		const days = [];
+		for (let d = addDays$8(g.deadline, -1); d >= today && days.length < 60; d = addDays$8(d, -1)) days.push(d);
+		const want = r5(g.leftMin);
+		const n = Math.max(1, Math.ceil(want / 90));
+		const size = Math.min(90, Math.max(25, Math.ceil(want / Math.max(1, Math.min(n, days.length)) / 5) * 5));
+		const taken = [];
+		let rest = want;
+		const used = (day) => taken.filter((t) => t.day === day).reduce((s, t) => s + t.minutes, 0);
+		const take = (day, cap) => {
+			const room = Math.min(left.get(day) ?? 0, 90 - used(day));
+			const m = Math.min(cap, room, rest);
+			if (m < 25 && !(m === rest && m >= 10)) return false;
+			left.set(day, (left.get(day) ?? 0) - m);
+			rest -= m;
+			taken.push({
+				day,
+				minutes: m
+			});
+			return true;
+		};
+		if (days.length) {
+			const stride = days.length / Math.min(n, days.length);
+			for (let i = 0; i < Math.min(n, days.length) && rest > 0; i++) {
+				const pick = [...days.slice(Math.floor(i * stride), Math.max(Math.floor(i * stride) + 1, Math.floor((i + 1) * stride)))].filter((d) => Math.min(left.get(d) ?? 0, 90 - used(d)) >= Math.min(25, rest)).sort((a, b) => (weight.get(b) ?? 2) - (weight.get(a) ?? 2) || b.localeCompare(a))[0];
+				if (pick) take(pick, size);
+			}
+		}
+		for (let guard = 0; rest > 0 && guard < 200; guard++) {
+			const pick = [...days].filter((d) => Math.min(left.get(d) ?? 0, 90 - used(d)) >= Math.min(25, rest)).sort((a, b) => used(a) - used(b) || (weight.get(b) ?? 2) - (weight.get(a) ?? 2) || b.localeCompare(a))[0];
+			if (!pick || !take(pick, size)) break;
+		}
+		const byDay = /* @__PURE__ */ new Map();
+		for (const t of taken) byDay.set(t.day, (byDay.get(t.day) ?? 0) + t.minutes);
+		const order = [...byDay.keys()].sort();
+		const of = order.length;
+		const word = deadlineWord(g.title);
+		const sessions = order.map((day, i) => {
+			const d = daysBetween$3(day, g.deadline);
+			return {
+				id: sessionId(g.id, day),
+				goalId: g.id,
+				title: sessionTitle(g),
+				day,
+				minutes: byDay.get(day),
+				n: i + 1,
+				of,
+				why: `${word} ${d === 1 ? "tomorrow" : `in ${d} days`}, session ${i + 1} of ${of}`
+			};
 		});
-		const c = v.current;
-		return [
-			seasonLine(c?.season ?? null, c?.progress ?? null, c?.boss ?? null, c?.questPcts ?? []),
-			visionLine(v.vision),
-			identityLine(v.votes),
-			winsLine(v.wins, v.low, v.today),
-			wheelLine(v.wheel, v.today),
-			v.sidePick && v.sideStatus === "open" ? `This week's side quest (a small offline adventure he can choose to do): ${v.sidePick.quest.title}.` : "",
-			arcLine(v.arc, v.moments, v.today)
-		].filter(Boolean);
-	} catch {
-		return [];
+		const shortMin = Math.max(0, rest);
+		out.push({
+			goalId: g.id,
+			title: g.title,
+			deadline: g.deadline,
+			leftMin: want,
+			sessions,
+			shortMin,
+			line: shortLine(g, shortMin)
+		});
 	}
+	return out;
+}
+/** "Etica exam: not enough room before Friday 20 Nov: 3h short" (and "behind by 2h" when it is). */
+function shortLine(g, shortMin) {
+	if (shortMin < 15) return null;
+	const behind = g.behindH != null && g.behindH >= 1 ? ` You are behind by ${Math.round(g.behindH)}h.` : "";
+	return `${g.title}: not enough room before ${dayLabel(g.deadline)}: ${fmtH$1(r5(shortMin))} short.${behind}`;
+}
+/** Today's sessions, ready for the packer (`goals`) with their why line and stable id. */
+function sessionsOn(plans, day) {
+	return plans.flatMap((p) => p.sessions.filter((s) => s.day === day));
+}
+/** Planned minutes per day (all deadlines). */
+function minutesByDay(plans) {
+	const m = /* @__PURE__ */ new Map();
+	for (const s of plans.flatMap((p) => p.sessions)) m.set(s.day, (m.get(s.day) ?? 0) + s.minutes);
+	return m;
+}
+/**
+* The deadline goals from the goal plans (core/goalPlan): what is left from the
+* start of today (today's minutes done count toward today's session), and how
+* far behind a steady pace.
+*/
+function fromGoalPlans(plans) {
+	return plans.filter((p) => p.leftMin > 0 && p.daysLeft > 0).map((p) => ({
+		id: p.goalId,
+		title: p.title,
+		subject: p.subject,
+		deadline: p.deadline,
+		leftMin: p.leftMin + doneToday(p),
+		behindH: p.aheadH < 0 ? -p.aheadH : 0
+	}));
+}
+/** Minutes done today on a goal (its share for today minus what is still left today). */
+var doneToday = (p) => Math.max(0, p.perDayMin - p.todayLeftMin);
+// src/core/ladderPlan.ts
+var LADDER_STUDY_ID = "ladder-study";
+/** This week's study still to do as a deadline goal (due next Monday), or null. */
+function ladderStudyGoal(l, facts, today) {
+	const g = activeGoals(l).find((x) => x.id === "study");
+	if (!g) return null;
+	const target = targetOf(g, "focusHours", facts);
+	if (!target) return null;
+	const monday = mondayOf$6(today);
+	const done = goalWeek(g, facts, monday, addDays$8(monday, 7)).actions.find((a) => a.metric === "focusHours")?.done ?? 0;
+	const leftMin = Math.round(Math.max(0, target - done) * 60);
+	if (leftMin < 25) return null;
+	return {
+		id: LADDER_STUDY_ID,
+		title: "Weekly focus",
+		subject: "Study",
+		deadline: addDays$8(monday, 7),
+		leftMin
+	};
+}
+/**
+* The week's study sessions in the room your real deadlines leave: their
+* minutes come off each day first, so an exam is never pushed out.
+* One session per day at most (stable ids: no duplicates on a re-plan).
+*/
+function placeStudy(goal, rooms, existing, today) {
+	if (!goal) return null;
+	const used = minutesByDay(existing);
+	const left = rooms.filter((r) => r.day < goal.deadline).map((r) => ({
+		...r,
+		minutes: Math.max(0, r.minutes - (used.get(r.day) ?? 0))
+	}));
+	return planDeadlines([goal], left, today)[0] ?? null;
+}
+// src/core/planWeek.ts
+var PLAN_WEEK = "plan_week";
+var WEEK_NAMES = [
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat",
+	"Sun"
+];
+var DAY_WEIGHT = {
+	heavy: 3,
+	normal: 2,
+	light: 1
+};
+/** The share of a day's room that deadline sessions may take, by kind of day (the rest is for the day's tasks). */
+var DEADLINE_SHARE = {
+	heavy: .8,
+	normal: .5,
+	light: .3
+};
+WEEK_NAMES.map(() => ({
+	type: "normal",
+	gym: false
+}));
+/** Checks and tidies what was saved. */
+function cleanWeek$1(raw) {
+	const r = raw && typeof raw === "object" ? raw : {};
+	const list = Array.isArray(r.days) ? r.days : [];
+	return {
+		days: WEEK_NAMES.map((_, i) => {
+			const d = list[i] ?? {};
+			return {
+				type: d.type === "heavy" || d.type === "light" ? d.type : "normal",
+				gym: d.gym === true
+			};
+		}),
+		setOn: typeof r.setOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.setOn) ? r.setOn : null
+	};
+}
+/** Monday = 0 … Sunday = 6. */
+var weekIndex = (day) => ((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7;
+/** What the week plan and your limits say for one day. */
+function dayRules(week, limits, day) {
+	const d = week.days[weekIndex(day)] ?? {
+		type: "normal",
+		gym: false
+	};
+	const anyGym = week.days.some((x) => x.gym);
+	return {
+		type: d.type,
+		gym: d.gym,
+		limits: limitsFor(limits, day, d.type === "light" ? 120 : null),
+		train: !anyGym || d.gym
+	};
+}
+/**
+* How much deadline study each day can hold: the free time between events
+* (from `from`, or from now today, to the off time or 22:00), minus the free
+* share, times the day's deadline share, never more than its work limit or
+* the study cap.
+*/
+function dayRooms(o) {
+	const out = [];
+	for (let i = 0; i < o.days; i++) {
+		const day = addDays$8(o.today, i);
+		const r = dayRules(o.week, o.limits, day);
+		const end = endWith(o.endBy ?? "22:00", r.limits);
+		let room = freeGaps(withProtected(o.events, r.limits, day), day, {
+			from: o.from ?? "08:00",
+			to: end,
+			...i === 0 ? { after: o.now } : {},
+			minMinutes: 25
+		}).reduce((t, g) => t + g.minutes, 0) * (1 - Math.max(0, Math.min(.5, o.freeShare ?? .15))) * DEADLINE_SHARE[r.type];
+		if (r.limits.maxFocusMin != null) room = Math.min(room, r.limits.maxFocusMin);
+		const study = r.limits.caps.find((c) => c.kind === "study");
+		if (study) room = Math.min(room, study.minutes);
+		out.push({
+			day,
+			minutes: Math.max(0, Math.floor(room / 5) * 5),
+			weight: DAY_WEIGHT[r.type]
+		});
+	}
+	return out;
+}
+/** Plans the deadlines with the week plan and your limits, for `days` days from today. */
+function weekDeadlines(o) {
+	const last = o.goals.filter((g) => g.leftMin > 0 && g.deadline > o.today).map((g) => g.deadline).sort().pop();
+	if (!last) return [];
+	const span = Math.min(60, Math.max(1, Math.round((Date.parse(`${last}T12:00:00Z`) - Date.parse(`${o.today}T12:00:00Z`)) / 864e5)));
+	const rooms = dayRooms({
+		today: o.today,
+		now: o.now,
+		days: span,
+		events: o.events,
+		week: o.week,
+		limits: o.limits,
+		freeShare: o.freeShare,
+		endBy: o.endBy
+	});
+	return planDeadlines(o.goals, rooms, o.today);
+}
+// src/core/trainLadders.ts
+var X = (m) => m;
+var TRAIN_MOVES = Object.fromEntries([
+	X({
+		id: "oap_neg",
+		name: "One-arm push-up negatives",
+		group: "push",
+		unit: "reps",
+		diff: 5,
+		muscles: [
+			"chest",
+			"triceps",
+			"core"
+		],
+		steps: [
+			"Feet wide, one hand under your chest, the other behind your back.",
+			"Lower yourself slowly for 3–5 seconds, body straight.",
+			"At the bottom, put the other hand down and push back up with both."
+		],
+		mistake: "Twisting the hips: squeeze your glutes and keep the body one line."
+	}),
+	X({
+		id: "oap",
+		name: "One-arm push-ups",
+		group: "push",
+		unit: "reps",
+		diff: 5,
+		muscles: [
+			"chest",
+			"triceps",
+			"core"
+		],
+		steps: [
+			"Feet wider than your shoulders, one hand under your chest.",
+			"Lower until your chest is a fist above the floor.",
+			"Press back up without turning your body."
+		],
+		mistake: "Going only halfway: a slow full rep beats three short ones."
+	}),
+	X({
+		id: "neg_pullup",
+		name: "Slow negative pull-ups",
+		group: "pull",
+		unit: "reps",
+		diff: 3,
+		needs: "a pull-up bar",
+		muscles: [
+			"back",
+			"biceps",
+			"grip"
+		],
+		steps: [
+			"Step or jump so your chin is over the bar.",
+			"Lower yourself for a full 5 seconds until your arms are straight.",
+			"Step down, reset, repeat."
+		],
+		mistake: "Dropping the last half: control it all the way to straight arms."
+	}),
+	X({
+		id: "band_pullup",
+		name: "Band-assisted pull-ups",
+		group: "pull",
+		unit: "reps",
+		diff: 3,
+		needs: "a pull-up bar and a band",
+		muscles: ["back", "biceps"],
+		steps: [
+			"Loop a band over the bar and put one knee or foot in it.",
+			"From straight arms, pull your chest towards the bar.",
+			"Lower all the way down each rep. Use a lighter band as you get stronger."
+		],
+		mistake: "Bouncing out of the bottom: start each rep from a still hang."
+	}),
+	X({
+		id: "pullup",
+		name: "Pull-ups",
+		group: "pull",
+		unit: "reps",
+		diff: 4,
+		needs: "a pull-up bar",
+		muscles: [
+			"back",
+			"biceps",
+			"grip"
+		],
+		steps: [
+			"Hang with palms facing away, hands a bit wider than your shoulders.",
+			"Pull until your chin is over the bar.",
+			"Lower to straight arms every rep."
+		],
+		mistake: "Kicking the legs: keep them still and squeeze your glutes."
+	}),
+	X({
+		id: "weighted_chinup",
+		name: "Weighted chin-ups (backpack)",
+		group: "pull",
+		unit: "reps",
+		diff: 4,
+		needs: "a pull-up bar and a loaded backpack",
+		muscles: ["back", "biceps"],
+		steps: [
+			"Wear a backpack with books or water bottles.",
+			"Palms facing you, pull your chin over the bar.",
+			"Lower to straight arms. Log the backpack weight as added kg."
+		],
+		mistake: "Too much weight too soon: add 2–3 kg at a time."
+	}),
+	X({
+		id: "archer_pullup",
+		name: "Archer pull-ups",
+		group: "pull",
+		unit: "reps",
+		diff: 5,
+		needs: "a pull-up bar",
+		muscles: ["back", "biceps"],
+		steps: [
+			"Wide grip. Pull up towards one hand while the other arm goes straight.",
+			"Lower slowly, then switch sides.",
+			"Count reps per side."
+		],
+		mistake: "Bending the straight arm: it only helps, it should not pull."
+	}),
+	X({
+		id: "wall_hs_hold",
+		name: "Wall handstand hold",
+		group: "push",
+		unit: "sec",
+		diff: 4,
+		needs: "a clear wall",
+		muscles: [
+			"shoulders",
+			"triceps",
+			"core"
+		],
+		steps: [
+			"Hands a hand-width from the wall, kick up with your belly or back to the wall.",
+			"Push the floor away, arms straight, ribs in.",
+			"Come down before your form breaks."
+		],
+		mistake: "A banana back: squeeze glutes and pull the ribs in."
+	}),
+	X({
+		id: "wall_hspu_neg",
+		name: "Wall handstand press negatives",
+		group: "push",
+		unit: "reps",
+		diff: 5,
+		needs: "a clear wall and a cushion",
+		muscles: ["shoulders", "triceps"],
+		steps: [
+			"From a wall handstand, lower your head slowly for 3–5 seconds to a cushion.",
+			"Come down from the wall, kick up again.",
+			"Keep elbows a bit in front, not flared wide."
+		],
+		mistake: "Falling the last part: stop at the cushion with control."
+	}),
+	X({
+		id: "wall_hspu",
+		name: "Wall handstand press",
+		group: "push",
+		unit: "reps",
+		diff: 5,
+		needs: "a clear wall and a cushion",
+		muscles: ["shoulders", "triceps"],
+		steps: [
+			"From a wall handstand, lower your head to a cushion.",
+			"Press back up to straight arms.",
+			"Keep the body tight the whole way."
+		],
+		mistake: "Short reps: the head touches the cushion every time."
+	}),
+	X({
+		id: "bss_load",
+		name: "Backpack Bulgarian splits",
+		group: "legs",
+		unit: "reps",
+		diff: 4,
+		needs: "a chair and a loaded backpack",
+		muscles: ["quads", "glutes"],
+		steps: [
+			"Wear the backpack. Back foot on a chair, front foot a big step ahead.",
+			"Lower the back knee towards the floor, chest tall.",
+			"Drive up through the front heel. Count reps per leg; log the backpack as added kg."
+		],
+		mistake: "The front heel lifting: step the front foot further forward."
+	}),
+	X({
+		id: "hip_thrust_load",
+		name: "Backpack hip thrusts",
+		group: "legs",
+		unit: "reps",
+		diff: 3,
+		needs: "a sofa or bed edge and a loaded backpack",
+		muscles: ["glutes", "hamstrings"],
+		steps: [
+			"Upper back on the sofa edge, backpack on your hips, feet flat.",
+			"Drive the hips up until your body is flat from knees to shoulders.",
+			"Hold 1 second at the top, lower with control."
+		],
+		mistake: "Arching the low back at the top: tuck the chin and ribs, squeeze glutes."
+	}),
+	X({
+		id: "sl_rdl",
+		name: "Single-leg Romanian deadlifts",
+		group: "legs",
+		unit: "reps",
+		diff: 3,
+		needs: "a loaded backpack (optional)",
+		muscles: [
+			"hamstrings",
+			"glutes",
+			"balance"
+		],
+		steps: [
+			"Stand on one leg, soft knee, backpack in the opposite hand.",
+			"Hinge forward, the free leg goes back, back flat, until you feel the hamstring.",
+			"Stand tall by squeezing the glute. Count reps per leg."
+		],
+		mistake: "Rounding the back to reach lower: stop where your back stays flat."
+	}),
+	X({
+		id: "nordic_neg",
+		name: "Nordic curl negatives",
+		group: "legs",
+		unit: "reps",
+		diff: 5,
+		needs: "a sofa or bed to hook your heels under",
+		muscles: ["hamstrings"],
+		steps: [
+			"Kneel on a cushion, heels hooked under something heavy.",
+			"Body straight from knees to head, lower forward as slowly as you can.",
+			"Catch yourself with your hands and push back up."
+		],
+		mistake: "Bending at the hips: keep hips straight so the hamstrings do the work."
+	}),
+	X({
+		id: "knee_raise",
+		name: "Lying knee raises",
+		group: "core",
+		unit: "reps",
+		diff: 1,
+		muscles: ["abs", "hip flexors"],
+		steps: [
+			"Lie on your back, hands under your hips, legs a bit off the floor.",
+			"Bring the knees to your chest and lift the hips slightly.",
+			"Lower slowly without touching the floor."
+		],
+		mistake: "Swinging fast: 2 seconds down every rep."
+	}),
+	X({
+		id: "hanging_leg_raise",
+		name: "Hanging leg raises",
+		group: "core",
+		unit: "reps",
+		diff: 4,
+		needs: "a pull-up bar",
+		muscles: [
+			"abs",
+			"hip flexors",
+			"grip"
+		],
+		steps: [
+			"Hang from the bar, shoulders active.",
+			"Raise straight (or slightly bent) legs to hip height or higher.",
+			"Lower slowly without swinging."
+		],
+		mistake: "Swinging: pause in the hang between reps."
+	})
+].map((m) => [m.id, m]));
+var L = (move, lo, hi, unit = "reps") => ({
+	move,
+	lo,
+	hi,
+	unit
+});
+/** The default ladders. */
+var DEFAULT_LADDERS = [
+	{
+		id: "push",
+		name: "Push",
+		type: "upper",
+		levels: [
+			L("knee_pushup", 8, 15),
+			L("pushup", 8, 15),
+			L("diamond_pushup", 6, 12),
+			L("decline_pushup", 6, 12),
+			L("archer_pushup", 5, 10),
+			L("planche_pushup", 5, 10),
+			L("oap_neg", 3, 6),
+			L("oap", 1, 5)
+		]
+	},
+	{
+		id: "pull",
+		name: "Pull",
+		type: "upper",
+		levels: [
+			L("table_row", 8, 15),
+			L("feet_row", 6, 12),
+			L("neg_pullup", 3, 6),
+			L("band_pullup", 5, 10),
+			L("pullup", 5, 10),
+			L("weighted_chinup", 5, 8),
+			L("archer_pullup", 3, 6)
+		]
+	},
+	{
+		id: "shoulders",
+		name: "Shoulders",
+		type: "upper",
+		levels: [
+			L("pike_pushup", 6, 12),
+			L("elevated_pike", 6, 12),
+			L("wall_hs_hold", 20, 45, "sec"),
+			L("wall_hspu_neg", 3, 6),
+			L("wall_hspu", 3, 8)
+		]
+	},
+	{
+		id: "single",
+		name: "Legs (single-leg)",
+		type: "legs",
+		levels: [
+			L("squat", 15, 25),
+			L("split_squat", 8, 15),
+			L("bulgarian_squat", 8, 12),
+			L("bss_load", 8, 12),
+			L("box_pistol", 5, 10),
+			L("pistol_squat", 3, 8)
+		]
+	},
+	{
+		id: "hinge",
+		name: "Hinge (hamstrings, glutes)",
+		type: "legs",
+		levels: [
+			L("glute_bridge", 12, 20),
+			L("single_leg_bridge", 8, 15),
+			L("hip_thrust_load", 8, 15),
+			L("sl_rdl", 8, 12),
+			L("nordic_neg", 3, 6)
+		]
+	},
+	{
+		id: "core",
+		name: "Core",
+		type: "legs",
+		levels: [
+			L("plank", 30, 60, "sec"),
+			L("knee_raise", 10, 15),
+			L("leg_raise", 8, 15),
+			L("hanging_leg_raise", 6, 12),
+			L("dragon_neg", 3, 6),
+			L("dragon_flag", 3, 6)
+		]
+	}
+];
+DEFAULT_LADDERS.map((l) => l.id);
+function moveInfo(id) {
+	const m = moveById(id);
+	if (m) return {
+		id,
+		name: m.name,
+		group: m.group,
+		unit: m.unit,
+		steps: m.steps,
+		mistake: m.mistake,
+		muscles: m.muscles,
+		lib: m
+	};
+	const t = TRAIN_MOVES[id];
+	return t ? {
+		id,
+		name: t.name,
+		group: t.group,
+		unit: t.unit,
+		steps: t.steps,
+		mistake: t.mistake,
+		muscles: t.muscles,
+		needs: t.needs,
+		lib: null
+	} : null;
+}
+var moveName = (id) => moveInfo(id)?.name ?? id;
+/** Stored ladders (yours, edited) into valid ones; a ladder that can't be read is the default. */
+function cleanLadders(x) {
+	const list = Array.isArray(x) ? x : [];
+	return DEFAULT_LADDERS.map((def) => {
+		const own = list.find((l) => l && l.id === def.id);
+		if (!own || !Array.isArray(own.levels)) return def;
+		const levels = own.levels.filter((v) => v && typeof v.move === "string" && moveInfo(v.move)).map((v) => {
+			const unit = moveInfo(v.move).unit;
+			const lo = Math.max(1, Math.min(300, Math.round(Number(v.lo) || 1)));
+			const hi = Math.max(lo, Math.min(300, Math.round(Number(v.hi) || lo)));
+			return {
+				move: v.move,
+				lo,
+				hi,
+				unit
+			};
+		});
+		return levels.length ? {
+			...def,
+			levels
+		} : def;
+	});
+}
+// src/core/trainWeek.ts
+/** Mon rest · Tue Upper · Wed Legs + core · Thu Upper · Fri rest · Sat Legs + core · Sun Upper. */
+var DEFAULT_DAYS = [
+	"rest",
+	"upper",
+	"legs",
+	"upper",
+	"rest",
+	"legs",
+	"upper"
+];
+var isType = (x) => x === "upper" || x === "legs" || x === "rest";
+/** Any stored value into a valid week (the default when it can't be read). */
+function cleanWeek(x) {
+	const o = x && typeof x === "object" ? x : {};
+	return {
+		v: 1,
+		days: [...Array.isArray(o.days) && o.days.length === 7 && o.days.every(isType) ? o.days : DEFAULT_DAYS],
+		updatedAt: Number(o.updatedAt) || 0
+	};
+}
+// src/core/trainLog.ts
+/** Our part of Sport Track's state, cleaned. */
+function trainOf(st) {
+	const lv = {};
+	for (const [k, v] of Object.entries(st?.trainLevels ?? {})) if (v && Number.isFinite(Number(v.level))) lv[k] = {
+		level: Math.max(0, Math.round(Number(v.level))),
+		reached: v.reached && typeof v.reached === "object" ? { ...v.reached } : {},
+		at: Number(v.at) || 0,
+		...v.declinedOn ? { declinedOn: String(v.declinedOn) } : {}
+	};
+	return {
+		week: cleanWeek(st?.trainWeek),
+		ladders: cleanLadders(st?.trainLadders?.ladders),
+		levels: lv,
+		log: Array.isArray(st?.trainLog) ? st.trainLog.filter((s) => s && typeof s.id === "string" && typeof s.date === "string" && Array.isArray(s.exercises)) : []
+	};
+}
+/** What an exercise's `move` says: the library id, or `t:<id>` for a move only Body Training has (Sport Track never guesses those from the name). */
+var exMoveTag = (move) => moveById(move) ? move : `t:${move}`;
+/** Sport Track exercises that are this move (a library move by its move or name; one of ours by its id). */
+function exIdsFor(exercises, move) {
+	const lib = moveById(move);
+	const tag = exMoveTag(move);
+	return (Array.isArray(exercises) ? exercises : []).filter((e) => e && (e.move === tag || lib && moveOf(e)?.id === move)).map((e) => String(e.id));
+}
+/** The days you logged sets of a move (any of its exercises), oldest first, up to `until`. */
+function moveSessions(st, move, until) {
+	const ids = exIdsFor(st?.exercises, move);
+	const log = st?.sets ?? {};
+	const out = [];
+	for (const day of Object.keys(log).sort()) {
+		if (until && day > until) continue;
+		const sets = ids.flatMap((id) => setsOn(log, day, id)).filter((s) => !s.test).sort((a, b) => (Number(a.at) || 0) - (Number(b.at) || 0));
+		if (sets.length) out.push({
+			day,
+			sets,
+			reps: sets.map((s) => Math.round(Number(s.reps) || 0))
+		});
+	}
+	return out;
+}
+/** Your level on a ladder: what you chose, else placement from your best sets. */
+function currentLevel(st, data, ladder) {
+	const s = data.levels[ladder.id];
+	if (s) {
+		const index = Math.min(ladder.levels.length - 1, s.level);
+		return {
+			index,
+			placed: false,
+			since: s.reached[String(index)] ?? null
+		};
+	}
+	return {
+		index: placeLadder(ladder, (m) => bestOf(st, m)),
+		placed: true,
+		since: null
+	};
+}
+/** Your best single set of a move: logged sets of it, or a best set you told Sport Track. */
+function bestOf(st, move) {
+	let best = 0;
+	for (const s of moveSessions(st, move)) for (const r of s.reps) best = Math.max(best, r);
+	for (const b of Object.values(st?.bestSets ?? {})) if (b && b.move === move) best = Math.max(best, Number(b.reps) || 0);
+	return best > 0 ? best : null;
+}
+/** Each harder level, about 70% of the reps you could do on the one before. */
+var TRANSFER = .7;
+/**
+* Placement from your best single sets: a best set counts toward harder levels at 70% of the reps per
+* step. You start on the hardest level where that still clears the top of its range with room to spare
+* (3 reps, or 10 seconds): your working sets sit inside the range, and a level that is too easy is
+* complete after 2 sessions. 50 push-ups → archer push-ups.
+*/
+function placeLadder(ladder, best) {
+	const proj = ladder.levels.map(() => 0);
+	ladder.levels.forEach((v, i) => {
+		const b = best(v.move);
+		if (!b) return;
+		for (let j = i; j < ladder.levels.length; j++) proj[j] = Math.max(proj[j], b * TRANSFER ** (j - i));
+	});
+	let at = 0;
+	ladder.levels.forEach((v, j) => {
+		if (proj[j] >= v.hi + (v.unit === "sec" ? 10 : 3)) at = j;
+	});
+	return at;
 }
 // src/core/career/jobs.ts
 var STAGES = [
@@ -22159,22 +23335,22 @@ function aimLine(list, today) {
 	return [now ? `His ONE aim for this month (track it, bring it up): "${now.text}".` : "", next ? `Aim he set for next month: "${next.text}".` : ""].filter(Boolean).join(" ");
 }
 // src/renderer/src/web/extrasContext.ts
-var read$1 = (db, key) => {
+var read$2 = (db, key) => {
 	try {
 		return JSON.parse(getSetting(db, key) || "null");
 	} catch {
 		return null;
 	}
 };
-var loadHabits = (db) => cleanBook(read$1(db, MY_HABITS));
+var loadHabits = (db) => cleanBook(read$2(db, MY_HABITS));
 var saveHabits = (db, b) => setSetting(db, MY_HABITS, JSON.stringify(b));
-var loadModes = (db, today) => cleanModes(read$1(db, LIFE_MODE), today);
+var loadModes = (db, today) => cleanModes(read$2(db, LIFE_MODE), today);
 /** Today's mode rules (or null on a normal day). */
 var todayMode = (db, today) => modeRules(loadModes(db, today), today);
 /** Sick and travel days: they keep the workout streak. */
 var modeRest = (db, today) => modeRestDays(loadModes(db, today), today);
-var loadLearn = (db) => cleanLearn(read$1(db, LEARN_LOG));
-var loadAims = (db) => cleanAims(read$1(db, MONTH_AIMS));
+var loadLearn = (db) => cleanLearn(read$2(db, LEARN_LOG));
+var loadAims = (db) => cleanAims(read$2(db, MONTH_AIMS));
 /** What Ben adds to his context from these (only lines that have something). */
 function extrasContext(db, today, restDays = []) {
 	const out = [];
@@ -22424,6 +23600,442 @@ function nextCard(db, today, skip = []) {
 }
 function saveJobs(db, b) {
 	put$2(db, CAREER_JOBS, b);
+}
+// src/renderer/src/web/ladderStore.ts
+var loadLadder = (db) => {
+	try {
+		return cleanLadder$1(JSON.parse(getSetting(db, "goal_ladder") || "null"));
+	} catch {
+		return cleanLadder$1(null);
+	}
+};
+/** The quarter: the current Season (12 weeks; an old one 8), else the ladder's own 12 weeks. */
+function quarterNow$1(db, l, today) {
+	const s = currentSeason(loadSeasons(db), today);
+	return quarterOf(s && s.start <= today ? {
+		start: s.start,
+		weeks: s.weeks,
+		name: s.name
+	} : null, l.start, today);
+}
+var safe = (fn, d) => {
+	try {
+		return fn();
+	} catch {
+		return d;
+	}
+};
+var inc = (m, day, n = 1) => m[day] = Math.round(((m[day] ?? 0) + n) * 100) / 100;
+var hm$5 = (t) => {
+	const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? ""));
+	return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+/** Counts every action the ladder scores, day by day, from `from` to `today`. */
+function ladderFacts(s, from, today, finance) {
+	const db = s.db;
+	const daily = {};
+	const put = (m) => daily[m] ??= {};
+	const inRange = (d) => typeof d === "string" && d >= from && d <= today;
+	const blob = safe(() => sportBlob(db), null);
+	const train = trainOf(blob);
+	const trainedDays = /* @__PURE__ */ new Set();
+	for (const r of safe(() => db.prepare("SELECT DISTINCT day FROM workouts WHERE day >= ? AND day <= ?").all(from, today), [])) trainedDays.add(String(r.day));
+	const sessions = put("sessions");
+	const hard = put("hardSets");
+	for (const sess of train.log) {
+		if (!inRange(sess.date) || !sess.exercises.some((e) => e.sets.length)) continue;
+		trainedDays.add(sess.date);
+		inc(sessions, sess.date);
+		const n = sess.exercises.reduce((t, e) => t + e.sets.filter((x) => x.feel !== "easy").length, 0);
+		if (n) inc(hard, sess.date, n);
+	}
+	const workouts = put("workouts");
+	for (const d of trainedDays) inc(workouts, d);
+	let levelUps = 0;
+	for (const st of Object.values(train.levels)) for (const d of Object.values(st?.reached ?? {})) if (inRange(d)) levelUps++;
+	const levels = train.ladders.filter((l) => l.id === "push" || l.id === "pull").map((l) => safe(() => `${l.name}: ${moveName(l.levels[currentLevel(blob, train, l).index]?.move ?? "")}`, "")).filter((x) => x && !x.endsWith(": "));
+	const events = safe(() => bodyEvents(db, from, today), []);
+	const protein = put("proteinDays");
+	for (let d = from; d <= today; d = addDays$8(d, 1)) {
+		const goal = safe(() => foodTargetsNow(db, d).protein, 0);
+		if (goal > 0 && safe(() => proteinOfDay(events, d), 0) >= goal) inc(protein, d);
+	}
+	const weigh = put("weighIns");
+	const wDays = new Set(listBodyComp(db, from, today).map((r) => r.day));
+	for (const r of safe(() => db.prepare("SELECT day FROM body_metrics WHERE weight IS NOT NULL AND day >= ? AND day <= ?").all(from, today), [])) wDays.add(String(r.day));
+	for (const d of wDays) inc(weigh, d);
+	const weeks = Math.min(20, Math.ceil((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 6048e5) + 2);
+	const weights = weeklyAverages(safe(() => bodyPoints(db, today, weeks * 7), []), today, weeks).filter((w) => w.avg != null).map((w) => ({
+		week: w.week,
+		avg: w.avg
+	}));
+	const focus = put("focusHours");
+	const dl = put("deadlineSessions");
+	const subjects = new Set(safe(() => db.prepare("SELECT subject FROM focus_goals WHERE archived = 0 AND COALESCE(kind, 'hours') = 'hours' AND deadline >= ?").all(today), []).map((r) => String(r.subject).toLowerCase()));
+	for (const r of safe(() => db.prepare("SELECT day, subject, minutes FROM focus_sessions WHERE day >= ? AND day <= ?").all(from, today), [])) {
+		inc(focus, String(r.day), (Number(r.minutes) || 0) / 60);
+		if (Number(r.minutes) >= 25 && subjects.has(String(r.subject).toLowerCase())) inc(dl, String(r.day));
+	}
+	const money = safe(() => s.goals.dailyValues({ kind: "money.saved" }, from, today, finance), null);
+	if (money) daily.moneySaved = money;
+	const apps = put("applications");
+	for (const j of safe(() => loadJobs(db).jobs, [])) if (inRange(j.applied)) inc(apps, j.applied);
+	const port = put("portfolio");
+	for (const p of safe(() => loadProofs(db), [])) if (inRange(p.day)) inc(port, p.day);
+	const cards = put("flashcardDays");
+	for (const d of new Set(safe(() => loadCards(db).log, []).map((m) => m.day))) if (inRange(d)) cards[d] = 1;
+	const nights = put("sleepNights");
+	const hours = [];
+	for (const r of safe(() => db.prepare("SELECT day, wake_time, bed_time, bed_on_time FROM sleep_logs WHERE day >= ? ORDER BY day").all(addDays$8(today, -60)), [])) {
+		const b = hm$5(r.bed_time);
+		const w = hm$5(r.wake_time);
+		if (b == null || w == null) continue;
+		const h = (w - b + 1440) % 1440 / 60;
+		hours.push(h);
+		if (inRange(String(r.day)) && Number(r.bed_on_time) === 1 && h >= 7.5) inc(nights, String(r.day));
+	}
+	const last = hours.slice(-14);
+	return {
+		...EMPTY_FACTS,
+		daily,
+		weights,
+		splitDays: train.week.days.filter((d) => d !== "rest").length,
+		hasDeadlines: subjects.size > 0,
+		levels,
+		levelUps,
+		sleepAvg: last.length ? last.reduce((t, h) => t + h, 0) / last.length : null
+	};
+}
+/** Everything the screens need, worked out once. */
+function ladderView(s, opts = {}) {
+	const now = opts.now ?? /* @__PURE__ */ new Date();
+	const today = s.wallet.today(now);
+	const ladder = loadLadder(s.db);
+	const quarter = quarterNow$1(s.db, ladder, today);
+	const facts = ladderFacts(s, addDays$8(quarter.start < mondayOf$6(today) ? quarter.start : mondayOf$6(today), -7), today, opts.finance);
+	return {
+		today,
+		quarter,
+		ladder,
+		facts,
+		cards: ladderCards(ladder, facts, quarter, today)
+	};
+}
+/**
+* Today's draft study session for the quarter's study goal (the planner's
+* hook, web/rhythmBot propose): the week's focus hours still to do, planned
+* backward to Monday in the room your real deadlines leave, within your
+* limits and week plan. null: nothing to place today.
+*/
+function ladderStudyToday(s, existing, o, now, events) {
+	const goal = ladderStudyGoal(loadLadder(s.db), ladderFacts(s, mondayOf$6(o.today), o.today), o.today);
+	if (!goal) return null;
+	const today = placeStudy(goal, dayRooms({
+		today: o.today,
+		now,
+		days: Math.max(1, daysBetween$3(o.today, goal.deadline)),
+		events,
+		week: o.week,
+		limits: o.limits,
+		freeShare: o.freeShare
+	}), existing, o.today)?.sessions.find((x) => x.day === o.today);
+	if (!today || today.minutes < 20) return null;
+	return {
+		title: today.title,
+		minutes: Math.min(90, today.minutes),
+		id: today.id,
+		why: `quarter goal: study session ${today.n} of ${today.of} this week`
+	};
+}
+// src/renderer/src/web/sagaStore.ts
+var SAGA_SEASONS = "saga_seasons";
+var SAGA_VISION = "saga_vision";
+var SAGA_VISION_PHOTOS = "saga_vision_photos";
+var SAGA_IDENTITY = "saga_identity";
+var SAGA_SIDE = "saga_side";
+var SAGA_WINS = "saga_wins";
+var SAGA_WHEEL = "saga_wheel";
+var SAGA_ARC = "saga_arc";
+var read$1 = (db, key) => {
+	try {
+		return JSON.parse(getSetting(db, key) || "null");
+	} catch {
+		return null;
+	}
+};
+var yearOf = (today) => Number(today.slice(0, 4));
+var loadSeasons = (db) => cleanSeasonBook(read$1(db, SAGA_SEASONS));
+var loadVision = (db, today) => cleanVision(read$1(db, SAGA_VISION), yearOf(today));
+var loadVisionPhotos = (db, cards) => cleanVisionPhotos(read$1(db, SAGA_VISION_PHOTOS), cards);
+var loadIdentity = (db) => cleanIdentity(read$1(db, SAGA_IDENTITY));
+var loadSide = (db) => cleanSide(read$1(db, SAGA_SIDE));
+var loadWins = (db) => cleanWins$1(read$1(db, SAGA_WINS));
+var loadWheel = (db) => cleanWheel(read$1(db, SAGA_WHEEL));
+var loadArc = (db) => cleanArc(read$1(db, SAGA_ARC));
+var extraVotes = (wins) => wins.mine.map((w) => ({
+	day: w.day,
+	kinds: w.kind === "kind" ? ["kind"] : [],
+	text: `${w.title} ${w.detail}`
+}));
+function seasonFacts(s, book, entries, today, goalPct) {
+	const progress = seasonProgress(s, today);
+	const end = seasonEnd(s);
+	const to = today < end ? today : end;
+	const live = effective(entries).filter((e) => e.day >= s.start && e.day <= to);
+	let perfectDays = 0;
+	if (progress.phase !== "before") {
+		for (let d = s.start; d <= to; d = addDays$8(d, 1)) if (questState(d, live.filter((e) => e.day === d)).allDone) perfectDays++;
+	}
+	const xp = live.reduce((t, e) => t + Math.max(0, e.xp), 0);
+	const questGoals = s.quests.map((q) => q.goalId != null ? ((g) => g ? {
+		id: q.goalId,
+		...g
+	} : null)(goalPct(q.goalId)) : null);
+	const questPcts = s.quests.map((q) => questPct(q, (id) => goalPct(id)?.pct ?? null));
+	const boss = bossHp(s, {
+		questPcts,
+		perfectDays,
+		xp
+	});
+	const q = questState(today, effective(entries).filter((e) => e.day === today));
+	const workouts = live.filter((e) => e.ruleId === "body.workout_done").length;
+	return {
+		season: s,
+		number: book.seasons.findIndex((x) => x.id === s.id) + 1,
+		progress,
+		boss,
+		questPcts,
+		questGoals,
+		perfectDays,
+		xp,
+		today: {
+			quests: q.quests.map((x) => ({
+				title: x.title,
+				progress: x.progress,
+				goal: x.goal,
+				done: x.done
+			})),
+			allDone: q.allDone
+		},
+		recap: progress.phase === "over" || s.boss.result ? seasonRecap(s, {
+			questPcts,
+			perfectDays,
+			xp,
+			workouts
+		}, today) : null
+	};
+}
+function goalsOf(s, finance, now) {
+	try {
+		return s.goals.cards(now, finance, { paused: true }).map((c) => ({
+			id: c.goal.id,
+			title: c.goal.title,
+			pct: Math.round(c.pct),
+			card: c.meta?.card ?? null
+		}));
+	} catch {
+		return [];
+	}
+}
+/** The weekend's weather from the weather plugin's saved data (null without it). */
+function weekendWeather(db, today) {
+	try {
+		if (!JSON.parse(getSetting(db, "plugins_on") || "{}")?.weather) return null;
+		const data = JSON.parse(getSetting(db, "plugin_weather_data") || "null");
+		const wknd = (Array.isArray(data?.days) ? data.days : []).filter((d) => d.day >= today && [0, 6].includes((/* @__PURE__ */ new Date(`${d.day}T12:00:00Z`)).getUTCDay()));
+		if (!wknd.length) return null;
+		if (wknd.every((d) => (d.rain?.length ?? 0) > 0)) return "rain";
+		if (wknd.every((d) => d.tmax != null && d.tmax < 4)) return "cold";
+		return "clear";
+	} catch {
+		return null;
+	}
+}
+function sagaView(s, opts = {}) {
+	const now = opts.now ?? /* @__PURE__ */ new Date();
+	const db = s.db;
+	const today = s.wallet.today(now);
+	const entries = s.wallet.entries();
+	const sum = s.wallet.summary(now);
+	const lv = sum.level.level;
+	const def = hunterDefFor(lv);
+	const nx = nextHunterRank(lv);
+	const goals = goalsOf(s, opts.finance, now);
+	const goalPct = (id) => {
+		const g = goals.find((x) => x.id === id);
+		return g ? {
+			title: g.title,
+			pct: g.pct
+		} : null;
+	};
+	const seasons = loadSeasons(db);
+	const cur = currentSeason(seasons, today);
+	const current = cur ? seasonFacts(cur, seasons, entries, today, goalPct) : null;
+	const done = finishedSeasons(seasons, today);
+	const vision = loadVision(db, today);
+	const identity = loadIdentity(db);
+	const winsBook = loadWins(db);
+	const side = loadSide(db);
+	let budget = opts.side?.budget;
+	if (budget === void 0) try {
+		budget = s.shop.value({ finance: opts.finance }, now).funLeftLei;
+	} catch {
+		budget = null;
+	}
+	const sidePick = pickSideQuest(pickInput(side, today, {
+		budget: budget ?? null,
+		weather: opts.side?.weather ?? weekendWeather(db, today),
+		freeEvenings: opts.side?.freeEvenings ?? null,
+		freeDay: opts.side?.freeDay ?? null
+	}));
+	const week = pickInput(side, today, {
+		budget: null,
+		weather: null,
+		freeEvenings: null,
+		freeDay: null
+	}).week;
+	const wins = collectWins({
+		entries,
+		book: winsBook,
+		seasons: done.map((x) => ({
+			id: x.id,
+			name: x.name,
+			boss: x.boss.title,
+			won: x.boss.result === "won",
+			day: x.boss.resultDay ?? x.closed ?? seasonEnd(x)
+		})),
+		adventures: side.log.map((a) => ({
+			id: a.id,
+			title: a.title,
+			emoji: a.emoji,
+			day: a.day,
+			place: a.place
+		}))
+	});
+	const low = lowDay(db, entries, today);
+	const wheel = loadWheel(db);
+	const hist = wheelHistory(wheel);
+	const last = hist[hist.length - 1];
+	const arcBook = loadArc(db);
+	const arc = arcState(done.length, arcBook.outfit);
+	const moments = sharedMoments(db);
+	const cands = [];
+	const lastRank = arcBook.played.filter((p) => p.startsWith("rank:")).map((p) => Number(p.slice(5))).sort((a, b) => b - a)[0];
+	const r = rankUp(lastRank ?? 1, lv);
+	if (r && lastRank != null) cands.push(r);
+	if (current) for (const m of seasonMoments(current.season, current.progress, current.boss)) cands.push(seasonCinematic(m, current.season.color));
+	return {
+		today,
+		level: {
+			level: lv,
+			rank: def.name,
+			title: def.title,
+			color: def.color,
+			badge: def.badge,
+			next: nx ? {
+				name: nx.name,
+				minLevel: nx.minLevel
+			} : null,
+			progress: sum.level.progress
+		},
+		seasons,
+		current,
+		finished: done.length,
+		vision,
+		photos: loadVisionPhotos(db, vision.cards),
+		cardToday: cardOfDay(vision, today),
+		identity,
+		votes: identityVotes(identity, entries, today, extraVotes(winsBook)),
+		side,
+		sidePick,
+		sideStatus: side.weeks[week]?.status ?? "open",
+		sideStats: adventureStats(side, today),
+		wins,
+		winsBook,
+		low,
+		winToday: low ? pickWin(wins, today) : null,
+		wheel,
+		wheelDue: wheelDue(wheel, today),
+		suggestion: last ? suggestTheme(last.ratings, hist.length > 1 ? hist[hist.length - 2].ratings : null) : null,
+		arc,
+		arcBook,
+		arcNew: newChapter(arcBook, arc),
+		moments,
+		cinematic: nextCinematic(cands, arcBook.played),
+		goals
+	};
+}
+function lowDay(db, entries, today) {
+	try {
+		const live = effective(entries);
+		const y = addDays$8(today, -1);
+		if (!live.some((e) => daysBetween$3(e.day, today) >= 2)) return false;
+		const yesterday = live.filter((e) => e.day === y).reduce((t, e) => t + Math.max(0, e.coins), 0);
+		const slipped = live.some((e) => e.day === y && e.ruleId === "discipline.reset");
+		let mood = null;
+		try {
+			const desk = JSON.parse(getSetting(db, "ben_desk") || "null");
+			const m = (Array.isArray(desk?.moods) ? desk.moods : []).filter((x) => x?.day === today).pop();
+			mood = m && Number.isFinite(Number(m.mood)) ? Number(m.mood) : null;
+		} catch {
+			mood = null;
+		}
+		return isLowDay({
+			mood,
+			yesterday,
+			score: null,
+			prevScore: null,
+			slipped
+		});
+	} catch {
+		return false;
+	}
+}
+/** Big moments you shared with Ben, from his memory store (ben_convo points kept as moments). */
+function sharedMoments(db) {
+	try {
+		return cleanConvo(JSON.parse(getSetting(db, "ben_convo") || "null")).points.filter((p) => p.via === "moment").map((p) => ({
+			day: p.day,
+			text: p.text
+		}));
+	} catch {
+		return [];
+	}
+}
+/** The goal ladder's line for Ben (the quarter's critical goals, scored on actions). */
+function ladderLine(s, finance, now) {
+	try {
+		const l = ladderView(s, {
+			finance,
+			now
+		});
+		return ladderBenLine(l.cards, l.quarter);
+	} catch {
+		return "";
+	}
+}
+/** Ben's lines about all this (only the parts that have something). */
+function sagaContext(s, db, finance, now = /* @__PURE__ */ new Date()) {
+	try {
+		const v = sagaView(s, {
+			finance,
+			now,
+			side: { budget: null }
+		});
+		const c = v.current;
+		return [
+			seasonLine(c?.season ?? null, c?.progress ?? null, c?.boss ?? null, c?.questPcts ?? []),
+			visionLine(v.vision),
+			identityLine(v.votes),
+			winsLine(v.wins, v.low, v.today),
+			wheelLine(v.wheel, v.today),
+			v.sidePick && v.sideStatus === "open" ? `This week's side quest (a small offline adventure he can choose to do): ${v.sidePick.quest.title}.` : "",
+			arcLine(v.arc, v.moments, v.today),
+			ladderLine(s, finance, now)
+		].filter(Boolean);
+	} catch {
+		return [];
+	}
 }
 // src/core/coachMind.ts
 var MAX = {
@@ -22726,7 +24338,7 @@ function weekSoFar(today, focus, workouts, tasks) {
 	};
 }
 // src/core/urgePatterns.ts
-var DAYS$7 = [
+var DAYS$6 = [
 	"Sun",
 	"Mon",
 	"Tue",
@@ -22799,7 +24411,7 @@ function upcomingRisk(windows, now = /* @__PURE__ */ new Date(), aheadMin = 60) 
 	return null;
 }
 function windowLabel(w) {
-	return `${w.weekday === null ? "every day" : DAYS$7[w.weekday]} ${w.from}–${w.to}`;
+	return `${w.weekday === null ? "every day" : DAYS$6[w.weekday]} ${w.from}–${w.to}`;
 }
 /** What sets it off most (last 90 days). */
 function topTriggers(notes, now = /* @__PURE__ */ new Date(), max = 3) {
@@ -24184,7 +25796,7 @@ function readMessage(m) {
 		snippet: String(m?.snippet ?? "").replace(/&#39;/g, "'").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").slice(0, 240)
 	};
 }
-var MONTHS$8 = {
+var MONTHS$7 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -24217,7 +25829,7 @@ function findDate(text, today) {
 	};
 	if (dmy) return fix(Number(dmy[1]), Number(dmy[2]), dmy[3] ? dmy[3].length === 2 ? 2e3 + Number(dmy[3]) : Number(dmy[3]) : void 0);
 	const word = /\b(\d{1,2})\s+([a-z]{3})[a-z]*\b/i.exec(text);
-	if (word && MONTHS$8[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$8[word[2].toLowerCase()]);
+	if (word && MONTHS$7[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$7[word[2].toLowerCase()]);
 	return null;
 }
 var KIND = [
@@ -25336,7 +26948,7 @@ function cleanRecipes(x) {
 	}
 	return out.slice(0, 30);
 }
-var DAYS$6 = [
+var DAYS$5 = [
 	"Sun",
 	"Mon",
 	"Tue",
@@ -25361,7 +26973,7 @@ var actionText = (a) => {
 function recipeText(r) {
 	const w = r.when.on === "context" ? `When ${CONTEXT_LABEL[r.when.ctx].toLowerCase()}` : r.when.on === "time" ? `At ${r.when.at}` : `When ${RECIPE_ON_LABEL[r.when.on].toLowerCase()}`;
 	const cond = [
-		r.if?.days?.length ? r.if.days.join(",") === "1,2,3,4,5" ? "weekdays" : r.if.days.join(",") === "0,6" ? "weekends" : r.if.days.map((d) => DAYS$6[d]).join(" ") : "",
+		r.if?.days?.length ? r.if.days.join(",") === "1,2,3,4,5" ? "weekdays" : r.if.days.join(",") === "0,6" ? "weekends" : r.if.days.map((d) => DAYS$5[d]).join(" ") : "",
 		r.if?.from ? `${r.if.from}–${r.if.to}` : "",
 		r.if?.noTimer ? "no timer" : ""
 	].filter(Boolean).join(" ");
@@ -27178,7 +28790,7 @@ var MILESTONE_RULE = "goal.milestone";
 var checkinRef = (goalId, period) => `goalci:${goalId}:${period}`;
 var milestoneRef = (goalId, index) => `goalms:${goalId}:${index}`;
 // src/core/goalsText.ts
-var MONTHS$7 = [
+var MONTHS$6 = [
 	"jan",
 	"feb",
 	"mar",
@@ -27192,7 +28804,7 @@ var MONTHS$7 = [
 	"nov",
 	"dec"
 ];
-var monthOf = (w) => MONTHS$7.indexOf(w.slice(0, 3).toLowerCase());
+var monthOf = (w) => MONTHS$6.indexOf(w.slice(0, 3).toLowerCase());
 var pad$11 = (n) => String(n).padStart(2, "0");
 var lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
 var valid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= lastDay(y, m);
@@ -28319,7 +29931,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		})}, ${now.toTimeString().slice(0, 5)}.`,
 		`Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
 		f.running ? `Focus timer RUNNING now on "${f.running.subject}" (${f.running.planned} min planned, ${runningEnd(f.running, now)}).` : "",
-		`Focus today: ${hm$6(f.todayMin)}${f.running ? ` (+ the running timer)` : ""}. Last 7 days ${hm$6(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
+		`Focus today: ${hm$7(f.todayMin)}${f.running ? ` (+ the running timer)` : ""}. Last 7 days ${hm$7(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
 		`Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") : "none written yet"}.`,
 		f.goals.length ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals.map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`).join("\n")}` : "No goals with deadlines (offer to set one when he mentions an exam, project or deadline).",
 		goalsNowSection(s, extra.finance, now),
@@ -29333,7 +30945,7 @@ function answerLocal(need, d) {
 		const by = /* @__PURE__ */ new Map();
 		for (const s of list) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
 		const days = new Set(list.map((s) => s.day)).size;
-		return `Focus ${span}: ${hm$6(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$6(m)}`).join(", ")}.` : ""}`;
+		return `Focus ${span}: ${hm$7(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$7(m)}`).join(", ")}.` : ""}`;
 	}
 	if (k === "workouts") {
 		const days = [...new Set(d.input.workouts.filter((w) => inRange(w.day)).map((w) => w.day))].sort();
@@ -31083,7 +32695,7 @@ function moveToTomorrow(plan, items, o = {}) {
 		deferred
 	});
 }
-var DAYS$5 = [
+var DAYS$4 = [
 	"Sunday",
 	"Monday",
 	"Tuesday",
@@ -31116,7 +32728,7 @@ function blockWhy(b, plan, tasks = []) {
 	if (later?.due) {
 		const d = /* @__PURE__ */ new Date(`${later.due}T12:00:00`);
 		const days = Math.round((d.getTime() - (/* @__PURE__ */ new Date(`${plan.day}T12:00:00`)).getTime()) / 864e5);
-		parts.push(days <= 6 ? `due ${DAYS$5[d.getDay()]}` : `due in ${days} days`);
+		parts.push(days <= 6 ? `due ${DAYS$4[d.getDay()]}` : `due in ${days} days`);
 	}
 	if (names.some((t) => also(t)?.overdue || todo(t)?.due && todo(t).due < plan.day)) parts.push("overdue");
 	if (names.some((t) => plan.mustdos.some((m) => sameThing(m, t)))) parts.push("must-do");
@@ -31417,8 +33029,8 @@ function tgPlanText(raw, o = {}) {
 	if (p.deferred?.length) lines.push("", "<b>Moved to tomorrow</b>", ...p.deferred.slice(0, 6).map((d) => `· ${esc$2(d.title)}: ${esc$2(d.why)}`));
 	if (hasLimits(o.limits)) {
 		const parts = [
-			`${fmtH(p.blocks.filter((b) => isWork(b)).reduce((t, b) => t + b.minutes, 0))} of work`,
-			o.limits.maxFocusMin != null ? `your limit ${fmtH(o.limits.maxFocusMin)}` : "",
+			`${fmtH$1(p.blocks.filter((b) => isWork(b)).reduce((t, b) => t + b.minutes, 0))} of work`,
+			o.limits.maxFocusMin != null ? `your limit ${fmtH$1(o.limits.maxFocusMin)}` : "",
 			o.limits.offAt ? `off at ${o.limits.offAt}` : ""
 		].filter(Boolean);
 		lines.push("", `⏱ ${esc$2(parts.join(" · "))}`);
@@ -31575,7 +33187,7 @@ function rebase(target, current) {
 	return out;
 }
 // src/core/quickAdd.ts
-var DAYS$4 = [
+var DAYS$3 = [
 	"sunday",
 	"monday",
 	"tuesday",
@@ -31584,7 +33196,7 @@ var DAYS$4 = [
 	"friday",
 	"saturday"
 ];
-var MONTHS$6 = [
+var MONTHS$5 = [
 	"january",
 	"february",
 	"march",
@@ -31618,8 +33230,8 @@ function dayWords(day, today) {
 	if (day === today) return "today";
 	if (day === addDays$8(today, 1)) return "tomorrow";
 	const n = Math.round(((/* @__PURE__ */ new Date(`${day}T12:00:00`)).getTime() - (/* @__PURE__ */ new Date(`${today}T12:00:00`)).getTime()) / 864e5);
-	if (n > 1 && n < 7) return cap$2(DAYS$4[wdayOf(day)]);
-	return `${Number(day.slice(8))} ${cap$2(MONTHS$6[Number(day.slice(5, 7)) - 1]).slice(0, 3)}`;
+	if (n > 1 && n < 7) return cap$2(DAYS$3[wdayOf(day)]);
+	return `${Number(day.slice(8))} ${cap$2(MONTHS$5[Number(day.slice(5, 7)) - 1]).slice(0, 3)}`;
 }
 var fail$1 = (ask) => ({ ask });
 var isFail = (x) => !!x && typeof x.ask === "string";
@@ -31767,11 +33379,11 @@ function parseQuick$1(input, ctx) {
 		day: addDays$8(today, Number(inN[1]) * (/^w/i.test(inN[2]) ? 7 : 1)),
 		raw: inN[0].trim()
 	});
-	const monthRe = MONTHS$6.map((m) => m.slice(0, 3)).join("|");
+	const monthRe = MONTHS$5.map((m) => m.slice(0, 3)).join("|");
 	const dm = take(new RegExp(`\\b(?:on\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${monthRe})[a-z]*\\b`, "i")) ?? take(new RegExp(`\\b(?:on\\s+)?(${monthRe})[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, "i"));
 	if (dm) {
 		const [a, b] = [dm[1], dm[2]];
-		const mon = MONTHS$6.findIndex((m) => m.startsWith((/\d/.test(a) ? b : a).toLowerCase().slice(0, 3)));
+		const mon = MONTHS$5.findIndex((m) => m.startsWith((/\d/.test(a) ? b : a).toLowerCase().slice(0, 3)));
 		const d = Number(/\d/.test(a) ? a : b);
 		if (mon < 0 || d < 1 || d > 31) return {
 			ok: false,
@@ -31782,7 +33394,7 @@ function parseQuick$1(input, ctx) {
 		if (day < today) day = `${++y}-${pad$10(mon + 1)}-${pad$10(d)}`;
 		if ((/* @__PURE__ */ new Date(`${day}T12:00:00`)).getDate() !== d) return {
 			ok: false,
-			ask: `There is no ${d} ${cap$2(MONTHS$6[mon])}. Which day?`
+			ask: `There is no ${d} ${cap$2(MONTHS$5[mon])}. Which day?`
 		};
 		days.push({
 			day,
@@ -31819,7 +33431,7 @@ function parseQuick$1(input, ctx) {
 				raw
 			};
 			else {
-				const near = DAYS$4.map((d, k) => ({
+				const near = DAYS$3.map((d, k) => ({
 					k,
 					dist: lev(w, d)
 				})).sort((a, b) => a.dist - b.dist);
@@ -31848,7 +33460,7 @@ function parseQuick$1(input, ctx) {
 					const nextWord = prev === "next";
 					if (wd === todayWd && !nextWord) return {
 						ok: false,
-						ask: `Today is ${cap$2(DAYS$4[wd])}: today or next ${cap$2(DAYS$4[wd])}? Say "today" or "next ${DAYS$4[wd]}".`
+						ask: `Today is ${cap$2(DAYS$3[wd])}: today or next ${cap$2(DAYS$3[wd])}? Say "today" or "next ${DAYS$3[wd]}".`
 					};
 					hit = {
 						day: coming(today, wd, nextWord),
@@ -31920,7 +33532,7 @@ function parseQuick$1(input, ctx) {
 * its time; a time on the task itself would read as a deadline to the plan audit).
 */
 function todoistText(t, today, o = {}) {
-	const due = t.day === today ? "today" : t.day === addDays$8(today, 1) ? "tomorrow" : `${Number(t.day.slice(8))} ${cap$2(MONTHS$6[Number(t.day.slice(5, 7)) - 1]).slice(0, 3)}${t.day.slice(0, 4) === today.slice(0, 4) ? "" : ` ${t.day.slice(0, 4)}`}`;
+	const due = t.day === today ? "today" : t.day === addDays$8(today, 1) ? "tomorrow" : `${Number(t.day.slice(8))} ${cap$2(MONTHS$5[Number(t.day.slice(5, 7)) - 1]).slice(0, 3)}${t.day.slice(0, 4) === today.slice(0, 4) ? "" : ` ${t.day.slice(0, 4)}`}`;
 	return [
 		t.title,
 		due + (t.time && !o.noTime ? ` at ${t.time}` : ""),
@@ -31987,10 +33599,10 @@ function fitVerdict(plan, b, ctx) {
 	if (l && !b.train && isWork(asBlock)) {
 		const others = planItems(plan).filter((x) => x.id !== b.id && !x.train && x.id !== "train" && isWork(x));
 		const total = others.reduce((t, x) => t + x.minutes, 0) + b.minutes;
-		if (l.maxFocusMin != null && total > l.maxFocusMin) return bad("work", `over your ${fmtH(l.maxFocusMin)} limit`);
+		if (l.maxFocusMin != null && total > l.maxFocusMin) return bad("work", `over your ${fmtH$1(l.maxFocusMin)} limit`);
 		const k = capKind(asBlock);
 		const cap = l.caps.find((c) => c.kind === k);
-		if (cap && others.filter((x) => capKind(x) === k).reduce((t, x) => t + x.minutes, 0) + b.minutes > cap.minutes) return bad("cap", `over your ${fmtH(cap.minutes)} ${CAP_NAMES[cap.kind].toLowerCase()} limit`);
+		if (cap && others.filter((x) => capKind(x) === k).reduce((t, x) => t + x.minutes, 0) + b.minutes > cap.minutes) return bad("cap", `over your ${fmtH$1(cap.minutes)} ${CAP_NAMES[cap.kind].toLowerCase()} limit`);
 	}
 	return {
 		fits: true,
@@ -38195,7 +39807,7 @@ var extOf = (f) => {
 	const m = /\.[A-Za-z0-9]{1,6}$/.exec(String(f ?? ""));
 	return m ? m[0].toLowerCase() : "";
 };
-var DAYS$3 = [
+var DAYS$2 = [
 	"Sun",
 	"Mon",
 	"Tue",
@@ -38258,7 +39870,7 @@ function sentence(a, hint) {
 	const steps = a.steps.map((s) => stepText(s, hint));
 	const doing = steps.length > 1 ? `${steps.slice(0, -1).join(", ")}, then ${steps[steps.length - 1]}` : steps[0];
 	if (!a.when.length) return `Tap to ${doing}`;
-	const days = a.if?.days?.length ? a.if.days.join(",") === "1,2,3,4,5" ? " on weekdays" : a.if.days.join(",") === "0,6" ? " at weekends" : ` on ${a.if.days.map((d) => DAYS$3[d]).join(" ")}` : "";
+	const days = a.if?.days?.length ? a.if.days.join(",") === "1,2,3,4,5" ? " on weekdays" : a.if.days.join(",") === "0,6" ? " at weekends" : ` on ${a.if.days.map((d) => DAYS$2[d]).join(" ")}` : "";
 	const hours = a.if?.from ? ` between ${a.if.from} and ${a.if.to}` : "";
 	return `When ${a.when.map(triggerText).join(" or ")}${days}${hours}, ${doing}`;
 }
@@ -48295,7 +49907,7 @@ function suggestSub(state, note, { category = null } = {}) {
 	return null;
 }
 // src/renderer/public/apps/finance/js/dates.js
-var MONTHS$5 = [
+var MONTHS$4 = [
 	"January",
 	"February",
 	"March",
@@ -48316,7 +49928,7 @@ function toISO(d) {
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
 	const [y, m] = key.split("-").map(Number);
-	const name = MONTHS$5[m - 1];
+	const name = MONTHS$4[m - 1];
 	return `${short ? name.slice(0, 3) : name} ${y}`;
 }
 function addMonths(key, n) {
@@ -48386,7 +49998,7 @@ function coinValue(qty, asset, to, rates) {
 	return convert(Math.round(qty * usd * 100), "USD", to, rates);
 }
 // src/renderer/public/apps/finance/js/recurring.js
-var MONTHS$4 = {
+var MONTHS$3 = {
 	month: 1,
 	"3months": 3,
 	year: 12
@@ -48396,7 +50008,7 @@ function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
 	if (rule.every === "week") return addDays$1(rule.start, 7 * n);
 	if (rule.every === "2weeks") return addDays$1(rule.start, 14 * n);
-	const key = addMonths(monthKey(rule.start), (MONTHS$4[rule.every] || 1) * n);
+	const key = addMonths(monthKey(rule.start), (MONTHS$3[rule.every] || 1) * n);
 	return `${key}-${pad$8(Math.min(Number(rule.start.slice(8, 10)), daysInMonth$1(key)))}`;
 }
 function occurrences(rule, from, to, max = 1e3) {
@@ -49658,7 +51270,7 @@ var daysInMonth = (key) => new Date(Date.UTC(Number(key.slice(0, 4)), Number(key
 var prevMonth = (key) => {
 	return new Date(Date.UTC(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 2, 1)).toISOString().slice(0, 7);
 };
-var MONTHS$3 = [
+var MONTHS$2 = [
 	"January",
 	"February",
 	"March",
@@ -49672,7 +51284,7 @@ var MONTHS$3 = [
 	"November",
 	"December"
 ];
-var monthName = (key) => MONTHS$3[Number(key.slice(5, 7)) - 1] ?? key;
+var monthName = (key) => MONTHS$2[Number(key.slice(5, 7)) - 1] ?? key;
 /** "1,240 lei" (whole lei, rounded). */
 var leiText = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
 var signed = (bani) => `${bani >= 0 ? "+" : "−"}${leiText(Math.abs(bani))}`;
@@ -50335,7 +51947,7 @@ var esc = (s) => s.replace(/[<>&]/g, (c) => ({
 var PLAN_ASK = "What are your 1–3 must-dos today?";
 function morningText(o) {
 	const lines = ["☀️ <b>Good morning!</b>", ""];
-	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$6(o.focusYesterdayMin)}</b> of focus.`);
+	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$7(o.focusYesterdayMin)}</b> of focus.`);
 	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
 	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
 	if (lines.length > 2) lines.push("");
@@ -50364,7 +51976,7 @@ function planKeyboard(plan, withReasons) {
 	return { inline_keyboard: rows };
 }
 function eveningText(plan, focusMin) {
-	const head = `🌙 <b>Evening review</b> · ${hm$6(focusMin)} of focus today`;
+	const head = `🌙 <b>Evening review</b> · ${hm$7(focusMin)} of focus today`;
 	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
 	const done = plan.items.filter((i) => i.done).length;
 	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
@@ -50374,19 +51986,19 @@ function weekText(w, goals) {
 	const lines = [
 		`📊 <b>Your week</b> (${w.from.slice(5)} → ${w.to.slice(5)})`,
 		"",
-		`⏱ Focus: <b>${hm$6(w.totalMin)}</b>`
+		`⏱ Focus: <b>${hm$7(w.totalMin)}</b>`
 	];
-	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc(s.subject)}: ${hm$6(s.minutes)}`);
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc(s.subject)}: ${hm$7(s.minutes)}`);
 	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
 	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc(r.reason)} ×${r.count}`).join(", ")}`);
-	if (w.funMin) lines.push(`🎮 Fun: ${hm$6(w.funMin)}`);
-	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc(g.title)}: ${hm$6(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	if (w.funMin) lines.push(`🎮 Fun: ${hm$7(w.funMin)}`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc(g.title)}: ${hm$7(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
 	lines.push("", "<b>One thing to change next week?</b> Reply here.");
 	return lines.join("\n");
 }
 function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
-	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$6(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$7(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/core/benActs.ts
 /** At 10:00–19:59 a proposed plan nobody approved gets approved. */
@@ -51639,7 +53251,7 @@ var plus = (day, n) => {
 	d.setDate(d.getDate() + n);
 	return ymd$2(d);
 };
-var MONTHS$2 = [
+var MONTHS$1 = [
 	"january",
 	"february",
 	"march",
@@ -51653,7 +53265,7 @@ var MONTHS$2 = [
 	"november",
 	"december"
 ];
-var MONTH_RE = new RegExp(`\\b(${MONTHS$2.map((m) => m.slice(0, 3)).join("|")})[a-z]*\\b`);
+var MONTH_RE = new RegExp(`\\b(${MONTHS$1.map((m) => m.slice(0, 3)).join("|")})[a-z]*\\b`);
 /** "today", "yesterday", "this/last week", "this/last month", "in October", "last 7 days" → a date range. */
 function rangeOf(text, today) {
 	const t = text.toLowerCase();
@@ -51701,7 +53313,7 @@ function rangeOf(text, today) {
 	};
 	const m = MONTH_RE.exec(t);
 	if (m && /\b(in|during|for|from|of|on)\s+\w+/.test(t)) {
-		const idx = MONTHS$2.findIndex((x) => x.startsWith(m[1]));
+		const idx = MONTHS$1.findIndex((x) => x.startsWith(m[1]));
 		let year = Number(today.slice(0, 4));
 		if (idx > Number(today.slice(5, 7)) - 1) year -= 1;
 		const from = `${year}-${pad$5(idx + 1)}-01`;
@@ -51709,7 +53321,7 @@ function rangeOf(text, today) {
 		return {
 			from,
 			to: ymd$2(end) > today ? today : ymd$2(end),
-			label: MONTHS$2[idx][0].toUpperCase() + MONTHS$2[idx].slice(1)
+			label: MONTHS$1[idx][0].toUpperCase() + MONTHS$1[idx].slice(1)
 		};
 	}
 	return null;
@@ -52102,247 +53714,6 @@ function impactVerdict(rows) {
 		verdict: up > down && up >= 2 ? "working" : down > up ? "not yet" : "mixed",
 		lines
 	};
-}
-var r5 = (m) => Math.round(m / 5) * 5;
-var DAYS$2 = [
-	"Sunday",
-	"Monday",
-	"Tuesday",
-	"Wednesday",
-	"Thursday",
-	"Friday",
-	"Saturday"
-];
-var MONTHS$1 = [
-	"Jan",
-	"Feb",
-	"Mar",
-	"Apr",
-	"May",
-	"Jun",
-	"Jul",
-	"Aug",
-	"Sep",
-	"Oct",
-	"Nov",
-	"Dec"
-];
-/** "Friday 20 Nov". */
-function dayLabel(day) {
-	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
-	return `${DAYS$2[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS$1[d.getUTCMonth()]}`;
-}
-/** What kind of deadline, in one word, from its title ("exam", "essay", "report"), else "deadline". */
-function deadlineWord(title) {
-	const m = /\b(exam|test|quiz|essay|report|thesis|project|presentation|assignment|paper)\b/i.exec(title);
-	return m ? m[1].toLowerCase() : "deadline";
-}
-/** The session block's title: the subject first, like the goal blocks (core/goalPlan goalBlockTitle). */
-var sessionTitle = (g) => g.subject?.trim() && g.subject.trim().toLowerCase() !== g.title.trim().toLowerCase() ? `${g.subject.trim()}: ${g.title.trim()}` : g.title.trim();
-/** Session id: goal and day (and the k-th session that day). Letters, digits and dashes only. */
-var sessionId = (goalId, day, k = 0) => `dl-${String(goalId).replace(/[^a-zA-Z0-9]/g, "")}-${day.replace(/-/g, "")}${k ? `-${k}` : ""}`;
-/**
-* Plans every deadline backward. `rooms` covers today and the days after
-* (missing days have no room). Earlier deadlines get room first. Pure: the
-* same inputs give the same sessions.
-*/
-function planDeadlines(goals, rooms, today) {
-	const left = new Map(rooms.filter((r) => r.day >= today).map((r) => [r.day, Math.max(0, Math.floor(r.minutes / 5) * 5)]));
-	const weight = new Map(rooms.map((r) => [r.day, r.weight]));
-	const open = goals.filter((g) => g.leftMin > 0 && g.deadline > today).sort((a, b) => a.deadline.localeCompare(b.deadline) || String(a.id).localeCompare(String(b.id)));
-	const out = [];
-	for (const g of open) {
-		const days = [];
-		for (let d = addDays$8(g.deadline, -1); d >= today && days.length < 60; d = addDays$8(d, -1)) days.push(d);
-		const want = r5(g.leftMin);
-		const n = Math.max(1, Math.ceil(want / 90));
-		const size = Math.min(90, Math.max(25, Math.ceil(want / Math.max(1, Math.min(n, days.length)) / 5) * 5));
-		const taken = [];
-		let rest = want;
-		const used = (day) => taken.filter((t) => t.day === day).reduce((s, t) => s + t.minutes, 0);
-		const take = (day, cap) => {
-			const room = Math.min(left.get(day) ?? 0, 90 - used(day));
-			const m = Math.min(cap, room, rest);
-			if (m < 25 && !(m === rest && m >= 10)) return false;
-			left.set(day, (left.get(day) ?? 0) - m);
-			rest -= m;
-			taken.push({
-				day,
-				minutes: m
-			});
-			return true;
-		};
-		if (days.length) {
-			const stride = days.length / Math.min(n, days.length);
-			for (let i = 0; i < Math.min(n, days.length) && rest > 0; i++) {
-				const pick = [...days.slice(Math.floor(i * stride), Math.max(Math.floor(i * stride) + 1, Math.floor((i + 1) * stride)))].filter((d) => Math.min(left.get(d) ?? 0, 90 - used(d)) >= Math.min(25, rest)).sort((a, b) => (weight.get(b) ?? 2) - (weight.get(a) ?? 2) || b.localeCompare(a))[0];
-				if (pick) take(pick, size);
-			}
-		}
-		for (let guard = 0; rest > 0 && guard < 200; guard++) {
-			const pick = [...days].filter((d) => Math.min(left.get(d) ?? 0, 90 - used(d)) >= Math.min(25, rest)).sort((a, b) => used(a) - used(b) || (weight.get(b) ?? 2) - (weight.get(a) ?? 2) || b.localeCompare(a))[0];
-			if (!pick || !take(pick, size)) break;
-		}
-		const byDay = /* @__PURE__ */ new Map();
-		for (const t of taken) byDay.set(t.day, (byDay.get(t.day) ?? 0) + t.minutes);
-		const order = [...byDay.keys()].sort();
-		const of = order.length;
-		const word = deadlineWord(g.title);
-		const sessions = order.map((day, i) => {
-			const d = daysBetween$3(day, g.deadline);
-			return {
-				id: sessionId(g.id, day),
-				goalId: g.id,
-				title: sessionTitle(g),
-				day,
-				minutes: byDay.get(day),
-				n: i + 1,
-				of,
-				why: `${word} ${d === 1 ? "tomorrow" : `in ${d} days`}, session ${i + 1} of ${of}`
-			};
-		});
-		const shortMin = Math.max(0, rest);
-		out.push({
-			goalId: g.id,
-			title: g.title,
-			deadline: g.deadline,
-			leftMin: want,
-			sessions,
-			shortMin,
-			line: shortLine(g, shortMin)
-		});
-	}
-	return out;
-}
-/** "Etica exam: not enough room before Friday 20 Nov: 3h short" (and "behind by 2h" when it is). */
-function shortLine(g, shortMin) {
-	if (shortMin < 15) return null;
-	const behind = g.behindH != null && g.behindH >= 1 ? ` You are behind by ${Math.round(g.behindH)}h.` : "";
-	return `${g.title}: not enough room before ${dayLabel(g.deadline)}: ${fmtH(r5(shortMin))} short.${behind}`;
-}
-/** Today's sessions, ready for the packer (`goals`) with their why line and stable id. */
-function sessionsOn(plans, day) {
-	return plans.flatMap((p) => p.sessions.filter((s) => s.day === day));
-}
-/**
-* The deadline goals from the goal plans (core/goalPlan): what is left from the
-* start of today (today's minutes done count toward today's session), and how
-* far behind a steady pace.
-*/
-function fromGoalPlans(plans) {
-	return plans.filter((p) => p.leftMin > 0 && p.daysLeft > 0).map((p) => ({
-		id: p.goalId,
-		title: p.title,
-		subject: p.subject,
-		deadline: p.deadline,
-		leftMin: p.leftMin + doneToday(p),
-		behindH: p.aheadH < 0 ? -p.aheadH : 0
-	}));
-}
-/** Minutes done today on a goal (its share for today minus what is still left today). */
-var doneToday = (p) => Math.max(0, p.perDayMin - p.todayLeftMin);
-// src/core/planWeek.ts
-var PLAN_WEEK = "plan_week";
-var WEEK_NAMES = [
-	"Mon",
-	"Tue",
-	"Wed",
-	"Thu",
-	"Fri",
-	"Sat",
-	"Sun"
-];
-var DAY_WEIGHT = {
-	heavy: 3,
-	normal: 2,
-	light: 1
-};
-/** The share of a day's room that deadline sessions may take, by kind of day (the rest is for the day's tasks). */
-var DEADLINE_SHARE = {
-	heavy: .8,
-	normal: .5,
-	light: .3
-};
-WEEK_NAMES.map(() => ({
-	type: "normal",
-	gym: false
-}));
-/** Checks and tidies what was saved. */
-function cleanWeek(raw) {
-	const r = raw && typeof raw === "object" ? raw : {};
-	const list = Array.isArray(r.days) ? r.days : [];
-	return {
-		days: WEEK_NAMES.map((_, i) => {
-			const d = list[i] ?? {};
-			return {
-				type: d.type === "heavy" || d.type === "light" ? d.type : "normal",
-				gym: d.gym === true
-			};
-		}),
-		setOn: typeof r.setOn === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.setOn) ? r.setOn : null
-	};
-}
-/** Monday = 0 … Sunday = 6. */
-var weekIndex = (day) => ((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7;
-/** What the week plan and your limits say for one day. */
-function dayRules(week, limits, day) {
-	const d = week.days[weekIndex(day)] ?? {
-		type: "normal",
-		gym: false
-	};
-	const anyGym = week.days.some((x) => x.gym);
-	return {
-		type: d.type,
-		gym: d.gym,
-		limits: limitsFor(limits, day, d.type === "light" ? 120 : null),
-		train: !anyGym || d.gym
-	};
-}
-/**
-* How much deadline study each day can hold: the free time between events
-* (from `from`, or from now today, to the off time or 22:00), minus the free
-* share, times the day's deadline share, never more than its work limit or
-* the study cap.
-*/
-function dayRooms(o) {
-	const out = [];
-	for (let i = 0; i < o.days; i++) {
-		const day = addDays$8(o.today, i);
-		const r = dayRules(o.week, o.limits, day);
-		const end = endWith(o.endBy ?? "22:00", r.limits);
-		let room = freeGaps(withProtected(o.events, r.limits, day), day, {
-			from: o.from ?? "08:00",
-			to: end,
-			...i === 0 ? { after: o.now } : {},
-			minMinutes: 25
-		}).reduce((t, g) => t + g.minutes, 0) * (1 - Math.max(0, Math.min(.5, o.freeShare ?? .15))) * DEADLINE_SHARE[r.type];
-		if (r.limits.maxFocusMin != null) room = Math.min(room, r.limits.maxFocusMin);
-		const study = r.limits.caps.find((c) => c.kind === "study");
-		if (study) room = Math.min(room, study.minutes);
-		out.push({
-			day,
-			minutes: Math.max(0, Math.floor(room / 5) * 5),
-			weight: DAY_WEIGHT[r.type]
-		});
-	}
-	return out;
-}
-/** Plans the deadlines with the week plan and your limits, for `days` days from today. */
-function weekDeadlines(o) {
-	const last = o.goals.filter((g) => g.leftMin > 0 && g.deadline > o.today).map((g) => g.deadline).sort().pop();
-	if (!last) return [];
-	const span = Math.min(60, Math.max(1, Math.round((Date.parse(`${last}T12:00:00Z`) - Date.parse(`${o.today}T12:00:00Z`)) / 864e5)));
-	const rooms = dayRooms({
-		today: o.today,
-		now: o.now,
-		days: span,
-		events: o.events,
-		week: o.week,
-		limits: o.limits,
-		freeShare: o.freeShare,
-		endBy: o.endBy
-	});
-	return planDeadlines(o.goals, rooms, o.today);
 }
 // src/core/islandActions.ts
 var MONTHS = "jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december|ian|ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie|янв|фев|мар|апр|май|июн|июл|авг|сен|окт|ноя|дек";
@@ -53549,7 +54920,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 		const setup = await mirror.read((db) => ({
 			today: services.services(db).wallet.today(),
 			limits: cleanLimits(readJson$1(db, PLAN_LIMITS, null)),
-			week: cleanWeek(readJson$1(db, PLAN_WEEK, null)),
+			week: cleanWeek$1(readJson$1(db, PLAN_WEEK, null)),
 			freeShare: readLifeFit(db).freeShare
 		}));
 		const today = setup.today;
@@ -53864,7 +55235,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 				bed = "23:30";
 			}
 			const limits = cleanLimits(readJson$1(db, PLAN_LIMITS, null));
-			const week = cleanWeek(readJson$1(db, PLAN_WEEK, null));
+			const week = cleanWeek$1(readJson$1(db, PLAN_WEEK, null));
 			const times = learnTimes(cleanReview(readJson$1(db, PLAN_REVIEW, null)), { before: today });
 			return {
 				today,
@@ -53910,6 +55281,8 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			id: x.id,
 			why: x.why
 		})).filter((g) => g.minutes >= 20);
+		const ladderToday = await mirror.read((db) => ladderStudyToday(services.services(db), deadlines, base, hmNow(now), events)).catch(() => null);
+		if (ladderToday && !allGoalItems.some((g) => g.id === ladderToday.id)) allGoalItems.push(ladderToday);
 		const mode = base.mode;
 		const goalItems = !mode ? allGoalItems : mode.kind === "sick" ? [] : mode.kind === "travel" ? allGoalItems.slice(0, 1).map((g) => ({
 			...g,
@@ -54586,7 +55959,7 @@ function createRhythm({ mirror, services, todoist, calendar, ai }) {
 			const svc = services.services(db);
 			const st = load(db, today);
 			const top3 = st.tomorrow?.day === day ? st.tomorrow.top3 : [];
-			const rules = dayRules(cleanWeek(readJson$1(db, PLAN_WEEK, null)), cleanLimits(readJson$1(db, PLAN_LIMITS, null)), day);
+			const rules = dayRules(cleanWeek$1(readJson$1(db, PLAN_WEEK, null)), cleanLimits(readJson$1(db, PLAN_LIMITS, null)), day);
 			const plan = packDay({
 				work: workToday(readLifeFit(db), day),
 				today: day,
@@ -55256,7 +56629,7 @@ function focusKeyboard(subjects) {
 }
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r, plan) {
-	const head = `✅ <b>${r.session.minutes} min of ${esc$5(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$6(r.state.todayMin)}`;
+	const head = `✅ <b>${r.session.minutes} min of ${esc$5(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$7(r.state.todayMin)}`;
 	const rate = [
 		1,
 		2,
@@ -56450,7 +57823,7 @@ function runFocus(s, text, focusEnded) {
 				const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
 				return { reply: `⏱ <b>Focusing on ${esc$5(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
 			}
-			return { reply: `⏱ Today: <b>${hm$6(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
+			return { reply: `⏱ Today: <b>${hm$7(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
 		}
 		const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
 		const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
@@ -57070,7 +58443,7 @@ function baseProgram(ctx) {
 	lines.push(...bodyLines(ctx.body).lines.slice(0, 2));
 	lines.push(`Every muscle is trained on ${RULES$1.minDays} or more days, and each set stops ${RULES$1.rir}.`);
 	return {
-		week: mondayOf$7(ctx.today),
+		week: mondayOf$9(ctx.today),
 		target,
 		sessions: 3,
 		deload: dl.due,
@@ -57142,7 +58515,7 @@ async function weeklyReview(ctx, ask, now = /* @__PURE__ */ new Date()) {
 	}
 }
 /** True when there is no review for this week yet (one per Monday-to-Sunday week). */
-var reviewDue = (program, today) => !program || program.week < mondayOf$7(today);
+var reviewDue = (program, today) => !program || program.week < mondayOf$9(today);
 // src/core/benRoute.ts
 var EDIT_VERB = /\b(move|add|book|schedule|rename|delete|remove|cancel|log|remind|set|start|drop|push|shift|put)\b/gi;
 /** What kind of message it is. Order matters: a review beats a plan ("review my day and plan tomorrow"). */
@@ -59199,7 +60572,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			const total = steps.reduce((t, x) => t + x.minutes, 0);
 			const list = steps.map((x, i) => `${i + 1}. ${x.title} (${x.minutes} min)`).join("\n");
 			return {
-				reply: `"${big}" in ${steps.length} steps, about ${hm$6(total)} in all:\n${list}${todoist ? "" : "\n(Todoist isn't connected, so they are only here.)"}`,
+				reply: `"${big}" in ${steps.length} steps, about ${hm$7(total)} in all:\n${list}${todoist ? "" : "\n(Todoist isn't connected, so they are only here.)"}`,
 				pre,
 				chips: ["Plan my day", "Start step 1"],
 				buttons: [{
@@ -60321,7 +61694,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				if (pre.length) step(digest ? "Read yesterday" : route.intent === "goals" ? "Checked your goals" : "Looked up your history");
 				if (tool?.found.length) pre.push(...tool.found);
 				if (digest && onStep && !/\bweek\b/i.test(clean)) step(`\u0001${reviewFromData(digest)}`);
-				else if (week && onStep) step(`\u0001This week so far: ${hm$6(week.focusMin)} of focus, ${week.workouts} workout${week.workouts === 1 ? "" : "s"}, ${week.tasks} task${week.tasks === 1 ? "" : "s"} done, ${week.daysLeft} day${week.daysLeft === 1 ? "" : "s"} left. The full review is coming…`);
+				else if (week && onStep) step(`\u0001This week so far: ${hm$7(week.focusMin)} of focus, ${week.workouts} workout${week.workouts === 1 ? "" : "s"}, ${week.tasks} task${week.tasks === 1 ? "" : "s"} done, ${week.daysLeft} day${week.daysLeft === 1 ? "" : "s"} left. The full review is coming…`);
 				out = parseBrain(await ask(pre.length ? pre.join("\n") : void 0, tool?.note ?? ""));
 				trace.mark("model");
 			}
@@ -61474,7 +62847,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	async function lessonOfDay(token, chat, botId, cfg, note) {
 		const ctx = await mirror.read((db) => {
 			const f = services.services(db).focus.state();
-			return `Focus today ${hm$6(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
+			return `Focus today ${hm$7(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
 		});
 		const out = parseBrain(await ai(`You are Victor's coach. Here is his day and his evening note. Write ONE short lesson for tomorrow (max 25 words, concrete, kind, in the language of his note) as "reply", and the same lesson as one item in "remember" starting with "Lesson ${(/* @__PURE__ */ new Date()).toISOString().slice(5, 10)}:". Answer only JSON {"reply": string, "actions": [], "remember": string[]}.
 

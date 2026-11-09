@@ -1906,6 +1906,7 @@ try {
   await step('Goals: cards with rings and pace lines, a new goal from words, a check-in, a habit day and a project step', async () => {
     await open('goals')
     await pg.waitForSelector('.gx-hero .gx-ring', { timeout: 15000 })
+    await pg.click('.gx .ptabs [data-tab="goals"]')
     await pg.waitForSelector('.gx-card .gx-chart svg polyline.plan', { timeout: 10000 })
     if ((await pg.$$('.gx-card')).length < 3) throw new Error('the made-up goals are missing')
     if (!(await pg.$('.gx-hour'))) throw new Error('no hour goal card')
@@ -1934,6 +1935,70 @@ try {
     await pg.keyboard.press('Escape')
     await pg.waitForSelector('.gx-detail', { state: 'detached', timeout: 5000 })
     if (!(await pg.$('.gx-card.k-limit .gx-bars'))) throw new Error('the limit has no week bars')
+  })
+  // The goal ladder: up to 3 critical goals for the 12-week quarter, scored on actions (Goals → This quarter).
+  // LADDER_SHOTS=<dir> saves a phone shot of the cards and a desktop shot of the review.
+  await step('Goal ladder: quarter cards with lights, a milestone confirmed, swap from Not now, the Sunday review pre-fills the top 3, the Today line, the timeline', async () => {
+    const shots = process.env.LADDER_SHOTS
+    if (shots) await pg.addStyleTag({ content: '.toasts, .wallet-pops { display: none !important; }' })
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await open('goals')
+    await pg.waitForSelector('.gx .ptabs [data-tab="quarter"]', { timeout: 15000 })
+    await pg.click('.gx .ptabs [data-tab="quarter"]')
+    await pg.waitForSelector('.ql-card', { timeout: 15000 })
+    const ids = await pg.locator('.ql-card').evaluateAll((cs) => cs.map((c) => c.dataset.goal))
+    if (ids.join() !== 'gain,strong,study') throw new Error(`critical goals: ${ids.join()}`)
+    for (const id of ids) {
+      const card = pg.locator(`.ql-card[data-goal="${id}"]`)
+      if (!/On track|Close|Needs a step|New week/.test(await card.locator('.ql-light').innerText())) throw new Error(`${id} has no traffic light`)
+      if ((await card.locator('.ql-strip li').count()) !== 12) throw new Error(`${id}: the timeline is not 12 weeks`)
+      if (!(await card.locator('.ql-acts li').count())) throw new Error(`${id}: no actions this week`)
+    }
+    if (!/workouts/.test(await pg.locator('.ql-card[data-goal="gain"] .ql-acts').innerText())) throw new Error('the gain goal does not count workouts')
+    // No horizontal scroll on a phone.
+    if (await pg.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) throw new Error('the quarter scrolls sideways on a phone')
+    if (shots) {
+      await pg.evaluate(() => document.querySelector('.ql')?.scrollIntoView())
+      await pg.screenshot({ path: `${shots}/phone-quarter-cards.png` })
+    }
+    // A suggested milestone (worked backward from the quarter) is confirmed.
+    const gain = pg.locator('.ql-card[data-goal="gain"]')
+    if (!(await gain.locator('.ql-sug').count())) throw new Error('the milestone is not marked as a suggestion')
+    await gain.locator('.ql-ms .btn').click()
+    await gain.locator('.ql-msedit .btn.primary').click()
+    await pg.waitForFunction(() => !document.querySelector('.ql-card[data-goal="gain"] .ql-sug'), null, { timeout: 8000 })
+    // A 4th critical goal needs a swap: Sleep in for Study, then back.
+    await pg.locator('.ql-notnow summary').click()
+    const sleep = pg.locator('.ql-notnow li', { hasText: 'Sleep better' })
+    await sleep.locator('.btn', { hasText: 'Swap in' }).click()
+    await sleep.locator('.ql-swap .btn', { hasText: 'Study' }).click()
+    await pg.waitForSelector('.ql-card[data-goal="sleep"]', { timeout: 8000 })
+    const study = pg.locator('.ql-notnow li', { hasText: 'Study' })
+    await study.locator('.btn', { hasText: 'Swap in' }).click()
+    await study.locator('.ql-swap .btn', { hasText: 'Sleep' }).click()
+    await pg.waitForSelector('.ql-card[data-goal="study"]', { timeout: 8000 })
+    // The Sunday review: this week's actions per goal, then next week's top 3 pre-filled from the ladder.
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await pg.locator('.ql-head-act .btn').first().click()
+    await pg.waitForSelector('.ql-review .ql-rev-goals li', { timeout: 5000 })
+    if ((await pg.locator('.ql-review .ql-rev-goals li').count()) !== 3) throw new Error('the review does not show the 3 goals')
+    if (shots) await pg.screenshot({ path: `${shots}/desktop-review.png` })
+    await pg.locator('.ql-review .btn.primary').click()
+    await pg.waitForFunction(() => document.querySelectorAll('.ql-review .ql-chips button.on').length === 3, null, { timeout: 8000 })
+    const picks = await pg.locator('.ql-review .ql-chips button.on').allInnerTexts()
+    if (!picks.some((t) => /workout|weigh-in|protein/i.test(t))) throw new Error(`the top 3 is not pre-filled from the ladder: ${picks.join(' | ')}`)
+    await pg.locator('.ql-review .btn.primary').click()
+    await pg.waitForSelector('.ql-review', { state: 'detached', timeout: 8000 })
+    if (shots) {
+      await pg.evaluate(() => document.querySelector('.ql-cards')?.scrollIntoView())
+      await pg.screenshot({ path: `${shots}/desktop-timeline.png` })
+    }
+    // One line on Today → Now.
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="now"]', { timeout: 10000 })
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.waitForSelector('.ql-today', { timeout: 10000 })
+    if (!/^Quarter goal: .+ · this week \d/.test(await pg.locator('.ql-today').innerText())) throw new Error('the Today line is missing its numbers')
   })
   await step('Settings: every section opens with content', async () => {
     await open('settings')
@@ -4708,7 +4773,7 @@ try {
     const report = []
     const pages = [
       ['progress', '.pg', ['week', 'areas', 'streaks', 'focus', 'look'], { week: 2.2 }],
-      ['goals', '.gx', ['goals', 'week', 'hours', 'path'], { goals: 2.6 }],
+      ['goals', '.gx', ['quarter', 'goals', 'week', 'hours', 'path'], { goals: 2.6 }],
       ['career', '.cr', ['jobs', 'portfolio', 'cards', 'study', 'money', 'review'], { money: 2 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],
