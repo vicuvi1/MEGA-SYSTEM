@@ -277,6 +277,45 @@ try {
       if (text.length < 40) throw new Error(`frame looks empty (${text.length} chars)`)
     })
   }
+  // Finance Home: "Where your money goes" is a donut plus rows, biggest first, shares adding to 100;
+  // tapping a row lights it up and lists its records; "See all in the Log" opens the Log filtered to it.
+  await step('Finance categories: donut, sorted rows add to 100, tap a row opens its records and the Log', async () => {
+    await open('money')
+    if (await pg.$('.mh-open')) await pg.click('.mh-open')
+    await pg.waitForTimeout(3500)
+    const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
+    const frame = src && pg.frames().find((f) => f.url().includes(src))
+    if (!frame) throw new Error('Finance Helper frame not loaded')
+    await frame.waitForSelector('.dn-card .dn-row', { timeout: 15000 })
+    const info = await frame.evaluate(() => {
+      const card = document.querySelector('.dn-card')
+      const rows = [...card.querySelectorAll('.dn-row:not(.child)')]
+      const pcts = rows.map((r) => Number(r.querySelector('.dn-pct').textContent.replace('%', '')))
+      const amts = rows.filter((r) => r.dataset.cat !== '__other').map((r) => Number(r.querySelector('.dn-amt').textContent.replace(/[^\d]/g, '')))
+      return { segs: card.querySelectorAll('.dn-narrow .dn-seg').length, pcts, amts, centre: card.querySelector('.dn-narrow .dn-c2')?.textContent || '', table: card.querySelectorAll('table.sr-only tbody tr').length, rows: rows.length }
+    })
+    if (info.segs < 2) throw new Error(`donut has ${info.segs} segments`)
+    if (info.pcts.reduce((a, b) => a + b, 0) !== 100) throw new Error(`shares add up to ${info.pcts.reduce((a, b) => a + b, 0)}, not 100`)
+    if (info.amts.some((a, i) => i && a > info.amts[i - 1])) throw new Error('rows are not biggest first')
+    if (!/\d/.test(info.centre)) throw new Error('no total in the donut centre')
+    if (info.table !== info.rows) throw new Error('the table fallback does not match the rows')
+    if (process.env.FIN_CAT_SHOTS) {
+      // Two looks for the report: phone in dark, desktop in light.
+      for (const [w, h, scheme] of [[390, 900, 'dark'], [1280, 900, 'light'], [390, 900, 'light'], [1280, 900, 'dark']]) {
+        await pg.setViewportSize({ width: w, height: h })
+        await pg.emulateMedia({ colorScheme: scheme })
+        await pg.waitForTimeout(1200)
+        await frame.locator('.dn-card').scrollIntoViewIfNeeded()
+        await frame.locator('.dn-card').screenshot({ path: `${process.env.FIN_CAT_SHOTS}/finance-categories-${scheme}-${w}.png` })
+      }
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await frame.click('.dn-card .dn-row:not(.child)')
+    await frame.waitForSelector('.dn-sel .tx', { timeout: 5000 })
+    await frame.click('.dn-sel [data-act="cat-log"]')
+    await frame.waitForFunction(() => location.hash === '#log' && /cat:/.test(document.getElementById('search')?.value || ''), null, { timeout: 8000 })
+    await frame.evaluate(() => { const s = document.getElementById('search'); if (s) { s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })) } })
+  })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.

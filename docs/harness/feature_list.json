@@ -811,6 +811,20 @@
    ],
    "evidence": "2026-11-09: unit tests (not enough data, +200 after 2 flat weeks, the waist condition, on track, bounds, once a week, history); smoke step Body log (On track, then +200 on both tabs, Accept, history in Goals, no points); full smoke",
    "notes": "core/foodAdjust.ts (rules), core/foodGoals.ts (adjLog in food_goals), main/food.ts adjustNow/answerAdjust (bodyPoints from body_comp + body_metrics), body/FoodAdjustCard.tsx (used by FoodCounter and progress/BodyProgress). bodyProgress.ts LEAN_ZONE = TARGET_BAND."
+  },
+  {
+   "id": "F-FIN-DONUT",
+   "priority": 1,
+   "area": "rewards",
+   "title": "Finance Helper: a donut of where the money goes, with category rows",
+   "user_visible_behavior": "Finance Home (after the month summary) and Reports show 'Where your money goes': a donut of spending by category (labels with leader lines on a wide card, the list on a phone), 'Spent N MDL' in the middle, and a rounded row per category with icon, amount, share in a small circle, a thin bar and '+12% vs last month'. Periods: This month, Last month, 3 months, Year, and month arrows. Categories under 3% fold into Other (tap to open). Tap a segment or row to see its records; 'See all in the Log' opens the Log filtered to it. Transfers, income, loans and points-only reward entries are left out.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Finance\" npm run smoke"
+   ],
+   "evidence": "unit tests (what is left out, order, shares add to 100, Other folding, comparison with the period before); smoke step Finance categories",
+   "notes": "apps/finance/js/catshare.js (numbers), js/screens/spending.js (card, donut SVG), css/app.css (.dn-*), screens/reports.js, web/financeCategoryShares.test.ts"
   }
  ]
 }
