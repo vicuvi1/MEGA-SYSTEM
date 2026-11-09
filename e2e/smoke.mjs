@@ -6096,7 +6096,7 @@ try {
     await pg.locator(`${gr} .gr-months .btn`).click()
     await pg.waitForFunction((g) => /Copied CSV/.test(document.querySelector(`${g} .gr-months .btn`)?.textContent ?? ''), gr, { timeout: 5000 })
     const csv = await pg.evaluate(() => navigator.clipboard.readText()).catch(() => '')
-    if (csv && !/^month,weight_kg,waist_cm,strength_pct,sessions,protein_goal_days,growth_level\n\d{4}-\d{2},/.test(csv)) throw new Error(`the CSV reads "${csv.slice(0, 80)}"`)
+    if (csv && !/^month,weight_kg,waist_cm,strength_pct,sessions,protein_goal_days,growth_level\r?\n\d{4}-\d{2},/.test(csv)) throw new Error(`the CSV reads "${csv.slice(0, 80)}"`)
     // "Log weight / waist" opens the Log body sheet.
     await pg.locator(`${gr} .gr-actions .btn`, { hasText: 'Log weight' }).click()
     await pg.waitForSelector('.blog-sheet', { timeout: 5000 })
