@@ -25,6 +25,7 @@ import { Rings, WeekChartView } from './FoodViz'
 import { FoodPlan, copyText } from './FoodPlan'
 import { FoodBars, QuickLog } from './FoodFast'
 import { FoodSavedSheet } from './FoodSavedSheet'
+import { FoodPhotoLog } from './FoodPhotoReview'
 import type { FoodView } from '../../../main/food'
 import './food.css'
 
@@ -302,6 +303,7 @@ export function FoodCounter() {
               </div>
             </div>
           )}
+          {!pastDay && <FoodPhotoLog view={v} />}
           <details className="fd-more" open={moreOpen || pastDay} onToggle={(e) => setMoreOpen((e.currentTarget as HTMLDetailsElement).open)}>
             <summary>More ways to log: in words, a photo with any AI app, same as yesterday</summary>
             <div className="fd-more-body">

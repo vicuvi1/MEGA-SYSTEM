@@ -18,6 +18,9 @@ Server secrets are **Vercel environment variables** (Vercel → mega-system → 
 | `TELEGRAM_BOT_TOKEN`, `SPORT_BOT_TOKEN`, `FINANCE_BOT_TOKEN`, `MAN_BOT_TOKEN`, `WAKY_BOT_TOKEN` | Vercel | older/specialist bots; `BOTS_NOT_ON_SERVER` lists bots the server should not run |
 | `OPENROUTER_API_KEY` | Vercel | main AI. `OPENROUTER_MODEL` / `OPENROUTER_STRONG_MODEL` override the pinned models |
 | `GEMINI_API_KEY` | Vercel | backup AI, voice notes and photos |
+| `VISION_PROVIDER` | Vercel | optional: who reads food photos, `gemini` (default) or `claude` |
+| `VISION_MODEL` | Vercel | optional: the model id for food photos (default `gemini-3.5-flash`, or `claude-haiku-4-5` with Claude) |
+| `ANTHROPIC_API_KEY` | Vercel | only with `VISION_PROVIDER=claude`: reads food photos |
 | `TODOIST_TOKEN` | Vercel | Todoist |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI` | Vercel | Google Calendar/Gmail OAuth (the refresh token is stored in the database) |
 | `CRON_SECRET` | Vercel **and** GitHub | signs the timers: Vercel crons, the GitHub tick, the backup workflow |
