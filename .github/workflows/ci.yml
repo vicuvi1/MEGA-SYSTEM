@@ -39,3 +39,20 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           node e2e/smoke.mjs
+  windows-unit:
+    # The desktop release builds on Windows. Run the unit tests there on every push too, so a
+    # Windows-only failure shows up here in minutes instead of silently blocking every installer.
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Unit tests on Windows
+        run: npx vitest run
+        env:
+          TURSO_URL: https://ci-not-a-real-db.turso.io
+          TURSO_TOKEN: ci-fake

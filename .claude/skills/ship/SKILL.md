@@ -22,8 +22,9 @@ Run these steps in order. Stop and report if a step fails and you can't fix it i
    - Keep both sides.
    - For `api/_bot/bot.mjs`, rebuild it from the merged source instead of hand-merging.
    - Re-run the typecheck and tests.
-5. **Push:** `git push origin HEAD:main`. Retry network errors up to 4 times with backoff. Never force-push.
-6. **Report (at most about 250 words):**
+5. **Check the last release first:** run `bash scripts/release-status.sh`. If the latest Windows release run is red, fix that first (`bash scripts/release-status.sh fail` shows why); never stack new work on a broken release. After pushing, check it again once the run finishes.
+6. **Push:** `git push origin HEAD:main`. Retry network errors up to 4 times with backoff. Never force-push.
+7. **Report (at most about 250 words):**
    - what changed for the user;
    - the files touched;
    - checks run, with results;

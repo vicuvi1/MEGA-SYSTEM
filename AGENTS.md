@@ -30,6 +30,7 @@ The full [`docs/AI_HANDOFF.md`](docs/AI_HANDOFF.md) (about 23k tokens) is the hi
 - `npm run smoke` passes. A UI change has a smoke step. Builders may run only their area with `SMOKE_ONLY`; the coordinator or CI runs the full suite.
 - If bot or server code changed: `npm run build:bot`, and commit `api/_bot/bot.mjs`. If `src/core/sport*.ts` changed: `npm run build:sport`, and commit `sportkit.js`.
 - New or changed behaviour is written in the matching `docs/areas/*.md` file.
+- The Windows release run is green (`bash scripts/release-status.sh`). A red release blocks all other shipping until it is fixed. Tests must not assume the operating system: the release builds on Windows, CI on Linux (both run the unit tests).
 - The feature's entry in `docs/harness/feature_list.json` is updated.
 
 ## Reports and handoffs
