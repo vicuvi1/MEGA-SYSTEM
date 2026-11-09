@@ -708,6 +708,21 @@
    ],
    "evidence": "2026-11-08: unit tests (parser, answers, redeem with and without real money, cleanup), speed table (money asks 0 model calls, under 1 s), smoke steps Rewards buy and Coach money",
    "notes": "main/shop.ts (paid default 0, clearPaid), web/webServices.ts (redeem, rewardMoney, removeRewardMoney), core/funBudget.ts rewardMoneyRows, redeem.ts + confirmSheet.tsx askSwitch, rewards/Shop.tsx RewardMoneyFix, apps/finance/js/app.js tag; core/benMoneyAsk.ts, web/financeBot.ts (moneyRows, monthSpend, restoreMoney), webBots.ts route, botBrain.ts UndoOp moneyback, bots/undo.ts"
+  },
+  {
+   "id": "F-BODY-COMP",
+   "priority": 1,
+   "area": "sport",
+   "title": "Body composition: log weigh-ins from a smart scale, weekly averages and the target band on Progress",
+   "user_visible_behavior": "Body Today's weight card and Progress open a 'Log body' sheet: weight (needed), body fat %, muscle kg, water %, visceral fat and waist under 'More', the time (now by default) and the hint 'Best: morning, after the toilet, before eating or drinking.' Saved with Undo, no points. Progress has a Body composition section: the weekly average weight as the headline with '+0.4 kg vs last week', a chart of faint grey daily weigh-ins with the 7-day average line and the target band (+0.25 to +0.5 kg a week) and an under/in/over label, 'Not enough data' under 3 weigh-ins in a week, the last 4 weeks with average calories from the food log, waist, and body fat % and muscle kg smoothed and labeled 'estimate, watch the trend'. The monthly report adds smoothed muscle and fat change, average calories and a progress photo link, opens first on the 1st-3rd of a month, and 'Monthly summary' jumps to it any day. A Sunday 10:00 waist reminder is added to your reminders once a week, and skipped for a week that already has a waist.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/bodyComp.test.ts src/main/bodyComp.test.ts",
+    "SMOKE_ONLY=\"Body log\" npm run smoke"
+   ],
+   "evidence": "2026-11-09: unit tests (ranges, dedupe key, first morning weight, weekly averages and count, not enough data, smoothing, band, week-over-week, monthly numbers, body_metrics kept in step, Undo, waist reminder, migration version), smoke step Body log",
+   "notes": "schema 023 body_comp, core/bodyComp.ts, main/bodyComp.ts, web/bodyCompBridge.ts (life.coach.bodyComp), body/BodyLogSheet.tsx, body/progress/BodyCompPanel.tsx + MonthCard.tsx; screenshots: E2E_BODY_DEMO=1 BODYSCALE_SHOTS=<dir> SMOKE_ONLY=\"Body log\" npm run smoke. Phase 2 (phone/server sync) and screenshot import come later."
   }
  ]
 }
