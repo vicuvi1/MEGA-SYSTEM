@@ -428,14 +428,15 @@
    "priority": 1,
    "area": "today",
    "title": "Tasks sync both ways with Todoist",
-   "user_visible_behavior": "Priority, due date (today, tomorrow, a date/time), title, labels and length set anywhere in the app reach Todoist; the row shows saving… / ✓ saved / Couldn't save to Todoist. Retry; a failed save waits and survives a reload; changes made in Todoist show on the next check and at once with Sync",
+   "user_visible_behavior": "Priority, due date (today, tomorrow, a date/time), title, labels and length set anywhere in the app reach Todoist; the row shows saving… / ✓ saved / Couldn't save to Todoist. Retry; a failed save waits and survives a reload; changes made in Todoist (day moved, time added or taken off, date removed, done, reopened, deleted, renamed, priority, project, a recurring task done) show on every surface within one change check (Tasks, Today → Now other tasks and Top 3, the day plan, the island list, Ben) and at once with Sync; a task moved away leaves the plan (\"Moved to tomorrow\" note, its block goes unless pinned); the Sync line says \"Synced 12:04 · 2 changes from Todoist\" or \"Can't reach Todoist right now.\"",
    "status": "in_review",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/todoSync.test.ts src/renderer/src/web/todoistClient.test.ts",
-    "SMOKE_ONLY=\"Tasks sync\" npm run smoke"
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/todoSync.test.ts src/renderer/src/web/todoistClient.test.ts src/renderer/src/web/todoistE2e.test.ts src/core/syncLabel.test.ts",
+    "SMOKE_ONLY=\"Tasks sync\" npm run smoke",
+    "SMOKE_ONLY=\"Todoist from outside\" npm run smoke"
    ],
    "evidence": "",
-   "notes": "2026-11-08: core/todoSync.ts (edit queue, overlay, resolveDue), web/todoistClient.ts (one Todoist object for every caller, Ben's quick commands and the island included), the server update answers with the task and sends plain dates as due_date."
+   "notes": "2026-11-08: core/todoSync.ts (edit queue, overlay, resolveDue), web/todoistClient.ts (one Todoist object for every caller, Ben's quick commands and the island included), the server update answers with the task and sends plain dates as due_date. 2026-11-09 audit: the change check carries the changed tasks (done/deleted marked), a lookup op says where plan tasks went (open elsewhere / done, recurring included / gone), planSync.mergeRemote no longer ticks a task that only moved away, draft blocks are checked too, renames follow into the plan and Top 3 (core/todoFollow.ts), waiting edits settle against Todoist's newer value (reconcilePatch), fixed-time-zone due times are read in the task's zone (dueParts), Ben's 45 s copy is dropped on a Todoist change; end-to-end fake-Todoist suite web/todoistE2e.test.ts and smoke step \"Todoist from outside\"."
   },
   {
    "id": "F030",

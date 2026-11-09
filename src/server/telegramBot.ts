@@ -27,7 +27,7 @@ import { createWebServices } from '../renderer/src/web/webServices'
 import { createWebBots, focusKeyboard, type AskModel, type CalendarLike } from '../renderer/src/web/webBots'
 import { appendLog, loadLog } from '../renderer/src/web/botBrain'
 import { GOOGLE_SETTING as GSET, createCalendarApi as makeCal, type GoogleEnv, type GoogleStored } from './googleCalendar'
-import { createTodoistApi } from './todoistApi'
+import { createTodoistApi, todoistOp } from './todoistApi'
 import { payTodoist } from '../renderer/src/web/todoistCoins'
 import { DEFAULT_RULES } from '@core/rules'
 import { canBeNow } from '@core/calResponse'
@@ -105,7 +105,7 @@ import { memoryJobs } from './memoryJobs'
 /** What Ben already said today, by kind (each kind once a day). */
 const BEN_SENT = 'ben_sent_today'
 
-export { createTodoistApi }
+export { createTodoistApi, todoistOp }
 export { GOOGLE_SETTING, GMAIL_READ_SCOPE, authUrl, createCalendarApi, exchangeCode, keepGooglePrefs, localIso } from './googleCalendar'
 
 export interface BotEnv {

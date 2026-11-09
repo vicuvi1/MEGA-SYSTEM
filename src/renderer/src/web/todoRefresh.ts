@@ -9,11 +9,23 @@
 export interface ChangeAnswer {
   token: string
   changed: number
+  /** Of those, changes made in Todoist itself (not this app's own edits coming back). */
+  outside?: number
 }
 
-export function createChangeWatch(ask: (token: string) => Promise<ChangeAnswer>) {
+/** What the Sync line shows: when Todoist last answered, how many outside changes came in, the last problem. */
+export interface WatchInfo {
+  okAt: number
+  failAt: number
+  error: string | null
+  /** Changes made in Todoist itself taken in since the last `take()`. */
+  changes: number
+}
+
+export function createChangeWatch(ask: (token: string) => Promise<ChangeAnswer>, now: () => number = Date.now) {
   let token: string | null = null
   let off = false
+  const info: WatchInfo = { okAt: 0, failAt: 0, error: null, changes: 0 }
   return {
     /** True when Todoist changed since the last check (the first check only starts the count). */
     async check(): Promise<boolean> {
@@ -22,10 +34,28 @@ export function createChangeWatch(ask: (token: string) => Promise<ChangeAnswer>)
         const j = await ask(token ?? '*')
         const first = token === null
         token = String(j.token || '') || null
+        info.okAt = now()
+        info.error = null
+        if (!first) info.changes += Number(j.outside ?? j.changed) || 0
         return !first && Number(j.changed) > 0
-      } catch {
+      } catch (e) {
+        info.failAt = now()
+        info.error = String((e as Error)?.message || e || 'Todoist did not answer')
         return false
       }
+    },
+    /** Did the last check reach Todoist? */
+    get ok(): boolean {
+      return !info.error
+    },
+    info(): WatchInfo {
+      return { ...info }
+    },
+    /** The outside changes counted since the last take (the Sync button's "2 changes from Todoist"). */
+    take(): number {
+      const n = info.changes
+      info.changes = 0
+      return n
     },
     /** Todoist is not connected: stop asking. */
     stop() {

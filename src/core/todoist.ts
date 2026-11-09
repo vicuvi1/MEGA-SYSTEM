@@ -25,6 +25,12 @@ export interface TodoTask {
   duration?: number | null
 }
 
+/** One task as Todoist's change check reports it: its fields, and whether it was done or deleted. */
+export type TodoDelta = TodoTask & { checked: boolean; deleted: boolean }
+
+/** A task looked up by id: still open (maybe on another day now), done, or gone (deleted). */
+export type TodoLookup = { id: string; state: 'open' | 'done' | 'gone'; task?: TodoTask }
+
 /** The Todoist label that makes a task one of today's must-dos (⭐). */
 export const TODAY_LABEL = 'today'
 

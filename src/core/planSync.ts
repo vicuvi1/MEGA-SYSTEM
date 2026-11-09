@@ -16,7 +16,8 @@
 import { fromMin, toMin, type BlockSync, type DayProposal } from './rhythm'
 import { isApproved, minOfDay, planItems, TRAIN_ID, type EditItem } from './planEdit'
 import type { CalEvent } from './dayTime'
-import type { TodoTask } from './todoist'
+import type { TodoLookup, TodoTask } from './todoist'
+import { addDays, dayLabel } from './dates'
 import { blockLook, lookTitle, planEventId, plainTitle, sameTitle } from './planLook'
 
 export type GoogleOp =
@@ -218,7 +219,19 @@ export function pending(b: Pick<EditItem, 'start' | 'minutes' | 'title' | 'sync'
  * Takes in what changed outside. `events`: today's calendar (null when it could not be read:
  * then nothing is taken as deleted); `tasks`: today's open Todoist tasks (null: not read).
  */
-export function mergeRemote(plan: DayProposal, events: CalEvent[] | null, tasks: TodoTask[] | null): RemoteResult {
+export interface RemoteOpts {
+  /**
+   * Where the plan's tasks that today's list no longer has are now (Todoist's
+   * change check, else a lookup by id). With it, a task moved to another day
+   * or deleted leaves the plan and only a really done one is ticked; a task
+   * not known yet is left alone. Without it: the old rule, missing = done.
+   */
+  where?: Map<string, TodoLookup> | null
+  /** A task's Todoist id from its title (draft blocks and must-dos hold titles only). */
+  idOf?: (title: string) => string | undefined
+}
+
+export function mergeRemote(plan: DayProposal, events: CalEvent[] | null, tasks: TodoTask[] | null, o: RemoteOpts = {}): RemoteResult {
   const notes: string[] = []
   const from = new Set<'google' | 'todoist'>()
   let p = plan
@@ -261,35 +274,131 @@ export function mergeRemote(plan: DayProposal, events: CalEvent[] | null, tasks:
   }
   if (tasks) {
     const open = new Map(tasks.map((t) => [t.id, t]))
-    for (const b of planItems(p)) {
-      const s = b.sync
-      if (!s?.tasks?.length || pending(b)) continue
-      for (const t of s.tasks) {
-        const now = open.get(t.id)
-        const k = lower(t.title)
-        if ((b.done ?? []).some((d) => lower(d) === k)) continue
-        if (!now) {
-          // Closed (or moved off today) in Todoist: ticked here, never closed twice.
-          put(b.id, (x) => ({ ...x, done: [...(x.done ?? []), t.title] }))
-          p = { ...p, closed: [...new Set([...(p.closed ?? []), t.id])] }
-          notes.push(`${t.title} was done in Todoist`)
-          from.add('todoist')
+    const where = o.where
+    const tomorrow = addDays(plan.day, 1)
+    const said = (msg: string) => {
+      notes.push(msg)
+      from.add('todoist')
+    }
+    /** Where a task the plan holds is now: today (open), done, elsewhere (another day, no date), gone, or unknown. */
+    const fate = (id: string): { kind: 'today'; task: TodoTask } | { kind: 'done' } | { kind: 'away'; task: TodoTask } | { kind: 'gone' } | null => {
+      const now = open.get(id)
+      if (now) return { kind: 'today', task: now }
+      // Without a lookup, the old rule: missing from today's list = done.
+      if (!where) return { kind: 'done' }
+      const l = where.get(id)
+      if (!l) return null // not known yet: never guess
+      if (l.state === 'done') return { kind: 'done' }
+      if (l.state === 'gone') return { kind: 'gone' }
+      if (!l.task) return null
+      // Today's read was older than the change check: it is still today.
+      if (l.task.due && l.task.due <= plan.day) return null
+      return { kind: 'away', task: l.task }
+    }
+    const awayWords = (t: TodoTask) => (!t.due ? 'has no date in Todoist now' : t.due === tomorrow ? 'moved to tomorrow in Todoist' : `moved to ${dayLabel(t.due)} in Todoist`)
+    const deferredOut: { id: string; title: string; why: string }[] = []
+    /** Ids of tasks that left today (moved away or deleted): they leave the must-dos and the other lists too. */
+    const leftIds = new Set<string>()
+    const renamed = new Map<string, string>() // lower(old) → new
+    const idFor = (b: EditItem, title: string) => b.sync?.tasks?.find((x) => lower(x.title) === lower(title))?.id ?? (b.sync?.tasks?.length === 1 && (b.tasks ?? []).length === 1 ? b.sync.tasks[0].id : undefined) ?? o.idOf?.(title)
+
+    for (const b0 of planItems(p)) {
+      if (b0.train || pending(b0) || !(b0.tasks ?? []).length) continue
+      const had = (b0.tasks ?? []).length
+      let lost = 0
+      for (const title of b0.tasks ?? []) {
+        const k = lower(title)
+        if ((b0.done ?? []).some((d) => lower(d) === k)) continue
+        const id = idFor(b0, title)
+        if (!id) continue
+        const f = fate(id)
+        if (!f) continue
+        const t = b0.sync?.tasks?.find((x) => x.id === id)
+        if (f.kind === 'done') {
+          // Done in Todoist: ticked here, never closed twice (and never paid again: the plan's tick doesn't pay).
+          put(b0.id, (x) => ({ ...x, done: [...(x.done ?? []), title] }))
+          p = { ...p, closed: [...new Set([...(p.closed ?? []), id])] }
+          said(`${title} was done in Todoist`)
           continue
         }
+        if (f.kind === 'away' || f.kind === 'gone') {
+          // Moved to another day, its date taken off, or deleted: it leaves the block.
+          put(b0.id, (x) => ({ ...x, tasks: (x.tasks ?? []).filter((y) => lower(y) !== k), ...(x.sync ? { sync: { ...x.sync, tasks: (x.sync.tasks ?? []).filter((y) => y.id !== id) } } : {}) }))
+          lost++
+          leftIds.add(id)
+          if (f.kind === 'away') {
+            deferredOut.push({ id, title: f.task.content || title, why: awayWords(f.task) })
+            said(`${f.task.content || title} ${awayWords(f.task)}`)
+          } else said(`${title} was deleted in Todoist`)
+          continue
+        }
+        const now = f.task
+        // Renamed in Todoist: the block (and its calendar memory) takes the new name, so nothing is sent back.
+        if (now.content.trim() && now.content.trim() !== title.trim()) {
+          const nu = now.content.trim()
+          renamed.set(k, nu)
+          put(b0.id, (x) => ({
+            ...x,
+            tasks: (x.tasks ?? []).map((y) => (lower(y) === k ? nu : y)),
+            ...(lower(x.title) === k ? { title: nu } : {}),
+            ...(x.sync ? { sync: { ...x.sync, tasks: (x.sync.tasks ?? []).map((y) => (y.id === id ? { ...y, title: nu } : y)) } } : {})
+          }))
+          said(`${title} renamed to ${nu} in Todoist`)
+        }
+        // A time change only matters for a task the plan gave a time to (an approved block).
+        if (!t) continue
         const at = now.due === plan.day ? now.dueTime : null
         if (at === t.at) continue
-        if (at && (b.tasks ?? []).length === 1) {
+        const s = b0.sync!
+        if (at && (b0.tasks ?? []).length === 1) {
           // Its block follows a single task's new time (the calendar event follows next round).
-          put(b.id, (x) => ({ ...x, start: at, sync: { ...s, tasks: [{ ...t, at }] } }))
-          // The block now differs from its calendar memory: keep the memory's time so Google is moved too.
-          notes.push(`${t.title} moved to ${at} in Todoist`)
+          put(b0.id, (x) => ({ ...x, start: at, sync: { ...(x.sync ?? s), tasks: [{ ...t, title: renamed.get(k) ?? t.title, at }] } }))
+          said(`${renamed.get(k) ?? title} moved to ${at} in Todoist`)
         } else {
           // Moved off this block's time (or the time was taken off): it leaves the block.
-          put(b.id, (x) => ({ ...x, tasks: (x.tasks ?? []).filter((y) => lower(y) !== k), sync: { ...s, tasks: (s.tasks ?? []).filter((y) => y.id !== t.id) } }))
-          notes.push(at ? `${t.title} moved to ${at} in Todoist` : `${t.title} has no time in Todoist now`)
+          put(b0.id, (x) => ({ ...x, tasks: (x.tasks ?? []).filter((y) => lower(y) !== k && lower(y) !== lower(renamed.get(k) ?? '')), sync: { ...(x.sync ?? s), tasks: ((x.sync ?? s).tasks ?? []).filter((y) => y.id !== id) } }))
+          said(at ? `${title} moved to ${at} in Todoist` : `${title} has no time in Todoist now`)
         }
-        from.add('todoist')
       }
+      // A block whose every task left today goes too (never a stale block); an approved one's calendar
+      // event is cleared with it (its tasks are not touched: they already have their new day).
+      // A pinned block stays where you put it: only the task leaves it.
+      if (lost && lost === had && !(b0.done ?? []).length && !b0.locked) {
+        put(b0.id, () => null)
+        const ev = b0.sync?.eventId
+        if (ev) p = { ...p, removed: [...(p.removed ?? []), { id: b0.id, eventId: ev, calendarId: b0.sync?.calendarId }] }
+      }
+    }
+    // The day's lists follow: must-dos, "also today", and "moved to tomorrow".
+    const mustId = (m: string) => o.idOf?.(m)
+    const mustdos = p.mustdos
+      .filter((m) => {
+        const id = mustId(m)
+        if (!id || open.has(id)) return true
+        if (leftIds.has(id)) return false
+        const f = where ? fate(id) : null
+        return !(f && (f.kind === 'away' || f.kind === 'gone'))
+      })
+      .map((m) => {
+        const now = open.get(mustId(m) ?? '')
+        return renamed.get(lower(m)) ?? (now && now.content.trim() ? now.content.trim() : m)
+      })
+    if (JSON.stringify(mustdos) !== JSON.stringify(p.mustdos)) p = { ...p, mustdos }
+    if (p.also?.length) {
+      const also = p.also
+        .filter((a) => !a.id || !leftIds.has(a.id))
+        .map((a) => {
+          const now = a.id ? open.get(a.id) : undefined
+          return now && now.content.trim() && now.content.trim() !== a.title ? { ...a, title: now.content.trim() } : a
+        })
+      if (JSON.stringify(also) !== JSON.stringify(p.also)) p = { ...p, also }
+    }
+    // Back on today in Todoist: it leaves "moved"; the audit puts it back on today's list.
+    const kept = (p.deferred ?? []).filter((d) => !(d.id && open.has(d.id) && / in Todoist( now)?$/.test(d.why)) && !(d.id && deferredOut.some((x) => x.id === d.id)))
+    const deferred = [...kept, ...deferredOut]
+    if (JSON.stringify(deferred) !== JSON.stringify(p.deferred ?? [])) {
+      p = { ...p, deferred }
+      if (!deferredOut.length && kept.length !== (plan.deferred ?? []).length) said('a task is back on today in Todoist')
     }
   }
   return { plan: p, notes, from: [...from] }

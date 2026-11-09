@@ -266,9 +266,9 @@ describe('Todoist changes (incremental sync)', () => {
       return new Response(JSON.stringify(json), { status: 200 })
     }) as typeof fetch
     const api = createTodoistApi('tok', fake)
-    expect(await api.changes('*')).toEqual({ token: 't1', changed: 0 })
-    expect(await api.changes('t1')).toEqual({ token: 't2', changed: 1 })
-    expect(await api.changes('t2')).toEqual({ token: 't2', changed: 0 })
+    expect(await api.changes('*')).toMatchObject({ token: 't1', changed: 0 })
+    expect(await api.changes('t1')).toMatchObject({ token: 't2', changed: 1 })
+    expect(await api.changes('t2')).toMatchObject({ token: 't2', changed: 0 })
     expect(calls[0]).toContain('/api/v1/sync')
     expect(calls[0]).toContain('resource_types=%5B%22items%22%5D')
   })

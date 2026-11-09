@@ -18,7 +18,7 @@ import type { Span } from '@core/planShift'
 import { fromMin, type DayProposal, type RhythmState } from '@core/rhythm'
 import type { CalEvent } from '@core/dayTime'
 import { limitsLine, type DayLimits } from '@core/planLimits'
-import type { TodoTask } from '@core/todoist'
+import type { TodoLookup, TodoTask } from '@core/todoist'
 import { markLabel, reviewItem, type Outcome, type ReviewItem, type ReviewRow } from '@core/planReview'
 import { life } from '../bridge'
 import { saveReview } from './planReviewStore'
@@ -612,23 +612,53 @@ const sender = createDebounce(400, flush)
 
 // ---- PE4: changes made in Google Calendar or Todoist ------------------------------
 
+/** Where the plan's tasks missing from today's list are now (the change check's answer, else a lookup). Empty when unknown. */
+async function whereNow(plan: DayProposal, tasks: TodoTask[], idOf: (title: string) => string | undefined): Promise<Map<string, TodoLookup> | null> {
+  const open = new Set(tasks.map((t) => t.id))
+  const ids = new Set<string>()
+  for (const b of planItems(plan)) {
+    if (b.train) continue
+    const done = new Set((b.done ?? []).map(lower))
+    for (const t of b.sync?.tasks ?? []) if (!done.has(lower(t.title))) ids.add(t.id)
+    for (const t of b.tasks ?? []) {
+      const id = done.has(lower(t)) ? undefined : idOf(t)
+      if (id) ids.add(id)
+    }
+  }
+  for (const m of plan.mustdos) {
+    const id = idOf(m)
+    if (id) ids.add(id)
+  }
+  for (const a of plan.also ?? []) if (a.id) ids.add(a.id)
+  const missing = [...ids].filter((id) => !open.has(id))
+  if (!life.todoist?.lookup) return null // an older bridge: the old rule (missing = done)
+  if (!missing.length) return new Map()
+  return life.todoist.lookup(missing).catch(() => new Map<string, TodoLookup>())
+}
+
 let checking = false
 let checkedAt = 0
 /** Looks at Google and Todoist and takes in what changed there (newest wins). */
 export async function checkRemote(force = false) {
   if (!cur || checking || (!force && Date.now() - checkedAt < 20_000)) return
-  if (!planItems(cur.plan).some((b) => b.sync)) return
-  if (sender.pending()) return // ours first: it is newer
+  // Ours first (it is newer): a Sync press waits a moment for edits on their way, a background look skips.
+  if (force) for (let i = 0; i < 30 && sender.pending(); i++) await new Promise((ok) => setTimeout(ok, 100))
+  if (!cur || checking || sender.pending()) return
   checking = true
   checkedAt = Date.now()
   try {
-    const [events, tasks] = await Promise.all([life.google ? todayEvents().catch(() => null) : Promise.resolve(null), freshTasks(0)])
+    const [events, tasks] = await Promise.all([life.google && planItems(cur.plan).some((b) => b.sync?.eventId) ? todayEvents().catch(() => null) : Promise.resolve(null), freshTasks(0)])
     if (!cur || sender.pending()) return
-    const r = mergeRemote(cur.plan, events, tasks)
-    if (!r.notes.length) return
+    // Tasks the plan holds that today's list no longer has: moved to another day, done or deleted?
+    const idOf = (title: string) => taskIds.get(lower(title))
+    const where = tasks ? await whereNow(cur.plan, tasks, idOf) : null
+    if (!cur || sender.pending()) return
+    const r = mergeRemote(cur.plan, events, tasks, { where, idOf })
+    if (r.plan === cur.plan) return
     await save(r.plan)
-    const where = r.from.length === 2 ? 'Google and Todoist' : r.from[0] === 'todoist' ? 'Todoist' : 'Google'
-    say({ text: `Updated from ${where}: ${r.notes[0]}${r.notes.length > 1 ? ` (+${r.notes.length - 1})` : ''}`, tone: 'info' })
+    if (!r.notes.length) return
+    const whom = r.from.length === 2 ? 'Google and Todoist' : r.from[0] === 'todoist' ? 'Todoist' : 'Google'
+    say({ text: `Updated from ${whom}: ${r.notes[0]}${r.notes.length > 1 ? ` (+${r.notes.length - 1})` : ''}`, tone: 'info' })
     // A task moved in Todoist moves its calendar event too.
     sender.poke()
   } finally {
@@ -653,8 +683,12 @@ export function startLive(): () => void {
     window.addEventListener('focus', onBack)
     document.addEventListener('visibilitychange', onBack)
     window.addEventListener('life-external-changed', tick)
+    // Todoist's change check saw something: the plan takes it in now (not after the 20-second pause).
+    window.addEventListener('life-todoist-changed', onTodoist)
     window.addEventListener('keydown', onKey)
     ;(startLive as any).tick = tick
+    // A card just opened: what changed in Todoist while it was closed (a task moved to tomorrow) comes in now.
+    setTimeout(() => void checkRemote().catch(() => null), 800)
   }
   return () => {
     liveOn--
@@ -664,6 +698,7 @@ export function startLive(): () => void {
       window.removeEventListener('focus', onBack)
       document.removeEventListener('visibilitychange', onBack)
       window.removeEventListener('life-external-changed', (startLive as any).tick)
+      window.removeEventListener('life-todoist-changed', onTodoist)
       window.removeEventListener('keydown', onKey)
     }
   }
@@ -677,6 +712,9 @@ function onKey(e: KeyboardEvent) {
   e.preventDefault()
   const l = undoLast()
   if (l) say({ text: `Undone: ${l}`, tone: 'info' })
+}
+function onTodoist() {
+  if (document.visibilityState === 'visible') void checkRemote(true).then(() => maybeAuto()).catch(() => null)
 }
 function onBack() {
   if (document.visibilityState === 'visible') void look()

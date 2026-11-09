@@ -10,6 +10,7 @@ import { useLive } from './live'
 import { PlanAlso } from './PlanAlso'
 import { PlanShiftOffer } from './PlanShiftOffer'
 import { PlanEditor } from './plan/PlanEditor'
+import { useLivePlan } from './plan/useLivePlan'
 
 /** `oneApprove`: on Today, where "Do this now" already shows Approve, the card doesn't repeat it. */
 export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: { onChange?: () => void; oneApprove?: boolean; hideReview?: boolean }) {
@@ -27,6 +28,8 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
   }, [oneApprove])
   useEffect(load, [load])
   useLive(load)
+  // Must-dos, "Also today" and "Moved to tomorrow" follow the plan store (edits, Todoist and Google changes).
+  const livePlan = useLivePlan(data?.state.briefing?.plan)
 
   if (!life.coach?.rhythm || !data || !data.prefs.on) return null
   const { state } = data
@@ -91,7 +94,7 @@ export function CoachPlan({ onChange, oneApprove = false, hideReview = false }: 
     )
   }
 
-  const p = b.plan
+  const p = livePlan ?? b.plan
   // A waiting plan with nothing in it (only the water goal) or one left over
   // in the evening isn't worth a card: Ben approves or replans on his own.
   if (b.status !== 'approved' && ((!p.mustdos.length && !p.blocks.length && !p.training) || hour >= 18)) return null

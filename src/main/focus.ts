@@ -13,6 +13,7 @@ import {
   weekReport,
   type DayPlan,
   type PlanInput,
+  type PlanItem,
   type FocusGoal,
   type FocusSession,
   type GoalProgress,
@@ -278,6 +279,27 @@ export class FocusService {
         return { text, done: was?.done ?? false, ...(id ? { todoistId: id } : {}) }
       })
     if (!next.length) throw new LedgerError('Write at least one must-do')
+    this.savePlan({ ...cur, items: next }, now)
+    return this.plan(d)
+  }
+
+  /**
+   * The must-dos follow Todoist (core/todoFollow.ts): a linked task renamed,
+   * moved to another day or deleted, or done there. Writes the list as given,
+   * never unticks, and pays nothing (a task done in Todoist pays through its
+   * own Todoist rule). An empty list changes nothing.
+   */
+  followTodoist(items: PlanItem[], now = new Date(), day?: string): DayPlan {
+    const d = day ?? this.wallet.today(now)
+    const cur = this.plan(d)
+    const next = items
+      .map((x) => {
+        const was = cur.items.find((i) => (x.todoistId && i.todoistId === x.todoistId) || i.text === x.text)
+        return { text: String(x.text ?? '').trim().slice(0, 140), done: !!x.done || !!was?.done, ...(x.todoistId ? { todoistId: String(x.todoistId) } : {}) }
+      })
+      .filter((x) => x.text)
+      .slice(0, 5)
+    if (!next.length) return cur
     this.savePlan({ ...cur, items: next }, now)
     return this.plan(d)
   }

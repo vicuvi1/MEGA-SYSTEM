@@ -292,6 +292,12 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   const fresh = new Map<string, { at: number; v: unknown }>()
   const FRESH_MS = 45_000
   const STALE_MS = 30 * 60_000
+  // Something changed in Todoist itself (the app's change check): his Todoist copy is read again
+  // next time (it still answers if Todoist is slow then).
+  if (!server && typeof window !== 'undefined' && typeof window.addEventListener === 'function')
+    window.addEventListener('life-todoist-changed', () => {
+      for (const [k, v] of fresh) if (k.startsWith('todoist:')) fresh.set(k, { ...v, at: Math.min(v.at, Date.now() - FRESH_MS) })
+    })
   function readThrough<T>(key: string, run: () => Promise<T>, slowMs: number): Promise<T | null> {
     const hit = fresh.get(key) as { at: number; v: T } | undefined
     if (hit && Date.now() - hit.at < FRESH_MS) return Promise.resolve(hit.v)
