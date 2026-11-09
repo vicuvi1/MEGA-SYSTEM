@@ -280,7 +280,7 @@ export function planSync(input: { local: LocalMeta[]; index: VaultIndex; remote:
       plan.notBackedUp.here++
       plan.notBackedUp.bytes += l.sizeBytes
       if (remote !== null && folderId) plan.uploads.push(l.id)
-    }
+    } else if (!fileId && !l.hasBlob && !l.removedHere) plan.notBackedUp.elsewhere++
     const base: IndexEntry = ix && ix.updatedAt > l.updatedAt ? { ...ix } : toEntry(l)
     delete base.driveFileId
     delete base.driveFolderId

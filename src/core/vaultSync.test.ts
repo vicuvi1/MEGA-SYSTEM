@@ -68,6 +68,9 @@ describe('Photo Locker sync plan', () => {
     expect(p.notBackedUp).toMatchObject({ here: 1, elsewhere: 1 })
     expect(notBackedUpLine(p.notBackedUp, false)).toBe('Not backed up yet: 1 item on this device, 1 on another device (connect Google Drive to back them up)')
     expect(notBackedUpLine({ here: 0, elsewhere: 0, bytes: 0 }, true)).toBeNull()
+    // Next time the row learned from the other device is listed here (no file yet): still "elsewhere".
+    const again = planSync({ local: [local('vE2'), local('vE1', { hasBlob: false, kind: 'file' })], index: p.index, remote: null, folderId: null, now: NOW })
+    expect(again.notBackedUp).toMatchObject({ here: 1, elsewhere: 1 })
   })
 
   it('a file deleted in Drive by hand goes up again from the device that still has it', () => {

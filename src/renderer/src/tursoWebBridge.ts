@@ -41,6 +41,7 @@ import { getSetting, setSetting, readSetting, writeSetting } from '../../main/se
 import { cleanSetup, cleanState as cleanCustomState, readSetup, CUSTOM_MAX_BYTES, CUSTOM_SETUP_KEY, CUSTOM_STATE_KEY, CUSTOM_VERSION, type CustomSetup, type CustomState } from '@core/custom'
 import { cleanLooks, type CoachLooks } from '@core/coachLooks'
 import { cleanWallpaper, okWallpaperPhoto, type WallpaperPrefs } from '@core/wallpaper'
+import { cleanIndex, mergeIndex, type VaultIndex } from '@core/vaultSync'
 import { financeSpending } from '@core/progress'
 
 /** What every screen listens to; sent when live data arrived. */
@@ -415,6 +416,22 @@ export function createTursoWebBridge(): Bridge {
       gStatus = null
       const j = await googleCall('connect')
       if (j.url) window.location.href = j.url
+    },
+    connectDrive: async () => {
+      gStatus = null
+      const j = await googleCall('connect', { drive: true })
+      if (!j.url) throw new Error(j.error || 'Google sign-in could not start')
+      try {
+        localStorage.setItem('ls.afterGoogle', 'locker')
+      } catch {
+        /* private window: the toast still says it */
+      }
+      window.location.href = j.url
+    },
+    driveToken: async () => {
+      const j = await googleCall('driveToken')
+      if (!j.token) throw new Error(j.error || 'Google Drive is not connected')
+      return { token: String(j.token), expiresAt: Number(j.expiresAt) || Date.now() + 30 * 60_000 }
     },
     events: async (from: string, to: string) => {
       if (!(await googleConnected())) return []
@@ -1685,6 +1702,16 @@ export function createTursoWebBridge(): Bridge {
         if (url !== null && !okWallpaperPhoto(url)) throw new Error('That picture is too big or not an image')
         await (await mirrorP).write((db) => writeSetting(db as any, 'look_wallpaper_photo', url))
       }
+    },
+    // Photo Locker (docs/areas/vault.md): the synced index, metadata only.
+    vault: {
+      index: async () => (await mirrorP).read((db) => cleanIndex(readSetting(db as any, 'vault_index'))),
+      saveIndex: async (next: VaultIndex) =>
+        (await mirrorP).write((db) => {
+          const merged = mergeIndex(cleanIndex(readSetting(db as any, 'vault_index')), cleanIndex(next))
+          writeSetting(db as any, 'vault_index', merged as unknown as Record<string, unknown>)
+          return merged
+        })
     },
     // Custom Center (src/core/custom, docs/areas/custom.md): the set-up and today's custom numbers.
     custom: {
