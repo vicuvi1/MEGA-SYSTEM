@@ -84,7 +84,8 @@ var SETTINGS = {
 	sport_rest_days: json$7("days marked as rest days", []),
 	body_plus: json$7("Body: protein goal (g per kg), saved meals and favourites, supplements you track, today's training dose if you picked one, the pre-shift fuel card (src/main/bodyPlus.ts)", null),
 	food_log: json$7("Food counter: meals (foods, grams, macros) of the last 45 days, at most 400, and starred meals (at most 20); the day totals are rows in body_log (src/main/food.ts)", null),
-	food_goals: json$7("Food counter goals (lean muscle): height, age, sex, activity, extra kcal on training and rest days (+150 / +0), your own kcal or protein goal (core/foodGoals.ts)", null),
+	food_goals: json$7("Food counter goals (slow muscle gain): height, age, sex, activity, extra kcal over maintenance (+350), your own kcal or protein goal, the weekly weight check adjustment (core/foodGoals.ts)", null),
+	food_saved: json$7("Saved foods (at most 60), saved meals (at most 24) and the standard day (at most 8 slots) for one-tap food logging; versioned, the seed when missing (core/foodSaved.ts)", null),
 	body_tape: json$7("Body: tape measurements (arm, chest, shoulders, thigh in cm) by day; waist stays in body_metrics", []),
 	ben_workouts: json$7("workouts Ben logged", []),
 	app_sync_finance: json$7("Finance Helper data synced into Life System", null),
@@ -5508,6 +5509,12 @@ function mealTypeAt(hm) {
 	if (h >= 17 && h < 22) return "dinner";
 	return "snack";
 }
+var MEAL_SOURCES = [
+	"saved",
+	"photo",
+	"manual",
+	"quick-add"
+];
 var FOOD_KIND = "protein:food";
 var KCAL_KIND = "kcal:food";
 var isKcalKind = (kind) => typeof kind === "string" && kind.startsWith("kcal:");
@@ -5532,7 +5539,7 @@ function cleanItem$1(raw) {
 	const carbs = r1(num$5(raw.carbs, 0, 800));
 	const fat = r1(num$5(raw.fat, 0, 400));
 	const k = Number(raw.kcal);
-	return {
+	const out = {
 		name,
 		grams,
 		protein,
@@ -5541,6 +5548,11 @@ function cleanItem$1(raw) {
 		kcal: Number.isFinite(k) && k > 0 ? Math.round(Math.min(k, 8e3)) : kcalOf(protein, carbs, fat),
 		confidence: raw.confidence === "sure" || raw.confidence === "guess" ? raw.confidence : "roughly"
 	};
+	const qty = Number(raw.qty);
+	if (Number.isFinite(qty) && qty > 0 && qty <= 50) out.qty = Math.round(qty * 2) / 2;
+	const unit = String(raw.unit ?? "").trim().slice(0, 30);
+	if (unit) out.unit = unit;
+	return out;
 }
 /** The item at a new weight: macros scale with the grams (5–3000 g). */
 function scaleItem(item, grams) {
@@ -5606,6 +5618,7 @@ function cleanFoodLog(raw, today) {
 		seen.add(id);
 		const at = String(m.at ?? "");
 		const type = MEAL_TYPES.includes(m.type) ? m.type : mealTypeAt(localHm$1(at));
+		const slot = /^ds-[a-z0-9-]{1,24}$/.test(String(m.slot ?? "")) ? String(m.slot) : "";
 		meals.push({
 			id,
 			at,
@@ -5614,7 +5627,9 @@ function cleanFoodLog(raw, today) {
 			type,
 			items,
 			...m.late ? { late: true } : {},
-			...m.supp ? { supp: true } : {}
+			...m.supp ? { supp: true } : {},
+			...MEAL_SOURCES.includes(m.source) ? { source: m.source } : {},
+			...slot ? { slot } : {}
 		});
 	}
 	meals.sort((a, b) => a.at < b.at ? 1 : a.at > b.at ? -1 : 0);
@@ -6830,15 +6845,19 @@ var DEFAULT_GOALS = {
 	age: 30,
 	sex: "m",
 	activity: "moderate",
-	trainSurplus: 150,
-	restSurplus: 0,
+	trainSurplus: 350,
+	restSurplus: 350,
 	kcalOwn: null,
 	proteinOwn: null,
 	leanV: 0,
+	gainV: 0,
+	bodySet: 0,
 	kcalAdj: 0,
 	adjAt: "",
 	prices: {}
 };
+/** Until a weight and your height and age are known: fixed goals. */
+var FIXED_KCAL = 2700;
 /** Fat in g per kg of body weight (lean plan; carbs are the rest of the kcal). */
 var FAT_GPK = .8;
 /** Own prices: a name (lower case, ≤ 40 chars) → MDL per kg (1–3000), at most 60. */
@@ -6870,7 +6889,9 @@ function cleanGoals(raw) {
 		kcalOwn: own(o.kcalOwn, 1200, 5e3),
 		proteinOwn: own(o.proteinOwn, 40, 350),
 		leanV: o.leanV === 1 ? 1 : 0,
-		kcalAdj: Number.isFinite(Number(o.kcalAdj)) ? Math.round(Math.max(-300, Math.min(300, Number(o.kcalAdj)))) : 0,
+		gainV: o.gainV === 1 ? 1 : 0,
+		bodySet: o.bodySet === 1 ? 1 : 0,
+		kcalAdj: Number.isFinite(Number(o.kcalAdj)) ? Math.round(Math.max(-600, Math.min(600, Number(o.kcalAdj)))) : 0,
 		adjAt: /^\d{4}-\d{2}-\d{2}$/.test(String(o.adjAt ?? "")) ? String(o.adjAt) : "",
 		prices: cleanPrices(o.prices)
 	};
@@ -6885,12 +6906,15 @@ function foodTargets(weightKg, gPerKg, goals, training = false) {
 	const pg = proteinGoal(w, gPerKg);
 	const maint = maintenance(w ?? 75, goals);
 	const surplus = training ? goals.trainSurplus : goals.restSurplus;
-	const kcal = goals.kcalOwn ?? maint + surplus + goals.kcalAdj;
-	const protein = goals.proteinOwn ?? pg.g;
+	const fixed = !w || goals.bodySet !== 1;
+	const kcal = goals.kcalOwn ?? (fixed ? 2700 : maint + surplus) + goals.kcalAdj;
+	const protein = goals.proteinOwn ?? (w ? pg.g : 125);
 	const fat = Math.round(FAT_GPK * (w ?? 75));
 	const carbs = Math.max(0, Math.round((kcal - 4 * protein - 9 * fat) / 4));
 	const sur = surplus >= 0 ? `+${surplus}` : String(surplus);
-	const why = [goals.proteinOwn ? `Protein: your own ${protein} g` : w ? `Protein: ${pg.gPerKg} g × ${w} kg` : "Protein: log your weight for a personal goal", goals.kcalOwn ? `kcal: your own ${kcal}` : `kcal: about ${maint} to stay the same, ${sur} on a ${training ? "training" : "rest"} day${goals.kcalAdj ? `, ${goals.kcalAdj > 0 ? "+" : ""}${goals.kcalAdj} from your weight check` : ""}${w ? "" : ` (until you log a weight, 75 kg is used)`}`].join(" · ");
+	const adj = goals.kcalAdj ? `, ${goals.kcalAdj > 0 ? "+" : ""}${goals.kcalAdj} from your weight check` : "";
+	const kcalWhy = goals.kcalOwn ? `kcal: your own ${kcal}` : fixed ? `kcal: ${FIXED_KCAL.toLocaleString("en-US")} to start${adj} (${w ? "enter your height and age" : "log your weight and enter your height and age"} for a personal goal)` : `kcal: about ${maint} to stay the same, ${sur} to grow${adj}`;
+	const why = [goals.proteinOwn ? `Protein: your own ${protein} g` : w ? `Protein: ${pg.gPerKg} g × ${w} kg` : `Protein: 125 g (log your weight for a personal goal)`, kcalWhy].join(" · ");
 	return {
 		protein,
 		kcal,
@@ -6900,6 +6924,7 @@ function foodTargets(weightKg, gPerKg, goals, training = false) {
 		weight: w,
 		gPerKg: pg.gPerKg,
 		training,
+		fixed,
 		why
 	};
 }
@@ -7503,6 +7528,8 @@ function addFoodMeal(db, input, source, now = /* @__PURE__ */ new Date()) {
 	const name = String(input.name ?? "").trim().slice(0, 60) || mealName(items);
 	const hm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 	const type = input.type && MEAL_TYPES.includes(input.type) ? input.type : mealTypeAt(hm);
+	const via = input.source && MEAL_SOURCES.includes(input.source) ? { source: input.source } : {};
+	const slot = typeof input.slot === "string" && /^ds-[a-z0-9-]{1,24}$/.test(input.slot) ? { slot: input.slot } : {};
 	writeSetting(db, "food_log", addMeal(readFoodLog(db, today), {
 		id,
 		at,
@@ -7511,7 +7538,9 @@ function addFoodMeal(db, input, source, now = /* @__PURE__ */ new Date()) {
 		type,
 		items,
 		...day !== today ? { late: true } : {},
-		...input.supp ? { supp: true } : {}
+		...input.supp ? { supp: true } : {},
+		...via,
+		...slot
 	}, today));
 	return {
 		id,

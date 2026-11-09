@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { canReplay, doneLine, findExerciseWord, routeOptions, routeQuick, type RouteCtx } from './quickRoute'
+import { seedSaved } from './foodSaved'
 
 const ctx: RouteCtx = {
   today: '2026-11-06',
@@ -152,5 +153,27 @@ describe('quickRoute: helpers', () => {
     expect(canReplay(routeQuick('500 ml', ctx)!)).toBe(true)
     expect(canReplay(routeQuick('task call mom', ctx)!)).toBe(false)
     expect(canReplay(routeQuick('focus 25', ctx)!)).toBe(false)
+  })
+})
+
+describe('quickRoute: saved foods and meals come first', () => {
+  const withSaved: RouteCtx = { ...ctx, saved: seedSaved() }
+  it('"standard day" logs every slot as its own meal', () => {
+    const r = routeQuick('standard day', withSaved)!
+    expect(r).toMatchObject({ kind: 'food', name: 'Standard day', saved: true, kcal: 2332 })
+    if (r.kind === 'food') expect(r.meals!.map((m) => m.slot)).toEqual(['ds-morning', 'ds-lunch', 'ds-afternoon', 'ds-evening', 'ds-anytime'])
+    expect(r.chip).toBe('Log my standard day: 2,332 kcal · 118 g protein')
+  })
+  it('"breakfast" logs the saved breakfast; "2 eggs" logs two saved eggs', () => {
+    expect(routeQuick('breakfast', withSaved)).toMatchObject({ kind: 'food', name: 'Breakfast: 3 eggs + 2 bread + banana', kcal: 486, saved: true })
+    const eggs = routeQuick('2 eggs', withSaved)!
+    expect(eggs).toMatchObject({ kind: 'food', name: '2 × Egg', kcal: 144, protein: 13 })
+    if (eggs.kind === 'food') expect(eggs.items[0]).toMatchObject({ qty: 2, grams: 100 })
+  })
+  it('without saved foods, or for other lines, nothing changes', () => {
+    expect(kind('breakfast')).toBe('task')
+    expect(kind('50 pushups', withSaved)).toBe('reps')
+    expect(kind('45 coffee', withSaved)).toBe('money')
+    expect(kind('2 eggs yesterday', withSaved)).toBe('ask')
   })
 })
