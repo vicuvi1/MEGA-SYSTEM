@@ -24,7 +24,7 @@ export function PhotoCompare() {
   const after = photos.find((p) => p.id === b) ?? photos[photos.length - 1]
   const label = (p: StoredPhoto) => p.day
   return (
-    <section className="card bpg-card" aria-label="Progress photos side by side">
+    <section id="bpg-photos" className="card bpg-card" aria-label="Progress photos side by side">
       <header className="bpg-head">
         <h2>Progress photos</h2>
         <span className="bpg-lock">Photos stay on this device. Never uploaded.</span>

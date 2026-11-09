@@ -260,3 +260,16 @@ entry that says why.
 - **Rules out:** a second set store, new points for sets, levels or level-ups (a finished session pays only
   the usual "Workout done", once a day), adding the extra moves to `MOVES` without real demos.
 
+
+### Smart-scale weigh-ins live in body_comp; body_metrics stays the day's weight (2026-11-09)
+- **Decision:** each weigh-in is a row in its own table `body_comp` (migration 023), id made from the
+  dedupe key (time to the minute in UTC + weight to 0.1 kg), later `updated_at` wins. Every write also
+  sets that day's `body_metrics.weight` to the first morning weigh-in and the waist to the newest given,
+  but never replaces a weight that came from elsewhere that day and never touches other days. The
+  headline is the weekly average (3+ weigh-ins a week); fat and muscle are shown only smoothed and
+  labeled as estimates. Body logs pay no points.
+- **Why:** a scale gives many numbers several times a day, too much for a setting or `body_log`'s
+  integer amounts, and the same weigh-in will arrive twice (typed now, synced later). Everything that
+  already reads `body_metrics` (weight trend, protein and food goals, Telegram) keeps working unchanged.
+- **Rules out:** writing scale data into `body_log` or a setting, a random id for a weigh-in, daily
+  weight as the headline number, or red alarms on body numbers.

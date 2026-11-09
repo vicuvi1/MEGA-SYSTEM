@@ -22,6 +22,7 @@ import { Rings } from '../FoodViz'
 import { FoodBars } from '../FoodFast'
 import { useBodyPlus } from '../useBodyPlus'
 import { BodyMapCard } from './BodyMapCard'
+import { useBodyLogSheet } from '../BodyLogSheet'
 import { useSportToday, type SportToday } from './useSportToday'
 import { requestSportStart } from '../../sportStart'
 import '../food.css'
@@ -47,6 +48,7 @@ export function TodayTab({
   onUndoLast?: () => void
 }) {
   const sport = useSportToday()
+  const bodyLog = useBodyLogSheet(onLogMetric, state.latestWeight)
   const [rest, setRest] = useRest()
   const restTapped = !!(rest?.restToday ?? state.restToday)
   const trainedToday = !!(rest?.workoutDoneToday ?? state.workoutDoneToday) || !!sport?.setsToday
@@ -79,8 +81,9 @@ export function TodayTab({
       <div className="bdy-grid three">
         <FoodRingsCard onOpen={onOpenFood} />
         <WaterSuppCard />
-        <WeightCard state={state} onLog={onLogMetric} />
+        <WeightCard state={state} onLog={bodyLog.open} />
       </div>
+      {bodyLog.sheet}
       <BodyMapCard sport={sport} />
       <div className="bdy-more" aria-label="More">
         <button type="button" className="bdy-btn quiet" onClick={onLogWorkout}>

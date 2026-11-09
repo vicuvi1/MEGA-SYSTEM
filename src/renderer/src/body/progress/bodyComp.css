@@ -1,0 +1,37 @@
+/* Progress → Body composition. Calm: the weekly average is the headline, daily weigh-ins are faint grey,
+   the band chip never turns red (under/over are neutral and soft gold). Life's tokens, light and dark. */
+.bcp-hero { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 20px; flex-wrap: wrap; margin-bottom: 2px; }
+.bcp-big { display: block; font-size: clamp(2.2rem, 5vw, 3rem); font-weight: 700; line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--text); }
+.bcp-big small { font-size: 1.1rem; font-weight: 600; color: var(--muted); }
+.bcp-big.muted { color: var(--muted); }
+.bcp-sub { display: block; margin-top: 4px; color: var(--muted); font-size: 13px; }
+.bcp-change { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.bcp-change b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.bcp-band { font-size: 13px; padding: 3px 10px; border-radius: 999px; background: rgb(var(--ink) / 0.06); color: var(--text); }
+.bcp-band.in { background: color-mix(in srgb, var(--bpg-good) 18%, transparent); }
+.bcp-band.over { background: color-mix(in srgb, var(--gold, #f5c84b) 18%, transparent); }
+.bcp-target { fill: color-mix(in srgb, var(--bpg-good) 16%, transparent); }
+.bcp-day { fill: rgb(var(--ink) / 0.22); }
+.bpg-legend .k-day i { width: 7px; height: 7px; border-radius: 50%; border: 0; background: rgb(var(--ink) / 0.3); }
+.bpg-legend .k-target i { background: color-mix(in srgb, var(--bpg-good) 30%, transparent); }
+.bcp-verdict { font-weight: 500; font-size: 14px; line-height: 1.45; }
+.bcp-weeks { list-style: none; padding: 0; margin: 4px 0 12px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.bcp-weeks li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.04); min-width: 0; }
+.bcp-weeks span, .bcp-weeks small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bcp-weeks b { font-variant-numeric: tabular-nums; font-size: 15px; }
+.bcp-weeks li.short b { color: var(--muted); font-weight: 500; }
+.bcp-minis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 10px; }
+.bcp-mini { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: rgb(var(--ink) / 0.04); min-width: 0; }
+.bcp-mini-t { color: var(--muted); font-size: 13px; }
+.bcp-mini b { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.bcp-mini b small { font-size: 13px; color: var(--muted); font-weight: 500; }
+.bcp-mini.empty b { color: var(--muted); }
+.bcp-mini-n { color: var(--muted); font-size: 13px; }
+.bcp-spark { width: 100%; height: 44px; display: block; }
+.bcp-spark-line { fill: none; stroke: var(--bpg-accent); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+.bpg-month-now { outline: 2px solid color-mix(in srgb, var(--bpg-accent) 45%, transparent); outline-offset: 2px; }
+.bpg-photo-link { display: inline-block; margin: 0 0 10px; color: var(--accent-text, var(--bpg-accent)); font-size: 14px; }
+@media (max-width: 520px) {
+  .bcp-weeks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .bcp-change { align-items: flex-start; }
+}

@@ -327,8 +327,20 @@ if (process.env.E2E_SAGA_DEMO) (await import(pathToFileURL(join(repo, 'e2e/sagaD
 if (process.env.E2E_BODY_DEMO) {
   const w = db.prepare('INSERT OR REPLACE INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, ?, NULL, ?)')
   for (let n = 41; n >= 0; n--) if (n % 2 === 0 || n % 7 === 3) w.run([day(n), Math.round((68.6 + (41 - n) * 0.004 + Math.sin(n * 1.7) * 0.35) * 10) / 10, n % 7 === 0 ? 79.5 : null, new Date().toISOString()])
+  // Body composition: most mornings on a made-up smart scale (about +0.35 kg a week, fat and muscle as estimates).
+  const bc = db.prepare('INSERT OR REPLACE INTO body_comp (id, at, day, weight_kg, body_fat_pct, muscle_kg, water_pct, visceral_fat, waist_cm, source, raw, dedupe, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)')
+  for (let n = 34; n >= 1; n--) {
+    if (n % 7 === 5 || n % 9 === 4) continue
+    const kg = Math.round((68.4 + (34 - n) * 0.05 + Math.sin(n * 1.3) * 0.4) * 10) / 10
+    const at = new Date(Date.now() - n * 864e5)
+    at.setHours(7, 10 + (n % 5), 0, 0)
+    const iso = at.toISOString()
+    const dd = `${iso.slice(0, 16)}|${kg.toFixed(1)}`
+    bc.run([`bc_${dd.replace(/[^0-9A-Za-z.]/g, '')}`, iso, day(n), kg, Math.round((16.4 - (34 - n) * 0.012 + Math.sin(n) * 0.5) * 10) / 10, Math.round((54.2 + (34 - n) * 0.03 + Math.cos(n) * 0.3) * 10) / 10, 58.5, 5, n % 7 === 0 ? 79.5 : null, 'manual', dd, iso])
+  }
   const p = db.prepare('INSERT INTO body_log (id, at, day, kind, amount, source) VALUES (?, ?, ?, ?, ?, ?)')
-  const meals = [['egg', 18], ['cottage', 28], ['chicken', 46], ['whey', 24], ['lentils', 18]]
+  for (let n = 13; n >= 1; n--) if (n % 4 !== 2) p.run([`demo-k${n}`, `${day(n)}T12:00:00.000Z`, day(n), 'kcal:food', 2550 + ((n * 37) % 300), 'web'])
+  const meals =[['egg', 18], ['cottage', 28], ['chicken', 46], ['whey', 24], ['lentils', 18]]
   for (let n = 6; n >= 1; n--) meals.slice(0, 3 + (n % 3)).forEach(([k, g], i) => p.run([`demo-p${n}-${i}`, `${day(n)}T${String(8 + i * 3).padStart(2, '0')}:00:00.000Z`, day(n), `protein:${k}`, g - (n % 2) * 4, 'web']))
   p.run(['demo-p0-0', `${day(0)}T06:00:00.000Z`, day(0), 'protein:egg', 18, 'phone'])
   p.run(['demo-p0-1', `${day(0)}T06:10:00.000Z`, day(0), 'protein:cottage', 28, 'phone'])
