@@ -117,8 +117,10 @@ describe('switching it on and off (a fake execFile)', () => {
     const w = createWallpaper({ dir, exec: f.exec, pickFolder: async () => null, platform: 'win32' })
     await w.act({ op: 'setOn', on: true })
     expect(w.prefs().previous).toBe('C:\\Users\\Sam\\Pictures\\old.jpg')
-    // On Linux the app folder is not a Windows path: the picture is written, and the check refuses to run it.
-    await expect(w.act({ op: 'apply', mode: 'study', image: JPEG })).rejects.toThrow()
+    // The picture is written to the app folder. On Windows (the release runner) that folder is a real
+    // Windows path, so the fixed script runs; anywhere else the path check refuses to run it.
+    if (process.platform === 'win32') await expect(w.act({ op: 'apply', mode: 'study', image: JPEG })).resolves.toMatchObject({ on: true })
+    else await expect(w.act({ op: 'apply', mode: 'study', image: JPEG })).rejects.toThrow()
     expect(readdirSync(join(dir, 'wallpapers')).some((n) => /^study-[0-9a-f]{12}\.jpg$/.test(n))).toBe(true)
     // A mode id that could escape the folder is refused.
     const before = f.calls.length
