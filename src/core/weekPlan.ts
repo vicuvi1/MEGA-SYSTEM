@@ -81,6 +81,18 @@ export function top3Chips(goals: string[], projects: string[], suggested: string
   return out
 }
 
+/**
+ * The Sunday pick pre-filled from the goal ladder (core/goalLadder.ts): the
+ * ladder's week steps come first and start picked; your goals, projects and
+ * earlier picks follow. You can still change any of it.
+ */
+export function ladderPrefill(ladderSteps: string[], goals: string[], projects: string[], prev: string[] = []): { chips: string[]; picked: string[] } {
+  const chips = top3Chips([...ladderSteps, ...goals], projects, prev)
+  const fromPrev = prev.filter((p) => chips.includes(p)).slice(0, 3)
+  const fromLadder = ladderSteps.map((s) => chips.find((c) => c.toLowerCase() === s.trim().slice(0, 60).toLowerCase())).filter((x): x is string => !!x)
+  return { chips, picked: (fromPrev.length ? fromPrev : fromLadder).slice(0, 3) }
+}
+
 /** Tap a chip: in or out, at most 3 picked. */
 export function toggleChip(picked: string[], chip: string): string[] {
   if (picked.includes(chip)) return picked.filter((p) => p !== chip)

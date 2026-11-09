@@ -1,4 +1,4 @@
-// The Season page (LF1, LF4–LF6, LF12, LF15, LF18): your current 8-week arc
+// The Season page (LF1, LF4–LF6, LF12, LF15, LF18): your current 12-week arc
 // with its boss, the vision board, identity votes, the wins wall, side-quest
 // adventures and the life wheel, one tab each. Ben's path opens from the
 // season tab. One sidebar entry for all of it.

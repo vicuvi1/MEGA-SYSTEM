@@ -16,6 +16,8 @@ import { cleanWheel, suggestTheme, wheelDue, wheelHistory, wheelLine, type Wheel
 import { arcLine, arcState, cleanArc, newChapter, type ArcBook, type ArcChapter, type ArcMoment, type ArcState } from '@core/benArc'
 import { nextCinematic, rankUp, seasonCinematic, type Cinematic } from '@core/levelCine'
 import { cleanConvo } from '@core/benConvo'
+import { ladderBenLine } from '@core/goalLadder'
+import { ladderView } from './ladderStore'
 import type { Services } from './webServices'
 
 export const SAGA_SEASONS = 'saga_seasons'
@@ -292,6 +294,16 @@ export function sharedMoments(db: any): ArcMoment[] {
   }
 }
 
+/** The goal ladder's line for Ben (the quarter's critical goals, scored on actions). */
+function ladderLine(s: Services, finance: any, now: Date): string {
+  try {
+    const l = ladderView(s, { finance, now })
+    return ladderBenLine(l.cards, l.quarter)
+  } catch {
+    return ''
+  }
+}
+
 /** Ben's lines about all this (only the parts that have something). */
 export function sagaContext(s: Services, db: any, finance: any, now = new Date()): string[] {
   try {
@@ -304,7 +316,8 @@ export function sagaContext(s: Services, db: any, finance: any, now = new Date()
       winsLine(v.wins, v.low, v.today),
       wheelLine(v.wheel, v.today),
       v.sidePick && v.sideStatus === 'open' ? `This week's side quest (a small offline adventure he can choose to do): ${v.sidePick.quest.title}.` : '',
-      arcLine(v.arc, v.moments, v.today)
+      arcLine(v.arc, v.moments, v.today),
+      ladderLine(s, finance, now)
     ].filter(Boolean)
   } catch {
     return []

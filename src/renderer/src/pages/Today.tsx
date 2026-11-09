@@ -23,13 +23,14 @@ import type { TodoTask } from '@core/todoist'
 import { CoachPlan } from '../CoachPlan'
 import { TodayHero } from '../TodayHero'
 import { DeepWork, MissTwiceCard, WeekStrip } from '../TodayExtras'
-import { PageTabs, TabPanel, usePageTab, type PageTab } from '../PageTabs'
+import { PageTabs, TabPanel, openTab, usePageTab, type PageTab } from '../PageTabs'
 import { HealthyToday, SleepToday, useHealthyToday } from '../TodayBody'
 import '../todayTabs.css'
 import { PluginCards } from '../../../plugins/cards'
 import { MoneyPill } from '../MoneyQuick'
 import { ShiftButtons } from '../LifeFitPanel'
 import { WeekTop3Pick } from '../WeekTop3'
+import { TodayLadderLine } from '../ladder/TodayLadderLine'
 import { WeekPlanCard } from '../plan/WeekPlan'
 
 type Pop = { id: number; coins: number; xp: number }
@@ -217,6 +218,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
               <ShiftButtons compact />
               {/* Sunday and Monday: "Pick your top 3 for this week", one slim line under the top line. */}
               <WeekTop3Pick compact />
+              {/* The goal ladder: one line for the quarter goal that needs you most this week. */}
+              <TodayLadderLine onOpen={() => openTab('goals', 'quarter')} />
             </div>
             {/* The money pill sits in the habits header on Now (next to "Log spending"). */}
             {!has('day') && <MoneyPill />}
