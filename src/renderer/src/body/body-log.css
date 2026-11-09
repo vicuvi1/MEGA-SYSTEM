@@ -1,0 +1,24 @@
+/* "Log body" sheet: one big weight field, the rest folded. Life's tokens, light/dark, phone first. */
+.sheet.blog-sheet { z-index: 200; }
+.blog-card { width: min(440px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow-y: auto; gap: 14px; animation: blog-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes blog-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .blog-card { animation: none; } }
+.blog-title { margin: 0; font-size: 18px; }
+.blog-hint { margin: -6px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.sheet-card .blog-weight { font-size: 13px; }
+.blog-weight-row { display: flex; align-items: baseline; gap: 8px; }
+.sheet-card.blog-card .blog-weight input { width: 100%; height: auto; font-size: 40px; font-weight: 700; font-variant-numeric: tabular-nums; padding: 8px 12px; border-radius: 14px; letter-spacing: -0.01em; }
+.blog-weight b { font-size: 18px; color: var(--muted); font-weight: 600; }
+.blog-more { border-radius: 12px; border: 1px solid var(--border, rgb(128 128 128 / 0.2)); padding: 10px 12px; }
+.blog-more summary { cursor: pointer; font-size: 13.5px; color: var(--muted); }
+.blog-more[open] summary { margin-bottom: 10px; }
+.blog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.blog-grid input { width: 100%; min-width: 0; }
+.sheet-card .blog-grid label, .sheet-card .blog-when { font-size: 13px; }
+.blog-note { margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.blog-when input { width: 100%; min-width: 0; }
+.blog-error { margin: 0; font-size: 13.5px; color: var(--text); background: color-mix(in srgb, var(--gold, #f5c84b) 16%, transparent); border-radius: 10px; padding: 8px 10px; }
+@media (max-width: 480px) {
+  .sheet.blog-sheet { place-items: end center; }
+  .blog-card { width: 100%; box-sizing: border-box; border-radius: 18px 18px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+}
