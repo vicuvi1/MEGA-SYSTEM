@@ -624,6 +624,20 @@
    "notes": "core/homeProgram.ts, core/challenges.ts, body/training/*. Data in Sport Track's state (homeTraining, program.custom), synced through sport_tracker_json. BT_SHOTS=<dir> for screenshots."
   },
   {
+   "id": "F902",
+   "priority": 1,
+   "area": "body",
+   "title": "Body -> Training: today's session from the weekly split, fast set logging, progression roadmap",
+   "user_visible_behavior": "Top of Training: today's session from your week (default Mon rest, Tue Upper, Wed Legs + core, Thu Upper, Fri rest, Sat Legs + core, Sun Upper; tap the week to change days, no muscle twice in a row, plain fix message), each move on your current ladder level with sets x range and 'Last time ... -> aim to beat it', warm-up, Start, a 30-minute clock with an on-pace bar. Per set: big -/+ and a number pad, backpack kg, Hard/OK/Easy, Log (tap again to undo), 'Same as last time'; a 60/90 s rest timer with sound and phone buzz. Finish logs the workout (the usual Workout done points, once a day; nothing new). Rest day: walk, stretch, eat, with 'Train anyway'; a missed session moves to a rest day only when it keeps 48 h. Roadmap: 6 ladders (push, pull, shoulders, single-leg, hinge, core) as level paths with dates reached, progress to level-up (top sets / needed), 'at your pace: ~N weeks' (needs 3 sessions), level complete after 2 top sessions asks before moving up, step back after missing the bottom twice, how-to sheet per level, ladder editor. Placement from best sets (50 push-ups -> archer push-ups).",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/trainWeek.test.ts src/core/trainLadders.test.ts src/core/trainLog.test.ts src/renderer/src/web/sportSync.test.ts",
+    "SMOKE_ONLY=\"Body training\" npm run smoke"
+   ],
+   "evidence": "Branch train-split; unit tests and the smoke step pass; screenshots kept outside the repo",
+   "notes": "core/trainWeek.ts, core/trainLadders.ts, core/trainLog.ts, body/training/TodaySession.tsx, Roadmap.tsx, RestTimer.tsx, MoveSheet.tsx. Data inside Sport Track's state (trainWeek, trainLadders, trainLevels, trainLog; sets gain rir/feel/session), merged in sportSync.ts. Next step: features 4-6."
+  },
+  {
    "id": "F-BODY-PROGRESS",
    "priority": 2,
    "area": "body",

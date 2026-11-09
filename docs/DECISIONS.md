@@ -240,3 +240,18 @@ entry that says why.
   counted it in today's money; the owner: "that's not physical money".
 - **Rules out:** defaulting `paid` to the real cost, sending a points buy to Finance Helper, or deleting
   reward records from Finance without the owner's confirm.
+
+### Body Training keeps its week, ladders, levels and sessions inside Sport Track's state (2026-11-09)
+- **Decision:** the weekly split (`trainWeek`, versioned `v: 1`), edited ladders (`trainLadders`), levels
+  (`trainLevels`) and the session log (`trainLog`) live in Sport Track's state and sync with it
+  (`sport_tracker_json`); `mergeTrain` (core/trainLog.ts) joins sessions by id and takes the newer edit for
+  the rest. Sets stay in the one set log (`sets[day][exerciseId]`) with optional `rir`, `feel`, `session`.
+  The split is the default schedule on the Training tab; the program builder stays for moves, sets and
+  equipment. Moves the library has no demo for are in `TRAIN_MOVES` (how-to text, no art) and their Sport
+  Track exercises carry `move: 't:<id>'`, which `moveOf` never guesses from the name.
+- **Why:** a new synced setting key needs its own API, web bridge and desktop handler (files outside the
+  Body area); the sport state already syncs, merges sets by id and is what every Sport view reads. The
+  `t:` tag stops "Wall handstand press" from counting as push-ups in Sport Track's levels.
+- **Rules out:** a second set store, new points for sets, levels or level-ups (a finished session pays only
+  the usual "Workout done", once a day), adding the extra moves to `MOVES` without real demos.
+
