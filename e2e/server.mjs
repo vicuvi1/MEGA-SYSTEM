@@ -578,6 +578,7 @@ const todo = (() => {
   const day = new Date().toISOString().slice(0, 10)
   const t = (id, content, due, dueTime) => ({ id, content, priority: 1, due, dueTime, project: 'Inbox', section: null, recurring: false, projectId: 'p1', sectionId: null, labels: [], duration: null })
   let changed = 0
+  const changedIds = new Set()
   const tasks = [t('t1', 'Pay the internet bill', day, null), t('t2', 'Email the lab partner', day, '16:00'), t('t3', 'Read chapter 4', null, null), t('t4', 'Draft the networking lab report', day, null), t('t5', 'Update the CV projects section', day, null), t('t6', 'Try one beginner CTF challenge', day, null), t('t7', 'Book the dentist', day, null), t('t8', 'Watch the refactoring talk, part 1', day, null)]
   return (q, r) => {
     const b = q.body || {}
@@ -597,13 +598,23 @@ const todo = (() => {
       const x = { ...t(`t${tasks.length + 1}`, content, due, (/\bat (\d\d:\d\d)\b/.exec(text) || [])[1] || null), priority: pr ? 5 - Number(pr[1]) : 1, duration: mins ? Number(mins[1]) : null, quick: text }
       tasks.push(x)
       changed++
+      changedIds.add(x.id)
       return send({ ok: true, task: x })
     }
     if (b.op === 'changes') {
+      // Like Todoist's incremental sync: the changed tasks come with the answer (done / deleted marked).
       const c = changed
+      const items = [...changedIds].map((id) => tasks.find((y) => y.id === id)).filter(Boolean).map((y) => ({ ...y, checked: !!y.done, deleted: !!y.removed }))
       changed = 0
-      return send({ token: 'x', changed: c })
+      changedIds.clear()
+      return send({ token: 'x', changed: Math.max(c, items.length), items })
     }
+    // Where tasks are now: open (maybe on another day), done, or gone.
+    if (b.op === 'lookup')
+      return send({ tasks: (b.ids || []).map((id) => {
+        const y = tasks.find((z) => z.id === id)
+        return !y || y.removed ? { id, state: 'gone' } : y.done ? { id, state: 'done', task: y } : { id, state: 'open', task: y }
+      }) })
     const x = tasks.find((y) => y.id === b.id)
     if (b.op === 'update' && x) {
       if (b.due) [x.due, x.dueTime] = b.due === 'no date' ? [null, null] : [b.due.slice(0, 10), b.due.slice(11, 16) || null]
@@ -619,8 +630,18 @@ const todo = (() => {
     if (b.op === 'testEdit' && x) {
       if (b.priority) x.priority = b.priority
       if (b.content) x.content = b.content
+      // A new day ("tomorrow", a date, or "no date"), as moved in the Todoist app.
+      if (b.due) [x.due, x.dueTime] = b.due === 'no date' ? [null, null] : b.due === 'tomorrow' ? [new Date(Date.now() + 86400000).toISOString().slice(0, 10), null] : [b.due.slice(0, 10), b.due.slice(11, 16) || null]
       changed++
+      changedIds.add(x.id)
       return send({ ok: true, task: x })
+    }
+    // Ticked off in the Todoist app.
+    if (b.op === 'testDone' && x) {
+      x.done = true
+      changed++
+      changedIds.add(x.id)
+      return send({ ok: true })
     }
     if (b.op === 'close' && x) return ((x.done = true), send({ ok: true }))
     if (b.op === 'remove' && x) return ((x.done = true), (x.removed = true), send({ ok: true }))
@@ -630,6 +651,7 @@ const todo = (() => {
       const x = t(`t${tasks.length + 1}`, String(b.content || 'New task'), day, null)
       tasks.push(x)
       changed++
+      changedIds.add(x.id)
       return send({ ok: true, task: x })
     }
     return send({ ok: true, tasks: [], items: [] })

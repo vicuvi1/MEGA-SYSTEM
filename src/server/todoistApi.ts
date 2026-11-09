@@ -2,7 +2,7 @@
 // Vercel): today's tasks, complete one, quick add (Todoist understands
 // "tomorrow 17:00 p1 #University"), and what you completed since a time.
 // Uses Todoist's current API (v1), with the older REST v2 as a fallback.
-import { TODAY_LABEL, guessArea, plainName, type Area, type TodoCompleted, type TodoTask } from '@core/todoist'
+import { TODAY_LABEL, guessArea, plainName, type Area, type TodoCompleted, type TodoDelta, type TodoLookup, type TodoTask } from '@core/todoist'
 
 const V1 = 'https://api.todoist.com/api/v1'
 const V2 = 'https://api.todoist.com/rest/v2'
@@ -12,6 +12,32 @@ type TaskPatch = { content?: string; priority?: number; due?: string; descriptio
 
 /** Optional: a model that picks an area when the words don't (the server passes Gemini). */
 export type AreaPicker = (text: string, areaNames: string[]) => Promise<string | null>
+
+/**
+ * Todoist's due → the task's own calendar date and time. A time with a fixed
+ * time zone comes as UTC ("2026-11-10T22:30:00Z"): it is turned back into the
+ * task's zone, so 00:30 in Bucharest is never read as the day before at
+ * 22:30. A floating time ("2026-11-10T15:00:00") is used as it is.
+ */
+export function dueParts(d: any): { due: string | null; dueTime: string | null } {
+  if (!d) return { due: null, dueTime: null }
+  const raw = String(d.datetime ?? d.date ?? '')
+  if (!raw) return { due: null, dueTime: null }
+  if (/T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/.test(raw)) {
+    const at = new Date(raw)
+    const zone = typeof d.timezone === 'string' && d.timezone ? d.timezone : undefined
+    if (!isNaN(at.getTime()))
+      try {
+        const parts = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(at)
+        const g = (k: string) => parts.find((x) => x.type === k)?.value ?? ''
+        return { due: `${g('year')}-${g('month')}-${g('day')}`, dueTime: `${g('hour')}:${g('minute')}` }
+      } catch {
+        /* an unknown zone: the plain reading below */
+      }
+  }
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(String(d.date ?? '')) ? String(d.date) : raw.slice(0, 10)
+  return { due: date, dueTime: /T\d{2}:\d{2}/.test(raw) ? raw.slice(11, 16) : null }
+}
 
 export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch, opts: { pickArea?: AreaPicker } = {}) {
   const call = async (url: string, init: RequestInit = {}): Promise<any> => {
@@ -80,13 +106,13 @@ export function createTodoistApi(token: string, fetchImpl: typeof fetch = fetch,
 
   const toTask = (t: any, names: Map<string, string>, secs: Map<string, string> = new Map()): TodoTask => {
     const due = t.due ?? null
-    const dt = String(due?.datetime ?? due?.date ?? '')
+    const parts = dueParts(due)
     return {
       id: String(t.id),
       content: String(t.content ?? ''),
       priority: Number(t.priority) || 1,
-      due: dt ? dt.slice(0, 10) : null,
-      dueTime: /T\d{2}:\d{2}/.test(dt) ? dt.slice(11, 16) : null,
+      due: parts.due,
+      dueTime: parts.dueTime,
       project: names.get(String(t.project_id)) ?? null,
       section: t.section_id ? (secs.get(String(t.section_id)) ?? null) : null,
       deadline: t.deadline?.date ? String(t.deadline.date).slice(0, 10) : null,
@@ -164,6 +190,21 @@ const updateTask = async (id: string, patch: TaskPatch): Promise<TodoTask | null
     return t && typeof t === 'object' && t.id != null ? toTask(t, new Map()) : null
   }
 
+  /** Completed since `since` (ISO), newest first. */
+  const completedSince = async (since: string): Promise<TodoCompleted[]> => {
+    const until = new Date().toISOString()
+    const items = await either(
+      () => all(`${V1}/tasks/completed/by_completion_date?since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&limit=200`),
+      () => all(`${SYNC}/completed/get_all?since=${encodeURIComponent(since.slice(0, 19))}&limit=200`)
+    )
+    return items.map((t: any) => ({
+      id: String(t.task_id ?? t.id),
+      content: String(t.content ?? ''),
+      priority: Number(t.priority) || 1,
+      completedAt: String(t.completed_at ?? '')
+    }))
+  }
+
   return {
     /** Every open task and your areas (the Tasks page). */
     async everything(): Promise<{ tasks: TodoTask[]; areas: Area[] }> {
@@ -178,13 +219,57 @@ const updateTask = async (id: string, patch: TaskPatch): Promise<TodoTask | null
      * only the tasks that changed (usually none), so checking every few
      * seconds is cheap. The first call ('*') just returns a token.
      */
-    async changes(token: string): Promise<{ token: string; changed: number }> {
+    async changes(token: string): Promise<{ token: string; changed: number; items: TodoDelta[] }> {
       const j = await call(`${V1}/sync`, {
         method: 'POST',
         body: new URLSearchParams({ sync_token: token || '*', resource_types: '["items"]' }).toString(),
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       })
-      return { token: String(j?.sync_token ?? ''), changed: j?.full_sync ? 0 : Array.isArray(j?.items) ? j.items.length : 0 }
+      const raw: any[] = !j?.full_sync && Array.isArray(j?.items) ? j.items : []
+      // What changed, task by task (moved day, renamed, done, deleted), so the app can put it right
+      // everywhere at once. Names of projects and sections are left out (the next list read has them).
+      const items: TodoDelta[] = raw.slice(0, 200).map((t: any) => ({ ...toTask(t, projectNames ?? new Map(), sectionNames ?? new Map()), checked: !!(t.checked ?? t.is_completed), deleted: !!t.is_deleted }))
+      return { token: String(j?.sync_token ?? ''), changed: raw.length, items }
+    },
+    /**
+     * Where these tasks are now: open (with their day), done, or gone. A
+     * recurring task done today moves on to its next date and stays open, so
+     * it counts as done when it is in what you completed since `since`.
+     */
+    async lookup(ids: string[], since?: string): Promise<TodoLookup[]> {
+      const want = [...new Set(ids.map(String).filter(Boolean))].slice(0, 25)
+      const [names, secs] = await Promise.all([projects().catch(() => new Map<string, string>()), sections().catch(() => new Map<string, string>())])
+      let doneToday: Set<string> | null = null
+      const completed = async () => {
+        if (doneToday) return doneToday
+        const items = since ? await completedSince(since).catch(() => [] as TodoCompleted[]) : []
+        doneToday = new Set(items.map((x) => x.id))
+        return doneToday
+      }
+      const out: TodoLookup[] = []
+      for (const id of want) {
+        let t: any
+        try {
+          t = await either(
+            () => call(`${V1}/tasks/${encodeURIComponent(id)}`),
+            () => call(`${V2}/tasks/${encodeURIComponent(id)}`)
+          )
+        } catch (e: any) {
+          if (e?.status === 404 || e?.status === 410) {
+            // Todoist answers "not found" for a deleted task, and the older API also for a done one.
+            out.push({ id, state: (await completed()).has(id) ? 'done' : 'gone' })
+            continue
+          }
+          throw e
+        }
+        if (!t || t.is_deleted) out.push({ id, state: 'gone' })
+        else if (t.checked || t.is_completed) out.push({ id, state: 'done', task: toTask(t, names, secs) })
+        else {
+          const task = toTask(t, names, secs)
+          out.push({ id, state: task.recurring && (await completed()).has(id) ? 'done' : 'open', task })
+        }
+      }
+      return out
     },
     updateTask,
     /** The same as updateTask, for callers that only need it done (the bots). */
@@ -312,19 +397,58 @@ const updateTask = async (id: string, patch: TaskPatch): Promise<TodoTask | null
       return task
     },
     /** Completed since `since` (ISO), newest first. */
-    async completedSince(since: string): Promise<TodoCompleted[]> {
-      const until = new Date().toISOString()
-      const items = await either(
-        () => all(`${V1}/tasks/completed/by_completion_date?since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&limit=200`),
-        () => all(`${SYNC}/completed/get_all?since=${encodeURIComponent(since.slice(0, 19))}&limit=200`)
-      )
-      return items.map((t: any) => ({
-        id: String(t.task_id ?? t.id),
-        content: String(t.content ?? ''),
-        priority: Number(t.priority) || 1,
-        completedAt: String(t.completed_at ?? '')
-      }))
-    }
+    completedSince
   }
 }
 export type TodoistApi = ReturnType<typeof createTodoistApi>
+
+/**
+ * The /api/todoist ops that only talk to Todoist (api/todoist.mjs runs them;
+ * `cleanup` stays there because it asks the AI). Shared with the end-to-end
+ * test (web/todoistE2e.test.ts), so the test drives the same code as the site.
+ * Returns null for an op it doesn't know.
+ */
+export async function todoistOp(api: TodoistApi, body: any): Promise<{ status: number; json: unknown } | null> {
+  const ok = (json: unknown) => ({ status: 200, json })
+  switch (body?.op) {
+    case 'today':
+      return ok({ connected: true, tasks: await api.today() })
+    case 'changes':
+      return ok(await api.changes(String(body.token || '*')))
+    case 'lookup':
+      // Tasks the app still shows but today's list no longer has: moved to another day, done, or deleted.
+      return ok({ tasks: await api.lookup(Array.isArray(body.ids) ? body.ids.map(String).slice(0, 25) : [], body.since ? String(body.since).slice(0, 40) : undefined) })
+    case 'upcoming':
+      return ok({ tasks: await api.upcoming(7) })
+    case 'close':
+      await api.close(String(body.id))
+      return ok({ ok: true })
+    case 'quick':
+      return ok({ task: await api.quickAdd(String(body.text || '').slice(0, 500), body.area ? String(body.area) : undefined) })
+    case 'everything':
+      return ok(await api.everything())
+    case 'update': {
+      // Answers with the task as Todoist now holds it, so the app shows the confirmed value.
+      const task = await api.updateTask(String(body.id), { content: body.content, priority: body.priority, due: body.due, description: body.description, labels: Array.isArray(body.labels) ? body.labels : undefined, duration: body.duration === undefined ? undefined : body.duration === null ? null : Number(body.duration) })
+      return ok({ ok: true, task })
+    }
+    case 'move':
+      await api.move(String(body.id), String(body.area))
+      return ok({ ok: true })
+    case 'reopen':
+      await api.reopen(String(body.id))
+      return ok({ ok: true })
+    case 'remove':
+      await api.remove(String(body.id))
+      return ok({ ok: true })
+    case 'addArea':
+      return ok({ area: await api.addArea(String(body.name || '').trim().slice(0, 60) || 'New area') })
+    case 'renameArea':
+      await api.renameArea(String(body.area), String(body.name || '').trim().slice(0, 60))
+      return ok({ ok: true })
+    case 'completed':
+      return ok({ items: await api.completedSince(String(body.since || new Date(Date.now() - 86400_000).toISOString())) })
+    default:
+      return null
+  }
+}

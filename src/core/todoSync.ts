@@ -11,6 +11,11 @@
 // - A failed write (offline, server busy, Todoist slow) stays in the queue,
 //   is kept on reload, and is retried; the row says "Couldn't save to Todoist".
 //   A write Todoist refuses outright (task gone, bad value) is dropped.
+// - A waiting edit never beats a newer change made in Todoist (reconcilePatch):
+//   once Todoist's change check or a later read shows the task, a field Todoist
+//   already has is done, a field Todoist changed itself since your edit takes
+//   Todoist's value (your part is dropped), and a task done or deleted there
+//   drops the edit. So no edit waits forever over Todoist's newer value.
 import { calendarDay, addDays } from './dates'
 import { isStarred, type TodoTask } from './todoist'
 
@@ -129,6 +134,56 @@ interface Entry {
   tries: number
   nextAt: number
   ver: number
+  /** When the edit was made (0: kept from an earlier visit). */
+  at: number
+}
+
+/** The value a field has on a task, in the form an edit compares it. */
+function fieldOf(t: Partial<TodoTask> | undefined, k: (typeof FIELDS)[number]): unknown {
+  if (!t) return undefined
+  if (k === 'due') return `${t.due ?? ''} ${t.dueTime ?? ''}`.trim()
+  if (k === 'labels') return [...(t.labels ?? [])].sort().join('\u0001')
+  if (k === 'duration') return t.duration || null
+  if (k === 'description') return t.description || ''
+  return (t as any)[k]
+}
+/** The value an edit asks for, in the same form (undefined: Todoist reads it, e.g. "friday"). */
+function wantedOf(patch: TaskPatch, k: (typeof FIELDS)[number]): unknown {
+  const v = patch[k]
+  if (k === 'due') {
+    const p = parseDue(String(v))
+    return p ? `${p.due ?? ''} ${p.dueTime ?? ''}`.trim() : undefined
+  }
+  if (k === 'labels') return [...((v as string[]) ?? [])].sort().join('\u0001')
+  if (k === 'duration') return v || null
+  if (k === 'description') return v || ''
+  return v
+}
+
+/**
+ * Todoist now holds `remote` for a task that has an edit waiting (not on its
+ * way). Per field of the edit: Todoist already has your value → that part is
+ * done; Todoist has a value that is neither yours nor the one you started
+ * from → it was changed in Todoist after your edit, and Todoist's newer value
+ * wins (your part is dropped); Todoist still has the old value → yours still
+ * goes out. Returns what is left to send and the fields that were dropped.
+ */
+export function reconcilePatch(patch: TaskPatch, base: TodoTask | undefined, remote: TodoTask): { patch: TaskPatch; dropped: string[] } {
+  const left: TaskPatch = {}
+  const dropped: string[] = []
+  for (const k of FIELDS) {
+    if (patch[k] === undefined) continue
+    const r = fieldOf(remote, k)
+    const want = wantedOf(patch, k)
+    if (want !== undefined && same(r, want)) continue
+    const b = fieldOf(base, k)
+    if (base && !same(r, b)) {
+      dropped.push(k)
+      continue
+    }
+    ;(left as any)[k] = patch[k]
+  }
+  return { patch: left, dropped }
 }
 
 export interface TodoQueueOpts {
@@ -154,7 +209,7 @@ export function createTodoQueue(opts: TodoQueueOpts) {
 
   try {
     const raw = JSON.parse(opts.store?.get() ?? '[]')
-    if (Array.isArray(raw)) for (const e of raw) if (e && typeof e.id === 'string' && e.patch) entries.set(e.id, { id: e.id, patch: e.patch, base: e.base, state: 'failed', error: e.error || 'Waiting to be sent', tries: Number(e.tries) || 0, nextAt: 0, ver: ++ver })
+    if (Array.isArray(raw)) for (const e of raw) if (e && typeof e.id === 'string' && e.patch) entries.set(e.id, { id: e.id, patch: e.patch, base: e.base, state: 'failed', error: e.error || 'Waiting to be sent', tries: Number(e.tries) || 0, nextAt: 0, ver: ++ver, at: 0 })
   } catch {
     /* nothing kept */
   }
@@ -217,14 +272,47 @@ export function createTodoQueue(opts: TodoQueueOpts) {
     return entries.has(id) ? run(id) : out
   }
 
+  /** Fields of waiting edits that Todoist's newer value replaced, by task (for the log and tests). */
+  const replaced = new Map<string, string[]>()
+  /** Todoist's state decides a waiting edit (see reconcilePatch). True when something changed. */
+  const settleWith = (e: Entry, remote: TodoTask): boolean => {
+    const r = reconcilePatch(e.patch, e.base, remote)
+    if (r.dropped.length) replaced.set(e.id, r.dropped)
+    if (Object.keys(r.patch).length === Object.keys(e.patch).length) return false
+    if (!Object.keys(r.patch).length) entries.delete(e.id)
+    else {
+      e.patch = r.patch
+      e.base = remote
+    }
+    return true
+  }
+
   return {
+    /**
+     * Todoist's change check saw this task change (it is newer than anything
+     * read before). A done or deleted task drops its waiting edit; otherwise
+     * the edit keeps only what Todoist doesn't already have or didn't change
+     * itself since. A confirmed value no longer covers Todoist's newer one.
+     */
+    remote(task: TodoTask, gone = false): void {
+      confirmed.delete(task.id)
+      const e = entries.get(task.id)
+      if (!e || inflight.has(task.id)) return
+      if (gone) entries.delete(task.id)
+      else if (!settleWith(e, task)) return
+      emit()
+    },
+    /** What Todoist's newer value replaced in your waiting edits (task id → fields). */
+    replaced(): Record<string, string[]> {
+      return Object.fromEntries(replaced)
+    },
     /** Queue an edit (merged with one still waiting for this task) and send it; resolves once Todoist confirms. */
     edit(id: string, patch: TaskPatch, base?: TodoTask): Promise<Confirmed | null> {
       const prev = entries.get(id)
       const wanted = { ...(prev?.patch ?? {}), ...patch }
       const changed = prev ? wanted : diffPatch(base, patch)
       if (!Object.keys(changed).length) return Promise.resolve(confirmedOf(base) ?? null)
-      entries.set(id, { id, patch: changed, base: prev?.base ?? base, state: 'saving', tries: prev?.tries ?? 0, nextAt: 0, ver: ++ver })
+      entries.set(id, { id, patch: changed, base: prev?.base ?? base, state: 'saving', tries: prev?.tries ?? 0, nextAt: 0, ver: ++ver, at: now() })
       confirmed.delete(id)
       emit()
       return run(id)
@@ -235,8 +323,13 @@ export function createTodoQueue(opts: TodoQueueOpts) {
       for (const [id, c] of confirmed) if (t0 - c.at > CONFIRM_KEEP) confirmed.delete(id)
       const seen = new Set<string>()
       const out: TodoTask[] = []
+      let settled = false
       for (const t of tasks) {
         seen.add(t.id)
+        // A read that started after an edit that is not on its way (it failed, or was kept from an
+        // earlier visit): what Todoist holds now decides what is still yours to send.
+        const w = entries.get(t.id)
+        if (w && !inflight.has(t.id) && readStartedAt > w.at && settleWith(w, t)) settled = true
         const e = entries.get(t.id)
         const c = confirmed.get(t.id)
         const v = e ? applyPatch(t, e.patch) : c && c.at > readStartedAt ? ({ ...t, ...c.fields } as TodoTask) : t
@@ -249,6 +342,7 @@ export function createTodoQueue(opts: TodoQueueOpts) {
           const v = applyPatch(e.base, e.patch)
           if (keep(v)) out.push(v)
         }
+      if (settled) emit()
       return out
     },
     /** Send again every waiting edit whose wait is over (all of them with force). */

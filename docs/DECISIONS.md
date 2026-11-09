@@ -161,6 +161,22 @@ entry that says why.
 - **Rules out:** writing a task edit straight to `/api/todoist` from a page, reverting a failed save
   silently, or sending date words for Todoist to read in its own time zone.
 
+### Todoist's newer change wins; a task that moved away is not a done task (2026-11-09)
+- **Decision:** a waiting app edit keeps only what Todoist hasn't changed itself since (`reconcilePatch`):
+  a field Todoist changed after your edit keeps Todoist's value, a task done or deleted there drops the
+  edit. A plan task missing from today's list is looked up (change check, else `{op:'lookup'}`): only a
+  really done one (a recurring one done today included) is ticked; moved to another day or deleted, it
+  leaves the plan (its block too unless pinned; an approved block's event is cleared, Todoist is not
+  written back); not known → left alone. Linked must-dos follow Todoist the same way and a must-do done in
+  Todoist is ticked without the must-do coins (`FocusService.followTodoist`; the Todoist task pays by its
+  own rule).
+- **Why:** a task moved to tomorrow in Todoist was ticked as done in the plan (and its block stayed), a
+  failed edit could hide a newer Todoist change forever, and due times with a fixed time zone were read
+  as UTC.
+- **Rules out:** treating "not on today's list" as done, guessing when Todoist doesn't answer, sending a
+  Todoist rename or a "clear time" back for a task that moved itself, or paying the must-do for a task
+  ticked in Todoist.
+
 ### Health alerts: once a day per problem, with the fix (2026-11-08)
 - **Decision:** each kind of problem (AI, server, outside timer, Telegram, Google, Todoist, backup…)
   is told on Telegram at most once per local day, all broken kinds in one message with "What to do"

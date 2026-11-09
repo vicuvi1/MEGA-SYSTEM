@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoSyncLine } from './syncLabel'
+import { autoSyncLine, syncErrorText, syncedLine } from './syncLabel'
 
 const at = (h: number, m: number) => new Date(2026, 10, 8, h, m).getTime()
 
@@ -22,5 +22,17 @@ describe('autoSyncLine', () => {
   })
   it('one failure is not yet a warning', () => {
     expect(autoSyncLine({ lastCheckAt: at(12, 4), lastOkAt: at(12, 3), fails: 1 }, at(12, 5)).tone).toBe('ok')
+  })
+})
+
+describe('syncedLine and the error words', () => {
+  it('says how many changes came from Todoist, only when there were some', () => {
+    expect(syncedLine(at(12, 4), 0)).toBe('Synced 12:04')
+    expect(syncedLine(at(12, 4), 1)).toBe('Synced 12:04 · 1 change from Todoist')
+    expect(syncedLine(at(12, 4), 2)).toBe('Synced 12:04 · 2 changes from Todoist')
+  })
+  it('Todoist not answering has its own plain words', () => {
+    expect(syncErrorText(true)).toBe("Can't reach Todoist right now.")
+    expect(syncErrorText()).toBe("Couldn't sync. Check your connection.")
   })
 })

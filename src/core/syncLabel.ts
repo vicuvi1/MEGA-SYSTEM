@@ -15,7 +15,12 @@ export function autoSyncLine(v: SyncView, now: number): { text: string; tone: 'o
   return { text: `Auto-sync on · last checked ${hhmm(v.lastCheckAt)}${stale ? ' (paused while hidden)' : ''}`, tone: 'ok' }
 }
 
-/** The error shown next to Retry after a manual Sync fails. */
-export function syncErrorText(): string {
-  return "Couldn't sync. Check your connection."
+/** The error shown next to Retry after a manual Sync fails (Todoist not answering has its own words). */
+export function syncErrorText(todoistDown = false): string {
+  return todoistDown ? "Can't reach Todoist right now." : "Couldn't sync. Check your connection."
+}
+
+/** "Synced 12:04 · 2 changes from Todoist" (the count only when Todoist itself changed something). */
+export function syncedLine(at: number, changes: number): string {
+  return `Synced ${hhmm(at)}${changes > 0 ? ` · ${changes} change${changes === 1 ? '' : 's'} from Todoist` : ''}`
 }

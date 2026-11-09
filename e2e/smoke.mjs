@@ -5292,6 +5292,60 @@ try {
       await reloadApp()
     }
   })
+  // Todoist from outside: changes made in the Todoist app reach Tasks, Today → Now and the day plan.
+  await step('Todoist from outside: a task moved to tomorrow and one done in Todoist show on Tasks, Today and the plan after Sync', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    const call = async (n, body) => (await fetch(`http://127.0.0.1:${port}/api/${n}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
+    const until = async (fn, what, ms = 20000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    await pg.locator('section.cp .pe-block').first().waitFor({ state: 'attached', timeout: 15000 })
+    const names = (await pg.$$eval('section.cp .pe-block .pe-name', (els) => els.map((el) => (el.textContent || '').trim()))).map((t) => t.replace(/^(?:\p{Extended_Pictographic}\uFE0F?)+\s*/u, ''))
+    const day = await pg.evaluate(() => {
+      const d = new Date()
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })
+    const open0 = (await call('todoist', { op: 'peek' })).filter((t) => !t.done && t.due && t.due <= day)
+    // One with a block of its own on the plan (so the plan has something to take in), and one more to tick.
+    const moved = open0.find((t) => names.includes(t.content)) ?? open0[0]
+    const done = open0.find((t) => t.id !== moved.id)
+    if (!moved || !done) throw new Error('the made-up Todoist has too few open tasks for today')
+    await call('todoist', { op: 'testEdit', id: moved.id, due: 'tomorrow' })
+    await call('todoist', { op: 'testDone', id: done.id })
+    // Today → Now: Sync, then neither is among the other tasks, and the line says what came in.
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    const sync = pg.locator('.ot-head .sync-btn button').first()
+    await sync.waitFor({ timeout: 15000 })
+    await sync.click()
+    await until(async () => (await pg.locator('.ot-head .sync-at', { hasText: /Synced \d\d:\d\d · \d+ changes? from Todoist/ }).count()) > 0, 'no "changes from Todoist" after Sync')
+    await until(async () => !(await pg.locator('.ot-list .ot-t', { hasText: moved.content }).count()) && !(await pg.locator('.ot-list .ot-t', { hasText: done.content }).count()), 'Today still lists the moved or the done task')
+    // The day plan: the moved task is listed under "Moved to tomorrow" (when it had a block), the block keeps no stale task.
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    if (names.includes(moved.content)) {
+      await until(async () => {
+        const closed = pg.locator('section.cp .pa:not(.open) .pa-head').first()
+        if (await closed.count()) await closed.click()
+        return (await pg.locator('section.cp .pa-later li', { hasText: moved.content }).filter({ hasText: 'moved to tomorrow in Todoist' }).count()) > 0
+      }, 'the plan does not show the task moved to tomorrow in Todoist')
+      // Its block goes (an approved one's calendar event with it); only a pinned block would stay.
+      const stale = async () => (await pg.$$eval('section.cp .pe-block:not(.locked) .pe-name', (els) => els.map((el) => (el.textContent || '').trim()))).map((t) => t.replace(/^(?:\p{Extended_Pictographic}️?)+\s*/u, '')).includes(moved.content)
+      await until(async () => !(await stale()), 'the plan still shows a block for the task moved to tomorrow')
+    } else console.log('  (no block of its own for the moved task in the made-up plan: Today and Tasks are checked)')
+    // Tasks: the moved one is due tomorrow, the done one is gone.
+    await open('tasks')
+    const row = pg.locator('.ta-task', { hasText: moved.content }).first()
+    await row.waitFor({ timeout: 15000 })
+    await row.locator('.ta-due', { hasText: /tomorrow/i }).waitFor({ timeout: 10000 })
+    await until(async () => !(await pg.locator('.ta-task', { hasText: done.content }).count()), 'Tasks still lists the task done in Todoist')
+  })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })

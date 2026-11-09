@@ -18,6 +18,7 @@ import { Ring } from './CoachFeed'
 import { PlanAlso } from './PlanAlso'
 import { PlanShiftOffer } from './PlanShiftOffer'
 import { PlanEditor } from './plan/PlanEditor'
+import { useLivePlan } from './plan/useLivePlan'
 import './coachFeed.css'
 
 /** The kinds of `show` that are cards here (the rest are ReplyExtras' small widgets). */
@@ -99,6 +100,8 @@ export function PlanCard({ live = true, spotlight = false, expired = false, onCh
   const [note, setNote] = useState('')
   const [cheer, setCheer] = useState(false)
   const t = useClock()
+  // Must-dos, "Also today" and "Moved to tomorrow" follow the plan store (edits, Todoist and Google changes).
+  const livePlan = useLivePlan(data?.state.briefing?.plan)
   if (!life.coach?.rhythm || !data) return null
   const b = data.state.briefing
   const ev = data.state.evening
@@ -165,7 +168,7 @@ export function PlanCard({ live = true, spotlight = false, expired = false, onCh
       </div>
     )
 
-  const p = b.plan
+  const p = livePlan ?? b.plan
   const tl = planTimeline(p, t)
   // One summary for the card, the chat and the headline (benPlanText.ts): stale counts leave the headline.
   const sum = planSummary(p)

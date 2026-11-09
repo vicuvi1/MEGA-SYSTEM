@@ -43370,6 +43370,30 @@ var FocusService = class {
 		}, now);
 		return this.plan(d);
 	}
+	/**
+	* The must-dos follow Todoist (core/todoFollow.ts): a linked task renamed,
+	* moved to another day or deleted, or done there. Writes the list as given,
+	* never unticks, and pays nothing (a task done in Todoist pays through its
+	* own Todoist rule). An empty list changes nothing.
+	*/
+	followTodoist(items, now = /* @__PURE__ */ new Date(), day) {
+		const d = day ?? this.wallet.today(now);
+		const cur = this.plan(d);
+		const next = items.map((x) => {
+			const was = cur.items.find((i) => x.todoistId && i.todoistId === x.todoistId || i.text === x.text);
+			return {
+				text: String(x.text ?? "").trim().slice(0, 140),
+				done: !!x.done || !!was?.done,
+				...x.todoistId ? { todoistId: String(x.todoistId) } : {}
+			};
+		}).filter((x) => x.text).slice(0, 5);
+		if (!next.length) return cur;
+		this.savePlan({
+			...cur,
+			items: next
+		}, now);
+		return this.plan(d);
+	}
 	/** Ticks (or unticks) a must-do. The first tick of each pays its coins (3 a day). */
 	togglePlan(index, now = /* @__PURE__ */ new Date(), day) {
 		const d = day ?? this.wallet.today(now);
@@ -58053,6 +58077,12 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	const fresh = /* @__PURE__ */ new Map();
 	const FRESH_MS = 45e3;
 	const STALE_MS = 18e5;
+	if (!server && typeof window !== "undefined" && typeof window.addEventListener === "function") window.addEventListener("life-todoist-changed", () => {
+		for (const [k, v] of fresh) if (k.startsWith("todoist:")) fresh.set(k, {
+			...v,
+			at: Math.min(v.at, Date.now() - FRESH_MS)
+		});
+	});
 	function readThrough(key, run, slowMs) {
 		const hit = fresh.get(key);
 		if (hit && Date.now() - hit.at < FRESH_MS) return Promise.resolve(hit.v);
@@ -61824,6 +61854,47 @@ function localIso(day, hm) {
 var V1 = "https://api.todoist.com/api/v1";
 var V2 = "https://api.todoist.com/rest/v2";
 var SYNC = "https://api.todoist.com/sync/v9";
+/**
+* Todoist's due → the task's own calendar date and time. A time with a fixed
+* time zone comes as UTC ("2026-11-10T22:30:00Z"): it is turned back into the
+* task's zone, so 00:30 in Bucharest is never read as the day before at
+* 22:30. A floating time ("2026-11-10T15:00:00") is used as it is.
+*/
+function dueParts(d) {
+	if (!d) return {
+		due: null,
+		dueTime: null
+	};
+	const raw = String(d.datetime ?? d.date ?? "");
+	if (!raw) return {
+		due: null,
+		dueTime: null
+	};
+	if (/T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/.test(raw)) {
+		const at = new Date(raw);
+		const zone = typeof d.timezone === "string" && d.timezone ? d.timezone : void 0;
+		if (!isNaN(at.getTime())) try {
+			const parts = new Intl.DateTimeFormat("en-CA", {
+				timeZone: zone,
+				year: "numeric",
+				month: "2-digit",
+				day: "2-digit",
+				hour: "2-digit",
+				minute: "2-digit",
+				hourCycle: "h23"
+			}).formatToParts(at);
+			const g = (k) => parts.find((x) => x.type === k)?.value ?? "";
+			return {
+				due: `${g("year")}-${g("month")}-${g("day")}`,
+				dueTime: `${g("hour")}:${g("minute")}`
+			};
+		} catch {}
+	}
+	return {
+		due: /^\d{4}-\d{2}-\d{2}$/.test(String(d.date ?? "")) ? String(d.date) : raw.slice(0, 10),
+		dueTime: /T\d{2}:\d{2}/.test(raw) ? raw.slice(11, 16) : null
+	};
+}
 function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 	const call = async (url, init = {}) => {
 		const res = await fetchImpl(url, {
@@ -61891,13 +61962,13 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 	};
 	const toTask = (t, names, secs = /* @__PURE__ */ new Map()) => {
 		const due = t.due ?? null;
-		const dt = String(due?.datetime ?? due?.date ?? "");
+		const parts = dueParts(due);
 		return {
 			id: String(t.id),
 			content: String(t.content ?? ""),
 			priority: Number(t.priority) || 1,
-			due: dt ? dt.slice(0, 10) : null,
-			dueTime: /T\d{2}:\d{2}/.test(dt) ? dt.slice(11, 16) : null,
+			due: parts.due,
+			dueTime: parts.dueTime,
 			project: names.get(String(t.project_id)) ?? null,
 			section: t.section_id ? secs.get(String(t.section_id)) ?? null : null,
 			deadline: t.deadline?.date ? String(t.deadline.date).slice(0, 10) : null,
@@ -62001,6 +62072,16 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 		}));
 		return t && typeof t === "object" && t.id != null ? toTask(t, /* @__PURE__ */ new Map()) : null;
 	};
+	/** Completed since `since` (ISO), newest first. */
+	const completedSince = async (since) => {
+		const until = (/* @__PURE__ */ new Date()).toISOString();
+		return (await either(() => all(`${V1}/tasks/completed/by_completion_date?since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&limit=200`), () => all(`${SYNC}/completed/get_all?since=${encodeURIComponent(since.slice(0, 19))}&limit=200`))).map((t) => ({
+			id: String(t.task_id ?? t.id),
+			content: String(t.content ?? ""),
+			priority: Number(t.priority) || 1,
+			completedAt: String(t.completed_at ?? "")
+		}));
+	};
 	return {
 		/** Every open task and your areas (the Tasks page). */
 		async everything() {
@@ -62027,10 +62108,67 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 				}).toString(),
 				headers: { "Content-Type": "application/x-www-form-urlencoded" }
 			});
+			const raw = !j?.full_sync && Array.isArray(j?.items) ? j.items : [];
+			const items = raw.slice(0, 200).map((t) => ({
+				...toTask(t, projectNames ?? /* @__PURE__ */ new Map(), sectionNames ?? /* @__PURE__ */ new Map()),
+				checked: !!(t.checked ?? t.is_completed),
+				deleted: !!t.is_deleted
+			}));
 			return {
 				token: String(j?.sync_token ?? ""),
-				changed: j?.full_sync ? 0 : Array.isArray(j?.items) ? j.items.length : 0
+				changed: raw.length,
+				items
 			};
+		},
+		/**
+		* Where these tasks are now: open (with their day), done, or gone. A
+		* recurring task done today moves on to its next date and stays open, so
+		* it counts as done when it is in what you completed since `since`.
+		*/
+		async lookup(ids, since) {
+			const want = [...new Set(ids.map(String).filter(Boolean))].slice(0, 25);
+			const [names, secs] = await Promise.all([projects().catch(() => /* @__PURE__ */ new Map()), sections().catch(() => /* @__PURE__ */ new Map())]);
+			let doneToday = null;
+			const completed = async () => {
+				if (doneToday) return doneToday;
+				const items = since ? await completedSince(since).catch(() => []) : [];
+				doneToday = new Set(items.map((x) => x.id));
+				return doneToday;
+			};
+			const out = [];
+			for (const id of want) {
+				let t;
+				try {
+					t = await either(() => call(`${V1}/tasks/${encodeURIComponent(id)}`), () => call(`${V2}/tasks/${encodeURIComponent(id)}`));
+				} catch (e) {
+					if (e?.status === 404 || e?.status === 410) {
+						out.push({
+							id,
+							state: (await completed()).has(id) ? "done" : "gone"
+						});
+						continue;
+					}
+					throw e;
+				}
+				if (!t || t.is_deleted) out.push({
+					id,
+					state: "gone"
+				});
+				else if (t.checked || t.is_completed) out.push({
+					id,
+					state: "done",
+					task: toTask(t, names, secs)
+				});
+				else {
+					const task = toTask(t, names, secs);
+					out.push({
+						id,
+						state: task.recurring && (await completed()).has(id) ? "done" : "open",
+						task
+					});
+				}
+			}
+			return out;
 		},
 		updateTask,
 		/** The same as updateTask, for callers that only need it done (the bots). */
@@ -62179,16 +62317,60 @@ function createTodoistApi(token, fetchImpl = fetch, opts = {}) {
 			return task;
 		},
 		/** Completed since `since` (ISO), newest first. */
-		async completedSince(since) {
-			const until = (/* @__PURE__ */ new Date()).toISOString();
-			return (await either(() => all(`${V1}/tasks/completed/by_completion_date?since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&limit=200`), () => all(`${SYNC}/completed/get_all?since=${encodeURIComponent(since.slice(0, 19))}&limit=200`))).map((t) => ({
-				id: String(t.task_id ?? t.id),
-				content: String(t.content ?? ""),
-				priority: Number(t.priority) || 1,
-				completedAt: String(t.completed_at ?? "")
-			}));
-		}
+		completedSince
 	};
+}
+/**
+* The /api/todoist ops that only talk to Todoist (api/todoist.mjs runs them;
+* `cleanup` stays there because it asks the AI). Shared with the end-to-end
+* test (web/todoistE2e.test.ts), so the test drives the same code as the site.
+* Returns null for an op it doesn't know.
+*/
+async function todoistOp(api, body) {
+	const ok = (json) => ({
+		status: 200,
+		json
+	});
+	switch (body?.op) {
+		case "today": return ok({
+			connected: true,
+			tasks: await api.today()
+		});
+		case "changes": return ok(await api.changes(String(body.token || "*")));
+		case "lookup": return ok({ tasks: await api.lookup(Array.isArray(body.ids) ? body.ids.map(String).slice(0, 25) : [], body.since ? String(body.since).slice(0, 40) : void 0) });
+		case "upcoming": return ok({ tasks: await api.upcoming(7) });
+		case "close":
+			await api.close(String(body.id));
+			return ok({ ok: true });
+		case "quick": return ok({ task: await api.quickAdd(String(body.text || "").slice(0, 500), body.area ? String(body.area) : void 0) });
+		case "everything": return ok(await api.everything());
+		case "update": return ok({
+			ok: true,
+			task: await api.updateTask(String(body.id), {
+				content: body.content,
+				priority: body.priority,
+				due: body.due,
+				description: body.description,
+				labels: Array.isArray(body.labels) ? body.labels : void 0,
+				duration: body.duration === void 0 ? void 0 : body.duration === null ? null : Number(body.duration)
+			})
+		});
+		case "move":
+			await api.move(String(body.id), String(body.area));
+			return ok({ ok: true });
+		case "reopen":
+			await api.reopen(String(body.id));
+			return ok({ ok: true });
+		case "remove":
+			await api.remove(String(body.id));
+			return ok({ ok: true });
+		case "addArea": return ok({ area: await api.addArea(String(body.name || "").trim().slice(0, 60) || "New area") });
+		case "renameArea":
+			await api.renameArea(String(body.area), String(body.name || "").trim().slice(0, 60));
+			return ok({ ok: true });
+		case "completed": return ok({ items: await api.completedSince(String(body.since || (/* @__PURE__ */ new Date(Date.now() - 864e5)).toISOString())) });
+		default: return null;
+	}
 }
 // src/core/coach.ts
 var daysSince = (rows, today) => {
@@ -68770,4 +68952,4 @@ async function mcpCall(env, body, ctx) {
 	};
 	return handleMcp(life, body, ctx);
 }
-export { DAILY_GAP_MS, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, exchangeCode, flowsOp, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, webhookVerdict };
+export { DAILY_GAP_MS, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, exchangeCode, flowsOp, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };
