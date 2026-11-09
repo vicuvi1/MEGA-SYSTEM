@@ -1,6 +1,6 @@
 // Body → Progress tab. One hero (strength per move), then body composition
 // (weekly average weight, the target band, waist, fat and muscle estimates,
-// calories), the monthly report (first on the 1st–3rd of a month), the
+// calories), the one weekly calorie check (same card as Food), the monthly report (first on the 1st–3rd of a month), the
 // records wall and photos side by side. The older
 // cards (weight nudge, measurements, weekly card, taking a photo) are folded
 // under "More". Reads Sport Track's data on this device; writes nothing.
@@ -21,6 +21,7 @@ import { monthSummaryDay } from '@core/bodyComp'
 import { MonthCard } from './MonthCard'
 import { RecordsWall } from './RecordsWall'
 import { PhotoCompare } from './PhotoCompare'
+import { FoodAdjustCard } from '../FoodAdjustCard'
 import './progress.css'
 
 const EVENTS = ['life-sport-changed', 'life-external-changed', 'storage']
@@ -57,6 +58,7 @@ export function BodyProgress({ state, onLog }: { state: BodyState; onLog: () => 
       {comp ? (
         <>
           <BodyCompPanel v={comp} onLog={bodyLog.open} onMonth={toMonth} />
+          <FoodAdjustCard where="progress" />
           {!monthFirst && month}
         </>
       ) : (
@@ -65,6 +67,7 @@ export function BodyProgress({ state, onLog }: { state: BodyState; onLog: () => 
           {!monthFirst && month}
         </div>
       )}
+      {!comp && <FoodAdjustCard where="progress" />}
       {bodyLog.sheet}
       <RecordsWall log={log} exercises={exercises} days={sport?.days ?? null} today={today} />
       <PhotoCompare />

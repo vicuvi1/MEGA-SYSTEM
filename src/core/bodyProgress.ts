@@ -9,6 +9,7 @@ import { moveOf, type SportEx, type DayLog } from './sportLadders'
 import { sessionsOf, type SetLog } from './sportSets'
 import { familySeries, type StrengthPoint } from './sportStrength'
 import { cleanWeighIns, trendPoints, type TrendPoint } from './weightTrend'
+import { TARGET_BAND } from './bodyComp'
 
 const r1 = (n: number) => Math.round(n * 10) / 10
 const sign = (n: number) => (n >= 0 ? '+' : '−')
@@ -86,7 +87,7 @@ export function strengthHero(log: SetLog | null | undefined, exercises: SportEx[
 export interface TrendView {
   points: TrendPoint[]
   waist: { day: string; waist: number }[]
-  /** Lean-gain zone from the trend 28 days ago: +0.1 to +0.25 kg a week. */
+  /** The target band from the trend 28 days ago: +0.25 to +0.5 kg a week (TARGET_BAND, the same band everywhere). */
   zone: { from: string; to: string; lo0: number; hi0: number; lo1: number; hi1: number } | null
   verdict: Verdict
 }
@@ -99,7 +100,11 @@ export interface Verdict {
   days: number
 }
 
-export const LEAN_ZONE = { lo: 0.1, hi: 0.25 }
+/** The one target band (+0.25 to +0.5 kg a week): Progress, the food goals and the calorie suggestion all use it. */
+export const LEAN_ZONE = TARGET_BAND
+/** Under this (kg a week) the weight is flat; over FAST it is faster than the band (core/foodAdjust.ts uses the same numbers). */
+const FLAT = 0.1
+const FAST = 0.6
 
 export function cleanWaists(list: { day: string; waist?: number | null }[]): { day: string; waist: number }[] {
   const by = new Map<string, number>()
@@ -137,8 +142,9 @@ export function bodyVerdict(weights: { day: string; weight: number | null | unde
   if (dWaist >= 1) return { tone: 'warn', text: `${kg}, waist up ${r1(dWaist)} cm: slow the surplus.`, dKg, dWaist, days }
   const waistWord = Math.abs(dWaist) < 0.5 ? 'the same' : dWaist > 0 ? `up ${r1(dWaist)} cm` : `down ${r1(-dWaist)} cm`
   if (dKg <= -0.3) return { tone: 'warn', text: `${kg}, waist ${waistWord}: you are losing weight. Eat a little more to build.`, dKg, dWaist, days }
-  if (perWeek < LEAN_ZONE.lo) return { tone: 'none', text: `${kg}, waist ${waistWord}: weight is flat. Add a little food if you want to grow.`, dKg, dWaist, days }
-  if (perWeek > LEAN_ZONE.hi * 1.6) return { tone: 'warn', text: `${kg}, waist ${waistWord}: faster than the lean zone. Watch the waist.`, dKg, dWaist, days }
+  if (perWeek < FLAT) return { tone: 'none', text: `${kg}, waist ${waistWord}: weight is flat. Add a little food if you want to grow.`, dKg, dWaist, days }
+  if (perWeek > FAST) return { tone: 'warn', text: `${kg}, waist ${waistWord}: faster than the target band (+0.25–0.5 kg a week). Watch the waist.`, dKg, dWaist, days }
+  if (perWeek < LEAN_ZONE.lo) return { tone: 'good', text: `${kg}, waist ${waistWord}: likely muscle, a little under the target band.`, dKg, dWaist, days }
   return { tone: 'good', text: `${kg}, waist ${waistWord}: ${dWaist < 0.5 ? 'likely muscle' : 'mostly fine, keep an eye on the waist'}.`, dKg, dWaist, days }
 }
 

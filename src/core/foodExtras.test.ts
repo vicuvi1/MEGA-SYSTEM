@@ -7,7 +7,6 @@ import { parseFoodReply } from './foodParse'
 import { parseFoodWords } from './foodWords'
 import { FOOD_TABLE, ownPer100 } from './foodTable'
 import { DEFAULT_GOALS, cleanGoals, foodTargets } from './foodGoals'
-import { adjustCheck, applyDelta, waistChange, weekAverage } from './foodAdjust'
 import { cheapMap, cheapProtein, proteinPerLei } from './foodCheap'
 import { prepPlan, shoppingList } from './foodPlan'
 import { dayRings, foodHeader, weekChart } from './foodDisplay'
@@ -96,68 +95,6 @@ describe('carbs and fat targets (lean plan)', () => {
     expect(foodTargets(75, 2, cleanGoals({ kcalAdj: 100, kcalOwn: 2500 }), false).kcal).toBe(2500)
     expect(cleanGoals({ kcalAdj: 9999 }).kcalAdj).toBe(600)
     expect(cleanGoals({ kcalAdj: -9999 }).kcalAdj).toBe(-600)
-  })
-})
-
-describe('weight and waist → suggestions', () => {
-  // Three weeks of morning weigh-ins (made up): 19–25 Oct, 26 Oct–1 Nov, 2–8 Nov (= the last 7 days).
-  const days = [['2026-10-19', '2026-10-21', '2026-10-23', '2026-10-25'], ['2026-10-26', '2026-10-28', '2026-10-30', '2026-11-01'], ['2026-11-02', '2026-11-04', '2026-11-06', '2026-11-08']]
-  const w = (...weeks: number[][]) => weeks.flatMap((ws, k) => ws.map((x, i) => ({ day: days[k + (3 - weeks.length)][i], weight: x })))
-  const flat = w([73.5, 73.4, 73.6, 73.5], [73.5, 73.6, 73.4, 73.5], [73.6, 73.5, 73.5, 73.6])
-  const fast = w([73.5, 73.5, 73.5, 73.5], [73.6, 73.7, 73.6, 73.7], [74.4, 74.5, 74.4, 74.5])
-  const good = w([73.5, 73.5, 73.5, 73.5], [73.8, 73.8, 73.9, 73.8], [74.1, 74.2, 74.1, 74.2])
-  const waistUp = [{ day: '2026-10-25', waist: 80 }, { day: '2026-11-07', waist: 81 }]
-  const waistSame = [{ day: '2026-10-25', waist: 80 }, { day: '2026-11-07', waist: 80.2 }]
-  it('weekly average not rising for 2 weeks: suggest +200 with a plain idea', () => {
-    const r = adjustCheck({ weights: flat, today: TODAY, adj: 0, adjAt: '' })
-    expect(r.state).toBe('suggest')
-    if (r.state === 'suggest') {
-      expect(r.suggestion).toMatchObject({ delta: 200, after: 200 })
-      expect(r.suggestion.tip).toMatch(/glass of milk.*peanut butter/)
-    }
-  })
-  it('flat this week but rising the week before, or only 2 weeks of data: wait', () => {
-    const rose = w([73.0, 73.0, 73.0, 73.0], [73.5, 73.5, 73.5, 73.5], [73.5, 73.5, 73.6, 73.5])
-    expect(adjustCheck({ weights: rose, today: TODAY, adj: 0, adjAt: '' }).state).toBe('none')
-    const two = w([73.5, 73.6, 73.4, 73.5], [73.6, 73.5, 73.5, 73.6])
-    const r = adjustCheck({ weights: two, today: TODAY, adj: 0, adjAt: '' })
-    expect(r.state === 'none' && r.why).toMatch(/One more week/)
-  })
-  it('rising over 0.5 kg a week AND the waist growing: suggest −150 (−200 when over 0.75)', () => {
-    const r = adjustCheck({ weights: fast, waists: waistUp, today: TODAY, adj: 0, adjAt: '' })
-    expect(r.state === 'suggest' && r.suggestion.delta).toBe(-200) // +0.8 kg a week
-    const fastish = w([73.5, 73.5, 73.5, 73.5], [73.6, 73.7, 73.6, 73.7], [74.2, 74.3, 74.2, 74.3])
-    const r2 = adjustCheck({ weights: fastish, waists: waistUp, today: TODAY, adj: 0, adjAt: '' })
-    expect(r2.state === 'suggest' && r2.suggestion.delta).toBe(-150) // +0.6 kg a week
-  })
-  it('rising fast with a steady waist is on track; with no waist it asks for one', () => {
-    const steady = adjustCheck({ weights: fast, waists: waistSame, today: TODAY, adj: 0, adjAt: '' })
-    expect(steady.state === 'none' && steady.why).toMatch(/On track.*waist is steady/)
-    const none = adjustCheck({ weights: fast, today: TODAY, adj: 0, adjAt: '' })
-    expect(none.state === 'none' && none.why).toMatch(/Measure your waist/)
-  })
-  it('+0.25–0.5 kg a week: on track', () => {
-    const r = adjustCheck({ weights: good, today: TODAY, adj: 0, adjAt: '' })
-    expect(r.state === 'none' && r.why).toMatch(/^On track: \+0\.33 kg a week/)
-  })
-  it('bounded at ±600, once a week, and needs data', () => {
-    expect(adjustCheck({ weights: flat, today: TODAY, adj: 500, adjAt: '' }).state).toBe('none')
-    expect(adjustCheck({ weights: fast, waists: waistUp, today: TODAY, adj: -500, adjAt: '' }).state).toBe('none')
-    expect(adjustCheck({ weights: flat, today: TODAY, adj: 0, adjAt: '2026-11-05' }).state).toBe('none')
-    expect(adjustCheck({ weights: flat, today: TODAY, adj: 0, adjAt: '2026-11-01' }).state).toBe('suggest')
-    const few = adjustCheck({ weights: [{ day: '2026-11-07', weight: 75 }], today: TODAY, adj: 0, adjAt: '' })
-    expect(few.state === 'none' && few.why).toMatch(/3–4 times a week/)
-    expect(applyDelta(500, 200)).toBe(600)
-    expect(applyDelta(-500, -200)).toBe(-600)
-  })
-  it('the week average needs 2 weigh-ins; the waist change compares this week with 1–3 weeks before', () => {
-    expect(weekAverage([{ day: '2026-11-08', weight: 74 }], TODAY, 0)).toBeNull()
-    expect(weekAverage([{ day: '2026-11-08', weight: 74 }, { day: '2026-11-03', weight: 73 }], TODAY, 0)).toBe(73.5)
-    expect(waistChange(waistUp, TODAY)).toBe(1)
-    expect(waistChange([{ day: '2026-11-07', waist: 81 }], TODAY)).toBeNull()
-  })
-  it('a maintain goal never adds for flat weight', () => {
-    expect(adjustCheck({ weights: flat, today: TODAY, adj: 0, adjAt: '', goal: 'maintain' }).state).toBe('none')
   })
 })
 

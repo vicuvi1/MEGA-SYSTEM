@@ -742,7 +742,7 @@
    "priority": 1,
    "area": "sport",
    "title": "Body composition: log weigh-ins from a smart scale, weekly averages and the target band on Progress",
-   "user_visible_behavior": "Body Today's weight card and Progress open a 'Log body' sheet: weight (needed), body fat %, muscle kg, water %, visceral fat and waist under 'More', the time (now by default) and the hint 'Best: morning, after the toilet, before eating or drinking.' Saved with Undo, no points. Progress has a Body composition section: the weekly average weight as the headline with '+0.4 kg vs last week', a chart of faint grey daily weigh-ins with the 7-day average line and the target band (+0.25 to +0.5 kg a week) and an under/in/over label, 'Not enough data' under 3 weigh-ins in a week, the last 4 weeks with average calories from the food log, waist, and body fat % and muscle kg smoothed and labeled 'estimate, watch the trend'. The monthly report adds smoothed muscle and fat change, average calories and a progress photo link, opens first on the 1st-3rd of a month, and 'Monthly summary' jumps to it any day. A Sunday 10:00 waist reminder is added to your reminders once a week, and skipped for a week that already has a waist.",
+   "user_visible_behavior": "Body Today's weight card and Progress open a 'Log body' sheet: weight (needed), body fat %, muscle kg, water %, visceral fat and waist under 'More', the time (now by default) and the hint 'Best: morning, after the toilet, before eating or drinking.' Saved with Undo, no points. Progress has a Body composition section: the weekly average weight as the headline with '+0.4 kg vs last week', a chart of faint grey daily weigh-ins with the 7-day average line and the target band (+0.25 to +0.5 kg a week) and an under/in/over label, 'Not enough data' under 3 weigh-ins in a week, the last 4 weeks with average calories from the food log, waist, and body fat % and muscle kg smoothed and labeled 'estimate, watch the trend'. The monthly report adds smoothed muscle and fat change, average calories and a progress photo link, opens first on the 1st-3rd of a month, and 'Monthly summary' jumps to it any day. A Sunday 10:00 waist reminder is added to your reminders once a week, and skipped for a week that already has a waist. 'Import a scale screenshot' in the Log body sheet (upload, paste or drop a Xiaomi Home / Mi Fitness result screen): the AI reads the numbers, a review marks each number read and leaves out impossible ones with a note, you edit any field, Save stores it as 'screenshot' with the checked numbers; the picture is never kept. Same 50-a-day limit and budget as food photos.",
    "status": "in_review",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
@@ -750,21 +750,21 @@
     "SMOKE_ONLY=\"Body log\" npm run smoke"
    ],
    "evidence": "2026-11-09: unit tests (ranges, dedupe key, first morning weight, weekly averages and count, not enough data, smoothing, band, week-over-week, monthly numbers, body_metrics kept in step, Undo, waist reminder, migration version), smoke step Body log",
-   "notes": "schema 023 body_comp, core/bodyComp.ts, main/bodyComp.ts, web/bodyCompBridge.ts (life.coach.bodyComp), body/BodyLogSheet.tsx, body/progress/BodyCompPanel.tsx + MonthCard.tsx; screenshots: E2E_BODY_DEMO=1 BODYSCALE_SHOTS=<dir> SMOKE_ONLY=\"Body log\" npm run smoke. Phase 2 (phone/server sync) and screenshot import come later."
+   "notes": "schema 023 body_comp, core/bodyComp.ts, main/bodyComp.ts, web/bodyCompBridge.ts (life.coach.bodyComp), body/BodyLogSheet.tsx, body/progress/BodyCompPanel.tsx + MonthCard.tsx; screenshots: E2E_BODY_DEMO=1 BODYSCALE_SHOTS=<dir> SMOKE_ONLY=\"Body log\" npm run smoke. Phase 2 (phone/server sync) comes later. Screenshot import: core/scaleRead.ts, api/_vision.mjs kind 'scale'."
   },
   {
    "id": "F-FOOD-PHOTO",
    "priority": 1,
    "area": "sport",
    "title": "Log a meal from a photo (AI reads it, you check it, then Save)",
-   "user_visible_behavior": "Body → Food: Snap a meal / Upload photo / drop or paste, with an optional note. The AI lists the foods (matching your saved foods); a review screen shows each food with a qty stepper, grams, kcal and protein, a 'Not sure about the portion: check it' badge, swap for a saved food, remove and add; live totals; meal slot; Save meal or Cancel. Nothing is saved before Save. After Save a line with the meal, today's totals and what is left. 50 photos a day and the monthly AI budget; over either, a plain message and 'Copy the prompt instead'. No points.",
+   "user_visible_behavior": "Body → Food: Snap a meal / Upload photo / drop or paste, with an optional note. The AI lists the foods (matching your saved foods); a review screen shows each food with a qty stepper, grams, kcal and protein, a 'Not sure about the portion: check it' badge, swap for a saved food, remove and add; live totals; meal slot; Save meal or Cancel. Nothing is saved before Save. After Save a line with the meal, today's totals and what is left. 50 photos a day and the monthly AI budget; over either, a plain message and 'Copy the prompt instead'. No points. The AI gets your real saved foods and saved meals (food_saved), and 'Swap for a saved food' lists them; a matched or swapped item uses your saved numbers × qty.",
    "status": "in_review",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
     "npx vitest run src/core/foodVision.test.ts src/server/foodPhoto.server.test.ts src/renderer/src/body/foodPhotoPrep.test.ts",
     "SMOKE_ONLY=\"Food photo\" npm run smoke"
    ],
-   "evidence": "2026-11-09: 42 unit tests; smoke step \"Food photo\" (canned AI answer, qty change, saved once, reply line, daily limit); full smoke",
+   "evidence": "2026-11-09: 42 unit tests; smoke step \"Food photo\" (canned AI answer, qty change, saved once, reply line, daily limit); full smoke; 2026-11-09 food-body-link: saved foods sent and swap to the saved bulgur in smoke",
    "notes": "core/foodVision.ts (pure validator + numbers), api/_vision.mjs (providers, prompt, schema, retry, sys_kv counter), api/ai.mjs op foodPhoto, body/foodPhotoPrep.ts, body/FoodPhotoReview.tsx (+ food-photo.css), one mount line in FoodCounter.tsx. Env: VISION_PROVIDER, VISION_MODEL, ANTHROPIC_API_KEY (optional)."
   },
   {
@@ -782,6 +782,21 @@
    ],
    "evidence": "2026-11-09: 12 unit tests + 7 server tests (fake Turso, fake Telegram file API, fake vision read); smoke Ben 2 step checks the Meal reminders switch",
    "notes": "core/foodBen.ts (photo draft, preview, edits, swap, decideMealReminder), web/bots/foodBot.ts (photo flow, /meals, fd| buttons, mealPushFor, foodPushNow), webBots.ts (photo route), telegramBot.ts + api/telegram.mjs (env.foodPhoto = ai.mjs foodPhoto), benPushes.ts (op log, prefs.meals, fd| buttons for meal pushes), benPushTick.ts, tursoWebBridge.ts/benPushFeed.ts (island), LifeFitPanel.tsx (switch)."
+  },
+  {
+   "id": "F-FOOD-BODY-CHECK",
+   "priority": 1,
+   "area": "sport",
+   "title": "One weekly calorie suggestion on Food and Progress (food and body agree)",
+   "user_visible_behavior": "One 'Weekly calorie check' card, the same on Body → Food and Body → Progress. It reads weekly average weight (body_comp, else body_metrics; 3+ morning weigh-ins a week, else 'Not enough data yet'). Weight flat (under +0.1 kg a week) 2 weeks in a row: 'Eat 200 kcal more a day' (a glass of milk + 1 spoon of peanut butter). Over +0.6 kg a week and the waist up more than 1 cm in 2 weeks: 150-200 kcal less. Else 'On track'. Accept changes the kcal goal once (within +/-600) and adds the change (date, change, reason) to 'Calorie changes' in Goals; Not now waits a week. Target band +0.25-0.5 kg a week everywhere. Calm colours, labeled an estimate. No points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/foodAdjust.test.ts src/main/food.test.ts src/core/bodyProgress.test.ts",
+    "SMOKE_ONLY=\"Body log\" npm run smoke"
+   ],
+   "evidence": "2026-11-09: unit tests (not enough data, +200 after 2 flat weeks, the waist condition, on track, bounds, once a week, history); smoke step Body log (On track, then +200 on both tabs, Accept, history in Goals, no points); full smoke",
+   "notes": "core/foodAdjust.ts (rules), core/foodGoals.ts (adjLog in food_goals), main/food.ts adjustNow/answerAdjust (bodyPoints from body_comp + body_metrics), body/FoodAdjustCard.tsx (used by FoodCounter and progress/BodyProgress). bodyProgress.ts LEAN_ZONE = TARGET_BAND."
   }
  ]
 }

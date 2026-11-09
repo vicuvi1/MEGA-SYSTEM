@@ -26,6 +26,8 @@ import { FoodPlan, copyText } from './FoodPlan'
 import { FoodBars, QuickLog } from './FoodFast'
 import { FoodSavedSheet } from './FoodSavedSheet'
 import { FoodPhotoLog } from './FoodPhotoReview'
+import { FoodAdjustCard } from './FoodAdjustCard'
+import { adjLogLine } from '@core/foodAdjust'
 import type { FoodView } from '../../../main/food'
 import './food.css'
 
@@ -222,7 +224,7 @@ export function FoodCounter() {
 
       {goalsOpen && <GoalsSheet v={v} onView={setV} day={day} />}
 
-      {sub === 'today' && !pastDay && sug && <WeekCheck v={v} onView={setV} day={day} />}
+      {sub === 'today' && !pastDay && sug && <FoodAdjustCard view={v} onView={setV} day={day} where="food" />}
 
       {sub === 'today' && (
         <>
@@ -471,7 +473,7 @@ export function FoodCounter() {
               <b>Next:</b> {v.next.line}
             </p>
           )}
-          {!pastDay && !sug && <WeekCheck v={v} onView={setV} day={day} />}
+          {!pastDay && !sug && <FoodAdjustCard view={v} onView={setV} day={day} where="food" />}
           <p className="pr-note">Saved foods use common table values; an AI app's numbers are estimates. Fix any amount that looks wrong. Logging food pays no points.</p>
         </>
       )}
@@ -481,48 +483,13 @@ export function FoodCounter() {
           <p className="fd-line">{v.week.line}</p>
           <WeekChartView chart={v.chart} />
           {v.adjust.state === 'none' && <small className="muted fd-adjust-note">{v.adjust.why}</small>}
-          {sug && <small className="muted fd-adjust-note">There is a weight check waiting on Today: {sug.title.toLowerCase()}.</small>}
+          {sug && <small className="muted fd-adjust-note">There is a calorie suggestion waiting on Today: {sug.title.toLowerCase()}.</small>}
         </div>
       )}
 
       {sub === 'plan' && <FoodPlan v={v} onView={setV} day={day} />}
       {manage && <FoodSavedSheet v={v} onView={setV} onClose={() => setManage(false)} />}
     </section>
-  )
-}
-
-/** The weekly weight and waist check: a suggestion (Apply / Not now) or one quiet line. */
-function WeekCheck({ v, onView, day }: { v: FoodView; onView: (v: FoodView) => void; day?: string }) {
-  const api = life.coach!.food!
-  const act = useAction()
-  const a = v.adjust
-  if (a.state !== 'suggest')
-    return (
-      <div className="fd-week-check" aria-label="Weekly weight check">
-        <small>
-          <b>Weekly check:</b> {a.why}
-        </small>
-      </div>
-    )
-  const sug = a.suggestion
-  const goal = v.totals.targets.kcal + sug.delta
-  return (
-    <div className="fd-week-check suggest fd-adjust" role="status" aria-label="Weekly weight check">
-      <b>{sug.title}</b>
-      <small>{sug.why}</small>
-      <small>
-        <b>Idea:</b> {sug.tip}
-      </small>
-      <div className="fd-row">
-        <button type="button" className="bdy-btn primary fd-adjust-apply" onClick={async () => onView((await act(() => api.adjust(true, day), `Goal changed to ${fmt(goal)} kcal`)) ?? v)}>
-          Apply ({sug.delta > 0 ? '+' : '−'}
-          {Math.abs(sug.delta)} kcal)
-        </button>
-        <button type="button" className="bdy-btn quiet fd-adjust-later" onClick={async () => onView((await act(() => api.adjust(false, day), 'Okay, I will check again next week')) ?? v)}>
-          Not now
-        </button>
-      </div>
-    </div>
   )
 }
 
@@ -606,8 +573,21 @@ function GoalsSheet({ v, onView, day }: { v: FoodView; onView: (v: FoodView) => 
         {v.totals.targets.fixed
           ? `For now the goal is a fixed ${fmt(FIXED_KCAL)} kcal. Log your weight and enter your height and age to get one made for you.`
           : `Maintenance is about ${fmt(v.totals.targets.maintenance)} kcal.`}{' '}
-        Slow muscle gain: about +350 kcal a day over maintenance and 1.8 g protein per kg. The weekly check adjusts it from your weight and waist.
+        Slow muscle gain: about +350 kcal a day over maintenance and 1.8 g protein per kg. The weekly calorie check suggests changes from your weight and waist.
       </small>
+      <div className="fd-adj-history" aria-label="Calorie changes">
+        <b>Calorie changes</b>
+        {v.goals.adjLog.length ? (
+          <ul>
+            {v.goals.adjLog.map((e, i) => (
+              <li key={`${e.day}-${i}`}>{adjLogLine(e)}</li>
+            ))}
+          </ul>
+        ) : (
+          <small className="muted">None yet. When you accept a weekly suggestion it is listed here.</small>
+        )}
+        {v.goals.kcalAdj !== 0 && <small className="muted">Now {v.goals.kcalAdj > 0 ? '+' : '−'}{Math.abs(v.goals.kcalAdj)} kcal a day from these changes (at most ±600).</small>}
+      </div>
       <div className="fd-row">
         <button type="button" className="btn primary small fd-goals-save" onClick={save}>
           Save goals

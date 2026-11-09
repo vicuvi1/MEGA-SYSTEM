@@ -22,3 +22,19 @@
   .sheet.blog-sheet { place-items: end center; }
   .blog-card { width: 100%; box-sizing: border-box; border-radius: 18px 18px 0 0; padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
 }
+
+/* Scale screenshot import: calm, the fields read from the picture marked "read". */
+.blog-card.drag { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.blog-shot-start { display: flex; flex-direction: column; gap: 6px; }
+.blog-shot-start small { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.blog-shot-btn { align-self: flex-start; }
+.blog-shot-reading, .blog-shot-review { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; }
+.blog-shot-reading { align-items: center; color: var(--muted); }
+.blog-shot-reading img, .blog-shot-review img { width: 44px; height: 64px; object-fit: cover; border-radius: 8px; flex: none; }
+.blog-shot-review > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.blog-shot-review small { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.blog-shot-review .blog-shot-dropped { color: var(--text); background: color-mix(in srgb, var(--gold, #f5c84b) 14%, transparent); border-radius: 8px; padding: 4px 8px; }
+.blog-shot-fail { font-size: 13.5px; background: color-mix(in srgb, var(--gold, #f5c84b) 14%, transparent); border-radius: 10px; padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+.blog-shot-fail p { margin: 0; }
+.blog-read-tag { margin-left: 6px; font-style: normal; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; padding: 1px 6px; border-radius: 999px; color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.blog-grid label.read input, .blog-weight.read input { border-color: color-mix(in srgb, var(--accent) 50%, var(--border, rgb(128 128 128 / 0.3))); }

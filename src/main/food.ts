@@ -19,7 +19,9 @@ import {
 import { DEFAULT_GOALS, GAIN_GPK, GAIN_SURPLUS, LEAN_GPK, cleanGoals, cleanPrices, foodTargets, type FoodGoals, type FoodTargets } from '../core/foodGoals'
 import { cleanSaved, dayTotals, type FoodSaved } from '../core/foodSaved'
 import { dayProgress, proteinBehind, type DayProgress, type ProteinBehind } from '../core/foodProgress'
-import { adjustCheck, applyDelta, type AdjustCheck } from '../core/foodAdjust'
+import { addAdjLog, adjustCheck, applyDelta, type AdjustCheck } from '../core/foodAdjust'
+import { dailyPoints, type DayPoint } from '../core/bodyComp'
+import { listBodyComp } from './bodyComp'
 import { cheapMap, cheapProtein, unpricedOwn, type CheapRow } from '../core/foodCheap'
 import { ownPer100, type OwnFood } from '../core/foodTable'
 import { prepPlan, shoppingList, type PrepPlan, type ShoppingList } from '../core/foodPlan'
@@ -141,19 +143,38 @@ export function waistIns(db: DB, days = 60): { day: string; waist: number }[] {
   }
 }
 
-/** The weekly check: weekly-average weight trend and the waist (core/foodAdjust.ts). */
+/** One point per day (first morning weight, waist) from body_comp, with body_metrics as fallback. */
+export function bodyPoints(db: DB, today: string, days = 42): DayPoint[] {
+  const from = addDays(today, -days)
+  let metrics: { day: string; weight: number | null; waist: number | null }[] = []
+  try {
+    metrics = (db.prepare('SELECT day, weight, waist FROM body_metrics WHERE day >= ? AND day <= ?').all(from, today) as any[]).map((r) => ({ day: String(r.day), weight: r.weight == null ? null : Number(r.weight), waist: r.waist == null ? null : Number(r.waist) }))
+  } catch {
+    metrics = []
+  }
+  return dailyPoints(listBodyComp(db, from, today), metrics)
+}
+
+/** The ONE calorie suggestion: weekly averages from body_comp (fallback body_metrics) and the waist (core/foodAdjust.ts). */
 export function adjustNow(db: DB, now = new Date()): AdjustCheck {
   const today = sportToday(now)
   const g = readFoodGoals(db)
-  return adjustCheck({ weights: weighIns(db, 40), waists: waistIns(db), today, adj: g.kcalAdj, adjAt: g.adjAt })
+  return adjustCheck({ points: bodyPoints(db, today), today, adj: g.kcalAdj, adjAt: g.adjAt })
 }
 
-/** Answers the weekly check: Apply changes the kcal goal by the suggestion (within ±600), "Not now" waits a week. Re-checked here, never trusted from the page. */
+/**
+ * Answers the suggestion: Accept changes the kcal goal by it (within ±600) and
+ * records the change in the history; "Not now" waits a week. Re-checked here,
+ * never trusted from the page.
+ */
 export function answerAdjust(db: DB, accept: boolean, now = new Date()): FoodGoals {
   const g = readFoodGoals(db)
   const chk = adjustNow(db, now)
   if (chk.state !== 'suggest') return g
-  return saveFoodGoals(db, { adjAt: sportToday(now), kcalAdj: accept ? applyDelta(g.kcalAdj, chk.suggestion.delta) : g.kcalAdj })
+  const today = sportToday(now)
+  if (!accept) return saveFoodGoals(db, { adjAt: today })
+  const after = applyDelta(g.kcalAdj, chk.suggestion.delta)
+  return saveFoodGoals(db, { adjAt: today, kcalAdj: after, adjLog: addAdjLog(g.adjLog, { day: today, delta: after - g.kcalAdj, after, reason: chk.suggestion.reason }) })
 }
 
 /** Your own prices (MDL per kg) by food name; a null removes one. */
