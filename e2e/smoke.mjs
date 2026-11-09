@@ -6040,6 +6040,94 @@ try {
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
 
+  // Photo Locker: two "devices" (browser contexts with their own IndexedDB) and one fake Google Drive
+  // (e2e/server.mjs /_fakedrive; googleapis.com is routed there). Made-up pictures only.
+  await step('Photo Locker: a photo uploaded on one device reaches Drive and the index, a second device downloads it; a video over 60 s is refused', async () => {
+    const toDrive = (ctx) => ctx.route('https://www.googleapis.com/**', async (route) => {
+      const u = new URL(route.request().url())
+      await route.fulfill({ response: await route.fetch({ url: `http://127.0.0.1:${port}/_fakedrive${u.pathname}${u.search}` }) })
+    })
+    const sql = async (q) => (await (await fetch(`http://127.0.0.1:${port}/api/_e2e`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'sql', sql: q }) })).json()).rows
+    const shots = process.env.LOCKER_SHOTS
+    await toDrive(pg.context())
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('locker')
+    await pg.waitForSelector('[data-testid="photo-locker"]', { timeout: 15000 })
+    if (!/Not encrypted/.test(await pg.locator('.lk-plain').innerText())) throw new Error('no plain "not encrypted" note')
+    // Pick the Drive folder: a new one, named in the box.
+    await pg.getByRole('button', { name: 'New folder…' }).click({ timeout: 10000 })
+    await pg.locator('.cs-sheet input').fill('Photo Locker test')
+    await pg.locator('.cs-sheet').getByRole('button', { name: 'Make folder' }).click()
+    await pg.waitForSelector('[data-testid="locker-folder"]', { timeout: 10000 })
+    // A made-up photo (a gradient with a shape), drawn in the page.
+    const png = await pg.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 600
+      c.height = 800
+      const g = c.getContext('2d')
+      const gr = g.createLinearGradient(0, 0, 600, 800)
+      gr.addColorStop(0, '#2b5876')
+      gr.addColorStop(1, '#4e4376')
+      g.fillStyle = gr
+      g.fillRect(0, 0, 600, 800)
+      g.fillStyle = '#9be15d'
+      g.beginPath()
+      g.ellipse(300, 160, 70, 85, 0, 0, Math.PI * 2)
+      g.fill()
+      g.fillRect(220, 260, 160, 360)
+      return c.toDataURL('image/png').split(',')[1]
+    })
+    await pg.setInputFiles('[data-testid="locker-upload"]', { name: 'front-made-up.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
+    await pg.waitForSelector('[data-testid="locker-tile"] .lk-state.in', { timeout: 20000 })
+    // In the synced index (metadata only, with the Drive file id), never image data.
+    let ix = ''
+    for (let i = 0; i < 40 && !/driveFileId/.test(ix); i++) {
+      ix = String((await sql("SELECT value FROM settings WHERE key = 'vault_index'"))[0]?.[0] ?? '')
+      if (!/driveFileId/.test(ix)) await pg.waitForTimeout(250)
+    }
+    if (!/front-made-up\.jpg/.test(ix) || !/driveFileId/.test(ix)) throw new Error(`vault_index not saved: ${ix.slice(0, 120)}`)
+    if (/base64|data:image/.test(ix)) throw new Error('vault_index holds image data')
+    // A video over 60 seconds (a made-up 61 s silent clip) is refused with a plain message.
+    const rate = 8000
+    const secs = 61
+    const wav = Buffer.alloc(44 + rate * secs, 128)
+    wav.write('RIFF', 0); wav.writeUInt32LE(36 + rate * secs, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22)
+    wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(rate * secs, 40)
+    await pg.setInputFiles('[data-testid="locker-upload"]', { name: 'long-clip.wav', mimeType: 'video/wav', buffer: wav })
+    await pg.waitForSelector('.toast:has-text("at most 60 seconds"), [role="status"]:has-text("at most 60 seconds")', { timeout: 15000 })
+    if ((await pg.locator('[data-testid="locker-tile"]').count()) !== 1) throw new Error('the long video was kept')
+    // The item view on the desktop.
+    await pg.locator('[data-testid="locker-tile"]').first().click()
+    await pg.waitForSelector('[data-testid="locker-item"] .lk-media img', { timeout: 5000 })
+    if (shots) await pg.screenshot({ path: `${shots}/locker-desktop-item.png`, style: '.toasts { display: none !important }' })
+    await pg.keyboard.press('Escape')
+    // Device B: its own browser (empty IndexedDB), a phone screen.
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+    const b = await ctx.newPage()
+    try {
+      b.on('pageerror', (e) => errors.push(`locker B: ${e.message}`))
+      b.on('console', (m) => /Content.Security.Policy|Refused to connect/i.test(m.text()) && errors.push(`locker B CSP: ${m.text().slice(0, 200)}`))
+      await toDrive(ctx)
+      await b.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
+      await b.goto(`http://127.0.0.1:${port}/`)
+      await b.waitForSelector('input', { timeout: 20000 })
+      await b.fill('input', '1234')
+      await b.keyboard.press('Enter')
+      await b.waitForSelector('main.content', { timeout: 20000 })
+      await b.evaluate(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'locker' })))
+      await b.waitForSelector('[data-testid="locker-tile"] img', { timeout: 20000 })
+      await b.waitForSelector('[data-testid="locker-tile"] .lk-state.in', { timeout: 10000 })
+      if (!/✓/.test(await b.locator('[data-testid="locker-tile"] .lk-state').first().innerText())) throw new Error('device B did not download the photo')
+      if (await b.locator('[data-testid="locker-warning"]').count()) throw new Error('device B warns about items not backed up')
+      if (shots) await b.screenshot({ path: `${shots}/locker-phone-timeline.png`, style: '.toasts { display: none !important }' })
+    } finally {
+      await ctx.close()
+    }
+    // One file in Drive: never uploaded twice.
+    const inDrive = await (await fetch(`http://127.0.0.1:${port}/_fakedrive/_e2e/files`, { headers: { authorization: 'Bearer fake-drive-key' } })).json()
+    if (inDrive.filter((f) => f.appProperties?.lsApp === 'locker').length !== 1) throw new Error(`Drive has ${inDrive.length} files`)
+  })
+
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

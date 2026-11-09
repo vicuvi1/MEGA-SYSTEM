@@ -8,7 +8,7 @@
 //   3. save the index (joined with any save from another device in between).
 // Runs when Photo Locker is open, after something is added, and once a while
 // after the app starts when uploads are waiting.
-import { deletePlan, folderMovePlan, notBackedUpLine, planSync, driveProps, type IndexEntry, type SyncPlan, type VaultIndex } from '@core/vaultSync'
+import { PROGRESS_TAG, deletePlan, folderMovePlan, notBackedUpLine, planSync, driveProps, type IndexEntry, type SyncPlan, type VaultIndex } from '@core/vaultSync'
 import { life } from '../bridge'
 import { createDrive, DriveError, type DriveApi, type DriveFolder } from './driveApi'
 import { thumbOf } from './mediaPrep'
@@ -220,6 +220,8 @@ export async function deleteItem(id: string, everywhere: boolean): Promise<void>
   const local = await getItem(id)
   const d = deletePlan(ix?.items[id], local ? metaOf(local) : undefined, everywhere, Date.now())
   if (d.trashFileId) await api().trash(d.trashFileId)
+  // A progress photo is also in Body's own store: it goes from there too (else it would come back in).
+  await import('../body/bodyPhotos').then((m) => m.deleteOwnPhoto(id)).catch(() => {})
   if (d.removeLocal === 'all') await removeItem(id)
   else await patchItem(id, { blob: undefined, removedHere: true })
   if (d.entry && ix && life.vault) await life.vault.saveIndex({ v: 1, folder: ix.folder, items: { [id]: d.entry } })
@@ -269,6 +271,28 @@ export async function chooseFolder(pick: { create: string } | DriveFolder): Prom
 
 /** The warning line for the page. */
 export const warningLine = (s: SyncState) => notBackedUpLine(s.notBackedUp, !!s.connected && !!s.folder)
+
+type BodyPhoto = { id: string; day: string; at: number; blob: Blob; w: number; h: number }
+const fromBodyPhoto = (p: BodyPhoto): VaultItem => ({ id: p.id.replace(/[^A-Za-z0-9_-]/g, '-'), kind: 'photo', name: `Progress ${p.day}.jpg`, tags: [PROGRESS_TAG], takenAt: p.at, sizeBytes: p.blob.size, mime: p.blob.type || 'image/jpeg', blob: p.blob, w: p.w, h: p.h, updatedAt: p.at })
+
+/** A progress photo from Body (same id in both stores, so it is never shown twice). */
+export async function addProgressPhoto(p: BodyPhoto): Promise<void> {
+  const it = fromBodyPhoto(p)
+  if (await getItem(it.id)) return
+  it.thumb = (await thumbOf(p.blob, 'photo').catch(() => null)) ?? undefined
+  await addItems([it])
+}
+
+/** Progress photos taken on this device before Photo Locker existed go into it (on this device; Drive once connected). */
+export async function importProgressPhotos(): Promise<number> {
+  const { listOwnPhotos } = await import('../body/bodyPhotos')
+  const have = new Set((await listItems()).map((it) => it.id))
+  const missing = (await listOwnPhotos()).filter((p) => !have.has(p.id))
+  const items: VaultItem[] = []
+  for (const p of missing) items.push({ ...fromBodyPhoto(p), thumb: (await thumbOf(p.blob, 'photo').catch(() => null)) ?? undefined })
+  if (items.length) await addItems(items)
+  return items.length
+}
 
 let booted = false
 /** Once after the app starts: if uploads are waiting and Drive is set up, carry on (a reload mid-upload resumes). */

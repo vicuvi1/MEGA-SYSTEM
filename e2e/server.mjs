@@ -549,7 +549,9 @@ const gcal = (() => {
     const send = (j) => (r.setHeader('Content-Type', 'application/json'), r.end(JSON.stringify(j)))
     if (['create', 'move', 'update', 'remove'].includes(b.op)) log.push({ ...b, at: Date.now() })
     if (b.op === 'log') return send(log)
-    if (b.op === 'status') return send({ configured: true, connected: true, calendars: [{ id: 'primary', name: 'Test calendar', color: '#7cc4ff', canWrite: true, on: true }] })
+    if (b.op === 'status') return send({ configured: true, connected: true, drive: true, calendars: [{ id: 'primary', name: 'Test calendar', color: '#7cc4ff', canWrite: true, on: true }] })
+    // Photo Locker: a made-up Drive key for the fake Drive below (the smoke routes googleapis.com to it).
+    if (b.op === 'driveToken') return send({ token: 'fake-drive-key', expiresAt: Date.now() + 3600_000 })
     if (b.op === 'events') return send({ events: events.filter((e) => e.end > b.from && e.start < b.to) })
     if (b.op === 'create') {
       // Like Google: an event id given by the app is made once; writing it again updates that event.
@@ -702,6 +704,81 @@ function capAnswer(r) {
   }
 }
 
+// Photo Locker: a fake Google Drive (in memory, made-up files). The smoke routes
+// https://www.googleapis.com/* here (/_fakedrive/*), so both "devices" (two
+// browser contexts) see one Drive. Folders, appProperties, resumable uploads
+// (308 + Range), downloads, move, trash, about.
+const fakeDrive = (() => {
+  const files = new Map()
+  const sessions = new Map()
+  let n = 0
+  const view = (f) => ({ id: f.id, name: f.name, mimeType: f.mimeType, size: String(f.data.length), parents: f.parents, appProperties: f.appProperties })
+  return (q, r, buf) => {
+    const url = new URL(q.url.replace(/^\/_fakedrive/, ''), 'https://www.googleapis.com')
+    const send = (status, body, headers = {}) => {
+      r.statusCode = status
+      for (const [k, v] of Object.entries({ 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*', 'Access-Control-Expose-Headers': 'Location, Range, Content-Length', ...headers })) r.setHeader(k, v)
+      r.end(body == null ? '' : JSON.stringify(body))
+    }
+    if (q.method === 'OPTIONS') return send(204, null, { 'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH', 'Access-Control-Allow-Headers': '*' })
+    if (q.headers.authorization !== 'Bearer fake-drive-key') return send(401, { error: { message: 'bad key' } })
+    const json = () => (buf.length ? JSON.parse(buf.toString('utf8')) : {})
+    if (url.pathname === '/_e2e/files') return send(200, [...files.values()].map(view))
+    if (url.pathname === '/upload/drive/v3/files' && q.method === 'POST') {
+      const id = `up${++n}`
+      sessions.set(id, { meta: json(), parts: [], size: 0, total: Number(q.headers['x-upload-content-length']) })
+      return send(200, {}, { Location: `https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&upload_id=${id}` })
+    }
+    if (url.pathname === '/upload/drive/v3/files' && q.method === 'PUT') {
+      const sess = sessions.get(url.searchParams.get('upload_id'))
+      if (!sess) return send(404, { error: { message: 'gone' } })
+      const range = String(q.headers['content-range'] || '')
+      if (!range.startsWith('bytes */')) (sess.parts.push(buf), (sess.size += buf.length))
+      if (sess.size < sess.total) return send(308, null, sess.size ? { Range: `bytes=0-${sess.size - 1}` } : {})
+      if (!sess.file) {
+        const id = `file${++n}x`
+        sess.file = { id, name: sess.meta.name, mimeType: sess.meta.mimeType, parents: sess.meta.parents ?? [], appProperties: sess.meta.appProperties ?? {}, data: Buffer.concat(sess.parts) }
+        files.set(id, sess.file)
+      }
+      return send(200, view(sess.file))
+    }
+    const m = /^\/drive\/v3\/files\/([^/]+)$/.exec(url.pathname)
+    if (m) {
+      const f = files.get(m[1])
+      if (!f) return send(404, { error: { message: 'not found' } })
+      if (url.searchParams.get('alt') === 'media') {
+        r.statusCode = 200
+        r.setHeader('Content-Type', f.mimeType || 'application/octet-stream')
+        r.setHeader('Content-Length', String(f.data.length))
+        r.setHeader('Access-Control-Allow-Origin', '*')
+        r.setHeader('Access-Control-Expose-Headers', 'Content-Length')
+        return r.end(f.data)
+      }
+      if (q.method === 'PATCH') {
+        const b = json()
+        if (b.trashed) f.trashed = true
+        const add = url.searchParams.get('addParents')
+        if (add) f.parents = [...f.parents.filter((p) => p !== url.searchParams.get('removeParents')), add]
+      }
+      return send(200, view(f))
+    }
+    if (url.pathname === '/drive/v3/files' && q.method === 'POST') {
+      const b = json()
+      const id = `fold${++n}x`
+      files.set(id, { id, name: b.name, mimeType: b.mimeType, parents: ['root'], appProperties: b.appProperties ?? {}, data: Buffer.alloc(0) })
+      return send(200, { id, name: b.name })
+    }
+    if (url.pathname === '/drive/v3/files') {
+      const qs = url.searchParams.get('q') || ''
+      const parent = /'([^']+)' in parents/.exec(qs)?.[1]
+      const list = [...files.values()].filter((f) => !f.trashed && (parent ? f.parents.includes(parent) : /folder/.test(qs) ? f.mimeType === 'application/vnd.google-apps.folder' : true))
+      return send(200, { files: list.map(view) })
+    }
+    if (url.pathname === '/drive/v3/about') return send(200, { storageQuota: { usage: String([...files.values()].reduce((t, f) => t + f.data.length, 0)), limit: String(15 * 1024 ** 3) } })
+    return send(404, { error: { message: 'unknown' } })
+  }
+})()
+
 // For the soak test (e2e/soak.mjs): calls counted by path, and "the server is down" on demand.
 const stats = { calls: {}, tooBig: 0 }
 let down = false
@@ -735,6 +812,12 @@ const dist = process.env.E2E_DIST || join(repo, 'dist')
 const types = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript', '.css': 'text/css', '.wasm': 'application/wasm', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json', '.webmanifest': 'application/manifest+json' }
 http
   .createServer((q, r) => {
+    if (q.url.startsWith('/_fakedrive')) {
+      const parts = []
+      q.on('data', (c) => parts.push(c))
+      q.on('end', () => fakeDrive(q, r, Buffer.concat(parts)))
+      return
+    }
     let body = ''
     q.on('data', (c) => (body += c))
     q.on('end', () => {

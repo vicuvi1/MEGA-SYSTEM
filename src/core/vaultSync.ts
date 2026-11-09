@@ -10,6 +10,7 @@
 //   - remote: the files in the chosen Drive folder, each carrying the item's
 //     app id in Drive appProperties (`lsId`), so nothing is ever uploaded twice.
 // Pure: no DOM, no network, no database.
+import { calendarDay } from './dates'
 
 export type VaultKind = 'photo' | 'video' | 'file'
 
@@ -385,7 +386,7 @@ export function byMonth<T extends { takenAt: number }>(items: T[]): { key: strin
   const out: { key: string; label: string; items: T[] }[] = []
   for (const it of [...items].sort((a, b) => b.takenAt - a.takenAt)) {
     const d = new Date(it.takenAt)
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    const key = calendarDay(d).slice(0, 7)
     let g = out.find((x) => x.key === key)
     if (!g) out.push((g = { key, label: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }), items: [] }))
     g.items.push(it)

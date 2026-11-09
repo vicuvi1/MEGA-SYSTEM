@@ -1,8 +1,14 @@
-// BD10: progress photos, ON THIS DEVICE ONLY. They live in this browser's
-// (or the desktop app's) IndexedDB, database "life-body-photos". They are
-// never put in the synced database, never sent to the server or Ben, and
-// never in a backup. Clearing the site's data or "Delete" removes them.
+// BD10: progress photos. They live in this browser's (or the desktop app's)
+// IndexedDB, database "life-body-photos". They are never put in the synced
+// database, never sent to the server or Ben. Since Photo Locker
+// (docs/areas/vault.md) a copy also goes into the Locker (vault/vaultStore.ts),
+// which backs it up to the owner's own Google Drive once he connects it (not
+// encrypted, his choice), and progress photos that came down from Drive on
+// another device show here too (listPhotos joins both).
 import type { PhotoMeta } from '@core/bodyPhotos'
+import { PROGRESS_TAG } from '@core/vaultSync'
+import { dayKey } from '@core/dates'
+import { listItems, patchItem, removeItem, getItem } from '../vault/vaultStore'
 
 const DB_NAME = 'life-body-photos'
 const STORE = 'photos'
@@ -39,17 +45,47 @@ async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBReq
   }
 }
 
-export async function listPhotos(): Promise<StoredPhoto[]> {
+const byDay = (a: StoredPhoto, b: StoredPhoto) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.at - b.at)
+
+/** Only the photos in this store (not the Locker's). */
+export async function listOwnPhotos(): Promise<StoredPhoto[]> {
   try {
     const all = (await tx('readonly', (s) => s.getAll())) as StoredPhoto[]
-    return all.filter((p) => p && p.blob && p.day).sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.at - b.at))
+    return all.filter((p) => p && p.blob && p.day).sort(byDay)
   } catch {
     return []
   }
 }
 
+/** Every progress photo on this device: this store's and the Locker's progress photos (from Drive). */
+export async function listPhotos(): Promise<StoredPhoto[]> {
+  const own = await listOwnPhotos()
+  try {
+    const ids = new Set(own.map((p) => p.id))
+    const more = (await listItems())
+      .filter((it) => it.kind === 'photo' && it.blob && it.tags.includes(PROGRESS_TAG) && !ids.has(it.id))
+      .map((it): StoredPhoto => ({ id: it.id, day: dayKey(new Date(it.takenAt)), at: it.takenAt, blob: it.blob!, w: it.w ?? 0, h: it.h ?? 0 }))
+    return [...own, ...more].sort(byDay)
+  } catch {
+    return own
+  }
+}
+
 export const savePhoto = (p: StoredPhoto) => tx('readwrite', (s) => s.put(p))
-export const deletePhoto = (id: string) => tx('readwrite', (s) => s.delete(id))
+/** Only from this store (Photo Locker's delete uses it, so a deleted photo is not brought back in). */
+export const deleteOwnPhoto = (id: string) => tx('readwrite', (s) => s.delete(id)).catch(() => undefined)
+
+/** Removes a photo from this device (both stores). A Locker copy already in Drive stays in Drive. */
+export async function deletePhoto(id: string): Promise<void> {
+  await tx('readwrite', (s) => s.delete(id))
+  try {
+    const it = await getItem(id)
+    if (it?.driveFileId) await patchItem(id, { blob: undefined, removedHere: true })
+    else if (it) await removeItem(id)
+  } catch {
+    /* no Locker in this browser */
+  }
+}
 
 /** Makes a picture small (at most 960 px tall, JPEG) before it is kept. */
 export async function shrink(src: Blob | HTMLVideoElement, maxH = 960): Promise<{ blob: Blob; w: number; h: number }> {
