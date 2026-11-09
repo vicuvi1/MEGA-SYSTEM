@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { baselineFrom, cleanCoach, coachWeekNo, DEFAULT_COACH, rampKcal } from './coachConfig'
 import { addOnsFor, bloodTestDue, KCAL_FLOOR, lowIntake, redFlag, safeKcalChange, safeText, weightRising } from './coachSafety'
 import { changeLine, checkinData, cleanDays, coachContext, dailyPlan, DAYS_KEEP, nudgeConditions, snapOf, ticksOf, toggleManual, withCheckin, withSnap, type PlanInputs } from './coachPlan'
-import { aiPrompt, dayLineFrom, needsAi, parseAiLine, templateLine, AI_RETRY_MS } from './coachText'
+import { aiPrompt, dayLineFrom, lineToShow, needsAi, parseAiLine, planKey, templateLine, AI_RETRY_MS } from './coachText'
 import { answerDecision, cleanWeeks, openDecisions, reviewWeek, summaryLine, weeklyReview, type WeekInput } from './coachWeek'
 import { cleanWeek } from './trainWeek'
 import { seedSaved } from './foodSaved'
@@ -232,6 +232,15 @@ describe('the day line: AI once a morning, template on failure', () => {
     const ok = dayLineFrom(plan, 'en', '{"line":"Upper body today, 28 min.","tip":"Eat all 5 meals."}', undefined, 5)
     expect(ok.src).toBe('ai')
     expect(aiPrompt(plan, 'ro', '')).toMatch(/Romanian/)
+  })
+  it('a kept AI line is shown only while the plan is the same', () => {
+    const ai = dayLineFrom(plan, 'en', '{"line":"Upper body today, 28 min.","tip":"Eat all 5 meals."}', undefined, 5)
+    expect(ai.key).toBe(planKey(plan))
+    expect(lineToShow(plan, 'en', ai).src).toBe('ai')
+    const rest = dailyPlan(base({ date: '2026-11-09' }))
+    expect(lineToShow(rest, 'en', ai)).toEqual({ ...templateLine(rest, 'en'), src: 'template' })
+    expect(needsAi(ai, 6, true, planKey(rest))).toBe(true)
+    expect(needsAi({ ...ai, tries: 3 }, 6, true, planKey(rest))).toBe(false)
   })
   it('asked once a day: an AI line is kept; a template is retried after 2 h, twice at most', () => {
     const now = 10 * AI_RETRY_MS

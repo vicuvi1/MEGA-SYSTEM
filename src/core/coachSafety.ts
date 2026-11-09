@@ -160,4 +160,4 @@ export function bloodTestDue(cfg: { bloodDismissed: string | null; ramp: { start
   return !cfg.ramp.start || today >= cfg.ramp.start
 }
 
-export const BLOOD_TEXT = 'Blood test: ask for a hemogram, ferritin, vitamin D and B12. It shows if anything holds your growth back.'
+export const BLOOD_TEXT = 'Get a blood test once: hemogram, ferritin, vitamin D and B12.'

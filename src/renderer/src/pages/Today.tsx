@@ -31,6 +31,7 @@ import { MoneyPill } from '../MoneyQuick'
 import { ShiftButtons } from '../LifeFitPanel'
 import { WeekTop3Pick } from '../WeekTop3'
 import { TodayLadderLine } from '../ladder/TodayLadderLine'
+import { CoachToday } from '../coach/CoachToday'
 import { WeekPlanCard } from '../plan/WeekPlan'
 import { GrowthChip } from '../body/progress/GrowthLevel'
 
@@ -223,6 +224,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
               <TodayLadderLine onOpen={() => openTab('goals', 'quarter')} />
               <GrowthChip where="today" />
             </div>
+            {/* The coach: today's training, meals and ticks in one card (compact here, full on Body → Today). */}
+            <CoachToday compact />
             {/* The money pill sits in the habits header on Now (next to "Log spending"). */}
             {!has('day') && <MoneyPill />}
             {has('day') && (
@@ -230,7 +233,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
                 <LifeModeCard compact quiet />
                 <YearOffer onOpen={() => openYear(onGo)} />
                 <MissTwiceCard />
-                <DayFlow summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} tasksSlot={tasksEl} weekSlot={weekEl} onCounts={setCounts} />
+                <DayFlow fold={life.coach?.today ? ['workout'] : undefined} summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} tasksSlot={tasksEl} weekSlot={weekEl} onCounts={setCounts} />
               </>
             )}
           </TabPanel>

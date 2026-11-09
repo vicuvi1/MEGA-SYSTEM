@@ -119,10 +119,21 @@ export function parseAiLine(text: string, plan: DailyPlan): { line: string; tip:
 }
 
 /** True when the day's line should be (re)asked: none yet, or a template from 2+ h ago (at most 2 tries). */
-export function needsAi(line: DayLine | undefined, now: number, aiOn: boolean): boolean {
+export function needsAi(line: DayLine | undefined, now: number, aiOn: boolean, key?: string): boolean {
   if (!aiOn) return false
   if (!line) return true
+  // The plan changed since (a workout logged, a session moved): one more try for the new plan.
+  if (key && line.key && line.key !== key) return line.tries < AI_TRIES + 1
   return line.src === 'template' && line.tries < AI_TRIES && now - line.at >= AI_RETRY_MS
+}
+
+/** What the line depends on: today's training and the kcal goal. */
+export const planKey = (plan: DailyPlan) => `${plan.training.kind === 'rest' ? 'rest' : plan.training.kind === 'done' ? 'done' : plan.training.type}|${plan.food.kcal}`
+
+/** The line to show now: the kept AI line while the plan is the same, else the template from today's plan. */
+export function lineToShow(plan: DailyPlan, lang: CoachLang, kept: DayLine | undefined): { line: string; tip: string; src: 'ai' | 'template' } {
+  if (kept && kept.src === 'ai' && (!kept.key || kept.key === planKey(plan))) return { line: kept.line, tip: kept.tip, src: 'ai' }
+  return { ...templateLine(plan, lang), src: 'template' }
 }
 
 /** The day's line as stored: the AI's when it passed, else the template. */
@@ -130,5 +141,5 @@ export function dayLineFrom(plan: DailyPlan, lang: CoachLang, aiText: string | n
   const tries = (prev?.tries ?? 0) + 1
   const ai = aiText ? parseAiLine(aiText, plan) : null
   const t = ai ?? templateLine(plan, lang)
-  return { line: t.line, tip: t.tip, src: ai ? 'ai' : 'template', lang, at: now, tries }
+  return { line: t.line, tip: t.tip, src: ai ? 'ai' : 'template', lang, at: now, tries, key: planKey(plan) }
 }

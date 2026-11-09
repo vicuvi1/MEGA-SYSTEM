@@ -244,6 +244,8 @@ export interface DayLine {
   lang: 'en' | 'ro'
   at: number
   tries: number
+  /** The plan it was written for (training + kcal): a changed plan gets a fresh line. */
+  key?: string
 }
 
 export interface CoachDay {
@@ -276,7 +278,7 @@ function cleanDay(x: any): CoachDay {
   const s = x?.snap
   if (s && typeof s === 'object' && ['upper', 'legs', 'rest', 'done'].includes(s.train)) out.snap = { train: s.train, kcal: Math.round(Number(s.kcal) || 0), checks: Math.round(Number(s.checks) || 0), ticked: Math.round(Number(s.ticked) || 0) }
   const a = x?.ai
-  if (a && typeof a.line === 'string') out.ai = { line: a.line.slice(0, 600), tip: String(a.tip ?? '').slice(0, 300), src: a.src === 'ai' ? 'ai' : 'template', lang: a.lang === 'ro' ? 'ro' : 'en', at: Number(a.at) || 0, tries: Math.max(0, Math.round(Number(a.tries) || 0)) }
+  if (a && typeof a.line === 'string') out.ai = { line: a.line.slice(0, 600), tip: String(a.tip ?? '').slice(0, 300), src: a.src === 'ai' ? 'ai' : 'template', lang: a.lang === 'ro' ? 'ro' : 'en', at: Number(a.at) || 0, tries: Math.max(0, Math.round(Number(a.tries) || 0)), ...(typeof a.key === 'string' ? { key: a.key.slice(0, 40) } : {}) }
   const c = x?.checkin
   if (c && typeof c === 'object') out.checkin = { energy: n15(c.energy), soreness: n15(c.soreness), ...(c.note ? { note: String(c.note).slice(0, 300) } : {}), at: Number(c.at) || 0 }
   return out
