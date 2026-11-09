@@ -18,15 +18,15 @@
 .palette-input input { flex: 1; background: transparent !important; border: 0 !important; padding: 4px 0 !important; font-size: 16px; color: var(--text); }
 .palette-input input:focus { outline: none; }
 .palette-list { overflow-y: auto; padding: 6px; }
-.palette-group { padding: 10px 10px 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); }
+.palette-group { padding: 10px 10px 4px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--faint); }
 .palette-item { --c: var(--lime); width: 100%; display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 12px; padding: 9px 10px; border: 0; border-radius: 10px; background: transparent; text-align: left; }
 .palette-item.sel { background: var(--panel-2); }
 .pi-icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; color: var(--c); background: color-mix(in srgb, var(--c) 12%, transparent); }
 .pi-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.pi-group { font-size: 11px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; }
-.pi-hint { font-size: 12.5px; color: var(--muted); white-space: nowrap; }
+.pi-group { font-size: 12px; color: var(--faint); text-transform: uppercase; letter-spacing: 0.08em; }
+.pi-hint { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .palette-empty { padding: 26px; text-align: center; color: var(--faint); }
-.palette-foot { display: flex; gap: 18px; padding: 9px 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+.palette-foot { display: flex; gap: 18px; padding: 9px 14px; border-top: 1px solid var(--line); color: var(--faint); font-size: 13px; }
 
 /* ---------- Coins flying into the wallet ---------- */
 .wallet { position: relative; }
@@ -36,7 +36,7 @@
   background: var(--panel-2); border: 1px solid rgba(245, 200, 75, 0.45); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45), 0 0 18px rgba(245, 200, 75, 0.2);
 }
 .wallet-pop b { font: 800 15px var(--display); color: var(--gold); }
-.wallet-pop small { color: var(--muted); font-size: 12px; font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.wallet-pop small { color: var(--muted); font-size: 13px; font-weight: 500; max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
 .wallet-pop.neg { border-color: rgba(255, 93, 108, 0.45); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
 .wallet-pop.neg b { color: var(--red); }
 
@@ -68,7 +68,7 @@
 .profile-ring span { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--panel); font: 800 14px var(--display); color: var(--accent-text); }
 .profile-text { display: grid; min-width: 0; line-height: 1.25; }
 .profile-text b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.profile-text small { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.profile-text small { font-size: 13px; color: var(--muted); white-space: nowrap; }
 .profile-coins { color: var(--gold); font-weight: 700; }
 .sidebar.collapsed:not(.peek) .profile { padding: 4px; border-color: transparent; background: transparent; justify-content: center; margin: -4px 0 4px; }
 .sidebar.collapsed:not(.peek) .profile-text { display: none; }
@@ -77,7 +77,7 @@
 .nav-dot { position: absolute; top: -3px; right: -4px; width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--lime)); box-shadow: 0 0 0 2px #0e1118; }
 .nav-dot.lime { background: var(--lime); }
 .nav-dot.warn { background: var(--orange); }
-.nav-count { margin-left: auto; font-style: normal; font-size: 11px; font-weight: 700; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--c, var(--lime)) 16%, transparent); color: var(--c, var(--lime)); }
+.nav-count { margin-left: auto; font-style: normal; font-size: 12px; font-weight: 700; min-width: 20px; height: 18px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; background: color-mix(in srgb, var(--c, var(--lime)) 16%, transparent); color: var(--c, var(--lime)); }
 .nav.on .nav-count { background: color-mix(in srgb, var(--c, var(--lime)) 26%, transparent); }
 /* In the rail the count hides; the dot says there is something. */
 .sidebar.collapsed:not(.peek) .nav-count { display: none; }
@@ -94,7 +94,7 @@
 .notif-panel header { display: flex; justify-content: space-between; align-items: center; padding: 12px 14px; border-bottom: 1px solid var(--line); }
 .notif-panel h3 { font-size: 14px; }
 .notif-scroll { overflow-y: auto; padding: 6px; }
-.notif-group { padding: 10px 8px 4px; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
+.notif-group { padding: 10px 8px 4px; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); }
 .notif-item { width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 11px; align-items: center; padding: 8px; border: 0; border-radius: 10px; background: transparent; text-align: left; position: relative; }
 .notif-item:hover { background: var(--panel-2); }
 .notif-item.new::before { content: ''; position: absolute; left: 1px; top: 50%; width: 4px; height: 4px; margin-top: -2px; border-radius: 50%; background: var(--lime); }
@@ -105,7 +105,7 @@
 .alert.good .ni-icon { color: var(--accent-text); background: rgba(200, 241, 53, 0.12); }
 .ni-body { display: grid; gap: 1px; min-width: 0; }
 .ni-body b { font-size: 13.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ni-body small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ni-body small { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ni-go { color: var(--faint); font-size: 18px; }
 .notif-empty { padding: 16px 8px; color: var(--faint); font-size: 13px; }
 :root[data-theme='light'] .notif-panel { border-color: #d9dde5; box-shadow: 0 20px 60px rgba(20, 25, 34, 0.18); }
@@ -129,7 +129,7 @@
 .log-list li.warn .log-level { color: var(--orange); }
 .log-msg { display: grid; gap: 2px; min-width: 0; }
 .log-msg b { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-.log-msg small { color: var(--faint); font-size: 11.5px; }
+.log-msg small { color: var(--faint); font-size: 13px; }
 
 /* ---------- Daily quests ---------- */
 .quests.all { border-color: rgba(200, 241, 53, 0.4); }
@@ -140,7 +140,7 @@
 .quest.done .quest-check { background: var(--lime); border-color: transparent; }
 .quest-body { display: grid; gap: 4px; min-width: 0; flex: 1; }
 .quest-body b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.quest-body small { color: var(--muted); font-size: 11.5px; }
+.quest-body small { color: var(--muted); font-size: 13px; }
 .quest-body .bar { height: 5px; }
 .quest-claim { white-space: nowrap; }
 @media (max-width: 1100px) { .quest-row { grid-template-columns: 1fr; } }
@@ -148,7 +148,7 @@
 /* ---------- Journey ---------- */
 .journey { display: grid; gap: 16px; }
 .week-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; height: 170px; }
-.wb { display: grid; justify-items: center; align-content: end; gap: 6px; font-size: 12px; color: var(--muted); }
+.wb { display: grid; justify-items: center; align-content: end; gap: 6px; font-size: 13px; color: var(--muted); }
 .wb i { width: 60%; max-width: 34px; border-radius: 8px 8px 4px 4px; background: linear-gradient(180deg, var(--lime), #8fbf10); }
 .wb.today i { box-shadow: 0 0 16px rgba(200, 241, 53, 0.45); }
 .wb small { color: var(--gold); font-weight: 700; min-height: 15px; }
@@ -162,7 +162,7 @@
 .rank-step.reached { opacity: 1; }
 .rank-step.current { border-color: rgba(200, 241, 53, 0.5); box-shadow: 0 0 18px rgba(200, 241, 53, 0.15); }
 .rank-step.current b { color: var(--accent-text); }
-.rank-step small { color: var(--muted); font-size: 11.5px; }
+.rank-step small { color: var(--muted); font-size: 13px; }
 
 .day-pillar-dots {
   display: flex;

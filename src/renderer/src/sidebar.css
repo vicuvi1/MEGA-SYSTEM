@@ -34,7 +34,7 @@
 .sb-nav { display: grid; gap: 4px; overflow-y: auto; scrollbar-width: none; margin: 0 -4px; padding: 0 4px; }
 .sb-nav::-webkit-scrollbar { display: none; }
 .sb-group { display: grid; gap: 2px; }
-.sb-group-title { margin: 12px 10px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
+.sb-group-title { margin: 12px 10px 4px; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); white-space: nowrap; }
 .sb-item {
   --c: var(--lime);
   position: relative; display: flex; align-items: center; gap: 12px; height: 42px; padding: 0 10px; border: 0; border-radius: 12px;
@@ -59,7 +59,7 @@
 .sb-item.on .sb-name { color: var(--text); font-weight: 650; }
 .sb-item.soon { opacity: 0.45; }
 .sb-lock { color: var(--faint); display: inline-grid; }
-.sb-count { min-width: 22px; height: 20px; padding: 0 7px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 11px; font-weight: 800; color: var(--c); background: color-mix(in srgb, var(--c) 15%, transparent); }
+.sb-count { min-width: 22px; height: 20px; padding: 0 7px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 12px; font-weight: 800; color: var(--c); background: color-mix(in srgb, var(--c) 15%, transparent); }
 .sb-key { font: 600 10px var(--mono); color: var(--faint); opacity: 0; transition: opacity 0.15s; }
 .sb-item:hover .sb-key { opacity: 1; }
 .sb-dot { position: absolute; top: -3px; right: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--lime)); box-shadow: 0 0 0 2px #141822; }
@@ -88,7 +88,7 @@
 
 .sb-tip {
   position: fixed; left: calc(var(--rail) + 2px); z-index: 80; transform: translateY(-50%); pointer-events: none; white-space: pre;
-  padding: 6px 11px; border-radius: 9px; font-size: 12.5px; font-weight: 600; color: var(--text);
+  padding: 6px 11px; border-radius: 9px; font-size: 13px; font-weight: 600; color: var(--text);
   background: #1d2230; border: 1px solid #2c3446; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
 }
 

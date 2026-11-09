@@ -14,19 +14,21 @@
 .st-item.on svg { color: var(--accent-text); opacity: 1; }
 .st-sep { margin: 18px 12px 6px; }
 
-.st-head { margin: 0 0 20px; padding-bottom: 16px; border-bottom: 1px solid var(--border); }
-.st-head h1 { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; }
-.st-head p { font-size: 14px; margin-top: 6px; }
+.st-head { margin: 0 0 12px; padding-bottom: 10px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; }
+.st-head h1 { font-size: var(--t-xl, 22px); font-weight: 700; letter-spacing: -0.02em; }
+.st-head p { font-size: var(--t-sm, 13px); margin: 0; }
 .st-grid { grid-template-columns: minmax(0, 1fr); gap: 16px; }
 
 /* Cards inside Settings */
-.st-body .panel { padding: 20px 22px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: none; }
+.st-body .panel { padding: 18px 22px; border-radius: 16px; background: var(--surface); border: 1px solid var(--border); box-shadow: none; }
 .st-body .panel-head { margin-bottom: 12px; }
 .st-body .panel-head h2 { font-size: 16px; font-weight: 650; letter-spacing: -0.01em; }
 .st-body .panel-head h2 svg { color: var(--muted); }
-.st-body .hint { font-size: 13.5px; line-height: 1.55; }
-.st-body .hint.small { font-size: 12.5px; }
-.st-body .hint.block { max-width: 64ch; }
+.st-body .hint { font-size: var(--t-sm); line-height: 1.45; }
+.st-body .hint.small { font-size: 13px; }
+.st-body .hint.block { max-width: 92ch; margin-bottom: 8px; }
+/* Test Ben shares the class name .bt with Body → Training (its gap is 16px there). */
+.st-body .bt { gap: 10px; }
 .st-body .row { gap: 8px; }
 
 /* Updates: one clear status and one main action */
@@ -43,7 +45,7 @@
 .up .update-bar { margin-top: 14px; }
 .up-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 18px 0 12px; border-radius: 12px; overflow: hidden; background: var(--border); border: 1px solid var(--border); }
 .up-facts div { background: var(--surface); padding: 10px 14px; display: grid; gap: 2px; }
-.up-facts dt { color: var(--muted); font-size: 12px; }
+.up-facts dt { color: var(--muted); font-size: 13px; }
 .up-facts dd { margin: 0; font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .up-note { margin: 0; }
 .link-btn { background: none; border: 0; padding: 0; font: inherit; color: var(--accent-text); cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
@@ -59,12 +61,12 @@
 .ai-input { width: min(100%, 260px); padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; }
 .ai-new { margin-top: 14px; padding: 14px 16px; border-radius: 12px; background: var(--accent-soft); border: 1px solid var(--border); display: grid; gap: 6px; }
 .ai-code { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0 10px; }
-.ai-code pre { flex: 1; min-width: 0; margin: 0; padding: 10px 12px; border-radius: 10px; background: rgb(var(--ink) / 0.05); border: 1px solid var(--border); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; color: var(--text); }
+.ai-code pre { flex: 1; min-width: 0; margin: 0; padding: 10px 12px; border-radius: 10px; background: rgb(var(--ink) / 0.05); border: 1px solid var(--border); font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-all; color: var(--text); }
 .ai-list { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 2px; }
 .ai-list li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); }
 .ai-list li:last-child { border-bottom: 0; }
 .ai-name { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.ai-name small { color: var(--muted); font-size: 12.5px; }
+.ai-name small { color: var(--muted); font-size: 13px; }
 .ai-h { margin: 16px 0 4px; font-size: 14px; font-weight: 650; }
 .ai-h:first-of-type { margin-top: 0; }
 
@@ -79,3 +81,15 @@
   .up-facts { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { .up-icon.spin svg { animation: none; } }
+
+/* Settings starts right under the top bar. */
+.st { padding-top: 0; }
+
+/* Ben's brain, compact: the budget's note and its box share one row; the usage tiles keep one line each. */
+.st-body .brain-budget { grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; }
+.st-body .brain-budget > .row:first-child, .st-body .brain-budget > .brain-budget-bar { grid-column: 1 / -1; }
+.st-body .brain-budget > p { margin: 0; }
+.st-body .brain-budget input#ai-budget { width: 90px !important; flex: none; }
+.st-body .brain-card em { font-size: var(--t-xs, 12px); }
+/* Look → Pages in the menu: three columns of switches on a laptop. */
+.st-body .sx-pages { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); column-gap: 20px; }

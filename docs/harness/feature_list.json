@@ -962,6 +962,23 @@
    ],
    "evidence": "2026-11-09: smoke steps Body Today (one card, no rest/workout clash, readiness line, no check-in at 08:30, Level chip), Food counter (exactly one primary button, sheet with Photo / My meals / Type it, all old checks through the sheet), Food photo, Coach check-in; phone and desktop screenshots at 2x kept outside the repo.",
    "notes": "body/FoodCounter.tsx (+food-simple.css, sheet via createPortal), FoodFast.tsx (FoodBars hero), FoodPhotoReview.tsx (bare + pickRef), body/today/TodayTab.tsx, training/StrengthCard.tsx, coach/CoachToday.tsx (+coach-full.css, readiness/rest props), coach/CoachCheckin.tsx (open prop, folds when done), progress/GrowthLevel.tsx (chip 'Level'), core/voiceNoise.ts + voice/voiceEngine.ts."
+  },
+  {
+   "id": "F-SHELL-DESIGN",
+   "priority": 1,
+   "area": "workflow",
+   "title": "App shell and design system pass",
+   "user_visible_behavior": "One type scale (body 15px, secondary text at least 13px, tabular numbers); sidebar in sections (Today, Pinned, Plan, Body, Money, Me, More) with pins and reorder kept per device; one top bar height on every page with a short page line; sync button carries the backup state; phone toasts and the new-version bar never cover the bottom nav; sticky page tabs sit flush under the top bar",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/renderer/src/navLayout.test.ts src/renderer/src/motionBudget.test.ts",
+    "SMOKE_ONLY=\"Shell\" npm run smoke",
+    "SMOKE_ONLY=\"Phone: toasts\" npm run smoke",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-09: full vitest and full smoke pass. Measured in the full run at 1280x720 (screens / limit): Pushes 1.63/2, Brain 1.69/2, Look today 1.92/2.4, Goals 2.27/2.6, Goals week 1.39/1.75, Insights week 1.84/2.2, Career jobs 1.48/1.75, Career money 1.63/2, Rewards shop 1.69/2, Rewards all 1.62/2, Today now 1.47/1.75, Today body 1.44/1.75, Today plan 1.49/1.75. Every tab is at or under 90% of its limit.",
+   "notes": "Tokens: design.css :root. Shell rules: shellPolish.css (loads before motion.css); page-imported files (pageTabs.css, quick.css) carry their own shell rules because they load later. Sidebar layout: navLayout.ts (pure) + navPrefs.ts (ls.nav). App CSS font sizes under 12px were raised (11.5-12.5 to 13, 10.5-11 to 12), except the island, HUD, Body and Photo Locker files."
   }
  ]
 }

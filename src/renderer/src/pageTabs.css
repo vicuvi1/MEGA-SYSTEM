@@ -7,7 +7,13 @@
   margin: 0 0 var(--s-3, 12px); padding: var(--s-2, 8px) 0;
   transition: background-color 0.15s;
 }
-.ptabs-wrap.stuck { background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.ptabs-wrap.stuck { background: var(--bg); box-shadow: 0 1px 0 var(--border); }
+/* A stuck row sits under the page's top padding (--content-pt, design.css): that strip gets the
+   same backdrop, so the page never shows between the top bar and the tabs. */
+.ptabs-wrap.stuck::before {
+  content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: calc(var(--content-pt, 0px) + 1px);
+  background: inherit;
+}
 .ptabs {
   position: relative; display: flex; gap: 2px; padding: 4px; min-width: 0; max-width: 100%;
   border-radius: 999px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--border);
@@ -23,19 +29,19 @@
 .ptabs button {
   position: relative; z-index: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px;
   height: 34px; padding: 0 14px; border: 0; border-radius: 999px; background: none; flex: 0 0 auto;
-  color: var(--muted); font: inherit; font-size: 13.5px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  color: var(--muted); font: inherit; font-size: var(--t-sm, 13.5px); font-weight: 600; white-space: nowrap; cursor: pointer;
   transition: color 0.15s;
 }
 .ptabs button:hover { color: var(--text); }
 .ptabs button.on { color: var(--accent-text); }
 .ptabs button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .ptabs-n {
-  font-style: normal; font-size: 11px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+  font-style: normal; font-size: 12px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
   display: inline-grid; place-items: center; font-variant-numeric: tabular-nums;
   background: rgb(var(--ink) / 0.08); color: var(--muted);
 }
 .ptabs button.on .ptabs-n { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent-text); }
-:root[data-theme='light'] .ptabs-wrap.stuck { background: color-mix(in srgb, var(--bg) 92%, transparent); }
+:root[data-theme='light'] .ptabs-wrap.stuck { background: var(--bg); }
 
 /* Content: only the chosen panel shows; it fades in with a small rise. */
 .ptab-panel[hidden] { display: none !important; }

@@ -522,11 +522,14 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
 
       <WalletHero balance={state.balance} insights={insights} value={value} next={next} hideEmptyNext={!!goal} coupons={coupons.length} onFun={(m) => void fun(m)} onHow={() => setHow(true)} onAdd={() => setSheet('new')} ben={<BenLine text={benText} />} />
 
-      <div className="sh-top">
-        <SavingFor goals={goals} balance={state.balance} perDay={perDay} today={today} onAll={() => setTab('all')} />
-        <Combo days={insights?.focusStreak ?? 0} />
-        <BudgetMeter spent={shopValue?.funSpentLei ?? monthSpendLei(state.recent, today.slice(0, 7))} budget={shopValue?.funBudgetLei ?? null} onSet={(n) => void setBudget(n)} />
-      </div>
+      {/* What you save for, the focus combo and the money meter belong to the Shop tab (the other tabs are lists). */}
+      {shownTab === 'now' && (
+        <div className="sh-top">
+          <SavingFor goals={goals} balance={state.balance} perDay={perDay} today={today} onAll={() => setTab('all')} />
+          <Combo days={insights?.focusStreak ?? 0} />
+          <BudgetMeter spent={shopValue?.funSpentLei ?? monthSpendLei(state.recent, today.slice(0, 7))} budget={shopValue?.funBudgetLei ?? null} onSet={(n) => void setBudget(n)} />
+        </div>
+      )}
       <RewardMoneyFix onRemove={removeRewardMoney} />
 
       <div className="rx-layout rx-one">

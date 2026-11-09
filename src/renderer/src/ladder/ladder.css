@@ -27,7 +27,7 @@
 .l-future { --ql-c: var(--ql-none); }
 
 .ql { display: grid; gap: 12px; min-width: 0; }
-.ql-kicker { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.ql-kicker { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 .ql-head { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-between; align-items: flex-end; }
 .ql-head h3 { margin: 2px 0; font-size: 17px; }
 .ql-head small { color: var(--muted); }
@@ -48,14 +48,14 @@
 .ql-card header { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .ql-card h4 { margin: 0; font-size: 15px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .ql-emoji { font-size: 18px; }
-.ql-light { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.ql-light { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--muted); white-space: nowrap; }
 .ql-light i { width: 9px; height: 9px; border-radius: 50%; background: var(--ql-c); }
 .ql-card p { margin: 0; font-size: 13px; line-height: 1.4; }
 .ql-ms { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 6px; }
 .ql-ms .btn { margin-left: auto; }
-.ql-sug { color: var(--muted); font-size: 12px; }
+.ql-sug { color: var(--muted); font-size: 13px; }
 .ql-acts { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.ql-acts li { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--ql-line); }
+.ql-acts li { font-size: 13px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--ql-line); }
 .ql-acts li.ok { border-color: color-mix(in srgb, var(--ql-green) 55%, transparent); }
 .ql-acts li.mid { border-color: color-mix(in srgb, var(--ql-yellow) 55%, transparent); }
 .ql-acts li.low { border-color: color-mix(in srgb, var(--ql-red) 55%, transparent); }
@@ -67,11 +67,11 @@
 .ql-strip li { height: 8px; border-radius: 3px; background: var(--ql-c); }
 .ql-strip li.l-future { background: transparent; border: 1px solid var(--ql-line); }
 .ql-more summary,
-.ql-notnow summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.ql-notnow summary { cursor: pointer; font-size: 13px; color: var(--muted); }
 .ql-targets { display: grid; gap: 6px; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); padding-top: 6px; align-items: end; }
 .ql-targets label,
 .ql-msedit label,
-.ql-rev-goals label { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
+.ql-rev-goals label { display: grid; gap: 3px; font-size: 13px; color: var(--muted); }
 .ql-targets input,
 .ql-msedit input,
 .ql-rev-goals input { min-width: 0; width: 100%; }
@@ -82,7 +82,7 @@
 .ql-notnow summary small { margin-left: 6px; }
 .ql-notnow ul { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
 .ql-notnow li { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; }
-.ql-notnow li small { grid-column: 2; color: var(--muted); font-size: 12px; }
+.ql-notnow li small { grid-column: 2; color: var(--muted); font-size: 13px; }
 .ql-notnow li > .btn,
 .ql-swap { grid-column: 3; grid-row: 1 / span 2; }
 .ql-swap { display: flex; flex-direction: column; gap: 4px; }

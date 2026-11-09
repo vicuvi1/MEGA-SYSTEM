@@ -1,9 +1,10 @@
-// The phone's bottom bar: Today, Tasks, the quick command, Discipline and
+// The phone's bottom bar: Today, Tasks, the quick command, Coach and
 // More (every other page you use, Settings → Today screen & pages).
 import { useState } from 'react'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
+import { NAV_PAGES } from './navLayout'
 import { buzz } from './soundKit'
 
 interface Props {
@@ -31,9 +32,11 @@ export function MobileBottomBar({ page, onGo, onQuickCommand }: Props) {
     onGo(p)
   }
   const main = MAIN.filter((m) => m.id === 'today' || !hidden.has(m.id))
-  const rest = [...MODULES, ...SYSTEM_PAGES.filter((m) => m.id === 'settings')].filter(
-    (m, i, all) => m.phase === 0 && !main.some((x) => x.id === m.id) && (m.id === 'settings' || !hidden.has(m.id)) && all.findIndex((x) => x.id === m.id) === i
-  )
+  // In the sidebar's order (Plan, Body, Money, Me, More), Settings last.
+  const at = (id: PageId) => (NAV_PAGES.includes(id) ? NAV_PAGES.indexOf(id) : 99)
+  const rest = [...MODULES, ...SYSTEM_PAGES.filter((m) => m.id === 'settings' || m.id === 'notebook')]
+    .filter((m, i, all) => m.phase === 0 && !main.some((x) => x.id === m.id) && (m.id === 'settings' || !hidden.has(m.id)) && all.findIndex((x) => x.id === m.id) === i)
+    .sort((a, b) => at(a.id) - at(b.id))
   const inMore = rest.some((m) => m.id === page)
   const button = (m: { id: PageId; label: string; icon: any }) => (
     <button key={m.id} type="button" className={`mobile-nav-btn ${page === m.id ? 'active' : ''}`} onClick={() => go(m.id)}>

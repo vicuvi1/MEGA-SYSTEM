@@ -1,0 +1,110 @@
+/* ============================================================
+   App shell pass (loaded after the page styles, before motion.css).
+   Uses the tokens in design.css (type scale, spacing, --topbar-h,
+   --nav-h, --content-pt, --card-radius); it adds no new colours.
+   - one top bar height everywhere, a clear page title
+   - a calm sidebar: neutral icons, one accent for the page you are on
+   - phone: toasts and the "new version" bar never sit on the bottom nav
+   - sticky page tabs: see pageTabs.css (it loads with the pages, after this file)
+   ============================================================ */
+
+/* ---------- base ---------- */
+:root body { font-size: var(--t-md); }
+:root .content { padding-top: var(--content-pt); }
+:where(.num, .coins, .tb-coins, .sb-count, .ptabs-n, .stat .big, .big, time) { font-variant-numeric: tabular-nums; }
+:root :where(.content) :where(h1) { font-size: var(--t-h1); letter-spacing: -0.02em; }
+:root :where(.content) :where(h2) { letter-spacing: -0.01em; }
+:root .panel, :root .card { border-radius: var(--card-radius); }
+
+/* ---------- top bar: one height, title + one short line ---------- */
+:root .main > .topbar,
+:root .main > .topbar.compact {
+  box-sizing: border-box; height: var(--topbar-h); min-height: var(--topbar-h);
+  padding-block: 0; gap: var(--s-2); flex-wrap: nowrap;
+}
+:root .main > .topbar .title h1 { font-size: var(--t-xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+:root .main > .topbar .title p { font-size: var(--t-sm); color: var(--muted); margin-top: 2px; max-width: 440px; }
+:root .main > .topbar.compact .title h1 { font-size: var(--t-lg); }
+.tb-sync { position: relative; }
+.tb-search, .tb-log, .tb-icon { height: 38px; }
+.tb-me { height: 38px; }
+.topbar .tb-log { font-size: var(--t-sm); }
+.topbar .tb-search { font-size: var(--t-sm); }
+
+/* ---------- sidebar: neutral icons, one accent ---------- */
+.sb-row { position: relative; display: grid; }
+.sb-row > .sb-item, .sb-more-btn { width: 100%; }
+.sb-row.dragging { opacity: 0.5; }
+:root .sb-item { height: 40px; gap: 11px; }
+:root .sb-tile { width: 28px; height: 28px; background: transparent; color: var(--muted); }
+:root .sb-item:hover .sb-tile { color: var(--text); transform: none; }
+:root .sb-item.on .sb-tile { background: var(--accent-soft); color: var(--accent-text); }
+:root .sb-item.on .sb-tile svg path[fill] { fill-opacity: 0.25; }
+:root .sb-name { font-size: var(--t-md); font-weight: 500; }
+:root .sb-item.on .sb-name { font-weight: 600; }
+:root .sb-active { background: rgb(var(--ink) / 0.06); border: 0; }
+:root .sb-count { color: var(--accent-text); background: var(--accent-soft); font-size: var(--t-xs); }
+:root .sb-group-title { margin: 14px 10px 4px; font-size: var(--t-xs); letter-spacing: 0.08em; color: var(--muted); }
+:root[data-theme='light'] .sb-tile { filter: none; }
+.sb-g-top { margin-top: 4px; }
+
+/* Pin: shows on hover or keyboard focus; a pinned page keeps a faint pin. */
+.sb-pin {
+  position: absolute; top: 50%; right: 6px; width: 26px; height: 26px; margin-top: -13px;
+  display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent;
+  color: var(--muted); cursor: pointer; opacity: 0; transition: opacity 0.15s, color 0.15s;
+}
+.sb-row:hover .sb-pin, .sb-row:focus-within .sb-pin { opacity: 1; }
+.sb-pin:hover { color: var(--text); background: rgb(var(--ink) / 0.06); }
+.sb-pin.on { color: var(--accent-text); }
+.sb-g-pinned .sb-row { cursor: grab; }
+.sb-row:hover .sb-count { opacity: 0; }
+
+/* More: the pages you use less, folded by default. */
+.sb-more-btn {
+  position: relative; display: flex; align-items: center; gap: 11px; height: 40px; padding: 0 10px; margin-top: 10px;
+  border: 0; border-radius: 12px; background: transparent; color: var(--muted); text-align: left; cursor: pointer; transition: color 0.15s;
+}
+.sb-more-btn:hover { color: var(--text); background: rgb(var(--ink) / 0.04); }
+.sb-more-btn .sb-tile svg { transition: transform 0.2s; }
+.sb-more.open .sb-more-btn .sb-tile svg { transform: rotate(90deg); }
+.sb-more-n { font-size: var(--t-xs); color: var(--muted); }
+.sb.collapsed .sb-more-btn { width: 44px; height: 44px; padding: 0; justify-content: center; margin-inline: auto; }
+.sb.collapsed .sb-group { gap: 2px; }
+
+/* ---------- empty states ---------- */
+:root .empty-state { color: var(--muted); }
+:root .empty-state p { font-size: var(--t-sm); line-height: 1.5; }
+
+/* ---------- toasts ---------- */
+:root .toast { font-size: var(--t-sm); border-radius: 12px; padding: 10px 14px; }
+
+/* ---------- "a new version is out": a slim bar on top that pushes the app down ---------- */
+:root { --nv-h: 0px; }
+:root:has(.nv-bar) { --nv-h: 40px; }
+:root .nv-bar {
+  position: fixed; top: 0; left: 0; right: 0; bottom: auto; width: auto; transform: none;
+  box-sizing: content-box; height: 40px; padding: env(safe-area-inset-top, 0px) 12px 0;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  border-radius: 0; box-shadow: 0 1px 0 var(--border);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  font-size: var(--t-sm); z-index: 200; animation: nv-in 0.25s ease both;
+}
+:root .nv-bar span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root:has(.nv-bar) .shell { margin-top: calc(var(--nv-h) + env(safe-area-inset-top, 0px)); height: calc(100% - var(--nv-h) - env(safe-area-inset-top, 0px)); }
+@keyframes nv-in { from { opacity: 0; } }
+
+/* ---------- phone ---------- */
+@media (max-width: 768px) {
+  :root { --topbar-h: 56px; --content-pt: var(--s-3); }
+  /* Pages with a two-way switch put it on its own row under the buttons. */
+  :root .main > .topbar:has(.seg-switch) { height: auto; padding-block: 8px; }
+  :root .main > .topbar .title h1 { font-size: var(--t-xl); }
+  .mobile-nav-bar { height: calc(var(--nav-h) + var(--safe-b)) !important; box-sizing: border-box; }
+  .mobile-nav-btn { font-size: var(--t-xs) !important; font-weight: 600 !important; }
+  /* Toasts sit above the bottom nav (and its ⚡ button), never on it. */
+  :root .toasts { bottom: calc(var(--nav-h) + var(--safe-b) + 16px); max-width: calc(100vw - 24px); }
+  :root .toast { max-width: calc(100vw - 24px); }
+  :root .nv-bar { justify-content: space-between; }
+  :root:has(.nv-bar) .mobile-embed-strip { top: var(--nv-h); }
+}

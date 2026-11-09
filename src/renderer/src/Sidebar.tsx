@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { AnimatePresence, m } from 'framer-motion'
 import { Icon, Logo } from './Icon'
-import { MODULES, type ModuleDef, type PageId } from './modules'
+import { MODULES, SYSTEM_PAGES, type ModuleDef, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
+import { buildNav, movePin, togglePin } from './navLayout'
+import { useNavPrefs } from './navPrefs'
 
 export type Badge = { n?: number; dot?: 'lime' | 'warn' }
 
@@ -14,18 +16,16 @@ interface Props {
   badges: Partial<Record<PageId, Badge>>
 }
 
-// Sections in groups, in the order they appear.
-const GROUPS: { title: string; ids: PageId[] }[] = [
-  { title: 'Plan', ids: ['today', 'calendar', 'tasks', 'coach', 'goals', 'season', 'career', 'progress', 'shop'] },
-  { title: 'Life', ids: ['sleep', 'body', 'locker', 'money', 'discipline', 'music', 'custom'] }
-]
-
 export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
   const [tip, setTip] = useState<{ label: string; y: number } | null>(null)
+  const [drag, setDrag] = useState<PageId | null>(null)
   const open = !collapsed
-  const byId = Object.fromEntries(MODULES.map((m) => [m.id, m])) as Record<PageId, ModuleDef>
+  const byId = Object.fromEntries([...MODULES, ...SYSTEM_PAGES].map((m) => [m.id, m])) as Record<PageId, ModuleDef>
   const [ui] = useUiPrefs()
-  const hiddenPages = new Set(ui.hiddenPages ?? [])
+  const [prefs, setPrefs] = useNavPrefs()
+  const sections = buildNav(prefs, new Set(ui.hiddenPages ?? []))
+  // More stays open while you are on one of its pages.
+  const moreOpen = prefs.more || !!sections.find((s) => s.id === 'more')?.ids.includes(page)
   let index = 0
 
   const showTip = (label: string, el: HTMLElement) => {
@@ -34,7 +34,70 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
     setTip({ label, y: r.top + r.height / 2 })
   }
 
-  const go = (p: PageId) => onPage(p)
+  const item = (id: PageId, pinned: boolean) => {
+    const m = byId[id]
+    if (!m) return null
+    const n = ++index
+    const on = page === id
+    const soon = m.phase > 0
+    const b = badges[id]
+    const isPin = prefs.pins.includes(id)
+    return (
+      <div
+        key={id}
+        className={`sb-row ${drag === id ? 'dragging' : ''}`}
+        draggable={pinned && open}
+        onDragStart={pinned ? (e) => (setDrag(id), e.dataTransfer.setData('text/plain', id), (e.dataTransfer.effectAllowed = 'move')) : undefined}
+        onDragOver={pinned && drag ? (e) => e.preventDefault() : undefined}
+        onDrop={pinned && drag ? (e) => (e.preventDefault(), setPrefs((p) => movePin(p, drag, id)), setDrag(null)) : undefined}
+        onDragEnd={() => setDrag(null)}
+      >
+        <button
+          aria-label={m.label}
+          aria-current={on ? 'page' : undefined}
+          className={`sb-item ${on ? 'on' : ''} ${soon ? 'soon' : ''}`}
+          style={{ ['--c' as string]: m.color }}
+          onClick={() => onPage(id)}
+          onKeyDown={
+            pinned
+              ? (e) => {
+                  if (!e.altKey || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return
+                  e.preventDefault()
+                  setPrefs((p) => movePin(p, id, e.key === 'ArrowUp' ? -1 : 1))
+                }
+              : undefined
+          }
+          onMouseEnter={(e) => showTip(`${m.label}${soon ? ' · soon' : ''}${n <= 9 ? `  Alt+${n}` : ''}`, e.currentTarget)}
+          onMouseLeave={() => setTip(null)}
+        >
+          {on && <span className="sb-active" />}
+          <span className="sb-tile">
+            <Icon name={m.icon} size={17} duo={on} />
+            {b && <i className={`sb-dot ${b.dot ?? ''}`} />}
+          </span>
+          <span className="sb-label sb-name">{m.label}</span>
+          {soon && (
+            <span className="sb-label sb-lock" title="Coming soon">
+              <Icon name="lock" size={12} />
+            </span>
+          )}
+          {!soon && b?.n ? <span className="sb-label sb-count">{b.n}</span> : null}
+        </button>
+        {open && id !== 'today' && (
+          <button
+            type="button"
+            className={`sb-pin ${isPin ? 'on' : ''}`}
+            aria-label={isPin ? `Unpin ${m.label}` : `Pin ${m.label} to the top`}
+            title={isPin ? 'Unpin (drag pinned pages to reorder; Alt+↑/↓ also moves them)' : 'Pin to the top'}
+            aria-pressed={isPin}
+            onClick={() => setPrefs((p) => togglePin(p, id))}
+          >
+            <Icon name="pin" size={13} />
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="side-cell">
@@ -55,44 +118,33 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
         </div>
 
         <nav className="sb-nav" aria-label="Sections">
-          {GROUPS.map((g) => (
-            <div key={g.title} className="sb-group">
-              <div className="sb-group-title sb-label">{g.title}</div>
-              {g.ids.filter((id) => !hiddenPages.has(id)).map((id) => {
-                const m = byId[id]
-                const n = ++index
-                const on = page === id
-                const soon = m.phase > 0
-                const b = badges[id]
-                return (
-                  <button
-                    key={id}
-                    aria-label={m.label}
-                    aria-current={on ? 'page' : undefined}
-                    className={`sb-item ${on ? 'on' : ''} ${soon ? 'soon' : ''}`}
-                    style={{ ['--c' as string]: m.color }}
-                    onClick={() => go(id)}
-                    onMouseEnter={(e) => showTip(`${m.label}${soon ? ' · soon' : ''}  Alt+${n}`, e.currentTarget)}
-                    onMouseLeave={() => setTip(null)}
-                  >
-                    {on && <span className="sb-active" />}
-                    <span className="sb-tile">
-                      <Icon name={m.icon} size={17} duo={on} />
-                      {b && <i className={`sb-dot ${b.dot ?? ''}`} />}
-                    </span>
-                    <span className="sb-label sb-name">{m.label}</span>
-                    {soon && (
-                      <span className="sb-label sb-lock" title="Coming soon">
-                        <Icon name="lock" size={12} />
-                      </span>
-                    )}
-                    {!soon && b?.n ? <span className="sb-label sb-count">{b.n}</span> : null}
-                    {!soon && !b?.n && open && <kbd className="sb-label sb-key">{n}</kbd>}
-                  </button>
-                )
-              })}
-            </div>
-          ))}
+          {sections.map((g) =>
+            g.id === 'more' ? (
+              <div key={g.id} className={`sb-group sb-more ${moreOpen ? 'open' : ''}`}>
+                <button
+                  type="button"
+                  className="sb-more-btn"
+                  aria-expanded={moreOpen}
+                  aria-label={moreOpen ? 'Show fewer pages' : `More pages: ${g.ids.map((id) => byId[id]?.label).join(', ')}`}
+                  onClick={() => setPrefs((p) => ({ ...p, more: !moreOpen }))}
+                  onMouseEnter={(e) => showTip(moreOpen ? 'Fewer pages' : 'More pages', e.currentTarget)}
+                  onMouseLeave={() => setTip(null)}
+                >
+                  <span className="sb-tile">
+                    <Icon name={moreOpen ? 'chevron' : 'dots'} size={17} />
+                  </span>
+                  <span className="sb-label sb-name">{g.title}</span>
+                  <span className="sb-label sb-more-n">{moreOpen ? '' : g.ids.length}</span>
+                </button>
+                {moreOpen && g.ids.map((id) => item(id, false))}
+              </div>
+            ) : (
+              <div key={g.id} className={`sb-group sb-g-${g.id}`}>
+                {g.title && <div className="sb-group-title sb-label">{g.title}</div>}
+                {g.ids.map((id) => item(id, g.id === 'pinned'))}
+              </div>
+            )
+          )}
         </nav>
 
         <button className="sb-toggle" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'} title={collapsed ? 'Expand (Ctrl+B)' : 'Collapse (Ctrl+B)'}>

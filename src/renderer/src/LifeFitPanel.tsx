@@ -186,8 +186,10 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
   }
   return (
     <div className="bp-settings">
-      <h3 className="lf-sub">How hard, per area</h3>
-      <p className="hint block">Each nudge belongs to an area. Soft: warm, fewer nudges, no firm follow-up. Normal: direct, one follow-up. Hard: sooner and firmer.</p>
+      {/* The level words explain themselves on hover (LEVEL_HINT); one short line here. */}
+      <h3 className="lf-sub">
+        How hard, per area <small className="bp-sub-hint">Soft: warm, no follow-up · Normal: one follow-up · Hard: sooner and firmer</small>
+      </h3>
       <div className="bp-areas" role="group" aria-label="Push level per area">
         {AREAS.map((a) => (
           <div key={a} className="bp-area" data-area={a}>
@@ -205,8 +207,9 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
         ))}
       </div>
 
-      <h3 className="lf-sub">When Ben writes first</h3>
-      <p className="hint block">On the island while you're at the PC, on Telegram when you're away. Never twice. Each has its own sound in Settings → Sound.</p>
+      <h3 className="lf-sub" title="Each has its own sound in Settings → Sound.">
+        When Ben writes first <small className="bp-sub-hint">On the island at the PC, on Telegram when you're away. Never twice.</small>
+      </h3>
       <label className="check toggle-row">
         <input type="checkbox" checked={p.checkins} onChange={(e) => setP({ checkins: e.target.checked })} />
         <span>
@@ -239,9 +242,9 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
         </span>
       </label>
       {p.shutdown && (
-        <div className="lf-grid">
+        <div className="bp-inline">
           <label>
-            Minutes before bed
+            <span className="hint small">Minutes before bed</span>
             <Select value={String(p.shutdownBefore)} onChange={(e) => setP({ shutdownBefore: Number(e.target.value) })} aria-label="Minutes before bed">
               {[15, 30, 45, 60, 90].map((m) => (
                 <option key={m} value={m}>
@@ -281,9 +284,9 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
         </span>
       </label>
       {p.weekly && rh && life.coach?.rhythm && (
-        <div className="lf-grid">
+        <div className="bp-inline">
           <label>
-            Day
+            <span className="hint small">Day</span>
             <Select value={String(rh.weeklyDay ?? 0)} onChange={(e) => void setWeek({ weeklyDay: Number(e.target.value) })} aria-label="Weekly check day">
               {WEEKDAYS.map((n, i) => (
                 <option key={n} value={i}>
@@ -293,7 +296,7 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
             </Select>
           </label>
           <label>
-            Time
+            <span className="hint small">Time</span>
             <input type="time" value={rh.weekly} onChange={(e) => e.target.value && void setWeek({ weekly: e.target.value })} />
           </label>
         </div>

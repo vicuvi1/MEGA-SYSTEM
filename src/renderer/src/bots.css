@@ -60,7 +60,7 @@
   padding: 4px 12px;
   border-radius: 999px;
   font-weight: 600;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .pill-online {
@@ -98,7 +98,7 @@
 
 .bot-timestamp {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .bot-hero-actions {
@@ -134,7 +134,7 @@
 }
 
 .badge-shield {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   background: rgba(200, 241, 53, 0.12);
   color: var(--accent-text);
@@ -156,7 +156,7 @@
 }
 
 .form-group label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -192,7 +192,7 @@
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 0 12px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   font-weight: 500;
 }
@@ -204,7 +204,7 @@
 
 .form-hint {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .form-footer {
@@ -264,7 +264,7 @@
 .count-pill {
   background: var(--panel-2);
   border: 1px solid var(--line);
-  font-size: 11px;
+  font-size: 12px;
   padding: 1px 7px;
   border-radius: 999px;
   color: var(--muted);
@@ -291,7 +291,7 @@
 
 .section-intro p {
   margin: 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -325,7 +325,7 @@
 }
 
 .codex-badge {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -336,7 +336,7 @@
 }
 
 .codex-coins {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--accent-text);
   background: rgba(200, 241, 53, 0.12);
@@ -356,7 +356,7 @@
 
 .codex-cmd {
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: 13px;
   color: #00d2ff;
   font-weight: 600;
 }
@@ -365,7 +365,7 @@
   background: var(--panel-2);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: 12px;
   padding: 3px 8px;
   color: var(--muted);
   transition: 0.15s; transition-property: color, background-color, border-color, opacity, transform;
@@ -378,7 +378,7 @@
 }
 
 .codex-desc {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   margin: 0;
   line-height: 1.4;
@@ -414,7 +414,7 @@
 
 .ecosystem-header small {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .badge-icon {
@@ -450,7 +450,7 @@
 }
 
 .ecosystem-inputs label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   font-weight: 600;
   text-transform: uppercase;
@@ -462,7 +462,7 @@
   color: var(--text);
   border-radius: 6px;
   padding: 6px 10px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .ecosystem-footer {
@@ -472,7 +472,7 @@
 }
 
 .status-tag {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -505,7 +505,7 @@
   background: transparent;
   border: none;
   outline: none;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text);
   width: 100%;
 }
@@ -516,7 +516,7 @@
 }
 
 .btn-sm {
-  font-size: 12px;
+  font-size: 13px;
   padding: 5px 12px;
 }
 
@@ -572,7 +572,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .log-badge {
@@ -600,17 +600,17 @@
 
 .log-chat {
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .log-time {
   margin-left: auto;
   color: var(--faint);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .log-response {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
   background: var(--bg);
   border-radius: 6px;

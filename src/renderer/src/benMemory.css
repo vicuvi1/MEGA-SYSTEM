@@ -12,7 +12,7 @@
 .bm-ic { flex: none; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 9px; background: rgb(var(--ink) / 0.06); font-size: 15px; }
 .bm-body { flex: 1; min-width: 0; display: grid; gap: 2px; }
 .bm-text { overflow-wrap: anywhere; }
-.bm-meta { color: var(--muted); font-size: 12px; }
+.bm-meta { color: var(--muted); font-size: 13px; }
 .bm-acts { display: flex; gap: 4px; flex: none; }
 .bm-row { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
 .bm-past { margin-top: 14px; }
