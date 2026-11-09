@@ -1588,7 +1588,8 @@ try {
       if (session && !(await pg.locator(`${strip} .ct-start`).count())) throw new Error('the coach strip has no Start')
       if (!session && !(await pg.locator(`${strip} .ct-done`).count())) throw new Error('a workout logged today does not show as done')
       for (const c of ['weigh', 'bed']) if (!(await pg.locator(`${strip} [data-check="${c}"]`).count())) throw new Error(`the coach strip has no ${c} tick`)
-      if (!(await pg.locator(`${strip} [data-meal]`).count())) throw new Error('the coach strip has no meal to tick')
+      // The next meal to tick, or "All meals" when the whole standard day is already logged (the Food counter step logs it).
+      if (!(await pg.locator(`${strip} [data-meal]`).count()) && !(await pg.locator(`${strip} .ct-check.on`, { hasText: 'All meals' }).count())) throw new Error('the coach strip has no meal to tick')
       if ((await pg.locator(strip).boundingBox()).height > 64) throw new Error(`the coach strip is ${(await pg.locator(strip).boundingBox()).height}px tall (one slim line)`)
       // Each thing once: the workout is the coach's, so the Workout habit is folded out of Now's habits.
       if ((await pg.locator('[data-tabpanel="now"] .hb-name').allInnerTexts()).some((t) => t.trim() === 'Workout')) throw new Error('the workout shows twice on Now (coach and habits)')
@@ -1604,16 +1605,25 @@ try {
       if ((await pg.locator(`${card} .ct-tip`).innerText()).trim().length < 10) throw new Error('no tip')
       // 3. Tick a meal: the usual meal is logged in Food (a real log, with an Undo toast), the tick follows it. No points.
       const ledgerBefore = Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value)
-      const meal = await pg.locator(`${card} .ct-meals li:not(.on)`).first().getAttribute('data-meal')
-      await pg.click(`${card} .ct-meals li[data-meal="${meal}"] .ct-tick`)
-      await pg.waitForSelector(`${card} .ct-meals li.on[data-meal="${meal}"]`, { timeout: 10000 })
-      if (!(await pg.locator('.toast.has-action .toast-act').count())) throw new Error('logging a meal has no Undo')
+      const open0 = await pg.locator(`${card} .ct-meals li:not(.on)`).count()
+      let meal = null
+      if (!open0) {
+        // Every meal is already logged today: each tick came from a real food log.
+        meal = await pg.locator(`${card} .ct-meals li.on`).first().getAttribute('data-meal')
+      } else {
+        meal = await pg.locator(`${card} .ct-meals li:not(.on)`).first().getAttribute('data-meal')
+        await pg.click(`${card} .ct-meals li[data-meal="${meal}"] .ct-tick`)
+        await pg.waitForSelector(`${card} .ct-meals li.on[data-meal="${meal}"]`, { timeout: 10000 })
+        if (!(await pg.locator('.toast.has-action .toast-act').count())) throw new Error('logging a meal has no Undo')
+      }
       // It was a real food-counter meal, with its standard-day slot.
       await until(async () => ((await sql("SELECT value FROM settings WHERE key = 'food_log'")).rows[0]?.[0]?.value ?? '').includes(`"slot":"${meal}"`), 'the ticked meal did not reach the food log')
       // "Ate other": your own tick, nothing logged. Bed is your own tick too.
-      const other = await pg.locator(`${card} .ct-meals li:not(.on)`).nth(1).getAttribute('data-meal')
-      await pg.click(`${card} .ct-meals li[data-meal="${other}"] .ct-other`)
-      await pg.waitForSelector(`${card} .ct-meals li.on[data-meal="${other}"]`, { timeout: 10000 })
+      if (open0 > 1) {
+        const other = await pg.locator(`${card} .ct-meals li:not(.on)`).first().getAttribute('data-meal')
+        await pg.click(`${card} .ct-meals li[data-meal="${other}"] .ct-other`)
+        await pg.waitForSelector(`${card} .ct-meals li.on[data-meal="${other}"]`, { timeout: 10000 })
+      }
       await pg.click(`${card} [data-check="bed"]`)
       await pg.waitForSelector(`${card} [data-check="bed"].on`, { timeout: 8000 })
       if (!(Number((await pg.locator(`${card} .ct-count`).innerText()).split('/')[0]) >= 2)) throw new Error('the tick count did not move')
