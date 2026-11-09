@@ -17,6 +17,7 @@ import { buildCommands, Palette, type Command } from './Palette'
 import { Notifications, type Alert } from './Notifications'
 import { NotifToasts } from './NotifToasts'
 import { RestDayButton } from './RestDay'
+import { GrowthChip } from './body/progress/GrowthLevel'
 import { Sidebar } from './Sidebar'
 import { MobileBottomBar } from './MobileBottomBar'
 import { PwaInstallBanner } from './PwaInstallBanner'
@@ -769,6 +770,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <Icon name="expand" size={16} />
             </button>
           )}
+          {page === 'body' && <GrowthChip where="body" />}
           {page === 'body' && <RestDayButton />}
           <button
             className={`tb-icon ${isSyncingMobile ? 'spinning' : ''}`}

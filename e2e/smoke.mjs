@@ -6040,6 +6040,98 @@ try {
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
 
+  // Body → Growth: the long run. Hero numbers with a period switch, the honest growth level (bar, what to do,
+  // history), charts, month-by-month rows with Copy CSV, the level chip on the Body header and Today, no points.
+  // GROWTH_SHOTS=<dir> saves growth-hero-phone.png and growth-charts-desktop.png (E2E_GROWTH_DEMO=1: six made-up months).
+  await step('Body growth: hero numbers, period switch, level bar and what to do, charts, monthly rows and CSV, header and Today chips, no points', async () => {
+    const shots = process.env.GROWTH_SHOTS
+    const sqlN = async (q) => Number((await (await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: q, args: [] } }] }) })).json()).results[0].response.result.rows[0][0].value)
+    const ledgerBefore = await sqlN('SELECT COUNT(*) FROM ledger')
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="growth"]', { timeout: 20000 })
+    const tabs = await pg.locator('.body-page .ptabs [role="tab"]').evaluateAll((bs) => bs.map((b) => b.dataset.tab))
+    if (tabs.join() !== 'today,food,training,growth,progress') throw new Error(`Body tabs ${tabs.join()}`)
+    // The level chip sits in the Body header and opens Growth.
+    await pg.waitForSelector('.topbar .gr-chip-body', { timeout: 15000 })
+    await pg.click('.body-page .ptabs [data-tab="today"]')
+    await pg.click('.topbar .gr-chip-body')
+    await pg.waitForFunction(() => document.querySelector('.body-page .ptabs [data-tab="growth"]')?.getAttribute('aria-selected') === 'true', null, { timeout: 5000 })
+    const gr = '#ptp-body-growth'
+    await pg.waitForSelector(`${gr} .gr-hero .gr-tile`, { timeout: 20000 })
+    // Hero: seven numbers; sessions and protein days are counts, the rest a number or "—" with a reason.
+    const tiles = await pg.locator(`${gr} .gr-tile`).evaluateAll((ls) => ls.map((l) => [l.dataset.k, l.querySelector('b').textContent, l.querySelector('small').textContent]))
+    if (tiles.length !== 7) throw new Error(`the hero has ${tiles.length} numbers`)
+    for (const [k, v, sub] of tiles) if (!/^([+−±]?\d+(\.\d)?( kg| cm|%)?|—)$/.test(v) || !sub) throw new Error(`hero ${k} reads "${v}" (${sub})`)
+    if (process.env.E2E_GROWTH_DEMO && !/^\+\d/.test(tiles.find((t) => t[0] === 'weight')[1])) throw new Error('the demo weight did not go up')
+    // The period switch: 4 weeks then back to All time.
+    await pg.locator(`${gr} .gr-periods button`, { hasText: '4 weeks' }).click()
+    await pg.waitForFunction((g) => /last 4 weeks/i.test(document.querySelector(`${g} .gr-hero .bpg-eyebrow`)?.textContent ?? ''), gr, { timeout: 5000 })
+    await pg.locator(`${gr} .gr-periods button`, { hasText: 'All time' }).click()
+    await pg.waitForFunction((g) => /since you started/i.test(document.querySelector(`${g} .gr-hero .bpg-eyebrow`)?.textContent ?? ''), gr, { timeout: 5000 })
+    // The level: a name, a bar, XP to the next level and what to do; the history opens with dates.
+    await pg.waitForSelector(`${gr} .gr-level .gr-lbar[role="progressbar"]`, { timeout: 5000 })
+    if (!/Seedling|Sprout|Builder|Solid|Athlete|Strong|Powerhouse|Elite|Titan|Legend/.test(await pg.locator(`${gr} .gr-level-name`).innerText())) throw new Error('no growth level name')
+    if (!/XP to /.test(await pg.locator(`${gr} .gr-level .gr-bar-wrap`).innerText())) throw new Error('the level bar does not say what is left')
+    if ((await pg.locator(`${gr} .gr-next li`).count()) < 1) throw new Error('no "next level: what to do"')
+    await pg.locator(`${gr} .gr-party button`).click({ timeout: 1500 }).catch(() => {})
+    await pg.locator(`${gr} .gr-history summary`).click()
+    if ((await pg.locator(`${gr} .gr-timeline li time`).count()) < 1) throw new Error('the level history has no dates')
+    // Charts: drawn (or a calm empty line), sessions always draw bars against the plan.
+    await pg.waitForSelector(`${gr} section[aria-label="Sessions per week"] svg.gr-chart`, { timeout: 5000 })
+    if ((await pg.locator(`${gr} .gr-charts section`).count()) !== 8) throw new Error('not 8 long-run charts')
+    if (process.env.E2E_GROWTH_DEMO) {
+      await pg.waitForSelector(`${gr} section[aria-label="Weekly average weight"] .gr-band`, { timeout: 5000 })
+      const box = await pg.locator(`${gr} section[aria-label="Weekly average weight"] svg`).boundingBox()
+      await pg.mouse.move(box.x + box.width * 0.6, box.y + box.height / 2)
+      await pg.waitForSelector(`${gr} section[aria-label="Weekly average weight"] .gr-tip`, { timeout: 3000 })
+      await pg.mouse.move(0, 0)
+    }
+    // Month by month, and Copy CSV.
+    if ((await pg.locator(`${gr} .gr-table tbody tr`).count()) < 1) throw new Error('no monthly rows')
+    await pg.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
+    await pg.locator(`${gr} .gr-months .btn`).click()
+    await pg.waitForFunction((g) => /Copied CSV/.test(document.querySelector(`${g} .gr-months .btn`)?.textContent ?? ''), gr, { timeout: 5000 })
+    const csv = await pg.evaluate(() => navigator.clipboard.readText()).catch(() => '')
+    if (csv && !/^month,weight_kg,waist_cm,strength_pct,sessions,protein_goal_days,growth_level\n\d{4}-\d{2},/.test(csv)) throw new Error(`the CSV reads "${csv.slice(0, 80)}"`)
+    // "Log weight / waist" opens the Log body sheet.
+    await pg.locator(`${gr} .gr-actions .btn`, { hasText: 'Log weight' }).click()
+    await pg.waitForSelector('.blog-sheet', { timeout: 5000 })
+    await pg.keyboard.press('Escape')
+    await pg.locator('.blog-sheet .blog-close, .blog-sheet [aria-label="Close"]').first().click({ timeout: 1500 }).catch(() => {})
+    await pg.waitForFunction(() => !document.querySelector('.blog-sheet'), null, { timeout: 5000 })
+    if (shots) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      const cdp = await pg.context().newCDPSession(pg)
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 1100, deviceScaleFactor: 1, mobile: false })
+      await pg.waitForTimeout(500)
+      await pg.locator(`${gr} .gr-charts`).screenshot({ path: `${shots}/growth-charts-desktop.png` })
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 390, height: 844, deviceScaleFactor: 2, mobile: true })
+      await pg.waitForTimeout(600)
+      await pg.evaluate((g) => document.querySelector(g)?.scrollIntoView({ block: 'start' }), gr)
+      await pg.locator(`${gr} .gr-hero`).screenshot({ path: `${shots}/growth-hero-phone.png` })
+      await pg.locator(`${gr} .gr-level`).screenshot({ path: `${shots}/growth-level-phone.png` })
+      await cdp.send('Emulation.clearDeviceMetricsOverride')
+      await cdp.detach()
+    }
+    // No sideways scroll on a phone or a laptop.
+    for (const [w, h] of [[390, 844], [1280, 720]]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.waitForTimeout(300)
+      const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (over > 1) throw new Error(`Body growth scrolls sideways at ${w}px (${over}px)`)
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await pg.click('.body-page .ptabs [data-tab="today"]')
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
+    // Today: one small chip on Now.
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.waitForSelector('[data-tabpanel="now"] .now-top .gr-chip-today', { timeout: 10000 })
+    if ((await sqlN('SELECT COUNT(*) FROM ledger')) !== ledgerBefore) throw new Error('Growth paid points')
+  })
+
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

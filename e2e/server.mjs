@@ -385,6 +385,61 @@ if (process.env.E2E_BODY_DEMO) {
   })
 }
 
+// E2E_GROWTH_DEMO=1: six months of made-up growth data (Body → Growth screenshots): weigh-ins on a
+// made-up scale (+0.3 kg a week, waist nearly flat), sets with harder steps, food, sleep. Off for the smoke test.
+if (process.env.E2E_GROWTH_DEMO) {
+  const bc = db.prepare('INSERT OR REPLACE INTO body_comp (id, at, day, weight_kg, body_fat_pct, muscle_kg, waist_cm, source, raw, dedupe, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)')
+  const p = db.prepare('INSERT INTO body_log (id, at, day, kind, amount, source) VALUES (?, ?, ?, ?, ?, ?)')
+  const sl = db.prepare('INSERT OR REPLACE INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+  const sets = {}
+  for (let n = 182; n >= 1; n--) {
+    const wk = (182 - n) / 7
+    const t = new Date(Date.now() - n * 864e5)
+    t.setHours(7, 12, 0, 0)
+    const iso = t.toISOString()
+    if (n % 7 !== 2 && n % 11 !== 5) {
+      const kg = Math.round((66.2 + wk * 0.3 + Math.sin(n * 1.3) * 0.35) * 10) / 10
+      const dd = `${iso.slice(0, 16)}|${kg.toFixed(1)}`
+      bc.run([`bc_${dd.replace(/[^0-9A-Za-z.]/g, '')}`, iso, day(n), kg, Math.round((15.8 - wk * 0.02 + Math.sin(n) * 0.4) * 10) / 10, Math.round((52.4 + wk * 0.2 + Math.cos(n) * 0.25) * 10) / 10, n % 7 === 0 ? Math.round((77.2 + wk * 0.04) * 10) / 10 : null, 'manual', dd, iso])
+    }
+    if (n % 9 !== 4) {
+      p.run([`gd-k${n}`, `${day(n)}T19:00:00.000Z`, day(n), 'kcal:food', 2700 + ((n * 53) % 400), 'web'])
+      p.run([`gd-p${n}`, `${day(n)}T19:00:00.000Z`, day(n), 'protein:chicken', 110 + ((n * 29) % 50), 'web'])
+    }
+    if (n % 10 !== 3) sl.run([day(n), '07:00', '07:00', 1, n % 3 ? '23:20' : '00:10', '23:30', 1, `${day(n)}T07:05:00.000Z`])
+    if ([1, 2, 3, 5, 6].includes(n % 7) && n % 13 !== 0) {
+      const at = Date.now() - n * 864e5
+      const a = (id, reps) => ((sets[day(n)] ??= {})[id] = reps.map((r, i) => ({ reps: r, at: at + i * 60000, id: `g${n}${id}${i}` })))
+      const lvl = Math.floor(wk / 2)
+      if (wk < 9) a('pushups', [12 + lvl, 11 + lvl, 10 + lvl])
+      else if (wk < 18) a('diamond', [7 + Math.floor((wk - 9) / 2), 6 + Math.floor((wk - 9) / 2)])
+      else a('decline', [7 + Math.floor((wk - 18) / 2), 6 + Math.floor((wk - 18) / 2)])
+      a(wk < 12 ? 'squats' : 'split', wk < 12 ? [20 + lvl, 18 + lvl] : [9 + Math.floor((wk - 12) / 2), 8 + Math.floor((wk - 12) / 2)])
+      a('rows', [9 + Math.floor(wk / 3), 8 + Math.floor(wk / 3)])
+      if (n % 2) a('plank', [40 + Math.round(wk * 2)])
+    }
+  }
+  db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ['body_plus', JSON.stringify({ gPerKg: 1.8, meals: [], favs: [], supps: [], fuelLead: 60, photoEvery: 14 })])
+  db.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ['sport_tracker_json', JSON.stringify({
+    savedAt: Date.now(),
+    data: {
+      lastDate: day(0),
+      exercises: [
+        { id: 'pushups', name: 'Push-ups', target: 36, unit: 'reps', active: true, move: 'pushup', doneToday: 0 },
+        { id: 'diamond', name: 'Diamond push-ups', target: 24, unit: 'reps', active: true, move: 'diamond_pushup', doneToday: 0 },
+        { id: 'decline', name: 'Decline push-ups', target: 24, unit: 'reps', active: true, move: 'decline_pushup', doneToday: 0 },
+        { id: 'squats', name: 'Squats', target: 45, unit: 'reps', active: true, move: 'squat', doneToday: 0 },
+        { id: 'split', name: 'Split squats', target: 30, unit: 'reps', active: true, move: 'split_squat', doneToday: 0 },
+        { id: 'rows', name: 'Table rows', target: 27, unit: 'reps', active: true, move: 'table_row', doneToday: 0 },
+        { id: 'plank', name: 'Plank', target: 60, unit: 'sec', active: true, move: 'plank', doneToday: 0 }
+      ],
+      water: { currentMl: 0, targetMl: 2500, glassSizeMl: 250 },
+      history: [],
+      sets
+    }
+  })])
+}
+
 // E2E_REWARDS_DEMO=1: a month of made-up points and a few made-up rewards, for
 // looking at the Rewards page (screenshots). Off for the smoke test.
 if (process.env.E2E_REWARDS_DEMO) {

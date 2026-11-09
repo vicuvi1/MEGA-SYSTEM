@@ -1,4 +1,4 @@
-// Body → Metrics & Workouts: four tabs (Today · Food · Training · Progress).
+// Body → Metrics & Workouts: five tabs (Today · Food · Training · Growth · Progress).
 // The shell only: each tab is one component, so each can change on its own.
 // Shared look: body/body-theme.css. Sheets (log workout, weight & waist, add
 // exercise): body/BodySheets.tsx.
@@ -19,11 +19,13 @@ import '../body/body-plus.css'
 import '../body/body-theme.css'
 import { BodyTraining } from '../body/training/BodyTraining'
 import { BodyProgress } from '../body/progress/BodyProgress'
+import { GrowthTab } from '../body/progress/GrowthTab'
 
 const BODY_TABS = [
   { id: 'today', label: 'Today', title: 'Your rank, today’s workout, readiness, food, water and the body map' },
   { id: 'food', label: 'Food', title: 'Food counter: meals, protein and kcal, what to eat next' },
   { id: 'training', label: 'Training', title: 'Home program, challenges, sets per muscle, strength, workouts' },
+  { id: 'growth', label: 'Growth', title: 'How much you are growing: the long run, your growth level, month by month' },
   { id: 'progress', label: 'Progress', title: 'Weight trend, measurements, photos, your week' }
 ]
 
@@ -81,6 +83,10 @@ export function Body({
 
       <TabPanel page="body" id="training" value={tab} className="body-tab">
         <BodyTraining state={state} onState={onState} onWallet={onWallet} hold={hold} onOpenSportApp={onOpenSportApp} />
+      </TabPanel>
+
+      <TabPanel page="body" id="growth" value={tab} className="body-tab">
+        {tab === 'growth' && <GrowthTab onLog={() => setMetricOpen(true)} lastWeight={state.latestWeight} />}
       </TabPanel>
 
       <TabPanel page="body" id="progress" value={tab} className="body-tab">
