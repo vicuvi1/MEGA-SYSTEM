@@ -116,3 +116,35 @@
 .sh-moneyfix-what { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sh-moneyfix-tag { font-size: 11px; padding: 2px 6px; border-radius: 999px; background: var(--surface-2, var(--border)); color: var(--muted); }
 .sh-moneyfix > .rx-btn { justify-self: start; }
+
+/* Shorter pages: folded long lists, tighter rhythm, smaller empty states */
+.rx-showall { justify-self: start; align-self: flex-start; }
+.rx-earn { gap: 10px; }
+.rx-earn-col { gap: 10px; }
+.rx-panel { padding: 10px 14px; gap: 8px; }
+.rx-chart { gap: 6px; }
+.rx-chart-foot { min-height: 16px; }
+.rx-from-list { gap: 4px; }
+.rx-earn .rx-badge-grid li { padding: 4px 2px; }
+.rx-earn .rx-badge-ico { font-size: 20px; }
+.rx-empty { padding: 16px 14px; gap: 6px; }
+.rx-history li { padding: 5px 10px; }
+.rx-unlock, .rx-all { gap: 10px; }
+.sh-more { gap: 10px; }
+.rx-chart-svg { height: 84px; }
+@media (min-width: 1101px) {
+  .rx-earn { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .rx-earn > .rx-panel:not(.rx-from, .rx-quests, .rx-badges-panel) { grid-column: span 2; }
+  .rx-earn .rx-badges-panel { grid-column: auto; }
+  .rx-earn .rx-badge-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+/* Smaller idea cards */
+.rx-sug-top { aspect-ratio: 16 / 5; }
+.rx-sug-top .rx-emoji { font-size: 32px; }
+.rx-sug-body { gap: 5px; padding: 8px 12px 10px; }
+.rx-sug-why { min-height: 0; -webkit-line-clamp: 2; }
+.rx-sug-extra { display: none; }
+/* Shorter cards on the shelves and in All */
+.rx-card .rx-top, .rx-card.compact .rx-top { aspect-ratio: 16 / 6; }
+.rx-card .rx-emoji, .rx-card.compact .rx-emoji { font-size: 38px; }
+.rx-card .rx-body, .rx-card.compact .rx-body { gap: 5px; padding: 8px 12px 10px; }
