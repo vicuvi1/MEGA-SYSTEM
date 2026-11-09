@@ -135,6 +135,8 @@ export function Chests({ levels, onOpen }: { levels: number[]; onOpen: (level: n
 
 export function Badges({ list }: { list: Badge[] }) {
   const got = list.filter((b) => b.earned).length
+  const [all, setAll] = useState(false)
+  const shown = all ? list : list.slice(0, 10)
   return (
     <section className="rx-panel rx-badges-panel">
       <header>
@@ -144,13 +146,18 @@ export function Badges({ list }: { list: Badge[] }) {
         </span>
       </header>
       <ul className="rx-badge-grid">
-        {list.map((b) => (
+        {shown.map((b) => (
           <li key={b.id} className={b.earned ? 'on' : ''} title={`${b.title}: ${b.hint}`} style={{ '--p': b.progress } as CSSProperties}>
             <span className="rx-badge-ico" aria-hidden>{b.emoji}</span>
             <small>{b.title}</small>
           </li>
         ))}
       </ul>
+      {list.length > 10 && !all && (
+        <button type="button" className="rx-btn small ghost rx-showall" onClick={() => setAll(true)}>
+          Show all ({list.length})
+        </button>
+      )}
     </section>
   )
 }

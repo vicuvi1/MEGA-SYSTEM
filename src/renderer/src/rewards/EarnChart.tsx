@@ -10,8 +10,8 @@ export function EarnChart({ e }: { e: Earnings }) {
   const [ref, seen] = useSeen<HTMLDivElement>()
   const [hover, setHover] = useState<number | null>(null)
   const W = 300
-  const H = 120
-  const base = 84
+  const H = 84
+  const base = 58
   // One scale for both, so a spend looks as big as the same points earned.
   const perPt = (base - 6) / Math.max(10, ...e.days.map((d) => d.total))
   const up = (v: number) => v * perPt
@@ -42,7 +42,7 @@ export function EarnChart({ e }: { e: Earnings }) {
           <small>spent {e.spent.toLocaleString()}</small>
         </div>
       </div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="rx-chart-svg" role="img" aria-label={`Points earned and spent over 30 days: ${e.earned} earned, ${e.spent} spent`} onPointerLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="rx-chart-svg" role="img" aria-label={`Points earned and spent over 30 days: ${e.earned} earned, ${e.spent} spent`} onPointerLeave={() => setHover(null)}>
         <line x1="0" x2={W} y1={base + 0.5} y2={base + 0.5} className="axis" />
         {e.days.map((d, i) => {
           let y = base

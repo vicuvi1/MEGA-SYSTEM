@@ -483,6 +483,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
       /* a convenience only */
     }
   }
+  const [unlockIdeasOpen, setUnlockIdeasOpen] = useState(false)
   const [ideasOpen, setIdeasOpen] = useState(() => {
     try {
       return localStorage.getItem('ls.rw.ideas') === '1'
@@ -569,13 +570,26 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
             <div className="rx-unlock" role="tabpanel" data-tabpanel="unlock">
               <p className="rx-sub rx-unlock-intro">These open when you really did it: a workout streak, hours of focus, nights on time. Your points still count; only the buy waits.</p>
               {lockedList.length ? (
-                <div className="rx-grid">{lockedList.map((r) => card(r))}</div>
+                <Folded n={lockedList.length} keep={6}>
+                  {(all) => <div className="rx-grid">{(all ? lockedList : lockedList.slice(0, 6)).map((r) => card(r))}</div>}
+                </Folded>
               ) : (
                 <div className="rx-slim-empty">
                   <span>No reward is locked yet. Add an idea below, or use any card's ⋯ menu → "Unlock by doing…".</span>
                 </div>
               )}
-              {more && <SuggestRow list={more.unlockIdeas} onAdd={addSuggestion} onHide={(k) => void hideSuggestion(k)} title="Ideas to unlock by doing" sub="Each one comes with its lock" />}
+              {more && more.unlockIdeas.length > 0 && (
+                <section className={`rx-sec sh-shelf ${unlockIdeasOpen ? 'open' : 'shut'}`}>
+                  <header>
+                    <button type="button" className="sh-shelf-head" aria-expanded={unlockIdeasOpen} onClick={() => setUnlockIdeasOpen(!unlockIdeasOpen)}>
+                      <span className="sh-chev" aria-hidden>{unlockIdeasOpen ? '▾' : '▸'}</span>
+                      <h3>Ideas to unlock by doing</h3>
+                      <span className="sh-count">{more.unlockIdeas.length}</span>
+                    </button>
+                  </header>
+                  {unlockIdeasOpen && <SuggestRow list={more.unlockIdeas} onAdd={addSuggestion} onHide={(k) => void hideSuggestion(k)} title="Ideas to unlock by doing" sub="Each one comes with its lock" />}
+                </section>
+              )}
             </div>
           )}
 
@@ -603,7 +617,9 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
                   </button>
                 </div>
               )}
-              <div className="rx-grid">{list.map((r) => card(r, !cat && !only))}</div>
+              <Folded n={list.length} keep={6} always={!!cat || !!only}>
+                {(all) => <div className="rx-grid">{(all ? list : list.slice(0, 6)).map((r) => card(r, !cat && !only))}</div>}
+              </Folded>
               {life.shop.reorder && live.length > 1 && <p className="rx-sub rx-drag-hint">Drag a card to change the order.</p>}
             </div>
           )}
@@ -685,7 +701,24 @@ function JarEditor({ r, balance, onPut, onTake, onClose }: { r: Reward; balance:
   )
 }
 
+/** A long list shows its first few items and a "Show all (N)" button. */
+function Folded({ n, keep, always, children }: { n: number; keep: number; always?: boolean; children: (all: boolean) => React.ReactNode }) {
+  const [all, setAll] = useState(false)
+  const full = all || !!always || n <= keep
+  return (
+    <>
+      {children(full)}
+      {!full && (
+        <button type="button" className="rx-btn small ghost rx-showall" onClick={() => setAll(true)}>
+          Show all ({n})
+        </button>
+      )}
+    </>
+  )
+}
+
 function History({ recent, currency, onUndo }: { recent: ShopState['recent']; currency: string; onUndo: ((ledgerId: number, title: string) => void) | null }) {
+  const [all, setAll] = useState(false)
   if (!recent.length)
     return (
       <div className="rx-empty">
@@ -693,9 +726,11 @@ function History({ recent, currency, onUndo }: { recent: ShopState['recent']; cu
         <span>Your first reward will show here.</span>
       </div>
     )
+  const shown = all ? recent : recent.slice(0, 8)
   return (
+    <>
     <ul className="rx-history">
-      {recent.map((x, i) => (
+      {shown.map((x, i) => (
         <li key={x.ledgerId ?? i} className={x.undone ? 'undone' : ''}>
           <Cover r={{ title: x.title, emoji: x.emoji ?? null, imageUrl: x.imageUrl ?? null, category: (x.category as RewardCategory) ?? null }} small />
           <span className="rx-h-text">
@@ -715,5 +750,11 @@ function History({ recent, currency, onUndo }: { recent: ShopState['recent']; cu
         </li>
       ))}
     </ul>
+    {recent.length > 8 && !all && (
+      <button type="button" className="rx-btn small ghost rx-showall" onClick={() => setAll(true)}>
+        Show all ({recent.length})
+      </button>
+    )}
+    </>
   )
 }
