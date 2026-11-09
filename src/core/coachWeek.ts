@@ -22,7 +22,7 @@ export interface WeekInput {
   levelUps: string[]
   /** Ladders ready to move up now (the roadmap's rule). */
   ready: { ladder: string; index: number; name: string }[]
-  checkins: { energy: number; soreness: number }[]
+  checkins: { energy: number; soreness: number; sleep?: number | null }[]
   /** The calorie check now (core/foodAdjust.ts). */
   adjust: AdjustCheck
   /** Today's food goal (kcal). */
@@ -59,6 +59,8 @@ export interface WeekReview {
     levelUps: string[]
     energy: number | null
     soreness: number | null
+    /** Average hours slept from the check-ins (null without any). */
+    sleep?: number | null
   }
   decisions: Decision[]
   /** Calm notes (no decision): a cut that the rules held back, low intake. */
@@ -79,6 +81,7 @@ export function weeklyReview(i: WeekInput): WeekReview {
   const protein = avgOf(i.food.map((f) => f.protein))
   const energy = avgOf(i.checkins.map((c) => c.energy))
   const soreness = avgOf(i.checkins.map((c) => c.soreness))
+  const sleep = avgOf(i.checkins.map((c) => c.sleep).filter((x): x is number => typeof x === 'number' && x > 0))
   const decisions: Decision[] = []
   const notes: string[] = []
 
@@ -100,7 +103,7 @@ export function weeklyReview(i: WeekInput): WeekReview {
 
   return {
     week: i.week,
-    stats: { avg: cur?.avg ?? null, change, waist: i.waist, kcal: kcal == null ? null : Math.round(kcal), protein: protein == null ? null : Math.round(protein), foodDays: i.food.length, sessions: i.sessions, levelUps: i.levelUps, energy: energy == null ? null : r1(energy), soreness: soreness == null ? null : r1(soreness) },
+    stats: { avg: cur?.avg ?? null, change, waist: i.waist, kcal: kcal == null ? null : Math.round(kcal), protein: protein == null ? null : Math.round(protein), foodDays: i.food.length, sessions: i.sessions, levelUps: i.levelUps, energy: energy == null ? null : r1(energy), soreness: soreness == null ? null : r1(soreness), sleep: sleep == null ? null : r1(sleep) },
     decisions,
     notes,
     summary: summaryLine(i, change)

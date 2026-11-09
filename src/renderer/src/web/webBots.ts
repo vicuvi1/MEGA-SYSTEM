@@ -11,7 +11,7 @@ import type { BotBridgeConfig, BotLogEntry } from '@shared/api'
 import { parseTelegramText } from '@core/botCommands'
 import { addDays, calendarDay } from '@core/dates'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
-import { logReps, saveSport } from '../../../main/bodyLog'
+import { logReps, saveSport, sportBlob } from '../../../main/bodyLog'
 import { queueFinanceExpense } from './financeInbox'
 import { deleteMoney, editMoney, keepMoneyAsk, logMoney, moneyRecord, moneyRows, monthSpend, previewMoney, recentMoney } from './financeBot'
 import { payTodoist } from './todoistCoins'
@@ -56,6 +56,13 @@ import { nextSlot } from '@core/benActs'
 import { parseSets, strengthSummary } from '@core/strength'
 import { AREA_WORDS, learnAreaWords } from '@core/areaWords'
 import { groundReply } from '@core/benGround'
+import { coachNote, guardReply, isCoachAsk, langOf as coachLangOf, missedAnswer, missedAsk, proposalButtons } from '@core/coachTalk'
+import { redFlag } from '@core/coachSafety'
+import { coachContext } from '@core/coachPlan'
+import { templateLine } from '@core/coachText'
+import { doneSessions, trainOf } from '@core/trainLog'
+import { coachToday, loadCoach } from '../coach/coachStore'
+import { proposeFrom, risingNow } from '../coach/coachTalkStore'
 import { blockFor, meansTimer, readFinished, readStartingNow, startNowReply } from '@core/benNow'
 import { REPLACE_ASK, REPLACE_CHIPS, planMadeLine, planSummary, replaceAnswer, wantsNewPlan } from '@core/benPlanText'
 import { amountIn, codeFix, nowSlots, preLookups, quickKind, quickReply } from '@core/benQuick'
@@ -71,7 +78,7 @@ import { runCommand, runFocus, type RunOut } from './bots/commands'
 import { runCareer } from './bots/careerBot'
 import { foodMessage, foodPhotoMessage, foodWants, photoWanted, type FoodOut, type FoodPhotoFn } from './bots/foodBot'
 import type { PhotoKv } from './bots/foodAlbum'
-import { foodDayTotals, whatNextNow } from '../../../main/food'
+import { foodDayTotals, readFoodSaved, whatNextNow } from '../../../main/food'
 import { foodAnswer } from '@core/foodBen'
 import { undoReply as undoReplyWith } from './bots/undo'
 import type { BotContext } from './bots/context'
@@ -584,7 +591,8 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       return runMoney(services.services(db), text, key)
     },
     foodPhoto,
-    photoKv
+    photoKv,
+    coachAi: ai ? (prompt) => ai(prompt, { json: true, kind: 'nudge' }) : null
   }
 
   async function handleButton(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
@@ -930,6 +938,32 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // What Ben can do without the AI: a stored confirm, a fix in code (B10), an instant answer (B3).
     let preset: { reply: string; acts: BrainAction[]; chips?: string[]; buttons?: { label: string; do: string }[] } | null = confirmed ? { reply: '👍 Done.', acts: [confirmed] } : null
     if (direct) preset = { reply: direct.reply, acts: direct.lines.map(readAction).filter((a): a is BrainAction => !!a) }
+    // The coach's hard rule (core/coachSafety.ts): red-flag words (dizziness, chest pain, fainting, sharp or
+    // joint pain, breathing, heart racing; EN + RO) get ONLY "stop training and see a doctor": no model, no exercise advice.
+    if (!preset && !media && text && !direct) {
+      const rf = redFlag(text, coachLangOf(text))
+      if (rf.hit) {
+        step('Safety first: no training advice')
+        preset = { reply: rf.reply, acts: [] }
+        codeMade = true
+      }
+    }
+    // "I missed Tuesday, what now?": answered from the week and the training log in code (core/coachTalk.ts).
+    if (!preset && !media && text && !direct) {
+      const day = missedAsk(text)
+      if (day != null) {
+        const ans = await mirror
+          .read((db) => {
+            const data = trainOf(sportBlob(db as any))
+            return missedAnswer({ week: data.week, done: doneSessions(data.log), today: sportToday(), day, lang: coachLangOf(text, loadCoach(db).lang) })
+          })
+          .catch(() => null)
+        if (ans) {
+          step('Answered from your training log')
+          preset = { reply: ans.reply, acts: [], chips: ans.chips }
+        }
+      }
+    }
     if (!preset && tool?.preset) preset = { reply: tool.preset.reply, acts: [], chips: tool.preset.chips }
     if (!preset && !media && text && !toolBusy) {
       const fix = codeFix(text)
@@ -1378,9 +1412,27 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     // The prompt diet per intent: a review gets yesterday's numbers, not the week's calendar or his PC.
     const full = route.trim === 'full'
     const dayText = asking ? keepLines(context, asking.keep) : trimContext(context, route.trim)
+    // The coach (core/coachTalk.ts): a message about food, training or the body gets the compact coach
+    // context (plan config, the last 7 days, today's plan), the hard rules and what it may propose.
+    const coach = !preset && !media && !direct && text && isCoachAsk(clean)
+      ? await mirror
+          .read((db) => {
+            const t = coachToday(db)
+            const rising = risingNow(db)
+            const saved = (() => {
+              try {
+                return readFoodSaved(db as any)
+              } catch {
+                return null
+              }
+            })()
+            return { note: coachNote({ context: coachContext(t.config, t.days, t.plan, t.today), saved, rising }), rising, lang: coachLangOf(text, t.config.lang), fallback: templateLine(t.plan, coachLangOf(text, t.config.lang)).line }
+          })
+          .catch(() => null)
+      : null
     const promptFor = (found: string | undefined, extraNote: string) =>
       brainPrompt(persona, dayText, memory, extraNote ? `${text}\n\n(${extraNote})` : text, media?.kind, profile, {
-        refs: [route.trim === 'review' || route.trim === 'goals' ? '' : made.lines, planLines, route.trim === 'review' ? '' : moneyLines, promises.lines, full ? pcHelp : '', full ? toolHelp : ''].filter(Boolean).join('\n'),
+        refs: [route.trim === 'review' || route.trim === 'goals' ? '' : made.lines, planLines, route.trim === 'review' ? '' : moneyLines, promises.lines, full ? pcHelp : '', full ? toolHelp : '', coach?.note ?? ''].filter(Boolean).join('\n'),
         now: new Date(),
         meant: clean !== text ? clean : undefined,
         found,
@@ -1739,6 +1791,23 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       if (g.dropped.length) {
         console.warn('coach: took out made-up parts:', g.dropped.join(' | ').slice(0, 200))
         out.reply = g.reply
+      }
+    }
+    // The coach's rules in code (core/coachTalk.ts guardReply): a sentence under 2,200 kcal, a cut or deficit while
+    // the weight isn't rising, body talk, fat burners or pills is taken out; nothing safe left → today's plan line.
+    if (coach && out.reply && !preset && !local) {
+      const g = guardReply(out.reply, { rising: coach.rising })
+      if (g.dropped.length) {
+        console.warn('coach: took out unsafe parts:', g.dropped.join(' | ').slice(0, 200))
+        out.reply = g.text || coach.fallback
+      }
+    }
+    // A plan-change proposal: checked against his data and stored; nothing changes until he taps Apply.
+    if (coach && out.propose && !preset && !local) {
+      const rec = await mirror.write((db) => proposeFrom(db, out.propose, coach.lang)).catch(() => null)
+      if (rec) {
+        out.reply = `${out.reply}\n💡 ${rec.text}`
+        out.buttons = [...proposalButtons(rec.id, coach.lang), ...(out.buttons ?? [])].slice(0, 3)
       }
     }
     // Easy to read: app words out, shorthand spelled out, 3+ sentences on their own lines (benPlain.ts).

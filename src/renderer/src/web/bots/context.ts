@@ -34,6 +34,8 @@ export interface BotContext {
   runMoneyIn: (db: any, text: string, key: string) => { reply: string; keyboard?: any } | null
   /** A meal photo's vision read (the server only; foodBot.ts "Done, read them"). */
   foodPhoto?: import('./foodBot').FoodPhotoFn | null
+  /** One short quick-model call (the coach's check-in phrasing); null without a model. */
+  coachAi?: ((prompt: string) => Promise<string>) | null
   /** Server-only short rows for photos of one meal (Telegram file ids, foodAlbum.ts). */
   photoKv?: import('./foodAlbum').PhotoKv | null
 }

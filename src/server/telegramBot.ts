@@ -1205,7 +1205,9 @@ async function deskTick(mirror: Mirror, services: any, now: Date, send: (text: s
   }
   // 3) Mood check-in (one tap) at lunch and in the evening.
   const slot = moodDue(d.moods, now)
-  if (slot && ((slot === 'noon' && h === 13) || (slot === 'evening' && h === 20))) {
+  // The coach's evening check-in (core/coachTalk.ts) asks about the day already: no second evening ask.
+  const coachEvening = slot === 'evening' && (await mirror.read((db) => readLifeFit(db).pushes?.coachCheckin !== false).catch(() => false))
+  if (slot && !coachEvening && ((slot === 'noon' && h === 13) || (slot === 'evening' && h === 20))) {
     await send(slot === 'noon' ? '🙂 Lunch check-in: how do you feel right now?' : '🌙 Evening check-in: how was today, really?', { inline_keyboard: [MOOD_FACES.map((f, i) => ({ text: f, callback_data: `md|${i + 1}` }))] }).catch(() => null)
   }
   // 4) The Sunday coach call (in the app, 5 minutes).

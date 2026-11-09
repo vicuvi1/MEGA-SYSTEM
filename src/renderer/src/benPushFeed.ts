@@ -24,7 +24,7 @@ let logCache: { at: number; day: string; log: PushLog | null } = { at: 0, day: '
 let active: { alert: IslandAlert; key: string; until: number } | null = null
 let prefsCache: { at: number; mode: string; peekFor: Record<string, boolean> | null } = { at: 0, mode: 'calm', peekFor: null }
 
-const TTL: Record<PushOut['type'], number> = { checkin: 10, brief: 45, shutdown: 30, weekly: 30, drift: 10, workoutNote: 30, rescue: 15, food: 30 }
+const TTL: Record<PushOut['type'], number> = { checkin: 10, brief: 45, shutdown: 30, weekly: 30, drift: 10, workoutNote: 30, rescue: 15, food: 30, coach: 30 }
 /** How long the "Rescue on · ↩ Undo" card stays after Accept. */
 const UNDO_CARD_MS = 2 * 60_000
 
@@ -216,6 +216,11 @@ export async function pushAct(a: Extract<IslandAction, { kind: 'benPush' }>): Pr
     return { said: '📋 Prompt copied: paste it with a meal photo into any AI app, then paste the reply in Body → Food.' }
   }
   if ((a.op === 'yesterday' || a.op === 'mute' || a.op === 'log') && p.food) return { said: await p.food(a.op, a.key, a.arg) }
+  // The coach's evening check-in (core/coachTalk.ts): "Check in" opens Today's card (3 taps there).
+  if (a.key.startsWith('coach:checkin') && a.op === 'ok' && a.arg === 'open') {
+    await answer('ok')
+    return { said: '📝 Check-in: on Today', then: { kind: 'open', page: 'today' } }
+  }
   switch (a.op) {
     case 'start': {
       const subject = (a.arg ?? 'Focus').slice(0, 40)

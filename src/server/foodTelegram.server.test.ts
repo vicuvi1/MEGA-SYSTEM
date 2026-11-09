@@ -27,7 +27,9 @@ afterEach(() => {
 const TOKEN = '777:test-token'
 const CHAT = '42'
 let n = 0
-const base = { coach_rhythm_prefs: { on: false }, sleep_weekday_target: '07:00', sleep_weekend_target: '07:00', sleep_bed_target: '23:30', life_fit: { push: 'firm' }, body_plus: { gPerKg: 2 } }
+// The coach's own nudges are off here (coachTalk.server.test.ts covers them and the shared cap).
+const NO_COACH = { coachMorning: false, coachProtein: false, coachCheckin: false }
+const base = { coach_rhythm_prefs: { on: false }, sleep_weekday_target: '07:00', sleep_weekend_target: '07:00', sleep_bed_target: '23:30', life_fit: { push: 'firm', pushes: NO_COACH }, body_plus: { gPerKg: 2 } }
 /** The photo's bytes (made up), and how they look in base64: they must never be stored or sent anywhere but the vision read. */
 const PHOTO = new TextEncoder().encode('made-up-jpeg-bytes-for-a-meal-photo')
 const PHOTO_B64 = Buffer.from(PHOTO).toString('base64')
@@ -276,7 +278,7 @@ describe('meal reminders on the tick', () => {
     const muted = world({ ...base, food_ben: { draft: null, muteUntil: new Date('2030-03-15T00:00:00').getTime() } })
     await runTick(muted.env as any, at('2030-03-12T13:05:00'))
     expect(texts(muted.sent).filter((m) => /Lunch time/.test(m.text ?? ''))).toHaveLength(0)
-    const off = world({ ...base, life_fit: { push: 'firm', pushes: { meals: false } } })
+    const off = world({ ...base, life_fit: { push: 'firm', pushes: { ...NO_COACH, meals: false } } })
     await runTick(off.env as any, at('2030-03-12T13:05:00'))
     expect(texts(off.sent).filter((m) => /Lunch time/.test(m.text ?? ''))).toHaveLength(0)
     // At the PC: Telegram stays quiet and the island decides the same reminder (one key).

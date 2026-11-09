@@ -11,7 +11,7 @@ import { MARK_WORD, type ItemMark, type PushCard, type PushLog, type PushOp } fr
 import { WeekTop3Pick } from './WeekTop3'
 import './benPush.css'
 
-const ICON: Record<PushCard['type'], string> = { checkin: '🎯', brief: '☀️', shutdown: '🌙', weekly: '📊', drift: '👀', workoutNote: '💪', rescue: '🛟', food: '🍽' }
+const ICON: Record<PushCard['type'], string> = { checkin: '🎯', brief: '☀️', shutdown: '🌙', weekly: '📊', drift: '👀', workoutNote: '💪', rescue: '🛟', food: '🍽', coach: '💪' }
 
 export function BenPushCard({ card, live, onChange }: { card: PushCard; live: boolean; onChange?: () => void }) {
   const act = useAction()
