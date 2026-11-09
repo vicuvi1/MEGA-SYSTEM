@@ -1,0 +1,170 @@
+/* One-tap food logging (Body → Food top, Body → Today food card).
+   Built on body-theme.css tokens (--bdy-*), so light and dark both work.
+   Motion: transform and opacity only; none with reduced motion. */
+
+/* ---------- the big bars ---------- */
+.fdf-bars { display: flex; flex-direction: column; gap: 10px; }
+.fdf-bar-row { display: grid; grid-template-columns: minmax(150px, auto) minmax(0, 1fr); align-items: center; gap: 14px; }
+.fdf-bar-label { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; color: var(--bdy-muted, var(--muted)); font-size: 14px; font-weight: 600; }
+.fdf-bar-label b { font-size: 24px; font-weight: 750; letter-spacing: -0.02em; color: var(--bdy-text, var(--text)); font-variant-numeric: tabular-nums; }
+.fdf-bars .bdy-bar { height: 14px; }
+.fdf-protein .bdy-bar > i { background: var(--bdy-accent, var(--accent)); }
+.fdf-kcal .bdy-bar > i { background: color-mix(in srgb, var(--bdy-accent, var(--accent)) 70%, var(--bdy-ok, #f5c84b)); }
+.fdf-protein.behind .bdy-bar > i { background: var(--bdy-low, var(--orange)); }
+.fdf-left { display: block; margin: 0; font-size: 15px; font-weight: 650; color: var(--bdy-text, var(--text)); font-variant-numeric: tabular-nums; }
+.fdf-behind { display: block; margin: 0; padding: 8px 12px; border-radius: 12px; font-size: 14px; font-weight: 600; color: var(--bdy-text, var(--text)); background: color-mix(in srgb, var(--bdy-low, var(--orange)) 14%, transparent); border: 1px solid color-mix(in srgb, var(--bdy-low, var(--orange)) 40%, transparent); }
+.fdf-bars.compact { gap: 6px; }
+.fdf-bars.compact .fdf-bar-row { grid-template-columns: minmax(120px, auto) minmax(0, 1fr); gap: 10px; }
+.fdf-bars.compact .fdf-bar-label b { font-size: 19px; }
+.fdf-bars.compact .bdy-bar { height: 10px; }
+.fdf-bars.compact .fdf-left { font-size: 13.5px; }
+.fdf-bars.compact .fdf-behind { font-size: 13px; padding: 6px 10px; }
+
+.fr-check { font-size: 13.5px; line-height: 1.4; color: var(--bdy-text, var(--text)); padding: 6px 10px; border-radius: 10px; background: var(--bdy-accent-soft, rgb(200 241 53 / 0.14)); }
+
+/* ---------- your meals ---------- */
+.fdf-quick { display: flex; flex-direction: column; gap: 12px; }
+.fdf-sec-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.fdf-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.fdf-tile-wrap { position: relative; display: flex; min-width: 0; }
+.fdf-tile {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: 'icon name' 'icon num';
+  align-items: center;
+  gap: 2px 10px;
+  min-height: 76px;
+  padding: 12px 40px 12px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--bdy-border, var(--border));
+  background: var(--bdy-surface-2, var(--surface-2));
+  color: var(--bdy-text, var(--text));
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease;
+}
+.fdf-tile:hover { border-color: color-mix(in srgb, var(--bdy-accent, var(--accent)) 50%, var(--bdy-border, var(--border))); }
+.fdf-tile:active { transform: scale(0.98); }
+.fdf-tile:focus-visible, .fdf-tile-adj:focus-visible, .fdf-step-btn:focus-visible, .fdf-x:focus-visible { outline: 2px solid var(--bdy-accent, var(--accent)); outline-offset: 2px; }
+.fdf-tile-icon { grid-area: icon; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--bdy-accent-soft, rgb(200 241 53 / 0.14)); color: var(--bdy-accent-text, var(--accent)); }
+.fdf-tile-name { grid-area: name; font-size: 14px; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.fdf-tile-num { grid-area: num; font-size: 13px; color: var(--bdy-muted, var(--muted)); font-weight: 600; }
+.fdf-tile-adj {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--bdy-border, var(--border));
+  background: var(--bdy-surface, var(--surface));
+  color: var(--bdy-muted, var(--muted));
+  font: inherit;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fdf-tile-adj:hover { color: var(--bdy-text, var(--text)); }
+.fdf-icon { display: block; }
+
+/* ---------- amounts panel ---------- */
+.fdf-qty { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 16px; border: 1px solid color-mix(in srgb, var(--bdy-accent, var(--accent)) 40%, var(--bdy-border, var(--border))); background: var(--bdy-surface-2, var(--surface-2)); animation: fdf-in 0.18s ease both; }
+.fdf-qty-title { font-size: 15px; }
+.fdf-qty ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.fdf-qty li { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fdf-qty-name { display: flex; flex-direction: column; min-width: 0; font-weight: 650; }
+.fdf-qty-name small { color: var(--bdy-muted, var(--muted)); font-weight: 500; font-size: 13px; }
+.fdf-qty-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fdf-qty-foot > span { flex: 1 1 160px; font-weight: 650; }
+.fdf-step { display: inline-flex; align-items: center; gap: 6px; flex: none; }
+.fdf-step b { min-width: 38px; text-align: center; font-size: 15px; }
+.fdf-step-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--bdy-border, var(--border));
+  background: var(--bdy-surface, var(--surface));
+  color: var(--bdy-text, var(--text));
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.fdf-step-btn:disabled { opacity: 0.4; cursor: default; }
+.fdf-step.small .fdf-step-btn { width: 34px; height: 34px; font-size: 16px; border-radius: 10px; }
+.fdf-step.small b { min-width: 32px; font-size: 14px; }
+.fdf-x { width: 34px; height: 34px; border-radius: 10px; border: 0; background: transparent; color: var(--bdy-muted, var(--muted)); font-size: 20px; cursor: pointer; flex: none; }
+.fdf-x:hover { color: var(--bdy-text, var(--text)); background: var(--bdy-surface-3, var(--surface-3)); }
+.fdf-last { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 8px 12px; border-radius: 12px; background: var(--bdy-accent-soft, rgb(200 241 53 / 0.14)); font-size: 14px; animation: fdf-in 0.18s ease both; }
+
+/* ---------- the standard day ---------- */
+.fdf-day { display: flex; flex-direction: column; gap: 10px; }
+.fdf-day-go { width: 100%; justify-content: space-between; }
+.fdf-day-go small { font-size: 14px; font-weight: 650; color: inherit; opacity: 0.72; }
+.fdf-day-done { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: 14px; border: 1px solid var(--bdy-border, var(--border)); background: var(--bdy-surface-2, var(--surface-2)); font-size: 14px; }
+.fdf-check { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; animation: fdf-in 0.18s ease both; }
+.fdf-check-slot { padding: 10px 12px; border-radius: 14px; border: 1px solid var(--bdy-border, var(--border)); display: flex; flex-direction: column; gap: 6px; }
+.fdf-check-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--bdy-text, var(--text)); }
+.fdf-check-head small { color: var(--bdy-muted, var(--muted)); font-weight: 600; }
+.fdf-check-head .fdf-swap { margin-left: auto; max-width: 100%; white-space: normal; text-align: left; line-height: 1.25; padding-top: 4px; padding-bottom: 4px; }
+.fdf-check-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.fdf-check-items li { display: grid; grid-template-columns: minmax(0, 1fr) auto 64px auto; align-items: center; gap: 8px; }
+.fdf-check-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+.fdf-check-kcal { text-align: right; color: var(--bdy-muted, var(--muted)); }
+.fdf-check-again { display: flex; justify-content: flex-end; }
+
+/* ---------- food chips ---------- */
+.fdf-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.fdf-chip { min-height: 40px; }
+
+/* ---------- more ways to log ---------- */
+.fd-more { border-top: 1px solid var(--bdy-border, var(--border)); padding-top: 10px; }
+.fd-more > summary { cursor: pointer; font-weight: 650; color: var(--bdy-muted, var(--muted)); list-style: none; display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.fd-more > summary::-webkit-details-marker { display: none; }
+.fd-more > summary::before { content: '›'; display: inline-block; transition: transform 0.15s ease; font-size: 18px; }
+.fd-more[open] > summary::before { transform: rotate(90deg); }
+.fd-more-body { display: flex; flex-direction: column; gap: 12px; padding-top: 8px; }
+.fd-week-check { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--bdy-border, var(--border)); background: var(--bdy-surface-2, var(--surface-2)); }
+.fd-week-check.suggest { border-color: color-mix(in srgb, var(--bdy-accent, var(--accent)) 55%, var(--bdy-border, var(--border))); }
+.fd-week-check small { color: var(--bdy-muted, var(--muted)); font-size: 13.5px; }
+
+/* ---------- the manage sheet ---------- */
+.sheet.fdf-sheet { z-index: 60; }
+.sheet-card.fdf-sheet-card { width: min(720px, calc(100vw - 24px)); max-height: min(88vh, 900px); display: flex; flex-direction: column; gap: 12px; background: var(--bdy-surface, var(--surface)); border-color: var(--bdy-border, var(--border)); border-radius: 20px; color: var(--bdy-text, var(--text)); outline: none; }
+.fdf-sheet-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.fdf-sheet-head b { font-size: 17px; }
+.fdf-sheet-body { overflow: auto; min-height: 0; flex: 1; padding-right: 2px; }
+.fdf-edit-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.fdf-edit-food, .fdf-edit-meal { padding: 12px; border-radius: 14px; border: 1px solid var(--bdy-border, var(--border)); background: var(--bdy-surface-2, var(--surface-2)); }
+.fdf-edit-food { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; align-items: end; }
+.fdf-edit-food .fdf-in-name { grid-column: 1 / -1; }
+.fdf-edit-food label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--bdy-muted, var(--muted)); }
+.fdf-edit-food input, .fdf-edit-meal input { min-width: 0; width: 100%; box-sizing: border-box; }
+.fdf-edit-food .fdf-order { grid-column: 1 / -1; }
+.fdf-edit-meal { display: flex; flex-direction: column; gap: 8px; }
+.fdf-edit-row { display: grid; grid-template-columns: minmax(0, 1fr) 140px; gap: 8px; }
+.fdf-in-name { font-weight: 650; }
+.fdf-order { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.fdf-items { display: flex; flex-direction: column; gap: 6px; }
+.fdf-item-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; align-items: center; }
+.fdf-items-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.fdf-alt { display: flex; flex-direction: column; gap: 6px; padding-left: 10px; border-left: 2px solid var(--bdy-border, var(--border)); }
+
+@keyframes fdf-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 560px) {
+  .fdf-bar-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .fdf-bars.compact .fdf-bar-row { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .fdf-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .fdf-tile { grid-template-columns: minmax(0, 1fr); grid-template-areas: 'icon' 'name' 'num'; min-height: 112px; padding: 10px 10px 10px 12px; align-content: start; }
+  .fdf-tile-icon { width: 34px; height: 34px; margin-bottom: 4px; }
+  .fdf-check-items li { grid-template-columns: minmax(0, 1fr) auto auto; }
+  .fdf-check-kcal { display: none; }
+  .fdf-edit-row { grid-template-columns: minmax(0, 1fr); }
+  .sheet-card.fdf-sheet-card { max-height: 92vh; padding: 14px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fdf-tile, .fdf-qty, .fdf-last, .fdf-check, .fd-more > summary::before { transition: none; animation: none; }
+}

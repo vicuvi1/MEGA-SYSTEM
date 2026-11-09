@@ -117,6 +117,8 @@ export type Bridge = LifeApi & {
     }
     /** BD1–BD18: protein, saved meals, supplements, tape measurements, today's training dose, the weekly body report. */
     bodyPlus?: import('./web/bodyPlusBridge').BodyPlusApi
+    /** Body composition: weigh-ins (weight, fat %, muscle, waist), weekly averages, the target band, Undo. */
+    bodyComp?: import('./web/bodyCompBridge').BodyCompApi
     /** Food counter: meals from your AI app's reply, day totals, goals, what to eat next, favourites. */
     food?: import('./web/foodBridge').FoodApi
     /** HD: your reminders (the list Ben's ⏰ uses), and add / Done / Snooze from the island. */

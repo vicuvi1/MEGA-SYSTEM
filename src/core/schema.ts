@@ -386,5 +386,30 @@ export const MIGRATIONS: string[] = [
     undoes TEXT
   );
   CREATE INDEX IF NOT EXISTS body_log_day ON body_log(day, kind);
+  `,
+  /* 023 Body composition from a smart scale or by hand: one row per weigh-in (the same weigh-in from two sources is one row, by its dedupe key) */ `
+  CREATE TABLE IF NOT EXISTS body_comp (
+    id TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    day TEXT NOT NULL,
+    weight_kg REAL NOT NULL,
+    body_fat_pct REAL,
+    muscle_kg REAL,
+    water_pct REAL,
+    protein_pct REAL,
+    bone_kg REAL,
+    visceral_fat REAL,
+    bmr REAL,
+    bmi REAL,
+    heart_rate REAL,
+    body_score REAL,
+    waist_cm REAL,
+    source TEXT NOT NULL DEFAULT 'manual',
+    raw TEXT,
+    dedupe TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS body_comp_dedupe ON body_comp(dedupe);
+  CREATE INDEX IF NOT EXISTS body_comp_day ON body_comp(day);
   `
 ]

@@ -34,11 +34,13 @@ const num = (s: string) => Number(s.replace(',', '.'))
 function findFood(word: string, own: Per100[]): Hit | null {
   const w = normFood(word)
   if (!w) return null
-  const mine = own.find((o) => normFood(o.name) === w)
-  if (mine) return { name: mine.name, p: mine.p, c: mine.c, f: mine.f, k: mine.k }
   const hit: TableFood | undefined =
     FOOD_TABLE.find((t) => normFood(t.name) === w || t.alias.some((a) => normFood(a) === w)) ??
     FOOD_TABLE.find((t) => [t.name, ...t.alias].some((a) => normFood(a).split(' ').includes(w)))
+  const mine = own.find((o) => normFood(o.name) === w)
+  // Your own numbers win; the table's units ("1 egg" = 50 g) still help with counts.
+  const same = hit && mine && [hit.name, ...hit.alias].some((a) => normFood(a) === w)
+  if (mine) return { name: mine.name, p: mine.p, c: mine.c, f: mine.f, k: mine.k, ...(same ? { units: hit!.units, each: hit!.each } : {}) }
   if (hit) return { name: hit.name, p: hit.p, c: hit.c, f: hit.f, k: hit.k, units: hit.units, each: hit.each }
   const near = own.find((o) => normFood(o.name).split(' ').includes(w) || (w.split(' ').includes(normFood(o.name)) && normFood(o.name).length > 3))
   return near ? { name: near.name, p: near.p, c: near.c, f: near.f, k: near.k } : null

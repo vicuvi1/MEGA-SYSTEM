@@ -73,9 +73,9 @@ export interface Progress {
 /** A session's working sets: the first `n` (a warm-up isn't logged as a set here). */
 const working = (s: Session, n: number) => s.reps.slice(0, n)
 /** Every working set reached the top. */
-const atTop = (s: Session, r: RepRange) => s.reps.length >= r.sets && working(s, r.sets).every((x) => x >= r.hi)
+export const atTop = (s: Session, r: RepRange) => s.reps.length >= r.sets && working(s, r.sets).every((x) => x >= r.hi)
 /** Not even one set reached the bottom. */
-const belowBottom = (s: Session, r: RepRange) => Math.max(...s.reps) < r.lo
+export const belowBottom = (s: Session, r: RepRange) => Math.max(...s.reps) < r.lo
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(b + 'T12:00:00Z') - Date.parse(a + 'T12:00:00Z')) / 86400000)
 

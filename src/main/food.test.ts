@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDb, type DB } from './db'
 import { bodyPlusView, logProtein, readPrefs, savePrefs, sportInsightNow } from './bodyPlus'
-import { addFoodMeal, addFoodSupp, addFoodWater, adjustNow, answerAdjust, editFoodMeal, foodDayTotals, foodView, foodWeekNow, leanDefaultOnce, readFoodGoals, readFoodLog, saveFoodPrices, sportFoodLineNow, waterNow, toggleFoodFav, toggleFoodMeal, whatNextNow } from './food'
+import { addFoodMeal, addFoodSupp, addFoodWater, adjustNow, answerAdjust, editFoodMeal, foodDayTotals, foodView, foodWeekNow, gainDefaultOnce, leanDefaultOnce, needsLeanDefault, readFoodGoals, readFoodLog, saveFoodPrices, sportFoodLineNow, waterNow, toggleFoodFav, toggleFoodMeal, whatNextNow } from './food'
 import { writeSetting } from './settings'
 
 let dir: string
@@ -63,22 +63,42 @@ describe('food counter on the database', () => {
     expect(addFoodMeal(db, { items: [chicken], day: '2026-11-09' }, 'web', now)!.day).toBe('2026-11-08')
     expect(addFoodMeal(db, { items: [] }, 'web', now)).toBeNull()
   })
-  it('lean goals: 2.0 g/kg once from the old 1.8 default; kcal +150 only once you train', () => {
-    savePrefs(db, { gPerKg: 1.8 })
-    expect(leanDefaultOnce(db)).toBe(true)
-    expect(readPrefs(db).gPerKg).toBe(2)
-    savePrefs(db, { gPerKg: 1.8 }) // your later pick stays
-    expect(leanDefaultOnce(db)).toBe(false)
-    expect(readPrefs(db).gPerKg).toBe(1.8)
+  it('slow gain once: the lean 2.0 g/kg becomes 1.8, lean surpluses become +350; saved height and age are kept', () => {
+    // An older install after the lean move: 2.0 g/kg, +150 / +0, the app's own 178 cm / 30.
     savePrefs(db, { gPerKg: 2 })
-    let t = foodDayTotals(db, now).targets
-    expect(t).toMatchObject({ protein: 150, kcal: 2650, training: false })
+    writeSetting(db, 'food_goals', { heightCm: 178, age: 30, trainSurplus: 150, restSurplus: 0, leanV: 1, kcalAdj: 100, prices: { rice: 20 } } as any)
+    expect(needsLeanDefault(db)).toBe(true)
+    expect(gainDefaultOnce(db)).toBe(true)
+    expect(readPrefs(db).gPerKg).toBe(1.8)
+    expect(readFoodGoals(db)).toMatchObject({ gainV: 1, trainSurplus: 350, restSurplus: 350, bodySet: 0, kcalAdj: 100, prices: { rice: 20 } })
+    // Height and age never entered: the fixed 2,700 (+ the weight check's 100); protein 1.8 × 75.
+    expect(foodDayTotals(db, now).targets).toMatchObject({ protein: 135, kcal: 2800, fixed: true })
+    // Runs once: a later pick stays.
+    savePrefs(db, { gPerKg: 2 })
+    expect(gainDefaultOnce(db)).toBe(false)
+    expect(leanDefaultOnce(db)).toBe(false)
+    expect(readPrefs(db).gPerKg).toBe(2)
+  })
+  it('slow gain once keeps your own numbers: own surpluses, own goals, and height/age you entered (then maintenance + surplus)', () => {
+    savePrefs(db, { gPerKg: 1.6 })
+    writeSetting(db, 'food_goals', { heightCm: 186, age: 21, trainSurplus: 200, restSurplus: 100, kcalOwn: null, proteinOwn: 140, leanV: 1 } as any)
+    gainDefaultOnce(db)
+    expect(readPrefs(db).gPerKg).toBe(1.6)
+    expect(readFoodGoals(db)).toMatchObject({ heightCm: 186, age: 21, trainSurplus: 200, restSurplus: 100, proteinOwn: 140, bodySet: 1 })
+    const t = foodDayTotals(db, now).targets
+    expect(t).toMatchObject({ protein: 140, fixed: false, kcal: t.maintenance + 100 })
     db.prepare("INSERT INTO workouts (day, ts, title, items_json) VALUES ('2026-11-08', 'x', 'Push-ups', '[]')").run()
-    t = foodDayTotals(db, now).targets
-    expect(t).toMatchObject({ kcal: 2800, training: true })
+    expect(foodDayTotals(db, now).targets).toMatchObject({ kcal: t.maintenance + 200, training: true })
+  })
+  it('a fresh install moves too (nothing saved yet): 1.8 g/kg stays, +350, fixed kcal until height and age are entered', () => {
+    expect(gainDefaultOnce(db)).toBe(true)
+    expect(readPrefs(db).gPerKg).toBe(1.8)
+    expect(readFoodGoals(db)).toMatchObject({ trainSurplus: 350, restSurplus: 350, bodySet: 0 })
+    expect(foodDayTotals(db, now).targets).toMatchObject({ kcal: 2700, protein: 135 })
   })
   it('what to eat next, same as yesterday, a star, the Sport Track line, the week', () => {
     savePrefs(db, { gPerKg: 2 })
+    writeSetting(db, 'food_goals', { bodySet: 1 } as any)
     addFoodMeal(db, { items: [chicken, rice] }, 'web', new Date('2026-11-07T13:00:00'))
     addFoodMeal(db, { items: [chicken] }, 'web', now)
     expect(whatNextNow(db, now).line).toMatch(/^104 g protein left today. Next meal, about 50 g: /)
@@ -86,9 +106,9 @@ describe('food counter on the database', () => {
     expect(v.yesterday.map((m) => m.name)).toEqual(['Chicken breast, Rice'])
     toggleFoodFav(db, { name: 'Lunch', items: v.yesterday[0].items })
     expect(foodView(db, now).favs.map((f) => f.name)).toEqual(['Lunch'])
-    expect(sportFoodLineNow(db, now)).toBe('Protein 46 / 150 g today')
+    expect(sportFoodLineNow(db, now)).toBe('Protein 46 / 150 g · 230 / 3,000 kcal today')
     writeSetting(db, 'sport_tracker_json', { data: { sets: { '2026-11-08': { pushups: [{ reps: 15, at: new Date('2026-11-08T12:00:00').toISOString(), id: 's1' }] } } } } as any)
-    expect(sportFoodLineNow(db, now)).toBe('Protein 46 / 150 g today · trained: +46 g')
+    expect(sportFoodLineNow(db, now)).toBe('Protein 46 / 150 g · 230 / 3,000 kcal today · trained: +46 g')
     expect(foodWeekNow(db, now)).toMatchObject({ days: 2, avgProtein: 49 })
   })
   it('"why it stalled" reads the food counter protein', () => {
@@ -153,22 +173,22 @@ describe('food counter extras on the database', () => {
     expect([w.totals.protein, w.carbs, w.fat]).toEqual([0, 0, 0])
     expect(w.next.proteinLeft).toBe(w.totals.targets.protein)
   })
-  it('the weekly weight check: flat weight offers +100, Apply changes the goal once, never silently', () => {
+  it('the weekly weight check: 2 flat weeks offer +200, Apply changes the goal once, never silently', () => {
     const ins = db.prepare("INSERT OR REPLACE INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, NULL, NULL, 'x')")
-    for (const [d, w] of [['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
+    for (const [d, w] of [['2026-10-20', 75], ['2026-10-23', 75.1], ['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
     const base = foodView(db, now).totals.targets.kcal
     expect(adjustNow(db, now).state).toBe('suggest')
     expect(foodView(db, now).totals.targets.kcal).toBe(base) // nothing changes by itself
     answerAdjust(db, true, now)
-    expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 100, adjAt: '2026-11-08' })
-    expect(foodView(db, now).totals.targets.kcal).toBe(base + 100)
+    expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 200, adjAt: '2026-11-08' })
+    expect(foodView(db, now).totals.targets.kcal).toBe(base + 200)
     expect(adjustNow(db, now).state).toBe('none') // once a week
     answerAdjust(db, true, now) // nothing to apply: no double change
-    expect(readFoodGoals(db).kcalAdj).toBe(100)
+    expect(readFoodGoals(db).kcalAdj).toBe(200)
   })
   it('"Not now" only marks the week; prices are saved, cleaned and change the cheap list', () => {
     const ins = db.prepare("INSERT OR REPLACE INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, NULL, NULL, 'x')")
-    for (const [d, w] of [['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
+    for (const [d, w] of [['2026-10-20', 75], ['2026-10-23', 75.1], ['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
     answerAdjust(db, false, now)
     expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 0, adjAt: '2026-11-08' })
     const first = foodView(db, now).cheap.find((r) => r.name === 'chicken breast')!

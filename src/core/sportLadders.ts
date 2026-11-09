@@ -16,8 +16,9 @@ export interface SportEx {
 /** Reps per exercise per day: { 'YYYY-MM-DD': { exerciseId: count } }. */
 export type DayLog = Record<string, Record<string, number>>
 
-/** The library move an exercise is: the one it was added as, else by its name. */
-export const moveOf = (ex: Pick<SportEx, 'name' | 'move'>): Move | null => moveById(ex.move) ?? matchMove(ex.name)
+/** The library move an exercise is: the one it was added as, else by its name. A Body Training move
+ *  the library doesn't have (`move: 't:<id>'`, trainLadders.ts) is none, never a guess from its name. */
+export const moveOf = (ex: Pick<SportEx, 'name' | 'move'>): Move | null => (String(ex.move ?? '').startsWith('t:') ? null : moveById(ex.move) ?? matchMove(ex.name))
 
 /** Where a move sits on its ladder: level 3 of 8. */
 export function levelOf(move: Move): { level: number; of: number; family: string; familyName: string } {

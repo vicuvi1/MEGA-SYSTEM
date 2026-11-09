@@ -14,7 +14,8 @@
 // on a log are refused, so it can never back-date anything (honest points).
 // Nothing here reads the clock: the caller passes today and the time now.
 import { parseFoodWords } from './foodWords'
-import type { FoodItem } from './food'
+import type { FoodItem, MealType } from './food'
+import { itemOf, itemsOf, itemsText, matchSaved, slotItems, type FoodSaved } from './foodSaved'
 import type { Per100 } from './foodTable'
 import { parseQuick, type QuickTask } from './quickAdd'
 
@@ -33,6 +34,8 @@ export interface RouteCtx {
   foods?: Per100[]
   /** One glass, in ml (250 by default). */
   glassMl?: number
+  /** Your saved foods, meals and standard day: their names win ("standard day", "breakfast", "2 eggs"). */
+  saved?: FoodSaved
 }
 
 interface Base {
@@ -45,7 +48,17 @@ export type Route = Base &
   (
     | { kind: 'reps'; exId: string; name: string; n: number }
     | { kind: 'water'; ml: number }
-    | { kind: 'food'; items: FoodItem[]; name: string; protein: number; kcal: number }
+    | {
+        kind: 'food'
+        items: FoodItem[]
+        name: string
+        protein: number
+        kcal: number
+        /** From your saved foods (logged with source 'saved'). */
+        saved?: boolean
+        /** The standard day: each slot is its own meal. */
+        meals?: { name: string; type: MealType; slot: string; items: FoodItem[] }[]
+      }
     | { kind: 'task'; task: QuickTask }
     | { kind: 'focus'; minutes: number; subject: string }
     | { kind: 'note'; text: string }
@@ -169,6 +182,28 @@ function food(text: string, ctx: RouteCtx, strict: boolean): Route | null {
   return { kind: 'food', items: r.items, name: r.items.map((i) => i.name).join(', ').slice(0, 60), protein, kcal, chip: `Log food: ${name} · ${protein} g protein` }
 }
 
+/** A saved meal, saved food or the standard day named in the line, as a food route. */
+function savedFood(text: string, ctx: RouteCtx): Route | null {
+  const s = ctx.saved
+  const hit = s ? matchSaved(text, s) : null
+  if (!s || !hit) return null
+  const sum = (items: FoodItem[]) => ({ protein: Math.round(items.reduce((a, i) => a + i.protein, 0)), kcal: Math.round(items.reduce((a, i) => a + i.kcal, 0)) })
+  if (hit.kind === 'day') {
+    const meals = s.day.slots.map((sl) => ({ name: `${sl.label}: ${itemsText(s, slotItems(sl))}`.slice(0, 60), type: sl.slot, slot: sl.id, items: itemsOf(s, slotItems(sl)) }))
+    const items = meals.flatMap((m) => m.items)
+    const t = sum(items)
+    return { kind: 'food', items, name: 'Standard day', ...t, saved: true, meals, chip: `Log my standard day: ${t.kcal.toLocaleString('en-US')} kcal · ${t.protein} g protein` }
+  }
+  if (hit.kind === 'meal') {
+    const items = itemsOf(s, hit.meal.items)
+    const t = sum(items)
+    return { kind: 'food', items, name: hit.meal.name, ...t, saved: true, chip: `Log ${hit.meal.name} · ${t.kcal} kcal · ${t.protein} g protein` }
+  }
+  const item = itemOf(hit.food, hit.qty)
+  const name = hit.qty === 1 ? hit.food.name : `${hit.qty} × ${hit.food.name}`
+  return { kind: 'food', items: [item], name, protein: Math.round(item.protein), kcal: item.kcal, saved: true, chip: `Log ${name} · ${item.kcal} kcal · ${Math.round(item.protein)} g protein` }
+}
+
 function habit(word: string, ctx: RouteCtx): Route {
   const w = letters(word)
   const list = ctx.habits
@@ -220,6 +255,9 @@ export function routeOptions(raw: string, ctx: RouteCtx): Route[] {
     const ml = waterAmount(m[1], glass)
     return [ml == null ? { kind: 'ask', chip: 'How much water?', say: 'How much water? Try "water 500" or "water 2" (glasses).' } : water(ml)]
   }
+  // ---- your saved meals and foods first: "standard day", "breakfast", "2 eggs" ----
+  const saved = PAST.test(t) ? null : savedFood(t, ctx)
+  if (saved) return [saved]
   if ((m = /^(?:ate|eat|had|food|meal)\s*[:\-]?\s+(.+)$/i.exec(t))) return [PAST.test(t) ? past() : (food(m[1], ctx, true) as Route)]
 
   const pastWords = PAST.test(t)

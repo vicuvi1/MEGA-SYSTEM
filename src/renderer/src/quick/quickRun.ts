@@ -68,8 +68,10 @@ export async function quickContext(): Promise<RouteCtx> {
   const habits = await (life.extras?.habits?.() ?? Promise.resolve(null))
     .then((v) => (v?.rows ?? []).map((h) => ({ id: h.id, name: h.name, done: h.done })))
     .catch(() => [])
+  // Saved foods and meals: "standard day", "breakfast", "2 eggs" log them.
+  const saved = (await life.coach?.food?.savedNow?.().catch(() => undefined)) ?? undefined
   // Tasks say "tomorrow" by the calendar (midnight), like Todoist.
-  return { today: calendarDay(), now: hm(), exercises, counter: quickCounter() || null, habits }
+  return { today: calendarDay(), now: hm(), exercises, counter: quickCounter() || null, habits, saved }
 }
 
 /** Only some routes can be taken back from the toast (money goes through the rules, which have their own Undo). */
@@ -94,7 +96,14 @@ async function run(r: Route, id: string): Promise<unknown> {
     case 'food': {
       const food = life.coach?.food
       if (!food) throw new QuickRefused('Food needs the app to be signed in')
-      await food.add({ items: r.items, name: r.name, id: mealId(id) })
+      // The standard day: each slot is its own meal, with its own fixed id (so a retry saves each once).
+      if (r.meals?.length) {
+        const ids = r.meals.map((_, i) => `${mealId(id).slice(0, 26)}${i}`)
+        for (const [i, m] of r.meals.entries()) await food.add({ items: m.items, name: m.name, type: m.type, id: ids[i], source: 'saved', slot: m.slot })
+        tell('life-body-changed', 'life-food-changed')
+        return ids
+      }
+      await food.add({ items: r.items, name: r.name, id: mealId(id), source: r.saved ? 'saved' : 'quick-add' })
       tell('life-body-changed', 'life-food-changed')
       return mealId(id)
     }
@@ -154,6 +163,7 @@ async function undo(r: Route, _id: string, result: unknown): Promise<void> {
       return
     case 'food':
       if (typeof result === 'string') await life.coach?.food?.toggle(result)
+      if (Array.isArray(result)) for (const id of result) await life.coach?.food?.toggle(String(id))
       tell('life-body-changed', 'life-food-changed')
       return
     case 'task':

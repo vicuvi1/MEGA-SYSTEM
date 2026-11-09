@@ -802,7 +802,7 @@ try {
     await pg.waitForSelector(`${prog} .bpg-hero .bpg-pill.on`, { timeout: 5000 })
     // Weight and waist: a verdict written from the numbers (or the empty prompt).
     await pg.waitForSelector(`${prog} .bpg-verdict, ${prog} .bpg-empty`, { timeout: 10000 })
-    if (process.env.E2E_BODY_DEMO && !/kg in \d+ weeks?|Log weight and waist weekly/.test(await pg.locator(`${prog} .bpg-verdict`).innerText())) throw new Error('the verdict has no numbers')
+    if (process.env.E2E_BODY_DEMO && !/kg in \d+ weeks?|Log weight and waist weekly|Not enough data|vs the week before|One more full week/.test(await pg.locator(`${prog} .bpg-verdict`).innerText())) throw new Error('the verdict has no numbers')
     // Records and the monthly report.
     await pg.waitForSelector(process.env.E2E_BODY_DEMO ? `${prog} .bpg-trophy` : `${prog} .bpg-trophy, ${prog} section[aria-label="Personal records"] .bpg-empty`, { timeout: 10000 })
     await pg.waitForSelector(`${prog} .bpg-tiles`, { timeout: 10000 })
@@ -883,6 +883,60 @@ try {
     const fc = '#ptp-body-food .fd-card'
     await pg.waitForSelector(`${fc} .fd-line`, { timeout: 20000 })
     if (!/Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(await pg.locator(`${fc} .fd-line`).innerText())) throw new Error('the food line is missing protein or kcal')
+    // One-tap logging: the big bars, a saved meal (logged once, Undo), amounts, the standard day and its checklist.
+    const kcalNow = async () => Number(((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).split('/')[0] || '').replace(/[^\d]/g, ''))
+    const waitKcal = (n) => pg.waitForFunction(([s, k]) => Number((document.querySelector(`${s} .fdf-kcal .fdf-bar-label b`)?.textContent ?? '').split('/')[0].replace(/[^\d]/g, '')) === k, [fc, n], { timeout: 15000 })
+    if (!/^[\d,]+ \/ [\d,]+$/.test((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim())) throw new Error('no kcal bar')
+    if (!/\d+ \/ \d+\s*g protein/.test(await pg.locator(`${fc} .fdf-protein`).innerText())) throw new Error('no protein bar')
+    if (!/kcal · \d+ g left|left|Goals reached/.test(await pg.locator(`${fc} .fdf-left`).innerText())) throw new Error('no "left" line')
+    if (!(await pg.locator(`${fc} .fd-week-check`).count())) throw new Error('no weekly weight check card')
+    const k0 = await kcalNow()
+    const mealCount = () => pg.locator(`${fc} .fd-meals li`).count()
+    const m0 = await mealCount()
+    await pg.click(`${fc} .fdf-tile[data-meal="sm-breakfast"]`)
+    await waitKcal(k0 + 486)
+    if ((await mealCount()) !== m0 + 1) throw new Error('one tap did not log exactly one meal')
+    await pg.locator('.toasts .toast-act', { hasText: 'Undo' }).last().click()
+    await waitKcal(k0)
+    await pg.click(`${fc} .fdf-tile[data-meal="sm-breakfast"]`)
+    await waitKcal(k0 + 486)
+    // Right after: eggs ×2 instead of ×3.
+    await pg.click(`${fc} .fdf-last-adj`)
+    await pg.waitForSelector(`${fc} .fdf-qty`, { timeout: 5000 })
+    await pg.locator(`${fc} .fdf-qty .fdf-less`).first().click()
+    if (!/×2/.test(await pg.locator(`${fc} .fdf-qty li`).first().innerText())) throw new Error('the egg stepper did not go to ×2')
+    await pg.click(`${fc} .fdf-qty-go`)
+    await waitKcal(k0 + 486 - 72)
+    // Before logging: the ± on a tile opens the amounts first.
+    await pg.click(`${fc} .fdf-tile-wrap:has([data-meal="sm-branza"]) .fdf-tile-adj`)
+    await pg.waitForSelector(`${fc} .fdf-qty`, { timeout: 5000 })
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector(`${fc} .fdf-qty`, { state: 'detached', timeout: 5000 })
+    // The standard day: every slot at once (about 2,330 kcal), then the checklist with a swap.
+    const k1 = await kcalNow()
+    await pg.click(`${fc} .fdf-day-go`)
+    await waitKcal(k1 + 2332)
+    await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fdf-check .fdf-check-slot`).length === 5, fc, { timeout: 10000 })
+    await pg.click(`${fc} .fdf-check-slot[data-slot="ds-evening"] .fdf-swap`)
+    await pg.waitForFunction((s) => /Buckwheat/.test(document.querySelector(`${s} .fdf-check-slot[data-slot="ds-evening"]`)?.textContent ?? ''), fc, { timeout: 10000 })
+    await waitKcal(k1 + 2332 + 24) // buckwheat + 2 eggs is 24 kcal more than bulgur
+    // A saved food chip.
+    const k2 = await kcalNow()
+    await pg.click(`${fc} .fdf-chip[data-food="sf-egg"]`)
+    await waitKcal(k2 + 72)
+    // The same numbers on Body → Today.
+    const barFood = (await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim()
+    await pg.waitForFunction(([b]) => (document.querySelector('#ptp-body-today .fr-card .fdf-kcal .fdf-bar-label b')?.textContent ?? '').trim() === b, [barFood], { timeout: 15000 })
+    if (shots) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.click(`${fc} .fdf-check-toggle`)
+      await pg.waitForTimeout(300)
+      await pg.locator(fc).screenshot({ path: `${shots}/food-fast-desktop.png` })
+      await pg.click(`${fc} .fdf-check-toggle`)
+    }
+    // The old ways to log are folded away but still work.
+    await pg.click(`${fc} .fd-more > summary`)
+    await pg.waitForSelector(`${fc} .fd-copy`, { state: 'visible', timeout: 5000 })
     const lineBefore = await pg.locator(`${fc} .fd-line`).innerText()
     // The label prompt for packaged food is a second button.
     if (!(await pg.locator(`${fc} .fd-copy-label`).count())) throw new Error('no "Copy label prompt" button')
@@ -919,7 +973,7 @@ try {
     await pg.click(`${fc} .fd-save`)
     await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li`).length === n + 1, [fc, mealsBefore], { timeout: 15000 })
     if (!/White rice/.test(await pg.locator(`${fc} .fd-meals`).innerText())) throw new Error('the renamed food is not in the saved meal')
-    await pg.waitForFunction((s) => /g protein left|Protein done/.test(document.querySelector(`${s} .fd-next`)?.textContent ?? ''), fc, { timeout: 10000 })
+    await pg.waitForFunction((s) => /g protein left|Protein done|Protein and kcal done/.test(document.querySelector(`${s} .fd-next`)?.textContent ?? ''), fc, { timeout: 10000 })
     // One protein number: Body → Today's food rings show the same protein as the counter.
     await pg.waitForFunction((s) => {
       const head = /Protein ([\d,]+)/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1]
@@ -985,9 +1039,9 @@ try {
     await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fd-cheap-list li`).length > 5 && /Shopping list for 7 days/.test(document.querySelector(`${s} .fd-shop`)?.textContent ?? '') && /Sunday meal prep/.test(document.querySelector(`${s} .fd-prep`)?.textContent ?? ''), fc, { timeout: 5000 })
     await pg.click(`${fc} [data-sub="today"]`)
     await pg.waitForSelector(`${fc} .fd-rings`, { timeout: 5000 })
-    // The Goals sheet says lean muscle.
+    // The Goals sheet says slow muscle gain, with the expected pace.
     await pg.locator(`${fc} .card-head .btn`, { hasText: 'Goals' }).click()
-    if (!/Lean muscle \(no fat gain\)/.test(await pg.locator(`${fc} .fd-goals`).innerText())) throw new Error('the Goals sheet does not say lean muscle')
+    if (!/Slow muscle gain[\s\S]*\+0\.25–0\.5 kg a week/.test(await pg.locator(`${fc} .fd-goals`).innerText())) throw new Error('the Goals sheet does not say slow muscle gain')
     await pg.locator(`${fc} .card-head .btn`, { hasText: 'Goals' }).click()
     if (shots) {
       await pg.setViewportSize({ width: 1280, height: 1600 })
@@ -1005,15 +1059,17 @@ try {
     const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
     await frame.click('.st-tab[data-tab="today"]')
-    await frame.waitForFunction(() => { const el = document.getElementById('food-line'); return !!el && !el.hidden && /^Protein \d+ \/ \d+ g today/.test(el.textContent || '') }, null, { timeout: 15000 })
+    await frame.waitForFunction(() => { const el = document.getElementById('food-line'); return !!el && !el.hidden && /^Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(el.textContent || '') }, null, { timeout: 15000 })
     await frame.click('#food-line')
     await pg.waitForSelector('#ptp-body-food .fd-card', { state: 'visible', timeout: 10000 })
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
-  // Body → Training: the home program builder (minutes, days, equipment, focus → a 4-week block on your levels),
-  // "Use this program" makes Sport Track's Today follow it, and a challenge with a ring (badges only, no points).
+  // Body → Training: today's session from the weekly split (log 3 sets with "same as last time" and effort, the rest
+  // timer runs, finish), the roadmap (current level, progress, a level-up after 2 top sessions, move up), then the
+  // home program builder (minutes, days, equipment, focus → a 4-week block on your levels), "Use this program" makes
+  // Sport Track's Today follow it, and a challenge with a ring (badges only, no points).
   // BT_SHOTS=<dir> saves screenshots. The Sport Track state is put back at the end.
-  await step('Body training: build a home program, use it so Today follows it, join a challenge', async () => {
+  await step('Body training: today\'s session and logging, the roadmap and level-up, the home program, a challenge', async () => {
     const shots = process.env.BT_SHOTS
     const K = 'life_sport_tracker_v1'
     await pg.setViewportSize({ width: 1440, height: 900 })
@@ -1023,6 +1079,104 @@ try {
     await pg.waitForSelector('.body-page .ptabs [data-tab="training"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="training"]')
     const T = '#ptp-body-training'
+    await pg.waitForSelector(`${T} .tr-today`, { timeout: 15000 })
+    // Seed made-up history: today is Upper in the week; diamond push-ups at the top of the range (4×12) in the last
+    // 2 sessions (a level-up waits); table rows 10 · 9 · 9 yesterday (so "same as last time" is 10 · 9 · 9).
+    await pg.evaluate((k) => {
+      const s = JSON.parse(localStorage.getItem(k) || 'null') || { exercises: [], days: {}, sets: {}, history: [], sportySettings: {} }
+      const d = (n) => { const x = new Date(Date.now() - n * 86400000 - 4 * 3600000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}` }
+      const dow = (new Date(Date.now() - 4 * 3600000).getDay() + 6) % 7
+      const days = ['rest', 'rest', 'rest', 'rest', 'rest', 'rest', 'rest']
+      days[dow] = 'upper'
+      days[(dow + 2) % 7] = 'legs'
+      s.trainWeek = { v: 1, days, updatedAt: Date.now() }
+      s.trainLevels = { push: { level: 2, reached: { 2: d(12) }, at: 1 }, pull: { level: 0, reached: {}, at: 1 } }
+      s.trainLog = []
+      s.exercises = (s.exercises || []).filter((e) => e.id !== 'ex_sm_d' && e.id !== 'ex_sm_r')
+      s.exercises.push({ id: 'ex_sm_d', name: 'Diamond push-ups', target: 24, unit: 'reps', active: false, doneToday: 0, move: 'diamond_pushup' }, { id: 'ex_sm_r', name: 'Table rows', target: 24, unit: 'reps', active: false, doneToday: 0, move: 'table_row' })
+      s.sets = s.sets || {}
+      const put = (day, id, reps) => { (s.sets[day] ||= {})[id] = reps.map((r, i) => ({ reps: r, at: Date.now() - 86400000 * 20 + i, id: `sm-${id}-${day}-${i}` })) }
+      put(d(5), 'ex_sm_d', [12, 12, 12, 12])
+      put(d(2), 'ex_sm_d', [12, 12, 12, 13])
+      put(d(1), 'ex_sm_r', [10, 9, 9])
+      localStorage.setItem(k, JSON.stringify(s))
+      window.dispatchEvent(new CustomEvent('life-sport-changed'))
+    }, K)
+    await pg.waitForFunction((t) => /Upper body/.test(document.querySelector(`${t} .tr-today [data-tr="type"]`)?.textContent ?? ''), T, { timeout: 8000 })
+    const pull = `${T} .tr-ex[data-ladder="pull"]`
+    await pg.waitForSelector(pull, { timeout: 5000 })
+    if (!/Last time: 10 · 9 · 9/.test(await pg.locator(`${pull} [data-tr="last"]`).innerText())) throw new Error('the pull move does not show last time')
+    if (!/3 × 8–15/.test(await pg.locator(`${pull} [data-tr="target"]`).innerText())) throw new Error('the pull move has no sets × range')
+    if ((await pg.locator(`${T} .tr-ex`).count()) !== 3) throw new Error('upper is not push + pull + shoulders')
+    if (shots) {
+      await pg.setViewportSize({ width: 390, height: 844 })
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(500)
+      await pg.evaluate((t) => { document.querySelector(`${t} .tr-today`).scrollIntoView({ block: 'start' }); window.scrollBy(0, -175) }, T)
+      await pg.waitForTimeout(300)
+      await pg.screenshot({ path: `${shots}/train-today-phone.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    // Start, "same as last time", effort taps, log 3 sets: the rest timer runs between them.
+    await pg.click(`${T} [data-tr="start"]`)
+    await pg.waitForSelector(`${T} [data-tr="clock"]`, { timeout: 5000 })
+    await pg.locator(`${pull} .tr-num`).first().fill('3')
+    await pg.click(`${pull} [data-tr="same"]`)
+    const vals = await pg.locator(`${pull} .tr-num`).evaluateAll((els) => els.map((e) => e.value).join(','))
+    if (vals !== '10,9,9') throw new Error(`"same as last time" did not fill 10, 9, 9: ${vals}`)
+    const feels = ['hard', 'ok', 'easy']
+    for (let i = 0; i < 3; i++) {
+      await pg.click(`${pull} .tr-set[data-set="${i}"] [data-feel="${feels[i]}"]`)
+      await pg.click(`${pull} .tr-set[data-set="${i}"] [data-tr="log"]`)
+      await pg.waitForSelector(`${pull} .tr-set[data-set="${i}"].logged`, { timeout: 5000 })
+      if (i === 0) {
+        await pg.waitForSelector(`${T} [data-tr="rest"]`, { timeout: 5000 })
+        const secs = async () => { const t = await pg.locator(`${T} [data-tr="rest-left"]`).innerText(); const m = /(\d+):(\d+)/.exec(t); return m ? Number(m[1]) * 60 + Number(m[2]) : 0 }
+        const a = await secs()
+        await pg.waitForTimeout(2100)
+        const b = await secs()
+        if (!(a > 0 && b < a)) throw new Error(`the rest timer does not run (${a} → ${b})`)
+        if (shots) {
+          await pg.setViewportSize({ width: 390, height: 844 })
+          await pg.waitForTimeout(400)
+          await pg.evaluate((p) => { document.querySelector(p).scrollIntoView({ block: 'start' }); window.scrollBy(0, -175) }, pull)
+          await pg.waitForTimeout(300)
+          await pg.screenshot({ path: `${shots}/train-logging-phone.png` })
+          await pg.setViewportSize({ width: 1440, height: 900 })
+        }
+        await pg.click(`${T} [data-tr="rest-skip"]`)
+      }
+    }
+    const saved = await pg.evaluate((k) => {
+      const s = JSON.parse(localStorage.getItem(k) || '{}')
+      const ids = (s.exercises || []).filter((e) => e.move === 'table_row').map((e) => e.id)
+      const all = Object.values(s.sets || {}).flatMap((m) => ids.flatMap((id) => m[id] || []))
+      const mine = all.filter((x) => x.session)
+      return { n: mine.length, feel: mine.map((x) => `${x.feel}:${x.rir}`).join(','), log: (s.trainLog || []).length, sets: (s.trainLog?.[0]?.exercises || []).reduce((n, e) => n + e.sets.length, 0) }
+    }, K)
+    if (saved.n !== 3 || saved.feel !== 'hard:1,ok:2,easy:4' || saved.log !== 1 || saved.sets !== 3) throw new Error(`the sets were not saved with their effort: ${JSON.stringify(saved)}`)
+    await pg.click(`${T} [data-tr="finish"]`)
+    await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLog?.[0]?.done === true, K, { timeout: 8000 })
+    await pg.waitForFunction((t) => /^Done/.test(document.querySelector(`${t} .tr-today [data-tr="type"]`)?.textContent ?? ''), T, { timeout: 5000 })
+    // The roadmap: the current level with progress, and the level-up after 2 top sessions (you confirm it).
+    const road = `${T} .tr-road`
+    if (!/^Table rows$/.test((await pg.locator(`${road} .tr-ladder[data-ladder="pull"] [data-tr="current"]`).innerText()).trim())) throw new Error('the roadmap does not show the current pull level')
+    if (!/\d+\/6 top sets/.test(await pg.locator(`${road} .tr-ladder[data-ladder="pull"] [data-tr="progress"]`).innerText())) throw new Error('the roadmap shows no progress toward the level-up')
+    await pg.waitForSelector(`${road} .tr-ladder[data-ladder="push"] [data-tr="levelup"]`, { timeout: 5000 })
+    if (shots) {
+      await pg.setViewportSize({ width: 1440, height: 1500 })
+      await pg.waitForTimeout(400)
+      await pg.evaluate((r) => { document.querySelector(r).scrollIntoView({ block: 'start' }); window.scrollBy(0, -130) }, road)
+      await pg.waitForTimeout(300)
+      await pg.screenshot({ path: `${shots}/train-roadmap-desktop.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await pg.click(`${road} .tr-ladder[data-ladder="push"] [data-tr="move-up"]`)
+    await pg.waitForFunction((r) => /Decline push-ups/.test(document.querySelector(`${r} .tr-ladder[data-ladder="push"] [data-tr="current"]`)?.textContent ?? ''), road, { timeout: 5000 })
+    // Tap a level: how to do it.
+    await pg.click(`${road} .tr-ladder[data-ladder="pull"] .tr-node.next button`)
+    await pg.waitForSelector(`${T} [data-tr="move-sheet"] .tr-steps li`, { timeout: 5000 })
+    await pg.locator(`${T} [data-tr="move-sheet"] .sheet-actions button`, { hasText: 'Close' }).click()
     await pg.waitForSelector(`${T} .bt-builder .bt-session`, { timeout: 15000 })
     // The old Training info is still here ("This week").
     await pg.waitForSelector(`${T} .bt-week .mw-row`, { timeout: 10000 })
@@ -1044,7 +1198,6 @@ try {
     await pg.click(`${T} [data-bt="use"]`)
     await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{}').program?.id === 'home', K, { timeout: 10000 })
     await pg.waitForSelector(`${T} .bt-inuse`, { timeout: 5000 })
-    await pg.waitForFunction((t) => /Full body|Rest day/.test(document.querySelector(`${t} .bt-hero`)?.textContent ?? ''), T, { timeout: 5000 })
     // Join "3 workouts this week": a ring, nothing counted from before joining.
     await pg.click(`${T} [data-chal="week3"] [data-bt="join"]`)
     await pg.waitForSelector(`${T} .bt-chal.joined[data-chal="week3"] .bt-ring`, { timeout: 5000 })
@@ -1059,7 +1212,6 @@ try {
     }
     // Sport Track's Today follows it: every full-body day has the pull-up move (Monday is one), and on a
     // training day the open page shows it.
-    const trainDay = /Full body/.test(await pg.locator(`${T} .bt-hero h2`).innerText())
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
     await pg.waitForTimeout(2500)
     const sportFrame = () => pg.frames().find((f) => f.url().includes('/apps/sport/') && !f.isDetached())
@@ -1079,10 +1231,12 @@ try {
       const d = new Date(Date.now() + 86400000 * (((8 - new Date().getDay()) % 7) || 7))
       const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       const r = window.SportKit.todayRoutine(s.exercises, s.program, day)
-      return { names: r.list.map((e) => e.name), session: r.session && r.session.name }
+      const now = new Date(Date.now() - 4 * 3600000)
+      const today = window.SportKit.todayRoutine(s.exercises, s.program, `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`)
+      return { names: r.list.map((e) => e.name), session: r.session && r.session.name, trainDay: !!(today.session && /Full body/.test(today.session.name)) }
     }
     if (!/^Full body [AB]$/.test(monday.session ?? '') || !monday.names.some((n) => /pull-ups|chin-ups/i.test(n))) throw new Error(`Monday in Sport Track is not the program's session: ${JSON.stringify(monday)}`)
-    if (trainDay) await sportFrame().waitForFunction(() => /pull-ups|chin-ups/i.test(document.body.innerText), null, { timeout: 15000 })
+    if (monday.trainDay) await sportFrame().waitForFunction(() => /pull-ups|chin-ups/i.test(document.body.innerText), null, { timeout: 15000 })
     // A phone does not scroll sideways.
     await pg.locator('.seg-switch [role="tab"]').nth(1).click()
     await pg.setViewportSize({ width: 390, height: 844 })
@@ -5136,6 +5290,139 @@ try {
     await box.press('Escape')
     await box.waitFor({ state: 'detached', timeout: 3000 })
     console.log(`  quick add: toast shown ${shownMs} ms after Enter (with Playwright overhead)`)
+  })
+
+  // Last of the data steps on purpose: it logs a weight (72.4 kg today), which earlier steps never expect.
+  await step('Body log: the Log body sheet saves weight, fat and waist with Undo; Progress shows the weekly average, the band, estimate labels and the monthly summary', async () => {
+    const shots = process.env.BODYSCALE_SHOTS
+    // The screenshot run (E2E_BODY_DEMO) has six weeks of made-up weigh-ins near 70 kg: log a weight that fits them.
+    const kg0 = process.env.E2E_BODY_DEMO ? 70.6 : 72.4
+    const sql = async (stmt) => (await (await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: stmt, args: [] } }] }) })).json()).results[0].response?.result
+    const until = async (fn, what, ms = 10000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 200))
+      }
+    }
+    const crisp = async (width, height, mobile) => {
+      const cdp = await pg.context().newCDPSession(pg)
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile })
+      return async () => (await cdp.send('Emulation.clearDeviceMetricsOverride'), await cdp.detach())
+    }
+    const fillSheet = async (kg, more = {}, when = null) => {
+      await pg.waitForSelector('.blog-sheet .blog-weight input', { timeout: 10000 })
+      await pg.fill('.blog-sheet .blog-weight input', String(kg))
+      if (Object.keys(more).length) {
+        await pg.click('.blog-sheet .blog-more summary')
+        for (const [k, v] of Object.entries(more)) await pg.fill(`.blog-sheet [data-field="${k}"]`, String(v))
+      }
+      if (when) await pg.fill('.blog-sheet .blog-when input', when)
+    }
+    const save = async (kg) => {
+      await pg.click('.blog-sheet .blog-save')
+      // Back-to-back saves share one Undo toast ("2 changes"), so the toast's words are checked only for the first.
+      await until(async () => (await pg.locator('.blog-error').count()) > 0 || (await pg.locator('.blog-sheet').count()) === 0, `saving ${kg} kg did not finish`)
+      if (await pg.locator('.blog-error').count()) throw new Error(`the sheet says: ${await pg.locator('.blog-error').innerText()}`)
+      await pg.locator('.toast.has-action').last().waitFor({ state: 'attached', timeout: 10000 })
+    }
+    // 1. Body Today (on a phone): the weight card opens the sheet; the hint says when to weigh.
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="today"]')
+    const t = '#ptp-body-today'
+    await pg.locator(`${t} .wt-log`).first().click()
+    await pg.waitForSelector('.blog-sheet', { timeout: 10000 })
+    if (!/morning, after the toilet, before eating or drinking/.test(await pg.locator('.blog-hint').innerText())) throw new Error('the sheet has no weigh-in hint')
+    if (await pg.locator('.blog-sheet .blog-save').isEnabled()) throw new Error('Save works without a weight')
+    await fillSheet(kg0, { body_fat_pct: 15.2, waist_cm: 80.5 })
+    if (shots) {
+      const back = await crisp(390, 844, true)
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(300)
+      await pg.screenshot({ path: `${shots}/body-log-sheet-phone.png` })
+      await back()
+    }
+    // 2. Save, Undo (the row and the day's weight go), then log it again. On a laptop: on a phone the
+    // toast sits under the bottom bar (an app-wide toast issue, not this sheet's).
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    // Another Undo toast (the planner's morning re-plan) would merge with ours into "2 changes": let it go first.
+    await until(async () => (await pg.locator('.toast.has-action').count()) === 0, 'an older Undo toast stays up', 15000)
+    await save(kg0)
+    const undo = pg.locator('.toast', { hasText: `Saved ${kg0} kg` }).last().locator('.toast-act')
+    await undo.waitFor({ state: 'attached', timeout: 10000 })
+    await undo.dispatchEvent('click')
+    await pg.locator('.toast', { hasText: 'Weigh-in taken back' }).last().waitFor({ state: 'attached', timeout: 10000 })
+    await until(async () => Number((await sql(`SELECT COUNT(*) FROM body_comp WHERE weight_kg = ${kg0}`)).rows[0][0].value) === 0, 'Undo did not remove the weigh-in')
+    await pg.locator(`${t} .wt-log`).first().click()
+    await fillSheet(kg0, { body_fat_pct: 15.2, waist_cm: 80.5 })
+    await save(kg0)
+    // (The demo data already has a weight today from elsewhere, which is kept.)
+    if (!process.env.E2E_BODY_DEMO) await until(async () => /72\.4/.test(await pg.locator(`${t} .wt-values`).innerText()), 'Body Today does not show the new weight')
+    await until(async () => {
+      const r = (await sql(`SELECT weight_kg, body_fat_pct, waist_cm, source FROM body_comp WHERE weight_kg = ${kg0}`)).rows
+      return r.length === 1 && Number(r[0][1].value) === 15.2 && Number(r[0][2].value) === 80.5 && r[0][3].value === 'manual'
+    }, 'the weigh-in is not saved once with its fat and waist')
+    if (!process.env.E2E_BODY_DEMO) await until(async () => Number((await sql('SELECT weight FROM body_metrics WHERE weight = 72.4')).rows.length) === 1, "body_metrics did not get the day's weight")
+    const ledgerBefore = Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value)
+    // 3. Progress: the body composition section.
+    await pg.click('.body-page .ptabs [data-tab="progress"]')
+    const prog = '#ptp-body-progress'
+    await pg.waitForSelector(`${prog} .bcp`, { timeout: 15000 })
+    if (shots) {
+      const back = await crisp(1440, 900, false)
+      await pg.waitForTimeout(400)
+      await pg.addStyleTag({ content: '.ptabs-wrap { position: static !important; } .toasts { display: none !important; }' })
+      await pg.locator(`${prog} .bcp`).scrollIntoViewIfNeeded()
+      await pg.locator(`${prog} .bcp`).screenshot({ path: `${shots}/body-comp-dashboard-desktop.png` })
+      await back()
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    if (!process.env.E2E_BODY_DEMO) {
+      // One weigh-in this week: not enough data for this week's average yet.
+      if (!/Not enough data/.test(await pg.locator(`${prog} .bcp`).innerText())) throw new Error('one weigh-in shows a weekly average')
+      // Three weigh-ins in each of the two weeks before (typed with a past time) give last week's average and the band.
+      const d = new Date(fakeNow())
+      const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
+      const at = (back, add) => {
+        const x = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() - back + add, 7, 10)
+        return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}T07:10`
+      }
+      for (const [back, add, kg] of [[14, 0, 71], [14, 1, 71.2], [14, 2, 71.1], [7, 0, 71.4], [7, 1, 71.5], [7, 2, 71.6]]) {
+        await pg.click(`${prog} .bcp-log`)
+        await fillSheet(kg, {}, at(back, add))
+        await save(kg)
+      }
+      await until(async () => /71\.5/.test(await pg.locator(`${prog} .bcp-big`).innerText()), 'Progress does not show last week\'s average 71.5 kg')
+      const head = await pg.locator(`${prog} .bcp-hero`).innerText()
+      if (!/Weekly average, last week/.test(head)) throw new Error('the headline does not say whose average it is')
+      if (!/\+0\.4 kg vs last week/.test(head)) throw new Error(`no week-over-week change: ${head}`)
+      if (!/In the target band/.test(head)) throw new Error('no target band label')
+      if (!(await pg.locator(`${prog} .bcp-chart .bcp-target`).count())) throw new Error('the chart has no target band')
+      if ((await pg.locator(`${prog} .bcp-chart .bcp-day`).count()) < 7) throw new Error('the chart has no daily points')
+      if (!(await pg.locator(`${prog} .bcp-chart .bpg-line`).count())) throw new Error('the chart has no 7-day average line')
+    }
+    const minis = await pg.locator(`${prog} .bcp-minis`).innerText()
+    if ((minis.match(/estimate, watch the trend/g) ?? []).length < 2) throw new Error('fat and muscle are not labeled as estimates')
+    if (await pg.locator(`${prog} .bcp .bad, ${prog} .bcp [class*="danger"]`).count()) throw new Error('the body section uses alarm colours')
+    // 4. The monthly summary: reachable any day, with the photo reminder.
+    await pg.click(`${prog} .bcp-month`)
+    await until(async () => (await pg.evaluate(() => document.activeElement?.id)) === 'bpg-month', 'Monthly summary did not take you to the card')
+    if (!(await pg.locator(`${prog} #bpg-month .bpg-photo-link`).count())) throw new Error('the monthly summary has no progress photo reminder')
+    if (!(await pg.locator(`${prog} #bpg-photos`).count())) throw new Error('the photo compare card is missing')
+    // 5. A Sunday waist reminder is planned once; body logs pay no points.
+    await until(async () => (await sql("SELECT value FROM settings WHERE key = 'coach_reminders'")).rows.some((r) => (r[0].value.match(/"waist:/g) ?? []).length >= 1), 'no Sunday waist reminder')
+    if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a body log paid points')
+    // No sideways scroll on a phone.
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await pg.waitForTimeout(300)
+    const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    if (over > 1) throw new Error(`Body progress scrolls sideways on a phone (${over}px)`)
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
 
   await step('no uncaught page errors', async () => {

@@ -195,6 +195,11 @@ entry that says why.
   card; sending simple data questions to the model when the data answers them.
 
 
+### Food goals are slow muscle gain; one-tap logging writes the same meals (2026-11-09)
+- **Decision:** the food goals are slow muscle gain: 1.8 g/kg protein, maintenance +350 kcal once a weight and the owner's own height and age are known, else a fixed 2,700 kcal / 125 g; the weekly weight and waist check suggests +200 or −150…−200 kcal (Apply, within ±600). The move from "lean" runs once (`food_goals.gainV`) and keeps every saved value that is not an old app default. Saved foods, saved meals and the standard day live in the synced setting `food_saved`; every tap becomes a normal food-counter meal through `addFoodMeal` (source 'saved'), so Undo, the one protein number and the week all stay one system. Meals carry a `source`; old meals read as 'manual' and are never rewritten. The owner's real height and age are not in code.
+- **Why:** the owner ate about 1,000–1,300 kcal and 45–60 g protein a day and was not growing; the lean plan (+150 / +0) kept him under-fed, and logging had to take one tap.
+- **Rules out:** a second store or meal format for saved meals, points for food, rewriting old meals, putting the owner's body data in code, or a weight-check change applied without a tap. (This replaces "a bulk-sized surplus by default" in the 2026-11-08 food decision: +350 is a slow gain, not a bulk.)
+
 ### Food counter: numbers in body_log, details in a capped setting, no image AI (2026-11-08)
 - **Decision:** a meal is two rows in the one body log (`protein:food`, `kcal:food`, ids `<meal>-p` / `<meal>-k`) and its foods in the synced setting `food_log` (45 days, 400 meals, 20 stars). Protein stays ONE number (`proteinOfDay` of every `protein:*` row). The app never calls an AI for food: it copies a prompt and parses the pasted reply with code. Goals are lean (2.0 g/kg; maintenance +150 kcal on a training day, +0 on a rest day).
 - **Why:** body_log already merges across devices by row id and feeds the ring, the weekly report and "why it stalled"; a new table would need a schema bump and a bot bundle rebuild. The owner wants no image-AI cost and no fat gain.
@@ -240,3 +245,31 @@ entry that says why.
   counted it in today's money; the owner: "that's not physical money".
 - **Rules out:** defaulting `paid` to the real cost, sending a points buy to Finance Helper, or deleting
   reward records from Finance without the owner's confirm.
+
+### Body Training keeps its week, ladders, levels and sessions inside Sport Track's state (2026-11-09)
+- **Decision:** the weekly split (`trainWeek`, versioned `v: 1`), edited ladders (`trainLadders`), levels
+  (`trainLevels`) and the session log (`trainLog`) live in Sport Track's state and sync with it
+  (`sport_tracker_json`); `mergeTrain` (core/trainLog.ts) joins sessions by id and takes the newer edit for
+  the rest. Sets stay in the one set log (`sets[day][exerciseId]`) with optional `rir`, `feel`, `session`.
+  The split is the default schedule on the Training tab; the program builder stays for moves, sets and
+  equipment. Moves the library has no demo for are in `TRAIN_MOVES` (how-to text, no art) and their Sport
+  Track exercises carry `move: 't:<id>'`, which `moveOf` never guesses from the name.
+- **Why:** a new synced setting key needs its own API, web bridge and desktop handler (files outside the
+  Body area); the sport state already syncs, merges sets by id and is what every Sport view reads. The
+  `t:` tag stops "Wall handstand press" from counting as push-ups in Sport Track's levels.
+- **Rules out:** a second set store, new points for sets, levels or level-ups (a finished session pays only
+  the usual "Workout done", once a day), adding the extra moves to `MOVES` without real demos.
+
+
+### Smart-scale weigh-ins live in body_comp; body_metrics stays the day's weight (2026-11-09)
+- **Decision:** each weigh-in is a row in its own table `body_comp` (migration 023), id made from the
+  dedupe key (time to the minute in UTC + weight to 0.1 kg), later `updated_at` wins. Every write also
+  sets that day's `body_metrics.weight` to the first morning weigh-in and the waist to the newest given,
+  but never replaces a weight that came from elsewhere that day and never touches other days. The
+  headline is the weekly average (3+ weigh-ins a week); fat and muscle are shown only smoothed and
+  labeled as estimates. Body logs pay no points.
+- **Why:** a scale gives many numbers several times a day, too much for a setting or `body_log`'s
+  integer amounts, and the same weigh-in will arrive twice (typed now, synced later). Everything that
+  already reads `body_metrics` (weight trend, protein and food goals, Telegram) keeps working unchanged.
+- **Rules out:** writing scale data into `body_log` or a setting, a random id for a weigh-in, daily
+  weight as the headline number, or red alarms on body numbers.

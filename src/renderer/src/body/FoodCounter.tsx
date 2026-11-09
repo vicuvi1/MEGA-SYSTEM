@@ -15,14 +15,16 @@ import { parseFoodWords } from '@core/foodWords'
 import { dayRings, foodHeader } from '@core/foodDisplay'
 import { SUPP_PRESETS, WATER_BUTTONS } from '@core/foodSupps'
 import { parseFoodReply } from '@core/foodParse'
-import { MEAL_TYPES, mealName, mealTypeAt, scaleItem, stepGrams, sumItems, type FoodItem, type MealType } from '@core/food'
-import { ACTIVITY, GOAL_LABEL, type Activity, type FoodGoals } from '@core/foodGoals'
+import { MEAL_TYPES, mealName, mealSource, mealTypeAt, scaleItem, stepGrams, sumItems, type FoodItem, type MealType } from '@core/food'
+import { ACTIVITY, FIXED_KCAL, GAIN_TEXT, GOAL_LABEL, type Activity, type FoodGoals } from '@core/foodGoals'
 import { addDays } from '@core/dates'
 import { life } from '../bridge'
 import { useAction, useToast } from '../ui'
 import { Select } from '../Select'
 import { Rings, WeekChartView } from './FoodViz'
 import { FoodPlan, copyText } from './FoodPlan'
+import { FoodBars, QuickLog } from './FoodFast'
+import { FoodSavedSheet } from './FoodSavedSheet'
 import type { FoodView } from '../../../main/food'
 import './food.css'
 
@@ -72,6 +74,8 @@ export function FoodCounter() {
   const [goalsOpen, setGoalsOpen] = useState(false)
   const [copied, setCopied] = useState(false)
   const [copiedLabel, setCopiedLabel] = useState(false)
+  const [manage, setManage] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
 
   useEffect(() => {
     if (!api) return
@@ -150,9 +154,15 @@ export function FoodCounter() {
   }
   const save = async () => {
     if (!draft.length) return
+    const before = new Set(v.meals.map((m) => m.id))
     const next = editing
       ? await act(() => api.edit(editing, { items: draft, name: mealName(draft), type }, v.day), 'Meal changed')
-      : await act(() => api.add({ items: draft, name: mealName(draft), day: v.day, type }, v.day), `Meal saved: +${draftTotals.protein} g protein, ${fmt(draftTotals.kcal)} kcal`)
+      : await act(() => api.add({ items: draft, name: mealName(draft), day: v.day, type, source: 'manual' }, v.day))
+    if (next && !editing) {
+      // One tap to keep it as a saved meal for next time.
+      const made = next.meals.find((m) => !before.has(m.id))
+      toast(`Meal saved: +${draftTotals.protein} g protein, ${fmt(draftTotals.kcal)} kcal`, 'good', made ? { label: 'Save as meal', run: () => void act(() => api.saveAsMeal(made.id), 'Saved to your meals').then((x) => x && setV(x)) } : undefined)
+    }
     if (next) {
       setV(next)
       clearDraft()
@@ -196,49 +206,26 @@ export function FoodCounter() {
 
       {sub === 'today' && (
         <>
-          <p className="fd-line" aria-live="polite">
+          <FoodBars progress={v.progress} behind={pastDay ? null : v.behind} />
+          <p className="fd-line sr-only" aria-live="polite">
             {head.line}
           </p>
-          <p className="fd-macros-line">{head.macros}</p>
           {head.preview && (
             <p className="fd-preview" aria-live="polite">
               {head.preview}
             </p>
           )}
-          <Rings rings={dayRings(saved, goals)} />
-          <small className="muted fd-why">
-            {GOAL_LABEL} · {t.targets.training ? 'training day' : 'rest day'}
-          </small>
         </>
       )}
       {pastDay && <p className="fd-past">Editing {v.day}: meals you add are marked "added later".</p>}
 
       {goalsOpen && <GoalsSheet v={v} onView={setV} day={day} />}
 
-      {sub === 'today' && !pastDay && (
-        <p className="fd-next" role="status">
-          <b>Next:</b> {v.next.line}
-        </p>
-      )}
-
-      {sub === 'today' && !pastDay && sug && (
-        <div className="fd-adjust" role="status" aria-label="Weekly weight check">
-          <b>{sug.title}</b>
-          <small>{sug.why}</small>
-          <div className="fd-row">
-            <button type="button" className="btn primary small fd-adjust-apply" onClick={async () => setV((await act(() => api.adjust(true, day), `Goal changed to ${fmt(t.targets.kcal + sug.delta)} kcal`)) ?? v)}>
-              Apply ({sug.delta > 0 ? '+' : '−'}
-              {Math.abs(sug.delta)} kcal)
-            </button>
-            <button type="button" className="btn ghost small" onClick={async () => setV((await act(() => api.adjust(false, day), 'Okay, no change')) ?? v)}>
-              Not now
-            </button>
-          </div>
-        </div>
-      )}
+      {sub === 'today' && !pastDay && sug && <WeekCheck v={v} onView={setV} day={day} />}
 
       {sub === 'today' && (
         <>
+          <QuickLog v={v} onView={setV} onManage={() => setManage(true)} />
           {!pastDay && (
             <div className="fd-quick-add" aria-label="Water and supplements">
               <div className="fd-row fd-water">
@@ -262,80 +249,6 @@ export function FoodCounter() {
               </div>
             </div>
           )}
-
-          <div className="fd-step fd-words-step">
-            <b>Say what you ate</b>
-            <div className="fd-row">
-              <input
-                className="fd-words"
-                value={words}
-                placeholder="200g chicken, 150g rice, 2 eggs, 1 banana"
-                aria-label="What you ate, in words"
-                onChange={(e) => setWords(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && words.trim() && addWords()}
-              />
-              <button type="button" className="btn small fd-words-go" disabled={!words.trim()} onClick={addWords}>
-                Add
-              </button>
-            </div>
-            {say && (
-              <p className="fd-words-say" role="status">
-                {say}
-              </p>
-            )}
-          </div>
-
-          <div className="fd-step">
-            <div className="fd-step-head">
-              <b>Or send a photo to an AI app</b>
-              <small className="muted">Copy the prompt, paste it with a photo of your meal (or of the nutrition label on packaged food) into any free AI app (ChatGPT, Gemini, Claude), then paste its reply below.</small>
-            </div>
-            <div className="fd-row">
-              <button type="button" className="btn primary small fd-copy" onClick={copyPrompt}>
-                {copied ? 'Copied' : 'Copy prompt'}
-              </button>
-              <button type="button" className="btn small fd-copy-label" onClick={copyLabel}>
-                {copiedLabel ? 'Copied' : 'Copy label prompt'}
-              </button>
-              <details className="fd-prompt">
-                <summary>See the prompts</summary>
-                <pre>{FOOD_PROMPT}</pre>
-                <pre>{LABEL_PROMPT}</pre>
-              </details>
-            </div>
-          </div>
-
-          <div className="fd-step">
-            <b>Paste the reply</b>
-            <textarea
-              className="fd-paste"
-              value={reply}
-              rows={3}
-              placeholder="Paste the AI app's whole reply here"
-              aria-label="The AI app's reply"
-              onChange={(e) => setReply(e.target.value)}
-              onPaste={(e) => {
-                const text = e.clipboardData.getData('text')
-                if (text) setTimeout(() => read(reply ? `${reply}${text}` : text), 0)
-              }}
-            />
-            <div className="fd-row">
-              <button type="button" className="btn small fd-read" disabled={!reply.trim()} onClick={() => read()}>
-                Read reply
-              </button>
-              {err && (
-                <button type="button" className="btn ghost small" onClick={copyPrompt}>
-                  Copy the prompt again
-                </button>
-              )}
-            </div>
-            {err && (
-              <p className="fd-err" role="alert">
-                {err}
-              </p>
-            )}
-          </div>
-
           {rows && (
             <div className="fd-draft" aria-label="Your meal before saving">
               {editing && <p className="fd-q">Changing a saved meal. Save replaces it.</p>}
@@ -389,35 +302,109 @@ export function FoodCounter() {
               </div>
             </div>
           )}
-
-          {(v.yesterday.length > 0 || v.favs.length > 0) && !rows && (
-            <div className="fd-quick">
-              {v.yesterday.length > 0 && (
-                <div className="fd-again">
-                  <b>Same as yesterday</b>
-                  <div className="pr-chips">
-                    {v.yesterday.map((m) => (
-                      <button key={m.id} type="button" className="chip-btn fd-yday" onClick={() => load(m.items)} title="Opens it with the grams to fix, then Save">
-                        {m.name} <small>+{m.totals.protein} g</small>
-                      </button>
-                    ))}
-                  </div>
+          <details className="fd-more" open={moreOpen || pastDay} onToggle={(e) => setMoreOpen((e.currentTarget as HTMLDetailsElement).open)}>
+            <summary>More ways to log: in words, a photo with any AI app, same as yesterday</summary>
+            <div className="fd-more-body">
+              <div className="fd-step fd-words-step">
+                <b>Say what you ate</b>
+                <div className="fd-row">
+                  <input
+                    className="fd-words"
+                    value={words}
+                    placeholder="200g chicken, 150g rice, 2 eggs, 1 banana"
+                    aria-label="What you ate, in words"
+                    onChange={(e) => setWords(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && words.trim() && addWords()}
+                  />
+                  <button type="button" className="btn small fd-words-go" disabled={!words.trim()} onClick={addWords}>
+                    Add
+                  </button>
                 </div>
-              )}
-              {v.favs.length > 0 && (
-                <div className="fd-again">
-                  <b>Starred</b>
-                  <div className="pr-chips">
-                    {v.favs.map((f) => (
-                      <button key={f.id} type="button" className="chip-btn fd-favchip" onClick={() => load(f.items)}>
-                        ★ {f.name} <small>+{sumItems(f.items).protein} g</small>
-                      </button>
-                    ))}
-                  </div>
+                {say && (
+                  <p className="fd-words-say" role="status">
+                    {say}
+                  </p>
+                )}
+              </div>
+              <div className="fd-step">
+                <div className="fd-step-head">
+                  <b>Or send a photo to an AI app</b>
+                  <small className="muted">Copy the prompt, paste it with a photo of your meal (or of the nutrition label on packaged food) into any free AI app (ChatGPT, Gemini, Claude), then paste its reply below.</small>
+                </div>
+                <div className="fd-row">
+                  <button type="button" className="btn primary small fd-copy" onClick={copyPrompt}>
+                    {copied ? 'Copied' : 'Copy prompt'}
+                  </button>
+                  <button type="button" className="btn small fd-copy-label" onClick={copyLabel}>
+                    {copiedLabel ? 'Copied' : 'Copy label prompt'}
+                  </button>
+                  <details className="fd-prompt">
+                    <summary>See the prompts</summary>
+                    <pre>{FOOD_PROMPT}</pre>
+                    <pre>{LABEL_PROMPT}</pre>
+                  </details>
+                </div>
+              </div>
+              <div className="fd-step">
+                <b>Paste the reply</b>
+                <textarea
+                  className="fd-paste"
+                  value={reply}
+                  rows={3}
+                  placeholder="Paste the AI app's whole reply here"
+                  aria-label="The AI app's reply"
+                  onChange={(e) => setReply(e.target.value)}
+                  onPaste={(e) => {
+                    const text = e.clipboardData.getData('text')
+                    if (text) setTimeout(() => read(reply ? `${reply}${text}` : text), 0)
+                  }}
+                />
+                <div className="fd-row">
+                  <button type="button" className="btn small fd-read" disabled={!reply.trim()} onClick={() => read()}>
+                    Read reply
+                  </button>
+                  {err && (
+                    <button type="button" className="btn ghost small" onClick={copyPrompt}>
+                      Copy the prompt again
+                    </button>
+                  )}
+                </div>
+                {err && (
+                  <p className="fd-err" role="alert">
+                    {err}
+                  </p>
+                )}
+              </div>
+              {(v.yesterday.length > 0 || v.favs.length > 0) && !rows && (
+                <div className="fd-quick">
+                  {v.yesterday.length > 0 && (
+                    <div className="fd-again">
+                      <b>Same as yesterday</b>
+                      <div className="pr-chips">
+                        {v.yesterday.map((m) => (
+                          <button key={m.id} type="button" className="chip-btn fd-yday" onClick={() => load(m.items)} title="Opens it with the grams to fix, then Save">
+                            {m.name} <small>+{m.totals.protein} g</small>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {v.favs.length > 0 && (
+                    <div className="fd-again">
+                      <b>Starred</b>
+                      <div className="pr-chips">
+                        {v.favs.map((f) => (
+                          <button key={f.id} type="button" className="chip-btn fd-favchip" onClick={() => load(f.items)}>
+                            ★ {f.name} <small>+{sumItems(f.items).protein} g</small>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </details>
 
           {groups.length > 0 && (
             <div className="fd-meals" aria-label={pastDay ? `Meals on ${v.day}` : "Today's meals"}>
@@ -450,6 +437,11 @@ export function FoodCounter() {
                                 {m.fav ? '★' : '☆'}
                               </button>
                             )}
+                            {!m.removed && !m.supp && mealSource(m) !== 'saved' && (
+                              <button type="button" className="btn ghost small fd-save-meal" onClick={async () => setV((await act(() => api.saveAsMeal(m.id), 'Saved to your meals: one tap logs it next time')) ?? v)}>
+                                Save as meal
+                              </button>
+                            )}
                             {!m.removed && (
                               <button type="button" className="btn ghost small fd-edit" onClick={() => edit(m)}>
                                 Edit
@@ -467,7 +459,18 @@ export function FoodCounter() {
               })}
             </div>
           )}
-          <p className="pr-note">The AI app's numbers are estimates; fix the grams if they look wrong. Nothing is sent from here. Logging food pays no points.</p>
+          <p className="fd-macros-line">{head.macros}</p>
+          <Rings rings={dayRings(saved, goals)} />
+          <small className="muted fd-why">
+            {GOAL_LABEL} · {GAIN_TEXT}
+          </small>
+          {!pastDay && (
+            <p className="fd-next" role="status">
+              <b>Next:</b> {v.next.line}
+            </p>
+          )}
+          {!pastDay && !sug && <WeekCheck v={v} onView={setV} day={day} />}
+          <p className="pr-note">Saved foods use common table values; an AI app's numbers are estimates. Fix any amount that looks wrong. Logging food pays no points.</p>
         </>
       )}
 
@@ -481,7 +484,43 @@ export function FoodCounter() {
       )}
 
       {sub === 'plan' && <FoodPlan v={v} onView={setV} day={day} />}
+      {manage && <FoodSavedSheet v={v} onView={setV} onClose={() => setManage(false)} />}
     </section>
+  )
+}
+
+/** The weekly weight and waist check: a suggestion (Apply / Not now) or one quiet line. */
+function WeekCheck({ v, onView, day }: { v: FoodView; onView: (v: FoodView) => void; day?: string }) {
+  const api = life.coach!.food!
+  const act = useAction()
+  const a = v.adjust
+  if (a.state !== 'suggest')
+    return (
+      <div className="fd-week-check" aria-label="Weekly weight check">
+        <small>
+          <b>Weekly check:</b> {a.why}
+        </small>
+      </div>
+    )
+  const sug = a.suggestion
+  const goal = v.totals.targets.kcal + sug.delta
+  return (
+    <div className="fd-week-check suggest fd-adjust" role="status" aria-label="Weekly weight check">
+      <b>{sug.title}</b>
+      <small>{sug.why}</small>
+      <small>
+        <b>Idea:</b> {sug.tip}
+      </small>
+      <div className="fd-row">
+        <button type="button" className="bdy-btn primary fd-adjust-apply" onClick={async () => onView((await act(() => api.adjust(true, day), `Goal changed to ${fmt(goal)} kcal`)) ?? v)}>
+          Apply ({sug.delta > 0 ? '+' : '−'}
+          {Math.abs(sug.delta)} kcal)
+        </button>
+        <button type="button" className="bdy-btn quiet fd-adjust-later" onClick={async () => onView((await act(() => api.adjust(false, day), 'Okay, I will check again next week')) ?? v)}>
+          Not now
+        </button>
+      </div>
+    </div>
   )
 }
 
@@ -490,16 +529,24 @@ function GoalsSheet({ v, onView, day }: { v: FoodView; onView: (v: FoodView) => 
   const act = useAction()
   const [g, setG] = useState<FoodGoals>(v.goals)
   const [gpk, setGpk] = useState(v.totals.targets.gPerKg)
+  // Height and age stay empty until you enter them (then kcal = maintenance + surplus).
+  const [body, setBody] = useState({ h: v.goals.bodySet ? String(v.goals.heightCm) : '', a: v.goals.bodySet ? String(v.goals.age) : '' })
   const num = (s: string) => (s.trim() === '' ? null : Number(s))
   const save = async () => {
     if (Math.abs(gpk - v.totals.targets.gPerKg) > 0.01) await life.coach?.bodyPlus?.prefs({ gPerKg: gpk }).catch(() => null)
-    const next = await act(() => api.goals(g, day), 'Goals saved')
+    const h = Number(body.h)
+    const a = Number(body.a)
+    const both = h > 0 && a > 0
+    const patch: Partial<FoodGoals> = { ...g, ...(both ? { heightCm: h, age: a, bodySet: 1 } : { bodySet: 0 }) }
+    const next = await act(() => api.goals(patch, day), 'Goals saved')
     if (next) onView(next)
   }
   return (
     <div className="fd-goals" aria-label="Goals">
       <b>{GOAL_LABEL}</b>
-      <small className="muted">{v.totals.targets.why}</small>
+      <small className="muted">
+        {GAIN_TEXT} {v.totals.targets.why}
+      </small>
       <label className="fd-field">
         <span>Protein per kg of body weight</span>
         <span className="pr-gpk-row">
@@ -513,11 +560,11 @@ function GoalsSheet({ v, onView, day }: { v: FoodView; onView: (v: FoodView) => 
       <div className="fd-grid">
         <label className="fd-field">
           <span>Height (cm)</span>
-          <input type="number" inputMode="numeric" value={g.heightCm} onChange={(e) => setG({ ...g, heightCm: Number(e.target.value) })} />
+          <input type="number" inputMode="numeric" className="fd-height" placeholder="e.g. 180" value={body.h} onChange={(e) => setBody({ ...body, h: e.target.value })} />
         </label>
         <label className="fd-field">
           <span>Age</span>
-          <input type="number" inputMode="numeric" value={g.age} onChange={(e) => setG({ ...g, age: Number(e.target.value) })} />
+          <input type="number" inputMode="numeric" className="fd-age" placeholder="e.g. 20" value={body.a} onChange={(e) => setBody({ ...body, a: e.target.value })} />
         </label>
         <label className="fd-field">
           <span>Sex (for the formula)</span>
@@ -537,11 +584,11 @@ function GoalsSheet({ v, onView, day }: { v: FoodView; onView: (v: FoodView) => 
           </Select>
         </label>
         <label className="fd-field">
-          <span>Extra kcal on a training day</span>
+          <span>Extra kcal to grow, training day</span>
           <input type="number" inputMode="numeric" value={g.trainSurplus} onChange={(e) => setG({ ...g, trainSurplus: Number(e.target.value) })} />
         </label>
         <label className="fd-field">
-          <span>Extra kcal on a rest day</span>
+          <span>Extra kcal to grow, rest day</span>
           <input type="number" inputMode="numeric" value={g.restSurplus} onChange={(e) => setG({ ...g, restSurplus: Number(e.target.value) })} />
         </label>
         <label className="fd-field">
@@ -553,7 +600,12 @@ function GoalsSheet({ v, onView, day }: { v: FoodView; onView: (v: FoodView) => 
           <input type="number" inputMode="numeric" value={g.proteinOwn ?? ''} onChange={(e) => setG({ ...g, proteinOwn: num(e.target.value) })} />
         </label>
       </div>
-      <small className="muted">Maintenance is about {fmt(v.totals.targets.maintenance)} kcal. Lean muscle: about +150 kcal on days you train, none on rest days, so the gain is muscle, not fat.</small>
+      <small className="muted">
+        {v.totals.targets.fixed
+          ? `For now the goal is a fixed ${fmt(FIXED_KCAL)} kcal. Log your weight and enter your height and age to get one made for you.`
+          : `Maintenance is about ${fmt(v.totals.targets.maintenance)} kcal.`}{' '}
+        Slow muscle gain: about +350 kcal a day over maintenance and 1.8 g protein per kg. The weekly check adjusts it from your weight and waist.
+      </small>
       <div className="fd-row">
         <button type="button" className="btn primary small fd-goals-save" onClick={save}>
           Save goals

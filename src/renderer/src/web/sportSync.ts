@@ -7,6 +7,7 @@ import { createAppSync, type AppSyncSpec } from './appSync'
 import type { Mirror } from './mirror'
 import { sportFromLog } from '../../../main/bodyLog'
 import { mergeSets } from '../../../core/sportSets'
+import { mergeTrain } from '../../../core/trainLog'
 
 export const SPORT_KEY = 'life_sport_tracker_v1'
 const SETTING = 'sport_tracker_json'
@@ -99,6 +100,8 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
     for (const [k, v] of Object.entries(newer.notYet ?? {})) later[k] = later[k] && later[k] > String(v) ? later[k] : String(v)
     out.notYet = later
   }
+  // Body → Training: sessions from both devices (by id); the week, your ladders and each level from the newer edit.
+  Object.assign(out, mergeTrain(a, b))
   return out
 }
 
