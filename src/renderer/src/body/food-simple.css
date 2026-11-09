@@ -71,8 +71,14 @@
 .fd-meal-sub { font-size: 14px; color: var(--bdy-muted); font-weight: 500; }
 .fd-meal-actions { flex: none; display: flex; align-items: center; gap: 2px; }
 .fd-meal-actions .fdf-x { width: 40px; height: 40px; display: inline-grid; place-items: center; font-size: 20px; }
-.fd-mlist li.removed .fd-meal-name { opacity: 0.5; }
-.fd-mlist li.removed .fd-meal-name b { text-decoration: line-through; }
+/* Just removed: one small grey line with Undo for 6 s, fading out, then gone (no struck-through list). */
+.fd-mlist li.removed .fd-mrow { min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
+.fd-mlist li.removed .fd-meal-name { opacity: 0.55; }
+.fd-mlist li.removed .fd-meal-name b { font-size: 14px; font-weight: 500; }
+.fd-mlist li.removed .fd-meal-sub { display: none; }
+.fd-mlist li.removed { animation: fd-gone 6s ease-in both; }
+.fd-removed-tag { font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--bdy-muted); }
+@keyframes fd-gone { 0%, 70% { opacity: 1; } 100% { opacity: 0.25; } }
 .fd-mextra { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 14px; font-size: 14px; color: var(--bdy-muted); animation: fdf-in 0.18s ease both; }
 .fd-mextra .fd-meal-items { overflow-wrap: anywhere; }
 .fd-star.on { color: var(--bdy-accent-text); }
@@ -201,6 +207,6 @@
   .fdl-card .fdf-tile { min-height: 104px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sheet-card.fdl-card, .fd-mextra { animation: none; }
+  .sheet-card.fdl-card, .fd-mextra, .fd-mlist li.removed { animation: none; }
   .fdl-choice, .fd-more > summary::after { transition: none; }
 }

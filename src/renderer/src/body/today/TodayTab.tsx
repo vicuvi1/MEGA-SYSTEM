@@ -134,15 +134,21 @@ export function TodayTab({
 
 const VERDICT_LINE: Record<Verdict, string> = { go: 'ready, go full today', lighter: 'go lighter today', rest: 'rest or mobility today' }
 
-/** "Readiness 75: go lighter today" with Adjust (the same number as the readiness card under More). */
+/** "Readiness 75: go lighter today" with Adjust (the same number as the readiness card under More, yesterday's hard sets counted). */
 function ReadinessLine({ r, ydaySets, onAdjust }: { r: ReadinessState; ydaySets: number; onAdjust: () => void }) {
   const score = r.tr ? r.tr.score : trainReadiness({ sleptMin: r.sleptMin, needMin: r.needMin, soreness: r.sore, ydaySets }).score
   const verdict = r.tr ? r.verdict : verdictOf(score)
+  // Nothing logged for last night or today: no made-up "100", just how to get a real score.
+  const thin = r.sleptMin == null && r.sore == null
   return (
-    <p className={`ct-ready rdy-line ${verdict}`}>
-      <span>
-        Readiness <b className="num">{score}</b>: {VERDICT_LINE[verdict]}
-      </span>
+    <p className={`ct-ready rdy-line ${thin ? 'thin' : verdict}`}>
+      {thin ? (
+        <span>Readiness: log sleep or tap soreness for a real score</span>
+      ) : (
+        <span>
+          Readiness <b className="num">{score}</b>: {VERDICT_LINE[verdict]}
+        </span>
+      )}
       <button type="button" className="ct-link rdy-adjust" onClick={onAdjust}>
         Adjust
       </button>

@@ -368,7 +368,7 @@ try {
       if (!(await pg.locator(`${t} .wo-anyway-btn`).count())) throw new Error('a rest day has no "Train anyway"')
     } else if (/ct-session/.test(train) && /Rest day/.test(await pg.locator(`${t} [data-ct="train"]`).innerText())) throw new Error('a session day says "Rest day"')
     // Readiness is one line in the card, with Adjust.
-    if (!/Readiness \d+: (ready, go full|go lighter|rest or mobility) today/.test(await pg.locator(`${t} .rdy-line`).innerText())) throw new Error(`no readiness line: ${await pg.locator(`${t} .rdy-line`).innerText().catch(() => '')}`)
+    if (!/Readiness \d+: (ready, go full|go lighter|rest or mobility) today|Readiness: log sleep or tap soreness for a real score/.test(await pg.locator(`${t} .rdy-line`).innerText())) throw new Error(`no readiness line: ${await pg.locator(`${t} .rdy-line`).innerText().catch(() => '')}`)
     // The clock says 08:30: no evening check-in yet.
     if (await pg.locator(`${t} .ck-card`).count()) throw new Error('the evening check-in shows in the morning')
     // ONE level in the header ("Level …"), and no "Strength rank" anywhere on Body Today.
@@ -1003,6 +1003,9 @@ try {
     const primaries = await pg.locator('#ptp-body-food :is(.bdy-btn.primary, .btn.primary)').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.textContent.trim()))
     if (primaries.length !== 1 || !/Log food/.test(primaries[0])) throw new Error(`the Food main view should have one primary "Log food" button, it has: ${JSON.stringify(primaries)}`)
     if (!(await pg.locator(`${fc} .fd-meals h3`, { hasText: "Today's meals" }).count())) throw new Error('no "Today\'s meals" list')
+    // The Food tab badge uses the same protein goal as the card.
+    const cardGoal = (await pg.locator(`${fc} .fdf-protein .fdf-goal`).innerText()).replace(/[^\d]/g, '')
+    await pg.waitForFunction((g) => new RegExp(`/${g}\\b`).test(document.querySelector('.body-page .ptabs [data-tab="food"]')?.textContent ?? ''), cardGoal, { timeout: 10000 })
     // Log food opens a sheet with three big choices.
     await pg.click(`${fc} .fd-log-btn`)
     await pg.waitForSelector(`.fdl-sheet .fdl-choices`, { timeout: 5000 })

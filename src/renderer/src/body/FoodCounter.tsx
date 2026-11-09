@@ -96,6 +96,7 @@ export function FoodCounter() {
   // The Log food sheet: its first page (Photo / My meals / Type it), or one of the two pages.
   const [sheet, setSheet] = useState<Sheet>(null)
   const [openMeal, setOpenMeal] = useState<string | null>(null)
+  const [justRemoved, setJustRemoved] = useState<string[]>([])
   const photoRef = useRef<PhotoPicker | null>(null)
 
   useEffect(() => {
@@ -182,6 +183,16 @@ export function FoodCounter() {
     setSay('')
     setSheet(null)
   }
+  /** Remove (or put back) a meal. A removed one shows as a grey "Removed · Undo" line for 6 s, then leaves the list. */
+  const toggleMeal = async (id: string, removing: boolean) => {
+    const next = await act(() => api.toggle(id, day))
+    if (!next) return
+    setV(next)
+    if (removing) {
+      setJustRemoved((l) => [...l, id])
+      window.setTimeout(() => setJustRemoved((l) => l.filter((x) => x !== id)), 6000)
+    } else setJustRemoved((l) => l.filter((x) => x !== id))
+  }
   /** Closing keeps an unsaved draft: "Finish your meal" opens it again. */
   const closeSheet = () => setSheet(null)
   const save = async () => {
@@ -207,8 +218,10 @@ export function FoodCounter() {
   const dayOptions = Array.from({ length: 8 }, (_, i) => addDays(v.today, -i))
 
   // Meal cards by meal type; supplements in their own card.
-  const foodMeals = v.meals.filter((m) => !m.supp)
-  const suppMeals = v.meals.filter((m) => m.supp)
+  // A removed meal leaves the list; only one you just removed shows for a few seconds as a grey line with Undo.
+  const shown = v.meals.filter((m) => !m.removed || justRemoved.includes(m.id))
+  const foodMeals = shown.filter((m) => !m.supp)
+  const suppMeals = shown.filter((m) => m.supp)
   const liveCount = v.meals.filter((m) => !m.removed).length
   const groups = [...MEAL_TYPES.map((ty) => ({ id: ty as string, label: TYPE_LABEL[ty], list: foodMeals.filter((m) => m.type === ty) })), { id: 'supp', label: 'Supplements', list: suppMeals }].filter((g) => g.list.length)
 
@@ -583,6 +596,7 @@ export function FoodCounter() {
                         <li key={m.id} className={`${m.removed ? 'removed' : ''}${openMeal === m.id ? ' open' : ''}`}>
                           <div className="fd-mrow">
                             <span className="fd-meal-name">
+                              {m.removed && <small className="fd-removed-tag">Removed</small>}
                               <b>{m.name}</b>
                               <small className="fd-meal-sub">
                                 <span className="num">{atHm(m.at)}</span> · <span className="num">{fmt(m.totals.kcal)} kcal · {m.totals.protein} g protein</span>
@@ -600,7 +614,7 @@ export function FoodCounter() {
                                   <LogIcon kind="pen" size={18} />
                                 </button>
                               )}
-                              <button type="button" className={m.removed ? 'bdy-btn quiet fd-remove' : 'fdf-x fd-remove'} aria-label={m.removed ? `Undo removing ${m.name}` : `Remove ${m.name}`} title={m.removed ? 'Undo' : 'Remove'} onClick={async () => setV((await act(() => api.toggle(m.id, day))) ?? v)}>
+                              <button type="button" className={m.removed ? 'bdy-btn quiet fd-remove' : 'fdf-x fd-remove'} aria-label={m.removed ? `Undo removing ${m.name}` : `Remove ${m.name}`} title={m.removed ? 'Undo' : 'Remove'} onClick={() => void toggleMeal(m.id, !m.removed)}>
                                 {m.removed ? 'Undo' : '×'}
                               </button>
                             </span>
