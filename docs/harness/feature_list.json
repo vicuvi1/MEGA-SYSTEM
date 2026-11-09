@@ -884,6 +884,21 @@
    ],
    "evidence": "Unit tests with a fake fetch pass",
    "notes": "The desktop app's update panel does not read this row (it has no cheap access to server health)."
+  },
+  {
+   "id": "F-BODY-GROWTH",
+   "priority": 2,
+   "area": "body",
+   "title": "Body → Growth: long-run growth dashboard and honest growth levels",
+   "user_visible_behavior": "Body has a Growth tab: 'You since you started' (lean mass estimate, weight, waist, strength %, harder moves, sessions, protein-goal days) with 4 weeks · 3 months · 6 months · 1 year · All time; weekly charts (weight in the +0.25–0.5 kg/week corridor, waist, strength per muscle group, sessions vs plan, protein, kcal, sleep, fat % and muscle as estimates); a lean gain check per month; what's missing; month-by-month rows with Copy CSV; one growth level (Seedling → Legend) earned only from milestones logged at the time, with a bar, what to do next, level history and a one-time celebration; a level chip in the Body header and on Today → Now. No points.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/growthBody.test.ts src/core/growthLevels.test.ts",
+    "SMOKE_ONLY=\"Body growth\" npm run smoke",
+    "E2E_GROWTH_DEMO=1 GROWTH_SHOTS=<dir> SMOKE_ONLY=\"Body growth\" npm run smoke"
+   ],
+   "evidence": "2026-11-09: unit tests (periods, corridor, lean verdicts, XP from seeded milestones, back-dated logs earn nothing, stable recompute, history dates, monthly rows, CSV); smoke step Body growth; full smoke",
+   "notes": "core/growthBody.ts + core/growthLevels.ts (pure), main/growthData.ts (read only) via life.coach.bodyComp.history(), body/progress/Growth*.tsx, useGrowth.ts, growth.css. Only the last celebrated level is kept per device (localStorage life_growth_seen)."
   }
  ]
 }

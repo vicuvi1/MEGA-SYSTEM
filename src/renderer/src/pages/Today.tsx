@@ -32,6 +32,7 @@ import { ShiftButtons } from '../LifeFitPanel'
 import { WeekTop3Pick } from '../WeekTop3'
 import { TodayLadderLine } from '../ladder/TodayLadderLine'
 import { WeekPlanCard } from '../plan/WeekPlan'
+import { GrowthChip } from '../body/progress/GrowthLevel'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -220,6 +221,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
               <WeekTop3Pick compact />
               {/* The goal ladder: one line for the quarter goal that needs you most this week. */}
               <TodayLadderLine onOpen={() => openTab('goals', 'quarter')} />
+              <GrowthChip where="today" />
             </div>
             {/* The money pill sits in the habits header on Now (next to "Log spending"). */}
             {!has('day') && <MoneyPill />}

@@ -350,3 +350,14 @@ entry that says why.
 - **Rules out:** per-surface sound rules (a second bell when the panel is open), notification sounds
   tied to the app's main volume, built-in water / push-up / focus buttons next to a widget that does the
   same, and putting new cards on the Day page outside More without removing a repeat.
+
+### Growth levels are recomputed from logs made at the time, and pay no points (2026-11-09)
+- **Decision:** the Body growth level (Seedling → Legend) is computed from scratch on every view from
+  real milestones (lean weekly-average gain with the waist in check, roadmap level-ups with a session
+  on the level before, strength +5%, full planned weeks, 7-day protein streaks, 12-session months, sleep
+  weeks). Only rows saved on their day or the day after count. Nothing is stored except the last level a
+  device celebrated. Levels pay no points.
+- **Why:** a stored counter drifts between devices and can be gamed by back-dating; recomputing keeps one
+  truth for every device and keeps the level honest like the points.
+- **Rules out:** an XP counter in a setting or table, points for levels or milestones, imports or
+  back-dated logs earning levels.
