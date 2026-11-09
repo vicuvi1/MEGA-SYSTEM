@@ -6,8 +6,10 @@ import { SOUND_CATEGORIES, SOUND_THEMES, type BedKind, type SoundCategory, type 
 import { Row, Saved, Segmented, Switch, useSaved } from '../settingsUi'
 import { Icon } from '../Icon'
 import { useUiPrefs } from '../uiPrefs'
-import { bedPlaying, play, playBodyReminder, previewMoment, setBedVolume, soundPrefs, startBed, stopBed, whyQuiet } from '../soundKit'
-import { BODY_REMINDERS, BODY_REMINDER_LABEL } from '@core/islandReminderSound'
+import { bedPlaying, play, playBodyReminder, playCard, previewMoment, setBedVolume, soundPrefs, startBed, stopBed, whyQuiet } from '../soundKit'
+import { reminderGain } from '@core/islandReminderSound'
+import { CARD_SOUND_KEYS, CARD_SOUND_LABEL, cardSoundName, type CardSoundKey } from '@core/islandCardSound'
+import { startIslandSoundTest } from '../IslandFeed'
 import { ISLAND_SOUND_LABEL, ISLAND_SOUND_MODES, type IslandSoundMode, type IslandSoundName } from '@core/islandSound'
 import { soundCheck } from '../islandSounds'
 import { DEFAULT_MOMENTS, MOMENTS, MOMENT_SOUNDS, type MomentId, type MomentSound } from '@core/soundMoments'
@@ -16,6 +18,11 @@ import { Select } from '../Select'
 /** What each kind's preview plays. */
 const PREVIEW: Record<SoundCategory, SoundName[]> = { success: ['habit', 'mustDo', 'water', 'levelUp'], money: ['coin', 'reward'], focus: ['focusStart', 'focusEnd'], alerts: ['remind', 'error'], ui: ['tick', 'click'] }
 const LABEL: Partial<Record<SoundName, string>> = { habit: 'Habit', mustDo: 'Must-do', water: 'Water', levelUp: 'Level up', coin: 'Points', reward: 'Reward', focusStart: 'Start', focusEnd: 'Gong', remind: 'Reminder', error: 'Error', tick: 'Tick', click: 'Click' }
+
+/** Each switch's ▶: the sound a typical notification of that kind plays. */
+const KEY_SOUND: Record<CardSoundKey, SoundName> = Object.fromEntries(
+  CARD_SOUND_KEYS.map((k) => [k, cardSoundName(({ water: { kind: 'water', id: 'water:t' }, eyes: { kind: 'eyes', id: 'eyes:t' }, move: { kind: 'move', id: 'move:t' }, screen: { kind: 'move', id: 'coach:break:t' }, ben: { kind: 'ben', id: 'ben:t' }, remind: { kind: 'remind', id: 'r:t' }, timer: { kind: 'over', id: 'o:t' }, meeting: { kind: 'block', id: 'm:t', meeting: true }, plan: { kind: 'block', id: 'b:t' }, bed: { kind: 'bed', id: 'bed:t' }, other: { kind: 'suggest', id: 's:t' } } as const)[k])])
+) as Record<CardSoundKey, SoundName>
 
 export function SoundSection() {
   const [ui, setUi] = useUiPrefs()
@@ -29,6 +36,23 @@ export function SoundSection() {
     startBed(k, { preview: true })
     setTrying(k)
     window.setTimeout(() => (bedPlaying() === k && stopBed(), setTrying((x) => (x === k ? null : x))), 5000)
+  }
+  // Test island sound: a test card through the real path; the island log says what happened.
+  const [islandTest, setIslandTest] = useState<string | null>(null)
+  const testIsland = async () => {
+    const d = window.desktop
+    if (!d?.islandGetLog) {
+      const r = await playCard('remind', reminderGain(p.reminders.volume), { preview: true })
+      return setIslandTest(r === 'played' ? 'Played here. The island itself runs in the desktop app.' : `No sound: ${r}`)
+    }
+    setIslandTest('waiting')
+    const id = startIslandSoundTest()
+    for (let i = 0; i < 12; i++) {
+      await new Promise((r) => window.setTimeout(r, 500))
+      const line = (await d.islandGetLog().catch(() => [])).filter((l) => l.line.includes(id)).pop()
+      if (line) return setIslandTest(line.line.replace(/^sound: /, '').replace(id + ': ', ''))
+    }
+    setIslandTest('The island did not answer. Is it on (Settings → Desktop island)? Look in Settings → Island log.')
   }
   const [checking, setChecking] = useState<IslandSoundName | null>(null)
   const stopCheck = useRef<(() => void) | null>(null)
@@ -144,12 +168,19 @@ export function SoundSection() {
       )}
       <div className="sx-moments" role="group" aria-label="Island reminders" data-reminder-sounds>
         <h3>Island reminders</h3>
-        <p className="hint">Water, eye breaks, move breaks and screen breaks open as a card on the desktop island with their own sound. Never in a call, a focus timer, a class, quiet hours or after bed. Works even with Sounds off above.</p>
-        {BODY_REMINDERS.map((k) => (
+        <p className="hint">Every notification that drops down on the desktop island plays its sound once. Dots that wait stay silent. Never in a call, quiet hours or after bed. Works even with Sounds off above.</p>
+        <div className="sx-test-island">
+          <button type="button" className="btn small" data-test-island-sound onClick={() => void testIsland()} disabled={islandTest === 'waiting'}>
+            🔔 Test island sound
+          </button>
+          {islandTest && islandTest !== 'waiting' && <small data-test-island-result>{islandTest}</small>}
+          {islandTest === 'waiting' && <small>Showing a test card on the island…</small>}
+        </div>
+        {CARD_SOUND_KEYS.map((k) => (
           <div key={k} className="sx-moment" data-reminder={k}>
-            <span className="sx-moment-name">{BODY_REMINDER_LABEL[k]}</span>
-            <Switch label={`Island reminder sound: ${BODY_REMINDER_LABEL[k]}`} on={p.reminders.on[k]} onChange={(v) => set({ reminders: { ...p.reminders, on: { ...p.reminders.on, [k]: v } } })} />
-            <button type="button" className="btn small ghost sx-play" aria-label={`Test the ${BODY_REMINDER_LABEL[k]} sound`} disabled={!p.reminders.on[k] || p.reminders.volume <= 0} onClick={() => playBodyReminder(k, p.reminders.volume, { preview: true })}>
+            <span className="sx-moment-name">{CARD_SOUND_LABEL[k]}</span>
+            <Switch label={`Island reminder sound: ${CARD_SOUND_LABEL[k]}`} on={p.reminders.on[k]} onChange={(v) => set({ reminders: { ...p.reminders, on: { ...p.reminders.on, [k]: v } } })} />
+            <button type="button" className="btn small ghost sx-play" aria-label={`Test the ${CARD_SOUND_LABEL[k]} sound`} disabled={!p.reminders.on[k] || p.reminders.volume <= 0} onClick={() => void playCard(KEY_SOUND[k], reminderGain(p.reminders.volume), { preview: true })}>
               ▶
             </button>
           </div>

@@ -148,6 +148,10 @@ export interface DesktopApi {
   onIslandShortcutFailed?(cb: (f: { accelerator: string; what: string }) => void): void
   /** The island log kept by the desktop (its own lines and the island page's). */
   islandGetLog?(): Promise<{ at: string; from: 'main' | 'island'; line: string }[]>
+  /** The island's audio didn't start: the desktop plays this kit sound from the app window, or beeps. Says how ('app window' / 'system beep'), or null. */
+  islandSoundFallback?(sound: string, loud: number): Promise<string | null>
+  /** The app window: the desktop asks it to play a kit sound for the island (its fallback). */
+  onIslandSoundFallback?(cb: (d: { sound: string; loud: number }) => void): void
   /** Island window: settings changed. */
   onIslandPrefs?(cb: (p: IslandPrefs & Partial<IslandDeskPrefs> & { scale?: number; theme?: IslandTheme | null }) => void): void
   /** App window: open a page when the island asks. */

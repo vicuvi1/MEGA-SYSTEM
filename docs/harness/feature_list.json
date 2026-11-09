@@ -825,6 +825,20 @@
    ],
    "evidence": "unit tests (what is left out, order, shares add to 100, Other folding, comparison with the period before); smoke step Finance categories",
    "notes": "apps/finance/js/catshare.js (numbers), js/screens/spending.js (card, donut SVG), css/app.css (.dn-*), screens/reports.js, web/financeCategoryShares.test.ts"
+  },
+  {
+   "id": "F-ISLAND-SOUND-DAY",
+   "priority": 1,
+   "area": "island",
+   "title": "Every island notification rings; a short Day page without repeats",
+   "user_visible_behavior": "Every notification that drops down on the island (water, eye, move and screen breaks, Ben and his pushes, your reminders, time's up, a meeting soon, plan blocks, bedtime, the rest) plays its sound once, loud enough, with a switch per kind in Settings → Sound → Island reminders. Dots stay silent. Settings → Sound → Test island sound shows a test card on the island through the real path and says what happened; every skipped sound has a reason in Settings → Island log. If the island has no audio, the app window plays it, else a system beep. The Day page shows only: the alert, the timer, bedtime, one Today list, one quick row (water, push-ups, focus), your Custom Center widgets (which replace the matching built-in button), Ben, and More for everything else.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/islandCardSound.test.ts src/core/islandDay.test.ts src/desktop/appFiles.test.ts src/core/islandReminderSound.test.ts",
+    "SMOKE_ONLY=\"Desktop island\" npm run smoke"
+   ],
+   "evidence": "smoke step 'Desktop island reminders' (one Today list, one water control, More, open time, time's up rings once); screenshots kept outside the repo",
+   "notes": "Root causes: Electron already allowed autoplay; non-body notifications played at ~5 % loudness; the open panel left the sound to a bell that waited for a click; the AudioContext resume was not awaited; skips were not logged; a failed own sound file reported success. Not tried on a real Windows PC yet."
   }
  ]
 }

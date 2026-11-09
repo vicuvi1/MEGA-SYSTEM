@@ -309,3 +309,18 @@ entry that says why.
   database for no gain (only the foods you save matter).
 - **Rules out:** a separate vision prompt or provider for Telegram, a new `api/` file for it, caching
   or saving photos, or meal reminders with their own mute or their own dedupe store.
+
+### Every island notification that drops down rings; dots stay silent; the Day page has one of each (2026-11-09)
+- **Decision:** one rule (`core/islandCardSound.ts cardSoundPlan`) decides the sound for every island
+  alert that peeks (slim line or card): once, at the Island reminders volume (not the app's main volume
+  or Sounds switch), with a switch per kind; a dot never rings; every skip is written to the island log.
+  The island may start audio without a click (`allowEagerAudio`, plus the `autoplay-policy` switch);
+  if its audio won't run, the app window plays the sound, a system beep only without one. The Day page
+  shows one Today list, one quick row (water, push-ups, focus) and the owner's Custom Center widgets,
+  which replace the matching built-in control; everything else sits behind More (not drawn until opened).
+- **Why:** the owner heard nothing for most notifications even after the autoplay change: the real
+  causes were ~5 % loudness, a bell waiting for a click, an unawaited resume and no log of skips. The
+  Day page repeated the to-do list and water in up to five places and felt slow.
+- **Rules out:** per-surface sound rules (a second bell when the panel is open), notification sounds
+  tied to the app's main volume, built-in water / push-up / focus buttons next to a widget that does the
+  same, and putting new cards on the Day page outside More without removing a repeat.

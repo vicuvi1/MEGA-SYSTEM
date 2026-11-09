@@ -85,8 +85,8 @@ export function useIslandSoundEvents(o: { view: string; snap: IslandSnapshot; mo
   useEffect(() => {
     const before = lastSnap.current
     lastSnap.current = snap
-    // A new alert that peeks already rings its own reminder sound: the bell is for when the panel is open (and silent otherwise).
-    for (const n of soundsFromSnapshots(before, snap)) if (n !== 'notify' || lastView.current === 'expanded') play(n)
+    // A new alert rings its own notification sound once (core/islandCardSound.ts, in every view), so no second bell here.
+    for (const n of soundsFromSnapshots(before, snap)) if (n !== 'notify') play(n)
   }, [snap])
   useEffect(() => {
     if (momentId) play('levelup')

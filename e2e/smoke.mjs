@@ -2038,9 +2038,13 @@ try {
     await pg.waitForFunction(() => document.querySelector('.st-head h1')?.textContent === 'Sound', null, { timeout: 5000 })
     const n = await pg.locator('.sx-moment:not([data-reminder])').count()
     if (n !== 18) throw new Error(`${n} sound rows, want 18`)
-    // Island reminders: a switch and a test button for water, eye break, move break and screen break.
+    // Island reminders: a switch and a test button for every kind of island notification, and Test island sound.
     const rem = await pg.locator('[data-reminder-sounds] .sx-moment[data-reminder]').count()
-    if (rem !== 4) throw new Error(`${rem} island reminder rows, want 4`)
+    if (rem !== 11) throw new Error(`${rem} island reminder rows, want 11`)
+    // On the website the test plays here and says the island is in the desktop app.
+    await pg.click('[data-test-island-sound]')
+    const said = await pg.locator('[data-test-island-result]').textContent({ timeout: 4000 })
+    if (!/Played here|No sound/.test(said || '')) throw new Error(`Test island sound says: ${said}`)
     await pg.click('button[aria-label="Sound for Water"]')
     await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
     await pg.locator('.ui-select-list [role=option]', { hasText: 'Pop' }).click()
@@ -2969,14 +2973,41 @@ try {
     const nub = await ip.locator('.di-nub').boundingBox()
     await ip.mouse.move(nub.x + nub.width / 2, nub.y + 2)
     await ip.waitForSelector('.di-pill.di-rest', { timeout: 3000 })
+    // How fast the panel opens: from the press to the first frame with the panel (want well under 150 ms on a PC).
+    await ip.evaluate(() => window.addEventListener('pointerdown', () => (window.__openT = performance.now()), { capture: true, once: true }))
     await ip.click('.di-pill.di-rest')
     await ip.waitForSelector('.di-panel', { timeout: 3000 })
+    const openMs = await ip.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(Math.round(performance.now() - window.__openT)))))
+    console.log(`  island panel opened in ${openMs} ms`)
+    if (!(openMs < 600)) throw new Error(`the panel took ${openMs} ms to open`)
+    // One to-do list, one water control, one row of quick actions; the rest waits behind More.
+    const day = await ip.evaluate(() => ({
+      today: document.querySelectorAll('.di-panel .di-today').length,
+      water: document.querySelectorAll('.di-panel [data-quick-water], .di-panel .di-logs .di-water, .di-panel .di-chips, .di-panel .dw-hero').length,
+      quick: document.querySelectorAll('.di-panel .di-quick').length,
+      hidden: document.querySelectorAll('.di-panel .di-minical, .di-panel .alive-minis, .di-panel .di-kit-start, .di-panel .v2-instant').length,
+      more: document.querySelectorAll('.di-panel [data-day-more]').length
+    }))
+    if (day.today !== 1 || day.water !== 1 || day.quick !== 1 || day.hidden || day.more !== 1) throw new Error(`the Day page repeats or is long: ${JSON.stringify(day)}`)
     // "Why no reminder?" on the Day page.
     const whyLine = await ip.locator('[data-nudge-why]').first().textContent({ timeout: 3000 }).catch(() => null)
     if (!/Why no reminder\? Move break: at the PC 12 min/.test(whyLine || '')) throw new Error(`the why line says: ${whyLine}`)
     const rows = await ip.evaluate(() => [...document.querySelectorAll('.di-check span, .di-week3-row span, .di-task span')].map((e) => (e.textContent || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()))
     const dup = rows.filter((r, i) => rows.indexOf(r) !== i)
     if (dup.length) throw new Error(`to-dos shown twice: ${dup.join(', ')} (rows: ${rows.join(' | ')})`)
+    if (process.env.ISLAND_DAY_SHOTS) await ip.locator('.di-panel').screenshot({ path: `${process.env.ISLAND_DAY_SHOTS}/island-day-page.png` })
+    // Any notification that drops down rings once, not only body reminders: time's up (it passes the gap).
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 4000 })
+    const before = await ip.evaluate(() => window.__island.sounds.length)
+    const over = { id: `over:${Date.now()}`, kind: 'over', title: "Time's up", text: 'Focus · 25 min', actions: [{ label: 'Done', primary: true, action: { kind: 'stop' } }] }
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 8, alert: a }), over)
+    await ip.waitForSelector('.di-peek.alert.kind-over', { timeout: 5000 })
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 9, alert: a }), over)
+    await ip.waitForTimeout(1200)
+    const rang = await ip.evaluate((n) => window.__island.sounds.slice(n), before)
+    if (rang.length !== 1 || rang[0].kind !== 'timer') throw new Error(`time's up rang wrong: ${JSON.stringify(rang)}`)
+    if (process.env.ISLAND_DAY_SHOTS) await ip.locator('.di-peek.alert').screenshot({ path: `${process.env.ISLAND_DAY_SHOTS}/island-notification-card.png` })
     await ip.context().close()
   })
   // Alive island (core/islandAlive.ts and core/gaming.ts, the real code, bundled here): accept the
@@ -3772,6 +3803,8 @@ try {
     // IC17: edit the pill in the panel: hide an item and it is saved.
     await ip.click('.di-pill')
     await ip.waitForSelector('.di-panel', { timeout: 5000 })
+    // The rest of the old Day page sits behind More (core/islandDay.ts).
+    await ip.click('[data-day-more]')
     await ip.click('.di-edit-open')
     await ip.waitForSelector('.di-edit-item', { timeout: 3000 })
     await ip.click('[data-tap="edit:points"]')
@@ -3838,6 +3871,8 @@ try {
     await ip.waitForSelector('.di-pill .hd-badge', { timeout: 5000 })
     await ip.evaluate((a) => window.__setSnap({ alert: a }), alert0)
     await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel [data-day-more]', { timeout: 5000 })
+    await ip.click('[data-day-more]')
     await ip.waitForSelector('.di-panel .hd-card', { timeout: 5000 })
     if (!/Healthy day/.test(await ip.locator('.hd-card').innerText())) throw new Error('no Healthy day card on the Day page')
     // The reminder you set: Done sends the answer.
@@ -3960,6 +3995,8 @@ try {
     // The panel: one time per zone, yours first.
     await ip.focus('.di-pill')
     await ip.keyboard.press('Enter')
+    await ip.waitForSelector('.di-panel [data-day-more]', { timeout: 5000 })
+    await ip.click('[data-day-more]')
     await ip.waitForSelector('.di-panel .di-world', { timeout: 5000 })
     const row = await ip.$$eval('.di-world-z small', (e) => e.map((x) => x.textContent))
     if (row.join(',') !== 'Local,NYC,London') throw new Error(`the world clock row has ${row.join(', ')}`)
