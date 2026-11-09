@@ -284,3 +284,13 @@
 .gr-rhythm button { padding: 4px 10px; border-radius: 999px; border: 1px solid rgb(var(--ink) / 0.14); background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
 .gr-rhythm button.on { background: rgb(var(--ink) / 0.1); border-color: rgb(var(--ink) / 0.3); }
 @media (max-width: 520px) { .gr-parts { grid-template-columns: minmax(0, 1fr); } }
+
+/* Tighter rows so Today → Now stays well inside a laptop screen. */
+.now-grid { gap: 8px; }
+.now-grid > .card { gap: 8px; padding: 10px 14px; }
+.hb:not(.grid) .hb-row { min-height: 34px; padding: 2px 6px; }
+.ot-item, .ot-add { min-height: 28px; }
+.t3-item, .t3-add { min-height: 36px; }
+.ot-item { padding-top: 0; padding-bottom: 0; }
+.hb:not(.grid) .hb-row { min-height: 32px; padding-top: 0; padding-bottom: 0; }
+.ot-head .sync-btn button, .ot-head .btn { padding-top: 3px; padding-bottom: 3px; }

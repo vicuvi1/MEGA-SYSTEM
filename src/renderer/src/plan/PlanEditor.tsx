@@ -368,6 +368,14 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
             {yLine}
           </span>
         )}
+        {anyDraft && (
+          <div className="pe-approve" title="Tick a block to approve it, or approve everything before a time. Approved blocks go to Google Calendar and Todoist; the rest stays a draft">
+            <button type="button" className="pe-btn" onClick={() => doEdit({ op: 'approve', ids: idsUntil(s.plan, until), on: true })}>
+              ✓ Approve until
+            </button>
+            <input type="time" step={900} value={until} onChange={(e) => e.target.value && setUntil(e.target.value)} aria-label="Approve the blocks before this time" />
+          </div>
+        )}
         <span className="pe-space" />
         {checkNow && (
           <button type="button" className="pe-btn pe-check" onClick={() => setReviewing(true)} title="How did today's blocks go? One tap each">
@@ -478,15 +486,7 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
           </button>
         </p>
       )}
-      {anyDraft && (
-        <div className="pe-approve" title="Tick a block to approve it, or approve everything before a time. Approved blocks go to Google Calendar and Todoist; the rest stays a draft">
-          <button type="button" className="pe-btn" onClick={() => doEdit({ op: 'approve', ids: idsUntil(s.plan, until), on: true })}>
-            ✓ Approve until
-          </button>
-          <input type="time" step={900} value={until} onChange={(e) => e.target.value && setUntil(e.target.value)} aria-label="Approve the blocks before this time" />
-        </div>
-      )}
-      <div className="pe-scroll" ref={scroller}>
+      <div className="pe-scroll" ref={scroller} title={status !== 'approved' ? 'Drag to move · pull the bottom edge · double-click to rename · ↑↓ keys move the picked block by 5 min' : undefined}>
         <ol ref={col} className="pe-col" style={{ height: (to - from) * PX } as CSSProperties} aria-label="Plan blocks: arrow keys move a block by 5 minutes">
           {Array.from({ length: (to - from) / 60 + 1 }, (_, i) => from + i * 60).map((m) => (
             <span key={`h${m}`} className="pe-hour" style={{ top: yOf(m) }} aria-hidden>
@@ -660,11 +660,6 @@ export function PlanEditor({ state, water = true, auto = true }: { state: Rhythm
             ))}
           </ul>
         </div>
-      )}
-      {status !== 'approved' && (
-        <p className="pe-hint">
-          <small>Drag to move · pull the bottom edge · double-click to rename · ↑↓ keys move the picked block by 5 min</small>
-        </p>
       )}
       {taskDrag?.moved && (
         <span className="pe-ghost" style={{ left: taskDrag.x + 12, top: taskDrag.y + 8 }} aria-hidden>
