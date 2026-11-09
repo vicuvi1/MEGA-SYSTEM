@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDb, type DB } from './db'
 import { bodyPlusView, logProtein, readPrefs, savePrefs, sportInsightNow } from './bodyPlus'
 import { addFoodMeal, addFoodSupp, addFoodWater, adjustNow, answerAdjust, editFoodMeal, foodDayTotals, foodView, foodWeekNow, gainDefaultOnce, leanDefaultOnce, needsLeanDefault, readFoodGoals, readFoodLog, saveFoodPrices, sportFoodLineNow, waterNow, toggleFoodFav, toggleFoodMeal, whatNextNow } from './food'
+import { addBodyMeasurement } from './bodyComp'
 import { writeSetting } from './settings'
 
 let dir: string
@@ -175,22 +176,31 @@ describe('food counter extras on the database', () => {
   })
   it('the weekly weight check: 2 flat weeks offer +200, Apply changes the goal once, never silently', () => {
     const ins = db.prepare("INSERT OR REPLACE INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, NULL, NULL, 'x')")
-    for (const [d, w] of [['2026-10-20', 75], ['2026-10-23', 75.1], ['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
+    for (const [d, w] of [['2026-10-20', 75], ['2026-10-21', 75.05], ['2026-10-23', 75.1], ['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
     const base = foodView(db, now).totals.targets.kcal
     expect(adjustNow(db, now).state).toBe('suggest')
     expect(foodView(db, now).totals.targets.kcal).toBe(base) // nothing changes by itself
     answerAdjust(db, true, now)
-    expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 200, adjAt: '2026-11-08' })
+    expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 200, adjAt: '2026-11-08', adjLog: [{ day: '2026-11-08', delta: 200, after: 200, reason: 'Weight flat for 2 weeks' }] })
     expect(foodView(db, now).totals.targets.kcal).toBe(base + 200)
     expect(adjustNow(db, now).state).toBe('none') // once a week
     answerAdjust(db, true, now) // nothing to apply: no double change
     expect(readFoodGoals(db).kcalAdj).toBe(200)
   })
+  it('the suggestion reads body_comp weigh-ins (the first morning one per day) before body_metrics', () => {
+    // Three weeks of scale weigh-ins at 07:30, flat: body_comp alone gives the suggestion.
+    for (const d of ['2026-10-20', '2026-10-21', '2026-10-23', '2026-10-27', '2026-10-29', '2026-11-01', '2026-11-03', '2026-11-05', '2026-11-07']) addBodyMeasurement(db, { at: new Date(`${d}T07:30:00`).toISOString(), weight_kg: 74 }, 'screenshot', now)
+    // An evening weigh-in (heavier) does not count as the day's weight.
+    addBodyMeasurement(db, { at: new Date('2026-11-07T21:00:00').toISOString(), weight_kg: 76 }, 'manual', now)
+    const r = adjustNow(db, now)
+    expect(r.state === 'suggest' && r.suggestion.delta).toBe(200)
+    expect(foodView(db, now).adjust.state).toBe('suggest')
+  })
   it('"Not now" only marks the week; prices are saved, cleaned and change the cheap list', () => {
     const ins = db.prepare("INSERT OR REPLACE INTO body_metrics (day, weight, waist, note, updated_at) VALUES (?, ?, NULL, NULL, 'x')")
-    for (const [d, w] of [['2026-10-20', 75], ['2026-10-23', 75.1], ['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
+    for (const [d, w] of [['2026-10-20', 75], ['2026-10-21', 75.05], ['2026-10-23', 75.1], ['2026-10-27', 75], ['2026-10-29', 75.1], ['2026-11-01', 75], ['2026-11-03', 75.1], ['2026-11-05', 75], ['2026-11-07', 75.1]] as const) ins.run(d, w)
     answerAdjust(db, false, now)
-    expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 0, adjAt: '2026-11-08' })
+    expect(readFoodGoals(db)).toMatchObject({ kcalAdj: 0, adjAt: '2026-11-08', adjLog: [] })
     const first = foodView(db, now).cheap.find((r) => r.name === 'chicken breast')!
     saveFoodPrices(db, { 'Chicken  Breast': 50, '': 5, bad: -3 })
     const after = foodView(db, now).cheap.find((r) => r.name === 'chicken breast')!

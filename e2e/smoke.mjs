@@ -889,7 +889,8 @@ try {
     if (!/^[\d,]+ \/ [\d,]+$/.test((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim())) throw new Error('no kcal bar')
     if (!/\d+ \/ \d+\s*g protein/.test(await pg.locator(`${fc} .fdf-protein`).innerText())) throw new Error('no protein bar')
     if (!/kcal · \d+ g left|left|Goals reached/.test(await pg.locator(`${fc} .fdf-left`).innerText())) throw new Error('no "left" line')
-    if (!(await pg.locator(`${fc} .fd-week-check`).count())) throw new Error('no weekly weight check card')
+    if (!(await pg.locator(`${fc} .fd-adjust-card .fd-adjust-title`).count())) throw new Error('no weekly calorie check card')
+    if (!/Estimate from weekly average weight/.test(await pg.locator(`${fc} .fd-adjust-card`).innerText())) throw new Error('the calorie check is not labeled as an estimate')
     const k0 = await kcalNow()
     const mealCount = () => pg.locator(`${fc} .fd-meals li`).count()
     const m0 = await mealCount()
@@ -1103,7 +1104,8 @@ try {
     const canned = {
       items: [
         { name: 'Eggs', matchedSavedFoodId: null, qty: 3, unit: 'egg', grams: 150, kcal: 215, protein: 19, carbs: 1, fat: 15, confidence: 'high' },
-        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low' }
+        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low' },
+        { name: 'bulgur container', matchedSavedFoodId: null, qty: 1, unit: 'container', grams: 350, kcal: 520, protein: 14, carbs: 80, fat: 12, confidence: 'medium' }
       ],
       totals: { kcal: 999, protein: 99 },
       message: 'Eggs and toast: a good protein start.'
@@ -1127,12 +1129,24 @@ try {
       const liveMeals = () => pg.locator(`${fc} .fd-meals li:not(.removed)`).count()
       const mealsBefore = await liveMeals()
       await pg.locator(`${fc} .fph-file`).setInputFiles({ name: 'meal.png', mimeType: 'image/png', buffer: png })
-      await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 2, fc, { timeout: 15000 })
+      await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 3, fc, { timeout: 15000 })
       // The photo went out small, as JPEG, with today's numbers.
       if (sent?.image?.mime !== 'image/jpeg' || sent.image.data.length > 400_000) throw new Error(`the photo was not made small: ${sent?.image?.mime} ${sent?.image?.data?.length}`)
       if (!(sent.targets?.kcal > 0)) throw new Error('the goals were not sent with the photo')
       // Totals come from the items (not the AI's 999), the low one is flagged, nothing is saved yet.
       const total = () => pg.locator(`${fc} .fph-total`).innerText()
+      // The AI got the real saved foods (food_saved), so "bulgur container" can match his own item.
+      if (!(sent.saved ?? []).some((x) => x.id === 'sf-bulgur' && /container/.test(x.portion))) throw new Error('the saved foods were not sent with the photo')
+      if (!/^895 kcal · 38 g protein$/.test(await total())) throw new Error(`review total with the bulgur: ${await total()}`)
+      // Swap the guessed bulgur for the saved one: its own numbers (400 kcal, 10 g) replace the AI's.
+      const bulgur = pg.locator(`${fc} .fph-item`).nth(2)
+      await bulgur.locator('.fph-swap-sel').click()
+      await pg.locator('[role="option"]', { hasText: 'Bulgur salad with vegetables' }).first().click()
+      await pg.waitForFunction((s) => /^775 kcal · 34 g protein$/.test(document.querySelector(`${s} .fph-total`)?.textContent?.trim() ?? ''), fc, { timeout: 5000 }).catch(() => null)
+      if (!/^775 kcal · 34 g protein$/.test(await total())) throw new Error(`after the swap to the saved bulgur: ${await total()}`)
+      if (!/Your saved food/.test(await bulgur.innerText())) throw new Error('the swapped item is not marked as a saved food')
+      await bulgur.locator('.fph-del').click()
+      await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 2, fc, { timeout: 5000 })
       if (!/^375 kcal · 24 g protein$/.test(await total())) throw new Error(`review total: ${await total()}`)
       if (!/Not sure about the portion: check it/.test(await pg.locator(`${fc} .fph-item`).nth(1).innerText())) throw new Error('the low-confidence item is not flagged')
       if (!/good protein start/.test(await pg.locator(`${fc} .fph-msg`).innerText())) throw new Error("the AI's message is not shown")
@@ -1214,6 +1228,8 @@ try {
       s.exercises = (s.exercises || []).filter((e) => e.id !== 'ex_sm_d' && e.id !== 'ex_sm_r')
       s.exercises.push({ id: 'ex_sm_d', name: 'Diamond push-ups', target: 24, unit: 'reps', active: false, doneToday: 0, move: 'diamond_pushup' }, { id: 'ex_sm_r', name: 'Table rows', target: 24, unit: 'reps', active: false, doneToday: 0, move: 'table_row' })
       s.sets = s.sets || {}
+      // Sets from earlier steps today would make the muscles "recovering": start today clean (put back at the end).
+      delete s.sets[d(0)]
       const put = (day, id, reps) => { (s.sets[day] ||= {})[id] = reps.map((r, i) => ({ reps: r, at: Date.now() - 86400000 * 20 + i, id: `sm-${id}-${day}-${i}` })) }
       put(d(5), 'ex_sm_d', [12, 12, 12, 12])
       put(d(2), 'ex_sm_d', [12, 12, 12, 13])
@@ -1227,6 +1243,19 @@ try {
     if (!/Last time: 10 · 9 · 9/.test(await pg.locator(`${pull} [data-tr="last"]`).innerText())) throw new Error('the pull move does not show last time')
     if (!/3 × 8–15/.test(await pg.locator(`${pull} [data-tr="target"]`).innerText())) throw new Error('the pull move has no sets × range')
     if ((await pg.locator(`${T} .tr-ex`).count()) !== 3) throw new Error('upper is not push + pull + shoulders')
+    // Recovery: six groups with a dot each, and the line agrees with the split (back trained yesterday: nearly ready).
+    await pg.waitForSelector(`${T} [data-tr="recovery"] [data-group="back"][data-status="yellow"]`, { timeout: 5000 })
+    if ((await pg.locator(`${T} [data-tr="recovery"] .tr-rec-item`).count()) !== 6) throw new Error('the recovery list does not show six muscle groups')
+    if (!/^Best to train today: Upper/.test(await pg.locator(`${T} [data-tr="recommend"]`).innerText())) throw new Error('the recovery line does not agree with the split')
+    if (shots) {
+      await pg.setViewportSize({ width: 390, height: 844 })
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(500)
+      await pg.evaluate((t) => { document.querySelector(`${t} [data-tr="recovery"]`).scrollIntoView({ block: 'start' }); window.scrollBy(0, -420) }, T)
+      await pg.waitForTimeout(300)
+      await pg.screenshot({ path: `${shots}/train-recovery-phone.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
     if (shots) {
       await pg.setViewportSize({ width: 390, height: 844 })
       await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
@@ -1296,6 +1325,62 @@ try {
     await pg.click(`${road} .tr-ladder[data-ladder="pull"] .tr-node.next button`)
     await pg.waitForSelector(`${T} [data-tr="move-sheet"] .tr-steps li`, { timeout: 5000 })
     await pg.locator(`${T} [data-tr="move-sheet"] .sheet-actions button`, { hasText: 'Close' }).click()
+    // After today's pull sets the back is recovering (red).
+    await pg.waitForSelector(`${T} [data-tr="recovery"] [data-group="back"][data-status="red"]`, { timeout: 5000 })
+    // A calm warning from made-up sets: wide push-ups down 2 sessions in a row. "Hide for a week" hides it;
+    // back again, "Lighter week (70%)" starts a lighter week.
+    const seedDrop = () => pg.evaluate((k) => {
+      const s = JSON.parse(localStorage.getItem(k) || '{}')
+      const d = (n) => { const x = new Date(Date.now() - n * 86400000 - 4 * 3600000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}` }
+      s.exercises = (s.exercises || []).filter((e) => e.id !== 'ex_sm_w')
+      s.exercises.push({ id: 'ex_sm_w', name: 'Wide push-ups', target: 30, unit: 'reps', active: false, doneToday: 0, move: 'wide_pushup' })
+      ;[[8, 14], [6, 13], [3, 11]].forEach(([n, r]) => { (s.sets[d(n)] ||= {}).ex_sm_w = [{ reps: r, at: Date.now() - n * 86400000, id: `sm-w-${n}` }] })
+      delete s.trainWarnDismiss
+      delete s.trainLighter
+      localStorage.setItem(k, JSON.stringify(s))
+      window.dispatchEvent(new CustomEvent('life-sport-changed'))
+    }, K)
+    await seedDrop()
+    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { timeout: 5000 })
+    if (!/went down 2 sessions in a row \(.+\)\. That usually means tired/.test(await pg.locator(`${T} .tr-warn[data-warn="tired"]`).innerText())) throw new Error('the strength warning has the wrong words')
+    await pg.click(`${T} .tr-warn[data-warn="tired"] [data-tr="warn-dismiss"]`)
+    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { state: 'detached', timeout: 5000 })
+    if (!(await pg.evaluate((k) => !!JSON.parse(localStorage.getItem(k) || '{}').trainWarnDismiss?.tired, K))) throw new Error('"Hide for a week" was not saved')
+    await seedDrop()
+    await pg.click(`${T} .tr-warn[data-warn="tired"] [data-tr="warn-lighter"]`)
+    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { state: 'detached', timeout: 5000 })
+    const light = await pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLighter, K)
+    if (!light?.until || light.until <= light.from) throw new Error(`the lighter week was not set: ${JSON.stringify(light)}`)
+    // The progress dashboard (folded): streak, sessions per week, hard sets per muscle, reps, strength and body, photo.
+    const prog = `${T} details[data-tr="dashboard"]`
+    await pg.click(`${prog} > summary`)
+    await pg.waitForSelector(`${prog} [data-tr="streak"] .bdy-num`, { timeout: 5000 })
+    if ((await pg.locator(`${prog} [data-tr="muscles"] .tr-prog-mini`).count()) !== 4) throw new Error('the dashboard has no hard sets per muscle')
+    if ((await pg.locator(`${prog} .tr-bars .tr-bar`).count()) < 3) throw new Error('the dashboard charts have no bars')
+    await pg.waitForSelector(`${prog} [data-tr="strength-body"] .bpg-hero`, { timeout: 5000 })
+    await pg.waitForSelector(`${prog} [data-tr="photo"] [data-tr="photo-open"]`, { timeout: 5000 })
+    if (shots) {
+      await pg.setViewportSize({ width: 1440, height: 1400 })
+      await pg.addStyleTag({ content: '.body-page .ptabs, header.topbar { position: static !important; }' })
+      await pg.waitForTimeout(400)
+      await pg.evaluate((p) => { document.querySelector(p).scrollIntoView({ block: 'start' }); window.scrollBy(0, -120) }, prog)
+      await pg.waitForTimeout(300)
+      await pg.locator(prog).screenshot({ path: `${shots}/train-dashboard-desktop.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await pg.click(`${prog} > summary`)
+    // Body → Today's body map: "Recovery" colours it by recovery, "This week's sets" goes back.
+    await pg.click('.body-page .ptabs [data-tab="today"]')
+    await pg.waitForSelector('.bmap-card [data-bmap="recovery"]', { timeout: 10000 })
+    // The lighter week set today's dose to Lighter: put readiness back to automatic for the steps after this one.
+    await pg.waitForTimeout(500)
+    if (await pg.locator('.rdy-card .rdy-back').count()) await pg.locator('.rdy-card .rdy-back').first().click()
+    await pg.click('.bmap-card [data-bmap="recovery"]')
+    await pg.waitForSelector('.bmap-card .bmap-rec-row[data-group="back"][data-status="red"]', { timeout: 5000 })
+    if (!(await pg.locator('.bmap-card .bmap-region.rec.r-red').count())) throw new Error('the body map is not coloured by recovery')
+    await pg.click('.bmap-card [data-bmap="sets"]')
+    await pg.waitForSelector('.bmap-card .bmap-row', { timeout: 5000 })
+    await pg.click('.body-page .ptabs [data-tab="training"]')
     await pg.waitForSelector(`${T} .bt-builder .bt-session`, { timeout: 15000 })
     // The old Training info is still here ("This week").
     await pg.waitForSelector(`${T} .bt-week .mw-row`, { timeout: 10000 })
@@ -1892,7 +1977,7 @@ try {
     await pg.waitForSelector('.bp-area[data-area="body"] button.on:text-is("Soft")', { timeout: 5000 })
     await pg.click('.bp-area[data-area="money"] button:text-is("Normal")')
     await pg.waitForSelector('.bp-area[data-area="money"] button.on:text-is("Normal")', { timeout: 5000 })
-    for (const t of ['Check in when a planned block starts', 'Morning brief at', 'Evening shutdown before bed', 'Weekly check']) if (!(await pg.locator('.bp-settings .toggle-row', { hasText: t }).count())) throw new Error(`no "${t}" switch`)
+    for (const t of ['Check in when a planned block starts', 'Morning brief at', 'Evening shutdown before bed', 'Meal reminders', 'Weekly check']) if (!(await pg.locator('.bp-settings .toggle-row', { hasText: t }).count())) throw new Error(`no "${t}" switch`)
     const b2 = process.env.BEN2_SHOTS
     if (b2) {
       // A tall window for the picture (the toasts gone, the section in the middle), then back.
@@ -5412,7 +5497,7 @@ try {
   })
 
   // Last of the data steps on purpose: it logs a weight (72.4 kg today), which earlier steps never expect.
-  await step('Body log: the Log body sheet saves weight, fat and waist with Undo; Progress shows the weekly average, the band, estimate labels and the monthly summary', async () => {
+  await step('Body log: the Log body sheet saves weight, fat and waist with Undo; Progress shows the weekly average, the band, estimate labels and the monthly summary; one calorie suggestion on Progress and Food; a scale screenshot import', async () => {
     const shots = process.env.BODYSCALE_SHOTS
     // The screenshot run (E2E_BODY_DEMO) has six weeks of made-up weigh-ins near 70 kg: log a weight that fits them.
     const kg0 = process.env.E2E_BODY_DEMO ? 70.6 : 72.4
@@ -5535,6 +5620,149 @@ try {
     // 5. A Sunday waist reminder is planned once; body logs pay no points.
     await until(async () => (await sql("SELECT value FROM settings WHERE key = 'coach_reminders'")).rows.some((r) => (r[0].value.match(/"waist:/g) ?? []).length >= 1), 'no Sunday waist reminder')
     if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a body log paid points')
+    // 6. ONE calorie suggestion, the same card on Progress and Food. Any weekday: the weigh-ins are placed in
+    // Monday–Sunday windows from the clock's date, and what the card should say comes from the app's own pure
+    // functions (core/bodyComp.ts + core/foodAdjust.ts, bundled here) run on the synced rows.
+    const card = `${prog} .fd-adjust-card`
+    const foodCard = '#ptp-body-food .fd-adjust-card'
+    const title = (sel) => pg.locator(`${sel} .fd-adjust-title`).innerText()
+    await pg.waitForSelector(card, { timeout: 15000 })
+    if (!process.env.E2E_BODY_DEMO) {
+      const { build } = await import('rolldown')
+      const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+      const { tmpdir } = await import('node:os')
+      const dir = await mkdtemp(join(tmpdir(), 'adjust-'))
+      await writeFile(join(dir, 'entry.ts'), ['bodyComp', 'foodAdjust', 'foodGoals', 'sportShared', 'dates'].map((m) => `export * from ${JSON.stringify(join(repo, `src/core/${m}.ts`))}`).join('\n'))
+      const out = await build({ input: join(dir, 'entry.ts'), write: false, output: { format: 'esm' } })
+      await writeFile(join(dir, 'adjust.mjs'), out.output[0].code)
+      const A = await import((await import('node:url')).pathToFileURL(join(dir, 'adjust.mjs')).href)
+      await rm(dir, { recursive: true, force: true })
+      // What the card should say now, from the synced body_comp + body_metrics rows and the goals.
+      const expected = async () => {
+        const n = (c) => (c?.type === 'null' || c == null ? null : Number(c.value))
+        const rows = (await sql('SELECT at, day, weight_kg, body_fat_pct, muscle_kg, waist_cm FROM body_comp')).rows.map((r) => ({ at: r[0].value, day: r[1].value, weight_kg: n(r[2]), body_fat_pct: n(r[3]), muscle_kg: n(r[4]), waist_cm: n(r[5]) }))
+        const metrics = (await sql('SELECT day, weight, waist FROM body_metrics')).rows.map((r) => ({ day: r[0].value, weight: n(r[1]), waist: n(r[2]) }))
+        const g = A.cleanGoals(JSON.parse((await sql("SELECT value FROM settings WHERE key = 'food_goals'")).rows[0]?.[0]?.value ?? '{}'))
+        const today = A.sportToday(new Date(fakeNow()))
+        return A.adjustCheck({ points: A.dailyPoints(rows, metrics).filter((p) => p.day <= today && p.day > A.addDays(today, -42)), today, adj: g.kcalAdj, adjAt: g.adjAt })
+      }
+      const sameAs = async (sel, what) => {
+        let last = ''
+        await until(async () => {
+          const want = (await expected()).title
+          last = `card "${await title(sel)}", expected "${want}"`
+          return (await title(sel)) === want
+        }, `${what}: ${last}`, 20000)
+      }
+      // Last week +0.4 kg (seeded above): on track, on both tabs.
+      const before = await expected()
+      if (before.state !== 'none' || before.kind !== 'ontrack') throw new Error(`the seeded weeks should be on track, the rules say ${before.state}/${before.kind}: ${before.why}`)
+      await sameAs(card, 'Progress does not match the rules')
+      await pg.click('.body-page .ptabs [data-tab="food"]')
+      await sameAs(foodCard, 'Food does not match the rules')
+      await pg.click('.body-page .ptabs [data-tab="progress"]')
+      // Make the last two full weeks flat (made-up weigh-ins in the weeks 3 back and 1 back, from this week's Monday).
+      const d = new Date(fakeNow())
+      const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
+      const at = (back, add) => {
+        const x = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() - back + add, 7, 10)
+        return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}T07:10`
+      }
+      for (const [back, add, kg] of [[21, 0, 71.1], [21, 1, 71.1], [21, 2, 71.1], [7, 3, 70.8], [7, 4, 70.8], [7, 5, 70.8], [7, 6, 70.8]]) {
+        await pg.click(`${prog} .bcp-log`)
+        await fillSheet(kg, {}, at(back, add))
+        await save(kg)
+      }
+      await until(async () => (await expected()).state === 'suggest', 'the flat weeks did not reach the server', 20000)
+      const sug = await expected()
+      if (sug.suggestion.delta !== 200) throw new Error(`two flat weeks should suggest +200, the rules say ${sug.suggestion.delta}`)
+      await sameAs(card, 'Progress does not show the suggestion')
+      if (!/glass of milk \+ 1 spoon of peanut butter/.test(await pg.locator(card).innerText())) throw new Error('the +200 idea is missing')
+      await pg.click('.body-page .ptabs [data-tab="food"]')
+      await sameAs(foodCard, 'the Food tab does not show the same suggestion')
+      await pg.click('.body-page .ptabs [data-tab="progress"]')
+      if (shots) {
+        await pg.setViewportSize({ width: 390, height: 844 })
+        await pg.addStyleTag({ content: '.ptabs-wrap { position: static !important; } .toasts { display: none !important; }' })
+        await pg.locator(card).evaluate((el) => el.scrollIntoView({ block: 'center' }))
+        await pg.waitForTimeout(400)
+        await pg.locator(card).screenshot({ path: `${shots}/calorie-check-phone.png` })
+        await pg.setViewportSize({ width: 1440, height: 900 })
+      }
+      // One tap accepts: the goal changes once, the change is in the history (Goals), no points.
+      await pg.click(`${card} .fd-adjust-apply`)
+      await until(async () => (await expected()).state === 'none' && (await expected()).kind === 'checked', 'Accept did not reach the server', 20000)
+      await sameAs(card, 'Accept did not settle the suggestion')
+      if (!/Last change: \d{4}-\d{2}-\d{2} · \+200 kcal · Weight flat for 2 weeks/.test(await pg.locator(card).innerText())) throw new Error('the change is not shown on the card')
+      await until(async () => /"kcalAdj":200/.test((await sql("SELECT value FROM settings WHERE key = 'food_goals'")).rows[0]?.[0]?.value ?? ''), 'the kcal goal did not change', 20000)
+      await pg.click('.body-page .ptabs [data-tab="food"]')
+      await sameAs(foodCard, 'the Food tab still shows the suggestion')
+      await pg.locator('#ptp-body-food .fd-card .card-head button', { hasText: 'Goals' }).click()
+      await pg.waitForSelector('#ptp-body-food .fd-adj-history li', { timeout: 10000 })
+      if (!/\+200 kcal · Weight flat for 2 weeks/.test(await pg.locator('#ptp-body-food .fd-adj-history').innerText())) throw new Error('Goals has no calorie change history')
+      await pg.locator('#ptp-body-food .fd-card .card-head button', { hasText: 'Goals' }).click()
+      await pg.click('.body-page .ptabs [data-tab="progress"]')
+      if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('accepting the calorie change paid points')
+    }
+    // 7. Scale screenshot import: upload → the numbers are read → check and fix → saved as "screenshot". The picture is not kept.
+    const shotPng = Buffer.from(await pg.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 540
+      c.height = 1170
+      const x = c.getContext('2d')
+      x.fillStyle = '#f4f6f8'
+      x.fillRect(0, 0, 540, 1170)
+      x.fillStyle = '#222'
+      x.font = 'bold 90px sans-serif'
+      x.fillText('70.9 kg', 110, 260)
+      x.font = '36px sans-serif'
+      for (const [i, t] of ['Body fat 15.1 %', 'Muscle 56.8 kg', 'Water 59.0 %', 'Visceral fat 5', 'BMR 1650 kcal', 'Body score 85'].entries()) x.fillText(t, 60, 420 + i * 90)
+      return c.toDataURL('image/png').split(',')[1]
+    }), 'base64')
+    const old = new Date(fakeNow() - 30 * 86400000)
+    const oldIso = `${old.getFullYear()}-${String(old.getMonth() + 1).padStart(2, '0')}-${String(old.getDate()).padStart(2, '0')}T07:05`
+    let scaleSent = null
+    await pg.route('**/api/ai', async (r) => {
+      const b = r.request().postDataJSON()
+      if (b?.op !== 'foodPhoto' || b?.kind !== 'scale') return r.fallback()
+      scaleSent = b
+      const result = { weightKg: 70.93, bodyFatPct: 15.1, muscleKg: 56.8, waterPct: 59, proteinPct: null, boneKg: 2.9, visceralFat: 5, bmr: 1650, bmi: 22.1, heartRate: 400, bodyScore: 85, measuredAt: oldIso }
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, result }) })
+    })
+    try {
+      await pg.setViewportSize({ width: 390, height: 844 })
+      await pg.click(`${prog} .bcp-log`)
+      await pg.waitForSelector('.blog-sheet .blog-shot-btn', { timeout: 10000 })
+      await pg.locator('.blog-sheet .blog-shot-file').setInputFiles({ name: 'scale.png', mimeType: 'image/png', buffer: shotPng })
+      await pg.waitForSelector('.blog-sheet .blog-shot-review', { timeout: 15000 })
+      if (scaleSent?.image?.mime !== 'image/jpeg' || scaleSent.image.data.length > 400_000) throw new Error('the screenshot was not made small first')
+      if ((await pg.inputValue('.blog-sheet .blog-weight input')) !== '70.93') throw new Error('the weight was not filled from the screenshot')
+      if ((await pg.inputValue('.blog-sheet [data-field="bmr"]')) !== '1650') throw new Error('BMR was not filled from the screenshot')
+      if ((await pg.locator('.blog-sheet .blog-read-tag').count()) < 8) throw new Error('the numbers read from the screenshot are not marked')
+      if (!/Heart rate 400 bpm is not possible/.test(await pg.locator('.blog-sheet .blog-shot-review').innerText())) throw new Error('a wrong number was not left out with a note')
+      if ((await pg.inputValue('.blog-sheet [data-field="heart_rate"]')) !== '') throw new Error('the impossible heart rate was filled in')
+      if ((await pg.inputValue('.blog-sheet .blog-when input')) !== oldIso) throw new Error('the time was not taken from the screenshot')
+      // Fix one number before saving.
+      await pg.fill('.blog-sheet [data-field="body_fat_pct"]', '15.0')
+      if (shots) {
+        const back = await crisp(390, 844, true)
+        await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+        await pg.waitForTimeout(300)
+        await pg.screenshot({ path: `${shots}/scale-review-phone.png` })
+        await back()
+      }
+      await pg.setViewportSize({ width: 1440, height: 900 })
+      await until(async () => (await pg.locator('.toast.has-action').count()) === 0, 'an older Undo toast stays up', 15000)
+      await save(70.93)
+      await until(async () => {
+        const r = (await sql('SELECT body_fat_pct, muscle_kg, bmr, heart_rate, source, raw FROM body_comp WHERE weight_kg = 70.93')).rows
+        return r.length === 1 && Number(r[0][0].value) === 15 && Number(r[0][1].value) === 56.8 && Number(r[0][2].value) === 1650 && r[0][3].type === 'null' && r[0][4].value === 'screenshot' && /"from":"screenshot"/.test(r[0][5].value) && !/base64|image/.test(r[0][5].value)
+      }, 'the screenshot weigh-in is not saved once with source screenshot and its numbers', 15000)
+      if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a screenshot import paid points')
+    } finally {
+      await pg.unroute('**/api/ai')
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
     // No sideways scroll on a phone.
     await pg.setViewportSize({ width: 390, height: 844 })
     await pg.waitForTimeout(300)

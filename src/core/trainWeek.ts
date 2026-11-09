@@ -129,6 +129,21 @@ export function rested(done: DoneSession[], type: SessionType, day: string): boo
 }
 
 /**
+ * A planned session in the last 2 days with nothing logged that day or after it (null: none). Only once
+ * you train with the split (a session in the 9 days before), so a first visit is never "missed".
+ */
+export function missedSession(week: TrainWeek, done: DoneSession[], today: string): { day: string; type: SessionType } | null {
+  if (!done.some((s) => s.date < today && daysBetween(s.date, today) <= 9)) return null
+  for (let i = 1; i <= 2; i++) {
+    const d = shiftDay(today, -i)
+    const t = planned(week, d)
+    if (t === 'rest') continue
+    if (!done.some((s) => s.date >= d && s.date < today)) return { day: d, type: t }
+  }
+  return null
+}
+
+/**
  * Today's session from the week and what you actually did. A planned session that didn't happen in the
  * last 2 days becomes today's on a rest day, when it keeps 48 hours for those muscles. A planned session
  * that would come too soon after the same kind moves to the other one (or rest).
@@ -145,16 +160,7 @@ export function todayPlan(week: TrainWeek, done: DoneSession[], today: string): 
   if (todayDone) return { type: todayDone.type, why: 'done', line: `Done for today: ${TYPE_NAME[todayDone.type]}. Eat well and sleep: that is when muscle grows.${nextLine}`, anyway: null, next }
 
   const plan = planned(week, today)
-  // A planned session in the last 2 days with nothing logged that day or after it.
-  let missed: { day: string; type: SessionType } | null = null
-  // Only once you train with the split (a session in the week before), so a first visit is never "missed".
-  const active = done.some((s) => s.date < today && daysBetween(s.date, today) <= 9)
-  for (let i = 1; i <= 2 && !missed && active; i++) {
-    const d = shiftDay(today, -i)
-    const t = planned(week, d)
-    if (t === 'rest') continue
-    if (!done.some((s) => s.date >= d && s.date < today)) missed = { day: d, type: t }
-  }
+  const missed = missedSession(week, done, today)
   const anyway = (['upper', 'legs'] as SessionType[])
     .filter((t) => rested(done, t, today))
     .sort((a, b) => (lastOf(done, a, today) ?? '').localeCompare(lastOf(done, b, today) ?? ''))[0] ?? null

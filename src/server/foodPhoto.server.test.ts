@@ -4,7 +4,7 @@
 import { describe, expect, it } from 'vitest'
 import initSqlJs from 'sql.js'
 // @ts-expect-error plain JS module without types
-import { GEMINI_SCHEMA, buildVisionRequest, countPhoto, foodPhotoPrompt, photoDay, overLimit, readFoodPhoto, readPhotoRequest, visionProvider } from '../../api/_vision.mjs'
+import { GEMINI_SCALE_SCHEMA, GEMINI_SCHEMA, buildVisionRequest, countPhoto, foodPhotoPrompt, photoDay, overLimit, readFoodPhoto, readPhotoRequest, visionProvider } from '../../api/_vision.mjs'
 // @ts-expect-error plain JS module without types
 import { foodPhoto } from '../../api/ai.mjs'
 import { validateVision } from '@core/foodVision'
@@ -71,6 +71,31 @@ describe('the request', () => {
     expect(r.body.tool_choice).toEqual({ type: 'tool', name: 'log_meal' })
     expect(r.body.tools[0].input_schema.properties.items.items.properties.matchedSavedFoodId.type).toEqual(['string', 'null'])
     expect(r.body.messages[0].content[0]).toEqual({ type: 'image', source: { type: 'base64', media_type: 'image/png', data: PIXEL } })
+  })
+})
+
+describe('scale screenshots (kind scale)', () => {
+  const req = readPhotoRequest({ kind: 'scale', image: body.image, saved: body.saved, note: 'ignored' })
+  it('keeps only the picture and asks for the scale numbers', () => {
+    expect(req).toEqual({ kind: 'scale', image: { mime: 'image/png', data: PIXEL } })
+    expect(readPhotoRequest({ kind: 'scale', image: { mime: 'text/html', data: PIXEL } }).error).toMatch(/JPEG, PNG or WebP/)
+  })
+  it('Gemini and Claude get the scale prompt and shape, keys only in headers', () => {
+    const g = buildVisionRequest({ name: 'gemini', key: 'SECRET-G', models: [] }, 'gemini-3.5-flash', req)
+    expect(g.body.systemInstruction.parts[0].text).toMatch(/smart scale/)
+    expect(g.body.generationConfig.responseSchema).toBe(GEMINI_SCALE_SCHEMA)
+    expect(Object.keys(GEMINI_SCALE_SCHEMA.properties)).toEqual(['weightKg', 'bodyFatPct', 'muscleKg', 'waterPct', 'proteinPct', 'boneKg', 'visceralFat', 'bmr', 'bmi', 'heartRate', 'bodyScore', 'measuredAt'])
+    expect(JSON.stringify(g.body)).not.toContain('SECRET-G')
+    const c = buildVisionRequest({ name: 'claude', key: 'SECRET-A', models: [] }, 'claude-haiku-4-5', req)
+    expect(c.body.tool_choice).toEqual({ type: 'tool', name: 'log_scale' })
+    expect(c.body.tools[0].input_schema.properties.weightKg.type).toEqual(['number', 'null'])
+  })
+  it('records its tokens as scaleShot', async () => {
+    const used: any[] = []
+    const reply = json(200, { candidates: [{ content: { parts: [{ text: JSON.stringify({ weightKg: 71.8, bodyFatPct: 15.4 }) }] } }], usageMetadata: { promptTokenCount: 700, candidatesTokenCount: 40 } })
+    const out = await readFoodPhoto({ name: 'gemini', key: 'g', models: ['gemini-3.5-flash'] }, req, { fetchImpl: (async () => reply) as any, record: async (u: any) => used.push(u), wait: async () => {} })
+    expect(out.json).toEqual({ weightKg: 71.8, bodyFatPct: 15.4 })
+    expect(used[0].kind).toBe('scaleShot')
   })
 })
 

@@ -127,15 +127,17 @@ export interface PushPrefs {
   shutdownBefore: number
   /** Weekdays (0 = Sunday) with no morning brief (days off). */
   offDays: number[]
+  /** Meal reminders at the standard day's slots (core/foodBen.ts decideMealReminder). */
+  meals: boolean
 }
-export const DEFAULT_PUSH_PREFS: PushPrefs = { checkins: true, brief: true, shutdown: true, weekly: true, shutdownBefore: 30, offDays: [] }
+export const DEFAULT_PUSH_PREFS: PushPrefs = { checkins: true, brief: true, shutdown: true, weekly: true, shutdownBefore: 30, offDays: [], meals: true }
 export function cleanPushPrefs(raw: unknown): PushPrefs {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<PushPrefs>
   const d = DEFAULT_PUSH_PREFS
   const b = (x: unknown, def: boolean) => (typeof x === 'boolean' ? x : def)
   const before = typeof o.shutdownBefore === 'number' && Number.isFinite(o.shutdownBefore) ? Math.max(10, Math.min(120, Math.round(o.shutdownBefore / 5) * 5)) : d.shutdownBefore
   const offDays = Array.isArray(o.offDays) ? [...new Set(o.offDays.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))].sort() : d.offDays
-  return { checkins: b(o.checkins, d.checkins), brief: b(o.brief, d.brief), shutdown: b(o.shutdown, d.shutdown), weekly: b(o.weekly, d.weekly), shutdownBefore: before, offDays }
+  return { checkins: b(o.checkins, d.checkins), brief: b(o.brief, d.brief), shutdown: b(o.shutdown, d.shutdown), weekly: b(o.weekly, d.weekly), shutdownBefore: before, offDays, meals: b(o.meals, d.meals) }
 }
 
 const weekdayOf = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay()
@@ -206,7 +208,7 @@ export const channelFor = (here: boolean): Channel => (here ? 'island' : 'telegr
 
 // ---- the shared log: one key per push, across the island and Telegram ----
 
-export type PushOp = 'start' | 'later' | 'skip' | 'plan' | 'ok' | 'shutdown' | 'tomorrow' | 'drop' | 'keep' | 'back' | 'more5' | 'accept' | 'undo' | 'prompt' | 'yesterday' | 'mute'
+export type PushOp = 'start' | 'later' | 'skip' | 'plan' | 'ok' | 'shutdown' | 'tomorrow' | 'drop' | 'keep' | 'back' | 'more5' | 'accept' | 'undo' | 'prompt' | 'yesterday' | 'mute' | 'log'
 export type ItemMark = 'tomorrow' | 'drop' | 'keep'
 export interface PushRec {
   at: number
@@ -242,7 +244,7 @@ export interface PushLog {
 }
 export const PUSH_LOG_KEY = 'ben_pushes'
 
-const OPS: PushOp[] = ['start', 'later', 'skip', 'plan', 'ok', 'shutdown', 'tomorrow', 'drop', 'keep', 'back', 'more5', 'accept', 'undo', 'prompt', 'yesterday', 'mute']
+const OPS: PushOp[] = ['start', 'later', 'skip', 'plan', 'ok', 'shutdown', 'tomorrow', 'drop', 'keep', 'back', 'more5', 'accept', 'undo', 'prompt', 'yesterday', 'mute', 'log']
 const MARKS: ItemMark[] = ['tomorrow', 'drop', 'keep']
 export function cleanPushLog(raw: unknown, day: string): PushLog {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<PushLog>
@@ -605,6 +607,11 @@ export function pushTelegram(p: PushOut, startData?: (subject: string) => string
     else if (b.op === 'tomorrow' && b.arg === '*') top.push({ text: b.label, callback_data: 'bp|t|*' })
     // Food pushes (core/foodBen.ts): the prompt, "Same as yesterday" and the mute are food buttons (web/bots/foodBot.ts).
     else if (b.op === 'prompt' || b.op === 'yesterday' || b.op === 'mute') rows.push([{ text: b.label, callback_data: `fd|${b.op === 'prompt' ? 'p' : b.op === 'yesterday' ? 'y' : 'm'}|${p.key}`.slice(0, 64) }])
+    // Meal reminders: Log it (the usual meal or its swap), 30 min, Skip are food buttons too.
+    else if (p.type === 'food' && (b.op === 'log' || b.op === 'later' || b.op === 'skip')) {
+      const d = b.op === 'log' ? `fd|l|${p.key}|${b.arg === 'alt' ? 1 : 0}` : `fd|${b.op === 'later' ? 'z' : 'k'}|${p.key}`
+      if (d.length <= 64) top.push({ text: b.label, callback_data: d })
+    }
     else {
       const cb = pushCallback(b.op, p.key, b.arg)
       if (cb) top.push({ text: b.label, callback_data: cb })

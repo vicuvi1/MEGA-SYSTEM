@@ -18,7 +18,7 @@ import { todayMode } from '../renderer/src/web/extrasContext'
 import { claimPush, readPcSeen, readPushLog, setShutdownItems, writePushLog } from '../renderer/src/web/benPushStore'
 import { rescueCheck, rescueMaybe } from '../renderer/src/web/planShared'
 import { decideFoodNudge, foodNudgeDue } from '@core/foodBen'
-import { foodFacts } from '../renderer/src/web/bots/foodBot'
+import { foodFacts, mealPushFor } from '../renderer/src/web/bots/foodBot'
 
 type Send = (text: string, markup?: unknown, opts?: { always?: boolean; push?: PushCard; throughQuiet?: boolean }) => Promise<unknown>
 interface Ctx {
@@ -156,6 +156,13 @@ export async function pushTick(c: Ctx): Promise<{ checkins: boolean; sent: strin
     ].slice(0, 6)
     const p = decideShutdown({ ...sdBase, open })
     if (p) await go(p, (db) => setShutdownItems(db, f.today, open))
+  }
+
+  // Meal reminders (core/foodBen.ts): at the standard day's slots when nothing was logged since the slot
+  // before; at most 3 a day, only while you're away from the PC; never in a meeting, quiet hours or after bed.
+  if (prefs.meals && !here && !c.paused && !c.quiet && !c.inEvent && !f.bedLogged) {
+    const p = await c.mirror.read((db) => mealPushFor(db, { now: c.now, day: f.today, wake: f.wake, bed: f.bed, on: true, log: f.log, here, meeting: c.inEvent, quiet: c.quiet })).catch(() => null)
+    if (p && (await go(p))) return { checkins: prefs.checkins, sent }
   }
 
   // Food (core/foodBen.ts): the evening protein nudge or the dinner reminder, at most one a day,

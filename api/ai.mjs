@@ -1,7 +1,8 @@
 // POST /api/ai (session required) {prompt} → {text, model}
 //      {op:'status'}                     → {configured}
 //      {op:'foodPhoto', image, note, saved, today, targets} → {ok, result} | {ok:false, error}
-//        (food photo logging: provider code in _vision.mjs, 50 photos a day)
+//        (food photo logging: provider code in _vision.mjs, 50 photos a day; kind:'scale'
+//        reads a smart-scale screenshot instead, same counter and budget)
 // Google Gemini for the website, with the key kept on the server
 // (GEMINI_API_KEY in Vercel). The page builds the prompt from your data.
 import { bearer, config, getSetting, readBody, send, requireSession, setSetting, turso, countCall } from './_lib.mjs'

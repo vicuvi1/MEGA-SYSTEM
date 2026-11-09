@@ -41,11 +41,13 @@ export interface FoodGoals {
   kcalAdj: number
   /** The day the weekly check was last answered (applied or "not now"), '' when never. */
   adjAt: string
+  /** Accepted calorie changes, newest first (date, change, reason), shown in Goals. */
+  adjLog: AdjLogEntry[]
   /** Your own prices in MDL per kg, by food name (the cheap protein list). */
   prices: Record<string, number>
 }
 
-export const DEFAULT_GOALS: FoodGoals = { heightCm: 178, age: 30, sex: 'm', activity: 'moderate', trainSurplus: 350, restSurplus: 350, kcalOwn: null, proteinOwn: null, leanV: 0, gainV: 0, bodySet: 0, kcalAdj: 0, adjAt: '', prices: {} }
+export const DEFAULT_GOALS: FoodGoals = { heightCm: 178, age: 30, sex: 'm', activity: 'moderate', trainSurplus: 350, restSurplus: 350, kcalOwn: null, proteinOwn: null, leanV: 0, gainV: 0, bodySet: 0, kcalAdj: 0, adjAt: '', adjLog: [], prices: {} }
 /** The plan's name in the Goals sheet. */
 export const GOAL_LABEL = 'Slow muscle gain'
 /** What to expect, in the Goals sheet. */
@@ -66,6 +68,36 @@ export const FALLBACK_KG = 75
 export const ADJ_MAX = 600
 /** Fat in g per kg of body weight (lean plan; carbs are the rest of the kcal). */
 export const FAT_GPK = 0.8
+
+/** Lines kept in the calorie-change history. */
+export const ADJ_LOG_MAX = 20
+
+/** One accepted change, newest first in the goals' history. */
+export interface AdjLogEntry {
+  day: string
+  delta: number
+  /** kcalAdj after the change. */
+  after: number
+  reason: string
+}
+
+/** The history, cleaned: newest first, at most 20, only real lines. */
+export function cleanAdjLog(raw: unknown): AdjLogEntry[] {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .filter((e) => e && typeof e === 'object' && /^\d{4}-\d{2}-\d{2}$/.test(String((e as any).day)) && Number.isFinite(Number((e as any).delta)) && Number((e as any).delta) !== 0)
+    .map((e: any) => ({
+      day: String(e.day),
+      delta: Math.round(Math.max(-ADJ_MAX, Math.min(ADJ_MAX, Number(e.delta)))),
+      after: Number.isFinite(Number(e.after)) ? Math.round(Math.max(-ADJ_MAX, Math.min(ADJ_MAX, Number(e.after)))) : 0,
+      reason: String(e.reason ?? '').replace(/\s+/g, ' ').trim().slice(0, 80)
+    }))
+    .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0))
+    .slice(0, ADJ_LOG_MAX)
+}
+
+/** Adds an accepted change to the history (newest first, capped). */
+export const addAdjLog = (log: AdjLogEntry[], entry: AdjLogEntry): AdjLogEntry[] => cleanAdjLog([entry, ...log])
 
 /** Own prices: a name (lower case, ≤ 40 chars) → MDL per kg (1–3000), at most 60. */
 export function cleanPrices(raw: unknown): Record<string, number> {
@@ -102,6 +134,7 @@ export function cleanGoals(raw: any): FoodGoals {
     bodySet: o.bodySet === 1 ? 1 : 0,
     kcalAdj: Number.isFinite(Number(o.kcalAdj)) ? Math.round(Math.max(-ADJ_MAX, Math.min(ADJ_MAX, Number(o.kcalAdj)))) : 0,
     adjAt: /^\d{4}-\d{2}-\d{2}$/.test(String(o.adjAt ?? '')) ? String(o.adjAt) : '',
+    adjLog: cleanAdjLog(o.adjLog),
     prices: cleanPrices(o.prices)
   }
 }

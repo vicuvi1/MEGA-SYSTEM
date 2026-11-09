@@ -123,6 +123,8 @@ export interface BotEnv {
   embed?: Embedder | null
   /** TL4/TL7: read links and search the web (default: the real web; null: off, as in tests). */
   web?: WebTools | null
+  /** A meal photo on Telegram: the same vision read as /api/ai {op:'foodPhoto'} (api/ai.mjs, its daily count and budget). */
+  foodPhoto?: import('../renderer/src/web/bots/foodBot').FoodPhotoFn | null
 }
 
 /**
@@ -187,10 +189,12 @@ let warmAt = 0
  * they must always call this one, never the first request's (whose time is long up).
  */
 let liveModel: BotEnv['model'] = undefined
+let liveFoodPhoto: BotEnv['foodPhoto'] = null
 
 async function botsFor(env: BotEnv) {
   liveModel = env.model
-  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '') + (env.embed === null ? '|noembed' : env.embed ? '|embed' : '') + (env.web === null ? '|noweb' : env.web ? '|web' : '')
+  liveFoodPhoto = env.foodPhoto ?? null
+  const key = env.tursoUrl + '|' + env.tursoToken.slice(-12) + '|' + (env.todoistToken ?? '').slice(-6) + '|' + (env.model ? 'ai' : '') + '|' + (env.google ? 'g' : '') + (env.embed === null ? '|noembed' : env.embed ? '|embed' : '') + (env.web === null ? '|noweb' : env.web ? '|web' : '') + (env.foodPhoto ? '|photo' : '')
   if (warm && warm.key === key) {
     // What the devices changed since the last message (one tiny read); not
     // again within the same few seconds (a tick calls this several times: S2).
@@ -259,7 +263,7 @@ async function botsFor(env: BotEnv) {
   const recall = vectors ? (q: string, k: number) => vectors.search(q, k) : null
   // AU10: the tools from your own MCP servers that you allowed (Settings → PC & automation).
   const web = env.web !== undefined ? env.web : process.env.VITEST ? null : serverWeb()
-  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: mergeTools(extToolsFor(env), flowToolsFor(env, mirror)), web })
+  const bots = createWebBots({ mirror, services, defaults, server: true, todoist, ai: model ?? null, calendar, recall, tools: mergeTools(extToolsFor(env), flowToolsFor(env, mirror)), web, foodPhoto: env.foodPhoto ? (body) => (liveFoodPhoto ?? env.foodPhoto!)(body) : null })
   warm = { key, SQL, bots, mirror, services, calendar, vectors }
   warmAt = Date.now()
   return warm

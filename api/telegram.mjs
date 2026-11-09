@@ -4,7 +4,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { botDefaults, config, readBody, send, serverBots, webhookSecret, countCall } from './_lib.mjs'
 import { handleTelegramUpdate } from './_bot/bot.mjs'
-import { deadlineIn, modelUntil } from './ai.mjs'
+import { deadlineIn, foodPhoto, modelUntil } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 
 /** When the webhook answers Telegram at the latest (the function stops at 60 s). */
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
   try {
     const update = await readBody(req)
     const work = handleTelegramUpdate(
-      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model, google: googleEnv(cfg) },
+      { tursoUrl: cfg.url, tursoToken: cfg.token, defaults: botDefaults(), timeZone: process.env.LIFE_TZ, todoistToken: process.env.TODOIST_TOKEN, model, google: googleEnv(cfg), foodPhoto: (body) => foodPhoto(body) },
       bot.token,
       update
     )

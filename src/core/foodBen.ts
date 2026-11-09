@@ -4,11 +4,16 @@
 // - "what should I eat now?" is answered from the food log, no model;
 // - the evening protein nudge and the dinner reminder: one food push a day,
 //   one key (`food:evening:<day>` / `food:dinner:<day>`), one channel;
-// - the Sunday food report (average protein and kcal vs goal, weight, days on goal, one tip).
+// - the Sunday food report (average protein and kcal vs goal, weight, days on goal, one tip);
+// - a meal photo sent on Telegram → the same vision check as the website → a
+//   preview (how many of each, 🔁 swap for a saved food, Save);
+// - meal reminders at the slots of the standard day (morning, lunch, afternoon,
+//   evening): one gentle nudge when nothing was logged since the slot before.
 // The database side is web/bots/foodBot.ts.
-import { scaleItem, sumItems, type FoodItem } from './food'
+import { scaleItem, sumItems, type FoodItem, type MealType } from './food'
 import type { FoodWeek } from './food'
 import { channelFor, type PushButton, type PushLog, type PushOut } from './benPushes'
+import { scaleVisionItem, stepQty, toFoodItems, visionTotals, type SavedFoodRef, type VisionItem } from './foodVision'
 
 // ---- the setting `food_ben`: the open Telegram draft and the mute ----
 
@@ -18,11 +23,19 @@ export interface FoodDraft {
   at: number
   items: FoodItem[]
   question: string | null
+  /**
+   * A meal photo's draft: the foods as the AI read them (`base`) and as they are
+   * now (`now`, after −/+, a swap or "eggs 2"). `items` follows `now`. The photo
+   * itself is never kept.
+   */
+  photo?: { base: VisionItem[]; now: VisionItem[]; message: string }
 }
 export interface FoodBen {
   draft: FoodDraft | null
-  /** "Mute food nudges for 7 days": no evening nudge or dinner reminder before this time. */
+  /** "Mute food nudges for 7 days": no evening nudge, dinner reminder or meal reminder before this time. */
   muteUntil: number | null
+  /** The meals a one-tap log made (the standard day makes several), for its ↩ Undo. */
+  undo?: { id: string; ids: string[]; at: number } | null
 }
 export const FOOD_BEN_KEY = 'food_ben'
 /** A draft stays open this long (then a "chicken 175" is a normal message again). */
@@ -35,9 +48,26 @@ export function cleanFoodBen(raw: unknown): FoodBen {
   const d = o.draft as Partial<FoodDraft> | null | undefined
   const draft =
     d && typeof d === 'object' && typeof d.id === 'string' && /^[a-z0-9]{1,12}$/.test(d.id) && typeof d.at === 'number' && Array.isArray(d.items) && d.items.length
-      ? { id: d.id, at: d.at, items: d.items.slice(0, 12) as FoodItem[], question: typeof d.question === 'string' ? d.question.slice(0, 200) : null }
+      ? { id: d.id, at: d.at, items: d.items.slice(0, 12) as FoodItem[], question: typeof d.question === 'string' ? d.question.slice(0, 200) : null, ...photoOf(d.photo) }
       : null
-  return { draft, muteUntil: typeof o.muteUntil === 'number' && Number.isFinite(o.muteUntil) ? o.muteUntil : null }
+  const u = o.undo
+  const undo = u && typeof u === 'object' && typeof u.id === 'string' && /^[a-z0-9]{1,12}$/.test(u.id) && Array.isArray(u.ids) && typeof u.at === 'number' ? { id: u.id, ids: u.ids.filter((x) => typeof x === 'string' && /^fd-[a-z0-9]{1,24}$/.test(x)).slice(0, 10), at: u.at } : null
+  return { draft, muteUntil: typeof o.muteUntil === 'number' && Number.isFinite(o.muteUntil) ? o.muteUntil : null, ...(undo ? { undo } : {}) }
+}
+const visionList = (raw: unknown): VisionItem[] | null => {
+  if (!Array.isArray(raw) || !raw.length) return null
+  const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+  const out = raw.slice(0, 12).filter((x) => x && typeof x === 'object' && typeof x.name === 'string').map(
+    (x: any): VisionItem => ({ name: String(x.name).slice(0, 60), matchedSavedFoodId: typeof x.matchedSavedFoodId === 'string' ? x.matchedSavedFoodId.slice(0, 40) : null, qty: n(x.qty) || 1, unit: String(x.unit ?? '').slice(0, 20), grams: n(x.grams), kcal: n(x.kcal), protein: n(x.protein), carbs: n(x.carbs), fat: n(x.fat), confidence: x.confidence === 'high' || x.confidence === 'low' ? x.confidence : 'medium' })
+  )
+  return out.length ? out : null
+}
+function photoOf(raw: unknown): { photo?: FoodDraft['photo'] } {
+  const p = raw as { base?: unknown; now?: unknown; message?: unknown } | null | undefined
+  if (!p || typeof p !== 'object') return {}
+  const base = visionList(p.base)
+  const now = visionList(p.now)
+  return base && now && base.length === now.length ? { photo: { base, now, message: typeof p.message === 'string' ? p.message.slice(0, 200) : '' } } : {}
 }
 export const liveDraft = (fb: FoodBen, now: number): FoodDraft | null => (fb.draft && now - fb.draft.at < DRAFT_MS && now >= fb.draft.at - 60_000 ? fb.draft : null)
 export const isMuted = (fb: FoodBen, now: number) => fb.muteUntil != null && now < fb.muteUntil
@@ -221,7 +251,8 @@ export function decideFoodNudge(i: FoodNudgeInput): PushOut | null {
     const text = fix.length ? `${short} g protein short today: ${fix.join(' or ')} fixes it.` : `${short} g protein short today. ${i.next.line}.`
     return { key: foodEveningKey(i.day), type: 'food', area: 'body', level: 'normal', title: 'Protein today', text, face: '🍗', channel, buttons: [{ label: '👍 OK', op: 'ok', primary: true }, MUTE_BTN] }
   }
-  if (!i.lateMeal && m >= w.dinner[0] && m < w.dinner[1]) {
+  // The evening meal reminder already asked about dinner today: no second ask.
+  if (!i.lateMeal && m >= w.dinner[0] && m < w.dinner[1] && !i.log.recs[mealKey(i.day, 'evening')]) {
     const text = i.yesterday ? 'Log dinner? Copy the prompt or Same as yesterday.' : "Log dinner? Copy the prompt, then paste the AI's reply here."
     const buttons: PushButton[] = [{ label: '📋 Copy the prompt', op: 'prompt', primary: true }, ...(i.yesterday ? [{ label: '🔁 Same as yesterday', op: 'yesterday' as const }] : []), MUTE_BTN]
     return { key: foodDinnerKey(i.day), type: 'food', area: 'body', level: 'normal', title: 'Dinner', text, face: '🍽', channel, buttons }
@@ -275,4 +306,295 @@ export function foodReport(o: { week: FoodWeek; goals: { protein: number; kcal: 
   else tip = 'Good week: keep the same plan.'
   const html = ['🍽 <b>Food this week</b>', ...lines.map((l) => `• ${escHtml(l)}`), `💡 ${escHtml(tip)}`].join('\n')
   return { lines, tip, html }
+}
+
+// ---- a meal photo on Telegram ----
+
+export interface PhotoSize {
+  file_id: string
+  width?: number
+  height?: number
+  file_size?: number
+}
+/** Biggest side of the photo we send to the AI (Telegram keeps ready sizes: 90, 320, 800, 1280 px). */
+export const PHOTO_MAX_SIDE = 1280
+/** About 1 MB of photo at most (the vision request takes 1.1 MB). */
+export const PHOTO_MAX_BYTES = 1_000_000
+
+/** The size to download: the largest one up to 1280 px and 1 MB, else the smallest one. No resizing needed. */
+export function pickPhotoSize(sizes: PhotoSize[] | null | undefined): PhotoSize | null {
+  const list = (Array.isArray(sizes) ? sizes : []).filter((x) => x && typeof x.file_id === 'string')
+  if (!list.length) return null
+  const side = (x: PhotoSize) => Math.max(Number(x.width) || 0, Number(x.height) || 0)
+  const fits = list.filter((x) => side(x) <= PHOTO_MAX_SIDE && (Number(x.file_size) || 0) <= PHOTO_MAX_BYTES)
+  if (fits.length) return fits.reduce((a, b) => (side(b) > side(a) ? b : a))
+  return list.reduce((a, b) => (side(b) < side(a) ? b : a))
+}
+
+/**
+ * Whether a photo is a meal to log (most are). A caption that asks the coach
+ * something ("?" in it, or it starts with "Ben") keeps going to the coach's brain.
+ */
+export function photoIsMeal(caption: string): boolean {
+  const t = String(caption ?? '').trim()
+  if (!t) return true
+  return !t.includes('?') && !/^(ben|coach)\b/i.test(t)
+}
+
+/** A photo draft from the checked AI answer (core/foodVision.ts validateVision). */
+export function photoDraft(id: string, at: number, items: VisionItem[], message: string): FoodDraft {
+  return { id, at, items: toFoodItems(items), question: null, photo: { base: items, now: items, message } }
+}
+const withNow = (d: FoodDraft, now: VisionItem[]): FoodDraft => ({ ...d, items: toFoodItems(now), photo: { ...d.photo!, now } })
+
+/** How many and the unit: "3 eggs", "1 container", "×2". */
+const qtyText = (it: VisionItem) => {
+  const q = Math.round(it.qty * 10) / 10
+  return it.unit && it.unit !== 'g' && it.unit !== 'serving' && it.unit !== 'portion' ? `${q} ${it.unit}` : q !== 1 ? `×${q}` : ''
+}
+
+/** The photo preview on Telegram (HTML): each food with how many, kcal and protein; low-confidence foods marked. */
+export function photoDraftText(d: FoodDraft): string {
+  const list = d.photo?.now ?? []
+  const t = visionTotals(list)
+  return [
+    '📸 <b>Check the meal, then Save</b>',
+    ...list.map((it, i) => {
+      const q = qtyText(it)
+      return `${i + 1}. ${escHtml(cap(it.name))}${q ? ` · ${escHtml(q)}` : ''}${it.grams ? ` · ${fmt(it.grams)} g` : ''} · ${fmt(it.kcal)} kcal · ${fmt(it.protein)} g protein${it.confidence === 'low' ? '\n   ⚠️ not sure, check the portion' : ''}`
+    }),
+    `<b>Total: ~${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b>`,
+    ...(d.photo?.message ? [`💬 ${escHtml(d.photo.message)}`] : []),
+    `Tap −/+ for how many, 🔁 to swap for one of your saved foods, or type e.g. <code>${escHtml((list[0]?.name ?? 'eggs').split(' ')[0].toLowerCase())} 2</code>.`
+  ].join('\n')
+}
+
+/** The photo preview's buttons: −/+/🔁 per food, then Save / Cancel. */
+export function photoDraftKeyboard(d: FoodDraft): { inline_keyboard: { text: string; callback_data: string }[][] } {
+  const rows = (d.photo?.now ?? []).slice(0, 8).map((it, i) => [
+    { text: `− ${i + 1}. ${cap(it.name).slice(0, 16)}`, callback_data: `fd|-|${d.id}|${i}` },
+    { text: '+', callback_data: `fd|+|${d.id}|${i}` },
+    { text: '🔁 Swap', callback_data: `fd|w|${d.id}|${i}` }
+  ])
+  rows.push([
+    { text: '✅ Save', callback_data: `fd|s|${d.id}` },
+    { text: '✗ Cancel', callback_data: `fd|x|${d.id}` }
+  ])
+  return { inline_keyboard: rows }
+}
+
+/** −/+ on one food of a photo draft: whole steps (halves under 1); a saved food keeps its own numbers. */
+export function stepPhoto(d: FoodDraft, index: number, dir: 1 | -1, saved: SavedFoodRef[]): FoodDraft {
+  const it = d.photo?.now[index]
+  if (!it) return d
+  return setPhotoQty(d, index, stepQty(it.qty, dir), saved)
+}
+/** A new "how many" for one food of a photo draft (grams and macros follow). */
+export function setPhotoQty(d: FoodDraft, index: number, qty: number, saved: SavedFoodRef[]): FoodDraft {
+  const p = d.photo
+  const base = p?.base[index]
+  if (!p || !base) return d
+  const next = { ...scaleVisionItem(base, qty / (base.qty || 1), saved), name: p.now[index].name }
+  return withNow(d, p.now.map((x, i) => (i === index ? next : x)))
+}
+/** New grams for one food of a photo draft. */
+export function setPhotoGrams(d: FoodDraft, index: number, grams: number, saved: SavedFoodRef[]): FoodDraft {
+  const p = d.photo
+  const base = p?.base[index]
+  if (!p || !base) return d
+  if (!base.grams) return withNow(d, p.now.map((x, i) => (i === index ? { ...x, grams } : x)))
+  const next = { ...scaleVisionItem(base, grams / base.grams, saved), name: p.now[index].name }
+  return withNow(d, p.now.map((x, i) => (i === index ? next : x)))
+}
+/** One food swapped for a saved food (its own numbers, one portion; −/+ then counts portions). */
+export function swapPhoto(d: FoodDraft, index: number, item: VisionItem): FoodDraft {
+  const p = d.photo
+  if (!p || !p.now[index]) return d
+  const put = (list: VisionItem[]) => list.map((x, i) => (i === index ? item : x))
+  return { ...d, items: toFoodItems(put(p.now)), photo: { ...p, base: put(p.base), now: put(p.now) } }
+}
+
+/**
+ * "eggs 2", "type: rice 150", "2 3" on a photo draft: up to 20 is how many,
+ * more (or "150 g") is grams. Null when it names none of the foods (or two).
+ */
+export function readPhotoEdit(text: string, d: FoodDraft): { index: number; qty?: number; grams?: number } | null {
+  const list = d.photo?.now
+  if (!list) return null
+  const m = /^\s*(?:type\s*:?\s*)?(.{1,40}?)\s*[:=]?\s+(\d{1,4}(?:[.,]5)?)\s*(g|gr|grams?|x|pcs)?\s*\.?\s*$/i.exec(String(text ?? ''))
+  if (!m) return null
+  const v = Number(m[2].replace(',', '.'))
+  const isGrams = /^g/i.test(m[3] ?? '') || v > 20
+  if (!(v > 0) || (isGrams && (v < 5 || v > 3000))) return null
+  const who = m[1].trim().toLowerCase()
+  let index = -1
+  if (/^\d{1,2}$/.test(who)) index = list[Number(who) - 1] ? Number(who) - 1 : -1
+  else {
+    const one = (w: string) => w.replace(/(ies)$/, 'y').replace(/s$/, '')
+    const names = list.map((it) => it.name.toLowerCase())
+    const exact = names.indexOf(who)
+    if (exact >= 0) index = exact
+    else {
+      const w = one(who.split(/\s+/)[0])
+      const hits = names.map((n, i) => ({ n, i })).filter(({ n }) => n.includes(who) || who.includes(n) || n.split(/\s+/).map(one).includes(w))
+      index = hits.length === 1 ? hits[0].i : -1
+    }
+  }
+  if (index < 0) return null
+  return isGrams ? { index, grams: Math.round(v) } : { index, qty: v }
+}
+
+/** The saved foods to swap one food for: the closest names first, at most 6. */
+export function swapChoices(item: { name: string }, saved: SavedFoodRef[], max = 6): { ref: SavedFoodRef; n: number }[] {
+  const words = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .split(/[^a-z0-9]+/)
+      .filter((w) => w.length >= 3)
+      .map((w) => w.replace(/s$/, ''))
+  const mine = new Set(words(item.name))
+  return saved
+    .map((ref, n) => ({ ref, n, score: words(ref.name).filter((w) => mine.has(w)).length }))
+    .sort((a, b) => b.score - a.score || a.n - b.n)
+    .slice(0, max)
+    .map(({ ref, n }) => ({ ref, n }))
+}
+/** The swap list's buttons: one per saved food, then Back. */
+export function swapKeyboard(d: FoodDraft, index: number, saved: SavedFoodRef[]): { inline_keyboard: { text: string; callback_data: string }[][] } {
+  const it = d.photo?.now[index]
+  const rows = it ? swapChoices(it, saved).map(({ ref, n }) => [{ text: `${ref.name.slice(0, 30)} · ${fmt(ref.kcal)} kcal`, callback_data: `fd|W|${d.id}|${index}|${n}` }]) : []
+  rows.push([{ text: '← Back', callback_data: `fd|b|${d.id}` }])
+  return { inline_keyboard: rows }
+}
+
+// ---- meal reminders at the standard day's slots ----
+
+export type MealKind = 'morning' | 'lunch' | 'afternoon' | 'evening'
+export const MEAL_KINDS: MealKind[] = ['morning', 'lunch', 'afternoon', 'evening']
+export const MEAL_LABEL: Record<MealKind, string> = { morning: 'Breakfast', lunch: 'Lunch', afternoon: 'Afternoon snack', evening: 'Dinner' }
+/** At most this many meal reminders a day (a snoozed one asked again counts). */
+export const MEALS_PER_DAY = 3
+/** A reminder may come this long after its slot's time (and before the next slot). */
+export const MEAL_WINDOW_MIN = 90
+export const MEAL_SNOOZE_MIN = 30
+export const mealKey = (day: string, kind: MealKind) => `meal:${day}:${kind}`
+export const mealAgainKey = (day: string, kind: MealKind) => `${mealKey(day, kind)}:again`
+/** The meal kind in a meal reminder's key ("meal:2030-03-12:lunch" → lunch). */
+export function mealKindOfKey(key: string): MealKind | null {
+  const m = /^meal:\d{4}-\d{2}-\d{2}:(morning|lunch|afternoon|evening)(?::again)?$/.exec(String(key ?? ''))
+  return m ? (m[1] as MealKind) : null
+}
+
+/** Which reminder a slot of the standard day is: by its name first ("Afternoon"), then its meal type. "Anytime" gets none. */
+export function mealKindOf(slot: { label: string; slot: MealType }): MealKind | null {
+  const l = String(slot.label ?? '').toLowerCase()
+  if (/\b(morning|breakfast)\b/.test(l)) return 'morning'
+  if (/\blunch\b/.test(l)) return 'lunch'
+  if (/\bafternoon\b/.test(l)) return 'afternoon'
+  if (/\b(evening|dinner|supper)\b/.test(l)) return 'evening'
+  if (/\banytime\b/.test(l)) return null
+  return slot.slot === 'breakfast' ? 'morning' : slot.slot === 'lunch' ? 'lunch' : slot.slot === 'dinner' ? 'evening' : null
+}
+
+/**
+ * The time of each meal reminder, in minutes into the app day: breakfast 45
+ * minutes after you wake (between 06:00 and 11:00; 08:30 without a wake time),
+ * lunch 13:00, the afternoon snack 16:30, dinner 19:30.
+ */
+export function mealTimes(wake: string | null | undefined): Record<MealKind, number> {
+  const w = wake && /^\d{1,2}:\d{2}$/.test(wake) ? toMin(wake.padStart(5, '0')) + 45 : 8 * 60 + 30
+  return { morning: Math.max(6 * 60, Math.min(11 * 60, w)), lunch: 13 * 60, afternoon: 16 * 60 + 30, evening: 19 * 60 + 30 }
+}
+
+export interface MealSlotIn {
+  kind: MealKind
+  /** The slot's own name ("Lunch") and what you usually eat then ("Bulgur salad + Rye bread"). */
+  label: string
+  items: string
+  /** The swap you sometimes make, if any ("Buckwheat + 2 × Egg"). */
+  alt: string | null
+  /** Already logged as this slot today (the standard day's checklist). */
+  logged: boolean
+}
+export interface MealReminderIn {
+  now: Date
+  day: string
+  /** Settings → Ben → Pushes → "Meal reminders" (default on). */
+  on: boolean
+  wake: string | null
+  bed: string | null
+  slots: MealSlotIn[]
+  /** When food was last logged today (ms), or null. */
+  lastLogAt: number | null
+  log: PushLog
+  here: boolean
+  meeting: boolean
+  /** Quiet hours, a paused day, or bed already logged. */
+  quiet: boolean
+  muted: boolean
+}
+
+/** A minute of today's app day as a time (ms). */
+const appMinuteToMs = (now: Date, m: number) => now.getTime() + (m - appMinute(now)) * 60_000 - now.getSeconds() * 1000 - now.getMilliseconds()
+
+/**
+ * One gentle meal reminder at a slot's time, when nothing was logged for that
+ * meal yet (nothing since halfway from the slot before) ("Lunch time: log your bulgur salad + bread?" with Log it /
+ * 30 min / Skip). Once per slot a day (a snoozed one comes back once), at most
+ * 3 a day, never in a meeting, quiet hours, after bed or while food nudges are muted.
+ */
+export function decideMealReminder(i: MealReminderIn): PushOut | null {
+  if (!i.on || i.muted || i.meeting || i.quiet || !i.slots.length) return null
+  const recs = i.log.recs
+  if (Object.keys(recs).filter((k) => k.startsWith('meal:')).length >= MEALS_PER_DAY) return null
+  const m = appMinute(i.now)
+  const bed = bedMinute(i.bed)
+  if (m >= bed - 30) return null
+  const times = mealTimes(i.wake)
+  const slots = [...i.slots].sort((a, b) => times[a.kind] - times[b.kind])
+  const channel = channelFor(i.here)
+  const make = (s: MealSlotIn, again: boolean): PushOut => {
+    const title = MEAL_LABEL[s.kind]
+    const usual = `${s.items.charAt(0).toLowerCase()}${s.items.slice(1)}`
+    const text = again ? `Still time to log ${title.toLowerCase()}: your ${usual}?` : `${title} time: log your ${usual}?`
+    const buttons: PushButton[] = [
+      { label: '✅ Log it', op: 'log', primary: true, arg: 'main' },
+      ...(s.alt ? [{ label: `🔁 ${s.alt.slice(0, 28)}`, op: 'log' as const, arg: 'alt' }] : []),
+      ...(again ? [] : [{ label: `⏰ ${MEAL_SNOOZE_MIN} min`, op: 'later' as const, minutes: MEAL_SNOOZE_MIN }]),
+      { label: 'Skip', op: 'skip' }
+    ]
+    return { key: again ? mealAgainKey(i.day, s.kind) : mealKey(i.day, s.kind), type: 'food', area: 'body', level: 'soft', title, text, face: '🍽', channel, buttons }
+  }
+  // A snoozed reminder comes back once, when its time is up (unless you logged since).
+  for (const s of slots) {
+    const r = recs[mealKey(i.day, s.kind)]
+    if (!r || r.ans !== 'later' || recs[mealAgainKey(i.day, s.kind)] || s.logged) continue
+    const until = r.until ?? r.at + MEAL_SNOOZE_MIN * 60_000
+    if (i.now.getTime() < until || i.now.getTime() > until + 60 * 60_000) continue
+    if (i.lastLogAt != null && i.lastLogAt >= r.at) continue
+    return make(s, true)
+  }
+  for (let k = 0; k < slots.length; k++) {
+    const s = slots[k]
+    const at = times[s.kind]
+    const next = slots[k + 1] ? times[slots[k + 1].kind] : Infinity
+    if (m < at || m >= Math.min(at + MEAL_WINDOW_MIN, next) || at >= bed - 30) continue
+    if (recs[mealKey(i.day, s.kind)] || s.logged) continue
+    // Nothing logged for this meal yet: since halfway from the slot before (a late breakfast still
+    // counts as breakfast; something at 12:40 counts as lunch). The first slot counts from 04:00.
+    const since = appMinuteToMs(i.now, k ? Math.round((times[slots[k - 1].kind] + at) / 2) : 240)
+    if (i.lastLogAt != null && i.lastLogAt >= since) continue
+    return make(s, false)
+  }
+  return null
+}
+
+/** Cheap check before reading the food log: inside a meal reminder's window, or a snoozed one may be due. */
+export function mealDue(now: Date, wake: string | null | undefined, log: PushLog): boolean {
+  const m = appMinute(now)
+  const t = mealTimes(wake)
+  if (MEAL_KINDS.some((k) => m >= t[k] && m < t[k] + MEAL_WINDOW_MIN)) return true
+  return Object.entries(log.recs).some(([k, r]) => k.startsWith('meal:') && r.ans === 'later')
 }

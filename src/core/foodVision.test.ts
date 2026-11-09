@@ -1,6 +1,30 @@
 // Food photo logging: the AI's answer is never trusted as is. Made-up foods only.
 import { describe, expect, it } from 'vitest'
-import { fromSaved, gramsOfPortion, photoReplyLine, readVisionJson, savedFromFavs, scaleVisionItem, stepQty, toFoodItems, validateVision, visionTotals, type SavedFoodRef } from './foodVision'
+import { fromSaved, gramsOfPortion, photoReplyLine, readVisionJson, savedFromFavs, savedRefs, scaleVisionItem, stepQty, toFoodItems, validateVision, visionTotals, type SavedFoodRef } from './foodVision'
+import { seedSaved } from './foodSaved'
+
+describe('the real saved foods (food_saved)', () => {
+  it('lists saved foods and meals with their own ids and portions, then starred meals not already there', () => {
+    const refs = savedRefs(seedSaved(), [
+      { id: 'f1', name: 'Kefir or milk 2.5%', items: [] },
+      { id: 'f2', name: 'Pasta night', items: [{ name: 'Pasta', grams: 300, protein: 15, carbs: 90, fat: 3, kcal: 450, confidence: 'roughly' }] }
+    ])
+    expect(refs.find((r) => r.id === 'sf-bulgur')).toMatchObject({ name: 'Bulgur salad with vegetables', portion: '1 container (300 g)', kcal: 400, protein: 10 })
+    expect(refs.find((r) => r.id === 'sf-branza')!.portion).toBe('250 g')
+    expect(refs.find((r) => r.id === 'sm-breakfast')!.portion).toMatch(/^1 meal \(\d+ g\)$/)
+    expect(refs.filter((r) => r.name === 'Kefir or milk 2.5%')).toHaveLength(1)
+    expect(refs.some((r) => r.id === 'fav:f2')).toBe(true)
+  })
+  it('a match to a saved food uses its macros × qty, not the AI numbers', () => {
+    const refs = savedRefs(seedSaved())
+    const r = validateVision({ items: [{ name: 'bulgur container', matchedSavedFoodId: 'sf-bulgur', qty: 2, unit: 'container', grams: 999, kcal: 9999, protein: 1, confidence: 'high' }] }, refs)
+    expect(r.ok).toBe(true)
+    if (!r.ok) return
+    expect(r.result.items[0]).toMatchObject({ matchedSavedFoodId: 'sf-bulgur', qty: 2, grams: 600, kcal: 800, protein: 20 })
+    expect(r.result.totals.kcal).toBe(800)
+    expect(toFoodItems(r.result.items)[0]).toMatchObject({ kcal: 800, protein: 20, qty: 2 })
+  })
+})
 
 const saved: SavedFoodRef[] = [
   { id: 'sv-bulgur', name: 'Bulgur container', portion: '1 container (350 g)', kcal: 520, protein: 38, carbs: 60, fat: 12 },

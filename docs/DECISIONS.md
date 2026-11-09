@@ -4,6 +4,11 @@ Choices that a later session could easily undo by accident. Each entry gives the
 was made, and what it rules out. Newest entries go on top. Don't reverse one without writing a new
 entry that says why.
 
+### One calorie suggestion for food and body; one target band; scale screenshots share the photo op (2026-11-09)
+- **Decision:** there is ONE calorie suggestion (`core/foodAdjust.ts`), shown by one component (`body/FoodAdjustCard.tsx`) on Food and on Progress. It reads weekly averages of the first morning weigh-in from `body_comp` (fallback `body_metrics`), needs 3+ weigh-ins a week, and uses the one band +0.25…+0.5 kg a week (`TARGET_BAND`; `bodyProgress.ts` `LEAN_ZONE` points at it). Rules: under +0.1 kg a week 2 weeks running → +200 kcal; over +0.6 kg a week AND waist up more than 1 cm in 2 weeks → −150/−200; else on track. Accept changes `food_goals.kcalAdj` (±600) and records `{day, delta, after, reason}` in `food_goals.adjLog`. Scale screenshots go through the same `/api/ai` op (`kind:'scale'`), the same 50-a-day counter and budget, a hand-written validator (`core/scaleRead.ts`), a review, then `body_comp` with source `screenshot`; the picture is never stored. This replaces the weight-check numbers in "Food goals are slow muscle gain" below (2 weigh-ins, +0.5 kg, waist +0.5 cm).
+- **Why:** Food and Progress used different bands (+0.1…+0.25 vs +0.25…+0.5) and different data (body_metrics vs body_comp), so they could disagree; the owner asked for one system.
+- **Rules out:** a second suggestion card or rule set, a second band, a silent kcal change, a new api/ function or a separate counter for screenshots, storing scale pictures.
+
 ### Food photos are read by AI on the server, checked in code, saved only after the owner's look (2026-11-09)
 - **Decision:** replaces the "no image AI" part of "Food counter: numbers in body_log…" below. Body → Food has "Snap a meal": the page shrinks the photo (1024 px, JPEG) and sends it to `/api/ai {op:'foodPhoto'}` (no new function; provider code in `api/_vision.mjs`, Gemini by default, Claude with `VISION_PROVIDER=claude`). The answer is JSON only and is checked by `core/foodVision.ts` (clamped numbers, totals added up again, a matched saved food uses the owner's own numbers × qty). A review screen shows every food; nothing is saved before "Save meal", and saving goes through the food counter's `addFoodMeal`. At most 50 photos a day (server counter in `sys_kv`, the owner's day) plus the monthly AI budget; over either, the copy-prompt way is offered. The photo is never stored or logged. No points.
 - **Why:** the owner gives up logging when it is slow; copy → paste in another app → paste back was the slow part. Code checks keep the one protein number honest; the review keeps the owner in charge.
@@ -266,6 +271,18 @@ entry that says why.
   the usual "Workout done", once a day), adding the extra moves to `MOVES` without real demos.
 
 
+### Training warnings stay calm and act only through existing settings (2026-11-09)
+- **Decision:** recovery, the streak and the warnings are pure rules over data already saved (Sport
+  Track's sets, the training log, the food counter's kcal, `body_comp`), read only. The two new pieces of
+  state, `trainLighter` (a 7-day lighter week) and `trainWarnDismiss` (hidden for a week), live in Sport
+  Track's state next to the other training fields. A lighter week changes the dose only through the usual
+  dose setting (`bodyPlus.setDose('light')`, once a day, never over a pick you made that day). Dots are
+  small and soft; the streak is never broken by a rest day.
+- **Why:** no new table, setting key or API file; one place decides today's dose; the owner wants guidance,
+  not alarms.
+- **Rules out:** points for streaks or recovery, red alarm banners, writing food or body data from
+  Training, or a second dose store.
+
 ### Smart-scale weigh-ins live in body_comp; body_metrics stays the day's weight (2026-11-09)
 - **Decision:** each weigh-in is a row in its own table `body_comp` (migration 023), id made from the
   dedupe key (time to the minute in UTC + weight to 0.1 kg), later `updated_at` wins. Every write also
@@ -278,3 +295,17 @@ entry that says why.
   already reads `body_metrics` (weight trend, protein and food goals, Telegram) keeps working unchanged.
 - **Rules out:** writing scale data into `body_log` or a setting, a random id for a weigh-in, daily
   weight as the headline number, or red alarms on body numbers.
+
+
+### Telegram meal photos use the website's vision call, in-process, and are never kept (2026-11-09)
+- **Decision:** a meal photo sent to the bot is read by the same `foodPhoto` function as
+  `/api/ai {op:'foodPhoto'}` (api/telegram.mjs hands it to the bot as `env.foodPhoto`), so the
+  50-photos-a-day counter, the monthly AI budget and the `core/foodVision.ts` check are shared. The
+  photo lives only in memory for that one request: never in the database, a setting, a log or a reply.
+  Only the owner's chats get a download or a vision call. Meal reminders share the one food mute and
+  the one push log (`meal:<day>:<kind>`, max 3 a day).
+- **Why:** one limit and one validator for every way of sending a photo; a second path would double
+  the AI spend and drift from the website's numbers. A stored photo would be private data in a synced
+  database for no gain (only the foods you save matter).
+- **Rules out:** a separate vision prompt or provider for Telegram, a new `api/` file for it, caching
+  or saving photos, or meal reminders with their own mute or their own dedupe store.

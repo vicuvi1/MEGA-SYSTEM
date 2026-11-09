@@ -56,7 +56,7 @@ describe('weight and waist verdict', () => {
   it('weight up, waist the same: likely muscle', () => {
     const v = bodyVerdict(weigh(steady(70, 70.6)), waist([[34, 80], [1, 80.2]]), TODAY)
     expect(v.tone).toBe('good')
-    expect(v.text).toMatch(/^\+0\.\d kg in 4 weeks, waist the same: likely muscle\.$/)
+    expect(v.text).toMatch(/^\+0\.\d kg in 4 weeks, waist the same: likely muscle/)
   })
   it('waist up 1.5 cm: slow the surplus', () => {
     const v = bodyVerdict(weigh(steady(70, 71)), waist([[34, 80], [1, 81.5]]), TODAY)

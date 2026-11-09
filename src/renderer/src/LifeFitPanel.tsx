@@ -253,6 +253,13 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
         </div>
       )}
       <label className="check toggle-row">
+        <input type="checkbox" checked={p.meals} onChange={(e) => setP({ meals: e.target.checked })} aria-label="Meal reminders" />
+        <span>
+          Meal reminders
+          <small>"Lunch time: log your bulgur container + bread?" at your standard day's meal times, only when nothing was logged since the meal before. Log it in one tap, 30 min later or Skip. At most 3 a day, never in meetings or quiet hours.</small>
+        </span>
+      </label>
+      <label className="check toggle-row">
         <input type="checkbox" checked={p.weekly} onChange={(e) => setP({ weekly: e.target.checked })} />
         <span>
           Weekly check

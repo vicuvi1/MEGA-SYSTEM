@@ -126,6 +126,22 @@
 .bmap-region.z-high path { fill: color-mix(in srgb, var(--bdy-low) 75%, var(--bdy-surface-3)); }
 .bmap-region.on path { stroke: var(--bdy-text); stroke-width: 1.4; }
 .bmap-region:hover path { stroke: var(--bdy-text); }
+/* body map: recovery view (red < 24 h, yellow 24–48 h, green 48 h+; soft, not alarming) */
+.bmap-card {
+  --rec-red: color-mix(in srgb, var(--red, #d9534f) 72%, var(--bdy-surface, #fff));
+  --rec-yellow: var(--bdy-ok);
+  --rec-green: color-mix(in srgb, var(--green, #3fae74) 85%, var(--bdy-surface, #fff));
+}
+.bmap-view { margin: 4px 0 12px; }
+.bmap-region.rec path { fill: color-mix(in srgb, var(--rec-green) 60%, var(--bdy-surface-3)); }
+.bmap-region.rec.r-yellow path { fill: color-mix(in srgb, var(--rec-yellow) 65%, var(--bdy-surface-3)); }
+.bmap-region.rec.r-red path { fill: color-mix(in srgb, var(--rec-red) 70%, var(--bdy-surface-3)); }
+.bmap-rec { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.bmap-rec-row { display: grid; grid-template-columns: 10px 90px minmax(0, 1fr); align-items: center; gap: 10px; min-height: 36px; padding: 0 10px; border-radius: 10px; background: var(--bdy-surface-2); font-size: 14px; }
+.bmap-rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--rec-green); }
+.bmap-rec-row.r-yellow .bmap-rec-dot { background: var(--rec-yellow); }
+.bmap-rec-row.r-red .bmap-rec-dot { background: var(--rec-red); }
+.bmap-rec-key { padding: 4px 2px 0; }
 .bmap-side-panel { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
 .bmap-list { display: flex; flex-direction: column; gap: 4px; }
 .bmap-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) 32px; align-items: center; gap: 10px; min-height: 38px; padding: 0 10px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--bdy-text); font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; text-align: left; }
