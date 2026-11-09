@@ -161,6 +161,7 @@ export const SETTINGS = {
   custom_state: json<Record<string, unknown> | null>("Custom Center: today's numbers of your own counters and checklists, and when each reminder rule last fired (core/custom); counters that track water or reps keep no number here", null),
   // ---- the saga (LF1, LF4–LF7, LF12, LF15, LF18): src/renderer/src/web/sagaStore.ts ----
   saga_seasons: json<Record<string, unknown> | null>('your seasons (12 weeks = the quarter; old ones 8): name, theme, cover, three main quests and the boss (src/core/season.ts)', null),
+  goal_ladder: json<Record<string, unknown> | null>('the goal ladder: up to 3 critical goals for the quarter, "Not now" goals, your weekly targets, confirmed monthly milestones and reviews done (src/core/goalLadder.ts)', null),
   saga_vision: json<Record<string, unknown> | null>('the vision board: word of the year, who you are becoming, 6–9 cards (src/core/vision.ts)', null),
   saga_vision_photos: json<Record<string, unknown> | null>('pictures on vision cards, made small on the device (card id → data URL)', null),
   saga_identity: json<Record<string, unknown> | null>('your "I am someone who…" lines and what counts as a vote (src/core/identityVotes.ts)', null),

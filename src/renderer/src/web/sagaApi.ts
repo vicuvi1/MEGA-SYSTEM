@@ -12,6 +12,7 @@ import { ARC, type Outfit } from '@core/benArc'
 import { financeStateFrom } from './botBrain'
 import { noteMoment } from './benMind'
 import { loadArc, loadIdentity, loadSeasons, loadSide, loadWheel, loadWins, sagaView, saveArc, saveIdentity, saveSeasons, saveSide, saveVision, saveVisionPhoto, saveWheel, saveWins, type SideFacts } from './sagaStore'
+import { createLadder } from './ladderApi'
 import type { Services, WebServices } from './webServices'
 
 const uid = (p: string) => `${p}${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`
@@ -27,6 +28,8 @@ export function createSaga(svcP: Promise<WebServices>) {
     saveSeasons(s.db, { seasons: b.seasons.map((x) => (x.id === id ? fn(x) : x)) })
   }
   return {
+    /** The goal ladder: the quarter's up to 3 critical goals, milestones, week steps and reviews. */
+    ladder: createLadder(svcP),
     view: (side?: SideFacts) => read((s) => sagaView(s, { finance: fin(s), side })),
     // ---- seasons (LF1)
     startSeason: (p: { name: string; theme?: string; cover?: string; color?: string; area?: string | null; start: string; quests?: string[]; boss?: { title: string; kind: BossKind; day?: string } }) =>
