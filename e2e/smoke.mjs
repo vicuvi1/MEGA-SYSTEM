@@ -5549,17 +5549,48 @@ try {
     // 5. A Sunday waist reminder is planned once; body logs pay no points.
     await until(async () => (await sql("SELECT value FROM settings WHERE key = 'coach_reminders'")).rows.some((r) => (r[0].value.match(/"waist:/g) ?? []).length >= 1), 'no Sunday waist reminder')
     if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a body log paid points')
-    // 6. ONE calorie suggestion, the same card on Progress and Food. Last week +0.4 kg: on track.
+    // 6. ONE calorie suggestion, the same card on Progress and Food. Any weekday: the weigh-ins are placed in
+    // Monday–Sunday windows from the clock's date, and what the card should say comes from the app's own pure
+    // functions (core/bodyComp.ts + core/foodAdjust.ts, bundled here) run on the synced rows.
     const card = `${prog} .fd-adjust-card`
     const foodCard = '#ptp-body-food .fd-adjust-card'
     const title = (sel) => pg.locator(`${sel} .fd-adjust-title`).innerText()
     await pg.waitForSelector(card, { timeout: 15000 })
     if (!process.env.E2E_BODY_DEMO) {
-      await until(async () => /On track/.test(await title(card)), 'Progress does not say On track for +0.4 kg a week')
+      const { build } = await import('rolldown')
+      const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+      const { tmpdir } = await import('node:os')
+      const dir = await mkdtemp(join(tmpdir(), 'adjust-'))
+      await writeFile(join(dir, 'entry.ts'), ['bodyComp', 'foodAdjust', 'foodGoals', 'sportShared', 'dates'].map((m) => `export * from ${JSON.stringify(join(repo, `src/core/${m}.ts`))}`).join('\n'))
+      const out = await build({ input: join(dir, 'entry.ts'), write: false, output: { format: 'esm' } })
+      await writeFile(join(dir, 'adjust.mjs'), out.output[0].code)
+      const A = await import((await import('node:url')).pathToFileURL(join(dir, 'adjust.mjs')).href)
+      await rm(dir, { recursive: true, force: true })
+      // What the card should say now, from the synced body_comp + body_metrics rows and the goals.
+      const expected = async () => {
+        const n = (c) => (c?.type === 'null' || c == null ? null : Number(c.value))
+        const rows = (await sql('SELECT at, day, weight_kg, body_fat_pct, muscle_kg, waist_cm FROM body_comp')).rows.map((r) => ({ at: r[0].value, day: r[1].value, weight_kg: n(r[2]), body_fat_pct: n(r[3]), muscle_kg: n(r[4]), waist_cm: n(r[5]) }))
+        const metrics = (await sql('SELECT day, weight, waist FROM body_metrics')).rows.map((r) => ({ day: r[0].value, weight: n(r[1]), waist: n(r[2]) }))
+        const g = A.cleanGoals(JSON.parse((await sql("SELECT value FROM settings WHERE key = 'food_goals'")).rows[0]?.[0]?.value ?? '{}'))
+        const today = A.sportToday(new Date(fakeNow()))
+        return A.adjustCheck({ points: A.dailyPoints(rows, metrics).filter((p) => p.day <= today && p.day > A.addDays(today, -42)), today, adj: g.kcalAdj, adjAt: g.adjAt })
+      }
+      const sameAs = async (sel, what) => {
+        let last = ''
+        await until(async () => {
+          const want = (await expected()).title
+          last = `card "${await title(sel)}", expected "${want}"`
+          return (await title(sel)) === want
+        }, `${what}: ${last}`, 20000)
+      }
+      // Last week +0.4 kg (seeded above): on track, on both tabs.
+      const before = await expected()
+      if (before.state !== 'none' || before.kind !== 'ontrack') throw new Error(`the seeded weeks should be on track, the rules say ${before.state}/${before.kind}: ${before.why}`)
+      await sameAs(card, 'Progress does not match the rules')
       await pg.click('.body-page .ptabs [data-tab="food"]')
-      await until(async () => (await title(foodCard)) === (await title(card)), 'Food and Progress show different calorie checks')
+      await sameAs(foodCard, 'Food does not match the rules')
       await pg.click('.body-page .ptabs [data-tab="progress"]')
-      // Make the last two weeks flat (made-up weigh-ins): the card suggests +200 kcal on both tabs.
+      // Make the last two full weeks flat (made-up weigh-ins in the weeks 3 back and 1 back, from this week's Monday).
       const d = new Date(fakeNow())
       const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
       const at = (back, add) => {
@@ -5571,10 +5602,13 @@ try {
         await fillSheet(kg, {}, at(back, add))
         await save(kg)
       }
-      await until(async () => /Eat 200 kcal more a day/.test(await title(card)), 'two flat weeks do not suggest +200 kcal')
+      await until(async () => (await expected()).state === 'suggest', 'the flat weeks did not reach the server', 20000)
+      const sug = await expected()
+      if (sug.suggestion.delta !== 200) throw new Error(`two flat weeks should suggest +200, the rules say ${sug.suggestion.delta}`)
+      await sameAs(card, 'Progress does not show the suggestion')
       if (!/glass of milk \+ 1 spoon of peanut butter/.test(await pg.locator(card).innerText())) throw new Error('the +200 idea is missing')
       await pg.click('.body-page .ptabs [data-tab="food"]')
-      await until(async () => /Eat 200 kcal more a day/.test(await title(foodCard)), 'the Food tab does not show the same suggestion')
+      await sameAs(foodCard, 'the Food tab does not show the same suggestion')
       await pg.click('.body-page .ptabs [data-tab="progress"]')
       if (shots) {
         await pg.setViewportSize({ width: 390, height: 844 })
@@ -5586,11 +5620,12 @@ try {
       }
       // One tap accepts: the goal changes once, the change is in the history (Goals), no points.
       await pg.click(`${card} .fd-adjust-apply`)
-      await until(async () => /Checked this week/.test(await title(card)), 'Accept did not settle the suggestion')
+      await until(async () => (await expected()).state === 'none' && (await expected()).kind === 'checked', 'Accept did not reach the server', 20000)
+      await sameAs(card, 'Accept did not settle the suggestion')
       if (!/Last change: \d{4}-\d{2}-\d{2} · \+200 kcal · Weight flat for 2 weeks/.test(await pg.locator(card).innerText())) throw new Error('the change is not shown on the card')
       await until(async () => /"kcalAdj":200/.test((await sql("SELECT value FROM settings WHERE key = 'food_goals'")).rows[0]?.[0]?.value ?? ''), 'the kcal goal did not change', 20000)
       await pg.click('.body-page .ptabs [data-tab="food"]')
-      await until(async () => /Checked this week/.test(await title(foodCard)), 'the Food tab still shows the suggestion')
+      await sameAs(foodCard, 'the Food tab still shows the suggestion')
       await pg.locator('#ptp-body-food .fd-card .card-head button', { hasText: 'Goals' }).click()
       await pg.waitForSelector('#ptp-body-food .fd-adj-history li', { timeout: 10000 })
       if (!/\+200 kcal · Weight flat for 2 weeks/.test(await pg.locator('#ptp-body-food .fd-adj-history').innerText())) throw new Error('Goals has no calorie change history')
