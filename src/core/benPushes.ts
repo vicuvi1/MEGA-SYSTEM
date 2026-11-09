@@ -129,15 +129,19 @@ export interface PushPrefs {
   offDays: number[]
   /** Meal reminders at the standard day's slots (core/foodBen.ts decideMealReminder). */
   meals: boolean
+  /** The coach's gentle nudges (core/coachTalk.ts): the morning one, midday protein, the evening check-in. */
+  coachMorning: boolean
+  coachProtein: boolean
+  coachCheckin: boolean
 }
-export const DEFAULT_PUSH_PREFS: PushPrefs = { checkins: true, brief: true, shutdown: true, weekly: true, shutdownBefore: 30, offDays: [], meals: true }
+export const DEFAULT_PUSH_PREFS: PushPrefs = { checkins: true, brief: true, shutdown: true, weekly: true, shutdownBefore: 30, offDays: [], meals: true, coachMorning: true, coachProtein: true, coachCheckin: true }
 export function cleanPushPrefs(raw: unknown): PushPrefs {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<PushPrefs>
   const d = DEFAULT_PUSH_PREFS
   const b = (x: unknown, def: boolean) => (typeof x === 'boolean' ? x : def)
   const before = typeof o.shutdownBefore === 'number' && Number.isFinite(o.shutdownBefore) ? Math.max(10, Math.min(120, Math.round(o.shutdownBefore / 5) * 5)) : d.shutdownBefore
   const offDays = Array.isArray(o.offDays) ? [...new Set(o.offDays.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))].sort() : d.offDays
-  return { checkins: b(o.checkins, d.checkins), brief: b(o.brief, d.brief), shutdown: b(o.shutdown, d.shutdown), weekly: b(o.weekly, d.weekly), shutdownBefore: before, offDays, meals: b(o.meals, d.meals) }
+  return { checkins: b(o.checkins, d.checkins), brief: b(o.brief, d.brief), shutdown: b(o.shutdown, d.shutdown), weekly: b(o.weekly, d.weekly), shutdownBefore: before, offDays, meals: b(o.meals, d.meals), coachMorning: b(o.coachMorning, d.coachMorning), coachProtein: b(o.coachProtein, d.coachProtein), coachCheckin: b(o.coachCheckin, d.coachCheckin) }
 }
 
 const weekdayOf = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay()
@@ -297,7 +301,7 @@ export interface PushButton {
   arg?: string
   minutes?: number
 }
-export type PushType = 'checkin' | 'brief' | 'shutdown' | 'weekly' | 'drift' | 'workoutNote' | 'rescue' | 'food'
+export type PushType = 'checkin' | 'brief' | 'shutdown' | 'weekly' | 'drift' | 'workoutNote' | 'rescue' | 'food' | 'coach'
 export interface PushOut {
   key: string
   type: PushType
@@ -604,6 +608,8 @@ export function pushTelegram(p: PushOut, startData?: (subject: string) => string
   for (const b of p.buttons) {
     if (b.op === 'start' && b.arg && startData) top.push({ text: b.label, callback_data: startData(b.arg) })
     else if (b.op === 'shutdown') continue
+    // The coach's evening check-in (core/coachTalk.ts): its taps carry their own callback ("ck|e|3").
+    else if (p.type === 'coach' && b.arg?.startsWith('ck|')) top.push({ text: b.label, callback_data: b.arg.slice(0, 64) })
     else if (b.op === 'tomorrow' && b.arg === '*') top.push({ text: b.label, callback_data: 'bp|t|*' })
     // Food pushes (core/foodBen.ts): the prompt, "Same as yesterday" and the mute are food buttons (web/bots/foodBot.ts).
     else if (b.op === 'prompt' || b.op === 'yesterday' || b.op === 'mute') rows.push([{ text: b.label, callback_data: `fd|${b.op === 'prompt' ? 'p' : b.op === 'yesterday' ? 'y' : 'm'}|${p.key}`.slice(0, 64) }])
@@ -643,7 +649,7 @@ export const toCard = (p: PushOut): PushCard => ({ type: p.type, key: p.key, tit
 export function pushCardOf(raw: unknown): PushCard | null {
   const o = raw as Partial<PushCard> | null
   if (!o || typeof o !== 'object' || typeof o.key !== 'string' || typeof o.title !== 'string' || !Array.isArray(o.lines)) return null
-  if (!['checkin', 'brief', 'shutdown', 'weekly', 'drift', 'workoutNote', 'rescue', 'food'].includes(o.type as string)) return null
+  if (!['checkin', 'brief', 'shutdown', 'weekly', 'drift', 'workoutNote', 'rescue', 'food', 'coach'].includes(o.type as string)) return null
   return o as PushCard
 }
 

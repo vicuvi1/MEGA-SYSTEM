@@ -928,7 +928,23 @@
     "npm run smoke"
    ],
    "evidence": "2026-11-09: coachCore.test.ts (30 tests) and full vitest pass; smoke steps Coach today, Today tabs (Now 1.59 screens), Goal ladder, Body Today pass",
-   "notes": "core/coachConfig.ts, coachPlan.ts, coachSafety.ts, coachText.ts, coachWeek.ts; renderer coach/* (life.coach.today); settings coach_config, coach_days, coach_weeks. For the next step: checkinData, coachContext, redFlag, nudgeConditions, checkin()."
+   "notes": "core/coachConfig.ts, coachPlan.ts, coachSafety.ts, coachText.ts, coachWeek.ts; renderer coach/* (life.coach.today); settings coach_config, coach_days, coach_weeks. Step 2 (check-in, nudges, chat) is F-COACH-TALK."
+  },
+  {
+   "id": "F-COACH-TALK",
+   "priority": 1,
+   "area": "coach",
+   "title": "Coach talks: evening check-in, gentle nudges (one cap of 3 a day), Ask the coach with Apply",
+   "user_visible_behavior": "About 21:00 the coach asks for the evening check-in (island card at the PC, else Telegram with buttons; a card on Today and Body → Today after 20:30): today's food, workout, weigh-in and last night's sleep from the logs, then energy, soreness and sleep in 3 taps, and 1-2 sentences back (what went well + one thing for tomorrow). Gentle nudges, each with a switch (coach settings and Settings → Ben → Pushes): the morning one (today's training and the snack), midday protein under 40%, the check-in; with meal reminders and food pushes at most 3 a day (check-in > protein > morning > meals). In Ben's chat (app and Telegram) a food, training or body question gets the coach's data and rules: red-flag words get only the doctor line, a missed session is answered from the log, unsafe sentences are taken out, and a plan change (swap a food, change a meal, move a session, the ramp-up) waits for Apply, with Undo. No points.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/coachTalk.test.ts src/server/coachTalk.server.test.ts",
+    "SMOKE_ONLY=\"Coach\" npm run smoke",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-09: coachTalk.test.ts (16) and coachTalk.server.test.ts (8) pass with full vitest; smoke steps Coach today (nudge switches), Coach check-in, Coach chat proposal pass; screenshots coach-checkin-phone.png and coach-chat-proposal.png kept outside the repo",
+   "notes": "core/coachTalk.ts (pure), coach/coachTalkStore.ts (database), coach/CoachCheckin.tsx, web/bots/coachBot.ts (ck| and cp| buttons), benPushTick.ts + foodBot.ts foodPushNow (the cap), webBots.ts think() (red flag, missed session, coach note, guard, proposal), BenThread.tsx (Apply / Not now / Undo). Settings: coach_props (new), life_fit.pushes.coachMorning/coachProtein/coachCheckin. The check-in's AI phrasing uses the 'nudge' kind (fixed text when the budget is used up). Real model replies not tried yet (fakes only)."
   }
  ]
 }

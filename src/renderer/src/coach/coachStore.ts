@@ -145,7 +145,7 @@ export function weekReviewOf(db: DB, stIn?: any, now = new Date()): WeekReview {
   const days = loadDays(db, today)
   const checkins = Object.entries(days.days)
     .filter(([d, x]) => d >= week && d <= end && x.checkin)
-    .map(([, x]) => ({ energy: x.checkin!.energy, soreness: x.checkin!.soreness }))
+    .map(([, x]) => ({ energy: x.checkin!.energy, soreness: x.checkin!.soreness, sleep: x.checkin!.sleep ?? null }))
   const tired = safe(() => strengthDrops(st?.sets ?? {}, Array.isArray(st?.exercises) ? st.exercises : [], today).length > 0 || allHardWeek(st?.sets ?? {}, today), false)
   return weeklyReview({
     week,

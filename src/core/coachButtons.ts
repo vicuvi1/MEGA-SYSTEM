@@ -12,6 +12,8 @@ export type ButtonDo =
   | { k: 'open'; tab: 'plan' | 'goals' | 'score' | 'about' }
   | { k: 'workout' }
   | { k: 'water' }
+  /** The coach's plan-change proposal (core/coachTalk.ts): Apply / Not now / Undo. */
+  | { k: 'coach'; op: 'apply' | 'skip' | 'undo'; id: string }
 
 export interface ReplyButton {
   label: string
@@ -30,9 +32,11 @@ export interface ReplyCards {
   tasks?: { text: string; due?: string; late?: boolean }[]
 }
 
-/** "focus:25:Algebra", "approve", "plan", "book:Algebra exam", "say:Done ✅", "open:goals". */
+/** "focus:25:Algebra", "approve", "plan", "book:Algebra exam", "say:Done ✅", "open:goals", "coach:apply:<id>". */
 export function readDo(d: string): ButtonDo | null {
   const s = String(d ?? '').trim()
+  const c = /^coach:(apply|skip|undo):([\w-]{1,24})$/.exec(s)
+  if (c) return { k: 'coach', op: c[1] as 'apply' | 'skip' | 'undo', id: c[2] }
   const m = /^(focus|approve|change|plan|book|say|open|workout|water)(?::([\s\S]*))?$/i.exec(s)
   if (!m) return null
   const k = m[1].toLowerCase()
@@ -58,7 +62,8 @@ export function readButtons(raw: unknown): ReplyButton[] {
   if (!Array.isArray(raw)) return []
   return raw
     .map((b: any) => ({ label: String(b?.label ?? '').trim().slice(0, 32), do: String(b?.do ?? '').trim() }))
-    .filter((b) => b.label && readDo(b.do))
+    // A proposal's buttons come only from code (a checked, stored proposal), never from the model.
+    .filter((b) => b.label && readDo(b.do) && readDo(b.do)!.k !== 'coach')
     .slice(0, 3)
 }
 
@@ -80,7 +85,7 @@ export function telegramKeyboard(buttons: ReplyButton[]): { inline_keyboard: { t
     .map((b) => {
       const d = readDo(b.do)
       if (!d) return null
-      const data = d.k === 'focus' ? fit(`fo|${d.minutes}|`, d.subject) : d.k === 'approve' ? 'rb|a' : d.k === 'change' ? 'rb|e' : d.k === 'plan' ? 'rb|p' : d.k === 'book' ? fit('gb|', d.goal) : d.k === 'say' ? fit('cs|', d.text) : d.k === 'workout' ? 'wk|show' : d.k === 'water' ? 'wa|show' : null
+      const data = d.k === 'focus' ? fit(`fo|${d.minutes}|`, d.subject) : d.k === 'approve' ? 'rb|a' : d.k === 'change' ? 'rb|e' : d.k === 'plan' ? 'rb|p' : d.k === 'book' ? fit('gb|', d.goal) : d.k === 'say' ? fit('cs|', d.text) : d.k === 'workout' ? 'wk|show' : d.k === 'water' ? 'wa|show' : d.k === 'coach' ? `cp|${d.op === 'apply' ? 'a' : d.op === 'skip' ? 'n' : 'u'}|${d.id}` : null
       return data ? { text: b.label, callback_data: data } : null
     })
     .filter((x): x is { text: string; callback_data: string } => !!x)

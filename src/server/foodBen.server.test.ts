@@ -32,7 +32,9 @@ const TOKEN = '777:test-token'
 const CHAT = '42'
 let n = 0
 // The rhythm off: only the pushes speak. Protein goal 2.0 g/kg × 75 kg = 150 g.
-const base = { coach_rhythm_prefs: { on: false }, sleep_weekday_target: '06:30', sleep_weekend_target: '06:30', sleep_bed_target: '23:30', life_fit: { push: 'firm' }, body_plus: { gPerKg: 2 } }
+// The coach's own nudges are off here (coachTalk.server.test.ts covers them and the shared cap).
+const NO_COACH = { coachMorning: false, coachProtein: false, coachCheckin: false }
+const base = { coach_rhythm_prefs: { on: false }, sleep_weekday_target: '06:30', sleep_weekend_target: '06:30', sleep_bed_target: '23:30', life_fit: { push: 'firm', pushes: NO_COACH }, body_plus: { gPerKg: 2 } }
 
 function world(settings: Record<string, unknown> = base) {
   const remote: SqlJsDatabase = new SQL.Database()
@@ -147,7 +149,7 @@ describe('food on Telegram', () => {
 describe('food pushes on the tick', () => {
   it('dinner reminder at ~21:00 when nothing was logged since 17:00, once, not while at the PC; Same as yesterday opens a preview', async () => {
     // Meal reminders off here (they would ask about dinner first: see foodTelegram.server.test.ts).
-    const w = world({ ...base, life_fit: { push: 'firm', pushes: { meals: false } } })
+    const w = world({ ...base, life_fit: { push: 'firm', pushes: { ...NO_COACH, meals: false } } })
     // Yesterday's dinner, to repeat.
     await handleTelegramUpdate(w.env as any, TOKEN, msg('/start'))
     w.remote.run("INSERT INTO body_log (id, at, day, kind, amount, source) VALUES ('fd-y1-p', '2030-03-11T19:00:00.000Z', '2030-03-11', 'protein:food', 45, 'app'), ('fd-y1-k', '2030-03-11T19:00:00.000Z', '2030-03-11', 'kcal:food', 600, 'app')")

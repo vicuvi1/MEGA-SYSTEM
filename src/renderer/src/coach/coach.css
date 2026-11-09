@@ -158,3 +158,27 @@
   .ct-meals li { min-height: 38px; }
   .ct-tick { width: 30px; height: 30px; font-size: 15px; }
 }
+
+/* The evening check-in (CoachCheckin.tsx): the logs' lines, then 3 rows of big taps. */
+.ck-facts { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13.5px; color: var(--muted); }
+.ck-row { display: grid; grid-template-columns: 76px 1fr; gap: 8px; align-items: center; }
+.ck-label { font-size: 13px; color: var(--muted); }
+.ck-taps { display: flex; flex-wrap: wrap; gap: 6px; }
+.ck-tap {
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid var(--ct-line);
+  background: none;
+  color: var(--text);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.ck-tap.wide { min-width: 56px; }
+.ck-tap.on { background: var(--ct-on); border-color: var(--ct-on); color: var(--ct-on-ink); font-weight: 600; }
+.ck-tap:focus-visible { outline: 2px solid var(--ct-on); outline-offset: 2px; }
+.ck-save { justify-self: start; min-height: 44px; }
+.ck-sum { margin: 0; font-size: 13px; color: var(--muted); }
+.ck-reply { margin: 0; font-size: 15px; line-height: 1.4; color: var(--text); }
+@media (max-width: 420px) { .ck-row { grid-template-columns: 1fr; gap: 4px; } }

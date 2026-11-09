@@ -77,7 +77,7 @@ export function CoachWeekStep() {
           <div>
             <dt>Check-ins</dt>
             <dd>
-              energy {s.energy}/5 · soreness {s.soreness}/5
+              energy {s.energy}/5 · soreness {s.soreness}/5{s.sleep != null ? ` · sleep ${s.sleep} h` : ''}
             </dd>
           </div>
         )}

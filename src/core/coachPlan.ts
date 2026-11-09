@@ -239,6 +239,10 @@ export interface Checkin {
   /** 1 (none) … 5 (very sore). */
   soreness: number
   note?: string
+  /** Hours slept the night before (from the sleep log or your tap). */
+  sleep?: number
+  /** The coach's 1–2 sentence reply (core/coachTalk.ts checkinReply). */
+  reply?: string
   at: number
 }
 
@@ -285,7 +289,7 @@ function cleanDay(x: any): CoachDay {
   const a = x?.ai
   if (a && typeof a.line === 'string') out.ai = { line: a.line.slice(0, 600), tip: String(a.tip ?? '').slice(0, 300), src: a.src === 'ai' ? 'ai' : 'template', lang: a.lang === 'ro' ? 'ro' : 'en', at: Number(a.at) || 0, tries: Math.max(0, Math.round(Number(a.tries) || 0)), ...(typeof a.key === 'string' ? { key: a.key.slice(0, 40) } : {}) }
   const c = x?.checkin
-  if (c && typeof c === 'object') out.checkin = { energy: n15(c.energy), soreness: n15(c.soreness), ...(c.note ? { note: String(c.note).slice(0, 300) } : {}), at: Number(c.at) || 0 }
+  if (c && typeof c === 'object') out.checkin = { energy: n15(c.energy), soreness: n15(c.soreness), ...(c.note ? { note: String(c.note).slice(0, 300) } : {}), ...(c.sleep != null && Number.isFinite(Number(c.sleep)) && Number(c.sleep) > 0 ? { sleep: Math.max(3, Math.min(14, Math.round(Number(c.sleep) * 2) / 2)) } : {}), ...(c.reply ? { reply: String(c.reply).slice(0, 400) } : {}), at: Number(c.at) || 0 }
   return out
 }
 
@@ -328,7 +332,7 @@ export function withSnap(d: CoachDays, date: string, snap: NonNullable<CoachDay[
   return { ...d, days: { ...d.days, [date]: { ...day, snap } } }
 }
 
-export function withCheckin(d: CoachDays, date: string, c: { energy: number; soreness: number; note?: string }, now: number): CoachDays {
+export function withCheckin(d: CoachDays, date: string, c: { energy: number; soreness: number; note?: string; sleep?: number | null; reply?: string }, now: number): CoachDays {
   const day = dayOf(d, date)
   return { ...d, days: { ...d.days, [date]: { ...day, checkin: cleanDay({ checkin: { ...c, at: now } }).checkin } } }
 }

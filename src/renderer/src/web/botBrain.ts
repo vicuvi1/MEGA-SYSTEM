@@ -936,6 +936,8 @@ export interface BrainOut {
   remember: string[]
   steps?: string[]
   need?: string[]
+  /** The coach's plan-change proposal (raw; checked by core/coachTalk.ts readProposal before it is shown). */
+  propose?: unknown
 }
 
 /** Reads the model's JSON (tolerating code fences or text around it). */
@@ -953,7 +955,8 @@ export function parseBrain(text: string): BrainOut {
       actions: (Array.isArray(j.actions) ? j.actions : []).map(String).slice(0, 16),
       remember: (Array.isArray(j.remember) ? j.remember : []).map(String).slice(0, 5),
       steps: (Array.isArray(j.steps) ? j.steps : []).map(String).map((x: string) => x.slice(0, 80)).slice(0, 4),
-      need: (Array.isArray(j.need) ? j.need : []).map(String).slice(0, 5)
+      need: (Array.isArray(j.need) ? j.need : []).map(String).slice(0, 5),
+      ...(j.propose && typeof j.propose === 'object' ? { propose: j.propose } : {})
     }
   } catch {
     return { reply: raw.replace(/^```\w*|```$/g, '').trim(), actions: [], remember: [] }

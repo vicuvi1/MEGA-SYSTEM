@@ -12,6 +12,7 @@ import type { PlanCheck, PlanMeal } from '@core/coachPlan'
 import { useCoach, sportNow } from './useCoach'
 import { CoachSettings } from './CoachSettings'
 import { WeeklyReviewFlow } from './WeeklyReview'
+import { CoachCheckin, checkinTime } from './CoachCheckin'
 import './coach.css'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
@@ -24,6 +25,8 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
   const [settings, setSettings] = useState(false)
   const [review, setReview] = useState(false)
   if (!v) return null
+  // The evening check-in card comes under the coach card after 20:30 (core/coachTalk.ts).
+  const evening = checkinTime() ? <CoachCheckin /> : null
   const { plan, ticks } = v
   const api = life.coach!.today!
   const t = plan.training
@@ -89,7 +92,8 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
   // Today → Now: one slim strip; "Open" shows the whole card in place.
   if (compact && !more)
     return (
-      <section className="ct-card ct-strip" aria-label="Coach today" data-coach="today">
+      <>
+        <section className="ct-card ct-strip" aria-label="Coach today" data-coach="today">
         <div className={`ct-strip-train ct-${t.kind}`} data-ct="train" title={v.line.line}>
           <b>{t.kind === 'session' ? `${t.title} · ${t.minutes} min` : t.kind === 'rest' ? 'Rest day · walk 20 min' : t.title}</b>
           {t.kind === 'session' && !ticks.workout && (
@@ -126,10 +130,13 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
           ⌄
         </button>
         {sheets}
-      </section>
+        </section>
+        {evening}
+      </>
     )
 
   return (
+    <>
     <section className="ct-card" aria-label="Coach today" data-coach="today">
       <header className="ct-head">
         <div className="ct-title">
@@ -250,5 +257,7 @@ export function CoachToday({ compact = false, moves = true, onStart }: { compact
 
       {sheets}
     </section>
+    {evening}
+    </>
   )
 }

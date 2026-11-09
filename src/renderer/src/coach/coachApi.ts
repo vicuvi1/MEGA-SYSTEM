@@ -11,9 +11,15 @@ import { redFlag } from '@core/coachSafety'
 import { answerDecision, openDecisions, type Decision, type WeekReview } from '@core/coachWeek'
 import { itemsOf, itemsText, slotItems } from '@core/foodSaved'
 import { answerAdjust, addFoodMeal, foodDayTotals, readFoodSaved, toggleFoodMeal } from '../../../main/food'
+import { checkinPrompt, clampTap, cleanSleep, parseCheckinAi, type CheckinReply, type NudgePrefs } from '@core/coachTalk'
+import { sportBlob } from '../../../main/bodyLog'
+import { updateSport } from '../sportTrack'
+import { answerProposal, checkinView, nudgePrefs, replyFor, saveCheckin, type CheckinView } from './coachTalkStore'
+import { readLifeFit, saveLifeFit } from '../web/lifeFitStore'
 import { coachToday, kcalDays, loadCoach, loadDays, loadWeeks, saveCoach, saveDays, saveWeeks, ticksNow, weekReviewOf } from './coachStore'
 
 type Svc = { read<T>(f: (s: any) => T): Promise<T>; write<T>(f: (s: any) => T, event?: string): Promise<T> }
+export type { CheckinView }
 export type AskAi = (prompt: string) => Promise<{ text: string; model: string }>
 
 export interface CoachView {
@@ -158,6 +164,53 @@ export function coachApi(svcP: Promise<Svc>, device: () => string, ask?: AskAi) 
         saveWeeks(db, answerDecision(loadWeeks(db), v.review, id, apply, Date.now()))
         return weekOf(db, st)
       }),
+    // ---- the evening check-in (core/coachTalk.ts) ----
+    /** Today's check-in: the auto-filled lines (food, workout, weigh-in, last night's sleep) and, once done, the taps and reply. */
+    checkinView: (st?: any): Promise<CheckinView> => svcP.then((svc) => svc.read((s) => checkinView(s.db, s, new Date(), st))),
+    /**
+     * Saves the 3 taps and returns the coach's 1–2 sentences: decided by rules from the logs, phrased
+     * by the AI when it passes the checks (same numbers, short, safe), else the rule text.
+     */
+    checkinSave: async (taps: { energy: number; soreness: number; sleep: number | null }, st?: any): Promise<CheckinView> => {
+      const svc = await svcP
+      const v = await svc.read((s) => checkinView(s.db, s, new Date(), st))
+      const t = { energy: clampTap(taps.energy), soreness: clampTap(taps.soreness), sleep: cleanSleep(taps.sleep ?? v.facts.sleepH) }
+      const cfg = await read((db) => loadCoach(db))
+      const phrase = ask && cfg.ai ? async (r: CheckinReply) => parseCheckinAi((await ask(checkinPrompt(r, v.facts.lang))).text, r) : null
+      const reply = await replyFor(v.facts, t, phrase)
+      return write((db) => {
+        saveCheckin(db, v.facts.date, t, reply.text)
+        return checkinView(db, null, new Date(), st)
+      }).then((x) => ({ ...x, facts: v.facts, lines: v.lines }))
+    },
+    /** The coach nudges' switches (the same ones as Settings → Ben → Pushes, in life_fit.pushes). */
+    nudgePrefs: () => read((db) => nudgePrefs(db)),
+    setNudgePrefs: (patch: Partial<NudgePrefs>) =>
+      write((db) => {
+        const cur = nudgePrefs(db)
+        const next = { ...cur, ...patch }
+        const pushes = readLifeFit(db).pushes
+        saveLifeFit(db, { pushes: { ...(pushes as any), coachMorning: next.morning, coachProtein: next.protein, coachCheckin: next.checkin } })
+        return nudgePrefs(db)
+      }),
+    /** A chat proposal: Apply (through the usual setters), Not now, or Undo. */
+    proposal: async (op: 'apply' | 'skip' | 'undo', id: string) => {
+      const r = await write((db) => {
+        const out = answerProposal(db, id, op, device())
+        return { ...out, week: out.ok && out.rec?.p.kind === 'move' ? (sportBlob(db)?.trainWeek ?? null) : null }
+      })
+      // A moved session: this page's Sport Track copy takes the new week at once (the newer edit wins on sync).
+      if (r.week) {
+        try {
+          updateSport((st) => void (st.trainWeek = r.week))
+        } catch {
+          /* not in a page */
+        }
+      }
+      changed('life-body-changed')
+      if (!r.ok) throw new Error(r.line)
+      return r.line
+    },
     // ---- for the next step (check-in, nudges, chat) ----
     checkin: (c: { energy: number; soreness: number; note?: string }, date?: string) =>
       write((db) => {

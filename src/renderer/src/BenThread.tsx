@@ -3,7 +3,7 @@
 // cards under a reply, and the rating. One look and one behaviour everywhere.
 import { Fragment, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { life } from './bridge'
-import { useAction } from './ui'
+import { useAction, useToast } from './ui'
 import type { CoachStatus } from './web/coachStatus'
 import { readDo, type ReplyCards } from '@core/coachButtons'
 import type { NudgeInfo, NudgeKind } from '@core/chatFeed'
@@ -99,11 +99,30 @@ export function Rich({ text, reveal = false, highlight = '', maxBold = Infinity 
 /** Buttons and live mini-widgets under a coach reply (interactive replies). */
 export function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: { m: Entry; status: CoachStatus | null; latest: boolean; busy: boolean; onSay: (t: string) => void; onOpen: (tab: 'plan' | 'goals' | 'score' | 'about') => void; onDone: () => void }) {
   const act = useAction()
+  const toast = useToast()
   const [used, setUsed] = useState<Record<number, boolean>>({})
+  /** A coach proposal applied here: its ↩ Undo shows until used. */
+  const [undo, setUndo] = useState<{ id: string; done: boolean } | null>(null)
+  const coachOp = async (op: 'apply' | 'skip' | 'undo', id: string) => {
+    const line = await act(() => life.coach!.today!.proposal(op, id))
+    if (line) toast(line, op === 'skip' ? 'info' : 'good')
+    return line
+  }
   const run = async (k: number, b: { label: string; do: string }) => {
     const d = readDo(b.do)
     if (!d) return
     let ok: unknown = true
+    if (d.k === 'coach') {
+      // A coach proposal: nothing changes until Apply; Apply goes through the usual setters, with Undo.
+      ok = await coachOp(d.op, d.id)
+      if (ok) {
+        const both = Object.fromEntries((m.buttons ?? []).map((x, i) => [i, readDo(x.do)?.k === 'coach']).filter(([, v]) => v))
+        setUsed((u) => ({ ...u, ...both, [k]: true }))
+        if (d.op === 'apply') setUndo({ id: d.id, done: false })
+        onDone()
+      }
+      return
+    }
     if (d.k === 'focus') ok = await act(() => life.focus.start(d.subject, d.minutes, null), `Focus started: ${d.subject} · ${d.minutes} min`)
     else if (d.k === 'approve') ok = await act(() => life.coach!.rhythm!('approve'), 'Approved: blocks in your calendar, must-dos on Today')
     else if (d.k === 'plan') ok = await act(() => life.coach!.rhythm!('propose'), "Today's plan is ready (Plan tab)")
@@ -115,7 +134,7 @@ export function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: 
     } else if (d.k === 'say') onSay(d.text)
     else if (d.k === 'change') onOpen('plan')
     else if (d.k === 'workout' || d.k === 'water') window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'body' }))
-    else onOpen(d.tab)
+    else if (d.k === 'open') onOpen(d.tab)
     if (ok && d.k !== 'open' && d.k !== 'change' && d.k !== 'workout' && d.k !== 'water') setUsed((u) => ({ ...u, [k]: true }))
     if (ok) onDone()
   }
@@ -253,6 +272,11 @@ export function ReplyExtras({ m, status, latest, busy, onSay, onOpen, onDone }: 
               {used[k] ? `✓ ${b.label}` : b.label}
             </button>
           ))}
+          {undo && !undo.done && (
+            <button className="cx-btn" data-coach-undo disabled={busy} onClick={() => void coachOp('undo', undo.id).then((x) => x && (setUndo({ ...undo, done: true }), onDone()))}>
+              ↩ Undo
+            </button>
+          )}
         </div>
       )}
     </div>

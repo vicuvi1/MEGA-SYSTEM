@@ -121,6 +121,7 @@ export const SETTINGS = {
   coach_config: json<Record<string, unknown> | null>("The coach's settings: slow-gain goal, meals a day, the 2-week food ramp-up (start, baseline), home training rules, the morning routine, bed time and sleep hours, language, AI line on/off, blood-test reminder dismissed (core/coachConfig.ts)", null),
   coach_days: json<Record<string, unknown> | null>("The coach's days (last 120, size-capped): the day's short record, your own meal and bed ticks, the day's line + tip (asked once a morning), the evening check-in (core/coachPlan.ts). Ticks pay nothing", null),
   coach_weeks: json<Record<string, unknown> | null>("The coach's weekly reviews (last 26): the summary line and which decisions you applied or skipped (core/coachWeek.ts)", null),
+  coach_props: json<Record<string, unknown> | null>("The coach's plan-change proposals from the chat (last 12, 7 days): a food swap or meal, a moved session, the ramp-up; open / applied (with what it replaced, for Undo) / skipped / undone. Nothing changes before Apply (core/coachTalk.ts)", null),
   body_tape: json<unknown[]>('Body: tape measurements (arm, chest, shoulders, thigh in cm) by day; waist stays in body_metrics', []),
   ben_workouts: json<unknown[]>('workouts Ben logged', []),
   app_sync_finance: json<Record<string, unknown> | null>('Finance Helper data synced into Life System', null),

@@ -6,6 +6,7 @@ import { createPortal } from 'react-dom'
 import { life } from '../bridge'
 import { useAction } from '../ui'
 import type { CoachConfig, MorningStep } from '@core/coachConfig'
+import type { NudgePrefs } from '@core/coachTalk'
 import './coach.css'
 
 const n = (v: string, d: number) => (Number.isFinite(Number(v)) && v !== '' ? Number(v) : d)
@@ -13,8 +14,10 @@ const n = (v: string, d: number) => (Number.isFinite(Number(v)) && v !== '' ? Nu
 export function CoachSettings({ onClose }: { onClose: () => void }) {
   const act = useAction()
   const [c, setC] = useState<CoachConfig | null>(null)
+  const [np, setNp] = useState<NudgePrefs | null>(null)
   useEffect(() => {
     void life.coach?.today?.config().then(setC)
+    void life.coach?.today?.nudgePrefs?.().then(setNp).catch(() => {})
     const k = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', k)
     return () => window.removeEventListener('keydown', k)
@@ -24,7 +27,11 @@ export function CoachSettings({ onClose }: { onClose: () => void }) {
   const put = (patch: Partial<CoachConfig>) => setC({ ...c, ...patch })
   const step = (i: number, patch: Partial<MorningStep>) => put({ morning: c.morning.map((s, k) => (k === i ? { ...s, ...patch } : s)) })
   const save = async () => {
-    const ok = await act(() => api.saveConfig(c), 'Coach settings saved')
+    const ok = await act(async () => {
+      const out = await api.saveConfig(c)
+      if (np) await api.setNudgePrefs(np)
+      return out
+    }, 'Coach settings saved')
     if (ok) onClose()
   }
   const ramp = async () => {
@@ -126,6 +133,21 @@ export function CoachSettings({ onClose }: { onClose: () => void }) {
             <input type="checkbox" checked={c.ai} onChange={(e) => put({ ai: e.target.checked })} /> Let the AI write the day's line (once a morning; a template otherwise)
           </label>
         </fieldset>
+        {np && (
+          <fieldset>
+            <legend>Nudges (at most 3 a day with meal reminders)</legend>
+            <label className="ct-row">
+              <input type="checkbox" checked={np.morning} onChange={(e) => setNp({ ...np, morning: e.target.checked })} /> Morning: today's training and the snack before it
+            </label>
+            <label className="ct-row">
+              <input type="checkbox" checked={np.protein} onChange={(e) => setNp({ ...np, protein: e.target.checked })} /> Midday protein (under 40% by 14:00)
+            </label>
+            <label className="ct-row">
+              <input type="checkbox" checked={np.checkin} onChange={(e) => setNp({ ...np, checkin: e.target.checked })} /> Evening check-in (about 21:00)
+            </label>
+            <p className="hint">The same switches are in Settings → Ben → Pushes.</p>
+          </fieldset>
+        )}
         <p className="hint">Supplements: an optional protein shake, optional creatine 3–5 g a day. Never fat burners.</p>
         <div className="sheet-actions">
           <button type="button" className="btn ghost" onClick={onClose}>

@@ -77,6 +77,7 @@ import { readSetting, writeSetting } from '../../../../main/settings'
 import { answerPushIn, readPushLog } from '../benPushStore'
 import { readLifeFit, sleepWindow } from '../lifeFitStore'
 import { downloadFile, esc, tg } from './telegram'
+import { coachNudgeFor, foodCapAllows } from '../../coach/coachTalkStore'
 import type { CallbackHandler } from './callbacks'
 import { MAX_SET, addPart, addedCount, collectAlbum, dropChatPhotos, joinAlbum, keepDraftPhotos, openAdd, setAddMsg, startAdd, takeAdd, type PhotoKv, type PhotoPart } from './foodAlbum'
 
@@ -396,8 +397,9 @@ export function mealPushFor(db: any, o: { now: Date; day: string; wake: string |
 }
 
 /**
- * The island's food push now (the app window decides while you're at the PC):
- * a meal reminder first, else the evening protein nudge or the dinner reminder.
+ * The island's coach and food push now (the app window decides while you're at the PC):
+ * a coach nudge first (core/coachTalk.ts), then a meal reminder, else the evening protein
+ * nudge or the dinner reminder; all of them inside the one daily cap.
  */
 export function foodPushNow(db: any, svc: any, o: { now: Date; meeting: boolean; quiet: boolean; here?: boolean }): PushOut | null {
   if (o.meeting || o.quiet) return null
@@ -408,6 +410,10 @@ export function foodPushNow(db: any, svc: any, o: { now: Date; meeting: boolean;
   const day: string = svc.wallet.today(now)
   const log = readPushLog(db, day)
   const wake = (sl?.weekdayTarget ? targetForDay(day, sl.weekdayTarget(), sl.weekendTarget()) : null) || sleepWindow(db).wake
+  // The coach's nudges first (check-in > protein > morning), then food, all inside one daily cap of 3.
+  const coach = coachNudgeFor(db, svc, { now, here, meeting: o.meeting, quiet: o.quiet, wake })
+  if (coach) return coach
+  if (!foodCapAllows(db, svc, now)) return null
   const meal = mealPushFor(db, { now, day, wake, bed, on: readLifeFit(db).pushes?.meals !== false, log, here, meeting: o.meeting, quiet: o.quiet })
   if (meal) return meal
   if (!foodNudgeDue(now, bed)) return null
