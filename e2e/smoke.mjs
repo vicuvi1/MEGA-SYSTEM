@@ -1940,7 +1940,7 @@ try {
   // LADDER_SHOTS=<dir> saves a phone shot of the cards and a desktop shot of the review.
   await step('Goal ladder: quarter cards with lights, a milestone confirmed, swap from Not now, the Sunday review pre-fills the top 3, the Today line, the timeline', async () => {
     const shots = process.env.LADDER_SHOTS
-    if (shots) await pg.addStyleTag({ content: '.toasts, .wallet-pops { display: none !important; }' })
+    if (shots) await pg.addStyleTag({ content: '.toasts, .wallet-pops, .fx-canvas { display: none !important; }' })
     await pg.setViewportSize({ width: 390, height: 844 })
     await open('goals')
     await pg.waitForSelector('.gx .ptabs [data-tab="quarter"]', { timeout: 15000 })
@@ -1952,6 +1952,8 @@ try {
       await pg.waitForTimeout(300)
     }
     await pg.waitForFunction(() => !document.querySelector('.gx-cel-scrim, .gx-confetti'), null, { timeout: 8000 })
+    // The app's shared particle canvas (fx.ts) from the earlier Goals step's check-ins: let it finish.
+    await pg.waitForFunction(() => { const c = document.querySelector('.fx-canvas'); return !c || c.style.display === 'none' }, null, { timeout: 8000 }).catch(() => {})
     const ids = await pg.locator('.ql-card').evaluateAll((cs) => cs.map((c) => c.dataset.goal))
     if (ids.join() !== 'gain,strong,study') throw new Error(`critical goals: ${ids.join()}`)
     for (const id of ids) {
