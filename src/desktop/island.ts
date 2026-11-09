@@ -22,7 +22,7 @@
 // Size: the page scales itself with CSS (`scale` in island:prefs). The island
 // page has the same origin as the app, and Chromium shares page zoom per
 // origin, so zooming the island would zoom the app too: its zoom stays locked.
-import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, powerMonitor, screen } from 'electron'
+import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, powerMonitor, screen, shell } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -33,6 +33,7 @@ import { applyProfile, autoProfile } from '../core/islandProfiles'
 import { typingFade } from '../core/islandCommands'
 import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs'
 import { barHome, cursorNear, savedSpot, snapBounce } from './islandPlace'
+import { soundFallbackRoute } from './appFiles'
 import { clampFree, PANEL_MAX, resizePanel, dragTo, dropSpot, fitShift, hideFor, hideText, hideTick, rememberSpot, rushing, screenKey, SHOWN, toggleHide, DODGE_MS, type HideChoice, type Rect, type Sample } from '../core/islandMove'
 import {
   barSpot, chooseDisplay, cleanDeskPrefs, displayKey, displayLabel, dragStale, followTick, hideOverApp, hotRects, islandBase, islandSize, isPlacement, migrateShortcuts,
@@ -981,6 +982,17 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (log.length > 200) log.splice(0, log.length - 200)
   })
   ipcMain.handle('island:getLog', (e) => (fromApp(e) || fromIsland(e) ? log.slice() : []))
+  // The island's audio did not start (no device, a context that won't resume): the app window,
+  // which is audio-capable even while hidden in the tray, plays the same kit sound; with no app
+  // window, a system beep as the last resort. Only kit sound names, from the island page.
+  ipcMain.handle('island:soundFallback', (e, sound, loud) => {
+    if (!fromIsland(e) || typeof sound !== 'string' || !/^[a-zA-Z0-9]{1,24}$/.test(sound)) return null
+    const route = soundFallbackRoute(!o.appWindow.isDestroyed() && !o.appWindow.webContents.isDestroyed())
+    if (route === 'app window') o.appWindow.webContents.send('island:playFallback', { sound, loud: Math.max(0, Math.min(3, Number(loud) || 1)) })
+    else shell.beep()
+    diag('sound', `Island sound played by the ${route} (the island's own audio did not start)`, true)
+    return route
+  })
 
   // Windows: a call (any app using the microphone or camera, from Windows'
   // own privacy log) and a full-screen app (the window in front covers its

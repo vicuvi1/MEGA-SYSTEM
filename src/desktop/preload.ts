@@ -60,6 +60,8 @@ const api: DesktopApi = {
   islandBar: (on) => ipcRenderer.send('island:bar', !!on),
   islandLog: (line) => ipcRenderer.send('island:log', String(line ?? '')),
   islandGetLog: () => ipcRenderer.invoke('island:getLog'),
+  islandSoundFallback: (sound, loud) => ipcRenderer.invoke('island:soundFallback', String(sound ?? ''), Number(loud) || 1),
+  onIslandSoundFallback: (cb) => void ipcRenderer.on('island:playFallback', (_e, d) => cb({ sound: String(d?.sound ?? ''), loud: Number(d?.loud) || 1 })),
   onIslandDiag: (cb) => void ipcRenderer.on('island:diag', (_e, d) => cb(d)),
   onIslandDragCancel: (cb) => void ipcRenderer.on('island:dragCancel', () => cb()),
   islandShortcutStatus: () => ipcRenderer.invoke('island:shortcutStatus'),

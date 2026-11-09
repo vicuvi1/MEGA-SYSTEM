@@ -99,7 +99,7 @@ export function paletteItems(c: PaletteCtx): PaletteItem[] {
   out.push({ id: 'ui:quiet', icon: '🌙', label: 'Quiet for an hour', group: 'Island', words: 'mute silence do not disturb', run: { kind: 'ui', op: 'quiet' } })
   out.push({ id: 'ui:pin', icon: '📌', label: 'Keep the island open', group: 'Island', words: 'pin stay', run: { kind: 'ui', op: 'pin' } })
   out.push({ id: 'ui:app', icon: '⤢', label: 'Open Life System', group: 'Island', words: 'app window', run: { kind: 'ui', op: 'app' } })
-  out.push({ id: 'ui:power', icon: '⚡', label: 'Change the one-tap row', group: 'Island', words: 'edit buttons power', run: { kind: 'ui', op: 'editPower' } })
+  out.push({ id: 'ui:power', icon: '⚡', label: 'Quick actions (Day page)', group: 'Island', words: 'water pushups focus quick day', run: { kind: 'ui', op: 'editPower' } })
   out.push({ id: 'ui:pill', icon: '✎', label: 'Edit the pill', group: 'Island', words: 'closed notch items', run: { kind: 'ui', op: 'editPill' } })
   return out
 }

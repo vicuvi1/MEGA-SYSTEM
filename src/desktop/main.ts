@@ -8,6 +8,7 @@ import { execFile } from 'node:child_process'
 import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
+import { appFile, rendererRoot } from './appFiles'
 import { createQuickAdd } from './quickWin'
 import { keyLabel } from './quickKeys'
 import { islandMoveMenu } from './islandMenu'
@@ -32,6 +33,10 @@ import { installNow, memoryReloadDue } from '../core/nightCare'
 const origin = 'life-system://app'
 const server = 'https://mega-system-ten.vercel.app'
 protocol.registerSchemesAsPrivileged([{ scheme: 'life-system', privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } }])
+// Every window may play sound without a click first (the island's notifications; Calm passes
+// every click through). Electron's default already is this; the switch makes it certain on every
+// build, and it must be set before the app is ready.
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required')
 // A separate folder preserves all data from the older Electron app.
 app.setPath('userData', app.commandLine.getSwitchValue('user-data-dir') || join(app.getPath('appData'), 'LifeSystem-CloudDesktop'))
 // Release check (LIFE_SMOKE=1): start, show the page, report, quit. The release
@@ -109,7 +114,7 @@ if (firstCopy) void app.whenReady().then(async () => {
   const dir = app.getPath('userData')
   await mkdir(dir, { recursive: true })
   const file = join(dir, 'life-local.sqlite')
-  const ui = resolve(__dirname, '../renderer')
+  const ui = rendererRoot(__dirname)
   // Island eyes (EY1–EY6): off until you turn them on; their downloaded files are served below.
   const eyes = createEyes({ dir, origin })
   // Update status goes to the window as it changes (set once the window exists).
@@ -130,8 +135,8 @@ if (firstCopy) void app.whenReady().then(async () => {
         })
       } catch { return new Response('Server unavailable', { status: 502 }) }
     }
-    const target = resolve(ui, '.' + decodeURIComponent(url.pathname === '/' ? '/index.html' : url.pathname))
-    if (!target.startsWith(ui + sep)) return new Response('Not found', { status: 404 })
+    const target = appFile(ui, url.pathname)
+    if (!target) return new Response('Not found', { status: 404 })
     return net.fetch(pathToFileURL(target).toString())
   })
   // Started by Windows at login: stay in the tray, the island is enough.

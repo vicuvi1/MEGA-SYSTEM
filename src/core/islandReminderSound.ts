@@ -27,15 +27,18 @@ export function bodyReminderOf(a: { kind: string; id: string }): BodyReminder | 
 }
 
 /** Settings → Sound → Island reminders: a switch per kind and one volume (0–100). Saved on this device (uiPrefs.sounds). */
+/** The other notifications' switches (core/islandCardSound.ts): Ben, your reminders, time's up, a meeting, plan blocks, bedtime, the rest. */
+export type OtherCardSound = 'ben' | 'remind' | 'timer' | 'meeting' | 'plan' | 'bed' | 'other'
+export const OTHER_CARD_SOUNDS: readonly OtherCardSound[] = ['ben', 'remind', 'timer', 'meeting', 'plan', 'bed', 'other']
 export interface ReminderSounds {
-  on: Record<BodyReminder, boolean>
+  on: Record<BodyReminder | OtherCardSound, boolean>
   volume: number
 }
-export const DEFAULT_REMINDER_SOUNDS: ReminderSounds = { on: { water: true, eyes: true, move: true, screen: true }, volume: 80 }
+export const DEFAULT_REMINDER_SOUNDS: ReminderSounds = { on: { water: true, eyes: true, move: true, screen: true, ben: true, remind: true, timer: true, meeting: true, plan: true, bed: true, other: true }, volume: 80 }
 export function cleanReminderSounds(p: unknown): ReminderSounds {
   const o = (p && typeof p === 'object' ? p : {}) as Partial<ReminderSounds>
   const on = { ...DEFAULT_REMINDER_SOUNDS.on }
-  for (const k of BODY_REMINDERS) if (typeof o.on?.[k] === 'boolean') on[k] = o.on[k] as boolean
+  for (const k of [...BODY_REMINDERS, ...OTHER_CARD_SOUNDS]) if (typeof o.on?.[k] === 'boolean') on[k] = o.on[k] as boolean
   const v = Number(o.volume)
   return { on, volume: Number.isFinite(v) ? Math.max(0, Math.min(100, Math.round(v))) : DEFAULT_REMINDER_SOUNDS.volume }
 }

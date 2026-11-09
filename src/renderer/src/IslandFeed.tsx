@@ -14,6 +14,9 @@ import { levelFor, pushFromLevel } from '@core/benPushes'
 import { focusQualityPc } from '@core/pcActivity'
 import { useCallback, useEffect, useRef } from 'react'
 import { MOOD_FACE, type Mood } from '@core/coachKit'
+import { TEST_SOUND_PREFIX } from '@core/islandCardSound'
+import { playCard } from './soundKit'
+import type { SoundName } from '@core/sounds'
 import { EMPTY_ISLAND, blocksFromPlan, nowNext, pickAlert, type IslandAction, type IslandAlert, type IslandBlock, type IslandSnapshot } from '@core/islandModel'
 import { bedFromAway, bedLoggedTonight, showBedButton, showWakeButton } from '@core/bedSense'
 import { autoStartBlock, blockKey, callNow, focusQuality, GUARD_IDLE_SEC, smartAlert, workNow } from '@core/islandSmart'
@@ -116,6 +119,18 @@ async function proteinNow(now: number): Promise<{ g: number; goal: number } | nu
   return proteinCache.v
 }
 if (typeof window !== 'undefined') window.addEventListener('life-money-changed', () => (moneyCache.at = 0))
+/** Settings → Sound → Test island sound: a test card for 20 s, through the real path (this snapshot → the island → its sound rule → the kit). */
+let soundTest: { id: string; until: number } | null = null
+let fallbackOn = false
+export function startIslandSoundTest(now = Date.now()): string {
+  soundTest = { id: `${TEST_SOUND_PREFIX}${now}`, until: now + 20_000 }
+  window.dispatchEvent(new CustomEvent('life-island-refresh'))
+  return soundTest.id
+}
+const soundTestAlert = (now: number): IslandAlert | null =>
+  soundTest && soundTest.until > now
+    ? { id: soundTest.id, kind: 'remind', title: '🔔 Test sound', text: 'This is how a notification sounds on the island.', face: '🔔', actions: [{ label: 'OK', primary: true, action: { kind: 'dismiss', id: soundTest.id } }] }
+    : null
 function bodyTick(sec: number) {
   const now = Date.now()
   if (sec >= 300) activeSince = null
@@ -782,7 +797,7 @@ export function IslandFeed() {
       })(),
       water: { ml: localWater, target: waterTarget },
       reps,
-      alert: alertNow,
+      alert: soundTestAlert(now) ?? alertNow,
       ...aliveData(),
       gaming: gm.view,
       health: healthView ? { today: healthView.today, week } : null,
@@ -966,6 +981,7 @@ export function IslandFeed() {
             // Seeing Ben's message counts as read.
             if (a.id.startsWith('ben:')) put(SEEN, Math.max(get<number>(SEEN, 0), Date.parse(a.id.slice(4)) || now))
             if (a.id.startsWith('eyes:')) put(LAST_EYES, now)
+            if (soundTest?.id === a.id) soundTest = null
             break
           }
           case 'bed': {
@@ -1453,6 +1469,11 @@ export function IslandFeed() {
       })
     }
     void send()
+    // The island's audio didn't start: the desktop asks this (app) window to play the sound instead (once per page).
+    if (!fallbackOn && window.desktop?.onIslandSoundFallback) {
+      fallbackOn = true
+      window.desktop.onIslandSoundFallback((d) => void playCard(d.sound as SoundName, d.loud))
+    }
     // CL11: nobody at the PC (idle 10+ minutes or locked): the island rests; your return wakes it at once.
     const t = setInterval(() => {
       if (lockedAt || (idleSec ?? 0) > 600) return
