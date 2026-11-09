@@ -45,6 +45,16 @@ await new Promise((ok, no) => {
 
 const fails = []
 // What a failure was waiting for (Playwright's call log), so a red run says which part.
+// The island morphs and re-centres itself with springs, so a click aimed at where a piece was can
+// land where it has moved to. Wait until the piece has stood still for 5 frames in a row (real state, not a fixed time).
+const still = (page, sel) => page.waitForFunction((sel) => {
+  const w = window
+  const r = document.querySelector(sel)?.getBoundingClientRect()
+  const key = r ? [r.x, r.y, r.width, r.height].map((n) => n.toFixed(1)).join() : ''
+  if (!w.__still || w.__still.sel !== sel || w.__still.key !== key) w.__still = { sel, key, n: 0 }
+  else w.__still.n++
+  return !!r && w.__still.n >= 5
+}, sel, { polling: 'raf', timeout: 10000 })
 const waitedFor = (msg) => (String(msg).split('\n').find((l) => /waiting for/.test(l)) ?? '').trim()
 const step = async (name, fn, { retries = 0 } = {}) => {
   // SMOKE_ONLY=<words>: run only the steps whose name has them (handy while working on one part).
@@ -64,6 +74,9 @@ const step = async (name, fn, { retries = 0 } = {}) => {
       }
       fails.push(name)
       console.log(`✗ ${name}: ${why.trim()}`)
+      // The line of this file that was waiting, so a red run says where.
+      const at = String(e.stack ?? '').split('\n').find((l) => /smoke\.mjs:\d+/.test(l))
+      if (at) console.log(`    at ${at.trim().replace(/^at /, '').replace(/\(?file:\/\/.*\/(smoke\.mjs:\d+):\d+\)?/, '$1')}`)
       return
     }
   }
@@ -92,8 +105,9 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
 }
 const pg = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(process.env.SMOKE_DSF ? { deviceScaleFactor: Number(process.env.SMOKE_DSF) } : {}) })).newPage()
 const errors = []
-pg.on('pageerror', (e) => errors.push(e.message))
+pg.on('pageerror', (e) => errors.push(`${e.message} @ ${pg.url()} ${String(e.stack ?? '').split('\n').slice(0, 4).join(' / ')}`))
 // LT3: anything the Content-Security-Policy blocks is a failure too (main page and the apps).
+pg.on('console', (m) => m.type() === 'warning' && /preload failed/.test(m.text()) && console.log(`  note: ${m.text()} @ ${pg.url()}`))
 pg.on('console', (m) => /Content.Security.Policy|Refused to (load|execute|connect|frame|apply)/i.test(m.text()) && errors.push(`CSP: ${m.text().slice(0, 200)}`))
 await pg.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
 
@@ -476,9 +490,11 @@ try {
     await pg.setViewportSize({ width: 1440, height: 900 }) // a retry starts from the usual size
     await open('body')
     await pg.locator('.seg-switch button').first().click()
-    await pg.waitForTimeout(2500)
+    // The app's frame loads its page and scripts: wait for it to have its tabs (a fixed 2.5 s was too short under load).
+    await pg.waitForFunction(() => [...document.querySelectorAll('iframe')].some((f) => f.src.includes('/apps/sport/')), null, { timeout: 20000 })
     let frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
+    await frame.waitForSelector('.st-tab[data-tab="plan"]', { state: 'visible', timeout: 20000 })
     // The coach steps below need Coach mode: it is off by default, one switch in the Plan tab.
     await frame.click('.st-tab[data-tab="plan"]')
     await frame.evaluate(() => { const c = document.getElementById('coach-mode-toggle'); if (!c.checked) c.click() })
@@ -499,7 +515,22 @@ try {
     for (const sel of ['.ex .lv-big, .ex .lvl, .ex .tag', '.ex .ex-target b', '.ex .log-big', '.ex .log-chips .chip', '.ex form.log-type input']) if (!(await frame.locator(sel).first().count())) throw new Error(`an exercise card lacks ${sel}`)
     // A library exercise shows its demo: two real photo frames, or the drawn figure (not an empty picture).
     await frame.waitForSelector('.ex .ex-demo svg.fig path[data-p="torso"][d], .ex .ex-demo .ph img.ph-b', { state: 'attached', timeout: 10000 })
-    const shut = async () => { if (await frame.locator('#cel.open').count()) { await frame.click('#cel', { position: { x: 5, y: 5 } }); await frame.waitForSelector('#cel', { state: 'hidden', timeout: 5000 }) } }
+    // Popups come from three places: the celebrations (which chain: a record, then a level-up; one with buttons never
+    // closes by itself), the badge check (the app runs it 700 ms after a change) and its "Nice!" card. Closing "the"
+    // popup once raced the next one. So: run the pending badge check now, then close whatever is open until a frame
+    // passes with nothing open.
+    const nextFrame = () => frame.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))
+    const shut = async () => {
+      await frame.evaluate(() => { try { clearTimeout(badgeTimer); checkBadges() } catch { /* the app is still starting */ } })
+      for (let i = 0; i < 12; i++) {
+        await nextFrame()
+        if (await frame.locator('#cel.open').count()) await frame.click('#cel', { position: { x: 5, y: 5 }, timeout: 5000 })
+        else if (await frame.locator('#unlock.open').count()) await frame.click('#unlock-ok', { timeout: 5000 })
+        else break
+      }
+      if (await frame.locator('#cel.open, #unlock.open').count()) throw new Error('a popup keeps opening')
+      await frame.waitForFunction(() => ['cel', 'unlock'].every((id) => { const c = document.getElementById(id); return c.hidden || c.classList.contains('open') }), null, { timeout: 5000 })
+    }
     // A quick-add sends the change to Life System's log.
     await pg.evaluate(() => { window.__sportLog = []; window.addEventListener('message', (e) => e.data?.action === 'SPORT_LOG' && window.__sportLog.push(e.data.payload)) })
     // Quick log: type "15 14 12" on the first card; the coach answers with a line and the next target.
@@ -1906,6 +1937,7 @@ try {
   await step('Goals: cards with rings and pace lines, a new goal from words, a check-in, a habit day and a project step', async () => {
     await open('goals')
     await pg.waitForSelector('.gx-hero .gx-ring', { timeout: 15000 })
+    await pg.click('.gx .ptabs [data-tab="goals"]')
     await pg.waitForSelector('.gx-card .gx-chart svg polyline.plan', { timeout: 10000 })
     if ((await pg.$$('.gx-card')).length < 3) throw new Error('the made-up goals are missing')
     if (!(await pg.$('.gx-hour'))) throw new Error('no hour goal card')
@@ -1934,6 +1966,83 @@ try {
     await pg.keyboard.press('Escape')
     await pg.waitForSelector('.gx-detail', { state: 'detached', timeout: 5000 })
     if (!(await pg.$('.gx-card.k-limit .gx-bars'))) throw new Error('the limit has no week bars')
+  })
+  // The goal ladder: up to 3 critical goals for the 12-week quarter, scored on actions (Goals → This quarter).
+  // LADDER_SHOTS=<dir> saves a phone shot of the cards and a desktop shot of the review.
+  await step('Goal ladder: quarter cards with lights, a milestone confirmed, swap from Not now, the Sunday review pre-fills the top 3, the Today line, the timeline', async () => {
+    const shots = process.env.LADDER_SHOTS
+    if (shots) await pg.addStyleTag({ content: '.toasts, .wallet-pops, .fx-canvas { display: none !important; }' })
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await open('goals')
+    await pg.waitForSelector('.gx .ptabs [data-tab="quarter"]', { timeout: 15000 })
+    await pg.click('.gx .ptabs [data-tab="quarter"]')
+    await pg.waitForSelector('.ql-card', { timeout: 15000 })
+    // A goal celebration from an earlier check-in (confetti over a dimmed page) is closed first.
+    for (let i = 0; i < 6 && (await pg.$('.gx-cel')); i++) {
+      await pg.keyboard.press('Escape')
+      await pg.waitForTimeout(300)
+    }
+    await pg.waitForFunction(() => !document.querySelector('.gx-cel-scrim, .gx-confetti'), null, { timeout: 8000 })
+    // The app's shared particle canvas (fx.ts) from the earlier Goals step's check-ins: let it finish.
+    await pg.waitForFunction(() => { const c = document.querySelector('.fx-canvas'); return !c || c.style.display === 'none' }, null, { timeout: 8000 }).catch(() => {})
+    const ids = await pg.locator('.ql-card').evaluateAll((cs) => cs.map((c) => c.dataset.goal))
+    if (ids.join() !== 'gain,strong,study') throw new Error(`critical goals: ${ids.join()}`)
+    for (const id of ids) {
+      const card = pg.locator(`.ql-card[data-goal="${id}"]`)
+      if (!/On track|Close|Needs a step|New week/.test(await card.locator('.ql-light').innerText())) throw new Error(`${id} has no traffic light`)
+      if ((await card.locator('.ql-strip li').count()) !== 12) throw new Error(`${id}: the timeline is not 12 weeks`)
+      if (!(await card.locator('.ql-acts li').count())) throw new Error(`${id}: no actions this week`)
+    }
+    if (!/workouts/.test(await pg.locator('.ql-card[data-goal="gain"] .ql-acts').innerText())) throw new Error('the gain goal does not count workouts')
+    // No horizontal scroll on a phone.
+    if (await pg.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1)) throw new Error('the quarter scrolls sideways on a phone')
+    if (shots) {
+      await pg.evaluate(() => document.querySelector('.ql')?.scrollIntoView())
+      await pg.screenshot({ path: `${shots}/phone-quarter-cards.png` })
+    }
+    // A suggested milestone (worked backward from the quarter) is confirmed.
+    const gain = pg.locator('.ql-card[data-goal="gain"]')
+    if (!(await gain.locator('.ql-sug').count())) throw new Error('the milestone is not marked as a suggestion')
+    await gain.locator('.ql-ms .btn').click()
+    await gain.locator('.ql-msedit .btn.primary').click()
+    await pg.waitForFunction(() => !document.querySelector('.ql-card[data-goal="gain"] .ql-sug'), null, { timeout: 8000 })
+    // A 4th critical goal needs a swap: Sleep in for Study, then back.
+    await pg.locator('.ql-notnow summary').click()
+    const sleep = pg.locator('.ql-notnow li', { hasText: 'Sleep better' })
+    await sleep.locator('.btn', { hasText: 'Swap in' }).click()
+    await sleep.locator('.ql-swap .btn', { hasText: 'Study' }).click()
+    await pg.waitForSelector('.ql-card[data-goal="sleep"]', { timeout: 8000 })
+    const study = pg.locator('.ql-notnow li', { hasText: 'Study' })
+    await study.locator('.btn', { hasText: 'Swap in' }).click()
+    await study.locator('.ql-swap .btn', { hasText: 'Sleep' }).click()
+    await pg.waitForSelector('.ql-card[data-goal="study"]', { timeout: 8000 })
+    // The Sunday review: this week's actions per goal, then next week's top 3 pre-filled from the ladder.
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await pg.locator('.ql-head-act .btn').first().click()
+    await pg.waitForSelector('.ql-review .ql-rev-goals li', { timeout: 5000 })
+    if ((await pg.locator('.ql-review .ql-rev-goals li').count()) !== 3) throw new Error('the review does not show the 3 goals')
+    if (shots) await pg.screenshot({ path: `${shots}/desktop-review.png` })
+    await pg.locator('.ql-review .btn.primary').click()
+    await pg.waitForFunction(() => document.querySelectorAll('.ql-review .ql-chips button.on').length === 3, null, { timeout: 8000 })
+    const picks = await pg.locator('.ql-review .ql-chips button.on').allInnerTexts()
+    if (!picks.some((t) => /workout|weigh-in|protein/i.test(t))) throw new Error(`the top 3 is not pre-filled from the ladder: ${picks.join(' | ')}`)
+    // (Saving makes them this week's big 3, which later Today steps would see: the save is in web/ladder.test.ts.)
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('.ql-review', { state: 'detached', timeout: 8000 })
+    if (shots) {
+      await pg.evaluate(() => document.querySelector('.ql-cards')?.scrollIntoView())
+      await pg.screenshot({ path: `${shots}/desktop-timeline.png` })
+    }
+    // One line on Today → Now.
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="now"]', { timeout: 10000 })
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    // Sunday/Monday: while "Pick your top 3" shows, the quarter line waits; "Not now" lets it show.
+    await pg.waitForTimeout(800)
+    const pick = pg.locator('[data-tabpanel="now"] .wk3 button', { hasText: 'Not now' })
+    if (await pick.count()) await pick.first().click()
+    await pg.waitForSelector('.ql-today', { timeout: 10000 })
+    if (!/^Quarter goal: .+ · this week \d/.test(await pg.locator('.ql-today').innerText())) throw new Error('the Today line is missing its numbers')
   })
   await step('Settings: every section opens with content', async () => {
     await open('settings')
@@ -2497,10 +2606,12 @@ try {
     }
     if (shots) await ip.addStyleTag({ content: "body::before { content: ''; position: fixed; inset: 0; z-index: -1; background: linear-gradient(160deg, #2a3140, #12151c); }" })
     // The morph: the same shape grows from the pill into the panel and back (one spring, clip-path).
+    await still(ip, '.di-shape')
     const pillBox = await ip.locator('.di-shape').boundingBox()
     await ip.click('.di-pill')
     await ip.waitForSelector('.di-panel', { timeout: 5000 })
     await ip.waitForTimeout(700)
+    await still(ip, '.di-shape')
     const openBox = await ip.locator('.di-shape').boundingBox()
     if (!pillBox || !openBox || openBox.width < pillBox.width * 1.5 || openBox.height < pillBox.height * 3) throw new Error(`the island did not morph open: ${JSON.stringify(pillBox)} → ${JSON.stringify(openBox)}`)
     await ip.keyboard.press('Escape')
@@ -2509,6 +2620,8 @@ try {
     await ip.evaluate(() => new BroadcastChannel('life-music').postMessage({ t: 'cmd', c: { op: 'play', station: { id: 'x', name: 'Lofi', url: 'https://soundcloud.com/someone/sets/lofi' } } }))
     await ip.waitForSelector('.di-pill.is-split .v2-lobe-left[data-kind="timer"]', { timeout: 6000 })
     await ip.waitForSelector('.di-pill.is-split .v2-lobe-right[data-kind="music"]', { timeout: 6000 })
+    // The right half first says "Lofi · Paused", then the track once the player is ready and playing: wait for the track itself.
+    await ip.waitForFunction(() => /Made-up track/.test(document.querySelector('.di-pill.is-split .v2-lobe-right')?.textContent ?? ''), null, { timeout: 10000 })
     const lobes = await ip.$$eval('.di-pill.is-split .v2-lobe', (ls) => ls.map((l) => l.textContent))
     if (lobes.length !== 2 || !/Write the essay/.test(lobes[0]) || !/\d+:\d\d/.test(lobes[0]) || !/Made-up track/.test(lobes[1])) throw new Error(`the split pill shows ${JSON.stringify(lobes)}`)
     if (await ip.$('.di-beside > *')) throw new Error('the split pill also drew a bubble beside it')
@@ -2637,7 +2750,17 @@ try {
     await ip.waitForTimeout(700)
     const box0 = await ip.locator('.di-shape').boundingBox()
     if (shots) await ip.screenshot({ path: `${shots}/center-pill.png`, clip: { x: 0, y: 0, width: 700, height: Math.ceil(box0.y + box0.height + 30) } })
-    await ip.click('.di-pill [data-center-chip="push"]')
+    // A real mouse arriving on the pill makes the island swap its pill for the hover view (a hint, a peek) a frame
+    // or two later, which under load moved the chip between the press and the release. So press and release the
+    // chip with pointer events at its settled place: the island's own tap code reads exactly these.
+    await still(ip, '.di-pill [data-center-chip="push"]')
+    await ip.evaluate(() => {
+      const r = document.querySelector('.di-pill [data-center-chip="push"]').getBoundingClientRect()
+      const o = { bubbles: true, cancelable: true, composed: true, button: 0, pointerId: 1, pointerType: 'mouse', isPrimary: true, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 }
+      window.dispatchEvent(new PointerEvent('pointermove', o))
+      document.elementFromPoint(o.clientX, o.clientY).dispatchEvent(new PointerEvent('pointerdown', o))
+      document.elementFromPoint(o.clientX, o.clientY).dispatchEvent(new PointerEvent('pointerup', o))
+    })
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'center' && a.op === 'count' && a.widget === 'push' && a.amount === 10), null, { timeout: 4000 })
     // It shows at once (10 → 20) before the app answers.
     await ip.waitForFunction(() => /20/.test(document.querySelector('[data-center-chip="push"]')?.textContent ?? ''), null, { timeout: 3000 })
@@ -4708,7 +4831,7 @@ try {
     const report = []
     const pages = [
       ['progress', '.pg', ['week', 'areas', 'streaks', 'focus', 'look'], { week: 2.2 }],
-      ['goals', '.gx', ['goals', 'week', 'hours', 'path'], { goals: 2.6 }],
+      ['goals', '.gx', ['quarter', 'goals', 'week', 'hours', 'path'], { goals: 2.6 }],
       ['career', '.cr', ['jobs', 'portfolio', 'cards', 'study', 'money', 'review'], { money: 2 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],

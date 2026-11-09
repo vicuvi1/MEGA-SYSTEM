@@ -1,4 +1,6 @@
-// Seasons (LF1): life in named 8-week story arcs. Each season has a theme,
+// Seasons (LF1): life in named 12-week story arcs (one season = one quarter
+// of the goal ladder, core/goalLadder.ts). Seasons saved before 2026-11-09 were
+// 8 weeks and keep their own length, so one in progress keeps its end date. Each season has a theme,
 // three main quests (linked to goals or ticked by hand) and a final "boss":
 // a real test on a real day (an exam, a CTF, a fitness test). The boss's HP
 // is how ready you are: finishing quests, perfect daily-quest days and the
@@ -7,8 +9,12 @@
 // Pure: no DOM, no database. Stored in the synced setting `saga_seasons`.
 import { addDays, daysBetween } from './dates'
 
-export const SEASON_WEEKS = 8
+/** New seasons: 12 weeks (the quarter). */
+export const SEASON_WEEKS = 12
 export const SEASON_DAYS = SEASON_WEEKS * 7
+/** Seasons saved without a length were 8 weeks long. */
+export const LEGACY_WEEKS = 8
+export type SeasonWeeks = 8 | 12
 export const SEASONS_MAX = 24
 /** The HP only the real boss fight can take: preparation stops here. */
 export const FINAL_BLOW = 10
@@ -56,6 +62,8 @@ export interface Season {
   area: string | null
   /** First day (a Monday). */
   start: string
+  /** 12 for new seasons; 8 for ones made before seasons became quarters. */
+  weeks: SeasonWeeks
   quests: MainQuest[]
   boss: Boss
   /** Closed early or after the recap. */
@@ -92,7 +100,16 @@ export const SEASON_THEMES: SeasonTheme[] = [
   { id: 'starfall', area: 'career', name: 'Starfall', theme: 'Ship the thing that changes your next year.', cover: 'twin-suns', color: '#f4c27c', boss: { title: 'Launch day', kind: 'project' }, quests: ['Build every weekday', 'Show it to 10 people', 'Fix the top 5 problems they find'] }
 ]
 
+/** The 8 one-week chapters of an old 8-week season. */
 export const CHAPTERS = ['The Call', 'First Steps', 'Training Arc', 'The Trial', 'Turning Point', 'Darkest Hour', 'The Climb', 'Final Battle']
+/** A 12-week season has 6 chapters of 2 weeks: two a month, so a chapter never splits a monthly milestone. */
+export const CHAPTERS_12 = ['The Call', 'Training Arc', 'The Trial', 'Turning Point', 'The Climb', 'Final Battle']
+export const WEEKS_PER_CHAPTER = 2
+
+/** The chapter names of a season (6 for 12 weeks, 8 for an old 8-week one). */
+export const chaptersOf = (s: Pick<Season, 'weeks'>): string[] => (s.weeks === LEGACY_WEEKS ? CHAPTERS : CHAPTERS_12)
+/** 1-based chapter number for a 1-based week. */
+export const chapterNo = (s: Pick<Season, 'weeks'>, week: number): number => (s.weeks === LEGACY_WEEKS ? week : Math.ceil(week / WEEKS_PER_CHAPTER))
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/
 const str = (v: unknown, n: number) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n)
@@ -111,7 +128,9 @@ export function nextMonday(d: string, allowToday = true): string {
   return allowToday && m === d ? d : addDays(m, 7)
 }
 
-export const seasonEnd = (s: Pick<Season, 'start'>): string => addDays(s.start, SEASON_DAYS - 1)
+/** Days in a season (84 for 12 weeks, 56 for an old one). */
+export const seasonDays = (s: { weeks?: number }): number => (s.weeks === LEGACY_WEEKS ? LEGACY_WEEKS : SEASON_WEEKS) * 7
+export const seasonEnd = (s: { start: string; weeks?: number }): string => addDays(s.start, seasonDays(s) - 1)
 
 function cleanQuest(q: any, i: number): MainQuest | null {
   const title = str(q?.title, 80)
@@ -127,8 +146,10 @@ export function cleanSeason(raw: unknown): Season | null {
   if (!name || !start) return null
   const b = (r.boss && typeof r.boss === 'object' ? r.boss : {}) as Record<string, any>
   const kind: BossKind = BOSS_KINDS.some((k) => k.id === b.kind) ? b.kind : 'other'
-  const end = seasonEnd({ start })
-  let bossDay = day(b.day) ?? addDays(start, SEASON_DAYS - 2)
+  // Migration: a season saved without a length is an old 8-week one (its end date stays).
+  const weeks: SeasonWeeks = Number(r.weeks) === SEASON_WEEKS ? SEASON_WEEKS : LEGACY_WEEKS
+  const end = seasonEnd({ start, weeks })
+  let bossDay = day(b.day) ?? addDays(start, seasonDays({ weeks }) - 2)
   if (bossDay < start) bossDay = start
   if (bossDay > end) bossDay = end
   const quests = (Array.isArray(r.quests) ? r.quests : []).map(cleanQuest).filter((q): q is MainQuest => !!q).slice(0, 3)
@@ -140,6 +161,7 @@ export function cleanSeason(raw: unknown): Season | null {
     color: hex(r.color, '#c8f135'),
     area: r.area ? str(r.area, 16) : null,
     start,
+    weeks,
     quests,
     boss: { title: str(b.title, 80) || 'The final test', kind, day: bossDay, result: b.result === 'won' || b.result === 'lost' ? b.result : null, resultDay: day(b.resultDay) },
     closed: day(r.closed)
@@ -167,6 +189,7 @@ export function newSeason(p: { name: string; theme?: string; cover?: string; col
     color: p.color,
     area: p.area ?? null,
     start,
+    weeks: SEASON_WEEKS,
     quests: (p.quests ?? []).slice(0, 3).map((title, i) => ({ id: `q${i + 1}`, title })),
     boss: { title: p.boss?.title ?? 'The final test', kind: p.boss?.kind ?? 'other', day: p.boss?.day ?? addDays(start, SEASON_DAYS - 2) }
   })
@@ -190,8 +213,12 @@ export function finishedSeasons(book: SeasonBook, today: string): Season[] {
 
 export interface SeasonProgress {
   phase: 'before' | 'active' | 'boss-week' | 'over'
-  /** 1..8 (0 before the start, 8 after the end). */
+  /** 1..weeks (0 before the start, the last week after the end). */
   week: number
+  /** The season's length in weeks (12, or 8 for an old one). */
+  weeks: number
+  /** 1-based chapter number (0 before the start). */
+  chapterNo: number
   chapter: string
   dayIndex: number
   daysLeft: number
@@ -202,12 +229,16 @@ export interface SeasonProgress {
 
 export function seasonProgress(s: Season, today: string): SeasonProgress {
   const end = seasonEnd(s)
+  const days = seasonDays(s)
+  const weeks = days / 7
+  const chapters = chaptersOf(s)
   const idx = daysBetween(s.start, today)
   const daysToBoss = daysBetween(today, s.boss.day)
-  if (idx < 0) return { phase: 'before', week: 0, chapter: 'Coming soon', dayIndex: idx, daysLeft: SEASON_DAYS, time: 0, daysToBoss }
-  if (today > end || s.closed) return { phase: 'over', week: SEASON_WEEKS, chapter: 'The end', dayIndex: Math.min(idx, SEASON_DAYS - 1), daysLeft: 0, time: 1, daysToBoss }
+  if (idx < 0) return { phase: 'before', week: 0, weeks, chapterNo: 0, chapter: 'Coming soon', dayIndex: idx, daysLeft: days, time: 0, daysToBoss }
+  if (today > end || s.closed) return { phase: 'over', week: weeks, weeks, chapterNo: chapters.length, chapter: 'The end', dayIndex: Math.min(idx, days - 1), daysLeft: 0, time: 1, daysToBoss }
   const week = Math.floor(idx / 7) + 1
-  return { phase: week === SEASON_WEEKS || daysToBoss <= 6 ? 'boss-week' : 'active', week, chapter: CHAPTERS[week - 1], dayIndex: idx, daysLeft: daysBetween(today, end) + 1, time: (idx + 1) / SEASON_DAYS, daysToBoss }
+  const no = chapterNo(s, week)
+  return { phase: week === weeks || daysToBoss <= 6 ? 'boss-week' : 'active', week, weeks, chapterNo: no, chapter: chapters[no - 1], dayIndex: idx, daysLeft: daysBetween(today, end) + 1, time: (idx + 1) / days, daysToBoss }
 }
 
 /** What wears the boss down (all of it measured, none of it typed in as HP). */
@@ -277,7 +308,7 @@ export function seasonMoments(s: Season, p: SeasonProgress, boss: BossState): Se
   const out: SeasonMoment[] = []
   if (p.phase === 'before') return out
   out.push({ id: `season:${s.id}:start`, kind: 'season-start', title: s.name, sub: s.theme || 'A new season begins' })
-  if (p.week >= 5) out.push({ id: `season:${s.id}:half`, kind: 'season-half', title: 'Halfway', sub: `${s.name} · chapter ${p.week}: ${p.chapter}` })
+  if (p.week > p.weeks / 2) out.push({ id: `season:${s.id}:half`, kind: 'season-half', title: 'Halfway', sub: `${s.name} · chapter ${p.chapterNo}: ${p.chapter}` })
   if (boss.ready && !boss.result) out.push({ id: `season:${s.id}:ready`, kind: 'boss-ready', title: 'The boss is weak', sub: `Only the real fight is left: ${s.boss.title}` })
   if (boss.result === 'won') out.push({ id: `season:${s.id}:won`, kind: 'boss-won', title: 'Boss defeated', sub: s.boss.title })
   return out
@@ -301,7 +332,8 @@ export interface SeasonRecap {
 export function seasonRecap(s: Season, input: BossInput & { workouts?: number; focusHours?: number; adventures?: number }, today: string): SeasonRecap {
   const pcts = input.questPcts.slice(0, s.quests.length)
   const questsDone = pcts.filter((p) => p >= 100).length
-  const weeks = Math.min(SEASON_WEEKS, Math.max(0, Math.ceil((Math.min(daysBetween(s.start, today), SEASON_DAYS - 1) + 1) / 7)))
+  const days = seasonDays(s)
+  const weeks = Math.min(days / 7, Math.max(0, Math.ceil((Math.min(daysBetween(s.start, today), days - 1) + 1) / 7)))
   const lines = [
     `${questsDone} of ${s.quests.length} main quests done`,
     `${input.perfectDays} perfect daily-quest days`,
@@ -321,5 +353,5 @@ export function seasonLine(s: Season | null, p: SeasonProgress | null, boss: Bos
   if (!s || !p || !boss) return ''
   if (p.phase === 'before') return `Season "${s.name}" starts ${s.start} (theme: ${s.theme}).`
   const qs = s.quests.map((q, i) => `${q.title} ${Math.round(questPcts[i] ?? 0)}%`).join('; ')
-  return `Season "${s.name}" (8-week arc, theme: ${s.theme}): week ${p.week} "${p.chapter}", ${p.daysLeft} days left. Main quests: ${qs || 'none set'}. Boss: ${s.boss.title} on ${s.boss.day} (${boss.result === 'won' ? 'DEFEATED' : boss.result === 'lost' ? 'lost this time' : `HP ${boss.hp}/${boss.max}${boss.ready ? ', only the real fight left' : ''}`}). Talk about his effort as chapters of this arc when it fits; never invent progress.`
+  return `Season "${s.name}" (${p.weeks}-week arc, theme: ${s.theme}): week ${p.week} of ${p.weeks}, chapter "${p.chapter}", ${p.daysLeft} days left. Main quests: ${qs || 'none set'}. Boss: ${s.boss.title} on ${s.boss.day} (${boss.result === 'won' ? 'DEFEATED' : boss.result === 'lost' ? 'lost this time' : `HP ${boss.hp}/${boss.max}${boss.ready ? ', only the real fight left' : ''}`}). Talk about his effort as chapters of this arc when it fits; never invent progress.`
 }

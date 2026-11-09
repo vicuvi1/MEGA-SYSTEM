@@ -55,7 +55,7 @@ export function SeasonIntro({ v, onClose }: { v: SagaView; onClose: () => void }
       <div className="cn-bar top" aria-hidden="true" />
       <div className="cn-bar bottom" aria-hidden="true" />
       <div className="cn-intro-body">
-        <span className="cn-kicker" style={{ animationDelay: '500ms' }}>Season {c.number} · 8 weeks · {fmtDay(s.start)}</span>
+        <span className="cn-kicker" style={{ animationDelay: '500ms' }}>Season {c.number} · {c.progress.weeks} weeks · {fmtDay(s.start)}</span>
         <h1 className="cn-intro-title"><Letters text={s.name} delay={900} /></h1>
         {s.theme && <p className="cn-intro-theme" style={{ animationDelay: `${1300 + s.name.length * 45}ms` }}>{s.theme}</p>}
         <ol className="cn-intro-quests">

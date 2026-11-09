@@ -17,21 +17,38 @@ const e = (day: string, ruleId: string | null, extra: Partial<LedgerEntry> = {})
 
 describe('seasons (LF1)', () => {
   const s = newSeason({ name: 'Shadow Code', theme: 'Become the hacker', start: '2026-11-04', quests: ['Solve 20 boxes', 'Write ups', 'Ship a tool'], boss: { title: 'Weekend CTF', kind: 'ctf' } })
-  it('starts on a Monday and lasts 8 weeks with the boss in the last week', () => {
+  it('starts on a Monday and lasts 12 weeks (a quarter) with the boss in the last week', () => {
     expect(s.start).toBe('2026-11-02')
+    expect(s.weeks).toBe(12)
     expect(mondayOf('2026-11-08')).toBe('2026-11-02')
     expect(nextMonday('2026-11-07')).toBe('2026-11-09')
     expect(nextMonday('2026-11-09')).toBe('2026-11-09')
-    expect(seasonEnd(s)).toBe('2026-12-27')
-    expect(s.boss.day).toBe('2026-12-26')
+    expect(seasonEnd(s)).toBe('2027-01-24')
+    expect(s.boss.day).toBe('2027-01-23')
     expect(s.quests.map((q) => q.id)).toEqual(['q1', 'q2', 'q3'])
   })
   it('knows the week, its chapter, the days left and the boss week', () => {
     expect(seasonProgress(s, '2026-11-01').phase).toBe('before')
     const p = seasonProgress(s, '2026-11-07')
-    expect(p).toMatchObject({ phase: 'active', week: 1, chapter: 'The Call', daysLeft: 51 })
-    expect(seasonProgress(s, '2026-12-21')).toMatchObject({ phase: 'boss-week', week: 8, chapter: 'Final Battle' })
-    expect(seasonProgress(s, '2026-12-28').phase).toBe('over')
+    expect(p).toMatchObject({ phase: 'active', week: 1, weeks: 12, chapterNo: 1, chapter: 'The Call', daysLeft: 79 })
+    // 6 chapters of 2 weeks: week 3 is chapter 2
+    expect(seasonProgress(s, '2026-11-16')).toMatchObject({ week: 3, chapterNo: 2, chapter: 'Training Arc' })
+    expect(seasonProgress(s, '2027-01-18')).toMatchObject({ phase: 'boss-week', week: 12, chapterNo: 6, chapter: 'Final Battle' })
+    expect(seasonProgress(s, '2027-01-25').phase).toBe('over')
+  })
+  it('migration: an 8-week season saved before keeps its 8 chapters and its end date', () => {
+    const old = cleanSeasonBook({ seasons: [{ id: 'old', name: 'Iron Path', start: '2026-10-05', quests: [], boss: { title: 'Fitness test', kind: 'fitness' } }] }).seasons[0]
+    expect(old.weeks).toBe(8)
+    expect(seasonEnd(old)).toBe('2026-11-29')
+    expect(old.boss.day).toBe('2026-11-28')
+    expect(seasonProgress(old, '2026-11-09')).toMatchObject({ phase: 'active', week: 6, weeks: 8, chapterNo: 6, chapter: 'Darkest Hour', daysLeft: 21 })
+    expect(seasonProgress(old, '2026-11-30').phase).toBe('over')
+    // saved again (any edit), it stays 8 weeks
+    expect(cleanSeasonBook({ seasons: [old] }).seasons[0].weeks).toBe(8)
+    // in progress on 9 Nov: still the current one, and the next season (12 weeks) can start after it
+    expect(currentSeason({ seasons: [old] }, '2026-11-09')?.id).toBe('old')
+    const next = newSeason({ name: 'Next', start: '2026-11-30' })
+    expect(seasonEnd(next)).toBe('2027-02-21')
   })
   it('boss HP falls with quests, perfect days and XP, but the last blow is the real fight', () => {
     const fresh = bossHp(s, { questPcts: [0, 0, 0], perfectDays: 0, xp: 0 })
@@ -55,23 +72,23 @@ describe('seasons (LF1)', () => {
   it('season moments: start, halfway, boss ready, boss won', () => {
     const b = bossHp(s, { questPcts: [100, 100, 100], perfectDays: 30, xp: 5000 })
     expect(seasonMoments(s, seasonProgress(s, '2026-11-03'), b).map((m) => m.kind)).toEqual(['season-start', 'boss-ready'])
-    expect(seasonMoments(s, seasonProgress(s, '2026-12-01'), bossHp(s, { questPcts: [], perfectDays: 0, xp: 0 })).map((m) => m.kind)).toEqual(['season-start', 'season-half'])
+    expect(seasonMoments(s, seasonProgress(s, '2026-12-14'), bossHp(s, { questPcts: [], perfectDays: 0, xp: 0 })).map((m) => m.kind)).toEqual(['season-start', 'season-half'])
   })
   it('finds the current season, keeps the book clean and sorted', () => {
-    const later = newSeason({ name: 'Iron Path', start: '2027-01-04' })
+    const later = newSeason({ name: 'Iron Path', start: '2027-01-25' })
     const book = cleanSeasonBook({ seasons: [later, s, { name: '' }, s, 'junk'] })
     expect(book.seasons.map((x) => x.name)).toEqual(['Shadow Code', 'Iron Path'])
     expect(currentSeason(book, '2026-11-20')?.name).toBe('Shadow Code')
-    expect(currentSeason(book, '2027-01-10')?.name).toBe('Iron Path')
-    expect(finishedSeasons(book, '2027-01-10').map((x) => x.name)).toEqual(['Shadow Code'])
+    expect(currentSeason(book, '2027-01-30')?.name).toBe('Iron Path')
+    expect(finishedSeasons(book, '2027-01-30').map((x) => x.name)).toEqual(['Shadow Code'])
     expect(cleanSeasonBook(null)).toEqual({ seasons: [] })
   })
   it('recaps the arc and gives Ben one honest line', () => {
-    const r = seasonRecap({ ...s, boss: { ...s.boss, result: 'won', resultDay: '2026-12-26' } }, { questPcts: [100, 100, 40], perfectDays: 22, xp: 2400, workouts: 18 }, '2026-12-28')
-    expect(r).toMatchObject({ weeks: 8, questsDone: 2, verdict: 'Legend' })
+    const r = seasonRecap({ ...s, boss: { ...s.boss, result: 'won', resultDay: '2027-01-23' } }, { questPcts: [100, 100, 40], perfectDays: 22, xp: 2400, workouts: 18 }, '2027-01-25')
+    expect(r).toMatchObject({ weeks: 12, questsDone: 2, verdict: 'Legend' })
     expect(r.lines).toContain('Boss defeated: Weekend CTF')
     const line = seasonLine(s, seasonProgress(s, '2026-11-20'), bossHp(s, { questPcts: [10, 0, 0], perfectDays: 2, xp: 300 }), [10, 0, 0])
-    expect(line).toMatch(/week 3 "Training Arc"/)
+    expect(line).toMatch(/12-week arc.*week 3 of 12, chapter "Training Arc"/)
     expect(line).toMatch(/HP \d+\/100/)
     expect(seasonLine(null, null, null)).toBe('')
   })

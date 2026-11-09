@@ -1,12 +1,12 @@
-// LF1: the season you are in. A cover from the wallpaper art, the 8 chapters
-// as a path, the boss with its HP bar, the three main quests, today's daily
+// LF1: the season you are in (12 weeks = the goal ladder's quarter). A cover
+// from the wallpaper art, the chapters (6 of 2 weeks; 8 for an old season) as a path, the boss with its HP bar, the three main quests, today's daily
 // quests (all three done hits the boss), your Hunter rank and Ben's path.
 import { useMemo, useState, type CSSProperties } from 'react'
 import { life } from '../bridge'
 import { useAction } from '../ui'
 import { artUrl } from '../wallpaper/art'
 import { barFill } from '../motionKit'
-import { BOSS_KINDS, CHAPTERS, SEASON_THEMES, SEASON_WEEKS, nextMonday, type BossKind, type SeasonTheme } from '@core/season'
+import { BOSS_KINDS, SEASON_THEMES, SEASON_WEEKS, chaptersOf, nextMonday, type BossKind, type SeasonTheme } from '@core/season'
 import { WHEEL_AREAS } from '@core/lifeWheel'
 import type { SagaView } from '../web/sagaStore'
 import { BenArcAvatar, BossSigil, VisionArtSvg } from './sagaArt'
@@ -35,16 +35,17 @@ export function SeasonTab({ v, onIntro, onRecap, onArc, onTab }: { v: SagaView; 
         {cover && <img className="sg-hero-art" src={cover} alt="" aria-hidden="true" />}
         <div className="sg-hero-shade" aria-hidden="true" />
         <div className="sg-hero-body">
-          <span className="sg-kicker">Season {c.number} · {p.phase === 'before' ? `starts ${fmtDay(s.start)}` : p.phase === 'over' ? 'complete' : `chapter ${p.week} of ${SEASON_WEEKS}`}</span>
+          <span className="sg-kicker">Season {c.number} · {p.phase === 'before' ? `starts ${fmtDay(s.start)}` : p.phase === 'over' ? 'complete' : `week ${p.week} of ${p.weeks} · chapter ${p.chapterNo}`}</span>
           <h1 className="sg-title">{s.name}</h1>
           {s.theme && <p className="sg-theme">{s.theme}</p>}
-          <ol className="sg-path" aria-label="The eight chapters">
-            {CHAPTERS.map((name, i) => {
-              const state = i + 1 < p.week ? 'done' : i + 1 === p.week && p.phase !== 'over' ? 'now' : p.phase === 'over' ? 'done' : 'next'
+          <ol className="sg-path" aria-label="The chapters">
+            {chaptersOf(s).map((name, i, all) => {
+              const state = i + 1 < p.chapterNo ? 'done' : i + 1 === p.chapterNo && p.phase !== 'over' ? 'now' : p.phase === 'over' ? 'done' : 'next'
+              const per = p.weeks / all.length
               return (
-                <li key={name} className={`sg-step ${state}`} title={`Week ${i + 1}: ${name}`}>
+                <li key={name} className={`sg-step ${state}`} title={per > 1 ? `Weeks ${i * per + 1}–${(i + 1) * per}: ${name}` : `Week ${i + 1}: ${name}`}>
                   <i />
-                  <small>{i + 1 === SEASON_WEEKS ? '⚔' : i + 1}</small>
+                  <small>{i + 1 === all.length ? '⚔' : i + 1}</small>
                 </li>
               )
             })}
@@ -204,7 +205,7 @@ function EmptySeason({ v, onPick }: { v: SagaView; onPick: (t: SeasonTheme | 'ow
     <div className="sg-empty">
       <div className="sg-empty-head">
         <span className="sg-kicker">Seasons</span>
-        <h1 className="sg-title">Your life, in 8-week arcs</h1>
+        <h1 className="sg-title">Your life, in 12-week arcs</h1>
         <p className="sg-theme">Pick a theme, three main quests and a final boss: a real test on a real day. Your daily quests and XP wear the boss down; the last blow is the real fight.</p>
       </div>
       {sug && (
@@ -295,7 +296,7 @@ function NewSeason({ v, start, onClose }: { v: SagaView; start: SeasonTheme | 'o
                 {BOSS_KINDS.map((k) => <option key={k.id} value={k.id}>{k.icon} {k.label}</option>)}
               </Select>
             </label>
-            <p className="sg-muted">{v.current ? 'Starts today; the season you are in now is closed.' : `Starts Monday ${fmtDay(startDay)} and runs 8 weeks. The boss is in the last week.`}</p>
+            <p className="sg-muted">{v.current ? 'Starts today; the season you are in now is closed.' : `Starts Monday ${fmtDay(startDay)} and runs ${SEASON_WEEKS} weeks: your quarter. The boss is in the last week.`}</p>
             <footer className="sg-sheet-foot">
               <button className="btn ghost" onClick={() => setPicking(true)}>Other themes</button>
               <button className="btn primary" disabled={!name.trim()} onClick={save}>Begin the season</button>

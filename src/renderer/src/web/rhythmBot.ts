@@ -46,6 +46,7 @@ import { freeGaps, suggestBlocks } from '@core/dayTime'
 import { PLAN_LIMITS, cleanLimits, endWith, withProtected } from '@core/planLimits'
 import { PLAN_WEEK, cleanWeek, dayRules, weekDeadlines } from '@core/planWeek'
 import { doneToday, fromGoalPlans, sessionsOn, type DeadlinePlan } from '@core/planDeadlines'
+import { ladderStudyToday } from './ladderStore'
 import type { Mirror } from './mirror'
 import type { AskModel, CalendarLike, TodoistLike } from './webBots'
 import type { WebServices } from './webServices'
@@ -440,6 +441,10 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       .filter(({ p }) => !!p && !bookedToday(p))
       .map(({ x, p }) => ({ title: x.title, minutes: Math.min(90, x.minutes - doneToday(p!)), id: x.id, why: x.why }))
       .filter((g) => g.minutes >= 20)
+    // The goal ladder (core/ladderPlan.ts): this week's study hours still to do, in the room the
+    // real deadlines leave, as one draft session today (a stable id, so a re-plan never doubles it).
+    const ladderToday = await mirror.read((db) => ladderStudyToday(services.services(db), deadlines, base, hmNow(now), events)).catch(() => null)
+    if (ladderToday && !allGoalItems.some((g) => g.id === ladderToday.id)) allGoalItems.push(ladderToday)
     // A life mode (FT4): sick = no study blocks, travel = one short one, exam week = longer ones.
     const mode = base.mode
     const goalItems = !mode ? allGoalItems : mode.kind === 'sick' ? [] : mode.kind === 'travel' ? allGoalItems.slice(0, 1).map((g) => ({ ...g, minutes: Math.min(45, g.minutes) })) : allGoalItems.map((g) => ({ ...g, minutes: Math.min(90, Math.round((g.minutes * mode.focus) / 5) * 5) }))

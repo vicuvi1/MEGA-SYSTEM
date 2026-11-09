@@ -28,7 +28,8 @@ describe('phone health keys (MC14)', () => {
     expect(stored).not.toContain(made.key)
     expect(stored).toMatch(/^[0-9a-f]{64}$/)
     expect(await healthKeyOk(cfg, made.key, 2000, fetchImpl)).toBe(true)
-    expect(await healthKeyOk(cfg, `${made.key.slice(0, -1)}x`, 2000, fetchImpl)).toBe(false)
+    // A changed last character (never the same one: the key is random, and 1 in 64 ends in "x").
+    expect(await healthKeyOk(cfg, `${made.key.slice(0, -1)}${made.key.endsWith('x') ? 'y' : 'x'}`, 2000, fetchImpl)).toBe(false)
     expect(await healthKeyOk(cfg, 'nope', 2000, fetchImpl)).toBe(false)
     expect(await listHealthKeys(cfg, fetchImpl)).toEqual([{ id: made.id, label: 'Test phone script', created: 1000, lastUsed: 2000 }])
     await dropHealthKey(cfg, made.id, fetchImpl)
