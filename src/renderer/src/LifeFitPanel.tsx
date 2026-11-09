@@ -256,32 +256,23 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
         <input type="checkbox" checked={p.meals} onChange={(e) => setP({ meals: e.target.checked })} aria-label="Meal reminders" />
         <span>
           Meal reminders
-          <small>"Lunch time: log your bulgur container + bread?" at your standard day's meal times, only when nothing was logged since the meal before. Log it in one tap, 30 min later or Skip. At most 3 a day, never in meetings or quiet hours.</small>
+          <small>"Lunch time: log your usual meal?" at your standard day's times when nothing was logged. Log it, 30 min or Skip. With the coach's nudges at most 3 a day, never in meetings or quiet hours.</small>
         </span>
       </label>
-      <h3 className="lf-sub">Coach nudges</h3>
-      <p className="hint block">Gentle and short. With the meal reminders and food nudges, at most 3 a day in total: the check-in first, then protein, then the morning one, then meals.</p>
-      <label className="check toggle-row">
-        <input type="checkbox" checked={p.coachMorning} onChange={(e) => setP({ coachMorning: e.target.checked })} aria-label="Coach morning nudge" />
-        <span>
-          Morning: today's training
-          <small>"Upper body today 💪 Banana + a glass of milk first, then wait 20–30 min." At your wake time.</small>
-        </span>
-      </label>
-      <label className="check toggle-row">
-        <input type="checkbox" checked={p.coachProtein} onChange={(e) => setP({ coachProtein: e.target.checked })} aria-label="Coach protein nudge" />
-        <span>
-          Midday protein
-          <small>From 14:00, when protein is under 40% of your goal: two of your own saved foods to add.</small>
-        </span>
-      </label>
-      <label className="check toggle-row">
-        <input type="checkbox" checked={p.coachCheckin} onChange={(e) => setP({ coachCheckin: e.target.checked })} aria-label="Coach evening check-in" />
-        <span>
-          Evening check-in
-          <small>About 21:00: today's food, workout and weigh-in from your logs, then 3 taps (energy, soreness, sleep) and one line back.</small>
-        </span>
-      </label>
+      <div className="lf-days" role="group" aria-label="Coach nudges" title="The check-in about 21:00, protein under 40% from 14:00, the morning one at your wake time. With meal reminders at most 3 a day: check-in, then protein, then morning, then meals.">
+        <span className="hint small bp-off">Coach:</span>
+        {(
+          [
+            ['coachMorning', 'Morning'],
+            ['coachProtein', 'Protein'],
+            ['coachCheckin', 'Check-in']
+          ] as const
+        ).map(([k, label]) => (
+          <button key={k} type="button" aria-pressed={p[k]} className={p[k] ? 'on' : ''} onClick={() => setP({ [k]: !p[k] })}>
+            {label}
+          </button>
+        ))}
+      </div>
       <label className="check toggle-row">
         <input type="checkbox" checked={p.weekly} onChange={(e) => setP({ weekly: e.target.checked })} />
         <span>

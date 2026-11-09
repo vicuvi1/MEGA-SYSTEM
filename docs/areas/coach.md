@@ -31,7 +31,7 @@
   - morning, from the wake time for 2 h: "Upper body today 💪 Banana + a glass of milk first, then wait 20–30 min." (the routine's first two steps, only for a morning session; a rest day gets the rest line; not once trained);
   - protein, 14:00–20:00 when under 40 % of the goal: "Protein's behind (40 / 130 g): <two saved foods richest in protein> with your next meal.";
   - the evening check-in (above).
-  - Switches: `life_fit.pushes.coachMorning / coachProtein / coachCheckin` (default on), in the coach settings sheet and in Settings → Ben → Pushes ("Coach nudges").
+  - Switches: `life_fit.pushes.coachMorning / coachProtein / coachCheckin` (default on), in the coach settings sheet and in Settings → Ben → Pushes (one row "Coach: Morning · Protein · Check-in").
   - **One cap of 3 a day** for coach nudges + meal reminders + the evening food push (`countsToCap`: keys `coach:`, `meal:`, `food:`; a meal re-ask counts). **Priority: check-in > protein > morning > meal reminders and food pushes.** A lower one may go only when the ones above it that can still come today keep their place (`reservedFor`): the check-in until its window ends (on, not done, not sent); protein from 11:00 to 20:00 while it is behind. So with every coach nudge on, at most one meal reminder fits on most days; switching the morning nudge off frees a place. In the tick and on the island the coach nudge is decided first, then `foodCapAllows` gates the meal reminder and the food push.
 - **Ask the coach** (Ben's chat in the app and on Telegram, `webBots.ts think()`):
   - red-flag words (`redFlag`, EN + RO) → ONLY "Stop training and see a doctor" in his language, before any model call or other fast path;
