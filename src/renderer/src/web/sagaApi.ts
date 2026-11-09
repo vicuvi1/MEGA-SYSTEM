@@ -2,7 +2,7 @@
 // writes it makes. Every write goes through the core cleaners, so a broken
 // page can't save a broken record.
 import { addDays } from '@core/dates'
-import { newSeason, type BossKind, type Season } from '@core/season'
+import { newSeason, seasonDays, type BossKind, type Season } from '@core/season'
 import { rateQuarter, quarterOf, type Ratings } from '@core/lifeWheel'
 import { type IdentityBook } from '@core/identityVotes'
 import { SIDE_QUESTS, pickInput } from '@core/sideQuest'
@@ -34,7 +34,7 @@ export function createSaga(svcP: Promise<WebServices>) {
         const b = loadSeasons(s.db)
         const sea = newSeason(p, uid('s'))
         // Only one open season at a time: an unfinished one that overlaps is closed today.
-        const seasons = b.seasons.map((x) => (!x.closed && x.start <= addDays(sea.start, 55) && addDays(x.start, 55) >= sea.start ? { ...x, closed: today(s) } : x))
+        const seasons = b.seasons.map((x) => (!x.closed && x.start <= addDays(sea.start, seasonDays(sea) - 1) && addDays(x.start, seasonDays(x) - 1) >= sea.start ? { ...x, closed: today(s) } : x))
         saveSeasons(s.db, { seasons: [...seasons, sea] })
         // The intro plays right away on the page, so the "a new season begins" scene isn't shown twice.
         const arc = loadArc(s.db)
@@ -63,11 +63,13 @@ export function createSaga(svcP: Promise<WebServices>) {
       write((s) => {
         const d = today(s)
         let name = ''
+        let weeks = 12
         editSeason(s, seasonId, (x) => {
           name = x.name
+          weeks = x.weeks
           return { ...x, closed: x.closed ?? d }
         })
-        noteMoment(s.db, `He finished the season "${name}" (8 weeks, start to finish)`, d)
+        noteMoment(s.db, `He finished the season "${name}" (${weeks} weeks, start to finish)`, d)
       }),
     // ---- vision board (LF4)
     saveVision: (v: VisionBook) => write((s) => saveVision(s.db, v, today(s))),
