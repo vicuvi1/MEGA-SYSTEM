@@ -1104,10 +1104,11 @@ try {
     await pg.waitForSelector('#ptp-body-food .fd-card', { state: 'visible', timeout: 10000 })
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
-  // Food photo: a meal photo is read by the AI (a canned answer here), you check the foods, Save logs it once,
-  // and the reply line is built from the real day totals. Over the daily limit: a clear message and the copy-prompt way.
+  // Food photo: 3 photos of one meal picked at once go to the AI in ONE request (a canned answer here), one review
+  // shows the 3 thumbnails and one combined list, you check the foods, Save logs ONE meal once, and the reply line is
+  // built from the real day totals. Over the daily limit: a clear message and the copy-prompt way.
   // FOOD_PHOTO_SHOTS=<dir> saves the review screen (desktop and phone). The meal is removed again at the end.
-  await step('Food photo: upload a photo, review the foods, change a qty, save once, the reply line, the daily limit', async () => {
+  await step('Food photo: upload 3 photos at once, one review, change a qty, save once, the reply line, the daily limit', async () => {
     const shots = process.env.FOOD_PHOTO_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
@@ -1118,7 +1119,7 @@ try {
     await pg.waitForSelector(`${fc} .fph-start .fph-snap`, { timeout: 20000 })
     if (!(await pg.locator(`${fc} .fph-noai`).count())) throw new Error('no "No AI? Copy the prompt instead" link')
     // A made-up "meal photo", drawn in the page (no real photo).
-    const png = Buffer.from(await pg.evaluate(() => {
+    const draw = async (tint) => Buffer.from(await pg.evaluate((tint) => {
       const c = document.createElement('canvas')
       c.width = 1600
       c.height = 1200
@@ -1138,13 +1139,22 @@ try {
       x.fillStyle = '#c98b4a'
       x.fillRect(860, 480, 240, 150)
       x.fillRect(880, 660, 240, 150)
+      x.fillStyle = tint
+      x.fillRect(80, 80, 260, 380)
       return c.toDataURL('image/png').split(',')[1]
-    }), 'base64')
+    }, tint), 'base64')
+    const png = await draw('#e9e2d6')
+    // Three made-up photos of one meal: the plate, a packaged snack, a drink.
+    const three = [
+      { name: 'plate.png', mimeType: 'image/png', buffer: png },
+      { name: 'snack.png', mimeType: 'image/png', buffer: await draw('#4a7bd8') },
+      { name: 'drink.png', mimeType: 'image/png', buffer: await draw('#d84a4a') }
+    ]
     const canned = {
       items: [
-        { name: 'Eggs', matchedSavedFoodId: null, qty: 3, unit: 'egg', grams: 150, kcal: 215, protein: 19, carbs: 1, fat: 15, confidence: 'high' },
-        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low' },
-        { name: 'bulgur container', matchedSavedFoodId: null, qty: 1, unit: 'container', grams: 350, kcal: 520, protein: 14, carbs: 80, fat: 12, confidence: 'medium' }
+        { name: 'Eggs', matchedSavedFoodId: null, qty: 3, unit: 'egg', grams: 150, kcal: 215, protein: 19, carbs: 1, fat: 15, confidence: 'high', photo: 1 },
+        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low', photo: 2 },
+        { name: 'bulgur container', matchedSavedFoodId: null, qty: 1, unit: 'container', grams: 350, kcal: 520, protein: 14, carbs: 80, fat: 12, confidence: 'medium', photo: 3 }
       ],
       totals: { kcal: 999, protein: 99 },
       message: 'Eggs and toast: a good protein start.'
@@ -1167,10 +1177,15 @@ try {
       const kcalBefore = await kcalNow()
       const liveMeals = () => pg.locator(`${fc} .fd-meals li:not(.removed)`).count()
       const mealsBefore = await liveMeals()
-      await pg.locator(`${fc} .fph-file`).setInputFiles({ name: 'meal.png', mimeType: 'image/png', buffer: png })
+      await pg.locator(`${fc} .fph-file`).setInputFiles(three)
       await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 3, fc, { timeout: 15000 })
-      // The photo went out small, as JPEG, with today's numbers.
-      if (sent?.image?.mime !== 'image/jpeg' || sent.image.data.length > 400_000) throw new Error(`the photo was not made small: ${sent?.image?.mime} ${sent?.image?.data?.length}`)
+      // ONE request with the 3 photos, each made small, as JPEG, with today's numbers.
+      if (calls !== 1) throw new Error(`3 photos should be one request, got ${calls}`)
+      if ((sent?.images ?? []).length !== 3) throw new Error(`expected 3 photos in the request, got ${(sent?.images ?? []).length}`)
+      for (const im of sent.images) if (im?.mime !== 'image/jpeg' || im.data.length > 400_000) throw new Error(`a photo was not made small: ${im?.mime} ${im?.data?.length}`)
+      // One review: the 3 thumbnails, and each food says which photo it was seen in.
+      if ((await pg.locator(`${fc} .fph-review .fph-strip img`).count()) !== 3) throw new Error('the review does not show the 3 photos')
+      if (!/^Photo 2$/.test((await pg.locator(`${fc} .fph-item`).nth(1).locator('.fph-pic-tag').innerText()).trim())) throw new Error('the food does not say which photo it came from')
       if (!(sent.targets?.kcal > 0)) throw new Error('the goals were not sent with the photo')
       // Totals come from the items (not the AI's 999), the low one is flagged, nothing is saved yet.
       const total = () => pg.locator(`${fc} .fph-total`).innerText()
@@ -1227,7 +1242,7 @@ try {
       if (!/50 photos today/.test(await pg.locator(`${fc} .fph-fail`).innerText())) throw new Error('no daily limit message')
       if (!(await pg.locator(`${fc} .fph-fail .fph-fallback`).count())) throw new Error('no "Copy the prompt instead" after the limit')
       if (await pg.locator(`${fc} .fph-review`).count()) throw new Error('a review opened over the limit')
-      if (calls !== 2) throw new Error(`expected 2 photo calls, got ${calls}`)
+      if (calls !== 2) throw new Error(`expected 2 photo requests (3 photos, then 1), got ${calls}`)
       // Clean up: remove the photo meal so later steps see the day as before.
       await pg.locator(`${fc} .fd-meals li:not(.removed)`).filter({ hasText: 'Eggs' }).first().locator('.fd-remove').click()
       await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li:not(.removed)`).length === n, [fc, mealsBefore], { timeout: 10000 })

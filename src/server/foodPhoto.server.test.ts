@@ -207,3 +207,79 @@ describe('the foodPhoto op', () => {
     expect(called).toBe(false)
   })
 })
+
+describe('several photos of one meal (up to 6, one request)', () => {
+  const three = { ...body, image: undefined, images: [PIXEL, PIXEL, PIXEL].map((data) => ({ mime: 'image/png', data })) }
+  it('reads 1–6 photos, refuses 7 or any bad one', () => {
+    const req = readPhotoRequest(three)
+    expect(req.images).toHaveLength(3)
+    expect(req.image).toEqual(req.images[0])
+    expect(readPhotoRequest({ ...three, images: Array.from({ length: 7 }, () => ({ mime: 'image/png', data: PIXEL })) }).error).toMatch(/at most 6 photos/)
+    expect(readPhotoRequest({ ...three, images: [...three.images, { mime: 'text/html', data: PIXEL }] }).error).toMatch(/JPEG, PNG or WebP/)
+    expect(readPhotoRequest({ ...three, images: Array.from({ length: 6 }, () => ({ mime: 'image/jpeg', data: 'A'.repeat(1_499_000) })) }).error).toMatch(/too big together/)
+  })
+  it('the prompt says one meal, each food once, and which photo', () => {
+    const { system, user } = foodPhotoPrompt(readPhotoRequest(three))
+    expect(system).toMatch(/3 photos \(Photo 1 to Photo 3\), all of ONE meal/)
+    expect(system).toMatch(/List each food ONCE/)
+    expect(user).toMatch(/What is in these 3 photos\?/)
+    expect(foodPhotoPrompt(readPhotoRequest(body)).system).not.toMatch(/Photo 1/)
+  })
+  it('Gemini and Claude get every photo in ONE request, numbered', () => {
+    const req = readPhotoRequest(three)
+    const g = buildVisionRequest({ name: 'gemini', key: 'k', models: [] }, 'gemini-3.5-flash', req)
+    const parts = g.body.contents[0].parts
+    expect(parts.filter((p: any) => p.inline_data)).toHaveLength(3)
+    expect(parts.filter((p: any) => /^Photo \d:$/.test(p.text ?? '')).map((p: any) => p.text)).toEqual(['Photo 1:', 'Photo 2:', 'Photo 3:'])
+    expect(GEMINI_SCHEMA.properties.items.items.properties.photo.type).toBe('NUMBER')
+    const c = buildVisionRequest({ name: 'claude', key: 'k', models: [] }, 'claude-haiku-4-5', req)
+    const content = c.body.messages[0].content
+    expect(content.filter((p: any) => p.type === 'image')).toHaveLength(3)
+    expect(content[0]).toEqual({ type: 'text', text: 'Photo 1:' })
+    expect(content[content.length - 1].type).toBe('text')
+  })
+  it('each photo counts toward the 50 a day (3 photos = 3); a re-read counts only the new ones', async () => {
+    const SQL = await initSqlJs()
+    const db = new SQL.Database()
+    const pipe = (b: any) => ({
+      results: (b.requests ?? []).map((r: any) => {
+        if (r.type !== 'execute') return { type: 'ok', response: { type: r.type } }
+        try {
+          const rows = db.exec(r.stmt.sql, (r.stmt.args ?? []).map((a: any) => a?.value ?? null))[0]?.values ?? []
+          return { type: 'ok', response: { type: 'execute', result: { rows: rows.map((row) => row.map((v) => ({ type: 'text', value: String(v) }))) } } }
+        } catch (e) {
+          return { type: 'error', error: { message: (e as Error).message } }
+        }
+      })
+    })
+    const fetchImpl = (async (url: string, init: any) => (String(url).includes('/v2/pipeline') ? new Response(JSON.stringify(pipe(JSON.parse(init.body))), { status: 200 }) : geminiOk())) as any
+    const env = { TURSO_URL: 'https://counter.fake.turso.io', TURSO_TOKEN: 't', GEMINI_API_KEY: 'g', LIFE_TZ: 'UTC' }
+    const vitest = process.env.VITEST
+    delete process.env.VITEST
+    try {
+      const day = new Date('2026-11-09T10:00:00Z')
+      expect((await foodPhoto(three, env, fetchImpl, day)).ok).toBe(true)
+      const count = () => Number(db.exec("SELECT value FROM sys_kv WHERE key = 'vision:2026-11-09'")[0].values[0][0])
+      expect(count()).toBe(3)
+      expect((await foodPhoto(three, env, fetchImpl, day, { counted: 2 })).ok).toBe(true)
+      expect(count()).toBe(4)
+      db.run("UPDATE sys_kv SET value = '48' WHERE key = 'vision:2026-11-09'")
+      const over = await foodPhoto(three, env, fetchImpl, day)
+      expect(over).toMatchObject({ ok: false, limit: 'day', error: expect.stringMatching(/over today's limit of 50 photos/) })
+    } finally {
+      process.env.VITEST = vitest
+    }
+  })
+  it('countPhoto adds n at once', async () => {
+    const SQL = await initSqlJs()
+    const db = new SQL.Database()
+    const run = async (stmts: { sql: string; args: string[] }[]) => {
+      let rows: unknown[][] = []
+      for (const s of stmts) rows = db.exec(s.sql, s.args)[0]?.values ?? []
+      return rows
+    }
+    const day = new Date('2026-11-09T10:00:00Z')
+    expect(await countPhoto(run, day, '', 3)).toBe(3)
+    expect(await countPhoto(run, day)).toBe(4)
+  })
+})

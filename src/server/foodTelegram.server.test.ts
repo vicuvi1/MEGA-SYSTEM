@@ -107,7 +107,7 @@ describe('a meal photo on Telegram', () => {
     expect(w.sent.find((s) => s.method === 'getFile')).toBeTruthy()
     expect(w.files).toHaveLength(1)
     expect(w.reads).toHaveLength(1)
-    expect(w.reads[0].image).toEqual({ mime: 'image/jpeg', data: PHOTO_B64 })
+    expect(w.reads[0].images).toEqual([{ mime: 'image/jpeg', data: PHOTO_B64 }])
     expect(w.reads[0].note).toBe('3 eggs, 2 slices of bread')
     expect(w.reads[0].saved.map((s: any) => s.id)).toContain('sf-egg')
     expect(w.reads[0].targets.protein).toBe(150)

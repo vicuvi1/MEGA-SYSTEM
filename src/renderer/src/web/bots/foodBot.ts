@@ -9,6 +9,10 @@
 //   its 50-a-day count and the AI budget) → a preview with −/+ how many,
 //   🔁 swap for a saved food, Save / Cancel; "eggs 2" sets how many. The photo
 //   is never stored or logged;
+// - an album (several photos sent together) → ONE vision call with every photo
+//   → ONE preview; "➕ Add another photo" on a preview collects more photos for
+//   60 s, then "✅ Done, read them" reads them all together (foodAlbum.ts keeps
+//   only Telegram's file ids, server-only, 10 minutes at most);
 // - "/meals", "standard day", "breakfast" or a saved meal's name → one tap logs it;
 // - the buttons under the evening nudge, the dinner reminder and the meal
 //   reminders (the prompt, Same as yesterday, Mute, Log it, 30 min, Skip);
@@ -74,6 +78,7 @@ import { answerPushIn, readPushLog } from '../benPushStore'
 import { readLifeFit, sleepWindow } from '../lifeFitStore'
 import { downloadFile, esc, tg } from './telegram'
 import type { CallbackHandler } from './callbacks'
+import { MAX_SET, addPart, addedCount, collectAlbum, dropChatPhotos, joinAlbum, keepDraftPhotos, openAdd, setAddMsg, startAdd, takeAdd, type PhotoKv, type PhotoPart } from './foodAlbum'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
 const shortId = () => Math.random().toString(36).slice(2, 8) || 'd'
@@ -95,8 +100,15 @@ const COULD_NOT = (why: string) => `⚠️ I couldn't read that reply (${esc(why
 
 export type FoodOut = { reply: string; keyboard?: any }
 
+/** A photo preview's buttons, with "➕ Add another photo" above Save / Cancel. */
+export function photoKeyboard(d: FoodDraft): { inline_keyboard: { text: string; callback_data: string }[][] } {
+  const kb = photoDraftKeyboard(d)
+  const rows = kb.inline_keyboard.slice()
+  const end = rows.pop()
+  return { inline_keyboard: [...rows, [{ text: '➕ Add another photo', callback_data: `fd|a|${d.id}` }], ...(end ? [end] : [])] }
+}
 /** The preview of a draft (a photo's or a pasted reply's). */
-const previewOf = (d: FoodDraft): FoodOut => (d.photo ? { reply: photoDraftText(d), keyboard: photoDraftKeyboard(d) } : { reply: draftText(d), keyboard: draftKeyboard(d) })
+const previewOf = (d: FoodDraft): FoodOut => (d.photo ? { reply: photoDraftText(d), keyboard: photoKeyboard(d) } : { reply: draftText(d), keyboard: draftKeyboard(d) })
 
 // ---- saved foods and meals ----
 
@@ -199,8 +211,11 @@ export function foodMessage(db: any, text: string, now = Date.now()): FoodOut | 
 
 // ---- a meal photo ----
 
-/** The vision read behind /api/ai {op:'foodPhoto'} (api/ai.mjs foodPhoto), handed in by the server. */
-export type FoodPhotoFn = (body: unknown) => Promise<{ ok: boolean; result?: unknown; error?: string; limit?: string }>
+/**
+ * The vision read behind /api/ai {op:'foodPhoto'} (api/ai.mjs foodPhoto), handed in by the server.
+ * `opts.counted`: photos of this meal already counted toward the 50 a day (an "Add another photo" re-read).
+ */
+export type FoodPhotoFn = (body: unknown, opts?: { counted?: number }) => Promise<{ ok: boolean; result?: unknown; error?: string; limit?: string }>
 /** The vision request takes about 1.1 MB of photo. */
 const MAX_B64 = 1_500_000
 
@@ -209,26 +224,35 @@ export function photoWanted(message: any): boolean {
   return Array.isArray(message?.photo) && message.photo.length > 0 && photoIsMeal(String(message?.caption ?? ''))
 }
 
+type Mirrorish = { read<T>(fn: (db: any) => T): Promise<T>; write<T>(fn: (db: any) => T): Promise<T> }
+
+/** Sends a message, or edits `msgId` into it; returns the message id. */
+async function sayIn(token: string, chat: string, msgId: number | null | undefined, text: string, keyboard?: any): Promise<number | null> {
+  const body = { chat_id: chat, text, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }
+  const r = msgId ? await tg(token, 'editMessageText', { ...body, message_id: msgId }).catch(() => null) : null
+  if (r?.ok) return msgId ?? null
+  const s = await tg(token, 'sendMessage', body).catch(() => null)
+  return s?.result?.message_id ?? null
+}
+
 /**
- * A meal photo from the owner's chat (checked before): download one size up to
- * 1280 px, read it with the same vision call as the website (its 50-a-day
- * count and AI budget), check the answer with core/foodVision.ts, and reply
- * with the preview. The photo lives only in this function's memory: it is
- * never written to the database or a log.
+ * Reads the photos of ONE meal (Telegram file ids, 1–6) with ONE vision call
+ * (the website's: its 50-a-day count and AI budget), checks the answer with
+ * core/foodVision.ts and turns `statusId` into the preview. The photos live
+ * only in this function's memory; only their file ids are kept (10 minutes,
+ * server-only) so "Add another photo" can read them again with a new one.
  */
-export async function foodPhotoMessage(o: { token: string; chat: string; photos: PhotoSize[]; caption: string; mirror: { read<T>(fn: (db: any) => T): Promise<T>; write<T>(fn: (db: any) => T): Promise<T> }; foodPhoto: FoodPhotoFn; now?: Date }): Promise<string> {
+export async function readMealPhotos(o: { token: string; chat: string; fileIds: string[]; caption: string; mirror: Mirrorish; foodPhoto: FoodPhotoFn; kv?: PhotoKv | null; counted?: number; statusId?: number | null; now?: Date }): Promise<string> {
   const now = o.now ?? new Date()
-  const status = await tg(o.token, 'sendMessage', { chat_id: o.chat, text: '📸 Reading the photo…' }).catch(() => null)
-  const statusId = status?.result?.message_id
-  const say = async (text: string, keyboard?: any) => {
-    const body = { chat_id: o.chat, text, parse_mode: 'HTML', ...(keyboard ? { reply_markup: keyboard } : {}) }
-    const r = statusId ? await tg(o.token, 'editMessageText', { ...body, message_id: statusId }).catch(() => null) : null
-    if (!r?.ok) await tg(o.token, 'sendMessage', body).catch(() => null)
-    return text
+  const ids = o.fileIds.slice(0, MAX_SET)
+  const say = async (text: string, keyboard?: any) => (await sayIn(o.token, o.chat, o.statusId, text, keyboard), text)
+  const many = ids.length > 1
+  let files: { mime: string; data: string }[] | null = []
+  for (const id of ids) {
+    const f = await downloadFile(o.token, id, 'photo')
+    if (!f || f.data.length > MAX_B64) return say(many ? "⚠️ I couldn't open one of the photos. Try again, or send /food for the copy prompt." : "⚠️ I couldn't open that photo. Try again, or send /food for the copy prompt.")
+    files.push({ mime: f.mime, data: f.data })
   }
-  const size = pickPhotoSize(o.photos)
-  let file = size ? await downloadFile(o.token, size.file_id, 'photo') : null
-  if (!file || file.data.length > MAX_B64) return say("⚠️ I couldn't open that photo. Try again, or send /food for the copy prompt.")
   const ctx = await o.mirror.read((db) => {
     const saved = savedRefs(readFoodSaved(db))
     const t = foodDayTotals(db, now)
@@ -241,18 +265,74 @@ export async function foodPhotoMessage(o: { token: string; chat: string; photos:
   })
   let ans: Awaited<ReturnType<FoodPhotoFn>>
   try {
-    ans = await o.foodPhoto({ image: { mime: file.mime, data: file.data }, note: o.caption, saved: ctx.saved, today: ctx.today, targets: ctx.targets })
+    ans = await o.foodPhoto({ images: files, note: o.caption, saved: ctx.saved, today: ctx.today, targets: ctx.targets }, o.counted ? { counted: o.counted } : undefined)
   } catch {
     ans = { ok: false, error: "The photo couldn't be read right now. Try again in a moment." }
   }
-  // Done with the photo: nothing below sees it.
-  file = null
+  // Done with the photos: nothing below sees them.
+  files = null
   if (!ans.ok) return say(`⚠️ ${esc(String(ans.error || "The photo couldn't be read."))}\nOr send /food for the copy prompt.`)
-  const check = validateVision(ans.result, ctx.saved)
+  const check = validateVision(ans.result, ctx.saved, ids.length)
   if (!check.ok) return say(`⚠️ ${esc(check.error)}`)
-  const d = photoDraft(shortId(), now.getTime(), check.result.items, check.result.message)
+  const msg = many ? `${ids.length} photos read together. ${check.result.message}`.trim().slice(0, 200) : check.result.message
+  const d = photoDraft(shortId(), now.getTime(), check.result.items, msg)
   await o.mirror.write((db) => writeFoodBen(db, { ...readFoodBen(db), draft: d }))
-  return say(photoDraftText(d), photoDraftKeyboard(d))
+  if (o.kv) await keepDraftPhotos(o.kv, o.chat, d.id, ids, o.caption, now.getTime()).catch(() => null)
+  return say(photoDraftText(d), photoKeyboard(d))
+}
+
+/** The "send the next photo" message while adding photos to a meal. */
+const addText = (n: number, before: number) =>
+  n
+    ? `📸 Got ${n === 1 ? 'one more photo' : `${n} more photos`} (${before + n} for this meal). Send another within a minute, or tap Done.`
+    : '📸 Send the next photo of this meal now (within a minute). Then tap Done, and I read all of them together.'
+const addKeyboard = (draft: string) => ({ inline_keyboard: [[{ text: '✅ Done, read them', callback_data: `fd|r|${draft}` }], [{ text: '✗ Stop adding', callback_data: `fd|q|${draft}` }]] })
+
+/**
+ * A meal photo from the owner's chat (checked before). With `kv` (the server):
+ * a photo sent in an open "Add another photo" window joins that meal; a part
+ * of an album waits for its other parts (the first one reads them all in ONE
+ * vision call, the rest answer nothing). Otherwise: download one size up to
+ * 1280 px, read it, and reply with the preview. The photo lives only in
+ * memory: never in the database or a log.
+ */
+export async function foodPhotoMessage(o: { token: string; chat: string; photos: PhotoSize[]; caption: string; mirror: Mirrorish; foodPhoto: FoodPhotoFn; kv?: PhotoKv | null; groupId?: string | null; messageId?: number; now?: Date }): Promise<string> {
+  const now = o.now ?? new Date()
+  const size = pickPhotoSize(o.photos)
+  if (!size) {
+    const text = "⚠️ I couldn't open that photo. Try again, or send /food for the copy prompt."
+    await sayIn(o.token, o.chat, null, text)
+    return text
+  }
+  const part: PhotoPart = { f: size.file_id, c: o.caption, m: Number(o.messageId) || now.getTime(), at: now.getTime() }
+  const kv = o.kv ?? null
+  if (kv) {
+    // "Add another photo" is open: this photo joins that meal (read on Done).
+    const st = await openAdd(kv, o.chat, now.getTime()).catch(() => null)
+    if (st) {
+      const n = await addPart(kv, o.chat, st, part, now.getTime())
+      const text = st.f.length + n > MAX_SET ? `📸 That makes more than ${MAX_SET} photos: tap Done to read the first ${MAX_SET}.` : addText(n, st.f.length)
+      await sayIn(o.token, o.chat, st.msg, text, addKeyboard(st.d))
+      return text
+    }
+    // An album: the parts meet in the database; the first one reads them all.
+    if (o.groupId) {
+      const role = await joinAlbum(kv, o.chat, o.groupId, part, now.getTime())
+      if (role === 'wait') return ''
+      if (role === 'lead') {
+        const status = await tg(o.token, 'sendMessage', { chat_id: o.chat, text: '📸 Reading the photos…' }).catch(() => null)
+        const parts = await collectAlbum(kv, o.chat, o.groupId, () => Date.now())
+        const list = parts.length ? parts : [part]
+        const caption = [...new Set(list.map((p) => p.c.trim()).filter(Boolean))].join(' · ').slice(0, 300)
+        const out = await readMealPhotos({ token: o.token, chat: o.chat, fileIds: list.slice(0, MAX_SET).map((p) => p.f), caption, mirror: o.mirror, foodPhoto: o.foodPhoto, kv, statusId: status?.result?.message_id, now })
+        if (list.length > MAX_SET) await tg(o.token, 'sendMessage', { chat_id: o.chat, text: `Only the first ${MAX_SET} photos were read.` }).catch(() => null)
+        return out
+      }
+      // 'late': the others were already read; this one is read on its own.
+    }
+  }
+  const status = await tg(o.token, 'sendMessage', { chat_id: o.chat, text: '📸 Reading the photo…' }).catch(() => null)
+  return readMealPhotos({ token: o.token, chat: o.chat, fileIds: [size.file_id], caption: o.caption, mirror: o.mirror, foodPhoto: o.foodPhoto, kv, statusId: status?.result?.message_id, now })
 }
 
 /**
@@ -417,6 +497,8 @@ export function foodSundayNow(db: any, now = new Date()): FoodReport | null {
  * food nudges for 7 days · fd|l|<key>|<0 or 1> Log it (the usual meal or its swap) ·
  * fd|z|<key> 30 min later · fd|k|<key> Skip.
  * Saved meals: fd|g|<meal id or "day"> log it now · fd|n|x No.
+ * More photos for a photo preview: fd|a|<draft> Add another photo (60 s) · fd|r|<draft> Done,
+ * read them (one vision call with every photo) · fd|q|<draft> Stop adding.
  */
 export const FOOD_CALLBACK: CallbackHandler = {
   prefixes: ['fd'],
@@ -427,7 +509,7 @@ export const FOOD_CALLBACK: CallbackHandler = {
     const mirror = c.mirror as unknown as { write<T>(fn: (db: any) => T): Promise<T> }
     const { data, chat, key, update, cq, answer, edit } = t
     if (!(await markSeen(key))) return null
-    const m = /^fd\|([sx+\-eupymlzkgnvwWb])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data)
+    const m = /^fd\|([sx+\-eupymlzkgnvwWbarq])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data)
     if (!m) return null
     const [, op, ref, idx, idx2] = m
     const now = new Date()
@@ -564,6 +646,57 @@ export const FOOD_CALLBACK: CallbackHandler = {
       await edit(text, { inline_keyboard: [[{ text: '↩ Undo', callback_data: `fd|u|${res.r.id}`.slice(0, 64) }]] })
       return text
     }
+    // More photos for the open photo preview (the server only: file ids in sys_kv, foodAlbum.ts).
+    if (op === 'a' || op === 'r' || op === 'q') {
+      const kv = c.photoKv
+      const live = await mirror.write((db) => liveDraft(readFoodBen(db), now.getTime()))
+      if (!kv || !c.foodPhoto || !live?.photo || live.id !== ref) {
+        await answer('That preview is closed. Send all the photos again.')
+        return null
+      }
+      if (op === 'q') {
+        await dropChatPhotos(kv, chat).catch(() => null)
+        await answer('Stopped')
+        await edit('Stopped adding photos. The preview above stays as it was.')
+        return 'stop'
+      }
+      if (op === 'a') {
+        const st = await startAdd(kv, chat, ref, now.getTime())
+        if (!st) {
+          await answer('Those photos are too old to add to. Send all the photos again.')
+          return null
+        }
+        if (st.f.length >= MAX_SET) {
+          await answer(`${MAX_SET} photos is the most for one meal`)
+          return null
+        }
+        await answer('Send the next photo')
+        const sent = await send(addText(0, st.f.length), addKeyboard(ref))
+        const msgId = sent?.result?.message_id
+        if (msgId) await setAddMsg(kv, chat, msgId).catch(() => null)
+        return 'add'
+      }
+      // Done: every photo of the meal (the earlier ones and the new ones) in ONE vision call.
+      const peek = await addedCount(kv, chat, ref)
+      if (!peek.st) {
+        await answer('Nothing to read. Tap “Add another photo” first.')
+        return null
+      }
+      if (!peek.n) {
+        await answer('No new photo yet. Send one, then tap Done.')
+        return null
+      }
+      const got = await takeAdd(kv, chat, ref)
+      if (!got || !got.parts.length) {
+        await answer('Already read')
+        return null
+      }
+      await answer('Reading the photos…')
+      const fileIds = [...got.st.f, ...got.parts.map((p) => p.f)].slice(0, MAX_SET)
+      const caption = [got.st.c, ...got.parts.map((p) => p.c)].map((x) => x.trim()).filter(Boolean).join(' · ').slice(0, 300)
+      await edit(`📸 Reading ${fileIds.length} photos…`)
+      return readMealPhotos({ token: update.__token, chat, fileIds, caption, mirror: c.mirror as unknown as Mirrorish, foodPhoto: c.foodPhoto, kv, counted: Math.min(got.st.f.length, fileIds.length), statusId: cq.message?.message_id, now })
+    }
     // The preview's buttons: only on the open draft.
     const res = await mirror.write((db) => {
       const fb = readFoodBen(db)
@@ -612,6 +745,8 @@ export const FOOD_CALLBACK: CallbackHandler = {
       await clearButtons()
       return null
     }
+    // Saved or cancelled: the photos' file ids are not needed any more.
+    if ((res.kind === 'cancel' || res.kind === 'saved') && c.photoKv) await dropChatPhotos(c.photoKv, chat).catch(() => null)
     if (res.kind === 'cancel') {
       await answer('Cancelled')
       await edit('✗ Cancelled. Nothing saved.')

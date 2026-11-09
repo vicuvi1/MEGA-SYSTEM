@@ -1,6 +1,6 @@
 // POST /api/ai (session required) {prompt} → {text, model}
 //      {op:'status'}                     → {configured}
-//      {op:'foodPhoto', image, note, saved, today, targets} → {ok, result} | {ok:false, error}
+//      {op:'foodPhoto', images (1–6) | image, note, saved, today, targets} → {ok, result} | {ok:false, error}
 //        (food photo logging: provider code in _vision.mjs, 50 photos a day; kind:'scale'
 //        reads a smart-scale screenshot instead, same counter and budget)
 // Google Gemini for the website, with the key kept on the server
@@ -683,7 +683,7 @@ export default async function handler(req, res) {
  * be done, so the page shows the message and the copy-prompt way. The photo is
  * not stored or logged.
  */
-export async function foodPhoto(body, env = process.env, fetchImpl = fetch, now = new Date()) {
+export async function foodPhoto(body, env = process.env, fetchImpl = fetch, now = new Date(), opts = {}) {
   const p = visionProvider(env)
   if (!p) return { ok: false, error: `Photo reading is not set up on the server (${trimmed(env.VISION_PROVIDER).toLowerCase() === 'claude' ? 'ANTHROPIC_API_KEY' : 'GEMINI_API_KEY'} is missing).`, fallback: FALLBACK }
   const req = readPhotoRequest(body)
@@ -693,11 +693,14 @@ export async function foodPhoto(body, env = process.env, fetchImpl = fetch, now 
     const cfg = config(env)
     let n
     try {
-      n = await countPhoto(tursoRun(turso, cfg, fetchImpl), now, trimmed(env.LIFE_TZ))
+      // Each photo counts. `opts.counted` is only set in-process by the Telegram bot: photos of
+      // this meal it already had read once ("Add another photo" reads them all again).
+      const fresh = (req.images?.length ?? 1) - Math.max(0, Math.floor(Number(opts?.counted) || 0))
+      n = await countPhoto(tursoRun(turso, cfg, fetchImpl), now, trimmed(env.LIFE_TZ), Math.max(1, fresh))
     } catch {
       return { ok: false, error: 'Database not reachable: try again in a moment.', fallback: FALLBACK }
     }
-    if (overLimit(n)) return { ok: false, error: "You've read 50 photos today, the daily limit. It starts again tomorrow.", fallback: FALLBACK, limit: 'day' }
+    if (overLimit(n)) return { ok: false, error: (req.images?.length ?? 1) > 1 ? "These photos would go over today's limit of 50 photos. It starts again tomorrow." : "You've read 50 photos today, the daily limit. It starts again tomorrow.", fallback: FALLBACK, limit: 'day' }
   }
   try {
     const out = await readFoodPhoto(p, req, { fetchImpl, record: (u) => recordUsage(u, env, fetchImpl) })

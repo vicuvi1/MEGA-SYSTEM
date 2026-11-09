@@ -11,7 +11,10 @@
 //   Claude's forced tool call). One retry at most, inside the request's 50 s.
 // - scalePrompt: kind 'scale' reads a smart-scale result screenshot (numbers only,
 //   checked again by src/core/scaleRead.ts); it shares the same daily counter.
-// - countPhoto: 50 photos a day (the owner's day, LIFE_TZ), counted in sys_kv (server only: /api/db refuses it).
+// - Several photos of one meal (up to 6: a plate, a packaged snack, a drink) go in ONE
+//   request, numbered "Photo 1…n", so the AI sees the whole meal and lists each food once.
+// - countPhoto: 50 photos a day (the owner's day, LIFE_TZ), counted in sys_kv (server only:
+//   /api/db refuses it). Every photo of a request counts (3 photos = 3 of the 50).
 // The photo is never stored or logged; only the foods the owner saves are kept.
 // The page checks the answer again with src/core/foodVision.ts before showing it.
 
@@ -26,6 +29,10 @@ export const DEFAULT_CLAUDE_VISION = 'claude-haiku-4-5'
 const MIMES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 /** About 1.1 MB of photo; the page sends 100–250 KB. */
 export const MAX_IMAGE_B64 = 1_500_000
+/** At most 6 photos of one meal in one request (a plate, a packaged snack, a drink…). */
+export const MAX_PHOTOS = 6
+/** All the photos of one request together (the page sends 6 × 350 KB at most; Telegram up to 6 × 1 MB photos, in-process). */
+export const MAX_TOTAL_B64 = 8_000_000
 
 const clean = (v) => String(v ?? '').trim()
 
@@ -48,9 +55,8 @@ const num = (v, hi) => {
 }
 const txt = (v, max) => String(v ?? '').replace(/[\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max)
 
-/** The picture in a request, checked: a JPEG/PNG/WebP in base64, not too big. */
-function readImage(body) {
-  const img = body?.image
+/** One picture, checked: a JPEG/PNG/WebP in base64, not too big. */
+function readImage(img) {
   const mime = clean(img?.mime).toLowerCase()
   const data = typeof img?.data === 'string' ? img.data.replace(/^data:[^,]*,/, '') : ''
   if (!MIMES.has(mime)) return { error: 'Send a JPEG, PNG or WebP photo.' }
@@ -58,18 +64,38 @@ function readImage(body) {
   return { image: { mime, data: data.replace(/\s+/g, '') } }
 }
 
+/**
+ * The pictures in a request: `images` (1–6 photos of one meal) or the older
+ * single `image`. Each is checked, and all of them together stay under MAX_TOTAL_B64.
+ */
+function readImages(body) {
+  const list = Array.isArray(body?.images) && body.images.length ? body.images : [body?.image]
+  if (list.length > MAX_PHOTOS) return { error: `Send at most ${MAX_PHOTOS} photos of one meal.` }
+  const images = []
+  for (const raw of list) {
+    const r = readImage(raw)
+    if (r.error) return r
+    images.push(r.image)
+  }
+  if (images.reduce((a, x) => a + x.data.length, 0) > MAX_TOTAL_B64) return { error: 'The photos are too big together. Try fewer photos.' }
+  return { images }
+}
+
 /** The request from the page, checked: the photo, a short note, at most 60 saved foods, today and the goals. */
 export function readPhotoRequest(body) {
-  const img = readImage(body)
+  if (body?.kind === 'scale') {
+    const img = readImage(body?.image)
+    return img.error ? img : { kind: 'scale', image: img.image }
+  }
+  const img = readImages(body)
   if (img.error) return img
-  if (body?.kind === 'scale') return { kind: 'scale', image: img.image }
   const saved = (Array.isArray(body.saved) ? body.saved : [])
     .slice(0, 60)
     .map((s) => ({ id: txt(s?.id, 60), name: txt(s?.name, 60), portion: txt(s?.portion, 40), kcal: num(s?.kcal, 5000), protein: num(s?.protein, 400), carbs: num(s?.carbs, 800), fat: num(s?.fat, 400) }))
     .filter((s) => s.id && s.name)
   const today = { kcal: num(body.today?.kcal, 20000), protein: num(body.today?.protein, 1000), items: (Array.isArray(body.today?.items) ? body.today.items : []).slice(0, 20).map((x) => txt(x, 60)).filter(Boolean) }
   const targets = { kcal: num(body.targets?.kcal, 10000), protein: num(body.targets?.protein, 600) }
-  return { kind: 'food', image: img.image, note: txt(body.note, 300), saved, today, targets }
+  return { kind: 'food', image: img.images[0], images: img.images, note: txt(body.note, 300), saved, today, targets }
 }
 
 /** The instructions and the text that goes with the photo. */
@@ -82,15 +108,27 @@ Rules:
 - Otherwise matchedSavedFoodId is null and you estimate kcal, protein, carbs and fat for the whole amount.
 - confidence: "high" when you are sure what it is and how much, "medium" for a fair guess, "low" when the portion is hard to see.
 - message: one short friendly sentence about the meal (no numbers beyond the totals).
-Answer ONLY with JSON in the given shape.`
+Answer ONLY with JSON in the given shape.${photosRule(req)}`
   const saved = req.saved.length ? req.saved.map((s) => `- id ${s.id}: ${s.name}, portion ${s.portion || '1'}: ${s.kcal} kcal, ${s.protein} g protein${s.carbs ? `, ${s.carbs} g carbs` : ''}${s.fat ? `, ${s.fat} g fat` : ''}`).join('\n') : '(none)'
   const user = `Owner's note: ${req.note || '(none)'}
 SAVED FOODS:
 ${saved}
 Today so far: ${req.today.kcal} kcal, ${req.today.protein} g protein${req.today.items.length ? ` (${req.today.items.join(', ')})` : ''}.
 Goals today: ${req.targets.kcal} kcal, ${req.targets.protein} g protein.
-What is in this photo?`
+${(req.images?.length ?? 1) > 1 ? `What is in these ${req.images.length} photos?` : 'What is in this photo?'}`
   return { system, user }
+}
+
+/** The extra rule when several photos come together (one meal, each food listed once). */
+function photosRule(req) {
+  const n = req.images?.length ?? 1
+  if (n < 2) return ''
+  return `
+
+There are ${n} photos (Photo 1 to Photo ${n}), all of ONE meal. They may show the same food from different angles, or different foods eaten together (a plate, a packaged snack, a drink).
+- List each food ONCE. Never count the same food twice because it is in two photos.
+- photo: the number of the photo where that food is clearest (1 to ${n}).
+- A package label in a photo is the truth for that food's numbers.`
 }
 
 /** A smart-scale result screenshot (Xiaomi Home / Mi Fitness / Zepp Life): the numbers on it, nothing guessed. */
@@ -130,7 +168,9 @@ const ITEM_PROPS = {
   protein: { type: 'number' },
   carbs: { type: 'number' },
   fat: { type: 'number' },
-  confidence: { type: 'string', enum: ['high', 'medium', 'low'] }
+  confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
+  /** Which photo it is in (1…n), when several photos come together. */
+  photo: { type: 'number' }
 }
 const ITEM_REQUIRED = ['name', 'matchedSavedFoodId', 'qty', 'unit', 'grams', 'kcal', 'protein', 'confidence']
 const SHAPE = {
@@ -152,6 +192,8 @@ export const CLAUDE_SCHEMA = { ...SHAPE, properties: { ...SHAPE.properties, item
 export function buildVisionRequest(p, model, req, think = true) {
   const scale = req.kind === 'scale'
   const { system, user } = scale ? scalePrompt() : foodPhotoPrompt(req)
+  // Every photo of the meal in the one request (each with its number when there are several).
+  const pics = !scale && Array.isArray(req.images) && req.images.length ? req.images : [req.image]
   const tool = scale ? { name: 'log_scale', description: 'The numbers on the scale screenshot, for the body log.', input_schema: CLAUDE_SCALE_SCHEMA } : { name: 'log_meal', description: 'The foods in the photo, for the calorie log.', input_schema: CLAUDE_SCHEMA }
   if (p.name === 'claude') {
     return {
@@ -164,7 +206,7 @@ export function buildVisionRequest(p, model, req, think = true) {
         system,
         tools: [tool],
         tool_choice: { type: 'tool', name: tool.name },
-        messages: [{ role: 'user', content: [{ type: 'image', source: { type: 'base64', media_type: req.image.mime, data: req.image.data } }, { type: 'text', text: user }] }]
+        messages: [{ role: 'user', content: [...pics.flatMap((x, i) => [...(pics.length > 1 ? [{ type: 'text', text: `Photo ${i + 1}:` }] : []), { type: 'image', source: { type: 'base64', media_type: x.mime, data: x.data } }]), { type: 'text', text: user }] }]
       }
     }
   }
@@ -173,7 +215,7 @@ export function buildVisionRequest(p, model, req, think = true) {
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': p.key },
     body: {
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ parts: [{ inline_data: { mime_type: req.image.mime, data: req.image.data } }, { text: user }] }],
+      contents: [{ parts: [...pics.flatMap((x, i) => [...(pics.length > 1 ? [{ text: `Photo ${i + 1}:` }] : []), { inline_data: { mime_type: x.mime, data: x.data } }]), { text: user }] }],
       generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: scale ? GEMINI_SCALE_SCHEMA : GEMINI_SCHEMA, ...(think ? { thinkingConfig: { thinkingBudget: 1024 } } : {}) }
     }
   }
@@ -250,20 +292,21 @@ export function photoDay(now = new Date(), tz = '') {
   return now.toISOString().slice(0, 10)
 }
 /**
- * Counts one photo for today and says how many were counted. `run(sql, args)`
- * runs the statements in order and returns the last one's rows. Yesterday's
- * counters are removed in the same go.
+ * Counts `n` photos for today (each photo of a request counts) and says how
+ * many were counted. `run(sql, args)` runs the statements in order and returns
+ * the last one's rows. Yesterday's counters are removed in the same go.
  */
-export async function countPhoto(run, now = new Date(), tz = '') {
+export async function countPhoto(run, now = new Date(), tz = '', n = 1) {
   const day = photoDay(now, tz)
+  const add = Math.max(1, Math.min(MAX_PHOTOS, Math.round(Number(n) || 1)))
   const rows = await run([
     { sql: 'CREATE TABLE IF NOT EXISTS sys_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)', args: [] },
     { sql: "DELETE FROM sys_kv WHERE key LIKE 'vision:%' AND key < ?", args: [`vision:${day}`] },
-    { sql: "INSERT INTO sys_kv (key, value) VALUES (?, '1') ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1 RETURNING value", args: [`vision:${day}`] }
+    { sql: 'INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + CAST(excluded.value AS INTEGER) RETURNING value', args: [`vision:${day}`, String(add)] }
   ])
-  const n = Number(rows?.[0]?.[0])
-  if (!Number.isFinite(n)) throw new Error('Database not reachable')
-  return n
+  const total = Number(rows?.[0]?.[0])
+  if (!Number.isFinite(total)) throw new Error('Database not reachable')
+  return total
 }
 /** Over the daily limit (the photo that makes 51 is refused). */
 export const overLimit = (n, limit = PHOTO_DAILY_LIMIT) => n > limit

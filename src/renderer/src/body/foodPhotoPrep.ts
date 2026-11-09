@@ -83,16 +83,27 @@ export async function prepFoodPhoto(file: Blob): Promise<PreparedPhoto> {
 
 /** The first picture in a paste or a drop, or null. */
 export function imageFrom(list: DataTransferItemList | FileList | null | undefined): File | null {
-  if (!list) return null
+  return imagesFrom(list, 1)[0] ?? null
+}
+
+/** At most this many photos of one meal are read together (the server's MAX_PHOTOS). */
+export const MAX_PHOTOS = 6
+
+/** The pictures in a pick, a paste or a drop (at most `max`; other files are skipped). */
+export function imagesFrom(list: DataTransferItemList | FileList | ArrayLike<File> | null | undefined, max = MAX_PHOTOS): File[] {
+  const out: File[] = []
+  if (!list) return out
   for (const x of Array.from(list as ArrayLike<DataTransferItem | File>)) {
-    const f = x instanceof File ? x : x.kind === 'file' ? x.getAsFile() : null
-    if (f && /^image\//.test(f.type)) return f
+    if (out.length >= max) break
+    const f = x instanceof File ? x : (x as DataTransferItem).kind === 'file' ? (x as DataTransferItem).getAsFile() : null
+    if (f && /^image\//.test(f.type)) out.push(f)
   }
-  return null
+  return out
 }
 
 export interface PhotoAsk {
-  image: { mime: string; data: string }
+  /** 1–6 photos of one meal, read together in one request (each counts toward the 50 a day). */
+  images: { mime: string; data: string }[]
   note: string
   saved: SavedFoodRef[]
   today: { kcal: number; protein: number; items?: string[] }
@@ -100,7 +111,7 @@ export interface PhotoAsk {
 }
 export type PhotoAnswer = { ok: true; result: unknown } | { ok: false; error: string; fallback?: string; limit?: 'day' | 'budget' }
 
-/** Asks the server to read the photo (session required). Never throws: a failure is {ok:false, error}. */
+/** Asks the server to read the meal's photos in one request (session required). Never throws: a failure is {ok:false, error}. */
 export async function askFoodPhoto(ask: PhotoAsk, fetchImpl: typeof fetch = fetch): Promise<PhotoAnswer> {
   return askVision({ op: 'foodPhoto', ...ask }, fetchImpl)
 }
