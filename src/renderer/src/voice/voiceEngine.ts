@@ -9,6 +9,7 @@ import { EAR_PACK, shrinkWasmMemory } from '@core/voiceModels'
 import workletUrl from './voiceMicWorklet.js?url'
 import { getFile } from './voiceStore'
 import { transcribe } from './voiceAi'
+import { isNoiseTranscript } from '@core/voiceNoise'
 import { Speaker } from './voiceSpeak'
 import { askBen } from './voiceAsk'
 import { voicePrefs, type VoicePrefs } from './voicePrefs'
@@ -250,7 +251,7 @@ export class VoiceEngine {
     const w = stripWake(text)
     if (!w.woke || this.flow.phase !== 'idle') return
     this.step({ type: 'wake' })
-    if (w.rest) {
+    if (w.rest && !isNoiseTranscript(w.rest)) {
       this.step({ type: 'speechEnd' })
       void this.handle(w.rest)
     }
@@ -268,7 +269,8 @@ export class VoiceEngine {
     if (gen !== this.gen) return
     // "Hey Ben, …" said in one go: the rest is the command.
     text = stripWake(text).rest.trim()
-    if (!text || /^[\W_]*$/.test(text) || /^\[.*\]$|^\(.*\)$/.test(text)) return this.step({ type: 'nothing' })
+    // Silence or noise often comes back as a stock sign-off ("Thanks for your time. Bye."): nothing was said.
+    if (!text || /^[\W_]*$/.test(text) || /^\[.*\]$|^\(.*\)$/.test(text) || isNoiseTranscript(text)) return this.step({ type: 'nothing' })
     void this.handle(text)
   }
 

@@ -22,10 +22,10 @@ import { BodyProgress } from '../body/progress/BodyProgress'
 import { GrowthTab } from '../body/progress/GrowthTab'
 
 const BODY_TABS = [
-  { id: 'today', label: 'Today', title: 'Your rank, today’s workout, readiness, food, water and the body map' },
-  { id: 'food', label: 'Food', title: 'Food counter: meals, protein and kcal, what to eat next' },
-  { id: 'training', label: 'Training', title: 'Home program, challenges, sets per muscle, strength, workouts' },
-  { id: 'growth', label: 'Growth', title: 'How much you are growing: the long run, your growth level, month by month' },
+  { id: 'today', label: 'Today', title: 'Your plan for today: training, meals and ticks (more under More)' },
+  { id: 'food', label: 'Food', title: 'Log food: a photo, your meals or a few words' },
+  { id: 'training', label: 'Training', title: 'Strength, home program, challenges, sets per muscle, workouts' },
+  { id: 'growth', label: 'Growth', title: 'How much you are growing: the long run, your level, month by month' },
   { id: 'progress', label: 'Progress', title: 'Weight trend, measurements, photos, your week' }
 ]
 

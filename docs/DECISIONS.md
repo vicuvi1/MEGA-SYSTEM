@@ -376,3 +376,16 @@ entry that says why.
   truth for every device and keeps the level honest like the points.
 - **Rules out:** an XP counter in a setting or table, points for levels or milestones, imports or
   back-dated logs earning levels.
+
+### One level in the UI, and one primary action per Body screen (2026-11-09)
+- **Decision:** the app shows ONE level: the Growth level, labelled "Level" (header chip, Growth tab).
+  The Sport Track strength rank is shown only as "Strength 0–100" (Body → Training), never with rank
+  names next to the level. Body → Today is one coach card (training from the split, readiness as one
+  line, meals with Log, ticks, tip) with everything else under a closed "More"; Body → Food has one
+  primary button, "Log food", which opens Photo / My meals / Type it. The evening check-in shows only
+  from 20:30 (or when asked for) and folds away once saved.
+- **Why:** the owner could not read the screens: two "levels", a coach card saying "Rest day" next to a
+  workout list, and a wall of food controls with the photo button halfway down.
+- **Rules out:** a second level system or rank names in the header or cards; a separate workout card or
+  readiness card above the fold on Body → Today; more than one accent primary button on the Food main
+  view; new food controls on the main view instead of in the Log food sheet or More.

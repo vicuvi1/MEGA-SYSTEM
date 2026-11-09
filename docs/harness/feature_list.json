@@ -945,6 +945,23 @@
    ],
    "evidence": "2026-11-09: coachTalk.test.ts (16) and coachTalk.server.test.ts (8) pass with full vitest; smoke steps Coach today (nudge switches), Coach check-in, Coach chat proposal pass; screenshots coach-checkin-phone.png and coach-chat-proposal.png kept outside the repo",
    "notes": "core/coachTalk.ts (pure), coach/coachTalkStore.ts (database), coach/CoachCheckin.tsx, web/bots/coachBot.ts (ck| and cp| buttons), benPushTick.ts + foodBot.ts foodPushNow (the cap), webBots.ts think() (red flag, missed session, coach note, guard, proposal), BenThread.tsx (Apply / Not now / Undo). Settings: coach_props (new), life_fit.pushes.coachMorning/coachProtein/coachCheckin. The check-in's AI phrasing uses the 'nudge' kind (fixed text when the budget is used up). Real model replies not tried yet (fakes only)."
+  },
+  {
+   "id": "F-BODY-SIMPLE",
+   "priority": 1,
+   "area": "sport",
+   "title": "Simple Body → Today and Body → Food: one card, one Log food button",
+   "user_visible_behavior": "Body → Today is one coach card: today's training from the split (Rest day with mobility and Train anyway, or the session with Start, never both), a one-line readiness with Adjust, meals with a Log tap each, weigh-in and bed ticks, the tip; readiness card, food rings, water, weight, body map and by-hand buttons are under More. The evening check-in shows only from 20:30 (or from the card's footer) and is gone once saved. One level: the header says 'Level Seedling'; strength is 'Strength 0-100' with the streak on Training. Body → Food: today's kcal big and protein second with one line, ONE 'Log food' button that opens a sheet with Photo (opens the photo picker at once, up to 6), My meals (standard day, saved meals, chips, yesterday, starred) and Type it, plus water and supplement chips; Today's meals one row each; everything else under More. Stray voice transcripts like 'Thanks for your time today. Nice meeting you. Bye.' (speech-to-text noise) are dropped. No logic or points change.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/voiceNoise.test.ts",
+    "SMOKE_ONLY=\"Body Today\" npm run smoke",
+    "SMOKE_ONLY=\"Food counter\" npm run smoke",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-09: smoke steps Body Today (one card, no rest/workout clash, readiness line, no check-in at 08:30, Level chip), Food counter (exactly one primary button, sheet with Photo / My meals / Type it, all old checks through the sheet), Food photo, Coach check-in; phone and desktop screenshots at 2x kept outside the repo.",
+   "notes": "body/FoodCounter.tsx (+food-simple.css, sheet via createPortal), FoodFast.tsx (FoodBars hero), FoodPhotoReview.tsx (bare + pickRef), body/today/TodayTab.tsx, training/StrengthCard.tsx, coach/CoachToday.tsx (+coach-full.css, readiness/rest props), coach/CoachCheckin.tsx (open prop, folds when done), progress/GrowthLevel.tsx (chip 'Level'), core/voiceNoise.ts + voice/voiceEngine.ts."
   }
  ]
 }

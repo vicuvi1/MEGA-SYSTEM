@@ -10,8 +10,10 @@
 // - Save goes through the food counter's own add (addFoodMeal), so the meal is
 //   in the same food log and body_log totals as every other meal. No points.
 // - "No AI? Copy the prompt instead" keeps the old copy-prompt way one tap away.
-// Mount: <FoodPhotoLog view={v} /> inside the food counter.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+// Mount: <FoodPhotoLog view={v} /> inside the food counter. With `bare`, the start
+// buttons are hidden (the counter's "Log food" sheet opens the picker through
+// `pickRef`) and only the reading, review, saved and failed states show.
+import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { FOOD_PROMPT } from '@core/foodPrompt'
 import { MEAL_TYPES, type MealType } from '@core/food'
 import { fromSaved, photoReplyLine, savedRefs, scaleVisionItem, slotNow, stepQty, toFoodItems, validateVision, visionTotals, type SavedFoodRef, type VisionItem } from '@core/foodVision'
@@ -44,7 +46,12 @@ const mealId = () => `fd-${Date.now().toString(36)}${Math.random().toString(36).
 
 type Stage = { s: 'idle' } | { s: 'reading' } | { s: 'review' } | { s: 'failed'; error: string; limit?: string } | { s: 'saved'; line: string }
 
-export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodView; saved?: SavedFoodRef[]; onSaved?: (v: FoodView) => void }) {
+/** Opens the photo picker from outside (it must run inside the tap, so phones allow it). */
+export interface PhotoPicker {
+  pick: () => void
+}
+
+export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pickRef }: { view: FoodView; saved?: SavedFoodRef[]; onSaved?: (v: FoodView) => void; bare?: boolean; pickRef?: MutableRefObject<PhotoPicker | null> }) {
   const api = life.coach?.food
   const toast = useToast()
   const [stage, setStage] = useState<Stage>({ s: 'idle' })
@@ -58,6 +65,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
   const idRef = useRef(mealId())
   const camRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  if (pickRef) pickRef.current = { pick: () => fileRef.current?.click() }
 
   // Your real saved foods and saved meals (food_saved), then starred meals: the AI gets them and the swap list shows them.
   const saved = useMemo(() => savedProp ?? savedRefs(view.saved, view.favs), [savedProp, view.saved, view.favs])
@@ -285,9 +293,12 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
     )
   }
 
+  // Bare: nothing to show until a photo is picked (the inputs stay, so the sheet can open them).
+  if (bare && stage.s === 'idle') return pickers
+
   return (
     <section
-      className={`fph fph-start${drag ? ' drag' : ''}`}
+      className={`fph fph-start${bare ? ' bare' : ''}${drag ? ' drag' : ''}`}
       aria-label="Log a meal from a photo"
       onDragOver={(e) => {
         e.preventDefault()
@@ -314,7 +325,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
           <span className="fph-spin" aria-hidden="true" />
           <span>{photos.length > 1 ? `Reading your ${photos.length} photos…` : 'Reading your photo…'}</span>
         </div>
-      ) : (
+      ) : bare ? null : (
         <>
           <div className="fph-start-row">
             <button type="button" className="bdy-btn primary big fph-snap" onClick={() => camRef.current?.click()}>
@@ -343,7 +354,12 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
           </div>
         </div>
       )}
-      {stage.s !== 'failed' && (
+      {stage.s === 'saved' && bare && (
+        <button type="button" className="bdy-btn quiet fph-dismiss" onClick={reset}>
+          OK
+        </button>
+      )}
+      {stage.s !== 'failed' && !bare && (
         <button type="button" className="fph-noai" onClick={copyPrompt}>
           No AI? Copy the prompt instead
         </button>

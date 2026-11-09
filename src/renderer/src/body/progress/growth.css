@@ -104,6 +104,7 @@
 .gr-chip { display: inline-flex; align-items: center; gap: 6px; flex: none; border: 1px solid var(--border); background: transparent; color: var(--text); border-radius: 999px; padding: 3px 10px 3px 4px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; min-height: 28px; }
 .gr-chip:hover { background: rgb(var(--ink) / 0.05); }
 .gr-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.gr-chip-k { font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
 .gr-chip-ring { width: 18px; height: 18px; border-radius: 50%; background: conic-gradient(var(--accent) var(--p, 0%), rgb(var(--ink) / 0.12) 0); -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px); mask: radial-gradient(circle, transparent 5px, #000 5.5px); }
 
 @media (max-width: 520px) {

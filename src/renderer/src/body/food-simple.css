@@ -1,0 +1,206 @@
+/* Body → Food, the simple screen: today's numbers, ONE "Log food" button, today's
+   meals, and everything else folded under "More". The Log food sheet has three
+   big choices (Photo, My meals, Type it) and quick water/supplement chips.
+   Built on body-theme.css tokens (--bdy-*): one accent, light and dark.
+   Type: body 15px+, headings 20px+. Motion: transform and opacity only. */
+
+.fd-card { gap: 22px; padding: 24px; }
+.fd-head { align-items: center; }
+.fd-head h2 { margin: 0; font-size: 26px; font-weight: 750; letter-spacing: -0.02em; }
+.fd-head .fd-day { min-width: 128px; }
+
+/* ---------- layout: one column on a phone; on a wide card the numbers, Log food
+   and More on the left, today's meals on the right ---------- */
+.fd-cols { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+.fd-left { display: contents; }
+.fd-cols > .fd-meals { order: 1; }
+.fd-left > .fd-more { order: 2; }
+@media (min-width: 1200px) {
+  .fd-cols { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 28px; align-items: start; }
+  .fd-left { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .fd-cols > .fd-meals { order: 0; }
+  .fd-left > .fd-more { order: 0; }
+}
+
+/* ---------- today's numbers ---------- */
+.fd-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 22px 20px;
+  border-radius: var(--bdy-radius);
+  background: var(--bdy-surface-2);
+}
+.fdf-bars.hero { gap: 18px; }
+.fdf-bars.hero .fdf-bar-row { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.fdf-bars.hero .fdf-bar-label { gap: 8px; font-size: 16px; font-weight: 600; white-space: normal; }
+.fdf-bars.hero .fdf-bar-label b { font-size: inherit; }
+.fdf-bars.hero .fdf-eaten { font-size: 52px; font-weight: 800; letter-spacing: -0.04em; line-height: 1; color: var(--bdy-text); }
+.fdf-bars.hero .fdf-goal { font-size: 22px; font-weight: 650; color: var(--bdy-muted); letter-spacing: -0.01em; }
+.fdf-bars.hero .fdf-protein .fdf-eaten { font-size: 30px; letter-spacing: -0.03em; }
+.fdf-bars.hero .fdf-protein .fdf-goal { font-size: 18px; }
+.fdf-bars.hero .bdy-bar { height: 12px; }
+.fdf-bars.hero .fdf-protein .bdy-bar { height: 8px; }
+.fdf-bars.hero .fdf-kcal .bdy-bar > i,
+.fdf-bars.hero .fdf-protein .bdy-bar > i { background: var(--bdy-accent); }
+.fdf-bars.hero .fdf-protein.behind .bdy-bar > i { background: var(--bdy-low); }
+.fdf-bars.hero .fdf-left { font-size: 16px; font-weight: 600; color: var(--bdy-muted); }
+.fdf-bars.hero .fdf-behind { padding: 0; border: 0; background: none; font-size: 16px; color: var(--bdy-low); }
+.fd-preview { font-size: 15px; }
+.fd-past { font-size: 15px; }
+
+/* ---------- the one button ---------- */
+.fd-log-btn { width: 100%; min-height: 64px; justify-content: center; gap: 10px; font-size: 19px; font-weight: 750; border-radius: 18px; }
+.fd-log-btn .fdl-svg { flex: none; }
+
+/* ---------- today's meals ---------- */
+.fd-meals { display: flex; flex-direction: column; gap: 14px; }
+.fd-meals-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.fd-meals-head h3 { margin: 0; font-size: 22px; font-weight: 750; letter-spacing: -0.015em; }
+.fd-meals-head small { font-size: 15px; color: var(--bdy-muted); }
+.fd-mcard { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fd-mcard > header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 0 4px; }
+.fd-mcard > header b { font-size: 13px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: var(--bdy-muted); }
+.fd-mcard > header small { font-size: 14px; color: var(--bdy-muted); font-weight: 600; }
+.fd-mlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-radius: 16px; background: var(--bdy-surface-2); overflow: hidden; }
+.fd-mlist li { display: block; padding: 0; border: 0; }
+.fd-mlist li + li { border-top: 1px solid var(--bdy-border); }
+.fd-mrow { display: flex; align-items: center; gap: 6px; min-height: 64px; padding: 10px 8px 10px 16px; }
+.fd-meal-name { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fd-meal-name b { font-size: 16px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-meal-sub { font-size: 14px; color: var(--bdy-muted); font-weight: 500; }
+.fd-meal-actions { flex: none; display: flex; align-items: center; gap: 2px; }
+.fd-meal-actions .fdf-x { width: 40px; height: 40px; display: inline-grid; place-items: center; font-size: 20px; }
+.fd-mlist li.removed .fd-meal-name { opacity: 0.5; }
+.fd-mlist li.removed .fd-meal-name b { text-decoration: line-through; }
+.fd-mextra { display: flex; flex-direction: column; gap: 8px; padding: 0 16px 14px; font-size: 14px; color: var(--bdy-muted); animation: fdf-in 0.18s ease both; }
+.fd-mextra .fd-meal-items { overflow-wrap: anywhere; }
+.fd-star.on { color: var(--bdy-accent-text); }
+.fd-empty { display: grid; justify-items: center; gap: 6px; padding: 30px 16px; text-align: center; border-radius: 18px; border: 1.5px dashed var(--bdy-border); color: var(--bdy-muted); }
+.fd-empty-icon { width: 52px; height: 52px; margin-bottom: 4px; display: grid; place-items: center; border-radius: 50%; background: var(--bdy-accent-soft); color: var(--bdy-accent-text); }
+.fd-empty b { font-size: 18px; color: var(--bdy-text); }
+.fd-empty small { font-size: 15px; line-height: 1.4; max-width: 30ch; }
+
+/* ---------- More ---------- */
+.fd-more { border: 1px solid var(--bdy-border); border-radius: 18px; padding: 0 18px; }
+.fd-more > summary { list-style: none; cursor: pointer; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 12px; min-height: 64px; padding: 10px 0; }
+.fd-more > summary::-webkit-details-marker { display: none; }
+.fd-more > summary > span { font-size: 17px; font-weight: 700; color: var(--bdy-text); }
+.fd-more > summary > small { grid-column: 1; font-size: 14px; color: var(--bdy-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-more > summary::after { content: '›'; grid-column: 2; grid-row: 1 / span 2; font-size: 24px; color: var(--bdy-muted); transition: transform 0.15s ease; }
+.fd-more[open] > summary::after { transform: rotate(90deg); }
+.fd-more > summary:focus-visible { outline: 2px solid var(--bdy-accent); outline-offset: 2px; border-radius: 12px; }
+.fd-more-body { display: flex; flex-direction: column; gap: 18px; padding: 4px 0 20px; font-size: 15px; }
+.fd-more-sec { display: flex; flex-direction: column; gap: 10px; }
+.fd-more-links { display: flex; flex-wrap: wrap; gap: 8px; }
+.fd-other { padding-top: 16px; border-top: 1px solid var(--bdy-border); }
+.fd-other small { font-size: 14px; line-height: 1.45; }
+.fd-macros-line { margin: 0; font-size: 15px; }
+.fd-next { font-size: 15px; }
+.fd-back { align-self: flex-start; }
+.fd-sub-title { margin: 0; font-size: 22px; font-weight: 750; }
+
+/* ---------- the Log food sheet ---------- */
+.sheet.fdl-sheet { z-index: 60; }
+.sheet-card.fdl-card {
+  width: min(560px, calc(100vw - 24px));
+  max-height: min(90vh, 880px);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border-radius: 26px;
+  border: 1px solid var(--bdy-border);
+  background: var(--bdy-surface);
+  color: var(--bdy-text);
+  animation: fdl-up 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+.fdl-head { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; align-items: center; gap: 8px; padding: 16px 16px 8px; }
+.fdl-title { text-align: center; font-size: 20px; font-weight: 750; letter-spacing: -0.01em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fdl-icon { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--bdy-surface-2); color: var(--bdy-text); font: inherit; font-size: 26px; line-height: 1; cursor: pointer; }
+.fdl-icon:hover { background: var(--bdy-surface-3); }
+.fdl-icon:focus-visible { outline: 2px solid var(--bdy-accent); outline-offset: 2px; }
+.fdl-body { min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 20px; padding: 10px 20px 24px; font-size: 15px; }
+.fdl-foot { padding: 12px 20px 20px; border-top: 1px solid var(--bdy-border); }
+.fdl-done { width: 100%; justify-content: center; }
+
+.fdl-choices { display: flex; flex-direction: column; gap: 12px; }
+.fdl-choice {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 88px;
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1px solid var(--bdy-border);
+  background: var(--bdy-surface-2);
+  color: var(--bdy-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.15s ease;
+}
+.fdl-choice:hover { border-color: color-mix(in srgb, var(--bdy-accent) 50%, var(--bdy-border)); }
+.fdl-choice:active { transform: scale(0.985); }
+.fdl-choice:focus-visible { outline: 2px solid var(--bdy-accent); outline-offset: 2px; }
+.fdl-choice-icon { flex: none; width: 54px; height: 54px; display: grid; place-items: center; border-radius: 16px; background: var(--bdy-accent-soft); color: var(--bdy-accent-text); }
+.fdl-photo .fdl-choice-icon { background: var(--bdy-accent); color: var(--bdy-accent-ink); }
+.fdl-choice-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.fdl-choice-text b { font-size: 19px; font-weight: 750; letter-spacing: -0.01em; }
+.fdl-choice-text small { font-size: 15px; line-height: 1.35; color: var(--bdy-muted); }
+
+.fd-quick-add { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--bdy-border); }
+.fd-quick-add .fd-row { gap: 8px; }
+.fd-qa-label { flex: 1 0 100%; font-size: 15px; font-weight: 600; color: var(--bdy-text); }
+.fd-quick-add .bdy-chip { min-height: 44px; font-size: 15px; padding: 0 16px; }
+
+/* Type it: the words box, then the meal to check. */
+.fd-words-step { display: flex; flex-direction: column; gap: 8px; }
+.fd-words-row { display: flex; gap: 8px; }
+.fd-words { flex: 1; min-width: 0; min-height: 54px; padding: 0 16px; border-radius: 16px; font: inherit; font-size: 16px; }
+.fd-words-go { min-height: 54px; padding: 0 20px; border-radius: 16px; }
+.fd-words-say { font-size: 15px; padding: 10px 12px; border-radius: 12px; }
+.fd-draft { display: flex; flex-direction: column; gap: 12px; }
+.fd-items { gap: 10px; }
+.fd-item { padding: 12px; border-radius: 16px; background: var(--bdy-surface-2); gap: 6px 8px; }
+.fd-item .fd-name { min-height: 44px; padding: 0 12px; border-radius: 12px; font: inherit; font-size: 16px; font-weight: 600; }
+.fd-grams b { font-size: 16px; }
+.fd-macros { font-size: 14px; }
+.fd-draft-total { margin: 0; font-size: 15px; color: var(--bdy-muted); }
+.fd-draft-total b { color: var(--bdy-text); }
+.fd-save-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+.fd-save { flex: 1 1 180px; justify-content: center; }
+.fd-q { font-size: 15px; }
+
+/* The picker sheet's own review card (from a photo) in the page. */
+.fph.fph-start.bare { padding: 16px; border-radius: 18px; background: var(--bdy-surface-2); }
+.fph-dismiss { align-self: flex-end; }
+
+/* My meals inside the sheet: tiles a little bigger. */
+.fdl-card .fdf-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.fdl-card .fdf-tile-name { font-size: 15.5px; }
+.fdl-card .fdf-tile-num { font-size: 14px; }
+.fdl-card .fdf-day-go { min-height: 68px; text-align: left; }
+.fdf-day-name { display: flex; flex-direction: column; gap: 2px; }
+.fdf-day-name b { font-size: 17px; }
+.fdf-day-name small { font-size: 14px; font-weight: 600; opacity: 0.75; }
+.fd-again { gap: 8px; }
+
+@keyframes fdl-up { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 560px) {
+  .fd-card { padding: 18px 16px; gap: 18px; }
+  .fd-hero { padding: 18px; }
+  .fdf-bars.hero .fdf-eaten { font-size: 46px; }
+  /* Sits above the app's bottom bar (about 72px), like the mobile More menu. */
+  .sheet.fdl-sheet { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); }
+  .sheet-card.fdl-card { width: calc(100% - 16px); max-height: calc(100vh - 96px); border-radius: 26px; }
+  .fdl-body { padding: 8px 16px 20px; }
+  .fd-more { padding: 0 16px; }
+  .fdl-card .fdf-tile { min-height: 104px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sheet-card.fdl-card, .fd-mextra { animation: none; }
+  .fdl-choice, .fd-more > summary::after { transition: none; }
+}

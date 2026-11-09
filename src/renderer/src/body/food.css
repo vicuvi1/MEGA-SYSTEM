@@ -15,7 +15,6 @@
 .fd-prompt pre { white-space: pre-wrap; word-break: break-word; font-size: 12px; max-height: 220px; overflow: auto; padding: 8px 10px; border-radius: 10px; background: rgb(var(--ink) / 0.05); margin: 6px 0 0; }
 .fd-paste { width: 100%; box-sizing: border-box; resize: vertical; min-height: 64px; font: inherit; font-size: 13px; }
 .fd-err { margin: 0; color: var(--red, #e5484d); font-weight: 600; }
-.fd-draft { border: 1px dashed var(--border); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
 .fd-q { margin: 0; }
 .fd-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .fd-item { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: 'name grams del' 'macros macros macros'; gap: 2px 8px; align-items: center; }
@@ -46,10 +45,6 @@
   .fd-line { font-size: 15px; }
 }
 
-/* Sub-tabs: Today · Week · Plan */
-.fd-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: rgb(var(--ink) / 0.06); align-self: flex-start; }
-.fd-tab { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; padding: 6px 16px; border-radius: 9px; cursor: pointer; }
-.fd-tab.on { background: var(--surface); color: var(--text, inherit); box-shadow: 0 1px 3px rgb(0 0 0 / 0.18); }
 .fd-macros-line { margin: -4px 0 0; font-variant-numeric: tabular-nums; color: var(--muted); }
 .fd-preview { margin: 0; padding: 4px 10px; border-radius: 10px; border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent); font-size: 13px; }
 /* Rings */
@@ -67,23 +62,13 @@
 .fd-ring-num small { font-size: 10px; color: var(--muted); }
 .fd-ring-label { font-size: 12px; color: var(--muted); font-weight: 600; }
 /* Water, supplements, words */
-.fd-quick-add { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 12px; }
 .fd-words { flex: 1 1 240px; min-width: 0; }
 .fd-words-say { margin: 0; padding: 6px 10px; border-radius: 10px; background: color-mix(in srgb, var(--orange) 14%, transparent); font-size: 13px; }
 .fd-adjust { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--purple) 12%, transparent); border: 1px solid color-mix(in srgb, var(--purple) 40%, transparent); }
-/* Meal cards */
-.fd-meals { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 8px; }
-.fd-mcard { border: 1px solid var(--border); border-radius: 12px; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.fd-mcard header { display: flex; flex-direction: column; gap: 1px; }
-.fd-mlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.fd-mlist li { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 2px 8px; padding: 6px 0; border-top: 1px solid var(--border); }
-.fd-mlist li.removed { opacity: 0.5; }
-.fd-mlist li.removed .fd-meal-name b { text-decoration: line-through; }
 .fd-time { color: var(--muted); font-variant-numeric: tabular-nums; }
 .fd-meal-name { display: flex; flex-direction: column; min-width: 0; }
 .fd-meal-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .fd-meal-items { overflow-wrap: anywhere; }
-.fd-meal-actions { grid-column: 2; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .fd-star { color: var(--muted); }
 .fd-star.on { color: var(--orange); }
 /* Week chart */
@@ -117,7 +102,6 @@
 .fd-unpriced { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
 @media (max-width: 520px) {
   .fd-line { font-size: 15px; }
-  .fd-meals { grid-template-columns: minmax(0, 1fr); }
   .fd-cheap-list li { grid-template-columns: 20px minmax(0, 1fr) auto; }
   .fd-cheap-list li .fd-cheap-price { grid-column: 2 / -1; }
   .fd-ring-num b { font-size: 13px; }
