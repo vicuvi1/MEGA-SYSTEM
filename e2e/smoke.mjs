@@ -1987,7 +1987,8 @@ try {
     await pg.waitForFunction(() => document.querySelectorAll('.ql-review .ql-chips button.on').length === 3, null, { timeout: 8000 })
     const picks = await pg.locator('.ql-review .ql-chips button.on').allInnerTexts()
     if (!picks.some((t) => /workout|weigh-in|protein/i.test(t))) throw new Error(`the top 3 is not pre-filled from the ladder: ${picks.join(' | ')}`)
-    await pg.locator('.ql-review .btn.primary').click()
+    // (Saving makes them this week's big 3, which later Today steps would see: the save is in web/ladder.test.ts.)
+    await pg.keyboard.press('Escape')
     await pg.waitForSelector('.ql-review', { state: 'detached', timeout: 8000 })
     if (shots) {
       await pg.evaluate(() => document.querySelector('.ql-cards')?.scrollIntoView())
@@ -1997,6 +1998,10 @@ try {
     await open('today')
     await pg.waitForSelector('.td2 .ptabs [data-tab="now"]', { timeout: 10000 })
     await pg.click('.td2 .ptabs [data-tab="now"]')
+    // Sunday/Monday: while "Pick your top 3" shows, the quarter line waits; "Not now" lets it show.
+    await pg.waitForTimeout(800)
+    const pick = pg.locator('[data-tabpanel="now"] .wk3 button', { hasText: 'Not now' })
+    if (await pick.count()) await pick.first().click()
     await pg.waitForSelector('.ql-today', { timeout: 10000 })
     if (!/^Quarter goal: .+ · this week \d/.test(await pg.locator('.ql-today').innerText())) throw new Error('the Today line is missing its numbers')
   })

@@ -116,3 +116,6 @@
 .ql-today i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ql-c); }
 .ql-today:hover span,
 .ql-today:focus-visible span { color: var(--text); }
+/* On Today → Now: while "Pick your top 3" shows (Sunday, Monday), that pick is the ladder's
+   step (pre-filled from it), so the quarter line waits; Now stays one laptop screen. */
+.now-top:has(> .wk3) > .ql-today { display: none; }
