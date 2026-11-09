@@ -802,7 +802,7 @@ try {
     await pg.waitForSelector(`${prog} .bpg-hero .bpg-pill.on`, { timeout: 5000 })
     // Weight and waist: a verdict written from the numbers (or the empty prompt).
     await pg.waitForSelector(`${prog} .bpg-verdict, ${prog} .bpg-empty`, { timeout: 10000 })
-    if (process.env.E2E_BODY_DEMO && !/kg in \d+ weeks?|Log weight and waist weekly/.test(await pg.locator(`${prog} .bpg-verdict`).innerText())) throw new Error('the verdict has no numbers')
+    if (process.env.E2E_BODY_DEMO && !/kg in \d+ weeks?|Log weight and waist weekly|Not enough data|vs the week before|One more full week/.test(await pg.locator(`${prog} .bpg-verdict`).innerText())) throw new Error('the verdict has no numbers')
     // Records and the monthly report.
     await pg.waitForSelector(process.env.E2E_BODY_DEMO ? `${prog} .bpg-trophy` : `${prog} .bpg-trophy, ${prog} section[aria-label="Personal records"] .bpg-empty`, { timeout: 10000 })
     await pg.waitForSelector(`${prog} .bpg-tiles`, { timeout: 10000 })
@@ -5136,6 +5136,139 @@ try {
     await box.press('Escape')
     await box.waitFor({ state: 'detached', timeout: 3000 })
     console.log(`  quick add: toast shown ${shownMs} ms after Enter (with Playwright overhead)`)
+  })
+
+  // Last of the data steps on purpose: it logs a weight (72.4 kg today), which earlier steps never expect.
+  await step('Body log: the Log body sheet saves weight, fat and waist with Undo; Progress shows the weekly average, the band, estimate labels and the monthly summary', async () => {
+    const shots = process.env.BODYSCALE_SHOTS
+    // The screenshot run (E2E_BODY_DEMO) has six weeks of made-up weigh-ins near 70 kg: log a weight that fits them.
+    const kg0 = process.env.E2E_BODY_DEMO ? 70.6 : 72.4
+    const sql = async (stmt) => (await (await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: stmt, args: [] } }] }) })).json()).results[0].response?.result
+    const until = async (fn, what, ms = 10000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 200))
+      }
+    }
+    const crisp = async (width, height, mobile) => {
+      const cdp = await pg.context().newCDPSession(pg)
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile })
+      return async () => (await cdp.send('Emulation.clearDeviceMetricsOverride'), await cdp.detach())
+    }
+    const fillSheet = async (kg, more = {}, when = null) => {
+      await pg.waitForSelector('.blog-sheet .blog-weight input', { timeout: 10000 })
+      await pg.fill('.blog-sheet .blog-weight input', String(kg))
+      if (Object.keys(more).length) {
+        await pg.click('.blog-sheet .blog-more summary')
+        for (const [k, v] of Object.entries(more)) await pg.fill(`.blog-sheet [data-field="${k}"]`, String(v))
+      }
+      if (when) await pg.fill('.blog-sheet .blog-when input', when)
+    }
+    const save = async (kg) => {
+      await pg.click('.blog-sheet .blog-save')
+      // Back-to-back saves share one Undo toast ("2 changes"), so the toast's words are checked only for the first.
+      await until(async () => (await pg.locator('.blog-error').count()) > 0 || (await pg.locator('.blog-sheet').count()) === 0, `saving ${kg} kg did not finish`)
+      if (await pg.locator('.blog-error').count()) throw new Error(`the sheet says: ${await pg.locator('.blog-error').innerText()}`)
+      await pg.locator('.toast.has-action').last().waitFor({ state: 'attached', timeout: 10000 })
+    }
+    // 1. Body Today (on a phone): the weight card opens the sheet; the hint says when to weigh.
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="today"]')
+    const t = '#ptp-body-today'
+    await pg.locator(`${t} .wt-log`).first().click()
+    await pg.waitForSelector('.blog-sheet', { timeout: 10000 })
+    if (!/morning, after the toilet, before eating or drinking/.test(await pg.locator('.blog-hint').innerText())) throw new Error('the sheet has no weigh-in hint')
+    if (await pg.locator('.blog-sheet .blog-save').isEnabled()) throw new Error('Save works without a weight')
+    await fillSheet(kg0, { body_fat_pct: 15.2, waist_cm: 80.5 })
+    if (shots) {
+      const back = await crisp(390, 844, true)
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(300)
+      await pg.screenshot({ path: `${shots}/body-log-sheet-phone.png` })
+      await back()
+    }
+    // 2. Save, Undo (the row and the day's weight go), then log it again. On a laptop: on a phone the
+    // toast sits under the bottom bar (an app-wide toast issue, not this sheet's).
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    // Another Undo toast (the planner's morning re-plan) would merge with ours into "2 changes": let it go first.
+    await until(async () => (await pg.locator('.toast.has-action').count()) === 0, 'an older Undo toast stays up', 15000)
+    await save(kg0)
+    const undo = pg.locator('.toast', { hasText: `Saved ${kg0} kg` }).last().locator('.toast-act')
+    await undo.waitFor({ state: 'attached', timeout: 10000 })
+    await undo.dispatchEvent('click')
+    await pg.locator('.toast', { hasText: 'Weigh-in taken back' }).last().waitFor({ state: 'attached', timeout: 10000 })
+    await until(async () => Number((await sql(`SELECT COUNT(*) FROM body_comp WHERE weight_kg = ${kg0}`)).rows[0][0].value) === 0, 'Undo did not remove the weigh-in')
+    await pg.locator(`${t} .wt-log`).first().click()
+    await fillSheet(kg0, { body_fat_pct: 15.2, waist_cm: 80.5 })
+    await save(kg0)
+    // (The demo data already has a weight today from elsewhere, which is kept.)
+    if (!process.env.E2E_BODY_DEMO) await until(async () => /72\.4/.test(await pg.locator(`${t} .wt-values`).innerText()), 'Body Today does not show the new weight')
+    await until(async () => {
+      const r = (await sql(`SELECT weight_kg, body_fat_pct, waist_cm, source FROM body_comp WHERE weight_kg = ${kg0}`)).rows
+      return r.length === 1 && Number(r[0][1].value) === 15.2 && Number(r[0][2].value) === 80.5 && r[0][3].value === 'manual'
+    }, 'the weigh-in is not saved once with its fat and waist')
+    if (!process.env.E2E_BODY_DEMO) await until(async () => Number((await sql('SELECT weight FROM body_metrics WHERE weight = 72.4')).rows.length) === 1, "body_metrics did not get the day's weight")
+    const ledgerBefore = Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value)
+    // 3. Progress: the body composition section.
+    await pg.click('.body-page .ptabs [data-tab="progress"]')
+    const prog = '#ptp-body-progress'
+    await pg.waitForSelector(`${prog} .bcp`, { timeout: 15000 })
+    if (shots) {
+      const back = await crisp(1440, 900, false)
+      await pg.waitForTimeout(400)
+      await pg.addStyleTag({ content: '.ptabs-wrap { position: static !important; } .toasts { display: none !important; }' })
+      await pg.locator(`${prog} .bcp`).scrollIntoViewIfNeeded()
+      await pg.locator(`${prog} .bcp`).screenshot({ path: `${shots}/body-comp-dashboard-desktop.png` })
+      await back()
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    if (!process.env.E2E_BODY_DEMO) {
+      // One weigh-in this week: not enough data for this week's average yet.
+      if (!/Not enough data/.test(await pg.locator(`${prog} .bcp`).innerText())) throw new Error('one weigh-in shows a weekly average')
+      // Three weigh-ins in each of the two weeks before (typed with a past time) give last week's average and the band.
+      const d = new Date(fakeNow())
+      const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - ((d.getDay() + 6) % 7))
+      const at = (back, add) => {
+        const x = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() - back + add, 7, 10)
+        return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}T07:10`
+      }
+      for (const [back, add, kg] of [[14, 0, 71], [14, 1, 71.2], [14, 2, 71.1], [7, 0, 71.4], [7, 1, 71.5], [7, 2, 71.6]]) {
+        await pg.click(`${prog} .bcp-log`)
+        await fillSheet(kg, {}, at(back, add))
+        await save(kg)
+      }
+      await until(async () => /71\.5/.test(await pg.locator(`${prog} .bcp-big`).innerText()), 'Progress does not show last week\'s average 71.5 kg')
+      const head = await pg.locator(`${prog} .bcp-hero`).innerText()
+      if (!/Weekly average, last week/.test(head)) throw new Error('the headline does not say whose average it is')
+      if (!/\+0\.4 kg vs last week/.test(head)) throw new Error(`no week-over-week change: ${head}`)
+      if (!/In the target band/.test(head)) throw new Error('no target band label')
+      if (!(await pg.locator(`${prog} .bcp-chart .bcp-target`).count())) throw new Error('the chart has no target band')
+      if ((await pg.locator(`${prog} .bcp-chart .bcp-day`).count()) < 7) throw new Error('the chart has no daily points')
+      if (!(await pg.locator(`${prog} .bcp-chart .bpg-line`).count())) throw new Error('the chart has no 7-day average line')
+    }
+    const minis = await pg.locator(`${prog} .bcp-minis`).innerText()
+    if ((minis.match(/estimate, watch the trend/g) ?? []).length < 2) throw new Error('fat and muscle are not labeled as estimates')
+    if (await pg.locator(`${prog} .bcp .bad, ${prog} .bcp [class*="danger"]`).count()) throw new Error('the body section uses alarm colours')
+    // 4. The monthly summary: reachable any day, with the photo reminder.
+    await pg.click(`${prog} .bcp-month`)
+    await until(async () => (await pg.evaluate(() => document.activeElement?.id)) === 'bpg-month', 'Monthly summary did not take you to the card')
+    if (!(await pg.locator(`${prog} #bpg-month .bpg-photo-link`).count())) throw new Error('the monthly summary has no progress photo reminder')
+    if (!(await pg.locator(`${prog} #bpg-photos`).count())) throw new Error('the photo compare card is missing')
+    // 5. A Sunday waist reminder is planned once; body logs pay no points.
+    await until(async () => (await sql("SELECT value FROM settings WHERE key = 'coach_reminders'")).rows.some((r) => (r[0].value.match(/"waist:/g) ?? []).length >= 1), 'no Sunday waist reminder')
+    if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a body log paid points')
+    // No sideways scroll on a phone.
+    await pg.setViewportSize({ width: 390, height: 844 })
+    await pg.waitForTimeout(300)
+    const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+    if (over > 1) throw new Error(`Body progress scrolls sideways on a phone (${over}px)`)
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
 
   await step('no uncaught page errors', async () => {
