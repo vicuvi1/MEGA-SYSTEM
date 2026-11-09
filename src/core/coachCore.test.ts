@@ -71,6 +71,13 @@ describe('training: session, rest, missed', () => {
     const p = dailyPlan(base({ date: '2026-11-14', done: [{ date: '2026-11-13', type: 'legs' }] }))
     expect(p.training.kind === 'session' && p.training.type).toBe('upper')
   })
+  it('trained another way today (Sport Track, a workout row): done, never "Rest day"', () => {
+    const p = dailyPlan(base({ date: '2026-11-09', trained: true }))
+    expect(p.training.kind).toBe('done')
+    expect(p.training.title).toBe('Done: workout')
+    expect(JSON.stringify(p.training)).not.toMatch(/Rest day/)
+    expect(dailyPlan(base({ trained: true })).training.title).toBe('Done: Upper body')
+  })
   it('done for today once a session is logged', () => {
     const p = dailyPlan(base({ done: [{ date: '2026-11-10', type: 'upper' }] }))
     expect(p.training.kind).toBe('done')

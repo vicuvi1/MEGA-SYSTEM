@@ -1582,8 +1582,11 @@ try {
       await pg.waitForSelector('.td2 .ptabs [data-tab="now"]', { timeout: 15000 })
       await pg.click('.td2 .ptabs [data-tab="now"]')
       const strip = '[data-tabpanel="now"] .ct-strip'
-      await pg.waitForFunction((s) => /Upper body · \d+ min/.test(document.querySelector(`${s} [data-ct="train"]`)?.textContent ?? ''), strip, { timeout: 15000 })
-      if (!(await pg.locator(`${strip} .ct-start`).count())) throw new Error('the coach strip has no Start')
+      await pg.waitForFunction((s) => /Upper body · \d+ min|Done: /.test(document.querySelector(`${s} [data-ct="train"]`)?.textContent ?? ''), strip, { timeout: 15000 })
+      // Earlier steps may already have logged a workout today (then the coach says done, never "Rest day").
+      const session = /Upper body · \d+ min/.test(await pg.locator(`${strip} [data-ct="train"]`).innerText())
+      if (session && !(await pg.locator(`${strip} .ct-start`).count())) throw new Error('the coach strip has no Start')
+      if (!session && !(await pg.locator(`${strip} .ct-done`).count())) throw new Error('a workout logged today does not show as done')
       for (const c of ['weigh', 'bed']) if (!(await pg.locator(`${strip} [data-check="${c}"]`).count())) throw new Error(`the coach strip has no ${c} tick`)
       if (!(await pg.locator(`${strip} [data-meal]`).count())) throw new Error('the coach strip has no meal to tick')
       if ((await pg.locator(strip).boundingBox()).height > 64) throw new Error(`the coach strip is ${(await pg.locator(strip).boundingBox()).height}px tall (one slim line)`)
@@ -1594,8 +1597,8 @@ try {
       const card = '[data-tabpanel="now"] .ct-card'
       await pg.waitForSelector(`${card} .ct-meals li`, { timeout: 5000 })
       if ((await pg.locator(`${card} .ct-meals li`).count()) < 4) throw new Error('the coach card shows fewer than 4 meals')
-      if (!(await pg.locator(`${card} .ct-moves li`).count())) throw new Error('the coach card shows no moves')
-      if (!/Last time|First time|reps/.test(await pg.locator(`${card} .ct-moves`).innerText())) throw new Error('the moves have no "beat last time" target')
+      if (session && !(await pg.locator(`${card} .ct-moves li`).count())) throw new Error('the coach card shows no moves')
+      if (session && !/Last time|First time|reps/.test(await pg.locator(`${card} .ct-moves`).innerText())) throw new Error('the moves have no "beat last time" target')
       if ((await pg.locator(`${card} .ct-routine li`).count()) < 4) throw new Error('no morning routine timeline')
       if (!/kcal/.test(await pg.locator(`${card} .ct-line`).innerText())) throw new Error(`the day's line has no plan numbers: ${await pg.locator(`${card} .ct-line`).innerText()}`)
       if ((await pg.locator(`${card} .ct-tip`).innerText()).trim().length < 10) throw new Error('no tip')

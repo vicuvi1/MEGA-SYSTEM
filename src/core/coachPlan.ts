@@ -31,6 +31,8 @@ export interface PlanInputs {
   intake: { day: string; kcal: number }[]
   /** A lighter week is on (70% reps). */
   lighter?: boolean
+  /** A workout is already logged today another way (Sport Track, a workout row): the day's training is done. */
+  trained?: boolean
 }
 
 export type TipKey = 'eat-more' | 'ramp' | 'catch-up' | 'beat-last' | 'rest-eat' | 'recover' | 'sleep' | 'protein' | 'weigh'
@@ -38,7 +40,7 @@ export type TipKey = 'eat-more' | 'ramp' | 'catch-up' | 'beat-last' | 'rest-eat'
 export type PlanTraining =
   | { kind: 'session'; type: SessionType; title: string; line: string; catchUp: boolean; moves: PlanMove[]; minutes: number; lighter: boolean }
   | { kind: 'rest'; title: string; line: string; anyway: SessionType | null }
-  | { kind: 'done'; type: SessionType; title: string; line: string }
+  | { kind: 'done'; type: SessionType | null; title: string; line: string }
 
 export interface PlanMeal {
   /** The standard day's slot id (`ds-…`), or `m1`… without one. */
@@ -114,7 +116,10 @@ export function dailyPlan(i: PlanInputs, date = i.date): DailyPlan {
   // Training: the split and what you actually did (the 48 h rule and missed sessions live in todayPlan).
   const tp = todayPlan(i.week, i.done, date)
   let training: PlanTraining
-  if (tp.why === 'done' && tp.type !== 'rest') training = { kind: 'done', type: tp.type, title: `Done: ${TYPE_NAME[tp.type]}`, line: 'Done for today. Eat well and sleep: that is when muscle grows.' }
+  const doneLine = 'Done for today. Eat well and sleep: that is when muscle grows.'
+  if (tp.why === 'done' && tp.type !== 'rest') training = { kind: 'done', type: tp.type, title: `Done: ${TYPE_NAME[tp.type]}`, line: doneLine }
+  // Trained today another way (Sport Track sets, a logged workout): never "Rest day" next to "you trained".
+  else if (i.trained) training = { kind: 'done', type: tp.type === 'rest' ? null : tp.type, title: tp.type === 'rest' ? 'Done: workout' : `Done: ${TYPE_NAME[tp.type]}`, line: doneLine }
   else if (tp.type === 'rest') training = { kind: 'rest', title: 'Rest day', line: 'Rest day: walk 20 min, eat everything.', anyway: tp.anyway }
   else {
     const t = tp.type

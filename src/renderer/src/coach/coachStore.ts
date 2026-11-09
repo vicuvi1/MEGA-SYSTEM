@@ -76,6 +76,7 @@ export function coachToday(db: DB, stIn?: any, now = new Date()): CoachToday {
   const targets = safe(() => foodTargetsNow(db, today), null)
   const goals = safe(() => readFoodGoals(db), null)
   const done = doneSessions(data.log)
+  const facts = factsOf(db, st, today, done)
   const plan = dailyPlan({
     date: today,
     config,
@@ -85,9 +86,10 @@ export function coachToday(db: DB, stIn?: any, now = new Date()): CoachToday {
     minutes: { upper: up.minutes, legs: legs.minutes },
     food: { goal: targets?.kcal ?? 2700, protein: targets?.protein ?? 125, saved: readFoodSaved(db), adjLog: goals?.adjLog ?? [] },
     intake: kcalDays(db, addDays(today, -8), addDays(today, -1)),
-    lighter: !!safe(() => lighterOn(st, today), null)
+    lighter: !!safe(() => lighterOn(st, today), null),
+    trained: facts.workout
   })
-  return { today, config, plan, facts: factsOf(db, st, today, done), days: loadDays(db, today) }
+  return { today, config, plan, facts, days: loadDays(db, today) }
 }
 
 /** What really happened today: a workout, meals, a weigh-in. */
