@@ -2,6 +2,8 @@
 // this turns them into checks, decides when Ben warns you (broken 30+ min)
 // and when he says it's fixed, and writes the weekly report. Pure and tested.
 
+import { DESKTOP_ALERT_HELP } from './desktopUpdates'
+
 export interface Beat {
   ok?: string
   err?: { at: string; msg: string }
@@ -48,6 +50,8 @@ export interface Check {
   detail: string
   /** Broken since (ISO), for "30+ minutes" alerts. */
   since?: string
+  /** GitHub (or another outside part) did not answer: shown as unknown, never as broken. */
+  unknown?: boolean
 }
 
 const ago = (now: Date, iso: string) => {
@@ -161,6 +165,14 @@ export function healthChecks(i: HealthInput): Check[] {
       .map(([k, v]) => `${k} ${big(Number(v))}`)
     const rows = Number(calls.rows) || 0
     out.push({ id: 'apiCalls', label: 'Server calls', ok: total < API_CALLS_WARN, detail: `This month: ${big(total)} (about ${Math.round(total / hours)} an hour${top.length ? `: ${top.join(', ')}` : ''})${rows ? `, ${big(rows)} database rows read` : ''}${total >= API_CALLS_WARN ? " (near Vercel's free monthly limit)" : ''}` })
+  }
+  // Desktop updates: is the Windows release build still working? (note:desktopupdates, refreshed hourly by the server)
+  const du = i.notes?.desktopupdates
+  if (du && typeof du === 'object') {
+    const built = du.version ? `Latest release ${du.version}${du.builtAt ? `, built ${ago(now, du.builtAt)}` : ''}` : 'No release found yet'
+    if (!du.okAt) out.push({ id: 'desktop', label: 'Desktop updates', ok: true, unknown: true, detail: 'Unknown (GitHub did not answer yet)' })
+    else if (du.broken) out.push({ id: 'desktop', label: 'Desktop updates', ok: false, detail: `Not being built: the last ${du.failed} Windows release runs failed. ${built}${du.runUrl ? `. ${du.runUrl}` : ''}`, since: du.brokenSince ?? du.okAt })
+    else out.push({ id: 'desktop', label: 'Desktop updates', ok: true, detail: built })
   }
   // CL3: the daily self-check: when it last ran, and what it found (problems, and parts Ben warned about).
   const sc = i.notes?.selfcheck
@@ -290,6 +302,8 @@ export function alertHelp(key: string, appUrl: string = DEFAULT_APP_URL): string
       return 'Copy a fresh token from Todoist → Settings → Integrations → Developer into TODOIST_TOKEN in Vercel.'
     case 'snapshot':
       return 'Ben makes it on his next run; to be safe, download a backup in Settings → Data.'
+    case 'desktop':
+      return DESKTOP_ALERT_HELP
     case 'budget':
       return 'Raise the budget in Settings → Ben → Brain, or let Ben use cheaper answers.'
     default:
@@ -303,6 +317,13 @@ function shownWarnings(warn: Check[]): Check[] {
   return warn.filter((c) => !(alertKey(c.id) === 'tick' && keys.has('timer')))
 }
 
+/** "Desktop updates are not being built: the last N Windows release runs failed. The app on your PC can't update until it's fixed." + the run link. */
+function desktopAlertDetail(detail: string): string {
+  const n = detail.match(/last (\d+) Windows/)?.[1] ?? '2'
+  const link = detail.match(/https:\/\/\S+/)?.[0]
+  return `Desktop updates are not being built: the last ${n} Windows release runs failed. The app on your PC can't update until it's fixed${link ? `. Run: ${link}` : ''}`
+}
+
 /** One message for everything broken at once, each with what to do. */
 export function alertText(warn: Check[], fixed: Check[], opts: { appUrl?: string } = {}): string {
   const lines: string[] = []
@@ -313,7 +334,7 @@ export function alertText(warn: Check[], fixed: Check[], opts: { appUrl?: string
       const k = alertKey(c.id)
       const extra = k === 'timer' && keys.has('tick') ? " Ben's server stops too while nothing wakes it." : ''
       const help = alertHelp(k, opts.appUrl)
-      const detail = c.detail.replace(/[.\s]+$/, '')
+      const detail = k === 'desktop' ? desktopAlertDetail(c.detail) : c.detail.replace(/[.\s]+$/, '')
       return `• <b>${c.label}</b>: ${detail}.${extra}${help ? `\n  What to do: ${help}` : ''}`
     })
     lines.push(`🔧 <b>Something needs a look</b>\n${items.join('\n')}\nYou'll hear about each problem at most once a day. Settings → System health has the details.`)

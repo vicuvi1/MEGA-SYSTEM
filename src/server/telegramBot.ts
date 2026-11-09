@@ -21,6 +21,7 @@ import type { BotBridgeConfig } from '@shared/api'
 import { Mirror, WRITES_TABLE } from '../renderer/src/web/mirror'
 import { goalsTick } from './goalsTick'
 import { careerTick } from './careerTick'
+import { refreshDesktopUpdates } from '@core/desktopUpdates'
 import { runSelfCheck, tgSend, timed, type SelfCheckDeps } from './selfCheck'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { createWebServices } from '../renderer/src/web/webServices'
@@ -1285,6 +1286,12 @@ async function healthTick(t: TursoHttp, mirror: Mirror, now: Date, send: (text: 
     // "Mute this for 7 days" (the button under a warning, settings health_mutes).
     mutes: readMutes(getSetting(db as any, HEALTH_MUTES))
   }))
+  // Desktop updates: GitHub is asked at most once an hour (the answer is cached in the note).
+  const du = await refreshDesktopUpdates(h.notes.desktopupdates, now).catch(() => h.notes.desktopupdates)
+  if (du && JSON.stringify(du) !== JSON.stringify(h.notes.desktopupdates)) {
+    h.notes.desktopupdates = du
+    await setNote(t, 'desktopupdates', du).catch(() => null)
+  }
   const checks = healthChecks({ now, beats: h.beats, sportySeen: local.sporty, latestSnapshot: h.latestSnapshot, today: local.today, errors: h.errors, notes: h.notes })
   // Each kind of problem at most once a day (your local day), grouped in one message.
   const d = alertDecisions(checks, h.notes.alerted ?? {}, now, { today: local.today, mutes: local.mutes })

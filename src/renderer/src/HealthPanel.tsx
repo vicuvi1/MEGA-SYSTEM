@@ -43,7 +43,7 @@ export function HealthPanel() {
       <StorageNote />
       <ul className="hp-list">
         {h.checks.map((c) => (
-          <li key={c.id} className={c.ok ? 'ok' : 'bad'}>
+          <li key={c.id} className={c.ok ? (c.unknown ? 'ok unknown' : 'ok') : 'bad'}>
             <i />
             <b>{c.label}</b>
             <span>{c.detail}</span>

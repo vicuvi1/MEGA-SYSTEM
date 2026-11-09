@@ -224,3 +224,17 @@
 .wp-trend i { display: block; width: 10px; border-radius: 3px 3px 0 0; background: color-mix(in srgb, var(--green) 65%, transparent); }
 .wp-trend i.none { height: 3px !important; background: rgb(var(--ink) / 0.15); }
 @media (max-width: 640px) { .prv-btn { padding: 6px 10px; } }
+
+/* Compact header: one tight row, one-line notes (Today → Plan must stay well under the screen budget). */
+.pe { gap: 5px; margin: 4px 0 2px; }
+.pe-bar { gap: 5px; flex-wrap: wrap; }
+.pe-bar .plan-sync { flex-wrap: nowrap; gap: 6px; }
+.pe-bar .plan-sync-auto { max-width: 20ch; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-bar .pe-btn { padding: 3px 9px; }
+.pe-bar .pe-approve { padding: 0 4px 0 0; background: none; gap: 4px; }
+.pe-bar .pe-approve input[type='time'] { padding: 1px 4px; height: 24px; box-sizing: border-box; }
+.pe-quick input { padding-top: 5px; padding-bottom: 5px; height: 30px; box-sizing: border-box; }
+.pe-audit, .pe-auto { flex-wrap: nowrap; padding: 2px 8px; gap: 8px; }
+.pe-audit > span, .pe-auto > span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-audit button, .pe-auto button { padding: 1px 8px; white-space: nowrap; }
+.pe-moved { padding: 2px 8px; }
