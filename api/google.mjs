@@ -5,14 +5,16 @@
 // the app. The sign-in's refresh token stays sealed in the database; only
 // this server opens it (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in Vercel).
 //   status                 → {configured, connected, email, calendars?, on, target}
-//   connect {gmail?}       → {url}            open it to sign in with Google (gmail: also read-only Gmail)
+//   connect {gmail?, drive?} → {url}          open it to sign in with Google (gmail: also read-only Gmail; drive: Photo Locker's own Drive files)
+//   driveToken             → {token, expiresAt} Photo Locker: a short-lived Drive-only key so THIS device uploads/downloads
+//                                               straight to Google (files never pass through here). Never logged.
 //   events {from, to}      → {events}         ISO times, the shown calendars
 //   create {title, start, end, description?, calendarId?, colorId?, id?} → {event} (with id: made once, a repeat updates it)
 //   move {calendarId, id, start, end} · remove {calendarId, id}
 //   setCalendars {on, target} · disconnect
 import { randomBytes } from "node:crypto"
 import { bearer, config, getSetting, readBody, send, requireSession, setSetting, sign, countCall } from './_lib.mjs'
-import { GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, createCalendarApi, exchangeCode, keepGooglePrefs } from './_bot/bot.mjs'
+import { DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, driveAccessToken, createCalendarApi, exchangeCode, keepGooglePrefs } from './_bot/bot.mjs'
 
 export function googleEnv(cfg, env = process.env) {
   const clientId = (env.GOOGLE_CLIENT_ID || '').trim()
@@ -67,6 +69,18 @@ export async function googleCallback(req, res) {
   }
 }
 
+/** Photo Locker's Drive key (the session was checked by the caller). The key goes only in the answer: never logged, never in an error. */
+export async function driveTokenOp(res, env, st, fetchImpl) {
+  if (!env) return send(res, 200, { error: 'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel first' })
+  if (!st?.enc) return send(res, 200, { error: 'Connect Google Drive first', drive: false })
+  try {
+    const t = await driveAccessToken(env, st, fetchImpl)
+    return send(res, 200, { token: t.token, expiresAt: t.expiresAt })
+  } catch (e) {
+    return send(res, 200, { error: String(e?.message || 'Google Drive failed').replace(/ya29\.[\w.-]+/g, '…'), drive: e?.code === 'no-drive' ? false : undefined })
+  }
+}
+
 /** A GET with ?callback=1 (the rewrite), the old path, or Google's own code/error answer. */
 export const isCallback = (req) => {
   if (req.method !== 'GET') return false
@@ -90,14 +104,15 @@ export default async function handler(req, res) {
   const op = body?.op
   if (op === 'connect') {
     if (!env) return send(res, 200, { error: 'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel first' })
-    return send(res, 200, { url: authUrl(env, redirectUri(req), makeState(cfg), body.gmail ? [GMAIL_READ_SCOPE] : []) })
+    const extra = [...(body.gmail ? [GMAIL_READ_SCOPE] : []), ...(body.drive ? [DRIVE_FILE_SCOPE] : [])]
+    return send(res, 200, { url: authUrl(env, redirectUri(req), makeState(cfg), extra) })
   }
   const st = await stored(cfg)
   if (op === 'status') {
     if (!env || !st?.enc) return send(res, 200, { configured: !!env, connected: false })
     try {
       const cals = await createCalendarApi(env, st).calendars()
-      return send(res, 200, { configured: true, connected: true, email: st.email ?? null, calendars: cals, on: st.on ?? [], target: st.target ?? null, gmail: (st.scopes ?? []).includes(GMAIL_READ_SCOPE) })
+      return send(res, 200, { configured: true, connected: true, email: st.email ?? null, calendars: cals, on: st.on ?? [], target: st.target ?? null, gmail: (st.scopes ?? []).includes(GMAIL_READ_SCOPE), drive: (st.scopes ?? []).includes(DRIVE_FILE_SCOPE) })
     } catch (e) {
       return send(res, 200, { configured: true, connected: false, email: st.email ?? null, error: e.message })
     }
@@ -106,6 +121,7 @@ export default async function handler(req, res) {
     await setSetting(cfg, GOOGLE_SETTING, 'null')
     return send(res, 200, { ok: true })
   }
+  if (op === 'driveToken') return driveTokenOp(res, env, st)
   if (!env || !st?.enc) return send(res, 200, { connected: false, events: [] })
   if (op === 'setCalendars') {
     const next = { ...st, on: Array.isArray(body.on) ? body.on.map(String) : st.on, target: body.target ? String(body.target) : st.target ?? null }

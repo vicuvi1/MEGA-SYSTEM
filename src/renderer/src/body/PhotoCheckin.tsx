@@ -1,12 +1,14 @@
 // BD10: a private progress photo every 2 weeks. Same spot, same pose: the
 // last photo shows as a ghost over the camera (or over the new photo) so you
-// can line up. Every 8 weeks a side-by-side with a slider. Photos stay on
-// THIS DEVICE ONLY (bodyPhotos.ts): never synced, never uploaded.
+// can line up. Every 8 weeks a side-by-side with a slider. Photos are kept on
+// this device (bodyPhotos.ts) and a copy goes into Photo Locker, which backs
+// it up to your own Google Drive once you connect it (not encrypted).
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { photoPlan } from '@core/bodyPhotos'
 import { dayKey } from '@core/dates'
 import { deletePhoto, listPhotos, savePhoto, shrink, type StoredPhoto } from './bodyPhotos'
 import { askConfirm } from '../confirmSheet'
+import { addProgressPhoto } from '../vault/driveSync'
 import { useAction } from '../ui'
 
 type Mode = 'idle' | 'camera' | 'review' | 'compare'
@@ -73,7 +75,10 @@ export function PhotoCheckin({ every = 14 }: { every?: number }) {
   }
   const keep = async () => {
     if (!draft) return
-    const ok = await act(() => savePhoto({ id: `ph-${Date.now().toString(36)}`, day: today, at: Date.now(), blob: draft.blob, w: draft.w, h: draft.h }), 'Photo kept on this device')
+    const photo = { id: `ph-${Date.now().toString(36)}`, day: today, at: Date.now(), blob: draft.blob, w: draft.w, h: draft.h }
+    const ok = await act(() => savePhoto(photo), 'Photo kept on this device')
+    // A copy in Photo Locker (backed up to Drive once it is connected).
+    if (ok !== undefined) void addProgressPhoto(photo).catch(() => {})
     URL.revokeObjectURL(draft.url)
     setDraft(null)
     setMode('idle')
@@ -92,7 +97,13 @@ export function PhotoCheckin({ every = 14 }: { every?: number }) {
     <section className="card ph-card" aria-label="Progress photos">
       <header className="card-head">
         <h2>Progress photos</h2>
-        <span className="ph-lock">🔒 Photos stay on this device. They are never uploaded or synced.</span>
+        <span className="ph-lock">
+          Kept on this device and in{' '}
+          <button type="button" className="link-btn" onClick={() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'locker' }))}>
+            Photo Locker
+          </button>{' '}
+          (backed up to your Google Drive once you connect it; not encrypted).
+        </span>
       </header>
       <input ref={file} type="file" accept="image/*" capture="user" hidden onChange={(e) => void picked(e.target.files?.[0])} />
 

@@ -18,6 +18,8 @@ export interface GoogleStatus {
   target?: string | null
   /** Read-only Gmail was allowed too (Connect Gmail). */
   gmail?: boolean
+  /** Photo Locker's Google Drive was allowed too (Connect Google Drive). */
+  drive?: boolean
   error?: string
 }
 import { createTursoWebBridge } from './tursoWebBridge'
@@ -174,6 +176,16 @@ export type Bridge = LifeApi & {
     remove(calendarId: string, id: string): Promise<void>
     setCalendars(on: string[], target: string | null): Promise<void>
     disconnect(): Promise<void>
+    /** Photo Locker: sign in again adding Google Drive (only the app's own files); the calendar stays. */
+    connectDrive?(): Promise<void>
+    /** Photo Locker: a short-lived Drive-only key for this device (straight to Google, never through the server). */
+    driveToken?(): Promise<{ token: string; expiresAt: number }>
+  }
+  /** Photo Locker's synced index (metadata only, core/vaultSync.ts). */
+  vault?: {
+    index(): Promise<import('@core/vaultSync').VaultIndex>
+    /** Joins with the saved index (another device may have saved in between) and saves. */
+    saveIndex(next: import('@core/vaultSync').VaultIndex): Promise<import('@core/vaultSync').VaultIndex>
   }
   /** "Am I improving?": the last 7 days against your usual week (web). */
   progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights>; growth?(): Promise<Growth>; seenMilestones?(): Promise<string[]>; markMilestones?(ids: string[], replace?: boolean): Promise<void> }

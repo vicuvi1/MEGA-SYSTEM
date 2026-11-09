@@ -93,6 +93,39 @@ export function keepGooglePrefs(prevRaw: string | null, next: GoogleStored): Goo
   }
 }
 
+/** Photo Locker: Google Drive, only the files this app made (and the folder it made). */
+export const DRIVE_FILE_SCOPE = 'https://www.googleapis.com/auth/drive.file'
+/** Scopes a Drive key handed to a device may carry (sign-in basics are harmless). */
+const DRIVE_TOKEN_OK = new Set([DRIVE_FILE_SCOPE, 'openid', 'email', 'profile', 'https://www.googleapis.com/auth/userinfo.email', 'https://www.googleapis.com/auth/userinfo.profile'])
+
+export interface DriveToken {
+  token: string
+  /** Milliseconds since 1970 when Google stops taking it. */
+  expiresAt: number
+}
+
+/**
+ * Photo Locker: a short-lived Google key for Drive only, for THIS device to
+ * upload and download straight to and from Google (files are too big for our
+ * server). The refresh is asked for the Drive scope alone, so the key cannot
+ * read the calendar or Gmail; a key Google hands back with more is refused,
+ * never given out. The key is never logged.
+ */
+export async function driveAccessToken(env: GoogleEnv, stored: GoogleStored, fetchImpl: typeof fetch = fetch, now = Date.now()): Promise<DriveToken> {
+  if (!(stored.scopes ?? []).includes(DRIVE_FILE_SCOPE)) throw Object.assign(new Error('Google Drive is not connected yet: press Connect Google Drive'), { code: 'no-drive' })
+  const res = await fetchImpl(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ client_id: env.clientId, client_secret: env.clientSecret, refresh_token: openToken(env.secret, stored.enc), grant_type: 'refresh_token', scope: DRIVE_FILE_SCOPE })
+  })
+  const j: any = await res.json().catch(() => ({}))
+  if (!res.ok || !j.access_token) throw new Error(j.error === 'invalid_grant' ? 'Google sign-in expired: connect Google Drive again' : j.error === 'invalid_scope' ? 'Google Drive is not allowed for this sign-in: press Connect Google Drive' : 'Google refused the Drive sign-in')
+  const granted = String(j.scope ?? DRIVE_FILE_SCOPE).split(/\s+/).filter(Boolean)
+  if (granted.some((s) => !DRIVE_TOKEN_OK.has(s))) throw new Error('Google gave a wider key than Drive needs, so it was not handed out')
+  const secs = Math.min(3600, Math.max(60, Number(j.expires_in) || 3600))
+  return { token: String(j.access_token), expiresAt: now + secs * 1000 }
+}
+
 export interface CalendarInfo {
   id: string
   name: string

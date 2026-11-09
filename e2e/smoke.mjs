@@ -757,7 +757,7 @@ try {
     await shot(`${prog} .tp-card`, 'measurements')
     await pg.waitForSelector(`${prog} .bw-card .bw-focus`, { timeout: 15000 })
     await shot(`${prog} .bw-card`, 'weekly-body-card')
-    if (!/stay on this device/.test(await pg.locator(`${prog} .ph-lock`).innerText())) throw new Error('the photo card does not say photos stay on this device')
+    if (!/Kept on this device and in Photo Locker.*not encrypted/s.test(await pg.locator(`${prog} .ph-lock`).innerText())) throw new Error('the photo card does not say where photos are kept (this device, Photo Locker, not encrypted)')
     // Two made-up drawn silhouettes in this device's photo store (8 weeks apart), then a new one: the ghost overlay.
     const drawn = await pg.evaluate(async (days) => {
       const figure = (broad, ink = '#c9d2e3') => {
@@ -833,10 +833,11 @@ try {
     await pg.locator(`${prog} .ph-card input[type="range"]`).fill('62')
     await shot(`${prog} .ph-card`, 'photo-compare-slider')
     await pg.locator(`${prog} .ph-card .ph-actions .btn`, { hasText: 'Done' }).click()
-    // The photos never left this device: nothing image-like reached the (fake) server's database.
+    // No photo data reached the (fake) server's database. Photo Locker's index (vault_index) may name
+    // the photo and its type (metadata only, see docs/areas/vault.md), but never holds image data.
     const leaked = await pg.evaluate(async () => {
       const s = localStorage.getItem('life_web_session') ?? ''
-      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%image/%' OR value LIKE '%ph-demo%' OR key LIKE '%photo%' AND key != 'look_wallpaper_photo'", args: [] } }, { type: 'close' }] }) })
+      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%data:image%' OR value LIKE '%;base64,%' OR (key != 'vault_index' AND (value LIKE '%image/%' OR value LIKE '%ph-demo%')) OR (key LIKE '%photo%' AND key != 'look_wallpaper_photo')", args: [] } }, { type: 'close' }] }) })
       const j = await r.json()
       return Number(j.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? -1)
     })
@@ -6150,6 +6151,97 @@ try {
     await pg.click('.td2 .ptabs [data-tab="now"]')
     await pg.waitForSelector('[data-tabpanel="now"] .now-top .gr-chip-today', { timeout: 10000 })
     if ((await sqlN('SELECT COUNT(*) FROM ledger')) !== ledgerBefore) throw new Error('Growth paid points')
+  })
+
+  // Photo Locker: two "devices" (browser contexts with their own IndexedDB) and one fake Google Drive
+  // (e2e/server.mjs /_fakedrive; googleapis.com is routed there). Made-up pictures only.
+  await step('Photo Locker: a photo uploaded on one device reaches Drive and the index, a second device downloads it; a video over 60 s is refused', async () => {
+    const toDrive = (ctx) => ctx.route('https://www.googleapis.com/**', async (route) => {
+      const u = new URL(route.request().url())
+      await route.fulfill({ response: await route.fetch({ url: `http://127.0.0.1:${port}/_fakedrive${u.pathname}${u.search}` }) })
+    })
+    const sql = async (q) => (await (await fetch(`http://127.0.0.1:${port}/api/_e2e`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'sql', sql: q }) })).json()).rows
+    const shots = process.env.LOCKER_SHOTS
+    await toDrive(pg.context())
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('locker')
+    await pg.waitForSelector('[data-testid="photo-locker"]', { timeout: 15000 })
+    if (!/Not encrypted/.test(await pg.locator('.lk-plain').innerText())) throw new Error('no plain "not encrypted" note')
+    // Pick the Drive folder: a new one, named in the box.
+    await pg.getByRole('button', { name: 'New folder…' }).click({ timeout: 10000 })
+    await pg.locator('.cs-sheet input').fill('Photo Locker test')
+    await pg.locator('.cs-sheet').getByRole('button', { name: 'Make folder' }).click()
+    await pg.waitForSelector('[data-testid="locker-folder"]', { timeout: 10000 })
+    // A made-up photo (a gradient with a shape), drawn in the page.
+    const png = await pg.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 600
+      c.height = 800
+      const g = c.getContext('2d')
+      const gr = g.createLinearGradient(0, 0, 600, 800)
+      gr.addColorStop(0, '#2b5876')
+      gr.addColorStop(1, '#4e4376')
+      g.fillStyle = gr
+      g.fillRect(0, 0, 600, 800)
+      g.fillStyle = '#9be15d'
+      g.beginPath()
+      g.ellipse(300, 160, 70, 85, 0, 0, Math.PI * 2)
+      g.fill()
+      g.fillRect(220, 260, 160, 360)
+      return c.toDataURL('image/png').split(',')[1]
+    })
+    await pg.setInputFiles('[data-testid="locker-upload"]', { name: 'front-made-up.png', mimeType: 'image/png', buffer: Buffer.from(png, 'base64') })
+    await pg.waitForSelector('[data-testid="locker-tile"][aria-label="Open front-made-up.jpg"] .lk-state.in', { timeout: 30000 })
+    // In the synced index (metadata only, with the Drive file id), never image data.
+    let ix = ''
+    for (let i = 0; i < 40 && !/driveFileId/.test(ix); i++) {
+      ix = String((await sql("SELECT value FROM settings WHERE key = 'vault_index'"))[0]?.[0] ?? '')
+      if (!/driveFileId/.test(ix)) await pg.waitForTimeout(250)
+    }
+    if (!/front-made-up\.jpg/.test(ix) || !/driveFileId/.test(ix)) throw new Error(`vault_index not saved: ${ix.slice(0, 120)}`)
+    if (/base64|data:image/.test(ix)) throw new Error('vault_index holds image data')
+    // A video over 60 seconds (a made-up 61 s silent clip) is refused with a plain message.
+    const rate = 8000
+    const secs = 61
+    const wav = Buffer.alloc(44 + rate * secs, 128)
+    wav.write('RIFF', 0); wav.writeUInt32LE(36 + rate * secs, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22)
+    wav.writeUInt32LE(rate, 24); wav.writeUInt32LE(rate, 28); wav.writeUInt16LE(1, 32); wav.writeUInt16LE(8, 34); wav.write('data', 36); wav.writeUInt32LE(rate * secs, 40)
+    await pg.setInputFiles('[data-testid="locker-upload"]', { name: 'long-clip.wav', mimeType: 'video/wav', buffer: wav })
+    // Wait for the real answer: the refusal toast, and the page done getting it ready (no "Getting … ready" line).
+    await pg.waitForSelector('.toast:has-text("at most 60 seconds")', { timeout: 60000 })
+    await pg.waitForFunction(() => !/Getting .* ready/.test(document.querySelector('.lk-progress')?.textContent ?? ''), null, { timeout: 30000 })
+    if (await pg.locator('[data-testid="locker-tile"].k-video, [data-testid="locker-tile"][aria-label="Open long-clip.wav"]').count()) throw new Error('the long video was kept')
+    // The item view on the desktop.
+    await pg.locator('[data-testid="locker-tile"][aria-label="Open front-made-up.jpg"]').click()
+    await pg.waitForSelector('[data-testid="locker-item"] .lk-media img', { timeout: 5000 })
+    if (shots) await pg.screenshot({ path: `${shots}/locker-desktop-item.png`, style: '.toasts { display: none !important }' })
+    await pg.keyboard.press('Escape')
+    // Device B: its own browser (empty IndexedDB), a phone screen.
+    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+    const b = await ctx.newPage()
+    try {
+      b.on('pageerror', (e) => errors.push(`locker B: ${e.message}`))
+      b.on('console', (m) => /Content.Security.Policy|Refused to connect/i.test(m.text()) && errors.push(`locker B CSP: ${m.text().slice(0, 200)}`))
+      await toDrive(ctx)
+      await b.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
+      await b.goto(`http://127.0.0.1:${port}/`)
+      await b.waitForSelector('input', { timeout: 20000 })
+      await b.fill('input', '1234')
+      await b.keyboard.press('Enter')
+      await b.waitForSelector('main.content', { timeout: 20000 })
+      await b.evaluate(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'locker' })))
+      const front = '[data-testid="locker-tile"][aria-label="Open front-made-up.jpg"]'
+      await b.waitForSelector(`${front} img`, { timeout: 30000 })
+      await b.waitForFunction((sel) => /✓/.test(document.querySelector(`${sel} .lk-state`)?.textContent ?? ''), front, { timeout: 30000 })
+      if (shots) await b.screenshot({ path: `${shots}/locker-phone-timeline.png`, style: '.toasts { display: none !important }' })
+    } finally {
+      await ctx.close()
+    }
+    // One file in Drive: never uploaded twice.
+    const inDrive = await (await fetch(`http://127.0.0.1:${port}/_fakedrive/_e2e/files`, { headers: { authorization: 'Bearer fake-drive-key' } })).json()
+    const ids = inDrive.filter((f) => f.appProperties?.lsApp === 'locker').map((f) => f.appProperties.lsId)
+    if (new Set(ids).size !== ids.length) throw new Error('an item was uploaded twice')
+    if (inDrive.filter((f) => f.name === 'front-made-up.jpg').length !== 1) throw new Error('the photo is not in Drive exactly once')
   })
 
   await step('no uncaught page errors', async () => {

@@ -2,7 +2,7 @@ import type { IconName } from './Icon'
 
 export type PageId =
   | 'today' | 'focus' | 'progress' | 'goals' | 'calendar' | 'coach' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
-  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season' | 'career' | 'custom'
+  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season' | 'career' | 'custom' | 'locker'
 
 export interface ModuleDef {
   id: PageId
@@ -27,6 +27,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes from Waky' },
   { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 0, blurb: 'Private streak, urge crusher and honest resets' },
   { id: 'body', label: 'Sport Track', icon: 'bolt', color: '#00F2FE', phase: 0, blurb: 'Workouts and body metrics' },
+  { id: 'locker', label: 'Photo Locker', icon: 'lock', color: '#6EE7D8', phase: 0, blurb: 'Progress photos, short videos and private files, on every device and backed up to your Google Drive (not encrypted)' },
   { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 0, blurb: 'Your money, from Finance Helper' },
   { id: 'shop', label: 'Rewards', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend your points: guilt-free fun time and real rewards' },
   { id: 'music', label: 'Music', icon: 'music', color: '#ff7a45', phase: 0, blurb: 'SoundCloud stations, lyrics and the players on your PC' },
