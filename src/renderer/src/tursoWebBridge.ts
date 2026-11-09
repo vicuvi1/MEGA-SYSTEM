@@ -26,7 +26,9 @@ import { financeSummary } from '@core/moneyDays'
 import { createWebAuth } from './web/webAuth'
 import { createFinanceInbox } from './web/financeInbox'
 import { payTodoist } from './web/todoistCoins'
-import { createChangeWatch } from './web/todoRefresh'
+import { createChangeWatch, type WatchInfo } from './web/todoRefresh'
+import { followMustDos, missingLinked } from '@core/todoFollow'
+import type { PlanItem } from '@core/focus'
 import { createTodoistClient, localStore } from './web/todoistClient'
 import { setSportLogger, sportDay } from './sportTrack'
 import type { TodoCompleted, TodoTask } from '@core/todoist'
@@ -342,7 +344,7 @@ export function createTursoWebBridge(): Bridge {
   // CL7: reading Todoist or Google over and over while they fail helps nobody:
   // after 3 failures in a row the background reads pause (1 min, then longer);
   // what you press yourself always goes through.
-  const POLLING = new Set(['changes', 'today', 'upcoming', 'everything', 'events', 'status'])
+  const POLLING = new Set(['changes', 'lookup', 'today', 'upcoming', 'everything', 'events', 'status'])
   const todoistBreak = breaker()
   // The 5-second "anything new?" check has its own pause: when it fails, reading the list still works.
   const changesBreak = breaker()
@@ -486,6 +488,29 @@ export function createTursoWebBridge(): Bridge {
   // when it sits in the background, paused when the tab is hidden.
   // The Sync button: set by the live loop below (Todoist, Google, then every list reads again).
   let pullOutside: (() => Promise<number>) | null = null
+  // The Sync line: when Todoist last answered, the last problem, outside changes (set by the live loop).
+  let watchInfo: (() => WatchInfo & { lastSyncChanges: number }) | null = null
+  let lastSyncChanges = 0
+  // The Top 3 follow Todoist: a linked must-do renamed, moved to another day, deleted or done there.
+  let following: Promise<void> | null = null
+  const followTop3 = (): Promise<void> =>
+    (following ??= (async () => {
+      try {
+        if (!(await todoistOnP)) return
+        const svc = await svcP
+        const items = (await svc.read((s) => s.focus.plan(s.wallet.today()).items)) as PlanItem[]
+        if (!items.some((i) => !i.done && i.todoistId)) return
+        const today = await todoist.today()
+        const missing = missingLinked(items, today)
+        const where = missing.length ? await todoist.lookup(missing).catch(() => null) : new Map()
+        const r = followMustDos(items, today, where, calendarDay())
+        if (!r.changed) return
+        await svc.write((s) => s.focus.followTodoist(r.items), 'life-focus-changed')
+        window.dispatchEvent(new CustomEvent('life-data-changed'))
+      } finally {
+        following = null
+      }
+    })())
   if (typeof window !== 'undefined') {
     let lastUse = Date.now()
     // Back after a while: look for changes right away (not at the next slow round).
@@ -531,11 +556,20 @@ export function createTursoWebBridge(): Bridge {
     let todoAt = 0
     let tickAt = 0
     let todoQuickAt = 0
-    // Todoist's "anything new since…?" check (web/todoRefresh.ts).
-    const todoWatch = createChangeWatch((token) => todoistCall('changes', { token }))
+    // Todoist's "anything new since…?" check (web/todoRefresh.ts). The changed tasks come with
+    // the answer and are put right in the client at once (todoistClient.changes).
+    const todoWatch = createChangeWatch((token) => todoist.changes(token))
+    watchInfo = () => ({ ...todoWatch.info(), lastSyncChanges })
     const todoistChanged = async (): Promise<boolean> => {
       if (!(await todoistOnP)) return false
-      return todoWatch.check()
+      const changed = await todoWatch.check()
+      // The Top 3 follow: a must-do renamed, moved away, deleted or done in Todoist (core/todoFollow.ts).
+      if (changed) {
+        // Copies kept for speed (Ben's 45-second read) are dropped at once.
+        window.dispatchEvent(new CustomEvent('life-todoist-changed'))
+        void followTop3().catch(() => null)
+      }
+      return changed
     }
     // The Sync button and coming back to the window: Todoist and Google now, then every list reads again.
     pullOutside = async () => {
@@ -545,8 +579,9 @@ export function createTursoWebBridge(): Bridge {
       // Waiting edits go first, so what is read back already has them.
       if (todoist.queue.pending) todoist.retryDue(true)
       await todoistChanged()
+      lastSyncChanges = todoWatch.take()
       window.dispatchEvent(new CustomEvent('life-external-changed'))
-      await bridge.todoist?.sync(true).catch(() => 0)
+      await Promise.all([bridge.todoist?.sync(true).catch(() => 0), followTop3().catch(() => null)])
       return Date.now()
     }
     // How lively to be: you're using it (every 3 s), it's open but you're away
@@ -1293,13 +1328,15 @@ export function createTursoWebBridge(): Bridge {
       update: (id: string, patch: { content?: string; priority?: number; due?: string; description?: string; labels?: string[]; duration?: number | null }) => todoist.update(id, patch),
       pending: async () => todoist.pending(),
       retry: (id: string) => todoist.retry(id),
+      lookup: async (ids: string[]) => ((await todoistOnP) ? todoist.lookup(ids) : new Map()),
+      syncInfo: () => watchInfo?.() ?? { okAt: 0, failAt: 0, error: null, changes: 0, lastSyncChanges: 0 },
       cleanup: async (today: string) => {
         const j = await todoistCall('cleanup', { today })
         return { changes: (j.changes ?? []) as CleanChange[], ai: !!j.ai, error: j.error as string | undefined }
       },
       move: (id: string, area: string) => todoist.move(id, area),
       reopen: async (id: string) => {
-        await todoistCall('reopen', { id })
+        await todoist.reopen(id)
         // Points stay honest: a task taken back gives back what it paid.
         await (await svcP)
           .write((s) => {

@@ -428,14 +428,15 @@
    "priority": 1,
    "area": "today",
    "title": "Tasks sync both ways with Todoist",
-   "user_visible_behavior": "Priority, due date (today, tomorrow, a date/time), title, labels and length set anywhere in the app reach Todoist; the row shows saving… / ✓ saved / Couldn't save to Todoist. Retry; a failed save waits and survives a reload; changes made in Todoist show on the next check and at once with Sync",
+   "user_visible_behavior": "Priority, due date (today, tomorrow, a date/time), title, labels and length set anywhere in the app reach Todoist; the row shows saving… / ✓ saved / Couldn't save to Todoist. Retry; a failed save waits and survives a reload; changes made in Todoist (day moved, time added or taken off, date removed, done, reopened, deleted, renamed, priority, project, a recurring task done) show on every surface within one change check (Tasks, Today → Now other tasks and Top 3, the day plan, the island list, Ben) and at once with Sync; a task moved away leaves the plan (\"Moved to tomorrow\" note, its block goes unless pinned); the Sync line says \"Synced 12:04 · 2 changes from Todoist\" or \"Can't reach Todoist right now.\"",
    "status": "in_review",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/todoSync.test.ts src/renderer/src/web/todoistClient.test.ts",
-    "SMOKE_ONLY=\"Tasks sync\" npm run smoke"
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/todoSync.test.ts src/renderer/src/web/todoistClient.test.ts src/renderer/src/web/todoistE2e.test.ts src/core/syncLabel.test.ts",
+    "SMOKE_ONLY=\"Tasks sync\" npm run smoke",
+    "SMOKE_ONLY=\"Todoist from outside\" npm run smoke"
    ],
    "evidence": "",
-   "notes": "2026-11-08: core/todoSync.ts (edit queue, overlay, resolveDue), web/todoistClient.ts (one Todoist object for every caller, Ben's quick commands and the island included), the server update answers with the task and sends plain dates as due_date."
+   "notes": "2026-11-08: core/todoSync.ts (edit queue, overlay, resolveDue), web/todoistClient.ts (one Todoist object for every caller, Ben's quick commands and the island included), the server update answers with the task and sends plain dates as due_date. 2026-11-09 audit: the change check carries the changed tasks (done/deleted marked), a lookup op says where plan tasks went (open elsewhere / done, recurring included / gone), planSync.mergeRemote no longer ticks a task that only moved away, draft blocks are checked too, renames follow into the plan and Top 3 (core/todoFollow.ts), waiting edits settle against Todoist's newer value (reconcilePatch), fixed-time-zone due times are read in the task's zone (dueParts), Ben's 45 s copy is dropped on a Todoist change; end-to-end fake-Todoist suite web/todoistE2e.test.ts and smoke step \"Todoist from outside\"."
   },
   {
    "id": "F030",
@@ -798,6 +799,22 @@
    "notes": "core/foodBen.ts (photo draft, preview, edits, swap, decideMealReminder), web/bots/foodBot.ts (photo flow, /meals, fd| buttons, mealPushFor, foodPushNow), webBots.ts (photo route), telegramBot.ts + api/telegram.mjs (env.foodPhoto = ai.mjs foodPhoto), benPushes.ts (op log, prefs.meals, fd| buttons for meal pushes), benPushTick.ts, tursoWebBridge.ts/benPushFeed.ts (island), LifeFitPanel.tsx (switch)."
   },
   {
+   "id": "F-FOOD-MULTI-PHOTO",
+   "priority": 1,
+   "area": "sport",
+   "title": "Several photos of one meal at once (app and Telegram)",
+   "user_visible_behavior": "Body -> Food: pick, drop or paste up to 6 photos of one meal at once (a plate, a packaged snack, a drink), with one optional note. They go to the AI in ONE request, so it sees the whole meal and lists each food once. The review shows the numbered thumbnails and one combined list (each food says 'Photo 2' where it was seen), the same edit, swap and Save; one meal is saved. Each photo counts toward the 50 a day. Telegram: an album (photos sent together) gets ONE '3 photos read together' preview from ONE AI read; under any photo preview, 'Add another photo' collects more photos for a minute and 'Done, read them' reads all of them together into a new preview ('Stop adding' keeps the old one). Only the owner's chats; no picture is kept; no points.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/server/foodAlbum.server.test.ts src/server/foodPhoto.server.test.ts src/core/foodVision.test.ts src/renderer/src/body/foodPhotoPrep.test.ts src/server/foodTelegram.server.test.ts",
+    "npm run build:bot",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-09: server tests on a fake Turso + fake Telegram + fake vision (album of 3 updates -> 1 call -> 1 preview, Add another photo -> Done -> 1 call with both and counted 1, stranger's album untouched, rows deleted after the read and on Save, a late part, the 10-minute sweep), counter (3 photos = 3, re-read counts new ones only, over the limit), request/prompt/provider shapes; smoke step 'Food photo' uploads 3 photos at once -> one request, one review, save once.",
+   "notes": "api/_vision.mjs (images 1-6, MAX_TOTAL_B64, 'Photo n:' labels, prompt rule, item.photo, countPhoto n), api/ai.mjs foodPhoto (counts each photo; opts.counted only in-process from Telegram), api/telegram.mjs (passes opts), core/foodVision.ts (item.photo), body/foodPhotoPrep.ts (imagesFrom, images), body/FoodPhotoReview.tsx (+css strip), web/bots/foodAlbum.ts (sys_kv rows: file ids only), web/bots/foodBot.ts (readMealPhotos, album lead, fd|a fd|r fd|q), bots/context.ts + webBots.ts (photoKv, foodPhoto), server/telegramBot.ts (photoKvFor)."
+  },
+  {
    "id": "F-FOOD-BODY-CHECK",
    "priority": 1,
    "area": "sport",
@@ -811,6 +828,34 @@
    ],
    "evidence": "2026-11-09: unit tests (not enough data, +200 after 2 flat weeks, the waist condition, on track, bounds, once a week, history); smoke step Body log (On track, then +200 on both tabs, Accept, history in Goals, no points); full smoke",
    "notes": "core/foodAdjust.ts (rules), core/foodGoals.ts (adjLog in food_goals), main/food.ts adjustNow/answerAdjust (bodyPoints from body_comp + body_metrics), body/FoodAdjustCard.tsx (used by FoodCounter and progress/BodyProgress). bodyProgress.ts LEAN_ZONE = TARGET_BAND."
+  },
+  {
+   "id": "F-FIN-DONUT",
+   "priority": 1,
+   "area": "rewards",
+   "title": "Finance Helper: a donut of where the money goes, with category rows",
+   "user_visible_behavior": "Finance Home (after the month summary) and Reports show 'Where your money goes': a donut of spending by category (labels with leader lines on a wide card, the list on a phone), 'Spent N MDL' in the middle, and a rounded row per category with icon, amount, share in a small circle, a thin bar and '+12% vs last month'. Periods: This month, Last month, 3 months, Year, and month arrows. Categories under 3% fold into Other (tap to open). Tap a segment or row to see its records; 'See all in the Log' opens the Log filtered to it. Transfers, income, loans and points-only reward entries are left out.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Finance\" npm run smoke"
+   ],
+   "evidence": "unit tests (what is left out, order, shares add to 100, Other folding, comparison with the period before); smoke step Finance categories",
+   "notes": "apps/finance/js/catshare.js (numbers), js/screens/spending.js (card, donut SVG), css/app.css (.dn-*), screens/reports.js, web/financeCategoryShares.test.ts"
+  },
+  {
+   "id": "F-ISLAND-SOUND-DAY",
+   "priority": 1,
+   "area": "island",
+   "title": "Every island notification rings; a short Day page without repeats",
+   "user_visible_behavior": "Every notification that drops down on the island (water, eye, move and screen breaks, Ben and his pushes, your reminders, time's up, a meeting soon, plan blocks, bedtime, the rest) plays its sound once, loud enough, with a switch per kind in Settings → Sound → Island reminders. Dots stay silent. Settings → Sound → Test island sound shows a test card on the island through the real path and says what happened; every skipped sound has a reason in Settings → Island log. If the island has no audio, the app window plays it, else a system beep. The Day page shows only: the alert, the timer, bedtime, one Today list, one quick row (water, push-ups, focus), your Custom Center widgets (which replace the matching built-in button), Ben, and More for everything else.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/islandCardSound.test.ts src/core/islandDay.test.ts src/desktop/appFiles.test.ts src/core/islandReminderSound.test.ts",
+    "SMOKE_ONLY=\"Desktop island\" npm run smoke"
+   ],
+   "evidence": "smoke step 'Desktop island reminders' (one Today list, one water control, More, open time, time's up rings once); screenshots kept outside the repo",
+   "notes": "Root causes: Electron already allowed autoplay; non-body notifications played at ~5 % loudness; the open panel left the sound to a bell that waited for a click; the AudioContext resume was not awaited; skips were not logged; a failed own sound file reported success. Not tried on a real Windows PC yet."
   }
  ]
 }

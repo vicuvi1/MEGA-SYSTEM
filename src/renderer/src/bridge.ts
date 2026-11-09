@@ -234,6 +234,10 @@ export type Bridge = LifeApi & {
     pending?(): Promise<Record<string, import('@core/todoSync').EditStatus>>
     /** Send a failed edit again now. */
     retry?(id: string): Promise<void>
+    /** Where these tasks are now (open on some day, done, or gone): the change check's answer, else asked from Todoist. */
+    lookup?(ids: string[]): Promise<Map<string, import('@core/todoist').TodoLookup>>
+    /** The Sync line: when Todoist last answered, the last problem, outside changes since the last Sync. */
+    syncInfo?(): { okAt: number; failAt: number; error: string | null; changes: number; lastSyncChanges: number }
     /** Your own order of today's tasks (ids), synced. */
     order?(): Promise<string[]>
     setOrder?(ids: string[]): Promise<void>

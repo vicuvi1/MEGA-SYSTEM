@@ -4,6 +4,11 @@ Choices that a later session could easily undo by accident. Each entry gives the
 was made, and what it rules out. Newest entries go on top. Don't reverse one without writing a new
 entry that says why.
 
+### Several photos of one meal: one request, each photo counts; Telegram albums meet in sys_kv as file ids (2026-11-09)
+- **Decision:** up to 6 photos of one meal go to the AI in ONE vision request (`images`, numbered "Photo n"), with a prompt rule to list each food once; one review, one meal. Each photo counts toward the 50 a day; an "Add another photo" re-read on Telegram counts only the new photos (`opts.counted`, in-process only). On Telegram, album parts and added photos are collected in server-only `sys_kv` rows that hold Telegram file ids (never the picture): the first album part to insert the lead row waits about 2 s, takes the parts and makes the one call; the rows go after the read, on Save/Cancel, and after 10 minutes at most. No new table, no new `api/` file, no schema change.
+- **Why:** one call lets the model see the whole meal and not count the same food twice across photos; Vercel functions are stateless and album parts can land in different calls at once, so only an atomic database row can elect one reader; a file id is a reference, not the image, so the "no photo stored" rule still holds.
+- **Rules out:** one vision call per photo of a meal, merging separate answers in code, keeping album parts in memory between requests, storing photo bytes (or base64) anywhere, a new table or function for this, and a page-supplied "already counted" number.
+
 ### One calorie suggestion for food and body; one target band; scale screenshots share the photo op (2026-11-09)
 - **Decision:** there is ONE calorie suggestion (`core/foodAdjust.ts`), shown by one component (`body/FoodAdjustCard.tsx`) on Food and on Progress. It reads weekly averages of the first morning weigh-in from `body_comp` (fallback `body_metrics`), needs 3+ weigh-ins a week, and uses the one band +0.25…+0.5 kg a week (`TARGET_BAND`; `bodyProgress.ts` `LEAN_ZONE` points at it). Rules: under +0.1 kg a week 2 weeks running → +200 kcal; over +0.6 kg a week AND waist up more than 1 cm in 2 weeks → −150/−200; else on track. Accept changes `food_goals.kcalAdj` (±600) and records `{day, delta, after, reason}` in `food_goals.adjLog`. Scale screenshots go through the same `/api/ai` op (`kind:'scale'`), the same 50-a-day counter and budget, a hand-written validator (`core/scaleRead.ts`), a review, then `body_comp` with source `screenshot`; the picture is never stored. This replaces the weight-check numbers in "Food goals are slow muscle gain" below (2 weigh-ins, +0.5 kg, waist +0.5 cm).
 - **Why:** Food and Progress used different bands (+0.1…+0.25 vs +0.25…+0.5) and different data (body_metrics vs body_comp), so they could disagree; the owner asked for one system.
@@ -161,6 +166,22 @@ entry that says why.
 - **Rules out:** writing a task edit straight to `/api/todoist` from a page, reverting a failed save
   silently, or sending date words for Todoist to read in its own time zone.
 
+### Todoist's newer change wins; a task that moved away is not a done task (2026-11-09)
+- **Decision:** a waiting app edit keeps only what Todoist hasn't changed itself since (`reconcilePatch`):
+  a field Todoist changed after your edit keeps Todoist's value, a task done or deleted there drops the
+  edit. A plan task missing from today's list is looked up (change check, else `{op:'lookup'}`): only a
+  really done one (a recurring one done today included) is ticked; moved to another day or deleted, it
+  leaves the plan (its block too unless pinned; an approved block's event is cleared, Todoist is not
+  written back); not known → left alone. Linked must-dos follow Todoist the same way and a must-do done in
+  Todoist is ticked without the must-do coins (`FocusService.followTodoist`; the Todoist task pays by its
+  own rule).
+- **Why:** a task moved to tomorrow in Todoist was ticked as done in the plan (and its block stayed), a
+  failed edit could hide a newer Todoist change forever, and due times with a fixed time zone were read
+  as UTC.
+- **Rules out:** treating "not on today's list" as done, guessing when Todoist doesn't answer, sending a
+  Todoist rename or a "clear time" back for a task that moved itself, or paying the must-do for a task
+  ticked in Todoist.
+
 ### Health alerts: once a day per problem, with the fix (2026-11-08)
 - **Decision:** each kind of problem (AI, server, outside timer, Telegram, Google, Todoist, backup…)
   is told on Telegram at most once per local day, all broken kinds in one message with "What to do"
@@ -309,3 +330,18 @@ entry that says why.
   database for no gain (only the foods you save matter).
 - **Rules out:** a separate vision prompt or provider for Telegram, a new `api/` file for it, caching
   or saving photos, or meal reminders with their own mute or their own dedupe store.
+
+### Every island notification that drops down rings; dots stay silent; the Day page has one of each (2026-11-09)
+- **Decision:** one rule (`core/islandCardSound.ts cardSoundPlan`) decides the sound for every island
+  alert that peeks (slim line or card): once, at the Island reminders volume (not the app's main volume
+  or Sounds switch), with a switch per kind; a dot never rings; every skip is written to the island log.
+  The island may start audio without a click (`allowEagerAudio`, plus the `autoplay-policy` switch);
+  if its audio won't run, the app window plays the sound, a system beep only without one. The Day page
+  shows one Today list, one quick row (water, push-ups, focus) and the owner's Custom Center widgets,
+  which replace the matching built-in control; everything else sits behind More (not drawn until opened).
+- **Why:** the owner heard nothing for most notifications even after the autoplay change: the real
+  causes were ~5 % loudness, a bell waiting for a click, an unawaited resume and no log of skips. The
+  Day page repeated the to-do list and water in up to five places and felt slow.
+- **Rules out:** per-surface sound rules (a second bell when the panel is open), notification sounds
+  tied to the app's main volume, built-in water / push-up / focus buttons next to a widget that does the
+  same, and putting new cards on the Day page outside More without removing a repeat.

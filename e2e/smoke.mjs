@@ -277,6 +277,45 @@ try {
       if (text.length < 40) throw new Error(`frame looks empty (${text.length} chars)`)
     })
   }
+  // Finance Home: "Where your money goes" is a donut plus rows, biggest first, shares adding to 100;
+  // tapping a row lights it up and lists its records; "See all in the Log" opens the Log filtered to it.
+  await step('Finance categories: donut, sorted rows add to 100, tap a row opens its records and the Log', async () => {
+    await open('money')
+    if (await pg.$('.mh-open')) await pg.click('.mh-open')
+    await pg.waitForTimeout(3500)
+    const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
+    const frame = src && pg.frames().find((f) => f.url().includes(src))
+    if (!frame) throw new Error('Finance Helper frame not loaded')
+    await frame.waitForSelector('.dn-card .dn-row', { timeout: 15000 })
+    const info = await frame.evaluate(() => {
+      const card = document.querySelector('.dn-card')
+      const rows = [...card.querySelectorAll('.dn-row:not(.child)')]
+      const pcts = rows.map((r) => Number(r.querySelector('.dn-pct').textContent.replace('%', '')))
+      const amts = rows.filter((r) => r.dataset.cat !== '__other').map((r) => Number(r.querySelector('.dn-amt').textContent.replace(/[^\d]/g, '')))
+      return { segs: card.querySelectorAll('.dn-narrow .dn-seg').length, pcts, amts, centre: card.querySelector('.dn-narrow .dn-c2')?.textContent || '', table: card.querySelectorAll('table.sr-only tbody tr').length, rows: rows.length }
+    })
+    if (info.segs < 2) throw new Error(`donut has ${info.segs} segments`)
+    if (info.pcts.reduce((a, b) => a + b, 0) !== 100) throw new Error(`shares add up to ${info.pcts.reduce((a, b) => a + b, 0)}, not 100`)
+    if (info.amts.some((a, i) => i && a > info.amts[i - 1])) throw new Error('rows are not biggest first')
+    if (!/\d/.test(info.centre)) throw new Error('no total in the donut centre')
+    if (info.table !== info.rows) throw new Error('the table fallback does not match the rows')
+    if (process.env.FIN_CAT_SHOTS) {
+      // Two looks for the report: phone in dark, desktop in light.
+      for (const [w, h, scheme] of [[390, 900, 'dark'], [1280, 900, 'light'], [390, 900, 'light'], [1280, 900, 'dark']]) {
+        await pg.setViewportSize({ width: w, height: h })
+        await pg.emulateMedia({ colorScheme: scheme })
+        await pg.waitForTimeout(1200)
+        await frame.locator('.dn-card').scrollIntoViewIfNeeded()
+        await frame.locator('.dn-card').screenshot({ path: `${process.env.FIN_CAT_SHOTS}/finance-categories-${scheme}-${w}.png` })
+      }
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await frame.click('.dn-card .dn-row:not(.child)')
+    await frame.waitForSelector('.dn-sel .tx', { timeout: 5000 })
+    await frame.click('.dn-sel [data-act="cat-log"]')
+    await frame.waitForFunction(() => location.hash === '#log' && /cat:/.test(document.getElementById('search')?.value || ''), null, { timeout: 8000 })
+    await frame.evaluate(() => { const s = document.getElementById('search'); if (s) { s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })) } })
+  })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.
@@ -1065,10 +1104,11 @@ try {
     await pg.waitForSelector('#ptp-body-food .fd-card', { state: 'visible', timeout: 10000 })
     await pg.locator('.seg-switch [role="tab"]').nth(0).click()
   })
-  // Food photo: a meal photo is read by the AI (a canned answer here), you check the foods, Save logs it once,
-  // and the reply line is built from the real day totals. Over the daily limit: a clear message and the copy-prompt way.
+  // Food photo: 3 photos of one meal picked at once go to the AI in ONE request (a canned answer here), one review
+  // shows the 3 thumbnails and one combined list, you check the foods, Save logs ONE meal once, and the reply line is
+  // built from the real day totals. Over the daily limit: a clear message and the copy-prompt way.
   // FOOD_PHOTO_SHOTS=<dir> saves the review screen (desktop and phone). The meal is removed again at the end.
-  await step('Food photo: upload a photo, review the foods, change a qty, save once, the reply line, the daily limit', async () => {
+  await step('Food photo: upload 3 photos at once, one review, change a qty, save once, the reply line, the daily limit', async () => {
     const shots = process.env.FOOD_PHOTO_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
@@ -1079,7 +1119,7 @@ try {
     await pg.waitForSelector(`${fc} .fph-start .fph-snap`, { timeout: 20000 })
     if (!(await pg.locator(`${fc} .fph-noai`).count())) throw new Error('no "No AI? Copy the prompt instead" link')
     // A made-up "meal photo", drawn in the page (no real photo).
-    const png = Buffer.from(await pg.evaluate(() => {
+    const draw = async (tint) => Buffer.from(await pg.evaluate((tint) => {
       const c = document.createElement('canvas')
       c.width = 1600
       c.height = 1200
@@ -1099,13 +1139,22 @@ try {
       x.fillStyle = '#c98b4a'
       x.fillRect(860, 480, 240, 150)
       x.fillRect(880, 660, 240, 150)
+      x.fillStyle = tint
+      x.fillRect(80, 80, 260, 380)
       return c.toDataURL('image/png').split(',')[1]
-    }), 'base64')
+    }, tint), 'base64')
+    const png = await draw('#e9e2d6')
+    // Three made-up photos of one meal: the plate, a packaged snack, a drink.
+    const three = [
+      { name: 'plate.png', mimeType: 'image/png', buffer: png },
+      { name: 'snack.png', mimeType: 'image/png', buffer: await draw('#4a7bd8') },
+      { name: 'drink.png', mimeType: 'image/png', buffer: await draw('#d84a4a') }
+    ]
     const canned = {
       items: [
-        { name: 'Eggs', matchedSavedFoodId: null, qty: 3, unit: 'egg', grams: 150, kcal: 215, protein: 19, carbs: 1, fat: 15, confidence: 'high' },
-        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low' },
-        { name: 'bulgur container', matchedSavedFoodId: null, qty: 1, unit: 'container', grams: 350, kcal: 520, protein: 14, carbs: 80, fat: 12, confidence: 'medium' }
+        { name: 'Eggs', matchedSavedFoodId: null, qty: 3, unit: 'egg', grams: 150, kcal: 215, protein: 19, carbs: 1, fat: 15, confidence: 'high', photo: 1 },
+        { name: 'Bread', matchedSavedFoodId: null, qty: 2, unit: 'slice', grams: 60, kcal: 160, protein: 5, carbs: 30, fat: 2, confidence: 'low', photo: 2 },
+        { name: 'bulgur container', matchedSavedFoodId: null, qty: 1, unit: 'container', grams: 350, kcal: 520, protein: 14, carbs: 80, fat: 12, confidence: 'medium', photo: 3 }
       ],
       totals: { kcal: 999, protein: 99 },
       message: 'Eggs and toast: a good protein start.'
@@ -1128,10 +1177,15 @@ try {
       const kcalBefore = await kcalNow()
       const liveMeals = () => pg.locator(`${fc} .fd-meals li:not(.removed)`).count()
       const mealsBefore = await liveMeals()
-      await pg.locator(`${fc} .fph-file`).setInputFiles({ name: 'meal.png', mimeType: 'image/png', buffer: png })
+      await pg.locator(`${fc} .fph-file`).setInputFiles(three)
       await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 3, fc, { timeout: 15000 })
-      // The photo went out small, as JPEG, with today's numbers.
-      if (sent?.image?.mime !== 'image/jpeg' || sent.image.data.length > 400_000) throw new Error(`the photo was not made small: ${sent?.image?.mime} ${sent?.image?.data?.length}`)
+      // ONE request with the 3 photos, each made small, as JPEG, with today's numbers.
+      if (calls !== 1) throw new Error(`3 photos should be one request, got ${calls}`)
+      if ((sent?.images ?? []).length !== 3) throw new Error(`expected 3 photos in the request, got ${(sent?.images ?? []).length}`)
+      for (const im of sent.images) if (im?.mime !== 'image/jpeg' || im.data.length > 400_000) throw new Error(`a photo was not made small: ${im?.mime} ${im?.data?.length}`)
+      // One review: the 3 thumbnails, and each food says which photo it was seen in.
+      if ((await pg.locator(`${fc} .fph-review .fph-strip img`).count()) !== 3) throw new Error('the review does not show the 3 photos')
+      if (!/^Photo 2$/.test((await pg.locator(`${fc} .fph-item`).nth(1).locator('.fph-pic-tag').innerText()).trim())) throw new Error('the food does not say which photo it came from')
       if (!(sent.targets?.kcal > 0)) throw new Error('the goals were not sent with the photo')
       // Totals come from the items (not the AI's 999), the low one is flagged, nothing is saved yet.
       const total = () => pg.locator(`${fc} .fph-total`).innerText()
@@ -1188,7 +1242,7 @@ try {
       if (!/50 photos today/.test(await pg.locator(`${fc} .fph-fail`).innerText())) throw new Error('no daily limit message')
       if (!(await pg.locator(`${fc} .fph-fail .fph-fallback`).count())) throw new Error('no "Copy the prompt instead" after the limit')
       if (await pg.locator(`${fc} .fph-review`).count()) throw new Error('a review opened over the limit')
-      if (calls !== 2) throw new Error(`expected 2 photo calls, got ${calls}`)
+      if (calls !== 2) throw new Error(`expected 2 photo requests (3 photos, then 1), got ${calls}`)
       // Clean up: remove the photo meal so later steps see the day as before.
       await pg.locator(`${fc} .fd-meals li:not(.removed)`).filter({ hasText: 'Eggs' }).first().locator('.fd-remove').click()
       await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals li:not(.removed)`).length === n, [fc, mealsBefore], { timeout: 10000 })
@@ -1999,9 +2053,13 @@ try {
     await pg.waitForFunction(() => document.querySelector('.st-head h1')?.textContent === 'Sound', null, { timeout: 5000 })
     const n = await pg.locator('.sx-moment:not([data-reminder])').count()
     if (n !== 18) throw new Error(`${n} sound rows, want 18`)
-    // Island reminders: a switch and a test button for water, eye break, move break and screen break.
+    // Island reminders: a switch and a test button for every kind of island notification, and Test island sound.
     const rem = await pg.locator('[data-reminder-sounds] .sx-moment[data-reminder]').count()
-    if (rem !== 4) throw new Error(`${rem} island reminder rows, want 4`)
+    if (rem !== 11) throw new Error(`${rem} island reminder rows, want 11`)
+    // On the website the test plays here and says the island is in the desktop app.
+    await pg.click('[data-test-island-sound]')
+    const said = await pg.locator('[data-test-island-result]').textContent({ timeout: 4000 })
+    if (!/Played here|No sound/.test(said || '')) throw new Error(`Test island sound says: ${said}`)
     await pg.click('button[aria-label="Sound for Water"]')
     await pg.waitForSelector('.ui-select-list [role=option]', { timeout: 3000 })
     await pg.locator('.ui-select-list [role=option]', { hasText: 'Pop' }).click()
@@ -2930,14 +2988,41 @@ try {
     const nub = await ip.locator('.di-nub').boundingBox()
     await ip.mouse.move(nub.x + nub.width / 2, nub.y + 2)
     await ip.waitForSelector('.di-pill.di-rest', { timeout: 3000 })
+    // How fast the panel opens: from the press to the first frame with the panel (want well under 150 ms on a PC).
+    await ip.evaluate(() => window.addEventListener('pointerdown', () => (window.__openT = performance.now()), { capture: true, once: true }))
     await ip.click('.di-pill.di-rest')
     await ip.waitForSelector('.di-panel', { timeout: 3000 })
+    const openMs = await ip.evaluate(() => new Promise((r) => requestAnimationFrame(() => r(Math.round(performance.now() - window.__openT)))))
+    console.log(`  island panel opened in ${openMs} ms`)
+    if (!(openMs < 600)) throw new Error(`the panel took ${openMs} ms to open`)
+    // One to-do list, one water control, one row of quick actions; the rest waits behind More.
+    const day = await ip.evaluate(() => ({
+      today: document.querySelectorAll('.di-panel .di-today').length,
+      water: document.querySelectorAll('.di-panel [data-quick-water], .di-panel .di-logs .di-water, .di-panel .di-chips, .di-panel .dw-hero').length,
+      quick: document.querySelectorAll('.di-panel .di-quick').length,
+      hidden: document.querySelectorAll('.di-panel .di-minical, .di-panel .alive-minis, .di-panel .di-kit-start, .di-panel .v2-instant').length,
+      more: document.querySelectorAll('.di-panel [data-day-more]').length
+    }))
+    if (day.today !== 1 || day.water !== 1 || day.quick !== 1 || day.hidden || day.more !== 1) throw new Error(`the Day page repeats or is long: ${JSON.stringify(day)}`)
     // "Why no reminder?" on the Day page.
     const whyLine = await ip.locator('[data-nudge-why]').first().textContent({ timeout: 3000 }).catch(() => null)
     if (!/Why no reminder\? Move break: at the PC 12 min/.test(whyLine || '')) throw new Error(`the why line says: ${whyLine}`)
     const rows = await ip.evaluate(() => [...document.querySelectorAll('.di-check span, .di-week3-row span, .di-task span')].map((e) => (e.textContent || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ').trim()))
     const dup = rows.filter((r, i) => rows.indexOf(r) !== i)
     if (dup.length) throw new Error(`to-dos shown twice: ${dup.join(', ')} (rows: ${rows.join(' | ')})`)
+    if (process.env.ISLAND_DAY_SHOTS) await ip.locator('.di-panel').screenshot({ path: `${process.env.ISLAND_DAY_SHOTS}/island-day-page.png` })
+    // Any notification that drops down rings once, not only body reminders: time's up (it passes the gap).
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 4000 })
+    const before = await ip.evaluate(() => window.__island.sounds.length)
+    const over = { id: `over:${Date.now()}`, kind: 'over', title: "Time's up", text: 'Focus · 25 min', actions: [{ label: 'Done', primary: true, action: { kind: 'stop' } }] }
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 8, alert: a }), over)
+    await ip.waitForSelector('.di-peek.alert.kind-over', { timeout: 5000 })
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 9, alert: a }), over)
+    await ip.waitForTimeout(1200)
+    const rang = await ip.evaluate((n) => window.__island.sounds.slice(n), before)
+    if (rang.length !== 1 || rang[0].kind !== 'timer') throw new Error(`time's up rang wrong: ${JSON.stringify(rang)}`)
+    if (process.env.ISLAND_DAY_SHOTS) await ip.locator('.di-peek.alert').screenshot({ path: `${process.env.ISLAND_DAY_SHOTS}/island-notification-card.png` })
     await ip.context().close()
   })
   // Alive island (core/islandAlive.ts and core/gaming.ts, the real code, bundled here): accept the
@@ -3733,6 +3818,8 @@ try {
     // IC17: edit the pill in the panel: hide an item and it is saved.
     await ip.click('.di-pill')
     await ip.waitForSelector('.di-panel', { timeout: 5000 })
+    // The rest of the old Day page sits behind More (core/islandDay.ts).
+    await ip.click('[data-day-more]')
     await ip.click('.di-edit-open')
     await ip.waitForSelector('.di-edit-item', { timeout: 3000 })
     await ip.click('[data-tap="edit:points"]')
@@ -3799,6 +3886,8 @@ try {
     await ip.waitForSelector('.di-pill .hd-badge', { timeout: 5000 })
     await ip.evaluate((a) => window.__setSnap({ alert: a }), alert0)
     await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel [data-day-more]', { timeout: 5000 })
+    await ip.click('[data-day-more]')
     await ip.waitForSelector('.di-panel .hd-card', { timeout: 5000 })
     if (!/Healthy day/.test(await ip.locator('.hd-card').innerText())) throw new Error('no Healthy day card on the Day page')
     // The reminder you set: Done sends the answer.
@@ -3921,6 +4010,8 @@ try {
     // The panel: one time per zone, yours first.
     await ip.focus('.di-pill')
     await ip.keyboard.press('Enter')
+    await ip.waitForSelector('.di-panel [data-day-more]', { timeout: 5000 })
+    await ip.click('[data-day-more]')
     await ip.waitForSelector('.di-panel .di-world', { timeout: 5000 })
     const row = await ip.$$eval('.di-world-z small', (e) => e.map((x) => x.textContent))
     if (row.join(',') !== 'Local,NYC,London') throw new Error(`the world clock row has ${row.join(', ')}`)
@@ -5252,6 +5343,60 @@ try {
       await pg.context().clock.setSystemTime(fakeNow())
       await reloadApp()
     }
+  })
+  // Todoist from outside: changes made in the Todoist app reach Tasks, Today → Now and the day plan.
+  await step('Todoist from outside: a task moved to tomorrow and one done in Todoist show on Tasks, Today and the plan after Sync', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    const call = async (n, body) => (await fetch(`http://127.0.0.1:${port}/api/${n}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
+    const until = async (fn, what, ms = 20000) => {
+      const end = Date.now() + ms
+      for (;;) {
+        if (await fn().catch(() => false)) return
+        if (Date.now() > end) throw new Error(what)
+        await new Promise((ok) => setTimeout(ok, 250))
+      }
+    }
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="plan"]', { timeout: 15000 })
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    await pg.locator('section.cp .pe-block').first().waitFor({ state: 'attached', timeout: 15000 })
+    const names = (await pg.$$eval('section.cp .pe-block .pe-name', (els) => els.map((el) => (el.textContent || '').trim()))).map((t) => t.replace(/^(?:\p{Extended_Pictographic}\uFE0F?)+\s*/u, ''))
+    const day = await pg.evaluate(() => {
+      const d = new Date()
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    })
+    const open0 = (await call('todoist', { op: 'peek' })).filter((t) => !t.done && t.due && t.due <= day)
+    // One with a block of its own on the plan (so the plan has something to take in), and one more to tick.
+    const moved = open0.find((t) => names.includes(t.content)) ?? open0[0]
+    const done = open0.find((t) => t.id !== moved.id)
+    if (!moved || !done) throw new Error('the made-up Todoist has too few open tasks for today')
+    await call('todoist', { op: 'testEdit', id: moved.id, due: 'tomorrow' })
+    await call('todoist', { op: 'testDone', id: done.id })
+    // Today → Now: Sync, then neither is among the other tasks, and the line says what came in.
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    const sync = pg.locator('.ot-head .sync-btn button').first()
+    await sync.waitFor({ timeout: 15000 })
+    await sync.click()
+    await until(async () => (await pg.locator('.ot-head .sync-at', { hasText: /Synced \d\d:\d\d · \d+ changes? from Todoist/ }).count()) > 0, 'no "changes from Todoist" after Sync')
+    await until(async () => !(await pg.locator('.ot-list .ot-t', { hasText: moved.content }).count()) && !(await pg.locator('.ot-list .ot-t', { hasText: done.content }).count()), 'Today still lists the moved or the done task')
+    // The day plan: the moved task is listed under "Moved to tomorrow" (when it had a block), the block keeps no stale task.
+    await pg.click('.td2 .ptabs [data-tab="plan"]')
+    if (names.includes(moved.content)) {
+      await until(async () => {
+        const closed = pg.locator('section.cp .pa:not(.open) .pa-head').first()
+        if (await closed.count()) await closed.click()
+        return (await pg.locator('section.cp .pa-later li', { hasText: moved.content }).filter({ hasText: 'moved to tomorrow in Todoist' }).count()) > 0
+      }, 'the plan does not show the task moved to tomorrow in Todoist')
+      // Its block goes (an approved one's calendar event with it); only a pinned block would stay.
+      const stale = async () => (await pg.$$eval('section.cp .pe-block:not(.locked) .pe-name', (els) => els.map((el) => (el.textContent || '').trim()))).map((t) => t.replace(/^(?:\p{Extended_Pictographic}️?)+\s*/u, '')).includes(moved.content)
+      await until(async () => !(await stale()), 'the plan still shows a block for the task moved to tomorrow')
+    } else console.log('  (no block of its own for the moved task in the made-up plan: Today and Tasks are checked)')
+    // Tasks: the moved one is due tomorrow, the done one is gone.
+    await open('tasks')
+    const row = pg.locator('.ta-task', { hasText: moved.content }).first()
+    await row.waitFor({ timeout: 15000 })
+    await row.locator('.ta-due', { hasText: /tomorrow/i }).waitFor({ timeout: 10000 })
+    await until(async () => !(await pg.locator('.ta-task', { hasText: done.content }).count()), 'Tasks still lists the task done in Todoist')
   })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {

@@ -1,6 +1,9 @@
 // Food photo logging (Body → Food): take or drop a meal photo, the AI lists the
 // foods, you check them here, then Save. NOTHING is saved before you tap Save.
-// - The photo is made small in the browser (foodPhotoPrep.ts) and read by
+// - Up to 6 photos of one meal at once (a plate, a packaged snack, a drink):
+//   picked, dropped or pasted together, they go in ONE request so the AI sees
+//   the whole meal and lists each food once. One combined list, one meal saved.
+// - Each photo is made small in the browser (foodPhotoPrep.ts) and read by
 //   /api/ai {op:'foodPhoto'}; it is never stored, only the foods you save.
 // - The AI's answer is checked by core/foodVision.ts (numbers clamped, totals
 //   added up again, your saved foods use your own numbers).
@@ -16,7 +19,7 @@ import { life } from '../bridge'
 import { useToast } from '../ui'
 import { Select } from '../Select'
 import { copyText } from './FoodPlan'
-import { askFoodPhoto, imageFrom, prepFoodPhoto, type PreparedPhoto } from './foodPhotoPrep'
+import { MAX_PHOTOS, askFoodPhoto, imagesFrom, prepFoodPhoto, type PreparedPhoto } from './foodPhotoPrep'
 import type { FoodView } from '../../../main/food'
 import './food-photo.css'
 
@@ -45,7 +48,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
   const api = life.coach?.food
   const toast = useToast()
   const [stage, setStage] = useState<Stage>({ s: 'idle' })
-  const [photo, setPhoto] = useState<PreparedPhoto | null>(null)
+  const [photos, setPhotos] = useState<PreparedPhoto[]>([])
   const [note, setNote] = useState('')
   const [rows, setRows] = useState<Row[]>([])
   const [message, setMessage] = useState('')
@@ -61,26 +64,28 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
   const items = rows.map((r) => r.item)
   const totals = visionTotals(items)
 
+  // All the photos picked, dropped or pasted together are one meal: one request, one list.
   const read = useCallback(
-    async (file: File | null) => {
-      if (!file) return
+    async (files: File[]) => {
+      if (!files.length) return
+      if (files.length > MAX_PHOTOS) toast(`Only the first ${MAX_PHOTOS} photos are read.`, 'bad')
       setStage({ s: 'reading' })
-      let p: PreparedPhoto
+      const ps: PreparedPhoto[] = []
       try {
-        p = await prepFoodPhoto(file)
+        for (const f of files.slice(0, MAX_PHOTOS)) ps.push(await prepFoodPhoto(f))
       } catch (e: any) {
         setStage({ s: 'failed', error: e?.message || 'That photo could not be opened.' })
         return
       }
-      setPhoto(p)
+      setPhotos(ps)
       const t = view.totals
       const todayItems = view.day === view.today ? view.meals.filter((m) => !m.removed).map((m) => m.name) : []
-      const ans = await askFoodPhoto({ image: { mime: p.mime, data: p.data }, note, saved, today: { kcal: t.kcal, protein: t.protein, items: todayItems }, targets: { kcal: t.targets.kcal, protein: t.targets.protein } })
+      const ans = await askFoodPhoto({ images: ps.map((p) => ({ mime: p.mime, data: p.data })), note, saved, today: { kcal: t.kcal, protein: t.protein, items: todayItems }, targets: { kcal: t.targets.kcal, protein: t.targets.protein } })
       if (!ans.ok) {
         setStage({ s: 'failed', error: ans.error, limit: ans.limit })
         return
       }
-      const check = validateVision(ans.result, saved)
+      const check = validateVision(ans.result, saved, ps.length)
       if (!check.ok) {
         setStage({ s: 'failed', error: check.error })
         return
@@ -91,17 +96,17 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
       setType(slotNow())
       setStage({ s: 'review' })
     },
-    [note, saved, view]
+    [note, saved, view, toast]
   )
 
   // Paste a photo anywhere on the page while nothing else is open.
   useEffect(() => {
     if (stage.s !== 'idle' && stage.s !== 'saved' && stage.s !== 'failed') return
     const onPaste = (e: ClipboardEvent) => {
-      const f = imageFrom(e.clipboardData?.items)
-      if (f) {
+      const fs = imagesFrom(e.clipboardData?.items, MAX_PHOTOS + 1)
+      if (fs.length) {
         e.preventDefault()
-        void read(f)
+        void read(fs)
       }
     }
     window.addEventListener('paste', onPaste)
@@ -113,7 +118,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
   const reset = () => {
     setStage({ s: 'idle' })
     setRows([])
-    setPhoto(null)
+    setPhotos([])
     setMessage('')
   }
   const copyPrompt = async () => {
@@ -132,7 +137,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
   const swap = (r: Row, id: string) => {
     const s = saved.find((x) => x.id === id)
     if (!s) return
-    const it = fromSaved(s, 1, r.item.grams)
+    const it = { ...fromSaved(s, 1, r.item.grams), ...(r.item.photo ? { photo: r.item.photo } : {}) }
     setRow(r.key, () => ({ key: r.key, base: it, item: it }))
   }
   const save = async () => {
@@ -147,7 +152,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
       const line = photoReplyLine({ items: items.filter((i) => i.name.trim()), meal: totals, day: { kcal: t.kcal, protein: t.protein, kcalGoal: t.targets.kcal, proteinGoal: t.targets.protein }, idea: v.next.ideas[0]?.text })
       setStage({ s: 'saved', line })
       setRows([])
-      setPhoto(null)
+      setPhotos([])
       setNote('')
       onSaved?.(v)
     } catch (e: any) {
@@ -159,8 +164,8 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
 
   const pickers = (
     <>
-      <input ref={camRef} className="fph-cam" type="file" accept="image/*" capture="environment" hidden onChange={(e) => (void read(e.target.files?.[0] ?? null), (e.target.value = ''))} />
-      <input ref={fileRef} className="fph-file" type="file" accept="image/*" hidden onChange={(e) => (void read(e.target.files?.[0] ?? null), (e.target.value = ''))} />
+      <input ref={camRef} className="fph-cam" type="file" accept="image/*" capture="environment" hidden onChange={(e) => (void read(imagesFrom(e.target.files, 1)), (e.target.value = ''))} />
+      <input ref={fileRef} className="fph-file" type="file" accept="image/*" multiple hidden onChange={(e) => (void read(imagesFrom(e.target.files, MAX_PHOTOS + 1)), (e.target.value = ''))} />
     </>
   )
 
@@ -168,7 +173,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
     return (
       <section className="fph fph-review" aria-label="Check the foods before saving">
         <div className="fph-review-head">
-          {photo && <img className="fph-thumb" src={photo.url} alt="Your meal photo" width={88} height={88} />}
+          {photos.length === 1 && <img className="fph-thumb" src={photos[0].url} alt="Your meal photo" width={88} height={88} />}
           <div className="fph-review-sum">
             <b className="fph-total" aria-live="polite">
               {fmt(totals.kcal)} kcal · {fmt(totals.protein)} g protein
@@ -179,6 +184,17 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
             {message && <p className="fph-msg">{message}</p>}
           </div>
         </div>
+        {photos.length > 1 && (
+          <div className="fph-strip" aria-label={`${photos.length} photos of this meal, read together`}>
+            {photos.map((p, i) => (
+              <figure key={i} className="fph-strip-pic">
+                <img src={p.url} alt={`Meal photo ${i + 1}`} width={72} height={72} />
+                <figcaption>{i + 1}</figcaption>
+              </figure>
+            ))}
+            <small className="muted fph-strip-note">{photos.length} photos read together: each food is listed once.</small>
+          </div>
+        )}
 
         <ul className="fph-items">
           {rows.map((r) => {
@@ -187,6 +203,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
               <li key={r.key} className={`fph-item${it.confidence === 'low' ? ' low' : ''}`}>
                 <div className="fph-item-top">
                   <input className="fph-name" value={it.name} placeholder="Food name" aria-label="Food name" onChange={(e) => setRow(r.key, (x) => ({ ...x, item: { ...x.item, name: e.target.value } }))} />
+                  {photos.length > 1 && it.photo ? <span className="fph-pic-tag" title={`Seen in photo ${it.photo}`}>Photo {it.photo}</span> : null}
                   {!r.manual && <span className={`fph-conf ${it.confidence}`}>{CONF_LABEL[it.confidence]}</span>}
                   <button type="button" className="fph-del" aria-label={`Remove ${it.name || 'this food'}`} onClick={() => setRows((list) => list.filter((x) => x.key !== r.key))}>
                     ×
@@ -280,7 +297,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
       onDrop={(e) => {
         e.preventDefault()
         setDrag(false)
-        void read(imageFrom(e.dataTransfer?.files))
+        void read(imagesFrom(e.dataTransfer?.files, MAX_PHOTOS + 1))
       }}
     >
       {pickers}
@@ -291,9 +308,11 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
       )}
       {stage.s === 'reading' ? (
         <div className="fph-reading" role="status">
-          {photo && <img className="fph-thumb" src={photo.url} alt="Your meal photo" width={64} height={64} />}
+          {photos.slice(0, 3).map((p, i) => (
+            <img key={i} className="fph-thumb" src={p.url} alt={`Meal photo ${i + 1}`} width={64} height={64} />
+          ))}
           <span className="fph-spin" aria-hidden="true" />
-          <span>Reading your photo…</span>
+          <span>{photos.length > 1 ? `Reading your ${photos.length} photos…` : 'Reading your photo…'}</span>
         </div>
       ) : (
         <>
@@ -302,11 +321,11 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved }: { view: FoodVi
               Snap a meal
             </button>
             <button type="button" className="bdy-btn fph-upload" onClick={() => fileRef.current?.click()}>
-              Upload photo
+              Upload photos
             </button>
           </div>
           <input className="fph-note" value={note} maxLength={300} placeholder='Note (optional): "2 containers, one was buckwheat"' aria-label="A note for the photo" onChange={(e) => setNote(e.target.value)} />
-          <small className="muted fph-hint">Or drop or paste a photo here. You check every food before it is saved.</small>
+          <small className="muted fph-hint">Or drop or paste photos here. Up to {MAX_PHOTOS} photos of one meal at once (plate, snack, drink). You check every food before it is saved.</small>
         </>
       )}
       {stage.s === 'failed' && (

@@ -4,13 +4,17 @@
 import { useEffect, useState } from 'react'
 import { life } from '../bridge'
 import { checkRemote } from './planStore'
-import { autoSyncLine, syncErrorText } from '@core/syncLabel'
+import { autoSyncLine, syncErrorText, syncedLine } from '@core/syncLabel'
 import './planEditor.css'
 
 let syncedAt = 0
 let lastCheckAt = 0
 let fails = 0
 let manualFailed = false
+/** The last Sync failed because Todoist did not answer. */
+let todoistDown = false
+/** Changes made in Todoist itself that the last Sync took in. */
+let lastChanges = 0
 let running: Promise<number> | null = null
 const subs = new Set<(at: number, busy: boolean) => void>()
 const tell = () => subs.forEach((f) => f(syncedAt, !!running))
@@ -19,18 +23,25 @@ const tell = () => subs.forEach((f) => f(syncedAt, !!running))
 export function syncAll(): Promise<number> {
   if (running) return running
   running = (async () => {
+    const started = Date.now()
     try {
-      lastCheckAt = Date.now()
+      lastCheckAt = started
       const at = await (life.syncNow?.() ?? Promise.resolve(Date.now()))
+      // Todoist didn't answer the change check: say so plainly (the lists keep what they had).
+      const info = life.todoist?.syncInfo?.()
+      if (info?.error && info.failAt >= started) throw Object.assign(new Error(info.error), { todoist: true })
       // The day plan takes in what changed in Google and Todoist.
       await checkRemote(true).catch(() => {})
       syncedAt = at
+      lastChanges = info?.lastSyncChanges ?? 0
       fails = 0
       manualFailed = false
+      todoistDown = false
       return at
-    } catch {
+    } catch (e) {
       fails++
       manualFailed = true
+      todoistDown = !!(e as { todoist?: boolean })?.todoist
       return syncedAt
     } finally {
       running = null
@@ -67,8 +78,6 @@ export function startAutoSync(): () => void {
   }
 }
 
-const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
-
 export function SyncButton({ className = '' }: { className?: string }) {
   const [at, setAt] = useState(syncedAt)
   const [busy, setBusy] = useState(!!running)
@@ -89,7 +98,7 @@ export function SyncButton({ className = '' }: { className?: string }) {
       </button>
       {manualFailed && !busy && (
         <small className="sync-err" role="alert">
-          {syncErrorText()}{' '}
+          {syncErrorText(todoistDown)}{' '}
           <button type="button" className="sync-retry" onClick={() => void syncAll()}>
             Retry
           </button>
@@ -97,7 +106,7 @@ export function SyncButton({ className = '' }: { className?: string }) {
       )}
       {at > 0 && !busy && !manualFailed && (
         <small className="sync-at" aria-live="polite">
-          Synced {hhmm(at)}
+          {syncedLine(at, lastChanges)}
         </small>
       )}
     </span>

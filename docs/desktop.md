@@ -136,3 +136,7 @@ app states. Restoring (`restoreStatements`) replaces each table in one
 transaction, only adds missing rows to the append-only history (ledger,
 discipline), keeps the PIN and bot setup, and moves the data marker so every
 device reloads. Settings → Restore from backup file takes the same files.
+
+## Island sound on Windows (2026-11-09)
+
+All island sounds are synthesized (no files to package). `main.ts` sets `autoplay-policy=no-user-gesture-required` before ready (Electron's default too). The island rings through `soundKit.ts playCard`, which waits for the AudioContext to run and makes a fresh one if it won't; if the island has no audio, `island:soundFallback` asks the app window (hidden in the tray is fine) to play the same sound, else `shell.beep()`. Every notification writes a sound line to the island log (Settings → Island log). Settings → Sound → Test island sound runs the real path. Windows counts any app holding the microphone as a call, which silences reminders (the log says "in a call (mic or camera in use)"). Details: `docs/areas/island.md`, "Every notification rings".

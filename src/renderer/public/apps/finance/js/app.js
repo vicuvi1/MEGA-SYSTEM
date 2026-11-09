@@ -1031,12 +1031,12 @@ function viewHome() {
   ${stepsCard(today)}
   ${payCard(today)}
   ${homeStrip(s, key)}
+  ${Spending.spendingCard({ key: 'home', period: ui.spendPeriod })}
   ${Goals.homeCard({ featured: true })}
   ${monthComparison(today)}
   ${quickRow()}
   <div class="dash">
     <div class="dash-main">
-      ${Spending.spendingCard({ period: ui.spendPeriod })}
       ${recent.length ? `<section class="card"><h2>Recent <button class="card-link right" data-go="log">Open log</button></h2><div class="list">${recent.map((t) => txRow(t, { showDate: true })).join('')}</div></section>` : ''}
     </div>
     <div class="dash-side">
@@ -3106,11 +3106,7 @@ document.addEventListener('click', (e) => {
   }
   else if (act.startsWith('update-')) Updates.onClick(act);
   else if (act === 'cat-open') Spending.openCategory(el.dataset.cat, el.dataset.period, el.dataset.type);
-  else if (act === 'spend-period') {
-    ui[el.dataset.type === 'income' ? 'incomePeriod' : 'spendPeriod'] = el.dataset.period;
-    render();
-    app.querySelector(`.spend[data-spend="${el.dataset.type}"]`)?.classList.add('flash-in');
-  }
+  else if (Spending.onClick(act, el)) { /* the "Where your money goes" card */ }
   else if (act === 'add') openTxSheet();
   else if (act === 'edit') openTxSheet(state.tx.find((t) => t.id === el.dataset.id));
   else if (act === 'transfer') openTransferSheet(el.dataset.from);

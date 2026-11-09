@@ -286,6 +286,8 @@ export function view() {
     ${r.loansOut || r.loansIn ? kpi('Loans', `${money(r.loansOut)} out`, `<span class="delta muted">${money(r.loansIn)} back in</span>`, '', '🤝') : ''}
   </section>
 
+  ${Spending.spendingCard({ key: 'reports', title: 'Where my money goes', range: { from: r0.from, to: r0.to, label: r0.label, prev: { ...M.previousRange(r0.from, r0.to), word: 'the period before' } }, list: fs.tx })}
+
   ${whereItWent(state, fs, r, r0)}
 
   <div class="rep-row-visuals">

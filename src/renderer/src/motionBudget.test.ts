@@ -75,6 +75,7 @@ const EXCEPTIONS: Record<string, string[]> = {
   'g-draw': ['stroke-dashoffset'], // a goal ring
   'spark-draw': ['stroke-dashoffset'], // the small balance line
   'toast-check': ['stroke-dashoffset'], // the 14 px tick in a toast
+  'dn-draw': ['stroke-dasharray'], // Finance donut segments, drawn once on open
 }
 
 describe('motion budget', () => {

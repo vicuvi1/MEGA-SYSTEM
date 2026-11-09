@@ -274,8 +274,73 @@ function schedule(e: Engine, voices: Voice[], cat: SoundCategory, extra: number,
   }
 }
 
-/** The sound engine has started (after your first tap or key): nothing makes it start early. */
-export const audioReady = () => !!eng && eng.c.state !== 'closed'
+/**
+ * The sound engine has started (after your first tap or key): nothing makes it
+ * start early, except on the desktop island (`allowEagerAudio`): Electron lets
+ * its window play without a click, and in Calm every click passes through, so
+ * waiting for one meant the island's sounds never played.
+ */
+let eager = false
+export const allowEagerAudio = () => {
+  eager = true
+}
+export const audioReady = () => eager || (!!eng && eng.c.state !== 'closed')
+
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
+/** Resumes the context and waits (at most `ms`) until it really runs. */
+async function running(e: Engine, ms: number): Promise<boolean> {
+  if (e.c.state === 'running') return true
+  await Promise.race([e.c.resume().catch(() => {}), wait(ms)])
+  return (e.c.state as string) === 'running'
+}
+/**
+ * An engine that really plays: resumed, and if its resume hangs or fails (the
+ * audio device changed, Windows took it away, the context went bad after a
+ * sleep), a fresh AudioContext once. null: no audio here at all.
+ */
+export async function readyEngine(ms = 400): Promise<Engine | null> {
+  const e = engine()
+  if (!e) return null
+  if (await running(e, ms)) return e
+  try {
+    void e.c.close().catch(() => {})
+  } catch {
+    /* already closed */
+  }
+  eng = null
+  const f = engine()
+  if (!f) return null
+  return (await running(f, ms)) ? f : null
+}
+/** What the audio engine says (for the island log). */
+export function audioState(): string {
+  if (!eng) return 'not started'
+  const c = eng.c as AudioContext & { baseLatency?: number }
+  return `${c.state}, ${c.sampleRate} Hz${typeof c.baseLatency === 'number' ? `, ${Math.round(c.baseLatency * 1000)} ms` : ''}`
+}
+
+export type CardSoundResult = 'played' | 'no audio device' | `blocked: ${string}`
+/**
+ * A notification's sound on the island (core/islandCardSound.ts decided it may
+ * ring). Its own volume: the app's main volume and Sounds switch don't make it
+ * quieter (the island reminder volume does); quiet hours, a meeting and a
+ * muted system still stop it, except for the Settings test (`preview`).
+ * Waits until the audio really runs, so a sleeping context can't swallow it.
+ */
+export async function playCard(name: SoundName, loud: number, opts: { preview?: boolean } = {}): Promise<CardSoundResult> {
+  const cat = SOUND_CATEGORY[name] ?? 'alerts'
+  const block = soundBlock(cat, { ...playCheck(), volume: 100 }, { ownSwitch: true, preview: opts.preview })
+  if (block) return `blocked: ${block}`
+  const prefs = soundPrefs()
+  const pick = pickFor(name, prefs.moments)
+  if (pick === null) return 'blocked: its sound is None (Settings → Sound → Which sound for what)'
+  const e = await readyEngine()
+  if (!e) return 'no audio device'
+  const voices = pick === 'own' ? themed(name, prefs.theme, 0) : themeVoices(momentRecipe(pick), prefs.theme)
+  const vol = Math.max(0, Math.min(100, getUiPrefs().volume ?? 80)) / 100
+  schedule(e, voices, cat, Math.min(4, Math.max(0, loud) / Math.max(0.25, vol)), 0)
+  return 'played'
+}
 
 /**
  * Plays notes made elsewhere (the island's own sounds, core/islandSound.ts)
@@ -304,8 +369,8 @@ export function playBodyReminder(kind: BodyReminder, volume: number, opts: { pre
   if (!(volume > 0)) return
   play(BODY_REMINDER_SOUND[kind], { loud: reminderGain(volume), ownSwitch: true, preview: opts.preview })
 }
-/** Why the kit would keep an alert sound quiet right now (quiet hours, a meeting, the system muted), or null. */
-export const alertBlock = () => soundBlock('alerts', playCheck(), { ownSwitch: true })
+/** Why the kit would keep an alert sound quiet right now (quiet hours, a meeting, the system muted), or null. The island's notifications have their own volume, so the app's main volume doesn't count. */
+export const alertBlock = () => soundBlock('alerts', { ...playCheck(), volume: 100 }, { ownSwitch: true })
 
 /** Settings' ▶ for one moment: its sound (or `sound` to try another), in quiet hours too. */
 export function previewMoment(id: MomentId, sound?: MomentSound): void {

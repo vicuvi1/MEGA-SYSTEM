@@ -177,3 +177,22 @@ describe('photoReplyLine', () => {
     expect(photoReplyLine({ ...base, day: { kcal: 2000, protein: 140, kcalGoal: 2700, proteinGoal: 130 } })).toMatch(/^Steak: ~600 kcal.*~700 kcal left\.$/)
   })
 })
+
+describe('several photos of one meal', () => {
+  const raw = { items: [{ name: 'Rice', qty: 1, unit: 'bowl', grams: 200, kcal: 260, protein: 5, photo: 1 }, { name: 'Protein bar', qty: 1, unit: 'bar', grams: 60, kcal: 220, protein: 20, photo: 2 }, { name: 'Cola zero', qty: 1, unit: 'can', grams: 330, kcal: 1, protein: 0, photo: 9 }], message: 'ok' }
+  it('keeps which photo a food was seen in (1…n), only when there are several', () => {
+    const many = validateVision(raw, [], 3)
+    expect(many.ok && many.result.items.map((i) => i.photo)).toEqual([1, 2, undefined])
+    const one = validateVision(raw, [], 1)
+    expect(one.ok && one.result.items.every((i) => i.photo === undefined)).toBe(true)
+    // Totals are added up once from the combined list; the photo number is not saved with the meal.
+    expect(many.ok && many.result.totals.kcal).toBe(481)
+    expect(many.ok && toFoodItems(many.result.items).some((i) => 'photo' in i)).toBe(false)
+  })
+  it('a scaled item keeps its photo; the empty-answer message says photos', () => {
+    const many = validateVision(raw, [], 3)
+    if (!many.ok) throw new Error('not ok')
+    expect(scaleVisionItem(many.result.items[1], 2).photo).toBe(2)
+    expect(validateVision({ items: [] }, [], 2)).toEqual({ ok: false, error: expect.stringMatching(/in the photos/) })
+  })
+})

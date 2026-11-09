@@ -125,6 +125,6 @@ export async function playLocal(ref: string, volume: number): Promise<boolean> {
   if (!url) return false
   const a = new Audio(url)
   a.volume = Math.max(0, Math.min(1, volume))
-  await a.play().catch(() => {})
-  return true
+  // A file that won't play (gone, wrong format) says so, so the caller can ring the built-in sound instead.
+  return a.play().then(() => true, () => false)
 }

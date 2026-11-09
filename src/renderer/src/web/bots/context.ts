@@ -32,6 +32,10 @@ export interface BotContext {
   act: (said: string, lines: string[], reply: string, asText?: string) => Promise<{ done: string[]; at?: string; undo?: unknown[] }>
   /** A money message logged on this database (inside mirror.write). */
   runMoneyIn: (db: any, text: string, key: string) => { reply: string; keyboard?: any } | null
+  /** A meal photo's vision read (the server only; foodBot.ts "Done, read them"). */
+  foodPhoto?: import('./foodBot').FoodPhotoFn | null
+  /** Server-only short rows for photos of one meal (Telegram file ids, foodAlbum.ts). */
+  photoKv?: import('./foodAlbum').PhotoKv | null
 }
 
 /** One button tap. */

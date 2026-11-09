@@ -73,3 +73,26 @@
 .di.motion-off .v2-lobe-fill, .di.motion-off .v2-drop-t { transition: none; }
 .di.motion-off .v2-instant-b:active { transform: none; }
 .di.doc-hidden .v2-lobe-fill { transition: none; }
+
+/* The Day page's one quick row (core/islandDay.ts): water, push-ups, focus. Big targets, transform-only motion. */
+.di-quick { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
+.di-q { position: relative; overflow: hidden; display: grid; gap: 2px; justify-items: start; min-height: 54px; padding: 10px 12px; border: 0; border-radius: 14px; background: rgb(var(--ink) / 0.07); color: var(--fg); font: inherit; text-align: left; cursor: pointer; transition: background-color 0.15s; }
+.di-q:hover { background: rgb(var(--ink) / 0.13); }
+.di-q:focus-visible { outline: 2px solid rgb(var(--ink) / 0.5); outline-offset: 2px; }
+.di-q b { position: relative; font-size: 14px; font-weight: 700; }
+.di-q small { position: relative; font-size: 11px; opacity: 0.7; font-variant-numeric: tabular-nums; }
+.di-q-fill { position: absolute; inset: 0; background: rgb(56 160 255 / 0.22); transform-origin: bottom; transition: transform 0.4s ease; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .di-q-fill, .di-q { transition: none; } }
+
+/* More: the rest of the old Day page, drawn only when opened. */
+.di-more { display: grid; gap: 10px; }
+.di-more-btn { justify-self: center; min-height: 32px; padding: 6px 18px; border: 0; border-radius: 999px; background: rgb(var(--ink) / 0.06); color: var(--fg); font: inherit; font-size: 12px; font-weight: 600; opacity: 0.8; cursor: pointer; }
+.di-more-btn:hover { opacity: 1; background: rgb(var(--ink) / 0.12); }
+.di-more-body { display: grid; gap: 10px; }
+
+/* The one Today list: its class name is shared with the pill's ring (island-motion.css), so it was centered like a ring. A plain list, left aligned. */
+section.di-must.di-today { position: static; display: grid; place-items: stretch; justify-items: stretch; flex: initial; gap: 2px; }
+section.di-must.di-today .di-check { justify-content: flex-start; text-align: left; min-height: 40px; }
+/* The quick row and More sit on the page, not in a card of their own. */
+.di .di-panel section.di-quick, .di .di-panel section.di-more { padding: 0; background: none; box-shadow: none; }
+.di.motion-full .di-panel section.di-quick:hover, .di.motion-full .di-panel section.di-more:hover { transform: none; }

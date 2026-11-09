@@ -12,7 +12,7 @@ import { createContext, Fragment, useCallback, useContext, useEffect, useLayoutE
 import { IslandVoice, islandVoiceOn } from './voice/IslandVoice'
 import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type AlertGate, type AlertKindPref, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
 import { restingView, type RestItem, type RestKind } from '@core/islandRest'
 import { benCardVisible, buildToday, dedupeTodos } from '@core/islandTodos'
 import { BODY_CARD_MS, CALM_TIMING, calmDots, firstSight, isBodyCard, presentAs, calmRevealed, calmStep, calmTiming, calmZone, dotColor, inZone, modeGate, peekKind, type CalmDot, type CalmEvent, type CalmPhase } from '@core/islandCalm'
@@ -26,8 +26,9 @@ import { installTaps, isPressed, onPress, tp } from './islandTap'
 import { IslandMedia } from './IslandMedia'
 import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
 import { plainError } from '@core/islandErrors'
-import { alertBlock, play, playBodyReminder, playReminder, soundPrefs } from './soundKit'
-import { bodyReminderOf, reminderGain, reminderPlan } from '@core/islandReminderSound'
+import { alertBlock, allowEagerAudio, audioState, play, playCard, soundPrefs } from './soundKit'
+import { bodyReminderOf, reminderGain } from '@core/islandReminderSound'
+import { cardSoundKey, cardSoundLine, cardSoundPlan, isTestSound } from '@core/islandCardSound'
 import { islandActionSound, play as islandSound, setIslandSoundLook, useIslandSoundEvents } from './islandSounds'
 import { useIslandSounds } from './focusSound'
 import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
@@ -35,12 +36,12 @@ import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake,
 import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from './IslandMoveBits'
 import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
 import { ClipTray, FileShelf, MiniCalendar, shelfDrop } from './IslandExtras'
-import { MusicPanel, ScHost, ScPeekRow, ScPillBadge, useIslandNowPlaying, usePillMusic, useSc } from './IslandMusic'
+import { ScHost, ScPeekRow, ScPillBadge, useIslandNowPlaying, usePillMusic, useSc } from './IslandMusic'
 import { IslandBeatGlow } from './music/IslandMusicFx'
 import { run as musicRun } from './music/engine'
 import { useTint } from './music/MusicUi'
 import { cleanPower, cyclePower, filterPalette, paletteItems, POWER_LABEL, startsTyping, type PaletteItem, type PowerId } from '@core/islandPalette'
-import { DayHero, Palette, PowerRow, useRipples, type HeroStat, type PowerTile } from './islandWow'
+import { Palette, useRipples } from './islandWow'
 import { registeredPages } from './widgets/islandPages'
 import { useMusicPage } from './IslandMusicTab'
 import { IslandPager, useScriptClock } from './widgets/island'
@@ -63,6 +64,8 @@ import { CENTER_CARD_MS, centerReminderSound, isCenterReminder } from '@core/isl
 import { playLocal } from './custom/localFiles'
 import { SplitPillView } from './island/LivePill'
 import { InstantBar } from './island/InstantBar'
+import { DayQuick } from './island/DayQuick'
+import { centerCovers, peekInstant, quickRow } from '@core/islandDay'
 import { DropZoneView, canTake, dropDataOf, dropTarget, parseDrop, type DropTo } from './island/DropZone'
 import './island/island-v2.css'
 import { lookClasses } from '@core/islandTiles'
@@ -73,7 +76,7 @@ import './island-fit.css'
 import './island-rest.css'
 import './island-calm.css'
 import './island-alive.css'
-import { AlertFx, AliveBen, GamingChip, DailyStory, HoverTimeline, LiquidFill, MiniWidgets, NowPlayingPlus, OrbitDots, PointsFly, aliveOf, dayStateOf, useDailyStory, usePointsFx } from './IslandAlive'
+import { AlertFx, AliveBen, GamingChip, DailyStory, HoverTimeline, LiquidFill, OrbitDots, PointsFly, aliveOf, dayStateOf, useDailyStory, usePointsFx } from './IslandAlive'
 import { islandSizing, type IslandDensity } from '@core/islandFit'
 import { momentsFrom, todayRings, type Moment } from '@core/islandMoments'
 import { cursorNear } from '../../desktop/islandPlace'
@@ -101,8 +104,6 @@ export const DRAG_MS = 120
 /** What may wait while you press a button (IC5): never your own clicks. */
 const HELD_EVENTS = new Set<IslandUiEvent['type']>(['hover', 'hoverHeld', 'leave', 'alert', 'alertEnd', 'autoOpen', 'blur'])
 
-/** A sound for each kind of reminder (A8), through the one sound kit (soundKit.ts). */
-const playSound = playReminder
 const hhmm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
 const minsText = (ms: number) => {
   const m = Math.max(1, Math.round(ms / 60000))
@@ -291,50 +292,6 @@ function LiveRing({ run, size = 22 }: { run: Run; size?: number }) {
   return <SmoothRing from={run.startedAt} to={run.endsAt} size={size} timer freeze={run.pausedAt} />
 }
 
-/** A +N reps button: the count runs up and the button gives a small bounce. */
-function RepBtn({ r, n = 10, onTap }: { r: IslandSnapshot['reps'][number]; n?: number; onTap: () => void }) {
-  const f = useFeel()
-  const el = useRef<HTMLButtonElement>(null)
-  const was = useRef(r.done)
-  useEffect(() => {
-    if (r.done > was.current) bump(el.current, f, 1.07)
-    was.current = r.done
-  }, [r.done, f])
-  return (
-    <button ref={el} {...tp(`rep:${r.id}`, onTap)} title={`${r.done}/${r.target}`}>
-      <span>{r.name}</span>
-      <small>
-        <CountUp value={r.done} />/{r.target}
-      </small>
-      <b>+{n}</b>
-    </button>
-  )
-}
-
-/** A water button: a ripple from where you clicked, and a little bounce. */
-function WaterBtn({ ml, onTap, children }: { ml: number; onTap: (ml: number) => void; children: ReactNode }) {
-  const f = useFeel()
-  const [rip, setRip] = useState<{ id: number; x: number; y: number }[]>([])
-  return (
-    <button
-      className="di-wbtn"
-      {...tp(`wbtn:${ml}`, (t) => {
-        onTap(ml)
-        bump(t.el, f, 1.06)
-        if (!f.extras) return
-        const b = t.el.getBoundingClientRect()
-        const id = Date.now()
-        setRip((x) => [...x.slice(-2), { id, x: t.keyboard ? b.width / 2 : t.x - b.left, y: t.keyboard ? b.height / 2 : t.y - b.top }])
-        window.setTimeout(() => setRip((x) => x.filter((p) => p.id !== id)), 600)
-      })}
-    >
-      {children}
-      {rip.map((p) => (
-        <i key={p.id} className="di-ripple" style={{ left: p.x, top: p.y }} aria-hidden />
-      ))}
-    </button>
-  )
-}
 
 /** What flies into the pill (IL6): a coin for points, a drop for water. */
 interface Flight { id: number; kind: 'coin' | 'drop'; text: string }
@@ -695,6 +652,37 @@ export function DesktopIsland() {
   const rangIds = useRef(new Set<string>())
   const snapRef = useRef(s)
   snapRef.current = s
+  // The island may start its audio without a click (Electron allows it; Calm passes clicks through).
+  useEffect(() => {
+    if (desk()) allowEagerAudio()
+  }, [])
+  /** Rings an alert's sound if the rule allows, through the kit, with the desktop's fallback; logs the outcome either way. */
+  const ringCard = (a: NonNullable<IslandSnapshot['alert']>, g: AlertGate, pref: AlertKindPref | null) => {
+    const lk = looksRef.current
+    const rs = soundPrefs().reminders
+    const center = isCenterReminder(a)
+    const plan = cardSoundPlan({
+      alert: a, gate: g, islandSound: !!prefsRef.current.sound && lk.sound.pack !== 'none', kindSound: !pref || prefsRef.current.kinds[pref].sound,
+      on: rs.on, volume: center ? rs.volume * (lk.sound.volume.reminder / DEFAULT_LOOKS.sound.volume.reminder) : rs.volume,
+      hush: snapRef.current.hush ?? null, quiet, call: inCall, blocked: alertBlock(), played: rangIds.current.has(a.id)
+    })
+    if (!plan.ring) return logIslandUi('sound', cardSoundLine(a.id, plan))
+    if (rangIds.current.size > 200) rangIds.current.clear()
+    rangIds.current.add(a.id)
+    window.dispatchEvent(new CustomEvent('life-island-reminder-sound', { detail: { kind: bodyReminderOf(a) ?? (center ? 'center' : plan.key), id: a.id } }))
+    const test = isTestSound(a.id)
+    // Your own file for this moment (Custom Center → Looks → Sounds), else the kit's sound.
+    const own = center ? lk.sound.files.reminder : a.kind === 'over' ? lk.sound.files.timer : null
+    void (async () => {
+      if (own && (await playLocal(own, Math.min(1, plan.loud / 2)))) return logIslandUi('sound', cardSoundLine(a.id, plan, 'played (your file)'))
+      const r = await playCard(plan.sound, plan.loud, { preview: test })
+      if (r === 'played') return logIslandUi('sound', cardSoundLine(a.id, plan, `played (audio ${audioState()})`))
+      if (r.startsWith('blocked')) return logIslandUi('sound', cardSoundLine(a.id, { ...plan, ring: false, why: r.slice(9) }))
+      // No audio in this window: the desktop plays it from the app window (or a system beep as a last resort).
+      const via = await desk()?.islandSoundFallback?.(plan.sound, plan.loud).catch(() => null)
+      logIslandUi('sound', cardSoundLine(a.id, plan, via ? `played by the desktop (${via}); the island's audio did not start: ${audioState()}` : `failed: no audio on the island (${audioState()})`))
+    })()
+  }
   useEffect(() => {
     const a = s.alert
     if (!a || a.id === seenAlert.current) return
@@ -703,9 +691,11 @@ export function DesktopIsland() {
     seenIds.current = first.seen
     if (!first.fresh) return
     // SI6: a suggestion you keep ignoring is only a dot.
-    const g = gateOf(a.kind, !!a.meeting, !!a.dot, a.id)
+    // The Settings test always drops down (that's what it tests).
+    const g = isTestSound(a.id) ? 'peek' : gateOf(a.kind, !!a.meeting, !!a.dot, a.id)
     if (g !== 'peek') {
       if (quiet || inCall) held.current += 1
+      logIslandUi('sound', cardSoundLine(a.id, { ring: false, key: cardSoundKey(a), why: g === 'drop' ? 'not shown' : quiet ? 'waits as a dot (quiet for a while)' : inCall ? 'waits as a dot (in a call)' : 'waits as a dot (a gap since the last pop-up, or a dot by your settings)' }))
       return
     }
     lastPeek.current = Date.now()
@@ -717,39 +707,8 @@ export function DesktopIsland() {
     const stays = (body || isCenterReminder(a)) && shows === 'card'
     const peekEv: IslandUiEvent = a.kind === 'recap' ? { type: 'alert', ms: RECAP_MS + 1500 } : stays ? { type: 'alert', ms: isCenterReminder(a) ? CENTER_CARD_MS : BODY_CARD_MS } : { type: 'alert' }
     const pref = alertPref(a.kind, !!a.meeting)
-    // Water, the eye break, the move break and the screen break: their own clear sound, once (core/islandReminderSound.ts).
-    if (isCenterReminder(a)) {
-      // Your Custom Center reminder: your own sound (this device) or the reminder bell, once, at your reminder volume.
-      const lk = looksRef.current
-      const vol = soundPrefs().reminders.volume
-      const plan = centerReminderSound({ gate: g, played: rangIds.current.has(a.id), islandSound: !!prefsRef.current.sound && lk.sound.pack !== 'none', volume: vol * lk.sound.volume.reminder, hush: snapRef.current.hush ?? null, quiet, call: inCall, blocked: alertBlock() })
-      if (plan.ring) {
-        rangIds.current.add(a.id)
-        const own = lk.sound.files.reminder
-        const gain = reminderGain(vol) * (lk.sound.volume.reminder / DEFAULT_LOOKS.sound.volume.reminder)
-        if (own) void playLocal(own, Math.min(1, gain / 2)).then((ok) => ok || playSound('remind', gain))
-        else playSound('remind', gain)
-        window.dispatchEvent(new CustomEvent('life-island-reminder-sound', { detail: { kind: 'center', id: a.id } }))
-      }
-      logIslandUi('sound', `${a.id}: ${plan.ring ? 'your reminder sound' : `no sound (${plan.why})`}`)
-    } else if (bodyReminderOf(a)) {
-      const plan = reminderPlan({
-        mode: prefsRef.current.mode, alert: a, gate: g, islandSound: !!prefsRef.current.sound, kindSound: !pref || prefsRef.current.kinds[pref].sound,
-        prefs: soundPrefs().reminders, hush: snapRef.current.hush ?? null, quiet, call: inCall, blocked: alertBlock(), played: rangIds.current.has(a.id)
-      })
-      if (plan.sound) {
-        if (rangIds.current.size > 200) rangIds.current.clear()
-        rangIds.current.add(a.id)
-        playBodyReminder(plan.sound, soundPrefs().reminders.volume)
-        window.dispatchEvent(new CustomEvent('life-island-reminder-sound', { detail: { kind: plan.sound, id: a.id } }))
-      }
-      logIslandUi('sound', `${a.id}: ${plan.sound ? `the ${plan.sound} sound` : `no sound (${plan.why})`}`)
-    } else if (prefsRef.current.sound && (!pref || prefsRef.current.kinds[pref].sound) && uiRef.current.view !== 'expanded') {
-      // Time's up: your own timer sound when you uploaded one (Custom Center → Looks → Sounds).
-      const own = a.kind === 'over' ? looksRef.current.sound.files.timer : null
-      if (own) void playLocal(own, Math.min(1, prefsRef.current.volume)).then((ok) => ok || playSound(a.kind, prefsRef.current.volume, !!a.meeting))
-      else playSound(a.kind, prefsRef.current.volume, !!a.meeting)
-    }
+    // One rule for every notification that drops down: its sound, once, with a switch per kind and a reason when skipped (core/islandCardSound.ts).
+    ringCard(a, g, pref)
     calmCardRef.current = prefsRef.current.mode === 'calm' && shows === 'card'
     setCalmCard(calmCardRef.current)
     // IL3: from the pill, it stretches down ~8 px first, then drops into the peek with a bounce (not in Calm: it slides out of the line).
@@ -1461,7 +1420,8 @@ export function DesktopIsland() {
     if (r.op === 'pin') return dispatch({ type: 'pin' })
     if (r.op === 'app') return (desk()?.showApp?.(), close())
     if (r.op === 'editPill') return setEditing(true)
-    if (r.op === 'editPower') return (window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'day' })), setPowerEdit(true))
+    // The old power row is now the Day page's quick row: its menu item opens the Day page.
+    if (r.op === 'editPower') return void window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'day' }))
     if (r.op === 'note' || r.op === 'task') return (setCapture(r.op === 'note' ? 'note' : true), openCmd())
     if (r.op === 'close') return close()
   }
@@ -1612,6 +1572,8 @@ export function DesktopIsland() {
   const [ghost, setGhost] = useState<string | null>(null)
   // IC17: the pill's edit mode in the panel.
   const [editing, setEditing] = useState(false)
+  // The Day page's More (closed: nothing in it is drawn).
+  const [moreOpen, setMoreOpen] = useState(false)
   // MU: the Music page of the opened island (the header's ♫, the music tile, the media row open it).
   useMusicPage(k, () => {
     if (uiRef.current.view !== 'expanded') dispatch({ type: 'click' })
@@ -1753,6 +1715,11 @@ export function DesktopIsland() {
   // IF10: your quick chips.
   const repN = prefs.chips.reps[0] ?? 10
   const focusMin = prefs.chips.focus[0] ?? 25
+  // One water control, one push-up button, one focus button; your Custom Center widgets replace the matching one (core/islandDay.ts).
+  const covers = centerCovers(center ? [...center.island, ...center.pill] : null)
+  // The hover peek: no second ▶ and no built-in counter that your pill counters already have.
+  const peekIds = peekInstant(widgets.instant, centerCovers(center?.pill))
+  const dayQuick = quickRow({ covers, running: !!run, hasReps: s.reps.length > 0, locked: s.locked })
   // LF4 / LF15: the morning card's "why" (word of the year, today's vision card) and, on a low day, "Open your wins".
   const sg = s.saga
   const sagaMorning = !!sg && new Date(now).getHours() >= 4 && new Date(now).getHours() < 12 && !!(sg.word || sg.card)
@@ -1772,6 +1739,24 @@ export function DesktopIsland() {
       )}
     </section>
   ) : null
+  // The rest of the old Day page lives behind More (core/islandDay.ts).
+  const pointsCard = pts ? (<section className="di-points">
+                  <span className="di-pts"><Roll text={String(pts.balance)} up /> pts</span>
+                  {pts.goal ? (
+                    <div className="di-pts-mid">
+                      <div className="di-bar gold pbar"><i style={{ '--p': Math.min(1, pts.balance / pts.goal.price) } as React.CSSProperties} /></div>
+                      <small>{pts.balance >= pts.goal.price ? `Ready: ${pts.goal.title} 🎉` : `${pts.goal.price - pts.balance} to ${pts.goal.title}`}</small>
+                    </div>
+                  ) : (
+                    <small className="di-pts-mid">Add a reward to work toward</small>
+                  )}
+                  <button {...tp('rewards', () => tap({ kind: 'open', page: 'shop' }))}>Rewards</button>
+                  {s.money && (
+                    <button className={`di-money lv-${s.money.level}`} {...tp('money', () => tap({ kind: 'open', page: 'money' }))} title="Safe to spend today (Finance Helper)">
+                      💸 {Math.round(Math.abs(s.money.left) / 100)} lei {s.money.left >= 0 ? 'left' : 'over'}
+                    </button>
+                  )}
+                </section>) : null
   const blocks: Record<IslandSection, ReactNode> = {
     tasks: null,
     sleep: <>{s.sleep?.bed || (s.sleep?.wake && s.alert?.kind !== 'morning') ? (<section className={`di-sleep ${s.sleep?.bed ? 'night' : 'day'} ${moon ? 'going' : ''}`}>
@@ -1802,23 +1787,7 @@ export function DesktopIsland() {
                     </>
                   )}
                 </section>) : null}{sagaCard}</>,
-    points: pts ? (<section className="di-points">
-                  <span className="di-pts"><Roll text={String(pts.balance)} up /> pts</span>
-                  {pts.goal ? (
-                    <div className="di-pts-mid">
-                      <div className="di-bar gold pbar"><i style={{ '--p': Math.min(1, pts.balance / pts.goal.price) } as React.CSSProperties} /></div>
-                      <small>{pts.balance >= pts.goal.price ? `Ready: ${pts.goal.title} 🎉` : `${pts.goal.price - pts.balance} to ${pts.goal.title}`}</small>
-                    </div>
-                  ) : (
-                    <small className="di-pts-mid">Add a reward to work toward</small>
-                  )}
-                  <button {...tp('rewards', () => tap({ kind: 'open', page: 'shop' }))}>Rewards</button>
-                  {s.money && (
-                    <button className={`di-money lv-${s.money.level}`} {...tp('money', () => tap({ kind: 'open', page: 'money' }))} title="Safe to spend today (Finance Helper)">
-                      💸 {Math.round(Math.abs(s.money.left) / 100)} lei {s.money.left >= 0 ? 'left' : 'over'}
-                    </button>
-                  )}
-                </section>) : null,
+    points: null,
 
     timer: run ? (<section className="di-timer">
                   <LiveTimer run={run} big guard={s.focusGuard} />
@@ -1896,10 +1865,6 @@ export function DesktopIsland() {
                       {b.maybe === 'invite' ? ' · accept?' : ''}
                     </small>
                   ))}
-                  <label className="di-auto" title="When a block from your calendar begins, its focus timer starts by itself (not for meetings)">
-                    <input type="checkbox" checked={!!s.autoFocus} onChange={(e) => send({ kind: 'autoFocus', on: e.target.checked })} />
-                    <span>⚡ Start focus by itself when a block begins</span>
-                  </label>
                   {s.work && (
                     <div className="di-shift" role="group" aria-label="Tonight's work">
                       <small>Work {s.work.from}–{s.work.to === '24:00' ? '00:00' : s.work.to}</small>
@@ -1908,31 +1873,8 @@ export function DesktopIsland() {
                     </div>
                   )}
                 </section>) : null,
-    logs: (<section className="di-logs">
-                <div className="di-water">
-                  <Glass pct={water.target ? water.ml / water.target : 0} size={40} splash={splash} shimmer={shimmer} />
-                  <div className="di-water-mid">
-                    <small>
-                      <Roll text={(water.ml / 1000).toFixed(2).replace(/0$/, '')} up /> / {(water.target / 1000).toFixed(1)} L
-                    </small>
-                    <div className="di-bar water"><i style={{ transform: `scaleX(${water.target ? Math.min(1, water.ml / water.target) : 0})` }} /></div>
-                  </div>
-                  {prefs.chips.water.slice(0, 3).map((ml) => (
-                    <WaterBtn key={ml} ml={ml} onTap={(v) => tap({ kind: 'water', ml: v })}>+{ml}</WaterBtn>
-                  ))}
-                </div>
-                {!!s.reps.length && (
-                  <div className="di-reps">
-                    {s.reps.map((r) => (
-                      <RepBtn key={r.id} r={r} n={repN} onTap={() => tap({ kind: 'reps', id: r.id, name: r.name, n: repN })} />
-                    ))}
-                  </div>
-                )}
-                <label className="di-auto" title="Every 20 min at the screen: look at something 6 m away for 20 s">
-                  <input type="checkbox" checked={!!s.eyeBreaks} onChange={(e) => send({ kind: 'eyeBreaks', on: e.target.checked })} />
-                  <span>👁️ 20-20-20 eye breaks</span>
-                </label>
-              </section>),
+    // One quick row: water, push-ups, focus (once each; your Custom Center widgets replace the matching one).
+    logs: <DayQuick ids={dayQuick} s={s} waterMl={prefs.chips.water[0] ?? 250} repN={repN} focusMin={focusMin} onLog={instantLog} />,
     // IM3: a slow wave while Ben thinks, then his first words fade in.
     // Ben's last message shows only while it is under ~2 h old; older ones are hidden.
     ben: benCardVisible(s.ben.last, s.ben.busy, now) ? (<section className="di-ben">
@@ -2404,7 +2346,7 @@ export function DesktopIsland() {
       {benLine && <p className="di-peek-ben"><span>{s.ben.face}</span><Marquee className="di-peek-ben-text" text={benLine} /></p>}
       <ScPeekRow music={k.kit.music} />
       {/* Island v2: one click logs (+10/+25/+50 push-ups, +250 ml, 25 min focus); scroll a counter to change it. */}
-      {!s.locked && widgets.instant.length > 0 && <InstantBar s={s} ids={widgets.instant} scrub={widgets.scrub} onLog={instantLog} />}
+      {!s.locked && peekIds.length > 0 && <InstantBar s={s} ids={peekIds} scrub={widgets.scrub} onLog={instantLog} />}
       {/* Custom Center: your pill counters with their buttons. */}
       {center && <CenterPeekRow c={center} clock={looks.clock} send={tap} />}
       {/* IN35: your one-tap buttons. */}
@@ -2445,74 +2387,8 @@ export function DesktopIsland() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [ui.view, kbd, openCmd, dispatch])
-  // The power row: four one-tap actions you pick (kept on this PC).
-  const [power, setPower] = useState<PowerId[]>(() => {
-    try {
-      return cleanPower(JSON.parse(localStorage.getItem('ls.islandPower') || 'null'))
-    } catch {
-      return cleanPower(null)
-    }
-  })
-  const [powerEdit, setPowerEdit] = useState(false)
-  const savePower = (row: PowerId[]) => {
-    setPower(row)
-    try {
-      localStorage.setItem('ls.islandPower', JSON.stringify(row))
-    } catch {
-      /* fine */
-    }
-  }
   const favAuto = (s.auto?.buttons ?? []).filter((b) => !b.fields.length).sort((x, y) => Number(y.fav) - Number(x.fav))[0]
   const waterMl = prefs.chips.water[0] ?? 250
-  const powerTile = (id: PowerId): PowerTile => {
-    switch (id) {
-      case 'focus':
-        return run ? { id, icon: '⏹', label: 'Stop & log', sub: run.subject, on: true } : { id, icon: '▶', label: `Focus ${focusMin}`, sub: s.today ? `${s.today.focusMin} / ${s.today.focusGoal} min today` : 'Start a timer' }
-      case 'water':
-        return { id, icon: '💧', label: `+${waterMl} ml`, sub: `${(water.ml / 1000).toFixed(2).replace(/0$/, '')} / ${(water.target / 1000).toFixed(1)} L` }
-      case 'note':
-        return { id, icon: '📝', label: 'Quick note', sub: 'Into your notebook' }
-      case 'task':
-        return { id, icon: '✅', label: 'Add task', sub: 'To Todoist' }
-      case 'auto':
-        return favAuto ? { id, icon: favAuto.icon || '⚡', label: favAuto.name, sub: favAuto.fav ? 'Favourite automation' : 'Automation' } : { id, icon: '⚡', label: 'Automation', sub: 'Pin one in Settings', off: true }
-      case 'reps':
-        return firstRep ? { id, icon: '💪', label: `+${repN} ${firstRep.name}`, sub: `${firstRep.done} / ${firstRep.target} today` } : { id, icon: '💪', label: 'Reps', sub: 'No exercise yet', off: true }
-      case 'music':
-        return sc.loaded ? { id, icon: sc.playing ? '⏸' : '▶', label: sc.playing ? 'Pause' : 'Play', sub: sc.title || sc.station?.name || 'Music', on: sc.playing } : { id, icon: '🎵', label: 'Music', sub: 'Open the Music page' }
-      case 'ben':
-        return { id, icon: s.ben.face, label: 'Ask Ben', sub: s.ben.busy ? 'Thinking…' : 'Type or talk' }
-      case 'quiet':
-        return { id, icon: '🌙', label: quiet ? 'Wake up' : 'Quiet 1 h', sub: quiet ? `Quiet until ${hhmm(q.until)}` : 'No reminders', on: quiet }
-    }
-  }
-  const doPower = (id: PowerId, el: HTMLElement) => {
-    bump(el, f, 1.05)
-    if (id === 'focus') return run ? tap({ kind: 'stop' }) : tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: focusMin })
-    if (id === 'water') return tap({ kind: 'water', ml: waterMl })
-    if (id === 'note' || id === 'task') return (setCapture(id === 'note' ? 'note' : true), openCmd())
-    if (id === 'auto' && favAuto) return tap({ kind: 'auto', op: 'run', id: favAuto.id }, favAuto.name)
-    if (id === 'reps' && firstRep) return tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n: repN })
-    if (id === 'music') return sc.loaded ? (islandSound('tap'), musicRun({ op: 'toggle' })) : window.dispatchEvent(new CustomEvent('life-island-page', { detail: 'music' }))
-    if (id === 'ben') return openCmd()
-    if (id === 'quiet') return quiet ? setQuiet(null) : setQuiet(60)
-  }
-  // The Day page's hero: the greeting and today's numbers (they count up as the page opens).
-  const part = dayPart(now)
-  const greeting = part === 'morning' ? 'Good morning' : part === 'day' ? 'Good afternoon' : part === 'evening' ? 'Good evening' : 'Late night'
-  const mustDone = s.mustdos.filter((m) => m.done).length
-  const heroStats: HeroStat[] = [
-    ...(s.mustdos.length ? [{ id: 'must', label: 'Must-dos', value: mustDone, unit: `/${s.mustdos.length}`, pct: mustDone / s.mustdos.length, tone: 'lime' as const }] : []),
-    ...(water.target ? [{ id: 'water', label: 'Water', value: water.ml / 1000, decimals: 1, unit: 'L', pct: water.ml / water.target, tone: 'water' as const, onTap: () => tap({ kind: 'water', ml: waterMl }) }] : []),
-    ...(s.today ? [{ id: 'focus', label: 'Focus', value: s.today.focusMin, unit: 'min', pct: s.today.focusMin / Math.max(1, s.today.focusGoal), tone: 'violet' as const }] : []),
-    ...(!s.today && pts ? [{ id: 'pts', label: 'Points', value: pts.balance, pct: pts.goal ? pts.balance / pts.goal.price : 0, tone: 'gold' as const }] : [])
-  ].slice(0, 3)
-  const heroSub = (
-    <>
-      {new Date(now).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })}
-      {s.streak && s.streak.days > 1 ? <span className="dw-streak"> · 🔥 {s.streak.days}-day {s.streak.kind} streak</span> : null}
-    </>
-  )
   const alertCard = a ? (
     <section className={`di-alert kind-${a.kind}`}>
       {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
@@ -2624,70 +2500,68 @@ export function DesktopIsland() {
           </>
         }
         day={<>
-          <DayHero greeting={greeting} sub={heroSub} stats={heroStats} />
-          <PowerRow tiles={power.map(powerTile)} editing={powerEdit} onTap={doPower} onCycle={(i) => savePower(cyclePower(power, i))} onEdit={setPowerEdit} />
-          {!s.locked && widgets.instant.length > 0 && <InstantBar s={s} ids={widgets.instant} scrub={widgets.scrub} onLog={instantLog} />}
+          {/* One short page (core/islandDay.ts): what needs you, the timer, the one Today list, one quick row, your widgets, Ben. */}
+          {alertCard}
+          {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
           {/* Custom Center: the mode on now (one tap to switch) and your widgets for the open island. */}
           {center && <CenterPanel c={center} now={now} clock={looks.clock} send={tap} scrub={widgets.scrub} />}
-          {alertCard}
-          {/* Alive: the track's levels with skip / like / a lyric line, and the swipeable mini widgets. */}
-          <NowPlayingPlus k={k} />
-          <MiniWidgets s={s} now={now} />
-          {/* HD: wind-down mode, today's Healthy day and (Sundays) the week for your body. */}
-          {s.windMode && <WindDownCard mode={s.windMode} tap={tap} playing={!!sc.playing} />}
-          {s.health && <HealthCard health={s.health.today} evening={new Date(now).getHours() >= 18} />}
           {/* "Why no reminder?": the move break's and water's reason right here (Settings → Island log has the full list). */}
           {s.nudgeWhy && <p className="di-why" data-nudge-why title="Why the move break or water reminder isn't on the island now">Why no reminder? {s.nudgeWhy}</p>}
-          {s.health?.week && <WeekHealthCard week={s.health.week} />}
-          {s.protein && s.protein.goal > 0 && (
-            // BD1: today's protein ring (log it from Today, Body, Telegram or by telling Ben).
-            <div className="di-protein" title="Protein today: log it on Today or Body, or tell Ben (&quot;2 eggs&quot;)">
-              <ProteinRing g={s.protein.g} goal={s.protein.goal} size={44} label={false} />
-              <span className="di-protein-text">
-                <b>
-                  {s.protein.g} / {s.protein.goal} g protein
-                </b>
-                <small>{s.protein.g >= s.protein.goal ? 'Goal reached today' : `${s.protein.goal - s.protein.g} g to go`}</small>
-              </span>
-            </div>
-          )}
-          {s.doing && (
-            // SI1: what Ben thinks you're doing (a kind, never a title); tap to fix it.
-            <button className="di-doing" title="That's not right? Tap to fix" {...tp('doing', () => tap({ kind: 'ctxFix', app: s.doing!.app }))}>
-              {s.doing.icon} {s.doing.label}
-              {s.doing.detail ? ` · ${s.doing.detail}` : ''}
-            </button>
-          )}
-          {/* AU1: what's playing (only with that switch on in PC & automation). */}
-          <IslandMedia />
-          {/* Your other time zones, one time each (Settings → Widgets → Island look). */}
-          <WorldClockRow zones={look.zones} />
-          <div className="di-chips">
-            {prefs.chips.water.map((ml) => (
-              <button key={`w${ml}`} {...tp(`chip:w${ml}`, (t) => (tap({ kind: 'water', ml }), bump(t.el, f)))}>💧 +{ml} ml</button>
-            ))}
-            {firstRep && prefs.chips.reps.map((n) => (
-              <button key={`r${n}`} {...tp(`chip:r${n}`, (t) => (tap({ kind: 'reps', id: firstRep.id, name: firstRep.name, n }), bump(t.el, f)))}>💪 +{n} {firstRep.name}</button>
-            ))}
-            {!run && prefs.chips.focus.map((m) => (
-              <button key={`f${m}`} {...tp(`chip:f${m}`, () => tap({ kind: 'start', subject: s.now && !s.now.call ? s.now.title : 'Focus', minutes: m }))}>▶ Focus {m}</button>
-            ))}
-            {run && <button {...tp('chip:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>}
-          </div>
-          {prefs.sections.filter((x) => x.on).map((x) => <Fragment key={x.id}>{blocks[x.id]}</Fragment>)}
-          {/* Island 2: your tiles and buttons, today's strip, music, the clipboard tray, the file shelf. */}
-          <KitTiles k={k} s={s} />
-          <IslandAutomations s={s} tap={tap} />
-          <MiniCalendar s={s} tap={tap} now={now} />
-          <MusicPanel k={k} />
-          <ClipTray k={k} tap={tap} />
-          <FileShelf k={k} tap={tap} />
-          {/* IC17: edit what the pill shows, like a phone's home screen. */}
-          {editing ? (
-            <PillEditor order={prefs.pillOrder} onChange={savePillOrder} onDone={() => setEditing(false)} />
-          ) : (
-            <button className="di-edit-open" {...tp('edit:open', () => setEditing(true))}>✎ Edit the pill</button>
-          )}
+          {/* Everything else, drawn only when you open it. */}
+          <section className={`di-more ${moreOpen ? 'open' : ''}`}>
+            <button className="di-more-btn" data-day-more aria-expanded={moreOpen} {...tp('day:more', () => setMoreOpen((x) => !x))}>{moreOpen ? 'Less' : 'More'}</button>
+            {moreOpen && (
+              <div className="di-more-body">
+                {s.windMode && <WindDownCard mode={s.windMode} tap={tap} playing={!!sc.playing} />}
+                {s.health && <HealthCard health={s.health.today} evening={new Date(now).getHours() >= 18} />}
+                {s.health?.week && <WeekHealthCard week={s.health.week} />}
+                {s.protein && s.protein.goal > 0 && (
+                  // BD1: today's protein ring (log it from Today, Body, Telegram or by telling Ben).
+                  <div className="di-protein" title="Protein today: log it on Today or Body, or tell Ben (&quot;2 eggs&quot;)">
+                    <ProteinRing g={s.protein.g} goal={s.protein.goal} size={44} label={false} />
+                    <span className="di-protein-text">
+                      <b>
+                        {s.protein.g} / {s.protein.goal} g protein
+                      </b>
+                      <small>{s.protein.g >= s.protein.goal ? 'Goal reached today' : `${s.protein.goal - s.protein.g} g to go`}</small>
+                    </span>
+                  </div>
+                )}
+                {pointsCard}
+                {s.doing && (
+                  // SI1: what Ben thinks you're doing (a kind, never a title); tap to fix it.
+                  <button className="di-doing" title="That's not right? Tap to fix" {...tp('doing', () => tap({ kind: 'ctxFix', app: s.doing!.app }))}>
+                    {s.doing.icon} {s.doing.label}
+                    {s.doing.detail ? ` · ${s.doing.detail}` : ''}
+                  </button>
+                )}
+                <label className="di-auto" title="When a block from your calendar begins, its focus timer starts by itself (not for meetings)">
+                  <input type="checkbox" checked={!!s.autoFocus} onChange={(e) => send({ kind: 'autoFocus', on: e.target.checked })} />
+                  <span>⚡ Start focus by itself when a block begins</span>
+                </label>
+                <label className="di-auto" title="Every 20 min at the screen: look at something 6 m away for 20 s">
+                  <input type="checkbox" checked={!!s.eyeBreaks} onChange={(e) => send({ kind: 'eyeBreaks', on: e.target.checked })} />
+                  <span>👁️ 20-20-20 eye breaks</span>
+                </label>
+                {/* AU1: what's playing (only with that switch on in PC & automation). */}
+                <IslandMedia />
+                {/* Your other time zones, one time each (Settings → Widgets → Island look). */}
+                <WorldClockRow zones={look.zones} />
+                {/* Island 2: your tiles and buttons, automations, the day strip, the clipboard tray, the file shelf. */}
+                <KitTiles k={k} s={s} />
+                <IslandAutomations s={s} tap={tap} />
+                <MiniCalendar s={s} tap={tap} now={now} />
+                <ClipTray k={k} tap={tap} />
+                <FileShelf k={k} tap={tap} />
+                {/* IC17: edit what the pill shows, like a phone's home screen. */}
+                {editing ? (
+                  <PillEditor order={prefs.pillOrder} onChange={savePillOrder} onDone={() => setEditing(false)} />
+                ) : (
+                  <button className="di-edit-open" {...tp('edit:open', () => setEditing(true))}>✎ Edit the pill</button>
+                )}
+              </div>
+            )}
+          </section>
         </>}
       />
       {cmdOpen && (
