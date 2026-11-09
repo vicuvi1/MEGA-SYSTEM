@@ -63477,6 +63477,46 @@ function keepGooglePrefs(prevRaw, next) {
 		return next;
 	}
 }
+/** Photo Locker: Google Drive, only the files this app made (and the folder it made). */
+var DRIVE_FILE_SCOPE = "https://www.googleapis.com/auth/drive.file";
+/** Scopes a Drive key handed to a device may carry (sign-in basics are harmless). */
+var DRIVE_TOKEN_OK = /* @__PURE__ */ new Set([
+	DRIVE_FILE_SCOPE,
+	"openid",
+	"email",
+	"profile",
+	"https://www.googleapis.com/auth/userinfo.email",
+	"https://www.googleapis.com/auth/userinfo.profile"
+]);
+/**
+* Photo Locker: a short-lived Google key for Drive only, for THIS device to
+* upload and download straight to and from Google (files are too big for our
+* server). The refresh is asked for the Drive scope alone, so the key cannot
+* read the calendar or Gmail; a key Google hands back with more is refused,
+* never given out. The key is never logged.
+*/
+async function driveAccessToken(env, stored, fetchImpl = fetch, now = Date.now()) {
+	if (!(stored.scopes ?? []).includes("https://www.googleapis.com/auth/drive.file")) throw Object.assign(/* @__PURE__ */ new Error("Google Drive is not connected yet: press Connect Google Drive"), { code: "no-drive" });
+	const res = await fetchImpl(TOKEN_URL, {
+		method: "POST",
+		headers: { "Content-Type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			client_id: env.clientId,
+			client_secret: env.clientSecret,
+			refresh_token: openToken(env.secret, stored.enc),
+			grant_type: "refresh_token",
+			scope: DRIVE_FILE_SCOPE
+		})
+	});
+	const j = await res.json().catch(() => ({}));
+	if (!res.ok || !j.access_token) throw new Error(j.error === "invalid_grant" ? "Google sign-in expired: connect Google Drive again" : j.error === "invalid_scope" ? "Google Drive is not allowed for this sign-in: press Connect Google Drive" : "Google refused the Drive sign-in");
+	if (String(j.scope ?? "https://www.googleapis.com/auth/drive.file").split(/\s+/).filter(Boolean).some((s) => !DRIVE_TOKEN_OK.has(s))) throw new Error("Google gave a wider key than Drive needs, so it was not handed out");
+	const secs = Math.min(3600, Math.max(60, Number(j.expires_in) || 3600));
+	return {
+		token: String(j.access_token),
+		expiresAt: now + secs * 1e3
+	};
+}
 function createCalendarApi(env, stored, fetchImpl = fetch) {
 	let access = null;
 	const token = async () => {
@@ -70844,4 +70884,4 @@ async function mcpCall(env, body, ctx) {
 	};
 	return handleMcp(life, body, ctx);
 }
-export { DAILY_GAP_MS, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, exchangeCode, flowsOp, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };
+export { DAILY_GAP_MS, DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, driveAccessToken, exchangeCode, flowsOp, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };
