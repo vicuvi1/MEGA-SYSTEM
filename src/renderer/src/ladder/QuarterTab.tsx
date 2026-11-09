@@ -137,6 +137,8 @@ function stepsFor(id: TemplateId, v: LadderScreen): string | null {
   const short = (d: string) => dayLabel(d).split(' ')[0].slice(0, 3)
   if ((id === 'gain' || id === 'strong') && v.steps.workouts.length && v.cards.find((c) => c.goal.id === 'gain' || c.goal.id === 'strong')?.goal.id === id)
     return `Planned (drafts): ${v.steps.workouts.map((w) => `${short(w.day)} ${w.type === 'upper' ? 'upper' : 'legs'}`).join(' · ')}`
+  const study = v.ladder.goals.find((g) => g.id === 'study')
+  if (id === 'study' && study && study.milestones == null && study.targets.focusHours == null) return 'Confirm the milestones (or set the weekly hours) and the planner adds study sessions as drafts.'
   if (id === 'study' && v.steps.study?.sessions.length) return `Planned (drafts): ${v.steps.study.sessions.map((s) => `${short(s.day)} ${s.minutes} min`).join(' · ')}`
   return null
 }

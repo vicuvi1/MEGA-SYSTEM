@@ -1946,6 +1946,12 @@ try {
     await pg.waitForSelector('.gx .ptabs [data-tab="quarter"]', { timeout: 15000 })
     await pg.click('.gx .ptabs [data-tab="quarter"]')
     await pg.waitForSelector('.ql-card', { timeout: 15000 })
+    // A goal celebration from an earlier check-in (confetti over a dimmed page) is closed first.
+    for (let i = 0; i < 6 && (await pg.$('.gx-cel')); i++) {
+      await pg.keyboard.press('Escape')
+      await pg.waitForTimeout(300)
+    }
+    await pg.waitForFunction(() => !document.querySelector('.gx-cel-scrim, .gx-confetti'), null, { timeout: 8000 })
     const ids = await pg.locator('.ql-card').evaluateAll((cs) => cs.map((c) => c.dataset.goal))
     if (ids.join() !== 'gain,strong,study') throw new Error(`critical goals: ${ids.join()}`)
     for (const id of ids) {

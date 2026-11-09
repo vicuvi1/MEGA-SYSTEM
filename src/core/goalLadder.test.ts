@@ -196,7 +196,8 @@ describe('the planner places the week steps (drafts, within limits, no duplicate
     vi.setSystemTime(new Date('2026-11-13T08:30:00'))
   })
   afterEach(() => vi.useRealTimers())
-  const l = defaultLadder()
+  // The study goal made yours (weekly hours set): only then does it place blocks.
+  const l = setTarget(defaultLadder(), 'study', 'focusHours', 10)
   const rooms = ['2026-11-13', '2026-11-14', '2026-11-15'].map((day) => ({ day, minutes: 120, weight: 2 }))
   it('study: the hours left this week as sessions of up to 90 min, one a day, due Monday', () => {
     const g = ladderStudyGoal(l, facts(), TODAY)!
@@ -213,6 +214,10 @@ describe('the planner places the week steps (drafts, within limits, no duplicate
     const p = placeStudy(ladderStudyGoal(l, facts(), TODAY), rooms, [exam], TODAY)!
     for (const s of p.sessions) expect(s.minutes).toBeLessThanOrEqual(30)
     expect(p.shortMin).toBe(90)
+  })
+  it('a template alone places nothing: the study goal must be confirmed first', () => {
+    expect(ladderStudyGoal(defaultLadder(), facts(), TODAY)).toBeNull()
+    expect(ladderStudyGoal(confirmMilestones(defaultLadder(), 'study', [{ month: 1, text: 'Month 1: 40 h', value: 40 }]), facts(), TODAY)?.leftMin).toBe(180)
   })
   it('nothing to place when the week\'s hours are done or study is "Not now"', () => {
     const f = facts({ daily: { focusHours: days('2026-11-09', 5, 2) } })

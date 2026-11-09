@@ -21366,10 +21366,10 @@ function fromGoalPlans(plans) {
 var doneToday = (p) => Math.max(0, p.perDayMin - p.todayLeftMin);
 // src/core/ladderPlan.ts
 var LADDER_STUDY_ID = "ladder-study";
-/** This week's study still to do as a deadline goal (due next Monday), or null. */
+/** This week's study still to do as a deadline goal (due next Monday), or null (not confirmed yet, or done). */
 function ladderStudyGoal(l, facts, today) {
 	const g = activeGoals(l).find((x) => x.id === "study");
-	if (!g) return null;
+	if (!g || g.milestones == null && g.targets.focusHours == null) return null;
 	const target = targetOf(g, "focusHours", facts);
 	if (!target) return null;
 	const monday = mondayOf$6(today);

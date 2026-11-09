@@ -161,7 +161,7 @@ function slowModel(log: string[]): AskModel {
     const reply = kind === 'plan-names' ? null : 'Here is the honest answer, short and with numbers.'
     if (reply) opts.onDelta?.(reply.slice(0, 12))
     await nap(strong ? REAL.strongRest : REAL.quickRest)
-    if (kind === 'plan-names') return JSON.stringify({ headline: '3 must-dos · lab first', mustdos: [], names: ['Named block', 'Named block', 'Named block'] }) // a deadline or goal session keeps its name, so name a few
+    if (kind === 'plan-names') return JSON.stringify({ headline: '3 must-dos · lab first', mustdos: [], names: ['Named block'] })
     return JSON.stringify({ reply, actions: [], remember: [] })
   }
 }
