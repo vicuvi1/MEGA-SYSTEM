@@ -4687,7 +4687,9 @@ try {
       if (!m) throw new Error('no "N of M" in the habits header')
       return [Number(m[1]), Number(m[2])]
     }
-    for (const n of ['Morning oath', 'Workout', 'Grooming', 'Log spending']) if (!(await row(n).count())) throw new Error(`no ${n} row`)
+    // Workout is the coach card's on Now (each thing once), so it is folded out of the habits.
+    for (const n of ['Morning oath', 'Grooming', 'Log spending']) if (!(await row(n).count())) throw new Error(`no ${n} row`)
+    if (await row('Workout').count()) throw new Error('Workout shows in the habits and in the coach card')
     if ((await row('Grooming').locator('.hb-dots .dot').count()) !== 7) throw new Error('a habit row does not show the last 7 days')
     // An auto habit: the tap opens the spending line and the row stays open (no points for a tap).
     if (!/\bauto\b/.test(await cls('Log spending'))) throw new Error('Log spending is not marked auto')
