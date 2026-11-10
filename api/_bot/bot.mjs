@@ -1590,7 +1590,7 @@ var BULK_PACE = {
 	lo: .25,
 	hi: .5
 };
-var r1$4 = (n) => Math.round(n * 10) / 10;
+var r1$5 = (n) => Math.round(n * 10) / 10;
 var r2$1 = (n) => Math.round(n * 100) / 100;
 /** Clean weigh-ins: one per day (the last one), sane numbers, oldest first. */
 function cleanWeighIns(list) {
@@ -1670,7 +1670,7 @@ function weightTrend(list, today) {
 	const perMonthKg = r2$1(slope(recent) * 30);
 	const perMonthPct = r2$1(perMonthKg / now * 100);
 	const tgt = targetKg;
-	const pace = `${perMonthKg >= 0 ? "+" : "−"}${Math.abs(r1$4(perMonthKg))} kg a month`;
+	const pace = `${perMonthKg >= 0 ? "+" : "−"}${Math.abs(r1$5(perMonthKg))} kg a month`;
 	if (perMonthPct < BULK_PACE.lo) {
 		const kcal = perMonthPct < 0 ? 300 : 200;
 		return {
@@ -1681,7 +1681,7 @@ function weightTrend(list, today) {
 			targetKg,
 			nudge: "add",
 			kcal,
-			line: `Trend ${pace}, under the lean-bulk pace (+${r1$4(tgt.lo)}–${r1$4(tgt.hi)} kg). Add about ${kcal} kcal a day: a glass of milk and a banana, or a peanut butter sandwich.`
+			line: `Trend ${pace}, under the lean-bulk pace (+${r1$5(tgt.lo)}–${r1$5(tgt.hi)} kg). Add about ${kcal} kcal a day: a glass of milk and a banana, or a peanut butter sandwich.`
 		};
 	}
 	if (perMonthPct > BULK_PACE.hi * 1.5) return {
@@ -1692,7 +1692,7 @@ function weightTrend(list, today) {
 		targetKg,
 		nudge: "ease",
 		kcal: -150,
-		line: `Trend ${pace}, faster than a lean bulk (+${r1$4(tgt.lo)}–${r1$4(tgt.hi)} kg). Ease off about 150 kcal a day so it stays mostly muscle.`
+		line: `Trend ${pace}, faster than a lean bulk (+${r1$5(tgt.lo)}–${r1$5(tgt.hi)} kg). Ease off about 150 kcal a day so it stays mostly muscle.`
 	};
 	return {
 		points,
@@ -1702,7 +1702,7 @@ function weightTrend(list, today) {
 		targetKg,
 		nudge: "hold",
 		kcal: 0,
-		line: `Trend ${pace}: right on a lean-bulk pace (+${r1$4(tgt.lo)}–${r1$4(tgt.hi)} kg). Hold steady.`
+		line: `Trend ${pace}: right on a lean-bulk pace (+${r1$5(tgt.lo)}–${r1$5(tgt.hi)} kg). Hold steady.`
 	};
 }
 // src/core/readiness.ts
@@ -5534,7 +5534,8 @@ var MEAL_SOURCES = [
 	"saved",
 	"photo",
 	"manual",
-	"quick-add"
+	"quick-add",
+	"paste"
 ];
 var FOOD_KIND = "protein:food";
 var KCAL_KIND = "kcal:food";
@@ -5543,7 +5544,7 @@ var proteinRowId = (mealId) => `${mealId}-p`;
 var kcalRowId = (mealId) => `${mealId}-k`;
 /** The meal a body-log row belongs to ("fd-abc-p" → "fd-abc"), or ''. */
 var mealOfRow = (rowId) => /^fd-[a-z0-9]{1,24}-[pk]$/.test(String(rowId)) ? String(rowId).slice(0, -2) : "";
-var r1$3 = (n) => Math.round(n * 10) / 10;
+var r1$4 = (n) => Math.round(n * 10) / 10;
 var num$8 = (v, lo, hi) => {
 	const n = Number(v);
 	return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : lo;
@@ -5556,9 +5557,9 @@ function cleanItem$1(raw) {
 	const name = String(raw.name ?? "").replace(/\s+/g, " ").trim().slice(0, 60);
 	const grams = Math.round(num$8(raw.grams, 0, 3e3));
 	if (!name || grams < 1) return null;
-	const protein = r1$3(num$8(raw.protein, 0, 400));
-	const carbs = r1$3(num$8(raw.carbs, 0, 800));
-	const fat = r1$3(num$8(raw.fat, 0, 400));
+	const protein = r1$4(num$8(raw.protein, 0, 400));
+	const carbs = r1$4(num$8(raw.carbs, 0, 800));
+	const fat = r1$4(num$8(raw.fat, 0, 400));
 	const k = Number(raw.kcal);
 	const out = {
 		name,
@@ -5577,7 +5578,7 @@ function cleanItem$1(raw) {
 	const hi = Math.round(Number(raw.hi));
 	if (lo >= 1 && hi <= 3e3 && lo <= grams && hi >= grams && lo < hi) out.lo = lo, out.hi = hi;
 	const fiber = Number(raw.fiber);
-	if (raw.fiber != null && Number.isFinite(fiber) && fiber >= 0) out.fiber = r1$3(Math.min(fiber, 200));
+	if (raw.fiber != null && Number.isFinite(fiber) && fiber >= 0) out.fiber = r1$4(Math.min(fiber, 200));
 	if (typeof raw.upf === "boolean") out.upf = raw.upf;
 	if (raw.src === "label" || raw.src === "barcode") out.src = raw.src;
 	return out;
@@ -5590,11 +5591,11 @@ function scaleItem(item, grams) {
 	return {
 		...item,
 		grams: g,
-		protein: r1$3(item.protein * f),
-		carbs: r1$3(item.carbs * f),
-		fat: r1$3(item.fat * f),
+		protein: r1$4(item.protein * f),
+		carbs: r1$4(item.carbs * f),
+		fat: r1$4(item.fat * f),
 		kcal: Math.round(item.kcal * f),
-		...item.fiber != null ? { fiber: r1$3(item.fiber * f) } : {}
+		...item.fiber != null ? { fiber: r1$4(item.fiber * f) } : {}
 	};
 }
 function sumItems(items) {
@@ -6321,11 +6322,11 @@ var ID$4 = {
 	slot: /^ds-[a-z0-9-]{1,24}$/
 };
 var text$1 = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
-var r1$2 = (n) => Math.round(n * 10) / 10;
+var r1$3 = (n) => Math.round(n * 10) / 10;
 var numOr = (v, lo, hi, def) => {
 	if (v == null || v === "") return def;
 	const n = Number(v);
-	return Number.isFinite(n) ? r1$2(Math.max(lo, Math.min(hi, n))) : def;
+	return Number.isFinite(n) ? r1$3(Math.max(lo, Math.min(hi, n))) : def;
 };
 /** A quantity in half portions, within 0.5–20. */
 var cleanQty = (v) => {
@@ -6411,9 +6412,9 @@ function itemOf(f, qty) {
 	return {
 		name: f.name,
 		grams: Math.max(1, Math.round((f.grams ?? 100) * q)),
-		protein: r1$2(f.protein * q),
-		carbs: r1$2((f.carbs ?? 0) * q),
-		fat: r1$2((f.fat ?? 0) * q),
+		protein: r1$3(f.protein * q),
+		carbs: r1$3((f.carbs ?? 0) * q),
+		fat: r1$3((f.fat ?? 0) * q),
 		kcal: Math.round(f.kcal * q),
 		confidence: "sure",
 		qty: q,
@@ -6743,7 +6744,7 @@ var HIDDEN = {
 };
 /** Said when the photo is too dark or blurry to read: a better photo beats a guess. */
 var UNCLEAR_PHOTO = "The photo is too dark or blurry to read well. Send a clearer one in good light (the whole plate, from above).";
-var r1$1 = (n) => Math.round(n * 10) / 10;
+var r1$2 = (n) => Math.round(n * 10) / 10;
 var clamp$4 = (v, lo, hi, dflt = lo) => {
 	const n = typeof v === "string" ? Number(v.replace(",", ".").replace(/[^\d.\-]/g, "")) : Number(v);
 	return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt;
@@ -6775,9 +6776,9 @@ var gramsOfPortion = (portion) => {
 function fromSaved(s, qty, grams) {
 	const q = clamp$4(qty, .25, 20, 1);
 	const per = gramsOfPortion(s.portion);
-	const carbs = r1$1((Number(s.carbs) || 0) * q);
-	const fat = r1$1((Number(s.fat) || 0) * q);
-	const protein = r1$1((Number(s.protein) || 0) * q);
+	const carbs = r1$2((Number(s.carbs) || 0) * q);
+	const fat = r1$2((Number(s.fat) || 0) * q);
+	const protein = r1$2((Number(s.protein) || 0) * q);
 	const kcal = Math.round((Number(s.kcal) || kcalOf(s.protein, s.carbs ?? 0, s.fat ?? 0)) * q);
 	const g = per ? Math.round(per * q) : Math.round(grams ?? 0);
 	return {
@@ -6840,16 +6841,16 @@ function cleanVisionItem(raw, saved = [], photos = 1) {
 	}
 	const label = raw.fromLabel === true || raw.source === "label";
 	const conf = label ? "high" : confidence;
-	const protein = r1$1(clamp$4(raw.protein, 0, 400));
-	const carbs = r1$1(clamp$4(raw.carbs, 0, 800));
-	const fat = r1$1(clamp$4(raw.fat, 0, 400));
+	const protein = r1$2(clamp$4(raw.protein, 0, 400));
+	const carbs = r1$2(clamp$4(raw.carbs, 0, 800));
+	const fat = r1$2(clamp$4(raw.fat, 0, 400));
 	const k = clamp$4(raw.kcal, 0, 8e3);
 	const kcal = Math.round(k > 0 ? k : kcalOf(protein, carbs, fat));
 	if (grams < 1 && kcal < 1) return null;
 	return {
 		name,
 		matchedSavedFoodId: null,
-		qty: r1$1(qty),
+		qty: r1$2(qty),
 		unit: text(raw.unit, 20) || "serving",
 		grams,
 		kcal,
@@ -6867,7 +6868,7 @@ function cleanVisionItem(raw, saved = [], photos = 1) {
 function extrasOf(raw) {
 	const f = raw?.fiber == null ? NaN : clamp$4(raw.fiber, 0, 200, NaN);
 	return {
-		...Number.isFinite(f) ? { fiber: r1$1(f) } : {},
+		...Number.isFinite(f) ? { fiber: r1$2(f) } : {},
 		...typeof raw?.ultra === "boolean" ? { upf: raw.ultra } : typeof raw?.upf === "boolean" ? { upf: raw.upf } : {}
 	};
 }
@@ -6986,13 +6987,13 @@ function scaleVisionItem(base, factor, saved = []) {
 	};
 	const out = {
 		...base,
-		qty: r1$1(base.qty * f),
+		qty: r1$2(base.qty * f),
 		grams: Math.round(base.grams * f),
 		kcal: Math.round(base.kcal * f),
-		protein: r1$1(base.protein * f),
-		carbs: r1$1(base.carbs * f),
-		fat: r1$1(base.fat * f),
-		...base.fiber != null ? { fiber: r1$1(base.fiber * f) } : {}
+		protein: r1$2(base.protein * f),
+		carbs: r1$2(base.carbs * f),
+		fat: r1$2(base.fat * f),
+		...base.fiber != null ? { fiber: r1$2(base.fiber * f) } : {}
 	};
 	if (base.lo != null && base.hi != null) out.lo = Math.max(1, Math.round(base.lo * f)), out.hi = Math.max(1, Math.round(base.hi * f));
 	return out;
@@ -7003,7 +7004,7 @@ function stepQty(qty, dir) {
 	if (dir > 0) return q < 1 ? 1 : Math.min(20, Math.floor(q) + 1);
 	return q <= 1 ? .5 : Math.ceil(q) - 1 || .5;
 }
-var CONF = {
+var CONF$1 = {
 	high: "sure",
 	medium: "roughly",
 	low: "guess"
@@ -7012,20 +7013,20 @@ var CONF = {
 var toFoodItems = (items) => items.filter((i) => i.grams >= 1 || i.kcal >= 1).map((i) => ({
 	name: i.name,
 	grams: Math.max(1, Math.round(i.grams || 1)),
-	protein: r1$1(i.protein),
-	carbs: r1$1(i.carbs),
-	fat: r1$1(i.fat),
+	protein: r1$2(i.protein),
+	carbs: r1$2(i.carbs),
+	fat: r1$2(i.fat),
 	kcal: Math.round(i.kcal),
-	confidence: CONF[i.confidence],
+	confidence: CONF$1[i.confidence],
 	...i.lo != null && i.hi != null && i.lo < i.hi ? {
 		lo: Math.round(i.lo),
 		hi: Math.round(i.hi)
 	} : {},
 	...i.matchedSavedFoodId ? {
-		qty: r1$1(i.qty),
+		qty: r1$2(i.qty),
 		unit: i.unit
 	} : {},
-	...i.fiber != null ? { fiber: r1$1(i.fiber) } : {},
+	...i.fiber != null ? { fiber: r1$2(i.fiber) } : {},
 	...typeof i.upf === "boolean" ? { upf: i.upf } : {},
 	...i.src === "label" || i.src === "barcode" ? { src: i.src } : {}
 }));
@@ -10590,6 +10591,259 @@ function proteinLeftNow(db, now = /* @__PURE__ */ new Date()) {
 		ideas: whatNextNow(db, now).ideas.map((x) => x.text)
 	}), workoutNoteNow(db, now) ?? ""].filter(Boolean);
 }
+// src/core/foodPaste.ts
+var TYPES$1 = {
+	breakfast: "breakfast",
+	lunch: "lunch",
+	dinner: "dinner",
+	snack: "snack",
+	supper: "dinner",
+	brunch: "breakfast"
+};
+var r1$1 = (n) => Math.round(n * 10) / 10;
+/** A number from "12,5", "~150", "≈ 200 g", "150-200" (the middle), or null. */
+function pasteNumber(raw) {
+	const t = String(raw ?? "").replace(/[~≈]|approx\.?|about|ca\./gi, "").replace(/(\d),(\d)/g, "$1.$2").trim();
+	const m = /^(\d+(?:\.\d+)?)\s*(?:[-–—]|to)\s*(\d+(?:\.\d+)?)/i.exec(t) ?? /^(\d+(?:\.\d+)?)/.exec(t);
+	if (!m) return null;
+	const a = Number(m[1]);
+	const b = m[2] != null ? Number(m[2]) : a;
+	return Number.isFinite(a) && Number.isFinite(b) ? r1$1((a + b) / 2) : null;
+}
+/** A line cleaned of fences, bullets and **bold**; `bullet` says whether it started with one. */
+function cleanLine(raw) {
+	let t = raw.replace(/\*\*|__|`/g, "").replace(/ /g, " ").trim();
+	const b = /^(?:[-*•·–—+]|\d{1,2}[.)])\s+/.exec(t);
+	if (b) t = t.slice(b[0].length).trim();
+	else if (/^[-*•·–—]\S/.test(t) && !/^-\d/.test(t)) t = t.slice(1).trim();
+	return {
+		text: t,
+		bullet: !!b
+	};
+}
+var fieldsOf = (t) => t.split(/\s*[|\t]\s*/).map((x) => x.trim()).filter((x, i, a) => x !== "" || i > 0 && i < a.length - 1);
+var KEY$3 = /^(p|prot|protein|c|carb|carbs|carbohydrates?|f|fat|fats|fib|fiber|fibre|kcal|cal|calories|energy|conf|confidence|g|grams?|weight)\b\s*[:=]?\s*(.*)$/i;
+var keyOf$2 = (k) => {
+	const x = k.toLowerCase();
+	if (/^(p|prot|protein)$/.test(x)) return "p";
+	if (/^(c|carb|carbs|carbohydrates?)$/.test(x)) return "c";
+	if (/^(f|fat|fats)$/.test(x)) return "f";
+	if (/^(fib|fiber|fibre)$/.test(x)) return "fib";
+	if (/^(kcal|cal|calories|energy)$/.test(x)) return "kcal";
+	if (/^(conf|confidence)$/.test(x)) return "conf";
+	return "g";
+};
+var GRAMS = /^[~≈]?\s*\d+(?:[.,]\d+)?(?:\s*[-–—]\s*\d+(?:[.,]\d+)?)?\s*(?:g|gr|grams?|ml)\.?$/i;
+/** One food line, or null when it isn't one (then the caller warns). */
+function readItem(fields, line, warnings) {
+	const name = fields[0]?.replace(/^[-*•]\s*/, "").trim();
+	if (!name || /^\d+([.,]\d+)?$/.test(name)) return null;
+	const v = {};
+	const free = [];
+	for (const f of fields.slice(1)) {
+		if (GRAMS.test(f)) {
+			v.g ??= f;
+			continue;
+		}
+		const m = KEY$3.exec(f);
+		if (m) {
+			v[keyOf$2(m[1])] ??= m[2];
+			continue;
+		}
+		const back = /^([~≈]?\s*\d+(?:[.,]\d+)?(?:\s*[-–—]\s*\d+(?:[.,]\d+)?)?)\s*(kcal|cal|calories)$/i.exec(f);
+		if (back) {
+			v.kcal ??= back[1];
+			continue;
+		}
+		free.push(f);
+	}
+	const num = (k) => v[k] != null ? pasteNumber(v[k]) : null;
+	const g = num("g");
+	const p = num("p");
+	const c = num("c");
+	const fa = num("f");
+	if (g == null && p == null && c == null && fa == null && num("kcal") == null) return null;
+	const protein = Math.max(0, Math.min(400, p ?? 0));
+	const carbs = Math.max(0, Math.min(800, c ?? 0));
+	const fat = Math.max(0, Math.min(400, fa ?? 0));
+	const calc = kcalOf(protein, carbs, fat);
+	const k = num("kcal");
+	const kcal = Math.round(Math.max(0, Math.min(8e3, k ?? calc)));
+	const fib = num("fib");
+	const conf = String(v.conf ?? "").toLowerCase();
+	const confidence = /^h/.test(conf) ? "high" : /^l/.test(conf) ? "low" : "medium";
+	const note = free.filter((x) => x !== "-" && x !== "—").join(" · ").slice(0, 120);
+	const grams = g != null ? Math.round(Math.max(0, Math.min(3e3, g))) : 0;
+	const it = {
+		name: name.slice(0, 60),
+		grams,
+		protein: r1$1(protein),
+		carbs: r1$1(carbs),
+		fat: r1$1(fat),
+		fiber: fib != null ? r1$1(Math.min(200, fib)) : null,
+		kcal,
+		kcalCalc: calc,
+		confidence,
+		note,
+		line
+	};
+	if (!grams) {
+		it.noGrams = true;
+		warnings.push(`Line ${line}: ${it.name} has no grams. Fill them in before logging.`);
+	}
+	if (k == null && (p != null || c != null || fa != null)) warnings.push(`Line ${line}: ${it.name} had no kcal; worked out from P/C/F (${calc} kcal).`);
+	if (k != null && calc > 0 && Math.abs(kcal - calc) / calc > .25) warnings.push(`Line ${line}: ${it.name} says ${kcal} kcal but P/C/F give about ${calc}. Check it.`);
+	return it;
+}
+/** A MEAL line: the type, the date and time (or "now"), the name, in any order. */
+function readMeal(fields, today) {
+	let type = null;
+	let at = null;
+	const rest = [];
+	for (const f of fields.slice(1)) {
+		const low = f.toLowerCase().replace(/[<>"']/g, "").trim();
+		const dt = /^(\d{4})-(\d{2})-(\d{2})(?:[ t]+(\d{1,2})[:.](\d{2}))?$/.exec(low);
+		const tm = /^(\d{1,2})[:.](\d{2})$/.exec(low);
+		if (!type && TYPES$1[low]) type = TYPES$1[low];
+		else if (!at && dt) at = `${dt[1]}-${dt[2]}-${dt[3]}T${(dt[4] ?? "12").padStart(2, "0")}:${dt[5] ?? "00"}`;
+		else if (!at && tm && Number(tm[1]) < 24) at = `${today}T${tm[1].padStart(2, "0")}:${tm[2]}`;
+		else if (low === "now" || low === "-" || low === "") continue;
+		else rest.push(f);
+	}
+	return {
+		type,
+		at,
+		name: rest.join(" · ").replace(/[<>]/g, "").slice(0, 60)
+	};
+}
+/** Reads a pasted LIFE-FOOD block (or something close to it). `today` (YYYY-MM-DD) fills a time given without a date. */
+function parseFoodPaste(text, today) {
+	const warnings = [];
+	const meals = [];
+	let cur = null;
+	let ended = false;
+	String(text ?? "").replace(/\r\n?/g, "\n").split("\n").forEach((raw, k) => {
+		const n = k + 1;
+		if (/^\s*```/.test(raw)) return;
+		const { text: t, bullet } = cleanLine(raw);
+		if (!t) return;
+		const fields = fieldsOf(t);
+		const head = (fields[0] ?? "").toUpperCase().replace(/[:]$/, "");
+		if (/^LIFE-?FOOD\b/i.test(t)) {
+			ended = false;
+			return;
+		}
+		if (head === "END") {
+			ended = true;
+			cur = null;
+			return;
+		}
+		if (head === "MEAL") {
+			ended = false;
+			cur = {
+				...readMeal(fields, today),
+				items: [],
+				total: null
+			};
+			meals.push(cur);
+			return;
+		}
+		if (head === "TOTAL" || head === "TOTALS") {
+			const it = readItem(["total", ...fields.slice(1)], n, []);
+			if (cur && it) cur.total = {
+				protein: it.protein,
+				carbs: it.carbs,
+				fat: it.fat,
+				kcal: it.kcal
+			};
+			return;
+		}
+		if (!(fields.length >= 2 || bullet)) return;
+		const it = fields.length >= 2 ? readItem(fields, n, warnings) : null;
+		if (!it) {
+			if (fields.length >= 2) warnings.push(`Line ${n} could not be read: "${t.slice(0, 80)}"`);
+			return;
+		}
+		if (ended) warnings.push(`Line ${n} came after END; it was read anyway.`);
+		if (!cur) {
+			cur = {
+				type: null,
+				at: null,
+				name: "",
+				items: [],
+				total: null
+			};
+			meals.push(cur);
+		}
+		cur.items.push(it);
+	});
+	const kept = meals.filter((m) => m.items.length);
+	meals.filter((m) => !m.items.length).forEach((m) => warnings.push(`The meal "${m.name || m.type || "without a name"}" has no foods.`));
+	for (const m of kept) {
+		if (!m.total) continue;
+		const sum = m.items.reduce((a, i) => a + i.kcal, 0);
+		if (m.total.kcal > 0 && Math.abs(sum - m.total.kcal) / m.total.kcal > .1) warnings.push(`${m.name || "A meal"}: its TOTAL says ${m.total.kcal} kcal, the foods add up to ${sum}. The foods are used.`);
+	}
+	return {
+		meals: kept,
+		warnings
+	};
+}
+var CONF = {
+	high: "sure",
+	medium: "roughly",
+	low: "guess"
+};
+/** A pasted food as a food-counter item (null when it still has no grams). */
+function pasteFoodItem(it) {
+	if (!(it.grams >= 1)) return null;
+	return {
+		name: it.name,
+		grams: it.grams,
+		protein: it.protein,
+		carbs: it.carbs,
+		fat: it.fat,
+		kcal: it.kcal,
+		confidence: CONF[it.confidence],
+		...it.fiber != null ? { fiber: it.fiber } : {}
+	};
+}
+/**
+* A pasted meal ready for the food counter: the block's date and time (else
+* now; never in the future, never more than 14 days back), the block's meal
+* type (else from the time), its foods with grams. `warn` gets why a time was changed.
+*/
+function pasteToLog(m, now, today, warn = () => {}) {
+	const items = m.items.map(pasteFoodItem).filter((x) => !!x);
+	if (!items.length) return null;
+	let when = now;
+	if (m.at) {
+		const d = new Date(m.at);
+		const day = m.at.slice(0, 10);
+		if (!Number.isFinite(d.getTime())) warn(`${m.name || "A meal"}: its time could not be read, so now is used.`);
+		else if (d.getTime() > now.getTime() + 3e5) warn(`${m.name || "A meal"}: ${m.at.replace("T", " ")} is in the future, so now is used.`);
+		else if (day < addDays$8(today, -14)) warn(`${m.name || "A meal"}: ${day} is more than 14 days ago, so today is used.`);
+		else when = d;
+	}
+	const hm = `${String(when.getHours()).padStart(2, "0")}:${String(when.getMinutes()).padStart(2, "0")}`;
+	const day = when === now ? today : m.at.slice(0, 10);
+	return {
+		items,
+		name: (m.name || items.map((i) => i.name).slice(0, 3).join(" + ")).slice(0, 60),
+		type: m.type ?? mealTypeAt(hm),
+		day,
+		at: when.toISOString()
+	};
+}
+/** A short id from the pasted text (the same block sent twice logs once). */
+function pasteId(text, k) {
+	let h = 5381;
+	const s = String(text ?? "").replace(/\s+/g, " ").trim();
+	for (let i = 0; i < s.length; i++) h = (h << 5) + h + s.charCodeAt(i) >>> 0;
+	return `fd-t${h.toString(36)}${k}`;
+}
+/** Whether a message is a pasted block for the food counter (starts with LIFE-FOOD, maybe inside a code fence). */
+var isPasteBlock = (text) => /^\s*(?:```[a-z]*\s*)?(?:\*\*)?LIFE-?FOOD\b/i.test(String(text ?? ""));
 // src/main/foodSaved.ts
 var add = (a, b) => ({
 	protein: a.protein + b.protein,
@@ -14609,7 +14863,7 @@ function mealsMenu(s) {
 /** Whether a Telegram message is for the food counter (a cheap read only for short shapes). */
 function foodWants(db, text, now = Date.now()) {
 	const t = String(text ?? "").trim();
-	if (/^\/(food|meals)(@\w+)?(\s|$)/i.test(t) || looksLikeFoodReply(t)) return true;
+	if (/^\/(food|meals)(@\w+)?(\s|$)/i.test(t) || isPasteBlock(t) || looksLikeFoodReply(t)) return true;
 	if (gramEditShape(t) || /^\s*\d{1,4}\s*(g|gr|grams?)?\s*\.?\s*$/i.test(t)) {
 		const d = liveDraft(readFoodBen(db), now);
 		if (d && (d.photo ? readAskAnswer(t, d) || readPhotoEdit(t, d) : readGramEdit(t, d))) return true;
@@ -14629,6 +14883,7 @@ function foodMessage(db, text, now = Date.now()) {
 		return { reply: `${promptMessage(FOOD_PROMPT)}\n\n📸 Or just send the meal photo here (add a note like "2 containers, one buckwheat").` };
 	}
 	if (/^\/meals(?:@\w+)?(\s|$)/i.test(t)) return mealsMenu(readFoodSaved(db));
+	if (isPasteBlock(t)) return pasteMessage(db, t, now);
 	const fb = readFoodBen(db);
 	const open = liveDraft(fb, now);
 	const ans = open?.photo ? readAskAnswer(t, open) : null;
@@ -14688,6 +14943,82 @@ function foodMessage(db, text, now = Date.now()) {
 		draft: d
 	});
 	return previewOf(d);
+}
+var PASTE_TYPE = {
+	breakfast: "Breakfast",
+	lunch: "Lunch",
+	dinner: "Dinner",
+	snack: "Snack"
+};
+/**
+* A LIFE-FOOD block (core/foodPaste.ts): each meal is logged as a normal
+* food-counter meal (its own time and type; ids from the text, so the same block
+* sent twice logs once). The reply lists every meal and food with its numbers,
+* the day line and protein left, and every line it could not read; buttons undo
+* one meal, all of them, or keep one as a repeat meal. No points.
+*/
+function pasteMessage(db, text, nowMs = Date.now()) {
+	const now = new Date(nowMs);
+	const today = sportToday(now);
+	const r = parseFoodPaste(text, today);
+	const warns = [...r.warnings];
+	const made = [];
+	r.meals.forEach((m, k) => {
+		const log = pasteToLog(m, now, today, (w) => warns.push(w));
+		if (!log) return void warns.push(`${m.name || "A meal"}: no food had grams, so it was not logged. Send it again with grams.`);
+		const res = addFoodMeal(db, {
+			...log,
+			id: pasteId(text, k),
+			source: "paste"
+		}, "telegram", now);
+		if (res) made.push({
+			id: res.id,
+			name: log.name,
+			type: log.type,
+			at: log.at,
+			items: log.items
+		});
+	});
+	const warnText = warns.slice(0, 8).map((w) => `⚠️ ${esc$5(w)}`);
+	if (!made.length) return { reply: [
+		"⚠️ <b>Nothing logged from that LIFE-FOOD block.</b>",
+		...warnText,
+		"Copy the AI prompt in Body → Food → Log food → Paste from AI, and try again."
+	].join("\n") };
+	const undoId = `p${pasteId(text, 0).slice(4, 14)}`;
+	writeFoodBen(db, {
+		...readFoodBen(db),
+		undo: {
+			id: undoId,
+			ids: made.map((m) => m.id),
+			at: nowMs
+		}
+	});
+	const all = sumItems(made.flatMap((m) => m.items));
+	const lines = [`✅ <b>Logged ${made.length} ${made.length === 1 ? "meal" : "meals"}</b> · ${fmt$2(all.kcal)} kcal · ${fmt$2(all.protein)} g protein`];
+	for (const m of made) {
+		const t = sumItems(m.items);
+		lines.push("", `<b>${PASTE_TYPE[m.type] ?? "Meal"}</b> · ${esc$5(whenText$1(Date.parse(m.at)))} · ${esc$5(m.name)}`);
+		for (const it of m.items.slice(0, 10)) lines.push(`• ${esc$5(it.name)} ${fmt$2(it.grams)} g: ${fmt$2(it.kcal)} kcal · P ${fmt$2(it.protein)} · C ${fmt$2(it.carbs)} · F ${fmt$2(it.fat)}`);
+		if (m.items.length > 10) lines.push(`• +${m.items.length - 10} more`);
+		lines.push(`<b>${fmt$2(t.kcal)} kcal · ${fmt$2(t.protein)} g protein</b>`);
+	}
+	lines.push("", esc$5(foodDayTotals(db, now).line), ...proteinLeftNow(db, now).map(esc$5), ...warnText);
+	const rows = made.slice(0, 6).map((m) => [{
+		text: `↩ Undo ${(PASTE_TYPE[m.type] ?? "meal").toLowerCase()} ${whenText$1(Date.parse(m.at)).slice(-5)}`,
+		callback_data: `fd|u|${m.id}`.slice(0, 64)
+	}, {
+		text: "⭐ Repeat meal",
+		callback_data: `fd|R|${m.id}`.slice(0, 64)
+	}]);
+	if (made.length > 1) rows.push([{
+		text: "↩ Undo all",
+		callback_data: `fd|v|${undoId}`
+	}]);
+	return {
+		reply: lines.join("\n").slice(0, 4e3),
+		keyboard: { inline_keyboard: rows }
+	};
 }
 /** The vision request takes about 1.1 MB of photo. */
 var MAX_B64 = 15e5;

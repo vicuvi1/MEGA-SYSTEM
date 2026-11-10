@@ -207,3 +207,40 @@ describe('meal reminders at his usual time', () => {
     expect(r[0].reply_markup.inline_keyboard[0].map((b: any) => b.callback_data)).toEqual(['fd|z|meal:2030-03-12:lunch', 'fd|k|meal:2030-03-12:lunch'])
   }, 60_000)
 })
+
+describe('a LIFE-FOOD block on Telegram', () => {
+  const msg = (text: string, chat = CHAT) => ({ update_id: ++uid, message: { message_id: uid, date: Math.floor(Date.now() / 1000), chat: { id: Number(chat), type: 'private' }, from: { id: Number(chat) }, text } })
+  const BLOCK = ['```', 'LIFE-FOOD v1', 'MEAL | Breakfast | 2030-03-12 08:10 | Eggs and toast', '- Eggs | 150 g | P 19 | C 1 | F 15 | FIB 0 | KCAL 215 | CONF high | 3 eggs', '- Rye bread | 60 g | P 5 | C 28 | F 1.5 | FIB 3.5 | KCAL 150 | CONF medium | -', 'MEAL | Lunch | now | Rice and chicken', '- Rice | 200 g | P 5 | C 56 | F 0.6 | KCAL 250', '- Sauce | P 0 | C 4 | F 6 | KCAL 70', 'END', '```'].join('\n')
+  it('logs every meal at its own time, lists every food, warns about what it could not log, once; strangers change nothing', async () => {
+    const w = world()
+    at('2030-03-12T13:20:00')
+    await handleTelegramUpdate(w.env as any, TOKEN, msg(BLOCK))
+    const meals = [...w.setting('food_log').meals].sort((a: any, b: any) => (a.at < b.at ? -1 : 1))
+    expect(meals.map((m: any) => [m.type, m.source, m.items.length, m.at])).toEqual([
+      ['breakfast', 'paste', 2, new Date('2030-03-12T08:10:00').toISOString()],
+      ['lunch', 'paste', 1, new Date('2030-03-12T13:20:00').toISOString()]
+    ])
+    expect(liveKcal(w)).toBe(615)
+    const r = last(w.sent)
+    expect(r.text).toMatch(/^✅ <b>Logged 2 meals<\/b> · 615 kcal · 29 g protein/)
+    expect(r.text).toMatch(/<b>Breakfast<\/b> · Tue 12 Mar, 08:10 · Eggs and toast\n• Eggs 150 g: 215 kcal · P 19 · C 1 · F 15/)
+    expect(r.text).toMatch(/⚠️ Line 8: Sauce has no grams/)
+    expect(r.text).toMatch(/🥩 \d+ g protein left today/)
+    const kb = r.reply_markup.inline_keyboard
+    expect(kb[0][1].callback_data).toMatch(/^fd\|R\|fd-t/)
+    expect(kb[kb.length - 1][0].text).toBe('↩ Undo all')
+    // The same block again (a retry): nothing logged twice.
+    await handleTelegramUpdate(w.env as any, TOKEN, msg(BLOCK))
+    expect(w.setting('food_log').meals).toHaveLength(2)
+    expect(liveKcal(w)).toBe(615)
+    // Undo all takes both back.
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(kb[kb.length - 1][0].callback_data))
+    expect(liveKcal(w)).toBe(0)
+    // A stranger's block: nothing logged, nothing sent.
+    const before = w.sent.length
+    await handleTelegramUpdate(w.env as any, TOKEN, msg(BLOCK.replace('Eggs and toast', 'Other'), '999999'))
+    expect(w.setting('food_log').meals).toHaveLength(2)
+    expect(w.sent.length).toBe(before)
+    expect(w.q("SELECT COUNT(*) FROM ledger")[0][0]).toBe(0)
+  }, 60_000)
+})

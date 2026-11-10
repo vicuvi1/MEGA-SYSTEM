@@ -4,6 +4,7 @@
 // read by core/foodParse.ts in the page.
 import { addFoodMeal, addFoodSupp, addFoodWater, answerAdjust, editFoodMeal, foodView, leanDefaultOnce, readFoodSaved, needsLeanDefault, saveFoodGoals, saveFoodSaved, saveFoodPrices, toggleFoodFav, toggleFoodMeal, type FoodView } from '../../../main/food'
 import { logSavedFood, logSavedMeal, logStandardDay, saveLoggedAsMeal } from '../../../main/foodSaved'
+import type { PasteLog } from '@core/foodPaste'
 import type { FoodGoals } from '@core/foodGoals'
 import type { FoodItem, MealSource, MealType } from '@core/food'
 import type { FoodSaved, SlotChoice } from '@core/foodSaved'
@@ -38,6 +39,12 @@ export interface FoodApi {
   saved(data: FoodSaved): Promise<FoodView>
   /** "Save as meal": a logged meal becomes a saved meal. */
   saveAsMeal(loggedMealId: string, name?: string): Promise<FoodView>
+  /**
+   * "Paste from AI": logs each pasted meal as a normal food-counter meal (its own
+   * day, time and type; `ids` fixed per paste, so a double tap logs once).
+   * Returns the meal ids (for Undo and "Save as repeat meal").
+   */
+  pasteLog(meals: PasteLog[], ids: string[]): Promise<{ view: FoodView; ids: string[] }>
   /** Just the saved foods, meals and day (for quick add). */
   savedNow(): Promise<FoodSaved>
 }
@@ -81,6 +88,11 @@ export function foodBridge(svcP: Promise<Svc>, device: () => string): FoodApi {
     undo: async (ids) => write((db) => (ids.forEach((id) => toggleFoodMeal(db, id, device())), foodView(db, new Date()))),
     saved: async (data) => write((db) => (saveFoodSaved(db, data), foodView(db, new Date()))),
     saveAsMeal: async (id, name) => write((db) => (saveLoggedAsMeal(db, id, name), foodView(db, new Date()))),
+    pasteLog: async (meals, ids) =>
+      write((db) => {
+        const made = meals.map((m, k) => addFoodMeal(db, { items: m.items, name: m.name, day: m.day, type: m.type, at: m.at, id: ids[k], source: 'paste' }, device())).filter((x): x is NonNullable<typeof x> => !!x)
+        return { ids: made.map((x) => x.id), view: foodView(db, new Date()) }
+      }),
     savedNow: async () => (await svcP).read((s) => readFoodSaved(s.db))
   }
 }

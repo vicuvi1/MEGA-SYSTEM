@@ -89,9 +89,9 @@ export interface FoodMeal {
 /** Photo Locker ids on a meal: letters, digits, _ and -, at most 6. */
 export const cleanPhotoIds = (raw: unknown): string[] => (Array.isArray(raw) ? raw.filter((x) => typeof x === 'string' && /^[A-Za-z0-9_-]{3,64}$/.test(x)).slice(0, 6) : [])
 
-/** How a meal was logged: a saved meal or food, a photo, typed or pasted, or quick add. */
-export type MealSource = 'saved' | 'photo' | 'manual' | 'quick-add'
-export const MEAL_SOURCES: MealSource[] = ['saved', 'photo', 'manual', 'quick-add']
+/** How a meal was logged: a saved meal or food, a photo, typed or pasted, quick add, or a LIFE-FOOD block pasted from his AI app ('paste'). */
+export type MealSource = 'saved' | 'photo' | 'manual' | 'quick-add' | 'paste'
+export const MEAL_SOURCES: MealSource[] = ['saved', 'photo', 'manual', 'quick-add', 'paste']
 /** A meal's source; old meals (saved before sources existed) read as 'manual'. Old data is never rewritten. */
 export const mealSource = (m: { source?: unknown }): MealSource => (MEAL_SOURCES.includes(m.source as MealSource) ? (m.source as MealSource) : 'manual')
 

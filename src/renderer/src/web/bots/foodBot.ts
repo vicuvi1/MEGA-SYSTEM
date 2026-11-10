@@ -66,6 +66,7 @@ import {
   photoDraftKeyboard,
   photoDraftText,
   photoSavedText,
+  whenText,
   photoIsMeal,
   pickPhotoSize,
   readGramEdit,
@@ -90,6 +91,7 @@ import { addFoodMeal, editFoodMeal, foodDayTotals, foodTargetsNow, foodWeekNow, 
 import { daySummaryNow, proteinLeftNow, usualTimesNow } from '../../../../main/foodInsights'
 import { isAfterNote, recentPhotoMeal } from '@core/foodLeftovers'
 import { labelFoods } from '@core/foodBarcode'
+import { isPasteBlock, parseFoodPaste, pasteId, pasteToLog } from '@core/foodPaste'
 import { logSavedMeal, logStandardDay, saveLoggedAsMeal } from '../../../../main/foodSaved'
 import { bodyEvents } from '../../../../main/bodyLog'
 import { weighIns } from '../../../../main/bodyPlus'
@@ -176,7 +178,7 @@ export function mealsMenu(s: FoodSaved): FoodOut {
 /** Whether a Telegram message is for the food counter (a cheap read only for short shapes). */
 export function foodWants(db: any, text: string, now = Date.now()): boolean {
   const t = String(text ?? '').trim()
-  if (/^\/(food|meals)(@\w+)?(\s|$)/i.test(t) || looksLikeFoodReply(t)) return true
+  if (/^\/(food|meals)(@\w+)?(\s|$)/i.test(t) || isPasteBlock(t) || looksLikeFoodReply(t)) return true
   if (gramEditShape(t) || /^\s*\d{1,4}\s*(g|gr|grams?)?\s*\.?\s*$/i.test(t)) {
     const d = liveDraft(readFoodBen(db), now)
     if (d && (d.photo ? readAskAnswer(t, d) || readPhotoEdit(t, d) : readGramEdit(t, d))) return true
@@ -197,6 +199,8 @@ export function foodMessage(db: any, text: string, now = Date.now()): FoodOut | 
     return { reply: `${promptMessage(FOOD_PROMPT)}\n\n📸 Or just send the meal photo here (add a note like "2 containers, one buckwheat").` }
   }
   if (/^\/meals(?:@\w+)?(\s|$)/i.test(t)) return mealsMenu(readFoodSaved(db))
+  // A LIFE-FOOD block from his AI app: every meal in it is logged at once.
+  if (isPasteBlock(t)) return pasteMessage(db, t, now)
   const fb = readFoodBen(db)
   const open = liveDraft(fb, now)
   // The one short question ("About how many grams of rice?") or "Change grams": a bare number answers it.
@@ -234,6 +238,51 @@ export function foodMessage(db: any, text: string, now = Date.now()): FoodOut | 
   const d: FoodDraft = { id: shortId(), at: now, items: r.items, question: r.question }
   writeFoodBen(db, { ...fb, draft: d })
   return previewOf(d)
+}
+
+// ---- a LIFE-FOOD block pasted from his AI app ----
+
+const PASTE_TYPE: Record<string, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' }
+/**
+ * A LIFE-FOOD block (core/foodPaste.ts): each meal is logged as a normal
+ * food-counter meal (its own time and type; ids from the text, so the same block
+ * sent twice logs once). The reply lists every meal and food with its numbers,
+ * the day line and protein left, and every line it could not read; buttons undo
+ * one meal, all of them, or keep one as a repeat meal. No points.
+ */
+export function pasteMessage(db: any, text: string, nowMs = Date.now()): FoodOut {
+  const now = new Date(nowMs)
+  const today = sportToday(now)
+  const r = parseFoodPaste(text, today)
+  const warns = [...r.warnings]
+  const made: { id: string; name: string; type: string; at: string; items: FoodItem[] }[] = []
+  r.meals.forEach((m, k) => {
+    const log = pasteToLog(m, now, today, (w) => warns.push(w))
+    if (!log) return void warns.push(`${m.name || 'A meal'}: no food had grams, so it was not logged. Send it again with grams.`)
+    const res = addFoodMeal(db, { ...log, id: pasteId(text, k), source: 'paste' }, 'telegram', now)
+    if (res) made.push({ id: res.id, name: log.name, type: log.type, at: log.at, items: log.items })
+  })
+  const warnText = warns.slice(0, 8).map((w) => `⚠️ ${esc(w)}`)
+  if (!made.length) return { reply: ['⚠️ <b>Nothing logged from that LIFE-FOOD block.</b>', ...warnText, 'Copy the AI prompt in Body → Food → Log food → Paste from AI, and try again.'].join('\n') }
+  // The Undo id comes from the text too: a retry of the same block keeps the first reply's ↩ Undo all working.
+  const undoId = `p${pasteId(text, 0).slice(4, 14)}`
+  writeFoodBen(db, { ...readFoodBen(db), undo: { id: undoId, ids: made.map((m) => m.id), at: nowMs } })
+  const all = sumItems(made.flatMap((m) => m.items))
+  const lines = [`✅ <b>Logged ${made.length} ${made.length === 1 ? 'meal' : 'meals'}</b> · ${fmt(all.kcal)} kcal · ${fmt(all.protein)} g protein`]
+  for (const m of made) {
+    const t = sumItems(m.items)
+    lines.push('', `<b>${PASTE_TYPE[m.type] ?? 'Meal'}</b> · ${esc(whenText(Date.parse(m.at)))} · ${esc(m.name)}`)
+    for (const it of m.items.slice(0, 10)) lines.push(`• ${esc(it.name)} ${fmt(it.grams)} g: ${fmt(it.kcal)} kcal · P ${fmt(it.protein)} · C ${fmt(it.carbs)} · F ${fmt(it.fat)}`)
+    if (m.items.length > 10) lines.push(`• +${m.items.length - 10} more`)
+    lines.push(`<b>${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b>`)
+  }
+  lines.push('', esc(foodDayTotals(db, now).line), ...proteinLeftNow(db, now).map(esc), ...warnText)
+  const rows = made.slice(0, 6).map((m) => [
+    { text: `↩ Undo ${(PASTE_TYPE[m.type] ?? 'meal').toLowerCase()} ${whenText(Date.parse(m.at)).slice(-5)}`, callback_data: `fd|u|${m.id}`.slice(0, 64) },
+    { text: '⭐ Repeat meal', callback_data: `fd|R|${m.id}`.slice(0, 64) }
+  ])
+  if (made.length > 1) rows.push([{ text: '↩ Undo all', callback_data: `fd|v|${undoId}` }])
+  return { reply: lines.join('\n').slice(0, 4000), keyboard: { inline_keyboard: rows } }
 }
 
 // ---- a meal photo ----

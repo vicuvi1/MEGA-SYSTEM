@@ -142,6 +142,14 @@ Tests: `core/foodPrecision.test.ts` (ranges, labels, saved foods, the memory, th
 - **Daily limit:** 15 photos a day by default; `PHOTO_DAILY_LIMIT` in Vercel (1–100) changes it.
 - Tests: `core/foodPrecision.test.ts` ("phase 2"), `server/foodTelegram.server.test.ts` ("repeat meals from a photo"); smoke "Photo Locker" (Save as meal → the tile → click shows it, double-click logs it once).
 
+### Paste from AI: a LIFE-FOOD block logs every meal at once (2026-11-10)
+
+To save money he reads his photos in his own AI app (ChatGPT, Grok, Gemini) with ONE fixed prompt (`FOOD_PASTE_PROMPT` in `core/foodPaste.ts`; keep its text as it is) and pastes the answer.
+- **Format** (LIFE-FOOD v1): `MEAL | <type> | <YYYY-MM-DD HH:MM or now> | <name>`, then `- <food> | <grams> g | P | C | F | FIB | KCAL | CONF | <note>`, an optional `TOTAL` line, `END`. `parseFoodPaste` reads it tolerantly: code fences, markdown bullets, `**bold**`, blank lines, text around the block, lower-case keys, `|` or tab, "12,5", "~" and "≈", "150-200 g" (the middle), missing optional fields (no kcal → 4P + 4C + 9F, said). Warnings, never silent drops: a line it can't read, a food without grams (must be filled in), kcal more than 25 % off 4P + 4C + 9F, a TOTAL that disagrees, an empty meal.
+- **App** (Body → Food → Log food → Paste from AI, `body/FoodPaste.tsx`): Copy AI prompt, a big text area, a live preview of every meal (name, type, date and time: from the block, else now and the type from the time) and every food with grams, kcal, P, C, F, fibre; grams editable (numbers scale), foods removable. Log all → `life.coach.food.pasteLog` → one `addFoodMeal` per meal (source `paste`, its own day and time; a time in the future or more than 14 days back becomes now, said). Ids come from the text (`pasteId`), so a double tap logs once. Undo all; "Save as repeat meal" per meal (`saveLoggedAsMeal`).
+- **Telegram:** a message starting with `LIFE-FOOD` (maybe inside a fence) is logged the same way (`foodBot.ts pasteMessage`): each meal and food with its numbers, the day line, protein left, the warnings; buttons Undo per meal, Undo all, Repeat meal. The same block sent twice logs once. Only the owner's chats (the bot's usual check).
+- Like typed meals: no points. Tests: `core/foodPaste.test.ts`, `server/foodPhotoExtras.server.test.ts` ("a LIFE-FOOD block"); smoke "Food paste from AI".
+
 ### Food counter extras (2026-11-08)
 
 The counter is now three views inside the card: **Today · Week · Plan**. No points for any of it; all data made up in tests.

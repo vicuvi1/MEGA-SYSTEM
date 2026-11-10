@@ -28,6 +28,7 @@ import { FoodPlan, copyText } from './FoodPlan'
 import { FoodBars, QuickLog } from './FoodFast'
 import { FoodSavedSheet } from './FoodSavedSheet'
 import { FoodPhotoLog, type PhotoPicker } from './FoodPhotoReview'
+import { FoodPaste } from './FoodPaste'
 import { FoodAdjustCard } from './FoodAdjustCard'
 import { ConfidenceDot, MealItems, MealPhotoThumb } from './MealPhoto'
 import { adjLogLine } from '@core/foodAdjust'
@@ -56,7 +57,7 @@ const toRows = (items: FoodItem[]): Row[] => items.map((it) => ({ key: ++rowKey,
 const rowItem = (r: Row): FoodItem => ({ ...scaleItem(r.base, r.grams), name: r.name.trim() || r.base.name })
 
 type Sub = 'today' | 'week' | 'plan'
-type Sheet = null | 'root' | 'meals' | 'type'
+type Sheet = null | 'root' | 'meals' | 'type' | 'paste'
 const itemsText = (items: FoodItem[]) => items.map((i) => `${i.grams} g ${i.name}`).join(', ')
 
 export function FoodCounter() {
@@ -306,7 +307,7 @@ export function FoodCounter() {
     </div>
   )
 
-  const sheetTitle = sheet === 'meals' ? 'My meals' : sheet === 'type' ? (rows ? (editing ? 'Change the meal' : 'Check and save') : 'Type what you ate') : pastDay ? `Log food on ${v.day}` : 'Log food'
+  const sheetTitle = sheet === 'paste' ? 'Paste from AI' : sheet === 'meals' ? 'My meals' : sheet === 'type' ? (rows ? (editing ? 'Change the meal' : 'Check and save') : 'Type what you ate') : pastDay ? `Log food on ${v.day}` : 'Log food'
   const sheetEl = sheet && (
     <div className="sheet fdl-sheet" role="dialog" aria-modal="true" aria-label={sheetTitle} onKeyDown={(e) => e.key === 'Escape' && closeSheet()} onClick={(e) => e.target === e.currentTarget && closeSheet()}>
       <div className="sheet-card fdl-card" data-page={sheet}>
@@ -364,6 +365,15 @@ export function FoodCounter() {
                     <small>"2 eggs, 200 g chicken, 1 banana"</small>
                   </span>
                 </button>
+                <button type="button" className="fdl-choice fdl-paste" onClick={() => setSheet('paste')}>
+                  <span className="fdl-choice-icon">
+                    <LogIcon kind="plate" />
+                  </span>
+                  <span className="fdl-choice-text">
+                    <b>Paste from AI</b>
+                    <small>Read your photos in ChatGPT, Grok or Gemini with the AI prompt, paste the answer: every meal at once.</small>
+                  </span>
+                </button>
               </div>
               {quickAdd}
             </>
@@ -401,6 +411,7 @@ export function FoodCounter() {
               )}
             </>
           )}
+          {sheet === 'paste' && <FoodPaste v={v} onView={setV} onDone={closeSheet} />}
           {sheet === 'type' && (
             <>
               <div className="fd-words-step">

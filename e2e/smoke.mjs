@@ -1013,7 +1013,7 @@ try {
     await pg.click(`${fc} .fd-log-btn`)
     await pg.waitForSelector(`.fdl-sheet .fdl-choices`, { timeout: 5000 })
     const choices = await pg.locator(`.fdl-sheet .fdl-choice b`).allInnerTexts()
-    if (choices.join('|') !== 'Photo|My meals|Type it') throw new Error(`the Log food sheet shows: ${choices.join(', ')}`)
+    if (choices.join('|') !== 'Photo|My meals|Type it|Paste from AI') throw new Error(`the Log food sheet shows: ${choices.join(', ')}`)
     await pg.click(`.fdl-sheet .fdl-close`)
     await pg.waitForSelector(`.fdl-sheet`, { state: 'detached', timeout: 5000 })
     await openFold(`${fc} .fd-more`)
@@ -1375,6 +1375,82 @@ try {
       await pg.unroute('**/api/ai')
       await pg.setViewportSize({ width: 1440, height: 900 })
     }
+  })
+  // Paste from AI: he reads his photos in his own AI app with the fixed prompt and pastes the LIFE-FOOD answer.
+  // A 2-meal sample with a code fence, bullets and **bold** → the live preview (every food with its numbers, a grams
+  // fix scales it) → Log all → both meals on Food with the right totals → Undo all takes them back. No points.
+  // FOOD_PASTE_SHOTS=<dir> saves the preview.
+  await step('Food paste from AI: the prompt, paste 2 meals with fences and bullets, the preview, a grams fix, Log all, the totals on Food, Undo all', async () => {
+    const shots = process.env.FOOD_PASTE_SHOTS
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="food"]')
+    const fc = '#ptp-body-food .fd-card'
+    await pg.waitForSelector(`${fc} .fd-log-btn`, { timeout: 20000 })
+    const kcalNow = async () => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(await pg.locator(`${fc} .fd-line`).innerText())?.[1] ?? 'x').replace(/,/g, ''))
+    const liveMeals = () => pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).count()
+    const k0 = await kcalNow()
+    const m0 = await liveMeals()
+    const points0 = await pg.evaluate(async () => {
+      const s = localStorage.getItem('life_web_session') ?? ''
+      const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT COUNT(*) FROM ledger', args: [] } }, { type: 'close' }] }) })
+      return (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? null
+    })
+    await pg.click(`${fc} .fd-log-btn`)
+    await pg.click('.fdl-sheet .fdl-paste')
+    await pg.waitForSelector('.fdl-sheet .fpa-text', { timeout: 5000 })
+    if (!/^You are a precise nutrition analyst\./.test(await pg.locator('.fdl-sheet .fpa-prompt pre').textContent())) throw new Error('the AI prompt is not the fixed one')
+    if (!(await pg.locator('.fdl-sheet .fpa-copy', { hasText: 'Copy AI prompt' }).count())) throw new Error('no "Copy AI prompt" button')
+    const sample = [
+      'Here you go:',
+      '```',
+      'LIFE-FOOD v1',
+      'MEAL | Breakfast | now | Oats',
+      '* **Oats** | 80 g | P 10,5 | C 54 | F 5.5 | FIB 8 | KCAL 300 | CONF high | -',
+      '* milk | 250 g | P 8 | C 12 | F 8 | KCAL 150 | CONF medium | -',
+      'TOTAL | P 18.5 | C 66 | F 13.5 | KCAL 450',
+      '',
+      'MEAL | Lunch | now | Chicken and rice',
+      '- chicken breast | 200 g | P 62 | C 0 | F 7 | KCAL 310 | CONF high | -',
+      '- rice | 150-250 g | P 5 | C 56 | F 0.6 | KCAL 250 | CONF low | rough portion',
+      'END',
+      '```',
+      'Enjoy!'
+    ].join('\n')
+    await pg.fill('.fdl-sheet .fpa-text', sample)
+    await pg.waitForFunction(() => document.querySelectorAll('.fdl-sheet .fpa-meal').length === 2, null, { timeout: 5000 })
+    if ((await pg.locator('.fdl-sheet .fpa-item').count()) !== 4) throw new Error('the preview does not list the 4 foods')
+    if (await pg.locator('.fdl-sheet .fpa-warn').count()) throw new Error(`warnings for a clean block: ${await pg.locator('.fdl-sheet .fpa-warn').innerText()}`)
+    const totals = await pg.locator('.fdl-sheet .fpa-total').allInnerTexts()
+    if (!/^450 kcal · 19 g protein/.test(totals[0]) || !/^560 kcal · 67 g protein/.test(totals[1])) throw new Error(`meal totals: ${totals.join(' | ')}`)
+    if (!/^200$/.test(await pg.locator('.fdl-sheet .fpa-item').nth(3).locator('.fpa-grams input').inputValue())) throw new Error('the range 150-250 g is not read as 200 g')
+    if ((await pg.locator('.fdl-sheet .fpa-meal').first().locator('.fpa-type').innerText()).trim() !== 'Breakfast') throw new Error('the meal type from the block is not used')
+    // A grams fix scales that food's numbers: 500 g milk = 300 kcal.
+    await pg.locator('.fdl-sheet .fpa-item').nth(1).locator('.fpa-grams input').fill('500')
+    await pg.waitForFunction(() => /^600 kcal/.test(document.querySelector('.fdl-sheet .fpa-total')?.textContent ?? ''), null, { timeout: 3000 })
+    if (!/Log all · 2 meals · 1,160 kcal/.test(await pg.locator('.fdl-sheet .fpa-log').innerText())) throw new Error(`log button: ${await pg.locator('.fdl-sheet .fpa-log').innerText()}`)
+    if (shots) await pg.locator('.fdl-sheet .fdl-card').screenshot({ path: `${shots}/food-paste-preview.png` })
+    await pg.click('.fdl-sheet .fpa-log')
+    await pg.waitForSelector('.fdl-sheet .fpa-done', { timeout: 10000 })
+    if (!/Logged 2 meals/.test(await pg.locator('.fdl-sheet .fpa-done-line').innerText())) throw new Error('no "Logged 2 meals"')
+    if ((await pg.locator('.fdl-sheet .fpa-keep', { hasText: 'Save as repeat meal' }).count()) !== 2) throw new Error('no "Save as repeat meal" for each meal')
+    await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0 + 1160], { timeout: 10000 })
+    if ((await liveMeals()) !== m0 + 2) throw new Error(`expected 2 more meals, got ${(await liveMeals()) - m0}`)
+    const row = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Chicken and rice' }).first()
+    if (!/rice\s+200 g/.test((await row.locator('.fd-mitem').allInnerTexts()).join('|'))) throw new Error('the pasted meal row does not list its foods')
+    // Undo all: both meals stop counting.
+    await pg.click('.fdl-sheet .fpa-undo')
+    await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0], { timeout: 10000 })
+    await pg.click('.fdl-sheet .fdl-close')
+    await pg.waitForSelector('.fdl-sheet', { state: 'detached', timeout: 5000 })
+    const points1 = await pg.evaluate(async () => {
+      const s = localStorage.getItem('life_web_session') ?? ''
+      const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT COUNT(*) FROM ledger', args: [] } }, { type: 'close' }] }) })
+      return (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? null
+    })
+    if (points1 !== points0) throw new Error('pasting meals paid points')
   })
   // Body → Training: today's session from the weekly split (log 3 sets with "same as last time" and effort, the rest
   // timer runs, finish), the roadmap (current level, progress, a level-up after 2 top sessions, move up), then the
