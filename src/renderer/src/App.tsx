@@ -3,6 +3,8 @@ import { AnimatePresence, m } from 'framer-motion'
 import { MotionRoot, viewSwitch } from './motionKit'
 import type { AuthStatus, BackupStatus, BodyState, ConnectionsState, DisciplineState, Rule, ScheduleState, ShopState, Summary, TasksState } from '@shared/api'
 import { features, isDemo, life } from './bridge'
+// Starts noting when you last touched the page (the plan card's auto-sync slows down while you are away).
+import './lastUse'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { Coins, ToastProvider, useToast } from './ui'

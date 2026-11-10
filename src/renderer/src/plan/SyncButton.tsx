@@ -3,8 +3,9 @@
 // "Synced 12:04" after. Every Sync button on screen shows the same time.
 import { useEffect, useState } from 'react'
 import { life } from '../bridge'
+import { idleFor } from '../lastUse'
 import { checkRemote } from './planStore'
-import { autoSyncLine, syncErrorText, syncedLine } from '@core/syncLabel'
+import { autoSyncGap, autoSyncLine, syncErrorText, syncedLine } from '@core/syncLabel'
 import './planEditor.css'
 
 let syncedAt = 0
@@ -52,7 +53,10 @@ export function syncAll(): Promise<number> {
   return running
 }
 
-/** Background check while a plan card is on screen: every 60 s while visible, and as soon as you come back. */
+/**
+ * Background check while a plan card is on screen: about every minute while you use the page, slower while it sits
+ * untouched (autoSyncGap: a tab left open overnight made about 400 calls an hour), and at once when you come back.
+ */
 let autoOn = 0
 let autoTimer: ReturnType<typeof setInterval> | null = null
 const auto = (minGap: number) => {
@@ -60,12 +64,18 @@ const auto = (minGap: number) => {
   void syncAll()
 }
 const onBack = () => auto(5_000)
-const onTick = () => auto(55_000)
+const onTick = () => auto(autoSyncGap(idleFor()))
+// Back after a while: check at once (lastUse.ts notes the touch just after this runs).
+const onUse = () => {
+  if (idleFor() >= 3 * 60_000) onBack()
+}
+const USE = ['pointerdown', 'keydown', 'touchstart'] as const
 export function startAutoSync(): () => void {
   if (++autoOn === 1) {
     autoTimer = setInterval(onTick, 60_000)
     window.addEventListener('focus', onBack)
     document.addEventListener('visibilitychange', onBack)
+    for (const e of USE) window.addEventListener(e, onUse, { passive: true, capture: true })
   }
   onBack()
   return () => {
@@ -74,6 +84,7 @@ export function startAutoSync(): () => void {
       autoTimer = null
       window.removeEventListener('focus', onBack)
       document.removeEventListener('visibilitychange', onBack)
+      for (const e of USE) window.removeEventListener(e, onUse, { capture: true })
     }
   }
 }
@@ -127,7 +138,7 @@ export function PlanSync() {
       clearInterval(t)
     }
   }, [])
-  const line = autoSyncLine({ lastCheckAt, lastOkAt: syncedAt, fails }, Date.now())
+  const line = autoSyncLine({ lastCheckAt, lastOkAt: syncedAt, fails, away: idleFor() >= 3 * 60_000 }, Date.now())
   return (
     <span className="plan-sync" data-sync-bar>
       <SyncButton />

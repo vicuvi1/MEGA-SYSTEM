@@ -399,3 +399,22 @@ entry that says why.
 - **Rules out:** a second level system or rank names in the header or cards; a separate workout card or
   readiness card above the fold on Body → Today; more than one accent primary button on the Food main
   view; new food controls on the main view instead of in the Log food sheet or More.
+
+### Number-only writes never make a synced copy "newer" (2026-11-10)
+- **Decision:** `sport_tracker_json` (and every app sync value) carries `editedAt` next to `savedAt`. A write
+  that changes only today's water and reps (they come from the `body_log` log) keeps `editedAt`; the app sync
+  compares the local edit time with `editedAt ?? savedAt` to pick the newer copy.
+- **Why:** a logged set rewrote the shared copy with a fresh `savedAt` before the debounced sync ran, so the
+  server copy looked newer and its exercise list replaced this device's: a just-added exercise and its set
+  were lost (Windows release 434, Body training).
+- **Rules out:** bumping `editedAt` (or using `savedAt` alone) for log-number writes; deciding "newer" from
+  the time of any write.
+
+### An untouched tab polls slowly (2026-11-10)
+- **Decision:** background checks slow down with idle time: the plan card's auto-sync (`autoSyncGap`: 1 min,
+  3 min after 3 idle minutes, 30 min after 15), the Todoist change check (5 min after 15 idle minutes, 10 min
+  after an hour), and timers like Study Time's alarm run only while there is something to watch. Coming back
+  (focus, a tap) checks at once.
+- **Why:** the nightly soak test failed from Nov 8: an idle hour made 441 server calls (limit 200).
+- **Rules out:** new every-minute polling that ignores idle time or runs with nothing to do.
+

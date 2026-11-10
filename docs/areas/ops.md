@@ -26,7 +26,7 @@
 
 - **Desktop at night (CL5, CL8, CL9).** A downloaded update installs at 04:00 when nobody has used the PC for 30 minutes and no focus timer runs (or at once when the website says this version is too old to save); a ready update keeps looking for newer ones. A window frozen 30 s is restarted; a dead island window is made again; at 04:00 windows over 300 MB reload. The website reloads a hidden tab at 04:00 after 3 days, or when it holds over 250 MB.
 
-- **Soak test (CL12).** `npm run soak` (`e2e/soak.mjs`, needs `npm run build:web`) runs the real app on the fake server with a fake clock across nights: memory, listeners, calls per idle hour, offline and a server outage, a database version bump, the day turning at 04:00. `-- --short` for a quick run, `--months=24` to seed two years of history. The server side: `src/server/castle.test.ts` runs 144 ticks.
+- **Soak test (CL12).** `npm run soak` (`e2e/soak.mjs`, needs `npm run build:web`) runs the real app on the fake server with a fake clock across nights: memory, listeners, calls per idle hour, offline and a server outage, a database version bump, the day turning at 04:00. `-- --short` for a quick run, `--months=24` to seed two years of history, `SOAK_START=23:00` to start at another local time (with `--short` the one idle hour crosses midnight), `SOAK_DEBUG=1` to list the database calls of each hour. The server side: `src/server/castle.test.ts` runs 144 ticks.
 
 ### Backups
 
