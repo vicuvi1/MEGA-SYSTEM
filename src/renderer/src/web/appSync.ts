@@ -69,7 +69,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     const obj = parse(raw)
     return obj ? JSON.stringify(share(obj)) : null
   }
-  const remoteOf = (db: any): { savedAt: number; data: any } | null => {
+  const remoteOf = (db: any): { savedAt: number; editedAt?: number; data: any } | null => {
     const saved = parse(getSetting(db, spec.setting))
     if (saved?.data) return saved
     const legacy = spec.legacySetting ? parse(getSetting(db, spec.legacySetting)) : null
@@ -113,9 +113,15 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
         const remote = remoteOf(db)
         const mine = parse(localRaw) ?? (remote?.data ? fromShared(remote.data) : null)
         if (!mine) return null
-        let out = remote?.data && JSON.stringify(remote.data) !== synced ? pruneDeleted(spec, spec.merge(mine, remote.data, edited >= (remote.savedAt || 0)), parse(synced), share(mine), remote.data) : mine
+        // The other copy's last real change: a write of only the log's numbers (Sport Track) keeps `editedAt`.
+        const theirsAt = Number(remote?.editedAt ?? remote?.savedAt) || 0
+        let out = remote?.data && JSON.stringify(remote.data) !== synced ? pruneDeleted(spec, spec.merge(mine, remote.data, edited >= theirsAt), parse(synced), share(mine), remote.data) : mine
         if (spec.finalize) out = spec.finalize(db, out, true)
-        if (!remote?.data || JSON.stringify(share(out)) !== JSON.stringify(remote.data)) setSetting(db as any, spec.setting, JSON.stringify({ savedAt: Date.now(), data: share(out) }))
+        if (!remote?.data || JSON.stringify(share(out)) !== JSON.stringify(remote.data)) {
+          const at = Date.now()
+          // Only the log check asked for this write (nothing edited here): the copy's last real change stays as it was.
+          setSetting(db as any, spec.setting, JSON.stringify({ savedAt: at, editedAt: realEdit || !theirsAt ? at : theirsAt, data: share(out) }))
+        }
         return out
       })
     } else if (!spec.finalize) {

@@ -227,3 +227,26 @@ describe('reps use the same log', () => {
     expect(await server.mirror.read((db) => sharedView(sportNow(db as any), sportToday()).exercises.find((e) => e.id === 'ex_pushups')?.done)).toBe(45)
   })
 })
+
+describe('a logged set never makes the sync drop a new exercise', () => {
+  it('the log writes the reps first, the sync after: the exercise added here and its reps stay', async () => {
+    const pc = await device('pc')
+    // Body → Training: the first set of a move you never did adds the exercise and its reps, with push-ups done too
+    // (updateSport → the log at once); the app notes the edit, and its sync runs a moment later.
+    pc.local((d) => {
+      d.exercises.push({ id: 'ex_new_rows', name: 'Table rows', target: 24, unit: 'reps', active: false, doneToday: 10 })
+      d.exercises.find((e: any) => e.id === 'ex_pushups').doneToday += 5
+    }, 'body')
+    pc.store.setItem('life_sync_sport_tracker_json_edited', String(Date.now()))
+    // The log's write lands a little after the edit (it rewrites the shared copy with the new sums).
+    vi.setSystemTime(Date.now() + 800)
+    for (let i = 0; i < 3; i++) await new Promise((r) => setTimeout(r, 0))
+    vi.setSystemTime(Date.now() + 700)
+    await pc.sync.sync()
+    const ids = (s: any) => (s?.exercises ?? []).map((e: any) => e.id)
+    const mine = JSON.parse(pc.store.getItem(SPORT_KEY) || 'null')
+    expect(ids(mine)).toContain('ex_new_rows')
+    expect(ids(await pc.mirror.read((db) => sportNow(db as any)))).toContain('ex_new_rows')
+    expect(mine.exercises.find((e: any) => e.id === 'ex_new_rows').doneToday).toBe(10)
+  })
+})

@@ -84,12 +84,26 @@ export function sportFromLog(db: DB, st: any, canWrite: boolean, now = new Date(
 /** Rewrites the shared copy's today numbers from the log (nothing when they already match). */
 function writeView(db: DB, st: any, day: string, base: any = st): any {
   const final = withTotals(st, day, bodyTotals(db, day, st))
-  const value = { savedAt: Date.now(), data: final }
+  const numbersOnly = shape(base, day) === shape(final, day)
+  const now = Date.now()
+  // `editedAt` says when the copy itself last changed. Only today's numbers changing keeps it: they come from the
+  // log, so a glass of water or a logged set must not make this copy "newer" than an exercise added on a device
+  // that hasn't synced yet (the sync keeps the newer copy's exercise list, so that exercise and its sets were lost).
+  let prevEdited = 0
+  if (numbersOnly) {
+    try {
+      const prev = readSetting(db, 'sport_tracker_json') as any
+      prevEdited = Number(prev?.editedAt ?? prev?.savedAt) || 0
+    } catch {
+      prevEdited = 0
+    }
+  }
+  const value = { savedAt: now, editedAt: numbersOnly && prevEdited ? prevEdited : now, data: final }
   // Only today's numbers changed: written without the "still as I read it"
   // check, so a glass logged offline is never refused later because another
   // device logged one too (the numbers come from the log anyway). A change to
   // the exercises themselves keeps the check (it must not undo another edit).
-  if (shape(base, day) === shape(final, day)) db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('sport_tracker_json', JSON.stringify(value))
+  if (numbersOnly) db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)').run('sport_tracker_json', JSON.stringify(value))
   else writeSetting(db, 'sport_tracker_json', value)
   return final
 }

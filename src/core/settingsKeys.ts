@@ -77,7 +77,14 @@ function flag(about: string): KeySpec<boolean> {
 
 /** The one shared water + reps log (its day turns at 04:00). */
 export interface SportBlob {
+  /** The last write of any kind (a glass of water too). */
   savedAt?: number
+  /**
+   * The last change to the copy itself (exercises, sets, settings). Writes of
+   * only today's water and reps (they come from the log) keep it, so they never
+   * make this copy look newer than an edit another device has not sent yet.
+   */
+  editedAt?: number
   data?: any
 }
 /** A focus session running now. */
