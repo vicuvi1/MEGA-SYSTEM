@@ -13,12 +13,17 @@
 //   checked again by src/core/scaleRead.ts); it shares the same daily counter.
 // - Several photos of one meal (up to 6: a plate, a packaged snack, a drink) go in ONE
 //   request, numbered "Photo 1…n", so the AI sees the whole meal and lists each food once.
-// - countPhoto: 50 photos a day (the owner's day, LIFE_TZ), counted in sys_kv (server only:
+// - countPhoto: 15 photos a day by default (PHOTO_DAILY_LIMIT) (the owner's day, LIFE_TZ), counted in sys_kv (server only:
 //   /api/db refuses it). Every photo of a request counts (3 photos = 3 of the 50).
 // The photo is never stored or logged; only the foods the owner saves are kept.
 // The page checks the answer again with src/core/foodVision.ts before showing it.
 
-export const PHOTO_DAILY_LIMIT = 50
+/** Photos a day by default (the owner's choice); PHOTO_DAILY_LIMIT in Vercel changes it (1–100). */
+export const PHOTO_DAILY_LIMIT = 15
+export const photoLimit = (env = process.env) => {
+  const n = Math.round(Number(String(env.PHOTO_DAILY_LIMIT ?? '').trim()))
+  return Number.isFinite(n) && n >= 1 && n <= 100 ? n : PHOTO_DAILY_LIMIT
+}
 export const VISION_DEADLINE_MS = 50_000
 const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta/models/'
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages'
@@ -128,6 +133,7 @@ export function foodPhotoPrompt(req) {
 5. HIS USUAL PORTIONS: use that many grams unless the photo clearly shows a different amount.
 6. Else matchedSavedFoodId is null: kcal, protein, carbs and fat for the whole amount from standard food values; check kcal ≈ 4×protein + 4×carbs + 9×fat.
 The owner's note is the truth. confidence: high = sure what and how much, medium = fair guess, low = amount hard to see. message: one short friendly sentence.
+unclear: true only when the photo is too dark or blurry to tell the foods (then items may be empty). hidden: oil, butter, sauce or sugar when one you cannot see could add over 100 kcal (fried or glossy food, a dressing, a sweet drink), else none.
 Answer ONLY with JSON in the given shape.${photosRule(req)}`
   const picked = promptSaved(req.saved, req.note)
   const saved = picked.length ? picked.map((s) => `- id ${s.id}: ${s.name}, ${s.portion || '1 portion'}: ${s.kcal} kcal, ${s.protein} g protein${s.carbs ? `, ${s.carbs} g carbs` : ''}${s.fat ? `, ${s.fat} g fat` : ''}`).join('\n') : '(none)'
@@ -203,7 +209,11 @@ const SHAPE = {
   type: 'object',
   properties: {
     items: { type: 'array', items: { type: 'object', properties: ITEM_PROPS, required: ITEM_REQUIRED } },
-    message: { type: 'string' }
+    message: { type: 'string' },
+    /** Too dark or blurry to read: the app asks for a better photo instead of a guess. */
+    unclear: { type: 'boolean' },
+    /** A hidden fat or sugar that could add 100+ kcal and can't be seen: one short question. */
+    hidden: { type: 'string', enum: ['oil', 'butter', 'sauce', 'sugar', 'none'] }
   },
   required: ['items', 'message']
 }
@@ -372,7 +382,7 @@ export async function readFoodPhoto(p, req, { fetchImpl = fetch, record = async 
   }
 }
 
-// ---- 50 photos a day (sys_kv "vision:<YYYY-MM-DD>", server only) ----
+// ---- photos a day (sys_kv "vision:<YYYY-MM-DD>", server only) ----
 /** The day in the owner's time zone (LIFE_TZ), else UTC: YYYY-MM-DD. */
 export function photoDay(now = new Date(), tz = '') {
   try {

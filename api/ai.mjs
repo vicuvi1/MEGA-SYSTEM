@@ -8,7 +8,7 @@
 import { bearer, config, getSetting, readBody, send, requireSession, setSetting, turso, countCall } from './_lib.mjs'
 import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, costOf, monthStart } from './_budget.mjs'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { FALLBACK, countPhoto, overLimit, readFoodPhoto, readPhotoRequest, tursoRun, visionProvider } from './_vision.mjs'
+import { FALLBACK, countPhoto, overLimit, photoLimit, readFoodPhoto, readPhotoRequest, tursoRun, visionProvider } from './_vision.mjs'
 
 /** QA4: the usage rows of one request (Ben's answer shows its model and cost). Run a request inside usageScope.run([], …). */
 export const usageScope = new AsyncLocalStorage()
@@ -700,7 +700,8 @@ export async function foodPhoto(body, env = process.env, fetchImpl = fetch, now 
     } catch {
       return { ok: false, error: 'Database not reachable: try again in a moment.', fallback: FALLBACK }
     }
-    if (overLimit(n)) return { ok: false, error: (req.images?.length ?? 1) > 1 ? "These photos would go over today's limit of 50 photos. It starts again tomorrow." : "You've read 50 photos today, the daily limit. It starts again tomorrow.", fallback: FALLBACK, limit: 'day' }
+    const lim = photoLimit(env)
+    if (overLimit(n, lim)) return { ok: false, error: (req.images?.length ?? 1) > 1 ? `These photos would go over today's limit of ${lim} photos. It starts again tomorrow.` : `You've read ${lim} photos today, the daily limit. It starts again tomorrow.`, fallback: FALLBACK, limit: 'day' }
   }
   try {
     const out = await readFoodPhoto(p, req, { fetchImpl, env, record: (u) => recordUsage(u, env, fetchImpl) })

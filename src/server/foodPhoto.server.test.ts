@@ -171,7 +171,7 @@ describe('50 photos a day', () => {
     }
     const day1 = new Date('2026-11-09T10:00:00Z')
     for (let i = 1; i <= 50; i++) expect(await countPhoto(run, day1)).toBe(i)
-    expect(overLimit(50)).toBe(false)
+    expect(overLimit(15)).toBe(false)
     expect(overLimit(await countPhoto(run, day1))).toBe(true)
     // The next day starts at 1 and yesterday's counter is gone.
     expect(await countPhoto(run, new Date('2026-11-10T08:00:00Z'))).toBe(1)
@@ -266,7 +266,7 @@ describe('several photos of one meal (up to 6, one request)', () => {
       expect(count()).toBe(4)
       db.run("UPDATE sys_kv SET value = '48' WHERE key = 'vision:2026-11-09'")
       const over = await foodPhoto(three, env, fetchImpl, day)
-      expect(over).toMatchObject({ ok: false, limit: 'day', error: expect.stringMatching(/over today's limit of 50 photos/) })
+      expect(over).toMatchObject({ ok: false, limit: 'day', error: expect.stringMatching(/over today's limit of 15 photos/) })
     } finally {
       process.env.VITEST = vitest
     }

@@ -400,3 +400,31 @@ describe('a Telegram meal photo goes to Photo Locker, and his fixes are remember
     expect(held(w)).toEqual([])
   }, 60_000)
 })
+
+describe('repeat meals from a photo', () => {
+  it('Keep as repeat meal makes a saved meal with the photo; /meals logs it again with no AI call, with the same picture', async () => {
+    const RICE = { items: [{ name: 'white rice', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 200, kcal: 260, protein: 5, carbs: 57, fat: 1, confidence: 'medium' }], message: '' }
+    const w = world(base, async () => ({ ok: true, result: RICE }))
+    at('2030-03-12T13:05:00')
+    await handleTelegramUpdate(w.env as any, TOKEN, photo())
+    const id = w.setting('food_ben').draft.id
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|s|${id}`))
+    const saved = w.sent.filter((s) => s.method === 'editMessageText').pop()!.body
+    expect(saved.reply_markup.inline_keyboard[0].map((b: any) => b.callback_data)).toEqual([`fd|u|fd-p${id}`, `fd|R|fd-p${id}`])
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|R|fd-p${id}`))
+    expect(last(w.sent).text).toMatch(/is a repeat meal now/)
+    const meal = w.setting('food_saved').meals.find((m: any) => m.photo === `fp${id}n1`)
+    expect(meal).toBeTruthy()
+    // /meals lists it first with 📷; one tap logs the same numbers, with the same picture, and no AI call.
+    at('2030-03-13T13:00:00')
+    await handleTelegramUpdate(w.env as any, TOKEN, msg('/meals'))
+    const menu = last(w.sent).reply_markup.inline_keyboard
+    expect(menu.find((r: any) => r[0].text.startsWith('📷 '))[0].callback_data).toBe(`fd|g|${meal.id}`)
+    const reads = w.reads.length
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|g|${meal.id}`, CHAT, 77))
+    expect(w.reads.length).toBe(reads)
+    const logged = w.setting('food_log').meals.find((m: any) => m.day === '2030-03-13')
+    expect(logged).toMatchObject({ source: 'saved', photos: [`fp${id}n1`] })
+    expect(logged.items[0]).toMatchObject({ grams: 200, kcal: 260 })
+  }, 60_000)
+})

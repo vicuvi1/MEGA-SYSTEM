@@ -134,3 +134,60 @@
     animation: none;
   }
 }
+.mp-tiles-wrap {
+  display: grid;
+  gap: 8px;
+  margin: 4px 0 14px;
+}
+.mp-tiles {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.mp-tile {
+  flex: none;
+  width: 132px;
+  padding: 0;
+  border: 1px solid var(--bdy-border, rgba(127, 127, 127, 0.25));
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bdy-card, rgba(127, 127, 127, 0.08));
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+.mp-tile:hover,
+.mp-tile:focus-visible {
+  transform: translateY(-1px);
+  border-color: var(--bdy-accent, #c6f432);
+}
+.mp-tile img,
+.mp-tile-ph {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 88px;
+  object-fit: cover;
+  font-size: 26px;
+}
+.mp-tile-text {
+  display: grid;
+  gap: 2px;
+  padding: 6px 8px 8px;
+  font-size: 12px;
+}
+.mp-tile-text b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-tile-text small {
+  opacity: 0.7;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mp-tile {
+    transition: none;
+  }
+}

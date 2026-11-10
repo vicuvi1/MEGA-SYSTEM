@@ -6952,7 +6952,7 @@ try {
 
   // Photo Locker: two "devices" (browser contexts with their own IndexedDB) and one fake Google Drive
   // (e2e/server.mjs /_fakedrive; googleapis.com is routed there). Made-up pictures only.
-  await step('Photo Locker: a photo uploaded on one device reaches Drive and the index, a second device downloads it; a video over 60 s is refused; a Telegram food photo goes to Drive under Food and shows on its meal', async () => {
+  await step('Photo Locker: a photo uploaded on one device reaches Drive and the index, a second device downloads it; a video over 60 s is refused; a Telegram food photo goes to Drive under Food and shows on its meal; a repeat meal tile logs it again on a double-click', async () => {
     const toDrive = (ctx) => ctx.route('https://www.googleapis.com/**', async (route) => {
       const u = new URL(route.request().url())
       await route.fulfill({ response: await route.fetch({ url: `http://127.0.0.1:${port}/_fakedrive${u.pathname}${u.search}` }) })
@@ -7097,6 +7097,26 @@ try {
       if (foodShots) await pg.screenshot({ path: `${foodShots}/food-photo-big.png`, style: '.toasts { display: none !important }', animations: 'disabled' })
       await pg.keyboard.press('Escape')
       await pg.waitForSelector('.mp-view', { state: 'detached', timeout: 5000 })
+      // Repeat meals: "Save as meal" keeps the photo; in Log food → My meals it is a photo tile. A click shows it big;
+      // a double-click logs the same numbers again (no AI call), with the same picture.
+      await row.locator('.fd-save-meal').click()
+      await pg.waitForSelector('.toast:has-text("Saved to your meals")', { timeout: 10000 })
+      await pg.locator('#ptp-body-food').getByRole('button', { name: /Log food/ }).first().click()
+      await pg.locator('.fdl-meals').click()
+      const tileSel = '.mp-tile[aria-label^="White rice, Chicken breast"]'
+      await pg.waitForSelector(`${tileSel} img`, { timeout: 15000 })
+      if (foodShots) await pg.screenshot({ path: `${foodShots}/food-repeat-tiles.png`, style: '.toasts { display: none !important }', animations: 'disabled' })
+      await pg.locator(tileSel).click()
+      await pg.waitForSelector('.mp-view img', { timeout: 5000 })
+      await pg.keyboard.press('Escape')
+      await pg.waitForSelector('.mp-view', { state: 'detached', timeout: 5000 })
+      const withPhoto = async () => JSON.parse(String((await sql("SELECT value FROM settings WHERE key = 'food_log'"))[0]?.[0] ?? '{"meals":[]}')).meals.filter((m) => (m.photos ?? []).includes('fpsmk1n1')).length
+      const n0 = await withPhoto()
+      await pg.locator(tileSel).dblclick()
+      let n1 = n0
+      for (let i = 0; i < 40 && n1 === n0; i++) (await pg.waitForTimeout(250), (n1 = await withPhoto()))
+      if (n1 !== n0 + 1) throw new Error(`a double-click on the repeat tile should log it once (photo meals ${n0} → ${n1})`)
+      await pg.locator('.fdl-done').click()
       await open('locker')
     }
     // Device B: its own browser (empty IndexedDB), a phone screen.

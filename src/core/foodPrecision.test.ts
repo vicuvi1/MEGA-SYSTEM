@@ -211,3 +211,36 @@ describe('the request and its cost', () => {
     expect(sent.map((b) => !!b.generationConfig.mediaResolution)).toEqual([true, false])
   })
 })
+
+describe('phase 2: repeat meals, hidden calories, unclear photos', () => {
+  it('a dark or blurry photo asks for a better one; a hidden fat is asked about once and one tap adds it', async () => {
+    const { UNCLEAR_PHOTO, HIDDEN } = await import('./foodVision')
+    const { addHidden } = await import('./foodBen')
+    expect(validateVision({ items: [], unclear: true, message: '' })).toEqual({ ok: false, error: UNCLEAR_PHOTO })
+    const r = validateVision({ items: [{ name: 'fried rice', grams: 300, kcal: 500, protein: 12, carbs: 70, fat: 18, confidence: 'medium' }], hidden: 'oil', message: '' })
+    if (!r.ok) throw new Error(r.error)
+    expect(r.result.hidden).toBe('oil')
+    // Already in the list: not asked again; 'none' or junk: nothing.
+    const again = validateVision({ items: [{ name: 'olive oil', grams: 10, kcal: 90, protein: 0, carbs: 0, fat: 10 }], hidden: 'oil', message: '' })
+    expect(again.ok && again.result.hidden).toBeNull()
+    expect((validateVision({ items: [{ name: 'egg', grams: 50, kcal: 70 }], hidden: 'none', message: '' }) as any).result.hidden).toBeNull()
+    pin('2030-03-12T13:05:00')
+    const d = photoDraft('hd1', Date.now(), r.result.items, '', { hidden: 'oil' })
+    expect(photoDraftText(d, 'lunch')).toMatch(/🫒 Cooked with oil\? Tap ➕ 1 tbsp oil if so\./)
+    const kb = (await import('./foodBen')).photoDraftKeyboard(d).inline_keyboard
+    expect(kb.find((row) => row[0].callback_data === 'fd|o|hd1')?.[0].text).toBe('➕ 1 tbsp oil')
+    const added = addHidden(d)
+    expect(added.photo!.now.map((i) => i.name)).toEqual(['fried rice', 'cooking oil'])
+    expect(added.photo!.hidden).toBeNull()
+    expect(added.items[1]).toMatchObject({ grams: 14, kcal: HIDDEN.oil.item.kcal, fat: 14 })
+    expect(addHidden(added)).toBe(added)
+  })
+
+  it('a logged photo meal kept as a saved meal keeps its picture', async () => {
+    const { savedMealFrom, cleanSaved, seedSaved } = await import('./foodSaved')
+    const s = savedMealFrom(seedSaved(), { name: 'Rice bowl', type: 'lunch', items: [{ name: 'white rice', grams: 220, protein: 6, carbs: 62, fat: 1, kcal: 286, confidence: 'roughly' }], photo: 'fpab12n1' })
+    const m = s.meals.find((x) => x.name === 'Rice bowl')!
+    expect(m.photo).toBe('fpab12n1')
+    expect(cleanSaved({ ...s, meals: [{ ...m, photo: 'bad id!' }] }).meals[0].photo).toBeUndefined()
+  })
+})

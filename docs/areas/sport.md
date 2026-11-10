@@ -135,6 +135,13 @@ Tests: `core/foodVision.test.ts`, `server/foodPhoto.server.test.ts` (provider by
 
 Tests: `core/foodPrecision.test.ts` (ranges, labels, saved foods, the memory, the question, the preview and fixes, the short prompt, thinking and second look, the image size retry), `server/foodTelegram.server.test.ts` ("goes to Photo Locker, and his fixes are remembered").
 
+**Repeat meals, hidden calories, unclear photos, the daily limit (2026-11-10, phase 2).**
+- **Repeat meals** are saved meals with a picture (`food_saved` meal `photo`: a Photo Locker id). After Save on Telegram, "⭐ Keep as repeat meal" (`fd|R|<meal>`, `saveLoggedAsMeal`) keeps it; in the app "Save as meal" on a photo meal does the same. /meals lists them first with 📷 and one tap logs the same numbers; in the app, Log food → My meals shows them as a row of photo tiles (`body/MealPhoto.tsx PhotoMealTiles`): a click shows the photo big, a double-click (or Enter) logs it again. No AI call, no cost; the logged meal carries the same picture. No points.
+- **Blurry or dark:** the model sets `unclear` when it can't tell the foods; the bot says "The photo is too dark or blurry to read well. Send a clearer one…" instead of guessing (`UNCLEAR_PHOTO`).
+- **Hidden calories:** the model names one hidden fat or sugar (`hidden`: oil, butter, sauce, sugar) when it could add over 100 kcal; the preview asks once ("🫒 Cooked with oil? Tap ➕ 1 tbsp oil if so.") and one tap (`fd|o`) adds the standard amount (`HIDDEN`). Not asked when that food is already in the list.
+- **Daily limit:** 15 photos a day by default; `PHOTO_DAILY_LIMIT` in Vercel (1–100) changes it.
+- Tests: `core/foodPrecision.test.ts` ("phase 2"), `server/foodTelegram.server.test.ts` ("repeat meals from a photo"); smoke "Photo Locker" (Save as meal → the tile → click shows it, double-click logs it once).
+
 ### Food counter extras (2026-11-08)
 
 The counter is now three views inside the card: **Today · Week · Plan**. No points for any of it; all data made up in tests.

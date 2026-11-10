@@ -6366,11 +6366,13 @@ function cleanSaved(raw) {
 		if (!m || !ID$4.meal.test(String(m.id)) || meals.some((x) => x.id === m.id)) continue;
 		const items = cleanItems(m.items, ids);
 		if (!items.length) continue;
+		const photo = typeof m.photo === "string" && /^[A-Za-z0-9_-]{3,64}$/.test(m.photo) ? { photo: m.photo } : {};
 		meals.push({
 			id: String(m.id),
 			name: text$1(m.name, 60) || "My meal",
 			slot: MEAL_TYPES.includes(m.slot) ? m.slot : "snack",
-			items
+			items,
+			...photo
 		});
 		if (meals.length >= 24) break;
 	}
@@ -6459,6 +6461,65 @@ var itemLabel = (name, qty) => qty === 1 ? name : `${qty} × ${name}`;
 function itemsText(s, items) {
 	return items.map((x) => itemLabel(foodOf(s, x.foodId)?.name ?? "?", x.qty)).join(" + ");
 }
+var slug$1 = (name) => name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 16) || "x";
+/** A new id that is not used yet: `sf-egg`, `sf-egg-2`, … */
+function newId$3(prefix, name, taken) {
+	const base = `${prefix}-${slug$1(name)}`;
+	if (!taken.includes(base)) return base;
+	for (let n = 2; n < 999; n++) if (!taken.includes(`${base}-${n}`)) return `${base}-${n}`;
+	return `${base}-${Date.now().toString(36).slice(-6)}`;
+}
+/**
+* "Save as meal": a logged meal becomes a saved meal. Each food is matched to
+* a saved food by name (the qty from the grams), or saved as a new food with
+* its own grams as one portion.
+*/
+function savedMealFrom(s, meal) {
+	const foods = [...s.foods];
+	const items = [];
+	for (const x of meal.items.slice(0, 12)) {
+		const known = foods.find((f) => f.name.toLowerCase() === x.name.toLowerCase());
+		if (known) {
+			items.push({
+				foodId: known.id,
+				qty: cleanQty(x.qty ?? (known.grams ? x.grams / known.grams : 1))
+			});
+			continue;
+		}
+		if (foods.length >= 60) continue;
+		const id = newId$3("sf", x.name, foods.map((f) => f.id));
+		foods.push({
+			id,
+			name: x.name.slice(0, 40),
+			portionLabel: `${x.grams} g`,
+			grams: x.grams,
+			kcal: x.kcal,
+			protein: x.protein,
+			carbs: x.carbs,
+			fat: x.fat
+		});
+		items.push({
+			foodId: id,
+			qty: 1
+		});
+	}
+	if (!items.length || s.meals.length >= 24) return {
+		...s,
+		foods
+	};
+	const id = newId$3("sm", meal.name, s.meals.map((m) => m.id));
+	return cleanSaved({
+		...s,
+		foods,
+		meals: [...s.meals, {
+			id,
+			name: meal.name.slice(0, 60),
+			slot: meal.type,
+			items,
+			...meal.photo ? { photo: meal.photo } : {}
+		}]
+	});
+}
 var words$4 = (t) => t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ").trim();
 /** "eggs" → "egg", "slices" → "slice" (simple plural). */
 var one$1 = (w) => w.replace(/(ies)$/, "y").replace(/(ches|shes|xes)$/, (m) => m.slice(0, -2)).replace(/s$/, "");
@@ -6498,6 +6559,80 @@ function matchSaved(line, s) {
 		qty: cleanQty(qty)
 	};
 }
+// src/core/foodVision.ts
+/** What one tap adds for a hidden fat or sugar (standard amounts). */
+var HIDDEN = {
+	oil: {
+		label: "1 tbsp oil",
+		ask: "Cooked with oil?",
+		item: {
+			name: "cooking oil",
+			matchedSavedFoodId: null,
+			qty: 1,
+			unit: "tbsp",
+			grams: 14,
+			kcal: 124,
+			protein: 0,
+			carbs: 0,
+			fat: 14,
+			confidence: "medium",
+			src: "estimate"
+		}
+	},
+	butter: {
+		label: "1 tbsp butter",
+		ask: "Butter on it?",
+		item: {
+			name: "butter",
+			matchedSavedFoodId: null,
+			qty: 1,
+			unit: "tbsp",
+			grams: 14,
+			kcal: 100,
+			protein: .1,
+			carbs: 0,
+			fat: 11.4,
+			confidence: "medium",
+			src: "estimate"
+		}
+	},
+	sauce: {
+		label: "2 tbsp sauce",
+		ask: "Any sauce or dressing?",
+		item: {
+			name: "sauce",
+			matchedSavedFoodId: null,
+			qty: 2,
+			unit: "tbsp",
+			grams: 30,
+			kcal: 90,
+			protein: .5,
+			carbs: 6,
+			fat: 7,
+			confidence: "medium",
+			src: "estimate"
+		}
+	},
+	sugar: {
+		label: "2 tsp sugar",
+		ask: "Sugar in it?",
+		item: {
+			name: "sugar",
+			matchedSavedFoodId: null,
+			qty: 2,
+			unit: "tsp",
+			grams: 8,
+			kcal: 32,
+			protein: 0,
+			carbs: 8,
+			fat: 0,
+			confidence: "medium",
+			src: "estimate"
+		}
+	}
+};
+/** Said when the photo is too dark or blurry to read: a better photo beats a guess. */
+var UNCLEAR_PHOTO = "The photo is too dark or blurry to read well. Send a clearer one in good light (the whole plate, from above).";
 var r1$1 = (n) => Math.round(n * 10) / 10;
 var clamp$4 = (v, lo, hi, dflt = lo) => {
 	const n = typeof v === "string" ? Number(v.replace(",", ".").replace(/[^\d.\-]/g, "")) : Number(v);
@@ -6647,6 +6782,10 @@ function validateVision(raw, saved = [], photos = 1, memory = null) {
 		ok: false,
 		error: "The AI's answer could not be read. Try again, or copy the prompt instead."
 	};
+	if (o.unclear === true) return {
+		ok: false,
+		error: UNCLEAR_PHOTO
+	};
 	if (!Array.isArray(o.items)) return {
 		ok: false,
 		error: "The AI's answer had no list of foods. Try again, or copy the prompt instead."
@@ -6657,13 +6796,20 @@ function validateVision(raw, saved = [], photos = 1, memory = null) {
 		error: photos > 1 ? "No food was found in the photos. Try clearer photos, or add the foods by hand." : "No food was found in the photo. Try a clearer photo, or add the foods by hand."
 	};
 	const items = memory ? applyPortions(read, memory, saved) : read;
+	const hidden = [
+		"oil",
+		"butter",
+		"sauce",
+		"sugar"
+	].includes(o.hidden) && !items.some((i) => foodKey(i.name).includes(o.hidden)) ? o.hidden : null;
 	return {
 		ok: true,
 		result: {
 			items,
 			totals: visionTotals(items),
 			message: text(o.message, 200),
-			question: questionFor(items)
+			question: questionFor(items),
+			hidden
 		}
 	};
 }
@@ -7492,12 +7638,15 @@ function photoOf(raw) {
 	const q = p;
 	const ask = typeof q.ask === "number" && Number.isInteger(q.ask) && now && q.ask >= 0 && q.ask < now.length ? q.ask : null;
 	const count = typeof q.n === "number" && q.n >= 1 && q.n <= 6 ? Math.round(q.n) : void 0;
+	const hid = p.hidden;
+	const hidden = typeof hid === "string" && hid in HIDDEN ? hid : null;
 	return base && now && base.length === now.length ? { photo: {
 		base,
 		now,
 		message: typeof p.message === "string" ? p.message.slice(0, 200) : "",
 		...ask != null ? { ask } : {},
-		...count ? { n: count } : {}
+		...count ? { n: count } : {},
+		...hidden ? { hidden } : {}
 	} } : {};
 }
 var liveDraft = (fb, now) => fb.draft && now - fb.draft.at < 72e5 && now >= fb.draft.at - 6e4 ? fb.draft : null;
@@ -7797,7 +7946,24 @@ function photoDraft(id, at, items, message, extra = {}) {
 			now: items,
 			message,
 			...ask != null ? { ask } : {},
-			...extra.n ? { n: extra.n } : {}
+			...extra.n ? { n: extra.n } : {},
+			...extra.hidden ? { hidden: extra.hidden } : {}
+		}
+	};
+}
+/** "➕ 1 tbsp oil": adds the hidden fat or sugar it asked about (standard amount), then the question is gone. */
+function addHidden(d) {
+	const h = d.photo?.hidden;
+	if (!d.photo || !h || d.photo.now.length >= 12) return d;
+	const it = HIDDEN[h].item;
+	return {
+		...d,
+		items: toFoodItems([...d.photo.now, it]),
+		photo: {
+			...d.photo,
+			base: [...d.photo.base, it],
+			now: [...d.photo.now, it],
+			hidden: null
 		}
 	};
 }
@@ -7892,6 +8058,7 @@ function photoDraftText(d, type) {
 		`<b>Total ~${fmt$4(t.kcal)} kcal · ${fmt$4(t.protein)} g protein</b>`,
 		`Carbs ${fmt$4(t.carbs)} g · Fat ${fmt$4(t.fat)} g · ${badge.dot} ${badge.word}`,
 		...d.photo?.message ? [`💬 ${escHtml(d.photo.message)}`] : [],
+		...d.photo?.hidden ? [`🫒 ${HIDDEN[d.photo.hidden].ask} Tap ➕ ${HIDDEN[d.photo.hidden].label} if so.`] : [],
 		ask ? `\n❓ <b>About how many grams of ${escHtml(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt$4(ask.grams || 150)}</code>.` : "Tap a food to fix it, or type e.g. <code>" + escHtml((list[0]?.name ?? "rice").split(" ")[0].toLowerCase()) + " 150</code>."
 	].join("\n");
 }
@@ -7903,6 +8070,10 @@ function photoDraftKeyboard(d) {
 	}));
 	const rows = [];
 	for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
+	if (d.photo?.hidden) rows.push([{
+		text: `➕ ${HIDDEN[d.photo.hidden].label}`,
+		callback_data: `fd|o|${d.id}`
+	}]);
 	rows.push([{
 		text: "✅ Save",
 		callback_data: `fd|s|${d.id}`
@@ -9518,7 +9689,8 @@ function logSavedMeal(db, mealId, qty, source = "app", now = /* @__PURE__ */ new
 		items: itemsOf(s, items),
 		name: changed ? itemsText(s, items).slice(0, 60) : m.name,
 		type: m.slot,
-		source: "saved"
+		source: "saved",
+		...m.photo ? { photos: [m.photo] } : {}
 	}, source, now);
 	return r ? {
 		ids: [r.id],
@@ -9554,6 +9726,17 @@ function logStandardDay(db, choices = {}, source = "app", now = /* @__PURE__ */ 
 		}
 	});
 	return out;
+}
+/** "Save as meal": a logged meal (today's or one of the last 45 days) becomes a saved meal. */
+function saveLoggedAsMeal(db, loggedMealId, name, type) {
+	const m = readFoodLog(db, sportToday()).meals.find((x) => x.id === loggedMealId);
+	if (!m) return null;
+	return saveFoodSaved(db, savedMealFrom(readFoodSaved(db), {
+		name: String(name ?? "").trim().slice(0, 60) || m.name,
+		type: type ?? m.type,
+		items: m.items,
+		photo: m.photos?.[0]
+	}));
 }
 // src/renderer/src/web/benPushStore.ts
 var parse$5 = (db, key) => {
@@ -13677,8 +13860,9 @@ function mealsMenu(s) {
 		text: `📅 Standard day · ${fmt$2(dayTotals(s).kcal)} kcal`,
 		callback_data: "fd|g|day"
 	}]);
-	for (const m of s.meals.slice(0, 12)) rows.push([{
-		text: `${m.name.slice(0, 40)} · ${fmt$2(totalsOf(s, m.items).kcal)} kcal`,
+	const meals = [...s.meals.filter((m) => m.photo), ...s.meals.filter((m) => !m.photo)];
+	for (const m of meals.slice(0, 12)) rows.push([{
+		text: `${m.photo ? "📷 " : ""}${m.name.slice(0, 40)} · ${fmt$2(totalsOf(s, m.items).kcal)} kcal`,
 		callback_data: `fd|g|${m.id}`.slice(0, 64)
 	}]);
 	return {
@@ -13852,7 +14036,8 @@ async function readMealPhotos(o) {
 	const msg = many ? `${ids.length} photos read together. ${check.result.message}`.trim().slice(0, 200) : check.result.message;
 	const d = photoDraft(shortId(), now.getTime(), check.result.items, msg, {
 		ask: check.result.question?.index ?? null,
-		n: ids.length
+		n: ids.length,
+		hidden: check.result.hidden ?? null
 	});
 	await o.mirror.write((db) => writeFoodBen(db, {
 		...readFoodBen(db),
@@ -14126,7 +14311,7 @@ var FOOD_CALLBACK = {
 		const mirror = c.mirror;
 		const { data, chat, key, update, cq, answer, edit } = t;
 		if (!await markSeen(key)) return null;
-		const m = /^fd\|([sx+\-eupymlzkgnvwWbarqihdNG])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data);
+		const m = /^fd\|([sx+\-eupymlzkgnvwWbarqihdNGRo])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data);
 		if (!m) return null;
 		const [, op, ref, idx, idx2] = m;
 		const now = /* @__PURE__ */ new Date();
@@ -14201,6 +14386,19 @@ var FOOD_CALLBACK = {
 			await answer(line);
 			await clearButtons();
 			return line;
+		}
+		if (op === "R") {
+			const kept = await mirror.write((db) => {
+				const before = readFoodSaved(db).meals.length;
+				const s = saveLoggedAsMeal(db, ref);
+				return s && s.meals.length > before ? s.meals[s.meals.length - 1].name : null;
+			});
+			await answer(kept ? "Kept as a repeat meal" : "Already kept, or the meal is gone");
+			if (kept) {
+				await clearButtons();
+				await send(`⭐ <b>${esc$5(kept)}</b> is a repeat meal now. Next time tap it in /meals (or double-click it in the app): the same numbers, no AI call, no cost.`);
+			}
+			return kept ? "kept" : null;
 		}
 		if (op === "n") {
 			await answer("OK, not logged");
@@ -14416,6 +14614,17 @@ var FOOD_CALLBACK = {
 					d: next
 				};
 			}
+			if (d.photo && op === "o") {
+				const next = addHidden(d);
+				writeFoodBen(db, {
+					...fb,
+					draft: next
+				});
+				return {
+					kind: "draft",
+					d: next
+				};
+			}
 			if (d.photo && op === "G") {
 				const next = askGrams(d, i);
 				writeFoodBen(db, {
@@ -14577,10 +14786,14 @@ var FOOD_CALLBACK = {
 			return "draft";
 		}
 		await answer("Saved");
+		const keep = res.id.startsWith("fd-p") ? [{
+			text: "⭐ Keep as repeat meal",
+			callback_data: `fd|R|${res.id}`.slice(0, 64)
+		}] : [];
 		await edit(res.text, { inline_keyboard: [[{
 			text: "↩ Undo",
 			callback_data: `fd|u|${res.id}`.slice(0, 64)
-		}]] });
+		}, ...keep]] });
 		return res.text;
 	}
 };

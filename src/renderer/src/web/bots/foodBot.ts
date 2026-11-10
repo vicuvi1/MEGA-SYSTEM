@@ -36,6 +36,7 @@ import {
   decideFoodNudge,
   decideMealReminder,
   draftKeyboard,
+  addHidden,
   askGrams,
   draftText,
   itemKeyboard,
@@ -77,7 +78,7 @@ import {
   type PhotoSize
 } from '@core/foodBen'
 import { addFoodMeal, foodDayTotals, foodTargetsNow, foodWeekNow, readFoodLog, readFoodSaved, toggleFoodMeal, whatNextNow } from '../../../../main/food'
-import { logSavedMeal, logStandardDay } from '../../../../main/foodSaved'
+import { logSavedMeal, logStandardDay, saveLoggedAsMeal } from '../../../../main/foodSaved'
 import { bodyEvents } from '../../../../main/bodyLog'
 import { weighIns } from '../../../../main/bodyPlus'
 import { readSetting, writeSetting } from '../../../../main/settings'
@@ -152,7 +153,9 @@ export function mealsMenu(s: FoodSaved): FoodOut {
   if (!s.meals.length && !s.day.slots.length) return { reply: 'No saved meals yet. Save one in Body → Food, then send /meals again.' }
   const rows: { text: string; callback_data: string }[][] = []
   if (s.day.slots.length) rows.push([{ text: `📅 Standard day · ${fmt(dayTotals(s).kcal)} kcal`, callback_data: 'fd|g|day' }])
-  for (const m of s.meals.slice(0, 12)) rows.push([{ text: `${m.name.slice(0, 40)} · ${fmt(totalsOf(s, m.items).kcal)} kcal`, callback_data: `fd|g|${m.id}`.slice(0, 64) }])
+  // Repeat meals first (📷: kept from a photo, logged again with no AI call).
+  const meals = [...s.meals.filter((m) => m.photo), ...s.meals.filter((m) => !m.photo)]
+  for (const m of meals.slice(0, 12)) rows.push([{ text: `${m.photo ? '📷 ' : ''}${m.name.slice(0, 40)} · ${fmt(totalsOf(s, m.items).kcal)} kcal`, callback_data: `fd|g|${m.id}`.slice(0, 64) }])
   return { reply: `${MEALS_HEAD}\nTap one to log it now (↩ Undo comes after).`, keyboard: { inline_keyboard: rows } }
 }
 
@@ -289,7 +292,7 @@ export async function readMealPhotos(o: { token: string; chat: string; fileIds: 
   if (!check.ok) return say(`⚠️ ${esc(check.error)}`)
   const msg = many ? `${ids.length} photos read together. ${check.result.message}`.trim().slice(0, 200) : check.result.message
   // A food it could not see well: one short question instead of a guess (a bare number answers it).
-  const d = photoDraft(shortId(), now.getTime(), check.result.items, msg, { ask: check.result.question?.index ?? null, n: ids.length })
+  const d = photoDraft(shortId(), now.getTime(), check.result.items, msg, { ask: check.result.question?.index ?? null, n: ids.length, hidden: check.result.hidden ?? null })
   await o.mirror.write((db) => writeFoodBen(db, { ...readFoodBen(db), draft: d }))
   if (o.kv) {
     await keepDraftPhotos(o.kv, o.chat, d.id, ids, o.caption, now.getTime()).catch(() => null)
@@ -532,7 +535,7 @@ export const FOOD_CALLBACK: CallbackHandler = {
     const mirror = c.mirror as unknown as { write<T>(fn: (db: any) => T): Promise<T> }
     const { data, chat, key, update, cq, answer, edit } = t
     if (!(await markSeen(key))) return null
-    const m = /^fd\|([sx+\-eupymlzkgnvwWbarqihdNG])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data)
+    const m = /^fd\|([sx+\-eupymlzkgnvwWbarqihdNGRo])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data)
     if (!m) return null
     const [, op, ref, idx, idx2] = m
     const now = new Date()
@@ -590,6 +593,20 @@ export const FOOD_CALLBACK: CallbackHandler = {
       await answer(line)
       await clearButtons()
       return line
+    }
+    // A saved photo meal becomes a saved meal with its picture (/meals and the app log it again for free).
+    if (op === 'R') {
+      const kept = await mirror.write((db) => {
+        const before = readFoodSaved(db).meals.length
+        const s = saveLoggedAsMeal(db, ref)
+        return s && s.meals.length > before ? s.meals[s.meals.length - 1].name : null
+      })
+      await answer(kept ? 'Kept as a repeat meal' : 'Already kept, or the meal is gone')
+      if (kept) {
+        await clearButtons()
+        await send(`⭐ <b>${esc(kept)}</b> is a repeat meal now. Next time tap it in /meals (or double-click it in the app): the same numbers, no AI call, no cost.`)
+      }
+      return kept ? 'kept' : null
     }
     if (op === 'n') {
       await answer('OK, not logged')
@@ -749,6 +766,11 @@ export const FOOD_CALLBACK: CallbackHandler = {
         writeFoodBen(db, { ...fb, draft: next })
         return { kind: 'draft' as const, d: next }
       }
+      if (d.photo && op === 'o') {
+        const next = addHidden(d)
+        writeFoodBen(db, { ...fb, draft: next })
+        return { kind: 'draft' as const, d: next }
+      }
       if (d.photo && op === 'G') {
         const next = askGrams(d, i)
         writeFoodBen(db, { ...fb, draft: next })
@@ -836,7 +858,9 @@ export const FOOD_CALLBACK: CallbackHandler = {
       return 'draft'
     }
     await answer('Saved')
-    await edit(res.text, { inline_keyboard: [[{ text: '↩ Undo', callback_data: `fd|u|${res.id}`.slice(0, 64) }]] })
+    // A photo meal can be kept as a repeat meal: next time one tap logs the same numbers, with no AI call.
+    const keep = res.id.startsWith('fd-p') ? [{ text: '⭐ Keep as repeat meal', callback_data: `fd|R|${res.id}`.slice(0, 64) }] : []
+    await edit(res.text, { inline_keyboard: [[{ text: '↩ Undo', callback_data: `fd|u|${res.id}`.slice(0, 64) }, ...keep]] })
     return res.text
   }
 }

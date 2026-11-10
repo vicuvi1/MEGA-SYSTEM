@@ -12,6 +12,7 @@ import type { DayProgress, ProteinBehind } from '@core/foodProgress'
 import { life } from '../bridge'
 import { useAction, useToast } from '../ui'
 import type { FoodView } from '../../../main/food'
+import { PhotoMealTiles } from './MealPhoto'
 import './food-fast.css'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
@@ -232,8 +233,11 @@ export function QuickLog({ v, onView, onManage }: { v: FoodView; onView: (v: Foo
   const afterMeal = panel?.kind === 'after' ? v.meals.find((m) => m.id === panel.loggedId) : null
 
   if (!today) return null
+  // Meals kept from a photo: a row of photo tiles (double-click logs it again, no AI call).
+  const repeats = s.meals.filter((m) => m.photo).map((m) => ({ id: m.id, name: m.name, photo: m.photo!, ...totalsOf(s, m.items) }))
   return (
     <div className="fdf-quick">
+      <PhotoMealTiles meals={repeats} onLog={(id) => void logMeal(id)} />
       {s.day.slots.length > 0 && (
         <div className="fdf-day">
           {!dayLogged ? (

@@ -13,7 +13,7 @@
 import { scaleItem, sumItems, type FoodItem, type MealType } from './food'
 import type { FoodWeek } from './food'
 import { channelFor, type PushButton, type PushLog, type PushOut } from './benPushes'
-import { FACTORS, cleanPortions, scaleVisionItem, stepQty, toFoodItems, visionTotals, type PortionMemory, type SavedFoodRef, type VisionItem } from './foodVision'
+import { FACTORS, HIDDEN, cleanPortions, scaleVisionItem, stepQty, toFoodItems, visionTotals, type HiddenKind, type PortionMemory, type SavedFoodRef, type VisionItem } from './foodVision'
 
 // ---- the setting `food_ben`: the open Telegram draft and the mute ----
 
@@ -36,6 +36,8 @@ export interface FoodDraft {
     ask?: number | null
     /** How many photos were read (their Photo Locker ids follow from the draft id: lockerPhotoIds). */
     n?: number
+    /** A hidden fat or sugar to ask about (one tap adds the standard amount). */
+    hidden?: HiddenKind | null
   }
 }
 export interface FoodBen {
@@ -85,7 +87,9 @@ function photoOf(raw: unknown): { photo?: FoodDraft['photo'] } {
   const q = p as { ask?: unknown; n?: unknown }
   const ask = typeof q.ask === 'number' && Number.isInteger(q.ask) && now && q.ask >= 0 && q.ask < now.length ? q.ask : null
   const count = typeof q.n === 'number' && q.n >= 1 && q.n <= 6 ? Math.round(q.n) : undefined
-  return base && now && base.length === now.length ? { photo: { base, now, message: typeof p.message === 'string' ? p.message.slice(0, 200) : '', ...(ask != null ? { ask } : {}), ...(count ? { n: count } : {}) } } : {}
+  const hid = (p as { hidden?: unknown }).hidden
+  const hidden = typeof hid === 'string' && hid in HIDDEN ? (hid as HiddenKind) : null
+  return base && now && base.length === now.length ? { photo: { base, now, message: typeof p.message === 'string' ? p.message.slice(0, 200) : '', ...(ask != null ? { ask } : {}), ...(count ? { n: count } : {}), ...(hidden ? { hidden } : {}) } } : {}
 }
 export const liveDraft = (fb: FoodBen, now: number): FoodDraft | null => (fb.draft && now - fb.draft.at < DRAFT_MS && now >= fb.draft.at - 60_000 ? fb.draft : null)
 export const isMuted = (fb: FoodBen, now: number) => fb.muteUntil != null && now < fb.muteUntil
@@ -360,9 +364,17 @@ export function photoIsMeal(caption: string): boolean {
 }
 
 /** A photo draft from the checked AI answer (core/foodVision.ts validateVision): the one short question and how many photos come along. */
-export function photoDraft(id: string, at: number, items: VisionItem[], message: string, extra: { ask?: number | null; n?: number } = {}): FoodDraft {
+export function photoDraft(id: string, at: number, items: VisionItem[], message: string, extra: { ask?: number | null; n?: number; hidden?: HiddenKind | null } = {}): FoodDraft {
   const ask = extra.ask != null && items[extra.ask] ? extra.ask : null
-  return { id, at, items: toFoodItems(items), question: null, photo: { base: items, now: items, message, ...(ask != null ? { ask } : {}), ...(extra.n ? { n: extra.n } : {}) } }
+  return { id, at, items: toFoodItems(items), question: null, photo: { base: items, now: items, message, ...(ask != null ? { ask } : {}), ...(extra.n ? { n: extra.n } : {}), ...(extra.hidden ? { hidden: extra.hidden } : {}) } }
+}
+
+/** "➕ 1 tbsp oil": adds the hidden fat or sugar it asked about (standard amount), then the question is gone. */
+export function addHidden(d: FoodDraft): FoodDraft {
+  const h = d.photo?.hidden
+  if (!d.photo || !h || d.photo.now.length >= 12) return d
+  const it = HIDDEN[h].item
+  return { ...d, items: toFoodItems([...d.photo.now, it]), photo: { ...d.photo, base: [...d.photo.base, it], now: [...d.photo.now, it], hidden: null } }
 }
 const withNow = (d: FoodDraft, now: VisionItem[]): FoodDraft => ({ ...d, items: toFoodItems(now), photo: { ...d.photo!, now } })
 
@@ -414,6 +426,7 @@ export function photoDraftText(d: FoodDraft, type?: MealType): string {
     `<b>Total ~${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b>`,
     `Carbs ${fmt(t.carbs)} g · Fat ${fmt(t.fat)} g · ${badge.dot} ${badge.word}`,
     ...(d.photo?.message ? [`💬 ${escHtml(d.photo.message)}`] : []),
+    ...(d.photo?.hidden ? [`🫒 ${HIDDEN[d.photo.hidden].ask} Tap ➕ ${HIDDEN[d.photo.hidden].label} if so.`] : []),
     ask ? `\n❓ <b>About how many grams of ${escHtml(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt(ask.grams || 150)}</code>.` : 'Tap a food to fix it, or type e.g. <code>' + escHtml((list[0]?.name ?? 'rice').split(' ')[0].toLowerCase()) + ' 150</code>.'
   ].join('\n')
 }
@@ -423,6 +436,7 @@ export function photoDraftKeyboard(d: FoodDraft): { inline_keyboard: { text: str
   const items = (d.photo?.now ?? []).slice(0, 8).map((it, i) => ({ text: `✏️ ${i + 1}. ${cap(it.name).slice(0, 18)}`, callback_data: `fd|i|${d.id}|${i}` }))
   const rows: { text: string; callback_data: string }[][] = []
   for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2))
+  if (d.photo?.hidden) rows.push([{ text: `➕ ${HIDDEN[d.photo.hidden].label}`, callback_data: `fd|o|${d.id}` }])
   rows.push([
     { text: '✅ Save', callback_data: `fd|s|${d.id}` },
     { text: '➕ Add photo', callback_data: `fd|a|${d.id}` }

@@ -63,7 +63,20 @@ export interface VisionResult {
   message: string
   /** One short question instead of a guess, when a food's amount is hard to see ("About how many grams of rice?"). */
   question?: { index: number; text: string } | null
+  /** A hidden fat or sugar that could add 100+ kcal and can't be seen (oil, butter, sauce, sugar): one tap adds it. */
+  hidden?: HiddenKind | null
 }
+
+export type HiddenKind = 'oil' | 'butter' | 'sauce' | 'sugar'
+/** What one tap adds for a hidden fat or sugar (standard amounts). */
+export const HIDDEN: Record<HiddenKind, { label: string; ask: string; item: VisionItem }> = {
+  oil: { label: '1 tbsp oil', ask: 'Cooked with oil?', item: { name: 'cooking oil', matchedSavedFoodId: null, qty: 1, unit: 'tbsp', grams: 14, kcal: 124, protein: 0, carbs: 0, fat: 14, confidence: 'medium', src: 'estimate' } },
+  butter: { label: '1 tbsp butter', ask: 'Butter on it?', item: { name: 'butter', matchedSavedFoodId: null, qty: 1, unit: 'tbsp', grams: 14, kcal: 100, protein: 0.1, carbs: 0, fat: 11.4, confidence: 'medium', src: 'estimate' } },
+  sauce: { label: '2 tbsp sauce', ask: 'Any sauce or dressing?', item: { name: 'sauce', matchedSavedFoodId: null, qty: 2, unit: 'tbsp', grams: 30, kcal: 90, protein: 0.5, carbs: 6, fat: 7, confidence: 'medium', src: 'estimate' } },
+  sugar: { label: '2 tsp sugar', ask: 'Sugar in it?', item: { name: 'sugar', matchedSavedFoodId: null, qty: 2, unit: 'tsp', grams: 8, kcal: 32, protein: 0, carbs: 8, fat: 0, confidence: 'medium', src: 'estimate' } }
+}
+/** Said when the photo is too dark or blurry to read: a better photo beats a guess. */
+export const UNCLEAR_PHOTO = 'The photo is too dark or blurry to read well. Send a clearer one in good light (the whole plate, from above).'
 
 export type VisionCheck = { ok: true; result: VisionResult } | { ok: false; error: string }
 
@@ -170,12 +183,14 @@ export function visionTotals(items: VisionItem[]): VisionTotals {
 export function validateVision(raw: unknown, saved: SavedFoodRef[] = [], photos = 1, memory: PortionMemory | null = null): VisionCheck {
   const o: any = readVisionJson(raw)
   if (!o || typeof o !== 'object' || Array.isArray(o)) return { ok: false, error: "The AI's answer could not be read. Try again, or copy the prompt instead." }
+  if (o.unclear === true) return { ok: false, error: UNCLEAR_PHOTO }
   if (!Array.isArray(o.items)) return { ok: false, error: "The AI's answer had no list of foods. Try again, or copy the prompt instead." }
   const read = o.items.map((x: unknown) => cleanVisionItem(x, saved, photos)).filter((x: VisionItem | null): x is VisionItem => !!x).slice(0, MAX_ITEMS)
   if (!read.length) return { ok: false, error: photos > 1 ? 'No food was found in the photos. Try clearer photos, or add the foods by hand.' : 'No food was found in the photo. Try a clearer photo, or add the foods by hand.' }
   // His own portions (learned from his corrections) beat a guess.
   const items = memory ? applyPortions(read, memory, saved) : read
-  return { ok: true, result: { items, totals: visionTotals(items), message: text(o.message, 200), question: questionFor(items) } }
+  const hidden = (['oil', 'butter', 'sauce', 'sugar'] as HiddenKind[]).includes(o.hidden) && !items.some((i: VisionItem) => foodKey(i.name).includes(o.hidden)) ? (o.hidden as HiddenKind) : null
+  return { ok: true, result: { items, totals: visionTotals(items), message: text(o.message, 200), question: questionFor(items), hidden } }
 }
 
 /** The item at a new amount: grams and macros scale together (qty from the AI's base). A saved food uses its own numbers × qty. */
@@ -276,7 +291,7 @@ export function photoReplyLine(o: { items: { name: string; qty: number; unit: st
 }
 
 /** Photos a day, counted on the server (the owner's day, LIFE_TZ). Each photo of a request counts. */
-export const PHOTO_DAILY_LIMIT = 50
+export const PHOTO_DAILY_LIMIT = 15
 /** At most this many photos of one meal are read together (api/_vision.mjs MAX_PHOTOS). */
 export const MAX_PHOTOS = 6
 

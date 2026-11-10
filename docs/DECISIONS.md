@@ -442,3 +442,13 @@ entry that says why.
 - **Rules out:** the server uploading to Drive or keeping photo bytes (or base64) anywhere, a hold longer
   than 3 days, a held row after the Drive copy, a new `api/` file, sending all saved foods in every prompt,
   a dearer default model or always-on high thinking, points for food photos.
+
+### Repeat meals are saved meals with a picture; logging one again never calls the AI (2026-11-10)
+- **Decision:** a photo meal he eats again is kept as a saved meal in `food_saved` with `photo` (its Photo
+  Locker id). Logging it again (Telegram /meals one tap, the app's photo tile double-click) uses the saved
+  numbers through `logSavedMeal`, carries the same picture, and makes no vision call. Photos a day default
+  to 15 (`PHOTO_DAILY_LIMIT`).
+- **Why:** the owner wants a meal analysed once and repeated for free; saved meals are already the one
+  store for one-tap logging, so no second meal store or cache of AI answers is needed.
+- **Rules out:** a separate repeat-meal store, re-reading a known meal's photo, caching AI answers by image,
+  points for repeats.
