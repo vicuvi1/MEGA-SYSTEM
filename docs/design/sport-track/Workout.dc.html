@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workout in progress</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+a{color:#c6f432}a:hover{color:#dcff6e}
+@keyframes xfade{0%,30%{opacity:0}45%,80%{opacity:1}95%,100%{opacity:0}}
+.demo{position:relative;overflow:hidden;background:#f3f3f1}
+.demo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.demo img.b{animation:xfade 2.6s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.demo img.b{animation:none;opacity:0}}
+</style>
+</helmet>
+<div style="min-height: 1180px; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; padding: 18px 40px; border-bottom: 1px solid #1f2721">
+    <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">Sport Track</h1>
+    <nav aria-label="Sport Track sections" style="display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto">
+      <a href="Main.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Dashboard</a>
+      <a href="Workout.dc.html" style="padding: 9px 16px; border-radius: 999px; background: #c6f432; color: #0c100d; font-weight: 600; text-decoration: none">Workout</a>
+      <a href="Exercises.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Exercises</a>
+      <a href="Progress.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Progress</a>
+      <a href="BodyFood.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Body &amp; Food</a>
+    </nav>
+    <span style="color: #a6b2a8">Upper body · 12 min in</span>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 32px 40px 48px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+    <section style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 12px">
+        <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px">Today's workout</h2>
+        <div style="display: flex; gap: 8px">
+          <button type="button" style="padding: 9px 14px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">Whole workout easier</button>
+          <button type="button" style="padding: 9px 14px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">Harder</button>
+        </div>
+      </div>
+
+      <article style="background: #151b17; border: 2px solid #c6f432; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 18px">
+        <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; align-items: center">
+          <div style="display: flex; align-items: center; gap: 16px">
+            <a href="Swap.dc.html" class="demo" title="Tap to pick easier or harder" style="display: block; width: 210px; height: 150px; border-radius: 14px">
+              <img src="/_blob/95c50cfed8cd32d3e94785b13b87d606" alt="Diamond push-ups, top">
+              <img class="b" src="/_blob/f3ed248e63da79b507a13f78cfdbbf88" alt="Diamond push-ups, bottom">
+            </a>
+            <div>
+              <div style="font-size: 13px; color: #c6f432; font-weight: 600">NOW · move 1 of 3</div>
+              <h3 style="margin: 2px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px">Diamond push-ups</h3>
+              <div style="color: #a6b2a8; font-size: 14px">3 × 6–12 · stop 1–2 reps before failure · rest 90 s</div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px">
+            <button type="button" style="padding: 9px 14px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">Easier: Push-ups</button>
+            <button type="button" style="padding: 9px 14px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">Harder: Decline</button>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+          <sc-for list="{{sets}}" as="s" hint-placeholder-count="3">
+            <div style="{{s.box}}">
+              <div style="font-size: 13px; color: #a6b2a8">Set {{s.n}}</div>
+              <div style="margin-top: 4px; font-family: 'Space Grotesk', sans-serif; font-size: 32px; font-weight: 700">{{s.reps}}</div>
+              <div style="font-size: 13px; color: {{s.tone}}">{{s.feel}}</div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 16px; border-radius: 14px; background: #101511">
+          <label for="reps" style="font-weight: 600">Set 3 reps</label>
+          <input id="reps" type="number" value="11" style="width: 90px; padding: 12px; border-radius: 10px; border: 1px solid #334036; background: #0c100d; color: #eef3ec; font: inherit; font-size: 20px; text-align: center">
+          <span style="color: #a6b2a8">How hard?</span>
+          <button type="button" style="padding: 12px 18px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">Easy</button>
+          <button type="button" style="padding: 12px 18px; border-radius: 10px; background: #2b3a1a; border: 1px solid #c6f432; color: #eef3ec; font: inherit; font-weight: 600">OK</button>
+          <button type="button" style="padding: 12px 18px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">Hard</button>
+          <button type="button" style="margin-left: auto; padding: 12px 22px; border-radius: 10px; background: #c6f432; border: 0; color: #0c100d; font: inherit; font-weight: 700">Log set</button>
+        </div>
+      </article>
+
+      <article style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 12px 22px 12px 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+        <div style="display: flex; align-items: center; gap: 14px">
+          <span aria-hidden="true" style="color: #6b786d; font-size: 18px">⋮⋮</span>
+          <span class="demo" style="width: 96px; height: 68px; border-radius: 10px"><img src="/_blob/685740b4fc6e606b16661ff4d5e4943e" alt=""><img class="b" src="/_blob/0996e753450cdc85f34a21d4c811e758" alt=""></span>
+          <div><div style="font-size: 17px; font-weight: 600">Table rows</div><div style="font-size: 13px; color: #a6b2a8">Pull · step 1 of 7 · sturdy table</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 18px"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700">4 × 8–15</span><span style="color: #a6b2a8; font-size: 14px">rest 90 s</span><a href="Swap.dc.html" style="font-size: 13px; font-weight: 600">Change ›</a></div>
+      </article>
+      <article style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 12px 22px 12px 12px; display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap">
+        <div style="display: flex; align-items: center; gap: 14px">
+          <span aria-hidden="true" style="color: #6b786d; font-size: 18px">⋮⋮</span>
+          <span class="demo" style="width: 96px; height: 68px; border-radius: 10px"><img src="/_blob/97df9c27e596ec442effcefc6694c952" alt=""><img class="b" src="/_blob/d7e63ebe9c6764da47d04fd2c03f907d" alt=""></span>
+          <div><div style="font-size: 17px; font-weight: 600">Chair dips</div><div style="font-size: 13px; color: #a6b2a8">Triceps · step 2 of 5 · sturdy chair</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 18px"><span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700">3 × 8–12</span><span style="color: #a6b2a8; font-size: 14px">rest 90 s</span><a href="Swap.dc.html" style="font-size: 13px; font-weight: 600">Change ›</a></div>
+      </article>
+      <button type="button" style="padding: 14px; border-radius: 14px; background: transparent; border: 1px dashed #334036; color: #a6b2a8; font: inherit">+ Add an exercise</button>
+    </section>
+
+    <aside style="flex: 1 1 340px; display: flex; flex-direction: column; gap: 20px">
+      <section aria-label="Rest timer" style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px; text-align: center">
+        <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Rest</div>
+        <div style="margin: 6px 0; font-family: 'Space Grotesk', sans-serif; font-size: 72px; font-weight: 700; letter-spacing: -1px">0:58</div>
+        <div style="height: 8px; border-radius: 99px; background: #263027; overflow: hidden"><div style="width: 36%; height: 100%; background: #c6f432"></div></div>
+        <div style="margin-top: 8px; color: #a6b2a8; font-size: 14px">Then set 3 of 3 · a sound plays at 0</div>
+        <div style="display: flex; gap: 10px; justify-content: center; margin-top: 16px">
+          <button type="button" style="padding: 11px 16px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">+30 s</button>
+          <button type="button" style="padding: 11px 16px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">Skip rest</button>
+        </div>
+      </section>
+
+      <section style="background: #1b2a12; border: 1px solid #3c5a1a; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <div style="font-size: 13px; color: #c6f432; font-weight: 700; text-transform: uppercase; letter-spacing: .08em">Ready to unlock</div>
+        <h3 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 24px">Decline push-ups</h3>
+        <ul style="margin: 0; padding-left: 18px; color: #cfd8cf; font-size: 14px; display: flex; flex-direction: column; gap: 4px">
+          <li>2 sessions in a row at 3 × 12</li>
+          <li>Every set OK or easy</li>
+          <li>Form OK, no pain</li>
+        </ul>
+        <button type="button" style="padding: 13px; border-radius: 12px; background: #c6f432; border: 0; color: #0c100d; font: inherit; font-weight: 700">Apply from next workout</button>
+        <button type="button" style="padding: 13px; border-radius: 12px; background: transparent; border: 1px solid #3c5a1a; color: #eef3ec; font: inherit; font-weight: 600">Keep Diamond 1 more week</button>
+      </section>
+
+      <section style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 22px 24px">
+        <h3 style="margin: 0 0 8px; font-size: 16px">Form check</h3>
+        <ul style="margin: 0; padding-left: 18px; color: #cfd8cf; font-size: 14px; display: flex; flex-direction: column; gap: 4px">
+          <li>Body in one straight line</li>
+          <li>Hands under the chest, thumbs and fingers touching</li>
+          <li>Elbows close to the body, chest to the hands</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const set = (n, reps, feel, state) => ({
+      n, reps, feel,
+      tone: state === 'done' ? '#9fd36b' : '#a6b2a8',
+      box: 'padding: 16px; border-radius: 14px; border: 1px solid ' + (state === 'now' ? '#c6f432; background: #1b2a12' : '#222a24; background: #101511')
+    });
+    return {
+      sets: [set(1, '12', 'OK · logged', 'done'), set(2, '12', 'OK · logged', 'done'), set(3, '—', 'Now', 'now')],
+      next: [
+        { name: 'Table rows', chain: 'Pull · step 1 of 7', sets: '4 × 8–15', rest: '90 s' },
+        { name: 'Pike push-ups', chain: 'Shoulders · step 1 of 5', sets: '3 × 6–12', rest: '90 s' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
