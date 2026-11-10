@@ -62,7 +62,7 @@ must pin the clock: `vi.useFakeTimers({ toFake: ['Date'] })` plus `vi.setSystemT
 | Today page | [areas/today.md](areas/today.md) | `DayFlow.tsx`, `dayflow/`, `habits/` |
 | Goals and Season | [areas/goals.md](areas/goals.md) | `pages/Goals.tsx`, `pages/Season.tsx`, `src/core/goal*.ts` |
 | Career (jobs, portfolio, flashcards, study, money plan) | [areas/career.md](areas/career.md) | `pages/Career.tsx`, `src/renderer/src/career/`, `src/core/career/` |
-| Focus boost (push ladder, launch kits, Dojo, win music) | [areas/focus.md](areas/focus.md) | `src/renderer/src/boost/`, `src/core/pushLadder.ts` |
+| Focus boost (push ladder, launch kits, Dojo, win music) and Study Time | [areas/focus.md](areas/focus.md) | `src/renderer/src/boost/`, `src/core/pushLadder.ts`, `src/core/studyTime.ts`, `pages/StudyTime.tsx` |
 | Healthy day, sleep care, My life | [areas/health.md](areas/health.md) | `src/core/healthyDay.ts`, `sleepCare.ts`, `lifeFit.ts` |
 | Desktop island | [areas/island.md](areas/island.md) | `src/desktop/island.ts`, `DesktopIsland.tsx`, `IslandFeed.tsx`, `src/core/island*.ts` |
 | Voice | [areas/voice.md](areas/voice.md) | `src/renderer/src/voice/`, `src/core/voice*.ts` |

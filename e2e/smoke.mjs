@@ -5353,6 +5353,51 @@ try {
     await pg.click('.sy .ptabs [data-tab="timer"]')
     console.log(`    Study Time tabs (screens of 654 px): ${sizes.join(', ')}`)
   })
+  await step('Study Time on the island: a running block counts up in the pill and the panel, a break and Stop from the island, quick blocks to start', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const base = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        now: null, next: null, mustdos: [], water: { ml: 500, target: 2000 }, reps: [], alert: null,
+        studyTime: { quick: [{ id: 'st-math', name: 'Math problems', color: '#7c9cff', planned: 50 }, { id: 'st-read', name: 'Reading', color: '#38bdf8', planned: 25 }], todayMin: 35 }
+      }
+      // 12 minutes into a 50 minute block: the island shows 12:xx (time studied), not 38:xx (time left).
+      const running = { ...base, running: { subject: 'Math problems', startedAt: now - 12 * 60_000, endsAt: now + 38 * 60_000, up: true, pausedMs: 0, breakEndsAt: null } }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), base, running }
+      window.desktop = new Proxy({
+        islandAction: (a) => { window.__island.actions.push(a) },
+        setIslandPrefs: async () => null,
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(running), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill.kind-timer', { timeout: 15000 })
+    await ip.waitForFunction(() => /^12:\d\d$/.test(document.querySelector('.di-pill .di-pill-time')?.getAttribute('aria-label') ?? document.querySelector('.di-pill .di-pill-time')?.textContent ?? ''), null, { timeout: 5000 })
+    await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel .di-study-run', { timeout: 5000 })
+    const big = await ip.$eval('.di-panel .di-study-run .di-clock', (e) => e.getAttribute('aria-label') ?? e.textContent)
+    if (!/^12:\d\d$/.test(big ?? '')) throw new Error(`the panel shows ${big}, not the time studied`)
+    if (process.env.SMOKE_SHOTS) {
+      await ip.waitForTimeout(900)
+      await ip.screenshot({ path: `${process.env.SMOKE_SHOTS}/study-island.png` })
+    }
+    await ip.click('.di-panel [data-tap="st:brk5"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'break' && a.minutes === 5), null, { timeout: 3000 })
+    await ip.click('.di-panel [data-tap="st:stop"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'stop'), null, { timeout: 3000 })
+    // Nothing running: the quick blocks, one tap starts one.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.base, at: Date.now(), running: null }))
+    await ip.waitForSelector('.di-panel .di-study-pick [data-tap="st:start:st-read"]', { timeout: 5000 })
+    await ip.click('.di-panel [data-tap="st:start:st-read"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'start' && a.blockId === 'st-read'), null, { timeout: 3000 })
+    await ip.context().close()
+  })
   // The same switch on every long page: each tab about one laptop screen.
   // Run at 10:00: how long Insights → Week is depends on what's left of today's calendar.
   await step('Long pages: Insights, Goals, Career, Money, Music, Rewards and long Settings sections fit by tabs', () => atTime('10:00', async () => {

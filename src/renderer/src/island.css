@@ -531,3 +531,12 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-today .di-today-now small, .di-today-next, .di-today-empty { color: var(--sub); font-size: 11.5px; }
 .di-today-next, .di-today-empty { padding: 2px 4px; display: flex; align-items: center; gap: 8px; }
 .di-week-chip { margin-left: 8px; padding: 1px 7px; border-radius: 999px; font-size: 10.5px; font-weight: 600; background: rgb(var(--ink) / 0.08); }
+
+/* Study Time on the island (studyTimeIslandFeed.ts): pick a quick block, breaks on a running block. */
+.di-study-brk { display: flex; gap: 6px; }
+.di-study-brk button { flex: 1; white-space: nowrap; padding: 7px 10px; }
+.di-study-pick { display: grid; gap: 2px; }
+.di-study-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.di-study-chips button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: rgb(var(--ink) / 0.1); color: inherit; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.di-study-chips button:hover { background: rgb(var(--ink) / 0.18); }
+.di-study-chips i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }

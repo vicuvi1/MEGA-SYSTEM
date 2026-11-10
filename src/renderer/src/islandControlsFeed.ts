@@ -53,7 +53,10 @@ export function islandRunning(run: RunningFocus | null, now: number): IslandSnap
     const startedAt = Date.parse(run.startedAt)
     const paused = run.pausedAt ? Date.parse(run.pausedAt) : null
     const next = run.stages?.find((s) => s.kind === 'next')
-    return { subject: run.subject, startedAt, endsAt: focusEndsAt(run), pausedAt: paused, dots: stageDots(run.stages), next: next?.subject ? { subject: next.subject, minutes: next.minutes } : null }
+    // Study Time: a block counts up (time studied), and a break with a length says when it ends.
+    const st = run as RunningFocus & { blockId?: string | null; breakMin?: number | null }
+    const study = st.blockId ? { up: true, pausedMs: Math.max(0, Number(run.pausedMs) || 0), breakEndsAt: paused && st.breakMin ? paused + st.breakMin * 60_000 : null } : {}
+    return { subject: run.subject, startedAt, endsAt: focusEndsAt(run), pausedAt: paused, dots: stageDots(run.stages), next: next?.subject ? { subject: next.subject, minutes: next.minutes } : null, ...study }
   }
   const b = currentBreak()
   if (b && now < b.endsAt + 10 * 60_000) return { subject: b.next ? `Break · next ${b.next.subject}` : 'Break', startedAt: b.startedAt, endsAt: b.endsAt, brk: true, dots: b.dots, next: b.next }

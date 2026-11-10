@@ -7,6 +7,7 @@ import { dedupeTodoist, dedupeTodos } from '@core/islandTodos'
 import type { LifeFitView } from './web/lifeFitStore'
 import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
 import { studyAct, studyForIsland } from './studyIslandFeed'
+import { studyBreakAlert, studyTimeAct, studyTimeForIsland } from './studyTimeIslandFeed'
 import { briefShownToday, driftAway, pushAct, pushRecs, pushTick as benPushTick } from './benPushFeed'
 import { boostAct, boostTick } from './boost/boostFeed'
 import { atPc } from '@core/benPushes'
@@ -676,6 +677,8 @@ export function IslandFeed() {
         driftAlert(focusRun, now, dismissed) ??
         distractAlert(focusRun, now, dismissed) ??
         breakOverAlert(now, dismissed, !!run) ??
+        // Study Time: a break with a length is over (rings like time's up).
+        studyBreakAlert(running, now, dismissed) ??
         qualityAlert(dismissed, now) ??
         // Focus boost: the push ladder's step, the morning countdown, the stalling fixes.
         (boostCard && !((dismissed[boostCard.id] ?? 0) > now) ? boostCard : null) ??
@@ -820,6 +823,7 @@ export function IslandFeed() {
       auto: autoIslandView(),
       goals: await goalsForIsland(now),
       study: await studyForIsland(now),
+      studyTime: await studyTimeForIsland(now),
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, EYE_BREAKS_DEFAULT),
       // Reminder sounds stay silent in a call, a focus timer, a class and after bed (the card may still wait).
@@ -956,9 +960,13 @@ export function IslandFeed() {
             window.dispatchEvent(new Event('life-focus-changed'))
             break
           }
-          case 'stop':
-            await life.focus.stop()
+          case 'stop': {
+            // A Study Time block stops through Study Time, so its break minutes are kept beside the session.
+            const cur = (await life.focus.state()).running as { blockId?: string | null } | null
+            if (cur?.blockId && life.study) await life.study.stop()
+            else await life.focus.stop()
             window.dispatchEvent(new Event('life-focus-changed'))
+          }
             break
           case 'extend':
             await life.focus.extend?.(a.minutes)
@@ -1209,6 +1217,15 @@ export function IslandFeed() {
           case 'study':
             said = await studyAct(a)
             break
+          case 'studyTime': {
+            said = await studyTimeAct(a)
+            if (a.alertId) {
+              const d = get<Record<string, number>>(DISMISSED, {})
+              d[a.alertId] = Date.now() + 864e5
+              put(DISMISSED, d)
+            }
+            break
+          }
           case 'goal': {
             said = await goalAct(a)
             if (a.alertId) {

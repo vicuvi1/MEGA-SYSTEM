@@ -12,6 +12,7 @@ import { createContext, Fragment, useCallback, useContext, useEffect, useLayoutE
 import { IslandVoice, islandVoiceOn } from './voice/IslandVoice'
 import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
+import { clockText, hmText } from '@core/studyTime'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type AlertGate, type AlertKindPref, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
 import { restingView, type RestItem, type RestKind } from '@core/islandRest'
 import { benCardVisible, buildToday, dedupeTodos } from '@core/islandTodos'
@@ -253,13 +254,21 @@ function useNow(ms: number) {
 }
 
 type Run = NonNullable<IslandSnapshot['running']>
+/** Study Time's clock: the time studied, or a break's time left (brk) while a break with a length goes on. */
+function studyShown(run: Run, tick: number): { text: string; brk: boolean; ms: number } {
+  const worked = Math.max(0, (run.pausedAt ?? tick) - run.startedAt - (run.pausedMs ?? 0))
+  if (run.pausedAt && run.breakEndsAt) return { text: clockText(Math.max(0, run.breakEndsAt - tick)), brk: true, ms: worked }
+  return { text: clockText(worked), brk: false, ms: worked }
+}
 function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard?: IslandSnapshot['focusGuard'] }) {
   const tick = useNow(1000)
   // IC1: paused, the time left stands still.
   const now = run.pausedAt ?? tick
   const left = (run.endsAt - now) / 1000
-  const over = left < 0
-  const text = `${over ? '+' : ''}${clock(left)}`
+  // Study Time counts up: the time studied so far (breaks left out); on a break with a length, the break's time left.
+  const up = run.up ? studyShown(run, tick) : null
+  const over = !up && left < 0
+  const text = up ? up.text : `${over ? '+' : ''}${clock(left)}`
   if (!big) return <Roll className={`di-pill-time ${over ? 'over' : ''}`} text={text} />
   return (
     <>
@@ -271,7 +280,7 @@ function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard
           <Roll className={`di-clock ${over ? 'over' : ''}`} text={text} />
         </Fly>
         <Fly id="ti-timer" pos className="di-sub-fly">
-          <small>{run.pausedAt && <b className="di-paused-tag">Paused · </b>}{run.subject} <StageDots dots={run.dots} /></small>
+          <small>{run.pausedAt && <b className="di-paused-tag">{up ? (up.brk ? 'Break · ' : 'On a break · ') : 'Paused · '}</b>}{run.subject} <StageDots dots={run.dots} /></small>
         </Fly>
         {guard && (
           <small className={`di-guard ${guard.pct >= 85 ? 'good' : guard.pct < 60 ? 'low' : ''}`} title="How much of this session you've been at the PC (no mouse/keys for 2+ min counts as away)">
@@ -1813,11 +1822,36 @@ export function DesktopIsland() {
                 </section>) : null}{sagaCard}</>,
     points: null,
 
-    timer: run ? (<section className="di-timer">
+    timer: run ? (<section className={`di-timer ${run.up ? 'di-study-run' : ''}`}>
                   <LiveTimer run={run} big guard={s.focusGuard} />
-                  <div className="di-actions col">
-                    <button className="primary" {...tp('panel:stop', () => tap({ kind: 'stop' }))}>Stop & log</button>
-                    <button {...tp('panel:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>
+                  {run.up ? (
+                    // Study Time: breaks and Stop on the block (the break never counts as study).
+                    <div className="di-actions col di-study-acts">
+                      <button className="primary" {...tp('st:stop', () => tap({ kind: 'studyTime', op: 'stop' }))}>Stop & log</button>
+                      {run.pausedAt ? (
+                        <button {...tp('st:back', () => tap({ kind: 'studyTime', op: 'back' }))}>▶ Back to it</button>
+                      ) : (
+                        <span className="di-study-brk">
+                          <button {...tp('st:brk5', () => tap({ kind: 'studyTime', op: 'break', minutes: 5 }))}>☕ 5</button>
+                          <button {...tp('st:brk10', () => tap({ kind: 'studyTime', op: 'break', minutes: 10 }))}>☕ 10</button>
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="di-actions col">
+                      <button className="primary" {...tp('panel:stop', () => tap({ kind: 'stop' }))}>Stop & log</button>
+                      <button {...tp('panel:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>
+                    </div>
+                  )}
+                </section>) : s.studyTime?.quick.length && !s.locked ? (
+                <section className="di-study-pick" aria-label="Study Time">
+                  <span className="di-label">Study Time{s.studyTime.todayMin ? ` · ${hmText(s.studyTime.todayMin)} today` : ''}</span>
+                  <div className="di-study-chips">
+                    {s.studyTime.quick.map((b) => (
+                      <button key={b.id} style={{ ['--c' as string]: b.color }} {...tp(`st:start:${b.id}`, () => tap({ kind: 'studyTime', op: 'start', blockId: b.id }))} title={b.planned ? `${b.planned} min` : 'Open stopwatch'}>
+                        <i />{b.name}
+                      </button>
+                    ))}
                   </div>
                 </section>) : null,
     plan: null,
@@ -2082,7 +2116,7 @@ export function DesktopIsland() {
   }
   // The small extra: an icon or a number, never a placeholder; its tooltip says what it means.
   const restMini = (r: RestItem) => {
-    if (r.kind === 'timer' && run) return <><SmoothRing from={run.startedAt} to={run.endsAt} size={15} stroke={2} timer freeze={run.pausedAt} /><b className="rest-num">{Math.max(0, Math.ceil((run.endsAt - (run.pausedAt ?? now)) / 60_000))}m</b></>
+    if (r.kind === 'timer' && run) return <><SmoothRing from={run.startedAt} to={run.endsAt} size={15} stroke={2} timer freeze={run.pausedAt} /><b className="rest-num">{run.up ? Math.floor(studyShown(run, now).ms / 60_000) : Math.max(0, Math.ceil((run.endsAt - (run.pausedAt ?? now)) / 60_000))}m</b></>
     if (r.kind === 'soon' && r.at) return <b className="rest-num soon">{Math.max(1, Math.ceil((r.at - now) / 60_000))}m</b>
     if (r.kind === 'music') return <ScPillBadge music={k.kit.music} mini />
     if (r.kind === 'captions') return <i className="rest-dot rec" />
@@ -2257,7 +2291,7 @@ export function DesktopIsland() {
     b.kind === 'timer' && run ? (
       <>
         <SmoothRing from={run.startedAt} to={run.endsAt} size={26} stroke={2.4} timer />
-        <b className="di-bubble-num">{Math.max(0, Math.ceil((run.endsAt - now) / 60_000))}</b>
+        <b className="di-bubble-num">{run.up ? Math.floor(studyShown(run, now).ms / 60_000) : Math.max(0, Math.ceil((run.endsAt - now) / 60_000))}</b>
       </>
     ) : b.kind === 'next' && b.at ? (
       <b className="di-bubble-num soon tick">{Math.max(0, Math.ceil((b.at - now) / 60_000))}m</b>

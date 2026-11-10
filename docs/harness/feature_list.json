@@ -993,6 +993,20 @@
    ],
    "evidence": "2026-11-10: shortNight.test.ts (14) and shortNight.server.test.ts (3) pass; speed harness: 4.8 s with one 6k-token model call -> 1.0 s, no model, first words at once. Smoke 'Coach chat: a short night' passes at UTC (night branch) and with TZ=Asia/Tokyo / Europe/Chisinau (daytime branch: plan changed, nothing before now, Keep the full plan restores it); all Coach steps pass.",
    "notes": "core/shortNight.ts (pure), webBots.ts sleepSayInCode (changePlan with one Undo), PlanBlock.rest (the nap; not focus in planSummary/planTimeline), DayProposal.shortNight/lightMoved. A plan made by 'Plan my day' after the sleep is logged still uses the packer's own short-night rule (under 6 h)."
+  },
+  {
+   "id": "F-STUDY-TIME",
+   "priority": 1,
+   "area": "focus",
+   "title": "Study Time page and island timer (desktop)",
+   "user_visible_behavior": "Plan → Study Time: blocks (name, category, tags, optional planned length, quick, day, optional Todoist task) with Today / Tomorrow / This week / All / Completed and category and tag filters with total time; one tap starts a block on the one focus timer; Break 5/10/15 (never counts), Back, Stop; a timer forgotten overnight asks when you stopped; Stats: donut by category / tag / block, day / week / month / custom, totals, sessions, average, breaks, streak, against plan, best day, bars per day, top blocks; Sessions: add and fix past ones. Island: a running block counts up in the pill and panel with ☕ 5 / ☕ 10 / Stop & log, quick blocks to start when nothing runs, and \"Break's over\" rings like time's up.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/studyTime.test.ts src/main/studyTime.test.ts",
+    "SMOKE_ONLY=\"Study Time\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: core studyTime.test.ts and main/studyTime.test.ts pass; smoke 'Study Time: start a block …' and 'Study Time on the island …' pass; tabs at 1280x720: timer 1.15, stats 1.19, sessions 1.00 screens (limit 1.75, checked at 1.575).",
+   "notes": "Desktop first. No schema change: sessions are focus_sessions rows; Study Time's part (block, break minutes, source) is the synced setting study_log, keyed by the session's start time; blocks are study_blocks. A plain Stop from elsewhere (bot, Today) logs the session without its break minutes."
   }
  ]
 }
