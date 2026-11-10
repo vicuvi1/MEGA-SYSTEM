@@ -33,6 +33,7 @@ import { wakeLoggedToday } from '@core/sleep'
 import { blockKindOf, type BlockKinds } from '@core/blockKind'
 import { healthTick, nudgeAct, nudgeIdle, nudgeTick, nudgeTouched, nudgeYes } from './islandNudgesFeed'
 import { clipAlert, clipWorthSaving, nextFreeSlot, taskMinutes } from '@core/islandActions'
+import { FOOD_NOTICE_MS, foodLoggedAlert, rememberSeen } from '@core/islandFood'
 import { dayHighlight, highlightAlert, rewardAlert } from '@core/islandFeel'
 import { liveScore } from '@core/liveScore'
 import { isDeclined, isInvite, isMarker, isRealMeeting, isTentative } from '@core/calResponse'
@@ -69,6 +70,8 @@ import { MOVE_CARD_EVENT, moveCardAlert } from '@core/islandMoveCard'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
+/** Meals the island already noticed ("Lunch logged"), so Undo or OK shows it once. */
+const FOOD_SEEN = 'ls.islandFoodSeen'
 /** The bedtime logged by itself after a night away from the PC (shown once on the island). */
 const BED_AUTO = 'ls.bedAuto'
 /** Island phase 1: focus guard, what you said when blocks ended, auto-start. */
@@ -651,6 +654,8 @@ export function IslandFeed() {
     applyCenterPlace(center)
     // Study Time: the subject's colour and ring on the running block, every block to start, and its notices (studyTimeIslandFeed.ts).
     const study = await studyIslandTick({ now, run, running, meeting: !!callOn || classOn, dismissed }).catch(() => null)
+    // A meal just logged (Telegram, the app, the island): "Lunch logged: 42 g protein, 680 kcal" with Undo, once.
+    const foodNote = foodLoggedAlert(await life.coach?.food?.lastLogged?.(now - FOOD_NOTICE_MS).catch(() => null) ?? null, now, dismissed, get<string[]>(FOOD_SEEN, []))
     if (study?.running) running = study.running
     scheduleModeChange(now, () => void sendRef.current())
     void wallpaperTick(now).catch(() => {})
@@ -688,6 +693,8 @@ export function IslandFeed() {
         (boostCard && !((dismissed[boostCard.id] ?? 0) > now) ? boostCard : null) ??
         // Ben 2: a planned block starts, the morning brief, the evening shutdown.
         pushCard ??
+        // Food: the meal you just logged, with Undo.
+        foodNote ??
         // HD: your reminder, then your body and your day's edges, through one governor.
         health?.alert ??
         // Custom Center: your own reminder rules (their gate: calls, focus, quiet, bedtime, the gap, the caps).
@@ -1129,6 +1136,16 @@ export function IslandFeed() {
             todoCache = { ...todoCache, at: 0, list: todoCache.list.filter((t) => t.id !== a.id), full }
             window.dispatchEvent(new CustomEvent('life-external-changed'))
             said ||= `✓ ${a.content}`
+            break
+          }
+          case 'foodUndo': {
+            // The food counter's own remove: the meal stops counting and can be put back in Body → Food.
+            await life.coach!.food!.toggle(a.mealId)
+            const d = get<Record<string, number>>(DISMISSED, {})
+            d[a.alertId] = Date.now() + 864e5
+            put(DISMISSED, d)
+            put(FOOD_SEEN, rememberSeen(get<string[]>(FOOD_SEEN, []), a.mealId))
+            said = '↩ Removed: nothing counts from that meal'
             break
           }
           case 'clipSave': {

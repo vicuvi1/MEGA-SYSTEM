@@ -87,7 +87,7 @@ export function peekKind(kind: string, meeting = false): PeekKind | null {
   if (kind === 'over' || kind === 'end') return 'timer'
   if (kind === 'winddown' || kind === 'bed' || kind === 'late' || kind === 'sleep') return 'bed'
   if (kind === 'praise' || kind === 'refocus' || kind === 'coach' || kind === 'push1' || kind === 'push2' || kind === 'push3') return 'coach'
-  if (kind === 'launch' || kind === 'win') return 'ben'
+  if (kind === 'launch' || kind === 'win' || kind === 'food') return 'ben'
   if (kind === 'pulse' || kind === 'countdown' || kind === 'streakRisk' || kind === 'mirror' || kind === 'weather' || kind === 'gaming') return 'alive'
   return null
 }

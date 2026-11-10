@@ -172,3 +172,6 @@ The Custom Center plugs into the adapter: `island/centerLook.ts` calls `setLookS
 - **Custom reminders:** `custom:<rule>:<time>` cards open as the full card in every mode (`presentAs`), stay 3 min, ring once through `centerReminderSound` (silent as a dot, in a call, quiet, focus, class, after bed), event `life-island-reminder-sound` with kind `center`.
 - **Modes:** a new `snap.center.mode.id` swaps everything at once with a short glow over the shape (`.v2c-flash`, opacity only, none in Off or reduced motion).
 
+## Food notice (2026-11-10)
+
+A meal logged in the last 10 minutes on any device (Telegram, the app, the island) shows once as "Lunch logged: 42 g protein, 680 kcal" with OK and ↩ Undo (`core/islandFood.ts foodLoggedAlert`, kind `food`, action `foodUndo` → `life.coach.food.toggle`). It goes through the usual alert gate (normal priority; in Calm it peeks under the Ben switch), never in quiet hours; a call makes it a dot. `IslandFeed` asks `life.coach.food.lastLogged(now − 10 min)` each tick and remembers the meals it showed (`ls.islandFoodSeen`). Meal reminders on the island follow his usual meal times (see sport.md). Tests: `core/islandFood.test.ts`; smoke "Desktop island food notice".
