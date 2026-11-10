@@ -59,6 +59,13 @@ export function MealPhotoThumb({ ids, name, sub }: { ids?: string[]; name: strin
   )
 }
 
+/** A gallery tile's picture: the meal's first photo, or a plate when it has none (or it is still on its way). */
+export function MealTileImage({ ids }: { ids?: string[] }) {
+  const list = useMealPhotos(ids)
+  const first = list?.find((x) => x.thumb)
+  return <span className={`mp-tile${first ? '' : ' none'}`} aria-hidden="true">{first ? <img src={first.thumb!} alt="" /> : <span>{ids?.length ? '📷' : '🍽'}</span>}</span>
+}
+
 function PhotoView({ list, start, name, sub, onClose }: { list: Loaded[]; start: number; name: string; sub?: string; onClose: () => void }) {
   const [i, setI] = useState(Math.min(start, list.length - 1))
   useEffect(() => {

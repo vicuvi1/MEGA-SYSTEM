@@ -15,7 +15,10 @@
 // `pickRef`) and only the reading, review, saved and failed states show.
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from 'react'
 import { FOOD_PROMPT } from '@core/foodPrompt'
-import { MEAL_TYPES, type MealType } from '@core/food'
+import { MEAL_TYPES, type FoodItem, type MealType } from '@core/food'
+import { eatenFrom, isAfterNote, leftLine, recentPhotoMeal } from '@core/foodLeftovers'
+import { missLine, type ProductMiss } from '@core/foodBarcode'
+import { mealScore } from '@core/foodScore'
 import { fromSaved, photoReplyLine, savedRefs, scaleVisionItem, slotNow, stepQty, toFoodItems, validateVision, visionTotals, type SavedFoodRef, type VisionItem } from '@core/foodVision'
 import { life } from '../bridge'
 import { useToast } from '../ui'
@@ -46,9 +49,16 @@ const mealId = () => `fd-${Date.now().toString(36)}${Math.random().toString(36).
 
 type Stage = { s: 'idle' } | { s: 'reading' } | { s: 'review' } | { s: 'failed'; error: string; limit?: string } | { s: 'saved'; line: string }
 
-/** Opens the photo picker from outside (it must run inside the tap, so phones allow it). */
+/** Opens the photo picker from outside (it must run inside the tap, so phones allow it), or reads dropped photos. */
 export interface PhotoPicker {
   pick: () => void
+  /** Photos dropped anywhere on Body → Food: read them the same way. */
+  read: (files: File[]) => void
+}
+const SRC_TAG: Record<string, string> = { label: '🏷 Label', barcode: '🔖 Barcode' }
+const hmOf = (iso: string) => {
+  const d = new Date(iso)
+  return Number.isFinite(d.getTime()) ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : ''
 }
 
 export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pickRef }: { view: FoodView; saved?: SavedFoodRef[]; onSaved?: (v: FoodView) => void; bare?: boolean; pickRef?: MutableRefObject<PhotoPicker | null> }) {
@@ -62,15 +72,23 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
   const [type, setType] = useState<MealType>(() => slotNow())
   const [saving, setSaving] = useState(false)
   const [drag, setDrag] = useState(false)
+  const [miss, setMiss] = useState<{ code: string; why: ProductMiss } | null>(null)
+  // An after photo: what is left of a photo meal from the last 90 minutes (only what was eaten is logged).
+  const [afterOn, setAfterOn] = useState(false)
   const idRef = useRef(mealId())
   const camRef = useRef<HTMLInputElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
-  if (pickRef) pickRef.current = { pick: () => fileRef.current?.click() }
+  const readRef = useRef<(files: File[]) => void>(() => {})
+  if (pickRef) pickRef.current = { pick: () => fileRef.current?.click(), read: (files) => readRef.current(files) }
 
   // Your real saved foods and saved meals (food_saved), then starred meals: the AI gets them and the swap list shows them.
   const saved = useMemo(() => savedProp ?? savedRefs(view.saved, view.favs), [savedProp, view.saved, view.favs])
   const items = rows.map((r) => r.item)
   const totals = visionTotals(items)
+  // The photo meal an after photo can belong to (live, logged in the last 90 minutes).
+  const recent = view.day === view.today ? recentPhotoMeal(view.meals, Date.now()) : null
+  const after = afterOn && recent ? eatenFrom(recent.items, items.filter((i) => i.name.trim()).map((i) => ({ name: i.name, grams: i.grams }))) : null
+  const afterTotals = after ? after.eaten.reduce((a, i) => ({ kcal: a.kcal + i.kcal, protein: a.protein + i.protein }), { kcal: 0, protein: 0 }) : null
 
   // All the photos picked, dropped or pasted together are one meal: one request, one list.
   const read = useCallback(
@@ -98,14 +116,22 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
         setStage({ s: 'failed', error: check.error })
         return
       }
+      const isAfter = !!(check.result.leftovers || isAfterNote(note)) && !!(view.day === view.today && recentPhotoMeal(view.meals, Date.now()))
+      if (!check.result.items.length && !isAfter) {
+        setStage({ s: 'failed', error: 'That looks like a clean plate, but there is no photo meal from the last 90 minutes to take it from.' })
+        return
+      }
       idRef.current = mealId()
       setRows(check.result.items.map((it) => newRow(it)))
       setMessage(check.result.message)
+      setMiss(check.result.barcode?.miss ? { code: check.result.barcode.code, why: check.result.barcode.miss } : null)
+      setAfterOn(isAfter)
       setType(slotNow())
       setStage({ s: 'review' })
     },
     [note, saved, view, toast]
   )
+  readRef.current = (files) => void read(files)
 
   // Paste a photo anywhere on the page while nothing else is open.
   useEffect(() => {
@@ -128,6 +154,19 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
     setRows([])
     setPhotos([])
     setMessage('')
+    setMiss(null)
+    setAfterOn(false)
+  }
+  /** The photos go into Photo Locker (and Drive) with the meal; ids like the Telegram ones. Best effort: the meal saves anyway. */
+  const keepPhotos = async (id: string, t: MealType, name: string): Promise<string[]> => {
+    if (!photos.length) return []
+    const ids = photos.map((_, i) => `fa${id.slice(3)}n${i + 1}`)
+    try {
+      const m = await import('../vault/driveSync')
+      return await m.addFoodPhotos(photos, ids, Date.now(), t, name)
+    } catch {
+      return []
+    }
   }
   const copyPrompt = async () => {
     const ok = await copyText(FOOD_PROMPT)
@@ -148,14 +187,38 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
     const it = { ...fromSaved(s, 1, r.item.grams), ...(r.item.photo ? { photo: r.item.photo } : {}) }
     setRow(r.key, () => ({ key: r.key, base: it, item: it }))
   }
+  const saveAfter = async () => {
+    if (!after || !recent || saving) return
+    setSaving(true)
+    try {
+      const ids = await keepPhotos(idRef.current, recent.type, recent.name)
+      const v = after.eaten.length ? await api.edit(recent.id, { items: after.eaten, photos: [...(recent.photos ?? []), ...ids].slice(0, 6) }) : await api.toggle(recent.id)
+      const t = v.totals
+      setStage({ s: 'saved', line: `${after.eaten.length ? `${TYPE_LABEL[recent.type]} changed to what you ate: ~${fmt(afterTotals!.kcal)} kcal, ${fmt(afterTotals!.protein)} g protein.` : `${TYPE_LABEL[recent.type]} removed: all of it was left.`} ${leftLine(after)} Today: ${fmt(t.kcal)} / ${fmt(t.targets.kcal)} kcal, ${fmt(t.protein)} / ${fmt(t.targets.protein)} g.` })
+      setRows([])
+      setPhotos([])
+      setNote('')
+      setAfterOn(false)
+      onSaved?.(v)
+    } catch (e: any) {
+      toast(e?.message || 'Could not change the meal. Try again.', 'bad')
+    } finally {
+      setSaving(false)
+    }
+  }
   const save = async () => {
+    if (after) return saveAfter()
     const list = toFoodItems(items.filter((i) => i.name.trim()))
     if (!list.length || saving) return
     setSaving(true)
     try {
-      // `source: 'photo'` marks the meal as logged from a photo (the food log keeps it).
-      const meal = { items: list, type, id: idRef.current, source: 'photo' as const }
+      // `source: 'photo'` marks the meal as logged from a photo (the food log keeps it); its photos go to Photo Locker.
+      const ids = await keepPhotos(idRef.current, type, list.map((i) => i.name).slice(0, 3).join(', '))
+      const meal = { items: list, type, id: idRef.current, source: 'photo' as const, ...(ids.length ? { photos: ids } : {}) }
       const v = await api.add(meal)
+      // A food read from a label or a barcode becomes a saved food (one tap next time).
+      const added = await api.labelFoods(items.filter((i) => i.name.trim())).catch(() => [] as string[])
+      if (added.length) toast(`Saved as a food: ${added.join(', ')}. One tap next time in My meals.`, 'good')
       const t = v.totals
       const line = photoReplyLine({ items: items.filter((i) => i.name.trim()), meal: totals, day: { kcal: t.kcal, protein: t.protein, kcalGoal: t.targets.kcal, proteinGoal: t.targets.protein }, idea: v.next.ideas[0]?.text })
       setStage({ s: 'saved', line })
@@ -190,8 +253,17 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
               Carbs {fmt(totals.carbs)} g · Fat {fmt(totals.fat)} g
             </small>
             {message && <p className="fph-msg">{message}</p>}
+            {miss && <p className="fph-miss">{missLine(miss.code, miss.why)}</p>}
           </div>
         </div>
+        {recent && (
+          <label className={`fph-after${afterOn ? ' on' : ''}`}>
+            <input type="checkbox" className="fph-after-on" checked={afterOn} onChange={(e) => setAfterOn(e.target.checked)} />
+            <span>
+              <b>After photo: this is what was left</b> of {TYPE_LABEL[recent.type].toLowerCase()} at {hmOf(recent.at)} ({recent.name}). Only what you ate is logged.
+            </span>
+          </label>
+        )}
         {photos.length > 1 && (
           <div className="fph-strip" aria-label={`${photos.length} photos of this meal, read together`}>
             {photos.map((p, i) => (
@@ -212,6 +284,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
                 <div className="fph-item-top">
                   <input className="fph-name" value={it.name} placeholder="Food name" aria-label="Food name" onChange={(e) => setRow(r.key, (x) => ({ ...x, item: { ...x.item, name: e.target.value } }))} />
                   {photos.length > 1 && it.photo ? <span className="fph-pic-tag" title={`Seen in photo ${it.photo}`}>Photo {it.photo}</span> : null}
+                  {it.src && SRC_TAG[it.src] ? <span className={`fph-src ${it.src}`} title={it.src === 'barcode' ? 'Numbers from Open Food Facts (the barcode)' : 'Numbers from the label'}>{SRC_TAG[it.src]}</span> : null}
                   {!r.manual && <span className={`fph-conf ${it.confidence}`}>{CONF_LABEL[it.confidence]}</span>}
                   <button type="button" className="fph-del" aria-label={`Remove ${it.name || 'this food'}`} onClick={() => setRows((list) => list.filter((x) => x.key !== r.key))}>
                     ×
@@ -271,22 +344,42 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
           })}
         </ul>
         <button type="button" className="bdy-btn quiet fph-add" onClick={() => setRows((list) => [...list, newRow(blankItem(), true)])}>
-          + Add a food
+          {after ? '+ Add a leftover' : '+ Add a food'}
         </button>
 
-        <div className="fph-slot bdy-seg" role="radiogroup" aria-label="Which meal">
+        {after && recent && (
+          <div className="fph-eaten" aria-label="What was eaten">
+            <p className="fph-left">{leftLine(after)}</p>
+            <b>Eaten (this is what counts)</b>
+            <ul>
+              {after.eaten.map((it: FoodItem, k: number) => (
+                <li key={k}>
+                  <span>{it.name}</span>
+                  <span className="num">{fmt(it.grams)} g</span>
+                  <span className="num">{fmt(it.kcal)} kcal</span>
+                  <span className="num">P {fmt(it.protein)} · C {fmt(it.carbs)} · F {fmt(it.fat)}</span>
+                </li>
+              ))}
+              {!after.eaten.length && <li>Nothing: all of it was left.</li>}
+            </ul>
+          </div>
+        )}
+
+        {!after && <MealScoreLine items={toFoodItems(items.filter((i) => i.name.trim()))} />}
+
+        {!after && <div className="fph-slot bdy-seg" role="radiogroup" aria-label="Which meal">
           {MEAL_TYPES.map((m) => (
             <button key={m} type="button" role="radio" aria-checked={type === m} onClick={() => setType(m)}>
               {TYPE_LABEL[m]}
             </button>
           ))}
-        </div>
+        </div>}
         <div className="fph-actions">
           <button type="button" className="bdy-btn quiet fph-cancel" onClick={reset} disabled={saving}>
             Cancel
           </button>
-          <button type="button" className="bdy-btn primary big fph-save" onClick={save} disabled={saving || !items.some((i) => i.name.trim())}>
-            {saving ? 'Saving…' : `Save meal · ${fmt(totals.kcal)} kcal`}
+          <button type="button" className="bdy-btn primary big fph-save" onClick={save} disabled={saving || (!after && !items.some((i) => i.name.trim()))}>
+            {saving ? 'Saving…' : after && recent ? `Update ${TYPE_LABEL[recent.type].toLowerCase()} · ${fmt(afterTotals!.kcal)} kcal eaten` : `Save meal · ${fmt(totals.kcal)} kcal`}
           </button>
         </div>
       </section>
@@ -365,5 +458,17 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
         </button>
       )}
     </section>
+  )
+}
+
+/** The meal's score before saving: "B · Add fibre: …". */
+function MealScoreLine({ items }: { items: FoodItem[] }) {
+  const sc = mealScore(items)
+  if (!sc) return null
+  return (
+    <p className="fph-score" aria-label={`Meal score ${sc.grade}`}>
+      <span className={`fd-grade g${sc.grade}`}>{sc.grade}</span>
+      <span>{sc.tip}</span>
+    </p>
   )
 }

@@ -32,9 +32,16 @@ import { FoodPaste } from './FoodPaste'
 import { FoodAdjustCard } from './FoodAdjustCard'
 import { ConfidenceDot, MealItems, MealPhotoThumb } from './MealPhoto'
 import { adjLogLine } from '@core/foodAdjust'
+import { mealScore } from '@core/foodScore'
+import { dayLabel } from '@core/foodInsights'
 import type { FoodView } from '../../../main/food'
+import type { FoodExtras } from '../web/foodBridge'
+import { FoodGallery } from './FoodGallery'
+import { FoodCharts } from './FoodCharts'
+import { imagesFrom } from './foodPhotoPrep'
 import './food.css'
 import './food-simple.css'
+import './food-gallery.css'
 
 const EVENTS = ['life-body-changed', 'life-sport-changed', 'life-external-changed']
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
@@ -56,7 +63,7 @@ let rowKey = 0
 const toRows = (items: FoodItem[]): Row[] => items.map((it) => ({ key: ++rowKey, base: it, name: it.name, grams: it.grams }))
 const rowItem = (r: Row): FoodItem => ({ ...scaleItem(r.base, r.grams), name: r.name.trim() || r.base.name })
 
-type Sub = 'today' | 'week' | 'plan'
+type Sub = 'today' | 'week' | 'plan' | 'photos' | 'charts'
 type Sheet = null | 'root' | 'meals' | 'type' | 'paste'
 const itemsText = (items: FoodItem[]) => items.map((i) => `${i.grams} g ${i.name}`).join(', ')
 
@@ -100,10 +107,15 @@ export function FoodCounter() {
   const [openMeal, setOpenMeal] = useState<string | null>(null)
   const [justRemoved, setJustRemoved] = useState<string[]>([])
   const photoRef = useRef<PhotoPicker | null>(null)
+  const [extras, setExtras] = useState<FoodExtras | null>(null)
+  const [dropping, setDropping] = useState(false)
 
   useEffect(() => {
     if (!api) return
-    const load = () => api.view(day).then(setV).catch(() => {})
+    const load = () => {
+      api.view(day).then(setV).catch(() => {})
+      api.extras?.().then(setExtras).catch(() => {})
+    }
     load()
     for (const e of EVENTS) window.addEventListener(e, load)
     return () => {
@@ -163,7 +175,7 @@ export function FoodCounter() {
       setWords(r.say ? words : '')
     }
   }
-  const edit = (m: FoodView['meals'][number]) => {
+  const edit = (m: Pick<FoodView['meals'][number], 'id' | 'items' | 'type'>) => {
     setRows(m.items.map((it) => ({ key: ++rowKey, base: it, name: it.name, grams: it.grams })))
     setEditing(m.id)
     setType(m.type)
@@ -471,10 +483,17 @@ export function FoodCounter() {
                   <b>Next:</b> {v.next.line}
                 </p>
               )}
+              {!pastDay && extras && extras.nextMeal.why !== 'done' && <p className="fd-nextmeal">{extras.nextMeal.line}</p>}
               {!pastDay && <FoodAdjustCard view={v} onView={setV} day={day} where="food" />}
               <div className="fd-more-links">
                 <button type="button" className="bdy-btn fd-sub-go" data-sub="week" onClick={() => setSub('week')}>
                   Week chart
+                </button>
+                <button type="button" className="bdy-btn fd-sub-go" data-sub="photos" onClick={() => setSub('photos')}>
+                  Photos by day
+                </button>
+                <button type="button" className="bdy-btn fd-sub-go" data-sub="charts" onClick={() => setSub('charts')}>
+                  Charts
                 </button>
                 <button type="button" className="bdy-btn fd-sub-go" data-sub="plan" onClick={() => setSub('plan')}>
                   Cheap protein, shopping and prep
@@ -534,8 +553,38 @@ export function FoodCounter() {
           </details>
   )
 
+  // Drop a meal photo anywhere on Food: read the same way as the Photo button (up to 6 photos of one meal).
+  const hasFiles = (e: React.DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes('Files')
+  const dropProps = pastDay
+    ? {}
+    : {
+        onDragOver: (e: React.DragEvent) => {
+          if (!hasFiles(e)) return
+          e.preventDefault()
+          if (!dropping) setDropping(true)
+        },
+        onDragLeave: (e: React.DragEvent) => {
+          if (e.currentTarget === e.target || !(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) setDropping(false)
+        },
+        onDrop: (e: React.DragEvent) => {
+          if (!hasFiles(e)) return
+          e.preventDefault()
+          setDropping(false)
+          const files = imagesFrom(e.dataTransfer?.files, 7)
+          if (!files.length) return toast('Drop a photo (JPEG, PNG or WebP) of your meal.', 'bad')
+          setSub('today')
+          setSheet(null)
+          photoRef.current?.read(files)
+        }
+      }
+
   return (
-    <section className="card fd-card" aria-label="Food counter">
+    <section className="card fd-card" aria-label="Food counter" {...dropProps}>
+      {dropping && (
+        <div className="fd-drop" role="status">
+          Drop the photo to log this meal
+        </div>
+      )}
       <div className="card-head fd-head">
         <h2>Food</h2>
         <div className="fd-head-actions">
@@ -567,6 +616,7 @@ export function FoodCounter() {
                 {head.preview}
               </p>
             )}
+            {!pastDay && extras?.workout && <p className="fd-train-note" role="status">{extras.workout}</p>}
           </div>
           {pastDay && <p className="fd-past">Editing {v.day}: meals you add are marked "added later".</p>}
 
@@ -612,11 +662,34 @@ export function FoodCounter() {
                               {m.removed && <small className="fd-removed-tag">Removed</small>}
                               <b>{m.name}</b>
                               <small className="fd-meal-sub">
-                                <span className="num">{atHm(m.at)}</span> · <span className="num">{fmt(m.totals.kcal)} kcal · {m.totals.protein} g protein</span>
+                                <span className="num fd-when">{dayLabel(m.day)}, {atHm(m.at)}</span> · <span className="num">{fmt(m.totals.kcal)} kcal · {m.totals.protein} g protein</span>
                                 {m.late ? ' · added later' : ''}
                                 {mealSource(m) === 'photo' && <ConfidenceDot items={m.items} />}
                               </small>
+                              {!m.removed && (
+                                <span className="fd-mitems" role="list" aria-label={`What is in ${m.name}`}>
+                                  {m.items.slice(0, 6).map((it, k) => (
+                                    <span className="fd-mitem" role="listitem" key={k}>
+                                      <span>
+                                        {it.name} <small className="num">{fmt(it.grams)} g</small>
+                                      </span>
+                                      <span className="num">
+                                        {fmt(it.kcal)} kcal · P {fmt(it.protein)} · C {fmt(it.carbs)} · F {fmt(it.fat)}
+                                      </span>
+                                    </span>
+                                  ))}
+                                  {m.items.length > 6 && <span className="fd-mitem" role="listitem">+{m.items.length - 6} more under ⋯</span>}
+                                </span>
+                              )}
                             </span>
+                            {!m.removed && !m.supp && (() => {
+                              const sc = mealScore(m.items)
+                              return sc ? (
+                                <span className={`fd-grade g${sc.grade}`} title={`Meal score ${sc.grade}: ${sc.tip}`} aria-label={`Meal score ${sc.grade}`}>
+                                  {sc.grade}
+                                </span>
+                              ) : null
+                            })()}
                             <span className="fd-meal-actions">
                               {!m.removed && (
                                 <button type="button" className="fdf-x fd-more-btn" aria-expanded={openMeal === m.id} aria-label={`More for ${m.name}`} title="Star, save as meal, see what is in it" onClick={() => setOpenMeal(openMeal === m.id ? null : m.id)}>
@@ -635,7 +708,8 @@ export function FoodCounter() {
                           </div>
                           {openMeal === m.id && !m.removed && (
                             <div className="fd-mextra">
-                              {mealSource(m) === 'photo' ? <MealItems items={m.items} /> : <small className="fd-meal-items">{itemsText(m.items)}</small>}
+                              <MealItems items={m.items} />
+                              {!m.supp && mealScore(m.items) && <small className="fd-score-tip">Score {mealScore(m.items)!.grade}: {mealScore(m.items)!.tip}</small>}
                               <small className="num">
                                 Carbs {m.totals.carbs} g · Fat {m.totals.fat} g
                               </small>
@@ -676,11 +750,20 @@ export function FoodCounter() {
           <p className="fd-line">{v.week.line}</p>
           <WeekChartView chart={v.chart} />
           {v.adjust.state === 'none' && <small className="muted fd-adjust-note">{v.adjust.why}</small>}
+          {extras && (
+            <div className="fd-accuracy" data-state={extras.accuracy.state} aria-label="Do your logs match your weight?">
+              <b>Do your logs match your weight?</b>
+              <p>{extras.accuracy.state === 'none' ? extras.accuracy.why : extras.accuracy.line}</p>
+              {extras.accuracy.state !== 'none' && extras.accuracy.rough && <small className="muted">Rough: enter your height and age in Goals for a better maintenance number.</small>}
+            </div>
+          )}
           {sug && <small className="muted fd-adjust-note">There is a calorie suggestion waiting under More on Today: {sug.title.toLowerCase()}.</small>}
         </div>
       )}
 
       {sub === 'plan' && <FoodPlan v={v} onView={setV} day={day} />}
+      {sub === 'photos' && <FoodGallery onFix={(m, d) => (d !== v.day && setDay(d === v.today ? undefined : d), edit(m))} />}
+      {sub === 'charts' && <FoodCharts />}
       {/* On top of the whole app (not inside the page's tabs); body-page keeps the Body colours. */}
       {sheetEl && createPortal(<div className="body-page fdl-portal">{sheetEl}</div>, document.body)}
       {manage && <FoodSavedSheet v={v} onView={setV} onClose={() => setManage(false)} />}

@@ -394,6 +394,22 @@ export function pullFoodInbox(): Promise<number> {
   return pulling
 }
 
+/**
+ * Meal photos taken or dropped in the app go into Photo Locker too (tag
+ * `food`, Food/YYYY-MM, named by date, time and meal), like the Telegram ones,
+ * and up to Drive with the usual sync. Returns the Locker ids for the meal.
+ */
+export async function addFoodPhotos(photos: { mime: string; data: string }[], ids: string[], at: number, type?: string, name?: string): Promise<string[]> {
+  const items: VaultItem[] = []
+  for (let i = 0; i < Math.min(photos.length, ids.length); i++) {
+    if (await getItem(ids[i]).catch(() => undefined)) continue
+    const blob = b64ToBlob(photos[i].data, photos[i].mime)
+    items.push({ id: ids[i], kind: 'photo', name: foodPhotoName(at, type, name, i + 1), tags: [FOOD_TAG, ...(type ? [type] : [])], takenAt: at, sizeBytes: blob.size, mime: photos[i].mime, blob, thumb: (await thumbOf(blob, 'photo').catch(() => null)) ?? undefined, folderPath: foodFolderPath(at), updatedAt: Date.now() })
+  }
+  if (items.length) await addItems(items)
+  return ids.slice(0, photos.length)
+}
+
 /** The Locker items (with their thumbnails) for a meal's photo ids, on this device. */
 export async function mealPhotos(ids: string[]): Promise<VaultItem[]> {
   const out: VaultItem[] = []
