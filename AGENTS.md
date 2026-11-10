@@ -12,6 +12,7 @@ Code (through `CLAUDE.md`), Codex and the others.
 The full [`docs/AI_HANDOFF.md`](docs/AI_HANDOFF.md) (about 23k tokens) is the historical reference. Don't read it by default.
 
 ## Rules
+- **Desktop only for now (owner's choice, Nov 2026):** build every new feature for the Windows desktop app (Electron renderer, island, desktop main process). Do no web-only, phone-layout or bot work unless the owner asks for it. Keep the web build and the existing smoke steps working, but don't spend effort polishing them.
 - **Public repo:** no secrets, ids, emails or the owner's real data anywhere. Use made-up data.
 - **Security rules that must hold:**
   - `/api/db` refuses the `sys_*` tables and ATTACH/PRAGMA, and pages may only read `cloud_snapshots` (`api/_sqlguard.mjs`).
