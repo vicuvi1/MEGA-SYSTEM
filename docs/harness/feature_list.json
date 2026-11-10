@@ -667,6 +667,20 @@
    "notes": "core/recovery.ts, core/trainStreak.ts, core/trainWarnings.ts, missedSession in core/trainWeek.ts; body/training/RecoveryPanel.tsx, ProgressDash.tsx, TrainWarnings.tsx; body/today/BodyMapCard.tsx toggle. New Sport Track state fields trainLighter {from, until, at} and trainWarnDismiss {id: day}, merged in mergeTrain. BT_SHOTS adds train-recovery-phone.png and train-dashboard-desktop.png."
   },
   {
+   "id": "F904",
+   "priority": 1,
+   "area": "sport",
+   "title": "Sport Track -> Training home: the real progressive workout (Phase 1)",
+   "user_visible_behavior": "Sport Track opens on Training (the old embedded app is the 'Classic tracker' tab; a device that last showed it moves to Training once). Cards: Today's Plan (the split's session, minutes, a level badge, each move as sets x reps on its ladder level, Start Workout, Customize: Full / Lighter / Short = sets, and Easier / Harder per move), Progression Path (Push / Pull / Legs / Core chains, done / current / locked levels, what the next level needs as 4 ticks: 2 sessions at the top, every set at the top, effort OK or Easy, form OK), AI Coach (one line from the engine, Make it harder / Make it easier for the whole workout, I can't train today = the usual rest day with mobility), Weekly Progress (planned vs logged sets per day, hard sets per muscle against the split's 10-20), Body & Metrics (latest body comp), Today's Nutrition (food counter), Program Roadmap (12 weeks from your first session). Start Workout: one set at a time, reps, a required effort tap, an optional form check, a rest timer with sound, Finish shows what changed: 'Unlocked: Decline push-ups, because 3x12 easy twice' with Apply / Keep. Nothing moves by itself; Make easier / harder keep every log. Empty states, no made-up numbers. Points only through the usual Workout done for logged sets.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/sportTrain.test.ts src/core/trainLog.test.ts",
+    "SMOKE_ONLY=\"Training home|Sport Track onboarding|Body training\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: branch training-home; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Training home 1.81 / 1.59 / 1.11 screens at 1280 / 1440 / 1920 (budget 2.25 with 10% headroom)",
+   "notes": "core/sportTrain.ts (the Training home engine) on core/trainLog.ts (levelStatus, offerOf, shiftLevel, ladderSets, doseSets, formOk); renderer/src/training/TrainingHome.tsx, WorkoutFlow.tsx, useTrainHome.ts, training-home.css; App.tsx section view 'train'. Phase 2 (not built): Exercise Library with chains, Workout Builder, equipment page, PRs, readiness and skills. TG_SHOTS=<dir> saves training-home-1920.png and training-finish-1920.png."
+  },
+  {
    "id": "F-BODY-PROGRESS",
    "priority": 2,
    "area": "body",

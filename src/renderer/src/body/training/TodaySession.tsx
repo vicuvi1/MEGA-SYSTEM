@@ -171,7 +171,7 @@ export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: {
     let setId = ''
     saveTraining((s) => {
       const exId = exIdOf(s, it)
-      keepLevel(s, ladder, it.index, Date.now())
+      keepLevel(s, ladder, it.index, Date.now(), today)
       setId = logSet(s, { day: today, exId, set: { reps, kg: d.kg[ladder] || undefined, feel: d.feel[ladder]?.[i] ?? undefined }, session: d.id, now: Date.now() }).id ?? ''
       saveSession(s, recordOf(d, s))
     })
@@ -212,7 +212,7 @@ export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: {
     if (up.length) {
       celebrate(null, 'reward')
       soundFanfare()
-      toast(`Level complete: ${up.map((x) => x.name).join(', ')}. Move up in your roadmap below.`, 'good')
+      toast(`Level complete: ${up.map((x) => x.name).join(', ')}. Choose Move up or Not yet in your roadmap below.`, 'good')
     } else celebrate(null, 'reward')
   }
 
@@ -371,9 +371,14 @@ export function TodaySession({ st, today, refresh, onOpenSportApp, onLogged }: {
                       {it.sets} × {rangeText(it.level)}
                     </span>
                   </div>
-                  {it.status.state === 'complete' && (
+                  {it.offer && !it.nextTime && (
                     <span className="tr-done-chip" data-tr="level-done">
-                      Level done{it.next ? ': move up in your roadmap' : ''}
+                      {it.offer.line} Move up in your roadmap below.
+                    </span>
+                  )}
+                  {it.nextTime && (
+                    <span className={`tr-done-chip${it.nextTime.kind === 'up' ? '' : ' quiet'}`} data-tr="next-time">
+                      {it.nextTime.line}
                     </span>
                   )}
                   <div className="tr-ex-last">

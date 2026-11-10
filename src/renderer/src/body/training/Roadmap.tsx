@@ -6,7 +6,7 @@
 // moves you up; missing the bottom twice offers to stay or step back. Tap a
 // level for how to do it; "Edit ladders" changes levels and ranges. No points.
 import { useMemo, useState } from 'react'
-import { currentLevel, declineLevel, estimateLevelUp, levelStatus, moveSessions, setLevel, setsFor, suggestNow, trainOf } from '@core/trainLog'
+import { currentLevel, declineLevel, estimateLevelUp, ladderSets, levelStatus, moveSessions, setLevel, suggestNow, trainOf } from '@core/trainLog'
 import { DEFAULT_LADDERS, laddersFor, moveName, movesFor, rangeText, type Ladder, type Level } from '@core/trainLadders'
 import { celebrate } from '../../fx'
 import { soundFanfare } from '../../soundKit'
@@ -25,13 +25,14 @@ export function Roadmap({ st, today, refresh }: { st: any; today: string; refres
   const rows = useMemo(
     () =>
       data.ladders.map((ladder) => {
-        const cur = currentLevel(st, data, ladder)
+        const cur = currentLevel(st, data, ladder, today)
         const level = ladder.levels[cur.index]
-        const sets = setsFor(laddersFor(data.ladders, ladder.type).indexOf(ladder), ladder.type)
+        const sets = ladderSets(data.week, data.ladders, ladder)
         const sessions = moveSessions(st, level.move, today)
-        const status = levelStatus(sessions, level, sets, cur.since)
+        const since = cur.since
+        const status = levelStatus(sessions, level, sets, since)
         const next = ladder.levels[cur.index + 1] ?? null
-        const est = estimateLevelUp(sessions, level, sets, next ? moveName(next.move) : null, cur.since)
+        const est = estimateLevelUp(sessions, level, sets, next ? moveName(next.move) : null, since)
         const latest = sessions[sessions.length - 1] ?? null
         const show = suggestNow(status, latest, data.levels[ladder.id]?.declinedOn)
         return { ladder, cur, level, sets, status, next, est, show, reached: data.levels[ladder.id]?.reached ?? {} }
@@ -65,7 +66,7 @@ export function Roadmap({ st, today, refresh }: { st: any; today: string; refres
           Edit ladders
         </button>
       </header>
-      <p className="bdy-note">Hit the top of the range in every set, 2 sessions in a row, and the level is done. You choose when to move up.</p>
+      <p className="bdy-note">Hit the top of the range in every set, 2 sessions in a row, with no set tapped Hard: the next move unlocks. You choose Move up or Not yet.</p>
       <div className="tr-ladders">
         {rows.map(({ ladder, cur, level, status, next, est, show, reached }) => (
           <article key={ladder.id} className="tr-ladder" data-ladder={ladder.id} data-state={status.state}>
