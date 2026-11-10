@@ -134,6 +134,9 @@ export function foodPhotoPrompt(req) {
 6. Else matchedSavedFoodId is null: kcal, protein, carbs and fat for the whole amount from standard food values; check kcal ≈ 4×protein + 4×carbs + 9×fat.
 The owner's note is the truth. confidence: high = sure what and how much, medium = fair guess, low = amount hard to see. message: one short friendly sentence.
 unclear: true only when the photo is too dark or blurry to tell the foods (then items may be empty). hidden: oil, butter, sauce or sugar when one you cannot see could add over 100 kcal (fried or glossy food, a dressing, a sweet drink), else none.
+Each item: fiber = grams of fibre; ultra = true for ultra-processed food (sausage, chips, sweets, soda, packaged snacks).
+A barcode you can read: barcode = its digits, and fromBarcode true on that food.
+leftovers: true only when the photo shows what is LEFT of a meal (a partly eaten plate, or the note says after); then items are only what is left (empty for a clean plate).
 Answer ONLY with JSON in the given shape.${photosRule(req)}`
   const picked = promptSaved(req.saved, req.note)
   const saved = picked.length ? picked.map((s) => `- id ${s.id}: ${s.name}, ${s.portion || '1 portion'}: ${s.kcal} kcal, ${s.protein} g protein${s.carbs ? `, ${s.carbs} g carbs` : ''}${s.fat ? `, ${s.fat} g fat` : ''}`).join('\n') : '(none)'
@@ -201,7 +204,12 @@ const ITEM_PROPS = {
   gramsLow: { type: 'number' },
   gramsHigh: { type: 'number' },
   /** The numbers come from a readable label or package. */
-  fromLabel: { type: 'boolean' }
+  fromLabel: { type: 'boolean' },
+  /** This food carries the barcode in the photo. */
+  fromBarcode: { type: 'boolean' },
+  /** Grams of fibre, and ultra-processed or not (for the meal score). */
+  fiber: { type: 'number' },
+  ultra: { type: 'boolean' }
 }
 const ITEM_REQUIRED = ['name', 'matchedSavedFoodId', 'qty', 'unit', 'grams', 'gramsLow', 'gramsHigh', 'kcal', 'protein', 'carbs', 'fat', 'confidence']
 // No totals: the code adds them up again anyway, so asking for them only costs output tokens.
@@ -213,7 +221,11 @@ const SHAPE = {
     /** Too dark or blurry to read: the app asks for a better photo instead of a guess. */
     unclear: { type: 'boolean' },
     /** A hidden fat or sugar that could add 100+ kcal and can't be seen: one short question. */
-    hidden: { type: 'string', enum: ['oil', 'butter', 'sauce', 'sugar', 'none'] }
+    hidden: { type: 'string', enum: ['oil', 'butter', 'sauce', 'sugar', 'none'] },
+    /** The digits of a barcode it can read (looked up in Open Food Facts on the server). */
+    barcode: { type: 'string' },
+    /** The photo shows what was left of a meal: the items are the leftovers. */
+    leftovers: { type: 'boolean' }
   },
   required: ['items', 'message']
 }
@@ -400,9 +412,13 @@ export function photoDay(now = new Date(), tz = '') {
 export async function countPhoto(run, now = new Date(), tz = '', n = 1) {
   const day = photoDay(now, tz)
   const add = Math.max(1, Math.min(MAX_PHOTOS, Math.round(Number(n) || 1)))
+  const month = day.slice(0, 7)
   const rows = await run([
     { sql: 'CREATE TABLE IF NOT EXISTS sys_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)', args: [] },
     { sql: "DELETE FROM sys_kv WHERE key LIKE 'vision:%' AND key < ?", args: [`vision:${day}`] },
+    // The month's photos, for the cost meter (kept until the next month).
+    { sql: "DELETE FROM sys_kv WHERE key LIKE 'photos:%' AND key < ?", args: [`photos:${month}`] },
+    { sql: 'INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + CAST(excluded.value AS INTEGER)', args: [`photos:${month}`, String(add)] },
     { sql: 'INSERT INTO sys_kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + CAST(excluded.value AS INTEGER) RETURNING value', args: [`vision:${day}`, String(add)] }
   ])
   const total = Number(rows?.[0]?.[0])
@@ -419,6 +435,52 @@ export const tursoRun = (turso, cfg, fetchImpl = fetch) => async (stmts) => {
   const last = json?.results?.[stmts.length - 1]
   if (status !== 200 || !last || last.type === 'error') throw new Error('Database not reachable')
   return (last.response?.result?.rows ?? []).map((r) => r.map((c) => (c && typeof c === 'object' ? c.value : c)))
+}
+
+// ---- barcodes (Open Food Facts: free, no key) ----
+
+/** A barcode's digits when the check digit is right (8, 12, 13 or 14 digits), else null (core/foodBarcode.ts cleanBarcode, the same rule). */
+export function barcodeDigits(raw) {
+  const d = String(raw ?? '').replace(/[\s-]/g, '')
+  if (!/^\d{8}$|^\d{12,14}$/.test(d) || /^0+$/.test(d)) return null
+  const body = d.slice(0, -1)
+  let sum = 0
+  for (let i = 0; i < body.length; i++) sum += Number(body[body.length - 1 - i]) * (i % 2 === 0 ? 3 : 1)
+  return (10 - (sum % 10)) % 10 === Number(d[d.length - 1]) ? d : null
+}
+const OFF_API = 'https://world.openfoodfacts.org/api/v2/product/'
+export const BARCODE_MS = 4000
+/**
+ * Looks a barcode up in Open Food Facts (the numbers per 100 g, the name, the
+ * serving). Never throws: a product, or why there is none ('notFound', or
+ * 'offline' when the site can't be reached, is blocked or is slow). Only the
+ * code is sent, with a plain app name as User-Agent.
+ */
+export async function lookupBarcode(code, fetchImpl = fetch, ms = BARCODE_MS) {
+  const c = barcodeDigits(code)
+  if (!c) return { miss: 'notFound' }
+  try {
+    const res = await fetchImpl(`${OFF_API}${c}.json?fields=product_name,brands,nutriments,serving_quantity`, { headers: { 'User-Agent': 'LifeSystem/1.0 (personal food log)', Accept: 'application/json' }, signal: AbortSignal.timeout(ms) })
+    if (res.status === 404) return { miss: 'notFound' }
+    if (!res.ok) return { miss: 'offline' }
+    const j = await res.json().catch(() => null)
+    if (!j || typeof j !== 'object') return { miss: 'offline' }
+    if (j.status === 0 || !j.product) return { miss: 'notFound' }
+    const n = j.product.nutriments ?? {}
+    const kcal = Number(n['energy-kcal_100g'] ?? (Number(n.energy_100g) ? Number(n.energy_100g) / 4.184 : NaN))
+    const v = (x) => (Number.isFinite(Number(x)) && Number(x) >= 0 ? Math.round(Number(x) * 10) / 10 : null)
+    if (!Number.isFinite(kcal) || v(n.proteins_100g) == null) return { miss: 'notFound' }
+    return { product: { code: c, name: txt(j.product.product_name, 60), brand: txt(String(j.product.brands ?? '').split(',')[0], 40), servingG: v(j.product.serving_quantity), per100: { kcal: Math.round(kcal), protein: v(n.proteins_100g), carbs: v(n.carbohydrates_100g) ?? 0, fat: v(n.fat_100g) ?? 0, fiber: v(n.fiber_100g) } } }
+  } catch {
+    return { miss: 'offline' }
+  }
+}
+/** The answer with the barcode's product (or why there is none) attached; the page checks it again. */
+export async function withBarcode(json, fetchImpl = fetch, ms = BARCODE_MS) {
+  const c = barcodeDigits(json?.barcode)
+  if (!c || !json || typeof json !== 'object') return json
+  const r = await lookupBarcode(c, fetchImpl, ms)
+  return r.product ? { ...json, barcode: c, product: r.product } : { ...json, barcode: c, productMiss: r.miss }
 }
 
 /** The page's fallback message when the photo can't be read now. */

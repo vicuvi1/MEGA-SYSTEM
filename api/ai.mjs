@@ -8,7 +8,7 @@
 import { bearer, config, getSetting, readBody, send, requireSession, setSetting, turso, countCall } from './_lib.mjs'
 import { BUDGET_KEY, DEFAULT_BUDGET_USD, budgetPlan, budgetTier, costOf, monthStart } from './_budget.mjs'
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { FALLBACK, countPhoto, overLimit, photoLimit, readFoodPhoto, readPhotoRequest, tursoRun, visionProvider } from './_vision.mjs'
+import { BARCODE_MS, FALLBACK, countPhoto, overLimit, photoDay, photoLimit, readFoodPhoto, readPhotoRequest, tursoRun, visionProvider, withBarcode } from './_vision.mjs'
 
 /** QA4: the usage rows of one request (Ben's answer shows its model and cost). Run a request inside usageScope.run([], …). */
 export const usageScope = new AsyncLocalStorage()
@@ -667,6 +667,8 @@ export default async function handler(req, res) {
     }
   }
   if (body?.op === 'foodPhoto') return send(res, 200, await foodPhoto(body))
+  // Settings → Ben → AI cost: this month's photo reads (real token counts) and photos sent.
+  if (body?.op === 'photoCost') return send(res, 200, await photoCost())
   if (!key && !orKey) return send(res, 503, { error: 'Add OPENROUTER_API_KEY or GEMINI_API_KEY in Vercel to use AI on the website' })
   const prompt = String(body?.prompt || '').slice(0, 60_000)
   if (!prompt.trim()) return send(res, 400, { error: 'Empty prompt' })
@@ -704,15 +706,45 @@ export async function foodPhoto(body, env = process.env, fetchImpl = fetch, now 
     if (overLimit(n, lim)) return { ok: false, error: (req.images?.length ?? 1) > 1 ? `These photos would go over today's limit of ${lim} photos. It starts again tomorrow.` : `You've read ${lim} photos today, the daily limit. It starts again tomorrow.`, fallback: FALLBACK, limit: 'day' }
   }
   try {
+    const t0 = Date.now()
     const out = await readFoodPhoto(p, req, { fetchImpl, env, record: (u) => recordUsage(u, env, fetchImpl) })
+    // A barcode it could read: Open Food Facts' numbers come along (or why there are none), inside the time left.
+    const left = 50_000 - (Date.now() - t0) - 2000
+    const result = req.kind === 'scale' ? out.json : await withBarcode(out.json, fetchImpl, Math.max(500, Math.min(BARCODE_MS, left)))
     // usage: each try's token counts and time (no photo, no key), for the cost meter and the second look.
-    return { ok: true, result: out.json, model: out.model, usage: out.usage, second: out.second }
+    return { ok: true, result, model: out.model, usage: out.usage, second: out.second }
   } catch (e) {
     // Only the plain message: never the request (it holds the photo) or a key.
     return { ok: false, error: e?.timeUp ? e.message : "The photo couldn't be read right now. Try again in a moment.", fallback: FALLBACK }
   }
 }
 const trimmed = (v) => String(v ?? '').trim()
+
+/**
+ * The month's photo reading for the cost meter: the real token counts recorded
+ * per read (ai_usage kinds foodPhoto, foodPhoto2, scaleShot; a monthly roll-up
+ * row stands for `calls` reads) and the photos sent this month (sys_kv
+ * photos:<YYYY-MM>, server only). The page turns them into money with its prices.
+ */
+export async function photoCost(env = process.env, fetchImpl = fetch, now = new Date()) {
+  const month = photoDay(now, trimmed(env.LIFE_TZ)).slice(0, 7)
+  const cfg = config(env)
+  if (!cfg.ok) return { month, photos: null, rows: [] }
+  const q = (sql, args = []) => ({ type: 'execute', stmt: { sql, args: args.map((a) => ({ type: 'text', value: String(a) })) } })
+  const { json } = await turso(cfg, {
+    requests: [
+      { type: 'execute', stmt: { sql: USAGE_TABLE } },
+      q("SELECT kind, COALESCE(SUM(COALESCE(calls, 1)),0), COALESCE(SUM(prompt_tokens),0), COALESCE(SUM(completion_tokens),0) FROM ai_usage WHERE at >= ? AND kind IN ('foodPhoto', 'foodPhoto2', 'scaleShot') GROUP BY kind", [monthStart(now)]),
+      q('CREATE TABLE IF NOT EXISTS sys_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)'),
+      q('SELECT value FROM sys_kv WHERE key = ?', [`photos:${month}`]),
+      { type: 'close' }
+    ]
+  }, fetchImpl).catch(() => ({ json: null }))
+  const rows = (i) => json?.results?.[i]?.response?.result?.rows ?? []
+  const v = (c) => (c == null || c.type === 'null' ? null : c.value)
+  const photos = rows(3)[0] ? Number(v(rows(3)[0][0])) : json ? 0 : null
+  return { month, photos: Number.isFinite(photos) ? photos : null, rows: rows(1).map((r) => ({ kind: String(v(r[0])), calls: Number(v(r[1])) || 0, prompt: Number(v(r[2])) || 0, completion: Number(v(r[3])) || 0 })) }
+}
 
 /** OpenRouter's models with prices per 1M tokens (in USD), newest/popular first. */
 let modelsCache = null
