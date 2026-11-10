@@ -100,13 +100,13 @@ export function toggleFoodMeal(db: DB, mealId: string, source: string, now = new
  * old rows are cancelled, the new ones added). Null when it is not a live meal
  * on a day that can still be changed.
  */
-export function editFoodMeal(db: DB, mealId: string, input: { items: unknown[]; name?: string; type?: MealType }, source: string, now = new Date()): { id: string; totals: Totals } | null {
+export function editFoodMeal(db: DB, mealId: string, input: { items: unknown[]; name?: string; type?: MealType; photos?: string[] }, source: string, now = new Date()): { id: string; totals: Totals } | null {
   const today = sportToday(now)
   const log = readFoodLog(db, today)
   const old = log.meals.find((m) => m.id === mealId)
   if (!old || old.day < addDays(today, -PAST_DAYS)) return null
   if (mealsOfDay(log, bodyEvents(db, addDays(old.day, -1), old.day), old.day).find((m) => m.id === mealId)?.removed) return null
-  const made = addFoodMeal(db, { items: input.items, name: input.name, day: old.day, type: input.type ?? old.type, at: old.at, supp: old.supp, source: old.source, slot: old.slot, photos: old.photos }, source, now)
+  const made = addFoodMeal(db, { items: input.items, name: input.name, day: old.day, type: input.type ?? old.type, at: old.at, supp: old.supp, source: old.source, slot: old.slot, photos: input.photos ?? old.photos }, source, now)
   if (!made) return null
   toggleFoodMeal(db, mealId, source, now)
   const cur = readFoodLog(db, today)

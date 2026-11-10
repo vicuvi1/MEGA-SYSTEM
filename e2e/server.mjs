@@ -755,6 +755,9 @@ const fakeAi = (q, r) => {
   if (b.op === 'setBudget') return send({ ok: true, budget: { ...budget, budget: Number(b.usd) || 0 } })
   if (b.op === 'usage')
     return send({ today: { calls: 14, cost: 0.083, tokens: 112000 }, week: { calls: 96, cost: 0.61, tokens: 790000 }, month: { calls: 380, cost: 2.4, tokens: 3100000 }, byModel: [{ model: 'deepseek/deepseek-v4.1-flash', calls: 340, cost: 0.9, tokens: 2800000 }, { model: 'anthropic/claude-sonnet-5.5', calls: 40, cost: 1.5, tokens: 300000 }], recent: [{ at: new Date().toISOString(), model: 'anthropic/claude-sonnet-5.5', kind: 'chat', prompt: 8200, completion: 420, cost: 0.031 }], credits: { total: 20, used: 7.5, left: 12.5 }, budget })
+  // The cost meter (Settings → Ben → AI cost): made-up token counts of this month's photo reads.
+  if (b.op === 'photoCost')
+    return send({ month: new Date().toISOString().slice(0, 7), photos: 40, rows: [{ kind: 'foodPhoto', calls: 36, prompt: 54000, completion: 14400 }, { kind: 'foodPhoto2', calls: 4, prompt: 6000, completion: 5600 }] })
   if (b.op === 'eval')
     return send({ model: b.model || 'deepseek/deepseek-v4.1-flash', passed: 17, total: 20, cost: 0.042, calls: 23, results: [
       { id: 'spend', say: 'spent 50 lei on lunch', want: 'logs a 50 lei expense', ok: true, trace: '✅ Logged: lunch 50\nREPLY: Logged.', ms: 3200 },

@@ -129,7 +129,7 @@ describe('an album of meal photos on Telegram', () => {
     expect(prev.text).toMatch(/Total ~596 kcal · 47 g protein/)
     const id = w.setting('food_ben').draft.id
     const kb = prev.reply_markup.inline_keyboard
-    expect(kb[kb.length - 1].map((b: any) => b.callback_data)).toEqual([`fd|N|${id}`])
+    expect(kb[kb.length - 1].map((b: any) => b.callback_data)).toEqual([`fd|t|${id}`, `fd|N|${id}`])
     expect(kb[kb.length - 2][1]).toEqual({ text: '➕ Add photo', callback_data: `fd|a|${id}` })
     // The parts are gone; only the preview's file ids are kept (for "Add another photo"), never a picture.
     expect(w.photoRows().filter((k) => k.startsWith('fdp:'))).toEqual([])

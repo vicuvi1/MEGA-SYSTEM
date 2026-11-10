@@ -1353,6 +1353,7 @@ export function DesktopIsland() {
     : a.kind === 'closeDay' ? 'Opening Close your day…'
     : a.kind === 'todoDone' ? `✓ ${a.content}`
     : a.kind === 'clipSave' ? (a.to === 'task' ? 'Adding to Todoist…' : 'Saving to Notebook…')
+    : a.kind === 'foodUndo' ? 'Removing the meal…'
     : a.kind === 'book' ? 'Finding a free slot…'
     : a.kind === 'voice' ? '🎤 Sent to Ben'
     : a.kind === 'pause' ? '⏸ Paused'
@@ -1466,7 +1467,7 @@ export function DesktopIsland() {
       close()
     }
     // Answered the thing that peeked: it goes back to the pill.
-    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'water', 'coach', 'studyTime'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)) || (a.kind === 'center' && a.op === 'remind'))) close()
+    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'foodUndo', 'water', 'coach', 'studyTime'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)) || (a.kind === 'center' && a.op === 'remind'))) close()
   }
   tapRef.current = tap
   // IC4: what Enter will do, live while you type (the same rules as the command bar).

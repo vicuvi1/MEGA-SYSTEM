@@ -1021,6 +1021,34 @@
    ],
    "evidence": "2026-11-10: the study unit tests pass (clock pinned, any time zone); smoke 'Study Time: quick add → pomodoro …', 'Study Time: count up …, Stats …', 'Study Time: your study tasks from Todoist …' and 'Study Time on the island: …' pass; tabs at 1280x720: timer 1.18, stats 1.54, sessions 1.00 screens (checked at 1.575).",
    "notes": "Desktop first. Still no schema change: sessions are focus_sessions rows; study_log keeps per session block, break and pause minutes, pomodoros and the note; study_blocks keeps blocks (order, repeat, estimated pomodoros, Todoist link), subject colours and emoji, weekly goals and the timer and sound prefs. Pure rules: core/studyTime.ts, studyPlan.ts (quick add, Todoist pull, tomatoes), studyInsights.ts (goals, best hours for the planner and Ben via life.study.bestHours, heat map, timeline, CSV), studyNotify.ts (the notices). A pomodoro run is one session with breaks (pomo.at moves on), not one session per pomodoro."
+  },
+  {
+   "id": "F-FOOD-PASTE",
+   "priority": 1,
+   "area": "body",
+   "title": "Paste from AI: a LIFE-FOOD block from his own AI app logs every meal at once (desktop + Telegram)",
+   "user_visible_behavior": "Body → Food → Log food → Paste from AI: Copy AI prompt (the fixed prompt, FOOD_PASTE_PROMPT), paste the answer from ChatGPT, Grok or Gemini; a live preview lists every meal (name, type, date and time from the block, else now and a type from the time) and every food with grams, kcal, P, C, F, fibre; grams can be fixed (numbers scale), foods removed; lines it could not read and kcal far from 4P+4C+9F are listed as warnings; a food without grams must be filled in. Log all saves each meal as a normal food-counter meal (source 'paste'), Undo all takes them back, each meal can be kept as a repeat meal. On Telegram a message starting with LIFE-FOOD is logged the same way (the same block twice logs once), with each meal and food listed, protein left, Undo per meal / all and Repeat meal buttons; only the owner's chats. No points.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/foodPaste.test.ts src/server/foodPhotoExtras.server.test.ts",
+    "SMOKE_ONLY=\"Food paste\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: foodPaste tests (fences, bullets, bold, lower case, commas, ~ and ≈, ranges, tabs, missing fields, warnings) and the Telegram LIFE-FOOD test pass; smoke 'Food paste from AI: …' passes (2 meals, a grams fix, Log all +1,160 kcal, Undo all, no points).",
+   "notes": "core/foodPaste.ts (parser, prompt, pasteToLog, pasteId), body/FoodPaste.tsx, web/foodBridge.ts pasteLog, web/bots/foodBot.ts pasteMessage."
+  },
+  {
+   "id": "F-FOOD-PHOTO-3",
+   "priority": 1,
+   "area": "body",
+   "title": "Food photos round 3: before & after, barcode, labels, score, accuracy, next meal, workout timing, night summary, gallery, charts, drag-drop, island notice, usual-time reminders, AI cost",
+   "user_visible_behavior": "Every meal row shows each food with grams, kcal, P, C, F, the date and time and an A-D score. An after photo within 90 min logs only what was eaten (app switch, Telegram Update button). A barcode is looked up in Open Food Facts (the AI's numbers and a line when it can't be reached); label and barcode foods become saved foods. Telegram previews change the meal type in one tap, and every food reply ends with the protein left and real foods; a note after training without protein; a night food summary on Telegram (totals, best meal, one change; switch in Pushes). Body → Food → More: next meal from what is left and the time to training or bed, Photos by day (tiles, day totals, tap → every food and Fix it), Charts (kcal and protein per meal type, eating times, most eaten); Week: do your logs match your weight. Drop a photo anywhere on Food. App photos go to Photo Locker. The island shows 'Lunch logged: 42 g protein, 680 kcal' with Undo. Meal reminders come at his usual times ('Lunch? Send a photo'). Settings → Ben → AI cost: photos read this month and the money from real token counts (Gemini 3.5 Flash $1.50 / $9 by default, editable). No points.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Food counter|Food photo|Food paste|Photo Locker|food notice|Settings AI cost|Long pages\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: unit and server tests pass (clock pinned, made-up data); smoke 'Food photo extras: …', 'Desktop island food notice: …', 'Settings AI cost: …', the full smoke run passes (Settings → Ben: pushes 1.71, cost 1.12 of 2 screens; Pushes folds meals, coach nudges and the weekly check).",
+   "notes": "core/foodScore.ts, foodBarcode.ts, foodLeftovers.ts, foodInsights.ts, foodTiming.ts, aiCost.ts, islandFood.ts; main/foodInsights.ts; api/_vision.mjs lookupBarcode + photos:<month>, api/ai.mjs photoCost; body/FoodGallery.tsx, FoodCharts.tsx, AiCostPanel.tsx; web/bots/foodBot.ts (after photos, type button, label foods, protein left, summary, usual times)."
   }
  ]
 }

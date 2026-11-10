@@ -76,6 +76,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'shift'; mode: 'normal' | 'short' | 'off' }
   | { kind: 'todoDone'; id: string; content: string }
   | { kind: 'clipSave'; to: 'task' | 'note'; text: string; alertId: string }
+  /** The island's "Lunch logged" notice: Undo removes that meal (the food counter's own toggle). */
+  | { kind: 'foodUndo'; mealId: string; alertId: string }
   | { kind: 'book'; text: string }
   | { kind: 'voice'; mime: string; data: string }
   | { kind: 'push'; block: IslandBlock; minutes: number }
@@ -144,7 +146,7 @@ export type IslandAction = { id?: string } & (
 
 export interface IslandAlert {
   id: string
-  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown' | 'push1' | 'push2' | 'push3' | 'launch' | 'win' | 'pulse' | 'countdown' | 'streakRisk' | 'mirror' | 'gaming'
+  kind: 'ben' | 'block' | 'over' | 'sleep' | 'drift' | 'end' | 'quality' | 'water' | 'move' | 'eyes' | 'winddown' | 'morning' | 'clip' | 'highlight' | 'reward' | 'distract' | 'late' | 'back' | 'suggest' | 'recap' | 'weather' | 'widget' | 'goal' | 'remind' | 'praise' | 'refocus' | 'coach' | 'checkin' | 'brief' | 'shutdown' | 'push1' | 'push2' | 'push3' | 'launch' | 'win' | 'pulse' | 'countdown' | 'streakRisk' | 'mirror' | 'gaming' | 'food'
   title: string
   text: string
   face?: string

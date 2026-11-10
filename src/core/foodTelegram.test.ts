@@ -75,7 +75,7 @@ describe('a meal photo', () => {
     const k = photoDraftKeyboard(D).inline_keyboard
     expect(k[0].map((b) => b.callback_data)).toEqual(['fd|i|ph1|0', 'fd|i|ph1|1'])
     expect(k[k.length - 2].map((b) => b.callback_data)).toEqual(['fd|s|ph1', 'fd|a|ph1'])
-    expect(k[k.length - 1].map((b) => b.callback_data)).toEqual(['fd|N|ph1'])
+    expect(k[k.length - 1].map((b) => b.callback_data)).toEqual(['fd|t|ph1', 'fd|N|ph1'])
     for (const row of k) for (const b of row) expect(b.callback_data.length).toBeLessThanOrEqual(64)
     expect(D.items.map((i) => i.kcal)).toEqual([216, 160, 90])
   })
@@ -134,7 +134,7 @@ describe('meal reminders', () => {
   it('at the slot time, when nothing was logged since the slot before: one gentle nudge with Log it / 30 min / Skip', () => {
     const p = decideMealReminder(mr())!
     expect(p.key).toBe('meal:2030-03-12:lunch')
-    expect(p.text).toBe('Lunch time: log your bulgur salad + Rye bread?')
+    expect(p.text).toBe('Lunch? Send a photo, or log your usual bulgur salad + Rye bread.')
     expect(p.buttons.map((b) => b.op)).toEqual(['log', 'later', 'skip'])
     expect(p.channel).toBe('telegram')
     const tg = pushTelegram(p)
@@ -177,7 +177,7 @@ describe('meal reminders', () => {
     expect(decideMealReminder(mr({ now: new Date('2030-03-12T13:20:00'), log: snoozed }))).toBeNull()
     const again = decideMealReminder(mr({ now: new Date('2030-03-12T13:36:00'), log: snoozed }))!
     expect(again.key).toBe('meal:2030-03-12:lunch:again')
-    expect(again.text).toMatch(/^Still time to log lunch/)
+    expect(again.text).toMatch(/^Still no lunch logged/)
     expect(again.buttons.map((b) => b.op)).toEqual(['log', 'skip'])
     expect(decideMealReminder(mr({ now: new Date('2030-03-12T13:36:00'), log: snoozed, lastLogAt: Date.parse('2030-03-12T13:30:00') }))).toBeNull()
     const done = claim(snoozed, 'meal:2030-03-12:lunch:again', 'telegram', t0).log

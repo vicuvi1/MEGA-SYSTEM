@@ -123,7 +123,7 @@ describe('a meal photo on Telegram', () => {
     // The sauce was hard to see: one short question instead of a guess.
     expect(prev.text).toMatch(/About how many grams of sauce\?/)
     const id = w.setting('food_ben').draft.id
-    expect(prev.reply_markup.inline_keyboard.pop().map((b: any) => b.callback_data)).toEqual([`fd|N|${id}`])
+    expect(prev.reply_markup.inline_keyboard.pop().map((b: any) => b.callback_data)).toEqual([`fd|t|${id}`, `fd|N|${id}`])
     expect(foodRows(w)).toEqual([])
 
     // + on the eggs (4), then "eggs 3" back; swap the sauce for a saved food, then − it away to half.
@@ -148,7 +148,10 @@ describe('a meal photo on Telegram', () => {
     expect(w.q('SELECT COUNT(*) FROM ledger')[0][0]).toBe(ledger0)
     const saved = w.sent.filter((s) => s.method === 'editMessageText').pop()!.body
     expect(saved.text).toMatch(/^✅ <b>Breakfast saved<\/b> · Tue 12 Mar, 08:10\n• Egg 150 g: 216 kcal · P 19/)
-    expect(saved.text).toMatch(/\n3 Egg \+ 2 Rye bread \+ Banana: ~481 kcal, 26 g protein\. Today: 481 \/ [\d,]+ kcal, 26 \/ 150 g\. ~[\d,]+ kcal left, 124 g protein; next: your lunch, afternoon, evening and anytime meals cover it \(~[\d,]+ kcal\)\.$/)
+    expect(saved.text).toMatch(/\n3 Egg \+ 2 Rye bread \+ Banana: ~481 kcal, 26 g protein\. Today: 481 \/ [\d,]+ kcal, 26 \/ 150 g\. ~[\d,]+ kcal left, 124 g protein; next: your lunch, afternoon, evening and anytime meals cover it \(~[\d,]+ kcal\)\.\n/)
+    // Every food reply ends with the protein left today and real foods to close it; the score has its line.
+    expect(saved.text).toMatch(/\n🥩 124 g protein left today: [^\n]+\.$/)
+    expect(saved.text).toMatch(/\n🏅 Score <b>[A-D]<\/b>: /)
     expect(saved.reply_markup.inline_keyboard[0][0].callback_data).toMatch(/^fd\|u\|fd-p/)
 
     // The photo is in no table and in no message.
@@ -237,17 +240,17 @@ describe('meal reminders on the tick', () => {
     // Breakfast logged at 07:55 (before its 07:45 reminder could fire on this tick? it did not: logged first).
     await handleTelegramUpdate(w.env as any, TOKEN, tap('fd|g|sm-breakfast', CHAT, 5))
     await runTick(w.env as any, at('2030-03-12T08:00:00'))
-    expect(texts(w.sent).filter((m) => /time: log your/.test(m.text ?? ''))).toHaveLength(0)
+    expect(texts(w.sent).filter((m) => /\? Send a photo/.test(m.text ?? ''))).toHaveLength(0)
     await runTick(w.env as any, at('2030-03-12T12:50:00'))
-    expect(texts(w.sent).filter((m) => /time: log your/.test(m.text ?? ''))).toHaveLength(0)
+    expect(texts(w.sent).filter((m) => /\? Send a photo/.test(m.text ?? ''))).toHaveLength(0)
     await runTick(w.env as any, at('2030-03-12T13:05:00'))
-    const r = texts(w.sent).filter((m) => /Lunch time: log your/.test(m.text ?? ''))
+    const r = texts(w.sent).filter((m) => /Lunch\? Send a photo/.test(m.text ?? ''))
     expect(r).toHaveLength(1)
-    expect(r[0].text).toMatch(/Lunch time: log your bulgur salad with vegetables \+ Rye bread\?/)
+    expect(r[0].text).toMatch(/Lunch\? Send a photo, or log your usual bulgur salad with vegetables \+ Rye bread\./)
     expect(r[0].reply_markup.inline_keyboard[0].map((b: any) => b.callback_data)).toEqual(['fd|l|meal:2030-03-12:lunch|0', 'fd|z|meal:2030-03-12:lunch', 'fd|k|meal:2030-03-12:lunch'])
     expect(w.setting('ben_pushes').recs['meal:2030-03-12:lunch'].via).toBe('telegram')
     await runTick(w.env as any, at('2030-03-12T13:20:00'))
-    expect(texts(w.sent).filter((m) => /Lunch time/.test(m.text ?? ''))).toHaveLength(1) // one key per slot a day
+    expect(texts(w.sent).filter((m) => /Lunch\? Send/.test(m.text ?? ''))).toHaveLength(1) // one key per slot a day
     await handleTelegramUpdate(w.env as any, TOKEN, tap('fd|l|meal:2030-03-12:lunch|0'))
     await handleTelegramUpdate(w.env as any, TOKEN, tap('fd|l|meal:2030-03-12:lunch|0'))
     const lunch = w.setting('food_log').meals.filter((m: any) => m.slot === 'ds-lunch')
@@ -265,30 +268,30 @@ describe('meal reminders on the tick', () => {
     await runTick(w.env as any, at('2030-03-12T13:20:00'))
     expect(texts(w.sent).filter((m) => /log (your|lunch)/i.test(m.text ?? ''))).toHaveLength(1)
     await runTick(w.env as any, at('2030-03-12T13:36:00'))
-    const again = texts(w.sent).filter((m) => /Still time to log lunch/.test(m.text ?? ''))
+    const again = texts(w.sent).filter((m) => /Still no lunch logged/.test(m.text ?? ''))
     expect(again).toHaveLength(1)
     await handleTelegramUpdate(w.env as any, TOKEN, tap('fd|k|meal:2030-03-12:lunch:again'))
     expect(last(w.sent).text).toMatch(/Skipped/)
     // Afternoon is the third today; dinner would be the fourth → none.
     await runTick(w.env as any, at('2030-03-12T16:35:00'))
-    expect(texts(w.sent).filter((m) => /Afternoon snack time/.test(m.text ?? ''))).toHaveLength(1)
+    expect(texts(w.sent).filter((m) => /Afternoon snack\? Send/.test(m.text ?? ''))).toHaveLength(1)
     await runTick(w.env as any, at('2030-03-12T19:35:00'))
-    expect(texts(w.sent).filter((m) => /Dinner time/.test(m.text ?? ''))).toHaveLength(0)
+    expect(texts(w.sent).filter((m) => /Dinner\? Send/.test(m.text ?? ''))).toHaveLength(0)
     expect(Object.keys(w.setting('ben_pushes').recs).filter((k) => k.startsWith('meal:'))).toHaveLength(3)
 
     const quiet = world({ ...base, notif_settings: { quiet: { from: '12:00', to: '14:00' } } })
     await runTick(quiet.env as any, at('2030-03-12T13:05:00'))
-    expect(texts(quiet.sent).filter((m) => /Lunch time/.test(m.text ?? ''))).toHaveLength(0)
+    expect(texts(quiet.sent).filter((m) => /Lunch\? Send/.test(m.text ?? ''))).toHaveLength(0)
     const muted = world({ ...base, food_ben: { draft: null, muteUntil: new Date('2030-03-15T00:00:00').getTime() } })
     await runTick(muted.env as any, at('2030-03-12T13:05:00'))
-    expect(texts(muted.sent).filter((m) => /Lunch time/.test(m.text ?? ''))).toHaveLength(0)
+    expect(texts(muted.sent).filter((m) => /Lunch\? Send/.test(m.text ?? ''))).toHaveLength(0)
     const off = world({ ...base, life_fit: { push: 'firm', pushes: { ...NO_COACH, meals: false } } })
     await runTick(off.env as any, at('2030-03-12T13:05:00'))
-    expect(texts(off.sent).filter((m) => /Lunch time/.test(m.text ?? ''))).toHaveLength(0)
+    expect(texts(off.sent).filter((m) => /Lunch\? Send/.test(m.text ?? ''))).toHaveLength(0)
     // At the PC: Telegram stays quiet and the island decides the same reminder (one key).
     const pc = world({ ...base, ben_pc_seen: { at: new Date('2030-03-12T13:04:00').getTime(), active: true } })
     await runTick(pc.env as any, at('2030-03-12T13:05:00'))
-    expect(texts(pc.sent).filter((m) => /Lunch time/.test(m.text ?? ''))).toHaveLength(0)
+    expect(texts(pc.sent).filter((m) => /Lunch\? Send/.test(m.text ?? ''))).toHaveLength(0)
   }, 90_000)
 
   it("the island's check: a meal reminder first, never in a meeting", () => {

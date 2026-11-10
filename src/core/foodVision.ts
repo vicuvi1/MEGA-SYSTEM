@@ -11,6 +11,7 @@
 // Nothing is saved from here: the owner checks the review screen and taps Save.
 import { kcalOf, mealTypeAt, type FoodItem, type MealType } from './food'
 import { totalsOf, type FoodSaved } from './foodSaved'
+import { cleanBarcode, cleanProduct, productAt, productName, type Product, type ProductMiss } from './foodBarcode'
 
 /** One of the owner's saved foods or meals, as the AI sees it (numbers per portion). */
 export interface SavedFoodRef {
@@ -43,11 +44,15 @@ export interface VisionItem {
   /** The likely range of grams (lo ≤ grams ≤ hi). */
   lo?: number
   hi?: number
-  /** Where the numbers come from: a label in the photo, a saved food, his usual portion, or the AI's estimate. */
+  /** Where the numbers come from: a label in the photo, a barcode (Open Food Facts), a saved food, his usual portion, or the AI's estimate. */
   src?: VisionSource
+  /** Grams of fibre, when the AI gave it (the meal score estimates it otherwise). */
+  fiber?: number
+  /** Ultra-processed (sausage, chips, sweets, soda…), when the AI said so. */
+  upf?: boolean
 }
 
-export type VisionSource = 'label' | 'saved' | 'memory' | 'estimate'
+export type VisionSource = 'label' | 'barcode' | 'saved' | 'memory' | 'estimate'
 
 export interface VisionTotals {
   kcal: number
@@ -65,6 +70,10 @@ export interface VisionResult {
   question?: { index: number; text: string } | null
   /** A hidden fat or sugar that could add 100+ kcal and can't be seen (oil, butter, sauce, sugar): one tap adds it. */
   hidden?: HiddenKind | null
+  /** A barcode in the photo: its product (numbers used for that food), or why there were none. */
+  barcode?: { code: string; product: Product | null; miss: ProductMiss | null } | null
+  /** The photo shows what was LEFT of a meal (a partly eaten plate): the items are the leftovers. */
+  leftovers?: boolean
 }
 
 export type HiddenKind = 'oil' | 'butter' | 'sauce' | 'sugar'
@@ -167,7 +176,31 @@ export function cleanVisionItem(raw: any, saved: SavedFoodRef[] = [], photos = 1
   const k = clamp(raw.kcal, 0, 8000)
   const kcal = Math.round(k > 0 ? k : kcalOf(protein, carbs, fat))
   if (grams < 1 && kcal < 1) return null
-  return { name, matchedSavedFoodId: null, qty: r1(qty), unit: text(raw.unit, 20) || 'serving', grams, kcal, protein, carbs, fat, confidence: conf, ...photoOf(raw, photos), src: label ? 'label' : 'estimate', ...rangeOf(grams, conf, raw.gramsLow, raw.gramsHigh) }
+  return { name, matchedSavedFoodId: null, qty: r1(qty), unit: text(raw.unit, 20) || 'serving', grams, kcal, protein, carbs, fat, confidence: conf, ...photoOf(raw, photos), src: label ? 'label' : 'estimate', ...rangeOf(grams, conf, raw.gramsLow, raw.gramsHigh), ...extrasOf(raw) }
+}
+
+/** Fibre and "ultra-processed" from the read, when it gave them (for the meal score). */
+function extrasOf(raw: any): { fiber?: number; upf?: boolean } {
+  const f = raw?.fiber == null ? NaN : clamp(raw.fiber, 0, 200, NaN)
+  return { ...(Number.isFinite(f) ? { fiber: r1(f) } : {}), ...(typeof raw?.ultra === 'boolean' ? { upf: raw.ultra } : typeof raw?.upf === 'boolean' ? { upf: raw.upf } : {}) }
+}
+
+/**
+ * A barcode's product on the right food: the one the AI marked (fromBarcode),
+ * else the only food, else the food whose name shares a word with the product.
+ * Its numbers per 100 g × the grams eaten (or one serving, or 100 g) replace the estimate.
+ */
+export function applyProduct(items: VisionItem[], p: Product, marked: number): VisionItem[] {
+  const words = (s: string) => new Set(foodKey(s).split(' ').filter(Boolean))
+  const pw = words(`${p.brand} ${p.name}`)
+  let i = marked >= 0 && marked < items.length ? marked : items.length === 1 ? 0 : -1
+  if (i < 0) i = items.findIndex((it) => !it.matchedSavedFoodId && [...words(it.name)].some((w) => pw.has(w)))
+  if (i < 0) return items
+  const it = items[i]
+  const g = it.grams > 0 ? it.grams : p.servingG || 100
+  const at = productAt(p, g)
+  const next: VisionItem = { ...it, name: productName(p), matchedSavedFoodId: null, grams: g, ...at, confidence: 'high', src: 'barcode', ...rangeOf(g, 'high') }
+  return items.map((x, k) => (k === i ? next : x))
 }
 
 /** The meal's totals, always added up from the items. */
@@ -185,12 +218,20 @@ export function validateVision(raw: unknown, saved: SavedFoodRef[] = [], photos 
   if (!o || typeof o !== 'object' || Array.isArray(o)) return { ok: false, error: "The AI's answer could not be read. Try again, or copy the prompt instead." }
   if (o.unclear === true) return { ok: false, error: UNCLEAR_PHOTO }
   if (!Array.isArray(o.items)) return { ok: false, error: "The AI's answer had no list of foods. Try again, or copy the prompt instead." }
-  const read = o.items.map((x: unknown) => cleanVisionItem(x, saved, photos)).filter((x: VisionItem | null): x is VisionItem => !!x).slice(0, MAX_ITEMS)
-  if (!read.length) return { ok: false, error: photos > 1 ? 'No food was found in the photos. Try clearer photos, or add the foods by hand.' : 'No food was found in the photo. Try a clearer photo, or add the foods by hand.' }
+  const leftovers = o.leftovers === true
+  const pairs = (o.items as unknown[]).map((x, k) => ({ it: cleanVisionItem(x, saved, photos), marked: !!(x && typeof x === 'object' && (x as any).fromBarcode === true), k })).filter((p) => !!p.it).slice(0, MAX_ITEMS)
+  let read = pairs.map((p) => p.it as VisionItem)
+  // An empty "after" photo is a clean plate: everything was eaten.
+  if (!read.length && !leftovers) return { ok: false, error: photos > 1 ? 'No food was found in the photos. Try clearer photos, or add the foods by hand.' : 'No food was found in the photo. Try a clearer photo, or add the foods by hand.' }
+  // A barcode: Open Food Facts' numbers (looked up on the server, checked again here) for that food.
+  const code = cleanBarcode(o.barcode ?? o.product?.code)
+  const product = code ? cleanProduct(o.product) : null
+  if (product) read = applyProduct(read, product, pairs.findIndex((p) => p.marked))
+  const barcode = code ? { code, product, miss: product ? null : o.productMiss === 'offline' ? ('offline' as const) : ('notFound' as const) } : null
   // His own portions (learned from his corrections) beat a guess.
   const items = memory ? applyPortions(read, memory, saved) : read
   const hidden = (['oil', 'butter', 'sauce', 'sugar'] as HiddenKind[]).includes(o.hidden) && !items.some((i: VisionItem) => foodKey(i.name).includes(o.hidden)) ? (o.hidden as HiddenKind) : null
-  return { ok: true, result: { items, totals: visionTotals(items), message: text(o.message, 200), question: questionFor(items), hidden } }
+  return { ok: true, result: { items, totals: visionTotals(items), message: text(o.message, 200), question: leftovers ? null : questionFor(items), hidden: leftovers ? null : hidden, ...(barcode ? { barcode } : {}), ...(leftovers ? { leftovers } : {}) } }
 }
 
 /** The item at a new amount: grams and macros scale together (qty from the AI's base). A saved food uses its own numbers × qty. */
@@ -198,7 +239,7 @@ export function scaleVisionItem(base: VisionItem, factor: number, saved: SavedFo
   const f = clamp(factor, 0.05, 20, 1)
   const match = base.matchedSavedFoodId ? saved.find((s) => s.id === base.matchedSavedFoodId) : undefined
   if (match) return { ...fromSaved(match, base.qty * f, base.grams * f), unit: base.unit, confidence: base.confidence, ...(base.photo ? { photo: base.photo } : {}) }
-  const out: VisionItem = { ...base, qty: r1(base.qty * f), grams: Math.round(base.grams * f), kcal: Math.round(base.kcal * f), protein: r1(base.protein * f), carbs: r1(base.carbs * f), fat: r1(base.fat * f) }
+  const out: VisionItem = { ...base, qty: r1(base.qty * f), grams: Math.round(base.grams * f), kcal: Math.round(base.kcal * f), protein: r1(base.protein * f), carbs: r1(base.carbs * f), fat: r1(base.fat * f), ...(base.fiber != null ? { fiber: r1(base.fiber * f) } : {}) }
   if (base.lo != null && base.hi != null) (out.lo = Math.max(1, Math.round(base.lo * f))), (out.hi = Math.max(1, Math.round(base.hi * f)))
   return out
 }
@@ -226,7 +267,11 @@ export const toFoodItems = (items: VisionItem[]): FoodItem[] =>
       // The likely range, so the meal row can show "180–260 g".
       ...(i.lo != null && i.hi != null && i.lo < i.hi ? { lo: Math.round(i.lo), hi: Math.round(i.hi) } : {}),
       // A saved food keeps how many portions (like a one-tap log).
-      ...(i.matchedSavedFoodId ? { qty: r1(i.qty), unit: i.unit } : {})
+      ...(i.matchedSavedFoodId ? { qty: r1(i.qty), unit: i.unit } : {}),
+      // For the meal score and "saved as a food": fibre, ultra-processed, a label or barcode read.
+      ...(i.fiber != null ? { fiber: r1(i.fiber) } : {}),
+      ...(typeof i.upf === 'boolean' ? { upf: i.upf } : {}),
+      ...(i.src === 'label' || i.src === 'barcode' ? { src: i.src } : {})
     }))
 
 /** The owner's starred meals as saved foods (one portion = the whole meal). */
@@ -354,7 +399,7 @@ export function learnPortions(mem: PortionMemory | null | undefined, base: Visio
   const out: PortionMemory = { ...cleanPortions(mem) }
   now.forEach((it, i) => {
     const b = base[i]
-    if (!b || it.matchedSavedFoodId || it.src === 'label' || !(it.grams >= 5)) return
+    if (!b || it.matchedSavedFoodId || it.src === 'label' || it.src === 'barcode' || !(it.grams >= 5)) return
     if (Math.abs(it.grams - b.grams) < Math.max(5, b.grams * 0.05)) return
     const k = foodKey(it.name)
     if (!k) return
@@ -371,7 +416,7 @@ export function learnPortions(mem: PortionMemory | null | undefined, base: Visio
  */
 export function applyPortions(items: VisionItem[], mem: PortionMemory, saved: SavedFoodRef[] = []): VisionItem[] {
   return items.map((it) => {
-    if (it.matchedSavedFoodId || it.src === 'label' || it.confidence === 'high' || !(it.grams > 0)) return it
+    if (it.matchedSavedFoodId || it.src === 'label' || it.src === 'barcode' || it.confidence === 'high' || !(it.grams > 0)) return it
     const p = portionFor(mem, it.name)
     if (!p || Math.abs(p.g - it.grams) < 5) return it
     const scaled = scaleVisionItem(it, p.g / it.grams, saved)
@@ -405,7 +450,7 @@ export function pickSaved<T extends { name: string }>(saved: T[], note = '', max
 
 /** One short question instead of a guess: the first food the AI could not see well (not a label, saved food or his portion). */
 export function questionFor(items: VisionItem[]): { index: number; text: string } | null {
-  const i = items.findIndex((it) => it.confidence === 'low' && !it.matchedSavedFoodId && it.src !== 'label' && it.src !== 'memory')
+  const i = items.findIndex((it) => it.confidence === 'low' && !it.matchedSavedFoodId && it.src !== 'label' && it.src !== 'barcode' && it.src !== 'memory')
   if (i < 0) return null
   return { index: i, text: `About how many grams of ${items[i].name.toLowerCase()}?` }
 }

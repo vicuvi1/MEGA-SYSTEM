@@ -129,19 +129,21 @@ export interface PushPrefs {
   offDays: number[]
   /** Meal reminders at the standard day's slots (core/foodBen.ts decideMealReminder). */
   meals: boolean
+  /** The food summary at night on Telegram (totals, the best meal, one change for tomorrow). */
+  foodSummary: boolean
   /** The coach's gentle nudges (core/coachTalk.ts): the morning one, midday protein, the evening check-in. */
   coachMorning: boolean
   coachProtein: boolean
   coachCheckin: boolean
 }
-export const DEFAULT_PUSH_PREFS: PushPrefs = { checkins: true, brief: true, shutdown: true, weekly: true, shutdownBefore: 30, offDays: [], meals: true, coachMorning: true, coachProtein: true, coachCheckin: true }
+export const DEFAULT_PUSH_PREFS: PushPrefs = { checkins: true, brief: true, shutdown: true, weekly: true, shutdownBefore: 30, offDays: [], meals: true, foodSummary: true, coachMorning: true, coachProtein: true, coachCheckin: true }
 export function cleanPushPrefs(raw: unknown): PushPrefs {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<PushPrefs>
   const d = DEFAULT_PUSH_PREFS
   const b = (x: unknown, def: boolean) => (typeof x === 'boolean' ? x : def)
   const before = typeof o.shutdownBefore === 'number' && Number.isFinite(o.shutdownBefore) ? Math.max(10, Math.min(120, Math.round(o.shutdownBefore / 5) * 5)) : d.shutdownBefore
   const offDays = Array.isArray(o.offDays) ? [...new Set(o.offDays.filter((x) => Number.isInteger(x) && x >= 0 && x <= 6))].sort() : d.offDays
-  return { checkins: b(o.checkins, d.checkins), brief: b(o.brief, d.brief), shutdown: b(o.shutdown, d.shutdown), weekly: b(o.weekly, d.weekly), shutdownBefore: before, offDays, meals: b(o.meals, d.meals), coachMorning: b(o.coachMorning, d.coachMorning), coachProtein: b(o.coachProtein, d.coachProtein), coachCheckin: b(o.coachCheckin, d.coachCheckin) }
+  return { checkins: b(o.checkins, d.checkins), brief: b(o.brief, d.brief), shutdown: b(o.shutdown, d.shutdown), weekly: b(o.weekly, d.weekly), shutdownBefore: before, offDays, meals: b(o.meals, d.meals), foodSummary: b(o.foodSummary, d.foodSummary), coachMorning: b(o.coachMorning, d.coachMorning), coachProtein: b(o.coachProtein, d.coachProtein), coachCheckin: b(o.coachCheckin, d.coachCheckin) }
 }
 
 const weekdayOf = (day: string) => new Date(`${day}T12:00:00Z`).getUTCDay()

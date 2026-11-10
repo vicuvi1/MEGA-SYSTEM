@@ -3,6 +3,7 @@ import { POPULAR_MODELS } from '@core/ai'
 import { features } from '../bridge'
 import { Icon } from '../Icon'
 import { BrainPanel } from '../BrainPanel'
+import { AiCostPanel } from '../AiCostPanel'
 import { BenNotes } from '../BenNotes'
 import { BenMemory } from '../BenMemory'
 import { CoachLooksPanel } from '../CoachLooksPanel'
@@ -22,6 +23,7 @@ export function BenSection({ s }: { s: SettingsState }) {
           <WinMusicPanel />
           <CoachLooksPanel />
           {!features.aiSettings && <BrainPanel />}
+          <AiCostPanel />
           <BenNotes />
           <BenMemory />
           {onGo && (

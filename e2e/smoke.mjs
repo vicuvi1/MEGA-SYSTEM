@@ -1013,7 +1013,7 @@ try {
     await pg.click(`${fc} .fd-log-btn`)
     await pg.waitForSelector(`.fdl-sheet .fdl-choices`, { timeout: 5000 })
     const choices = await pg.locator(`.fdl-sheet .fdl-choice b`).allInnerTexts()
-    if (choices.join('|') !== 'Photo|My meals|Type it') throw new Error(`the Log food sheet shows: ${choices.join(', ')}`)
+    if (choices.join('|') !== 'Photo|My meals|Type it|Paste from AI') throw new Error(`the Log food sheet shows: ${choices.join(', ')}`)
     await pg.click(`.fdl-sheet .fdl-close`)
     await pg.waitForSelector(`.fdl-sheet`, { state: 'detached', timeout: 5000 })
     await openFold(`${fc} .fd-more`)
@@ -1374,6 +1374,259 @@ try {
     } finally {
       await pg.unroute('**/api/ai')
       await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+  })
+  // Paste from AI: he reads his photos in his own AI app with the fixed prompt and pastes the LIFE-FOOD answer.
+  // A 2-meal sample with a code fence, bullets and **bold** → the live preview (every food with its numbers, a grams
+  // fix scales it) → Log all → both meals on Food with the right totals → Undo all takes them back. No points.
+  // FOOD_PASTE_SHOTS=<dir> saves the preview.
+  await step('Food paste from AI: the prompt, paste 2 meals with fences and bullets, the preview, a grams fix, Log all, the totals on Food, Undo all', async () => {
+    const shots = process.env.FOOD_PASTE_SHOTS
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="food"]')
+    const fc = '#ptp-body-food .fd-card'
+    await pg.waitForSelector(`${fc} .fd-log-btn`, { timeout: 20000 })
+    const kcalNow = async () => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(await pg.locator(`${fc} .fd-line`).innerText())?.[1] ?? 'x').replace(/,/g, ''))
+    const liveMeals = () => pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).count()
+    const k0 = await kcalNow()
+    const m0 = await liveMeals()
+    const points0 = await pg.evaluate(async () => {
+      const s = localStorage.getItem('life_web_session') ?? ''
+      const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT COUNT(*) FROM ledger', args: [] } }, { type: 'close' }] }) })
+      return (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? null
+    })
+    try {
+    await pg.click(`${fc} .fd-log-btn`)
+    await pg.click('.fdl-sheet .fdl-paste')
+    await pg.waitForSelector('.fdl-sheet .fpa-text', { timeout: 5000 })
+    if (!/^You are a precise nutrition analyst\./.test(await pg.locator('.fdl-sheet .fpa-prompt pre').textContent())) throw new Error('the AI prompt is not the fixed one')
+    if (!(await pg.locator('.fdl-sheet .fpa-copy', { hasText: 'Copy AI prompt' }).count())) throw new Error('no "Copy AI prompt" button')
+    const sample = [
+      'Here you go:',
+      '```',
+      'LIFE-FOOD v1',
+      'MEAL | Breakfast | now | Oats',
+      '* **Oats** | 80 g | P 10,5 | C 54 | F 5.5 | FIB 8 | KCAL 300 | CONF high | -',
+      '* milk | 250 g | P 8 | C 12 | F 8 | KCAL 150 | CONF medium | -',
+      'TOTAL | P 18.5 | C 66 | F 13.5 | KCAL 450',
+      '',
+      'MEAL | Lunch | now | Chicken and rice',
+      '- chicken breast | 200 g | P 62 | C 0 | F 7 | KCAL 310 | CONF high | -',
+      '- rice | 150-250 g | P 5 | C 56 | F 0.6 | KCAL 250 | CONF low | rough portion',
+      'END',
+      '```',
+      'Enjoy!'
+    ].join('\n')
+    await pg.fill('.fdl-sheet .fpa-text', sample)
+    await pg.waitForFunction(() => document.querySelectorAll('.fdl-sheet .fpa-meal').length === 2, null, { timeout: 5000 })
+    if ((await pg.locator('.fdl-sheet .fpa-item').count()) !== 4) throw new Error('the preview does not list the 4 foods')
+    if (await pg.locator('.fdl-sheet .fpa-warn').count()) throw new Error(`warnings for a clean block: ${await pg.locator('.fdl-sheet .fpa-warn').innerText()}`)
+    const totals = await pg.locator('.fdl-sheet .fpa-total').allInnerTexts()
+    if (!/^450 kcal · 19 g protein/.test(totals[0]) || !/^560 kcal · 67 g protein/.test(totals[1])) throw new Error(`meal totals: ${totals.join(' | ')}`)
+    if (!/^200$/.test(await pg.locator('.fdl-sheet .fpa-item').nth(3).locator('.fpa-grams input').inputValue())) throw new Error('the range 150-250 g is not read as 200 g')
+    if ((await pg.locator('.fdl-sheet .fpa-meal').first().locator('.fpa-type').innerText()).trim() !== 'Breakfast') throw new Error('the meal type from the block is not used')
+    // A grams fix scales that food's numbers: 500 g milk = 300 kcal.
+    await pg.locator('.fdl-sheet .fpa-item').nth(1).locator('.fpa-grams input').fill('500')
+    await pg.waitForFunction(() => /^600 kcal/.test(document.querySelector('.fdl-sheet .fpa-total')?.textContent ?? ''), null, { timeout: 3000 })
+    if (!/Log all · 2 meals · 1,160 kcal/.test(await pg.locator('.fdl-sheet .fpa-log').innerText())) throw new Error(`log button: ${await pg.locator('.fdl-sheet .fpa-log').innerText()}`)
+    if (shots) await pg.locator('.fdl-sheet .fdl-card').screenshot({ path: `${shots}/food-paste-preview.png` })
+    await pg.click('.fdl-sheet .fpa-log')
+    await pg.waitForSelector('.fdl-sheet .fpa-done', { timeout: 10000 })
+    if (!/Logged 2 meals/.test(await pg.locator('.fdl-sheet .fpa-done-line').innerText())) throw new Error('no "Logged 2 meals"')
+    if ((await pg.locator('.fdl-sheet .fpa-keep', { hasText: 'Save as repeat meal' }).count()) !== 2) throw new Error('no "Save as repeat meal" for each meal')
+    await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0 + 1160], { timeout: 10000 })
+    if ((await liveMeals()) !== m0 + 2) throw new Error(`expected 2 more meals, got ${(await liveMeals()) - m0}`)
+    const row = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Chicken and rice' }).first()
+    if (!/rice\s+200 g/.test((await row.locator('.fd-mitem').allInnerTexts()).join('|'))) throw new Error('the pasted meal row does not list its foods')
+    // Undo all: both meals stop counting.
+    await pg.click('.fdl-sheet .fpa-undo')
+    await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0], { timeout: 10000 })
+    } finally {
+      // Never leave the sheet open (or pasted meals counting) for the next steps.
+      if (await pg.locator('.fdl-sheet .fpa-undo').count()) await pg.click('.fdl-sheet .fpa-undo').catch(() => {})
+      if (await pg.locator('.fdl-sheet .fdl-close').count()) await pg.click('.fdl-sheet .fdl-close').catch(() => {})
+      await pg.waitForSelector('.fdl-sheet', { state: 'detached', timeout: 5000 }).catch(() => {})
+    }
+    const points1 = await pg.evaluate(async () => {
+      const s = localStorage.getItem('life_web_session') ?? ''
+      const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT COUNT(*) FROM ledger', args: [] } }, { type: 'close' }] }) })
+      return (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? null
+    })
+    if (points1 !== points0) throw new Error('pasting meals paid points')
+  })
+  // Food photo extras (desktop): a photo dropped anywhere on Body → Food is read like the Photo button (one request,
+  // one review); the review shows the barcode line (Open Food Facts couldn't be reached), a label food and the meal
+  // score; Save logs one meal with every food's numbers, date and time on its row, keeps the photo in Photo Locker
+  // and the label food as a saved food. A second photo the AI reads as leftovers changes that meal to what was eaten
+  // (no second meal). The gallery shows it by day with totals, a tap opens every food and Fix it; the charts follow.
+  // FOOD_PHOTO2_SHOTS=<dir> saves the review, the gallery and the charts. The meal is removed again at the end.
+  await step('Food photo extras: drop a photo on Food, barcode and label lines, the score, its photo kept, an after photo logs only what was eaten, the gallery by day with Fix it, the charts', async () => {
+    const shots = process.env.FOOD_PHOTO2_SHOTS
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('body')
+    await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+    await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
+    await pg.click('.body-page .ptabs [data-tab="food"]')
+    const fc = '#ptp-body-food .fd-card'
+    await pg.waitForSelector(`${fc} .fd-log-btn`, { timeout: 20000 })
+    const png = Buffer.from(await pg.evaluate(() => {
+      const c = document.createElement('canvas')
+      c.width = 1200
+      c.height = 900
+      const x = c.getContext('2d')
+      x.fillStyle = '#ece6da'
+      x.fillRect(0, 0, 1200, 900)
+      x.fillStyle = '#fff'
+      x.beginPath()
+      x.arc(600, 450, 380, 0, 7)
+      x.fill()
+      x.fillStyle = '#d9a35c'
+      x.fillRect(430, 320, 200, 140)
+      x.fillStyle = '#7b5a3a'
+      x.beginPath()
+      x.arc(720, 520, 110, 0, 7)
+      x.fill()
+      return c.toDataURL('image/png').split(',')[1]
+    }), 'base64')
+    const MEAL = {
+      items: [
+        { name: 'Grilled chicken', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 200, gramsLow: 170, gramsHigh: 230, kcal: 330, protein: 62, carbs: 0, fat: 7, confidence: 'high', fiber: 0, ultra: false },
+        { name: 'Buckwheat', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 200, gramsLow: 150, gramsHigh: 250, kcal: 184, protein: 7, carbs: 40, fat: 1, confidence: 'medium', fiber: 5, ultra: false },
+        { name: 'Protein yoghurt', matchedSavedFoodId: null, qty: 1, unit: 'cup', grams: 150, kcal: 105, protein: 15, carbs: 6, fat: 2, confidence: 'high', fromLabel: true, fromBarcode: true }
+      ],
+      message: 'Chicken, buckwheat and a yoghurt.',
+      barcode: '4006381333931',
+      productMiss: 'offline'
+    }
+    const AFTER = { items: [{ name: 'Buckwheat', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 100, kcal: 92, protein: 3.5, carbs: 20, fat: 0.5, confidence: 'medium' }], message: 'Some buckwheat left.', leftovers: true }
+    let mode = 'meal'
+    let calls = 0
+    await pg.route('**/api/ai', async (r) => {
+      const b = r.request().postDataJSON()
+      if (b?.op !== 'foodPhoto') return r.fallback()
+      calls++
+      return r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true, result: mode === 'after' ? AFTER : MEAL }) })
+    })
+    const kcalNow = async () => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(await pg.locator(`${fc} .fd-line`).innerText())?.[1] ?? 'x').replace(/,/g, ''))
+    const liveMeals = () => pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).count()
+    const drop = (type) =>
+      pg.evaluate(([sel, b64, t]) => {
+        const bin = atob(b64)
+        const u = new Uint8Array(bin.length)
+        for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i)
+        const dt = new DataTransfer()
+        dt.items.add(new File([u], 'meal.png', { type: 'image/png' }))
+        document.querySelector(sel).dispatchEvent(new DragEvent(t, { bubbles: true, cancelable: true, dataTransfer: dt }))
+      }, [fc, png.toString('base64'), type])
+    try {
+      const k0 = await kcalNow()
+      const m0 = await liveMeals()
+      // Dragging a file over Food shows the drop target; dropping it reads it like the Photo button.
+      await drop('dragover')
+      await pg.waitForSelector(`${fc} .fd-drop`, { timeout: 3000 })
+      if (!/Drop the photo to log this meal/.test(await pg.locator(`${fc} .fd-drop`).innerText())) throw new Error('the drop target does not say what it does')
+      await drop('drop')
+      await pg.waitForFunction((s) => document.querySelectorAll(`${s} .fph-review .fph-item`).length === 3, fc, { timeout: 15000 })
+      if (calls !== 1) throw new Error(`a dropped photo should be one request, got ${calls}`)
+      if (await pg.locator(`${fc} .fd-drop`).count()) throw new Error('the drop target stayed after the drop')
+      const review = `${fc} .fph-review`
+      if (!/Barcode 4006381333931 seen, but Open Food Facts couldn't be reached: the numbers are the AI's estimate\./.test(await pg.locator(`${review} .fph-miss`).innerText())) throw new Error('no line about the barcode lookup')
+      if (!(await pg.locator(`${review} .fph-item`).nth(2).locator('.fph-src.label').count())) throw new Error('the label food is not marked')
+      if (!/^[A-D]$/.test((await pg.locator(`${review} .fph-score .fd-grade`).innerText()).trim())) throw new Error('no meal score in the review')
+      if (await pg.locator(`${review} .fph-after.on`).count()) throw new Error('a plain meal photo was taken as an after photo')
+      if (shots) {
+        await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+        await pg.locator(review).evaluate((el) => el.scrollIntoView({ block: 'center' }))
+        await pg.waitForTimeout(300)
+        await pg.locator(review).screenshot({ path: `${shots}/food-photo-drop-review.png` })
+      }
+      await pg.click(`${review} .fph-save`)
+      await pg.waitForSelector(`${fc} .fph-done`, { timeout: 15000 })
+      await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals .fd-mlist > li:not(.removed)`).length === n + 1, [fc, m0], { timeout: 10000 })
+      if ((await kcalNow()) !== k0 + 619) throw new Error(`the day kcal went from ${k0} to ${await kcalNow()}, not +619`)
+      // The meal row: every food with grams and numbers, the date and time, the score, the photo from Photo Locker.
+      const row = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Grilled chicken' }).first()
+      const lines = await row.locator('.fd-mitem').allInnerTexts()
+      if (lines.length !== 3 || !/Buckwheat\s+200 g/.test(lines[1]) || !/184 kcal · P 7 · C 40 · F 1/.test(lines[1])) throw new Error(`the meal row's foods: ${lines.join(' | ')}`)
+      if (!/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}, \d{2}:\d{2}$/.test((await row.locator('.fd-when').innerText()).trim())) throw new Error(`the meal row has no date and time: ${await row.locator('.fd-when').innerText()}`)
+      if (!/^[A-D]$/.test((await row.locator('.fd-grade').innerText()).trim())) throw new Error('no score on the meal row')
+      await row.locator('.mp-thumb img').waitFor({ timeout: 10000 })
+      // The label food is a saved food now (one tap next time): in My meals' saved food chips.
+      await pg.waitForFunction(() => [...document.querySelectorAll('.toasts .toast')].some((t) => /Saved as a food: Protein yoghurt/.test(t.textContent ?? '')), null, { timeout: 8000 })
+      await pg.click(`${fc} .fd-log-btn`)
+      await pg.click('.fdl-sheet .fdl-meals')
+      if (!(await pg.locator('.fdl-sheet', { hasText: 'Protein yoghurt' }).count())) throw new Error('the label food is not among the saved foods')
+      await pg.click('.fdl-sheet .fdl-close')
+      await pg.waitForSelector('.fdl-sheet', { state: 'detached', timeout: 5000 })
+
+      // An after photo (the AI sees leftovers) within 90 minutes: only what was eaten counts, on the same meal.
+      mode = 'after'
+      await pg.locator(`${fc} .fph-file`).setInputFiles({ name: 'after.png', mimeType: 'image/png', buffer: png })
+      await pg.waitForSelector(`${review} .fph-after.on`, { timeout: 15000 })
+      if (!(await pg.locator(`${review} .fph-after-on`).isChecked())) throw new Error('the after photo is not marked as leftovers')
+      if (!/^Left: 100 g buckwheat\.$/.test((await pg.locator(`${review} .fph-left`).innerText()).trim())) throw new Error(`leftovers line: ${await pg.locator(`${review} .fph-left`).innerText()}`)
+      const eaten = await pg.locator(`${review} .fph-eaten li`).allInnerTexts()
+      if (eaten.length !== 3 || !/Buckwheat\s+100 g\s+92 kcal/.test(eaten[1])) throw new Error(`eaten: ${eaten.join(' | ')}`)
+      if (!/^Update \w+ · 527 kcal eaten$/.test((await pg.locator(`${review} .fph-save`).innerText()).trim())) throw new Error(`save button: ${await pg.locator(`${review} .fph-save`).innerText()}`)
+      await pg.click(`${review} .fph-save`)
+      await pg.waitForSelector(`${fc} .fph-done`, { timeout: 15000 })
+      await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0 + 527], { timeout: 10000 })
+      if ((await liveMeals()) !== m0 + 1) throw new Error('the after photo made a second meal')
+      const row2 = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Grilled chicken' }).first()
+      if (!/Buckwheat\s+100 g/.test((await row2.locator('.fd-mitem').allInnerTexts()).join('|'))) throw new Error('the meal row does not show the eaten buckwheat')
+      await row2.locator('.mp-count').waitFor({ timeout: 10000 })
+      if ((await row2.locator('.mp-count').innerText()).trim() !== '2') throw new Error('the after photo did not join the meal')
+      await pg.click(`${fc} .fph-dismiss`).catch(() => {})
+
+      // The gallery: meals by day with totals; the photo tile; a tap shows every food and Fix it opens the edit.
+      await openFold(`${fc} .fd-more`)
+      await pg.click(`${fc} .fd-sub-go[data-sub="photos"]`)
+      await pg.waitForSelector(`${fc} .fdg-day`, { timeout: 10000 })
+      const head = await pg.locator(`${fc} .fdg-day-head`).first().innerText()
+      if (!/^Today, [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}\s+[\d,]+ kcal · \d+ g protein/.test(head)) throw new Error(`gallery day header: ${head}`)
+      const tile = pg.locator(`${fc} .fdg-tile`).filter({ hasText: 'Grilled chicken' }).first()
+      await tile.locator('.mp-tile img').waitFor({ timeout: 10000 })
+      if (!/527 kcal · \d+ g/.test(await tile.innerText())) throw new Error(`the tile's numbers: ${await tile.innerText()}`)
+      await pg.locator(`${fc} .fdg-only input`).check()
+      if (!(await pg.locator(`${fc} .fdg-tile`).filter({ hasText: 'Grilled chicken' }).count())) throw new Error('"Only photos" hides the photo meal')
+      if (shots) {
+        await pg.locator(`${fc} .fdg`).screenshot({ path: `${shots}/food-gallery.png` })
+      }
+      await tile.locator('.fdg-tile-btn').click()
+      await pg.waitForSelector(`${fc} .fdg-detail .mp-items li`, { timeout: 5000 })
+      if ((await pg.locator(`${fc} .fdg-detail .mp-items li`).count()) !== 3) throw new Error('the open meal does not list its 3 foods')
+      await pg.click(`${fc} .fdg-fix`)
+      await pg.waitForSelector('.fdl-sheet .fd-draft .fd-item', { timeout: 5000 })
+      if ((await pg.locator('.fdl-sheet .fd-item').count()) !== 3) throw new Error('Fix it did not open the meal with its foods')
+      await pg.click('.fdl-sheet .fd-cancel')
+      await pg.waitForSelector('.fdl-sheet', { state: 'detached', timeout: 5000 })
+
+      // Charts: protein and kcal per meal type (two charts, one scale each), when you eat, most eaten foods.
+      await openFold(`${fc} .fd-more`)
+      await pg.click(`${fc} .fd-sub-go[data-sub="charts"]`)
+      await pg.waitForSelector(`${fc} .fdc-bars`, { timeout: 10000 })
+      if ((await pg.locator(`${fc} .fdc-bars`).count()) !== 2) throw new Error('not two per-meal-type charts')
+      if ((await pg.locator(`${fc} .fdc-col`).count()) !== 24) throw new Error('the eating-time chart is not 24 hours')
+      if (!(await pg.locator(`${fc} .fdc-top tbody tr`, { hasText: 'Grilled chicken' }).count())) throw new Error('most eaten foods miss the grilled chicken')
+      if (shots) await pg.locator(`${fc} .fdc`).screenshot({ path: `${shots}/food-charts.png` })
+      await pg.setViewportSize({ width: 390, height: 844 })
+      await pg.waitForTimeout(300)
+      const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
+      if (over > 1) throw new Error(`the charts scroll sideways on a phone (${over}px)`)
+      await pg.setViewportSize({ width: 1440, height: 900 })
+      await pg.click(`${fc} .fd-back`)
+      // Clean up: remove the meal so later steps see the day as before.
+      await pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Grilled chicken' }).first().locator('.fd-remove').click()
+      await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals .fd-mlist > li:not(.removed)`).length === n, [fc, m0], { timeout: 10000 })
+    } finally {
+      await pg.unroute('**/api/ai')
+      await pg.setViewportSize({ width: 1440, height: 900 })
+      // Never leave a sheet or a sub-view open for the next steps.
+      if (await pg.locator('.fdl-sheet .fdl-close').count()) await pg.click('.fdl-sheet .fdl-close').catch(() => {})
+      if (await pg.locator(`${fc} .fd-back`).count()) await pg.click(`${fc} .fd-back`).catch(() => {})
     }
   })
   // Body → Training: today's session from the weekly split (log 3 sets with "same as last time" and effort, the rest
@@ -2485,6 +2738,41 @@ try {
         .catch(() => false)
       if (!ok) throw new Error(`${name} looks empty`)
     }
+  })
+  // Settings → Ben → AI cost: this month's photos and money from the recorded token counts (a made-up month on
+  // the fake server: 40 photos, 60,000 input and 20,000 output tokens), at Gemini 3.5 Flash's $1.50 / $9 by
+  // default; new prices change the money and are kept after a reload.
+  await step('Settings AI cost: photos read this month and the money from real token counts, prices you can change', async () => {
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Ben' }).first().click()
+    await pg.waitForSelector('.st-tabs .ptabs [data-tab="cost"]', { timeout: 8000 })
+    await pg.click('.st-tabs .ptabs [data-tab="cost"]')
+    await pg.waitForSelector('.ai-cost .ai-cost-usd', { timeout: 10000 })
+    const usd = () => pg.locator('.ai-cost .ai-cost-usd').innerText()
+    if ((await pg.locator('.ai-cost .ai-cost-photos').innerText()).trim() !== '40') throw new Error('the meter does not show 40 photos')
+    if ((await usd()).trim() !== '$0.27') throw new Error(`the month at $1.50 / $9 should be $0.27, shows ${await usd()}`)
+    if ((await pg.locator('.ai-cost .ai-cost-model').inputValue()) !== 'Gemini 3.5 Flash') throw new Error('the default model is not Gemini 3.5 Flash')
+    if (!/60,000 input and 20,000 output tokens \(36 reads, 4 careful second looks\)/.test(await pg.locator('.ai-cost .ai-cost-meter').innerText())) throw new Error('the token counts are not shown')
+    const shots = process.env.FOOD_PHOTO2_SHOTS
+    if (shots) await pg.locator('.ai-cost').screenshot({ path: `${shots}/settings-ai-cost.png` })
+    await pg.fill('.ai-cost .ai-cost-in', '0.3')
+    await pg.fill('.ai-cost .ai-cost-out', '2.5')
+    await pg.click('.ai-cost .ai-cost-save')
+    await pg.waitForFunction(() => document.querySelector('.ai-cost .ai-cost-usd')?.textContent?.trim() === '$0.07', null, { timeout: 5000 })
+    // Kept: leave Settings and come back (the panel reads the synced setting again).
+    await open('today')
+    await pg.waitForSelector('.td2', { timeout: 10000 })
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 15000 })
+    await pg.locator('.st-item', { hasText: 'Ben' }).first().click()
+    await pg.waitForSelector('.st-tabs .ptabs [data-tab="cost"]', { timeout: 8000 })
+    await pg.click('.st-tabs .ptabs [data-tab="cost"]')
+    await pg.waitForFunction(() => document.querySelector('.ai-cost .ai-cost-usd')?.textContent?.trim() === '$0.07', null, { timeout: 10000 })
+    // Back to the defaults for later steps.
+    await pg.click('.ai-cost .btn.ghost')
+    await pg.click('.ai-cost .ai-cost-save')
+    await pg.waitForFunction(() => document.querySelector('.ai-cost .ai-cost-usd')?.textContent?.trim() === '$0.27', null, { timeout: 5000 })
   })
   // Wallpaper (Settings → Look → Wallpaper): pick one; the layer sits behind the app with the
   // page-coloured shade that keeps text readable; "Only on Today" hides it elsewhere; None removes it.
@@ -4024,6 +4312,53 @@ try {
     await ip.screenshot({ path: `${shots || '/tmp'}/island-rescue-undo.png`, clip: { x: 0, y: 0, width: 560, height: 300 } }).catch(() => {})
     await ip.click('.di-peek.alert.kind-checkin [data-tap="peek:alert:↩ Undo"]')
     await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'benPush' && a.op === 'undo' && a.key === 'rescue:lab'), null, { timeout: 3000 })
+    await ip.context().close()
+  })
+  // The island's food notice: a meal just logged (any device) drops down as "Lunch logged: 42 g protein, 680 kcal"
+  // with OK and Undo (core/islandFood.ts, the usual alert path). Undo sends the food counter's own remove.
+  await step('Desktop island food notice: "Lunch logged" with protein and kcal, OK and Undo', async () => {
+    const { build } = await import('rolldown')
+    const { mkdtemp, writeFile, rm } = await import('node:fs/promises')
+    const { tmpdir } = await import('node:os')
+    const dir = await mkdtemp(join(tmpdir(), 'foodnote-'))
+    const entry = join(dir, 'entry.ts')
+    await writeFile(entry, `export * from ${JSON.stringify(join(repo, 'src/core/islandFood.ts'))}\n`)
+    const out = await build({ input: entry, write: false, output: { format: 'esm' } })
+    await writeFile(join(dir, 'f.mjs'), out.output[0].code)
+    const F = await import((await import('node:url')).pathToFileURL(join(dir, 'f.mjs')).href)
+    await rm(dir, { recursive: true, force: true })
+    const now = fakeNow()
+    const alert = F.foodLoggedAlert({ id: 'fd-pnote1', name: 'Rice + chicken', type: 'lunch', kcal: 680, protein: 42, at: new Date(now - 60_000).toISOString() }, now, {})
+    if (!alert || alert.text !== 'Lunch logged: 42 g protein, 680 kcal') throw new Error(`the notice: ${alert?.text}`)
+    const ip = await (await browser.newContext({ viewport: { width: 560, height: 720 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island food notice: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const snap = { at: Date.now(), locked: false, ben: { face: '😎', mood: 'hyped', why: '', move: null, last: null, unread: 0, busy: false, steps: [] }, running: null, now: null, next: null, mustdos: [], water: { ml: 750, target: 2500 }, reps: [], alert: null }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.desktop = new Proxy({
+        islandHot: () => {},
+        islandTakeClicks: () => {},
+        islandAction: (a) => { window.__island.actions.push(a) },
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(snap), 50) },
+        onIslandPrefs: (cb) => { cbs.prefs = cb; setTimeout(() => cb({ size: 'normal', mode: 'calm', calmRest: 'line', peekSec: 3, gapMin: 0 }), 60) },
+        onIslandHover: on('hover'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di.calm-hidden .di-nub-wrap', { timeout: 15000 })
+    await ip.evaluate((a) => window.__island.send('state', { ...window.__island.snap, at: Date.now() + 1, alert: a }), alert)
+    await ip.waitForSelector('.di-peek.kind-food', { timeout: 5000 })
+    if (await ip.$('.di-peek.calm-peek.kind-food')) await ip.click('.di-peek.calm-peek.kind-food')
+    await ip.waitForSelector('.di-peek.alert.kind-food', { timeout: 4000 })
+    if (!(await ip.textContent('.di-peek.alert.kind-food')).includes('Lunch logged: 42 g protein, 680 kcal')) throw new Error('the island card does not say what was logged')
+    for (const l of ['OK', '↩ Undo']) if (!(await ip.$(`.di-peek.alert.kind-food [data-tap="peek:alert:${l}"]`))) throw new Error(`the food notice has no "${l}"`)
+    const shots = process.env.FOOD_PHOTO2_SHOTS
+    await ip.waitForTimeout(600)
+    if (shots) await ip.screenshot({ path: `${shots}/island-food-notice.png`, clip: { x: 0, y: 0, width: 560, height: 300 } }).catch(() => {})
+    await ip.click('.di-peek.alert.kind-food [data-tap="peek:alert:↩ Undo"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'foodUndo' && a.mealId === 'fd-pnote1'), null, { timeout: 3000 })
     await ip.context().close()
   })
   // Focus boost (DX4, DX7, DX9, DX10, DX12, DX19, LF14, LF20): the push ladder's 3 steps and the morning
@@ -5570,7 +5905,7 @@ try {
     }
     await open('settings')
     await pg.waitForSelector('.st-item', { timeout: 10000 })
-    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['life', 'pushes', 'brain', 'talk', 'notes', 'memory']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
+    for (const [sec, name, ids] of [['look', 'Look', ['look', 'today']], ['ben', 'Ben', ['life', 'pushes', 'brain', 'cost', 'talk', 'notes', 'memory']], ['connections', 'Connections', ['accounts', 'bots', 'telegram']], ['widgets', 'Widgets', ['gallery', 'pages', 'look']], ['ai-apps', 'Connect an AI app', ['connect', 'how']], ['automation', 'PC & automation', ['push', 'n8n', 'hooks', 'auto', 'mcp']]]) {
       await pg.locator('.st-item', { hasText: name }).first().click()
       await pg.waitForFunction((n) => document.querySelector('.st-head h1')?.textContent === n, name, { timeout: 5000 })
       await pg.waitForSelector(`.st-tabs .ptabs [data-tab="${ids[0]}"]`, { timeout: 8000 })

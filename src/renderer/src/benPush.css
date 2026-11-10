@@ -31,3 +31,8 @@
 .bp-seg button { border: 0; padding: 6px 12px; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; background: transparent; color: var(--muted); transition: background-color 0.15s, color 0.15s; }
 .bp-seg button.on { background: var(--lime); color: var(--lime-ink); }
 .bp-off { align-self: center; margin-right: 4px; }
+
+/* Settings → Ben → Pushes: meal reminders, the coach nudges and the night food summary, folded. */
+.lf-fold { margin: 6px 0; }
+.lf-fold > summary { cursor: pointer; padding: 8px 0; font-weight: 600; color: var(--text); }
+.lf-fold[open] > summary { margin-bottom: 4px; }

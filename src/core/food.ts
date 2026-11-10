@@ -35,6 +35,12 @@ export interface FoodItem {
   /** The likely range of grams from a photo read ("180–260 g"). */
   lo?: number
   hi?: number
+  /** Grams of fibre, when a photo read gave it (else the meal score estimates it from the name). */
+  fiber?: number
+  /** Ultra-processed, when a photo read said so (else the meal score's word list decides). */
+  upf?: boolean
+  /** Where the numbers came from: a label or package ('label'), or a barcode looked up in Open Food Facts ('barcode'). */
+  src?: 'label' | 'barcode'
 }
 
 export interface Totals {
@@ -83,9 +89,9 @@ export interface FoodMeal {
 /** Photo Locker ids on a meal: letters, digits, _ and -, at most 6. */
 export const cleanPhotoIds = (raw: unknown): string[] => (Array.isArray(raw) ? raw.filter((x) => typeof x === 'string' && /^[A-Za-z0-9_-]{3,64}$/.test(x)).slice(0, 6) : [])
 
-/** How a meal was logged: a saved meal or food, a photo, typed or pasted, or quick add. */
-export type MealSource = 'saved' | 'photo' | 'manual' | 'quick-add'
-export const MEAL_SOURCES: MealSource[] = ['saved', 'photo', 'manual', 'quick-add']
+/** How a meal was logged: a saved meal or food, a photo, typed or pasted, quick add, or a LIFE-FOOD block pasted from his AI app ('paste'). */
+export type MealSource = 'saved' | 'photo' | 'manual' | 'quick-add' | 'paste'
+export const MEAL_SOURCES: MealSource[] = ['saved', 'photo', 'manual', 'quick-add', 'paste']
 /** A meal's source; old meals (saved before sources existed) read as 'manual'. Old data is never rewritten. */
 export const mealSource = (m: { source?: unknown }): MealSource => (MEAL_SOURCES.includes(m.source as MealSource) ? (m.source as MealSource) : 'manual')
 
@@ -143,6 +149,10 @@ export function cleanItem(raw: any): FoodItem | null {
   const lo = Math.round(Number(raw.lo))
   const hi = Math.round(Number(raw.hi))
   if (lo >= 1 && hi <= 3000 && lo <= grams && hi >= grams && lo < hi) (out.lo = lo), (out.hi = hi)
+  const fiber = Number(raw.fiber)
+  if (raw.fiber != null && Number.isFinite(fiber) && fiber >= 0) out.fiber = r1(Math.min(fiber, 200))
+  if (typeof raw.upf === 'boolean') out.upf = raw.upf
+  if (raw.src === 'label' || raw.src === 'barcode') out.src = raw.src
   return out
 }
 
@@ -151,7 +161,7 @@ export function scaleItem(item: FoodItem, grams: number): FoodItem {
   const n = Number(grams)
   const g = Math.round(Math.max(5, Math.min(3000, Number.isFinite(n) ? n : item.grams)))
   const f = item.grams > 0 ? g / item.grams : 1
-  return { ...item, grams: g, protein: r1(item.protein * f), carbs: r1(item.carbs * f), fat: r1(item.fat * f), kcal: Math.round(item.kcal * f) }
+  return { ...item, grams: g, protein: r1(item.protein * f), carbs: r1(item.carbs * f), fat: r1(item.fat * f), kcal: Math.round(item.kcal * f), ...(item.fiber != null ? { fiber: r1(item.fiber * f) } : {}) }
 }
 
 /** The −/+ step: 10 g under 100 g, 25 g under 300 g, else 50 g. */

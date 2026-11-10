@@ -1,0 +1,11 @@
+/* Settings → Ben → AI cost. Theme tokens only. */
+.ai-cost-meter { display: grid; gap: 8px; margin: 6px 0 12px; }
+.ai-cost-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ai-cost-nums span { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2, rgba(127, 127, 127, 0.08)); border: 1px solid var(--border, rgba(127, 127, 127, 0.2)); }
+.ai-cost-nums b { font-size: 22px; color: var(--text); }
+.ai-cost-nums small { color: var(--muted); font-size: 12px; }
+.ai-cost-form { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 8px; }
+@media (max-width: 560px) {
+  .ai-cost-form { grid-template-columns: 1fr 1fr; }
+  .ai-cost-form .field:first-child { grid-column: 1 / -1; }
+}
