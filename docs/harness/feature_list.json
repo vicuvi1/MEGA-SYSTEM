@@ -1091,6 +1091,20 @@
     ],
     "evidence": "2026-11-10: branch build-a-sport-design; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Dashboard 2.06 / 1.34 / 1.25 screens at 1280 / 1440 / 1920 (budget 2.5, 2.25 with 10% headroom); screenshots kept outside the repo.",
     "notes": "core/trainGear.ts (gear, needs per move, fallbacks, one-day picks), core/trainSwap.ts (swapView, makeStep, gearPlan), core/trainLog.ts (sessionItems follows gear and picks; trainOf reads trainGear / trainPicks; mergeTrain), core/trainLadders.ts (6 new how-to moves: band, dumbbell, ring, door towel, backpack rows, floor pulls). renderer/src/training/SwapSheet.tsx, GearView.tsx, MovePic.tsx (DemoPic), WorkoutFlow.tsx (useWorkoutFlow + FinishOverlay), SportDashboard.tsx, SportWorkout.tsx. Gear is stored in Sport Track's synced state (trainGear, newer device wins) and described under settings.sport_tracker_json in settingsKeys.ts. Not in batch A: Exercises restyle, Progress path progress, Body & Food restyle, the Growth view."
- }
+ },
+  {
+      "id": "F-SPORT-DESIGN-B",
+      "priority": 1,
+      "area": "sport",
+      "title": "Sport Track design batch B: Exercises, Progress path bars, Body & Food, Am I really growing?",
+      "user_visible_behavior": "Exercises: a search, six paths with your step (3 / 8), a link to what you own (Gear), the chosen path as step cards (Mastered, You are here, Next with the sessions to go, Locked) with the real photo demo cross-fading, a locked step without a photo says \"Demo opens when unlocked\", and a detail panel (big demo, sets, reps, rest, your best, form tips, Make easier / Make harder that keep your history). Progress: a period switch (Week, 4 weeks, 12 weeks), four numbers, strength over time with the steps up marked, Ready today, Path progress (one segmented bar per path, your step part-filled by its real unlock progress, \"NN% to <next>\", the unlock checks with your real values), personal records and the 12-week program; the older recovery, warnings, challenges and logging by hand sit folded under More. Body & Food: four numbers (protein left with a food idea, calories, weight, quick log), 1 Copy the food prompt (Copy, Show all of it), 2 Paste the AI's answer (live preview, Log all, Save as repeat meal), Repeat meals as tiles (double-click logs); the Dashboard's \"Paste from AI\" lands on step 2. Am I really growing? (from the Dashboard chip): a verdict with a growth score ring and one honest sentence, six signs (strength, weight against the +0.4 to +0.8 kg a month zone, waist, hard sets per muscle, protein days, sleep) each Good / Improve / Fix with a bar, To grow faster, a weight and waist chart with the band, and a photo check linking the Photo Locker. With too little logged it makes up nothing and says exactly what to log. No points.",
+      "status": "passing",
+      "verification": [
+          "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/trainProgress.test.ts src/core/growthCheck.test.ts",
+          "SMOKE_ONLY=\"Sport Track|Body & Food\" npm run smoke"
+      ],
+      "evidence": "2026-11-10: tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Exercises 1.59 / 1.17 / 1.01 screens at 1280 / 1440 / 1920 (budget 1.95), Progress 2.97 / 2.53 / 2.09 (budget 3.6), Body & Food top (numbers, steps, Repeat meals) 1.37 / 1.22 / 1.00 (budget 1.9), Growth 2.25 / 1.88 / 1.58 (budget 2.8), all with 10% headroom; 1920 screenshots compared with the artboards.",
+      "notes": "core/trainProgress.ts (pathProgress, pathViews, kpisFor, strengthChart, personalRecords), core/growthCheck.ts (growthCheck, growthChart: the six signs and the verdict, pure, clock pinned in the tests). renderer/src/training/SportExercises.tsx, SportProgress.tsx, GrowthView.tsx, SportMore.tsx (the folded older parts), sport-batch-b.css; renderer/src/body/FoodBoard.tsx, FoodPaste.tsx (step 2), FoodCounter.tsx (board mode), food-board.css. No new data: everything is read from the Sport Track state, the body log and the food counter; the lean-gain zone is a device setting (life_growth_zone)."
+  }
  ]
 }

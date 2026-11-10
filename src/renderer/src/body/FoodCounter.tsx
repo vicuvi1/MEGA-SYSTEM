@@ -28,7 +28,6 @@ import { FoodPlan, copyText } from './FoodPlan'
 import { FoodBars, QuickLog } from './FoodFast'
 import { FoodSavedSheet } from './FoodSavedSheet'
 import { FoodPhotoLog, type PhotoPicker } from './FoodPhotoReview'
-import { FoodPaste } from './FoodPaste'
 import { FoodAdjustCard } from './FoodAdjustCard'
 import { ConfidenceDot, MealItems, MealPhotoThumb } from './MealPhoto'
 import { adjLogLine } from '@core/foodAdjust'
@@ -64,10 +63,11 @@ const toRows = (items: FoodItem[]): Row[] => items.map((it) => ({ key: ++rowKey,
 const rowItem = (r: Row): FoodItem => ({ ...scaleItem(r.base, r.grams), name: r.name.trim() || r.base.name })
 
 type Sub = 'today' | 'week' | 'plan' | 'photos' | 'charts'
-type Sheet = null | 'root' | 'meals' | 'type' | 'paste'
+type Sheet = null | 'root' | 'meals' | 'type'
 const itemsText = (items: FoodItem[]) => items.map((i) => `${i.grams} g ${i.name}`).join(', ')
 
-export function FoodCounter() {
+/** `board`: the Body & Food top (FoodBoard.tsx) already shows the day's numbers and the paste way, so they are not repeated here. */
+export function FoodCounter({ board = false }: { board?: boolean }) {
   const api = life.coach?.food
   const act = useAction()
   const toast = useToast()
@@ -103,18 +103,7 @@ export function FoodCounter() {
     }
   }
   // The Log food sheet: its first page (Photo / My meals / Type it), or one of the two pages.
-  // Sport Track's Dashboard "Paste from AI ›" opens this page straight away (a one-shot flag, set just before the tab opens).
-  const [sheet, setSheet] = useState<Sheet>(() => {
-    try {
-      if (localStorage.getItem('life_food_open') === 'paste') {
-        localStorage.removeItem('life_food_open')
-        return 'paste'
-      }
-    } catch {
-      /* private window */
-    }
-    return null
-  })
+  const [sheet, setSheet] = useState<Sheet>(null)
   const [openMeal, setOpenMeal] = useState<string | null>(null)
   const [justRemoved, setJustRemoved] = useState<string[]>([])
   const photoRef = useRef<PhotoPicker | null>(null)
@@ -330,7 +319,7 @@ export function FoodCounter() {
     </div>
   )
 
-  const sheetTitle = sheet === 'paste' ? 'Paste from AI' : sheet === 'meals' ? 'My meals' : sheet === 'type' ? (rows ? (editing ? 'Change the meal' : 'Check and save') : 'Type what you ate') : pastDay ? `Log food on ${v.day}` : 'Log food'
+  const sheetTitle = sheet === 'meals' ? 'My meals' : sheet === 'type' ? (rows ? (editing ? 'Change the meal' : 'Check and save') : 'Type what you ate') : pastDay ? `Log food on ${v.day}` : 'Log food'
   const sheetEl = sheet && (
     <div className="sheet fdl-sheet" role="dialog" aria-modal="true" aria-label={sheetTitle} onKeyDown={(e) => e.key === 'Escape' && closeSheet()} onClick={(e) => e.target === e.currentTarget && closeSheet()}>
       <div className="sheet-card fdl-card" data-page={sheet}>
@@ -388,15 +377,6 @@ export function FoodCounter() {
                     <small>"2 eggs, 200 g chicken, 1 banana"</small>
                   </span>
                 </button>
-                <button type="button" className="fdl-choice fdl-paste" onClick={() => setSheet('paste')}>
-                  <span className="fdl-choice-icon">
-                    <LogIcon kind="plate" />
-                  </span>
-                  <span className="fdl-choice-text">
-                    <b>Paste from AI</b>
-                    <small>Read your photos in ChatGPT, Grok or Gemini with the AI prompt, paste the answer: every meal at once.</small>
-                  </span>
-                </button>
               </div>
               {quickAdd}
             </>
@@ -434,7 +414,6 @@ export function FoodCounter() {
               )}
             </>
           )}
-          {sheet === 'paste' && <FoodPaste v={v} onView={setV} onDone={closeSheet} />}
           {sheet === 'type' && (
             <>
               <div className="fd-words-step">
@@ -597,7 +576,7 @@ export function FoodCounter() {
         </div>
       )}
       <div className="card-head fd-head">
-        <h2>Food</h2>
+        <h2>{board ? 'Today’s food' : 'Food'}</h2>
         <div className="fd-head-actions">
           <Select className="fd-day" value={v.day} onChange={(e) => setDay(e.target.value === v.today ? undefined : e.target.value)} title="Add or fix meals on a past day">
             {dayOptions.map((d, i) => (
@@ -618,7 +597,7 @@ export function FoodCounter() {
         <div className="fd-cols">
           <div className="fd-left">
           <div className="fd-hero">
-            <FoodBars progress={v.progress} behind={pastDay ? null : v.behind} hero />
+            {!board && <FoodBars progress={v.progress} behind={pastDay ? null : v.behind} hero />}
             <p className="fd-line sr-only" aria-live="polite">
               {head.line}
             </p>

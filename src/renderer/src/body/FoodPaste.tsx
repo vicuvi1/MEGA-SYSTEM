@@ -1,4 +1,4 @@
-// Body → Food → Log food → Paste from AI: he reads his meal photos in his own
+// Body & Food, step 2 "Paste the AI's answer" (step 1 copies the prompt: FoodBoard.tsx): he reads his meal photos in his own
 // AI app with ONE fixed prompt ("Copy AI prompt"), pastes the LIFE-FOOD answer
 // here, checks the live preview (every meal and food with its numbers, the date
 // and time, the meal type; grams editable, foods removable), and "Log all"
@@ -9,11 +9,11 @@
 import { useMemo, useState } from 'react'
 import { MEAL_TYPES, mealTypeAt, type MealType } from '@core/food'
 import { calendarDay } from '@core/dates'
-import { FOOD_PASTE_PROMPT, parseFoodPaste, pasteId, pasteToLog, type PasteItem, type PasteMeal } from '@core/foodPaste'
+import { parseFoodPaste, pasteId, pasteToLog, type PasteItem, type PasteMeal } from '@core/foodPaste'
+import { savedMealFrom } from '@core/foodSaved'
 import { life } from '../bridge'
 import { useToast } from '../ui'
 import { Select } from '../Select'
-import { copyText } from './FoodPlan'
 import type { FoodView } from '../../../main/food'
 import './food-paste.css'
 
@@ -46,7 +46,7 @@ const rowItem = (r: Row): PasteItem => {
 }
 const sum = (items: PasteItem[]) => items.reduce((a, i) => ({ kcal: a.kcal + i.kcal, protein: a.protein + i.protein, carbs: a.carbs + i.carbs, fat: a.fat + i.fat }), { kcal: 0, protein: 0, carbs: 0, fat: 0 })
 
-export function FoodPaste({ v, onView, onDone }: { v: FoodView; onView: (v: FoodView) => void; onDone: () => void }) {
+export function FoodPaste({ v, onView, onDone, focus = false }: { v: FoodView; onView: (v: FoodView) => void; onDone: () => void; focus?: boolean }) {
   const api = life.coach!.food!
   const toast = useToast()
   const [text, setText] = useState('')
@@ -64,10 +64,6 @@ export function FoodPaste({ v, onView, onDone }: { v: FoodView; onView: (v: Food
   const patch = (k: number, p: Partial<Pick<EditMeal, 'name' | 'type' | 'at'>> & { rows?: Row[] }) => setEdits((e) => ({ ...e, [k]: { ...e[k], ...p } }))
   const setRow = (k: number, j: number, p: Partial<Row>) => patch(k, { rows: meals[k].rows.map((r, i) => (i === j ? { ...r, ...p } : r)) })
 
-  const copyPrompt = async () => {
-    const ok = await copyText(FOOD_PASTE_PROMPT)
-    toast(ok ? 'AI prompt copied. Paste it with your meal photos into ChatGPT, Grok or Gemini, then paste the answer here.' : 'Could not copy. Select the prompt under "See the prompt" and copy it.', ok ? 'good' : 'bad')
-  }
   const logAll = async () => {
     if (busy || !live.length || missing.length) return
     setBusy(true)
@@ -86,6 +82,29 @@ export function FoodPaste({ v, onView, onDone }: { v: FoodView; onView: (v: Food
       for (const w of warns) toast(w, 'bad')
     } catch (e: any) {
       toast(e?.message || 'Could not log the meals. Try again.', 'bad')
+    } finally {
+      setBusy(false)
+    }
+  }
+  /** Keeps every previewed meal as a repeat meal (a saved meal), without logging anything. */
+  const saveRepeat = async () => {
+    if (busy || !live.length || missing.length) return
+    setBusy(true)
+    try {
+      const now = new Date()
+      let saved = await api.savedNow()
+      let n = 0
+      for (const m of meals) {
+        const log = pasteToLog({ ...m.src, name: m.name, type: m.type, at: m.at, items: m.rows.filter((r) => !r.gone).map(rowItem) }, now, v.today)
+        if (!log) continue
+        saved = savedMealFrom(saved, { name: log.name, type: log.type, items: log.items })
+        n++
+      }
+      if (!n) return
+      onView(await api.saved(saved))
+      toast(`Saved ${n} repeat ${n === 1 ? 'meal' : 'meals'}. Double-click ${n === 1 ? 'it' : 'one'} under Repeat meals to log it again.`, 'good')
+    } catch (e: any) {
+      toast(e?.message || 'Could not save the repeat meal. Try again.', 'bad')
     } finally {
       setBusy(false)
     }
@@ -133,26 +152,20 @@ export function FoodPaste({ v, onView, onDone }: { v: FoodView; onView: (v: Food
     )
   }
 
+  const foods = live.reduce((n, m) => n + m.items.length, 0)
   return (
-    <div className="fpa" aria-label="Paste from AI">
-      <div className="fpa-top">
-        <small className="bdy-note">Read your photos in ChatGPT, Grok or Gemini with the AI prompt, then paste the whole answer here. Several meals at once are fine.</small>
-        <button type="button" className="bdy-btn fpa-copy" onClick={copyPrompt}>
-          Copy AI prompt
-        </button>
-      </div>
-      <details className="fd-prompt fpa-prompt">
-        <summary>See the prompt</summary>
-        <pre>{FOOD_PASTE_PROMPT}</pre>
-      </details>
+    <div className="fpa" aria-label="Paste the AI's answer">
+      <label className="fpa-label" htmlFor="fpa-text">
+        Paste everything it wrote. Extra text, bold or bullets are fine.
+      </label>
       <textarea
+        id="fpa-text"
         className="fpa-text"
         value={text}
-        rows={8}
-        autoFocus
+        rows={6}
+        autoFocus={focus}
         spellCheck={false}
         placeholder={'LIFE-FOOD v1\nMEAL | Lunch | now | Rice and chicken\n- rice | 200 g | P 5 | C 56 | F 0.6 | FIB 0.8 | KCAL 250 | CONF medium | -\nEND'}
-        aria-label="The AI's answer"
         onChange={(e) => (setText(e.target.value), setEdits({}))}
       />
       {text.trim() && !parsed.meals.length && <p className="fd-err">No meals found in that text. Paste the block that starts with LIFE-FOOD.</p>}
@@ -163,6 +176,8 @@ export function FoodPaste({ v, onView, onDone }: { v: FoodView; onView: (v: Food
           ))}
         </ul>
       )}
+      <div className="fpa-preview" aria-live="polite">
+        {meals.length === 0 && <p className="fpa-hint">Your meals show here as soon as you paste: each food with its grams and numbers, to check before you log.</p>}
       {meals.map((m, k) => {
         const items = m.rows.filter((r) => !r.gone).map(rowItem)
         const t = sum(items)
@@ -211,14 +226,21 @@ export function FoodPaste({ v, onView, onDone }: { v: FoodView; onView: (v: Food
           </section>
         )
       })}
-      {live.length > 0 && (
-        <div className="fpa-foot">
-          {missing.length > 0 && <p className="fd-err">Add the grams for {missing.map((i) => i.name).join(', ')} first.</p>}
-          <button type="button" className="bdy-btn primary big fpa-log" disabled={busy || missing.length > 0} onClick={() => void logAll()}>
-            {busy ? 'Logging…' : `Log all · ${live.length} ${live.length === 1 ? 'meal' : 'meals'} · ${fmt(all.kcal)} kcal`}
-          </button>
-        </div>
-      )}
+        {meals.length > 0 && (
+          <p className="fpa-read">
+            Read {live.length} {live.length === 1 ? 'meal' : 'meals'}, {foods} {foods === 1 ? 'food' : 'foods'} · {parsed.warnings.length ? `${parsed.warnings.length} ${parsed.warnings.length === 1 ? 'line' : 'lines'} to check` : 'nothing skipped'}
+          </p>
+        )}
+      </div>
+      {missing.length > 0 && <p className="fd-err">Add the grams for {missing.map((i) => i.name).join(', ')} first.</p>}
+      <div className="fpa-foot">
+        <button type="button" className="bdy-btn primary big fpa-log" disabled={busy || missing.length > 0 || live.length === 0} onClick={() => void logAll()}>
+          {busy ? 'Logging…' : live.length ? `Log all · +${fmt(all.protein)} g protein` : 'Log all'}
+        </button>
+        <button type="button" className="bdy-btn big fpa-repeat" disabled={busy || missing.length > 0 || live.length === 0} onClick={() => void saveRepeat()}>
+          Save as repeat meal
+        </button>
+      </div>
     </div>
   )
 }
