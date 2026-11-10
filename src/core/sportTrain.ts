@@ -19,6 +19,7 @@ import {
   type Dose, type Feel, type Offer, type PlanItem, type TrainSession
 } from './trainLog'
 import { atTop } from './sportProgress'
+import { needText, pickToday } from './trainGear'
 import { daysBetween, dowOf, planned, todayPlan, TYPE_NAME, WARMUP, WEEKDAYS, SHORT_DAYS, type DayType, type SessionType, type TodayPlan } from './trainWeek'
 import { shiftDay } from './sportSets'
 
@@ -49,6 +50,8 @@ export interface TrackerItem extends PlanItem {
   demo: string | null
   /** "Step 3 of 8": where this move sits on its chain (the one overall level is the Growth level). */
   levelText: string
+  /** What the move needs, in words ("floor", "chair or bed", "sturdy table"). */
+  needs: string
 }
 
 export interface TrackerView {
@@ -151,7 +154,8 @@ export function trackerToday(st: any, day: string, opts: { dose?: Dose; anyway?:
       effort: it.level.unit === 'sec' ? holdLine : EFFORT_LINE,
       rest: restSecFor(it.level),
       demo: moveById(it.level.move) ? it.level.move : null,
-      levelText: `Step ${it.index + 1} of ${it.ladder.levels.length}`
+      levelText: it.alt ? 'Stand-in for your gear' : `Step ${it.index + 1} of ${it.ladder.levels.length}`,
+      needs: needText(it.level.move)
     }
   })
   const setsPlanned = items.reduce((n, it) => n + it.sets, 0)
@@ -229,10 +233,12 @@ export function trackerFinish(st: any, input: { day: string; type: SessionType; 
 // ---------- choices: Apply / Keep, Make easier / Make harder ----------
 
 /** Apply: move up to the unlocked level (its sessions start counting from today). Null: nothing unlocked. */
-export function applyOffer(st: any, input: { day: string; type: SessionType; ladder: LadderId; now: number }): Offer | null {
+export function applyOffer(st: any, input: { day: string; type: SessionType; ladder: LadderId; now: number; fromNext?: boolean }): Offer | null {
   const it = sessionItems(st, trainOf(st), input.type, input.day).find((x) => x.ladder.id === input.ladder)
   if (!it?.offer) return null
   keepLevel(st, input.ladder, it.index, input.now)
+  // "Apply from next workout": today stays on the move you started (a one-day pick); the new step counts from tomorrow.
+  if (input.fromNext) pickToday(st, { day: input.day, ladder: input.ladder, level: it.level, now: input.now })
   setLevel(st, input.ladder, it.offer.to, input.day, input.now)
   return it.offer
 }

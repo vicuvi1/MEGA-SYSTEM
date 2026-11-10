@@ -6,6 +6,8 @@
 //   trainLadders { ladders, updatedAt }: your edited ladders (trainLadders.ts)
 //   trainLevels { [ladder]: { level, reached: { [level]: day }, at, declinedOn? } }
 //   trainLog    the sessions: { id, date, type, exercises, startedAt, durationSec }
+//   trainGear   what you can train with (trainGear.ts); the plan only uses moves it allows
+//   trainPicks  { day, at, moves: { [ladder]: Level } }: the move you chose for today only (the swap sheet)
 // Sets go to the same set log as Sport Track (sets[day][exerciseId]), with
 // rir / feel / session added. Pure and tested (trainLog.test.ts). Nothing
 // here pays points: a finished workout is logged like any other workout.
@@ -15,6 +17,7 @@ import { atTop, belowBottom, NEED, type RepRange } from './sportProgress'
 import { setsOn, setsText, shiftDay, type SetEntry, type SetLog } from './sportSets'
 import { estimateSets, isImported } from './sportLevels'
 import { cleanLadders, laddersFor, moveInfo, moveName, rangeText, type Ladder, type LadderId, type Level } from './trainLadders'
+import { allowed, cleanGear, effectiveLevel, stepFrom, type Gear } from './trainGear'
 import { cleanWeek, daysBetween, SESSION_RULES, type DoneSession, type SessionType, type TrainWeek } from './trainWeek'
 
 export type Feel = 'hard' | 'ok' | 'easy'
@@ -56,11 +59,33 @@ export interface LevelState {
 }
 export type Levels = Partial<Record<LadderId, LevelState>>
 
+/** "Use this move today": your step stays, today's plan uses this move (any other day it is your step again). */
+export interface TrainPicks {
+  day: string
+  at: number
+  moves: Partial<Record<LadderId, Level>>
+}
+
 export interface TrainData {
   week: TrainWeek
   ladders: Ladder[]
   levels: Levels
   log: TrainSession[]
+  /** What you can train with (null: not set yet, nothing is ruled out). */
+  gear: Gear | null
+  picks: TrainPicks | null
+}
+
+function cleanPicks(x: any): TrainPicks | null {
+  if (!x || typeof x.day !== 'string' || !x.moves || typeof x.moves !== 'object') return null
+  const moves: TrainPicks['moves'] = {}
+  for (const [k, v] of Object.entries<any>(x.moves)) {
+    const info = v && typeof v.move === 'string' ? moveInfo(v.move) : null
+    if (!info) continue
+    const lo = Math.max(1, Math.min(300, Math.round(Number(v.lo) || 1)))
+    moves[k as LadderId] = { move: v.move, lo, hi: Math.max(lo, Math.min(300, Math.round(Number(v.hi) || lo))), unit: info.unit }
+  }
+  return { day: x.day, at: Number(x.at) || 0, moves }
 }
 
 /** Our part of Sport Track's state, cleaned. */
@@ -72,7 +97,9 @@ export function trainOf(st: any): TrainData {
     week: cleanWeek(st?.trainWeek),
     ladders: cleanLadders(st?.trainLadders?.ladders),
     levels: lv,
-    log: Array.isArray(st?.trainLog) ? st.trainLog.filter((s: any) => s && typeof s.id === 'string' && typeof s.date === 'string' && Array.isArray(s.exercises)) : []
+    log: Array.isArray(st?.trainLog) ? st.trainLog.filter((s: any) => s && typeof s.id === 'string' && typeof s.date === 'string' && Array.isArray(s.exercises)) : [],
+    gear: cleanGear(st?.trainGear),
+    picks: cleanPicks(st?.trainPicks)
   }
 }
 
@@ -370,6 +397,12 @@ export interface PlanItem {
   offer: Offer | null
   /** What happens next time, from today's sets (null until you log one today). */
   nextTime: NextTime | null
+  /** Your step needs gear you don't have: this move stands in for it. */
+  swapped: boolean
+  /** This move is not a step of the chain (a floor pull on the pull chain). */
+  alt: boolean
+  /** You chose this move for today only (the swap sheet). */
+  picked: boolean
 }
 
 export interface Offer {
@@ -397,14 +430,16 @@ export interface NextTime {
  * "Unlocked: Decline push-ups 4 × 6–12, because 4×12 easy twice": what today's sets of a move mean for
  * the next session, by the same rules that pick that session (levelStatus, currentLevel). Null with no set today.
  */
-export function nextTimeOf(p: { ladder: Ladder; index: number; level: Level; name: string; fullSets: number; latest: MoveSession | null; status: LevelStatus }, today: string): NextTime | null {
+export function nextTimeOf(p: { ladder: Ladder; index: number; level: Level; name: string; fullSets: number; latest: MoveSession | null; status: LevelStatus; gear?: Gear | null }, today: string): NextTime | null {
   const t = p.latest && p.latest.day === today ? p.latest : null
   if (!t) return null
   const { level, fullSets: sets, status } = p
   const u = level.unit === 'sec' ? ' s' : ''
   if (status.state === 'complete') {
     if (p.index >= p.ladder.levels.length - 1) return { kind: 'top', move: level.move, line: `Next time: ${p.name} with a slow tempo (3 s down, 1 s pause), because ${status.reason}. This is the top of the ladder.` }
-    const to = p.ladder.levels[Math.min(p.ladder.levels.length - 1, p.index + (status.jump ?? 1))]
+    const at = stepFrom(p.ladder, Math.min(p.ladder.levels.length - 1, p.index + (status.jump ?? 1)), 1, p.gear)
+    if (at == null) return { kind: 'top', move: level.move, line: `Next time: ${p.name} with a slow tempo (3 s down, 1 s pause), because ${status.reason}. Your gear has no harder step on this chain.` }
+    const to = p.ladder.levels[at]
     return { kind: 'up', move: to.move, line: `Unlocked: ${moveName(to.move)} ${sets} × ${rangeText(to)}, because ${status.reason}.` }
   }
   if (status.state === 'struggling') {
@@ -428,15 +463,23 @@ export function sessionItems(st: any, data: TrainData, type: SessionType, today:
   return laddersFor(data.ladders, type).map((ladder) => {
     const cur = currentLevel(st, data, ladder, today)
     const stored = data.levels[ladder.id]
-    const level = ladder.levels[cur.index]
+    // Your gear decides which move stands in for your step; "Use today" (the swap sheet) wins for today only.
+    const eff = effectiveLevel(ladder, cur.index, data.gear)
+    const pick = data.picks?.day === today ? data.picks.moves[ladder.id] : undefined
+    const picked = !!pick && pick.move !== eff.level.move && allowed(pick.move, data.gear)
+    const level = picked ? pick! : eff.level
+    const at = picked ? ladder.levels.findIndex((x) => x.move === pick!.move) : -1
+    const index = picked ? (at >= 0 ? at : eff.index) : eff.index
+    const alt = picked ? at < 0 : eff.alt
     const fullSets = ladderSets(data.week, data.ladders, ladder)
     const sets = doseSets(fullSets, dose)
     const all = moveSessions(st, level.move, today)
     const last = lastTime(all, today)
-    const since = cur.since
+    const since = eff.swapped || picked ? null : cur.since
+    const nextAt = alt ? null : stepFrom(ladder, index + 1, 1, data.gear)
     const item: PlanItem = {
       ladder,
-      index: cur.index,
+      index,
       level,
       name: moveName(level.move),
       sets,
@@ -446,22 +489,28 @@ export function sessionItems(st: any, data: TrainData, type: SessionType, today:
       latest: all[all.length - 1] ?? null,
       lastLine: lastLine(last, level, sets),
       status: levelStatus(all, level, fullSets, since),
-      next: ladder.levels[cur.index + 1] ?? null,
+      next: nextAt == null ? null : ladder.levels[nextAt],
       fullSets,
       offer: null,
-      nextTime: null
+      nextTime: null,
+      swapped: eff.swapped,
+      alt,
+      picked
     }
-    item.offer = offerOf(item, stored?.declinedOn)
-    item.nextTime = nextTimeOf(item, today)
+    // A stand-in or a one-day pick is not your step: it offers nothing (its sets still count for that move).
+    item.offer = alt || picked ? null : offerOf(item, stored?.declinedOn, data.gear)
+    item.nextTime = alt ? null : nextTimeOf({ ...item, gear: data.gear }, today)
     return item
   })
 }
 
 /** The next level unlocked by a completed one, unless you chose Keep after your newest session (null: nothing to offer). */
-export function offerOf(p: Pick<PlanItem, 'ladder' | 'index' | 'status' | 'latest' | 'fullSets'>, declinedOn?: string): Offer | null {
+export function offerOf(p: Pick<PlanItem, 'ladder' | 'index' | 'status' | 'latest' | 'fullSets'>, declinedOn?: string, gear?: Gear | null): Offer | null {
   if (p.status.state !== 'complete' || p.index >= p.ladder.levels.length - 1) return null
   if (!suggestNow(p.status, p.latest, declinedOn)) return null
-  const to = Math.min(p.ladder.levels.length - 1, p.index + (p.status.jump ?? 1))
+  // The next step your gear allows (a step that needs gear you don't own is skipped).
+  const to = stepFrom(p.ladder, Math.min(p.ladder.levels.length - 1, p.index + (p.status.jump ?? 1)), 1, gear)
+  if (to == null) return null
   const lv = p.ladder.levels[to]
   const name = moveName(lv.move)
   return { to, move: lv.move, name, target: `${p.fullSets} × ${rangeText(lv)}`, reason: p.status.reason ?? '', line: `Unlocked: ${name}, because ${p.status.reason}.` }
@@ -586,8 +635,10 @@ export function setLevel(st: any, ladder: LadderId, index: number, day: string, 
  */
 export function shiftLevel(st: any, data: TrainData, ladder: Ladder, delta: -1 | 1, day: string, now: number): number | null {
   const cur = currentLevel(st, data, ladder, day)
-  const to = cur.index + delta
-  if (to < 0 || to >= ladder.levels.length) return null
+  // From the step the plan really uses; only steps your gear allows count.
+  const from = effectiveLevel(ladder, cur.index, data.gear).index
+  const to = stepFrom(ladder, from + delta, delta, data.gear)
+  if (to == null) return null
   // Placement becomes your level first, so the step is from where you were.
   keepLevel(st, ladder.id, cur.index, now)
   setLevel(st, ladder.id, to, day, now, true)
@@ -627,6 +678,8 @@ export function mergeTrain(a: any, b: any): Record<string, unknown> {
   newer('trainWeek', (v) => Number(v?.updatedAt) || 0)
   newer('trainLadders', (v) => Number(v?.updatedAt) || 0)
   newer('trainLighter', (v) => Number(v?.at) || 0)
+  newer('trainGear', (v) => Number(v?.at) || 0)
+  newer('trainPicks', (v) => Number(v?.at) || 0)
   // Dismissed warnings: the later day per warning.
   if (a?.trainWarnDismiss || b?.trainWarnDismiss) {
     const dm: Record<string, string> = { ...(b?.trainWarnDismiss ?? {}) }

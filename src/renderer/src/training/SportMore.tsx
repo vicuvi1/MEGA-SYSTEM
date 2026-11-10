@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { BodyState } from '@shared/api'
 import { dayKey } from '@core/dates'
 import { doneSessions, trainOf } from '@core/trainLog'
+import { gearSummary } from '@core/trainGear'
 import { todayPlan } from '@core/trainWeek'
 import { life } from '../bridge'
 import { readSoreness } from '../body/useBodyPlus'
@@ -54,12 +55,18 @@ function SectionHead({ title, line }: { title: string; line: string }) {
   )
 }
 
-export function SportExercises() {
+export function SportExercises({ onGear }: { onGear: () => void }) {
   const { st, ht, today, refresh } = useTraining()
   useTrainingSync(st, today, refresh)
   return (
     <div className="body-page sp-more" data-sp="exercises">
       <SectionHead title="Exercises" line="Your chains, step by step: tap a step to see how to do it. The full library with pictures comes next." />
+      <p className="sp-gear-link" data-sp="gear-side">
+        Your gear: <b>{gearSummary(trainOf(st ?? {}).gear)}</b> ·{' '}
+        <button type="button" className="sp-link inline" onClick={onGear} data-sp="edit-gear">
+          edit gear
+        </button>
+      </p>
       <div className="bt">
         <Roadmap st={st ?? {}} today={today} refresh={refresh} />
         <ProgramBuilder st={st} ht={ht} today={today} onChanged={refresh} />

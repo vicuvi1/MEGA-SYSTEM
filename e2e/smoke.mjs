@@ -1723,10 +1723,10 @@ try {
     // Three pull sets in the workout (Hard, OK, Easy) and Finish: saved with their effort in one session.
     await sportView('Dashboard')
     await pg.click('[data-tg="home"] [data-tg="start"]')
-    await pg.waitForSelector('[data-tg="flow"]', { timeout: 5000 })
+    await pg.waitForSelector('[data-sp="workout"] [data-tg="flow"]', { timeout: 5000 })
     // Pick the pull move each time: after a set the flow goes back to the first open move.
     for (const feel of ['hard', 'ok', 'easy']) {
-      await pg.locator('[data-tg="flow"] .tg-flow-moves button', { hasText: 'Table rows' }).click()
+      await pg.locator('[data-sp="workout"] [data-tg="moves"] .sp-wk-name', { hasText: 'Table rows' }).click()
       await pg.waitForFunction(() => /Table rows/.test(document.querySelector('[data-tg="flow-move"]')?.textContent ?? ''), null, { timeout: 5000 })
       await pg.fill('[data-tg="reps"]', '10')
       await pg.click(`[data-tg="flow"] [data-feel="${feel}"]`)
@@ -1897,6 +1897,8 @@ try {
       // Diamond push-ups: one session at the top (3×12, tapped Easy) two days ago. Today's 3×12 easy unlocks the next move.
       s.trainLevels = { push: { level: 2, reached: { 2: d(5) }, at: 1 }, pull: { level: 0, reached: { 0: d(5) }, at: 1 }, shoulders: { level: 0, reached: { 0: d(5) }, at: 1 } }
       s.trainLog = []
+      delete s.trainGear
+      delete s.trainPicks
       s.exercises = (s.exercises || []).filter((e) => !['ex_tg_d', 'ex_tg_r', 'ex_tg_p'].includes(e.id) && !['diamond_pushup', 'decline_pushup', 'table_row', 'pike_pushup'].includes(e.move))
       s.exercises.push(
         { id: 'ex_tg_d', name: 'Diamond push-ups', target: 18, unit: 'reps', active: false, doneToday: 0, move: 'diamond_pushup' },
@@ -1921,7 +1923,8 @@ try {
     await pg.evaluate((k) => { const b = localStorage.getItem('smoke_tg_backup'); localStorage.removeItem('smoke_tg_backup'); localStorage.removeItem('life_train_order'); if (b) localStorage.setItem(k, b); else if (b === '') localStorage.removeItem(k); window.dispatchEvent(new CustomEvent('life-sport-changed')) }, TGK)
   }
   // Fits 1280–1920: no sideways scroll, and the page stays inside its height budget with 10% headroom.
-  const tgFit = async (what, cardSel, budget, shotName) => {
+  const tgFit = async (what, cardSel, budget0, shotName) => {
+    const budget = process.env.TG_BUDGET ? Number(process.env.TG_BUDGET) : budget0
     const sizes = []
     for (const [w, h] of [[1280, 800], [1440, 900], [1920, 1080]]) {
       await pg.setViewportSize({ width: w, height: h })
@@ -1979,22 +1982,26 @@ try {
     const lvName = (await pg.locator('[data-sp="level"] .sp-level-text b').innerText()).trim()
     const chip = await pg.locator('.gr-chip').first().innerText().catch(() => '')
     if (chip && !chip.includes(lvName)) throw new Error(`the Dashboard level (${lvName}) is not the header's (${chip})`)
-    if (!/Start Workout/.test(await pg.locator('[data-tg="start"]').innerText())) throw new Error('no Start Workout')
+    if (!/Start workout/.test(await pg.locator('[data-tg="start"]').innerText())) throw new Error('no Start workout')
     if (!/One more session at the top of Diamond push-ups/.test(await pg.locator('[data-tg="coach-line"]').innerText())) throw new Error(`the coach line is not from the engine: ${await pg.locator('[data-tg="coach-line"]').innerText()}`)
-    for (const sel of ['[data-kpi="streak"]', '[data-kpi="workouts"]', '[data-kpi="goal"]', '[data-kpi="weight"]', '[data-tg="harder-all"]', '[data-tg="easier-all"]', '[data-tg="cant-train"]', '[data-tg="path"] .sp-steps li.current', '[data-tg="requirements"] li', '[data-tg="week"] .sp-bar', '[data-tg="body"]', '[data-tg="food"]', '[data-tg="roadmap"] .sp-phases li'])
+    for (const sel of ['[data-kpi="streak"]', '[data-kpi="workouts"]', '[data-kpi="sets"]', '[data-kpi="weight"]', '[data-tg="harder-all"]', '[data-tg="easier-all"]', '[data-tg="cant-train"]', '[data-tg="path"] .sp-steps li.current', '[data-tg="requirements"] li', '[data-tg="week"] .sp-bar', '[data-tg="body"]', '[data-tg="food"]', '[data-tg="roadmap"]', '[data-sp="growing"]', '[data-sp="edit-gear"]', '[data-sp="paste-ai"]', '[data-tg="moves"] li[data-ladder="push"] [data-tg="change"]'])
       if (!(await pg.$(sel))) throw new Error(`no ${sel}`)
-    if ((await pg.locator('[data-tg="roadmap"] .sp-phases li').count()) !== 5) throw new Error('the roadmap is not 5 phase cards')
+    // The tiles: Body, Food (with "Paste from AI ›") and the 12-week program.
+    if (!/Paste from AI/.test(await pg.locator('[data-tg="food"]').innerText())) throw new Error('the Food tile has no "Paste from AI"')
+    if (!/Change ›/.test(await pg.locator('[data-tg="moves"] li[data-ladder="push"]').innerText())) throw new Error('a move has no "Change ›"')
     // The main chain only, 5 steps at most, the current one is Diamond push-ups.
     const steps = await pg.locator('[data-tg="path"] .sp-steps li').count()
     if (steps < 1 || steps > 5) throw new Error(`the path shows ${steps} steps (at most 5)`)
-    if (!/Diamond push-ups/.test(await pg.locator('[data-tg="path"] .sp-steps li.current small').innerText())) throw new Error('the path does not show the current push step')
-    // A real exercise picture: Diamond push-ups' photo has loaded.
-    await pg.waitForFunction(() => { const i = document.querySelector('[data-tg="plan"] .sp-pic.photo img'); return !!i && i.complete && i.naturalWidth > 0 }, null, { timeout: 8000 })
+    if (!/Diamond push-ups/.test(await pg.locator('[data-tg="path"] .sp-steps li.current b').innerText())) throw new Error('the path does not show the current push step')
+    // A real exercise photo, large: Diamond push-ups' two frames have loaded (from the local photos).
+    await pg.waitForFunction(() => { const i = document.querySelectorAll('[data-tg="plan"] .sp-today-demo img'); return i.length === 2 && [...i].every((x) => x.complete && x.naturalWidth > 0 && /^\/apps\/sport\/photos\//.test(new URL(x.src).pathname)) }, null, { timeout: 8000 })
+    const demo = await pg.locator('[data-tg="plan"] .sp-today-demo').boundingBox()
+    if (!demo || demo.width < 200 || demo.height < 200) throw new Error(`the demo is not large (${JSON.stringify(demo)})`)
     // What the next step needs: 4 ticks, the reps and effort ticked from the last session (12 · 12 · 12 easy).
     const req = await pg.locator('[data-tg="requirements"] li').evaluateAll((ls) => ls.map((l) => `${l.dataset.req}:${l.dataset.done}`).join(','))
     if (req !== 'sessions:0,reps:1,effort:1,form:1') throw new Error(`the requirements are not ticked from the last session: ${req}`)
     // No made-up numbers: the program starts with the first workout (no session in the log yet).
-    if (!/starts with your first workout/.test(await pg.locator('[data-tg="roadmap"]').innerText())) throw new Error('the roadmap claims a program week with no workout logged')
+    if (!/starts with your first workout/i.test(await pg.locator('[data-tg="roadmap"]').innerText())) throw new Error('the program tile claims a week with no workout logged')
     await tgFit('The Dashboard', '[data-tg="home"] .sp-card, [data-tg="home"] .sp-hero', 2.5, 'sport-dashboard-1920.png')
   })
   await step('Sport Track Workout: each move with sets × reps, rest and Easier / Harder, reorder with the handle, how much today, the rest timer runs, what unlocks next and why; fits 1280–1920', async () => {
@@ -2002,9 +2009,13 @@ try {
     await tgOpen()
     await sportView('Workout')
     const W = '[data-sp="workout"]'
-    await pg.waitForSelector(`${W} [data-tg="moves"] li[data-ladder="push"]`, { timeout: 8000 })
-    const rows = await pg.locator(`${W} [data-tg="moves"] li`).evaluateAll((ls) => ls.map((l) => `${l.dataset.ladder}:${l.querySelector('[data-tg="target"]')?.textContent}:${!!l.querySelector('[data-tg="easier"]') && !!l.querySelector('[data-tg="harder"]')}`))
-    if (rows.join('|') !== 'push:3 sets × 6–12 reps:true|pull:5 sets × 8–15 reps:true|shoulders:2 sets × 6–12 reps:true') throw new Error(`the Workout moves: ${rows.join('|')}`)
+    // The current move (push) is the big card: its demo, Easier / Harder, set tiles, reps, effort, Log set. The others are rows with Change ›.
+    await pg.waitForSelector(`${W} [data-tg="flow"][data-ladder="push"] [data-tg="easier"]`, { timeout: 8000 })
+    const rows = await pg.locator(`${W} [data-tg="moves"] li`).evaluateAll((ls) => ls.map((l) => `${l.dataset.ladder}:${l.querySelector('[data-tg="target"]')?.textContent}:${!!l.querySelector('[data-tg="change"]')}`))
+    if (rows.join('|') !== 'pull:5 × 8–15:true|shoulders:2 × 6–12:true') throw new Error(`the Workout moves after the current one: ${rows.join('|')}`)
+    if (!/Diamond push-ups/.test(await pg.locator(`${W} [data-tg="flow-move"]`).innerText()) || (await pg.locator(`${W} .sp-sets .sp-set`).count()) !== 3) throw new Error('the current move card is not Diamond push-ups with 3 set tiles')
+    if (!/Harder: Decline/.test(await pg.locator(`${W} [data-tg="harder"]`).innerText())) throw new Error(`the Harder button: ${await pg.locator(`${W} [data-tg="harder"]`).innerText()}`)
+    await pg.waitForFunction((w) => { const i = document.querySelectorAll(`${w} .sp-now-pic img`); return i.length === 2 && [...i].every((x) => x.complete && x.naturalWidth > 0) }, W, { timeout: 8000 })
     // The rest timer starts at the first move's rest (6–12 reps: 90 s) and runs.
     const left = async () => { const m = /(\d+):(\d+)/.exec(await pg.locator(`${W} [data-sp="timer-left"]`).innerText()); return m ? Number(m[1]) * 60 + Number(m[2]) : -1 }
     if ((await left()) !== 90) throw new Error(`the rest timer does not start at 1:30 (${await left()} s)`)
@@ -2015,25 +2026,25 @@ try {
     await pg.click(`${W} [data-sp="timer-go"]`)
     // What unlocks next on the closest move, and why (from the engine).
     if (!/Decline push-ups comes after Diamond push-ups/.test(await pg.locator(`${W} [data-sp="unlock"]`).innerText())) throw new Error(`the unlock panel: ${await pg.locator(`${W} [data-sp="unlock"]`).innerText()}`)
-    // Order: the arrow keys on the handle move a move (this device only); back again.
-    await pg.focus(`${W} [data-tg="moves"] li[data-ladder="push"] .sp-grip`)
+    // Order: the arrow keys on the handle move a move after the current one (this device only); back again.
+    await pg.focus(`${W} [data-tg="moves"] li[data-ladder="pull"] .sp-grip`)
     await pg.keyboard.press('ArrowDown')
-    await pg.waitForFunction((w) => [...document.querySelectorAll(`${w} [data-tg="moves"] li`)].map((l) => l.dataset.ladder).join() === 'pull,push,shoulders', W, { timeout: 5000 })
+    await pg.waitForFunction((w) => [...document.querySelectorAll(`${w} [data-tg="moves"] li`)].map((l) => l.dataset.ladder).join() === 'shoulders,pull', W, { timeout: 5000 })
     const order = await pg.evaluate(() => JSON.parse(localStorage.getItem('life_train_order') || '{}').upper?.join())
-    if (order !== 'pull,push,shoulders') throw new Error(`the order was not kept: ${order}`)
+    if (order !== 'push,shoulders,pull') throw new Error(`the order was not kept: ${order}`)
     await sportView('Dashboard')
-    if ((await pg.locator('[data-tg="moves"] li').first().getAttribute('data-ladder')) !== 'pull') throw new Error('the Dashboard does not follow the new order')
+    if ((await pg.locator('[data-tg="moves"] li').nth(1).getAttribute('data-ladder')) !== 'shoulders') throw new Error('the Dashboard does not follow the new order')
     await sportView('Workout')
-    await pg.focus(`${W} [data-tg="moves"] li[data-ladder="push"] .sp-grip`)
-    await pg.keyboard.press('ArrowUp')
-    await pg.waitForFunction((w) => document.querySelector(`${w} [data-tg="moves"] li`)?.dataset.ladder === 'push', W, { timeout: 5000 })
+    await pg.focus(`${W} [data-tg="moves"] li[data-ladder="shoulders"] .sp-grip`)
+    await pg.keyboard.press('ArrowDown')
+    await pg.waitForFunction((w) => document.querySelector(`${w} [data-tg="moves"] li`)?.dataset.ladder === 'pull', W, { timeout: 5000 })
     await tgFit('The Workout section', `${W} .sp-card`, 2.5, 'sport-workout-plan.png')
   })
   await step('Sport Track workout: log all sets at the top, easy, the second time → "New variation unlocked" on Workout → Finish → Apply (rest timer, what changed)', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await tgOpen()
     await pg.click('[data-tg="start"]')
-    await pg.waitForSelector('[data-tg="flow"]', { timeout: 5000 })
+    await pg.waitForSelector('[data-sp="workout"] [data-tg="flow"]', { timeout: 5000 })
     if (!/Diamond push-ups/.test(await pg.locator('[data-tg="flow-move"]').innerText())) throw new Error('the workout does not start on the first move')
     for (let i = 0; i < 3; i++) {
       await pg.waitForFunction((n) => new RegExp(`Set ${n} of 3`).test(document.querySelector('[data-tg="flow-set"]')?.textContent ?? ''), i + 1, { timeout: 5000 })
@@ -2060,14 +2071,12 @@ try {
       return (s.sets?.[day]?.ex_tg_d || []).map((x) => `${x.reps}:${x.feel}:${x.session ? 's' : '-'}`).join(',')
     }, TGK)
     if (saved !== '12:easy:s,12:easy:s,12:easy:s') throw new Error(`the sets were not saved with their effort: ${saved}`)
-    // Close mid-workout: the Workout section says the next variation is unlocked, and why, with Apply change / Keep.
-    await pg.click('[data-tg="flow-close"]')
-    await sportView('Workout')
+    // Mid-workout: the Workout section says "Ready to unlock" Decline push-ups, and why, with Apply from next workout / Keep.
     const U = '[data-sp="workout"] [data-sp="unlock"]'
     await pg.waitForSelector(`${U}.on [data-sp="unlock-apply"]`, { timeout: 8000 })
     const u = await pg.locator(U).innerText()
-    if (!/New variation unlocked!/.test(u) || !/Replace Diamond push-ups with Decline push-ups/.test(u) || !/Or keep Diamond push-ups/.test(u)) throw new Error(`the unlock panel: ${u}`)
-    if ((await pg.locator(`${U} [data-sp="why"] li[data-done="1"]`).count()) !== 4) throw new Error('"Why is it unlocked?" does not tick all 4 rules')
+    if (!/Ready to unlock/i.test(u) || !/Decline push-ups/.test(u) || !/Apply from next workout/.test(u) || !/Keep Diamond push-ups/.test(u)) throw new Error(`the unlock panel: ${u}`)
+    if ((await pg.locator(`${U} [data-sp="why"] li[data-done="1"]`).count()) !== 4) throw new Error('"Ready to unlock" does not tick all 4 rules')
     if (process.env.TG_SHOTS) {
       await pg.setViewportSize({ width: 1920, height: 1080 })
       await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
@@ -2076,8 +2085,6 @@ try {
       await pg.screenshot({ path: `${process.env.TG_SHOTS}/sport-workout-1920.png` })
       await pg.setViewportSize({ width: 1440, height: 900 })
     }
-    await pg.click('[data-sp="workout"] [data-tg="start"]')
-    await pg.waitForSelector('[data-tg="flow"]', { timeout: 5000 })
     await pg.click('[data-tg="finish-btn"]')
     await pg.waitForSelector('[data-tg="finish"]', { timeout: 8000 })
     const row = pg.locator('[data-tg="finish-row"][data-ladder="push"]')
@@ -2094,26 +2101,119 @@ try {
     if (lv !== 3) throw new Error(`Apply did not move push to Decline push-ups (step ${lv + 1})`)
     await pg.click('[data-tg="finish-close"]')
     await pg.waitForSelector('[data-sp="workout"] [data-tg="done"]', { timeout: 5000 })
-    if (!/Decline push-ups/.test(await pg.locator('[data-sp="workout"] [data-tg="moves"] li[data-ladder="push"]').innerText())) throw new Error('the workout does not show the applied move')
+    if (!/Decline push-ups/.test(await pg.locator('[data-sp="workout"] [data-tg="flow-move"]').innerText())) throw new Error('the workout does not show the applied move')
     await sportView('Dashboard')
     await pg.waitForSelector('[data-tg="home"] [data-tg="done"]', { timeout: 5000 })
   })
   await step('Sport Track Workout: Make easier keeps history (one step down at once, the logged sets and the day you reached a step stay)', async () => {
     await tgOpen()
     await sportView('Workout')
-    const R = '[data-sp="workout"] [data-tg="moves"] li[data-ladder="push"]'
+    const R = '[data-sp="workout"] [data-tg="flow"][data-ladder="push"]'
     await pg.waitForSelector(R, { timeout: 8000 })
     const before = await pg.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); return { sets: Object.values(s.sets || {}).reduce((n, m) => n + (m.ex_tg_d || []).length, 0), reached: s.trainLevels?.push?.reached?.['2'], log: (s.trainLog || []).length } }, TGK)
     await pg.click(`${R} [data-tg="easier"]`)
-    await pg.waitForFunction((r) => /Diamond push-ups/.test(document.querySelector(r)?.textContent ?? ''), R, { timeout: 5000 })
+    // Diamond's 3 sets are done today, so the flow moves on; push is now one of the rows after the current move.
+    const RL = '[data-sp="workout"] [data-tg="moves"] li[data-ladder="push"]'
+    await pg.waitForFunction((r) => /Diamond push-ups/.test(document.querySelector(r)?.textContent ?? ''), RL, { timeout: 5000 })
     const after = await pg.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); return { sets: Object.values(s.sets || {}).reduce((n, m) => n + (m.ex_tg_d || []).length, 0), reached: s.trainLevels?.push?.reached?.['2'], log: (s.trainLog || []).length, level: s.trainLevels?.push?.level } }, TGK)
     if (after.level !== 2 || after.sets !== before.sets || after.reached !== before.reached || after.log !== before.log) throw new Error(`Make easier lost history: ${JSON.stringify({ before, after })}`)
     // Going down does not offer the harder move again until a newer session.
-    if (/Unlocked/.test(await pg.locator(R).innerText())) throw new Error('the harder move is offered again right after Make easier')
+    if (/Unlocked|Ready to unlock/i.test(await pg.locator(RL).innerText() + await pg.locator('[data-sp="workout"] [data-sp="unlock"]').innerText())) throw new Error('the harder move is offered again right after Make easier')
+    await pg.click(`${RL} .sp-wk-name`)
+    await pg.waitForSelector(R, { timeout: 5000 })
     await pg.click(`${R} [data-tg="harder"]`)
-    await pg.waitForFunction((r) => /Decline push-ups/.test(document.querySelector(r)?.textContent ?? ''), R, { timeout: 5000 })
+    await pg.waitForFunction((r) => /Decline push-ups/.test(document.querySelector(`${r} [data-tg="flow-move"]`)?.textContent ?? ''), R, { timeout: 5000 })
     // Back to the automatic dose, and Sport Track as it was.
     if (await pg.locator('[data-tg="customize"] .sp-link', { hasText: 'Back to automatic' }).count()) await pg.locator('[data-tg="customize"] .sp-link', { hasText: 'Back to automatic' }).click()
+    await tgRestore()
+  })
+  await step('Sport Track Change ›: the swap sheet lists easier steps, your step, the next one and a side option with photos; pick harder → "Use … today" changes today only, "Make it my step" keeps history', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await tgOpen()
+    await tgSeed()
+    if (/after all/.test(await pg.locator('[data-tg="cant-train"]').innerText())) await pg.click('[data-tg="cant-train"]')
+    const push = '[data-tg="moves"] li[data-ladder="push"]'
+    await pg.waitForFunction((r) => /Diamond push-ups/.test(document.querySelector(r)?.textContent ?? ''), push, { timeout: 8000 })
+    const count = () => pg.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); return { sets: Object.values(s.sets || {}).reduce((n, m) => n + Object.values(m).reduce((a, l) => a + l.length, 0), 0), log: (s.trainLog || []).length, level: s.trainLevels?.push?.level, reached: JSON.stringify(s.trainLevels?.push?.reached), picks: s.trainPicks ? Object.keys(s.trainPicks.moves).join() : '' } }, TGK)
+    const before = await count()
+    await pg.click(`${push} [data-tg="change"]`)
+    const S = '[data-sp="swap"]'
+    await pg.waitForSelector(S, { timeout: 5000 })
+    const kinds = await pg.locator(`${S} .sp-pick`).evaluateAll((l) => l.map((x) => `${x.dataset.kind}:${x.dataset.pick}`).join(','))
+    if (kinds !== 'easier:knee_pushup,easier:pushup,yours:diamond_pushup,next:decline_pushup,side:wide_pushup') throw new Error(`the swap options: ${kinds}`)
+    // Every option has a photo thumbnail, and the big demo is the move you picked.
+    if ((await pg.locator(`${S} .sp-pick .sp-pic`).count()) !== 5 || (await pg.locator(`${S} .sp-pick .sp-pic.photo`).count()) < 4) throw new Error('every option needs a thumbnail (a photo where there is one)')
+    await pg.waitForFunction((s) => { const i = document.querySelectorAll(`${s} .sp-sheet-stage img`); return i.length === 2 && [...i].every((x) => x.complete && x.naturalWidth > 0 && /diamond_pushup-[01]\.webp/.test(x.src)) }, S, { timeout: 8000 })
+    if (!/Harder locked steps \(Archer push-ups/.test(await pg.locator(S).innerText())) throw new Error('the locked steps are not named')
+    // Pick the harder step: the big demo swaps to it (pop-in), then Use … today.
+    await pg.click(`${S} [data-pick="decline_pushup"]`)
+    await pg.waitForFunction((s) => document.querySelector(`${s} [data-sp="swap-name"]`)?.textContent === 'Decline push-ups' && [...document.querySelectorAll(`${s} .sp-sheet-stage img`)].every((x) => /decline_pushup-[01]\.webp/.test(x.src)), S, { timeout: 5000 })
+    if (!(await pg.locator(`${S} .sp-demo.pop`).count())) throw new Error('the demo has no pop-in')
+    if (process.env.TG_SHOTS) {
+      await pg.setViewportSize({ width: 1920, height: 1080 })
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${process.env.TG_SHOTS}/sport-swap-1920.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await pg.click(`${S} [data-sp="swap-use"]`)
+    await pg.waitForSelector(S, { state: 'detached', timeout: 5000 })
+    await pg.waitForFunction((r) => /Decline push-ups/.test(document.querySelector(r)?.textContent ?? '') && /today only/.test(document.querySelector(r)?.textContent ?? ''), push, { timeout: 5000 })
+    const used = await count()
+    if (used.level !== 2 || used.sets !== before.sets || used.log !== before.log || used.reached !== before.reached || used.picks !== 'push') throw new Error(`Use today changed more than today: ${JSON.stringify({ before, used })}`)
+    // Make it my step: a level change (the old step keeps its day), today's pick ends.
+    await pg.click(`${push} [data-tg="change"]`)
+    await pg.waitForSelector(S, { timeout: 5000 })
+    await pg.click(`${S} [data-pick="decline_pushup"]`)
+    await pg.click(`${S} [data-sp="swap-step"]`)
+    await pg.waitForSelector(S, { state: 'detached', timeout: 5000 })
+    const stepped = await count()
+    if (stepped.level !== 3 || stepped.sets !== before.sets || stepped.log !== before.log || !stepped.reached.includes('"2"') || stepped.picks !== '') throw new Error(`Make it my step lost history: ${JSON.stringify({ before, stepped })}`)
+    await tgRestore()
+  })
+  await step('Sport Track Gear: edit gear from the Dashboard and Exercises; a weak desk means no table rows in the plan, the swap sheet or the path', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await tgOpen()
+    await tgSeed()
+    if (/after all/.test(await pg.locator('[data-tg="cant-train"]').innerText())) await pg.click('[data-tg="cant-train"]')
+    await pg.waitForFunction(() => /Table rows/.test(document.querySelector('[data-tg="moves"]')?.textContent ?? ''), null, { timeout: 8000 })
+    await pg.click('[data-tg="plan"] [data-sp="edit-gear"]')
+    const G = '[data-sp="gear"]'
+    await pg.waitForSelector(G, { timeout: 5000 })
+    const plan = (ladder) => pg.locator(`${G} [data-sp="gear-plan"] li[data-ladder="${ladder}"]`).getAttribute('data-move')
+    if ((await plan('pull')) !== 'table_row') throw new Error(`a sturdy table does not give table rows (${await plan('pull')})`)
+    // Desk too weak: never table rows. Bar first, then bands, then a towel on a door, then a backpack, then the floor.
+    await pg.click(`${G} [data-gear-table="weak"]`)
+    await pg.waitForFunction((g) => document.querySelector(`${g} [data-sp="gear-plan"] li[data-ladder="pull"]`)?.dataset.move === 'neg_pullup', G, { timeout: 5000 })
+    if (!/desk skipped/.test(await pg.locator(`${G} [data-sp="gear-plan"] li[data-ladder="pull"]`).innerText())) throw new Error('the plan does not say the desk was skipped')
+    const order = []
+    for (const k of ['bar', 'bands', 'dumbbells', 'rings', 'towel', 'backpack']) {
+      await pg.click(`${G} [data-gear="${k}"]`)
+      order.push(await pg.locator(`${G} [data-sp="gear-plan"] li[data-ladder="pull"]`).getAttribute('data-move'))
+    }
+    if (order.join() !== 'band_row,dumbbell_row,ring_row,towel_row,backpack_row,floor_pull') throw new Error(`the pull moves as gear is taken away: ${order.join()}`)
+    // No table at all: the same, and saved with the Sport Track state.
+    await pg.click(`${G} [data-gear-table="none"]`)
+    await pg.click(`${G} [data-gear="towel"]`)
+    await pg.waitForFunction((g) => document.querySelector(`${g} [data-sp="gear-plan"] li[data-ladder="pull"]`)?.dataset.move === 'towel_row', G, { timeout: 5000 })
+    const saved = await pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}').trainGear, TGK)
+    if (!saved || saved.table !== 'none' || saved.towel !== true || saved.bar !== false) throw new Error(`the gear was not saved: ${JSON.stringify(saved)}`)
+    // Today's plan, the swap sheet and the path never show table rows.
+    await pg.click(`${G} [data-sp="gear-back"]`)
+    await pg.waitForSelector('[data-tg="home"] [data-tg="plan"]', { timeout: 5000 })
+    await pg.waitForFunction(() => /Door towel rows/.test(document.querySelector('[data-tg="moves"] li[data-ladder="pull"]')?.textContent ?? ''), null, { timeout: 5000 })
+    if (/Table rows|Feet-elevated rows/.test(await pg.locator('[data-tg="plan"]').innerText())) throw new Error("table rows are still in today's plan")
+    await pg.click('[data-tg="moves"] li[data-ladder="pull"] [data-tg="change"]')
+    await pg.waitForSelector('[data-sp="swap"]', { timeout: 5000 })
+    const swap = await pg.locator('[data-sp="swap"] .sp-picks').innerText()
+    if (/Table rows|Feet-elevated rows/.test(swap)) throw new Error('the swap sheet lists a move that needs a table')
+    await pg.keyboard.press('Escape')
+    await pg.waitForSelector('[data-sp="swap"]', { state: 'detached', timeout: 5000 })
+    // The Exercises sidebar has the same link.
+    await sportView('Exercises')
+    await pg.click('[data-sp="gear-side"] [data-sp="edit-gear"]')
+    await pg.waitForSelector(G, { timeout: 5000 })
+    await pg.click(`${G} [data-sp="gear-back"]`)
     await tgRestore()
   })
   // The coach (Ben): ONE card that says what to do today. Today → Now has a slim strip (training + Start, the

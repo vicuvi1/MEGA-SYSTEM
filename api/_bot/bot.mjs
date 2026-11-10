@@ -77,7 +77,7 @@ var SETTINGS = {
 	island_widgets: json$7("PL1–PL8: installed widgets (pinned hashes, permissions), island pages, script tiles, the island look and the synced layout (src/core/widgets/settings.ts)", null),
 	island_kit: json$7("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)", null),
 	music_now: json$7("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
-	sport_tracker_json: json$7("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}", null),
+	sport_tracker_json: json$7("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}; the training part rides in the same blob (trainWeek, trainLadders, trainLevels, trainLog, trainLighter) with the gear you can train with (trainGear, core/trainGear.ts: the plan only picks moves it allows) and today's one-day move picks (trainPicks); the newer device wins for each", null),
 	sport_sync_seen: json$7("when Sporty last synced water and workouts", null),
 	sporty_status: json$7("Sporty's last status", null),
 	sporty_update_request: json$7("a change waiting for Sporty to pick up", null),
@@ -14196,9 +14196,98 @@ var TRAIN_MOVES = Object.fromEntries([
 			"Lower slowly without swinging."
 		],
 		mistake: "Swinging: pause in the hang between reps."
+	}),
+	X({
+		id: "band_row",
+		name: "Band rows",
+		group: "pull",
+		unit: "reps",
+		diff: 2,
+		needs: "a resistance band",
+		muscles: ["back", "biceps"],
+		steps: [
+			"Anchor the band at chest height (a door anchor or a post) and hold both ends.",
+			"Pull your elbows back and squeeze your shoulder blades together.",
+			"Return slowly with straight arms."
+		],
+		mistake: "Shrugging up: keep the shoulders down and pull the elbows to your ribs."
+	}),
+	X({
+		id: "dumbbell_row",
+		name: "Dumbbell rows",
+		group: "pull",
+		unit: "reps",
+		diff: 2,
+		needs: "a dumbbell",
+		muscles: ["back", "biceps"],
+		steps: [
+			"One hand and one knee on a sofa or chair, a dumbbell in the other hand.",
+			"Pull the dumbbell to your hip, elbow close to the body.",
+			"Lower slowly. Count reps per arm."
+		],
+		mistake: "Twisting the trunk: keep your back flat like a table."
+	}),
+	X({
+		id: "ring_row",
+		name: "Ring rows",
+		group: "pull",
+		unit: "reps",
+		diff: 3,
+		needs: "gym rings",
+		muscles: ["back", "biceps"],
+		steps: [
+			"Hang the rings at hip height, lean back with straight arms.",
+			"Pull your chest to the rings, elbows close.",
+			"Lower slowly. Walk your feet forward to make it harder."
+		],
+		mistake: "Sagging hips: squeeze your glutes so the body stays one line."
+	}),
+	X({
+		id: "towel_row",
+		name: "Door towel rows",
+		group: "pull",
+		unit: "reps",
+		diff: 2,
+		needs: "a towel and a door that closes and locks",
+		muscles: ["back", "biceps"],
+		steps: [
+			"Knot a towel round both door handles on the closed, locked side, or trap its knot in the door.",
+			"Hold both ends, lean back with straight arms, feet near the door.",
+			"Pull your chest to your hands, then lower slowly."
+		],
+		mistake: "Using a door that can swing open: close and lock it first."
+	}),
+	X({
+		id: "backpack_row",
+		name: "Backpack rows",
+		group: "pull",
+		unit: "reps",
+		diff: 2,
+		needs: "a loaded backpack",
+		muscles: ["back", "biceps"],
+		steps: [
+			"Fill a backpack with books or bottles; hold it by the top handle or both straps.",
+			"Hinge forward with a flat back, knees soft.",
+			"Pull the backpack to your belly, then lower slowly."
+		],
+		mistake: "Rounding the back: stop where your back stays flat."
+	}),
+	X({
+		id: "floor_pull",
+		name: "Floor sliding pulls",
+		group: "pull",
+		unit: "reps",
+		diff: 1,
+		muscles: ["back", "biceps"],
+		steps: [
+			"Lie face down on a smooth floor, a towel under each hand.",
+			"Slide your hands from straight ahead back to your ribs, pulling your chest forward.",
+			"Slide out slowly and repeat."
+		],
+		mistake: "Lifting your head: look at the floor and keep the neck long."
 	})
 ].map((m) => [m.id, m]));
-var L$1 = (move, lo, hi, unit = "reps") => ({
+var L$2 = (move, lo, hi, unit = "reps") => ({
 	move,
 	lo,
 	hi,
@@ -14211,14 +14300,14 @@ var DEFAULT_LADDERS = [
 		name: "Push",
 		type: "upper",
 		levels: [
-			L$1("knee_pushup", 8, 15),
-			L$1("pushup", 8, 15),
-			L$1("diamond_pushup", 6, 12),
-			L$1("decline_pushup", 6, 12),
-			L$1("archer_pushup", 5, 10),
-			L$1("planche_pushup", 5, 10),
-			L$1("oap_neg", 3, 6),
-			L$1("oap", 1, 5)
+			L$2("knee_pushup", 8, 15),
+			L$2("pushup", 8, 15),
+			L$2("diamond_pushup", 6, 12),
+			L$2("decline_pushup", 6, 12),
+			L$2("archer_pushup", 5, 10),
+			L$2("planche_pushup", 5, 10),
+			L$2("oap_neg", 3, 6),
+			L$2("oap", 1, 5)
 		]
 	},
 	{
@@ -14226,13 +14315,13 @@ var DEFAULT_LADDERS = [
 		name: "Pull",
 		type: "upper",
 		levels: [
-			L$1("table_row", 8, 15),
-			L$1("feet_row", 6, 12),
-			L$1("neg_pullup", 3, 6),
-			L$1("band_pullup", 5, 10),
-			L$1("pullup", 5, 10),
-			L$1("weighted_chinup", 5, 8),
-			L$1("archer_pullup", 3, 6)
+			L$2("table_row", 8, 15),
+			L$2("feet_row", 6, 12),
+			L$2("neg_pullup", 3, 6),
+			L$2("band_pullup", 5, 10),
+			L$2("pullup", 5, 10),
+			L$2("weighted_chinup", 5, 8),
+			L$2("archer_pullup", 3, 6)
 		]
 	},
 	{
@@ -14240,11 +14329,11 @@ var DEFAULT_LADDERS = [
 		name: "Shoulders",
 		type: "upper",
 		levels: [
-			L$1("pike_pushup", 6, 12),
-			L$1("elevated_pike", 6, 12),
-			L$1("wall_hs_hold", 20, 45, "sec"),
-			L$1("wall_hspu_neg", 3, 6),
-			L$1("wall_hspu", 3, 8)
+			L$2("pike_pushup", 6, 12),
+			L$2("elevated_pike", 6, 12),
+			L$2("wall_hs_hold", 20, 45, "sec"),
+			L$2("wall_hspu_neg", 3, 6),
+			L$2("wall_hspu", 3, 8)
 		]
 	},
 	{
@@ -14252,12 +14341,12 @@ var DEFAULT_LADDERS = [
 		name: "Legs (single-leg)",
 		type: "legs",
 		levels: [
-			L$1("squat", 15, 25),
-			L$1("split_squat", 8, 15),
-			L$1("bulgarian_squat", 8, 12),
-			L$1("bss_load", 8, 12),
-			L$1("box_pistol", 5, 10),
-			L$1("pistol_squat", 3, 8)
+			L$2("squat", 15, 25),
+			L$2("split_squat", 8, 15),
+			L$2("bulgarian_squat", 8, 12),
+			L$2("bss_load", 8, 12),
+			L$2("box_pistol", 5, 10),
+			L$2("pistol_squat", 3, 8)
 		]
 	},
 	{
@@ -14265,11 +14354,11 @@ var DEFAULT_LADDERS = [
 		name: "Hinge (hamstrings, glutes)",
 		type: "legs",
 		levels: [
-			L$1("glute_bridge", 12, 20),
-			L$1("single_leg_bridge", 8, 15),
-			L$1("hip_thrust_load", 8, 15),
-			L$1("sl_rdl", 8, 12),
-			L$1("nordic_neg", 3, 6)
+			L$2("glute_bridge", 12, 20),
+			L$2("single_leg_bridge", 8, 15),
+			L$2("hip_thrust_load", 8, 15),
+			L$2("sl_rdl", 8, 12),
+			L$2("nordic_neg", 3, 6)
 		]
 	},
 	{
@@ -14277,12 +14366,12 @@ var DEFAULT_LADDERS = [
 		name: "Core",
 		type: "legs",
 		levels: [
-			L$1("plank", 30, 60, "sec"),
-			L$1("knee_raise", 10, 15),
-			L$1("leg_raise", 8, 15),
-			L$1("hanging_leg_raise", 6, 12),
-			L$1("dragon_neg", 3, 6),
-			L$1("dragon_flag", 3, 6)
+			L$2("plank", 30, 60, "sec"),
+			L$2("knee_raise", 10, 15),
+			L$2("leg_raise", 8, 15),
+			L$2("hanging_leg_raise", 6, 12),
+			L$2("dragon_neg", 3, 6),
+			L$2("dragon_flag", 3, 6)
 		]
 	}
 ];
@@ -14340,7 +14429,171 @@ function cleanLadders(x) {
 var laddersFor = (ladders, type) => ladders.filter((l) => l.type === type);
 /** "6–12" or "20–45 s". */
 var rangeText = (v) => `${v.lo}–${v.hi}${v.unit === "sec" ? " s" : ""}`;
+// src/core/trainGear.ts
+var GEAR_FLAGS = [
+	"chair",
+	"bed",
+	"wall",
+	"towel",
+	"backpack",
+	"bar",
+	"bands",
+	"dumbbells",
+	"rings"
+];
+/** Everything allowed: what a plan assumed before gear existed. */
+var ALL_GEAR = {
+	table: "sturdy",
+	chair: true,
+	bed: true,
+	wall: true,
+	towel: true,
+	backpack: true,
+	bar: true,
+	bands: true,
+	dumbbells: true,
+	rings: true,
+	at: 0
+};
+/** A stored value into valid gear; null when none was ever saved. */
+function cleanGear(x) {
+	if (!x || typeof x !== "object") return null;
+	const o = x;
+	const g = {
+		...ALL_GEAR,
+		table: o.table === "weak" || o.table === "none" ? o.table : "sturdy",
+		at: Number(o.at) || 0
+	};
+	for (const k of GEAR_FLAGS) g[k] = o[k] == null ? ALL_GEAR[k] : !!o[k];
+	return g;
+}
+var hasGear = (g, k) => !g ? true : k === "table" ? g.table === "sturdy" : !!g[k];
+/** What a move needs: any one of these sets of gear (every key in a set is needed). No entry: the floor is enough. */
+var NEEDS = {
+	decline_pushup: [["chair"], ["bed"]],
+	incline_pushup: [
+		["chair"],
+		["bed"],
+		["table"]
+	],
+	chair_dip: [["chair"]],
+	table_row: [["table"]],
+	feet_row: [["table"]],
+	neg_pullup: [["bar"]],
+	band_pullup: [["bar", "bands"]],
+	pullup: [["bar"]],
+	weighted_chinup: [["bar", "backpack"]],
+	archer_pullup: [["bar"]],
+	elevated_pike: [["chair"], ["bed"]],
+	wall_hs_hold: [["wall"]],
+	wall_hspu_neg: [["wall"]],
+	wall_hspu: [["wall"]],
+	bulgarian_squat: [["chair"], ["bed"]],
+	bss_load: [["chair", "backpack"]],
+	box_pistol: [["chair"], ["bed"]],
+	hip_thrust_load: [["bed", "backpack"], ["chair", "backpack"]],
+	nordic_neg: [["bed"]],
+	hanging_leg_raise: [["bar"]],
+	band_row: [["bands"]],
+	towel_row: [["towel"]],
+	backpack_row: [["backpack"]],
+	dumbbell_row: [["dumbbells"]],
+	ring_row: [["rings"]]
+};
+/** Can you do this move with this gear? (null gear: yes.) */
+var allowed = (move, g) => {
+	const n = NEEDS[move];
+	return !g || !n || n.some((set) => set.every((k) => hasGear(g, k)));
+};
+var L$1 = (move, lo, hi, unit = "reps") => ({
+	move,
+	lo,
+	hi,
+	unit
+});
+/**
+* What a chain falls back to when its step needs gear you don't have, best first. The pull chain starts on a
+* table, so a weak desk or no table means a bar first, then bands, a towel on a door, a backpack, floor pulls
+* (dumbbells and rings, if you own them, come right after the bands).
+*/
+var ALT_LEVELS = { pull: [
+	L$1("neg_pullup", 3, 6),
+	L$1("band_row", 8, 15),
+	L$1("dumbbell_row", 8, 15),
+	L$1("ring_row", 8, 15),
+	L$1("towel_row", 8, 15),
+	L$1("backpack_row", 8, 15),
+	L$1("floor_pull", 8, 15)
+] };
+/** The step the plan really uses: yours when your gear allows it, else the nearest easier one, else a fallback. */
+function effectiveLevel(ladder, index, g) {
+	const lv = ladder.levels[index];
+	if (!g || allowed(lv.move, g)) return {
+		index,
+		level: lv,
+		swapped: false,
+		alt: false
+	};
+	for (let i = index - 1; i >= 0; i--) if (allowed(ladder.levels[i].move, g)) return {
+		index: i,
+		level: ladder.levels[i],
+		swapped: true,
+		alt: false
+	};
+	for (const alt of ALT_LEVELS[ladder.id] ?? []) {
+		if (!allowed(alt.move, g)) continue;
+		const at = ladder.levels.findIndex((x) => x.move === alt.move);
+		return at >= 0 ? {
+			index: at,
+			level: ladder.levels[at],
+			swapped: true,
+			alt: false
+		} : {
+			index,
+			level: alt,
+			swapped: true,
+			alt: true
+		};
+	}
+	for (let i = index + 1; i < ladder.levels.length; i++) if (allowed(ladder.levels[i].move, g)) return {
+		index: i,
+		level: ladder.levels[i],
+		swapped: true,
+		alt: false
+	};
+	return {
+		index,
+		level: lv,
+		swapped: false,
+		alt: false
+	};
+}
+/** The first step you can do at or after `from` (going `dir`), or null. */
+function stepFrom(ladder, from, dir, g) {
+	for (let i = from; i >= 0 && i < ladder.levels.length; i += dir) if (allowed(ladder.levels[i].move, g)) return i;
+	return null;
+}
 // src/core/trainLog.ts
+function cleanPicks(x) {
+	if (!x || typeof x.day !== "string" || !x.moves || typeof x.moves !== "object") return null;
+	const moves = {};
+	for (const [k, v] of Object.entries(x.moves)) {
+		const info = v && typeof v.move === "string" ? moveInfo(v.move) : null;
+		if (!info) continue;
+		const lo = Math.max(1, Math.min(300, Math.round(Number(v.lo) || 1)));
+		moves[k] = {
+			move: v.move,
+			lo,
+			hi: Math.max(lo, Math.min(300, Math.round(Number(v.hi) || lo))),
+			unit: info.unit
+		};
+	}
+	return {
+		day: x.day,
+		at: Number(x.at) || 0,
+		moves
+	};
+}
 /** Our part of Sport Track's state, cleaned. */
 function trainOf(st) {
 	const lv = {};
@@ -14354,7 +14607,9 @@ function trainOf(st) {
 		week: cleanWeek$1(st?.trainWeek),
 		ladders: cleanLadders(st?.trainLadders?.ladders),
 		levels: lv,
-		log: Array.isArray(st?.trainLog) ? st.trainLog.filter((s) => s && typeof s.id === "string" && typeof s.date === "string" && Array.isArray(s.exercises)) : []
+		log: Array.isArray(st?.trainLog) ? st.trainLog.filter((s) => s && typeof s.id === "string" && typeof s.date === "string" && Array.isArray(s.exercises)) : [],
+		gear: cleanGear(st?.trainGear),
+		picks: cleanPicks(st?.trainPicks)
 	};
 }
 /** Sessions with at least one set, as the week reads them. */
@@ -14596,7 +14851,13 @@ function nextTimeOf(p, today) {
 			move: level.move,
 			line: `Next time: ${p.name} with a slow tempo (3 s down, 1 s pause), because ${status.reason}. This is the top of the ladder.`
 		};
-		const to = p.ladder.levels[Math.min(p.ladder.levels.length - 1, p.index + (status.jump ?? 1))];
+		const at = stepFrom(p.ladder, Math.min(p.ladder.levels.length - 1, p.index + (status.jump ?? 1)), 1, p.gear);
+		if (at == null) return {
+			kind: "top",
+			move: level.move,
+			line: `Next time: ${p.name} with a slow tempo (3 s down, 1 s pause), because ${status.reason}. Your gear has no harder step on this chain.`
+		};
+		const to = p.ladder.levels[at];
 		return {
 			kind: "up",
 			move: to.move,
@@ -14636,15 +14897,22 @@ function sessionItems(st, data, type, today, dose = "full") {
 	return laddersFor(data.ladders, type).map((ladder) => {
 		const cur = currentLevel(st, data, ladder, today);
 		const stored = data.levels[ladder.id];
-		const level = ladder.levels[cur.index];
+		const eff = effectiveLevel(ladder, cur.index, data.gear);
+		const pick = data.picks?.day === today ? data.picks.moves[ladder.id] : void 0;
+		const picked = !!pick && pick.move !== eff.level.move && allowed(pick.move, data.gear);
+		const level = picked ? pick : eff.level;
+		const at = picked ? ladder.levels.findIndex((x) => x.move === pick.move) : -1;
+		const index = picked ? at >= 0 ? at : eff.index : eff.index;
+		const alt = picked ? at < 0 : eff.alt;
 		const fullSets = ladderSets(data.week, data.ladders, ladder);
 		const sets = doseSets(fullSets, dose);
 		const all = moveSessions(st, level.move, today);
 		const last = lastTime(all, today);
-		const since = cur.since;
+		const since = eff.swapped || picked ? null : cur.since;
+		const nextAt = alt ? null : stepFrom(ladder, index + 1, 1, data.gear);
 		const item = {
 			ladder,
-			index: cur.index,
+			index,
 			level,
 			name: moveName(level.move),
 			sets,
@@ -14654,21 +14922,28 @@ function sessionItems(st, data, type, today, dose = "full") {
 			latest: all[all.length - 1] ?? null,
 			lastLine: lastLine(last, level, sets),
 			status: levelStatus(all, level, fullSets, since),
-			next: ladder.levels[cur.index + 1] ?? null,
+			next: nextAt == null ? null : ladder.levels[nextAt],
 			fullSets,
 			offer: null,
-			nextTime: null
+			nextTime: null,
+			swapped: eff.swapped,
+			alt,
+			picked
 		};
-		item.offer = offerOf(item, stored?.declinedOn);
-		item.nextTime = nextTimeOf(item, today);
+		item.offer = alt || picked ? null : offerOf(item, stored?.declinedOn, data.gear);
+		item.nextTime = alt ? null : nextTimeOf({
+			...item,
+			gear: data.gear
+		}, today);
 		return item;
 	});
 }
 /** The next level unlocked by a completed one, unless you chose Keep after your newest session (null: nothing to offer). */
-function offerOf(p, declinedOn) {
+function offerOf(p, declinedOn, gear) {
 	if (p.status.state !== "complete" || p.index >= p.ladder.levels.length - 1) return null;
 	if (!suggestNow(p.status, p.latest, declinedOn)) return null;
-	const to = Math.min(p.ladder.levels.length - 1, p.index + (p.status.jump ?? 1));
+	const to = stepFrom(p.ladder, Math.min(p.ladder.levels.length - 1, p.index + (p.status.jump ?? 1)), 1, gear);
+	if (to == null) return null;
 	const lv = p.ladder.levels[to];
 	const name = moveName(lv.move);
 	return {

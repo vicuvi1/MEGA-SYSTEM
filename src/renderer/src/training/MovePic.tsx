@@ -15,7 +15,7 @@ const PHOTOS = new Set([
 export const hasPhoto = (move: string) => PHOTOS.has(move)
 
 /** The figure to draw for a move without a photo: its own, else the first move of its chain that has one. */
-function figureOf(move: string) {
+export function figureOf(move: string) {
   const own = moveInfo(move)?.lib?.anim
   if (own) return own
   const ladder = DEFAULT_LADDERS.find((l) => l.levels.some((v) => v.move === move))
@@ -38,6 +38,30 @@ export function MovePic({ move, size = 'md', className = '' }: { move: string; s
   return (
     <span className={`sp-pic drawn ${size} ${className}`} aria-hidden="true">
       {anim ? <FigureSvg anim={anim} size={size === 'sm' ? 34 : size === 'md' ? 48 : size === 'lg' ? 90 : 120} /> : null}
+    </span>
+  )
+}
+
+/**
+ * A big demo: the real photo's two frames cross-fading (start, then end, looping), else the drawn figure of
+ * the move. Honors prefers-reduced-motion (the CSS shows the first frame only). `pop` replays a short
+ * pop-in each time the move changes (the swap sheet).
+ */
+export function DemoPic({ move, className = '', label, pop = false, fig = 220 }: { move: string; className?: string; label?: string; pop?: boolean; fig?: number }) {
+  const name = moveInfo(move)?.name ?? move
+  if (PHOTOS.has(move))
+    return (
+      <span className={`sp-demo photo${pop ? ' pop' : ''} ${className}`} key={pop ? move : undefined} data-move={move}>
+        <img src={`/apps/sport/photos/${move}-0.webp`} alt={`${name}, start`} draggable={false} />
+        <img className="b" src={`/apps/sport/photos/${move}-1.webp`} alt={`${name}, end`} draggable={false} />
+        {label && <span className="sp-demo-tag">{label}</span>}
+      </span>
+    )
+  const anim = figureOf(move)
+  return (
+    <span className={`sp-demo drawn${pop ? ' pop' : ''} ${className}`} key={pop ? move : undefined} data-move={move} role="img" aria-label={name}>
+      {anim ? <FigureSvg anim={anim} size={fig} /> : null}
+      {label && <span className="sp-demo-tag">{label}</span>}
     </span>
   )
 }

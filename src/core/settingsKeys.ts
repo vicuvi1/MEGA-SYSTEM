@@ -124,7 +124,7 @@ export const SETTINGS = {
   island_kit: json<Record<string, unknown> | null>('Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)', null),
   music_now: json<Record<string, unknown> | null>("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
   // ---- shared app data (embedded apps) ----
-  sport_tracker_json: json<SportBlob | null>('Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}', null),
+  sport_tracker_json: json<SportBlob | null>('Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}; the training part rides in the same blob (trainWeek, trainLadders, trainLevels, trainLog, trainLighter) with the gear you can train with (trainGear, core/trainGear.ts: the plan only picks moves it allows) and today\'s one-day move picks (trainPicks); the newer device wins for each', null),
   sport_sync_seen: json<{ at?: string } | null>('when Sporty last synced water and workouts', null),
   sporty_status: json<Record<string, unknown> | null>("Sporty's last status", null),
   sporty_update_request: json<Record<string, unknown> | null>('a change waiting for Sporty to pick up', null),
