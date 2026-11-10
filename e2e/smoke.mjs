@@ -5301,7 +5301,9 @@ try {
     if (await x.first().isVisible({ timeout: 1200 }).catch(() => false)) await x.first().click({ timeout: 5000 })
   }
   const studyClock = () => pg.textContent('[data-testid="study-clock"]').then((t) => (t ?? '').trim())
-  await step('Study Time: quick add → pomodoro start → pause → resume → +5 → Take 5 → back → switch block → stop with a note; the totals agree', async () => {
+  await step('Study Time: quick add → pomodoro start → pause → resume → +5 → Take 5 → back → switch block → stop with a note; the totals agree', () => atTime('06:00', async () => {
+    // Early, before the day's first plan block, and the clock is put back after: the sessions this step makes must not land
+    // on the morning's plan blocks, which would count as worked (Plan trust re-plans only blocks nobody worked in).
     await pg.setViewportSize({ width: 1920, height: 1080 })
     await open('study')
     await pg.waitForSelector('.sy .ptabs [data-tab="timer"]', { timeout: 15000 })
@@ -5377,8 +5379,10 @@ try {
     const sum = parts.reduce((t, x) => t + studyHm(x), 0)
     if (!week || Math.abs(sum - week) > 1) throw new Error(`the subjects add up to ${sum} min, the week says ${week} min`)
     if (!(await pg.locator('.sy-fchip', { hasText: 'Math' }).filter({ hasText: /[1-9]/ }).count())) throw new Error('Math shows no time after a Math session')
-  })
-  await step('Study Time: count up turns gold past the plan, drag to reorder, a repeating block moves on, Stats (slice detail, heat map, timeline, best hours, goals, CSV), each tab fits', async () => {
+  }))
+  await step('Study Time: count up turns gold past the plan, drag to reorder, a repeating block moves on, Stats (slice detail, heat map, timeline, best hours, goals, CSV), each tab fits', () => atTime('07:15', async () => {
+    // Early, before the day's first plan block, and the clock is put back after: the sessions this step makes must not land
+    // on the morning's plan blocks, which would count as worked (Plan trust re-plans only blocks nobody worked in).
     await pg.setViewportSize({ width: 1920, height: 1080 })
     await pg.click('.sy .ptabs [data-tab="timer"]')
     // Count up to Reading's 25 minutes; past it the ring is gold.
@@ -5437,7 +5441,7 @@ try {
     for (const id of ['timer', 'stats', 'log']) sizes.push(`${id} ${((await tabFit('.sy', id, 1.75 * 0.9)).scroll / 654).toFixed(2)}`)
     await pg.click('.sy .ptabs [data-tab="timer"]')
     console.log(`    Study Time tabs (screens of 654 px): ${sizes.join(', ')}`)
-  })
+  }))
   await step('Study Time on the island: the subject ring in the pill, pause / resume / +5 / switch, start any block by search, and the notices (Take 5, Keep going, Back to it) with their buttons', async () => {
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
     ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
