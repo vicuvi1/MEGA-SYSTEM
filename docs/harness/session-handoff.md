@@ -23,14 +23,14 @@ Next action: <the single next step>
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
-### Current handoff (2026-11-09, evening)
+### Current handoff (2026-11-10, evening)
 ```
-Milestone:   AI coach + growth + Photo Locker + goal ladder on main; release v1.4.1428 green
-Completed:   see progress.md
-Active:      none
-Blockers:    owner: Drive API + drive.file scope; which scale app for Phase 2
-Next action: scale Phase 2 (tools/scale-sync + docs/scale-sync.md) or the UI clean-up pick list
-Files:       docs/INDEX.md, docs/areas/coach.md, docs/areas/vault.md, docs/areas/sport.md, docs/harness/progress.md
+Milestone:   Study Time 2, food photos (Drive, paste from AI, gallery, scores), island click-through, Ben short night; release v1.4.1441 green
+Completed:   see progress.md (2026-11-10 entry)
+Active:      architect "Tracker uses the real progressive program" (worktree agent-a5743df7…): Sport Track Tracker Today -> sets x reps at ladder steps from trainWeek/trainLadders, double progression; owns sport/index.html, src/core/sport*.ts, sportkit.js, body/training. Ship it when it reports (full smoke + release).
+Blockers:    owner: Connect Google Drive in Photo Locker; which scale app (Xiaomi Home / Mi Fitness); real AI / Open Food Facts / Drive only tested with fakes
+Next action: ship the Tracker branch; then small batches only (2-4 features), see "Cost rules" in CLAUDE.md
+Files:       docs/INDEX.md, docs/areas/sport.md, docs/areas/food.md, docs/areas/focus.md (Study Time), docs/harness/progress.md
 ```
 
 ## Builder report format (≤ ~250 words)
