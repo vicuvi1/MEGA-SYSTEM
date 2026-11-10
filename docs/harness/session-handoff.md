@@ -17,9 +17,9 @@ Running background agents keep running. The new session sees their commits on `m
 ```
 Milestone:   <what this stretch of work is>
 Completed:   <commits/features landed, one line each>
-Active:      <agents still running: area, worktree, what they own>
+Active:      none. Training phase 1 shipped (d5efdd3): Sport Track opens on Training (src/renderer/src/training/, core/sportTrain.ts).
 Blockers:    <anything failing or waiting on the user>
-Next action: <the single next step>
+Next action: Training phase 2 in small batches: equipment + home-only mode; exercise library with chains; workout builder; PRs + readiness; switch Body -> Today coach Start to the new workout flow. Mockups were images 28-31 in the old session (dark cards, lime accents).
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
