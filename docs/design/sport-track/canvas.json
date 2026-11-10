@@ -1,0 +1,130 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Exercises.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "title": "3 \u00b7 Exercises",
+      "w": 1440,
+      "x": 3040,
+      "y": 0
+    },
+    "Main.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "title": "1 \u00b7 Dashboard",
+      "w": 1440,
+      "x": 0,
+      "y": 0
+    },
+    "Progress.dc.html": {
+      "expand": "fill",
+      "h": 1560,
+      "title": "4 \u00b7 Progress",
+      "w": 1440,
+      "x": 4560,
+      "y": 0
+    },
+    "Workout.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "title": "2 \u00b7 Workout",
+      "w": 1440,
+      "x": 1520,
+      "y": 0
+    },
+    "Swap.dc.html": {
+      "h": 900,
+      "title": "7 \u00b7 Tap a move: pick easier or harder",
+      "w": 1440,
+      "x": 0,
+      "y": 1300,
+      "is_interactive": true
+    },
+    "Gear.dc.html": {
+      "h": 900,
+      "title": "8 \u00b7 What you own (sets your exercises)",
+      "w": 1440,
+      "x": 1520,
+      "y": 1300,
+      "is_interactive": true
+    },
+    "BodyFood.dc.html": {
+      "expand": "fill",
+      "h": 1180,
+      "title": "5 \u00b7 Body & Food: AI prompt + paste box",
+      "w": 1440,
+      "x": 6080,
+      "y": 0
+    },
+    "Growth.dc.html": {
+      "expand": "fill",
+      "h": 1300,
+      "title": "6 \u00b7 Am I really growing?",
+      "w": 1440,
+      "x": 7600,
+      "y": 0
+    }
+  },
+  "createdOnFiles": {
+    "at": "2026-11-10T21:40:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "launch": {
+    "view": "canvas"
+  },
+  "noteOrder": [
+    "intro",
+    "rules",
+    "food",
+    "growth"
+  ],
+  "notes": {
+    "intro": {
+      "fill": "green",
+      "size": 40,
+      "text": "Sport Track \u2014 round 3. Row 1: Dashboard, Workout, Exercises, Progress, Body & Food (AI prompt + paste box). Row 2: tap a move to swap it, and what you own. Numbers are examples shaped like your data.",
+      "w": 620,
+      "x": 0,
+      "y": -420
+    },
+    "rules": {
+      "fill": "blue",
+      "size": 24,
+      "text": "One level system: Level = your overall level (top right). Each exercise chain = Step N of M. One card style, one type scale, one accent (lime). Empty data = one line + one button. Exercises always come from the equipment you ticked.",
+      "w": 620,
+      "x": 700,
+      "y": -420
+    },
+    "food": {
+      "x": 6080,
+      "y": -300,
+      "text": "Food + AI is here \u2192 copy the prompt, paste the AI's answer, see every meal, Log all.",
+      "w": 620,
+      "size": "l",
+      "fill": "orange"
+    },
+    "growth": {
+      "x": 7600,
+      "y": -300,
+      "text": "Am I really growing? One verdict from 6 signs: strength, weight, waist, training, protein, sleep.",
+      "w": 620,
+      "size": "l",
+      "fill": "green"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "Workout.dc.html",
+    "Exercises.dc.html",
+    "Progress.dc.html",
+    "BodyFood.dc.html",
+    "Growth.dc.html",
+    "Swap.dc.html",
+    "Gear.dc.html"
+  ],
+  "pages": [],
+  "title": "Sport Track Design"
+}

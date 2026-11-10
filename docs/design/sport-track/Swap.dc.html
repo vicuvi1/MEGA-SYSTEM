@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Swap a move</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+@keyframes xfade{0%,30%{opacity:0}45%,80%{opacity:1}95%,100%{opacity:0}}
+@keyframes cardin{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes popin{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+.demo{position:relative;overflow:hidden;background:#f3f3f1}
+.demo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.demo img.b{animation:xfade 2.6s ease-in-out infinite}
+.demo.big{animation:popin .3s ease both}
+.sheet{animation:cardin .35s cubic-bezier(.2,.8,.2,1) both}
+.pick{transition:transform .18s ease,border-color .18s ease,background .18s ease}
+.pick:hover{transform:translateY(-3px)}
+@media (prefers-reduced-motion:reduce){.demo img.b{animation:none;opacity:0}.sheet,.demo.big{animation:none}.pick{transition:none}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; position: relative; overflow: hidden; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+  <div aria-hidden="true" style="position: absolute; inset: 0; padding: 40px; opacity: .25">
+    <div style="font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700">Today's workout</div>
+    <div style="margin-top: 20px; height: 120px; border-radius: 20px; background: #151b17"></div>
+    <div style="margin-top: 16px; height: 80px; border-radius: 16px; background: #151b17"></div>
+  </div>
+  <div style="position: absolute; inset: 0; background: rgba(6,9,7,.74)"></div>
+
+  <section class="sheet" role="dialog" aria-label="Change Diamond push-ups" style="position: absolute; left: 100px; right: 100px; top: 50px; bottom: 50px; background: #131914; border: 1px solid #2a332c; border-radius: 26px; padding: 28px 32px; display: flex; flex-direction: column; gap: 20px">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px">
+      <div>
+        <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Push path · today's move</div>
+        <h2 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 30px">Pick how hard</h2>
+      </div>
+      <button type="button" aria-label="Close" style="width: 44px; height: 44px; border-radius: 12px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit; font-size: 20px">×</button>
+    </div>
+
+    <div style="display: flex; gap: 28px; flex: 1 1 auto; min-height: 0">
+      <div style="flex: 1 1 560px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
+        <div style="position: relative; flex: 1 1 auto; min-height: 0">
+          <sc-if value="{{is0}}" hint-placeholder-val="{{false}}">
+            <div class="demo big" style="position: absolute; inset: 0; border-radius: 20px"><img src="/_blob/ce6ac499488506f7306e8b2d9f101f5a" alt="Incline push-ups, top"><img class="b" src="/_blob/fb77eb2452721f2cd06431576792700f" alt="Incline push-ups, bottom"></div>
+          </sc-if>
+          <sc-if value="{{is1}}" hint-placeholder-val="{{false}}">
+            <div class="demo big" style="position: absolute; inset: 0; border-radius: 20px"><img src="/_blob/5e92269e52edf4d40cb8ce4f29c4c07a" alt="Push-ups, top"><img class="b" src="/_blob/f80bc24c7e0eba9f509c0254d1e2760f" alt="Push-ups, bottom"></div>
+          </sc-if>
+          <sc-if value="{{is2}}" hint-placeholder-val="{{true}}">
+            <div class="demo big" style="position: absolute; inset: 0; border-radius: 20px"><img src="/_blob/95c50cfed8cd32d3e94785b13b87d606" alt="Diamond push-ups, top"><img class="b" src="/_blob/f3ed248e63da79b507a13f78cfdbbf88" alt="Diamond push-ups, bottom"></div>
+          </sc-if>
+          <sc-if value="{{is3}}" hint-placeholder-val="{{false}}">
+            <div class="demo big" style="position: absolute; inset: 0; border-radius: 20px"><img src="/_blob/84f3bbeb6408197916eef133c3c21db9" alt="Decline push-ups, top"><img class="b" src="/_blob/509888f8eb82c52356f7c446eea3dd81" alt="Decline push-ups, bottom"></div>
+          </sc-if>
+          <sc-if value="{{is4}}" hint-placeholder-val="{{false}}">
+            <div class="demo big" style="position: absolute; inset: 0; border-radius: 20px"><img src="/_blob/fb56d3d3d9eaccfda757fe0c3827eacf" alt="Wide push-ups, top"><img class="b" src="/_blob/b928c488057377bcf69e3d06cd6be0dc" alt="Wide push-ups, bottom"></div>
+          </sc-if>
+          <span style="position: absolute; left: 14px; top: 14px; padding: 6px 12px; border-radius: 999px; background: #0c100d; color: #c6f432; font-size: 13px; font-weight: 600">{{cur.badge}}</span>
+          <span style="position: absolute; right: 14px; bottom: 14px; padding: 6px 12px; border-radius: 999px; background: rgba(12,16,13,.82); color: #eef3ec; font-size: 13px">Real demo · loops top → bottom</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; text-align: center">
+          <div style="background: #101511; border-radius: 12px; padding: 12px"><div style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">{{cur.sets}}</div><div style="font-size: 12px; color: #a6b2a8">sets × reps</div></div>
+          <div style="background: #101511; border-radius: 12px; padding: 12px"><div style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">{{cur.rest}}</div><div style="font-size: 12px; color: #a6b2a8">rest</div></div>
+          <div style="background: #101511; border-radius: 12px; padding: 12px"><div style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">{{cur.needs}}</div><div style="font-size: 12px; color: #a6b2a8">needs</div></div>
+        </div>
+      </div>
+
+      <div style="flex: 1 1 520px; display: flex; flex-direction: column; gap: 14px; min-width: 0">
+        <div>
+          <h3 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px">{{cur.name}}</h3>
+          <p style="margin: 6px 0 0; color: #cfd8cf">{{cur.why}}</p>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <button type="button" class="pick" onClick="{{p0}}" style="{{b0}}"><span class="demo" style="flex: 0 0 96px; height: 64px; border-radius: 10px"><img src="/_blob/ce6ac499488506f7306e8b2d9f101f5a" alt=""></span><span style="flex: 1; min-width: 0"><span style="display: block; font-size: 12px; color: #9fd36b">Easier · step 1</span><span style="display: block; font-weight: 600; font-size: 16px">Incline push-ups</span><span style="font-size: 13px; color: #a6b2a8">3 × 10–15 · hands on a chair or bed</span></span></button>
+          <button type="button" class="pick" onClick="{{p1}}" style="{{b1}}"><span class="demo" style="flex: 0 0 96px; height: 64px; border-radius: 10px"><img src="/_blob/5e92269e52edf4d40cb8ce4f29c4c07a" alt=""></span><span style="flex: 1; min-width: 0"><span style="display: block; font-size: 12px; color: #9fd36b">Easier · step 2 · mastered</span><span style="display: block; font-weight: 600; font-size: 16px">Push-ups</span><span style="font-size: 13px; color: #a6b2a8">3 × 8–15 · floor</span></span></button>
+          <button type="button" class="pick" onClick="{{p2}}" style="{{b2}}"><span class="demo" style="flex: 0 0 96px; height: 64px; border-radius: 10px"><img src="/_blob/95c50cfed8cd32d3e94785b13b87d606" alt=""></span><span style="flex: 1; min-width: 0"><span style="display: block; font-size: 12px; color: #c6f432">Your step · 3</span><span style="display: block; font-weight: 600; font-size: 16px">Diamond push-ups</span><span style="font-size: 13px; color: #a6b2a8">3 × 6–12 · floor</span></span></button>
+          <button type="button" class="pick" onClick="{{p3}}" style="{{b3}}"><span class="demo" style="flex: 0 0 96px; height: 64px; border-radius: 10px"><img src="/_blob/84f3bbeb6408197916eef133c3c21db9" alt=""></span><span style="flex: 1; min-width: 0"><span style="display: block; font-size: 12px; color: #9fd36b">Next · step 4 · 1 session to go</span><span style="display: block; font-weight: 600; font-size: 16px">Decline push-ups</span><span style="font-size: 13px; color: #a6b2a8">3 × 6–12 · feet on a chair or bed</span></span></button>
+          <button type="button" class="pick" onClick="{{p4}}" style="{{b4}}"><span class="demo" style="flex: 0 0 96px; height: 64px; border-radius: 10px"><img src="/_blob/fb56d3d3d9eaccfda757fe0c3827eacf" alt=""></span><span style="flex: 1; min-width: 0"><span style="display: block; font-size: 12px; color: #a6b2a8">Side option · same level</span><span style="display: block; font-weight: 600; font-size: 16px">Wide push-ups</span><span style="font-size: 13px; color: #a6b2a8">3 × 8–12 · more chest, less triceps</span></span></button>
+        </div>
+        <div style="margin-top: auto; display: flex; flex-wrap: wrap; gap: 12px">
+          <button type="button" style="flex: 1 1 200px; padding: 15px; border-radius: 14px; background: #c6f432; border: 0; color: #0c100d; font: inherit; font-weight: 700; font-size: 16px">Use {{cur.short}} today</button>
+          <button type="button" style="flex: 1 1 200px; padding: 15px; border-radius: 14px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit; font-weight: 600; font-size: 16px">Make it my step</button>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: #a6b2a8">Harder locked steps (Archer, one-arm) open from Exercises. Your history always stays.</p>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { picked: 2 }; }
+  renderVals() {
+    const all = [
+      { name: 'Incline push-ups', short: 'Incline', sets: '3 × 10–15', rest: '60 s', needs: 'chair', badge: 'Easier', why: 'Hands up on a chair or the bed: less of your weight, same movement. Good on a tired day.' },
+      { name: 'Push-ups', short: 'Push-ups', sets: '3 × 8–15', rest: '75 s', needs: 'floor', badge: 'Easier · mastered', why: 'The classic. You mastered it: 3 × 15 easy, twice in a row.' },
+      { name: 'Diamond push-ups', short: 'Diamond', sets: '3 × 6–12', rest: '90 s', needs: 'floor', badge: 'Your step now', why: 'Hands close together under the chest: the work moves to the triceps and inner chest.' },
+      { name: 'Decline push-ups', short: 'Decline', sets: '3 × 6–12', rest: '90 s', needs: 'chair', badge: 'Next step: try it today', why: 'Feet up on a chair or the bed puts more weight on the shoulders and upper chest. Unlocks after 1 more strong Diamond session.' },
+      { name: 'Wide push-ups', short: 'Wide', sets: '3 × 8–12', rest: '75 s', needs: 'floor', badge: 'Side option', why: 'Hands wider than the shoulders: more chest, less triceps. Same level, for variety.' }
+    ];
+    const p = this.state.picked;
+    const box = (i) => 'display: flex; gap: 14px; align-items: center; text-align: left; padding: 10px 14px 10px 10px; border-radius: 14px; font: inherit; color: #eef3ec; cursor: pointer; border: 1px solid ' + (i === p ? '#c6f432; background: #1b2a12' : '#2a332c; background: #101511');
+    const v = { cur: all[p] };
+    for (let i = 0; i < 5; i++) {
+      v['is' + i] = i === p;
+      v['b' + i] = box(i);
+      v['p' + i] = () => this.setState({ picked: i });
+    }
+    return v;
+  }
+}
+</script>
+</body>
+</html>

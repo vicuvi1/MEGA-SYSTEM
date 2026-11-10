@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sport Track dashboard</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+a{color:#c6f432}a:hover{color:#dcff6e}
+@keyframes xfade{0%,30%{opacity:0}45%,80%{opacity:1}95%,100%{opacity:0}}
+.demo{position:relative;overflow:hidden;background:#f3f3f1}
+.demo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.demo img.b{animation:xfade 2.6s ease-in-out infinite}
+.mv:hover{background:#1b221d}
+@media (prefers-reduced-motion:reduce){.demo img.b{animation:none;opacity:0}}
+</style>
+</helmet>
+<div style="min-height: 1180px; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; padding: 18px 40px; border-bottom: 1px solid #1f2721">
+    <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">Sport Track</h1>
+    <nav aria-label="Sport Track sections" style="display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto">
+      <a href="Main.dc.html" style="padding: 9px 16px; border-radius: 999px; background: #c6f432; color: #0c100d; font-weight: 600; text-decoration: none">Dashboard</a>
+      <a href="Workout.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Workout</a>
+      <a href="Exercises.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Exercises</a>
+      <a href="Progress.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Progress</a>
+      <a href="BodyFood.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Body &amp; Food</a>
+    </nav>
+    <div style="display: flex; align-items: center; gap: 10px; padding: 6px 14px 6px 6px; border: 1px solid #2a332c; border-radius: 999px">
+      <span style="display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: #c6f432; color: #0c100d; font-weight: 700; font-size: 14px">4</span>
+      <span style="font-weight: 600">Level 4 · Builder</span>
+    </div>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+    <section style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch">
+      <div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+        <div>
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 34px; font-weight: 700">Good evening, Victor</h2>
+          <p style="margin: 6px 0 0; color: #a6b2a8; font-size: 16px">Upper body today. One rep more than last time is a win.</p>
+          <a href="Growth.dc.html" style="display: inline-flex; align-items: center; gap: 10px; margin-top: 12px; padding: 9px 14px; border-radius: 999px; background: #17230f; border: 1px solid #3c5a1a; color: #eef3ec; text-decoration: none; font-weight: 600"><span style="width: 10px; height: 10px; border-radius: 50%; background: #c6f432"></span>Am I growing? Yes: lean muscle · score 82 ›</a>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px">
+          <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+            <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 16px 18px">
+              <div style="font-size: 13px; color: #a6b2a8">{{k.label}}</div>
+              <div style="margin-top: 6px; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700">{{k.value}}</div>
+              <div style="margin-top: 2px; font-size: 13px; color: #c6f432">{{k.note}}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      <div style="flex: 1 1 300px; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 22px 24px; display: flex; align-items: center; gap: 20px">
+        <svg width="112" height="112" viewBox="0 0 112 112" role="img" aria-label="Level 4, 62 percent to level 5">
+          <circle cx="56" cy="56" r="48" fill="none" stroke="#263027" stroke-width="10"></circle>
+          <circle cx="56" cy="56" r="48" fill="none" stroke="#c6f432" stroke-width="10" stroke-linecap="round" stroke-dasharray="187 302" transform="rotate(-90 56 56)"></circle>
+          <text x="56" y="52" text-anchor="middle" fill="#a6b2a8" font-size="12" font-family="Inter">Level</text>
+          <text x="56" y="76" text-anchor="middle" fill="#eef3ec" font-size="30" font-weight="700" font-family="Space Grotesk">4</text>
+        </svg>
+        <div style="min-width: 0">
+          <div style="font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">Builder</div>
+          <div style="margin-top: 4px; color: #a6b2a8; font-size: 14px">620 / 1,000 XP to Level 5</div>
+          <div style="margin-top: 10px; color: #cfd8cf; font-size: 14px">XP comes only from sets you log.</div>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-wrap: wrap; gap: 24px">
+      <article style="flex: 999 1 640px; min-width: 0; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 26px; display: flex; flex-wrap: wrap; gap: 26px">
+        <div class="demo" style="flex: 0 0 300px; height: 260px; border-radius: 16px">
+          <img src="/_blob/95c50cfed8cd32d3e94785b13b87d606" alt="Diamond push-ups, top position">
+          <img class="b" src="/_blob/f3ed248e63da79b507a13f78cfdbbf88" alt="Diamond push-ups, bottom position">
+          <span style="position: absolute; left: 10px; bottom: 10px; padding: 5px 10px; border-radius: 999px; background: rgba(12,16,13,.85); color: #c6f432; font-size: 12px; font-weight: 600">First up: Diamond push-ups</span>
+        </div>
+        <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+          <div style="display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap">
+            <div>
+              <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Today's workout</div>
+              <h3 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700">Upper body</h3>
+            </div>
+            <a href="Gear.dc.html" style="color: #a6b2a8; text-decoration: none">≈ 25 min · floor, bed, chair · <span style="color: #c6f432">edit gear</span></a>
+          </div>
+          <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column">
+            <li style="border-top: 1px solid #222a24"><a href="Swap.dc.html" class="mv" title="Tap to pick easier or harder" style="display: flex; align-items: center; gap: 14px; padding: 10px 8px; margin: 0 -8px; border-radius: 12px; color: #eef3ec; text-decoration: none"><span class="demo" style="flex: 0 0 72px; height: 52px; border-radius: 10px"><img src="/_blob/95c50cfed8cd32d3e94785b13b87d606" alt=""></span><span style="flex: 1; min-width: 0"><span style="display: block; font-size: 17px; font-weight: 600">Diamond push-ups</span><span style="display: block; font-size: 13px; color: #a6b2a8">Push · step 3 of 8</span></span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700">3 × 6–12</span><span style="padding: 6px 10px; border-radius: 999px; border: 1px solid #334036; color: #c6f432; font-size: 13px; font-weight: 600">Change ›</span></a></li>
+            <li style="border-top: 1px solid #222a24"><a href="Swap.dc.html" class="mv" title="Tap to pick easier or harder" style="display: flex; align-items: center; gap: 14px; padding: 10px 8px; margin: 0 -8px; border-radius: 12px; color: #eef3ec; text-decoration: none"><span class="demo" style="flex: 0 0 72px; height: 52px; border-radius: 10px"><img src="/_blob/685740b4fc6e606b16661ff4d5e4943e" alt=""></span><span style="flex: 1; min-width: 0"><span style="display: block; font-size: 17px; font-weight: 600">Table rows</span><span style="display: block; font-size: 13px; color: #a6b2a8">Pull · step 1 of 7 · sturdy table</span></span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700">4 × 8–15</span><span style="padding: 6px 10px; border-radius: 999px; border: 1px solid #334036; color: #c6f432; font-size: 13px; font-weight: 600">Change ›</span></a></li>
+            <li style="border-top: 1px solid #222a24"><a href="Swap.dc.html" class="mv" title="Tap to pick easier or harder" style="display: flex; align-items: center; gap: 14px; padding: 10px 8px; margin: 0 -8px; border-radius: 12px; color: #eef3ec; text-decoration: none"><span class="demo" style="flex: 0 0 72px; height: 52px; border-radius: 10px"><img src="/_blob/97df9c27e596ec442effcefc6694c952" alt=""></span><span style="flex: 1; min-width: 0"><span style="display: block; font-size: 17px; font-weight: 600">Chair dips</span><span style="display: block; font-size: 13px; color: #a6b2a8">Triceps · step 2 of 5 · sturdy chair</span></span><span style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700">3 × 8–12</span><span style="padding: 6px 10px; border-radius: 999px; border: 1px solid #334036; color: #c6f432; font-size: 13px; font-weight: 600">Change ›</span></a></li>
+          </ul>
+          <div style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: auto">
+            <a href="Workout.dc.html" style="flex: 1 1 220px; text-align: center; padding: 15px 20px; border-radius: 14px; background: #c6f432; color: #0c100d; font-weight: 700; font-size: 17px; text-decoration: none">Start workout</a>
+            <button type="button" style="flex: 0 1 160px; padding: 15px 20px; border-radius: 14px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit; font-weight: 600">Customize</button>
+          </div>
+        </div>
+      </article>
+
+      <aside style="flex: 1 1 320px; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 26px; display: flex; flex-direction: column; gap: 14px">
+        <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Coach</div>
+        <p style="margin: 0; font-size: 18px; line-height: 1.5">One more strong session of Diamond push-ups (3 × 12, not hard) unlocks <strong style="color: #c6f432">Decline push-ups</strong>.</p>
+        <p style="margin: 0; color: #a6b2a8; font-size: 14px">Slept 7 h, no soreness: go full today.</p>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: auto">
+          <button type="button" style="padding: 13px; border-radius: 12px; background: #c6f432; border: 0; color: #0c100d; font: inherit; font-weight: 700">Make it harder</button>
+          <button type="button" style="padding: 13px; border-radius: 12px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit; font-weight: 600">Make it easier</button>
+          <button type="button" style="padding: 13px; border-radius: 12px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit; font-weight: 600">I can't train today</button>
+        </div>
+      </aside>
+    </section>
+
+    <section style="display: flex; flex-wrap: wrap; gap: 24px">
+      <article style="flex: 999 1 560px; min-width: 0; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 26px">
+        <div style="display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap">
+          <div>
+            <h3 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Push-up path</h3>
+            <div style="color: #a6b2a8; font-size: 14px">Step 3 of 8 · Pull, Legs and Core paths in Exercises</div>
+          </div>
+          <a href="Exercises.dc.html" style="font-weight: 600">All paths</a>
+        </div>
+        <ol style="list-style: none; margin: 22px 0 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px">
+          <sc-for list="{{path}}" as="p" hint-placeholder-count="5">
+            <li style="{{p.box}}">
+              <div style="font-size: 12px; color: #a6b2a8">Step {{p.n}}</div>
+              <div style="margin-top: 4px; font-weight: 600; font-size: 15px">{{p.name}}</div>
+              <div style="margin-top: 6px; font-size: 12px; color: {{p.tone}}">{{p.state}}</div>
+            </li>
+          </sc-for>
+        </ol>
+        <div style="margin-top: 18px; padding: 16px 18px; border-radius: 14px; background: #1b2a12; border: 1px solid #3c5a1a">
+          <div style="font-weight: 600">To unlock Decline push-ups</div>
+          <ul style="margin: 8px 0 0; padding-left: 18px; color: #cfd8cf; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 18px; font-size: 14px">
+            <li>2 sessions at the top: 1 of 2</li>
+            <li>Every set 12 reps: done</li>
+            <li>Effort OK or easy: done</li>
+            <li>Form OK on every set: done</li>
+          </ul>
+        </div>
+      </article>
+
+      <article style="flex: 1 1 380px; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 26px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; justify-content: space-between">
+          <h3 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">This week</h3>
+          <span style="color: #c6f432; font-weight: 600">3 of 4 workouts</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; align-items: end; height: 120px">
+          <sc-for list="{{week}}" as="d" hint-placeholder-count="7">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end">
+              <div style="{{d.bar}}"></div>
+              <span style="font-size: 12px; color: #a6b2a8">{{d.day}}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 18px; font-size: 14px">
+          <sc-for list="{{muscles}}" as="m" hint-placeholder-count="4">
+            <div style="display: flex; justify-content: space-between"><span style="color: #a6b2a8">{{m.name}}</span><span>{{m.sets}}</span></div>
+          </sc-for>
+        </div>
+        <div style="font-size: 13px; color: #a6b2a8">Hard sets per muscle. 10–20 a week grows muscle.</div>
+      </article>
+    </section>
+
+    <section style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px">
+      <a href="#" style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 22px 24px; color: #eef3ec; text-decoration: none">
+        <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Body</div>
+        <div style="margin-top: 8px; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700">74.0 kg</div>
+        <div style="color: #c6f432; font-size: 14px">+0.4 kg this month · lean gain pace</div>
+      </a>
+      <a href="BodyFood.dc.html" style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 22px 24px; color: #eef3ec; text-decoration: none">
+        <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Food today</div>
+        <div style="margin-top: 8px; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700">92 / 125 g protein</div>
+        <div style="color: #a6b2a8; font-size: 14px">1,820 / 2,700 kcal · 33 g left</div>
+        <div style="margin-top: 10px; display: inline-block; padding: 7px 12px; border-radius: 999px; background: #c6f432; color: #0c100d; font-size: 13px; font-weight: 700">Paste from AI ›</div>
+      </a>
+      <a href="Progress.dc.html" style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 22px 24px; color: #eef3ec; text-decoration: none">
+        <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">12-week program</div>
+        <div style="margin-top: 8px; font-family: 'Space Grotesk', sans-serif; font-size: 28px; font-weight: 700">Build · week 3</div>
+        <div style="color: #a6b2a8; font-size: 14px">Next: Strength (weeks 5–6)</div>
+      </a>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const box = (s) => 'padding: 14px; border-radius: 14px; border: 1px solid ' + (s === 'now' ? '#c6f432; background: #1b2a12' : s === 'done' ? '#2d3a2f; background: #18201a' : '#222a24; background: #131814');
+    const tone = (s) => (s === 'now' ? '#c6f432' : s === 'done' ? '#9fd36b' : '#7f8c81');
+    const path = [
+      ['Knee push-ups', 'done'], ['Push-ups', 'done'], ['Diamond push-ups', 'now'], ['Decline push-ups', 'next'], ['Archer push-ups', 'locked']
+    ].map(([name, s], i) => ({ n: i + 1, name, box: box(s), tone: tone(s), state: s === 'now' ? 'You are here' : s === 'done' ? 'Done' : s === 'next' ? 'Next' : 'Locked' }));
+    const vals = [70, 0, 85, 60, 0, 0, 0];
+    const week = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, i) => ({
+      day,
+      bar: 'width: 100%; max-width: 30px; border-radius: 8px; height: ' + Math.max(8, vals[i]) + '%; background: ' + (vals[i] ? '#c6f432' : '#263027')
+    }));
+    return {
+      kpis: [
+        { label: 'Streak', value: '5 days', note: 'best 9' },
+        { label: 'Workouts this week', value: '3 / 4', note: '1 to go' },
+        { label: 'Hard sets this week', value: '38', note: '+6 vs last week' },
+        { label: 'Weight this month', value: '+0.4 kg', note: 'on lean pace' }
+      ],
+      moves: [
+        { name: 'Diamond push-ups', chain: 'Push · step 3 of 8', sets: '3 × 6–12' },
+        { name: 'Table rows', chain: 'Pull · step 1 of 7', sets: '4 × 8–15' },
+        { name: 'Pike push-ups', chain: 'Shoulders · step 1 of 5', sets: '3 × 6–12' }
+      ],
+      path,
+      week,
+      muscles: [
+        { name: 'Push', sets: '14 / 15' }, { name: 'Pull', sets: '10 / 15' },
+        { name: 'Legs', sets: '9 / 14' }, { name: 'Core', sets: '5 / 10' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Am I really growing</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+a{color:#c6f432}a:hover{color:#dcff6e}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.sig{animation:rise .4s ease both}
+@media (prefers-reduced-motion:reduce){.sig{animation:none}}
+</style>
+</helmet>
+<div style="min-height: 1300px; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; padding: 18px 40px; border-bottom: 1px solid #1f2721">
+    <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">Sport Track</h1>
+    <nav aria-label="Sport Track sections" style="display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto">
+      <a href="Main.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Dashboard</a>
+      <a href="Workout.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Workout</a>
+      <a href="Exercises.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Exercises</a>
+      <a href="Progress.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Progress</a>
+      <a href="Growth.dc.html" style="padding: 9px 16px; border-radius: 999px; background: #c6f432; color: #0c100d; font-weight: 600; text-decoration: none">Am I growing?</a>
+      <a href="BodyFood.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Body &amp; Food</a>
+    </nav>
+    <div role="group" aria-label="Period" style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #151b17">
+      <button type="button" style="padding: 8px 14px; border-radius: 9px; border: 0; background: transparent; color: #cfd8cf; font: inherit">4 weeks</button>
+      <button type="button" style="padding: 8px 14px; border-radius: 9px; border: 0; background: #2b3a1a; color: #eef3ec; font: inherit; font-weight: 600">8 weeks</button>
+      <button type="button" style="padding: 8px 14px; border-radius: 9px; border: 0; background: transparent; color: #cfd8cf; font: inherit">12 weeks</button>
+    </div>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+    <section style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch">
+      <article style="flex: 999 1 640px; min-width: 0; background: #17230f; border: 1px solid #3c5a1a; border-radius: 24px; padding: 30px 32px; display: flex; gap: 28px; align-items: center; flex-wrap: wrap">
+        <svg width="150" height="150" viewBox="0 0 150 150" role="img" aria-label="Growth score 82 of 100">
+          <circle cx="75" cy="75" r="64" fill="none" stroke="#263027" stroke-width="14"></circle>
+          <circle cx="75" cy="75" r="64" fill="none" stroke="#c6f432" stroke-width="14" stroke-linecap="round" stroke-dasharray="330 402" transform="rotate(-90 75 75)"></circle>
+          <text x="75" y="72" text-anchor="middle" fill="#eef3ec" font-size="40" font-weight="700" font-family="Space Grotesk">82</text>
+          <text x="75" y="96" text-anchor="middle" fill="#a6b2a8" font-size="13" font-family="Inter">growth score</text>
+        </svg>
+        <div style="flex: 1 1 320px; min-width: 0">
+          <div style="font-size: 13px; color: #c6f432; font-weight: 700; text-transform: uppercase; letter-spacing: .08em">Last 8 weeks · verdict</div>
+          <h2 style="margin: 6px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px; line-height: 1.1">Yes, you are growing lean muscle.</h2>
+          <p style="margin: 10px 0 0; color: #cfd8cf; font-size: 17px">Stronger on every path, weight up slowly, waist the same. That pattern is muscle, not fat.</p>
+          <p style="margin: 8px 0 0; color: #a6b2a8; font-size: 14px">4 of 6 signs are green · 2 to improve · based on 23 workouts, 18 weigh-ins and 52 food days</p>
+        </div>
+      </article>
+      <aside style="flex: 1 1 320px; background: #151b17; border: 1px solid #222a24; border-radius: 24px; padding: 26px; display: flex; flex-direction: column; gap: 12px">
+        <h3 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 20px">To grow faster</h3>
+        <ol style="margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; color: #eef3ec">
+          <li><strong>Sleep 7 h+.</strong> <span style="color: #a6b2a8">You average 6 h 40. Muscle is built while you sleep.</span></li>
+          <li><strong>Protein on 6 of 7 days.</strong> <span style="color: #a6b2a8">You hit 125 g on 5 of 7. Add skyr at night.</span></li>
+        </ol>
+        <p style="margin: auto 0 0; font-size: 13px; color: #a6b2a8">Checked every Sunday. If a sign turns red two weeks in a row, the coach changes your plan.</p>
+      </aside>
+    </section>
+
+    <section aria-label="The six signs" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px">
+      <sc-for list="{{signs}}" as="s" hint-placeholder-count="6">
+        <article class="sig" style="{{s.box}}">
+          <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px">
+            <span style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .06em">{{s.label}}</span>
+            <span style="{{s.pill}}">{{s.state}}</span>
+          </div>
+          <div style="margin-top: 8px; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700">{{s.value}}</div>
+          <div style="margin-top: 2px; font-size: 14px; color: #cfd8cf">{{s.meaning}}</div>
+          <div style="margin-top: 12px; height: 8px; border-radius: 99px; background: #263027; overflow: hidden"><div style="{{s.bar}}"></div></div>
+          <div style="margin-top: 6px; display: flex; justify-content: space-between; font-size: 12px; color: #7f8c81"><span>{{s.low}}</span><span>{{s.goal}}</span></div>
+        </article>
+      </sc-for>
+    </section>
+
+    <section style="display: flex; flex-wrap: wrap; gap: 24px">
+      <article style="flex: 999 1 640px; min-width: 0; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px">
+        <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px">
+          <h3 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Weight vs the lean-gain zone</h3>
+          <span style="color: #a6b2a8; font-size: 14px">Green band = +0.4 to +0.8 kg a month · above it adds fat, below it is too little food</span>
+        </div>
+        <svg viewBox="0 0 720 260" width="100%" height="260" role="img" aria-label="Weekly average weight rising from 72.9 to 74.0 kilograms, inside the lean-gain band, with waist flat at 79 centimetres" style="margin-top: 12px">
+          <polygon points="40,200 680,120 680,60 40,170" fill="#c6f432" fill-opacity="0.10"></polygon>
+          <path d="M40 200 L680 120 M40 170 L680 60" stroke="#c6f432" stroke-opacity="0.35" stroke-dasharray="6 6"></path>
+          <polyline points="40,188 120,184 200,176 280,170 360,165 440,154 520,148 600,139 680,132" fill="none" stroke="#c6f432" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"></polyline>
+          <polyline points="40,232 120,231 200,233 280,232 360,231 440,232 520,231 600,232 680,231" fill="none" stroke="#7ab8ff" stroke-width="3" stroke-dasharray="2 0"></polyline>
+          <text x="684" y="130" fill="#c6f432" font-size="13" font-family="Inter">74.0 kg</text>
+          <text x="684" y="235" fill="#7ab8ff" font-size="13" font-family="Inter">waist 79 cm</text>
+          <text x="40" y="254" fill="#a6b2a8" font-size="12" font-family="Inter">8 weeks ago · 72.9 kg</text>
+          <text x="600" y="254" fill="#a6b2a8" font-size="12" font-family="Inter" text-anchor="end">now</text>
+        </svg>
+      </article>
+      <article style="flex: 1 1 340px; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <h3 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Photo check</h3>
+        <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+          <div style="height: 170px; border-radius: 14px; background: #1d251f; display: grid; place-items: center; color: #7f8c81; font-size: 13px; text-align: center; padding: 8px">Sep 10 · front<br>[your photo]</div>
+          <div style="height: 170px; border-radius: 14px; background: #1d251f; display: grid; place-items: center; color: #7f8c81; font-size: 13px; text-align: center; padding: 8px">Nov 10 · front<br>[your photo]</div>
+        </div>
+        <p style="margin: 0; font-size: 14px; color: #cfd8cf">Same light, same spot, once a month. Kept in your Photo Locker, never on the server.</p>
+        <button type="button" style="margin-top: auto; padding: 13px; border-radius: 12px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit; font-weight: 600">Take this month's photo</button>
+      </article>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const tone = { good: ['#9fd36b', '#1f3312', 'Good'], watch: ['#f0b35a', '#33260f', 'Improve'], bad: ['#ff8a7a', '#3a1714', 'Fix'] };
+    const sign = (label, value, meaning, st, pct, low, goal) => {
+      const [c, bg, word] = tone[st];
+      return {
+        label, value, meaning, low, goal, state: word,
+        pill: 'padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: ' + c + '; background: ' + bg,
+        bar: 'height: 100%; border-radius: 99px; background: ' + c + '; width: ' + pct + '%',
+        box: 'background: #151b17; border-radius: 20px; padding: 20px 22px; border: 1px solid ' + (st === 'good' ? '#2d4418' : st === 'watch' ? '#4a3a18' : '#4a2420')
+      };
+    };
+    return {
+      signs: [
+        sign('Strength', '+18%', 'Stronger on all 5 paths. 2 harder steps unlocked.', 'good', 90, '0%', 'goal +10% / 8 wk'),
+        sign('Weight', '+1.1 kg', '+0.55 kg a month: inside the lean-gain zone (+0.4 to +0.8 kg).', 'good', 70, '0 kg', '+1.6 kg max'),
+        sign('Waist', '±0.0 cm', 'Waist the same while weight goes up: the gain is muscle.', 'good', 95, '+2 cm = fat', 'same'),
+        sign('Training', '14 sets', 'Hard sets per muscle a week. 10–20 grows muscle.', 'good', 70, '0', '10–20'),
+        sign('Protein', '5 of 7 days', 'Days at 125 g or more. Aim for 6 of 7.', 'watch', 71, '0 days', '6 of 7'),
+        sign('Sleep', '6 h 40', 'Average a night. Under 7 h slows recovery.', 'watch', 60, '5 h', '7–9 h')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

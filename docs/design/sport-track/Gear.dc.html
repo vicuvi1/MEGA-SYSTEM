@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>What you own</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+.tile{transition:border-color .18s ease,background .18s ease,transform .18s ease}
+.tile:hover{transform:translateY(-2px)}
+@media (prefers-reduced-motion:reduce){.tile{transition:none}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45; padding: 36px 48px; display: flex; gap: 32px">
+  <section style="flex: 1 1 860px; min-width: 0; display: flex; flex-direction: column; gap: 22px">
+    <div>
+      <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Settings · asked once at the start</div>
+      <h2 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 32px">What can you train with?</h2>
+      <p style="margin: 6px 0 0; color: #cfd8cf">Tick what you really have. Every workout uses only these.</p>
+    </div>
+
+    <div>
+      <h3 style="margin: 0 0 10px; font-size: 16px">A table or desk for rows</h3>
+      <div role="radiogroup" aria-label="Table or desk" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+        <sc-for list="{{tables}}" as="t" hint-placeholder-count="3">
+          <button type="button" role="radio" aria-checked="{{t.on}}" class="tile" onClick="{{t.pick}}" style="{{t.box}}">
+            <span style="display: block; font-weight: 600; font-size: 16px; color: #eef3ec">{{t.name}}</span>
+            <span style="display: block; margin-top: 4px; font-size: 13px; color: #a6b2a8">{{t.note}}</span>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div>
+      <h3 style="margin: 0 0 10px; font-size: 16px">Everything else</h3>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+        <sc-for list="{{gear}}" as="g" hint-placeholder-count="9">
+          <button type="button" aria-pressed="{{g.on}}" class="tile" onClick="{{g.toggle}}" style="{{g.box}}">
+            <span style="display: flex; justify-content: space-between; align-items: center; gap: 8px">
+              <span style="font-weight: 600; font-size: 16px; color: #eef3ec">{{g.name}}</span>
+              <span style="{{g.dot}}">{{g.mark}}</span>
+            </span>
+            <span style="display: block; margin-top: 4px; font-size: 13px; color: #a6b2a8">{{g.note}}</span>
+          </button>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <aside style="flex: 1 1 420px; background: #151b17; border: 1px solid #222a24; border-radius: 22px; padding: 26px; display: flex; flex-direction: column; gap: 16px">
+    <h3 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Your plan with this</h3>
+    <p style="margin: 0; color: #a6b2a8; font-size: 14px">Changes live as you tick.</p>
+    <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px">
+      <sc-for list="{{plan}}" as="p" hint-placeholder-count="5">
+        <li style="padding: 14px 16px; border-radius: 14px; background: #101511; border: 1px solid #222a24">
+          <div style="display: flex; justify-content: space-between; gap: 10px"><span style="color: #a6b2a8; font-size: 13px">{{p.path}}</span><span style="color: #c6f432; font-size: 13px">{{p.tag}}</span></div>
+          <div style="margin-top: 2px; font-weight: 600; font-size: 16px">{{p.move}}</div>
+        </li>
+      </sc-for>
+    </ul>
+    <p style="margin: auto 0 0; font-size: 13px; color: #a6b2a8">Safety: a wobbly desk is never used for rows. Moves that need something you don't own are hidden, never just greyed out.</p>
+  </aside>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) {
+    super(p);
+    this.state = { table: 'weak', gear: { chair: true, bed: true, wall: true, towel: true, backpack: true, bar: false, bands: false, dumbbells: false, rings: false } };
+  }
+  renderVals() {
+    const s = this.state;
+    const tileBox = (on) => 'text-align: left; padding: 16px; border-radius: 16px; font: inherit; cursor: pointer; border: 1px solid ' + (on ? '#c6f432; background: #1b2a12' : '#2a332c; background: #151b17');
+    const tables = [
+      { id: 'sturdy', name: 'Sturdy table', note: 'Holds my full weight: table rows' },
+      { id: 'weak', name: 'Desk too weak', note: 'Wobbles or is light: no rows on it' },
+      { id: 'none', name: 'No table', note: 'Use other pull moves' }
+    ].map((t) => ({ ...t, on: s.table === t.id, box: tileBox(s.table === t.id), pick: () => this.setState({ table: t.id }) }));
+    const names = { chair: ['Sturdy chair', 'Dips, step-ups, Bulgarian squats'], bed: ['Bed or sofa', 'Decline push-ups, hip thrusts'], wall: ['Free wall', 'Wall sits, handstand work'], towel: ['Towel + door', 'Door towel rows (door must close and lock)'], backpack: ['Backpack', 'Fill with books: rows, squats, extra weight'], bar: ['Pull-up bar', 'Pull-ups, hanging leg raises'], bands: ['Resistance bands', 'Rows, face pulls, assisted pull-ups'], dumbbells: ['Dumbbells', 'Rows, presses, goblet squats'], rings: ['Gym rings', 'Ring rows, dips']};
+    const gear = Object.keys(names).map((k) => {
+      const on = !!s.gear[k];
+      return {
+        name: names[k][0], note: names[k][1], on, box: tileBox(on), mark: on ? '✓' : '',
+        dot: 'display: grid; place-items: center; width: 24px; height: 24px; border-radius: 7px; font-size: 14px; font-weight: 700; ' + (on ? 'background: #c6f432; color: #0c100d' : 'border: 1px solid #3a463c; color: transparent'),
+        toggle: () => this.setState({ gear: { ...s.gear, [k]: !on } })
+      };
+    });
+    const g = s.gear;
+    const pull = g.bar ? 'Negative pull-ups' : s.table === 'sturdy' ? 'Table rows' : g.bands ? 'Band rows' : g.towel ? 'Door towel rows' : g.backpack ? 'Backpack rows' : 'Floor sliding pulls';
+    const legs = g.chair ? 'Bulgarian split squats' : g.backpack ? 'Backpack squats' : 'Split squats';
+    const push = g.bed || g.chair ? 'Diamond → Decline push-ups' : 'Diamond push-ups';
+    const shoulders = g.wall ? 'Pike → wall pike push-ups' : 'Pike push-ups';
+    const extra = g.dumbbells ? 'Dumbbell curls' : g.backpack ? 'Backpack curls' : 'Towel isometric curls';
+    return {
+      tables, gear,
+      plan: [
+        { path: 'Pull', move: pull, tag: s.table === 'weak' && !g.bar ? 'desk skipped' : 'uses your gear' },
+        { path: 'Push', move: push, tag: 'floor + bed' },
+        { path: 'Legs', move: legs, tag: g.chair ? 'chair' : 'floor' },
+        { path: 'Shoulders', move: shoulders, tag: g.wall ? 'wall' : 'floor' },
+        { path: 'Arms', move: extra, tag: 'optional' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

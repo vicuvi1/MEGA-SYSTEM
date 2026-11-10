@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Body and food</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;family=JetBrains+Mono:wght@400&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+a{color:#c6f432}a:hover{color:#dcff6e}
+</style>
+</helmet>
+<div style="min-height: 1180px; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; padding: 18px 40px; border-bottom: 1px solid #1f2721">
+    <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">Sport Track</h1>
+    <nav aria-label="Sport Track sections" style="display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto">
+      <a href="Main.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Dashboard</a>
+      <a href="Workout.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Workout</a>
+      <a href="Exercises.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Exercises</a>
+      <a href="Progress.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Progress</a>
+      <a href="BodyFood.dc.html" style="padding: 9px 16px; border-radius: 999px; background: #c6f432; color: #0c100d; font-weight: 600; text-decoration: none">Body &amp; Food</a>
+    </nav>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 28px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+    <section style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+      <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 18px 20px"><div style="font-size: 13px; color: #a6b2a8">Protein today</div><div style="margin-top: 6px; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700">92 / 125 g</div><div style="font-size: 13px; color: #c6f432">33 g left · e.g. 250 g skyr</div></div>
+      <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 18px 20px"><div style="font-size: 13px; color: #a6b2a8">Calories</div><div style="margin-top: 6px; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700">1,820</div><div style="font-size: 13px; color: #a6b2a8">of 2,700 kcal</div></div>
+      <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 18px 20px"><div style="font-size: 13px; color: #a6b2a8">Weight</div><div style="margin-top: 6px; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700">74.0 kg</div><div style="font-size: 13px; color: #c6f432">+0.4 kg this month</div></div>
+      <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 8px"><div style="font-size: 13px; color: #a6b2a8">Log</div><button type="button" style="padding: 10px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">+ Weight</button><button type="button" style="padding: 10px; border-radius: 10px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit">+ Repeat a meal</button></div>
+    </section>
+
+    <section style="display: flex; flex-wrap: wrap; gap: 24px; align-items: stretch">
+      <article style="flex: 1 1 560px; min-width: 0; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 26px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #c6f432; color: #0c100d; font-weight: 700">1</span>
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Copy the food prompt</h2>
+        </div>
+        <p style="margin: 0; color: #cfd8cf">Paste it once in ChatGPT, Grok or Gemini, then send all your food photos. It answers in a format this app reads.</p>
+        <pre style="margin: 0; padding: 16px 18px; border-radius: 14px; background: #0c100d; border: 1px solid #222a24; color: #cfd8cf; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.55; white-space: pre-wrap; height: 230px; overflow: auto">You are a precise nutrition analyst. I will send one or more food photos (and sometimes a note). For EVERY photo, identify each separate food, estimate its weight in grams using the plate, cutlery, hand or packaging for scale, and read any nutrition label or barcode text you can see…
+
+Reply with ONLY the block below…
+
+LIFE-FOOD v1
+MEAL | &lt;Breakfast/Lunch/Dinner/Snack&gt; | &lt;YYYY-MM-DD HH:MM or "now"&gt; | &lt;short meal name&gt;
+- &lt;food&gt; | &lt;grams&gt; g | P &lt;g&gt; | C &lt;g&gt; | F &lt;g&gt; | FIB &lt;g&gt; | KCAL &lt;kcal&gt; | CONF &lt;high/medium/low&gt; | &lt;note&gt;
+TOTAL | P | C | F | KCAL
+END</pre>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px">
+          <button type="button" style="flex: 1 1 200px; padding: 14px; border-radius: 12px; background: #c6f432; border: 0; color: #0c100d; font: inherit; font-weight: 700; font-size: 16px">Copy prompt</button>
+          <button type="button" style="flex: 0 1 180px; padding: 14px; border-radius: 12px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit; font-weight: 600">Show all of it</button>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: #a6b2a8">Tip: write "lunch yesterday 13:30" with the photo and the AI fills in the date and time.</p>
+      </article>
+
+      <article style="flex: 1 1 560px; min-width: 0; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 26px; display: flex; flex-direction: column; gap: 16px">
+        <div style="display: flex; align-items: center; gap: 12px">
+          <span style="display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; background: #c6f432; color: #0c100d; font-weight: 700">2</span>
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Paste the AI's answer</h2>
+        </div>
+        <label for="paste" style="color: #cfd8cf">Paste everything it wrote. Extra text, bold or bullets are fine.</label>
+        <textarea id="paste" style="height: 150px; padding: 14px 16px; border-radius: 14px; background: #0c100d; border: 1px solid #c6f432; color: #cfd8cf; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.55; resize: vertical">LIFE-FOOD v1
+MEAL | Lunch | now | Chicken and rice
+- Chicken breast, grilled | 180 g | P 56 | C 0 | F 6.5 | FIB 0 | KCAL 285 | CONF high | -
+- White rice, cooked | 200 g | P 5.4 | C 56 | F 0.6 | FIB 0.8 | KCAL 250 | CONF medium | -
+MEAL | Snack | now | Skyr
+- Skyr, plain | 250 g | P 27.5 | C 10 | F 0.5 | FIB 0 | KCAL 155 | CONF high | label
+END</textarea>
+        <div style="border-radius: 14px; background: #101511; border: 1px solid #222a24; padding: 4px 16px">
+          <sc-for list="{{meals}}" as="m" hint-placeholder-count="2">
+            <div style="padding: 12px 0; border-bottom: 1px solid #222a24">
+              <div style="display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap">
+                <span style="font-weight: 600">{{m.type}} · {{m.name}}</span>
+                <span style="color: #c6f432; font-weight: 600">{{m.total}}</span>
+              </div>
+              <sc-for list="{{m.items}}" as="i" hint-placeholder-count="2">
+                <div style="display: flex; justify-content: space-between; gap: 10px; font-size: 14px; color: #cfd8cf; margin-top: 4px">
+                  <span>{{i.name}} <span style="color: #a6b2a8">· {{i.g}}</span></span>
+                  <span>{{i.macros}}</span>
+                </div>
+              </sc-for>
+            </div>
+          </sc-for>
+          <div style="padding: 10px 0; font-size: 13px; color: #a6b2a8">Read 2 meals, 3 foods · nothing skipped</div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; margin-top: auto">
+          <button type="button" style="flex: 1 1 200px; padding: 14px; border-radius: 12px; background: #c6f432; border: 0; color: #0c100d; font: inherit; font-weight: 700; font-size: 16px">Log all · +89 g protein</button>
+          <button type="button" style="flex: 0 1 180px; padding: 14px; border-radius: 12px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit; font-weight: 600">Save as repeat meal</button>
+        </div>
+      </article>
+    </section>
+
+    <article style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px">
+      <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px">
+        <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Repeat meals</h2>
+        <span style="color: #a6b2a8; font-size: 14px">Double-click to log again · no AI needed</span>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 14px">
+        <sc-for list="{{repeats}}" as="r" hint-placeholder-count="5">
+          <button type="button" style="text-align: left; padding: 0; border-radius: 14px; overflow: hidden; border: 1px solid #2a332c; background: #101511; color: #eef3ec; font: inherit">
+            <span aria-hidden="true" style="display: block; height: 84px; background: {{r.tint}}"></span>
+            <span style="display: block; padding: 10px 12px"><span style="display: block; font-weight: 600">{{r.name}}</span><span style="font-size: 13px; color: #a6b2a8">{{r.p}} protein · {{r.k}}</span></span>
+          </button>
+        </sc-for>
+      </div>
+    </article>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      meals: [
+        { type: 'Lunch', name: 'Chicken and rice', total: '61 g protein · 535 kcal', items: [
+          { name: 'Chicken breast, grilled', g: '180 g', macros: 'P 56 · C 0 · F 6.5' },
+          { name: 'White rice, cooked', g: '200 g', macros: 'P 5.4 · C 56 · F 0.6' }
+        ] },
+        { type: 'Snack', name: 'Skyr', total: '28 g protein · 155 kcal', items: [
+          { name: 'Skyr, plain', g: '250 g', macros: 'P 27.5 · C 10 · F 0.5' }
+        ] }
+      ],
+      repeats: [
+        { name: 'Oats + whey', p: '42 g', k: '520 kcal', tint: '#2a2418' },
+        { name: 'Chicken + rice', p: '61 g', k: '535 kcal', tint: '#1f2a1c' },
+        { name: '3 eggs + toast', p: '27 g', k: '420 kcal', tint: '#2b2716' },
+        { name: 'Skyr 250 g', p: '28 g', k: '155 kcal', tint: '#1c2328' },
+        { name: 'Tuna pasta', p: '45 g', k: '640 kcal', tint: '#271c1c' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

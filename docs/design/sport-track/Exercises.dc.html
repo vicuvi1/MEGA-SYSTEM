@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Exercise library</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+a{color:#c6f432}a:hover{color:#dcff6e}
+@keyframes xfade{0%,30%{opacity:0}45%,80%{opacity:1}95%,100%{opacity:0}}
+.demo{position:relative;overflow:hidden;background:#f3f3f1}
+.demo img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.demo img.b{animation:xfade 2.6s ease-in-out infinite}
+.step{transition:transform .18s ease}
+.step:hover{transform:translateY(-3px)}
+@media (prefers-reduced-motion:reduce){.demo img.b{animation:none;opacity:0}.step{transition:none}}
+</style>
+</helmet>
+<div style="min-height: 1180px; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; padding: 18px 40px; border-bottom: 1px solid #1f2721">
+    <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">Sport Track</h1>
+    <nav aria-label="Sport Track sections" style="display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto">
+      <a href="Main.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Dashboard</a>
+      <a href="Workout.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Workout</a>
+      <a href="Exercises.dc.html" style="padding: 9px 16px; border-radius: 999px; background: #c6f432; color: #0c100d; font-weight: 600; text-decoration: none">Exercises</a>
+      <a href="Progress.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Progress</a>
+      <a href="BodyFood.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Body &amp; Food</a>
+    </nav>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 28px 40px 48px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+    <aside style="flex: 1 1 230px; display: flex; flex-direction: column; gap: 18px">
+      <label for="search" style="position: absolute; left: -9999px">Search exercises</label>
+      <input id="search" type="search" placeholder="Search exercises" style="padding: 13px 14px; border-radius: 12px; border: 1px solid #2a332c; background: #151b17; color: #eef3ec; font: inherit">
+      <nav aria-label="Paths" style="display: flex; flex-direction: column; gap: 4px">
+        <sc-for list="{{groups}}" as="g" hint-placeholder-count="5">
+          <a href="#" style="{{g.style}}"><span>{{g.name}}</span><span style="color: #a6b2a8">{{g.step}}</span></a>
+        </sc-for>
+      </nav>
+      <section style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 16px">
+        <h2 style="margin: 0 0 10px; font-size: 15px">What you own</h2>
+        <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px">
+          <sc-for list="{{gear}}" as="e" hint-placeholder-count="5">
+            <label style="display: flex; gap: 10px; align-items: center"><input type="checkbox" checked="{{e.on}}" style="width: 18px; height: 18px; accent-color: #c6f432"> {{e.name}}</label>
+          </sc-for>
+        </div>
+        <p style="margin: 10px 0 0; font-size: 13px; color: #a6b2a8">Home only is on: plans use only what is ticked.</p>
+      </section>
+    </aside>
+
+    <section style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 20px">
+      <article style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px">
+        <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px">
+          <div>
+            <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 24px">Push path</h2>
+            <div style="color: #a6b2a8; font-size: 14px">Chest, shoulders, triceps · you are on step 3 of 8</div>
+          </div>
+          <span style="color: #a6b2a8; font-size: 14px">≈ 2–4 weeks per step</span>
+        </div>
+        <ol style="list-style: none; margin: 20px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+          <li class="step" style="padding: 10px; border-radius: 14px; border: 1px solid #222a24; background: #101511"><div class="demo" style="height: 96px; border-radius: 10px; margin-bottom: 10px"><img src="/_blob/ce6ac499488506f7306e8b2d9f101f5a" alt="Incline push-ups"><img class="b" src="/_blob/fb77eb2452721f2cd06431576792700f" alt=""></div><div style="font-size: 12px; color: #a6b2a8">Step 1 · 10–15</div><div style="font-weight: 600">Incline push-ups</div><div style="font-size: 12px; color: #9fd36b">Mastered</div></li>
+          <li class="step" style="padding: 10px; border-radius: 14px; border: 1px solid #222a24; background: #101511"><div class="demo" style="height: 96px; border-radius: 10px; margin-bottom: 10px"><img src="/_blob/5e92269e52edf4d40cb8ce4f29c4c07a" alt="Push-ups"><img class="b" src="/_blob/f80bc24c7e0eba9f509c0254d1e2760f" alt=""></div><div style="font-size: 12px; color: #a6b2a8">Step 2 · 8–15</div><div style="font-weight: 600">Push-ups</div><div style="font-size: 12px; color: #9fd36b">Mastered</div></li>
+          <li class="step" style="padding: 10px; border-radius: 14px; border: 1px solid #c6f432; background: #1b2a12"><div class="demo" style="height: 96px; border-radius: 10px; margin-bottom: 10px"><img src="/_blob/95c50cfed8cd32d3e94785b13b87d606" alt="Diamond push-ups"><img class="b" src="/_blob/f3ed248e63da79b507a13f78cfdbbf88" alt=""></div><div style="font-size: 12px; color: #a6b2a8">Step 3 · 6–12</div><div style="font-weight: 600">Diamond push-ups</div><div style="font-size: 12px; color: #c6f432">You are here</div></li>
+          <li class="step" style="padding: 10px; border-radius: 14px; border: 1px solid #3c5a1a; background: #101511"><div class="demo" style="height: 96px; border-radius: 10px; margin-bottom: 10px"><img src="/_blob/84f3bbeb6408197916eef133c3c21db9" alt="Decline push-ups"><img class="b" src="/_blob/509888f8eb82c52356f7c446eea3dd81" alt=""></div><div style="font-size: 12px; color: #a6b2a8">Step 4 · 6–12</div><div style="font-weight: 600">Decline push-ups</div><div style="font-size: 12px; color: #9fd36b">Next · 1 session to go</div></li>
+          <sc-for list="{{locked}}" as="c" hint-placeholder-count="4">
+            <li style="padding: 10px; border-radius: 14px; border: 1px dashed #2a332c; background: #0f1310"><div style="height: 96px; border-radius: 10px; margin-bottom: 10px; background: #161c18; display: grid; place-items: center; color: #6b786d; font-size: 12px">Demo opens when unlocked</div><div style="font-size: 12px; color: #7f8c81">Step {{c.n}} · {{c.range}}</div><div style="font-weight: 600; color: #b8c2b9">{{c.name}}</div><div style="font-size: 12px; color: #7f8c81">Locked</div></li>
+          </sc-for>
+        </ol>
+      </article>
+    </section>
+
+    <aside style="flex: 1 1 320px; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+      <div class="demo" style="height: 220px; border-radius: 14px">
+        <img src="/_blob/95c50cfed8cd32d3e94785b13b87d606" alt="Diamond push-ups, top">
+        <img class="b" src="/_blob/f3ed248e63da79b507a13f78cfdbbf88" alt="Diamond push-ups, bottom">
+      </div>
+      <div>
+        <div style="font-size: 13px; color: #c6f432; font-weight: 600">Your step now</div>
+        <h2 style="margin: 2px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px">Diamond push-ups</h2>
+        <div style="color: #a6b2a8; font-size: 14px">Triceps · chest · shoulders · bodyweight</div>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; text-align: center">
+        <div style="background: #101511; border-radius: 12px; padding: 10px"><div style="font-weight: 700">3–4</div><div style="font-size: 12px; color: #a6b2a8">sets</div></div>
+        <div style="background: #101511; border-radius: 12px; padding: 10px"><div style="font-weight: 700">6–12</div><div style="font-size: 12px; color: #a6b2a8">reps</div></div>
+        <div style="background: #101511; border-radius: 12px; padding: 10px"><div style="font-weight: 700">90 s</div><div style="font-size: 12px; color: #a6b2a8">rest</div></div>
+      </div>
+      <div>
+        <h3 style="margin: 0 0 6px; font-size: 15px">Your best</h3>
+        <p style="margin: 0; color: #cfd8cf; font-size: 14px">12 reps (Tue) · 3 sessions on this step</p>
+      </div>
+      <div>
+        <h3 style="margin: 0 0 6px; font-size: 15px">Form</h3>
+        <ul style="margin: 0; padding-left: 18px; color: #cfd8cf; font-size: 14px; display: flex; flex-direction: column; gap: 3px">
+          <li>Straight line from head to heels</li>
+          <li>Hands make a diamond under the chest</li>
+          <li>Lower slowly, no bouncing</li>
+        </ul>
+      </div>
+      <div style="display: flex; gap: 10px; margin-top: auto">
+        <button type="button" style="flex: 1; padding: 13px; border-radius: 12px; background: transparent; border: 1px solid #334036; color: #eef3ec; font: inherit; font-weight: 600">Make easier</button>
+        <button type="button" style="flex: 1; padding: 13px; border-radius: 12px; background: #c6f432; border: 0; color: #0c100d; font: inherit; font-weight: 700">Make harder</button>
+      </div>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const steps = [
+      ['Wall push-ups', '10–20', 'done'], ['Knee push-ups', '8–15', 'done'], ['Diamond push-ups', '6–12', 'now'], ['Decline push-ups', '6–12', 'next'],
+      ['Archer push-ups', '5–8', 'locked'], ['Pseudo-planche', '5–10', 'locked'], ['One-arm negatives', '3–5', 'locked'], ['One-arm push-ups', '1–5', 'locked']
+    ];
+    const chain = steps.map(([name, range, s], i) => ({
+      n: i + 1, name, range,
+      state: s === 'now' ? 'You are here' : s === 'done' ? 'Mastered' : s === 'next' ? 'Next · 1 session to go' : 'Locked',
+      tone: s === 'now' ? '#c6f432' : s === 'done' ? '#9fd36b' : '#7f8c81',
+      ink: s === 'locked' ? '#4a564c' : '#c6f432',
+      box: 'padding: 12px; border-radius: 14px; border: 1px solid ' + (s === 'now' ? '#c6f432; background: #1b2a12' : '#222a24; background: #101511')
+    }));
+    const g = (name, step, on) => ({ name, step, style: 'display: flex; justify-content: space-between; padding: 11px 14px; border-radius: 12px; text-decoration: none; color: #eef3ec; ' + (on ? 'background: #1b2a12; border: 1px solid #3c5a1a' : 'border: 1px solid transparent') });
+    return {
+      groups: [g('Push', '3 / 8', true), g('Pull', '1 / 7'), g('Shoulders', '1 / 5'), g('Legs', '2 / 7'), g('Core', '2 / 6')],
+      gear: [{ name: 'Bodyweight', on: true }, { name: 'Table or desk (rows)', on: true }, { name: 'Pull-up bar', on: false }, { name: 'Resistance bands', on: false }, { name: 'Dumbbells', on: false }],
+      chain,
+      locked: [
+        { n: 5, name: 'Archer push-ups', range: '5–8' }, { n: 6, name: 'Pseudo-planche', range: '5–10' },
+        { n: 7, name: 'One-arm negatives', range: '3–5' }, { n: 8, name: 'One-arm push-ups', range: '1–5' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

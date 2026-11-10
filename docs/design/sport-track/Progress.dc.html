@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Training progress</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+a{color:#c6f432}a:hover{color:#dcff6e}
+</style>
+</helmet>
+<div style="min-height: 1180px; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45">
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 28px; padding: 18px 40px; border-bottom: 1px solid #1f2721">
+    <h1 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px; font-weight: 700">Sport Track</h1>
+    <nav aria-label="Sport Track sections" style="display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto">
+      <a href="Main.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Dashboard</a>
+      <a href="Workout.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Workout</a>
+      <a href="Exercises.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Exercises</a>
+      <a href="Progress.dc.html" style="padding: 9px 16px; border-radius: 999px; background: #c6f432; color: #0c100d; font-weight: 600; text-decoration: none">Progress</a>
+      <a href="BodyFood.dc.html" style="padding: 9px 16px; border-radius: 999px; color: #cfd8cf; text-decoration: none">Body &amp; Food</a>
+    </nav>
+    <div role="group" aria-label="Period" style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #151b17">
+      <button type="button" style="padding: 8px 14px; border-radius: 9px; border: 0; background: transparent; color: #cfd8cf; font: inherit">Week</button>
+      <button type="button" style="padding: 8px 14px; border-radius: 9px; border: 0; background: #2b3a1a; color: #eef3ec; font: inherit; font-weight: 600">4 weeks</button>
+      <button type="button" style="padding: 8px 14px; border-radius: 9px; border: 0; background: transparent; color: #cfd8cf; font: inherit">12 weeks</button>
+    </div>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 32px 40px 48px; display: flex; flex-direction: column; gap: 24px">
+    <section style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+      <sc-for list="{{kpis}}" as="k" hint-placeholder-count="4">
+        <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 18px 20px">
+          <div style="font-size: 13px; color: #a6b2a8">{{k.label}}</div>
+          <div style="margin-top: 6px; font-family: 'Space Grotesk', sans-serif; font-size: 30px; font-weight: 700">{{k.value}}</div>
+          <div style="font-size: 13px; color: #c6f432">{{k.note}}</div>
+        </div>
+      </sc-for>
+    </section>
+
+    <section style="display: flex; flex-wrap: wrap; gap: 24px">
+      <article style="flex: 999 1 600px; min-width: 0; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px">
+        <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px">
+          <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Strength over time</h2>
+          <span style="color: #a6b2a8; font-size: 14px">Best set per week · steps marked</span>
+        </div>
+        <svg viewBox="0 0 640 220" width="100%" height="220" role="img" aria-label="Push strength rising over four weeks, with a step up to Diamond push-ups in week 3" style="margin-top: 14px">
+          <path d="M40 30 H620 M40 90 H620 M40 150 H620" stroke="#222a24"></path>
+          <path d="M40 190 H620" stroke="#334036"></path>
+          <polyline points="60,170 200,140 340,150 480,105 600,70" fill="none" stroke="#c6f432" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"></polyline>
+          <circle cx="60" cy="170" r="6" fill="#c6f432"></circle><circle cx="200" cy="140" r="6" fill="#c6f432"></circle><circle cx="340" cy="150" r="6" fill="#c6f432"></circle><circle cx="480" cy="105" r="6" fill="#c6f432"></circle><circle cx="600" cy="70" r="6" fill="#c6f432"></circle>
+          <path d="M340 40 V190" stroke="#3c5a1a" stroke-dasharray="5 5"></path>
+          <text x="348" y="54" fill="#9fd36b" font-size="13" font-family="Inter">Step up: Diamond</text>
+          <text x="60" y="210" fill="#a6b2a8" font-size="12" font-family="Inter" text-anchor="middle">W1</text>
+          <text x="200" y="210" fill="#a6b2a8" font-size="12" font-family="Inter" text-anchor="middle">W2</text>
+          <text x="340" y="210" fill="#a6b2a8" font-size="12" font-family="Inter" text-anchor="middle">W3</text>
+          <text x="480" y="210" fill="#a6b2a8" font-size="12" font-family="Inter" text-anchor="middle">W4</text>
+          <text x="600" y="210" fill="#a6b2a8" font-size="12" font-family="Inter" text-anchor="middle">Now</text>
+        </svg>
+        <div role="group" aria-label="Path" style="display: flex; gap: 8px; margin-top: 8px">
+          <button type="button" style="padding: 8px 14px; border-radius: 999px; border: 1px solid #c6f432; background: #1b2a12; color: #eef3ec; font: inherit">Push</button>
+          <button type="button" style="padding: 8px 14px; border-radius: 999px; border: 1px solid #334036; background: transparent; color: #cfd8cf; font: inherit">Pull</button>
+          <button type="button" style="padding: 8px 14px; border-radius: 999px; border: 1px solid #334036; background: transparent; color: #cfd8cf; font: inherit">Legs</button>
+          <button type="button" style="padding: 8px 14px; border-radius: 999px; border: 1px solid #334036; background: transparent; color: #cfd8cf; font: inherit">Core</button>
+        </div>
+      </article>
+
+      <article style="flex: 1 1 340px; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Ready today</h2>
+        <div style="display: flex; align-items: center; gap: 18px">
+          <svg width="96" height="96" viewBox="0 0 96 96" role="img" aria-label="Readiness 86 of 100">
+            <circle cx="48" cy="48" r="40" fill="none" stroke="#263027" stroke-width="9"></circle>
+            <circle cx="48" cy="48" r="40" fill="none" stroke="#c6f432" stroke-width="9" stroke-linecap="round" stroke-dasharray="216 251" transform="rotate(-90 48 48)"></circle>
+            <text x="48" y="56" text-anchor="middle" fill="#eef3ec" font-size="24" font-weight="700" font-family="Space Grotesk">86</text>
+          </svg>
+          <div style="font-size: 16px; font-weight: 600">Go full today</div>
+        </div>
+        <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 14px">
+          <li style="display: flex; justify-content: space-between"><span style="color: #a6b2a8">Sleep</span><span>7 h 10 min</span></li>
+          <li style="display: flex; justify-content: space-between"><span style="color: #a6b2a8">Soreness</span><span>Low</span></li>
+          <li style="display: flex; justify-content: space-between"><span style="color: #a6b2a8">Last workout</span><span>Yesterday, upper</span></li>
+        </ul>
+      </article>
+    </section>
+
+    <article style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 26px">
+      <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; align-items: baseline">
+        <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Path progress</h2>
+        <span style="color: #a6b2a8; font-size: 14px">Each bar = all steps of a path · the bright part is how close you are to the next step</span>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 18px; margin-top: 18px">
+        <sc-for list="{{paths}}" as="p" hint-placeholder-count="5">
+          <div style="display: grid; grid-template-columns: 170px minmax(0, 1fr) 300px; gap: 20px; align-items: center">
+            <div>
+              <div style="font-weight: 600; font-size: 16px">{{p.name}}</div>
+              <div style="font-size: 13px; color: #a6b2a8">Step {{p.step}} of {{p.of}} · {{p.move}}</div>
+            </div>
+            <div>
+              <div style="display: flex; gap: 4px">
+                <sc-for list="{{p.segs}}" as="s" hint-placeholder-count="8">
+                  <div style="flex: 1; height: 14px; border-radius: 5px; background: #263027; overflow: hidden" title="{{s.label}}"><div style="{{s.fill}}"></div></div>
+                </sc-for>
+              </div>
+              <div style="display: flex; justify-content: space-between; margin-top: 6px; font-size: 12px; color: #7f8c81"><span>{{p.first}}</span><span style="color: #c6f432">{{p.pct}} to {{p.next}}</span><span>{{p.last}}</span></div>
+            </div>
+            <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 13px">
+              <sc-for list="{{p.checks}}" as="c" hint-placeholder-count="3">
+                <li style="display: flex; justify-content: space-between; gap: 10px"><span style="color: {{c.tone}}">{{c.mark}} {{c.text}}</span><span style="color: #a6b2a8">{{c.val}}</span></li>
+              </sc-for>
+            </ul>
+          </div>
+        </sc-for>
+      </div>
+    </article>
+
+    <section style="display: flex; flex-wrap: wrap; gap: 24px">
+      <article style="flex: 1 1 420px; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px">
+        <h2 style="margin: 0 0 12px; font-family: 'Space Grotesk', sans-serif; font-size: 22px">Personal records</h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 15px">
+          <thead>
+            <tr style="color: #a6b2a8; font-size: 13px; text-align: left"><th style="padding: 8px 0; font-weight: 500">Move</th><th style="font-weight: 500">Best</th><th style="font-weight: 500">When</th><th style="font-weight: 500; text-align: right">Change</th></tr>
+          </thead>
+          <tbody>
+            <sc-for list="{{prs}}" as="r" hint-placeholder-count="4">
+              <tr style="border-top: 1px solid #222a24"><td style="padding: 12px 0; font-weight: 600">{{r.move}}</td><td>{{r.best}}</td><td style="color: #a6b2a8">{{r.when}}</td><td style="text-align: right; color: #c6f432">{{r.change}}</td></tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </article>
+
+      <article style="flex: 1 1 420px; background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 24px; display: flex; flex-direction: column; gap: 14px">
+        <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 22px">12-week home program</h2>
+        <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px">
+          <sc-for list="{{phases}}" as="p" hint-placeholder-count="5">
+            <li style="{{p.box}}">
+              <div>
+                <div style="font-weight: 600">{{p.name}} <span style="color: #a6b2a8; font-weight: 400">· weeks {{p.weeks}}</span></div>
+                <div style="font-size: 13px; color: #a6b2a8">{{p.goal}}</div>
+              </div>
+              <span style="font-size: 13px; color: {{p.tone}}">{{p.state}}</span>
+            </li>
+          </sc-for>
+        </ol>
+      </article>
+    </section>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":1560}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const ph = (name, weeks, goal, s) => ({
+      name, weeks, goal,
+      state: s === 'now' ? 'Now' : s === 'done' ? 'Done' : 'Later',
+      tone: s === 'now' ? '#c6f432' : s === 'done' ? '#9fd36b' : '#7f8c81',
+      box: 'display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 12px; border: 1px solid ' + (s === 'now' ? '#c6f432; background: #1b2a12' : '#222a24; background: #101511')
+    });
+    const ok = (text, val, done) => ({ text, val, mark: done ? '✓' : '○', tone: done ? '#9fd36b' : '#cfd8cf' });
+    const path = (name, step, of, move, next, first, last, frac, checks) => ({
+      name, step, of, move, next, first, last, checks, pct: Math.round(frac * 100) + '%',
+      segs: Array.from({ length: of }, (_, i) => ({
+        label: 'Step ' + (i + 1),
+        fill: 'height: 100%; border-radius: 5px; background: ' + (i < step - 1 ? '#5f7f3a' : i === step - 1 ? '#c6f432' : 'transparent') + '; width: ' + (i < step - 1 ? 100 : i === step - 1 ? Math.round(frac * 100) : 0) + '%'
+      }))
+    });
+    const paths = [
+      path('Push', 3, 8, 'Diamond push-ups', 'Decline', 'Incline', 'One-arm', 0.75, [ok('2 sessions at the top', '1 / 2', false), ok('Every set 12 reps', '12 · 12 · 12', true), ok('Effort OK or easy', 'OK', true)]),
+      path('Pull', 1, 7, 'Table rows', 'Feet-up rows', 'Table rows', 'Pull-ups', 0.4, [ok('2 sessions at the top', '0 / 2', false), ok('Every set 15 reps', '15 · 13 · 12', false), ok('Effort OK or easy', 'hard', false)]),
+      path('Legs', 2, 7, 'Split squats', 'Bulgarian', 'Squats', 'Pistol', 0.5, [ok('2 sessions at the top', '1 / 2', false), ok('Every set 15 reps', '15 · 15 · 14', false), ok('Effort OK or easy', 'OK', true)]),
+      path('Triceps', 2, 5, 'Chair dips', 'Feet-up dips', 'Bench dips', 'Ring dips', 0.2, [ok('2 sessions at the top', '0 / 2', false), ok('Every set 12 reps', '10 · 9 · 8', false), ok('Effort OK or easy', 'OK', true)]),
+      path('Core', 2, 6, 'Plank', 'Long-lever plank', 'Knee plank', 'L-sit', 0.9, [ok('2 sessions at the top', '2 / 2', true), ok('Every hold 60 s', '60 · 60 · 58', false), ok('Form OK', 'OK', true)])
+    ];
+    return {
+      paths,
+      kpis: [
+        { label: 'Workouts', value: '11', note: '+3 vs 4 weeks before' },
+        { label: 'Hard sets', value: '142', note: '≈ 36 a week' },
+        { label: 'Steps unlocked', value: '2', note: 'Push-ups, Diamond' },
+        { label: 'Weight', value: '74.0 kg', note: '+0.4 kg, waist same' }
+      ],
+      prs: [
+        { move: 'Diamond push-ups', best: '12 reps', when: 'Tue', change: '+3' },
+        { move: 'Table rows', best: '15 reps', when: 'Mon', change: '+2' },
+        { move: 'Pike push-ups', best: '10 reps', when: 'Thu', change: '+2' },
+        { move: 'Plank', best: '1:40', when: 'Sun', change: '+20 s' }
+      ],
+      phases: [
+        ph('Foundation', '1–2', 'Learn every move, honest effort taps', 'done'),
+        ph('Build', '3–4', 'One more rep on your lowest set each session', 'now'),
+        ph('Strength', '5–6', 'First harder variations unlock', 'later'),
+        ph('Advanced', '7–8', 'Harder moves on every path', 'later'),
+        ph('Athlete', '9–12', 'Archer, pistol and handstand work', 'later')
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
