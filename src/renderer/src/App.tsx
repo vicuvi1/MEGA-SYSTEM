@@ -44,6 +44,7 @@ import { storageWakesApp } from './islandLog'
 import { watchDayTurn } from './dayTurn'
 import { MusicHost } from './musicHost'
 import { FocusBoost } from './boost/FocusBoost'
+import { StudyAlarm } from './study/StudyAlarm'
 import { winMoment } from './boost/boostBus'
 import { startZoom, ZoomToast } from './zoom'
 import { WallpaperLayer } from './wallpaper/WallpaperLayer'
@@ -93,6 +94,7 @@ const Notebook = lazyNamed(() => import('./pages/Notebook'), 'Notebook')
 const Music = lazyNamed(() => import('./pages/Music'), 'Music')
 const Progress = lazyNamed(() => import('./pages/Progress'), 'Progress')
 const Goals = lazyNamed(() => import('./pages/Goals'), 'Goals')
+const StudyTime = lazyNamed(() => import('./pages/StudyTime'), 'StudyTime')
 const Season = lazyNamed(() => import('./pages/Season'), 'Season')
 const CinematicHost = lazyNamed(() => import('./saga/Cinematics'), 'CinematicHost')
 const Career = lazyNamed(() => import('./pages/Career'), 'Career')
@@ -728,7 +730,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
       <div className="main">
         {/* The desktop app has its own island at the top of the screen: one is enough. */}
-        {!window.desktop?.islandState && <FocusIsland hideNext={page === 'today'} />}
+        {!window.desktop?.islandState && <FocusIsland hideNext={page === 'today'} noDim={page === 'study'} />}
         <DeepLinks onGo={setPage} />
         {/* UI7: not on pages with their own full-screen app or a floating + button. */}
         <ZoomToast />
@@ -854,6 +856,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <MusicHost />
         {/* Focus boost: session goal and verdict, launch kits, Dojo mode, "why I'm stalling", win music. */}
         <FocusBoost />
+        <StudyAlarm />
 
         {!activeEmbed && (
           <main className={`content ${bbHidden || !life.coach ? '' : 'has-bb'}`}>
@@ -878,6 +881,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {(page === 'progress' || page === 'focus') && <Progress onGo={setPage} onWallet={onWallet} />}
             {page === 'calendar' && <CalendarPage onGo={setPage} />}
             {page === 'goals' && <Goals onGo={setPage} />}
+            {page === 'study' && <StudyTime />}
             {page === 'season' && <Season />}
             {page === 'career' && <Career onGo={setPage} />}
             {page === 'coach' && <Coach onWallet={onWallet} />}

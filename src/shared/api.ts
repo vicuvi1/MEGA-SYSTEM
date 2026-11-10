@@ -723,6 +723,20 @@ export interface LifeApi {
     archiveGoal(id: number): Promise<FocusState>
     fun(minutes: number, what?: string): Promise<{ cost: number; balance: number }>
   }
+  /** Study Time (src/main/studyTime.ts): blocks and sessions on the one focus timer. */
+  study?: {
+    blocks(): Promise<import('@core/studyTime').StudyStore | null>
+    change(op: import('@core/studyTime').StudyBlockOp): Promise<import('@core/studyTime').StudyStore>
+    start(block: { id: string; name: string; plannedMin: number | null; taskId?: string | null; taskTitle?: string | null }): Promise<FocusState>
+    breakStart(minutes: number | null): Promise<FocusState>
+    breakEnd(): Promise<FocusState>
+    stop(): Promise<{ session: FocusSession; coins: number; state: FocusState }>
+    stopAt(endAt: string): Promise<{ session: FocusSession; coins: number; state: FocusState }>
+    sessions(sinceDay: string): Promise<import('@core/studyTime').StudySession[]>
+    add(o: { subject: string; blockId?: string | null; minutes: number; breakMin?: number; day: string }): Promise<{ session: FocusSession; coins: number; state: FocusState }>
+    edit(id: number, patch: { subject?: string; blockId?: string | null; minutes?: number; breakMin?: number; day?: string }): Promise<import('@core/studyTime').StudySession>
+    remove(id: number): Promise<void>
+  }
   sleep: {
     state(): Promise<SleepSummary>
     logWake(time?: string, quality?: number): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>

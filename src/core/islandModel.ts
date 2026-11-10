@@ -121,6 +121,8 @@ export type IslandAction = { id?: string } & (
   | { kind: 'widget'; op: 'fetch' | 'addTask' | 'addNote' | 'notify' | 'save'; widget: string; url?: string; text?: string; setting?: unknown }
   /** Career: start the study pack (a focus timer), grade the quick flashcard, or another pack (src/core/career/). */
   | { kind: 'study'; op: 'start' | 'grade' | 'next'; minutes?: number; cardId?: string; grade?: 'again' | 'hard' | 'good' | 'easy' }
+  /** Study Time: start a quick block, start or end a break (minutes: its length), stop and log. */
+  | { kind: 'studyTime'; op: 'start' | 'break' | 'back' | 'stop'; blockId?: string; minutes?: number; alertId?: string }
   /** Goals: a check-in from the island ("+50", "-0.5", "=3400", "s" same as before, "k" skip: src/core/goalsBen.ts). */
   | { kind: 'goal'; goalId: number; op: string; alertId?: string }
   /** HD: a reminder you set: add one ("remind me to call mom at 18:00"), or Done / Snooze on its card. */
@@ -171,7 +173,23 @@ export interface IslandSnapshot {
    * left stays `endsAt - pausedAt` (IC1). brk: a break between two blocks
    * (IC11), never a focus session. dots: the stage dots (n parts, at = now).
    */
-  running: { subject: string; startedAt: number; endsAt: number; pausedAt?: number | null; brk?: boolean; dots?: { n: number; at: number } | null; next?: { subject: string; minutes: number } | null } | null
+  running: {
+    subject: string
+    startedAt: number
+    endsAt: number
+    pausedAt?: number | null
+    brk?: boolean
+    dots?: { n: number; at: number } | null
+    next?: { subject: string; minutes: number } | null
+    /** Study Time: a block is running; show the time studied (counting up), not the time left. */
+    up?: boolean
+    /** Study Time: the break time before the pause going on now (ms), for the time studied. */
+    pausedMs?: number
+    /** Study Time: when the break going on now ends (it has a length). */
+    breakEndsAt?: number | null
+  } | null
+  /** Study Time: your quick blocks (one tap starts one) and today's minutes (src/core/studyTime.ts). */
+  studyTime?: { quick: { id: string; name: string; color: string; planned: number | null }[]; todayMin: number } | null
   now: IslandBlock | null
   next: IslandBlock | null
   /** IS6: later today, a "maybe" or an invite you haven't answered (greyed in the Next list). */

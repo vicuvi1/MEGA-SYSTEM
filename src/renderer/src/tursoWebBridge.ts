@@ -57,6 +57,7 @@ import { RHYTHM, RHYTHM_PREFS, cleanPrefs, rhythmFor, type DayProposal } from '@
 import { PLAN_LIMITS, cleanLimits, type PlanLimits } from '@core/planLimits'
 import { PLAN_WEEK, cleanWeek, type WeekShape } from '@core/planWeek'
 import { PLAN_REVIEW, cleanReview, dropItem, putItem, type ReviewItem } from '@core/planReview'
+import { StudyService } from '../../main/studyTime'
 import { lateBlocks } from '@core/planShift'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus, waterToday } from './web/coachStatus'
@@ -1849,6 +1850,18 @@ export function createTursoWebBridge(): Bridge {
         }
         // A session for a must-do or a Todoist task: Today asks whether it's done.
         if (method === 'stop' && r?.task) window.dispatchEvent(new CustomEvent('life-focus-ended', { detail: { task: r.task, minutes: r.session?.minutes ?? 0 } }))
+        return r
+      }
+    }),
+    // Study Time: the same local copy and the same focus timer (src/main/studyTime.ts); reads are plain, changes tell the timer's screens.
+    study: new Proxy({} as NonNullable<Bridge['study']>, {
+      get: (_t, method: string) => async (...args: unknown[]) => {
+        const svc = await svcP
+        const run = (s: any) => (new StudyService(s.db, s.wallet) as any)[method](...args)
+        if (method === 'blocks' || method === 'sessions') return svc.read(run)
+        forgetShared()
+        const r = await svc.write(run, 'life-wallet-changed')
+        window.dispatchEvent(new CustomEvent(method === 'change' ? 'life-study-changed' : 'life-focus-changed'))
         return r
       }
     }),

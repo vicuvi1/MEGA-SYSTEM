@@ -112,6 +112,12 @@ The owner, after the update: still no sound when a notification comes in; the is
 - **Out of the way:** the right-click menu ends with **Hide for 1 hour** (`HIDE_HOUR_ITEM`, desktop only), next to the round menu's Hide 1 h, the tray's Hide / Bring the island back and `Alt+Shift+I`. Drag to any top spot or corner (remembered per screen in `island.json`), auto-collapse on leave and hide over full-screen apps (default `fullscreen: 'hide'`) are unchanged.
 - Smoke: "Desktop island: pill → click → panel …" checks no take 4 px under the pill, a quick pass never peeks and ends with clicks passing through, resting peeks by itself, and right-click → Hide for 1 hour calls `islandHide('1h')`.
 
+### Study Time on the island (2026-11-10)
+- A running Study Time block counts **up** (time studied) in the pill, the bubble and the panel (`running.up`, `pausedMs`, `breakEndsAt` in the snapshot, from `islandRunning`). The panel's timer card has Stop & log and ☕ 5 / ☕ 10, or ▶ Back to it on a break.
+- With nothing running, the timer slot shows your quick blocks and today's minutes (`snap.studyTime`, `studyTimeIslandFeed.ts`); one tap starts one (action `studyTime`).
+- "Break's over" rings like time's up (kind `over`). Details: [focus.md](focus.md), "Study Time".
+- Smoke: "Study Time on the island: …".
+
 ### One Today list, Ben's card age, a spot that stays (v1.4.1379 fixes)
 
 - **One list.** The Day page's `mustdos` section is now a single "Today" card (`buildToday` in `core/islandTodos.ts`, tested): the current block first (with Start / Join / Done), then must-dos, then Todoist due today, each title once, done items folded into "N done". The week's top 3 is a small "🎯 n/3" chip (`.di-week-chip`), never a list. Next block, maybe/invite lines, the auto-focus switch and tonight's shift live in the same card. The old separate `tasks` and `plan` cards render nothing.

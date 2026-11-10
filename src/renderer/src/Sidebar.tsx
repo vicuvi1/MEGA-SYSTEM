@@ -16,7 +16,7 @@ interface Props {
 
 // Sections in groups, in the order they appear.
 const GROUPS: { title: string; ids: PageId[] }[] = [
-  { title: 'Plan', ids: ['today', 'calendar', 'tasks', 'coach', 'goals', 'season', 'career', 'progress', 'shop'] },
+  { title: 'Plan', ids: ['today', 'calendar', 'tasks', 'study', 'coach', 'goals', 'season', 'career', 'progress', 'shop'] },
   { title: 'Life', ids: ['sleep', 'body', 'locker', 'money', 'discipline', 'music', 'custom'] }
 ]
 

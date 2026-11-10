@@ -158,6 +158,8 @@ var SETTINGS = {
 	area_words: json$7("words that map tasks to life areas", null),
 	task_area_colors: json$7("colours of the life areas", null),
 	focus_running: json$7("the focus session running now, or null", null),
+	study_blocks: json$7("Study Time: your blocks (name, category, tags, planned length, quick, day, done, linked Todoist task) and category colours; sessions are focus_sessions rows (src/core/studyTime.ts)", null),
+	study_log: json$7("Study Time: per focus session (by its start time) its block, break minutes and source (timer, manual, fixed); at most 3000, the last 400 days (src/core/studyTime.ts)", null),
 	focus_ratings: json$7("how each focus session felt", []),
 	block_marks: json$7("calendar blocks marked done / skipped", null),
 	block_kinds: json$7("calendar items you set as an event or a focus block (by title)", null),

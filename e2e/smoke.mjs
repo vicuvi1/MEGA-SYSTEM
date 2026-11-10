@@ -5285,6 +5285,119 @@ try {
     await pg.waitForSelector('.cr-letter ul li', { timeout: 5000 })
     await pg.click('.cr .ptabs [data-tab="jobs"]')
   })
+  // Study Time: start a quick block, the clock counts up, a break stands it still, Stop logs it, the donut shows it.
+  await step('Study Time: start a block → the clock counts up → break → back → stop → the stats donut shows it; each tab fits with room to spare', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('study')
+    await pg.waitForSelector('.sy .ptabs [data-tab="timer"]', { timeout: 15000 })
+    await pg.click('.sy .ptabs [data-tab="timer"]')
+    // The sidebar has it under Plan, and Ctrl+K finds it.
+    if (!(await pg.locator('.sb-group', { hasText: 'Plan' }).locator('.sb-item[aria-label="Study Time"]').count())) throw new Error('Study Time is not in the sidebar under Plan')
+    // An empty store gets the made-up starter blocks.
+    const chip = pg.locator('.sy-chip', { hasText: 'Math problems' })
+    await chip.waitFor({ timeout: 10000 })
+    const before = await pg.textContent('[data-testid="study-today"]')
+    await chip.click()
+    await pg.waitForSelector('.sy-timer:not(.idle) .sy-clock', { timeout: 8000 })
+    // The one focus timer asks its usual one-line goal (Focus boost): close it.
+    const closeBoost = async () => {
+      const x = pg.locator('.fb-card .fb-x')
+      if (await x.first().isVisible({ timeout: 1500 }).catch(() => false)) await x.first().click({ timeout: 5000 })
+    }
+    await closeBoost()
+    // A second start is not offered while one runs (one timer at a time).
+    if (!(await chip.isDisabled())) throw new Error('a second block can start while one runs')
+    await pg.context().clock.fastForward(3 * 60_000 + 5_000)
+    await pg.waitForFunction(() => /^[3-9]:\d\d$/.test(document.querySelector('[data-testid="study-clock"]')?.textContent?.trim() ?? ''), null, { timeout: 5000 })
+    // The timer is the one focus timer: it survives a reload (the start time is stored, not a counter).
+    await pg.reload()
+    await pg.waitForSelector('main.content, input', { timeout: 20000 })
+    if (!(await pg.$('main.content'))) {
+      await pg.fill('input', '1234')
+      await pg.keyboard.press('Enter')
+      await pg.waitForSelector('main.content', { timeout: 20000 })
+    }
+    await open('study')
+    await pg.waitForFunction(() => /^[3-9]:\d\d$/.test(document.querySelector('[data-testid="study-clock"]')?.textContent?.trim() ?? ''), null, { timeout: 15000 })
+    await closeBoost()
+    // A 5 minute break: the studied time stands still and the break counts down.
+    await pg.locator('.sy-actions .btn', { hasText: 'Break 5m' }).click()
+    await pg.waitForSelector('[data-testid="study-break"]', { timeout: 5000 })
+    const held = await pg.textContent('[data-testid="study-clock"]')
+    await pg.context().clock.fastForward(60_000)
+    await pg.waitForTimeout(1200)
+    if ((await pg.textContent('[data-testid="study-clock"]')) !== held) throw new Error('the break counted as study')
+    await pg.locator('.sy-actions .btn', { hasText: 'Back to work' }).click()
+    await pg.waitForSelector('[data-testid="study-break"]', { state: 'detached', timeout: 5000 })
+    await pg.locator('.sy-actions .btn', { hasText: 'Stop' }).click()
+    await pg.waitForSelector('.sy-timer.idle', { timeout: 8000 })
+    await closeBoost() // its "How did it go?"
+    await pg.waitForFunction((b) => document.querySelector('[data-testid="study-today"]')?.textContent !== b, before, { timeout: 8000 })
+    // The donut: the minutes went to Math.
+    await pg.click('.sy .ptabs [data-tab="stats"]')
+    await pg.waitForSelector('.sy-where .mh-donut circle:not(.bg)', { timeout: 8000 })
+    const total = await pg.textContent('[data-testid="study-donut-total"]')
+    if (!/[1-9]/.test(total ?? '')) throw new Error(`the donut shows ${total}`)
+    if (!(await pg.locator('.sy-legend li', { hasText: 'Math' }).count())) throw new Error('the donut legend has no Math')
+    await pg.locator('.sy-seg button', { hasText: 'Tag' }).click()
+    await pg.waitForSelector('.sy-legend li:has-text("#practice")', { timeout: 5000 })
+    if (process.env.SMOKE_SHOTS) await pg.screenshot({ path: `${process.env.SMOKE_SHOTS}/study-donut-1440.png` })
+    await pg.locator('.sy-seg button', { hasText: 'Category' }).click()
+    // The session is listed and can be fixed.
+    await pg.click('.sy .ptabs [data-tab="log"]')
+    await pg.waitForSelector('.sy-sessions li:has-text("Math problems")', { timeout: 5000 })
+    // Each tab fits a laptop screen with at least 10% to spare (1.75 screens is the long-page limit).
+    await pg.setViewportSize({ width: 1280, height: 720 })
+    const sizes = []
+    for (const id of ['timer', 'stats', 'log']) sizes.push(`${id} ${((await tabFit('.sy', id, 1.75 * 0.9)).scroll / 654).toFixed(2)}`)
+    await pg.click('.sy .ptabs [data-tab="timer"]')
+    console.log(`    Study Time tabs (screens of 654 px): ${sizes.join(', ')}`)
+  })
+  await step('Study Time on the island: a running block counts up in the pill and the panel, a break and Stop from the island, quick blocks to start', async () => {
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+    await ip.addInitScript(() => {
+      const cbs = {}
+      const on = (name) => (cb) => { cbs[name] = cb }
+      const now = Date.now()
+      const base = {
+        at: now, locked: false,
+        ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+        now: null, next: null, mustdos: [], water: { ml: 500, target: 2000 }, reps: [], alert: null,
+        studyTime: { quick: [{ id: 'st-math', name: 'Math problems', color: '#7c9cff', planned: 50 }, { id: 'st-read', name: 'Reading', color: '#38bdf8', planned: 25 }], todayMin: 35 }
+      }
+      // 12 minutes into a 50 minute block: the island shows 12:xx (time studied), not 38:xx (time left).
+      const running = { ...base, running: { subject: 'Math problems', startedAt: now - 12 * 60_000, endsAt: now + 38 * 60_000, up: true, pausedMs: 0, breakEndsAt: null } }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), base, running }
+      window.desktop = new Proxy({
+        islandAction: (a) => { window.__island.actions.push(a) },
+        setIslandPrefs: async () => null,
+        onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb(running), 50) },
+        onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
+      }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+    })
+    await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+    await ip.waitForSelector('.di-pill.kind-timer', { timeout: 15000 })
+    await ip.waitForFunction(() => /^12:\d\d$/.test(document.querySelector('.di-pill .di-pill-time')?.getAttribute('aria-label') ?? document.querySelector('.di-pill .di-pill-time')?.textContent ?? ''), null, { timeout: 5000 })
+    await ip.click('.di-pill')
+    await ip.waitForSelector('.di-panel .di-study-run', { timeout: 5000 })
+    const big = await ip.$eval('.di-panel .di-study-run .di-clock', (e) => e.getAttribute('aria-label') ?? e.textContent)
+    if (!/^12:\d\d$/.test(big ?? '')) throw new Error(`the panel shows ${big}, not the time studied`)
+    if (process.env.SMOKE_SHOTS) {
+      await ip.waitForTimeout(900)
+      await ip.screenshot({ path: `${process.env.SMOKE_SHOTS}/study-island.png` })
+    }
+    await ip.click('.di-panel [data-tap="st:brk5"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'break' && a.minutes === 5), null, { timeout: 3000 })
+    await ip.click('.di-panel [data-tap="st:stop"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'stop'), null, { timeout: 3000 })
+    // Nothing running: the quick blocks, one tap starts one.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.base, at: Date.now(), running: null }))
+    await ip.waitForSelector('.di-panel .di-study-pick [data-tap="st:start:st-read"]', { timeout: 5000 })
+    await ip.click('.di-panel [data-tap="st:start:st-read"]')
+    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'start' && a.blockId === 'st-read'), null, { timeout: 3000 })
+    await ip.context().close()
+  })
   // The same switch on every long page: each tab about one laptop screen.
   // Run at 10:00: how long Insights → Week is depends on what's left of today's calendar.
   await step('Long pages: Insights, Goals, Career, Money, Music, Rewards and long Settings sections fit by tabs', () => atTime('10:00', async () => {
