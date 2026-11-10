@@ -102,6 +102,10 @@ export interface FocusRunning {
   blockId?: string | null
   open?: boolean
   breakMin?: number | null
+  /** Study Time: a plain pause or a break, the break part of pausedMs, and pomodoro mode's lengths and count (src/core/studyTime.ts). */
+  pauseKind?: 'pause' | 'break' | null
+  brkMs?: number
+  pomo?: { work: number; short: number; long: number; every: number; done: number; at: number } | null
 }
 
 export const SETTINGS = {
@@ -205,8 +209,8 @@ export const SETTINGS = {
   task_area_colors: json<Record<string, string> | null>('colours of the life areas', null),
   // ---- plan, focus, calendar ----
   focus_running: json<FocusRunning | null>('the focus session running now, or null', null),
-  study_blocks: json<Record<string, unknown> | null>('Study Time: your blocks (name, category, tags, planned length, quick, day, done, linked Todoist task) and category colours; sessions are focus_sessions rows (src/core/studyTime.ts)', null),
-  study_log: json<Record<string, unknown> | null>("Study Time: per focus session (by its start time) its block, break minutes and source (timer, manual, fixed); at most 3000, the last 400 days (src/core/studyTime.ts)", null),
+  study_blocks: json<Record<string, unknown> | null>('Study Time: your blocks (name, category, tags, planned length, estimated pomodoros, quick, day, repeat, done, linked or pulled Todoist task) in your order, subject colours and emoji, weekly goals per subject, and the timer and sound choices (pomodoro lengths, sounds, noise, which Todoist tasks are study); sessions are focus_sessions rows (src/core/studyTime.ts)', null),
+  study_log: json<Record<string, unknown> | null>("Study Time: per focus session (by its start time) its block, break and pause minutes, pomodoros, your one-line note and source (timer, manual, fixed); at most 3000, the last 400 days (src/core/studyTime.ts)", null),
   focus_ratings: json<unknown[]>('how each focus session felt', []),
   block_marks: json<Record<string, unknown> | null>('calendar blocks marked done / skipped', null),
   block_kinds: json<Record<string, unknown> | null>('calendar items you set as an event or a focus block (by title)', null),

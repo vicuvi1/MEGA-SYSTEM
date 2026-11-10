@@ -730,7 +730,23 @@ export interface LifeApi {
     start(block: { id: string; name: string; plannedMin: number | null; taskId?: string | null; taskTitle?: string | null }): Promise<FocusState>
     breakStart(minutes: number | null): Promise<FocusState>
     breakEnd(): Promise<FocusState>
+    /** A plain pause and resume (no length). */
+    pause(): Promise<FocusState>
+    resume(): Promise<FocusState>
+    /** Pomodoro done: its break (long after every few), or keep going. */
+    pomoBreak(): Promise<FocusState>
+    keepGoing(): Promise<FocusState>
+    /** +N minutes on the pomodoro or the planned length; a break gets longer. */
+    extend(minutes: number): Promise<FocusState>
+    breakMore(minutes: number): Promise<FocusState>
     stop(): Promise<{ session: FocusSession; coins: number; state: FocusState }>
+    /** Stop with "What did you do?". */
+    finish(note?: string | null): Promise<{ session: FocusSession; coins: number; state: FocusState }>
+    /** Switch block without stopping: the time so far goes to the old block, the new one starts at once. */
+    switchBlock(block: { id: string; name: string; plannedMin: number | null; taskId?: string | null; taskTitle?: string | null }, note?: string | null): Promise<{ logged: { session: { id: number; minutes: number }; coins: number } | null; state: FocusState }>
+    setNote(id: number, text: string): Promise<import('@core/studyTime').StudySession>
+    /** The hours you focus longest (last 30 days): for the page, the planner and Ben. */
+    bestHours(): Promise<import('@core/studyInsights').BestHours>
     stopAt(endAt: string): Promise<{ session: FocusSession; coins: number; state: FocusState }>
     sessions(sinceDay: string): Promise<import('@core/studyTime').StudySession[]>
     add(o: { subject: string; blockId?: string | null; minutes: number; breakMin?: number; day: string }): Promise<{ session: FocusSession; coins: number; state: FocusState }>

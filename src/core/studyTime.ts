@@ -8,7 +8,7 @@
 // focus_sessions row with its block id, its break minutes and where it came
 // from ('timer' live, 'manual' typed in, 'fixed' a forgotten timer you put
 // right). Blocks live in the synced setting `study_blocks`.
-import { addDays, daysBetween } from './dates'
+import { addDays, dayKey, daysBetween } from './dates'
 
 // ---------------------------------------------------------------- blocks
 
@@ -29,22 +29,72 @@ export interface StudyBlock {
   /** The Todoist task it is for (linked, never copied). */
   taskId?: string | null
   taskTitle?: string | null
+  /** Pulled from Todoist by your study projects or labels (studyPlan.ts todoistBlocks). */
+  fromTodoist?: boolean
+  /** Estimated pomodoros (the tomato dots: planned against done), or null. */
+  estPomos?: number | null
+  /** Comes back after Done: every day, on weekdays or every week (its day moves on). */
+  repeat?: Repeat | null
+  /** The last day it was done (a repeating block moves on instead of staying done). */
+  lastDone?: string | null
   createdAt: string
 }
+
+export type Repeat = 'daily' | 'weekdays' | 'weekly'
+export const REPEATS: readonly Repeat[] = ['daily', 'weekdays', 'weekly']
 
 export interface StudyCategory {
   name: string
   color: string
+  /** The subject's emoji (the timer, the bars and the island). */
+  emoji?: string
+}
+
+/** The noise under a study block (generated, no recordings). */
+export type StudyNoise = 'off' | 'white' | 'brown' | 'rain'
+/** The sounds you can pick for the end of a pomodoro and the end of a break (all made by the app's sound kit). */
+export const STUDY_SOUNDS = ['focusEnd', 'levelUp', 'remindReward', 'success', 'remindEyes', 'remind', 'notify'] as const
+export type StudySound = (typeof STUDY_SOUNDS)[number]
+export const STUDY_SOUND_LABEL: Record<StudySound, string> = { focusEnd: 'Gong', levelUp: 'Fanfare', remindReward: 'Chime', success: 'Bright', remindEyes: 'Soft bell', remind: 'Ding', notify: 'Pop' }
+
+export interface StudyPrefs {
+  /** Pomodoro (work, then a break) or count up (the planned length, or an open stopwatch). */
+  mode: 'pomodoro' | 'up'
+  work: number
+  short: number
+  long: number
+  /** A long break after this many pomodoros. */
+  every: number
+  endSound: StudySound
+  breakSound: StudySound
+  /** A soft tick while you study. */
+  tick: boolean
+  noise: StudyNoise
+  /** The gentle notices (a planned block waiting, a goal reached or behind). Timer notices always come. */
+  nudges: boolean
+  /** Which Todoist tasks show as blocks: by project or label (names, any case). */
+  todoist: { projects: string[]; labels: string[] }
+}
+
+export const DEFAULT_PREFS: StudyPrefs = { mode: 'pomodoro', work: 25, short: 5, long: 15, every: 4, endSound: 'focusEnd', breakSound: 'remindReward', tick: false, noise: 'off', nudges: true, todoist: { projects: [], labels: [] } }
+
+/** A goal per subject: minutes a week ("Math 6 h this week"). */
+export interface StudyGoal {
+  category: string
+  minutes: number
 }
 
 export interface StudyStore {
   v: 1
   blocks: StudyBlock[]
   categories: StudyCategory[]
+  prefs?: StudyPrefs
+  goals?: StudyGoal[]
 }
 
 export const MAX_BLOCKS = 200
 export const MAX_TAGS = 6
+export const NO_BLOCK_COLOR = '#64748b'
 export const PALETTE = ['#7c9cff', '#38bdf8', '#a78bfa', '#fbbf24', '#f472b6', '#34d399', '#fb7185', '#94a3b8'] as const
 
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().replace(/\s+/g, ' ').slice(0, max) : '')
@@ -68,6 +118,8 @@ export function cleanBlock(v: unknown): StudyBlock | null {
   if (!id || !name) return null
   const tags = [...new Set((Array.isArray(o.tags) ? o.tags : []).map(cleanTag).filter(Boolean))].slice(0, MAX_TAGS)
   const taskId = str(o.taskId, 80)
+  const est = Math.round(Number(o.estPomos))
+  const repeat = REPEATS.includes(o.repeat as Repeat) ? (o.repeat as Repeat) : null
   return {
     id,
     name,
@@ -77,7 +129,10 @@ export function cleanBlock(v: unknown): StudyBlock | null {
     quick: !!o.quick,
     due: isDay(o.due) ? o.due : null,
     done: !!o.done,
-    ...(taskId ? { taskId, taskTitle: str(o.taskTitle, 120) || null } : {}),
+    ...(taskId ? { taskId, taskTitle: str(o.taskTitle, 120) || null, ...(o.fromTodoist ? { fromTodoist: true } : {}) } : {}),
+    ...(est >= 1 ? { estPomos: Math.min(20, est) } : {}),
+    ...(repeat ? { repeat } : {}),
+    ...(isDay(o.lastDone) ? { lastDone: o.lastDone } : {}),
     createdAt: typeof o.createdAt === 'string' ? o.createdAt : new Date(0).toISOString()
   }
 }
@@ -98,23 +153,70 @@ export function cleanStore(v: unknown): StudyStore {
   for (const x of Array.isArray(o.categories) ? o.categories : []) {
     const name = str((x as StudyCategory)?.name, 40)
     const color = str((x as StudyCategory)?.color, 20)
-    if (name && /^#[0-9a-f]{3,8}$/i.test(color) && !cats.some((c) => c.name.toLowerCase() === name.toLowerCase())) cats.push({ name, color })
+    const emoji = cleanEmoji((x as StudyCategory)?.emoji)
+    if (name && /^#[0-9a-f]{3,8}$/i.test(color) && !cats.some((c) => c.name.toLowerCase() === name.toLowerCase())) cats.push({ name, color, ...(emoji ? { emoji } : {}) })
   }
-  return { v: 1, blocks, categories: cats.slice(0, 40) }
+  const goals: StudyGoal[] = []
+  for (const x of Array.isArray(o.goals) ? o.goals : []) {
+    const category = str((x as StudyGoal)?.category, 40)
+    const minutes = Math.round(Number((x as StudyGoal)?.minutes))
+    if (category && minutes >= 10 && !goals.some((g) => g.category.toLowerCase() === category.toLowerCase())) goals.push({ category, minutes: Math.min(100 * 60, minutes) })
+  }
+  return { v: 1, blocks, categories: cats.slice(0, 40), prefs: cleanPrefs(o.prefs), goals: goals.slice(0, 20) }
 }
+
+/** One emoji (or a short symbol), or ''. */
+export function cleanEmoji(v: unknown): string {
+  if (typeof v !== 'string') return ''
+  const t = v.trim()
+  if (!t || /[A-Za-z0-9<>]/.test(t)) return ''
+  return [...t].slice(0, 4).join('')
+}
+
+const intIn = (v: unknown, lo: number, hi: number, d: number) => {
+  const n = Math.round(Number(v))
+  return Number.isFinite(n) && n >= lo && n <= hi ? n : d
+}
+
+/** Your timer and sound choices, cleaned (anything unknown takes the default). */
+export function cleanPrefs(v: unknown): StudyPrefs {
+  const o = (v && typeof v === 'object' ? v : {}) as Record<string, unknown>
+  const d = DEFAULT_PREFS
+  const snd = (x: unknown, def: StudySound) => (STUDY_SOUNDS.includes(x as StudySound) ? (x as StudySound) : def)
+  const t = (o.todoist && typeof o.todoist === 'object' ? o.todoist : {}) as Record<string, unknown>
+  const names = (x: unknown) => [...new Set((Array.isArray(x) ? x : []).map((n) => str(n, 60)).filter(Boolean))].slice(0, 20)
+  return {
+    mode: o.mode === 'up' ? 'up' : 'pomodoro',
+    work: intIn(o.work, 5, 120, d.work),
+    short: intIn(o.short, 1, 30, d.short),
+    long: intIn(o.long, 5, 60, d.long),
+    every: intIn(o.every, 2, 8, d.every),
+    endSound: snd(o.endSound, d.endSound),
+    breakSound: snd(o.breakSound, d.breakSound),
+    tick: !!o.tick,
+    noise: o.noise === 'white' || o.noise === 'brown' || o.noise === 'rain' ? o.noise : 'off',
+    nudges: o.nudges !== false,
+    todoist: { projects: names(t.projects), labels: names(t.labels).map((l) => l.replace(/^@/, '').toLowerCase()) }
+  }
+}
+
+/** The prefs of a store (older stores have none yet). */
+export const prefsOf = (s: Pick<StudyStore, 'prefs'>): StudyPrefs => s.prefs ?? DEFAULT_PREFS
 
 /** Made-up starter blocks for an empty store (the owner edits or removes them). */
 export function starterStore(now: Date): StudyStore {
   const at = now.toISOString()
-  const b = (id: string, name: string, category: string, tags: string[], plannedMin: number | null): StudyBlock => ({ id, name, category, tags, plannedMin, quick: true, due: null, done: false, createdAt: at })
+  const b = (id: string, name: string, category: string, tags: string[], plannedMin: number | null, estPomos: number | null): StudyBlock => ({ id, name, category, tags, plannedMin, quick: true, due: null, done: false, ...(estPomos ? { estPomos } : {}), createdAt: at })
   return {
     v: 1,
-    blocks: [b('st-math', 'Math problems', 'Math', ['practice'], 50), b('st-read', 'Reading', 'English', ['reading'], 25), b('st-rev', 'Review notes', 'General', ['review'], null)],
+    blocks: [b('st-math', 'Math problems', 'Math', ['practice'], 50, 2), b('st-read', 'Reading', 'English', ['reading'], 25, 1), b('st-rev', 'Review notes', 'General', ['review'], null, null)],
     categories: [
-      { name: 'Math', color: PALETTE[0] },
-      { name: 'English', color: PALETTE[1] },
-      { name: 'General', color: PALETTE[7] }
-    ]
+      { name: 'Math', color: PALETTE[0], emoji: '📐' },
+      { name: 'English', color: PALETTE[1], emoji: '📖' },
+      { name: 'General', color: PALETTE[7], emoji: '📝' }
+    ],
+    prefs: DEFAULT_PREFS,
+    goals: []
   }
 }
 
@@ -136,6 +238,11 @@ export function saveBlock(store: StudyStore, input: Partial<StudyBlock> & { id: 
 
 export function removeBlock(store: StudyStore, id: string): StudyStore {
   return { ...store, blocks: store.blocks.filter((b) => b.id !== id) }
+}
+
+/** A subject's emoji ('' for none). */
+export function categoryEmoji(store: Pick<StudyStore, 'categories'>, name: string): string {
+  return store.categories.find((x) => x.name.toLowerCase() === name.toLowerCase())?.emoji ?? ''
 }
 
 export function categoryColor(store: Pick<StudyStore, 'categories'>, name: string): string {
@@ -165,9 +272,10 @@ export function weekStart(day: string): string {
 }
 
 /**
- * The blocks a filter shows, quick blocks first, then by name. A block with
- * no day belongs to every day (Today and This week). Completed blocks show
- * only under Completed (and under their category or tag).
+ * The blocks a filter shows, in your own order (drag to reorder). A block
+ * with no day belongs to every day (Today and This week); an overdue one
+ * stays in Today. Completed blocks show only under Completed (and under their
+ * category or tag).
  */
 export function filterBlocks(blocks: StudyBlock[], f: StudyFilter, today: string): StudyBlock[] {
   const tomorrow = addDays(today, 1)
@@ -190,8 +298,11 @@ export function filterBlocks(blocks: StudyBlock[], f: StudyFilter, today: string
         return b.tags.includes(cleanTag(f.tag))
     }
   }
-  return blocks.filter(keep).sort((a, b) => Number(b.quick) - Number(a.quick) || a.name.localeCompare(b.name))
+  return blocks.filter(keep)
 }
+
+/** Past its day and not done (shown in red). */
+export const isOverdue = (b: Pick<StudyBlock, 'due' | 'done'>, today: string) => !b.done && !!b.due && b.due < today
 
 /** How many blocks each fixed filter shows (the counts next to the filter names). */
 export function filterCounts(blocks: StudyBlock[], today: string): Record<'today' | 'tomorrow' | 'week' | 'all' | 'done', number> {
@@ -213,6 +324,51 @@ export interface StudyRun {
   open?: boolean
   /** The break going on now: its planned length (minutes), for the sound at its end. */
   breakMin?: number | null
+  /** What the pause going on now is: a break (it may have a length) or a plain pause. */
+  pauseKind?: 'pause' | 'break' | null
+  /** The break part of the time paused before now (ms); the rest of pausedMs was plain pauses. */
+  brkMs?: number
+  /** Pomodoro mode: the lengths, the pomodoros done so far, and the minutes studied at which this one ends. */
+  pomo?: PomoRun | null
+}
+
+export interface PomoRun {
+  work: number
+  short: number
+  long: number
+  every: number
+  done: number
+  /** The studied minutes at which the pomodoro going on now ends (moves on with +5 and each new one). */
+  at: number
+}
+
+/** The minutes studied the ring fills to: this pomodoro's end, else the planned length; null for an open stopwatch. */
+export function goalMin(run: Pick<StudyRun, 'planned' | 'open' | 'pomo'>): number | null {
+  if (run.pomo) return run.pomo.at
+  return run.open ? null : run.planned
+}
+
+/** The break after the pomodoro going on now: long after every `every`-th one. */
+export function pomoBreakLen(p: Pick<PomoRun, 'done' | 'short' | 'long' | 'every'>): number {
+  return (p.done + 1) % p.every === 0 ? p.long : p.short
+}
+
+/** The pomodoros finished in this run so far (counting the one going on once its time is reached). */
+export function pomosDone(run: Pick<StudyRun, 'pomo'>, workedMs: number): number {
+  if (!run.pomo) return 0
+  return run.pomo.done + (workedMs >= run.pomo.at * 60_000 ? 1 : 0)
+}
+
+/** Break and plain pause time so far (ms), apart: the CSV and the session note keep both. */
+export function pausesOf(run: Pick<StudyRun, 'pausedAt' | 'pausedMs' | 'pauseKind' | 'brkMs'>, now: number): { breakMs: number; pauseMs: number } {
+  const before = Math.max(0, Number(run.pausedMs) || 0)
+  const at = run.pausedAt ? Date.parse(run.pausedAt) : NaN
+  const cur = Number.isFinite(at) ? Math.max(0, now - at) : 0
+  const brkBefore = Math.min(before, Math.max(0, Number(run.brkMs) || 0))
+  // Older runs never said: their pauses were all breaks.
+  const legacy = run.brkMs == null && !run.pauseKind
+  const breakMs = (legacy ? before : brkBefore) + (run.pauseKind === 'pause' ? 0 : cur)
+  return { breakMs, pauseMs: Math.max(0, before + cur - breakMs) }
 }
 
 /** Longest a single live session counts (4 hours; also what an open stopwatch is capped at). */
@@ -242,8 +398,9 @@ export function runNow(run: StudyRun, now: number): RunNow {
   const onBreak = Number.isFinite(pausedAt)
   const breakMs = before + (onBreak ? Math.max(0, now - pausedAt) : 0)
   const workedMs = Math.max(0, (onBreak ? pausedAt : now) - start - before)
-  const breakEndsAt = onBreak && run.breakMin && run.breakMin > 0 ? pausedAt + run.breakMin * 60_000 : null
-  const plannedEndsAt = run.open ? null : start + run.planned * 60_000 + before + (onBreak ? Math.max(0, now - pausedAt) : 0)
+  const breakEndsAt = onBreak && run.pauseKind !== 'pause' && run.breakMin && run.breakMin > 0 ? pausedAt + run.breakMin * 60_000 : null
+  const goal = goalMin(run)
+  const plannedEndsAt = goal == null ? null : start + goal * 60_000 + before + (onBreak ? Math.max(0, now - pausedAt) : 0)
   return { workedMs, breakMs, onBreak, breakEndsAt, plannedEndsAt }
 }
 
@@ -257,6 +414,9 @@ export function isForgotten(run: StudyRun, now: number, dayOf: (at: Date) => str
   if (!Number.isFinite(start)) return false
   const { workedMs } = runNow(run, now)
   if (workedMs > sessionCap(run) * 60_000) return true
+  // Paused and gone for hours (a break that never ended).
+  const pausedAt = run.pausedAt ? Date.parse(run.pausedAt) : NaN
+  if (Number.isFinite(pausedAt) && now - pausedAt > 3 * 3600_000) return true
   return dayOf(new Date(start)) !== dayOf(new Date(now)) && workedMs > 60 * 60_000
 }
 
@@ -299,6 +459,12 @@ export interface StudySession {
   startedAt: string
   endedAt: string
   source: 'timer' | 'manual' | 'fixed'
+  /** "What did you do?" (one line, saved when you stop). */
+  note?: string
+  /** Plain pauses (not breaks), minutes. */
+  pauseMin?: number
+  /** Pomodoros finished in this session (pomodoro mode). */
+  pomos?: number
 }
 
 export type GroupBy = 'category' | 'tag' | 'block'
@@ -355,14 +521,29 @@ export interface StudyStats {
   beforeMin: number
 }
 
-const NONE = { category: 'No category', tag: 'No tag', block: 'Other' }
+const NONE = { category: 'No category', block: 'No block', tag: 'No tag' }
+/** The key of sessions with no block (plain focus timers, older sessions): "No block". */
+export const NO_BLOCK_KEY = 'c:~none'
+
+/**
+ * Sessions with no block (a plain focus timer, or from before Study Time)
+ * take the block whose name is their subject, when there is one; the rest
+ * count under "No block". So the page's total and the category and tag
+ * totals always agree.
+ */
+export function resolveBlocks(sessions: StudySession[], store: Pick<StudyStore, 'blocks'>): StudySession[] {
+  const byName = new Map<string, string>()
+  for (const b of store.blocks) if (!byName.has(b.name.toLowerCase())) byName.set(b.name.toLowerCase(), b.id)
+  return sessions.map((s) => (s.blockId ? s : byName.has(s.subject.toLowerCase()) ? { ...s, blockId: byName.get(s.subject.toLowerCase())! } : s))
+}
 
 /** What one session counts under: by category, each tag, or the block. */
-function keysOf(s: StudySession, by: GroupBy, blocks: Map<string, StudyBlock>): { key: string; label: string }[] {
+export function keysOf(s: StudySession, by: GroupBy, blocks: Map<string, StudyBlock>): { key: string; label: string }[] {
   const b = s.blockId ? blocks.get(s.blockId) : undefined
   if (by === 'block') return [{ key: b ? `b:${b.id}` : `s:${s.subject.toLowerCase()}`, label: b?.name ?? s.subject }]
   if (by === 'category') {
-    const c = b?.category ?? ''
+    if (!b) return [{ key: NO_BLOCK_KEY, label: NONE.block }]
+    const c = b.category
     return [{ key: `c:${c.toLowerCase()}`, label: c || NONE.category }]
   }
   const tags = b?.tags ?? []
@@ -413,7 +594,7 @@ export function studyStats(all: StudySession[], store: Pick<StudyStore, 'blocks'
       groups.set(k.key, g)
     }
   const sorted = [...groups.values()].filter((g) => g.minutes > 0).sort((a, b) => b.minutes - a.minutes || a.label.localeCompare(b.label))
-  const colorFor = (g: Slice, i: number) => (by === 'category' ? categoryColor(store, g.key === 'c:' ? '' : g.label) : PALETTE[i % PALETTE.length])
+  const colorFor = (g: Slice, i: number) => (by === 'category' ? (g.key === NO_BLOCK_KEY ? NO_BLOCK_COLOR : categoryColor(store, g.key === 'c:' ? '' : g.label)) : PALETTE[i % PALETTE.length])
   let slices = sorted.map((g, i) => ({ ...g, color: colorFor(g, i) }))
   if (slices.length > maxSlices) {
     const rest = slices.slice(maxSlices - 1)
@@ -470,19 +651,24 @@ export function minutesByBlock(sessions: StudySession[], from: string, to: strin
   return m
 }
 
-/** Minutes per category and per tag (all time), for the sidebar of filters. */
-export function totalsByGroup(sessions: StudySession[], store: Pick<StudyStore, 'blocks'>): { category: Map<string, number>; tag: Map<string, number> } {
+/**
+ * Minutes per category and per tag, for the filter chips. Sessions with no
+ * block count under the category '~none' ("No block") and the tag '' ("No
+ * tag"), so the categories always add up to the total.
+ */
+export function totalsByGroup(sessions: StudySession[], store: Pick<StudyStore, 'blocks'>): { category: Map<string, number>; tag: Map<string, number>; total: number } {
   const blocks = new Map(store.blocks.map((b) => [b.id, b]))
   const category = new Map<string, number>()
   const tag = new Map<string, number>()
+  let total = 0
   for (const s of sessions) {
+    total += s.minutes
     const b = s.blockId ? blocks.get(s.blockId) : undefined
-    if (!b) continue
-    const c = b.category.toLowerCase()
+    const c = b ? b.category.toLowerCase() : '~none'
     category.set(c, (category.get(c) ?? 0) + s.minutes)
-    for (const t of b.tags) tag.set(t, (tag.get(t) ?? 0) + s.minutes)
+    for (const t of b?.tags.length ? b.tags : ['']) tag.set(t, (tag.get(t) ?? 0) + s.minutes)
   }
-  return { category, tag }
+  return { category, tag, total }
 }
 
 /** "1h 05m", "45m", "0m". */
@@ -520,7 +706,14 @@ export interface StudyNote {
   /** Break minutes. */
   k?: number
   s?: StudySession['source']
+  /** "What did you do?" */
+  n?: string
+  /** Plain pause minutes. */
+  q?: number
+  /** Pomodoros finished. */
+  p?: number
 }
+export const NOTE_MAX = 140
 export type StudyLog = Record<string, StudyNote>
 export const LOG_MAX = 3000
 export const LOG_DAYS = 400
@@ -534,7 +727,10 @@ export function cleanLog(v: unknown): StudyLog {
     out[k] = {
       ...(typeof n.b === 'string' && n.b ? { b: n.b.slice(0, 40) } : {}),
       ...(Number(n.k) > 0 ? { k: Math.min(600, Math.round(Number(n.k))) } : {}),
-      ...(n.s === 'manual' || n.s === 'fixed' ? { s: n.s } : {})
+      ...(n.s === 'manual' || n.s === 'fixed' ? { s: n.s } : {}),
+      ...(typeof n.n === 'string' && n.n.trim() ? { n: str(n.n, NOTE_MAX) } : {}),
+      ...(Number(n.q) > 0 ? { q: Math.min(600, Math.round(Number(n.q))) } : {}),
+      ...(Number(n.p) > 0 ? { p: Math.min(40, Math.round(Number(n.p))) } : {})
     }
   }
   return out
@@ -555,34 +751,105 @@ export function putNote(log: StudyLog, startedAt: string, note: StudyNote | null
 
 /** A focus session row plus its note: what the page and the stats read. */
 export function withNote(row: { id: number; day: string; subject: string; minutes: number; startedAt: string; endedAt: string }, n: StudyNote | undefined): StudySession {
-  return { ...row, blockId: n?.b ?? null, breakMin: n?.k ?? 0, source: n?.s ?? 'timer' }
+  return { ...row, blockId: n?.b ?? null, breakMin: n?.k ?? 0, source: n?.s ?? 'timer', ...(n?.n ? { note: n.n } : {}), ...(n?.q ? { pauseMin: n.q } : {}), ...(n?.p ? { pomos: n.p } : {}) }
 }
 
 // ---------------------------------------------------------------- changes from the page
+
+/** A Todoist task as Study Time pulls it (only what a block needs). */
+export interface TodoLite {
+  id: string
+  content: string
+  due: string | null
+  project: string | null
+  section?: string | null
+  labels?: string[]
+  duration?: number | null
+  recurring?: boolean
+}
 
 /** One change to the blocks, applied inside the save (two devices never undo each other's whole list). */
 export type StudyBlockOp =
   | { op: 'save'; block: Partial<StudyBlock> & { id: string; name: string } }
   | { op: 'remove'; id: string }
   | { op: 'done'; id: string; done: boolean }
-  | { op: 'color'; category: string; color: string }
+  | { op: 'color'; category: string; color: string; emoji?: string }
   | { op: 'starter' }
+  /** Drag to reorder: the ids as they now stand (they take the places those blocks had). */
+  | { op: 'reorder'; ids: string[] }
+  | { op: 'prefs'; prefs: Partial<StudyPrefs> }
+  /** A weekly goal for a subject (minutes; null removes it). */
+  | { op: 'goal'; category: string; minutes: number | null }
+  /** Your study tasks from Todoist become blocks (studyPlan.ts todoistBlocks; applied by the service). */
+  | { op: 'todoist'; tasks: TodoLite[] }
 
-export function applyStudyOp(store: StudyStore, o: StudyBlockOp, now: Date): StudyStore {
+/** The next day a repeating block is due, after `today` (weekly keeps its weekday). */
+export function nextDue(from: string | null, repeat: Repeat, today: string): string {
+  const base = from && from > today ? from : today
+  if (repeat === 'daily') return addDays(base, 1)
+  if (repeat === 'weekdays') {
+    let d = addDays(base, 1)
+    while ([0, 6].includes(new Date(`${d}T12:00:00Z`).getUTCDay())) d = addDays(d, 1)
+    return d
+  }
+  let d = from ?? today
+  do d = addDays(d, 7)
+  while (d <= today)
+  return d
+}
+
+/** The listed ids take the places those blocks had, in the new order; every other block stays where it was. */
+export function reorderBlocks(blocks: StudyBlock[], ids: string[]): StudyBlock[] {
+  const want = ids.filter((id, i) => ids.indexOf(id) === i && blocks.some((b) => b.id === id))
+  const set = new Set(want)
+  const slots = blocks.map((b, i) => (set.has(b.id) ? i : -1)).filter((i) => i >= 0)
+  const out = [...blocks]
+  slots.forEach((slot, k) => (out[slot] = blocks.find((b) => b.id === want[k])!))
+  return out
+}
+
+export function applyStudyOp(store: StudyStore, o: StudyBlockOp, now: Date, today = localDay(now)): StudyStore {
   switch (o.op) {
     case 'save':
       return saveBlock(store, o.block, now)
     case 'remove':
       return removeBlock(store, o.id)
     case 'done':
-      return { ...store, blocks: store.blocks.map((b) => (b.id === o.id ? { ...b, done: !!o.done } : b)) }
+      return {
+        ...store,
+        blocks: store.blocks.map((b) => {
+          if (b.id !== o.id) return b
+          // A repeating block moves on to its next day instead of staying done.
+          if (o.done && b.repeat && !b.fromTodoist) return { ...b, done: false, lastDone: today, due: nextDue(b.due, b.repeat, today) }
+          return { ...b, done: !!o.done, ...(o.done ? { lastDone: today } : {}) }
+        })
+      }
     case 'color': {
       const name = String(o.category ?? '').trim().slice(0, 40)
       if (!name || !/^#[0-9a-f]{3,8}$/i.test(o.color)) return store
+      const was = store.categories.find((c) => c.name.toLowerCase() === name.toLowerCase())
+      const emoji = o.emoji === undefined ? (was?.emoji ?? '') : cleanEmoji(o.emoji)
       const rest = store.categories.filter((c) => c.name.toLowerCase() !== name.toLowerCase())
-      return { ...store, categories: [...rest, { name, color: o.color }] }
+      return { ...store, categories: [...rest, { name: was?.name ?? name, color: o.color, ...(emoji ? { emoji } : {}) }] }
     }
     case 'starter':
       return store.blocks.length ? store : starterStore(now)
+    case 'reorder':
+      return { ...store, blocks: reorderBlocks(store.blocks, Array.isArray(o.ids) ? o.ids.map(String) : []) }
+    case 'prefs': {
+      const cur = prefsOf(store)
+      return { ...store, prefs: cleanPrefs({ ...cur, ...o.prefs, todoist: { ...cur.todoist, ...(o.prefs?.todoist ?? {}) } }) }
+    }
+    case 'goal': {
+      const name = String(o.category ?? '').trim().slice(0, 40)
+      const rest = (store.goals ?? []).filter((g) => g.category.toLowerCase() !== name.toLowerCase())
+      const m = Math.round(Number(o.minutes))
+      return { ...store, goals: name && m >= 10 ? [...rest, { category: name, minutes: Math.min(6000, m) }] : rest }
+    }
+    case 'todoist':
+      return store
   }
 }
+
+/** The app's day of a moment (it starts at 04:00); the service passes the wallet's own. */
+export const localDay = (d: Date): string => dayKey(d)
