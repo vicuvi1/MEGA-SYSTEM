@@ -237,10 +237,10 @@ export function levelStatus(sessions: MoveSession[], level: Level, sets: number,
     const far = easy && two.every((s) => s.reps.slice(0, sets).every((x) => x >= level.hi + way))
     const how = easy ? 'easy twice' : feels.every((f) => f === 'easy' || f === 'ok') ? 'twice with 1–2 reps left' : `in ${NEED} sessions in a row`
     const reason = `${sets}×${level.hi}${u} ${how}`
-    return { ...base, pct: 1, topSets: needSets, state: 'complete', reason, jump: far ? 2 : 1, line: `Level complete: ${reason}.` }
+    return { ...base, pct: 1, topSets: needSets, state: 'complete', reason, jump: far ? 2 : 1, line: `Step complete: ${reason}.` }
   }
   const lastTwo = list.slice(-2)
-  if (lastTwo.length === 2 && lastTwo.every((s) => belowBottom(s, r))) return { ...base, state: 'struggling', line: `Under ${level.lo}${u} twice. Stay here a bit longer, or go one level back.` }
+  if (lastTwo.length === 2 && lastTwo.every((s) => belowBottom(s, r))) return { ...base, state: 'struggling', line: `Under ${level.lo}${u} twice. Stay here a bit longer, or go one step back.` }
   const hardTop = atTop(lastS, r) && (effort === 'hard' || !formOk(lastS, sets))
   return { ...base, state: 'building', line: hardTop ? `${sets}×${level.hi}${u}, but ${effort === 'hard' ? 'it was hard' : 'your form broke'}. Once more with 1–2 reps left and good form counts.` : hits ? `1 of ${NEED} sessions at the top. One more (not hard) unlocks the next move.` : `${topSets} of ${needSets} sets at the top (${level.hi}${u}).` }
 }
@@ -409,7 +409,7 @@ export function nextTimeOf(p: { ladder: Ladder; index: number; level: Level; nam
   }
   if (status.state === 'struggling') {
     const back = p.ladder.levels[p.index - 1]
-    return { kind: 'down', move: level.move, line: `Next time: stay on ${p.name}${back ? ` or go one level back to ${moveName(back.move)}` : ''}, because you stayed under ${level.lo}${u} twice.` }
+    return { kind: 'down', move: level.move, line: `Next time: stay on ${p.name}${back ? ` or go one step back to ${moveName(back.move)}` : ''}, because you stayed under ${level.lo}${u} twice.` }
   }
   const w = t.reps.slice(0, sets)
   if (w.length >= sets && w.every((x) => x >= level.hi))

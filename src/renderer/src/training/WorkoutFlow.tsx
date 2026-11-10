@@ -1,4 +1,4 @@
-// Start Workout: a focused, set-by-set flow over the Training home. One set at
+// Start Workout: a focused, set-by-set flow over Sport Track. One set at
 // a time: the move, its level and target, last time, the reps (− / + or type
 // them), an effort tap (Hard / OK / Easy) and the optional form check, then
 // Log set. A rest timer follows each set (the engine's rest for that level,

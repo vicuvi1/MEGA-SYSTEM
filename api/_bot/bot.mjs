@@ -14500,14 +14500,14 @@ function levelStatus(sessions, level, sets, since) {
 			state: "complete",
 			reason,
 			jump: far ? 2 : 1,
-			line: `Level complete: ${reason}.`
+			line: `Step complete: ${reason}.`
 		};
 	}
 	const lastTwo = list.slice(-2);
 	if (lastTwo.length === 2 && lastTwo.every((s) => belowBottom(s, r))) return {
 		...base,
 		state: "struggling",
-		line: `Under ${level.lo}${u} twice. Stay here a bit longer, or go one level back.`
+		line: `Under ${level.lo}${u} twice. Stay here a bit longer, or go one step back.`
 	};
 	const hardTop = atTop$1(lastS, r) && (effort === "hard" || !formOk(lastS, sets));
 	return {
@@ -14608,7 +14608,7 @@ function nextTimeOf(p, today) {
 		return {
 			kind: "down",
 			move: level.move,
-			line: `Next time: stay on ${p.name}${back ? ` or go one level back to ${moveName(back.move)}` : ""}, because you stayed under ${level.lo}${u} twice.`
+			line: `Next time: stay on ${p.name}${back ? ` or go one step back to ${moveName(back.move)}` : ""}, because you stayed under ${level.lo}${u} twice.`
 		};
 	}
 	const w = t.reps.slice(0, sets);

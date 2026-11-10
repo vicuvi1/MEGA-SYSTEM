@@ -1,0 +1,23 @@
+/* Sport Track's ⋯ menu in the top bar (Life's tokens). */
+.sp-menu { position: relative; flex: none; }
+.sp-menu-btn span { font-size: 20px; line-height: 1; letter-spacing: 1px; }
+.sp-menu-pop {
+  position: absolute; right: 0; top: calc(100% + 8px); z-index: 80; min-width: 280px; padding: 6px;
+  background: var(--surface, #12161f); border: 1px solid var(--border-strong, rgb(255 255 255 / 0.14)); border-radius: 14px;
+  box-shadow: var(--shadow-2, 0 18px 40px rgb(0 0 0 / 0.45));
+}
+.sp-menu-pop button {
+  width: 100%; display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 11px 12px; border: 0; border-radius: 10px;
+  background: transparent; color: var(--text); font: inherit; cursor: pointer;
+}
+.sp-menu-pop button:hover, .sp-menu-pop button:focus-visible { background: var(--surface-2, rgb(255 255 255 / 0.05)); outline: none; }
+.sp-menu-pop b { font-size: 15px; font-weight: 700; }
+.sp-menu-pop small { font-size: 13px; color: var(--muted); line-height: 1.35; }
+
+/* Five sections fit any width: columns may shrink below their label (it ends in "…"), never push the bar sideways. */
+.seg-switch { grid-template-columns: repeat(var(--seg-n, 2), minmax(0, 1fr)); max-width: 100%; }
+.seg-switch button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 760px) {
+  .topbar .seg-switch button { padding-inline: 6px; gap: 4px; }
+  .topbar .seg-switch button svg { display: none; }
+}

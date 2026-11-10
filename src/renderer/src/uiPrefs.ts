@@ -162,8 +162,11 @@ systemDark?.addEventListener('change', () => current.theme === 'system' && apply
 
 // ---------- Last place ----------
 
-/** Which tab a section shows: the embedded app, Life System's view, or (Sport Track) the Training home. */
-export type SectionView = 'app' | 'system' | 'train'
+/**
+ * Which tab a section shows: the embedded app or Life System's view. Sport Track: 'train' (Dashboard),
+ * 'workout', 'exercises', 'progress', 'system' (Body & Food) and 'app' (the Classic tracker, in its ⋯ menu).
+ */
+export type SectionView = 'app' | 'system' | 'train' | 'workout' | 'exercises' | 'progress'
 export interface LastPlace {
   page: string
   view: Record<string, SectionView>

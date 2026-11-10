@@ -47,7 +47,7 @@ export interface TrackerItem extends PlanItem {
   rest: number
   /** A library move has a demo. */
   demo: string | null
-  /** "Level 3 of 8" */
+  /** "Step 3 of 8": where this move sits on its chain (the one overall level is the Growth level). */
   levelText: string
 }
 
@@ -77,8 +77,6 @@ export interface TrackerView {
   /** Hard sets a week per muscle group from the split (10–20 each). */
   weekly: Record<'push' | 'pull' | 'legs' | 'core', number>
   sessionId: string | null
-  /** "Level 3": the average level of today's moves (null on a rest day). */
-  level: number | null
 }
 
 /** Aim for each set: last time's reps (the last one repeated), the lowest one +1 (+5 s for holds), inside the range. */
@@ -140,8 +138,7 @@ export function trackerToday(st: any, day: string, opts: { dose?: Dose; anyway?:
       setsPlanned: 0,
       setsDone: 0,
       warmup: [],
-      sessionId: null,
-      level: null
+      sessionId: null
     }
   const items: TrackerItem[] = sessionItems(st, data, type, day, dose).map((it) => {
     const ids = exIdsFor(st?.exercises, it.level.move)
@@ -154,7 +151,7 @@ export function trackerToday(st: any, day: string, opts: { dose?: Dose; anyway?:
       effort: it.level.unit === 'sec' ? holdLine : EFFORT_LINE,
       rest: restSecFor(it.level),
       demo: moveById(it.level.move) ? it.level.move : null,
-      levelText: `Level ${it.index + 1} of ${it.ladder.levels.length}`
+      levelText: `Step ${it.index + 1} of ${it.ladder.levels.length}`
     }
   })
   const setsPlanned = items.reduce((n, it) => n + it.sets, 0)
@@ -169,8 +166,7 @@ export function trackerToday(st: any, day: string, opts: { dose?: Dose; anyway?:
         : plan.why === 'catch-up' || plan.why === 'moved'
           ? plan.line
           : `${WEEKDAYS[dowOf(day)]}: ${name}. Every set: ${EFFORT_LINE}.`
-  const level = items.length ? Math.round(items.reduce((n, it) => n + it.index + 1, 0) / items.length) : null
-  return { ...base, type, stage, title: stage === 'done' ? `Done: ${name}` : name, line, items, minutes: sessionMinutes(items), setsPlanned, setsDone, warmup: WARMUP[type], sessionId: started?.id ?? trackerSessionId(day, type), level }
+  return { ...base, type, stage, title: stage === 'done' ? `Done: ${name}` : name, line, items, minutes: sessionMinutes(items), setsPlanned, setsDone, warmup: WARMUP[type], sessionId: started?.id ?? trackerSessionId(day, type) }
 }
 
 /** The session record for the Tracker's session today, read back from the set log. */
@@ -319,6 +315,30 @@ export function coachLine(v: TrackerView, readiness: number | null = null): stri
   if (low) return `${low.name} stayed under ${low.level.lo} twice. Make it easier for a while: your history stays.`
   if (v.items.every((it) => !it.last)) return 'First session on these moves: start at the bottom of each range and tap how hard every set felt.'
   return `${TYPE_NAME[v.type]}: beat last time by one rep on your lowest set, and ${EFFORT_LINE}.`
+}
+
+/**
+ * The part of a chain to draw: at most `size` steps with the current one in the middle where it can be
+ * (the Dashboard's Progression Path). Returns [from, to) step indexes.
+ */
+export function stepWindow(count: number, index: number, size = 5): [number, number] {
+  const n = Math.max(0, count)
+  const s = Math.min(size, n)
+  const from = Math.max(0, Math.min(index - Math.floor((s - 1) / 2), n - s))
+  return [from, from + s]
+}
+
+/**
+ * Today's moves in the order you dragged them into (ladder ids; unknown ones keep their place at the end).
+ * The engine's order is the default; this changes only the order, never sets, levels or logs.
+ */
+export function orderItems<T extends { ladder: { id: string } }>(items: T[], order: string[] | null | undefined): T[] {
+  if (!order?.length) return items
+  const at = (id: string) => {
+    const i = order.indexOf(id)
+    return i < 0 ? order.length : i
+  }
+  return items.map((it, i) => ({ it, i })).sort((a, b) => at(a.it.ladder.id) - at(b.it.ladder.id) || a.i - b.i).map((x) => x.it)
 }
 
 // ---------- the week ----------

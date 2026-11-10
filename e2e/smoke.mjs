@@ -154,6 +154,16 @@ try {
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+  // Sport Track: one of its sections in the top bar (Dashboard · Workout · Exercises · Progress · Body & Food), and the
+  // Classic tracker (the old embedded app) from its ⋯ menu.
+  const sportView = (name) => pg.locator('.seg-switch [role="tab"]', { hasText: name }).click()
+  const openClassic = async () => {
+    // Already on the Classic tracker (no section selected, e.g. a Start button opened it): nothing to do.
+    await pg.waitForSelector('[data-sport-more]', { timeout: 10000 })
+    if (!(await pg.locator('.seg-switch [role="tab"][aria-selected="true"]').count())) return
+    await pg.click('[data-sport-more]')
+    await pg.click('[data-sport-menu="classic"]')
+  }
   // A step that needs a certain time of day sets it here (HH:MM today, local):
   // the page reloads at that time (nothing kept from the run's own clock), and
   // the run's clock comes back afterwards, pass or fail.
@@ -301,8 +311,8 @@ try {
     await step(`${name} loads with its own content`, async () => {
       await open(page)
       if (page === 'money') await pg.click('.mh-open')
-      // Sport Track opens on its Training home; its own app is the Classic tracker tab.
-      if (page === 'body') await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+      // Sport Track opens on its Dashboard; its own app is the Classic tracker in the ⋯ menu.
+      if (page === 'body') await openClassic()
       await pg.waitForTimeout(3500)
       const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
       if (!src) throw new Error('no visible app frame')
@@ -358,7 +368,7 @@ try {
     const shots = process.env.BODY_TODAY_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="today"]')
     const t = '#ptp-body-today'
@@ -473,12 +483,12 @@ try {
       await frame.evaluate(() => document.getElementById('wm-close')?.click())
       await frame.waitForSelector('#workout-mode', { state: 'hidden', timeout: 10000 })
     } else if (!(await pg.locator(`${t} .ct-done`).count())) throw new Error('no Start button and not done for today')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
   })
   await step('Sport Track note: a workout summary makes one note from Ben, once', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
     await pg.waitForTimeout(2500)
     const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
@@ -496,7 +506,7 @@ try {
   await step('Sport Track simple Today: your own exercises, Harder raises a target, no coach UI', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
     await pg.waitForTimeout(2500)
     const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
@@ -538,7 +548,7 @@ try {
   await step('Sport Track Today: hero, exercise cards, water, menus, fits laptop and phone', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 }) // a retry starts from the usual size
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
     // The app's frame loads its page and scripts: wait for it to have its tabs (a fixed 2.5 s was too short under load).
     await pg.waitForFunction(() => [...document.querySelectorAll('iframe')].some((f) => f.src.includes('/apps/sport/')), null, { timeout: 20000 })
     let frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
@@ -721,7 +731,7 @@ try {
   await step('Sport Track onboarding: a best set of 50 push-ups puts Today (and the Training home) on a harder variation', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
     await pg.waitForTimeout(2500)
     const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
@@ -738,11 +748,12 @@ try {
     if (!/[45]×[5-8]\s+(archer|decline)/i.test(session)) throw new Error(`Today's session is not 4×5–8 of a hard variation (got: ${JSON.stringify(session)})`)
     if (process.env.SPORT_SHOTS) await pg.locator('body').screenshot({ path: `${process.env.SPORT_SHOTS}/today-after-onboarding.png` })
     // One engine: the Training home places the same best set on a hard push variation too (its Progression Path).
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Training' }).click()
-    await pg.waitForSelector('[data-tg="path"] .tg-steps li.current', { timeout: 15000 })
-    const tgPush = await pg.locator('[data-tg="path"] .tg-steps li.current small').first().innerText()
+    await sportView('Dashboard')
+    await sportView('Exercises')
+    await pg.waitForSelector('[data-sp="exercises"] .tr-ladder[data-ladder="push"] [data-tr="current"]', { timeout: 15000 })
+    const tgPush = await pg.locator('[data-sp="exercises"] .tr-ladder[data-ladder="push"] [data-tr="current"]').first().innerText()
     if (!/(archer|planche|one-arm|decline)/i.test(tgPush)) throw new Error(`the Training home does not place 50 push-ups on a harder variation (got: ${tgPush})`)
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
     // It does not come back by itself, and "Re-check my levels" reopens it with your answer.
     await frame.evaluate(() => location.reload())
     await frame.waitForSelector('#your-coach:not([hidden])', { timeout: 10000 })
@@ -770,8 +781,8 @@ try {
       await pg.locator(sel).first().screenshot({ path: `${shots}/${name}.png` })
     }
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
-    await pg.waitForSelector('.body-page .ptabs [data-tab="training"]', { timeout: 20000 })
+    await sportView('Body & Food')
+    await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
     // Today: readiness sets the dose; tapping Short tells Sport Track (life_body) and says it's your pick; then back to automatic.
     await pg.click('.body-page .ptabs [data-tab="today"]')
     const today = '#ptp-body-today'
@@ -793,13 +804,15 @@ try {
     // Trained today (the Sport Track steps logged sets): "Done for today", never "Rest day" next to it.
     const all = await pg.locator(today).innerText()
     if (/Rest day/.test(all) && /trained today/i.test(all)) throw new Error('Today says "Rest day" and "You trained today" together')
-    // Training: hard sets per muscle (done / planned, 10–20) and the next step for each move.
-    await pg.click('.body-page .ptabs [data-tab="training"]')
-    await pg.waitForSelector('#ptp-body-training .mw-row', { timeout: 15000 })
-    if ((await pg.locator('#ptp-body-training .mw-row').count()) !== 4) throw new Error('sets per muscle does not show 4 muscles')
-    await pg.waitForSelector('#ptp-body-training .mw-moves li', { timeout: 5000 })
-    await shot('#ptp-body-training .mw-card', 'sets-per-muscle')
-    // Progress: the weight trend and its nudge, measurements, photos, the weekly card.
+    // Sport Track → Progress: hard sets per muscle (done / planned, 10–20) and the next step for each move.
+    await sportView('Progress')
+    await pg.waitForSelector('[data-sp="progress"] .mw-row', { timeout: 15000 })
+    if ((await pg.locator('[data-sp="progress"] .mw-row').count()) !== 4) throw new Error('sets per muscle does not show 4 muscles')
+    await pg.waitForSelector('[data-sp="progress"] .mw-moves li', { timeout: 5000 })
+    await shot('[data-sp="progress"] .mw-card', 'sets-per-muscle')
+    await sportView('Body & Food')
+    await pg.waitForSelector('.body-page .ptabs [data-tab="progress"]', { timeout: 20000 })
+    // Body: the weight trend and its nudge, measurements, photos, the weekly card.
     await pg.click('.body-page .ptabs [data-tab="progress"]')
     const prog = '#ptp-body-progress'
     await pg.waitForSelector(`${prog} .bpg-more`, { timeout: 15000 })
@@ -907,7 +920,7 @@ try {
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
     // Back to the tracker for the steps after this one.
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
   })
   // Body → Progress: the strength chart per move, weight and waist with a plain verdict, the monthly report,
   // the records wall and two made-up drawn photos side by side. BODY_SHOTS=<dir> saves screenshots.
@@ -915,7 +928,7 @@ try {
     const shots = process.env.BODY_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.waitForSelector('.body-page .ptabs [data-tab="progress"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="progress"]')
     const prog = '#ptp-body-progress'
@@ -997,14 +1010,14 @@ try {
       if (over > 1) throw new Error(`Body progress scrolls sideways at ${w}px (${over}px)`)
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
   })
   await step('Food counter: copy the prompt, paste a reply, fix grams, save, totals, what to eat next, same as yesterday, quick words, a supplement, water, rings, week chart, plan, the Sport Track line', async () => {
     const shots = process.env.FOOD_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await pg.context().grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {})
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="food"]')
     const fc = '#ptp-body-food .fd-card'
@@ -1222,7 +1235,7 @@ try {
     if (over > 1) throw new Error(`the food counter scrolls sideways on a phone (${over}px)`)
     await pg.setViewportSize({ width: 1440, height: 900 })
     // Sport Track Today shows one protein line; a tap opens Body → Food.
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
     await pg.waitForTimeout(2500)
     const frame = pg.frames().find((f) => f.url().includes('/apps/sport/'))
     if (!frame) throw new Error('no Sport Track frame')
@@ -1230,7 +1243,7 @@ try {
     await frame.waitForFunction(() => { const el = document.getElementById('food-line'); return !!el && !el.hidden && /^Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(el.textContent || '') }, null, { timeout: 15000 })
     await frame.click('#food-line')
     await pg.waitForSelector('#ptp-body-food .fd-card', { state: 'visible', timeout: 10000 })
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
   })
   // Food photo: 3 photos of one meal picked at once go to the AI in ONE request (a canned answer here), one review
   // shows the 3 thumbnails and one combined list, you check the foods, Save logs ONE meal once, and the reply line is
@@ -1240,7 +1253,7 @@ try {
     const shots = process.env.FOOD_PHOTO_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="food"]')
     const fc = '#ptp-body-food .fd-card'
@@ -1392,7 +1405,7 @@ try {
     const shots = process.env.FOOD_PASTE_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="food"]')
     const fc = '#ptp-body-food .fd-card'
@@ -1475,7 +1488,7 @@ try {
     const shots = process.env.FOOD_PHOTO2_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="food"]')
     const fc = '#ptp-body-food .fd-card'
@@ -1637,22 +1650,21 @@ try {
       if (await pg.locator(`${fc} .fd-back`).count()) await pg.click(`${fc} .fd-back`).catch(() => {})
     }
   })
-  // Body → Training: today's session from the weekly split (log 3 sets with "same as last time" and effort, the rest
-  // timer runs, finish), the roadmap (current level, progress, a level-up after 2 top sessions, move up), then the
-  // home program builder (minutes, days, equipment, focus → a 4-week block on your levels), "Use this program" makes
-  // Sport Track's Today follow it, and a challenge with a ring (badges only, no points).
-  // BT_SHOTS=<dir> saves screenshots. The Sport Track state is put back at the end.
-  await step('Body training: today\'s session and logging, the roadmap and level-up, the home program, a challenge', async () => {
+  // Sport Track → Exercises and → Progress (for now the parts Body → Training had, each in one place): the roadmap
+  // (current step, progress, a step-up after 2 top sessions, move up, how to do a step) and the home program builder
+  // (minutes, days, equipment, focus → a 4-week block on your steps; "Use this program" makes the Classic tracker's
+  // Today follow it) on Exercises; recovery, a calm warning, the progress dashboard, This week and a challenge with a
+  // ring (badges only, no points) on Progress. BT_SHOTS=<dir> saves screenshots. Sport Track's state is put back.
+  await step('Sport Track Exercises and Progress: the roadmap and step-up, the home program; recovery, warnings, dashboard, This week, a challenge', async () => {
     const shots = process.env.BT_SHOTS
     const K = 'life_sport_tracker_v1'
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
     await pg.evaluate((k) => localStorage.setItem('smoke_bt_backup', localStorage.getItem(k) ?? ''), K)
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
-    await pg.waitForSelector('.body-page .ptabs [data-tab="training"]', { timeout: 20000 })
-    await pg.click('.body-page .ptabs [data-tab="training"]')
-    const T = '#ptp-body-training'
-    await pg.waitForSelector(`${T} .tr-today`, { timeout: 15000 })
+    await sportView('Exercises')
+    const T = '[data-sp="exercises"]'
+    const P = '[data-sp="progress"]'
+    await pg.waitForSelector(`${T} .tr-road`, { timeout: 15000 })
     // Seed made-up history: today is Upper in the week; diamond push-ups at the top of the range (4×12) in the last
     // 2 sessions (a level-up waits); table rows 10 · 9 · 9 yesterday (so "same as last time" is 10 · 9 · 9).
     await pg.evaluate((k) => {
@@ -1681,75 +1693,7 @@ try {
       localStorage.setItem(k, JSON.stringify(s))
       window.dispatchEvent(new CustomEvent('life-sport-changed'))
     }, K)
-    await pg.waitForFunction((t) => /Upper body/.test(document.querySelector(`${t} .tr-today [data-tr="type"]`)?.textContent ?? ''), T, { timeout: 8000 })
-    const pull = `${T} .tr-ex[data-ladder="pull"]`
-    await pg.waitForSelector(pull, { timeout: 5000 })
-    if (!/Last time: 10 · 9 · 9/.test(await pg.locator(`${pull} [data-tr="last"]`).innerText())) throw new Error('the pull move does not show last time')
-    if (!/5 × 8–15/.test(await pg.locator(`${pull} [data-tr="target"]`).innerText())) throw new Error('the pull move has no sets × range (5 sets: pull gets its 15 weekly sets from 3 upper days)')
-    if ((await pg.locator(`${T} .tr-ex`).count()) !== 3) throw new Error('upper is not push + pull + shoulders')
-    // Recovery: six groups with a dot each, and the line agrees with the split (back trained yesterday: nearly ready).
-    await pg.waitForSelector(`${T} [data-tr="recovery"] [data-group="back"][data-status="yellow"]`, { timeout: 5000 })
-    if ((await pg.locator(`${T} [data-tr="recovery"] .tr-rec-item`).count()) !== 6) throw new Error('the recovery list does not show six muscle groups')
-    if (!/^Best to train today: Upper/.test(await pg.locator(`${T} [data-tr="recommend"]`).innerText())) throw new Error('the recovery line does not agree with the split')
-    if (shots) {
-      await pg.setViewportSize({ width: 390, height: 844 })
-      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
-      await pg.waitForTimeout(500)
-      await pg.evaluate((t) => { document.querySelector(`${t} [data-tr="recovery"]`).scrollIntoView({ block: 'start' }); window.scrollBy(0, -420) }, T)
-      await pg.waitForTimeout(300)
-      await pg.screenshot({ path: `${shots}/train-recovery-phone.png` })
-      await pg.setViewportSize({ width: 1440, height: 900 })
-    }
-    if (shots) {
-      await pg.setViewportSize({ width: 390, height: 844 })
-      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
-      await pg.waitForTimeout(500)
-      await pg.evaluate((t) => { document.querySelector(`${t} .tr-today`).scrollIntoView({ block: 'start' }); window.scrollBy(0, -175) }, T)
-      await pg.waitForTimeout(300)
-      await pg.screenshot({ path: `${shots}/train-today-phone.png` })
-      await pg.setViewportSize({ width: 1440, height: 900 })
-    }
-    // Start, "same as last time", effort taps, log 3 sets: the rest timer runs between them.
-    await pg.click(`${T} [data-tr="start"]`)
-    await pg.waitForSelector(`${T} [data-tr="clock"]`, { timeout: 5000 })
-    await pg.locator(`${pull} .tr-num`).first().fill('3')
-    await pg.click(`${pull} [data-tr="same"]`)
-    const vals = await pg.locator(`${pull} .tr-num`).evaluateAll((els) => els.map((e) => e.value).join(','))
-    if (vals !== '10,9,9,9,9') throw new Error(`"same as last time" did not fill 10, 9, 9 (the last one repeated): ${vals}`)
-    const feels = ['hard', 'ok', 'easy']
-    for (let i = 0; i < 3; i++) {
-      await pg.click(`${pull} .tr-set[data-set="${i}"] [data-feel="${feels[i]}"]`)
-      await pg.click(`${pull} .tr-set[data-set="${i}"] [data-tr="log"]`)
-      await pg.waitForSelector(`${pull} .tr-set[data-set="${i}"].logged`, { timeout: 5000 })
-      if (i === 0) {
-        await pg.waitForSelector(`${T} [data-tr="rest"]`, { timeout: 5000 })
-        const secs = async () => { const t = await pg.locator(`${T} [data-tr="rest-left"]`).innerText(); const m = /(\d+):(\d+)/.exec(t); return m ? Number(m[1]) * 60 + Number(m[2]) : 0 }
-        const a = await secs()
-        await pg.waitForTimeout(2100)
-        const b = await secs()
-        if (!(a > 0 && b < a)) throw new Error(`the rest timer does not run (${a} → ${b})`)
-        if (shots) {
-          await pg.setViewportSize({ width: 390, height: 844 })
-          await pg.waitForTimeout(400)
-          await pg.evaluate((p) => { document.querySelector(p).scrollIntoView({ block: 'start' }); window.scrollBy(0, -175) }, pull)
-          await pg.waitForTimeout(300)
-          await pg.screenshot({ path: `${shots}/train-logging-phone.png` })
-          await pg.setViewportSize({ width: 1440, height: 900 })
-        }
-        await pg.click(`${T} [data-tr="rest-skip"]`)
-      }
-    }
-    const saved = await pg.evaluate((k) => {
-      const s = JSON.parse(localStorage.getItem(k) || '{}')
-      const ids = (s.exercises || []).filter((e) => e.move === 'table_row').map((e) => e.id)
-      const all = Object.values(s.sets || {}).flatMap((m) => ids.flatMap((id) => m[id] || []))
-      const mine = all.filter((x) => x.session)
-      return { n: mine.length, feel: mine.map((x) => `${x.feel}:${x.rir}`).join(','), log: (s.trainLog || []).length, sets: (s.trainLog?.[0]?.exercises || []).reduce((n, e) => n + e.sets.length, 0) }
-    }, K)
-    if (saved.n !== 3 || saved.feel !== 'hard:1,ok:2,easy:4' || saved.log !== 1 || saved.sets !== 3) throw new Error(`the sets were not saved with their effort: ${JSON.stringify(saved)}`)
-    await pg.click(`${T} [data-tr="finish"]`)
-    await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLog?.[0]?.done === true, K, { timeout: 8000 })
-    await pg.waitForFunction((t) => /^Done/.test(document.querySelector(`${t} .tr-today [data-tr="type"]`)?.textContent ?? ''), T, { timeout: 5000 })
+    await pg.waitForFunction((t) => /^Table rows$/.test((document.querySelector(`${t} .tr-road .tr-ladder[data-ladder="pull"] [data-tr="current"]`)?.textContent ?? '').trim()), T, { timeout: 8000 })
     // The roadmap: the current level with progress, and the level-up after 2 top sessions (you confirm it).
     const road = `${T} .tr-road`
     if (!/^Table rows$/.test((await pg.locator(`${road} .tr-ladder[data-ladder="pull"] [data-tr="current"]`).innerText()).trim())) throw new Error('the roadmap does not show the current pull level')
@@ -1769,8 +1713,42 @@ try {
     await pg.click(`${road} .tr-ladder[data-ladder="pull"] .tr-node.next button`)
     await pg.waitForSelector(`${T} [data-tr="move-sheet"] .tr-steps li`, { timeout: 5000 })
     await pg.locator(`${T} [data-tr="move-sheet"] .sheet-actions button`, { hasText: 'Close' }).click()
+    // Progress: recovery has six groups with a dot each, and the line agrees with the split (back trained yesterday: nearly ready).
+    await sportView('Progress')
+    await pg.waitForSelector(`${P} [data-tr="recovery"] [data-group="back"][data-status="yellow"]`, { timeout: 15000 })
+    if ((await pg.locator(`${P} [data-tr="recovery"] .tr-rec-item`).count()) !== 6) throw new Error('the recovery list does not show six muscle groups')
+    if (!/^Best to train today: Upper/.test(await pg.locator(`${P} [data-tr="recommend"]`).innerText())) throw new Error('the recovery line does not agree with the split')
+    // The old Training info is here ("This week").
+    await pg.waitForSelector(`${P} .bt-week .mw-row`, { timeout: 10000 })
+    // Three pull sets in the workout (Hard, OK, Easy) and Finish: saved with their effort in one session.
+    await sportView('Dashboard')
+    await pg.click('[data-tg="home"] [data-tg="start"]')
+    await pg.waitForSelector('[data-tg="flow"]', { timeout: 5000 })
+    // Pick the pull move each time: after a set the flow goes back to the first open move.
+    for (const feel of ['hard', 'ok', 'easy']) {
+      await pg.locator('[data-tg="flow"] .tg-flow-moves button', { hasText: 'Table rows' }).click()
+      await pg.waitForFunction(() => /Table rows/.test(document.querySelector('[data-tg="flow-move"]')?.textContent ?? ''), null, { timeout: 5000 })
+      await pg.fill('[data-tg="reps"]', '10')
+      await pg.click(`[data-tg="flow"] [data-feel="${feel}"]`)
+      await pg.click('[data-tg="log-set"]')
+      await pg.waitForSelector('[data-tg="rest"]', { timeout: 5000 })
+      await pg.click('[data-tg="rest-skip"]')
+    }
+    const saved = await pg.evaluate((k) => {
+      const s = JSON.parse(localStorage.getItem(k) || '{}')
+      const ids = (s.exercises || []).filter((e) => e.move === 'table_row').map((e) => e.id)
+      const all = Object.values(s.sets || {}).flatMap((m) => ids.flatMap((id) => m[id] || []))
+      const mine = all.filter((x) => x.session)
+      return { n: mine.length, feel: mine.map((x) => `${x.feel}:${x.rir}`).join(','), log: (s.trainLog || []).length, sets: (s.trainLog?.[0]?.exercises || []).reduce((n, e) => n + e.sets.length, 0) }
+    }, K)
+    if (saved.n !== 3 || saved.feel !== 'hard:1,ok:2,easy:4' || saved.log !== 1 || saved.sets !== 3) throw new Error(`the sets were not saved with their effort: ${JSON.stringify(saved)}`)
+    await pg.click('[data-tg="finish-btn"]')
+    await pg.waitForSelector('[data-tg="finish"]', { timeout: 8000 })
+    await pg.click('[data-tg="finish-close"]')
+    await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLog?.[0]?.done === true, K, { timeout: 8000 })
     // After today's pull sets the back is recovering (red).
-    await pg.waitForSelector(`${T} [data-tr="recovery"] [data-group="back"][data-status="red"]`, { timeout: 5000 })
+    await sportView('Progress')
+    await pg.waitForSelector(`${P} [data-tr="recovery"] [data-group="back"][data-status="red"]`, { timeout: 8000 })
     // A calm warning from made-up sets: wide push-ups down 2 sessions in a row. "Hide for a week" hides it;
     // back again, "Lighter week (70%)" starts a lighter week.
     const seedDrop = () => pg.evaluate((k) => {
@@ -1785,18 +1763,18 @@ try {
       window.dispatchEvent(new CustomEvent('life-sport-changed'))
     }, K)
     await seedDrop()
-    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { timeout: 5000 })
-    if (!/went down 2 sessions in a row \(.+\)\. That usually means tired/.test(await pg.locator(`${T} .tr-warn[data-warn="tired"]`).innerText())) throw new Error('the strength warning has the wrong words')
-    await pg.click(`${T} .tr-warn[data-warn="tired"] [data-tr="warn-dismiss"]`)
-    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { state: 'detached', timeout: 5000 })
+    await pg.waitForSelector(`${P} .tr-warn[data-warn="tired"]`, { timeout: 5000 })
+    if (!/went down 2 sessions in a row \(.+\)\. That usually means tired/.test(await pg.locator(`${P} .tr-warn[data-warn="tired"]`).innerText())) throw new Error('the strength warning has the wrong words')
+    await pg.click(`${P} .tr-warn[data-warn="tired"] [data-tr="warn-dismiss"]`)
+    await pg.waitForSelector(`${P} .tr-warn[data-warn="tired"]`, { state: 'detached', timeout: 5000 })
     if (!(await pg.evaluate((k) => !!JSON.parse(localStorage.getItem(k) || '{}').trainWarnDismiss?.tired, K))) throw new Error('"Hide for a week" was not saved')
     await seedDrop()
-    await pg.click(`${T} .tr-warn[data-warn="tired"] [data-tr="warn-lighter"]`)
-    await pg.waitForSelector(`${T} .tr-warn[data-warn="tired"]`, { state: 'detached', timeout: 5000 })
+    await pg.click(`${P} .tr-warn[data-warn="tired"] [data-tr="warn-lighter"]`)
+    await pg.waitForSelector(`${P} .tr-warn[data-warn="tired"]`, { state: 'detached', timeout: 5000 })
     const light = await pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLighter, K)
     if (!light?.until || light.until <= light.from) throw new Error(`the lighter week was not set: ${JSON.stringify(light)}`)
     // The progress dashboard (folded): streak, sessions per week, hard sets per muscle, reps, strength and body, photo.
-    const prog = `${T} details[data-tr="dashboard"]`
+    const prog = `${P} details[data-tr="dashboard"]`
     await pg.click(`${prog} > summary`)
     await pg.waitForSelector(`${prog} [data-tr="streak"] .bdy-num`, { timeout: 5000 })
     if ((await pg.locator(`${prog} [data-tr="muscles"] .tr-prog-mini`).count()) !== 4) throw new Error('the dashboard has no hard sets per muscle')
@@ -1814,7 +1792,11 @@ try {
     }
     await pg.click(`${prog} > summary`)
     // Body → Today's body map: "Recovery" colours it by recovery, "This week's sets" goes back.
+    await sportView('Body & Food')
     await pg.click('.body-page .ptabs [data-tab="today"]')
+    // The body map sits under More (open it when this step runs on its own).
+    await pg.waitForSelector('#ptp-body-today .bdy-today-more', { timeout: 10000 })
+    if (!(await pg.locator('#ptp-body-today .bdy-today-more[open]').count())) await pg.click('#ptp-body-today .bdy-today-more > summary')
     await pg.waitForSelector('.bmap-card [data-bmap="recovery"]', { timeout: 10000 })
     // The lighter week set today's dose to Lighter: put readiness back to automatic for the steps after this one.
     await pg.waitForTimeout(500)
@@ -1824,10 +1806,9 @@ try {
     if (!(await pg.locator('.bmap-card .bmap-region.rec.r-red').count())) throw new Error('the body map is not coloured by recovery')
     await pg.click('.bmap-card [data-bmap="sets"]')
     await pg.waitForSelector('.bmap-card .bmap-row', { timeout: 5000 })
-    await pg.click('.body-page .ptabs [data-tab="training"]')
+    // Exercises: the home program builder.
+    await sportView('Exercises')
     await pg.waitForSelector(`${T} .bt-builder .bt-session`, { timeout: 15000 })
-    // The old Training info is still here ("This week").
-    await pg.waitForSelector(`${T} .bt-week .mw-row`, { timeout: 10000 })
     // 4 days a week gives upper / lower.
     await pg.click(`${T} [data-bt="days-4"]`)
     await pg.waitForFunction((t) => /Upper body/.test(document.querySelector(`${t} .bt-sessions`)?.textContent ?? ''), T, { timeout: 5000 })
@@ -1846,21 +1827,22 @@ try {
     await pg.click(`${T} [data-bt="use"]`)
     await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{}').program?.id === 'home', K, { timeout: 10000 })
     await pg.waitForSelector(`${T} .bt-inuse`, { timeout: 5000 })
-    // Join "3 workouts this week": a ring, nothing counted from before joining.
-    await pg.click(`${T} [data-chal="week3"] [data-bt="join"]`)
-    await pg.waitForSelector(`${T} .bt-chal.joined[data-chal="week3"] .bt-ring`, { timeout: 5000 })
+    // Progress: join "3 workouts this week": a ring, nothing counted from before joining.
+    await sportView('Progress')
+    await pg.click(`${P} [data-chal="week3"] [data-bt="join"]`)
+    await pg.waitForSelector(`${P} .bt-chal.joined[data-chal="week3"] .bt-ring`, { timeout: 5000 })
     if (shots) {
       await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
       await pg.waitForTimeout(500)
       await pg.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('*').forEach((el) => { if (el.scrollTop) el.scrollTop = 0 }) })
       await pg.waitForTimeout(300)
       await pg.screenshot({ path: `${shots}/training-program.png` })
-      await pg.locator(`${T} .bt-challenges`).scrollIntoViewIfNeeded()
+      await pg.locator(`${P} .bt-challenges`).scrollIntoViewIfNeeded()
       await pg.screenshot({ path: `${shots}/training-challenges.png` })
     }
     // Sport Track's Today follows it: every full-body day has the pull-up move (Monday is one), and on a
     // training day the open page shows it.
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
     await pg.waitForTimeout(2500)
     const sportFrame = () => pg.frames().find((f) => f.url().includes('/apps/sport/') && !f.isDetached())
     if (!sportFrame()) throw new Error('no Sport Track frame')
@@ -1886,19 +1868,22 @@ try {
     if (!/^Full body [AB]$/.test(monday.session ?? '') || !monday.names.some((n) => /pull-ups|chin-ups/i.test(n))) throw new Error(`Monday in Sport Track is not the program's session: ${JSON.stringify(monday)}`)
     if (monday.trainDay) await sportFrame().waitForFunction(() => /pull-ups|chin-ups/i.test(document.body.innerText), null, { timeout: 15000 })
     // A phone does not scroll sideways.
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.setViewportSize({ width: 390, height: 844 })
     await pg.waitForTimeout(400)
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
-    if (over > 1) throw new Error(`the Training tab scrolls sideways on a phone (${over}px)`)
+    if (over > 1) throw new Error(`Body & Food scrolls sideways on a phone (${over}px)`)
     await pg.setViewportSize({ width: 1440, height: 900 })
     // Put Sport Track back as it was.
     await pg.evaluate((k) => { const b = localStorage.getItem('smoke_bt_backup'); localStorage.removeItem('smoke_bt_backup'); if (b) localStorage.setItem(k, b); else localStorage.removeItem(k); window.dispatchEvent(new CustomEvent('life-sport-changed')) }, K)
   })
-  // Sport Track → Training home (the section's default view; the embedded app is the "Classic tracker" tab): today's
-  // split session as sets × reps, the set-by-set workout with effort taps and a rest timer, Finish shows what
-  // changed, the next variation is offered (Apply / Keep), Make easier keeps history. Made-up data; Sport Track's
-  // state is put back at the end. TG_SHOTS=<dir> saves training-home-1920.png and training-finish-1920.png.
+  // Sport Track is one app with five sections in the top bar (Dashboard · Workout · Exercises · Progress · Body & Food);
+  // the old embedded app is the "Classic tracker" in the ⋯ menu. Dashboard: today's split session as sets × reps with
+  // pictures and one Start, the main chain's path (5 steps at most), the coach, the week, body and food tiles, the
+  // roadmap and ONE level (the Growth level, as in the header chip). Workout: each move with sets × reps, rest and
+  // Easier / Harder, the order (arrow keys on the handle), how much today, the rest timer, what unlocks next and why.
+  // Then the set-by-set flow, Finish, Apply, and Make easier keeps history. Made-up data; Sport Track's state is put
+  // back at the end. TG_SHOTS=<dir> saves sport-dashboard-1920.png, sport-workout-1920.png, training-finish-1920.png.
   const TGK = 'life_sport_tracker_v1'
   const tgSeed = async () => {
     await pg.evaluate((k) => {
@@ -1922,68 +1907,129 @@ try {
       delete s.sets[d(0)]
       ;(s.sets[d(2)] ||= {}).ex_tg_d = [12, 12, 12].map((r, i) => ({ reps: r, at: Date.now() - 2 * 86400000 + i, id: `tg-d-${i}`, feel: 'easy', rir: 4 }))
       ;(s.sets[d(2)] ||= {}).ex_tg_r = [11, 10, 10, 9, 9].map((r, i) => ({ reps: r, at: Date.now() - 2 * 86400000 + 10 + i, id: `tg-r-${i}`, feel: 'ok', rir: 2 }))
+      localStorage.removeItem('life_train_order')
       localStorage.setItem(k, JSON.stringify(s))
       window.dispatchEvent(new CustomEvent('life-sport-changed'))
     }, TGK)
   }
   const tgOpen = async () => {
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Training' }).click()
+    await sportView('Dashboard')
     await pg.waitForSelector('[data-tg="home"] [data-tg="plan"]', { timeout: 20000 })
   }
   const tgRestore = async () => {
-    await pg.evaluate((k) => { const b = localStorage.getItem('smoke_tg_backup'); localStorage.removeItem('smoke_tg_backup'); if (b) localStorage.setItem(k, b); else if (b === '') localStorage.removeItem(k); window.dispatchEvent(new CustomEvent('life-sport-changed')) }, TGK)
+    await pg.evaluate((k) => { const b = localStorage.getItem('smoke_tg_backup'); localStorage.removeItem('smoke_tg_backup'); localStorage.removeItem('life_train_order'); if (b) localStorage.setItem(k, b); else if (b === '') localStorage.removeItem(k); window.dispatchEvent(new CustomEvent('life-sport-changed')) }, TGK)
   }
-  await step("Training home shows today's sets × reps: the split's session, Start Workout, coach, path, week, body, food, roadmap; fits 1280–1920", async () => {
-    await pg.setViewportSize({ width: 1440, height: 900 })
-    await tgOpen()
-    await tgSeed()
-    // A rest day tapped earlier in the run is not today's plan here.
-    if (/after all/.test(await pg.locator('[data-tg="cant-train"]').innerText())) await pg.click('[data-tg="cant-train"]')
-    await pg.waitForFunction(() => /Upper body/.test(document.querySelector('[data-tg="plan-title"]')?.textContent ?? ''), null, { timeout: 8000 })
-    // Full today (Customize), so the sets are the plan's; automatic comes back at the end.
-    await pg.click('[data-tg="customize-btn"]')
-    await pg.locator('[data-tg="customize"] [role="radio"]', { hasText: 'Full' }).click()
-    await pg.waitForFunction(() => document.querySelector('[data-tg="customize"] [role="radio"][aria-checked="true"]')?.textContent === 'Full', null, { timeout: 8000 })
-    await pg.click('[data-tg="customize-btn"]')
-    const moves = await pg.locator('[data-tg="moves"] li').evaluateAll((ls) => ls.map((l) => `${l.dataset.ladder}:${l.querySelector('[data-tg="target"]')?.textContent}`))
-    if (moves.join('|') !== 'push:3 × 6–12|pull:5 × 8–15|shoulders:2 × 6–12') throw new Error(`today's moves are not sets × reps from the split: ${moves.join('|')}`)
-    if (!/Diamond push-ups/.test(await pg.locator('[data-tg="moves"] li[data-ladder="push"]').innerText())) throw new Error('push is not on its level (Diamond push-ups)')
-    if (!/^Level \d+$/.test((await pg.locator('[data-tg="level-badge"]').innerText()).trim())) throw new Error('no level badge')
-    if (!/Start Workout/.test(await pg.locator('[data-tg="start"]').innerText())) throw new Error('no Start Workout')
-    if (!/One more session at the top of Diamond push-ups/.test(await pg.locator('[data-tg="coach-line"]').innerText())) throw new Error(`the coach line is not from the engine: ${await pg.locator('[data-tg="coach-line"]').innerText()}`)
-    for (const sel of ['[data-tg="harder-all"]', '[data-tg="easier-all"]', '[data-tg="cant-train"]', '[data-tg="path"] .tg-steps li.current', '[data-tg="requirements"] li', '[data-tg="week"] .tg-bar', '[data-tg="body"]', '[data-tg="food"]', '[data-tg="roadmap"] .tg-phases li', '[data-tg="classic"]'])
-      if (!(await pg.$(sel))) throw new Error(`no ${sel}`)
-    // What the next level needs: 4 ticks, the reps and effort ticked from the last session (12 · 12 · 12 easy).
-    const req = await pg.locator('[data-tg="requirements"] li').evaluateAll((ls) => ls.map((l) => `${l.dataset.req}:${l.dataset.done}`).join(','))
-    if (req !== 'sessions:0,reps:1,effort:1,form:1') throw new Error(`the requirements are not ticked from the last session: ${req}`)
-    // No made-up numbers: the program starts with the first workout (no session in the log yet).
-    if (!/starts with your first workout/.test(await pg.locator('[data-tg="roadmap"]').innerText())) throw new Error('the roadmap claims a program week with no workout logged')
-    // Fits 1280–1920 cleanly: no sideways scroll, and the page stays inside its height budget with 10% headroom.
+  // Fits 1280–1920: no sideways scroll, and the page stays inside its height budget with 10% headroom.
+  const tgFit = async (what, cardSel, budget, shotName) => {
     const sizes = []
     for (const [w, h] of [[1280, 800], [1440, 900], [1920, 1080]]) {
       await pg.setViewportSize({ width: w, height: h })
       await pg.waitForTimeout(350)
-      const m = await pg.evaluate(() => {
+      const m = await pg.evaluate((sel) => {
         const main = document.querySelector('main.content')
-        const cards = [...document.querySelectorAll('[data-tg="home"] .tg-card')].map((c) => c.getBoundingClientRect())
+        const cards = [...document.querySelectorAll(sel)].map((c) => c.getBoundingClientRect())
         return { over: document.documentElement.scrollWidth - document.documentElement.clientWidth, cardOver: cards.some((r) => r.right > window.innerWidth + 1), screens: (main?.scrollHeight ?? 0) / window.innerHeight }
-      })
-      if (m.over > 1 || m.cardOver) throw new Error(`the Training home scrolls sideways at ${w}px`)
+      }, cardSel)
+      if (m.over > 1 || m.cardOver) throw new Error(`${what} scrolls sideways at ${w}px`)
       sizes.push(`${w}: ${m.screens.toFixed(2)}`)
-      // Budget 2.5 screens; keep 10% headroom.
-      if (m.screens > 2.5 * 0.9) throw new Error(`the Training home is ${m.screens.toFixed(2)} screens at ${w}px (budget 2.25 with headroom)`)
-      if (w === 1920 && process.env.TG_SHOTS) {
+      if (m.screens > budget * 0.9) throw new Error(`${what} is ${m.screens.toFixed(2)} screens at ${w}px (budget ${budget}, ${(budget * 0.9).toFixed(2)} with headroom)`)
+      if ((w === 1920 || process.env.TG_FULL) && process.env.TG_SHOTS && shotName) {
         await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
         await pg.evaluate(() => window.scrollTo(0, 0))
-        await pg.waitForTimeout(300)
-        await pg.screenshot({ path: `${process.env.TG_SHOTS}/training-home-1920.png` })
+        await pg.waitForTimeout(400)
+        await pg.screenshot({ path: `${process.env.TG_SHOTS}/${w === 1920 ? shotName : `${w}-${shotName}`}` })
+        if (process.env.TG_FULL) {
+          await pg.evaluate(() => { window.scrollTo(0, 1e6); document.querySelectorAll('main.content, .main').forEach((m) => { m.scrollTop = 1e6 }) })
+          await pg.waitForTimeout(300)
+          await pg.screenshot({ path: `${process.env.TG_SHOTS}/${w}-bottom-${shotName}` })
+          await pg.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('main.content, .main').forEach((m) => { m.scrollTop = 0 }) })
+        }
       }
     }
-    console.log(`  Training home screens: ${sizes.join(' · ')}`)
+    console.log(`  ${what} screens: ${sizes.join(' · ')}`)
     await pg.setViewportSize({ width: 1440, height: 900 })
+  }
+  await step("Sport Track is one app: five sections and the Classic tracker in ⋯; the Dashboard shows today's sets × reps with pictures, Start, a 5-step path, coach, week, body, food, roadmap and one level; fits 1280–1920", async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await tgOpen()
+    const tabs = (await pg.locator('.seg-switch [role="tab"]').allInnerTexts()).map((s) => s.trim())
+    if (tabs.join('|') !== 'Dashboard|Workout|Exercises|Progress|Body & Food') throw new Error(`Sport Track sections: ${tabs.join('|')}`)
+    await pg.click('[data-sport-more]')
+    if (!/Classic tracker/.test(await pg.locator('[data-sport-menu="classic"]').innerText())) throw new Error('the ⋯ menu has no Classic tracker')
+    await pg.keyboard.press('Escape')
+    await tgSeed()
+    // A rest day tapped earlier in the run is not today's plan here.
+    if (/after all/.test(await pg.locator('[data-tg="cant-train"]').innerText())) await pg.click('[data-tg="cant-train"]')
+    await pg.waitForFunction(() => /Upper body/.test(document.querySelector('[data-tg="plan-title"]')?.textContent ?? ''), null, { timeout: 8000 })
+    // Full today (Workout → How much today), so the sets are the plan's; automatic comes back at the end.
+    await pg.click('[data-tg="customize-btn"]')
+    await pg.waitForSelector('[data-sp="workout"] [data-tg="customize"]', { timeout: 8000 })
+    await pg.locator('[data-tg="customize"] [role="radio"]', { hasText: 'Full' }).click()
+    await pg.waitForFunction(() => document.querySelector('[data-tg="customize"] [role="radio"][aria-checked="true"]')?.textContent === 'Full', null, { timeout: 8000 })
+    await sportView('Dashboard')
+    await pg.waitForSelector('[data-tg="home"] [data-tg="moves"] li', { timeout: 8000 })
+    const moves = await pg.locator('[data-tg="moves"] li').evaluateAll((ls) => ls.map((l) => `${l.dataset.ladder}:${l.querySelector('[data-tg="target"]')?.textContent}`))
+    if (moves.join('|') !== 'push:3 × 6–12|pull:5 × 8–15|shoulders:2 × 6–12') throw new Error(`today's moves are not sets × reps from the split: ${moves.join('|')}`)
+    const push = await pg.locator('[data-tg="moves"] li[data-ladder="push"]').innerText()
+    if (!/Diamond push-ups/.test(push) || !/Push · Step 3 of 8/.test(push)) throw new Error(`push is not on its step (Diamond push-ups, Step 3 of 8): ${push}`)
+    // One level system: chains have steps, the one level is the Growth level (the same name as the header chip).
+    if (/Level \d+ of \d+/.test(await pg.locator('[data-tg="home"]').innerText())) throw new Error('a chain step is still called a level')
+    await pg.waitForFunction(() => /^Level\s*\d+$/.test((document.querySelector('[data-sp="level"] .sp-ring-in')?.textContent ?? '').trim()), null, { timeout: 10000 })
+    const lvName = (await pg.locator('[data-sp="level"] .sp-level-text b').innerText()).trim()
+    const chip = await pg.locator('.gr-chip').first().innerText().catch(() => '')
+    if (chip && !chip.includes(lvName)) throw new Error(`the Dashboard level (${lvName}) is not the header's (${chip})`)
+    if (!/Start Workout/.test(await pg.locator('[data-tg="start"]').innerText())) throw new Error('no Start Workout')
+    if (!/One more session at the top of Diamond push-ups/.test(await pg.locator('[data-tg="coach-line"]').innerText())) throw new Error(`the coach line is not from the engine: ${await pg.locator('[data-tg="coach-line"]').innerText()}`)
+    for (const sel of ['[data-kpi="streak"]', '[data-kpi="workouts"]', '[data-kpi="goal"]', '[data-kpi="weight"]', '[data-tg="harder-all"]', '[data-tg="easier-all"]', '[data-tg="cant-train"]', '[data-tg="path"] .sp-steps li.current', '[data-tg="requirements"] li', '[data-tg="week"] .sp-bar', '[data-tg="body"]', '[data-tg="food"]', '[data-tg="roadmap"] .sp-phases li'])
+      if (!(await pg.$(sel))) throw new Error(`no ${sel}`)
+    if ((await pg.locator('[data-tg="roadmap"] .sp-phases li').count()) !== 5) throw new Error('the roadmap is not 5 phase cards')
+    // The main chain only, 5 steps at most, the current one is Diamond push-ups.
+    const steps = await pg.locator('[data-tg="path"] .sp-steps li').count()
+    if (steps < 1 || steps > 5) throw new Error(`the path shows ${steps} steps (at most 5)`)
+    if (!/Diamond push-ups/.test(await pg.locator('[data-tg="path"] .sp-steps li.current small').innerText())) throw new Error('the path does not show the current push step')
+    // A real exercise picture: Diamond push-ups' photo has loaded.
+    await pg.waitForFunction(() => { const i = document.querySelector('[data-tg="plan"] .sp-pic.photo img'); return !!i && i.complete && i.naturalWidth > 0 }, null, { timeout: 8000 })
+    // What the next step needs: 4 ticks, the reps and effort ticked from the last session (12 · 12 · 12 easy).
+    const req = await pg.locator('[data-tg="requirements"] li').evaluateAll((ls) => ls.map((l) => `${l.dataset.req}:${l.dataset.done}`).join(','))
+    if (req !== 'sessions:0,reps:1,effort:1,form:1') throw new Error(`the requirements are not ticked from the last session: ${req}`)
+    // No made-up numbers: the program starts with the first workout (no session in the log yet).
+    if (!/starts with your first workout/.test(await pg.locator('[data-tg="roadmap"]').innerText())) throw new Error('the roadmap claims a program week with no workout logged')
+    await tgFit('The Dashboard', '[data-tg="home"] .sp-card, [data-tg="home"] .sp-hero', 2.5, 'sport-dashboard-1920.png')
   })
-  await step('Training home workout: log all sets at the top, easy, the second time → the next variation is offered → Apply (rest timer, Finish shows what changed)', async () => {
+  await step('Sport Track Workout: each move with sets × reps, rest and Easier / Harder, reorder with the handle, how much today, the rest timer runs, what unlocks next and why; fits 1280–1920', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await tgOpen()
+    await sportView('Workout')
+    const W = '[data-sp="workout"]'
+    await pg.waitForSelector(`${W} [data-tg="moves"] li[data-ladder="push"]`, { timeout: 8000 })
+    const rows = await pg.locator(`${W} [data-tg="moves"] li`).evaluateAll((ls) => ls.map((l) => `${l.dataset.ladder}:${l.querySelector('[data-tg="target"]')?.textContent}:${!!l.querySelector('[data-tg="easier"]') && !!l.querySelector('[data-tg="harder"]')}`))
+    if (rows.join('|') !== 'push:3 sets × 6–12 reps:true|pull:5 sets × 8–15 reps:true|shoulders:2 sets × 6–12 reps:true') throw new Error(`the Workout moves: ${rows.join('|')}`)
+    // The rest timer starts at the first move's rest (6–12 reps: 90 s) and runs.
+    const left = async () => { const m = /(\d+):(\d+)/.exec(await pg.locator(`${W} [data-sp="timer-left"]`).innerText()); return m ? Number(m[1]) * 60 + Number(m[2]) : -1 }
+    if ((await left()) !== 90) throw new Error(`the rest timer does not start at 1:30 (${await left()} s)`)
+    await pg.click(`${W} [data-sp="timer-go"]`)
+    await pg.waitForTimeout(2100)
+    const l2 = await left()
+    if (!(l2 < 90 && l2 > 80)) throw new Error(`the rest timer does not run (${l2} s)`)
+    await pg.click(`${W} [data-sp="timer-go"]`)
+    // What unlocks next on the closest move, and why (from the engine).
+    if (!/Decline push-ups comes after Diamond push-ups/.test(await pg.locator(`${W} [data-sp="unlock"]`).innerText())) throw new Error(`the unlock panel: ${await pg.locator(`${W} [data-sp="unlock"]`).innerText()}`)
+    // Order: the arrow keys on the handle move a move (this device only); back again.
+    await pg.focus(`${W} [data-tg="moves"] li[data-ladder="push"] .sp-grip`)
+    await pg.keyboard.press('ArrowDown')
+    await pg.waitForFunction((w) => [...document.querySelectorAll(`${w} [data-tg="moves"] li`)].map((l) => l.dataset.ladder).join() === 'pull,push,shoulders', W, { timeout: 5000 })
+    const order = await pg.evaluate(() => JSON.parse(localStorage.getItem('life_train_order') || '{}').upper?.join())
+    if (order !== 'pull,push,shoulders') throw new Error(`the order was not kept: ${order}`)
+    await sportView('Dashboard')
+    if ((await pg.locator('[data-tg="moves"] li').first().getAttribute('data-ladder')) !== 'pull') throw new Error('the Dashboard does not follow the new order')
+    await sportView('Workout')
+    await pg.focus(`${W} [data-tg="moves"] li[data-ladder="push"] .sp-grip`)
+    await pg.keyboard.press('ArrowUp')
+    await pg.waitForFunction((w) => document.querySelector(`${w} [data-tg="moves"] li`)?.dataset.ladder === 'push', W, { timeout: 5000 })
+    await tgFit('The Workout section', `${W} .sp-card`, 2.5, 'sport-workout-plan.png')
+  })
+  await step('Sport Track workout: log all sets at the top, easy, the second time → "New variation unlocked" on Workout → Finish → Apply (rest timer, what changed)', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await tgOpen()
     await pg.click('[data-tg="start"]')
@@ -2014,13 +2060,30 @@ try {
       return (s.sets?.[day]?.ex_tg_d || []).map((x) => `${x.reps}:${x.feel}:${x.session ? 's' : '-'}`).join(',')
     }, TGK)
     if (saved !== '12:easy:s,12:easy:s,12:easy:s') throw new Error(`the sets were not saved with their effort: ${saved}`)
+    // Close mid-workout: the Workout section says the next variation is unlocked, and why, with Apply change / Keep.
+    await pg.click('[data-tg="flow-close"]')
+    await sportView('Workout')
+    const U = '[data-sp="workout"] [data-sp="unlock"]'
+    await pg.waitForSelector(`${U}.on [data-sp="unlock-apply"]`, { timeout: 8000 })
+    const u = await pg.locator(U).innerText()
+    if (!/New variation unlocked!/.test(u) || !/Replace Diamond push-ups with Decline push-ups/.test(u) || !/Or keep Diamond push-ups/.test(u)) throw new Error(`the unlock panel: ${u}`)
+    if ((await pg.locator(`${U} [data-sp="why"] li[data-done="1"]`).count()) !== 4) throw new Error('"Why is it unlocked?" does not tick all 4 rules')
+    if (process.env.TG_SHOTS) {
+      await pg.setViewportSize({ width: 1920, height: 1080 })
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      await pg.evaluate(() => window.scrollTo(0, 0))
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${process.env.TG_SHOTS}/sport-workout-1920.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    await pg.click('[data-sp="workout"] [data-tg="start"]')
+    await pg.waitForSelector('[data-tg="flow"]', { timeout: 5000 })
     await pg.click('[data-tg="finish-btn"]')
     await pg.waitForSelector('[data-tg="finish"]', { timeout: 8000 })
     const row = pg.locator('[data-tg="finish-row"][data-ladder="push"]')
     if (!/Unlocked: Decline push-ups, because 3×12 easy twice\./.test(await row.innerText())) throw new Error(`Finish does not offer the next variation: ${await row.innerText()}`)
     if (process.env.TG_SHOTS) {
       await pg.setViewportSize({ width: 1920, height: 1080 })
-      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
       await pg.waitForTimeout(400)
       await pg.screenshot({ path: `${process.env.TG_SHOTS}/training-finish-1920.png` })
       await pg.setViewportSize({ width: 1440, height: 900 })
@@ -2028,25 +2091,29 @@ try {
     await row.locator('[data-tg="apply"]').click()
     await pg.waitForFunction(() => /Next time: Decline push-ups 3 × 6–12, because 3×12 easy twice\./.test(document.querySelector('[data-tg="finish-row"][data-ladder="push"] [data-tg="finish-line"]')?.textContent ?? ''), null, { timeout: 5000 })
     const lv = await pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLevels?.push?.level, TGK)
-    if (lv !== 3) throw new Error(`Apply did not move push to Decline push-ups (level ${lv})`)
+    if (lv !== 3) throw new Error(`Apply did not move push to Decline push-ups (step ${lv + 1})`)
     await pg.click('[data-tg="finish-close"]')
-    await pg.waitForSelector('[data-tg="done"]', { timeout: 5000 })
-    if (!/Decline push-ups/.test(await pg.locator('[data-tg="moves"] li[data-ladder="push"]').innerText())) throw new Error('the plan does not show the applied move')
+    await pg.waitForSelector('[data-sp="workout"] [data-tg="done"]', { timeout: 5000 })
+    if (!/Decline push-ups/.test(await pg.locator('[data-sp="workout"] [data-tg="moves"] li[data-ladder="push"]').innerText())) throw new Error('the workout does not show the applied move')
+    await sportView('Dashboard')
+    await pg.waitForSelector('[data-tg="home"] [data-tg="done"]', { timeout: 5000 })
   })
-  await step('Training home: Make easier keeps history (one level down at once, the logged sets and the day you reached a level stay)', async () => {
+  await step('Sport Track Workout: Make easier keeps history (one step down at once, the logged sets and the day you reached a step stay)', async () => {
     await tgOpen()
+    await sportView('Workout')
+    const R = '[data-sp="workout"] [data-tg="moves"] li[data-ladder="push"]'
+    await pg.waitForSelector(R, { timeout: 8000 })
     const before = await pg.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); return { sets: Object.values(s.sets || {}).reduce((n, m) => n + (m.ex_tg_d || []).length, 0), reached: s.trainLevels?.push?.reached?.['2'], log: (s.trainLog || []).length } }, TGK)
-    await pg.click('[data-tg="customize-btn"]')
-    await pg.click('[data-tg="moves"] li[data-ladder="push"] [data-tg="easier"]')
-    await pg.waitForFunction(() => /Diamond push-ups/.test(document.querySelector('[data-tg="moves"] li[data-ladder="push"]')?.textContent ?? ''), null, { timeout: 5000 })
+    await pg.click(`${R} [data-tg="easier"]`)
+    await pg.waitForFunction((r) => /Diamond push-ups/.test(document.querySelector(r)?.textContent ?? ''), R, { timeout: 5000 })
     const after = await pg.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); return { sets: Object.values(s.sets || {}).reduce((n, m) => n + (m.ex_tg_d || []).length, 0), reached: s.trainLevels?.push?.reached?.['2'], log: (s.trainLog || []).length, level: s.trainLevels?.push?.level } }, TGK)
     if (after.level !== 2 || after.sets !== before.sets || after.reached !== before.reached || after.log !== before.log) throw new Error(`Make easier lost history: ${JSON.stringify({ before, after })}`)
     // Going down does not offer the harder move again until a newer session.
-    if (/Unlocked/.test(await pg.locator('[data-tg="moves"] li[data-ladder="push"]').innerText())) throw new Error('the harder move is offered again right after Make easier')
-    await pg.click('[data-tg="moves"] li[data-ladder="push"] [data-tg="harder"]')
-    await pg.waitForFunction(() => /Decline push-ups/.test(document.querySelector('[data-tg="moves"] li[data-ladder="push"]')?.textContent ?? ''), null, { timeout: 5000 })
+    if (/Unlocked/.test(await pg.locator(R).innerText())) throw new Error('the harder move is offered again right after Make easier')
+    await pg.click(`${R} [data-tg="harder"]`)
+    await pg.waitForFunction((r) => /Decline push-ups/.test(document.querySelector(r)?.textContent ?? ''), R, { timeout: 5000 })
     // Back to the automatic dose, and Sport Track as it was.
-    if (await pg.locator('[data-tg="customize"] .tg-link', { hasText: 'Back to automatic' }).count()) await pg.locator('[data-tg="customize"] .tg-link', { hasText: 'Back to automatic' }).click()
+    if (await pg.locator('[data-tg="customize"] .sp-link', { hasText: 'Back to automatic' }).count()) await pg.locator('[data-tg="customize"] .sp-link', { hasText: 'Back to automatic' }).click()
     await tgRestore()
   })
   // The coach (Ben): ONE card that says what to do today. Today → Now has a slim strip (training + Start, the
@@ -2188,7 +2255,7 @@ try {
       if (Number((await sql('SELECT COUNT(*) FROM ledger')).rows[0][0].value) !== ledgerBefore) throw new Error('a coach tick or decision paid points')
       // 5. Body → Today: the same plan in full.
       await open('body')
-      await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+      await sportView('Body & Food')
       await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
       await pg.click('.body-page .ptabs [data-tab="today"]')
       await pg.waitForSelector('#ptp-body-today .ct-card:not(.ct-strip) [data-ct="train"]', { timeout: 15000 })
@@ -7103,7 +7170,7 @@ try {
     // 1. Body Today (on a phone): the weight card opens the sheet; the hint says when to weigh.
     await pg.setViewportSize({ width: 390, height: 844 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.waitForSelector('.body-page .ptabs [data-tab="today"]', { timeout: 20000 })
     await pg.click('.body-page .ptabs [data-tab="today"]')
     const t = '#ptp-body-today'
@@ -7340,7 +7407,7 @@ try {
     const over = await pg.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)
     if (over > 1) throw new Error(`Body progress scrolls sideways on a phone (${over}px)`)
     await pg.setViewportSize({ width: 1440, height: 900 })
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
   })
 
   // Body → Growth: the long run. Hero numbers with a period switch, the honest growth level (bar, what to do,
@@ -7352,10 +7419,10 @@ try {
     const ledgerBefore = await sqlN('SELECT COUNT(*) FROM ledger')
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+    await sportView('Body & Food')
     await pg.waitForSelector('.body-page .ptabs [data-tab="growth"]', { timeout: 20000 })
     const tabs = await pg.locator('.body-page .ptabs [role="tab"]').evaluateAll((bs) => bs.map((b) => b.dataset.tab))
-    if (tabs.join() !== 'today,food,training,growth,progress') throw new Error(`Body tabs ${tabs.join()}`)
+    if (tabs.join() !== 'today,food,progress,growth') throw new Error(`Body tabs ${tabs.join()}`)
     // The level chip sits in the Body header and opens Growth.
     await pg.waitForSelector('.topbar .gr-chip-body', { timeout: 15000 })
     await pg.click('.body-page .ptabs [data-tab="today"]')
@@ -7447,7 +7514,7 @@ try {
     }
     await pg.setViewportSize({ width: 1440, height: 900 })
     await pg.click('.body-page .ptabs [data-tab="today"]')
-    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Classic tracker' }).click()
+    await openClassic()
     // Today: one small chip on Now.
     await open('today')
     await pg.click('.td2 .ptabs [data-tab="now"]')
@@ -7585,7 +7652,7 @@ try {
       if (!(pic.appProperties.lsTags ?? '').includes('food')) throw new Error('the food photo has no food tag')
       // Body → Food: the meal row shows the thumbnail; a tap opens it big; ⋯ lists each food with its range.
       await open('body')
-      await pg.locator('.seg-switch [role="tab"]', { hasText: 'Metrics & Workouts' }).click()
+      await sportView('Body & Food')
       await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
       await pg.click('.body-page .ptabs [data-tab="food"]')
       const row = pg.locator('#ptp-body-food .fd-mlist li', { has: pg.locator('.mp-thumb') }).first()

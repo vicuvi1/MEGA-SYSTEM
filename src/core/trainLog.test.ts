@@ -54,7 +54,7 @@ describe('level-up and step back', () => {
   it("can't reach the bottom twice on a new level → stay or one level back; old sessions before the level don't count", () => {
     const s = [ses('2026-10-01', [3, 2]), ses('2026-11-10', [5, 4, 4]), ses('2026-11-13', [5, 5, 4])]
     expect(levelStatus(s, diamond, 3, '2026-11-10').state).toBe('struggling')
-    expect(levelStatus(s, diamond, 3, '2026-11-10').line).toMatch(/one level back/)
+    expect(levelStatus(s, diamond, 3, '2026-11-10').line).toMatch(/one step back/)
     expect(levelStatus([ses('2026-11-13', [5, 5, 4])], diamond, 3).state).toBe('building')
   })
 
@@ -243,7 +243,7 @@ describe('double progression with effort (one engine for the Tracker and Trainin
     const hard = [tapped('2026-11-13', [12, 12, 12], 'hard')]
     expect(nextTimeOf({ ...base, latest: hard[0], status: levelStatus(hard, diamond, 3) }, '2026-11-13')?.kind).toBe('stay')
     const low = [tapped('2026-11-10', [5, 4, 4], 'hard'), tapped('2026-11-13', [5, 5, 4], 'hard')]
-    expect(nextTimeOf({ ...base, latest: low[1], status: levelStatus(low, diamond, 3) }, '2026-11-13')).toMatchObject({ kind: 'down', line: expect.stringMatching(/one level back to Push-ups/) })
+    expect(nextTimeOf({ ...base, latest: low[1], status: levelStatus(low, diamond, 3) }, '2026-11-13')).toMatchObject({ kind: 'down', line: expect.stringMatching(/one step back to Push-ups/) })
     expect(nextTimeOf({ ...base, latest: low[0], status: levelStatus(low, diamond, 3) }, '2026-11-13')).toBeNull()
   })
 

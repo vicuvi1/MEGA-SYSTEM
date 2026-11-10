@@ -1,10 +1,11 @@
-// Body → Metrics & Workouts: five tabs (Today · Food · Training · Growth · Progress).
+// Sport Track → Body & Food: four tabs (Today · Food · Body · Growth). Training
+// lives in Sport Track's own sections (Dashboard, Workout, Exercises,
+// Progress: training/SportTrack.tsx), so it is not repeated here.
 // The shell only: each tab is one component, so each can change on its own.
 // Shared look: body/body-theme.css. Sheets (log workout, weight & waist, add
 // exercise): body/BodySheets.tsx.
 import { useEffect, useState } from 'react'
 import type { BodyState } from '@shared/api'
-import { dayKey } from '@core/dates'
 import { askConfirm } from '../confirmSheet'
 import { life } from '../bridge'
 import { soundCoin } from '../soundKit'
@@ -13,22 +14,19 @@ import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
 import { FoodCounter } from '../body/FoodCounter'
 import { TodayTab } from '../body/today/TodayTab'
 import { ExerciseModal, MetricModal, WorkoutModal } from '../body/BodySheets'
-import { readSoreness } from '../body/useBodyPlus'
 import type { DayProgress } from '@core/foodProgress'
 import '../body/bodyLook.css'
 import '../body.css'
 import '../body/body-plus.css'
 import '../body/body-theme.css'
-import { BodyTraining } from '../body/training/BodyTraining'
 import { BodyProgress } from '../body/progress/BodyProgress'
 import { GrowthTab } from '../body/progress/GrowthTab'
 
 const BODY_TABS = [
   { id: 'today', label: 'Today', title: 'Your plan for today: training, meals and ticks (more under More)' },
   { id: 'food', label: 'Food', title: 'Log food: a photo, your meals or a few words' },
-  { id: 'training', label: 'Training', title: 'Strength, home program, challenges, sets per muscle, workouts' },
-  { id: 'growth', label: 'Growth', title: 'How much you are growing: the long run, your level, month by month' },
-  { id: 'progress', label: 'Progress', title: 'Weight trend, measurements, photos, your week' }
+  { id: 'progress', label: 'Body', title: 'Weight trend, body composition, measurements, photos, your week' },
+  { id: 'growth', label: 'Growth', title: 'How much you are growing: the long run, your level, month by month' }
 ]
 
 export function Body({
@@ -49,18 +47,6 @@ export function Body({
   const [tab, setTab] = usePageTab('body', BODY_TABS.map((t) => t.id), 'today')
   // The Food tab's badge: the same protein numbers as the Food card (eaten and the food goal, foodTargetsNow).
   const protein = useFoodProtein()
-  // BD7: progression holds after a short night (the next steps say "repeat").
-  const [hold, setHold] = useState(false)
-  useEffect(() => {
-    const load = () =>
-      void life.coach?.bodyPlus
-        ?.ready(readSoreness(dayKey(new Date())))
-        .then((r) => setHold(r.hold))
-        .catch(() => {})
-    load()
-    window.addEventListener('life-body-changed', load)
-    return () => window.removeEventListener('life-body-changed', load)
-  }, [])
 
   const handleUndoLast = async () => {
     if (state.recentWorkouts.length === 0) return
@@ -82,10 +68,6 @@ export function Body({
 
       <TabPanel page="body" id="food" value={tab} className="body-tab">
         <FoodCounter />
-      </TabPanel>
-
-      <TabPanel page="body" id="training" value={tab} className="body-tab">
-        <BodyTraining state={state} onState={onState} onWallet={onWallet} hold={hold} onOpenSportApp={onOpenSportApp} />
       </TabPanel>
 
       <TabPanel page="body" id="growth" value={tab} className="body-tab">
