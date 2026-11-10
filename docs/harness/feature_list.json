@@ -1047,7 +1047,7 @@
     "npx tsc --noEmit -p tsconfig.json && npx vitest run",
     "SMOKE_ONLY=\"Food counter|Food photo|Food paste|Photo Locker|food notice|Settings AI cost|Long pages\" npm run smoke"
    ],
-   "evidence": "2026-11-10: unit and server tests pass (clock pinned, made-up data); smoke 'Food photo extras: …', 'Desktop island food notice: …', 'Settings AI cost: …', Food counter, Food photo, Food paste, Photo Locker and Long pages pass (Settings → Ben: pushes 1.89, cost 1.12 of 2).",
+   "evidence": "2026-11-10: unit and server tests pass (clock pinned, made-up data); smoke 'Food photo extras: …', 'Desktop island food notice: …', 'Settings AI cost: …', the full smoke run passes (Settings → Ben: pushes 1.71, cost 1.12 of 2 screens; Pushes folds meals, coach nudges and the weekly check).",
    "notes": "core/foodScore.ts, foodBarcode.ts, foodLeftovers.ts, foodInsights.ts, foodTiming.ts, aiCost.ts, islandFood.ts; main/foodInsights.ts; api/_vision.mjs lookupBarcode + photos:<month>, api/ai.mjs photoCost; body/FoodGallery.tsx, FoodCharts.tsx, AiCostPanel.tsx; web/bots/foodBot.ts (after photos, type button, label foods, protein left, summary, usual times)."
   }
  ]
