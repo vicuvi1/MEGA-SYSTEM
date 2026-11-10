@@ -18,7 +18,7 @@ import { todayMode } from '../renderer/src/web/extrasContext'
 import { claimPush, readPcSeen, readPushLog, setShutdownItems, writePushLog } from '../renderer/src/web/benPushStore'
 import { rescueCheck, rescueMaybe } from '../renderer/src/web/planShared'
 import { decideFoodNudge, foodNudgeDue } from '@core/foodBen'
-import { foodFacts, mealPushFor } from '../renderer/src/web/bots/foodBot'
+import { foodFacts, foodSummaryFor, mealPushFor } from '../renderer/src/web/bots/foodBot'
 import { coachNudgeFor, foodCapAllows } from '../renderer/src/coach/coachTalkStore'
 
 type Send = (text: string, markup?: unknown, opts?: { always?: boolean; push?: PushCard; throughQuiet?: boolean }) => Promise<unknown>
@@ -157,6 +157,13 @@ export async function pushTick(c: Ctx): Promise<{ checkins: boolean; sent: strin
     ].slice(0, 6)
     const p = decideShutdown({ ...sdBase, open })
     if (p) await go(p, (db) => setShutdownItems(db, f.today, open))
+  }
+
+  // The food summary at night (Telegram, once a day; a report, not one of the 3 nudges): totals, the best
+  // meal, one change for tomorrow. Never in quiet hours, a meeting, a paused day or after bed.
+  if (prefs.foodSummary && !c.paused && !c.quiet && !c.inEvent && !f.bedLogged) {
+    const p = await c.mirror.read((db) => foodSummaryFor(db, { now: c.now, day: f.today, bed: f.bed, on: true, log: f.log, meeting: c.inEvent, quiet: c.quiet })).catch(() => null)
+    if (p) await go(p)
   }
 
   // The coach's gentle nudges (core/coachTalk.ts): the evening check-in, midday protein, the morning one.

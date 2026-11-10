@@ -35,9 +35,16 @@ import {
   cleanFoodBen,
   decideFoodNudge,
   decideMealReminder,
+  decideFoodSummary,
+  summaryWindow,
   draftKeyboard,
   addHidden,
+  afterDraft,
+  afterSavedText,
   askGrams,
+  cycleType,
+  draftType,
+  notAfter,
   draftText,
   itemKeyboard,
   lockerPhotoIds,
@@ -73,11 +80,16 @@ import {
   weekWeight,
   type FoodBen,
   type FoodDraft,
+  type AfterOf,
   type FoodReport,
   type MealKind,
-  type PhotoSize
+  type PhotoSize,
+  type UsualTimes
 } from '@core/foodBen'
-import { addFoodMeal, foodDayTotals, foodTargetsNow, foodWeekNow, readFoodLog, readFoodSaved, toggleFoodMeal, whatNextNow } from '../../../../main/food'
+import { addFoodMeal, editFoodMeal, foodDayTotals, foodTargetsNow, foodWeekNow, readFoodLog, readFoodSaved, saveFoodSaved, toggleFoodMeal, whatNextNow } from '../../../../main/food'
+import { daySummaryNow, proteinLeftNow, usualTimesNow } from '../../../../main/foodInsights'
+import { isAfterNote, recentPhotoMeal } from '@core/foodLeftovers'
+import { labelFoods } from '@core/foodBarcode'
 import { logSavedMeal, logStandardDay, saveLoggedAsMeal } from '../../../../main/foodSaved'
 import { bodyEvents } from '../../../../main/bodyLog'
 import { weighIns } from '../../../../main/bodyPlus'
@@ -290,9 +302,25 @@ export async function readMealPhotos(o: { token: string; chat: string; fileIds: 
   if (!ans.ok) return say(`⚠️ ${esc(String(ans.error || "The photo couldn't be read."))}\nOr send /food for the copy prompt.`)
   const check = validateVision(ans.result, ctx.saved, ids.length, ctx.portions)
   if (!check.ok) return say(`⚠️ ${esc(check.error)}`)
-  const msg = many ? `${ids.length} photos read together. ${check.result.message}`.trim().slice(0, 200) : check.result.message
+  // An "after" photo (the note says so, or the AI saw leftovers) within 90 minutes of a photo meal: only what was eaten counts.
+  const isAfter = isAfterNote(o.caption) || !!check.result.leftovers
+  if (isAfter) {
+    const of = await o.mirror.read((db) => afterTarget(db, now))
+    if (of) {
+      const ad = afterDraft(shortId(), now.getTime(), check.result.items, of, ids.length, check.result.message)
+      await o.mirror.write((db) => writeFoodBen(db, { ...readFoodBen(db), draft: ad }))
+      if (o.kv) await holdPhotos(o.kv, ad.id, ids, now.getTime()).catch(() => null)
+      return say(photoDraftText(ad), photoKeyboard(ad))
+    }
+    if (!check.result.items.length) return say('🍽 That looks like a clean plate, but there is no photo meal from the last 90 minutes to take it from. Nothing changed.')
+  }
+  const lead = isAfter ? 'No photo meal in the last 90 minutes to take leftovers from, so this is read as a new meal. ' : ''
+  const msg = `${lead}${many ? `${ids.length} photos read together. ` : ''}${check.result.message}`.trim().slice(0, 200)
   // A food it could not see well: one short question instead of a guess (a bare number answers it).
-  const d = photoDraft(shortId(), now.getTime(), check.result.items, msg, { ask: check.result.question?.index ?? null, n: ids.length, hidden: check.result.hidden ?? null })
+  const d0 = photoDraft(shortId(), now.getTime(), check.result.items, msg, { ask: check.result.question?.index ?? null, n: ids.length, hidden: check.result.hidden ?? null })
+  // A barcode it saw but couldn't look up: one line says the numbers are the AI's.
+  const miss = check.result.barcode?.miss ? { code: check.result.barcode.code, why: check.result.barcode.miss } : null
+  const d: FoodDraft = miss ? { ...d0, photo: { ...d0.photo!, miss } } : d0
   await o.mirror.write((db) => writeFoodBen(db, { ...readFoodBen(db), draft: d }))
   if (o.kv) {
     await keepDraftPhotos(o.kv, o.chat, d.id, ids, o.caption, now.getTime()).catch(() => null)
@@ -300,6 +328,22 @@ export async function readMealPhotos(o: { token: string; chat: string; fileIds: 
     await holdPhotos(o.kv, d.id, ids, now.getTime()).catch(() => null)
   }
   return say(photoDraftText(d, slotNow(now)), photoKeyboard(d))
+}
+
+/**
+ * The meal an "after" photo belongs to: the photo preview still open (read in
+ * the last 90 minutes), else the newest photo meal logged in the last 90 minutes.
+ */
+export function afterTarget(db: any, now: Date): AfterOf | null {
+  const open = liveDraft(readFoodBen(db), now.getTime())
+  if (open?.photo && !open.photo.after && now.getTime() - open.at <= 90 * 60_000) {
+    const before = toFoodItems(open.photo.now)
+    if (before.length) return { meal: null, name: mealName(before), at: open.at, type: draftType(open), before, prev: { id: open.id, n: open.photo.n ?? 0 } }
+  }
+  const today = sportToday(now)
+  const live = liveIds(bodyEvents(db, today))
+  const m = recentPhotoMeal(readFoodLog(db, today).meals.filter((x) => x.day === today), now.getTime(), live)
+  return m ? { meal: m.id, name: m.name, at: Date.parse(m.at), type: m.type, before: m.items } : null
 }
 
 /** The "send the next photo" message while adding photos to a meal. */
@@ -399,7 +443,11 @@ export function logMealSlot(db: any, kind: MealKind, alt: boolean, source: strin
 
 /** The meal reminder due now (decided from the logs, the standard day and the push log), or null. */
 export function mealPushFor(db: any, o: { now: Date; day: string; wake: string | null; bed: string | null; on: boolean; log: PushLog; here: boolean; meeting: boolean; quiet: boolean }): PushOut | null {
-  if (!o.on || o.meeting || o.quiet || !mealDue(o.now, o.wake, o.log)) return null
+  if (!o.on || o.meeting || o.quiet) return null
+  // His usual meal times, learned from his logs (3+ days): the reminder comes 20 minutes after.
+  const u = usualTimesNow(db, o.now)
+  const usual: UsualTimes = { morning: u.breakfast, lunch: u.lunch, evening: u.dinner }
+  if (!mealDue(o.now, o.wake, o.log, usual)) return null
   const s = readFoodSaved(db)
   const today = sportToday(o.now)
   const events = bodyEvents(db, today).filter((e) => e.day === today && (e.kind.startsWith('protein:') || e.kind.startsWith('kcal:')))
@@ -413,7 +461,13 @@ export function mealPushFor(db: any, o: { now: Date; day: string; wake: string |
     seen.add(kind)
     return [{ kind, label: sl.label, items: itemsText(s, sl.items), alt: sl.alternative?.length ? itemsText(s, sl.alternative) : null, logged: meals.some((m) => m.slot === sl.id) }]
   })
-  return decideMealReminder({ ...o, slots, lastLogAt: times.length ? Math.max(...times) : null, muted: isMuted(readFoodBen(db), o.now.getTime()) })
+  // A meal he usually eats but has no standard-day slot for: "Lunch? Send a photo" (no Log button).
+  const typeOf: Record<'morning' | 'lunch' | 'evening', string> = { morning: 'breakfast', lunch: 'lunch', evening: 'dinner' }
+  for (const kind of ['morning', 'lunch', 'evening'] as const) {
+    if (seen.has(kind) || usual[kind] == null) continue
+    slots.push({ kind, label: '', items: '', alt: null, logged: meals.some((m) => m.type === typeOf[kind] && !m.supp) })
+  }
+  return decideMealReminder({ ...o, slots, usual, lastLogAt: times.length ? Math.max(...times) : null, muted: isMuted(readFoodBen(db), o.now.getTime()) })
 }
 
 /**
@@ -440,13 +494,25 @@ export function foodPushNow(db: any, svc: any, o: { now: Date; meeting: boolean;
   return decideFoodNudge({ ...foodFacts(db, now), now, day, bed, log, here, meeting: o.meeting, quiet: o.quiet })
 }
 
+// ---- the food summary at night (Telegram) ----
+
+/** Tonight's food summary push when it is due (core/foodBen.ts decideFoodSummary), or null. */
+export function foodSummaryFor(db: any, o: { now: Date; day: string; bed: string | null; on: boolean; log: PushLog; meeting: boolean; quiet: boolean }): PushOut | null {
+  if (!o.on || o.quiet || o.meeting || o.log.recs[`foodday:${o.day}`]) return null
+  // Cheap check first: inside tonight's window.
+  const m = appMinute(o.now)
+  const [from, to] = summaryWindow(o.bed)
+  if (m < from || m >= to) return null
+  return decideFoodSummary({ ...o, summary: daySummaryNow(db, o.now) })
+}
+
 // ---- saved lines ----
 
 /** "Saved: Chicken breast, rice · 51 g protein · 490 kcal" and today's line. */
 function savedText(db: any, items: FoodItem[], now: Date): string {
   const t = sumItems(items)
   const day = foodDayTotals(db, now)
-  return `✅ <b>Saved:</b> ${esc(mealName(items))} · ${fmt(t.protein)} g protein · ${fmt(t.kcal)} kcal\n${esc(day.line)}`
+  return [`✅ <b>Saved:</b> ${esc(mealName(items))} · ${fmt(t.protein)} g protein · ${fmt(t.kcal)} kcal`, esc(day.line), ...proteinLeftNow(db, now).map(esc)].join('\n')
 }
 
 /** The meal to repeat for "Same as yesterday": yesterday's dinner, else its last meal. */
@@ -535,7 +601,7 @@ export const FOOD_CALLBACK: CallbackHandler = {
     const mirror = c.mirror as unknown as { write<T>(fn: (db: any) => T): Promise<T> }
     const { data, chat, key, update, cq, answer, edit } = t
     if (!(await markSeen(key))) return null
-    const m = /^fd\|([sx+\-eupymlzkgnvwWbarqihdNGRo])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data)
+    const m = /^fd\|([sx+\-eupymlzkgnvwWbarqihdNGRotA])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data)
     if (!m) return null
     const [, op, ref, idx, idx2] = m
     const now = new Date()
@@ -626,13 +692,13 @@ export const FOOD_CALLBACK: CallbackHandler = {
         if (!got || !got.ids.length || !name) return null
         const undoId = shortId()
         writeFoodBen(db, { ...readFoodBen(db), undo: { id: undoId, ids: got.ids, at: now.getTime() } })
-        return { name, totals: got.totals, undoId, line: foodDayTotals(db, now).line }
+        return { name, totals: got.totals, undoId, line: foodDayTotals(db, now).line, left: proteinLeftNow(db, now) }
       })
       if (!r) {
         await answer('That meal is not saved any more')
         return null
       }
-      const text = `✅ <b>Logged:</b> ${esc(r.name)} · ${fmt(r.totals.kcal)} kcal · ${fmt(r.totals.protein)} g protein\n${esc(r.line)}`
+      const text = [`✅ <b>Logged:</b> ${esc(r.name)} · ${fmt(r.totals.kcal)} kcal · ${fmt(r.totals.protein)} g protein`, esc(r.line), ...r.left.map(esc)].join('\n')
       await answer('Logged')
       // The /meals list stays for the next tap; a "Log it now?" question is answered.
       if (!String(cq.message?.text ?? '').startsWith('🍽 Your saved meals')) await clearButtons()
@@ -659,7 +725,7 @@ export const FOOD_CALLBACK: CallbackHandler = {
         const r = logMealSlot(db, kind, idx === '1', 'telegram', now)
         if (!r) return { kind: 'none' as const }
         answerPushIn(db, day, ref, 'log', now.getTime())
-        return { kind: 'logged' as const, r, line: foodDayTotals(db, now).line }
+        return { kind: 'logged' as const, r, line: foodDayTotals(db, now).line, left: proteinLeftNow(db, now) }
       })
       if (res.kind === 'done') {
         await answer('Already logged')
@@ -681,7 +747,7 @@ export const FOOD_CALLBACK: CallbackHandler = {
         await edit('Skipped. Log it any time with /meals.')
         return 'skip'
       }
-      const text = `✅ <b>Logged:</b> ${esc(res.r.name)} · ${fmt(res.r.kcal)} kcal · ${fmt(res.r.protein)} g protein\n${esc(res.line)}`
+      const text = [`✅ <b>Logged:</b> ${esc(res.r.name)} · ${fmt(res.r.kcal)} kcal · ${fmt(res.r.protein)} g protein`, esc(res.line), ...res.left.map(esc)].join('\n')
       await answer('Logged')
       await edit(text, { inline_keyboard: [[{ text: '↩ Undo', callback_data: `fd|u|${res.r.id}`.slice(0, 64) }]] })
       return text
@@ -766,6 +832,16 @@ export const FOOD_CALLBACK: CallbackHandler = {
         writeFoodBen(db, { ...fb, draft: next })
         return { kind: 'draft' as const, d: next }
       }
+      if (d.photo && op === 't') {
+        const next = cycleType(d)
+        writeFoodBen(db, { ...fb, draft: next })
+        return { kind: 'draft' as const, d: next }
+      }
+      if (d.photo?.after && op === 'A') {
+        const next = notAfter(d)
+        writeFoodBen(db, { ...fb, draft: next })
+        return { kind: 'draft' as const, d: next }
+      }
       if (d.photo && op === 'o') {
         const next = addHidden(d)
         writeFoodBen(db, { ...fb, draft: next })
@@ -792,21 +868,52 @@ export const FOOD_CALLBACK: CallbackHandler = {
         return { kind: 'draft' as const, d: next }
       }
       if (op !== 's') return { kind: 'gone' as const }
+      if (d.photo?.after) {
+        // An after photo: the meal becomes only what was eaten (same day and time); its photos join the meal's.
+        const of = d.photo.after
+        const mine = d.photo.n ? lockerPhotoIds(d.id, d.photo.n) : []
+        const eaten = d.items
+        writeFoodBen(db, { ...fb, draft: null })
+        let id: string | null = null
+        const held: { draft: string; meal: string; name: string; type: string }[] = []
+        if (of.meal) {
+          const old = readFoodLog(db, sportToday(now)).meals.find((x) => x.id === of.meal)
+          if (!old) return { kind: 'gone' as const }
+          if (eaten.length) {
+            const r = editFoodMeal(db as any, of.meal, { items: eaten, photos: [...(old.photos ?? []), ...mine].slice(0, 6) }, 'telegram', now)
+            if (!r) return { kind: 'gone' as const }
+            id = r.id
+          } else toggleFoodMeal(db as any, of.meal, 'telegram', now)
+        } else if (of.prev && eaten.length) {
+          // The before photo was still a preview: the meal is logged now with only what was eaten.
+          const before = lockerPhotoIds(of.prev.id, of.prev.n)
+          const r = addFoodMeal(db as any, { items: eaten, id: `fd-p${of.prev.id}`, type: of.type, at: new Date(of.at).toISOString(), source: 'photo', photos: [...before, ...mine].slice(0, 6) }, 'telegram', now)
+          if (!r) return { kind: 'gone' as const }
+          id = r.id
+          if (before.length) held.push({ draft: of.prev.id, meal: r.id, name: mealName(eaten), type: of.type })
+        }
+        if (id && mine.length) held.push({ draft: d.id, meal: id, name: mealName(eaten), type: of.type })
+        return { kind: 'saved' as const, id: id ?? '', text: afterSavedText(eaten, of, proteinLeftNow(db, now)), held, after: true }
+      }
       if (d.photo) {
         // The meal's id comes from the draft: a second Save (a double tap, a retry) can't log it twice.
         const items = d.photo.now
-        const type = slotNow(new Date(d.at))
+        const type = draftType(d)
         // Its photos in Photo Locker (the meal row shows the thumbnail); they arrive there through the app.
         const photos = d.photo.n ? lockerPhotoIds(d.id, d.photo.n) : []
         const saved = addFoodMeal(db as any, { items: toFoodItems(items), id: `fd-p${d.id}`, type, source: 'photo', photos }, 'telegram', now)
         // His gram fixes teach his usual portions for next time.
         writeFoodBen(db, { ...fb, draft: null, portions: learnPortions(fb.portions, d.photo.base, items, now.getTime()) })
         if (!saved) return { kind: 'gone' as const }
+        // A food read from a label or a barcode becomes one of his saved foods (one tap next time).
+        const lf = labelFoods(readFoodSaved(db), items, () => `sf-l${shortId()}`)
+        if (lf.added.length) saveFoodSaved(db, lf.saved)
         const day = foodDayTotals(db, now)
         const idea = coverIdea(db, now, day.targets.kcal - day.kcal) ?? whatNextNow(db, now).ideas[0]?.text
         const line = photoReplyLine({ items, meal: visionTotals(items), day: { kcal: day.kcal, protein: day.protein, kcalGoal: day.targets.kcal, proteinGoal: day.targets.protein }, idea })
         const name = mealName(toFoodItems(items))
-        return { kind: 'saved' as const, id: saved.id, text: photoSavedText(items, type, d.at, line), held: photos.length ? { draft: d.id, meal: saved.id, name, type } : null }
+        const extra = [...(lf.added.length ? [`🏷 Saved as a food: ${lf.added.join(', ')} (one tap next time in Body → Food → My meals).`] : []), ...proteinLeftNow(db, now)]
+        return { kind: 'saved' as const, id: saved.id, text: photoSavedText(items, type, d.at, line, extra), held: photos.length ? [{ draft: d.id, meal: saved.id, name, type }] : [] }
       }
       const saved = addFoodMeal(db as any, { items: d.items }, 'telegram', now)
       writeFoodBen(db, { ...fb, draft: null })
@@ -821,7 +928,7 @@ export const FOOD_CALLBACK: CallbackHandler = {
     // Saved or cancelled: the photos' file ids are not needed any more (a saved meal's stay held for Photo Locker).
     if ((res.kind === 'cancel' || res.kind === 'saved') && c.photoKv) await dropChatPhotos(c.photoKv, chat).catch(() => null)
     if (res.kind === 'cancel' && c.photoKv) await dropHeld(c.photoKv, ref).catch(() => null)
-    if (res.kind === 'saved' && 'held' in res && res.held && c.photoKv) await attachMeal(c.photoKv, res.held.draft, { id: res.held.meal, name: res.held.name, type: res.held.type }).catch(() => null)
+    if (res.kind === 'saved' && 'held' in res && res.held && c.photoKv) for (const h of res.held) await attachMeal(c.photoKv, h.draft, { id: h.meal, name: h.name, type: h.type }).catch(() => null)
     if (res.kind === 'item') {
       await answer(`Fix ${res.d.photo!.now[res.i].name}`)
       await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: itemKeyboard(res.d, res.i) }).catch(() => null)
@@ -859,8 +966,8 @@ export const FOOD_CALLBACK: CallbackHandler = {
     }
     await answer('Saved')
     // A photo meal can be kept as a repeat meal: next time one tap logs the same numbers, with no AI call.
-    const keep = res.id.startsWith('fd-p') ? [{ text: '⭐ Keep as repeat meal', callback_data: `fd|R|${res.id}`.slice(0, 64) }] : []
-    await edit(res.text, { inline_keyboard: [[{ text: '↩ Undo', callback_data: `fd|u|${res.id}`.slice(0, 64) }, ...keep]] })
+    const keep = res.id.startsWith('fd-p') && !('after' in res) ? [{ text: '⭐ Keep as repeat meal', callback_data: `fd|R|${res.id}`.slice(0, 64) }] : []
+    await edit(res.text, res.id ? { inline_keyboard: [[{ text: '↩ Undo', callback_data: `fd|u|${res.id}`.slice(0, 64) }, ...keep]] } : undefined)
     return res.text
   }
 }

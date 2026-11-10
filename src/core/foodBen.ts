@@ -10,7 +10,10 @@
 // - meal reminders at the slots of the standard day (morning, lunch, afternoon,
 //   evening): one gentle nudge when nothing was logged since the slot before.
 // The database side is web/bots/foodBot.ts.
-import { scaleItem, sumItems, type FoodItem, type MealType } from './food'
+import { MEAL_TYPES, cleanItem, scaleItem, sumItems, type FoodItem, type MealType } from './food'
+import { eatenFrom, leftLine } from './foodLeftovers'
+import { mealScore } from './foodScore'
+import { missLine, type ProductMiss } from './foodBarcode'
 import type { FoodWeek } from './food'
 import { channelFor, type PushButton, type PushLog, type PushOut } from './benPushes'
 import { FACTORS, HIDDEN, cleanPortions, scaleVisionItem, stepQty, toFoodItems, visionTotals, type HiddenKind, type PortionMemory, type SavedFoodRef, type VisionItem } from './foodVision'
@@ -38,7 +41,29 @@ export interface FoodDraft {
     n?: number
     /** A hidden fat or sugar to ask about (one tap adds the standard amount). */
     hidden?: HiddenKind | null
+    /** The meal type he picked with the 🍽 button (else from the time it was sent). */
+    type?: MealType
+    /** A barcode it saw but couldn't look up (its line shows in the preview). */
+    miss?: { code: string; why: ProductMiss } | null
+    /**
+     * An "after" photo: `now` is what is LEFT of an earlier photo meal (a logged
+     * meal, or the preview that was open), `items` is what was eaten. Save logs
+     * only that.
+     */
+    after?: AfterOf | null
   }
+}
+/** The meal an "after" photo belongs to. */
+export interface AfterOf {
+  /** The logged meal (`fd-…`), or null when it was the open preview (then `prev` is that preview). */
+  meal: string | null
+  name: string
+  at: number
+  type: MealType
+  /** The meal's foods before (what the leftovers are taken from). */
+  before: FoodItem[]
+  /** The open preview it came from: its draft id and how many photos it had (for Photo Locker). */
+  prev?: { id: string; n: number } | null
 }
 export interface FoodBen {
   draft: FoodDraft | null
@@ -59,7 +84,7 @@ export function cleanFoodBen(raw: unknown): FoodBen {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Partial<FoodBen>
   const d = o.draft as Partial<FoodDraft> | null | undefined
   const draft =
-    d && typeof d === 'object' && typeof d.id === 'string' && /^[a-z0-9]{1,12}$/.test(d.id) && typeof d.at === 'number' && Array.isArray(d.items) && d.items.length
+    d && typeof d === 'object' && typeof d.id === 'string' && /^[a-z0-9]{1,12}$/.test(d.id) && typeof d.at === 'number' && Array.isArray(d.items) && (d.items.length || afterOf((d.photo as any)?.after))
       ? { id: d.id, at: d.at, items: d.items.slice(0, 12) as FoodItem[], question: typeof d.question === 'string' ? d.question.slice(0, 200) : null, ...photoOf(d.photo) }
       : null
   const u = o.undo
@@ -74,7 +99,9 @@ const visionList = (raw: unknown): VisionItem[] | null => {
     (x: any): VisionItem => ({
       name: String(x.name).slice(0, 60), matchedSavedFoodId: typeof x.matchedSavedFoodId === 'string' ? x.matchedSavedFoodId.slice(0, 40) : null, qty: n(x.qty) || 1, unit: String(x.unit ?? '').slice(0, 20), grams: n(x.grams), kcal: n(x.kcal), protein: n(x.protein), carbs: n(x.carbs), fat: n(x.fat), confidence: x.confidence === 'high' || x.confidence === 'low' ? x.confidence : 'medium',
       ...(n(x.lo) > 0 && n(x.hi) >= n(x.lo) ? { lo: n(x.lo), hi: n(x.hi) } : {}),
-      ...(['label', 'saved', 'memory', 'estimate'].includes(x.src) ? { src: x.src } : {})
+      ...(['label', 'barcode', 'saved', 'memory', 'estimate'].includes(x.src) ? { src: x.src } : {}),
+      ...(typeof x.fiber === 'number' && x.fiber >= 0 ? { fiber: x.fiber } : {}),
+      ...(typeof x.upf === 'boolean' ? { upf: x.upf } : {})
     })
   )
   return out.length ? out : null
@@ -82,14 +109,27 @@ const visionList = (raw: unknown): VisionItem[] | null => {
 function photoOf(raw: unknown): { photo?: FoodDraft['photo'] } {
   const p = raw as { base?: unknown; now?: unknown; message?: unknown } | null | undefined
   if (!p || typeof p !== 'object') return {}
-  const base = visionList(p.base)
-  const now = visionList(p.now)
+  const base = visionList(p.base) ?? (afterOf((p as any).after) ? [] : null)
+  const now = visionList(p.now) ?? (afterOf((p as any).after) ? [] : null)
   const q = p as { ask?: unknown; n?: unknown }
   const ask = typeof q.ask === 'number' && Number.isInteger(q.ask) && now && q.ask >= 0 && q.ask < now.length ? q.ask : null
   const count = typeof q.n === 'number' && q.n >= 1 && q.n <= 6 ? Math.round(q.n) : undefined
   const hid = (p as { hidden?: unknown }).hidden
   const hidden = typeof hid === 'string' && hid in HIDDEN ? (hid as HiddenKind) : null
-  return base && now && base.length === now.length ? { photo: { base, now, message: typeof p.message === 'string' ? p.message.slice(0, 200) : '', ...(ask != null ? { ask } : {}), ...(count ? { n: count } : {}), ...(hidden ? { hidden } : {}) } } : {}
+  const ty = (p as { type?: unknown }).type
+  const type = MEAL_TYPES.includes(ty as MealType) ? { type: ty as MealType } : {}
+  const ms = (p as { miss?: any }).miss
+  const miss = ms && typeof ms === 'object' && /^\d{8,14}$/.test(String(ms.code)) && (ms.why === 'offline' || ms.why === 'notFound') ? { miss: { code: String(ms.code), why: ms.why as ProductMiss } } : {}
+  const after = afterOf((p as any).after)
+  return base && now && base.length === now.length ? { photo: { base, now, message: typeof p.message === 'string' ? p.message.slice(0, 200) : '', ...(ask != null ? { ask } : {}), ...(count ? { n: count } : {}), ...(hidden ? { hidden } : {}), ...type, ...miss, ...(after ? { after } : {}) } } : {}
+}
+function afterOf(raw: any): AfterOf | null {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.before) || typeof raw.at !== 'number' || !MEAL_TYPES.includes(raw.type)) return null
+  const meal = typeof raw.meal === 'string' && /^fd-[a-z0-9]{1,24}$/.test(raw.meal) ? raw.meal : null
+  const prev = raw.prev && typeof raw.prev === 'object' && /^[a-z0-9]{1,12}$/.test(String(raw.prev.id)) ? { id: String(raw.prev.id), n: Math.max(0, Math.min(6, Math.round(Number(raw.prev.n) || 0))) } : null
+  if (!meal && !prev) return null
+  const before = raw.before.map(cleanItem).filter((x: FoodItem | null): x is FoodItem => !!x).slice(0, 12)
+  return before.length ? { meal, name: String(raw.name ?? '').slice(0, 60), at: raw.at, type: raw.type, before, ...(prev ? { prev } : {}) } : null
 }
 export const liveDraft = (fb: FoodBen, now: number): FoodDraft | null => (fb.draft && now - fb.draft.at < DRAFT_MS && now >= fb.draft.at - 60_000 ? fb.draft : null)
 export const isMuted = (fb: FoodBen, now: number) => fb.muteUntil != null && now < fb.muteUntil
@@ -394,7 +434,7 @@ export function confidenceBadge(items: { confidence: string }[]): { dot: string;
   return { dot: '🟡', word: 'fair estimate' }
 }
 
-const SRC_MARK: Record<string, string> = { label: ' 🏷 label', saved: ' ⭐ saved', memory: ' 👤 your usual' }
+const SRC_MARK: Record<string, string> = { label: ' 🏷 label', barcode: ' 🔖 barcode', saved: ' ⭐ saved', memory: ' 👤 your usual' }
 const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 /** "Tue 10 Nov, 13:05" (local time). */
@@ -410,12 +450,13 @@ const MEAL_WORD: Record<MealType, string> = { breakfast: 'Breakfast', lunch: 'Lu
  * the confidence badge, and the one short question when a food was hard to see.
  */
 export function photoDraftText(d: FoodDraft, type?: MealType): string {
+  if (d.photo?.after) return afterText(d)
   const list = d.photo?.now ?? []
   const t = visionTotals(list)
   const badge = confidenceBadge(list)
   const ask = d.photo?.ask != null ? list[d.photo.ask] : null
   return [
-    `📸 <b>${type ? MEAL_WORD[type] : 'Meal'}</b> · ${whenText(d.at)}`,
+    `📸 <b>${d.photo?.type ?? type ? MEAL_WORD[(d.photo?.type ?? type)!] : 'Meal'}</b> · ${whenText(d.at)}`,
     '',
     ...list.map((it, i) => {
       const q = qtyText(it)
@@ -426,6 +467,7 @@ export function photoDraftText(d: FoodDraft, type?: MealType): string {
     `<b>Total ~${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b>`,
     `Carbs ${fmt(t.carbs)} g · Fat ${fmt(t.fat)} g · ${badge.dot} ${badge.word}`,
     ...(d.photo?.message ? [`💬 ${escHtml(d.photo.message)}`] : []),
+    ...(d.photo?.miss ? [`🔖 ${escHtml(missLine(d.photo.miss.code, d.photo.miss.why))}`] : []),
     ...(d.photo?.hidden ? [`🫒 ${HIDDEN[d.photo.hidden].ask} Tap ➕ ${HIDDEN[d.photo.hidden].label} if so.`] : []),
     ask ? `\n❓ <b>About how many grams of ${escHtml(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt(ask.grams || 150)}</code>.` : 'Tap a food to fix it, or type e.g. <code>' + escHtml((list[0]?.name ?? 'rice').split(' ')[0].toLowerCase()) + ' 150</code>.'
   ].join('\n')
@@ -433,6 +475,7 @@ export function photoDraftText(d: FoodDraft, type?: MealType): string {
 
 /** The preview's buttons: the foods two to a row (tap one to fix it), then Save and Add photo, then Not this meal. */
 export function photoDraftKeyboard(d: FoodDraft): { inline_keyboard: { text: string; callback_data: string }[][] } {
+  if (d.photo?.after) return afterKeyboard(d)
   const items = (d.photo?.now ?? []).slice(0, 8).map((it, i) => ({ text: `✏️ ${i + 1}. ${cap(it.name).slice(0, 18)}`, callback_data: `fd|i|${d.id}|${i}` }))
   const rows: { text: string; callback_data: string }[][] = []
   for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2))
@@ -441,9 +484,68 @@ export function photoDraftKeyboard(d: FoodDraft): { inline_keyboard: { text: str
     { text: '✅ Save', callback_data: `fd|s|${d.id}` },
     { text: '➕ Add photo', callback_data: `fd|a|${d.id}` }
   ])
-  rows.push([{ text: '✗ Not this meal', callback_data: `fd|N|${d.id}` }])
+  // The meal type from the time it was sent; one tap changes it (breakfast → lunch → dinner → snack).
+  rows.push([
+    { text: `🍽 ${MEAL_WORD[d.photo?.type ?? slotOf(d.at)]} · change`, callback_data: `fd|t|${d.id}` },
+    { text: '✗ Not this meal', callback_data: `fd|N|${d.id}` }
+  ])
   return { inline_keyboard: rows }
 }
+
+/** The meal type from the local time (breakfast / lunch / dinner / snack), as core/foodVision.ts slotNow. */
+const slotOf = (at: number): MealType => {
+  const h = new Date(at).getHours()
+  return h >= 5 && h < 11 ? 'breakfast' : h >= 11 && h < 16 ? 'lunch' : h >= 17 && h < 22 ? 'dinner' : 'snack'
+}
+/** The meal type a photo draft saves as: the one he picked, else from the time it was sent. */
+export const draftType = (d: FoodDraft): MealType => d.photo?.after?.type ?? d.photo?.type ?? slotOf(d.at)
+/** 🍽 one tap: the next meal type (breakfast → lunch → dinner → snack → breakfast). */
+export function cycleType(d: FoodDraft): FoodDraft {
+  if (!d.photo) return d
+  const cur = draftType(d)
+  return { ...d, photo: { ...d.photo, type: MEAL_TYPES[(MEAL_TYPES.indexOf(cur) + 1) % MEAL_TYPES.length] } }
+}
+
+/**
+ * An "after" photo's draft: what is left (the read) taken from the meal's foods.
+ * `items` is what was eaten (what Save logs); `photo.now` the leftovers.
+ */
+export function afterDraft(id: string, at: number, leftovers: VisionItem[], of: AfterOf, n: number, message = ''): FoodDraft {
+  const r = eatenFrom(of.before, leftovers.map((x) => ({ name: x.name, grams: x.grams })))
+  return { id, at, items: r.eaten, question: null, photo: { base: leftovers, now: leftovers, message, n, after: of } }
+}
+/** The after photo's preview: the meal it belongs to, what is left, and what was eaten (each food with its numbers). */
+export function afterText(d: FoodDraft): string {
+  const of = d.photo!.after!
+  const r = eatenFrom(of.before, d.photo!.now.map((x) => ({ name: x.name, grams: x.grams })))
+  const t = sumItems(r.eaten)
+  const was = sumItems(of.before)
+  return [
+    `🍽 <b>After photo</b> · leftovers of ${MEAL_WORD[of.type]} (${whenText(of.at)})`,
+    escHtml(leftLine(r)),
+    '',
+    '<b>Eaten:</b>',
+    ...(r.eaten.length ? r.eaten.map((it, i) => `${i + 1}. <b>${escHtml(cap(it.name))}</b> · ${fmt(it.grams)} g
+    ${fmt(it.kcal)} kcal · P ${fmt(it.protein)} · C ${fmt(it.carbs)} · F ${fmt(it.fat)}`) : ['Nothing: all of it was left.']),
+    '',
+    `<b>Counts ~${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b> (the full plate was ${fmt(was.kcal)} kcal)`,
+    'Save logs only what was eaten.'
+  ].join('\n')
+}
+function afterKeyboard(d: FoodDraft): { inline_keyboard: { text: string; callback_data: string }[][] } {
+  const of = d.photo!.after!
+  return {
+    inline_keyboard: [
+      [{ text: of.meal ? `✅ Update ${MEAL_WORD[of.type].toLowerCase()}: only what I ate` : '✅ Save only what I ate', callback_data: `fd|s|${d.id}` }],
+      [
+        { text: '↩ It’s a new meal', callback_data: `fd|A|${d.id}` },
+        { text: '✗ Cancel', callback_data: `fd|x|${d.id}` }
+      ]
+    ]
+  }
+}
+/** "It's a new meal": the after photo was a meal of its own (its read items become the preview). */
+export const notAfter = (d: FoodDraft): FoodDraft => (d.photo?.after ? { ...d, items: toFoodItems(d.photo.now), photo: { ...d.photo, after: null } } : d)
 
 /** One food's quick fixes: ½× 1.5× 2×, Change grams, Remove, Swap, Back. */
 export function itemKeyboard(d: FoodDraft, index: number): { inline_keyboard: { text: string; callback_data: string }[][] } {
@@ -608,19 +710,26 @@ export function mealKindOf(slot: { label: string; slot: MealType }): MealKind | 
   return slot.slot === 'breakfast' ? 'morning' : slot.slot === 'lunch' ? 'lunch' : slot.slot === 'dinner' ? 'evening' : null
 }
 
+/** A reminder comes this long after his usual time for that meal (learned from his logs). */
+export const USUAL_GRACE_MIN = 20
+/** His usual meal times (minutes into the app day), learned from his logs (core/foodTiming.ts usualMealTimes). */
+export type UsualTimes = Partial<Record<MealKind, number | null>>
+const within = (m: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, m))
 /**
- * The time of each meal reminder, in minutes into the app day: breakfast 45
- * minutes after you wake (between 06:00 and 11:00; 08:30 without a wake time),
- * lunch 13:00, the afternoon snack 16:30, dinner 19:30.
+ * The time of each meal reminder, in minutes into the app day. With his usual
+ * time for a meal (3+ days in his logs): 20 minutes after it. Else: breakfast
+ * 45 minutes after you wake (between 06:00 and 11:00; 08:30 without a wake
+ * time), lunch 13:00, the afternoon snack 16:30, dinner 19:30.
  */
-export function mealTimes(wake: string | null | undefined): Record<MealKind, number> {
+export function mealTimes(wake: string | null | undefined, usual: UsualTimes = {}): Record<MealKind, number> {
   const w = wake && /^\d{1,2}:\d{2}$/.test(wake) ? toMin(wake.padStart(5, '0')) + 45 : 8 * 60 + 30
-  return { morning: Math.max(6 * 60, Math.min(11 * 60, w)), lunch: 13 * 60, afternoon: 16 * 60 + 30, evening: 19 * 60 + 30 }
+  const u = (k: MealKind, lo: number, hi: number, d: number) => (typeof usual[k] === 'number' ? within(usual[k]! + USUAL_GRACE_MIN, lo, hi) : d)
+  return { morning: u('morning', 6 * 60, 11 * 60 + 30, Math.max(6 * 60, Math.min(11 * 60, w))), lunch: u('lunch', 11 * 60, 16 * 60, 13 * 60), afternoon: 16 * 60 + 30, evening: u('evening', 17 * 60, 23 * 60, 19 * 60 + 30) }
 }
 
 export interface MealSlotIn {
   kind: MealKind
-  /** The slot's own name ("Lunch") and what you usually eat then ("Bulgur salad + Rye bread"). */
+  /** The slot's own name ("Lunch") and what you usually eat then ("Bulgur salad + Rye bread"); '' when only his usual time is known (no standard-day slot). */
   label: string
   items: string
   /** The swap you sometimes make, if any ("Buckwheat + 2 × Egg"). */
@@ -644,6 +753,8 @@ export interface MealReminderIn {
   /** Quiet hours, a paused day, or bed already logged. */
   quiet: boolean
   muted: boolean
+  /** His usual meal times from his logs (reminders follow them). */
+  usual?: UsualTimes
 }
 
 /** A minute of today's app day as a time (ms). */
@@ -662,16 +773,23 @@ export function decideMealReminder(i: MealReminderIn): PushOut | null {
   const m = appMinute(i.now)
   const bed = bedMinute(i.bed)
   if (m >= bed - 30) return null
-  const times = mealTimes(i.wake)
+  const times = mealTimes(i.wake, i.usual)
   const slots = [...i.slots].sort((a, b) => times[a.kind] - times[b.kind])
   const channel = channelFor(i.here)
   const make = (s: MealSlotIn, again: boolean): PushOut => {
     const title = MEAL_LABEL[s.kind]
     const usual = `${s.items.charAt(0).toLowerCase()}${s.items.slice(1)}`
-    const text = again ? `Still time to log ${title.toLowerCase()}: your ${usual}?` : `${title} time: log your ${usual}?`
+    // "Lunch? Send a photo": a photo is the quickest log; his usual meal is one tap when he has one.
+    const text = s.items
+      ? again
+        ? `Still no ${title.toLowerCase()} logged: send a photo, or log your usual ${usual}?`
+        : `${title}? Send a photo, or log your usual ${usual}.`
+      : again
+        ? `Still no ${title.toLowerCase()} logged: send a photo when you eat.`
+        : `${title}? Send a photo 📸`
     const buttons: PushButton[] = [
-      { label: '✅ Log it', op: 'log', primary: true, arg: 'main' },
-      ...(s.alt ? [{ label: `🔁 ${s.alt.slice(0, 28)}`, op: 'log' as const, arg: 'alt' }] : []),
+      ...(s.items ? [{ label: '✅ Log my usual', op: 'log' as const, primary: true, arg: 'main' }] : []),
+      ...(s.items && s.alt ? [{ label: `🔁 ${s.alt.slice(0, 28)}`, op: 'log' as const, arg: 'alt' }] : []),
       ...(again ? [] : [{ label: `⏰ ${MEAL_SNOOZE_MIN} min`, op: 'later' as const, minutes: MEAL_SNOOZE_MIN }]),
       { label: 'Skip', op: 'skip' }
     ]
@@ -702,9 +820,9 @@ export function decideMealReminder(i: MealReminderIn): PushOut | null {
 }
 
 /** Cheap check before reading the food log: inside a meal reminder's window, or a snoozed one may be due. */
-export function mealDue(now: Date, wake: string | null | undefined, log: PushLog): boolean {
+export function mealDue(now: Date, wake: string | null | undefined, log: PushLog, usual: UsualTimes = {}): boolean {
   const m = appMinute(now)
-  const t = mealTimes(wake)
+  const t = mealTimes(wake, usual)
   if (MEAL_KINDS.some((k) => m >= t[k] && m < t[k] + MEAL_WINDOW_MIN)) return true
   return Object.entries(log.recs).some(([k, r]) => k.startsWith('meal:') && r.ans === 'later')
 }
@@ -714,13 +832,52 @@ export function mealDue(now: Date, wake: string | null | undefined, log: PushLog
  * and macros, the totals and the confidence badge, then the day's line from
  * core/foodVision.ts photoReplyLine (protein and kcal left, what to eat next).
  */
-export function photoSavedText(items: VisionItem[], type: MealType, at: number, dayLine: string): string {
+export function photoSavedText(items: VisionItem[], type: MealType, at: number, dayLine: string, extra: string[] = []): string {
   const t = visionTotals(items)
   const badge = confidenceBadge(items)
+  const score = mealScore(toFoodItems(items))
   return [
     `✅ <b>${MEAL_WORD[type]} saved</b> · ${whenText(at)}`,
     ...items.slice(0, 8).map((it) => `• ${escHtml(cap(it.name))}${it.grams ? ` ${fmt(it.grams)} g` : ''}: ${fmt(it.kcal)} kcal · P ${fmt(it.protein)} · C ${fmt(it.carbs)} · F ${fmt(it.fat)}`),
     `<b>${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b> · C ${fmt(t.carbs)} · F ${fmt(t.fat)} · ${badge.dot}`,
-    escHtml(dayLine)
+    ...(score ? [`🏅 Score <b>${score.grade}</b>: ${escHtml(score.tip)}`] : []),
+    escHtml(dayLine),
+    ...extra.filter(Boolean).map(escHtml)
   ].join('\n')
+}
+
+/** After Save on an "after" photo: what was eaten, each food with its numbers, then the day's lines. */
+export function afterSavedText(eaten: FoodItem[], of: AfterOf, extra: string[] = []): string {
+  const t = sumItems(eaten)
+  const was = sumItems(of.before)
+  return [
+    eaten.length ? `✅ <b>${MEAL_WORD[of.type]} updated</b> · only what you ate (${whenText(of.at)})` : `✅ <b>${MEAL_WORD[of.type]} removed</b>: all of it was left`,
+    ...eaten.slice(0, 8).map((it) => `• ${escHtml(cap(it.name))} ${fmt(it.grams)} g: ${fmt(it.kcal)} kcal · P ${fmt(it.protein)} · C ${fmt(it.carbs)} · F ${fmt(it.fat)}`),
+    ...(eaten.length ? [`<b>${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b> (the full plate was ${fmt(was.kcal)} kcal)`] : []),
+    ...extra.filter(Boolean).map(escHtml)
+  ].join('\n')
+}
+
+// ---- the food summary at night (Telegram) ----
+
+export const foodSummaryKey = (day: string) => `foodday:${day}`
+/** When the night summary may come: from 20:30 (earlier for an early bed) until 15 minutes before bed. */
+export function summaryWindow(bed: string | null | undefined): [number, number] {
+  const b = bedMinute(bed)
+  return [Math.min(20 * 60 + 30, b - 90), b - 15]
+}
+
+/**
+ * Tonight's food summary as a push (Telegram): once a day, in its window, never
+ * in quiet hours, a meeting or after bed, and only when something was logged.
+ * It is a report, not a nudge: it is not one of the 3 coach and food nudges.
+ */
+export function decideFoodSummary(i: { now: Date; day: string; bed: string | null; on: boolean; quiet: boolean; meeting: boolean; log: PushLog; summary: { lines: string[]; change: string } | null }): PushOut | null {
+  if (!i.on || i.quiet || i.meeting || !i.summary) return null
+  const key = foodSummaryKey(i.day)
+  if (i.log.recs[key]) return null
+  const m = appMinute(i.now)
+  const [a, b] = summaryWindow(i.bed)
+  if (m < a || m >= b) return null
+  return { key, type: 'food', area: 'body', level: 'soft', title: 'Food today', text: [...i.summary.lines, `Tomorrow: ${i.summary.change}`].join('\n'), face: '🌙', channel: 'telegram', buttons: [{ label: '👍 OK', op: 'ok', primary: true }] }
 }

@@ -256,7 +256,14 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
         <input type="checkbox" checked={p.meals} onChange={(e) => setP({ meals: e.target.checked })} aria-label="Meal reminders" />
         <span>
           Meal reminders
-          <small>"Lunch time: log your usual meal?" at your standard day's times when nothing was logged. Log it, 30 min or Skip. With the coach's nudges at most 3 a day, never in meetings or quiet hours.</small>
+          <small>"Lunch? Send a photo" when nothing was logged by your usual time (learned from your logs; else your standard day's times). Log your usual, 30 min or Skip. With the coach's nudges at most 3 a day, never in meetings or quiet hours.</small>
+        </span>
+      </label>
+      <label className="check toggle-row">
+        <input type="checkbox" checked={p.foodSummary} onChange={(e) => setP({ foodSummary: e.target.checked })} aria-label="Food summary at night" />
+        <span>
+          Food summary at night
+          <small>On Telegram before bed: today's totals, the best meal and one change for tomorrow. Once a day, never in quiet hours.</small>
         </span>
       </label>
       <div className="lf-days" role="group" aria-label="Coach nudges" title="The check-in about 21:00, protein under 40% from 14:00, the morning one at your wake time. With meal reminders at most 3 a day: check-in, then protein, then morning, then meals.">

@@ -138,6 +138,7 @@ describe('the Telegram preview and fixes', () => {
       '• White rice 200 g: 200 kcal · P 20 · C 40 · F 4',
       '• Salad 80 g: 80 kcal · P 8 · C 16 · F 2',
       '<b>280 kcal · 28 g protein</b> · C 56 · F 6 · 🔴',
+      '🏅 Score <b>A</b>: Add fibre: a handful of vegetables, beans or a slice of rye bread.',
       'Today: 900 / 2,700 kcal, 60 / 150 g. ~1,800 kcal left, 90 g protein.'
     ])
   })
