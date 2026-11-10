@@ -91,6 +91,10 @@ export interface FocusRunning {
   pausedMs?: number
   /** IC11: a break and the next block after it (from the island). */
   stages?: unknown[]
+  /** Study Time: the block this timer is for, an open stopwatch (no planned length), the break's planned minutes. */
+  blockId?: string | null
+  open?: boolean
+  breakMin?: number | null
 }
 
 export const SETTINGS = {
@@ -194,6 +198,8 @@ export const SETTINGS = {
   task_area_colors: json<Record<string, string> | null>('colours of the life areas', null),
   // ---- plan, focus, calendar ----
   focus_running: json<FocusRunning | null>('the focus session running now, or null', null),
+  study_blocks: json<Record<string, unknown> | null>('Study Time: your blocks (name, category, tags, planned length, quick, day, done, linked Todoist task) and category colours; sessions are focus_sessions rows (src/core/studyTime.ts)', null),
+  study_log: json<Record<string, unknown> | null>("Study Time: per focus session (by its start time) its block, break minutes and source (timer, manual, fixed); at most 3000, the last 400 days (src/core/studyTime.ts)", null),
   focus_ratings: json<unknown[]>('how each focus session felt', []),
   block_marks: json<Record<string, unknown> | null>('calendar blocks marked done / skipped', null),
   block_kinds: json<Record<string, unknown> | null>('calendar items you set as an event or a focus block (by title)', null),
