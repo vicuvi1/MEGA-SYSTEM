@@ -21,7 +21,7 @@ import type { IslandBeat, IslandPlacement, IslandTheme } from '../../shared/desk
 import { AlertScene, CountUp, Glass, Marquee, Roll, TypeIn, type WaterSplash } from './IslandScenes'
 import { FeelContext, bump, feelFor, flyId, onFrame, ringColor, setFrameMode, useFeel, type Feel } from './islandFeel'
 import { dropOldIslandUiLog, logIslandUi } from './islandLog'
-import { finalShapeRect, inRects, roundOut, SHIELD_OFF, SHIELD_PAD, shieldStep, unionRect, type Rect, type Shield } from '@core/islandClicks'
+import { finalShapeRect, HOVER_OFF, hoverStep, peekWaitAfterIntent, roundOut, SHIELD_OFF, shieldHit, shieldStep, TAKE_BEAT_MS, unionRect, type HoverGate, type Rect, type Shield } from '@core/islandClicks'
 import { installTaps, isPressed, onPress, tp } from './islandTap'
 import { IslandMedia } from './IslandMedia'
 import { IslandDebug, dbg, dbgEvent } from './IslandDebug'
@@ -31,7 +31,7 @@ import { bodyReminderOf, reminderGain } from '@core/islandReminderSound'
 import { cardSoundKey, cardSoundLine, cardSoundPlan, isTestSound } from '@core/islandCardSound'
 import { islandActionSound, play as islandSound, setIslandSoundLook, useIslandSoundEvents } from './islandSounds'
 import { useIslandSounds } from './focusSound'
-import { canUndo, classifyDrop, commandPreview, menuFor, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
+import { canUndo, classifyDrop, commandPreview, menuFor, withHide, moveChoice, quickButtons, ringItems, timerAdjust, UNDO_SHOW_MS, waterPick, wheelSteps, type MenuItem, type RingItem, type Suggestion } from '@core/islandCommands'
 import { ActMenu, cacheSnap, cachedSnap, QuickRow, RING_RADIUS, RingMenu, shake, StageDots, Suggest, UndoButton, useEarlyOpen, useExpected, useKeyboardMode, useRing, WheelBadge } from './islandControls'
 import { GripHandle, MoveModeBar, PanelCorner, ParkedDot, useIslandMove } from './IslandMoveBits'
 import { KitTiles, PillKitButtons, ringKitItems, useKit } from './IslandTiles'
@@ -483,7 +483,9 @@ export function DesktopIsland() {
     }
     // IF7, IF11: your hover delay (or click only), how long reminders peek, how long the panel stays.
     // Calm: the pill never grows into the bigger peek on hover; staying on it opens the panel (below).
-    const step = islandStep(uiRef.current, e, islandTiming(prefsRef.current.mode === 'calm' ? { ...prefsRef.current, openOn: 'click' } : prefsRef.current))
+    // IC30: the page's hover intent already waited a moment, so the peek waits the rest (the total is your setting).
+    const pf = prefsRef.current
+    const step = islandStep(uiRef.current, e, islandTiming(pf.mode === 'calm' ? { ...pf, openOn: 'click' } : { ...pf, hoverMs: desk()?.islandTakeClicks ? peekWaitAfterIntent(pf.hoverMs) : pf.hoverMs }))
     // IS23: every change of view, and what caused it.
     if (step.ui.view !== uiRef.current.view) {
       logIslandUi('view', `${uiRef.current.view} → ${step.ui.view} (${e.type})`)
@@ -989,11 +991,15 @@ export function DesktopIsland() {
     }
   }, [sendHot, pump])
 
-  // ---- IC1, IC2: take clicks where the island is (the page decides) ----
+  // ---- IC1, IC2, IC30: take clicks where the island is (the page decides) ----
   // Every mouse move reaches the page (the desktop forwards them even while
-  // clicks pass through). On the shape (or within 12 px of it, or less than
-  // 400 ms after it left, or while a button is held): take clicks.
+  // clicks pass through). Only ON the shape does it start taking clicks; then
+  // a few px around it, a short moment after it left while still close, or a
+  // press that began on it (core/islandClicks.ts). The window is far bigger
+  // than the pill and takes clicks everywhere while it takes them, so this
+  // stays tight. Hovering (bubble, peek) needs the pointer to rest on it.
   const shield = useRef<Shield>(SHIELD_OFF)
+  const hoverGate = useRef<HoverGate>(HOVER_OFF)
   const lastPtr = useRef<{ x: number; y: number } | null>(null)
   const takeSent = useRef<{ on: boolean; at: number } | null>(null)
   const recheckT = useRef(0)
@@ -1034,6 +1040,7 @@ export function DesktopIsland() {
       calmSend({ type: near ? 'enter' : 'leave' })
       clearTimeout(recheckT.current)
       shield.current = SHIELD_OFF
+      hoverGate.current = HOVER_OFF
       dbg.take = false
       if (force || takeSent.current?.on !== false) {
         takeSent.current = { on: false, at: Date.now() }
@@ -1043,30 +1050,41 @@ export function DesktopIsland() {
       return
     }
     let inside = false
+    let near = false
+    let onShape = false
     if (p) {
-      inside = inRects(p.x, p.y, target.current, SHIELD_PAD)
+      const hit = shieldHit(p.x, p.y, target.current, shield.current.take)
+      inside = hit.inside
+      near = hit.near
+      onShape = inside && shieldHit(p.x, p.y, target.current, false).inside
       if (!inside) {
-        const hit = typeof document.elementFromPoint === 'function' ? (document.elementFromPoint(p.x, p.y) as HTMLElement | null) : null
-        inside = !!hit?.closest?.('[data-hot]')
+        const el = typeof document.elementFromPoint === 'function' ? (document.elementFromPoint(p.x, p.y) as HTMLElement | null) : null
+        inside = !!el?.closest?.('[data-hot]')
+        onShape = inside
+        near = near || inside
       }
     }
-    const was = shield.current.take
-    const r = shieldStep(shield.current, { inside, pressed: isPressed(), now: Date.now() })
-    shield.current = r.st
-    clearTimeout(recheckT.current)
-    if (r.recheckIn != null) recheckT.current = window.setTimeout(() => evaluateRef.current(), r.recheckIn + 5)
-    const on = r.st.take
     const t = Date.now()
+    const r = shieldStep(shield.current, { inside, near, pressed: isPressed(), now: t })
+    shield.current = r.st
+    const on = r.st.take
+    const h = hoverGate.current
+    const hv = hoverStep(h, { onShape, take: on, now: t })
+    hoverGate.current = hv.st
+    clearTimeout(recheckT.current)
+    const again = [r.recheckIn, hv.recheckIn].filter((x): x is number => x != null)
+    if (again.length) recheckT.current = window.setTimeout(() => evaluateRef.current(), Math.min(...again) + 5)
     dbg.take = on
-    // On change at once; while on, again every half second (the desktop may have reset after a drag).
-    if (force || takeSent.current?.on !== on || (on && t - takeSent.current.at > 500)) {
+    // On change at once; while on, again every half second (the desktop may have reset after a drag,
+    // and it lets clicks through by itself when these stop: core/islandClicks.ts takeExpired).
+    if (force || takeSent.current?.on !== on || (on && t - takeSent.current.at > TAKE_BEAT_MS - 50)) {
       takeSent.current = { on, at: t }
       desk()?.islandTakeClicks?.(on)
     }
-    if (on !== was) {
-      dbgEvent(on ? 'take clicks' : 'pass through', p ? { x: Math.round(p.x), y: Math.round(p.y) } : {})
-      logIslandUi('hover', on ? 'mouse in' : 'mouse out')
-      dispatch({ type: 'hover', on })
+    if (hv.st.over !== h.over) {
+      dbgEvent(hv.st.over ? 'hover' : 'pass through', p ? { x: Math.round(p.x), y: Math.round(p.y) } : {})
+      logIslandUi('hover', hv.st.over ? 'mouse in' : 'mouse out')
+      dispatch({ type: 'hover', on: hv.st.over })
     }
   }, [dispatch])
   evaluateRef.current = evaluate
@@ -1075,8 +1093,9 @@ export function DesktopIsland() {
     lastPtr.current = null
     dbg.ptr = null
     clearTimeout(recheckT.current)
-    const was = shield.current.take
+    const was = shield.current.take || hoverGate.current.over
     shield.current = SHIELD_OFF
+    hoverGate.current = HOVER_OFF
     dbg.take = false
     takeSent.current = { on: false, at: Date.now() }
     if (was || uiRef.current.over) {
@@ -1099,7 +1118,8 @@ export function DesktopIsland() {
     // IC5: what waited while you pressed comes now.
     const stopPress = onPress((on) => {
       frozen.current = on
-      if (on) return
+      // IC30: a press on the island keeps its clicks while it's held (a drag, a swipe).
+      if (on) return evaluateRef.current()
       const evs = heldEvents.current
       heldEvents.current = []
       for (const ev of evs) dispatch(ev)
@@ -1110,7 +1130,11 @@ export function DesktopIsland() {
       }
       evaluateRef.current()
     })
+    // IC30: while it takes clicks it says so again every half second, even with a resting
+    // pointer; the desktop lets clicks through by itself when these stop.
+    const beat = window.setInterval(() => { if (shield.current.take) evaluateRef.current() }, TAKE_BEAT_MS)
     return () => {
+      clearInterval(beat)
       window.removeEventListener('pointermove', move, true)
       window.removeEventListener('pointerdown', move, true)
       window.removeEventListener('pointerup', press, true)
@@ -1899,7 +1923,7 @@ export function DesktopIsland() {
     // IC7: the menu for what the pill shows (nothing to offer: the panel).
     if (what === 'menu') {
       const items = menuFor(main, s, prefs.chips, !!lastWater.current)
-      return items.length ? setMenu(items) : dispatch({ type: 'click' })
+      return items.length ? setMenu(withHide(items, !!desk()?.islandHide)) : dispatch({ type: 'click' })
     }
     if (quiet) return setQuiet(null)
     dispatch({ type: 'click' })
@@ -1918,6 +1942,7 @@ export function DesktopIsland() {
     }
     if (m.act === 'mute') return muteForMeeting()
     if (m.act === 'undoWater') return void (lastWater.current && doUndo(lastWater.current))
+    if (m.act === 'hide') return desk()?.islandHide?.('1h')
     if (m.act !== 'rename') tap(m.act)
   }
   // IC3: hold the pill for the round menu; slide and let go to fire.

@@ -93,7 +93,7 @@ describe('your settings are cleaned (IF3, IF7, IF8, IF10, IF11, IP3)', () => {
   })
   it('clamps numbers and drops nonsense', () => {
     const p = cleanIslandPrefs({ hoverMs: 5, peekSec: 999, pillHeight: 10, panelWidth: 2000, clicks: { left: 'explode', right: 'app' }, chips: { water: [300, 300, 'x', 5, 750], reps: [], focus: [45, 15] }, openOn: 'click' })
-    expect(p).toMatchObject({ hoverMs: 100, peekSec: 60, pillHeight: 28, panelWidth: 720, openOn: 'click' })
+    expect(p).toMatchObject({ hoverMs: 300, peekSec: 60, pillHeight: 28, panelWidth: 720, openOn: 'click' })
     expect(p.clicks).toEqual({ left: 'panel', middle: 'timer', right: 'app' })
     expect(p.chips).toEqual({ water: [300, 750], reps: [10], focus: [45, 15] })
   })

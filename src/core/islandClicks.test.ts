@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { finalShapeRect, inRects, padRect, roundOut, SHIELD_MS, SHIELD_OFF, shieldStep, snapshotKey, tapVerdict, targetRects, unionRect } from './islandClicks'
+import { finalShapeRect, HOVER_INTENT_MS, HOVER_OFF, hoverStep, inRects, padRect, peekWaitAfterIntent, roundOut, SHIELD_MS, SHIELD_NEAR, SHIELD_OFF, SHIELD_PAD, shieldHit, shieldStep, snapshotKey, takeExpired, TAKE_TTL_MS, tapVerdict, targetRects, unionRect } from './islandClicks'
+import { cleanIslandPrefs, HOVER_MIN_MS } from './islandModel'
+import { HIDE_HOUR_ITEM, withHide } from './islandCommands'
 
 describe('island click area', () => {
   it('the shape ends where its anchor says: left, middle or right', () => {
@@ -27,7 +29,7 @@ describe('island click area', () => {
 
 describe('click shield', () => {
   it('takes clicks at once on the shape', () => {
-    expect(shieldStep(SHIELD_OFF, { inside: true, pressed: false, now: 1000 })).toEqual({ st: { take: true, lastInside: 1000 }, recheckIn: null })
+    expect(shieldStep(SHIELD_OFF, { inside: true, pressed: false, now: 1000 })).toEqual({ st: { take: true, lastInside: 1000, pressIn: false }, recheckIn: null })
   })
   it('keeps taking them for a moment after the pointer left, then lets them through', () => {
     const on = { take: true, lastInside: 1000 }
@@ -36,11 +38,82 @@ describe('click shield', () => {
     expect(r.recheckIn).toBe(SHIELD_MS - 100)
     expect(shieldStep(on, { inside: false, pressed: false, now: 1000 + SHIELD_MS }).st.take).toBe(false)
   })
-  it('never lets go while a button is held', () => {
-    const on = { take: true, lastInside: 1000 }
-    expect(shieldStep(on, { inside: false, pressed: true, now: 9000 }).st.take).toBe(true)
+  it('never lets go while a press that began on it is held', () => {
+    const on = { take: true, lastInside: 1000, pressIn: true }
+    expect(shieldStep(on, { inside: false, near: false, pressed: true, now: 9000 }).st.take).toBe(true)
     // ...but a press doesn't start taking clicks off the island.
     expect(shieldStep(SHIELD_OFF, { inside: false, pressed: true, now: 9000 }).st.take).toBe(false)
+  })
+})
+
+// IC30: the window is far bigger than the pill and takes clicks everywhere while it takes them.
+describe('click shield stays tight (IC30)', () => {
+  const pill = [{ x: 190, y: 0, w: 240, h: 40 }]
+  it('starts taking clicks only ON the shape, never in the space around it', () => {
+    expect(shieldHit(310, 20, pill, false)).toEqual({ inside: true, near: true })
+    // 4 px under the pill (a browser tab strip): not yet.
+    expect(shieldHit(310, 44, pill, false).inside).toBe(false)
+    // Once taking, a few px of slack so the edge doesn't flicker.
+    expect(shieldHit(310, 40 + SHIELD_PAD - 1, pill, true).inside).toBe(true)
+    expect(shieldHit(310, 40 + SHIELD_PAD + 2, pill, true).inside).toBe(false)
+    expect(shieldHit(310, 40 + SHIELD_NEAR - 2, pill, true).near).toBe(true)
+    expect(shieldHit(310, 200, pill, true)).toEqual({ inside: false, near: false })
+  })
+  it('lets go at once when the pointer is well away (no linger over the apps below)', () => {
+    const on = { take: true, lastInside: 1000 }
+    expect(shieldStep(on, { inside: false, near: false, pressed: false, now: 1010 }).st.take).toBe(false)
+    // Still close: only a short moment.
+    const r = shieldStep(on, { inside: false, near: true, pressed: false, now: 1050 })
+    expect(r.st.take).toBe(true)
+    expect(r.recheckIn).toBe(SHIELD_MS - 50)
+    expect(SHIELD_MS).toBeLessThanOrEqual(200)
+  })
+  it('a press that began off the shape lets the clicks go', () => {
+    const on = { take: true, lastInside: 1000, pressIn: false }
+    expect(shieldStep(on, { inside: false, near: false, pressed: true, now: 1500 }).st.take).toBe(false)
+    // A press right at the edge just after leaving still belongs to the island (a quick flick off the pill).
+    const edge = shieldStep(on, { inside: false, near: true, pressed: true, now: 1050 })
+    expect(edge.st).toMatchObject({ take: true, pressIn: true })
+    expect(shieldStep(edge.st, { inside: false, near: false, pressed: true, now: 4000 }).st.take).toBe(true)
+    expect(shieldStep(edge.st, { inside: false, near: false, pressed: false, now: 4000 }).st.take).toBe(false)
+  })
+  it('the desktop lets clicks through by itself when the page stops repeating "take"', () => {
+    expect(takeExpired({ taking: true, lastTakeAt: 1000, now: 1000 + TAKE_TTL_MS - 1 })).toBe(false)
+    expect(takeExpired({ taking: true, lastTakeAt: 1000, now: 1000 + TAKE_TTL_MS + 1 })).toBe(true)
+    expect(takeExpired({ taking: false, lastTakeAt: 0, now: 99_999 })).toBe(false)
+  })
+})
+
+describe('hover intent (IC30)', () => {
+  it('a pass over the pill does nothing; resting on it counts as hover', () => {
+    let g = hoverStep(HOVER_OFF, { onShape: true, take: true, now: 1000 })
+    expect(g.st.over).toBe(false)
+    expect(g.recheckIn).toBe(HOVER_INTENT_MS)
+    // It moved off before the intent time: back to zero.
+    g = hoverStep(g.st, { onShape: false, take: true, now: 1060 })
+    expect(g.st).toEqual({ over: false, since: null })
+    g = hoverStep(g.st, { onShape: true, take: true, now: 1100 })
+    g = hoverStep(g.st, { onShape: true, take: true, now: 1100 + HOVER_INTENT_MS })
+    expect(g.st.over).toBe(true)
+    // Clicks pass through again: hover is over.
+    expect(hoverStep(g.st, { onShape: false, take: false, now: 2000 }).st).toEqual(HOVER_OFF)
+  })
+  it('the peek waits the rest, so the whole wait is your setting, and never less than 300 ms', () => {
+    expect(peekWaitAfterIntent(350) + HOVER_INTENT_MS).toBe(350)
+    expect(peekWaitAfterIntent(50)).toBe(0)
+    expect(HOVER_MIN_MS).toBeGreaterThanOrEqual(300)
+    expect(cleanIslandPrefs({ hoverMs: 100 }).hoverMs).toBe(HOVER_MIN_MS)
+    expect(cleanIslandPrefs({}).hoverMs).toBeGreaterThanOrEqual(300)
+    expect(cleanIslandPrefs({}).hoverMs).toBeLessThanOrEqual(400)
+  })
+})
+
+describe('get it out of the way (IC30)', () => {
+  it('the right-click menu ends with Hide for 1 hour on the desktop', () => {
+    const items = [{ id: 'm:pause', label: 'Pause', act: { kind: 'pause' } } as never]
+    expect(withHide(items, true).at(-1)).toBe(HIDE_HOUR_ITEM)
+    expect(HIDE_HOUR_ITEM.act).toBe('hide')
+    expect(withHide(items, false)).toEqual(items)
   })
 })
 

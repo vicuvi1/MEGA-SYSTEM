@@ -962,6 +962,22 @@
    ],
    "evidence": "2026-11-09: smoke steps Body Today (one card, no rest/workout clash, readiness line, no check-in at 08:30, Level chip), Food counter (exactly one primary button, sheet with Photo / My meals / Type it, all old checks through the sheet), Food photo, Coach check-in; phone and desktop screenshots at 2x kept outside the repo.",
    "notes": "body/FoodCounter.tsx (+food-simple.css, sheet via createPortal), FoodFast.tsx (FoodBars hero), FoodPhotoReview.tsx (bare + pickRef), body/today/TodayTab.tsx, training/StrengthCard.tsx, coach/CoachToday.tsx (+coach-full.css, readiness/rest props), coach/CoachCheckin.tsx (open prop, folds when done), progress/GrowthLevel.tsx (chip 'Level'), core/voiceNoise.ts + voice/voiceEngine.ts."
+  },
+  {
+   "id": "F-ISLAND-CLICKS",
+   "priority": 1,
+   "area": "island",
+   "title": "The island never steals clicks next to it, and is quick to put away",
+   "user_visible_behavior": "Clicks next to the desktop island (a tab strip, a window's buttons, anything near the top of the screen) reach the app under it: the island starts taking clicks only on the pill or panel itself, lets go as soon as the pointer is a little away (0.15 s, and only while still within 24 px), and a press that started off it never stays captured. If the island page freezes, reloads or a message is lost, clicks pass through again within 1.5 s by themselves. Passing over the pill on the way to something else does nothing: it only counts as hovered after resting on it, and peeks after your wait (at least 300 ms, default 350 ms). Right-click the pill: the menu now ends with 'Hide for 1 hour' (also in the round menu, the tray menu with Bring the island back, and Alt+Shift+I). Drag to any top spot or corner (remembered per screen), auto-collapse on leave and hide over full-screen apps were already there and are unchanged; sounds and reminders unchanged.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/islandClicks.test.ts src/core/islandPrefs.test.ts",
+    "SMOKE_ONLY=\"Desktop island: pill\" npm run smoke",
+    "SMOKE_ONLY=\"island\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: islandClicks.test.ts (tight shield, press off the shape, take expiry, hover intent, hide item) passes; smoke step 'Desktop island: pill -> click -> panel ...' checks no take 4 px under the pill, a quick pass never peeks and ends with clicks passing through, resting peeks, right-click Hide for 1 hour. Not yet tried on a real Windows desktop.",
+   "notes": "Root cause: the island window is one fixed size (about 640 x 760 DIP at 100%: WIN_BASE 500x660 widened to the panel + 40, height panel + 100) while the resting pill is about 240 x 40, and while it takes clicks the whole window takes them; the old shield started 12 px outside the pill, lingered 400 ms after leaving it anywhere in the window, and never expired. core/islandClicks.ts (shieldHit, shieldStep with pressIn, takeExpired, hoverStep, peekWaitAfterIntent), DesktopIsland.tsx (evaluate, heartbeat, right-click Hide), desktop/island.ts (takeAt watchdog, pass through on reload / unresponsive), core/islandModel.ts (HOVER_MIN_MS), core/islandCommands.ts (HIDE_HOUR_ITEM, withHide), IslandSettingsPanel.tsx (slider min 300)."
   }
  ]
 }

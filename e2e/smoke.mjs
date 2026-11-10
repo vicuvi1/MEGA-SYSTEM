@@ -2787,7 +2787,7 @@ try {
   // IP6: the desktop island on its own page, with a stand-in for the desktop
   // bridge: the pill, a click opens the panel, Escape closes it, hover peeks,
   // a right click opens the quiet menu, a reminder drops down.
-  await step('Desktop island: pill → click → panel → Escape → pill, hover peeks, takes clicks on the shape, Stop & log on release, reminders drop down', async () => {
+  await step('Desktop island: pill → click → panel → Escape → pill, hover peeks, takes clicks on the shape, Stop & log on release, clicks pass through next to it, a quick pass never opens it, Hide for 1 hour, reminders drop down', async () => {
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
     ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
     await ip.addInitScript(() => {
@@ -2801,9 +2801,10 @@ try {
         now: null, next: { title: 'Gym', start: now + 2 * 3600_000, end: now + 3 * 3600_000 },
         mustdos: [{ i: 0, text: 'Call the bank', done: false }], water: { ml: 500, target: 2000 }, reps: [], alert: null
       }
-      window.__island = { hot: 0, take: [], actions: [], prefs: [], send: (name, v) => cbs[name]?.(v), snap }
+      window.__island = { hot: 0, rects: [], take: [], hides: [], actions: [], prefs: [], send: (name, v) => cbs[name]?.(v), snap }
       window.desktop = new Proxy({
-        islandHot: () => { window.__island.hot++ },
+        islandHot: (r) => { window.__island.hot++; window.__island.rects = r?.rects ?? [] },
+        islandHide: (c) => { window.__island.hides.push(c) },
         islandTakeClicks: (on) => { window.__island.take.push(on) },
         islandAction: (a) => { window.__island.actions.push(a) },
         setIslandPrefs: async (p) => { window.__island.prefs.push(p); return null },
@@ -2859,6 +2860,37 @@ try {
     await ip.waitForFunction(() => window.__island.take[window.__island.take.length - 1] === false, null, { timeout: 3000 })
     await ip.evaluate(() => window.__island.send('hover', false))
     await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
+    // IC30: the window is much bigger than the pill. Just under the pill (a tab strip, a window's buttons)
+    // the island never starts taking clicks, and well away from it they pass through at once.
+    await ip.waitForTimeout(500)
+    const shapeR = await ip.evaluate(() => window.__island.rects[0] ?? null)
+    if (!shapeR) throw new Error('the island sent no click area')
+    await ip.evaluate(() => { window.__island.take = [] })
+    await ip.mouse.move(shapeR.x + shapeR.w / 2, shapeR.y + shapeR.h + 4, { steps: 4 })
+    await ip.waitForTimeout(250)
+    if (await ip.evaluate(() => window.__island.take.includes(true))) throw new Error('the island took clicks 4 px under the pill')
+    // A quick pass across the pill on the way to something else: it takes clicks only while on it, and never peeks.
+    await ip.mouse.move(8, 640)
+    await ip.evaluate(() => { window.__island.take = [] })
+    await ip.mouse.move(shapeR.x + shapeR.w / 2, shapeR.y + shapeR.h / 2, { steps: 2 })
+    await ip.mouse.move(shapeR.x + shapeR.w + 120, 300, { steps: 2 })
+    await ip.waitForTimeout(700)
+    if (await ip.$('.di-peek')) throw new Error('a quick pass over the pill opened the peek')
+    const passTake = await ip.evaluate(() => window.__island.take)
+    if (passTake[passTake.length - 1] !== false) throw new Error(`after a quick pass the island still takes clicks: ${passTake.join(',')}`)
+    // Resting on it (the page's own hover, no help from the desktop) peeks after a short wait.
+    await ip.mouse.move(shapeR.x + shapeR.w / 2, shapeR.y + shapeR.h / 2, { steps: 3 })
+    await ip.waitForSelector('.di-peek', { timeout: 3000 })
+    await ip.mouse.move(8, 640, { steps: 3 })
+    await ip.waitForSelector('.di-peek', { state: 'detached', timeout: 4000 })
+    // Get it out of the way: right click → Hide for 1 hour.
+    await ip.click('.di-pill', { button: 'right' })
+    await ip.waitForSelector('.di-actmenu', { timeout: 5000 })
+    await ip.waitForTimeout(300)
+    await ip.click('.di-actmenu [data-tap="m:hide1h"]')
+    await ip.waitForFunction(() => window.__island.hides.includes('1h'), null, { timeout: 3000 })
+    await ip.waitForSelector('.di-actmenu', { state: 'detached', timeout: 5000 })
+    await ip.mouse.move(8, 640, { steps: 3 })
     // A reminder drops down by itself, and Escape puts it away.
     await ip.evaluate(() => window.__island.send('state', { ...window.__island.snap, at: Date.now(), alert: { id: 'water:1', kind: 'water', title: 'Water', text: 'A glass of water?', actions: [{ label: '+250 ml', action: { kind: 'water', ml: 250 }, primary: true }] } }))
     await ip.waitForSelector('.di-peek.alert', { timeout: 5000 })

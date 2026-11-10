@@ -365,9 +365,14 @@ export interface MenuItem {
   id: string
   label: string
   /** A tap, or something the island does itself. */
-  act: IslandAction | 'rename' | 'copyLink' | 'mute' | 'undoWater'
+  act: IslandAction | 'rename' | 'copyLink' | 'mute' | 'undoWater' | 'hide'
   disabled?: boolean
 }
+
+/** IC30: the right-click menu always ends with a quick way to get the island out of the way. */
+export const HIDE_HOUR_ITEM: MenuItem = { id: 'm:hide1h', label: '🙈 Hide for 1 hour', act: 'hide' }
+/** The right-click menu with the hide item last (on the desktop only: the web preview has nowhere to hide to). */
+export const withHide = (items: MenuItem[], canHide: boolean): MenuItem[] => (canHide ? [...items, HIDE_HOUR_ITEM] : items)
 
 export function menuFor(a: Activity | null, s: IslandSnapshot, chips: IslandPrefs['chips'], canUndoWater: boolean): MenuItem[] {
   if (!a) return []
