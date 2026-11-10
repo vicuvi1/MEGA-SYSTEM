@@ -4,6 +4,11 @@ Choices that a later session could easily undo by accident. Each entry gives the
 was made, and what it rules out. Newest entries go on top. Don't reverse one without writing a new
 entry that says why.
 
+### Sport Track is one app with five sections; the Growth level is the only "Level", chains have steps (2026-11-10)
+- **Decision:** Sport Track's top-bar switch is Dashboard · Workout · Exercises · Progress · Body & Food, and every feature lives in exactly one of them (table in `docs/areas/sport.md`). The embedded app is "Classic tracker" in the page's ⋯ menu, not a tab; its history and badges still count. Training is not repeated on Body & Food (no Training tab there) and today's session has one view (Workout) and one set-by-set flow (`WorkoutFlow`). All sections share one training state (`training/useSportTrain.ts`). The only thing called "Level" is the Growth level (Dashboard ring and header chip); a chain has steps ("Step 3 of 8"), and there is no average level of today's moves.
+- **Why:** the owner was lost in three overlapping tabs that repeated the same cards and in three different "levels" (a Level 2 badge, Level 5 of 8, Level 1 of 7).
+- **Rules out:** a second place showing today's session or its sets, a card telling him to go to another tab to do the main thing, putting the Classic tracker back as a main tab, a second level number or calling a chain step a level, a second training state per section.
+
 ### Paste from AI is one fixed prompt and one block format; pasted meals are normal meals (2026-11-10)
 - **Decision:** to save money he reads photos in his own AI app with ONE fixed prompt (`FOOD_PASTE_PROMPT`, text kept as it is) whose answer is a LIFE-FOOD v1 block. `core/foodPaste.ts` reads it tolerantly and warns about every line it can't read, every food without grams and kcal far from 4P + 4C + 9F; nothing is dropped silently. Each meal is saved through `addFoodMeal` (source `paste`, its own day and time, ids from the text so a retry logs once), so every view sees it. Telegram takes a message that starts with LIFE-FOOD, from the owner's chats only. No points.
 - **Why:** the owner pays for his own AI plans; one format keeps the parser simple and the numbers checkable, and one food store keeps the bars, Ben and the weekly check right.

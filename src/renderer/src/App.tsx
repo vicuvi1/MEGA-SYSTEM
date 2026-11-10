@@ -6,6 +6,9 @@ import { features, isDemo, life } from './bridge'
 // Starts noting when you last touched the page (the plan card's auto-sync slows down while you are away).
 import './lastUse'
 import { Icon, type IconName } from './Icon'
+import { openTab } from './PageTabs'
+import { SportMenu } from './training/SportMenu'
+import { clearSportStart } from './sportStart'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { Coins, ToastProvider, useToast } from './ui'
 import { CoinFlight } from './rewards/CoinFlight'
@@ -88,7 +91,7 @@ const Rewards = lazyNamed(() => import('./pages/Rewards'), 'Rewards')
 const TodoTasks = lazyNamed(() => import('./pages/TodoTasks'), 'TodoTasks')
 const Discipline = lazyNamed(() => import('./pages/Discipline'), 'Discipline')
 const Body = lazyNamed(() => import('./pages/Body'), 'Body')
-const TrainingHome = lazyNamed(() => import('./training/TrainingHome'), 'TrainingHome')
+const SportTrack = lazyNamed(() => import('./training/SportTrack'), 'SportTrack')
 const Sleep = lazyNamed(() => import('./pages/Sleep'), 'Sleep')
 const Money = lazyNamed(() => import('./pages/Money'), 'Money')
 const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
@@ -127,7 +130,7 @@ const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
   money: { kind: 'finance', system: 'Money hub' },
   sleep: { kind: 'waky', system: 'Points & stats' },
   // MN24: Discipline is one page (the built-in one); the MAN app isn't a second copy.
-  body: { kind: 'sport', system: 'Metrics & Workouts' }
+  body: { kind: 'sport', system: 'Body & Food' }
 }
 
 export function App() {
@@ -254,9 +257,19 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       setView((v) => ({ ...v, [p]: 'system' }))
     }
     window.addEventListener('life-open-system', sys)
+    // Sport Track: Body & Food's tabs open that section; the old Body → Training opens Workout.
+    const bodyTab = (e: Event) => {
+      const d = (e as CustomEvent).detail as { page?: string; tab?: string } | undefined
+      if (d?.page !== 'body' || !d.tab) return
+      // A coach Start lands on Workout (its own Start): no Classic tracker workout left waiting to pop up later.
+      if (d.tab === 'training') clearSportStart()
+      setView((v) => ({ ...v, body: d.tab === 'training' ? 'workout' : 'system' }))
+    }
+    window.addEventListener('life-open-tab', bodyTab)
     return () => {
       window.removeEventListener('life-open-page', on)
       window.removeEventListener('life-open-system', sys)
+      window.removeEventListener('life-open-tab', bodyTab)
     }
   }, [])
   const [wakeEdit, setWakeEdit] = useState(0) // "Fix wake-up" taps: opens the editor on Sleep
@@ -518,15 +531,17 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // Stealth hides MAN too until the section is revealed.
   const hiddenByStealth = page === 'discipline' && !!discipline?.stealth && !revealed
   // Money opens on its own hub (Night 11); the full Finance Helper is one tap away.
-  // Sport Track opens on the Training home; its embedded app is the "Classic tracker".
+  // Sport Track opens on its Dashboard; its embedded app is the "Classic tracker" (⋯ menu, not a tab).
   const tab: SectionView = embed ? (hiddenByStealth ? 'system' : view[page] ?? (page === 'money' ? 'system' : page === 'body' ? 'train' : 'app')) : 'system'
   const segTabs: { id: SectionView; label: string; icon: IconName }[] = !embed
     ? []
     : embed.kind === 'sport'
       ? [
-          { id: 'train', label: 'Training', icon: 'bolt' },
-          { id: 'system', label: embed.system, icon: 'spark' },
-          { id: 'app', label: 'Classic tracker', icon: 'tasks' }
+          { id: 'train', label: 'Dashboard', icon: 'home' },
+          { id: 'workout', label: 'Workout', icon: 'bolt' },
+          { id: 'exercises', label: 'Exercises', icon: 'list' },
+          { id: 'progress', label: 'Progress', icon: 'chart' },
+          { id: 'system', label: embed.system, icon: 'spark' }
         ]
       : [
           { id: 'app', label: EMBED_LABEL[embed.kind], icon: embed.kind === 'finance' ? 'coin' : embed.kind === 'waky' ? 'moon' : 'shield' },
@@ -762,7 +777,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           </div>
           {embed && !hiddenByStealth && (
             <div className="seg-switch" role="tablist" aria-label={`${current.label} views`} style={{ ['--seg-n' as string]: segTabs.length }}>
-              <span className="seg-thumb" aria-hidden="true" style={{ ['--seg-i' as string]: Math.max(0, segTabs.findIndex((t) => t.id === tab)) }} />
+              <span className="seg-thumb" aria-hidden="true" style={{ ['--seg-i' as string]: Math.max(0, segTabs.findIndex((t) => t.id === tab)), opacity: segTabs.some((t) => t.id === tab) ? undefined : 0 }} />
               {segTabs.map((t) => (
                 <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: t.id }))}>
                   <Icon name={t.icon} size={14} />
@@ -771,6 +786,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               ))}
             </div>
           )}
+          {page === 'body' && <SportMenu classic={tab === 'app'} onClassic={() => setView((v) => ({ ...v, body: 'app' }))} onBack={() => setView((v) => ({ ...v, body: 'train' }))} />}
           {page === 'sleep' && (
             <button
               className="btn small"
@@ -882,7 +898,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} body={body} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
             )}
-            {page === 'body' && tab === 'train' && <TrainingHome body={body} onBody={setBody} onWallet={onWallet} onClassic={() => setView((v) => ({ ...v, body: 'app' }))} onMetrics={() => setView((v) => ({ ...v, body: 'system' }))} />}
+            {page === 'body' && (tab === 'train' || tab === 'workout' || tab === 'exercises' || tab === 'progress') && (
+              <SportTrack
+                section={tab}
+                body={body}
+                onBody={setBody}
+                onWallet={onWallet}
+                onSection={(s) => setView((v) => ({ ...v, body: s }))}
+                onBodyFood={(t) => openTab('body', t)}
+              />
+            )}
             {page === 'body' && tab === 'system' && body && <Body state={body} onState={setBody} onWallet={onWallet} onOpenSportApp={() => setView((v) => ({ ...v, body: 'app' }))} />}
             {page === 'discipline' && discipline && (
               <Discipline state={discipline} man={connections?.man.suggestion ?? null} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />

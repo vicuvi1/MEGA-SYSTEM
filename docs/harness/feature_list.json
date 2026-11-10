@@ -678,7 +678,21 @@
     "SMOKE_ONLY=\"Training home|Sport Track onboarding|Body training\" npm run smoke"
    ],
    "evidence": "2026-11-10: branch training-home; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Training home 1.81 / 1.59 / 1.11 screens at 1280 / 1440 / 1920 (budget 2.25 with 10% headroom)",
-   "notes": "core/sportTrain.ts (the Training home engine) on core/trainLog.ts (levelStatus, offerOf, shiftLevel, ladderSets, doseSets, formOk); renderer/src/training/TrainingHome.tsx, WorkoutFlow.tsx, useTrainHome.ts, training-home.css; App.tsx section view 'train'. Phase 2 (not built): Exercise Library with chains, Workout Builder, equipment page, PRs, readiness and skills. TG_SHOTS=<dir> saves training-home-1920.png and training-finish-1920.png."
+   "notes": "core/sportTrain.ts (the Training home engine) on core/trainLog.ts (levelStatus, offerOf, shiftLevel, ladderSets, doseSets, formOk); renderer/src/training/TrainingHome.tsx, WorkoutFlow.tsx, useTrainHome.ts, training-home.css; App.tsx section view 'train'. Phase 2 (not built): Exercise Library with chains, Workout Builder, equipment page, PRs, readiness and skills. TG_SHOTS=<dir> saves training-home-1920.png and training-finish-1920.png. Superseded in layout by F905 (2026-11-10): TrainingHome.tsx was replaced by the Dashboard and Workout sections; the engine stays."
+  },
+  {
+   "id": "F905",
+   "priority": 1,
+   "area": "sport",
+   "title": "Sport Track is one app: Dashboard, Workout, Exercises, Progress, Body & Food",
+   "user_visible_behavior": "Sport Track has five sections in the top bar instead of three overlapping tabs: Dashboard · Workout · Exercises · Progress · Body & Food; the old embedded app is 'Classic tracker' in the page's ⋯ menu (its history and badges still count). Dashboard: a greeting with 4 numbers (streak in sessions, workouts this week, the week's planned sets done, weight over 4 weeks) and the ONE level (the Growth level, the same as the header chip); Today's Workout with a real exercise photo, moves as sets x reps with their chain step, one big Start Workout and Customize (opens Workout); Progression Path of the main chain (today's first move's chain), 5 steps at most, with what the next step needs; Coach (engine line, Make it harder / easier, I can't train today); This Week bars; compact Body and Today's Food tiles that open Body & Food; Program Roadmap as 5 phase cards. Workout: each move with its picture, sets x reps, rest, Easier / Harder, drag (or arrow keys on the handle) to change the order; How much today (Full / Lighter / Short); a big rest timer; New variation unlocked / Why is it unlocked (the 4 rules) / Apply change / Or keep for now; form tips; Start opens the set-by-set flow. Chains have steps ('Step 3 of 8'); the only 'Level' is the Growth level. Exercises and Progress hold the old Body → Training parts for now (roadmap, program builder; recovery, warnings, strength, dashboard, challenges, This week). Body & Food is the old Metrics & Workouts without Training: Today · Food · Body · Growth.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/sportTrain.test.ts src/core/trainLog.test.ts",
+    "SMOKE_ONLY=\"Sport Track|Body Today|Body growth\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: branch sport-track-one-app; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Dashboard 2.00 / 1.78 / 1.25 screens and Workout 1.43 / 1.19 / 0.95 at 1280 / 1440 / 1920 (budget 2.5, 2.25 with 10% headroom); screenshots kept outside the repo.",
+   "notes": "renderer/src/training/SportTrack.tsx (shell), useSportTrain.ts (one state and every action), SportDashboard.tsx, SportWorkout.tsx, SportMore.tsx (Exercises / Progress for now), SportMenu.tsx (⋯), MovePic.tsx (photos from apps/sport/photos, else the drawn figure), sportBits.tsx, sport-track.css (prefix sp-), sport-menu.css. App.tsx section views train / workout / exercises / progress / system / app; life-open-tab for body maps Body & Food tabs and 'training' → Workout. core/sportTrain.ts: levelText 'Step x of y', no average level, stepWindow, orderItems. Removed: TrainingHome.tsx, BodyTraining.tsx, TodaySession.tsx, RestTimer.tsx, Body's Training tab. Move order is per device (localStorage life_train_order). Next batch: the Exercise library with chains and detail, PRs and charts on Progress, the equipment list. TG_SHOTS=<dir> saves sport-dashboard-1920.png, sport-workout-1920.png and training-finish-1920.png."
   },
   {
    "id": "F-BODY-PROGRESS",

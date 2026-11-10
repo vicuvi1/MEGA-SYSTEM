@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  aimFor, applyOffer, coachLine, finishReport, keepOffer, programPhases, requirementsOf, restMobility, shiftMove, shiftWorkout, trackerFinish, trackerLog, trackerSessionId, trackerToday, trackerUndo, weekBars
+  aimFor, applyOffer, orderItems, stepWindow, coachLine, finishReport, keepOffer, programPhases, requirementsOf, restMobility, shiftMove, shiftWorkout, trackerFinish, trackerLog, trackerSessionId, trackerToday, trackerUndo, weekBars
 } from './sportTrain'
 import { moveSessions, sessionItems, trainOf } from './trainLog'
 
@@ -43,14 +43,14 @@ afterEach(() => vi.useRealTimers())
 describe("the Training home's Today is the split's session", () => {
   it('Tuesday is Upper: each move on a level from his past bests, as sets × range at an effort target', () => {
     const v = trackerToday(oldSetup(), TUE)
-    expect(v).toMatchObject({ type: 'upper', stage: 'ready', title: 'Upper body', level: 2 })
+    expect(v).toMatchObject({ type: 'upper', stage: 'ready', title: 'Upper body' })
     expect(v.items.map((i) => i.ladder.id)).toEqual(['push', 'pull', 'shoulders'])
     const push = v.items[0]
     // 130 push-ups a day is about 22 a set: past plain push-ups, so a harder variation.
     expect(push.name).toBe('Diamond push-ups')
     expect(push.target).toBe('3 × 6–12')
     expect(push.effort).toBe('stop 1–2 reps before failure')
-    expect(push.levelText).toBe('Level 3 of 8')
+    expect(push.levelText).toBe('Step 3 of 8')
     expect(push.aim).toEqual([6, 6, 6])
     expect(push.demo).toBe('diamond_pushup')
     expect(push.offer).toBeNull()
@@ -66,7 +66,7 @@ describe("the Training home's Today is the split's session", () => {
 
   it('a rest day shows rest and mobility, with Train anyway; "I can\'t train today" is rest too', () => {
     const v = trackerToday(oldSetup(), FRI)
-    expect(v).toMatchObject({ type: 'rest', stage: 'rest', title: 'Rest day', items: [], level: null })
+    expect(v).toMatchObject({ type: 'rest', stage: 'rest', title: 'Rest day', items: [] })
     expect(v.mobility.length).toBeGreaterThan(0)
     expect(v.anyway).not.toBeNull()
     const any = trackerToday(oldSetup(), FRI, { anyway: v.anyway })
@@ -268,5 +268,20 @@ describe('the week and the program', () => {
     const p = programPhases(st, '2026-11-26')
     expect(p).toMatchObject({ week: 3, start: TUE, levelsUp: 1 })
     expect(p.phases.map((x) => x.state)).toEqual(['done', 'current', 'next', 'next', 'next'])
+  })
+})
+
+describe('the Dashboard path and the Workout order', () => {
+  it('shows at most 5 steps of a chain, the current one in the middle where it can be', () => {
+    expect(stepWindow(8, 4)).toEqual([2, 7])
+    expect(stepWindow(8, 0)).toEqual([0, 5])
+    expect(stepWindow(8, 7)).toEqual([3, 8])
+    expect(stepWindow(3, 1)).toEqual([0, 3])
+    expect(stepWindow(0, 0)).toEqual([0, 0])
+  })
+  it('puts moves in the dragged order and keeps unknown ones at the end', () => {
+    const it = (id: string) => ({ ladder: { id } })
+    expect(orderItems([it('push'), it('pull'), it('shoulders')], ['shoulders', 'push']).map((x) => x.ladder.id)).toEqual(['shoulders', 'push', 'pull'])
+    expect(orderItems([it('push'), it('pull')], null).map((x) => x.ladder.id)).toEqual(['push', 'pull'])
   })
 })

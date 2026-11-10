@@ -1,4 +1,4 @@
-// Data for Sport Track's Training home: Sport Track's state (through the
+// Data for Sport Track's sections: Sport Track's state (through the
 // same store as Body → Training), today's readiness and dose, the food
 // counter's day and the latest body composition. Only real data: anything
 // not logged stays null and the card shows an empty state.
