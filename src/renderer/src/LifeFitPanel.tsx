@@ -206,19 +206,19 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
       </div>
 
       <h3 className="lf-sub">When Ben writes first</h3>
-      <p className="hint block">On the island while you're at the PC, on Telegram when you're away. Never twice. Each has its own sound in Settings → Sound.</p>
+      <p className="hint block">On the island at the PC, on Telegram when away; never twice. Sounds: Settings → Sound.</p>
       <label className="check toggle-row">
         <input type="checkbox" checked={p.checkins} onChange={(e) => setP({ checkins: e.target.checked })} />
         <span>
           Check in when a planned block starts
-          <small>"Lab 4 starts now, ready?" with Start, 10 min later and Skip. One firmer word 10 minutes later if it hasn't started, then he stops. Never in meetings.</small>
+          <small>"Lab 4 starts now, ready?" Start, 10 min later or Skip. Never in meetings.</small>
         </span>
       </label>
       <label className="check toggle-row">
         <input type="checkbox" checked={p.brief} onChange={(e) => setP({ brief: e.target.checked })} />
         <span>
           Morning brief at {v.wake}
-          <small>Your must-dos, the first block and the water goal, with one tap for Plan my day.</small>
+          <small>Must-dos, the first block, water, and Plan my day.</small>
         </span>
       </label>
       {p.brief && (
@@ -235,7 +235,7 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
         <input type="checkbox" checked={p.shutdown} onChange={(e) => setP({ shutdown: e.target.checked })} />
         <span>
           Evening shutdown before bed ({v.bed})
-          <small>What got done, what's open (each: Tomorrow, Drop or Keep today) and a bedtime reminder. It opens Today's Shut down.</small>
+          <small>Done, still open (Tomorrow, Drop, Keep) and bedtime.</small>
         </span>
       </label>
       {p.shutdown && (
@@ -256,14 +256,7 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
         <input type="checkbox" checked={p.meals} onChange={(e) => setP({ meals: e.target.checked })} aria-label="Meal reminders" />
         <span>
           Meal reminders
-          <small>"Lunch? Send a photo" when nothing was logged by your usual time (learned from your logs; else your standard day's times). Log your usual, 30 min or Skip. With the coach's nudges at most 3 a day, never in meetings or quiet hours.</small>
-        </span>
-      </label>
-      <label className="check toggle-row">
-        <input type="checkbox" checked={p.foodSummary} onChange={(e) => setP({ foodSummary: e.target.checked })} aria-label="Food summary at night" />
-        <span>
-          Food summary at night
-          <small>On Telegram before bed: today's totals, the best meal and one change for tomorrow. Once a day, never in quiet hours.</small>
+          <small>"Lunch? Send a photo" at your usual time, learned from your logs. Max 3 a day with the coach.</small>
         </span>
       </label>
       <div className="lf-days" role="group" aria-label="Coach nudges" title="The check-in about 21:00, protein under 40% from 14:00, the morning one at your wake time. With meal reminders at most 3 a day: check-in, then protein, then morning, then meals.">
@@ -279,12 +272,15 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
             {label}
           </button>
         ))}
+        <button type="button" aria-pressed={p.foodSummary} className={`bp-food-summary${p.foodSummary ? ' on' : ''}`} title="On Telegram before bed: today's totals, the best meal and one change for tomorrow. Once a day, never in quiet hours." onClick={() => setP({ foodSummary: !p.foodSummary })}>
+          Night food summary
+        </button>
       </div>
       <label className="check toggle-row">
         <input type="checkbox" checked={p.weekly} onChange={(e) => setP({ weekly: e.target.checked })} />
         <span>
           Weekly check
-          <small>Your week score, 3 wins, 1 thing to fix and next week's top 3 to accept, on Telegram and here in Coach.</small>
+          <small>Week score, 3 wins, 1 thing to fix, next week's top 3 (Telegram and Coach).</small>
         </span>
       </label>
       {p.weekly && rh && life.coach?.rhythm && (
