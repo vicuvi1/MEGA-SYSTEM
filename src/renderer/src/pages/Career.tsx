@@ -55,7 +55,10 @@ export function Career({ onGo }: { onGo?: (p: PageId) => void }) {
   return (
     <div className="cr">
       <header className="cr-hero">
-        {/* The top bar already says "Career" and what it is for: the hero is just your numbers. */}
+        <div className="cr-hero-txt">
+          <h1>Career</h1>
+          <p className="hint">Applications, proof of work, study and money for the job you want.</p>
+        </div>
         <div className="cr-hero-stats">
           <button className={`cr-chip${v.week.sent >= v.week.quota && v.week.quota ? ' ok' : ''}`} onClick={() => setTab('jobs')}>
             <b>

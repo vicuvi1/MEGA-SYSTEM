@@ -3,13 +3,13 @@
 
 .ysc { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .ysc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-.ysc-head h4 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu-sub); }
+.ysc-head h4 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu-sub); }
 .ysc-head h4 span { margin-left: 6px; text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--mu-fg); }
 .ysc-acts { display: inline-flex; gap: 12px; align-items: baseline; }
 .ysc-connect { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .ysc-connect input { flex: 1; min-width: 160px; height: 34px; padding: 0 12px; border: 1px solid var(--mu-line); border-radius: 10px; background: rgb(var(--ink, 255 255 255) / 0.05); color: var(--mu-fg); font: inherit; font-size: 13px; outline: none; user-select: text; }
 .ysc-connect input:focus { border-color: rgb(var(--mu-rgb) / 0.7); }
-.ysc-cta { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1px dashed var(--mu-line); border-radius: 12px; background: var(--mu-chip); color: var(--mu-fg); font: inherit; font-size: 13px; cursor: pointer; text-align: left; transition: transform 0.2s var(--mu-spring, ease); }
+.ysc-cta { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 12px; border: 1px dashed var(--mu-line); border-radius: 12px; background: var(--mu-chip); color: var(--mu-fg); font: inherit; font-size: 12.5px; cursor: pointer; text-align: left; transition: transform 0.2s var(--mu-spring, ease); }
 .ysc-cta:hover { transform: translateY(-1px); }
 
 .ysc-row { display: grid; grid-auto-flow: column; grid-auto-columns: 132px; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; padding: 2px 2px 8px; scrollbar-width: thin; }
@@ -25,12 +25,12 @@
 .ysc-play { position: absolute; right: 6px; bottom: 6px; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: rgb(255 255 255 / 0.94); color: #111; opacity: 0; transform: scale(0.85); transition: opacity 0.2s ease, transform 0.24s var(--mu-spring, ease); }
 .ysc-card:hover .ysc-play, .ysc-card:focus-visible .ysc-play, .ysc-card.on .ysc-play { opacity: 1; transform: none; }
 .ysc-card b { margin-top: 5px; font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ysc-card small { font-size: 13px; color: var(--mu-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ysc.compact .ysc-card b { font-size: 13px; }
+.ysc-card small { font-size: 11.5px; color: var(--mu-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ysc.compact .ysc-card b { font-size: 12px; }
 
 .ysc-like-wrap { position: relative; display: inline-flex; align-items: center; gap: 6px; }
 .ysc-like.on { color: #ff5a36; }
-.ysc-note { font-size: 13px; color: var(--mu-sub); white-space: nowrap; }
+.ysc-note { font-size: 11.5px; color: var(--mu-sub); white-space: nowrap; }
 
 /* ---- the Music page's tabs and the signed-in tab ---- */
 .mup-tabs { display: flex; gap: 6px; }
@@ -43,7 +43,7 @@
 .ysw-ic { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent; color: var(--mu-sub); cursor: pointer; transition: background-color 0.15s ease, color 0.15s ease; }
 .ysw-ic:hover, .ysw-ic[aria-expanded='true'] { background: var(--mu-chip); color: var(--mu-fg); }
 .ysw-ic:focus-visible, .ysw-zoom button:focus-visible, .ysw-state:focus-visible { outline: 2px solid rgb(var(--mu-rgb) / 0.7); outline-offset: 1px; }
-.ysw-state { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--mu-chip); color: var(--mu-sub); font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1; white-space: nowrap; }
+.ysw-state { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 12px; border: 0; border-radius: 999px; background: var(--mu-chip); color: var(--mu-sub); font-family: inherit; font-size: 12.5px; font-weight: 600; line-height: 1; white-space: nowrap; }
 .ysw-state i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: 0.6; }
 .ysw-state.on { color: var(--mu-fg); }
 .ysw-state.on i { background: #3ecf8e; opacity: 1; }
@@ -55,13 +55,13 @@ button.ysw-state:hover { background: rgb(255 85 0 / 0.14); }
 .ysw-zoom button { height: 26px; min-width: 26px; padding: 0 6px; border: 0; border-radius: 999px; background: transparent; color: var(--mu-sub); font-family: inherit; font-size: 16px; font-weight: 600; line-height: 1; cursor: pointer; }
 .ysw-zoom button:hover:not(:disabled) { color: var(--mu-fg); background: rgb(var(--ink, 255 255 255) / 0.08); }
 .ysw-zoom button:disabled { opacity: 0.35; cursor: default; }
-.ysw-zoom .ysw-pct { min-width: 46px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.ysw-zoom .ysw-pct { min-width: 46px; font-size: 12.5px; font-variant-numeric: tabular-nums; }
 .ysw-more { position: relative; }
 .ysw-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 250px; padding: 6px; border: 1px solid var(--border, var(--mu-line)); border-radius: 14px; background: var(--surface, #16181d); box-shadow: 0 18px 40px -18px rgb(0 0 0 / 0.6); }
 .ysw-menu button { display: grid; gap: 2px; width: 100%; padding: 9px 12px; border: 0; border-radius: 10px; background: transparent; color: var(--mu-fg); font-family: inherit; font-size: 13px; font-weight: 600; line-height: 1.3; text-align: left; cursor: pointer; }
 .ysw-menu button:hover { background: var(--mu-chip); }
 .ysw-menu button.warn { color: #ff6b5a; }
-.ysw-menu small { color: var(--mu-sub); font-weight: 400; font-size: 13px; }
+.ysw-menu small { color: var(--mu-sub); font-weight: 400; font-size: 11.5px; }
 /* The SoundCloud view sits exactly over this box (inside its 1px border). */
 .ysw-box { position: relative; display: grid; place-items: center; height: calc(100vh - 190px); min-height: 320px; border-radius: var(--radius, 14px); overflow: hidden; background: #121212; border: 1px solid var(--border, var(--mu-line)); color: rgb(255 255 255 / 0.6); }
 .ysw-box p { margin: 0; font-size: 13px; }

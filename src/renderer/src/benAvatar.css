@@ -51,8 +51,8 @@ html.calm .ba.thinking .ba-ring, html.calm .ba.typing .ba-ring { animation-itera
 .lk-opt.on { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--accent-soft); }
 .lk-opt .ba { margin-bottom: 6px; }
 .lk-opt b { font-size: 14px; }
-.lk-opt small { color: var(--muted); font-size: 13px; line-height: 1.35; }
+.lk-opt small { color: var(--muted); font-size: 12px; line-height: 1.35; }
 .lk-me { display: flex; align-items: center; gap: 16px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
 .lk-me > div { display: grid; gap: 4px; min-width: 0; }
-.lk-me small { color: var(--muted); font-size: 13px; }
+.lk-me small { color: var(--muted); font-size: 12.5px; }
 .lk-me .row { margin-top: 6px; display: flex; gap: 8px; flex-wrap: wrap; }

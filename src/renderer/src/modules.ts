@@ -11,34 +11,31 @@ export interface ModuleDef {
   color: string
   /** Phase from the build plan; 0 means ready now. */
   phase: number
-  /** One short line under the page title. */
   blurb: string
-  /** The longer description (search and Ctrl+K hints find pages by it). */
-  more?: string
 }
 
 // The sidebar is built from this list; a new section is one entry plus its page.
 export const MODULES: ModuleDef[] = [
   { id: 'today', label: 'Today', icon: 'home', color: 'var(--lime)', phase: 0, blurb: 'Your day at a glance' },
-  { id: 'coach', label: 'Coach', icon: 'spark', color: 'var(--lime)', phase: 0, blurb: 'Talk to your coach', more: 'Talk to your coach; your goals, rules and what it remembers' },
-  { id: 'calendar', label: 'Calendar', icon: 'calendar', color: '#B892FF', phase: 0, blurb: 'Your week and day, with Google Calendar', more: 'Your Google Calendar and timed tasks, by week or day' },
-  { id: 'goals', label: 'Goals', icon: 'trophy', color: 'var(--lime)', phase: 0, blurb: 'What you are working towards', more: 'Every goal in one list: deadline, hours left, this week, today, and your cyber security path' },
-  { id: 'season', label: 'Season', icon: 'gate', color: '#ff9f43', phase: 0, blurb: 'Your 12-week season', more: 'Your 12-week arc (the quarter) and its boss, vision board, identity votes, wins wall, adventures and life wheel' },
-  { id: 'career', label: 'Career', icon: 'briefcase', color: '#7CC4FF', phase: 0, blurb: 'Job hunt, study and proof of work', more: 'Job hunt, proof of work, flashcards, study packs for your shift, essays and the money plan behind your career' },
-  { id: 'progress', label: 'Insights', icon: 'chart', color: 'var(--lime)', phase: 0, blurb: 'Am I improving?', more: 'Am I improving? Week score, streaks, your year and focus goals' },
+  { id: 'coach', label: 'Coach', icon: 'spark', color: 'var(--lime)', phase: 0, blurb: 'Talk to your coach; your goals, rules and what it remembers' },
+  { id: 'calendar', label: 'Calendar', icon: 'calendar', color: '#B892FF', phase: 0, blurb: 'Your Google Calendar and timed tasks, by week or day' },
+  { id: 'goals', label: 'Goals', icon: 'trophy', color: 'var(--lime)', phase: 0, blurb: 'Every goal in one list: deadline, hours left, this week, today, and your cyber security path' },
+  { id: 'season', label: 'Season', icon: 'gate', color: '#ff9f43', phase: 0, blurb: 'Your 12-week arc (the quarter) and its boss, vision board, identity votes, wins wall, adventures and life wheel' },
+  { id: 'career', label: 'Career', icon: 'briefcase', color: '#7CC4FF', phase: 0, blurb: 'Job hunt, proof of work, flashcards, study packs for your shift, essays and the money plan behind your career' },
+  { id: 'progress', label: 'Insights', icon: 'chart', color: 'var(--lime)', phase: 0, blurb: 'Am I improving? Week score, streaks, your year and focus goals' },
   { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'Your Todoist, by area' },
-  { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes', more: 'Wake-ups and bedtimes from Waky' },
-  { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 0, blurb: 'Private streak and honest resets', more: 'Private streak, urge crusher and honest resets' },
-  { id: 'body', label: 'Sport Track', icon: 'bolt', color: '#00F2FE', phase: 0, blurb: 'Workouts, food and body', more: 'Workouts and body metrics' },
-  { id: 'locker', label: 'Photo Locker', icon: 'lock', color: '#6EE7D8', phase: 0, blurb: 'Photos, videos and files, backed up to Google Drive', more: 'Progress photos, short videos and private files, on every device and backed up to your Google Drive (not encrypted)' },
+  { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes from Waky' },
+  { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 0, blurb: 'Private streak, urge crusher and honest resets' },
+  { id: 'body', label: 'Sport Track', icon: 'bolt', color: '#00F2FE', phase: 0, blurb: 'Workouts and body metrics' },
+  { id: 'locker', label: 'Photo Locker', icon: 'lock', color: '#6EE7D8', phase: 0, blurb: 'Progress photos, short videos and private files, on every device and backed up to your Google Drive (not encrypted)' },
   { id: 'money', label: 'Money', icon: 'coin', color: '#F5C84B', phase: 0, blurb: 'Your money, from Finance Helper' },
-  { id: 'shop', label: 'Rewards', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend your points on fun and real rewards', more: 'Spend your points: guilt-free fun time and real rewards' },
-  { id: 'music', label: 'Music', icon: 'music', color: '#ff7a45', phase: 0, blurb: 'Stations, lyrics and your players', more: 'SoundCloud stations, lyrics and the players on your PC' },
-  { id: 'custom', label: 'Custom Center', icon: 'sliders', color: '#B892FF', phase: 0, blurb: 'Your own widgets, actions and looks', more: 'Build your own widgets, actions, reminders, modes and looks for the island and the app' },
+  { id: 'shop', label: 'Rewards', icon: 'gift', color: '#F5C84B', phase: 0, blurb: 'Spend your points: guilt-free fun time and real rewards' },
+  { id: 'music', label: 'Music', icon: 'music', color: '#ff7a45', phase: 0, blurb: 'SoundCloud stations, lyrics and the players on your PC' },
+  { id: 'custom', label: 'Custom Center', icon: 'sliders', color: '#B892FF', phase: 0, blurb: 'Build your own widgets, actions, reminders, modes and looks for the island and the app' },
 ]
 
 export const SYSTEM_PAGES: ModuleDef[] = [
-  { id: 'notebook', label: 'Notebook', icon: 'book', color: 'var(--lime)', phase: 0, blurb: "Your notes and Ben's", more: 'Your notes and Ben\'s: what he knows about you, your journal' },
+  { id: 'notebook', label: 'Notebook', icon: 'book', color: 'var(--lime)', phase: 0, blurb: 'Your notes and Ben\'s: what he knows about you, your journal' },
   { id: 'history', label: 'History', icon: 'list', color: 'var(--muted)', phase: 0, blurb: 'Every point in and out' },
   { id: 'connected', label: 'Connected apps', icon: 'link', color: 'var(--muted)', phase: 0, blurb: 'Waky, Finance Helper and MAN' },
   { id: 'bots', label: 'Telegram bots', icon: 'bot', color: '#00D2FF', phase: 0, blurb: 'Your Telegram bots: Mega, Finance and Waky' },

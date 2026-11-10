@@ -3,15 +3,15 @@
 .pa-head { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 40px; padding: 0 10px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-size: 14.5px; cursor: pointer; text-align: left; }
 .pa-head:hover { background: rgb(var(--ink) / 0.05); }
 .pa-head:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.pa-head small { margin-left: auto; color: var(--muted); font-size: 13px; }
+.pa-head small { margin-left: auto; color: var(--muted); font-size: 12.5px; }
 .pa-caret { display: inline-block; width: 12px; color: var(--muted); font-weight: 700; transition: transform 0.18s ease; }
 .pa.open .pa-caret { transform: rotate(90deg); }
 .pa-list { list-style: none; margin: 0; padding: 0 6px 6px; display: grid; gap: 2px; }
 .pa-list li { display: flex; align-items: flex-start; gap: 10px; padding: 6px 4px; border-radius: 10px; font-size: 14.5px; }
 .pa-tx { display: grid; min-width: 0; overflow-wrap: anywhere; }
-.pa-tx small { font-size: 13px; color: var(--muted); }
+.pa-tx small { font-size: 12px; color: var(--muted); }
 .pa-list li.done .pa-tx { color: var(--muted); text-decoration: line-through; }
-.pa-tick { flex: none; width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; border: 2px solid var(--border-strong); background: none; color: var(--accent-ink, #fff); font-size: 13px; font-weight: 800; display: grid; place-items: center; cursor: pointer; transition: transform 0.2s ease, background-color 0.15s, border-color 0.15s; }
+.pa-tick { flex: none; width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; border: 2px solid var(--border-strong); background: none; color: var(--accent-ink, #fff); font-size: 12px; font-weight: 800; display: grid; place-items: center; cursor: pointer; transition: transform 0.2s ease, background-color 0.15s, border-color 0.15s; }
 .pa-tick.p1 { border-color: #ef4444; }
 .pa-tick.p2 { border-color: #f59e0b; }
 .pa-tick.p3 { border-color: #3b82f6; }
@@ -19,7 +19,7 @@
 .pa-tick:disabled { cursor: default; }
 .pa-list li.done .pa-tick { background: var(--accent); border-color: var(--accent); }
 .pa-later { padding: 4px 10px 8px; display: grid; gap: 4px; }
-.pa-later > small { font-size: 13px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.pa-later > small { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .pa-later ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 13.5px; color: var(--muted); }
 .plan-why { margin: 0; font-size: 13px; color: var(--muted); }
 .plan-shift { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.05); font-size: 13.5px; }
@@ -28,5 +28,5 @@
 .plan-shift-btns button { min-height: 32px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--border-strong); background: none; color: var(--text); font: inherit; cursor: pointer; }
 .plan-shift-btns button.p { background: var(--accent); border-color: var(--accent); color: var(--accent-ink, #fff); font-weight: 700; }
 .plan-shift-btns button:disabled { opacity: 0.6; cursor: default; }
-.plan-tasks { display: block; font-size: 13px; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
+.plan-tasks { display: block; font-size: 12px; color: var(--muted); white-space: normal; overflow-wrap: anywhere; }
 @media (prefers-reduced-motion: reduce) { .pa-caret, .pa-tick { transition: none; } }

@@ -11,7 +11,7 @@
 .flame { width: 64px; height: 64px; border-radius: 18px; display: grid; place-items: center; background: rgba(255, 138, 61, 0.16); color: var(--orange); }
 .streak-num { font: 800 54px/1 var(--display); display: flex; align-items: baseline; gap: 8px; }
 .streak-num small { font-size: 16px; color: var(--muted); font-weight: 600; }
-.streak-sub { color: var(--muted); font-size: 13px; margin-top: 4px; }
+.streak-sub { color: var(--muted); font-size: 12.5px; margin-top: 4px; }
 .rank-box { display: grid; gap: 4px; max-width: 320px; justify-self: end; width: 100%; }
 .rank-box b { font: 800 20px var(--display); color: var(--orange); letter-spacing: 0.04em; text-transform: uppercase; }
 .rank-box .bar i { background: var(--orange); }
@@ -31,11 +31,11 @@
 .milestones { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
 .ms { display: grid; justify-items: center; gap: 4px; padding: 12px 8px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg-2); text-align: center; }
 .ms b { font: 800 24px/1 var(--display); }
-.ms small { color: var(--muted); font-size: 12px; margin-top: -4px; }
+.ms small { color: var(--muted); font-size: 11px; margin-top: -4px; }
 .ms.locked { opacity: 0.45; }
 .ms.claimable { border-color: rgba(200, 241, 53, 0.55); }
 .ms.claimed b, .ms.before-setup b { color: var(--orange); }
-.ms-tag { font-size: 12px; color: var(--muted); }
+.ms-tag { font-size: 11px; color: var(--muted); }
 
 .campaign { display: grid; grid-template-columns: repeat(15, 1fr); gap: 5px; }
 .cell { aspect-ratio: 1; border-radius: 6px; background: #1a1f2b; display: grid; place-items: center; font-size: 10px; font-weight: 700; color: var(--faint); }
@@ -58,7 +58,7 @@
 
 .urge { position: fixed; inset: 0; z-index: 45; display: grid; place-items: center; background: radial-gradient(60% 60% at 50% 45%, rgba(110, 231, 216, 0.12), transparent), rgba(5, 7, 11, 0.94); }
 .urge-inner { display: grid; justify-items: center; gap: 14px; text-align: center; max-width: 440px; padding: 24px; }
-.urge-inner .label { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.16em; }
+.urge-inner .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.16em; }
 .breath { width: 190px; height: 190px; border-radius: 50%; display: grid; place-items: center; margin: 26px 0; background: radial-gradient(circle at 40% 35%, rgba(110, 231, 216, 0.5), rgba(110, 231, 216, 0.12) 70%); border: 1px solid rgba(110, 231, 216, 0.5); }
 .breath span { font: 700 18px var(--display); color: #dffbf7; }
 .urge-time { font: 800 46px var(--display); font-variant-numeric: tabular-nums; }
@@ -87,12 +87,12 @@
 .dw.clean { background: var(--green); border-color: transparent; }
 .dw.reset { background: var(--red); border-color: transparent; opacity: 0.8; }
 .dw.before { background: transparent; border-style: dashed; opacity: 0.4; }
-.disc-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+.disc-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 12px; color: var(--muted); }
 .disc-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .disc-legend .dw { width: 11px; }
 .disc-sub { margin: 16px 0 8px; font-size: 13px; color: var(--muted); font-weight: 600; }
 .disc-bars { display: grid; gap: 6px; max-width: 520px; }
-.disc-bar { display: grid; grid-template-columns: 130px 1fr 28px; align-items: center; gap: 8px; font-size: 13px; }
+.disc-bar { display: grid; grid-template-columns: 130px 1fr 28px; align-items: center; gap: 8px; font-size: 12.5px; }
 .disc-bar i { height: 10px; border-radius: 5px; background: var(--orange); min-width: 2px; }
 .disc-bar b { text-align: right; font-variant-numeric: tabular-nums; }
 .reflection textarea { width: 100%; resize: vertical; margin-top: 6px; }

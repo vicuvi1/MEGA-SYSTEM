@@ -4,8 +4,8 @@
 
 .vb { display: flex; flex-direction: column; gap: 10px; }
 .vb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
-.vb-head h4 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu-sub); }
-.vb-link { border: 0; background: none; padding: 2px 0; color: var(--mu-sub); font: inherit; font-size: 13px; cursor: pointer; text-decoration: underline; text-decoration-color: rgb(var(--ink, 255 255 255) / 0.25); text-underline-offset: 3px; }
+.vb-head h4 { margin: 0; font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mu-sub); }
+.vb-link { border: 0; background: none; padding: 2px 0; color: var(--mu-sub); font: inherit; font-size: 12px; cursor: pointer; text-decoration: underline; text-decoration-color: rgb(var(--ink, 255 255 255) / 0.25); text-underline-offset: 3px; }
 .vb-link:hover { color: var(--mu-fg); }
 
 /* ---- Play something for now ---- */
@@ -17,7 +17,7 @@
 .vb-now:hover .vb-now-ic { transform: scale(1.08); }
 .vb-now-t { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .vb-now-t b { font-size: 14px; font-weight: 700; letter-spacing: -0.01em; }
-.vb-now-t small { font-size: 13px; opacity: 0.88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vb-now-t small { font-size: 12px; opacity: 0.88; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- the cards ---- */
 .vb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 12px; }
@@ -45,7 +45,7 @@
 .vb-card.playing .vb-tri { opacity: 0; transform: scale(0.3) rotate(30deg); }
 .vb-card.playing .vb-eq.mu-eq { opacity: 1; transform: none; }
 .vb-main b { margin-top: 6px; font-size: 13px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.vb-main small { font-size: 12px; color: var(--mu-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vb-main small { font-size: 11px; color: var(--mu-sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .vb-hide { position: absolute; top: 6px; right: 6px; display: grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: rgb(0 0 0 / 0.42); color: #fff; font-size: 14px; line-height: 1; cursor: pointer; opacity: 0; transform: scale(0.8); transition: opacity 0.18s ease, transform 0.18s ease; }
 .vb-card:hover .vb-hide, .vb-card:focus-within .vb-hide { opacity: 1; transform: none; }
@@ -58,7 +58,7 @@
 .di-mu .vb-art { border-radius: 12px; aspect-ratio: 1; }
 .di-mu .vb-icon { font-size: 24px; }
 .di-mu .vb-play { width: 24px; height: 24px; right: 5px; bottom: 5px; }
-.di-mu .vb-main b { margin-top: 4px; font-size: 13px; }
+.di-mu .vb-main b { margin-top: 4px; font-size: 11.5px; }
 .di-mu .vb-main small { font-size: 10px; }
 .di-mu .vb-now { padding: 8px 12px 8px 8px; border-radius: 14px; }
 .di-mu .vb-now-ic { width: 30px; height: 30px; }
