@@ -65,7 +65,7 @@ function Ring({ pct, over, size = 22 }: { pct: number; over: boolean; size?: num
 }
 
 /** `hideNext`: the page already shows what's next (Today's "Next" line), so the pill doesn't repeat it. */
-export function FocusIsland({ hideNext = false }: { hideNext?: boolean } = {}) {
+export function FocusIsland({ hideNext = false, noDim = false }: { hideNext?: boolean; /** The Study Time page is the timer's own page: never dimmed. */ noDim?: boolean } = {}) {
   const reduce = useReducedMotion()
   const act = useAction()
   const [prefs, setPrefsState] = useState<IslandPrefs>(loadPrefs)
@@ -186,7 +186,7 @@ export function FocusIsland({ hideNext = false }: { hideNext?: boolean } = {}) {
 
   // AF19: while a timer runs the rest of the app dims (opacity only); a click
   // or Esc brings it back for this session.
-  const dimOn = !!run && prefs.dim && undimmed !== run.startedAt
+  const dimOn = !!run && prefs.dim && !noDim && undimmed !== run.startedAt
   useEffect(() => {
     if (!dimOn || !run) return
     const k = (e: KeyboardEvent) => e.key === 'Escape' && setUndimmed(run.startedAt)

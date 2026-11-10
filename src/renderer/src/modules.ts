@@ -2,7 +2,7 @@ import type { IconName } from './Icon'
 
 export type PageId =
   | 'today' | 'focus' | 'progress' | 'goals' | 'calendar' | 'coach' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
-  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season' | 'career' | 'custom' | 'locker'
+  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season' | 'career' | 'custom' | 'locker' | 'study'
 
 export interface ModuleDef {
   id: PageId
@@ -24,6 +24,7 @@ export const MODULES: ModuleDef[] = [
   { id: 'career', label: 'Career', icon: 'briefcase', color: '#7CC4FF', phase: 0, blurb: 'Job hunt, proof of work, flashcards, study packs for your shift, essays and the money plan behind your career' },
   { id: 'progress', label: 'Insights', icon: 'chart', color: 'var(--lime)', phase: 0, blurb: 'Am I improving? Week score, streaks, your year and focus goals' },
   { id: 'tasks', label: 'Tasks', icon: 'tasks', color: '#7CC4FF', phase: 0, blurb: 'Your Todoist, by area' },
+  { id: 'study', label: 'Study Time', icon: 'clock', color: '#7c9cff', phase: 0, blurb: 'Time your subjects: blocks, breaks and where your study time goes' },
   { id: 'sleep', label: 'Sleep', icon: 'moon', color: '#6EE7D8', phase: 0, blurb: 'Wake-ups and bedtimes from Waky' },
   { id: 'discipline', label: 'Discipline', icon: 'shield', color: '#FF8A3D', phase: 0, blurb: 'Private streak, urge crusher and honest resets' },
   { id: 'body', label: 'Sport Track', icon: 'bolt', color: '#00F2FE', phase: 0, blurb: 'Workouts and body metrics' },

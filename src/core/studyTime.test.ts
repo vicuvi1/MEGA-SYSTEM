@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { dayKey } from './dates'
 import {
+  alarmDue,
   applyStudyOp,
   checkManual,
   cleanLog,
@@ -222,5 +223,22 @@ describe('session notes and text', () => {
     expect(hmText(45)).toBe('45m')
     expect(clockText(65_000)).toBe('1:05')
     expect(clockText(3_725_000)).toBe('1:02:05')
+  })
+})
+
+describe('the reminder when a planned block or a break ends', () => {
+  it('fires once for the planned end and once for a break end, never for an open stopwatch or a plain focus timer', () => {
+    const said = new Set<string>()
+    const run = { subject: 'Algebra', startedAt: iso(9), planned: 50, blockId: 'a' }
+    expect(alarmDue(run, Date.parse(iso(9, 49)), said)).toBeNull()
+    const end = alarmDue(run, Date.parse(iso(9, 50)), said)!
+    expect(end.text).toMatch(/planned time done/)
+    said.add(end.key)
+    expect(alarmDue(run, Date.parse(iso(9, 51)), said)).toBeNull()
+    const brk = { ...run, pausedAt: iso(9, 52), breakMin: 5 }
+    expect(alarmDue(brk, Date.parse(iso(9, 56)), said)).toBeNull()
+    expect(alarmDue(brk, Date.parse(iso(9, 57)), said)!.text).toMatch(/Break's over/)
+    expect(alarmDue({ ...run, open: true, planned: 240 }, Date.parse(iso(23)), new Set())).toBeNull()
+    expect(alarmDue({ subject: 'x', startedAt: iso(9), planned: 25 }, Date.parse(iso(9, 30)), new Set())).toBeNull()
   })
 })

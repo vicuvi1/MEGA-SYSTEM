@@ -18,6 +18,7 @@ import { budgetEffect, goalPlan, leiText, mergeGoals, overLine, worstLevel, days
 import { pointValue, pointValueLine, type PointValue } from '@core/pointValue'
 import type { MoneyHubView } from '../web/moneyHub'
 import '../money.css'
+import { Donut } from '../Donut'
 
 const lei = (bani: number) => Math.round(bani / 100).toLocaleString('en-US')
 const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -288,12 +289,11 @@ const DONUT_COLORS = ['var(--accent)', '#38bdf8', '#a78bfa', '#fbbf24', '#f472b6
 
 function WhereMoneyGoes({ view }: { view: MoneyHubView }) {
   const c = view.compare
-  const [ref, seen] = useSeen<HTMLDivElement>()
+  const [ref] = useSeen<HTMLDivElement>()
   const total = Math.max(1, c.thisTotal)
   const top = c.byCat.slice(0, 6)
   const rest = c.byCat.slice(6).reduce((s, r) => s + r.now, 0)
   const parts = [...top.map((r) => ({ key: r.id, name: `${r.emoji ? r.emoji + ' ' : ''}${r.name}`, v: r.now })), ...(rest ? [{ key: 'rest', name: 'Everything else', v: rest }] : [])]
-  let acc = 0
   const monthWord = c.month === view.today.slice(0, 7) ? 'this month' : ''
   return (
     <section className="mh-card mh-where" ref={ref}>
@@ -304,22 +304,11 @@ function WhereMoneyGoes({ view }: { view: MoneyHubView }) {
         </span>
       </header>
       <div className="mh-where-body">
-        <div className={`mh-donut ${seen ? 'seen' : ''}`}>
-          <svg viewBox="0 0 120 120" aria-hidden="true">
-            <circle className="bg" cx="60" cy="60" r="46" />
-            {parts.map((p, i) => {
-              const f = p.v / total
-              const el = <circle key={p.key} cx="60" cy="60" r="46" pathLength={1} stroke={DONUT_COLORS[i % DONUT_COLORS.length]} strokeDasharray={`${Math.max(0, f - 0.006)} ${1 - Math.max(0, f - 0.006)}`} strokeDashoffset={-acc} />
-              acc += f
-              return el
-            })}
-          </svg>
-          <div className="mh-donut-mid">
-            <b className="num">{lei(c.thisTotal)}</b>
-            <small>lei spent</small>
-            {c.pct !== null && <em className={c.pct > 0 ? 'up' : c.pct < 0 ? 'down' : ''}>{c.pct > 0 ? `▲ ${c.pct}%` : c.pct < 0 ? `▼ ${Math.abs(c.pct)}%` : 'same as before'}</em>}
-          </div>
-        </div>
+        <Donut parts={parts.map((p, i) => ({ key: p.key, value: p.v, color: DONUT_COLORS[i % DONUT_COLORS.length], label: p.name }))} total={total}>
+          <b className="num">{lei(c.thisTotal)}</b>
+          <small>lei spent</small>
+          {c.pct !== null && <em className={c.pct > 0 ? 'up' : c.pct < 0 ? 'down' : ''}>{c.pct > 0 ? `▲ ${c.pct}%` : c.pct < 0 ? `▼ ${Math.abs(c.pct)}%` : 'same as before'}</em>}
+        </Donut>
         <ul className="mh-legend">
           {parts.map((p, i) => (
             <li key={p.key}>

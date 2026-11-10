@@ -271,6 +271,22 @@ export function minutesUntil(run: StudyRun, endAt: number): number {
   return Math.max(1, Math.min(sessionCap(run), Math.round((end - start - brk) / 60_000)))
 }
 
+/** Which moment just passed (the app's note and sound): the planned end or the break's end, once each. */
+export function alarmDue(run: StudyRun | null, now: number, said: Set<string>): { key: string; text: string } | null {
+  const r = run
+  if (!r?.blockId) return null
+  const n = runNow(r, now)
+  if (n.onBreak && n.breakEndsAt && now >= n.breakEndsAt && now - n.breakEndsAt < 10 * 60_000) {
+    const key = `brk:${n.breakEndsAt}`
+    if (!said.has(key)) return { key, text: `Break's over · back to ${r.subject}` }
+  }
+  if (!n.onBreak && n.plannedEndsAt && now >= n.plannedEndsAt && now - n.plannedEndsAt < 10 * 60_000) {
+    const key = `end:${r.startedAt}`
+    if (!said.has(key)) return { key, text: `${r.subject}: planned time done. Stop, or keep going.` }
+  }
+  return null
+}
+
 // ---------------------------------------------------------------- sessions and stats
 
 export interface StudySession {
