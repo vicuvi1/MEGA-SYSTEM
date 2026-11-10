@@ -607,6 +607,19 @@ const gcal = (() => {
     if (b.op === 'status') return send({ configured: true, connected: true, drive: true, calendars: [{ id: 'primary', name: 'Test calendar', color: '#7cc4ff', canWrite: true, on: true }] })
     // Photo Locker: a made-up Drive key for the fake Drive below (the smoke routes googleapis.com to it).
     if (b.op === 'driveToken') return send({ token: 'fake-drive-key', expiresAt: Date.now() + 3600_000 })
+    // Telegram food photos held for Photo Locker (made-up; the smoke sets one with /api/_e2e {op:'foodHold'}).
+    if (b.op === 'foodInbox') return send({ items: foodHeld.items.map((h) => h.item) })
+    if (b.op === 'foodInboxGet') {
+      const h = foodHeld.items.find((x) => x.item.id === b.id)
+      foodHeld.fetched.push(String(b.id))
+      return send(h ? { mime: h.mime, data: h.data } : { error: 'That photo is not held any more' })
+    }
+    if (b.op === 'foodInboxDone') {
+      const ids = (b.ids ?? []).map(String)
+      foodHeld.erased.push(...ids)
+      foodHeld.items = foodHeld.items.filter((h) => !ids.includes(h.item.id))
+      return send({ ok: true, erased: ids.length })
+    }
     if (b.op === 'events') return send({ events: events.filter((e) => e.end > b.from && e.start < b.to) })
     if (b.op === 'create') {
       // Like Google: an event id given by the app is made once; writing it again updates that event.
@@ -827,7 +840,7 @@ const fakeDrive = (() => {
     if (url.pathname === '/drive/v3/files' && q.method === 'POST') {
       const b = json()
       const id = `fold${++n}x`
-      files.set(id, { id, name: b.name, mimeType: b.mimeType, parents: ['root'], appProperties: b.appProperties ?? {}, data: Buffer.alloc(0) })
+      files.set(id, { id, name: b.name, mimeType: b.mimeType, parents: Array.isArray(b.parents) && b.parents.length ? b.parents : ['root'], appProperties: b.appProperties ?? {}, data: Buffer.alloc(0) })
       return send(200, { id, name: b.name })
     }
     if (url.pathname === '/drive/v3/files') {
@@ -841,6 +854,9 @@ const fakeDrive = (() => {
   }
 })()
 
+// Telegram food photos the server would hold for Photo Locker (made-up; see bots/foodLocker.ts).
+const foodHeld = { items: [], fetched: [], erased: [] }
+
 // For the soak test (e2e/soak.mjs): calls counted by path, and "the server is down" on demand.
 const stats = { calls: {}, tooBig: 0 }
 let down = false
@@ -850,6 +866,11 @@ function e2eControl(q, r) {
   if (b.op === 'down') down = !!b.on
   if (b.op === 'schema') schemaOld = !!b.on
   if (b.op === 'reset') (stats.calls = {}), (stats.db = undefined)
+  if (b.op === 'foodHold') foodHeld.items.push({ item: b.item, mime: b.mime, data: b.data })
+  if (b.op === 'foodHeld') {
+    r.setHeader('Content-Type', 'application/json')
+    return r.end(JSON.stringify({ items: foodHeld.items.map((h) => h.item), fetched: foodHeld.fetched, erased: foodHeld.erased }))
+  }
   if (b.op === 'sql') {
     try {
       const out = db.exec(String(b.sql))

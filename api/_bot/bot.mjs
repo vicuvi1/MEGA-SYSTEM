@@ -4635,16 +4635,16 @@ var WEEKLY_SETS = {
 };
 /** Which muscle group a library group trains (cardio and stretches: none). */
 var muscleOf = (g) => g === "push" || g === "pull" || g === "core" || g === "legs" ? g : null;
-var clean$4 = (n) => Math.max(0, Math.min(2e3, Math.round(Number(n) || 0)));
+var clean$5 = (n) => Math.max(0, Math.min(2e3, Math.round(Number(n) || 0)));
 /** The sets of one exercise on one day (a copy, only real ones). */
 function setsOn(log, day, exId) {
 	const l = log?.[day]?.[exId];
-	return Array.isArray(l) ? l.filter((s) => s && clean$4(s.reps) > 0) : [];
+	return Array.isArray(l) ? l.filter((s) => s && clean$5(s.reps) > 0) : [];
 }
 /** A set to store: whole numbers, an id and a time. */
 function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
 	const s = {
-		reps: clean$4(reps),
+		reps: clean$5(reps),
 		at: now,
 		id: `${now.toString(36)}${salt || Math.random().toString(36).slice(2, 6)}`
 	};
@@ -4655,7 +4655,7 @@ function makeSet(reps, now = Date.now(), kg = 0, salt = "") {
 function addSets(log, day, exId, reps, now = Date.now(), extra = {}) {
 	const out = JSON.parse(JSON.stringify(log ?? {}));
 	const list = (out[day] ??= {})[exId] ?? [];
-	reps.map(clean$4).filter((r) => r > 0).forEach((r, i) => {
+	reps.map(clean$5).filter((r) => r > 0).forEach((r, i) => {
 		const e = makeSet(r, now + i, extra.kg ?? 0, `${i}${exId.length}`);
 		if (extra.test) e.test = true;
 		list.push(e);
@@ -4667,7 +4667,7 @@ function addSets(log, day, exId, reps, now = Date.now(), extra = {}) {
 function sessionsOf$1(log, exId, until) {
 	return Object.keys(log ?? {}).filter((d) => !until || d <= until).sort().map((day) => ({
 		day,
-		reps: setsOn(log, day, exId).map((s) => clean$4(s.reps))
+		reps: setsOn(log, day, exId).map((s) => clean$5(s.reps))
 	})).filter((s) => s.reps.length > 0);
 }
 /** Your best single set of an exercise (reps or seconds), and the day; null without sets. */
@@ -5527,6 +5527,8 @@ function mealTypeAt(hm) {
 	if (h >= 17 && h < 22) return "dinner";
 	return "snack";
 }
+/** Photo Locker ids on a meal: letters, digits, _ and -, at most 6. */
+var cleanPhotoIds = (raw) => Array.isArray(raw) ? raw.filter((x) => typeof x === "string" && /^[A-Za-z0-9_-]{3,64}$/.test(x)).slice(0, 6) : [];
 var MEAL_SOURCES = [
 	"saved",
 	"photo",
@@ -5570,6 +5572,9 @@ function cleanItem$1(raw) {
 	if (Number.isFinite(qty) && qty > 0 && qty <= 50) out.qty = Math.round(qty * 2) / 2;
 	const unit = String(raw.unit ?? "").trim().slice(0, 30);
 	if (unit) out.unit = unit;
+	const lo = Math.round(Number(raw.lo));
+	const hi = Math.round(Number(raw.hi));
+	if (lo >= 1 && hi <= 3e3 && lo <= grams && hi >= grams && lo < hi) out.lo = lo, out.hi = hi;
 	return out;
 }
 /** The item at a new weight: macros scale with the grams (5–3000 g). */
@@ -5647,7 +5652,8 @@ function cleanFoodLog(raw, today) {
 			...m.late ? { late: true } : {},
 			...m.supp ? { supp: true } : {},
 			...MEAL_SOURCES.includes(m.source) ? { source: m.source } : {},
-			...slot ? { slot } : {}
+			...slot ? { slot } : {},
+			...cleanPhotoIds(m.photos).length ? { photos: cleanPhotoIds(m.photos) } : {}
 		});
 	}
 	meals.sort((a, b) => a.at < b.at ? 1 : a.at > b.at ? -1 : 0);
@@ -6528,17 +6534,40 @@ function fromSaved(s, qty, grams) {
 	const fat = r1$1((Number(s.fat) || 0) * q);
 	const protein = r1$1((Number(s.protein) || 0) * q);
 	const kcal = Math.round((Number(s.kcal) || kcalOf(s.protein, s.carbs ?? 0, s.fat ?? 0)) * q);
+	const g = per ? Math.round(per * q) : Math.round(grams ?? 0);
 	return {
 		name: text(s.name, 60) || "Saved food",
 		matchedSavedFoodId: s.id,
 		qty: q,
 		unit: "portion",
-		grams: per ? Math.round(per * q) : Math.round(grams ?? 0),
+		grams: g,
 		kcal,
 		protein,
 		carbs,
 		fat,
-		confidence: "high"
+		confidence: "high",
+		src: "saved",
+		...rangeOf$2(g, "high")
+	};
+}
+/** How wide the range is when the AI gave none: ±10 % sure, ±25 % fair guess, ±40 % hard to see. */
+var SPREAD = {
+	high: .1,
+	medium: .25,
+	low: .4
+};
+/** A grams range around `g`: the AI's own when it holds `g` and stays within 3× either way, else from the confidence. */
+function rangeOf$2(g, confidence, lo, hi) {
+	if (!(g > 0)) return {};
+	let a = Math.round(clamp$4(lo, 0, 3e3, 0));
+	let b = Math.round(clamp$4(hi, 0, 3e3, 0));
+	if (!(a > 0 && b > 0 && a <= g && b >= g && a >= g / 3 && b <= g * 3)) {
+		a = Math.round(g * (1 - SPREAD[confidence]));
+		b = Math.round(g * (1 + SPREAD[confidence]));
+	}
+	return {
+		lo: Math.max(1, a),
+		hi: Math.max(1, b)
 	};
 }
 /** The photo number (1…photos) an item was seen in; only kept when there are several photos. */
@@ -6564,6 +6593,8 @@ function cleanVisionItem(raw, saved = [], photos = 1) {
 			...photoOf$1(raw, photos)
 		};
 	}
+	const label = raw.fromLabel === true || raw.source === "label";
+	const conf = label ? "high" : confidence;
 	const protein = r1$1(clamp$4(raw.protein, 0, 400));
 	const carbs = r1$1(clamp$4(raw.carbs, 0, 800));
 	const fat = r1$1(clamp$4(raw.fat, 0, 400));
@@ -6580,8 +6611,10 @@ function cleanVisionItem(raw, saved = [], photos = 1) {
 		protein,
 		carbs,
 		fat,
-		confidence,
-		...photoOf$1(raw, photos)
+		confidence: conf,
+		...photoOf$1(raw, photos),
+		src: label ? "label" : "estimate",
+		...rangeOf$2(grams, conf, raw.gramsLow, raw.gramsHigh)
 	};
 }
 /** The meal's totals, always added up from the items. */
@@ -6608,7 +6641,7 @@ function visionTotals(items) {
 * Checks the AI's answer (an object, or text holding one). Refuses an answer it
 * can't read, or one with no food in it, with a plain message.
 */
-function validateVision(raw, saved = [], photos = 1) {
+function validateVision(raw, saved = [], photos = 1, memory = null) {
 	const o = readVisionJson(raw);
 	if (!o || typeof o !== "object" || Array.isArray(o)) return {
 		ok: false,
@@ -6618,17 +6651,19 @@ function validateVision(raw, saved = [], photos = 1) {
 		ok: false,
 		error: "The AI's answer had no list of foods. Try again, or copy the prompt instead."
 	};
-	const items = o.items.map((x) => cleanVisionItem(x, saved, photos)).filter((x) => !!x).slice(0, 12);
-	if (!items.length) return {
+	const read = o.items.map((x) => cleanVisionItem(x, saved, photos)).filter((x) => !!x).slice(0, 12);
+	if (!read.length) return {
 		ok: false,
 		error: photos > 1 ? "No food was found in the photos. Try clearer photos, or add the foods by hand." : "No food was found in the photo. Try a clearer photo, or add the foods by hand."
 	};
+	const items = memory ? applyPortions(read, memory, saved) : read;
 	return {
 		ok: true,
 		result: {
 			items,
 			totals: visionTotals(items),
-			message: text(o.message, 200)
+			message: text(o.message, 200),
+			question: questionFor(items)
 		}
 	};
 }
@@ -6642,7 +6677,7 @@ function scaleVisionItem(base, factor, saved = []) {
 		confidence: base.confidence,
 		...base.photo ? { photo: base.photo } : {}
 	};
-	return {
+	const out = {
 		...base,
 		qty: r1$1(base.qty * f),
 		grams: Math.round(base.grams * f),
@@ -6651,6 +6686,8 @@ function scaleVisionItem(base, factor, saved = []) {
 		carbs: r1$1(base.carbs * f),
 		fat: r1$1(base.fat * f)
 	};
+	if (base.lo != null && base.hi != null) out.lo = Math.max(1, Math.round(base.lo * f)), out.hi = Math.max(1, Math.round(base.hi * f));
+	return out;
 }
 /** The qty stepper: whole steps, or halves under 1. */
 function stepQty(qty, dir) {
@@ -6672,6 +6709,10 @@ var toFoodItems = (items) => items.filter((i) => i.grams >= 1 || i.kcal >= 1).ma
 	fat: r1$1(i.fat),
 	kcal: Math.round(i.kcal),
 	confidence: CONF[i.confidence],
+	...i.lo != null && i.hi != null && i.lo < i.hi ? {
+		lo: Math.round(i.lo),
+		hi: Math.round(i.hi)
+	} : {},
 	...i.matchedSavedFoodId ? {
 		qty: r1$1(i.qty),
 		unit: i.unit
@@ -6700,6 +6741,122 @@ function photoReplyLine(o) {
 	else left = `~${fmt$5(kLeft)} kcal left${pLeft > 0 ? `, ${fmt$5(pLeft)} g protein` : ""}${o.idea ? `; next: ${o.idea.replace(/\.$/, "")}` : ""}.`;
 	return `${head} ${today} ${left}`;
 }
+var COOK_WORDS = /* @__PURE__ */ new Set([
+	"cooked",
+	"boiled",
+	"grilled",
+	"fried",
+	"baked",
+	"roasted",
+	"steamed",
+	"raw",
+	"fresh",
+	"plain",
+	"some",
+	"with",
+	"and",
+	"the",
+	"portion",
+	"serving",
+	"bowl",
+	"plate"
+]);
+/** A food's key: lower-case words without accents or cooking words, singular, sorted ("Boiled white rice" → "rice white"). */
+function foodKey(name) {
+	const words = String(name ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").split(/[^a-z]+/).filter((w) => w.length >= 3 && !COOK_WORDS.has(w)).map((w) => w.endsWith("ies") ? w.slice(0, -3) + "y" : w.endsWith("oes") ? w.slice(0, -2) : w.endsWith("s") && !w.endsWith("ss") ? w.slice(0, -1) : w);
+	return [...new Set(words)].sort().join(" ").slice(0, 40);
+}
+/** His portion for a food: the same key, else the longest remembered key whose words are all in the name. */
+function portionFor$1(mem, name) {
+	if (!mem) return null;
+	const k = foodKey(name);
+	if (!k) return null;
+	if (mem[k]) return mem[k];
+	const words = new Set(k.split(" "));
+	let best = null;
+	for (const [key, m] of Object.entries(mem)) if (key.split(" ").every((w) => words.has(w)) && (!best || key.length > best[0].length)) best = [key, m];
+	return best ? best[1] : null;
+}
+/** A clean memory: bad rows dropped, at most 60, the newest kept. */
+function cleanPortions(raw) {
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) return {};
+	const rows = Object.entries(raw).filter(([k, v]) => /^[a-z ]{3,40}$/.test(k) && v && Number(v.g) >= 5 && Number(v.g) <= 3e3).map(([k, v]) => [k, {
+		g: Math.round(Number(v.g)),
+		n: Math.max(1, Math.min(99, Math.round(Number(v.n) || 1))),
+		at: Number(v.at) || 0
+	}]).sort((a, b) => b[1].at - a[1].at).slice(0, 60);
+	return Object.fromEntries(rows);
+}
+/**
+* Learns from a saved photo meal: every food whose grams he changed (typed,
+* ½× / 1.5× / 2×) teaches his portion. Saved foods (his own numbers) and label
+* reads teach nothing. A new correction counts most (60 %).
+*/
+function learnPortions(mem, base, now, at) {
+	const out = { ...cleanPortions(mem) };
+	now.forEach((it, i) => {
+		const b = base[i];
+		if (!b || it.matchedSavedFoodId || it.src === "label" || !(it.grams >= 5)) return;
+		if (Math.abs(it.grams - b.grams) < Math.max(5, b.grams * .05)) return;
+		const k = foodKey(it.name);
+		if (!k) return;
+		const old = out[k];
+		out[k] = {
+			g: old ? Math.round(old.g * .4 + it.grams * .6) : Math.round(it.grams),
+			n: Math.min(99, (old?.n ?? 0) + 1),
+			at
+		};
+	});
+	return cleanPortions(out);
+}
+/**
+* His portion instead of a guess: a food the AI only estimated (not a label,
+* not a saved food, not marked sure) that he corrected before is set to his
+* usual grams; the macros scale with it.
+*/
+function applyPortions(items, mem, saved = []) {
+	return items.map((it) => {
+		if (it.matchedSavedFoodId || it.src === "label" || it.confidence === "high" || !(it.grams > 0)) return it;
+		const p = portionFor$1(mem, it.name);
+		if (!p || Math.abs(p.g - it.grams) < 5) return it;
+		return {
+			...scaleVisionItem(it, p.g / it.grams, saved),
+			grams: p.g,
+			src: "memory",
+			confidence: "medium",
+			...rangeOf$2(p.g, "high")
+		};
+	});
+}
+/** His usual portions worth telling the AI (the ones his note names first), at most `max`. */
+function portionHints(mem, note = "", max = 8) {
+	const words = new Set(foodKey(note).split(" ").filter(Boolean));
+	return Object.entries(cleanPortions(mem)).map(([k, m]) => ({
+		name: k,
+		g: m.g,
+		hit: k.split(" ").some((w) => words.has(w)) ? 1 : 0,
+		n: m.n,
+		at: m.at
+	})).sort((a, b) => b.hit - a.hit || b.n - a.n || b.at - a.at).slice(0, max).map(({ name, g }) => ({
+		name,
+		g
+	}));
+}
+/** One short question instead of a guess: the first food the AI could not see well (not a label, saved food or his portion). */
+function questionFor(items) {
+	const i = items.findIndex((it) => it.confidence === "low" && !it.matchedSavedFoodId && it.src !== "label" && it.src !== "memory");
+	if (i < 0) return null;
+	return {
+		index: i,
+		text: `About how many grams of ${items[i].name.toLowerCase()}?`
+	};
+}
+/** The quick fixes on Telegram: ½×, 1.5×, 2× (index = the button's code). */
+var FACTORS = [
+	.5,
+	1.5,
+	2
+];
 // src/core/benPushes.ts
 var AREAS$1 = [
 	"study",
@@ -7292,10 +7449,12 @@ function cleanFoodBen(raw) {
 		ids: u.ids.filter((x) => typeof x === "string" && /^fd-[a-z0-9]{1,24}$/.test(x)).slice(0, 10),
 		at: u.at
 	} : null;
+	const portions = cleanPortions(o.portions);
 	return {
 		draft,
 		muteUntil: typeof o.muteUntil === "number" && Number.isFinite(o.muteUntil) ? o.muteUntil : null,
-		...undo ? { undo } : {}
+		...undo ? { undo } : {},
+		...Object.keys(portions).length ? { portions } : {}
 	};
 }
 var visionList = (raw) => {
@@ -7311,7 +7470,17 @@ var visionList = (raw) => {
 		protein: n(x.protein),
 		carbs: n(x.carbs),
 		fat: n(x.fat),
-		confidence: x.confidence === "high" || x.confidence === "low" ? x.confidence : "medium"
+		confidence: x.confidence === "high" || x.confidence === "low" ? x.confidence : "medium",
+		...n(x.lo) > 0 && n(x.hi) >= n(x.lo) ? {
+			lo: n(x.lo),
+			hi: n(x.hi)
+		} : {},
+		...[
+			"label",
+			"saved",
+			"memory",
+			"estimate"
+		].includes(x.src) ? { src: x.src } : {}
 	}));
 	return out.length ? out : null;
 };
@@ -7320,10 +7489,15 @@ function photoOf(raw) {
 	if (!p || typeof p !== "object") return {};
 	const base = visionList(p.base);
 	const now = visionList(p.now);
+	const q = p;
+	const ask = typeof q.ask === "number" && Number.isInteger(q.ask) && now && q.ask >= 0 && q.ask < now.length ? q.ask : null;
+	const count = typeof q.n === "number" && q.n >= 1 && q.n <= 6 ? Math.round(q.n) : void 0;
 	return base && now && base.length === now.length ? { photo: {
 		base,
 		now,
-		message: typeof p.message === "string" ? p.message.slice(0, 200) : ""
+		message: typeof p.message === "string" ? p.message.slice(0, 200) : "",
+		...ask != null ? { ask } : {},
+		...count ? { n: count } : {}
 	} } : {};
 }
 var liveDraft = (fb, now) => fb.draft && now - fb.draft.at < 72e5 && now >= fb.draft.at - 6e4 ? fb.draft : null;
@@ -7610,8 +7784,9 @@ function photoIsMeal(caption) {
 	if (!t) return true;
 	return !t.includes("?") && !/^(ben|coach)\b/i.test(t);
 }
-/** A photo draft from the checked AI answer (core/foodVision.ts validateVision). */
-function photoDraft(id, at, items, message) {
+/** A photo draft from the checked AI answer (core/foodVision.ts validateVision): the one short question and how many photos come along. */
+function photoDraft(id, at, items, message, extra = {}) {
+	const ask = extra.ask != null && items[extra.ask] ? extra.ask : null;
 	return {
 		id,
 		at,
@@ -7620,7 +7795,9 @@ function photoDraft(id, at, items, message) {
 		photo: {
 			base: items,
 			now: items,
-			message
+			message,
+			...ask != null ? { ask } : {},
+			...extra.n ? { n: extra.n } : {}
 		}
 	};
 }
@@ -7632,50 +7809,189 @@ var withNow = (d, now) => ({
 		now
 	}
 });
+/** The Photo Locker ids of a photo meal's photos (the same on every device: the meal row finds its thumbnail by them). */
+var lockerPhotoIds = (draftId, n) => Array.from({ length: Math.max(0, Math.min(6, Math.round(n) || 0)) }, (_, i) => `fp${draftId}n${i + 1}`);
 /** How many and the unit: "3 eggs", "1 container", "×2". */
 var qtyText = (it) => {
 	const q = Math.round(it.qty * 10) / 10;
 	return it.unit && it.unit !== "g" && it.unit !== "serving" && it.unit !== "portion" ? `${q} ${it.unit}` : q !== 1 ? `×${q}` : "";
 };
-/** The photo preview on Telegram (HTML): each food with how many, kcal and protein; low-confidence foods marked. */
-function photoDraftText(d) {
+/** The meal's confidence as one badge: green when every food is sure, red when one is hard to see, amber otherwise. */
+function confidenceBadge(items) {
+	if (items.some((i) => i.confidence === "low" || i.confidence === "guess")) return {
+		dot: "🔴",
+		word: "rough guess"
+	};
+	if (items.length && items.every((i) => i.confidence === "high" || i.confidence === "sure")) return {
+		dot: "🟢",
+		word: "sure"
+	};
+	return {
+		dot: "🟡",
+		word: "fair estimate"
+	};
+}
+var SRC_MARK = {
+	label: " 🏷 label",
+	saved: " ⭐ saved",
+	memory: " 👤 your usual"
+};
+var DAYS$8 = [
+	"Sun",
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat"
+];
+var MONTHS$10 = [
+	"Jan",
+	"Feb",
+	"Mar",
+	"Apr",
+	"May",
+	"Jun",
+	"Jul",
+	"Aug",
+	"Sep",
+	"Oct",
+	"Nov",
+	"Dec"
+];
+/** "Tue 10 Nov, 13:05" (local time). */
+var whenText$1 = (at) => {
+	const d = new Date(at);
+	return `${DAYS$8[d.getDay()]} ${d.getDate()} ${MONTHS$10[d.getMonth()]}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+};
+var MEAL_WORD = {
+	breakfast: "Breakfast",
+	lunch: "Lunch",
+	dinner: "Dinner",
+	snack: "Snack"
+};
+/**
+* The photo preview on Telegram (HTML): the meal and when, each food with its
+* grams and range, kcal and macros, where the numbers come from, the totals,
+* the confidence badge, and the one short question when a food was hard to see.
+*/
+function photoDraftText(d, type) {
 	const list = d.photo?.now ?? [];
 	const t = visionTotals(list);
+	const badge = confidenceBadge(list);
+	const ask = d.photo?.ask != null ? list[d.photo.ask] : null;
 	return [
-		"📸 <b>Check the meal, then Save</b>",
+		`📸 <b>${type ? MEAL_WORD[type] : "Meal"}</b> · ${whenText$1(d.at)}`,
+		"",
 		...list.map((it, i) => {
 			const q = qtyText(it);
-			return `${i + 1}. ${escHtml(cap$4(it.name))}${q ? ` · ${escHtml(q)}` : ""}${it.grams ? ` · ${fmt$4(it.grams)} g` : ""} · ${fmt$4(it.kcal)} kcal · ${fmt$4(it.protein)} g protein${it.confidence === "low" ? "\n   ⚠️ not sure, check the portion" : ""}`;
+			const range = it.lo != null && it.hi != null && it.hi > it.lo ? ` <i>(${fmt$4(it.lo)}–${fmt$4(it.hi)})</i>` : "";
+			return `${i + 1}. <b>${escHtml(cap$4(it.name))}</b>${q ? ` · ${escHtml(q)}` : ""}${it.grams ? ` · ${fmt$4(it.grams)} g${range}` : ""}${SRC_MARK[it.src ?? ""] ?? ""}\n    ${fmt$4(it.kcal)} kcal · P ${fmt$4(it.protein)} · C ${fmt$4(it.carbs)} · F ${fmt$4(it.fat)}${it.confidence === "low" ? " · ⚠️ check it" : ""}`;
 		}),
-		`<b>Total: ~${fmt$4(t.kcal)} kcal · ${fmt$4(t.protein)} g protein</b>`,
+		"",
+		`<b>Total ~${fmt$4(t.kcal)} kcal · ${fmt$4(t.protein)} g protein</b>`,
+		`Carbs ${fmt$4(t.carbs)} g · Fat ${fmt$4(t.fat)} g · ${badge.dot} ${badge.word}`,
 		...d.photo?.message ? [`💬 ${escHtml(d.photo.message)}`] : [],
-		`Tap −/+ for how many, 🔁 to swap for one of your saved foods, or type e.g. <code>${escHtml((list[0]?.name ?? "eggs").split(" ")[0].toLowerCase())} 2</code>.`
+		ask ? `\n❓ <b>About how many grams of ${escHtml(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt$4(ask.grams || 150)}</code>.` : "Tap a food to fix it, or type e.g. <code>" + escHtml((list[0]?.name ?? "rice").split(" ")[0].toLowerCase()) + " 150</code>."
 	].join("\n");
 }
-/** The photo preview's buttons: −/+/🔁 per food, then Save / Cancel. */
+/** The preview's buttons: the foods two to a row (tap one to fix it), then Save and Add photo, then Not this meal. */
 function photoDraftKeyboard(d) {
-	const rows = (d.photo?.now ?? []).slice(0, 8).map((it, i) => [
-		{
-			text: `− ${i + 1}. ${cap$4(it.name).slice(0, 16)}`,
-			callback_data: `fd|-|${d.id}|${i}`
-		},
-		{
-			text: "+",
-			callback_data: `fd|+|${d.id}|${i}`
-		},
-		{
-			text: "🔁 Swap",
-			callback_data: `fd|w|${d.id}|${i}`
-		}
-	]);
+	const items = (d.photo?.now ?? []).slice(0, 8).map((it, i) => ({
+		text: `✏️ ${i + 1}. ${cap$4(it.name).slice(0, 18)}`,
+		callback_data: `fd|i|${d.id}|${i}`
+	}));
+	const rows = [];
+	for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2));
 	rows.push([{
 		text: "✅ Save",
 		callback_data: `fd|s|${d.id}`
 	}, {
-		text: "✗ Cancel",
-		callback_data: `fd|x|${d.id}`
+		text: "➕ Add photo",
+		callback_data: `fd|a|${d.id}`
+	}]);
+	rows.push([{
+		text: "✗ Not this meal",
+		callback_data: `fd|N|${d.id}`
 	}]);
 	return { inline_keyboard: rows };
+}
+/** One food's quick fixes: ½× 1.5× 2×, Change grams, Remove, Swap, Back. */
+function itemKeyboard(d, index) {
+	if (!d.photo?.now[index]) return photoDraftKeyboard(d);
+	return { inline_keyboard: [
+		FACTORS.map((f, k) => ({
+			text: f === .5 ? "½×" : `${f}×`,
+			callback_data: `fd|h|${d.id}|${index}|${k}`
+		})),
+		[{
+			text: "✏️ Change grams",
+			callback_data: `fd|G|${d.id}|${index}`
+		}, {
+			text: "🗑 Remove",
+			callback_data: `fd|d|${d.id}|${index}`
+		}],
+		[{
+			text: "🔁 Swap for saved",
+			callback_data: `fd|w|${d.id}|${index}`
+		}, {
+			text: "← Back",
+			callback_data: `fd|b|${d.id}`
+		}]
+	] };
+}
+/** ½× / 1.5× / 2× on one food (from what it is now; grams, range and macros follow). */
+function multiplyPhoto(d, index, factor, saved) {
+	const it = d.photo?.now[index];
+	if (!it || !(factor > 0)) return d;
+	const next = {
+		...scaleVisionItem(it, factor, saved),
+		name: it.name
+	};
+	return withNow({
+		...d,
+		photo: {
+			...d.photo,
+			ask: d.photo.ask === index ? null : d.photo.ask
+		}
+	}, d.photo.now.map((x, i) => i === index ? next : x));
+}
+/** Removes one food; null when none is left (then it is not a meal). */
+function removePhotoItem(d, index) {
+	const p = d.photo;
+	if (!p || !p.now[index]) return d;
+	const keep = (list) => list.filter((_, i) => i !== index);
+	if (p.now.length <= 1) return null;
+	const ask = p.ask == null || p.ask === index ? null : p.ask > index ? p.ask - 1 : p.ask;
+	return {
+		...d,
+		items: toFoodItems(keep(p.now)),
+		photo: {
+			...p,
+			base: keep(p.base),
+			now: keep(p.now),
+			ask
+		}
+	};
+}
+/** "Change grams": the next bare number he types sets this food's grams. */
+var askGrams = (d, index) => d.photo?.now[index] ? {
+	...d,
+	photo: {
+		...d.photo,
+		ask: index
+	}
+} : d;
+/** A bare number ("150", "150 g") while a food is asked about: its grams (5–3000), else null. */
+function readAskAnswer(text, d) {
+	const i = d.photo?.ask;
+	if (i == null || !d.photo?.now[i]) return null;
+	const m = /^\s*(\d{1,4})\s*(g|gr|grams?)?\s*\.?\s*$/i.exec(String(text ?? ""));
+	const g = m ? Number(m[1]) : NaN;
+	return g >= 5 && g <= 3e3 ? {
+		index: i,
+		grams: g
+	} : null;
 }
 /** −/+ on one food of a photo draft: whole steps (halves under 1); a saved food keeps its own numbers. */
 function stepPhoto(d, index, dir, saved) {
@@ -7913,6 +8229,21 @@ function mealDue(now, wake, log) {
 	const t = mealTimes(wake);
 	if (MEAL_KINDS.some((k) => m >= t[k] && m < t[k] + 90)) return true;
 	return Object.entries(log.recs).some(([k, r]) => k.startsWith("meal:") && r.ans === "later");
+}
+/**
+* The message after Save (HTML): the meal and when, each food with its grams
+* and macros, the totals and the confidence badge, then the day's line from
+* core/foodVision.ts photoReplyLine (protein and kcal left, what to eat next).
+*/
+function photoSavedText(items, type, at, dayLine) {
+	const t = visionTotals(items);
+	const badge = confidenceBadge(items);
+	return [
+		`✅ <b>${MEAL_WORD[type]} saved</b> · ${whenText$1(at)}`,
+		...items.slice(0, 8).map((it) => `• ${escHtml(cap$4(it.name))}${it.grams ? ` ${fmt$4(it.grams)} g` : ""}: ${fmt$4(it.kcal)} kcal · P ${fmt$4(it.protein)} · C ${fmt$4(it.carbs)} · F ${fmt$4(it.fat)}`),
+		`<b>${fmt$4(t.kcal)} kcal · ${fmt$4(t.protein)} g protein</b> · C ${fmt$4(t.carbs)} · F ${fmt$4(t.fat)} · ${badge.dot}`,
+		escHtml(dayLine)
+	].join("\n");
 }
 // src/core/foodGoals.ts
 var ACTIVITY = {
@@ -9051,6 +9382,7 @@ function addFoodMeal(db, input, source, now = /* @__PURE__ */ new Date()) {
 	const type = input.type && MEAL_TYPES.includes(input.type) ? input.type : mealTypeAt(hm);
 	const via = input.source && MEAL_SOURCES.includes(input.source) ? { source: input.source } : {};
 	const slot = typeof input.slot === "string" && /^ds-[a-z0-9-]{1,24}$/.test(input.slot) ? { slot: input.slot } : {};
+	const photos = cleanPhotoIds(input.photos).length ? { photos: cleanPhotoIds(input.photos) } : {};
 	writeSetting(db, "food_log", addMeal(readFoodLog(db, today), {
 		id,
 		at,
@@ -9061,7 +9393,8 @@ function addFoodMeal(db, input, source, now = /* @__PURE__ */ new Date()) {
 		...day !== today ? { late: true } : {},
 		...input.supp ? { supp: true } : {},
 		...via,
-		...slot
+		...slot,
+		...photos
 	}, today));
 	return {
 		id,
@@ -9223,16 +9556,16 @@ function logStandardDay(db, choices = {}, source = "app", now = /* @__PURE__ */ 
 	return out;
 }
 // src/renderer/src/web/benPushStore.ts
-var parse$4 = (db, key) => {
+var parse$5 = (db, key) => {
 	try {
 		return JSON.parse(getSetting(db, key) || "null");
 	} catch {
 		return null;
 	}
 };
-var readPushLog = (db, day) => cleanPushLog(parse$4(db, PUSH_LOG_KEY), day);
+var readPushLog = (db, day) => cleanPushLog(parse$5(db, PUSH_LOG_KEY), day);
 var writePushLog = (db, log) => setSetting(db, PUSH_LOG_KEY, JSON.stringify(log));
-var readPcSeen = (db) => cleanPcSeen(parse$4(db, PC_SEEN_KEY));
+var readPcSeen = (db) => cleanPcSeen(parse$5(db, PC_SEEN_KEY));
 /** Claims a push (inside one write): false when it already went out anywhere. */
 function claimPush(db, day, key, via, now) {
 	const r = claim(readPushLog(db, day), key, via, now);
@@ -12861,6 +13194,147 @@ function answerProposal(db, id, op, device = "app", now = Date.now()) {
 		rec: back
 	};
 }
+// src/renderer/src/web/bots/foodLocker.ts
+/** Held at most this long (the owner's choice: 3 days), then erased unread. */
+var HOLD_MS = 2592e5;
+var TABLE$2 = {
+	sql: "CREATE TABLE IF NOT EXISTS sys_kv (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+	args: []
+};
+var sweep$1 = (now) => ({
+	sql: "DELETE FROM sys_kv WHERE key LIKE 'lkh:%' AND (NOT json_valid(value) OR CAST(json_extract(value, '$.at') AS INTEGER) < ?)",
+	args: [now - HOLD_MS]
+});
+var clean$4 = (s) => String(s ?? "").replace(/[^\w-]/g, "").slice(0, 24);
+var prefix = (draft) => `lkh:${clean$4(draft)}:`;
+/** Holds the photos behind a photo preview (Telegram file ids, in order). A photo held for an older preview moves to this one. */
+async function holdPhotos(kv, draft, fileIds, now) {
+	const ids = fileIds.slice(0, 6);
+	if (!ids.length) return;
+	await kv([
+		TABLE$2,
+		sweep$1(now),
+		{
+			sql: `DELETE FROM sys_kv WHERE key LIKE 'lkh:%' AND json_valid(value) AND json_extract(value, '$.f') IN (${ids.map(() => "?").join(",")})`,
+			args: ids
+		},
+		...ids.map((f, i) => ({
+			sql: "INSERT OR REPLACE INTO sys_kv (key, value) VALUES (?, ?)",
+			args: [`${prefix(draft)}${i + 1}`, JSON.stringify({
+				f: f.slice(0, 200),
+				d: clean$4(draft),
+				n: i + 1,
+				at: now,
+				st: "open"
+			})]
+		}))
+	]);
+}
+/** Save: the held photos now belong to the meal (its id, name and type name the file). */
+async function attachMeal(kv, draft, meal) {
+	await kv([TABLE$2, {
+		sql: "UPDATE sys_kv SET value = json_set(value, '$.st', 'meal', '$.meal', ?, '$.name', ?, '$.type', ?) WHERE key >= ? AND key < ?",
+		args: [
+			meal.id.slice(0, 40),
+			meal.name.slice(0, 60),
+			meal.type.slice(0, 12),
+			prefix(draft),
+			prefix(draft) + "~"
+		]
+	}]);
+}
+/** Cancel / "Not this meal": the draft's photos are not kept at all. */
+async function dropHeld(kv, draft) {
+	await kv([TABLE$2, {
+		sql: "DELETE FROM sys_kv WHERE key >= ? AND key < ?",
+		args: [prefix(draft), prefix(draft) + "~"]
+	}]);
+}
+var parse$4 = (v) => {
+	try {
+		return typeof v === "string" ? JSON.parse(v) : null;
+	} catch {
+		return null;
+	}
+};
+var rowOf = (key, v) => {
+	const o = parse$4(v);
+	if (!o || typeof o.f !== "string" || !/^[\w-]{1,24}$/.test(String(o.d)) || !(Number(o.n) >= 1)) return null;
+	const id = lockerPhotoIds(String(o.d), Number(o.n))[Number(o.n) - 1];
+	if (!id || String(key) !== `lkh:${o.d}:${o.n}`) return null;
+	return {
+		id,
+		f: o.f,
+		st: String(o.st),
+		at: Number(o.at) || 0,
+		...o.meal ? {
+			meal: String(o.meal),
+			name: String(o.name ?? ""),
+			type: String(o.type ?? "")
+		} : {}
+	};
+};
+/** The photos ready for Photo Locker: saved with a meal, or older than the preview's 2 hours. Old rows are swept first. */
+async function listHeld(kv, now) {
+	return ((await kv([
+		TABLE$2,
+		sweep$1(now),
+		{
+			sql: "SELECT key, value FROM sys_kv WHERE key LIKE 'lkh:%' ORDER BY key LIMIT 60",
+			args: []
+		}
+	]))[2] ?? []).map((row) => rowOf(row[0], row[1])).filter((x) => !!x && (x.st === "meal" || now - x.at > 72e5)).map(({ f: _f, st: _st, ...h }) => h);
+}
+/** The Telegram file id behind a held photo (by its Locker id), or null. */
+async function heldFile(kv, id, now) {
+	const m = /^fp([a-z0-9]{1,12})n([1-6])$/.exec(String(id));
+	if (!m) return null;
+	const row = (await kv([
+		TABLE$2,
+		sweep$1(now),
+		{
+			sql: "SELECT key, value FROM sys_kv WHERE key = ?",
+			args: [`lkh:${m[1]}:${m[2]}`]
+		}
+	]))[2]?.[0];
+	return row ? rowOf(row[0], row[1])?.f ?? null : null;
+}
+/** Erases held photos once they are in Drive (Locker ids). */
+async function doneHeld(kv, ids) {
+	const keys = ids.map((id) => /^fp([a-z0-9]{1,12})n([1-6])$/.exec(String(id))).filter((m) => !!m).slice(0, 60).map((m) => `lkh:${m[1]}:${m[2]}`);
+	if (!keys.length) return 0;
+	await kv([TABLE$2, {
+		sql: `DELETE FROM sys_kv WHERE key IN (${keys.map(() => "?").join(",")})`,
+		args: keys
+	}]);
+	return keys.length;
+}
+/**
+* /api/google {op:'foodInbox' | 'foodInboxGet' | 'foodInboxDone'} (the session is
+* checked before). A file id only opens with the bot that received it, so each
+* of the server's bot tokens is tried; no token or file id ever goes back.
+*/
+async function foodInboxOp(kv, body, tokens, download, now = Date.now()) {
+	const op = String(body?.op ?? "");
+	if (op === "foodInbox") return { items: await listHeld(kv, now) };
+	if (op === "foodInboxDone") return {
+		ok: true,
+		erased: await doneHeld(kv, Array.isArray(body?.ids) ? body.ids.map(String) : [])
+	};
+	if (op === "foodInboxGet") {
+		const f = await heldFile(kv, String(body?.id ?? ""), now);
+		if (!f) return { error: "That photo is not held any more" };
+		for (const t of tokens) {
+			const got = await download(t, f).catch(() => null);
+			if (got && got.data.length <= 4e6) return {
+				mime: got.mime,
+				data: got.data
+			};
+		}
+		return { error: "Telegram did not give the photo: try again later" };
+	}
+	return { error: "Unknown op" };
+}
 // src/renderer/src/web/bots/foodAlbum.ts
 /** Rows older than this are removed on the next photo (and never read again). */
 var SET_TTL_MS = 6e5;
@@ -13120,22 +13594,11 @@ function labelPrompt() {
 /** A prompt as a Telegram message you can copy (one tap on the block copies it). */
 var promptMessage = (p, what = "a meal photo") => `📋 <b>Copy this, paste it with ${what} into any AI app (ChatGPT, Gemini, Claude), then paste the AI's whole reply here.</b>\n\n<pre>${esc$5(p)}</pre>`;
 var COULD_NOT = (why) => `⚠️ I couldn't read that reply (${esc$5(why)}).\nSend /food for the prompt, ask the AI again, and paste its whole reply here.`;
-/** A photo preview's buttons, with "➕ Add another photo" above Save / Cancel. */
-function photoKeyboard(d) {
-	const rows = photoDraftKeyboard(d).inline_keyboard.slice();
-	const end = rows.pop();
-	return { inline_keyboard: [
-		...rows,
-		[{
-			text: "➕ Add another photo",
-			callback_data: `fd|a|${d.id}`
-		}],
-		...end ? [end] : []
-	] };
-}
-/** The preview of a draft (a photo's or a pasted reply's). */
+/** A photo preview's buttons: the foods (tap one to fix it), Save and Add photo, Not this meal. */
+var photoKeyboard = (d) => photoDraftKeyboard(d);
+/** The preview of a draft (a photo's or a pasted reply's). A photo's names the meal from the time it was sent. */
 var previewOf = (d) => d.photo ? {
-	reply: photoDraftText(d),
+	reply: photoDraftText(d, slotNow(new Date(d.at))),
 	keyboard: photoKeyboard(d)
 } : {
 	reply: draftText$1(d),
@@ -13227,9 +13690,9 @@ function mealsMenu(s) {
 function foodWants(db, text, now = Date.now()) {
 	const t = String(text ?? "").trim();
 	if (/^\/(food|meals)(@\w+)?(\s|$)/i.test(t) || looksLikeFoodReply(t)) return true;
-	if (gramEditShape(t)) {
+	if (gramEditShape(t) || /^\s*\d{1,4}\s*(g|gr|grams?)?\s*\.?\s*$/i.test(t)) {
 		const d = liveDraft(readFoodBen(db), now);
-		if (d && (d.photo ? readPhotoEdit(t, d) : readGramEdit(t, d))) return true;
+		if (d && (d.photo ? readAskAnswer(t, d) || readPhotoEdit(t, d) : readGramEdit(t, d))) return true;
 	}
 	return !!savedHit(db, t);
 }
@@ -13248,6 +13711,22 @@ function foodMessage(db, text, now = Date.now()) {
 	if (/^\/meals(?:@\w+)?(\s|$)/i.test(t)) return mealsMenu(readFoodSaved(db));
 	const fb = readFoodBen(db);
 	const open = liveDraft(fb, now);
+	const ans = open?.photo ? readAskAnswer(t, open) : null;
+	if (open && ans) {
+		const d0 = setPhotoGrams(open, ans.index, ans.grams, savedRefs(readFoodSaved(db)));
+		const d = {
+			...d0,
+			photo: {
+				...d0.photo,
+				ask: null
+			}
+		};
+		writeFoodBen(db, {
+			...fb,
+			draft: d
+		});
+		return previewOf(d);
+	}
 	if (open && gramEditShape(t)) {
 		if (open.photo) {
 			const e = readPhotoEdit(t, open);
@@ -13346,7 +13825,8 @@ async function readMealPhotos(o) {
 			targets: {
 				kcal: t.targets.kcal,
 				protein: t.targets.protein
-			}
+			},
+			portions: readFoodBen(db).portions ?? null
 		};
 	});
 	let ans;
@@ -13356,7 +13836,8 @@ async function readMealPhotos(o) {
 			note: o.caption,
 			saved: ctx.saved,
 			today: ctx.today,
-			targets: ctx.targets
+			targets: ctx.targets,
+			portions: portionHints(ctx.portions, o.caption)
 		}, o.counted ? { counted: o.counted } : void 0);
 	} catch {
 		ans = {
@@ -13366,16 +13847,22 @@ async function readMealPhotos(o) {
 	}
 	files = null;
 	if (!ans.ok) return say(`⚠️ ${esc$5(String(ans.error || "The photo couldn't be read."))}\nOr send /food for the copy prompt.`);
-	const check = validateVision(ans.result, ctx.saved, ids.length);
+	const check = validateVision(ans.result, ctx.saved, ids.length, ctx.portions);
 	if (!check.ok) return say(`⚠️ ${esc$5(check.error)}`);
 	const msg = many ? `${ids.length} photos read together. ${check.result.message}`.trim().slice(0, 200) : check.result.message;
-	const d = photoDraft(shortId(), now.getTime(), check.result.items, msg);
+	const d = photoDraft(shortId(), now.getTime(), check.result.items, msg, {
+		ask: check.result.question?.index ?? null,
+		n: ids.length
+	});
 	await o.mirror.write((db) => writeFoodBen(db, {
 		...readFoodBen(db),
 		draft: d
 	}));
-	if (o.kv) await keepDraftPhotos(o.kv, o.chat, d.id, ids, o.caption, now.getTime()).catch(() => null);
-	return say(photoDraftText(d), photoKeyboard(d));
+	if (o.kv) {
+		await keepDraftPhotos(o.kv, o.chat, d.id, ids, o.caption, now.getTime()).catch(() => null);
+		await holdPhotos(o.kv, d.id, ids, now.getTime()).catch(() => null);
+	}
+	return say(photoDraftText(d, slotNow(now)), photoKeyboard(d));
 }
 /** The "send the next photo" message while adding photos to a meal. */
 var addText = (n, before) => n ? `📸 Got ${n === 1 ? "one more photo" : `${n} more photos`} (${before + n} for this meal). Send another within a minute, or tap Done.` : "📸 Send the next photo of this meal now (within a minute). Then tap Done, and I read all of them together.";
@@ -13639,7 +14126,7 @@ var FOOD_CALLBACK = {
 		const mirror = c.mirror;
 		const { data, chat, key, update, cq, answer, edit } = t;
 		if (!await markSeen(key)) return null;
-		const m = /^fd\|([sx+\-eupymlzkgnvwWbarq])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data);
+		const m = /^fd\|([sx+\-eupymlzkgnvwWbarqihdNG])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data);
 		if (!m) return null;
 		const [, op, ref, idx, idx2] = m;
 		const now = /* @__PURE__ */ new Date();
@@ -13875,7 +14362,7 @@ var FOOD_CALLBACK = {
 			const fb = readFoodBen(db);
 			const d = liveDraft(fb, now.getTime());
 			if (!d || d.id !== ref) return { kind: "gone" };
-			if (op === "x") {
+			if (op === "x" || op === "N") {
 				writeFoodBen(db, {
 					...fb,
 					draft: null
@@ -13887,6 +14374,60 @@ var FOOD_CALLBACK = {
 				d
 			};
 			const i = Number(idx ?? -1);
+			if (d.photo && op === "i") return d.photo.now[i] ? {
+				kind: "item",
+				d,
+				i
+			} : {
+				kind: "draft",
+				d
+			};
+			if (d.photo && op === "h") {
+				const f = FACTORS[Number(idx2 ?? -1)];
+				if (!f) return {
+					kind: "draft",
+					d
+				};
+				const next = multiplyPhoto(d, i, f, savedRefs(readFoodSaved(db)));
+				writeFoodBen(db, {
+					...fb,
+					draft: next
+				});
+				return {
+					kind: "draft",
+					d: next
+				};
+			}
+			if (d.photo && op === "d") {
+				const next = removePhotoItem(d, i);
+				if (!next) {
+					writeFoodBen(db, {
+						...fb,
+						draft: null
+					});
+					return { kind: "cancel" };
+				}
+				writeFoodBen(db, {
+					...fb,
+					draft: next
+				});
+				return {
+					kind: "draft",
+					d: next
+				};
+			}
+			if (d.photo && op === "G") {
+				const next = askGrams(d, i);
+				writeFoodBen(db, {
+					...fb,
+					draft: next
+				});
+				return {
+					kind: "ask",
+					d: next,
+					i
+				};
+			}
 			if (d.photo && (op === "w" || op === "W" || op === "b")) {
 				const saved = savedRefs(readFoodSaved(db));
 				if (op === "b" || !d.photo.now[i]) return {
@@ -13927,15 +14468,19 @@ var FOOD_CALLBACK = {
 			if (op !== "s") return { kind: "gone" };
 			if (d.photo) {
 				const items = d.photo.now;
+				const type = slotNow(new Date(d.at));
+				const photos = d.photo.n ? lockerPhotoIds(d.id, d.photo.n) : [];
 				const saved = addFoodMeal(db, {
 					items: toFoodItems(items),
 					id: `fd-p${d.id}`,
-					type: slotNow(now),
-					source: "photo"
+					type,
+					source: "photo",
+					photos
 				}, "telegram", now);
 				writeFoodBen(db, {
 					...fb,
-					draft: null
+					draft: null,
+					portions: learnPortions(fb.portions, d.photo.base, items, now.getTime())
 				});
 				if (!saved) return { kind: "gone" };
 				const day = foodDayTotals(db, now);
@@ -13951,10 +14496,17 @@ var FOOD_CALLBACK = {
 					},
 					idea
 				});
+				const name = mealName(toFoodItems(items));
 				return {
 					kind: "saved",
 					id: saved.id,
-					text: `✅ <b>Saved.</b> ${esc$5(line)}`
+					text: photoSavedText(items, type, d.at, line),
+					held: photos.length ? {
+						draft: d.id,
+						meal: saved.id,
+						name,
+						type
+					} : null
 				};
 			}
 			const saved = addFoodMeal(db, { items: d.items }, "telegram", now);
@@ -13975,9 +14527,32 @@ var FOOD_CALLBACK = {
 			return null;
 		}
 		if ((res.kind === "cancel" || res.kind === "saved") && c.photoKv) await dropChatPhotos(c.photoKv, chat).catch(() => null);
+		if (res.kind === "cancel" && c.photoKv) await dropHeld(c.photoKv, ref).catch(() => null);
+		if (res.kind === "saved" && "held" in res && res.held && c.photoKv) await attachMeal(c.photoKv, res.held.draft, {
+			id: res.held.meal,
+			name: res.held.name,
+			type: res.held.type
+		}).catch(() => null);
+		if (res.kind === "item") {
+			await answer(`Fix ${res.d.photo.now[res.i].name}`);
+			await tg(update.__token, "editMessageReplyMarkup", {
+				chat_id: chat,
+				message_id: cq.message.message_id,
+				reply_markup: itemKeyboard(res.d, res.i)
+			}).catch(() => null);
+			return "item";
+		}
+		if (res.kind === "ask") {
+			const it = res.d.photo.now[res.i];
+			await answer("Type the grams");
+			const p = previewOf(res.d);
+			await edit(p.reply, p.keyboard);
+			await send(`✏️ How many grams of ${esc$5(it.name.toLowerCase())}? Type the number, e.g. <code>${Math.round(it.grams || 150)}</code>.`);
+			return "ask";
+		}
 		if (res.kind === "cancel") {
 			await answer("Cancelled");
-			await edit("✗ Cancelled. Nothing saved.");
+			await edit(op === "N" ? "✗ Not a meal. Nothing saved, and the photo is not kept." : "✗ Cancelled. Nothing saved.");
 			return "cancel";
 		}
 		if (res.kind === "hint") {
@@ -73485,4 +74060,13 @@ async function mcpCall(env, body, ctx) {
 	};
 	return handleMcp(life, body, ctx);
 }
-export { DAILY_GAP_MS, DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, driveAccessToken, exchangeCode, flowsOp, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };
+/**
+* Telegram food photos waiting for Photo Locker (bots/foodLocker.ts): the app
+* lists them, fetches each one once and erases it once it is in Drive. Only
+* Telegram file ids are held (3 days at most), never the picture.
+*/
+async function foodInbox(env, body, tokens, now = Date.now()) {
+	const kv = (stmts) => new TursoHttp(env.tursoUrl, env.tursoToken).writeAtomic(stmts);
+	return foodInboxOp(kv, body, tokens, (token, fileId) => downloadFile(token, fileId, "photo"), now);
+}
+export { DAILY_GAP_MS, DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, driveAccessToken, exchangeCode, flowsOp, foodInbox, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };

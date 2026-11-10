@@ -13,7 +13,7 @@
 import { scaleItem, sumItems, type FoodItem, type MealType } from './food'
 import type { FoodWeek } from './food'
 import { channelFor, type PushButton, type PushLog, type PushOut } from './benPushes'
-import { scaleVisionItem, stepQty, toFoodItems, visionTotals, type SavedFoodRef, type VisionItem } from './foodVision'
+import { FACTORS, cleanPortions, scaleVisionItem, stepQty, toFoodItems, visionTotals, type PortionMemory, type SavedFoodRef, type VisionItem } from './foodVision'
 
 // ---- the setting `food_ben`: the open Telegram draft and the mute ----
 
@@ -28,7 +28,15 @@ export interface FoodDraft {
    * now (`now`, after −/+, a swap or "eggs 2"). `items` follows `now`. The photo
    * itself is never kept.
    */
-  photo?: { base: VisionItem[]; now: VisionItem[]; message: string }
+  photo?: {
+    base: VisionItem[]
+    now: VisionItem[]
+    message: string
+    /** The food the one short question is about (a bare number answers it with grams). */
+    ask?: number | null
+    /** How many photos were read (their Photo Locker ids follow from the draft id: lockerPhotoIds). */
+    n?: number
+  }
 }
 export interface FoodBen {
   draft: FoodDraft | null
@@ -36,6 +44,8 @@ export interface FoodBen {
   muteUntil: number | null
   /** The meals a one-tap log made (the standard day makes several), for its ↩ Undo. */
   undo?: { id: string; ids: string[]; at: number } | null
+  /** His usual portions, learned from his gram fixes on photo meals (core/foodVision.ts learnPortions). */
+  portions?: PortionMemory
 }
 export const FOOD_BEN_KEY = 'food_ben'
 /** A draft stays open this long (then a "chicken 175" is a normal message again). */
@@ -52,13 +62,18 @@ export function cleanFoodBen(raw: unknown): FoodBen {
       : null
   const u = o.undo
   const undo = u && typeof u === 'object' && typeof u.id === 'string' && /^[a-z0-9]{1,12}$/.test(u.id) && Array.isArray(u.ids) && typeof u.at === 'number' ? { id: u.id, ids: u.ids.filter((x) => typeof x === 'string' && /^fd-[a-z0-9]{1,24}$/.test(x)).slice(0, 10), at: u.at } : null
-  return { draft, muteUntil: typeof o.muteUntil === 'number' && Number.isFinite(o.muteUntil) ? o.muteUntil : null, ...(undo ? { undo } : {}) }
+  const portions = cleanPortions(o.portions)
+  return { draft, muteUntil: typeof o.muteUntil === 'number' && Number.isFinite(o.muteUntil) ? o.muteUntil : null, ...(undo ? { undo } : {}), ...(Object.keys(portions).length ? { portions } : {}) }
 }
 const visionList = (raw: unknown): VisionItem[] | null => {
   if (!Array.isArray(raw) || !raw.length) return null
   const n = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
   const out = raw.slice(0, 12).filter((x) => x && typeof x === 'object' && typeof x.name === 'string').map(
-    (x: any): VisionItem => ({ name: String(x.name).slice(0, 60), matchedSavedFoodId: typeof x.matchedSavedFoodId === 'string' ? x.matchedSavedFoodId.slice(0, 40) : null, qty: n(x.qty) || 1, unit: String(x.unit ?? '').slice(0, 20), grams: n(x.grams), kcal: n(x.kcal), protein: n(x.protein), carbs: n(x.carbs), fat: n(x.fat), confidence: x.confidence === 'high' || x.confidence === 'low' ? x.confidence : 'medium' })
+    (x: any): VisionItem => ({
+      name: String(x.name).slice(0, 60), matchedSavedFoodId: typeof x.matchedSavedFoodId === 'string' ? x.matchedSavedFoodId.slice(0, 40) : null, qty: n(x.qty) || 1, unit: String(x.unit ?? '').slice(0, 20), grams: n(x.grams), kcal: n(x.kcal), protein: n(x.protein), carbs: n(x.carbs), fat: n(x.fat), confidence: x.confidence === 'high' || x.confidence === 'low' ? x.confidence : 'medium',
+      ...(n(x.lo) > 0 && n(x.hi) >= n(x.lo) ? { lo: n(x.lo), hi: n(x.hi) } : {}),
+      ...(['label', 'saved', 'memory', 'estimate'].includes(x.src) ? { src: x.src } : {})
+    })
   )
   return out.length ? out : null
 }
@@ -67,7 +82,10 @@ function photoOf(raw: unknown): { photo?: FoodDraft['photo'] } {
   if (!p || typeof p !== 'object') return {}
   const base = visionList(p.base)
   const now = visionList(p.now)
-  return base && now && base.length === now.length ? { photo: { base, now, message: typeof p.message === 'string' ? p.message.slice(0, 200) : '' } } : {}
+  const q = p as { ask?: unknown; n?: unknown }
+  const ask = typeof q.ask === 'number' && Number.isInteger(q.ask) && now && q.ask >= 0 && q.ask < now.length ? q.ask : null
+  const count = typeof q.n === 'number' && q.n >= 1 && q.n <= 6 ? Math.round(q.n) : undefined
+  return base && now && base.length === now.length ? { photo: { base, now, message: typeof p.message === 'string' ? p.message.slice(0, 200) : '', ...(ask != null ? { ask } : {}), ...(count ? { n: count } : {}) } } : {}
 }
 export const liveDraft = (fb: FoodBen, now: number): FoodDraft | null => (fb.draft && now - fb.draft.at < DRAFT_MS && now >= fb.draft.at - 60_000 ? fb.draft : null)
 export const isMuted = (fb: FoodBen, now: number) => fb.muteUntil != null && now < fb.muteUntil
@@ -341,11 +359,15 @@ export function photoIsMeal(caption: string): boolean {
   return !t.includes('?') && !/^(ben|coach)\b/i.test(t)
 }
 
-/** A photo draft from the checked AI answer (core/foodVision.ts validateVision). */
-export function photoDraft(id: string, at: number, items: VisionItem[], message: string): FoodDraft {
-  return { id, at, items: toFoodItems(items), question: null, photo: { base: items, now: items, message } }
+/** A photo draft from the checked AI answer (core/foodVision.ts validateVision): the one short question and how many photos come along. */
+export function photoDraft(id: string, at: number, items: VisionItem[], message: string, extra: { ask?: number | null; n?: number } = {}): FoodDraft {
+  const ask = extra.ask != null && items[extra.ask] ? extra.ask : null
+  return { id, at, items: toFoodItems(items), question: null, photo: { base: items, now: items, message, ...(ask != null ? { ask } : {}), ...(extra.n ? { n: extra.n } : {}) } }
 }
 const withNow = (d: FoodDraft, now: VisionItem[]): FoodDraft => ({ ...d, items: toFoodItems(now), photo: { ...d.photo!, now } })
+
+/** The Photo Locker ids of a photo meal's photos (the same on every device: the meal row finds its thumbnail by them). */
+export const lockerPhotoIds = (draftId: string, n: number): string[] => Array.from({ length: Math.max(0, Math.min(6, Math.round(n) || 0)) }, (_, i) => `fp${draftId}n${i + 1}`)
 
 /** How many and the unit: "3 eggs", "1 container", "×2". */
 const qtyText = (it: VisionItem) => {
@@ -353,34 +375,108 @@ const qtyText = (it: VisionItem) => {
   return it.unit && it.unit !== 'g' && it.unit !== 'serving' && it.unit !== 'portion' ? `${q} ${it.unit}` : q !== 1 ? `×${q}` : ''
 }
 
-/** The photo preview on Telegram (HTML): each food with how many, kcal and protein; low-confidence foods marked. */
-export function photoDraftText(d: FoodDraft): string {
+/** The meal's confidence as one badge: green when every food is sure, red when one is hard to see, amber otherwise. */
+export function confidenceBadge(items: { confidence: string }[]): { dot: string; word: string } {
+  if (items.some((i) => i.confidence === 'low' || i.confidence === 'guess')) return { dot: '🔴', word: 'rough guess' }
+  if (items.length && items.every((i) => i.confidence === 'high' || i.confidence === 'sure')) return { dot: '🟢', word: 'sure' }
+  return { dot: '🟡', word: 'fair estimate' }
+}
+
+const SRC_MARK: Record<string, string> = { label: ' 🏷 label', saved: ' ⭐ saved', memory: ' 👤 your usual' }
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+/** "Tue 10 Nov, 13:05" (local time). */
+export const whenText = (at: number) => {
+  const d = new Date(at)
+  return `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}, ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+const MEAL_WORD: Record<MealType, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' }
+
+/**
+ * The photo preview on Telegram (HTML): the meal and when, each food with its
+ * grams and range, kcal and macros, where the numbers come from, the totals,
+ * the confidence badge, and the one short question when a food was hard to see.
+ */
+export function photoDraftText(d: FoodDraft, type?: MealType): string {
   const list = d.photo?.now ?? []
   const t = visionTotals(list)
+  const badge = confidenceBadge(list)
+  const ask = d.photo?.ask != null ? list[d.photo.ask] : null
   return [
-    '📸 <b>Check the meal, then Save</b>',
+    `📸 <b>${type ? MEAL_WORD[type] : 'Meal'}</b> · ${whenText(d.at)}`,
+    '',
     ...list.map((it, i) => {
       const q = qtyText(it)
-      return `${i + 1}. ${escHtml(cap(it.name))}${q ? ` · ${escHtml(q)}` : ''}${it.grams ? ` · ${fmt(it.grams)} g` : ''} · ${fmt(it.kcal)} kcal · ${fmt(it.protein)} g protein${it.confidence === 'low' ? '\n   ⚠️ not sure, check the portion' : ''}`
+      const range = it.lo != null && it.hi != null && it.hi > it.lo ? ` <i>(${fmt(it.lo)}–${fmt(it.hi)})</i>` : ''
+      return `${i + 1}. <b>${escHtml(cap(it.name))}</b>${q ? ` · ${escHtml(q)}` : ''}${it.grams ? ` · ${fmt(it.grams)} g${range}` : ''}${SRC_MARK[it.src ?? ''] ?? ''}\n    ${fmt(it.kcal)} kcal · P ${fmt(it.protein)} · C ${fmt(it.carbs)} · F ${fmt(it.fat)}${it.confidence === 'low' ? ' · ⚠️ check it' : ''}`
     }),
-    `<b>Total: ~${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b>`,
+    '',
+    `<b>Total ~${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b>`,
+    `Carbs ${fmt(t.carbs)} g · Fat ${fmt(t.fat)} g · ${badge.dot} ${badge.word}`,
     ...(d.photo?.message ? [`💬 ${escHtml(d.photo.message)}`] : []),
-    `Tap −/+ for how many, 🔁 to swap for one of your saved foods, or type e.g. <code>${escHtml((list[0]?.name ?? 'eggs').split(' ')[0].toLowerCase())} 2</code>.`
+    ask ? `\n❓ <b>About how many grams of ${escHtml(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt(ask.grams || 150)}</code>.` : 'Tap a food to fix it, or type e.g. <code>' + escHtml((list[0]?.name ?? 'rice').split(' ')[0].toLowerCase()) + ' 150</code>.'
   ].join('\n')
 }
 
-/** The photo preview's buttons: −/+/🔁 per food, then Save / Cancel. */
+/** The preview's buttons: the foods two to a row (tap one to fix it), then Save and Add photo, then Not this meal. */
 export function photoDraftKeyboard(d: FoodDraft): { inline_keyboard: { text: string; callback_data: string }[][] } {
-  const rows = (d.photo?.now ?? []).slice(0, 8).map((it, i) => [
-    { text: `− ${i + 1}. ${cap(it.name).slice(0, 16)}`, callback_data: `fd|-|${d.id}|${i}` },
-    { text: '+', callback_data: `fd|+|${d.id}|${i}` },
-    { text: '🔁 Swap', callback_data: `fd|w|${d.id}|${i}` }
-  ])
+  const items = (d.photo?.now ?? []).slice(0, 8).map((it, i) => ({ text: `✏️ ${i + 1}. ${cap(it.name).slice(0, 18)}`, callback_data: `fd|i|${d.id}|${i}` }))
+  const rows: { text: string; callback_data: string }[][] = []
+  for (let i = 0; i < items.length; i += 2) rows.push(items.slice(i, i + 2))
   rows.push([
     { text: '✅ Save', callback_data: `fd|s|${d.id}` },
-    { text: '✗ Cancel', callback_data: `fd|x|${d.id}` }
+    { text: '➕ Add photo', callback_data: `fd|a|${d.id}` }
   ])
+  rows.push([{ text: '✗ Not this meal', callback_data: `fd|N|${d.id}` }])
   return { inline_keyboard: rows }
+}
+
+/** One food's quick fixes: ½× 1.5× 2×, Change grams, Remove, Swap, Back. */
+export function itemKeyboard(d: FoodDraft, index: number): { inline_keyboard: { text: string; callback_data: string }[][] } {
+  if (!d.photo?.now[index]) return photoDraftKeyboard(d)
+  return {
+    inline_keyboard: [
+      FACTORS.map((f, k) => ({ text: f === 0.5 ? '½×' : `${f}×`, callback_data: `fd|h|${d.id}|${index}|${k}` })),
+      [
+        { text: '✏️ Change grams', callback_data: `fd|G|${d.id}|${index}` },
+        { text: '🗑 Remove', callback_data: `fd|d|${d.id}|${index}` }
+      ],
+      [
+        { text: '🔁 Swap for saved', callback_data: `fd|w|${d.id}|${index}` },
+        { text: '← Back', callback_data: `fd|b|${d.id}` }
+      ]
+    ]
+  }
+}
+
+/** ½× / 1.5× / 2× on one food (from what it is now; grams, range and macros follow). */
+export function multiplyPhoto(d: FoodDraft, index: number, factor: number, saved: SavedFoodRef[]): FoodDraft {
+  const it = d.photo?.now[index]
+  if (!it || !(factor > 0)) return d
+  const next = { ...scaleVisionItem(it, factor, saved), name: it.name }
+  return withNow({ ...d, photo: { ...d.photo!, ask: d.photo!.ask === index ? null : d.photo!.ask } }, d.photo!.now.map((x, i) => (i === index ? next : x)))
+}
+
+/** Removes one food; null when none is left (then it is not a meal). */
+export function removePhotoItem(d: FoodDraft, index: number): FoodDraft | null {
+  const p = d.photo
+  if (!p || !p.now[index]) return d
+  const keep = (list: VisionItem[]) => list.filter((_, i) => i !== index)
+  if (p.now.length <= 1) return null
+  const ask = p.ask == null || p.ask === index ? null : p.ask > index ? p.ask - 1 : p.ask
+  return { ...d, items: toFoodItems(keep(p.now)), photo: { ...p, base: keep(p.base), now: keep(p.now), ask } }
+}
+
+/** "Change grams": the next bare number he types sets this food's grams. */
+export const askGrams = (d: FoodDraft, index: number): FoodDraft => (d.photo?.now[index] ? { ...d, photo: { ...d.photo, ask: index } } : d)
+
+/** A bare number ("150", "150 g") while a food is asked about: its grams (5–3000), else null. */
+export function readAskAnswer(text: string, d: FoodDraft): { index: number; grams: number } | null {
+  const i = d.photo?.ask
+  if (i == null || !d.photo?.now[i]) return null
+  const m = /^\s*(\d{1,4})\s*(g|gr|grams?)?\s*\.?\s*$/i.exec(String(text ?? ''))
+  const g = m ? Number(m[1]) : NaN
+  return g >= 5 && g <= 3000 ? { index: i, grams: g } : null
 }
 
 /** −/+ on one food of a photo draft: whole steps (halves under 1); a saved food keeps its own numbers. */
@@ -597,4 +693,20 @@ export function mealDue(now: Date, wake: string | null | undefined, log: PushLog
   const t = mealTimes(wake)
   if (MEAL_KINDS.some((k) => m >= t[k] && m < t[k] + MEAL_WINDOW_MIN)) return true
   return Object.entries(log.recs).some(([k, r]) => k.startsWith('meal:') && r.ans === 'later')
+}
+
+/**
+ * The message after Save (HTML): the meal and when, each food with its grams
+ * and macros, the totals and the confidence badge, then the day's line from
+ * core/foodVision.ts photoReplyLine (protein and kcal left, what to eat next).
+ */
+export function photoSavedText(items: VisionItem[], type: MealType, at: number, dayLine: string): string {
+  const t = visionTotals(items)
+  const badge = confidenceBadge(items)
+  return [
+    `✅ <b>${MEAL_WORD[type]} saved</b> · ${whenText(at)}`,
+    ...items.slice(0, 8).map((it) => `• ${escHtml(cap(it.name))}${it.grams ? ` ${fmt(it.grams)} g` : ''}: ${fmt(it.kcal)} kcal · P ${fmt(it.protein)} · C ${fmt(it.carbs)} · F ${fmt(it.fat)}`),
+    `<b>${fmt(t.kcal)} kcal · ${fmt(t.protein)} g protein</b> · C ${fmt(t.carbs)} · F ${fmt(t.fat)} · ${badge.dot}`,
+    escHtml(dayLine)
+  ].join('\n')
 }

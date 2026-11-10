@@ -40,7 +40,14 @@ export interface VisionItem {
   confidence: VisionConfidence
   /** Which photo it was seen in (1…n), when several photos of one meal were read together. */
   photo?: number
+  /** The likely range of grams (lo ≤ grams ≤ hi). */
+  lo?: number
+  hi?: number
+  /** Where the numbers come from: a label in the photo, a saved food, his usual portion, or the AI's estimate. */
+  src?: VisionSource
 }
+
+export type VisionSource = 'label' | 'saved' | 'memory' | 'estimate'
 
 export interface VisionTotals {
   kcal: number
@@ -54,6 +61,8 @@ export interface VisionResult {
   totals: VisionTotals
   /** The AI's short summary (plain text, at most 200 characters), or ''. */
   message: string
+  /** One short question instead of a guess, when a food's amount is hard to see ("About how many grams of rice?"). */
+  question?: { index: number; text: string } | null
 }
 
 export type VisionCheck = { ok: true; result: VisionResult } | { ok: false; error: string }
@@ -98,7 +107,22 @@ export function fromSaved(s: SavedFoodRef, qty: number, grams?: number): VisionI
   const fat = r1((Number(s.fat) || 0) * q)
   const protein = r1((Number(s.protein) || 0) * q)
   const kcal = Math.round((Number(s.kcal) || kcalOf(s.protein, s.carbs ?? 0, s.fat ?? 0)) * q)
-  return { name: text(s.name, 60) || 'Saved food', matchedSavedFoodId: s.id, qty: q, unit: 'portion', grams: per ? Math.round(per * q) : Math.round(grams ?? 0), kcal, protein, carbs, fat, confidence: 'high' }
+  const g = per ? Math.round(per * q) : Math.round(grams ?? 0)
+  return { name: text(s.name, 60) || 'Saved food', matchedSavedFoodId: s.id, qty: q, unit: 'portion', grams: g, kcal, protein, carbs, fat, confidence: 'high', src: 'saved', ...rangeOf(g, 'high') }
+}
+
+/** How wide the range is when the AI gave none: ±10 % sure, ±25 % fair guess, ±40 % hard to see. */
+const SPREAD: Record<VisionConfidence, number> = { high: 0.1, medium: 0.25, low: 0.4 }
+/** A grams range around `g`: the AI's own when it holds `g` and stays within 3× either way, else from the confidence. */
+export function rangeOf(g: number, confidence: VisionConfidence, lo?: unknown, hi?: unknown): { lo?: number; hi?: number } {
+  if (!(g > 0)) return {}
+  let a = Math.round(clamp(lo, 0, 3000, 0))
+  let b = Math.round(clamp(hi, 0, 3000, 0))
+  if (!(a > 0 && b > 0 && a <= g && b >= g && a >= g / 3 && b <= g * 3)) {
+    a = Math.round(g * (1 - SPREAD[confidence]))
+    b = Math.round(g * (1 + SPREAD[confidence]))
+  }
+  return { lo: Math.max(1, a), hi: Math.max(1, b) }
 }
 
 /** The photo number (1…photos) an item was seen in; only kept when there are several photos. */
@@ -121,13 +145,16 @@ export function cleanVisionItem(raw: any, saved: SavedFoodRef[] = [], photos = 1
     const it = fromSaved(match, qty, grams)
     return { ...it, unit: text(raw.unit, 20) || it.unit, confidence, ...photoOf(raw, photos) }
   }
+  // Numbers read off a label or package are exact: sure.
+  const label = raw.fromLabel === true || raw.source === 'label'
+  const conf: VisionConfidence = label ? 'high' : confidence
   const protein = r1(clamp(raw.protein, 0, 400))
   const carbs = r1(clamp(raw.carbs, 0, 800))
   const fat = r1(clamp(raw.fat, 0, 400))
   const k = clamp(raw.kcal, 0, 8000)
   const kcal = Math.round(k > 0 ? k : kcalOf(protein, carbs, fat))
   if (grams < 1 && kcal < 1) return null
-  return { name, matchedSavedFoodId: null, qty: r1(qty), unit: text(raw.unit, 20) || 'serving', grams, kcal, protein, carbs, fat, confidence, ...photoOf(raw, photos) }
+  return { name, matchedSavedFoodId: null, qty: r1(qty), unit: text(raw.unit, 20) || 'serving', grams, kcal, protein, carbs, fat, confidence: conf, ...photoOf(raw, photos), src: label ? 'label' : 'estimate', ...rangeOf(grams, conf, raw.gramsLow, raw.gramsHigh) }
 }
 
 /** The meal's totals, always added up from the items. */
@@ -140,13 +167,15 @@ export function visionTotals(items: VisionItem[]): VisionTotals {
  * Checks the AI's answer (an object, or text holding one). Refuses an answer it
  * can't read, or one with no food in it, with a plain message.
  */
-export function validateVision(raw: unknown, saved: SavedFoodRef[] = [], photos = 1): VisionCheck {
+export function validateVision(raw: unknown, saved: SavedFoodRef[] = [], photos = 1, memory: PortionMemory | null = null): VisionCheck {
   const o: any = readVisionJson(raw)
   if (!o || typeof o !== 'object' || Array.isArray(o)) return { ok: false, error: "The AI's answer could not be read. Try again, or copy the prompt instead." }
   if (!Array.isArray(o.items)) return { ok: false, error: "The AI's answer had no list of foods. Try again, or copy the prompt instead." }
-  const items = o.items.map((x: unknown) => cleanVisionItem(x, saved, photos)).filter((x: VisionItem | null): x is VisionItem => !!x).slice(0, MAX_ITEMS)
-  if (!items.length) return { ok: false, error: photos > 1 ? 'No food was found in the photos. Try clearer photos, or add the foods by hand.' : 'No food was found in the photo. Try a clearer photo, or add the foods by hand.' }
-  return { ok: true, result: { items, totals: visionTotals(items), message: text(o.message, 200) } }
+  const read = o.items.map((x: unknown) => cleanVisionItem(x, saved, photos)).filter((x: VisionItem | null): x is VisionItem => !!x).slice(0, MAX_ITEMS)
+  if (!read.length) return { ok: false, error: photos > 1 ? 'No food was found in the photos. Try clearer photos, or add the foods by hand.' : 'No food was found in the photo. Try a clearer photo, or add the foods by hand.' }
+  // His own portions (learned from his corrections) beat a guess.
+  const items = memory ? applyPortions(read, memory, saved) : read
+  return { ok: true, result: { items, totals: visionTotals(items), message: text(o.message, 200), question: questionFor(items) } }
 }
 
 /** The item at a new amount: grams and macros scale together (qty from the AI's base). A saved food uses its own numbers × qty. */
@@ -154,7 +183,9 @@ export function scaleVisionItem(base: VisionItem, factor: number, saved: SavedFo
   const f = clamp(factor, 0.05, 20, 1)
   const match = base.matchedSavedFoodId ? saved.find((s) => s.id === base.matchedSavedFoodId) : undefined
   if (match) return { ...fromSaved(match, base.qty * f, base.grams * f), unit: base.unit, confidence: base.confidence, ...(base.photo ? { photo: base.photo } : {}) }
-  return { ...base, qty: r1(base.qty * f), grams: Math.round(base.grams * f), kcal: Math.round(base.kcal * f), protein: r1(base.protein * f), carbs: r1(base.carbs * f), fat: r1(base.fat * f) }
+  const out: VisionItem = { ...base, qty: r1(base.qty * f), grams: Math.round(base.grams * f), kcal: Math.round(base.kcal * f), protein: r1(base.protein * f), carbs: r1(base.carbs * f), fat: r1(base.fat * f) }
+  if (base.lo != null && base.hi != null) (out.lo = Math.max(1, Math.round(base.lo * f))), (out.hi = Math.max(1, Math.round(base.hi * f)))
+  return out
 }
 
 /** The qty stepper: whole steps, or halves under 1. */
@@ -177,6 +208,8 @@ export const toFoodItems = (items: VisionItem[]): FoodItem[] =>
       fat: r1(i.fat),
       kcal: Math.round(i.kcal),
       confidence: CONF[i.confidence],
+      // The likely range, so the meal row can show "180–260 g".
+      ...(i.lo != null && i.hi != null && i.lo < i.hi ? { lo: Math.round(i.lo), hi: Math.round(i.hi) } : {}),
       // A saved food keeps how many portions (like a one-tap log).
       ...(i.matchedSavedFoodId ? { qty: r1(i.qty), unit: i.unit } : {})
     }))
@@ -246,3 +279,121 @@ export function photoReplyLine(o: { items: { name: string; qty: number; unit: st
 export const PHOTO_DAILY_LIMIT = 50
 /** At most this many photos of one meal are read together (api/_vision.mjs MAX_PHOTOS). */
 export const MAX_PHOTOS = 6
+
+// ---- his usual portions (learned from his corrections) ----
+
+/** One food's usual portion: grams, how many corrections taught it, when last. */
+export interface PortionMemo {
+  g: number
+  n: number
+  at: number
+}
+/** Food key → his usual grams. Kept in the synced setting `food_ben` (`portions`). */
+export type PortionMemory = Record<string, PortionMemo>
+export const PORTIONS_MAX = 60
+
+const COOK_WORDS = new Set(['cooked', 'boiled', 'grilled', 'fried', 'baked', 'roasted', 'steamed', 'raw', 'fresh', 'plain', 'some', 'with', 'and', 'the', 'portion', 'serving', 'bowl', 'plate'])
+/** A food's key: lower-case words without accents or cooking words, singular, sorted ("Boiled white rice" → "rice white"). */
+export function foodKey(name: string): string {
+  const words = String(name ?? '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .split(/[^a-z]+/)
+    .filter((w) => w.length >= 3 && !COOK_WORDS.has(w))
+    .map((w) => (w.endsWith('ies') ? w.slice(0, -3) + 'y' : w.endsWith('oes') ? w.slice(0, -2) : w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w))
+  return [...new Set(words)].sort().join(' ').slice(0, 40)
+}
+
+/** His portion for a food: the same key, else the longest remembered key whose words are all in the name. */
+export function portionFor(mem: PortionMemory | null | undefined, name: string): PortionMemo | null {
+  if (!mem) return null
+  const k = foodKey(name)
+  if (!k) return null
+  if (mem[k]) return mem[k]
+  const words = new Set(k.split(' '))
+  let best: [string, PortionMemo] | null = null
+  for (const [key, m] of Object.entries(mem)) {
+    if (key.split(' ').every((w) => words.has(w)) && (!best || key.length > best[0].length)) best = [key, m]
+  }
+  return best ? best[1] : null
+}
+
+/** A clean memory: bad rows dropped, at most 60, the newest kept. */
+export function cleanPortions(raw: unknown): PortionMemory {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const rows = Object.entries(raw as Record<string, any>)
+    .filter(([k, v]) => /^[a-z ]{3,40}$/.test(k) && v && Number(v.g) >= 5 && Number(v.g) <= 3000)
+    .map(([k, v]): [string, PortionMemo] => [k, { g: Math.round(Number(v.g)), n: Math.max(1, Math.min(99, Math.round(Number(v.n) || 1))), at: Number(v.at) || 0 }])
+    .sort((a, b) => b[1].at - a[1].at)
+    .slice(0, PORTIONS_MAX)
+  return Object.fromEntries(rows)
+}
+
+/**
+ * Learns from a saved photo meal: every food whose grams he changed (typed,
+ * ½× / 1.5× / 2×) teaches his portion. Saved foods (his own numbers) and label
+ * reads teach nothing. A new correction counts most (60 %).
+ */
+export function learnPortions(mem: PortionMemory | null | undefined, base: VisionItem[], now: VisionItem[], at: number): PortionMemory {
+  const out: PortionMemory = { ...cleanPortions(mem) }
+  now.forEach((it, i) => {
+    const b = base[i]
+    if (!b || it.matchedSavedFoodId || it.src === 'label' || !(it.grams >= 5)) return
+    if (Math.abs(it.grams - b.grams) < Math.max(5, b.grams * 0.05)) return
+    const k = foodKey(it.name)
+    if (!k) return
+    const old = out[k]
+    out[k] = { g: old ? Math.round(old.g * 0.4 + it.grams * 0.6) : Math.round(it.grams), n: Math.min(99, (old?.n ?? 0) + 1), at }
+  })
+  return cleanPortions(out)
+}
+
+/**
+ * His portion instead of a guess: a food the AI only estimated (not a label,
+ * not a saved food, not marked sure) that he corrected before is set to his
+ * usual grams; the macros scale with it.
+ */
+export function applyPortions(items: VisionItem[], mem: PortionMemory, saved: SavedFoodRef[] = []): VisionItem[] {
+  return items.map((it) => {
+    if (it.matchedSavedFoodId || it.src === 'label' || it.confidence === 'high' || !(it.grams > 0)) return it
+    const p = portionFor(mem, it.name)
+    if (!p || Math.abs(p.g - it.grams) < 5) return it
+    const scaled = scaleVisionItem(it, p.g / it.grams, saved)
+    return { ...scaled, grams: p.g, src: 'memory' as const, confidence: 'medium' as const, ...rangeOf(p.g, 'high') }
+  })
+}
+
+/** His usual portions worth telling the AI (the ones his note names first), at most `max`. */
+export function portionHints(mem: PortionMemory | null | undefined, note = '', max = 8): { name: string; g: number }[] {
+  const words = new Set(foodKey(note).split(' ').filter(Boolean))
+  return Object.entries(cleanPortions(mem))
+    .map(([k, m]) => ({ name: k, g: m.g, hit: k.split(' ').some((w) => words.has(w)) ? 1 : 0, n: m.n, at: m.at }))
+    .sort((a, b) => b.hit - a.hit || b.n - a.n || b.at - a.at)
+    .slice(0, max)
+    .map(({ name, g }) => ({ name, g }))
+}
+
+/**
+ * The few saved foods worth sending (a short prompt is a cheap one): the ones
+ * his note names first, then the order he keeps them in. At most `max`.
+ */
+export function pickSaved<T extends { name: string }>(saved: T[], note = '', max = 8): T[] {
+  const words = new Set(foodKey(note).split(' ').filter(Boolean))
+  if (!words.size) return saved.slice(0, max)
+  return saved
+    .map((s, i) => ({ s, i, hit: foodKey(s.name).split(' ').filter((w) => words.has(w)).length }))
+    .sort((a, b) => b.hit - a.hit || a.i - b.i)
+    .slice(0, max)
+    .map((x) => x.s)
+}
+
+/** One short question instead of a guess: the first food the AI could not see well (not a label, saved food or his portion). */
+export function questionFor(items: VisionItem[]): { index: number; text: string } | null {
+  const i = items.findIndex((it) => it.confidence === 'low' && !it.matchedSavedFoodId && it.src !== 'label' && it.src !== 'memory')
+  if (i < 0) return null
+  return { index: i, text: `About how many grams of ${items[i].name.toLowerCase()}?` }
+}
+
+/** The quick fixes on Telegram: ½×, 1.5×, 2× (index = the button's code). */
+export const FACTORS = [0.5, 1.5, 2] as const

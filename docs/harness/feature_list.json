@@ -815,6 +815,20 @@
    "notes": "api/_vision.mjs (images 1-6, MAX_TOTAL_B64, 'Photo n:' labels, prompt rule, item.photo, countPhoto n), api/ai.mjs foodPhoto (counts each photo; opts.counted only in-process from Telegram), api/telegram.mjs (passes opts), core/foodVision.ts (item.photo), body/foodPhotoPrep.ts (imagesFrom, images), body/FoodPhotoReview.tsx (+css strip), web/bots/foodAlbum.ts (sys_kv rows: file ids only), web/bots/foodBot.ts (readMealPhotos, album lead, fd|a fd|r fd|q), bots/context.ts + webBots.ts (photoKv, foodPhoto), server/telegramBot.ts (photoKvFor)."
   },
   {
+   "id": "F-FOOD-PHOTO-DRIVE",
+   "priority": 2,
+   "area": "food",
+   "title": "Telegram meal photos: precise estimates, quick fixes, his usual portions, a copy in Drive",
+   "user_visible_behavior": "A meal photo sent to the bot: each food with grams and a range, label numbers used when readable, saved foods and his usual portions preferred, totals and a green/amber/red badge, one short question when a food is hard to see; buttons: tap a food → ½× 1.5× 2× / Change grams / Remove / Swap, Save, Add photo, Not this meal; the saved message lists every food with its macros and the time. His gram fixes are remembered (food_ben.portions) and used next time. The photo also goes into Photo Locker (Food/YYYY-MM, named by date, time and meal) and his Drive folder through the app; the meal row on Body → Food shows the thumbnail (tap: big, with time and totals) and each food with its range. A small thinking budget per photo, one careful second look only for a hard photo or a meal over 900 kcal, a medium image size, a short prompt (8 saved foods at most).",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/foodPrecision.test.ts src/core/vaultFood.test.ts src/server/foodTelegram.server.test.ts src/server/foodAlbum.server.test.ts src/core/foodTelegram.test.ts src/server/foodPhoto.server.test.ts",
+    "SMOKE_ONLY=\"Photo Locker|Food photo|Food counter\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: unit tests pass (pinned clocks, made-up meals); smoke Photo Locker step: a held Telegram food photo is fetched once, lands in Drive under Food/YYYY-MM, the server is told to erase it, the meal row shows the thumbnail, the big view and the ranges",
+   "notes": "Fakes only: real Gemini replies and token counts not yet seen (the counts are now read from usageMetadata and recorded). The server holds only Telegram file ids (3 days at most); the photo reaches Drive when the app (desktop or website) next syncs with Drive connected."
+  },
+  {
    "id": "F-FOOD-BODY-CHECK",
    "priority": 1,
    "area": "sport",

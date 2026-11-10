@@ -143,7 +143,7 @@ describe('review screen numbers', () => {
     const r = validateVision(good)
     if (!r.ok) throw new Error('bad')
     const items = toFoodItems(r.result.items)
-    expect(items[0]).toEqual({ name: 'Eggs', grams: 150, protein: 19, carbs: 1, fat: 15, kcal: 215, confidence: 'sure' })
+    expect(items[0]).toEqual({ name: 'Eggs', grams: 150, protein: 19, carbs: 1, fat: 15, kcal: 215, confidence: 'sure', lo: 135, hi: 165 })
     expect(items[1].confidence).toBe('roughly')
     expect(visionTotals(r.result.items).kcal).toBe(375)
   })

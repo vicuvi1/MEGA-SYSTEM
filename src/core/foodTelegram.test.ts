@@ -66,14 +66,16 @@ describe('a meal photo', () => {
 
   it('previews how many, kcal and protein per food (saved numbers win), marks low confidence, buttons fit in 64 bytes', () => {
     const t = photoDraftText(D)
-    expect(t).toMatch(/1\. Egg · 3 eggs · 150 g · 216 kcal · 19 g protein/)
-    expect(t).toMatch(/2\. Rye bread · 2 slices · 66 g · 160 kcal · 5 g protein/)
-    expect(t).toMatch(/3\. Sauce · 30 g · 90 kcal · 0 g protein\n {3}⚠️ not sure, check the portion/)
-    expect(t).toMatch(/Total: ~466 kcal · 24 g protein/)
+    expect(t).toMatch(/1\. <b>Egg<\/b> · 3 eggs · 150 g[^\n]*\n {4}216 kcal · P 19/)
+    expect(t).toMatch(/2\. <b>Rye bread<\/b> · 2 slices · 66 g[^\n]*\n {4}160 kcal · P 5/)
+    expect(t).toMatch(/3\. <b>Sauce<\/b> · 30 g[^\n]*\n {4}90 kcal · P 0 · C \d+ · F \d+ · ⚠️ check it/)
+    expect(t).toMatch(/<b>Total ~466 kcal · 24 g protein<\/b>/)
+    expect(t).toMatch(/🔴 rough guess/)
     expect(t).toMatch(/A good breakfast\./)
     const k = photoDraftKeyboard(D).inline_keyboard
-    expect(k[0].map((b) => b.callback_data)).toEqual(['fd|-|ph1|0', 'fd|+|ph1|0', 'fd|w|ph1|0'])
-    expect(k[k.length - 1].map((b) => b.callback_data)).toEqual(['fd|s|ph1', 'fd|x|ph1'])
+    expect(k[0].map((b) => b.callback_data)).toEqual(['fd|i|ph1|0', 'fd|i|ph1|1'])
+    expect(k[k.length - 2].map((b) => b.callback_data)).toEqual(['fd|s|ph1', 'fd|a|ph1'])
+    expect(k[k.length - 1].map((b) => b.callback_data)).toEqual(['fd|N|ph1'])
     for (const row of k) for (const b of row) expect(b.callback_data.length).toBeLessThanOrEqual(64)
     expect(D.items.map((i) => i.kcal)).toEqual([216, 160, 90])
   })

@@ -1,0 +1,136 @@
+/* A photo meal on Body → Food: thumbnail, big view, the per-item list. */
+.mp-thumb {
+  position: relative;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin-right: 10px;
+  padding: 0;
+  border: 1px solid var(--line, rgba(127, 127, 127, 0.25));
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--panel-2, rgba(127, 127, 127, 0.1));
+  display: grid;
+  place-items: center;
+  cursor: zoom-in;
+}
+.mp-thumb:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+.mp-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.mp-count {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+}
+.fd-mrow:has(.mp-thumb) {
+  align-items: center;
+}
+.mp-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-left: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.mp-dot.good {
+  background: #34c759;
+}
+.mp-dot.mid {
+  background: #ffb020;
+}
+.mp-dot.bad {
+  background: #ff5a5f;
+}
+.mp-view {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.82);
+  animation: mp-in 0.16s ease-out;
+}
+.mp-view img {
+  max-width: min(92vw, 1100px);
+  max-height: 78vh;
+  border-radius: 12px;
+  object-fit: contain;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.mp-view-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: #fff;
+}
+@keyframes mp-in {
+  from {
+    opacity: 0;
+  }
+}
+.mp-items {
+  list-style: none;
+  margin: 4px 0 6px;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+/* .fd-mlist li (the meal rows) would make these blocks: the longer selector wins. */
+.fd-mlist .mp-items li,
+.mp-items li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(104px, auto) 72px minmax(0, 1.3fr);
+  gap: 12px;
+  align-items: baseline;
+  padding: 3px 0;
+  border: 0;
+  font-size: 13px;
+}
+.fd-mlist .mp-items li + li {
+  border-top: 1px dashed var(--bdy-border, rgba(127, 127, 127, 0.2));
+}
+.mp-k {
+  text-align: right;
+}
+.mp-view-title {
+  display: grid;
+  gap: 2px;
+}
+.mp-view-title small {
+  opacity: 0.75;
+}
+.mp-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.mp-items small {
+  opacity: 0.65;
+}
+.mp-m {
+  opacity: 0.75;
+  text-align: right;
+}
+@media (prefers-reduced-motion: reduce) {
+  .mp-view {
+    animation: none;
+  }
+}

@@ -8,7 +8,7 @@
 //   3. save the index (joined with any save from another device in between).
 // Runs when Photo Locker is open, after something is added, and once a while
 // after the app starts when uploads are waiting.
-import { PROGRESS_TAG, deletePlan, folderMovePlan, notBackedUpLine, planSync, driveProps, type IndexEntry, type SyncPlan, type VaultIndex } from '@core/vaultSync'
+import { FOOD_TAG, PROGRESS_TAG, cleanFolderPath, deletePlan, folderMovePlan, foodFolderPath, foodPhotoName, foodPhotoNumber, notBackedUpLine, planSync, driveProps, type IndexEntry, type SyncPlan, type VaultIndex } from '@core/vaultSync'
 import { life } from '../bridge'
 import { createDrive, DriveError, type DriveApi, type DriveFolder } from './driveApi'
 import { thumbOf } from './mediaPrep'
@@ -106,14 +106,20 @@ export function syncNow(opts: { downloadAll?: boolean; ids?: string[] } = {}): P
 async function pass(opts: { downloadAll?: boolean; ids?: string[] }) {
   if (!life.vault) return
   set({ running: true, error: null, line: 'Checking…' })
+  // Telegram food photos the server holds come in first (they go up with everything else).
+  const foodError = await pullFoodInbox().then(() => null, (e) => `Food photos from Telegram could not be fetched: ${(e as Error).message}`)
   let index = await life.vault.index()
   const connected = state.connected ?? (await checkConnected())
   set({ folder: index.folder })
   let remote = null
   let driveError: string | null = null
+  let subFolders = new Map<string, string>()
   if (connected && index.folder) {
     try {
-      remote = await api().listFolder(index.folder.id)
+      // The folder and the app's own sub-folders in it (Food/2026-11): a food photo there is not uploaded again.
+      const tree = await api().listTree(index.folder.id)
+      remote = tree.files
+      subFolders = tree.folders
     } catch (e) {
       driveError = (e as Error).message
     }
@@ -128,18 +134,24 @@ async function pass(opts: { downloadAll?: boolean; ids?: string[] }) {
     await putItem({ ...rest, updatedAt: e.updatedAt }, true)
   }
   for (const a of plan.adopt) await patchItem(a.id, { driveFileId: a.fileId, driveFolderId: a.folderId, syncedAt: now, upload: undefined }, true)
+  // A food photo another device already put in Drive: the server's copy can go.
+  const adoptedFood = plan.adopt.map((a) => a.id).filter((id) => foodPhotoNumber(id))
+  if (adoptedFood.length) await life.google?.foodInboxDone?.(adoptedFood).catch(() => null)
   // Uploads, one at a time.
   let i = 0
   let failed = 0
+  const uploadedFood: string[] = []
   for (const id of plan.uploads) {
     i++
     const it = await getItem(id)
     if (!it?.blob || !index.folder) continue
     set({ line: `Uploading ${it.name} (${i} of ${plan.uploads.length})`, done: 0, total: it.sizeBytes })
     try {
-      const f = await upload(it, index.folder.id)
-      await patchItem(id, { driveFileId: f.fileId, driveFolderId: index.folder.id, syncedAt: Date.now(), upload: undefined }, true)
-      index.items[id] = { ...(index.items[id] ?? toIndex(it)), driveFileId: f.fileId, driveFolderId: index.folder.id, updatedAt: Date.now() }
+      const target = await folderFor(it, index.folder.id, subFolders)
+      const f = await upload(it, target)
+      await patchItem(id, { driveFileId: f.fileId, driveFolderId: target, syncedAt: Date.now(), upload: undefined }, true)
+      index.items[id] = { ...(index.items[id] ?? toIndex(it)), driveFileId: f.fileId, driveFolderId: target, updatedAt: Date.now() }
+      if (foodPhotoNumber(id)) uploadedFood.push(id)
       plan.notBackedUp.here = Math.max(0, plan.notBackedUp.here - 1)
       plan.notBackedUp.bytes = Math.max(0, plan.notBackedUp.bytes - it.sizeBytes)
     } catch (e) {
@@ -164,6 +176,8 @@ async function pass(opts: { downloadAll?: boolean; ids?: string[] }) {
     }
   }
   index = await saveIndex(index)
+  // In Drive now: the server erases the photos it held for us (erase-after-copy).
+  if (uploadedFood.length) await life.google?.foodInboxDone?.(uploadedFood).catch(() => null)
   const fine = !driveError && connected && !!index.folder
   if (fine || remote) {
     try {
@@ -174,7 +188,7 @@ async function pass(opts: { downloadAll?: boolean; ids?: string[] }) {
   }
   let storage = state.storage
   if (connected && index.folder && remote) storage = { locker: lockerBytes(index), ...(await api().about().catch(() => ({ usage: 0, limit: 0 }))) }
-  set({ lastSync: fine || remote ? Date.now() : state.lastSync, error: failed ? `${failed} upload${failed > 1 ? 's' : ''} did not finish: ${driveError}` : driveError, notBackedUp: plan.notBackedUp, folder: index.folder, storage: storage ?? (index.folder ? { locker: lockerBytes(index), usage: 0, limit: 0 } : null) })
+  set({ lastSync: fine || remote ? Date.now() : state.lastSync, error: failed ? `${failed} upload${failed > 1 ? 's' : ''} did not finish: ${driveError}` : driveError ?? foodError, notBackedUp: plan.notBackedUp, folder: index.folder, storage: storage ?? (index.folder ? { locker: lockerBytes(index), usage: 0, limit: 0 } : null) })
   window.dispatchEvent(new CustomEvent('life-vault-changed', { detail: { fromSync: true } }))
 }
 
@@ -299,8 +313,93 @@ let booted = false
 export async function vaultBoot(): Promise<void> {
   if (booted || !life.vault || !life.google?.driveToken) return
   booted = true
+  // Telegram food photos held on the server: now, and every 30 minutes while the app is open.
+  const food = async () => ((await pullFoodInbox().catch(() => 0)) > 0 && (await life.vault!.index()).folder ? void syncNow() : undefined)
+  setInterval(() => void food(), 30 * 60_000)
+  if (await pullFoodInbox().catch(() => 0)) return void food()
   const items = await listItems()
   if (!items.some((it) => it.blob && !it.driveFileId)) return
   const ix = await life.vault.index()
   if (ix.folder) void syncNow()
+}
+
+// ---- Telegram food photos (held on the server as file ids, 3 days at most: bots/foodLocker.ts) ----
+
+/** The Drive folder an item goes to: the Locker's folder, or a sub-folder in it (made once, found again by path). */
+async function folderFor(it: VaultItem, rootId: string, known: Map<string, string>): Promise<string> {
+  const path = cleanFolderPath(it.folderPath)
+  if (!path) return rootId
+  let parent = rootId
+  let sofar = ''
+  for (const part of path.split('/')) {
+    sofar = sofar ? `${sofar}/${part}` : part
+    let id = known.get(sofar)
+    if (!id) {
+      id = (await api().createFolder(part, parent)).id
+      known.set(sofar, id)
+    }
+    parent = id
+  }
+  return parent
+}
+
+const b64ToBlob = (data: string, mime: string) => {
+  const bin = atob(data)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new Blob([bytes], { type: mime })
+}
+
+let pulling: Promise<number> | null = null
+/**
+ * Brings the food photos the server holds into Photo Locker on this device
+ * (tag `food`, the meal type, folder Food/YYYY-MM, named by date, time and
+ * meal). Each is fetched once; one already here or already in Drive is not
+ * fetched again (and is erased on the server once it is in Drive). Returns how
+ * many came in. The sync pass then uploads them and erases them on the server.
+ */
+export function pullFoodInbox(): Promise<number> {
+  if (pulling) return pulling
+  pulling = (async () => {
+    const g = life.google
+    if (!g?.foodInbox || !g.foodInboxGet || !life.vault) return 0
+    const held = await g.foodInbox()
+    if (!held.length) return 0
+    const ix = await life.vault.index()
+    const added: VaultItem[] = []
+    const inDrive: string[] = []
+    for (const h of held.slice(0, 20)) {
+      const have = await getItem(h.id)
+      if (have || ix.items[h.id]) {
+        if (have?.driveFileId || ix.items[h.id]?.driveFileId) inDrive.push(h.id)
+        continue
+      }
+      const got = await g.foodInboxGet(h.id).catch(() => null)
+      if (!got) continue
+      const blob = b64ToBlob(got.data, got.mime)
+      const at = Number(h.at) || Date.now()
+      const tags = [FOOD_TAG, ...(h.type ? [h.type] : [])]
+      added.push({ id: h.id, kind: 'photo', name: foodPhotoName(at, h.type, h.name, foodPhotoNumber(h.id)), tags, takenAt: at, sizeBytes: blob.size, mime: got.mime, blob, thumb: (await thumbOf(blob, 'photo').catch(() => null)) ?? undefined, folderPath: foodFolderPath(at), updatedAt: Date.now() })
+    }
+    if (inDrive.length) await g.foodInboxDone?.(inDrive).catch(() => null)
+    if (added.length) {
+      for (const it of added) await putItem(it)
+      await life.vault.saveIndex({ v: 1, folder: ix.folder, items: Object.fromEntries(added.map((it) => [it.id, toIndex(it)])) })
+      window.dispatchEvent(new CustomEvent('life-vault-changed', { detail: { fromSync: true } }))
+    }
+    return added.length
+  })().finally(() => {
+    pulling = null
+  })
+  return pulling
+}
+
+/** The Locker items (with their thumbnails) for a meal's photo ids, on this device. */
+export async function mealPhotos(ids: string[]): Promise<VaultItem[]> {
+  const out: VaultItem[] = []
+  for (const id of ids) {
+    const it = await getItem(id).catch(() => undefined)
+    if (it) out.push(it)
+  }
+  return out
 }

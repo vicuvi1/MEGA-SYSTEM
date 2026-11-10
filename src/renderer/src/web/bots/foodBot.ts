@@ -25,7 +25,7 @@ import { sportToday } from '@core/sportShared'
 import { targetForDay } from '@core/sleep'
 import { yesterdayMeals, cleanFoodLog, sumItems, mealName, type FoodItem } from '@core/food'
 import { liveIds } from '@core/bodyLog'
-import { fromSaved, photoReplyLine, slotNow, toFoodItems, validateVision, visionTotals, type SavedFoodRef } from '@core/foodVision'
+import { FACTORS, fromSaved, learnPortions, photoReplyLine, portionHints, slotNow, toFoodItems, validateVision, visionTotals, type SavedFoodRef } from '@core/foodVision'
 import { dayTotals, itemsOf, itemsText, matchSaved, slotItems, totalsOf, type FoodSaved, type SavedMatch } from '@core/foodSaved'
 import type { PushLog, PushOut } from '@core/benPushes'
 import {
@@ -36,7 +36,13 @@ import {
   decideFoodNudge,
   decideMealReminder,
   draftKeyboard,
+  askGrams,
   draftText,
+  itemKeyboard,
+  lockerPhotoIds,
+  multiplyPhoto,
+  readAskAnswer,
+  removePhotoItem,
   foodNudgeDue,
   foodReport,
   gramEditShape,
@@ -51,6 +57,7 @@ import {
   photoDraft,
   photoDraftKeyboard,
   photoDraftText,
+  photoSavedText,
   photoIsMeal,
   pickPhotoSize,
   readGramEdit,
@@ -79,6 +86,7 @@ import { readLifeFit, sleepWindow } from '../lifeFitStore'
 import { downloadFile, esc, tg } from './telegram'
 import { coachNudgeFor, foodCapAllows } from '../../coach/coachTalkStore'
 import type { CallbackHandler } from './callbacks'
+import { attachMeal, dropHeld, holdPhotos } from './foodLocker'
 import { MAX_SET, addPart, addedCount, collectAlbum, dropChatPhotos, joinAlbum, keepDraftPhotos, openAdd, setAddMsg, startAdd, takeAdd, type PhotoKv, type PhotoPart } from './foodAlbum'
 
 const fmt = (n: number) => Math.round(n).toLocaleString('en-US')
@@ -101,15 +109,10 @@ const COULD_NOT = (why: string) => `⚠️ I couldn't read that reply (${esc(why
 
 export type FoodOut = { reply: string; keyboard?: any }
 
-/** A photo preview's buttons, with "➕ Add another photo" above Save / Cancel. */
-export function photoKeyboard(d: FoodDraft): { inline_keyboard: { text: string; callback_data: string }[][] } {
-  const kb = photoDraftKeyboard(d)
-  const rows = kb.inline_keyboard.slice()
-  const end = rows.pop()
-  return { inline_keyboard: [...rows, [{ text: '➕ Add another photo', callback_data: `fd|a|${d.id}` }], ...(end ? [end] : [])] }
-}
-/** The preview of a draft (a photo's or a pasted reply's). */
-const previewOf = (d: FoodDraft): FoodOut => (d.photo ? { reply: photoDraftText(d), keyboard: photoKeyboard(d) } : { reply: draftText(d), keyboard: draftKeyboard(d) })
+/** A photo preview's buttons: the foods (tap one to fix it), Save and Add photo, Not this meal. */
+export const photoKeyboard = (d: FoodDraft) => photoDraftKeyboard(d)
+/** The preview of a draft (a photo's or a pasted reply's). A photo's names the meal from the time it was sent. */
+const previewOf = (d: FoodDraft): FoodOut => (d.photo ? { reply: photoDraftText(d, slotNow(new Date(d.at))), keyboard: photoKeyboard(d) } : { reply: draftText(d), keyboard: draftKeyboard(d) })
 
 // ---- saved foods and meals ----
 
@@ -159,9 +162,9 @@ export function mealsMenu(s: FoodSaved): FoodOut {
 export function foodWants(db: any, text: string, now = Date.now()): boolean {
   const t = String(text ?? '').trim()
   if (/^\/(food|meals)(@\w+)?(\s|$)/i.test(t) || looksLikeFoodReply(t)) return true
-  if (gramEditShape(t)) {
+  if (gramEditShape(t) || /^\s*\d{1,4}\s*(g|gr|grams?)?\s*\.?\s*$/i.test(t)) {
     const d = liveDraft(readFoodBen(db), now)
-    if (d && (d.photo ? readPhotoEdit(t, d) : readGramEdit(t, d))) return true
+    if (d && (d.photo ? readAskAnswer(t, d) || readPhotoEdit(t, d) : readGramEdit(t, d))) return true
   }
   return !!savedHit(db, t)
 }
@@ -181,6 +184,14 @@ export function foodMessage(db: any, text: string, now = Date.now()): FoodOut | 
   if (/^\/meals(?:@\w+)?(\s|$)/i.test(t)) return mealsMenu(readFoodSaved(db))
   const fb = readFoodBen(db)
   const open = liveDraft(fb, now)
+  // The one short question ("About how many grams of rice?") or "Change grams": a bare number answers it.
+  const ans = open?.photo ? readAskAnswer(t, open) : null
+  if (open && ans) {
+    const d0 = setPhotoGrams(open, ans.index, ans.grams, savedRefs(readFoodSaved(db)))
+    const d = { ...d0, photo: { ...d0.photo!, ask: null } }
+    writeFoodBen(db, { ...fb, draft: d })
+    return previewOf(d)
+  }
   if (open && gramEditShape(t)) {
     if (open.photo) {
       const e = readPhotoEdit(t, open)
@@ -262,24 +273,30 @@ export async function readMealPhotos(o: { token: string; chat: string; fileIds: 
       .meals.filter((m) => m.day === t.day && !m.supp && live.has(`${m.id}-p`))
       .map((m) => m.name)
       .slice(0, 20)
-    return { saved, today: { kcal: t.kcal, protein: t.protein, items }, targets: { kcal: t.targets.kcal, protein: t.targets.protein } }
+    return { saved, today: { kcal: t.kcal, protein: t.protein, items }, targets: { kcal: t.targets.kcal, protein: t.targets.protein }, portions: readFoodBen(db).portions ?? null }
   })
   let ans: Awaited<ReturnType<FoodPhotoFn>>
   try {
-    ans = await o.foodPhoto({ images: files, note: o.caption, saved: ctx.saved, today: ctx.today, targets: ctx.targets }, o.counted ? { counted: o.counted } : undefined)
+    // His usual portions (learned from his fixes) go along; the server keeps only the few saved foods his note names.
+    ans = await o.foodPhoto({ images: files, note: o.caption, saved: ctx.saved, today: ctx.today, targets: ctx.targets, portions: portionHints(ctx.portions, o.caption) }, o.counted ? { counted: o.counted } : undefined)
   } catch {
     ans = { ok: false, error: "The photo couldn't be read right now. Try again in a moment." }
   }
   // Done with the photos: nothing below sees them.
   files = null
   if (!ans.ok) return say(`⚠️ ${esc(String(ans.error || "The photo couldn't be read."))}\nOr send /food for the copy prompt.`)
-  const check = validateVision(ans.result, ctx.saved, ids.length)
+  const check = validateVision(ans.result, ctx.saved, ids.length, ctx.portions)
   if (!check.ok) return say(`⚠️ ${esc(check.error)}`)
   const msg = many ? `${ids.length} photos read together. ${check.result.message}`.trim().slice(0, 200) : check.result.message
-  const d = photoDraft(shortId(), now.getTime(), check.result.items, msg)
+  // A food it could not see well: one short question instead of a guess (a bare number answers it).
+  const d = photoDraft(shortId(), now.getTime(), check.result.items, msg, { ask: check.result.question?.index ?? null, n: ids.length })
   await o.mirror.write((db) => writeFoodBen(db, { ...readFoodBen(db), draft: d }))
-  if (o.kv) await keepDraftPhotos(o.kv, o.chat, d.id, ids, o.caption, now.getTime()).catch(() => null)
-  return say(photoDraftText(d), photoKeyboard(d))
+  if (o.kv) {
+    await keepDraftPhotos(o.kv, o.chat, d.id, ids, o.caption, now.getTime()).catch(() => null)
+    // The photos go to Photo Locker (and his Drive) through the app: only their file ids are held, 3 days at most.
+    await holdPhotos(o.kv, d.id, ids, now.getTime()).catch(() => null)
+  }
+  return say(photoDraftText(d, slotNow(now)), photoKeyboard(d))
 }
 
 /** The "send the next photo" message while adding photos to a meal. */
@@ -515,7 +532,7 @@ export const FOOD_CALLBACK: CallbackHandler = {
     const mirror = c.mirror as unknown as { write<T>(fn: (db: any) => T): Promise<T> }
     const { data, chat, key, update, cq, answer, edit } = t
     if (!(await markSeen(key))) return null
-    const m = /^fd\|([sx+\-eupymlzkgnvwWbarq])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data)
+    const m = /^fd\|([sx+\-eupymlzkgnvwWbarqihdNG])\|([\w:.-]{1,56})(?:\|(\d{1,2}))?(?:\|(\d{1,2}))?$/.exec(data)
     if (!m) return null
     const [, op, ref, idx, idx2] = m
     const now = new Date()
@@ -708,12 +725,35 @@ export const FOOD_CALLBACK: CallbackHandler = {
       const fb = readFoodBen(db)
       const d = liveDraft(fb, now.getTime())
       if (!d || d.id !== ref) return { kind: 'gone' as const }
-      if (op === 'x') {
+      if (op === 'x' || op === 'N') {
         writeFoodBen(db, { ...fb, draft: null })
         return { kind: 'cancel' as const }
       }
       if (op === 'e') return { kind: 'hint' as const, d }
       const i = Number(idx ?? -1)
+      // One food's quick fixes: the menu, ½× / 1.5× / 2×, Remove, Change grams.
+      if (d.photo && op === 'i') return d.photo.now[i] ? { kind: 'item' as const, d, i } : { kind: 'draft' as const, d }
+      if (d.photo && op === 'h') {
+        const f = FACTORS[Number(idx2 ?? -1)]
+        if (!f) return { kind: 'draft' as const, d }
+        const next = multiplyPhoto(d, i, f, savedRefs(readFoodSaved(db)))
+        writeFoodBen(db, { ...fb, draft: next })
+        return { kind: 'draft' as const, d: next }
+      }
+      if (d.photo && op === 'd') {
+        const next = removePhotoItem(d, i)
+        if (!next) {
+          writeFoodBen(db, { ...fb, draft: null })
+          return { kind: 'cancel' as const }
+        }
+        writeFoodBen(db, { ...fb, draft: next })
+        return { kind: 'draft' as const, d: next }
+      }
+      if (d.photo && op === 'G') {
+        const next = askGrams(d, i)
+        writeFoodBen(db, { ...fb, draft: next })
+        return { kind: 'ask' as const, d: next, i }
+      }
       if (d.photo && (op === 'w' || op === 'W' || op === 'b')) {
         const saved = savedRefs(readFoodSaved(db))
         if (op === 'b' || !d.photo.now[i]) return { kind: 'draft' as const, d }
@@ -733,13 +773,18 @@ export const FOOD_CALLBACK: CallbackHandler = {
       if (d.photo) {
         // The meal's id comes from the draft: a second Save (a double tap, a retry) can't log it twice.
         const items = d.photo.now
-        const saved = addFoodMeal(db as any, { items: toFoodItems(items), id: `fd-p${d.id}`, type: slotNow(now), source: 'photo' }, 'telegram', now)
-        writeFoodBen(db, { ...fb, draft: null })
+        const type = slotNow(new Date(d.at))
+        // Its photos in Photo Locker (the meal row shows the thumbnail); they arrive there through the app.
+        const photos = d.photo.n ? lockerPhotoIds(d.id, d.photo.n) : []
+        const saved = addFoodMeal(db as any, { items: toFoodItems(items), id: `fd-p${d.id}`, type, source: 'photo', photos }, 'telegram', now)
+        // His gram fixes teach his usual portions for next time.
+        writeFoodBen(db, { ...fb, draft: null, portions: learnPortions(fb.portions, d.photo.base, items, now.getTime()) })
         if (!saved) return { kind: 'gone' as const }
         const day = foodDayTotals(db, now)
         const idea = coverIdea(db, now, day.targets.kcal - day.kcal) ?? whatNextNow(db, now).ideas[0]?.text
         const line = photoReplyLine({ items, meal: visionTotals(items), day: { kcal: day.kcal, protein: day.protein, kcalGoal: day.targets.kcal, proteinGoal: day.targets.protein }, idea })
-        return { kind: 'saved' as const, id: saved.id, text: `✅ <b>Saved.</b> ${esc(line)}` }
+        const name = mealName(toFoodItems(items))
+        return { kind: 'saved' as const, id: saved.id, text: photoSavedText(items, type, d.at, line), held: photos.length ? { draft: d.id, meal: saved.id, name, type } : null }
       }
       const saved = addFoodMeal(db as any, { items: d.items }, 'telegram', now)
       writeFoodBen(db, { ...fb, draft: null })
@@ -751,11 +796,26 @@ export const FOOD_CALLBACK: CallbackHandler = {
       await clearButtons()
       return null
     }
-    // Saved or cancelled: the photos' file ids are not needed any more.
+    // Saved or cancelled: the photos' file ids are not needed any more (a saved meal's stay held for Photo Locker).
     if ((res.kind === 'cancel' || res.kind === 'saved') && c.photoKv) await dropChatPhotos(c.photoKv, chat).catch(() => null)
+    if (res.kind === 'cancel' && c.photoKv) await dropHeld(c.photoKv, ref).catch(() => null)
+    if (res.kind === 'saved' && 'held' in res && res.held && c.photoKv) await attachMeal(c.photoKv, res.held.draft, { id: res.held.meal, name: res.held.name, type: res.held.type }).catch(() => null)
+    if (res.kind === 'item') {
+      await answer(`Fix ${res.d.photo!.now[res.i].name}`)
+      await tg(update.__token, 'editMessageReplyMarkup', { chat_id: chat, message_id: cq.message.message_id, reply_markup: itemKeyboard(res.d, res.i) }).catch(() => null)
+      return 'item'
+    }
+    if (res.kind === 'ask') {
+      const it = res.d.photo!.now[res.i]
+      await answer('Type the grams')
+      const p = previewOf(res.d)
+      await edit(p.reply, p.keyboard)
+      await send(`✏️ How many grams of ${esc(it.name.toLowerCase())}? Type the number, e.g. <code>${Math.round(it.grams || 150)}</code>.`)
+      return 'ask'
+    }
     if (res.kind === 'cancel') {
       await answer('Cancelled')
-      await edit('✗ Cancelled. Nothing saved.')
+      await edit(op === 'N' ? '✗ Not a meal. Nothing saved, and the photo is not kept.' : '✗ Cancelled. Nothing saved.')
       return 'cancel'
     }
     if (res.kind === 'hint') {

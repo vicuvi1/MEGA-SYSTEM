@@ -32,6 +32,9 @@ export interface FoodItem {
   qty?: number
   /** What one portion is ("1 large"), for a saved food. */
   unit?: string
+  /** The likely range of grams from a photo read ("180–260 g"). */
+  lo?: number
+  hi?: number
 }
 
 export interface Totals {
@@ -73,7 +76,12 @@ export interface FoodMeal {
   source?: MealSource
   /** The standard-day slot it came from (`ds-…`), for the day's checklist. */
   slot?: string
+  /** Its photos in Photo Locker (item ids), for the thumbnail on the meal row. */
+  photos?: string[]
 }
+
+/** Photo Locker ids on a meal: letters, digits, _ and -, at most 6. */
+export const cleanPhotoIds = (raw: unknown): string[] => (Array.isArray(raw) ? raw.filter((x) => typeof x === 'string' && /^[A-Za-z0-9_-]{3,64}$/.test(x)).slice(0, 6) : [])
 
 /** How a meal was logged: a saved meal or food, a photo, typed or pasted, or quick add. */
 export type MealSource = 'saved' | 'photo' | 'manual' | 'quick-add'
@@ -132,6 +140,9 @@ export function cleanItem(raw: any): FoodItem | null {
   if (Number.isFinite(qty) && qty > 0 && qty <= 50) out.qty = Math.round(qty * 2) / 2
   const unit = String(raw.unit ?? '').trim().slice(0, 30)
   if (unit) out.unit = unit
+  const lo = Math.round(Number(raw.lo))
+  const hi = Math.round(Number(raw.hi))
+  if (lo >= 1 && hi <= 3000 && lo <= grams && hi >= grams && lo < hi) (out.lo = lo), (out.hi = hi)
   return out
 }
 
@@ -195,7 +206,8 @@ export function cleanFoodLog(raw: any, today?: string): FoodLog {
       ...(m.late ? { late: true } : {}),
       ...(m.supp ? { supp: true } : {}),
       ...(MEAL_SOURCES.includes(m.source) ? { source: m.source as MealSource } : {}),
-      ...(slot ? { slot } : {})
+      ...(slot ? { slot } : {}),
+      ...(cleanPhotoIds(m.photos).length ? { photos: cleanPhotoIds(m.photos) } : {})
     })
   }
   meals.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0))

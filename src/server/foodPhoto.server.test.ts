@@ -44,13 +44,14 @@ describe('the request', () => {
     expect(readPhotoRequest({ ...body, image: { mime: 'image/png', data: `data:image/png;base64,${PIXEL}` } }).image.data).toBe(PIXEL)
     expect(readPhotoRequest({ ...body, note: 'x'.repeat(900) }).note).toHaveLength(300)
   })
-  it('puts the note, saved foods, today and goals in the prompt', () => {
+  it('puts the note and the saved foods in a short prompt (today and goals are not needed to read a photo)', () => {
     const { user, system } = foodPhotoPrompt(req)
     expect(user).toContain('2 containers, one was buckwheat')
-    expect(user).toContain('id sv-bulgur: Bulgur container, portion 1 container (350 g): 520 kcal, 38 g protein')
-    expect(user).toContain('Today so far: 1400 kcal, 60 g protein (Oats)')
-    expect(user).toContain('Goals today: 2700 kcal, 130 g protein')
+    expect(user).toContain('id sv-bulgur: Bulgur container, 1 container (350 g): 520 kcal, 38 g protein')
+    expect(user).not.toContain('Today so far')
     expect(system).toMatch(/ONLY with JSON/)
+    expect(system).toMatch(/fork 19 cm/)
+    expect(system).toMatch(/label/)
   })
   it('Gemini: JSON mode with a schema; the key only in a header', () => {
     const r = buildVisionRequest({ name: 'gemini', key: 'SECRET-G', models: [] }, 'gemini-3.5-flash', req)

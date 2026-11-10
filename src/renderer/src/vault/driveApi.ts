@@ -63,10 +63,34 @@ export function createDrive(getToken: () => Promise<string>, fetchImpl: typeof f
   return {
     /** Every file of ours in a folder (not in the bin). */
     listFolder: (folderId: string) => listAll(`${q(folderId)} in parents and trashed = false`),
+    /**
+     * Every file of ours in the folder AND in the sub-folders the app made there
+     * (Food → Food/2026-11), at most 3 levels down. `folders` maps each sub-folder
+     * path ("Food/2026-11") to its Drive id, so an upload finds it again.
+     */
+    listTree: async (rootId: string): Promise<{ files: RemoteFile[]; folders: Map<string, string> }> => {
+      const files: RemoteFile[] = []
+      const folders = new Map<string, string>()
+      const walk = async (id: string, path: string, depth: number) => {
+        for (const f of await listAll(`${q(id)} in parents and trashed = false`)) {
+          if (f.mime === FOLDER_MIME) {
+            if (f.appProperties?.lsApp === 'locker-sub' && depth < 3) {
+              const p = path ? `${path}/${f.name}` : f.name
+              if (!folders.has(p)) folders.set(p, f.fileId)
+              await walk(f.fileId, p, depth + 1)
+            }
+          } else files.push(f)
+        }
+      }
+      await walk(rootId, '', 0)
+      return { files, folders }
+    },
     /** Folders this app made (drive.file sees only those), for "Use an existing folder". */
-    listFolders: async (): Promise<DriveFolder[]> => (await listAll(`mimeType = '${FOLDER_MIME}' and trashed = false`)).map((f) => ({ id: f.fileId, name: f.name })),
-    createFolder: async (name: string): Promise<DriveFolder> => {
-      const j = await json('/drive/v3/files?fields=id,name', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name.slice(0, 120) || 'Photo Locker', mimeType: FOLDER_MIME, appProperties: { lsApp: 'locker-folder' } }) }, 'make the folder')
+    listFolders: async (): Promise<DriveFolder[]> => (await listAll(`mimeType = '${FOLDER_MIME}' and trashed = false`)).filter((f) => f.appProperties?.lsApp !== 'locker-sub').map((f) => ({ id: f.fileId, name: f.name })),
+    /** A folder: the Locker's own (no parent), or a sub-folder inside it (Food, 2026-11). */
+    createFolder: async (name: string, parentId?: string): Promise<DriveFolder> => {
+      const meta = { name: name.slice(0, 120) || 'Photo Locker', mimeType: FOLDER_MIME, appProperties: { lsApp: parentId ? 'locker-sub' : 'locker-folder' }, ...(parentId ? { parents: [parentId] } : {}) }
+      const j = await json('/drive/v3/files?fields=id,name', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(meta) }, 'make the folder')
       return { id: String(j.id), name: String(j.name) }
     },
     /** Starts a resumable upload; returns Google's session link. */

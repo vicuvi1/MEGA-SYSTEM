@@ -703,8 +703,9 @@ export async function foodPhoto(body, env = process.env, fetchImpl = fetch, now 
     if (overLimit(n)) return { ok: false, error: (req.images?.length ?? 1) > 1 ? "These photos would go over today's limit of 50 photos. It starts again tomorrow." : "You've read 50 photos today, the daily limit. It starts again tomorrow.", fallback: FALLBACK, limit: 'day' }
   }
   try {
-    const out = await readFoodPhoto(p, req, { fetchImpl, record: (u) => recordUsage(u, env, fetchImpl) })
-    return { ok: true, result: out.json, model: out.model }
+    const out = await readFoodPhoto(p, req, { fetchImpl, env, record: (u) => recordUsage(u, env, fetchImpl) })
+    // usage: each try's token counts and time (no photo, no key), for the cost meter and the second look.
+    return { ok: true, result: out.json, model: out.model, usage: out.usage, second: out.second }
   } catch (e) {
     // Only the plain message: never the request (it holds the photo) or a key.
     return { ok: false, error: e?.timeUp ? e.message : "The photo couldn't be read right now. Try again in a moment.", fallback: FALLBACK }

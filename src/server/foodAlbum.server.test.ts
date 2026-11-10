@@ -122,15 +122,15 @@ describe('an album of meal photos on Telegram', () => {
     // One "Reading the photos…" that becomes the one preview; the other parts said nothing.
     const out = texts(w.sent.slice(before))
     expect(out.filter((m) => /Reading the photo/.test(m.text))).toHaveLength(1)
-    expect(out.filter((m) => /Total: ~/.test(m.text))).toHaveLength(1)
-    expect(replies.filter((r) => r && /Total: ~/.test(r))).toHaveLength(1)
+    expect(out.filter((m) => /Total ~/.test(m.text))).toHaveLength(1)
+    expect(replies.filter((r) => r && /Total ~/.test(r))).toHaveLength(1)
     const prev = last(w.sent)
     expect(prev.text).toMatch(/3 photos read together\. Eggs, a bar and milk\./)
-    expect(prev.text).toMatch(/Total: ~596 kcal · 47 g protein/)
+    expect(prev.text).toMatch(/Total ~596 kcal · 47 g protein/)
     const id = w.setting('food_ben').draft.id
     const kb = prev.reply_markup.inline_keyboard
-    expect(kb[kb.length - 1].map((b: any) => b.callback_data)).toEqual([`fd|s|${id}`, `fd|x|${id}`])
-    expect(kb[kb.length - 2][0]).toEqual({ text: '➕ Add another photo', callback_data: `fd|a|${id}` })
+    expect(kb[kb.length - 1].map((b: any) => b.callback_data)).toEqual([`fd|N|${id}`])
+    expect(kb[kb.length - 2][1]).toEqual({ text: '➕ Add photo', callback_data: `fd|a|${id}` })
     // The parts are gone; only the preview's file ids are kept (for "Add another photo"), never a picture.
     expect(w.photoRows().filter((k) => k.startsWith('fdp:'))).toEqual([])
     expect(w.photoRows().filter((k) => k.startsWith('fdd:'))).toEqual([`fdd:${CHAT}:${id}`])

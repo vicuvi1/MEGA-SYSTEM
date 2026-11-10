@@ -6952,7 +6952,7 @@ try {
 
   // Photo Locker: two "devices" (browser contexts with their own IndexedDB) and one fake Google Drive
   // (e2e/server.mjs /_fakedrive; googleapis.com is routed there). Made-up pictures only.
-  await step('Photo Locker: a photo uploaded on one device reaches Drive and the index, a second device downloads it; a video over 60 s is refused', async () => {
+  await step('Photo Locker: a photo uploaded on one device reaches Drive and the index, a second device downloads it; a video over 60 s is refused; a Telegram food photo goes to Drive under Food and shows on its meal', async () => {
     const toDrive = (ctx) => ctx.route('https://www.googleapis.com/**', async (route) => {
       const u = new URL(route.request().url())
       await route.fulfill({ response: await route.fetch({ url: `http://127.0.0.1:${port}/_fakedrive${u.pathname}${u.search}` }) })
@@ -7013,6 +7013,92 @@ try {
     await pg.waitForSelector('[data-testid="locker-item"] .lk-media img', { timeout: 5000 })
     if (shots) await pg.screenshot({ path: `${shots}/locker-desktop-item.png`, style: '.toasts { display: none !important }' })
     await pg.keyboard.press('Escape')
+    // A Telegram meal photo (made up): the server holds it (file id only); this app fetches it, keeps it
+    // in the Locker under Food, uploads it to Drive in Food/YYYY-MM and has the server erase it. The
+    // meal it belongs to shows the thumbnail on Body → Food; a tap opens it big; the foods show their ranges.
+    {
+      const meal = await pg.evaluate(() => {
+        const c = document.createElement('canvas')
+        c.width = 640
+        c.height = 480
+        const g = c.getContext('2d')
+        g.fillStyle = '#f4efe6'
+        g.fillRect(0, 0, 640, 480)
+        g.fillStyle = '#ffffff'
+        g.beginPath()
+        g.arc(320, 240, 190, 0, Math.PI * 2)
+        g.fill()
+        g.fillStyle = '#f7f3ea'
+        g.beginPath()
+        g.ellipse(250, 230, 90, 70, 0, 0, Math.PI * 2)
+        g.fill()
+        g.fillStyle = '#c98b4a'
+        g.beginPath()
+        g.ellipse(390, 250, 80, 55, 0.3, 0, Math.PI * 2)
+        g.fill()
+        g.fillStyle = '#5aa04a'
+        g.fillRect(300, 320, 90, 30)
+        const d = new Date()
+        d.setHours(8, 5, 0, 0)
+        const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        return { data: c.toDataURL('image/jpeg', 0.85).split(',')[1], at: d.getTime(), iso: d.toISOString(), day, month: day.slice(0, 7) }
+      })
+      const e2e = (body) => fetch(`http://127.0.0.1:${port}/api/_e2e`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then((r) => r.json())
+      await e2e({ op: 'foodHold', item: { id: 'fpsmk1n1', at: meal.at, meal: 'fd-psmk1', name: 'Rice, chicken', type: 'breakfast' }, mime: 'image/jpeg', data: meal.data })
+      // The meal saved on Telegram: its two body-log rows and its foods (with ranges) in food_log, linked to the photo.
+      const old = JSON.parse(String((await sql("SELECT value FROM settings WHERE key = 'food_log'"))[0]?.[0] ?? '{"meals":[],"favs":[]}'))
+      const items = [
+        { name: 'white rice', grams: 220, lo: 180, hi: 260, protein: 6, carbs: 62, fat: 1, kcal: 286, confidence: 'roughly' },
+        { name: 'chicken breast', grams: 150, lo: 135, hi: 165, protein: 46, carbs: 0, fat: 5, kcal: 248, confidence: 'sure' }
+      ]
+      old.meals = [{ id: 'fd-psmk1', at: meal.iso, day: meal.day, name: 'White rice, Chicken breast', type: 'breakfast', items, source: 'photo', photos: ['fpsmk1n1'] }, ...(old.meals ?? [])]
+      const q = (s) => s.replace(/'/g, "''")
+      await sql(`INSERT OR IGNORE INTO body_log (id, at, day, kind, amount, source, undoes) VALUES ('fd-psmk1-p', '${meal.iso}', '${meal.day}', 'protein:food', 52, 'telegram', NULL), ('fd-psmk1-k', '${meal.iso}', '${meal.day}', 'kcal:food', 534, 'telegram', NULL)`)
+      await sql(`INSERT OR REPLACE INTO settings (key, value) VALUES ('food_log', '${q(JSON.stringify(old))}')`)
+      // The change marker every write sets, so the page's copy reads the database again.
+      await sql(`INSERT OR REPLACE INTO settings (key, value) VALUES ('data_version', 'smoke-food-${Date.now()}')`)
+      // The page reads the database again (as after the meal arrives through sync), then the Locker syncs.
+      await reloadApp()
+      await open('locker')
+      await pg.waitForSelector('[data-testid="photo-locker"] [data-testid="locker-folder"]', { timeout: 15000 })
+      await pg.locator('[data-testid="photo-locker"]').getByRole('button', { name: 'Sync now' }).first().click()
+      await pg.locator('.lk-chip', { hasText: /^Food/ }).first().click()
+      const tile = `[data-testid="locker-tile"][aria-label="Open ${meal.day} 08-05 Breakfast - Rice, chicken.jpg"]`
+      await pg.waitForSelector(`${tile} .lk-state.in`, { timeout: 30000 }).catch(async (e) => {
+        const tiles = await pg.locator("[data-testid=\"locker-tile\"]").evaluateAll((els) => els.map((x) => x.getAttribute("aria-label")))
+        throw new Error(`${e.message.split("\n")[0]} · tiles: ${JSON.stringify(tiles)} · held: ${JSON.stringify(await e2e({ op: "foodHeld" }))} · line: ${await pg.locator(".lk-progress, .lk-error, .lk-warn").allInnerTexts().catch(() => [])}`)
+      })
+      let held = await e2e({ op: 'foodHeld' })
+      for (let i = 0; i < 40 && !held.erased.includes('fpsmk1n1'); i++) (await pg.waitForTimeout(250), (held = await e2e({ op: 'foodHeld' })))
+      if (!held.erased.includes('fpsmk1n1')) throw new Error('the server was not told to erase the food photo after the Drive copy')
+      if (held.fetched.filter((x) => x === 'fpsmk1n1').length !== 1) throw new Error(`the food photo was fetched ${held.fetched.length} times, not once`)
+      const files = await (await fetch(`http://127.0.0.1:${port}/_fakedrive/_e2e/files`, { headers: { authorization: 'Bearer fake-drive-key' } })).json()
+      const food = files.find((f) => f.name === 'Food' && f.appProperties?.lsApp === 'locker-sub')
+      const month = files.find((f) => f.name === meal.month && f.parents.includes(food?.id))
+      const pic = files.find((f) => f.appProperties?.lsId === 'fpsmk1n1')
+      if (!food || !month || !pic?.parents.includes(month.id)) throw new Error('the food photo is not in Drive under Food/YYYY-MM')
+      if (!(pic.appProperties.lsTags ?? '').includes('food')) throw new Error('the food photo has no food tag')
+      // Body → Food: the meal row shows the thumbnail; a tap opens it big; ⋯ lists each food with its range.
+      await open('body')
+      await pg.locator('.seg-switch [role="tab"]').nth(1).click()
+      await pg.waitForSelector('.body-page .ptabs [data-tab="food"]', { timeout: 20000 })
+      await pg.click('.body-page .ptabs [data-tab="food"]')
+      const row = pg.locator('#ptp-body-food .fd-mlist li', { has: pg.locator('.mp-thumb') }).first()
+      await row.locator(".mp-thumb img").waitFor({ timeout: 20000 }).catch(async (e) => {
+        throw new Error(`${e.message.split("\n")[0]} · meals: ${JSON.stringify(await pg.locator("#ptp-body-food .fd-mlist li").allInnerTexts())} · thumbs: ${await pg.locator(".mp-thumb").count()}`)
+      })
+      await row.locator('.fd-more-btn').click()
+      await row.locator('.mp-items li', { hasText: '(180–260)' }).waitFor({ timeout: 5000 })
+      if (!(await row.locator('.mp-dot').count())) throw new Error('no confidence dot on the photo meal')
+      const foodShots = process.env.FOODPHOTO_SHOTS
+      if (foodShots) await row.screenshot({ path: `${foodShots}/food-meal-row-photo.png` })
+      await row.locator('.mp-thumb').click()
+      await pg.waitForSelector('.mp-view img', { timeout: 5000 })
+      if (foodShots) await pg.screenshot({ path: `${foodShots}/food-photo-big.png`, style: '.toasts { display: none !important }', animations: 'disabled' })
+      await pg.keyboard.press('Escape')
+      await pg.waitForSelector('.mp-view', { state: 'detached', timeout: 5000 })
+      await open('locker')
+    }
     // Device B: its own browser (empty IndexedDB), a phone screen.
     const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
     const b = await ctx.newPage()
