@@ -18,3 +18,9 @@
   - Look at no more than 1–2 screenshots per feature.
   - Use `gh api … --jq` instead of large MCP listings.
   - Start a fresh session at each milestone, with the handoff in `docs/harness/session-handoff.md`.
+- **Cost rules (owner, Nov 2026):**
+  - Batches of 2–4 features, shipped as soon as each is green; no 15-feature briefs.
+  - Use `builder` (Sonnet) for UI, tests and routine work. Use `architect` (Opus) only for sync, the planner, security, data models or a hard root cause.
+  - Don't re-run the full smoke if the builder already ran it on the same base; re-run only after a rebase that changed things or a conflict.
+  - When a test depends on page height or timing, keep ≥10% headroom up front: the Windows release is slower and its fonts are taller.
+  - Start a fresh session after each shipped milestone (handoff in `docs/harness/session-handoff.md`).

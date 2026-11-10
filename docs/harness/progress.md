@@ -31,6 +31,14 @@ Keep it short and true: anything written here is what the next session will trus
   - Telegram ±30 buttons don't use the pin rules yet (assigned to the focus-loop builder).
 - **Next best action:** land the five Life boost builders, then run one full smoke pass on `main`.
 
+### 2026-11-10: Study Time, food photos, island and release safeguards
+- Shipped: island clicks pass through (only the pill takes clicks); Ben answers a short night in code in ~1 s and really lightens the plan; Sport Track metrics look kept, app-wide restyle rolled back (owner keeps the old sidebar).
+- Shipped: Study Time 1+2 (two halves, pomodoro, pause/switch, quick add, Todoist blocks, stats, island ring + notices); lost-set sync race fixed (editedAt); idle server calls cut (soak green).
+- Shipped: food photos via Telegram -> Photo Locker -> Drive, precise estimates, repeat-meal tiles, Paste from AI (LIFE-FOOD v1 prompt), meal score, gallery, charts, island notice, AI cost meter.
+- Rule: desktop only for now (AGENTS.md). Release v1.4.1441 green.
+- Lessons: Windows fails tests Linux passes (fonts taller, slower): keep >=10% height headroom, mark DOM rows instead of counting them, never leave the page clock moved.
+- Next: Tracker -> real progressive program (agent running); keep batches small and cheap.
+
 <!-- Template for a new entry:
 ### YYYY-MM-DD: short title
 - Goal:
