@@ -322,7 +322,7 @@ export function FoodPhotoLog({ view, saved: savedProp, onSaved, bare = false, pi
                     </>
                   ) : (
                     <span className="fph-macros">
-                      {fmt(it.kcal)} kcal · {q1(it.protein)} g protein
+                      {fmt(it.kcal)} kcal · {q1(it.protein)} g protein · C {q1(it.carbs)} · F {q1(it.fat)}
                     </span>
                   )}
                 </div>

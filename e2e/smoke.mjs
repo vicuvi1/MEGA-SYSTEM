@@ -1398,6 +1398,7 @@ try {
       const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT COUNT(*) FROM ledger', args: [] } }, { type: 'close' }] }) })
       return (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? null
     })
+    try {
     await pg.click(`${fc} .fd-log-btn`)
     await pg.click('.fdl-sheet .fdl-paste')
     await pg.waitForSelector('.fdl-sheet .fpa-text', { timeout: 5000 })
@@ -1443,8 +1444,12 @@ try {
     // Undo all: both meals stop counting.
     await pg.click('.fdl-sheet .fpa-undo')
     await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0], { timeout: 10000 })
-    await pg.click('.fdl-sheet .fdl-close')
-    await pg.waitForSelector('.fdl-sheet', { state: 'detached', timeout: 5000 })
+    } finally {
+      // Never leave the sheet open (or pasted meals counting) for the next steps.
+      if (await pg.locator('.fdl-sheet .fpa-undo').count()) await pg.click('.fdl-sheet .fpa-undo').catch(() => {})
+      if (await pg.locator('.fdl-sheet .fdl-close').count()) await pg.click('.fdl-sheet .fdl-close').catch(() => {})
+      await pg.waitForSelector('.fdl-sheet', { state: 'detached', timeout: 5000 }).catch(() => {})
+    }
     const points1 = await pg.evaluate(async () => {
       const s = localStorage.getItem('life_web_session') ?? ''
       const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: 'SELECT COUNT(*) FROM ledger', args: [] } }, { type: 'close' }] }) })
@@ -1488,7 +1493,7 @@ try {
     }), 'base64')
     const MEAL = {
       items: [
-        { name: 'Chicken breast', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 200, gramsLow: 170, gramsHigh: 230, kcal: 330, protein: 62, carbs: 0, fat: 7, confidence: 'high', fiber: 0, ultra: false },
+        { name: 'Grilled chicken', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 200, gramsLow: 170, gramsHigh: 230, kcal: 330, protein: 62, carbs: 0, fat: 7, confidence: 'high', fiber: 0, ultra: false },
         { name: 'Buckwheat', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 200, gramsLow: 150, gramsHigh: 250, kcal: 184, protein: 7, carbs: 40, fat: 1, confidence: 'medium', fiber: 5, ultra: false },
         { name: 'Protein yoghurt', matchedSavedFoodId: null, qty: 1, unit: 'cup', grams: 150, kcal: 105, protein: 15, carbs: 6, fat: 2, confidence: 'high', fromLabel: true, fromBarcode: true }
       ],
@@ -1543,7 +1548,7 @@ try {
       await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals .fd-mlist > li:not(.removed)`).length === n + 1, [fc, m0], { timeout: 10000 })
       if ((await kcalNow()) !== k0 + 619) throw new Error(`the day kcal went from ${k0} to ${await kcalNow()}, not +619`)
       // The meal row: every food with grams and numbers, the date and time, the score, the photo from Photo Locker.
-      const row = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Chicken breast' }).first()
+      const row = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Grilled chicken' }).first()
       const lines = await row.locator('.fd-mitem').allInnerTexts()
       if (lines.length !== 3 || !/Buckwheat\s+200 g/.test(lines[1]) || !/184 kcal · P 7 · C 40 · F 1/.test(lines[1])) throw new Error(`the meal row's foods: ${lines.join(' | ')}`)
       if (!/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}, \d{2}:\d{2}$/.test((await row.locator('.fd-when').innerText()).trim())) throw new Error(`the meal row has no date and time: ${await row.locator('.fd-when').innerText()}`)
@@ -1570,7 +1575,7 @@ try {
       await pg.waitForSelector(`${fc} .fph-done`, { timeout: 15000 })
       await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0 + 527], { timeout: 10000 })
       if ((await liveMeals()) !== m0 + 1) throw new Error('the after photo made a second meal')
-      const row2 = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Chicken breast' }).first()
+      const row2 = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Grilled chicken' }).first()
       if (!/Buckwheat\s+100 g/.test((await row2.locator('.fd-mitem').allInnerTexts()).join('|'))) throw new Error('the meal row does not show the eaten buckwheat')
       await row2.locator('.mp-count').waitFor({ timeout: 10000 })
       if ((await row2.locator('.mp-count').innerText()).trim() !== '2') throw new Error('the after photo did not join the meal')
@@ -1582,11 +1587,11 @@ try {
       await pg.waitForSelector(`${fc} .fdg-day`, { timeout: 10000 })
       const head = await pg.locator(`${fc} .fdg-day-head`).first().innerText()
       if (!/^Today, [A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}\s+[\d,]+ kcal · \d+ g protein/.test(head)) throw new Error(`gallery day header: ${head}`)
-      const tile = pg.locator(`${fc} .fdg-tile`).filter({ hasText: 'Chicken breast' }).first()
+      const tile = pg.locator(`${fc} .fdg-tile`).filter({ hasText: 'Grilled chicken' }).first()
       await tile.locator('.mp-tile img').waitFor({ timeout: 10000 })
       if (!/527 kcal · \d+ g/.test(await tile.innerText())) throw new Error(`the tile's numbers: ${await tile.innerText()}`)
       await pg.locator(`${fc} .fdg-only input`).check()
-      if (!(await pg.locator(`${fc} .fdg-tile`).filter({ hasText: 'Chicken breast' }).count())) throw new Error('"Only photos" hides the photo meal')
+      if (!(await pg.locator(`${fc} .fdg-tile`).filter({ hasText: 'Grilled chicken' }).count())) throw new Error('"Only photos" hides the photo meal')
       if (shots) {
         await pg.locator(`${fc} .fdg`).screenshot({ path: `${shots}/food-gallery.png` })
       }
@@ -1605,7 +1610,7 @@ try {
       await pg.waitForSelector(`${fc} .fdc-bars`, { timeout: 10000 })
       if ((await pg.locator(`${fc} .fdc-bars`).count()) !== 2) throw new Error('not two per-meal-type charts')
       if ((await pg.locator(`${fc} .fdc-col`).count()) !== 24) throw new Error('the eating-time chart is not 24 hours')
-      if (!(await pg.locator(`${fc} .fdc-top tbody tr`, { hasText: 'Chicken breast' }).count())) throw new Error('most eaten foods miss the chicken')
+      if (!(await pg.locator(`${fc} .fdc-top tbody tr`, { hasText: 'Grilled chicken' }).count())) throw new Error('most eaten foods miss the grilled chicken')
       if (shots) await pg.locator(`${fc} .fdc`).screenshot({ path: `${shots}/food-charts.png` })
       await pg.setViewportSize({ width: 390, height: 844 })
       await pg.waitForTimeout(300)
@@ -1614,11 +1619,14 @@ try {
       await pg.setViewportSize({ width: 1440, height: 900 })
       await pg.click(`${fc} .fd-back`)
       // Clean up: remove the meal so later steps see the day as before.
-      await pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Chicken breast' }).first().locator('.fd-remove').click()
+      await pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Grilled chicken' }).first().locator('.fd-remove').click()
       await pg.waitForFunction(([s, n]) => document.querySelectorAll(`${s} .fd-meals .fd-mlist > li:not(.removed)`).length === n, [fc, m0], { timeout: 10000 })
     } finally {
       await pg.unroute('**/api/ai')
       await pg.setViewportSize({ width: 1440, height: 900 })
+      // Never leave a sheet or a sub-view open for the next steps.
+      if (await pg.locator('.fdl-sheet .fdl-close').count()) await pg.click('.fdl-sheet .fdl-close').catch(() => {})
+      if (await pg.locator(`${fc} .fd-back`).count()) await pg.click(`${fc} .fd-back`).catch(() => {})
     }
   })
   // Body → Training: today's session from the weekly split (log 3 sets with "same as last time" and effort, the rest

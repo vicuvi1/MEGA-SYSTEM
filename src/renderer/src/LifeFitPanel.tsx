@@ -252,6 +252,8 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
           </label>
         </div>
       )}
+      <details className="lf-fold bp-food-fold">
+        <summary>Meals, coach nudges and the weekly check</summary>
       <label className="check toggle-row">
         <input type="checkbox" checked={p.meals} onChange={(e) => setP({ meals: e.target.checked })} aria-label="Meal reminders" />
         <span>
@@ -283,6 +285,7 @@ function BenPushes({ v, save }: { v: LifeFitView; save: (patch: Partial<LifeFitV
           <small>Week score, 3 wins, 1 thing to fix, next week's top 3 (Telegram and Coach).</small>
         </span>
       </label>
+      </details>
       {p.weekly && rh && life.coach?.rhythm && (
         <div className="lf-grid">
           <label>
