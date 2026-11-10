@@ -8,6 +8,7 @@
 // core/foodPaste.ts; nothing is dropped silently (warnings are listed). No points.
 import { useMemo, useState } from 'react'
 import { MEAL_TYPES, mealTypeAt, type MealType } from '@core/food'
+import { calendarDay } from '@core/dates'
 import { FOOD_PASTE_PROMPT, parseFoodPaste, pasteId, pasteToLog, type PasteItem, type PasteMeal } from '@core/foodPaste'
 import { life } from '../bridge'
 import { useToast } from '../ui'
@@ -22,7 +23,7 @@ const TYPE: Record<MealType, string> = { breakfast: 'Breakfast', lunch: 'Lunch',
 const localNow = () => {
   const d = new Date()
   const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+  return `${calendarDay(d)}T${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 /** A food in the preview: the pasted one (numbers scale from it) and the grams now. */
