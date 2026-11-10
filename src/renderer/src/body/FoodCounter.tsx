@@ -103,7 +103,18 @@ export function FoodCounter() {
     }
   }
   // The Log food sheet: its first page (Photo / My meals / Type it), or one of the two pages.
-  const [sheet, setSheet] = useState<Sheet>(null)
+  // Sport Track's Dashboard "Paste from AI ›" opens this page straight away (a one-shot flag, set just before the tab opens).
+  const [sheet, setSheet] = useState<Sheet>(() => {
+    try {
+      if (localStorage.getItem('life_food_open') === 'paste') {
+        localStorage.removeItem('life_food_open')
+        return 'paste'
+      }
+    } catch {
+      /* private window */
+    }
+    return null
+  })
   const [openMeal, setOpenMeal] = useState<string | null>(null)
   const [justRemoved, setJustRemoved] = useState<string[]>([])
   const photoRef = useRef<PhotoPicker | null>(null)

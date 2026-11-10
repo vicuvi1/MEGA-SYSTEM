@@ -1077,6 +1077,20 @@
    ],
    "evidence": "2026-11-10: unit and server tests pass (clock pinned, made-up data); smoke 'Food photo extras: …', 'Desktop island food notice: …', 'Settings AI cost: …', the full smoke run passes (Settings → Ben: pushes 1.71, cost 1.12 of 2 screens; Pushes folds meals, coach nudges and the weekly check).",
    "notes": "core/foodScore.ts, foodBarcode.ts, foodLeftovers.ts, foodInsights.ts, foodTiming.ts, aiCost.ts, islandFood.ts; main/foodInsights.ts; api/_vision.mjs lookupBarcode + photos:<month>, api/ai.mjs photoCost; body/FoodGallery.tsx, FoodCharts.tsx, AiCostPanel.tsx; web/bots/foodBot.ts (after photos, type button, label foods, protein left, summary, usual times)."
-  }
+  },
+ {
+    "id": "F906",
+    "priority": 1,
+    "area": "sport",
+    "title": "Sport Track design, batch A: Dashboard, Workout, swap sheet (Change ›) and Gear",
+    "user_visible_behavior": "The Dashboard and Workout follow the approved design (docs/design/sport-track): greeting, an 'Am I growing?' chip, 4 tiles, the level ring, a large real photo demo (two frames cross-fading), a thumbnail and Change › on every move, the Coach, a 5-step path with its unlock box, This week, and Body / Food (Paste from AI ›) / 12-week program tiles. Workout is the set-by-set flow in the page (big current move, set tiles, reps, Easy / OK / Hard, Log set, the moves after it with drag order, a big rest timer with +30 s / Skip / sound, Ready to unlock with Apply from next workout / Keep, form check). Change › opens a sheet with the move's chain (easier steps, your step, next, a side option, locked ones named) with photos; Use … today changes today only, Make it my step is a level change. Gear (edit gear on the Dashboard and Exercises) says what you can train with; the plan only uses moves that gear allows (a weak desk or no table never means table rows).",
+    "status": "passing",
+    "verification": [
+       "npx vitest run src/core/trainGear.test.ts src/core/sportTrain.test.ts src/core/trainLog.test.ts",
+       "SMOKE_ONLY=\"Sport Track\" npm run smoke"
+    ],
+    "evidence": "2026-11-10: branch build-a-sport-design; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Dashboard 2.06 / 1.34 / 1.25 screens at 1280 / 1440 / 1920 (budget 2.5, 2.25 with 10% headroom); screenshots kept outside the repo.",
+    "notes": "core/trainGear.ts (gear, needs per move, fallbacks, one-day picks), core/trainSwap.ts (swapView, makeStep, gearPlan), core/trainLog.ts (sessionItems follows gear and picks; trainOf reads trainGear / trainPicks; mergeTrain), core/trainLadders.ts (6 new how-to moves: band, dumbbell, ring, door towel, backpack rows, floor pulls). renderer/src/training/SwapSheet.tsx, GearView.tsx, MovePic.tsx (DemoPic), WorkoutFlow.tsx (useWorkoutFlow + FinishOverlay), SportDashboard.tsx, SportWorkout.tsx. Gear is stored in Sport Track's synced state (trainGear, newer device wins) and described under settings.sport_tracker_json in settingsKeys.ts. Not in batch A: Exercises restyle, Progress path progress, Body & Food restyle, the Growth view."
+ }
  ]
 }

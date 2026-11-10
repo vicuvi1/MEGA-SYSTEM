@@ -11,7 +11,9 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { BodyState } from '@shared/api'
 import { applyOffer, finishReport, keepOffer, orderItems, shiftMove, shiftWorkout, trackerFinish, trackerLog, trackerToday, trackerUndo, type TrackerItem, type TrackerView } from '@core/sportTrain'
 import { ensureExercise, sessionItems, trainOf, type Dose, type Feel } from '@core/trainLog'
-import type { LadderId } from '@core/trainLadders'
+import { clearPick, pickToday, setGear, type Gear } from '@core/trainGear'
+import { makeStep } from '@core/trainSwap'
+import type { LadderId, Level } from '@core/trainLadders'
 import type { SessionType } from '@core/trainWeek'
 import { life } from '../bridge'
 import { celebrate } from '../fx'
@@ -64,7 +66,12 @@ export interface SportTrain {
   logSet: (it: TrackerItem, reps: number, feel: Feel, formOff: boolean) => void
   undoSet: (setId: string) => void
   finish: () => Promise<ReturnType<typeof finishReport> | null>
-  apply: (ladder: string, type?: SessionType) => string | null
+  apply: (ladder: string, type?: SessionType, fromNext?: boolean) => string | null
+  /** Use this move today only (null: back to your step). */
+  usePick: (ladder: LadderId, level: Level | null) => void
+  /** Make this step your level on the chain. */
+  makeStep: (ladder: LadderId, index: number) => boolean
+  saveGear: (g: Omit<Gear, 'at'>) => void
   keep: (ladder: string, type?: SessionType) => string | null
   shiftAll: (delta: -1 | 1) => void
   shiftOne: (it: TrackerItem, delta: -1 | 1) => void
@@ -137,16 +144,16 @@ export function useSportTrain(body: BodyState | null, onBody: (s: BodyState) => 
   }, [session, today, dose, anyway, refresh, toast, onBody, onWallet])
 
   const apply = useCallback(
-    (ladder: string, type?: SessionType): string | null => {
+    (ladder: string, type?: SessionType, fromNext?: boolean): string | null => {
       const t = type ?? session
       if (!t) return null
       const box: { o: ReturnType<typeof applyOffer> } = { o: null }
       saveTraining((s) => {
-        box.o = applyOffer(s, { day: today, type: t, ladder: ladder as LadderId, now: Date.now() })
+        box.o = applyOffer(s, { day: today, type: t, ladder: ladder as LadderId, now: Date.now(), fromNext })
       })
       refresh()
       if (!box.o) return null
-      toast(`${box.o.name} is your step now. Your old sets stay in your history.`, 'good')
+      toast(fromNext ? `${box.o.name} starts from your next workout. Today stays as planned.` : `${box.o.name} is your step now. Your old sets stay in your history.`, 'good')
       return appliedLine(box.o)
     },
     [session, today, refresh, toast]
@@ -195,6 +202,25 @@ export function useSportTrain(body: BodyState | null, onBody: (s: BodyState) => 
       toast((e as Error).message, 'bad')
     }
   }
+  const usePick = (ladder: LadderId, level: Level | null) => {
+    saveTraining((s) => {
+      if (level) pickToday(s, { day: today, ladder, level, now: Date.now() })
+      else clearPick(s, { day: today, ladder, now: Date.now() })
+    })
+    refresh()
+  }
+  const makeStepFn = (ladder: LadderId, index: number) => {
+    let ok = false
+    saveTraining((s) => {
+      ok = makeStep(s, { day: today, ladder, index, now: Date.now() })
+    })
+    refresh()
+    return ok
+  }
+  const saveGear = (g: Omit<Gear, 'at'>) => {
+    saveTraining((s) => void setGear(s, g, Date.now()))
+    refresh()
+  }
   const trainAnyway = (t: SessionType | null) => {
     writeAnyway(today, t)
     setAnyway(t)
@@ -227,6 +253,9 @@ export function useSportTrain(body: BodyState | null, onBody: (s: BodyState) => 
     shiftAll,
     shiftOne,
     restToday,
+    usePick,
+    makeStep: makeStepFn,
+    saveGear,
     trainAnyway,
     reorder,
     refresh
