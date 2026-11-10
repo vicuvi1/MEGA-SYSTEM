@@ -12735,6 +12735,1200 @@ function progressFor(input) {
 		line: hits ? `${hits} of 2 sessions at the top. One more and the next level unlocks.` : `Aim for ${r.sets}×${goal}${u$2(r)} today. Next level at ${nextAt}.`
 	};
 }
+// src/core/sportLevels.ts
+var MEANING = [
+	["Everyone starts here. Showing up is the hard part.", "You have started: that already beats most people."],
+	["You are building the base. Your body is learning fast.", "Habits first, strength follows. You are on your way."],
+	["Stronger than most beginners. This is real progress.", "People notice this level. Keep the rhythm."],
+	["A solid, honest level. You train with control.", "You can trust your body here. Time to aim higher."],
+	["Strong. Few people reach this without a gym.", "This is advanced home training. Be proud of it."],
+	["Elite strength. You earned every single rep.", "The top of the ladder: legends are made of days like yours."]
+];
+var T = (family, rows) => [family, rows];
+var TABLES = [
+	T("pushup", [
+		[
+			"Starting Line",
+			"incline_pushup",
+			3,
+			6
+		],
+		[
+			"Incline Climber",
+			"incline_pushup",
+			3,
+			12
+		],
+		[
+			"Kneeler",
+			"knee_pushup",
+			3,
+			10
+		],
+		[
+			"Knee Master",
+			"knee_pushup",
+			3,
+			15
+		],
+		[
+			"Floor Ready",
+			"pushup",
+			3,
+			5
+		],
+		[
+			"Solid",
+			"pushup",
+			3,
+			10
+		],
+		[
+			"Strong Chest",
+			"pushup",
+			3,
+			15
+		],
+		[
+			"Machine",
+			"pushup",
+			3,
+			20
+		],
+		[
+			"Wide Wings",
+			"wide_pushup",
+			3,
+			15
+		],
+		[
+			"Diamond Cutter",
+			"diamond_pushup",
+			3,
+			10
+		],
+		[
+			"Iron Chest",
+			"diamond_pushup",
+			3,
+			15
+		],
+		[
+			"Decline Drive",
+			"decline_pushup",
+			3,
+			10
+		],
+		[
+			"Archer",
+			"archer_pushup",
+			3,
+			6
+		],
+		[
+			"Archer Elite",
+			"archer_pushup",
+			3,
+			10
+		],
+		[
+			"One-arm Helper",
+			"onearm_assist_pushup",
+			3,
+			5
+		]
+	]),
+	T("squat", [
+		[
+			"Starting Line",
+			"squat",
+			3,
+			8
+		],
+		[
+			"Steady Legs",
+			"squat",
+			3,
+			15
+		],
+		[
+			"Squat Habit",
+			"squat",
+			3,
+			20
+		],
+		[
+			"Hundred Club",
+			"squat",
+			3,
+			30
+		],
+		[
+			"Springy",
+			"jump_squat",
+			3,
+			10
+		],
+		[
+			"Jump Master",
+			"jump_squat",
+			3,
+			15
+		],
+		[
+			"One Leg Forward",
+			"split_squat",
+			3,
+			10
+		],
+		[
+			"Split Strong",
+			"split_squat",
+			3,
+			15
+		],
+		[
+			"Bulgarian",
+			"bulgarian_squat",
+			3,
+			8
+		],
+		[
+			"Bulgarian Pro",
+			"bulgarian_squat",
+			3,
+			12
+		],
+		[
+			"Box Pistol",
+			"box_pistol",
+			3,
+			6
+		],
+		[
+			"Shrimp Starter",
+			"shrimp_squat",
+			3,
+			4
+		],
+		[
+			"Shrimp Master",
+			"shrimp_squat",
+			3,
+			8
+		],
+		[
+			"Pistol Path",
+			"pistol_squat",
+			3,
+			2
+		],
+		[
+			"Pistol",
+			"pistol_squat",
+			3,
+			5
+		]
+	]),
+	T("core", [
+		[
+			"Starting Line",
+			"crunch",
+			3,
+			10
+		],
+		[
+			"Crunch Rhythm",
+			"crunch",
+			3,
+			20
+		],
+		[
+			"Sit-up Start",
+			"situp",
+			3,
+			10
+		],
+		[
+			"Sit-up Strong",
+			"situp",
+			3,
+			20
+		],
+		[
+			"Raise Your Legs",
+			"leg_raise",
+			3,
+			8
+		],
+		[
+			"Leg Raise Pro",
+			"leg_raise",
+			3,
+			15
+		],
+		[
+			"Hollow Start",
+			"hollow_hold",
+			3,
+			15
+		],
+		[
+			"Hollow Strong",
+			"hollow_hold",
+			3,
+			30
+		],
+		[
+			"Hollow Rocker",
+			"hollow_rock",
+			3,
+			15
+		],
+		[
+			"V Shape",
+			"v_up",
+			3,
+			8
+		],
+		[
+			"V-up Pro",
+			"v_up",
+			3,
+			15
+		],
+		[
+			"Negative Start",
+			"dragon_neg",
+			3,
+			3
+		],
+		[
+			"Negative Strong",
+			"dragon_neg",
+			3,
+			6
+		],
+		[
+			"Dragon Start",
+			"dragon_flag",
+			3,
+			2
+		],
+		[
+			"Dragon Strong",
+			"dragon_flag",
+			3,
+			5
+		]
+	]),
+	T("plank", [
+		[
+			"Starting Line",
+			"plank",
+			3,
+			15
+		],
+		[
+			"Half Minute",
+			"plank",
+			3,
+			30
+		],
+		[
+			"Forty-five",
+			"plank",
+			3,
+			45
+		],
+		[
+			"Full Minute",
+			"plank",
+			3,
+			60
+		],
+		[
+			"Side Start",
+			"side_plank",
+			3,
+			20
+		],
+		[
+			"Side Steady",
+			"side_plank",
+			3,
+			40
+		],
+		[
+			"Tap Tap",
+			"shoulder_taps",
+			3,
+			20
+		],
+		[
+			"Tap Master",
+			"shoulder_taps",
+			3,
+			40
+		],
+		[
+			"Up and Down",
+			"plank_updown",
+			3,
+			10
+		],
+		[
+			"Up-down Pro",
+			"plank_updown",
+			3,
+			20
+		],
+		[
+			"Lean Start",
+			"planche_lean",
+			3,
+			10
+		],
+		[
+			"Lean Strong",
+			"planche_lean",
+			3,
+			25
+		]
+	]),
+	T("row", [
+		[
+			"Starting Line",
+			"door_row",
+			3,
+			6
+		],
+		[
+			"Door Puller",
+			"door_row",
+			3,
+			12
+		],
+		[
+			"Door Master",
+			"door_row",
+			3,
+			18
+		],
+		[
+			"Table Start",
+			"table_row_bent",
+			3,
+			6
+		],
+		[
+			"Bent Knee Rower",
+			"table_row_bent",
+			3,
+			12
+		],
+		[
+			"Bent Knee Master",
+			"table_row_bent",
+			3,
+			18
+		],
+		[
+			"Straight Legs",
+			"table_row",
+			3,
+			5
+		],
+		[
+			"Rower",
+			"table_row",
+			3,
+			10
+		],
+		[
+			"Strong Back",
+			"table_row",
+			3,
+			15
+		],
+		[
+			"Back of Steel",
+			"table_row",
+			3,
+			20
+		],
+		[
+			"Feet-up Rower",
+			"feet_row",
+			3,
+			8
+		],
+		[
+			"Feet-up Strong",
+			"feet_row",
+			3,
+			12
+		],
+		[
+			"One-arm Start",
+			"onearm_row",
+			3,
+			4
+		],
+		[
+			"One-arm Row Pro",
+			"onearm_row",
+			3,
+			8
+		]
+	]),
+	T("lunge", [
+		[
+			"Starting Line",
+			"reverse_lunge",
+			3,
+			6
+		],
+		[
+			"Backstep",
+			"reverse_lunge",
+			3,
+			10
+		],
+		[
+			"Backstep Strong",
+			"reverse_lunge",
+			3,
+			14
+		],
+		[
+			"Forward Lunge",
+			"lunge",
+			3,
+			8
+		],
+		[
+			"Lunge Steady",
+			"lunge",
+			3,
+			12
+		],
+		[
+			"Lunge Strong",
+			"lunge",
+			3,
+			16
+		],
+		[
+			"Lunge Master",
+			"lunge",
+			3,
+			20
+		],
+		[
+			"Jump Start",
+			"jump_lunge",
+			3,
+			6
+		],
+		[
+			"Jump Lunger",
+			"jump_lunge",
+			3,
+			10
+		],
+		[
+			"Spring Legs",
+			"jump_lunge",
+			3,
+			15
+		]
+	]),
+	T("bridge", [
+		[
+			"Starting Line",
+			"glute_bridge",
+			3,
+			8
+		],
+		[
+			"Bridge Builder",
+			"glute_bridge",
+			3,
+			15
+		],
+		[
+			"Bridge Strong",
+			"glute_bridge",
+			3,
+			20
+		],
+		[
+			"Bridge Master",
+			"glute_bridge",
+			3,
+			30
+		],
+		[
+			"One Leg Start",
+			"single_leg_bridge",
+			3,
+			5
+		],
+		[
+			"One Leg Steady",
+			"single_leg_bridge",
+			3,
+			8
+		],
+		[
+			"One Leg Strong",
+			"single_leg_bridge",
+			3,
+			12
+		],
+		[
+			"One Leg Pro",
+			"single_leg_bridge",
+			3,
+			15
+		],
+		[
+			"Glute Machine",
+			"single_leg_bridge",
+			3,
+			20
+		],
+		[
+			"Glute Legend",
+			"single_leg_bridge",
+			4,
+			20
+		]
+	]),
+	T("calf", [
+		[
+			"Starting Line",
+			"calf_raise",
+			3,
+			10
+		],
+		[
+			"Calf Habit",
+			"calf_raise",
+			3,
+			20
+		],
+		[
+			"Calf Strong",
+			"calf_raise",
+			3,
+			30
+		],
+		[
+			"Calf Master",
+			"calf_raise",
+			3,
+			40
+		],
+		[
+			"One Leg Start",
+			"single_calf_raise",
+			3,
+			6
+		],
+		[
+			"One Leg Steady",
+			"single_calf_raise",
+			3,
+			10
+		],
+		[
+			"One Leg Strong",
+			"single_calf_raise",
+			3,
+			15
+		],
+		[
+			"One Leg Pro",
+			"single_calf_raise",
+			3,
+			20
+		],
+		[
+			"Spring Steel",
+			"single_calf_raise",
+			3,
+			25
+		],
+		[
+			"Calf Legend",
+			"single_calf_raise",
+			3,
+			30
+		]
+	]),
+	T("dips", [
+		[
+			"Starting Line",
+			"chair_dip",
+			3,
+			4
+		],
+		[
+			"Dip Starter",
+			"chair_dip",
+			3,
+			8
+		],
+		[
+			"Dip Steady",
+			"chair_dip",
+			3,
+			12
+		],
+		[
+			"Dip Strong",
+			"chair_dip",
+			3,
+			16
+		],
+		[
+			"Dip Machine",
+			"chair_dip",
+			3,
+			20
+		],
+		[
+			"Dip Pro",
+			"chair_dip",
+			3,
+			25
+		],
+		[
+			"Triceps Tank",
+			"chair_dip",
+			4,
+			20
+		],
+		[
+			"Dip Elite",
+			"chair_dip",
+			4,
+			25
+		],
+		[
+			"Dip Master",
+			"chair_dip",
+			5,
+			20
+		],
+		[
+			"Dip Legend",
+			"chair_dip",
+			5,
+			25
+		]
+	]),
+	T("pike", [
+		[
+			"Starting Line",
+			"pike_pushup",
+			3,
+			4
+		],
+		[
+			"Pike Starter",
+			"pike_pushup",
+			3,
+			8
+		],
+		[
+			"Pike Steady",
+			"pike_pushup",
+			3,
+			12
+		],
+		[
+			"Pike Strong",
+			"pike_pushup",
+			3,
+			15
+		],
+		[
+			"Feet-up Start",
+			"elevated_pike",
+			3,
+			4
+		],
+		[
+			"Feet-up Steady",
+			"elevated_pike",
+			3,
+			8
+		],
+		[
+			"Feet-up Strong",
+			"elevated_pike",
+			3,
+			12
+		],
+		[
+			"Shoulder Tank",
+			"elevated_pike",
+			3,
+			15
+		],
+		[
+			"Shoulder Pro",
+			"elevated_pike",
+			4,
+			15
+		],
+		[
+			"Shoulder Legend",
+			"elevated_pike",
+			5,
+			15
+		]
+	]),
+	T("back", [
+		[
+			"Starting Line",
+			"superman",
+			3,
+			6
+		],
+		[
+			"Superman Steady",
+			"superman",
+			3,
+			12
+		],
+		[
+			"Superman Strong",
+			"superman",
+			3,
+			18
+		],
+		[
+			"Superman Master",
+			"superman",
+			3,
+			24
+		],
+		[
+			"Swimmer Start",
+			"swimmer",
+			3,
+			10
+		],
+		[
+			"Swimmer Steady",
+			"swimmer",
+			3,
+			16
+		],
+		[
+			"Swimmer Strong",
+			"swimmer",
+			3,
+			24
+		],
+		[
+			"Swimmer Pro",
+			"swimmer",
+			3,
+			32
+		],
+		[
+			"Back Tank",
+			"swimmer",
+			4,
+			32
+		],
+		[
+			"Back Legend",
+			"swimmer",
+			5,
+			32
+		]
+	]),
+	T("burpee", [
+		[
+			"Starting Line",
+			"half_burpee",
+			3,
+			5
+		],
+		[
+			"Thruster",
+			"half_burpee",
+			3,
+			10
+		],
+		[
+			"Thruster Strong",
+			"half_burpee",
+			3,
+			15
+		],
+		[
+			"Burpee Start",
+			"burpee",
+			3,
+			5
+		],
+		[
+			"Burpee Steady",
+			"burpee",
+			3,
+			10
+		],
+		[
+			"Burpee Strong",
+			"burpee",
+			3,
+			15
+		],
+		[
+			"Burpee Master",
+			"burpee",
+			3,
+			20
+		],
+		[
+			"Push-up Burpee",
+			"pushup_burpee",
+			3,
+			6
+		],
+		[
+			"Burpee Pro",
+			"pushup_burpee",
+			3,
+			10
+		],
+		[
+			"Burpee Legend",
+			"pushup_burpee",
+			3,
+			15
+		]
+	])
+];
+var REP_LADDER = [
+	6,
+	10,
+	15,
+	20,
+	25,
+	30,
+	40,
+	50,
+	60,
+	80
+];
+/** Words after the ×: "push-ups", "seconds of plank". */
+var reqText = (m, sets, reps) => m.unit === "sec" ? `${sets}×${reps} s ${m.name.toLowerCase()}` : `${sets}×${reps} ${m.name.toLowerCase()}`;
+function build(family, group, name, rows) {
+	const N = rows.length;
+	return {
+		family,
+		name,
+		group,
+		levels: rows.map(([lname, move, sets, reps], i) => {
+			const m = moveById(move);
+			if (!m) throw new Error(`sportLevels: unknown move ${move}`);
+			const tier = Math.min(MEANING.length - 1, Math.floor(i / N * MEANING.length));
+			return {
+				n: i + 1,
+				name: lname,
+				move,
+				sets,
+				reps,
+				req: reqText(m, sets, reps),
+				meaning: MEANING[tier][i % 2]
+			};
+		})
+	};
+}
+/** A track for a family without a hand-made table: each step × a ladder of reps, 10 levels at least. */
+function generic(family) {
+	const f = FAMILIES[family];
+	const steps = (f?.steps ?? []).map((id) => moveById(id)).filter(Boolean);
+	if (!steps.length) return null;
+	const rows = [];
+	const perStep = Math.max(3, Math.ceil(10 / steps.length));
+	steps.forEach((m, si) => {
+		const sec = m.unit === "sec";
+		const base = sec ? [
+			10,
+			20,
+			30,
+			45,
+			60,
+			75,
+			90
+		] : REP_LADDER;
+		const from = si === 0 ? 0 : 1;
+		for (let k = 0; k < perStep; k++) {
+			const r = base[Math.min(base.length - 1, from + k)];
+			rows.push([
+				`${m.name} ${k + 1}`,
+				m.id,
+				3,
+				si === 0 || !sec ? Math.max(3, Math.round(r * (1 - Math.min(.5, si * .12)))) : r
+			]);
+		}
+	});
+	return build(family, steps[0].group, f.name, rows.slice(0, 15).map((r) => [
+		r[0],
+		r[1],
+		r[2],
+		r[3]
+	]));
+}
+var CACHE = /* @__PURE__ */ new Map();
+function trackOf(family) {
+	if (CACHE.has(family)) return CACHE.get(family);
+	let t = null;
+	const table = TABLES.find((x) => x[0] === family);
+	if (table) t = build(family, moveById(table[1][0][1])?.group ?? "push", FAMILIES[family]?.name ?? family, table[1]);
+	else t = generic(family);
+	CACHE.set(family, t);
+	return t;
+}
+TABLES.map((t) => t[0]);
+var stepIdx = (move) => (FAMILIES[move.family]?.steps ?? []).indexOf(move.id);
+/** Working sets are about 60% of a max set. */
+var WORKING_OF_MAX = .6;
+/** Reps on a move that match `reps` on a move `steps` harder on its ladder. */
+var transferReps = (reps, steps) => reps * Math.pow(.7, Math.max(0, steps));
+/** How many sets a day total was probably done in. */
+function estimateSets(total, unit = "reps") {
+	const t = Math.max(0, Math.round(total));
+	if (t <= 0) return [];
+	const n = unit === "sec" ? t > 180 ? 4 : 3 : Math.max(3, Math.min(6, Math.ceil(t / 25)));
+	const base = Math.floor(t / n);
+	const extra = t - base * n;
+	return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
+}
+/** A day total that came from the Telegram import: it is never evidence for a level. */
+var isImported$1 = (imp, day, exId) => !!imp?.[day]?.includes(exId);
+/** Per day, the entries of one family: real sets, else an estimate from the day total. */
+function dayEntries(input, family, until) {
+	const out = /* @__PURE__ */ new Map();
+	const exs = input.exercises.map((ex) => ({
+		ex,
+		move: moveOf(ex)
+	})).filter((x) => x.move && x.move.family === family);
+	const dayKeys = /* @__PURE__ */ new Set([...Object.keys(input.days ?? {}), ...Object.keys(input.sets ?? {})]);
+	for (const day of dayKeys) {
+		if (day > (until ?? input.today)) continue;
+		for (const { ex, move } of exs) {
+			const real = setsOn(input.sets, day, String(ex.id)).map((s) => s.reps);
+			let entry = null;
+			if (real.length) entry = {
+				move,
+				reps: real,
+				est: false
+			};
+			else {
+				const total = isImported$1(input.imported, day, String(ex.id)) ? 0 : Number(input.days?.[day]?.[String(ex.id)]) || 0;
+				if (total > 0) entry = {
+					move,
+					reps: estimateSets(total, move.unit),
+					est: true
+				};
+			}
+			if (entry) (out.get(day) ?? out.set(day, []).get(day)).push(entry);
+		}
+	}
+	const b = input.best?.[family];
+	const bm = b && moveById(b.move);
+	if (b && bm && b.reps > 0 && b.day <= (until ?? input.today)) {
+		const w = Math.max(1, Math.round(b.reps * WORKING_OF_MAX));
+		const mk = () => ({
+			move: bm,
+			reps: [
+				w,
+				w,
+				w
+			],
+			est: true,
+			transfer: true
+		});
+		for (const d of [b.day, shiftDay(b.day, -1)]) (out.get(d) ?? out.set(d, []).get(d)).push(mk());
+	}
+	return out;
+}
+/** How many sets of this entry count towards a level: the move at least as hard, 70% of the reps for a harder move. */
+function setsMeeting(entries, lv) {
+	const lm = moveById(lv.move);
+	if (!lm) return 0;
+	const li = stepIdx(lm);
+	let n = 0;
+	for (const e of entries) {
+		const hard = stepIdx(e.move);
+		if (hard < li) {
+			if (e.transfer) n += e.reps.filter((r) => transferReps(r, li - hard) >= lv.reps).length;
+			continue;
+		}
+		const need = hard > li ? Math.ceil(lv.reps * .7) : lv.reps;
+		n += e.reps.filter((r) => r >= need).length;
+	}
+	return n;
+}
+/** The highest level a day's entries reach (0: none). */
+function levelOfDay(track, entries) {
+	for (let i = track.levels.length - 1; i >= 0; i--) if (setsMeeting(entries, track.levels[i]) >= track.levels[i].sets) return i + 1;
+	return 0;
+}
+/** The day's level with the part of the way to the next one ("6.4"). */
+function valueOfDay(track, entries) {
+	const L = levelOfDay(track, entries);
+	const top = Math.max(0, ...entries.flatMap((e) => e.reps));
+	if (L >= track.levels.length) return L;
+	const cur = L ? track.levels[L - 1] : null;
+	const next = track.levels[L];
+	const nm = moveById(next.move);
+	const best = Math.max(0, ...entries.filter((e) => stepIdx(e.move) >= stepIdx(nm)).flatMap((e) => e.reps), ...entries.flatMap((e) => e.reps).map((r) => r * .7));
+	const lo = cur && cur.move === next.move ? cur.reps : 0;
+	return L + Math.max(0, Math.min(.95, (Math.min(best, top) - lo) / Math.max(1, next.reps - lo)));
+}
+var dayDiff$1 = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+function core(input, track, until) {
+	const rows = [...dayEntries(input, track.family, until).entries()].map(([day, es]) => ({
+		day,
+		es,
+		level: levelOfDay(track, es),
+		value: valueOfDay(track, es)
+	})).sort((a, b) => a.day.localeCompare(b.day));
+	const lastDay = rows.length ? rows[rows.length - 1].day : null;
+	const of = track.levels.length;
+	const base = {
+		family: track.family,
+		track,
+		of,
+		active30: 0,
+		daysLogged: rows.length,
+		trend: "new",
+		lastDay,
+		frac: 0,
+		estimated: false
+	};
+	if (!rows.length) return {
+		...base,
+		level: 0,
+		lv: null,
+		next: track.levels[0],
+		best: null,
+		solid: 0
+	};
+	const win = (n) => rows.filter((r) => dayDiff$1(r.day, until) <= n);
+	const w60 = win(60);
+	const w45 = win(45);
+	const pool = w60.length ? w60 : rows.slice(-1);
+	let bestRow = pool[0];
+	for (const r of pool) if (r.level > bestRow.level || r.level === bestRow.level && r.day > bestRow.day) bestRow = r;
+	let solid = 0;
+	for (let L = of; L >= 1; L--) if (w45.filter((r) => r.level >= L).length >= 2) {
+		solid = L;
+		break;
+	}
+	let level = pool.length <= 2 ? bestRow.level : Math.max(solid, Math.min(bestRow.level, solid + 1));
+	const w21 = win(21);
+	if (w21.length >= 2) {
+		const recentMax = Math.max(...w21.map((r) => r.level));
+		if (recentMax < level - 1) level = recentMax + 1;
+	}
+	level = Math.max(1, Math.min(of, level));
+	const a = win(14);
+	const b = rows.filter((r) => dayDiff$1(r.day, until) > 14 && dayDiff$1(r.day, until) <= 28);
+	const avg = (l) => l.length ? l.reduce((t, r) => t + r.value, 0) / l.length : null;
+	const va = avg(a);
+	const vb = avg(b);
+	const trend = va == null ? "down" : vb == null ? rows.length < 3 ? "new" : "steady" : va - vb > .3 ? "up" : va - vb < -.3 ? "down" : "steady";
+	const top = Math.max(0, ...bestRow.es.flatMap((e) => e.reps));
+	const topEntry = bestRow.es.find((e) => e.reps.includes(top));
+	const recentBest = Math.max(0, ...win(10).map((r) => r.value));
+	const frac = Math.max(0, Math.min(1, recentBest - Math.floor(recentBest))) * (recentBest >= level ? 1 : 0);
+	return {
+		...base,
+		level,
+		lv: track.levels[level - 1],
+		next: track.levels[level] ?? null,
+		best: {
+			level: bestRow.level,
+			day: bestRow.day,
+			top,
+			sets: topEntry.reps.length,
+			est: bestRow.es.some((e) => e.est)
+		},
+		solid,
+		active30: win(30).length,
+		trend,
+		frac,
+		estimated: bestRow.es.every((e) => e.est)
+	};
+}
+/** Where you stand on one family's track. `until` re-places you as you were on that day. */
+function placeFamily(input, family, until) {
+	const track = trackOf(family);
+	if (!track) return null;
+	const day = until ?? input.today;
+	const p = core(input, track, day);
+	let comeback = null;
+	let level = p.level;
+	if (p.lastDay && p.level > 0) {
+		const off = dayDiff$1(p.lastDay, day);
+		if (off >= 10) {
+			comeback = {
+				from: p.level,
+				hits: 0,
+				need: 2,
+				daysOff: off
+			};
+			level = Math.max(1, p.level - (off >= 21 ? 2 : 1));
+		} else {
+			const entries = [...dayEntries(input, family, day).keys()].sort();
+			for (let i = entries.length - 1; i > 0; i--) {
+				if (dayDiff$1(entries[i], day) > 35) break;
+				const gap = dayDiff$1(entries[i - 1], entries[i]);
+				if (gap >= 10) {
+					const old = core(input, track, entries[i - 1]).level;
+					const map = dayEntries(input, family, day);
+					const hits = entries.slice(i).filter((d) => levelOfDay(track, map.get(d) ?? []) >= old).length;
+					if (hits < 2 && old > 1) {
+						comeback = {
+							from: old,
+							hits,
+							need: 2,
+							daysOff: gap
+						};
+						level = Math.min(p.level, Math.max(1, old - (gap >= 21 ? 2 : 1)));
+					}
+					break;
+				}
+			}
+		}
+	}
+	const lv = level ? track.levels[level - 1] : null;
+	const next = track.levels[level] ?? null;
+	const bestTxt = p.best ? `best day ${p.best.sets}×${p.best.top}${p.estimated ? " (from your totals)" : ""}` : "nothing logged yet";
+	const steady = p.active30 >= 12 ? "steady" : p.active30 >= 6 ? "regular" : p.active30 ? "on and off" : "quiet lately";
+	const trendTxt = p.trend === "up" ? "trending up" : p.trend === "down" ? "a little down lately" : p.trend === "new" ? "just started" : "holding steady";
+	const why = !level ? `${track.name}: nothing logged yet. Log one day (like "15 14 12") and your level appears.` : comeback && comeback.hits < comeback.need ? `${track.name}: Comeback level ${level} ${lv.name} after ${comeback.daysOff} days off. Hit Level ${comeback.from} (${track.levels[comeback.from - 1].req}) on ${comeback.need - comeback.hits} more ${comeback.need - comeback.hits === 1 ? "day" : "days"} to get it back.` : `${track.name}: ${bestTxt}, ${p.active30} ${p.active30 === 1 ? "day" : "days"} in 30 (${steady}), ${trendTxt} → Level ${level} ${lv.name}.${next ? ` Next: Level ${next.n} at ${next.req}.` : " You are at the top of this ladder."}`;
+	return {
+		...p,
+		level,
+		lv,
+		next,
+		comeback,
+		why
+	};
+}
 // src/core/trainLadders.ts
 var X = (m) => m;
 var TRAIN_MOVES = Object.fromEntries([
@@ -13144,6 +14338,8 @@ function cleanLadders(x) {
 }
 /** The ladders a session uses, in order. */
 var laddersFor = (ladders, type) => ladders.filter((l) => l.type === type);
+/** "6–12" or "20–45 s". */
+var rangeText = (v) => `${v.lo}–${v.hi}${v.unit === "sec" ? " s" : ""}`;
 // src/core/trainLog.ts
 /** Our part of Sport Track's state, cleaned. */
 function trainOf(st) {
@@ -13201,8 +14397,39 @@ function lastLine(last, level, sets) {
 	const kg = Math.max(0, ...last.sets.map((s) => Number(s.kg) || 0));
 	return `Last time: ${setsText(last.reps.slice(0, Math.max(sets, last.reps.length)), level.unit)}${kg ? ` +${kg} kg` : ""} → aim to beat it`;
 }
-/** Working sets per move in a session: the first move of the day gets 4, the others 3. */
-var setsFor = (index, type) => type === "upper" && index === 0 ? 4 : 3;
+/** The muscle group a ladder trains hard (shoulders count as push, like the body map). */
+var LADDER_MUSCLE = {
+	push: "push",
+	shoulders: "push",
+	pull: "pull",
+	single: "legs",
+	hinge: "legs",
+	core: "core"
+};
+/** Hard sets per muscle group a week: about 14, never under 10 or over 20 when the week allows it. */
+var WEEK_SETS = {
+	lo: 10,
+	aim: 14,
+	hi: 20
+};
+/**
+* Working sets of a ladder in each session at the full dose, so every muscle group gets about 10-20 hard
+* sets a week from your split: the muscle's weekly aim is shared by its sessions, then by its ladders in
+* that session (the first one gets the extra set). 2 to 5 sets a move.
+* Default week (3 upper, 2 legs + core): push 3 + shoulders 2, pull 5, single-leg 4 + hinge 3, core 5.
+*/
+function ladderSets(week, ladders, ladder) {
+	const mu = LADDER_MUSCLE[ladder.id];
+	const n = week.days.filter((d) => d === ladder.type).length || 1;
+	const per = Math.max(Math.ceil(WEEK_SETS.lo / n), Math.min(Math.floor(WEEK_SETS.hi / n), Math.round(WEEK_SETS.aim / n)));
+	const peers = laddersFor(ladders, ladder.type).filter((l) => LADDER_MUSCLE[l.id] === mu);
+	const k = Math.max(1, peers.length);
+	const i = Math.max(0, peers.indexOf(ladder));
+	const share = Math.floor(per / k) + (i < per % k ? 1 : 0);
+	return Math.max(2, Math.min(5, share));
+}
+/** Sets today at a dose: Lighter is one set less, Short is 2 sets (never more than planned). */
+var doseSets = (sets, dose = "full") => dose === "short" ? Math.min(sets, 2) : dose === "light" ? Math.max(Math.min(sets, 2), sets - 1) : sets;
 var rangeOf = (v, sets) => ({
 	lo: v.lo,
 	hi: v.hi,
@@ -13210,8 +14437,22 @@ var rangeOf = (v, sets) => ({
 	unit: v.unit
 });
 /**
-* Where you stand on a level, from the sessions since you reached it. Complete: every working set at
-* the top of the range in 2 sessions in a row (Sport Track's rule, sportProgress.ts). Struggling: the
+* How a session's working sets felt: easy when every one was tapped Easy, ok when all were OK or Easy (the
+* target: 1-2 reps left), hard when any was Hard; null when a working set was not tapped.
+*/
+function effortOf(s, sets) {
+	const w = (s?.sets ?? []).slice(0, sets);
+	if (!w.length || w.some((x) => !x.feel)) return null;
+	if (w.some((x) => x.feel === "hard")) return "hard";
+	return w.every((x) => x.feel === "easy") ? "easy" : "ok";
+}
+/** The optional form check: no working set marked "form broke". */
+var formOk = (s, sets) => !(s?.sets ?? []).slice(0, sets).some((x) => x.form === "off");
+/**
+* Where you stand on a level, from the sessions since you reached it. Complete (double progression): every
+* working set at the top of the range in 2 sessions in a row, at the target effort (each set tapped OK or Easy,
+* or not tapped; a session with a Hard set or a "form broke" set doesn't count). The next level is then offered: you choose Apply or
+* Keep (it never moves by itself). Easy both times and far past the top: two levels up. Struggling: the
 * bottom of the range not reached in the last 2 sessions on this level.
 */
 function levelStatus(sessions, level, sets, since) {
@@ -13227,40 +14468,60 @@ function levelStatus(sessions, level, sets, since) {
 		needSets,
 		pct: 0,
 		sessions: 0,
-		line: `Not started: ${sets}×${level.lo}${u} to begin, ${sets}×${level.hi}${u} twice to level up.`
+		line: `Not started: ${sets}×${level.lo}${u} to begin, ${sets}×${level.hi}${u} twice to unlock the next move.`
 	};
 	let hits = 0;
-	for (let i = list.length - 1; i >= 0 && atTop$1(list[i], r); i--) hits++;
+	for (let i = list.length - 1; i >= 0 && atTop$1(list[i], r) && effortOf(list[i], sets) !== "hard" && formOk(list[i], sets); i--) hits++;
 	const lastS = list[list.length - 1];
 	const partial = hits ? 0 : lastS.reps.slice(0, sets).filter((x) => x >= level.hi).length;
 	const topSets = Math.min(needSets, hits * sets + partial);
+	const effort = effortOf(lastS, sets);
 	const base = {
 		hits: Math.min(hits, 2),
 		need: 2,
 		topSets,
 		needSets,
 		pct: topSets / needSets,
-		sessions: list.length
+		sessions: list.length,
+		effort
 	};
-	if (hits >= 2) return {
-		...base,
-		state: "complete",
-		line: `Level complete: ${sets}×${level.hi}${u} in 2 sessions in a row.`
-	};
+	if (hits >= 2) {
+		const two = list.slice(-2);
+		const feels = two.map((s) => effortOf(s, sets));
+		const easy = feels.every((f) => f === "easy");
+		const way = Math.max(3, Math.ceil(level.hi * .25));
+		const far = easy && two.every((s) => s.reps.slice(0, sets).every((x) => x >= level.hi + way));
+		const how = easy ? "easy twice" : feels.every((f) => f === "easy" || f === "ok") ? "twice with 1–2 reps left" : `in 2 sessions in a row`;
+		const reason = `${sets}×${level.hi}${u} ${how}`;
+		return {
+			...base,
+			pct: 1,
+			topSets: needSets,
+			state: "complete",
+			reason,
+			jump: far ? 2 : 1,
+			line: `Level complete: ${reason}.`
+		};
+	}
 	const lastTwo = list.slice(-2);
 	if (lastTwo.length === 2 && lastTwo.every((s) => belowBottom(s, r))) return {
 		...base,
 		state: "struggling",
 		line: `Under ${level.lo}${u} twice. Stay here a bit longer, or go one level back.`
 	};
+	const hardTop = atTop$1(lastS, r) && (effort === "hard" || !formOk(lastS, sets));
 	return {
 		...base,
 		state: "building",
-		line: hits ? `1 of 2 sessions at the top. One more and this level is done.` : `${topSets} of ${needSets} sets at the top (${level.hi}${u}).`
+		line: hardTop ? `${sets}×${level.hi}${u}, but ${effort === "hard" ? "it was hard" : "your form broke"}. Once more with 1–2 reps left and good form counts.` : hits ? `1 of 2 sessions at the top. One more (not hard) unlocks the next move.` : `${topSets} of ${needSets} sets at the top (${level.hi}${u}).`
 	};
 }
-/** Your level on a ladder: what you chose, else placement from your best sets. */
-function currentLevel(st, data, ladder) {
+/**
+* Your level on a ladder: what you chose (or applied), else placement from your best sets. With `today`, your
+* daily totals of the last 60 days count toward placement too (old rep logs place you). The level never moves
+* by itself: a completed level is offered (PlanItem.offer) and you choose Apply or Keep.
+*/
+function currentLevel(st, data, ladder, today) {
 	const s = data.levels[ladder.id];
 	if (s) {
 		const index = Math.min(ladder.levels.length - 1, s.level);
@@ -13271,16 +14532,32 @@ function currentLevel(st, data, ladder) {
 		};
 	}
 	return {
-		index: placeLadder(ladder, (m) => bestOf(st, m)),
+		index: placeLadder(ladder, (m) => bestOf(st, m, today)),
 		placed: true,
 		since: null
 	};
 }
-/** Your best single set of a move: logged sets of it, or a best set you told Sport Track. */
-function bestOf(st, move) {
+/**
+* Your best single set of a move: logged sets of it, or a best set you told Sport Track. With `today`, your
+* daily totals of the last 60 days count too, as the first set of an even split (130 push-ups in a day is
+* about 6 sets of 22, so 22): old rep logs still place you. Telegram-imported days never do.
+*/
+function bestOf(st, move, today) {
 	let best = 0;
 	for (const s of moveSessions(st, move)) for (const r of s.reps) best = Math.max(best, r);
 	for (const b of Object.values(st?.bestSets ?? {})) if (b && b.move === move) best = Math.max(best, Number(b.reps) || 0);
+	if (today) {
+		const ids = exIdsFor(st?.exercises, move);
+		const from = shiftDay(today, -60);
+		const unit = moveInfo(move)?.unit ?? "reps";
+		for (const [day, m] of Object.entries(st?.days ?? {})) {
+			if (day < from || day > today || !m) continue;
+			for (const id of ids) {
+				if (isImported$1(st?.importedDays, day, id)) continue;
+				best = Math.max(best, estimateSets(Number(m[id]) || 0, unit)[0] ?? 0);
+			}
+		}
+	}
 	return best > 0 ? best : null;
 }
 /** Each harder level, about 70% of the reps you could do on the one before. */
@@ -13304,29 +14581,104 @@ function placeLadder(ladder, best) {
 	});
 	return at;
 }
-/** Today's moves for a session type, each on your current level. */
-function sessionItems(st, data, type, today) {
-	return laddersFor(data.ladders, type).map((ladder, i) => {
-		const cur = currentLevel(st, data, ladder);
+/**
+* "Unlocked: Decline push-ups 4 × 6–12, because 4×12 easy twice": what today's sets of a move mean for
+* the next session, by the same rules that pick that session (levelStatus, currentLevel). Null with no set today.
+*/
+function nextTimeOf(p, today) {
+	const t = p.latest && p.latest.day === today ? p.latest : null;
+	if (!t) return null;
+	const { level, fullSets: sets, status } = p;
+	const u = level.unit === "sec" ? " s" : "";
+	if (status.state === "complete") {
+		if (p.index >= p.ladder.levels.length - 1) return {
+			kind: "top",
+			move: level.move,
+			line: `Next time: ${p.name} with a slow tempo (3 s down, 1 s pause), because ${status.reason}. This is the top of the ladder.`
+		};
+		const to = p.ladder.levels[Math.min(p.ladder.levels.length - 1, p.index + (status.jump ?? 1))];
+		return {
+			kind: "up",
+			move: to.move,
+			line: `Unlocked: ${moveName(to.move)} ${sets} × ${rangeText(to)}, because ${status.reason}.`
+		};
+	}
+	if (status.state === "struggling") {
+		const back = p.ladder.levels[p.index - 1];
+		return {
+			kind: "down",
+			move: level.move,
+			line: `Next time: stay on ${p.name}${back ? ` or go one level back to ${moveName(back.move)}` : ""}, because you stayed under ${level.lo}${u} twice.`
+		};
+	}
+	const w = t.reps.slice(0, sets);
+	if (w.length >= sets && w.every((x) => x >= level.hi)) return status.hits >= 1 ? {
+		kind: "stay",
+		move: level.move,
+		line: `Next time: ${p.name} ${sets} × ${level.hi}${u} again, because one more session at the top unlocks the next move.`
+	} : {
+		kind: "stay",
+		move: level.move,
+		line: `Next time: ${p.name} ${sets} × ${level.hi}${u} again, because you reached the top but it was hard. Twice with 1–2 reps left unlocks the next move.`
+	};
+	const step = level.unit === "sec" ? 5 : 1;
+	const aim = Array.from({ length: sets }, (_, i) => Math.min(level.hi, w[i] ?? w[w.length - 1] ?? level.lo));
+	const low = aim.indexOf(Math.min(...aim));
+	aim[low] = Math.min(level.hi, aim[low] + step);
+	return {
+		kind: "reps",
+		move: level.move,
+		line: `Next time: ${p.name} ${setsText(aim, level.unit)}, because ${w.length < sets ? `${sets} sets is the plan` : `one more ${level.unit === "sec" ? "5 s" : "rep"} on your lowest set is how you grow`}.`
+	};
+}
+/** Today's moves for a session type, each on your current level, at today's dose; a completed level carries its offer. */
+function sessionItems(st, data, type, today, dose = "full") {
+	return laddersFor(data.ladders, type).map((ladder) => {
+		const cur = currentLevel(st, data, ladder, today);
+		const stored = data.levels[ladder.id];
 		const level = ladder.levels[cur.index];
-		const sets = setsFor(i, type);
+		const fullSets = ladderSets(data.week, data.ladders, ladder);
+		const sets = doseSets(fullSets, dose);
 		const all = moveSessions(st, level.move, today);
 		const last = lastTime(all, today);
-		return {
+		const since = cur.since;
+		const item = {
 			ladder,
 			index: cur.index,
 			level,
 			name: moveName(level.move),
 			sets,
 			placed: cur.placed,
-			since: cur.since,
+			since,
 			last,
 			latest: all[all.length - 1] ?? null,
 			lastLine: lastLine(last, level, sets),
-			status: levelStatus(all, level, sets, cur.since),
-			next: ladder.levels[cur.index + 1] ?? null
+			status: levelStatus(all, level, fullSets, since),
+			next: ladder.levels[cur.index + 1] ?? null,
+			fullSets,
+			offer: null,
+			nextTime: null
 		};
+		item.offer = offerOf(item, stored?.declinedOn);
+		item.nextTime = nextTimeOf(item, today);
+		return item;
 	});
+}
+/** The next level unlocked by a completed one, unless you chose Keep after your newest session (null: nothing to offer). */
+function offerOf(p, declinedOn) {
+	if (p.status.state !== "complete" || p.index >= p.ladder.levels.length - 1) return null;
+	if (!suggestNow(p.status, p.latest, declinedOn)) return null;
+	const to = Math.min(p.ladder.levels.length - 1, p.index + (p.status.jump ?? 1));
+	const lv = p.ladder.levels[to];
+	const name = moveName(lv.move);
+	return {
+		to,
+		move: lv.move,
+		name,
+		target: `${p.fullSets} × ${rangeText(lv)}`,
+		reason: p.status.reason ?? "",
+		line: `Unlocked: ${name}, because ${p.status.reason}.`
+	};
 }
 /** About how long a session takes: warm-up, ~40 s a set (twice for one-leg moves), 75 s rest between sets. */
 function sessionMinutes$1(items) {
@@ -13350,6 +14702,8 @@ function sessionMinutes$1(items) {
 	sec += Math.max(0, total - 1) * 75;
 	return Math.round(sec / 60);
 }
+/** Shows the level-up / step-back suggestion only when a session came after your last "not yet". */
+var suggestNow = (status, last, declinedOn) => (status.state === "complete" || status.state === "struggling") && (!declinedOn || (last?.day ?? "") > declinedOn);
 // src/core/coachTalk.ts
 var fmt$3 = (n) => Math.round(n).toLocaleString("en-US");
 var toMin$11 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
@@ -19883,1200 +21237,6 @@ function musicNowContext(v, now) {
 	const m = cleanMusicNow(v);
 	if (!m || now - m.at > 12e5 || m.at - now > 6e4) return null;
 	return `Music playing on SoundCloud now: ${m.line}.`;
-}
-// src/core/sportLevels.ts
-var MEANING = [
-	["Everyone starts here. Showing up is the hard part.", "You have started: that already beats most people."],
-	["You are building the base. Your body is learning fast.", "Habits first, strength follows. You are on your way."],
-	["Stronger than most beginners. This is real progress.", "People notice this level. Keep the rhythm."],
-	["A solid, honest level. You train with control.", "You can trust your body here. Time to aim higher."],
-	["Strong. Few people reach this without a gym.", "This is advanced home training. Be proud of it."],
-	["Elite strength. You earned every single rep.", "The top of the ladder: legends are made of days like yours."]
-];
-var T = (family, rows) => [family, rows];
-var TABLES = [
-	T("pushup", [
-		[
-			"Starting Line",
-			"incline_pushup",
-			3,
-			6
-		],
-		[
-			"Incline Climber",
-			"incline_pushup",
-			3,
-			12
-		],
-		[
-			"Kneeler",
-			"knee_pushup",
-			3,
-			10
-		],
-		[
-			"Knee Master",
-			"knee_pushup",
-			3,
-			15
-		],
-		[
-			"Floor Ready",
-			"pushup",
-			3,
-			5
-		],
-		[
-			"Solid",
-			"pushup",
-			3,
-			10
-		],
-		[
-			"Strong Chest",
-			"pushup",
-			3,
-			15
-		],
-		[
-			"Machine",
-			"pushup",
-			3,
-			20
-		],
-		[
-			"Wide Wings",
-			"wide_pushup",
-			3,
-			15
-		],
-		[
-			"Diamond Cutter",
-			"diamond_pushup",
-			3,
-			10
-		],
-		[
-			"Iron Chest",
-			"diamond_pushup",
-			3,
-			15
-		],
-		[
-			"Decline Drive",
-			"decline_pushup",
-			3,
-			10
-		],
-		[
-			"Archer",
-			"archer_pushup",
-			3,
-			6
-		],
-		[
-			"Archer Elite",
-			"archer_pushup",
-			3,
-			10
-		],
-		[
-			"One-arm Helper",
-			"onearm_assist_pushup",
-			3,
-			5
-		]
-	]),
-	T("squat", [
-		[
-			"Starting Line",
-			"squat",
-			3,
-			8
-		],
-		[
-			"Steady Legs",
-			"squat",
-			3,
-			15
-		],
-		[
-			"Squat Habit",
-			"squat",
-			3,
-			20
-		],
-		[
-			"Hundred Club",
-			"squat",
-			3,
-			30
-		],
-		[
-			"Springy",
-			"jump_squat",
-			3,
-			10
-		],
-		[
-			"Jump Master",
-			"jump_squat",
-			3,
-			15
-		],
-		[
-			"One Leg Forward",
-			"split_squat",
-			3,
-			10
-		],
-		[
-			"Split Strong",
-			"split_squat",
-			3,
-			15
-		],
-		[
-			"Bulgarian",
-			"bulgarian_squat",
-			3,
-			8
-		],
-		[
-			"Bulgarian Pro",
-			"bulgarian_squat",
-			3,
-			12
-		],
-		[
-			"Box Pistol",
-			"box_pistol",
-			3,
-			6
-		],
-		[
-			"Shrimp Starter",
-			"shrimp_squat",
-			3,
-			4
-		],
-		[
-			"Shrimp Master",
-			"shrimp_squat",
-			3,
-			8
-		],
-		[
-			"Pistol Path",
-			"pistol_squat",
-			3,
-			2
-		],
-		[
-			"Pistol",
-			"pistol_squat",
-			3,
-			5
-		]
-	]),
-	T("core", [
-		[
-			"Starting Line",
-			"crunch",
-			3,
-			10
-		],
-		[
-			"Crunch Rhythm",
-			"crunch",
-			3,
-			20
-		],
-		[
-			"Sit-up Start",
-			"situp",
-			3,
-			10
-		],
-		[
-			"Sit-up Strong",
-			"situp",
-			3,
-			20
-		],
-		[
-			"Raise Your Legs",
-			"leg_raise",
-			3,
-			8
-		],
-		[
-			"Leg Raise Pro",
-			"leg_raise",
-			3,
-			15
-		],
-		[
-			"Hollow Start",
-			"hollow_hold",
-			3,
-			15
-		],
-		[
-			"Hollow Strong",
-			"hollow_hold",
-			3,
-			30
-		],
-		[
-			"Hollow Rocker",
-			"hollow_rock",
-			3,
-			15
-		],
-		[
-			"V Shape",
-			"v_up",
-			3,
-			8
-		],
-		[
-			"V-up Pro",
-			"v_up",
-			3,
-			15
-		],
-		[
-			"Negative Start",
-			"dragon_neg",
-			3,
-			3
-		],
-		[
-			"Negative Strong",
-			"dragon_neg",
-			3,
-			6
-		],
-		[
-			"Dragon Start",
-			"dragon_flag",
-			3,
-			2
-		],
-		[
-			"Dragon Strong",
-			"dragon_flag",
-			3,
-			5
-		]
-	]),
-	T("plank", [
-		[
-			"Starting Line",
-			"plank",
-			3,
-			15
-		],
-		[
-			"Half Minute",
-			"plank",
-			3,
-			30
-		],
-		[
-			"Forty-five",
-			"plank",
-			3,
-			45
-		],
-		[
-			"Full Minute",
-			"plank",
-			3,
-			60
-		],
-		[
-			"Side Start",
-			"side_plank",
-			3,
-			20
-		],
-		[
-			"Side Steady",
-			"side_plank",
-			3,
-			40
-		],
-		[
-			"Tap Tap",
-			"shoulder_taps",
-			3,
-			20
-		],
-		[
-			"Tap Master",
-			"shoulder_taps",
-			3,
-			40
-		],
-		[
-			"Up and Down",
-			"plank_updown",
-			3,
-			10
-		],
-		[
-			"Up-down Pro",
-			"plank_updown",
-			3,
-			20
-		],
-		[
-			"Lean Start",
-			"planche_lean",
-			3,
-			10
-		],
-		[
-			"Lean Strong",
-			"planche_lean",
-			3,
-			25
-		]
-	]),
-	T("row", [
-		[
-			"Starting Line",
-			"door_row",
-			3,
-			6
-		],
-		[
-			"Door Puller",
-			"door_row",
-			3,
-			12
-		],
-		[
-			"Door Master",
-			"door_row",
-			3,
-			18
-		],
-		[
-			"Table Start",
-			"table_row_bent",
-			3,
-			6
-		],
-		[
-			"Bent Knee Rower",
-			"table_row_bent",
-			3,
-			12
-		],
-		[
-			"Bent Knee Master",
-			"table_row_bent",
-			3,
-			18
-		],
-		[
-			"Straight Legs",
-			"table_row",
-			3,
-			5
-		],
-		[
-			"Rower",
-			"table_row",
-			3,
-			10
-		],
-		[
-			"Strong Back",
-			"table_row",
-			3,
-			15
-		],
-		[
-			"Back of Steel",
-			"table_row",
-			3,
-			20
-		],
-		[
-			"Feet-up Rower",
-			"feet_row",
-			3,
-			8
-		],
-		[
-			"Feet-up Strong",
-			"feet_row",
-			3,
-			12
-		],
-		[
-			"One-arm Start",
-			"onearm_row",
-			3,
-			4
-		],
-		[
-			"One-arm Row Pro",
-			"onearm_row",
-			3,
-			8
-		]
-	]),
-	T("lunge", [
-		[
-			"Starting Line",
-			"reverse_lunge",
-			3,
-			6
-		],
-		[
-			"Backstep",
-			"reverse_lunge",
-			3,
-			10
-		],
-		[
-			"Backstep Strong",
-			"reverse_lunge",
-			3,
-			14
-		],
-		[
-			"Forward Lunge",
-			"lunge",
-			3,
-			8
-		],
-		[
-			"Lunge Steady",
-			"lunge",
-			3,
-			12
-		],
-		[
-			"Lunge Strong",
-			"lunge",
-			3,
-			16
-		],
-		[
-			"Lunge Master",
-			"lunge",
-			3,
-			20
-		],
-		[
-			"Jump Start",
-			"jump_lunge",
-			3,
-			6
-		],
-		[
-			"Jump Lunger",
-			"jump_lunge",
-			3,
-			10
-		],
-		[
-			"Spring Legs",
-			"jump_lunge",
-			3,
-			15
-		]
-	]),
-	T("bridge", [
-		[
-			"Starting Line",
-			"glute_bridge",
-			3,
-			8
-		],
-		[
-			"Bridge Builder",
-			"glute_bridge",
-			3,
-			15
-		],
-		[
-			"Bridge Strong",
-			"glute_bridge",
-			3,
-			20
-		],
-		[
-			"Bridge Master",
-			"glute_bridge",
-			3,
-			30
-		],
-		[
-			"One Leg Start",
-			"single_leg_bridge",
-			3,
-			5
-		],
-		[
-			"One Leg Steady",
-			"single_leg_bridge",
-			3,
-			8
-		],
-		[
-			"One Leg Strong",
-			"single_leg_bridge",
-			3,
-			12
-		],
-		[
-			"One Leg Pro",
-			"single_leg_bridge",
-			3,
-			15
-		],
-		[
-			"Glute Machine",
-			"single_leg_bridge",
-			3,
-			20
-		],
-		[
-			"Glute Legend",
-			"single_leg_bridge",
-			4,
-			20
-		]
-	]),
-	T("calf", [
-		[
-			"Starting Line",
-			"calf_raise",
-			3,
-			10
-		],
-		[
-			"Calf Habit",
-			"calf_raise",
-			3,
-			20
-		],
-		[
-			"Calf Strong",
-			"calf_raise",
-			3,
-			30
-		],
-		[
-			"Calf Master",
-			"calf_raise",
-			3,
-			40
-		],
-		[
-			"One Leg Start",
-			"single_calf_raise",
-			3,
-			6
-		],
-		[
-			"One Leg Steady",
-			"single_calf_raise",
-			3,
-			10
-		],
-		[
-			"One Leg Strong",
-			"single_calf_raise",
-			3,
-			15
-		],
-		[
-			"One Leg Pro",
-			"single_calf_raise",
-			3,
-			20
-		],
-		[
-			"Spring Steel",
-			"single_calf_raise",
-			3,
-			25
-		],
-		[
-			"Calf Legend",
-			"single_calf_raise",
-			3,
-			30
-		]
-	]),
-	T("dips", [
-		[
-			"Starting Line",
-			"chair_dip",
-			3,
-			4
-		],
-		[
-			"Dip Starter",
-			"chair_dip",
-			3,
-			8
-		],
-		[
-			"Dip Steady",
-			"chair_dip",
-			3,
-			12
-		],
-		[
-			"Dip Strong",
-			"chair_dip",
-			3,
-			16
-		],
-		[
-			"Dip Machine",
-			"chair_dip",
-			3,
-			20
-		],
-		[
-			"Dip Pro",
-			"chair_dip",
-			3,
-			25
-		],
-		[
-			"Triceps Tank",
-			"chair_dip",
-			4,
-			20
-		],
-		[
-			"Dip Elite",
-			"chair_dip",
-			4,
-			25
-		],
-		[
-			"Dip Master",
-			"chair_dip",
-			5,
-			20
-		],
-		[
-			"Dip Legend",
-			"chair_dip",
-			5,
-			25
-		]
-	]),
-	T("pike", [
-		[
-			"Starting Line",
-			"pike_pushup",
-			3,
-			4
-		],
-		[
-			"Pike Starter",
-			"pike_pushup",
-			3,
-			8
-		],
-		[
-			"Pike Steady",
-			"pike_pushup",
-			3,
-			12
-		],
-		[
-			"Pike Strong",
-			"pike_pushup",
-			3,
-			15
-		],
-		[
-			"Feet-up Start",
-			"elevated_pike",
-			3,
-			4
-		],
-		[
-			"Feet-up Steady",
-			"elevated_pike",
-			3,
-			8
-		],
-		[
-			"Feet-up Strong",
-			"elevated_pike",
-			3,
-			12
-		],
-		[
-			"Shoulder Tank",
-			"elevated_pike",
-			3,
-			15
-		],
-		[
-			"Shoulder Pro",
-			"elevated_pike",
-			4,
-			15
-		],
-		[
-			"Shoulder Legend",
-			"elevated_pike",
-			5,
-			15
-		]
-	]),
-	T("back", [
-		[
-			"Starting Line",
-			"superman",
-			3,
-			6
-		],
-		[
-			"Superman Steady",
-			"superman",
-			3,
-			12
-		],
-		[
-			"Superman Strong",
-			"superman",
-			3,
-			18
-		],
-		[
-			"Superman Master",
-			"superman",
-			3,
-			24
-		],
-		[
-			"Swimmer Start",
-			"swimmer",
-			3,
-			10
-		],
-		[
-			"Swimmer Steady",
-			"swimmer",
-			3,
-			16
-		],
-		[
-			"Swimmer Strong",
-			"swimmer",
-			3,
-			24
-		],
-		[
-			"Swimmer Pro",
-			"swimmer",
-			3,
-			32
-		],
-		[
-			"Back Tank",
-			"swimmer",
-			4,
-			32
-		],
-		[
-			"Back Legend",
-			"swimmer",
-			5,
-			32
-		]
-	]),
-	T("burpee", [
-		[
-			"Starting Line",
-			"half_burpee",
-			3,
-			5
-		],
-		[
-			"Thruster",
-			"half_burpee",
-			3,
-			10
-		],
-		[
-			"Thruster Strong",
-			"half_burpee",
-			3,
-			15
-		],
-		[
-			"Burpee Start",
-			"burpee",
-			3,
-			5
-		],
-		[
-			"Burpee Steady",
-			"burpee",
-			3,
-			10
-		],
-		[
-			"Burpee Strong",
-			"burpee",
-			3,
-			15
-		],
-		[
-			"Burpee Master",
-			"burpee",
-			3,
-			20
-		],
-		[
-			"Push-up Burpee",
-			"pushup_burpee",
-			3,
-			6
-		],
-		[
-			"Burpee Pro",
-			"pushup_burpee",
-			3,
-			10
-		],
-		[
-			"Burpee Legend",
-			"pushup_burpee",
-			3,
-			15
-		]
-	])
-];
-var REP_LADDER = [
-	6,
-	10,
-	15,
-	20,
-	25,
-	30,
-	40,
-	50,
-	60,
-	80
-];
-/** Words after the ×: "push-ups", "seconds of plank". */
-var reqText = (m, sets, reps) => m.unit === "sec" ? `${sets}×${reps} s ${m.name.toLowerCase()}` : `${sets}×${reps} ${m.name.toLowerCase()}`;
-function build(family, group, name, rows) {
-	const N = rows.length;
-	return {
-		family,
-		name,
-		group,
-		levels: rows.map(([lname, move, sets, reps], i) => {
-			const m = moveById(move);
-			if (!m) throw new Error(`sportLevels: unknown move ${move}`);
-			const tier = Math.min(MEANING.length - 1, Math.floor(i / N * MEANING.length));
-			return {
-				n: i + 1,
-				name: lname,
-				move,
-				sets,
-				reps,
-				req: reqText(m, sets, reps),
-				meaning: MEANING[tier][i % 2]
-			};
-		})
-	};
-}
-/** A track for a family without a hand-made table: each step × a ladder of reps, 10 levels at least. */
-function generic(family) {
-	const f = FAMILIES[family];
-	const steps = (f?.steps ?? []).map((id) => moveById(id)).filter(Boolean);
-	if (!steps.length) return null;
-	const rows = [];
-	const perStep = Math.max(3, Math.ceil(10 / steps.length));
-	steps.forEach((m, si) => {
-		const sec = m.unit === "sec";
-		const base = sec ? [
-			10,
-			20,
-			30,
-			45,
-			60,
-			75,
-			90
-		] : REP_LADDER;
-		const from = si === 0 ? 0 : 1;
-		for (let k = 0; k < perStep; k++) {
-			const r = base[Math.min(base.length - 1, from + k)];
-			rows.push([
-				`${m.name} ${k + 1}`,
-				m.id,
-				3,
-				si === 0 || !sec ? Math.max(3, Math.round(r * (1 - Math.min(.5, si * .12)))) : r
-			]);
-		}
-	});
-	return build(family, steps[0].group, f.name, rows.slice(0, 15).map((r) => [
-		r[0],
-		r[1],
-		r[2],
-		r[3]
-	]));
-}
-var CACHE = /* @__PURE__ */ new Map();
-function trackOf(family) {
-	if (CACHE.has(family)) return CACHE.get(family);
-	let t = null;
-	const table = TABLES.find((x) => x[0] === family);
-	if (table) t = build(family, moveById(table[1][0][1])?.group ?? "push", FAMILIES[family]?.name ?? family, table[1]);
-	else t = generic(family);
-	CACHE.set(family, t);
-	return t;
-}
-TABLES.map((t) => t[0]);
-var stepIdx = (move) => (FAMILIES[move.family]?.steps ?? []).indexOf(move.id);
-/** Working sets are about 60% of a max set. */
-var WORKING_OF_MAX = .6;
-/** Reps on a move that match `reps` on a move `steps` harder on its ladder. */
-var transferReps = (reps, steps) => reps * Math.pow(.7, Math.max(0, steps));
-/** How many sets a day total was probably done in. */
-function estimateSets(total, unit = "reps") {
-	const t = Math.max(0, Math.round(total));
-	if (t <= 0) return [];
-	const n = unit === "sec" ? t > 180 ? 4 : 3 : Math.max(3, Math.min(6, Math.ceil(t / 25)));
-	const base = Math.floor(t / n);
-	const extra = t - base * n;
-	return Array.from({ length: n }, (_, i) => base + (i < extra ? 1 : 0));
-}
-/** A day total that came from the Telegram import: it is never evidence for a level. */
-var isImported$1 = (imp, day, exId) => !!imp?.[day]?.includes(exId);
-/** Per day, the entries of one family: real sets, else an estimate from the day total. */
-function dayEntries(input, family, until) {
-	const out = /* @__PURE__ */ new Map();
-	const exs = input.exercises.map((ex) => ({
-		ex,
-		move: moveOf(ex)
-	})).filter((x) => x.move && x.move.family === family);
-	const dayKeys = /* @__PURE__ */ new Set([...Object.keys(input.days ?? {}), ...Object.keys(input.sets ?? {})]);
-	for (const day of dayKeys) {
-		if (day > (until ?? input.today)) continue;
-		for (const { ex, move } of exs) {
-			const real = setsOn(input.sets, day, String(ex.id)).map((s) => s.reps);
-			let entry = null;
-			if (real.length) entry = {
-				move,
-				reps: real,
-				est: false
-			};
-			else {
-				const total = isImported$1(input.imported, day, String(ex.id)) ? 0 : Number(input.days?.[day]?.[String(ex.id)]) || 0;
-				if (total > 0) entry = {
-					move,
-					reps: estimateSets(total, move.unit),
-					est: true
-				};
-			}
-			if (entry) (out.get(day) ?? out.set(day, []).get(day)).push(entry);
-		}
-	}
-	const b = input.best?.[family];
-	const bm = b && moveById(b.move);
-	if (b && bm && b.reps > 0 && b.day <= (until ?? input.today)) {
-		const w = Math.max(1, Math.round(b.reps * WORKING_OF_MAX));
-		const mk = () => ({
-			move: bm,
-			reps: [
-				w,
-				w,
-				w
-			],
-			est: true,
-			transfer: true
-		});
-		for (const d of [b.day, shiftDay(b.day, -1)]) (out.get(d) ?? out.set(d, []).get(d)).push(mk());
-	}
-	return out;
-}
-/** How many sets of this entry count towards a level: the move at least as hard, 70% of the reps for a harder move. */
-function setsMeeting(entries, lv) {
-	const lm = moveById(lv.move);
-	if (!lm) return 0;
-	const li = stepIdx(lm);
-	let n = 0;
-	for (const e of entries) {
-		const hard = stepIdx(e.move);
-		if (hard < li) {
-			if (e.transfer) n += e.reps.filter((r) => transferReps(r, li - hard) >= lv.reps).length;
-			continue;
-		}
-		const need = hard > li ? Math.ceil(lv.reps * .7) : lv.reps;
-		n += e.reps.filter((r) => r >= need).length;
-	}
-	return n;
-}
-/** The highest level a day's entries reach (0: none). */
-function levelOfDay(track, entries) {
-	for (let i = track.levels.length - 1; i >= 0; i--) if (setsMeeting(entries, track.levels[i]) >= track.levels[i].sets) return i + 1;
-	return 0;
-}
-/** The day's level with the part of the way to the next one ("6.4"). */
-function valueOfDay(track, entries) {
-	const L = levelOfDay(track, entries);
-	const top = Math.max(0, ...entries.flatMap((e) => e.reps));
-	if (L >= track.levels.length) return L;
-	const cur = L ? track.levels[L - 1] : null;
-	const next = track.levels[L];
-	const nm = moveById(next.move);
-	const best = Math.max(0, ...entries.filter((e) => stepIdx(e.move) >= stepIdx(nm)).flatMap((e) => e.reps), ...entries.flatMap((e) => e.reps).map((r) => r * .7));
-	const lo = cur && cur.move === next.move ? cur.reps : 0;
-	return L + Math.max(0, Math.min(.95, (Math.min(best, top) - lo) / Math.max(1, next.reps - lo)));
-}
-var dayDiff$1 = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
-function core(input, track, until) {
-	const rows = [...dayEntries(input, track.family, until).entries()].map(([day, es]) => ({
-		day,
-		es,
-		level: levelOfDay(track, es),
-		value: valueOfDay(track, es)
-	})).sort((a, b) => a.day.localeCompare(b.day));
-	const lastDay = rows.length ? rows[rows.length - 1].day : null;
-	const of = track.levels.length;
-	const base = {
-		family: track.family,
-		track,
-		of,
-		active30: 0,
-		daysLogged: rows.length,
-		trend: "new",
-		lastDay,
-		frac: 0,
-		estimated: false
-	};
-	if (!rows.length) return {
-		...base,
-		level: 0,
-		lv: null,
-		next: track.levels[0],
-		best: null,
-		solid: 0
-	};
-	const win = (n) => rows.filter((r) => dayDiff$1(r.day, until) <= n);
-	const w60 = win(60);
-	const w45 = win(45);
-	const pool = w60.length ? w60 : rows.slice(-1);
-	let bestRow = pool[0];
-	for (const r of pool) if (r.level > bestRow.level || r.level === bestRow.level && r.day > bestRow.day) bestRow = r;
-	let solid = 0;
-	for (let L = of; L >= 1; L--) if (w45.filter((r) => r.level >= L).length >= 2) {
-		solid = L;
-		break;
-	}
-	let level = pool.length <= 2 ? bestRow.level : Math.max(solid, Math.min(bestRow.level, solid + 1));
-	const w21 = win(21);
-	if (w21.length >= 2) {
-		const recentMax = Math.max(...w21.map((r) => r.level));
-		if (recentMax < level - 1) level = recentMax + 1;
-	}
-	level = Math.max(1, Math.min(of, level));
-	const a = win(14);
-	const b = rows.filter((r) => dayDiff$1(r.day, until) > 14 && dayDiff$1(r.day, until) <= 28);
-	const avg = (l) => l.length ? l.reduce((t, r) => t + r.value, 0) / l.length : null;
-	const va = avg(a);
-	const vb = avg(b);
-	const trend = va == null ? "down" : vb == null ? rows.length < 3 ? "new" : "steady" : va - vb > .3 ? "up" : va - vb < -.3 ? "down" : "steady";
-	const top = Math.max(0, ...bestRow.es.flatMap((e) => e.reps));
-	const topEntry = bestRow.es.find((e) => e.reps.includes(top));
-	const recentBest = Math.max(0, ...win(10).map((r) => r.value));
-	const frac = Math.max(0, Math.min(1, recentBest - Math.floor(recentBest))) * (recentBest >= level ? 1 : 0);
-	return {
-		...base,
-		level,
-		lv: track.levels[level - 1],
-		next: track.levels[level] ?? null,
-		best: {
-			level: bestRow.level,
-			day: bestRow.day,
-			top,
-			sets: topEntry.reps.length,
-			est: bestRow.es.some((e) => e.est)
-		},
-		solid,
-		active30: win(30).length,
-		trend,
-		frac,
-		estimated: bestRow.es.every((e) => e.est)
-	};
-}
-/** Where you stand on one family's track. `until` re-places you as you were on that day. */
-function placeFamily(input, family, until) {
-	const track = trackOf(family);
-	if (!track) return null;
-	const day = until ?? input.today;
-	const p = core(input, track, day);
-	let comeback = null;
-	let level = p.level;
-	if (p.lastDay && p.level > 0) {
-		const off = dayDiff$1(p.lastDay, day);
-		if (off >= 10) {
-			comeback = {
-				from: p.level,
-				hits: 0,
-				need: 2,
-				daysOff: off
-			};
-			level = Math.max(1, p.level - (off >= 21 ? 2 : 1));
-		} else {
-			const entries = [...dayEntries(input, family, day).keys()].sort();
-			for (let i = entries.length - 1; i > 0; i--) {
-				if (dayDiff$1(entries[i], day) > 35) break;
-				const gap = dayDiff$1(entries[i - 1], entries[i]);
-				if (gap >= 10) {
-					const old = core(input, track, entries[i - 1]).level;
-					const map = dayEntries(input, family, day);
-					const hits = entries.slice(i).filter((d) => levelOfDay(track, map.get(d) ?? []) >= old).length;
-					if (hits < 2 && old > 1) {
-						comeback = {
-							from: old,
-							hits,
-							need: 2,
-							daysOff: gap
-						};
-						level = Math.min(p.level, Math.max(1, old - (gap >= 21 ? 2 : 1)));
-					}
-					break;
-				}
-			}
-		}
-	}
-	const lv = level ? track.levels[level - 1] : null;
-	const next = track.levels[level] ?? null;
-	const bestTxt = p.best ? `best day ${p.best.sets}×${p.best.top}${p.estimated ? " (from your totals)" : ""}` : "nothing logged yet";
-	const steady = p.active30 >= 12 ? "steady" : p.active30 >= 6 ? "regular" : p.active30 ? "on and off" : "quiet lately";
-	const trendTxt = p.trend === "up" ? "trending up" : p.trend === "down" ? "a little down lately" : p.trend === "new" ? "just started" : "holding steady";
-	const why = !level ? `${track.name}: nothing logged yet. Log one day (like "15 14 12") and your level appears.` : comeback && comeback.hits < comeback.need ? `${track.name}: Comeback level ${level} ${lv.name} after ${comeback.daysOff} days off. Hit Level ${comeback.from} (${track.levels[comeback.from - 1].req}) on ${comeback.need - comeback.hits} more ${comeback.need - comeback.hits === 1 ? "day" : "days"} to get it back.` : `${track.name}: ${bestTxt}, ${p.active30} ${p.active30 === 1 ? "day" : "days"} in 30 (${steady}), ${trendTxt} → Level ${level} ${lv.name}.${next ? ` Next: Level ${next.n} at ${next.req}.` : " You are at the top of this ladder."}`;
-	return {
-		...p,
-		level,
-		lv,
-		next,
-		comeback,
-		why
-	};
 }
 // src/core/sportCoach.ts
 /** One exercise's sessions up to `until`, oldest first: real sets, else an estimate from the day total. */
@@ -28311,7 +28471,7 @@ function ladderFacts(s, from, today, finance) {
 	for (const d of trainedDays) inc(workouts, d);
 	let levelUps = 0;
 	for (const st of Object.values(train.levels)) for (const d of Object.values(st?.reached ?? {})) if (inRange(d)) levelUps++;
-	const levels = train.ladders.filter((l) => l.id === "push" || l.id === "pull").map((l) => safe(() => `${l.name}: ${moveName(l.levels[currentLevel(blob, train, l).index]?.move ?? "")}`, "")).filter((x) => x && !x.endsWith(": "));
+	const levels = train.ladders.filter((l) => l.id === "push" || l.id === "pull").map((l) => safe(() => `${l.name}: ${moveName(l.levels[currentLevel(blob, train, l, today).index]?.move ?? "")}`, "")).filter((x) => x && !x.endsWith(": "));
 	const events = safe(() => bodyEvents(db, from, today), []);
 	const protein = put("proteinDays");
 	for (let d = from; d <= today; d = addDays$8(d, 1)) {
