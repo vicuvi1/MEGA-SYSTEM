@@ -2473,16 +2473,18 @@ try {
       })
       const rows = '.cf-col .cf-row.ben'
       const ask = async (text, re) => {
-        const n = await pg.locator(rows).count()
+        // Mark the rows already there: an older plan card can be folded away while the answer comes,
+        // so counting rows is not enough to find the new ones.
+        const n = await pg.locator(rows).evaluateAll((els) => { els.forEach((e) => e.setAttribute('data-seen', '1')); return els.length })
         const t0 = Date.now()
         await pg.fill('.cf-input textarea', text)
         await pg.keyboard.press('Enter')
         await pg.waitForFunction(({ n, sel, src }) => {
           const r = [...document.querySelectorAll(sel)]
           // The answer can come as more than one row (the text, then the plan card): any new row may hold it.
-          const fresh = r.slice(n)
+          const fresh = r.filter((x) => !x.hasAttribute('data-seen'))
           return fresh.length > 0 && fresh.some((x) => new RegExp(src).test(x.textContent ?? '')) && !fresh.some((x) => x.querySelector('.cf-ben.pending'))
-        }, { n, sel: rows, src: re.source }, { timeout: 10000 }).catch(async (e) => { throw new Error(`${e.message}: last rows ${(await pg.locator('.cf-col .cf-row').evaluateAll((els) => els.slice(-2).map((x) => x.textContent).join(' // ')).catch(() => '?'))}`) })
+        }, { n, sel: rows, src: re.source }, { timeout: 10000 }).catch(async (e) => { throw new Error(`${e.message}: before ${n}, new rows ${JSON.stringify(await pg.locator(rows).evaluateAll((els) => els.filter((x) => !x.hasAttribute('data-seen')).map((x) => ({ pending: !!x.querySelector('.cf-ben.pending'), text: (x.textContent || '').slice(0, 80) }))).catch(() => '?'))}; last rows ${(await pg.locator('.cf-col .cf-row').evaluateAll((els) => els.slice(-2).map((x) => x.textContent).join(' // ')).catch(() => '?'))}`) })
         return Date.now() - t0
       }
       const ms = await ask(say, daytime ? /Lighter day: [\s\S]*focus instead of[\s\S]*Slept 5h30/ : /Slept 5h30/)
