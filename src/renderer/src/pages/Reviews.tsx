@@ -59,6 +59,7 @@ async function weekEvents(): Promise<CalEvent[]> {
 
 export function PlannedVsReal() {
   const [w, setW] = useState<WeekTime | null>(null)
+  const [all, setAll] = useState(false)
   const load = useCallback(() => {
     if (!life.extras) return
     void weekEvents().then((ev) => life.extras!.weekTime(ev).then(setW).catch(() => {}))
@@ -76,7 +77,7 @@ export function PlannedVsReal() {
       </header>
       {!w.rows.length && <p className="hint small">Focus blocks in your calendar count as planned; the focus timer counts what you really did.</p>}
       <ul className="rv-bars">
-        {w.rows.slice(0, 8).map((r) => (
+        {w.rows.slice(0, all ? 8 : 3).map((r) => (
           <li key={r.subject}>
             <span className="rv-label">{r.subject}</span>
             <span className="rv-track" aria-hidden="true">
@@ -90,6 +91,11 @@ export function PlannedVsReal() {
           </li>
         ))}
       </ul>
+      {w.rows.length > 3 && (
+        <button type="button" className="btn small ghost" onClick={() => setAll((v) => !v)} aria-expanded={all}>
+          {all ? 'Show fewer' : `Show all ${Math.min(w.rows.length, 8)}`}
+        </button>
+      )}
       {w.rows.length > 0 && (
         <p className="rv-legend hint small">
           <i className="plan" /> planned <i className="real" /> done
