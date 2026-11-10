@@ -121,8 +121,11 @@ export type IslandAction = { id?: string } & (
   | { kind: 'widget'; op: 'fetch' | 'addTask' | 'addNote' | 'notify' | 'save'; widget: string; url?: string; text?: string; setting?: unknown }
   /** Career: start the study pack (a focus timer), grade the quick flashcard, or another pack (src/core/career/). */
   | { kind: 'study'; op: 'start' | 'grade' | 'next'; minutes?: number; cardId?: string; grade?: 'again' | 'hard' | 'good' | 'easy' }
-  /** Study Time: start a quick block, start or end a break (minutes: its length), stop and log. */
-  | { kind: 'studyTime'; op: 'start' | 'break' | 'back' | 'stop'; blockId?: string; minutes?: number; alertId?: string }
+  /**
+   * Study Time: start any block (or switch to it when one runs), a break (minutes: its length), pause and
+   * resume, +minutes, a pomodoro's break or keep going, stop and log; a notice's Later / OK / Open / Drop.
+   */
+  | { kind: 'studyTime'; op: 'start' | 'switch' | 'break' | 'back' | 'stop' | 'pause' | 'resume' | 'extend' | 'pomoBreak' | 'keepGoing' | 'breakMore' | 'later' | 'ok' | 'open' | 'drop'; blockId?: string; minutes?: number; alertId?: string }
   /** Goals: a check-in from the island ("+50", "-0.5", "=3400", "s" same as before, "k" skip: src/core/goalsBen.ts). */
   | { kind: 'goal'; goalId: number; op: string; alertId?: string }
   /** HD: a reminder you set: add one ("remind me to call mom at 18:00"), or Done / Snooze on its card. */
@@ -156,10 +159,17 @@ export interface IslandAlert {
   nudge?: import('./islandNudges').Nudge
   /** Alive island: how long this peek stays (ms), shorter than the usual peek (the hourly pulse: 3000). */
   peekMs?: number
+  /** Its own sound (Study Time: the end and break sounds you picked), instead of the kind's. */
+  sound?: import('./sounds').SoundName
+  /** Study Time's notice look: the subject's colour and emoji (src/core/studyNotify.ts). */
+  study?: { kind: string; color: string; emoji: string }
 }
 
 /** IC14: the day in a few numbers, told as a short story in the evening. */
 export interface IslandRecap { gamingMin?: number; mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; focusMin: number; focusGoal: number; streak?: number }
+
+/** A Study Time block on the island. */
+export interface StudyIslandBlock { id: string; name: string; color: string; emoji?: string; planned: number | null; category?: string; due?: string | null }
 
 export interface IslandSnapshot {
   at: number
@@ -187,9 +197,21 @@ export interface IslandSnapshot {
     pausedMs?: number
     /** Study Time: when the break going on now ends (it has a length). */
     breakEndsAt?: number | null
+    /** Study Time: the subject's colour and emoji (the ring in the pill). */
+    color?: string
+    emoji?: string
+    /** Study Time: the ring fills from goalFrom to goalAt (ms of time studied: this pomodoro, else the plan; null: open). */
+    goalAt?: number | null
+    goalFrom?: number
+    /** Study Time: pomodoro n of a cycle of `every`, `done` so far. */
+    pomo?: { n: number; every: number; done: number } | null
+    /** Study Time: a plain pause (not a break). */
+    plain?: boolean
+    /** Study Time: the noise and tick you picked, played while you study. */
+    sound?: { noise: import('./sounds').BedKind; tick: boolean }
   } | null
-  /** Study Time: your quick blocks (one tap starts one) and today's minutes (src/core/studyTime.ts). */
-  studyTime?: { quick: { id: string; name: string; color: string; planned: number | null }[]; todayMin: number } | null
+  /** Study Time: every open block to start (quick ones first), today's minutes and the timer mode (src/core/studyTime.ts). */
+  studyTime?: { quick: StudyIslandBlock[]; blocks?: StudyIslandBlock[]; todayMin: number; mode?: 'pomodoro' | 'up' } | null
   now: IslandBlock | null
   next: IslandBlock | null
   /** IS6: later today, a "maybe" or an invite you haven't answered (greyed in the Next list). */

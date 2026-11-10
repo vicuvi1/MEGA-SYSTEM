@@ -24,6 +24,9 @@ describe('which switch and sound each notification uses', () => {
   it('picks the kit sound', () => {
     expect(cardSoundName({ kind: 'water', id: 'water:1' })).toBe('remindWater')
     expect(cardSoundName({ kind: 'move', id: 'coach:break:1' })).toBe('remindScreen')
+    // Study Time's notices ring the sound you picked there (still under the time's-up switch).
+    expect(cardSoundName({ kind: 'over', id: 'study:pomo:1', sound: 'levelUp' })).toBe('levelUp')
+    expect(cardSoundKey({ kind: 'over', id: 'study:pomo:1' })).toBe('timer')
     expect(cardSoundName({ kind: 'remind', id: 'custom:x:1' })).toBe('remind')
     expect(cardSoundName({ kind: 'ben', id: 'ben:1' })).toBe('ben')
     expect(cardSoundName({ kind: 'over', id: 'o' })).toBe('focusEnd')

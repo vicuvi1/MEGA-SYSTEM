@@ -211,7 +211,7 @@ function BlockRow({ b, store, today, run, picked, todayMin, pomos, dragging, ove
     const next = !b.done
     const ok = await act(() => life.study!.change({ op: 'done', id: b.id, done: next }), next ? (b.repeat && !b.fromTodoist ? `Done · back ${dayLabel(nextDue(b.due, b.repeat, today))}` : 'Done') : 'Brought back')
     // A linked Todoist task is completed there too (the usual Tasks path: its own points rule).
-    if (ok && next && b.taskId) {
+    if (ok && next && b.taskId && life.todoist) {
       const t: TodoTask = todoTasks().find((x) => x.id === b.taskId) ?? { id: b.taskId, content: b.taskTitle ?? b.name, priority: 1, due: b.due, dueTime: null, project: null, recurring: false }
       await act(() => life.todoist!.complete(t), 'Completed in Todoist too')
     }

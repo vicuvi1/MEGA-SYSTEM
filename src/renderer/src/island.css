@@ -540,3 +540,25 @@ html.di-dragging, html.di-dragging * { cursor: grabbing !important; }
 .di-study-chips button { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 0 12px; border: 0; border-radius: 999px; background: rgb(var(--ink) / 0.1); color: inherit; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .di-study-chips button:hover { background: rgb(var(--ink) / 0.18); }
 .di-study-chips i { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+
+/* Study Time 2 (studyTimeIslandFeed.ts): the subject's ring in the pill, gold past the plan; a searchable picker; the notice look. */
+.di-study-ring .fg { transition: stroke-dashoffset 0.9s linear, stroke 0.4s; filter: drop-shadow(0 0 3px color-mix(in srgb, var(--c) 60%, transparent)); }
+.di-study-ring.gold .fg { filter: drop-shadow(0 0 5px rgb(245 184 61 / 0.75)); }
+.di-study-ring.paused { opacity: 0.55; }
+.di-pill-time.gold, .di-clock.gold, .rest-num.gold { color: #f5b83d; }
+.di-pomo-n { font-weight: 600; opacity: 0.85; }
+.di-study-acts button.on { background: rgb(var(--ink) / 0.2); }
+.di-study-brk button[data-tap="st:pause"] { flex: 0 0 auto; padding: 7px 12px; }
+.di-study-picker { display: grid; gap: 6px; margin-top: 4px; }
+.di-study-find { box-sizing: border-box; width: 100%; height: 32px; padding: 0 12px; border: 0; border-radius: 10px; background: rgb(var(--ink) / 0.08); color: inherit; font: inherit; font-size: 13px; outline: none; }
+.di-study-find:focus { background: rgb(var(--ink) / 0.13); box-shadow: 0 0 0 1px rgb(var(--ink) / 0.25); }
+.di-study-emoji { font-size: 13px; }
+.di-study-due { margin-left: 2px; padding: 0 6px; border-radius: 999px; background: rgb(245 184 61 / 0.22); font-size: 10.5px; font-weight: 700; }
+.di-study-none { opacity: 0.7; font-size: 12px; }
+.di-study-scene { background: radial-gradient(circle at 50% 120%, color-mix(in srgb, var(--c) 30%, transparent), transparent 70%); pointer-events: none; }
+.di-study-ringbox { position: relative; display: grid; place-items: center; width: 50px; height: 50px; }
+.di-study-ringbox svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.di-study-scene circle { fill: none; stroke-width: 3.4; }
+.di-study-scene .bg { stroke: rgb(var(--ink) / 0.12); }
+.di-study-scene .fg { stroke: var(--c); stroke-linecap: round; filter: drop-shadow(0 0 4px color-mix(in srgb, var(--c) 70%, transparent)); }
+.di-study-scene b { position: relative; font-size: 21px; line-height: 1; }

@@ -112,11 +112,13 @@ The owner, after the update: still no sound when a notification comes in; the is
 - **Out of the way:** the right-click menu ends with **Hide for 1 hour** (`HIDE_HOUR_ITEM`, desktop only), next to the round menu's Hide 1 h, the tray's Hide / Bring the island back and `Alt+Shift+I`. Drag to any top spot or corner (remembered per screen in `island.json`), auto-collapse on leave and hide over full-screen apps (default `fullscreen: 'hide'`) are unchanged.
 - Smoke: "Desktop island: pill → click → panel …" checks no take 4 px under the pill, a quick pass never peeks and ends with clicks passing through, resting peeks by itself, and right-click → Hide for 1 hour calls `islandHide('1h')`.
 
-### Study Time on the island (2026-11-10)
-- A running Study Time block counts **up** (time studied) in the pill, the bubble and the panel (`running.up`, `pausedMs`, `breakEndsAt` in the snapshot, from `islandRunning`). The panel's timer card has Stop & log and ☕ 5 / ☕ 10, or ▶ Back to it on a break.
-- With nothing running, the timer slot shows your quick blocks and today's minutes (`snap.studyTime`, `studyTimeIslandFeed.ts`); one tap starts one (action `studyTime`).
-- "Break's over" rings like time's up (kind `over`). Details: [focus.md](focus.md), "Study Time".
-- Smoke: "Study Time on the island: …".
+### Study Time on the island (2026-11-10; Study Time 2 the same day)
+- **The pill:** a running block shows a ring in its subject's colour (`StudyRing`), filling to this pomodoro (or the plan), gold past it, green on a break; the time is the minutes left in the pomodoro (count up: the time studied). The snapshot's `running` carries `up`, `pausedMs`, `breakEndsAt`, `color`, `emoji`, `goalAt` / `goalFrom` (ms of time studied), `pomo`, `plain` (a pause, not a break) and `sound` (your noise and tick, played only while you study; no gong: the notices ring instead).
+- **The panel:** Stop & log, ❚❚ Pause / ▶ Resume (or Back to it), ☕ the pomodoro's break (or ☕ 5), +5, ⇄ Switch (type to find a block). With nothing running, "Start a block…" finds any open block (quick and today's first), not only the quick ones (`snap.studyTime.blocks`). Action `studyTime` with op `start` (switches when one runs) / `switch` / `pause` / `resume` / `break` / `pomoBreak` / `keepGoing` / `extend` / `breakMore` / `stop` / `later` / `ok` / `open` / `drop`.
+- **Notices** come from `core/studyNotify.ts` through `studyIslandTick` (in `IslandFeed`): timer ones (pomodoro done, break over, planned time, over time, forgotten timer) are kind `over` and go first; gentle ones (goal reached or behind, a block waiting) wait their turn (kinds `goal` / `remind`, never in a call or a class). Each card has the subject's ring and emoji (`StudyScene`), its own sound (`IslandAlert.sound`, the one you picked; `cardSoundName` uses it), and buttons that close it. Answering drops it for a day; "In an hour" brings it back after its minutes. A Study Time block never gets the plain "Time is up" card.
+- The click-through rules (`core/islandClicks.ts`) are unchanged: the ring sits where the timer ring was.
+- Details: [focus.md](focus.md), "Study Time".
+- Smoke: "Study Time on the island: the subject ring in the pill, pause / resume / +5 / switch, start any block by search, and the notices (Take 5, Keep going, Back to it) with their buttons".
 
 ### One Today list, Ben's card age, a spot that stays (v1.4.1379 fixes)
 

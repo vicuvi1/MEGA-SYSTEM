@@ -5438,41 +5438,25 @@ try {
     await pg.click('.sy .ptabs [data-tab="timer"]')
     console.log(`    Study Time tabs (screens of 654 px): ${sizes.join(', ')}`)
   })
-  await step('Study Time: your study tasks from Todoist come in as blocks; Done here completes the task in Todoist', async () => {
-    await pg.setViewportSize({ width: 1440, height: 900 })
-    await pg.click('.sy .ptabs [data-tab="timer"]')
-    await pg.click('.sy-todo-btn')
-    await pg.locator('.sy-todo .sy-fchip', { hasText: 'Inbox' }).click({ timeout: 10000 })
-    const blk = pg.locator('.sy-block', { hasText: 'Read chapter 4' })
-    await blk.waitFor({ timeout: 10000 })
-    if (!/Todoist/.test(await blk.textContent())) throw new Error('a pulled block is not marked as from Todoist')
-    await blk.locator('button', { hasText: 'Done' }).click()
-    const peek = async () => (await (await fetch(`http://127.0.0.1:${port}/api/todoist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ op: 'peek' }) })).json()) || []
-    const t0 = Date.now()
-    while (!(await peek()).some((t) => t.id === 't3' && t.done)) {
-      if (Date.now() - t0 > 10000) throw new Error('Done on the block did not complete the task in Todoist')
-      await pg.waitForTimeout(300)
-    }
-    // Leave Todoist out of the later steps.
-    await pg.locator('.sy-todo .sy-fchip', { hasText: 'Inbox' }).click()
-    await pg.click('.sy-todo-btn')
-  })
-  await step('Study Time on the island: a running block counts up in the pill and the panel, a break and Stop from the island, quick blocks to start', async () => {
+  await step('Study Time on the island: the subject ring in the pill, pause / resume / +5 / switch, start any block by search, and the notices (Take 5, Keep going, Back to it) with their buttons', async () => {
     const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
     ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
     await ip.addInitScript(() => {
       const cbs = {}
       const on = (name) => (cb) => { cbs[name] = cb }
       const now = Date.now()
+      const blk = (id, name, color, emoji, planned, quick, category) => ({ id, name, color, emoji, planned, category, due: null })
+      const blocks = [blk('st-math', 'Math problems', '#7c9cff', '📐', 50, true, 'Math'), blk('st-read', 'Reading', '#38bdf8', '📖', 25, true, 'English'), blk('st-phys', 'Physics lab sheet', '#a78bfa', '🧪', 45, false, 'Physics')]
       const base = {
         at: now, locked: false,
         ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
         now: null, next: null, mustdos: [], water: { ml: 500, target: 2000 }, reps: [], alert: null,
-        studyTime: { quick: [{ id: 'st-math', name: 'Math problems', color: '#7c9cff', planned: 50 }, { id: 'st-read', name: 'Reading', color: '#38bdf8', planned: 25 }], todayMin: 35 }
+        studyTime: { quick: blocks.slice(0, 2), blocks, todayMin: 35, mode: 'pomodoro' }
       }
-      // 12 minutes into a 50 minute block: the island shows 12:xx (time studied), not 38:xx (time left).
-      const running = { ...base, running: { subject: 'Math problems', startedAt: now - 12 * 60_000, endsAt: now + 38 * 60_000, up: true, pausedMs: 0, breakEndsAt: null } }
-      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), base, running }
+      // 12 minutes into a 25 minute pomodoro of Math: the pill shows the minutes left, in Math's colour.
+      const run = { subject: 'Math problems', startedAt: now - 12 * 60_000, endsAt: now + 13 * 60_000, up: true, pausedMs: 0, breakEndsAt: null, color: '#7c9cff', emoji: '📐', goalAt: 25 * 60_000, goalFrom: 0, pomo: { n: 1, every: 4, done: 0 }, sound: { noise: 'off', tick: false } }
+      const running = { ...base, running: run }
+      window.__island = { actions: [], send: (name, v) => cbs[name]?.(v), base, running, run }
       window.desktop = new Proxy({
         islandAction: (a) => { window.__island.actions.push(a) },
         setIslandPrefs: async () => null,
@@ -5480,26 +5464,73 @@ try {
         onIslandHover: on('hover'), onIslandPrefs: on('prefs'), onIslandQuiet: on('quiet'), onIslandToggle: on('toggle')
       }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
     })
+    const did = (pred, what) => ip.waitForFunction(pred, null, { timeout: 3000 }).catch(() => { throw new Error(`the island did not send ${what}`) })
     await ip.goto(`http://127.0.0.1:${port}/?island=1`)
     await ip.waitForSelector('.di-pill.kind-timer', { timeout: 15000 })
-    await ip.waitForFunction(() => /^12:\d\d$/.test(document.querySelector('.di-pill .di-pill-time')?.getAttribute('aria-label') ?? document.querySelector('.di-pill .di-pill-time')?.textContent ?? ''), null, { timeout: 5000 })
+    // The ring in the pill, in the subject's colour; the minutes left in the pomodoro.
+    await ip.waitForSelector('.di-pill .di-study-ring', { timeout: 5000 })
+    const stroke = await ip.$eval('.di-pill .di-study-ring .fg', (e) => getComputedStyle(e).stroke)
+    if (!/124, 156, 255/.test(stroke)) throw new Error(`the pill ring is ${stroke}, not Math's colour`)
+    await ip.waitForFunction(() => /^1[23]:\d\d$/.test(document.querySelector('.di-pill .di-pill-time')?.getAttribute('aria-label') ?? document.querySelector('.di-pill .di-pill-time')?.textContent ?? ''), null, { timeout: 5000 })
     await ip.click('.di-pill')
     await ip.waitForSelector('.di-panel .di-study-run', { timeout: 5000 })
-    const big = await ip.$eval('.di-panel .di-study-run .di-clock', (e) => e.getAttribute('aria-label') ?? e.textContent)
-    if (!/^12:\d\d$/.test(big ?? '')) throw new Error(`the panel shows ${big}, not the time studied`)
+    // Pause, +5 and the pomodoro's break from the panel.
+    await ip.click('.di-panel [data-tap="st:pause"]')
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'pause'), 'pause')
+    await ip.click('.di-panel [data-tap="st:plus5"]')
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'extend' && a.minutes === 5), '+5')
+    await ip.click('.di-panel [data-tap="st:pomobrk"]')
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'pomoBreak'), "the pomodoro's break")
+    // Switch subject: find it by typing.
+    await ip.click('.di-panel [data-tap="st:switch"]')
+    await ip.fill('.di-panel .di-study-find', 'read')
+    await ip.click('.di-panel [data-tap="st:to:st-read"]')
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'switch' && a.blockId === 'st-read'), 'switch to Reading')
+    // Paused: Resume.
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.running, at: Date.now(), running: { ...window.__island.run, pausedAt: Date.now() - 30_000, plain: true } }))
+    await ip.waitForSelector('.di-panel [data-tap="st:resume"]', { timeout: 5000 })
+    await ip.click('.di-panel [data-tap="st:resume"]')
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'resume'), 'resume')
+    await ip.click('.di-panel [data-tap="st:stop"]')
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'stop'), 'stop')
+    // Nothing running: start ANY block by searching (not only the quick ones).
+    await ip.evaluate(() => window.__island.send('state', { ...window.__island.base, at: Date.now(), running: null }))
+    await ip.waitForSelector('.di-panel .di-study-pick .di-study-find', { timeout: 5000 })
+    await ip.fill('.di-panel .di-study-pick .di-study-find', 'phys')
+    await ip.click('.di-panel [data-tap="st:start:st-phys"]')
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'start' && a.blockId === 'st-phys'), 'start Physics')
+    await ip.keyboard.press('Escape')
+    await ip.waitForSelector('.di-panel', { state: 'detached', timeout: 5000 }).catch(() => {})
+    // The notices: a pomodoro done drops down with Take 5 / Keep going, in the subject's look.
+    const notice = (id, kind, title, text, face, sk, actions) => ({ id, kind, title, text, face, sound: 'levelUp', study: { kind: sk, color: '#7c9cff', emoji: '📐' }, actions })
+    await ip.evaluate((n) => window.__island.send('state', { ...window.__island.running, at: Date.now() + 1, alert: n }), notice('study:pomo:1', 'over', 'Pomodoro 1 done', 'Math problems: nice work. Rest your eyes for 5 minutes.', '🍅', 'pomoDone', [
+      { label: 'Take 5', primary: true, action: { kind: 'studyTime', op: 'pomoBreak', alertId: 'study:pomo:1' } },
+      { label: 'Keep going', action: { kind: 'studyTime', op: 'keepGoing', alertId: 'study:pomo:1' } },
+      { label: 'Stop & log', action: { kind: 'studyTime', op: 'stop', alertId: 'study:pomo:1' } }
+    ]))
+    await ip.waitForSelector('.di-peek.alert:has-text("Pomodoro 1 done") .di-study-scene', { timeout: 5000 })
     if (process.env.SMOKE_SHOTS) {
       await ip.waitForTimeout(900)
-      await ip.screenshot({ path: `${process.env.SMOKE_SHOTS}/study-island.png` })
+      await ip.screenshot({ path: `${process.env.SMOKE_SHOTS}/study-island-notice.png` })
     }
-    await ip.click('.di-panel [data-tap="st:brk5"]')
-    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'break' && a.minutes === 5), null, { timeout: 3000 })
-    await ip.click('.di-panel [data-tap="st:stop"]')
-    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'stop'), null, { timeout: 3000 })
-    // Nothing running: the quick blocks, one tap starts one.
-    await ip.evaluate(() => window.__island.send('state', { ...window.__island.base, at: Date.now(), running: null }))
-    await ip.waitForSelector('.di-panel .di-study-pick [data-tap="st:start:st-read"]', { timeout: 5000 })
-    await ip.click('.di-panel [data-tap="st:start:st-read"]')
-    await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'start' && a.blockId === 'st-read'), null, { timeout: 3000 })
+    const before = await ip.evaluate(() => window.__island.actions.length)
+    await ip.locator('.di-peek.alert .di-actions button', { hasText: 'Take 5' }).click()
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'pomoBreak' && a.alertId === 'study:pomo:1'), 'Take 5')
+    if ((await ip.evaluate(() => window.__island.actions.length)) - before > 1) throw new Error('one tap sent more than one action')
+    // Break over → "Back to Math problems".
+    await ip.evaluate((n) => window.__island.send('state', { ...window.__island.running, at: Date.now() + 2, alert: n }), notice('study:brk:1', 'over', "Break's over", 'Back to Math problems · pomodoro 2.', '📐', 'breakOver', [
+      { label: 'Back to Math problems', primary: true, action: { kind: 'studyTime', op: 'back', alertId: 'study:brk:1' } },
+      { label: '+5 min break', action: { kind: 'studyTime', op: 'breakMore', minutes: 5, alertId: 'study:brk:1' } }
+    ]))
+    await ip.locator('.di-peek.alert .di-actions button', { hasText: 'Back to Math problems' }).click({ timeout: 5000 })
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'back' && a.alertId === 'study:brk:1'), 'Back to Math problems')
+    // The next pomodoro done: Keep going.
+    await ip.evaluate((n) => window.__island.send('state', { ...window.__island.running, at: Date.now() + 3, alert: n }), notice('study:pomo:2', 'over', 'Pomodoro 2 done', 'Math problems: nice work.', '🍅', 'pomoDone', [
+      { label: 'Take 5', primary: true, action: { kind: 'studyTime', op: 'pomoBreak', alertId: 'study:pomo:2' } },
+      { label: 'Keep going', action: { kind: 'studyTime', op: 'keepGoing', alertId: 'study:pomo:2' } }
+    ]))
+    await ip.locator('.di-peek.alert .di-actions button', { hasText: 'Keep going' }).click({ timeout: 5000 })
+    await did(() => window.__island.actions.some((a) => a.kind === 'studyTime' && a.op === 'keepGoing' && a.alertId === 'study:pomo:2'), 'Keep going')
     await ip.context().close()
   })
   // The same switch on every long page: each tab about one laptop screen.
@@ -6257,6 +6288,32 @@ try {
     await until(async () => !(await pg.locator('.ta-task', { hasText: done.content }).count()), 'Tasks still lists the task done in Todoist')
   })
   // LF1, LF4–LF7, LF12, LF15, LF18: one Season page for the arc, the vision board, identity votes, wins, adventures and the life wheel.
+  // Study Time's Todoist pull runs after the Todoist steps (its Done completes a task and pays, which changes the plan they drag).
+  await step('Study Time: your study tasks from Todoist come in as blocks; Done here completes the task in Todoist', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    const call = async (body) => (await fetch(`http://127.0.0.1:${port}/api/todoist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })).json()
+    const { task } = await call({ op: 'testStudy', content: 'Physics problem sheet 3' })
+    await open('study')
+    await pg.waitForSelector('.sy .ptabs [data-tab="timer"]', { timeout: 15000 })
+    await pg.click('.sy .ptabs [data-tab="timer"]')
+    await pg.click('.sy-todo-btn')
+    // The picker lists your projects and labels: the "study" label brings its tasks in.
+    await pg.locator('.sy-todo .sy-fchip', { hasText: '@study' }).click({ timeout: 10000 })
+    await pg.click('.sy-filters [data-filter="all"]')
+    const blk = pg.locator('.sy-block', { hasText: 'Physics problem sheet 3' })
+    await blk.waitFor({ timeout: 10000 })
+    if (!/Todoist/.test(await blk.textContent()) || !/40m/.test(await blk.textContent())) throw new Error(`a pulled block reads ${await blk.textContent()}`)
+    await blk.locator('button', { hasText: 'Done' }).click()
+    const t0 = Date.now()
+    while (!(await call({ op: 'peek' })).some((t) => t.id === task.id && t.done)) {
+      if (Date.now() - t0 > 10000) throw new Error('Done on the block did not complete the task in Todoist')
+      await pg.waitForTimeout(300)
+    }
+    // Leave Todoist out of the later steps.
+    await pg.locator('.sy-todo .sy-fchip', { hasText: '@study' }).click()
+    await pg.click('.sy-todo-btn')
+    await pg.click('.sy-filters [data-filter="today"]')
+  })
   await step('Season: pick a theme, the intro plays, the boss has HP, every tab has its content', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('season')

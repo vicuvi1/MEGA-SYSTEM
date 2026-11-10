@@ -149,7 +149,7 @@ function timerNotice(o: NoticeIn): StudyNotice | null {
       timer: true,
       title: `Pomodoro ${nth} done`,
       text: long ? `${subj}: ${nth} in a row. Time for a long break.` : `${subj}: nice work. Rest your eyes for ${len} minutes.`,
-      face: '🍅',
+      face,
       sound: p.endSound,
       actions: [
         { label: `Take ${len}`, op: 'pomoBreak', primary: true },

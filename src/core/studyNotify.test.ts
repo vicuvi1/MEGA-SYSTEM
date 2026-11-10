@@ -30,7 +30,7 @@ describe('Study Time notices', () => {
   it('pomodoro done → "Take 5" / "Keep going", with your end sound; one over-time nudge later; a long break after 4', () => {
     expect(studyNotice(input({ run: pomoRun(), now: at(13, 9, 24).getTime() }))).toBeNull()
     const n = studyNotice(input({ run: pomoRun(), now: at(13, 9, 25).getTime() }))!
-    expect(n).toMatchObject({ kind: 'pomoDone', timer: true, title: 'Pomodoro 1 done', sound: 'levelUp', face: '🍅' })
+    expect(n).toMatchObject({ kind: 'pomoDone', timer: true, title: 'Pomodoro 1 done', sound: 'levelUp', face: '📐' })
     expect(n.actions.map((a) => [a.label, a.op])).toEqual([
       ['Take 5', 'pomoBreak'],
       ['Keep going', 'keepGoing'],
