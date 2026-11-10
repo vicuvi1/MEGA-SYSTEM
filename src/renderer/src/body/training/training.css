@@ -167,6 +167,8 @@
 .tr-ex-name small { font-size: 13px; color: var(--bdy-muted); }
 .tr-ex-name:focus-visible { outline: 2px solid var(--bdy-accent); outline-offset: 3px; border-radius: 6px; }
 .tr-done-chip { align-self: flex-start; font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: color-mix(in srgb, var(--bdy-accent) 18%, transparent); color: var(--bdy-accent-text); }
+.tr-done-chip.quiet { font-weight: 600; background: var(--bdy-soft, color-mix(in srgb, currentColor 8%, transparent)); color: inherit; }
+.tr-done-chip { border-radius: 12px; line-height: 1.35; }
 .tr-target { font-weight: 800; font-size: 16px; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--bdy-accent-text); }
 .tr-ex-last { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13.5px; color: var(--bdy-muted); }
 .tr-kg { display: flex; align-items: center; gap: 8px; font-size: 13.5px; }

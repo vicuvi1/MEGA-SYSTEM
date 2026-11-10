@@ -5,7 +5,7 @@ import type { AuthStatus, BackupStatus, BodyState, ConnectionsState, DisciplineS
 import { features, isDemo, life } from './bridge'
 // Starts noting when you last touched the page (the plan card's auto-sync slows down while you are away).
 import './lastUse'
-import { Icon } from './Icon'
+import { Icon, type IconName } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
 import { Coins, ToastProvider, useToast } from './ui'
 import { CoinFlight } from './rewards/CoinFlight'
@@ -33,7 +33,7 @@ import { DisciplineMoments } from './DisciplineMoments'
 import { BenBubble } from './BenBubble'
 import { DeepLinks } from './DeepLinks'
 import { describeEntry, useAction } from './ui'
-import { loadLastPlace, saveLastPlace } from './uiPrefs'
+import { loadLastPlace, saveLastPlace, trainingHomeFirst, type SectionView } from './uiPrefs'
 import { reloadToday } from './todayEvents'
 import { capture } from './capture'
 import { useAddMoney } from './MoneyQuick'
@@ -88,6 +88,7 @@ const Rewards = lazyNamed(() => import('./pages/Rewards'), 'Rewards')
 const TodoTasks = lazyNamed(() => import('./pages/TodoTasks'), 'TodoTasks')
 const Discipline = lazyNamed(() => import('./pages/Discipline'), 'Discipline')
 const Body = lazyNamed(() => import('./pages/Body'), 'Body')
+const TrainingHome = lazyNamed(() => import('./training/TrainingHome'), 'TrainingHome')
 const Sleep = lazyNamed(() => import('./pages/Sleep'), 'Sleep')
 const Money = lazyNamed(() => import('./pages/Money'), 'Money')
 const Connected = lazyNamed(() => import('./pages/Connected'), 'Connected')
@@ -232,7 +233,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [revealed, setRevealed] = useState(false)
   const [urgeOpen, setUrgeOpen] = useState(false)
   // Which tab each app section shows: the app itself, or Life System's view.
-  const [view, setView] = useState<Partial<Record<PageId, 'app' | 'system'>>>(last?.view ?? {})
+  const [view, setView] = useState<Partial<Record<PageId, SectionView>>>(() => trainingHomeFirst(last?.view ?? {}))
   const [paletteOpen, setPaletteOpen] = useState(false)
   // Ctrl+K lists today's Todoist (the one task system), loaded when it opens.
   const [paletteTodo, setPaletteTodo] = useState<TodoTask[] | null>(null)
@@ -290,7 +291,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     }
   }
 
-  useEffect(() => saveLastPlace({ page, view: view as Record<string, 'app' | 'system'> }), [page, view])
+  useEffect(() => saveLastPlace({ page, view: view as Record<string, SectionView> }), [page, view])
   useEffect(() => life.onFullScreen(setFullScreen), [])
   const [update, setUpdate] = useUpdates()
   const [sidebarMode, setSidebarMode] = useState<'auto' | 'open' | 'closed'>(() => {
@@ -517,7 +518,20 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // Stealth hides MAN too until the section is revealed.
   const hiddenByStealth = page === 'discipline' && !!discipline?.stealth && !revealed
   // Money opens on its own hub (Night 11); the full Finance Helper is one tap away.
-  const tab = embed ? (hiddenByStealth ? 'system' : view[page] ?? (page === 'money' ? 'system' : 'app')) : 'system'
+  // Sport Track opens on the Training home; its embedded app is the "Classic tracker".
+  const tab: SectionView = embed ? (hiddenByStealth ? 'system' : view[page] ?? (page === 'money' ? 'system' : page === 'body' ? 'train' : 'app')) : 'system'
+  const segTabs: { id: SectionView; label: string; icon: IconName }[] = !embed
+    ? []
+    : embed.kind === 'sport'
+      ? [
+          { id: 'train', label: 'Training', icon: 'bolt' },
+          { id: 'system', label: embed.system, icon: 'spark' },
+          { id: 'app', label: 'Classic tracker', icon: 'tasks' }
+        ]
+      : [
+          { id: 'app', label: EMBED_LABEL[embed.kind], icon: embed.kind === 'finance' ? 'coin' : embed.kind === 'waky' ? 'moon' : 'shield' },
+          { id: 'system', label: embed.system, icon: 'spark' }
+        ]
   const activeEmbed = embed && tab === 'app' ? embed.kind : null
   const { events: todayEvents } = useTodayEvents()
 
@@ -540,7 +554,10 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       if (key === 'toggle-sidebar') toggleSidebar()
       const n = /^go:(\d)$/.exec(key)
       if (n && MODULES[Number(n[1]) - 1]) setPage(MODULES[Number(n[1]) - 1].id)
-      if (key === 'switch-view' && embed) setView((v) => ({ ...v, [page]: tab === 'app' ? 'system' : 'app' }))
+      if (key === 'switch-view' && embed) {
+        const ids = segTabs.map((t) => t.id)
+        setView((v) => ({ ...v, [page]: ids[(ids.indexOf(tab) + 1) % ids.length] }))
+      }
       if (key === 'palette') {
         soundTick()
         setPaletteOpen((o) => !o)
@@ -744,17 +761,14 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {!compact && <p>{page === 'today' ? new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : current.blurb}</p>}
           </div>
           {embed && !hiddenByStealth && (
-            <div className="seg-switch" role="tablist" aria-label={`${current.label} views`}>
-              <span className={`seg-thumb ${tab === 'app' ? '' : 'second'}`} aria-hidden="true" />
-              <button role="tab" aria-selected={tab === 'app'} className={tab === 'app' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'app' }))}>
-                <Icon name={embed.kind === 'finance' ? 'coin' : embed.kind === 'waky' ? 'moon' : embed.kind === 'sport' ? 'tasks' : 'shield'} size={14} />
-                {/* The page title already says "Sport Track": its app tab doesn't repeat it. */}
-                {embed.kind === 'sport' ? 'Tracker' : EMBED_LABEL[embed.kind]}
-              </button>
-              <button role="tab" aria-selected={tab === 'system'} className={tab === 'system' ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: 'system' }))}>
-                <Icon name="spark" size={14} />
-                {embed.system}
-              </button>
+            <div className="seg-switch" role="tablist" aria-label={`${current.label} views`} style={{ ['--seg-n' as string]: segTabs.length }}>
+              <span className="seg-thumb" aria-hidden="true" style={{ ['--seg-i' as string]: Math.max(0, segTabs.findIndex((t) => t.id === tab)) }} />
+              {segTabs.map((t) => (
+                <button key={t.id} role="tab" aria-selected={tab === t.id} className={tab === t.id ? 'on' : ''} onClick={() => setView((v) => ({ ...v, [page]: t.id }))}>
+                  <Icon name={t.icon} size={14} />
+                  {t.label}
+                </button>
+              ))}
             </div>
           )}
           {page === 'sleep' && (
@@ -868,7 +882,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} body={body} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
             )}
-            {page === 'body' && body && <Body state={body} onState={setBody} onWallet={onWallet} onOpenSportApp={() => setView((v) => ({ ...v, body: 'app' }))} />}
+            {page === 'body' && tab === 'train' && <TrainingHome body={body} onBody={setBody} onWallet={onWallet} onClassic={() => setView((v) => ({ ...v, body: 'app' }))} onMetrics={() => setView((v) => ({ ...v, body: 'system' }))} />}
+            {page === 'body' && tab === 'system' && body && <Body state={body} onState={setBody} onWallet={onWallet} onOpenSportApp={() => setView((v) => ({ ...v, body: 'app' }))} />}
             {page === 'discipline' && discipline && (
               <Discipline state={discipline} man={connections?.man.suggestion ?? null} onState={setDiscipline} onWallet={onWallet} revealed={revealed} onReveal={() => setRevealed(true)} urgeOpen={urgeOpen} onUrgeOpen={setUrgeOpen} />
             )}

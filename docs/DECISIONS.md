@@ -462,3 +462,14 @@ entry that says why.
   store for one-tap logging, so no second meal store or cache of AI answers is needed.
 - **Rules out:** a separate repeat-meal store, re-reading a known meal's photo, caching AI answers by image,
   points for repeats.
+
+### One training engine; a harder move is offered, never applied by itself (2026-11-10)
+- **Decision:** Sport Track's Training home and Body → Training use one engine (`core/sportTrain.ts` on
+  `trainWeek` / `trainLadders` / `trainLog`). Double progression unlocks the next variation after every set at
+  the top of the range in 2 sessions in a row, with no Hard or broken-form set; he then chooses Apply or Keep.
+  Make easier / Make harder move one level and never delete or rewrite logs. The embedded app stays as the
+  "Classic tracker" tab, unchanged.
+- **Why:** the owner wants to progress without surprises: the app suggests from his own logged sets and he
+  decides; two engines would disagree about his level.
+- **Rules out:** a level that changes by itself, a second progression engine in the Training home or the
+  Classic tracker's Today, deleting old rep logs when moving to sets × reps, points for levels or offers.

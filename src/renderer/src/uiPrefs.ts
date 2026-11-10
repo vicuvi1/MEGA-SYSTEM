@@ -162,9 +162,27 @@ systemDark?.addEventListener('change', () => current.theme === 'system' && apply
 
 // ---------- Last place ----------
 
+/** Which tab a section shows: the embedded app, Life System's view, or (Sport Track) the Training home. */
+export type SectionView = 'app' | 'system' | 'train'
 export interface LastPlace {
   page: string
-  view: Record<string, 'app' | 'system'>
+  view: Record<string, SectionView>
+}
+
+/**
+ * Sport Track opens on the Training home now (2026-11-10). A device that last showed the old tracker
+ * ("app") moves to the Training home once; after that your own choice is remembered as before.
+ */
+export function trainingHomeFirst(view: Record<string, SectionView>): Record<string, SectionView> {
+  try {
+    if (localStorage.getItem('ls.trainHome') === '1') return view
+    localStorage.setItem('ls.trainHome', '1')
+  } catch {
+    return view
+  }
+  if (view.body !== 'app') return view
+  const { body: _old, ...rest } = view
+  return rest
 }
 
 export function loadLastPlace(): LastPlace | null {

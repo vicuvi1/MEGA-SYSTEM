@@ -8,7 +8,7 @@ import { sportToday } from '@core/sportShared'
 import { COACH_CONFIG, COACH_DAYS, COACH_WEEKS, cleanCoach, coachWeekNo, type CoachConfig } from '@core/coachConfig'
 import { cleanDays, dailyPlan, dayOf, snapOf, ticksOf, withSnap, type CoachDays, type DailyPlan, type DayFacts, type PlanMove } from '@core/coachPlan'
 import { cleanWeeks, reviewWeek, weeklyReview, type CoachWeeks, type WeekReview } from '@core/coachWeek'
-import { currentLevel, doneSessions, levelStatus, moveSessions, sessionItems, sessionMinutes, setsFor, suggestNow, trainOf, type TrainData } from '@core/trainLog'
+import { currentLevel, doneSessions, levelStatus, moveSessions, sessionItems, sessionMinutes, ladderSets, suggestNow, trainOf, type TrainData } from '@core/trainLog'
 import { laddersFor, moveName } from '@core/trainLadders'
 import { allHardWeek, lighterOn, strengthDrops } from '@core/trainWarnings'
 import type { SessionType } from '@core/trainWeek'
@@ -138,7 +138,7 @@ export function weekReviewOf(db: DB, stIn?: any, now = new Date()): WeekReview {
       const next = ladder.levels[cur.index + 1]
       if (!level || !next) return
       const sessions = moveSessions(st ?? {}, level.move, today)
-      const status = levelStatus(sessions, level, setsFor(laddersFor(data.ladders, ladder.type).indexOf(ladder), ladder.type), cur.since)
+      const status = levelStatus(sessions, level, ladderSets(data.week, data.ladders, ladder), cur.since)
       if (status.state === 'complete' && suggestNow(status, sessions[sessions.length - 1] ?? null, lv?.declinedOn)) ready.push({ ladder: ladder.id, index: cur.index + 1, name: moveName(next.move) })
     }, undefined)
   }

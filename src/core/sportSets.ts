@@ -19,6 +19,8 @@ export interface SetEntry {
   rir?: number
   feel?: 'hard' | 'ok' | 'easy'
   session?: string
+  /** The optional form check: 'off' when your form broke (the set doesn't count toward unlocking a harder move). */
+  form?: 'off'
 }
 /** { 'YYYY-MM-DD': { exerciseId: [sets] } } */
 export type SetLog = Record<string, Record<string, SetEntry[]>>

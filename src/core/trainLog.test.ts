@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mergeSets } from './sportSets'
 import { DEFAULT_LADDERS } from './trainLadders'
 import {
-  bestOf, currentLevel, declineLevel, doneSessions, ensureExercise, estimateLevelUp, keepLevel, lastLine, lastTime, levelStatus, logSet, mergeTrain,
-  moveSessions, placeLadder, sameAsLast, saveSession, sessionFromSets, sessionItems, sessionMinutes, setLevel, suggestNow, trainOf, unlogSet, workoutOf, type MoveSession
+  bestOf, currentLevel, doseSets, effortOf, ladderSets, weeklySets, declineLevel, doneSessions, ensureExercise, estimateLevelUp, keepLevel, lastLine, lastTime, levelStatus, logSet, mergeTrain,
+  moveSessions, nextTimeOf, placeLadder, sameAsLast, saveSession, sessionFromSets, sessionItems, sessionMinutes, setLevel, suggestNow, trainOf, unlogSet, workoutOf, type MoveSession
 } from './trainLog'
 
 const push = DEFAULT_LADDERS[0]
@@ -113,15 +113,16 @@ describe('the roadmap estimate', () => {
 })
 
 describe("today's moves and saving", () => {
-  it('today on your levels: upper is push, pull, shoulders with 4 + 3 + 3 sets inside 30 minutes', () => {
+  it('today on your levels: upper is push, pull, shoulders with 3 + 5 + 2 sets inside 30 minutes (10-20 hard sets a muscle a week)', () => {
     const st = state({ '2026-11-10': [9, 8, 8] }, { trainLevels: { push: { level: 2, reached: {}, at: 1 } } })
     const items = sessionItems(st, trainOf(st), 'upper', '2026-11-13')
     expect(items.map((i) => i.ladder.id)).toEqual(['push', 'pull', 'shoulders'])
-    expect(items.map((i) => i.sets)).toEqual([4, 3, 3])
+    expect(items.map((i) => i.sets)).toEqual([3, 5, 2])
     expect(items[0]).toMatchObject({ name: 'Diamond push-ups', lastLine: 'Last time: 9 · 8 · 8 → aim to beat it' })
     expect(sessionMinutes(items)).toBeLessThanOrEqual(30)
     const legs = sessionItems(st, trainOf(st), 'legs', '2026-11-13')
     expect(legs.map((i) => i.ladder.id)).toEqual(['single', 'hinge', 'core'])
+    expect(legs.map((i) => i.sets)).toEqual([4, 3, 5])
     expect(sessionMinutes(legs)).toBeLessThanOrEqual(30)
   })
 
@@ -184,5 +185,92 @@ describe('finishing a workout', () => {
     expect(w.title).toBe('Upper body: Push-ups 12 · 11')
     expect(w.items).toEqual([{ exerciseId: 'ex_p', name: 'Push-ups', unit: 'reps', amount: 23, sets: [{ reps: 12 }, { reps: 11 }] }])
     expect(workoutOf({ ...rec, exercises: [] })).toBeNull()
+  })
+})
+
+// The Tracker and Body → Training share these rules (sportTrain.ts reads them): double progression with effort.
+describe('double progression with effort (one engine for the Tracker and Training)', () => {
+  const tapped = (day: string, reps: number[], feel: 'easy' | 'ok' | 'hard'): MoveSession => ({ day, reps, sets: reps.map((r, i) => ({ reps: r, at: Date.parse(day) + i, id: `${day}${i}`, feel })) })
+
+  it('the top of the range in every set, 2 sessions in a row, not Hard and form OK, completes a level', () => {
+    const two = (feel: 'easy' | 'ok' | 'hard') => [tapped('2026-11-08', [12, 12, 12, 12], feel), tapped('2026-11-10', [12, 12, 12, 12], feel)]
+    expect(levelStatus(two('easy'), diamond, 4)).toMatchObject({ state: 'complete', reason: '4×12 easy twice', jump: 1 })
+    expect(levelStatus(two('ok'), diamond, 4)).toMatchObject({ state: 'complete', reason: '4×12 twice with 1–2 reps left' })
+    expect(levelStatus(two('hard'), diamond, 4)).toMatchObject({ state: 'building', hits: 0 })
+    expect(levelStatus(two('hard'), diamond, 4).line).toMatch(/it was hard/)
+    expect(levelStatus([tapped('2026-11-10', [12, 12, 12, 12], 'easy')], diamond, 4)).toMatchObject({ state: 'building', hits: 1 })
+    expect(levelStatus([ses('2026-11-08', [12, 12, 12, 12]), ses('2026-11-10', [12, 12, 12, 12])], diamond, 4).reason).toBe('4×12 in 2 sessions in a row')
+    const broke = two('easy')
+    broke[1].sets[0].form = 'off'
+    expect(levelStatus(broke, diamond, 4)).toMatchObject({ state: 'building', hits: 0 })
+  })
+
+  it('far too easy, twice, offers two levels up', () => {
+    expect(levelStatus([tapped('2026-11-08', [16, 16, 15, 15], 'easy'), tapped('2026-11-10', [16, 16, 15, 15], 'easy')], diamond, 4)).toMatchObject({ state: 'complete', jump: 2 })
+  })
+
+  it('effort is read from the working sets only', () => {
+    expect(effortOf(tapped('2026-11-10', [12, 12], 'easy'), 2)).toBe('easy')
+    expect(effortOf({ sets: [{ reps: 12, at: 1, id: 'a', feel: 'easy' }, { reps: 12, at: 2, id: 'b', feel: 'ok' }] }, 2)).toBe('ok')
+    expect(effortOf({ sets: [{ reps: 12, at: 1, id: 'a', feel: 'easy' }, { reps: 12, at: 2, id: 'b' }] }, 2)).toBeNull()
+  })
+
+  it('a completed level is offered, never applied by itself; "Not yet" waits for a newer session', () => {
+    const st: any = state({}, { trainLevels: { push: { level: 2, reached: { '2': '2026-11-01' }, at: 1 } } })
+    for (const d of ['2026-11-09', '2026-11-11']) st.sets[d] = { ex_d: [12, 12, 12].map((r, i) => ({ reps: r, at: Date.parse(d + 'T10:00:00Z') + i, id: `${d}${i}`, feel: 'easy' })) }
+    const data = trainOf(st)
+    expect(currentLevel(st, data, push, '2026-11-13').index).toBe(2)
+    const items = sessionItems(st, data, 'upper', '2026-11-11')
+    expect(items[0].offer).toMatchObject({ to: 3, name: 'Decline push-ups', reason: '3×12 easy twice' })
+    expect(items[0].nextTime).toEqual({ kind: 'up', move: 'decline_pushup', line: 'Unlocked: Decline push-ups 3 × 6–12, because 3×12 easy twice.' })
+    declineLevel(st, 'push', 2, '2026-11-12', 5)
+    expect(sessionItems(st, trainOf(st), 'upper', '2026-11-13')[0].offer).toBeNull()
+  })
+
+  it('placement becomes your level with the day you reached it; Make easier keeps the earlier day', () => {
+    const st: any = state({}, {})
+    keepLevel(st, 'push', 3, 9, '2026-11-13')
+    expect(st.trainLevels.push).toMatchObject({ level: 3, reached: { '3': '2026-11-13' } })
+    setLevel(st, 'push', 2, '2026-11-14', 10, true)
+    setLevel(st, 'push', 3, '2026-11-15', 11, true)
+    expect(st.trainLevels.push).toMatchObject({ level: 3, reached: { '2': '2026-11-14', '3': '2026-11-13' } })
+  })
+
+  it('under the top: aim one more rep on the lowest set; a hard top set stays; under the bottom twice stays or steps back', () => {
+    const base = { ladder: push, index: 2, level: diamond, name: 'Diamond push-ups', fullSets: 3 }
+    const reps = [tapped('2026-11-13', [10, 9, 8], 'ok')]
+    expect(nextTimeOf({ ...base, latest: reps[0], status: levelStatus(reps, diamond, 3) }, '2026-11-13')?.line).toBe('Next time: Diamond push-ups 10 · 9 · 9, because one more rep on your lowest set is how you grow.')
+    const hard = [tapped('2026-11-13', [12, 12, 12], 'hard')]
+    expect(nextTimeOf({ ...base, latest: hard[0], status: levelStatus(hard, diamond, 3) }, '2026-11-13')?.kind).toBe('stay')
+    const low = [tapped('2026-11-10', [5, 4, 4], 'hard'), tapped('2026-11-13', [5, 5, 4], 'hard')]
+    expect(nextTimeOf({ ...base, latest: low[1], status: levelStatus(low, diamond, 3) }, '2026-11-13')).toMatchObject({ kind: 'down', line: expect.stringMatching(/one level back to Push-ups/) })
+    expect(nextTimeOf({ ...base, latest: low[0], status: levelStatus(low, diamond, 3) }, '2026-11-13')).toBeNull()
+  })
+
+  it('the default week gives every muscle group 10-20 hard sets, legs included; Full / Lighter / Short are 4 / 3 / 2 sets', () => {
+    const data = trainOf({})
+    const w = weeklySets(data)
+    for (const m of ['push', 'pull', 'legs', 'core'] as const) {
+      expect(w[m]).toBeGreaterThanOrEqual(10)
+      expect(w[m]).toBeLessThanOrEqual(20)
+    }
+    // Four upper days: still inside the range.
+    const four = trainOf({ trainWeek: { v: 1, days: ['upper', 'legs', 'upper', 'rest', 'upper', 'legs', 'upper'], updatedAt: 1 } })
+    for (const v of Object.values(weeklySets(four))) expect(v).toBeLessThanOrEqual(20)
+    expect(ladderSets(data.week, data.ladders, data.ladders[3])).toBe(4)
+    expect([doseSets(4, 'full'), doseSets(4, 'light'), doseSets(4, 'short')]).toEqual([4, 3, 2])
+    expect(doseSets(2, 'light')).toBe(2)
+  })
+
+  it('old daily totals place you: 130 push-ups a day is about 22 a set, which is past plain push-ups', () => {
+    const st = { exercises: [{ id: 'ex_p', name: 'Push-ups', target: 130 }], days: { '2026-11-12': { ex_p: 130 } }, sets: {} }
+    const data = trainOf(st)
+    expect(push.levels[currentLevel(st, data, push, '2026-11-13').index].move).toBe('diamond_pushup')
+    // Without today (no totals) and for Telegram-imported days, totals don't place you.
+    expect(currentLevel(st, data, push).index).toBe(0)
+    const imp = { ...st, importedDays: { '2026-11-12': ['ex_p'] } }
+    expect(currentLevel(imp, trainOf(imp), push, '2026-11-13').index).toBe(0)
+    // Totals older than 60 days don't count.
+    expect(currentLevel(st, data, push, '2027-03-01').index).toBe(0)
   })
 })

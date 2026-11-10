@@ -82,7 +82,7 @@ export function ladderFacts(s: Services, from: string, today: string, finance?: 
   for (const st of Object.values(train.levels)) for (const d of Object.values(st?.reached ?? {})) if (inRange(d)) levelUps++
   const levels = train.ladders
     .filter((l) => l.id === 'push' || l.id === 'pull')
-    .map((l) => safe(() => `${l.name}: ${moveName(l.levels[currentLevel(blob, train, l).index]?.move ?? '')}`, ''))
+    .map((l) => safe(() => `${l.name}: ${moveName(l.levels[currentLevel(blob, train, l, today).index]?.move ?? '')}`, ''))
     .filter((x) => x && !x.endsWith(': '))
 
   // Food: days the protein goal was reached (the day's own target, training days included).
