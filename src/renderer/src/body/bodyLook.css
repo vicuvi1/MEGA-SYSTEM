@@ -1,0 +1,80 @@
+/* Sport Track (Body page): the larger-text look of the 2026-11-10 restyle (e3342f9), for this page only.
+   Everything sits under .body-page (through :where, so no extra specificity), so no other page, the sidebar
+   or the top bar changes. Loaded first in pages/Body.tsx so the body/*.css files still win ties. */
+
+/* One type scale, spacing and card tokens for this page. */
+:where(.body-page) {
+  --t-xs: 12px; --t-sm: 13px; --t-md: 15px; --t-lg: 17px; --t-xl: 22px; --t-2xl: 30px;
+  --t-h1: 24px; --t-h2: 18px; --t-h3: 15.5px; --card-radius: 16px; --card-pad: var(--s-5);
+  font-size: var(--t-md);
+  letter-spacing: -0.075px;
+}
+/* Numbers line up; headings and cards as in the restyle. */
+:where(.body-page) :where(.num, .coins, .ptabs-n, .stat .big, .big, time) { font-variant-numeric: tabular-nums; }
+:root :where(.body-page) :where(h1) { font-size: var(--t-h1); letter-spacing: -0.02em; }
+:root :where(.body-page) :where(h2) { letter-spacing: -0.01em; }
+:root :where(.body-page) .panel, :root :where(.body-page) .card { border-radius: var(--card-radius); }
+:root :where(.body-page) .empty-state { color: var(--muted); }
+:root :where(.body-page) .empty-state p { font-size: var(--t-sm); line-height: 1.5; }
+
+
+
+/* from calm.css */
+:where(.body-page) .hint.small { font-size: 13px; }
+
+/* from design.css */
+:root :where(.body-page) .hint.small { font-size: var(--t-sm); }
+:where(.body-page) .toast-act { font-size: 13px; }
+:where(.body-page) .rest-day { font-size: 13px; }
+:where(.body-page) .st-vol-cell small { font-size: 12px; }
+:root :where(.body-page) .btn.small { font-size: 13px; }
+
+/* from discipline.css */
+:where(.body-page) .ms small { font-size: 12px; }
+
+/* from ladder/ladder.css */
+:where(.body-page) .ql-kicker { font-size: 12px; }
+:where(.body-page) .ql-light { font-size: 13px; }
+:where(.body-page) .ql-rev-goals label { font-size: 13px; }
+
+/* from pageTabs.css */
+:where(.body-page) .ptabs-wrap.stuck { background: var(--bg); box-shadow: 0 1px 0 var(--border); }
+:where(.body-page) .ptabs-wrap.stuck::before { content: ''; position: absolute; left: 0; right: 0; bottom: 100%; height: calc(var(--content-pt, 0px) + 1px); background: inherit; }
+:where(.body-page) .ptabs button { font-size: var(--t-sm, 13.5px); }
+:where(.body-page) .ptabs-n { font-size: 12px; }
+:root[data-theme='light'] :where(.body-page) .ptabs-wrap.stuck { background: var(--bg); }
+
+/* from plan.css */
+:where(.body-page) .tag { font-size: 12px; }
+:where(.body-page) .field { font-size: 13px; }
+:where(.body-page) .wd { font-size: 13px; }
+:where(.body-page) .wk small { font-size: 12px; }
+:where(.body-page) .status { font-size: 12px; }
+
+/* from saga/saga.css */
+:where(.body-page) .btn.sm { font-size: 13px; }
+
+/* from select.css */
+:where(.body-page) .ui-select-group { font-size: 12px; }
+
+/* from styles.css */
+:where(.body-page) .nav.small { font-size: 13px; }
+:where(.body-page) .title p { font-size: 13px; }
+:where(.body-page) .chip { font-size: 13px; }
+:where(.body-page) .hint { font-size: 13px; }
+:where(.body-page) .btn.small { font-size: 13px; }
+:where(.body-page) .mono { font-size: 13px; }
+:where(.body-page) .stat .label { font-size: 12px; }
+:where(.body-page) .stat .sub { font-size: 13px; }
+:where(.body-page) .group h3 { font-size: 12px; }
+:where(.body-page) .action { font-size: 13px; }
+:where(.body-page) .feed li { font-size: 13px; }
+:where(.body-page) .feed .when { font-size: 13px; }
+:where(.body-page) .table th { font-size: 12px; }
+:where(.body-page) .sheet-card label { font-size: 13px; }
+:where(.body-page) .err { font-size: 13px; }
+:where(.body-page) .toast { font-size: 13px; }
+:where(.body-page) .big small { font-size: 13px; }
+:where(.body-page) .link { font-size: 13px; }
+:where(.body-page) .reward .note { font-size: 13px; }
+:where(.body-page) .price .real { font-size: 13px; }
