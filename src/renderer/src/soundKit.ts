@@ -465,6 +465,48 @@ export function setBedVolume(v: number): void {
   if (bed && eng) bed.g.gain.setTargetAtTime(bedGain(v), eng.c.currentTime, 0.1)
 }
 
+// ---- Study Time's soft tick (beside the background, not instead of it) ----
+
+let tickLoop: { src: AudioBufferSourceNode; g: GainNode } | null = null
+/** A soft clock tick once a second while a study block runs (Study Time's own switch). */
+export function startTick(): void {
+  if (tickLoop) return
+  if (soundBlock('focus', playCheck())) return
+  const e = engine()
+  if (!e) return
+  try {
+    const { c, buses } = e
+    wake(c)
+    const buf = c.createBuffer(1, Math.floor(c.sampleRate * 2), c.sampleRate)
+    buf.getChannelData(0).set(bedSamples('tick', c.sampleRate, 2))
+    const src = c.createBufferSource()
+    src.buffer = buf
+    src.loop = true
+    const lp = c.createBiquadFilter()
+    lp.type = 'lowpass'
+    lp.frequency.value = BED_LOWPASS.tick
+    const g = c.createGain()
+    g.gain.value = bedGain(soundPrefs().bedVolume) * 0.6
+    src.connect(lp).connect(g).connect(buses.focus)
+    src.start()
+    tickLoop = { src, g }
+  } catch {
+    tickLoop = null
+  }
+}
+export function stopTick(): void {
+  const t = tickLoop
+  tickLoop = null
+  if (!t) return
+  try {
+    t.src.stop()
+    t.src.disconnect()
+    t.g.disconnect()
+  } catch {
+    /* gone */
+  }
+}
+
 // ---- the old names, so every caller keeps working ----
 
 export const soundTick = () => play('tick')

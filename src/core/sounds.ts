@@ -16,7 +16,7 @@ export const SOUND_CATEGORIES: { id: SoundCategory; label: string; hint: string 
 ]
 
 export type SoundThemeId = 'soft' | 'arcade' | 'glass'
-export type BedKind = 'off' | 'brown' | 'rain' | 'tick'
+export type BedKind = 'off' | 'brown' | 'rain' | 'tick' | 'white'
 
 /** Sound choices on this device (Settings → Sound). */
 export interface SoundPrefs {
@@ -48,7 +48,7 @@ export function cleanSoundPrefs(p: unknown): SoundPrefs {
     cats,
     theme: o.theme && o.theme in SOUND_THEMES ? o.theme : 'soft',
     haptics: o.haptics !== false,
-    bed: o.bed === 'brown' || o.bed === 'rain' || o.bed === 'tick' ? o.bed : 'off',
+    bed: o.bed === 'brown' || o.bed === 'rain' || o.bed === 'tick' || o.bed === 'white' ? o.bed : 'off',
     bedVolume: typeof o.bedVolume === 'number' ? Math.max(0, Math.min(100, o.bedVolume)) : 40,
     lastTen: o.lastTen !== false,
     island: o.island === 'off' || o.island === 'full' ? o.island : 'subtle',
@@ -265,6 +265,9 @@ export function bedSamples(kind: Exclude<BedKind, 'off'>, rate: number, seconds 
     if (kind === 'brown') {
       last = (last + 0.02 * white) / 1.02
       out[i] = last * 3.5
+    } else if (kind === 'white') {
+      // White noise, softened by its lowpass (a steady hiss, not harsh).
+      out[i] = white * 0.22
     } else {
       // Rain: lightly smoothed noise with an occasional drop.
       last = 0.6 * last + 0.4 * white
@@ -280,7 +283,7 @@ export function bedSamples(kind: Exclude<BedKind, 'off'>, rate: number, seconds 
   return out
 }
 /** The lowpass for each background (Hz). */
-export const BED_LOWPASS: Record<Exclude<BedKind, 'off'>, number> = { brown: 500, rain: 3200, tick: 2600 }
+export const BED_LOWPASS: Record<Exclude<BedKind, 'off'>, number> = { brown: 500, rain: 3200, tick: 2600, white: 5200 }
 
 /** Which of the last 10 seconds of a timer gets a tick now (10…1), or null. */
 export function lastTenSecond(msLeft: number): number | null {

@@ -703,6 +703,13 @@ const todo = (() => {
     if (b.op === 'close' && x) return ((x.done = true), send({ ok: true }))
     if (b.op === 'remove' && x) return ((x.done = true), (x.removed = true), send({ ok: true }))
     if (b.op === 'peek') return send(tasks)
+    // Study Time's smoke: a made-up study task with the label "study", due in a week (it stays off Today and the day plan).
+    if (b.op === 'testStudy') {
+      const week = new Date(Date.parse(`${day}T12:00:00Z`) + 7 * 86400000).toISOString().slice(0, 10)
+      const x = { ...t(`t${tasks.length + 1}`, String(b.content || 'Study task'), week, null), labels: ['study'], duration: 40 }
+      tasks.push(x)
+      return send({ ok: true, task: x })
+    }
     // A task added in Todoist itself (the phone): the smoke test adds one, then presses Sync.
     if (b.op === 'testAdd') {
       const x = t(`t${tasks.length + 1}`, String(b.content || 'New task'), day, null)

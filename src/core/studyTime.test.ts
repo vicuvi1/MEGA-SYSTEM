@@ -158,13 +158,13 @@ describe('stats', () => {
     expect(studyStats(all, s, rangeOf('custom', today, { from: '2026-11-09', to: '2026-11-15' }), 'block', today).beforeMin).toBe(100)
     expect(studyStats(all, s, rangeOf('month', today), 'block', today).totalMin).toBe(275)
   })
-  it('the donut by category, tag or block (biggest first, "No category" for loose sessions)', () => {
+  it('the donut by category, tag or block (biggest first, "No block" for loose sessions)', () => {
     const r = rangeOf('week', today)
     const byCat = studyStats(all, s, r, 'category', today).slices
     expect(byCat.map((x) => [x.label, x.minutes])).toEqual([
       ['Math', 125],
       ['English', 30],
-      ['No category', 20]
+      ['No block', 20]
     ])
     expect(byCat[0].color).toBe(s.categories[0].color)
     const byTag = studyStats(all, s, r, 'tag', today).slices

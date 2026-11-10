@@ -978,8 +978,8 @@
    ],
    "evidence": "2026-11-10: islandClicks.test.ts (tight shield, press off the shape, take expiry, hover intent, hide item) passes; smoke step 'Desktop island: pill -> click -> panel ...' checks no take 4 px under the pill, a quick pass never peeks and ends with clicks passing through, resting peeks, right-click Hide for 1 hour. Not yet tried on a real Windows desktop.",
    "notes": "Root cause: the island window is one fixed size (about 640 x 760 DIP at 100%: WIN_BASE 500x660 widened to the panel + 40, height panel + 100) while the resting pill is about 240 x 40, and while it takes clicks the whole window takes them; the old shield started 12 px outside the pill, lingered 400 ms after leaving it anywhere in the window, and never expired. core/islandClicks.ts (shieldHit, shieldStep with pressIn, takeExpired, hoverStep, peekWaitAfterIntent), DesktopIsland.tsx (evaluate, heartbeat, right-click Hide), desktop/island.ts (takeAt watchdog, pass through on reload / unresponsive), core/islandModel.ts (HOVER_MIN_MS), core/islandCommands.ts (HIDE_HOUR_ITEM, withHide), IslandSettingsPanel.tsx (slider min 300)."
-   },
-   {
+  },
+  {
    "id": "F-COACH-SHORT-NIGHT",
    "priority": 1,
    "area": "coach",
@@ -998,15 +998,15 @@
    "id": "F-STUDY-TIME",
    "priority": 1,
    "area": "focus",
-   "title": "Study Time page and island timer (desktop)",
-   "user_visible_behavior": "Plan → Study Time: blocks (name, category, tags, optional planned length, quick, day, optional Todoist task) with Today / Tomorrow / This week / All / Completed and category and tag filters with total time; one tap starts a block on the one focus timer; Break 5/10/15 (never counts), Back, Stop; a timer forgotten overnight asks when you stopped; Stats: donut by category / tag / block, day / week / month / custom, totals, sessions, average, breaks, streak, against plan, best day, bars per day, top blocks; Sessions: add and fix past ones. Island: a running block counts up in the pill and panel with ☕ 5 / ☕ 10 / Stop & log, quick blocks to start when nothing runs, and \"Break's over\" rings like time's up.",
+   "title": "Study Time 2: ring timer, pomodoro, blocks, Stats and island notices (desktop)",
+   "user_visible_behavior": "Plan → Study Time, two halves. Left: a big timer with a round ring that fills to the planned time (this pomodoro) and turns gold past it; Pomodoro (25/5, a long break after 4, your own lengths) or Count up (planned length or open stopwatch); Pause / Resume, Take 5 or Break 5/10, +5 min, Switch block without stopping (the time so far goes to the old block), Stop with \"What did you do?\" (one line, kept with the session); your end and break-over sounds, white noise / soft noise / rain and a soft tick while studying; today's sessions with their notes. Right: a quick add bar (\"Math lab 4 50m #practice tomorrow\": name, length, pomodoros, #tags, @subject, day, repeat, * quick), filters Today / Tomorrow / This week / All / Completed plus subjects and tags with this week's time (they add up to the total; plain focus time is \"No block\"), blocks with colour and emoji per subject, tomato dots (planned against done), drag to reorder (or Alt+arrows), due dates (red when late), repeat (daily, weekdays, weekly), labelled Start / Switch, Done and Edit buttons with tooltips; Todoist study tasks by chosen project or label come in as blocks and Done completes them in Todoist. Stats (full window): range, KPIs, a bigger donut with legend (tap a slice: its sessions and 8-week trend), weekly goals per subject with an even-pace mark and a behind warning, a 52-week heat map, the day's timeline, best hours, Export CSV. Sessions: add and fix past ones (typed time pays nothing). Island: the pill's ring in the subject's colour with minutes left in the pomodoro (elapsed in count up), gold past the plan; the panel has Pause / Resume, the pomodoro's break, +5, Switch (searchable) and Stop & log; with nothing running, start any block by typing. Notices, once each, with your sound and buttons: pomodoro done (Take 5 / Keep going), break over (Back to <block>), planned time reached, one over-time nudge, a forgotten timer, a goal reached or behind, a planned block waiting (Start / In an hour); quiet hours keep them silent, meetings make the timer ones a dot and hold the gentle ones.",
    "status": "passing",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/studyTime.test.ts src/main/studyTime.test.ts",
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/studyTime.test.ts src/core/studyPlan.test.ts src/core/studyInsights.test.ts src/core/studyNotify.test.ts src/main/studyTime.test.ts",
     "SMOKE_ONLY=\"Study Time\" npm run smoke"
    ],
-   "evidence": "2026-11-10: core studyTime.test.ts and main/studyTime.test.ts pass; smoke 'Study Time: start a block …' and 'Study Time on the island …' pass; tabs at 1280x720: timer 1.15, stats 1.19, sessions 1.00 screens (limit 1.75, checked at 1.575).",
-   "notes": "Desktop first. No schema change: sessions are focus_sessions rows; Study Time's part (block, break minutes, source) is the synced setting study_log, keyed by the session's start time; blocks are study_blocks. A plain Stop from elsewhere (bot, Today) logs the session without its break minutes."
+   "evidence": "2026-11-10: the study unit tests pass (clock pinned, any time zone); smoke 'Study Time: quick add → pomodoro …', 'Study Time: count up …, Stats …', 'Study Time: your study tasks from Todoist …' and 'Study Time on the island: …' pass; tabs at 1280x720: timer 1.18, stats 1.54, sessions 1.00 screens (checked at 1.575).",
+   "notes": "Desktop first. Still no schema change: sessions are focus_sessions rows; study_log keeps per session block, break and pause minutes, pomodoros and the note; study_blocks keeps blocks (order, repeat, estimated pomodoros, Todoist link), subject colours and emoji, weekly goals and the timer and sound prefs. Pure rules: core/studyTime.ts, studyPlan.ts (quick add, Todoist pull, tomatoes), studyInsights.ts (goals, best hours for the planner and Ben via life.study.bestHours, heat map, timeline, CSV), studyNotify.ts (the notices). A pomodoro run is one session with breaks (pomo.at moves on), not one session per pomodoro."
   }
  ]
 }

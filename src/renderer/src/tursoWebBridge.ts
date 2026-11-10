@@ -1861,7 +1861,7 @@ export function createTursoWebBridge(): Bridge {
       get: (_t, method: string) => async (...args: unknown[]) => {
         const svc = await svcP
         const run = (s: any) => (new StudyService(s.db, s.wallet) as any)[method](...args)
-        if (method === 'blocks' || method === 'sessions') return svc.read(run)
+        if (method === 'blocks' || method === 'sessions' || method === 'bestHours') return svc.read(run)
         forgetShared()
         const r = await svc.write(run, 'life-wallet-changed')
         window.dispatchEvent(new CustomEvent(method === 'change' ? 'life-study-changed' : 'life-focus-changed'))

@@ -13,7 +13,7 @@ import { IslandVoice, islandVoiceOn } from './voice/IslandVoice'
 import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
 import { dayPart } from '@core/islandFeel'
 import { clockText, hmText } from '@core/studyTime'
-import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type AlertGate, type AlertKindPref, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandUiEvent, type PillItem } from '@core/islandModel'
+import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type AlertGate, type AlertKindPref, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandAlert, type StudyIslandBlock, type IslandUiEvent, type PillItem } from '@core/islandModel'
 import { restingView, type RestItem, type RestKind } from '@core/islandRest'
 import { benCardVisible, buildToday, dedupeTodos } from '@core/islandTodos'
 import { BODY_CARD_MS, CALM_TIMING, calmDots, firstSight, isBodyCard, presentAs, calmRevealed, calmStep, calmTiming, calmZone, dotColor, inZone, modeGate, peekKind, type CalmDot, type CalmEvent, type CalmPhase } from '@core/islandCalm'
@@ -254,11 +254,92 @@ function useNow(ms: number) {
 }
 
 type Run = NonNullable<IslandSnapshot['running']>
-/** Study Time's clock: the time studied, or a break's time left (brk) while a break with a length goes on. */
-function studyShown(run: Run, tick: number): { text: string; brk: boolean; ms: number } {
+/**
+ * Study Time's clock: a pomodoro counts down (then +over), count up shows the
+ * time studied; a break with a length shows its time left (brk). `mins`: what
+ * the pill and the bubble show (minutes left in a pomodoro, else minutes studied).
+ */
+function studyShown(run: Run, tick: number): { text: string; brk: boolean; ms: number; over: boolean; mins: number; pct: number } {
   const worked = Math.max(0, (run.pausedAt ?? tick) - run.startedAt - (run.pausedMs ?? 0))
-  if (run.pausedAt && run.breakEndsAt) return { text: clockText(Math.max(0, run.breakEndsAt - tick)), brk: true, ms: worked }
-  return { text: clockText(worked), brk: false, ms: worked }
+  const from = run.goalFrom ?? 0
+  const pct = run.goalAt != null ? (worked - from) / Math.max(1, run.goalAt - from) : (worked % 3_600_000) / 3_600_000
+  if (run.pausedAt && run.breakEndsAt) {
+    const left = Math.max(0, run.breakEndsAt - tick)
+    return { text: clockText(left), brk: true, ms: worked, over: false, mins: Math.ceil(left / 60_000), pct }
+  }
+  const over = run.goalAt != null && worked >= run.goalAt
+  if (run.pomo && run.goalAt != null) {
+    const left = run.goalAt - worked
+    return { text: left >= 0 ? clockText(left) : `+${clockText(-left)}`, brk: false, ms: worked, over, mins: left >= 0 ? Math.ceil(left / 60_000) : Math.floor(-left / 60_000), pct }
+  }
+  return { text: clockText(worked), brk: false, ms: worked, over, mins: Math.floor(worked / 60_000), pct }
+}
+
+/** Study Time's ring in the pill: the subject's colour filling to the plan (this pomodoro), gold past it, green on a break. */
+function StudyRing({ run, size = 22, stroke = 2.6 }: { run: Run; size?: number; stroke?: number }) {
+  const tick = useNow(1000)
+  const st = studyShown(run, tick)
+  const r = size / 2 - stroke
+  const c = 2 * Math.PI * r
+  const brkPct = run.pausedAt && run.breakEndsAt ? 1 - st.mins / Math.max(1, Math.ceil((run.breakEndsAt - run.pausedAt) / 60_000)) : 0
+  const pct = st.brk ? brkPct : st.over ? 1 : Math.max(0, Math.min(1, st.pct))
+  const color = st.brk ? '#34d399' : st.over ? '#f5b83d' : run.color ?? 'var(--lime)'
+  return (
+    <svg className={`di-ring di-study-ring ${st.over ? 'gold' : ''} ${run.pausedAt && !st.brk ? 'paused' : ''}`} width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden style={{ ['--c' as string]: color }}>
+      <circle cx={size / 2} cy={size / 2} r={r} className="bg" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} className="fg" strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={c * (1 - pct)} transform={`rotate(-90 ${size / 2} ${size / 2})`} style={{ stroke: color }} />
+    </svg>
+  )
+}
+
+/** Start or switch to any Study Time block: type to find it (quick and today's first). */
+function StudyPicker({ blocks, current, prefix, onPick, placeholder }: { blocks: StudyIslandBlock[]; current?: string | null; prefix: string; onPick: (id: string) => void; placeholder: string }) {
+  const [q, setQ] = useState('')
+  const list = (q.trim() ? blocks.filter((b) => `${b.name} ${b.category ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())) : blocks).filter((b) => b.id !== current).slice(0, q.trim() ? 8 : 6)
+  return (
+    <div className="di-study-picker">
+      <input
+        className="di-study-find"
+        value={q}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        onPointerDown={() => desk()?.islandFocus?.()}
+        onFocus={() => desk()?.islandFocus?.()}
+        onChange={(e) => setQ(e.target.value)}
+        onKeyDown={(e) => {
+          e.stopPropagation()
+          if (e.key === 'Enter' && list[0]) onPick(list[0].id)
+        }}
+      />
+      <div className="di-study-chips">
+        {list.map((b) => (
+          <button key={b.id} style={{ ['--c' as string]: b.color }} {...tp(`${prefix}:${b.id}`, () => onPick(b.id))} title={`${b.category ? `${b.category} · ` : ''}${b.planned ? `${b.planned} min` : 'open'}${b.due ? ' · planned for today' : ''}`}>
+            <i />
+            {b.emoji ? <span className="di-study-emoji">{b.emoji}</span> : null}
+            {b.name}
+            {b.due ? <small className="di-study-due">today</small> : null}
+          </button>
+        ))}
+        {!list.length && <small className="di-study-none">No block matches.</small>}
+      </div>
+    </div>
+  )
+}
+
+/** A Study Time notice's look: the subject's ring and emoji (gold past the plan, green when a break ends, a tomato for a pomodoro). */
+function StudyScene({ st }: { st: NonNullable<IslandAlert['study']> }) {
+  const color = st.kind === 'breakOver' ? '#34d399' : st.kind === 'overtime' || st.kind === 'planned' || st.kind === 'goalReached' ? '#f5b83d' : st.color
+  return (
+    <div className={`sc di-study-scene k-${st.kind}`} style={{ ['--c' as string]: color }} aria-hidden>
+      <motion.span className="di-study-ringbox" initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ type: 'spring', stiffness: 420, damping: 22 }}>
+        <svg viewBox="0 0 40 40">
+          <circle cx="20" cy="20" r="16" className="bg" />
+          <motion.circle cx="20" cy="20" r="16" className="fg" initial={{ pathLength: 0 }} animate={{ pathLength: st.kind === 'goalBehind' || st.kind === 'due' ? 0.4 : 1 }} transition={{ duration: 0.9, ease: 'easeOut' }} transform="rotate(-90 20 20)" />
+        </svg>
+        <b>{st.kind === 'pomoDone' ? '🍅' : st.emoji}</b>
+      </motion.span>
+    </div>
+  )
 }
 function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard?: IslandSnapshot['focusGuard'] }) {
   const tick = useNow(1000)
@@ -269,18 +350,18 @@ function LiveTimer({ run, big = false, guard }: { run: Run; big?: boolean; guard
   const up = run.up ? studyShown(run, tick) : null
   const over = !up && left < 0
   const text = up ? up.text : `${over ? '+' : ''}${clock(left)}`
-  if (!big) return <Roll className={`di-pill-time ${over ? 'over' : ''}`} text={text} />
+  if (!big) return <Roll className={`di-pill-time ${over ? 'over' : ''} ${up?.over ? 'gold' : ''}`} text={text} />
   return (
     <>
       <Fly id="ic-timer">
-        <SmoothRing from={run.startedAt} to={run.endsAt} size={58} stroke={4} timer freeze={run.pausedAt} />
+        {run.up ? <StudyRing run={run} size={58} stroke={4} /> : <SmoothRing from={run.startedAt} to={run.endsAt} size={58} stroke={4} timer freeze={run.pausedAt} />}
       </Fly>
       <div className="di-timer-mid">
         <Fly id="tm-timer" className="di-clock-fly">
-          <Roll className={`di-clock ${over ? 'over' : ''}`} text={text} />
+          <Roll className={`di-clock ${over ? 'over' : ''} ${up?.over ? 'gold' : ''}`} text={text} />
         </Fly>
         <Fly id="ti-timer" pos className="di-sub-fly">
-          <small>{run.pausedAt && <b className="di-paused-tag">{up ? (up.brk ? 'Break · ' : 'On a break · ') : 'Paused · '}</b>}{run.subject} <StageDots dots={run.dots} /></small>
+          <small>{run.pausedAt && <b className="di-paused-tag">{up ? (up.brk ? 'Break · ' : run.plain ? 'Paused · ' : 'On a break · ') : 'Paused · '}</b>}{run.emoji ? `${run.emoji} ` : ''}{run.subject}{run.pomo ? <b className="di-pomo-n"> · 🍅 {run.pomo.n}</b> : null} <StageDots dots={run.dots} /></small>
         </Fly>
         {guard && (
           <small className={`di-guard ${guard.pct >= 85 ? 'good' : guard.pct < 60 ? 'low' : ''}`} title="How much of this session you've been at the PC (no mouse/keys for 2+ min counts as away)">
@@ -298,6 +379,7 @@ function LiveCountdown({ at }: { at: number }) {
   return <Roll className={`di-pill-time ${left <= 300 ? 'soon' : ''}`} text={`in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`} />
 }
 function LiveRing({ run, size = 22 }: { run: Run; size?: number }) {
+  if (run.up) return <StudyRing run={run} size={size} />
   return <SmoothRing from={run.startedAt} to={run.endsAt} size={size} timer freeze={run.pausedAt} />
 }
 
@@ -683,7 +765,8 @@ export function DesktopIsland() {
     window.dispatchEvent(new CustomEvent('life-island-reminder-sound', { detail: { kind: bodyReminderOf(a) ?? (center ? 'center' : plan.key), id: a.id } }))
     const test = isTestSound(a.id)
     // Your own file for this moment (Custom Center → Looks → Sounds), else the kit's sound.
-    const own = center ? lk.sound.files.reminder : a.kind === 'over' ? lk.sound.files.timer : null
+    // Study Time's notices ring the sound you picked there (a.sound), not your own time's-up file.
+    const own = center ? lk.sound.files.reminder : a.kind === 'over' && !a.sound ? lk.sound.files.timer : null
     void (async () => {
       if (own && (await playLocal(own, Math.min(1, plan.loud / 2)))) return logIslandUi('sound', cardSoundLine(a.id, plan, 'played (your file)'))
       const r = await playCard(plan.sound, plan.loud, { preview: test })
@@ -832,7 +915,10 @@ export function DesktopIsland() {
   }, [pick])
   const bubble: Activity | null = stack.length === 1 ? stack[0] : null
   const run = s.running
-  useIslandSounds(place, inCall, run)
+  useIslandSounds(place, inCall, run ? { startedAt: run.startedAt, endsAt: run.endsAt, study: run.up ? { noise: run.sound?.noise ?? 'off', tick: !!run.sound?.tick, paused: !!run.pausedAt } : null } : null)
+  // Study Time: the "switch subject" list on the panel's timer card.
+  const [studySwitch, setStudySwitch] = useState(false)
+  useEffect(() => setStudySwitch(false), [run?.startedAt])
 
   // IP3: nothing live for a while: it tucks away (a tiny dot, or faded); the mouse on it brings it back.
   const lastLive = useRef(Date.now())
@@ -1374,8 +1460,13 @@ export function DesktopIsland() {
       desk()?.showApp?.(a.kind === 'open' ? a.page : 'today')
       close()
     }
+    // Study Time: "Fix it in Study Time" / "See stats" opens the page.
+    if (a.kind === 'studyTime' && a.op === 'open') {
+      desk()?.showApp?.('study')
+      close()
+    }
     // Answered the thing that peeked: it goes back to the pill.
-    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'water', 'coach'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)) || (a.kind === 'center' && a.op === 'remind'))) close()
+    if (uiRef.current.byAlert && (['dismiss', 'start', 'stop', 'push', 'blockResult', 'eventMark', 'moveBreak', 'clipSave', 'water', 'coach', 'studyTime'].includes(a.kind) || (a.kind === 'nudge' && NUDGE_CLOSES.has(a.op.op)) || (a.kind === 'center' && a.op === 'remind'))) close()
   }
   tapRef.current = tap
   // IC4: what Enter will do, live while you type (the same rules as the command bar).
@@ -1825,17 +1916,25 @@ export function DesktopIsland() {
     timer: run ? (<section className={`di-timer ${run.up ? 'di-study-run' : ''}`}>
                   <LiveTimer run={run} big guard={s.focusGuard} />
                   {run.up ? (
-                    // Study Time: breaks and Stop on the block (the break never counts as study).
+                    // Study Time: pause, a break, +5, switch subject and Stop (breaks and pauses never count as study).
                     <div className="di-actions col di-study-acts">
-                      <button className="primary" {...tp('st:stop', () => tap({ kind: 'studyTime', op: 'stop' }))}>Stop & log</button>
+                      <button className="primary" {...tp('st:stop', () => tap({ kind: 'studyTime', op: 'stop' }))} title="Stop and log it">Stop & log</button>
                       {run.pausedAt ? (
-                        <button {...tp('st:back', () => tap({ kind: 'studyTime', op: 'back' }))}>▶ Back to it</button>
+                        <button {...tp('st:resume', () => tap({ kind: 'studyTime', op: 'resume' }))} title={run.plain ? 'Go on with the timer' : 'End the break'}>▶ {run.plain ? 'Resume' : 'Back to it'}</button>
                       ) : (
                         <span className="di-study-brk">
-                          <button {...tp('st:brk5', () => tap({ kind: 'studyTime', op: 'break', minutes: 5 }))}>☕ 5</button>
-                          <button {...tp('st:brk10', () => tap({ kind: 'studyTime', op: 'break', minutes: 10 }))}>☕ 10</button>
+                          <button {...tp('st:pause', () => tap({ kind: 'studyTime', op: 'pause' }))} title="Pause (resume any time)">❚❚</button>
+                          {run.pomo ? (
+                            <button {...tp('st:pomobrk', () => tap({ kind: 'studyTime', op: 'pomoBreak' }))} title="Count this pomodoro and take its break">☕ {run.pomo.n % run.pomo.every === 0 ? 'Long' : 'Break'}</button>
+                          ) : (
+                            <button {...tp('st:brk5', () => tap({ kind: 'studyTime', op: 'break', minutes: 5 }))} title="A 5 minute break">☕ 5</button>
+                          )}
+                          <button {...tp('st:plus5', () => tap({ kind: 'studyTime', op: 'extend', minutes: 5 }))} title="5 more minutes">+5</button>
                         </span>
                       )}
+                      {s.studyTime?.blocks?.length ? (
+                        <button className={studySwitch ? 'on' : ''} {...tp('st:switch', () => setStudySwitch((x) => !x))} title="Switch subject: the time so far goes to this one">⇄ Switch</button>
+                      ) : null}
                     </div>
                   ) : (
                     <div className="di-actions col">
@@ -1843,16 +1942,13 @@ export function DesktopIsland() {
                       <button {...tp('panel:extend', () => tap({ kind: 'extend', minutes: 5 }))}>+5 min</button>
                     </div>
                   )}
-                </section>) : s.studyTime?.quick.length && !s.locked ? (
+                  {run.up && studySwitch && s.studyTime?.blocks?.length ? (
+                    <StudyPicker blocks={s.studyTime.blocks} current={null} prefix="st:to" placeholder="Switch to…" onPick={(id) => (setStudySwitch(false), tap({ kind: 'studyTime', op: 'switch', blockId: id }))} />
+                  ) : null}
+                </section>) : (s.studyTime?.blocks?.length || s.studyTime?.quick.length) && !s.locked ? (
                 <section className="di-study-pick" aria-label="Study Time">
-                  <span className="di-label">Study Time{s.studyTime.todayMin ? ` · ${hmText(s.studyTime.todayMin)} today` : ''}</span>
-                  <div className="di-study-chips">
-                    {s.studyTime.quick.map((b) => (
-                      <button key={b.id} style={{ ['--c' as string]: b.color }} {...tp(`st:start:${b.id}`, () => tap({ kind: 'studyTime', op: 'start', blockId: b.id }))} title={b.planned ? `${b.planned} min` : 'Open stopwatch'}>
-                        <i />{b.name}
-                      </button>
-                    ))}
-                  </div>
+                  <span className="di-label">Study Time{s.studyTime.todayMin ? ` · ${hmText(s.studyTime.todayMin)} today` : ''}{s.studyTime.mode === 'pomodoro' ? ' · 🍅 pomodoro' : ''}</span>
+                  <StudyPicker blocks={s.studyTime.blocks?.length ? s.studyTime.blocks : s.studyTime.quick} prefix="st:start" placeholder="Start a block…" onPick={(id) => tap({ kind: 'studyTime', op: 'start', blockId: id })} />
                 </section>) : null,
     plan: null,
     // One list: the current block, then must-dos, then Todoist due today. Done items fold into "N done".
@@ -2116,7 +2212,7 @@ export function DesktopIsland() {
   }
   // The small extra: an icon or a number, never a placeholder; its tooltip says what it means.
   const restMini = (r: RestItem) => {
-    if (r.kind === 'timer' && run) return <><SmoothRing from={run.startedAt} to={run.endsAt} size={15} stroke={2} timer freeze={run.pausedAt} /><b className="rest-num">{run.up ? Math.floor(studyShown(run, now).ms / 60_000) : Math.max(0, Math.ceil((run.endsAt - (run.pausedAt ?? now)) / 60_000))}m</b></>
+    if (r.kind === 'timer' && run) return <>{run.up ? <StudyRing run={run} size={15} stroke={2} /> : <SmoothRing from={run.startedAt} to={run.endsAt} size={15} stroke={2} timer freeze={run.pausedAt} />}<b className={`rest-num ${run.up && studyShown(run, now).over ? 'gold' : ''}`}>{run.up ? studyShown(run, now).mins : Math.max(0, Math.ceil((run.endsAt - (run.pausedAt ?? now)) / 60_000))}m</b></>
     if (r.kind === 'soon' && r.at) return <b className="rest-num soon">{Math.max(1, Math.ceil((r.at - now) / 60_000))}m</b>
     if (r.kind === 'music') return <ScPillBadge music={k.kit.music} mini />
     if (r.kind === 'captions') return <i className="rest-dot rec" />
@@ -2290,8 +2386,8 @@ export function DesktopIsland() {
   const bubbleIcon = (b: Activity) =>
     b.kind === 'timer' && run ? (
       <>
-        <SmoothRing from={run.startedAt} to={run.endsAt} size={26} stroke={2.4} timer />
-        <b className="di-bubble-num">{run.up ? Math.floor(studyShown(run, now).ms / 60_000) : Math.max(0, Math.ceil((run.endsAt - now) / 60_000))}</b>
+        {run.up ? <StudyRing run={run} size={26} stroke={2.4} /> : <SmoothRing from={run.startedAt} to={run.endsAt} size={26} stroke={2.4} timer />}
+        <b className="di-bubble-num">{run.up ? studyShown(run, now).mins : Math.max(0, Math.ceil((run.endsAt - now) / 60_000))}</b>
       </>
     ) : b.kind === 'next' && b.at ? (
       <b className="di-bubble-num soon tick">{Math.max(0, Math.ceil((b.at - now) / 60_000))}m</b>
@@ -2331,7 +2427,7 @@ export function DesktopIsland() {
   const benLine = s.ben.last?.text.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
   const peek = a && (ui.byAlert || !main || (prefs.mode === 'calm' && calmCard)) ? (
     <div className={`di-peek alert kind-${a.kind} mood-${s.ben.mood} ${isBodyCard(a) ? 'body-card' : ''}`} data-body-card={isBodyCard(a) ? (bodyReminderOf(a) ?? undefined) : undefined} {...tp('peek', () => clicked() && dispatch({ type: 'click' }))} {...dragProps}>
-      {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
+      {a.study ? <StudyScene st={a.study} /> : a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
       <AlertFx kind={a.kind} text={a.text} />
       <div className="di-peek-top">
         <span className={`di-peek-face ${a.kind === 'ben' ? 'ben-in' : ''}`}>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>
@@ -2450,7 +2546,7 @@ export function DesktopIsland() {
   const waterMl = prefs.chips.water[0] ?? 250
   const alertCard = a ? (
     <section className={`di-alert kind-${a.kind}`}>
-      {a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
+      {a.study ? <StudyScene st={a.study} /> : a.kind === 'recap' && a.recap ? <EveningScene recap={a.recap} /> : (!a.nudge || a.nudge.type === 'move') && <AlertScene kind={a.kind} water={s.water} splash={splash} shimmer={shimmer} title={a.title} onAlertDone={() => alertDone(a.id)} />}
       <AlertFx kind={a.kind} text={a.text} />
       <div className="di-alert-top">
         <span>{a.face ?? (a.kind === 'ben' ? s.ben.face : a.kind === 'over' ? '⏰' : '▶')}</span>

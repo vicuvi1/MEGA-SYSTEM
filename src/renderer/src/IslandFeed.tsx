@@ -7,7 +7,7 @@ import { dedupeTodoist, dedupeTodos } from '@core/islandTodos'
 import type { LifeFitView } from './web/lifeFitStore'
 import { goalAct, goalAlert, goalsForIsland } from './goalsIslandFeed'
 import { studyAct, studyForIsland } from './studyIslandFeed'
-import { studyBreakAlert, studyTimeAct, studyTimeForIsland } from './studyTimeIslandFeed'
+import { studyIslandTick, studyTimeAct } from './studyTimeIslandFeed'
 import { briefShownToday, driftAway, pushAct, pushRecs, pushTick as benPushTick } from './benPushFeed'
 import { boostAct, boostTick } from './boost/boostFeed'
 import { atPc } from '@core/benPushes'
@@ -649,12 +649,16 @@ export function IslandFeed() {
     })()
     const center = await centerForIsland(now, centerReal).catch(() => null)
     applyCenterPlace(center)
+    // Study Time: the subject's colour and ring on the running block, every block to start, and its notices (studyTimeIslandFeed.ts).
+    const study = await studyIslandTick({ now, run, running, meeting: !!callOn || classOn, dismissed }).catch(() => null)
+    if (study?.running) running = study.running
     scheduleModeChange(now, () => void sendRef.current())
     void wallpaperTick(now).catch(() => {})
     const alertBase = (() => {
       // Paused: its time is never up (the end moves on with the pause).
       // Your reminders show as their own card (Done / Snooze), not as a copy of Ben's ⏰ message.
-      const pick = pickAlert({ now, running: focusRun?.pausedAt ? { ...focusRun, endsAt: focusRun.endsAt + now - focusRun.pausedAt } : focusRun, blocks: blocks.current.list, log: log.filter((e) => !/^\s*⏰/u.test(e.text)).map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
+      // A Study Time block rings its own notices (pomodoro done, planned time), not the plain "Time is up".
+      const pick = pickAlert({ now, running: focusRun?.up ? { ...focusRun, endsAt: Number.POSITIVE_INFINITY } : focusRun?.pausedAt ? { ...focusRun, endsAt: focusRun.endsAt + now - focusRun.pausedAt } : focusRun, blocks: blocks.current.list, log: log.filter((e) => !/^\s*⏰/u.test(e.text)).map((e) => ({ ...e, face: faceOf(e.mood) })), seenBen: seen, dismissed })
       if (pick?.kind === 'over') return pick
       const answered = get<Record<string, string>>(ANSWERED, {})
       const smart = smartAlert({ now, blocks: blocks.current.list, running: !!running, idleSec, dismissed, answered, reality: realityOf })
@@ -671,14 +675,14 @@ export function IslandFeed() {
         return sg && (dismissed[sg.id] ?? 0) > now ? null : sg
       }
       return (
+        // Study Time: pomodoro done, break over, planned time, over time, a forgotten timer (rings like time's up).
+        study?.urgent ??
         autoAlert(now, dismissed) ??
         pcAskAlert(now, dismissed) ??
         backAlert(focusRun, now, dismissed) ??
         driftAlert(focusRun, now, dismissed) ??
         distractAlert(focusRun, now, dismissed) ??
         breakOverAlert(now, dismissed, !!run) ??
-        // Study Time: a break with a length is over (rings like time's up).
-        studyBreakAlert(running, now, dismissed) ??
         qualityAlert(dismissed, now) ??
         // Focus boost: the push ladder's step, the morning countdown, the stalling fixes.
         (boostCard && !((dismissed[boostCard.id] ?? 0) > now) ? boostCard : null) ??
@@ -692,6 +696,8 @@ export function IslandFeed() {
         coachCard ??
         // Goals: a check-in that's due (once a period; never during a timer or a call).
         goalAlert(now, busy, dismissed) ??
+        // Study Time: a goal reached or behind, a planned block waiting (never in a call or a class).
+        (call || classOn ? null : study?.gentle) ??
         (() => {
           // A reward you can now afford: celebrate it (for 3 minutes, once).
           const r = rewardAlert({ balance: shop?.balance ?? 0, goal: goal ? { title: goal.title, price: goal.price } : null, celebrated: Object.keys(celebrated).filter((k) => now - celebrated[k] > 3 * 60_000), now, dismissed })
@@ -823,7 +829,7 @@ export function IslandFeed() {
       auto: autoIslandView(),
       goals: await goalsForIsland(now),
       study: await studyForIsland(now),
-      studyTime: await studyTimeForIsland(now),
+      studyTime: study?.studyTime ?? null,
       autoFocus: get<boolean>(AUTO, false),
       eyeBreaks: get<boolean>(EYES, EYE_BREAKS_DEFAULT),
       // Reminder sounds stay silent in a call, a focus timer, a class and after bed (the card may still wait).
@@ -1218,12 +1224,14 @@ export function IslandFeed() {
             said = await studyAct(a)
             break
           case 'studyTime': {
-            said = await studyTimeAct(a)
+            // A notice is answered once: Later brings it back after its minutes, anything else drops it.
             if (a.alertId) {
               const d = get<Record<string, number>>(DISMISSED, {})
-              d[a.alertId] = Date.now() + 864e5
+              d[a.alertId] = Date.now() + (a.op === 'later' ? (a.minutes ?? 60) * 60_000 : 864e5)
               put(DISMISSED, d)
             }
+            said = await studyTimeAct(a)
+            window.dispatchEvent(new Event('life-focus-changed'))
             break
           }
           case 'goal': {

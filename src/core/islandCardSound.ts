@@ -49,7 +49,8 @@ export function cardSoundKey(a: { kind: string; id: string; meeting?: boolean })
 }
 
 /** The kit sound for an alert: body reminders their own, your Custom Center reminders the bell, the rest by kind. */
-export function cardSoundName(a: { kind: string; id: string; meeting?: boolean }): SoundName {
+export function cardSoundName(a: { kind: string; id: string; meeting?: boolean; sound?: SoundName }): SoundName {
+  if (a.sound) return a.sound
   const body = bodyReminderOf(a)
   if (body) return ({ water: 'remindWater', eyes: 'remindEyes', move: 'remindMove', screen: 'remindScreen' } as const)[body]
   if (a.kind === 'remind' && a.id.startsWith('custom:')) return 'remind'
@@ -61,7 +62,7 @@ export const TEST_SOUND_PREFIX = 'test:sound:'
 export const isTestSound = (id: string) => id.startsWith(TEST_SOUND_PREFIX)
 
 export interface CardSoundIn {
-  alert: { kind: string; id: string; meeting?: boolean }
+  alert: { kind: string; id: string; meeting?: boolean; sound?: SoundName }
   /** After alertGate + modeGate (the Settings test always counts as a peek). */
   gate: AlertGate
   /** The island's Sounds switch (Settings → Desktop island) and the island look's pack ('none' = off). */

@@ -135,7 +135,7 @@ export function SoundSection() {
           </div>
           <Row title="Focus background" hint="Plays softly while a focus timer runs; fades in and out">
             <div className="sx-try">
-              <Segmented<BedKind> label="Focus background" value={p.bed} options={[['off', 'Off'], ['brown', 'Brown noise'], ['rain', 'Rain'], ['tick', 'Soft tick']]} onChange={(v) => set({ bed: v })} />
+              <Segmented<BedKind> label="Focus background" value={p.bed} options={[['off', 'Off'], ['brown', 'Brown noise'], ['rain', 'Rain'], ['tick', 'Soft tick'], ['white', 'White noise']]} onChange={(v) => set({ bed: v })} />
               {p.bed !== 'off' && (
                 <button type="button" className="btn small ghost" onClick={() => tryBed(p.bed)}>
                   {trying === p.bed ? 'Stop' : 'Try'}

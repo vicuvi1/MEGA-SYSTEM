@@ -1,12 +1,15 @@
-// Study Time's reminder in the app window: when a planned block reaches its
-// length or a break with a length ends, a short note shows (once each). On
-// the desktop the island rings for both (its "time is up" and "Break's
-// over" cards); without an island this window plays the sound itself.
+// Study Time's timer notices in the app window: a pomodoro done, a break
+// over, the planned time reached, one over-time nudge (src/core/studyNotify.ts,
+// once each). On the desktop the island shows them with their buttons and
+// sound; here a short note shows, and without an island this window plays
+// your chosen sound itself.
 // The 2-second check runs only while a study block is running: with nothing
 // running it was a timer firing all day for nothing (and the soak test's
 // busiest hour went over its server-call limit with it on).
 import { useEffect, useRef } from 'react'
-import { alarmDue } from '@core/studyTime'
+import { dayKey } from '@core/dates'
+import { studyNotice } from '@core/studyNotify'
+import { cleanStore, type StudyStore } from '@core/studyTime'
 import { life } from '../bridge'
 import { play } from '../soundKit'
 import { useToast } from '../ui'
@@ -20,22 +23,25 @@ export function StudyAlarm() {
     let alive = true
     let timer: ReturnType<typeof setInterval> | null = null
     let run: Running | null = null
+    let store: StudyStore | null = null
     const said = new Set<string>()
     const tick = () => {
-      const due = alarmDue(run, Date.now(), said)
-      if (!due) return
-      said.add(due.key)
-      toastRef.current(due.text, 'good')
+      if (!run?.blockId || !store) return
+      const now = Date.now()
+      const n = studyNotice({ run, now, today: dayKey(new Date(now)), store, sessions: [], done: (id) => said.has(id), meeting: false, dayOf: (d) => dayKey(d) })
+      if (!n || !n.timer || n.kind === 'forgot') return
+      said.add(n.id)
+      toastRef.current(`${n.title} · ${n.text}`, 'good')
       // The island rings on the desktop; here only when there is none.
-      if (!window.desktop) play('focusEnd', { ownSwitch: true })
+      if (!window.desktop) play(n.sound, { ownSwitch: true })
     }
     const follow = () => {
       const on = !!run?.blockId
       if (on && !timer) timer = setInterval(tick, 2000)
       if (!on && timer) (clearInterval(timer), (timer = null))
     }
-    const load = () =>
-      life.focus
+    const load = () => {
+      void life.focus
         .state()
         .then((s) => {
           if (!alive) return
@@ -43,8 +49,15 @@ export function StudyAlarm() {
           follow()
         })
         .catch(() => {})
-    void load()
-    const evs = ['life-focus-changed', 'life-external-changed']
+      void life.study
+        ?.blocks()
+        .then((b) => {
+          if (alive) store = b ? cleanStore(b) : null
+        })
+        .catch(() => {})
+    }
+    load()
+    const evs = ['life-focus-changed', 'life-study-changed', 'life-external-changed']
     for (const e of evs) window.addEventListener(e, load)
     return () => {
       alive = false
