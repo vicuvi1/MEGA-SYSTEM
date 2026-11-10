@@ -4,16 +4,35 @@
 // background sound fades in and out with it. SO7: a very quiet tick in each
 // of the last 10 seconds. SO5: the island's sounds lean toward its side.
 import { useEffect, useRef } from 'react'
-import { lastTenSecond, panFor } from '@core/sounds'
-import { play, setInMeeting, setPan, soundPrefs, startBed, stopBed } from './soundKit'
+import { lastTenSecond, panFor, type BedKind } from '@core/sounds'
+import { play, setInMeeting, setPan, soundPrefs, startBed, startTick, stopBed, stopTick } from './soundKit'
 
-export interface FocusRun { startedAt: number; endsAt: number }
+/**
+ * study: a Study Time block. Its own noise and soft tick play only while you
+ * study (not on a break or a pause), and its notices ring instead of the gong.
+ */
+export interface FocusRun { startedAt: number; endsAt: number; study?: { noise: BedKind; tick: boolean; paused: boolean } | null }
 
 export function useFocusSound(run: FocusRun | null, chime = true): void {
   const key = run ? `${run.startedAt}` : null
   const prev = useRef<string | null | undefined>(undefined)
   const ended = useRef<string | null>(null)
   const endsAt = run?.endsAt ?? 0
+  const study = run?.study ?? null
+  const isStudy = !!study
+  // Study Time: your noise and tick, only while you study.
+  const studyBed: BedKind | null = study ? (study.paused ? 'off' : study.noise) : null
+  useEffect(() => {
+    if (studyBed == null) return
+    if (studyBed === 'off') stopBed(0.6)
+    else startBed(studyBed)
+  }, [studyBed])
+  const tickOn = !!study && !study.paused && study.tick
+  useEffect(() => {
+    if (tickOn) startTick()
+    else stopTick()
+  }, [tickOn])
+  useEffect(() => () => stopTick(), [])
   // Started / stopped.
   useEffect(() => {
     const was = prev.current
@@ -21,13 +40,14 @@ export function useFocusSound(run: FocusRun | null, chime = true): void {
     if (key && key !== was) {
       // Already running when the page opened: just the background, no swell.
       if (was !== undefined) play('focusStart')
-      if (Date.now() < endsAt) startBed()
+      if (Date.now() < endsAt && !isStudy) startBed()
     } else if (!key && was) stopBed()
-  }, [key, endsAt])
+  }, [key, endsAt, isStudy])
   useEffect(() => () => stopBed(), [])
   // The last 10 seconds, then the gong.
   useEffect(() => {
-    if (!key) return
+    // Study Time rings its own notices (pomodoro done, planned time) instead.
+    if (!key || isStudy) return
     let lastSec: number | null = null
     let t: ReturnType<typeof setTimeout> | null = null
     const step = () => {
@@ -53,7 +73,7 @@ export function useFocusSound(run: FocusRun | null, chime = true): void {
     return () => {
       if (t) clearTimeout(t)
     }
-  }, [key, endsAt, chime])
+  }, [key, endsAt, chime, isStudy])
 }
 
 /** The desktop island: its side of the screen, its calls and its timer. */

@@ -105,7 +105,7 @@ export interface FocusRunning {
   /** Study Time: a plain pause or a break, the break part of pausedMs, and pomodoro mode's lengths and count (src/core/studyTime.ts). */
   pauseKind?: 'pause' | 'break' | null
   brkMs?: number
-  pomo?: { work: number; short: number; long: number; every: number; done: number; at: number } | null
+  pomo?: { work: number; short: number; long: number; every: number; done: number; at: number; from?: number } | null
 }
 
 export const SETTINGS = {

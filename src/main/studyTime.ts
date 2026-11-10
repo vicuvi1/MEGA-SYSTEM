@@ -97,7 +97,7 @@ export class StudyService {
       const task = block.taskId ? { kind: 'todoist' as const, ref: block.taskId, title: block.taskTitle || block.name } : null
       this.focus.start(block.name, Math.min(180, Math.max(5, planned)), now, task)
       const r = this.run()!
-      const pomo: PomoRun | null = pomoMode ? { work: prefs.work, short: prefs.short, long: prefs.long, every: prefs.every, done: 0, at: prefs.work } : null
+      const pomo: PomoRun | null = pomoMode ? { work: prefs.work, short: prefs.short, long: prefs.long, every: prefs.every, done: 0, at: prefs.work, from: 0 } : null
       this.setRun({ ...r, planned, blockId: String(block.id).slice(0, 40), ...(open ? { open: true } : {}), ...(pomo ? { pomo } : {}) })
       this.note(r.startedAt, { b: block.id }, now)
       return this.focus.state(now)
@@ -173,7 +173,7 @@ export class StudyService {
     // The next one ends a full pomodoro after now (or after this one's end, if you answered early).
     const base = Math.max(p.at, Math.floor(worked / 60_000))
     const at = Math.min(MAX_LIVE_MIN, base + p.work)
-    this.setRun({ ...r, planned: Math.min(MAX_LIVE_MIN, Math.max(r.planned, at)), pomo: { ...p, done: p.done + 1, at } })
+    this.setRun({ ...r, planned: Math.min(MAX_LIVE_MIN, Math.max(r.planned, at)), pomo: { ...p, done: p.done + 1, at, from: base } })
   }
 
   /** +N minutes: on the pomodoro going on (or the planned length); at most 4 h in all. */

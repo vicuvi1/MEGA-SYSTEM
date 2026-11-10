@@ -340,6 +340,14 @@ export interface PomoRun {
   done: number
   /** The studied minutes at which the pomodoro going on now ends (moves on with +5 and each new one). */
   at: number
+  /** The studied minutes at which it began (the ring fills from here to `at`). */
+  from?: number
+}
+
+/** How far the pomodoro going on is (0–1, past 1 when over): the ring. */
+export function pomoPct(p: Pick<PomoRun, 'at' | 'from' | 'work'>, workedMs: number): number {
+  const from = p.from ?? Math.max(0, p.at - p.work)
+  return (workedMs / 60_000 - from) / Math.max(1, p.at - from)
 }
 
 /** The minutes studied the ring fills to: this pomodoro's end, else the planned length; null for an open stopwatch. */
