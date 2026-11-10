@@ -32,6 +32,15 @@
 ## Server
 - `api/google.mjs`: `connect {drive:true}` adds `https://www.googleapis.com/auth/drive.file` (incremental: `include_granted_scopes`, the calendar and Gmail stay; `keepGooglePrefs` keeps the calendar picks). `status` returns `drive`. `driveToken` (session required) → `{token, expiresAt}`: the refresh asks Google for the `drive.file` scope only (`src/server/googleCalendar.ts driveAccessToken`), so the key cannot read the calendar or Gmail; a key with more scopes is refused, never handed out. The key is never logged or put in an error. No new `api/` file.
 
+
+## Food photos from Telegram (2026-11-10)
+- A meal photo sent to the bot (single or album, owner's chats only) also goes into the Locker as a food photo: tags `food` + the meal type, file name "2026-11-10 13-05 Lunch - White rice.jpg", Drive folder **Food/YYYY-MM** inside the Locker's folder. Filter chip **Food**.
+- **The server never uploads to Drive** (files stay device-to-Google). It only HOLDS a reference: one server-only `sys_kv` row per photo, `lkh:<draft>:<n>` = Telegram's file id, the draft, the time and, after Save, the meal id, name and type (`web/bots/foodLocker.ts`). Never the picture. Cancel or Not this meal erases the rows at once; any row is erased after **3 days**. A photo whose preview was neither saved nor cancelled is offered after 2 hours (unlinked).
+- **The app copies it** (`vault/driveSync.ts pullFoodInbox`, on app start, every 30 minutes and at the start of every sync): `/api/google {op:'foodInbox'}` lists the held photos, `{op:'foodInboxGet', id}` fetches one (base64, at most 4 MB; the server tries its bot tokens, none leaves it), the item is kept in IndexedDB with `folderPath`, uploaded in the next sync, and then `{op:'foodInboxDone', ids}` erases the rows (**erase after copy**; also for one another device already put in Drive). Each photo is fetched once.
+- **Sub-folders:** the sync lists the folder and the app's own sub-folders in it (`driveApi.listTree`, `appProperties.lsApp = locker-sub`, 3 levels at most), so a photo in Food/2026-11 is never uploaded again; an upload makes a missing sub-folder once. "Use a folder made before" hides sub-folders. Changing the folder moves the app's files and its sub-folders (`folderMovePlan`).
+- **Linked to the meal:** the meal's `photos` holds the Locker ids (`fp<draft>n<n>`, the same on every device); Body → Food shows the thumbnail (a 📷 placeholder until the photo arrives).
+- Limits: Telegram photos are up to 1280 px (well under the Locker's photo limits); no points.
+- Tests: `core/vaultFood.test.ts`, `server/foodTelegram.server.test.ts` (held, listed, fetched once, erased, 3 days); smoke "Photo Locker" (a held photo → Drive under Food/YYYY-MM → the server erases it → the meal row's thumbnail and big view; `FOODPHOTO_SHOTS=<dir>` saves two screenshots).
 ## Owner set-up
 1. In the Google Cloud project of the existing OAuth client: enable the **Google Drive API**, and add the `.../auth/drive.file` scope to the OAuth consent screen (it is a non-sensitive scope: no Google review).
 2. Photo Locker → **Connect Google Drive** → allow → **New folder…**.

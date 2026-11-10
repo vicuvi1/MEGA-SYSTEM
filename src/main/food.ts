@@ -13,7 +13,7 @@ import { defaultSport } from '../core/sportCards'
 import { readPrefs, savePrefs, tickSupp, weighIns } from './bodyPlus'
 import { proteinOfDay } from '../core/protein'
 import {
-  FOOD_KIND, KCAL_KIND, MEAL_TYPES, PAST_DAYS, mealTypeAt, addMeal, cleanFoodLog, cleanItem, dayLine, foodWeek, isFav, kcalOfDay, kcalRowId, mealName, mealsOfDay, proteinRowId, proteinSince, sportFoodLine, sumItems, toggleFav, yesterdayMeals,
+  FOOD_KIND, KCAL_KIND, cleanPhotoIds, MEAL_TYPES, PAST_DAYS, mealTypeAt, addMeal, cleanFoodLog, cleanItem, dayLine, foodWeek, isFav, kcalOfDay, kcalRowId, mealName, mealsOfDay, proteinRowId, proteinSince, sportFoodLine, sumItems, toggleFav, yesterdayMeals,
   MEAL_SOURCES, type DayMeal, type FoodFav, type FoodItem, type FoodLog, type FoodWeek, type MealSource, type MealType, type Totals
 } from '../core/food'
 import { DEFAULT_GOALS, GAIN_GPK, GAIN_SURPLUS, LEAN_GPK, cleanGoals, cleanPrices, foodTargets, type FoodGoals, type FoodTargets } from '../core/foodGoals'
@@ -59,7 +59,7 @@ function insertRow(db: DB, id: string, at: string, day: string, kind: string, am
  */
 export function addFoodMeal(
   db: DB,
-  input: { items: unknown[]; name?: string; day?: string; type?: MealType; supp?: boolean; at?: string; id?: string; source?: MealSource; slot?: string },
+  input: { items: unknown[]; name?: string; day?: string; type?: MealType; supp?: boolean; at?: string; id?: string; source?: MealSource; slot?: string; photos?: string[] },
   source: string,
   now = new Date()
 ): { id: string; day: string; totals: Totals } | null {
@@ -81,7 +81,9 @@ export function addFoodMeal(
   // How it was logged ('saved', 'photo', 'quick-add'); none = 'manual' when read.
   const via = input.source && MEAL_SOURCES.includes(input.source) ? { source: input.source } : {}
   const slot = typeof input.slot === 'string' && /^ds-[a-z0-9-]{1,24}$/.test(input.slot) ? { slot: input.slot } : {}
-  writeSetting(db, 'food_log', addMeal(readFoodLog(db, today), { id, at, day, name, type, items, ...(day !== today ? { late: true } : {}), ...(input.supp ? { supp: true } : {}), ...via, ...slot }, today) as any)
+  // Its photos in Photo Locker (a Telegram meal photo), for the thumbnail on the meal row.
+  const photos = cleanPhotoIds(input.photos).length ? { photos: cleanPhotoIds(input.photos) } : {}
+  writeSetting(db, 'food_log', addMeal(readFoodLog(db, today), { id, at, day, name, type, items, ...(day !== today ? { late: true } : {}), ...(input.supp ? { supp: true } : {}), ...via, ...slot, ...photos }, today) as any)
   return { id, day, totals }
 }
 
@@ -104,7 +106,7 @@ export function editFoodMeal(db: DB, mealId: string, input: { items: unknown[]; 
   const old = log.meals.find((m) => m.id === mealId)
   if (!old || old.day < addDays(today, -PAST_DAYS)) return null
   if (mealsOfDay(log, bodyEvents(db, addDays(old.day, -1), old.day), old.day).find((m) => m.id === mealId)?.removed) return null
-  const made = addFoodMeal(db, { items: input.items, name: input.name, day: old.day, type: input.type ?? old.type, at: old.at, supp: old.supp, source: old.source, slot: old.slot }, source, now)
+  const made = addFoodMeal(db, { items: input.items, name: input.name, day: old.day, type: input.type ?? old.type, at: old.at, supp: old.supp, source: old.source, slot: old.slot, photos: old.photos }, source, now)
   if (!made) return null
   toggleFoodMeal(db, mealId, source, now)
   const cur = readFoodLog(db, today)

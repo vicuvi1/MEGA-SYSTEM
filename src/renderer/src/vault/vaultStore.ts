@@ -31,6 +31,8 @@ export interface VaultItem {
   removedHere?: boolean
   /** A resumable upload in progress (Google's session link, valid about a week). */
   upload?: { url: string; folderId: string; at: number }
+  /** A folder under the Locker's folder in Drive ("Food/2026-11" for a Telegram meal photo); none = the folder itself. */
+  folderPath?: string
   updatedAt: number
 }
 

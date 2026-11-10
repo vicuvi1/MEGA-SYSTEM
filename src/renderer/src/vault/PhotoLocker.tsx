@@ -23,6 +23,7 @@ import './locker.css'
 const FILTERS: { id: VaultFilter; label: string }[] = [
   { id: 'all', label: 'All' },
   { id: 'progress', label: 'Progress photos' },
+  { id: 'food', label: 'Food' },
   { id: 'video', label: 'Videos' },
   { id: 'file', label: 'Files' }
 ]

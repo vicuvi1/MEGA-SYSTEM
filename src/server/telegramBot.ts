@@ -11,6 +11,8 @@ import { loadFeedback } from '../renderer/src/web/botBrain'
 import { serverWeb, type WebTools } from './webTools'
 import { planKeyboard as planButtons } from '@core/tgPlan'
 import { planMessageOf } from '../renderer/src/web/bots/planButtons'
+import { foodInboxOp } from '../renderer/src/web/bots/foodLocker'
+import { downloadFile } from '../renderer/src/web/bots/telegram'
 import { quietNow, quietRules } from '../core/benTiming'
 import { neutral } from '../core/stealth'
 import { examSleepGuard, sleepRegularity } from '../core/sleepRegularity'
@@ -1887,4 +1889,14 @@ export async function mcpCall(env: BotEnv, body: unknown, ctx: McpCtx): Promise<
     }
   }
   return handleMcp(life, body, ctx)
+}
+
+/**
+ * Telegram food photos waiting for Photo Locker (bots/foodLocker.ts): the app
+ * lists them, fetches each one once and erases it once it is in Drive. Only
+ * Telegram file ids are held (3 days at most), never the picture.
+ */
+export async function foodInbox(env: Pick<BotEnv, 'tursoUrl' | 'tursoToken'>, body: unknown, tokens: string[], now = Date.now()): Promise<Record<string, unknown>> {
+  const kv = (stmts: Parameters<TursoHttp['writeAtomic']>[0]) => new TursoHttp(env.tursoUrl, env.tursoToken).writeAtomic(stmts)
+  return foodInboxOp(kv, body, tokens, (token, fileId) => downloadFile(token, fileId, 'photo'), now)
 }

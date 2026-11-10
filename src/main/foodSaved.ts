@@ -35,7 +35,8 @@ export function logSavedMeal(db: DB, mealId: string, qty?: Record<string, number
   if (!m) return null
   const items = withQty(m.items, qty)
   const changed = items.some((x, i) => x.qty !== m.items[i].qty)
-  const r = addFoodMeal(db, { items: itemsOf(s, items), name: changed ? itemsText(s, items).slice(0, 60) : m.name, type: m.slot, source: 'saved' }, source, now)
+  // A repeat of a photo meal shows the same picture (no AI call, no cost).
+  const r = addFoodMeal(db, { items: itemsOf(s, items), name: changed ? itemsText(s, items).slice(0, 60) : m.name, type: m.slot, source: 'saved', ...(m.photo ? { photos: [m.photo] } : {}) }, source, now)
   return r ? { ids: [r.id], totals: r.totals } : null
 }
 
@@ -65,5 +66,5 @@ export function logStandardDay(db: DB, choices: Record<string, SlotChoice> = {},
 export function saveLoggedAsMeal(db: DB, loggedMealId: string, name?: string, type?: MealType): FoodSaved | null {
   const m = readFoodLog(db, sportToday()).meals.find((x) => x.id === loggedMealId)
   if (!m) return null
-  return saveFoodSaved(db, savedMealFrom(readFoodSaved(db), { name: String(name ?? '').trim().slice(0, 60) || m.name, type: type ?? m.type, items: m.items }))
+  return saveFoodSaved(db, savedMealFrom(readFoodSaved(db), { name: String(name ?? '').trim().slice(0, 60) || m.name, type: type ?? m.type, items: m.items, photo: m.photos?.[0] }))
 }

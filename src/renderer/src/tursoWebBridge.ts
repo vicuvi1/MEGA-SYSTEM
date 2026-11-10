@@ -435,6 +435,13 @@ export function createTursoWebBridge(): Bridge {
       if (!j.token) throw new Error(j.error || 'Google Drive is not connected')
       return { token: String(j.token), expiresAt: Number(j.expiresAt) || Date.now() + 30 * 60_000 }
     },
+    foodInbox: async () => ((await googleCall('foodInbox')).items ?? []) as { id: string; at: number; meal?: string; name?: string; type?: string }[],
+    foodInboxGet: async (id: string) => {
+      const j = await googleCall('foodInboxGet', { id })
+      if (!j.data) throw new Error(j.error || 'The photo could not be fetched')
+      return { mime: String(j.mime || 'image/jpeg'), data: String(j.data) }
+    },
+    foodInboxDone: async (ids: string[]) => void (await googleCall('foodInboxDone', { ids })),
     events: async (from: string, to: string) => {
       if (!(await googleConnected())) return []
       const f = Date.parse(from)

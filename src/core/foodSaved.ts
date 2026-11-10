@@ -48,6 +48,8 @@ export interface SavedMeal {
   name: string
   slot: MealType
   items: SavedItem[]
+  /** Its picture: a Photo Locker id (a meal first logged from a photo). One tap or a double-click logs it again, with no AI call. */
+  photo?: string
 }
 
 export interface DaySlot {
@@ -173,7 +175,8 @@ export function cleanSaved(raw: any): FoodSaved {
     if (!m || !ID.meal.test(String(m.id)) || meals.some((x) => x.id === m.id)) continue
     const items = cleanItems(m.items, ids)
     if (!items.length) continue
-    meals.push({ id: String(m.id), name: text(m.name, 60) || 'My meal', slot: MEAL_TYPES.includes(m.slot) ? m.slot : 'snack', items })
+    const photo = typeof m.photo === 'string' && /^[A-Za-z0-9_-]{3,64}$/.test(m.photo) ? { photo: m.photo } : {}
+    meals.push({ id: String(m.id), name: text(m.name, 60) || 'My meal', slot: MEAL_TYPES.includes(m.slot) ? m.slot : 'snack', items, ...photo })
     if (meals.length >= MEALS_MAX) break
   }
   const slots: DaySlot[] = []
@@ -278,7 +281,7 @@ export function newId(prefix: 'sf' | 'sm' | 'ds', name: string, taken: string[])
  * a saved food by name (the qty from the grams), or saved as a new food with
  * its own grams as one portion.
  */
-export function savedMealFrom(s: FoodSaved, meal: { name: string; type: MealType; items: FoodItem[] }): FoodSaved {
+export function savedMealFrom(s: FoodSaved, meal: { name: string; type: MealType; items: FoodItem[]; photo?: string }): FoodSaved {
   const foods = [...s.foods]
   const items: SavedItem[] = []
   for (const x of meal.items.slice(0, ITEMS_MAX)) {
@@ -294,7 +297,7 @@ export function savedMealFrom(s: FoodSaved, meal: { name: string; type: MealType
   }
   if (!items.length || s.meals.length >= MEALS_MAX) return { ...s, foods }
   const id = newId('sm', meal.name, s.meals.map((m) => m.id))
-  return cleanSaved({ ...s, foods, meals: [...s.meals, { id, name: meal.name.slice(0, 60), slot: meal.type, items }] })
+  return cleanSaved({ ...s, foods, meals: [...s.meals, { id, name: meal.name.slice(0, 60), slot: meal.type, items, ...(meal.photo ? { photo: meal.photo } : {}) }] })
 }
 
 /** Drops a food, and it from every meal and slot (a meal or slot left empty goes too). */

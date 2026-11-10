@@ -6,6 +6,8 @@
 // this server opens it (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET in Vercel).
 //   status                 → {configured, connected, email, calendars?, on, target}
 //   connect {gmail?, drive?} → {url}          open it to sign in with Google (gmail: also read-only Gmail; drive: Photo Locker's own Drive files)
+//   foodInbox → {items} · foodInboxGet {id} → {mime, data} · foodInboxDone {ids}: Telegram food photos held
+//                                               for Photo Locker (file ids only, 3 days; bots/foodLocker.ts).
 //   driveToken             → {token, expiresAt} Photo Locker: a short-lived Drive-only key so THIS device uploads/downloads
 //                                               straight to Google (files never pass through here). Never logged.
 //   events {from, to}      → {events}         ISO times, the shown calendars
@@ -13,8 +15,8 @@
 //   move {calendarId, id, start, end} · remove {calendarId, id}
 //   setCalendars {on, target} · disconnect
 import { randomBytes } from "node:crypto"
-import { bearer, config, getSetting, readBody, send, requireSession, setSetting, sign, countCall } from './_lib.mjs'
-import { DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, driveAccessToken, createCalendarApi, exchangeCode, keepGooglePrefs } from './_bot/bot.mjs'
+import { bearer, config, getSetting, readBody, send, requireSession, serverBots, setSetting, sign, countCall } from './_lib.mjs'
+import { DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, driveAccessToken, createCalendarApi, exchangeCode, foodInbox, keepGooglePrefs } from './_bot/bot.mjs'
 
 export function googleEnv(cfg, env = process.env) {
   const clientId = (env.GOOGLE_CLIENT_ID || '').trim()
@@ -102,6 +104,14 @@ export default async function handler(req, res) {
   }
   const env = googleEnv(cfg)
   const op = body?.op
+  // Photo Locker: Telegram food photos held for the app (file ids only, 3 days at most; bots/foodLocker.ts).
+  if (op === 'foodInbox' || op === 'foodInboxGet' || op === 'foodInboxDone') {
+    try {
+      return send(res, 200, await foodInbox({ tursoUrl: cfg.url, tursoToken: cfg.token }, body, serverBots().map((b) => b.token)))
+    } catch {
+      return send(res, 503, { error: 'Database not reachable: try again in a moment.' })
+    }
+  }
   if (op === 'connect') {
     if (!env) return send(res, 200, { error: 'Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Vercel first' })
     const extra = [...(body.gmail ? [GMAIL_READ_SCOPE] : []), ...(body.drive ? [DRIVE_FILE_SCOPE] : [])]

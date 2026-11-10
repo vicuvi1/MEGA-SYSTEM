@@ -29,6 +29,7 @@ import { FoodBars, QuickLog } from './FoodFast'
 import { FoodSavedSheet } from './FoodSavedSheet'
 import { FoodPhotoLog, type PhotoPicker } from './FoodPhotoReview'
 import { FoodAdjustCard } from './FoodAdjustCard'
+import { ConfidenceDot, MealItems, MealPhotoThumb } from './MealPhoto'
 import { adjLogLine } from '@core/foodAdjust'
 import type { FoodView } from '../../../main/food'
 import './food.css'
@@ -595,12 +596,14 @@ export function FoodCounter() {
                       {g.list.map((m) => (
                         <li key={m.id} className={`${m.removed ? 'removed' : ''}${openMeal === m.id ? ' open' : ''}`}>
                           <div className="fd-mrow">
+                            {!m.removed && <MealPhotoThumb ids={m.photos} name={m.name} sub={`${m.day} · ${atHm(m.at)} · ${fmt(m.totals.kcal)} kcal · ${m.totals.protein} g protein · carbs ${m.totals.carbs} g · fat ${m.totals.fat} g`} />}
                             <span className="fd-meal-name">
                               {m.removed && <small className="fd-removed-tag">Removed</small>}
                               <b>{m.name}</b>
                               <small className="fd-meal-sub">
                                 <span className="num">{atHm(m.at)}</span> · <span className="num">{fmt(m.totals.kcal)} kcal · {m.totals.protein} g protein</span>
                                 {m.late ? ' · added later' : ''}
+                                {mealSource(m) === 'photo' && <ConfidenceDot items={m.items} />}
                               </small>
                             </span>
                             <span className="fd-meal-actions">
@@ -621,7 +624,7 @@ export function FoodCounter() {
                           </div>
                           {openMeal === m.id && !m.removed && (
                             <div className="fd-mextra">
-                              <small className="fd-meal-items">{itemsText(m.items)}</small>
+                              {mealSource(m) === 'photo' ? <MealItems items={m.items} /> : <small className="fd-meal-items">{itemsText(m.items)}</small>}
                               <small className="num">
                                 Carbs {m.totals.carbs} g · Fat {m.totals.fat} g
                               </small>

@@ -11,7 +11,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js'
 import { MIGRATIONS } from '../core/schema'
 import { handlePipeline } from '../renderer/src/web/fakeTurso'
-import { handleTelegramUpdate, runTick } from './telegramBot'
+import { foodInbox, handleTelegramUpdate, runTick } from './telegramBot'
 import { foodPushNow } from '../renderer/src/web/bots/foodBot'
 
 const require = createRequire(import.meta.url)
@@ -116,25 +116,28 @@ describe('a meal photo on Telegram', () => {
     expect(texts(w.sent)[0].text).toBe('📸 Reading the photo…')
     const prev = last(w.sent)
     expect(prev.message_id).toBe(901) // the "Reading…" message becomes the preview
-    expect(prev.text).toMatch(/1\. Egg · 3 eggs · 150 g · 216 kcal · 19 g protein/)
-    expect(prev.text).toMatch(/3\. Sauce · 30 g · 90 kcal · 0 g protein\n {3}⚠️ not sure, check the portion/)
-    expect(prev.text).toMatch(/Total: ~466 kcal · 24 g protein/)
+    expect(prev.text).toMatch(/^📸 <b>Breakfast<\/b> · Tue 12 Mar, 08:10/)
+    expect(prev.text).toMatch(/1\. <b>Egg<\/b> · 3 eggs · 150 g[^\n]*\n {4}216 kcal · P 19/)
+    expect(prev.text).toMatch(/3\. <b>Sauce<\/b> · 30 g[^\n]*\n {4}90 kcal · P 0 · C \d+ · F \d+ · ⚠️ check it/)
+    expect(prev.text).toMatch(/Total ~466 kcal · 24 g protein/)
+    // The sauce was hard to see: one short question instead of a guess.
+    expect(prev.text).toMatch(/About how many grams of sauce\?/)
     const id = w.setting('food_ben').draft.id
-    expect(prev.reply_markup.inline_keyboard.pop().map((b: any) => b.callback_data)).toEqual([`fd|s|${id}`, `fd|x|${id}`])
+    expect(prev.reply_markup.inline_keyboard.pop().map((b: any) => b.callback_data)).toEqual([`fd|N|${id}`])
     expect(foodRows(w)).toEqual([])
 
     // + on the eggs (4), then "eggs 3" back; swap the sauce for a saved food, then − it away to half.
     await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|+|${id}|0`))
     expect(w.setting('food_ben').draft.photo.now[0]).toMatchObject({ qty: 4, kcal: 288 })
     await handleTelegramUpdate(w.env as any, TOKEN, msg('eggs 3'))
-    expect(last(w.sent).text).toMatch(/1\. Egg · 3 eggs · 150 g · 216 kcal/)
+    expect(last(w.sent).text).toMatch(/1\. <b>Egg<\/b> · 3 eggs · 150 g[^\n]*\n {4}216 kcal/)
     await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|w|${id}|2`))
     const swapList = w.sent.filter((s) => s.method === 'editMessageReplyMarkup').pop()!.body.reply_markup.inline_keyboard
     expect(swapList.length).toBeLessThanOrEqual(7)
     const banana = swapList.find((r: any) => /^Banana/.test(r[0].text))[0].callback_data
     expect(banana).toMatch(new RegExp(`^fd\\|W\\|${id}\\|2\\|\\d+$`))
     await handleTelegramUpdate(w.env as any, TOKEN, tap(banana))
-    expect(last(w.sent).text).toMatch(/3\. Banana · 118 g · 105 kcal · 1 g protein/)
+    expect(last(w.sent).text).toMatch(/3\. <b>Banana<\/b> · 118 g[^\n]*\n {4}105 kcal · P 1/)
 
     // Save twice (a double tap): one meal, source 'photo', no points, and the line from the real day.
     const ledger0 = w.q('SELECT COUNT(*) FROM ledger')[0][0]
@@ -144,7 +147,8 @@ describe('a meal photo on Telegram', () => {
     expect(w.setting('food_log').meals.map((m: any) => m.source)).toEqual(['photo'])
     expect(w.q('SELECT COUNT(*) FROM ledger')[0][0]).toBe(ledger0)
     const saved = w.sent.filter((s) => s.method === 'editMessageText').pop()!.body
-    expect(saved.text).toMatch(/^✅ <b>Saved\.<\/b> 3 Egg \+ 2 Rye bread \+ Banana: ~481 kcal, 26 g protein\. Today: 481 \/ [\d,]+ kcal, 26 \/ 150 g\. ~[\d,]+ kcal left, 124 g protein; next: your lunch, afternoon, evening and anytime meals cover it \(~[\d,]+ kcal\)\.$/)
+    expect(saved.text).toMatch(/^✅ <b>Breakfast saved<\/b> · Tue 12 Mar, 08:10\n• Egg 150 g: 216 kcal · P 19/)
+    expect(saved.text).toMatch(/\n3 Egg \+ 2 Rye bread \+ Banana: ~481 kcal, 26 g protein\. Today: 481 \/ [\d,]+ kcal, 26 \/ 150 g\. ~[\d,]+ kcal left, 124 g protein; next: your lunch, afternoon, evening and anytime meals cover it \(~[\d,]+ kcal\)\.$/)
     expect(saved.reply_markup.inline_keyboard[0][0].callback_data).toMatch(/^fd\|u\|fd-p/)
 
     // The photo is in no table and in no message.
@@ -321,4 +325,106 @@ describe('meal reminders on the tick', () => {
     expect(p?.channel).toBe('island')
     expect(foodPushNow(wrap as any, svc, { now, meeting: true, quiet: false })).toBeNull()
   })
+})
+
+describe('a Telegram meal photo goes to Photo Locker, and his fixes are remembered', () => {
+  const RICE = { items: [{ name: 'white rice', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 150, gramsLow: 120, gramsHigh: 190, kcal: 195, protein: 4, carbs: 42, fat: 0.5, confidence: 'medium' }], message: 'Rice.' }
+  const held = (w: ReturnType<typeof world>) => w.q("SELECT key, value FROM sys_kv WHERE key LIKE 'lkh:%'").map(([k, v]) => [k, JSON.parse(String(v))])
+
+  it('½× / 2× / change grams, Save links the photo to the meal; the app fetches it once and erases it; the next photo uses his portion', async () => {
+    const w = world(base, async () => ({ ok: true, result: RICE }))
+    at('2030-03-12T13:05:00')
+    await handleTelegramUpdate(w.env as any, TOKEN, photo('lunch'))
+    const id = w.setting('food_ben').draft.id
+    // Held for the Locker: Telegram's file id only (the size up to 1280 px), never the picture.
+    expect(held(w)).toEqual([[`lkh:${id}:1`, { f: 'mid-id', d: id, n: 1, at: Date.parse('2030-03-12T13:05:00'), st: 'open' }]])
+    // The preview: the meal and when, the range, the totals; tap the food → ½× 1.5× 2× / Change grams / Remove.
+    expect(last(w.sent).text).toMatch(/^📸 <b>Lunch<\/b> · Tue 12 Mar, 13:05/)
+    expect(last(w.sent).text).toMatch(/White rice<\/b> · 150 g <i>\(120–190\)<\/i>/)
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|i|${id}|0`))
+    const menu = w.sent.filter((s) => s.method === 'editMessageReplyMarkup').pop()!.body.reply_markup.inline_keyboard
+    expect(menu.map((r: any) => r.map((b: any) => b.text))).toEqual([['½×', '1.5×', '2×'], ['✏️ Change grams', '🗑 Remove'], ['🔁 Swap for saved', '← Back']])
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|h|${id}|0|2`))
+    expect(w.setting('food_ben').draft.photo.now[0]).toMatchObject({ grams: 300, kcal: 390, lo: 240, hi: 380 })
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|G|${id}|0`))
+    expect(last(w.sent).text).toMatch(/How many grams of white rice\?/)
+    await handleTelegramUpdate(w.env as any, TOKEN, msg('220'))
+    expect(w.setting('food_ben').draft.photo.now[0]).toMatchObject({ grams: 220, kcal: 286 })
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|s|${id}`))
+    // The meal carries its Locker photo id; the held row now names the meal; his portion is learned.
+    const meal = w.setting('food_log').meals[0]
+    expect(meal).toMatchObject({ id: `fd-p${id}`, type: 'lunch', source: 'photo', photos: [`fp${id}n1`] })
+    expect(meal.items[0]).toMatchObject({ name: 'white rice', grams: 220 })
+    expect(held(w)[0][1]).toMatchObject({ st: 'meal', meal: `fd-p${id}`, type: 'lunch' })
+    expect(w.setting('food_ben').portions).toEqual({ 'rice white': { g: 220, n: 1, at: Date.parse('2030-03-12T13:05:00') } })
+    const savedMsg = w.sent.filter((s) => s.method === 'editMessageText').pop()!.body.text
+    expect(savedMsg).toMatch(/^✅ <b>Lunch saved<\/b> · Tue 12 Mar, 13:05\n• White rice 220 g: 286 kcal · P \d/)
+
+    // The app: lists it, fetches it once (through the server: no bot token leaves it), erases it once it is in Drive.
+    const env = { tursoUrl: w.env.tursoUrl, tursoToken: 'k' }
+    const list = await foodInbox(env, { op: 'foodInbox' }, [TOKEN])
+    expect(list).toEqual({ items: [{ id: `fp${id}n1`, at: Date.parse('2030-03-12T13:05:00'), meal: `fd-p${id}`, name: 'White rice', type: 'lunch' }] })
+    const got = await foodInbox(env, { op: 'foodInboxGet', id: `fp${id}n1` }, ['1:wrong', TOKEN])
+    expect(got).toEqual({ mime: 'image/jpeg', data: PHOTO_B64 })
+    expect(JSON.stringify(got)).not.toContain(TOKEN)
+    expect(await foodInbox(env, { op: 'foodInboxGet', id: 'fpnope1n1' }, [TOKEN])).toEqual({ error: 'That photo is not held any more' })
+    await foodInbox(env, { op: 'foodInboxDone', ids: [`fp${id}n1`] }, [TOKEN])
+    expect(held(w)).toEqual([])
+    // Still no picture in any table.
+    expect(w.everything()).not.toContain(PHOTO_B64)
+
+    // Next lunch: the AI guesses 150 g again; his usual 220 g wins, and the AI is told about it.
+    at('2030-03-13T13:00:00')
+    await handleTelegramUpdate(w.env as any, TOKEN, photo('rice again'))
+    expect(w.reads[1].portions).toEqual([{ name: 'rice white', g: 220 }])
+    expect(w.setting('food_ben').draft.photo.now[0]).toMatchObject({ grams: 220, src: 'memory' })
+    expect(last(w.sent).text).toMatch(/👤 your usual/)
+  }, 60_000)
+
+  it('"Not this meal" saves nothing and keeps no photo; a held photo is erased after 3 days', async () => {
+    const w = world(base, async () => ({ ok: true, result: RICE }))
+    at('2030-03-12T13:05:00')
+    await handleTelegramUpdate(w.env as any, TOKEN, photo())
+    const id = w.setting('food_ben').draft.id
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|N|${id}`))
+    expect(last(w.sent).text).toMatch(/Not a meal\. Nothing saved, and the photo is not kept/)
+    expect(held(w)).toEqual([])
+    expect(w.setting('food_log')).toBeNull()
+
+    await handleTelegramUpdate(w.env as any, TOKEN, photo())
+    const env = { tursoUrl: w.env.tursoUrl, tursoToken: 'k' }
+    // Not saved yet: not listed while the preview is open (2 h), listed after, erased unread after 3 days.
+    expect(await foodInbox(env, { op: 'foodInbox' }, [TOKEN], Date.parse('2030-03-12T13:30:00'))).toEqual({ items: [] })
+    expect(((await foodInbox(env, { op: 'foodInbox' }, [TOKEN], Date.parse('2030-03-12T16:00:00'))) as any).items).toHaveLength(1)
+    expect(await foodInbox(env, { op: 'foodInbox' }, [TOKEN], Date.parse('2030-03-15T13:06:00'))).toEqual({ items: [] })
+    expect(held(w)).toEqual([])
+  }, 60_000)
+})
+
+describe('repeat meals from a photo', () => {
+  it('Keep as repeat meal makes a saved meal with the photo; /meals logs it again with no AI call, with the same picture', async () => {
+    const RICE = { items: [{ name: 'white rice', matchedSavedFoodId: null, qty: 1, unit: 'serving', grams: 200, kcal: 260, protein: 5, carbs: 57, fat: 1, confidence: 'medium' }], message: '' }
+    const w = world(base, async () => ({ ok: true, result: RICE }))
+    at('2030-03-12T13:05:00')
+    await handleTelegramUpdate(w.env as any, TOKEN, photo())
+    const id = w.setting('food_ben').draft.id
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|s|${id}`))
+    const saved = w.sent.filter((s) => s.method === 'editMessageText').pop()!.body
+    expect(saved.reply_markup.inline_keyboard[0].map((b: any) => b.callback_data)).toEqual([`fd|u|fd-p${id}`, `fd|R|fd-p${id}`])
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|R|fd-p${id}`))
+    expect(last(w.sent).text).toMatch(/is a repeat meal now/)
+    const meal = w.setting('food_saved').meals.find((m: any) => m.photo === `fp${id}n1`)
+    expect(meal).toBeTruthy()
+    // /meals lists it first with 📷; one tap logs the same numbers, with the same picture, and no AI call.
+    at('2030-03-13T13:00:00')
+    await handleTelegramUpdate(w.env as any, TOKEN, msg('/meals'))
+    const menu = last(w.sent).reply_markup.inline_keyboard
+    expect(menu.find((r: any) => r[0].text.startsWith('📷 '))[0].callback_data).toBe(`fd|g|${meal.id}`)
+    const reads = w.reads.length
+    await handleTelegramUpdate(w.env as any, TOKEN, tap(`fd|g|${meal.id}`, CHAT, 77))
+    expect(w.reads.length).toBe(reads)
+    const logged = w.setting('food_log').meals.find((m: any) => m.day === '2030-03-13')
+    expect(logged).toMatchObject({ source: 'saved', photos: [`fp${id}n1`] })
+    expect(logged.items[0]).toMatchObject({ grams: 200, kcal: 260 })
+  }, 60_000)
 })

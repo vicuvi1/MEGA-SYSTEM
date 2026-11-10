@@ -13,12 +13,17 @@
 //   checked again by src/core/scaleRead.ts); it shares the same daily counter.
 // - Several photos of one meal (up to 6: a plate, a packaged snack, a drink) go in ONE
 //   request, numbered "Photo 1…n", so the AI sees the whole meal and lists each food once.
-// - countPhoto: 50 photos a day (the owner's day, LIFE_TZ), counted in sys_kv (server only:
+// - countPhoto: 15 photos a day by default (PHOTO_DAILY_LIMIT) (the owner's day, LIFE_TZ), counted in sys_kv (server only:
 //   /api/db refuses it). Every photo of a request counts (3 photos = 3 of the 50).
 // The photo is never stored or logged; only the foods the owner saves are kept.
 // The page checks the answer again with src/core/foodVision.ts before showing it.
 
-export const PHOTO_DAILY_LIMIT = 50
+/** Photos a day by default (the owner's choice); PHOTO_DAILY_LIMIT in Vercel changes it (1–100). */
+export const PHOTO_DAILY_LIMIT = 15
+export const photoLimit = (env = process.env) => {
+  const n = Math.round(Number(String(env.PHOTO_DAILY_LIMIT ?? '').trim()))
+  return Number.isFinite(n) && n >= 1 && n <= 100 ? n : PHOTO_DAILY_LIMIT
+}
 export const VISION_DEADLINE_MS = 50_000
 const GEMINI_API = 'https://generativelanguage.googleapis.com/v1beta/models/'
 const CLAUDE_API = 'https://api.anthropic.com/v1/messages'
@@ -95,26 +100,47 @@ export function readPhotoRequest(body) {
     .filter((s) => s.id && s.name)
   const today = { kcal: num(body.today?.kcal, 20000), protein: num(body.today?.protein, 1000), items: (Array.isArray(body.today?.items) ? body.today.items : []).slice(0, 20).map((x) => txt(x, 60)).filter(Boolean) }
   const targets = { kcal: num(body.targets?.kcal, 10000), protein: num(body.targets?.protein, 600) }
-  return { kind: 'food', image: img.images[0], images: img.images, note: txt(body.note, 300), saved, today, targets }
+  // His usual portions (learned from his corrections, core/foodVision.ts portionHints): at most 8.
+  const portions = (Array.isArray(body.portions) ? body.portions : [])
+    .slice(0, PROMPT_PORTIONS)
+    .map((p) => ({ name: txt(p?.name, 40), g: Math.round(num(p?.g, 3000)) }))
+    .filter((p) => p.name && p.g >= 5)
+  return { kind: 'food', image: img.images[0], images: img.images, note: txt(body.note, 300), saved, today, targets, portions }
 }
 
-/** The instructions and the text that goes with the photo. */
+/** A short prompt is a cheap one: at most this many saved foods and usual portions go in it. */
+export const PROMPT_SAVED = 8
+export const PROMPT_PORTIONS = 8
+const noteWords = (s) => new Set(String(s ?? '').toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3).map((w) => w.replace(/s$/, '')))
+/** The saved foods worth sending: the ones the note names first, then his own order (core/foodVision.ts pickSaved, the same rule). */
+export function promptSaved(saved, note, max = PROMPT_SAVED) {
+  const words = noteWords(note)
+  if (!words.size) return saved.slice(0, max)
+  return saved
+    .map((s, i) => ({ s, i, hit: [...noteWords(s.name)].filter((w) => words.has(w)).length }))
+    .sort((a, b) => b.hit - a.hit || a.i - b.i)
+    .slice(0, max)
+    .map((x) => x.s)
+}
+
+/** The instructions and the text that goes with the photo. Short on purpose: every word is paid for on every photo. */
 export function foodPhotoPrompt(req) {
-  const system = `You estimate the food in a meal photo for a calorie and protein log.
-Rules:
-- List each food separately, with how many (qty and unit, e.g. 2 eggs, 1 container, 150 g) and the grams eaten (cooked weight).
-- The owner's note is the truth when it says what something is or how much.
-- If a food is one of the owner's SAVED FOODS (or SAVED MEALS), set matchedSavedFoodId to its id and qty to how many portions; its numbers are used as saved. Match by meaning, not exact words: "bulgur container" in the note or a container of bulgur in the photo is the saved bulgur container.
-- Otherwise matchedSavedFoodId is null and you estimate kcal, protein, carbs and fat for the whole amount.
-- confidence: "high" when you are sure what it is and how much, "medium" for a fair guess, "low" when the portion is hard to see.
-- message: one short friendly sentence about the meal (no numbers beyond the totals).
+  const system = `You estimate the food in meal photos for a calorie and protein log. Be precise.
+1. Identify each separate food or drink; list each once.
+2. Grams eaten (cooked weight). Size it against what is in the photo: dinner plate 26 cm, side plate 20 cm, fork 19 cm, spoon 15 ml, adult palm 9 cm wide, fist about 250 ml, can 330 ml. gramsLow and gramsHigh: your honest range.
+3. A readable nutrition label or package text is exact: use its numbers for the amount eaten and set fromLabel true.
+4. A SAVED FOOD (match by meaning, e.g. a container of bulgur = "bulgur container"): set matchedSavedFoodId and qty in portions; its own numbers are used.
+5. HIS USUAL PORTIONS: use that many grams unless the photo clearly shows a different amount.
+6. Else matchedSavedFoodId is null: kcal, protein, carbs and fat for the whole amount from standard food values; check kcal ≈ 4×protein + 4×carbs + 9×fat.
+The owner's note is the truth. confidence: high = sure what and how much, medium = fair guess, low = amount hard to see. message: one short friendly sentence.
+unclear: true only when the photo is too dark or blurry to tell the foods (then items may be empty). hidden: oil, butter, sauce or sugar when one you cannot see could add over 100 kcal (fried or glossy food, a dressing, a sweet drink), else none.
 Answer ONLY with JSON in the given shape.${photosRule(req)}`
-  const saved = req.saved.length ? req.saved.map((s) => `- id ${s.id}: ${s.name}, portion ${s.portion || '1'}: ${s.kcal} kcal, ${s.protein} g protein${s.carbs ? `, ${s.carbs} g carbs` : ''}${s.fat ? `, ${s.fat} g fat` : ''}`).join('\n') : '(none)'
+  const picked = promptSaved(req.saved, req.note)
+  const saved = picked.length ? picked.map((s) => `- id ${s.id}: ${s.name}, ${s.portion || '1 portion'}: ${s.kcal} kcal, ${s.protein} g protein${s.carbs ? `, ${s.carbs} g carbs` : ''}${s.fat ? `, ${s.fat} g fat` : ''}`).join('\n') : '(none)'
+  const usual = (req.portions ?? []).length ? `\nHIS USUAL PORTIONS: ${req.portions.map((p) => `${p.name} ${p.g} g`).join(', ')}` : ''
   const user = `Owner's note: ${req.note || '(none)'}
 SAVED FOODS:
-${saved}
-Today so far: ${req.today.kcal} kcal, ${req.today.protein} g protein${req.today.items.length ? ` (${req.today.items.join(', ')})` : ''}.
-Goals today: ${req.targets.kcal} kcal, ${req.targets.protein} g protein.
+${saved}${usual}
 ${(req.images?.length ?? 1) > 1 ? `What is in these ${req.images.length} photos?` : 'What is in this photo?'}`
   return { system, user }
 }
@@ -170,17 +196,26 @@ const ITEM_PROPS = {
   fat: { type: 'number' },
   confidence: { type: 'string', enum: ['high', 'medium', 'low'] },
   /** Which photo it is in (1…n), when several photos come together. */
-  photo: { type: 'number' }
+  photo: { type: 'number' },
+  /** The honest range of grams. */
+  gramsLow: { type: 'number' },
+  gramsHigh: { type: 'number' },
+  /** The numbers come from a readable label or package. */
+  fromLabel: { type: 'boolean' }
 }
-const ITEM_REQUIRED = ['name', 'matchedSavedFoodId', 'qty', 'unit', 'grams', 'kcal', 'protein', 'confidence']
+const ITEM_REQUIRED = ['name', 'matchedSavedFoodId', 'qty', 'unit', 'grams', 'gramsLow', 'gramsHigh', 'kcal', 'protein', 'carbs', 'fat', 'confidence']
+// No totals: the code adds them up again anyway, so asking for them only costs output tokens.
 const SHAPE = {
   type: 'object',
   properties: {
     items: { type: 'array', items: { type: 'object', properties: ITEM_PROPS, required: ITEM_REQUIRED } },
-    totals: { type: 'object', properties: { kcal: { type: 'number' }, protein: { type: 'number' } }, required: ['kcal', 'protein'] },
-    message: { type: 'string' }
+    message: { type: 'string' },
+    /** Too dark or blurry to read: the app asks for a better photo instead of a guess. */
+    unclear: { type: 'boolean' },
+    /** A hidden fat or sugar that could add 100+ kcal and can't be seen: one short question. */
+    hidden: { type: 'string', enum: ['oil', 'butter', 'sauce', 'sugar', 'none'] }
   },
-  required: ['items', 'totals', 'message']
+  required: ['items', 'message']
 }
 /** Gemini's schema: the same shape with its upper-case type names (OBJECT, STRING…). */
 const upper = (o) => (Array.isArray(o) ? o.map(upper) : o && typeof o === 'object' ? Object.fromEntries(Object.entries(o).map(([k, v]) => [k, k === 'type' ? String(v).toUpperCase() : k === 'required' || k === 'enum' ? v : upper(v)])) : o)
@@ -189,7 +224,7 @@ export const GEMINI_SCHEMA = upper(SHAPE)
 export const CLAUDE_SCHEMA = { ...SHAPE, properties: { ...SHAPE.properties, items: { type: 'array', items: { type: 'object', properties: { ...ITEM_PROPS, matchedSavedFoodId: { type: ['string', 'null'] } }, required: ITEM_REQUIRED } } } }
 
 /** The HTTP request for one try (url, headers, body). The key is only in a header. */
-export function buildVisionRequest(p, model, req, think = true) {
+export function buildVisionRequest(p, model, req, think = THINK_LOW, media = true) {
   const scale = req.kind === 'scale'
   const { system, user } = scale ? scalePrompt() : foodPhotoPrompt(req)
   // Every photo of the meal in the one request (each with its number when there are several).
@@ -216,7 +251,16 @@ export function buildVisionRequest(p, model, req, think = true) {
     body: {
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ parts: [...pics.flatMap((x, i) => [...(pics.length > 1 ? [{ text: `Photo ${i + 1}:` }] : []), { inline_data: { mime_type: x.mime, data: x.data } }]), { text: user }] }],
-      generationConfig: { temperature: 0.2, maxOutputTokens: 4096, responseMimeType: 'application/json', responseSchema: scale ? GEMINI_SCALE_SCHEMA : GEMINI_SCHEMA, ...(think ? { thinkingConfig: { thinkingBudget: 1024 } } : {}) }
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+        responseMimeType: 'application/json',
+        responseSchema: scale ? GEMINI_SCALE_SCHEMA : GEMINI_SCHEMA,
+        // A small thinking budget for an ordinary photo; the careful second look gets more (readFoodPhoto).
+        ...(think != null && think !== false ? { thinkingConfig: { thinkingBudget: think === true ? THINK_HIGH : Number(think) } } : {}),
+        // A fixed, modest image size (tokens per photo) instead of the most detailed one.
+        ...(media && !scale ? { mediaResolution: mediaResolution() } : {})
+      }
     }
   }
 }
@@ -243,34 +287,68 @@ export function readVisionReply(p, j) {
 const isTimeout = (e) => !!e && (e.name === 'TimeoutError' || e.name === 'AbortError' || /timed? ?out|aborted/i.test(String(e.message ?? '')))
 const worthRetry = (e) => !!e && (e.badJson || isTimeout(e) || /\b(429|5\d\d)\b/.test(String(e.message ?? '')))
 
-/**
- * Reads the photo: the provider's models in order (a 404 moves to the next),
- * one retry at most for a time-out, a busy provider or bad JSON. Each try gets
- * at most 25 s and never more than the time left. `record` gets the tokens.
- * Returns the raw JSON object (the page checks it with core/foodVision.ts).
- */
-export async function readFoodPhoto(p, req, { fetchImpl = fetch, record = async () => {}, deadline = Date.now() + VISION_DEADLINE_MS, wait = (ms) => new Promise((ok) => setTimeout(ok, ms)) } = {}) {
+/** Thinking budgets (tokens): small for an ordinary photo, more for the careful second look. VISION_THINK sets the small one. */
+export const THINK_LOW = 128
+export const THINK_HIGH = 1024
+const thinkLow = (env = process.env) => {
+  const raw = String(env.VISION_THINK ?? '').trim()
+  const n = Number(raw)
+  return raw !== '' && Number.isFinite(n) && n >= 0 && n <= 8192 ? Math.round(n) : THINK_LOW
+}
+/** The image size Gemini reads at (VISION_MEDIA = low | medium | high; medium by default: labels stay readable, tokens stay fixed). */
+export function mediaResolution(env = process.env) {
+  const v = String(env.VISION_MEDIA ?? '').trim().toLowerCase()
+  return `MEDIA_RESOLUTION_${v === 'low' || v === 'high' ? v.toUpperCase() : 'MEDIUM'}`
+}
+/** A second, careful look is worth paying for: a food it could not see well, or a big meal (over 900 kcal). */
+export const SECOND_LOOK_KCAL = 900
+export function needsSecondLook(json) {
+  const items = Array.isArray(json?.items) ? json.items : []
+  if (!items.length) return false
+  const kcal = items.reduce((a, x) => a + (Number(x?.kcal) || 0), 0)
+  return kcal > SECOND_LOOK_KCAL || items.some((x) => x?.confidence === 'low' && !x?.matchedSavedFoodId && x?.fromLabel !== true)
+}
+
+/** The token counts of one reply: input (the image part apart when the provider says), output and thinking. */
+export function usageOf(p, j) {
+  if (p.name === 'claude') return { prompt: Number(j?.usage?.input_tokens) || 0, image: null, completion: Number(j?.usage?.output_tokens) || 0, thoughts: 0 }
+  const u = j?.usageMetadata ?? {}
+  const img = (u.promptTokensDetails ?? []).find((d) => d?.modality === 'IMAGE')
+  return { prompt: Number(u.promptTokenCount) || 0, image: img ? Number(img.tokenCount) || 0 : null, completion: Number(u.candidatesTokenCount) || 0, thoughts: Number(u.thoughtsTokenCount) || 0 }
+}
+
+/** One read through the provider's models: a 404 moves to the next, one retry for a time-out, a busy provider or bad JSON. */
+async function readOnce(p, req, think, { fetchImpl, record, deadline, wait, kind }) {
   let retried = false
-  let think = true
+  let media = true
   for (let i = 0; i < p.models.length; i++) {
     const model = p.models[i]
     const left = deadline - Date.now() - 3000
     if (left < 4000) throw Object.assign(new Error('Reading the photo took too long. Try again.'), { timeUp: true })
     try {
-      const r = buildVisionRequest(p, model, req, think)
+      const t0 = Date.now()
+      const r = buildVisionRequest(p, model, req, think, media)
       const res = await fetchImpl(r.url, { method: 'POST', headers: r.headers, body: JSON.stringify(r.body), signal: AbortSignal.timeout(Math.min(25_000, left)) })
       if (res.status === 404 && i < p.models.length - 1) continue
       const j = await res.json().catch(() => ({}))
-      // A model that takes no thinking budget: ask it again without one.
-      if (res.status === 400 && think && /thinking/i.test(j?.error?.message ?? '')) {
-        think = false
+      const msg = String(j?.error?.message ?? '')
+      // A model that takes no thinking budget, or no image size setting: ask it again without it.
+      if (res.status === 400 && think != null && think !== false && /thinking/i.test(msg)) {
+        think = null
         i--
         continue
       }
-      if (!res.ok) throw new Error(`${p.name === 'claude' ? 'Claude' : 'Gemini'} ${res.status}: ${j?.error?.message || 'request failed'}`)
+      if (res.status === 400 && media && /media.?resolution/i.test(msg)) {
+        media = false
+        i--
+        continue
+      }
+      if (!res.ok) throw new Error(`${p.name === 'claude' ? 'Claude' : 'Gemini'} ${res.status}: ${msg || 'request failed'}`)
       const out = readVisionReply(p, j)
-      await record({ model: `${p.name === 'claude' ? 'anthropic' : 'google'}/${model}`, kind: req.kind === 'scale' ? 'scaleShot' : 'foodPhoto', prompt: out.prompt, completion: out.completion, cost: null }).catch(() => null)
-      return { json: out.json, model }
+      const usage = { ...usageOf(p, j), ms: Date.now() - t0 }
+      // Thinking is paid like output: it goes into the completion count.
+      await record({ model: `${p.name === 'claude' ? 'anthropic' : 'google'}/${model}`, kind, prompt: usage.prompt, completion: usage.completion + usage.thoughts, cost: null }).catch(() => null)
+      return { json: out.json, model, usage }
     } catch (e) {
       if (retried || !worthRetry(e)) throw e
       retried = true
@@ -281,7 +359,30 @@ export async function readFoodPhoto(p, req, { fetchImpl = fetch, record = async 
   throw new Error('No AI model could read the photo')
 }
 
-// ---- 50 photos a day (sys_kv "vision:<YYYY-MM-DD>", server only) ----
+/**
+ * Reads the photo: first with a small thinking budget; a hard photo (a food it
+ * could not see well, or over 900 kcal) gets ONE careful second look with more
+ * thinking when there is time (both are counted in the AI budget). Each try gets
+ * at most 25 s and never more than the time left. `record` gets the tokens.
+ * Returns the raw JSON (checked again with core/foodVision.ts), the model, each
+ * try's token counts and time, and whether a second look was taken.
+ */
+export async function readFoodPhoto(p, req, { fetchImpl = fetch, record = async () => {}, deadline = Date.now() + VISION_DEADLINE_MS, wait = (ms) => new Promise((ok) => setTimeout(ok, ms)), env = process.env } = {}) {
+  const scale = req.kind === 'scale'
+  const ctx = { fetchImpl, record, deadline, wait, kind: scale ? 'scaleShot' : 'foodPhoto' }
+  const first = await readOnce(p, req, scale ? THINK_HIGH : thinkLow(env), ctx)
+  const usage = [first.usage]
+  if (scale || p.name !== 'gemini' || !needsSecondLook(first.json) || deadline - Date.now() < 20_000) return { json: first.json, model: first.model, usage, second: false }
+  try {
+    const again = await readOnce(p, req, THINK_HIGH, { ...ctx, kind: 'foodPhoto2' })
+    usage.push(again.usage)
+    return { json: Array.isArray(again.json?.items) && again.json.items.length ? again.json : first.json, model: again.model, usage, second: true }
+  } catch {
+    return { json: first.json, model: first.model, usage, second: false }
+  }
+}
+
+// ---- photos a day (sys_kv "vision:<YYYY-MM-DD>", server only) ----
 /** The day in the owner's time zone (LIFE_TZ), else UTC: YYYY-MM-DD. */
 export function photoDay(now = new Date(), tz = '') {
   try {

@@ -353,7 +353,7 @@ entry that says why.
   weight as the headline number, or red alarms on body numbers.
 
 
-### Telegram meal photos use the website's vision call, in-process, and are never kept (2026-11-09)
+### Telegram meal photos use the website's vision call, in-process, and are never kept (2026-11-09) (photo part replaced 2026-11-10: see "Telegram meal photos go to Photo Locker")
 - **Decision:** a meal photo sent to the bot is read by the same `foodPhoto` function as
   `/api/ai {op:'foodPhoto'}` (api/telegram.mjs hands it to the bot as `env.foodPhoto`), so the
   50-photos-a-day counter, the monthly AI budget and the `core/foodVision.ts` check are shared. The
@@ -423,3 +423,32 @@ entry that says why.
 - **Why:** the nightly soak test failed from Nov 8: an idle hour made 441 server calls (limit 200).
 - **Rules out:** new every-minute polling that ignores idle time or runs with nothing to do.
 
+
+### Telegram meal photos go to Photo Locker: the server holds file ids for 3 days, the app copies (2026-11-10)
+- **Decision:** replaces "the photo lives only in memory" in "Telegram meal photos use the website's vision
+  call…" (the owner asked for every food photo in his Drive). The server still never stores the picture and
+  never uploads to Drive: it holds one server-only `sys_kv` row per photo (`lkh:<draft>:<n>`, Telegram's file
+  id, the draft, after Save the meal), erased on Cancel / Not this meal, after the app's Drive copy
+  (`/api/google {op:'foodInboxDone'}`), and after 3 days in any case. The app fetches each photo once through
+  `/api/google {op:'foodInboxGet'}` (the bot token stays on the server), keeps it in the Locker (`food` tag,
+  Food/YYYY-MM, named by date, time and meal) and uploads it with the usual device-to-Google sync. The meal
+  links its photos by Locker id (`fp<draft>n<n>`). His gram fixes are remembered in `food_ben.portions` and
+  beat an estimate (never a label or a saved food). Cost stays low: a small thinking budget, one careful
+  second look only for a hard photo or a meal over 900 kcal, a medium image size, at most 8 saved foods in
+  the prompt.
+- **Why:** files device-to-Google and "no picture stored on our side" both still hold (a file id is a
+  reference that only the bot token opens), no new function is needed, and nothing reaches Drive unless
+  Drive is connected on his device.
+- **Rules out:** the server uploading to Drive or keeping photo bytes (or base64) anywhere, a hold longer
+  than 3 days, a held row after the Drive copy, a new `api/` file, sending all saved foods in every prompt,
+  a dearer default model or always-on high thinking, points for food photos.
+
+### Repeat meals are saved meals with a picture; logging one again never calls the AI (2026-11-10)
+- **Decision:** a photo meal he eats again is kept as a saved meal in `food_saved` with `photo` (its Photo
+  Locker id). Logging it again (Telegram /meals one tap, the app's photo tile double-click) uses the saved
+  numbers through `logSavedMeal`, carries the same picture, and makes no vision call. Photos a day default
+  to 15 (`PHOTO_DAILY_LIMIT`).
+- **Why:** the owner wants a meal analysed once and repeated for free; saved meals are already the one
+  store for one-tap logging, so no second meal store or cache of AI answers is needed.
+- **Rules out:** a separate repeat-meal store, re-reading a known meal's photo, caching AI answers by image,
+  points for repeats.

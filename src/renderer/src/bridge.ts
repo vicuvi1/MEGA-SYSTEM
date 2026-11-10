@@ -182,6 +182,12 @@ export type Bridge = LifeApi & {
     connectDrive?(): Promise<void>
     /** Photo Locker: a short-lived Drive-only key for this device (straight to Google, never through the server). */
     driveToken?(): Promise<{ token: string; expiresAt: number }>
+    /** Photo Locker: Telegram food photos the server holds for this app (file ids only, 3 days at most; bots/foodLocker.ts). */
+    foodInbox?(): Promise<{ id: string; at: number; meal?: string; name?: string; type?: string }[]>
+    /** One held photo's bytes (base64), fetched through the server (the bot token stays there). */
+    foodInboxGet?(id: string): Promise<{ mime: string; data: string }>
+    /** Erases held photos once they are in Drive. */
+    foodInboxDone?(ids: string[]): Promise<void>
   }
   /** Photo Locker's synced index (metadata only, core/vaultSync.ts). */
   vault?: {

@@ -44,13 +44,14 @@ describe('the request', () => {
     expect(readPhotoRequest({ ...body, image: { mime: 'image/png', data: `data:image/png;base64,${PIXEL}` } }).image.data).toBe(PIXEL)
     expect(readPhotoRequest({ ...body, note: 'x'.repeat(900) }).note).toHaveLength(300)
   })
-  it('puts the note, saved foods, today and goals in the prompt', () => {
+  it('puts the note and the saved foods in a short prompt (today and goals are not needed to read a photo)', () => {
     const { user, system } = foodPhotoPrompt(req)
     expect(user).toContain('2 containers, one was buckwheat')
-    expect(user).toContain('id sv-bulgur: Bulgur container, portion 1 container (350 g): 520 kcal, 38 g protein')
-    expect(user).toContain('Today so far: 1400 kcal, 60 g protein (Oats)')
-    expect(user).toContain('Goals today: 2700 kcal, 130 g protein')
+    expect(user).toContain('id sv-bulgur: Bulgur container, 1 container (350 g): 520 kcal, 38 g protein')
+    expect(user).not.toContain('Today so far')
     expect(system).toMatch(/ONLY with JSON/)
+    expect(system).toMatch(/fork 19 cm/)
+    expect(system).toMatch(/label/)
   })
   it('Gemini: JSON mode with a schema; the key only in a header', () => {
     const r = buildVisionRequest({ name: 'gemini', key: 'SECRET-G', models: [] }, 'gemini-3.5-flash', req)
@@ -170,7 +171,7 @@ describe('50 photos a day', () => {
     }
     const day1 = new Date('2026-11-09T10:00:00Z')
     for (let i = 1; i <= 50; i++) expect(await countPhoto(run, day1)).toBe(i)
-    expect(overLimit(50)).toBe(false)
+    expect(overLimit(15)).toBe(false)
     expect(overLimit(await countPhoto(run, day1))).toBe(true)
     // The next day starts at 1 and yesterday's counter is gone.
     expect(await countPhoto(run, new Date('2026-11-10T08:00:00Z'))).toBe(1)
@@ -265,7 +266,7 @@ describe('several photos of one meal (up to 6, one request)', () => {
       expect(count()).toBe(4)
       db.run("UPDATE sys_kv SET value = '48' WHERE key = 'vision:2026-11-09'")
       const over = await foodPhoto(three, env, fetchImpl, day)
-      expect(over).toMatchObject({ ok: false, limit: 'day', error: expect.stringMatching(/over today's limit of 50 photos/) })
+      expect(over).toMatchObject({ ok: false, limit: 'day', error: expect.stringMatching(/over today's limit of 15 photos/) })
     } finally {
       process.env.VITEST = vitest
     }

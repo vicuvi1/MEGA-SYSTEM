@@ -332,7 +332,8 @@ export function deletePlan(e: IndexEntry | undefined, local: LocalMeta | undefin
  */
 export function folderMovePlan(remoteInOld: RemoteFile[], oldId: string | null, newId: string): { fileId: string; from: string }[] {
   if (!oldId || oldId === newId) return []
-  return remoteInOld.filter((f) => fromRemote(f) && f.parents.includes(oldId) && !f.parents.includes(newId)).map((f) => ({ fileId: f.fileId, from: oldId }))
+  // The app's files and its own sub-folders (Food/…) move; what is inside a sub-folder moves with it.
+  return remoteInOld.filter((f) => (fromRemote(f) || f.appProperties?.lsApp === SUB_FOLDER_APP) && f.parents.includes(oldId) && !f.parents.includes(newId)).map((f) => ({ fileId: f.fileId, from: oldId }))
 }
 
 export const VIDEO_LENGTH_UNKNOWN = "Couldn't read this video's length; try again."
@@ -374,13 +375,13 @@ export function fitSide(w: number, h: number, max = PHOTO_MAX_SIDE): { width: nu
   return { width: Math.max(1, Math.round(W * k)), height: Math.max(1, Math.round(H * k)) }
 }
 
-export type VaultFilter = 'all' | 'progress' | 'video' | 'file'
+export type VaultFilter = 'all' | 'progress' | 'food' | 'video' | 'file'
 
 /** The items a filter and a search show, newest first. */
 export function filterItems<T extends Pick<IndexEntry, 'kind' | 'name' | 'tags' | 'takenAt'>>(items: T[], filter: VaultFilter, q: string): T[] {
   const words = q.toLowerCase().split(/\s+/).filter(Boolean)
   return items
-    .filter((e) => (filter === 'all' ? true : filter === 'progress' ? e.kind === 'photo' && e.tags.includes(PROGRESS_TAG) : e.kind === filter))
+    .filter((e) => (filter === 'all' ? true : filter === 'progress' ? e.kind === 'photo' && e.tags.includes(PROGRESS_TAG) : filter === 'food' ? e.kind === 'photo' && e.tags.includes('food') : e.kind === filter))
     .filter((e) => words.every((w) => e.name.toLowerCase().includes(w) || e.tags.some((t) => t.includes(w.replace(/^#/, '')))))
     .sort((a, b) => b.takenAt - a.takenAt)
 }
@@ -400,3 +401,36 @@ export function byMonth<T extends { takenAt: number }>(items: T[]): { key: strin
 
 /** A new item id: time + random (letters and digits only). */
 export const newVaultId = (now: number, rnd: () => number = Math.random) => `v${now.toString(36)}${Math.floor(rnd() * 36 ** 6).toString(36).padStart(6, '0')}`
+
+// ---- Telegram food photos (docs/areas/vault.md, "Food photos from Telegram") ----
+
+/** The tag every food photo carries. */
+export const FOOD_TAG = 'food'
+/** appProperties.lsApp of a folder the app made inside the Locker's folder (Food, Food/2026-11). */
+export const SUB_FOLDER_APP = 'locker-sub'
+const MEAL_WORD: Record<string, string> = { breakfast: 'Breakfast', lunch: 'Lunch', dinner: 'Dinner', snack: 'Snack' }
+const two = (n: number) => String(n).padStart(2, '0')
+
+/** Where a food photo goes in Drive: Food/YYYY-MM (local time). */
+export const foodFolderPath = (at: number) => {
+  const d = new Date(at)
+  return `Food/${d.getFullYear()}-${two(d.getMonth() + 1)}`
+}
+
+/** A food photo's file name: date, time and meal ("2026-11-10 13-05 Lunch - White rice.jpg"). Safe on every OS. */
+export function foodPhotoName(at: number, type?: string, meal?: string, n = 1): string {
+  const d = new Date(at)
+  const when = `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}-${two(d.getMinutes())}`
+  const safe = meal ? str(meal, 40).replace(/[^\p{L}\p{N} ,.'&+()-]+/gu, ' ').replace(/\s+/g, ' ').trim() : ''
+  const what = [MEAL_WORD[type ?? ''] ?? 'Meal', safe].filter(Boolean).join(' - ')
+  return `${when} ${what}${n > 1 ? ` (${n})` : ''}.jpg`.slice(0, NAME_MAX)
+}
+
+/** A sub-folder path, checked: up to 3 parts of letters, digits, spaces, - and _ ("Food/2026-11"). */
+export const cleanFolderPath = (p: unknown): string | null => {
+  const parts = String(p ?? '').split('/').map((x) => x.trim()).filter(Boolean)
+  return parts.length && parts.length <= 3 && parts.every((x) => /^[\w -]{1,40}$/.test(x)) ? parts.join('/') : null
+}
+
+/** The photo number in a Telegram food photo's Locker id (fp<draft>n<n>), else 0. */
+export const foodPhotoNumber = (id: string) => Number(/^fp[a-z0-9]{1,12}n([1-6])$/.exec(id)?.[1] ?? 0)
