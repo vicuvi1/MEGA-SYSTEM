@@ -3,14 +3,20 @@
 /* Week: the score and the week plan on the left, planned vs real and mood on the
    right when the page is wide enough; one column otherwise. */
 .pg .ptab-panel[data-tabpanel='week'] { container-type: inline-size; }
-.pg-wk { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-4, 16px); align-items: start; }
+.pg-wk { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--s-3, 12px); align-items: start; }
 .pg-wk > * { margin: 0; min-width: 0; }
 .pg-wk > .pg-wk-side { margin: 0; }
-@container (min-width: 1100px) {
+@container (min-width: 900px) {
   .pg-wk { grid-template-columns: minmax(0, 1.75fr) minmax(360px, 1fr); }
   .pg-wk > :not(.pg-wk-side) { grid-column: 1; }
   .pg-wk > .pg-wk-side { grid-column: 2; grid-row: 1 / span 2; display: flex; flex-direction: column; gap: var(--s-4, 16px); position: sticky; top: 8px; }
 }
+
+/* Week plan inside Insights: tighter steps, the three big tasks side by side. */
+.pg-wk .wp-step { padding: 8px 0; gap: 10px; }
+.pg-wk .wp-step > div { gap: 4px; }
+.pg-wk .wp-step:nth-of-type(3) > div { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px 8px; }
+.pg-wk .wp-step:nth-of-type(3) > div > :where(h3, p, .wp-chips) { grid-column: 1 / -1; }
 
 /* Mood, before there are enough check-ins: a short card with a progress line. */
 .rv-mood-empty { gap: 8px; }
