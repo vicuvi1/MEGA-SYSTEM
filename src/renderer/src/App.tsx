@@ -5,9 +5,6 @@ import type { AuthStatus, BackupStatus, BodyState, ConnectionsState, DisciplineS
 import { features, isDemo, life } from './bridge'
 import { Icon } from './Icon'
 import { MODULES, SYSTEM_PAGES, type PageId } from './modules'
-import { buildNav, shortcutOrder } from './navLayout'
-import { readNavPrefs } from './navPrefs'
-import { getUiPrefs } from './uiPrefs'
 import { Coins, ToastProvider, useToast } from './ui'
 import { CoinFlight } from './rewards/CoinFlight'
 import { ConfirmHost } from './confirmSheet'
@@ -105,12 +102,6 @@ const CustomCenter = lazyNamed(() => import('./pages/CustomCenter'), 'CustomCent
 const PhotoLocker = lazyNamed(() => import('./vault/PhotoLocker'), 'PhotoLocker')
 const QuickHost = lazyNamed(() => import('./quick/QuickHost'), 'QuickHost')
 
-
-/** The pages Alt+1…9 open, in the sidebar's visible order. */
-function sidebarShortcuts(): PageId[] {
-  const prefs = readNavPrefs()
-  return shortcutOrder(buildNav(prefs, new Set(getUiPrefs().hiddenPages ?? [])), prefs.more)
-}
 
 /** Runs `fn` once the page is idle (at the latest after `ms`); returns a cancel. */
 function whenIdle(fn: () => void, ms = 2000): () => void {
@@ -543,12 +534,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   useEffect(() => {
     const run = (key: string) => {
       if (key === 'toggle-sidebar') toggleSidebar()
-      // Alt+1…9 follow the sidebar's order as you see it (your pins first, More only while open).
       const n = /^go:(\d)$/.exec(key)
-      if (n) {
-        const order = sidebarShortcuts()
-        if (order[Number(n[1]) - 1]) setPage(order[Number(n[1]) - 1])
-      }
+      if (n && MODULES[Number(n[1]) - 1]) setPage(MODULES[Number(n[1]) - 1].id)
       if (key === 'switch-view' && embed) setView((v) => ({ ...v, [page]: tab === 'app' ? 'system' : 'app' }))
       if (key === 'palette') {
         soundTick()
@@ -796,30 +783,31 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           )}
           {page === 'body' && <GrowthChip where="body" />}
           {page === 'body' && <RestDayButton />}
-          {/* One sync button: tap to sync now; it also carries today's cloud backup (a dot and a
-              "Backup missed" chip only when something needs you; "all fine" needs no badge). */}
           <button
-            className={`tb-icon tb-sync ${isSyncingMobile ? 'spinning' : ''}`}
+            className={`tb-icon ${isSyncingMobile ? 'spinning' : ''}`}
             onClick={triggerMobileSync}
             disabled={isSyncingMobile}
             aria-label="Sync now"
-            title={`${features.cloudflareSync ? 'Sync Telegram mobile logs' : 'Sync now: get what your other devices and the bots changed'}${backup && !isDemo && !backup.lastError ? `\nCloud backup saved${backup.last?.at ? ` (${backup.last.at})` : ''}` : ''}`}
+            title={features.cloudflareSync ? 'Sync Telegram mobile logs' : 'Sync now: get what your other devices and the bots changed'}
           >
             <Icon name="refresh" size={16} />
-            {backup?.lastError && !isDemo && <i className="tb-dot warn" aria-hidden="true" />}
           </button>
           <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
           <NotifToasts onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
           {!window.desktop && <UpdateChip status={update} onClick={() => setPage('settings')} />}
-          {backup && !isDemo && backup.lastError && (
+          {backup && !isDemo && (
             <button
-              className="chip warn"
+              className={`chip ${backup.lastError ? 'warn' : 'ok'}`}
               onClick={() => openSettingsTab('backups')}
-              aria-label="Today’s cloud backup didn’t save: open Backups & data"
-              title={`Today’s cloud backup didn’t save.\n${backup.lastError}\nYour data is safe; only today’s copy is missing. Click to open Backups & data.`}
+              aria-label={backup.lastError ? 'Today’s cloud backup didn’t save: open Backups & data' : 'Backed up: open Backups & data'}
+              title={
+                backup.lastError
+                  ? `Today’s cloud backup didn’t save.\n${backup.lastError}\nYour data is safe; only today’s copy is missing. Click to open Backups & data.`
+                  : `Cloud backup saved${backup.last?.at ? ` (${backup.last.at})` : ''}. Click to open Backups & data.`
+              }
             >
               <Icon name="cloud" size={15} />
-              <span className="chip-text">Backup missed</span>
+              <span className="chip-text">{backup.lastError ? 'Backup missed' : 'Backed up'}</span>
             </button>
           )}
           {/* The one Settings button (the sidebar has none); a dot when an update or a missed backup waits there. */}

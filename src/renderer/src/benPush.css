@@ -8,34 +8,26 @@
 .bp-items li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
 .bp-items li > span:first-child { min-width: 0; overflow-wrap: anywhere; }
 .bp-acts { display: inline-flex; gap: 6px; flex-wrap: wrap; }
-.bp-acts button { font: inherit; font-size: 13px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: inherit; cursor: pointer; transition: background-color 0.15s, border-color 0.15s; }
+.bp-acts button { font: inherit; font-size: 12.5px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: inherit; cursor: pointer; transition: background-color 0.15s, border-color 0.15s; }
 .bp-acts button:hover { background: rgb(var(--ink) / 0.06); border-color: var(--tone); }
-.bp-mark { color: var(--muted); font-size: 13px; }
+.bp-mark { color: var(--muted); font-size: 12.5px; }
 .bp-week { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 18px; align-items: start; }
 .bp-score { display: grid; justify-items: center; padding: 10px 14px; border-radius: 16px; background: color-mix(in srgb, var(--tone) 14%, transparent); }
 .bp-score b { font-size: 34px; line-height: 1; }
-.bp-score small { color: var(--muted); font-size: 13px; text-align: center; max-width: 11ch; }
+.bp-score small { color: var(--muted); font-size: 12px; text-align: center; max-width: 11ch; }
 .bp-wins ul { margin: 4px 0 10px; padding-left: 18px; display: grid; gap: 4px; font-size: 14.5px; }
 .bp-wins p { margin: 4px 0 0; font-size: 14.5px; }
-.bp-sub { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.bp-sub { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
 @media (max-width: 520px) {
   .bp-week { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Settings → Ben → My life: push level per area and when Ben writes first. */
-.bp-areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px; margin: 6px 0 8px; }
-.bp-area { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; padding: 5px 6px 5px 12px; border-radius: 12px; background: rgb(var(--ink) / 0.035); }
+.bp-areas { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 6px; margin: 6px 0 10px; }
+.bp-area { display: flex; align-items: center; justify-content: space-between; gap: 8px 14px; flex-wrap: wrap; padding: 8px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.035); }
 .bp-area-name { display: flex; flex-direction: column; font-size: 14px; font-weight: 600; min-width: 0; }
-.bp-area-name small { font-weight: 400; font-size: 13px; color: var(--muted); }
+.bp-area-name small { font-weight: 400; font-size: 12px; color: var(--muted); }
 .bp-seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 10px; background: rgb(var(--ink) / 0.06); }
-.bp-seg button { border: 0; padding: 6px 10px; border-radius: 8px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; color: var(--muted); transition: background-color 0.15s, color 0.15s; }
+.bp-seg button { border: 0; padding: 6px 12px; border-radius: 8px; font: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; background: transparent; color: var(--muted); transition: background-color 0.15s, color 0.15s; }
 .bp-seg button.on { background: var(--lime); color: var(--lime-ink); }
 .bp-off { align-self: center; margin-right: 4px; }
-
-/* Settings → Ben → Pushes, compact: the section line sits beside its heading; a setting's
-   own choice (minutes before bed, the weekly day and time) sits on one row under its switch. */
-.bp-settings .lf-sub { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
-.bp-sub-hint { font-size: var(--t-sm, 13px); font-weight: 400; color: var(--muted); }
-.bp-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: -2px 0 6px 30px; }
-.bp-inline label { display: inline-flex; align-items: center; gap: 8px; }
-.bp-inline .sel, .bp-inline select, .bp-inline input[type='time'] { width: auto; min-width: 120px; }

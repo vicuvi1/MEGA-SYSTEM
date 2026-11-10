@@ -24,7 +24,7 @@
 .di.at-right .di-voice,
 .di.at-top-right .di-voice { left: auto; right: 0; translate: none; }
 .di-voice.is-thinking .voice-wave { opacity: 0.45; }
-.di-voice-text { display: grid; min-width: 0; font-size: 13px; }
+.di-voice-text { display: grid; min-width: 0; font-size: 12.5px; }
 .di-voice-text b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .di-voice-text small { color: var(--sub, #a0a6b0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
 .di-voice-text .di-voice-err { color: #ff9a9d; direction: ltr; }

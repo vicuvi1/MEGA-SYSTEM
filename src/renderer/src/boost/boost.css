@@ -29,13 +29,13 @@
 .fb-card input { width: 100%; padding: 8px 10px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.14); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: 13.5px; }
 .fb-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .fb-verdicts .btn { flex: 1; justify-content: center; }
-.fb-note { font-size: 13px; color: var(--muted); }
+.fb-note { font-size: 11.5px; color: var(--muted); }
 .fb-reasons { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 6px; }
 .fb-reason { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 10px; border-radius: 10px; border: 1px solid rgb(var(--ink) / 0.1); background: rgb(var(--ink) / 0.03); color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: transform 120ms ease, background-color 120ms ease; }
 .fb-reason:hover { background: rgb(var(--ink) / 0.07); transform: translateY(-1px); }
 .fb-reason span { font-size: 18px; }
 .fb-reason b { font-size: 13px; }
-.fb-reason small { font-size: 13px; color: var(--muted); }
+.fb-reason small { font-size: 11.5px; color: var(--muted); }
 
 .fb-win {
   position: fixed;
@@ -90,7 +90,7 @@
 }
 .dojo-top { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; justify-content: space-between; align-items: center; gap: 12px; z-index: 2; }
 .dojo-scenes { display: flex; gap: 6px; flex-wrap: wrap; }
-.dojo-scenes button, .dojo-x { border: 1px solid rgba(243, 239, 230, 0.22); background: rgba(8, 10, 16, 0.45); color: #f3efe6; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 13px; cursor: pointer; transition: background-color 150ms ease, opacity 150ms ease; }
+.dojo-scenes button, .dojo-x { border: 1px solid rgba(243, 239, 230, 0.22); background: rgba(8, 10, 16, 0.45); color: #f3efe6; border-radius: 999px; padding: 6px 12px; font: inherit; font-size: 12.5px; cursor: pointer; transition: background-color 150ms ease, opacity 150ms ease; }
 .dojo-scenes button.on { background: rgba(243, 239, 230, 0.18); border-color: rgba(243, 239, 230, 0.55); }
 .dojo-x { width: 36px; height: 36px; padding: 0; font-size: 15px; }
 .dojo-center { position: relative; z-index: 1; display: grid; justify-items: center; gap: 14px; }
@@ -135,16 +135,16 @@
 .fbs-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .fbs-row > span:first-child { min-width: 160px; }
 .fbs-kit { border: 1px solid rgb(var(--ink) / 0.1); border-radius: 12px; padding: 10px 12px; display: grid; gap: 8px; background: rgb(var(--ink) / 0.02); }
-.fbs-kit textarea { width: 100%; min-height: 54px; resize: vertical; padding: 7px 9px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.03); color: var(--text); font: inherit; font-size: 13px; }
+.fbs-kit textarea { width: 100%; min-height: 54px; resize: vertical; padding: 7px 9px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.03); color: var(--text); font: inherit; font-size: 12.5px; }
 .fbs-kit input[type='text'] { padding: 6px 9px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.12); background: rgb(var(--ink) / 0.03); color: var(--text); font: inherit; }
 .fbs-chips { display: flex; flex-wrap: wrap; gap: 5px; }
-.fbs-chip { padding: 4px 10px; border-radius: 999px; border: 1px solid rgb(var(--ink) / 0.14); background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.fbs-chip { padding: 4px 10px; border-radius: 999px; border: 1px solid rgb(var(--ink) / 0.14); background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
 .fbs-chip.on { background: var(--accent-soft, rgb(var(--ink) / 0.1)); color: var(--text); border-color: var(--accent, rgb(var(--ink) / 0.3)); }
 .fbs-ladder { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.fbs-step { border-radius: 10px; padding: 9px 10px; border: 1px solid rgb(var(--ink) / 0.1); display: grid; gap: 3px; font-size: 13px; }
+.fbs-step { border-radius: 10px; padding: 9px 10px; border: 1px solid rgb(var(--ink) / 0.1); display: grid; gap: 3px; font-size: 12.5px; }
 .fbs-step b { font-size: 13px; }
 .fbs-step small { color: var(--muted); }
-.fbs-limits { font-size: 13px; color: var(--muted); }
+.fbs-limits { font-size: 12px; color: var(--muted); }
 @media (max-width: 600px) {
   .fbs-ladder { grid-template-columns: 1fr; }
 }

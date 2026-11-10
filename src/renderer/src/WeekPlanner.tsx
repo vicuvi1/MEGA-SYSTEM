@@ -103,9 +103,8 @@ export function WeekPlanner({ report, plan, today, onDone }: { report: ProgressR
       <div className="wp-step">
         <span className="wp-n">2</span>
         <div>
-          <h3>
-            One focus for the week <small className="wp-sub">Only one. Everything else just keeps going.</small>
-          </h3>
+          <h3>One focus for the week</h3>
+          <p className="hint">Only one. Everything else just keeps going.</p>
           <div className="wp-chips">
             {report.metrics.map((m) => (
               <button key={m.id} className={`wp-chip ${focus === m.id ? 'on' : ''}`} onClick={() => setFocus(m.id)}>
@@ -126,10 +125,8 @@ export function WeekPlanner({ report, plan, today, onDone }: { report: ProgressR
       <div className="wp-step">
         <span className="wp-n">3</span>
         <div>
-          <h3>
-            Your 3 big tasks <small className="wp-sub">If only these get done, the week was a win. Block time for them in your calendar.</small>
-          </h3>
-          <div className="wp-bigs">
+          <h3>Your 3 big tasks</h3>
+          <p className="hint">If only these get done, the week was a win. Block time for them in your calendar.</p>
           {big.map((b, i) => (
             <input
               key={i}
@@ -140,7 +137,6 @@ export function WeekPlanner({ report, plan, today, onDone }: { report: ProgressR
               maxLength={140}
             />
           ))}
-          </div>
           {todo.filter((t) => !used.has(t.id)).length > 0 && (
             <div className="wp-chips">
               <span className="hint">From Todoist:</span>

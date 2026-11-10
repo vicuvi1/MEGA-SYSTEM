@@ -18,12 +18,12 @@
 .pe-scroll { max-height: min(46vh, 520px); overflow-y: auto; overscroll-behavior: contain; border-radius: 12px; background: rgb(var(--ink) / 0.02); }
 .pe-col { position: relative; list-style: none; margin: 0; padding: 0; min-height: 120px; }
 .pe-hour { position: absolute; left: 0; right: 0; height: 0; border-top: 1px dashed rgb(var(--ink) / 0.08); pointer-events: none; }
-.pe-hour small { position: absolute; left: 8px; top: -8px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; background: var(--surface, var(--panel)); padding: 0 3px; border-radius: 4px; }
+.pe-hour small { position: absolute; left: 8px; top: -8px; font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; background: var(--surface, var(--panel)); padding: 0 3px; border-radius: 4px; }
 .pe-now { position: absolute; left: 48px; right: 4px; height: 2px; background: var(--red); border-radius: 2px; pointer-events: none; z-index: 3; box-shadow: 0 0 0 3px color-mix(in srgb, var(--red) 18%, transparent); }
 .pe-now::before { content: ''; position: absolute; left: -4px; top: -3px; width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
 .pe-ev { position: absolute; left: 52px; right: 4px; border-radius: 10px; background: repeating-linear-gradient(135deg, rgb(var(--ink) / 0.05) 0 6px, rgb(var(--ink) / 0.025) 6px 12px); border: 1px dashed rgb(var(--ink) / 0.14); pointer-events: none; overflow: hidden; }
-.pe-ev small { display: block; padding: 3px 8px; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
-.pe-add { position: absolute; left: 56px; border: 1px dashed rgb(var(--ink) / 0.18); background: transparent; color: var(--muted); font: inherit; font-size: 12px; padding: 2px 9px; border-radius: 999px; cursor: pointer; opacity: 0.55; transition: opacity 0.15s, background 0.15s, color 0.15s; z-index: 1; }
+.pe-ev small { display: block; padding: 3px 8px; font-size: 10.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: right; }
+.pe-add { position: absolute; left: 56px; border: 1px dashed rgb(var(--ink) / 0.18); background: transparent; color: var(--muted); font: inherit; font-size: 11px; padding: 2px 9px; border-radius: 999px; cursor: pointer; opacity: 0.55; transition: opacity 0.15s, background 0.15s, color 0.15s; z-index: 1; }
 .pe-add:hover, .pe-add:focus-visible { opacity: 1; background: var(--accent-soft); color: var(--text); border-color: var(--accent); }
 @media (hover: none) { .pe-add { opacity: 0.9; } }
 
@@ -44,12 +44,12 @@
 .pe-ok { flex: none; width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .pe-name { flex: 0 1 auto; min-width: 0; font-size: var(--t-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pe-name-in { flex: 1; min-width: 60px; font: inherit; font-size: var(--t-sm); font-weight: 700; color: var(--text); background: rgb(var(--ink) / 0.08); border: 1px solid var(--accent); border-radius: 6px; padding: 1px 6px; user-select: text; }
-.pe-time { flex: none; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.pe-st { flex: none; font-size: 12px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgb(var(--ink) / 0.07); }
+.pe-time { flex: none; color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.pe-st { flex: none; font-size: 10.5px; font-weight: 700; padding: 1px 7px; border-radius: 999px; background: rgb(var(--ink) / 0.07); }
 .pe-st.ok { color: var(--green); }
 .pe-st.wait { color: var(--amber); animation: pe-pulse 1.2s ease-in-out infinite; }
 .pe-st.err { background: color-mix(in srgb, var(--red) 16%, transparent); }
-.pe-pin, .pe-x { flex: none; margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 13px; line-height: 1; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; opacity: 0.4; filter: grayscale(1); transition: opacity 0.15s, background 0.15s; }
+.pe-pin, .pe-x { flex: none; margin-left: auto; border: 0; background: transparent; color: var(--muted); font-size: 12px; line-height: 1; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; opacity: 0.4; filter: grayscale(1); transition: opacity 0.15s, background 0.15s; }
 .pe-x { margin-left: 0; }
 .pe-pin.on { opacity: 1; filter: none; }
 .pe-block:hover .pe-pin, .pe-block:hover .pe-x, .pe-block:focus-within .pe-pin, .pe-block:focus-within .pe-x { opacity: 0.9; }
@@ -60,19 +60,19 @@
 .pe-block:hover .pe-resize::after, .pe-block.dragging .pe-resize::after { opacity: 1; }
 @media (hover: none) { .pe-resize { height: 16px; } .pe-resize::after { opacity: 0.8; } }
 .pe-tasks { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; min-width: 0; }
-.pe-task { display: flex; align-items: center; gap: 6px; font-size: 13px; min-height: 19px; padding: 0 2px; border-radius: 6px; cursor: grab; touch-action: none; }
+.pe-task { display: flex; align-items: center; gap: 6px; font-size: 11.5px; min-height: 19px; padding: 0 2px; border-radius: 6px; cursor: grab; touch-action: none; }
 .pe-task:hover { background: rgb(var(--ink) / 0.06); }
 .pe-task span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pe-task.done span { text-decoration: line-through; color: var(--muted); }
 .pe-tick { flex: none; width: 14px; height: 14px; padding: 0; border-radius: 4px; border: 1.5px solid rgb(var(--ink) / 0.35); background: transparent; color: var(--accent-ink, #000); font-size: 10px; line-height: 1; cursor: pointer; }
 .pe-task.done .pe-tick { background: var(--accent); border-color: var(--accent); }
 .pe-grip { flex: none; font-style: normal; color: var(--muted); opacity: 0.5; font-size: 10px; letter-spacing: -2px; }
-.pe-more button { all: unset; cursor: pointer; font-size: 12px; color: var(--muted); }
+.pe-more button { all: unset; cursor: pointer; font-size: 11px; color: var(--muted); }
 .pe-tray { padding: 8px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.04); display: grid; gap: 4px; animation: pe-in 0.25s ease-out both; }
-.pe-tray > small { color: var(--muted); font-size: 12px; }
+.pe-tray > small { color: var(--muted); font-size: 11px; }
 .pe-tray .pe-task { font-size: var(--t-xs); min-height: 24px; }
-.pe-hint small { color: var(--muted); font-size: 12px; }
-.pe-ghost { position: fixed; z-index: 1000; pointer-events: none; padding: 4px 10px; border-radius: 8px; font-size: 13px; font-weight: 600; background: var(--accent); color: var(--accent-ink, #000); box-shadow: 0 10px 24px -10px rgb(0 0 0 / 0.5); white-space: nowrap; }
+.pe-hint small { color: var(--muted); font-size: 11px; }
+.pe-ghost { position: fixed; z-index: 1000; pointer-events: none; padding: 4px 10px; border-radius: 8px; font-size: 12px; font-weight: 600; background: var(--accent); color: var(--accent-ink, #000); box-shadow: 0 10px 24px -10px rgb(0 0 0 / 0.5); white-space: nowrap; }
 .pe.task-drag, .pe.task-drag * { cursor: grabbing !important; }
 
 :root[data-theme='light'] .pe-block { background: color-mix(in srgb, var(--c) 16%, #fff); border-color: color-mix(in srgb, var(--c) 55%, transparent); }
@@ -88,16 +88,16 @@
 
 /* Sync button (Tasks, Today → Now) */
 .sync-btn { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
-.sync-at { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.sync-at { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .sync-spin { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: sync-spin 0.8s linear infinite; vertical-align: -1px; }
 @keyframes sync-spin { to { transform: rotate(1turn); } }
 .ta-bar .ta-sync { order: 9; margin-left: 0; }
 
 .plan-sync { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .plan-sync .sync-btn { margin-left: 0; }
-.plan-sync-auto { font-size: 12px; color: var(--muted); }
+.plan-sync-auto { font-size: 11px; color: var(--muted); }
 .plan-sync-auto.warn, .sync-err { color: var(--warn, #b45309); }
-.sync-err { font-size: 12px; }
+.sync-err { font-size: 11px; }
 .sync-retry { background: none; border: 0; padding: 0; color: inherit; text-decoration: underline; cursor: pointer; font: inherit; }
 @media (max-width: 640px) { .plan-sync { width: 100%; } }
 @media (prefers-reduced-motion: reduce) { .sync-spin { animation-duration: 3s; } }
@@ -107,7 +107,7 @@
 .pe-auto { background: rgb(var(--ink) / 0.04); color: var(--muted); }
 .pe-audit button, .pe-auto button { border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-weight: 600; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
 .pe-audit button:hover, .pe-auto button:hover { background: rgb(var(--ink) / 0.09); }
-.pe-why { display: block; padding: 0 8px; margin-top: -2px; font-size: 12px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pe-why { display: block; padding: 0 8px; margin-top: -2px; font-size: 10.5px; line-height: 14px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Protected time (your limits) in the plan column: a calmer stripe than a calendar event. */
 .pe-ev.protected { border-style: solid; border-color: color-mix(in srgb, var(--green) 40%, transparent); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--green) 10%, transparent) 0 6px, transparent 6px 12px); }
@@ -123,7 +123,7 @@
 .pl-prow { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 10px; background: rgb(var(--ink) / 0.03); }
 .pl-pname { font-weight: 600; color: var(--text); }
 .pl-days { display: inline-flex; gap: 2px; margin-left: auto; }
-.pl-days button { all: unset; cursor: pointer; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; font-size: 12px; color: var(--muted); background: rgb(var(--ink) / 0.04); }
+.pl-days button { all: unset; cursor: pointer; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 6px; font-size: 10.5px; color: var(--muted); background: rgb(var(--ink) / 0.04); }
 .pl-days button.on { color: var(--text); background: var(--accent-soft); font-weight: 700; }
 .pl-days button:focus-visible { outline: 2px solid var(--accent); }
 .pl-add { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
@@ -138,7 +138,7 @@
 .wp-day.past { opacity: 0.55; }
 .wp-day.over { border-color: color-mix(in srgb, var(--amber) 60%, transparent); }
 .wp-day b { display: flex; justify-content: space-between; gap: 4px; }
-.wp-type, .wp-gym { all: unset; cursor: pointer; text-align: center; padding: 2px 4px; border-radius: 7px; font-size: 12px; font-weight: 600; background: rgb(var(--ink) / 0.05); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-type, .wp-gym { all: unset; cursor: pointer; text-align: center; padding: 2px 4px; border-radius: 7px; font-size: 10.5px; font-weight: 600; background: rgb(var(--ink) / 0.05); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wp-type.heavy { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--text); }
 .wp-type.light { background: color-mix(in srgb, var(--green) 18%, transparent); color: var(--text); }
 .wp-gym.on { background: color-mix(in srgb, var(--green) 26%, transparent); color: var(--text); }
@@ -149,7 +149,7 @@
 .wp-bar { height: 4px; border-radius: 4px; background: rgb(var(--ink) / 0.07); overflow: hidden; }
 .wp-bar i { display: block; height: 100%; background: var(--accent); border-radius: 4px; }
 .wp-bar.over i { background: var(--amber); }
-.wp-sess { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wp-sess { color: var(--muted); font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wp-dl { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: var(--t-xs); }
 .wp-dl li { display: flex; flex-wrap: wrap; gap: 6px; justify-content: space-between; }
 .wp-dl li.short { color: var(--amber); }
@@ -178,7 +178,7 @@
 .pe-qchip { padding: 3px 10px; border-radius: 999px; font-weight: 700; background: var(--accent-soft); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
 .pe-moved { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0; font-size: var(--t-xs); padding: 5px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.04); }
 .pe-moved button { border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-weight: 600; padding: 3px 9px; border-radius: 999px; cursor: pointer; }
-.pe-fit { position: absolute; left: 56px; z-index: 8; pointer-events: none; padding: 3px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; white-space: nowrap; box-shadow: 0 8px 20px -10px rgb(0 0 0 / 0.55); }
+.pe-fit { position: absolute; left: 56px; z-index: 8; pointer-events: none; padding: 3px 10px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; box-shadow: 0 8px 20px -10px rgb(0 0 0 / 0.55); }
 .pe-fit.ok { background: color-mix(in srgb, var(--green) 24%, var(--surface, #15161a)); color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 55%, transparent); }
 .pe-fit.bad { background: color-mix(in srgb, var(--red) 22%, var(--surface, #15161a)); color: var(--red); border: 1px solid color-mix(in srgb, var(--red) 55%, transparent); }
 .pe-slot { position: absolute; left: 52px; right: 4px; z-index: 5; pointer-events: none; border-radius: 10px; border: 2px dashed; }
