@@ -4217,8 +4217,11 @@ try {
       }), { Events: { READY: 'ready', PLAY: 'play', PAUSE: 'pause', FINISH: 'finish', ERROR: 'error', PLAY_PROGRESS: 'progress', SEEK: 'seek' } }) }
       window.dispatchEvent(new CustomEvent('life-win', { detail: { kind: 'workout' } }))
     })
+    // The card names the win. In a full run an earlier step can fire a win just before this one, and
+    // the rule is one victory clip per 10 minutes, so the card on screen may name that earlier win.
     await pg.waitForSelector('.fb-win', { timeout: 8000 })
-    if (!/Workout done/.test(await pg.textContent('.fb-win'))) throw new Error('the victory card does not name the win')
+    const winText = (await pg.textContent('.fb-win')) || ''
+    if (!/Workout done|Level up|Goal milestone|Season complete|Boss beaten/.test(winText)) throw new Error('the victory card does not name the win: ' + JSON.stringify(winText))
     if (shots) {
       await pg.waitForTimeout(500)
       await pg.screenshot({ path: `${shots}/victory-moment.png`, clip: { x: 420, y: 40, width: 600, height: 160 } })
