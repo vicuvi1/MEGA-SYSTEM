@@ -10,7 +10,7 @@ import { dur } from './benPlain'
 // model's headline are dropped once they no longer match.
 
 export interface PlanLike {
-  blocks: { title: string; start: string; minutes: number }[]
+  blocks: { title: string; start: string; minutes: number; rest?: boolean }[]
   mustdos: string[]
   headline?: string
 }
@@ -18,8 +18,10 @@ export interface PlanLike {
 
 /** Blocks, focus minutes and must-dos, counted the way the plan card counts them. */
 export function planSummary(p: PlanLike): { blocks: number; focusMin: number; mustdos: number; start: string | null; text: string } {
-  const blocks = p.blocks.length
-  const focusMin = p.blocks.reduce((t, b) => t + Math.max(5, b.minutes || 0), 0)
+  // A rest block (the nap after a short night) is on the plan but is not a session or focus time.
+  const work = p.blocks.filter((b) => !b.rest)
+  const blocks = work.length
+  const focusMin = work.reduce((t, b) => t + Math.max(5, b.minutes || 0), 0)
   const mustdos = p.mustdos.length
   const start = [...p.blocks].map((b) => b.start).filter((s) => /^\d{1,2}:\d{2}$/.test(s)).sort()[0] ?? null
   // Plain words for the chat (no "blocks"): "4 sessions, 3 h 5 min of focus and 3 must-dos".

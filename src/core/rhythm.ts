@@ -29,6 +29,8 @@ export interface PlanBlock {
   sync?: BlockSync
   /** A deadline study session's reason ("exam in 5 days, session 2 of 4", core/planDeadlines). */
   why?: string
+  /** A rest block (the nap after a short night, core/shortNight): not focus time. */
+  rest?: boolean
 }
 
 /** What the outside apps hold for a block, as last synced. */
@@ -94,6 +96,10 @@ export interface DayProposal {
   squeeze?: { keep: string; drop?: string }
   /** Things the user took off the plan by hand today (normalized titles): a re-plan never puts them back. */
   dropped?: string[]
+  /** Made lighter after a short night (the minutes slept, core/shortNight): not lightened twice. */
+  shortNight?: number
+  /** The tasks that short-night lightening took off the timeline (still on today's list). */
+  lightMoved?: string[]
 }
 
 export interface RhythmState {

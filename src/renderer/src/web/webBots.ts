@@ -73,7 +73,11 @@ import { downloadFile, downloadText, esc, tg } from './bots/telegram'
 import { focusKeyboard, linkExpense, STOP_KEYBOARD, takeLink, ruleCoins } from './bots/helpers'
 import { CALLBACK_DATA, runCallback } from './bots/callbacks'
 import { planMessageOf } from './bots/planButtons'
-import { addQuickBlock, quickSpot } from './planShared'
+import { moveToTomorrow } from '@core/planAudit'
+import { targetForDay } from '@core/sleep'
+import { sleepWindow } from './lifeFitStore'
+import { addQuickBlock, changePlan, fixedEvents, quickSpot, undoPlanChange, type PlanDeps } from './planShared'
+import { LIGHTER_LABEL, SHORT_NIGHT_MIN, bedTonight, hm as hmShort, lighterAnswer, nightReply, readSleepSay, shortNightPlan, type ShortNightResult } from '@core/shortNight'
 import { runCommand, runFocus, type RunOut } from './bots/commands'
 import { runCareer } from './bots/careerBot'
 import { foodMessage, foodPhotoMessage, foodWants, photoWanted, type FoodOut, type FoodPhotoFn } from './bots/foodBot'
@@ -86,7 +90,7 @@ import type { BotContext } from './bots/context'
 export { focusKeyboard }
 import { addReps, addWater, parseWater, sharedView, sportToday } from '@core/sportShared'
 import { parseProtein } from '@core/protein'
-import { bodyPlusView, logProtein, sportBodyNow } from '../../../main/bodyPlus'
+import { bodyPlusView, logProtein, sleepNeedMin, sportBodyNow } from '../../../main/bodyPlus'
 import { declareBest, logBotSets } from '@core/sportBot'
 import { answerTraining, isTrainingQuestion } from '@core/sportAsk'
 import { reviewDue, weeklyReview } from '@core/sportReview'
@@ -876,6 +880,83 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     return lines
   }
 
+  /** The deps the shared plan changes use (planShared.ts), on this mirror. */
+  const planDepsHere = (): PlanDeps => ({
+    read: (fn) => mirror.read((db) => fn(db, services.services(db))),
+    write: (fn) => mirror.write((db) => fn(db, services.services(db))),
+    todoist: todoist ? { update: todoist.update?.bind(todoist), close: (id: string) => todoist.close(id) } : null
+  })
+
+  /**
+   * A sleep report ("went to sleep at 2 am, got up at 7:30") and the chips under its reply, in code.
+   * Null when the message is something else.
+   */
+  async function sleepSayInCode(text: string, step: (s: string) => void): Promise<{ reply: string; acts: BrainAction[]; chips?: string[]; show?: string[] } | null> {
+    const chip = lighterAnswer(text)
+    if (chip === 'keep') {
+      const r = await undoPlanChange(planDepsHere(), { prefix: LIGHTER_LABEL })
+      step('Put the full plan back')
+      return { reply: r.ok ? 'The full plan is back. Go easy on yourself if it gets too much.' : 'The full plan is already there.', acts: [], show: ['plan'] }
+    }
+    if (chip === 'rest') {
+      const r = await changePlan(planDepsHere(), (_f, b) => {
+        const titles = (b.plan.lightMoved ?? []).map((t) => t.toLowerCase())
+        const items = (b.plan.also ?? []).filter((a) => titles.includes(a.title.toLowerCase())).map((a) => ({ title: a.title, ...(a.id ? { id: a.id } : {}) }))
+        if (!items.length) return { none: 'Nothing is waiting from this morning' }
+        return { plan: { ...moveToTomorrow(b.plan, items), lightMoved: [] }, label: `Moved ${items.length} task${items.length === 1 ? '' : 's'} to tomorrow`, tomorrow: items }
+      })
+      step('Moved them to tomorrow')
+      return { reply: r.ok ? `${r.line}. Today is just the must-dos and the light blocks now.` : `${r.line}.`, acts: [], show: ['plan'], chips: ['What now?'] }
+    }
+    const now = new Date()
+    const say = readSleepSay(text, now)
+    if (!say) return null
+    // The first words at once; the plan change lands with the full reply a moment later.
+    step(`\u0001Logged ${hmShort(say.sleptMin)} of sleep.`)
+    const facts = await mirror.read((db) => {
+      const svc = services.services(db)
+      const today: string = svc.wallet.today(now)
+      const win = sleepWindow(db)
+      let wakeTomorrow = win.wake
+      try {
+        wakeTomorrow = targetForDay(addDays(today, 1), svc.sleep.weekdayTarget(), svc.sleep.weekendTarget())
+      } catch {
+        /* the window's wake time */
+      }
+      let best: number[] = []
+      try {
+        best = learnedRhythm(db, today).best ?? []
+      } catch {
+        best = []
+      }
+      return { today, bedTarget: win.bed, wakeTomorrow, needMin: sleepNeedMin(db as any), best, briefing: rhythmFor(readSetting(db as any, RHYTHM), today).briefing }
+    })
+    const act = readAction(`sleep: ${facts.today} | bed=${say.bed}; wake=${say.wake}`)
+    const bed = bedTonight({ target: facts.bedTarget, wakeTomorrow: facts.wakeTomorrow, needMin: facts.needMin })
+    let made: ShortNightResult | null = null
+    const b0 = facts.briefing
+    const ours = !!b0 && b0.plan.day === facts.today
+    if (say.sleptMin < SHORT_NIGHT_MIN && ours && b0!.status === 'proposed') {
+      // Today's calendar: what it said lately, else one short read (never the long wait).
+      const mid = new Date(now)
+      mid.setHours(0, 0, 0, 0)
+      const key = `calendar:${mid.toISOString()}`
+      const cal = calendar ? (peek<CalEvent[]>(key) ?? (await readThrough(key, () => calendar.events(mid.toISOString(), new Date(mid.getTime() + 8 * 86400000).toISOString()), 1_200))) : null
+      const hmNow = fromMin(now.getHours() * 60 + now.getMinutes())
+      await changePlan(
+        planDepsHere(),
+        (f, b) => {
+          made = shortNightPlan(b.plan, { sleptMin: say.sleptMin, now: hmNow, wake: say.wake, events: fixedEvents(cal ?? [], b.plan), endBy: f.endBy, best: facts.best, sessions: f.sessions, needMin: facts.needMin })
+          return made ? { plan: made.plan, label: LIGHTER_LABEL } : { none: 'Nothing to change' }
+        },
+        now
+      ).catch(() => (made = null))
+      step(made ? 'Made today lighter' : 'Read your plan')
+    }
+    const r = nightReply(say, made, { bed, hasPlan: ours, approved: b0?.status === 'approved' })
+    return { reply: r.reply, acts: act ? [act] : [], chips: r.chips, ...(ours ? { show: ['plan'] } : {}) }
+  }
+
   async function think(
     persona: Persona,
     text: string,
@@ -936,7 +1017,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     /** Done in code: the result is the reply, no model call to "repair" it. */
     let codeMade = false
     // What Ben can do without the AI: a stored confirm, a fix in code (B10), an instant answer (B3).
-    let preset: { reply: string; acts: BrainAction[]; chips?: string[]; buttons?: { label: string; do: string }[] } | null = confirmed ? { reply: '👍 Done.', acts: [confirmed] } : null
+    let preset: { reply: string; acts: BrainAction[]; chips?: string[]; buttons?: { label: string; do: string }[]; show?: string[] } | null = confirmed ? { reply: '👍 Done.', acts: [confirmed] } : null
     if (direct) preset = { reply: direct.reply, acts: direct.lines.map(readAction).filter((a): a is BrainAction => !!a) }
     // The coach's hard rule (core/coachSafety.ts): red-flag words (dizziness, chest pain, fainting, sharp or
     // joint pain, breathing, heart racing; EN + RO) get ONLY "stop training and see a doctor": no model, no exercise advice.
@@ -965,6 +1046,17 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       }
     }
     if (!preset && tool?.preset) preset = { reply: tool.preset.reply, acts: [], chips: tool.preset.chips }
+    // Coach fix (core/shortNight.ts): "I went to sleep at 2 am and got up at 7:30, spent too much time
+    // with gf" is answered in code, no model: the sleep is logged through the usual sleep action, and
+    // after a short night today's draft plan really gets lighter (nothing before now, less focus, a nap
+    // before 15:00, lighter training) before the reply says so. The reason gets one kind line.
+    if (!preset && !media && text && !direct) {
+      const night = await sleepSayInCode(clean, step).catch((e) => (console.warn('ben: sleep in code:', (e as Error)?.message), null))
+      if (night) {
+        preset = night
+        codeMade = true
+      }
+    }
     if (!preset && !media && text && !toolBusy) {
       const fix = codeFix(text)
       if (fix) preset = await fixInCode(fix).catch(() => null)
@@ -1679,7 +1771,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     }
     let out: BrainOut
     try {
-      if (preset) out = { reply: preset.reply, actions: direct ? direct.lines : [], remember: [], chips: preset.chips, buttons: preset.buttons }
+      if (preset) out = { reply: preset.reply, actions: direct ? direct.lines : [], remember: [], chips: preset.chips, buttons: preset.buttons, ...(preset.show ? { show: preset.show } : {}) }
       else if (local) out = local
       else {
         // A question about history: its numbers are looked up first, so one call answers it (B9).
