@@ -40,8 +40,8 @@ export function planTone(title: string, train = false): PlanTone {
 
 export function planTimeline(plan: Pick<DayProposal, 'blocks' | 'training'>, nowMin: number): PlanTimeline {
   const raw = [
-    ...plan.blocks.map((b) => ({ title: b.title, s: toMin(b.start), m: Math.max(5, b.minutes), train: false, tasks: (b.tasks ?? []).length > 1 || (b.tasks?.length === 1 && b.tasks[0] !== b.title) ? b.tasks : undefined })),
-    ...(plan.training ? [{ title: plan.training.what, s: toMin(plan.training.time), m: 60, train: true, tasks: undefined }] : [])
+    ...plan.blocks.map((b) => ({ title: b.title, s: toMin(b.start), m: Math.max(5, b.minutes), train: false, rest: !!b.rest, tasks: (b.tasks ?? []).length > 1 || (b.tasks?.length === 1 && b.tasks[0] !== b.title) ? b.tasks : undefined })),
+    ...(plan.training ? [{ title: plan.training.what, s: toMin(plan.training.time), m: 60, train: true, rest: false, tasks: undefined }] : [])
   ]
     .filter((x) => Number.isFinite(x.s))
     .sort((a, b) => a.s - b.s)
@@ -64,7 +64,7 @@ export function planTimeline(plan: Pick<DayProposal, 'blocks' | 'training'>, now
     from: fromMin(from),
     to: fromMin(to),
     now: nowMin >= from && nowMin <= to ? (nowMin - from) / span : null,
-    totalMin: raw.filter((x) => !x.train).reduce((t, x) => t + x.m, 0)
+    totalMin: raw.filter((x) => !x.train && !x.rest).reduce((t, x) => t + x.m, 0)
   }
 }
 

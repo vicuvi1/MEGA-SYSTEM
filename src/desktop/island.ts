@@ -14,6 +14,12 @@
 // screens and 125/150% scaling can't put the pointer "outside" the right end
 // of the peek. The desktop's own 50 ms look at the pointer only notices it
 // leaving the window (and is the fallback for an older page).
+// IC30: the window is much bigger than the pill (about 640 × 760 against a
+// ~240 × 40 pill) and while it takes clicks it takes them EVERYWHERE in that
+// box, so the page starts taking only on the shape and lets go fast, and it
+// repeats "take" every 0.5 s: when that stops for 1.5 s (a frozen page, a lost
+// message, a reload) the desktop lets clicks through by itself. Click-through
+// is always the safe default.
 // The window still never takes the focus (focusable: false, a tool window, so
 // no taskbar button): a press on a window that doesn't take the focus can be
 // swallowed by Windows, so the page fires its buttons on the release (that
@@ -33,6 +39,7 @@ import { applyProfile, autoProfile } from '../core/islandProfiles'
 import { typingFade } from '../core/islandCommands'
 import type { IslandControls, IslandProfileId } from '../core/islandControlPrefs'
 import { barHome, cursorNear, savedSpot, snapBounce } from './islandPlace'
+import { takeExpired } from '../core/islandClicks'
 import { soundFallbackRoute } from './appFiles'
 import { clampFree, PANEL_MAX, resizePanel, dragTo, dropSpot, fitShift, hideFor, hideText, hideTick, rememberSpot, rushing, screenKey, SHOWN, toggleHide, DODGE_MS, type HideChoice, type Rect, type Sample } from '../core/islandMove'
 import {
@@ -135,6 +142,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   let ignoring = true
   /** The page decides when it takes clicks (it said so at least once). */
   let pageCtl = false
+  /** IC30: when the page last said "take clicks" (it repeats it while it does). */
+  let takeAt = 0
   /** The pointer is inside the window's box (null: not known). */
   let inWin: boolean | null = null
   /** Calm at rest: the page shows only its faint line (it watches the hover zone itself). */
@@ -371,7 +380,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     w.webContents.on('before-input-event', (e, input) => {
       if ((input.control || input.meta) && ['+', '-', '=', '0', 'Add', 'Subtract', 'NumpadAdd', 'NumpadSubtract'].includes(input.key)) e.preventDefault()
     })
-    w.webContents.on('did-start-loading', () => { ready = false })
+    // IC30: a reloading page can't say "let go": clicks pass through until it says otherwise.
+    w.webContents.on('did-start-loading', () => { ready = false; if (win === w) setIgnore(true, 'the island page is loading', true) })
     w.webContents.on('did-finish-load', () => {
       void w.webContents.setVisualZoomLevelLimits(1, 1).catch(() => {})
       greet()
@@ -399,6 +409,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     })
     let frozen: ReturnType<typeof setTimeout> | null = null
     w.webContents.on('unresponsive', () => {
+      if (win === w) setIgnore(true, 'the island page is not answering', true)
       frozen ??= setTimeout(() => {
         frozen = null
         if (!w.isDestroyed()) w.webContents.reload()
@@ -509,6 +520,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     drag = null
     inside = null
     inWin = null
+    // IC30: the page has 1.5 s to say it still takes clicks (the pointer is on the pill), or they pass through.
+    takeAt = Date.now()
     if (!win || win.isDestroyed()) return
     const c = screen.getCursorScreenPoint()
     const b = win.getBounds()
@@ -601,6 +614,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (!moveMode || !win || win.isDestroyed()) { moveMode = null; return }
     const m = moveMode
     moveMode = null
+    takeAt = Date.now()
     if (save) {
       const b = win.getBounds()
       keepSpot({ x: b.x + b.width / 2, y: b.y + 20 }, b, 'free')
@@ -727,6 +741,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (!pageCtl) diag('ctl', 'The island page decides where it takes clicks', true)
     pageCtl = true
     inside = !!on
+    if (on) takeAt = Date.now()
     // A late "take" after the pointer already left the window is ignored.
     if (on && inWin === false) return
     setIgnore(!on, on ? 'pointer on the island' : 'pointer off the island')
@@ -745,6 +760,11 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     const b = win.getBounds()
     dodgeCheck(c, b)
     if (pageCtl) {
+      // IC30: the page stopped repeating "take clicks": they pass through (never a stuck invisible wall).
+      if (takeExpired({ taking: !ignoring, lastTakeAt: takeAt, now: t })) {
+        setIgnore(true, 'the island page went quiet')
+        inside = false
+      }
       const nowIn = c.x >= b.x && c.x < b.x + b.width && c.y >= b.y && c.y < b.y + b.height
       if (nowIn === inWin) return
       inWin = nowIn

@@ -4816,7 +4816,7 @@ function sleepWeek(nights, today, needMin = 480) {
 		debtMin: known.reduce((t, n) => t + Math.max(0, needMin - n.minutes), 0)
 	};
 }
-var hm$12 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
+var hm$13 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
 var esc$6 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 function bodyWeek(i) {
 	const lines = [];
@@ -4846,7 +4846,7 @@ function bodyWeek(i) {
 	lines.push({
 		icon: "🌙",
 		label: "Sleep",
-		value: s.avgMin == null ? "No nights logged" : `${hm$12(s.avgMin)} a night on average${s.debtMin >= 30 ? ` · ${hm$12(s.debtMin)} short of your sleep need this week` : ""}`,
+		value: s.avgMin == null ? "No nights logged" : `${hm$13(s.avgMin)} a night on average${s.debtMin >= 30 ? ` · ${hm$13(s.debtMin)} short of your sleep need this week` : ""}`,
 		tone: s.avgMin == null ? "none" : s.avgMin >= 450 ? "good" : s.avgMin >= 390 ? "warn" : "bad"
 	});
 	if (i.steps != null) lines.push({
@@ -4862,10 +4862,10 @@ function bodyWeek(i) {
 	let cause = null;
 	if (stall && lowProtein && shortSleep) {
 		focus = `Protein at every meal (${p.goal} g a day) and lights out 30 min earlier.`;
-		cause = `Low protein (${p.avg} g) and short sleep (${hm$12(s.avgMin)}) are the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
+		cause = `Low protein (${p.avg} g) and short sleep (${hm$13(s.avgMin)}) are the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
 	} else if (stall && shortSleep) {
 		focus = "Sleep first: lights out 30 min earlier on training nights.";
-		cause = `Short sleep (${hm$12(s.avgMin)} a night) is the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
+		cause = `Short sleep (${hm$13(s.avgMin)} a night) is the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
 	} else if (stall && lowProtein) {
 		focus = `Protein: ${p.goal} g a day, a portion at every meal.`;
 		cause = `Low protein (${p.avg} g a day) is the likely reason ${stall.name.toLowerCase()} stalled at ${stall.now}.`;
@@ -4874,7 +4874,7 @@ function bodyWeek(i) {
 		cause = "Muscle needs the protein to grow from the training.";
 	} else if (shortSleep) {
 		focus = "Sleep: aim for 7 h+ every night this week.";
-		cause = `${hm$12(s.avgMin)} a night on average; muscle grows while you sleep.`;
+		cause = `${hm$13(s.avgMin)} a night on average; muscle grows while you sleep.`;
 	} else if (low.length) {
 		focus = `More sets for ${low.map((m) => m.short.toLowerCase()).join(" and ")}: at least 10 hard sets a week each.`;
 		cause = `${low.map((m) => `${m.short} ${i.sets[m.id]}`).join(", ")} this week, under the 10 that grow muscle.`;
@@ -5010,7 +5010,7 @@ function sleepDebt(logs, today, needH = DEFAULT_CARE.needH) {
 		level: debtMin >= 180 ? "high" : debtMin >= 60 ? "behind" : "ok"
 	};
 }
-var hm$11 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${String(min % 60).padStart(2, "0")}` : ""}` : `${min} min`;
+var hm$12 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? ` ${String(min % 60).padStart(2, "0")}` : ""}` : `${min} min`;
 var WEEKDAY = [
 	"Sunday",
 	"Monday",
@@ -5031,7 +5031,7 @@ function debtAdvice(d, o) {
 		nap: null,
 		napOk: false,
 		early: null,
-		line: d.logged ? `On track: ${d.debtMin ? `${hm$11(d.debtMin)} behind` : "no debt"} over the last ${d.logged} nights.` : "Log a few nights (bed and wake-up) to see your sleep debt."
+		line: d.logged ? `On track: ${d.debtMin ? `${hm$12(d.debtMin)} behind` : "no debt"} over the last ${d.logged} nights.` : "Log a few nights (bed and wake-up) to see your sleep debt."
 	};
 	const cur = clockOf(o.now);
 	const napOk = cur >= 240 && cur < 880;
@@ -5050,7 +5050,7 @@ function debtAdvice(d, o) {
 			minutes
 		};
 	}
-	const line = `${hm$11(d.debtMin)} behind over the last ${d.logged} nights.${early ? ` Bed at ${early.bed} ${early.label === "tonight" || early.label === "tomorrow" ? early.label : `on ${early.label}`} (${minutes} min earlier).` : ""}`;
+	const line = `${hm$12(d.debtMin)} behind over the last ${d.logged} nights.${early ? ` Bed at ${early.bed} ${early.label === "tonight" || early.label === "tomorrow" ? early.label : `on ${early.label}`} (${minutes} min earlier).` : ""}`;
 	return {
 		nap,
 		napOk,
@@ -5061,12 +5061,12 @@ function debtAdvice(d, o) {
 /** One line for Ben's prompt. */
 function debtLine(d, a) {
 	if (!d.logged) return "";
-	if (d.level === "ok") return `SLEEP DEBT: fine (${hm$11(d.debtMin)} behind a ${hm$11(d.needMin)} need over the last ${d.logged} logged nights). Don't bring it up.`;
-	return `SLEEP DEBT: ${hm$11(d.debtMin)} behind a ${hm$11(d.needMin)} need over the last ${d.logged} logged nights.${a.napOk ? " Suggest one 20-min nap before 15:00." : " No nap today (too late)."}${a.early ? ` Suggest bed at ${a.early.bed} ${a.early.label === "tonight" || a.early.label === "tomorrow" ? a.early.label : `on ${a.early.label}`} (his next free evening).` : ""} Say it once, not every message.`;
+	if (d.level === "ok") return `SLEEP DEBT: fine (${hm$12(d.debtMin)} behind a ${hm$12(d.needMin)} need over the last ${d.logged} logged nights). Don't bring it up.`;
+	return `SLEEP DEBT: ${hm$12(d.debtMin)} behind a ${hm$12(d.needMin)} need over the last ${d.logged} logged nights.${a.napOk ? " Suggest one 20-min nap before 15:00." : " No nap today (too late)."}${a.early ? ` Suggest bed at ${a.early.bed} ${a.early.label === "tonight" || a.early.label === "tomorrow" ? a.early.label : `on ${a.early.label}`} (his next free evening).` : ""} Say it once, not every message.`;
 }
 // src/core/benGround.ts
 var pad$17 = (n) => String(n).padStart(2, "0");
-var TIME$1 = /\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
+var TIME$2 = /\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
 var AMPM = /\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s?(am|pm)\b/gi;
 var EVENT$1 = /\b(meetings?|appointments?|interviews?|lectures?|class(?:es)?|seminars?|exams?)\b/gi;
 var PROGRESS = /\b(?:nearly|almost|mostly|half(?:way)?|basically|practically)\s+(?:done|finished|through|complete|there)\b/i;
@@ -5074,7 +5074,7 @@ var norm$9 = (h, m) => `${pad$17(h)}:${pad$17(m)}`;
 /** Every clock time in a text, as "HH:MM" (am/pm turned into 24 h). */
 function timesIn(text) {
 	const out = [];
-	for (const m of text.matchAll(TIME$1)) out.push(norm$9(Number(m[1]), Number(m[2])));
+	for (const m of text.matchAll(TIME$2)) out.push(norm$9(Number(m[1]), Number(m[2])));
 	for (const m of text.matchAll(AMPM)) {
 		let h = Number(m[1]) % 12;
 		if (/pm/i.test(m[3])) h += 12;
@@ -8117,7 +8117,7 @@ function weeklyAverages(points, today, weeks = 8, key = "weight", kcalByDay = {}
 }
 `${TARGET_BAND.lo}${TARGET_BAND.hi}`;
 // src/core/coachKit.ts
-var hm$10 = (iso) => {
+var hm$11 = (iso) => {
 	const d = new Date(iso);
 	return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
@@ -8132,7 +8132,7 @@ function makeRefs(events, tasks) {
 	};
 	const evLines = events.filter((e) => !e.allDay).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 40).map((e, i) => {
 		refs.events.set(`E${i + 1}`, e);
-		return `E${i + 1} ${dayOf$8(e.start).slice(5)} ${hm$10(e.start)}–${hm$10(e.end)} ${e.title}`;
+		return `E${i + 1} ${dayOf$8(e.start).slice(5)} ${hm$11(e.start)}–${hm$11(e.end)} ${e.title}`;
 	});
 	const tLines = tasks.slice(0, 60).map((t, i) => {
 		refs.tasks.set(`T${i + 1}`, t);
@@ -9309,7 +9309,7 @@ var HM$10 = /^([01]\d|2[0-3]):[0-5]\d$/;
 var isHm$3 = (x) => typeof x === "string" && HM$10.test(x);
 var isEnd = (x) => isHm$3(x) || x === "24:00";
 var toMin$13 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
-var hm$9 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
+var hm$10 = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 var hours$3 = (x, d) => typeof x === "number" && Number.isFinite(x) ? Math.max(0, Math.min(12, Math.round(x * 2) / 2)) : d;
 function cleanLifeFit(raw) {
 	const o = raw && typeof raw === "object" ? raw : {};
@@ -9359,7 +9359,7 @@ function workToday(fit, day) {
 			mode,
 			busy: {
 				from: w.from,
-				to: end >= 1440 ? "24:00" : hm$9(end)
+				to: end >= 1440 ? "24:00" : hm$10(end)
 			},
 			light: null
 		};
@@ -13998,7 +13998,7 @@ var FOOD_CALLBACK = {
 	}
 };
 // src/core/calWatch.ts
-var hm$8 = (iso) => new Date(iso).toTimeString().slice(0, 5);
+var hm$9 = (iso) => new Date(iso).toTimeString().slice(0, 5);
 var day$1 = (iso, now) => {
 	const d = new Date(iso);
 	const t = new Date(now);
@@ -14011,7 +14011,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 	for (const [id, e] of Object.entries(now)) if (!prev[id] && live(e)) out.push({
 		kind: "added",
 		ev: e,
-		text: `📅 New in your calendar: <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$8(e.start)}. I'll plan around it.`
+		text: `📅 New in your calendar: <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$9(e.start)}. I'll plan around it.`
 	});
 	for (const [id, e] of Object.entries(prev)) if (!now[id] && live(e) && Date.parse(e.start) > at.getTime()) {
 		const freeMin = Math.round((Date.parse(e.end) - Date.parse(e.start)) / 6e4);
@@ -14019,7 +14019,7 @@ function calendarChanges(prev, now, at, firstMustDo) {
 			kind: "cancelled",
 			ev: e,
 			freeMin,
-			text: `❌ <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$8(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
+			text: `❌ <b>${e.title}</b> ${day$1(e.start, at)} at ${hm$9(e.start)} is gone from your calendar: ${freeMin} free minutes.${firstMustDo ? ` Use them for “${firstMustDo}”?` : " Use them for a focus block?"}`
 		});
 	}
 	return out.slice(0, 3);
@@ -14113,11 +14113,11 @@ function weekReport(sessions, plans, funMin, today) {
 	};
 }
 /** "2h 05m", "45m". */
-var hm$7 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
+var hm$8 = (min) => min >= 60 ? `${Math.floor(min / 60)}h ${String(min % 60).padStart(2, "0")}m` : `${Math.max(0, Math.round(min))}m`;
 // src/core/moneyGuess.ts
 var MONEY = /\b(lei|mdl|ron|usd|eur|euro|dollars?|bani|spent|paid|pay|bought|cost|costs|price|cash|card|maib|vb|victoriabank|cheltuit|plătit|platit|потратил|заплатил|руб)\b|[$€£₽]/iu;
 var MONTH$1 = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?|ianuarie|februarie|martie|aprilie|mai|iunie|iulie|august|septembrie|octombrie|noiembrie|decembrie|январ\p{L}*|феврал\p{L}*|март\p{L}*|апрел\p{L}*|ма[йя]|июн\p{L}*|июл\p{L}*|август\p{L}*|сентябр\p{L}*|октябр\p{L}*|ноябр\p{L}*|декабр\p{L}*)\b/iu;
-var TIME = /\b\d{1,2}[:.]\d{2}\b|\b\d{1,2}\s*(am|pm|a\.m\.|p\.m\.)|\b(at|by|until|till|from|la|ora|в)\s+\d{1,2}\b|\bo'?clock\b/iu;
+var TIME$1 = /\b\d{1,2}[:.]\d{2}\b|\b\d{1,2}\s*(am|pm|a\.m\.|p\.m\.)|\b(at|by|until|till|from|la|ora|в)\s+\d{1,2}\b|\bo'?clock\b/iu;
 var DURATION = /\b\d+(?:[.,]\d+)?\s*(min(ute)?s?|h|hrs?|hours?|ore|минут\p{L}*|час\p{L}*|km|meters?|metres?|kg|kgs?|lbs?|reps?|sets?|cups?|glasses|pages?|days?|weeks?|times?|x)\b/iu;
 var EVENT = /\b(exam|test|deadline|meeting|appointment|class|lecture|lab|due|tomorrow|today|tonight|yesterday|monday|tuesday|wednesday|thursday|friday|saturday|sunday|next|woke|wake|slept|sleep|bed|nap|up at|examen|mâine|maine|azi|экзамен|завтра|сегодня)\b/iu;
 /** True when the number in this message is clearly not an amount of money. */
@@ -14125,7 +14125,7 @@ function notMoney(text) {
 	const t = String(text ?? "").trim();
 	if (!t || t.startsWith("/")) return false;
 	if (MONEY.test(t)) return false;
-	return MONTH$1.test(t) || TIME.test(t) || DURATION.test(t) || EVENT.test(t);
+	return MONTH$1.test(t) || TIME$1.test(t) || DURATION.test(t) || EVENT.test(t);
 }
 var HOSTS = [
 	"soundcloud.com",
@@ -16418,7 +16418,7 @@ function place(wins, c, best, minMin, avoid = []) {
 	return null;
 }
 var b_minutes = (b) => b.minutes;
-var hm$6 = (m) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
+var hm$7 = (m) => `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`;
 var fmtMin = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : `${m} min`;
 /** The whole day packed without the model (also the fallback when the model returns too little). */
 function packDay(p) {
@@ -16767,11 +16767,11 @@ function packDay(p) {
 	const focus = blocks.reduce((s, b) => s + b.minutes, 0);
 	const total = tasks.length;
 	const classes = p.events.filter((e) => !e.allDay).length;
-	const why = !blocks.length ? freeMin < 25 ? "No free time between your events today, so the must-dos fit where they can." : "Nothing to plan today: pick one thing that matters." : `${total} task${total === 1 ? "" : "s"}${classes ? ` and ${classes} event${classes === 1 ? "" : "s"}` : ""}, ${hm$6(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? "" : "s"} (${fmtMin(focus)})${quick.length ? ", small tasks batched" : ""}${meal ? `, lunch at ${fromMin$2(meal.start)} kept free` : ""}, ${fmtMin(Math.max(0, freeMin - focus - trainMin))} left free${short ? `. Short night (${hm$6(p.sleptMin)}), so shorter blocks and an earlier end` : ""}.`;
+	const why = !blocks.length ? freeMin < 25 ? "No free time between your events today, so the must-dos fit where they can." : "Nothing to plan today: pick one thing that matters." : `${total} task${total === 1 ? "" : "s"}${classes ? ` and ${classes} event${classes === 1 ? "" : "s"}` : ""}, ${hm$7(freeMin)} free: ${blocks.length} block${blocks.length === 1 ? "" : "s"} (${fmtMin(focus)})${quick.length ? ", small tasks batched" : ""}${meal ? `, lunch at ${fromMin$2(meal.start)} kept free` : ""}, ${fmtMin(Math.max(0, freeMin - focus - trainMin))} left free${short ? `. Short night (${hm$7(p.sleptMin)}), so shorter blocks and an earlier end` : ""}.`;
 	const headline = mustdos.length ? `${mustdos.length} must-do${mustdos.length === 1 ? "" : "s"} · ${blocks.length} block${blocks.length === 1 ? "" : "s"} · ${fmtMin(focus)} focus${alsoOpen({ also }).length ? ` · ${alsoOpen({ also }).length} more on the list` : ""}` : "A light day: pick one thing that matters";
 	const result = {
 		day: p.today,
-		headline: short ? `Short night (${hm$6(p.sleptMin)}): a lighter day. ${headline}`.slice(0, 160) : headline,
+		headline: short ? `Short night (${hm$7(p.sleptMin)}): a lighter day. ${headline}`.slice(0, 160) : headline,
 		mustdos,
 		blocks,
 		training,
@@ -20953,8 +20953,8 @@ function progressReport(i) {
 			label: "Focus time",
 			higherBetter: true,
 			f: (a, b) => sum$1(i.focus, a, b, (r) => r.minutes),
-			text: hm$7,
-			day: (v) => v ? hm$7(v) : "·",
+			text: hm$8,
+			day: (v) => v ? hm$8(v) : "·",
 			target: 600,
 			unit: 30
 		},
@@ -24338,7 +24338,7 @@ function ladderBenLine(cards, q) {
 	const parts = cards.map((c) => `${c.goal.title} (${c.week.light === "none" ? "new week" : c.week.light}: ${c.week.actions.filter((a) => a.target != null).map((a) => a.text).join(", ")}${c.milestone ? `; month ${c.milestone.month}: ${c.milestone.text.replace(/^Month \d+: /, "")}` : ""})`);
 	return `Quarter (week ${q.week} of ${q.weeks}${q.season ? `, season "${q.season}"` : ""}), up to 3 critical goals, scored on actions this week: ${parts.join("; ")}. Everything else is "Not now": don't push it. Praise actions, not results; no guilt when a light is red, one small next step.`;
 }
-var r5 = (m) => Math.round(m / 5) * 5;
+var r5$1 = (m) => Math.round(m / 5) * 5;
 var DAYS$7 = [
 	"Sunday",
 	"Monday",
@@ -24389,7 +24389,7 @@ function planDeadlines(goals, rooms, today) {
 	for (const g of open) {
 		const days = [];
 		for (let d = addDays$8(g.deadline, -1); d >= today && days.length < 60; d = addDays$8(d, -1)) days.push(d);
-		const want = r5(g.leftMin);
+		const want = r5$1(g.leftMin);
 		const n = Math.max(1, Math.ceil(want / 90));
 		const size = Math.min(90, Math.max(25, Math.ceil(want / Math.max(1, Math.min(n, days.length)) / 5) * 5));
 		const taken = [];
@@ -24453,7 +24453,7 @@ function planDeadlines(goals, rooms, today) {
 function shortLine(g, shortMin) {
 	if (shortMin < 15) return null;
 	const behind = g.behindH != null && g.behindH >= 1 ? ` You are behind by ${Math.round(g.behindH)}h.` : "";
-	return `${g.title}: not enough room before ${dayLabel(g.deadline)}: ${fmtH$1(r5(shortMin))} short.${behind}`;
+	return `${g.title}: not enough room before ${dayLabel(g.deadline)}: ${fmtH$1(r5$1(shortMin))} short.${behind}`;
 }
 /** Today's sessions, ready for the packer (`goals`) with their why line and stable id. */
 function sessionsOn(plans, day) {
@@ -26230,7 +26230,7 @@ var safe = (fn, d) => {
 	}
 };
 var inc = (m, day, n = 1) => m[day] = Math.round(((m[day] ?? 0) + n) * 100) / 100;
-var hm$5 = (t) => {
+var hm$6 = (t) => {
 	const m = /^(\d{1,2}):(\d{2})/.exec(String(t ?? ""));
 	return m ? Number(m[1]) * 60 + Number(m[2]) : null;
 };
@@ -26291,8 +26291,8 @@ function ladderFacts(s, from, today, finance) {
 	const nights = put("sleepNights");
 	const hours = [];
 	for (const r of safe(() => db.prepare("SELECT day, wake_time, bed_time, bed_on_time FROM sleep_logs WHERE day >= ? ORDER BY day").all(addDays$8(today, -60)), [])) {
-		const b = hm$5(r.bed_time);
-		const w = hm$5(r.wake_time);
+		const b = hm$6(r.bed_time);
+		const w = hm$6(r.wake_time);
 		if (b == null || w == null) continue;
 		const h = (w - b + 1440) % 1440 / 60;
 		hours.push(h);
@@ -32419,7 +32419,7 @@ function lifeContext(s, db, extra, now = /* @__PURE__ */ new Date()) {
 		})}, ${now.toTimeString().slice(0, 5)}.`,
 		`Coins: ${sum.balance} (today +${sum.todayCoins}). Level ${sum.level.level}.`,
 		f.running ? `Focus timer RUNNING now on "${f.running.subject}" (${f.running.planned} min planned, ${runningEnd(f.running, now)}).` : "",
-		`Focus today: ${hm$7(f.todayMin)}${f.running ? ` (+ the running timer)` : ""}. Last 7 days ${hm$7(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
+		`Focus today: ${hm$8(f.todayMin)}${f.running ? ` (+ the running timer)` : ""}. Last 7 days ${hm$8(f.week.totalMin)}. Subjects: ${f.subjects.slice(0, 5).join(", ") || "none yet"}.`,
 		`Today's must-dos: ${f.plan.items.length ? f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") : "none written yet"}.`,
 		f.goals.length ? `Goals planned backward from their deadlines (block titles "Subject: goal" count for them):\n${f.goals.map((g) => `- ${planLine(planGoal(g, today, f.todaySessions.filter((x) => x.subject.toLowerCase() === g.subject.toLowerCase()).reduce((t, x) => t + x.minutes, 0)))}`).join("\n")}` : "No goals with deadlines (offer to set one when he mentions an exam, project or deadline).",
 		goalsNowSection(s, extra.finance, now),
@@ -33434,7 +33434,7 @@ function answerLocal(need, d) {
 		const by = /* @__PURE__ */ new Map();
 		for (const s of list) by.set(s.subject, (by.get(s.subject) ?? 0) + s.minutes);
 		const days = new Set(list.map((s) => s.day)).size;
-		return `Focus ${span}: ${hm$7(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$7(m)}`).join(", ")}.` : ""}`;
+		return `Focus ${span}: ${hm$8(total)} in ${list.length} sessions on ${days} days.${by.size ? ` By subject: ${[...by].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([s, m]) => `${s} ${hm$8(m)}`).join(", ")}.` : ""}`;
 	}
 	if (k === "workouts") {
 		const days = [...new Set(d.input.workouts.filter((w) => inRange(w.day)).map((w) => w.day))].sort();
@@ -37209,12 +37209,12 @@ async function undoReceipt(t, line, at) {
 		}]] }
 	}).catch(() => null);
 }
-var hm$4 = (iso) => new Date(iso).toTimeString().slice(0, 5);
+var hm$5 = (iso) => new Date(iso).toTimeString().slice(0, 5);
 /** The calendar event of an approved plan's block (same title and start), if the calendar has it. */
 async function eventOf(c, day, b) {
 	if (!c.calendar) return null;
 	const s = /* @__PURE__ */ new Date(`${day}T00:00:00`);
-	return (await c.calendar.events(s.toISOString(), new Date(s.getTime() + 864e5).toISOString()).catch(() => [])).find((e) => e.title === b.title && hm$4(e.start) === b.start)?.id ?? null;
+	return (await c.calendar.events(s.toISOString(), new Date(s.getTime() + 864e5).toISOString()).catch(() => [])).find((e) => e.title === b.title && hm$5(e.start) === b.start)?.id ?? null;
 }
 /** Marks of today's blocks, by block index, for the keyboard. */
 function blockMarks(all, p) {
@@ -43060,7 +43060,7 @@ var sum = (s, today, from, to, counted) => {
 		n: vals.length
 	};
 };
-var hm$3 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
+var hm$4 = (m) => `${Math.floor(m / 60)}h${String(Math.round(m % 60)).padStart(2, "0")}`;
 function lifeReview(series, urges, today) {
 	const out = [];
 	const gaps = {};
@@ -43082,9 +43082,9 @@ function lifeReview(series, urges, today) {
 			text: fmt(week, usual)
 		});
 	};
-	area("sleep", "Sleep", (w, u) => `${hm$3(w)} a night, ${Math.abs(Math.round(w - u))} min ${w >= u ? "more" : "less"} than usual`, true, "up");
+	area("sleep", "Sleep", (w, u) => `${hm$4(w)} a night, ${Math.abs(Math.round(w - u))} min ${w >= u ? "more" : "less"} than usual`, true, "up");
 	area("workouts", "Training", (w, u) => `${Math.round(w)} workout${Math.round(w) === 1 ? "" : "s"} (usual ${u.toFixed(1)})`, false, "up");
-	area("focus", "Focus", (w, u) => `${hm$3(w)} of focus (usual ${hm$3(u)})`, false, "up");
+	area("focus", "Focus", (w, u) => `${hm$4(w)} of focus (usual ${hm$4(u)})`, false, "up");
 	area("spend", "Money", (w, u) => `${Math.round(w).toLocaleString("en-US")} lei spent, ${Math.abs(Math.round((w - u) / Math.max(1, u) * 100))}% ${w <= u ? "under" : "over"} usual`, false, "down");
 	if (urges.crushed || urges.slips || urges.prevCrushed) {
 		const good = urges.slips === 0;
@@ -50498,7 +50498,7 @@ function pcWorkMinutes(line) {
 	return m[2] === "h" ? Number(m[1]) * 60 + Number(m[3] ?? 0) : Number(m[1]);
 }
 var key = (s) => s.trim().toLowerCase();
-var hm$2 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(Math.round(min % 60)).padStart(2, "0") : ""}` : `${Math.round(min)}m`;
+var hm$3 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(Math.round(min % 60)).padStart(2, "0") : ""}` : `${Math.round(min)}m`;
 function weekTime(i) {
 	const inWeek = (d) => d >= i.from && d <= i.to;
 	const rows = /* @__PURE__ */ new Map();
@@ -50524,7 +50524,7 @@ function weekTime(i) {
 	const pcDays = (i.pcLines ?? []).filter((x) => inWeek(x.day)).map((x) => pcWorkMinutes(x.line)).filter((x) => x != null);
 	const pcWorkMin = pcDays.length ? pcDays.reduce((t, x) => t + x, 0) : null;
 	const worst = list.filter((r) => r.plannedMin >= 30).sort((a, b) => a.realMin / a.plannedMin - b.realMin / b.plannedMin)[0];
-	const line = !list.length ? "" : `⏱ Planned vs real: ${hm$2(plannedMin)} planned, ${hm$2(realMin)} done${plannedMin ? ` (${Math.round(realMin / plannedMin * 100)}%)` : ""}${pcWorkMin != null ? `, PC work ${hm$2(pcWorkMin)}` : ""}. ${list.slice(0, 4).map((r) => `${r.subject} ${hm$2(r.realMin)}/${hm$2(r.plannedMin)}`).join(", ")}${worst && worst.realMin < worst.plannedMin * .6 ? `. Biggest gap: ${worst.subject}.` : "."}`;
+	const line = !list.length ? "" : `⏱ Planned vs real: ${hm$3(plannedMin)} planned, ${hm$3(realMin)} done${plannedMin ? ` (${Math.round(realMin / plannedMin * 100)}%)` : ""}${pcWorkMin != null ? `, PC work ${hm$3(pcWorkMin)}` : ""}. ${list.slice(0, 4).map((r) => `${r.subject} ${hm$3(r.realMin)}/${hm$3(r.plannedMin)}`).join(", ")}${worst && worst.realMin < worst.plannedMin * .6 ? `. Biggest gap: ${worst.subject}.` : "."}`;
 	return {
 		from: i.from,
 		to: i.to,
@@ -54518,7 +54518,7 @@ var esc = (s) => s.replace(/[<>&]/g, (c) => ({
 var PLAN_ASK = "What are your 1–3 must-dos today?";
 function morningText(o) {
 	const lines = ["☀️ <b>Good morning!</b>", ""];
-	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$7(o.focusYesterdayMin)}</b> of focus.`);
+	if (o.focusYesterdayMin) lines.push(`Yesterday: <b>${hm$8(o.focusYesterdayMin)}</b> of focus.`);
 	for (const g of o.goalsBehind.slice(0, 2)) lines.push(`🎯 <b>${esc(g.title)}</b>: ${-g.aheadH}h behind, needs ~${g.perWeekH}h this week.`);
 	if (o.todoistToday) lines.push(`📋 ${o.todoistToday} Todoist task${o.todoistToday === 1 ? "" : "s"} due today (/todo).`);
 	if (lines.length > 2) lines.push("");
@@ -54547,7 +54547,7 @@ function planKeyboard(plan, withReasons) {
 	return { inline_keyboard: rows };
 }
 function eveningText(plan, focusMin) {
-	const head = `🌙 <b>Evening review</b> · ${hm$7(focusMin)} of focus today`;
+	const head = `🌙 <b>Evening review</b> · ${hm$8(focusMin)} of focus today`;
 	if (!plan.items.length) return `${head}\n\nNo must-dos today. Tomorrow morning I'll ask again.\nHow was today? Just reply here with one line.`;
 	const done = plan.items.filter((i) => i.done).length;
 	const verdict = done === plan.items.length ? "All done 🎉 Great day." : `${done}/${plan.items.length} done. Tick what you finished; for the rest, tap what got in the way.`;
@@ -54557,19 +54557,19 @@ function weekText(w, goals) {
 	const lines = [
 		`📊 <b>Your week</b> (${w.from.slice(5)} → ${w.to.slice(5)})`,
 		"",
-		`⏱ Focus: <b>${hm$7(w.totalMin)}</b>`
+		`⏱ Focus: <b>${hm$8(w.totalMin)}</b>`
 	];
-	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc(s.subject)}: ${hm$7(s.minutes)}`);
+	for (const s of w.bySubject.slice(0, 6)) lines.push(`   · ${esc(s.subject)}: ${hm$8(s.minutes)}`);
 	lines.push(`📝 Must-dos: <b>${w.planDone}/${w.planTotal}</b>${w.planTotal ? ` (${Math.round(w.planDone / w.planTotal * 100)}%)` : ""}`);
 	if (w.topReasons.length) lines.push(`🧱 What got in the way: ${w.topReasons.map((r) => `${esc(r.reason)} ×${r.count}`).join(", ")}`);
-	if (w.funMin) lines.push(`🎮 Fun: ${hm$7(w.funMin)}`);
-	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc(g.title)}: ${hm$7(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
+	if (w.funMin) lines.push(`🎮 Fun: ${hm$8(w.funMin)}`);
+	for (const g of goals.slice(0, 4)) lines.push(`🎯 ${esc(g.title)}: ${hm$8(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · ~${g.perWeekH}h/week`);
 	lines.push("", "<b>One thing to change next week?</b> Reply here.");
 	return lines.join("\n");
 }
 function goalsText(goals) {
 	if (!goals.length) return "🎯 <b>No goals with a deadline yet.</b>\nAdd one in Life System → Focus (e.g. \"Math exam, 15 Jan, 40 h\").";
-	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$7(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
+	return `🎯 <b>Goals</b>\n\n${goals.map((g) => `<b>${esc(g.title)}</b> · ${g.daysLeft} days left\n   ${hm$8(g.doneMin)} of ${g.hours}h · ${g.aheadH >= 0 ? `${g.aheadH}h ahead` : `${-g.aheadH}h behind`} · needs ~${g.perWeekH}h/week`).join("\n")}`;
 }
 // src/core/benActs.ts
 /** At 10:00–19:59 a proposed plan nobody approved gets approved. */
@@ -54944,7 +54944,7 @@ var REASONS = [
 	}
 ];
 /** The reason a rating stands for (old ratings had the reason as their kind). */
-function reasonOf(f) {
+function reasonOf$1(f) {
 	if (f.reason) return f.reason;
 	if (f.kind === "long") return "long";
 	if (f.kind === "wrong") return "wrong";
@@ -54963,7 +54963,7 @@ function learnedRules(list, now = /* @__PURE__ */ new Date(), min = 2) {
 	const counts = /* @__PURE__ */ new Map();
 	for (const f of list) {
 		if (Date.parse(f.at) < since || f.kind === "up") continue;
-		const r = reasonOf(f);
+		const r = reasonOf$1(f);
 		if (!r || !RULES[r]) continue;
 		const c = counts.get(r) ?? {
 			n: 0,
@@ -54986,7 +54986,7 @@ function feedbackPrompt(list, now = /* @__PURE__ */ new Date()) {
 	return [
 		rules.length ? `Learned from his ratings (follow these):\n${rules.map((r) => `- ${r}`).join("\n")}` : "",
 		`His ratings of your replies (14 days): 👍 ${n("up")}, 👎 ${recent.length - n("up")}.`,
-		...bad.map((f) => `- he marked "${REASONS.find((x) => x.id === reasonOf(f))?.label.toLowerCase() ?? "bad"}"${f.note ? ` (${f.note})` : ""}: "${f.text.replace(/\s+/g, " ").slice(0, 120)}"`)
+		...bad.map((f) => `- he marked "${REASONS.find((x) => x.id === reasonOf$1(f))?.label.toLowerCase() ?? "bad"}"${f.note ? ` (${f.note})` : ""}: "${f.text.replace(/\s+/g, " ").slice(0, 120)}"`)
 	].filter(Boolean).join("\n");
 }
 /** A saved rating made safe. */
@@ -55827,8 +55827,9 @@ function meansTimer(what, subject) {
 // src/core/benPlanText.ts
 /** Blocks, focus minutes and must-dos, counted the way the plan card counts them. */
 function planSummary(p) {
-	const blocks = p.blocks.length;
-	const focusMin = p.blocks.reduce((t, b) => t + Math.max(5, b.minutes || 0), 0);
+	const work = p.blocks.filter((b) => !b.rest);
+	const blocks = work.length;
+	const focusMin = work.reduce((t, b) => t + Math.max(5, b.minutes || 0), 0);
 	const mustdos = p.mustdos.length;
 	const start = [...p.blocks].map((b) => b.start).filter((s) => /^\d{1,2}:\d{2}$/.test(s)).sort()[0] ?? null;
 	const bits = [
@@ -56167,7 +56168,7 @@ function cleanKnow(raw) {
 }
 var pad$4 = (n) => String(n).padStart(2, "0");
 /** "18", "18:30", "6pm", "6.30" → "HH:MM". */
-function clock(s) {
+function clock$1(s) {
 	const m = /^(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm)?$/i.exec(String(s ?? "").trim());
 	if (!m) return null;
 	let h = Number(m[1]);
@@ -56205,7 +56206,7 @@ function readCorrection(text) {
 	}
 	if (m = /^(?:no[,.]?\s+|nu[,.]?\s+|нет[,.]?\s+)?(.{2,40}?)\s+(?:is\s+)?(?:always|usually|every day|e mereu|este mereu|mereu|e intotdeauna|всегда|обычно)\s+(?:at|la|в)\s+(\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?)$/iu.exec(t)) {
 		const key = nameOf(m[1]);
-		const time = clock(m[2]);
+		const time = clock$1(m[2]);
 		if (key && time && time !== "24:00") return {
 			kind: "time",
 			key,
@@ -56332,8 +56333,8 @@ function readOffer(text) {
 	const t = normalize$1(raw).replace(/[.!]+$/, "");
 	let m;
 	if (m = new RegExp(`(?:my (?:shift|work|job) is|i work|i'?m at work|i have work|lucrez|tura mea e|tura e|работаю|моя смена)\\s+(?:from\\s+|de la\\s+|с\\s+)?(\\d{1,2}(?::\\d{2})?)\\s*(?:-|–|—|to|till|until|pana la|до)\\s*(\\d{1,2}(?::\\d{2})?)(?:\\s+(?:on\\s+)?(weekdays|mon-fri|monday to friday|every day|daily|weekends))?`, "i").exec(t)) {
-		const from = clock(m[1]);
-		const to = clock(m[2]);
+		const from = clock$1(m[1]);
+		const to = clock$1(m[2]);
 		if (from && to && from !== to) {
 			const days = m[3] ? DAYS$1[m[3].toLowerCase()] : void 0;
 			return {
@@ -56364,7 +56365,7 @@ function readOffer(text) {
 		text: `Your goal: ${m[1]}`
 	};
 	if (m = /^i (?:always|usually) (wake up|go to bed|train|go to the gym|study|work out|eat) (?:at|around) (\d{1,2}(?::\d{2})?(?:\s*[ap]m)?)$/i.exec(t)) {
-		const at = clock(m[2]);
+		const at = clock$1(m[2]);
 		if (at) return {
 			kind: "habit",
 			text: `You usually ${m[1]} at ${at}`
@@ -58896,7 +58897,7 @@ function focusKeyboard(subjects) {
 }
 /** After a session: what was logged, and for a must-do or Todoist task, a "Done" button. */
 function stoppedReply(r, plan) {
-	const head = `✅ <b>${r.session.minutes} min of ${esc$5(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$7(r.state.todayMin)}`;
+	const head = `✅ <b>${r.session.minutes} min of ${esc$5(r.session.subject)}</b> logged.${r.coins ? `\n🪙 +${r.coins} points` : ""}\nToday: ${hm$8(r.state.todayMin)}`;
 	const rate = [
 		1,
 		2,
@@ -60103,6 +60104,373 @@ var CALLBACKS = [
 function runCallback(c, t) {
 	return CALLBACKS.find((x) => x.match(t.data)).run(c, t);
 }
+/** Under this much, focus is cut to half instead of 60%. */
+var VERY_SHORT_MIN = 300;
+var NAP_TITLE = "Nap: 20 min, alarm on";
+/** The plan change's label (its Undo finds it by this prefix). */
+var LIGHTER_LABEL = "Lighter day after a short night";
+var TIME = String.raw`(\d{1,2})(?:[:.](\d{2}))?\s*(a\.?m\.?|p\.?m\.?)?`;
+var BED = new RegExp(String.raw`\b(?:went\s+to\s+(?:sleep|bed)|fell\s+asleep|got\s+to\s+(?:sleep|bed)|slept|sleep|bed|asleep|m-?am\s+culcat|am\s+adormit)\s*(?:at|around|about|by|la|pe\s+la|~)?\s*${TIME}`, "i");
+var WAKE = new RegExp(String.raw`\b(?:got\s+up|woke(?:\s+up)?|wake\s+up|waking\s+up|i\s+was\s+up|up|awake|m-?am\s+trezit|m-?am\s+sculat)\s*(?:at|around|about|la|pe\s+la|~)?\s*${TIME}`, "i");
+var RANGE = new RegExp(String.raw`\bslept\s+(?:from\s+)?${TIME}\s*(?:-|–|to|till|until)\s*${TIME}`, "i");
+function clock(h, m, ap, isBed) {
+	let hh = Number(h);
+	const mm = Number(m ?? 0);
+	if (hh > 23 || mm > 59) return null;
+	const a = (ap ?? "").toLowerCase().replace(/\./g, "");
+	if (a === "pm" && hh < 12) hh += 12;
+	else if (a === "am" && hh === 12) hh = 0;
+	else if (!a && isBed && hh >= 7 && hh <= 11) hh += 12;
+	else if (!a && isBed && hh === 12) hh = 0;
+	return hh * 60 + mm;
+}
+function reasonOf(rest) {
+	const r = rest.replace(/^[\s,.;:!-]+|[\s,.;:!]+$/g, "").replace(/^(?:and|but|because|cause|cuz|coz|bc|since|so|i|was|cos)\b[\s,]*/gi, "").replace(/\b(?:eh|lol|haha+|hah|ugh|tbh|ngl|lmao)\b[\s.!]*/gi, "").replace(/\s+/g, " ").trim();
+	if (r.split(" ").filter((w) => /[a-z]{2,}/i.test(w)).length < 2) return {
+		reason: null,
+		kind: null,
+		who: null
+	};
+	const t = r.toLowerCase();
+	const who = /\b(gf|girlfriend|my girl)\b/.test(t) ? "girlfriend" : /\b(bf|boyfriend)\b/.test(t) ? "boyfriend" : /\b(wife)\b/.test(t) ? "wife" : /\b(husband)\b/.test(t) ? "husband" : /\b(partner)\b/.test(t) ? "partner" : null;
+	const kind = who ? "partner" : /\b(friends?|mates?|party|date|family|guests?|talking|call)\b/.test(t) ? "people" : /\b(gam(?:e|es|ing)|played|youtube|tiktok|phone|scroll\w*|netflix|series|shows?|anime|reels|instagram|movie)\b/.test(t) ? "screen" : /\b(stud\w*|homework|exam|deadline|work\w*|shift|project|assignment|coding|lab)\b/.test(t) ? "work" : "other";
+	return {
+		reason: r.slice(0, 80),
+		kind,
+		who
+	};
+}
+/**
+* "I went to sleep at 2 am and got up at 7:30 am, spent too much time with gf":
+* bed 02:00, up 07:30, 330 min, and the reason. Null unless both times are there,
+* the night is 1–15 h, and the wake-up is not later than now.
+*/
+function readSleepSay(text, now) {
+	const s = String(text ?? "").replace(/\s+/g, " ").trim();
+	if (!s || s.length > 240 || /\?\s*$/.test(s)) return null;
+	let bed = null;
+	let wake = null;
+	let rest = s;
+	const range = RANGE.exec(s);
+	if (range) {
+		bed = clock(range[1], range[2], range[3], true);
+		wake = clock(range[4], range[5], range[6], false);
+		rest = s.replace(range[0], " ");
+	} else {
+		const b = BED.exec(s);
+		const w = WAKE.exec(s);
+		if (!b || !w) return null;
+		bed = clock(b[1], b[2], b[3], true);
+		wake = clock(w[1], w[2], w[3], false);
+		rest = s.replace(b[0], " ").replace(w[0], " ");
+	}
+	if (bed == null || wake == null) return null;
+	const slept = (wake - bed + 1440) % 1440;
+	if (slept < 60 || slept > 900) return null;
+	const nowMin = now.getHours() * 60 + now.getMinutes();
+	if (wake > nowMin + 10) return null;
+	rest = rest.replace(/\b(?:i|and|then|at|la)\b(?=\s*(?:,|$))/gi, " ");
+	return {
+		bed: fromMin$2(bed),
+		wake: fromMin$2(wake),
+		sleptMin: slept,
+		...reasonOf(rest)
+	};
+}
+/** "5h30", "45 min". */
+var hm$2 = (min) => min >= 60 ? `${Math.floor(min / 60)}h${String(min % 60).padStart(2, "0")}` : `${min} min`;
+var low = (x) => x.trim().toLowerCase();
+var focusOf = (blocks) => blocks.filter((b) => !b.rest).reduce((t, b) => t + Math.max(5, b.minutes || 0), 0);
+var r5 = (n) => Math.round(n / 5) * 5;
+var trainMin = (t) => t.minutes ?? (Number(/(\d+)\s*min/.exec(t.what)?.[1]) || 30);
+/** Takes `minutes` from the first window that has them at or after `from` (10 min breaks around). */
+function take(wins, from, minutes) {
+	const i = wins.findIndex((w) => Math.ceil(Math.max(w.s, from) / 5) * 5 + minutes <= w.e);
+	if (i < 0) return null;
+	const w = wins[i];
+	const start = Math.ceil(Math.max(w.s, from) / 5) * 5;
+	const parts = [{
+		s: w.s,
+		e: start - 10
+	}, {
+		s: start + minutes + 10,
+		e: w.e
+	}].filter((x) => x.e - x.s >= 20);
+	wins.splice(i, 1, ...parts);
+	return start;
+}
+/** Takes exactly [start, start + minutes) when it is free. */
+function takeAt(wins, start, minutes) {
+	const i = wins.findIndex((w) => w.s <= start && start + minutes <= w.e);
+	if (i < 0) return false;
+	const w = wins[i];
+	wins.splice(i, 1, ...[{
+		s: w.s,
+		e: start - 10
+	}, {
+		s: start + minutes + 10,
+		e: w.e
+	}].filter((x) => x.e - x.s >= 20));
+	return true;
+}
+/**
+* Today's plan after a short night (null: not short, or nothing to change).
+* Only draft blocks change; pinned, approved, started and calendar blocks stay.
+*/
+function shortNightPlan(plan, o) {
+	if (!(o.sleptMin < 390) || plan.shortNight != null) return null;
+	const startAt = planStartAt(o.now);
+	const s0 = toMin$8(startAt);
+	const sessions = o.sessions ?? [];
+	const fixed = (b) => !!(b.locked || b.ok || b.sync?.eventId || b.rest || blockStarted(b, plan.day, sessions));
+	const kept = plan.blocks.filter(fixed);
+	const drafts = plan.blocks.filter((b) => !fixed(b));
+	const focusBefore = focusOf(plan.blocks);
+	if (!drafts.length && !plan.training) return null;
+	const share = o.sleptMin < VERY_SHORT_MIN ? .5 : .6;
+	const budget = Math.max(60, r5(focusBefore * share));
+	const must = new Set(plan.mustdos.map(low));
+	const isMust = (b) => [b.title, ...b.tasks ?? []].some((t) => must.has(low(t)));
+	const rank = (b) => isMust(b) ? 0 : b.kind === "goal" ? 1 : b.kind === "quick" ? 3 : 2;
+	const order = [...drafts].sort((a, b) => rank(a) - rank(b) || b.minutes - a.minutes || a.start.localeCompare(b.start));
+	let used = focusOf(kept);
+	const chosen = [];
+	const left = [];
+	for (const b of order) {
+		const m = Math.min(60, b.minutes);
+		if (isMust(b)) chosen.push({
+			...b,
+			minutes: m
+		}), used += m;
+		else if (used + m <= budget) chosen.push({
+			...b,
+			minutes: m
+		}), used += m;
+		else if (budget - used >= 25) {
+			chosen.push({
+				...b,
+				minutes: r5(budget - used)
+			});
+			used = budget;
+		} else left.push(b);
+	}
+	const iso = (hhmm, plus = 0) => new Date((/* @__PURE__ */ new Date(`${plan.day}T${hhmm}:00`)).getTime() + plus * 6e4).toISOString();
+	const asEvent = (start, minutes, id) => ({
+		id,
+		calendarId: "plan",
+		title: id,
+		start: iso(start),
+		end: iso(start, minutes),
+		allDay: false
+	});
+	const busy = [...o.events, ...kept.filter((b) => toMin$8(b.start) + b.minutes > s0).map((b, i) => asEvent(b.start, b.minutes, `keep${i}`))];
+	let training = plan.training;
+	let trainOut = null;
+	if (training) {
+		const rd = trainReadiness({
+			sleptMin: o.sleptMin,
+			soreness: null,
+			needMin: o.needMin
+		});
+		const mode = rd.mode === "full" ? "light" : rd.mode;
+		const base = trainMin(training);
+		const minutes = training.locked || training.ok || training.sync?.eventId ? base : doseMinutes(base, mode);
+		const what = `${DOSE_LABEL[mode]}: ${training.what.replace(/^(easy|lighter 70%|short 50%|full)\s*:\s*/i, "")}`;
+		training = {
+			...training,
+			what,
+			minutes
+		};
+		trainOut = {
+			mode,
+			pct: rd.pct === 100 ? 70 : rd.pct,
+			minutes,
+			time: training.time
+		};
+	}
+	let wins = freeWindows(busy, plan.day, startAt, o.endBy);
+	if (training && !training.locked && !training.ok && !training.sync?.eventId) {
+		const tStart = toMin$8(training.time);
+		if (tStart < s0 || !takeAt(wins, tStart, training.minutes ?? 30)) {
+			const at = take(wins, Math.max(s0, toMin$8("17:00")), training.minutes ?? 30) ?? take(wins, s0, training.minutes ?? 30);
+			if (at != null) training = {
+				...training,
+				time: fromMin$2(at)
+			};
+		}
+		trainOut = trainOut && {
+			...trainOut,
+			time: training.time
+		};
+	} else if (training && toMin$8(training.time) >= s0) {
+		busy.push(asEvent(training.time, training.minutes ?? 30, "training"));
+		wins = freeWindows(busy, plan.day, startAt, o.endBy);
+	}
+	const wakeMin = toMin$8(o.wake);
+	const bestFrom = (() => {
+		const hrs = (o.best ?? []).map((h) => h * 60).filter((m) => m + 30 >= s0).sort((a, b) => a - b);
+		return Math.max(s0, hrs[0] ?? wakeMin + 120);
+	})();
+	const placed = [];
+	const unplaced = [];
+	const place = (b, from) => {
+		let at = take(wins, from, b.minutes);
+		if (at == null && from > s0) at = take(wins, s0, b.minutes);
+		let minutes = b.minutes;
+		if (at == null && b.minutes > 25) {
+			minutes = 25;
+			at = take(wins, s0, 25);
+		}
+		if (at == null) unplaced.push(b);
+		else placed.push({
+			...b,
+			start: fromMin$2(at),
+			minutes
+		});
+	};
+	if (chosen.length) place(chosen[0], bestFrom);
+	let nap = null;
+	if (s0 <= toMin$8("14:30")) for (const c of [
+		"13:30",
+		"13:00",
+		"14:00",
+		"12:30",
+		"14:30"
+	].map(toMin$8)) {
+		if (c < s0 + 30) continue;
+		if (takeAt(wins, c, 30)) {
+			nap = {
+				start: fromMin$2(c),
+				end: fromMin$2(c + 30)
+			};
+			break;
+		}
+	}
+	for (const b of chosen.slice(1)) place(b, s0);
+	const gone = [...left, ...unplaced];
+	const also = [...plan.also ?? []];
+	const lightMoved = [];
+	for (const b of gone) for (const t of b.tasks?.length ? b.tasks : [b.title]) {
+		if (must.has(low(t))) continue;
+		lightMoved.push(t);
+		const id = b.sync?.tasks?.find((x) => low(x.title) === low(t))?.id;
+		if (!also.some((a) => low(a.title) === low(t))) also.push({
+			title: t,
+			minutes: Math.max(10, Math.round(b.minutes / Math.max(1, b.tasks?.length ?? 1))),
+			priority: 1,
+			...id ? { id } : {}
+		});
+	}
+	const napBlock = nap ? [{
+		id: `nap-${plan.day}`,
+		title: NAP_TITLE,
+		start: nap.start,
+		minutes: 30,
+		rest: true
+	}] : [];
+	const blocks = [
+		...kept,
+		...placed,
+		...napBlock
+	].sort((a, b) => a.start.localeCompare(b.start));
+	const focusAfter = focusOf(blocks);
+	if (focusAfter === focusBefore && !nap && JSON.stringify(training) === JSON.stringify(plan.training) && blocks.every((b, i) => b.start === plan.blocks[i]?.start)) return null;
+	const lead = `Lighter day: ${[
+		`${hm$2(focusAfter)} focus instead of ${hm$2(focusBefore)}`,
+		nap ? `nap ${nap.start}–${nap.end}` : "",
+		trainOut ? `training ${trainOut.pct}% (${trainOut.minutes} min at ${trainOut.time})` : ""
+	].filter(Boolean).join(", ")}.`;
+	const hard = placed[0];
+	const why = [
+		`Short night (${hm$2(o.sleptMin)}):`,
+		plan.mustdos.length ? `your ${plan.mustdos.length} must-do${plan.mustdos.length === 1 ? "" : "s"} stay,` : "",
+		hard ? `the hardest work at ${hard.start},` : "",
+		lightMoved.length ? `${lightMoved.length} smaller task${lightMoved.length === 1 ? "" : "s"} wait on today's list,` : "",
+		nap ? "a 20-minute nap before 15:00," : "",
+		trainOut ? `training at ${trainOut.pct}% with the same reps as last time.` : ""
+	].filter(Boolean).join(" ").replace(/,$/, ".");
+	return {
+		plan: relinkAlso({
+			...plan,
+			blocks,
+			training,
+			also,
+			light: true,
+			shortNight: o.sleptMin,
+			...lightMoved.length ? { lightMoved } : {},
+			headline: `Short night (${hm$2(o.sleptMin)}): a lighter day · ${hm$2(focusAfter)} focus${nap ? ` · nap ${nap.start}` : ""}`.slice(0, 160),
+			why
+		}),
+		focusBefore,
+		focusAfter,
+		nap,
+		training: trainOut,
+		moved: gone.map((b) => b.title),
+		lead
+	};
+}
+/**
+* Tonight's bedtime: the earlier of the bedtime target and the wake target minus
+* the sleep need, rounded down to 15 min, never before 21:30.
+*/
+function bedTonight(o) {
+	const late = (m) => m < 720 ? m + 1440 : m;
+	const fromNeed = late((toMin$8(o.wakeTomorrow) - o.needMin + 1440) % 1440);
+	const pick = Math.max(late(1290), Math.min(late(toMin$8(o.target)), fromNeed));
+	return fromMin$2(Math.floor(pick / 15) * 15 % 1440);
+}
+/** One short, kind line about why, with one tiny thing for tonight (null: no reason given). */
+function reasonLine(say, bed) {
+	if (!say.kind) return null;
+	const before = (m) => fromMin$2((toMin$8(bed) - m + 1440) % 1440);
+	switch (say.kind) {
+		case "partner": return `Time with your ${say.who} counts too, no guilt. Tonight: say goodnight by ${before(15)}, lights out by ${bed}.`;
+		case "people": return `Time with people you like counts too, no guilt. Tonight: head home or hang up by ${before(30)}, lights out by ${bed}.`;
+		case "screen": return `It happens, no guilt. Tonight: phone on the charger away from the bed at ${before(30)}, lights out by ${bed}.`;
+		case "work": return `Late work happens. Tonight: stop working at ${before(60)}, lights out by ${bed}.`;
+		default: return `Noted, no guilt. Tonight: lights out by ${bed}.`;
+	}
+}
+/** The reply: what changed first, then the sleep, then the kind line. */
+function nightReply(say, r, o) {
+	const slept = `Slept ${hm$2(say.sleptMin)} (${say.bed}–${say.wake}), logged.`;
+	const kind = say.sleptMin < 390 ? reasonLine(say, o.bed) : null;
+	if (say.sleptMin >= 390) return {
+		reply: [slept, "A good night: today's plan stays as it is."].join("\n"),
+		chips: ["What now?"]
+	};
+	if (r) {
+		const keep = r.plan.mustdos.length ? `Kept your ${r.plan.mustdos.length} must-do${r.plan.mustdos.length === 1 ? "" : "s"}.` : "";
+		const wait = r.plan.lightMoved?.length ? ` ${r.plan.lightMoved.length} smaller task${r.plan.lightMoved.length === 1 ? "" : "s"} wait on today's list.` : "";
+		return {
+			reply: [
+				r.lead,
+				`${slept} ${keep}${wait}`.trim(),
+				kind
+			].filter(Boolean).join("\n"),
+			chips: [
+				...r.plan.lightMoved?.length ? ["Move the rest to tomorrow"] : [],
+				"Keep the full plan",
+				"What now?"
+			]
+		};
+	}
+	return {
+		reply: [
+			slept,
+			!o.hasPlan ? "Short night: plan a light day with a 20-minute nap before 15:00." : o.approved ? "Short night. Today's plan is approved and in your calendar, so I left it: use Too much today on the plan card to lighten it." : "Short night. Today's plan is already the lighter one.",
+			kind
+		].filter(Boolean).join("\n"),
+		chips: !o.hasPlan ? ["Plan my day", "What now?"] : ["What now?"]
+	};
+}
+/** The chips under that reply, said back. */
+function lighterAnswer(text) {
+	const t = String(text ?? "").trim().toLowerCase().replace(/[.!]+$/, "");
+	if (t === "move the rest to tomorrow") return "rest";
+	if (t === "keep the full plan") return "keep";
+	return null;
+}
 // src/renderer/src/web/bots/commands.ts
 var store$1 = typeof localStorage !== "undefined" ? localStorage : null;
 /**
@@ -60147,7 +60515,7 @@ function runFocus(s, text, focusEnded) {
 				const min = Math.round((Date.now() - Date.parse(st.running.startedAt)) / 6e4);
 				return { reply: `⏱ <b>Focusing on ${esc$5(st.running.subject)}</b>: ${min} of ${st.running.planned} min.\nSend <code>/stop</code> when you're done.` };
 			}
-			return { reply: `⏱ Today: <b>${hm$7(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
+			return { reply: `⏱ Today: <b>${hm$8(st.todayMin)}</b> of focus.\nStart one: <code>/focus 50 math</code>` };
 		}
 		const minutes = Number(/\b(\d{1,3})\b/.exec(arg)?.[1] ?? 50);
 		const subject = arg.replace(/\b\d{1,3}\s*(min|m)?\b/i, "").trim() || st.subjects[0] || "Focus";
@@ -61594,7 +61962,7 @@ function timeIn(text, now) {
 	const m = /\bat (\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?)(?![\d:])/.exec(t);
 	if (!m) return null;
 	const day = dayOf$2(t, now);
-	const exact = clock(m[1]);
+	const exact = clock$1(m[1]);
 	if (!exact || exact === "24:00") return null;
 	const h = Number(exact.slice(0, 2));
 	const mins = exact.slice(3);
@@ -62661,7 +63029,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			const total = steps.reduce((t, x) => t + x.minutes, 0);
 			const list = steps.map((x, i) => `${i + 1}. ${x.title} (${x.minutes} min)`).join("\n");
 			return {
-				reply: `"${big}" in ${steps.length} steps, about ${hm$7(total)} in all:\n${list}${todoist ? "" : "\n(Todoist isn't connected, so they are only here.)"}`,
+				reply: `"${big}" in ${steps.length} steps, about ${hm$8(total)} in all:\n${list}${todoist ? "" : "\n(Todoist isn't connected, so they are only here.)"}`,
 				pre,
 				chips: ["Plan my day", "Start step 1"],
 				buttons: [{
@@ -62702,6 +63070,127 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const lines = [`task: ${c.title}${when ? ` ${word} ${when.time}` : dw ? ` ${dw}` : ""}`];
 		if (when && calendar) lines.unshift(`event: ${c.title} | ${when.day} ${when.time} | ${minutes}`);
 		return lines;
+	}
+	/** The deps the shared plan changes use (planShared.ts), on this mirror. */
+	const planDepsHere = () => ({
+		read: (fn) => mirror.read((db) => fn(db, services.services(db))),
+		write: (fn) => mirror.write((db) => fn(db, services.services(db))),
+		todoist: todoist ? {
+			update: todoist.update?.bind(todoist),
+			close: (id) => todoist.close(id)
+		} : null
+	});
+	/**
+	* A sleep report ("went to sleep at 2 am, got up at 7:30") and the chips under its reply, in code.
+	* Null when the message is something else.
+	*/
+	async function sleepSayInCode(text, step) {
+		const chip = lighterAnswer(text);
+		if (chip === "keep") {
+			const r = await undoPlanChange(planDepsHere(), { prefix: LIGHTER_LABEL });
+			step("Put the full plan back");
+			return {
+				reply: r.ok ? "The full plan is back. Go easy on yourself if it gets too much." : "The full plan is already there.",
+				acts: [],
+				show: ["plan"]
+			};
+		}
+		if (chip === "rest") {
+			const r = await changePlan(planDepsHere(), (_f, b) => {
+				const titles = (b.plan.lightMoved ?? []).map((t) => t.toLowerCase());
+				const items = (b.plan.also ?? []).filter((a) => titles.includes(a.title.toLowerCase())).map((a) => ({
+					title: a.title,
+					...a.id ? { id: a.id } : {}
+				}));
+				if (!items.length) return { none: "Nothing is waiting from this morning" };
+				return {
+					plan: {
+						...moveToTomorrow(b.plan, items),
+						lightMoved: []
+					},
+					label: `Moved ${items.length} task${items.length === 1 ? "" : "s"} to tomorrow`,
+					tomorrow: items
+				};
+			});
+			step("Moved them to tomorrow");
+			return {
+				reply: r.ok ? `${r.line}. Today is just the must-dos and the light blocks now.` : `${r.line}.`,
+				acts: [],
+				show: ["plan"],
+				chips: ["What now?"]
+			};
+		}
+		const now = /* @__PURE__ */ new Date();
+		const say = readSleepSay(text, now);
+		if (!say) return null;
+		step(`\u0001Logged ${hm$2(say.sleptMin)} of sleep.`);
+		const facts = await mirror.read((db) => {
+			const svc = services.services(db);
+			const today = svc.wallet.today(now);
+			const win = sleepWindow(db);
+			let wakeTomorrow = win.wake;
+			try {
+				wakeTomorrow = targetForDay(addDays$8(today, 1), svc.sleep.weekdayTarget(), svc.sleep.weekendTarget());
+			} catch {}
+			let best = [];
+			try {
+				best = learnedRhythm(db, today).best ?? [];
+			} catch {
+				best = [];
+			}
+			return {
+				today,
+				bedTarget: win.bed,
+				wakeTomorrow,
+				needMin: sleepNeedMin(db),
+				best,
+				briefing: rhythmFor(readSetting(db, RHYTHM), today).briefing
+			};
+		});
+		const act = readAction(`sleep: ${facts.today} | bed=${say.bed}; wake=${say.wake}`);
+		const bed = bedTonight({
+			target: facts.bedTarget,
+			wakeTomorrow: facts.wakeTomorrow,
+			needMin: facts.needMin
+		});
+		let made = null;
+		const b0 = facts.briefing;
+		const ours = !!b0 && b0.plan.day === facts.today;
+		if (say.sleptMin < 390 && ours && b0.status === "proposed") {
+			const mid = new Date(now);
+			mid.setHours(0, 0, 0, 0);
+			const key = `calendar:${mid.toISOString()}`;
+			const cal = calendar ? peek(key) ?? await readThrough(key, () => calendar.events(mid.toISOString(), new Date(mid.getTime() + 6912e5).toISOString()), 1200) : null;
+			const hmNow = fromMin$2(now.getHours() * 60 + now.getMinutes());
+			await changePlan(planDepsHere(), (f, b) => {
+				made = shortNightPlan(b.plan, {
+					sleptMin: say.sleptMin,
+					now: hmNow,
+					wake: say.wake,
+					events: fixedEvents(cal ?? [], b.plan),
+					endBy: f.endBy,
+					best: facts.best,
+					sessions: f.sessions,
+					needMin: facts.needMin
+				});
+				return made ? {
+					plan: made.plan,
+					label: LIGHTER_LABEL
+				} : { none: "Nothing to change" };
+			}, now).catch(() => made = null);
+			step(made ? "Made today lighter" : "Read your plan");
+		}
+		const r = nightReply(say, made, {
+			bed,
+			hasPlan: ours,
+			approved: b0?.status === "approved"
+		});
+		return {
+			reply: r.reply,
+			acts: act ? [act] : [],
+			chips: r.chips,
+			...ours ? { show: ["plan"] } : {}
+		};
 	}
 	async function think(persona, text, key, media, via = "telegram", onStep, direct) {
 		const deadline = Date.now() + BUDGET;
@@ -62795,6 +63284,13 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 			acts: [],
 			chips: tool.preset.chips
 		};
+		if (!preset && !media && text && !direct) {
+			const night = await sleepSayInCode(clean, step).catch((e) => (console.warn("ben: sleep in code:", e?.message), null));
+			if (night) {
+				preset = night;
+				codeMade = true;
+			}
+		}
 		if (!preset && !media && text && !toolBusy) {
 			const fix = codeFix(text);
 			if (fix) preset = await fixInCode(fix).catch(() => null);
@@ -63826,7 +64322,8 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				actions: direct ? direct.lines : [],
 				remember: [],
 				chips: preset.chips,
-				buttons: preset.buttons
+				buttons: preset.buttons,
+				...preset.show ? { show: preset.show } : {}
 			};
 			else if (local) out = local;
 			else {
@@ -63839,7 +64336,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				if (pre.length) step(digest ? "Read yesterday" : route.intent === "goals" ? "Checked your goals" : "Looked up your history");
 				if (tool?.found.length) pre.push(...tool.found);
 				if (digest && onStep && !/\bweek\b/i.test(clean)) step(`\u0001${reviewFromData(digest)}`);
-				else if (week && onStep) step(`\u0001This week so far: ${hm$7(week.focusMin)} of focus, ${week.workouts} workout${week.workouts === 1 ? "" : "s"}, ${week.tasks} task${week.tasks === 1 ? "" : "s"} done, ${week.daysLeft} day${week.daysLeft === 1 ? "" : "s"} left. The full review is coming…`);
+				else if (week && onStep) step(`\u0001This week so far: ${hm$8(week.focusMin)} of focus, ${week.workouts} workout${week.workouts === 1 ? "" : "s"}, ${week.tasks} task${week.tasks === 1 ? "" : "s"} done, ${week.daysLeft} day${week.daysLeft === 1 ? "" : "s"} left. The full review is coming…`);
 				out = parseBrain(await ask(pre.length ? pre.join("\n") : void 0, tool?.note ?? ""));
 				trace.mark("model");
 			}
@@ -65006,7 +65503,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	async function lessonOfDay(token, chat, botId, cfg, note) {
 		const ctx = await mirror.read((db) => {
 			const f = services.services(db).focus.state();
-			return `Focus today ${hm$7(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
+			return `Focus today ${hm$8(f.todayMin)}. Must-dos: ${f.plan.items.map((x) => `${x.done ? "[done]" : "[open]"} ${x.text}`).join("; ") || "none"}. Got in the way: ${f.plan.reasons.join(", ") || "nothing marked"}.`;
 		});
 		const out = parseBrain(await ai(`You are Victor's coach. Here is his day and his evening note. Write ONE short lesson for tomorrow (max 25 words, concrete, kind, in the language of his note) as "reply", and the same lesson as one item in "remember" starting with "Lesson ${(/* @__PURE__ */ new Date()).toISOString().slice(5, 10)}:". Answer only JSON {"reply": string, "actions": [], "remember": string[]}.
 

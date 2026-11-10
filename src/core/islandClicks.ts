@@ -3,8 +3,19 @@
 // island's shape. The page sees every mouse move (the desktop forwards them),
 // so it knows exactly where the pointer is in its own pixels, with no screen
 // scaling to convert: it says "take clicks" or "let them through" at once.
-// - a click shield: once the pointer is on the shape it keeps taking clicks a
-//   little around it (SHIELD_PAD) and for a moment after it left (SHIELD_MS);
+// - a click shield: it starts taking clicks only ON the shape; once on, it
+//   keeps them a little around it (SHIELD_PAD) and for a short moment after
+//   it left (SHIELD_MS), but only while the pointer is still close
+//   (SHIELD_NEAR). The window is much bigger than the pill (it never resizes),
+//   and while the island takes clicks the WHOLE window takes them, so the
+//   shield must stay tight or clicks on the apps below get swallowed (IC30);
+// - a press that started off the shape never keeps the clicks;
+// - the page says "take" again every TAKE_BEAT_MS while it takes them, and the
+//   desktop lets clicks through by itself when that stops (TAKE_TTL_MS): a
+//   frozen page or a lost message can't leave a big invisible wall;
+// - hover intent: the island only counts as "hovered" (bubble, peek timer)
+//   after the pointer rested on the shape itself for HOVER_INTENT_MS, so
+//   passing over it on the way to something else does nothing;
 // - while the peek or the panel opens, the area is the size it will END at,
 //   not the size it is mid-animation;
 // - a button fires when the press and the release are on the same button,
@@ -12,10 +23,18 @@
 
 export interface Rect { x: number; y: number; w: number; h: number }
 
-/** Clicks are taken this far around the shape. */
-export const SHIELD_PAD = 12
-/** ...and for this long after the pointer was last on it. */
-export const SHIELD_MS = 400
+/** Once taking, clicks are still taken this far around the shape (never to start). */
+export const SHIELD_PAD = 6
+/** ...and for this long after the pointer was last on it... */
+export const SHIELD_MS = 150
+/** ...but only while the pointer is still this close; farther off, clicks pass through at once. */
+export const SHIELD_NEAR = 24
+/** While taking clicks the page says so again this often. */
+export const TAKE_BEAT_MS = 500
+/** The desktop lets clicks through by itself when no "take" came for this long. */
+export const TAKE_TTL_MS = 1500
+/** The pointer must rest on the shape this long before it counts as hovering. */
+export const HOVER_INTENT_MS = 120
 /** From a press until this long after the release, nothing moves under the pointer. */
 export const PRESS_HOLD_MS = 150
 /** A press longer ago than this does not pair with a release. */
@@ -55,21 +74,58 @@ export function targetRects(now: Rect[], end: Rect[]): Rect[] {
   return now.map((r, i) => (end[i] ? unionRect(r, end[i]) : r)).concat(end.slice(now.length))
 }
 
-export interface Shield { take: boolean; lastInside: number }
-export const SHIELD_OFF: Shield = { take: false, lastInside: 0 }
+export interface Shield { take: boolean; lastInside: number; pressIn?: boolean }
+export const SHIELD_OFF: Shield = { take: false, lastInside: 0, pressIn: false }
 
 /**
- * One pointer update: `inside` the shape (with the pad), a button `pressed`.
- * Returns the new state, and when to look again (ms) if the pointer may have
- * left and no further move comes.
+ * Where the pointer is against the click area: `inside` (on the shape; once
+ * taking, with SHIELD_PAD around it) and `near` (within SHIELD_NEAR).
  */
-export function shieldStep(st: Shield, o: { inside: boolean; pressed: boolean; now: number }, ms = SHIELD_MS): { st: Shield; recheckIn: number | null } {
-  if (o.inside) return { st: { take: true, lastInside: o.now }, recheckIn: null }
-  if (o.pressed && st.take) return { st, recheckIn: null }
-  const since = o.now - st.lastInside
-  if (st.take && since < ms) return { st, recheckIn: ms - since }
-  return { st: { take: false, lastInside: st.lastInside }, recheckIn: null }
+export function shieldHit(x: number, y: number, rects: Rect[], taking: boolean): { inside: boolean; near: boolean } {
+  const inside = inRects(x, y, rects, taking ? SHIELD_PAD : 0)
+  return { inside, near: inside || inRects(x, y, rects, SHIELD_NEAR) }
 }
+
+/**
+ * One pointer update: `inside` the shape, `near` it, a button `pressed`.
+ * Returns the new state, and when to look again (ms) if the pointer may have
+ * left and no further move comes. `near` left out counts as near (older callers).
+ */
+export function shieldStep(st: Shield, o: { inside: boolean; near?: boolean; pressed: boolean; now: number }, ms = SHIELD_MS): { st: Shield; recheckIn: number | null } {
+  if (o.inside) return { st: { take: true, lastInside: o.now, pressIn: o.pressed }, recheckIn: null }
+  const near = o.near !== false
+  const since = o.now - st.lastInside
+  // A press (a drag, a swipe) that started on the island keeps the clicks until it's let go.
+  if (o.pressed && st.take && st.pressIn) return { st, recheckIn: null }
+  // A press right at its edge, just after the pointer was on it, counts as on the island too.
+  if (o.pressed && st.take && near && since < ms) return { st: { ...st, pressIn: true }, recheckIn: null }
+  if (st.take && near && !o.pressed && since < ms) return { st, recheckIn: ms - since }
+  return { st: { take: false, lastInside: st.lastInside, pressIn: false }, recheckIn: null }
+}
+
+/** The desktop side: the page's last "take" is too old (it froze, or a message got lost), so clicks pass through. */
+export function takeExpired(o: { taking: boolean; lastTakeAt: number; now: number }, ttl = TAKE_TTL_MS): boolean {
+  return o.taking && o.now - o.lastTakeAt > ttl
+}
+
+export interface HoverGate { over: boolean; since: number | null }
+export const HOVER_OFF: HoverGate = { over: false, since: null }
+/**
+ * Hover intent: `onShape` (the shape itself, no pad) for HOVER_INTENT_MS in a
+ * row turns it on; clicks passing through again (`take` false) turns it off.
+ * Returns when to look again while it waits.
+ */
+export function hoverStep(st: HoverGate, o: { onShape: boolean; take: boolean; now: number }, ms = HOVER_INTENT_MS): { st: HoverGate; recheckIn: number | null } {
+  if (!o.take) return { st: HOVER_OFF, recheckIn: null }
+  if (st.over) return { st, recheckIn: null }
+  if (!o.onShape) return { st: { over: false, since: null }, recheckIn: null }
+  const since = st.since ?? o.now
+  if (o.now - since >= ms) return { st: { over: true, since }, recheckIn: null }
+  return { st: { over: false, since }, recheckIn: ms - (o.now - since) }
+}
+
+/** The peek waits the rest of your "wait before peeking" after hover intent (so the total is your setting). */
+export const peekWaitAfterIntent = (hoverMs: number) => Math.max(0, hoverMs - HOVER_INTENT_MS)
 
 export type TapVerdict = 'fire' | 'lost-down' | 'none'
 /**

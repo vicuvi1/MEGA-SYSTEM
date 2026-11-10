@@ -8,6 +8,8 @@ import type { SafeAction } from './recipes'
 import { cleanControls, DEFAULT_CONTROLS, type IslandControls } from './islandControlPrefs'
 import { rainItem, sunItem } from './widgets/weatherPill'
 import { cleanPeekFor, DEFAULT_PEEK_FOR, isIslandMode, PEEK_FOR_V, type CalmRest, type IslandMode, type PeekKind } from './islandCalm'
+/** IC30: the shortest "wait before peeking": a pointer passing over the island on its way somewhere never opens it. */
+export const HOVER_MIN_MS = 300
 
 export interface IslandBlock {
   title: string
@@ -624,7 +626,7 @@ export function cleanIslandPrefs(p: any): IslandPrefs {
     pillOrder: cleanOrder(p?.pillOrder),
     meetingOpenMin: num(p?.meetingOpenMin, 0, 30, d.meetingOpenMin, true),
     openOn: p?.openOn === 'click' ? 'click' : 'hover',
-    hoverMs: num(p?.hoverMs, 100, 2000, d.hoverMs, true),
+    hoverMs: num(p?.hoverMs, HOVER_MIN_MS, 2000, d.hoverMs, true),
     clicks: {
       left: cleanClick(p?.clicks?.left, d.clicks.left),
       middle: cleanClick(p?.clicks?.middle, d.clicks.middle),

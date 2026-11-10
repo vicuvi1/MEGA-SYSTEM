@@ -962,6 +962,37 @@
    ],
    "evidence": "2026-11-09: smoke steps Body Today (one card, no rest/workout clash, readiness line, no check-in at 08:30, Level chip), Food counter (exactly one primary button, sheet with Photo / My meals / Type it, all old checks through the sheet), Food photo, Coach check-in; phone and desktop screenshots at 2x kept outside the repo.",
    "notes": "body/FoodCounter.tsx (+food-simple.css, sheet via createPortal), FoodFast.tsx (FoodBars hero), FoodPhotoReview.tsx (bare + pickRef), body/today/TodayTab.tsx, training/StrengthCard.tsx, coach/CoachToday.tsx (+coach-full.css, readiness/rest props), coach/CoachCheckin.tsx (open prop, folds when done), progress/GrowthLevel.tsx (chip 'Level'), core/voiceNoise.ts + voice/voiceEngine.ts."
+  },
+  {
+   "id": "F-ISLAND-CLICKS",
+   "priority": 1,
+   "area": "island",
+   "title": "The island never steals clicks next to it, and is quick to put away",
+   "user_visible_behavior": "Clicks next to the desktop island (a tab strip, a window's buttons, anything near the top of the screen) reach the app under it: the island starts taking clicks only on the pill or panel itself, lets go as soon as the pointer is a little away (0.15 s, and only while still within 24 px), and a press that started off it never stays captured. If the island page freezes, reloads or a message is lost, clicks pass through again within 1.5 s by themselves. Passing over the pill on the way to something else does nothing: it only counts as hovered after resting on it, and peeks after your wait (at least 300 ms, default 350 ms). Right-click the pill: the menu now ends with 'Hide for 1 hour' (also in the round menu, the tray menu with Bring the island back, and Alt+Shift+I). Drag to any top spot or corner (remembered per screen), auto-collapse on leave and hide over full-screen apps were already there and are unchanged; sounds and reminders unchanged.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/islandClicks.test.ts src/core/islandPrefs.test.ts",
+    "SMOKE_ONLY=\"Desktop island: pill\" npm run smoke",
+    "SMOKE_ONLY=\"island\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: islandClicks.test.ts (tight shield, press off the shape, take expiry, hover intent, hide item) passes; smoke step 'Desktop island: pill -> click -> panel ...' checks no take 4 px under the pill, a quick pass never peeks and ends with clicks passing through, resting peeks, right-click Hide for 1 hour. Not yet tried on a real Windows desktop.",
+   "notes": "Root cause: the island window is one fixed size (about 640 x 760 DIP at 100%: WIN_BASE 500x660 widened to the panel + 40, height panel + 100) while the resting pill is about 240 x 40, and while it takes clicks the whole window takes them; the old shield started 12 px outside the pill, lingered 400 ms after leaving it anywhere in the window, and never expired. core/islandClicks.ts (shieldHit, shieldStep with pressIn, takeExpired, hoverStep, peekWaitAfterIntent), DesktopIsland.tsx (evaluate, heartbeat, right-click Hide), desktop/island.ts (takeAt watchdog, pass through on reload / unresponsive), core/islandModel.ts (HOVER_MIN_MS), core/islandCommands.ts (HIDE_HOUR_ITEM, withHide), IslandSettingsPanel.tsx (slider min 300)."
+   },
+   {
+   "id": "F-COACH-SHORT-NIGHT",
+   "priority": 1,
+   "area": "coach",
+   "title": "A short night told to Ben makes today really lighter, at once",
+   "user_visible_behavior": "Typing 'I went to sleep at 2 am and got up at 7:30, spent too much time with gf' in the Coach chat (app, web or Telegram) answers in about a second with no AI call. The sleep is logged. Under 6h30 of sleep, today's waiting plan changes before the reply says so: nothing starts before now, about 60% of the focus (half under 5 h), blocks at most 60 min, the must-dos kept, the hardest block in his best hours (else 2 h after waking), one 30-minute nap block before 15:00 when there is room, training at the readiness dose (never full). The reply leads with one line ('Lighter day: 3h25 focus instead of 5h45, nap 13:30–14:00, training 70% (20 min at 18:00).'), then the sleep, then one kind line about the reason with a bedtime for tonight. Chips: Move the rest to tomorrow, Keep the full plan (Undo). Approved, pinned and calendar blocks never move. No points change.",
+   "status": "in_review",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/core/shortNight.test.ts src/server/shortNight.server.test.ts",
+    "SMOKE_ONLY=\"Coach\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: shortNight.test.ts (14) and shortNight.server.test.ts (3) pass; speed harness: 4.8 s with one 6k-token model call -> 1.0 s, no model, first words at once. Smoke 'Coach chat: a short night' passes at UTC (night branch) and with TZ=Asia/Tokyo / Europe/Chisinau (daytime branch: plan changed, nothing before now, Keep the full plan restores it); all Coach steps pass.",
+   "notes": "core/shortNight.ts (pure), webBots.ts sleepSayInCode (changePlan with one Undo), PlanBlock.rest (the nap; not focus in planSummary/planTimeline), DayProposal.shortNight/lightMoved. A plan made by 'Plan my day' after the sleep is logged still uses the packer's own short-night rule (under 6 h)."
   }
  ]
 }

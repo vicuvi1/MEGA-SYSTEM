@@ -388,7 +388,7 @@ export function IslandSettingsPanel() {
         <Switch label="Peek when the mouse rests on it" on={p.openOn !== 'click'} onChange={(v) => void save({ openOn: v ? 'hover' : 'click' })} />
       </Row>
       <Row title="Wait before peeking" disabled={p.openOn === 'click'}>
-        <Slider label="Wait before peeking" value={p.hoverMs} min={100} max={2000} step={50} unit=" ms" onChange={(v) => void save({ hoverMs: v })} />
+        <Slider label="Wait before peeking" value={p.hoverMs} min={300} max={2000} step={50} unit=" ms" onChange={(v) => void save({ hoverMs: v })} />
       </Row>
       <Row title="Reminders" hint="For each kind: drop down, show only a dot (it waits in the island), or never. 🔔 is its sound." />
       <div className="is-kinds is-rules">
