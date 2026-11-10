@@ -2479,13 +2479,15 @@ try {
         await pg.keyboard.press('Enter')
         await pg.waitForFunction(({ n, sel, src }) => {
           const r = [...document.querySelectorAll(sel)]
-          return r.length > n && new RegExp(src).test(r[r.length - 1].textContent ?? '') && !r[r.length - 1].querySelector('.cf-ben.pending')
+          // The answer can come as more than one row (the text, then the plan card): any new row may hold it.
+          const fresh = r.slice(n)
+          return fresh.length > 0 && fresh.some((x) => new RegExp(src).test(x.textContent ?? '')) && !fresh.some((x) => x.querySelector('.cf-ben.pending'))
         }, { n, sel: rows, src: re.source }, { timeout: 10000 }).catch(async (e) => { throw new Error(`${e.message}: last rows ${(await pg.locator('.cf-col .cf-row').evaluateAll((els) => els.slice(-2).map((x) => x.textContent).join(' // ')).catch(() => '?'))}`) })
         return Date.now() - t0
       }
       const ms = await ask(say, daytime ? /Lighter day: [\s\S]*focus instead of[\s\S]*Slept 5h30/ : /Slept 5h30/)
       if (ms > 4000) throw new Error(`the short-night answer took ${ms} ms`)
-      const text = await pg.locator(rows).last().innerText()
+      const text = (await pg.locator(rows).evaluateAll((els) => els.map((e) => e.innerText))).filter((t) => /Slept 5h30/.test(t)).pop() || ''
       if (!/Time with your girlfriend counts too, no guilt\. Tonight: say goodnight by \d\d:\d\d, lights out by \d\d:\d\d\./.test(text)) throw new Error(`no kind line about the reason: ${text}`)
       if (/nap at/i.test(text)) throw new Error('a nap chip that the plan does not hold')
       const woke = (await sql({ sql: 'SELECT wake_time FROM sleep_logs WHERE day = ?', args: [txt(day)] })).rows[0]?.[0]?.value
