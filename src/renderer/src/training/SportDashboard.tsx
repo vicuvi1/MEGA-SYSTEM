@@ -33,6 +33,7 @@ export function SportDashboard({
   onStart,
   onSection,
   onBodyFood,
+  onGrowing,
   onSwap,
   onGear
 }: {
@@ -40,6 +41,8 @@ export function SportDashboard({
   onStart: () => void
   onSection: (s: 'workout' | 'exercises' | 'progress') => void
   onBodyFood: (tab: 'today' | 'food' | 'progress' | 'growth') => void
+  /** Opens "Am I really growing?" (the verdict and the six signs). */
+  onGrowing: () => void
   onSwap: (ladder: LadderId) => void
   onGear: () => void
 }) {
@@ -66,7 +69,7 @@ export function SportDashboard({
         <div className="sp-hero-main">
           <h2 className="sp-hello">{greeting(new Date().getHours())}</h2>
           <p className="sp-hello-sub">{v.stage === 'rest' ? 'Rest day: muscles grow while you rest.' : v.stage === 'done' ? 'Done for today. Eat well and sleep: that is when muscle grows.' : `${TYPE_NAME[v.type]} today. One rep more than last time is a win.`}</p>
-          <button type="button" className="sp-grow-chip" onClick={() => onBodyFood('growth')} data-sp="growing">
+          <button type="button" className="sp-grow-chip" onClick={onGrowing} data-sp="growing">
             <span className="sp-grow-dot" aria-hidden="true" />
             Am I growing? {lvl ? `${lvl.name} · ${fmt(lvl.xp)} XP` : 'See your Growth'} ›
           </button>

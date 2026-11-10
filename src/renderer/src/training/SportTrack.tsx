@@ -12,11 +12,14 @@ import { MoveSheet } from '../body/training/MoveSheet'
 import { useSportTrain } from './useSportTrain'
 import { SportDashboard } from './SportDashboard'
 import { SportWorkout } from './SportWorkout'
-import { SportExercises, SportProgress } from './SportMore'
+import { SportExercises } from './SportExercises'
+import { SportProgress } from './SportProgress'
+import { GrowthView } from './GrowthView'
 import { SwapSheet } from './SwapSheet'
 import { GearView } from './GearView'
 import './training-home.css'
 import './sport-track.css'
+import './sport-batch-b.css'
 
 export type SportSection = 'train' | 'workout' | 'exercises' | 'progress'
 
@@ -39,14 +42,16 @@ export function SportTrack({
   const [sheet, setSheet] = useState<PlanItem | null>(null)
   const [swap, setSwap] = useState<LadderId | null>(null)
   const [gear, setGear] = useState(false)
+  const [growth, setGrowth] = useState(false)
 
   return (
-    <div className="sp" data-sp-section={gear ? 'gear' : section}>
+    <div className="sp" data-sp-section={gear ? 'gear' : growth && section === 'train' ? 'growth' : section}>
       {gear && <GearView t={t} onBack={() => setGear(false)} />}
-      {!gear && section === 'train' && <SportDashboard t={t} onStart={() => onSection('workout')} onSection={onSection} onBodyFood={onBodyFood} onSwap={setSwap} onGear={() => setGear(true)} />}
+      {!gear && section === 'train' && growth && <GrowthView onBack={() => setGrowth(false)} onSection={onSection} onBodyFood={onBodyFood} />}
+      {!gear && section === 'train' && !growth && <SportDashboard t={t} onStart={() => onSection('workout')} onSection={onSection} onBodyFood={onBodyFood} onGrowing={() => setGrowth(true)} onSwap={setSwap} onGear={() => setGear(true)} />}
       {!gear && section === 'workout' && <SportWorkout t={t} onHow={setSheet} onSwap={setSwap} />}
-      {!gear && section === 'exercises' && <SportExercises onGear={() => setGear(true)} />}
-      {!gear && section === 'progress' && <SportProgress body={body} onBody={onBody} onWallet={onWallet} />}
+      {!gear && section === 'exercises' && <SportExercises t={t} onGear={() => setGear(true)} />}
+      {!gear && section === 'progress' && <SportProgress t={t} body={body} onBody={onBody} onWallet={onWallet} onWorkout={() => onSection('workout')} />}
       {swap && <SwapSheet t={t} ladder={swap} onClose={() => setSwap(null)} onGear={() => setGear(true)} />}
       {sheet && (
         <div className="body-page sp-sheet-host">

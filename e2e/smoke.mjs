@@ -156,7 +156,19 @@ try {
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
   // Sport Track: one of its sections in the top bar (Dashboard · Workout · Exercises · Progress · Body & Food), and the
   // Classic tracker (the old embedded app) from its ⋯ menu.
-  const sportView = (name) => pg.locator('.seg-switch [role="tab"]', { hasText: name }).click()
+  const sportView = async (name) => {
+    await pg.locator('.seg-switch [role="tab"]', { hasText: name }).click()
+    // The older sections (ladder editor, recovery, challenges…) sit in folded <details class="sp-fold"> under the new
+    // Exercises and Progress views: older steps reach them, so keep every fold open from here on.
+    await pg.evaluate(() => {
+      const open = () => document.querySelectorAll('details.sp-fold:not([open])').forEach((d) => d.setAttribute('open', ''))
+      if (!window.__spFolds) {
+        window.__spFolds = new MutationObserver(open)
+        window.__spFolds.observe(document.body, { childList: true, subtree: true })
+      }
+      open()
+    })
+  }
   const openClassic = async () => {
     // Already on the Classic tracker (no section selected, e.g. a Start button opened it): nothing to do.
     await pg.waitForSelector('[data-sport-more]', { timeout: 10000 })
@@ -1024,27 +1036,29 @@ try {
     await pg.waitForSelector(`${fc} .fd-line`, { timeout: 20000 })
     // The main view: today's numbers, exactly ONE primary button ("Log food"), today's meals, More (closed).
     await pg.evaluate(() => document.querySelectorAll('#ptp-body-food .fd-more').forEach((d) => { d.open = false }))
-    const primaries = await pg.locator('#ptp-body-food :is(.bdy-btn.primary, .btn.primary)').evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.textContent.trim()))
+    const primaries = await pg.locator(`${fc} :is(.bdy-btn.primary, .btn.primary)`).evaluateAll((els) => els.filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.textContent.trim()))
     if (primaries.length !== 1 || !/Log food/.test(primaries[0])) throw new Error(`the Food main view should have one primary "Log food" button, it has: ${JSON.stringify(primaries)}`)
     if (!(await pg.locator(`${fc} .fd-meals h3`, { hasText: "Today's meals" }).count())) throw new Error('no "Today\'s meals" list')
     // The Food tab badge uses the same protein goal as the card.
-    const cardGoal = (await pg.locator(`${fc} .fdf-protein .fdf-goal`).innerText()).replace(/[^\d]/g, '')
+    // (the numbers are the four tiles at the top of Body & Food: protein left, calories, weight, quick log)
+    const cardGoal = (/\/ ([\d,]+) g/.exec(await pg.locator('.fdb [data-fb="protein"] b').innerText())?.[1] ?? '').replace(/[^\d]/g, '')
     await pg.waitForFunction((g) => new RegExp(`/${g}\\b`).test(document.querySelector('.body-page .ptabs [data-tab="food"]')?.textContent ?? ''), cardGoal, { timeout: 10000 })
     // Log food opens a sheet with three big choices.
     await pg.click(`${fc} .fd-log-btn`)
     await pg.waitForSelector(`.fdl-sheet .fdl-choices`, { timeout: 5000 })
     const choices = await pg.locator(`.fdl-sheet .fdl-choice b`).allInnerTexts()
-    if (choices.join('|') !== 'Photo|My meals|Type it|Paste from AI') throw new Error(`the Log food sheet shows: ${choices.join(', ')}`)
+    if (choices.join('|') !== 'Photo|My meals|Type it') throw new Error(`the Log food sheet shows: ${choices.join(', ')}`)
     await pg.click(`.fdl-sheet .fdl-close`)
     await pg.waitForSelector(`.fdl-sheet`, { state: 'detached', timeout: 5000 })
     await openFold(`${fc} .fd-more`)
     if (!/Protein \d+ \/ \d+ g · [\d,]+ \/ [\d,]+ kcal today/.test(await pg.locator(`${fc} .fd-line`).innerText())) throw new Error('the food line is missing protein or kcal')
     // One-tap logging: the big bars, a saved meal (logged once, Undo), amounts, the standard day and its checklist.
-    const kcalNow = async () => Number(((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).split('/')[0] || '').replace(/[^\d]/g, ''))
-    const waitKcal = (n) => pg.waitForFunction(([s, k]) => Number((document.querySelector(`${s} .fdf-kcal .fdf-bar-label b`)?.textContent ?? '').split('/')[0].replace(/[^\d]/g, '')) === k, [fc, n], { timeout: 15000 })
-    if (!/^[\d,]+ \/ [\d,]+$/.test((await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim())) throw new Error('no kcal bar')
-    if (!/\d+ \/ \d+\s*g protein/.test(await pg.locator(`${fc} .fdf-protein`).innerText())) throw new Error('no protein bar')
-    if (!/kcal · \d+ g left|left|Goals reached/.test(await pg.locator(`${fc} .fdf-left`).innerText())) throw new Error('no "left" line')
+    const kcalNow = async () => Number((await pg.locator('.fdb [data-fb="kcal"] b').innerText()).replace(/[^\d]/g, ''))
+    const waitKcal = (n) => pg.waitForFunction((k) => Number((document.querySelector('.fdb [data-fb="kcal"] b')?.textContent ?? '').replace(/[^\d]/g, '')) === k, n, { timeout: 15000 })
+    if (!/^[\d,]+$/.test((await pg.locator('.fdb [data-fb="kcal"] b').innerText()).trim())) throw new Error('no calories number')
+    if (!/\d+ \/ \d+ g/.test(await pg.locator('.fdb [data-fb="protein"] b').innerText())) throw new Error('no protein number')
+    if (!/g left|goal reached/i.test(await pg.locator('.fdb [data-fb="protein"]').innerText())) throw new Error('no "left" line')
+    if (await pg.locator(`${fc} .fdf-bars.hero`).count()) throw new Error('the protein and calorie bars are shown twice on Body & Food')
     if (!(await pg.locator(`${fc} .fd-adjust-card .fd-adjust-title`).count())) throw new Error('no weekly calorie check card')
     if (!/Estimate from weekly average weight/.test(await pg.locator(`${fc} .fd-adjust-card`).innerText())) throw new Error('the calorie check is not labeled as an estimate')
     const k0 = await kcalNow()
@@ -1098,7 +1112,7 @@ try {
     }
     await openFold(`${fc} .fd-more`)
     // The same numbers on Body → Today.
-    const barFood = (await pg.locator(`${fc} .fdf-kcal .fdf-bar-label b`).innerText()).trim()
+    const barFood = `${(await pg.locator('.fdb [data-fb="kcal"] b').innerText()).trim()} / ${/of ([\d,]+) kcal/.exec(await pg.locator('.fdb [data-fb="kcal"]').innerText())?.[1] ?? ''}`
     await pg.waitForFunction(([b]) => (document.querySelector('#ptp-body-today .fr-card .fdf-kcal .fdf-bar-label b')?.textContent ?? '').trim() === b, [barFood], { timeout: 15000 })
     if (shots) {
       await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
@@ -1401,7 +1415,7 @@ try {
   // A 2-meal sample with a code fence, bullets and **bold** → the live preview (every food with its numbers, a grams
   // fix scales it) → Log all → both meals on Food with the right totals → Undo all takes them back. No points.
   // FOOD_PASTE_SHOTS=<dir> saves the preview.
-  await step('Food paste from AI: the prompt, paste 2 meals with fences and bullets, the preview, a grams fix, Log all, the totals on Food, Undo all', async () => {
+  await step('Body & Food: copy the food prompt (step 1), paste 2 meals with fences and bullets (step 2), the preview, a grams fix, Log all, the totals on Food, Undo all', async () => {
     const shots = process.env.FOOD_PASTE_SHOTS
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('body')
@@ -1420,11 +1434,19 @@ try {
       return (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? null
     })
     try {
-    await pg.click(`${fc} .fd-log-btn`)
-    await pg.click('.fdl-sheet .fdl-paste')
-    await pg.waitForSelector('.fdl-sheet .fpa-text', { timeout: 5000 })
-    if (!/^You are a precise nutrition analyst\./.test(await pg.locator('.fdl-sheet .fpa-prompt pre').textContent())) throw new Error('the AI prompt is not the fixed one')
-    if (!(await pg.locator('.fdl-sheet .fpa-copy', { hasText: 'Copy AI prompt' }).count())) throw new Error('no "Copy AI prompt" button')
+    // The design's top: 4 numbers, step 1 (the fixed prompt, Copy, Show all), step 2 (paste), Repeat meals.
+    await pg.waitForSelector('.fdb [data-fb="step2"] .fpa-text', { timeout: 5000 })
+    for (const sel of ['[data-fb="protein"]', '[data-fb="kcal"]', '[data-fb="weight"]', '[data-fb="quick"] [data-fb="log-weight"]', '[data-fb="step1"] [data-fb="copy"]', '[data-fb="step1"] [data-fb="show-all"]', '[data-fb="repeats"]'])
+      if (!(await pg.locator(`.fdb ${sel}`).count())) throw new Error(`Body & Food has no ${sel}`)
+    if (!/^You are a precise nutrition analyst\./.test(await pg.locator('.fdb [data-fb="prompt"]').textContent())) throw new Error('the AI prompt is not the fixed one')
+    if (!/^\d+ \/ \d+ g$/.test((await pg.locator('.fdb [data-fb="protein"] b').innerText()).trim())) throw new Error('the protein number is not "eaten / goal g"')
+    const promptH = (sel) => pg.locator(sel).evaluate((e) => e.getBoundingClientRect().height)
+    const h0 = await promptH('.fdb [data-fb="prompt"]')
+    await pg.click('.fdb [data-fb="show-all"]')
+    if ((await promptH('.fdb [data-fb="prompt"]')) <= h0) throw new Error('"Show all of it" does not open the whole prompt')
+    await pg.click('.fdb [data-fb="show-all"]')
+    await pg.click('.fdb [data-fb="copy"]')
+    await pg.waitForFunction(() => /Copied/.test(document.querySelector('.fdb [data-fb="copy"]')?.textContent ?? ''), null, { timeout: 5000 }).catch(() => {})
     const sample = [
       'Here you go:',
       '```',
@@ -1441,33 +1463,33 @@ try {
       '```',
       'Enjoy!'
     ].join('\n')
-    await pg.fill('.fdl-sheet .fpa-text', sample)
-    await pg.waitForFunction(() => document.querySelectorAll('.fdl-sheet .fpa-meal').length === 2, null, { timeout: 5000 })
-    if ((await pg.locator('.fdl-sheet .fpa-item').count()) !== 4) throw new Error('the preview does not list the 4 foods')
-    if (await pg.locator('.fdl-sheet .fpa-warn').count()) throw new Error(`warnings for a clean block: ${await pg.locator('.fdl-sheet .fpa-warn').innerText()}`)
-    const totals = await pg.locator('.fdl-sheet .fpa-total').allInnerTexts()
+    await pg.fill('.fdb [data-fb="step2"] .fpa-text', sample)
+    await pg.waitForFunction(() => document.querySelectorAll('.fdb [data-fb="step2"] .fpa-meal').length === 2, null, { timeout: 5000 })
+    if ((await pg.locator('.fdb [data-fb="step2"] .fpa-item').count()) !== 4) throw new Error('the preview does not list the 4 foods')
+    if (await pg.locator('.fdb [data-fb="step2"] .fpa-warn').count()) throw new Error(`warnings for a clean block: ${await pg.locator('.fdb [data-fb="step2"] .fpa-warn').innerText()}`)
+    const totals = await pg.locator('.fdb [data-fb="step2"] .fpa-total').allInnerTexts()
     if (!/^450 kcal · 19 g protein/.test(totals[0]) || !/^560 kcal · 67 g protein/.test(totals[1])) throw new Error(`meal totals: ${totals.join(' | ')}`)
-    if (!/^200$/.test(await pg.locator('.fdl-sheet .fpa-item').nth(3).locator('.fpa-grams input').inputValue())) throw new Error('the range 150-250 g is not read as 200 g')
-    if ((await pg.locator('.fdl-sheet .fpa-meal').first().locator('.fpa-type').innerText()).trim() !== 'Breakfast') throw new Error('the meal type from the block is not used')
+    if (!/^200$/.test(await pg.locator('.fdb [data-fb="step2"] .fpa-item').nth(3).locator('.fpa-grams input').inputValue())) throw new Error('the range 150-250 g is not read as 200 g')
+    if ((await pg.locator('.fdb [data-fb="step2"] .fpa-meal').first().locator('.fpa-type').innerText()).trim() !== 'Breakfast') throw new Error('the meal type from the block is not used')
     // A grams fix scales that food's numbers: 500 g milk = 300 kcal.
-    await pg.locator('.fdl-sheet .fpa-item').nth(1).locator('.fpa-grams input').fill('500')
-    await pg.waitForFunction(() => /^600 kcal/.test(document.querySelector('.fdl-sheet .fpa-total')?.textContent ?? ''), null, { timeout: 3000 })
-    if (!/Log all · 2 meals · 1,160 kcal/.test(await pg.locator('.fdl-sheet .fpa-log').innerText())) throw new Error(`log button: ${await pg.locator('.fdl-sheet .fpa-log').innerText()}`)
-    if (shots) await pg.locator('.fdl-sheet .fdl-card').screenshot({ path: `${shots}/food-paste-preview.png` })
-    await pg.click('.fdl-sheet .fpa-log')
-    await pg.waitForSelector('.fdl-sheet .fpa-done', { timeout: 10000 })
-    if (!/Logged 2 meals/.test(await pg.locator('.fdl-sheet .fpa-done-line').innerText())) throw new Error('no "Logged 2 meals"')
-    if ((await pg.locator('.fdl-sheet .fpa-keep', { hasText: 'Save as repeat meal' }).count()) !== 2) throw new Error('no "Save as repeat meal" for each meal')
+    await pg.locator('.fdb [data-fb="step2"] .fpa-item').nth(1).locator('.fpa-grams input').fill('500')
+    await pg.waitForFunction(() => /^600 kcal/.test(document.querySelector('.fdb [data-fb="step2"] .fpa-total')?.textContent ?? ''), null, { timeout: 3000 })
+    if (!/^Log all · \+\d+ g protein$/.test(await pg.locator('.fdb [data-fb="step2"] .fpa-log').innerText())) throw new Error(`log button: ${await pg.locator('.fdb [data-fb="step2"] .fpa-log').innerText()}`)
+    if (shots) await pg.locator('.fdb [data-fb="step2"]').screenshot({ path: `${shots}/food-paste-preview.png` })
+    await pg.click('.fdb [data-fb="step2"] .fpa-log')
+    await pg.waitForSelector('.fdb [data-fb="step2"] .fpa-done', { timeout: 10000 })
+    if (!/Logged 2 meals/.test(await pg.locator('.fdb [data-fb="step2"] .fpa-done-line').innerText())) throw new Error('no "Logged 2 meals"')
+    if ((await pg.locator('.fdb [data-fb="step2"] .fpa-keep', { hasText: 'Save as repeat meal' }).count()) !== 2) throw new Error('no "Save as repeat meal" for each meal')
     await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0 + 1160], { timeout: 10000 })
     if ((await liveMeals()) !== m0 + 2) throw new Error(`expected 2 more meals, got ${(await liveMeals()) - m0}`)
     const row = pg.locator(`${fc} .fd-meals .fd-mlist > li:not(.removed)`).filter({ hasText: 'Chicken and rice' }).first()
     if (!/rice\s+200 g/.test((await row.locator('.fd-mitem').allInnerTexts()).join('|'))) throw new Error('the pasted meal row does not list its foods')
     // Undo all: both meals stop counting.
-    await pg.click('.fdl-sheet .fpa-undo')
+    await pg.click('.fdb [data-fb="step2"] .fpa-undo')
     await pg.waitForFunction(([s, k]) => Number((/([\d,]+) \/ [\d,]+ kcal/.exec(document.querySelector(`${s} .fd-line`)?.textContent ?? '')?.[1] ?? 'x').replace(/,/g, '')) === k, [fc, k0], { timeout: 10000 })
     } finally {
       // Never leave the sheet open (or pasted meals counting) for the next steps.
-      if (await pg.locator('.fdl-sheet .fpa-undo').count()) await pg.click('.fdl-sheet .fpa-undo').catch(() => {})
+      if (await pg.locator('.fdb [data-fb="step2"] .fpa-undo').count()) await pg.click('.fdb [data-fb="step2"] .fpa-undo').catch(() => {})
       if (await pg.locator('.fdl-sheet .fdl-close').count()) await pg.click('.fdl-sheet .fdl-close').catch(() => {})
       await pg.waitForSelector('.fdl-sheet', { state: 'detached', timeout: 5000 }).catch(() => {})
     }
@@ -2214,6 +2236,225 @@ try {
     await pg.click('[data-sp="gear-side"] [data-sp="edit-gear"]')
     await pg.waitForSelector(G, { timeout: 5000 })
     await pg.click(`${G} [data-sp="gear-back"]`)
+    await tgRestore()
+  })
+  // Sport Track design batch B (docs/design/sport-track): Exercises (search, paths with your step, step cards with real
+  // photo demos, the detail panel, Make easier / Make harder keep history), Progress (period switch, KPIs, the strength
+  // chart, Ready today, Path progress bars, records, the 12-week program), Body & Food (the four numbers, copy the prompt,
+  // paste → preview → Log all is in "Body & Food: copy the food prompt…", repeat meals as tiles, the Dashboard's
+  // "Paste from AI ›" lands on step 2) and "Am I really growing?". Made-up data; Sport Track's state is put back.
+  // TG_SHOTS=<dir> saves sport-exercises-1920.png, sport-progress-1920.png, sport-bodyfood-1920.png, sport-growth-1920.png.
+  // The fit checks measure the new views alone: close the folded older sections (and stop reopening them).
+  const closeFolds = () => pg.evaluate(() => { window.__spFolds?.disconnect(); window.__spFolds = null; document.querySelectorAll('details.sp-fold').forEach((d) => d.removeAttribute('open')); document.querySelectorAll('main.content, .main').forEach((m) => { m.scrollTop = 0 }) })
+  const tgLog = (extra = {}) => pg.evaluate(([k, extra]) => {
+    const s = JSON.parse(localStorage.getItem(k) || '{}')
+    const d = (n) => { const x = new Date(Date.now() - n * 86400000 - 4 * 3600000); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}` }
+    const sets = (reps, feel) => reps.map((r) => ({ reps: r, feel }))
+    s.trainLog = [
+      { id: `trk-${d(9)}-upper`, date: d(9), type: 'upper', startedAt: Date.now() - 9 * 86400000, durationSec: 1800, done: true, exercises: [{ ladder: 'push', move: 'diamond_pushup', exId: 'ex_tg_d', sets: sets([8, 9, 9], 'ok') }, { ladder: 'pull', move: 'table_row', exId: 'ex_tg_r', sets: sets([9, 8, 8], 'ok') }] },
+      { id: `trk-${d(2)}-upper`, date: d(2), type: 'upper', startedAt: Date.now() - 2 * 86400000, durationSec: 1800, done: true, exercises: [{ ladder: 'push', move: 'diamond_pushup', exId: 'ex_tg_d', sets: sets([12, 12, 12], 'easy') }, { ladder: 'pull', move: 'table_row', exId: 'ex_tg_r', sets: sets([11, 10, 10], 'ok') }] }
+    ]
+    Object.assign(s, extra)
+    localStorage.setItem(k, JSON.stringify(s))
+    window.dispatchEvent(new CustomEvent('life-sport-changed'))
+  }, [TGK, extra])
+
+  await step('Sport Track Exercises: search, six paths with your step, step cards with real photo demos, the detail panel, Make harder and Make easier keep history', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await tgOpen()
+    await tgSeed()
+    await sportView('Exercises')
+    const E = '[data-sp="exercises"]'
+    await pg.waitForSelector(`${E} [data-sp="ex-path"] .sp-xstep`, { timeout: 15000 })
+    // Paths: Push 3 / 8, six in all.
+    if ((await pg.locator(`${E} .sp-ex-path`).count()) !== 6) throw new Error('Exercises does not list six paths')
+    await pg.click(`${E} .sp-ex-path[data-path="push"]`)
+    if (!/Push\s*3 \/ \d+/.test(await pg.locator(`${E} .sp-ex-path[data-path="push"]`).innerText())) throw new Error(`the Push path does not show your step: ${await pg.locator(`${E} .sp-ex-path[data-path="push"]`).innerText()}`)
+    // Step cards: Mastered, You are here, Next, Locked.
+    const states = await pg.locator(`${E} [data-sp="ex-path"] .sp-xstep`).evaluateAll((els) => els.map((e) => e.dataset.state))
+    if (states.slice(0, 4).join() !== 'done,done,now,next' || states.slice(4).some((x) => x !== 'locked')) throw new Error(`step states: ${states.join()}`)
+    if (!(await pg.locator(`${E} .sp-xstep.now`).innerText()).includes('You are here')) throw new Error('no "You are here"')
+    if (!(await pg.locator(`${E} .sp-xstep.done`).first().innerText()).includes('Mastered')) throw new Error('no "Mastered"')
+    if (!/^Next · (\d sessions? to go|unlocked)/m.test(await pg.locator(`${E} .sp-xstep.next`).innerText())) throw new Error('the next step does not say how many sessions to go')
+    // A real photo demo: both frames load for the step you are on.
+    await pg.waitForFunction(() => { const im = [...document.querySelectorAll('[data-sp="ex-path"] .sp-xstep.now img')]; return im.length === 2 && im.every((i) => i.complete && i.naturalWidth > 0 && /\/apps\/sport\/photos\/diamond_pushup-[01]\.webp/.test(i.src)) }, null, { timeout: 8000 })
+    // A locked step with no photo says "Demo opens when unlocked".
+    if (!(await pg.locator(`${E} .sp-xstep.locked [data-demo="locked"]`).count())) throw new Error('no locked step says "Demo opens when unlocked"')
+    if (!/Demo opens when unlocked/.test(await pg.locator(`${E} .sp-xstep.locked [data-demo="locked"]`).first().innerText())) throw new Error('the locked step has no "Demo opens when unlocked"')
+    // The detail panel: the big demo, sets / reps / rest, your best, form tips.
+    const D = `${E} [data-sp="ex-detail"]`
+    if ((await pg.locator(`${D} [data-sp="ex-name"]`).innerText()).trim() !== 'Diamond push-ups') throw new Error('the detail panel is not on your step')
+    if ((await pg.locator(`${D} .sp-ex-stats > div`).count()) !== 3) throw new Error('no sets / reps / rest')
+    if (!/^\d+ s$/.test((await pg.locator(`${D} .sp-ex-stats > div`).nth(2).locator('b').innerText()).trim())) throw new Error('no rest time')
+    if (!(await pg.locator(`${D} .sp-ex-tips li`).count())) throw new Error('no form tips')
+    if (!(await pg.locator(`${D} [data-sp="ex-best"]`).innerText()).trim()) throw new Error('no "Your best" line')
+    // Tapping another step shows it, and offers "Make … my step".
+    await pg.click(`${E} .sp-xstep[data-step="3"]`)
+    await pg.waitForFunction((d) => /Decline push-ups/.test(document.querySelector(`${d} [data-sp="ex-name"]`)?.textContent ?? ''), D, { timeout: 5000 })
+    if (!(await pg.locator(`${D} [data-sp="ex-make-step"]`).count())) throw new Error('no "Make … my step" on another step')
+    // Make harder: your step moves one step on, the history and the day you reached the old step stay.
+    await tgLog()
+    const lv = () => pg.evaluate((k) => { const s = JSON.parse(localStorage.getItem(k) || '{}'); return { level: s.trainLevels?.push?.level, reached: s.trainLevels?.push?.reached, sets: Object.keys(s.sets || {}).length, log: (s.trainLog || []).length } }, TGK)
+    const before = await lv()
+    await pg.click(`${D} [data-sp="ex-harder"]`)
+    await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLevels?.push?.level === 3, TGK, { timeout: 5000 })
+    await pg.waitForFunction(() => document.querySelector('[data-sp="ex-path"] .sp-xstep.now')?.textContent?.includes('Decline push-ups'), null, { timeout: 5000 })
+    const up = await lv()
+    if (up.sets !== before.sets || up.log !== before.log || !up.reached || up.reached['2'] !== before.reached['2']) throw new Error(`Make harder changed the history: ${JSON.stringify([before, up])}`)
+    await pg.click(`${D} [data-sp="ex-easier"]`)
+    await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{}').trainLevels?.push?.level === 2, TGK, { timeout: 5000 })
+    await pg.waitForFunction(() => document.querySelector('[data-sp="ex-path"] .sp-xstep.now')?.textContent?.includes('Diamond push-ups'), null, { timeout: 5000 })
+    // Search: a move's name finds its path and hides the other steps.
+    await pg.fill(`${E} [data-sp="ex-search"]`, 'pike')
+    await pg.waitForFunction(() => document.querySelectorAll('[data-sp="exercises"] .sp-ex-path').length === 1 && /Pike push-ups/.test(document.querySelector('[data-sp="ex-path"]')?.textContent ?? ''), null, { timeout: 5000 })
+    await pg.fill(`${E} [data-sp="ex-search"]`, '')
+    await pg.click(`${E} .sp-ex-path[data-path="push"]`)
+    // The way to Gear, and the older ladder editor still there.
+    if (!(await pg.locator(`${E} [data-sp="gear-side"] [data-sp="edit-gear"]`).count())) throw new Error('no link to what you own')
+    if (!(await pg.locator(`${E} [data-sp="ex-advanced"] [data-tr="edit-ladders"]`).count())) throw new Error('Edit ladders is gone from Exercises')
+    await closeFolds()
+    await tgFit('Exercises', `${E} .sp-ex-grid > *`, 1.95, 'sport-exercises-1920.png')
+    await tgRestore()
+  })
+
+  await step('Sport Track Progress: period switch, numbers, strength chart, Ready today, one path bar each with the real unlock checks, records, the 12-week program', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await tgOpen()
+    await tgSeed()
+    await tgLog()
+    await sportView('Progress')
+    const P = '[data-sp="progress"]'
+    await pg.waitForSelector(`${P} .sp-pp`, { timeout: 15000 })
+    // Period switch and four numbers.
+    if ((await pg.locator(`${P} [data-sp="period"] button`).count()) !== 3) throw new Error('no Week / 4 weeks / 12 weeks switch')
+    if ((await pg.locator(`${P} .sp-prog-kpis [data-kpi]`).count()) !== 4) throw new Error('Progress does not show four numbers')
+    await pg.click(`${P} [data-sp="period"] [data-period="12w"]`)
+    await pg.waitForFunction(() => document.querySelector('[data-sp="progress"] [data-period="12w"]')?.getAttribute('aria-pressed') === 'true', null, { timeout: 3000 })
+    if ((await pg.locator(`${P} [data-kpi="workouts"] b`).innerText()).trim() !== '2') throw new Error(`workouts in 12 weeks: ${await pg.locator(`${P} [data-kpi="workouts"] b`).innerText()}`)
+    await pg.click(`${P} [data-sp="period"] [data-period="week"]`)
+    await pg.waitForFunction(() => document.querySelector('[data-sp="progress"] [data-kpi="workouts"] b')?.textContent?.trim() === '1', null, { timeout: 3000 })
+    await pg.click(`${P} [data-sp="period"] [data-period="4w"]`)
+    // The chart has points for the chosen path (seeded sets on Push), and an empty path says so.
+    await pg.waitForSelector(`${P} [data-sp="chart"] .dot`, { timeout: 5000 })
+    await pg.click(`${P} .sp-pillbtn[data-path="core"]`)
+    await pg.waitForSelector(`${P} [data-sp="chart-empty"]`, { timeout: 3000 })
+    await pg.click(`${P} .sp-pillbtn[data-path="push"]`)
+    // Ready today is either a real score or one line saying what to log.
+    const ready = await pg.locator(`${P} [data-sp="ready"]`).innerText()
+    if (!/\d{1,3}\s|No real score yet/.test(ready)) throw new Error(`Ready today shows nothing useful: ${ready}`)
+    // Path progress: six bars; the Push bar has 2 full steps, your step part-filled by its real progress, "NN% to Decline push-ups".
+    if ((await pg.locator(`${P} .sp-pp`).count()) !== 6) throw new Error('Path progress does not show six paths')
+    const push = `${P} .sp-pp[data-path="push"]`
+    if (!/Step 3 of \d+ · Diamond push-ups/.test(await pg.locator(`${push} .sp-pp-name`).innerText())) throw new Error('the Push bar does not say your step')
+    const segs = await pg.locator(`${push} .sp-seg1 i`).evaluateAll((els) => els.map((e) => Math.round(parseFloat(e.style.width))))
+    if (segs[0] !== 100 || segs[1] !== 100 || !(segs[2] > 0 && segs[2] < 100) || segs.slice(3).some((n) => n !== 0)) throw new Error(`the Push segments: ${segs.join()}`)
+    const pct = /^(\d+)% to Decline push-ups$/.exec((await pg.locator(`${push} [data-pp="pct"]`).innerText()).trim())
+    if (!pct || Number(pct[1]) !== segs[2]) throw new Error(`"NN% to next" does not match the bar (${segs[2]}): ${await pg.locator(`${push} [data-pp="pct"]`).innerText()}`)
+    const checks = await pg.locator(`${push} .sp-pp-checks li`).allInnerTexts()
+    if (checks.length !== 3 || !/sessions in a row at the top[\s\S]*1 of 2/.test(checks[0]) || !/3 × 12/.test(checks[1])) throw new Error(`the unlock checks: ${checks.join(' | ')}`)
+    // Records and the 12-week program.
+    if (!(await pg.locator(`${P} [data-sp="records"] tbody tr`).count())) throw new Error('no personal records')
+    if (!/Diamond push-ups/.test(await pg.locator(`${P} [data-sp="records"]`).innerText())) throw new Error('the records miss Diamond push-ups')
+    if ((await pg.locator(`${P} [data-sp="program"] .sp-phases li`).count()) !== 5) throw new Error('the 12-week program does not show 5 phases')
+    // Everything from before is still there, folded.
+    if (!(await pg.locator(`${P} [data-sp="progress-more"] [data-tr="recovery"]`).count())) throw new Error('the recovery list is gone from Progress')
+    await closeFolds()
+    await tgFit('Progress', `${P} .sp-card, ${P} .sp-kpi`, 3.6, 'sport-progress-1920.png')
+    await tgRestore()
+  })
+
+  await step('Body & Food: Repeat meals as tiles (double-click logs, Undo takes it back); the Dashboard\'s "Paste from AI ›" lands on step 2', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await tgOpen()
+    // (the screenshots of earlier steps hide the toasts: show them again)
+    await pg.evaluate(() => document.querySelectorAll('style').forEach((st) => { if (/\.toasts \{ display: none/.test(st.textContent ?? '')) st.remove() }))
+    // The Dashboard's Food tile → step 2 with the cursor in the box.
+    await pg.click('[data-sp="paste-ai"]')
+    await pg.waitForSelector('.fdb [data-fb="step2"] .fpa-text', { timeout: 20000 })
+    await pg.waitForFunction(() => document.activeElement?.classList.contains('fpa-text'), null, { timeout: 5000 })
+    if (await pg.evaluate(() => localStorage.getItem('life_food_open'))) throw new Error('the one-shot flag was not cleared')
+    // Repeat meals: tiles, a double-click logs one, Undo.
+    const kcal = async () => Number((await pg.locator('.fdb [data-fb="kcal"] b').innerText()).replace(/[^\d]/g, ''))
+    await pg.waitForSelector('.fdb [data-fb="repeats"] .fdb-tile', { timeout: 10000 })
+    const k0 = await kcal()
+    const tile = pg.locator('.fdb [data-fb="repeats"] .fdb-tile[data-meal="sm-breakfast"]')
+    if (!/\d+ g protein · [\d,]+ kcal/.test(await tile.innerText())) throw new Error('a repeat meal tile has no protein and kcal')
+    await tile.dblclick()
+    // (several toasts at once are merged into "2 changes · Undo": any Undo button in the toasts takes the logged meal back)
+    await pg.waitForSelector('.toasts button:has-text("Undo")', { timeout: 15000 })
+    await pg.waitForFunction((k) => Number((document.querySelector('.fdb [data-fb="kcal"] b')?.textContent ?? '').replace(/[^\d]/g, '')) > k, k0, { timeout: 15000 })
+    await pg.locator('.toasts button', { hasText: 'Undo' }).last().click()
+    await pg.waitForFunction((k) => Number((document.querySelector('.fdb [data-fb="kcal"] b')?.textContent ?? '').replace(/[^\d]/g, '')) === k, k0, { timeout: 15000 })
+    // The top numbers are there, and the weight button opens the weight sheet.
+    for (const f of ['protein', 'kcal', 'weight', 'quick']) if (!(await pg.locator(`.fdb [data-fb="${f}"]`).count())) throw new Error(`Body & Food has no ${f} tile`)
+    if (process.env.TG_SHOTS) {
+      await pg.addStyleTag({ content: '.toasts { display: none !important; }' })
+      // A made-up answer in step 2, so the screenshot shows the live preview.
+      await pg.fill('.fdb [data-fb="step2"] .fpa-text', 'LIFE-FOOD v1\nMEAL | Lunch | now | Chicken and rice\n- Chicken breast, grilled | 180 g | P 56 | C 0 | F 6.5 | FIB 0 | KCAL 285 | CONF high | -\n- White rice, cooked | 200 g | P 5.4 | C 56 | F 0.6 | FIB 0.8 | KCAL 250 | CONF medium | -\nMEAL | Snack | now | Skyr\n- Skyr, plain | 250 g | P 27.5 | C 10 | F 0.5 | FIB 0 | KCAL 155 | CONF high | label\nEND')
+      await pg.setViewportSize({ width: 1920, height: 1080 })
+      await pg.evaluate(() => { window.scrollTo(0, 0); document.querySelectorAll('main.content, .main').forEach((m) => { m.scrollTop = 0 }) })
+      await pg.waitForTimeout(500)
+      await pg.screenshot({ path: `${process.env.TG_SHOTS}/sport-bodyfood-1920.png` })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+      await pg.fill('.fdb [data-fb="step2"] .fpa-text', '')
+    }
+    await pg.click('.fdb [data-fb="log-weight"]')
+    await pg.waitForSelector('.sheet [aria-label], .sheet-card', { timeout: 5000 })
+    await pg.keyboard.press('Escape')
+    // It fits: the new top of the page (numbers, steps 1 and 2, Repeat meals) has no sideways scroll at 1280–1920 and stays
+    // inside its height budget with 10% headroom (today's meals below it grow with what earlier steps logged, so they are not counted).
+    const fdbScreens = []
+    for (const [w, h] of [[1280, 800], [1440, 900], [1920, 1080]]) {
+      await pg.setViewportSize({ width: w, height: h })
+      await pg.waitForTimeout(350)
+      const m = await pg.evaluate(() => {
+        const b = document.querySelector('.fdb').getBoundingClientRect()
+        return { over: document.documentElement.scrollWidth - document.documentElement.clientWidth, cardOver: [...document.querySelectorAll('.fdb .fdb-card, .fdb .fdb-kpi')].some((c) => c.getBoundingClientRect().right > window.innerWidth + 1), screens: b.height / window.innerHeight }
+      })
+      fdbScreens.push(`${w}: ${m.screens.toFixed(2)}`)
+      if (m.over > 1 || m.cardOver) { await pg.setViewportSize({ width: 1440, height: 900 }); throw new Error(`Body & Food scrolls sideways at ${w}px`) }
+      if (m.screens > 1.9 * 0.9) { await pg.setViewportSize({ width: 1440, height: 900 }); throw new Error(`the top of Body & Food is ${m.screens.toFixed(2)} screens at ${w}px (budget 1.9, 1.71 with headroom)`) }
+    }
+    console.log(`  Body & Food top screens: ${fdbScreens.join(' · ')}`)
+    await pg.setViewportSize({ width: 1440, height: 900 })
+  })
+
+  await step('Sport Track Growth: "Am I growing?" opens the verdict with six signs; too little data says exactly what to log, enough data shows a score; back to the Dashboard', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await tgOpen()
+    await tgSeed()
+    await tgLog()
+    await pg.click('[data-sp="growing"]')
+    const G = '[data-sp="growth"]'
+    await pg.waitForSelector(`${G} [data-sp="verdict"]`, { timeout: 15000 })
+    const signs = await pg.locator(`${G} [data-sign]`).evaluateAll((els) => els.map((e) => [e.dataset.sign, e.dataset.state]))
+    if (signs.map((x) => x[0]).join() !== 'strength,weight,waist,training,protein,sleep') throw new Error(`the six signs: ${JSON.stringify(signs)}`)
+    if (signs.some((x) => !['good', 'improve', 'fix', 'none'].includes(x[1]))) throw new Error(`a sign has no state: ${JSON.stringify(signs)}`)
+    const verdict = await pg.locator(G).getAttribute('data-verdict')
+    const score = (await pg.locator(`${G} [data-sp="score"] .n`).textContent()).trim()
+    const noData = signs.filter((x) => x[1] === 'none').length
+    if (verdict === 'toolittle') {
+      // Nothing made up: no score, and one line to log for each missing sign.
+      if (score !== '—') throw new Error(`a score "${score}" with too little data`)
+      if ((await pg.locator(`${G} [data-sp="to-log"] li`).count()) !== noData || noData < 1) throw new Error('"log this" does not list what is missing')
+      if (!/Weigh in|Log your sets|Log your food|Log your sleep|Measure your waist/.test(await pg.locator(`${G} [data-sp="to-log"]`).innerText())) throw new Error('"log this" says nothing exact')
+    } else {
+      if (!/^\d{1,3}$/.test(score)) throw new Error(`the growth score is "${score}"`)
+      if (!/signs are green/.test(await pg.locator(`${G} [data-sp="basis"]`).innerText())) throw new Error('no "signs are green" line')
+      if (!(await pg.locator(`${G} [data-sp="verdict-headline"]`).innerText()).trim()) throw new Error('no verdict')
+    }
+    // Every sign has a bar; signs with no data say how to log them.
+    if ((await pg.locator(`${G} .sp-gbar`).count()) !== 6) throw new Error('the signs have no bars')
+    if (noData && !(await pg.locator(`${G} .sp-sign.none .sp-link`).count())) throw new Error('a sign with no data does not say where to log it')
+    // The chart, the zone you can change, the photo check with the Photo Locker.
+    if (!(await pg.locator(`${G} [data-sp="weight-chart"]`).count()) || !(await pg.locator(`${G} [data-sp="photo-check"] [data-sp="open-locker"]`).count())) throw new Error('no weight chart or photo check')
+    await pg.click(`${G} [data-sp="zone-edit"]`)
+    await pg.waitForSelector(`${G} .sp-zone-edit input`, { timeout: 3000 })
+    await pg.click(`${G} [data-sp="zone-edit"]`)
+    await closeFolds()
+    await tgFit('Growth', `${G} .sp-card, ${G} .sp-sign`, 2.8, 'sport-growth-1920.png')
+    await pg.click(`${G} [data-sp="growth-back"]`)
+    await pg.waitForSelector('[data-tg="home"] [data-tg="plan"]', { timeout: 5000 })
     await tgRestore()
   })
   // The coach (Ben): ONE card that says what to do today. Today → Now has a slim strip (training + Start, the

@@ -12,6 +12,7 @@ import { soundCoin } from '../soundKit'
 import { useAction } from '../ui'
 import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
 import { FoodCounter } from '../body/FoodCounter'
+import { FoodBoard } from '../body/FoodBoard'
 import { TodayTab } from '../body/today/TodayTab'
 import { ExerciseModal, MetricModal, WorkoutModal } from '../body/BodySheets'
 import type { DayProgress } from '@core/foodProgress'
@@ -67,7 +68,8 @@ export function Body({
       </TabPanel>
 
       <TabPanel page="body" id="food" value={tab} className="body-tab">
-        <FoodCounter />
+        <FoodBoard weight={state.latestWeight} onLogWeight={() => setMetricOpen(true)} />
+        <FoodCounter board />
       </TabPanel>
 
       <TabPanel page="body" id="growth" value={tab} className="body-tab">

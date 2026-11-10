@@ -1,23 +1,14 @@
-// Sport Track → Exercises and → Progress, for now: the parts Body → Training
-// had, each in one place, until the next batch rebuilds them (the exercise
-// library with chains and detail; PRs and charts).
-//   Exercises: every chain step by step (done, now, next, how to do each one,
-//              Move up / Not yet, Edit ladders) and the home program builder
-//              (minutes, days, equipment, focus).
-//   Progress:  recovery per muscle, calm warnings, strength and streak, the
-//              progress dashboard, challenges with badges, and "This week"
-//              (sets per muscle, workouts, by-hand logging).
-// Nothing here pays new points.
+// Sport Track → Progress, the parts that stay below the new Progress view (folded under "More"):
+// recovery per muscle, calm warnings, strength and streak, the progress dashboard, challenges with
+// badges, and "This week" (sets per muscle, workouts, by-hand logging). Also the badge sync
+// (useTrainingSync) that Exercises and Progress both run. Nothing here pays new points.
 import { useEffect, useMemo, useState } from 'react'
 import type { BodyState } from '@shared/api'
 import { dayKey } from '@core/dates'
 import { doneSessions, trainOf } from '@core/trainLog'
-import { gearSummary } from '@core/trainGear'
 import { todayPlan } from '@core/trainWeek'
 import { life } from '../bridge'
 import { readSoreness } from '../body/useBodyPlus'
-import { Roadmap } from '../body/training/Roadmap'
-import { ProgramBuilder } from '../body/training/ProgramBuilder'
 import { Challenges } from '../body/training/Challenges'
 import { ThisWeek } from '../body/training/ThisWeek'
 import { StrengthCard } from '../body/training/StrengthCard'
@@ -34,7 +25,7 @@ import '../body/body-theme.css'
 import '../body/training/training.css'
 
 /** As on Body → Training before: targets follow the week of the block, today's totals go into challenges, finished ones get a badge. */
-function useTrainingSync(st: any, today: string, refresh: () => void) {
+export function useTrainingSync(st: any, today: string, refresh: () => void) {
   const toast = useToast()
   useEffect(() => {
     const fresh = syncTraining(today)
@@ -46,36 +37,7 @@ function useTrainingSync(st: any, today: string, refresh: () => void) {
   }, [st, today, refresh, toast])
 }
 
-function SectionHead({ title, line }: { title: string; line: string }) {
-  return (
-    <header className="sp-sec-head">
-      <h2>{title}</h2>
-      <p>{line}</p>
-    </header>
-  )
-}
-
-export function SportExercises({ onGear }: { onGear: () => void }) {
-  const { st, ht, today, refresh } = useTraining()
-  useTrainingSync(st, today, refresh)
-  return (
-    <div className="body-page sp-more" data-sp="exercises">
-      <SectionHead title="Exercises" line="Your chains, step by step: tap a step to see how to do it. The full library with pictures comes next." />
-      <p className="sp-gear-link" data-sp="gear-side">
-        Your gear: <b>{gearSummary(trainOf(st ?? {}).gear)}</b> ·{' '}
-        <button type="button" className="sp-link inline" onClick={onGear} data-sp="edit-gear">
-          edit gear
-        </button>
-      </p>
-      <div className="bt">
-        <Roadmap st={st ?? {}} today={today} refresh={refresh} />
-        <ProgramBuilder st={st} ht={ht} today={today} onChanged={refresh} />
-      </div>
-    </div>
-  )
-}
-
-export function SportProgress({ body, onBody, onWallet }: { body: BodyState | null; onBody: (s: BodyState) => void; onWallet: () => void }) {
+export function ProgressMore({ body, onBody, onWallet }: { body: BodyState | null; onBody: (s: BodyState) => void; onWallet: () => void }) {
   const { st, ht, today, refresh } = useTraining()
   useTrainingSync(st, today, refresh)
   const state = st ?? {}
@@ -106,8 +68,11 @@ export function SportProgress({ body, onBody, onWallet }: { body: BodyState | nu
     }
   }, [])
   return (
-    <div className="body-page sp-more" data-sp="progress">
-      <SectionHead title="Progress" line="Strength, streak, sets per muscle, challenges and your workouts. Records and charts in one view come next." />
+    <details className="sp-fold" data-sp="progress-more">
+      <summary>
+        <b>More: recovery, warnings, strength, challenges and this week</b>
+        <small>Recovery per muscle, calm warnings, the progress dashboard, challenges with badges, sets per muscle and logging by hand</small>
+      </summary>
       <div className="bt">
         <section className="bdy-card" aria-label="Recovery">
           <h3 className="bdy-title">Recovery</h3>
@@ -119,6 +84,6 @@ export function SportProgress({ body, onBody, onWallet }: { body: BodyState | nu
         <Challenges st={st} ht={ht} today={today} onChanged={refresh} />
         {body && <ThisWeek state={body} onState={onBody} onWallet={onWallet} hold={hold} />}
       </div>
-    </div>
+    </details>
   )
 }
