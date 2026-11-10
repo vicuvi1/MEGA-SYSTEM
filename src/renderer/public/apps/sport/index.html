@@ -1953,7 +1953,9 @@
     function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        if (!raw) return JSON.parse(JSON.stringify(DEFAULT_STATE));
+        // A first start is already on the current routine version: without it the next open ran the one-time
+        // migration and switched Coach mode back off right after you turned it on.
+        if (!raw) { const fresh = JSON.parse(JSON.stringify(DEFAULT_STATE)); return window.SportKit && window.SportKit.migrateRoutine ? window.SportKit.migrateRoutine(fresh) : fresh; }
         const parsed = JSON.parse(raw);
         // The made-up examples older versions started with are not yours: drop them.
         const FAKE_PRS = { bench: '85 kg', run5k: '23m 15s', pullups: '18 reps', pushups: '55 reps' };

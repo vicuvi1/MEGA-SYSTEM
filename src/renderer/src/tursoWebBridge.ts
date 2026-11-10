@@ -615,8 +615,11 @@ export function createTursoWebBridge(): Bridge {
       if (document.visibilityState !== 'visible') return { db: 300_000, todo: Infinity, ext: Infinity, tick: Infinity }
       if (idle < 3 * 60_000 && document.hasFocus()) return { db: 3000, todo: 5000, ext: 30_000, tick: 120_000 }
       if (idle < 15 * 60_000) return { db: 20_000, todo: 60_000, ext: 120_000, tick: 120_000 }
-      // Away from this page for long (maybe adding tasks in Todoist itself): Todoist is still asked every minute.
-      return { db: 90_000, todo: 60_000, ext: 600_000, tick: 600_000 }
+      // Away from this page for long (maybe adding tasks in Todoist itself): Todoist is asked every 5 minutes, then
+      // every 10 once nothing was touched for an hour. Coming back to this window (focus) or touching it checks
+      // Todoist at once, so asking every minute while nobody looks only cost calls (the soak test's limit).
+      if (idle < 60 * 60_000) return { db: 90_000, todo: 300_000, ext: 600_000, tick: 600_000 }
+      return { db: 90_000, todo: 600_000, ext: 600_000, tick: 600_000 }
     }
     // CL7: the server not answering: wait longer each time (5 s … 4 min), not every few seconds.
     // (Saving a change in between waits too: see Mirror.flushOffline.)

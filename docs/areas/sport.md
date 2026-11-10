@@ -233,3 +233,4 @@ A fifth Body tab, **Growth** (Today · Food · Training · Growth · Progress), 
 ## Coach today on Body → Today (2026-11-09)
 
 The coach card sits at the top of Body → Today in full (training line + Start, meals with big ticks, weigh-in, bed, morning routine, line + tip); the moves stay in the workout card below it. A meal tick logs the usual standard-day meal through `addFoodMeal` (source saved, with its slot). No points. Details: [coach.md](coach.md).
+- **First start is on the current routine version (2026-11-10).** With no saved data the page migrates its default state too (`loadState` runs `migrateRoutine` on it), so it is saved with `routineV: 5`. Before this the next open ran the one-time v5 migration and switched Coach mode back off right after it was turned on (the smoke step "Sport Track onboarding" failed its first try on every run).

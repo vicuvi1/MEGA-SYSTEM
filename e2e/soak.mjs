@@ -74,9 +74,11 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
 const ctx = await browser.newContext({ viewport: { width: 1280, height: 860 }, timezoneId: 'Europe/Chisinau' })
 await ctx.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
 // 21:00 local (Chisinau) today: the run crosses midnight and the 04:00 day turn.
+// SOAK_START=HH:MM starts at another time (e.g. 23:00 with --short: the one idle hour crosses midnight).
 const startDay = new Date().toLocaleDateString('sv-SE', { timeZone: 'Europe/Chisinau' })
 const offset = new Date().toLocaleString('en-US', { timeZone: 'Europe/Chisinau', timeZoneName: 'longOffset' }).match(/GMT([+-]\d\d):?(\d\d)?/)
-const startAt = new Date(`${startDay}T21:00:00${offset ? `${offset[1]}:${offset[2] ?? '00'}` : '+02:00'}`)
+const startHm = /^\d\d:\d\d$/.test(process.env.SOAK_START ?? '') ? process.env.SOAK_START : '21:00'
+const startAt = new Date(`${startDay}T${startHm}:00${offset ? `${offset[1]}:${offset[2] ?? '00'}` : '+02:00'}`)
 await ctx.clock.install({ time: startAt })
 await ctx.addInitScript(() => localStorage.setItem('life_soak', '1'))
 const pg = await ctx.newPage()

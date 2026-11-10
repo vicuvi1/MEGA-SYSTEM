@@ -873,11 +873,21 @@ function seed(db, day, from, now) {
 /** Rewrites the shared copy's today numbers from the log (nothing when they already match). */
 function writeView(db, st, day, base = st) {
 	const final = withTotals(st, day, bodyTotals(db, day, st));
+	const numbersOnly = shape(base, day) === shape(final, day);
+	const now = Date.now();
+	let prevEdited = 0;
+	if (numbersOnly) try {
+		const prev = readSetting(db, "sport_tracker_json");
+		prevEdited = Number(prev?.editedAt ?? prev?.savedAt) || 0;
+	} catch {
+		prevEdited = 0;
+	}
 	const value = {
-		savedAt: Date.now(),
+		savedAt: now,
+		editedAt: numbersOnly && prevEdited ? prevEdited : now,
 		data: final
 	};
-	if (shape(base, day) === shape(final, day)) db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("sport_tracker_json", JSON.stringify(value));
+	if (numbersOnly) db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run("sport_tracker_json", JSON.stringify(value));
 	else writeSetting(db, "sport_tracker_json", value);
 	return final;
 }

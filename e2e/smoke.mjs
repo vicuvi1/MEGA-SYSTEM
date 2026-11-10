@@ -59,7 +59,8 @@ const waitedFor = (msg) => (String(msg).split('\n').find((l) => /waiting for/.te
 const step = async (name, fn, { retries = 0 } = {}) => {
   // SMOKE_ONLY=<words>: run only the steps whose name has them (handy while working on one part).
   // The sign-in step always runs: every other step needs it.
-  if (process.env.SMOKE_ONLY && !name.includes(process.env.SMOKE_ONLY) && !name.startsWith('opens and signs in')) return
+  // Several parts: separate them with "|" (e.g. SMOKE_ONLY="Sport Track|Body training").
+  if (process.env.SMOKE_ONLY && !process.env.SMOKE_ONLY.split('|').some((w) => name.includes(w)) && !name.startsWith('opens and signs in')) return
   for (let attempt = 0; ; attempt++) {
     try {
       await fn()
@@ -104,6 +105,8 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
   }
 }
 const pg = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(process.env.SMOKE_DSF ? { deviceScaleFactor: Number(process.env.SMOKE_DSF) } : {}) })).newPage()
+// SMOKE_CPU=<n>: run the page n times slower (CDP CPU throttling), to find races a slow Windows runner hits.
+if (Number(process.env.SMOKE_CPU) > 1) await (await pg.context().newCDPSession(pg)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.SMOKE_CPU) })
 const errors = []
 pg.on('pageerror', (e) => errors.push(`${e.message} @ ${pg.url()} ${String(e.stack ?? '').split('\n').slice(0, 4).join(' / ')}`))
 // LT3: anything the Content-Security-Policy blocks is a failure too (main page and the apps).

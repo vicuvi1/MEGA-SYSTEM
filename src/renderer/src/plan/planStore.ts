@@ -20,7 +20,9 @@ import type { CalEvent } from '@core/dayTime'
 import { limitsLine, type DayLimits } from '@core/planLimits'
 import type { TodoLookup, TodoTask } from '@core/todoist'
 import { markLabel, reviewItem, type Outcome, type ReviewItem, type ReviewRow } from '@core/planReview'
+import { autoSyncGap } from '@core/syncLabel'
 import { life } from '../bridge'
+import { idleFor } from '../lastUse'
 import { saveReview } from './planReviewStore'
 
 export type BlockStatus = 'syncing' | 'ok' | 'err'
@@ -674,12 +676,18 @@ async function look() {
 
 let liveOn = 0
 let timer: ReturnType<typeof setInterval> | null = null
-/** While a plan card is on screen: a light check every 60 s (visible page only), on focus and when the app notices outside changes. */
+let lookedAt = 0
+/**
+ * While a plan card is on screen: a light check every 60 s while you use the page (visible page only), slower while
+ * it sits untouched (autoSyncGap: every minute all night was most of a tab's calls), on focus and when the app
+ * notices outside changes.
+ */
 export function startLive(): () => void {
   liveOn++
   if (liveOn === 1) {
-    const tick = () => document.visibilityState === 'visible' && void look()
-    timer = setInterval(tick, 60_000)
+    const tick = () => document.visibilityState === 'visible' && ((lookedAt = Date.now()), void look())
+    const every = () => Date.now() - lookedAt >= autoSyncGap(idleFor()) && tick()
+    timer = setInterval(every, 60_000)
     window.addEventListener('focus', onBack)
     document.addEventListener('visibilitychange', onBack)
     window.addEventListener('life-external-changed', tick)
@@ -723,6 +731,7 @@ function onBack() {
 /** For tests: start over. */
 export function _reset() {
   cur = null
+  lookedAt = 0
   undo.clear()
   linked = false
   autoNote = null

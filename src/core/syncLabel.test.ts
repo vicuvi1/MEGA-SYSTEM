@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { autoSyncLine, syncErrorText, syncedLine } from './syncLabel'
+import { autoSyncGap, autoSyncLine, syncErrorText, syncedLine } from './syncLabel'
 
 const at = (h: number, m: number) => new Date(2026, 10, 8, h, m).getTime()
 
@@ -22,6 +22,26 @@ describe('autoSyncLine', () => {
   })
   it('one failure is not yet a warning', () => {
     expect(autoSyncLine({ lastCheckAt: at(12, 4), lastOkAt: at(12, 3), fails: 1 }, at(12, 5)).tone).toBe('ok')
+  })
+  it('says checks are slower while you are away, not paused', () => {
+    const r = autoSyncLine({ lastCheckAt: at(12, 4), lastOkAt: at(12, 4), fails: 0, away: true }, at(12, 12))
+    expect(r.text).toBe('Auto-sync on · last checked 12:04 (slower while you are away)')
+  })
+})
+
+describe('autoSyncGap', () => {
+  it('about a minute while you use the page, then slower the longer it sits untouched', () => {
+    expect(autoSyncGap(0)).toBe(55_000)
+    expect(autoSyncGap(2 * 60_000)).toBe(55_000)
+    expect(autoSyncGap(5 * 60_000)).toBe(3 * 60_000)
+    expect(autoSyncGap(8 * 3600_000)).toBe(30 * 60_000)
+  })
+  it('an untouched hour asks at most twice (it was 60 times)', () => {
+    const tick = 60_000
+    let last = -Infinity
+    let n = 0
+    for (let t = 15 * 60_000; t < 75 * 60_000; t += tick) if (t - last >= autoSyncGap(t)) (last = t), n++
+    expect(n).toBeLessThanOrEqual(2)
   })
 })
 
