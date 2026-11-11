@@ -3,6 +3,8 @@
 // the same services as the desktop on that copy, so every section behaves the
 // same as on the PC: caps, cooldowns, undo, shop, quests, streaks. Things only
 // the web has (embedded apps, Telegram polling, cloud snapshots) are here.
+import { readSimple, SIMPLE_KEY } from '@core/simpleMode'
+import { budgetCheck, budgetPrefs, cleanLedger, type PushSlot } from '@core/notifyBudget'
 import { lifeFitView, readLifeFit, saveLifeFit, saveTonight, type LifeFitView } from './web/lifeFitStore'
 import { answerPushIn, applyMark, claimPush, noteMark, queueOut, readPushLog, setShutdownItems, writePcSeen } from './web/benPushStore'
 import { rescueAnswer, rescueCheck, rescueMaybe } from './web/planShared'
@@ -1831,6 +1833,24 @@ export function createTursoWebBridge(): Bridge {
         await (await mirrorP).write((db) => snoozeNotif(db as any, id, until))
       },
       settings: async () => (await mirrorP).read((db) => cleanNotifSettings(JSON.parse(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(NOTIF_SETTINGS_KEY) as any)?.value || 'null'))),
+      simple: async () => (await mirrorP).read((db) => readSimple(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(SIMPLE_KEY) as any)?.value ?? null)),
+      saveSimple: async (p: any) =>
+        (await mirrorP).write((db) => {
+          const cur = readSimple(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(SIMPLE_KEY) as any)?.value ?? null)
+          const next = readSimple({ ...cur, ...p })
+          ;(db as any).prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(SIMPLE_KEY, JSON.stringify(next))
+          window.dispatchEvent(new CustomEvent('life-simple-changed', { detail: next }))
+          return next
+        }),
+      budget: async () => (await mirrorP).read((db) => cleanLedger(JSON.parse(((db as any).prepare("SELECT value FROM settings WHERE key = 'push_budget'").get() as any)?.value || 'null'), dayKey(new Date()))),
+      claimSlot: async (slot: PushSlot, day: string, weekday: number) =>
+        (await mirrorP).write((db) => {
+          const simple = readSimple(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(SIMPLE_KEY) as any)?.value ?? null)
+          const led = JSON.parse(((db as any).prepare("SELECT value FROM settings WHERE key = 'push_budget'").get() as any)?.value || 'null')
+          const v = budgetCheck(led, slot, day, budgetPrefs(simple), weekday)
+          if (v.ok && budgetPrefs(simple).on) (db as any).prepare("INSERT INTO settings (key, value) VALUES ('push_budget', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(v.next))
+          return v.ok
+        }),
       saveSettings: async (p: any) =>
         (await mirrorP).write((db) => {
           const cur = cleanNotifSettings(JSON.parse(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(NOTIF_SETTINGS_KEY) as any)?.value || 'null'))

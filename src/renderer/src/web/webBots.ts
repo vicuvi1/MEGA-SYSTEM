@@ -10,6 +10,9 @@ import { withTimeout } from '@core/ai'
 import type { BotBridgeConfig, BotLogEntry } from '@shared/api'
 import { parseTelegramText } from '@core/botCommands'
 import { addDays, calendarDay } from '@core/dates'
+import { checkPick, looksLikePick, pickBody, splitMustDos } from '@core/mustDoRule'
+import { addNotif } from './notifications'
+import { nightNotifId, nightNudgeDue, nightText, pickOpen } from '@core/benOneJob'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
 import { logReps, saveSport, sportBlob } from '../../../main/bodyLog'
 import { queueFinanceExpense } from './financeInbox'
@@ -2806,6 +2809,45 @@ His note: ${note}`,
     }
     // A reply to the morning question is today's plan.
     const asked = String(update.message?.reply_to_message?.text ?? '')
+    // Ben's one job (feature freeze): one "go to sleep" a night when you write after 23:15 (core/benOneJob.ts).
+    if (text && chat && allowed(cfg, chat)) {
+      const late = await mirror
+        .write((db) => {
+          const day = services.services(db).wallet.today()
+          // Once a night across the app and Telegram: the bell entry night:<day> is the shared mark.
+          const said = !!db.prepare('SELECT 1 FROM notifications WHERE id = ?').get(nightNotifId(day))
+          if (said || !nightNudgeDue(new Date(), getSetting(db as any, 'night_nudge_day'), day)) return false
+          setSetting(db as any, 'night_nudge_day', day)
+          addNotif(db as any, { id: nightNotifId(day), at: new Date().toISOString(), kind: 'bedtime', title: nightText(new Date()), body: null, action: { kind: 'page', page: 'sleep', label: 'Open Sleep' } })
+          return true
+        })
+        .catch(() => false)
+      if (late) await tg(update.__token, 'sendMessage', { chat_id: chat, text: nightText(new Date()) }).catch(() => null)
+    }
+    // Tomorrow's 3 must-dos: a reply to the 21:15 question (or any message in the 3 hours after it, or "tomorrow: …")
+    // must be exactly 3 concrete items (core/mustDoRule.ts); they are saved to tomorrow's plan.
+    if (text && !text.startsWith('/') && chat) {
+      const wanted = /pick tomorrow's 3/i.test(asked) || looksLikePick(text) || (splitMustDos(text).length >= 2 && (await mirror.read((db) => pickOpen(readSetting(db as any, 'pick_tomorrow') as any, new Date())).catch(() => false)))
+      if (wanted) {
+        if (!(await markSeen(key))) return null
+        if (!allowed(cfg, chat)) return null
+        const r = checkPick(pickBody(text))
+        let reply = esc(r.ok ? r.reply : `${r.reply}\nPick tomorrow's 3 again: reply with 3 lines.`)
+        if (r.ok) {
+          await mirror
+            .write((db) => {
+              const svc = services.services(db)
+              svc.focus.setPlan(r.items, new Date(), addDays(svc.wallet.today(), 1))
+              setSetting(db as any, 'pick_tomorrow', 'null')
+            })
+            .catch((e) => (reply = `⚠️ ${esc((e as Error).message)}`))
+        }
+        processed++
+        addLog(text.slice(0, 80), chat, r.ok, reply)
+        await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply, parse_mode: 'HTML', ...(r.ok ? {} : { reply_markup: { force_reply: true, input_field_placeholder: 'sport: 25 min, 30 push-ups' } }) }).catch(() => null)
+        return reply
+      }
+    }
     // Answers to the rhythm's questions: change today's plan, tomorrow's top 3, next week's big 3.
     if (text && !text.startsWith('/') && chat && (asked.includes(EDIT_ASK) || asked.includes(TOP3_ASK) || asked.includes(WEEK_ASK))) {
       if (!(await markSeen(key))) return null

@@ -96,7 +96,8 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
     await ctx.addInitScript(() => {
       try {
         const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
-        if (p.notif?.popups !== false) localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: false } }))
+        // smoke_popups=1: one step (the push budget) turns them on for itself.
+        if (localStorage.getItem('smoke_popups') !== '1' && p.notif?.popups !== false) localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: false } }))
       } catch {
         /* no storage on this page */
       }
@@ -122,6 +123,40 @@ try {
     await pg.fill('input', '1234')
     await pg.keyboard.press('Enter')
     await pg.waitForSelector('.td2', { timeout: 20000 })
+  })
+  // Feature freeze (2026-11-11): Today → Now shows only the 3 numbers (sleep, focus blocks started, must-dos out of 3),
+  // the next calendar block and last night's sleep against 23:30. Everything else Today showed is under one "More",
+  // closed by default. TODAY_SHOT=<file.png>: a picture of the new Today at 1920×1080.
+  await step('Today shows 3 numbers: sleep, focus blocks started and must-dos out of 3, the next calendar block and last night against 23:30; the rest under More', async () => {
+    await pg.setViewportSize({ width: 1920, height: 1080 })
+    const T = '[data-testid="three-numbers"]'
+    await pg.waitForSelector(T, { timeout: 15000 })
+    const tiles = await pg.locator(`${T} .tn-tile`).evaluateAll((t) => t.map((x) => x.dataset.n))
+    if (tiles.join() !== 'sleep,focus,must') throw new Error(`the tiles are ${tiles.join()}`)
+    await pg.waitForFunction(() => /^\d \/ 3$/.test(document.querySelector('[data-testid="tn-must"]')?.textContent?.trim() ?? ''), null, { timeout: 10000 })
+    if (!/^\d+$/.test((await pg.textContent('[data-testid="tn-focus"]')).trim())) throw new Error('no focus block count')
+    const sleep = await pg.locator(`${T} [data-n="sleep"]`).innerText()
+    if (!/23:30/.test(sleep) || !/06:45/.test(sleep)) throw new Error(`last night is not measured against 23:30 / 06:45: ${sleep}`)
+    if (!/Next: .+\d\d:\d\d|Nothing more in your calendar today/.test(await pg.locator('[data-testid="tn-next"]').innerText())) throw new Error('no next calendar block')
+    if (!/^Day score \d{1,3}\s*\/100$/.test((await pg.locator('[data-testid="day-score"]').innerText()).trim())) throw new Error('no day score')
+    // Nothing else on Now: the old content is folded under More.
+    const more = pg.locator('[data-tabpanel="now"] .td-now-more')
+    if (await more.evaluate((d) => d.open)) throw new Error('More is open on a fresh start')
+    if (await pg.locator('[data-tabpanel="now"] .thb').isVisible()) throw new Error("Ben's line shows outside More")
+    // Smaller: Now ends inside the first screen (with 10% headroom for the Windows build's taller fonts).
+    const bottom = await pg.evaluate(() => [...document.querySelectorAll('[data-tabpanel="now"] > *')].reduce((b, e) => Math.max(b, e.getBoundingClientRect().bottom), 0) / window.innerHeight)
+    if (bottom > 0.9) throw new Error(`Now ends at ${bottom.toFixed(2)} of the screen at 1920×1080`)
+    if (process.env.TODAY_SHOT) {
+      // Toasts hidden for the picture only: the later steps click Undo in them.
+      const hide = await pg.addStyleTag({ content: '.toasts, .nt-stack { display: none !important; }' })
+      await pg.waitForTimeout(600)
+      await pg.screenshot({ path: process.env.TODAY_SHOT })
+      await hide.evaluate((e) => e.remove())
+    }
+    // The older steps use what is under More: open it (remembered on this device).
+    await more.locator('summary').click()
+    await pg.waitForSelector('[data-tabpanel="now"] .thb', { timeout: 10000 })
+    await pg.setViewportSize({ width: 1440, height: 900 })
   })
   await step('Today shows Ben and the day', async () => {
     await pg.waitForSelector('.thb', { timeout: 15000 })
@@ -154,6 +189,107 @@ try {
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+  // The island as a quiet helper (Simple mode, owner 2026-11-11): the closed pill shows the 3 numbers, the open island
+  // only records things in one tap, and a must-do ticked there updates Today. The island page draws the app's real
+  // numbers (the page's own bridge, the soak hook); the tick it sends is run the way the desktop runs it.
+  await step('The island in Simple mode: the pill shows the 3 numbers, the open island records in one tap (no feeds), a must-do ticked there updates Today', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.waitForSelector('[data-testid="three-numbers"]', { timeout: 10000 })
+    // A must-do to tick (the made-up morning has none yet).
+    if (!(await pg.locator('[data-testid="three-numbers"] .tn-list li').count())) {
+      await pg.fill('[data-testid="three-numbers"] .tn-add input', 'read 20 pages')
+      await pg.click('[data-testid="three-numbers"] .tn-add button')
+      await pg.waitForSelector('[data-testid="three-numbers"] .tn-list li', { timeout: 8000 })
+    }
+    // The real numbers from the app (the soak hook gives the page's own bridge), as the island feed sends them.
+    await pg.evaluate(() => localStorage.setItem('life_soak', '1'))
+    await pg.reload()
+    await pg.waitForSelector('.td2, main.content, input', { timeout: 20000 })
+    if (!(await pg.$('main.content'))) {
+      await pg.fill('input', '1234')
+      await pg.keyboard.press('Enter')
+      await pg.waitForSelector('main.content', { timeout: 20000 })
+    }
+    await pg.waitForFunction(() => !!window.__life?.coach?.status, null, { timeout: 15000 })
+    const st = await pg.evaluate(() => window.__life.coach.status())
+    const sleepMark = (() => {
+      const n = st.today.sleep
+      const m = (t) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null)
+      const bed = m(n?.bedTime)
+      const up = m(n?.wakeTime)
+      if (bed == null && up == null) return 'none'
+      return bed != null && (bed - 720 + 1440) % 1440 <= 690 && up != null && up >= 180 && up <= 405 ? 'ok' : 'off'
+    })()
+    const now0 = Date.now()
+    const snap = {
+      at: now0, locked: false, simple: true,
+      three: { sleep: sleepMark, blocks: st.today.focusBlocks, mustDone: st.today.mustDone },
+      ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+      running: null, now: null, next: null, mustdos: st.mustdos, water: { ml: st.today.waterMl, target: st.today.waterTarget }, reps: [], alert: null
+    }
+    if (!snap.mustdos.some((x) => !x.done)) throw new Error('no open must-do for the island')
+    // The island page draws that snapshot: the pill shows the 3 numbers; opened, only quick recording.
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    try {
+      ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+      await ip.addInitScript((sn) => {
+        const cbs = {}
+        window.__island = { actions: [] }
+        window.desktop = new Proxy({
+          islandAction: (a) => { window.__island.actions.push(a) },
+          setIslandPrefs: async () => null,
+          onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb({ ...sn, at: Date.now() }), 50) }
+        }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+      }, snap)
+      await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+      await ip.waitForSelector('.di-pill [data-testid="island-three"]', { timeout: 15000 })
+      const pill = (await ip.textContent('.di-pill [data-testid="island-three"]')).trim()
+      if (!new RegExp(`(Sleep ✓|Sleep ✗|Bed 23:30) · \\d+ blocks? · ${Math.min(3, snap.three.mustDone)}/3`).test(pill)) throw new Error(`the pill says "${pill}"`)
+      await ip.click('.di-pill')
+      await ip.waitForSelector('[data-testid="island-simple"]', { timeout: 5000 })
+      const q = await ip.locator('[data-testid="island-simple"] .dis-grid button').evaluateAll((b) => b.map((x) => x.dataset.q).join())
+      if (q !== 'start,bed,wake,water,meal' && q !== 'stop,bed,wake,water,meal') throw new Error(`the open island's buttons: ${q}`)
+      if (await ip.locator('.di-panel .di-pager, .di-panel .ipg, .di-alert-strip').count()) throw new Error('the open island still shows its pages or feeds')
+      const first = snap.mustdos.find((x) => !x.done)
+      await ip.locator(`[data-testid="island-simple"] .dis-must[data-i="${first.i}"]`).click()
+      await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'mustdo'), null, { timeout: 5000 })
+      const act = await ip.evaluate(() => window.__island.actions.find((a) => a.kind === 'mustdo'))
+      if (act.i !== first.i) throw new Error(`the island ticked must-do ${act.i}, not ${first.i}`)
+      // The desktop runs that action in the app (IslandFeed: life.focus.togglePlan(i)): Today shows the tick.
+      await pg.evaluate((i) => window.__life.focus.togglePlan(i), act.i)
+      await open('today')
+      await pg.click('.td2 .ptabs [data-tab="now"]')
+      await pg.waitForFunction((n) => document.querySelector('[data-testid="tn-must"]')?.textContent?.trim() === `${n} / 3`, Math.min(3, st.today.mustDone + 1), { timeout: 15000 })
+    } finally {
+      await ip.context().close()
+      await pg.evaluate(() => localStorage.removeItem('life_soak'))
+    }
+  })
+  // Simple mode (on by default): Tasks, focus goals, the weekly goal check-in and loot are hidden, never deleted;
+  // Settings → Simple mode brings them back. The rest of the run uses the full app (Simple mode off; the push budget stays on).
+  await step('Simple mode is on by default and hides the unused modules; Settings → Simple mode brings them back', async () => {
+    await pg.waitForSelector('aside.sb .sb-item[aria-label="Today"]', { timeout: 10000 })
+    if (await pg.locator('aside.sb .sb-item[aria-label="Tasks"]').count()) throw new Error('Tasks is in the menu in Simple mode')
+    if (await pg.locator('.td2 .ptabs [data-tab="tasks"]').count()) throw new Error('Today has a Tasks tab in Simple mode')
+    await open('goals')
+    await pg.waitForSelector('.ptabs [data-tab="week"]', { timeout: 10000 })
+    await pg.click('.ptabs [data-tab="week"]')
+    await pg.waitForFunction(() => /hidden in Simple mode/.test(document.querySelector('main.content')?.textContent ?? ''), null, { timeout: 8000 })
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Simple mode' }).first().click()
+    const sw = pg.locator('[data-testid="simple-mode"] [role="switch"][aria-label="Simple mode"]')
+    await sw.waitFor({ timeout: 8000 })
+    await pg.waitForFunction(() => document.querySelector('[data-testid="simple-mode"] [role="switch"][aria-label="Simple mode"]')?.getAttribute('aria-checked') === 'true', null, { timeout: 8000 })
+    if ((await pg.locator('[data-testid="simple-mode"] [role="switch"][aria-label="Afternoon nudge"]').getAttribute('aria-checked')) !== 'false') throw new Error('the afternoon nudge is on by default')
+    if (!/Pushes today: \d of 4/.test(await pg.textContent('[data-testid="push-count"]'))) throw new Error('no push count')
+    await sw.click()
+    await pg.waitForSelector('aside.sb .sb-item[aria-label="Tasks"]', { timeout: 8000 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="tasks"]', { timeout: 8000 })
+  })
   // Sport Track: one of its sections in the top bar (Dashboard · Workout · Exercises · Progress · Body & Food), and the
   // Classic tracker (the old embedded app) from its ⋯ menu.
   const sportView = async (name) => {
@@ -241,7 +377,11 @@ try {
     // Your day stays beside the tabs on a laptop (no Day tab there).
     if (!(await pg.locator('.td2 .cmd-side .ds').first().isVisible())) throw new Error('"Your day" is not beside the tabs')
     const sizes = []
+    // Now as it opens on a fresh start (More closed); More comes back open for the older steps.
+    const nowMore = (open) => pg.evaluate((o) => document.querySelectorAll('.td-now-more').forEach((d) => { d.open = o }), open)
+    await nowMore(false)
     for (const id of ids) sizes.push(`${id} ${((await tabFit('.td2', id)).scroll / 654).toFixed(2)}`)
+    await nowMore(true)
     // Sunday and Monday (the run follows the real date): "Pick your top 3 for this week" is one slim line on Now; Pick opens the chips.
     await pg.click('.td2 .ptabs [data-tab="now"]')
     const wk3 = pg.locator('[data-tabpanel="now"] .wk3')
@@ -6523,7 +6663,18 @@ try {
     await pg.waitForSelector('.sy-list .sy-block:has-text("Review notes")', { state: 'detached', timeout: 5000 })
     await pg.click('.sy-filters [data-filter="tomorrow"]')
     await pg.waitForSelector('.sy-block:has-text("Review notes"):has-text("every day")', { timeout: 5000 })
-    await pg.click('.sy-filters [data-filter="today"]')
+    // Back to Today. On CI (slower, taller fonts) a card that came late (the focus boost's "How did it go?", which
+    // closeBoost only waits 1.2 s for) sat on this button for the whole 30 s: close it, then click; if something still
+    // covers the button, say what and press it directly (the filter is what this checks, not the card).
+    await closeBoost()
+    const todayFilter = pg.locator('.sy-filters [data-filter="today"]')
+    await todayFilter.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {})
+    if (!(await todayFilter.click({ timeout: 8000 }).then(() => true, () => false))) {
+      const on = await todayFilter.evaluate((b) => { const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return e ? `${e.tagName.toLowerCase()}.${[...e.classList].join('.')}` : 'nothing' }).catch((e) => `no Today filter (${String(e.message).split('\n')[0]})`)
+      console.log(`  note: the Today filter was covered by ${on}; pressed it directly`)
+      await todayFilter.dispatchEvent('click', undefined, { timeout: 5000 })
+    }
+    await pg.waitForFunction(() => document.querySelector('.sy-filters [data-filter="today"]')?.classList.contains('on'), null, { timeout: 5000 })
     // Stats: the full window.
     await pg.click('.sy .ptabs [data-tab="stats"]')
     await pg.waitForSelector('.sy-where .mh-donut circle:not(.bg)', { timeout: 8000 })
@@ -8256,6 +8407,98 @@ try {
     const ids = inDrive.filter((f) => f.appProperties?.lsApp === 'locker').map((f) => f.appProperties.lsId)
     if (new Set(ids).size !== ids.length) throw new Error('an item was uploaded twice')
     if (inDrive.filter((f) => f.name === 'front-made-up.jpg').length !== 1) throw new Error('the photo is not in Drive exactly once')
+  })
+
+  // The daily push budget (feature freeze, core/notifyBudget.ts): 7 notifications arrive (the 5 push slots and 2 others);
+  // at most 4 slots are claimed and only those may reach Windows; the others stay silent in the bell.
+  await step('The notification budget caps at 4 a day: only the day\'s pushes may pop up, each once; the rest stays silent in the bell', async () => {
+    // This step turns pop-ups on for itself and uses the page's soak hook (window.__life) to add made-up notifications.
+    await pg.evaluate(() => {
+      const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
+      localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: true } }))
+      localStorage.setItem('smoke_popups', '1')
+      localStorage.setItem('life_soak', '1')
+    })
+    try {
+      await reloadApp()
+      await pg.waitForFunction(() => !!window.__life?.notifications?.claimSlot, null, { timeout: 15000 })
+      const r = await pg.evaluate(async () => {
+        const life = window.__life
+        window.__pushed = []
+        window.desktop = new Proxy({ notify: async (n) => (window.__pushed.push(n.id), true) }, { get: (t, k) => (k in t ? t[k] : () => undefined) })
+        document.hasFocus = () => false
+        await life.notifications.saveSimple({ afternoon: true })
+        const d = new Date(Date.now() - 4 * 3600_000)
+        const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const ids = [...['morning', 'afternoon', 'weekly', 'plan', 'winddown'].map((s) => `budget:${s}:${day}`), 'ben:smoke-budget-1', 'water:smoke-budget-2']
+        const t0 = Date.now() - 60_000
+        for (const [i, id] of ids.entries()) await life.notifications.add({ id, at: new Date(t0 + i * 1000).toISOString(), kind: 'ben', title: `Life System: test ${i + 1}`, body: null, action: null })
+        // The toasts check 3 at a time: ask a few times.
+        for (let k = 0; k < 5; k++) {
+          document.dispatchEvent(new Event('visibilitychange'))
+          await new Promise((ok) => setTimeout(ok, 700))
+        }
+        const led = await life.notifications.budget()
+        const bell = (await life.notifications.list()).map((n) => n.id)
+        await life.notifications.saveSimple({ afternoon: false })
+        return { pushed: window.__pushed, sent: led.sent, bell, ids }
+      })
+      if (r.sent.length !== 4) throw new Error(`${r.sent.length} push slots used, not 4: ${r.sent.join(', ')}`)
+      if (r.pushed.length > 4 || r.pushed.some((id) => !id.startsWith('budget:'))) throw new Error(`Windows got ${r.pushed.join(', ')}`)
+      if (!r.bell.includes('ben:smoke-budget-1') || !r.bell.includes('water:smoke-budget-2')) throw new Error('the other notifications are not in the bell')
+      console.log(`  push budget: slots ${r.sent.join(', ')} · Windows ${r.pushed.length}`)
+    } finally {
+      await pg.evaluate(() => {
+        const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
+        localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: false } }))
+        localStorage.removeItem('smoke_popups')
+        localStorage.removeItem('life_soak')
+      })
+      await reloadApp()
+    }
+  })
+
+  // Ben's one job (feature freeze): from 21:15 Today asks for tomorrow's 3 must-dos and refuses vague ones
+  // ("sport", "Dorm": one word, no number); exactly 3 concrete items are saved to tomorrow's plan.
+  await step("A vague must-do is rejected: tomorrow's 3 need a number or minutes each, exactly 3 are saved", () => atTime('21:30', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    const P = '[data-testid="pick-tomorrow"]'
+    await pg.waitForSelector(P, { timeout: 10000 })
+    await pg.fill(`${P} textarea`, 'sport\nDorm\nread')
+    await pg.click(`${P} button[type="submit"]`)
+    await pg.waitForSelector(`${P} [data-testid="pick-reply"].tn-err`, { timeout: 5000 })
+    if (!/Too vague/.test(await pg.textContent(`${P} [data-testid="pick-reply"]`))) throw new Error('"sport / Dorm / read" was not called vague')
+    await pg.fill(`${P} textarea`, 'sport: 25 min, 30 push-ups\nread 20 pages')
+    await pg.click(`${P} button[type="submit"]`)
+    await pg.waitForFunction((p) => /exactly 3/.test(document.querySelector(`${p} [data-testid="pick-reply"]`)?.textContent ?? ''), P, { timeout: 5000 })
+    await pg.fill(`${P} textarea`, 'sport: 25 min, 30 push-ups\nread 20 pages\nclean the dorm 15 min')
+    await pg.click(`${P} button[type="submit"]`)
+    await pg.waitForSelector(`${P} [data-testid="pick-reply"].tn-ok`, { timeout: 8000 })
+    if (!/clean the dorm 15 min/.test(await pg.textContent(`${P} [data-testid="pick-reply"]`))) throw new Error("tomorrow's 3 were not saved")
+  }))
+
+  // The honest day score: a day with nothing in it (no sleep logged, no focus, no must-dos) is 0, never 96.
+  await step('An empty day scores 0: no must-dos, no focus blocks and no sleep logged give a day score of 0/100', async () => {
+    const empty = new Date(fakeNow())
+    empty.setDate(empty.getDate() + 40)
+    empty.setHours(10, 0, 0, 0)
+    await pg.context().clock.setSystemTime(empty.getTime())
+    try {
+      await reloadApp()
+      await pg.setViewportSize({ width: 1440, height: 900 })
+      await open('today')
+      await pg.click('.td2 .ptabs [data-tab="now"]')
+      await pg.waitForSelector('[data-testid="three-numbers"]', { timeout: 15000 })
+      await pg.waitForFunction(() => document.querySelector('[data-testid="tn-must"]')?.textContent?.trim() === '0 / 3', null, { timeout: 10000 })
+      const n = await pg.evaluate(() => ({ focus: document.querySelector('[data-testid="tn-focus"]')?.textContent?.trim(), sleep: document.querySelector('[data-testid="tn-sleep-result"]')?.textContent?.trim(), score: document.querySelector('[data-testid="day-score"]')?.textContent?.replace(/\s+/g, ' ').trim() }))
+      if (n.focus !== '0' || n.sleep !== 'Not logged') throw new Error(`the made-up empty day is not empty: ${JSON.stringify(n)}`)
+      if (n.score !== 'Day score 0/100') throw new Error(`an empty day scores "${n.score}"`)
+    } finally {
+      await pg.context().clock.setSystemTime(fakeNow())
+      await reloadApp()
+    }
   })
 
   await step('no uncaught page errors', async () => {

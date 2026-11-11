@@ -25,6 +25,8 @@ let n = 0
 function world(settings: Record<string, unknown>) {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests check the older senders, so the daily push budget (Simple mode) is off here.
+  remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '{"budget":false}')`)
   for (const [k, v] of Object.entries(settings)) remote.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, typeof v === 'string' ? v : JSON.stringify(v)])
   const sent: { method: string; body: any }[] = []
   vi.stubGlobal('fetch', async (url: string, init: { body?: string } = {}) => {

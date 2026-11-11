@@ -34,6 +34,7 @@ import '../lifeExtras.css'
 import '../rewards/rewards.css'
 import '../rewards/rewards2.css'
 import '../rewards/shop.css'
+import { useSimple } from '../useSimple'
 
 type Tab = 'now' | 'unlock' | 'all' | 'history' | 'earn'
 const TABS: { id: Tab; label: string; title: string }[] = [
@@ -78,6 +79,7 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
     }
   })
   const [ruling, setRuling] = useState<number | null>(null)
+  const simple = useSimple()
   const [reveal, setReveal] = useState<{ prize: ChestPrize; box: 'chest' | 'mystery' } | null>(null)
   const [unlocking, setUnlocking] = useState<Set<number>>(new Set())
   const [tab, setTabNow] = useState<Tab | null>(readTab)
@@ -531,7 +533,8 @@ export function Rewards({ state, onState, onWallet }: { state: ShopState; onStat
 
       <div className="rx-layout rx-one">
         <div className="rx-main">
-          <Surprises chests={state.chests} mystery={more?.mystery ?? null} coupons={coupons} today={today} onChest={openChest} onMystery={openMystery} />
+          {/* Simple mode hides loot: chests, the mystery box and coupons (nothing is deleted). */}
+          {!simple.on && <Surprises chests={state.chests} mystery={more?.mystery ?? null} coupons={coupons} today={today} onChest={openChest} onMystery={openMystery} />}
 
           <PageTabs
             page="shop"

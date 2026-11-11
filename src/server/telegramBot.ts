@@ -81,7 +81,10 @@ import { defaultSport, workoutCard } from '@core/sportCards'
 import { PROPOSAL_KEYBOARD, REVIEW_KEYBOARD, RHYTHM_PREFS, WEEKLY_KEYBOARD, cleanPrefs, dueRhythm, proposalText, reviewText, rhythmFor, RHYTHM, weeklyText, focusName, type RhythmState, missedTwiceText } from '@core/rhythm'
 import { missTwiceLine } from '@core/neverMissTwice'
 import { todayMode } from '../renderer/src/web/extrasContext'
-import { coachStatus } from '../renderer/src/web/coachStatus'
+import { coachStatus, weekFacts } from '../renderer/src/web/coachStatus'
+import { budgetCheck, budgetPrefs, cleanLedger, dueSlot, slotNotifId, slotText, type BudgetPrefs, type PushSlot } from '@core/notifyBudget'
+import { readSimple, SIMPLE_KEY } from '@core/simpleMode'
+import { weekSummaryText } from '@core/threeNumbers'
 import { handleMcp, type McpCtx, type McpLife } from './mcp'
 import { extToolsFor, hookFacts, hooksTick, loadAuto, ntfyAlso, type AutoConf } from './automation'
 import { flowFailTick, flowToolsFor, mergeTools } from './flows'
@@ -441,7 +444,13 @@ export async function runDaily(env: BotEnv & { botToken: string; chatId: string;
     }
   }
   const stealth = await mirror.read((db) => readSetting(db as any, 'discipline_stealth')).catch(() => false)
+  // The daily push budget (core/notifyBudget.ts): these old daily messages are not one of the 4, so they stay quiet.
+  const budgetOn = await mirror.read((db) => budgetPrefs(readSimple(getSetting(db as any, SIMPLE_KEY))).on).catch(() => true)
   const send = async (text: string, reply_markup?: unknown, token = env.botToken) => {
+    if (budgetOn) {
+      await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{ at: new Date().toISOString(), status: 'skipped', kind: `${job} message`, reason: 'Daily push budget: not one of the 4 pushes', text }])
+      return
+    }
     if (stealth) text = neutral(text)
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: 'POST',
@@ -700,7 +709,41 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       })
       .catch(() => null))
   /** `notif`: the bell entry to use (fixed id, so the app's own copy isn't doubled). `urgent`: through quiet hours. */
-  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean; notif?: Omit<Notif, 'readAt'>; urgent?: boolean; push?: unknown; throughQuiet?: boolean; buttons?: { label: string; do: string }[] } = {}): Promise<any> => {
+  // The daily push budget (feature freeze, core/notifyBudget.ts): read once per tick.
+  let budP: Promise<BudgetPrefs> | null = null
+  const budgetNow = () => (budP ??= mirror.read((db) => budgetPrefs(readSimple(getSetting(db as any, SIMPLE_KEY)))).catch(() => budgetPrefs(null)))
+  const weekdayNow = () => new Date(`${calendarDay(now, tz)}T12:00:00Z`).getUTCDay()
+  /**
+   * `slot`: one of the day's 4 pushes (07:00, 21:15, 23:00, the optional afternoon nudge; Sunday's summary).
+   * `userSet`: a reminder you set yourself ("remind me at 18"), which still rings.
+   */
+  const send = async (text: string, reply_markup?: unknown, opts: { always?: boolean; notif?: Omit<Notif, 'readAt'>; urgent?: boolean; push?: unknown; throughQuiet?: boolean; buttons?: { label: string; do: string }[]; slot?: PushSlot; userSet?: boolean } = {}): Promise<any> => {
+    // The daily push budget: only the 4 slots reach Telegram. Everything else is silent, in the app only
+    // (the bell), and counts as delivered there so nothing is retried every minute.
+    const bud = await budgetNow()
+    if (bud.on && !opts.userSet) {
+      const day = dayKey(now, tz)
+      const slot = opts.slot ?? null
+      const v = slot
+        ? await mirror
+            .write((db) => {
+              const r = budgetCheck(readSetting(db as any, 'push_budget') as any, slot, day, bud, weekdayNow())
+              if (r.ok) writeSetting(db as any, 'push_budget', r.next)
+              return r
+            })
+            .catch(() => ({ ok: false, reason: "Couldn't read today's push budget", next: null }))
+        : budgetCheck(null, null, day, bud)
+      if (!v.ok) {
+        await mirror
+          .write((db) => {
+            const n = opts.notif ?? notifFromMessage(text, reply_markup, new Date())
+            if (n) addNotif(db as any, n)
+          })
+          .catch(() => null)
+        note('skipped', text, v.reason ?? 'Daily push budget: in the app only')
+        return true
+      }
+    }
     // Quiet hours (N6): only your own reminders (🔔 ⏰) and urgent things go to Telegram; the rest waits in the bell.
     // Ben 2: the morning brief (your wake time) and the shutdown (before your bedtime) are timed by you: they pass.
     if (!opts.urgent && !opts.throughQuiet && stillQuiet(quietNowSet(notifSet, now), now, await wakeAt()) && !/^\s*(🔔|⏰)/u.test(text)) {
@@ -716,7 +759,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     // The app day (turns at 04:00), so a message at 00:30 still counts for the evening before.
     const today = dayKey(now, tz)
     const own = !opts.urgent && !opts.notif && !/^\s*(🔔|⏰)/u.test(text)
-    if (own) {
+    if (own && !bud.on) {
       const count = await mirror.read((db) => {
         try {
           const c = JSON.parse(getSetting(db as any, 'ben_sent_count') || 'null')
@@ -758,7 +801,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     // Stealth mode: neutral words in everything Ben sends on his own (H14).
     if (await mirror.read((db) => readSetting(db as any, 'discipline_stealth')).catch(() => false)) text = neutral(text)
     // Nudges in Ben's own words for this moment of your day (the fixed line if that fails).
-    text = await voiced(text)
+    if (!opts.slot) text = await voiced(text)
     const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -821,6 +864,29 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     return true
   }
   const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  /** The slot due now, if any, with neutral words (no food, body or personal details). */
+  async function budgetTick(): Promise<void> {
+    const bud = await budgetNow()
+    if (!bud.on) return
+    const day = dayKey(now, tz)
+    const led = await mirror.read((db) => cleanLedger(readSetting(db as any, 'push_budget'), day))
+    const slot = dueSlot(localMinuteOf(now, tz), weekdayNow(), bud, led.sent)
+    if (!slot) return
+    const facts = await mirror.read((db) => {
+      const items = services.services(db).focus.state(now).plan.items as { done?: boolean }[]
+      return { mustDone: items.filter((x) => x.done).length, mustTotal: items.length, week: slot === 'weekly' ? weekSummaryText(weekFacts(db, day)) : undefined }
+    })
+    const text = slotText(slot, facts)
+    // 21:15: the next reply on Telegram is read as tomorrow's 3 (webBots.ts, core/mustDoRule.ts).
+    if (slot === 'plan') await mirror.write((db) => writeSetting(db as any, 'pick_tomorrow', { day, at: now.toISOString() })).catch(() => null)
+    const lines = text.split('\n')
+    await send(esc(text), slot === 'plan' ? { force_reply: true, input_field_placeholder: 'sport: 25 min, 30 push-ups' } : undefined, {
+      slot,
+      always: true,
+      throughQuiet: true,
+      notif: { id: slotNotifId(slot, day), at: now.toISOString(), kind: slot === 'morning' || slot === 'plan' ? 'plan' : 'ben', title: lines[0].slice(0, 110), body: lines.slice(1).join(' · ').slice(0, 240) || null, action: { kind: 'page', page: 'today', label: 'Open Today' } }
+    })
+  }
   const pauseRow = [
     { text: '😴 30 min', callback_data: 'ns|' },
     { text: '⏸ Pause today', callback_data: 'np|' }
@@ -831,6 +897,14 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   if (box.length) {
     await mirror.write((db) => setSetting(db as any, OUTBOX, '[]')).catch(() => null)
     for (const m of box.filter((x) => now.getTime() - x.at < 6 * 3600_000)) await send(m.text, m.markup ?? undefined).catch(() => null)
+  }
+
+  // 0b) The day's few pushes (core/notifyBudget.ts): 07:00 your 3 must-dos, 21:15 pick tomorrow's 3,
+  // 23:00 wind down, the optional afternoon nudge, Sunday 18:00 the week's 3 numbers.
+  try {
+    await budgetTick()
+  } catch (e) {
+    console.error('push budget:', e)
   }
 
   const today0 = await mirror.read((db) => services.services(db).wallet.today(now))
@@ -865,15 +939,18 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
       return false
     }
   })
+  const budOn = (await budgetNow()).on
   for (const r of dueReminders(list, now)) {
     // Plain reminders you set still ring; Ben's check-ins wait.
     if (hush && r.kind === 'checkin') continue
+    // The push budget: Ben's own check-ins and promise questions are coach chatter (off); your reminders ring.
+    if (budOn && (r.kind === 'checkin' || (r as PromiseReminder).promise)) continue
     try {
       // Check-ins get sharper each time and name the week's missed promises.
       // HD: your reminder with Done / Snooze (the island's card answers the same reminder).
       // ME5: a promise is asked first as "You said you'd …" with Done / Tomorrow / Drop.
       const pr = r as PromiseReminder
-      const went = pr.promise && !pr.tries ? await send(promiseAsk({ ...pr, promise: { ...pr.promise, what: esc(pr.promise.what) } }, now), benKeyboard(promiseButtons(r.id)) ?? undefined, { always: true, buttons: promiseButtons(r.id) }) : await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : { inline_keyboard: [[{ text: '✓ Done', callback_data: `rm|d|${r.id}` }, { text: '⏰ 10 min', callback_data: `rm|s|${r.id}` }, { text: '1 hour', callback_data: `rm|h|${r.id}` }]] }, { always: true })
+      const went = pr.promise && !pr.tries ? await send(promiseAsk({ ...pr, promise: { ...pr.promise, what: esc(pr.promise.what) } }, now), benKeyboard(promiseButtons(r.id)) ?? undefined, { always: true, buttons: promiseButtons(r.id) }) : await send(r.kind === 'checkin' ? followUpText({ ...r, text: esc(r.text) }, promiseStats(list, now), tone) : `⏰ ${esc(r.text)}`, r.kind === 'checkin' ? { inline_keyboard: [pauseRow] } : { inline_keyboard: [[{ text: '✓ Done', callback_data: `rm|d|${r.id}` }, { text: '⏰ 10 min', callback_data: `rm|s|${r.id}` }, { text: '1 hour', callback_data: `rm|h|${r.id}` }]] }, { always: true, userSet: r.kind !== 'checkin' })
       // Only a message that really reached him moves the check-in on (and can count as ignored).
       if (!went) continue
       list = afterSend(list, r.id, now)

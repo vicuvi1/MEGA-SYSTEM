@@ -63,8 +63,10 @@ describe('rhythm: the plan', () => {
 describe('rhythm: reviews', () => {
   const r = { mustdosDone: 2, mustdosTotal: 3, focusMin: 60, plannedFocusMin: 100, blocksDone: 1, blocksPlanned: 2, waterMl: 2700, waterTarget: 2700, workoutDone: true, trainingPlanned: true }
   it('scores the day and names the weakest part', () => {
-    // Blocks kept are half of the focus part (K1).
-    expect(dayScore(r)).toBe(Math.round((2 / 3) * 40 + 0.6 * 15 + 0.5 * 15 + 15 + 15))
+    // The honest score of the 3 numbers: 2 of 3 must-dos, no focus blocks or sleep logged.
+    expect(dayScore(r)).toBe(22)
+    expect(dayScore({ ...r, mustdosDone: 0, mustdosTotal: 0, focusMin: 300 })).toBe(0)
+    expect(dayScore({ ...r, focusBlocks: 3, sleep: { bedTime: '23:00', wakeTime: '06:30' }, mustdosDone: 3 })).toBe(100)
     expect(weakest(r)).toContain('Focus 60 of 100')
     expect(weakest({ ...r, focusMin: 100 })).toContain('1 must-do left open')
     expect(weakest({ ...r, mustdosDone: 3, focusMin: 100 })).toContain('Everything done')
@@ -79,8 +81,9 @@ describe('rhythm: reviews', () => {
     expect(blocksKept(blocks, sessions, day, new Date(`${day}T20:00:00`))).toBe(2)
     expect(blocksKept(blocks, [], day)).toBe(0)
   })
-  it('says an unapproved plan still counts (K8) and asks after a second miss (K3)', () => {
-    expect(reviewText({ ...r, planApproved: false }, 50, 'x', [])).toContain('never approved')
+  it('shows the 3 numbers in the review and asks after a second miss (K3)', () => {
+    expect(reviewText({ ...r, focusBlocks: 2 }, 50, 'x', [])).toContain('Focus blocks started: 2')
+    expect(reviewText(r, 50, 'x', [])).toContain('Must-dos: 2 of 3 done')
     expect(missedTwiceText('Algebra')).toContain('slipped again')
   })
   it('picks the weakest metric for next week and reads typed lists', () => {

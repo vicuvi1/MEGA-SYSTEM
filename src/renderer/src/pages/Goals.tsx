@@ -30,6 +30,7 @@ import '../goals.css'
 import { Select } from '../Select'
 import { PageTabs, TabPanel, usePageTab } from '../PageTabs'
 import { QuarterTab } from '../ladder/QuarterTab'
+import { useSimple } from '../useSimple'
 
 const hm = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h${min % 60 ? String(min % 60).padStart(2, '0') : ''}` : `${min} min`)
 const dayText = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
@@ -65,6 +66,7 @@ const writeSeen = (s: Record<string, string>) => {
 
 export function Goals({ onGo }: { onGo?: (p: PageId) => void }) {
   const act = useAction()
+  const simple = useSimple()
   const { events } = useTodayEvents()
   const [v, setV] = useState<GoalsView | null>(null)
   const [tab, setTab] = usePageTab('goals', ['quarter', 'goals', 'week', 'hours', 'path'], 'quarter')
@@ -272,7 +274,8 @@ export function Goals({ onGo }: { onGo?: (p: PageId) => void }) {
         )}
       </TabPanel>
       <TabPanel page="goals" id="week" value={tab}>
-        <WeekCheckin v={v} cards={openMeasures} onAskBen={askBen} onOpen={(c) => setDetail(c.goal.id)} />
+        {/* Simple mode hides the weekly goal check-in (the goals and their numbers stay). */}
+        {simple.on ? <p className="hint">The weekly goal check-in is hidden in Simple mode (Settings → Simple mode).</p> : <WeekCheckin v={v} cards={openMeasures} onAskBen={askBen} onOpen={(c) => setDetail(c.goal.id)} />}
       </TabPanel>
       <TabPanel page="goals" id="hours" value={tab}>
         {(hourGoals.length > 0 || aims.length > 0) && (

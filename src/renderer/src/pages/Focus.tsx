@@ -10,6 +10,7 @@ import { useAction } from '../ui'
 import { barFill, useSeen } from '../motionKit'
 import { verdictStats, statsLine, type SessionRec } from '@core/sessionGoal'
 import { dayKey } from '@core/dates'
+import { useSimple } from '../useSimple'
 
 export function useFocus(): [FocusState | null, () => void, (s: FocusState) => void] {
   const [st, setSt] = useState<FocusState | null>(null)
@@ -57,6 +58,8 @@ function GoalRow({ g, onArchive }: { g: GoalProgress; onArchive: () => void }) {
 export function FocusInsights({ onWallet }: { onWallet: () => void }) {
   const act = useAction()
   const [st, , setSt] = useFocus()
+  // Simple mode hides focus goals (their data stays; Settings → Simple mode brings them back).
+  const simple = useSimple()
   const [goal, setGoal] = useState({ title: '', subject: '', deadline: '', hours: 20 })
   const [addMin, setAddMin] = useState({ subject: '', minutes: 30 })
   const [seenRef, seen] = useSeen<HTMLDivElement>()
@@ -123,6 +126,7 @@ export function FocusInsights({ onWallet }: { onWallet: () => void }) {
         </details>
       </section>
 
+      {!simple.on && (
       <section className="card">
         <header className="card-head">
           <h2>
@@ -157,6 +161,7 @@ export function FocusInsights({ onWallet }: { onWallet: () => void }) {
           </button>
         </div>
       </section>
+      )}
     </div>
   )
 }

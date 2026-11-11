@@ -34,6 +34,8 @@ import { TodayLadderLine } from '../ladder/TodayLadderLine'
 import { CoachToday } from '../coach/CoachToday'
 import { WeekPlanCard } from '../plan/WeekPlan'
 import { GrowthChip } from '../body/progress/GrowthLevel'
+import { ThreeToday } from '../ThreeToday'
+import { useSimple } from '../useSimple'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -82,6 +84,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   }
 
   const [ui] = useUiPrefs()
+  const simple = useSimple()
   // "More" stays as you left it (on this device).
   const [moreOpen, setMoreOpenState] = useState(() => {
     try {
@@ -94,6 +97,22 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     setMoreOpenState(v)
     try {
       localStorage.setItem('ls.todayMore', v ? '1' : '0')
+    } catch {
+      /* private window */
+    }
+  }
+  // Now's "More" (everything but the 3 numbers): closed by default, then as you left it (this device).
+  const [nowMore, setNowMoreState] = useState(() => {
+    try {
+      return localStorage.getItem('ls.nowMore') === '1'
+    } catch {
+      return false
+    }
+  })
+  const setNowMore = (v: boolean) => {
+    setNowMoreState(v)
+    try {
+      localStorage.setItem('ls.nowMore', v ? '1' : '0')
     } catch {
       /* private window */
     }
@@ -182,7 +201,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     // Must-dos are counted on the Now tab itself (the top row and the list), so its tab has no number.
     { id: 'now', label: 'Now', title: "What's on now, your Top 3, today's tasks and habits (1)" },
     { id: 'plan', label: 'Plan', title: "Ben's plan for today (2)" },
-    { id: 'tasks', label: 'Tasks', count: counts ? counts.tasks : null, title: `Everything else today${counts?.late ? `, ${counts.late} late` : ''}, and coming up (3)` },
+    // Simple mode hides tasks from Today (the Tasks tab); Settings → Simple mode brings it back.
+    ...(simple.on ? [] : [{ id: 'tasks', label: 'Tasks', count: counts ? counts.tasks : null, title: `Everything else today${counts?.late ? `, ${counts.late} late` : ''}, and coming up (3)` }]),
     { id: 'body', label: 'Body', count: health ? `${health.met}/4` : null, title: 'Reps, water, sleep and your healthy day (4)' },
     { id: 'week', label: 'Week', title: 'This week, the week score and more (5)' },
     ...(showDay ? [{ id: 'day', label: 'Day', title: 'Your day, hour by hour (6)' }] : [])
@@ -190,7 +210,11 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   const [tab, setTab] = usePageTab('today', tabs.map((t) => t.id), 'now')
   // Things that need the Now tab (closing the day, logging spending) bring it up.
   useEffect(() => {
-    const toNow = () => setTab('now')
+    // Closing the day and logging spending live under Now's "More": open it too.
+    const toNow = () => {
+      setTab('now')
+      setNowMoreState(true)
+    }
     const toPlan = () => setTab('plan')
     window.addEventListener('life-close-day', toNow)
     window.addEventListener('life-open-spend', toNow)
@@ -214,6 +238,14 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
         <div className="cmd-main">
           <PageTabs page="today" label="Today views" tabs={tabs} value={tab} onChange={setTab} />
           <TabPanel page="today" id="now" value={tab}>
+            {/* Feature freeze: the 3 numbers, the next calendar block and last night's sleep. Everything else is under More. */}
+            <ThreeToday />
+            <details className="td-now-more" open={nowMore} onToggle={(e) => setNowMore((e.target as HTMLDetailsElement).open)}>
+              <summary>
+                <span>More</span>
+                <small>Ben's line, the coach, tasks and habits</small>
+              </summary>
+              <div className="td-now-more-body">
             {/* One slim line on top (what's on, what's next, the plan to approve, ⋯), then the lists. */}
             <div className="now-top">
               <TodayHero slim name={ui.name} onGo={(p) => onGo(p)} />
@@ -236,6 +268,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
                 <DayFlow fold={life.coach?.today ? ['workout'] : undefined} summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} tasksSlot={tasksEl} weekSlot={weekEl} onCounts={setCounts} />
               </>
             )}
+              </div>
+            </details>
           </TabPanel>
           <TabPanel page="today" id="plan" value={tab} className="td-plan">
             <CoachPlan oneApprove hideReview onChange={() => onChange()} />
@@ -280,7 +314,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
             </TabPanel>
           )}
         </div>
-        {!narrow && <aside className="cmd-side">{day}</aside>}
+        {/* On Now the day column comes with More (the 3 numbers stand alone until you ask for more). */}
+        {!narrow && (tab !== 'now' || nowMore) && <aside className="cmd-side">{day}</aside>}
       </div>
       <DeepWork />
     </div>

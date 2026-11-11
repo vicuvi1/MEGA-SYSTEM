@@ -147,14 +147,12 @@ export function TodayHero({ name, onGo, slim = false }: { name?: string; onGo: (
   }
   const label: Record<string, string> = { focus: '▶ Start', running: '⏹ Stop & log', approve: '✓ Approve', plan: 'Plan my day', answer: '✅ Done', ask: 'Ask Ben' }
   const focusGoal = Math.max(50, st.goals.reduce((t, g) => t + g.perDayMin, 0))
+  // The honest day score: the 3 numbers only (core/threeNumbers.ts).
   const live = liveScore({
     mustDone: st.today.mustDone,
     openMustDos: st.mustdos.filter((x) => !x.done).map((x) => x.text),
-    focusMin: st.today.focusMin,
-    focusGoal,
-    waterMl: st.today.waterMl,
-    waterTarget: st.today.waterTarget,
-    workoutDone: !!st.today.workoutDone
+    focusBlocks: st.today.focusBlocks ?? 0,
+    sleep: st.today.sleep ?? null
   })
   // What the row's left side says and does: evening close, a block now/soon, or Ben's move.
   const evening = appHour(new Date(tick)) >= 19 && !closed && m.kind !== 'running'
@@ -299,7 +297,7 @@ export function TodayHero({ name, onGo, slim = false }: { name?: string; onGo: (
       </button>
       {/* Water shows once on Today: in the "Reps & water" card, where you log it. */}
       <div className="thb-nums">
-        <span className={live.score >= 70 ? 'good' : ''} title={`Today's score (Ben's evening review). Raise it: ${live.gains.map((g) => `${g.label} +${g.points}`).join(', ') || 'a perfect day'}`}>
+        <span className={live.score >= 70 ? 'good' : ''} title={`Today's score: sleep, focus blocks and must-dos. Raise it: ${live.gains.map((g) => `${g.label} +${g.points}`).join(', ') || 'a perfect day'}`}>
           <b>{live.score}</b> score
         </span>
         <span title={focusStreak(st.week) >= 2 ? `Focus streak: ${focusStreak(st.week)} days` : `Goal: ${focusGoal} min`} style={{ ['--p' as string]: `${Math.min(100, (st.today.focusMin / focusGoal) * 100)}%` }}>

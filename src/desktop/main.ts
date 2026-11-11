@@ -1,4 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, session, shell, Tray } from 'electron'
+import { budgetCheck, slotOfId, type BudgetLedger } from '../core/notifyBudget'
+import { calendarDay } from '../core/dates'
 import { clipWorthSaving } from '../core/islandActions'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { appendFileSync, existsSync } from 'node:fs'
@@ -252,8 +254,17 @@ if (firstCopy) void app.whenReady().then(async () => {
   // plays its own chime; a click opens Life System and runs the action.
   const shown = new Map<string, Notification>()
   const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  // The daily push budget (core/notifyBudget.ts), enforced here too: a Windows notification only for one of
+  // the day's 4 pushes (bell id budget:<slot>:<day>), each once, at most 4 a day; the Settings test passes.
+  let pushLedger: BudgetLedger | null = null
   handle('desktop:notify', (n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[]; urgent?: boolean }) => {
     if (!Notification.isSupported() || typeof n?.id !== 'string') return false
+    if (!n.id.startsWith('test:')) {
+      const day = calendarDay(new Date())
+      const v = budgetCheck(pushLedger, slotOfId(n.id), day, { on: true, afternoon: true })
+      if (!v.ok) return false
+      pushLedger = v.next
+    }
     // P20: during focus, Life System's own notifications wait (unless urgent, or a focus block's own).
     if (pcRef.current?.prefs().holdNotifs && pcRef.current.focus().running && !n.urgent && !n.id.startsWith('block:')) return false
     const title = String(n.title).slice(0, 120)

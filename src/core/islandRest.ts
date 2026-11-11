@@ -18,6 +18,8 @@ export type RestKind =
   | 'timer' | 'music' | 'soon' | 'captions' | 'alert' | 'winddown'
   // calm (nothing live)
   | 'now' | 'next' | 'time' | 'health' | 'nothing'
+  // Simple mode: the 3 numbers at a glance
+  | 'three'
   // the small clock beside it (only when you switched the clock on)
   | 'clock'
 
@@ -140,10 +142,22 @@ const SECOND_ORDER: RestKind[] = ['timer', 'soon', 'captions', 'alert', 'music',
 
 /** The resting island: one main item and at most one small extra. */
 export function restingView(i: RestInput): RestView {
+  // Simple mode: only a running timer is live; otherwise the 3 numbers (sleep, focus blocks, must-dos).
+  if (i.s.simple && i.s.three) {
+    const timer = lives(i).find((x) => x.kind === 'timer')
+    return { primary: timer ?? threeRest(i.s.three), secondary: null, hint: timer ? timer.text : '' }
+  }
   const live = lives(i)
   const primary = live[0] ?? calm(i)
   const rest = live.slice(1)
   let secondary = SECOND_ORDER.map((k) => rest.find((x) => x.kind === k)).find(Boolean) ?? null
   if (!secondary && i.clock && ['music', 'captions', 'alert', 'health'].includes(primary.kind)) secondary = { kind: 'clock', key: 'clock', text: '', time: '', tip: 'The time' }
   return { primary, secondary, hint: hintFor(primary, i) }
+}
+
+/** Simple mode's resting pill: "23:30 · 2 blocks · 1/3" (sleep target, or last night's ✓ / ✗). */
+export function threeRest(t: NonNullable<IslandSnapshot['three']>): RestItem {
+  const sleep = t.sleep === 'ok' ? 'Sleep ✓' : t.sleep === 'off' ? 'Sleep ✗' : 'Bed 23:30'
+  const text = `${sleep} · ${plural(t.blocks, 'block')} · ${Math.min(3, t.mustDone)}/3`
+  return { kind: 'three', key: `three:${text}`, text, time: '', tip: `Last night: ${t.sleep === 'ok' ? 'on time' : t.sleep === 'off' ? 'off target' : 'not logged'} (asleep by 23:30, up by 06:45) · ${plural(t.blocks, 'focus block')} started · ${Math.min(3, t.mustDone)} of 3 must-dos done` }
 }

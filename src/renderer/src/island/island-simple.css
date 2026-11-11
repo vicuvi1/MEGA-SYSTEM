@@ -1,0 +1,22 @@
+/* Simple mode's island (DesktopIsland.tsx simplePanel): a quiet helper for one-tap recording. */
+.di-simple { display: flex; flex-direction: column; gap: 10px; padding: 12px 14px 14px; overflow: auto; }
+.dis-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 30px; cursor: grab; }
+.dis-three { font-size: 14px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dis-acts { display: flex; gap: 4px; flex: none; }
+.dis-sec { display: grid; gap: 4px; }
+.dis-sec h4 { margin: 0 0 2px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.65; }
+.dis-must { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 10px; background: rgb(255 255 255 / 0.05); color: inherit; font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; }
+.dis-must:hover { background: rgb(255 255 255 / 0.09); }
+.dis-must i { flex: none; width: 18px; height: 18px; display: grid; place-items: center; border: 1.5px solid currentColor; border-radius: 6px; font-style: normal; font-size: 12px; font-weight: 700; opacity: 0.8; }
+.dis-must.done i { border-color: #c8f135; background: #c8f135; color: #101503; opacity: 1; }
+.dis-must span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dis-must.done span { opacity: 0.55; text-decoration: line-through; }
+.dis-none { margin: 0; font-size: 13px; opacity: 0.7; }
+.dis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.dis-grid button { padding: 9px 8px; border: 0; border-radius: 10px; background: rgb(255 255 255 / 0.07); color: inherit; font: inherit; font-size: 13px; cursor: pointer; }
+.dis-grid button:hover { background: rgb(255 255 255 / 0.12); }
+.dis-grid button[data-q='meal'] { grid-column: 1 / -1; }
+.dis-note { display: flex; gap: 6px; }
+.dis-note input { flex: 1 1 auto; min-width: 0; padding: 7px 9px; border: 1px solid rgb(255 255 255 / 0.14); border-radius: 9px; background: rgb(255 255 255 / 0.04); color: inherit; font: inherit; font-size: 13px; }
+.dis-note button { flex: none; padding: 7px 12px; border: 0; border-radius: 9px; background: #c8f135; color: #101503; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.rest-three { font-variant-numeric: tabular-nums; }

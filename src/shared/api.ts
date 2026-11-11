@@ -548,6 +548,13 @@ export interface LifeApi {
     /** Quiet hours, event warnings, travel times: synced, the server uses them too. */
     settings?(): Promise<import('@core/eventAlerts').NotifSettings>
     saveSettings?(p: Partial<import('@core/eventAlerts').NotifSettings>): Promise<import('@core/eventAlerts').NotifSettings>
+    /** Simple mode (synced `simple_mode`): hidden modules, the daily push budget, the afternoon nudge (core/simpleMode.ts). */
+    simple?(): Promise<import('@core/simpleMode').SimpleMode>
+    saveSimple?(p: Partial<import('@core/simpleMode').SimpleMode>): Promise<import('@core/simpleMode').SimpleMode>
+    /** Today's push slots used (synced `push_budget`, core/notifyBudget.ts). */
+    budget?(): Promise<import('@core/notifyBudget').BudgetLedger>
+    /** Claims a slot for a push from this device; false when the budget says no. */
+    claimSlot?(slot: import('@core/notifyBudget').PushSlot, day: string, weekday: number): Promise<boolean>
   }
   wallet: {
     summary(): Promise<Summary>
@@ -716,7 +723,8 @@ export interface LifeApi {
     /** Adds minutes to the running timer (web app). */
     extend?(minutes: number): Promise<FocusState>
     add(subject: string, minutes: number, day?: string): Promise<{ session: FocusSession; coins: number; state: FocusState }>
-    setPlan(items: import('@core/focus').PlanInput[]): Promise<DayPlan>
+    /** `day`: another day's must-dos (tomorrow's 3); today when left out. */
+    setPlan(items: import('@core/focus').PlanInput[], day?: string): Promise<DayPlan>
     togglePlan(index: number): Promise<{ plan: DayPlan; coins: number }>
     review(text: string | null, reasons: string[]): Promise<DayPlan>
     saveGoal(g: { id?: number; title: string; subject: string; deadline: string; hours: number }): Promise<FocusState>

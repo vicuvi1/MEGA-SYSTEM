@@ -67,6 +67,8 @@ import { kitAct, kitForIsland } from './islandKitFeed'
 import { weatherAlert, widgetAct, widgetsForIsland } from './widgets/widgetsFeed'
 import { autoAct, autoAlert, autoIslandView, autoTick, noteDone, startAutomations } from './automationsFeed'
 import { MOVE_CARD_EVENT, moveCardAlert } from '@core/islandMoveCard'
+import { islandAlertPasses } from '@core/notifyBudget'
+import { sleepCheck } from '@core/threeNumbers'
 
 const SEEN = 'ls.coachSeen'
 const DISMISSED = 'ls.islandDismissed'
@@ -107,6 +109,20 @@ let todoCache: { at: number; okAt: number; failed: boolean; list: { id: string; 
 let pointsWatch: { balance: number | null; fx: { id: string; delta: number; label: string; until: number } | null } = { balance: null, fx: null }
 /** MF11: today's money left (Finance Helper), read at most once a minute or when money changes. */
 let moneyCache: { at: number; v: { left: number; level: string } | null } = { at: 0, v: null }
+let simpleCache: { at: number; on: boolean } = { at: 0, on: true }
+if (typeof window !== 'undefined') window.addEventListener('life-simple-changed', (e) => {
+  simpleCache = { at: Date.now(), on: (e as CustomEvent<{ on?: boolean }>).detail?.on !== false }
+})
+
+/**
+ * Simple mode: the island is a quiet helper (owner, 2026-11-11). The pill shows the 3 numbers
+ * (or the running timer); nothing pops up except his own timers and reminders
+ * (islandAlertPasses); no Ben dot, nudge pill, points, story, weather moment, streak, saga or
+ * Custom Center mode. The data stays; Simple mode off brings it all back.
+ */
+function quietIsland(s: IslandSnapshot, three: NonNullable<IslandSnapshot['three']>): IslandSnapshot {
+  return { ...s, simple: true, three, alert: islandAlertPasses(s.alert) ? s.alert : null, ben: { ...s.ben, unread: 0 }, move: null, pointsFx: undefined, story: undefined, moment: undefined, streak: null, saga: null, points: undefined, center: null }
+}
 // LF4 / LF15: the saga's morning line, low-day wins and rank (read at most every 5 minutes).
 let sagaCache: { at: number; v: IslandSnapshot['saga'] } = { at: 0, v: null }
 if (typeof window !== 'undefined') window.addEventListener('life-saga-changed', () => (sagaCache.at = 0))
@@ -466,7 +482,7 @@ export function IslandFeed() {
     const rewards = (shop?.rewards ?? []).filter((r) => !r.archived && r.price > 0)
     const goal = shop ? rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b) => a.price - b.price).find((r) => r.price > shop.balance) ?? [...rewards].sort((a, b) => a.price - b.price)[0] ?? null : null
     const todayKey = localDayOf(now)
-    const live = liveScore({ mustDone: status.today.mustDone, openMustDos: status.mustdos.filter((x) => !x.done).map((x) => x.text), focusMin: status.today.focusMin, focusGoal: Math.max(50, status.goals.reduce((t, g) => t + g.perDayMin, 0)), waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone })
+    const live = liveScore({ mustDone: status.today.mustDone, openMustDos: status.mustdos.filter((x) => !x.done).map((x) => x.text), focusBlocks: status.today.focusBlocks ?? 0, sleep: status.today.sleep ?? null })
     const highlight = dayHighlight({ focusMin: status.today.focusMin, focusBefore: status.week.filter((d) => d.day < todayKey).map((d) => d.min), mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone, sportStreak: body?.streak ?? 0 })
     const celebrated = get<Record<string, number>>(CELEBRATED, {})
     // IC5, IC14: today's focus against its goal (the Today ring, the evening story).
@@ -787,7 +803,12 @@ export function IslandFeed() {
         })()
       }
     }
-    return {
+    // Simple mode (core/simpleMode.ts): read now and then; Settings tells at once.
+    if (now - simpleCache.at > 60_000 && life.notifications?.simple) {
+      simpleCache.at = now
+      simpleCache.on = await life.notifications.simple().then((m) => m.on).catch(() => simpleCache.on)
+    }
+    const snap: IslandSnapshot = {
       at: now,
       locked: false,
       ben: {
@@ -870,6 +891,9 @@ export function IslandFeed() {
         return { balance: shop.balance, goal: goal ? { title: goal.title, price: goal.price } : null }
       })()
     }
+    if (!simpleCache.on) return snap
+    const sc = sleepCheck(status.today.sleep ?? null)
+    return quietIsland(snap, { sleep: sc.met ? 'ok' : sc.bedOk == null && sc.upOk == null ? 'none' : 'off', blocks: status.today.focusBlocks ?? 0, mustDone: status.today.mustDone })
   }, [])
 
   // IS16 / IC9: one build at a time, and at most one more waiting (the 15 s
@@ -1364,11 +1388,20 @@ export function IslandFeed() {
             said = `🌇 Day closed${open.length ? ` · ${a.blocks === 'move' ? `${moved} moved to tomorrow` : `${open.length} dropped`}` : ''} · note drafted`
             break
           }
-          case 'open':
+          case 'open': {
             if (a.page === 'coach') put(SEEN, Date.now())
+            const toPage = a.page === 'food-paste' ? 'body:food' : a.page
+            // Simple mode's "Log a meal / Paste from AI": Body & Food opens on the paste box.
+            if (a.page === 'food-paste') {
+              try {
+                localStorage.setItem('life_food_open', 'paste')
+              } catch {
+                /* private window: the Food tab opens on its first page */
+              }
+            }
             // "season:wins" opens a page on one of its tabs (LF15: Open your wins).
-            if (a.page?.includes(':')) {
-              const [page, tab] = a.page.split(':')
+            if (toPage?.includes(':')) {
+              const [page, tab] = toPage.split(':')
               try {
                 localStorage.setItem(tabKey(page), tab)
               } catch {
@@ -1376,8 +1409,9 @@ export function IslandFeed() {
               }
               window.dispatchEvent(new CustomEvent('life-open-page', { detail: page }))
               window.dispatchEvent(new CustomEvent('life-open-tab', { detail: { page, tab } }))
-            } else if (a.page) window.dispatchEvent(new CustomEvent('life-open-page', { detail: a.page }))
+            } else if (toPage) window.dispatchEvent(new CustomEvent('life-open-page', { detail: toPage }))
             break
+          }
           case 'chat': {
             // The command bar: "focus 50 algebra" starts a timer; the rules do
             // money, water, reps, sleep (free, instant); only the rest goes to Ben.

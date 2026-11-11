@@ -39,6 +39,13 @@ Keep it short and true: anything written here is what the next session will trus
 - Lessons: Windows fails tests Linux passes (fonts taller, slower): keep >=10% height headroom, mark DOM rows instead of counting them, never leave the page clock moved.
 - Next: Tracker -> real progressive program (agent running); keep batches small and cheap.
 
+### 2026-11-11: Feature freeze, the 3 numbers (branch simplify-three-numbers, not pushed)
+- Phase 0: Sport Dashboard/Growth shorter at 1280 (move names on one line, even verdict row); the Study Time step no longer sticks on the Today filter.
+- Today → Now = sleep, focus blocks, 3 must-dos, next block, honest day score (an empty day is 0); the rest under More.
+- At most 4 pushes a day through `core/notifyBudget.ts` (server tick, NotifToasts, desktop:notify); the rest is silent in the bell.
+- Ben: 21:15 tomorrow's 3 (vague ones refused), one "go to sleep" after 23:15, Sunday summary. Simple mode on by default.
+- Next: the owner checks the 4 push times on his phone; push the branch after a green Windows release.
+
 <!-- Template for a new entry:
 ### YYYY-MM-DD: short title
 - Goal:

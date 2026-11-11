@@ -421,6 +421,12 @@ span.sp-wk-name { cursor: default; font-size: 16px; font-weight: 650; }
   .sp-mv, .sp-mv-static { padding: 7px 8px; }
   .sp-moves li > .sp-mv > b, .sp-mv-static > b { font-size: 18px; }
   .sp-coach { gap: 10px; }
+  /* The move list is narrow here: each name and its line stay on one line (cut with …) instead of one word per line. */
+  .sp-mv { gap: 10px; }
+  .sp-mv .sp-pic.md { width: 56px; height: 42px; }
+  .sp-move-name { font-size: 15.5px; }
+  .sp-move-name, .sp-move-name small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sp-change { font-size: 12.5px; }
   .sp-coach-line { font-size: 16px; }
   .sp-coach-btns { gap: 8px; }
   .sp-coach-btns .sp-btn { min-height: 44px; }
@@ -431,4 +437,9 @@ span.sp-wk-name { cursor: default; font-size: 16px; font-weight: 650; }
   .sp-week { gap: 10px; }
   .sp-bars { height: 84px; }
   .sp-timer-big { font-size: 60px; }
+}
+/* Small laptops (under 1400 px): a narrower demo picture gives the move list room. */
+@media (max-width: 1399px) {
+  .sp-today-body { grid-template-columns: 200px minmax(0, 1fr); gap: 14px; }
+  .sp-today-demo { height: 200px; }
 }
