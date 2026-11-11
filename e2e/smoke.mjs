@@ -2102,6 +2102,7 @@ try {
     // The rail: every move × set, the current one highlighted.
     if ((await pg.locator(`${M} [data-tg="rail"] li`).count()) !== 3 || !(await pg.$(`${M} [data-tg="rail"] li.cur[data-ladder="push"]`))) throw new Error('the session rail does not show 3 moves with push current')
     await pg.waitForFunction(() => { const i = document.querySelectorAll('.wm .xm img'); return i.length === 2 && [...i].every((x) => x.complete && x.naturalWidth > 0) }, null, { timeout: 8000 })
+    if ((await pg.locator(`${M} [data-tg="cues"] li`).count()) !== 3) throw new Error('the movement cues are not 3 lines under the title')
     if (!/Free Exercise DB · public domain/.test(await pg.locator(`${M} [data-media-tag]`).innerText())) throw new Error('the demo has no source tag')
     await wmFits('Workout mode (set)')
     for (let i = 0; i < 3; i++) {

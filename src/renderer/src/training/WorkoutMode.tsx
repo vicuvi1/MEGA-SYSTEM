@@ -142,14 +142,8 @@ export function WorkoutMode({ t, flow, onClose, onDone }: { t: SportTrain; flow:
       {it && (
         <main className="wm-main">
           <section className="wm-media-col">
-            <div className="wm-media-inner">
-              <ExerciseMedia move={it.level.move} verdicts={t.verdicts} onVerdict={t.verdict} ctl={ctl} tempo={tempoFor(it.level)} className="wm-media" />
-              <MediaBar ctl={ctl} hasMedia={media.length > 0}>
-                <span className="wm-cues" data-tg="cues">
-                  {cuesFor(it.level.move).join(' · ')}
-                </span>
-              </MediaBar>
-            </div>
+            <ExerciseMedia move={it.level.move} verdicts={t.verdicts} onVerdict={t.verdict} ctl={ctl} tempo={tempoFor(it.level)} className="wm-media fill" />
+            <MediaBar ctl={ctl} hasMedia={media.length > 0} />
           </section>
           <aside className="wm-side">
             <div className="wm-id">
@@ -162,6 +156,11 @@ export function WorkoutMode({ t, flow, onClose, onDone }: { t: SportTrain; flow:
                 Target <span data-tg="flow-target">{it.target}</span>
                 {PER_SIDE.has(it.level.move) ? (LEGS.has(it.level.move) ? ' per leg' : ' per side') : ''} · {it.effort}
               </div>
+              <ul className="wm-cues" data-tg="cues" aria-label="Movement cues">
+                {cuesFor(it.level.move).map((c) => (
+                  <li key={c}>{c[0].toUpperCase() + c.slice(1)}</li>
+                ))}
+              </ul>
             </div>
             <div className="wm-stage" key={`${stage}:${key}`}>
               {stage === 'set' && <SetPanel it={it} flow={flow} onDone={onSetDone} onPain={() => setPainOpen(true)} />}
@@ -262,8 +261,8 @@ function SetPanel({ it, flow, onDone, onPain }: { it: TrackerItem; flow: Workout
         <button type="button" aria-pressed={flow.form === 'off'} className={`wm-chip${flow.form === 'off' ? ' on warn' : ''}`} onClick={() => flow.setForm(flow.form === 'off' ? null : 'off')} data-form="off">
           <b>Form broke</b>
         </button>
-        <button type="button" className="wm-chip danger" onClick={onPain} data-tg="pain-open">
-          <b>Pain / can’t finish</b>
+        <button type="button" className="wm-chip danger" onClick={onPain} title="Pain, discomfort or can’t finish this set" aria-label="Pain or can’t finish" data-tg="pain-open">
+          <b>Pain / stop</b>
         </button>
       </div>
       <p className="wm-hint" data-tg="form-hint">
@@ -337,7 +336,7 @@ function PainPanel({ it, flow, onCancel, onIssue }: { it: TrackerItem; flow: Wor
   return (
     <div className="wm-card wm-pain" role="group" aria-label="Pain or can't finish" data-tg="pain">
       <div className="wm-set-head">
-        <span className="wm-set-n">What happened on set {flow.n + 1}?</span>
+        <span className="wm-set-n">Pain or can’t finish set {flow.n + 1}?</span>
       </div>
       <div className="wm-pain-kinds">
         <button type="button" className={`wm-chip danger${kind === 'pain' ? ' on' : ''}`} onClick={() => setKind('pain')} data-issue="pain" aria-pressed={kind === 'pain'}>
