@@ -34,6 +34,8 @@ const base = { coach_rhythm_prefs: { on: false }, sleep_weekday_target: '07:00',
 function world(settings: Record<string, unknown> = base, model?: AskModel) {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests check the older senders, so the daily push budget (Simple mode) is off here.
+  remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '{"budget":false}')`)
   for (const [k, v] of Object.entries(settings)) remote.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, typeof v === 'string' ? v : JSON.stringify(v)])
   remote.run("INSERT INTO body_metrics (day, weight, updated_at) VALUES ('2030-03-01', 62, '2030-03-01T08:00:00Z')")
   const sent: { method: string; body: any }[] = []

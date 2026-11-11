@@ -29,9 +29,11 @@ afterEach(() => {
 const TOKEN = '777:test-token'
 const CHAT = '42'
 let n = 0
-function world() {
+function world(simple = '{"budget":false}') {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // Most tests here check the older senders, so the daily push budget (Simple mode) is off unless asked.
+  remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '${simple}')`)
   const sent: { method: string; body: any }[] = []
   const hook = { url: '', allowed_updates: [] as string[], pending_update_count: 0 }
   const fake = async (url: string, init: { body?: string } = {}) => {
@@ -156,5 +158,42 @@ describe('server soak: a day of ticks', () => {
     expect(msgs.filter((m) => /Your day/.test(m))).toHaveLength(1)
     const coachLog = JSON.parse(String(q("SELECT value FROM settings WHERE key = 'coach_log'")[0]?.[0] ?? '[]'))
     expect(coachLog.length).toBeLessThan(400)
+  }, 120_000)
+})
+
+describe('the daily push budget (feature freeze)', () => {
+  const day = async (startIso: string, simple: string) => {
+    const w = world(simple)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    const start = new Date(startIso).getTime()
+    for (let i = 0; i < 144; i++) {
+      const at = new Date(start + i * 10 * 60_000)
+      vi.setSystemTime(at)
+      await runTick({ ...w.env, botToken: TOKEN, chatId: CHAT, timer: true }, at)
+    }
+    return w
+  }
+  it('a whole day of ticks sends at most 4 pushes, neutral and private; the rest stays in the bell', async () => {
+    const { sent, q } = await day('2026-11-05T00:05:00Z', '{"afternoon":true}')
+    const msgs = texts(sent)
+    expect(msgs).toHaveLength(4)
+    expect(msgs.every((m) => m.startsWith('Life System: '))).toBe(true)
+    expect(msgs.join('\n')).not.toMatch(/protein|kcal|lunch|meal|weigh|food/i)
+    expect(msgs[0]).toMatch(/3 must-dos|no must-dos/)
+    expect(msgs[2]).toMatch(/pick tomorrow's 3/)
+    expect(msgs[3]).toMatch(/wind down, phone away/)
+    // The bell still has the day's other things, silently.
+    expect(Number(q('SELECT COUNT(*) FROM notifications')[0][0])).toBeGreaterThan(4)
+    expect(JSON.parse(String(q("SELECT value FROM settings WHERE key = 'push_budget'")[0][0])).sent).toEqual(['morning', 'afternoon', 'plan', 'winddown'])
+  }, 120_000)
+  it("on Sunday the weekly summary of the 3 numbers takes the afternoon nudge's place (still 4)", async () => {
+    const { sent } = await day('2026-11-08T00:05:00Z', '{"afternoon":true}')
+    const msgs = texts(sent)
+    expect(msgs).toHaveLength(4)
+    expect(msgs[1]).toMatch(/your week[\s\S]*Sleep on time[\s\S]*Focus blocks started[\s\S]*Must-dos done/)
+  }, 120_000)
+  it('the afternoon nudge is off by default: 3 pushes on a weekday', async () => {
+    const { sent } = await day('2026-11-05T00:05:00Z', 'null')
+    expect(texts(sent)).toHaveLength(3)
   }, 120_000)
 })

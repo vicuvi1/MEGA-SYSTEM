@@ -14,6 +14,23 @@ import { useLive } from './live'
 import type { PageId } from './modules'
 import { setSoundQuiet, soundNotify } from './soundKit'
 import { DEFAULT_NOTIF, getUiPrefs } from './uiPrefs'
+import { budgetPrefs, dueSlot, slotNotifId, slotOfId, slotText } from '@core/notifyBudget'
+import { dayKey } from '@core/dates'
+
+/**
+ * The daily push budget (feature freeze, core/notifyBudget.ts): only the day's 4 pushes
+ * (07:00, 21:15, 23:00, the optional afternoon nudge; Sunday's summary) pop up or chime, each
+ * claimed once in the synced ledger so the server and every device send it once in all.
+ * Everything else waits silently in the bell.
+ */
+async function passBudget(n: Notif, now: Date): Promise<boolean> {
+  const simple = await life.notifications?.simple?.().catch(() => null)
+  if (!budgetPrefs(simple ?? null).on) return true
+  const slot = slotOfId(n.id)
+  if (!slot) return false
+  const day = n.id.split(':')[2] ?? dayKey(now)
+  return (await life.notifications?.claimSlot?.(slot, day, new Date(`${day}T12:00:00`).getDay()).catch(() => false)) ?? false
+}
 
 const POPPED = 'ls.notif.popped'
 const KIND_ICON: Record<string, IconName> = { ben: 'spark', plan: 'sun', block: 'calendar', review: 'moon', health: 'shield', reminder: 'bell', water: 'bolt', training: 'bolt', week: 'trophy', event: 'calendar', leave: 'calendar', bedtime: 'moon' }
@@ -102,13 +119,20 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
     const prefs = { ...DEFAULT_NOTIF, ...(getUiPrefs().notif ?? {}), quiet: q.on, quietFrom: q.from, quietTo: q.to }
     const now = new Date()
     const popped = readPopped()
-    const fresh = force ? list : freshNotifs(list, popped, now)
-    if (!fresh.length) return
-    for (const n of fresh) {
+    const all = force ? list : freshNotifs(list, popped, now)
+    if (!all.length) return
+    for (const n of all) {
       popped.add(n.id)
       known.current.set(n.id, n)
     }
     savePopped(popped)
+    // Not one of the day's 4 pushes: silent, in the bell only (no card, no chime, no Windows notification).
+    const fresh: Notif[] = []
+    for (const n of all) if (force || (await passBudget(n, now))) fresh.push(n)
+    if (!fresh.length) {
+      window.dispatchEvent(new CustomEvent('life-notif-new', { detail: { count: all.length, quiet: true } }))
+      return
+    }
     const running = force ? false : await life.focus.state().then((f) => !!f.running).catch(() => false)
     const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     const how = force ? { popup: true, sound: prefs.sound } : interrupt(prefs, time, running)
@@ -201,6 +225,18 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
       const st = await life.coach?.status?.().catch(() => null)
       const w = st ? waterAlert(st.today.waterMl, st.today.waterTarget, now, s) : null
       if (w && !quietNow(s, now)) list.push(w)
+      // The day's pushes (07:00, 21:15, 23:00…): the same bell entry the server adds (one id per slot and day).
+      const simple = await life.notifications.simple?.().catch(() => null)
+      const bud = budgetPrefs(simple ?? null)
+      if (bud.on) {
+        const day = dayKey(now)
+        const led = await life.notifications.budget?.().catch(() => null)
+        const slot = dueSlot(now.getHours() * 60 + now.getMinutes(), now.getDay(), bud, led?.sent ?? [])
+        if (slot) {
+          const text = slotText(slot, { mustDone: st?.today.mustDone ?? 0, mustTotal: st?.today.mustTotal ?? 0 })
+          list.push({ id: slotNotifId(slot, day), at: now.toISOString(), kind: slot === 'morning' || slot === 'plan' ? 'plan' : 'ben', title: text.split('\n')[0].slice(0, 110), body: null, action: { kind: 'page', page: 'today', label: 'Open Today' } })
+        }
+      }
       for (const n of list) if (!stop) await life.notifications.add(n).catch(() => null)
       if (list.length) check()
     }

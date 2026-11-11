@@ -15,7 +15,7 @@ import { addDays } from '@core/dates'
 import type { Services } from './webServices'
 import { neverMissTwice, type MissTwiceItem } from '@core/neverMissTwice'
 import { WATER_TARGET_ML } from '@core/defaults'
-import { focusBlocksStarted, honestScore, type SleepNight } from '@core/threeNumbers'
+import { focusBlocksStarted, honestScore, type SleepNight, type WeekDay } from '@core/threeNumbers'
 
 
 /**
@@ -74,6 +74,30 @@ export function lastNight(db: any, today: string): SleepNight | null {
   } catch {
     return null
   }
+}
+
+/** The last 7 days' 3 numbers (oldest first), for Sunday's summary: sleep_logs, focus_sessions, day_plans. */
+export function weekFacts(db: any, today: string): WeekDay[] {
+  return Array.from({ length: 7 }, (_, k) => {
+    const day = addDays(today, k - 6)
+    let focusBlocks = 0
+    let mustDone = 0
+    let mustTotal = 0
+    try {
+      focusBlocks = Number((db.prepare('SELECT COUNT(*) AS n FROM focus_sessions WHERE day = ?').get(day) as { n?: number } | undefined)?.n ?? 0)
+    } catch {
+      /* no table yet */
+    }
+    try {
+      const raw = (db.prepare('SELECT items FROM day_plans WHERE day = ?').get(day) as { items?: string } | undefined)?.items
+      const items = raw ? (JSON.parse(raw) as { done?: boolean }[]) : []
+      mustTotal = items.length
+      mustDone = items.filter((x) => x?.done).length
+    } catch {
+      /* no plan that day */
+    }
+    return { day, sleep: lastNight(db, day), focusBlocks, mustDone, mustTotal }
+  })
 }
 
 export function coachStatus(s: Services, now = new Date()): CoachStatus {

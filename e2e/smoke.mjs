@@ -96,7 +96,8 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
     await ctx.addInitScript(() => {
       try {
         const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
-        if (p.notif?.popups !== false) localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: false } }))
+        // smoke_popups=1: one step (the push budget) turns them on for itself.
+        if (localStorage.getItem('smoke_popups') !== '1' && p.notif?.popups !== false) localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: false } }))
       } catch {
         /* no storage on this page */
       }
@@ -8303,6 +8304,55 @@ try {
     const ids = inDrive.filter((f) => f.appProperties?.lsApp === 'locker').map((f) => f.appProperties.lsId)
     if (new Set(ids).size !== ids.length) throw new Error('an item was uploaded twice')
     if (inDrive.filter((f) => f.name === 'front-made-up.jpg').length !== 1) throw new Error('the photo is not in Drive exactly once')
+  })
+
+  // The daily push budget (feature freeze, core/notifyBudget.ts): 7 notifications arrive (the 5 push slots and 2 others);
+  // at most 4 slots are claimed and only those may reach Windows; the others stay silent in the bell.
+  await step('The notification budget caps at 4 a day: only the day\'s pushes may pop up, each once; the rest stays silent in the bell', async () => {
+    // This step turns pop-ups on for itself and uses the page's soak hook (window.__life) to add made-up notifications.
+    await pg.evaluate(() => {
+      const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
+      localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: true } }))
+      localStorage.setItem('smoke_popups', '1')
+      localStorage.setItem('life_soak', '1')
+    })
+    try {
+      await reloadApp()
+      await pg.waitForFunction(() => !!window.__life?.notifications?.claimSlot, null, { timeout: 15000 })
+      const r = await pg.evaluate(async () => {
+        const life = window.__life
+        window.__pushed = []
+        window.desktop = new Proxy({ notify: async (n) => (window.__pushed.push(n.id), true) }, { get: (t, k) => (k in t ? t[k] : () => undefined) })
+        document.hasFocus = () => false
+        await life.notifications.saveSimple({ afternoon: true })
+        const d = new Date(Date.now() - 4 * 3600_000)
+        const day = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+        const ids = [...['morning', 'afternoon', 'weekly', 'plan', 'winddown'].map((s) => `budget:${s}:${day}`), 'ben:smoke-budget-1', 'water:smoke-budget-2']
+        const t0 = Date.now() - 60_000
+        for (const [i, id] of ids.entries()) await life.notifications.add({ id, at: new Date(t0 + i * 1000).toISOString(), kind: 'ben', title: `Life System: test ${i + 1}`, body: null, action: null })
+        // The toasts check 3 at a time: ask a few times.
+        for (let k = 0; k < 5; k++) {
+          document.dispatchEvent(new Event('visibilitychange'))
+          await new Promise((ok) => setTimeout(ok, 700))
+        }
+        const led = await life.notifications.budget()
+        const bell = (await life.notifications.list()).map((n) => n.id)
+        await life.notifications.saveSimple({ afternoon: false })
+        return { pushed: window.__pushed, sent: led.sent, bell, ids }
+      })
+      if (r.sent.length !== 4) throw new Error(`${r.sent.length} push slots used, not 4: ${r.sent.join(', ')}`)
+      if (r.pushed.length > 4 || r.pushed.some((id) => !id.startsWith('budget:'))) throw new Error(`Windows got ${r.pushed.join(', ')}`)
+      if (!r.bell.includes('ben:smoke-budget-1') || !r.bell.includes('water:smoke-budget-2')) throw new Error('the other notifications are not in the bell')
+      console.log(`  push budget: slots ${r.sent.join(', ')} · Windows ${r.pushed.length}`)
+    } finally {
+      await pg.evaluate(() => {
+        const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
+        localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: false } }))
+        localStorage.removeItem('smoke_popups')
+        localStorage.removeItem('life_soak')
+      })
+      await reloadApp()
+    }
   })
 
   // Ben's one job (feature freeze): from 21:15 Today asks for tomorrow's 3 must-dos and refuses vague ones
