@@ -111,6 +111,13 @@ export function gearUsed(move: string, g: Gear | null | undefined): string | nul
   return set.map((k) => SHORT[k]).join(' + ')
 }
 
+/** The gear a move uses with this gear (the first way you can do it; empty: the floor). */
+export function gearKeysUsed(move: string, g: Gear | null | undefined): GearKey[] {
+  const n = NEEDS[move]
+  if (!n) return []
+  return n.find((s) => s.every((k) => hasGear(g, k))) ?? n[0]
+}
+
 const L = (move: string, lo: number, hi: number, unit: 'reps' | 'sec' = 'reps'): Level => ({ move, lo, hi, unit })
 
 /**

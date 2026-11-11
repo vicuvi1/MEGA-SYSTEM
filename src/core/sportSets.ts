@@ -19,8 +19,27 @@ export interface SetEntry {
   rir?: number
   feel?: 'hard' | 'ok' | 'easy'
   session?: string
-  /** The optional form check: 'off' when your form broke (the set doesn't count toward unlocking a harder move). */
-  form?: 'off'
+  /**
+   * The form check: 'good' when you confirmed it, 'off' when it broke. Not set means "form unknown": the set
+   * is saved and counts for volume, but it never counts toward unlocking a harder move.
+   */
+  form?: 'off' | 'good'
+  /** Pain, discomfort or a set you couldn't finish (Workout mode's "Pain / can't finish"). */
+  issue?: SetIssue
+}
+
+/** Where it hurt. */
+export type PainSpot = 'wrist' | 'shoulder' | 'elbow' | 'knee' | 'back' | 'other'
+export const PAIN_SPOTS: PainSpot[] = ['wrist', 'shoulder', 'elbow', 'knee', 'back', 'other']
+/** pain: blocks a step up and offers easier or another move · discomfort: noted, the session does not count toward a step up · incomplete: you stopped early. */
+export interface SetIssue {
+  kind: 'pain' | 'discomfort' | 'incomplete'
+  where?: PainSpot
+}
+/** A stored issue into a valid one (null: none). */
+export function cleanIssue(x: any): SetIssue | null {
+  if (!x || !['pain', 'discomfort', 'incomplete'].includes(x.kind)) return null
+  return { kind: x.kind, ...(PAIN_SPOTS.includes(x.where) ? { where: x.where as PainSpot } : {}) }
 }
 /** { 'YYYY-MM-DD': { exerciseId: [sets] } } */
 export type SetLog = Record<string, Record<string, SetEntry[]>>

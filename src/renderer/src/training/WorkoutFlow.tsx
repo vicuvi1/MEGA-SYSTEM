@@ -1,14 +1,18 @@
-// The set-by-set logic of a workout, shared by Sport Track's Workout section:
-// one move at a time (the first with sets left, or the one you pick), the reps
-// (− / + or typed), an effort tap (Hard / OK / Easy: required) and the optional
-// form check, then Log set. A rest timer follows each set (the engine's rest for
+// The set-by-set logic of a workout, shared by Sport Track's Workout section and
+// Workout mode: one move at a time (the first with sets left, or the one you
+// pick), the reps (− / + or typed), an effort tap (Hard / OK / Easy: required)
+// and the form check (Form good / Form broke; not tapped is "form unknown",
+// which never counts toward a step up), then Set done. "Pain / can't finish"
+// logs the set with the issue; a pain flag offers easier or another move and
+// can end the move. A rest timer follows each set (the engine's rest for
 // that level, +30 s, Skip; start / pause by hand too) and plays the "focus end"
 // sound at zero (the sound can be turned off, kept on this device). Every set is
 // saved the moment it is logged, so leaving never loses anything. Finish logs the
-// usual workout (built only from logged sets) and shows what changed in
-// FinishOverlay: an unlocked move with Apply / Keep, or what next time looks like.
+// usual workout (built only from logged sets); Workout mode then shows Workout
+// done (WorkoutDone.tsx).
 import { useEffect, useRef, useState } from 'react'
 import type { Feel } from '@core/trainLog'
+import type { SetIssue } from '@core/sportSets'
 import type { FinishRow, TrackerItem, TrackerView } from '@core/sportTrain'
 import { buzz, play } from '../soundKit'
 
@@ -42,9 +46,11 @@ interface Rest {
   left: number
 }
 
+export type FormTap = 'good' | 'off' | null
+
 export interface WorkoutFlowHandlers {
   view: TrackerView
-  onLog: (it: TrackerItem, reps: number, feel: Feel, formOff: boolean) => void
+  onLog: (it: TrackerItem, reps: number, feel: Feel | null, form: FormTap, issue?: SetIssue | null) => void
   onUndo: (setId: string) => void
   onFinish: () => Promise<FinishRow[] | null>
   onApply: (ladder: string) => string | null
@@ -53,7 +59,9 @@ export interface WorkoutFlowHandlers {
 
 export function useWorkoutFlow({ view, onLog, onUndo, onFinish, onApply, onKeep }: WorkoutFlowHandlers) {
   const items = view.items
-  const firstOpen = Math.max(0, items.findIndex((it) => it.done.length < it.sets))
+  // Moves you ended early (after pain): the flow skips them; their sets stay logged.
+  const [ended, setEnded] = useState<string[]>([])
+  const firstOpen = Math.max(0, items.findIndex((it) => it.done.length < it.sets && !ended.includes(it.ladder.id)))
   const [pick, setPick] = useState<number | null>(null)
   const idx = Math.min(Math.max(0, items.length - 1), pick ?? firstOpen)
   const it: TrackerItem | undefined = items[idx]
@@ -61,7 +69,9 @@ export function useWorkoutFlow({ view, onLog, onUndo, onFinish, onApply, onKeep 
   const aim = it ? it.aim[Math.min(n, it.aim.length - 1)] ?? it.level.lo : 0
   const [reps, setReps] = useState(aim)
   const [feel, setFeel] = useState<Feel | null>(null)
-  const [formOk, setFormOk] = useState(true)
+  const [form, setForm] = useState<FormTap>(null)
+  /** The pain flag just logged on this move (shows the easier / alternate / end choices). */
+  const [hurt, setHurt] = useState<{ ladder: string; issue: SetIssue; set: number } | null>(null)
   const [rest, setRest] = useState<Rest | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [sound, setSoundOn] = useState(readSound)
@@ -74,7 +84,7 @@ export function useWorkoutFlow({ view, onLog, onUndo, onFinish, onApply, onKeep 
   useEffect(() => {
     setReps(aim)
     setFeel(null)
-    setFormOk(true)
+    setForm(null)
   }, [key]) // eslint-disable-line react-hooks/exhaustive-deps
   const running = rest?.endsAt != null
   useEffect(() => {
@@ -114,8 +124,10 @@ export function useWorkoutFlow({ view, onLog, onUndo, onFinish, onApply, onKeep 
     }
   }
   const addRest = (s: number, idleSec: number) => {
-    if (!rest) return setRest({ endsAt: null, total: idleSec + s, left: idleSec + s })
-    setRest({ ...rest, total: rest.total + s, left: rest.endsAt == null ? rest.left + s : rest.left, endsAt: rest.endsAt == null ? null : rest.endsAt + s * 1000 })
+    if (!rest) return setRest({ endsAt: null, total: Math.max(5, idleSec + s), left: Math.max(5, idleSec + s) })
+    // Never below 0 left (−15 s near the end just ends the rest at 0).
+    const cut = s < 0 ? -Math.min(-s, left) : s
+    setRest({ ...rest, total: Math.max(1, rest.total + cut), left: rest.endsAt == null ? Math.max(0, rest.left + cut) : rest.left, endsAt: rest.endsAt == null ? null : rest.endsAt + cut * 1000 })
   }
   const setSound = (on: boolean) => {
     setSoundOn(on)
@@ -132,11 +144,31 @@ export function useWorkoutFlow({ view, onLog, onUndo, onFinish, onApply, onKeep 
 
   const log = () => {
     if (!it || !feel || reps < 1) return
-    onLog(it, reps, feel, !formOk)
+    onLog(it, reps, feel, form)
     setPick(null)
     const after = view.setsDone + (n < it.sets ? 1 : 0)
     if (after < view.setsPlanned) startRest(it.rest)
     else setRest(null)
+  }
+  /** "Pain / can't finish": the set is logged with the reps you did and the issue. Pain stops here and offers choices. */
+  const logIssue = (issue: SetIssue) => {
+    if (!it) return
+    onLog(it, Math.max(1, reps), feel, form, issue)
+    if (issue.kind === 'pain') {
+      setRest(null)
+      setHurt({ ladder: it.ladder.id, issue, set: n + 1 })
+      setPick(idx)
+      return
+    }
+    setPick(null)
+    const after = view.setsDone + (n < it.sets ? 1 : 0)
+    if (after < view.setsPlanned) startRest(it.rest)
+  }
+  /** Ends a move early (its logged sets stay): the next move with sets left comes up. */
+  const endMove = (ladder: string) => {
+    setEnded((e) => (e.includes(ladder) ? e : [...e, ladder]))
+    setHurt(null)
+    setPick(null)
   }
   const finish = async () => {
     setBusy(true)
@@ -149,69 +181,11 @@ export function useWorkoutFlow({ view, onLog, onUndo, onFinish, onApply, onKeep 
     const line = kind === 'apply' ? onApply(ladder) : onKeep(ladder)
     if (line) setChoices((m) => ({ ...m, [ladder]: { ladder, kind, line } }))
   }
-  return { items, idx, it, n, reps, setReps, feel, setFeel, formOk, setFormOk, rest, left, running, sound, setSound, setPick, startRest, toggleRest, addRest, skipRest: () => setRest(null), allDone, unit, step, log, finish, busy, report, closeReport: () => setReport(null), choices, choose, onUndo }
+  const finished = items.every((x) => x.done.length >= x.sets || ended.includes(x.ladder.id)) && view.setsDone > 0
+  return { items, idx, it, n, reps, setReps, feel, setFeel, form, setForm, hurt, clearHurt: () => setHurt(null), logIssue, ended, endMove, finished, rest, left, running, sound, setSound, setPick, startRest, toggleRest, addRest, skipRest: () => setRest(null), allDone, unit, step, log, finish, busy, report, closeReport: () => setReport(null), choices, choose, onUndo }
 }
 
 export type WorkoutFlowState = ReturnType<typeof useWorkoutFlow>
-
-/** "Workout done": what changed, per move, with Apply / Keep for an unlocked one. */
-export function FinishOverlay({ view, flow, onClose }: { view: TrackerView; flow: WorkoutFlowState; onClose: () => void }) {
-  const { report, choices, choose } = flow
-  if (!report) return null
-  return (
-    <div className="tg-flow" role="dialog" aria-modal="true" aria-label="Workout finished" data-tg="finish">
-      <div className="tg-flow-card tg-finish">
-        <header className="tg-flow-head">
-          <div>
-            <small className="tg-eyebrow">Workout done</small>
-            <h2 className="tg-flow-title">{view.title.replace(/^Done: /, '')}</h2>
-          </div>
-        </header>
-        <p className="tg-finish-stats">
-          <span>
-            <b className="num">{view.setsDone}</b> sets
-          </span>
-          <span>
-            <b className="num">{view.items.reduce((t, x) => t + x.done.reduce((a, s) => a + s.reps, 0), 0)}</b> reps
-          </span>
-        </p>
-        <h3 className="tg-finish-h">What changed</h3>
-        {report.length === 0 && <p className="tg-muted">No sets were logged, so nothing changes.</p>}
-        <ul className="tg-finish-list">
-          {report.map((r) => {
-            const c = choices[r.ladder]
-            return (
-              <li key={r.ladder} className={`tg-finish-row${r.offer && !c ? ' offer' : ''}`} data-tg="finish-row" data-ladder={r.ladder}>
-                <div className="tg-finish-move">
-                  <b>{r.name}</b>
-                  <span className="num">{r.sets}</span>
-                </div>
-                <p className="tg-finish-line" data-tg="finish-line">
-                  {c ? c.line : r.line}
-                </p>
-                {r.offer && !c && (
-                  <div className="tg-finish-actions">
-                    <button type="button" className="tg-btn primary" data-tg="apply" onClick={() => choose(r.ladder, 'apply')}>
-                      Apply: {r.offer.name}
-                    </button>
-                    <button type="button" className="tg-btn" data-tg="keep" onClick={() => choose(r.ladder, 'keep')}>
-                      Keep {r.name}
-                    </button>
-                  </div>
-                )}
-              </li>
-            )
-          })}
-        </ul>
-        <div className="tg-flow-foot">
-          <button type="button" className="tg-btn primary big" onClick={onClose} data-tg="finish-close">
-            Done
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
 
 /** "Next time: Decline push-ups 3 × 6–12, because 3×12 easy twice." */
 export const appliedLine = (o: { name: string; target: string; reason: string }) => `Next time: ${o.name} ${o.target}, because ${o.reason}.`

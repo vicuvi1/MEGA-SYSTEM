@@ -31,7 +31,7 @@ function oldSetup(): any {
 const logAll = (st: any, day: string, reps: number, feel: 'easy' | 'ok' | 'hard', opts: { formOff?: boolean; ladder?: 'push' | 'pull' } = {}) => {
   const ladder = opts.ladder ?? 'push'
   const n = trackerToday(st, day).items.find((i) => i.ladder.id === ladder)!.sets
-  for (let i = 0; i < n; i++) trackerLog(st, { day, type: 'upper', ladder, reps, feel, formOff: opts.formOff, now: Date.parse(day + 'T18:00:00Z') + i, salt: `${day}${ladder}${i}` })
+  for (let i = 0; i < n; i++) trackerLog(st, { day, type: 'upper', ladder, reps, feel, form: opts.formOff ? 'off' : 'good', now: Date.parse(day + 'T18:00:00Z') + i, salt: `${day}${ladder}${i}` })
 }
 
 beforeEach(() => {
@@ -203,14 +203,15 @@ describe('double progression: the next variation is offered, you choose Apply or
 
   it('what the next level needs, as ticks', () => {
     const st = oldSetup()
-    expect(requirementsOf(trackerToday(st, TUE).items[0]).map((r) => r.done)).toEqual([false, false, false, false])
+    expect(requirementsOf(trackerToday(st, TUE).items[0]).map((r) => r.done)).toEqual([false, false, false, false, false])
     logAll(st, TUE, 12, 'easy')
     const req = requirementsOf(trackerToday(st, TUE).items[0])
     expect(req).toEqual([
       { id: 'sessions', label: '2 sessions in a row at the top', done: false, detail: '1 of 2' },
       { id: 'reps', label: 'Every set at 12 (3 sets)', done: true, detail: '3 × 12' },
       { id: 'effort', label: 'Effort OK or Easy (1–2 reps left)', done: true, detail: 'easy' },
-      { id: 'form', label: 'Form OK on every set', done: true, detail: 'OK' }
+      { id: 'form', label: 'Form confirmed good on every set', done: true, detail: 'good' },
+      { id: 'pain', label: 'No pain flagged', done: true, detail: 'none' }
     ])
   })
 })

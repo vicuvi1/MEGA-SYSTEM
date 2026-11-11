@@ -164,7 +164,7 @@ describe('the swap sheet', () => {
 
   it('Apply from next workout keeps today on the move you started', () => {
     const st: any = { trainLevels: { push: { level: 2, reached: { 2: '2026-11-03' }, at: 1 } }, exercises: [{ id: 'ex_d', name: 'Diamond push-ups', target: 18, unit: 'reps', active: false, doneToday: 0, move: 'diamond_pushup' }], sets: {} }
-    for (const day of ['2026-11-05', '2026-11-08']) st.sets[day] = { ex_d: [12, 12, 12].map((r, i) => ({ reps: r, at: Date.parse(`${day}T10:00:00Z`) + i, id: `${day}${i}`, feel: 'easy', rir: 4 })) }
+    for (const day of ['2026-11-05', '2026-11-08']) st.sets[day] = { ex_d: [12, 12, 12].map((r, i) => ({ reps: r, at: Date.parse(`${day}T10:00:00Z`) + i, id: `${day}${i}`, feel: 'easy', rir: 4, form: 'good' })) }
     const it = sessionItems(st, trainOf(st), 'upper', TUE).find((i) => i.ladder.id === 'push')!
     expect(it.offer?.move).toBe('decline_pushup')
     expect(applyOffer(st, { day: TUE, type: 'upper', ladder: 'push', now: 20, fromNext: true })).not.toBeNull()

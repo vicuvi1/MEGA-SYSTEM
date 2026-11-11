@@ -12,10 +12,10 @@
 // (sportTrain.test.ts). Nothing here pays points: Finish gives the page the
 // usual workout to log, built only from the sets you logged.
 import { MOVES, moveById } from './sportMoves'
-import { setsOn, setsText, type SetEntry } from './sportSets'
+import { setsOn, setsText, type SetEntry, type SetIssue } from './sportSets'
 import { laddersFor, moveInfo, rangeText, type LadderId } from './trainLadders'
 import {
-  LADDER_MUSCLE, declineLevel, doneSessions, effortOf, ensureExercise, exIdsFor, formOk, keepLevel, ladderSets, logSet, saveSession, sessionFromSets, sessionItems, sessionMinutes, setLevel, shiftLevel, trainOf, unlogSet, weeklySets, workoutOf,
+  LADDER_MUSCLE, declineLevel, doneSessions, effortOf, ensureExercise, exIdsFor, formConfirmed, formOk, formUnknown, issueOf, keepLevel, painText, ladderSets, logSet, saveSession, sessionFromSets, sessionItems, sessionMinutes, setLevel, shiftLevel, trainOf, unlogSet, weeklySets, workoutOf,
   type Dose, type Feel, type Offer, type PlanItem, type TrainSession
 } from './trainLog'
 import { atTop } from './sportProgress'
@@ -193,7 +193,7 @@ function recordFor(st: any, day: string, type: SessionType, now: number, done = 
  * when needed, placement becomes your saved level, the set goes into the set log with its effort and form,
  * the day total and today's count, and the session record is updated.
  */
-export function trackerLog(st: any, input: { day: string; type: SessionType; ladder: LadderId; reps: number; feel?: Feel | null; formOff?: boolean; kg?: number; now: number; dose?: Dose; salt?: string }): { set: SetEntry; item: PlanItem } | null {
+export function trackerLog(st: any, input: { day: string; type: SessionType; ladder: LadderId; reps: number; feel?: Feel | null; formOff?: boolean; form?: 'good' | 'off' | null; issue?: SetIssue | null; kg?: number; now: number; dose?: Dose; salt?: string }): { set: SetEntry; item: PlanItem } | null {
   const data = trainOf(st)
   const item = sessionItems(st, data, input.type, input.day, input.dose).find((x) => x.ladder.id === input.ladder)
   if (!item || !(input.reps > 0)) return null
@@ -202,7 +202,7 @@ export function trackerLog(st: any, input: { day: string; type: SessionType; lad
   const set = logSet(st, {
     day: input.day,
     exId,
-    set: { reps: input.reps, ...(input.kg ? { kg: input.kg } : {}), ...(input.feel ? { feel: input.feel } : {}), ...(input.formOff ? { form: 'off' as const } : {}) },
+    set: { reps: input.reps, ...(input.kg ? { kg: input.kg } : {}), ...(input.feel ? { feel: input.feel } : {}), ...(input.formOff || input.form === 'off' ? { form: 'off' as const } : input.form === 'good' ? { form: 'good' as const } : {}), ...(input.issue ? { issue: input.issue } : {}) },
     session: trackerSessionId(input.day, input.type),
     now: input.now,
     salt: input.salt
@@ -282,7 +282,7 @@ export function shiftWorkout(st: any, input: { day: string; type: SessionType; d
 // ---------- what the next level needs ----------
 
 export interface Requirement {
-  id: 'sessions' | 'reps' | 'effort' | 'form'
+  id: 'sessions' | 'reps' | 'effort' | 'form' | 'pain'
   label: string
   done: boolean
   /** "1 of 2", "10 · 11 · 12" */
@@ -300,7 +300,8 @@ export function requirementsOf(it: Pick<PlanItem, 'status' | 'latest' | 'level' 
     { id: 'sessions', label: `${status.need} sessions in a row at the top`, done: status.hits >= status.need, detail: `${status.hits} of ${status.need}` },
     { id: 'reps', label: `Every set at ${level.hi}${u} (${sets} sets)`, done: !!latest && atTop(latest, r), detail: latest ? setsText(latest.reps.slice(0, Math.max(sets, 1)), level.unit) : 'no session yet' },
     { id: 'effort', label: 'Effort OK or Easy (1–2 reps left)', done: !!latest && effort !== 'hard', detail: latest ? (effort ?? 'not tapped') : '—' },
-    { id: 'form', label: 'Form OK on every set', done: !!latest && formOk(latest, sets), detail: latest ? (formOk(latest, sets) ? 'OK' : 'form broke') : '—' }
+    { id: 'form', label: 'Form confirmed good on every set', done: !!latest && formConfirmed(latest, sets), detail: latest ? (formConfirmed(latest, sets) ? 'good' : !formOk(latest, sets) ? 'form broke' : `form unknown on ${formUnknown(latest, sets)}`) : '—' },
+    { id: 'pain', label: 'No pain flagged', done: !!latest && !issueOf(latest, ['pain', 'discomfort']), detail: latest ? (issueOf(latest, ['pain', 'discomfort']) ? painText(issueOf(latest, ['pain', 'discomfort'])!) : 'none') : '—' }
   ]
 }
 

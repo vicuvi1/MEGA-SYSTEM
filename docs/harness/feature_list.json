@@ -1105,6 +1105,20 @@
       ],
       "evidence": "2026-11-10: tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Exercises 1.59 / 1.17 / 1.01 screens at 1280 / 1440 / 1920 (budget 1.95), Progress 2.97 / 2.53 / 2.09 (budget 3.6), Body & Food top (numbers, steps, Repeat meals) 1.37 / 1.22 / 1.00 (budget 1.9), Growth 2.25 / 1.88 / 1.58 (budget 2.8), all with 10% headroom; 1920 screenshots compared with the artboards.",
       "notes": "core/trainProgress.ts (pathProgress, pathViews, kpisFor, strengthChart, personalRecords), core/growthCheck.ts (growthCheck, growthChart: the six signs and the verdict, pure, clock pinned in the tests). renderer/src/training/SportExercises.tsx, SportProgress.tsx, GrowthView.tsx, SportMore.tsx (the folded older parts), sport-batch-b.css; renderer/src/body/FoodBoard.tsx, FoodPaste.tsx (step 2), FoodCounter.tsx (board mode), food-board.css. No new data: everything is read from the Sport Track state, the body log and the food counter; the lean-gain zone is a device setting (life_growth_zone)."
+  },
+  {
+   "id": "F-SPORT-WORKOUT-MODE",
+   "priority": 1,
+   "area": "sport",
+   "title": "Sport Track v2 Phase B: Workout mode, ExerciseMedia with checked demo videos, pain flags, choices with reasons, Workout done",
+   "user_visible_behavior": "Start workout opens a full-window Workout mode: a session rail (every move × set), a big demo (bundled video or photo frames or 'No verified demo yet' with steps; play/pause, repeat, 0.5×/0.75×/1×; a source and licence tag; Looks right / Wrong demo), 'Move N of M · Set X of Y', a giant reps number with − / +, Easy / OK / Hard with reps in reserve, Form good / Form broke (no tap = form unknown, never counts toward a step up), Pain / can't finish (pain with where, discomfort, couldn't complete; saved on the set; pain blocks the step up and offers an easier step or another move, never harder, and can end the move), a huge Set done, a rest ring with −15 s / +30 s / Start next set and a sound, Easier / Alternate / Harder at any time with the reason from your data, a Safety note for chairs, beds, doors, backpacks. Finish shows Workout done: actual vs target per move, records, pain flags, one recommended change with its reasons, Apply next time / Ask me later and Undo that keeps history.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/trainAdvice.test.ts src/core/trainMedia.test.ts src/core/trainLog.test.ts src/core/sportTrain.test.ts",
+    "SMOKE_ONLY=\"is one app|Workout mode\" npm run smoke"
+   ],
+   "evidence": "2026-11-11: branch sport-workout-mode; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); real screenshots at 1920×1080 and 1280×800 (Training, Rest, Done, Pain, Video) compared with the artboards, kept outside the repo.",
+   "notes": "core/trainAdvice.ts (moveChoices, BRANCHES, safetyNotes, workoutDone), core/trainMedia.ts (manifest, verdicts trainMediaOk, tempo, cues), core/trainLog.ts (formConfirmed, issueOf, state 'hurt'), core/sportSets.ts (SetEntry.form 'good', SetEntry.issue); renderer/src/training/WorkoutMode.tsx, WorkoutDone.tsx, ExerciseMedia.tsx, workout-mode.css, exercise-media.css; media in src/renderer/public/apps/sport/media (7 webm, 1.34 MB, NOTICE.md, by-sa/NOTICE.md). TG_SHOTS=<dir> saves wm-*-1920.png and wm-*-1280.png. Next: Phase E (Exercises PathGraph, Progress) in the same system."
   }
  ]
 }
