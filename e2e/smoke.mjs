@@ -6523,7 +6523,18 @@ try {
     await pg.waitForSelector('.sy-list .sy-block:has-text("Review notes")', { state: 'detached', timeout: 5000 })
     await pg.click('.sy-filters [data-filter="tomorrow"]')
     await pg.waitForSelector('.sy-block:has-text("Review notes"):has-text("every day")', { timeout: 5000 })
-    await pg.click('.sy-filters [data-filter="today"]')
+    // Back to Today. On CI (slower, taller fonts) a card that came late (the focus boost's "How did it go?", which
+    // closeBoost only waits 1.2 s for) sat on this button for the whole 30 s: close it, then click; if something still
+    // covers the button, say what and press it directly (the filter is what this checks, not the card).
+    await closeBoost()
+    const todayFilter = pg.locator('.sy-filters [data-filter="today"]')
+    await todayFilter.scrollIntoViewIfNeeded({ timeout: 5000 }).catch(() => {})
+    if (!(await todayFilter.click({ timeout: 8000 }).then(() => true, () => false))) {
+      const on = await todayFilter.evaluate((b) => { const r = b.getBoundingClientRect(); const e = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return e ? `${e.tagName.toLowerCase()}.${[...e.classList].join('.')}` : 'nothing' }).catch((e) => `no Today filter (${String(e.message).split('\n')[0]})`)
+      console.log(`  note: the Today filter was covered by ${on}; pressed it directly`)
+      await todayFilter.dispatchEvent('click', undefined, { timeout: 5000 })
+    }
+    await pg.waitForFunction(() => document.querySelector('.sy-filters [data-filter="today"]')?.classList.contains('on'), null, { timeout: 5000 })
     // Stats: the full window.
     await pg.click('.sy .ptabs [data-tab="stats"]')
     await pg.waitForSelector('.sy-where .mh-donut circle:not(.bg)', { timeout: 8000 })

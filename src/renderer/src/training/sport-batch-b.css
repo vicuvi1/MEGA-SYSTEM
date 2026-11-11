@@ -198,7 +198,13 @@
   .sp-ex-detail .sp-ex-big { grid-row: span 4; height: 100%; min-height: 220px; }
   .sp-ex-actions { grid-column: 2 / -1; }
   .sp-pp { grid-template-columns: 150px minmax(0, 1fr) 280px; gap: 16px; }
-  .sp-grow-top, .sp-grow-bottom { grid-template-columns: minmax(0, 1fr) 320px; }
+  .sp-grow-bottom { grid-template-columns: minmax(0, 1fr) 320px; }
+  /* Laptop widths: the verdict and "log this" share the row evenly, so the list doesn't wrap every line (Growth stays short). */
+  .sp-grow-top { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+  .sp-verdict { padding: 20px 22px; gap: 18px; }
+  .sp-verdict-text h3 { font-size: 28px; }
+  .sp-tolog { gap: 6px; font-size: 13.5px; }
+  .sp-tolog li { padding-bottom: 6px; }
 }
 @media (max-width: 1100px) {
   .sp-prog-row, .sp-prog-row.two, .sp-grow-top, .sp-grow-bottom { grid-template-columns: minmax(0, 1fr); }
