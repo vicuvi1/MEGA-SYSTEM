@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workout mode</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>
+body{margin:0;background:#0c100d}
+@keyframes xfade{0%,30%{opacity:0}45%,80%{opacity:1}95%,100%{opacity:0}}
+.media{position:relative;overflow:hidden;background:#f3f3f1}
+.media img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.media img.b{animation:xfade 2.6s ease-in-out infinite}
+.media.s75 img.b{animation-duration:3.5s}
+.media.s50 img.b{animation-duration:5.2s}
+.media.paused img.b{animation-play-state:paused}
+.btn{transition:transform .12s ease,background .12s ease}
+.btn:active{transform:scale(.97)}
+@media (prefers-reduced-motion:reduce){.media img.b{animation:none;opacity:0}.btn{transition:none}}
+</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45; display: flex; flex-direction: column">
+  <header style="display: flex; align-items: center; gap: 24px; padding: 16px 32px; border-bottom: 1px solid #1f2721">
+    <button type="button" class="btn" style="min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit; font-weight: 600">Pause · Esc</button>
+    <div style="min-width: 0">
+      <div style="font-family: 'Space Grotesk', sans-serif; font-size: 20px; font-weight: 700">Legs + Core</div>
+      <div style="font-size: 13px; color: #a6b2a8">11:42 elapsed · about 16 min left</div>
+    </div>
+    <ol aria-label="Session progress" style="list-style: none; margin: 0 0 0 auto; padding: 0; display: flex; gap: 10px">
+      <sc-for list="{{rail}}" as="r" hint-placeholder-count="4">
+        <li style="{{r.box}}">
+          <span style="display: block; font-size: 13px; font-weight: 600; white-space: nowrap">{{r.name}}</span>
+          <span style="display: flex; gap: 4px; margin-top: 6px">
+            <sc-for list="{{r.dots}}" as="d" hint-placeholder-count="4"><span style="{{d.style}}"></span></sc-for>
+          </span>
+        </li>
+      </sc-for>
+    </ol>
+  </header>
+
+  <main style="flex: 1 1 auto; min-height: 0; display: flex; gap: 28px; padding: 24px 32px 28px">
+    <section style="flex: 1 1 820px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+      <div class="{{mediaCls}}" style="flex: 1 1 auto; min-height: 0; border-radius: 22px">
+        <img src="/_blob/75899f634d818f2d7c2cf966e38c32ab" alt="Split squat, top position">
+        <img class="b" src="/_blob/7d4b9f037e2ca72d696033f9c5551e06" alt="Split squat, bottom position">
+        <span style="position: absolute; left: 16px; top: 16px; padding: 6px 12px; border-radius: 999px; background: rgba(12,16,13,.88); color: #eef3ec; font-size: 13px">Photo frames · Free Exercise DB · public domain</span>
+        <span style="position: absolute; right: 16px; top: 16px; padding: 6px 12px; border-radius: 999px; background: rgba(12,16,13,.88); color: #c6f432; font-size: 13px; font-weight: 600">2 s down · 1 s up</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap">
+        <button type="button" class="btn" onClick="{{togglePlay}}" aria-label="{{playLabel}}" style="min-width: 120px; min-height: 48px; border-radius: 12px; border: 0; background: #1b221d; color: #eef3ec; font: inherit; font-weight: 700">{{playLabel}}</button>
+        <button type="button" class="btn" onClick="{{replay}}" style="min-height: 48px; padding: 0 18px; border-radius: 12px; border: 0; background: #1b221d; color: #eef3ec; font: inherit; font-weight: 600">Repeat</button>
+        <div role="group" aria-label="Playback speed" style="display: flex; gap: 4px; padding: 4px; border-radius: 12px; background: #151b17">
+          <sc-for list="{{speeds}}" as="s" hint-placeholder-count="3">
+            <button type="button" onClick="{{s.pick}}" aria-pressed="{{s.on}}" style="{{s.style}}">{{s.label}}</button>
+          </sc-for>
+        </div>
+        <span style="margin-left: auto; color: #a6b2a8; font-size: 14px">Front knee over the toes · back knee nearly touches the floor · torso tall</span>
+      </div>
+    </section>
+
+    <aside style="flex: 0 0 470px; display: flex; flex-direction: column; gap: 16px">
+      <div>
+        <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Move 1 of 3 · Legs path step 2</div>
+        <h1 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 34px; line-height: 1.1">Bulgarian split squat</h1>
+        <div style="margin-top: 6px; color: #cfd8cf">Target 4 × 8–12 per leg · stop 1–2 reps before failure</div>
+      </div>
+
+      <sc-if value="{{inSet}}" hint-placeholder-val="{{true}}">
+        <div style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 16px">
+          <div style="display: flex; justify-content: space-between; align-items: baseline">
+            <span style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700">Set 2 of 4</span>
+            <span style="color: #a6b2a8">last time 10 · aim 11</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+            <button type="button" class="btn" onClick="{{minus}}" aria-label="One rep less" style="width: 72px; height: 72px; border-radius: 18px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit; font-size: 32px">−</button>
+            <div style="text-align: center">
+              <div style="font-family: 'Space Grotesk', sans-serif; font-size: 96px; font-weight: 700; line-height: 1">{{reps}}</div>
+              <div style="color: #a6b2a8; font-size: 14px">reps per leg</div>
+            </div>
+            <button type="button" class="btn" onClick="{{plus}}" aria-label="One rep more" style="width: 72px; height: 72px; border-radius: 18px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit; font-size: 32px">+</button>
+          </div>
+          <div role="group" aria-label="How hard was it" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+            <sc-for list="{{efforts}}" as="e" hint-placeholder-count="3">
+              <button type="button" class="btn" onClick="{{e.pick}}" aria-pressed="{{e.on}}" style="{{e.style}}"><span style="display: block; font-weight: 700">{{e.label}}</span><span style="display: block; font-size: 12px; color: #a6b2a8">{{e.note}}</span></button>
+            </sc-for>
+          </div>
+          <div role="group" aria-label="Form" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+            <sc-for list="{{forms}}" as="f" hint-placeholder-count="3">
+              <button type="button" class="btn" onClick="{{f.pick}}" aria-pressed="{{f.on}}" style="{{f.style}}">{{f.label}}</button>
+            </sc-for>
+          </div>
+          <button type="button" class="btn" onClick="{{done}}" style="min-height: 64px; border-radius: 16px; border: 0; background: #c6f432; color: #0c100d; font: inherit; font-size: 20px; font-weight: 700">Set done</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{resting}}" hint-placeholder-val="{{false}}">
+        <div style="background: #151b17; border: 1px solid #222a24; border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 14px">
+          <div style="font-size: 13px; color: #a6b2a8; text-transform: uppercase; letter-spacing: .08em">Rest · set 2 saved: {{reps}} reps, {{effortName}}</div>
+          <svg width="200" height="200" viewBox="0 0 200 200" role="img" aria-label="1 minute 24 seconds of rest left">
+            <circle cx="100" cy="100" r="86" fill="none" stroke="#263027" stroke-width="14"></circle>
+            <circle cx="100" cy="100" r="86" fill="none" stroke="#c6f432" stroke-width="14" stroke-linecap="round" stroke-dasharray="378 540" transform="rotate(-90 100 100)"></circle>
+            <text x="100" y="112" text-anchor="middle" fill="#eef3ec" font-size="52" font-weight="700" font-family="Space Grotesk">1:24</text>
+          </svg>
+          <div style="color: #cfd8cf">Next: set 3 of 4 · aim 11 · sound at 0</div>
+          <div style="display: flex; gap: 8px; width: 100%">
+            <button type="button" class="btn" style="flex: 1; min-height: 52px; border-radius: 14px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit; font-weight: 600">−15 s</button>
+            <button type="button" class="btn" style="flex: 1; min-height: 52px; border-radius: 14px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit; font-weight: 600">+30 s</button>
+            <button type="button" class="btn" onClick="{{back}}" style="flex: 1.4; min-height: 52px; border-radius: 14px; border: 0; background: #c6f432; color: #0c100d; font: inherit; font-weight: 700">Start set 3</button>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+        <button type="button" class="btn" style="min-height: 52px; border-radius: 14px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit"><span style="display: block; font-weight: 600">Easier</span><span style="font-size: 12px; color: #a6b2a8">Split squat</span></button>
+        <button type="button" class="btn" style="min-height: 52px; border-radius: 14px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit"><span style="display: block; font-weight: 600">Alternate</span><span style="font-size: 12px; color: #a6b2a8">Reverse lunge</span></button>
+        <button type="button" class="btn" style="min-height: 52px; border-radius: 14px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit"><span style="display: block; font-weight: 600">Harder</span><span style="font-size: 12px; color: #a6b2a8">Backpack Bulgarian</span></button>
+      </div>
+      <div role="note" style="display: flex; gap: 12px; padding: 14px 16px; border-radius: 14px; background: #2a2210; border: 1px solid #5a4614; color: #f3dfb4; font-size: 14px">
+        <strong style="color: #f0b35a">Safety</strong>
+        <span>Back foot on a chair: put the chair against a wall so it can't slide. No chairs on wheels.</span>
+      </div>
+    </aside>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { playing: true, speed: 1, reps: 11, effort: 'ok', form: 'good', mode: 'set', k: 0 }; }
+  renderVals() {
+    const s = this.state;
+    const chip = (on) => 'min-height: 52px; border-radius: 14px; font: inherit; color: #eef3ec; padding: 6px; border: 1px solid ' + (on ? '#c6f432; background: #1b2a12' : '#334036; background: transparent');
+    const mk = (n, done, total, cur) => ({
+      name: n,
+      box: 'padding: 8px 12px; border-radius: 12px; border: 1px solid ' + (cur ? '#c6f432; background: #1b2a12' : '#222a24; background: #151b17'),
+      dots: Array.from({ length: total }, (_, i) => ({ style: 'width: 18px; height: 6px; border-radius: 3px; background: ' + (i < done ? '#c6f432' : cur && i === done ? '#eef3ec' : '#334036') }))
+    });
+    const speeds = [{ v: 0.5, label: '0.5×' }, { v: 0.75, label: '0.75×' }, { v: 1, label: '1×' }].map((x) => ({
+      ...x, on: s.speed === x.v, pick: () => this.setState({ speed: x.v }),
+      style: 'min-height: 40px; padding: 0 12px; border-radius: 9px; border: 0; font: inherit; font-weight: 600; color: #eef3ec; background: ' + (s.speed === x.v ? '#2b3a1a' : 'transparent')
+    }));
+    const efforts = [['easy', 'Easy', '3+ reps left'], ['ok', 'OK', '1–2 left'], ['hard', 'Hard', '0 left']].map(([id, label, note]) => ({ label, note, on: s.effort === id, style: chip(s.effort === id), pick: () => this.setState({ effort: id }) }));
+    const forms = [['good', 'Form good'], ['off', 'Form broke'], ['pain', 'Pain']].map(([id, label]) => ({ label, on: s.form === id, style: chip(s.form === id) + (id === 'pain' && s.form === id ? '; border-color: #ff8a7a; background: #3a1714' : ''), pick: () => this.setState({ form: id }) }));
+    return {
+      rail: [mk('Bulgarian split squat', 1, 4, true), mk('Glute bridge', 0, 3, false), mk('Plank', 0, 3, false)],
+      mediaCls: 'media' + (s.speed === 0.75 ? ' s75' : s.speed === 0.5 ? ' s50' : '') + (s.playing ? '' : ' paused'),
+      playLabel: s.playing ? 'Pause demo' : 'Play demo',
+      togglePlay: () => this.setState({ playing: !s.playing }),
+      replay: () => this.setState({ playing: true, k: s.k + 1 }),
+      speeds, efforts, forms,
+      reps: s.reps,
+      minus: () => this.setState({ reps: Math.max(0, s.reps - 1) }),
+      plus: () => this.setState({ reps: s.reps + 1 }),
+      inSet: s.mode === 'set',
+      resting: s.mode === 'rest',
+      effortName: { easy: 'easy', ok: 'OK', hard: 'hard' }[s.effort],
+      done: () => this.setState({ mode: 'rest' }),
+      back: () => this.setState({ mode: 'set' })
+    };
+  }
+}
+</script>
+</body>
+</html>

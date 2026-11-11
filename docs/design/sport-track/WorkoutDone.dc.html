@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Workout complete</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600;700&amp;display=swap">
+<style>body{margin:0;background:#0c100d}</style>
+</helmet>
+<div style="width: 1440px; height: 900px; box-sizing: border-box; background: #0c100d; color: #eef3ec; font-family: Inter, system-ui, sans-serif; font-size: 15px; line-height: 1.45; padding: 36px 48px; display: flex; flex-direction: column; gap: 24px">
+  <header style="display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap">
+    <div>
+      <div style="font-size: 13px; color: #c6f432; font-weight: 700; text-transform: uppercase; letter-spacing: .08em">Workout complete</div>
+      <h1 style="margin: 4px 0 0; font-family: 'Space Grotesk', sans-serif; font-size: 40px">Legs + Core · 27 min</h1>
+    </div>
+    <div style="display: flex; gap: 12px">
+      <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 14px 18px"><div style="font-size: 13px; color: #a6b2a8">Working sets</div><div style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700">10 / 10</div></div>
+      <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 14px 18px"><div style="font-size: 13px; color: #a6b2a8">New records</div><div style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700; color: #c6f432">1</div></div>
+      <div style="background: #151b17; border: 1px solid #222a24; border-radius: 16px; padding: 14px 18px"><div style="font-size: 13px; color: #a6b2a8">Pain flags</div><div style="font-family: 'Space Grotesk', sans-serif; font-size: 26px; font-weight: 700">0</div></div>
+    </div>
+  </header>
+
+  <section style="display: flex; gap: 24px; flex: 1 1 auto; min-height: 0">
+    <article style="flex: 1 1 820px; min-width: 0; background: #151b17; border: 1px solid #222a24; border-radius: 22px; padding: 24px">
+      <h2 style="margin: 0 0 12px; font-family: 'Space Grotesk', sans-serif; font-size: 22px">What you actually did</h2>
+      <table style="width: 100%; border-collapse: collapse; font-size: 16px">
+        <thead><tr style="color: #a6b2a8; font-size: 13px; text-align: left"><th style="padding: 8px 0; font-weight: 500">Move</th><th style="font-weight: 500">Target</th><th style="font-weight: 500">Reps per set</th><th style="font-weight: 500">Effort</th><th style="font-weight: 500; text-align: right">vs last time</th></tr></thead>
+        <tbody>
+          <sc-for list="{{rows}}" as="r" hint-placeholder-count="3">
+            <tr style="border-top: 1px solid #222a24"><td style="padding: 16px 0; font-weight: 600">{{r.move}}</td><td style="color: #a6b2a8">{{r.target}}</td><td style="font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 700">{{r.reps}}</td><td>{{r.effort}}</td><td style="text-align: right; color: {{r.tone}}; font-weight: 600">{{r.delta}}</td></tr>
+          </sc-for>
+        </tbody>
+      </table>
+      <p style="margin: 16px 0 0; color: #a6b2a8; font-size: 14px">Everything above is saved. Edit a set if a number is wrong: it changes no points you have not earned.</p>
+    </article>
+
+    <aside style="flex: 1 1 460px; display: flex; flex-direction: column; gap: 16px">
+      <article style="background: #17230f; border: 1px solid #3c5a1a; border-radius: 22px; padding: 24px; display: flex; flex-direction: column; gap: 12px">
+        <div style="font-size: 13px; color: #c6f432; font-weight: 700; text-transform: uppercase; letter-spacing: .08em">Recommended next time</div>
+        <h2 style="margin: 0; font-family: 'Space Grotesk', sans-serif; font-size: 26px">Glute bridge → Single-leg bridge</h2>
+        <ul style="margin: 0; padding-left: 18px; color: #cfd8cf; display: flex; flex-direction: column; gap: 4px">
+          <li>3 × 20 at the top of the range, 2 sessions running</li>
+          <li>Effort OK, form good, no pain</li>
+          <li>Readiness today: good</li>
+        </ul>
+        <div style="display: flex; gap: 10px; flex-wrap: wrap">
+          <button type="button" style="flex: 1 1 160px; min-height: 52px; border-radius: 14px; border: 0; background: #c6f432; color: #0c100d; font: inherit; font-weight: 700">Apply next time</button>
+          <button type="button" style="flex: 1 1 140px; min-height: 52px; border-radius: 14px; border: 1px solid #3c5a1a; background: transparent; color: #eef3ec; font: inherit; font-weight: 600">Ask me later</button>
+        </div>
+        <p style="margin: 0; font-size: 13px; color: #a6b2a8">You can undo a step any time in Exercises. Your history stays.</p>
+      </article>
+      <article style="background: #151b17; border: 1px solid #222a24; border-radius: 22px; padding: 22px 24px">
+        <h3 style="margin: 0 0 8px; font-size: 16px">Holding steady</h3>
+        <p style="margin: 0; color: #cfd8cf; font-size: 14px">Bulgarian split squat: aim 12 on your lowest set next time (you got 10 on set 4, effort hard).</p>
+      </article>
+      <button type="button" style="margin-top: auto; min-height: 56px; border-radius: 16px; border: 1px solid #334036; background: transparent; color: #eef3ec; font: inherit; font-size: 17px; font-weight: 600">Done · back to Today</button>
+    </aside>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1440,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      rows: [
+        { move: 'Bulgarian split squat', target: '4 × 8–12', reps: '12 · 11 · 11 · 10', effort: 'OK, last hard', delta: '+3 reps', tone: '#9fd36b' },
+        { move: 'Glute bridge', target: '3 × 12–20', reps: '20 · 20 · 20', effort: 'OK', delta: 'Record ✓', tone: '#c6f432' },
+        { move: 'Plank', target: '3 × 30–60 s', reps: '60 · 55 · 50 s', effort: 'Hard', delta: '+10 s', tone: '#9fd36b' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
