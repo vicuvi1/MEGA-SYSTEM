@@ -189,6 +189,84 @@ try {
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+  // The island as a quiet helper (Simple mode, owner 2026-11-11): the closed pill shows the 3 numbers, the open island
+  // only records things in one tap, and a must-do ticked there updates Today. The island page draws the app's real
+  // numbers (the page's own bridge, the soak hook); the tick it sends is run the way the desktop runs it.
+  await step('The island in Simple mode: the pill shows the 3 numbers, the open island records in one tap (no feeds), a must-do ticked there updates Today', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.waitForSelector('[data-testid="three-numbers"]', { timeout: 10000 })
+    // A must-do to tick (the made-up morning has none yet).
+    if (!(await pg.locator('[data-testid="three-numbers"] .tn-list li').count())) {
+      await pg.fill('[data-testid="three-numbers"] .tn-add input', 'read 20 pages')
+      await pg.click('[data-testid="three-numbers"] .tn-add button')
+      await pg.waitForSelector('[data-testid="three-numbers"] .tn-list li', { timeout: 8000 })
+    }
+    // The real numbers from the app (the soak hook gives the page's own bridge), as the island feed sends them.
+    await pg.evaluate(() => localStorage.setItem('life_soak', '1'))
+    await pg.reload()
+    await pg.waitForSelector('.td2, main.content, input', { timeout: 20000 })
+    if (!(await pg.$('main.content'))) {
+      await pg.fill('input', '1234')
+      await pg.keyboard.press('Enter')
+      await pg.waitForSelector('main.content', { timeout: 20000 })
+    }
+    await pg.waitForFunction(() => !!window.__life?.coach?.status, null, { timeout: 15000 })
+    const st = await pg.evaluate(() => window.__life.coach.status())
+    const sleepMark = (() => {
+      const n = st.today.sleep
+      const m = (t) => (t ? Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5)) : null)
+      const bed = m(n?.bedTime)
+      const up = m(n?.wakeTime)
+      if (bed == null && up == null) return 'none'
+      return bed != null && (bed - 720 + 1440) % 1440 <= 690 && up != null && up >= 180 && up <= 405 ? 'ok' : 'off'
+    })()
+    const now0 = Date.now()
+    const snap = {
+      at: now0, locked: false, simple: true,
+      three: { sleep: sleepMark, blocks: st.today.focusBlocks, mustDone: st.today.mustDone },
+      ben: { face: '🙂', mood: 'chill', why: '', move: null, last: null, unread: 0, busy: false, steps: [] },
+      running: null, now: null, next: null, mustdos: st.mustdos, water: { ml: st.today.waterMl, target: st.today.waterTarget }, reps: [], alert: null
+    }
+    if (!snap.mustdos.some((x) => !x.done)) throw new Error('no open must-do for the island')
+    // The island page draws that snapshot: the pill shows the 3 numbers; opened, only quick recording.
+    const ip = await (await browser.newContext({ viewport: { width: 520, height: 680 } })).newPage()
+    try {
+      ip.on('pageerror', (e) => errors.push(`island: ${e.message}`))
+      await ip.addInitScript((sn) => {
+        const cbs = {}
+        window.__island = { actions: [] }
+        window.desktop = new Proxy({
+          islandAction: (a) => { window.__island.actions.push(a) },
+          setIslandPrefs: async () => null,
+          onIslandState: (cb) => { cbs.state = cb; setTimeout(() => cb({ ...sn, at: Date.now() }), 50) }
+        }, { get: (t, k) => (k in t ? t[k] : typeof k === 'string' && /^(on|island|show)/.test(k) ? () => {} : undefined) })
+      }, snap)
+      await ip.goto(`http://127.0.0.1:${port}/?island=1`)
+      await ip.waitForSelector('.di-pill [data-testid="island-three"]', { timeout: 15000 })
+      const pill = (await ip.textContent('.di-pill [data-testid="island-three"]')).trim()
+      if (!new RegExp(`(Sleep ✓|Sleep ✗|Bed 23:30) · \\d+ blocks? · ${Math.min(3, snap.three.mustDone)}/3`).test(pill)) throw new Error(`the pill says "${pill}"`)
+      await ip.click('.di-pill')
+      await ip.waitForSelector('[data-testid="island-simple"]', { timeout: 5000 })
+      const q = await ip.locator('[data-testid="island-simple"] .dis-grid button').evaluateAll((b) => b.map((x) => x.dataset.q).join())
+      if (q !== 'start,bed,wake,water,meal' && q !== 'stop,bed,wake,water,meal') throw new Error(`the open island's buttons: ${q}`)
+      if (await ip.locator('.di-panel .di-pager, .di-panel .ipg, .di-alert-strip').count()) throw new Error('the open island still shows its pages or feeds')
+      const first = snap.mustdos.find((x) => !x.done)
+      await ip.locator(`[data-testid="island-simple"] .dis-must[data-i="${first.i}"]`).click()
+      await ip.waitForFunction(() => window.__island.actions.some((a) => a.kind === 'mustdo'), null, { timeout: 5000 })
+      const act = await ip.evaluate(() => window.__island.actions.find((a) => a.kind === 'mustdo'))
+      if (act.i !== first.i) throw new Error(`the island ticked must-do ${act.i}, not ${first.i}`)
+      // The desktop runs that action in the app (IslandFeed: life.focus.togglePlan(i)): Today shows the tick.
+      await pg.evaluate((i) => window.__life.focus.togglePlan(i), act.i)
+      await open('today')
+      await pg.click('.td2 .ptabs [data-tab="now"]')
+      await pg.waitForFunction((n) => document.querySelector('[data-testid="tn-must"]')?.textContent?.trim() === `${n} / 3`, Math.min(3, st.today.mustDone + 1), { timeout: 15000 })
+    } finally {
+      await ip.context().close()
+      await pg.evaluate(() => localStorage.removeItem('life_soak'))
+    }
+  })
   // Simple mode (on by default): Tasks, focus goals, the weekly goal check-in and loot are hidden, never deleted;
   // Settings → Simple mode brings them back. The rest of the run uses the full app (Simple mode off; the push budget stays on).
   await step('Simple mode is on by default and hides the unused modules; Settings → Simple mode brings them back', async () => {

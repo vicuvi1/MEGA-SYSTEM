@@ -114,3 +114,14 @@ export function budgetPrefs(raw: unknown): BudgetPrefs {
   const r = (raw ?? {}) as { on?: unknown; budget?: unknown; afternoon?: unknown }
   return { on: r.budget !== false, afternoon: r.afternoon === true }
 }
+
+/**
+ * The island in Simple mode (a quiet helper): a card may still pop up only for a timer he started
+ * himself (a focus or study timer that is over: kind 'over', or a Study Time notice) or a reminder
+ * he set ('remind'). Everything else waits silently until he opens the island; the 4 daily pushes
+ * reach him as Windows notifications and on Telegram, so the island adds none.
+ */
+export function islandAlertPasses(a: { kind: string; study?: unknown } | null | undefined): boolean {
+  if (!a) return false
+  return a.kind === 'over' || a.kind === 'remind' || !!a.study
+}

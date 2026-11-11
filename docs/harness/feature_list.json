@@ -1129,7 +1129,7 @@
    "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/threeNumbers.test.ts src/core/notifyBudget.test.ts src/core/mustDoRule.test.ts src/core/benOneJob.test.ts src/core/simpleMode.test.ts src/server/castle.test.ts src/server/benOneJob.server.test.ts",
-    "SMOKE_ONLY=\"Today shows 3|Simple mode is on|notification budget|vague must-do|empty day\" npm run smoke"
+    "SMOKE_ONLY=\"Today shows 3|island in Simple mode|Simple mode is on|notification budget|vague must-do|empty day\" npm run smoke"
    ],
    "evidence": "2026-11-11: branch simplify-three-numbers; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); a real screenshot of the new Today at 1920x1080 kept outside the repo.",
    "notes": "core/threeNumbers.ts, core/notifyBudget.ts, core/mustDoRule.ts, core/benOneJob.ts, core/simpleMode.ts; ThreeToday.tsx, settings/simple.tsx, useSimple.ts, NotifToasts.tsx; server/telegramBot.ts (send gate, budgetTick, runDaily), web/webBots.ts (pick, night), desktop/main.ts (desktop:notify cap)."

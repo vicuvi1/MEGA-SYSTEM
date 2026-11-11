@@ -34,6 +34,14 @@ export function ThreeToday() {
   const load = useCallback(() => void life.coach?.status?.().then(setSt).catch(() => {}), [])
   useEffect(load, [load])
   useLive(load)
+  // A must-do ticked or a focus block started elsewhere on this device (the island, Ben, the timer) shows at once.
+  useEffect(() => {
+    const evs = ['life-focus-changed', 'life-wallet-changed', 'life-sleep-changed']
+    for (const e of evs) window.addEventListener(e, load)
+    return () => {
+      for (const e of evs) window.removeEventListener(e, load)
+    }
+  }, [load])
   useEffect(() => {
     const t = setInterval(() => setTick(Date.now()), 30_000)
     return () => clearInterval(t)

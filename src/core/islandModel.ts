@@ -219,6 +219,10 @@ export interface IslandSnapshot {
   /** IS6: later today, a "maybe" or an invite you haven't answered (greyed in the Next list). */
   maybe?: IslandBlock[]
   mustdos: { i: number; text: string; done: boolean }[]
+  /** Simple mode is on (core/simpleMode.ts): the island is a quiet helper (the 3 numbers, quick recording). */
+  simple?: boolean
+  /** The 3 numbers (core/threeNumbers.ts): last night against 23:30 / 06:45, focus blocks started, must-dos out of 3. */
+  three?: { sleep: 'ok' | 'off' | 'none'; blocks: number; mustDone: number }
   water: { ml: number; target: number }
   reps: { id: string; name: string; done: number; target: number }[]
   alert: IslandAlert | null

@@ -14,7 +14,7 @@ import { AnimatePresence, LayoutGroup, MotionConfig, animate, motion, useMotionV
 import { dayPart } from '@core/islandFeel'
 import { clockText, hmText } from '@core/studyTime'
 import { DEFAULT_ISLAND_PREFS, EMPTY_ISLAND, cleanIslandPrefs, ISLAND_SHAPE, ISLAND_UI, ISLAND_ZOOM, activities, alertGate, alertPref, bedClock, clock, islandStep, islandTiming, isLive, liveStack, meetingToOpen, pillBubbles, tuckState, windDownLeft, type Activity, type AlertGate, type AlertKindPref, type ClickAction, type IslandAction, type IslandPrefs, type IslandSection, type IslandSnapshot, type IslandUi, type IslandAlert, type StudyIslandBlock, type IslandUiEvent, type PillItem } from '@core/islandModel'
-import { restingView, type RestItem, type RestKind } from '@core/islandRest'
+import { restingView, threeRest, type RestItem, type RestKind } from '@core/islandRest'
 import { benCardVisible, buildToday, dedupeTodos } from '@core/islandTodos'
 import { BODY_CARD_MS, CALM_TIMING, calmDots, firstSight, isBodyCard, presentAs, calmRevealed, calmStep, calmTiming, calmZone, dotColor, inZone, modeGate, peekKind, type CalmDot, type CalmEvent, type CalmPhase } from '@core/islandCalm'
 
@@ -71,6 +71,7 @@ import { DropZoneView, canTake, dropDataOf, dropTarget, parseDrop, type DropTo }
 import './island/island-v2.css'
 import { lookClasses } from '@core/islandTiles'
 import './island.css'
+import './island/island-simple.css'
 import './island-motion.css'
 import './island-move.css'
 import './island-fit.css'
@@ -918,6 +919,8 @@ export function DesktopIsland() {
   useIslandSounds(place, inCall, run ? { startedAt: run.startedAt, endsAt: run.endsAt, study: run.up ? { noise: run.sound?.noise ?? 'off', tick: !!run.sound?.tick, paused: !!run.pausedAt } : null } : null)
   // Study Time: the "switch subject" list on the panel's timer card.
   const [studySwitch, setStudySwitch] = useState(false)
+  // Simple mode's quick note on the open island.
+  const [quickNote, setQuickNote] = useState('')
   useEffect(() => setStudySwitch(false), [run?.startedAt])
 
   // IP3: nothing live for a while: it tucks away (a tiny dot, or faded); the mouse on it brings it back.
@@ -2201,6 +2204,9 @@ export function DesktopIsland() {
             <span className="rest-time">{r.text}</span>
           </>
         )
+      case 'three':
+        // Simple mode: the 3 numbers at a glance (sleep, focus blocks, must-dos).
+        return <span className="rest-text rest-three" data-testid="island-three">{r.text}</span>
       case 'time':
         return clockMine ? <ClockFace clock={looks.clock} /> : <IslandClock kind={look.clock === 'off' ? 'simple' : look.clock} color={look.clockColor || undefined} zones={look.zones} back={look.zoneBack} onTap={holdHover} />
       default:
@@ -2606,7 +2612,59 @@ export function DesktopIsland() {
     </form>
   )
   const benStatus = s.ben.busy ? 'thinking…' : s.ben.why ? `${s.ben.mood} · ${s.ben.why}` : s.ben.mood
-  const expanded = (
+  // Simple mode (owner, 2026-11-11): the open island records things in one tap and nothing else:
+  // tick a must-do, start / stop a focus block, bed / up, water, a meal (or Paste from AI), a note.
+  // No feeds, advice cards or game parts; they come back with Simple mode off.
+  const firstOpen = s.mustdos.find((m) => !m.done)?.text
+  const saveQuickNote = () => {
+    const t = quickNote.trim()
+    if (!t) return
+    tap({ kind: 'clipSave', to: 'note', text: t.slice(0, 300), alertId: 'simple:note' })
+    setQuickNote('')
+  }
+  const simplePanel = (
+    <div className="di-panel di-simple" ref={panelEl} role="dialog" aria-label="Quick record" tabIndex={-1} data-testid="island-simple">
+      <div className="dis-top" {...dragProps}>
+        <b className="dis-three">{s.three ? threeRest(s.three).text : 'Today'}</b>
+        <span className="dis-acts">
+          <button className="di-icon" {...tp('head:app', () => (desk()?.showApp?.(), close()))} title="Open Life System">⤢</button>
+          <button className="di-icon" {...tp('head:close', close)} aria-label="Close" title="Close (Esc)">✕</button>
+        </span>
+      </div>
+      <section className="dis-sec" aria-label="Must-dos">
+        <h4>Must-dos {Math.min(3, s.mustdos.filter((m) => m.done).length)}/3</h4>
+        {s.mustdos.slice(0, 3).map((m) => (
+          <button key={m.i} className={`dis-must ${m.done ? 'done' : ''}`} data-i={m.i} aria-pressed={m.done} {...tp(`simple:must:${m.i}`, () => tap({ kind: 'mustdo', i: m.i }))}>
+            <i aria-hidden>{m.done ? '✓' : ''}</i>
+            <span>{m.text}</span>
+          </button>
+        ))}
+        {!s.mustdos.length && <p className="dis-none">No must-dos yet: pick 3 on Today.</p>}
+      </section>
+      <section className="dis-grid" aria-label="Record">
+        {run ? (
+          <button data-q="stop" {...tp('simple:stop', () => tap({ kind: 'stop' }))}>⏹ Stop focus</button>
+        ) : (
+          <button data-q="start" {...tp('simple:start', () => tap({ kind: 'start', subject: (firstOpen ?? 'Focus').slice(0, 40), minutes: 25 }))}>▶ Focus 25 min</button>
+        )}
+        <button data-q="bed" {...tp('simple:bed', () => tap({ kind: 'bed' }))}>🌙 In bed now</button>
+        <button data-q="wake" {...tp('simple:wake', () => tap({ kind: 'wake' }))}>☀️ Up now</button>
+        <button data-q="water" {...tp('simple:water', () => tap({ kind: 'water', ml: 250 }))}>💧 +250 ml</button>
+        <button data-q="meal" {...tp('simple:meal', () => tap({ kind: 'open', page: 'food-paste' }))}>🍽 Log a meal / Paste from AI</button>
+      </section>
+      <form
+        className="dis-note"
+        onSubmit={(e) => {
+          e.preventDefault()
+          saveQuickNote()
+        }}
+      >
+        <input value={quickNote} onChange={(e) => setQuickNote(e.target.value)} placeholder="Quick note…" aria-label="Quick note" maxLength={300} />
+        <button type="button" {...tp('simple:note', saveQuickNote)}>Save</button>
+      </form>
+    </div>
+  )
+  const expanded = s.simple ? simplePanel : (
     <div className={`di-panel ${cmdOpen ? 'has-pal' : ''}`} ref={panelEl} role="dialog" aria-label="Life System command center" tabIndex={-1}>
       <IslandBeatGlow />
       <IslandPager

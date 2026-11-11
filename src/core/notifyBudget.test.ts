@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { budgetCheck, budgetPrefs, DAILY_PUSH_CAP, dueSlot, slotNotifId, slotOfId, slotText, type BudgetLedger, type PushSlot } from './notifyBudget'
+import { budgetCheck, budgetPrefs, islandAlertPasses, DAILY_PUSH_CAP, dueSlot, slotNotifId, slotOfId, slotText, type BudgetLedger, type PushSlot } from './notifyBudget'
 
 const DAY = '2026-11-11'
 
@@ -65,5 +65,15 @@ describe('the daily push budget', () => {
       expect(t).not.toMatch(/protein|kcal|weight|lunch|food|meal/i)
     }
     expect(slotText('afternoon', { mustDone: 2, mustTotal: 3 })).toBe('Life System: 2 of 3 done.')
+  })
+})
+
+describe('the island in Simple mode', () => {
+  it('pops up only for his own timers and reminders', () => {
+    expect(islandAlertPasses({ kind: 'over' })).toBe(true)
+    expect(islandAlertPasses({ kind: 'remind' })).toBe(true)
+    expect(islandAlertPasses({ kind: 'coach', study: { kind: 'pomo' } })).toBe(true)
+    for (const kind of ['ben', 'water', 'move', 'coach', 'food', 'checkin', 'reward', 'win', 'praise', 'morning', 'end']) expect(islandAlertPasses({ kind })).toBe(false)
+    expect(islandAlertPasses(null)).toBe(false)
   })
 })

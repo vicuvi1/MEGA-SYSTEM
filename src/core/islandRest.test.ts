@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { EMPTY_ISLAND, type IslandSnapshot } from './islandModel'
-import { restingView, waitingDot, type RestInput } from './islandRest'
+import { restingView, threeRest, waitingDot, type RestInput } from './islandRest'
 
 const at = (h: number, m = 0) => new Date(2026, 10, 6, h, m).getTime()
 const NOW = at(10, 30)
@@ -99,5 +99,20 @@ describe('the resting island', () => {
     expect(run({ clock: true, music: { playing: true, title: 'x' } }).secondary?.kind).toBe('clock')
     expect(run({ clock: true }).secondary).toBeNull()
     expect(run({ clock: false, music: { playing: true, title: 'x' } }).secondary).toBeNull()
+  })
+})
+
+describe('the resting island in Simple mode (a quiet helper)', () => {
+  const three = { sleep: 'none' as const, blocks: 1, mustDone: 1 }
+  it('shows the 3 numbers, and nothing live but a running timer', () => {
+    const quiet = run({ s: snap({ simple: true, three, ben: ben(2), next: { title: 'Lab', start: at(10, 40), end: at(12) } }), music: { playing: true, title: 'Song' } })
+    expect(quiet.primary).toMatchObject({ kind: 'three', text: 'Bed 23:30 · 1 block · 1/3' })
+    expect(quiet.secondary).toBeNull()
+    const timer = run({ s: snap({ simple: true, three, running: { subject: 'Essay', startedAt: at(10), endsAt: at(10, 50) } }) })
+    expect(timer.primary.kind).toBe('timer')
+  })
+  it('says last night as a tick or a cross', () => {
+    expect(threeRest({ sleep: 'ok', blocks: 3, mustDone: 3 }).text).toBe('Sleep ✓ · 3 blocks · 3/3')
+    expect(threeRest({ sleep: 'off', blocks: 0, mustDone: 5 }).text).toBe('Sleep ✗ · 0 blocks · 3/3')
   })
 })
