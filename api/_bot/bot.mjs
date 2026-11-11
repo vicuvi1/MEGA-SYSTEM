@@ -7461,7 +7461,7 @@ function isOffDay(prefs, day, mode) {
 }
 var HM$11 = /^([01]\d|2[0-3]):[0-5]\d$/;
 var isHm$4 = (x) => typeof x === "string" && HM$11.test(x);
-var minOf$2 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+var minOf$3 = (t) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
 var localMin = (now) => {
 	const d = new Date(now);
 	return d.getHours() * 60 + d.getMinutes();
@@ -7470,7 +7470,7 @@ var hmOf$11 = (ms) => new Date(ms).toTimeString().slice(0, 5);
 /** Minutes from now until a clock time tonight (bedtime may be after midnight): negative once it's past (until 05:00). */
 function minutesUntil$1(now, at) {
 	const night = (m) => (m - 720 + 1440) % 1440;
-	return night(minOf$2(at)) - night(localMin(now));
+	return night(minOf$3(at)) - night(localMin(now));
 }
 var PC_SEEN_KEY = "ben_pc_seen";
 function cleanPcSeen(raw) {
@@ -7692,7 +7692,7 @@ function briefLines(o) {
 function decideBrief(i) {
 	if (!i.prefs.brief || i.off || i.quiet || !isHm$4(i.wake)) return null;
 	const m = localMin(i.now);
-	const w = minOf$2(i.wake);
+	const w = minOf$3(i.wake);
 	if (m < w || m >= w + 120) return null;
 	if (i.log.recs[briefKey(i.day)]) return null;
 	const level = levelFor(i.levels, "brief");
@@ -11393,7 +11393,7 @@ var ICON = {
 	points: "🪙"
 };
 var hmOf$9 = (d) => `${pad$16(d.getHours())}:${pad$16(d.getMinutes())}`;
-var minOf$1 = (hm) => {
+var minOf$2 = (hm) => {
 	const m = /^(\d{1,2}):(\d{2})$/.exec(hm);
 	return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
 };
@@ -11406,7 +11406,7 @@ function nowSlots(blocks, events, now, after) {
 	const day = ymd$3(now);
 	const all = [];
 	for (const b of blocks) {
-		const s = minOf$1(b.start);
+		const s = minOf$2(b.start);
 		if (!Number.isFinite(s)) continue;
 		const e = s + Math.max(5, b.minutes || 0);
 		all.push({
@@ -11512,7 +11512,7 @@ function quickReply(q, d, now = /* @__PURE__ */ new Date()) {
 		}
 		const cur = sl?.current;
 		if (cur && m.kind !== "answer" && m.kind !== "approve") {
-			const left = Math.max(5, minOf$1(cur.end) - (now.getHours() * 60 + now.getMinutes()));
+			const left = Math.max(5, minOf$2(cur.end) - (now.getHours() * 60 + now.getMinutes()));
 			const subject = cur.title.replace(/\(.*?\)/g, "").trim().slice(0, 28) || "Focus";
 			return cur.kind === "block" ? {
 				reply: `🎯 Right now: ${cur.title}.\nIt is on your plan until ${cur.end} (${left} min left).${nextLine}\nStart a timer for it below.`,
@@ -18742,6 +18742,21 @@ function focusBlocksStarted(sessions, running) {
 function mustLine(done, total) {
 	if (!total) return "No must-dos yet";
 	return `${Math.min(done, 3)} of 3 done`;
+}
+/** Sunday's summary of the week's 3 numbers (plain text, no personal details). */
+function weekSummaryText(days) {
+	const n = days.length || 1;
+	const sleepOk = days.filter((d) => sleepCheck(d.sleep).met).length;
+	const blocks = days.reduce((t, d) => t + Math.max(0, d.focusBlocks), 0);
+	const mustDone = days.reduce((t, d) => t + Math.min(3, Math.max(0, d.mustDone)), 0);
+	const avg = Math.round(days.reduce((t, d) => t + honestScore(d).score, 0) / n);
+	return [
+		"Life System: your week",
+		`Sleep on time: ${sleepOk} of ${days.length} nights`,
+		`Focus blocks started: ${blocks}`,
+		`Must-dos done: ${mustDone} of ${days.length * 3}`,
+		`Average day score: ${avg}/100`
+	].join("\n");
 }
 var toMin$9 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 var isHm$1 = (v) => typeof v === "string" && /^\d{2}:\d{2}$/.test(v);
@@ -28078,7 +28093,7 @@ function cleanLetters(raw) {
 	})).sort((a, b) => b.month.localeCompare(a.month)).slice(0, 24);
 }
 // src/core/habitBoard.ts
-var SLOTS = [
+var SLOTS$1 = [
 	"morning",
 	"day",
 	"evening"
@@ -28184,7 +28199,7 @@ function cleanLook(v) {
 	const out = {};
 	if (HABIT_ICONS.includes(v?.icon)) out.icon = v.icon;
 	if (HABIT_COLORS.includes(v?.color)) out.color = v.color;
-	if (v?.slot === "any" || SLOTS.includes(v?.slot)) out.slot = v.slot;
+	if (v?.slot === "any" || SLOTS$1.includes(v?.slot)) out.slot = v.slot;
 	if (v?.by === null || isHm(v?.by)) out.by = v.by;
 	return out;
 }
@@ -37980,7 +37995,7 @@ function putItem(s, day, item, today) {
 		}
 	}, today);
 }
-var minOf = (iso) => {
+var minOf$1 = (iso) => {
 	const d = new Date(iso);
 	return d.getHours() * 60 + d.getMinutes();
 };
@@ -37998,8 +38013,8 @@ function timerFor(blocks, sessions) {
 		const subject = String(s.subject ?? "");
 		let hit = subject.trim() ? blocks.find((b) => names(b).some((n) => sameThing(n, subject) || similarity(subject, n) >= .6 || similarity(n, subject) >= .6)) : void 0;
 		if (!hit && s.startedAt) {
-			const a = minOf(s.startedAt);
-			const e = s.endedAt ? minOf(s.endedAt) : a + mins;
+			const a = minOf$1(s.startedAt);
+			const e = s.endedAt ? minOf$1(s.endedAt) : a + mins;
 			const best = blocks.map((b) => ({
 				b,
 				overlap: Math.max(0, Math.min(e, toMin$8(b.start) + b.minutes) - Math.max(a, toMin$8(b.start)))
@@ -54498,6 +54513,83 @@ function withTimeout$1(p, ms, what = "The AI") {
 	let t;
 	return Promise.race([p, new Promise((_, no) => t = setTimeout(() => no(/* @__PURE__ */ new Error(`${what} took too long`)), ms))]).finally(() => t && clearTimeout(t));
 }
+/** Why a must-do is too vague, or null when it is concrete enough. */
+function vagueReason(text) {
+	const t = String(text ?? "").trim();
+	if (!t) return "It is empty.";
+	if (t.split(/[\s:,;/.+-]+/).filter((w) => /\p{L}|\d/u.test(w)).length < 2) return `"${t}" is one word. Say what and how much.`;
+	if (!/\d/.test(t)) return `"${t}" has no number. Add minutes or an amount.`;
+	return null;
+}
+/** Splits a message into items: one per line, or separated by ";" or numbered "1. … 2. …". */
+function splitMustDos(text) {
+	return String(text ?? "").replace(/\r/g, "").split(/\n|;|(?:^|\s)(?=\d[.)]\s)/).map((s) => s.replace(/^\s*(?:\d[.)]|[-*•])\s*/, "").trim()).filter(Boolean).slice(0, 10);
+}
+/** Checks a pick of tomorrow's must-dos: exactly 3, each concrete. */
+function checkPick(text) {
+	const items = splitMustDos(text);
+	if (items.length !== 3) return {
+		ok: false,
+		items: [],
+		reply: `I need exactly 3 must-dos, one per line (you sent ${items.length}). For example: "sport: 25 min, 30 push-ups".`
+	};
+	const bad = items.map((i) => vagueReason(i)).filter((r) => !!r);
+	if (bad.length) return {
+		ok: false,
+		items: [],
+		reply: `Too vague: ${bad.join(" ")} Something concrete, like "sport: 25 min, 30 push-ups".`
+	};
+	return {
+		ok: true,
+		items,
+		reply: `Saved tomorrow's 3:\n1. ${items[0]}\n2. ${items[1]}\n3. ${items[2]}`
+	};
+}
+/** A message that looks like an answer to "pick tomorrow's 3" (a prefix or 3 lines). */
+function looksLikePick(text) {
+	const t = String(text ?? "").trim();
+	if (/^(tomorrow'?s?\s*3|tomorrow|mâine|maine|завтра)\s*[:\-]/i.test(t)) return true;
+	return false;
+}
+/** Strips a "tomorrow:" prefix. */
+function pickBody(text) {
+	return String(text ?? "").trim().replace(/^(tomorrow'?s?\s*3|tomorrow|mâine|maine|завтра)\s*[:\-]\s*/i, "");
+}
+// src/renderer/src/web/notifications.ts
+/** Adds one (once per id), and keeps the newest 200 from the last 30 days. */
+function addNotif(db, n) {
+	try {
+		if (db.prepare("SELECT value FROM settings WHERE key = 'discipline_stealth'").all()[0]?.value === "1") n = {
+			...n,
+			title: neutral(n.title),
+			body: n.body ? neutral(n.body) : n.body
+		};
+	} catch {}
+	db.prepare("INSERT OR IGNORE INTO notifications (id, at, kind, title, body, action) VALUES (?, ?, ?, ?, ?, ?)").run(n.id, n.at, n.kind, n.title, n.body, n.action ? JSON.stringify(n.action) : null);
+	const cut = (/* @__PURE__ */ new Date(Date.parse(n.at) - 2592e6)).toISOString();
+	db.prepare("DELETE FROM notifications WHERE at < ? OR id IN (SELECT id FROM notifications ORDER BY at DESC LIMIT -1 OFFSET 200)").run(cut);
+}
+/** True from 23:15 until the day turns at 04:00. */
+function lateNow(d) {
+	const m = d.getHours() * 60 + d.getMinutes();
+	return m >= 1395 || m < 240;
+}
+/** One "go to sleep" a night: late now, and not said yet for this app day. */
+function nightNudgeDue(d, lastDay, appDay) {
+	return lateNow(d) && lastDay !== appDay;
+}
+function nightText(d) {
+	const m = d.getHours() * 60 + d.getMinutes();
+	return m >= 1410 || m < 240 ? "It is past 23:30. Go to sleep now: phone away, lights off." : "It is 23:15. Time to go to sleep: phone away, asleep by 23:30.";
+}
+/** The bell id that marks tonight's "go to sleep" as said (shared by the app and Telegram). */
+var nightNotifId = (appDay) => `night:${appDay}`;
+/** Is the 21:15 question still open for a plain reply? */
+function pickOpen(pick, now) {
+	if (!pick?.at) return false;
+	const at = Date.parse(pick.at);
+	return Number.isFinite(at) && now.getTime() >= at && now.getTime() - at < 108e5;
+}
 // src/renderer/public/apps/finance/js/money.js
 var LETTERS = /[^\d.,+\-*/()x×÷]/gi;
 function parseAmount(text) {
@@ -58194,6 +58286,31 @@ function lastNight(db, today) {
 	} catch {
 		return null;
 	}
+}
+/** The last 7 days' 3 numbers (oldest first), for Sunday's summary: sleep_logs, focus_sessions, day_plans. */
+function weekFacts(db, today) {
+	return Array.from({ length: 7 }, (_, k) => {
+		const day = addDays$8(today, k - 6);
+		let focusBlocks = 0;
+		let mustDone = 0;
+		let mustTotal = 0;
+		try {
+			focusBlocks = Number(db.prepare("SELECT COUNT(*) AS n FROM focus_sessions WHERE day = ?").get(day)?.n ?? 0);
+		} catch {}
+		try {
+			const raw = db.prepare("SELECT items FROM day_plans WHERE day = ?").get(day)?.items;
+			const items = raw ? JSON.parse(raw) : [];
+			mustTotal = items.length;
+			mustDone = items.filter((x) => x?.done).length;
+		} catch {}
+		return {
+			day,
+			sleep: lastNight(db, day),
+			focusBlocks,
+			mustDone,
+			mustTotal
+		};
+	});
 }
 function coachStatus(s, now = /* @__PURE__ */ new Date()) {
 	const db = s.db;
@@ -68270,6 +68387,54 @@ His note: ${note}`, { json: true }));
 			}
 		}
 		const asked = String(update.message?.reply_to_message?.text ?? "");
+		if (text && chat && allowed(cfg, chat)) {
+			if (await mirror.write((db) => {
+				const day = services.services(db).wallet.today();
+				if (!!db.prepare("SELECT 1 FROM notifications WHERE id = ?").get(nightNotifId(day)) || !nightNudgeDue(/* @__PURE__ */ new Date(), getSetting(db, "night_nudge_day"), day)) return false;
+				setSetting(db, "night_nudge_day", day);
+				addNotif(db, {
+					id: nightNotifId(day),
+					at: (/* @__PURE__ */ new Date()).toISOString(),
+					kind: "bedtime",
+					title: nightText(/* @__PURE__ */ new Date()),
+					body: null,
+					action: {
+						kind: "page",
+						page: "sleep",
+						label: "Open Sleep"
+					}
+				});
+				return true;
+			}).catch(() => false)) await tg(update.__token, "sendMessage", {
+				chat_id: chat,
+				text: nightText(/* @__PURE__ */ new Date())
+			}).catch(() => null);
+		}
+		if (text && !text.startsWith("/") && chat) {
+			if (/pick tomorrow's 3/i.test(asked) || looksLikePick(text) || splitMustDos(text).length >= 2 && await mirror.read((db) => pickOpen(readSetting(db, "pick_tomorrow"), /* @__PURE__ */ new Date())).catch(() => false)) {
+				if (!await markSeen(key)) return null;
+				if (!allowed(cfg, chat)) return null;
+				const r = checkPick(pickBody(text));
+				let reply = esc$5(r.ok ? r.reply : `${r.reply}\nPick tomorrow's 3 again: reply with 3 lines.`);
+				if (r.ok) await mirror.write((db) => {
+					const svc = services.services(db);
+					svc.focus.setPlan(r.items, /* @__PURE__ */ new Date(), addDays$8(svc.wallet.today(), 1));
+					setSetting(db, "pick_tomorrow", "null");
+				}).catch((e) => reply = `⚠️ ${esc$5(e.message)}`);
+				processed++;
+				addLog(text.slice(0, 80), chat, r.ok, reply);
+				await tg(update.__token, "sendMessage", {
+					chat_id: chat,
+					text: reply,
+					parse_mode: "HTML",
+					...r.ok ? {} : { reply_markup: {
+						force_reply: true,
+						input_field_placeholder: "sport: 25 min, 30 push-ups"
+					} }
+				}).catch(() => null);
+				return reply;
+			}
+		}
 		if (text && !text.startsWith("/") && chat && (asked.includes("What should change in today's plan?") || asked.includes("Tomorrow's top 3? One per line.") || asked.includes("Next week's 3 big tasks? One per line."))) {
 			if (!await markSeen(key)) return null;
 			if (!allowed(cfg, chat)) return null;
@@ -70157,20 +70322,6 @@ function notifFromMessage(html, markup, at) {
 		}
 	};
 }
-// src/renderer/src/web/notifications.ts
-/** Adds one (once per id), and keeps the newest 200 from the last 30 days. */
-function addNotif(db, n) {
-	try {
-		if (db.prepare("SELECT value FROM settings WHERE key = 'discipline_stealth'").all()[0]?.value === "1") n = {
-			...n,
-			title: neutral(n.title),
-			body: n.body ? neutral(n.body) : n.body
-		};
-	} catch {}
-	db.prepare("INSERT OR IGNORE INTO notifications (id, at, kind, title, body, action) VALUES (?, ?, ?, ?, ?, ?)").run(n.id, n.at, n.kind, n.title, n.body, n.action ? JSON.stringify(n.action) : null);
-	const cut = (/* @__PURE__ */ new Date(Date.parse(n.at) - 2592e6)).toISOString();
-	db.prepare("DELETE FROM notifications WHERE at < ? OR id IN (SELECT id FROM notifications ORDER BY at DESC LIMIT -1 OFFSET 200)").run(cut);
-}
 // src/renderer/src/web/moneyHub.ts
 var B = (t) => Number.isInteger(t?.base) ? t.base : Number(t?.amount) || 0;
 /** Finance Helper's state in its current shape (null without data). */
@@ -70330,6 +70481,122 @@ function nudgeFacts(raw, today) {
 		} : null,
 		loggedToday: v.loggedToday,
 		bill: big
+	};
+}
+var SLOTS = [
+	"morning",
+	"afternoon",
+	"weekly",
+	"plan",
+	"winddown"
+];
+var SLOT_TIME = {
+	morning: "07:00",
+	afternoon: "15:30",
+	weekly: "18:00",
+	plan: "21:15",
+	winddown: "23:00"
+};
+var DEFAULT_BUDGET = {
+	on: true,
+	afternoon: false
+};
+var isSlot = (x) => typeof x === "string" && SLOTS.includes(x);
+/** The bell id of a slot's message: one per slot and day, so every device adds it once. */
+var slotNotifId = (slot, day) => `budget:${slot}:${day}`;
+function cleanLedger(raw, day) {
+	const r = raw;
+	if (!r || r.day !== day || !Array.isArray(r.sent)) return {
+		day,
+		sent: []
+	};
+	return {
+		day,
+		sent: [...new Set(r.sent.filter(isSlot))]
+	};
+}
+/**
+* May this push go out? `slot` null means "not one of the 4": in the app only.
+* Weekly only on Sundays; afternoon only when switched on; each slot once a
+* day; at most DAILY_PUSH_CAP in all.
+*/
+function budgetCheck(ledger, slot, day, prefs = DEFAULT_BUDGET, weekday) {
+	const cur = cleanLedger(ledger, day);
+	const no = (reason) => ({
+		ok: false,
+		reason,
+		next: cur
+	});
+	if (!prefs.on) return {
+		ok: true,
+		reason: null,
+		next: cur
+	};
+	if (!slot) return no("Daily push budget: in the app only");
+	if (slot === "afternoon" && !prefs.afternoon) return no("The afternoon nudge is off");
+	if (slot === "afternoon" && weekday === 0) return no("On Sundays the weekly summary takes the afternoon nudge's place");
+	if (slot === "weekly" && weekday != null && weekday !== 0) return no("The weekly summary is for Sundays");
+	if (cur.sent.includes(slot)) return no("Already sent this one today");
+	if (cur.sent.length >= 4) return no(`Today's 4 pushes are used up: in the app only`);
+	return {
+		ok: true,
+		reason: null,
+		next: {
+			day,
+			sent: [...cur.sent, slot]
+		}
+	};
+}
+var minOf = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
+/** The slot due at this minute of the day (its time up to SLOT_WINDOW_MIN after), or null. */
+function dueSlot(minute, weekday, prefs = DEFAULT_BUDGET, sent = []) {
+	for (const s of SLOTS) {
+		if (sent.includes(s)) continue;
+		if (s === "afternoon" && (!prefs.afternoon || weekday === 0)) continue;
+		if (s === "weekly" && weekday !== 0) continue;
+		const t = minOf(SLOT_TIME[s]);
+		if (minute >= t && minute < t + 45) return s;
+	}
+	return null;
+}
+/** The neutral text of a slot's push (no food, body or personal details). */
+function slotText(slot, f) {
+	switch (slot) {
+		case "morning": return f.mustTotal ? `Life System: your 3 must-dos today (${Math.min(f.mustDone, 3)} of 3 done). Open the app to see them.` : "Life System: no must-dos for today yet. Pick 3 in the app.";
+		case "afternoon": return `Life System: ${Math.min(f.mustDone, 3)} of 3 done.`;
+		case "weekly": return f.week ?? "Life System: your week is ready in the app.";
+		case "plan": return "Life System: pick tomorrow's 3 must-dos. Reply with 3 lines, each with a number or minutes.";
+		case "winddown": return "Life System: wind down, phone away. Asleep by 23:30.";
+	}
+}
+/** Reads the `simple_mode` setting's budget part (missing = on, afternoon off). */
+function budgetPrefs(raw) {
+	const r = raw ?? {};
+	return {
+		on: r.budget !== false,
+		afternoon: r.afternoon === true
+	};
+}
+// src/core/simpleMode.ts
+var SIMPLE_KEY = "simple_mode";
+var DEFAULT_SIMPLE = {
+	on: true,
+	budget: true,
+	afternoon: false
+};
+/** Missing or unreadable = the defaults (on). */
+function readSimple(raw) {
+	let r = raw;
+	if (typeof raw === "string") try {
+		r = JSON.parse(raw);
+	} catch {
+		r = null;
+	}
+	if (!r || typeof r !== "object") return { ...DEFAULT_SIMPLE };
+	return {
+		on: r.on !== false,
+		budget: r.budget !== false,
+		afternoon: r.afternoon === true
 	};
 }
 // src/server/mcp.ts
@@ -74455,7 +74722,18 @@ async function runDaily(env, job) {
 		}
 	}
 	const stealth = await mirror.read((db) => readSetting(db, "discipline_stealth")).catch(() => false);
+	const budgetOn = await mirror.read((db) => budgetPrefs(readSimple(getSetting(db, SIMPLE_KEY))).on).catch(() => true);
 	const send = async (text, reply_markup, token = env.botToken) => {
+		if (budgetOn) {
+			await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{
+				at: (/* @__PURE__ */ new Date()).toISOString(),
+				status: "skipped",
+				kind: `${job} message`,
+				reason: "Daily push budget: not one of the 4 pushes",
+				text
+			}]);
+			return;
+		}
 		if (stealth) text = neutral(text);
 		const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
 			method: "POST",
@@ -74761,7 +75039,36 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			return db.prepare("SELECT wake_time FROM sleep_logs WHERE day = ?").get(today)?.wake_time ?? null;
 		}).catch(() => null);
 		/** `notif`: the bell entry to use (fixed id, so the app's own copy isn't doubled). `urgent`: through quiet hours. */
+		let budP = null;
+		const budgetNow = () => budP ??= mirror.read((db) => budgetPrefs(readSimple(getSetting(db, SIMPLE_KEY)))).catch(() => budgetPrefs(null));
+		const weekdayNow = () => (/* @__PURE__ */ new Date(`${calendarDay(now, tz)}T12:00:00Z`)).getUTCDay();
+		/**
+		* `slot`: one of the day's 4 pushes (07:00, 21:15, 23:00, the optional afternoon nudge; Sunday's summary).
+		* `userSet`: a reminder you set yourself ("remind me at 18"), which still rings.
+		*/
 		const send = async (text, reply_markup, opts = {}) => {
+			const bud = await budgetNow();
+			if (bud.on && !opts.userSet) {
+				const day = dayKey(now, tz);
+				const slot = opts.slot ?? null;
+				const v = slot ? await mirror.write((db) => {
+					const r = budgetCheck(readSetting(db, "push_budget"), slot, day, bud, weekdayNow());
+					if (r.ok) writeSetting(db, "push_budget", r.next);
+					return r;
+				}).catch(() => ({
+					ok: false,
+					reason: "Couldn't read today's push budget",
+					next: null
+				})) : budgetCheck(null, null, day, bud);
+				if (!v.ok) {
+					await mirror.write((db) => {
+						const n = opts.notif ?? notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
+						if (n) addNotif(db, n);
+					}).catch(() => null);
+					note("skipped", text, v.reason ?? "Daily push budget: in the app only");
+					return true;
+				}
+			}
 			if (!opts.urgent && !opts.throughQuiet && stillQuiet(quietNow(notifSet, now), now, await wakeAt()) && !/^\s*(🔔|⏰)/u.test(text)) {
 				await mirror.write((db) => {
 					const n = opts.notif ?? notifFromMessage(text, reply_markup, /* @__PURE__ */ new Date());
@@ -74772,7 +75079,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			}
 			const today = dayKey(now, tz);
 			const own = !opts.urgent && !opts.notif && !/^\s*(🔔|⏰)/u.test(text);
-			if (own) {
+			if (own && !bud.on) {
 				if (await mirror.read((db) => {
 					try {
 						const c = JSON.parse(getSetting(db, "ben_sent_count") || "null");
@@ -74805,7 +75112,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				return false;
 			}
 			if (await mirror.read((db) => readSetting(db, "discipline_stealth")).catch(() => false)) text = neutral(text);
-			text = await voiced(text);
+			if (!opts.slot) text = await voiced(text);
 			const res = await fetch(`https://api.telegram.org/bot${env.botToken}/sendMessage`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
@@ -74886,6 +75193,48 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			return true;
 		};
 		const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+		/** The slot due now, if any, with neutral words (no food, body or personal details). */
+		async function budgetTick() {
+			const bud = await budgetNow();
+			if (!bud.on) return;
+			const day = dayKey(now, tz);
+			const led = await mirror.read((db) => cleanLedger(readSetting(db, "push_budget"), day));
+			const slot = dueSlot(localMinute(now, tz), weekdayNow(), bud, led.sent);
+			if (!slot) return;
+			const text = slotText(slot, await mirror.read((db) => {
+				const items = services.services(db).focus.state(now).plan.items;
+				return {
+					mustDone: items.filter((x) => x.done).length,
+					mustTotal: items.length,
+					week: slot === "weekly" ? weekSummaryText(weekFacts(db, day)) : void 0
+				};
+			}));
+			if (slot === "plan") await mirror.write((db) => writeSetting(db, "pick_tomorrow", {
+				day,
+				at: now.toISOString()
+			})).catch(() => null);
+			const lines = text.split("\n");
+			await send(esc(text), slot === "plan" ? {
+				force_reply: true,
+				input_field_placeholder: "sport: 25 min, 30 push-ups"
+			} : void 0, {
+				slot,
+				always: true,
+				throughQuiet: true,
+				notif: {
+					id: slotNotifId(slot, day),
+					at: now.toISOString(),
+					kind: slot === "morning" || slot === "plan" ? "plan" : "ben",
+					title: lines[0].slice(0, 110),
+					body: lines.slice(1).join(" · ").slice(0, 240) || null,
+					action: {
+						kind: "page",
+						page: "today",
+						label: "Open Today"
+					}
+				}
+			});
+		}
 		const pauseRow = [{
 			text: "😴 30 min",
 			callback_data: "ns|"
@@ -74897,6 +75246,11 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		if (box.length) {
 			await mirror.write((db) => setSetting(db, OUTBOX, "[]")).catch(() => null);
 			for (const m of box.filter((x) => now.getTime() - x.at < 216e5)) await send(m.text, m.markup ?? void 0).catch(() => null);
+		}
+		try {
+			await budgetTick();
+		} catch (e) {
+			console.error("push budget:", e);
 		}
 		const today0 = await mirror.read((db) => services.services(db).wallet.today(now));
 		const tone = await mirror.read((db) => loadStyle(db).tone);
@@ -74934,8 +75288,10 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				return false;
 			}
 		});
+		const budOn = (await budgetNow()).on;
 		for (const r of dueReminders(list, now)) {
 			if (hush && r.kind === "checkin") continue;
+			if (budOn && (r.kind === "checkin" || r.promise)) continue;
 			try {
 				const pr = r;
 				if (!(pr.promise && !pr.tries ? await send(promiseAsk({
@@ -74963,7 +75319,10 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 						text: "1 hour",
 						callback_data: `rm|h|${r.id}`
 					}
-				]] }, { always: true }))) continue;
+				]] }, {
+					always: true,
+					userSet: r.kind !== "checkin"
+				}))) continue;
 				list = afterSend(list, r.id, now);
 				if (list.find((x) => x.id === r.id)?.ignored) await bots.rhythm.countPromise(today0, "ignored").catch(() => null);
 			} catch {}

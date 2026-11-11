@@ -16,6 +16,7 @@ import { setSoundQuiet, soundNotify } from './soundKit'
 import { DEFAULT_NOTIF, getUiPrefs } from './uiPrefs'
 import { budgetPrefs, dueSlot, slotNotifId, slotOfId, slotText } from '@core/notifyBudget'
 import { dayKey } from '@core/dates'
+import { lateNow, nightNotifId, nightText } from '@core/benOneJob'
 
 /**
  * The daily push budget (feature freeze, core/notifyBudget.ts): only the day's 4 pushes
@@ -247,6 +248,32 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
       clearInterval(t)
     }
   }, [check])
+
+  // Ben's one job: using the app after 23:15 gets ONE "go to sleep" a night (shared with Telegram by the bell id).
+  useEffect(() => {
+    let last = 0
+    const on = () => {
+      const now = new Date()
+      if (now.getTime() - last < 60_000 || !lateNow(now) || !life.notifications?.add) return
+      last = now.getTime()
+      const id = nightNotifId(dayKey(now))
+      void life.notifications
+        .list()
+        .then(async (l) => {
+          if (l.some((n) => n.id === id)) return
+          const n: Notif = { id, at: now.toISOString(), kind: 'bedtime', title: nightText(now), body: null, action: { kind: 'page', page: 'sleep', label: 'Open Sleep' }, readAt: null }
+          await life.notifications!.add!(n)
+          void deliver([n], true)
+        })
+        .catch(() => {})
+    }
+    window.addEventListener('pointerdown', on, true)
+    window.addEventListener('keydown', on, true)
+    return () => {
+      window.removeEventListener('pointerdown', on, true)
+      window.removeEventListener('keydown', on, true)
+    }
+  }, [deliver])
 
   // A button on a Windows notification (N9).
   useEffect(() => {
