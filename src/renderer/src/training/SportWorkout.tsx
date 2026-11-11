@@ -1,7 +1,7 @@
 // Sport Track → Workout (the approved design, docs/design/sport-track/Workout.dc.html):
-// the workout as you do it. The current move in a big card (a large looping
-// demo you can tap to change the move, Easier / Harder one step, a tile for every
-// set, the reps, an Easy / OK / Hard tap and Log set); the moves after it with
+// the plan for today. The next move in a big card (the demo, Easier / Harder one
+// step, a tile for every set, a big Start / Continue workout that opens the
+// full-window Workout mode, WorkoutMode.tsx, where the sets are logged); the moves after it with
 // thumbnails (drag the handle, or ↑ / ↓ on it, to change the order; Change ›
 // opens the swap sheet); a big rest timer that starts after every set (+30 s,
 // Skip, a sound at zero); "Ready to unlock" with Apply from next workout / Keep;
@@ -15,16 +15,20 @@ import { moveInfo, moveName, type LadderId } from '@core/trainLadders'
 import { swapView } from '@core/trainSwap'
 import { TYPE_NAME } from '@core/trainWeek'
 import { Icon } from '../Icon'
-import { DemoPic, MovePic } from './MovePic'
+import { MovePic } from './MovePic'
 import type { SportTrain } from './useSportTrain'
-import { FinishOverlay, FEELS, mmss, useWorkoutFlow, type WorkoutFlowState } from './WorkoutFlow'
+import { mmss, useWorkoutFlow, type WorkoutFlowState } from './WorkoutFlow'
+import { ExerciseMedia, useMediaControls } from './ExerciseMedia'
+import { WorkoutMode } from './WorkoutMode'
+import { tempoFor } from '@core/trainMedia'
 import { CardHead, PlayIcon } from './sportBits'
 
 const chainName = (n: string) => n.replace(/ \(.*\)$/, '')
 
-export function SportWorkout({ t, onHow, onSwap }: { t: SportTrain; onHow: (it: PlanItem) => void; onSwap: (l: LadderId) => void }) {
+export function SportWorkout({ t, onHow, onSwap, mode, setMode, onToday }: { t: SportTrain; onHow: (it: PlanItem) => void; onSwap: (l: LadderId) => void; mode: boolean; setMode: (on: boolean) => void; onToday: () => void }) {
   const { v } = t
   const flow = useWorkoutFlow({ view: v, onLog: t.logSet, onUndo: t.undoSet, onFinish: t.finish, onApply: (l) => t.apply(l), onKeep: (l) => t.keep(l) })
+  const modeOn = mode && v.stage !== 'rest' && !!flow.it
   if (v.stage === 'rest')
     return (
       <div className="sp-wk" data-sp="workout">
@@ -82,7 +86,16 @@ export function SportWorkout({ t, onHow, onSwap }: { t: SportTrain; onHow: (it: 
                   Harder
                 </button>
               )}
-              <button type="button" className={`sp-btn${flow.allDone ? ' primary' : ''}`} onClick={() => void flow.finish()} disabled={flow.busy || v.setsDone === 0} data-tg="finish-btn">
+              <button
+                type="button"
+                className={`sp-btn${flow.allDone ? ' primary' : ''}`}
+                onClick={() => {
+                  setMode(true)
+                  void flow.finish()
+                }}
+                disabled={flow.busy || v.setsDone === 0}
+                data-tg="finish-btn"
+              >
                 Finish workout
               </button>
             </div>
@@ -92,7 +105,7 @@ export function SportWorkout({ t, onHow, onSwap }: { t: SportTrain; onHow: (it: 
               <Icon name="check" size={14} /> Done for today · {v.setsDone} sets. Eat well and sleep: that is when muscle grows.
             </p>
           )}
-          {flow.it && <CurrentCard t={t} flow={flow} onHow={onHow} onSwap={onSwap} />}
+          {flow.it && <CurrentCard t={t} flow={flow} onHow={onHow} onSwap={onSwap} onStart={() => setMode(true)} />}
           <MoveList t={t} flow={flow} onSwap={onSwap} />
           {v.warmup.length > 0 && (
             <p className="sp-small sp-wk-warm">
@@ -107,31 +120,44 @@ export function SportWorkout({ t, onHow, onSwap }: { t: SportTrain; onHow: (it: 
           <DoseCard t={t} />
         </aside>
       </div>
-      <FinishOverlay view={v} flow={flow} onClose={flow.closeReport} />
+      {modeOn && (
+        <WorkoutMode
+          t={t}
+          flow={flow}
+          onClose={() => setMode(false)}
+          onDone={() => {
+            flow.closeReport()
+            setMode(false)
+            onToday()
+          }}
+        />
+      )}
     </div>
   )
 }
 
 // ---------------------------------------------------------------- the current move
 
-function CurrentCard({ t, flow, onHow, onSwap }: { t: SportTrain; flow: WorkoutFlowState; onHow: (it: PlanItem) => void; onSwap: (l: LadderId) => void }) {
+function CurrentCard({ t, flow, onHow, onSwap, onStart }: { t: SportTrain; flow: WorkoutFlowState; onHow: (it: PlanItem) => void; onSwap: (l: LadderId) => void; onStart: () => void }) {
   const it = flow.it!
   const { n, unit } = flow
+  const ctl = useMediaControls()
   const view = useMemo(() => swapView(t.st, it.ladder.id, t.today, t.v.dose), [t.st, it.ladder.id, t.today, t.v.dose])
   const easier = view ? [...view.options].reverse().find((o) => o.kind === 'easier') : null
   const harder = view?.options.find((o) => o.kind === 'next') ?? null
   const ofN = it.sets
   const over = n >= ofN
+  const going = t.v.setsDone > 0
   return (
     <article className="sp-now" data-tg="flow" data-ladder={it.ladder.id}>
       <div className="sp-now-top">
         <div className="sp-now-id">
-          <button type="button" className="sp-now-pic" onClick={() => onSwap(it.ladder.id)} title="Tap to pick easier or harder" aria-label={`Change ${it.name}`} data-tg="change">
-            <DemoPic move={it.level.move} />
-          </button>
+          <div className="sp-now-pic sp-now-media" data-tg="now-media">
+            <ExerciseMedia move={it.level.move} verdicts={t.verdicts} ctl={ctl} tempo={tempoFor(it.level)} />
+          </div>
           <div>
             <div className="sp-now-eyebrow" data-tg="flow-set">
-              {over ? 'Extra set' : `NOW · Set ${n + 1} of ${ofN}`} · move {flow.idx + 1} of {flow.items.length}
+              {over ? 'Extra set' : `${going ? 'NOW' : 'FIRST'} · Set ${n + 1} of ${ofN}`} · move {flow.idx + 1} of {flow.items.length}
             </div>
             <h3 data-tg="flow-move">{it.name}</h3>
             <p className="sp-now-line">
@@ -142,6 +168,10 @@ function CurrentCard({ t, flow, onHow, onSwap }: { t: SportTrain; flow: WorkoutF
               {it.needs !== 'floor' ? ` · ${it.needs}` : ''} ·{' '}
               <button type="button" className="sp-link inline" onClick={() => onHow(it)}>
                 How to do it
+              </button>{' '}
+              ·{' '}
+              <button type="button" className="sp-link inline" onClick={() => onSwap(it.ladder.id)} data-tg="change">
+                Change ›
               </button>
             </p>
           </div>
@@ -166,41 +196,24 @@ function CurrentCard({ t, flow, onHow, onSwap }: { t: SportTrain; flow: WorkoutF
                 {s.reps}
                 {unit}
               </b>
-              <small className="ok">{s.feel ? `${s.feel === 'ok' ? 'OK' : s.feel[0].toUpperCase() + s.feel.slice(1)} · logged` : 'logged'}{s.form === 'off' ? ' · form' : ''}</small>
+              <small className="ok">
+                {s.feel ? `${s.feel === 'ok' ? 'OK' : s.feel[0].toUpperCase() + s.feel.slice(1)}` : 'logged'}
+                {s.form === 'good' ? ' · form good' : s.form === 'off' ? ' · form broke' : ' · form ?'}
+                {s.issue ? ` · ${s.issue.kind}` : ''}
+              </small>
             </button>
           ) : (
             <div key={i} className={`sp-set${now ? ' now' : ''}`}>
               <small>Set {i + 1}</small>
               <b className="num">—</b>
-              <small>{now ? 'Now' : `aim ${it.aim[i] ?? it.level.lo}${unit}`}</small>
+              <small>{now ? 'Next' : `aim ${it.aim[i] ?? it.level.lo}${unit}`}</small>
             </div>
           )
         })}
       </div>
-      <form
-        className="sp-logbar"
-        onSubmit={(e) => {
-          e.preventDefault()
-          flow.log()
-        }}
-      >
-        <label htmlFor="sp-reps">{over ? 'Extra set' : `Set ${n + 1}`} {it.level.unit === 'sec' ? 'seconds' : 'reps'}</label>
-        <input id="sp-reps" className="sp-reps num" type="number" inputMode="numeric" min={1} max={600} value={flow.reps} onChange={(e) => flow.setReps(Math.max(0, Math.min(600, Math.round(Number(e.target.value) || 0))))} data-tg="reps" />
-        <span className="sp-how">How hard?</span>
-        <span className="sp-feels" role="radiogroup" aria-label="How hard was it?">
-          {FEELS.map((f) => (
-            <button key={f.id} type="button" role="radio" aria-checked={flow.feel === f.id} className={flow.feel === f.id ? 'on' : ''} onClick={() => flow.setFeel(f.id)} data-feel={f.id} title={f.hint}>
-              {f.label}
-            </button>
-          ))}
-        </span>
-        <label className="sp-formok">
-          <input type="checkbox" checked={flow.formOk} onChange={(e) => flow.setFormOk(e.target.checked)} data-tg="form" /> Form stayed good
-        </label>
-        <button type="submit" className="sp-btn primary big sp-logbtn" disabled={!flow.feel || flow.reps < 1} data-tg="log-set">
-          {flow.feel ? `Log set: ${flow.reps}${unit}` : 'Log set'}
-        </button>
-      </form>
+      <button type="button" className="sp-btn primary big sp-start-mode" onClick={onStart} data-tg="mode-open">
+        <PlayIcon /> {going ? 'Continue workout' : 'Start workout'}
+      </button>
       {it.nextTime && <p className={`sp-said tg-next ${it.nextTime.kind}`}>{it.nextTime.line}</p>}
       {flow.allDone && (
         <p className="sp-said" data-tg="all-done">

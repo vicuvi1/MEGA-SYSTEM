@@ -13,6 +13,9 @@ import { applyOffer, finishReport, keepOffer, orderItems, shiftMove, shiftWorkou
 import { ensureExercise, sessionItems, trainOf, type Dose, type Feel } from '@core/trainLog'
 import { clearPick, pickToday, setGear, type Gear } from '@core/trainGear'
 import { makeStep } from '@core/trainSwap'
+import { cleanVerdicts, clearVerdict, setVerdict, type MediaVerdicts } from '@core/trainMedia'
+import { workoutDone, type DoneView } from '@core/trainAdvice'
+import type { SetIssue } from '@core/sportSets'
 import type { LadderId, Level } from '@core/trainLadders'
 import type { SessionType } from '@core/trainWeek'
 import { life } from '../bridge'
@@ -22,7 +25,7 @@ import { useToast } from '../ui'
 import { readSport } from '../sportTrack'
 import { saveTraining, useTraining } from '../body/training/trainingStore'
 import { useTrainReady } from './useTrainHome'
-import { appliedLine, keptLine } from './WorkoutFlow'
+import { appliedLine, keptLine, type FormTap } from './WorkoutFlow'
 
 const ANYWAY_KEY = 'life_train_anyway'
 const ORDER_KEY = 'life_train_order'
@@ -63,7 +66,7 @@ export interface SportTrain {
   auto: boolean
   skip: boolean
   setDose: (m: Dose | null) => void
-  logSet: (it: TrackerItem, reps: number, feel: Feel, formOff: boolean) => void
+  logSet: (it: TrackerItem, reps: number, feel: Feel | null, form: FormTap, issue?: SetIssue | null) => void
   undoSet: (setId: string) => void
   finish: () => Promise<ReturnType<typeof finishReport> | null>
   apply: (ladder: string, type?: SessionType, fromNext?: boolean) => string | null
@@ -79,6 +82,11 @@ export interface SportTrain {
   trainAnyway: (t: SessionType | null) => void
   reorder: (ids: string[]) => void
   refresh: () => void
+  /** The owner's demo answers (Looks right / Wrong demo). */
+  verdicts: MediaVerdicts
+  verdict: (id: string, ok: boolean | null) => void
+  /** The Workout done page, read fresh from the saved state (a snapshot: Apply later doesn't change it). */
+  doneView: () => DoneView
 }
 
 export function useSportTrain(body: BodyState | null, onBody: (s: BodyState) => void, onWallet: () => void): SportTrain {
@@ -98,11 +106,11 @@ export function useSportTrain(body: BodyState | null, onBody: (s: BodyState) => 
   const session = v.type === 'rest' ? null : (v.type as SessionType)
 
   const logSet = useCallback(
-    (it: TrackerItem, reps: number, feel: Feel, formOff: boolean) => {
+    (it: TrackerItem, reps: number, feel: Feel | null, form: FormTap, issue?: SetIssue | null) => {
       if (!session) return
       // The exercise first (its own change), so the reps after it reach the log as reps.
       saveTraining((s) => void ensureExercise(s, it.level.move, it.level, it.sets))
-      saveTraining((s) => void trackerLog(s, { day: today, type: session, ladder: it.ladder.id, reps, feel, formOff, now: Date.now(), dose }))
+      saveTraining((s) => void trackerLog(s, { day: today, type: session, ladder: it.ladder.id, reps, feel, form, issue: issue ?? null, now: Date.now(), dose }))
       if (v.byChoice) writeAnyway(today, session)
       refresh()
     },
@@ -235,9 +243,24 @@ export function useSportTrain(body: BodyState | null, onBody: (s: BodyState) => 
     }
     setOrder(next)
   }
+  const verdicts = useMemo(() => cleanVerdicts(state.trainMediaOk), [state])
+  const verdict = (id: string, ok: boolean | null) => {
+    saveTraining((s) => (ok == null ? clearVerdict(s, id) : setVerdict(s, id, ok, Date.now())))
+    refresh()
+    if (ok === false) toast('Thanks: that demo is hidden for this move. The next one shows instead.', 'info')
+    else if (ok) toast('Demo marked as checked.', 'good')
+  }
+  const doneView = () => {
+    const fresh = readSport() ?? {}
+    const raw = trackerToday(fresh, today, { dose, anyway })
+    return workoutDone(fresh, raw.type === 'rest' ? raw : { ...raw, items: orderItems(raw.items, order[raw.type]) }, Date.now())
+  }
   return {
     st: state,
     today,
+    verdicts,
+    verdict,
+    doneView,
     v,
     session,
     readiness: tr && !thin ? tr.score : null,

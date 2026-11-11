@@ -85,7 +85,7 @@ export function pathProgress(st: any, today: string): PathRow[] {
         pct: Math.round(frac * 100),
         first: moveName(l.levels[0].move),
         last: moveName(l.levels[l.levels.length - 1].move),
-        checks: requirementsOf(it).filter((r) => r.id !== 'form'),
+        checks: requirementsOf(it).filter((r) => r.id !== 'form' && r.id !== 'pain'),
         stand,
         fresh: it.status.state === 'new'
       })

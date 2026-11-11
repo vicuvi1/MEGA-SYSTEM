@@ -8,12 +8,12 @@ import {
 
 const push = DEFAULT_LADDERS[0]
 const diamond = push.levels[2] // 6–12
-const ses = (day: string, reps: number[], kg?: number): MoveSession => ({ day, reps, sets: reps.map((r, i) => ({ reps: r, at: Date.parse(day) + i, id: `${day}${i}`, ...(kg ? { kg } : {}) })) })
+const ses = (day: string, reps: number[], kg?: number): MoveSession => ({ day, reps, sets: reps.map((r, i) => ({ reps: r, at: Date.parse(day) + i, id: `${day}${i}`, form: 'good' as const, ...(kg ? { kg } : {}) })) })
 
 /** A made-up Sport Track state with diamond push-up sets on some days. */
 function state(days: Record<string, number[]>, extra: Record<string, unknown> = {}) {
   const sets: any = {}
-  for (const [d, reps] of Object.entries(days)) sets[d] = { ex_d: reps.map((r, i) => ({ reps: r, at: Date.parse(d + 'T10:00:00Z') + i, id: `${d}-${i}` })) }
+  for (const [d, reps] of Object.entries(days)) sets[d] = { ex_d: reps.map((r, i) => ({ reps: r, at: Date.parse(d + 'T10:00:00Z') + i, id: `${d}-${i}`, form: 'good' })) }
   return { lastDate: '2026-11-13', exercises: [{ id: 'ex_d', name: 'Diamond push-ups', target: 30, move: 'diamond_pushup' }], days: {}, sets, ...extra }
 }
 
@@ -190,7 +190,7 @@ describe('finishing a workout', () => {
 
 // The Tracker and Body → Training share these rules (sportTrain.ts reads them): double progression with effort.
 describe('double progression with effort (one engine for the Tracker and Training)', () => {
-  const tapped = (day: string, reps: number[], feel: 'easy' | 'ok' | 'hard'): MoveSession => ({ day, reps, sets: reps.map((r, i) => ({ reps: r, at: Date.parse(day) + i, id: `${day}${i}`, feel })) })
+  const tapped = (day: string, reps: number[], feel: 'easy' | 'ok' | 'hard'): MoveSession => ({ day, reps, sets: reps.map((r, i) => ({ reps: r, at: Date.parse(day) + i, id: `${day}${i}`, feel, form: 'good' as const })) })
 
   it('the top of the range in every set, 2 sessions in a row, not Hard and form OK, completes a level', () => {
     const two = (feel: 'easy' | 'ok' | 'hard') => [tapped('2026-11-08', [12, 12, 12, 12], feel), tapped('2026-11-10', [12, 12, 12, 12], feel)]
@@ -217,7 +217,7 @@ describe('double progression with effort (one engine for the Tracker and Trainin
 
   it('a completed level is offered, never applied by itself; "Not yet" waits for a newer session', () => {
     const st: any = state({}, { trainLevels: { push: { level: 2, reached: { '2': '2026-11-01' }, at: 1 } } })
-    for (const d of ['2026-11-09', '2026-11-11']) st.sets[d] = { ex_d: [12, 12, 12].map((r, i) => ({ reps: r, at: Date.parse(d + 'T10:00:00Z') + i, id: `${d}${i}`, feel: 'easy' })) }
+    for (const d of ['2026-11-09', '2026-11-11']) st.sets[d] = { ex_d: [12, 12, 12].map((r, i) => ({ reps: r, at: Date.parse(d + 'T10:00:00Z') + i, id: `${d}${i}`, feel: 'easy', form: 'good' })) }
     const data = trainOf(st)
     expect(currentLevel(st, data, push, '2026-11-13').index).toBe(2)
     const items = sessionItems(st, data, 'upper', '2026-11-11')

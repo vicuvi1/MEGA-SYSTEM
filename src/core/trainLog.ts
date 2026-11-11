@@ -8,16 +8,18 @@
 //   trainLog    the sessions: { id, date, type, exercises, startedAt, durationSec }
 //   trainGear   what you can train with (trainGear.ts); the plan only uses moves it allows
 //   trainPicks  { day, at, moves: { [ladder]: Level } }: the move you chose for today only (the swap sheet)
+//   trainMediaOk { [mediaId]: { ok, at } }: the owner's "Looks right" / "Wrong demo" per demo (trainMedia.ts)
 // Sets go to the same set log as Sport Track (sets[day][exerciseId]), with
 // rir / feel / session added. Pure and tested (trainLog.test.ts). Nothing
 // here pays points: a finished workout is logged like any other workout.
 import { moveById } from './sportMoves'
 import { moveOf } from './sportLadders'
 import { atTop, belowBottom, NEED, type RepRange } from './sportProgress'
-import { setsOn, setsText, shiftDay, type SetEntry, type SetLog } from './sportSets'
+import { cleanIssue, setsOn, setsText, shiftDay, type SetEntry, type SetIssue, type SetLog } from './sportSets'
 import { estimateSets, isImported } from './sportLevels'
 import { cleanLadders, laddersFor, moveInfo, moveName, rangeText, type Ladder, type LadderId, type Level } from './trainLadders'
 import { allowed, cleanGear, effectiveLevel, stepFrom, type Gear } from './trainGear'
+import { mergeVerdicts } from './trainMedia'
 import { cleanWeek, daysBetween, SESSION_RULES, type DoneSession, type SessionType, type TrainWeek } from './trainWeek'
 
 export type Feel = 'hard' | 'ok' | 'easy'
@@ -29,8 +31,10 @@ export interface TrainSet {
   reps: number
   kg?: number
   feel?: Feel
-  /** 'off': your form broke on this set. */
-  form?: 'off'
+  /** 'good': you confirmed your form · 'off': it broke · not set: form unknown (never counts toward a step up). */
+  form?: 'off' | 'good'
+  /** Pain, discomfort or a set you couldn't finish. */
+  issue?: SetIssue
 }
 export interface SessionExercise {
   ladder: LadderId
@@ -202,7 +206,10 @@ export const doseSets = (sets: number, dose: Dose = 'full') => (dose === 'short'
 const rangeOf = (v: Level, sets: number): RepRange => ({ lo: v.lo, hi: v.hi, sets, unit: v.unit })
 
 export interface LevelStatus {
-  state: 'new' | 'building' | 'complete' | 'struggling'
+  /** hurt: pain was flagged in your newest session on this step (no step up; easier or another move is offered, never harder). */
+  state: 'new' | 'building' | 'complete' | 'struggling' | 'hurt'
+  /** The pain flag of your newest session (state hurt). */
+  pain?: PainFlag | null
   /** Complete: why, in a few words ("you hit 4×12 easy"). */
   reason?: string
   /** Complete: how many levels to move up (2 when it was far too easy). */
@@ -233,8 +240,35 @@ export function effortOf(s: { sets: SetEntry[] } | null | undefined, sets: numbe
   return w.every((x) => x.feel === 'easy') ? 'easy' : 'ok'
 }
 
-/** The optional form check: no working set marked "form broke". */
+/** No working set marked "form broke" (form unknown is not broken, but see formConfirmed). */
 export const formOk = (s: { sets: SetEntry[] } | null | undefined, sets: number) => !(s?.sets ?? []).slice(0, sets).some((x) => x.form === 'off')
+
+/** Form explicitly confirmed good on every working set: the only form that counts toward a step up (never assumed). */
+export const formConfirmed = (s: { sets: SetEntry[] } | null | undefined, sets: number) => {
+  const w = (s?.sets ?? []).slice(0, sets)
+  return w.length > 0 && w.every((x) => x.form === 'good')
+}
+/** Working sets with no form check (form unknown). */
+export const formUnknown = (s: { sets: SetEntry[] } | null | undefined, sets: number) => (s?.sets ?? []).slice(0, sets).filter((x) => x.form !== 'good' && x.form !== 'off').length
+
+export interface PainFlag {
+  /** 1-based set number. */
+  set: number
+  kind: SetIssue['kind']
+  where?: SetIssue['where']
+  day: string
+}
+/** The first pain (or, with `kinds`, other issue) flagged in a session, on any set. */
+export function issueOf(s: { day: string; sets: SetEntry[] } | null | undefined, kinds: SetIssue['kind'][] = ['pain']): PainFlag | null {
+  const list = s?.sets ?? []
+  for (let i = 0; i < list.length; i++) {
+    const is = cleanIssue(list[i].issue)
+    if (is && kinds.includes(is.kind)) return { set: i + 1, kind: is.kind, ...(is.where ? { where: is.where } : {}), day: s!.day }
+  }
+  return null
+}
+/** "pain flagged on set 2 (wrist)" */
+export const painText = (p: PainFlag) => `${p.kind === 'pain' ? 'pain' : p.kind === 'discomfort' ? 'discomfort' : 'a set you couldn\u2019t finish'} flagged on set ${p.set}${p.where ? ` (${p.where})` : ''}`
 
 /**
  * Where you stand on a level, from the sessions since you reached it. Complete (double progression): every
@@ -250,7 +284,9 @@ export function levelStatus(sessions: MoveSession[], level: Level, sets: number,
   const u = level.unit === 'sec' ? ' s' : ''
   if (!list.length) return { state: 'new', hits: 0, need: NEED, topSets: 0, needSets, pct: 0, sessions: 0, line: `Not started: ${sets}×${level.lo}${u} to begin, ${sets}×${level.hi}${u} twice to unlock the next move.` }
   let hits = 0
-  for (let i = list.length - 1; i >= 0 && atTop(list[i], r) && effortOf(list[i], sets) !== 'hard' && formOk(list[i], sets); i--) hits++
+  // A session counts toward a step up only with form confirmed on every working set and no pain or discomfort.
+  const counts = (x: MoveSession) => atTop(x, r) && effortOf(x, sets) !== 'hard' && formConfirmed(x, sets) && !issueOf(x, ['pain', 'discomfort'])
+  for (let i = list.length - 1; i >= 0 && counts(list[i]); i--) hits++
   const lastS = list[list.length - 1]
   const partial = hits ? 0 : lastS.reps.slice(0, sets).filter((x) => x >= level.hi).length
   const topSets = Math.min(needSets, hits * sets + partial)
@@ -266,10 +302,15 @@ export function levelStatus(sessions: MoveSession[], level: Level, sets: number,
     const reason = `${sets}×${level.hi}${u} ${how}`
     return { ...base, pct: 1, topSets: needSets, state: 'complete', reason, jump: far ? 2 : 1, line: `Step complete: ${reason}.` }
   }
+  const pain = issueOf(lastS)
+  if (pain) return { ...base, state: 'hurt', pain, line: `No step up: ${painText(pain)}. Go easier or try another move; never harder until it is gone.` }
   const lastTwo = list.slice(-2)
   if (lastTwo.length === 2 && lastTwo.every((s) => belowBottom(s, r))) return { ...base, state: 'struggling', line: `Under ${level.lo}${u} twice. Stay here a bit longer, or go one step back.` }
-  const hardTop = atTop(lastS, r) && (effort === 'hard' || !formOk(lastS, sets))
-  return { ...base, state: 'building', line: hardTop ? `${sets}×${level.hi}${u}, but ${effort === 'hard' ? 'it was hard' : 'your form broke'}. Once more with 1–2 reps left and good form counts.` : hits ? `1 of ${NEED} sessions at the top. One more (not hard) unlocks the next move.` : `${topSets} of ${needSets} sets at the top (${level.hi}${u}).` }
+  const sore = issueOf(lastS, ['discomfort'])
+  const unknown = formUnknown(lastS, sets)
+  const why = effort === 'hard' ? 'it was hard' : !formOk(lastS, sets) ? 'your form broke' : sore ? `${painText(sore)}` : unknown ? `form was not confirmed on ${unknown === 1 ? '1 set' : `${unknown} sets`}` : ''
+  const hardTop = atTop(lastS, r) && !!why
+  return { ...base, state: 'building', line: hardTop ? `${sets}×${level.hi}${u}, but ${why}. Once more with 1–2 reps left and form confirmed good counts.` : hits ? `1 of ${NEED} sessions at the top. One more (not hard, form good) unlocks the next move.` : `${topSets} of ${needSets} sets at the top (${level.hi}${u}).` }
 }
 
 export interface CurrentLevel {
@@ -442,6 +483,11 @@ export function nextTimeOf(p: { ladder: Ladder; index: number; level: Level; nam
     const to = p.ladder.levels[at]
     return { kind: 'up', move: to.move, line: `Unlocked: ${moveName(to.move)} ${sets} × ${rangeText(to)}, because ${status.reason}.` }
   }
+  if (status.state === 'hurt' && status.pain) {
+    const at = p.index > 0 ? stepFrom(p.ladder, p.index - 1, -1, p.gear) : null
+    const back = at == null ? null : p.ladder.levels[at]
+    return { kind: 'down', move: back?.move ?? level.move, line: `Next time: ${back ? `an easier step (${moveName(back.move)}) or another move` : 'another move or a rest'}, because ${painText(status.pain)}. Never harder until it is gone.` }
+  }
   if (status.state === 'struggling') {
     const back = p.ladder.levels[p.index - 1]
     return { kind: 'down', move: level.move, line: `Next time: stay on ${p.name}${back ? ` or go one step back to ${moveName(back.move)}` : ''}, because you stayed under ${level.lo}${u} twice.` }
@@ -550,7 +596,9 @@ export function logSet(st: any, input: { day: string; exId: string; set: TrainSe
     e.feel = set.feel
     e.rir = feelToRir(set.feel)
   }
-  if (set.form === 'off') e.form = 'off'
+  if (set.form === 'off' || set.form === 'good') e.form = set.form
+  const is = cleanIssue(set.issue)
+  if (is) e.issue = is
   st.sets = st.sets ?? {}
   const list = ((st.sets[day] ??= {})[exId] ??= [])
   list.push(e)
@@ -594,7 +642,7 @@ export function sessionFromSets(st: any, input: { id: string; date: string; type
     exId: it.exId,
     sets: setsOn(st?.sets, input.date, it.exId)
       .filter((s) => s.session === input.id)
-      .map((s) => ({ reps: s.reps, ...(s.kg ? { kg: s.kg } : {}), ...(s.feel ? { feel: s.feel } : {}), ...(s.form === 'off' ? { form: 'off' as const } : {}) }))
+      .map((s) => ({ reps: s.reps, ...(s.kg ? { kg: s.kg } : {}), ...(s.feel ? { feel: s.feel } : {}), ...(s.form === 'off' || s.form === 'good' ? { form: s.form } : {}), ...(cleanIssue(s.issue) ? { issue: cleanIssue(s.issue)! } : {}) }))
   }))
   return { id: input.id, date: input.date, type: input.type, exercises, startedAt: input.startedAt, durationSec: Math.max(0, Math.round((input.now - input.startedAt) / 1000)), ...(input.done ? { done: true } : {}) }
 }
@@ -654,7 +702,7 @@ export function declineLevel(st: any, ladder: LadderId, index: number, day: stri
 
 /** Shows the level-up / step-back suggestion only when a session came after your last "not yet". */
 export const suggestNow = (status: LevelStatus, last: MoveSession | null, declinedOn?: string) =>
-  (status.state === 'complete' || status.state === 'struggling') && (!declinedOn || (last?.day ?? '') > declinedOn)
+  (status.state === 'complete' || status.state === 'struggling' || status.state === 'hurt') && (!declinedOn || (last?.day ?? '') > declinedOn)
 
 // ---------- merging two devices (sportSync.ts) ----------
 
@@ -680,6 +728,8 @@ export function mergeTrain(a: any, b: any): Record<string, unknown> {
   newer('trainLighter', (v) => Number(v?.at) || 0)
   newer('trainGear', (v) => Number(v?.at) || 0)
   newer('trainPicks', (v) => Number(v?.at) || 0)
+  // The owner's demo answers ("Looks right" / "Wrong demo"): per demo, the newer one wins.
+  if (a?.trainMediaOk || b?.trainMediaOk) out.trainMediaOk = mergeVerdicts(a?.trainMediaOk, b?.trainMediaOk)
   // Dismissed warnings: the later day per warning.
   if (a?.trainWarnDismiss || b?.trainWarnDismiss) {
     const dm: Record<string, string> = { ...(b?.trainWarnDismiss ?? {}) }

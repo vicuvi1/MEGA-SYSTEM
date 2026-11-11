@@ -77,7 +77,7 @@ var SETTINGS = {
 	island_widgets: json$7("PL1–PL8: installed widgets (pinned hashes, permissions), island pages, script tiles, the island look and the synced layout (src/core/widgets/settings.ts)", null),
 	island_kit: json$7("Island 2: your island tiles, buttons, profiles, colours and SoundCloud stations, starred tracks and music options (src/core/islandTiles.ts, src/core/music.ts)", null),
 	music_now: json$7("MU: the song playing now, for Ben (only with \"Ben can see what's playing\" on; src/core/music.ts)", null),
-	sport_tracker_json: json$7("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}; the training part rides in the same blob (trainWeek, trainLadders, trainLevels, trainLog, trainLighter) with the gear you can train with (trainGear, core/trainGear.ts: the plan only picks moves it allows) and today's one-day move picks (trainPicks); the newer device wins for each", null),
+	sport_tracker_json: json$7("Sport Track: water + reps, {savedAt, data:{lastDate, exercises, water}}; the training part rides in the same blob (trainWeek, trainLadders, trainLevels, trainLog, trainLighter) with the gear you can train with (trainGear, core/trainGear.ts: the plan only picks moves it allows) today's one-day move picks (trainPicks) and the owner's demo checks (trainMediaOk, core/trainMedia.ts); a set may carry form good / off and an issue (pain, discomfort, incomplete); the newer device wins for each", null),
 	sport_sync_seen: json$7("when Sporty last synced water and workouts", null),
 	sporty_status: json$7("Sporty's last status", null),
 	sporty_update_request: json$7("a change waiting for Sporty to pick up", null),
@@ -4607,6 +4607,26 @@ function prevStep(move) {
 	return i > 0 ? moveById(f.steps[i - 1]) : null;
 }
 // src/core/sportSets.ts
+var PAIN_SPOTS = [
+	"wrist",
+	"shoulder",
+	"elbow",
+	"knee",
+	"back",
+	"other"
+];
+/** A stored issue into a valid one (null: none). */
+function cleanIssue(x) {
+	if (!x || ![
+		"pain",
+		"discomfort",
+		"incomplete"
+	].includes(x.kind)) return null;
+	return {
+		kind: x.kind,
+		...PAIN_SPOTS.includes(x.where) ? { where: x.where } : {}
+	};
+}
 var MUSCLES = [
 	{
 		id: "push",
@@ -14573,6 +14593,42 @@ function stepFrom(ladder, from, dir, g) {
 	for (let i = from; i >= 0 && i < ladder.levels.length; i += dir) if (allowed(ladder.levels[i].move, g)) return i;
 	return null;
 }
+// src/core/trainMedia.ts
+var CC_BY_3 = "https://creativecommons.org/licenses/by/3.0/";
+var CC_BY_SA_4 = "https://creativecommons.org/licenses/by-sa/4.0/";
+var PD_US = "https://commons.wikimedia.org/wiki/Template:PD-USGov";
+var commons = (file) => `https://commons.wikimedia.org/wiki/File:${file.replace(/ /g, "_")}`;
+var VIDEO_CHANGES = "Scaled from 720p to 540p, 24 fps, re-encoded to VP9, no audio.";
+var v = (id, file, title, author, licence, match, note, changes = VIDEO_CHANGES) => {
+	const sa = licence === "CC BY-SA 4.0";
+	return {
+		id,
+		kind: "video",
+		src: [`/apps/sport/media/${sa ? "by-sa/" : ""}${file}`],
+		title,
+		author,
+		licence,
+		licenceUrl: licence === "CC BY 3.0" ? CC_BY_3 : sa ? CC_BY_SA_4 : PD_US,
+		sourceUrl: commons(title),
+		source: "Wikimedia Commons",
+		shareAlike: sa,
+		match,
+		...note ? { note } : {},
+		changes,
+		verifiedTechnique: false
+	};
+};
+/** The bundled videos (src/renderer/public/apps/sport/media). */
+var VIDEOS = {
+	squat: v("v-squat-fs", "squat-fitnessscape.webm", "Squat - exercise demonstration video.webm", "FitnessScape", "CC BY 3.0", "close", "A barbell back squat: the same squat pattern. Do yours without the bar."),
+	pullup: v("v-pullup-fs", "pullup-fitnessscape.webm", "Pull-ups - exercise demonstration video.webm", "FitnessScape", "CC BY 3.0", "exact"),
+	hangingLegRaise: v("v-hlr-fs", "hanging-leg-raise-fitnessscape.webm", "Leg raises - exercise demonstration video.webm", "FitnessScape", "CC BY 3.0", "exact"),
+	hangingKneeRaise: v("v-hkr-fs", "hanging-knee-raise-fitnessscape.webm", "Hanging crunches - exercise demonstration video.webm", "FitnessScape", "CC BY 3.0", "close", "Knees bent: the easier way to start hanging leg raises."),
+	singleLegSquat: v("v-slsq-rb", "single-leg-squat-bennison.webm", "Basic single leg squat.webm", "RickyBennison", "CC BY-SA 4.0", "close", "A free single-leg squat with the back knee bent (like a shrimp squat).", "Re-encoded to VP9 at 24 fps, audio removed. Size kept (480×640)."),
+	pushup: v("v-pushup-navy", "pushup-navy.webm", "Navy-seal-buds-training-push-ups.ogv", "United States Navy", "Public domain", "exact", void 0, "Cut to 6.5 s, letterbox cropped, scaled to 400p, 24 fps, converted to VP9 webm, no audio."),
+	lunge: v("v-lunge-army", "forward-lunge-army.webm", "Strength Training Circuit- Forward Lunge.webm", "U.S. Army (Army Combat Fitness Test)", "Public domain", "close", "Holding kettlebells: the same lunge. Do yours with no weight.", "Cut to 10 s, scaled to 480p, 24 fps, re-encoded to VP9, no audio.")
+};
+VIDEOS.squat, VIDEOS.pullup, { ...VIDEOS.pullup }, { ...VIDEOS.pullup }, { ...VIDEOS.pullup }, VIDEOS.hangingLegRaise, VIDEOS.hangingKneeRaise, { ...VIDEOS.singleLegSquat }, VIDEOS.singleLegSquat, VIDEOS.pushup, VIDEOS.lunge, { ...VIDEOS.lunge };
 // src/core/trainLog.ts
 function cleanPicks(x) {
 	if (!x || typeof x.day !== "string" || !x.moves || typeof x.moves !== "object") return null;
@@ -14701,8 +14757,31 @@ function effortOf(s, sets) {
 	if (w.some((x) => x.feel === "hard")) return "hard";
 	return w.every((x) => x.feel === "easy") ? "easy" : "ok";
 }
-/** The optional form check: no working set marked "form broke". */
+/** No working set marked "form broke" (form unknown is not broken, but see formConfirmed). */
 var formOk = (s, sets) => !(s?.sets ?? []).slice(0, sets).some((x) => x.form === "off");
+/** Form explicitly confirmed good on every working set: the only form that counts toward a step up (never assumed). */
+var formConfirmed = (s, sets) => {
+	const w = (s?.sets ?? []).slice(0, sets);
+	return w.length > 0 && w.every((x) => x.form === "good");
+};
+/** Working sets with no form check (form unknown). */
+var formUnknown = (s, sets) => (s?.sets ?? []).slice(0, sets).filter((x) => x.form !== "good" && x.form !== "off").length;
+/** The first pain (or, with `kinds`, other issue) flagged in a session, on any set. */
+function issueOf(s, kinds = ["pain"]) {
+	const list = s?.sets ?? [];
+	for (let i = 0; i < list.length; i++) {
+		const is = cleanIssue(list[i].issue);
+		if (is && kinds.includes(is.kind)) return {
+			set: i + 1,
+			kind: is.kind,
+			...is.where ? { where: is.where } : {},
+			day: s.day
+		};
+	}
+	return null;
+}
+/** "pain flagged on set 2 (wrist)" */
+var painText = (p) => `${p.kind === "pain" ? "pain" : p.kind === "discomfort" ? "discomfort" : "a set you couldn’t finish"} flagged on set ${p.set}${p.where ? ` (${p.where})` : ""}`;
 /**
 * Where you stand on a level, from the sessions since you reached it. Complete (double progression): every
 * working set at the top of the range in 2 sessions in a row, at the target effort (each set tapped OK or Easy,
@@ -14726,7 +14805,8 @@ function levelStatus(sessions, level, sets, since) {
 		line: `Not started: ${sets}×${level.lo}${u} to begin, ${sets}×${level.hi}${u} twice to unlock the next move.`
 	};
 	let hits = 0;
-	for (let i = list.length - 1; i >= 0 && atTop$1(list[i], r) && effortOf(list[i], sets) !== "hard" && formOk(list[i], sets); i--) hits++;
+	const counts = (x) => atTop$1(x, r) && effortOf(x, sets) !== "hard" && formConfirmed(x, sets) && !issueOf(x, ["pain", "discomfort"]);
+	for (let i = list.length - 1; i >= 0 && counts(list[i]); i--) hits++;
 	const lastS = list[list.length - 1];
 	const partial = hits ? 0 : lastS.reps.slice(0, sets).filter((x) => x >= level.hi).length;
 	const topSets = Math.min(needSets, hits * sets + partial);
@@ -14758,17 +14838,27 @@ function levelStatus(sessions, level, sets, since) {
 			line: `Step complete: ${reason}.`
 		};
 	}
+	const pain = issueOf(lastS);
+	if (pain) return {
+		...base,
+		state: "hurt",
+		pain,
+		line: `No step up: ${painText(pain)}. Go easier or try another move; never harder until it is gone.`
+	};
 	const lastTwo = list.slice(-2);
 	if (lastTwo.length === 2 && lastTwo.every((s) => belowBottom(s, r))) return {
 		...base,
 		state: "struggling",
 		line: `Under ${level.lo}${u} twice. Stay here a bit longer, or go one step back.`
 	};
-	const hardTop = atTop$1(lastS, r) && (effort === "hard" || !formOk(lastS, sets));
+	const sore = issueOf(lastS, ["discomfort"]);
+	const unknown = formUnknown(lastS, sets);
+	const why = effort === "hard" ? "it was hard" : !formOk(lastS, sets) ? "your form broke" : sore ? `${painText(sore)}` : unknown ? `form was not confirmed on ${unknown === 1 ? "1 set" : `${unknown} sets`}` : "";
+	const hardTop = atTop$1(lastS, r) && !!why;
 	return {
 		...base,
 		state: "building",
-		line: hardTop ? `${sets}×${level.hi}${u}, but ${effort === "hard" ? "it was hard" : "your form broke"}. Once more with 1–2 reps left and good form counts.` : hits ? `1 of 2 sessions at the top. One more (not hard) unlocks the next move.` : `${topSets} of ${needSets} sets at the top (${level.hi}${u}).`
+		line: hardTop ? `${sets}×${level.hi}${u}, but ${why}. Once more with 1–2 reps left and form confirmed good counts.` : hits ? `1 of 2 sessions at the top. One more (not hard, form good) unlocks the next move.` : `${topSets} of ${needSets} sets at the top (${level.hi}${u}).`
 	};
 }
 /**
@@ -14862,6 +14952,15 @@ function nextTimeOf(p, today) {
 			kind: "up",
 			move: to.move,
 			line: `Unlocked: ${moveName(to.move)} ${sets} × ${rangeText(to)}, because ${status.reason}.`
+		};
+	}
+	if (status.state === "hurt" && status.pain) {
+		const at = p.index > 0 ? stepFrom(p.ladder, p.index - 1, -1, p.gear) : null;
+		const back = at == null ? null : p.ladder.levels[at];
+		return {
+			kind: "down",
+			move: back?.move ?? level.move,
+			line: `Next time: ${back ? `an easier step (${moveName(back.move)}) or another move` : "another move or a rest"}, because ${painText(status.pain)}. Never harder until it is gone.`
 		};
 	}
 	if (status.state === "struggling") {
@@ -14978,7 +15077,7 @@ function sessionMinutes$1(items) {
 	return Math.round(sec / 60);
 }
 /** Shows the level-up / step-back suggestion only when a session came after your last "not yet". */
-var suggestNow = (status, last, declinedOn) => (status.state === "complete" || status.state === "struggling") && (!declinedOn || (last?.day ?? "") > declinedOn);
+var suggestNow = (status, last, declinedOn) => (status.state === "complete" || status.state === "struggling" || status.state === "hurt") && (!declinedOn || (last?.day ?? "") > declinedOn);
 // src/core/coachTalk.ts
 var fmt$3 = (n) => Math.round(n).toLocaleString("en-US");
 var toMin$11 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));

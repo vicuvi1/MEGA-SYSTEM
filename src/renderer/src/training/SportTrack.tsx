@@ -43,13 +43,18 @@ export function SportTrack({
   const [swap, setSwap] = useState<LadderId | null>(null)
   const [gear, setGear] = useState(false)
   const [growth, setGrowth] = useState(false)
+  // Workout mode (full window): opened by Start workout here or on the Dashboard; leaving it keeps every set.
+  const [mode, setMode] = useState(false)
 
   return (
     <div className="sp" data-sp-section={gear ? 'gear' : growth && section === 'train' ? 'growth' : section}>
       {gear && <GearView t={t} onBack={() => setGear(false)} />}
       {!gear && section === 'train' && growth && <GrowthView onBack={() => setGrowth(false)} onSection={onSection} onBodyFood={onBodyFood} />}
-      {!gear && section === 'train' && !growth && <SportDashboard t={t} onStart={() => onSection('workout')} onSection={onSection} onBodyFood={onBodyFood} onGrowing={() => setGrowth(true)} onSwap={setSwap} onGear={() => setGear(true)} />}
-      {!gear && section === 'workout' && <SportWorkout t={t} onHow={setSheet} onSwap={setSwap} />}
+      {!gear && section === 'train' && !growth && <SportDashboard t={t} onStart={() => {
+            setMode(true)
+            onSection('workout')
+          }} onSection={onSection} onBodyFood={onBodyFood} onGrowing={() => setGrowth(true)} onSwap={setSwap} onGear={() => setGear(true)} />}
+      {!gear && section === 'workout' && <SportWorkout t={t} onHow={setSheet} onSwap={setSwap} mode={mode} setMode={setMode} onToday={() => onSection('train')} />}
       {!gear && section === 'exercises' && <SportExercises t={t} onGear={() => setGear(true)} />}
       {!gear && section === 'progress' && <SportProgress t={t} body={body} onBody={onBody} onWallet={onWallet} onWorkout={() => onSection('workout')} />}
       {swap && <SwapSheet t={t} ladder={swap} onClose={() => setSwap(null)} onGear={() => setGear(true)} />}

@@ -11,8 +11,8 @@ function state(): any {
   return {
     exercises: [{ id: 'ex_d', name: 'Diamond push-ups', target: 24, unit: 'reps', move: 'diamond_pushup' }],
     sets: {
-      '2026-10-27': { ex_d: [8, 8, 8].map((r, i) => ({ reps: r, at: 1000 + i, id: `a${i}`, feel: 'ok' })) },
-      '2026-11-05': { ex_d: [12, 12, 12].map((r, i) => ({ reps: r, at: 2000 + i, id: `b${i}`, feel: 'ok' })) }
+      '2026-10-27': { ex_d: [8, 8, 8].map((r, i) => ({ reps: r, at: 1000 + i, id: `a${i}`, feel: 'ok', form: 'good' })) },
+      '2026-11-05': { ex_d: [12, 12, 12].map((r, i) => ({ reps: r, at: 2000 + i, id: `b${i}`, feel: 'ok', form: 'good' })) }
     },
     trainLevels: { push: { level: 2, reached: { 1: '2026-09-01', 2: '2026-10-20' }, at: 1 }, pull: { level: 0, reached: {}, at: 1 } },
     trainLog: [
