@@ -1119,6 +1119,20 @@
    ],
    "evidence": "2026-11-11: branch sport-workout-mode; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); real screenshots at 1920×1080 and 1280×800 (Training, Rest, Done, Pain, Video) compared with the artboards, kept outside the repo.",
    "notes": "core/trainAdvice.ts (moveChoices, BRANCHES, safetyNotes, workoutDone), core/trainMedia.ts (manifest, verdicts trainMediaOk, tempo, cues), core/trainLog.ts (formConfirmed, issueOf, state 'hurt'), core/sportSets.ts (SetEntry.form 'good', SetEntry.issue); renderer/src/training/WorkoutMode.tsx, WorkoutDone.tsx, ExerciseMedia.tsx, workout-mode.css, exercise-media.css; media in src/renderer/public/apps/sport/media (7 webm, 1.34 MB, NOTICE.md, by-sa/NOTICE.md). TG_SHOTS=<dir> saves wm-*-1920.png and wm-*-1280.png. Next: Phase E (Exercises PathGraph, Progress) in the same system."
+  },
+  {
+   "id": "F-FREEZE-THREE-NUMBERS",
+   "priority": 1,
+   "area": "today",
+   "title": "Feature freeze: Today shows 3 numbers, an honest day score, at most 4 pushes a day, Ben has one job, Simple mode",
+   "user_visible_behavior": "Today \u2192 Now shows only sleep (asleep by 23:30, up by 06:45), focus blocks started and must-dos out of 3, the next calendar block and the day score; the rest is under More. The day score is sleep 34 + focus 33 + must-dos 33 (out of 3), so an empty day is 0. At most 4 pushes a day (07:00, 21:15, 23:00, optional afternoon; Sunday 18:00 summary), neutral words; everything else is silent in the bell. From 21:15 Today and Ben ask for tomorrow's 3 and refuse vague items. One 'go to sleep' a night after 23:15. Simple mode (on) hides loot, coupons and shields, goal check-ins, focus goals and Tasks.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/threeNumbers.test.ts src/core/notifyBudget.test.ts src/core/mustDoRule.test.ts src/core/benOneJob.test.ts src/core/simpleMode.test.ts src/server/castle.test.ts src/server/benOneJob.server.test.ts",
+    "SMOKE_ONLY=\"Today shows 3|Simple mode is on|notification budget|vague must-do|empty day\" npm run smoke"
+   ],
+   "evidence": "2026-11-11: branch simplify-three-numbers; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); a real screenshot of the new Today at 1920x1080 kept outside the repo.",
+   "notes": "core/threeNumbers.ts, core/notifyBudget.ts, core/mustDoRule.ts, core/benOneJob.ts, core/simpleMode.ts; ThreeToday.tsx, settings/simple.tsx, useSimple.ts, NotifToasts.tsx; server/telegramBot.ts (send gate, budgetTick, runDaily), web/webBots.ts (pick, night), desktop/main.ts (desktop:notify cap)."
   }
  ]
 }

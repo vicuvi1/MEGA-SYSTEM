@@ -9,6 +9,7 @@ import { Cover } from './RewardCard'
 import type { ValueInfo } from './useRewards'
 import type { Reward } from '@core/shop'
 import type { RewardsInsights } from '../../../main/shop'
+import { useSimple } from '../useSimple'
 
 const FLAME_TEXT = ['', 'On a roll', 'On fire', 'Unstoppable']
 
@@ -50,6 +51,8 @@ export function WalletHero({
   /** Ben's one line, along the bottom of the hero. */
   ben?: React.ReactNode
 }) {
+  // Simple mode hides the inventory (coupons); they are kept.
+  const simple = useSimple()
   const e = insights?.earnings
   const flame = insights?.flame ?? 0
   const [fun, setFun] = useState(false)
@@ -73,7 +76,7 @@ export function WalletHero({
               <i aria-hidden>🔥</i> {insights!.focusStreak} days · {FLAME_TEXT[flame]}
             </span>
           )}
-          {coupons > 0 && (
+          {coupons > 0 && !simple.on && (
             <span className="rx-pill rx-coupon-pill" title="Coupons from chests and the mystery reward: they make a buy cheaper or free">
               🎟️ {coupons} coupon{coupons > 1 ? 's' : ''}
             </span>

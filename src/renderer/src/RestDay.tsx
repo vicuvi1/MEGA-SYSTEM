@@ -7,6 +7,7 @@ import { life } from './bridge'
 import { useLive } from './live'
 import { soundSuccess } from './soundKit'
 import { useToast } from './ui'
+import { useSimple } from './useSimple'
 
 export function useRest(): [BodyState | null, (day: string | null, on: boolean) => Promise<void>] {
   const toast = useToast()
@@ -92,11 +93,13 @@ export function RestDayCard() {
 /** Missed yesterday? A streak shield turns it into a rest day (the streak lives on). */
 function ShieldYesterday({ st, onDone }: { st: BodyState; onDone: () => void }) {
   const toast = useToast()
+  // Simple mode hides the inventory (streak shields); they are kept.
+  const simple = useSimple()
   const [n, setN] = useState<number | null>(null)
   useEffect(() => void life.shields.count().then(setN).catch(() => setN(0)), [])
   const y = new Date(Date.parse(`${st.today}T12:00:00Z`) - 86400000).toISOString().slice(0, 10)
   const covered = (st.restDays ?? []).includes(y) || (st.recentWorkouts ?? []).some((w) => w.day === y)
-  if (covered || !n || !life.shields.protect) return null
+  if (simple.on || covered || !n || !life.shields.protect) return null
   return (
     <button
       className="btn small ghost"

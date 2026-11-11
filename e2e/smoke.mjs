@@ -147,9 +147,11 @@ try {
     const bottom = await pg.evaluate(() => [...document.querySelectorAll('[data-tabpanel="now"] > *')].reduce((b, e) => Math.max(b, e.getBoundingClientRect().bottom), 0) / window.innerHeight)
     if (bottom > 0.9) throw new Error(`Now ends at ${bottom.toFixed(2)} of the screen at 1920×1080`)
     if (process.env.TODAY_SHOT) {
-      await pg.addStyleTag({ content: '.toasts, .nt-stack { display: none !important; }' })
+      // Toasts hidden for the picture only: the later steps click Undo in them.
+      const hide = await pg.addStyleTag({ content: '.toasts, .nt-stack { display: none !important; }' })
       await pg.waitForTimeout(600)
       await pg.screenshot({ path: process.env.TODAY_SHOT })
+      await hide.evaluate((e) => e.remove())
     }
     // The older steps use what is under More: open it (remembered on this device).
     await more.locator('summary').click()
@@ -187,6 +189,29 @@ try {
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+  // Simple mode (on by default): Tasks, focus goals, the weekly goal check-in and loot are hidden, never deleted;
+  // Settings → Simple mode brings them back. The rest of the run uses the full app (Simple mode off; the push budget stays on).
+  await step('Simple mode is on by default and hides the unused modules; Settings → Simple mode brings them back', async () => {
+    await pg.waitForSelector('aside.sb .sb-item[aria-label="Today"]', { timeout: 10000 })
+    if (await pg.locator('aside.sb .sb-item[aria-label="Tasks"]').count()) throw new Error('Tasks is in the menu in Simple mode')
+    if (await pg.locator('.td2 .ptabs [data-tab="tasks"]').count()) throw new Error('Today has a Tasks tab in Simple mode')
+    await open('goals')
+    await pg.waitForSelector('.ptabs [data-tab="week"]', { timeout: 10000 })
+    await pg.click('.ptabs [data-tab="week"]')
+    await pg.waitForFunction(() => /hidden in Simple mode/.test(document.querySelector('main.content')?.textContent ?? ''), null, { timeout: 8000 })
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Simple mode' }).first().click()
+    const sw = pg.locator('[data-testid="simple-mode"] [role="switch"][aria-label="Simple mode"]')
+    await sw.waitFor({ timeout: 8000 })
+    await pg.waitForFunction(() => document.querySelector('[data-testid="simple-mode"] [role="switch"][aria-label="Simple mode"]')?.getAttribute('aria-checked') === 'true', null, { timeout: 8000 })
+    if ((await pg.locator('[data-testid="simple-mode"] [role="switch"][aria-label="Afternoon nudge"]').getAttribute('aria-checked')) !== 'false') throw new Error('the afternoon nudge is on by default')
+    if (!/Pushes today: \d of 4/.test(await pg.textContent('[data-testid="push-count"]'))) throw new Error('no push count')
+    await sw.click()
+    await pg.waitForSelector('aside.sb .sb-item[aria-label="Tasks"]', { timeout: 8000 })
+    await open('today')
+    await pg.waitForSelector('.td2 .ptabs [data-tab="tasks"]', { timeout: 8000 })
+  })
   // Sport Track: one of its sections in the top bar (Dashboard · Workout · Exercises · Progress · Body & Food), and the
   // Classic tracker (the old embedded app) from its ⋯ menu.
   const sportView = async (name) => {

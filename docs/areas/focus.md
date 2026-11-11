@@ -49,3 +49,5 @@ A time tracker in the style of Focus To-Do: **Plan → Study Time** (sidebar and
 - On the website the page works the same on the same data; the in-app timer bar never dims the Study Time page.
 - Smoke: "Study Time: quick add → pomodoro start → pause → resume → +5 → Take 5 → back → switch block → stop with a note; the totals agree", "Study Time: count up turns gold …, Stats …, each tab fits", "Study Time: your study tasks from Todoist …" and "Study Time on the island: …".
 - Smoke fix (2026-11-11): "count up turns gold" timed out on CI clicking the Today filter after the Tomorrow one (30 s, nothing in the log said what covered it). The step now closes a late focus-boost card first, clicks, and if something still covers the button it logs what (`note: the Today filter was covered by …`) and presses it directly, then checks the filter is on.
+
+- Simple mode (2026-11-11) hides "Goals with a deadline" on Insights → Focus; a running focus or study block ending is a sound in the app, never one of the 4 daily pushes.

@@ -15,6 +15,7 @@ import { PluginsPanel } from '../../../plugins/PluginsPanel'
 import { WidgetsPanel } from '../widgets/WidgetsPanel'
 import { useSettingsState, type SettingsProps } from '../settings/useSettingsState'
 import { GeneralSection } from '../settings/general'
+import { SimpleModeSettings } from '../settings/simple'
 import { LookSection } from '../settings/look'
 import { SoundSection } from '../settings/sound'
 import { VoiceSettings } from '../voice/VoiceSettings'
@@ -36,6 +37,14 @@ export function Settings(props: SettingsProps) {
       hint: 'PIN, this device and start-up',
       keywords: 'pin lock security password trusted device remember start windows background tray',
       body: <GeneralSection s={s} />
+    },
+    {
+      id: 'simple',
+      label: 'Simple mode',
+      icon: 'spark',
+      hint: '3 numbers, hidden extras, at most 4 pushes a day',
+      keywords: 'simple mode feature freeze hide loot chest buffs inventory goal check-ins focus goals tasks push budget notifications afternoon nudge',
+      body: <SimpleModeSettings />
     },
     {
       id: 'notifications',

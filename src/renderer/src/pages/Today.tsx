@@ -35,6 +35,7 @@ import { CoachToday } from '../coach/CoachToday'
 import { WeekPlanCard } from '../plan/WeekPlan'
 import { GrowthChip } from '../body/progress/GrowthLevel'
 import { ThreeToday } from '../ThreeToday'
+import { useSimple } from '../useSimple'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -83,6 +84,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   }
 
   const [ui] = useUiPrefs()
+  const simple = useSimple()
   // "More" stays as you left it (on this device).
   const [moreOpen, setMoreOpenState] = useState(() => {
     try {
@@ -199,7 +201,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     // Must-dos are counted on the Now tab itself (the top row and the list), so its tab has no number.
     { id: 'now', label: 'Now', title: "What's on now, your Top 3, today's tasks and habits (1)" },
     { id: 'plan', label: 'Plan', title: "Ben's plan for today (2)" },
-    { id: 'tasks', label: 'Tasks', count: counts ? counts.tasks : null, title: `Everything else today${counts?.late ? `, ${counts.late} late` : ''}, and coming up (3)` },
+    // Simple mode hides tasks from Today (the Tasks tab); Settings → Simple mode brings it back.
+    ...(simple.on ? [] : [{ id: 'tasks', label: 'Tasks', count: counts ? counts.tasks : null, title: `Everything else today${counts?.late ? `, ${counts.late} late` : ''}, and coming up (3)` }]),
     { id: 'body', label: 'Body', count: health ? `${health.met}/4` : null, title: 'Reps, water, sleep and your healthy day (4)' },
     { id: 'week', label: 'Week', title: 'This week, the week score and more (5)' },
     ...(showDay ? [{ id: 'day', label: 'Day', title: 'Your day, hour by hour (6)' }] : [])

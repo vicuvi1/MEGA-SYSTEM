@@ -3,6 +3,8 @@ import { AnimatePresence, m } from 'framer-motion'
 import { Icon, Logo } from './Icon'
 import { MODULES, type ModuleDef, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
+import { useSimple } from './useSimple'
+import { simpleHiddenPages } from '@core/simpleMode'
 
 export type Badge = { n?: number; dot?: 'lime' | 'warn' }
 
@@ -25,7 +27,9 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
   const open = !collapsed
   const byId = Object.fromEntries(MODULES.map((m) => [m.id, m])) as Record<PageId, ModuleDef>
   const [ui] = useUiPrefs()
-  const hiddenPages = new Set(ui.hiddenPages ?? [])
+  // Simple mode takes the Tasks page out of the menu (core/simpleMode.ts).
+  const simple = useSimple()
+  const hiddenPages = new Set([...(ui.hiddenPages ?? []), ...simpleHiddenPages(simple)])
   let index = 0
 
   const showTip = (label: string, el: HTMLElement) => {
