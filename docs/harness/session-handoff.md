@@ -15,11 +15,11 @@ Running background agents keep running. The new session sees their commits on `m
 
 ## Coordinator handoff (overwrite each time, keep it under ~15 lines)
 ```
-Milestone:   <what this stretch of work is>
+Milestone:   Sport Track rebuilt to the approved design (docs/design/sport-track/); release v1.4.1445 green
 Completed:   <commits/features landed, one line each>
-Active:      none. Sport Track is one app (4ebb8d5, v1.4.1443): Dashboard / Workout / Exercises / Progress / Body & Food in src/renderer/src/training/.
+Active:      none. Batch A 9c0271c (Dashboard, Workout, swap sheet, Gear) + batch B 925b5f3 (Exercises, Progress path bars, Body & Food prompt/paste, Am I growing?).
 Blockers:    <anything failing or waiting on the user>
-Next action: small batches: (1) Exercises library with chains + detail (mockup 29); (2) Progress with PRs/charts + readiness; (3) equipment list + home-only mode; (4) Body & Food -> Today Start opens the new Workout flow, not Classic. Mockups: images 28-31 of the old session; ask the owner to re-send if needed.
+Next action: wait for the owner's feedback on v1.4.1445; fix in small batches against docs/design/sport-track. Known gaps: no photos for pike/knee push-ups and some pull moves (drawn figure); Growth verdict needs weigh-ins.
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 
