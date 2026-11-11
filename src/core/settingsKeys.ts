@@ -200,6 +200,11 @@ export const SETTINGS = {
   ben_cal_seen: json<unknown[]>('old place of the calendar events Ben saw (now in sys_kv)', []),
   ben_outbox: json<unknown[]>('messages Telegram refused, tried again for 6 hours', []),
   ben_sent_count: json<{ day: string; n: number } | null>('messages Ben sent on his own today (app day)', null),
+  // ---- feature freeze (2026-11-11): Simple mode, the push budget, Ben's one job ----
+  simple_mode: json<{ on?: boolean; budget?: boolean; afternoon?: boolean } | null>('Simple mode: hide unused modules, the daily push budget, the afternoon nudge (src/core/simpleMode.ts); missing = on', null),
+  push_budget: json<{ day: string; sent: string[] } | null>('the push slots used today, at most 4 (src/core/notifyBudget.ts)', null),
+  night_nudge_day: text('the night Ben last said "go to sleep" after 23:15 (app day)'),
+  pick_tomorrow: json<{ day: string; at: string } | null>("Ben asked for tomorrow's 3 must-dos (21:15); the next reply is read as the pick", null),
   ben_sent_today: json<{ day: string; kinds: string[] } | null>('kinds of message already sent today (app day)', null),
   ben_misstwice_day: text('app day of the last "never miss twice" message'),
   voiced_kinds: json<{ day: string; kinds: string[] } | null>('nudge kinds Ben already wrote in his own words today', null),

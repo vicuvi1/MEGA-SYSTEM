@@ -466,7 +466,7 @@ export function IslandFeed() {
     const rewards = (shop?.rewards ?? []).filter((r) => !r.archived && r.price > 0)
     const goal = shop ? rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b) => a.price - b.price).find((r) => r.price > shop.balance) ?? [...rewards].sort((a, b) => a.price - b.price)[0] ?? null : null
     const todayKey = localDayOf(now)
-    const live = liveScore({ mustDone: status.today.mustDone, openMustDos: status.mustdos.filter((x) => !x.done).map((x) => x.text), focusMin: status.today.focusMin, focusGoal: Math.max(50, status.goals.reduce((t, g) => t + g.perDayMin, 0)), waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone })
+    const live = liveScore({ mustDone: status.today.mustDone, openMustDos: status.mustdos.filter((x) => !x.done).map((x) => x.text), focusBlocks: status.today.focusBlocks ?? 0, sleep: status.today.sleep ?? null })
     const highlight = dayHighlight({ focusMin: status.today.focusMin, focusBefore: status.week.filter((d) => d.day < todayKey).map((d) => d.min), mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, waterMl: status.today.waterMl, waterTarget: status.today.waterTarget, workoutDone: !!status.today.workoutDone, sportStreak: body?.streak ?? 0 })
     const celebrated = get<Record<string, number>>(CELEBRATED, {})
     // IC5, IC14: today's focus against its goal (the Today ring, the evening story).

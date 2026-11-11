@@ -5,6 +5,7 @@
 // - the evening review (planned vs done, a score, one lesson, tomorrow's
 //   top 3) and the Sunday review (the week, next week's focus and big 3).
 // When each is due comes from the tick (every few minutes) and this state.
+import { honestScore, mustLine, sleepCheck, type SleepNight } from './threeNumbers'
 import { islandHasWater } from './healthyDay'
 import { freeGaps, suggestBlocks, type CalEvent } from './dayTime'
 import { calendarDay } from './dates'
@@ -410,16 +411,18 @@ export interface DayResult {
   waterTarget: number
   workoutDone: boolean
   trainingPlanned: boolean
+  /** The 3 numbers (feature freeze): focus blocks started today and last night's sleep. */
+  focusBlocks?: number
+  sleep?: SleepNight | null
 }
 
-/** 0–100: must-dos 40, focus against the plan 30 (half of it the blocks kept, when there were blocks), water 15, training 15. */
+/**
+ * 0–100, the honest day score of the 3 numbers (core/threeNumbers.ts): sleep 34,
+ * focus blocks started 33, must-dos out of 3 33. No must-dos: that part is 0, so
+ * an empty day can't score high. Past days keep the score they were given.
+ */
 export function dayScore(r: DayResult): number {
-  const md = r.mustdosTotal ? r.mustdosDone / r.mustdosTotal : r.focusMin >= 50 ? 1 : 0
-  const fo = Math.min(1, r.focusMin / Math.max(50, r.plannedFocusMin))
-  const bl = r.blocksPlanned ? Math.min(1, r.blocksDone / r.blocksPlanned) : fo
-  const wa = r.waterTarget ? Math.min(1, r.waterMl / r.waterTarget) : 0
-  const tr = r.workoutDone ? 1 : r.trainingPlanned ? 0 : 0.5
-  return Math.round(md * 40 + fo * 15 + bl * 15 + wa * 15 + tr * 15)
+  return honestScore({ sleep: r.sleep ?? null, focusBlocks: r.focusBlocks ?? 0, mustDone: r.mustdosDone, mustTotal: r.mustdosTotal }).score
 }
 
 /**
@@ -473,9 +476,9 @@ export function reviewText(r: DayResult, score: number, lesson: string, top3: st
   return [
     `🌙 <b>Day review: ${score}/100</b> ${mark}`,
     '',
-    `Must-dos ${r.mustdosDone}/${r.mustdosTotal} · Focus ${r.focusMin}${r.plannedFocusMin ? `/${r.plannedFocusMin}` : ''} min${r.blocksPlanned ? ` · Blocks ${r.blocksDone}/${r.blocksPlanned}` : ''}`,
-    ...(r.planApproved === false ? [`<i>You never approved today's plan, but it still counts: ${r.plannedFocusMin} min planned, ${r.focusMin} done.</i>`] : []),
-    `Water ${(r.waterMl / 1000).toFixed(1)}/${(r.waterTarget / 1000).toFixed(1)} L · Training ${r.workoutDone ? '✅' : '—'}`,
+    `Sleep: ${sleepCheck(r.sleep ?? null).text}`,
+    `Focus blocks started: ${r.focusBlocks ?? 0}`,
+    `Must-dos: ${mustLine(r.mustdosDone, r.mustdosTotal)}`,
     '',
     `<b>Lesson:</b> ${esc(lesson)}`,
     ...(top3.length ? ['', "<b>Tomorrow's top 3</b>", ...top3.map((t, i) => `${i + 1}. ${esc(t)}`)] : [])

@@ -123,6 +123,38 @@ try {
     await pg.keyboard.press('Enter')
     await pg.waitForSelector('.td2', { timeout: 20000 })
   })
+  // Feature freeze (2026-11-11): Today → Now shows only the 3 numbers (sleep, focus blocks started, must-dos out of 3),
+  // the next calendar block and last night's sleep against 23:30. Everything else Today showed is under one "More",
+  // closed by default. TODAY_SHOT=<file.png>: a picture of the new Today at 1920×1080.
+  await step('Today shows 3 numbers: sleep, focus blocks started and must-dos out of 3, the next calendar block and last night against 23:30; the rest under More', async () => {
+    await pg.setViewportSize({ width: 1920, height: 1080 })
+    const T = '[data-testid="three-numbers"]'
+    await pg.waitForSelector(T, { timeout: 15000 })
+    const tiles = await pg.locator(`${T} .tn-tile`).evaluateAll((t) => t.map((x) => x.dataset.n))
+    if (tiles.join() !== 'sleep,focus,must') throw new Error(`the tiles are ${tiles.join()}`)
+    await pg.waitForFunction(() => /^\d \/ 3$/.test(document.querySelector('[data-testid="tn-must"]')?.textContent?.trim() ?? ''), null, { timeout: 10000 })
+    if (!/^\d+$/.test((await pg.textContent('[data-testid="tn-focus"]')).trim())) throw new Error('no focus block count')
+    const sleep = await pg.locator(`${T} [data-n="sleep"]`).innerText()
+    if (!/23:30/.test(sleep) || !/06:45/.test(sleep)) throw new Error(`last night is not measured against 23:30 / 06:45: ${sleep}`)
+    if (!/Next: .+\d\d:\d\d|Nothing more in your calendar today/.test(await pg.locator('[data-testid="tn-next"]').innerText())) throw new Error('no next calendar block')
+    if (!/^Day score \d{1,3}\s*\/100$/.test((await pg.locator('[data-testid="day-score"]').innerText()).trim())) throw new Error('no day score')
+    // Nothing else on Now: the old content is folded under More.
+    const more = pg.locator('[data-tabpanel="now"] .td-now-more')
+    if (await more.evaluate((d) => d.open)) throw new Error('More is open on a fresh start')
+    if (await pg.locator('[data-tabpanel="now"] .thb').isVisible()) throw new Error("Ben's line shows outside More")
+    // Smaller: Now ends inside the first screen (with 10% headroom for the Windows build's taller fonts).
+    const bottom = await pg.evaluate(() => [...document.querySelectorAll('[data-tabpanel="now"] > *')].reduce((b, e) => Math.max(b, e.getBoundingClientRect().bottom), 0) / window.innerHeight)
+    if (bottom > 0.9) throw new Error(`Now ends at ${bottom.toFixed(2)} of the screen at 1920×1080`)
+    if (process.env.TODAY_SHOT) {
+      await pg.addStyleTag({ content: '.toasts, .nt-stack { display: none !important; }' })
+      await pg.waitForTimeout(600)
+      await pg.screenshot({ path: process.env.TODAY_SHOT })
+    }
+    // The older steps use what is under More: open it (remembered on this device).
+    await more.locator('summary').click()
+    await pg.waitForSelector('[data-tabpanel="now"] .thb', { timeout: 10000 })
+    await pg.setViewportSize({ width: 1440, height: 900 })
+  })
   await step('Today shows Ben and the day', async () => {
     await pg.waitForSelector('.thb', { timeout: 15000 })
     if (process.env.PLAN_SHOTS) {
@@ -241,7 +273,11 @@ try {
     // Your day stays beside the tabs on a laptop (no Day tab there).
     if (!(await pg.locator('.td2 .cmd-side .ds').first().isVisible())) throw new Error('"Your day" is not beside the tabs')
     const sizes = []
+    // Now as it opens on a fresh start (More closed); More comes back open for the older steps.
+    const nowMore = (open) => pg.evaluate((o) => document.querySelectorAll('.td-now-more').forEach((d) => { d.open = o }), open)
+    await nowMore(false)
     for (const id of ids) sizes.push(`${id} ${((await tabFit('.td2', id)).scroll / 654).toFixed(2)}`)
+    await nowMore(true)
     // Sunday and Monday (the run follows the real date): "Pick your top 3 for this week" is one slim line on Now; Pick opens the chips.
     await pg.click('.td2 .ptabs [data-tab="now"]')
     const wk3 = pg.locator('[data-tabpanel="now"] .wk3')
@@ -8267,6 +8303,49 @@ try {
     const ids = inDrive.filter((f) => f.appProperties?.lsApp === 'locker').map((f) => f.appProperties.lsId)
     if (new Set(ids).size !== ids.length) throw new Error('an item was uploaded twice')
     if (inDrive.filter((f) => f.name === 'front-made-up.jpg').length !== 1) throw new Error('the photo is not in Drive exactly once')
+  })
+
+  // Ben's one job (feature freeze): from 21:15 Today asks for tomorrow's 3 must-dos and refuses vague ones
+  // ("sport", "Dorm": one word, no number); exactly 3 concrete items are saved to tomorrow's plan.
+  await step("A vague must-do is rejected: tomorrow's 3 need a number or minutes each, exactly 3 are saved", () => atTime('21:30', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    const P = '[data-testid="pick-tomorrow"]'
+    await pg.waitForSelector(P, { timeout: 10000 })
+    await pg.fill(`${P} textarea`, 'sport\nDorm\nread')
+    await pg.click(`${P} button[type="submit"]`)
+    await pg.waitForSelector(`${P} [data-testid="pick-reply"].tn-err`, { timeout: 5000 })
+    if (!/Too vague/.test(await pg.textContent(`${P} [data-testid="pick-reply"]`))) throw new Error('"sport / Dorm / read" was not called vague')
+    await pg.fill(`${P} textarea`, 'sport: 25 min, 30 push-ups\nread 20 pages')
+    await pg.click(`${P} button[type="submit"]`)
+    await pg.waitForFunction((p) => /exactly 3/.test(document.querySelector(`${p} [data-testid="pick-reply"]`)?.textContent ?? ''), P, { timeout: 5000 })
+    await pg.fill(`${P} textarea`, 'sport: 25 min, 30 push-ups\nread 20 pages\nclean the dorm 15 min')
+    await pg.click(`${P} button[type="submit"]`)
+    await pg.waitForSelector(`${P} [data-testid="pick-reply"].tn-ok`, { timeout: 8000 })
+    if (!/clean the dorm 15 min/.test(await pg.textContent(`${P} [data-testid="pick-reply"]`))) throw new Error("tomorrow's 3 were not saved")
+  }))
+
+  // The honest day score: a day with nothing in it (no sleep logged, no focus, no must-dos) is 0, never 96.
+  await step('An empty day scores 0: no must-dos, no focus blocks and no sleep logged give a day score of 0/100', async () => {
+    const empty = new Date(fakeNow())
+    empty.setDate(empty.getDate() + 40)
+    empty.setHours(10, 0, 0, 0)
+    await pg.context().clock.setSystemTime(empty.getTime())
+    try {
+      await reloadApp()
+      await pg.setViewportSize({ width: 1440, height: 900 })
+      await open('today')
+      await pg.click('.td2 .ptabs [data-tab="now"]')
+      await pg.waitForSelector('[data-testid="three-numbers"]', { timeout: 15000 })
+      await pg.waitForFunction(() => document.querySelector('[data-testid="tn-must"]')?.textContent?.trim() === '0 / 3', null, { timeout: 10000 })
+      const n = await pg.evaluate(() => ({ focus: document.querySelector('[data-testid="tn-focus"]')?.textContent?.trim(), sleep: document.querySelector('[data-testid="tn-sleep-result"]')?.textContent?.trim(), score: document.querySelector('[data-testid="day-score"]')?.textContent?.replace(/\s+/g, ' ').trim() }))
+      if (n.focus !== '0' || n.sleep !== 'Not logged') throw new Error(`the made-up empty day is not empty: ${JSON.stringify(n)}`)
+      if (n.score !== 'Day score 0/100') throw new Error(`an empty day scores "${n.score}"`)
+    } finally {
+      await pg.context().clock.setSystemTime(fakeNow())
+      await reloadApp()
+    }
   })
 
   await step('no uncaught page errors', async () => {

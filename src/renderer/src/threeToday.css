@@ -1,0 +1,43 @@
+/* Today → Now: the 3 daily numbers (ThreeToday.tsx). Calm, large, nothing else. */
+.tn { display: grid; gap: 12px; margin: 0 0 12px; }
+.tn-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.tn-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; min-width: 0; padding: 16px 18px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--panel); }
+.tn-tile.ok { border-color: color-mix(in srgb, var(--green) 45%, transparent); }
+.tn-tile.off { border-color: color-mix(in srgb, var(--orange) 40%, transparent); }
+.tn-label { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.tn-big { font-family: var(--display); font-size: 34px; line-height: 1.1; color: var(--text); }
+.tn-tile.ok .tn-big { color: var(--green); }
+.tn-tile.off .tn-big { color: var(--orange); }
+.tn-sub { font-size: 13.5px; color: var(--text); }
+.tn-target { font-size: 12px; color: var(--muted); }
+.tn-tile .btn { margin-top: auto; }
+.tn-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; width: 100%; }
+.tn-list li { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 14px; }
+.tn-list li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tn-list li.done span { color: var(--muted); text-decoration: line-through; }
+.tn-check { flex: none; width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 1.5px solid var(--muted); border-radius: 7px; background: transparent; color: var(--lime-ink); font-weight: 700; cursor: pointer; }
+.tn-list li.done .tn-check { border-color: var(--lime); background: var(--lime); }
+.tn-add { display: flex; gap: 6px; width: 100%; }
+.tn-add input { flex: 1 1 auto; min-width: 0; }
+.tn-err { margin: 0; font-size: 13px; color: var(--orange); }
+.tn-ok { margin: 0; font-size: 13px; color: var(--green); white-space: pre-line; }
+.tn-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); font-size: 14px; color: var(--muted); }
+.tn-next b { color: var(--text); }
+.tn-next i { font-style: normal; color: var(--faint); }
+.tn-score b { font-size: 18px; color: var(--text); }
+.tn-pick { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.tn-pick label { display: grid; gap: 6px; }
+.tn-pick small { color: var(--muted); }
+.tn-pick textarea { width: 100%; resize: vertical; }
+.tn-pick .btn { justify-self: start; }
+/* "More": everything Today showed before, folded under one link. */
+.td-now-more { margin-top: 4px; }
+.td-now-more > summary { cursor: pointer; list-style: none; display: inline-flex; align-items: baseline; gap: 8px; padding: 6px 2px; color: var(--muted); font-size: 13.5px; }
+.td-now-more > summary::-webkit-details-marker { display: none; }
+.td-now-more > summary::before { content: '▸'; }
+.td-now-more[open] > summary::before { content: '▾'; }
+.td-now-more > summary small { color: var(--faint); }
+.td-now-more-body { display: grid; gap: 10px; margin-top: 6px; }
+@media (max-width: 760px) {
+  .tn-row { grid-template-columns: minmax(0, 1fr); }
+}

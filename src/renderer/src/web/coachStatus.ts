@@ -15,6 +15,7 @@ import { addDays } from '@core/dates'
 import type { Services } from './webServices'
 import { neverMissTwice, type MissTwiceItem } from '@core/neverMissTwice'
 import { WATER_TARGET_ML } from '@core/defaults'
+import { focusBlocksStarted, honestScore, type SleepNight } from '@core/threeNumbers'
 
 
 /**
@@ -46,7 +47,7 @@ export interface CoachStatus {
   plan: { status: 'none' | 'proposed' | 'approved'; blocks: number; mustdos: number; headline: string; score?: number }
   promises: { awaiting: string[]; kept: number; missed: number }
   goals: { id: number; title: string; subject: string; pct: number; perDayMin: number; todayLeftMin: number; status: string; daysLeft: number }[]
-  today: { focusMin: number; mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; workoutDone: boolean }
+  today: { focusMin: number; mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; workoutDone: boolean; focusBlocks: number; sleep: SleepNight | null; score: number }
   /** Focus minutes per day, the last 7 days (oldest first). */
   week: { day: string; min: number }[]
   /** Focus minutes the 7 days before that (to compare weeks). */
@@ -59,6 +60,17 @@ export interface CoachStatus {
 const json = (db: any, key: string) => {
   try {
     return JSON.parse(getSetting(db, key) || 'null')
+  } catch {
+    return null
+  }
+}
+
+/** Last night: the sleep_logs row of the morning it ended in (today's), or null. */
+export function lastNight(db: any, today: string): SleepNight | null {
+  try {
+    const r = db.prepare('SELECT bed_time, wake_time FROM sleep_logs WHERE day = ?').get(today) as { bed_time?: string | null; wake_time?: string | null } | undefined
+    if (!r) return null
+    return { bedTime: r.bed_time || null, wakeTime: r.wake_time || null }
   } catch {
     return null
   }
@@ -117,7 +129,14 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
       const g = f.goals.find((x) => x.id === p.goalId)!
       return { id: p.goalId, title: p.title, subject: p.subject, pct: Math.min(100, Math.round((g.doneMin / 60 / Math.max(0.1, g.hours)) * 100)), perDayMin: p.perDayMin, todayLeftMin: p.todayLeftMin, status: p.status, daysLeft: p.daysLeft }
     }),
-    today: { focusMin: f.todayMin, mustDone: f.plan.items.length - open.length, mustTotal: f.plan.items.length, waterMl: water.ml, waterTarget: water.target, workoutDone: (s.wallet.summary(now).todayRules ?? []).includes('body.workout_done') },
+    today: (() => {
+      // The 3 numbers (core/threeNumbers.ts): last night, focus blocks started, must-dos.
+      const focusBlocks = focusBlocksStarted(f.todaySessions, !!f.running)
+      const sleep = lastNight(db, today)
+      const mustDone = f.plan.items.length - open.length
+      const mustTotal = f.plan.items.length
+      return { focusMin: f.todayMin, mustDone, mustTotal, waterMl: water.ml, waterTarget: water.target, workoutDone: (s.wallet.summary(now).todayRules ?? []).includes('body.workout_done'), focusBlocks, sleep, score: honestScore({ sleep, focusBlocks, mustDone, mustTotal }).score }
+    })(),
     prevWeekMin: (() => {
       const focus = s.progress.input(null, now, 8).focus
       const from = addDays(today, -13)

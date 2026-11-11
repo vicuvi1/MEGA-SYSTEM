@@ -2,6 +2,8 @@
 // the day, puts an approved plan into your calendar and Todoist, writes the
 // evening and Sunday reviews, and the water and training nudges. Used by the
 // tick on the server (Telegram, Mega) and by the app (Today, Coach).
+import { focusBlocksStarted, mustLine, sleepCheck } from '@core/threeNumbers'
+import { lastNight } from './coachStatus'
 import { careerWeekLine } from './career'
 import { behindMove, weeklyGoalLines } from '@core/goalsBen'
 import { checkModelPlan, estimateMinutes, packDay, planStartAt, relinkAlso, type PlanTask } from '@core/dayPacker'
@@ -828,7 +830,10 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
         waterMl: water.ml,
         waterTarget: water.target,
         workoutDone: (svc.wallet.summary().todayRules ?? []).includes('body.workout_done') || !!svc.body.state().restToday,
-        trainingPlanned: !!st.briefing?.plan.training
+        trainingPlanned: !!st.briefing?.plan.training,
+        // The 3 numbers: the honest day score counts only these with the must-dos.
+        focusBlocks: focusBlocksStarted(f.todaySessions, !!f.running),
+        sleep: lastNight(db, today)
       }
     })
   }
@@ -886,7 +891,7 @@ export function createRhythm({ mirror, services, todoist, calendar, ai }: Rhythm
       try {
         writeJournal(db as any, today, {
           score,
-          result: `Must-dos ${result.mustdosDone}/${result.mustdosTotal} · focus ${result.focusMin}/${result.plannedFocusMin} min · blocks ${result.blocksDone}/${result.blocksPlanned} · water ${(result.waterMl / 1000).toFixed(1)}/${(result.waterTarget / 1000).toFixed(1)} L · training ${result.workoutDone ? 'done' : 'not done'}`,
+          result: `Sleep: ${sleepCheck(result.sleep ?? null).text} · focus blocks ${result.focusBlocks ?? 0} · must-dos ${mustLine(result.mustdosDone, result.mustdosTotal)}`,
           lesson,
           top3
         })
