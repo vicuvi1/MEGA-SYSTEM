@@ -15,11 +15,11 @@ Running background agents keep running. The new session sees their commits on `m
 
 ## Coordinator handoff (overwrite each time, keep it under ~15 lines)
 ```
-Milestone:   Sport Track v2 Phase B (Workout mode, ExerciseMedia, 7 licensed videos) shipped; release v1.4.1446 green
+Milestone:   Simplify + harden: module switch (Today, Money, Sleep, Sport Track, Discipline ON; island OFF), security, Money 6 fixes, sync data-loss fixes, sleep/discipline/food fixes; release v1.4.1454 green
 Completed:   <commits/features landed, one line each>
-Active:      none. Plan + media research + designs: docs/design/sport-track/ (sport-redesign-v2.md, media-research.md, WorkoutMode/WorkoutDone).
-Blockers:    <anything failing or waiting on the user>
-Next action: (1) consolidate the Classic tracker into the train engine: reversible migration of history, records, settings; validate; remove only after validation. (2) Phase E: Exercises with branching paths + Progress in the v2 visual system; real screenshots compared to designs before shipping.
+Active:      none.
+Blockers:    owner: change PIN (6-12 digits); confirm or skip Finance "Re-price N past entries"; store BACKUP_PASSPHRASE + CRON_SECRET in a password manager. Known: src/core/calendar.test.ts fails outside UTC (Calendar module is off).
+Next action: long-term batch (small steps): backup size alert at 2.5 MB + split backup + second copy; quarterly plain-SQLite export + monthly Drive copy; CSV export per module; AI model names in one config with fallback; Electron + Node 24 bumps; DST/year-rollover clock test; recovery runbook + yearly checklist in docs. Later, after the freeze: design the University module (years > semesters > courses > labs/exams/grades) together with the owner.
 Files:       <the 3–6 files/docs the next session needs first>
 ```
 

@@ -51,6 +51,14 @@ Keep it short and true: anything written here is what the next session will trus
 - Ben: 21:15 tomorrow's 3 (vague ones refused), one "go to sleep" after 23:15, Sunday summary. Simple mode on by default.
 - Next: the owner checks the 4 push times on his phone; push the branch after a green Windows release.
 
+### 2026-11-12: simplify and harden
+- Feature freeze; Today = 3 numbers with an honest score; at most 4 notifications a day; Ben has one job.
+- Module switch: only Today, Money, Sleep, Sport Track and Discipline are on; the island is off; nothing deleted (Settings → Modules).
+- Security: PIN hash only in sys_auth, push follows the budget, 503 on DB hiccups, more guard and network hardening.
+- Money: currency conversion and re-price review, import rate warning, one total, decimals, one no-spend button, faster saves.
+- Sync: no lost exercises, Waky fields or offline numbers; clock skew and outbox fixed. Sleep/Discipline/food reader fixes.
+- Next: the long-term batch (backups, exports, model config, Electron/Node). Release v1.4.1454.
+
 <!-- Template for a new entry:
 ### YYYY-MM-DD: short title
 - Goal:
