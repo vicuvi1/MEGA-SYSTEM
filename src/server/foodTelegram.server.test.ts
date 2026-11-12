@@ -6,6 +6,7 @@
 // stored nowhere; /meals and "breakfast" log a saved meal in one tap (with Undo);
 // meal reminders at the standard day's slots: Log it, 30 min, Skip, the caps,
 // quiet hours, the mute, the switch, the island's own check.
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js'
@@ -47,6 +48,8 @@ const AI_OK = {
 function world(settings: Record<string, unknown> = base, vision: (body: any) => Promise<any> = async () => ({ ok: true, result: AI_OK })) {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   // These tests check the older senders, so the daily push budget (Simple mode) is off here.
   remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '{"budget":false}')`)
   for (const [k, v] of Object.entries(settings)) remote.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, typeof v === 'string' ? v : JSON.stringify(v)])

@@ -22,6 +22,7 @@ import { life } from './bridge'
 import { useAction } from './ui'
 import { useLive } from './live'
 import { useTodayEvents } from './todayEvents'
+import { useModules } from './useModules'
 import './threeToday.css'
 
 const hm = (iso: string) => new Date(iso).toTimeString().slice(0, 5)
@@ -59,6 +60,7 @@ export function ThreeToday() {
     const t = setInterval(() => setTick(Date.now()), 30_000)
     return () => clearInterval(t)
   }, [])
+  const calOn = useModules().calendar
   const { events } = useTodayEvents()
   const timed = events.filter((e) => !e.allDay && localDay(e.start) === localDay(new Date(tick).toISOString()))
   const next = nextUp(timed, tick)
@@ -172,7 +174,8 @@ export function ThreeToday() {
         </article>
       </div>
       <footer className="tn-foot">
-        <span className="tn-next" data-testid="tn-next">
+        {/* The next calendar block only while the Calendar module is on (core/modules.ts). */}
+        {calOn && <span className="tn-next" data-testid="tn-next">
           {next ? (
             <>
               Next: <b>{next.title}</b> {hm(next.start)} <i>{countdown(Date.parse(next.start) - tick)}</i>
@@ -180,7 +183,7 @@ export function ThreeToday() {
           ) : (
             'Nothing more in your calendar today'
           )}
-        </span>
+        </span>}
         <span className="tn-foot-r">
           {!showPick && (
             <button className="tn-link" data-testid="plan-tomorrow" onClick={() => setPickOpen(true)}>

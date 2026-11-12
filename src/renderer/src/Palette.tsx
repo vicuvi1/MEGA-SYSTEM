@@ -27,17 +27,21 @@ interface Sources {
   award: (rule: Rule) => Promise<unknown>
   completeTodo: (t: TodoTask) => Promise<unknown>
   actions: Command[]
+  /** The module switch (core/modules.ts pageOn): a page of a module that is off is not offered. Missing = every page. */
+  pageOn?: (page: string) => boolean
 }
 
 /** Everything the palette can do right now. */
 export function buildCommands(s: Sources): Command[] {
   const out: Command[] = []
+  const on = s.pageOn ?? (() => true)
   for (const m of [...MODULES, ...SYSTEM_PAGES]) {
-    if (m.phase > 0) continue
+    if (m.phase > 0 || !on(m.id)) continue
     out.push({ id: `go:${m.id}`, label: m.label, hint: m.blurb, group: 'Go to', icon: m.icon, color: m.color, run: () => s.go(m.id) })
   }
   // A page's own tab, straight away ("water" opens Today on Body).
   for (const l of TAB_LINKS) {
+    if (!on(l.page)) continue
     const m = [...MODULES, ...SYSTEM_PAGES].find((x) => x.id === l.page)
     out.push({ id: `tab:${l.page}:${l.tab}`, label: l.label, hint: l.hint, group: 'Go to', icon: m?.icon ?? 'list', color: m?.color, run: () => openTab(l.page, l.tab) })
   }
@@ -49,10 +53,10 @@ export function buildCommands(s: Sources): Command[] {
   for (const r of s.rules.filter((r) => r.enabled && !isFlowRule(r.id))) {
     out.push({ id: `log:${r.id}`, label: r.title, hint: `${r.coins > 0 ? '+' : ''}${r.coins} points`, group: 'Log', icon: 'plus', run: () => s.award(r) })
   }
-  for (const t of s.todo ?? []) {
+  for (const t of on('tasks') ? s.todo ?? [] : []) {
     out.push({ id: `todo:${t.id}`, label: t.content, hint: `Done in Todoist${t.dueTime ? ` · ${t.dueTime}` : ''}`, group: 'Tasks', icon: 'check', run: () => s.completeTodo(t) })
   }
-  for (const r of s.shop?.rewards ?? []) {
+  for (const r of on('shop') ? s.shop?.rewards ?? [] : []) {
     out.push({ id: `reward:${r.id}`, label: r.title, hint: `${r.price} points`, group: 'Shop', icon: 'gift', run: () => s.go('shop') })
   }
   return [...out, ...s.actions]

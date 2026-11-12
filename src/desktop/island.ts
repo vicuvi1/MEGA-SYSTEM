@@ -69,6 +69,10 @@ const SLOT_LABEL: Record<Slot, string> = { island: 'open the island', quiet: 'qu
 export function createIsland(o: { origin: string; preload: string; appWindow: BrowserWindow; showApp: (page?: string) => void; dir: string; onChange?: () => void; pc?: () => { activeApp: boolean; titles: boolean }; onApp?: (proc: string, title: string | null, seconds: number) => void; onFg?: (proc: string) => void }) {
   const prefFile = join(o.dir, 'island.json')
   let enabled = true
+  // The module switch (core/modules.ts, Settings → Modules): the Dynamic island is a module, OFF by default.
+  // Off = the window is never created; the app window tells us (island:module) and we keep the last answer
+  // here, so a restart starts right. Turning it on opens the island at once (no restart).
+  let moduleOn = false
   let place: IslandPlacement = 'top'
   // top: center share of the width; free: center share + px from the top; sides: center share of the height.
   let pos = { cx: 0.5, top: 0, cy: 0.5 }
@@ -92,6 +96,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     if (existsSync(prefFile)) {
       const p = JSON.parse(readFileSync(prefFile, 'utf8'))
       enabled = p.enabled !== false
+      moduleOn = p.module === true
       if (isPlacement(p.place)) place = p.place
       if (Number.isFinite(p.cx)) pos.cx = Math.min(1, Math.max(0, p.cx))
       if (Number.isFinite(p.top)) pos.top = Math.max(0, p.top)
@@ -122,7 +127,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const layoutNow = (): IslandLayout => ({ place, pos: { ...pos }, offset: { ...desk.offset }, displayId: savedDisplay, size: prefs.size })
   const savePrefs = () => {
     if (desk.perScreen && screensKey) desk = { ...desk, layouts: rememberLayout(desk.layouts, screensKey, layoutNow()) }
-    try { writeFileSync(prefFile, JSON.stringify({ v: SHORTCUTS_VERSION, clicksV: 1, sizeV: 1, enabled, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs, desk, theme: appTheme })) } catch { /* fine */ }
+    try { writeFileSync(prefFile, JSON.stringify({ v: SHORTCUTS_VERSION, clicksV: 1, sizeV: 1, enabled, module: moduleOn, place, ...pos, displayId: savedDisplay, quietUntil: quietEnd, prefs, desk, theme: appTheme })) } catch { /* fine */ }
   }
   if (needsSave) savePrefs()
   // What the size is on the island's screen right now (Settings shows what Auto picked).
@@ -349,6 +354,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
 
   const open = () => {
     if (win && !win.isDestroyed()) return
+    // The Dynamic island module is off: no window, so none of its timers, sounds or notices run.
+    if (!moduleOn) return
     ready = false
     inside = null
     inWin = null
@@ -1209,6 +1216,11 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
 
   // Settings → Desktop island (from the app window).
   ipcMain.handle('island:getPrefs', (e) => (fromApp(e) ? allPrefs() : null))
+  // The module switch from the app window (core/modules.ts): only the app may turn the island module on or off.
+  ipcMain.on('island:module', (e, on) => {
+    if (!fromApp(e)) return
+    moduleChange?.(on === true)
+  })
   ipcMain.handle('island:setPrefs', (e, p: Partial<IslandPrefs & IslandDeskPrefs> & { place?: unknown; displayId?: unknown }) => {
     // IC17: the island's edit mode may save its pill order, and nothing else.
     if (!fromApp(e)) {
@@ -1323,7 +1335,8 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   }, 500)
 
   if (enabled) open()
-  return {
+  let moduleChange: ((on: boolean) => void) | null = null
+  const api = {
     /** CL9: memory the island's page uses (bytes; 0 when it isn't open). */
     memory: () => {
       if (!win || win.isDestroyed()) return 0
@@ -1339,7 +1352,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     capture: () => openFor('capture'),
     voice: () => openFor('voice'),
     restartWatcher,
-    enabled: () => enabled,
+    enabled: () => enabled && moduleOn,
+    /** The Dynamic island module is on (Settings → Modules). */
+    moduleOn: () => moduleOn,
     /** Meetings (MT1): in a call now (mic / camera, or a calendar meeting). */
     inCall,
     /** Island 2 (islandKit.ts): an event for the page, is this the page, the island's own shortcuts, shown now. */
@@ -1390,6 +1405,17 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
       savePrefs()
       if (on) open()
       else close()
+    },
+    /** The module switch: off closes the window (nothing is deleted), on opens it now when it is shown. */
+    setModule(on: boolean) {
+      if (on === moduleOn) return
+      moduleOn = on
+      savePrefs()
+      if (on && enabled) open()
+      if (!on) close()
+      o.onChange?.()
     }
   }
+  moduleChange = (on) => api.setModule(on)
+  return api
 }

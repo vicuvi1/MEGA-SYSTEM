@@ -1,3 +1,4 @@
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type SqlJsStatic } from 'sql.js'
@@ -20,6 +21,8 @@ afterEach(() => (vi.unstubAllGlobals(), vi.useRealTimers()))
 async function web() {
   const remote = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   remote.run(`INSERT INTO ledger (ts, day, module, kind, coins, xp, rule_id, note) VALUES ('2026-10-01T08:00:00Z', '2026-10-01', 'x', 'adjust', 100, 0, NULL, 'start')`)
   vi.stubGlobal('fetch', async (_u: string, init: { body: string }) => {
     const out = handlePipeline(remote, JSON.parse(init.body))

@@ -151,6 +151,7 @@ var SETTINGS = {
 	ben_outbox: json$7("messages Telegram refused, tried again for 6 hours", []),
 	ben_sent_count: json$7("messages Ben sent on his own today (app day)", null),
 	simple_mode: json$7("Simple mode: hide unused modules, the daily push budget, the afternoon nudge (src/core/simpleMode.ts); missing = on", null),
+	modules_on: json$7("the module switch: which parts of the app are on (src/core/modules.ts, Settings → Modules); missing = Today, Money, Sleep, Sport Track and Discipline on", null),
 	push_budget: json$7("the push slots used today, at most 4 (src/core/notifyBudget.ts)", null),
 	night_nudge_day: text$2("the night Ben last said \"go to sleep\" after 23:15 (app day)"),
 	pick_tomorrow: json$7("Ben asked for tomorrow's 3 must-dos (21:15); the next reply is read as the pick", null),
@@ -30722,7 +30723,7 @@ function pluginsOn(db) {
 	const v = readSetting(db, PLUGINS_ON);
 	return v && typeof v === "object" ? v : {};
 }
-var isOn = (db, id) => pluginsOn(db)[id] === true;
+var isOn$1 = (db, id) => pluginsOn(db)[id] === true;
 function readConfig(db, id) {
 	const v = parseJson$1(getSetting(db, configKey(id)), {});
 	return v && typeof v === "object" ? v : {};
@@ -31898,7 +31899,7 @@ var pluginById = (id) => PLUGINS.find((p) => p.id === id) ?? null;
 function pluginContext(db, now) {
 	const out = [];
 	for (const p of PLUGINS) {
-		if (!p.context || !isOn(db, p.id)) continue;
+		if (!p.context || !isOn$1(db, p.id)) continue;
 		try {
 			const line = p.context(db, now);
 			if (line) out.push(line);
@@ -31938,7 +31939,7 @@ function runPluginAction(ctx, call) {
 	const p = pluginById(call.plugin);
 	const a = p?.actions?.[call.verb];
 	if (!p || !a) return null;
-	if (!isOn(ctx.db, p.id)) return { line: `⚠️ The ${p.title} plugin is off (Settings → Plugins)` };
+	if (!isOn$1(ctx.db, p.id)) return { line: `⚠️ The ${p.title} plugin is off (Settings → Plugins)` };
 	return a.run(ctx, call.args);
 }
 function undoPluginAction(ctx, plugin, verb, data) {
@@ -31957,7 +31958,7 @@ function findPluginCommand(db, text) {
 	const name = m[1].toLowerCase();
 	for (const p of PLUGINS) {
 		const cmd = p.commands?.[name];
-		if (cmd && isOn(db, p.id)) return {
+		if (cmd && isOn$1(db, p.id)) return {
 			plugin: p,
 			cmd,
 			arg: (m[2] ?? "").trim()
@@ -31967,11 +31968,11 @@ function findPluginCommand(db, text) {
 }
 /** The plugin that reads this file (a bank CSV…), when it's on. */
 function pluginForFile(db, name, mime) {
-	return PLUGINS.find((p) => p.file && isOn(db, p.id) && p.file.accepts(name, mime)) ?? null;
+	return PLUGINS.find((p) => p.file && isOn$1(db, p.id) && p.file.accepts(name, mime)) ?? null;
 }
 /** Read-only tools for the MCP agent, named "<plugin>.<tool>"-free (tool names are unique). */
 function pluginMcpTools(db) {
-	return PLUGINS.filter((p) => isOn(db, p.id)).flatMap((p) => (p.mcpTools ?? []).map((t) => ({
+	return PLUGINS.filter((p) => isOn$1(db, p.id)).flatMap((p) => (p.mcpTools ?? []).map((t) => ({
 		...t,
 		plugin: p.id
 	})));
@@ -54516,6 +54517,592 @@ syncFinance: (recordDays) => write((s) => {
 		}
 	};
 }
+// src/core/modules.ts
+var MODULES_KEY = "modules_on";
+/** Every module, in menu order. */
+var MODULE_LIST = [
+	{
+		id: "today",
+		label: "Today",
+		line: "The 3 numbers: sleep, focus blocks started and exactly 3 must-dos, with the focus timer and your own reminders.",
+		pages: ["today"],
+		island: [
+			"running",
+			"mustdos",
+			"three",
+			"today",
+			"dayPct",
+			"alert",
+			"focusGuard",
+			"shield"
+		],
+		desktop: [
+			"focusTimer",
+			"reminders",
+			"pushBudget",
+			"nightNudge"
+		],
+		server: [
+			"tick.budget",
+			"tick.reminders",
+			"tick.pick"
+		],
+		bot: [
+			"today",
+			"status",
+			"stat",
+			"focus",
+			"stop",
+			"plan",
+			"review",
+			"week",
+			"why",
+			"start",
+			"help",
+			"commands"
+		],
+		pushes: ["plan", "reminder"],
+		settings: [
+			"simple_mode",
+			"push_budget",
+			"pick_tomorrow",
+			"focus_running",
+			"night_nudge_day",
+			"my_habits",
+			"habit_board"
+		],
+		locked: true
+	},
+	{
+		id: "money",
+		label: "Money",
+		line: "Finance Helper: safe to spend, quick add and your categories.",
+		pages: ["money"],
+		island: ["money"],
+		desktop: [],
+		server: [],
+		bot: [
+			"expense",
+			"buy",
+			"spent",
+			"pay",
+			"paid",
+			"balance",
+			"accounts",
+			"money"
+		],
+		pushes: [],
+		settings: [
+			"app_sync_finance",
+			"money_daily_budget",
+			"money_nothing_spent"
+		]
+	},
+	{
+		id: "sleep",
+		label: "Sleep",
+		line: "Bedtime and wake-up (Waky), asleep by 23:30 and up by 06:45, the wind-down.",
+		pages: ["sleep"],
+		island: [
+			"sleep",
+			"windDown",
+			"windMode",
+			"afterShift"
+		],
+		desktop: ["awayBedtime", "bedtimeAlert"],
+		server: ["tick.winddown", "daily.night"],
+		bot: [
+			"wake",
+			"up",
+			"bed",
+			"sleep"
+		],
+		pushes: ["bedtime"],
+		settings: [
+			"app_sync_waky",
+			"sleep_bed_target",
+			"sleep_weekday_target",
+			"sleep_weekend_target",
+			"sleep_care",
+			"wind_down_day"
+		]
+	},
+	{
+		id: "sport",
+		label: "Sport Track",
+		line: "Workouts, water, body metrics and food (meals, protein, food photos).",
+		pages: ["body"],
+		island: [
+			"water",
+			"reps",
+			"protein",
+			"streak",
+			"health",
+			"glance"
+		],
+		desktop: ["waterAlert", "foodInbox"],
+		server: ["cron.sport", "cron.health"],
+		bot: [
+			"water",
+			"workout",
+			"w",
+			"gym",
+			"train",
+			"protein",
+			"p",
+			"food",
+			"meals",
+			"weight",
+			"waist",
+			"pr",
+			"record",
+			"sport",
+			"sports",
+			"athlete",
+			"pushups",
+			"situps",
+			"squats",
+			"plank",
+			"run"
+		],
+		pushes: ["water", "training"],
+		settings: [
+			"sport_tracker_json",
+			"body_plus",
+			"food_log",
+			"food_goals",
+			"food_saved",
+			"food_ben",
+			"body_tape",
+			"sport_rest_days"
+		]
+	},
+	{
+		id: "discipline",
+		label: "Discipline",
+		line: "The days-clean counter, check-in, morning oath and the urge crusher.",
+		pages: ["discipline"],
+		island: [],
+		desktop: [],
+		server: [],
+		bot: [
+			"checkin",
+			"clean",
+			"oath",
+			"crush",
+			"panic",
+			"urge"
+		],
+		pushes: [],
+		settings: [
+			"discipline_stealth",
+			"discipline_why",
+			"discipline_triggers"
+		]
+	},
+	{
+		id: "study",
+		label: "Study Time",
+		line: "Study blocks with a pomodoro, breaks, stats and Todoist study tasks.",
+		pages: ["study"],
+		island: ["studyTime"],
+		desktop: ["studyAlarm"],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: ["study_blocks", "study_log"]
+	},
+	{
+		id: "calendar",
+		label: "Calendar",
+		line: "Your Google Calendar by week or day, class and leave-now warnings, the day strip.",
+		pages: ["calendar"],
+		island: [
+			"now",
+			"next",
+			"maybe",
+			"call",
+			"inMeeting",
+			"day",
+			"work"
+		],
+		desktop: ["eventAlerts", "planAutoSync"],
+		server: [
+			"tick.calendarWatch",
+			"tick.calendarAlerts",
+			"tick.lateBlock"
+		],
+		bot: [],
+		pushes: [
+			"block",
+			"event",
+			"leave"
+		],
+		settings: ["cal_templates", "ben_cal_seen"]
+	},
+	{
+		id: "tasks",
+		label: "Tasks",
+		line: "Your Todoist, by area, with points for tasks done.",
+		pages: ["tasks"],
+		island: [
+			"tasks",
+			"tasksAt",
+			"tasksStale"
+		],
+		desktop: ["todoistWatch"],
+		server: ["tick.todoistPay"],
+		bot: [
+			"todo",
+			"tasks",
+			"task",
+			"add",
+			"done",
+			"tick",
+			"complete"
+		],
+		pushes: [],
+		settings: []
+	},
+	{
+		id: "coach",
+		label: "Coach (Ben)",
+		line: "Ben, the AI coach: chat, plans, check-ins, nudges, memory and his Telegram chat.",
+		pages: ["coach"],
+		island: [
+			"ben",
+			"nudgeWhy",
+			"dayState",
+			"story",
+			"doing",
+			"move"
+		],
+		desktop: ["benBubble", "coachUnread"],
+		server: [
+			"tick.rhythm",
+			"tick.desk",
+			"tick.memory",
+			"tick.checkins",
+			"tick.nudges",
+			"daily.morning",
+			"daily.reask",
+			"daily.midday",
+			"daily.evening"
+		],
+		bot: ["coach", "ben"],
+		pushes: ["ben", "review"],
+		settings: [
+			"coach_rhythm",
+			"coach_rhythm_prefs",
+			"coach_memory",
+			"coach_nudges",
+			"coach_reminders",
+			"ben_desk",
+			"ben_pushes"
+		]
+	},
+	{
+		id: "goals",
+		label: "Goals",
+		line: "Every goal with its deadline and pace, the goal ladder and the week top 3.",
+		pages: ["goals"],
+		island: ["goals", "week"],
+		desktop: [],
+		server: ["tick.goals"],
+		bot: [
+			"goals",
+			"wishlist",
+			"deadlines"
+		],
+		pushes: ["week"],
+		settings: [
+			"goal_ladder",
+			"goal_asks",
+			"goal_booking",
+			"week_top3_ask"
+		]
+	},
+	{
+		id: "season",
+		label: "Season",
+		line: "The 12-week arc and its boss, vision board, wins wall and the level-up scenes.",
+		pages: ["season"],
+		island: ["saga"],
+		desktop: ["cinematics"],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: [
+			"saga_seasons",
+			"saga_vision",
+			"saga_wins",
+			"saga_arc"
+		]
+	},
+	{
+		id: "career",
+		label: "Career",
+		line: "Job hunt, flashcards, study packs, essays and the money plan behind your career.",
+		pages: ["career"],
+		island: ["study"],
+		desktop: [],
+		server: ["tick.career"],
+		bot: [
+			"quiz",
+			"pack",
+			"jobs",
+			"career"
+		],
+		pushes: [],
+		settings: [
+			"career_jobs",
+			"career_cards",
+			"career_study",
+			"career_money",
+			"career_letters"
+		]
+	},
+	{
+		id: "insights",
+		label: "Insights",
+		line: "Am I improving? Week score, streaks, your year and the week plan.",
+		pages: ["progress", "focus"],
+		island: [],
+		desktop: [],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: [
+			"week_plan",
+			"week_plans",
+			"month_aims"
+		]
+	},
+	{
+		id: "rewards",
+		label: "Rewards",
+		line: "Spend your points on fun time and real rewards; loot, coupons and the points history.",
+		pages: ["shop", "history"],
+		island: ["points", "pointsFx"],
+		desktop: [],
+		server: [],
+		bot: [
+			"vault",
+			"economy",
+			"fun",
+			"shop"
+		],
+		pushes: [],
+		settings: [
+			"reward_budget",
+			"reward_coupons",
+			"streak_shields",
+			"fun_budget"
+		]
+	},
+	{
+		id: "locker",
+		label: "Photo Locker",
+		line: "Progress photos, short videos and files, backed up to your Google Drive.",
+		pages: ["locker"],
+		island: [],
+		desktop: ["driveSync"],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: ["vault_index"]
+	},
+	{
+		id: "music",
+		label: "Music",
+		line: "SoundCloud stations, lyrics and the players on your PC.",
+		pages: ["music"],
+		island: ["musicPause"],
+		desktop: ["musicHost"],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: ["music_now"]
+	},
+	{
+		id: "custom",
+		label: "Custom Center",
+		line: "Your own widgets, actions, reminders, modes and looks for the island and the app.",
+		pages: ["custom"],
+		island: [
+			"center",
+			"widgets",
+			"kit",
+			"weather",
+			"moment",
+			"auto"
+		],
+		desktop: ["customBackground"],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: [
+			"custom_setup",
+			"custom_state",
+			"island_widgets",
+			"island_kit"
+		]
+	},
+	{
+		id: "focusBoost",
+		label: "Focus boost",
+		line: "Push ladder, launch kits, Dojo mode, \"why I'm stalling\" and win music.",
+		pages: [],
+		island: [],
+		desktop: ["focusBoost"],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: ["focus_boost", "focus_log"]
+	},
+	{
+		id: "island",
+		label: "Dynamic island",
+		line: "The floating island at the top of the screen on Windows: timers, quick logs and notices.",
+		pages: [],
+		island: [],
+		desktop: ["islandWindow", "islandFeed"],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: [
+			"island_day_log",
+			"island_nudges",
+			"island_recipes"
+		]
+	},
+	{
+		id: "growth",
+		label: "Growth level",
+		line: "The Growth level (Seedling to Legend) in the header and on Today.",
+		pages: [],
+		island: [],
+		desktop: [],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: []
+	},
+	{
+		id: "notebook",
+		label: "Notebook",
+		line: "Your notes and Ben's notes about you, your journal.",
+		pages: ["notebook"],
+		island: [],
+		desktop: [],
+		server: [],
+		bot: [],
+		pushes: [],
+		settings: []
+	},
+	{
+		id: "plugins",
+		label: "Plugins & automation",
+		line: "Plugins (weather, GitHub…), PC automations, n8n flows and webhooks.",
+		pages: [],
+		island: [],
+		desktop: ["pcAutomations"],
+		server: [
+			"tick.plugins",
+			"tick.n8n",
+			"cron.plugins"
+		],
+		bot: [],
+		pushes: [],
+		settings: ["plugins_on", "automations"]
+	}
+];
+var MODULE_IDS = MODULE_LIST.map((m) => m.id);
+/** The owner's choice (2026-11-12): these five on, everything else off. */
+var DEFAULT_ON = [
+	"today",
+	"money",
+	"sleep",
+	"sport",
+	"discipline"
+];
+var DEFAULT_MODULES = Object.fromEntries(MODULE_IDS.map((id) => [id, DEFAULT_ON.includes(id)]));
+Object.fromEntries(MODULE_IDS.map((id) => [id, true]));
+var byId = new Map(MODULE_LIST.map((m) => [m.id, m]));
+var moduleDef = (id) => byId.get(id);
+/**
+* The stored setting (`{ on: { study: true, … } }`) on top of the defaults. Missing or
+* unreadable = the defaults; a module added later starts at its default. Today is always on.
+*/
+function readModules(raw) {
+	let r = raw;
+	if (typeof raw === "string") try {
+		r = JSON.parse(raw);
+	} catch {
+		r = null;
+	}
+	const out = { ...DEFAULT_MODULES };
+	const on = r && typeof r === "object" && r.on && typeof r.on === "object" && !Array.isArray(r.on) ? r.on : null;
+	if (on) {
+		for (const id of MODULE_IDS) if (typeof on[id] === "boolean") out[id] = on[id];
+	}
+	for (const m of MODULE_LIST) if (m.locked) out[m.id] = true;
+	return out;
+}
+var isOn = (m, id) => m[id] !== false;
+/** The module a page belongs to; null for system pages (Settings, Connected apps, Telegram bots). */
+function pageModule(page) {
+	for (const m of MODULE_LIST) if (m.pages.includes(page)) return m.id;
+	return null;
+}
+/** The module that runs this background job (desktop or server); null = not a module's job. */
+function jobModule(job) {
+	for (const m of MODULE_LIST) if (m.desktop.includes(job) || m.server.includes(job)) return m.id;
+	return null;
+}
+/** May this background job run? A job of no module (backups, health, sync) always may. */
+var jobOn = (m, job) => {
+	const id = jobModule(job);
+	return !id || isOn(m, id);
+};
+/** The module of a Telegram command ("/quiz 3", "/todo@MyBot"); null for free text or a command of no module. */
+function commandModule(text) {
+	const c = /^\/([a-z_]+)(?:@\w+)?(?:\s|$)/i.exec(String(text ?? "").trim());
+	if (!c) return null;
+	const cmd = c[1].toLowerCase();
+	for (const m of MODULE_LIST) if (m.bot.includes(cmd)) return m.id;
+	return null;
+}
+/** The reply to a command of a module that is off. */
+var OFF_REPLY = "This part is switched off. Turn it on in Settings → Modules";
+/** The OFF reply for this text when its command belongs to a module that is off; null otherwise. */
+function offReply(m, text) {
+	const id = commandModule(text);
+	return id && !isOn(m, id) ? `${moduleDef(id).label}: ${OFF_REPLY}` : null;
+}
+/** The daily-push slot ids (notifyBudget `budget:<slot>:<day>`) and the module that owns each. */
+var SLOT_MODULE = {
+	morning: "today",
+	afternoon: "today",
+	plan: "today",
+	weekly: "today",
+	winddown: "sleep"
+};
+/** The module a notification belongs to: the daily pushes by their slot, then its kind, then the page it opens. */
+function notifModule(n) {
+	const slot = /^budget:([a-z]+):/.exec(String(n.id ?? ""));
+	if (slot && SLOT_MODULE[slot[1]]) return SLOT_MODULE[slot[1]];
+	if (/^night:/.test(String(n.id ?? ""))) return "sleep";
+	const kind = String(n.kind ?? "");
+	for (const m of MODULE_LIST) if (m.pushes.includes(kind)) return m.id;
+	const page = n.action?.kind === "page" ? n.action.page : void 0;
+	return page ? pageModule(page) : null;
+}
+/** May this notification show (bell, pop-up, Telegram)? One of no module (health, updates) always may. */
+var notifOn = (m, n) => {
+	const id = notifModule(n);
+	return !id || isOn(m, id);
+};
 // src/core/benWhy.ts
 var WHY_KEY = "ben_why";
 function addWhy(list, actions, because, source, at = (/* @__PURE__ */ new Date()).toISOString()) {
@@ -68371,8 +68958,28 @@ His note: ${note}`, { json: true }));
 			parse_mode: "HTML"
 		});
 	}
+	/** The module switch (core/modules.ts), read fresh for each message. */
+	const modsNow = () => mirror.read((db) => readModules(getSetting(db, MODULES_KEY))).catch(() => readModules(null));
+	/** One plain reply for a part that is switched off (only to the owner's chats). */
+	async function offAnswer(botId, update, cfg, reply) {
+		const chat = String(update.message?.chat?.id ?? "");
+		if (!chat || !await markSeen(`${botId}:${update.update_id}`)) return null;
+		if (!allowed(cfg, chat)) return null;
+		processed++;
+		addLog(String(update.message?.text ?? "").slice(0, 80), chat, true, reply);
+		await tg(update.__token, "sendMessage", {
+			chat_id: chat,
+			text: reply
+		}).catch(() => null);
+		return reply;
+	}
 	async function handle(botId, update, cfg) {
 		if (update.callback_query) return handleButton(botId, update, cfg);
+		const cmdText = String(update.message?.text ?? "").trim();
+		if (cmdText.startsWith("/")) {
+			const off = offReply(await modsNow(), cmdText);
+			if (off) return offAnswer(botId, update, cfg, off);
+		}
 		const viaTodoist = await handleTodoist(botId, update, cfg);
 		if (viaTodoist !== void 0) return viaTodoist;
 		const key = `${botId}:${update.update_id}`;
@@ -68499,6 +69106,7 @@ His note: ${note}`, { json: true }));
 				file: null,
 				cmd: findPluginCommand(db, text)
 			}).catch(() => null);
+			if ((hit?.file || hit?.cmd) && !isOn(await modsNow(), "plugins")) return offAnswer(botId, update, cfg, `${moduleDef("plugins").label}: ${OFF_REPLY}`);
 			if (hit?.file || hit?.cmd) {
 				if (!await markSeen(key)) return null;
 				if (!allowed(cfg, chat)) return null;
@@ -68557,6 +69165,7 @@ His note: ${note}`, { json: true }));
 					return reply;
 				}
 			}
+			if (!isOn(await modsNow(), "coach")) return offAnswer(botId, update, cfg, `${moduleDef("coach").label}: ${OFF_REPLY}`);
 			return handleBrain(botId, update, cfg, text, key, file);
 		}
 		for (let attempt = 0; attempt < 2; attempt++) try {
@@ -68603,7 +69212,18 @@ His note: ${note}`, { json: true }));
 					return said;
 				}
 			}
-			if (ai && "unknown" in out && out.unknown && !text.startsWith("/")) return handleBrain(botId, update, cfg, text, key);
+			if (ai && "unknown" in out && out.unknown && !text.startsWith("/")) {
+				if (!isOn(await modsNow(), "coach")) {
+					const reply = `${moduleDef("coach").label}: ${OFF_REPLY}`;
+					addLog(text, chat, true, reply);
+					await tg(update.__token, "sendMessage", {
+						chat_id: chat,
+						text: reply
+					}).catch(() => null);
+					return reply;
+				}
+				return handleBrain(botId, update, cfg, text, key);
+			}
 			processed++;
 			if (out.ok && "sport" in out && out.sport) {
 				const prog = addRepsToSportTrack(out.sport.name, out.sport.amount, out.sport.sets, out.sport);
@@ -68710,6 +69330,11 @@ His note: ${note}`, { json: true }));
 	async function quick(text) {
 		const t = text.trim();
 		if (!t || t.length > 200) return { unknown: true };
+		const off = t.startsWith("/") ? offReply(await modsNow(), t) : null;
+		if (off) return {
+			ok: true,
+			reply: off
+		};
 		const key = `quick:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`;
 		const out = await mirror.write((db) => {
 			const svc = services.services(db);
@@ -70606,29 +71231,12 @@ function budgetPrefs(raw) {
 }
 // src/core/simpleMode.ts
 var SIMPLE_KEY = "simple_mode";
-/** Everything else, in this order, under one closed "Archive" group. Nothing is deleted. */
-var ARCHIVE_PAGES = [
-	"calendar",
-	"coach",
-	"goals",
-	"season",
-	"career",
-	"progress",
-	"shop",
-	"sleep",
-	"locker",
-	"discipline",
-	"music",
-	"custom",
-	"tasks"
-];
 var DEFAULT_SIMPLE = {
 	on: true,
 	budget: true,
-	afternoon: false,
-	shown: []
+	afternoon: false
 };
-/** Missing or unreadable = the defaults (on). */
+/** Missing or unreadable = the defaults (on). An old `shown` list (the Archive) is ignored. */
 function readSimple(raw) {
 	let r = raw;
 	if (typeof raw === "string") try {
@@ -70637,12 +71245,10 @@ function readSimple(raw) {
 		r = null;
 	}
 	if (!r || typeof r !== "object") return { ...DEFAULT_SIMPLE };
-	const shown = Array.isArray(r.shown) ? ARCHIVE_PAGES.filter((p) => r.shown.includes(p)) : [];
 	return {
 		on: r.on !== false,
 		budget: r.budget !== false,
-		afternoon: r.afternoon === true,
-		shown
+		afternoon: r.afternoon === true
 	};
 }
 // src/server/mcp.ts
@@ -74743,7 +75349,7 @@ async function handleTelegramUpdate(env, token, update) {
 		if (raw) setSetting(db, REMINDERS, JSON.stringify(answered$1(JSON.parse(raw), /* @__PURE__ */ new Date(), String(m.text ?? m.caption ?? ""), !!m.reply_to_message)));
 	}).catch(() => null);
 	const reply = await bots.handleUpdate(token, update);
-	await payTodoistDone(env, { minGapMs: 18e4 }).catch(() => null);
+	if (await mirror.read((db) => jobOn(readModules(getSetting(db, "modules_on")), "tick.todoistPay")).catch(() => false)) await payTodoistDone(env, { minGapMs: 18e4 }).catch(() => null);
 	await coachSettle().catch(() => null);
 	return reply;
 }
@@ -74757,6 +75363,14 @@ async function handleTelegramUpdate(env, token, update) {
 async function runDaily(env, job) {
 	lifeTz(env);
 	const { services, mirror } = await botsFor(env);
+	if (!jobOn(await mirror.read((db) => readModules(getSetting(db, MODULES_KEY))).catch(() => readModules(null)), `daily.${job}`)) {
+		await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{
+			status: "skipped",
+			kind: `${job} message`,
+			reason: "Switched off in Settings → Modules"
+		}]);
+		return [];
+	}
 	if (job === "morning" || job === "reask" || job === "evening" || job === "midday") {
 		if (await mirror.read((db) => cleanPrefs$2(JSON.parse(getSetting(db, "coach_rhythm_prefs") || "null")).on).catch(() => true)) {
 			await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{
@@ -75247,6 +75861,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			const led = await mirror.read((db) => cleanLedger(readSetting(db, "push_budget"), day));
 			const slot = dueSlot(localMinute(now, tz), weekdayNow(), bud, led.sent);
 			if (!slot) return;
+			if (!notifOn(await mirror.read((db) => readModules(getSetting(db, "modules_on"))).catch(() => readModules(null)), { id: slotNotifId(slot, day) })) return;
 			const text = slotText(slot, await mirror.read((db) => {
 				const items = services.services(db).focus.state(now).plan.items;
 				return {
@@ -75298,6 +75913,10 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		} catch (e) {
 			console.error("push budget:", e);
 		}
+		const mods = await mirror.read((db) => readModules(getSetting(db, MODULES_KEY))).catch(() => readModules(null));
+		const on = (job) => jobOn(mods, job);
+		const coachOn = isOn(mods, "coach");
+		const calOn = isOn(mods, "calendar") && !!calendar;
 		const today0 = await mirror.read((db) => services.services(db).wallet.today(now));
 		const tone = await mirror.read((db) => loadStyle(db).tone);
 		const reminders = await mirror.read((db) => {
@@ -75338,6 +75957,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		for (const r of dueReminders(list, now)) {
 			if (hush && r.kind === "checkin") continue;
 			if (budOn && (r.kind === "checkin" || r.promise)) continue;
+			if (!coachOn && (r.kind === "checkin" || r.promise)) continue;
 			try {
 				const pr = r;
 				if (!(pr.promise && !pr.tries ? await send(promiseAsk({
@@ -75375,24 +75995,24 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		}
 		if (list !== reminders) await mirror.write((db) => writeSetting(db, REMINDERS, list));
 		try {
-			await rhythmTick(env, now, send);
+			if (on("tick.rhythm")) await rhythmTick(env, now, send);
 		} catch (e) {
 			console.error("rhythm:", e);
 			logError(healthDb, "server", `rhythm: ${e.message}`);
 		}
 		try {
-			await deskTick(mirror, services, now, send, esc);
+			if (on("tick.desk")) await deskTick(mirror, services, now, send, esc);
 		} catch (e) {
 			console.error("desk:", e);
 		}
 		try {
-			const g = await goalsTick(mirror, services, now, send, esc);
+			const g = on("tick.goals") ? await goalsTick(mirror, services, now, send, esc) : null;
 			if (g) note("sent", `Goal check-in: ${g}`, void 0, "goals");
 		} catch (e) {
 			console.error("goals:", e);
 		}
 		try {
-			const c = await careerTick(mirror, services, now, localMinute(now, tz), send, esc);
+			const c = on("tick.career") ? await careerTick(mirror, services, now, localMinute(now, tz), send, esc) : null;
 			if (c) note("sent", `Career: ${c}`, void 0, "career");
 		} catch (e) {
 			console.error("career:", e);
@@ -75416,12 +76036,12 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			console.error("prune:", e);
 		}
 		try {
-			const ran = await pluginJobs(env, mirror, healthDb, now, (t) => send(t));
+			const ran = on("tick.plugins") ? await pluginJobs(env, mirror, healthDb, now, (t) => send(t)) : [];
 			if (ran.length) note("sent", `Plugins: ${ran.join(", ")}`, void 0, "plugins");
 		} catch (e) {
 			console.error("plugins:", e);
 		}
-		const memRan = await memoryJobs({
+		const memRan = !on("tick.memory") ? [] : await memoryJobs({
 			mirror,
 			vectors,
 			model: env.model,
@@ -75430,7 +76050,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			now
 		});
 		if (memRan.length) note("sent", `Memory: ${memRan.join(", ")}`, void 0, "memory");
-		if (calendar) try {
+		if (calendar && calOn && on("tick.calendarWatch")) try {
 			if (await sysClaim(healthDb, "ben_cal_watch_at", now.getTime(), 6e5)) {
 				const end = new Date(now);
 				end.setDate(end.getDate() + 2);
@@ -75518,9 +76138,12 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		};
 		const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
 		const paused = nudge.pausedDay === st.today;
-		const events = calendar ? await calendar.events((/* @__PURE__ */ new Date(now.getTime() - 144e5)).toISOString(), new Date(now.getTime() + 9e5).toISOString()).catch(() => []) : [];
+		const events = calendar && calOn ? await calendar.events((/* @__PURE__ */ new Date(now.getTime() - 144e5)).toISOString(), new Date(now.getTime() + 9e5).toISOString()).catch(() => []) : [];
 		const inEvent = events.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime());
-		const pushed = await pushTick({
+		const pushed = !on("tick.checkins") ? {
+			checkins: false,
+			sent: []
+		} : await pushTick({
 			mirror,
 			services,
 			calendar,
@@ -75539,7 +76162,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			};
 		});
 		if (pushed.sent.length) sent.push(...pushed.sent.map((k) => `push:${k}`));
-		if (calendar && !st.focus.running && !paused && !pushed.checkins) {
+		if (calendar && calOn && on("tick.lateBlock") && !st.focus.running && !paused && !pushed.checkins) {
 			const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 6e5 && Date.parse(e.end) - now.getTime() >= 9e5);
 			if (starting) {
 				const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 6e4);
@@ -75556,7 +76179,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 				} catch {}
 			}
 		}
-		if (calendar && notifSet.lead + Math.max(0, ...notifSet.travel.map((t) => t.minutes)) > 0) {
+		if (calendar && calOn && on("tick.calendarAlerts") && notifSet.lead + Math.max(0, ...notifSet.travel.map((t) => t.minutes)) > 0) {
 			const ahead = await calendar.events(now.toISOString(), new Date(now.getTime() + (Math.max(notifSet.lead, ...notifSet.travel.map((t) => t.minutes + 5)) + 15) * 6e4).toISOString()).catch(() => []);
 			for (const w of eventAlerts(ahead, now, notifSet).filter((x) => !(nudge.announced ?? []).includes(x.id))) {
 				const ev = ahead.find((e) => w.id.includes(`:${e.id}:`));
@@ -75578,7 +76201,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			}
 		}
 		const blockNow = events.find((e) => isFocusBlock(e) && Date.parse(e.start) <= now.getTime() - 6e5 && Date.parse(e.end) - now.getTime() >= 9e5);
-		if (blockNow && !pushed.checkins && !st.focus.running && !paused && st.idleMin >= 20 && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
+		if (blockNow && on("tick.lateBlock") && !pushed.checkins && !st.focus.running && !paused && st.idleMin >= 20 && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
 			const subject = blockSubject(blockNow.title).slice(0, 28);
 			const later = `bx|${blockNow.id}`.length <= 64 ? [{
 				text: "↪️ Next free time",
@@ -75611,7 +76234,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 		const quiet = await mirror.read((db) => quietNow$1(quietRules(loadFeedback(db)), now)).catch(() => null);
 		if (!sent.length && !inEvent && quiet && shouldNudge(nudge, facts, now)) note("skipped", "Nudge: nothing done for a while", `${quiet.text} (learned from your 👎)`, "nudge");
 		if (!sent.length && !inEvent && !quiet && st.mode && !st.mode.idle && shouldNudge(nudge, facts, now)) note("skipped", "Nudge: nothing done for a while", `Life mode: ${st.mode.label}`, "nudge");
-		if (!sent.length && !inEvent && !quiet && !blockNow && !(st.mode && !st.mode.idle) && shouldNudge(nudge, facts, now)) {
+		if (on("tick.nudges") && !sent.length && !inEvent && !quiet && !blockNow && !(st.mode && !st.mode.idle) && shouldNudge(nudge, facts, now)) {
 			const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1;
 			const first = openMustDos[0]?.text;
 			const text = nudgeText(n, Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ""}${Math.round(st.idleMin % 60)}m` : "all day", first, st.focus.todayMin, st.tone);
@@ -75630,7 +76253,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			const bm = Number(bed.slice(0, 2)) * 60 + Number(bed.slice(3, 5));
 			const before = lateShift ? -1 : (bm - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440;
 			const seen = before >= 25 && before <= 50 ? await mirror.read((db) => bodyFacts(db, services.services(db), today0, now)).catch(() => null) : null;
-			if (telegramWindDown({
+			if (on("tick.winddown") && telegramWindDown({
 				minutesBefore: before,
 				bedLogged: !!seen?.bedLogged,
 				islandBedAt: seen?.bedAt ?? null,
@@ -75646,7 +76269,7 @@ async function runTick(env, now = /* @__PURE__ */ new Date()) {
 			console.error("wind-down:", e);
 		}
 		try {
-			for (const t of await flowFailTick(healthDb, now)) if (await send(t, void 0, { always: true }).catch(() => false)) sent.push(t);
+			for (const t of on("tick.n8n") ? await flowFailTick(healthDb, now) : []) if (await send(t, void 0, { always: true }).catch(() => false)) sent.push(t);
 		} catch (e) {
 			console.error("flows:", e.message);
 		}
@@ -76488,6 +77111,10 @@ async function pluginJobs(env, mirror, healthDb, now, send, opts = {}) {
 async function runPlugins(env, opts = {}) {
 	lifeTz(env);
 	const { mirror } = await botsFor(env);
+	if (!await mirror.read((db) => jobOn(readModules(getSetting(db, "modules_on")), "cron.plugins")).catch(() => true)) return {
+		ok: true,
+		ran: []
+	};
 	return {
 		ok: true,
 		ran: await pluginJobs(env, mirror, new TursoHttp(env.tursoUrl, env.tursoToken), /* @__PURE__ */ new Date(), void 0, {

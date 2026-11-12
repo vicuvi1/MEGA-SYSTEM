@@ -67,11 +67,9 @@
 .sb-dot.warn { background: var(--orange); }
 .sb-item.on .sb-dot { box-shadow: 0 0 0 2px #141822, 0 0 8px var(--c); }
 
-/* Simple mode: the closed Archive group and Settings at the bottom (Sidebar.tsx). */
-.sb-archive { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgb(var(--ink) / 0.06); }
-.sb-archive-toggle .sb-count { color: var(--muted); background: rgb(var(--ink) / 0.06); }
-.sb-archive .sb-item:not(.sb-archive-toggle) { height: 38px; }
-.sb-settings { margin-top: auto; flex: none; }
+/* The module switch: one quiet "Modules" link under the menu opens Settings → Modules (Sidebar.tsx). */
+.sb-more { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgb(var(--ink) / 0.06); height: 46px; color: var(--muted); }
+.sb-more .sb-name { color: var(--muted); }
 
 /* Collapse button: top-right when open, bottom of the dock when slim. */
 .sb-toggle {

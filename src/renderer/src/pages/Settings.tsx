@@ -16,6 +16,7 @@ import { WidgetsPanel } from '../widgets/WidgetsPanel'
 import { useSettingsState, type SettingsProps } from '../settings/useSettingsState'
 import { GeneralSection } from '../settings/general'
 import { SimpleModeSettings } from '../settings/simple'
+import { ModulesSettings } from '../settings/modules'
 import { LookSection } from '../settings/look'
 import { SoundSection } from '../settings/sound'
 import { VoiceSettings } from '../voice/VoiceSettings'
@@ -37,6 +38,14 @@ export function Settings(props: SettingsProps) {
       hint: 'PIN, this device and start-up',
       keywords: 'pin lock security password trusted device remember start windows background tray',
       body: <GeneralSection s={s} />
+    },
+    {
+      id: 'modules',
+      label: 'Modules',
+      icon: 'sliders',
+      hint: 'Turn parts of the app on or off',
+      keywords: 'modules module switch on off turn deactivate activate study time calendar tasks coach ben goals season career insights rewards photo locker music custom center focus boost dynamic island growth notebook plugins',
+      body: <ModulesSettings />
     },
     {
       id: 'simple',

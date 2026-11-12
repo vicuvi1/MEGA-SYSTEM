@@ -58,6 +58,7 @@ const api: DesktopApi = {
   islandCopy: (text) => ipcRenderer.send('island:copy', String(text ?? '')),
   islandCall: (inCall) => ipcRenderer.send('island:call', { inCall: !!inCall }),
   islandBar: (on) => ipcRenderer.send('island:bar', !!on),
+  islandModule: (on) => ipcRenderer.send('island:module', !!on),
   islandLog: (line) => ipcRenderer.send('island:log', String(line ?? '')),
   islandGetLog: () => ipcRenderer.invoke('island:getLog'),
   islandSoundFallback: (sound, loud) => ipcRenderer.invoke('island:soundFallback', String(sound ?? ''), Number(loud) || 1),

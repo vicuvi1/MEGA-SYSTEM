@@ -1,6 +1,8 @@
 // Desktop only: the app window (it keeps running hidden in the tray) feeds the
 // desktop island its snapshot and does what the island's buttons ask. The
 // island window itself never opens your data, so there is one owner of it.
+import { modulesNow, useModules } from './useModules'
+import { islandWithout } from '@core/modules'
 import { pushStyle, workToday } from '@core/lifeFit'
 import { weekTop3View, type WeekPlan } from '@core/weekPlan'
 import { dedupeTodoist, dedupeTodos } from '@core/islandTodos'
@@ -367,7 +369,13 @@ async function onAway(w: { from: string; to: string }): Promise<void> {
   window.dispatchEvent(new CustomEvent('life-sleep-changed'))
 }
 
+/** The Dynamic island module (core/modules.ts): off, nothing here runs (no snapshots, sounds or notices) and the desktop makes no island window. */
 export function IslandFeed() {
+  const mods = useModules()
+  return mods.island ? <IslandFeedOn /> : null
+}
+
+function IslandFeedOn() {
   // JV2: what you say to the island's voice goes to Ben from here (the app window).
   useEffect(() => startVoiceAskHost(), [])
   // Meetings on the island: Save the captions, Help me reply (the island has no data of its own).
@@ -891,9 +899,10 @@ export function IslandFeed() {
         return { balance: shop.balance, goal: goal ? { title: goal.title, price: goal.price } : null }
       })()
     }
-    if (!simpleCache.on) return snap
+    // The module switch (core/modules.ts): sections of modules that are off are emptied before the island sees them.
+    if (!simpleCache.on) return islandWithout(snap, modulesNow())
     const sc = sleepCheck(status.today.sleep ?? null)
-    return quietIsland(snap, { sleep: sc.met ? 'ok' : sc.bedOk == null && sc.upOk == null ? 'none' : 'off', blocks: status.today.focusBlocks ?? 0, mustDone: status.today.mustDone })
+    return quietIsland(islandWithout(snap, modulesNow()), { sleep: sc.met ? 'ok' : sc.bedOk == null && sc.upOk == null ? 'none' : 'off', blocks: status.today.focusBlocks ?? 0, mustDone: status.today.mustDone })
   }, [])
 
   // IS16 / IC9: one build at a time, and at most one more waiting (the 15 s

@@ -4,6 +4,7 @@
 // same as on the PC: caps, cooldowns, undo, shop, quests, streaks. Things only
 // the web has (embedded apps, Telegram polling, cloud snapshots) are here.
 import { readSimple, SIMPLE_KEY } from '@core/simpleMode'
+import { MODULES_KEY, readModules, setModule, writeModules, type ModuleId } from '@core/modules'
 import { budgetCheck, budgetPrefs, cleanLedger, type PushSlot } from '@core/notifyBudget'
 import { lifeFitView, readLifeFit, saveLifeFit, saveTonight, type LifeFitView } from './web/lifeFitStore'
 import { answerPushIn, applyMark, claimPush, noteMark, queueOut, readPushLog, setShutdownItems, writePcSeen } from './web/benPushStore'
@@ -592,6 +593,8 @@ export function createTursoWebBridge(): Bridge {
     watchInfo = () => ({ ...todoWatch.info(), lastSyncChanges })
     const todoistChanged = async (): Promise<boolean> => {
       if (!(await todoistOnP)) return false
+      // The Tasks module is off (core/modules.ts): no Todoist change checks in the background.
+      if (!(await (await mirrorP).read((db) => readModules(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(MODULES_KEY) as any)?.value ?? null).tasks).catch(() => true))) return false
       const changed = await todoWatch.check()
       // The Top 3 follow: a must-do renamed, moved away, deleted or done in Todoist (core/todoFollow.ts).
       if (changed) {
@@ -1819,6 +1822,18 @@ export function createTursoWebBridge(): Bridge {
       remove: async (id: string) => {
         await (await mirrorP).write((db) => removeNote(db as any, id))
       }
+    },
+    // The module switch (core/modules.ts): one synced setting; turning a module on or off never touches its data.
+    modules: {
+      get: async () => (await mirrorP).read((db) => readModules(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(MODULES_KEY) as any)?.value ?? null)),
+      set: async (id: ModuleId, on: boolean) =>
+        (await mirrorP).write((db) => {
+          const cur = readModules(((db as any).prepare('SELECT value FROM settings WHERE key = ?').get(MODULES_KEY) as any)?.value ?? null)
+          const next = setModule(cur, id, on)
+          ;(db as any).prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(MODULES_KEY, writeModules(next))
+          window.dispatchEvent(new CustomEvent('life-modules-changed', { detail: next }))
+          return next
+        })
     },
     notifications: {
       list: async () => (await mirrorP).read((db) => listNotifs(db as any)),

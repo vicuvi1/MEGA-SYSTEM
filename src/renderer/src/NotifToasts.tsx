@@ -3,6 +3,8 @@
 // tab is in the background), a soft chime, a card that slides in at the top
 // right, and the bell rings. Quiet hours and focus hold all of that back;
 // everything still lands in the inbox. Each device pops a notification once.
+import { isOn, notifOn } from '@core/modules'
+import { modulesNow } from './useModules'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useFlip, useLeaving, useSwipeDismiss } from './toastMotion'
 import type { Notif } from '@core/notify'
@@ -177,7 +179,8 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
   }, [])
 
   const check = useCallback(() => {
-    life.notifications?.list().then((l) => void deliver(l)).catch(() => {})
+    // The module switch (core/modules.ts): a notification of a module that is off never pops up.
+    life.notifications?.list().then((l) => void deliver(l.filter((n) => notifOn(modulesNow(), n)))).catch(() => {})
   }, [deliver])
 
   // On start, only remember what's there (no burst of old ones), then watch.
@@ -216,15 +219,16 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
       setSoundQuiet(s.quiet)
       const now = new Date()
       const list: Omit<Notif, 'readAt'>[] = []
-      if (life.google) {
+      const mods = modulesNow()
+      if (life.google && isOn(mods, 'calendar')) {
         const evs = await life.google.events(now.toISOString(), new Date(now.getTime() + 4 * 3600_000).toISOString()).catch(() => [])
         list.push(...eventAlerts(evs, now, s))
       }
-      const sleep = await life.sleep.state().catch(() => null)
-      const bed = bedtimeAlert((sleep as any)?.bedTarget ?? '23:00', now, s)
+      const sleep = isOn(mods, 'sleep') ? await life.sleep.state().catch(() => null) : null
+      const bed = sleep ? bedtimeAlert((sleep as any)?.bedTarget ?? '23:00', now, s) : null
       if (bed && !quietNow(s, now)) list.push(bed)
       const st = await life.coach?.status?.().catch(() => null)
-      const w = st ? waterAlert(st.today.waterMl, st.today.waterTarget, now, s) : null
+      const w = st && isOn(mods, 'sport') ? waterAlert(st.today.waterMl, st.today.waterTarget, now, s) : null
       if (w && !quietNow(s, now)) list.push(w)
       // The day's pushes (07:00, 21:15, 23:00…): the same bell entry the server adds (one id per slot and day).
       const simple = await life.notifications.simple?.().catch(() => null)

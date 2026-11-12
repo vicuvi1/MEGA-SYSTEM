@@ -115,8 +115,35 @@ pg.on('console', (m) => m.type() === 'warning' && /preload failed/.test(m.text()
 pg.on('console', (m) => /Content.Security.Policy|Refused to (load|execute|connect|frame|apply)/i.test(m.text()) && errors.push(`CSP: ${m.text().slice(0, 200)}`))
 await pg.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
 
+// The module switch (core/modules.ts): most parts are OFF by default (owner, 2026-11-12). The older steps test those
+// parts, so the run starts with every module on (as before the switch); the module steps put the owner's default back
+// for themselves and switch everything on again at their end. Keep MODULE_IDS in step with core/modules.ts.
+const MODULE_IDS = ['today', 'money', 'sleep', 'sport', 'discipline', 'study', 'calendar', 'tasks', 'coach', 'goals', 'season', 'career', 'insights', 'rewards', 'locker', 'music', 'custom', 'focusBoost', 'island', 'growth', 'notebook', 'plugins']
+const DEFAULT_ON = ['today', 'money', 'sleep', 'sport', 'discipline']
+/** Writes `modules_on` straight into the made-up database before the page opens (null = removed: the owner's default). */
+const setModules = async (onIds) => {
+  const stmt = onIds == null
+    ? { sql: "DELETE FROM settings WHERE key = 'modules_on'", args: [] }
+    : { sql: "INSERT INTO settings (key, value) VALUES ('modules_on', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [{ type: 'text', value: JSON.stringify({ on: Object.fromEntries(MODULE_IDS.map((id) => [id, onIds.includes(id)])) }) }] }
+  // Written like the app's own tracked change (web/tableVersions.ts trackStatements): the settings table gets a new
+  // version and data_version moves on with the chain, so open pages reload just that table and their own writes go on.
+  const v = { type: 'text', value: `smoke-modules-${Date.now()}` }
+  const DV = "COALESCE((SELECT value FROM settings WHERE key = 'data_version'), '')"
+  const track = [
+    { sql: 'CREATE TABLE IF NOT EXISTS sys_table_versions (name TEXT PRIMARY KEY, v TEXT NOT NULL)', args: [] },
+    { sql: `INSERT INTO sys_table_versions (name, v) SELECT '*', ? WHERE ${DV} = COALESCE((SELECT v FROM sys_table_versions WHERE name = '*'), '') ON CONFLICT(name) DO UPDATE SET v = excluded.v`, args: [v] },
+    { sql: "INSERT INTO sys_table_versions (name, v) VALUES ('settings', ?) ON CONFLICT(name) DO UPDATE SET v = excluded.v", args: [v] }
+  ]
+  const dv = { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [v] }
+  const r = await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [...track, stmt, dv].map((x) => ({ type: 'execute', stmt: x })) }) })
+  if (!r.ok) throw new Error(`modules_on: ${r.status}`)
+}
+const allModulesOn = () => setModules(MODULE_IDS)
+
 try {
   await step('opens and signs in with the PIN', async () => {
+    // Every module on for the older steps (see setModules above).
+    await allModulesOn()
     const res = await pg.goto(`http://127.0.0.1:${port}/`)
     if (!/frame-ancestors 'none'/.test(res?.headers()['content-security-policy'] ?? '')) throw new Error('no Content-Security-Policy header')
     await pg.waitForSelector('input', { timeout: 20000 })
@@ -267,41 +294,65 @@ try {
       await pg.evaluate(() => localStorage.removeItem('life_soak'))
     }
   })
-  // Usability pass (2026-11-12): in Simple mode the menu is Today, Study Time, Sport Track and Money (the owner keeps
-  // Money), then Settings; every other page is in one closed Archive group. A page comes back from Settings → Simple mode;
-  // Alt+number follows the menu; Today logs last night in place and offers "Set tomorrow's 3" at any hour.
-  await step('Simple mode menu: Today, Study Time, Sport Track, Money; the rest in a closed Archive; a page comes back from Settings; Alt+number follows the menu', async () => {
-    await pg.setViewportSize({ width: 1920, height: 1080 })
-    await open('today')
-    await pg.waitForSelector('aside.sb [data-testid="sb-archive-toggle"]', { timeout: 10000 })
-    const main = () => pg.locator('aside.sb .sb-group:not(.sb-archive) .sb-item').evaluateAll((b) => b.map((x) => x.getAttribute('aria-label')).join())
-    if ((await main()) !== 'Today,Study Time,Sport Track,Money') throw new Error(`the menu is ${await main()}`)
-    if (!(await pg.locator('aside.sb .sb-item.sb-settings[aria-label="Settings"]').count())) throw new Error('no Settings in the menu')
-    if ((await pg.locator('aside.sb [data-testid="sb-archive-toggle"]').getAttribute('aria-expanded')) !== 'false') throw new Error('the Archive is open on a fresh start')
-    if (await pg.locator('aside.sb .sb-archive .sb-item[aria-label="Calendar"]').count()) throw new Error('a closed Archive shows its pages')
-    // Opened: every other page is there (nothing deleted), and it goes to it.
-    await pg.click('aside.sb [data-testid="sb-archive-toggle"]')
-    const arch = await pg.locator('aside.sb .sb-archive .sb-item:not(.sb-archive-toggle)').evaluateAll((b) => b.map((x) => x.getAttribute('aria-label')))
-    for (const l of ['Calendar', 'Coach', 'Goals', 'Season', 'Career', 'Insights', 'Rewards', 'Sleep', 'Photo Locker', 'Discipline', 'Music', 'Custom Center', 'Tasks']) if (!arch.includes(l)) throw new Error(`${l} is not in the Archive (${arch.join()})`)
-    if (arch.includes('Money')) throw new Error('Money is in the Archive')
-    await pg.click('aside.sb .sb-archive .sb-item[aria-label="Calendar"]')
-    await pg.waitForFunction(() => document.querySelector('aside.sb .sb-item[aria-label="Calendar"]')?.getAttribute('aria-current') === 'page', null, { timeout: 8000 })
-    await pg.click('aside.sb [data-testid="sb-archive-toggle"]')
-    // Alt+2 is Study Time (the second item in the menu), Alt+1 back to Today.
-    await pg.keyboard.press('Alt+2')
-    await pg.waitForFunction(() => document.querySelector('aside.sb .sb-item[aria-label="Study Time"]')?.getAttribute('aria-current') === 'page', null, { timeout: 8000 })
-    await pg.keyboard.press('Alt+1')
-    await pg.waitForFunction(() => document.querySelector('aside.sb .sb-item[aria-label="Today"]')?.getAttribute('aria-current') === 'page', null, { timeout: 8000 })
-    // Restore Sleep from Settings → Simple mode: it joins the menu after Money; switched off, it goes back to the Archive.
-    await open('settings')
-    await pg.waitForSelector('.st-item', { timeout: 10000 })
-    await pg.locator('.st-item', { hasText: 'Simple mode' }).first().click()
-    const sleepSw = pg.locator('[data-testid="simple-archive"] [role="switch"][aria-label="Show Sleep in the menu"]')
-    await sleepSw.waitFor({ timeout: 8000 })
-    await sleepSw.click()
-    await pg.waitForFunction(() => [...document.querySelectorAll('aside.sb .sb-group:not(.sb-archive) .sb-item')].map((x) => x.getAttribute('aria-label')).join() === 'Today,Study Time,Sport Track,Money,Sleep', null, { timeout: 8000 })
-    await sleepSw.click()
-    await pg.waitForFunction(() => ![...document.querySelectorAll('aside.sb .sb-group:not(.sb-archive) .sb-item')].some((x) => x.getAttribute('aria-label') === 'Sleep'), null, { timeout: 8000 })
+  // Inside a run the switches are flipped in Settings → Modules itself (the app's own synced writes), never by writing
+  // the database from outside while the page is open (that sends the page's next writes down a slow full re-read).
+  const modulesUi = async (page, onIds) => {
+    await page.click('aside.sb [data-testid="sb-modules-link"]')
+    await page.waitForSelector('[data-testid="modules"] .mod-list li[data-module="money"] [role="switch"]', { timeout: 10000 })
+    for (const id of MODULE_IDS) {
+      if (id === 'today') continue
+      const sw = page.locator(`[data-testid="modules"] li[data-module="${id}"] [role="switch"]`)
+      const want = onIds.includes(id) ? 'true' : 'false'
+      if ((await sw.getAttribute('aria-checked')) !== want) {
+        await sw.click()
+        await page.waitForSelector(`[data-testid="modules"] li[data-module="${id}"] [role="switch"][aria-checked="${want}"]`, { timeout: 8000 })
+      }
+    }
+  }
+  // The module switch (owner, 2026-11-12; core/modules.ts): with the owner's default only Today, Money, Sleep, Sport Track
+  // and Discipline exist. The menu, Ctrl+K and Alt+number show only those; an off page says so with one button; nothing is
+  // deleted. MODULES_SHOTS=<dir>: real 1920×1080 pictures of the sidebar + Today and of Settings → Modules.
+  await step('Modules: only Today, Money, Sleep, Sport Track and Discipline are in the menu, Ctrl+K and Alt+number; an off page says it is switched off', async () => {
+    await modulesUi(pg, DEFAULT_ON)
+    try {
+      await pg.setViewportSize({ width: 1920, height: 1080 })
+      await open('today')
+      const menu = () => pg.locator('aside.sb [data-testid="sb-modules"] .sb-item').evaluateAll((b) => b.map((x) => x.getAttribute('aria-label')).join())
+      await pg.waitForFunction(() => [...document.querySelectorAll('aside.sb [data-testid="sb-modules"] .sb-item')].map((x) => x.getAttribute('aria-label')).join() === 'Today,Money,Sleep,Sport Track,Discipline', null, { timeout: 10000 }).catch(async () => { throw new Error(`the menu is ${await menu()}`) })
+      if (await pg.locator('aside.sb [data-testid="sb-archive-toggle"], aside.sb .sb-archive').count()) throw new Error('the Archive group is still there')
+      // Today: no cards of off modules (no Plan, Tasks or Week tab, no next calendar block).
+      await pg.click('.td2 .ptabs [data-tab="now"]')
+      await pg.waitForSelector('[data-testid="three-numbers"]', { timeout: 10000 })
+      const tabs = await pg.locator('.td2 .ptabs [data-tab]').evaluateAll((b) => b.map((x) => x.dataset.tab).join())
+      if (tabs !== 'now,body') throw new Error(`Today's tabs are ${tabs}`)
+      if (await pg.locator('[data-testid="tn-next"]').count()) throw new Error('Today shows the next calendar block with Calendar off')
+      if (process.env.MODULES_SHOTS) {
+        await pg.addStyleTag({ content: '.toasts, .nt-stack { display: none !important; }' })
+        await pg.waitForTimeout(600)
+        await pg.screenshot({ path: `${process.env.MODULES_SHOTS}/sidebar-today-1920.png` })
+      }
+      // Alt+2 is Money, Alt+6 goes nowhere.
+      await pg.keyboard.press('Alt+2')
+      await pg.waitForFunction(() => document.querySelector('aside.sb .sb-item[aria-label="Money"]')?.getAttribute('aria-current') === 'page', null, { timeout: 8000 })
+      await pg.keyboard.press('Alt+1')
+      await pg.waitForFunction(() => document.querySelector('aside.sb .sb-item[aria-label="Today"]')?.getAttribute('aria-current') === 'page', null, { timeout: 8000 })
+      // Ctrl+K finds Sleep but not Calendar or Study Time.
+      await pg.keyboard.press('Control+k')
+      await pg.waitForSelector('.palette input', { timeout: 5000 })
+      const found = async (q) => {
+        await pg.fill('.palette input', q)
+        await pg.waitForTimeout(250)
+        return pg.locator('.palette .palette-item .pi-label').evaluateAll((b) => b.map((x) => x.textContent ?? '').join('|'))
+      }
+      if (!/Sleep/.test(await found('Sleep'))) throw new Error('Ctrl+K does not find Sleep')
+      if (/Calendar/.test(await found('Calendar'))) throw new Error('Ctrl+K offers Calendar while it is off')
+      if (/Study Time/.test(await found('Study Time'))) throw new Error('Ctrl+K offers Study Time while it is off')
+      await pg.keyboard.press('Escape')
+      // A link to an off page shows "switched off" with one button, never the page.
+      await open('calendar')
+      await pg.waitForSelector('[data-testid="module-off"][data-module="calendar"]', { timeout: 8000 })
+      if (!/switched off/.test(await pg.textContent('[data-testid="module-off"]'))) throw new Error('the off page does not say it is switched off')
+      await open('today')
     // Today: last night in place (a typed bedtime is a record only), and tomorrow's 3 at 08:30 from "Set tomorrow's 3".
     await open('today')
     await pg.click('.td2 .ptabs [data-tab="now"]')
@@ -315,14 +366,107 @@ try {
       await pg.click('[data-testid="plan-tomorrow"]')
       await pg.waitForSelector('[data-testid="pick-tomorrow"] textarea', { timeout: 5000 })
     }
-    await pg.setViewportSize({ width: 1440, height: 900 })
+    } finally {
+      await modulesUi(pg, MODULE_IDS)
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+  })
+  // Settings → Modules: one switch per module with one line each. Study Time (off) comes back at once with its blocks,
+  // and goes again when switched off. Nothing is deleted.
+  await step('Modules: turning Study Time on in Settings → Modules brings it back with its data; off again, it is gone', async () => {
+    await modulesUi(pg, DEFAULT_ON)
+    try {
+      await pg.setViewportSize({ width: 1920, height: 1080 })
+      await pg.click('aside.sb [data-testid="sb-modules-link"]')
+      await pg.waitForSelector('[data-testid="modules"] .mod-list li[data-module="study"]', { timeout: 10000 })
+      const rows = await pg.locator('[data-testid="modules"] .mod-list li').count()
+      if (rows !== MODULE_IDS.length) throw new Error(`Settings → Modules lists ${rows} modules, not ${MODULE_IDS.length}`)
+      for (const id of DEFAULT_ON.filter((x) => x !== 'today')) if ((await pg.locator(`[data-testid="modules"] li[data-module="${id}"] [role="switch"]`).getAttribute('aria-checked')) !== 'true') throw new Error(`${id} is not on by default`)
+      for (const id of ['study', 'island', 'coach', 'calendar']) if ((await pg.locator(`[data-testid="modules"] li[data-module="${id}"] [role="switch"]`).getAttribute('aria-checked')) !== 'false') throw new Error(`${id} is not off by default`)
+      if (process.env.MODULES_SHOTS) {
+        await pg.addStyleTag({ content: '.toasts, .nt-stack { display: none !important; }' })
+        await pg.waitForTimeout(600)
+        await pg.screenshot({ path: `${process.env.MODULES_SHOTS}/settings-modules-1920.png` })
+      }
+      await pg.click('[data-testid="modules"] li[data-module="study"] [role="switch"]')
+      await pg.waitForSelector('aside.sb .sb-item[aria-label="Study Time"]', { timeout: 8000 })
+      await pg.click('aside.sb .sb-item[aria-label="Study Time"]')
+      await pg.locator('.sy-block', { hasText: 'Math problems' }).first().waitFor({ timeout: 10000 })
+      await open('settings')
+      await pg.click('aside.sb [data-testid="sb-modules-link"]')
+      await pg.waitForSelector('[data-testid="modules"] li[data-module="study"] [role="switch"][aria-checked="true"]', { timeout: 8000 })
+      await pg.click('[data-testid="modules"] li[data-module="study"] [role="switch"]')
+      await pg.waitForSelector('aside.sb .sb-item[aria-label="Study Time"]', { state: 'detached', timeout: 8000 })
+    } finally {
+      await modulesUi(pg, MODULE_IDS)
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+  })
+  // A bot command of an OFF module gets "This part is switched off. Turn it on in Settings → Modules" and does nothing.
+  // Ctrl+K free text goes through the same bot rules as Telegram (capture → the bots' quick path).
+  await step('Modules: a bot command for an OFF module gives the switched-off reply', async () => {
+    await modulesUi(pg, DEFAULT_ON)
+    try {
+      await open('today')
+      await pg.waitForSelector('.td2', { timeout: 10000 })
+      await pg.keyboard.press('Control+k')
+      await pg.waitForSelector('.palette input', { timeout: 5000 })
+      await pg.fill('.palette input', '/quiz')
+      await pg.keyboard.press('Enter')
+      await pg.waitForFunction(() => /Career: This part is switched off\. Turn it on in Settings → Modules/.test(document.body.textContent ?? ''), null, { timeout: 10000 })
+    } finally {
+      await modulesUi(pg, MODULE_IDS)
+    }
+  })
+  // The Dynamic island is a module, OFF by default: the app tells the desktop (islandModule false) and sends it no
+  // snapshots, so the desktop never creates the island window (src/desktop/island.ts); switched on, it says so at once.
+  await step('Modules: the Dynamic island is not created while it is off; turning it on asks for it at once', async () => {
+    await modulesUi(pg, DEFAULT_ON)
+    const dp = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+    try {
+      dp.on('pageerror', (e) => errors.push(`desktop app: ${e.message}`))
+      await dp.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
+      await dp.addInitScript(() => {
+        window.__desk = { module: [], states: 0 }
+        window.desktop = new Proxy({
+          islandState: () => { window.__desk.states++ },
+          onIslandAction: () => { window.__desk.feed = (window.__desk.feed ?? 0) + 1 },
+          islandModule: (on) => { window.__desk.module.push(on) },
+          // The desktop keeps the database copy on disk: none here.
+          load: async () => null,
+          save: async () => {},
+          eyes: undefined
+          // Anything else the desktop app offers answers nothing here (events never fire, calls return null).
+        }, { get: (t, k) => (k in t ? t[k] : typeof k !== 'string' || k === 'then' ? undefined : /^(on|island|show)/.test(k) ? () => () => {} : async () => null) })
+      })
+      await dp.goto(`http://127.0.0.1:${port}/`)
+      await dp.waitForSelector('input', { timeout: 20000 })
+      await dp.fill('input', '1234')
+      await dp.keyboard.press('Enter')
+      await dp.waitForSelector('.td2', { timeout: 20000 })
+      await dp.waitForFunction(() => window.__desk.module.length > 0, null, { timeout: 10000 })
+      await dp.waitForTimeout(2500)
+      const off = await dp.evaluate(() => ({ ...window.__desk }))
+      if (off.module[off.module.length - 1] !== false) throw new Error(`the desktop was told ${JSON.stringify(off.module)}`)
+      if (off.states || off.feed) throw new Error(`the island feed ran while it is off (${off.states} snapshots)`)
+      // On from Settings → Modules: the desktop is told at once (no restart) and the snapshots start.
+      await dp.click('aside.sb [data-testid="sb-modules-link"]')
+      await dp.click('[data-testid="modules"] li[data-module="island"] [role="switch"]')
+      await dp.waitForFunction(() => window.__desk.module[window.__desk.module.length - 1] === true, null, { timeout: 8000 })
+      // The island feed starts (it listens for the island's taps); the desktop opens the window on islandModule(true).
+      await dp.waitForFunction(() => (window.__desk.feed ?? 0) > 0, null, { timeout: 20000 })
+    } finally {
+      await dp.context().close()
+      // The other window turned the island on; this page sees it, then everything goes back on.
+      await pg.waitForTimeout(1500)
+      await modulesUi(pg, MODULE_IDS)
+    }
   })
   // Simple mode (on by default): Tasks, focus goals, the weekly goal check-in and loot are hidden, never deleted;
   // Settings → Simple mode brings them back. The rest of the run uses the full app (Simple mode off; the push budget stays on).
   await step('Simple mode is on by default and hides the unused modules; Settings → Simple mode brings them back', async () => {
     await pg.waitForSelector('aside.sb .sb-item[aria-label="Today"]', { timeout: 10000 })
-    if (await pg.locator('aside.sb .sb-item[aria-label="Tasks"]').count()) throw new Error('Tasks is in the menu in Simple mode')
-    if (await pg.locator('.td2 .ptabs [data-tab="tasks"]').count()) throw new Error('Today has a Tasks tab in Simple mode')
+    // Tasks is no longer Simple mode's: the module switch decides (on for this run, see setModules).
     await open('goals')
     await pg.waitForSelector('.ptabs [data-tab="week"]', { timeout: 10000 })
     await pg.click('.ptabs [data-tab="week"]')
@@ -336,7 +480,7 @@ try {
     if ((await pg.locator('[data-testid="simple-mode"] [role="switch"][aria-label="Afternoon nudge"]').getAttribute('aria-checked')) !== 'false') throw new Error('the afternoon nudge is on by default')
     if (!/Pushes today: \d of 4/.test(await pg.textContent('[data-testid="push-count"]'))) throw new Error('no push count')
     await sw.click()
-    await pg.waitForSelector('aside.sb .sb-item[aria-label="Tasks"]', { timeout: 8000 })
+    await pg.waitForSelector('[data-testid="simple-mode"] [role="switch"][aria-label="Simple mode"][aria-checked="false"]', { timeout: 8000 })
     await open('today')
     await pg.waitForSelector('.td2 .ptabs [data-tab="tasks"]', { timeout: 8000 })
   })
@@ -6609,7 +6753,7 @@ try {
     await open('study')
     await pg.waitForSelector('.sy .ptabs [data-tab="timer"]', { timeout: 15000 })
     await pg.click('.sy .ptabs [data-tab="timer"]')
-    if (!(await pg.locator('.sb-group', { hasText: 'Plan' }).locator('.sb-item[aria-label="Study Time"]').count())) throw new Error('Study Time is not in the sidebar under Plan')
+    if (!(await pg.locator('aside.sb [data-testid="sb-modules"] .sb-item[aria-label="Study Time"]').count())) throw new Error('Study Time is not in the sidebar (its module is on for this run)')
     // Two halves: the timer on the left, the blocks on the right, side by side and filling the window.
     await pg.locator('.sy-block', { hasText: 'Math problems' }).waitFor({ timeout: 10000 })
     const halves = await pg.evaluate(() => [...document.querySelectorAll('.sy-split > .sy-half')].map((e) => e.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), w: Math.round(r.width), h: Math.round(r.height) })))

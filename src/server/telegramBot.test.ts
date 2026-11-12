@@ -2,6 +2,7 @@
 // end on a fake Turso and a fake Telegram. A webhook delivered twice is
 // handled once; a stranger changes nothing; two ticks in the same minute
 // run once; the tick's clock never lands in the synced settings.
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js'
@@ -27,6 +28,8 @@ let n = 0
 function world() {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   // These tests check the older senders, so the daily push budget (Simple mode) is off here.
   remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '{"budget":false}')`)
   const sent: { method: string; body: any }[] = []

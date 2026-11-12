@@ -4,6 +4,7 @@
 // - the meal type button; a barcode that couldn't be looked up; a label food saved as a food;
 // - the food summary at night (once, never in quiet hours);
 // - "Lunch? Send a photo" at his usual time learned from his logs.
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js'
@@ -32,6 +33,8 @@ const it0 = (name: string, grams: number, kcal: number, protein: number, extra: 
 function world(settings: Record<string, unknown> = base, vision: (body: any) => Promise<any> = async () => ({ ok: true, result: { items: [it0('rice', 250, 325, 6), it0('chicken breast', 200, 330, 62)], message: 'Rice and chicken.' } })) {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   // These tests check the older senders, so the daily push budget (Simple mode) is off here.
   remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '{"budget":false}')`)
   for (const [k, v] of Object.entries(settings)) remote.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, typeof v === 'string' ? v : JSON.stringify(v)])

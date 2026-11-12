@@ -2,6 +2,7 @@
 // morning brief goes to Telegram at the wake time only while you're away from
 // the PC, once, with "Plan my day"; the evening shutdown before bed; a drift
 // word the island handed over goes out once.
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js'
@@ -25,6 +26,8 @@ let n = 0
 function world(settings: Record<string, unknown>) {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   // These tests check the older senders, so the daily push budget (Simple mode) is off here.
   remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '{"budget":false}')`)
   for (const [k, v] of Object.entries(settings)) remote.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, typeof v === 'string' ? v : JSON.stringify(v)])

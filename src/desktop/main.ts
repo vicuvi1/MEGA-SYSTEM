@@ -259,14 +259,15 @@ if (firstCopy) void app.whenReady().then(async () => {
   let pushLedger: BudgetLedger | null = null
   handle('desktop:notify', (n: { id: string; title: string; body?: string | null; actions?: { id: string; label: string }[]; urgent?: boolean }) => {
     if (!Notification.isSupported() || typeof n?.id !== 'string') return false
-    if (!n.id.startsWith('test:')) {
+    // Your own timers (timer:<start>, the Dynamic island module off) are not pushes: they pass, like the Settings test.
+    if (!n.id.startsWith('test:') && !n.id.startsWith('timer:')) {
       const day = calendarDay(new Date())
       const v = budgetCheck(pushLedger, slotOfId(n.id), day, { on: true, afternoon: true })
       if (!v.ok) return false
       pushLedger = v.next
     }
     // P20: during focus, Life System's own notifications wait (unless urgent, or a focus block's own).
-    if (pcRef.current?.prefs().holdNotifs && pcRef.current.focus().running && !n.urgent && !n.id.startsWith('block:')) return false
+    if (pcRef.current?.prefs().holdNotifs && pcRef.current.focus().running && !n.urgent && !n.id.startsWith('block:') && !n.id.startsWith('timer:')) return false
     const title = String(n.title).slice(0, 120)
     const body = String(n.body ?? '').slice(0, 240)
     const link = (a: string) => xml(`lifesystem://notif?id=${encodeURIComponent(n.id)}&a=${encodeURIComponent(a)}`)
@@ -373,7 +374,9 @@ if (firstCopy) void app.whenReady().then(async () => {
   const menu = () => Menu.buildFromTemplate([
     { label: 'Open Life System', click: () => showApp() },
     { label: `Quick add (${keyLabel(quick.shortcut())})`, click: () => quick.open() },
-    { label: `Show the island (${island.shortcut.replace('Control', 'Ctrl')})`, type: 'checkbox', checked: island.enabled(), click: (item) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
+    // The Dynamic island module is off (Settings → Modules): no island and none of its menu items.
+    ...(!island.moduleOn() ? [{ label: 'Island is off (Settings → Modules)', click: () => showApp('settings') }] : [
+    { label: `Show the island (${island.shortcut.replace('Control', 'Ctrl')})`, type: 'checkbox' as const, checked: island.enabled(), click: (item: Electron.MenuItem) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
     // H1: hide it for a while or bring it back; move it with the arrow keys.
     ...islandMoveMenu(island, () => tray.setContextMenu(menu())),
     // Quiet for a while (Q1): no reminders, only a small moon; back by itself.
@@ -403,6 +406,7 @@ if (firstCopy) void app.whenReady().then(async () => {
         ...island.displays().map((d) => ({ label: d.label, type: 'radio' as const, checked: island.monitor() === 'fixed' && d.current, click: () => { island.setMonitor('fixed', d.id); tray.setContextMenu(menu()) } }))
       ]
     },
+    ]),
     { label: 'Start with Windows', type: 'checkbox', checked: startsWithWindows(), enabled: app.isPackaged, click: (item) => { app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--hidden'] }); tray.setContextMenu(menu()) } },
     { type: 'separator' },
     { label: 'Quit Life System', click: () => { quitting = true; app.quit() } }

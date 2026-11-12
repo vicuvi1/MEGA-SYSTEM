@@ -2649,12 +2649,15 @@ export function DesktopIsland() {
         ) : (
           <button data-q="start" {...tp('simple:start', () => tap({ kind: 'start', subject: (firstOpen ?? 'Focus').slice(0, 40), minutes: 25 }))}>▶ Focus 25 min</button>
         )}
-        <button data-q="bed" {...tp('simple:bed', () => tap({ kind: 'bed' }))}>🌙 In bed now</button>
-        <button data-q="wake" {...tp('simple:wake', () => tap({ kind: 'wake' }))}>☀️ Up now</button>
-        <button data-q="water" title="Log a glass of water" {...tp('simple:water', () => tap({ kind: 'water', ml: 250 }))}>
-          💧 +250 ml{s.water ? <small className="dis-water"> · {litres(s.water.ml)} of {litres(s.water.target)} L</small> : null}
-        </button>
-        <button data-q="meal" {...tp('simple:meal', () => tap({ kind: 'open', page: 'food-paste' }))}>🍽 Log a meal / Paste from AI</button>
+        {/* Bed / up while Sleep is on, water and meals while Sport Track is on (the module switch, core/modules.ts). */}
+        {!s.off?.includes('sleep') && <button data-q="bed" {...tp('simple:bed', () => tap({ kind: 'bed' }))}>🌙 In bed now</button>}
+        {!s.off?.includes('sleep') && <button data-q="wake" {...tp('simple:wake', () => tap({ kind: 'wake' }))}>☀️ Up now</button>}
+        {!s.off?.includes('sport') && (
+          <button data-q="water" title="Log a glass of water" {...tp('simple:water', () => tap({ kind: 'water', ml: 250 }))}>
+            💧 +250 ml{s.water ? <small className="dis-water"> · {litres(s.water.ml)} of {litres(s.water.target)} L</small> : null}
+          </button>
+        )}
+        {!s.off?.includes('sport') && <button data-q="meal" {...tp('simple:meal', () => tap({ kind: 'open', page: 'food-paste' }))}>🍽 Log a meal / Paste from AI</button>}
       </section>
       <form
         className="dis-note"
