@@ -1193,6 +1193,20 @@
   ],
   "evidence": "2026-11-12: branch money-six-fixes; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "finance/js/fx.js rateToBase + rateOnDay, reprice.js + screens/reprice.js, importer.js rateGaps/fillRate/fillKnownRates/skipNoRate + screens/rategaps.js (CSV, workbook, bank imports), store.js saveSoon/flushSave/onSaved, sync.js mergeLocal; web/financeBot.ts, web/moneyHub.ts (countsAsSpending), web/appSync.ts (cheap noteEdit), web/financeInbox.ts (keepInbox, inboxWarning), web/moneyApi.ts (inboxWarning, applyInbox), core/moneyText.ts, core/moneyHub.ts leiText, pages/Money.tsx, MoneyQuick.tsx, DayFlow.tsx, EmbedHost.tsx, main/money.ts."
+ },
+ {
+  "id": "F-SYNC-LOSS",
+  "priority": 1,
+  "area": "data-sync",
+  "title": "Sync merges keep both devices' changes",
+  "user_visible_behavior": "When two devices changed the same thing, nothing is lost: an exercise added on one device stays (a deleted one stays deleted), a past day keeps the reps from both, a Waky morning keeps its time and its mood, and a weight or a position edited offline is no longer added up (the later change wins). A device whose clock is behind no longer loses edits made after it saw the other copy. A damaged offline queue in the browser is backed up and never written over.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/syncDataLoss.test.ts src/renderer/src/web/desktopSync.test.ts src/renderer/src/web/sportSync.test.ts src/renderer/src/web/appSync.test.ts src/renderer/src/web/mirror.test.ts",
+   "npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch fix/sync-data-loss; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "web/desktopSync.ts (COUNTER_KEYS, merge3 serverLater, mergeRow), web/appSync.ts (SEEN timeline, EDITED cleared, mergeEntry/mergeEntries, mergeWaky), web/sportSync.ts (exercise union + exercises in lists, past days field by field), web/mirror.ts (outbox backup life_offline_writes_unreadable_<ms>, outboxLocked). Unit tests only: no UI change, so no smoke step."
  }
  ]
 }

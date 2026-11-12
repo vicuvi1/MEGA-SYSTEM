@@ -28,7 +28,15 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
   const byId = (list: any) => new Map((Array.isArray(list) ? list : []).map((e: any) => [String(e.id ?? e.name), e]))
   const fromLater = byId(later.exercises)
   const fromOther = byId((later === a ? b : a).exercises)
-  out.exercises = (Array.isArray(newer.exercises) ? newer.exercises : later.exercises ?? []).map((e: any) => {
+  // Every exercise from both devices (the newer device's order first, then
+  // ones only the older device has, e.g. added there while offline). An
+  // exercise deleted on either device stays deleted: `exercises` is in the
+  // spec's `lists`, so the sync drops what left the last synced copy.
+  const exKey = (e: any) => String(e?.id ?? e?.name)
+  const fromNewer = Array.isArray(newer.exercises) ? newer.exercises : []
+  const newerKeys = new Set(fromNewer.map(exKey))
+  const onlyOlder = (Array.isArray(older.exercises) ? older.exercises : []).filter((e: any) => !newerKeys.has(exKey(e)))
+  out.exercises = [...fromNewer, ...onlyOlder].map((e: any) => {
     const k = String(e.id ?? e.name)
     const x = fromLater.get(k)
     const y = fromOther.get(k)
@@ -51,10 +59,13 @@ export function mergeSport(a: any, b: any, aIsNewer: boolean): any {
     })
     .sort((x: any, y: any) => (Number(y?.id) || 0) - (Number(x?.id) || 0))
   if (typeof a.xp === 'number' || typeof b.xp === 'number') out.xp = Math.max(Number(a.xp) || 0, Number(b.xp) || 0)
-  // The day log (the calendar): every day from both; a day changed on the
-  // newer device wins, and today keeps the higher count per exercise.
+  // The day log (the calendar): every day from both; on a day changed on
+  // both, each exercise from both (the newer device's count where both have
+  // one), and today keeps the higher count per exercise.
   if (a.days || b.days) {
-    const days: Record<string, Record<string, number>> = { ...(older.days ?? {}), ...(newer.days ?? {}) }
+    // A past day changed on both devices keeps both: each exercise's count, the newer device's where both have one.
+    const days: Record<string, Record<string, number>> = { ...(older.days ?? {}) }
+    for (const [d, v] of Object.entries<any>(newer.days ?? {})) days[d] = older.days?.[d] && typeof older.days[d] === 'object' && v && typeof v === 'object' ? { ...older.days[d], ...v } : v
     const today = out.lastDate
     if (sameDay && today) {
       const m: Record<string, number> = { ...(older.days?.[today] ?? {}) }
@@ -121,7 +132,10 @@ export const SPORT: AppSyncSpec = {
   // Today's water and reps are never decided by comparing two copies: they
   // are the sum of the one log (body_log), so every device shows the same.
   finalize: (db, merged, canWrite) => sportFromLog(db, merged, canWrite),
-  lists: [{ path: 'history', key: (h) => JSON.stringify([h?.id, h?.title]) }]
+  lists: [
+    { path: 'history', key: (h) => JSON.stringify([h?.id, h?.title]) },
+    { path: 'exercises', key: (e) => String(e?.id ?? e?.name) }
+  ]
 }
 
 export function createSportSync(mirror: Mirror, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null) {

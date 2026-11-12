@@ -41591,24 +41591,70 @@ function idField(...lists) {
 	return ID_FIELDS.find((f) => all.every((x) => x[f] != null) && new Set(lists[1].map((x) => stable(x[f]))).size === lists[1].length) ?? null;
 }
 /**
+* Columns (and JSON fields) that are real running counts: both sides' changes
+* add up when both changed them. Everything else that is a number (a weight,
+* a position, a start time, a price…) is never added up.
+* - `allocated_coins`, `allocated_real_cost`: a goal jar's balance (shop.ts adds and takes coins).
+* - `count`: how many of an item you hold (inventory_items).
+* - `doneToday`, `currentMl`, `waterMl`: today's reps and water inside Sport Track's copy.
+*/
+var COUNTER_KEYS = /* @__PURE__ */ new Set([
+	"allocated_coins",
+	"allocated_real_cost",
+	"count",
+	"doneToday",
+	"currentMl",
+	"waterMl"
+]);
+/** The fields that say when a row or record was last changed. */
+var EDIT_TIME_KEYS = [
+	"updated_at",
+	"updatedAt",
+	"editedAt",
+	"savedAt"
+];
+var timeValue = (v) => {
+	if (typeof v === "number" && Number.isFinite(v)) return v;
+	if (typeof v === "string" && v) {
+		const t = Date.parse(v);
+		return Number.isNaN(t) ? null : t;
+	}
+	return null;
+};
+/** true: the server's copy was changed later; false: mine was; null: can't tell. */
+function serverIsLater(a, s) {
+	for (const k of EDIT_TIME_KEYS) {
+		const ta = timeValue(a[k]);
+		const ts = timeValue(s[k]);
+		if (ta == null || ts == null) continue;
+		if (ts !== ta) return ts > ta;
+	}
+	return null;
+}
+/**
 * Three-way merge of one value: `b` the common start, `a` mine (this desktop),
 * `s` the server's. Only one side changed → that side. Both changed: objects
-* and lists merge field by field, counters add both changes, times take the
-* later one, anything else keeps mine.
+* and lists merge field by field, the counters in COUNTER_KEYS add both
+* changes, times take the later one, and anything else (other numbers
+* included) takes the side whose row was changed later (`updated_at`,
+* `updatedAt`, `editedAt` or `savedAt`), or else mine.
+* `serverLater`: the enclosing row or record says the server's copy is newer.
 */
-function merge3(key, b, a, s) {
+function merge3(key, b, a, s, serverLater = false) {
 	if (same(a, b)) return s;
 	if (same(s, b) || same(a, s)) return a;
+	const clash = serverLater ? s : a;
 	if (typeof a === "number" && typeof s === "number") {
 		if (isTimeKey(key)) return Math.max(a, s);
-		if (typeof b === "number") return s + (a - b);
-		return a;
+		if (COUNTER_KEYS.has(key) && typeof b === "number") return s + (a - b);
+		return clash;
 	}
 	if (isObj(a) && isObj(s)) {
 		const base = isObj(b) ? b : {};
+		const later = serverIsLater(a, s) ?? serverLater;
 		const out = {};
 		for (const k of /* @__PURE__ */ new Set([...Object.keys(s), ...Object.keys(a)])) {
-			const v = merge3(k, base[k], a[k], s[k]);
+			const v = merge3(k, base[k], a[k], s[k], later);
 			if (v !== void 0) out[k] = v;
 		}
 		return out;
@@ -41624,7 +41670,7 @@ function merge3(key, b, a, s) {
 			const order = [...s.map(id), ...a.map(id).filter((k) => !sm.has(k))];
 			const out = [];
 			for (const k of order) {
-				const v = merge3(key, bm.get(k), am.get(k), sm.get(k));
+				const v = merge3(key, bm.get(k), am.get(k), sm.get(k), serverLater);
 				if (v !== void 0) out.push(v);
 			}
 			return out;
@@ -41644,14 +41690,15 @@ function merge3(key, b, a, s) {
 			}
 		};
 		const [pa, ps] = [parse(a), parse(s)];
-		if (pa !== void 0 && ps !== void 0) return JSON.stringify(merge3(key, parse(b), pa, ps));
+		if (pa !== void 0 && ps !== void 0) return JSON.stringify(merge3(key, parse(b), pa, ps, serverLater));
 	}
-	return a;
+	return clash;
 }
-/** Merges one row; `b` null when this desktop created it. */
+/** Merges one row; `b` null when this desktop created it. A clash goes to the later `updated_at`, else this desktop. */
 function mergeRow(b, a, s) {
+	const later = serverIsLater(a, s) ?? false;
 	const out = {};
-	for (const k of /* @__PURE__ */ new Set([...Object.keys(s), ...Object.keys(a)])) out[k] = merge3(k, b ? b[k] : void 0, a[k], s[k]);
+	for (const k of /* @__PURE__ */ new Set([...Object.keys(s), ...Object.keys(a)])) out[k] = merge3(k, b ? b[k] : void 0, a[k], s[k], later);
 	return out;
 }
 function applyRemap(row, t, map, info) {
@@ -42202,15 +42249,35 @@ var Mirror = class Mirror {
 	static OUTBOX = "life_offline_writes";
 	offline = null;
 	outboxUnsaved = false;
+	/**
+	* The stored queue could not be read and no backup of it could be kept:
+	* it is never overwritten (the waiting changes stay in this tab's memory).
+	*/
+	outboxLocked = false;
 	outbox() {
 		if (this.offline) return this.offline;
+		let raw = null;
 		try {
-			const v = typeof localStorage !== "undefined" ? JSON.parse(localStorage.getItem(Mirror.OUTBOX) || "[]") : [];
-			this.offline = Array.isArray(v) ? v : [];
+			raw = typeof localStorage !== "undefined" ? localStorage.getItem(Mirror.OUTBOX) : null;
 		} catch {
-			this.offline = [];
+			raw = null;
 		}
-		return this.offline;
+		if (raw == null) return this.offline = [];
+		let v;
+		try {
+			v = JSON.parse(raw);
+		} catch {
+			v = void 0;
+		}
+		if (Array.isArray(v)) return this.offline = v;
+		try {
+			localStorage.setItem(`${Mirror.OUTBOX}_unreadable_${Date.now()}`, raw);
+			console.warn("[sync] the offline queue could not be read; its text is kept under", `${Mirror.OUTBOX}_unreadable_*`);
+		} catch {
+			this.outboxLocked = true;
+			console.warn("[sync] the offline queue could not be read or backed up; it is left as it is");
+		}
+		return this.offline = [];
 	}
 	static SINCE = "life_offline_since";
 	sinceMem = null;
@@ -42228,6 +42295,10 @@ var Mirror = class Mirror {
 		this.offline = list;
 		if (!list.length) this.sinceMem = null;
 		else this.sinceMem ??= Date.now();
+		if (this.outboxLocked) {
+			this.outboxUnsaved = list.length > 0;
+			return;
+		}
 		try {
 			if (typeof localStorage === "undefined") return;
 			if (list.length) {

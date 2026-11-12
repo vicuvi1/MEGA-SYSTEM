@@ -346,15 +346,37 @@ export class Mirror {
   // you're told plainly instead of losing them on the next reload.
   private offline: Change[][] | null = null
   private outboxUnsaved = false
+  /**
+   * The stored queue could not be read and no backup of it could be kept:
+   * it is never overwritten (the waiting changes stay in this tab's memory).
+   */
+  private outboxLocked = false
   private outbox(): Change[][] {
     if (this.offline) return this.offline
+    let raw: string | null = null
     try {
-      const v = typeof localStorage !== 'undefined' ? JSON.parse(localStorage.getItem(Mirror.OUTBOX) || '[]') : []
-      this.offline = Array.isArray(v) ? v : []
+      raw = typeof localStorage !== 'undefined' ? localStorage.getItem(Mirror.OUTBOX) : null
     } catch {
-      this.offline = []
+      raw = null
     }
-    return this.offline
+    if (raw == null) return (this.offline = [])
+    let v: unknown
+    try {
+      v = JSON.parse(raw)
+    } catch {
+      v = undefined
+    }
+    if (Array.isArray(v)) return (this.offline = v as Change[][])
+    // Unreadable (cut short, damaged): keep the raw text under its own key
+    // before anything else is saved there, so it is never lost (repair by hand).
+    try {
+      localStorage.setItem(`${Mirror.OUTBOX}_unreadable_${Date.now()}`, raw)
+      console.warn('[sync] the offline queue could not be read; its text is kept under', `${Mirror.OUTBOX}_unreadable_*`)
+    } catch {
+      this.outboxLocked = true
+      console.warn('[sync] the offline queue could not be read or backed up; it is left as it is')
+    }
+    return (this.offline = [])
   }
   private static SINCE = 'life_offline_since'
   private sinceMem: number | null = null
@@ -372,6 +394,11 @@ export class Mirror {
     this.offline = list
     if (!list.length) this.sinceMem = null
     else this.sinceMem ??= Date.now()
+    if (this.outboxLocked) {
+      // Never write over a queue we could not read nor back up.
+      this.outboxUnsaved = list.length > 0
+      return
+    }
     try {
       if (typeof localStorage === 'undefined') return
       if (list.length) {
