@@ -1207,6 +1207,20 @@
   ],
   "evidence": "2026-11-12: branch fix/sync-data-loss; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "web/desktopSync.ts (COUNTER_KEYS, merge3 serverLater, mergeRow), web/appSync.ts (SEEN timeline, EDITED cleared, mergeEntry/mergeEntries, mergeWaky), web/sportSync.ts (exercise union + exercises in lists, past days field by field), web/mirror.ts (outbox backup life_offline_writes_unreadable_<ms>, outboxLocked). Unit tests only: no UI change, so no smoke step."
+   },
+   {
+  "id": "F-SLEEP-DISC-FOOD-PICKS",
+  "priority": 1,
+  "area": "health",
+  "title": "Food reader fixes; one meaning of on time; bedtime check; 23:15 and 00:00 reminders; one Discipline day number",
+  "user_visible_behavior": "Pasted food: 1,500 g and KCAL 1,200 read as thousands, a 01:30 meal lands on the evening before, a note starting with Fat/Carbs stays a note. Sleep: on time is asleep by 23:30 and up by 06:45 with 5 min grace everywhere (points, streak, Today, score, pill); Today and Sleep name the targets. Going to bed then 30+ min more at the PC takes the bed points back and sets the bedtime to the last PC use, said in plain words on Sleep and in the bell. Windows notifications at 23:15 and 00:00 when Sleep is on and bed is not logged. Discipline: the ring, the campaign, Today and the alert all say the same Day N; undoing a reset removes its comeback check-ins and nothing is sent to Todoist or Ben while those modules are off; check-in hours use the configured time zone.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/foodPaste.test.ts src/core/sleep.test.ts src/core/threeNumbers.test.ts src/core/bedSense.test.ts src/core/notifyBudget.test.ts src/main/sleep.test.ts src/main/discipline.test.ts",
+   "SMOKE_ONLY=\"One day number on Discipline\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch sleep-discipline-food-picks; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "core/foodPaste.ts, core/sleep.ts, core/threeNumbers.ts, core/bedSense.ts, core/notifyBudget.ts, core/discipline.ts dayShown, core/comeback.ts, core/dates.ts hourIn, main/sleep.ts bedActivity, main/discipline.ts, main/wallet.ts hour, desktop/main.ts sleep tick, renderer sleepNight.ts, ThreeToday.tsx, pages/Sleep.tsx, pages/Discipline.tsx."
  }
  ]
 }

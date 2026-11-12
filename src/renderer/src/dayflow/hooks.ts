@@ -1,6 +1,7 @@
 // Today's data hooks (LT11: split out of DayFlow.tsx): Todoist's today and the habit chips.
 import { useCallback, useEffect, useState } from 'react'
 import type { TodoTask } from '@core/todoist'
+import { dayShown } from '@core/discipline'
 import type { BodyState, ConnectionsState, DisciplineState, Rule, Summary } from '@shared/api'
 import { life } from '../bridge'
 import { createTodayList } from '../web/todoRefresh'
@@ -103,7 +104,7 @@ export function useHabits({ summary, discipline, connections, body, onChange, on
   const focusMins = Math.min(90, focusTarget)
   const list: Habit[] = [
     { id: 'oath', label: 'Morning oath', hint: pts('discipline.oath', 1), pays: pts('discipline.oath', 1), source: 'Discipline', done: !!(discipline?.oathToday || r.includes('discipline.oath')), run: () => done(act(() => life.discipline.oath(), 'Oath taken')) },
-    { id: 'clean', label: 'Clean day check-in', short: 'Clean day', hint: discipline?.setup ? `day ${discipline.day ?? discipline.current} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), pays: pts('discipline.clean_day', 3), source: discipline?.setup ? `Discipline · day ${discipline.day ?? discipline.current}` : 'Discipline', done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
+    { id: 'clean', label: 'Clean day check-in', short: 'Clean day', hint: discipline?.setup ? `day ${dayShown(discipline)} · ${pts('discipline.clean_day', 3)}` : pts('discipline.clean_day', 3), pays: pts('discipline.clean_day', 3), source: discipline?.setup ? `Discipline · day ${dayShown(discipline)}` : 'Discipline', done: !!(discipline?.checkedInToday || r.includes('discipline.clean_day')), run: () => done(act(() => life.discipline.checkIn(), 'Checked in')) },
     { id: 'workout', label: 'Workout', hint: pts('body.workout_done', 3), pays: pts('body.workout_done', 3), auto: true, source: 'Sport Track', action: 'Open Sport Track', done: !!(body?.workoutDoneToday || body?.restToday || r.includes('body.workout_done')), run: () => onGo('body') },
     { id: 'focus', label: `${focusTarget} minutes of focus`, short: `Focus ${focusTarget} min`, hint: focusMin ? `${focusMin} min so far · +3 per 10 min` : '+3 per 10 min', pays: '+3 / 10 min', auto: true, source: 'Focus timer', action: `Start ${focusMins} min`, progress: { value: Math.min(focusMin, focusTarget), target: focusTarget, unit: 'min' }, done: focusMin >= focusTarget || r.includes('study.block_done'), run: () => void act(() => life.focus.start('Focus', focusMins), `Focus started: ${focusMins} minutes`).then((ok) => ok && onChange()) },
     // BD15: one habit with steps (morning and night, weekly nails and haircut); it pays once, when every step is ticked.

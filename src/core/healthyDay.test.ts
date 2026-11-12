@@ -123,11 +123,13 @@ describe('the Healthy day ring', () => {
     expect(healthyStreak(days, '2026-11-04')).toBe(2)
     expect(healthyStreak({ ...days, '2026-11-04': { healthy: true } }, '2026-11-04')).toBe(3)
   })
-  it('bed on time: 15 minutes of grace, past midnight too', () => {
-    expect(sleptOnTime({ bedTime: '23:10', bedTarget: '23:00', bedOnTime: null })).toBe(true)
+  it('bed on time: the same 5 minutes of grace as points (core/sleep.ts), past midnight too', () => {
+    expect(sleptOnTime({ bedTime: '23:05', bedTarget: '23:00', bedOnTime: null })).toBe(true)
+    expect(sleptOnTime({ bedTime: '23:10', bedTarget: '23:00', bedOnTime: null })).toBe(false)
+    expect(sleptOnTime({ bedTime: '23:35', bedTarget: null, bedOnTime: null })).toBe(true)
     expect(sleptOnTime({ bedTime: '00:20', bedTarget: '23:00', bedOnTime: null })).toBe(false)
     expect(sleptOnTime({ bedTime: '22:30', bedTarget: '23:00', bedOnTime: null })).toBe(true)
-    expect(sleptOnTime({ bedTime: '00:10', bedTarget: '00:00', bedOnTime: null })).toBe(true)
+    expect(sleptOnTime({ bedTime: '00:05', bedTarget: '00:00', bedOnTime: null })).toBe(true)
     expect(sleptOnTime(null)).toBeNull()
   })
   it('the week: water average, moves, breaks and steady bedtimes', () => {

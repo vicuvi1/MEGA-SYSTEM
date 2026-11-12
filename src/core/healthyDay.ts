@@ -17,6 +17,7 @@
 import type { IslandAlert } from './islandModel'
 import type { NudgeDay, NudgeStore } from './islandNudges'
 import { addDays } from './dates'
+import { BED_BY, isBedOnTime } from './sleep'
 
 export const HEALTHY_RULE = 'body.healthy_day'
 /** The same thing is never nudged twice within this, on any surface. */
@@ -238,14 +239,11 @@ export function healthyDay(i: HealthyInput): HealthyDay {
 /** Screen breaks in a nudge day (eyes, calm, tidy, walks). */
 export const screenBreaks = (d: Pick<NudgeDay, 'eyes' | 'calm' | 'tidy' | 'walks'> | null | undefined) => (d ? d.eyes + d.calm + d.tidy + d.walks : 0)
 
-/** Last night's bedtime on time? From the row of the morning the night ended in (15 min grace). */
-export function sleptOnTime(log: { bedTime: string | null; bedTarget: string | null; bedOnTime: boolean | null } | null | undefined, fallbackTarget = '23:00'): boolean | null {
+/** Last night's bedtime on time? From the row of the morning the night ended in (the one meaning of on time, core/sleep.ts). */
+export function sleptOnTime(log: { bedTime: string | null; bedTarget: string | null; bedOnTime: boolean | null } | null | undefined, fallbackTarget = BED_BY): boolean | null {
   if (!log || !isHm(log.bedTime)) return null
   if (typeof log.bedOnTime === 'boolean') return log.bedOnTime
-  const target = isHm(log.bedTarget) ? log.bedTarget : fallbackTarget
-  // Minutes after the target, wrapping past midnight (an hour early counts as on time).
-  const late = (toMin(log.bedTime) - toMin(target) + 1440 + 720) % 1440 - 720
-  return late <= 15
+  return isBedOnTime(log.bedTime, isHm(log.bedTarget) ? log.bedTarget : fallbackTarget)
 }
 
 /** Days in a row with all four (today counts once it's done; else it starts from yesterday). */

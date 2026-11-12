@@ -252,6 +252,7 @@ export const SETTINGS = {
   sleep_bed_target: text('bedtime target (HH:MM)'),
   sleep_weekday_target: text('weekday wake target (HH:MM)'),
   sleep_weekend_target: text('weekend wake target (HH:MM)'),
+  sleep_bed_watch: json<Record<string, unknown> | null>('The "Going to bed" check: the tap, the last PC use after it and what happened in plain words (src/core/bedSense.ts)', null),
   // ---- discipline ----
   discipline_stealth: flag('stealth mode: neutral words everywhere ("1" on)'),
   discipline_why: text('your reason for the streak, in your words (shown in the urge crusher)'),

@@ -15,7 +15,7 @@
 // dropped silently: every line that looks like data but can't be read, and
 // every food without grams, comes back as a warning. No points (like a typed meal).
 import { kcalOf, mealTypeAt, type FoodItem, type MealType } from './food'
-import { addDays } from './dates'
+import { addDays, dayKey, DAY_START_HOUR } from './dates'
 
 /** The exact prompt he copies into his AI app (keep the text as it is). */
 export const FOOD_PASTE_PROMPT = `You are a precise nutrition analyst. I will send one or more food photos (and sometimes a note). For EVERY photo, identify each separate food, estimate its weight in grams using the plate, cutlery, hand or packaging for scale, and read any nutrition label or barcode text you can see (label numbers beat estimates). Count hidden oil, butter, sauces and sugar you can reasonably assume, and say so in the note.
@@ -65,11 +65,22 @@ export interface PasteResult {
 const TYPES: Record<string, MealType> = { breakfast: 'breakfast', lunch: 'lunch', dinner: 'dinner', snack: 'snack', supper: 'dinner', brunch: 'breakfast' }
 const r1 = (n: number) => Math.round(n * 10) / 10
 
-/** A number from "12,5", "~150", "≈ 200 g", "150-200" (the middle), or null. */
+/**
+ * One written number as plain digits with a dot: "1,500" and "1.200" are thousands
+ * (1–3 digits, then groups of exactly 3), "1,234.5" and "1.234,5" too; otherwise a
+ * comma is a decimal ("12,5", "0,125").
+ */
+function plainNumber(tok: string): string {
+  if (/^[1-9]\d{0,2}(?:,\d{3})+(?:\.\d+)?$/.test(tok)) return tok.replace(/,/g, '')
+  if (/^[1-9]\d{0,2}(?:\.\d{3})+(?:,\d+)?$/.test(tok)) return tok.replace(/\./g, '').replace(',', '.')
+  return tok.replace(',', '.')
+}
+
+/** A number from "12,5", "1,500", "~150", "≈ 200 g", "150-200" (the middle), or null. */
 export function pasteNumber(raw: string): number | null {
   const t = String(raw ?? '')
     .replace(/[~≈]|approx\.?|about|ca\./gi, '')
-    .replace(/(\d),(\d)/g, '$1.$2')
+    .replace(/\d[\d.,]*\d/g, plainNumber)
     .trim()
   const m = /^(\d+(?:\.\d+)?)\s*(?:[-–—]|to)\s*(\d+(?:\.\d+)?)/i.exec(t) ?? /^(\d+(?:\.\d+)?)/.exec(t)
   if (!m) return null
@@ -100,7 +111,9 @@ const keyOf = (k: string): Key => {
   if (/^(conf|confidence)$/.test(x)) return 'conf'
   return 'g'
 }
-const GRAMS = /^[~≈]?\s*\d+(?:[.,]\d+)?(?:\s*[-–—]\s*\d+(?:[.,]\d+)?)?\s*(?:g|gr|grams?|ml)\.?$/i
+const GRAMS = /^[~≈]?\s*\d[\d.,]*(?:\s*[-–—]\s*\d[\d.,]*)?\s*(?:g|gr|grams?|ml)\.?$/i
+/** A key only counts with its value ("Fat 12", "CONF low"); "Fat added from oil" is a note. */
+const keyValue = (k: Key, val: string) => (k === 'conf' ? /^(h|m|l)/i.test(val.trim()) : pasteNumber(val) != null)
 
 /** One food line, or null when it isn't one (then the caller warns). */
 function readItem(fields: string[], line: number, warnings: string[]): PasteItem | null {
@@ -114,12 +127,12 @@ function readItem(fields: string[], line: number, warnings: string[]): PasteItem
       continue
     }
     const m = KEY.exec(f)
-    if (m) {
+    if (m && keyValue(keyOf(m[1]), m[2])) {
       v[keyOf(m[1])] ??= m[2]
       continue
     }
     // "260 kcal", "5 g protein" written the other way round.
-    const back = /^([~≈]?\s*\d+(?:[.,]\d+)?(?:\s*[-–—]\s*\d+(?:[.,]\d+)?)?)\s*(kcal|cal|calories)$/i.exec(f)
+    const back = /^([~≈]?\s*\d[\d.,]*(?:\s*[-–—]\s*\d[\d.,]*)?)\s*(kcal|cal|calories)$/i.exec(f)
     if (back) {
       v.kcal ??= back[1]
       continue
@@ -164,7 +177,8 @@ function readMeal(fields: string[], today: string): Pick<PasteMeal, 'type' | 'at
     const tm = /^(\d{1,2})[:.](\d{2})$/.exec(low)
     if (!type && TYPES[low]) type = TYPES[low]
     else if (!at && dt) at = `${dt[1]}-${dt[2]}-${dt[3]}T${(dt[4] ?? '12').padStart(2, '0')}:${dt[5] ?? '00'}`
-    else if (!at && tm && Number(tm[1]) < 24) at = `${today}T${tm[1].padStart(2, '0')}:${tm[2]}`
+    // A bare time belongs to the app day `today`: 00:00–03:59 is the next calendar date.
+    else if (!at && tm && Number(tm[1]) < 24) at = `${Number(tm[1]) < DAY_START_HOUR ? addDays(today, 1) : today}T${tm[1].padStart(2, '0')}:${tm[2]}`
     else if (low === 'now' || low === '-' || low === '') continue
     else rest.push(f)
   }
@@ -258,14 +272,15 @@ export function pasteToLog(m: PasteMeal, now: Date, today: string, warn: (s: str
   let when = now
   if (m.at) {
     const d = new Date(m.at)
-    const day = m.at.slice(0, 10)
+    // The APP day (it turns at 04:00): a meal at 01:30 belongs to the evening before.
+    const day = Number.isFinite(d.getTime()) ? dayKey(d) : ''
     if (!Number.isFinite(d.getTime())) warn(`${m.name || 'A meal'}: its time could not be read, so now is used.`)
     else if (d.getTime() > now.getTime() + 5 * 60_000) warn(`${m.name || 'A meal'}: ${m.at.replace('T', ' ')} is in the future, so now is used.`)
     else if (day < addDays(today, -PASTE_PAST_DAYS)) warn(`${m.name || 'A meal'}: ${day} is more than ${PASTE_PAST_DAYS} days ago, so today is used.`)
     else when = d
   }
   const hm = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`
-  const day = when === now ? today : m.at!.slice(0, 10)
+  const day = when === now ? today : dayKey(when)
   const name = (m.name || items.map((i) => i.name).slice(0, 3).join(' + ')).slice(0, 60)
   return { items, name, type: m.type ?? mealTypeAt(hm), day, at: when.toISOString() }
 }

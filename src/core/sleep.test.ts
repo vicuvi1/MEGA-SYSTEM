@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeSleepStats, fromMinutes, isBedOnTime, isWakeOnTime, targetForDay, toMinutes, type SleepLog } from './sleep'
+import { BED_BY, computeSleepStats, ON_TIME_GRACE_MIN, UP_BY, fromMinutes, isBedOnTime, isWakeOnTime, targetForDay, toMinutes, type SleepLog } from './sleep'
 
 describe('sleep core', () => {
   it('converts to and from minutes correctly', () => {
@@ -13,19 +13,33 @@ describe('sleep core', () => {
   it('evaluates wake on-time with grace window', () => {
     expect(isWakeOnTime('06:55', '07:00')).toBe(true)
     expect(isWakeOnTime('07:00', '07:00')).toBe(true)
-    expect(isWakeOnTime('07:20', '07:00')).toBe(true) // 20 min grace, like Waky
-    expect(isWakeOnTime('07:21', '07:00')).toBe(false)
+    expect(isWakeOnTime('07:05', '07:00')).toBe(true) // 5 min grace at most (one meaning of on time)
+    expect(isWakeOnTime('07:06', '07:00')).toBe(false)
+    expect(isWakeOnTime('07:20', '07:00', 20)).toBe(false) // a bigger grace is capped at 5
     expect(isWakeOnTime('08:30', '07:00')).toBe(false)
+  })
+
+  it('one meaning of on time: 23:30 / 06:45 with 5 min grace by default', () => {
+    expect([BED_BY, UP_BY, ON_TIME_GRACE_MIN]).toEqual(['23:30', '06:45', 5])
+    expect(isWakeOnTime('06:50')).toBe(true)
+    expect(isWakeOnTime('06:51')).toBe(false)
+    expect(isWakeOnTime('02:30')).toBe(false) // before 03:00 is not a wake-up
+    expect(isBedOnTime('23:35')).toBe(true)
+    expect(isBedOnTime('23:36')).toBe(false)
+    // Points (computeSleepStats defaults) and Today (threeNumbers) agree: the weekend is 06:45 too.
+    expect(computeSleepStats([], '2026-10-31')).toMatchObject({ weekdayTarget: '06:45', weekendTarget: '06:45' })
   })
 
   it('evaluates bedtime on-time with grace window', () => {
     expect(isBedOnTime('23:00', '23:00')).toBe(true)
-    expect(isBedOnTime('23:25', '23:00')).toBe(true)
+    expect(isBedOnTime('23:05', '23:00')).toBe(true)
+    expect(isBedOnTime('23:25', '23:00')).toBe(false)
     expect(isBedOnTime('22:45', '23:00')).toBe(true)
     expect(isBedOnTime('00:10', '23:00')).toBe(false)
     // Early is on time (P6); after midnight against a midnight target still works.
     expect(isBedOnTime('21:00', '23:00')).toBe(true)
-    expect(isBedOnTime('00:20', '00:00')).toBe(true)
+    expect(isBedOnTime('00:05', '00:00')).toBe(true)
+    expect(isBedOnTime('00:20', '00:00')).toBe(false)
     expect(isBedOnTime('01:00', '00:00')).toBe(false)
   })
 

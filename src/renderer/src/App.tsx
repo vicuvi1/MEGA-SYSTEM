@@ -56,6 +56,8 @@ import { FocusBoost } from './boost/FocusBoost'
 import { StudyAlarm } from './study/StudyAlarm'
 import { winMoment } from './boost/boostBus'
 import { startZoom, ZoomToast } from './zoom'
+import { startSleepNight } from './sleepNight'
+import { dayShown } from '@core/discipline'
 import { WallpaperLayer } from './wallpaper/WallpaperLayer'
 import { CustomBackground } from './custom/CustomBackground'
 
@@ -161,6 +163,8 @@ function WindowErrors() {
   useEffect(() => installWindowErrorHandlers((t) => toast(t, 'bad')), [toast])
   // Zoom: the desktop window's own (Ctrl + / - / 0, Ctrl + wheel), told to the page.
   useEffect(() => startZoom(), [])
+  // Sleep at night on the desktop: the "Going to bed" check and the 23:15 / 00:00 reminders.
+  useEffect(() => startSleepNight(), [])
   // Back from the Google sign-in (/?google=connected): say how it went, open Calendar.
   useEffect(() => {
     const q = new URLSearchParams(window.location.search).get('google')
@@ -715,7 +719,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // On the desktop the title bar offers 'Restart to update' itself.
   if (updateReady && !window.desktop) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
   if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Today’s cloud backup didn’t save', body: backup.lastError, page: 'settings' })
-  if (checkInDue && modOn('discipline')) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current}`, page: 'discipline' })
+  if (checkInDue && modOn('discipline')) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${dayShown(discipline!)}`, page: 'discipline' })
   if (overdue && modOn('tasks')) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
   // The next thing in your real calendar within the hour (T2; it read an old, empty schedule).
   const nextEv = modOn('calendar') ? nextUp(todayEvents, Date.now()) : null

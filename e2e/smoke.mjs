@@ -3254,6 +3254,31 @@ try {
       await pg.waitForSelector('.dx-urge', { state: 'detached', timeout: 5000 })
     }
   })
+  // Owner picks (2026-11-12): ONE day number on Discipline (the ring and the 90-day campaign say the same "Day N"),
+  // and ONE meaning of on time: Today and the Sleep page name the same targets with the same 5-minute grace.
+  await step('One day number on Discipline, one meaning of on time on Today and Sleep', async () => {
+    await open('discipline')
+    await pg.waitForSelector('.discipline, .setup, .stealth-cover', { timeout: 10000 })
+    if (await pg.$('.discipline [data-testid="dx-day"]')) {
+      const ring = await pg.getAttribute('.dx-streak-ring', 'aria-label').catch(() => null)
+      const camp = await pg.getAttribute('[data-testid="dx-campaign"]', 'aria-label').catch(() => null)
+      const n = Number(ring?.match(/^Day (\d+)$/)?.[1] ?? NaN)
+      if (!Number.isFinite(n)) throw new Error(`the streak ring does not say "Day N": ${ring}`)
+      if (camp && camp !== `Day ${Math.min(n, 90)} of 90`) throw new Error(`the ring says Day ${n} but the campaign says ${camp}`)
+      if (/days clean/.test(await pg.locator('.dx-streak').innerText())) throw new Error('the ring still counts "days clean"')
+    }
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.waitForSelector('[data-testid="tn-sleep-target"]', { timeout: 10000 })
+    const today = (await pg.textContent('[data-testid="tn-sleep-target"]'))?.replace(/\s+/g, ' ').trim() ?? ''
+    const m = /asleep by (\d\d:\d\d), up by (\d\d:\d\d) \(5 min grace\)/.exec(today)
+    if (!m) throw new Error(`Today's sleep target has no grace or times: "${today}"`)
+    await open('sleep')
+    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Points & stats' }).click({ timeout: 15000 })
+    await pg.waitForSelector('[data-testid="sleep-on-time-rule"]', { timeout: 10000 })
+    const rule = (await pg.textContent('[data-testid="sleep-on-time-rule"]'))?.replace(/\s+/g, ' ').trim() ?? ''
+    if (!rule.includes(`asleep by ${m[1]} and up by ${m[2]}`) || !/5 minutes of grace/.test(rule)) throw new Error(`Sleep says "${rule}" but Today says "${today}"`)
+  })
   // Night 11: Rewards shows the wallet, Ben's line, the tabs and the reward cards.
   await step('Rewards: wallet, tabs and reward cards', async () => {
     await open('shop')

@@ -161,6 +161,15 @@ export function dayNumber(s: { current: number; resets: number; setup?: boolean 
 }
 
 /**
+ * The ONE day number to show (owner, 2026-11-12): the page ring, the 90-day
+ * campaign, Today, the alert and the island all say "Day N" from `state.day`.
+ * `current` (whole clean days) stays for badges, ranks and milestones only.
+ */
+export function dayShown(s: { day?: number | null; current: number; resets?: number; setup?: boolean }): number {
+  return typeof s.day === 'number' ? s.day : dayNumber({ current: s.current, resets: s.resets ?? 0, setup: s.setup })
+}
+
+/**
  * When the clean-day check-in can be done (MN3, H2): from 19:00 (until the day
  * turns at 04:00) it is for today; in the morning (until 12:00) for yesterday,
  * if yesterday wasn't checked in or reset; otherwise it waits for 19:00.

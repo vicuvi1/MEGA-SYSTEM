@@ -34,6 +34,7 @@ const api: DesktopApi = {
   onNavigate: (cb) => void ipcRenderer.on('app:navigate', (_e, page) => cb(page)),
   onAway: (cb) => void ipcRenderer.on('desktop:away', (_e, a) => cb(a)),
   onIdle: (cb) => void ipcRenderer.on('desktop:idle', (_e, sec) => cb(Number(sec) || 0)),
+  onSleepTick: (cb) => void ipcRenderer.on('desktop:sleep-tick', (_e, t) => cb({ idleSec: Number(t?.idleSec) || 0, remind: t?.remind === 'winddown' || t?.remind === 'lastcall' ? t.remind : null })),
   onIslandTick: (cb) => void ipcRenderer.on('island:tick', () => cb()),
   onClip: (cb) => void ipcRenderer.on('desktop:clip', (_e, t) => cb(String(t ?? ''))),
   onIslandState: (cb) => void ipcRenderer.on('island:state', (_e, s) => cb(s)),

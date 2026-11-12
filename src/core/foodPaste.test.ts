@@ -133,3 +133,46 @@ describe('a pasted meal for the food counter', () => {
     expect(pasteToLog({ ...r.meals[0], items: [{ ...r.meals[0].items[0], grams: 0, noGrams: true }] }, new Date(), TODAY)).toBeNull()
   })
 })
+
+describe('bug hunt fixes (thousands, the 04:00 day, notes)', () => {
+  it('reads thousands separators; a comma is a decimal only before 1–2 digits', () => {
+    expect(pasteNumber('1,500 g')).toBe(1500)
+    expect(pasteNumber('1,200')).toBe(1200)
+    expect(pasteNumber('1.200')).toBe(1200)
+    expect(pasteNumber('1,234.5')).toBe(1234.5)
+    expect(pasteNumber('1.234,5')).toBe(1234.5)
+    expect(pasteNumber('12,5')).toBe(12.5)
+    expect(pasteNumber('1,25')).toBe(1.3)
+    expect(pasteNumber('1.5')).toBe(1.5)
+    expect(pasteNumber('0.125')).toBe(0.1)
+    expect(pasteNumber('1,000-1,200')).toBe(1100)
+    const r = parseFoodPaste('MEAL | Dinner | now | Pasta\n- Pasta | 1,500 g | P 50 | C 300 | F 20 | KCAL 1,600', TODAY)
+    expect(r.meals[0].items[0]).toMatchObject({ grams: 1500, kcal: 1600 })
+  })
+  it('keeps a note that starts with a key word; a key needs a number', () => {
+    const r = parseFoodPaste('- Salad | 200 g | P 3 | C 8 | F 12 | KCAL 150 | Fat added from oil', TODAY)
+    expect(r.meals[0].items[0]).toMatchObject({ fat: 12, note: 'Fat added from oil' })
+    const c = parseFoodPaste('- Soup | 300 g | P 6 | C 20 | F 4 | KCAL 140 | Carbs mostly from potato | CONF low', TODAY)
+    expect(c.meals[0].items[0]).toMatchObject({ carbs: 20, note: 'Carbs mostly from potato', confidence: 'low' })
+  })
+  it('a meal at 01:30 belongs to the app day before (04:00 boundary), also in the 14-day check', () => {
+    // 02:00 on 13 Mar (calendar) is still app day 12 Mar.
+    const now = new Date(2030, 2, 13, 2, 0)
+    const meal = parseFoodPaste('MEAL | Snack | 2030-03-13 01:30 | Toast\n- Toast | 60 g | P 5 | C 28 | F 1.5 | KCAL 150', TODAY).meals[0]
+    const a = pasteToLog(meal, now, TODAY)!
+    expect(a.day).toBe(TODAY)
+    expect(a.at).toBe(new Date(2030, 2, 13, 1, 30).toISOString())
+    // A time without a date, before 04:00, is on the next calendar date of the app day.
+    const t = parseFoodPaste('MEAL | Snack | 01:30 | Toast\n- Toast | 60 g | P 5 | C 28 | F 1.5 | KCAL 150', TODAY).meals[0]
+    expect(t.at).toBe('2030-03-13T01:30')
+    expect(pasteToLog(t, now, TODAY)!.day).toBe(TODAY)
+    // 01:30 on 27 Feb is app day 26 Feb: exactly 14 days back, still allowed.
+    const warns: string[] = []
+    const old = pasteToLog({ ...meal, at: '2030-02-27T01:30' }, now, TODAY, (w) => warns.push(w))!
+    expect(old.day).toBe('2030-02-26')
+    expect(warns).toEqual([])
+    // 01:30 on 26 Feb is app day 25 Feb: too old, said with the app day.
+    expect(pasteToLog({ ...meal, at: '2030-02-26T01:30' }, now, TODAY, (w) => warns.push(w))!.day).toBe(TODAY)
+    expect(warns).toEqual(['Toast: 2030-02-25 is more than 14 days ago, so today is used.'])
+  })
+})

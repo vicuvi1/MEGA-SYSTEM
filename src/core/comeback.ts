@@ -13,7 +13,7 @@ const IF_THEN: Record<string, string> = {
 }
 
 /** The plan for the 72 hours after a reset at `now`, with times. */
-export function comebackPlan(now: Date, topTrigger: string | null, bedTarget = '23:00'): ComebackStep[] {
+export function comebackPlan(now: Date, topTrigger: string | null, bedTarget = '23:30'): ComebackStep[] {
   const ifThen = IF_THEN[String(topTrigger ?? '').toLowerCase()] ?? 'If the urge hits, then I open the urge crusher right away.'
   const at = (hoursFromNow: number) => new Date(now.getTime() + hoursFromNow * 3600_000).toISOString()
   const tonight = new Date(now)
@@ -29,4 +29,22 @@ export function comebackPlan(now: Date, topTrigger: string | null, bedTarget = '
     { kind: 'task', text: 'Comeback day 3: check in (pays the comeback bonus)', at: at(66), due: 'in 3 days' },
     { kind: 'checkin', text: '72 hours done. What helped most? Keep that one.', at: at(72) }
   ]
+}
+
+/** The tag on a reset's comeback check-ins (one reset a day at most), so undoing the reset removes them. */
+export const comebackRef = (resetDay: string): string => `comeback:${resetDay}`
+
+/**
+ * What the comeback plan may create (owner, 2026-11-12): Ben's check-ins only with
+ * the Coach module on, Todoist tasks only with Tasks on. The tasks are added only
+ * after the 10-minute undo window (pages/Discipline.tsx), because a task sent to
+ * Todoist can't be taken back.
+ */
+export function comebackParts(plan: ComebackStep[], on: { coach: boolean; tasks: boolean }): { checkins: ComebackStep[]; tasks: ComebackStep[] } {
+  return { checkins: on.coach ? plan.filter((x) => x.kind === 'checkin') : [], tasks: on.tasks ? plan.filter((x) => x.kind === 'task') : [] }
+}
+
+/** The reminders without a taken-back reset's comeback check-ins. */
+export function dropComeback<T extends { ref?: string }>(list: T[], ref: string): T[] {
+  return list.filter((r) => r.ref !== ref)
 }

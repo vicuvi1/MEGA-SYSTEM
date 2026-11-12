@@ -62,6 +62,18 @@ export function monthKey(day: string): string {
   return day.slice(0, 7)
 }
 
+const hourFmt = new Map<string, Intl.DateTimeFormat>()
+/** The hour (0–23) of an instant in `timeZone`, or in the local zone when none is given. */
+export function hourIn(at: Date, timeZone?: string): number {
+  if (!timeZone) return at.getHours()
+  let f = hourFmt.get(timeZone)
+  if (!f) {
+    f = new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' })
+    hourFmt.set(timeZone, f)
+  }
+  return Number(f.formatToParts(at).find((p) => p.type === 'hour')?.value ?? at.getHours()) % 24
+}
+
 /** The hour on the app's clock: 00:00–03:59 still belong to the evening before (25, 26, 27). */
 export const appHour = (now = new Date()) => {
   const h = now.getHours()

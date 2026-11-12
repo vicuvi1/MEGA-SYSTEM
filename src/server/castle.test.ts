@@ -184,7 +184,7 @@ describe('the daily push budget (feature freeze)', () => {
     expect(msgs.join('\n')).not.toMatch(/protein|kcal|lunch|meal|weigh|food/i)
     expect(msgs[0]).toMatch(/3 must-dos|no must-dos/)
     expect(msgs[2]).toMatch(/pick tomorrow's 3/)
-    expect(msgs[3]).toMatch(/wind down, phone away/)
+    expect(msgs[3]).toMatch(/15 minutes to bed/)
     // The bell still has the day's other things, silently.
     expect(Number(q('SELECT COUNT(*) FROM notifications')[0][0])).toBeGreaterThan(4)
     expect(JSON.parse(String(q("SELECT value FROM settings WHERE key = 'push_budget'")[0][0])).sent).toEqual(['morning', 'afternoon', 'plan', 'winddown'])

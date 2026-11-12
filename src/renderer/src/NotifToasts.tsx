@@ -225,7 +225,7 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
         list.push(...eventAlerts(evs, now, s))
       }
       const sleep = isOn(mods, 'sleep') ? await life.sleep.state().catch(() => null) : null
-      const bed = sleep ? bedtimeAlert((sleep as any)?.bedTarget ?? '23:00', now, s) : null
+      const bed = sleep ? bedtimeAlert((sleep as any)?.bedTarget ?? '23:30', now, s) : null
       if (bed && !quietNow(s, now)) list.push(bed)
       const st = await life.coach?.status?.().catch(() => null)
       const w = st && isOn(mods, 'sport') ? waterAlert(st.today.waterMl, st.today.waterTarget, now, s) : null
@@ -237,7 +237,8 @@ export function NotifToasts({ onGo }: { onGo: (p: PageId) => void }) {
         const day = dayKey(now)
         const led = await life.notifications.budget?.().catch(() => null)
         const slot = dueSlot(now.getHours() * 60 + now.getMinutes(), now.getDay(), bud, led?.sent ?? [])
-        if (slot) {
+        // On the desktop the 23:15 wind-down is the Sleep reminder's (sleepNight.ts: only if bed isn't logged).
+        if (slot && !(slot === 'winddown' && window.desktop?.onSleepTick)) {
           const text = slotText(slot, { mustDone: st?.today.mustDone ?? 0, mustTotal: st?.today.mustTotal ?? 0 })
           list.push({ id: slotNotifId(slot, day), at: now.toISOString(), kind: slot === 'morning' || slot === 'plan' ? 'plan' : 'ben', title: text.split('\n')[0].slice(0, 110), body: null, action: { kind: 'page', page: 'today', label: 'Open Today' } })
         }

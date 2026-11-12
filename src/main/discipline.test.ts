@@ -5,6 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { openDb, type DB } from './db'
 import { Wallet } from './wallet'
 import { Discipline } from './discipline'
+import { readSetting, writeSetting } from './settings'
+import { REMINDERS } from '@core/coachKit'
+import { comebackParts, comebackPlan, comebackRef, dropComeback } from '@core/comeback'
+import { dayShown } from '@core/discipline'
 
 let dir: string
 let db: DB
@@ -166,5 +170,51 @@ describe('discipline service', () => {
     expect(d.state(oct25).why).toBe('To be present for the people I love.')
     d.setWhy('')
     expect(d.state(oct25).why).toBeNull()
+  })
+})
+
+describe('owner picks (2026-11-12): one day number, comeback undo, your time zone', () => {
+  it('one day number: the start day is Day 1, a reset day Day 0, everywhere from state.day', () => {
+    d.setStart('2026-10-25', oct25)
+    expect(dayShown(d.state(oct25))).toBe(1)
+    expect(d.state(oct25)).toMatchObject({ current: 0, day: 1 })
+    expect(dayShown(d.state(t('2026-10-27T20:00:00Z')))).toBe(3)
+    d.reset(t('2026-10-27T20:00:00Z'))
+    expect(dayShown(d.state(t('2026-10-27T20:01:00Z')))).toBe(0)
+    expect(dayShown(d.state(t('2026-10-28T20:00:00Z')))).toBe(1)
+    // A state without `day` (older data) gives the same number.
+    expect(dayShown({ current: 4, resets: 0, setup: true })).toBe(5)
+    expect(dayShown({ current: 4, resets: 2, setup: true })).toBe(4)
+  })
+
+  it("undoing a reset also removes that reset's comeback check-ins (and only those)", () => {
+    d.setStart('2026-10-15', oct25)
+    d.reset(oct25)
+    const mine = { id: 'a', at: '2026-10-25T22:00:00Z', text: 'x', kind: 'checkin' as const, createdAt: '', ref: comebackRef('2026-10-25') }
+    const other = { id: 'b', at: '2026-10-26T09:00:00Z', text: 'your own', kind: 'remind' as const, createdAt: '' }
+    writeSetting(db, REMINDERS, [mine, other])
+    d.undoReset(t('2026-10-25T20:05:00Z'))
+    expect(readSetting(db, REMINDERS).map((r) => r.id)).toEqual(['b'])
+  })
+
+  it('nothing from the comeback plan is created while Coach and Tasks are off', () => {
+    const plan = comebackPlan(new Date(2030, 0, 2, 20, 0), null)
+    expect(comebackParts(plan, { coach: false, tasks: false })).toEqual({ checkins: [], tasks: [] })
+    const on = comebackParts(plan, { coach: true, tasks: true })
+    expect(on.checkins.length).toBe(4)
+    expect(on.tasks.length).toBe(3)
+    expect(dropComeback([{ ref: 'comeback:2030-01-02' }, { ref: undefined }], comebackRef('2030-01-02'))).toEqual([{ ref: undefined }])
+  })
+
+  it('check-in hours and the history use the configured time zone, not the PC clock', () => {
+    const tz = new Discipline(db, new Wallet(db, 'Asia/Tokyo'))
+    // 11:00 UTC is 20:00 in Tokyo: the evening check-in is open there.
+    const at = t('2026-10-25T11:00:00Z')
+    tz.setStart('2026-10-15', at)
+    expect(tz.state(at).checkIn?.mode).toBe('today')
+    tz.checkIn(at)
+    expect(tz.state(at).history?.find((h) => h.kind === 'checkin')?.hour).toBe(20)
+    // 03:00 UTC is 12:00 in Tokyo: midday waits for 19:00.
+    expect(new Discipline(db, new Wallet(db, 'Asia/Tokyo')).state(t('2026-10-26T03:00:00Z')).checkIn?.mode).toBe('wait')
   })
 })
