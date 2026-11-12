@@ -12,7 +12,7 @@ export interface Rule {
 }
 
 export const DEFAULT_RULES: Rule[] = [
-  { id: 'sleep.up_on_time', module: 'sleep', title: 'Up by 07:00', coins: 10, xp: 20, dailyCap: 1, cooldownMin: 0, enabled: true },
+  { id: 'sleep.up_on_time', module: 'sleep', title: 'Up by 06:45', coins: 10, xp: 20, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'sleep.bed_on_time', module: 'sleep', title: 'In bed on time', coins: 5, xp: 10, dailyCap: 1, cooldownMin: 0, enabled: true },
   { id: 'study.block_done', module: 'schedule', title: 'Study block completed', coins: 15, xp: 30, dailyCap: 6, cooldownMin: 20, enabled: true },
   { id: 'study.block_skipped', module: 'schedule', title: 'Study block skipped', coins: -5, xp: 0, dailyCap: 6, cooldownMin: 0, enabled: true },

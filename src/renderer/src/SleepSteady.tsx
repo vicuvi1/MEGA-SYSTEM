@@ -1,6 +1,6 @@
 // How steady your sleep is: a regularity score, social jet lag and the real
 // hours slept each night (bedtime and wake-up of the same night).
-import type { SleepLog } from '@core/sleep'
+import { BED_BY, type SleepLog } from '@core/sleep'
 import { useEffect, useState } from 'react'
 import { examSleepGuard, sleepRegularity } from '@core/sleepRegularity'
 import { dayKey } from '@core/dates'
@@ -15,7 +15,7 @@ export function SleepSteady({ logs, bedTarget }: { logs: SleepLog[]; bedTarget?:
   useEffect(() => {
     life.focus.state().then((f) => setExams(f.goals.map((g) => ({ title: g.title, deadline: g.deadline })))).catch(() => {})
   }, [])
-  const guard = examSleepGuard({ today: dayKey(new Date()), nights: r.nights, exams, bedTarget: bedTarget ?? '23:00' })
+  const guard = examSleepGuard({ today: dayKey(new Date()), nights: r.nights, exams, bedTarget: bedTarget ?? BED_BY })
   if (r.score == null && !r.nights.length) return null
   const max = Math.max(9 * 60, ...r.nights.map((n) => n.minutes))
   const lag = r.socialJetLagMin

@@ -72,7 +72,7 @@ import { beat, logError, logErrors, readBenLog, readHealth, type ErrorReport } f
 import { addTrigger, loadTriggers, urgeEvents } from './web/disciplinePatterns'
 import { addReminder, REMINDERS, type Reminder } from '@core/coachKit'
 import { reminderDone, reminderSnooze } from '@core/healthyDay'
-import { comebackPlan } from '@core/comeback'
+import { comebackParts, comebackPlan, comebackRef } from '@core/comeback'
 import { neutral } from '@core/stealth'
 import { sportToday } from '@core/sportShared'
 import { WATER_KIND, deviceSource } from '@core/bodyLog'
@@ -1941,13 +1941,18 @@ export function createTursoWebBridge(): Bridge {
           const trig = topTriggers(loadTriggers(s.db))[0]?.trigger ?? null
           const stealth = readSetting(s.db as any, 'discipline_stealth')
           const plan = comebackPlan(new Date(), trig, s.sleep.bedtimeTarget()).map((x) => (stealth ? { ...x, text: neutral(x.text) } : x))
+          // Ben's check-ins only with the Coach module on; tagged, so taking the reset back removes them.
+          const mods = readModules(((s.db as any).prepare('SELECT value FROM settings WHERE key = ?').get(MODULES_KEY) as any)?.value ?? null)
+          const parts = comebackParts(plan, { coach: mods.coach, tasks: mods.tasks })
+          if (!parts.checkins.length) return plan
           let list: Reminder[] = []
           try {
             list = readSetting(s.db as any, REMINDERS)
           } catch {
             list = []
           }
-          for (const st of plan.filter((x) => x.kind === 'checkin')) list = addReminder(list, { at: st.at, text: st.text, kind: 'checkin', follow: false })
+          const ref = comebackRef(s.wallet.today())
+          for (const st of parts.checkins) list = addReminder(list, { at: st.at, text: st.text, kind: 'checkin', follow: false, ref })
           writeSetting(s.db as any, REMINDERS, list)
           return plan
         }),

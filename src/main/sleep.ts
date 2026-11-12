@@ -1,5 +1,6 @@
 import { bedNightDay, computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, wakyFill, type SleepLog, type SleepSummary } from '@core/sleep'
 import { daysBetween } from '@core/dates'
+import { bedWatchStep, cleanBedWatch, startBedWatch, type BedWatch } from '@core/bedSense'
 import { LedgerError } from '@core/ledger'
 import { DEFAULT_BED, DEFAULT_WAKE } from '@core/lifeFit'
 import type { DB } from './db'
@@ -42,7 +43,8 @@ export class SleepService {
   }
 
   weekendTarget(): string {
-    return getSetting(this.db, 'sleep_weekend_target') || '08:30'
+    // One meaning of on time: the weekend uses the same 06:45 unless you set your own.
+    return getSetting(this.db, 'sleep_weekend_target') || this.weekdayTarget()
   }
 
   bedtimeTarget(): string {
@@ -65,7 +67,45 @@ export class SleepService {
 
   state(now = new Date()): SleepSummary {
     const today = this.wallet.today(now)
-    return { ...computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget()), bedTarget: this.bedtimeTarget() }
+    const w = this.bedWatch()
+    // What the "Going to bed" check saw, for the night just gone or tonight (shown on the Sleep page).
+    const bedCheck = w && daysBetween(today, w.day) >= 0 && daysBetween(today, w.day) <= 1 ? { day: w.day, lines: w.log, stillUp: w.stillUp, done: w.done } : null
+    return { ...computeSleepStats(this.logs(), today, this.weekdayTarget(), this.weekendTarget()), bedTarget: this.bedtimeTarget(), bedCheck }
+  }
+
+  private bedWatch(): BedWatch | null {
+    try {
+      return cleanBedWatch(JSON.parse(getSetting(this.db, 'sleep_bed_watch') || 'null'))
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * The desktop's minute check after a "Going to bed" tap (core/bedSense.ts):
+   * still on the PC 30+ minutes later takes the bed points back; once the PC is
+   * left alone, the bedtime becomes the last moment it was used (a record, no
+   * points). Returns the sentence to show when something changed.
+   */
+  bedActivity(idleSec: number, now = new Date()): { said: string | null } {
+    const w = this.bedWatch()
+    if (!w || w.done) return { said: null }
+    const { watch, step } = bedWatchStep(w, now, idleSec)
+    // Saved when something happened, else every 5 minutes (a synced setting: no write every minute).
+    if (step.kind !== 'none' || (watch.lastTick ?? 0) - (w.lastTick ?? w.tapAt) >= 5 * 60_000) setSetting(this.db, 'sleep_bed_watch', JSON.stringify(watch))
+    if (step.kind === 'stillUp') {
+      this.unpay('sleep.bed_on_time', watch.payDay, now)
+      return { said: watch.log[watch.log.length - 1] }
+    }
+    if (step.kind === 'settle') {
+      const row = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(watch.day) as SleepLogRow | undefined
+      if (row) {
+        const target = row.bed_target || this.bedtimeTarget()
+        this.db.prepare('UPDATE sleep_logs SET bed_time = ?, bed_on_time = ? WHERE day = ?').run(step.time, isBedOnTime(step.time, target) ? 1 : 0, watch.day)
+      }
+      return { said: watch.log[watch.log.length - 1] }
+    }
+    return { said: null }
   }
 
   /** How you slept (1–5) for a morning already logged (the bot's check-in buttons). */
@@ -209,6 +249,12 @@ export class SleepService {
         // No wake-up yet: an empty wake time (never a made-up 07:00).
         .run(today, '', wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString())
     }
+
+    // A bedtime logged as you go (a tap, or a time within 20 minutes of now): the desktop
+    // checks that the PC really stops (bedActivity). A time typed later is not watched.
+    const [bh, bm] = bedTime.split(':').map(Number)
+    const gap = Math.abs(now.getHours() * 60 + now.getMinutes() - (bh * 60 + bm)) % 1440
+    if (!time || Math.min(gap, 1440 - gap) <= 20) setSetting(this.db, 'sleep_bed_watch', JSON.stringify(startBedWatch(now, today, this.wallet.today(now), bedTime)))
 
     let awarded = false
     if (onTime) {

@@ -2,7 +2,7 @@
 // Pure and tested (threeNumbers.test.ts). Everything that shows a day score
 // (Today, the island, Ben's evening review on Telegram) uses `honestScore`.
 //
-//   1. Sleep: asleep by 23:30 and up by 06:45 (last night's sleep_logs row).
+//   1. Sleep: asleep by 23:30 and up by 06:45, 5 min grace (last night's sleep_logs row; core/sleep.ts).
 //   2. Focus blocks started today (focus_sessions, plus one running now).
 //   3. Exactly 3 must-dos (day_plans): done out of 3.
 //
@@ -13,8 +13,9 @@
 // An empty day (no sleep logged, no focus, no must-dos) scores 0, never 96.
 // The score pays no points; past days keep the score they were given.
 
-export const BED_BY = '23:30'
-export const UP_BY = '06:45'
+import { BED_BY, isBedOnTime, isWakeOnTime, ON_TIME_GRACE_MIN, UP_BY } from './sleep'
+// One meaning of "on time" (core/sleep.ts): the same targets and 5-minute grace as points.
+export { BED_BY, ON_TIME_GRACE_MIN, UP_BY }
 export const MUST_DOS = 3
 export const FOCUS_GOAL = 3
 export const WEIGHTS = { bed: 17, up: 17, focus: 33, must: 33 } as const
@@ -23,6 +24,9 @@ export interface SleepNight {
   /** "HH:mm" or null when not logged. */
   bedTime: string | null
   wakeTime: string | null
+  /** The targets the night was judged by when logged (the row's own); missing: 23:30 / 06:45. */
+  bedTarget?: string | null
+  wakeTarget?: string | null
 }
 
 export interface ThreeFacts {
@@ -43,23 +47,19 @@ const hm = (s: string | null | undefined): number | null => {
 }
 
 /**
- * Asleep by 23:30: a bedtime from noon to 23:30 is on time; 23:31 to 11:59
- * (after midnight too) is late. Null when not logged.
+ * Asleep by 23:30 (plus the 5-minute grace): a bedtime from noon to 23:35 is on
+ * time; later (after midnight too) is late. Null when not logged.
  */
-export function bedOnTime(bed: string | null | undefined, by = BED_BY): boolean | null {
-  const b = hm(bed)
-  const t = hm(by)
-  if (b == null || t == null) return null
-  const fromNoon = (m: number) => (m - 720 + 1440) % 1440
-  return fromNoon(b) <= fromNoon(t)
+export function bedOnTime(bed: string | null | undefined, by: string | null | undefined = BED_BY): boolean | null {
+  if (hm(bed) == null) return null
+  return isBedOnTime(bed!.trim(), by && hm(by) != null ? by : BED_BY)
 }
 
-/** Up by 06:45: a wake-up from 03:00 to 06:45 is on time. Null when not logged. */
-export function upOnTime(wake: string | null | undefined, by = UP_BY): boolean | null {
+/** Up by 06:45 (plus the 5-minute grace): a wake-up from 03:00 to 06:50 is on time. Null when not logged. */
+export function upOnTime(wake: string | null | undefined, by: string | null | undefined = UP_BY): boolean | null {
   const w = hm(wake)
-  const t = hm(by)
-  if (w == null || t == null) return null
-  return w >= 180 && w <= t
+  if (w == null) return null
+  return isWakeOnTime(wake!.trim(), by && hm(by) != null ? by : UP_BY)
 }
 
 export interface SleepCheck {
@@ -72,8 +72,8 @@ export interface SleepCheck {
 }
 
 export function sleepCheck(n: SleepNight | null): SleepCheck {
-  const bedOk = bedOnTime(n?.bedTime)
-  const upOk = upOnTime(n?.wakeTime)
+  const bedOk = bedOnTime(n?.bedTime, n?.bedTarget)
+  const upOk = upOnTime(n?.wakeTime, n?.wakeTarget)
   const part = (label: string, t: string | null | undefined, ok: boolean | null) => (ok == null ? `${label} not logged` : `${label} ${t} ${ok ? '✓' : '✗'}`)
   const text = bedOk == null && upOk == null ? 'Not logged' : `${part('Asleep', n?.bedTime, bedOk)} · ${part('up', n?.wakeTime, upOk)}`
   return { bedOk, upOk, met: bedOk === true && upOk === true, text }

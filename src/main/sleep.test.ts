@@ -24,13 +24,72 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
+describe('one meaning of on time (23:30 / 06:45, 5 min grace)', () => {
+  it('defaults to 06:45 every day and 23:30 at night; 06:55 is late, 06:50 is not', () => {
+    expect([sleep.weekdayTarget(), sleep.weekendTarget(), sleep.bedtimeTarget()]).toEqual(['06:45', '06:45', '23:30'])
+    // Saturday: no 08:30 weekend default any more.
+    expect(sleep.logWake('06:55', undefined, new Date('2026-10-31T06:55:00Z')).log.onTime).toBe(false)
+    expect(sleep.logWake('06:50', undefined, new Date('2026-11-02T06:50:00Z')).log.onTime).toBe(true)
+    expect(sleep.logBed('23:36', new Date('2026-11-02T23:36:00Z')).log.bedOnTime).toBe(false)
+    expect(sleep.logBed('23:35', new Date('2026-11-03T23:35:00Z')).log.bedOnTime).toBe(true)
+  })
+})
+
+describe('"Going to bed" checks you really stopped', () => {
+  // Local clock times (the check reads the PC's own clock), so the test is the same on any OS and zone.
+  const L = (d: number, h: number, m: number) => new Date(2026, 10, d, h, m)
+  let w: Wallet
+  let s: SleepService
+  beforeEach(() => {
+    w = new Wallet(db)
+    s = new SleepService(db, w)
+  })
+  it('still on the PC 30+ minutes after the tap: the bed points go back, and the bedtime becomes the last PC use', () => {
+    const tap = L(2, 23, 20)
+    expect(s.logBed(undefined, tap).awarded).toBe(true)
+    expect(w.summary(tap).balance).toBe(5)
+    expect(s.state(tap).bedCheck).toMatchObject({ day: '2026-11-03', stillUp: false, done: false, lines: ['23:20: you tapped "Going to bed".'] })
+    // Active every minute until 23:52.
+    for (let m = 21; m <= 52; m++) s.bedActivity(0, L(2, 23, m))
+    expect(w.summary(L(2, 23, 52)).balance).toBe(0)
+    expect(s.state(L(2, 23, 52)).bedCheck?.stillUp).toBe(true)
+    // Last used at 00:40, then left alone: 30 minutes later the bedtime is 00:40, late, and pays nothing.
+    for (let m = 53; m <= 59; m++) s.bedActivity(0, L(2, 23, m))
+    for (let m = 0; m <= 40; m++) s.bedActivity(0, L(3, 0, m))
+    let said: string | null = null
+    for (let m = 41; m <= 80 && !said; m++) said = s.bedActivity((m - 40) * 60, L(3, Math.floor(m / 60), m % 60)).said
+    expect(said).toBe('Bedtime set to 00:40, the last time the PC was used.')
+    const row = s.logs().find((l) => l.day === '2026-11-03')!
+    expect([row.bedTime, row.bedOnTime]).toEqual(['00:40', false])
+    expect(w.summary(L(3, 7, 0)).balance).toBe(0)
+    expect(s.state(L(3, 7, 0)).bedCheck?.lines).toEqual([
+      '23:20: you tapped "Going to bed".',
+      '23:51: the PC was still in use more than 30 minutes after that, so the bed points went back.',
+      'Bedtime set to 00:40, the last time the PC was used.'
+    ])
+  })
+  it('the PC left alone after the tap (or asleep): the tap and its points stand, and the morning is not "still up"', () => {
+    s.logBed(undefined, L(2, 23, 20))
+    for (let m = 21; m <= 25; m++) s.bedActivity(0, L(2, 23, m))
+    // The PC went to sleep at 23:25; the next tick comes in the morning with fresh input.
+    expect(s.bedActivity(0, L(3, 6, 40)).said).toBe(null)
+    expect(s.state(L(3, 6, 40)).bedCheck).toMatchObject({ stillUp: false, done: true })
+    expect(w.summary(L(3, 6, 40)).balance).toBe(5)
+    expect(s.logs().find((l) => l.day === '2026-11-03')!.bedTime).toBe('23:20')
+  })
+  it('a bedtime typed long after is a record, not watched', () => {
+    s.logBed('23:00', L(3, 9, 0))
+    expect(s.state(L(3, 9, 0)).bedCheck ?? null).toBe(null)
+  })
+})
+
 describe('SleepService backend', () => {
   it('logs on-time wake up and awards wallet coins', () => {
-    const now = new Date('2026-10-26T06:55:00Z') // Monday 06:55 (target 07:00)
-    const res = sleep.logWake('06:55', 5, now)
+    const now = new Date('2026-10-26T06:40:00Z') // Monday 06:40 (target 06:45)
+    const res = sleep.logWake('06:40', 5, now)
 
     expect(res.log.onTime).toBe(true)
-    expect(res.log.wakeTime).toBe('06:55')
+    expect(res.log.wakeTime).toBe('06:40')
     expect(res.awarded).toBe(true)
     expect(wallet.summary(now).balance).toBe(10) // +10 for sleep.up_on_time
     expect(res.state.streak).toBe(1)

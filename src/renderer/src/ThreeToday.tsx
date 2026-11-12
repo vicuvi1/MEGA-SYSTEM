@@ -15,7 +15,7 @@ import { addDays, appHour } from '@core/dates'
 import { focusEndsAt } from '@core/focus'
 import { localDay } from '@core/dayTime'
 import { countdown, nextUp } from '@core/dayGlance'
-import { BED_BY, FOCUS_GOAL, MUST_DOS, UP_BY, honestScore, sleepCheck } from '@core/threeNumbers'
+import { BED_BY, FOCUS_GOAL, MUST_DOS, ON_TIME_GRACE_MIN, UP_BY, honestScore, sleepCheck } from '@core/threeNumbers'
 import { checkPick, vagueReason } from '@core/mustDoRule'
 import type { CoachStatus } from './web/coachStatus'
 import { life } from './bridge'
@@ -111,7 +111,9 @@ export function ThreeToday() {
           <small className="tn-label">Sleep · last night</small>
           <b className="tn-big num" data-testid="tn-sleep">{sleep.bedOk == null && sleep.upOk == null ? '—' : sleep.met ? 'On time' : 'Off target'}</b>
           <span className="tn-sub" data-testid="tn-sleep-result">{sleep.text}</span>
-          <span className="tn-target">Target: asleep by {BED_BY}, up by {UP_BY}</span>
+          <span className="tn-target" data-testid="tn-sleep-target">
+            Target: asleep by {t?.sleep?.bedTarget || t?.sleepTargets?.bed || BED_BY}, up by {t?.sleep?.wakeTarget || t?.sleepTargets?.up || UP_BY} ({ON_TIME_GRACE_MIN} min grace)
+          </span>
           {sleepOpen || sleepEmpty ? (
             <SleepForm
               night={t?.sleep ?? null}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, m } from 'framer-motion'
 import { dayKey } from '@core/dates'
-import { disciplineCharts } from '@core/discipline'
+import { dayShown, disciplineCharts } from '@core/discipline'
 import { URGE_WAVE_SECONDS, badgesOf, bestRun, friendlyDate, heatmap, nextBadge, rankLadder, rankProgress, shortDate, urgesPerWeek, type HeatCell } from '@core/disciplineView'
 import { addReflection, lastReflections, REFLECTION_TITLE, reflectionPrompt } from '@core/reflections'
 import type { ConnectionsState, DisciplineState } from '@shared/api'
@@ -14,6 +14,24 @@ import { mmss } from './planUi'
 import { useTicker } from '../useTicker'
 import { Emblem, Flame, Medal, Ring } from './disciplineArt'
 import { UrgeCrusher } from './UrgeCrusher'
+import { comebackParts, type ComebackStep } from '@core/comeback'
+import { RESET_UNDO_MINUTES } from '@core/discipline'
+import { moduleOn } from '../useModules'
+
+/**
+ * The comeback plan's Todoist tasks, added only after the reset can no longer be taken
+ * back (a task in Todoist can't be removed from here), and only if the reset still
+ * stands and the Tasks module is on. Kept outside the page so leaving it doesn't cancel it.
+ */
+function comebackTasksLater(plan: ComebackStep[]): void {
+  if (!comebackParts(plan, { coach: false, tasks: moduleOn('tasks') }).tasks.length) return
+  window.setTimeout(async () => {
+    const st = await life.discipline.state().catch(() => null)
+    const tasks = comebackParts(plan, { coach: false, tasks: moduleOn('tasks') }).tasks
+    if (!st?.resetToday || !tasks.length) return
+    for (const t of tasks) await life.todoist?.quickAdd(`${t.text} ${t.due ?? 'today'}`).catch(() => null)
+  }, RESET_UNDO_MINUTES * 60_000 + 5_000)
+}
 
 type ManSuggestion = ConnectionsState['man']['suggestion']
 
@@ -133,7 +151,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
                 }
               }}
             />
-            <Campaign current={state.current} />
+            <Campaign day={dayShown(state)} />
           </section>
         </div>
 
@@ -191,11 +209,10 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
                   setConfirmReset(false)
                   if (s) {
                     setComeback(true)
-                    // The 72-hour plan as real things: Ben's check-ins, and Todoist tasks.
+                    // The 72-hour plan as real things: Ben's check-ins (Coach on; removed if the reset is
+                    // taken back), and Todoist tasks (Tasks on) only once the 10-minute undo window is over.
                     void life.discipline.comeback?.()
-                      .then(async (plan) => {
-                        for (const st of plan.filter((x) => x.kind === 'task')) await life.todoist?.quickAdd(`${st.text} ${st.due ?? 'today'}`).catch(() => null)
-                      })
+                      .then((plan) => comebackTasksLater(plan))
                       .catch(() => {})
                     window.dispatchEvent(new Event('life-discipline-reset-done'))
                   }
@@ -218,7 +235,12 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
               <li>Use the urge crusher the next time it hits.</li>
               <li>Check in tomorrow. Day 3 pays a comeback bonus.</li>
             </ul>
-            <p className="hint small">Ben will check in tonight, tomorrow and on day 3 with your if-then plan, and the steps are in Todoist.</p>
+            {(moduleOn('coach') || moduleOn('tasks')) && (
+              <p className="hint small">
+                {moduleOn('coach') ? 'Ben will check in tonight, tomorrow and on day 3 with your if-then plan.' : ''}
+                {moduleOn('tasks') ? ' The steps go to Todoist in 10 minutes, once the reset can no longer be taken back.' : ''}
+              </p>
+            )}
             <p className="hint">One slip doesn't erase the work. Your best of {state.best} days is still yours to beat.</p>
             {state.undoResetUntil && Date.parse(state.undoResetUntil) > Date.now() && (
               <p className="hint small">
@@ -306,12 +328,12 @@ function Hero({ state, blurred, onBlur, justChecked, onCheckIn, onOath, onUrge }
       </button>
 
       <div className="dx-streak dx-private">
-        <Ring size={188} stroke={12} pct={nb?.pct ?? 1} className="dx-streak-ring" label={`${state.current} days clean`}>
+        <Ring size={188} stroke={12} pct={nb?.pct ?? 1} className="dx-streak-ring" label={`Day ${dayShown(state)}`}>
           <Flame size={26} />
-          <span className="dx-days">
-            <CountUp value={state.current} />
+          <span className="dx-days-l">Day</span>
+          <span className="dx-days" data-testid="dx-day">
+            <CountUp value={dayShown(state)} />
           </span>
-          <span className="dx-days-l">{state.current === 1 ? 'day clean' : 'days clean'}</span>
         </Ring>
         <span className="dx-streak-next">{nb ? `${nb.days - state.current} ${nb.days - state.current === 1 ? 'day' : 'days'} to ${nb.name.toLowerCase()}` : 'Every badge earned'}</span>
       </div>
@@ -439,10 +461,10 @@ function CoinMilestones({ state, claimable, onClaim }: { state: DisciplineState;
   )
 }
 
-function Campaign({ current }: { current: number }) {
-  const day = Math.min(current, 90)
+function Campaign({ day: n }: { day: number }) {
+  const day = Math.min(n, 90)
   return (
-    <div className="dx-campaign dx-private" aria-label={`Day ${day} of 90`}>
+    <div className="dx-campaign dx-private" data-testid="dx-campaign" aria-label={`Day ${day} of 90`}>
       <div className="dx-campaign-top">
         <span>90-day campaign</span>
         <b>Day {day} of 90</b>
@@ -450,7 +472,7 @@ function Campaign({ current }: { current: number }) {
       <div className="dx-campaign-bar">
         <i style={{ width: `${(day / 90) * 100}%` }} />
         {[3, 7, 14, 30, 60].map((d) => (
-          <span key={d} className={`dx-tick ${current >= d ? 'on' : ''}`} style={{ left: `${(d / 90) * 100}%` }} title={`Day ${d}`} />
+          <span key={d} className={`dx-tick ${day >= d ? 'on' : ''}`} style={{ left: `${(d / 90) * 100}%` }} title={`Day ${d}`} />
         ))}
       </div>
     </div>

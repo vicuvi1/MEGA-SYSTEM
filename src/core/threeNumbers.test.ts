@@ -33,14 +33,19 @@ describe('the 3 numbers and the honest day score', () => {
     expect(honestScore({ sleep: null, focusBlocks: 9, mustDone: 0, mustTotal: 0 }).score).toBe(33)
   })
 
-  it('asleep by 23:30 and up by 06:45', () => {
+  it('asleep by 23:30 and up by 06:45, with the same 5 min grace as points', () => {
     expect(bedOnTime('23:30')).toBe(true)
     expect(bedOnTime('22:10')).toBe(true)
-    expect(bedOnTime('23:31')).toBe(false)
+    expect(bedOnTime('23:35')).toBe(true)
+    expect(bedOnTime('23:36')).toBe(false)
     expect(bedOnTime('00:40')).toBe(false)
     expect(bedOnTime(null)).toBe(null)
     expect(upOnTime('06:45')).toBe(true)
-    expect(upOnTime('06:46')).toBe(false)
+    expect(upOnTime('06:50')).toBe(true)
+    expect(upOnTime('06:51')).toBe(false)
+    // A night judged by the targets it was logged with (the same ones that paid points).
+    expect(sleepCheck({ bedTime: '23:50', wakeTime: '07:10', bedTarget: '23:45', wakeTarget: '07:15' })).toMatchObject({ bedOk: true, upOk: true, met: true })
+    expect(sleepCheck({ bedTime: '23:50', wakeTime: '07:10', bedTarget: null, wakeTarget: null })).toMatchObject({ bedOk: false, upOk: false })
     expect(upOnTime('')).toBe(null)
     expect(sleepCheck({ bedTime: '00:20', wakeTime: '06:30' })).toMatchObject({ bedOk: false, upOk: true, met: false })
     expect(sleepCheck(null).text).toBe('Not logged')

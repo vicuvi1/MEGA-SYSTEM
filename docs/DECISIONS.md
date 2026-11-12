@@ -532,3 +532,38 @@ entry that says why.
 - **Rules out:** adding up a numeric column that is not in `COUNTER_KEYS`, "newer copy replaces the whole
   record", comparing this device's clock with another device's `editedAt` without the `+1` rule, and
   writing over stored data that could not be parsed.
+### One meaning of "on time" for sleep: 23:30 / 06:45, 5 minutes of grace (2026-11-12)
+- **Decision:** `core/sleep.ts` holds the only on-time rule (`BED_BY`, `UP_BY`, `ON_TIME_GRACE_MIN = 5`,
+  `isBedOnTime`, `isWakeOnTime`). Points, the streak, Today, the day score, the island pill and the Healthy day
+  ring all use it. Sleep settings may change the times, never the grace (capped at 5); the weekend uses the
+  weekday time unless set. Today judges a night by the targets stored on its row. Points already paid stay.
+- **Why:** the owner saw "on time" mean three things (30/20 min grace, a 07:00 and 08:30 default, a strict
+  23:30 / 06:45 on Today); his 3 daily numbers need one.
+- **Rules out:** a second grace or default anywhere, re-judging or taking back points paid before the change.
+
+### "Going to bed" is checked against the PC; the bedtime becomes the last PC use (2026-11-12)
+- **Decision:** a live "Going to bed" starts a watch (`core/bedSense.ts`, `sleep_bed_watch`). The desktop sends
+  idle seconds every minute; still using the PC more than 30 minutes after the tap takes the bed points back,
+  and once the PC is left alone 30 minutes the bedtime becomes the last moment it was used (no points). A gap of
+  10+ minutes in checks (PC asleep or off) ends the watch with the tap standing. Every step is a plain sentence
+  he can read.
+- **Why:** honest points: a bed tap followed by an hour at the PC is not bed.
+- **Rules out:** paying bed points the check has taken back, judging the next morning's input as "still up",
+  watching a bedtime typed long after.
+
+### Sleep reminders: 23:15 replaces 23:00 as one of the 4; 00:00 is a sleep-only exception (2026-11-12)
+- **Decision:** the wind-down slot moves from 23:00 to 23:15 (still one of the 4 daily pushes). On the desktop a
+  main-process timer sends it as a Windows notification only with the Sleep module on and bed not logged; a
+  second one at 00:00 (`lastcall`) goes out under the same conditions and does not count toward the 4. The
+  server tick never sends `lastcall` (it is not in `SLOTS`).
+- **Why:** the owner asked for real reminders at 23:15 and 00:00 that don't need a click in the app window, inside
+  the 4-a-day budget; midnight is the one exception he asked for.
+- **Rules out:** a fifth ordinary push, a midnight message on Telegram, any sleep reminder once bed is logged or
+  with Sleep off.
+
+### Discipline shows one day number: "Day N" from `state.day` (2026-11-12)
+- **Decision:** the page ring, the 90-day campaign, Today, the alert and the island all show `dayShown(state)`
+  (start day = Day 1, reset day = Day 0). `current` stays only for badges, ranks and milestones.
+- **Why:** the ring said "0 days clean" while Today said "Day 1" and the campaign "Day 0 of 90".
+- **Rules out:** showing `current` as the streak's day anywhere.
+

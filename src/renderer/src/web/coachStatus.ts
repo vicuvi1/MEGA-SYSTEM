@@ -16,6 +16,7 @@ import type { Services } from './webServices'
 import { neverMissTwice, type MissTwiceItem } from '@core/neverMissTwice'
 import { WATER_TARGET_ML } from '@core/defaults'
 import { focusBlocksStarted, honestScore, type SleepNight, type WeekDay } from '@core/threeNumbers'
+import { targetForDay } from '@core/sleep'
 
 
 /**
@@ -47,7 +48,7 @@ export interface CoachStatus {
   plan: { status: 'none' | 'proposed' | 'approved'; blocks: number; mustdos: number; headline: string; score?: number }
   promises: { awaiting: string[]; kept: number; missed: number }
   goals: { id: number; title: string; subject: string; pct: number; perDayMin: number; todayLeftMin: number; status: string; daysLeft: number }[]
-  today: { focusMin: number; mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; workoutDone: boolean; focusBlocks: number; sleep: SleepNight | null; score: number }
+  today: { focusMin: number; mustDone: number; mustTotal: number; waterMl: number; waterTarget: number; workoutDone: boolean; focusBlocks: number; sleep: SleepNight | null; score: number; sleepTargets?: { bed: string; up: string } }
   /** Focus minutes per day, the last 7 days (oldest first). */
   week: { day: string; min: number }[]
   /** Focus minutes the 7 days before that (to compare weeks). */
@@ -68,9 +69,12 @@ const json = (db: any, key: string) => {
 /** Last night: the sleep_logs row of the morning it ended in (today's), or null. */
 export function lastNight(db: any, today: string): SleepNight | null {
   try {
-    const r = db.prepare('SELECT bed_time, wake_time FROM sleep_logs WHERE day = ?').get(today) as { bed_time?: string | null; wake_time?: string | null } | undefined
+    const r = db.prepare('SELECT bed_time, wake_time, bed_target, wake_target FROM sleep_logs WHERE day = ?').get(today) as
+      | { bed_time?: string | null; wake_time?: string | null; bed_target?: string | null; wake_target?: string | null }
+      | undefined
     if (!r) return null
-    return { bedTime: r.bed_time || null, wakeTime: r.wake_time || null }
+    // The row's own targets: Today judges the night exactly as points did (core/sleep.ts).
+    return { bedTime: r.bed_time || null, wakeTime: r.wake_time || null, bedTarget: r.bed_target || null, wakeTarget: r.wake_target || null }
   } catch {
     return null
   }
@@ -159,7 +163,9 @@ export function coachStatus(s: Services, now = new Date()): CoachStatus {
       const sleep = lastNight(db, today)
       const mustDone = f.plan.items.length - open.length
       const mustTotal = f.plan.items.length
-      return { focusMin: f.todayMin, mustDone, mustTotal, waterMl: water.ml, waterTarget: water.target, workoutDone: (s.wallet.summary(now).todayRules ?? []).includes('body.workout_done'), focusBlocks, sleep, score: honestScore({ sleep, focusBlocks, mustDone, mustTotal }).score }
+      // The targets on time is judged by (Sleep settings, else 23:30 / 06:45): shown on Today even before a night is logged.
+      const sleepTargets = { bed: s.sleep.bedtimeTarget(), up: targetForDay(today, s.sleep.weekdayTarget(), s.sleep.weekendTarget()) }
+      return { focusMin: f.todayMin, mustDone, mustTotal, waterMl: water.ml, waterTarget: water.target, workoutDone: (s.wallet.summary(now).todayRules ?? []).includes('body.workout_done'), focusBlocks, sleep, score: honestScore({ sleep, focusBlocks, mustDone, mustTotal }).score, sleepTargets }
     })(),
     prevWeekMin: (() => {
       const focus = s.progress.input(null, now, 8).focus

@@ -416,13 +416,13 @@ export function offReply(m: ModulesOn, text: string): string | null {
 }
 
 /** The daily-push slot ids (notifyBudget `budget:<slot>:<day>`) and the module that owns each. */
-const SLOT_MODULE: Record<string, ModuleId> = { morning: 'today', afternoon: 'today', plan: 'today', weekly: 'today', winddown: 'sleep' }
+const SLOT_MODULE: Record<string, ModuleId> = { morning: 'today', afternoon: 'today', plan: 'today', weekly: 'today', winddown: 'sleep', lastcall: 'sleep' }
 
 /** The module a notification belongs to: the daily pushes by their slot, then its kind, then the page it opens. */
 export function notifModule(n: { id?: string; kind?: string; action?: { kind?: string; page?: string } | null }): ModuleId | null {
   const slot = /^budget:([a-z]+):/.exec(String(n.id ?? ''))
   if (slot && SLOT_MODULE[slot[1]]) return SLOT_MODULE[slot[1]]
-  if (/^night:/.test(String(n.id ?? ''))) return 'sleep'
+  if (/^(night|bedcheck):/.test(String(n.id ?? ''))) return 'sleep'
   const kind = String(n.kind ?? '')
   for (const m of MODULE_LIST) if (m.pushes.includes(kind)) return m.id
   const page = n.action?.kind === 'page' ? n.action.page : undefined

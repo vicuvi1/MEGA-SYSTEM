@@ -4,6 +4,8 @@ import {
   type DisciplineEvent, type DisciplineKind
 } from '@core/discipline'
 import { streakRuns } from '@core/disciplineView'
+import { REMINDERS } from '@core/coachKit'
+import { comebackRef, dropComeback } from '@core/comeback'
 import { LedgerError } from '@core/ledger'
 import type { DisciplineState } from '@shared/api'
 import type { DB } from './db'
@@ -70,13 +72,14 @@ export class Discipline {
       stealth: readSetting(this.db, 'discipline_stealth'),
       quote: quoteFor(today),
       checkIn: (() => {
-        const w = checkInWindow(events, today, now.getHours())
+        // Hours on the configured time zone's clock, the same one as wallet.today (not the PC's).
+        const w = checkInWindow(events, today, this.wallet.hour(now))
         const done = events.some((e) => (e.kind === 'checkin' || e.kind === 'reset') && e.day === w.day)
         return { mode: done && w.mode !== 'wait' ? ('done' as const) : w.mode, day: w.day }
       })(),
       history: events
         .filter((e) => e.day >= addDays(today, -7 * 27) && e.kind !== 'start')
-        .map((e) => ({ day: e.day, kind: e.kind, hour: new Date(e.ts).getHours() })),
+        .map((e) => ({ day: e.day, kind: e.kind, hour: this.wallet.hour(new Date(e.ts)) })),
       undoResetUntil: (() => {
         const r = resetUndoable(events, today, now)
         return r ? new Date(Date.parse(r.ts) + RESET_UNDO_MINUTES * 60_000).toISOString() : null
@@ -98,6 +101,10 @@ export class Discipline {
       if (!r) throw new LedgerError('A reset can only be taken back in the first 10 minutes.')
       // The log stays append-only: the reset is marked as taken back.
       setSetting(this.db, UNDONE_KEY, JSON.stringify([...undoneResets(this.db), r.id]))
+      // The comeback plan's check-ins for this reset go with it (core/comeback.ts).
+      const reminders = readSetting(this.db, REMINDERS)
+      const kept = dropComeback(reminders, comebackRef(r.day))
+      if (kept.length !== reminders.length) writeSetting(this.db, REMINDERS, kept)
       const undone = new Set(this.wallet.entries().filter((e) => e.kind === 'undo').map((e) => e.undoOf))
       for (const e of this.wallet.entries()) {
         if (undone.has(e.id) || e.kind === 'undo' || e.ts < r.ts.slice(0, 19)) continue
@@ -121,7 +128,7 @@ export class Discipline {
   checkIn(now = new Date()): { day: string; coins: number } {
     return this.db.transaction(() => {
       const appToday = this.wallet.today(now)
-      const win = checkInWindow(this.events(), appToday, now.getHours())
+      const win = checkInWindow(this.events(), appToday, this.wallet.hour(now))
       if (win.mode === 'wait') throw new LedgerError('The clean-day check-in opens at 19:00, when the day is done.')
       const today = win.day
       planCheckIn(this.events(), today)

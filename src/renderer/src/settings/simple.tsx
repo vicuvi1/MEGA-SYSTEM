@@ -8,7 +8,7 @@ import { life } from '../bridge'
 import { Row, Switch } from '../settingsUi'
 import { Icon } from '../Icon'
 
-const SLOT_NAME: Record<PushSlot, string> = { morning: 'your 3 must-dos', afternoon: 'afternoon nudge', weekly: 'the week', plan: "pick tomorrow's 3", winddown: 'wind down' }
+const SLOT_NAME: Record<PushSlot, string> = { morning: 'your 3 must-dos', afternoon: 'afternoon nudge', weekly: 'the week', plan: "pick tomorrow's 3", winddown: 'wind down (23:15)', lastcall: 'midnight sleep reminder' }
 
 export function SimpleModeSettings() {
   const [m, setM] = useState<SimpleMode>(DEFAULT_SIMPLE)

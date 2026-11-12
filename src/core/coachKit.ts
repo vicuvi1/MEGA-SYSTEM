@@ -68,6 +68,8 @@ export interface Reminder {
   outcome?: 'kept' | 'broken' | null
   /** HD: answered with Done or Snooze (island or Telegram): the island card goes. */
   handled?: boolean
+  /** Where it came from, so it can be taken back with it ("comeback:<day>": a reset's 72-hour plan). */
+  ref?: string
 }
 
 export const REMINDERS = 'coach_reminders'

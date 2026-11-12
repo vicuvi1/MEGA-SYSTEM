@@ -1,4 +1,4 @@
-import { dayKey } from '@core/dates'
+import { dayKey, hourIn } from '@core/dates'
 import { balance, LedgerError, planUndo, totalXp, effective, type LedgerEntry, type NewEntry } from '@core/ledger'
 import { levelInfo, type StatAllocation } from '@core/levels'
 import { planAward, type Rule } from '@core/rules'
@@ -279,6 +279,11 @@ export class Wallet {
 
   today(now = new Date()): string {
     return dayKey(now, this.timeZone)
+  }
+
+  /** The hour (0–23) on the same clock as today(): the configured time zone. */
+  hour(now = new Date()): number {
+    return hourIn(now, this.timeZone)
   }
 
   undo(id: number, note: string, now = new Date()): number {

@@ -5,19 +5,25 @@
 // At most 4 pushes a day, each slot once:
 //   07:00  morning    "your 3 must-dos"
 //   21:15  plan       "pick tomorrow's 3"
-//   23:00  winddown   "wind down, phone away"
+//   23:15  winddown   "15 minutes to bed" (Sleep: only if bed isn't logged; was 23:00)
 //   15:30  afternoon  one optional nudge (off by default)
 //   18:00  weekly     Sunday's summary of the 3 numbers (Sundays only)
+// One exception the owner asked for (2026-11-12, DECISIONS.md): 00:00 lastcall, a
+// second sleep reminder on the desktop only when bed still isn't logged. It does not
+// count toward the 4 and is not a slot of the server tick (not in SLOTS).
 // Everything else is silent and in the app only (the bell). Not pushes, so not
 // counted: timers you started yourself (a focus or study block ending, the rest
 // timer) are sounds in the app, and reminders you set yourself ("remind me at 18").
 // Text is neutral and private: "Life System: 2 of 3 done", never food or body details.
 
-export type PushSlot = 'morning' | 'plan' | 'winddown' | 'afternoon' | 'weekly'
+export type PushSlot = 'morning' | 'plan' | 'winddown' | 'afternoon' | 'weekly' | 'lastcall'
 
 export const DAILY_PUSH_CAP = 4
 export const SLOTS: PushSlot[] = ['morning', 'afternoon', 'weekly', 'plan', 'winddown']
-export const SLOT_TIME: Record<PushSlot, string> = { morning: '07:00', afternoon: '15:30', weekly: '18:00', plan: '21:15', winddown: '23:00' }
+export const SLOT_TIME: Record<PushSlot, string> = { morning: '07:00', afternoon: '15:30', weekly: '18:00', plan: '21:15', winddown: '23:15', lastcall: '00:00' }
+/** The sleep reminders the desktop sends itself (src/desktop/main.ts), only while bed isn't logged. */
+export const SLEEP_REMINDERS = ['winddown', 'lastcall'] as const
+export type SleepReminder = (typeof SLEEP_REMINDERS)[number]
 /** How long after its time a slot may still go out (a missed tick, the PC asleep). */
 export const SLOT_WINDOW_MIN = 45
 
@@ -35,7 +41,7 @@ export interface BudgetPrefs {
 
 export const DEFAULT_BUDGET: BudgetPrefs = { on: true, afternoon: false }
 
-export const isSlot = (x: unknown): x is PushSlot => typeof x === 'string' && (SLOTS as string[]).includes(x)
+export const isSlot = (x: unknown): x is PushSlot => typeof x === 'string' && (x === 'lastcall' || (SLOTS as string[]).includes(x))
 
 /** The bell id of a slot's message: one per slot and day, so every device adds it once. */
 export const slotNotifId = (slot: PushSlot, day: string): string => `budget:${slot}:${day}`
@@ -75,7 +81,9 @@ export function budgetCheck(ledger: BudgetLedger | null, slot: PushSlot | null, 
   if (slot === 'afternoon' && weekday === 0) return no("On Sundays the weekly summary takes the afternoon nudge's place")
   if (slot === 'weekly' && weekday != null && weekday !== 0) return no('The weekly summary is for Sundays')
   if (cur.sent.includes(slot)) return no('Already sent this one today')
-  if (cur.sent.length >= DAILY_PUSH_CAP) return no(`Today's ${DAILY_PUSH_CAP} pushes are used up: in the app only`)
+  // 00:00 lastcall: the owner's sleep-only exception, never one of the 4.
+  if (slot === 'lastcall') return { ok: true, reason: null, next: { day, sent: [...cur.sent, slot] } }
+  if (cur.sent.filter((s) => s !== 'lastcall').length >= DAILY_PUSH_CAP) return no(`Today's ${DAILY_PUSH_CAP} pushes are used up: in the app only`)
   return { ok: true, reason: null, next: { day, sent: [...cur.sent, slot] } }
 }
 
@@ -93,6 +101,26 @@ export function dueSlot(minute: number, weekday: number, prefs: BudgetPrefs = DE
   return null
 }
 
+/** The sleep reminder due at this minute of the day (23:15 or 00:00, up to SLOT_WINDOW_MIN after), or null. */
+export function sleepReminderDue(minute: number): SleepReminder | null {
+  for (const s of SLEEP_REMINDERS) {
+    const t = minOf(SLOT_TIME[s])
+    if (minute >= t && minute < t + SLOT_WINDOW_MIN) return s
+  }
+  return null
+}
+
+/**
+ * Should the desktop show tonight's sleep reminder? Only with the Sleep module on and
+ * bed not logged. 23:15 (winddown) is one of the 4: it goes out when it claims its slot,
+ * or when the slot is already this one's (the same push, also on Telegram). 00:00
+ * (lastcall) is the owner's exception and always passes the budget.
+ */
+export function sleepReminderShows(o: { slot: SleepReminder; sleepOn: boolean; bedLogged: boolean; claimed: boolean; alreadySent: boolean }): boolean {
+  if (!o.sleepOn || o.bedLogged) return false
+  return o.slot === 'lastcall' || o.claimed || o.alreadySent
+}
+
 /** The neutral text of a slot's push (no food, body or personal details). */
 export function slotText(slot: PushSlot, f: { mustDone: number; mustTotal: number; mustDos?: string[]; week?: string }): string {
   switch (slot) {
@@ -105,7 +133,9 @@ export function slotText(slot: PushSlot, f: { mustDone: number; mustTotal: numbe
     case 'plan':
       return "Life System: pick tomorrow's 3 must-dos. Reply with 3 lines, each with a number or minutes."
     case 'winddown':
-      return 'Life System: wind down, phone away. Asleep by 23:30.'
+      return 'Life System: 15 minutes to bed. Phone away, asleep by 23:30.'
+    case 'lastcall':
+      return 'Life System: it is midnight and bed is not logged. Go to sleep now.'
   }
 }
 

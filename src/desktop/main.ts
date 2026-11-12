@@ -1,6 +1,6 @@
 import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net, Notification, powerMonitor, protocol, session, shell, Tray } from 'electron'
-import { budgetCheck, slotOfId, type BudgetLedger } from '../core/notifyBudget'
-import { calendarDay } from '../core/dates'
+import { budgetCheck, sleepReminderDue, slotOfId, type BudgetLedger } from '../core/notifyBudget'
+import { calendarDay, dayKey } from '../core/dates'
 import { clipWorthSaving } from '../core/islandActions'
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
 import { appendFileSync, existsSync } from 'node:fs'
@@ -521,6 +521,20 @@ if (firstCopy) void app.whenReady().then(async () => {
       }
     }
     setInterval(tick, 60_000)
+    // Sleep (owner, 2026-11-12): a main-process clock, so it works with the window hidden in the tray.
+    // Every minute the app window gets the PC's idle seconds (the "Going to bed" check, core/bedSense.ts)
+    // and, once each at 23:15 and 00:00, a sleep reminder it sends as a Windows notification if bed
+    // isn't logged and the Sleep module is on (src/renderer/src/sleepNight.ts, core/notifyBudget.ts).
+    let sleepSent = ''
+    setInterval(() => {
+      if (win.isDestroyed()) return
+      const now = new Date()
+      const due = sleepReminderDue(now.getHours() * 60 + now.getMinutes())
+      const key = due ? `${due}:${dayKey(now)}` : ''
+      const remind = due && key !== sleepSent ? due : null
+      if (remind) sleepSent = key
+      win.webContents.send('desktop:sleep-tick', { idleSec: powerMonitor.getSystemIdleTime(), remind })
+    }, 60_000)
     // Seconds since the last mouse/keys, for the island (drift, focus quality).
     setInterval(() => {
       if (!pcPrefsNow.idle) return

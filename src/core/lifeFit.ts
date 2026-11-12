@@ -11,6 +11,7 @@
 // - How hard Ben pushes: Gentle / Firm / Push, mapped onto the tone and the
 //   nudge caps that already exist (never above them, never past quiet hours).
 
+import { BED_BY, UP_BY } from './sleep'
 import { cleanAreas, cleanPushPrefs, type AreaLevels, type PushPrefs } from './benPushes'
 
 export type PushLevel = 'gentle' | 'firm' | 'push'
@@ -45,9 +46,10 @@ export interface LifeFit {
 }
 
 export const LIFE_FIT_KEY = 'life_fit'
-export const DEFAULT_BED = '23:30'
-/** The wake target when none is set (the sleep rule's long-standing default). */
-export const DEFAULT_WAKE = '07:00'
+// One meaning of on time (core/sleep.ts): asleep by 23:30, up by 06:45.
+export const DEFAULT_BED = BED_BY
+/** The wake target when none is set. */
+export const DEFAULT_WAKE = UP_BY
 export const DEFAULT_LIFE_FIT: LifeFit = {
   latestBed: '00:00',
   work: { on: false, days: [1, 2, 3, 4, 5], from: '18:00', to: '22:00', minH: 1, maxH: 3 },

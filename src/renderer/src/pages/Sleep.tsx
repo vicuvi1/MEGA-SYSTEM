@@ -9,6 +9,7 @@ import { soundCoin, soundSuccess } from '../soundKit'
 import { useAction } from '../ui'
 import { ConnectCard } from './Connected'
 import { addDays } from '@core/dates'
+import { BED_BY, ON_TIME_GRACE_MIN, UP_BY } from '@core/sleep'
 import { CountUp } from '../motionKit'
 import { Select } from '../Select'
 
@@ -32,6 +33,7 @@ export function Sleep({ state, onState, onWallet, openEditor = 0 }: { state: Con
           </button>
         </div>
         <WakeEditor state={state} onState={onState} onWallet={onWallet} openSignal={openEditor} />
+        <OnTimeRule />
         <SleepCarePanel />
         <WakySleepView w={w} />
       </div>
@@ -48,6 +50,7 @@ export function Sleep({ state, onState, onWallet, openEditor = 0 }: { state: Con
         </div>
       )}
       <WakeEditor state={state} onState={onState} onWallet={onWallet} openSignal={openEditor} />
+      <OnTimeRule />
       <SleepCarePanel />
       <NativeSleepView onWallet={onWallet} />
       {!hasWaky && (
@@ -235,6 +238,25 @@ function WakySleepView({ w }: { w: ConnectionsState['waky'] }) {
   )
 }
 
+/** The one meaning of on time (core/sleep.ts), in words: the same targets and grace as Today, the score and points. */
+function OnTimeRule() {
+  const [s, setS] = useState<SleepSummary | null>(null)
+  useEffect(() => {
+    const load = () => void life.sleep.state().then(setS).catch(() => {})
+    load()
+    window.addEventListener('life-sleep-changed', load)
+    return () => window.removeEventListener('life-sleep-changed', load)
+  }, [])
+  const up = s?.weekdayTarget ?? UP_BY
+  const weekend = s?.weekendTarget ?? up
+  return (
+    <p className="hint" data-testid="sleep-on-time-rule">
+      On time means asleep by {s?.bedTarget ?? BED_BY} and up by {up}
+      {weekend !== up ? ` (${weekend} at the weekend)` : ''}, with {ON_TIME_GRACE_MIN} minutes of grace. Today, the day score and points all use this.
+    </p>
+  )
+}
+
 function NativeSleepView({ onWallet }: { onWallet: () => void }) {
   const pts = usePoints()
   const [summary, setSummary] = useState<SleepSummary | null>(null)
@@ -242,9 +264,9 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
   const [quality, setQuality] = useState(5)
   const [bedTime, setBedTime] = useState('')
   const [editingTargets, setEditingTargets] = useState(false)
-  const [weekdayDraft, setWeekdayDraft] = useState('07:00')
-  const [weekendDraft, setWeekendDraft] = useState('08:30')
-  const [bedDraft, setBedDraft] = useState('23:00')
+  const [weekdayDraft, setWeekdayDraft] = useState(UP_BY)
+  const [weekendDraft, setWeekendDraft] = useState(UP_BY)
+  const [bedDraft, setBedDraft] = useState(BED_BY)
   const act = useAction()
 
   const refresh = () => {
@@ -389,7 +411,15 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
               <p>
                 <b>In bed at {(summary.tonight ?? todayLog)!.bedTime}</b>
               </p>
-              <small className="muted">{(summary.tonight ?? todayLog)?.bedOnTime ? 'Bedtime on-time award received.' : 'Bedtime logged.'}</small>
+              <small className="muted">{(summary.tonight ?? todayLog)?.bedOnTime && !summary.bedCheck?.stillUp ? 'Bedtime on-time award received.' : 'Bedtime logged.'}</small>
+              {summary.bedCheck && summary.bedCheck.lines.length > 0 && (
+                <ul className="hint small" data-testid="sleep-bed-check" aria-label="What the bedtime check saw">
+                  {summary.bedCheck.lines.map((l, i) => (
+                    <li key={i}>{l}</li>
+                  ))}
+                  {!summary.bedCheck.done && !!window.desktop && <li>The PC is watched for 30 minutes: if it stays in use, the bed points go back.</li>}
+                </ul>
+              )}
             </div>
           ) : (
             <div className="log-form">

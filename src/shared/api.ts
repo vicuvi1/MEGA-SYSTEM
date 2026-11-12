@@ -778,6 +778,8 @@ export interface LifeApi {
     setTargets(weekday: string, weekend: string, bedtime?: string): Promise<SleepSummary>
     logs?(): Promise<SleepLog[]>
     setQuality?(day: string, quality: number): Promise<SleepLog>
+    /** Desktop only, every minute: the PC's idle seconds for the "Going to bed" check (core/bedSense.ts). */
+    bedActivity?(idleSec: number): Promise<{ said: string | null }>
   }
   money: {
     state(): Promise<NativeMoneySummary>

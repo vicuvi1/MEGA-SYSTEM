@@ -19,6 +19,8 @@ export interface SleepSummary {
   tonight?: SleepLog | null
   /** Your bedtime target. */
   bedTarget?: string
+  /** What the "Going to bed" check saw (core/bedSense.ts), in plain words, for the latest night. */
+  bedCheck?: { day: string; lines: string[]; stillUp: boolean; done: boolean } | null
   today: string
   weekdayTarget: string
   weekendTarget: string
@@ -44,20 +46,27 @@ export function fromMinutes(min: number): string {
 }
 
 /**
- * On-time check: wake up at or before target (with up to 15 min grace, consistent with Waky).
+ * The ONE meaning of "on time" (owner, 2026-11-12): asleep by 23:30 and up by
+ * 06:45, with at most 5 minutes of grace. Points, the streak, Today, the day
+ * score and the island pill all judge with these two functions and these
+ * defaults (your own targets in Sleep settings replace the times, never the grace).
  */
-/** On time = within 20 minutes of the target (the same grace as Waky). */
-export function isWakeOnTime(wakeTime: string, targetTime: string, graceMinutes = 20): boolean {
+export const BED_BY = '23:30'
+export const UP_BY = '06:45'
+export const ON_TIME_GRACE_MIN = 5
+
+/** Up on time: from 03:00 up to the target plus the grace. */
+export function isWakeOnTime(wakeTime: string, targetTime: string = UP_BY, graceMinutes = ON_TIME_GRACE_MIN): boolean {
   const w = toMinutes(wakeTime)
   const t = toMinutes(targetTime)
-  return w <= t + graceMinutes
+  return w >= 180 && w <= t + Math.min(graceMinutes, ON_TIME_GRACE_MIN)
 }
 
-/** Bedtime check: in bed by the target, with 30 min grace. Earlier is on time too (P6). */
-export function isBedOnTime(bedTime: string, targetTime: string, graceMinutes = 30): boolean {
+/** In bed on time: by the target plus the grace. Earlier is on time too (P6). */
+export function isBedOnTime(bedTime: string, targetTime: string = BED_BY, graceMinutes = ON_TIME_GRACE_MIN): boolean {
   // Minutes since noon, so 23:30 and 00:30 compare the right way round.
   const night = (m: number) => (m - 720 + 1440) % 1440
-  return night(toMinutes(bedTime)) <= night(toMinutes(targetTime)) + graceMinutes
+  return night(toMinutes(bedTime)) <= night(toMinutes(targetTime)) + Math.min(graceMinutes, ON_TIME_GRACE_MIN)
 }
 
 export function targetForDay(day: string, weekdayTarget: string, weekendTarget: string): string {
@@ -79,8 +88,8 @@ export function wakeLoggedToday(todayLog: Pick<SleepLog, 'day' | 'wakeTime'> | n
 export function computeSleepStats(
   logs: SleepLog[],
   today: string,
-  weekdayTarget = '07:00',
-  weekendTarget = '08:30'
+  weekdayTarget = UP_BY,
+  weekendTarget = weekdayTarget
 ): SleepSummary {
   // A row with only a bedtime (the night before a wake-up) isn't a morning yet.
   const valid = logs.filter((l) => l.day <= today && !!l.wakeTime).sort((a, b) => b.day.localeCompare(a.day))

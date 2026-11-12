@@ -88,7 +88,7 @@ export function SleepToday({ sleep, onOpen }: { sleep: SleepSummary | null; onOp
         <span className={log?.bedTime ? (log.bedOnTime ? 'good' : 'late') : ''}>
           <small>Bed last night</small>
           <b>{log?.bedTime ?? '—'}</b>
-          <small>{log?.bedTime ? `goal ${log.bedTarget ?? sleep.bedTarget ?? '23:00'}${log.bedOnTime ? ' · on time' : ''}` : 'not logged'}</small>
+          <small>{log?.bedTime ? `goal ${log.bedTarget ?? sleep.bedTarget ?? '23:30'}${log.bedOnTime ? ' · on time' : ''}` : 'not logged'}</small>
         </span>
         <span>
           <small>Wake-up streak</small>
