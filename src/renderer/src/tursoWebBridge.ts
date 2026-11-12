@@ -47,6 +47,7 @@ import { cleanSetup, cleanState as cleanCustomState, readSetup, CUSTOM_MAX_BYTES
 import { cleanLooks, type CoachLooks } from '@core/coachLooks'
 import { cleanWallpaper, okWallpaperPhoto, type WallpaperPrefs } from '@core/wallpaper'
 import { cleanIndex, mergeIndex, type VaultIndex } from '@core/vaultSync'
+import { cleanReceipts, mergeReceipts, MONEY_RECEIPTS_KEY, type ReceiptIndex } from '@core/receiptIndex'
 import { financeSpending } from '@core/progress'
 
 /** What every screen listens to; sent when live data arrived. */
@@ -1754,6 +1755,16 @@ export function createTursoWebBridge(): Bridge {
         (await mirrorP).write((db) => {
           const merged = mergeIndex(cleanIndex(readSetting(db as any, 'vault_index')), cleanIndex(next))
           writeSetting(db as any, 'vault_index', merged as unknown as Record<string, unknown>)
+          return merged
+        })
+    },
+    // Money receipts (docs/areas/rewards-money.md): the synced index, metadata only.
+    moneyReceipts: {
+      index: async () => (await mirrorP).read((db) => cleanReceipts(readSetting(db as any, MONEY_RECEIPTS_KEY))),
+      saveIndex: async (next: ReceiptIndex) =>
+        (await mirrorP).write((db) => {
+          const merged = mergeReceipts(cleanReceipts(readSetting(db as any, MONEY_RECEIPTS_KEY)), cleanReceipts(next))
+          writeSetting(db as any, MONEY_RECEIPTS_KEY, merged as unknown as Record<string, unknown>)
           return merged
         })
     },

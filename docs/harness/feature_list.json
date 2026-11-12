@@ -1278,6 +1278,20 @@
   ],
   "evidence": "2026-11-12: branch data-safety; tsc, full vitest (4336) and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "core/backupPack.ts, backupCheck.ts, backupPlan.ts (restorePlan, fkOrder, markRestoredApps, localBackupsToDelete), riskChange.ts, dataSafety.ts, zip.ts; api/_snapshots.mjs (parts), db.mjs {snapshotPart}, cron.mjs job=backup list/part and job=offsite; web/cloudBackup.ts, restoreApps.ts, restoreDrill.ts, appSync.ts (restore id, big-change guard); desktop/localBackups.ts, backups.ts; renderer safety/*; .github/workflows/backup.yml; docs/RECOVERY.md. No schema change (server tables made with CREATE TABLE IF NOT EXISTS)."
+ },
+ {
+  "id": "F-MONEY-TAXES-3",
+  "priority": 1,
+  "area": "money",
+  "title": "Money v2 phase 3: tax tags, the yearly tax summary, the accountant export and receipts in Google Drive",
+  "user_visible_behavior": "Finance Helper → Reports → Taxes: 'Not tax advice: check with an accountant.' on every view; the tax situation (individual entrepreneur by default, individual, IT Park, or not set = totals only) with dated, sourced numbers you can change; taxable income, deductible costs, non-taxable income and VAT for the year, by source, by category, by book and month by month, totals also in USD or EUR at today's rate; a rough estimate and the deadline. Tag records one by one, many at once (also from the Log table's bulk bar) or once per category. 'Excel for your accountant' saves one .xlsx (Entries with a Drive link per receipt, and Totals). A cost's edit sheet has 'Attach receipt' (photo or PDF): kept on this device at once, then uploaded to Google Drive 'Life System/Receipts/YYYY-MM'; while Drive is not connected it waits and goes later.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeTax.test.ts src/renderer/src/web/financeAccountant.test.ts src/core/receiptIndex.test.ts src/renderer/src/money/receipts.test.ts",
+   "SMOKE_ONLY=\"Money taxes\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch money-phase3-taxes; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "apps/finance/js/tax.js, taxprofiles.js, accountant.js, receipts.js, screens/taxes.js, css/tax.css; app.js (Taxes tab, bulk 'Tax tag…', sheet row, keepOnEdit); core/receiptIndex.ts; renderer/src/money/receipts.ts + receiptBridge.ts; EmbedHost.tsx (2 hooks); tursoWebBridge.ts moneyReceipts; settingsKeys money_receipts; modules.ts receiptUpload; vault/driveApi.ts hides receipt folders; e2e/smokeTaxes.mjs. Not tried against the real Google Drive yet (fakes only)."
  }
  ]
 }

@@ -44,6 +44,7 @@ import * as RateGaps from './screens/rategaps.js';
 import * as WorkHour from './screens/workhour.js';
 import * as YearReview from './screens/yearreview.js';
 import * as LongView from './screens/longview.js';
+import * as Taxes from './screens/taxes.js';
 import { workText } from './workhours.js';
 import { planSplit, splitTransfers, splitPrefs, isSplit } from './split.js';
 import { openBankImport, rowsFromFile, decodeText } from './screens/bankimport.js';
@@ -1133,6 +1134,7 @@ function bulkBar() {
     <span class="muted small">${[out ? `−${money(out)}` : '', inc ? `+${money(inc)}` : ''].filter(Boolean).join(' · ')}</span>
     <select data-bulk="category" aria-label="Set category"><option value="">Category…</option>${cats('expense', 'Spent')}${cats('income', 'Earned')}</select>
     <select data-bulk="account" aria-label="Set account"><option value="">Account…</option>${accountOptionsHTML(state.settings.accounts.filter((a) => !a.archived), '', { baseCur: state.settings.currency })}</select>
+    ${Taxes.bulkSelectHTML()}
     <label class="bulk-date"><span>Date</span><input type="date" data-bulk="date" aria-label="Set date"></label>
     <button type="button" class="btn danger" data-act="bulk-del">Delete</button>
     <button type="button" class="btn" data-act="bulk-clear">Clear</button>
@@ -1199,12 +1201,13 @@ function onBulkChange(el) {
       if (M.category(state, v)?.type !== t.type) { skipped++; continue; }
       t.category = v;
     } else if (el.dataset.bulk === 'account') setTxAccount(t, v);
+    else if (el.dataset.bulk === 'tax' && !Taxes.bulkTag(t, v)) { skipped++; continue; }
     M.touch(t);
     changed++;
   }
   if (!changed) { toast(skipped ? 'None of the selected records can take that (moves, or a different type)' : 'Nothing changed'); el.value = ''; return; }
   commit();
-  const what = { category: 'category', account: 'account', date: 'date' }[el.dataset.bulk];
+  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag' }[el.dataset.bulk];
   toast(`Changed the ${what} of ${changed} record${changed === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'Undo', () => undoRedo(-1));
 }
 
@@ -1932,6 +1935,7 @@ function openTxSheet(existing = null, preset = {}) {
       ${!existing && !isT && !draft.fromRule ? `<div class="row2"><label class="field"><span>Date</span><input id="tx-date" type="date" value="${esc(draft.date)}"></label>
         <label class="field"><span>Repeat</span><select id="tx-repeat"><option value="">No</option>${FREQS.filter((f) => f.id !== 'once').map((f) => `<option value="${f.id}" ${draft.repeat === f.id ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label></div>`
     : `<label class="field"><span>Date</span><input id="tx-date" type="date" value="${esc(draft.date)}"></label>`}
+      ${existing ? Taxes.sheetRow(existing.id) : ''}
       <div class="btns">
         ${existing ? '<button type="button" class="btn danger" data-act="tx-delete">Delete</button>' : ''}
         ${existing && draft.type === 'income' && !existing.loan ? '<button type="button" class="btn" data-act="tx-split">Split</button>' : ''}
@@ -2127,6 +2131,8 @@ function openTxSheet(existing = null, preset = {}) {
       state.recurring.push({ id, createdAt: now, updatedAt: now, type: tx.type, amount: tx.amount, currency: tx.currency, account: tx.account, category: tx.category, note: tx.note, ...(tx.person ? { person: tx.person } : {}), every: draft.repeat, start: tx.date, lastDone: tx.date, auto: false, paused: false });
       tx.recurring = id;
     }
+    // The form does not show the tax tag or receipts: keep them (js/screens/taxes.js).
+    if (existing) Object.assign(tx, Taxes.keepOnEdit(state, existing.id));
     if (existing) state.tx = state.tx.map((t) => (t.id === existing.id ? tx : t));
     else state.tx.push(tx);
     // You picked or confirmed the subcategory: remember the shop for next time.
@@ -2149,6 +2155,7 @@ function openTxSheet(existing = null, preset = {}) {
   // paint() replaces the sheet's contents (fresh inputs each time); this click
   // listener sits on the sheet itself, so it is bound once.
   openSheet('', (sheet) => {
+    Taxes.bindSheet(sheet);
     sheet.addEventListener('click', (e) => {
       const seg = e.target.closest('.seg button');
       if (seg) {
@@ -3480,9 +3487,9 @@ document.addEventListener('keydown', (e) => {
 const SUB_TABS = [
   [{ tab: 'accounts', label: 'Cards & accounts' }, { tab: 'rates', label: 'Rates & converter' }],
   [{ tab: 'people', label: 'People & loans' }, { tab: 'clients', label: 'Clients & invoices' }],
-  [{ tab: 'reports', label: 'Reports' }, { tab: 'review', label: 'Year in review' }, { tab: 'longview', label: 'Long view' }],
+  [{ tab: 'reports', label: 'Reports' }, { tab: 'review', label: 'Year in review' }, { tab: 'longview', label: 'Long view' }, { tab: 'taxes', label: 'Taxes' }],
 ];
-const NAV_PARENT = { rates: 'accounts', clients: 'people', review: 'reports', longview: 'reports' };
+const NAV_PARENT = { rates: 'accounts', clients: 'people', review: 'reports', longview: 'reports', taxes: 'reports' };
 
 const SCREENS = {
   home: { view: viewHome, onClick: (a, el) => Plan.onClick(a, el) },
@@ -3495,6 +3502,7 @@ const SCREENS = {
   reports: ReportsScreen,
   review: YearReview,
   longview: LongView,
+  taxes: Taxes,
   rates: RatesScreen,
   telegram: TelegramHub,
   bot: TelegramHub,

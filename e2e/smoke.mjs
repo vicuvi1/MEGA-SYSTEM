@@ -945,6 +945,8 @@ try {
     // Read only: every stored record is exactly as it was.
     if (JSON.stringify(await storedTx()) !== txBefore) throw new Error('opening the long view changed a stored record')
   })
+  // Money v2 phase 3: a tax tag, the year summary, the accountant export (e2e/smokeTaxes.mjs).
+  await (await import('./smokeTaxes.mjs')).taxSteps({ step, pg, open, financeFrame, storedTx })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.

@@ -79,11 +79,12 @@ export const MODULE_LIST: ModuleDef[] = [
     line: 'Finance Helper: safe to spend, quick add and your categories.',
     pages: ['money'],
     island: ['money'],
-    desktop: [],
+    // Receipt upload to Google Drive is Money's (money/receiptBridge.ts): it runs while Photo Locker is off.
+    desktop: ['receiptUpload'],
     server: [],
     bot: ['expense', 'buy', 'spent', 'pay', 'paid', 'balance', 'accounts', 'money'],
     pushes: [],
-    settings: ['app_sync_finance', 'money_daily_budget', 'money_nothing_spent']
+    settings: ['app_sync_finance', 'money_daily_budget', 'money_nothing_spent', 'money_receipts']
   },
   {
     id: 'sleep',

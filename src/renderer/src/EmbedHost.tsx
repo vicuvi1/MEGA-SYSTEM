@@ -26,6 +26,7 @@ import { Icon } from './Icon'
 import { offerWorkoutNote } from './benPushFeed'
 import { openTab } from './PageTabs'
 import { clearSportStart, SPORT_START_CODE, SPORT_START_EVENT, sportStartPending } from './sportStart'
+import { handleReceiptMessage, startReceiptUploads } from './money/receiptBridge'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
@@ -64,6 +65,8 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
       // SO4: an embedded app's sound plays through the app's one sound kit.
       const snd = parseBridgeMessage(data, e.origin, window.location.origin)
       if (snd?.action === 'SOUND') return embedSound(snd.payload)
+      // Money receipts from Finance Helper: kept on this device, then to Google Drive (money/receiptBridge.ts).
+      if (handleReceiptMessage(data, e.source as Window | null)) return
 
       // Sport Track (Iron Pulse)
       if (data.type === 'SPORT_WORKOUT_LOGGED' || (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'SPORT_WORKOUT_LOGGED')) {
@@ -251,7 +254,11 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
     }
 
     window.addEventListener('message', onWindowMessage)
-    return () => window.removeEventListener('message', onWindowMessage)
+    const stopReceipts = startReceiptUploads()
+    return () => {
+      window.removeEventListener('message', onWindowMessage)
+      stopReceipts()
+    }
   }, [])
 
   useEffect(() => {

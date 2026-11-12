@@ -195,6 +195,12 @@ export type Bridge = LifeApi & {
     /** Joins with the saved index (another device may have saved in between) and saves. */
     saveIndex(next: import('@core/vaultSync').VaultIndex): Promise<import('@core/vaultSync').VaultIndex>
   }
+  /** Money receipts' synced index `money_receipts` (metadata only, core/receiptIndex.ts). */
+  moneyReceipts?: {
+    index(): Promise<import('@core/receiptIndex').ReceiptIndex>
+    /** Joins with the saved index and saves (read → merge → write). */
+    saveIndex(next: import('@core/receiptIndex').ReceiptIndex): Promise<import('@core/receiptIndex').ReceiptIndex>
+  }
   /** "Am I improving?": the last 7 days against your usual week (web). */
   progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights>; growth?(): Promise<Growth>; seenMilestones?(): Promise<string[]>; markMilestones?(ids: string[], replace?: boolean): Promise<void> }
   /** Day templates for the calendar ("study day"), synced (web). */
