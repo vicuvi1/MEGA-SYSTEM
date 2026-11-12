@@ -1,8 +1,12 @@
-// The app lock on the web, compatible with the desktop: the PIN is stored as
-// "saltHex:scryptHex" in settings.pin_hash (Node's scrypt defaults: N=16384,
-// r=8, p=1, 32 bytes). An older web version stored the PIN in plain text
-// there, which locked the desktop out; such a PIN still works once and is
-// then saved hashed. 2007 only opens the app when no PIN was ever set.
+// The app lock on the web and the desktop. The server checks the PIN
+// (sys_auth). For unlocking offline, each device keeps its OWN copy of the
+// hash ("saltHex:scryptHex", Node's scrypt defaults: N=16384, r=8, p=1, 32
+// bytes) in local storage, saved after the server accepted the PIN; it is
+// never synced, so no other session can read it (the shared settings.pin_hash
+// copy was crackable by any signed-in page and is gone). A device with no
+// local copy must be online once to unlock. Only the dev/test direct-Turso
+// mode still keeps the PIN in settings (no server there). 2007 only opens the
+// app when no PIN was ever set (direct mode).
 import { scrypt } from 'scrypt-js'
 import type { AuthStatus } from '@shared/api'
 import { getSetting, setSetting } from '../../../main/settings'
@@ -33,12 +37,45 @@ export async function pinMatches(stored: string | null, pin: string): Promise<bo
   return /^\d{4,12}$/.test(stored) && stored === pin // the old plain-text web PIN
 }
 
-export function createWebAuth(mirror: Mirror) {
+/** Where a device keeps its offline PIN check. */
+export interface PinStore {
+  read(): Promise<string | null>
+  write(value: string): Promise<void>
+}
+
+/** This device's own offline copy, in local storage (never synced; a blocked storage just means "online only"). */
+export function localPinStore(key = 'life-offline-pin', storage: () => Storage | undefined = () => (typeof localStorage === 'undefined' ? undefined : localStorage)): PinStore {
+  return {
+    read: async () => {
+      try {
+        return storage()?.getItem(key) ?? null
+      } catch {
+        return null
+      }
+    },
+    write: async (value) => {
+      try {
+        storage()?.setItem(key, value)
+      } catch {
+        /* private window: unlocking needs the internet */
+      }
+    }
+  }
+}
+
+export const OFFLINE_NO_COPY = 'No internet: connect once to unlock with your PIN on this device'
+
+/**
+ * `local`: the device's own offline copy (website and installed app, where the
+ * server checks the PIN). Without it (direct Turso, dev and tests only) the
+ * PIN is read from and saved to settings as before.
+ */
+export function createWebAuth(mirror: Mirror, local?: PinStore) {
   let locked = true
   let failures = 0
   let blockedUntil = 0
-  const stored = () => mirror.read((db) => getSetting(db as any, 'pin_hash'))
-  const save = (value: string) => mirror.write((db) => setSetting(db as any, 'pin_hash', value))
+  const stored = () => (local ? local.read() : mirror.read((db) => getSetting(db as any, 'pin_hash')))
+  const save = (value: string) => (local ? local.write(value) : mirror.write((db) => setSetting(db as any, 'pin_hash', value)))
   const status = (): AuthStatus => ({ pinSet: true, locked })
 
   return {
@@ -48,6 +85,8 @@ export function createWebAuth(mirror: Mirror) {
       const now = Date.now()
       if (!checked && now < blockedUntil) throw new Error(`Too many tries. Wait ${Math.ceil((blockedUntil - now) / 1000)} s`)
       const s = await stored()
+      // Offline with no copy of our own: never fall back to 2007.
+      if (!checked && local && !s) throw new Error(OFFLINE_NO_COPY)
       if (!checked && !(await pinMatches(s, pin))) {
         if (++failures >= MAX_TRIES) {
           failures = 0
@@ -58,8 +97,10 @@ export function createWebAuth(mirror: Mirror) {
       }
       failures = 0
       locked = false
-      // Upgrade an old plain-text PIN so the desktop can read it again.
-      if (s && !s.includes(":") && (await pinMatches(s, pin))) void hashPin(pin).then(save).catch(() => {})
+      // The server accepted it: this device's offline copy follows (a new PIN, a first unlock).
+      if (local && checked && !(s && s.includes(':') && (await pinMatches(s, pin)))) await hashPin(pin).then(save).catch(() => {})
+      // Direct mode: upgrade an old plain-text PIN so the desktop can read it again.
+      else if (!local && s && !s.includes(':') && (await pinMatches(s, pin))) void hashPin(pin).then(save).catch(() => {})
       return status()
     },
     setPin: async (pin: string, currentPin?: string): Promise<AuthStatus> => {

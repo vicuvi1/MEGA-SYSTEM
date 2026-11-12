@@ -6,7 +6,7 @@
 // settings at /api/telegram, so they answer 24/7. Safe to call often: a bot
 // already pointed here is left as it is. Production only (a preview must not
 // take the bots away from the live site).
-import { bearer, config, cronSecretOk, ensureWebhook, leftBots, readBody, send, serverBots, sessionOk, requireSession, tg } from './_lib.mjs'
+import { bearer, config, cronSecretOk, ensureWebhook, leftBots, readBody, send, serverBots, requireSession, tg } from './_lib.mjs'
 
 const BOTS = ['MEGA_BOT_TOKEN', 'TELEGRAM_BOT_TOKEN', 'SPORT_BOT_TOKEN', 'FINANCE_BOT_TOKEN', 'MAN_BOT_TOKEN', 'WAKY_BOT_TOKEN']
 
@@ -31,7 +31,8 @@ async function check(token) {
 
 /** The bots' health (was api/bot-health.mjs). */
 export async function botHealth(req, res) {
-  if (!cronSecretOk(req) && !(await sessionOk(config(), bearer(req)).catch(() => false))) return send(res, 401, { error: 'Not allowed' })
+  // A database hiccup is a 503 (requireSession), never a 401 that signs the app out.
+  if (!cronSecretOk(req) && !(await requireSession(res, config(), bearer(req)))) return
   const out = {}
   const seen = new Map()
   for (const name of BOTS) {

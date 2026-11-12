@@ -42,12 +42,21 @@ export async function unsubscribe(cfg, endpoint, fetchImpl = fetch) {
   await run(cfg, [[T_PUSH], ['DELETE FROM sys_push WHERE endpoint = ?', [String(endpoint)]]], fetchImpl)
 }
 
-/** The offline helper asks "what's new?" with its push address: the newest unread (≤ 30 min old). */
+/**
+ * Which bell entries may wake a phone (the daily push budget, core/notifyBudget.ts):
+ * only the ones that passed budgetCheck, whose id is `budget:<slot>:<day>`
+ * (slotNotifId: at most 4 a day). Everything else stays bell-only. When the
+ * owner turned the budget off (simple_mode.budget === false), every unread one
+ * may, as before the budget.
+ */
+export const PUSHABLE = "(id LIKE 'budget:%' OR (SELECT CASE WHEN json_valid(value) THEN json_extract(value, '$.budget') END FROM settings WHERE key = 'simple_mode') IS 0)"
+
+/** The offline helper asks "what's new?" with its push address: the newest unread pushable ones (≤ 30 min old). */
 export async function peek(cfg, endpoint, now = Date.now(), fetchImpl = fetch) {
   const [, known] = await run(cfg, [[T_PUSH], ['SELECT 1 FROM sys_push WHERE endpoint = ?', [String(endpoint)]]], fetchImpl)
   if (!known.length) return []
   const since = new Date(now - 30 * 60_000).toISOString()
-  const [rows] = await run(cfg, [['SELECT id, title, body, action FROM notifications WHERE read_at IS NULL AND dismissed_at IS NULL AND at >= ? AND at <= ? ORDER BY at DESC LIMIT 3', [since, new Date(now).toISOString()]]], fetchImpl).catch(() => [[]])
+  const [rows] = await run(cfg, [[`SELECT id, title, body, action FROM notifications WHERE read_at IS NULL AND dismissed_at IS NULL AND at >= ? AND at <= ? AND ${PUSHABLE} ORDER BY at DESC LIMIT 3`, [since, new Date(now).toISOString()]]], fetchImpl).catch(() => [[]])
   return rows.map(([id, title, body]) => ({ id: String(id), title: String(title), body: body == null ? '' : String(body) }))
 }
 
@@ -64,13 +73,13 @@ export function vapidAuth(endpoint, env = process.env, now = Date.now()) {
 }
 
 /**
- * After each tick: if there are unread notifications newer than the last
- * push, wake every subscribed phone (an empty push). Gone subscriptions
+ * After each tick: if there are unread pushable notifications (PUSHABLE) newer
+ * than the last push, wake every subscribed phone (an empty push). Gone subscriptions
  * (404/410) are removed.
  */
 export async function pushNew(cfg, env = process.env, now = Date.now(), fetchImpl = fetch) {
   if (!vapidPublic(env) || !env.VAPID_PRIVATE_KEY) return 0
-  const [, subs, newest] = await run(cfg, [[T_PUSH], ['SELECT endpoint, last_at FROM sys_push'], ['SELECT MAX(at) FROM notifications WHERE read_at IS NULL AND dismissed_at IS NULL AND at <= ?', [new Date(now).toISOString()]]], fetchImpl)
+  const [, subs, newest] = await run(cfg, [[T_PUSH], ['SELECT endpoint, last_at FROM sys_push'], [`SELECT MAX(at) FROM notifications WHERE read_at IS NULL AND dismissed_at IS NULL AND at <= ? AND ${PUSHABLE}`, [new Date(now).toISOString()]]], fetchImpl)
   const latest = newest[0]?.[0]
   if (!latest || !subs.length) return 0
   let sent = 0

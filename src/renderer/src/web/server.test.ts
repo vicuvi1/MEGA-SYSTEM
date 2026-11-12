@@ -129,8 +129,8 @@ describe('web server', () => {
     expect((await changePin(cfg, '4821', '12', null, Date.now(), fetchImpl)).status).toBe(400)
     expect((await changePin(cfg, '4821', '123456', null, Date.now(), fetchImpl, '7.7.7.8')).status).toBe(200)
     expect((await login(cfg, '123456', Date.now(), fetchImpl, '7.7.7.9')).status).toBe(200)
-    // The devices' offline copy follows.
-    expect(await pinMatches(String(db.exec("SELECT value FROM settings WHERE key = 'pin_hash'")[0].values[0][0]), '123456')).toBe(true)
+    // No copy in settings (any signed-in page reads settings); devices keep their own.
+    expect(db.exec("SELECT value FROM settings WHERE key = 'pin_hash'")).toEqual([])
   })
 
   it('a database hiccup is "try again", never "signed out" (A4)', async () => {

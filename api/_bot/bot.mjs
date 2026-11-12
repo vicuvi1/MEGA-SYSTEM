@@ -44206,18 +44206,43 @@ function privateIp(ip) {
 		return a === 0 || a === 10 || a === 127 || a >= 224 || a === 100 && b >= 64 && b <= 127 || a === 169 && b === 254 || a === 172 && b >= 16 && b <= 31 || a === 192 && b === 168 || a === 192 && b === 0 || a === 198 && (b === 18 || b === 19);
 	}
 	if (s.includes(":")) {
-		if (s === "::" || s === "::1") return true;
-		const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/.exec(s);
-		if (mapped) return privateIp(mapped[1]);
-		if (/^::ffff:/.test(s)) return true;
-		const first = parseInt(s.split(":")[0] || "0", 16);
+		const g = ipv6Groups(s);
+		if (!g) return true;
+		const [first, second] = g;
+		if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0 || g[5] === 65535)) return true;
 		if ((first & 65024) === 64512) return true;
 		if ((first & 65472) === 65152) return true;
 		if ((first & 65280) === 65280) return true;
-		if (first === 100 || first === 8193 && /^2001:0?db8:/.test(s)) return true;
+		if (first === 100) return true;
+		if (first === 8193 && (second === 0 || second === 3512)) return true;
+		if (first === 8194) return privateIp(`${second >> 8}.${second & 255}.${g[2] >> 8}.${g[2] & 255}`);
 		return false;
 	}
 	return true;
+}
+/** The 8 groups of an IPv6 address (a dotted IPv4 tail allowed), or null when it isn't one. */
+function ipv6Groups(s) {
+	let text = s.replace(/%.*$/, "");
+	const tail = /(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(text);
+	if (tail) {
+		const b = tail.slice(1).map(Number);
+		if (b.some((n) => n > 255)) return null;
+		text = text.slice(0, tail.index) + `${(b[0] << 8 | b[1]).toString(16)}:${(b[2] << 8 | b[3]).toString(16)}`;
+	}
+	const halves = text.split("::");
+	if (halves.length > 2) return null;
+	const part = (h) => h ? h.split(":") : [];
+	const head = part(halves[0]);
+	const back = halves.length === 2 ? part(halves[1]) : [];
+	const fill = 8 - head.length - back.length;
+	if (halves.length === 2 ? fill < 1 : fill !== 0) return null;
+	const all = [
+		...head,
+		...Array(halves.length === 2 ? fill : 0).fill("0"),
+		...back
+	];
+	if (all.some((x) => !/^[0-9a-f]{1,4}$/.test(x))) return null;
+	return all.map((x) => parseInt(x, 16));
 }
 var isIpLiteral = (h) => /^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(":");
 /**

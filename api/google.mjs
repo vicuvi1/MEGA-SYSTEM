@@ -14,7 +14,7 @@
 //   create {title, start, end, description?, calendarId?, colorId?, id?} → {event} (with id: made once, a repeat updates it)
 //   move {calendarId, id, start, end} · remove {calendarId, id}
 //   setCalendars {on, target} · disconnect
-import { randomBytes } from "node:crypto"
+import { randomBytes, timingSafeEqual } from "node:crypto"
 import { bearer, config, getSetting, readBody, send, requireSession, serverBots, setSetting, sign, countCall } from './_lib.mjs'
 import { DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, authUrl, driveAccessToken, createCalendarApi, exchangeCode, foodInbox, keepGooglePrefs } from './_bot/bot.mjs'
 
@@ -35,7 +35,10 @@ export function stateOk(cfg, state, now = Date.now()) {
   const [ts, nonce, sig] = String(state || '').split('.')
   if (!ts || !nonce || !sig) return false
   if (now - Number(ts) > 15 * 60_000) return false
-  return sign(cfg.secret, `google:${ts}.${nonce}`) === sig
+  // Constant time: no timing hints about the right signature.
+  const want = Buffer.from(sign(cfg.secret, `google:${ts}.${nonce}`))
+  const got = Buffer.from(sig)
+  return want.length === got.length && timingSafeEqual(want, got)
 }
 
 async function stored(cfg) {

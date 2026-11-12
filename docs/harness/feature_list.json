@@ -1147,6 +1147,20 @@
   ],
   "evidence": "2026-11-12: branch usability-core; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); before/after walks of the 7 flows at 1920x1080 kept outside the repo.",
   "notes": "core/simpleMode.ts (SIMPLE_CORE, ARCHIVE_PAGES, simpleMenu, toggleShown, altTarget), Sidebar.tsx, App.tsx (Alt keys, rest chip), settings/simple.tsx, ThreeToday.tsx (SleepForm, running block, plan-tomorrow), FocusIsland.tsx (no dim in Simple mode, stuck-open fix), boost/FocusBoost.tsx, study/*, training/SportDashboard.tsx, WorkoutMode.tsx, WorkoutDone.tsx, body/FoodBoard.tsx, food-paste.css, DesktopIsland.tsx simplePanel; web/webServices.ts sleep.setBed. Money/finance untouched (owner)."
+ },
+ {
+  "id": "F-SEC-HUNT-NOV",
+  "priority": 1,
+  "area": "security",
+  "title": "Security hunt fixes: no PIN hash in settings, web push keeps to the budget, 503 on a database hiccup, tick needs a session or the secret",
+  "user_visible_behavior": "The PIN hash is no longer copied into the synced settings (a signed-in page could read and crack it); the server deletes any old copy. Each device keeps its own offline copy after an online unlock; a device that never unlocked online needs the internet once. Phone push only wakes for the day's budgeted messages (at most 4). Bot health and Settings → Plugins refresh say 'try again' instead of signing out when the database hiccups. /api/cron?job=tick needs the app's session or CRON_SECRET. /api/db refuses every server sys_* table, pragma_* functions, dbstat and sqlite_dbpage. The URL guard refuses IPv4 hidden in IPv6.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/securityHunt.test.ts src/renderer/src/web/server.test.ts",
+   "npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch security-hardening-pin; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "api/_lib.mjs (authState cleanup, changePin), api/_sqlguard.mjs (PAGE_SYS_TABLES, SECRET_KEYS, INTERNAL), api/_push.mjs (PUSHABLE), api/bot-setup.mjs, api/cron.mjs, api/google.mjs (stateOk), src/core/netGuard.ts, web/webAuth.ts (localPinStore), tursoWebBridge.ts. Decision in DECISIONS.md."
  }
  ]
 }

@@ -104,22 +104,29 @@ export function sessionSigned(cfg, token, now = Date.now()) {
 // The PIN hash and the sign-out counter live in a server-only table (A1/A2):
 // /api/db refuses it (_sqlguard.mjs), so a page can neither read the hash nor
 // set a PIN of its own. The first read copies them over from settings, where
-// older versions kept them; from then on settings.pin_hash is only the copy
-// devices check while offline (the server writes it, never trusts it).
+// older versions kept them, and then deletes settings.pin_hash: any signed-in
+// page can read settings, and a 4-digit PIN falls from its hash in minutes.
+// Nothing PIN-derived is ever written to settings again; a device checks the
+// PIN offline against its own local copy (webAuth.ts localPinStore).
 const T_AUTH = 'CREATE TABLE IF NOT EXISTS sys_auth (key TEXT PRIMARY KEY, value TEXT NOT NULL)'
+/** A new data marker: every device downloads everything once (and so drops its old copy of a deleted row). */
+const bumpVersion = (tag, now = Date.now()) => ["INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [`${tag}-${now}-${randomBytes(4).toString('hex')}`]]
 
 /** { pin: "salt:hash" | null (none set: 2007), counter } from sys_auth. */
 export async function authState(cfg, fetchImpl = fetch) {
-  const [, , , rows] = await run(
+  const [, , , rows, cleaned] = await run(
     cfg,
     [
       [T_AUTH],
       ["INSERT OR IGNORE INTO sys_auth (key, value) VALUES ('pin_hash', COALESCE((SELECT value FROM settings WHERE key = 'pin_hash'), ''))"],
       ["INSERT OR IGNORE INTO sys_auth (key, value) VALUES ('session_epoch', COALESCE((SELECT value FROM settings WHERE key = 'session_epoch'), '0'))"],
-      ['SELECT key, value FROM sys_auth']
+      ['SELECT key, value FROM sys_auth'],
+      // The old copy goes (idempotent: nothing to delete after the first time).
+      ["DELETE FROM settings WHERE key = 'pin_hash' RETURNING key"]
     ],
     fetchImpl
   )
+  if (cleaned.length) await run(cfg, [bumpVersion('pin-clean')], fetchImpl)
   const m = Object.fromEntries(rows.map((r) => [String(r[0]), r[1] == null ? '' : String(r[1])]))
   return { pin: m.pin_hash || null, counter: m.session_epoch || '0' }
 }
@@ -268,7 +275,7 @@ export async function hashPinServer(pin, salt = randomBytes(16)) {
 /**
  * A new PIN, checked here (A2): the current PIN must be right (same wrong-PIN
  * limits as the login). Every other session ends; this device gets a fresh
- * one. Devices get the new hash for their offline check with the next sync.
+ * one. The hash stays in sys_auth only; each device keeps its own offline copy.
  */
 export async function changePin(cfg, current, next, sid, now = Date.now(), fetchImpl = fetch, ip = 'unknown') {
   next = String(next ?? '')
@@ -280,9 +287,8 @@ export async function changePin(cfg, current, next, sid, now = Date.now(), fetch
     cfg,
     [
       ["UPDATE sys_auth SET value = ? WHERE key = 'pin_hash'", [hash]],
-      ["INSERT INTO settings (key, value) VALUES ('pin_hash', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [hash]],
-      // An untracked change: every device downloads everything once (and gets the new copy).
-      ["INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [`pin-${now}-${randomBytes(4).toString('hex')}`]]
+      // Only in sys_auth: never a copy in settings, which every signed-in page can read.
+      ["DELETE FROM settings WHERE key = 'pin_hash'"]
     ],
     fetchImpl
   )

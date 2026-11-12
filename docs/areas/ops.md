@@ -7,7 +7,7 @@
 ### Timers (Ben writes first)
 
 
-- `.github/workflows/tick.yml` calls `/api/cron?job=tick` every 10 minutes (with `CRON_SECRET` and `X-Life-Timer: github`); the open app also calls it every 2 minutes. Twice a month its keepalive job re-enables the scheduled workflows through the GitHub API (GitHub switches them off after 60 days without commits in a public repo).
+- `.github/workflows/tick.yml` calls `/api/cron?job=tick` every 10 minutes (with `CRON_SECRET` and `X-Life-Timer: github`); the open app also calls it every 2 minutes with its session. Without the secret or a session the tick answers 401. Twice a month its keepalive job re-enables the scheduled workflows through the GitHub API (GitHub switches them off after 60 days without commits in a public repo).
 - The tick sends the daily messages (`morning` 08:30, `reask` 10:00, `midday` 13:00, `evening` 21:30, local time: `src/core/dailyClock.ts`) and the bedtime wind-down; the Vercel crons in `vercel.json` (UTC) are the backup. Both claim the same once-a-day slot (`sys_gate` `daily:<job>`), so nothing goes twice.
 - Settings → System health shows "Ben's server" (any tick) and "Ben's timer" (the outside timer only), red after 30 minutes. Optional second pinger: a free cron-job.org or UptimeRobot monitor calling `https://mega-system-ten.vercel.app/api/cron?job=tick` every 10 minutes with the header `Authorization: Bearer <CRON_SECRET>` (and `X-Life-Timer: pinger`).
 
