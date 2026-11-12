@@ -5671,7 +5671,7 @@ var localHm$1 = (iso) => {
 	return Number.isFinite(d.getTime()) ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` : "";
 };
 var cleanItems$1 = (raw) => (Array.isArray(raw) ? raw : []).map(cleanItem$1).filter((x) => !!x).slice(0, 20);
-var DAY$15 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$16 = /^\d{4}-\d{2}-\d{2}$/;
 /**
 * A clean food log: meals with a valid id, day and items, newest first, the
 * last LOG_DAYS days before `today` and at most LOG_MAX; favourites apart
@@ -5679,13 +5679,13 @@ var DAY$15 = /^\d{4}-\d{2}-\d{2}$/;
 */
 function cleanFoodLog(raw, today) {
 	const o = raw && typeof raw === "object" ? raw : {};
-	const from = today && DAY$15.test(today) ? addDays$8(today, -45) : "";
+	const from = today && DAY$16.test(today) ? addDays$8(today, -45) : "";
 	const seen = /* @__PURE__ */ new Set();
 	const meals = [];
 	for (const m of Array.isArray(o.meals) ? o.meals : []) {
 		if (!m || typeof m !== "object") continue;
 		const id = String(m.id ?? "");
-		if (!/^fd-[a-z0-9]{1,24}$/.test(id) || seen.has(id) || !DAY$15.test(String(m.day)) || String(m.day) < from) continue;
+		if (!/^fd-[a-z0-9]{1,24}$/.test(id) || seen.has(id) || !DAY$16.test(String(m.day)) || String(m.day) < from) continue;
 		const items = cleanItems$1(m.items);
 		if (!items.length) continue;
 		seen.add(id);
@@ -7852,7 +7852,7 @@ function weeklyHtml(c, level, next) {
 		...next.big3.map((b, i) => `${i + 1}. ${e(b)}`)
 	].join("\n");
 }
-var escHtml$1 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+var escHtml$2 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 /** Callback data for a push button ("bp|<op>|<key or item>"), kept under Telegram's 64 bytes. */
 function pushCallback(op, key, arg) {
 	const c = {
@@ -7937,9 +7937,9 @@ function pushTelegram(p, startData) {
 		}
 	]));
 	if (top.length) rows.unshift(top);
-	const lines = p.text.split("\n").map(escHtml$1);
+	const lines = p.text.split("\n").map(escHtml$2);
 	return {
-		text: [`${p.face} <b>${escHtml$1(p.title)}</b>`, ...lines].join("\n"),
+		text: [`${p.face} <b>${escHtml$2(p.title)}</b>`, ...lines].join("\n"),
 		keyboard: { inline_keyboard: rows }
 	};
 }
@@ -8069,16 +8069,16 @@ function looksLikeFoodReply(text) {
 }
 var fmt$7 = (n) => Math.round(n).toLocaleString("en-US");
 var cap$4 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-var escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+var escHtml$1 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 /** The preview on Telegram (HTML): each food, the total and the AI's question. */
 function draftText$1(d) {
 	const t = sumItems(d.items);
 	return [
 		"🍽 <b>Check the meal, then Save</b>",
-		...d.items.map((it, i) => `${i + 1}. ${escHtml(cap$4(it.name))} · ${fmt$7(it.grams)} g · ${fmt$7(it.protein)} g protein · ${fmt$7(it.kcal)} kcal`),
+		...d.items.map((it, i) => `${i + 1}. ${escHtml$1(cap$4(it.name))} · ${fmt$7(it.grams)} g · ${fmt$7(it.protein)} g protein · ${fmt$7(it.kcal)} kcal`),
 		`<b>Total: ${fmt$7(t.protein)} g protein · ${fmt$7(t.kcal)} kcal</b> (carbs ${fmt$7(t.carbs)} g · fat ${fmt$7(t.fat)} g)`,
-		...d.question ? [`❓ ${escHtml(d.question)}`] : [],
-		`Tap −/+ for 25 g, or type the food and the grams, e.g. <code>${escHtml(d.items[0].name.split(" ")[0].toLowerCase())} 175</code>.`
+		...d.question ? [`❓ ${escHtml$1(d.question)}`] : [],
+		`Tap −/+ for 25 g, or type the food and the grams, e.g. <code>${escHtml$1(d.items[0].name.split(" ")[0].toLowerCase())} 175</code>.`
 	].join("\n");
 }
 /** The preview's buttons: −/+25 g per food, then Save / Edit grams / Cancel. */
@@ -8311,8 +8311,8 @@ function foodReport(o) {
 	else tip = "Good week: keep the same plan.";
 	const html = [
 		"🍽 <b>Food this week</b>",
-		...lines.map((l) => `• ${escHtml(l)}`),
-		`💡 ${escHtml(tip)}`
+		...lines.map((l) => `• ${escHtml$1(l)}`),
+		`💡 ${escHtml$1(tip)}`
 	].join("\n");
 	return {
 		lines,
@@ -8459,15 +8459,15 @@ function photoDraftText(d, type) {
 		...list.map((it, i) => {
 			const q = qtyText(it);
 			const range = it.lo != null && it.hi != null && it.hi > it.lo ? ` <i>(${fmt$7(it.lo)}–${fmt$7(it.hi)})</i>` : "";
-			return `${i + 1}. <b>${escHtml(cap$4(it.name))}</b>${q ? ` · ${escHtml(q)}` : ""}${it.grams ? ` · ${fmt$7(it.grams)} g${range}` : ""}${SRC_MARK[it.src ?? ""] ?? ""}\n    ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}${it.confidence === "low" ? " · ⚠️ check it" : ""}`;
+			return `${i + 1}. <b>${escHtml$1(cap$4(it.name))}</b>${q ? ` · ${escHtml$1(q)}` : ""}${it.grams ? ` · ${fmt$7(it.grams)} g${range}` : ""}${SRC_MARK[it.src ?? ""] ?? ""}\n    ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}${it.confidence === "low" ? " · ⚠️ check it" : ""}`;
 		}),
 		"",
 		`<b>Total ~${fmt$7(t.kcal)} kcal · ${fmt$7(t.protein)} g protein</b>`,
 		`Carbs ${fmt$7(t.carbs)} g · Fat ${fmt$7(t.fat)} g · ${badge.dot} ${badge.word}`,
-		...d.photo?.message ? [`💬 ${escHtml(d.photo.message)}`] : [],
-		...d.photo?.miss ? [`🔖 ${escHtml(missLine(d.photo.miss.code, d.photo.miss.why))}`] : [],
+		...d.photo?.message ? [`💬 ${escHtml$1(d.photo.message)}`] : [],
+		...d.photo?.miss ? [`🔖 ${escHtml$1(missLine(d.photo.miss.code, d.photo.miss.why))}`] : [],
 		...d.photo?.hidden ? [`🫒 ${HIDDEN[d.photo.hidden].ask} Tap ➕ ${HIDDEN[d.photo.hidden].label} if so.`] : [],
-		ask ? `\n❓ <b>About how many grams of ${escHtml(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt$7(ask.grams || 150)}</code>.` : "Tap a food to fix it, or type e.g. <code>" + escHtml((list[0]?.name ?? "rice").split(" ")[0].toLowerCase()) + " 150</code>."
+		ask ? `\n❓ <b>About how many grams of ${escHtml$1(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt$7(ask.grams || 150)}</code>.` : "Tap a food to fix it, or type e.g. <code>" + escHtml$1((list[0]?.name ?? "rice").split(" ")[0].toLowerCase()) + " 150</code>."
 	].join("\n");
 }
 /** The preview's buttons: the foods two to a row (tap one to fix it), then Save and Add photo, then Not this meal. */
@@ -8551,10 +8551,10 @@ function afterText(d) {
 	const was = sumItems(of.before);
 	return [
 		`🍽 <b>After photo</b> · leftovers of ${MEAL_WORD[of.type]} (${whenText$1(of.at)})`,
-		escHtml(leftLine(r)),
+		escHtml$1(leftLine(r)),
 		"",
 		"<b>Eaten:</b>",
-		...r.eaten.length ? r.eaten.map((it, i) => `${i + 1}. <b>${escHtml(cap$4(it.name))}</b> · ${fmt$7(it.grams)} g
+		...r.eaten.length ? r.eaten.map((it, i) => `${i + 1}. <b>${escHtml$1(cap$4(it.name))}</b> · ${fmt$7(it.grams)} g
     ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}`) : ["Nothing: all of it was left."],
 		"",
 		`<b>Counts ~${fmt$7(t.kcal)} kcal · ${fmt$7(t.protein)} g protein</b> (the full plate was ${fmt$7(was.kcal)} kcal)`,
@@ -8911,11 +8911,11 @@ function photoSavedText(items, type, at, dayLine, extra = []) {
 	const score = mealScore(toFoodItems(items));
 	return [
 		`✅ <b>${MEAL_WORD[type]} saved</b> · ${whenText$1(at)}`,
-		...items.slice(0, 8).map((it) => `• ${escHtml(cap$4(it.name))}${it.grams ? ` ${fmt$7(it.grams)} g` : ""}: ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}`),
+		...items.slice(0, 8).map((it) => `• ${escHtml$1(cap$4(it.name))}${it.grams ? ` ${fmt$7(it.grams)} g` : ""}: ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}`),
 		`<b>${fmt$7(t.kcal)} kcal · ${fmt$7(t.protein)} g protein</b> · C ${fmt$7(t.carbs)} · F ${fmt$7(t.fat)} · ${badge.dot}`,
-		...score ? [`🏅 Score <b>${score.grade}</b>: ${escHtml(score.tip)}`] : [],
-		escHtml(dayLine),
-		...extra.filter(Boolean).map(escHtml)
+		...score ? [`🏅 Score <b>${score.grade}</b>: ${escHtml$1(score.tip)}`] : [],
+		escHtml$1(dayLine),
+		...extra.filter(Boolean).map(escHtml$1)
 	].join("\n");
 }
 /** After Save on an "after" photo: what was eaten, each food with its numbers, then the day's lines. */
@@ -8924,9 +8924,9 @@ function afterSavedText(eaten, of, extra = []) {
 	const was = sumItems(of.before);
 	return [
 		eaten.length ? `✅ <b>${MEAL_WORD[of.type]} updated</b> · only what you ate (${whenText$1(of.at)})` : `✅ <b>${MEAL_WORD[of.type]} removed</b>: all of it was left`,
-		...eaten.slice(0, 8).map((it) => `• ${escHtml(cap$4(it.name))} ${fmt$7(it.grams)} g: ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}`),
+		...eaten.slice(0, 8).map((it) => `• ${escHtml$1(cap$4(it.name))} ${fmt$7(it.grams)} g: ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}`),
 		...eaten.length ? [`<b>${fmt$7(t.kcal)} kcal · ${fmt$7(t.protein)} g protein</b> (the full plate was ${fmt$7(was.kcal)} kcal)`] : [],
-		...extra.filter(Boolean).map(escHtml)
+		...extra.filter(Boolean).map(escHtml$1)
 	].join("\n");
 }
 var foodSummaryKey = (day) => `foodday:${day}`;
@@ -12118,12 +12118,12 @@ var DEFAULT_COACH = {
 	bloodDismissed: null,
 	updatedAt: 0
 };
-var DAY$14 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$15 = /^\d{4}-\d{2}-\d{2}$/;
 var num$6 = (v, lo, hi, d) => {
 	const n = Number(v);
 	return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
 };
-var day$2 = (v) => typeof v === "string" && DAY$14.test(v) ? v : null;
+var day$2 = (v) => typeof v === "string" && DAY$15.test(v) ? v : null;
 var txt = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 var pair = (v, lo, hi, d) => {
 	if (!Array.isArray(v)) return d;
@@ -12540,7 +12540,7 @@ function dailyPlan(i, date = i.date) {
 		notes
 	};
 }
-var DAY$13 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$14 = /^\d{4}-\d{2}-\d{2}$/;
 var n15 = (v) => {
 	const n = Math.round(Number(v));
 	return Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 3;
@@ -12588,7 +12588,7 @@ function cleanDay$1(x) {
 function cleanDays$1(raw, today) {
 	const o = raw && typeof raw === "object" ? raw : {};
 	const days = {};
-	const keys = Object.keys(o.days ?? {}).filter((k) => DAY$13.test(k) && (!today || k <= addDays$8(today, 1) && k > addDays$8(today, -120))).sort();
+	const keys = Object.keys(o.days ?? {}).filter((k) => DAY$14.test(k) && (!today || k <= addDays$8(today, 1) && k > addDays$8(today, -120))).sort();
 	for (const k of keys) days[k] = cleanDay$1(o.days[k]);
 	const out = {
 		v: 1,
@@ -21392,7 +21392,7 @@ function canon(text, aliases = {}) {
 	};
 }
 var words$2 = (s) => normalize$1(s).split(/[^\p{L}\p{N}]+/u).filter((x) => x.length >= 2);
-var STOP$5 = /* @__PURE__ */ new Set([
+var STOP$6 = /* @__PURE__ */ new Set([
 	"the",
 	"my",
 	"a",
@@ -21429,8 +21429,8 @@ function wordFit(a, b) {
 * word in the name (typos allowed); extra words in the name cost a little.
 */
 function similarity(query, name) {
-	const q = words$2(query).filter((x) => !STOP$5.has(x));
-	const n = words$2(name).filter((x) => !STOP$5.has(x));
+	const q = words$2(query).filter((x) => !STOP$6.has(x));
+	const n = words$2(name).filter((x) => !STOP$6.has(x));
 	if (!q.length || !n.length) return 0;
 	if (normalize$1(query) === normalize$1(name)) return 1;
 	let sum = 0;
@@ -23491,7 +23491,7 @@ function planSync(docs, stored, limit = 60) {
 	};
 }
 var WORD$1 = /[\p{L}\p{N}]{3,}/gu;
-var STOP$4 = /* @__PURE__ */ new Set([
+var STOP$5 = /* @__PURE__ */ new Set([
 	"the",
 	"and",
 	"for",
@@ -23525,7 +23525,7 @@ var STOP$4 = /* @__PURE__ */ new Set([
 	"its",
 	"too"
 ]);
-var stems = (t) => new Set((t.toLowerCase().match(WORD$1) ?? []).filter((w) => !STOP$4.has(w)).map((w) => w.slice(0, 5)));
+var stems = (t) => new Set((t.toLowerCase().match(WORD$1) ?? []).filter((w) => !STOP$5.has(w)).map((w) => w.slice(0, 5)));
 /** The keyword fallback: pieces sharing the most words with the question (rarer words count more). */
 function keywordRecall(docs, query, k = 6) {
 	const q = stems(query);
@@ -23632,7 +23632,7 @@ function strengthSummary(workouts) {
 // src/core/progress.ts
 var WEEKS = 6;
 /** Sum of `value` for days in [from, to]. */
-function sum$1(rows, from, to, value) {
+function sum$2(rows, from, to, value) {
 	let t = 0;
 	for (const r of rows) if (r.day >= from && r.day <= to) t += value(r);
 	return t;
@@ -23664,7 +23664,7 @@ function progressReport(i) {
 			id: "focus",
 			label: "Focus time",
 			higherBetter: true,
-			f: (a, b) => sum$1(i.focus, a, b, (r) => r.minutes),
+			f: (a, b) => sum$2(i.focus, a, b, (r) => r.minutes),
 			text: hm$10,
 			day: (v) => v ? hm$10(v) : "·",
 			target: 600,
@@ -23674,7 +23674,7 @@ function progressReport(i) {
 			id: "wake",
 			label: "On-time wake-ups",
 			higherBetter: true,
-			f: (a, b) => sum$1(i.wakes, a, b, (r) => r.onTime ? 1 : 0),
+			f: (a, b) => sum$2(i.wakes, a, b, (r) => r.onTime ? 1 : 0),
 			text: (v) => `${v}/7`,
 			day: tick,
 			target: 7,
@@ -23704,7 +23704,7 @@ function progressReport(i) {
 			id: "todoist",
 			label: "Todoist tasks done",
 			higherBetter: true,
-			f: (a, b) => sum$1(i.todoist, a, b, () => 1),
+			f: (a, b) => sum$2(i.todoist, a, b, () => 1),
 			text: (v) => String(v),
 			day: (v) => v ? String(v) : "·",
 			target: 15,
@@ -23714,7 +23714,7 @@ function progressReport(i) {
 			id: "mustdo",
 			label: "Must-dos done",
 			higherBetter: true,
-			f: (a, b) => sum$1(i.mustdos ?? [], a, b, (r) => r.done ? 1 : 0),
+			f: (a, b) => sum$2(i.mustdos ?? [], a, b, (r) => r.done ? 1 : 0),
 			text: (v) => String(v),
 			day: (v) => v ? String(v) : "·",
 			target: 10,
@@ -23725,7 +23725,7 @@ function progressReport(i) {
 			id: "spend",
 			label: "Spent",
 			higherBetter: false,
-			f: (a, b) => sum$1(i.spending ?? [], a, b, (r) => r.bani),
+			f: (a, b) => sum$2(i.spending ?? [], a, b, (r) => r.bani),
 			text: lei,
 			day: (v) => v ? String(Math.round(v / 100)) : "·",
 			target: null,
@@ -24979,10 +24979,10 @@ var CHAPTERS_12 = [
 var chaptersOf = (s) => s.weeks === 8 ? CHAPTERS : CHAPTERS_12;
 /** 1-based chapter number for a 1-based week. */
 var chapterNo = (s, week) => s.weeks === 8 ? week : Math.ceil(week / 2);
-var DAY$12 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$13 = /^\d{4}-\d{2}-\d{2}$/;
 var str$7 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var hex = (v, d) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d;
-var day = (v) => typeof v === "string" && DAY$12.test(v) ? v : null;
+var day = (v) => typeof v === "string" && DAY$13.test(v) ? v : null;
 /** The Monday of the week holding `d` (or `d` itself on a Monday). */
 function mondayOf$7(d) {
 	return addDays$8(d, -(((/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay() + 6) % 7));
@@ -25835,12 +25835,12 @@ function pickSideQuest(i, pool = SIDE_QUESTS) {
 		].filter(Boolean).join(", ")}.`
 	};
 }
-var DAY$11 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$12 = /^\d{4}-\d{2}-\d{2}$/;
 var str$4 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanSide(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	const weeks = {};
-	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$11.test(k)).sort().slice(-26)) {
+	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$12.test(k)).sort().slice(-26)) {
 		const w = r.weeks[k] ?? {};
 		weeks[k] = {
 			passed: (Array.isArray(w.passed) ? w.passed : []).map((x) => str$4(x, 24)).filter(Boolean).slice(0, 10),
@@ -25849,7 +25849,7 @@ function cleanSide(raw) {
 	}
 	return {
 		weeks,
-		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$4(a.title, 90) && DAY$11.test(String(a.day))).map((a, i) => ({
+		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$4(a.title, 90) && DAY$12.test(String(a.day))).map((a, i) => ({
 			id: str$4(a.id, 24) || `a${i + 1}`,
 			questId: a.questId ? str$4(a.questId, 24) : null,
 			title: str$4(a.title, 90),
@@ -25977,12 +25977,12 @@ var MANUAL = [
 		manual: false
 	}
 ].filter((k) => k.manual).map((k) => k.id);
-var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$11 = /^\d{4}-\d{2}-\d{2}$/;
 var str$3 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanWins$1(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	return {
-		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$3(w.title, 120) && DAY$10.test(String(w.day))).map((w, i) => ({
+		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$3(w.title, 120) && DAY$11.test(String(w.day))).map((w, i) => ({
 			id: str$3(w.id, 24) || `w${i + 1}`,
 			day: String(w.day),
 			kind: MANUAL.includes(w.kind) ? w.kind : "other",
@@ -26719,7 +26719,7 @@ var DEFAULT_ACTIVE = [
 	"strong",
 	"study"
 ];
-var DAY$9 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
 var str$2 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var num$4 = (v) => v === null || v === void 0 || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null;
 var isMetric = (m) => Object.prototype.hasOwnProperty.call(METRICS, m);
@@ -26775,11 +26775,11 @@ function cleanLadder$1(raw) {
 	for (const t of TEMPLATES) if (!seen.has(t.id)) goals.push(freshGoal(t, false));
 	let on = 0;
 	for (const g of goals) if (g.on && ++on > 3) g.on = false;
-	const days = (v, n) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x)).filter((x) => DAY$9.test(x.slice(0, 10))))].sort().slice(-n);
+	const days = (v, n) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x)).filter((x) => DAY$10.test(x.slice(0, 10))))].sort().slice(-n);
 	return {
 		v: 1,
 		goals,
-		start: typeof r.start === "string" && DAY$9.test(r.start) ? r.start : null,
+		start: typeof r.start === "string" && DAY$10.test(r.start) ? r.start : null,
 		reviews: days(r.reviews, 30),
 		monthReviews: days(r.monthReviews, 12)
 	};
@@ -28222,7 +28222,7 @@ function habitStreak(doneDays, today, o = {}) {
 	};
 }
 var BOARD_PREFS = "habit_board";
-var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$9 = /^\d{4}-\d{2}-\d{2}$/;
 var ID$3 = /^[\w:.-]{1,60}$/;
 function cleanLook(v) {
 	const out = {};
@@ -28239,7 +28239,7 @@ function cleanPrefs$1(v) {
 		for (const [k, l] of Object.entries(v.looks).slice(0, 60)) if (ID$3.test(k)) looks[k] = cleanLook(l);
 	}
 	const skips = {};
-	if (v?.skips && typeof v.skips === "object") for (const d of Object.keys(v.skips).filter((d) => DAY$8.test(d)).sort().slice(-90)) {
+	if (v?.skips && typeof v.skips === "object") for (const d of Object.keys(v.skips).filter((d) => DAY$9.test(d)).sort().slice(-90)) {
 		const list = ids(v.skips[d]);
 		if (list.length) skips[d] = list;
 	}
@@ -28258,7 +28258,7 @@ function skipsOf(prefs, id) {
 var MY_HABITS = "my_habits";
 /** The rule that pays a tap (+2, at most 6 a day across all your habits). */
 var HABIT_RULE = "habit.own";
-var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$10 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanBook(v) {
 	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$10(h.name, 60)).map((h) => {
@@ -28274,7 +28274,7 @@ function cleanBook(v) {
 	}) : [];
 	const log = {};
 	if (v?.log && typeof v.log === "object") {
-		const days = Object.keys(v.log).filter((d) => DAY$7.test(d)).sort().slice(-400);
+		const days = Object.keys(v.log).filter((d) => DAY$8.test(d)).sort().slice(-400);
 		for (const d of days) if (Array.isArray(v.log[d])) log[d] = [...new Set(v.log[d].map(String))];
 	}
 	return {
@@ -28403,8 +28403,8 @@ var MODES = {
 	}
 };
 var MODE_KINDS = Object.keys(MODES);
-var DAY$6 = /^\d{4}-\d{2}-\d{2}$/;
-var okMode = (m) => !!m && MODE_KINDS.includes(m.kind) && DAY$6.test(m.from) && DAY$6.test(m.until) && m.until >= m.from;
+var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
+var okMode = (m) => !!m && MODE_KINDS.includes(m.kind) && DAY$7.test(m.from) && DAY$7.test(m.until) && m.until >= m.from;
 /** A saved book, with a mode whose last day has passed moved to the past. */
 function cleanModes(v, today) {
 	const past = (Array.isArray(v?.past) ? v.past : []).filter(okMode).map((m) => ({
@@ -28568,14 +28568,14 @@ var TRACKS = {
 	}
 };
 var TRACK_IDS = Object.keys(TRACKS);
-var DAY$5 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$6 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$9 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var cleanLink = (s) => {
 	const t = clip$9(s, 300);
 	return /^https?:\/\/\S+$/i.test(t) ? t : null;
 };
 function cleanLearn(v) {
-	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$9(e.title, 120) && DAY$5.test(e.day)).map((e) => ({
+	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$9(e.title, 120) && DAY$6.test(e.day)).map((e) => ({
 		id: clip$9(e.id, 40) || `l${e.day}`,
 		track: e.track,
 		title: clip$9(e.title, 120),
@@ -31304,7 +31304,7 @@ var gmail_default = definePlugin({
 // src/renderer/src/web/financeInbox.ts
 var SETTING$1 = "finance_inbox_json";
 var KEEP_DAYS = 60;
-var DAY$4 = 864e5;
+var DAY$5 = 864e5;
 var parse$3 = (raw, fallback) => {
 	try {
 		return raw ? JSON.parse(raw) : fallback;
@@ -31332,7 +31332,7 @@ function isApplied(e, state) {
 * stays, and the Money page warns from day 50 (inboxWarning).
 */
 function keepInbox(list, now, finance) {
-	const cutoff = now - KEEP_DAYS * DAY$4;
+	const cutoff = now - KEEP_DAYS * DAY$5;
 	return list.filter((e) => e.at >= cutoff || !isApplied(e, finance));
 }
 /** Adds an expense to the inbox (call inside the bot's change). */
@@ -37988,7 +37988,7 @@ var SOURCES = [
 	"said",
 	"plan"
 ];
-var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$4 = /^\d{4}-\d{2}-\d{2}$/;
 var HM$3 = /^\d{2}:\d{2}$/;
 var num$1 = (x, lo, hi) => typeof x === "number" && Number.isFinite(x) ? Math.max(lo, Math.min(hi, Math.round(x))) : null;
 var strs = (x) => Array.isArray(x) ? x.filter((s) => typeof s === "string" && !!s.trim()).map((s) => s.slice(0, 120)).slice(0, 12) : void 0;
@@ -38022,7 +38022,7 @@ function cleanReview(raw) {
 		days
 	};
 	for (const [day, d] of Object.entries(src)) {
-		if (!DAY$3.test(day) || !d || typeof d.items !== "object") continue;
+		if (!DAY$4.test(day) || !d || typeof d.items !== "object") continue;
 		const items = {};
 		for (const [id, x] of Object.entries(d.items ?? {})) {
 			const it = cleanItem(x, id);
@@ -46169,7 +46169,7 @@ var addDays$2 = (d, n) => {
 	x.setUTCDate(x.getUTCDate() + n);
 	return x.toISOString().slice(0, 10);
 };
-var sum = (s, today, from, to, counted) => {
+var sum$1 = (s, today, from, to, counted) => {
 	const vals = [];
 	for (let k = from; k <= to; k++) {
 		const v = s[addDays$2(today, -k)];
@@ -46186,8 +46186,8 @@ function lifeReview(series, urges, today) {
 	const gaps = {};
 	const area = (m, label, fmt, perDay, better) => {
 		const counted = m !== "sleep";
-		const w = sum(series[m], today, 0, 6, counted);
-		const u = sum(series[m], today, 7, 34, counted);
+		const w = sum$1(series[m], today, 0, 6, counted);
+		const u = sum$1(series[m], today, 7, 34, counted);
 		if (!w.n || !u.n) return;
 		const week = perDay ? w.total / w.n : w.total;
 		const usual = perDay ? u.total / u.n : u.total / u.n * 7;
@@ -49684,7 +49684,7 @@ function reasonFor(s, sig, i) {
 	return days != null && days <= 14 ? `About ${plural(days, "day")} of your usual earning.` : "A treat worth working towards.";
 }
 /** The row: the best fit of each size first, then the next best, at most 2 per kind of reward. */
-function suggest(i) {
+function suggest$1(i) {
 	const sig = signals(i.activity);
 	if (i.funOver) sig.gaming = {
 		score: .1,
@@ -51366,7 +51366,7 @@ var WORK_KINDS = [
 	"meeting",
 	"money"
 ];
-var DAY$2 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
 var json$3 = (s, d) => {
 	try {
 		return JSON.parse(String(s ?? "")) ?? d;
@@ -51672,7 +51672,7 @@ var GoalsService = class {
 		const type = prevMeta && input.id ? input.meta?.type ?? prevMeta.type : input.meta?.type ?? "target";
 		const period = isPeriodType(type);
 		const deadline = period && !input.deadline ? NO_END : String(input.deadline ?? "");
-		if (!DAY$2.test(deadline)) throw new LedgerError("Pick the deadline");
+		if (!DAY$3.test(deadline)) throw new LedgerError("Pick the deadline");
 		const today = this.wallet.today(now);
 		if (!input.id && deadline <= today) throw new LedgerError("The deadline needs to be after today");
 		const steps = type === "project" ? input.meta?.steps ?? prevMeta?.steps ?? [] : [];
@@ -51687,7 +51687,7 @@ var GoalsService = class {
 		} : { kind: "manual" };
 		const meta = SOURCES$1.find((s) => s.id === source.kind);
 		if (meta.needsArg && !source.arg && !argOptional(source.kind)) throw new LedgerError(`${meta.label}: which one? (${meta.needsArg})`);
-		const startDay = input.startDay && DAY$2.test(input.startDay) && input.startDay <= today ? input.startDay : today;
+		const startDay = input.startDay && DAY$3.test(input.startDay) && input.startDay <= today ? input.startDay : today;
 		let start = type !== "target" ? 0 : input.start == null || !Number.isFinite(Number(input.start)) ? null : Number(input.start);
 		if (start == null) start = isAuto(source) && !countsFromStart(source.kind) ? this.autoValue({
 			source,
@@ -51785,7 +51785,7 @@ var GoalsService = class {
 		if (!isPeriodType(meta.type) || isAuto(g.source)) throw new LedgerError("This goal counts itself");
 		if (!Number.isFinite(amount) || !amount || Math.abs(amount) > 1e7) throw new LedgerError("Type how much, e.g. 1");
 		const today = this.wallet.today(now);
-		const day = onDay && DAY$2.test(onDay) && onDay <= today && periodOf(meta.per, onDay).key === periodOf(meta.per, today).key ? onDay : today;
+		const day = onDay && DAY$3.test(onDay) && onDay <= today && periodOf(meta.per, onDay).key === periodOf(meta.per, today).key ? onDay : today;
 		return this.db.transaction(() => {
 			const before = this.checkins(id);
 			const dayHas = before.filter((c) => c.day === day && (c.by === "me" || c.by === "ben")).reduce((t, c) => t + c.value, 0);
@@ -54239,9 +54239,9 @@ function rewardsMore(s, value, now = /* @__PURE__ */ new Date()) {
 		hasGoal: live.some((r) => r.goalRank),
 		funOver: pace.level === "over"
 	};
-	const suggestions = suggest(input);
+	const suggestions = suggest$1(input);
 	const shown = new Set(suggestions.map((x) => x.starter.key));
-	const unlockIdeas = suggest({
+	const unlockIdeas = suggest$1({
 		...input,
 		limit: 6,
 		only: (x) => !!x.unlock && !shown.has(x.key)
@@ -55875,7 +55875,7 @@ function cleanShop(s) {
 	if (!/\p{L}/u.test(t) || NOT_SHOP.test(t) || CARD_ONLY.test(t)) return "";
 	return t.slice(0, 60);
 }
-function merchantOf(text, title, hit, source, app) {
+function merchantOf$1(text, title, hit, source, app) {
 	const label = LABEL.exec(text);
 	if (label) {
 		const s = cleanShop(label[1].split(/[,;]|\s{2,}/)[0]);
@@ -55935,7 +55935,7 @@ function parsePayNotification(n, opts) {
 	if (source === "generic" && !refundWords && !PAYMENT.test(all)) return no("not-payment", "No payment words in it (paid, payment, plată, оплата…)");
 	const refund = refundWords || hit.sign === "+";
 	const card = LAST4.exec(all);
-	const merchant = merchantOf(inText, inText === title ? "" : title, hit, source, app);
+	const merchant = merchantOf$1(inText, inText === title ? "" : title, hit, source, app);
 	return {
 		ok: true,
 		amount: hit.amount,
@@ -56008,7 +56008,7 @@ function findTwin(list, p, windowMs = TWIN_WINDOW_MS) {
 var TOSORT_KEY = "money_tosort";
 /** Unreadable / ignored items kept for the review list (newest first). */
 var IGNORED_KEEP = 50;
-var DAY$1 = 864e5;
+var DAY$2 = 864e5;
 var DONE_KEEP_DAYS = 30;
 /** The stored value, read safely (anything odd reads as empty). */
 function readToSort(raw) {
@@ -56096,8 +56096,8 @@ function capIgnored(items) {
 function keepToSort(list, finance, now) {
 	const has = (id) => !!id && (!!finance?.tx?.some((t) => t && t.id === id) || !!finance?.deleted?.[id]);
 	return { items: list.items.filter((x) => {
-		if (x.state === "new") return true;
-		if (now - (x.updatedAt ?? x.at) < DONE_KEEP_DAYS * DAY$1) return true;
+		if (x.state === "new" || x.reopen) return true;
+		if (now - (x.updatedAt ?? x.at) < DONE_KEEP_DAYS * DAY$2) return true;
 		if (x.state === "dismissed") return false;
 		return !has(x.txId);
 	}) };
@@ -56260,7 +56260,7 @@ var isCorrection = (t) => !!t?.reconcile;
 var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t) && !isCorrection(t);
 var countsAsIncome = (t) => t.type === "income" && !t.loan && !isCorrection(t);
 // src/renderer/public/apps/finance/js/cattree.js
-var fold$4 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var fold$5 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 var SUB_DEFAULTS = [
 	{
 		key: "groceries",
@@ -56576,7 +56576,7 @@ var PARENT_NAMES = [
 function parentKeyOf(c) {
 	if (!c || c.type !== "expense") return null;
 	if (PARENT_IDS[c.id]) return PARENT_IDS[c.id];
-	const n = fold$4(c.name);
+	const n = fold$5(c.name);
 	return PARENT_NAMES.find(([, re]) => re.test(n))?.[0] || null;
 }
 var ADD_IF_MISSING = {
@@ -56643,7 +56643,7 @@ function subOf(state, t) {
 	const s = t && t.sub ? subById(state, t.sub) : null;
 	return s && s.parent === t.category ? s : null;
 }
-var isOther = (catId) => !catId || catId === "other" || catId === "other-in";
+var isOther$1 = (catId) => !catId || catId === "other" || catId === "other-in";
 var touch = (o, now) => Object.assign(o, { updatedAt: now });
 function setSub(state, t, id, { learn = true, now = Date.now() } = {}) {
 	const s = subById(state, id);
@@ -56654,8 +56654,8 @@ function setSub(state, t, id, { learn = true, now = Date.now() } = {}) {
 	if (learn) rememberSub(state, t.note, s.id, now);
 	return true;
 }
-var STOP$3 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store at in on of la de si cu pe some a an my lei mdl usd eur today yesterday azi ieri".split(" "));
-var noteWords = (note) => (fold$4(String(note || "").replace(/#[\p{L}\p{N}_-]+/gu, " ")).match(/[\p{L}]{2,}/gu) || []).filter((w) => !STOP$3.has(w));
+var STOP$4 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store at in on of la de si cu pe some a an my lei mdl usd eur today yesterday azi ieri".split(" "));
+var noteWords = (note) => (fold$5(String(note || "").replace(/#[\p{L}\p{N}_-]+/gu, " ")).match(/[\p{L}]{2,}/gu) || []).filter((w) => !STOP$4.has(w));
 function merchantKey(note) {
 	return [...new Set(noteWords(note))].slice(0, 3).join(" ");
 }
@@ -56737,7 +56737,7 @@ var KEYWORDS$1 = [
 	["stocks", "stock$, stocks$, actiuni, etf$, broker, акци"],
 	["crypto", "crypto, bitcoin, btc$, binance, крипт, usdt$"]
 ].map(([key, text]) => {
-	const items = text.split(",").map((x) => fold$4(x.trim())).filter(Boolean);
+	const items = text.split(",").map((x) => fold$5(x.trim())).filter(Boolean);
 	return {
 		key,
 		phrases: items.filter((x) => x.includes(" ")),
@@ -56746,7 +56746,7 @@ var KEYWORDS$1 = [
 	};
 });
 function keywordKeys(note) {
-	const text = ` ${fold$4(note).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+	const text = ` ${fold$5(note).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
 	const words = text.trim().split(" ").filter(Boolean);
 	const out = [];
 	for (const k of KEYWORDS$1) if (k.phrases.some((p) => text.includes(` ${p} `)) || k.exact.some((x) => words.includes(x)) || k.stems.some((x) => words.some((w) => w.startsWith(x)))) out.push(k.key);
@@ -56775,7 +56775,7 @@ function pastIndex(state) {
 		if (t.type !== "expense" || !t.sub) continue;
 		const s = subOf(state, t);
 		if (!s) continue;
-		const k = fold$4(t.note).trim();
+		const k = fold$5(t.note).trim();
 		const prev = map.get(k);
 		if (!prev || (t.updatedAt || 0) > (prev.t.updatedAt || 0)) map.set(k, {
 			t,
@@ -56790,14 +56790,14 @@ function pastIndex(state) {
 }
 function suggestSub(state, note, { category = null } = {}) {
 	if (!String(note || "").trim()) return null;
-	const free = isOther(category);
+	const free = isOther$1(category);
 	const ok = (s) => s && !s.archived && (free || s.parent === category) && state.settings.categories.some((c) => c.id === s.parent && c.type === "expense");
 	const mem = memorySub(state, note);
 	if (ok(mem)) return {
 		sub: mem,
 		source: "memory"
 	};
-	const past = pastIndex(state).get(fold$4(note).trim());
+	const past = pastIndex(state).get(fold$5(note).trim());
 	if (past && ok(past.s)) return {
 		sub: past.s,
 		source: "past"
@@ -56911,6 +56911,179 @@ function upcomingItems(state, today, days = 30) {
 		});
 	}
 	return out.sort(sortItems);
+}
+var HALF_LIFE_DAYS = 180;
+var DAY$1 = 864e5;
+var fold$4 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var STOP$3 = new Set("plata platii plati pentru from with the and for at to of in on by la de din si cu pe al ale card pos atm srl sa ii ip md mda chisinau chisinaului balti moldova str nr bd bul via transfer payment purchase pay paid achitare cumparare comision operatiune tranzactie tranzactia retragere online web www com net org ltd llc inc gmbh ooo maib micb victoriabank moldindconbank eximbank fincombank energbank paynet mpay revolut visa mastercard оплата покупка перевод платеж для ооо".split(" "));
+var FAMILY = /* @__PURE__ */ new Set([
+	"uber",
+	"bolt",
+	"yandex",
+	"google",
+	"apple",
+	"amazon",
+	"paypal",
+	"steam",
+	"microsoft"
+]);
+function merchantOf(note) {
+	const words = fold$4(note).replace(/#[\p{L}\p{N}_-]+/gu, " ").replace(/[\p{N}]+/gu, " ").replace(/[^\p{L}\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 2 && !STOP$3.has(w));
+	if (!words.length) return "";
+	return FAMILY.has(words[0]) && words[1] ? `${words[0]} ${words[1]}` : words[0];
+}
+var isOther = (id) => id === "other" || id === "other-in";
+var validCat = (state, id, type) => (state.settings?.categories || []).some((c) => c.id === id && c.type === type && !c.archived);
+/** A record that counts as your own choice (not a guess, not unconfirmed). */
+function isEvidence(t) {
+	if (!t || t.type !== "expense" && t.type !== "income" || t.loan || t.reconcile) return false;
+	if (!t.category || isOther(t.category) || t.catBy === "auto") return false;
+	if ((t.source === "capture" || t.source === "auto") && !t.confirmedAt) return false;
+	return true;
+}
+var cache = /* @__PURE__ */ new WeakMap();
+function choiceTable(state, now = Date.now()) {
+	const tx = state.tx || [];
+	let last = 0;
+	for (const t of tx) if ((t.updatedAt || 0) > last) last = t.updatedAt || 0;
+	const key = `${tx.length}|${last}|${Math.floor(now / DAY$1)}`;
+	const hit = cache.get(tx);
+	if (hit && hit.key === key) return hit.table;
+	const table = /* @__PURE__ */ new Map();
+	for (const t of tx) {
+		if (!isEvidence(t)) continue;
+		const m = merchantOf(t.note);
+		if (!m) continue;
+		const k = `${t.type}|${m}`;
+		let row = table.get(k);
+		if (!row) table.set(k, row = {
+			merchant: m,
+			type: t.type,
+			cats: /* @__PURE__ */ new Map(),
+			subs: /* @__PURE__ */ new Map(),
+			books: /* @__PURE__ */ new Map(),
+			n: 0,
+			last: "",
+			label: t.note
+		});
+		const at = Date.parse(`${t.date}T12:00:00Z`);
+		const w = Number.isFinite(at) ? Math.pow(.5, Math.max(0, now - at) / (HALF_LIFE_DAYS * DAY$1)) : 1;
+		row.cats.set(t.category, (row.cats.get(t.category) || 0) + w);
+		if (t.sub) row.subs.set(`${t.category}|${t.sub}`, (row.subs.get(`${t.category}|${t.sub}`) || 0) + w);
+		const book = t.book ?? "personal";
+		row.books.set(book, (row.books.get(book) || 0) + w);
+		row.n++;
+		if (String(t.date) >= row.last) {
+			row.last = String(t.date);
+			row.label = t.note;
+		}
+	}
+	cache.set(tx, {
+		key,
+		table
+	});
+	return table;
+}
+var top = (map) => [...map.entries()].sort((a, b) => b[1] - a[1]);
+var sum = (map) => [...map.values()].reduce((a, b) => a + b, 0);
+var levelOf = (confidence, n) => confidence >= .9 && n >= 3 ? "sure" : confidence >= .6 ? "maybe" : "guess";
+/** An explicit rule ("contains linella -> Food") for a note: the longest match wins. */
+function ruleFor(state, note, type) {
+	const n = fold$4(note);
+	if (!n) return null;
+	return (state.settings?.rules || []).filter((r) => r && r.match && (r.type === type || r.type === "any") && n.includes(fold$4(r.match)) && validCat(state, r.category, type)).sort((a, b) => b.match.length - a.match.length)[0] || null;
+}
+/** What your records say about this merchant (no rules, no keywords), or null. */
+function merchantChoice(state, note, type, now = Date.now()) {
+	const m = merchantOf(note);
+	if (!m) return null;
+	const row = choiceTable(state, now).get(`${type}|${m}`);
+	if (!row) return null;
+	const cats = top(row.cats).filter(([id]) => validCat(state, id, type));
+	if (!cats.length) return null;
+	const total = sum(row.cats);
+	const confidence = Math.round(cats[0][1] / total * 100) / 100;
+	const subs = top(row.subs).filter(([k]) => k.startsWith(`${cats[0][0]}|`));
+	const books = top(row.books);
+	const book = books.length && books[0][1] / sum(row.books) >= .9 ? books[0][0] : null;
+	return {
+		merchant: m,
+		category: cats[0][0],
+		sub: subs.length && subs[0][1] / cats[0][1] >= .6 ? subs[0][0].split("|")[1] : null,
+		book,
+		confidence,
+		n: row.n,
+		level: levelOf(confidence, row.n),
+		alternatives: cats.map(([id, w]) => ({
+			category: id,
+			confidence: Math.round(w / total * 100) / 100
+		}))
+	};
+}
+function usual(state, type, now) {
+	const from = (/* @__PURE__ */ new Date(now - 90 * DAY$1)).toISOString().slice(0, 10);
+	const n = /* @__PURE__ */ new Map();
+	for (const t of state.tx || []) if (t.type === type && !isOther(t.category) && String(t.date) >= from) n.set(t.category, (n.get(t.category) || 0) + 1);
+	return top(n).map(([id]) => id);
+}
+/**
+* The suggestion for a note: category, subcategory, book, how sure, why, and
+* up to 3 chips (`alternatives`). `guess` is Finance's own keyword guess
+* (model.js suggestCategory), used after rules and your records.
+*/
+function suggest(state, { note, type = "expense" }, { guess = null, now = Date.now(), chips = 3 } = {}) {
+	const m = merchantOf(note);
+	const rule = ruleFor(state, note, type);
+	const mine = merchantChoice(state, note, type, now);
+	let out;
+	if (rule) out = {
+		category: rule.category,
+		sub: rule.sub || null,
+		book: rule.book || mine?.book || null,
+		confidence: 1,
+		level: "sure",
+		why: "rule",
+		rule: rule.id,
+		n: mine?.n || 0
+	};
+	else if (mine) out = {
+		category: mine.category,
+		sub: mine.sub,
+		book: mine.book,
+		confidence: mine.confidence,
+		level: mine.level,
+		why: "merchant",
+		n: mine.n
+	};
+	else if (guess && validCat(state, guess, type) && !isOther(guess)) out = {
+		category: guess,
+		sub: null,
+		book: null,
+		confidence: .3,
+		level: "guess",
+		why: "keyword",
+		n: 0
+	};
+	else out = {
+		category: null,
+		sub: null,
+		book: null,
+		confidence: 0,
+		level: "guess",
+		why: "none",
+		n: 0
+	};
+	const list = [
+		out.category,
+		...(mine?.alternatives || []).map((a) => a.category),
+		guess,
+		...usual(state, type, now),
+		...(state.settings?.categories || []).filter((c) => c.type === type).map((c) => c.id)
+	];
+	const seen = /* @__PURE__ */ new Set();
+	out.alternatives = list.filter((id) => id && !isOther(id) && validCat(state, id, type) && !seen.has(id) && seen.add(id)).slice(0, chips);
+	out.merchant = m;
+	return out;
 }
 var ACCOUNT_DEFAULTS = {
 	bank: "",
@@ -57662,6 +57835,8 @@ function suggestCategory(state, note, type) {
 	const valid = (id) => state.settings.categories.some((c) => c.id === id && c.type === type);
 	const rule = matchRule(state, note, type);
 	if (rule && valid(rule.category)) return rule.category;
+	const sure = merchantChoice(state, note, type);
+	if (sure?.level === "sure" && valid(sure.category)) return sure.category;
 	const past = sortTx(state.tx).find((t) => t.type === type && (t.note || "").trim().toLowerCase() === n);
 	if (past && valid(past.category)) return past.category;
 	const mem = type === "expense" ? memorySub(state, note) : null;
@@ -58497,8 +58672,12 @@ function moneyKeyboard(state, t, extra = "") {
 		text: `${a.id === t.account ? "✓ " : ""}${a.emoji ? a.emoji + " " : ""}${a.name}`,
 		callback_data: `fa|${t.id}|${a.id}`
 	})));
+	if (t.catBy === "auto" && Array.isArray(t._chips) && t._chips.length) rows.unshift(t._chips.slice(0, 3).map((id) => ({
+		text: `${id === t.category ? "✓ " : ""}${category(state, id)?.emoji ? category(state, id).emoji + " " : ""}${category(state, id)?.name ?? id}`,
+		callback_data: `fk|${t.id}|${id}`
+	})));
 	rows.push([{
-		text: `📂 ${catLabel(state, t)}`,
+		text: `📂 ${catLabel(state, t)} · change`,
 		callback_data: `fc|${t.id}`
 	}, {
 		text: "↩️ Undo",
@@ -58607,12 +58786,56 @@ function logMoney(db, text, key, today, now = Date.now(), opts = {}) {
 		now
 	});
 	if (state.tx.some((x) => x.id === tx.id)) return null;
+	const pick = learnCategory(state, tx);
 	state.tx.push(tx);
 	save$1(db, state);
+	const shown = {
+		...tx,
+		_chips: pick.chips
+	};
 	return {
 		tx,
-		reply: loggedText(state, tx, today),
-		keyboard: moneyKeyboard(state, tx)
+		reply: pick.line ? `${loggedText(state, tx, today)}\n${pick.line}` : loggedText(state, tx, today),
+		keyboard: moneyKeyboard(state, shown)
+	};
+}
+var LEVEL_TEXT = {
+	sure: "sure",
+	maybe: "maybe",
+	guess: "a guess"
+};
+var escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+/**
+* Phase 5 (js/learn.js): your rules and what you chose before for this
+* merchant. Sure → filed there (catBy 'rule' / 'learned'); otherwise the
+* category stays a guess (catBy 'auto', not learned from) and the reply
+* offers three one-tap choices. The book is set only when the merchant's
+* usual book differs from the account's.
+*/
+function learnCategory(state, tx) {
+	if (tx.type !== "expense" && tx.type !== "income") return {
+		line: "",
+		chips: []
+	};
+	const s = suggest(state, {
+		note: tx.note,
+		type: tx.type
+	}, { guess: tx.category });
+	if (s.level === "sure" && s.category) {
+		if (s.category !== tx.category) {
+			tx.category = s.category;
+			if (tx.sub && subById(state, tx.sub)?.parent !== s.category) delete tx.sub;
+		}
+		if (s.sub && subById(state, s.sub)?.parent === tx.category) tx.sub = s.sub;
+		tx.catBy = s.why === "rule" ? "rule" : "learned";
+		const accBook = account(state, tx.account)?.book ?? "personal";
+		if (s.book && s.book !== accBook) tx.book = s.book;
+	} else tx.catBy = "auto";
+	const name = catLabel(state, tx);
+	const why = s.why === "rule" ? "your rule" : s.why === "merchant" ? `${s.n} like it before` : "from the words";
+	return {
+		line: tx.catBy === "auto" ? `📂 ${escHtml(name)} (${LEVEL_TEXT[s.level] ?? "a guess"}, ${why}): tap the right one below` : `📂 ${escHtml(name)} (sure, ${why})`,
+		chips: tx.catBy === "auto" ? s.alternatives : []
 	};
 }
 /** A button under a logged record was tapped: returns the new text and buttons. */
@@ -58650,6 +58873,7 @@ function moneyButton(db, data, today) {
 	}
 	if (kind === "fs") {
 		if (!setSub(state, t, arg, { now })) return null;
+		t.catBy = "you";
 		save$1(db, state);
 		return {
 			text: loggedText(state, t, today),
@@ -58660,6 +58884,7 @@ function moneyButton(db, data, today) {
 	if (kind === "fa" && account(state, arg)) t.account = arg;
 	else if (kind === "fk" && category(state, arg)) {
 		t.category = arg;
+		t.catBy = "you";
 		if (t.sub && subById(state, t.sub)?.parent !== arg) delete t.sub;
 	} else return null;
 	t.updatedAt = now;

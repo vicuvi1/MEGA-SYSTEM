@@ -51,6 +51,12 @@ export function logMoment(t: { id?: unknown; source?: unknown; createdAt?: unkno
   return { at: Number(t.createdAt), imported: isImported(t) }
 }
 
+/** Does this record make its day "logged" (made, or for a capture / auto bill confirmed, by you on that day; not imported)? */
+export function countsAsLogged(t: { date?: unknown; id?: unknown; createdAt?: unknown; source?: unknown; confirmedAt?: unknown }, dayOf: (ms: number) => string): boolean {
+  const m = logMoment(t)
+  return liveLog(String(t.date ?? '').slice(0, 10), m.at, dayOf, m.imported)
+}
+
 /** Imported from a bank statement or a sheet (not logged by hand). */
 export const isImported = (t: { id?: unknown; source?: unknown }) => /^tg-life-bank-|^imp-|^bank-/.test(String(t.id ?? '')) || /^(bank|import|csv|sheet|xlsx)$/i.test(String(t.source ?? ''))
 

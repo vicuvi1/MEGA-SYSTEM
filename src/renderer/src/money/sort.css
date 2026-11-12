@@ -1,0 +1,41 @@
+/* Money phase 5: the To sort card and the Rules card (Money page). */
+.ts-card { display: grid; gap: 6px; padding-top: 14px; padding-bottom: 14px; }
+.ts-card .mh-head { margin-bottom: 2px; }
+/* One line per payment on a wide screen (details left, chips right); it wraps on a narrow one. */
+.ts-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 6px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.04); border: 1px solid var(--border); }
+.ts-row > .ts-top { flex: 1 1 260px; }
+.ts-row > .ts-chips { flex: 0 1 auto; justify-content: flex-end; }
+.ts-row.auto { border-style: dashed; }
+.ts-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; min-width: 0; }
+.ts-amt { font-variant-numeric: tabular-nums; font-size: 15px; }
+.ts-merch { flex: 1 1 140px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.ts-when { color: var(--muted); font-size: var(--t-xs); }
+.ts-x { width: 28px; height: 28px; border-radius: 999px; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; }
+.ts-x:hover { color: var(--text); background: rgb(var(--ink) / 0.06); }
+.ts-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.ts-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 12px; border-radius: 999px; font: inherit; font-size: 13px; color: var(--text); background: rgb(var(--ink) / 0.06); border: 1px solid var(--border-strong); cursor: pointer; transition: transform 0.15s var(--ease-out), background-color 0.15s; }
+.ts-chip:hover:not(:disabled) { background: rgb(var(--ink) / 0.1); }
+.ts-chip:active:not(:disabled) { transform: scale(0.97); }
+.ts-chip:disabled { opacity: 0.55; cursor: default; }
+.ts-chip.top { border-color: color-mix(in srgb, var(--accent) 55%, var(--border-strong)); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.ts-chip.ghost { background: transparent; color: var(--muted); }
+.ts-other { min-height: 32px; border-radius: 10px; font: inherit; font-size: 13px; }
+.ts-lv { font-style: normal; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: rgb(var(--ink) / 0.08); color: var(--muted); }
+.ts-lv.lv-sure { color: var(--accent-text); }
+.ts-lv.lv-maybe { color: var(--mh-amber, #d97706); }
+.ts-autotag { font-style: normal; font-size: 11px; padding: 1px 6px; border-radius: 6px; background: color-mix(in srgb, var(--mh-blue, #38bdf8) 18%, transparent); color: var(--text); }
+.ts-filed { display: inline-flex; align-items: center; gap: 6px; margin-right: 4px; font-size: 13px; }
+.ts-sub { margin: 6px 0 0; font-size: 13px; font-weight: 650; color: var(--muted); }
+.ts-rules summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; }
+.ts-rules summary::-webkit-details-marker { display: none; }
+.ts-rules summary h2 { margin: 0; font: 650 16px/1.2 var(--display, inherit); }
+.ts-rlist { display: grid; gap: 6px; margin: 10px 0 0; padding: 0; list-style: none; }
+.ts-rlist li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 10px; border-radius: 12px; background: rgb(var(--ink) / 0.04); }
+.ts-rlist select { min-height: 30px; border-radius: 8px; font: inherit; font-size: 13px; }
+.ts-arrow { color: var(--muted); }
+.ts-rnew { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ts-rnew input { flex: 1 1 200px; min-height: 34px; padding: 0 10px; border-radius: 10px; border: 1px solid var(--border-strong); background: transparent; color: var(--text); font: inherit; }
+.ts-rnew select { min-height: 34px; border-radius: 10px; font: inherit; }
+@media (prefers-reduced-motion: reduce) { .ts-chip { transition: none; } .ts-chip:active:not(:disabled) { transform: none; } }
+.ts-amtin { width: 110px; min-height: 30px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--border-strong); background: transparent; color: var(--text); font: inherit; font-size: 14px; }
+.ts-more { justify-self: start; padding: 2px 4px; border: 0; background: none; color: var(--accent-text); font: inherit; font-size: 13px; cursor: pointer; }

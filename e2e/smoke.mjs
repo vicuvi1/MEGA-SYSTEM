@@ -713,6 +713,40 @@ try {
       window.dispatchEvent(new CustomEvent('life-finance-changed'))
     })
   })
+  // Money phase 5 (less typing): a captured payment waits in To sort; one tap on a chip files it and
+  // teaches the rule; the next one from the same merchant ("Smokebistro #7") is filed by itself, marked auto.
+  await step('Money to sort: one tap files a payment, the rule is learned, the next one files itself', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('money')
+    await pg.click('.mh .ptabs [data-tab="today"]').catch(() => {})
+    await pg.waitForSelector('[data-testid="ts-item"][data-id="smoke-cap-1"]', { timeout: 15000 }).catch(async () => {
+      throw new Error(`no To sort card: ${(await pg.locator('.mh').innerText().catch(() => '')).slice(0, 200)}`)
+    })
+    if (!(await pg.$('[data-testid="ts-item"][data-id="smoke-cap-2"]'))) throw new Error('the second payment should wait too (no rule yet)')
+    const row = pg.locator('[data-testid="ts-item"][data-id="smoke-cap-1"]')
+    if ((await row.locator('[data-testid="ts-chip"]').count()) < 1 || !(await row.locator('[data-testid="ts-other"]').count())) throw new Error('no category chips or Other…')
+    const chip = row.locator('[data-testid="ts-chip"]').first()
+    const cat = await chip.getAttribute('data-cat')
+    await chip.click()
+    // The rule is learned: the next one is filed by itself in the same category, marked "auto".
+    await pg.waitForSelector('[data-testid="ts-auto"][data-id="smoke-cap-2"]', { timeout: 15000 }).catch(async () => {
+      throw new Error(`the next payment was not filed by itself: ${(await pg.locator('[data-testid="tosort"]').innerText().catch(() => 'card gone')).slice(0, 300)}`)
+    })
+    if (await pg.$('[data-testid="ts-item"][data-id="smoke-cap-1"]')) throw new Error('the tapped payment is still in To sort')
+    const autoCat = await pg.locator('[data-testid="ts-auto"][data-id="smoke-cap-2"] [data-testid="ts-auto-cat"]').innerText()
+    if (!/auto/.test(autoCat)) throw new Error(`no "auto" mark: ${autoCat}`)
+    if (process.env.MONEY5_SHOT) await pg.locator('[data-testid="tosort"]').screenshot({ path: process.env.MONEY5_SHOT }).catch(() => {})
+    // The rule shows on the Rules card (Month tab), learned from To sort.
+    await pg.click('.mh .ptabs [data-tab="month"]')
+    await pg.click('[data-testid="rules-card"] summary')
+    await pg.waitForSelector('[data-testid="rule-row"][data-match="smokebistro"]', { timeout: 10000 })
+    const picked = await pg.locator('[data-testid="rule-row"][data-match="smokebistro"] select').inputValue()
+    if (picked !== cat) throw new Error(`the rule files to ${picked}, the tap picked ${cat}`)
+    // Back on Today: OK confirms the auto-filed one and the card empties.
+    await pg.click('.mh .ptabs [data-tab="today"]')
+    await pg.click('[data-testid="ts-auto"][data-id="smoke-cap-2"] [data-testid="ts-ok"]')
+    await pg.waitForFunction(() => !document.querySelector('[data-testid="ts-auto"]'), null, { timeout: 10000 })
+  })
   for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky']]) {
     await step(`${name} loads with its own content`, async () => {
       await open(page)

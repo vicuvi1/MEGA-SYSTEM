@@ -207,6 +207,10 @@ if (process.env.E2E_DISCIPLINE === 'demo') {
     deleted: {}
   }
   db.run("INSERT INTO settings (key, value) VALUES ('app_sync_finance', ?)", [JSON.stringify({ savedAt: Date.now(), data })])
+  // Money phase 5: two made-up captured payments waiting in To sort, the same
+  // merchant written two ways (a branch number on one).
+  const cap = (id, mins, merchant, amount) => ({ id, at: Date.now() - mins * 60000, source: 'maib', amount, currency: 'MDL', merchant, kind: 'debit', state: 'new', updatedAt: 1 })
+  db.run("INSERT INTO settings (key, value) VALUES ('money_tosort', ?)", [JSON.stringify({ items: [cap('smoke-cap-1', 120, 'SMOKEBISTRO 12', 8900), cap('smoke-cap-2', 60, 'Smokebistro #7', 6400)] })])
 }
 
 // Made-up career data (Career page smoke and screenshots): companies from the

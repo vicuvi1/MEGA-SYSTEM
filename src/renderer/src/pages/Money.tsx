@@ -21,6 +21,8 @@ import type { MoneyHubView } from '../web/moneyHub'
 import '../money.css'
 import { Donut } from '../Donut'
 import { LongViewCard } from '../MoneyLong'
+import { ToSortCard } from '../money/ToSortCard'
+import { RulesCard } from '../money/RulesCard'
 
 // One money formatter, shared with Finance Helper (core/moneyText): single
 // amounts keep their bani (12,50 MDL), totals are whole units; the label is
@@ -117,6 +119,7 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
             onChange={setTab}
           />
           <TabPanel page="money" id="today" value={tab}>
+            <ToSortCard />
             <div className="mh-top">
               <Hero view={view} ringRef={ring} pop={pop} streak={days.state?.streak.days ?? 0} />
               <section className="mh-card mh-quick">
@@ -139,6 +142,7 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
               <Forecast view={view} />
               <LongViewCard view={view} onOpenApp={openApp} />
             </div>
+            <RulesCard />
           </TabPanel>
           <TabPanel page="money" id="goals" value={tab}>
             <div className="mh-grid">

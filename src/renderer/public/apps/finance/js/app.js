@@ -2133,6 +2133,8 @@ function openTxSheet(existing = null, preset = {}) {
     }
     // The form does not show the tax tag or receipts: keep them (js/screens/taxes.js).
     if (existing) Object.assign(tx, Taxes.keepOnEdit(state, existing.id));
+    // Nor where it came from, its book or whether you confirmed it (phase 5): kept too (model.js keptOnEdit).
+    if (existing) tx = M.keptOnEdit(existing, tx);
     if (existing) state.tx = state.tx.map((t) => (t.id === existing.id ? tx : t));
     else state.tx.push(tx);
     // You picked or confirmed the subcategory: remember the shop for next time.

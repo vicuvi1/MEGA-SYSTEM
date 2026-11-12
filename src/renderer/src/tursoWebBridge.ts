@@ -111,6 +111,7 @@ import { createExtras } from './web/lifeExtras'
 import { createSaga } from './web/sagaApi'
 import { createCareer } from './web/career'
 import { createMoneyApi } from './web/moneyApi'
+import { createSortApi, paysLogged } from './web/moneySort'
 import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 import { MIGRATIONS } from '@core/schema'
 import { cleanBlockKinds, setBlockKind, type BlockKind, type BlockKinds } from '@core/blockKind'
@@ -1357,6 +1358,8 @@ export function createTursoWebBridge(): Bridge {
     career: createCareer(svcP, (db) => financeStateFrom(db, typeof localStorage !== 'undefined' ? localStorage : null), serverAi(currentSession)),
     // The Money hub and one-line quick add (Finance Helper's data).
     finance: createMoneyApi(svcP, () => syncsP.then((list) => list.find((x) => x.spec === FINANCE)?.sync()), applyFinance),
+    // Money phase 5: To sort, bills due to confirm, category rules.
+    moneySort: createSortApi(svcP, () => syncsP.then((list) => list.find((x) => x.spec === FINANCE)?.sync())),
     system: {
       health: async () => {
         const h = await readHealth(turso)
@@ -2018,7 +2021,7 @@ export function createTursoWebBridge(): Bridge {
       // through the Sleep section when it checks you in).
       sync: async () => {
         const finance = readJson<any>('finance-helper.state')
-        const days = Array.isArray(finance?.tx) ? finance.tx.map((t: any) => String(t?.date ?? '')).filter((d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d)) : []
+        const days = Array.isArray(finance?.tx) ? finance.tx.filter((t: any) => paysLogged(t, (ms) => dayKey(new Date(ms)))).map((t: any) => String(t?.date ?? '')).filter((d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d)) : []
         // Always: finished days logged in Life System are judged too (FX3).
         const awarded = await (await svcP).connections.syncFinance(days)
         return { awarded, state: await bridge.connections.state() }

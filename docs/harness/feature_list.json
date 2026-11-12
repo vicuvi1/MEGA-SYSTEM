@@ -1292,6 +1292,20 @@
   ],
   "evidence": "2026-11-12: branch money-phase3-taxes; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "apps/finance/js/tax.js, taxprofiles.js, accountant.js, receipts.js, screens/taxes.js, css/tax.css; app.js (Taxes tab, bulk 'Tax tag…', sheet row, keepOnEdit); core/receiptIndex.ts; renderer/src/money/receipts.ts + receiptBridge.ts; EmbedHost.tsx (2 hooks); tursoWebBridge.ts moneyReceipts; settingsKeys money_receipts; modules.ts receiptUpload; vault/driveApi.ts hides receipt folders; e2e/smokeTaxes.mjs. Not tried against the real Google Drive yet (fakes only)."
+ },
+ {
+  "id": "F-MONEY-5A",
+  "priority": 1,
+  "area": "money",
+  "title": "Money phase 5a: learned category rules, To sort card, bills to confirm, Telegram uses the rules",
+  "user_visible_behavior": "Categories are learned from what you chose before (LINELLA 23 = Linella), with how sure the app is. Phone payments wait in a To sort card on the Money page with 3 category chips and Other… (an unreadable one asks for the amount); one tap files one and teaches a rule, and the next one from that merchant is filed by itself, marked auto, with OK, Change and Undo. Recurring bills that are due wait for one tap (Paid / Didn't happen). A Rules card lists, edits and deletes rules and shows what was learned. On Telegram the reply says which category it chose and how sure, with a change button, and three buttons when not sure. Auto-filed entries pay no points.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeLearn.test.ts src/renderer/src/web/moneySort.test.ts src/renderer/src/web/financeBot.test.ts",
+   "SMOKE_ONLY=\"Money to sort\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch money-phase5; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "apps/finance/js/learn.js (new), model.js (suggestCategory sure merchant, addRule/removeRule via learn.js, keptOnEdit), app.js (edit keeps unknown fields), sync.js (rules list merge), sw.js v42; web/moneySortCore.ts, web/moneySort.ts, money/ToSortCard.tsx, money/RulesCard.tsx, money/sort.css (new); web/financeBot.ts (learnCategory, saveFinance), core/moneyDays.ts (countsAsLogged on logMoment), core/moneyToSort.ts (auto, reopen; keepToSort keeps reopen), core/moneyText.ts typedBani, tursoWebBridge.ts, bridge.ts, pages/Money.tsx."
  }
  ]
 }
