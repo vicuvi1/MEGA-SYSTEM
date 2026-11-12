@@ -274,7 +274,7 @@ function BlockRow({ b, store, today, run, picked, todayMin, pomos, dragging, ove
           <span className="sy-livetag" title="This block is running">● Running</span>
         ) : (
           !b.done && (
-            <button className="btn small primary sy-startbtn" onClick={() => void start()} title={run ? `Switch to ${b.name}: the time so far goes to ${run.subject}` : `Start ${b.name} now`} aria-label={run ? `Switch to ${b.name}` : `Start ${b.name}`}>
+            <button className="btn small sy-startbtn" onClick={() => void start()} title={run ? `Switch to ${b.name}: the time so far goes to ${run.subject}` : `Start ${b.name} now`} aria-label={run ? `Switch to ${b.name}` : `Start ${b.name}`}>
               {run ? '⇄ Switch' : '▶ Start'}
             </button>
           )

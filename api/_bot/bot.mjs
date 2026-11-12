@@ -54369,6 +54369,8 @@ syncFinance: (recordDays) => write((s) => {
 			logWake: (time, quality) => write((s) => s.sleep.logWake(time, quality), W),
 			logBed: (time) => write((s) => s.sleep.logBed(time), W),
 			setWake: (day, time) => write((s) => s.sleep.setWake(day, time), W),
+			/** A bedtime for a past night (the morning row `day`): the record only, no points. */
+			setBed: (day, time) => write((s) => s.sleep.setBed(day, time), "life-sleep-changed"),
 			/** Waky's wake-ups and bedtimes into the sleep log, where it has none yet. */
 			fromWaky: () => write((s) => s.sleep.fromWaky(), W),
 			setTargets: (weekday, weekend, bedtime) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime)),
@@ -70579,10 +70581,27 @@ function budgetPrefs(raw) {
 }
 // src/core/simpleMode.ts
 var SIMPLE_KEY = "simple_mode";
+/** Everything else, in this order, under one closed "Archive" group. Nothing is deleted. */
+var ARCHIVE_PAGES = [
+	"calendar",
+	"coach",
+	"goals",
+	"season",
+	"career",
+	"progress",
+	"shop",
+	"sleep",
+	"locker",
+	"discipline",
+	"music",
+	"custom",
+	"tasks"
+];
 var DEFAULT_SIMPLE = {
 	on: true,
 	budget: true,
-	afternoon: false
+	afternoon: false,
+	shown: []
 };
 /** Missing or unreadable = the defaults (on). */
 function readSimple(raw) {
@@ -70593,10 +70612,12 @@ function readSimple(raw) {
 		r = null;
 	}
 	if (!r || typeof r !== "object") return { ...DEFAULT_SIMPLE };
+	const shown = Array.isArray(r.shown) ? ARCHIVE_PAGES.filter((p) => r.shown.includes(p)) : [];
 	return {
 		on: r.on !== false,
 		budget: r.budget !== false,
-		afternoon: r.afternoon === true
+		afternoon: r.afternoon === true,
+		shown
 	};
 }
 // src/server/mcp.ts

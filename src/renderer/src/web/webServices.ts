@@ -459,6 +459,8 @@ export function createWebServices(mirror: Mirror) {
       logWake: (time?: string, quality?: number) => write((s) => s.sleep.logWake(time, quality), W),
       logBed: (time?: string) => write((s) => s.sleep.logBed(time), W),
       setWake: (day: string, time: string) => write((s) => s.sleep.setWake(day, time), W),
+      /** A bedtime for a past night (the morning row `day`): the record only, no points. */
+      setBed: (day: string, time: string) => write((s) => s.sleep.setBed(day, time), 'life-sleep-changed'),
       /** Waky's wake-ups and bedtimes into the sleep log, where it has none yet. */
       fromWaky: () => write((s) => s.sleep.fromWaky(), W),
       setTargets: (weekday: string, weekend: string, bedtime?: string) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime)),

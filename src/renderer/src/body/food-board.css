@@ -57,7 +57,10 @@
 .fdb-tile .mp-tile.none { display: grid; place-items: center; font-size: 26px; background: color-mix(in srgb, var(--surface-3) 70%, transparent); }
 .fdb-tile-text { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; min-width: 0; }
 .fdb-tile-text b { font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.fdb-tile-text small { font-size: 13px; color: var(--muted); }
+.fdb-tile-text small { font-size: 14px; color: var(--muted); }
+.fdb-tile { position: relative; }
+.fdb-tile-log { position: absolute; top: 8px; right: 8px; padding: 5px 12px; border: 0; border-radius: 999px; background: var(--accent, #c8f135); color: var(--accent-ink, #101503); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
+.fdb-tile-log:hover { filter: brightness(1.08); }
 .fdb-empty { color: var(--muted); }
 
 @media (max-width: 1199px) { .fdb-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } .fdb-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

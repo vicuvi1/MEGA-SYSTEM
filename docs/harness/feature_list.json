@@ -1133,6 +1133,20 @@
    ],
    "evidence": "2026-11-11: branch simplify-three-numbers; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); a real screenshot of the new Today at 1920x1080 kept outside the repo.",
    "notes": "core/threeNumbers.ts, core/notifyBudget.ts, core/mustDoRule.ts, core/benOneJob.ts, core/simpleMode.ts; ThreeToday.tsx, settings/simple.tsx, useSimple.ts, NotifToasts.tsx; server/telegramBot.ts (send gate, budgetTick, runDaily), web/webBots.ts (pick, night), desktop/main.ts (desktop:notify cap)."
-  }
+  },
+ {
+  "id": "F-USABLE-CORE",
+  "priority": 1,
+  "area": "today",
+  "title": "Usability pass: a 4-item menu with a closed Archive, and the 7 daily flows with fewer clicks",
+  "user_visible_behavior": "Simple mode's menu is Today, Study Time, Sport Track and Money, then Settings; every other page is in one closed Archive group (Settings → Simple mode brings any back; Ctrl+K finds all; Alt+number follows the menu). Today logs last night in place, names the must-do its Start button starts, shows a running block with Stop, and offers Set tomorrow's 3 at any hour. Starting focus no longer dims the app or asks a goal; stopping no longer asks twice. Study Time, Sport Track's Dashboard and Workout done have one main button each; no dead demo buttons; repeat meals have + Log; the island's Stop shows the time and water shows the day so far. Text 15 px.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/simpleMode.test.ts",
+   "SMOKE_ONLY=\"Today shows 3|island in Simple mode|Simple mode\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch usability-core; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); before/after walks of the 7 flows at 1920x1080 kept outside the repo.",
+  "notes": "core/simpleMode.ts (SIMPLE_CORE, ARCHIVE_PAGES, simpleMenu, toggleShown, altTarget), Sidebar.tsx, App.tsx (Alt keys, rest chip), settings/simple.tsx, ThreeToday.tsx (SleepForm, running block, plan-tomorrow), FocusIsland.tsx (no dim in Simple mode, stuck-open fix), boost/FocusBoost.tsx, study/*, training/SportDashboard.tsx, WorkoutMode.tsx, WorkoutDone.tsx, body/FoodBoard.tsx, food-paste.css, DesktopIsland.tsx simplePanel; web/webServices.ts sleep.setBed. Money/finance untouched (owner)."
+ }
  ]
 }

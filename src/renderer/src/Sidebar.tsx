@@ -4,7 +4,7 @@ import { Icon, Logo } from './Icon'
 import { MODULES, type ModuleDef, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
 import { useSimple } from './useSimple'
-import { simpleHiddenPages } from '@core/simpleMode'
+import { simpleMenu } from '@core/simpleMode'
 
 export type Badge = { n?: number; dot?: 'lime' | 'warn' }
 
@@ -16,20 +16,51 @@ interface Props {
   badges: Partial<Record<PageId, Badge>>
 }
 
-// Sections in groups, in the order they appear.
+// Sections in groups, in the order they appear (the full menu, Simple mode off).
 const GROUPS: { title: string; ids: PageId[] }[] = [
   { title: 'Plan', ids: ['today', 'calendar', 'tasks', 'study', 'coach', 'goals', 'season', 'career', 'progress', 'shop'] },
   { title: 'Life', ids: ['sleep', 'body', 'locker', 'money', 'discipline', 'music', 'custom'] }
 ]
+/** The full menu's order (for Alt+number when Simple mode is off). */
+export const FULL_MENU: PageId[] = GROUPS.flatMap((g) => g.ids)
+
+// Simple mode's Archive group: closed unless you opened it (this device), or you are on one of its pages.
+const ARCHIVE_OPEN = 'ls.sbArchive'
+const readOpen = () => {
+  try {
+    return localStorage.getItem(ARCHIVE_OPEN) === '1'
+  } catch {
+    return false
+  }
+}
 
 export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
   const [tip, setTip] = useState<{ label: string; y: number } | null>(null)
   const open = !collapsed
   const byId = Object.fromEntries(MODULES.map((m) => [m.id, m])) as Record<PageId, ModuleDef>
   const [ui] = useUiPrefs()
-  // Simple mode takes the Tasks page out of the menu (core/simpleMode.ts).
+  // Simple mode: Today, Study Time, Sport Track (plus pages you brought back); the rest under Archive (core/simpleMode.ts).
   const simple = useSimple()
-  const hiddenPages = new Set([...(ui.hiddenPages ?? []), ...simpleHiddenPages(simple)])
+  const menu = simpleMenu(simple)
+  const hiddenPages = new Set(ui.hiddenPages ?? [])
+  const [archiveOpen, setArchiveOpen] = useState(readOpen)
+  const onArchivePage = !!menu && (menu.archive as string[]).includes(page)
+  const showArchive = archiveOpen || onArchivePage
+  const toggleArchive = () => {
+    const next = !showArchive
+    setArchiveOpen(next)
+    try {
+      localStorage.setItem(ARCHIVE_OPEN, next ? '1' : '0')
+    } catch {
+      /* private window: stays for this visit */
+    }
+  }
+  const groups: { title: string; ids: PageId[]; archive?: boolean }[] = menu
+    ? [
+        { title: 'Daily', ids: menu.main as PageId[] },
+        { title: 'Archive', ids: menu.archive as PageId[], archive: true }
+      ]
+    : GROUPS.map((g) => ({ ...g, ids: g.ids.filter((id) => !hiddenPages.has(id)) }))
   let index = 0
 
   const showTip = (label: string, el: HTMLElement) => {
@@ -59,12 +90,33 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
         </div>
 
         <nav className="sb-nav" aria-label="Sections">
-          {GROUPS.map((g) => (
-            <div key={g.title} className="sb-group">
-              <div className="sb-group-title sb-label">{g.title}</div>
-              {g.ids.filter((id) => !hiddenPages.has(id)).map((id) => {
+          {groups.map((g) => (
+            <div key={g.title} className={`sb-group ${g.archive ? 'sb-archive' : ''}`} data-testid={g.archive ? 'sb-archive' : undefined}>
+              {g.archive ? (
+                <button
+                  className="sb-item sb-archive-toggle"
+                  style={{ ['--c' as string]: 'var(--muted)' }}
+                  aria-expanded={showArchive}
+                  data-testid="sb-archive-toggle"
+                  onClick={toggleArchive}
+                  title={showArchive ? 'Close the Archive' : `Archive: ${g.ids.length} pages you don't use every day (nothing is deleted)`}
+                  onMouseEnter={(e) => showTip(`Archive · ${g.ids.length} pages`, e.currentTarget)}
+                  onMouseLeave={() => setTip(null)}
+                >
+                  <span className="sb-tile">
+                    <Icon name="grid" size={17} />
+                  </span>
+                  <span className="sb-label sb-name">Archive</span>
+                  <span className="sb-label sb-count">{showArchive ? '▾' : `${g.ids.length} ▸`}</span>
+                </button>
+              ) : (
+                <div className="sb-group-title sb-label">{g.title}</div>
+              )}
+              {(!g.archive || showArchive) && g.ids.map((id) => {
                 const m = byId[id]
-                const n = ++index
+                if (!m) return null
+                // Alt+number goes to the pages in the menu (not the archive), the same as App's shortcut.
+                const n = g.archive ? 0 : ++index
                 const on = page === id
                 const soon = m.phase > 0
                 const b = badges[id]
@@ -76,7 +128,7 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
                     className={`sb-item ${on ? 'on' : ''} ${soon ? 'soon' : ''}`}
                     style={{ ['--c' as string]: m.color }}
                     onClick={() => go(id)}
-                    onMouseEnter={(e) => showTip(`${m.label}${soon ? ' · soon' : ''}  Alt+${n}`, e.currentTarget)}
+                    onMouseEnter={(e) => showTip(`${m.label}${soon ? ' · soon' : ''}${n && n < 10 ? `  Alt+${n}` : ''}`, e.currentTarget)}
                     onMouseLeave={() => setTip(null)}
                   >
                     {on && <span className="sb-active" />}
@@ -91,13 +143,31 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
                       </span>
                     )}
                     {!soon && b?.n ? <span className="sb-label sb-count">{b.n}</span> : null}
-                    {!soon && !b?.n && open && <kbd className="sb-label sb-key">{n}</kbd>}
+                    {!soon && !b?.n && open && n > 0 && n < 10 && <kbd className="sb-label sb-key">{n}</kbd>}
                   </button>
                 )
               })}
             </div>
           ))}
         </nav>
+
+        {menu && (
+          <button
+            aria-label="Settings"
+            aria-current={page === 'settings' ? 'page' : undefined}
+            className={`sb-item sb-settings ${page === 'settings' ? 'on' : ''}`}
+            style={{ ['--c' as string]: 'var(--muted)' }}
+            onClick={() => go('settings')}
+            onMouseEnter={(e) => showTip('Settings', e.currentTarget)}
+            onMouseLeave={() => setTip(null)}
+          >
+            {page === 'settings' && <span className="sb-active" />}
+            <span className="sb-tile">
+              <Icon name="gear" size={17} duo={page === 'settings'} />
+            </span>
+            <span className="sb-label sb-name">Settings</span>
+          </button>
+        )}
 
         <button className="sb-toggle" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'} title={collapsed ? 'Expand (Ctrl+B)' : 'Collapse (Ctrl+B)'}>
           <span className={collapsed ? 'flip' : ''}>‹</span>

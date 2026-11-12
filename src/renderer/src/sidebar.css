@@ -55,7 +55,7 @@
 .sb-item:hover .sb-tile { transform: translateY(-1px); }
 .sb-item.on .sb-tile { color: #0b0d12; background: var(--c); box-shadow: 0 0 18px color-mix(in srgb, var(--c) 50%, transparent); }
 .sb-item.on .sb-tile svg path[fill] { fill-opacity: 0.35; }
-.sb-name { flex: 1; font-size: 14px; white-space: nowrap; }
+.sb-name { flex: 1; font-size: 15px; white-space: nowrap; }
 .sb-item.on .sb-name { color: var(--text); font-weight: 650; }
 .sb-item.soon { opacity: 0.45; }
 .sb-lock { color: var(--faint); display: inline-grid; }
@@ -66,6 +66,12 @@
 .sb-dot.lime { background: var(--lime); }
 .sb-dot.warn { background: var(--orange); }
 .sb-item.on .sb-dot { box-shadow: 0 0 0 2px #141822, 0 0 8px var(--c); }
+
+/* Simple mode: the closed Archive group and Settings at the bottom (Sidebar.tsx). */
+.sb-archive { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgb(var(--ink) / 0.06); }
+.sb-archive-toggle .sb-count { color: var(--muted); background: rgb(var(--ink) / 0.06); }
+.sb-archive .sb-item:not(.sb-archive-toggle) { height: 38px; }
+.sb-settings { margin-top: auto; flex: none; }
 
 /* Collapse button: top-right when open, bottom of the dock when slim. */
 .sb-toggle {

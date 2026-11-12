@@ -23,7 +23,9 @@ import { Notifications, type Alert } from './Notifications'
 import { NotifToasts } from './NotifToasts'
 import { RestDayButton } from './RestDay'
 import { GrowthChip } from './body/progress/GrowthLevel'
-import { Sidebar } from './Sidebar'
+import { FULL_MENU, Sidebar } from './Sidebar'
+import { useSimple } from './useSimple'
+import { altTarget, type SimpleMode } from '@core/simpleMode'
 import { MobileBottomBar } from './MobileBottomBar'
 import { PwaInstallBanner } from './PwaInstallBanner'
 import { PageSkeleton } from './blocks'
@@ -563,12 +565,17 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     })
   }, [activeEmbed, narrow])
 
+  // Alt+number follows the menu as you see it (Simple mode: Today, Study Time, Sport Track, then pages you brought back).
+  const simpleNav = useSimple()
+  const navRef = useRef<{ simple: SimpleMode; hidden: string[] }>({ simple: simpleNav, hidden: [] })
+  navRef.current.simple = simpleNav
   // Shortcuts, also while an app inside is focused (main forwards them).
   useEffect(() => {
     const run = (key: string) => {
       if (key === 'toggle-sidebar') toggleSidebar()
       const n = /^go:(\d)$/.exec(key)
-      if (n && MODULES[Number(n[1]) - 1]) setPage(MODULES[Number(n[1]) - 1].id)
+      const target = n ? altTarget(navRef.current.simple, FULL_MENU, navRef.current.hidden, Number(n[1])) : null
+      if (target) setPage(target as PageId)
       if (key === 'switch-view' && embed) {
         const ids = segTabs.map((t) => t.id)
         setView((v) => ({ ...v, [page]: ids[(ids.indexOf(tab) + 1) % ids.length] }))
@@ -680,6 +687,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
   // Small counts on the sidebar and the "needs you" list in the bell.
   const [ui, setUiPrefs] = useUiPrefs()
+  navRef.current.hidden = ui.hiddenPages ?? []
   const blocksLeft = schedule && schedule.day === schedule.today ? schedule.blocks.filter((b) => b.status === 'pending' || b.status === 'running').length : 0
   const tasksLeft = tasks?.tasks.filter((t) => !t.done).length ?? 0
   const overdue = tasks?.tasks.filter((t) => t.overdue).length ?? 0
@@ -816,7 +824,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             </button>
           )}
           {page === 'body' && <GrowthChip where="body" />}
-          {page === 'body' && <RestDayButton />}
+          {/* Simple mode: no "Rest day" chip up here (it read like today's status next to "Upper body today"); "I can't train today" on the Dashboard does the same. */}
+          {page === 'body' && !simpleNav.on && <RestDayButton />}
           <button
             className={`tb-icon ${isSyncingMobile ? 'spinning' : ''}`}
             onClick={triggerMobileSync}

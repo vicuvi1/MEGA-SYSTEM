@@ -10,13 +10,13 @@
 .sy-today { display: flex; align-items: baseline; gap: 8px; }
 .sy-today b { font: 750 30px/1 var(--display, inherit); color: var(--text); letter-spacing: -0.02em; }
 .sy-today small, .sy-week { color: var(--muted); font-size: var(--t-xs); }
-.sy-week { font-size: 13px; }
+.sy-week { font-size: 15px; }
 
 .sy-card { position: relative; box-sizing: border-box; min-width: 0; padding: 16px 18px; border-radius: 18px; background: var(--sy-glass); border: 1px solid var(--border); }
 .sy-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
 .sy-head h2 { margin: 0; display: flex; align-items: center; gap: 8px; font: 650 15px/1.2 var(--display, inherit); color: var(--text); }
 .sy-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.sy input, .sy select { box-sizing: border-box; min-width: 0; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: 13px; }
+.sy input, .sy select { box-sizing: border-box; min-width: 0; padding: 7px 10px; border-radius: 10px; border: 1px solid var(--border); background: rgb(var(--ink) / 0.04); color: var(--text); font: inherit; font-size: 15px; }
 .sy-icon { flex: none; width: 30px; height: 30px; border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--muted); font-size: 14px; cursor: pointer; }
 .sy-icon:hover:not(:disabled) { background: rgb(var(--ink) / 0.06); color: var(--text); }
 .sy-icon:disabled { opacity: 0.3; cursor: default; }
@@ -27,7 +27,7 @@
 .sy-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 
 .sy-seg { display: inline-flex; padding: 3px; border-radius: 12px; background: rgb(var(--ink) / 0.06); gap: 2px; }
-.sy-seg button { padding: 6px 12px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.sy-seg button { padding: 6px 12px; border: 0; border-radius: 9px; background: none; color: var(--muted); font: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer; }
 .sy-seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 3px rgb(0 0 0 / 0.18); }
 .sy-seg.small button { padding: 4px 9px; font-size: 12px; }
 
@@ -57,7 +57,7 @@
 .sy-ring-emoji { font-size: 26px; line-height: 1; }
 .sy-clock { font: 750 clamp(48px, 5.4vw, 84px)/1 var(--display, inherit); letter-spacing: -0.03em; color: var(--text); font-variant-numeric: tabular-nums; }
 .sy-clock.gold { color: var(--sy-gold); }
-.sy-ring-sub { color: var(--muted); font-size: 13px; font-weight: 550; }
+.sy-ring-sub { color: var(--muted); font-size: 15px; font-weight: 550; }
 .sy-timer.idle .sy-clock { color: var(--muted); opacity: 0.75; }
 .sy-timer.on-break .sy-clock { color: #34d399; }
 .sy-timer.paused .sy-clock { opacity: 0.55; }
@@ -95,15 +95,15 @@
 .sy-sesslist { list-style: none; margin: 0; padding: 0; display: grid; align-content: start; gap: 4px; }
 .sy-sesslist li { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 12px; border-left: 3px solid var(--c); background: rgb(var(--ink) / 0.025); }
 .sy-sesslist.compact li { grid-template-columns: 64px minmax(0, 1fr) auto; }
-.sy-time { color: var(--muted); font-size: 12px; }
+.sy-time { color: var(--muted); font-size: 13.5px; }
 .sy-smain { display: grid; min-width: 0; }
-.sy-smain b { font-size: 13.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sy-smain small { color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sy-smin { font-size: 13px; color: var(--text); white-space: nowrap; }
-.sy-notebtn { justify-self: start; max-width: 100%; padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 12px; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sy-smain b { font-size: 15px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sy-smain small { color: var(--muted); font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sy-smin { font-size: 15px; color: var(--text); white-space: nowrap; }
+.sy-notebtn { justify-self: start; max-width: 100%; padding: 0; border: 0; background: none; color: var(--muted); font: inherit; font-size: 13.5px; text-align: left; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sy-notebtn em { font-style: normal; opacity: 0.7; }
 .sy-notebtn:hover { color: var(--text); }
-.sy-empty { padding: 14px 8px; border: 0 !important; background: none !important; }
+.sy-empty { padding: 14px 8px; border: 0 !important; background: none !important; font-size: 15px; }
 
 /* right half */
 .sy-quickadd { padding: 10px 12px; display: grid; gap: 6px; }
@@ -111,7 +111,7 @@
 .sy-plus { color: var(--accent-text, var(--accent)); font-size: 20px; font-weight: 700; padding-left: 4px; }
 .sy-quickadd input { flex: 1; padding: 10px 12px; font-size: 15px; border-radius: 12px; }
 .sy-qparts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 22px; padding-left: 30px; }
-.sy-qname { font-weight: 650; color: var(--text); font-size: 13px; }
+.sy-qname { font-weight: 650; color: var(--text); font-size: 15px; }
 .sy-qpart { padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--text); font-size: 12px; font-weight: 600; }
 .sy-qpart.tag { background: rgb(var(--ink) / 0.08); }
 .sy-qpart.pomos { background: color-mix(in srgb, #ef4444 18%, transparent); }
@@ -119,13 +119,13 @@
 .sy-blocks { padding: 12px 14px; gap: 10px; }
 .sy-filters { display: grid; gap: 8px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
 .sy-frow { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
-.sy-frow > button:not(.sy-fchip) { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.sy-frow > button:not(.sy-fchip) { display: inline-flex; align-items: center; gap: 6px; padding: 6px 11px; border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; font-size: 14.5px; font-weight: 600; cursor: pointer; }
 .sy-frow > button:not(.sy-fchip):hover { background: rgb(var(--ink) / 0.05); }
 .sy-frow > button small { color: var(--muted); font-size: 11.5px; font-weight: 500; }
 .sy-frow > button.on { background: var(--accent-soft); }
 .sy-frow-sub { gap: 6px; }
 .sy-flabel { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; margin-right: 4px; }
-.sy-fchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: rgb(var(--ink) / 0.03); color: var(--text); font: inherit; font-size: 12.5px; cursor: pointer; }
+.sy-fchip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: rgb(var(--ink) / 0.03); color: var(--text); font: inherit; font-size: 14px; cursor: pointer; }
 .sy-fchip small { color: var(--muted); }
 .sy-fchip.on { background: color-mix(in srgb, var(--c, var(--accent)) 22%, transparent); border-color: color-mix(in srgb, var(--c, var(--accent)) 60%, transparent); font-weight: 650; }
 .sy-fchip.ghost { cursor: default; opacity: 0.85; }
@@ -146,7 +146,7 @@
 .sy-block:hover .sy-grip, .sy-grip:focus-visible { opacity: 1; }
 .sy-bmain { flex: 1; min-width: 0; display: grid; gap: 3px; }
 .sy-bmain > b { font-size: 14px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sy-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); font-size: 12px; }
+.sy-meta { display: flex; flex-wrap: wrap; gap: 4px 10px; color: var(--muted); font-size: 13.5px; }
 .sy-tag { color: var(--muted); }
 .sy-due.today { color: var(--accent-text, var(--accent)); font-weight: 650; }
 .sy-due.late { color: #f87171; font-weight: 700; }
@@ -154,12 +154,12 @@
 .sy-tomatoes i { width: 9px; height: 9px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px #ef4444; }
 .sy-tomatoes i.done { background: #ef4444; box-shadow: none; }
 .sy-tomatoes small { color: var(--muted); font-size: 11px; }
-.sy-bnum { flex: none; font-size: 13px; color: var(--text); text-align: right; white-space: nowrap; }
+.sy-bnum { flex: none; font-size: 15px; color: var(--text); text-align: right; white-space: nowrap; }
 .sy-bnum small { color: var(--muted); }
 .sy-bacts { flex: none; display: flex; align-items: center; gap: 4px; }
 .sy-bacts .btn { white-space: nowrap; }
 .sy-startbtn { min-width: 82px; }
-.sy-livetag { min-width: 82px; text-align: center; color: var(--c); font-size: 12.5px; font-weight: 700; }
+.sy-livetag { min-width: 82px; text-align: center; color: var(--c); font-size: 14px; font-weight: 700; }
 .sy-editrow { list-style: none; }
 .sy-form { display: grid; gap: 10px; padding: 12px; border-radius: 14px; background: rgb(var(--ink) / 0.04); margin-bottom: 6px; }
 .sy-form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; }

@@ -287,7 +287,7 @@ function CoachCard({ t }: { t: SportTrain }) {
         </div>
       )}
       <div className="sp-coach-btns">
-        <button type="button" className="sp-btn primary big" onClick={() => t.shiftAll(1)} disabled={!canShift} data-tg="harder-all">
+        <button type="button" className="sp-btn big" onClick={() => t.shiftAll(1)} disabled={!canShift} data-tg="harder-all">
           Make it harder
         </button>
         <button type="button" className="sp-btn big" onClick={() => t.shiftAll(-1)} disabled={!canShift} data-tg="easier-all">
