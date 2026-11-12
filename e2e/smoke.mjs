@@ -981,6 +981,70 @@ try {
   })
   // Money v2 phase 3: a tax tag, the year summary, the accountant export (e2e/smokeTaxes.mjs).
   await (await import('./smokeTaxes.mjs')).taxSteps({ step, pg, open, financeFrame, storedTx })
+  // Money v2 phase 2: one Personal / Business / Both switch on the Money page and in Finance Helper.
+  // With no business account Both is the default and Business says so; marking an account Business
+  // (undoable) fills the Business card; Pay yourself is "Paid to you" there; everything is put back.
+  await step('Money books: the Personal / Business / Both switch, the business view and pay yourself', async () => {
+    const stored = () => pg.evaluate(() => JSON.parse(localStorage.getItem('finance-helper.state') || '{}'))
+    await open('money')
+    await pg.waitForTimeout(800)
+    if (!(await pg.$('.mh-hero'))) await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click()
+    await pg.waitForSelector('[data-testid="money-book-switch"]', { timeout: 15000 })
+    const on = () => pg.locator('[data-testid="money-book-switch"] button[aria-checked="true"]').innerText()
+    if ((await on()) !== 'Both') throw new Error(`with no business account the switch shows ${await on()}, not Both`)
+    const before = await stored()
+    await pg.locator('[data-testid="money-book-switch"] button', { hasText: 'Business' }).click()
+    await pg.waitForSelector('[data-testid="money-business"]', { timeout: 8000 })
+    if (!/No business money yet/.test(await pg.locator('[data-testid="money-business"]').innerText())) throw new Error('the empty Business card does not say there is no business money')
+    // The step before may leave the Month tab open; the full-app button is on Today.
+    if (await pg.$('.mh .ptabs [data-tab="today"]')) await pg.click('.mh .ptabs [data-tab="today"]')
+    await pg.waitForSelector('.mh-open', { state: 'visible', timeout: 8000 })
+    await pg.click('.mh-open')
+    await pg.waitForTimeout(2500)
+    const frame = await financeFrame()
+    await frame.evaluate(() => { location.hash = '#home' })
+    // Finance Helper follows the same switch.
+    await frame.waitForSelector('[data-testid="book-switch"] [data-book="business"][aria-pressed="true"]', { timeout: 10000 })
+    await frame.waitForSelector('[data-testid="business-view"] [data-act="book-manage"]', { timeout: 8000 })
+    const mdl = before.settings.accounts.filter((a) => !a.archived && (a.currency || 'MDL') === before.settings.currency)
+    if (mdl.length < 2) throw new Error('the fixture needs two accounts in the main currency')
+    const [biz, mine] = mdl
+    await frame.click('[data-testid="business-view"] [data-act="book-manage"]')
+    await frame.click(`.sheet [data-acc="${biz.id}"][data-to="business"]`)
+    await pg.waitForFunction((id) => JSON.parse(localStorage.getItem('finance-helper.state')).settings.accounts.find((a) => a.id === id)?.book === 'business', biz.id, { timeout: 5000 })
+    await frame.click('.sheet .icon-btn[data-close]')
+    await frame.waitForSelector('[data-testid="biz-profit"]', { timeout: 5000 })
+    // Pay yourself: a transfer business → personal, "Paid to you" in Business (never a cost).
+    const costs = await frame.locator('[data-testid="business-view"] .bk-kpis div:nth-child(3) b').innerText()
+    await frame.click('[data-testid="book-pay"]')
+    await frame.waitForSelector('.sheet [data-testid="pay-amount"]', { timeout: 5000 })
+    await frame.selectOption('.sheet #bk-from', biz.id)
+    await frame.selectOption('.sheet #bk-to', mine.id)
+    await frame.fill('.sheet [data-testid="pay-amount"]', '123')
+    await frame.click('.sheet [data-testid="pay-go"]')
+    await pg.waitForFunction(() => JSON.parse(localStorage.getItem('finance-helper.state')).tx.some((t) => t.draw && t.amount === 12300 && t.type === 'transfer'), null, { timeout: 5000 })
+    await frame.waitForFunction(() => /123/.test(document.querySelector('[data-testid="biz-draws"]')?.textContent || ''), null, { timeout: 5000 })
+    if ((await frame.locator('[data-testid="business-view"] .bk-kpis div:nth-child(3) b').innerText()) !== costs) throw new Error('paying yourself changed the business costs')
+    if (process.env.BOOKS_SHOTS) {
+      await frame.locator('[data-testid="business-view"]').screenshot({ path: `${process.env.BOOKS_SHOTS}/finance-business-view.png` })
+    }
+    // Undo the payment, then Personal: no Business card.
+    await frame.click('#toast button')
+    await pg.waitForFunction(() => !JSON.parse(localStorage.getItem('finance-helper.state')).tx.some((t) => t.draw && t.amount === 12300), null, { timeout: 5000 })
+    await frame.click('[data-testid="book-switch"] [data-book="personal"]')
+    await frame.waitForSelector('[data-testid="book-switch"] [data-book="personal"][aria-pressed="true"]', { timeout: 5000 })
+    if (await frame.$('[data-testid="business-view"]')) throw new Error('the Business card shows in the Personal view')
+    // Put the account back (Books… → Personal) and the switch on Both: everything as before.
+    await frame.click('[data-testid="book-switch"] [data-act="book-manage"]')
+    await frame.click(`.sheet [data-acc="${biz.id}"][data-to="personal"]`)
+    await pg.waitForFunction((id) => !JSON.parse(localStorage.getItem('finance-helper.state')).settings.accounts.find((a) => a.id === id)?.book, biz.id, { timeout: 5000 })
+    await frame.click('.sheet .icon-btn[data-close]')
+    await frame.click('[data-testid="book-switch"] [data-book="both"]')
+    await frame.waitForSelector('[data-testid="book-switch"] [data-book="both"][aria-pressed="true"]', { timeout: 5000 })
+    const after = await stored()
+    if (after.tx.length !== before.tx.length) throw new Error(`records changed: ${before.tx.length} → ${after.tx.length}`)
+    if (after.tx.some((t) => t.book)) throw new Error('a record got a book field')
+  })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.

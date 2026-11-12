@@ -37,6 +37,9 @@ import * as Calc from './screens/calc.js';
 import * as Buddy from './screens/buddy.js';
 import * as ImportCheck from './screens/importcheck.js';
 import * as Reprice from './screens/reprice.js';
+// [books] Personal / Business / Both (Money v2 phase 2).
+import * as Books from './books.js';
+import * as BooksUI from './screens/books.js';
 import * as Reconcile from './screens/reconcile.js';
 import * as MoneyIO from './screens/moneyio.js';
 import { isMoneyExport } from './moneyexport.js';
@@ -70,6 +73,9 @@ import { APP_VERSION } from './version.js';
 import { countsAsSpending, countsAsIncome } from './catshare.js';
 
 let state = load();
+// [books] While a one-book screen is drawn, `state` is a read-only lens and this holds the real data.
+let bookReal = null;
+const realState = () => bookReal || state;
 // Undo / redo for this session (js/history.js).
 const history = createHistory();
 history.reset(state);
@@ -90,6 +96,8 @@ const ui = {
   // Sheet view: days with an extra empty row.
   sheetExtra: new Set(),
   lastSel: null,
+  // [books] which money is shown: personal, business or both (this device).
+  book: Books.readBook(state),
 };
 let installPrompt = null;
 let toastTimer = null;
@@ -153,6 +161,7 @@ const countUp = (c, key, opts) => (c = Math.round(c / 100) * 100, `<span data-co
 // one write, and leaving the page writes at once.
 const SAVE_FAILED = 'Could not save. Is your browser storage full or blocked?';
 function persist({ quiet = false } = {}) {
+  const state = realState(); // [books] always the real data, never a one-book view
   if (!saveSoon(state)) toast(SAVE_FAILED);
   if (quiet) history.reset(state);
   else history.record(state);
@@ -1136,6 +1145,7 @@ function bulkBar() {
     <select data-bulk="account" aria-label="Set account"><option value="">Account…</option>${accountOptionsHTML(state.settings.accounts.filter((a) => !a.archived), '', { baseCur: state.settings.currency })}</select>
     ${Taxes.bulkSelectHTML()}
     <label class="bulk-date"><span>Date</span><input type="date" data-bulk="date" aria-label="Set date"></label>
+    ${BooksUI.bulkSelectHTML()}
     <button type="button" class="btn danger" data-act="bulk-del">Delete</button>
     <button type="button" class="btn" data-act="bulk-clear">Clear</button>
   </div>`;
@@ -1720,10 +1730,24 @@ function render({ enter = false } = {}) {
     persist({ quiet: true });
   }
   applyTheme();
+  // [books] A one-book screen is drawn from a read-only lens (books.js); the real data comes back after.
+  if (Books.isView(ui.book) && ui.book !== 'both' && !bookReal && !state._sealed) {
+    bookReal = state;
+    state = Books.bookLens(state, ui.book);
+    try { return drawScreen({ enter }); } finally { state = bookReal; bookReal = null; }
+  }
+  return drawScreen({ enter });
+}
+function drawScreen({ enter }) {
   // Today's weekday color, used to mark today everywhere.
   document.documentElement.style.setProperty('--today-c', `var(--dow${dowIndex(todayISO())})`);
   app.className = `app view-${ui.tab}`;
   app.innerHTML = (SCREENS[ui.tab] || SCREENS.home).view();
+  { // [books] the switch on top; the Business card on Home in the Business view
+    const html = (state._sealed ? '' : BooksUI.switchHTML(ui.book)) + (ui.book === 'business' && ui.tab === 'home' && !state._sealed ? BooksUI.businessCard() : '');
+    const top = app.querySelector('header.top');
+    if (top) top.insertAdjacentHTML('afterend', html); else app.insertAdjacentHTML('afterbegin', html);
+  }
   // Sections that share a sidebar item get tabs under their title.
   const group = SUB_TABS.find((g) => g.some((x) => x.tab === ui.tab));
   if (group) app.querySelector('header.top')?.insertAdjacentHTML('afterend', `<nav class="subtabs" aria-label="Sections">${group.map((x) => `<a href="#${x.tab}"${x.tab === ui.tab ? ' aria-current="page"' : ''}>${x.label}</a>`).join('')}</nav>`);
@@ -2135,6 +2159,7 @@ function openTxSheet(existing = null, preset = {}) {
     if (existing) Object.assign(tx, Taxes.keepOnEdit(state, existing.id));
     // Nor where it came from, its book or whether you confirmed it (phase 5): kept too (model.js keptOnEdit).
     if (existing) tx = M.keptOnEdit(existing, tx);
+    Books.stampBook(state, tx, existing, ui.book); // [books] an edit keeps its book; a new record gets the view's
     if (existing) state.tx = state.tx.map((t) => (t.id === existing.id ? tx : t));
     else state.tx.push(tx);
     // You picked or confirmed the subcategory: remember the shop for next time.
@@ -3176,6 +3201,7 @@ document.addEventListener('click', (e) => {
     if (ui.tab === 'settings' && ui.settingsTab === 'general') render();
     return;
   }
+  if (BooksUI.onClick(act, el)) return; // [books]
   if (SCREENS[ui.tab]?.onClick?.(act, el)) return;
   if (act === 'acc-open') AccountsScreen.openAccount(el.dataset.id);
   else if (act === 'person-open') PeopleScreen.openPerson(el.dataset.id);
@@ -3338,6 +3364,7 @@ document.addEventListener('click', (e) => {
 document.addEventListener('change', (e) => {
   if (e.target.closest('.sheet')) return;
   if (SCREENS[ui.tab]?.onChange?.(e.target)) return;
+  if (e.target.dataset.bulk === 'book') { if (e.target.value) BooksUI.moveSelected([...ui.selected], e.target.value); return; } // [books]
   if (e.target.dataset.bulk) onBulkChange(e.target);
   else if (e.target.dataset.sh) onSheetChange(e.target);
   else if (e.target.classList.contains('sel')) return;
@@ -3552,6 +3579,19 @@ async function updateRates({ force = false, announce = false } = {}) {
 // A real getter (Object.assign would copy today's object once), so screens
 // always see the current state after a restore, erase or demo reset.
 Object.defineProperty(ctx, 'state', { get: () => state });
+// [books] Draws a piece of a screen (the donut after a tap) from the chosen book, like render does.
+ctx.withBook = (fn) => {
+  if (!Books.isView(ui.book) || ui.book === 'both' || bookReal || state._sealed) return fn();
+  bookReal = state;
+  state = Books.bookLens(state, ui.book);
+  try { return fn(); } finally { state = bookReal; bookReal = null; }
+};
+// [books] The switch on Life's Money page changes this page too (same device).
+window.addEventListener('storage', (e) => {
+  if (e.key !== Books.BOOK_KEY || !Books.isView(e.newValue) || e.newValue === ui.book) return;
+  ui.book = e.newValue;
+  render();
+});
 Object.assign(ctx, {
   ui,
   tipCard,

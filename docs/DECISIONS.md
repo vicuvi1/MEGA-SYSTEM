@@ -16,7 +16,7 @@ entry that says why.
 - **Rules out:** writing captures into `app_sync_finance` or `finance_inbox_json`; a health key posting money (or the reverse); guessing an amount without a currency; dropping a notification silently; logging notification text on the server; paying points for a capture not confirmed on its day; a new `api/` file for this.
 
 ### Money long view: read only, the shared rules, rates of each day, today = totalBalance (2026-11-12)
-- **Decision:** the long view (`apps/finance/js/longview.js`, Reports → Long view, the Money page card) only reads; it adds no stored field, setting or top-level key. Income and spending are `catshare.js countsAsIncome` / `countsAsSpending` (no refund rule of its own: a refund is income, as in Reports). Past balances in another currency use the saved rate of that day (nearest earlier saved day), else the latest converted record in that currency up to that day, else `knownRates`; an account with no rate at all is listed as missing, never counted 1:1. Today's point is exactly `totalBalance`. A month uses its saved snapshot only when nothing was logged after it that month. USD/EUR views convert each record and month end at the rate of its day (MDL stays the default). Book views read `tx.book ?? 'personal'` / `account.book ?? 'personal'` and add up to the whole. The Money card's numbers are added in `web/moneyApi.ts`, not `moneyHub.ts`, so the bot bundle does not pull in the long view.
+- **Decision:** the long view (`apps/finance/js/longview.js`, Reports → Long view, the Money page card) only reads; it adds no stored field, setting or top-level key. Income and spending are `catshare.js countsAsIncome` / `countsAsSpending` (no refund rule of its own: a refund is income, as in Reports). Past balances in another currency use the saved rate of that day (nearest earlier saved day), else the latest converted record in that currency up to that day, else `knownRates`; an account with no rate at all is listed as missing, never counted 1:1. Today's point is exactly `totalBalance`. A month uses its saved snapshot only when nothing was logged after it that month. USD/EUR views convert each record and month end at the rate of its day (MDL stays the default). Book views use `books.js` (a record's own book, else its account's; a picked book is read from `bookView`) and add up to the whole. The Money card's numbers are added in `web/moneyApi.ts`, not `moneyHub.ts`, so the bot bundle does not pull in the long view.
 - **Why:** owner, 2026-11-12: money is crucial, this phase must never change a transaction; the Money v2 plan (phase 4) and the phase 1 rule "one spending rule, `knownRates` for every total"; reports in MDL, USD and EUR with historical rates.
 - **Rules out:** writing anything from the long view; a second income/spending/refund rule; converting past months at today's rate when a saved day's rate exists; a 1:1 fallback; a "today" net worth that differs from Accounts; a snapshot taken before later records standing for the month end.
 ### Money taxes and receipts: tags on records, dated editable tax numbers, receipts device-to-Drive with their index outside Finance's data (2026-11-12)
@@ -597,3 +597,15 @@ entry that says why.
 - **Why:** the ring said "0 days clean" while Today said "Day 1" and the campaign "Day 0 of 90".
 - **Rules out:** showing `current` as the streak's day anywhere.
 
+
+### Business and personal books are read-only views; a record's book comes from its account (2026-11-12)
+- **Decision:** `bookOf = t.book || account.book || 'personal'` (`apps/finance/js/books.js`). Personal / Business /
+  Both only change what is shown: `bookView` / `bookLens` build a view, cross-book money is a synthetic record,
+  Both is the full state unchanged, and a view is never saved (`store.js` refuses `_view`, `persist` uses the
+  real state). Pay yourself is income in Personal, "Paid to you" in Business, never a cost, and a plain transfer
+  in Both. Moves only set or clear `book` and keep `moved` for an exact undo. New data lives in record fields
+  and `settings.books` only, never in a new top-level key.
+- **Why:** money is the owner's tool for decades: no record may be rewritten, lost or counted twice, and old
+  devices and the bot bundle must keep the new fields (the v3 sync drops unknown top-level keys).
+- **Rules out:** writing a book on every record, saving a filtered state, counting a draw as a business cost or
+  counting it again in Both, and adding top-level collections to the Finance blob.

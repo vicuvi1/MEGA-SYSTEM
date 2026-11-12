@@ -6105,3 +6105,28 @@ html[data-calm] .theme-atmosphere, html[data-calm] .atmosphere-particle { displa
 .recon-pair { border: 1px dashed var(--line-strong); border-radius: 12px; padding: 2px 6px; margin-bottom: 6px; }
 .recon-history { margin-top: 14px; }
 .recon-history summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+
+/* [books] Personal / Business / Both switch and the Business card (js/screens/books.js) */
+.bk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 0 0 14px; }
+.bk-bar .bk-seg { margin: 0; flex: 0 1 320px; min-width: 240px; }
+.bk-tools { display: flex; gap: 6px; margin-left: auto; }
+.bk-card h2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.bk-cur { display: inline-grid; grid-template-columns: repeat(3, auto); margin: 0 0 0 auto; padding: 2px; font-size: 12px; }
+.bk-cur button { padding: 3px 8px; font-size: 12px; }
+.bk-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin: 6px 0 12px; }
+.bk-kpis div { background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 2px; }
+.bk-kpis span, .bk-line span { color: var(--muted); font-size: 12px; }
+.bk-kpis b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.bk-spark { display: flex; align-items: flex-end; gap: 4px; height: 36px; margin-bottom: 10px; }
+.bk-spark i { flex: 1; height: var(--h); background: var(--income); border-radius: 3px 3px 0 0; opacity: 0.75; }
+.bk-spark i.neg { background: var(--expense); }
+.bk-line { margin: 6px 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: baseline; }
+.bk-line span { min-width: 110px; }
+.bk-h { font-size: 13px; color: var(--muted); margin: 14px 0 6px; font-weight: 600; }
+.bk-client { display: grid; grid-template-columns: minmax(90px, 1fr) 2fr auto; gap: 8px; align-items: center; margin: 4px 0; font-size: 14px; }
+.bk-client i { display: block; height: 8px; width: var(--w); background: var(--gold); border-radius: 4px; }
+.bk-costs { list-style: none; padding: 0; margin: 0; display: grid; gap: 4px; }
+.bk-costs li { display: flex; justify-content: space-between; gap: 8px; }
+.bk-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.bk-row .seg { margin: 0; min-width: 180px; }
+.bk-manage h4 { margin: 14px 0 4px; }

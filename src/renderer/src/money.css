@@ -264,3 +264,17 @@
 .mh-pillbtn:hover:not(:disabled) { transform: translateY(-1px); }
 .mh-pillbtn:disabled { opacity: 0.6; cursor: default; }
 .mh-pillbtn.hot { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+
+/* [books] Personal / Business / Both (MoneyBooks.tsx) */
+.mh-books { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.mh-books-seg { display: inline-flex; gap: 3px; padding: 3px; border-radius: 12px; background: var(--mh-glass); border: 1px solid var(--border); }
+.mh-books-seg button { border: 0; background: none; color: var(--text-dim, var(--muted)); font: 600 13px/1 inherit; padding: 7px 14px; border-radius: 9px; cursor: pointer; }
+.mh-books-seg button.on { background: var(--surface-2, rgb(255 255 255 / 0.08)); color: var(--text); }
+.mh-books-hint { color: var(--text-dim, var(--muted)); }
+.mh-biz { margin-bottom: 14px; }
+.mh-biz-cur button { padding: 4px 9px; font-size: 12px; }
+.mh-biz-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 10px; }
+.mh-biz-kpis div { display: grid; gap: 2px; }
+.mh-biz-kpis span { color: var(--text-dim, var(--muted)); font-size: 12px; }
+.mh-biz-kpis b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.mh-biz-line, .mh-biz-empty { margin: 4px 0; color: var(--text); }
