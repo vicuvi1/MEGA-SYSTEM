@@ -806,8 +806,12 @@ export interface LifeApi {
     cloudSnapshots?(): Promise<{ day: string; exportedAt: string; sizeBytes: number }[]>
     saveDailySnapshot?(): Promise<boolean>
     restoreCloudSnapshot?(day: string): Promise<boolean>
-    /** Puts back a backup (the JSON of a daily file, an export or a snapshot). */
+    /** Puts back a backup (the JSON of a daily file, an export or a snapshot). A "before restore" backup is saved first. */
     restoreSnapshot?(text: string): Promise<boolean>
+    /** A full backup saved before a risky step (one-click undo); throws when it could not be saved. */
+    backupBeforeRisk?(label: string): Promise<{ id: string; label: string; at: string; where: 'file' | 'browser'; name?: string; size?: number }>
+    /** Settings → Data safety: the cloud backup, the off-site copy and the server's restore test. */
+    safety?(): Promise<DataSafetyCloud>
   }
     economy: {
     summary(): Promise<EconomySummary>
@@ -890,3 +894,12 @@ export interface SyncHealth {
 
 /** IPC replies are wrapped so error messages reach the UI cleanly. */
 export type IpcReply<T> = { ok: true; data: T } | { ok: false; error: string }
+
+/** What the cloud side of Settings → Data safety knows (2026-11-12). */
+export interface DataSafetyCloud {
+  cloud: { lastDay: string | null; error: string | null; bytes: number | null; biggest: number | null; parts: number | null }
+  offsite: { okAt: string | null; day: string | null; errAt: string | null; err: string | null }
+  drill: { at: string; ok: boolean; msg: string } | null
+  /** False when the server's health notes could not be read (offline). */
+  reachable: boolean
+}

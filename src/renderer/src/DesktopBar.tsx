@@ -2,7 +2,7 @@
 // the File/Edit menu and the old row of buttons). Drag it to move the window;
 // Windows' own minimize/maximize/close sit on the right, in the same dark.
 // Shows sync state in one word; update / sign-in / conflict buttons appear
-// only when they're needed. Backups live in Settings → Backups on this PC.
+// only when they're needed. Backups live in Settings → Data safety.
 import { askConfirm } from './confirmSheet'
 import { useEffect, useRef, useState } from 'react'
 import type { UpdateStatus } from '../../shared/api'

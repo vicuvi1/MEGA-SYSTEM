@@ -12,6 +12,13 @@ Keep it short and true: anything written here is what the next session will trus
 
 ## Session record
 
+### 2026-11-12: no data loss (branch data-safety, not pushed)
+- Cloud backup in 1.5 MB parts with SHA-256 (no size ceiling; warn at a 2.5 MB chunk); off-site job fetches the parts and reports back.
+- Desktop: a full .zip (backup.json + sqlite + manifest) daily and before risky steps in Documents/LifeSystem/Backups (choosable), 14/8/12 + 30 "before"; daily restore test.
+- Restore: "before restore" backup first, staging tables + one transaction in foreign-key order, apps' data put back with a restore id so no device merges old data back.
+- Settings → Data safety (lights, size, export everything, restore from file, undo to before X); red = Today dot + one of the 4 pushes. Runbook docs/RECOVERY.md.
+- Owner: keep BACKUP_PASSPHRASE in a password manager. Verified: tsc, full vitest, full smoke.
+
 ### 2026-11-12: usability pass (Simple mode menu + the 7 daily flows)
 - Menu in Simple mode: Today, Study Time, Sport Track, Money (owner keeps Money), Settings; the rest in a closed Archive, any page back from Settings; Alt+number follows the menu.
 - Today logs last night in place, names the must-do it starts, shows a running block with Stop, Set tomorrow's 3 any hour; no dim / goal / verdict cards in Simple mode; one main button on Study Time, Sport Dashboard, Workout done; + Log on repeat meals; island Stop shows the time.

@@ -1,3 +1,4 @@
+import { SafetyDot } from './safety/SafetyDot'
 import { Suspense, createElement, lazy, useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
 import { AnimatePresence, m } from 'framer-motion'
 import { MotionRoot, viewSwitch } from './motionKit'
@@ -641,7 +642,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     setPage(p)
   }, [])
   const bbHidden = page === 'coach' || page === 'today' || page === 'calendar' || !!embed
-  /** Settings, opened on one section (the backup chip opens Backups & data). */
+  /** Settings, opened on one section (the backup chip opens Data safety). */
   const openSettingsTab = (id: string) => {
     try {
       localStorage.setItem('ls.settingsTab', id)
@@ -795,7 +796,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         <DisciplineMoments onOpenChat={() => setPage('coach')} />
         <header className={`topbar ${compact ? 'compact' : ''}`}>
           <div className="title">
-            <h1>{current.label}</h1>
+            <h1>
+              {current.label}
+              {/* Data safety: a small red dot on Today only when a backup needs a look. */}
+              {page === 'today' && !isDemo && <SafetyDot onOpen={() => openSettingsTab('backups')} />}
+            </h1>
             {!compact && <p>{page === 'today' ? new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : current.blurb}</p>}
           </div>
           {embed && !hiddenByStealth && (
@@ -857,11 +862,11 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             <button
               className={`chip ${backup.lastError ? 'warn' : 'ok'}`}
               onClick={() => openSettingsTab('backups')}
-              aria-label={backup.lastError ? 'Today’s cloud backup didn’t save: open Backups & data' : 'Backed up: open Backups & data'}
+              aria-label={backup.lastError ? 'Today’s cloud backup didn’t save: open Data safety' : 'Backed up: open Data safety'}
               title={
                 backup.lastError
-                  ? `Today’s cloud backup didn’t save.\n${backup.lastError}\nYour data is safe; only today’s copy is missing. Click to open Backups & data.`
-                  : `Cloud backup saved${backup.last?.at ? ` (${backup.last.at})` : ''}. Click to open Backups & data.`
+                  ? `Today’s cloud backup didn’t save.\n${backup.lastError}\nYour data is safe; only today’s copy is missing. Click to open Data safety.`
+                  : `Cloud backup saved${backup.last?.at ? ` (${backup.last.at})` : ''}. Click to open Data safety.`
               }
             >
               <Icon name="cloud" size={15} />

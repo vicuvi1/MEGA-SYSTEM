@@ -57,6 +57,7 @@ import { riskWindows, topTriggers, upcomingRisk, warningText } from '@core/urgeP
 import { aiFailureCounts, alertDecisions, alertKeyboard, alertText, brokenKinds, healthChecks, HEALTH_MUTES, readMutes, weeklyReport } from '@core/health'
 import { beat, logBen, logError, readHealth, setNote, type BenLogEntry } from '../renderer/src/web/systemHealth'
 import { restoreDrill, snapshotOf } from '../renderer/src/web/restoreDrill'
+import { readBackup, saveBackupDirect } from '../renderer/src/web/cloudBackup'
 import { loadTriggers, urgeEvents } from '../renderer/src/web/disciplinePatterns'
 import { SPORTY_REQUEST, SPORTY_STATUS, parseJson, pollSporty, sportyUpdated, type SportyRequest, type SportyStatus } from '@core/sportyUpdate'
 import { WEEK_FOCUS_POINTS, payOnce } from '../main/points'
@@ -1342,15 +1343,15 @@ async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: D
   ] as any)
   if (!(have instanceof Error) && !have.rows.length) {
     try {
-      // Packed like the app's ("gz:" + base64 of the gzipped JSON): a tenth of the size (LT1).
-      const data = `gz:${gzipSync(Buffer.from(JSON.stringify(await mirror.read((db) => snapshotOf(db as any, "Ben's server", now))), 'utf8')).toString('base64')}`
-      const cut = new Date(now.getTime() - 30 * 86400000)
-      await t.writeAtomic([
-        { sql: 'INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(day) DO NOTHING', args: [day, now.toISOString(), Buffer.byteLength(data), data] },
-        { sql: 'DELETE FROM cloud_snapshots WHERE day < ?', args: [calendarDay(cut)] }
-      ] as any)
+      // Gzipped and cut into parts (any size, 2026-11-12); the manifest row goes in last.
+      const json = JSON.stringify(await mirror.read((db) => snapshotOf(db as any, "Ben's server", now)))
+      const saved = await saveBackupDirect((s) => t.writeAtomic(s as any), day, json, (u8) => new Uint8Array(gzipSync(u8)), now)
+      // A single part at 2.5 MB or more is a warning (Settings → Data safety, the self-check); it was still saved.
+      await beat(t, 'cloudBackup', true, undefined, now)
+      await setNote(t, 'cloudBackup', { day, at: now.toISOString(), parts: saved.parts, bytes: saved.bytes, biggest: saved.biggest })
     } catch (e) {
       void logError(t, 'server', `snapshot: ${(e as Error).message}`)
+      await beat(t, 'cloudBackup', false, `Today's cloud backup failed: ${(e as Error).message}`.slice(0, 200), now)
     }
   }
   let last: string | null = null
@@ -1361,13 +1362,24 @@ async function backupTick(t: TursoHttp, SQL: SqlJsStatic, mirror: Mirror, now: D
   }
   if (last && now.getTime() - Date.parse(last) < 7 * 86400000) return
   await setNote(t, 'drill', now.toISOString())
-  const [snap] = await t.readMany([{ sql: 'SELECT day, data FROM cloud_snapshots ORDER BY day DESC LIMIT 1', args: [] }] as any)
+  const [snap] = await t.readMany([{ sql: 'SELECT day FROM cloud_snapshots ORDER BY day DESC LIMIT 1', args: [] }] as any)
   if (snap instanceof Error || !snap.rows.length) return
-  // Snapshots saved by the app are gzipped ("gz:" + base64, Y8).
-  const raw = String(snap.rows[0][1])
-  const text = raw.startsWith('gz:') ? gunzipSync(Buffer.from(raw.slice(3), 'base64')).toString('utf8') : raw
-  const r = restoreDrill(SQL, text)
-  await beat(t, 'restoreDrill', r.ok, r.ok ? undefined : `${snap.rows[0][0]}: ${r.msg}`, now)
+  const newest = String(snap.rows[0][0])
+  let r: { ok: boolean; msg: string }
+  try {
+    // Parts are joined and checked; old one-piece backups ("gz:" + base64, Y8) read as before.
+    const read = async (sql: string, args: unknown[]) => {
+      const [res] = await t.readMany([{ sql, args }] as any)
+      if (res instanceof Error) throw res
+      return res.rows as unknown[][]
+    }
+    r = restoreDrill(SQL, await readBackup(read, newest, (u8) => new Uint8Array(gunzipSync(u8))))
+  } catch (e) {
+    r = { ok: false, msg: (e as Error).message }
+  }
+  await beat(t, 'restoreDrill', r.ok, r.ok ? undefined : `${newest}: ${r.msg}`, now)
+  // What the last test restore found, for Settings → Data safety.
+  await setNote(t, 'drillResult', { at: now.toISOString(), day: newest, ok: r.ok, msg: r.msg })
 }
 
 /** CL4: what the last health check found (the tick answers health:false, so the GitHub timer fails and GitHub emails you). */

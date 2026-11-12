@@ -19,5 +19,10 @@ export const FINANCE: AppSyncSpec = {
   share: (state) => toCloud(normalizeState(state), '').data,
   fromShared: (data) => normalizeState({ ...data, version: SCHEMA_VERSION }),
   merge: (mine, theirs) => mergeStates(normalizeState(mine), remote(theirs)).state,
+  // After a restore: the restored records and shared settings; this device's own settings (PIN, theme…) and rates stay.
+  adopt: (mine, data) => {
+    const { lastRates: _rates, settings, ...rest } = data ?? {}
+    return normalizeState({ ...mine, ...rest, settings: { ...(mine?.settings ?? {}), ...(settings ?? {}) }, version: SCHEMA_VERSION })
+  },
   skip: (store) => !!store.getItem('finance-helper.enc')
 }

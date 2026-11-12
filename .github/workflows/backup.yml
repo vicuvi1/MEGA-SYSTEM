@@ -2,12 +2,15 @@
 # same Turso database as everything else; this keeps a copy outside it.
 #
 # Once a week it downloads the newest daily backup from Ben's server
-# (/api/cron?job=backup, needs CRON_SECRET), ENCRYPTS it with your passphrase
-# (BACKUP_PASSPHRASE) and keeps it as a workflow artifact for 90 days. The
+# (/api/cron?job=backup, needs CRON_SECRET), part by part when it is big (the
+# parts joined are one gzip file, each checked against its SHA-256), ENCRYPTS
+# it with your passphrase (BACKUP_PASSPHRASE) and keeps it as a workflow
+# artifact for 90 days (the most GitHub allows for a public repository). The
 # repository is public and anyone signed in to GitHub can download artifacts,
 # so nothing unencrypted is ever uploaded: without the passphrase the run fails.
+# At the end it tells Ben's server (Settings → Data safety shows "Off-site copy").
 #
-# To restore: docs/AI_HANDOFF.md, "Backups".
+# To restore: docs/RECOVERY.md.
 name: Off-site backup
 on:
   schedule:
@@ -33,7 +36,9 @@ jobs:
           done
   backup:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
+    env:
+      APP: https://mega-system-ten.vercel.app
     steps:
       - name: Download and encrypt the newest backup
         env:
@@ -46,17 +51,32 @@ jobs:
             exit 1
           fi
           umask 077
-          mkdir -p out
-          curl -fsS -m 120 -D headers.txt -H "Authorization: Bearer ${CRON_SECRET}" "https://mega-system-ten.vercel.app/api/cron?job=backup" -o snap.json.gz
-          gzip -t snap.json.gz
-          day=$(grep -i '^x-snapshot-day:' headers.txt | tr -d '\r' | awk '{print $2}')
+          mkdir -p out parts
+          auth="Authorization: Bearer ${CRON_SECRET}"
+          # The newest backup's day and parts (each with its SHA-256).
+          curl -fsS -m 60 -H "$auth" "${APP}/api/cron?job=backup&list=1" -o list.json
+          day=$(jq -r .day list.json)
+          n=$(jq -r .parts list.json)
           [[ "$day" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || { echo "::error::No backup day in the answer"; exit 1; }
+          [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] || { echo "::error::No parts in the answer"; exit 1; }
+          for i in $(seq 0 $((n - 1))); do
+            f=$(printf 'parts/%04d.gz' "$i")
+            curl -fsS -m 120 --retry 3 -H "$auth" "${APP}/api/cron?job=backup&day=${day}&part=${i}" -o "$f"
+            want=$(jq -r ".shas[$i]" list.json)
+            have=$(sha256sum "$f" | cut -d' ' -f1)
+            [ "$want" = "$have" ] || { echo "::error::Part $i does not match its checksum"; exit 1; }
+          done
+          # Joined, the parts are the one gzip file of the backup.
+          cat parts/*.gz > snap.json.gz
+          [ "$(sha256sum snap.json.gz | cut -d' ' -f1)" = "$(jq -r .sha list.json)" ] || { echo "::error::The joined backup does not match its checksum"; exit 1; }
+          gzip -t snap.json.gz
           out="out/life-backup-${day}.json.gz.enc"
           openssl enc -aes-256-cbc -pbkdf2 -iter 600000 -salt -in snap.json.gz -out "$out" -pass env:BACKUP_PASSPHRASE
           # It must open again with the same passphrase before it is kept.
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in "$out" -pass env:BACKUP_PASSPHRASE | gzip -t
-          rm -f snap.json.gz headers.txt
           echo "DAY=${day}" >> "$GITHUB_ENV"
+          echo "BYTES=$(stat -c %s "$out")" >> "$GITHUB_ENV"
+          rm -rf snap.json.gz parts list.json
           ls -l out
       - uses: actions/upload-artifact@v4
         with:
@@ -64,3 +84,18 @@ jobs:
           path: out/*.enc
           retention-days: 90
           if-no-files-found: error
+      - name: Tell Ben's server the copy is kept
+        if: success()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          curl -fsS -m 30 -X POST -H "Authorization: Bearer ${CRON_SECRET}" -H 'Content-Type: application/json' \
+            -d "{\"day\":\"${DAY}\",\"bytes\":${BYTES}}" "${APP}/api/cron?job=offsite" || echo "::warning::Could not tell the server (the copy is kept anyway)"
+      - name: Tell Ben's server the copy failed
+        if: failure()
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          [ -n "${CRON_SECRET}" ] || exit 0
+          curl -fsS -m 30 -X POST -H "Authorization: Bearer ${CRON_SECRET}" -H 'Content-Type: application/json' \
+            -d '{"error":"The weekly off-site copy failed: see GitHub Actions → Off-site backup"}' "${APP}/api/cron?job=offsite" || true

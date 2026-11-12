@@ -114,9 +114,12 @@ export interface DesktopApi {
   onZoom?(cb: (factor: number) => void): void
   // ---- daily backup files (optional: older desktops don't have them) ----
   backupStatus?(): Promise<BackupStatus>
-  writeBackup?(text: string, day: string): Promise<BackupStatus>
-  readBackup?(where: BackupWhere, name: string): Promise<string>
-  chooseBackupFolder?(): Promise<BackupStatus>
+  /** A backup .zip: the daily one, or one made before a risky step (`reason`). */
+  writeBackup?(text: string, day: string, reason?: string | null): Promise<BackupStatus>
+  /** A backup file's bytes (a .zip, or an old daily .json). */
+  readBackup?(where: BackupWhere, name: string): Promise<Uint8Array>
+  chooseBackupFolder?(where?: 'local' | 'drive'): Promise<BackupStatus>
+  resetBackupFolder?(): Promise<BackupStatus>
   openBackupFolder?(where: BackupWhere): Promise<void>
   // ---- your Obsidian vault, read-only (optional: older desktops don't have it) ----
   vaultChoose?(): Promise<import('../plugins/notes/vault').VaultData | null>

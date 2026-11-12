@@ -36,7 +36,7 @@ import { createTodoistClient, localStore } from './web/todoistClient'
 import { setSportLogger, sportDay } from './sportTrack'
 import type { TodoCompleted, TodoTask } from '@core/todoist'
 import { SPORT } from './web/sportSync'
-import { MAN, WAKY, createAppSync } from './web/appSync'
+import { MAN, WAKY, createAppSync, setBigChangeGuard, type AppSyncSpec } from './web/appSync'
 import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { careApi } from './web/careApi'
@@ -66,7 +66,12 @@ import { StudyService } from '../../main/studyTime'
 import { lateBlocks } from '@core/planShift'
 import { COACH_HISTORY, cleanHistory, impactVerdict, scorecard } from '@core/coachImpact'
 import { coachStatus, waterToday } from './web/coachStatus'
-import { backupTables, redactRows, restoreStatements } from '@core/backupPlan'
+import { APP_BLOBS, backupTables, markRestoredApps, redactRows, restorePlan, runRestorePlan } from '@core/backupPlan'
+import { isBigChange } from '@core/riskChange'
+import { readBackup, saveBackupDirect, saveBackupViaServer } from './web/cloudBackup'
+import { appBlobsOf, putBackApps, type AppRestoreSpec } from './web/restoreApps'
+import { gunzipAsync, gzipAsync } from './safety/backupFiles'
+import { saveRiskPoint } from './safety/riskPoints'
 import { breaker, retryDelay } from '@core/retry'
 import { riskWindows, topTriggers, windowLabel } from '@core/urgePatterns'
 import { healthChecks } from '@core/health'
@@ -711,21 +716,17 @@ export function createTursoWebBridge(): Bridge {
         })
     })
 
-  /** "gz:" + base64 of the gzipped JSON (plain JSON when the browser can't compress). */
-  const packSnapshot = async (json: string): Promise<string> => {
-    if (typeof CompressionStream === 'undefined') return json
-    const buf = await new Response(new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer()
-    let bin = ''
-    const bytes = new Uint8Array(buf)
-    for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-    return `gz:${btoa(bin)}`
-  }
-  const unpackSnapshot = async (data: string): Promise<string> => {
-    if (!data.startsWith('gz:')) return data
-    const bin = atob(data.slice(3))
-    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
-    return new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).text()
-  }
+  /** A cloud backup's JSON: its parts joined and checked (one read each), or an old one-piece backup. */
+  const readCloud = (day: string) =>
+    readBackup(
+      async (sql, args) => {
+        const [res] = await turso.readMany([{ sql, args: args as any }])
+        if (res instanceof Error) throw res
+        return res.rows as unknown[][]
+      },
+      day,
+      gunzipAsync
+    )
 
   // Through /api/db the backups can only be read (LT1): the server makes the table.
   const ensureSnapshotsTable = async () => {
@@ -753,12 +754,32 @@ export function createTursoWebBridge(): Bridge {
       exportedAt: new Date().toISOString(),
       source: 'Life System Web',
       tables,
-      financeState: readJson('finance-helper.state'),
-      wakyState: readJson('waky_web_data_v2'),
-      sportState: readJson('life_sport_tracker_v1'),
-      manState: readJson('MAN_SPARTAN_DATA')
+      // Every app's own data on this device (Finance and its locked copy, Sport Track, Waky, MAN).
+      ...appBlobsOf(store)
     }
   }
+  /** The apps whose data a restore puts back, with their sync rules (core/backupPlan.ts APP_BLOBS). */
+  const APP_SPECS: Record<string, AppSyncSpec> = { financeState: FINANCE, sportState: SPORT, wakyState: WAKY, manState: MAN }
+  const restoreSpecs: Record<string, AppRestoreSpec> = Object.fromEntries(Object.entries(APP_SPECS).map(([f, sp]) => [f, { share: sp.share, fromShared: sp.fromShared, adopt: sp.adopt }]))
+  /** A full backup saved before a risky step; throws when it could not be saved (the step must not go ahead). */
+  const backupBeforeRisk = async (label: string, prepare?: (snap: Record<string, unknown>) => void) => {
+    const snap = (await snapshot()) as Record<string, unknown>
+    prepare?.(snap)
+    return saveRiskPoint(label, JSON.stringify(snap))
+  }
+  // A big change to an app's data (an import, a bulk delete, a re-price) is about to go to the
+  // database: a "before" backup first, at most one per app every 10 minutes. The app's copy on
+  // this device is already the new one, so the backup leaves it out: a restore then uses the
+  // database's copy, which is still the one from before.
+  const lastBig = new Map<string, number>()
+  setBigChangeGuard(async (spec, before, after) => {
+    if (!isBigChange(before, after) || Date.now() - (lastBig.get(spec.setting) ?? 0) < 10 * 60_000) return
+    lastBig.set(spec.setting, Date.now())
+    const blob = APP_BLOBS.find((b) => b.setting === spec.setting)
+    await backupBeforeRisk(`big change in ${blob?.label ?? 'an app'}`, (snap) => {
+      if (blob) delete snap[blob.field]
+    }).catch((e) => store?.setItem('life_risk_error', `A backup before a big change failed: ${String((e as Error)?.message ?? e).slice(0, 160)}`))
+  })
 
   const ERRORS = 'life_error_log'
   const readErrors = (): any[] => readJson<any[]>(ERRORS) ?? []
@@ -1501,9 +1522,7 @@ export function createTursoWebBridge(): Bridge {
         const days = await snapshotDays()
         if (!days.length) return { ok: false, name: null, detail: store?.getItem('life_snapshot_error') || 'No snapshot yet' }
         try {
-          const [res] = await turso.readMany([{ sql: 'SELECT data FROM cloud_snapshots WHERE day = ?', args: [days[0]] }])
-          if (res instanceof Error || !res.rows.length) throw new Error('not readable')
-          const snap = JSON.parse(await unpackSnapshot(String(res.rows[0][0])))
+          const snap = JSON.parse(await readCloud(days[0]))
           const n = (t: string) => (Array.isArray(snap.tables?.[t]) ? snap.tables[t].length : 0)
           const parts = [`${n('ledger')} points entries`, `${n('workouts')} workouts`, `${n('sleep_logs')} nights`, `${n('expenses')} expenses`, `${Object.keys(snap.tables ?? {}).length} tables`]
           return { ok: true, name: days[0], detail: `Cloud snapshot of ${days[0]}: ${parts.join(', ')}` }
@@ -2083,6 +2102,31 @@ export function createTursoWebBridge(): Bridge {
       ...base.data,
       exportCsv: async (kind: 'workouts' | 'expenses') => (await svcP).exporter.exportCsv(kind),
       exportJson: async (): Promise<string> => JSON.stringify(await snapshot(), null, 2),
+      /** A full backup saved before a risky step (restore, import, bulk delete, re-price…); throws when it could not be saved. */
+      backupBeforeRisk: (label: string) => backupBeforeRisk(label),
+      /** What Settings → Data safety shows about the cloud copies (the local one comes from the desktop app). */
+      safety: async () => {
+        const [h, list] = await Promise.all([readHealth(turso).catch(() => null), bridge.data.cloudSnapshots!().catch(() => [])])
+        // Today's backup when there is one, else the newest that isn't dated in the future
+        // (a device with a wrong clock can save one ahead; it must not hide that today's is missing or saved).
+        const todayDay = dayKey(new Date())
+        const newest = list.find((s) => s.day === todayDay) ?? list.find((s) => s.day <= todayDay) ?? list[0] ?? null
+        const note = h?.notes.cloudBackup
+        const mine = readJson<{ day: string; bytes: number; parts: number; biggest: number }>('life_snapshot_info')
+        const sized = note?.day === newest?.day ? note : mine?.day === newest?.day ? mine : null
+        const cb = h?.beats.cloudBackup
+        const serverErr = cb?.err && (!cb.ok || cb.err.at > cb.ok) ? cb.err.msg : null
+        const off = h?.beats.offsite
+        const drillNote = h?.notes.drillResult as { at: string; ok: boolean; msg: string } | undefined
+        const rd = h?.beats.restoreDrill
+        const drill = drillNote?.at ? drillNote : rd?.ok || rd?.err ? { at: (rd.ok && (!rd.err || rd.ok > rd.err.at) ? rd.ok : rd.err?.at) ?? '', ok: !!rd.ok && (!rd.err || rd.ok > rd.err.at), msg: rd.err?.msg ?? 'every row came back' } : null
+        return {
+          cloud: { lastDay: newest?.day ?? null, error: store?.getItem('life_snapshot_error') || serverErr || null, bytes: sized?.bytes ?? newest?.sizeBytes ?? null, biggest: sized?.biggest ?? null, parts: sized?.parts ?? null },
+          offsite: { okAt: off?.ok ?? null, day: h?.notes.offsite?.day ?? null, errAt: off?.err?.at ?? null, err: off?.err?.msg ?? null },
+          drill,
+          reachable: !!h
+        }
+      },
       cloudSnapshots: async () => {
         try {
           await ensureSnapshotsTable()
@@ -2104,26 +2148,16 @@ export function createTursoWebBridge(): Bridge {
             store?.removeItem('life_snapshot_error')
             return true
           }
-          // Packed (gzip) so a big history fits the 4.5 MB a request may carry (Y8).
-          const data = await packSnapshot(JSON.stringify(await snapshot()))
-          if (data.length > 4_200_000) {
-            store?.setItem('life_snapshot_error', `Today's cloud backup is too big to save (${(data.length / 1e6).toFixed(1)} MB). Download a backup from Settings → Data instead.`)
-            return false
-          }
-          if (direct)
-            await turso.writeAtomic([
-              {
-                sql: `INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?)
-                      ON CONFLICT(day) DO UPDATE SET exported_at = excluded.exported_at, size_bytes = excluded.size_bytes, data = excluded.data`,
-                args: [day, new Date().toISOString(), new Blob([data]).size, data]
-              },
-              { sql: 'DELETE FROM cloud_snapshots WHERE day < ?', args: [addDays(day, -30)] }
-            ])
-          else {
+          // Gzipped and cut into parts of about 2 MB (any size, 2026-11-12): each part is one request,
+          // the manifest goes last. Never refused for its size.
+          const json = JSON.stringify(await snapshot())
+          const post = async (body: unknown) => {
             // LT1: the backups are read-only through /api/db; the server adds today's (it never overwrites one).
-            const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ snapshot: { day, data } }) })
+            const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
             if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error || `HTTP ${res.status}`)
           }
+          const saved = direct ? await saveBackupDirect((st) => turso.writeAtomic(st as any), day, json, gzipAsync) : await saveBackupViaServer(post, day, json, gzipAsync)
+          store?.setItem('life_snapshot_info', JSON.stringify({ day, bytes: saved.bytes, parts: saved.parts, biggest: saved.biggest }))
           store?.removeItem('life_snapshot_error')
           backupDays = null
           return true
@@ -2139,11 +2173,7 @@ export function createTursoWebBridge(): Bridge {
        * discipline events), where only missing rows come back. Your current
        * PIN and bot settings are kept.
        */
-      restoreCloudSnapshot: async (day: string) => {
-        const [res] = await turso.readMany([{ sql: 'SELECT data FROM cloud_snapshots WHERE day = ?', args: [day] }])
-        if (res instanceof Error || !res.rows.length) return false
-        return bridge.data.restoreSnapshot!(await unpackSnapshot(String(res.rows[0][0])))
-      },
+      restoreCloudSnapshot: async (day: string) => bridge.data.restoreSnapshot!(await readCloud(day)),
       /**
        * Puts a backup back (a daily file, an export, a cloud snapshot), all in
        * one Turso transaction (all or nothing). Tables are replaced, except the
@@ -2153,22 +2183,31 @@ export function createTursoWebBridge(): Bridge {
        */
       restoreSnapshot: async (text: string) => {
         const snap = JSON.parse(text)
+        if (!snap || typeof snap.tables !== 'object') throw new Error('This file is not a Life System backup')
+        // Backup before risk: today's data is saved first, so this restore can be undone in one click.
+        await backupBeforeRisk('restore')
         const mirror = await mirrorP
         // Changes still waiting on this computer go first.
         await mirror.refresh().catch(() => {})
-        const columns = await mirror.read((db) => {
-          const out: Record<string, string[]> = {}
+        const shape = await mirror.read((db) => {
+          const columns: Record<string, string[]> = {}
+          const refs: Record<string, string[]> = {}
           for (const r of db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as any[]) {
-            out[String(r.name)] = db.prepare(`PRAGMA table_info("${String(r.name)}")`).all().map((c: any) => String(c.name))
+            const t = String(r.name)
+            columns[t] = db.prepare(`PRAGMA table_info("${t}")`).all().map((c: any) => String(c.name))
+            refs[t] = [...new Set(db.prepare(`PRAGMA foreign_key_list("${t}")`).all().map((f: any) => String(f.table)))]
           }
-          return out
+          return { columns, refs }
         })
-        await turso.writeAtomic(restoreStatements(snap, columns, `restore-${Date.now().toString(36)}`) as any)
-        for (const [key, field] of [['finance-helper.state', 'financeState'], ['waky_web_data_v2', 'wakyState'], ['life_sport_tracker_v1', 'sportState'], ['MAN_SPARTAN_DATA', 'manState']] as const) {
-          if (snap[field]) store?.setItem(key, JSON.stringify(snap[field]))
-        }
+        // The apps' copies are marked with this restore's id: every device takes them as they are.
+        const now = Date.now()
+        const restoreId = `restore-${now.toString(36)}`
+        const marked = markRestoredApps(snap, restoreId, now, Object.fromEntries(Object.entries(restoreSpecs).map(([f, sp]) => [f, sp.share ?? ((x: any) => x)])))
+        // Staging tables, then one transaction in foreign-key order: all or nothing, any size.
+        await runRestorePlan(restorePlan(marked.snap, shape.columns, restoreId, { refs: shape.refs }), (st) => turso.writeAtomic(st as any))
+        if (store) putBackApps(store, snap, marked.apps, restoreId, now, restoreSpecs)
         await mirror.refresh()
-        for (const n of ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed']) window.dispatchEvent(new CustomEvent(n))
+        for (const n of ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed', ...Object.values(APP_SPECS).map((sp) => sp.event)]) window.dispatchEvent(new CustomEvent(n, { detail: { fromSync: true } }))
         return true
       }
     },

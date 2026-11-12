@@ -8971,6 +8971,52 @@ try {
     }
   })
 
+  // Data safety (2026-11-12): one light per copy, the size, "Back up now" (the cloud backup in parts),
+  // "Export everything" (one zip of CSV + JSON) and "Restore from file" (that zip back in, after a
+  // "before restore" backup that then shows under "Undo to before…"). The website has no local backup: amber, never red.
+  await step('Settings → Data safety shows every backup light, backs up, exports everything as one zip and restores it from a file', async () => {
+    const DS = '[data-testid="data-safety"]'
+    const light = (id) => pg.getAttribute(`${DS} [data-testid="safety-row-${id}"]`, 'data-light')
+    const toDataSafety = async () => {
+      await open('settings')
+      await pg.waitForSelector('.st-item', { timeout: 10000 })
+      await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+      await pg.waitForSelector(`${DS} [data-testid="safety-row-drill"]`, { timeout: 15000 })
+    }
+    await toDataSafety()
+    for (const id of ['cloud', 'local', 'offsite', 'drill']) if (!['green', 'amber', 'red'].includes(await light(id))) throw new Error(`no light for ${id}`)
+    if ((await light('local')) !== 'amber') throw new Error(`the website's local backup light is ${await light('local')}, not amber`)
+    await pg.locator(`${DS} button`, { hasText: 'Back up now' }).click()
+    // A full run holds a lot of made-up data by now: the backup goes up in parts, so give it time.
+    await pg.waitForFunction((s) => document.querySelector(`${s} [data-testid="safety-row-cloud"]`)?.getAttribute('data-light') === 'green', DS, { timeout: 45000 }).catch(async (e) => {
+      const why = await pg.evaluate((s) => [document.querySelector(`${s} [data-testid="safety-row-cloud"]`)?.textContent, document.querySelector('.toasts')?.textContent, localStorage.getItem('life_snapshot_error')].map((x) => (x ?? '').trim().slice(0, 200)).join(' | '), DS)
+      throw new Error(`the cloud backup light did not turn green: ${why} (${e.message.split('\n')[0]})`)
+    })
+    if (!/cloud backup \d+(\.\d)? (KB|MB)/.test(await pg.textContent(`${DS} [data-testid="safety-size"]`))) throw new Error('no backup size')
+    if (await pg.$('[data-testid="cloud-backups"] li') === null) throw new Error('no cloud backup listed')
+    // SAFETY_SHOT=<file.png>: a picture of the panel (kept outside the repo).
+    if (process.env.SAFETY_SHOT) await pg.locator(DS).screenshot({ path: process.env.SAFETY_SHOT })
+    // Export everything: one zip with the full JSON, every table as CSV and every app's data.
+    const [dl] = await Promise.all([pg.waitForEvent('download', { timeout: 20000 }), pg.click(`${DS} [data-testid="export-everything"]`)])
+    if (!/^life-system-everything-\d{4}-\d{2}-\d{2}\.zip$/.test(dl.suggestedFilename())) throw new Error(`export named ${dl.suggestedFilename()}`)
+    const { readFileSync } = await import('node:fs')
+    const zip = readFileSync(await dl.path())
+    const text = zip.toString('latin1')
+    if (zip[0] !== 0x50 || zip[1] !== 0x4b) throw new Error('the export is not a zip')
+    for (const name of ['life-system-backup.json', 'tables/ledger.csv', 'tables/settings.csv', 'manifest.json', 'README.txt']) if (!text.includes(name)) throw new Error(`the export has no ${name}`)
+    // Restore from file: the same zip back (same data), after a backup of today.
+    await pg.setInputFiles(`${DS} [data-testid="restore-from-file"] input[type="file"]`, { name: 'life-system-everything.zip', mimeType: 'application/zip', buffer: zip })
+    await pg.waitForSelector('.cs-sheet', { timeout: 8000 })
+    if (!/backup of today is saved first/.test(await pg.textContent('.cs-sheet'))) throw new Error('the restore does not say a backup is saved first')
+    await pg.click('.cs-sheet .cs-row .btn:not(.ghost)')
+    await pg.waitForFunction(() => /Restored life-system-everything\.zip/.test(document.body.textContent ?? ''), null, { timeout: 30000 })
+    await pg.waitForTimeout(1600)
+    await reloadApp()
+    await toDataSafety()
+    await pg.waitForFunction((s) => /Undo to before restore/.test(document.querySelector(`${s} [data-testid="risk-points"]`)?.textContent ?? ''), DS, { timeout: 15000 })
+    await open('today')
+  })
+
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })

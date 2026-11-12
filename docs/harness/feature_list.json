@@ -1263,6 +1263,21 @@
   ],
   "evidence": "2026-11-13: branch phone-payments; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "core/payNotify.ts (+ fixtures), core/moneyToSort.ts, core/moneyDays.ts logMoment, web/phonePay.ts, web/webServices.ts financeDayTx, web/webBots.ts (paste), server/telegramBot.ts phonePay, api/_health.mjs (key kinds, payRequest, readPayBody), api/cron.mjs job=pay, settings/phonePay.tsx, bridge plugins.phonePay, settingsKeys money_tosort, e2e/server.mjs job=pay. The To sort card UI is the next batch."
+ },
+ {
+  "id": "F-DATA-SAFETY",
+  "priority": 1,
+  "area": "data",
+  "title": "No data loss: cloud backup in parts, local zip every day, backup before risk with undo, tested restore, Data safety page",
+  "user_visible_behavior": "Settings → Data safety: green/amber/red for the cloud backup, the backup on this PC, the weekly off-site copy and the last restore test, the size, Back up now, Test a restore (desktop), Export everything (one zip: CSV + JSON), Restore from file (.zip or .json), the backup folder (default Documents/LifeSystem/Backups, Change), Undo to before X, daily and cloud backups with Restore. Today shows a small red dot next to its title only when something is red, and a red state is one of the 4 daily notifications. A cloud backup of any size is saved (in parts); a restore saves a backup of today first, goes all or nothing in foreign-key order, puts the apps' data back and no device merges its old copy back in.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+   "npx vitest run src/server/cloudParts.test.ts src/desktop/localBackups.test.ts src/renderer/src/web/backupBeforeRisk.test.ts src/renderer/src/web/restoreDrill.test.ts src/core/backupPlan.test.ts src/core/dataSafety.test.ts src/renderer/src/safety/backupFiles.test.ts",
+   "SMOKE_ONLY=\"Data safety\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch data-safety; tsc, full vitest (4336) and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "core/backupPack.ts, backupCheck.ts, backupPlan.ts (restorePlan, fkOrder, markRestoredApps, localBackupsToDelete), riskChange.ts, dataSafety.ts, zip.ts; api/_snapshots.mjs (parts), db.mjs {snapshotPart}, cron.mjs job=backup list/part and job=offsite; web/cloudBackup.ts, restoreApps.ts, restoreDrill.ts, appSync.ts (restore id, big-change guard); desktop/localBackups.ts, backups.ts; renderer safety/*; .github/workflows/backup.yml; docs/RECOVERY.md. No schema change (server tables made with CREATE TABLE IF NOT EXISTS)."
  }
  ]
 }

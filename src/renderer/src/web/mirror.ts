@@ -17,8 +17,9 @@ import { READ_VERSIONS, catchUpPlan, parseVersions, repairStatements, trackState
 import { retryDelay } from '@core/retry'
 import { APPEND_ONLY } from '@core/backupPlan'
 
-// cloud_snapshots: 30 full backups, read straight from Turso when needed, never copied to every device.
-const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$)/
+// cloud_snapshots (+ their parts): 30 full backups, read straight from Turso when needed, never copied to every device.
+// restore_stage_*: a restore's staging tables (core/backupPlan.ts), gone when the restore ends.
+const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|restore_stage_|cloud_snapshots$|cloud_snapshot_parts$)/
 
 export interface MirrorStore {
   load(): Promise<Uint8Array | null>

@@ -10979,16 +10979,16 @@ function saveLoggedAsMeal(db, loggedMealId, name, type) {
 	}));
 }
 // src/renderer/src/web/benPushStore.ts
-var parse$5 = (db, key) => {
+var parse$6 = (db, key) => {
 	try {
 		return JSON.parse(getSetting(db, key) || "null");
 	} catch {
 		return null;
 	}
 };
-var readPushLog = (db, day) => cleanPushLog(parse$5(db, PUSH_LOG_KEY), day);
+var readPushLog = (db, day) => cleanPushLog(parse$6(db, PUSH_LOG_KEY), day);
 var writePushLog = (db, log) => setSetting(db, PUSH_LOG_KEY, JSON.stringify(log));
-var readPcSeen = (db) => cleanPcSeen(parse$5(db, PC_SEEN_KEY));
+var readPcSeen = (db) => cleanPcSeen(parse$6(db, PC_SEEN_KEY));
 /** Claims a push (inside one write): false when it already went out anywhere. */
 function claimPush(db, day, key, via, now) {
 	const r = claim(readPushLog(db, day), key, via, now);
@@ -16192,7 +16192,7 @@ async function dropHeld(kv, draft) {
 		args: [prefix(draft), prefix(draft) + "~"]
 	}]);
 }
-var parse$4 = (v) => {
+var parse$5 = (v) => {
 	try {
 		return typeof v === "string" ? JSON.parse(v) : null;
 	} catch {
@@ -16200,7 +16200,7 @@ var parse$4 = (v) => {
 	}
 };
 var rowOf = (key, v) => {
-	const o = parse$4(v);
+	const o = parse$5(v);
 	if (!o || typeof o.f !== "string" || !/^[\w-]{1,24}$/.test(String(o.d)) || !(Number(o.n) >= 1)) return null;
 	const id = lockerPhotoIds(String(o.d), Number(o.n))[Number(o.n) - 1];
 	if (!id || String(key) !== `lkh:${o.d}:${o.n}`) return null;
@@ -16304,7 +16304,7 @@ var partPrefix = (chat, set) => `fdp:${clean$3(chat)}:${set}:`;
 var leadKey = (chat, gid) => `fdl:${clean$3(chat)}:g${clean$3(gid)}`;
 var addKey = (chat) => `fda:${clean$3(chat)}`;
 var draftKey = (chat, draft) => `fdd:${clean$3(chat)}:${clean$3(draft)}`;
-var parse$3 = (v) => {
+var parse$4 = (v) => {
 	try {
 		return typeof v === "string" ? JSON.parse(v) : null;
 	} catch {
@@ -16312,7 +16312,7 @@ var parse$3 = (v) => {
 	}
 };
 var partOf$1 = (v) => {
-	const o = parse$3(v);
+	const o = parse$4(v);
 	return o && typeof o.f === "string" && o.f ? {
 		f: o.f.slice(0, 200),
 		c: String(o.c ?? "").slice(0, 300),
@@ -16363,7 +16363,7 @@ async function joinAlbum(kv, chat, gid, part, now) {
 		}
 	]);
 	if (r[3]?.length) return "lead";
-	if (parse$3(r[4]?.[0]?.[0])?.st !== "taken") return "wait";
+	if (parse$4(r[4]?.[0]?.[0])?.st !== "taken") return "wait";
 	await kv([{
 		sql: "DELETE FROM sys_kv WHERE key = ?",
 		args: [prefix + pad$15(part.m)]
@@ -16410,7 +16410,7 @@ async function keepDraftPhotos(kv, chat, draft, fileIds, caption, now) {
 	]);
 }
 var addOf = (v) => {
-	const o = parse$3(v);
+	const o = parse$4(v);
 	return o && typeof o.d === "string" && Array.isArray(o.f) ? {
 		d: o.d,
 		at: Number(o.at) || 0,
@@ -16421,7 +16421,7 @@ var addOf = (v) => {
 };
 /** "Add another photo" on a preview: opens the window. null when the preview's photos are gone (older than 10 minutes). */
 async function startAdd(kv, chat, draft, now) {
-	const kept = parse$3((await kv([
+	const kept = parse$4((await kv([
 		TABLE$1,
 		sweep(now),
 		{
@@ -31304,7 +31304,7 @@ var gmail_default = definePlugin({
 var SETTING$1 = "finance_inbox_json";
 var KEEP_DAYS = 60;
 var DAY$4 = 864e5;
-var parse$2 = (raw, fallback) => {
+var parse$3 = (raw, fallback) => {
 	try {
 		return raw ? JSON.parse(raw) : fallback;
 	} catch {
@@ -31313,7 +31313,7 @@ var parse$2 = (raw, fallback) => {
 };
 /** What Finance Helper already has, from its synced copy (null: never synced, so nothing is known to be in it). */
 function syncedFinance(db) {
-	const saved = parse$2(getSetting(db, "app_sync_finance"), null);
+	const saved = parse$3(getSetting(db, "app_sync_finance"), null);
 	return saved?.data && Array.isArray(saved.data.tx) ? saved.data : null;
 }
 /** An inbox entry Finance Helper already took (added, removed, or deleted there). */
@@ -31336,13 +31336,13 @@ function keepInbox(list, now, finance) {
 }
 /** Adds an expense to the inbox (call inside the bot's change). */
 function queueFinanceExpense(db, entry) {
-	const list = keepInbox(parse$2(getSetting(db, SETTING$1), []), entry.at, syncedFinance(db)).filter((e) => e.id !== entry.id);
+	const list = keepInbox(parse$3(getSetting(db, SETTING$1), []), entry.at, syncedFinance(db)).filter((e) => e.id !== entry.id);
 	list.push(entry);
 	setSetting(db, SETTING$1, JSON.stringify(list));
 }
 /** Adds many records at once (a bank statement); returns the ids that were new. */
 function queueFinanceEntries(db, entries, now = Date.now()) {
-	const list = keepInbox(parse$2(getSetting(db, SETTING$1), []), now, syncedFinance(db));
+	const list = keepInbox(parse$3(getSetting(db, SETTING$1), []), now, syncedFinance(db));
 	const have = new Set(list.map((e) => e.id));
 	const fresh = entries.filter((e) => !have.has(e.id));
 	if (!fresh.length) return [];
@@ -31351,7 +31351,7 @@ function queueFinanceEntries(db, entries, now = Date.now()) {
 }
 /** The ids already waiting in the inbox. */
 function inboxIds(db) {
-	return new Set(parse$2(getSetting(db, SETTING$1), []).map((e) => e.id));
+	return new Set(parse$3(getSetting(db, SETTING$1), []).map((e) => e.id));
 }
 /** The account you last paid from in your main currency (else the first one in it). */
 function financeAccount(state) {
@@ -38975,7 +38975,7 @@ function movedLine(t) {
 // src/core/planAuto.ts
 var GRACE = 10;
 var GAP = 10;
-var q$2 = (s) => `'${s.length > 40 ? `${s.slice(0, 39)}…` : s}'`;
+var q$3 = (s) => `'${s.length > 40 ? `${s.slice(0, 39)}…` : s}'`;
 /** Can the automatic re-plan move this block? Only a draft nobody has touched in the outside apps. */
 function autoMovable(b, status) {
 	return !b.locked && !isApproved(b, status) && !b.sync?.eventId && !b.done?.length;
@@ -39145,7 +39145,7 @@ function autoReplan(raw, status, ctx) {
 						from: l.start,
 						to: null
 					});
-					why.set(l.id, `to make room for ${q$2(b.title)}`);
+					why.set(l.id, `to make room for ${q$3(b.title)}`);
 					break;
 				}
 				busy.splice(i, 0, held);
@@ -39265,8 +39265,8 @@ function autoNote(moves, why) {
 	const m = moves[0];
 	const reason = why.get(m.id) ?? "";
 	const more = moves.length > 1 ? ` (+${moves.length - 1} more)` : "";
-	if (m.to == null) return `No room left today for ${q$2(m.title)}, it's on the list${reason ? ` (${reason.replace(/^because /, "")})` : ""}${more}`;
-	return `${m.from == null ? `Added ${q$2(m.title)} at ${m.to}` : `Moved ${q$2(m.title)} to ${m.to}`}${reason ? ` ${reason}` : ""}${more}`.replace(/\s+/g, " ").trim();
+	if (m.to == null) return `No room left today for ${q$3(m.title)}, it's on the list${reason ? ` (${reason.replace(/^because /, "")})` : ""}${more}`;
+	return `${m.from == null ? `Added ${q$3(m.title)} at ${m.to}` : `Moved ${q$3(m.title)} to ${m.to}`}${reason ? ` ${reason}` : ""}${more}`.replace(/\s+/g, " ").trim();
 }
 /** A block older than this is not rescued any more (the evening check deals with it). */
 var RESCUE_UNTIL_MIN = 180;
@@ -39274,7 +39274,7 @@ var RESCUE_UNTIL_MIN = 180;
 var MIN_LEN = 25;
 var rescueKey = (blockId, again = false) => `rescue:${blockId}${again ? ":again" : ""}`;
 var isRescueKey = (k) => k.startsWith("rescue:");
-var q$1 = (s) => `'${s.length > 40 ? `${s.slice(0, 39)}…` : s}'`;
+var q$2 = (s) => `'${s.length > 40 ? `${s.slice(0, 39)}…` : s}'`;
 var startedIn = (b, day, sessions) => {
 	const from = Date.parse(`${day}T${b.start}:00`);
 	return sessions.some((x) => x.s >= from - 6e5 && x.s < from + b.minutes * 6e4);
@@ -39369,9 +39369,9 @@ function buildRescue(raw, status, ctx) {
 		} : b)
 	};
 	if (!movable && minutes < 15 && !tomorrow.length) return null;
-	const names = tomorrow.slice(0, 2).map((x) => q$1(x.title));
+	const names = tomorrow.slice(0, 2).map((x) => q$2(x.title));
 	const more = tomorrow.length > 2 ? ` +${tomorrow.length - 2} more` : "";
-	const text = `Rescue: start ${q$1(late.title)} now${minutes >= 5 ? ` for ${minutes} min` : ""}${tomorrow.length ? `, move ${names.join(" and ")}${more} to tomorrow` : ""}.`;
+	const text = `Rescue: start ${q$2(late.title)} now${minutes >= 5 ? ` for ${minutes} min` : ""}${tomorrow.length ? `, move ${names.join(" and ")}${more} to tomorrow` : ""}.`;
 	return {
 		plan,
 		block: {
@@ -39468,7 +39468,7 @@ function rescueApplied(offer, cur, curVersion, status) {
 }
 /** The line after Accept: "Started: 'Lab report' at 10:35 for 45 min; 1 to tomorrow". */
 function acceptLine(o) {
-	return `${o.block.moved ? `Rescue on: ${q$1(o.block.title)} now at ${o.block.start} for ${o.block.minutes} min` : `Rescue on: start ${q$1(o.block.title)} now`}${o.tomorrow.length ? `; ${o.tomorrow.length} moved to tomorrow` : ""}.`;
+	return `${o.block.moved ? `Rescue on: ${q$2(o.block.title)} now at ${o.block.start} for ${o.block.minutes} min` : `Rescue on: start ${q$2(o.block.title)} now`}${o.tomorrow.length ? `; ${o.tomorrow.length} moved to tomorrow` : ""}.`;
 }
 // src/renderer/src/web/todoistCoins.ts
 function payTodoist(s, done) {
@@ -41528,7 +41528,7 @@ var encodePending = (write) => JSON.stringify(write, (_key, value) => value inst
 var decodePending = (text) => JSON.parse(text, (_key, value) => value && Array.isArray(value.blob) ? new Uint8Array(value.blob) : value);
 var stable = (v) => v === void 0 ? "undefined" : JSON.stringify(v, (_k, x) => x instanceof Uint8Array ? { blob: Array.from(x) } : x);
 var same = (a, b) => stable(a) === stable(b);
-var q = (name) => `"${name.replace(/"/g, "\"\"")}"`;
+var q$1 = (name) => `"${name.replace(/"/g, "\"\"")}"`;
 var TABLE_RE = /^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+["`]?(\w+)["`]?/i;
 function touchedTables(changes) {
 	const out = [];
@@ -41546,10 +41546,10 @@ function schemaInfo(db) {
 	};
 	const tables = (db.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []).map((r) => String(r[0])).filter((t) => !SKIP$1.test(t));
 	for (const t of tables) {
-		const pk = (db.exec(`PRAGMA table_info(${q(t)})`)[0]?.values ?? []).filter((c) => Number(c[5]) > 0).sort((a, b) => Number(a[5]) - Number(b[5]));
+		const pk = (db.exec(`PRAGMA table_info(${q$1(t)})`)[0]?.values ?? []).filter((c) => Number(c[5]) > 0).sort((a, b) => Number(a[5]) - Number(b[5]));
 		info.keys[t] = pk.map((c) => String(c[1]));
 		info.intPk[t] = pk.length === 1 && String(pk[0][2]).toUpperCase() === "INTEGER" ? String(pk[0][1]) : null;
-		info.fks[t] = (db.exec(`PRAGMA foreign_key_list(${q(t)})`)[0]?.values ?? []).map((r) => ({
+		info.fks[t] = (db.exec(`PRAGMA foreign_key_list(${q$1(t)})`)[0]?.values ?? []).map((r) => ({
 			table: String(r[2]),
 			from: String(r[3]),
 			to: String(r[4] ?? "")
@@ -41560,7 +41560,7 @@ function schemaInfo(db) {
 function tableRows(db, t, keys) {
 	const out = /* @__PURE__ */ new Map();
 	if (!(db.exec(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '${t.replace(/'/g, "''")}'`).length > 0)) return out;
-	const stmt = db.prepare(keys.length ? `SELECT * FROM ${q(t)}` : `SELECT rowid AS __rowid, * FROM ${q(t)}`);
+	const stmt = db.prepare(keys.length ? `SELECT * FROM ${q$1(t)}` : `SELECT rowid AS __rowid, * FROM ${q$1(t)}`);
 	try {
 		while (stmt.step()) {
 			const row = stmt.getAsObject();
@@ -41760,7 +41760,7 @@ var mergeMaps = (...maps) => {
 var where = (key) => {
 	const cols = Object.keys(key);
 	return {
-		sql: cols.map((c) => `${c === "rowid" ? "rowid" : q(c)} = ?`).join(" AND "),
+		sql: cols.map((c) => `${c === "rowid" ? "rowid" : q$1(c)} = ?`).join(" AND "),
 		args: cols.map((c) => key[c])
 	};
 };
@@ -41786,13 +41786,13 @@ async function rebaseWrite(turso, write, info) {
 	for (const r of rows) {
 		const w = where(r.key);
 		reads.push({
-			sql: `SELECT * FROM ${q(r.t)} WHERE ${w.sql}`,
+			sql: `SELECT * FROM ${q$1(r.t)} WHERE ${w.sql}`,
 			args: w.args
 		});
 	}
 	const insertTables = [...new Set(rows.filter((r) => !r.before && info.intPk[r.t]).map((r) => r.t))];
 	for (const t of insertTables) reads.push({
-		sql: `SELECT MAX(${q(info.intPk[t])}) FROM ${q(t)}`,
+		sql: `SELECT MAX(${q$1(info.intPk[t])}) FROM ${q$1(t)}`,
 		args: []
 	});
 	const res = await turso.readMany(reads);
@@ -41826,7 +41826,7 @@ async function rebaseWrite(turso, write, info) {
 		const w = where(key);
 		if (!after) {
 			if (s && same(s, r.before)) out.push({
-				sql: `DELETE FROM ${q(r.t)} WHERE ${w.sql}`,
+				sql: `DELETE FROM ${q$1(r.t)} WHERE ${w.sql}`,
 				args: w.args
 			});
 			return;
@@ -41834,9 +41834,9 @@ async function rebaseWrite(turso, write, info) {
 		if (!s) {
 			const cols = Object.keys(after);
 			const withRowid = "rowid" in key && !(info.keys[r.t] ?? []).length;
-			const names = [...withRowid ? ["rowid"] : [], ...cols.map(q)];
+			const names = [...withRowid ? ["rowid"] : [], ...cols.map(q$1)];
 			out.push({
-				sql: `INSERT INTO ${q(r.t)} (${names.join(", ")}) VALUES (${names.map(() => "?").join(", ")})`,
+				sql: `INSERT INTO ${q$1(r.t)} (${names.join(", ")}) VALUES (${names.map(() => "?").join(", ")})`,
 				args: [...withRowid ? [key.rowid] : [], ...cols.map((c) => after[c])]
 			});
 			return;
@@ -41845,7 +41845,7 @@ async function rebaseWrite(turso, write, info) {
 		const changed = Object.keys(merged).filter((c) => !same(merged[c], s[c]));
 		if (!changed.length) return;
 		out.push({
-			sql: `UPDATE ${q(r.t)} SET ${changed.map((c) => `${q(c)} = ?`).join(", ")} WHERE ${w.sql}`,
+			sql: `UPDATE ${q$1(r.t)} SET ${changed.map((c) => `${q$1(c)} = ?`).join(", ")} WHERE ${w.sql}`,
 			args: [...changed.map((c) => merged[c]), ...w.args]
 		});
 	});
@@ -41964,7 +41964,7 @@ function retryDelay(attempt, o = {}) {
 }
 // src/core/backupPlan.ts
 /** Tables that are only plumbing (or backups themselves): never in a backup, never restored. */
-var NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$|bot_seen_updates$|applied_sync_events$)/;
+var NOT_BACKED_UP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|restore_stage_|cloud_snapshots$|cloud_snapshot_parts$|bot_seen_updates$|applied_sync_events$)/;
 /** Append-only history: a restore only adds rows that are missing. */
 var APPEND_ONLY = /* @__PURE__ */ new Set(["ledger", "discipline_events"]);
 /** Settings a restore never overwrites (your current PIN and bot setup). */
@@ -41986,51 +41986,227 @@ function redactRows(table, rows) {
 function backupTables(all) {
 	return all.filter((t) => !NOT_BACKED_UP.test(t)).sort();
 }
+var APP_BLOBS = [
+	{
+		field: "financeState",
+		localKey: "finance-helper.state",
+		setting: "app_sync_finance",
+		label: "Finance"
+	},
+	{
+		field: "financeEnc",
+		localKey: "finance-helper.enc",
+		label: "Finance (locked copy)"
+	},
+	{
+		field: "sportState",
+		localKey: "life_sport_tracker_v1",
+		setting: "sport_tracker_json",
+		label: "Sport Track"
+	},
+	{
+		field: "wakyState",
+		localKey: "waky_web_data_v2",
+		setting: "app_sync_waky",
+		label: "Waky"
+	},
+	{
+		field: "manState",
+		localKey: "MAN_SPARTAN_DATA",
+		setting: "app_sync_man",
+		label: "MAN"
+	}
+];
+var BLOB_FIELDS = APP_BLOBS.map((b) => b.field);
+/** Staging tables of a restore: plumbing, never backed up, dropped by the restore itself. */
+var STAGE_PREFIX = "restore_stage_";
+var q = (name) => `"${name.replace(/"/g, "\"\"")}"`;
 /**
-* The statements that put a snapshot back, in one transaction: each table is
-* replaced (append-only history only gets its missing rows back), settings
-* are upserted except the kept ones, and the data marker moves so every
-* device reloads. `columns` = the current columns of each existing table.
+* Tables in foreign-key order: a table comes after every table it points at
+* (rows go in parents first; deletes run in the reverse order, children first).
+* Self-references are ignored (rows keep their original order); a cycle falls
+* back to name order. `refs` = table → tables it references.
 */
-function restoreStatements(snap, columns, version) {
-	if (!snap || typeof snap !== "object" || !snap.tables || typeof snap.tables !== "object") throw new Error("This file is not a Life System backup");
+function fkOrder(tables, refs = {}) {
+	const set = new Set(tables);
+	const need = new Map(tables.map((t) => [t, new Set((refs[t] ?? []).filter((r) => r !== t && set.has(r)))]));
 	const out = [];
-	for (const t of Object.keys(snap.tables).sort()) {
-		const rows = snap.tables[t];
-		const cols = columns[t];
-		if (!Array.isArray(rows) || !cols || NOT_BACKED_UP.test(t)) continue;
-		const have = new Set(cols);
-		if (t === "settings") {
-			for (const r of rows) {
-				if (!r || typeof r.key !== "string" || KEEP_SETTINGS.has(r.key) || typeof r.value !== "string") continue;
-				out.push({
-					sql: "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-					args: [r.key, r.value]
-				});
-			}
-			continue;
+	const left = new Set([...tables].sort());
+	while (left.size) {
+		const next = [...left].find((t) => [...need.get(t)].every((r) => !left.has(r))) ?? [...left][0];
+		out.push(next);
+		left.delete(next);
+	}
+	return out;
+}
+var argChars = (a) => a == null ? 4 : a instanceof Uint8Array ? a.length * 1.4 : typeof a === "string" ? a.length * 1.1 + 24 : 24;
+/**
+* How a backup is put back, with no size limit and all or nothing:
+*   1. its rows go into staging tables (restore_stage_<table>), in as many
+*      small requests as needed; a long text goes in pieces;
+*   2. one transaction replaces every table from its staging copy, in
+*      foreign-key order, and drops the staging tables.
+* Append-only history (ledger, discipline events) only gets its missing rows
+* back; settings are upserted, except the kept ones (your PIN and bot setup);
+* the data marker moves so every device reloads. `columns` = the current
+* columns of each existing table (a column the database no longer has is left out).
+*/
+function restorePlan(snap, columns, version, opts = {}) {
+	if (!snap || typeof snap !== "object" || !snap.tables || typeof snap.tables !== "object") throw new Error("This file is not a Life System backup");
+	const batchChars = opts.batchChars ?? 12e5;
+	const batchStmts = opts.batchStmts ?? 400;
+	const piece = opts.pieceChars ?? 7e5;
+	const order = fkOrder(Object.keys(snap.tables).filter((t) => Array.isArray(snap.tables[t]) && columns[t] && !NOT_BACKED_UP.test(t)), opts.refs);
+	const stage = [];
+	let cur = [];
+	let chars = 0;
+	const push = (s) => {
+		const n = s.sql.length + s.args.reduce((m, a) => m + argChars(a), 0);
+		if (cur.length && (chars + n > batchChars || cur.length >= batchStmts)) {
+			stage.push(cur);
+			cur = [];
+			chars = 0;
 		}
-		if (!APPEND_ONLY.has(t)) out.push({
-			sql: `DELETE FROM "${t}"`,
+		cur.push(s);
+		chars += n;
+	};
+	const swapInserts = [];
+	for (const t of order) {
+		const s = q(STAGE_PREFIX + t);
+		const have = new Set(columns[t]);
+		push({
+			sql: `DROP TABLE IF EXISTS ${s}`,
 			args: []
 		});
+		push({
+			sql: `CREATE TABLE ${s} AS SELECT * FROM ${q(t)} WHERE 0`,
+			args: []
+		});
+		let rows = snap.tables[t].filter((r) => r && typeof r === "object");
+		if (t === "settings") rows = rows.filter((r) => typeof r.key === "string" && !KEEP_SETTINGS.has(r.key) && typeof r.value === "string");
+		const groups = /* @__PURE__ */ new Map();
 		for (const r of rows) {
-			const keys = Object.keys(r ?? {}).filter((k) => have.has(k));
+			const keys = Object.keys(r).filter((k) => have.has(k));
 			if (!keys.length) continue;
-			out.push({
-				sql: `INSERT ${APPEND_ONLY.has(t) ? "OR IGNORE " : ""}INTO "${t}" (${keys.map((k) => `"${k}"`).join(", ")}) VALUES (${keys.map(() => "?").join(", ")})`,
-				args: keys.map((k) => r[k] === void 0 ? null : r[k])
+			const sig = keys.join("\0");
+			if (!groups.has(sig)) groups.set(sig, {
+				keys,
+				rows: []
+			});
+			groups.get(sig).rows.push(r);
+		}
+		let rowid = 0;
+		for (const { keys, rows: list } of groups.values()) {
+			const from = rowid + 1;
+			for (const r of list) {
+				rowid++;
+				const args = keys.map((k) => r[k] === void 0 ? null : r[k]);
+				const long = args.map((a, i) => typeof a === "string" && a.length > piece ? i : -1).filter((i) => i >= 0);
+				push({
+					sql: `INSERT INTO ${s} (rowid, ${keys.map(q).join(", ")}) VALUES (?, ${keys.map(() => "?").join(", ")})`,
+					args: [rowid, ...args.map((a, i) => long.includes(i) ? a.slice(0, piece) : a)]
+				});
+				for (const i of long) {
+					const text = args[i];
+					for (let at = piece; at < text.length; at += piece) push({
+						sql: `UPDATE ${s} SET ${q(keys[i])} = ${q(keys[i])} || ? WHERE rowid = ?`,
+						args: [text.slice(at, at + piece), rowid]
+					});
+				}
+			}
+			const cols = keys.map(q).join(", ");
+			const range = `rowid BETWEEN ${from} AND ${rowid}`;
+			if (t === "settings") {
+				const set = keys.filter((k) => k !== "key").map((k) => `${q(k)} = excluded.${q(k)}`);
+				swapInserts.push({
+					sql: `INSERT INTO "settings" (${cols}) SELECT ${cols} FROM ${s} WHERE ${range} ORDER BY rowid ${set.length ? `ON CONFLICT("key") DO UPDATE SET ${set.join(", ")}` : "ON CONFLICT(\"key\") DO NOTHING"}`,
+					args: []
+				});
+			} else swapInserts.push({
+				sql: `INSERT ${APPEND_ONLY.has(t) ? "OR IGNORE " : ""}INTO ${q(t)} (${cols}) SELECT ${cols} FROM ${s} WHERE ${range} ORDER BY rowid`,
+				args: []
 			});
 		}
 	}
-	out.push({
-		sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-		args: [version]
-	});
-	return out;
+	if (cur.length) stage.push(cur);
+	const deletes = [...order].reverse().filter((t) => t !== "settings" && !APPEND_ONLY.has(t)).map((t) => ({
+		sql: `DELETE FROM ${q(t)}`,
+		args: []
+	}));
+	const drops = order.map((t) => ({
+		sql: `DROP TABLE IF EXISTS ${q(STAGE_PREFIX + t)}`,
+		args: []
+	}));
+	return {
+		stage,
+		swap: [
+			...deletes,
+			...swapInserts,
+			{
+				sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+				args: [version]
+			},
+			...drops
+		],
+		cleanup: drops,
+		tables: order
+	};
+}
+/** The synced copy of an app in a backup's settings (its `data`), or null. */
+function settingCopy(snap, setting) {
+	const row = (snap.tables?.settings ?? []).find((r) => r?.key === setting);
+	if (!row || typeof row.value !== "string") return null;
+	try {
+		return JSON.parse(row.value)?.data ?? null;
+	} catch {
+		return null;
+	}
+}
+/**
+* Marks the apps' synced copies in a backup as restored: each becomes
+* `{savedAt, editedAt: now, restore: id, data}`. A device whose last-seen
+* restore id differs takes that copy as it is (app sync), instead of merging
+* its own older copy back in. The data is the backup's localStorage copy when
+* it has one (in shared form), else the backup's synced copy. Returns the
+* backup to restore and each app's restored shared data.
+*/
+function markRestoredApps(snap, restoreId, now, share = {}) {
+	const apps = {};
+	const settings = [...snap.tables?.settings ?? []];
+	for (const b of APP_BLOBS) {
+		if (!b.setting) continue;
+		const data = snap[b.field] != null ? (share[b.field] ?? ((x) => x))(snap[b.field]) : settingCopy(snap, b.setting);
+		if (data == null) continue;
+		apps[b.field] = data;
+		const value = JSON.stringify({
+			savedAt: now,
+			editedAt: now,
+			restore: restoreId,
+			data
+		});
+		const i = settings.findIndex((r) => r?.key === b.setting);
+		if (i >= 0) settings[i] = {
+			...settings[i],
+			value
+		};
+		else settings.push({
+			key: b.setting,
+			value
+		});
+	}
+	return {
+		snap: {
+			...snap,
+			tables: {
+				...snap.tables,
+				settings
+			}
+		},
+		apps
+	};
 }
 // src/renderer/src/web/mirror.ts
-var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|cloud_snapshots$)/;
+var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|restore_stage_|cloud_snapshots$|cloud_snapshot_parts$)/;
 var MirrorError = class extends Error {};
 var Mirror = class Mirror {
 	SQL;
@@ -43810,9 +43986,8 @@ var SELF_CHECK = {
 	errorHours: 24,
 	/** A plain SELECT slower than this is a slow database. */
 	dbSlowMs: 2e3,
-	/** Today's backup: warn above this size (a server answer may be at most 4.5 MB). */
-	snapshotWarnBytes: 3e6,
-	snapshotMaxBytes: 45e5,
+	/** Today's backup: warn when a single stored chunk reaches this (one request may carry 4.5 MB; backups go in parts of about 2 MB, so only an old one-piece backup gets here). */
+	snapshotWarnBytes: 25e5,
 	/** The restore drill runs weekly; older than this is a missed drill. */
 	drillDays: 8,
 	/** Ben's tick and the outside timer should run every 10 minutes. */
@@ -43890,8 +44065,8 @@ function selfCheckChecks(i) {
 	}
 	add("db", "Database", i.db.ok && (i.db.ms ?? 0) < SELF_CHECK.dbSlowMs, !i.db.ok ? `Not reachable: ${String(i.db.error ?? "").slice(0, 120)}` : `Answers in ${i.db.ms} ms${(i.db.ms ?? 0) >= SELF_CHECK.dbSlowMs ? " (slow)" : ""}`);
 	if (!i.snapshot) add("snapshot", "Today's backup", false, "Not made yet today");
-	else if (i.snapshot.bytes >= SELF_CHECK.snapshotWarnBytes) add("snapshot", "Today's backup", false, `${mb(i.snapshot.bytes)}: close to the ${mb(SELF_CHECK.snapshotMaxBytes)} a backup may be. Download a backup in Settings → Data and tell your helper to make backups smaller`);
-	else add("snapshot", "Today's backup", true, `Saved (${mb(i.snapshot.bytes)})`);
+	else if ((i.snapshot.biggest ?? i.snapshot.bytes) >= SELF_CHECK.snapshotWarnBytes) add("snapshot", "Today's backup", false, `Saved, but one piece is ${mb(i.snapshot.biggest ?? i.snapshot.bytes)} (a piece should stay under ${mb(SELF_CHECK.snapshotWarnBytes)}; one request may carry 4.5 MB). Tell your helper; your local backup in Settings → Data safety has everything`);
+	else add("snapshot", "Today's backup", true, `Saved (${mb(i.snapshot.bytes)}${(i.snapshot.parts ?? 1) > 1 ? `, ${i.snapshot.parts} parts` : ""})`);
 	if (!i.drillAt) add("drill", "Restore drill", false, "Has not run yet");
 	else {
 		const m = mins(now, i.drillAt);
@@ -43923,6 +44098,82 @@ function confirmed(checks, now) {
 function selfCheckLine(checks, at, fixed) {
 	const bad = checks.filter((c) => !c.ok);
 	return `${bad.length ? `${bad.length} need${bad.length === 1 ? "s" : ""} a look` : "All good"}${fixed ? `, ${fixed} fixed by itself` : ""} · ${at.slice(0, 16).replace("T", " ")} UTC`;
+}
+// src/core/backupPack.ts
+/** Raw gzip bytes per part: about 2 MB once written as base64, well under one request. */
+var PART_BYTES = 15e5;
+/** A single stored chunk (base64 characters) at or above this earns a warning. */
+var CHUNK_WARN = 25e5;
+var PARTS_PREFIX = "parts:";
+function toBase64(u8) {
+	let bin = "";
+	for (let i = 0; i < u8.length; i += 32768) bin += String.fromCharCode(...u8.subarray(i, i + 32768));
+	return btoa(bin);
+}
+function fromBase64(s) {
+	const bin = atob(s);
+	const out = new Uint8Array(bin.length);
+	for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+	return out;
+}
+function splitBytes(u8, size = PART_BYTES) {
+	if (size <= 0) throw new Error("Bad part size");
+	const out = [];
+	for (let i = 0; i < u8.length; i += size) out.push(u8.subarray(i, i + size));
+	return out.length ? out : [/* @__PURE__ */ new Uint8Array(0)];
+}
+function joinBytes(list) {
+	const out = new Uint8Array(list.reduce((n, p) => n + p.length, 0));
+	let at = 0;
+	for (const p of list) {
+		out.set(p, at);
+		at += p.length;
+	}
+	return out;
+}
+async function sha256Hex(u8) {
+	const buf = await globalThis.crypto.subtle.digest("SHA-256", u8);
+	return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+/** The gzip bytes of a backup, as stored parts (base64) and their manifest. */
+async function packParts(gz, jsonLength, size = PART_BYTES) {
+	const raw = splitBytes(gz, size);
+	const parts = raw.map(toBase64);
+	const shas = await Promise.all(raw.map(sha256Hex));
+	return {
+		parts,
+		manifest: {
+			v: 3,
+			parts: parts.length,
+			bytes: gz.length,
+			sha: await sha256Hex(gz),
+			json: jsonLength,
+			sizes: parts.map((p) => p.length),
+			shas
+		}
+	};
+}
+var isManifest = (data) => typeof data === "string" && data.startsWith("parts:");
+var manifestText = (m) => PARTS_PREFIX + JSON.stringify(m);
+/** The manifest in a cloud_snapshots row's data, or null when it is an old one-piece backup or broken. */
+function readManifest(data) {
+	if (!isManifest(data)) return null;
+	try {
+		const m = JSON.parse(data.slice(6));
+		if (m?.v !== 3 || !Number.isInteger(m.parts) || m.parts < 1 || !Array.isArray(m.shas) || m.shas.length !== m.parts || typeof m.sha !== "string") return null;
+		return m;
+	} catch {
+		return null;
+	}
+}
+/** The stored parts joined back to the gzip bytes; throws when one is missing or changed. */
+async function joinParts(m, parts) {
+	if (parts.length !== m.parts || parts.some((p) => typeof p !== "string")) throw new Error(`The backup is missing parts (${parts.filter((p) => typeof p === "string").length} of ${m.parts})`);
+	const raw = parts.map(fromBase64);
+	for (let i = 0; i < raw.length; i++) if (await sha256Hex(raw[i]) !== m.shas[i]) throw new Error(`Part ${i + 1} of the backup does not match its checksum`);
+	const all = joinBytes(raw);
+	if (all.length !== m.bytes || await sha256Hex(all) !== m.sha) throw new Error("The joined backup does not match its checksum");
+	return all;
 }
 // src/renderer/src/web/systemHealth.ts
 var ENSURE = [{
@@ -44150,13 +44401,19 @@ async function runSelfCheck(d) {
 	}
 	const day = calendarDay(now);
 	const [snap] = await t.readMany([{
-		sql: "SELECT day, COALESCE(size_bytes, LENGTH(data)) FROM cloud_snapshots WHERE day = ?",
+		sql: "SELECT day, COALESCE(size_bytes, LENGTH(data)), CASE WHEN data LIKE 'parts:%' THEN data ELSE NULL END, LENGTH(data) FROM cloud_snapshots WHERE day = ?",
 		args: [day]
 	}]).catch(() => [/* @__PURE__ */ new Error("no answer")]);
-	const snapshot = snap instanceof Error || !snap.rows.length ? null : {
-		day: String(snap.rows[0][0]),
-		bytes: Number(snap.rows[0][1]) || 0
-	};
+	const snapshot = snap instanceof Error || !snap.rows.length ? null : (() => {
+		const [d, bytes, manifest, len] = snap.rows[0];
+		const m = manifest ? readManifest(String(manifest)) : null;
+		return {
+			day: String(d),
+			bytes: Number(bytes) || 0,
+			parts: m?.parts ?? 1,
+			biggest: m ? Math.max(0, ...m.sizes) : Number(len) || 0
+		};
+	})();
 	const h = await readHealth(t).catch(() => ({
 		beats: {},
 		notes: {},
@@ -59486,7 +59743,7 @@ var webLookupHelp = (web) => web ? `\n- ${WEB_LOOKUP_HELP}` : "";
 // src/renderer/src/web/memoryStore.ts
 var BLOCKS_KEY = "coach_blocks";
 var MEM_LOG_KEY = "coach_memory_changes";
-var parse$1 = (raw) => {
+var parse$2 = (raw) => {
 	try {
 		return JSON.parse(raw || "null");
 	} catch {
@@ -59494,13 +59751,13 @@ var parse$1 = (raw) => {
 	}
 };
 function loadBlocks(db) {
-	return cleanBlocks(parse$1(getSetting(db, BLOCKS_KEY)));
+	return cleanBlocks(parse$2(getSetting(db, BLOCKS_KEY)));
 }
 function saveBlocks(db, blocks) {
 	setSetting(db, BLOCKS_KEY, JSON.stringify(cleanBlocks(blocks)));
 }
 function loadMemLog(db) {
-	return logChanges(parse$1(getSetting(db, MEM_LOG_KEY)), []);
+	return logChanges(parse$2(getSetting(db, MEM_LOG_KEY)), []);
 }
 function addMemLog(db, add) {
 	if (!add.some(Boolean)) return;
@@ -61017,16 +61274,16 @@ function staleBig(p, open, today) {
 	return open.filter((t) => (p[keyOf$1(t)] ?? today) < addDays(today, -2) && estimateMinutes(t) >= 45 && !/ · /.test(t.content)).map((t) => t.content);
 }
 // src/renderer/src/web/benMind.ts
-var parse = (raw) => {
+var parse$1 = (raw) => {
 	try {
 		return JSON.parse(raw || "null");
 	} catch {
 		return null;
 	}
 };
-var loadKnow = (db) => cleanKnow(parse(getSetting(db, BEN_KNOW)));
+var loadKnow = (db) => cleanKnow(parse$1(getSetting(db, BEN_KNOW)));
 var saveKnow = (db, k) => setSetting(db, BEN_KNOW, JSON.stringify(cleanKnow(k)));
-var loadConvo = (db) => cleanConvo(parse(getSetting(db, BEN_CONVO)));
+var loadConvo = (db) => cleanConvo(parse$1(getSetting(db, BEN_CONVO)));
 var saveConvo = (db, c) => setSetting(db, BEN_CONVO, JSON.stringify(cleanConvo(c)));
 /** "no, curata camera takes 40 min" → saved; the result line and its undo, or null when it isn't one. */
 function saveCorrection(db, text, src, now = /* @__PURE__ */ new Date()) {
@@ -61241,7 +61498,7 @@ function notePast(db, text, day, now = /* @__PURE__ */ new Date(), via) {
 /** Today's plan blocks kept for learning (called whenever Ben reads today's plan). */
 function notePlan(db, day, blocks) {
 	if (!blocks.length) return;
-	const s = cleanLearn$1(parse(getSetting(db, BEN_LEARN)));
+	const s = cleanLearn$1(parse$1(getSetting(db, BEN_LEARN)));
 	if (!(JSON.stringify(s.plans[day] ?? null) === JSON.stringify(blocks.slice(0, 12).map((b) => ({
 		title: String(b.title).slice(0, 80),
 		start: b.start,
@@ -61262,20 +61519,20 @@ function learnedRhythm(db, today) {
 	} catch {
 		sessions = [];
 	}
-	const log = parse(getSetting(db, "island_day_log")) ?? {};
+	const log = parse$1(getSetting(db, "island_day_log")) ?? {};
 	const results = Object.entries(log).filter(([d]) => d >= from && d < today).flatMap(([day, x]) => (x.blocks ?? []).map((b) => ({
 		day,
 		...b
 	})));
 	return learnRhythm({
-		planned: plannedRows(cleanLearn$1(parse(getSetting(db, BEN_LEARN))), today).filter((p) => p.day >= from),
+		planned: plannedRows(cleanLearn$1(parse$1(getSetting(db, BEN_LEARN))), today).filter((p) => p.day >= from),
 		sessions,
 		results
 	});
 }
 /** Notes when each open task was first due; gives the big ones pushed back more than 2 days. */
 function pushedBack(db, open, today) {
-	const p = notePushbacks(cleanPushbacks(parse(getSetting(db, BEN_PUSHBACKS))), open, today);
+	const p = notePushbacks(cleanPushbacks(parse$1(getSetting(db, BEN_PUSHBACKS))), open, today);
 	setSetting(db, BEN_PUSHBACKS, JSON.stringify(p));
 	return staleBig(p, open, today);
 }
@@ -71574,6 +71831,139 @@ function cleanVoice(out, template) {
 	if (nums(template).some((n) => !have.has(n))) return null;
 	return t;
 }
+// src/core/backupCheck.ts
+/** 53-bit string hash (cyrb53). */
+function hash53(s, seed = 0) {
+	let h1 = 3735928559 ^ seed;
+	let h2 = 1103547991 ^ seed;
+	for (let i = 0; i < s.length; i++) {
+		const c = s.charCodeAt(i);
+		h1 = Math.imul(h1 ^ c, 2654435761);
+		h2 = Math.imul(h2 ^ c, 1597334677);
+	}
+	h1 = Math.imul(h1 ^ h1 >>> 16, 2246822507) ^ Math.imul(h2 ^ h2 >>> 13, 3266489909);
+	h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
+	return (4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36);
+}
+/** A value as stable text: object keys sorted, bytes as numbers, numbers that are whole printed whole. */
+function canonical(v) {
+	if (v === void 0 || v === null) return "null";
+	if (v instanceof Uint8Array) return `b[${Array.from(v).join(",")}]`;
+	if (Array.isArray(v)) return `[${v.map(canonical).join(",")}]`;
+	if (typeof v === "object") {
+		const o = v;
+		return `{${Object.keys(o).filter((k) => o[k] !== void 0).sort().map((k) => `${JSON.stringify(k)}:${canonical(o[k])}`).join(",")}}`;
+	}
+	if (typeof v === "bigint") return v.toString();
+	return JSON.stringify(v);
+}
+/**
+* A table's digest: its row count and a checksum of its rows in any order.
+* `cols` limits it to these columns (a restore only puts back columns the
+* database still has).
+*/
+function tableDigest(rows, cols) {
+	const keep = cols ? new Set(cols) : null;
+	const lines = rows.map((r) => {
+		const o = {};
+		for (const [k, v] of Object.entries(r ?? {})) if (!keep || keep.has(k)) o[k] = v;
+		return canonical(o);
+	});
+	lines.sort();
+	return {
+		rows: rows.length,
+		sum: hash53(lines.join("\n"))
+	};
+}
+var blobDigest = (v) => {
+	const text = canonical(v);
+	return {
+		size: text.length,
+		sum: hash53(text)
+	};
+};
+/** The digest of a whole backup: every table, and every app blob field in `blobFields` that it holds. */
+function backupDigest(snap, blobFields) {
+	const tables = {};
+	for (const [t, rows] of Object.entries(snap?.tables ?? {})) if (Array.isArray(rows)) tables[t] = tableDigest(rows);
+	const blobs = {};
+	for (const f of blobFields) if (snap?.[f] != null) blobs[f] = blobDigest(snap[f]);
+	return {
+		tables,
+		blobs
+	};
+}
+/** What differs between two digests: one line per table or blob, empty when they match. */
+function digestDiff(want, got) {
+	const out = [];
+	for (const [t, w] of Object.entries(want.tables)) {
+		const g = got.tables[t];
+		if (!g) out.push(`${t}: missing`);
+		else if (g.rows !== w.rows) out.push(`${t}: ${g.rows}/${w.rows} rows`);
+		else if (g.sum !== w.sum) out.push(`${t}: rows changed`);
+	}
+	for (const [f, w] of Object.entries(want.blobs)) {
+		const g = got.blobs[f];
+		if (!g) out.push(`${f}: missing`);
+		else if (g.sum !== w.sum) out.push(`${f}: changed`);
+	}
+	return out;
+}
+// src/renderer/src/web/restoreApps.ts
+var isRecord = (x) => !!x && typeof x === "object" && !Array.isArray(x);
+/** Default: this device's own keys stay, every shared key comes from the restored copy. */
+var adoptShared = (mine, shared) => isRecord(mine) && isRecord(shared) ? {
+	...mine,
+	...shared
+} : shared;
+/** The sync markers of an app (see appSync.ts). */
+var syncKeys = (setting) => ({
+	synced: `life_sync_${setting}`,
+	seen: `life_sync_${setting}_seen`,
+	edited: `life_sync_${setting}_edited`,
+	restore: `life_sync_${setting}_restore`,
+	before: `life_sync_${setting}_before_restore`
+});
+var parse = (raw) => {
+	try {
+		return raw ? JSON.parse(raw) : null;
+	} catch {
+		return null;
+	}
+};
+/**
+* Writes the restored app data into this device's storage. `apps` = each
+* app's restored shared data (from markRestoredApps). Returns the fields put back.
+*/
+function putBackApps(store, snap, apps, restoreId, now, specs = {}) {
+	const done = [];
+	for (const b of APP_BLOBS) {
+		const spec = specs[b.field] ?? {};
+		if (b.setting && apps[b.field] != null) {
+			const k = syncKeys(b.setting);
+			const shared = apps[b.field];
+			const curRaw = store.getItem(b.localKey);
+			if (curRaw) store.setItem(k.before, JSON.stringify({
+				at: new Date(now).toISOString(),
+				restore: restoreId,
+				raw: curRaw
+			}));
+			const cur = parse(curRaw);
+			const next = cur != null ? (spec.adopt ?? adoptShared)(cur, shared) : snap[b.field] != null ? snap[b.field] : (spec.fromShared ?? ((x) => x))(shared);
+			store.setItem(b.localKey, JSON.stringify(next));
+			store.setItem(k.synced, JSON.stringify((spec.share ?? ((x) => x))(next)));
+			store.setItem(k.seen, String(now));
+			store.removeItem(k.edited);
+			store.setItem(k.restore, restoreId);
+			done.push(b.field);
+		} else if (!b.setting && snap[b.field] != null) {
+			const v = snap[b.field];
+			store.setItem(b.localKey, typeof v === "string" ? v : JSON.stringify(v));
+			done.push(b.field);
+		}
+	}
+	return done;
+}
 // src/renderer/src/web/restoreDrill.ts
 /** Every data table of a database, as a backup (same shape as the apps' export). */
 function snapshotOf(db, source, now = /* @__PURE__ */ new Date()) {
@@ -71587,9 +71977,64 @@ function snapshotOf(db, source, now = /* @__PURE__ */ new Date()) {
 		tables
 	};
 }
+/** A sql.js database as the RowsDb snapshotOf reads. */
+var rowsDbOf = (raw) => ({ prepare: (sql) => ({ all: () => {
+	const r = raw.exec(sql)[0];
+	return r ? r.values.map((v) => Object.fromEntries(r.columns.map((c, i) => [c, v[i]]))) : [];
+} }) });
+/** Current columns and foreign keys of every table of a sql.js database. */
+function shapeOf(db) {
+	const columns = {};
+	const refs = {};
+	for (const [name] of db.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []) {
+		const t = String(name);
+		columns[t] = (db.exec(`PRAGMA table_info("${t}")`)[0]?.values ?? []).map((c) => String(c[1]));
+		refs[t] = [...new Set((db.exec(`PRAGMA foreign_key_list("${t}")`)[0]?.values ?? []).map((f) => String(f[2])))];
+	}
+	return {
+		columns,
+		refs
+	};
+}
+/**
+* Puts a backup back into a sql.js database the way the app does on Turso
+* (staging tables, then one swap in foreign-key order), all in one
+* transaction: on any error everything is rolled back and the error thrown.
+*/
+function applyRestore(db, snap, version = "restore", fail) {
+	const { columns, refs } = shapeOf(db);
+	const plan = restorePlan(snap, columns, version, { refs });
+	db.exec("BEGIN");
+	try {
+		for (const s of [...plan.stage.flat(), ...plan.swap]) {
+			if (fail?.(s.sql)) throw new Error(`Test failure at: ${s.sql.slice(0, 60)}`);
+			db.run(s.sql, s.args);
+		}
+		db.exec("COMMIT");
+	} catch (e) {
+		db.exec("ROLLBACK");
+		throw e;
+	}
+	return plan.tables;
+}
+var APP_SETTINGS = new Set(APP_BLOBS.flatMap((b) => b.setting ? [b.setting] : []));
+var settingsRows = (rows) => rows.filter((r) => typeof r?.key === "string" && typeof r?.value === "string" && !KEEP_SETTINGS.has(r.key) && !APP_SETTINGS.has(r.key));
+var MemoryStore = class {
+	m = /* @__PURE__ */ new Map();
+	getItem(k) {
+		return this.m.has(k) ? this.m.get(k) : null;
+	}
+	setItem(k, v) {
+		this.m.set(k, String(v));
+	}
+	removeItem(k) {
+		this.m.delete(k);
+	}
+};
 /**
 * Puts a backup back into a fresh, empty database (built from the app's own
-* migrations, like a new install) and checks each table got exactly its rows.
+* migrations, like a new install) and an empty app storage, then checks the
+* row count and checksum of every table and the checksum of every app copy.
 */
 function restoreDrill(SQL, text) {
 	let snap;
@@ -71612,40 +72057,59 @@ function restoreDrill(SQL, text) {
 	const db = new SQL.Database();
 	try {
 		for (const m of MIGRATIONS) db.exec(m);
-		const columns = {};
-		for (const [name] of db.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []) columns[String(name)] = (db.exec(`PRAGMA table_info("${String(name)}")`)[0]?.values ?? []).map((c) => String(c[1]));
-		const stmts = restoreStatements(snap, columns, "drill");
-		db.exec("BEGIN");
-		for (const s of stmts) db.run(s.sql, s.args);
-		db.exec("COMMIT");
-		const bad = [];
+		const { columns } = shapeOf(db);
+		const marked = markRestoredApps(snap, "drill", 0);
+		applyRestore(db, marked.snap, "drill");
+		const store = new MemoryStore();
+		putBackApps(store, snap, marked.apps, "drill", 0);
+		const want = {
+			tables: {},
+			blobs: backupDigest(snap, BLOB_FIELDS).blobs
+		};
+		const got = {
+			tables: {},
+			blobs: {}
+		};
 		let tables = 0;
 		let rows = 0;
 		for (const [t, list] of Object.entries(snap.tables)) {
-			if (!Array.isArray(list) || !columns[t] || NOT_BACKED_UP.test(t)) continue;
-			let want = list.length;
-			let got;
-			if (t === "settings") {
-				const wanted = new Map(list.filter((r) => typeof r?.key === "string" && typeof r?.value === "string" && !KEEP_SETTINGS.has(r.key)).map((r) => [r.key, r.value]));
-				const have = new Map((db.exec("SELECT key, value FROM settings")[0]?.values ?? []).map(([k, v]) => [String(k), String(v)]));
-				want = wanted.size;
-				got = [...wanted].filter(([k, v]) => have.get(k) === v).length;
-			} else got = Number(db.exec(`SELECT COUNT(*) FROM "${t}"`)[0]?.values[0][0] ?? 0);
-			if (got !== want && !(APPEND_ONLY.has(t) && got < want && got > 0)) bad.push(`${t} ${got}/${want}`);
+			if (!Array.isArray(list) || !columns[t] || !backupTables([t]).length) continue;
+			const have = new Set(columns[t]);
+			const cols = [...new Set(list.flatMap((r) => Object.keys(r ?? {})))].filter((k) => have.has(k));
+			const restored = rowsDbOf(db).prepare(`SELECT * FROM "${t}"`).all();
+			const source = list.filter((r) => r && typeof r === "object");
+			want.tables[t] = t === "settings" ? tableDigest(settingsRows(source), cols) : tableDigest(source, cols);
+			got.tables[t] = t === "settings" ? tableDigest(settingsRows(restored), cols) : tableDigest(restored, cols);
 			tables++;
-			rows += want;
+			rows += list.length;
+		}
+		for (const b of APP_BLOBS) {
+			if (want.blobs[b.field] == null) continue;
+			const raw = store.getItem(b.localKey);
+			if (raw == null) continue;
+			got.blobs[b.field] = backupDigest({ [b.field]: b.setting ? JSON.parse(raw) : raw }, [b.field]).blobs[b.field];
+		}
+		const blobs = Object.keys(want.blobs).length + Object.keys(marked.apps).filter((f) => want.blobs[f] == null).length;
+		const bad = digestDiff(want, got);
+		for (const [f, data] of Object.entries(marked.apps)) {
+			if (want.blobs[f] != null) continue;
+			const b = APP_BLOBS.find((x) => x.field === f);
+			const back = store.getItem(b.localKey);
+			if (back == null || JSON.stringify(JSON.parse(back)) !== JSON.stringify(data)) bad.push(`${f}: missing`);
 		}
 		if (bad.length) return {
 			ok: false,
-			msg: `Rows missing after a test restore: ${bad.slice(0, 5).join(", ")}`,
+			msg: `Not the same after a test restore: ${bad.slice(0, 5).join(", ")}`,
 			tables,
-			rows
+			rows,
+			blobs
 		};
 		return {
 			ok: true,
-			msg: `${tables} tables, ${rows} rows put back`,
+			msg: `${tables} tables, ${rows} rows${blobs ? ` and ${blobs} app copies` : ""} put back; every checksum matches`,
 			tables,
-			rows
+			rows,
+			blobs
 		};
 	} catch (e) {
 		return {
@@ -71657,6 +72121,92 @@ function restoreDrill(SQL, text) {
 	} finally {
 		db.close();
 	}
+}
+// src/renderer/src/web/cloudBackup.ts
+var SNAPSHOTS_SQL = "CREATE TABLE IF NOT EXISTS cloud_snapshots (day TEXT PRIMARY KEY, exported_at TEXT, size_bytes INTEGER, data TEXT)";
+var PARTS_SQL = "CREATE TABLE IF NOT EXISTS cloud_snapshot_parts (day TEXT NOT NULL, part INTEGER NOT NULL, size_bytes INTEGER, sha TEXT, data TEXT, PRIMARY KEY (day, part))";
+var minusDays = (day, n) => (/* @__PURE__ */ new Date(Date.parse(day + "T00:00:00Z") - n * 864e5)).toISOString().slice(0, 10);
+/** The backup's JSON packed into parts and their manifest. */
+async function packBackup(json, gzip) {
+	return packParts(await gzip(new TextEncoder().encode(json)), json.length);
+}
+/**
+* Saves a day's backup straight to Turso (Ben's server, or the app in its
+* direct test mode): each part in its own request, the manifest last (a day
+* that already has a backup is never changed), then backups older than 30 days go.
+*/
+async function saveBackupDirect(write, day, json, gzip, now = /* @__PURE__ */ new Date()) {
+	const { manifest, parts } = await packBackup(json, gzip);
+	await write([{
+		sql: SNAPSHOTS_SQL,
+		args: []
+	}, {
+		sql: PARTS_SQL,
+		args: []
+	}]);
+	for (let i = 0; i < parts.length; i++) await write([{
+		sql: "INSERT INTO cloud_snapshot_parts (day, part, size_bytes, sha, data) SELECT ?, ?, ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM cloud_snapshots WHERE day = ?) ON CONFLICT(day, part) DO UPDATE SET size_bytes = excluded.size_bytes, sha = excluded.sha, data = excluded.data",
+		args: [
+			day,
+			i,
+			parts[i].length,
+			manifest.shas[i],
+			parts[i],
+			day
+		]
+	}]);
+	const bytes = parts.reduce((n, p) => n + p.length, 0);
+	const cut = minusDays(day, 30);
+	await write([
+		{
+			sql: "INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(day) DO NOTHING",
+			args: [
+				day,
+				now.toISOString(),
+				bytes,
+				manifestText(manifest)
+			]
+		},
+		{
+			sql: "DELETE FROM cloud_snapshots WHERE day < ?",
+			args: [cut]
+		},
+		{
+			sql: "DELETE FROM cloud_snapshot_parts WHERE day < ?",
+			args: [cut]
+		}
+	]);
+	const biggest = Math.max(...manifest.sizes);
+	return {
+		day,
+		parts: parts.length,
+		bytes,
+		biggest,
+		warn: biggest >= CHUNK_WARN
+	};
+}
+/**
+* A day's backup as its JSON text: a parts backup is joined and checked
+* (every part's and the whole SHA-256), an old one-piece backup ("gz:" +
+* base64, or plain JSON) is read as before. Parts are read one per request
+* (an answer may be at most 4.5 MB).
+*/
+async function readBackup(read, day, gunzip) {
+	const rows = await read("SELECT data FROM cloud_snapshots WHERE day = ?", [day]);
+	if (!rows.length) throw new Error(`No cloud backup of ${day}`);
+	const data = String(rows[0][0] ?? "");
+	if (data.startsWith("parts:")) {
+		const m = readManifest(data);
+		if (!m) throw new Error(`The ${day} backup's list of parts is broken`);
+		const parts = [];
+		for (let i = 0; i < m.parts; i++) {
+			const p = await read("SELECT data FROM cloud_snapshot_parts WHERE day = ? AND part = ?", [day, i]);
+			parts.push(p.length ? String(p[0][0]) : null);
+		}
+		return new TextDecoder().decode(await gunzip(await joinParts(m, parts)));
+	}
+	if (data.startsWith("gz:")) return new TextDecoder().decode(await gunzip(fromBase64(data.slice(3))));
+	return data;
 }
 // src/core/sportyUpdate.ts
 var SPORTY_STATUS = "sporty_status";
@@ -71981,13 +72531,14 @@ var SLOT_TIME = {
 	weekly: "18:00",
 	plan: "21:15",
 	winddown: "23:15",
-	lastcall: "00:00"
+	lastcall: "00:00",
+	backup: ""
 };
 var DEFAULT_BUDGET = {
 	on: true,
 	afternoon: false
 };
-var isSlot = (x) => typeof x === "string" && (x === "lastcall" || SLOTS.includes(x));
+var isSlot = (x) => typeof x === "string" && (x === "lastcall" || x === "backup" || SLOTS.includes(x));
 /** The bell id of a slot's message: one per slot and day, so every device adds it once. */
 var slotNotifId = (slot, day) => `budget:${slot}:${day}`;
 function cleanLedger(raw, day) {
@@ -72062,6 +72613,7 @@ function slotText(slot, f) {
 		case "plan": return "Life System: pick tomorrow's 3 must-dos. Reply with 3 lines, each with a number or minutes.";
 		case "winddown": return "Life System: 15 minutes to bed. Phone away, asleep by 23:30.";
 		case "lastcall": return "Life System: it is midnight and bed is not logged. Go to sleep now.";
+		case "backup": return "Life System: a backup needs a look. Open Settings → Data safety.";
 	}
 }
 /** Reads the `simple_mode` setting's budget part (missing = on, afternoon off). */
@@ -77236,22 +77788,18 @@ async function backupTick(t, SQL, mirror, now) {
 		args: []
 	}]);
 	if (!(have instanceof Error) && !have.rows.length) try {
-		const data = `gz:${gzipSync(Buffer.from(JSON.stringify(await mirror.read((db) => snapshotOf(db, "Ben's server", now))), "utf8")).toString("base64")}`;
-		const cut = /* @__PURE__ */ new Date(now.getTime() - 2592e6);
-		await t.writeAtomic([{
-			sql: "INSERT INTO cloud_snapshots (day, exported_at, size_bytes, data) VALUES (?, ?, ?, ?) ON CONFLICT(day) DO NOTHING",
-			args: [
-				day,
-				now.toISOString(),
-				Buffer.byteLength(data),
-				data
-			]
-		}, {
-			sql: "DELETE FROM cloud_snapshots WHERE day < ?",
-			args: [calendarDay(cut)]
-		}]);
+		const saved = await saveBackupDirect((s) => t.writeAtomic(s), day, JSON.stringify(await mirror.read((db) => snapshotOf(db, "Ben's server", now))), (u8) => new Uint8Array(gzipSync(u8)), now);
+		await beat(t, "cloudBackup", true, void 0, now);
+		await setNote(t, "cloudBackup", {
+			day,
+			at: now.toISOString(),
+			parts: saved.parts,
+			bytes: saved.bytes,
+			biggest: saved.biggest
+		});
 	} catch (e) {
 		logError(t, "server", `snapshot: ${e.message}`);
+		await beat(t, "cloudBackup", false, `Today's cloud backup failed: ${e.message}`.slice(0, 200), now);
 	}
 	let last = null;
 	try {
@@ -77262,13 +77810,35 @@ async function backupTick(t, SQL, mirror, now) {
 	if (last && now.getTime() - Date.parse(last) < 6048e5) return;
 	await setNote(t, "drill", now.toISOString());
 	const [snap] = await t.readMany([{
-		sql: "SELECT day, data FROM cloud_snapshots ORDER BY day DESC LIMIT 1",
+		sql: "SELECT day FROM cloud_snapshots ORDER BY day DESC LIMIT 1",
 		args: []
 	}]);
 	if (snap instanceof Error || !snap.rows.length) return;
-	const raw = String(snap.rows[0][1]);
-	const r = restoreDrill(SQL, raw.startsWith("gz:") ? gunzipSync(Buffer.from(raw.slice(3), "base64")).toString("utf8") : raw);
-	await beat(t, "restoreDrill", r.ok, r.ok ? void 0 : `${snap.rows[0][0]}: ${r.msg}`, now);
+	const newest = String(snap.rows[0][0]);
+	let r;
+	try {
+		const read = async (sql, args) => {
+			const [res] = await t.readMany([{
+				sql,
+				args
+			}]);
+			if (res instanceof Error) throw res;
+			return res.rows;
+		};
+		r = restoreDrill(SQL, await readBackup(read, newest, (u8) => new Uint8Array(gunzipSync(u8))));
+	} catch (e) {
+		r = {
+			ok: false,
+			msg: e.message
+		};
+	}
+	await beat(t, "restoreDrill", r.ok, r.ok ? void 0 : `${newest}: ${r.msg}`, now);
+	await setNote(t, "drillResult", {
+		at: now.toISOString(),
+		day: newest,
+		ok: r.ok,
+		msg: r.msg
+	});
 }
 /** CL4: what the last health check found (the tick answers health:false, so the GitHub timer fails and GitHub emails you). */
 var lastHealth = null;
