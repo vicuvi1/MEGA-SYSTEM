@@ -8,6 +8,7 @@ import * as M from '../model.js';
 import { todayISO, monthLabel, dayLabel } from '../dates.js';
 import { evalAmount, centsToPlain, formatMoney } from '../money.js';
 import { CARD_THEMES } from '../cards.js';
+import { countsAsIncome } from '../catshare.js';
 
 const TEMPLATES = [
   { emoji: '🛟', name: 'Emergency fund', account: 'savings', theme: 'teal', emergency: true },
@@ -291,7 +292,7 @@ export function openAllocationSheet(incomeId = null, goalId = null) {
   const goals = (state.goals || []).filter((g) => !g.doneAt && !g.archived);
   if (!goals.length) { ctx.toast('Create a goal first.'); return; }
   const summary = M.goalAllocationSummary(state);
-  const incomes = M.sortTx(state.tx.filter((t) => t.type === 'income' && !t.loan));
+  const incomes = M.sortTx(state.tx.filter((t) => countsAsIncome(t)));
   ctx.openSheet(`<h3>Allocate money to goals <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
     <form id="goal-allocation-form" novalidate><label class="field"><span>Allocate from</span><select id="allocation-source"><option value="">Existing unallocated funds</option>${incomes.map((t) => `<option value="${esc(t.id)}" ${incomeId === t.id ? 'selected' : ''}>${esc(t.date)} · ${esc(t.note || 'Income')} · ${ctx.money(Math.max(0, M.B(t) - (summary.byIncome[t.id] || 0)))} left</option>`).join('')}</select></label>
     <p class="muted small">All amounts are in ${esc(state.settings.currency)}. Foreign income uses its recorded exchange rate. Allocating to a balance-tracking goal switches its progress to reserved money; existing balances are not automatically reserved.</p>
@@ -301,7 +302,7 @@ export function openAllocationSheet(incomeId = null, goalId = null) {
       const update = () => {
         const s = M.goalAllocationSummary(ctx.state);
         const id = sheet.querySelector('#allocation-source').value;
-        const income = id && ctx.state.tx.find((t) => t.id === id && t.type === 'income' && !t.loan);
+        const income = id && ctx.state.tx.find((t) => t.id === id && countsAsIncome(t));
         const limit = Math.min(s.unallocated, id ? Math.max(0, (income ? M.B(income) : 0) - (s.byIncome[id] || 0)) : s.unallocated);
         const entries = read(), valid = entries.every((e) => Number.isSafeInteger(e.amount) && e.amount > 0);
         const total = entries.reduce((sum, e) => sum + (e.amount || 0), 0);

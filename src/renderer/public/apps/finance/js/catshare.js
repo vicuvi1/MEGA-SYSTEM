@@ -14,7 +14,11 @@ export const FOLD_BELOW = 0.03; // categories under 3% fold into Other
 export const MAX_SEGMENTS = 7; // more than this also fold into Other
 
 export const isPointsReward = (t) => String(t?.id || '').startsWith('life-reward-');
-export const countsAsSpending = (t) => t.type === 'expense' && !t.loan && !isPointsReward(t);
+// A reconciliation adjustment (js/reconcile.js) settles a difference with the
+// bank: it moves the balance but is neither income nor spending.
+export const isCorrection = (t) => !!t?.reconcile;
+export const countsAsSpending = (t) => t.type === 'expense' && !t.loan && !isPointsReward(t) && !isCorrection(t);
+export const countsAsIncome = (t) => t.type === 'income' && !t.loan && !isCorrection(t);
 
 // "This month", "Last month", "3 months", "Year", or "m:2026-09" (a month you picked).
 export const SPEND_PERIODS = [

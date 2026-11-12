@@ -8,6 +8,7 @@ import { formatMoney, evalAmount, centsToPlain } from '../money.js';
 import { monthKey, addMonths, daysInMonth, monthLabel, todayISO } from '../dates.js';
 import { lineChart } from '../charts.js';
 import { cardHTML, CARD_THEMES, themeOf, readLogo, readCardPhoto, BANK_CARDS, designGroups } from '../cards.js';
+import * as Reconcile from './reconcile.js';
 
 export const BANKS = ['Cash', 'maib', 'Victoriabank', 'Moldindconbank', 'OTP Bank', 'MICB', 'FinComBank', 'Eximbank', 'Energbank', 'ProCredit Bank', 'Paynet', 'Revolut', 'Wise', 'Paysera', 'PayPal', 'Binance'];
 
@@ -138,6 +139,7 @@ export function view() {
 
   return `<header class="top"><div><h1>Accounts</h1><div class="sub">${active.length} account${active.length === 1 ? '' : 's'} · ${[...byCur.keys()].join(', ')}</div></div>
     <div class="btns top-btns">${active.length > 1 ? `<button class="btn${reorder ? ' primary' : ''}" data-act="acc-reorder" aria-pressed="${reorder}">${reorder ? 'Done' : '⇄ Reorder'}</button>` : ''}<button class="btn primary" data-act="acc-new">+ Add account</button></div></header>
+  ${reorder ? '' : Reconcile.dueLine()}
   <section class="hero">
     <div class="hero-main">
       <div class="label">All my money</div>
@@ -217,12 +219,14 @@ function openAccount(id) {
       <button class="btn primary" id="acc-add-rec">Add record</button>
       <button class="btn" id="acc-move">Move money</button>
       <button class="btn" id="acc-count">${a.kind === 'cash' ? 'Count cash' : 'Set balance'}</button>
+      <button class="btn" id="acc-recon" data-testid="acc-recon">Reconcile</button>
       <button class="btn" id="acc-edit">Edit</button>
     </div>
     ${recent.length ? `<div class="list">${recent.map((t) => ctx.txRow(t, { showDate: true })).join('')}</div>` : '<p class="muted">No records in this account yet.</p>'}`, (sheet) => {
     sheet.querySelector('#acc-add-rec').addEventListener('click', () => { ctx.closeSheet(); ctx.openTxSheet(null, { account: id, from: id }); });
     sheet.querySelector('#acc-move').addEventListener('click', () => { ctx.closeSheet(); ctx.openTransferSheet(id); });
     sheet.querySelector('#acc-count')?.addEventListener('click', () => setBalanceSheet(id));
+    sheet.querySelector('#acc-recon')?.addEventListener('click', () => Reconcile.open(id));
     sheet.querySelector('#acc-edit').addEventListener('click', () => editAccount(id));
     sheet.addEventListener('click', (e) => {
       if (e.target.closest('[data-act="acc-setbal"]')) { e.stopPropagation(); setBalanceSheet(id); return; }

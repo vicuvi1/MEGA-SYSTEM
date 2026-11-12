@@ -5,6 +5,7 @@ import { formatMoney } from './money.js';
 import { daysInMonth, weekday, todayISO, dowIndex, DOW_LONG, DOW_SHORT, MONTHS, addDays } from './dates.js';
 import { TYPE_LABEL } from './importer.js';
 import { B, category } from './model.js';
+import { countsAsSpending, countsAsIncome } from './catshare.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const plain = (c) => formatMoney(c, '');
@@ -193,8 +194,8 @@ export function tableHTML(state, list, { sort, draft, fmt: fmtExact, selected = 
     return `${head}<tr data-id="${esc(t.id)}" class="t-${t.type}${isLoan ? ' is-loan' : ''}${newDay ? ' newday' : ''}${t.date === today ? ' is-today' : ''}${on ? ' selected' : ''}"><td class="selc"><input type="checkbox" class="sel" data-act="sel" data-id="${esc(t.id)}" ${on ? 'checked' : ''} aria-label="Select this record"></td>${cells(state, t, { who })}
       <td class="c-del"><button type="button" class="row-del" data-act="row-del" data-id="${esc(t.id)}" aria-label="Delete this record" title="Delete">×</button></td></tr>`;
   }).join('');
-  const income = list.filter((t) => t.type === 'income' && !t.loan).reduce((a, t) => a + B(t), 0);
-  const expense = list.filter((t) => t.type === 'expense' && !t.loan).reduce((a, t) => a + B(t), 0);
+  const income = list.filter((t) => countsAsIncome(t)).reduce((a, t) => a + B(t), 0);
+  const expense = list.filter((t) => countsAsSpending(t)).reduce((a, t) => a + B(t), 0);
   const loanOut = list.filter((t) => t.type === 'expense' && t.loan).reduce((a, t) => a + B(t), 0);
   const loanIn = list.filter((t) => t.type === 'income' && t.loan).reduce((a, t) => a + B(t), 0);
   const arrow = (id) => (sort.col === id ? (sort.dir > 0 ? ' ▲' : ' ▼') : '');

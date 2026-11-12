@@ -3,6 +3,7 @@
 
 import { report, yearOverview, rebuiltTotal, category, person, account, B } from './model.js';
 import { addDays } from './dates.js';
+import { countsAsIncome } from './catshare.js';
 
 // Longest run of days in a row with at least one record, within the year.
 function longestStreak(dates) {
@@ -31,7 +32,7 @@ export function yearReview(state, year, today) {
   const nameOf = (id) => category(state, id)?.name || 'Other';
   const topClient = (() => {
     const per = {};
-    for (const t of inYear) if (t.type === 'income' && !t.loan && t.person) per[t.person] = (per[t.person] || 0) + B(t);
+    for (const t of inYear) if (countsAsIncome(t) && t.person) per[t.person] = (per[t.person] || 0) + B(t);
     const [id, amount] = Object.entries(per).sort((a, b) => b[1] - a[1])[0] || [];
     return id ? { name: person(state, id)?.name || 'Someone', amount } : null;
   })();
@@ -64,7 +65,7 @@ export function yearReview(state, year, today) {
 // amount in your currency. Loans and moves between accounts are left out.
 export function taxSummary(state, year) {
   const rows = state.tx
-    .filter((t) => t.type === 'income' && !t.loan && t.date.startsWith(String(year)))
+    .filter((t) => countsAsIncome(t) && t.date.startsWith(String(year)))
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
     .map((t) => ({
       id: t.id,

@@ -18,7 +18,7 @@ export function toCloud(state, deviceId, now = Date.now()) {
     schema: SCHEMA_VERSION,
     savedAt: now,
     deviceId,
-    data: { settings, tx: state.tx, people: state.people, recurring: state.recurring || [], invoices: state.invoices || [], netWorth: state.netWorth || [], goals: state.goals || [], goalAllocations: state.goalAllocations || [], deleted: state.deleted, ...(sharedRates(state.rates) ? { lastRates: sharedRates(state.rates) } : {}) },
+    data: { settings, tx: state.tx, people: state.people, recurring: state.recurring || [], invoices: state.invoices || [], netWorth: state.netWorth || [], goals: state.goals || [], goalAllocations: state.goalAllocations || [], reconciliations: state.reconciliations || [], deleted: state.deleted, ...(sharedRates(state.rates) ? { lastRates: sharedRates(state.rates) } : {}) },
   };
 }
 
@@ -48,7 +48,9 @@ function mergeList(a = [], b = [], deleted) {
   for (const x of a) byId.set(x.id, x);
   for (const x of b) {
     const mine = byId.get(x.id);
-    if (!mine || (x.updatedAt || 0) > (mine.updatedAt || 0)) byId.set(x.id, x);
+    // Same time on both sides but different content (two devices in the same
+    // millisecond): the same pick on both devices, so they end up equal.
+    if (!mine || (x.updatedAt || 0) > (mine.updatedAt || 0) || ((x.updatedAt || 0) === (mine.updatedAt || 0) && JSON.stringify(x) > JSON.stringify(mine))) byId.set(x.id, x);
   }
   const out = [];
   for (const [id, x] of byId) {
@@ -109,6 +111,7 @@ export function mergeStates(local, remote) {
     netWorth: mergeList(local.netWorth, r.netWorth, deleted),
     goals: mergeList(local.goals, r.goals, deleted),
     goalAllocations: mergeList(local.goalAllocations, r.goalAllocations, deleted),
+    reconciliations: mergeList(local.reconciliations, r.reconciliations, deleted),
     deleted,
     rates: withRates(local.rates, remote.data.lastRates),
   };

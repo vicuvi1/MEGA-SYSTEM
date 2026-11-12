@@ -6,6 +6,7 @@ import { monthKey, addMonths, daysInMonth, monthLabel, addDays, isValidISO } fro
 import { convert, coinValue } from './fx.js';
 import { perMonth } from './recurring.js';
 import { ensureTree, memorySub, suggestSub, subOf } from './cattree.js';
+import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome } from './catshare.js';
 
 // v1: first release. v2: custom multi-currency accounts, people, loans,
 // per-record timestamps and deletion markers for sync.
@@ -87,6 +88,9 @@ function baseState() {
     // Money goals (see goalStatus). The old single settings.goal becomes the first one.
     goals: [{ id: 'g-main', name: 'Safe goal', emoji: '🏦', target: 10000000, account: 'savings', saved: 0, history: [], deadline: null, doneAt: null, theme: 'gold', updatedAt: 0 }],
     goalAllocations: [],
+    // Monthly reconciliation points (js/reconcile.js): per account the date,
+    // the real balance from the bank and the app's balance that day.
+    reconciliations: [],
     // One net-worth snapshot per day (id nw-YYYY-MM-DD), so crypto and
     // exchange rates of the day are kept; older history is rebuilt from records.
     netWorth: [],
@@ -158,7 +162,10 @@ export function normalizeState(raw) {
       .map((g) => (g.id === 'g-main' && !g.updatedAt && g.account === 'all' && g.name === 'Safe goal' ? { ...g, account: 'savings' } : g))
     : [{ id: 'g-main', name: settings.goal.name || 'Safe goal', emoji: '🏦', target: settings.goal.target || 0, account: settings.goal.account || 'all', saved: 0, history: [], deadline: null, doneAt: null, theme: 'gold', updatedAt: 0 }];
   const goalAllocations = (Array.isArray(raw.goalAllocations) ? raw.goalAllocations : []).filter((a) => a && typeof a.id === 'string' && typeof a.goalId === 'string' && Number.isSafeInteger(a.amount) && a.amount > 0 && isValidISO(a.date || '')).map((a) => ({ ...a, currency: a.currency || baseCur, updatedAt: a.updatedAt || 0 }));
-  return { version: SCHEMA_VERSION, settings, tx, people, recurring, invoices, netWorth, goals, goalAllocations, deleted, rates: raw.rates || (raw.lastRates?.usd?.MDL ? { usd: { ...raw.lastRates.usd }, crypto: {}, history: {}, fetchedAt: Date.parse(`${raw.lastRates.date}T12:00:00`) || null, synced: true } : null), meta: { ...base.meta, ...(raw.meta || {}) } };
+  const reconciliations = (Array.isArray(raw.reconciliations) ? raw.reconciliations : [])
+    .filter((r) => r && typeof r.id === 'string' && typeof r.account === 'string' && isValidISO(r.date || '') && Number.isSafeInteger(r.real))
+    .map((r) => ({ adjustment: null, ...r, updatedAt: r.updatedAt || 0 }));
+  return { version: SCHEMA_VERSION, settings, tx, people, recurring, invoices, netWorth, goals, goalAllocations, reconciliations, deleted, rates: raw.rates || (raw.lastRates?.usd?.MDL ? { usd: { ...raw.lastRates.usd }, crypto: {}, history: {}, fetchedAt: Date.parse(`${raw.lastRates.date}T12:00:00`) || null, synced: true } : null), meta: { ...base.meta, ...(raw.meta || {}) } };
 }
 
 function validTx(t) {
@@ -171,8 +178,9 @@ function validTx(t) {
 export const B = (t) => (Number.isInteger(t.base) ? t.base : t.amount);
 
 // Loans are money that comes back: they move balances but are not income or
-// spending.
-const counts = (t) => !t.loan;
+// spending. Neither are a reward bought with points (life-reward-…, the same
+// rule as catshare.js countsAsSpending) or a reconciliation adjustment.
+const counts = (t) => !t.loan && !isPointsReward(t) && !isCorrection(t);
 
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -462,9 +470,11 @@ export function takeSnapshot(state, today, now = Date.now()) {
 export function rebuiltTotal(state, date) {
   const baseCur = state.settings.currency;
   const bal = accountBalances(state, date);
+  // The same rates as today's total (totalBalance): live, else the newest known.
+  const rates = knownRates(state);
   let total = 0;
   for (const a of state.settings.accounts) {
-    const v = convert(bal[a.id] || 0, a.currency, baseCur, state.rates);
+    const v = convert(bal[a.id] || 0, a.currency, baseCur, rates);
     if (v != null) total += v;
   }
   return total;
@@ -668,7 +678,7 @@ export function goalAllocationSummary(state, asOf = null) {
     if (amount == null) unpriced.push(a.id);
     const validAmount = Number.isSafeInteger(amount) && amount > 0 ? amount : 0;
     const goal = (state.goals || []).find((g) => g.id === a.goalId);
-    const income = a.incomeId ? state.tx.find((t) => t.id === a.incomeId && t.type === 'income' && !t.loan && (!asOf || t.date <= asOf)) : null;
+    const income = a.incomeId ? state.tx.find((t) => t.id === a.incomeId && countsAsIncome(t) && (!asOf || t.date <= asOf)) : null;
     const incomeLeft = a.incomeId ? Math.max(0, (income ? B(income) : 0) - (byIncome[a.incomeId] || 0)) : Infinity;
     const funded = goal?.account === 'allocated' ? Math.min(validAmount, Math.max(0, cash - reserved), incomeLeft) : 0;
     requested += validAmount;
@@ -694,7 +704,7 @@ export function allocateToGoals(state, entries, { incomeId = null, date, now = D
   }
   if (!Number.isSafeInteger(total) || total > summary.unallocated) throw new Error('The total exceeds your unallocated cash and bank balances.');
   if (incomeId) {
-    const income = state.tx.find((t) => t.id === incomeId && t.type === 'income' && !t.loan);
+    const income = state.tx.find((t) => t.id === incomeId && countsAsIncome(t));
     if (!income || total > Math.max(0, B(income) - (summary.byIncome[incomeId] || 0))) throw new Error('The total exceeds the unallocated amount of this income.');
   }
   // Validate the whole batch before changing anything.
@@ -1357,7 +1367,7 @@ export function periodRange(id, today) {
 // Spending (or income) per category between two dates, in the base currency,
 // biggest first, each with its share and number of records.
 export function totalsByCategory(state, from, to, type = 'expense') {
-  const list = state.tx.filter((t) => t.type === type && !t.loan && t.date >= from && t.date <= to);
+  const list = state.tx.filter((t) => t.type === type && counts(t) && t.date >= from && t.date <= to);
   const total = list.reduce((a, t) => a + B(t), 0);
   const count = {};
   for (const t of list) count[t.category] = (count[t.category] || 0) + 1;
@@ -1394,7 +1404,7 @@ function group(list, key) {
 // noted. `prev` holds the same numbers for the period just before.
 export function report(state, from, to, { withPrev = true, today = null } = {}) {
   const inRange = state.tx.filter((t) => t.date >= from && t.date <= to);
-  const real = inRange.filter((t) => t.type !== 'transfer' && !t.loan);
+  const real = inRange.filter((t) => t.type !== 'transfer' && counts(t));
   const income = real.filter((t) => t.type === 'income').reduce((a, t) => a + B(t), 0);
   const expense = real.filter((t) => t.type === 'expense').reduce((a, t) => a + B(t), 0);
   const days = isoDays(from, to);
@@ -1439,7 +1449,7 @@ export function report(state, from, to, { withPrev = true, today = null } = {}) 
 // Income and spending per day (short periods) or per month (long ones).
 export function reportSeries(state, from, to) {
   const days = isoDays(from, to);
-  const real = state.tx.filter((t) => t.date >= from && t.date <= to && t.type !== 'transfer' && !t.loan);
+  const real = state.tx.filter((t) => t.date >= from && t.date <= to && (countsAsSpending(t) || countsAsIncome(t)));
   const buckets = new Map();
   const keyOf = days <= 62 ? (iso) => iso : (iso) => iso.slice(0, 7);
   if (days <= 62) for (let i = 0; i < days; i++) buckets.set(shiftIso(from, i), { key: shiftIso(from, i), income: 0, expense: 0 });

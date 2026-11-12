@@ -5,6 +5,7 @@
 //
 //   settings.subcats    [{ id, parent, key?, name, emoji, color?, budget?, updatedAt }]
 //   settings.subMemory  { "<merchant words>": subId }  learned from your own choices
+import { countsAsSpending } from './catshare.js';
 
 const fold = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -505,7 +506,7 @@ export function monthlyAverage(state, from, key, months = 6) {
 
 export function subBudgetStatus(state, key) {
   return subList(state).filter((s) => s.budget > 0 && !s.archived).map((s) => {
-    const spent = state.tx.filter((t) => t.type === 'expense' && !t.loan && t.date.startsWith(key) && t.sub === s.id && t.category === s.parent).reduce((a, t) => a + B(t), 0);
+    const spent = state.tx.filter((t) => countsAsSpending(t) && t.date.startsWith(key) && t.sub === s.id && t.category === s.parent).reduce((a, t) => a + B(t), 0);
     const pct = spent / s.budget;
     return { sub: s, budget: s.budget, spent, left: s.budget - spent, pct, level: pct > 1 ? 'over' : pct >= 0.8 ? 'near' : 'ok' };
   }).sort((a, b) => b.pct - a.pct);

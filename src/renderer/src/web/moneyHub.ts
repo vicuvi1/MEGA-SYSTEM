@@ -7,7 +7,11 @@ import { safeToSpend, limitStatus, isEveryday } from '../../public/apps/finance/
 // @ts-ignore
 import { upcomingItems } from '../../public/apps/finance/js/recurring.js'
 // @ts-ignore
-import { countsAsSpending } from '../../public/apps/finance/js/catshare.js'
+import { rateToBase } from '../../public/apps/finance/js/fx.js'
+// @ts-ignore
+import { reconDue } from '../../public/apps/finance/js/reconcile.js'
+// @ts-ignore
+import { countsAsSpending, countsAsIncome } from '../../public/apps/finance/js/catshare.js'
 // @ts-ignore
 import { goalStatus, normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } from '../../public/apps/finance/js/model.js'
 import { addDays } from '@core/dates'
@@ -58,6 +62,8 @@ export interface MoneyHubView {
   recent: { id: string; date: string; type: string; amount: number; category: string; emoji: string; note: string; account: string }[]
   bills: { name: string; amount: number; date: string }[]
   loggedToday: boolean
+  /** Accounts not reconciled for more than 31 days (Finance's reconcile.js). */
+  reconcile: { id: string; name: string; days: number | null }[]
 }
 
 const B = (t: any) => (Number.isInteger(t?.base) ? t.base : Number(t?.amount) || 0)
@@ -77,13 +83,36 @@ function hubTx(state: any): HubTx[] {
     // Spending is Finance's own rule (catshare.js countsAsSpending, the same as
     // its "Where your money goes" donut): a reward bought with points
     // (life-reward-…) is not real money and is left out here too.
-    .filter((t) => t && !t.deleted && typeof t.date === 'string' && t.type !== 'transfer' && !t.loan && (t.type !== 'expense' || countsAsSpending(t)))
+    .filter((t) => t && !t.deleted && typeof t.date === 'string' && (countsAsSpending(t) || countsAsIncome(t)))
     .map((t) => ({ id: String(t.id), date: t.date.slice(0, 10), type: t.type, amount: Math.abs(B(t)), category: String(t.category ?? 'other'), note: t.note ? String(t.note) : undefined, everyday: t.type === 'expense' && isEveryday(state, t) }))
+}
+
+// A recurring item's amount in the main currency. Rules keep their own
+// currency (a 10 USD subscription is 1000 cents of USD): it is converted with
+// Finance's rate rule (fx.js rateToBase), never counted 1:1. With no rate at
+// all it is left out (null).
+function ruleInBase(state: any, rule: any): number | null {
+  const amount = Math.abs(Number(rule.amount) || 0)
+  const base = state.settings.currency || 'MDL'
+  const cur = rule.currency || base
+  if (cur === base) return amount
+  const rate = rateToBase(state, cur)
+  return rate > 0 ? Math.round(amount * rate) : null
 }
 
 function upcoming(state: any, today: string): Upcoming[] {
   try {
-    return (upcomingItems(state, today, 31) as any[]).map((x) => ({ date: x.date, amount: Math.abs(Number(x.rule.base ?? x.rule.amount) || 0), type: x.rule.type === 'income' ? 'income' : 'expense', label: x.rule.note || 'Bill' }))
+    return (upcomingItems(state, today, 31) as any[])
+      .map((x) => ({ date: x.date, amount: ruleInBase(state, x.rule), type: (x.rule.type === 'income' ? 'income' : 'expense') as Upcoming['type'], label: x.rule.note || 'Bill' }))
+      .filter((x) => x.amount != null) as Upcoming[]
+  } catch {
+    return []
+  }
+}
+
+function reconcileDue(state: any, today: string): MoneyHubView['reconcile'] {
+  try {
+    return (reconDue(state, today) as any[]).map((x) => ({ id: String(x.account.id), name: String(x.account.name || 'Account'), days: x.days ?? null }))
   } catch {
     return []
   }
@@ -162,7 +191,8 @@ export function hubView(raw: any, today: string): MoneyHubView | null {
     mainAccount: mainAccountId(state.settings.accounts, state.settings.currency),
     recent,
     bills,
-    loggedToday: tx.some((t) => t.date === today && month === today.slice(0, 7))
+    loggedToday: tx.some((t) => t.date === today && month === today.slice(0, 7)),
+    reconcile: reconcileDue(state, today)
   }
 }
 

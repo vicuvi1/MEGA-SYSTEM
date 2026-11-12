@@ -6090,3 +6090,18 @@ html[data-calm] .theme-atmosphere, html[data-calm] .atmosphere-particle { displa
   .app.enter .dn-seg, .flash-in .dn-seg, .app.enter .dn-bar i, .flash-in .dn-bar i { animation: none; }
   .dn-seg, .dn-row { transition: none; }
 }
+
+/* Monthly reconciliation (js/screens/reconcile.js) */
+.banner.recon-due { flex-wrap: wrap; margin-bottom: 12px; }
+.banner.recon-due p { flex: 1 1 100%; }
+.banner.recon-due .chips { margin: 0; flex-wrap: wrap; }
+.recon-nums { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 12px 0 8px; }
+.recon-nums > div { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; min-width: 0; }
+.recon-nums span { color: var(--muted); font-size: 12px; }
+.recon-nums b { font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.recon-result { margin-top: 6px; }
+.recon-result.ok p b { color: var(--income); }
+.recon-causes h4 { margin: 16px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.recon-pair { border: 1px dashed var(--line-strong); border-radius: 12px; padding: 2px 6px; margin-bottom: 6px; }
+.recon-history { margin-top: 14px; }
+.recon-history summary { cursor: pointer; color: var(--muted); font-size: 13px; }

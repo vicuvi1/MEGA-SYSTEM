@@ -129,6 +129,7 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
                 <Recent view={view} />
               </section>
             </div>
+            <ReconcileDue view={view} onOpenApp={openApp} />
             <OpenApp onOpenApp={openApp} />
           </TabPanel>
           <TabPanel page="money" id="month" value={tab}>
@@ -630,6 +631,39 @@ function PointsCard({ state, onState, days, onWallet }: { state: ConnectionsStat
         )}
       </div>
     </section>
+  )
+}
+
+/**
+ * "Reconcile: due": accounts not checked against the bank for more than 31
+ * days (Finance Helper's reconcile.js). A tap opens Finance Helper on that
+ * account's reconcile sheet (the finance-helper.goto key, read once there).
+ */
+function ReconcileDue({ view, onOpenApp }: { view: MoneyHubView; onOpenApp: () => void }) {
+  const due = view.reconcile ?? []
+  if (!due.length) return null
+  const go = (id: string) => {
+    try {
+      localStorage.setItem('finance-helper.goto', JSON.stringify({ screen: 'reconcile', account: id, at: Date.now() }))
+    } catch {
+      /* storage blocked: the app still opens */
+    }
+    onOpenApp()
+  }
+  return (
+    <div className="mh-card mh-recon" data-testid="reconcile-due">
+      <span>
+        <b>Reconcile: due</b> · check against your bank or card
+      </span>
+      <span className="mh-recon-list">
+        {due.slice(0, 4).map((d) => (
+          <button key={d.id} type="button" className="mh-pillbtn" onClick={() => go(d.id)} title={d.days == null ? 'Never reconciled' : `Last reconciled ${d.days} days ago`}>
+            {d.name} <small>{d.days == null ? 'never' : `${d.days}d`}</small>
+          </button>
+        ))}
+        {due.length > 4 && <small>+{due.length - 4} more</small>}
+      </span>
+    </div>
   )
 }
 

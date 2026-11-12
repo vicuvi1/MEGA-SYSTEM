@@ -9,7 +9,7 @@ import { formatMoney, evalAmount, centsToPlain } from './money.js';
 import { todayISO, monthKey, monthLabel, addMonths, daysInMonth, dayLabel, dowIndex, DOW_LONG, DOW_SHORT, MONTHS, addDays } from './dates.js';
 import { convert, pairRate, formatRate, rateToBase } from './fx.js';
 import { parseCSV, toCSV } from './csv.js';
-import { importRows, importWorkbook, importCheck, exportRows, toTSV, monthSheet, overviewSheet, detectColumns, fillRate, fillKnownRates, skipNoRate } from './importer.js';
+import { importRows, importWorkbook, importCheck, exportRows, toTSV, monthSheet, overviewSheet, detectColumns, fillRate, fillKnownRates, skipNoRate, previewTotal } from './importer.js';
 import { readWorkbook } from './xlsx-read.js';
 import { workbook } from './xlsx.js';
 import { refreshRates, backfillRates, recordRates } from './rates.js';
@@ -37,6 +37,9 @@ import * as Calc from './screens/calc.js';
 import * as Buddy from './screens/buddy.js';
 import * as ImportCheck from './screens/importcheck.js';
 import * as Reprice from './screens/reprice.js';
+import * as Reconcile from './screens/reconcile.js';
+import * as MoneyIO from './screens/moneyio.js';
+import { isMoneyExport } from './moneyexport.js';
 import * as RateGaps from './screens/rategaps.js';
 import * as WorkHour from './screens/workhour.js';
 import * as YearReview from './screens/yearreview.js';
@@ -62,6 +65,7 @@ import { AmbientMusic } from './ambient.js';
 import { openPalette, closePalette, isPaletteOpen } from './palette.js';
 import { bindSankeyHover } from './charts.js';
 import { APP_VERSION } from './version.js';
+import { countsAsSpending, countsAsIncome } from './catshare.js';
 
 let state = load();
 // Undo / redo for this session (js/history.js).
@@ -306,7 +310,7 @@ function monthNav() {
     if (!t.date.startsWith(String(year))) continue;
     const k = t.date.slice(0, 7);
     count[k] = (count[k] || 0) + 1;
-    if (t.type === 'expense' && !t.loan) spent[k] = (spent[k] || 0) + M.B(t);
+    if (countsAsSpending(t)) spent[k] = (spent[k] || 0) + M.B(t);
   }
   const max = Math.max(1, ...Object.values(spent));
   const pills = MONTHS.map((name, i) => {
@@ -541,7 +545,9 @@ function txRow(t, { showDate = false } = {}) {
     const inLei = cur !== state.settings.currency && Number.isInteger(t.base) ? `<small class="typed-as">≈ ${formatMoney(t.base, state.settings.currency)}</small>` : '';
     // A reward bought in Life System (life-reward-…): tagged, so you can tell it from real spending.
     const fromRewards = String(t.id || '').startsWith('life-reward-') ? '<span class="pill" title="Bought with points in Life System Rewards">From Rewards (points)</span> ' : '';
-    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${fromRewards}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
+    // A reconciliation adjustment (js/reconcile.js): labelled, it is not income or spending.
+    const recon = t.reconcile ? '<span class="pill" title="Settles a difference with your bank; not income or spending">Reconciliation</span> ' : '';
+    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${fromRewards}${recon}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
   }
   if (showDate) sub = `${dayLabel(t.date)} · ${sub}`;
   return `<button class="tx" data-act="edit" data-id="${esc(t.id)}">
@@ -938,7 +944,7 @@ function safeCard(today) {
   const week = [];
   for (let i = 6; i >= 0; i--) {
     const d = addDays(today, -i);
-    const spent = state.tx.filter((t) => t.date === d && t.type === 'expense' && !t.loan && !t.recurring && !M.isBillCategory(state, t.category))
+    const spent = state.tx.filter((t) => t.date === d && countsAsSpending(t) && !t.recurring && !M.isBillCategory(state, t.category))
       .reduce((a, t) => a + M.B(t), 0);
     week.push({ d, spent });
   }
@@ -1488,6 +1494,10 @@ function viewSettings() {
       <button class="btn" data-act="import-bank">Import bank statement</button>
       <button class="btn" data-act="export-csv">Export CSV</button>
     </div>
+    <div class="btns" style="margin-top:8px">
+      <button class="btn primary" data-act="money-export" data-testid="money-export">Export all money (CSV + Excel)</button>
+    </div>
+    <p class="muted small">Every record with every field (rate, ${esc(state.settings.currency)} value, tags, client, invoice), plus accounts, invoices, clients, recurring items, goals and reconciliations. Import the CSV back the same way as above: what is already here is skipped.</p>
     <p class="muted small" style="margin-bottom:0">From Google Sheets: File → Download → <b>Microsoft Excel (.xlsx)</b> and import the whole file: every month tab at once, you pick which. Bank statements: export CSV or Excel from maib / Victoriabank online banking. Importing the same thing twice is safe.</p>
   </section>`,
     look: `<section class="card look-card"><h2>Look</h2>
@@ -2684,8 +2694,8 @@ function onTableEnter(el) {
 
 function openDaySheet(date) {
   const items = M.sortTx(state.tx.filter((t) => t.date === date));
-  const inc = items.filter((t) => t.type === 'income' && !t.loan).reduce((a, t) => a + M.B(t), 0);
-  const exp = items.filter((t) => t.type === 'expense' && !t.loan).reduce((a, t) => a + M.B(t), 0);
+  const inc = items.filter((t) => countsAsIncome(t)).reduce((a, t) => a + M.B(t), 0);
+  const exp = items.filter((t) => countsAsSpending(t)).reduce((a, t) => a + M.B(t), 0);
   openSheet(`<h3>${dayLabel(date)} <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
     <div class="stats" style="margin-bottom:12px">
       <div class="stat"><span class="k">Earned</span><b class="income">${money(inc)}</b></div>
@@ -2714,6 +2724,8 @@ const isStatement = (rows) => detectColumns(rows).headerRow === -1 && !!guessMap
 async function onCSVFile(text) {
   if (text == null) return;
   const rows = parseCSV(text);
+  // This app's full money export: its own import (ids, rates and values kept).
+  if (isMoneyExport(rows)) { MoneyIO.openImport(rows); return; }
   if (isStatement(rows)) { openBankImport(rows); return; }
   const res = importRows(rows, state);
   if (!res.tx.length) {
@@ -2765,8 +2777,8 @@ async function onCSVFile(text) {
         if (g.kind === 'set') fillRate(res.tx, g.currency, g.rate, base);
         else if (g.kind === 'skip') res.tx = skipNoRate(res.tx, g.currency, base);
         else if (g.kind === 'fetch') { await RateGaps.fetchRates(); fillKnownRates(res.tx, state); }
-        res.income = res.tx.filter((t) => t.type === 'income').reduce((a, t) => a + t.amount, 0);
-        res.expense = res.tx.filter((t) => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
+        res.income = previewTotal(res.tx, 'income');
+        res.expense = previewTotal(res.tx, 'expense');
         paint();
       })) return;
       if (!e.target.closest('#imp-go') || RateGaps.gapsOf(res.tx).length || !res.tx.length) return;
@@ -2784,6 +2796,8 @@ async function onCSVFile(text) {
 // A whole .xlsx: one line per tab with what it holds; untick tabs to skip.
 async function onWorkbookFile(buf) {
   const sheets = await readWorkbook(buf);
+  const mx = sheets.find((sh) => isMoneyExport(sh.rows));
+  if (mx) { MoneyIO.openImport(mx.rows.map((r) => r.map((c) => (c == null ? '' : c)))); return; }
   if (sheets.length === 1 && isStatement(sheets[0].rows)) { openBankImport(sheets[0].rows); return; }
   const res = importWorkbook(sheets, state);
   const tabs = res.sheets;
@@ -3188,6 +3202,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'cat-open') Spending.openCategory(el.dataset.cat, el.dataset.period, el.dataset.type);
   else if (Spending.onClick(act, el)) { /* the "Where your money goes" card */ }
   else if (Reprice.onClick(act)) { /* "Re-price past entries" */ }
+  else if (Reconcile.onClick(act, el)) { /* monthly reconciliation */ }
   else if (act === 'add') openTxSheet();
   else if (act === 'edit') openTxSheet(state.tx.find((t) => t.id === el.dataset.id));
   else if (act === 'transfer') openTransferSheet(el.dataset.from);
@@ -3275,6 +3290,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'export-xlsx') exportExcel();
   else if (act === 'export-json') exportJSON();
   else if (act === 'export-csv') exportCSV();
+  else if (act === 'money-export') MoneyIO.exportAll();
   else if (act === 'import-csv') document.getElementById('file-csv').click();
   else if (act === 'import-check') ImportCheck.open();
   else if (act === 'import-bank') document.getElementById('file-bank').click();
@@ -3613,6 +3629,25 @@ function route() {
 }
 
 window.addEventListener('hashchange', route);
+
+// Life System's Money page asks to reconcile an account ("Reconcile: due"):
+// it leaves { screen: 'reconcile', account } under this key, read once.
+const GOTO_KEY = 'finance-helper.goto';
+function takeGoto() {
+  let g = null;
+  try { g = JSON.parse(localStorage.getItem(GOTO_KEY) || 'null'); localStorage.removeItem(GOTO_KEY); } catch { return; }
+  if (!g || state._sealed || Date.now() - (Number(g.at) || 0) > 10 * 60e3) return;
+  if (g.screen === 'reconcile') {
+    // Opening a screen closes any sheet, so the sheet opens once Accounts is shown.
+    const openIt = () => { if (g.account && M.account(state, g.account)) Reconcile.open(g.account); };
+    if (location.hash !== '#accounts') {
+      window.addEventListener('hashchange', () => setTimeout(openIt, 60), { once: true });
+      location.hash = '#accounts';
+    } else openIt();
+  }
+}
+window.addEventListener('storage', (e) => { if (e.key === GOTO_KEY && e.newValue) takeGoto(); });
+setTimeout(takeGoto, 300);
 
 // Paste rows copied from Excel / Google Sheets (or this app's "Copy table")
 // anywhere on the Log screen to import them, with a preview first.

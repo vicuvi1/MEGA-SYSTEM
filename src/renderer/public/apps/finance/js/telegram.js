@@ -11,6 +11,7 @@ import { blockKeyboard } from './blocks.js';
 import { dueItems, upcomingItems } from './recurring.js';
 import { workText } from './workhours.js';
 import { safeLine, safeToSpend, shortDay, limitStatus } from './safespend.js';
+import { countsAsSpending, countsAsIncome } from './catshare.js';
 
 const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const INCOME_WORDS = /^(\+|got|earned|income|salary|salariu|venit|primit|зарплата|получил|доход)$/;
@@ -84,7 +85,7 @@ export function recordFromMessage(fields, { updateId, date, rate = 1, currency, 
 const esc = (s) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
 
 const fm = (state, c) => esc(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
-const spentOn = (state, from, to) => state.tx.filter((t) => t.type === 'expense' && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
+const spentOn = (state, from, to) => state.tx.filter((t) => countsAsSpending(t) && t.date >= from && t.date <= to).reduce((a, t) => a + B(t), 0);
 const catName = (state, id) => { const c = category(state, id); return c ? `${c.emoji ? `${c.emoji} ` : ''}${c.name}` : 'Other'; };
 
 // The reply to a logged record: what it was, then where you stand today and
@@ -100,7 +101,7 @@ export function loggedText(state, t, today = null) {
   if (work) lines.push(`⏱ ${esc(work)} of your work`);
   if (t.type === 'expense' && t.date) {
     const key = monthKey(t.date);
-    const catMonth = state.tx.filter((x) => x.type === 'expense' && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
+    const catMonth = state.tx.filter((x) => countsAsSpending(x) && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B(x), 0);
     lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
     lines.push(`${esc(c || 'This category')} this month: ${fm(state, catMonth)}`);
   }
@@ -112,7 +113,7 @@ export function loggedText(state, t, today = null) {
 const dayShort = (iso) => `${DOW_SHORT[dowIndex(iso)]} ${Number(iso.slice(8))}`;
 
 export function todayText(state, today) {
-  const list = state.tx.filter((t) => t.date === today && t.type !== 'transfer' && !t.loan);
+  const list = state.tx.filter((t) => t.date === today && (countsAsSpending(t) || countsAsIncome(t)));
   const out = list.filter((t) => t.type === 'expense').reduce((a, t) => a + B(t), 0);
   const inc = list.filter((t) => t.type === 'income').reduce((a, t) => a + B(t), 0);
   const s = monthSummary(state, monthKey(today));
