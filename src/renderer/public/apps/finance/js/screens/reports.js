@@ -19,6 +19,7 @@ import { workbook } from '../xlsx.js';
 import { parseQuery, searchTx, relRange } from '../search.js';
 import { catIcon, subColor } from './categories.js';
 import * as Spending from './spending.js';
+import { countsAsSpending } from '../catshare.js';
 
 const PRESETS = [
   { id: 'month', name: 'Month' },
@@ -116,8 +117,8 @@ function drillState(state) {
 function whereItWent(state, fs, r, r0) {
   const money = ctx.money;
   const { cat, sub } = drillState(state);
-  const expenses = r.list.filter((t) => t.type === 'expense' && !t.loan);
-  const prevExpenses = r.prev.list.filter((t) => t.type === 'expense' && !t.loan);
+  const expenses = r.list.filter((t) => countsAsSpending(t));
+  const prevExpenses = r.prev.list.filter((t) => countsAsSpending(t));
   const months = Math.max(1, r.days / 30.44);
   const c = cat ? M.category(state, cat) : null;
   const s = sub && sub !== T.NO_SUB ? T.subById(state, sub) : null;
@@ -237,7 +238,7 @@ export function view() {
   const tips = rs.preset === 'month' && !filtered && !r0.searched ? M.insights(state, r0.from.slice(0, 7), today) : [];
   const year = !filtered && (rs.preset === 'year' || rs.preset === 'lastyear') ? M.yearOverview(state, Number(r0.from.slice(0, 4))) : null;
 
-  const expenses = r.list.filter((t) => t.type === 'expense' && !t.loan);
+  const expenses = r.list.filter((t) => countsAsSpending(t));
   const sankeyData = {
     income: r.income,
     expense: r.expense,
@@ -414,7 +415,7 @@ function exportReport() {
   const b = state.settings.currency;
   const v = (c) => ({ v: c / 100, t: 'money' });
   const cat = (id) => M.category(state, id)?.name || 'Unknown';
-  const expenses = r.list.filter((t) => t.type === 'expense' && !t.loan);
+  const expenses = r.list.filter((t) => countsAsSpending(t));
   const subRows = T.totalsAllSubs(state, expenses);
   const sheets = [
     { name: 'Summary', header: false, cols: [24, 18, 18], rows: [

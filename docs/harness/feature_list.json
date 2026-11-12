@@ -1221,6 +1221,20 @@
   ],
   "evidence": "2026-11-12: branch sleep-discipline-food-picks; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "core/foodPaste.ts, core/sleep.ts, core/threeNumbers.ts, core/bedSense.ts, core/notifyBudget.ts, core/discipline.ts dayShown, core/comeback.ts, core/dates.ts hourIn, main/sleep.ts bedActivity, main/discipline.ts, main/wallet.ts hour, desktop/main.ts sleep tick, renderer sleepNight.ts, ThreeToday.tsx, pages/Sleep.tsx, pages/Discipline.tsx."
+ },
+ {
+  "id": "F-MONEY-TRUST-1",
+  "priority": 1,
+  "area": "money",
+  "title": "Money trust phase 1: monthly reconciliation, full export and import back, every total proved",
+  "user_visible_behavior": "Reconcile an account against the bank: type the real balance, see the difference with the app's balance that day and what could explain it (an entry of that amount, likely duplicates, recurring items not logged, entries since the last check), or add one labelled 'Reconciliation adjustment' that is not income or spending; Undo takes it out. 'Reconcile: due' on the Money page and Finance Accounts after 31 days. One click exports every record with every field (CSV with a BOM, plus an Excel file with accounts, invoices, clients, recurring items, goals and reconciliations); importing that CSV back shows a preview and adds only new records. Finance and the Money hub now give the same totals (points buys, recurring bills in USD, money logged ahead, foreign accounts without live rates).",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/moneyTrust.test.ts src/renderer/src/web/moneyReconcile.test.ts",
+   "SMOKE_ONLY=\"Money\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch money-trust-phase1; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "apps/finance/js/reconcile.js, moneyexport.js, screens/reconcile.js, screens/moneyio.js, catshare.js (isCorrection, countsAsIncome), model.js (counts, reconciliations, rebuiltTotal knownRates), safespend.js (up to today, knownRates, countsAsSpending), forecast.js, importer.js (rateOnDay, previewTotal), sync.js (reconciliations, tie-break), history.js, app.js (goto, export button, import detection, Reconciliation pill), screens/accounts.js, sw.js v39; web/moneyHub.ts (reconcile, ruleInBase), pages/Money.tsx ReconcileDue."
  }
  ]
 }

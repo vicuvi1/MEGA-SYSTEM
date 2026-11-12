@@ -7,6 +7,7 @@ import { dueItems, upcomingItems } from './recurring.js';
 import { invoiceStatus, invoiceTotal } from './invoices.js';
 import { addDays, daysBetween } from './dates.js';
 import { convert } from './fx.js';
+import { countsAsSpending } from './catshare.js';
 
 export const isLiquid = (a) => !a.archived && !a.savings && a.kind !== 'savings' && a.kind !== 'crypto';
 
@@ -17,7 +18,7 @@ export function spentFrom(state, today, window = 60) {
   const by = new Map();
   let total = 0;
   for (const t of state.tx) {
-    if (t.type !== 'expense' || t.loan || t.recurring || t.date < since || t.date > today) continue;
+    if (!countsAsSpending(t) || t.recurring || t.date < since || t.date > today) continue;
     if (isBillCategory(state, t.category) || isWorkCost(state, t.category)) continue;
     by.set(t.account, (by.get(t.account) || 0) + B(t));
     total += B(t);
@@ -50,7 +51,7 @@ export function spendingIds(state, today = null) {
 // recurring items already cover and loans.
 export function dailySpend(state, today, window = 90) {
   const since = addDays(today, -window + 1);
-  const list = state.tx.filter((t) => t.type === 'expense' && !t.loan && !t.recurring && t.date >= since && t.date <= today);
+  const list = state.tx.filter((t) => countsAsSpending(t) && !t.recurring && t.date >= since && t.date <= today);
   if (!list.length) return 0;
   const first = list.reduce((m, t) => (t.date < m ? t.date : m), today);
   const span = Math.max(14, daysBetween(first, today) + 1);

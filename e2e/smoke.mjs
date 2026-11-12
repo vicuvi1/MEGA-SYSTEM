@@ -807,6 +807,82 @@ try {
     await frame.click('.sheet [data-close].btn')
     await pg.waitForTimeout(400)
   })
+  // Money trust 1 (2026-11-12): "Reconcile: due" on the Money page opens Finance Helper on that
+  // account; a real balance 12,34 MDL below the app's shows the difference and its causes; one
+  // labelled adjustment settles it (not income or spending), and Undo takes it back out.
+  const financeFrame = async () => {
+    const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
+    const frame = src && pg.frames().find((f) => f.url().includes(src))
+    if (!frame) throw new Error('Finance Helper frame not loaded')
+    return frame
+  }
+  const storedTx = () => pg.evaluate(() => JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}').tx)
+  await step('Money reconcile: "Reconcile: due" opens the account; a difference, one adjustment and its Undo', async () => {
+    await open('money')
+    // The steps before left the full app open: back to the Money hub view.
+    await pg.waitForTimeout(800)
+    if (!(await pg.$('.mh-hero'))) await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click()
+    await pg.waitForSelector('.mh-hero .mh-big', { timeout: 15000 })
+    await pg.waitForSelector('[data-testid="reconcile-due"] button', { timeout: 10000 }).catch(async () => {
+      throw new Error(`no "Reconcile: due" on the Money page (${await pg.locator('.mh').innerText().catch(() => '')})`.slice(0, 400))
+    })
+    if (!/Reconcile: due/.test(await pg.locator('[data-testid="reconcile-due"]').innerText())) throw new Error('the line does not say "Reconcile: due"')
+    await pg.locator('[data-testid="reconcile-due"] button').first().click()
+    await pg.waitForTimeout(1500)
+    const frame = await financeFrame()
+    await frame.waitForSelector('.sheet [data-testid="rc-real"]', { timeout: 15000 })
+    const app = Number(await frame.getAttribute('.sheet [data-testid="rc-real"]', 'placeholder'))
+    if (!Number.isFinite(app)) throw new Error('the reconcile sheet does not show the app balance')
+    const real = Math.round((app - 12.34) * 100) / 100
+    await frame.fill('.sheet [data-testid="rc-real"]', String(real))
+    await frame.click('.sheet [data-testid="rc-check"]')
+    await frame.waitForSelector('.sheet [data-testid="rc-adjust"]', { timeout: 5000 })
+    const result = (await frame.locator('.sheet [data-testid="rc-result"]').innerText()).replace(/\s+/g, ' ')
+    if (!/Difference\s*−12,34/.test(result)) throw new Error(`difference not shown: ${result.slice(0, 200)}`)
+    if (!(await frame.locator('.sheet [data-testid="rc-causes"]').count())) throw new Error('no causes listed')
+    const before = (await storedTx()).length
+    await frame.click('.sheet [data-testid="rc-adjust"]')
+    await frame.waitForSelector('.sheet [data-testid="rc-adjusted"]', { timeout: 5000 })
+    await pg.waitForFunction((n) => JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}').tx.length === n + 1, before, { timeout: 5000 })
+    const adj = (await storedTx()).find((t) => t.reconcile)
+    if (!adj || adj.note !== 'Reconciliation adjustment' || adj.amount !== 1234 || adj.type !== 'expense') throw new Error(`adjustment record: ${JSON.stringify(adj)}`)
+    await frame.click('.sheet [data-testid="rc-undo"]')
+    await frame.waitForSelector('.sheet [data-testid="rc-adjust"]', { timeout: 5000 })
+    await pg.waitForFunction((id) => { const st = JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}'); return !st.tx.some((t) => t.id === id) && !!st.deleted?.[id] }, adj.id, { timeout: 5000 })
+    if ((await storedTx()).length !== before) throw new Error('Undo did not put the records back as they were')
+    await frame.click('.sheet .icon-btn[data-close]')
+    await pg.waitForTimeout(300)
+  })
+  // Money trust 2: one click exports every record (CSV with a BOM, plus a workbook); importing the
+  // same CSV back finds every record already here and adds nothing.
+  await step('Money export: CSV with every field, then import it back with no duplicates', async () => {
+    await open('money')
+    if (await pg.$('.mh-open')) await pg.click('.mh-open')
+    await pg.waitForTimeout(2500)
+    const frame = await financeFrame()
+    await frame.evaluate(() => { location.hash = '#settings' })
+    await frame.waitForSelector('[data-act="set-tab"][data-sec="data"]', { timeout: 8000 })
+    await frame.click('[data-act="set-tab"][data-sec="data"]')
+    await frame.waitForSelector('[data-testid="money-export"]', { timeout: 5000 })
+    const [dl] = await Promise.all([pg.waitForEvent('download', { timeout: 10000 }), frame.click('[data-testid="money-export"]')])
+    if (!/^money-transactions-\d{4}-\d\d-\d\d\.csv$/.test(dl.suggestedFilename())) throw new Error(`file name ${dl.suggestedFilename()}`)
+    const { readFileSync } = await import('node:fs')
+    const buf = readFileSync(await dl.path())
+    if (!(buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf)) throw new Error('the CSV has no UTF-8 BOM')
+    const text = buf.toString('utf8')
+    const head = text.replace(/^﻿/, '').split(/\r?\n/, 1)[0]
+    for (const h of ['ID', 'Date', 'Account', 'Category', 'Amount', 'Currency', 'Base amount', 'Rate', 'Note', 'Tags', 'Client', 'Invoice ID', 'Repriced from']) if (!head.split(',').includes(h)) throw new Error(`no "${h}" column`)
+    const count = (await storedTx()).length
+    if (text.trim().split(/\r?\n/).length < count + 1) throw new Error('the CSV has fewer rows than records')
+    await frame.setInputFiles('#file-csv', { name: 'money.csv', mimeType: 'text/csv', buffer: buf })
+    await frame.waitForSelector('.sheet [data-testid="mx-new"]', { timeout: 8000 })
+    const nw = await frame.locator('.sheet [data-testid="mx-new"] b').innerText()
+    const dup = await frame.locator('.sheet [data-testid="mx-dup"] b').innerText().catch(() => '0')
+    if (nw !== '0' || Number(dup) !== count) throw new Error(`re-import: ${nw} new, ${dup} already here (want 0 and ${count})`)
+    if (!(await frame.locator('.sheet [data-testid="mx-go"]').isDisabled())) throw new Error('Import is on with nothing new')
+    await frame.click('.sheet .icon-btn[data-close]')
+    if ((await storedTx()).length !== count) throw new Error('records changed after the re-import')
+  })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.

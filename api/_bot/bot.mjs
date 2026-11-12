@@ -9327,7 +9327,7 @@ function nudged(st, today, now = /* @__PURE__ */ new Date(), idleMin) {
 	};
 }
 /** He's saying something went wrong ("that's not money", "undo", "wrong amount", "nu e bine"). */
-function isCorrection(text) {
+function isCorrection$1(text) {
 	const t = text.toLowerCase();
 	return /\b(wrong|mistake|not money|not an expense|that'?s water|undo|delete (it|that)|remove (it|that)|fix (it|that)|incorrect|shouldn'?t (be|have)|didn'?t (spend|buy|pay)|greșit|gresit|nu e (bine|corect)|nu sunt bani|șterge|sterge|неправильно|удали|ошибка|не деньги)\b/.test(t) || /\bnot money\b|\bthats water\b|\bthat's water\b/.test(t.replace(/[^\w' ]/g, ""));
 }
@@ -55548,6 +55548,73 @@ function formatMoney(cents, currency = "MDL", { sign = false, compact = false } 
 function group(n) {
 	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
 }
+// src/renderer/public/apps/finance/js/dates.js
+var MONTHS$3 = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December"
+];
+var pad$8 = (n) => String(n).padStart(2, "0");
+function toISO(d) {
+	return `${d.getFullYear()}-${pad$8(d.getMonth() + 1)}-${pad$8(d.getDate())}`;
+}
+var monthKey = (iso) => iso.slice(0, 7);
+function monthLabel(key, short = false) {
+	const [y, m] = key.split("-").map(Number);
+	const name = MONTHS$3[m - 1];
+	return `${short ? name.slice(0, 3) : name} ${y}`;
+}
+function addMonths(key, n) {
+	const [y, m] = key.split("-").map(Number);
+	const idx = y * 12 + (m - 1) + n;
+	return `${Math.floor(idx / 12)}-${pad$8(idx % 12 + 1)}`;
+}
+function daysInMonth$1(key) {
+	const [y, m] = key.split("-").map(Number);
+	return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+function utc(iso) {
+	const [y, m, d] = iso.split("-").map(Number);
+	return new Date(Date.UTC(y, m - 1, d));
+}
+function addDays$1(iso, n) {
+	const d = utc(iso);
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+}
+var daysBetween = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
+function weekday(iso) {
+	return utc(iso).getUTCDay();
+}
+var dowIndex = (iso) => (weekday(iso) + 6) % 7;
+var DOW_SHORT = [
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat",
+	"Sun"
+];
+function isValidISO(iso) {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+	const d = utc(iso);
+	return toISO(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) === iso;
+}
+// src/renderer/public/apps/finance/js/catshare.js
+var isPointsReward = (t) => String(t?.id || "").startsWith("life-reward-");
+var isCorrection = (t) => !!t?.reconcile;
+var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t) && !isCorrection(t);
+var countsAsIncome = (t) => t.type === "income" && !t.loan && !isCorrection(t);
 // src/renderer/public/apps/finance/js/cattree.js
 var fold$4 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 var SUB_DEFAULTS = [
@@ -56105,68 +56172,6 @@ function suggestSub(state, note, { category = null } = {}) {
 	}
 	return null;
 }
-// src/renderer/public/apps/finance/js/dates.js
-var MONTHS$3 = [
-	"January",
-	"February",
-	"March",
-	"April",
-	"May",
-	"June",
-	"July",
-	"August",
-	"September",
-	"October",
-	"November",
-	"December"
-];
-var pad$8 = (n) => String(n).padStart(2, "0");
-function toISO(d) {
-	return `${d.getFullYear()}-${pad$8(d.getMonth() + 1)}-${pad$8(d.getDate())}`;
-}
-var monthKey = (iso) => iso.slice(0, 7);
-function monthLabel(key, short = false) {
-	const [y, m] = key.split("-").map(Number);
-	const name = MONTHS$3[m - 1];
-	return `${short ? name.slice(0, 3) : name} ${y}`;
-}
-function addMonths(key, n) {
-	const [y, m] = key.split("-").map(Number);
-	const idx = y * 12 + (m - 1) + n;
-	return `${Math.floor(idx / 12)}-${pad$8(idx % 12 + 1)}`;
-}
-function daysInMonth$1(key) {
-	const [y, m] = key.split("-").map(Number);
-	return new Date(Date.UTC(y, m, 0)).getUTCDate();
-}
-function utc(iso) {
-	const [y, m, d] = iso.split("-").map(Number);
-	return new Date(Date.UTC(y, m - 1, d));
-}
-function addDays$1(iso, n) {
-	const d = utc(iso);
-	d.setUTCDate(d.getUTCDate() + n);
-	return d.toISOString().slice(0, 10);
-}
-var daysBetween = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
-function weekday(iso) {
-	return utc(iso).getUTCDay();
-}
-var dowIndex = (iso) => (weekday(iso) + 6) % 7;
-var DOW_SHORT = [
-	"Mon",
-	"Tue",
-	"Wed",
-	"Thu",
-	"Fri",
-	"Sat",
-	"Sun"
-];
-function isValidISO(iso) {
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
-	const d = utc(iso);
-	return toISO(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) === iso;
-}
 // src/renderer/public/apps/finance/js/fx.js
 var STABLE = {
 	USDT: 1,
@@ -56503,6 +56508,7 @@ function baseState() {
 			updatedAt: 0
 		}],
 		goalAllocations: [],
+		reconciliations: [],
 		netWorth: [],
 		deleted: {},
 		rates: null,
@@ -56629,6 +56635,11 @@ function normalizeState(raw) {
 			currency: a.currency || baseCur,
 			updatedAt: a.updatedAt || 0
 		})),
+		reconciliations: (Array.isArray(raw.reconciliations) ? raw.reconciliations : []).filter((r) => r && typeof r.id === "string" && typeof r.account === "string" && isValidISO(r.date || "") && Number.isSafeInteger(r.real)).map((r) => ({
+			adjustment: null,
+			...r,
+			updatedAt: r.updatedAt || 0
+		})),
 		deleted,
 		rates: raw.rates || (raw.lastRates?.usd?.MDL ? {
 			usd: { ...raw.lastRates.usd },
@@ -56651,7 +56662,7 @@ function validTx(t) {
 	].includes(t.type) && Number.isInteger(t.amount) && t.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(t.date);
 }
 var B$2 = (t) => Number.isInteger(t.base) ? t.base : t.amount;
-var counts = (t) => !t.loan;
+var counts = (t) => !t.loan && !isPointsReward(t) && !isCorrection(t);
 function sortTx(list) {
 	return [...list].sort((a, b) => a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1);
 }
@@ -56816,7 +56827,7 @@ function goalAllocationSummary(state, asOf = null) {
 		if (amount == null) unpriced.push(a.id);
 		const validAmount = Number.isSafeInteger(amount) && amount > 0 ? amount : 0;
 		const goal = (state.goals || []).find((g) => g.id === a.goalId);
-		const income = a.incomeId ? state.tx.find((t) => t.id === a.incomeId && t.type === "income" && !t.loan && (!asOf || t.date <= asOf)) : null;
+		const income = a.incomeId ? state.tx.find((t) => t.id === a.incomeId && countsAsIncome(t) && (!asOf || t.date <= asOf)) : null;
 		const incomeLeft = a.incomeId ? Math.max(0, (income ? B$2(income) : 0) - (byIncome[a.incomeId] || 0)) : Infinity;
 		const funded = goal?.account === "allocated" ? Math.min(validAmount, Math.max(0, cash - reserved), incomeLeft) : 0;
 		requested += validAmount;
@@ -57081,8 +57092,8 @@ function hourlyRate(state, today) {
 		2,
 		3
 	].map((i) => addMonths(cur, -i));
-	const income = state.tx.filter((t) => t.type === "income" && !t.loan && months.includes(t.date.slice(0, 7))).reduce((a, t) => a + B$2(t), 0);
-	const active = new Set(state.tx.filter((t) => t.type === "income" && !t.loan && months.includes(t.date.slice(0, 7))).map((t) => t.date.slice(0, 7))).size;
+	const income = state.tx.filter((t) => countsAsIncome(t) && months.includes(t.date.slice(0, 7))).reduce((a, t) => a + B$2(t), 0);
+	const active = new Set(state.tx.filter((t) => countsAsIncome(t) && months.includes(t.date.slice(0, 7))).map((t) => t.date.slice(0, 7))).size;
 	if (!income || !active) return null;
 	return {
 		rate: Math.round(income / active / (p.hoursPerMonth || 160)),
@@ -57166,7 +57177,7 @@ function spentFrom(state, today, window = 60) {
 	const by = /* @__PURE__ */ new Map();
 	let total = 0;
 	for (const t of state.tx) {
-		if (t.type !== "expense" || t.loan || t.recurring || t.date < since || t.date > today) continue;
+		if (!countsAsSpending(t) || t.recurring || t.date < since || t.date > today) continue;
 		if (isBillCategory(state, t.category) || isWorkCost(state, t.category)) continue;
 		by.set(t.account, (by.get(t.account) || 0) + B$2(t));
 		total += B$2(t);
@@ -57190,7 +57201,7 @@ function spendingIds(state, today = null) {
 }
 // src/renderer/public/apps/finance/js/safespend.js
 var lei$2 = (c) => Math.floor(c / 100) * 100;
-var isEveryday = (state, t) => t.type === "expense" && !t.loan && !t.recurring && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
+var isEveryday = (state, t) => countsAsSpending(t) && !t.recurring && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
 var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + B$2(t), 0);
 var limitOn = (state) => !!(state.settings.limit?.on && state.settings.limit.amount > 0);
 function limitStatus(state, today) {
@@ -57215,13 +57226,14 @@ function limitStatus(state, today) {
 }
 function safeToSpend(state, today) {
 	const base = state.settings.currency;
-	const toBase = (c, cur) => !cur || cur === base ? c : convert(c, cur, base, state.rates);
+	const rates = knownRates(state);
+	const toBase = (c, cur) => !cur || cur === base ? c : convert(c, cur, base, rates);
 	const pay = payOn(state) ? payStatus(state, today) : null;
 	const spendIds = spendingIds(state, today);
 	const spendable = (a) => spendIds.has(a.id);
 	const accs = state.settings.accounts;
 	const liquidIds = new Set(accs.filter(spendable).map((a) => a.id));
-	const bal = accountBalances(state);
+	const bal = accountBalances(state, today);
 	const liquid = accs.filter(spendable).reduce((a, acc) => a + (toBase(bal[acc.id] || 0, acc.currency) || 0), 0);
 	const ahead = upcomingItems(state, today, 45);
 	const inc = pay ? null : ahead.find((x) => x.rule.type === "income");
@@ -57396,7 +57408,7 @@ var esc$1 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	">": "&gt;"
 })[c]);
 var fm = (state, c) => esc$1(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
-var spentOn = (state, from, to) => state.tx.filter((t) => t.type === "expense" && !t.loan && t.date >= from && t.date <= to).reduce((a, t) => a + B$2(t), 0);
+var spentOn = (state, from, to) => state.tx.filter((t) => countsAsSpending(t) && t.date >= from && t.date <= to).reduce((a, t) => a + B$2(t), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
 	const sc = subOf(state, t);
@@ -57408,7 +57420,7 @@ function loggedText(state, t, today = null) {
 	if (work) lines.push(`⏱ ${esc$1(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
-		const catMonth = state.tx.filter((x) => x.type === "expense" && !x.loan && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B$2(x), 0);
+		const catMonth = state.tx.filter((x) => countsAsSpending(x) && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B$2(x), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
 		lines.push(`${esc$1(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
@@ -57441,6 +57453,7 @@ function toCloud(state, deviceId, now = Date.now()) {
 			netWorth: state.netWorth || [],
 			goals: state.goals || [],
 			goalAllocations: state.goalAllocations || [],
+			reconciliations: state.reconciliations || [],
 			deleted: state.deleted,
 			...sharedRates(state.rates) ? { lastRates: sharedRates(state.rates) } : {}
 		}
@@ -67374,11 +67387,11 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		dayStart.setHours(0, 0, 0, 0);
 		trace.mark("instant checks");
 		const r0 = routeFor(clean, {
-			correcting: !direct && isCorrection(text),
+			correcting: !direct && isCorrection$1(text),
 			media: !!media
 		});
 		const route0 = r0.intent === "chat" && canT !== clean ? routeFor(canT, {
-			correcting: !direct && isCorrection(text),
+			correcting: !direct && isCorrection$1(text),
 			media: !!media
 		}) : r0;
 		const asking = !harder && !toolBusy && !direct && !media && !preset && !conf ? askTrim(clean, route0.intent) : null;
@@ -67616,7 +67629,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		};
 		const moneyRefs = new Map(money.map((m, i) => [`M${i + 1}`, m.id]));
 		const moneyLines = money.length ? `Money records, newest first (use the M-number):\n${money.map((m, i) => `M${i + 1} ${m.line}`).join("\n")}` : "";
-		const correcting = !direct && isCorrection(text);
+		const correcting = !direct && isCorrection$1(text);
 		const big = route.strong && route.think;
 		if (big) step("Thinking it through");
 		const pcHelp = await mirror.read((db) => deskReady(cleanPcState(readSetting(db, "pc_asks"), Date.now()), Date.now()) ? PC_ACTIONS_HELP : "").catch(() => "");
@@ -71259,9 +71272,33 @@ function notifFromMessage(html, markup, at) {
 		}
 	};
 }
-// src/renderer/public/apps/finance/js/catshare.js
-var isPointsReward = (t) => String(t?.id || "").startsWith("life-reward-");
-var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t);
+var byDate = (a, b) => a.date === b.date ? (a.createdAt || 0) - (b.createdAt || 0) : a.date < b.date ? -1 : 1;
+var reconsOf = (state, accountId) => (state.reconciliations || []).filter((r) => r.account === accountId).sort(byDate);
+var lastRecon = (state, accountId) => reconsOf(state, accountId).at(-1) || null;
+var touches = (t, id) => t.account === id || t.from === id || t.to === id;
+function reconDue(state, today, days = 31) {
+	const out = [];
+	for (const a of state.settings.accounts) {
+		if (a.archived) continue;
+		const last = lastRecon(state, a.id);
+		if (last) {
+			const age = daysBetween(last.date, today);
+			if (age > days) out.push({
+				account: a,
+				days: age,
+				last: last.date
+			});
+			continue;
+		}
+		const first = state.tx.filter((t) => touches(t, a.id)).reduce((m, t) => !m || t.date < m ? t.date : m, null);
+		if (first && daysBetween(first, today) > days) out.push({
+			account: a,
+			days: null,
+			last: null
+		});
+	}
+	return out;
+}
 // src/renderer/src/web/moneyHub.ts
 var B = (t) => Number.isInteger(t?.base) ? t.base : Number(t?.amount) || 0;
 /** Finance Helper's state in its current shape (null without data). */
@@ -71277,7 +71314,7 @@ function cleanFinance(raw) {
 	}
 }
 function hubTx(state) {
-	return state.tx.filter((t) => t && !t.deleted && typeof t.date === "string" && t.type !== "transfer" && !t.loan && (t.type !== "expense" || countsAsSpending(t))).map((t) => ({
+	return state.tx.filter((t) => t && !t.deleted && typeof t.date === "string" && (countsAsSpending(t) || countsAsIncome(t))).map((t) => ({
 		id: String(t.id),
 		date: t.date.slice(0, 10),
 		type: t.type,
@@ -71287,13 +71324,32 @@ function hubTx(state) {
 		everyday: t.type === "expense" && isEveryday(state, t)
 	}));
 }
+function ruleInBase(state, rule) {
+	const amount = Math.abs(Number(rule.amount) || 0);
+	const base = state.settings.currency || "MDL";
+	const cur = rule.currency || base;
+	if (cur === base) return amount;
+	const rate = rateToBase(state, cur);
+	return rate > 0 ? Math.round(amount * rate) : null;
+}
 function upcoming(state, today) {
 	try {
 		return upcomingItems(state, today, 31).map((x) => ({
 			date: x.date,
-			amount: Math.abs(Number(x.rule.base ?? x.rule.amount) || 0),
+			amount: ruleInBase(state, x.rule),
 			type: x.rule.type === "income" ? "income" : "expense",
 			label: x.rule.note || "Bill"
+		})).filter((x) => x.amount != null);
+	} catch {
+		return [];
+	}
+}
+function reconcileDue(state, today) {
+	try {
+		return reconDue(state, today).map((x) => ({
+			id: String(x.account.id),
+			name: String(x.account.name || "Account"),
+			days: x.days ?? null
 		}));
 	} catch {
 		return [];
@@ -71398,7 +71454,8 @@ function hubView(raw, today) {
 		mainAccount: mainAccountId(state.settings.accounts, state.settings.currency),
 		recent,
 		bills,
-		loggedToday: tx.some((t) => t.date === today && month === today.slice(0, 7))
+		loggedToday: tx.some((t) => t.date === today && month === today.slice(0, 7)),
+		reconcile: reconcileDue(state, today)
 	};
 }
 /** Sunday: this week against the same days last week (null without data). */
