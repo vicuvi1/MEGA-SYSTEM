@@ -1235,6 +1235,20 @@
   ],
   "evidence": "2026-11-12: branch money-trust-phase1; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "apps/finance/js/reconcile.js, moneyexport.js, screens/reconcile.js, screens/moneyio.js, catshare.js (isCorrection, countsAsIncome), model.js (counts, reconciliations, rebuiltTotal knownRates), safespend.js (up to today, knownRates, countsAsSpending), forecast.js, importer.js (rateOnDay, previewTotal), sync.js (reconciliations, tie-break), history.js, app.js (goto, export button, import detection, Reconciliation pill), screens/accounts.js, sw.js v39; web/moneyHub.ts (reconcile, ruleInBase), pages/Money.tsx ReconcileDue."
+ },
+ {
+  "id": "F-MONEY-LONG-VIEW",
+  "priority": 2,
+  "area": "money",
+  "title": "Money phase 4: the long view (net worth over time, savings rate, this year vs last, runway)",
+  "user_visible_behavior": "Finance → Reports → Long view: 4 numbers at the top (net worth and its change this year, this year's savings rate with its trend, spending so far against the same days last year, runway). Net worth month by month or year by year (chart plus table, saved snapshots marked), and what each account adds in the month you tap. Savings rate per month and per year. Each category this year against last year (so far or full year) with the biggest increases and decreases. Runway: 'You could live N months on your savings' from the last 3, 6 and 12 months. MDL by default; USD or EUR convert at the rate of each day. A book filter shows when records have books. The Money page's Month tab has one card with net worth, this year's change, the savings rate and the runway, and 'See it all' opens the screen. Read only.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeLongView.test.ts",
+   "SMOKE_ONLY=\"Money long view\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch money-phase4-longview; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "apps/finance/js/longview.js (pure), screens/longview.js, css/longview.css (loaded by the screen); app.js: import, SUB_TABS, NAV_PARENT, SCREENS, goto 'longview'; sw.js 3 lines; web/moneyLong.ts, MoneyLong.tsx, moneyLong.css; web/moneyApi.ts adds view.long (not in moneyHub.ts, so the bot bundle is unchanged); pages/Money.tsx one card."
  }
  ]
 }

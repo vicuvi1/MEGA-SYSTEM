@@ -43,6 +43,7 @@ import { isMoneyExport } from './moneyexport.js';
 import * as RateGaps from './screens/rategaps.js';
 import * as WorkHour from './screens/workhour.js';
 import * as YearReview from './screens/yearreview.js';
+import * as LongView from './screens/longview.js';
 import { workText } from './workhours.js';
 import { planSplit, splitTransfers, splitPrefs, isSplit } from './split.js';
 import { openBankImport, rowsFromFile, decodeText } from './screens/bankimport.js';
@@ -3479,9 +3480,9 @@ document.addEventListener('keydown', (e) => {
 const SUB_TABS = [
   [{ tab: 'accounts', label: 'Cards & accounts' }, { tab: 'rates', label: 'Rates & converter' }],
   [{ tab: 'people', label: 'People & loans' }, { tab: 'clients', label: 'Clients & invoices' }],
-  [{ tab: 'reports', label: 'Reports' }, { tab: 'review', label: 'Year in review' }],
+  [{ tab: 'reports', label: 'Reports' }, { tab: 'review', label: 'Year in review' }, { tab: 'longview', label: 'Long view' }],
 ];
-const NAV_PARENT = { rates: 'accounts', clients: 'people', review: 'reports' };
+const NAV_PARENT = { rates: 'accounts', clients: 'people', review: 'reports', longview: 'reports' };
 
 const SCREENS = {
   home: { view: viewHome, onClick: (a, el) => Plan.onClick(a, el) },
@@ -3493,6 +3494,7 @@ const SCREENS = {
   people: PeopleScreen,
   reports: ReportsScreen,
   review: YearReview,
+  longview: LongView,
   rates: RatesScreen,
   telegram: TelegramHub,
   bot: TelegramHub,
@@ -3644,7 +3646,7 @@ function takeGoto() {
       window.addEventListener('hashchange', () => setTimeout(openIt, 60), { once: true });
       location.hash = '#accounts';
     } else openIt();
-  }
+  } else if (g.screen === 'longview') location.hash = '#longview';
 }
 window.addEventListener('storage', (e) => { if (e.key === GOTO_KEY && e.newValue) takeGoto(); });
 setTimeout(takeGoto, 300);
