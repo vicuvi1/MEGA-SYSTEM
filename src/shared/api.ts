@@ -537,6 +537,12 @@ export interface LifeApi {
     save(n: { id?: string; title: string; body: string; pinned?: boolean }): Promise<import('@core/notebook').Note>
     remove(id: string): Promise<void>
   }
+  /** The module switch (synced `modules_on`, core/modules.ts): which parts of the app are on. */
+  modules?: {
+    get(): Promise<import('@core/modules').ModulesOn>
+    /** Turns one module on or off; its data is never touched. */
+    set(id: import('@core/modules').ModuleId, on: boolean): Promise<import('@core/modules').ModulesOn>
+  }
   notifications?: {
     list(): Promise<import('@core/notify').Notif[]>
     read(ids: string[] | null): Promise<void>

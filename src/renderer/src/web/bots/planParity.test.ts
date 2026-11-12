@@ -3,6 +3,7 @@
 // today / Move to tomorrow / Undo, the end-of-day check, a rescue's Accept and
 // Undo, and a quick-add for today all write the same data the app reads.
 // Strangers are ignored. Pinned clock: Tuesday 12 March 2030, 10:31.
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type SqlJsStatic } from 'sql.js'
@@ -61,6 +62,8 @@ async function world(o: { status?: 'proposed' | 'approved'; hm?: string; limit?:
   vi.setSystemTime(new Date(`${DAY}T${o.hm ?? '10:31'}:00`))
   const remote = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   const sent: { method: string; body: any }[] = []
   vi.stubGlobal('fetch', async (url: string, init: { body: string }) => {
     if (String(url).startsWith('https://api.telegram.org/')) {

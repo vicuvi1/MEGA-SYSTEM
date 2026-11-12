@@ -1,3 +1,4 @@
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type SqlJsStatic } from 'sql.js'
@@ -140,6 +141,8 @@ describe('Todoist in Life System', () => {
   function fakeTurso() {
     const remote = new SQL.Database()
     for (const m of MIGRATIONS) remote.exec(m)
+    // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+    remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
     vi.stubGlobal('fetch', async (url: string, init: { body: string }) => {
       if (String(url).startsWith('https://api.telegram.org/')) return json({ ok: true, result: {} })
       const out = handlePipeline(remote, JSON.parse(init.body))

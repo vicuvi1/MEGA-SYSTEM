@@ -150,6 +150,10 @@ export function FocusIsland({ hideNext = false, noDim = false }: { hideNext?: bo
   useEffect(() => {
     if (!run || !over || chimed.current === run.startedAt) return
     chimed.current = run.startedAt
+    // The desktop app without its island (Dynamic island module off): your own timer also ends with a Windows
+    // notification when the window is not in front (core/notifyBudget.ts: your own timers are not one of the 4 pushes).
+    if (window.desktop?.notify && !(document.visibilityState === 'visible' && document.hasFocus()))
+      void window.desktop.notify({ id: `timer:${run.startedAt}`, title: "⏱ Time's up", body: run.subject ? `${run.subject}: your block is done.` : 'Your block is done.' }).catch(() => false)
     setFlash(true)
     setOpen(true)
     if (flashT.current) clearTimeout(flashT.current)

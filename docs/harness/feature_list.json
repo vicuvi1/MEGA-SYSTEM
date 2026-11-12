@@ -1161,6 +1161,23 @@
   ],
   "evidence": "2026-11-12: branch security-hardening-pin; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "api/_lib.mjs (authState cleanup, changePin), api/_sqlguard.mjs (PAGE_SYS_TABLES, SECRET_KEYS, INTERNAL), api/_push.mjs (PUSHABLE), api/bot-setup.mjs, api/cron.mjs, api/google.mjs (stateOk), src/core/netGuard.ts, web/webAuth.ts (localPinStore), tursoWebBridge.ts. Decision in DECISIONS.md."
+   },
+   {
+  "notes": "core/simpleMode.ts (SIMPLE_CORE, ARCHIVE_PAGES, simpleMenu, toggleShown, altTarget), Sidebar.tsx, App.tsx (Alt keys, rest chip), settings/simple.tsx, ThreeToday.tsx (SleepForm, running block, plan-tomorrow), FocusIsland.tsx (no dim in Simple mode, stuck-open fix), boost/FocusBoost.tsx, study/*, training/SportDashboard.tsx, WorkoutMode.tsx, WorkoutDone.tsx, body/FoodBoard.tsx, food-paste.css, DesktopIsland.tsx simplePanel; web/webServices.ts sleep.setBed. Money/finance untouched (owner). The Archive menu was replaced the same day by the module switch (F-MODULE-SWITCH)."
+ },
+ {
+  "id": "F-MODULE-SWITCH",
+  "priority": 1,
+  "area": "today",
+  "title": "Module switch: each part of the app ON or OFF; by default only Today, Money, Sleep, Sport Track and Discipline",
+  "user_visible_behavior": "Settings \u2192 Modules lists every part with one line and a switch. Off means off: gone from the menu, Ctrl+K, Alt+number, Today, the island and notifications; its background jobs stop on the PC and the server; its Telegram commands answer \"This part is switched off. Turn it on in Settings \u2192 Modules\". Turning one on brings it back at once with its data. The Dynamic island is a module too, off by default: no island window; your own timers then end with the in-app chime and a Windows notification. Today keeps the 3 numbers with Study Time and Tasks off. The Archive group is gone.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/modules.test.ts src/core/simpleMode.test.ts src/server/modules.server.test.ts",
+   "SMOKE_ONLY=\"Modules:|Simple mode\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch module-switch; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); real 1920x1080 screenshots of the sidebar + Today and of Settings \u2192 Modules kept outside the repo.",
+  "notes": "core/modules.ts (registry, readModules, menuPages, altPage, jobOn, offReply, notifOn, islandWithout), settingsKeys modules_on, tursoWebBridge life.modules, useModules.ts, ModuleOff.tsx, settings/modules.tsx, Sidebar.tsx, App.tsx, Palette.tsx, pages/Today.tsx, ThreeToday.tsx, todayEvents.ts, NotifToasts.tsx, Notifications.tsx, capture.ts, coachUnread.ts, vault/driveSync.ts, automationsFeed.ts, IslandFeed.tsx, DesktopIsland.tsx; web/webBots.ts (offReply, Coach off); server/telegramBot.ts (runTick parts, runDaily, runPlugins, Todoist pay); desktop/island.ts (setModule, island:module), main.ts (tray, timer: notifications), preload.ts. Money's own code untouched."
  }
  ]
 }

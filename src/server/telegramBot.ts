@@ -84,6 +84,7 @@ import { todayMode } from '../renderer/src/web/extrasContext'
 import { coachStatus, weekFacts } from '../renderer/src/web/coachStatus'
 import { budgetCheck, budgetPrefs, cleanLedger, dueSlot, slotNotifId, slotText, type BudgetPrefs, type PushSlot } from '@core/notifyBudget'
 import { readSimple, SIMPLE_KEY } from '@core/simpleMode'
+import { MODULES_KEY, isOn, jobOn, notifOn, readModules } from '@core/modules'
 import { weekSummaryText } from '@core/threeNumbers'
 import { handleMcp, type McpCtx, type McpLife } from './mcp'
 import { extToolsFor, hookFacts, hooksTick, loadAuto, ntfyAlso, type AutoConf } from './automation'
@@ -417,7 +418,8 @@ export async function handleTelegramUpdate(env: BotEnv, token: string, update: u
       .catch(() => null)
   }
   const reply = await bots.handleUpdate(token, update)
-  await payTodoistDone(env, { minGapMs: 3 * 60_000 }).catch(() => null)
+  // Points for Todoist tasks done there: the Tasks module's job.
+  if (await mirror.read((db) => jobOn(readModules(getSetting(db as any, MODULES_KEY)), 'tick.todoistPay')).catch(() => false)) await payTodoistDone(env, { minGapMs: 3 * 60_000 }).catch(() => null)
   // What the answer left running (a plan's block names) finishes before the function stops.
   await coachSettle().catch(() => null)
   return reply
@@ -435,6 +437,12 @@ export type DailyJob = 'morning' | 'reask' | 'midday' | 'evening' | 'night'
 export async function runDaily(env: BotEnv & { botToken: string; chatId: string; ai?: (prompt: string) => Promise<string>; appUrl?: string; sleepBotToken?: string }, job: DailyJob): Promise<string[]> {
   lifeTz(env)
   const { services, mirror } = await botsFor(env)
+  // The module switch (core/modules.ts): the old daily messages are Ben's (Coach), the night one Sleep's.
+  const dailyMods = await mirror.read((db) => readModules(getSetting(db as any, MODULES_KEY))).catch(() => readModules(null))
+  if (!jobOn(dailyMods, `daily.${job}`)) {
+    await logBen(new TursoHttp(env.tursoUrl, env.tursoToken), [{ status: 'skipped', kind: `${job} message`, reason: 'Switched off in Settings → Modules' }])
+    return []
+  }
   // The daily rhythm (the tick) sends the morning plan and the evening and Sunday reviews now.
   if (job === 'morning' || job === 'reask' || job === 'evening' || job === 'midday') {
     const on = await mirror.read((db) => cleanPrefs(JSON.parse(getSetting(db as any, RHYTHM_PREFS) || 'null')).on).catch(() => true)
@@ -872,6 +880,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     const led = await mirror.read((db) => cleanLedger(readSetting(db as any, 'push_budget'), day))
     const slot = dueSlot(localMinuteOf(now, tz), weekdayNow(), bud, led.sent)
     if (!slot) return
+    // The wind-down push is Sleep's (core/modules.ts): off, that slot is not sent (the cap never grows).
+    if (!notifOn(await mirror.read((db) => readModules(getSetting(db as any, MODULES_KEY))).catch(() => readModules(null)), { id: slotNotifId(slot, day) })) return
     const facts = await mirror.read((db) => {
       const items = services.services(db).focus.state(now).plan.items as { done?: boolean }[]
       return { mustDone: items.filter((x) => x.done).length, mustTotal: items.length, week: slot === 'weekly' ? weekSummaryText(weekFacts(db, day)) : undefined }
@@ -906,6 +916,13 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   } catch (e) {
     console.error('push budget:', e)
   }
+
+  // The module switch (core/modules.ts, Settings → Modules): each part below runs only while its module is on.
+  // Off parts make no calls (Google, Todoist, AI) and send nothing; their data stays as it is.
+  const mods = await mirror.read((db) => readModules(getSetting(db as any, MODULES_KEY))).catch(() => readModules(null))
+  const on = (job: string) => jobOn(mods, job)
+  const coachOn = isOn(mods, 'coach')
+  const calOn = isOn(mods, 'calendar') && !!calendar
 
   const today0 = await mirror.read((db) => services.services(db).wallet.today(now))
   const tone = await mirror.read((db) => loadStyle(db).tone)
@@ -945,6 +962,8 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     if (hush && r.kind === 'checkin') continue
     // The push budget: Ben's own check-ins and promise questions are coach chatter (off); your reminders ring.
     if (budOn && (r.kind === 'checkin' || (r as PromiseReminder).promise)) continue
+    // Ben's check-ins and promise questions are the Coach module: off, only your own reminders ring.
+    if (!coachOn && (r.kind === 'checkin' || (r as PromiseReminder).promise)) continue
     try {
       // Check-ins get sharper each time and name the week's missed promises.
       // HD: your reminder with Done / Snooze (the island's card answers the same reminder).
@@ -964,7 +983,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
 
   // The daily rhythm: morning plan, water and training nudges, evening and Sunday reviews.
   try {
-    await rhythmTick(env, now, send)
+    if (on('tick.rhythm')) await rhythmTick(env, now, send)
   } catch (e) {
     console.error('rhythm:', e)
     void logError(healthDb, 'server', `rhythm: ${(e as Error).message}`)
@@ -972,14 +991,14 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
 
   // Ben's desk: stakes enforced on time, study reviews, mood check-ins, the Sunday call.
   try {
-    await deskTick(mirror, services, now, send, esc)
+    if (on('tick.desk')) await deskTick(mirror, services, now, send, esc)
   } catch (e) {
     console.error('desk:', e)
   }
 
   // Measurable goals: Ben asks for the number on each goal's rhythm, or reports a goal that counts itself.
   try {
-    const g = await goalsTick(mirror, services, now, send, esc)
+    const g = on('tick.goals') ? await goalsTick(mirror, services, now, send, esc) : null
     if (g) note('sent', `Goal check-in: ${g}`, undefined, 'goals')
   } catch (e) {
     console.error('goals:', e)
@@ -987,7 +1006,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
 
   // Career: the monthly letter, pay yourself first, job follow-ups, essays behind, the shift study pack.
   try {
-    const c = await careerTick(mirror, services, now, localMinuteOf(now, tz), send, esc)
+    const c = on('tick.career') ? await careerTick(mirror, services, now, localMinuteOf(now, tz), send, esc) : null
     if (c) note('sent', `Career: ${c}`, undefined, 'career')
   } catch (e) {
     console.error('career:', e)
@@ -1016,18 +1035,18 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
 
   // Plugins (Settings → Plugins): weather, GitHub, mail… fetched on their own schedule.
   try {
-    const ran = await pluginJobs(env, mirror, healthDb, now, (t) => send(t))
+    const ran = on('tick.plugins') ? await pluginJobs(env, mirror, healthDb, now, (t) => send(t)) : []
     if (ran.length) note('sent', `Plugins: ${ran.join(', ')}`, undefined, 'plugins')
   } catch (e) {
     console.error('plugins:', e)
   }
 
   // BR1/BR2: Ben's memory: new pieces get embeddings (every 20 min), the nightly tidy-up (03:00–05:00).
-  const memRan = await memoryJobs({ mirror, vectors, model: env.model, claim: (key, gap) => sysClaim(healthDb, key, now.getTime(), gap), tasks: env.todoistToken ? () => createTodoistApi(env.todoistToken!, todoistFetch(env)).upcoming(30) : undefined, now })
+  const memRan = !on('tick.memory') ? [] : await memoryJobs({ mirror, vectors, model: env.model, claim: (key, gap) => sysClaim(healthDb, key, now.getTime(), gap), tasks: env.todoistToken ? () => createTodoistApi(env.todoistToken!, todoistFetch(env)).upcoming(30) : undefined, now })
   if (memRan.length) note('sent', `Memory: ${memRan.join(', ')}`, undefined, 'memory')
 
   // Calendar watch (N10): a class added or cancelled today or tomorrow, checked every 10 minutes.
-  if (calendar) {
+  if (calendar && calOn && on('tick.calendarWatch')) {
     try {
       if (await sysClaim(healthDb, 'ben_cal_watch_at', now.getTime(), 10 * 60000)) {
         const end = new Date(now)
@@ -1100,11 +1119,11 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
   const paused = nudge.pausedDay === st.today
   // What's in the calendar around now (a class or meeting means: don't nag).
-  const events = calendar ? await calendar.events(new Date(now.getTime() - 4 * 3600_000).toISOString(), new Date(now.getTime() + 15 * 60000).toISOString()).catch(() => []) : []
+  const events = calendar && calOn ? await calendar.events(new Date(now.getTime() - 4 * 3600_000).toISOString(), new Date(now.getTime() + 15 * 60000).toISOString()).catch(() => []) : []
   const inEvent = events.some((e) => !e.allDay && !isFocusBlock(e) && Date.parse(e.start) <= now.getTime() && Date.parse(e.end) > now.getTime())
   // Ben 2: check-ins, the morning brief, the evening shutdown and drift words (benPushTick.ts).
   // With check-ins on, they replace the two older block messages below.
-  const pushed = await pushTick({
+  const pushed = !on('tick.checkins') ? { checkins: false, sent: [] as string[] } : await pushTick({
     mirror,
     services,
     calendar,
@@ -1120,7 +1139,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     return { checkins: false, sent: [] as string[] }
   })
   if (pushed.sent.length) sent.push(...pushed.sent.map((k) => `push:${k}`))
-  if (calendar && !st.focus.running && !paused && !pushed.checkins) {
+  if (calendar && calOn && on('tick.lateBlock') && !st.focus.running && !paused && !pushed.checkins) {
     const starting = events.find((e) => isFocusBlock(e) && !(nudge.announced ?? []).includes(e.id) && Date.parse(e.start) - now.getTime() <= 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
     if (starting) {
       const mins = Math.round((Date.parse(starting.end) - Math.max(now.getTime(), Date.parse(starting.start))) / 60000)
@@ -1137,7 +1156,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   }
   // Classes and meetings (N2) and "leave now" (N3), not only focus blocks:
   // the same warnings (same ids) as the app makes, once each.
-  if (calendar && notifSet.lead + Math.max(0, ...notifSet.travel.map((t) => t.minutes)) > 0) {
+  if (calendar && calOn && on('tick.calendarAlerts') && notifSet.lead + Math.max(0, ...notifSet.travel.map((t) => t.minutes)) > 0) {
     const ahead = await calendar.events(now.toISOString(), new Date(now.getTime() + (Math.max(notifSet.lead, ...notifSet.travel.map((t) => t.minutes + 5)) + 15) * 60_000).toISOString()).catch(() => [])
     for (const w of eventAlerts(ahead, now, notifSet).filter((x) => !(nudge.announced ?? []).includes(x.id))) {
       const ev = ahead.find((e) => w.id.includes(`:${e.id}:`))
@@ -1153,7 +1172,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   // W2: a block that should be running but hasn't started: one nudge about THAT block,
   // and no "nothing done" nudge while a block is on (the plan is the nudge).
   const blockNow = events.find((e) => isFocusBlock(e) && Date.parse(e.start) <= now.getTime() - 10 * 60000 && Date.parse(e.end) - now.getTime() >= 15 * 60000)
-  if (blockNow && !pushed.checkins && !st.focus.running && !paused && st.idleMin >= 20 && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
+  if (blockNow && on('tick.lateBlock') && !pushed.checkins && !st.focus.running && !paused && st.idleMin >= 20 && !(nudge.announced ?? []).includes(`late:${blockNow.id}`)) {
     const subject = blockSubject(blockNow.title).slice(0, 28)
     const later = `bx|${blockNow.id}`.length <= 64 ? [{ text: '↪️ Next free time', callback_data: `bx|${blockNow.id}` }] : []
     try {
@@ -1174,7 +1193,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   if (!sent.length && !inEvent && quiet && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', `${quiet.text} (learned from your 👎)`, 'nudge')
   // Sick or travelling (a life mode): no "nothing done" nudges (FT4).
   if (!sent.length && !inEvent && !quiet && st.mode && !st.mode.idle && shouldNudge(nudge, facts, now)) note('skipped', 'Nudge: nothing done for a while', `Life mode: ${st.mode.label}`, 'nudge')
-  if (!sent.length && !inEvent && !quiet && !blockNow && !(st.mode && !st.mode.idle) && shouldNudge(nudge, facts, now)) {
+  if (on('tick.nudges') && !sent.length && !inEvent && !quiet && !blockNow && !(st.mode && !st.mode.idle) && shouldNudge(nudge, facts, now)) {
     const n = (nudge.day === st.today ? nudge.count ?? 0 : 0) + 1
     const first = openMustDos[0]?.text
     const idle = Number.isFinite(st.idleMin) ? `${Math.floor(st.idleMin / 60) ? `${Math.floor(st.idleMin / 60)}h ` : ''}${Math.round(st.idleMin % 60)}m` : 'all day'
@@ -1197,7 +1216,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
     const before = lateShift ? -1 : (bm - (now.getHours() * 60 + now.getMinutes()) + 1440) % 1440
     // HD: not when bed is logged, nor when the island just showed its own wind-down (you saw it at the PC).
     const seen = before >= 25 && before <= 50 ? await mirror.read((db) => bodyFacts(db as any, services.services(db), today0, now)).catch(() => null) : null
-    if (telegramWindDown({ minutesBefore: before, bedLogged: !!seen?.bedLogged, islandBedAt: seen?.bedAt ?? null, now: now.getTime() })) {
+    if (on('tick.winddown') && telegramWindDown({ minutesBefore: before, bedLogged: !!seen?.bedLogged, islandBedAt: seen?.bedAt ?? null, now: now.getTime() })) {
       const first = await mirror.write((db) => {
         if (getSetting(db as any, 'wind_down_day') === today0) return false
         setSetting(db as any, 'wind_down_day', today0)
@@ -1210,7 +1229,7 @@ export async function runTick(env: BotEnv & { botToken: string; chatId: string; 
   }
   // AH7: failed n8n flows tell you on Telegram (and ntfy), each once, every 10 minutes at most.
   try {
-    for (const t of await flowFailTick(healthDb, now)) if (await send(t, undefined, { always: true }).catch(() => false)) sent.push(t)
+    for (const t of on('tick.n8n') ? await flowFailTick(healthDb, now) : []) if (await send(t, undefined, { always: true }).catch(() => false)) sent.push(t)
   } catch (e) {
     console.error('flows:', (e as Error).message)
   }
@@ -1892,6 +1911,8 @@ async function pluginJobs(env: BotEnv, mirror: Mirror, healthDb: TursoHttp, now:
 export async function runPlugins(env: BotEnv, opts: { only?: string } = {}): Promise<{ ok: boolean; ran: string[] }> {
   lifeTz(env)
   const { mirror } = await botsFor(env)
+  // The Plugins & automation module is off (core/modules.ts): nothing is fetched.
+  if (!(await mirror.read((db) => jobOn(readModules(getSetting(db as any, MODULES_KEY)), 'cron.plugins')).catch(() => true))) return { ok: true, ran: [] }
   const ran = await pluginJobs(env, mirror, new TursoHttp(env.tursoUrl, env.tursoToken), new Date(), undefined, { force: true, only: opts.only })
   return { ok: true, ran }
 }

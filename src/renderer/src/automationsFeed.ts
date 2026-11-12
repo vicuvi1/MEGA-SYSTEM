@@ -8,6 +8,7 @@
 // Kept on THIS device only (localStorage): the last values per automation,
 // the last 20 runs (Re-run), the run log (secrets removed), the loop guard's
 // times, and what you did by hand (for Ben's "Make this a button?").
+import { moduleOn } from './useModules'
 import {
   addRecent, addRun, automationsFor, cleanRunLog, cleanStore, confirmNeeded, desktopWatch, dryRun, DESKTOP_STEPS, EMPTY_STORE, findRepeat, islandButtons, mapParams,
   openAutoAsks, pcReads, runChain, suggestedAutomation, webhookBody, logLine, type AutoEvent, type Automation, type AutomationStore, type AutoIslandOp, type DoneStep, type IslandAutoRun,
@@ -80,7 +81,8 @@ export async function saveStore(next: AutomationStore): Promise<AutomationStore>
 /** The desktop starts only the sensors your automations use. */
 function syncWatch() {
   if (!desk()?.auto) return
-  const w = desktopWatch(store)
+  // The Plugins & automation module is off (core/modules.ts): no sensors run on the PC.
+  const w = moduleOn('plugins') ? desktopWatch(store) : desktopWatch(EMPTY_STORE)
   const key = JSON.stringify(w)
   if (key === watchKey) return
   watchKey = key
@@ -289,6 +291,8 @@ export function startAutomations(onChange: () => void) {
 /** Every island build (~15 s): time / calendar triggers, focus and meetings starting or ending, Ben's asks. */
 export async function autoTick(o: { now: number; running: boolean; call: boolean; block: string; events: { title: string; start: number }[] }) {
   if (!life.automations) return
+  // The Plugins & automation module is off: no automation runs (and the sensors are stopped).
+  if (!moduleOn('plugins')) return syncWatch()
   await loadStore()
   const evs: AutoEvent[] = [{ t: 'tick', at: o.now, events: o.events.filter((e) => e.start > o.now).slice(0, 20) }]
   if (o.running !== prev.running) evs.push({ t: o.running ? 'focus:start' : 'focus:end', at: o.now })

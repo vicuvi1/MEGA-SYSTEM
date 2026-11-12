@@ -3,6 +3,7 @@
 // recorded in bot_seen_updates in the same Turso transaction as what it
 // logged, so the phone and the PC never log one message twice, and a message
 // is never marked done without its record (or the other way round).
+import { MODULES_KEY, OFF_REPLY, isOn, moduleDef, offReply, readModules } from '@core/modules'
 import { readShift, shiftReply, workToday } from '@core/lifeFit'
 import { readLifeFit, saveTonight } from './lifeFitStore'
 import { addWhy, WHY_KEY } from '@core/benWhy'
@@ -2777,8 +2778,27 @@ His note: ${note}`,
     await tg(token, 'sendMessage', { chat_id: chat, text: `💡 <b>Lesson for tomorrow:</b> ${esc(out.reply)}`, parse_mode: 'HTML' })
   }
 
+  /** The module switch (core/modules.ts), read fresh for each message. */
+  const modsNow = () => mirror.read((db) => readModules(getSetting(db as any, MODULES_KEY))).catch(() => readModules(null))
+  /** One plain reply for a part that is switched off (only to the owner's chats). */
+  async function offAnswer(botId: string, update: any, cfg: BotBridgeConfig, reply: string): Promise<string | null> {
+    const chat = String(update.message?.chat?.id ?? '')
+    if (!chat || !(await markSeen(`${botId}:${update.update_id}`))) return null
+    if (!allowed(cfg, chat)) return null
+    processed++
+    addLog(String(update.message?.text ?? '').slice(0, 80), chat, true, reply)
+    await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply }).catch(() => null)
+    return reply
+  }
+
   async function handle(botId: string, update: any, cfg: BotBridgeConfig): Promise<string | null> {
     if (update.callback_query) return handleButton(botId, update, cfg)
+    // A command of a module that is off (Settings → Modules) gets one line back and does nothing else.
+    const cmdText = String(update.message?.text ?? '').trim()
+    if (cmdText.startsWith('/')) {
+      const off = offReply(await modsNow(), cmdText)
+      if (off) return offAnswer(botId, update, cfg, off)
+    }
     const viaTodoist = await handleTodoist(botId, update, cfg)
     if (viaTodoist !== undefined) return viaTodoist
     const key = `${botId}:${update.update_id}`
@@ -2874,6 +2894,7 @@ His note: ${note}`,
       const hit = await mirror
         .read((db) => (doc ? { file: pluginForFile(db as any, String(doc.file_name ?? ''), String(doc.mime_type ?? '')), cmd: null } : { file: null, cmd: findPluginCommand(db as any, text) }))
         .catch(() => null)
+      if ((hit?.file || hit?.cmd) && !isOn(await modsNow(), 'plugins')) return offAnswer(botId, update, cfg, `${moduleDef('plugins').label}: ${OFF_REPLY}`)
       if (hit?.file || hit?.cmd) {
         if (!(await markSeen(key))) return null
         if (!allowed(cfg, chat)) return null
@@ -2918,6 +2939,8 @@ His note: ${note}`,
           return reply
         }
       }
+      // Ben's chat is the Coach module: off, the free text gets the switched-off line (the logs above still work).
+      if (!isOn(await modsNow(), 'coach')) return offAnswer(botId, update, cfg, `${moduleDef('coach').label}: ${OFF_REPLY}`)
       return handleBrain(botId, update, cfg, text, key, file)
     }
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -2949,7 +2972,15 @@ His note: ${note}`,
             return said
           }
         }
-        if (ai && 'unknown' in out && out.unknown && !text.startsWith('/')) return handleBrain(botId, update, cfg, text, key)
+        if (ai && 'unknown' in out && out.unknown && !text.startsWith('/')) {
+          if (!isOn(await modsNow(), 'coach')) {
+            const reply = `${moduleDef('coach').label}: ${OFF_REPLY}`
+            addLog(text, chat, true, reply)
+            await tg(update.__token, 'sendMessage', { chat_id: chat, text: reply }).catch(() => null)
+            return reply
+          }
+          return handleBrain(botId, update, cfg, text, key)
+        }
         processed++
         if (out.ok && 'sport' in out && out.sport) {
           const prog = addRepsToSportTrack(out.sport.name, out.sport.amount, (out.sport as any).sets, out.sport as any)
@@ -3054,6 +3085,9 @@ His note: ${note}`,
   async function quick(text: string): Promise<{ ok: boolean; reply: string } | { unknown: true }> {
     const t = text.trim()
     if (!t || t.length > 200) return { unknown: true }
+    // The same module switch as Telegram: a command of a part that is off says so and does nothing.
+    const off = t.startsWith('/') ? offReply(await modsNow(), t) : null
+    if (off) return { ok: true, reply: off }
     const key = `quick:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`
     const out = await mirror.write((db) => {
       const svc = services.services(db)

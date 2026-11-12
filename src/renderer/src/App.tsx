@@ -23,9 +23,11 @@ import { Notifications, type Alert } from './Notifications'
 import { NotifToasts } from './NotifToasts'
 import { RestDayButton } from './RestDay'
 import { GrowthChip } from './body/progress/GrowthLevel'
-import { FULL_MENU, Sidebar } from './Sidebar'
+import { SIDEBAR_PAGES, Sidebar } from './Sidebar'
 import { useSimple } from './useSimple'
-import { altTarget, type SimpleMode } from '@core/simpleMode'
+import { useModules } from './useModules'
+import { ModuleGate, ModuleOff } from './ModuleOff'
+import { altPage, isOn, pageModule, pageOn, type ModulesOn } from '@core/modules'
 import { MobileBottomBar } from './MobileBottomBar'
 import { PwaInstallBanner } from './PwaInstallBanner'
 import { PageSkeleton } from './blocks'
@@ -128,6 +130,9 @@ function whenIdle(fn: () => void, ms = 2000): () => void {
 const SIDEBAR_FOLD_PX = 1180
 
 // Sections that hold one of the apps living inside Life System.
+// Ctrl+K actions that open a page: offered only while that page's module is on (core/modules.ts).
+const ACTION_PAGE: Record<string, string> = { 'a:oracle': 'coach', 'a:year': 'progress', 'a:month': 'progress', 'a:urge': 'discipline' }
+
 const EMBED_OF: Partial<Record<PageId, { kind: EmbedKind; system: string }>> = {
   money: { kind: 'finance', system: 'Money hub' },
   sleep: { kind: 'waky', system: 'Points & stats' },
@@ -242,9 +247,12 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [paletteOpen, setPaletteOpen] = useState(false)
   // Ctrl+K lists today's Todoist (the one task system), loaded when it opens.
   const [paletteTodo, setPaletteTodo] = useState<TodoTask[] | null>(null)
+  // The module switch (Settings → Modules): what is off is gone from the menu, Ctrl+K, alerts and the background.
+  const mods = useModules()
+  const modOn = (p: string) => pageOn(mods, p)
   useEffect(() => {
-    if (paletteOpen && life.todoist) life.todoist.today().then(setPaletteTodo).catch(() => setPaletteTodo(null))
-  }, [paletteOpen])
+    if (paletteOpen && life.todoist && isOn(mods, 'tasks')) life.todoist.today().then(setPaletteTodo).catch(() => setPaletteTodo(null))
+  }, [paletteOpen, mods])
   const [fullScreen, setFullScreen] = useState(false)
   const [pops, setPops] = useState<{ id: number; coins: number; label: string }[]>([])
   const act = useAction()
@@ -529,7 +537,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   useEffect(() => {
     if (![...MODULES, ...SYSTEM_PAGES].some((m) => m.id === page)) setPage('today')
   }, [page])
-  const embed = EMBED_OF[page]
+  // A page of a module that is off has no embedded app either (its page says it is switched off).
+  const embed = pageOn(mods, page) ? EMBED_OF[page] : undefined
   // Stealth hides MAN too until the section is revealed.
   const hiddenByStealth = page === 'discipline' && !!discipline?.stealth && !revealed
   // Money opens on its own hub (Night 11); the full Finance Helper is one tap away.
@@ -565,16 +574,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     })
   }, [activeEmbed, narrow])
 
-  // Alt+number follows the menu as you see it (Simple mode: Today, Study Time, Sport Track, then pages you brought back).
+  // Alt+number follows the menu as you see it: the pages of the modules that are on (core/modules.ts altPage).
   const simpleNav = useSimple()
-  const navRef = useRef<{ simple: SimpleMode; hidden: string[] }>({ simple: simpleNav, hidden: [] })
-  navRef.current.simple = simpleNav
+  const navRef = useRef<{ mods: ModulesOn; hidden: string[] }>({ mods, hidden: [] })
+  navRef.current.mods = mods
   // Shortcuts, also while an app inside is focused (main forwards them).
   useEffect(() => {
     const run = (key: string) => {
       if (key === 'toggle-sidebar') toggleSidebar()
       const n = /^go:(\d)$/.exec(key)
-      const target = n ? altTarget(navRef.current.simple, FULL_MENU, navRef.current.hidden, Number(n[1])) : null
+      const target = n ? altPage(navRef.current.mods, SIDEBAR_PAGES, navRef.current.hidden, Number(n[1])) : null
       if (target) setPage(target as PageId)
       if (key === 'switch-view' && embed) {
         const ids = segTabs.map((t) => t.id)
@@ -681,8 +690,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       ...(features.updates ? [{ id: 'a:update', label: 'Check for updates', group: 'Actions', icon: 'spark', run: () => act(() => life.updates.check()).then((u) => u && setUpdate(u)) } as const] : []),
       { id: 'a:sync', label: 'Check connected apps now', group: 'Actions', icon: 'link', run: () => act(() => life.connections.sync()).then((r) => r && onWallet()) },
       { id: 'a:mobile-sync', label: features.cloudflareSync ? 'Sync Mobile Telegram Logs (Heal Streaks)' : 'Sync now (get what other devices changed)', hint: features.cloudflareSync ? 'Cloudflare 24/7' : 'Turso', group: 'Actions', icon: 'cloud', color: '#00d2ff', run: triggerMobileSync },
-
-    ]
+      { id: 'a:modules', label: 'Modules: turn parts of the app on or off', hint: 'Settings', group: 'Actions', icon: 'sliders', run: () => openSettingsTab('modules') }
+    ].filter((a) => modOn(ACTION_PAGE[a.id] ?? 'settings')) as Command[],
+    pageOn: modOn
   })
 
   // Small counts on the sidebar and the "needs you" list in the bell.
@@ -694,21 +704,21 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const checkInDue = !!discipline?.setup && !discipline.checkedInToday && !discipline.resetToday && !discipline.stealth
   const shopReady = !!shop && shop.rewards.some((r) => !r.archived && r.price <= shop.balance)
   const updateReady = !!update && ['available', 'ready'].includes(update.state)
-  const coachUnread = useCoachUnread(page === 'coach', ui.sound !== false)
+  const coachUnread = useCoachUnread(page === 'coach', ui.sound !== false, isOn(mods, 'coach'))
   const badges: Partial<Record<PageId, { n?: number; dot?: 'lime' | 'warn' }>> = {
     coach: coachUnread ? { n: coachUnread } : undefined,
     discipline: checkInDue ? { dot: 'lime' } : undefined,
-    shop: shopReady ? { dot: 'lime' } : undefined,
+    shop: shopReady && modOn('shop') ? { dot: 'lime' } : undefined,
     settings: updateReady || backup?.lastError ? { dot: updateReady ? 'lime' : 'warn' } : undefined
   }
   const alerts: Alert[] = []
   // On the desktop the title bar offers 'Restart to update' itself.
   if (updateReady && !window.desktop) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
   if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Today’s cloud backup didn’t save', body: backup.lastError, page: 'settings' })
-  if (checkInDue) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current}`, page: 'discipline' })
-  if (overdue) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
+  if (checkInDue && modOn('discipline')) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${discipline!.day ?? discipline!.current}`, page: 'discipline' })
+  if (overdue && modOn('tasks')) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
   // The next thing in your real calendar within the hour (T2; it read an old, empty schedule).
-  const nextEv = nextUp(todayEvents, Date.now())
+  const nextEv = modOn('calendar') ? nextUp(todayEvents, Date.now()) : null
   if (nextEv && Date.parse(nextEv.start) - Date.now() < 60 * 60_000) {
     alerts.push({ id: `event-${nextEv.id}`, tone: 'info', icon: 'calendar', title: `${nextEv.title} at ${new Date(nextEv.start).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`, body: `Starts ${countdown(Date.parse(nextEv.start) - Date.now())}${nextEv.location ? ` · ${nextEv.location}` : ''}`, page: 'calendar' })
   }
@@ -736,7 +746,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   return (
     <div className={`shell ${collapsed ? 'rail' : ''} ${focus ? 'focus' : ''}`}>
       <WallpaperLayer page={page} />
-      <CustomBackground />
+      <ModuleGate id="custom"><CustomBackground /></ModuleGate>
       <Palette
         open={paletteOpen}
         onClose={() => setPaletteOpen(false)}
@@ -772,11 +782,12 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
       <div className="main">
         {/* The desktop app has its own island at the top of the screen: one is enough. */}
-        {!window.desktop?.islandState && <FocusIsland hideNext={page === 'today'} noDim={page === 'study'} />}
+        {/* Without the Dynamic island module, the desktop app shows this in-app timer island too (your timers still chime). */}
+        {(!window.desktop?.islandState || !isOn(mods, 'island')) && <FocusIsland hideNext={page === 'today'} noDim={page === 'study'} />}
         <DeepLinks onGo={setPage} />
         {/* UI7: not on pages with their own full-screen app or a floating + button. */}
         <ZoomToast />
-        <BenBubble hidden={bbHidden} where={page} unread={coachUnread} onOpenChat={() => setPage('coach')} />
+        <ModuleGate id="coach"><BenBubble hidden={bbHidden} where={page} unread={coachUnread} onOpenChat={() => setPage('coach')} /></ModuleGate>
         <DisciplineMoments onOpenChat={() => setPage('coach')} />
         <header className={`topbar ${compact ? 'compact' : ''}`}>
           <div className="title">
@@ -823,7 +834,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
               <Icon name="expand" size={16} />
             </button>
           )}
-          {page === 'body' && <GrowthChip where="body" />}
+          {page === 'body' && isOn(mods, 'growth') && <GrowthChip where="body" />}
           {/* Simple mode: no "Rest day" chip up here (it read like today's status next to "Upper body today"); "I can't train today" on the Dashboard does the same. */}
           {page === 'body' && !simpleNav.on && <RestDayButton />}
           <button
@@ -860,7 +871,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           </button>
 
           {/* Your points: tap to spend them (Shop). */}
-          {summary && (
+          {summary && modOn('shop') && (
             <button className="tb-me" onClick={() => setPage('shop')} title="Your points: spend them on fun time and rewards">
               <span className="tb-coins">
                 <Coins n={summary.balance} />
@@ -894,15 +905,18 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
         <EmbedHost active={activeEmbed} soundEnabled={ui.sound} />
         {/* MU: the website's SoundCloud player (hidden, only after you press play) and Ben's "now playing" line. */}
-        <MusicHost />
+        <ModuleGate id="music"><MusicHost /></ModuleGate>
         {/* Focus boost: session goal and verdict, launch kits, Dojo mode, "why I'm stalling", win music. */}
-        <FocusBoost />
-        <StudyAlarm />
+        <ModuleGate id="focusBoost"><FocusBoost /></ModuleGate>
+        <ModuleGate id="study"><StudyAlarm /></ModuleGate>
 
         {!activeEmbed && (
           <main className={`content ${bbHidden || !life.coach ? '' : 'has-bb'}`}>
             <ErrorBoundary key={page} area={current.label} onHome={page === 'today' ? undefined : () => setPage('today')}>
             <Suspense fallback={<PageSkeleton />}>
+            {/* The module switch: a page whose module is off says so, with one button to turn it on (its data is untouched). */}
+            {!pageOn(mods, page) && <ModuleOff id={pageModule(page)!} />}
+            {pageOn(mods, page) && (<>
             {page === 'today' && !summary && <PageSkeleton />}
             {page === 'today' && summary && (
               <Today summary={summary} rules={rules} shop={shop} tasks={tasks} schedule={schedule} discipline={discipline} connections={connections} body={body} onChange={onWallet} onTasks={setTasks} onSchedule={setSchedule} onGo={setPage} onOpenApp={(p) => { setView((v) => ({ ...v, [p]: 'app' })); setPage(p) }} />
@@ -941,12 +955,13 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}
             {current.phase > 0 && <Soon module={current} />}
+            </>)}
             </Suspense>
             </ErrorBoundary>
           </main>
         )}
         {/* LF7: the level-up cinematic (new ranks and season moments, once each). */}
-        <Suspense fallback={null}>{summary && life.saga && <CinematicHost level={summary.level?.level ?? null} />}</Suspense>
+        <Suspense fallback={null}>{summary && life.saga && isOn(mods, 'season') && <CinematicHost level={summary.level?.level ?? null} />}</Suspense>
         <Suspense fallback={null}>
           <QuickHost open={quickCommandOpen} onClose={() => setQuickCommandOpen(false)} />
         </Suspense>

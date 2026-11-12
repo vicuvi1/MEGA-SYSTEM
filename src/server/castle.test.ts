@@ -2,6 +2,7 @@
 // tells once (CL3), the second alarm (CL4), the server's call counter (CL2),
 // and a server soak: a day of ticks (every 10 minutes) on a fake Turso and a
 // fake Telegram, with the tables staying small.
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js'
@@ -32,6 +33,8 @@ let n = 0
 function world(simple = '{"budget":false}') {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   // Most tests here check the older senders, so the daily push budget (Simple mode) is off unless asked.
   remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '${simple}')`)
   const sent: { method: string; body: any }[] = []

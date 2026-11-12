@@ -24,11 +24,13 @@ const write = (t: number) => {
   }
 }
 
-export function useCoachUnread(onCoachPage: boolean, sound = true): number {
+/** `enabled` false (the Coach module is off, core/modules.ts): no reads, no timer, no badge. */
+export function useCoachUnread(onCoachPage: boolean, sound = true, enabled = true): number {
   const toast = useToast()
   const [n, setN] = useState(0)
   const last = useRef<string | null>(null)
   const check = useCallback(async () => {
+    if (!enabled) return setN(0)
     if (!life.coach) return
     const log = await life.coach.log().catch(() => null)
     if (!log) return
@@ -45,12 +47,13 @@ export function useCoachUnread(onCoachPage: boolean, sound = true): number {
       // (it was a second card and a second sound, ignoring quiet hours).
       last.current = newest.at
     } else if (last.current === null) last.current = newest?.at ?? ''
-  }, [onCoachPage, toast, sound])
+  }, [onCoachPage, toast, sound, enabled])
   useEffect(() => {
     void check()
+    if (!enabled) return
     const t = setInterval(() => void check(), 45_000)
     return () => clearInterval(t)
-  }, [check])
+  }, [check, enabled])
   useLive(() => void check())
   return n
 }

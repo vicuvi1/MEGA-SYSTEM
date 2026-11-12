@@ -8,6 +8,8 @@
 //   3. save the index (joined with any save from another device in between).
 // Runs when Photo Locker is open, after something is added, and once a while
 // after the app starts when uploads are waiting.
+import { isOn } from '@core/modules'
+import { loadModules } from '../useModules'
 import { FOOD_TAG, PROGRESS_TAG, cleanFolderPath, deletePlan, folderMovePlan, foodFolderPath, foodPhotoName, foodPhotoNumber, notBackedUpLine, planSync, driveProps, type IndexEntry, type SyncPlan, type VaultIndex } from '@core/vaultSync'
 import { life } from '../bridge'
 import { createDrive, DriveError, type DriveApi, type DriveFolder } from './driveApi'
@@ -313,10 +315,16 @@ let booted = false
 export async function vaultBoot(): Promise<void> {
   if (booted || !life.vault || !life.google?.driveToken) return
   booted = true
+  // The module switch (core/modules.ts): Telegram food photos belong to Sport Track (food) and are still
+  // fetched into this device (the server keeps them 3 days at most); the Drive upload is Photo Locker's
+  // job and runs only while that module is on.
+  const lockerOn = async () => isOn(await loadModules(), 'locker')
+  const sportOn = async () => isOn(await loadModules(), 'sport')
   // Telegram food photos held on the server: now, and every 30 minutes while the app is open.
-  const food = async () => ((await pullFoodInbox().catch(() => 0)) > 0 && (await life.vault!.index()).folder ? void syncNow() : undefined)
+  const food = async () => ((await sportOn()) && (await pullFoodInbox().catch(() => 0)) > 0 && (await lockerOn()) && (await life.vault!.index()).folder ? void syncNow() : undefined)
   setInterval(() => void food(), 30 * 60_000)
-  if (await pullFoodInbox().catch(() => 0)) return void food()
+  if ((await sportOn()) && (await pullFoodInbox().catch(() => 0))) return void food()
+  if (!(await lockerOn())) return
   const items = await listItems()
   if (!items.some((it) => it.blob && !it.driveFileId)) return
   const ix = await life.vault.index()

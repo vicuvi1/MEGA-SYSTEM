@@ -5,6 +5,7 @@
 // dinner reminder and the evening protein nudge once a day, only while away;
 // "Mute food nudges for 7 days"; "what should I eat now?" with no model call;
 // the Sunday food report's numbers.
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js'
@@ -39,6 +40,8 @@ const base = { coach_rhythm_prefs: { on: false }, sleep_weekday_target: '06:30',
 function world(settings: Record<string, unknown> = base) {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   // These tests check the older senders, so the daily push budget (Simple mode) is off here.
   remote.exec(`INSERT INTO settings (key, value) VALUES ('simple_mode', '{"budget":false}')`)
   for (const [k, v] of Object.entries(settings)) remote.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', [k, typeof v === 'string' ? v : JSON.stringify(v)])

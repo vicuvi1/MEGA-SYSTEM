@@ -1,3 +1,5 @@
+import { notifOn } from '@core/modules'
+import { modulesNow } from './useModules'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { groupNotifs, type Notif } from '@core/notify'
 import { useLive } from './live'
@@ -50,7 +52,8 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
   const box = useRef<HTMLDivElement>(null)
   const titles = useMemo(() => Object.fromEntries(rules.map((r) => [r.id, r.title])), [rules])
   const loadInbox = useCallback(() => {
-    life.notifications?.list().then(setInbox).catch(() => {})
+    // The module switch (core/modules.ts): the bell lists nothing from a module that is off (the rows stay saved).
+    life.notifications?.list().then((l) => setInbox(l.filter((n) => notifOn(modulesNow(), n)))).catch(() => {})
   }, [])
 
   // Reload the activity whenever the wallet changes, the inbox whenever data changes.

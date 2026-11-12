@@ -1,6 +1,7 @@
 // Plugins on the server, end to end on a fake Turso, a fake Telegram and a
 // fake Open-Meteo (made-up data): phone numbers, a plugin command, a bank CSV
 // sent on Telegram, and the weather job in the tick.
+import { ALL_ON, writeModules } from '@core/modules'
 import { createRequire } from 'node:module'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type Database as SqlJsDatabase, type SqlJsStatic } from 'sql.js'
@@ -34,6 +35,8 @@ function forecast() {
 function world() {
   const remote: SqlJsDatabase = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // These tests use parts that are off by default (core/modules.ts): every module on, as before the switch.
+  remote.run("INSERT INTO settings (key, value) VALUES ('modules_on', ?)", [writeModules(ALL_ON)])
   const sent: { method: string; body: any }[] = []
   const hosts: string[] = []
   vi.stubGlobal('fetch', async (url: string, init: { body?: string } = {}) => {

@@ -35,7 +35,7 @@ import { CoachToday } from '../coach/CoachToday'
 import { WeekPlanCard } from '../plan/WeekPlan'
 import { GrowthChip } from '../body/progress/GrowthLevel'
 import { ThreeToday } from '../ThreeToday'
-import { useSimple } from '../useSimple'
+import { useModules } from '../useModules'
 
 type Pop = { id: number; coins: number; xp: number }
 
@@ -84,7 +84,9 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   }
 
   const [ui] = useUiPrefs()
-  const simple = useSimple()
+  // The module switch (core/modules.ts): Today keeps only the cards of modules that are on. The 3 numbers
+  // always work: the focus number counts plain focus blocks (Today's own timer), not Study Time.
+  const mods = useModules()
   // "More" stays as you left it (on this device).
   const [moreOpen, setMoreOpenState] = useState(() => {
     try {
@@ -200,11 +202,11 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   const tabs: PageTab[] = [
     // Must-dos are counted on the Now tab itself (the top row and the list), so its tab has no number.
     { id: 'now', label: 'Now', title: "What's on now, your Top 3, today's tasks and habits (1)" },
-    { id: 'plan', label: 'Plan', title: "Ben's plan for today (2)" },
-    // Simple mode hides tasks from Today (the Tasks tab); Settings → Simple mode brings it back.
-    ...(simple.on ? [] : [{ id: 'tasks', label: 'Tasks', count: counts ? counts.tasks : null, title: `Everything else today${counts?.late ? `, ${counts.late} late` : ''}, and coming up (3)` }]),
-    { id: 'body', label: 'Body', count: health ? `${health.met}/4` : null, title: 'Reps, water, sleep and your healthy day (4)' },
-    { id: 'week', label: 'Week', title: 'This week, the week score and more (5)' },
+    ...(mods.coach ? [{ id: 'plan', label: 'Plan', title: "Ben's plan for today (2)" }] : []),
+    // The Tasks module (Settings → Modules) brings the Tasks tab back.
+    ...(mods.tasks ? [{ id: 'tasks', label: 'Tasks', count: counts ? counts.tasks : null, title: `Everything else today${counts?.late ? `, ${counts.late} late` : ''}, and coming up (3)` }] : []),
+    ...(mods.sport ? [{ id: 'body', label: 'Body', count: health ? `${health.met}/4` : null, title: 'Reps, water, sleep and your healthy day (4)' }] : []),
+    ...(mods.insights || mods.goals ? [{ id: 'week', label: 'Week', title: 'This week, the week score and more (5)' }] : []),
     ...(showDay ? [{ id: 'day', label: 'Day', title: 'Your day, hour by hour (6)' }] : [])
   ]
   const [tab, setTab] = usePageTab('today', tabs.map((t) => t.id), 'now')
@@ -228,8 +230,8 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
   const FOLDED = on.filter((x) => x.id === 'fun' || x.id === 'quicklog')
   const day = (
     <>
-      {has('timeline') && <TodayStrip />}
-      <PluginCards />
+      {has('timeline') && mods.calendar && <TodayStrip />}
+      {mods.plugins && <PluginCards />}
     </>
   )
   return (
@@ -243,27 +245,27 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
             <details className="td-now-more" open={nowMore} onToggle={(e) => setNowMore((e.target as HTMLDetailsElement).open)}>
               <summary>
                 <span>More</span>
-                <small>Ben's line, the coach, tasks and habits</small>
+                <small>{mods.coach ? "Ben's line, the coach, tasks and habits" : 'Your habits and the day'}</small>
               </summary>
               <div className="td-now-more-body">
             {/* One slim line on top (what's on, what's next, the plan to approve, ⋯), then the lists. */}
             <div className="now-top">
               <TodayHero slim name={ui.name} onGo={(p) => onGo(p)} />
-              <ShiftButtons compact />
+              {mods.coach && <ShiftButtons compact />}
               {/* Sunday and Monday: "Pick your top 3 for this week", one slim line under the top line. */}
-              <WeekTop3Pick compact />
+              {mods.goals && <WeekTop3Pick compact />}
               {/* The goal ladder: one line for the quarter goal that needs you most this week. */}
-              <TodayLadderLine onOpen={() => openTab('goals', 'quarter')} />
-              <GrowthChip where="today" />
+              {mods.goals && <TodayLadderLine onOpen={() => openTab('goals', 'quarter')} />}
+              {mods.growth && <GrowthChip where="today" />}
             </div>
             {/* The coach: today's training, meals and ticks in one card (compact here, full on Body → Today). */}
-            <CoachToday compact />
+            {mods.coach && <CoachToday compact />}
             {/* The money pill sits in the habits header on Now (next to "Log spending"). */}
-            {!has('day') && <MoneyPill />}
+            {!has('day') && mods.money && <MoneyPill />}
             {has('day') && (
               <>
                 <LifeModeCard compact quiet />
-                <YearOffer onOpen={() => openYear(onGo)} />
+                {mods.insights && <YearOffer onOpen={() => openYear(onGo)} />}
                 <MissTwiceCard />
                 <DayFlow fold={life.coach?.today ? ['workout'] : undefined} summary={summary} discipline={discipline} connections={connections} body={body ?? null} onChange={onChange} onGo={onGo} onOpenApp={onOpenApp} rules={rules} tasksSlot={tasksEl} weekSlot={weekEl} onCounts={setCounts} />
               </>
@@ -272,7 +274,7 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
             </details>
           </TabPanel>
           <TabPanel page="today" id="plan" value={tab} className="td-plan">
-            <CoachPlan oneApprove hideReview onChange={() => onChange()} />
+            {mods.coach && <CoachPlan oneApprove hideReview onChange={() => onChange()} />}
             <p className="hint td-plan-none">No plan for today. Ben plans the morning; ask him on the Coach page.</p>
           </TabPanel>
           <TabPanel page="today" id="tasks" value={tab}>
@@ -290,10 +292,10 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
             {new Date().getDay() === 0 && <BodyWeekCard sunday folded />}
           </TabPanel>
           <TabPanel page="today" id="week" value={tab}>
-            <WeekPlanCard />
+            {mods.insights && <WeekPlanCard />}
             <WeekStrip />
             <div ref={setWeekEl} className="td-slot" />
-            {has('progress') && <ProgressCard onOpen={() => onGo('progress')} />}
+            {has('progress') && mods.insights && <ProgressCard onOpen={() => onGo('progress')} />}
             {FOLDED.length > 0 && (
               <details className="td-more" open={moreOpen} onToggle={(e) => setMoreOpen((e.target as HTMLDetailsElement).open)}>
                 <summary>
