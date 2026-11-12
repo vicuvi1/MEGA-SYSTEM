@@ -19,7 +19,7 @@ bash scripts/ship.sh <message-file> # typecheck, tests, bundle, commit, push
 
 - The smoke test runs on a fixed clock: today at 08:30 local time, in the browser and the fake server (`E2E_NOW=14:00 npm run smoke` tries another time). A step that needs a certain hour sets it itself (`atTime` in `e2e/smoke.mjs`); never hand a page the real `Date.now()` from the test (use `fakeNow()`). Unit tests that depend on the hour pin it with `vi.useFakeTimers({ toFake: ['Date'] })` + `vi.setSystemTime(...)`.
 - Only push to `main` when typecheck and **all** tests pass. A push deploys straight to production.
-- After pushing, check the Vercel deployment is READY, then `/api/cron?job=tick` should return `{"ok":true,…}`.
+- After pushing, check the Vercel deployment is READY, then `/api/cron?job=tick` with `Authorization: Bearer <CRON_SECRET>` should return `{"ok":true,…}` (without it: 401).
 - Commit with the owner's git identity as configured on the machine (never write a personal email into the repo). Before pushing: `git fetch origin main && git rebase origin/main`. Never force-push.
 - Local testing: a fake Turso is in `src/renderer/src/web/fakeTurso.ts`; the bot bundle exports `coachChat`, `runTick`, `handleTelegramUpdate`, `coachRhythm`, `coachUndo`, `sportShared` for end-to-end tests with a fake model.
 - Check UI changes at desktop width (1280–1440 px) first, then phone (390 px).

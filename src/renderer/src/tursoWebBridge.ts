@@ -25,7 +25,7 @@ import { createBoostApi } from './web/boostStore'
 import { TursoHttp } from './web/tursoHttp'
 import { createWebServices, financeDayTx, type WebServices } from './web/webServices'
 import { financeSummary } from '@core/moneyDays'
-import { createWebAuth } from './web/webAuth'
+import { createWebAuth, localPinStore } from './web/webAuth'
 import { createFinanceInbox } from './web/financeInbox'
 import { payTodoist } from './web/todoistCoins'
 import { createChangeWatch, type WatchInfo } from './web/todoRefresh'
@@ -281,7 +281,8 @@ export function createTursoWebBridge(): Bridge {
   const sessionReady = new Promise<void>((resolve) => (haveSession = resolve))
   if (direct || sessionValid(currentSession())) haveSession()
   // The server session may expire during a trip. A previously downloaded
-  // desktop database still opens with its locally verified PIN while offline.
+  // desktop database still opens offline with the PIN checked against this
+  // device's own copy (saved after the last online unlock, never synced).
   if (window.desktop) void window.desktop.load().then((bytes) => { if (bytes) haveSession() })
 
   // Starts loading at once; every call below waits for it.
@@ -289,7 +290,8 @@ export function createTursoWebBridge(): Bridge {
     ([SQL]) => new Mirror(SQL, turso, window.desktop ? { load: () => window.desktop!.load(), save: (bytes) => window.desktop!.save(bytes) } : typeof indexedDB !== 'undefined' ? indexedDbStore() : null, !!window.desktop)
   )
   const svcP: Promise<WebServices> = mirrorP.then((m) => createWebServices(m))
-  const authP = mirrorP.then((m) => createWebAuth(m))
+  // The server checks the PIN; offline, this device's own copy (never synced: webAuth.ts).
+  const authP = mirrorP.then((m) => createWebAuth(m, direct ? undefined : localPinStore()))
   // The embedded apps' data (Sport Track, Finance Helper, Waky, MAN) lives in
   // this browser: copied to Turso and back so every device shows the same.
   const syncsP = mirrorP.then((m) => {
@@ -1589,6 +1591,8 @@ export function createTursoWebBridge(): Bridge {
         if (direct) return (await authP).setPin(pin, current)
         if (!/^\d{4,12}$/.test(pin)) throw new Error('PIN must be 4 to 12 digits')
         await serverChangePin(current ?? '', pin)
+        // This device's offline copy follows the new PIN.
+        await (await authP).unlock(pin, true)
         void (await mirrorP).refresh().catch(() => null)
         unlocked = true
         return { pinSet: true, locked: false }

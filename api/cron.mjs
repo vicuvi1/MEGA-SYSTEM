@@ -7,7 +7,7 @@
 // these UTC crons are the backup. Both claim the same `daily:<job>` slot.
 // GET /api/cron?job=backup (CRON_SECRET): the newest daily backup as gzip, for
 // the weekly encrypted off-site copy (.github/workflows/backup.yml, LT1).
-import { bearer, bearerIs, botDefaults, checkWebhooks, config, countCall, cronSecretOk, gate, send, serverBots, sessionOk } from './_lib.mjs'
+import { bearer, bearerIs, botDefaults, checkWebhooks, config, countCall, cronSecretOk, gate, requireSession, send, serverBots } from './_lib.mjs'
 import { DAILY_GAP_MS, dailyDue, dailyGate, healthAlarm, healthPush, localMinute, runDaily, runPlugins, runTick, selfCheck, sportShared, tickHealth, webhookVerdict } from './_bot/bot.mjs'
 import { dropHealthKey, healthKeyOk, listHealthKeys, newHealthKey } from './_health.mjs'
 import { readBody } from './_lib.mjs'
@@ -52,9 +52,8 @@ export default async function handler(req, res) {
   // CL2: every call is counted (Settings → System health shows the month's total).
   await countCall(config(), `cron${new URL(req.url, 'http://x').searchParams.get('job') || ''}`)
   // job=tick: the coach writes first (reminders, check-ins, block starts,
-  // follow-ups). Woken every ~10 min by a GitHub Actions timer and every 2 min
-  // by the open app. No secret needed: it runs at most once a minute and only
-  // sends what is due, each thing once.
+  // follow-ups). Woken every ~10 min by a GitHub Actions timer or a pinger
+  // (CRON_SECRET) and every 2 min by the open app (its session). Nobody else.
   if (new URL(req.url, 'http://x').searchParams.get('job') === 'tick') return tick(req, res)
   // job=sport: Sporty (the Python bot) reads and writes water and workouts here.
   if (new URL(req.url, 'http://x').searchParams.get('job') === 'sport') return sport(req, res)
@@ -97,14 +96,14 @@ async function tick(req, res) {
   const bot = serverBots().find((b) => b.name === 'MEGA_BOT_TOKEN') ?? serverBots()[0]
   const chatId = process.env.TELEGRAM_CHAT_ID || ''
   if (!cfg.ok || !bot || !chatId) return send(res, 200, { ok: false, reason: 'No bot or chat set up' })
-  // The app (a session) and the GitHub timer (CRON_SECRET) may wake Ben once a
-  // minute; anyone else at most once every 4.5 minutes. One atomic slot in
-  // Turso, so two server copies never run the tick at the same time.
-  const timer = cronSecretOk(req) || /^(github|pinger)$/.test(String(req.headers?.['x-life-timer'] || ''))
-  let trusted = cronSecretOk(req)
-  if (!trusted) trusted = await sessionOk(cfg, bearer(req)).catch(() => false)
+  // Only the app (a session) and the timers (CRON_SECRET) may wake Ben, once a
+  // minute. A database hiccup while checking the session is a 503 (never a
+  // sign-out). The X-Life-Timer header alone proves nothing. One atomic slot
+  // in Turso, so two server copies never run the tick at the same time.
+  const timer = cronSecretOk(req)
+  if (!timer && !(await requireSession(res, cfg, bearer(req)))) return
   try {
-    if (!(await gate(cfg, 'tick', trusted ? 50_000 : 270_000))) return send(res, 200, { ok: true, skipped: true })
+    if (!(await gate(cfg, 'tick', 50_000))) return send(res, 200, { ok: true, skipped: true })
   } catch (e) {
     return send(res, 503, { error: e.message || 'Database not reachable' })
   }
@@ -188,7 +187,7 @@ async function health(req, res) {
   }
   try {
     if (body.op) {
-      if (!(await sessionOk(cfg, bearer(req)).catch(() => false))) return send(res, 401, { error: 'Sign in first' })
+      if (!(await requireSession(res, cfg, bearer(req)))) return
       if (body.op === 'new') return send(res, 200, await newHealthKey(cfg, body.label))
       if (body.op === 'drop') await dropHealthKey(cfg, body.id)
       return send(res, 200, { keys: await listHealthKeys(cfg) })
@@ -205,7 +204,7 @@ async function health(req, res) {
 async function plugins(req, res) {
   const cfg = config()
   if (!cfg.ok) return send(res, 503, { error: 'Server not set up' })
-  if (!(await sessionOk(cfg, bearer(req)).catch(() => false))) return send(res, 401, { error: 'Sign in first' })
+  if (!(await requireSession(res, cfg, bearer(req)))) return
   try {
     if (!(await gate(cfg, 'plugins-now', 20_000))) return send(res, 429, { error: 'Just refreshed: try again in a moment' })
     const hasAi = (process.env.OPENROUTER_API_KEY || process.env.GEMINI_API_KEY || '').trim()
