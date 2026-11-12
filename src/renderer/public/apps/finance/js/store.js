@@ -91,6 +91,8 @@ function failed(e) {
 }
 
 export function save(state, storage = globalThis.localStorage) {
+  // A direct save is the newest copy: a waiting (debounced) one must not land after it.
+  cancelPending();
   try {
     const head = readHead(storage);
     if (!head?.enc) {
@@ -110,8 +112,52 @@ export function save(state, storage = globalThis.localStorage) {
   }
 }
 
-// Resolves once every queued encrypted write is on disk.
-export const flush = () => queue;
+// ---------- Saving soon (debounced) ----------
+// With thousands of records, writing the whole state on every tap is slow and
+// makes Life System's sync re-merge it each time. saveSoon() keeps only the
+// latest state and writes it once things are quiet for SAVE_DELAY ms (one
+// write for a burst of changes). The write is the same full, plain save(), so
+// Life System's sync (appSync.ts) sees exactly what it saw before, only less
+// often. flushSave() writes a waiting save now: on leaving the page, before
+// reading the stored copy back, and before encryption or a reset.
+
+export const SAVE_DELAY = 400;
+let pending = null; // { state, storage }
+let timer = null;
+const savedHooks = new Set();
+
+function cancelPending() {
+  pending = null;
+  if (timer) { clearTimeout(timer); timer = null; }
+}
+
+// Called after each debounced write lands, with whether it worked.
+export function onSaved(fn) {
+  savedHooks.add(fn);
+  return () => savedHooks.delete(fn);
+}
+
+export const hasPendingSave = () => !!pending;
+
+export function saveSoon(state, storage = globalThis.localStorage, delay = SAVE_DELAY) {
+  if (isPlaceholder(state) && !readHead(storage)?.enc) return false;
+  pending = { state, storage };
+  if (timer) clearTimeout(timer);
+  timer = setTimeout(() => { timer = null; flushSave(); }, delay);
+  return true;
+}
+
+// Writes the waiting save now (if any). Returns whether it worked (true when nothing waited).
+export function flushSave() {
+  if (!pending) return true;
+  const { state, storage } = pending;
+  const ok = save(state, storage); // clears `pending`
+  for (const fn of savedHooks) { try { fn(ok); } catch {} }
+  return ok;
+}
+
+// Resolves once every waiting and queued encrypted write is on disk.
+export const flush = () => { flushSave(); return queue; };
 
 async function keyFor(pin, salt, iter) {
   const id = `${salt}|${iter}|${pin}`;
@@ -174,6 +220,7 @@ export async function disableEncryption(state, storage = globalThis.localStorage
 
 // "Reset this device": every stored copy goes.
 export function wipeStore(storage = globalThis.localStorage) {
+  cancelPending();
   session = null;
   keyCache.clear();
   for (const k of [KEY, ENC, HEAD]) storage?.removeItem(k);

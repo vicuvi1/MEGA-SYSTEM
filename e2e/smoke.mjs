@@ -653,6 +653,66 @@ try {
     await pg.keyboard.press('Enter')
     await pg.waitForFunction(() => /smoke lunch/.test(document.querySelector('.mh-recent')?.textContent ?? ''), null, { timeout: 8000 })
   })
+  // Money fixes (2026-11-12): a foreign amount is converted through USD (never counted 1:1),
+  // and a single amount shows its bani with Finance Helper's own formatter ("12,50 MDL").
+  await step('Money amounts: a 10 EUR quick add counts as 200 MDL; a single amount shows 12,50 MDL', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('money')
+    await pg.waitForSelector('.mh-hero .mh-big', { timeout: 15000 })
+    // A made-up euro account and rates (units per 1 USD: 1 EUR = 17.6 / 0.88 = 20 MDL) on this device;
+    // the app sync carries them to the synced copy quick add reads.
+    await pg.evaluate(() => {
+      const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+      if (!st) throw new Error('no Finance Helper data on this device')
+      const now = Date.now()
+      st.settings.accounts = [...(st.settings.accounts || []).filter((a) => a.id !== 'smoke-eur'), { id: 'smoke-eur', name: 'Euroacc', kind: 'card', currency: 'EUR', updatedAt: now }]
+      st.settings.updatedAt = now
+      st.rates = { ...(st.rates || {}), usd: { ...(st.rates?.usd || {}), USD: 1, MDL: 17.6, EUR: 0.88 }, crypto: st.rates?.crypto || {}, history: st.rates?.history || {}, fetchedAt: now }
+      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      window.dispatchEvent(new CustomEvent('life-finance-changed'))
+    })
+    const nb = (t) => String(t || '').replace(/ /g, ' ')
+    // Wait until the preview knows the euro account (the sync runs in the background).
+    const end = Date.now() + 20000
+    for (;;) {
+      await pg.fill('.mh-quick input', '')
+      await pg.fill('.mh-quick input', '10 smoke coffee euroacc')
+      const p = await pg.waitForSelector('.mq-preview b', { timeout: 4000 }).then((el) => el.innerText()).catch(() => '')
+      if (/10 EUR/.test(nb(p))) break
+      if (Date.now() > end) throw new Error(`the preview never showed the euro amount (${nb(p)})`)
+      await pg.waitForTimeout(800)
+    }
+    await pg.keyboard.press('Enter')
+    await pg.waitForFunction(() => [...document.querySelectorAll('.mh-recent li')].some((li) => /smoke coffee/.test(li.textContent) && /200\sMDL/.test(li.textContent.replace(/ /g, ' '))), null, { timeout: 10000 }).catch(async () => {
+      throw new Error(`10 EUR did not count as 200 MDL: ${nb(await pg.locator('.mh-recent').innerText().catch(() => ''))}`)
+    })
+    // Take the euro record back out (Undo), so later steps see the usual data.
+    await pg.locator('.toasts button', { hasText: 'Undo' }).last().click().catch(() => {})
+    await pg.waitForFunction(() => ![...document.querySelectorAll('.mh-recent li')].some((li) => /smoke coffee/.test(li.textContent)), null, { timeout: 10000 }).catch(() => {})
+    // A single amount keeps its bani; the label is MDL, never "lei".
+    await pg.fill('.mh-quick input', '12.50 smoke tea')
+    await pg.waitForFunction(() => /12,50\sMDL/.test((document.querySelector('.mq-preview b')?.textContent || '').replace(/ /g, ' ')), null, { timeout: 8000 }).catch(async () => {
+      throw new Error(`the preview does not show 12,50 MDL: ${nb(await pg.locator('.mq-preview').innerText().catch(() => ''))}`)
+    })
+    await pg.keyboard.press('Enter')
+    await pg.waitForFunction(() => [...document.querySelectorAll('.mh-recent li')].some((li) => /smoke tea/.test(li.textContent) && /12,50\sMDL/.test(li.textContent.replace(/ /g, ' '))), null, { timeout: 10000 }).catch(async () => {
+      throw new Error(`the list does not show 12,50 MDL: ${nb(await pg.locator('.mh-recent').innerText().catch(() => ''))}`)
+    })
+    if (/\blei\b/.test(await pg.locator('.mh-hero').innerText())) throw new Error('the Money hero still says "lei"')
+    // Take it back too (Finance's totals stay whole for the steps after).
+    await pg.locator('.toasts button', { hasText: 'Undo' }).last().click().catch(() => {})
+    await pg.waitForFunction(() => ![...document.querySelectorAll('.mh-recent li')].some((li) => /smoke tea/.test(li.textContent)), null, { timeout: 10000 }).catch(() => {})
+    // Leave the euro account out of the data again (a deletion that syncs).
+    await pg.evaluate(() => {
+      const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+      if (!st) return
+      st.settings.accounts = (st.settings.accounts || []).filter((a) => a.id !== 'smoke-eur')
+      st.deleted = { ...(st.deleted || {}), 'smoke-eur': Date.now() }
+      st.settings.updatedAt = Date.now()
+      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      window.dispatchEvent(new CustomEvent('life-finance-changed'))
+    })
+  })
   for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky']]) {
     await step(`${name} loads with its own content`, async () => {
       await open(page)
@@ -706,6 +766,46 @@ try {
     await frame.click('.dn-sel [data-act="cat-log"]')
     await frame.waitForFunction(() => location.hash === '#log' && /cat:/.test(document.getElementById('search')?.value || ''), null, { timeout: 8000 })
     await frame.evaluate(() => { const s = document.getElementById('search'); if (s) { s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })) } })
+  })
+  // Money fix 2: rows in a currency with no rate are never imported 1:1. The preview warns
+  // ("No ZZZ→MDL rate for 12 rows: they would count 1:1") and Import waits for a rate or a skip.
+  // ZZZ is a made-up code, so no live rate can ever exist for it. Nothing is imported here.
+  await step('Finance import: rows with no rate show a warning; Import waits until a rate is set or the rows are skipped', async () => {
+    await open('money')
+    if (await pg.$('.mh-open')) await pg.click('.mh-open')
+    await pg.waitForTimeout(3500)
+    const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
+    const frame = src && pg.frames().find((f) => f.url().includes(src))
+    if (!frame) throw new Error('Finance Helper frame not loaded')
+    const rows = ['Date\tType\tAmount\tCurrency\tCategory\tAccount\tNote', ...Array.from({ length: 12 }, (_, i) => `2026-10-${String(i + 1).padStart(2, '0')}\tSpent\t10\tZZZ\tFood\tWallet\tsmoke zzz ${i}`), '2026-10-20\tSpent\t45\tMDL\tFood\tWallet\tsmoke lei row'].join('\n')
+    const paste = () => frame.evaluate((text) => {
+      const dt = new DataTransfer()
+      dt.setData('text/plain', text)
+      document.body.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true }))
+    }, rows)
+    await frame.evaluate(() => { location.hash = '#log' })
+    await frame.waitForFunction(() => location.hash === '#log' && !!document.getElementById('search'), null, { timeout: 8000 })
+    await paste()
+    await frame.waitForSelector('.sheet [data-testid="rate-gap"]', { timeout: 8000 })
+    const warn = (await frame.locator('.sheet [data-testid="rate-gap"]').innerText()).replace(/\s+/g, ' ')
+    if (!/No ZZZ→MDL rate for 12 rows: they would count 1:1/.test(warn)) throw new Error(`warning text: ${warn}`)
+    for (const b of ['Fetch rates', 'Set rate', 'Skip these rows']) if (!(await frame.locator('.sheet [data-testid="rate-gap"] button', { hasText: b }).count())) throw new Error(`no "${b}" button`)
+    if (!(await frame.locator('#imp-go').isDisabled())) throw new Error('Import is on while rows would count 1:1')
+    // Set one rate: the warning goes and Import turns on for all 13.
+    await frame.fill('.sheet [data-gap-rate="ZZZ"]', '20')
+    await frame.click('.sheet [data-gap="set"]')
+    await frame.waitForFunction(() => !document.querySelector('.sheet [data-testid="rate-gap"]') && !document.getElementById('imp-go')?.disabled, null, { timeout: 5000 })
+    if (!/Import 13/.test(await frame.locator('#imp-go').innerText())) throw new Error('Import does not count the 13 rows')
+    await frame.click('.sheet [data-close].btn')
+    await frame.waitForFunction(() => !document.querySelector('.sheet'), null, { timeout: 5000 }).catch(() => {})
+    await pg.waitForTimeout(400)
+    // Or skip them: only the lei row is left to import.
+    await paste()
+    await frame.waitForSelector('.sheet [data-testid="rate-gap"]', { timeout: 8000 })
+    await frame.click('.sheet [data-gap="skip"]')
+    await frame.waitForFunction(() => !document.querySelector('.sheet [data-testid="rate-gap"]') && /Import 1\b/.test(document.getElementById('imp-go')?.textContent || ''), null, { timeout: 5000 })
+    await frame.click('.sheet [data-close].btn')
+    await pg.waitForTimeout(400)
   })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
@@ -6584,8 +6684,9 @@ try {
     if (!(await pg.locator('.ot form.ot-add input[placeholder="Add a task…"]').count())) throw new Error('no "Add a task…" line under Other tasks')
     await pg.setViewportSize({ width: 1440, height: 900 })
   })
-  // A free day: "No spending today" ticks Log spending once, a second tap does nothing, undo takes it back.
-  await step('No spending: a free day ticks Log spending once, no second pay, undo takes it back', async () => {
+  // Money fix 5: one no-spend button, the honest one. "Nothing spent today" pays nothing at the
+  // tap; once the day is over it counts as a no-spend day only if nothing was logged for it.
+  await step('No spending: one "Nothing spent today" button, no instant points, judged at day end', async () => {
     await pg.setViewportSize({ width: 1280, height: 720 })
     // Its own state: the list view (an earlier step may leave the grid), a fresh page, Today → Now.
     await pg.evaluate(() => localStorage.setItem('ls.hbView', 'list'))
@@ -6593,12 +6694,6 @@ try {
     await open('today')
     await pg.click('.td2 .ptabs [data-tab="now"]')
     await pg.waitForSelector('.hb .hb-row', { timeout: 15000 })
-    const row = pg.locator('.hb-row', { hasText: 'Log spending' }).first()
-    if (!(await row.count())) {
-      // Hidden by an earlier step: show it again from the board's ⋯ menu.
-      await pg.locator('.hb-head .hb-more, .hb-head [aria-label*="More"]').first().click().catch(() => {})
-      throw new Error('the Log spending row is not on the board (hidden or removed)')
-    }
     const coins = () => pg.evaluate(() => document.querySelector('.topbar .tb-coins')?.textContent?.trim() ?? '')
     const settled = async () => {
       let v = await coins()
@@ -6616,46 +6711,29 @@ try {
       localStorage.setItem('finance-helper.state', JSON.stringify({ settings: { currency: 'MDL', categories: [], accounts: [] }, tx: [] }))
       return old
     })
-    const already = /s-done/.test((await row.getAttribute('class')) ?? '')
-    // The same way a home-screen shortcut opens the spending line (a ticked row has no tap target).
-    await pg.evaluate(() => window.dispatchEvent(new Event('life-open-spend')))
-    await pg.waitForSelector('.spend-line', { timeout: 3000 })
-    const btn = pg.locator('.spend-line [data-testid="free-day"]')
-    await btn.waitFor({ timeout: 3000 })
-    if (!/No spending today/.test(await btn.innerText())) throw new Error('no "No spending today" button in the spending line')
-    if (already) {
-      // Spending was already paid earlier in this run: a free day must not pay a second time.
-      const was = await settled()
-      await btn.click()
-      await pg.waitForTimeout(1500)
-      if ((await settled()) !== was) throw new Error('a free day paid again on a day that was already paid')
+    try {
+      // The same way a home-screen shortcut opens the spending line.
+      await pg.evaluate(() => window.dispatchEvent(new Event('life-open-spend')))
+      await pg.waitForSelector('.spend-line', { timeout: 3000 })
+      if (await pg.locator('.spend-line [data-testid="free-day"]').count()) throw new Error('the old "No spending today" button is still there')
+      if (/No spending today/.test(await pg.locator('.spend-line').innerText())) throw new Error('"No spending today" still shows next to "Nothing spent today"')
+      const btn = pg.locator('.spend-line [data-testid="no-spend"]')
+      await btn.waitFor({ timeout: 3000 })
+      if (!/Nothing spent today/.test(await btn.innerText())) throw new Error('no "Nothing spent today" button in the spending line')
+      const before = await settled()
+      if (!(await btn.isDisabled())) {
+        await btn.click()
+        await pg.waitForFunction(() => /✓ Nothing spent today/.test(document.querySelector('.spend-line [data-testid="no-spend"]')?.textContent ?? ''), null, { timeout: 8000 }).catch(async () => {
+          throw new Error(`the button did not take the tap (toast: ${(await pg.locator('.toasts').innerText().catch(() => '')).replace(/\s+/g, ' ')})`)
+        })
+        if (!(await btn.isDisabled())) throw new Error('a second tap is still possible')
+      }
+      await pg.waitForTimeout(800)
+      if ((await settled()) !== before) throw new Error('"Nothing spent today" paid points at the tap (it is judged at day end)')
+      if (process.env.NOSPEND_SHOTS) await pg.screenshot({ path: join(process.env.NOSPEND_SHOTS, 'nothing-spent.png') })
+    } finally {
       await pg.evaluate((old) => (old === null ? localStorage.removeItem('finance-helper.state') : localStorage.setItem('finance-helper.state', old)), keptFinance)
-      return
     }
-    const before = await settled()
-    await btn.click()
-    await pg.waitForTimeout(1500)
-    const said = (await pg.locator('.toasts').innerText().catch(() => '')).replace(/\s+/g, ' ')
-    await pg.waitForFunction(() => [...document.querySelectorAll('.hb-row')].some((r) => /Log spending/.test(r.textContent) && /s-done/.test(r.className)), null, { timeout: 8000 }).catch(async () => {
-      throw new Error(`"No spending today" did not tick Log spending (toast: ${said})`)
-    })
-    await pg.waitForFunction(() => /✓ No spending today/.test(document.querySelector('.spend-line [data-testid="free-day"]')?.textContent ?? ''), null, { timeout: 5000 })
-    await pg.waitForTimeout(800)
-    const after = await settled()
-    if (after === before) throw new Error(`a free day paid no points (${before})`)
-    // A second tap is Undo, not a second pay: undo takes the points back and un-ticks the habit.
-    await btn.click()
-    await pg.waitForFunction(() => [...document.querySelectorAll('.hb-row')].some((r) => /Log spending/.test(r.textContent) && !/s-done/.test(r.className)), null, { timeout: 8000 }).catch(() => {
-      throw new Error('undo did not un-tick Log spending')
-    })
-    await pg.waitForTimeout(800)
-    if ((await settled()) !== before) throw new Error('undo did not take the points back')
-    // Tap again for the screenshot and leave the day free.
-    await pg.locator('.spend-line [data-testid="free-day"]').click()
-    await pg.waitForFunction(() => /✓ No spending today/.test(document.querySelector('.spend-line [data-testid="free-day"]')?.textContent ?? ''), null, { timeout: 5000 })
-    if (process.env.NOSPEND_SHOTS) await pg.waitForFunction(() => !document.querySelector('.toasts .toast'), null, { timeout: 10000 }).catch(() => {})
-    if (process.env.NOSPEND_SHOTS) await pg.screenshot({ path: join(process.env.NOSPEND_SHOTS, 'free-day.png') })
-    await pg.evaluate((old) => (old === null ? localStorage.removeItem('finance-helper.state') : localStorage.setItem('finance-helper.state', old)), keptFinance)
   })
   // Career (made-up data): the job board with its weekly quota, a flashcard review,
   // the portfolio export, an essay planned backward, pay yourself first, the letter.

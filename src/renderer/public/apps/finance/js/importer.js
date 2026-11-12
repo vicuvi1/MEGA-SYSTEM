@@ -4,7 +4,7 @@
 import { parseAmount, centsToPlain } from './money.js';
 import { parseLooseDate } from './dates.js';
 import { suggestCategory, uid, ensurePerson, B } from './model.js';
-import { pairRate } from './fx.js';
+import { pairRate, rateOnDay } from './fx.js';
 import { subsOf, subOf, suggestSub, isOther } from './cattree.js';
 
 const norm = (s) => String(s || '').trim().toLowerCase()
@@ -141,6 +141,55 @@ export function importRows(rows, state, { account } = {}) {
   const expense = out.filter((t) => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
   const months = [...new Set(out.map((t) => t.date.slice(0, 7)))].sort();
   return { format: cols.format, tx: out, duplicates, skipped, income, expense, months, allMonths: [...allMonths].sort(), dup, skippedRows, stated: cols.format === 'sheet' ? statedTotals(rows) : null };
+}
+
+// ---------- Rows in another currency without a rate ----------
+// Imported rows keep `rate: null` when no rate to the main currency is known.
+// They must never go in silently as 1:1 (10 EUR counted as 10 MDL): the
+// import preview lists them per currency and asks to fetch rates, set one
+// rate, or skip those rows.
+
+const needsRate = (t, baseCur) => !!t && t.type !== 'transfer' && (t.currency || baseCur) !== baseCur && !(t.rate > 0);
+
+// [{ currency, count }] for rows that still have no rate.
+export function rateGaps(txs, baseCur) {
+  const by = new Map();
+  for (const t of txs || []) if (needsRate(t, baseCur)) by.set(t.currency, (by.get(t.currency) || 0) + 1);
+  return [...by].map(([currency, count]) => ({ currency, count }));
+}
+
+// One rate for every row in `currency` that has none yet. Returns how many.
+export function fillRate(txs, currency, rate, baseCur) {
+  if (!(rate > 0)) return 0;
+  let n = 0;
+  for (const t of txs || []) {
+    if (!needsRate(t, baseCur) || t.currency !== currency) continue;
+    t.rate = rate;
+    t.base = Math.round(t.amount * rate);
+    n++;
+  }
+  return n;
+}
+
+// Rates now known (after "Fetch rates"): each row gets the rate of its day
+// when saved, else today's. Returns how many rows got one.
+export function fillKnownRates(txs, state) {
+  const baseCur = state.settings.currency;
+  let n = 0;
+  for (const t of txs || []) {
+    if (!needsRate(t, baseCur)) continue;
+    const r = rateOnDay(state, t.currency, t.date);
+    if (!(r > 0)) continue;
+    t.rate = Math.round(r * 10000) / 10000;
+    t.base = Math.round(t.amount * t.rate);
+    n++;
+  }
+  return n;
+}
+
+// The rows without the ones in `currency` that have no rate ("Skip these rows").
+export function skipNoRate(txs, currency, baseCur) {
+  return (txs || []).filter((t) => !(needsRate(t, baseCur) && t.currency === currency));
 }
 
 // Totals your sheet states itself, from cells labelled e.g. "PROFIT (this

@@ -14,13 +14,16 @@ import { soundCoin, soundWarning } from '../soundKit'
 import { useAction } from '../ui'
 import { usePoints } from '../usePoints'
 import { flyTo, QuickAddBox } from '../MoneyQuick'
-import { budgetEffect, goalPlan, leiText, mergeGoals, overLine, worstLevel, daysInMonth, type BudgetLevel, type GoalIn, type GoalPlan } from '@core/moneyHub'
+import { budgetEffect, goalPlan, mergeGoals, overLine, worstLevel, daysInMonth, type BudgetLevel, type GoalIn, type GoalPlan } from '@core/moneyHub'
+import { moneyText, totalNumber, totalText } from '@core/moneyText'
 import { pointValue, pointValueLine, type PointValue } from '@core/pointValue'
 import type { MoneyHubView } from '../web/moneyHub'
 import '../money.css'
 import { Donut } from '../Donut'
 
-const lei = (bani: number) => Math.round(bani / 100).toLocaleString('en-US')
+// One money formatter, shared with Finance Helper (core/moneyText): single
+// amounts keep their bani (12,50 MDL), totals are whole units; the label is
+// Finance Helper's currency code (MDL), never "lei".
 const DOW = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
 const dow = (iso: string) => DOW[new Date(`${iso}T12:00:00Z`).getUTCDay()]
 const SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
@@ -83,8 +86,8 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
   const ring = useRef<HTMLDivElement>(null)
   const [pop, setPop] = useState(0)
   const openApp = onOpenApp ?? (() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'money' })))
-  const added = (r: { line: string; amount: number; type: string }, input: HTMLElement | null) => {
-    void flyTo(input, ring.current, `${r.type === 'income' ? '+' : '−'}${lei(r.amount)}`).then(() => setPop((n) => n + 1))
+  const added = (r: { line: string; amount: number; type: string; currency?: string }, input: HTMLElement | null) => {
+    void flyTo(input, ring.current, `${r.type === 'income' ? '+' : '−'}${moneyText(r.amount, r.currency || view?.currency)}`).then(() => setPop((n) => n + 1))
     onWallet()
   }
   return (
@@ -94,6 +97,7 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
         <i className="b" />
         <i className="c" />
       </div>
+      <InboxWarn />
       {view === undefined ? (
         <HubSkeleton />
       ) : !view ? (
@@ -149,6 +153,48 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
   )
 }
 
+// ------------------------------------------------- Telegram inbox warning
+
+/**
+ * Entries sent from Telegram wait in an inbox until Finance Helper takes them.
+ * One still waiting after 50 days is shown here with "Apply now"; none is
+ * ever dropped silently (web/financeInbox.ts keepInbox).
+ */
+function InboxWarn() {
+  const [w, setW] = useState<import('../web/financeInbox').InboxWarning | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  useEffect(() => {
+    if (!life.finance?.inboxWarning) return
+    const load = () => void life.finance!.inboxWarning().then(setW).catch(() => setW(null))
+    load()
+    window.addEventListener('life-finance-changed', load)
+    return () => window.removeEventListener('life-finance-changed', load)
+  }, [])
+  if (!w) return null
+  const apply = async () => {
+    if (!life.finance?.applyInbox) return
+    setBusy(true)
+    try {
+      const r = await life.finance.applyInbox()
+      setW(r.warning)
+      setNote(r.warning ? `${r.added ? `Added ${r.added}. ` : ''}Some could not be added here: open Finance Helper on this device (unlock it if it has a PIN) and try again.` : null)
+      if (r.added) window.dispatchEvent(new CustomEvent('life-money-changed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="mh-card mh-inbox-warn" role="alert" data-testid="inbox-warn">
+      <span>⏳ {w.line}</span>
+      <button className="mh-pillbtn" onClick={() => void apply()} disabled={busy}>
+        {busy ? 'Applying…' : 'Apply now'}
+      </button>
+      {note && <small>{note}</small>}
+    </div>
+  )
+}
+
 // ---------------------------------------------------------------- the hero
 
 function Ring({ frac, level, size = 168, stroke = 14, children, className = '' }: { frac: number; level: BudgetLevel; size?: number; stroke?: number; children?: ReactNode; className?: string }) {
@@ -171,6 +217,7 @@ function Ring({ frac, level, size = 168, stroke = 14, children, className = '' }
 
 function Hero({ view, ringRef, pop, streak }: { view: MoneyHubView; ringRef: React.RefObject<HTMLDivElement | null>; pop: number; streak: number }) {
   const h = view.hero
+  const cur = view.currency
   const left = useCountUp(Math.max(0, h.leftToday), 380)
   const level = worstLevel(h.dayLevel, h.monthLevel)
   const [fx, setFx] = useState<'flash' | 'shake' | null>(null)
@@ -202,26 +249,26 @@ function Hero({ view, ringRef, pop, streak }: { view: MoneyHubView; ringRef: Rea
       <div className="mh-hero-main">
         <span className="mh-eyebrow">Safe to spend today</span>
         <div className="mh-big">
-          <span className="num">{lei(left)}</span>
-          <small>lei</small>
+          <span className="num">{totalNumber(left)}</span>
+          <small>{cur}</small>
         </div>
         <p className="mh-sub">
           {h.short > 0 ? (
-            <>Bills and savings need {leiText(h.short)} more before payday.</>
+            <>Bills and savings need {totalText(h.short, cur)} more before payday.</>
           ) : (
             <>
-              <b>{leiText(Math.max(0, h.left))}</b> left for {h.leftDays} {h.leftDays === 1 ? 'day' : 'days'}
+              <b>{totalText(Math.max(0, h.left), cur)}</b> left for {h.leftDays} {h.leftDays === 1 ? 'day' : 'days'}
               {h.leftFor === 'limit' ? ' of your monthly limit' : ' until payday'}
             </>
           )}
         </p>
         <div className="mh-chips">
           <span>
-            Spent today <b>{leiText(h.spentToday)}</b>
+            Spent today <b>{totalText(h.spentToday, cur)}</b>
           </span>
           {h.perDay > 0 && (
             <span>
-              Day's share <b>{leiText(h.perDay)}</b>
+              Day's share <b>{totalText(h.perDay, cur)}</b>
             </span>
           )}
           {streak > 0 && <span className="mh-badge">🏅 {streak === 1 ? 'Under budget yesterday' : `${streak} days under budget`}</span>}
@@ -248,7 +295,7 @@ function Hero({ view, ringRef, pop, streak }: { view: MoneyHubView; ringRef: Rea
         <div className="mh-bars">
           {h.perDay > 0 && <span className="mh-line" style={{ transform: `translateY(${-(h.perDay / max) * 64}px)` }} title="Today's share" />}
           {view.week.map((d, i) => (
-            <div key={d.day} className={`mh-bar ${d.day === view.today ? 'today' : ''} ${h.perDay > 0 && d.spent > h.perDay ? 'over' : ''}`} title={`${shortDay(d.day)}: ${leiText(d.spent)}`}>
+            <div key={d.day} className={`mh-bar ${d.day === view.today ? 'today' : ''} ${h.perDay > 0 && d.spent > h.perDay ? 'over' : ''}`} title={`${shortDay(d.day)}: ${totalText(d.spent, cur)}`}>
               <i style={{ height: `${Math.max(3, (d.spent / max) * 64)}px`, animationDelay: `${i * 30}ms` }} />
               <small>{dow(d.day)}</small>
             </div>
@@ -275,7 +322,7 @@ function Recent({ view }: { view: MoneyHubView }) {
           </span>
           <span className={`mh-amt num ${t.type === 'income' ? 'in' : ''}`}>
             {t.type === 'income' ? '+' : '−'}
-            {lei(t.amount)}
+            {moneyText(t.amount, view.currency)}
           </span>
         </li>
       ))}
@@ -305,8 +352,8 @@ function WhereMoneyGoes({ view }: { view: MoneyHubView }) {
       </header>
       <div className="mh-where-body">
         <Donut parts={parts.map((p, i) => ({ key: p.key, value: p.v, color: DONUT_COLORS[i % DONUT_COLORS.length], label: p.name }))} total={total}>
-          <b className="num">{lei(c.thisTotal)}</b>
-          <small>lei spent</small>
+          <b className="num">{totalNumber(c.thisTotal)}</b>
+          <small>{view.currency} spent</small>
           {c.pct !== null && <em className={c.pct > 0 ? 'up' : c.pct < 0 ? 'down' : ''}>{c.pct > 0 ? `▲ ${c.pct}%` : c.pct < 0 ? `▼ ${Math.abs(c.pct)}%` : 'same as before'}</em>}
         </Donut>
         <ul className="mh-legend">
@@ -314,7 +361,7 @@ function WhereMoneyGoes({ view }: { view: MoneyHubView }) {
             <li key={p.key}>
               <i style={{ background: DONUT_COLORS[i % DONUT_COLORS.length] }} />
               <span>{p.name}</span>
-              <b className="num">{lei(p.v)}</b>
+              <b className="num">{totalText(p.v, view.currency)}</b>
             </li>
           ))}
           {!parts.length && <li className="mh-hint">Nothing spent yet this month.</li>}
@@ -324,7 +371,7 @@ function WhereMoneyGoes({ view }: { view: MoneyHubView }) {
       <div className="mh-vs">
         <div>
           <small>Same days last month</small>
-          <b className="num">{leiText(c.lastTotal)}</b>
+          <b className="num">{totalText(c.lastTotal, view.currency)}</b>
         </div>
       </div>
       {c.changes.length > 0 && (
@@ -382,7 +429,7 @@ function Forecast({ view }: { view: MoneyHubView }) {
         </svg>
         <span className={`mh-chart-end ${good ? 'good' : 'bad'}`} style={{ top: `${(y(endV) / H) * 150}px` }}>
           {good ? '+' : '−'}
-          {lei(Math.abs(f.endNet))}
+          {totalText(Math.abs(f.endNet), view.currency)}
         </span>
         <div className="mh-chart-x">
           <span>1 {SHORT[Number(f.month.slice(5, 7)) - 1]}</span>
@@ -395,17 +442,17 @@ function Forecast({ view }: { view: MoneyHubView }) {
       <div className="mh-vs three">
         <div>
           <small>Spend up to</small>
-          <b className="num">{leiText(f.safeDaily)}</b>
+          <b className="num">{totalText(f.safeDaily, view.currency)}</b>
           <small>a day to end even</small>
         </div>
         <div>
           <small>Your pace</small>
-          <b className="num">{leiText(f.pace)}</b>
+          <b className="num">{totalText(f.pace, view.currency)}</b>
           <small>a day</small>
         </div>
         <div>
           <small>Bills ahead</small>
-          <b className="num">{view.bills.length ? leiText(view.bills.reduce((s, b) => s + b.amount, 0)) : '–'}</b>
+          <b className="num">{view.bills.length ? totalText(view.bills.reduce((s, b) => s + b.amount, 0), view.currency) : '–'}</b>
           <small>{view.bills.length ? `next: ${view.bills[0].name}, ${shortDay(view.bills[0].date)}` : 'next 7 days'}</small>
         </div>
       </div>
@@ -448,7 +495,7 @@ function Goals({ view }: { view: MoneyHubView }) {
               <div className="mh-goal-text">
                 <b>{g.name}</b>
                 <small className="num">
-                  {lei(g.current)} of {leiText(g.target)} · {Math.round(g.ratio * 100)}%
+                  {totalNumber(g.current)} of {totalText(g.target, view.currency)} · {Math.round(g.ratio * 100)}%
                 </small>
                 <span>{g.line}</span>
                 {g.eta && g.eta !== 'done' && <small>At your pace: {g.eta}</small>}
@@ -486,20 +533,20 @@ function FunCard() {
       </header>
       <div className="mh-fun-body">
         <Ring frac={frac} level={budget > 0 && frac < 0.2 ? 'warn' : 'ok'} size={96} stroke={10} className="small">
-          <span className="mh-ring-num small num">{budget > 0 ? lei(Math.max(0, budget - v.funSpentLei) * 100) : '–'}</span>
-          <small>lei left</small>
+          <span className="mh-ring-num small num">{budget > 0 ? totalNumber(Math.max(0, budget - v.funSpentLei) * 100) : '–'}</span>
+          <small>MDL left</small>
         </Ring>
         <div className="mh-fun-text">
           {budget > 0 ? (
             <p>
-              <b>{lei(v.funSpentLei * 100)}</b> of {lei(budget * 100)} lei spent on fun this month.
+              <b>{totalNumber(v.funSpentLei * 100)}</b> of {totalText(budget * 100)} spent on fun this month.
             </p>
           ) : (
             <p>Set a monthly fun budget in Rewards: points then buy exactly that much fun.</p>
           )}
           <p className="mh-pv">{pointValueLine(v.value)}</p>
           <small>{v.value.source === 'budget' ? `Your fun budget over the ${v.value.usualMonthlyPoints} points you usually earn a month.` : 'The standard rate until you set a fun budget.'}</small>
-          {v.hourlyLei ? <small>An hour of your work ≈ {Math.round(v.hourlyLei)} lei.</small> : null}
+          {v.hourlyLei ? <small>An hour of your work ≈ {totalText(v.hourlyLei * 100)}.</small> : null}
         </div>
       </div>
     </section>
@@ -571,11 +618,11 @@ function PointsCard({ state, onState, days, onWallet }: { state: ConnectionsStat
         <span>Daily budget for points</span>
         {draft === null ? (
           <button className="mh-link" onClick={() => setDraft(String(f.dailyBudget || ''))}>
-            {f.dailyBudget ? `${f.dailyBudget} lei · change` : 'Set one'}
+            {f.dailyBudget ? `${totalText(f.dailyBudget * 100)} · change` : 'Set one'}
           </button>
         ) : (
           <span className="mh-inline">
-            <input autoFocus type="number" min={0} inputMode="numeric" aria-label="Daily budget in lei" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void save()} />
+            <input autoFocus type="number" min={0} inputMode="numeric" aria-label="Daily budget in MDL" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void save()} />
             <button className="mq-go" onClick={() => void save()}>
               Save
             </button>

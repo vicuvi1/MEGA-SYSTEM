@@ -7,6 +7,8 @@ import { safeToSpend, limitStatus, isEveryday } from '../../public/apps/finance/
 // @ts-ignore
 import { upcomingItems } from '../../public/apps/finance/js/recurring.js'
 // @ts-ignore
+import { countsAsSpending } from '../../public/apps/finance/js/catshare.js'
+// @ts-ignore
 import { goalStatus, normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } from '../../public/apps/finance/js/model.js'
 import { addDays } from '@core/dates'
 import {
@@ -72,7 +74,10 @@ export function cleanFinance(raw: any): any | null {
 
 function hubTx(state: any): HubTx[] {
   return (state.tx as any[])
-    .filter((t) => t && !t.deleted && typeof t.date === 'string' && t.type !== 'transfer' && !t.loan)
+    // Spending is Finance's own rule (catshare.js countsAsSpending, the same as
+    // its "Where your money goes" donut): a reward bought with points
+    // (life-reward-…) is not real money and is left out here too.
+    .filter((t) => t && !t.deleted && typeof t.date === 'string' && t.type !== 'transfer' && !t.loan && (t.type !== 'expense' || countsAsSpending(t)))
     .map((t) => ({ id: String(t.id), date: t.date.slice(0, 10), type: t.type, amount: Math.abs(B(t)), category: String(t.category ?? 'other'), note: t.note ? String(t.note) : undefined, everyday: t.type === 'expense' && isEveryday(state, t) }))
 }
 

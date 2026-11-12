@@ -3921,6 +3921,15 @@ body.locked .calc-fab, body.locked .calc, body.printing .calc-fab, body.printing
 @keyframes alert-in { from { opacity: 0; transform: translateY(-4px); } }
 .banner.warn { border-color: color-mix(in srgb, var(--expense) 50%, var(--line)); background: var(--expense-soft); }
 
+/* Import preview: rows in another currency with no rate (never imported 1:1) */
+.rate-gap { border: 1px solid color-mix(in srgb, var(--warn) 55%, var(--line)); background: var(--warn-soft); border-radius: var(--radius-sm); padding: 10px 12px; margin: 10px 0; font-size: 14px; }
+.rate-gap p { margin: 0 0 8px; }
+.rate-gap-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.rate-gap-set { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.rate-gap-set input { width: 6em; min-height: 32px; }
+/* Re-price past entries */
+.reprice-table td.num, .reprice-table th.num { text-align: right; white-space: nowrap; }
+
 /* ---------- Look B · Midnight premium ----------
    Serif (Fraunces) for page titles and the figures that matter; a plain
    panel sidebar with a gold edge on the open section; calmer cards. */

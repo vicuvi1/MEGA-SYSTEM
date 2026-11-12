@@ -10,7 +10,7 @@ import { ctx, esc } from '../ctx.js';
 import * as M from '../model.js';
 import * as T from '../cattree.js';
 import { todayISO, addMonths, monthKey, monthLabel } from '../dates.js';
-import { categoryShares, changeText, spendRange, SPEND_PERIODS, OTHER_ID } from '../catshare.js';
+import { categoryShares, changeText, spendRange, SPEND_PERIODS, OTHER_ID, countsAsSpending } from '../catshare.js';
 
 const TOP = 7; // openCategory's own fold ("Everything else"), kept for the old sheet
 
@@ -153,7 +153,7 @@ function selectedPanel(key, items, range, list, base) {
   const it = id && items.find((x) => x.id === id) || id && items.flatMap((x) => x.items || []).find((x) => x.id === id);
   if (!it) return '';
   const ids = new Set(id === OTHER_ID ? it.items.map((x) => x.id) : [id]);
-  const recs = M.sortTx(list.filter((t) => t.type === 'expense' && !t.loan && !String(t.id || '').startsWith('life-reward-') && ids.has(t.category) && t.date >= range.from && t.date <= range.to));
+  const recs = M.sortTx(list.filter((t) => countsAsSpending(t) && ids.has(t.category) && t.date >= range.from && t.date <= range.to));
   const nm = id === OTHER_ID ? 'Other' : M.category(state, id)?.name || 'Unknown';
   return `<div class="dn-sel" role="region" aria-label="${esc(nm)} records">
     <div class="dn-sel-h"><b>${esc(nm)}</b><span class="muted small">${recs.length} record${recs.length === 1 ? '' : 's'} · ${esc(range.label)}</span>
