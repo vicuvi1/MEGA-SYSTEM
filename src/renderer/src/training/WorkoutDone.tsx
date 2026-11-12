@@ -152,8 +152,9 @@ export function WorkoutDone({ t, view, title, onClose }: { t: SportTrain; view: 
               ))}
             </article>
           )}
-          <button type="button" className="wdn-btn big" onClick={onClose} data-tg="finish-close">
-            Done · back to Today
+          {/* The one main button, unless "Apply next time" is waiting (Esc closes too). */}
+          <button type="button" className={`wdn-btn big ${(a?.kind === 'up' || a?.kind === 'down') && !said ? '' : 'primary'}`} onClick={onClose} data-tg="finish-close">
+            Done
           </button>
         </aside>
       </section>

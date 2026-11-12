@@ -120,7 +120,7 @@ export function FoodBoard({ weight, onLogWeight }: { weight: number | null; onLo
             className="fdb-mini"
             onClick={() => {
               repeats.current?.scrollIntoView({ block: 'center', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
-              repeats.current?.querySelector<HTMLButtonElement>('.fdb-tile')?.focus()
+              repeats.current?.querySelector<HTMLElement>('.fdb-tile')?.focus()
             }}
             data-fb="log-repeat"
           >
@@ -142,7 +142,7 @@ export function FoodBoard({ weight, onLogWeight }: { weight: number | null; onLo
             {FOOD_PASTE_PROMPT}
           </pre>
           <div className="fdb-row">
-            <button type="button" className="bdy-btn primary big fdb-copy" onClick={() => void copy()} data-fb="copy">
+            <button type="button" className="bdy-btn big fdb-copy" onClick={() => void copy()} data-fb="copy">
               {copied ? 'Copied' : 'Copy prompt'}
             </button>
             <button type="button" className="bdy-btn big" onClick={() => setAll((a) => !a)} aria-expanded={all} data-fb="show-all">
@@ -166,14 +166,14 @@ export function FoodBoard({ weight, onLogWeight }: { weight: number | null; onLo
       <section className="fdb-card fdb-repeats" aria-labelledby="fb-h3" data-fb="repeats" ref={repeats}>
         <div className="fdb-head">
           <h2 id="fb-h3">Repeat meals</h2>
-          <span>Double-click to log again · no AI needed</span>
+          <span>Press Log (or double-click a meal) to log it again · no AI needed</span>
         </div>
         {meals.length ? (
           <div className="fdb-tiles" role="list">
             {meals.map((m) => (
-              <button
+              <div
                 key={m.id}
-                type="button"
+                tabIndex={0}
                 role="listitem"
                 className="fdb-tile"
                 onDoubleClick={() => void logAgain(m.id)}
@@ -193,7 +193,18 @@ export function FoodBoard({ weight, onLogWeight }: { weight: number | null; onLo
                     {m.protein} g protein · {fmt(m.kcal)} kcal
                   </small>
                 </span>
-              </button>
+                {/* A plain button (double-click was the only way before, and nothing said so). */}
+                <button
+                  type="button"
+                  className="fdb-tile-log"
+                  data-fb="tile-log"
+                  onClick={(e) => (e.stopPropagation(), void logAgain(m.id))}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                  aria-label={`Log ${m.name} again`}
+                >
+                  + Log
+                </button>
+              </div>
             ))}
           </div>
         ) : (

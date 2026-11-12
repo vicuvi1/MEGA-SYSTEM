@@ -1,11 +1,13 @@
 // Settings → Simple mode (feature freeze, 2026-11-11; core/simpleMode.ts, core/notifyBudget.ts).
 // On by default: the unused modules are hidden (nothing is deleted) and at most 4 pushes a day.
 import { useEffect, useState } from 'react'
-import { DEFAULT_SIMPLE, HIDDEN_MODULES, type SimpleMode } from '@core/simpleMode'
+import { ARCHIVE_PAGES, DEFAULT_SIMPLE, HIDDEN_MODULES, toggleShown, type SimpleMode } from '@core/simpleMode'
+import { MODULES } from '../modules'
 import { DAILY_PUSH_CAP, SLOT_TIME, type BudgetLedger, type PushSlot } from '@core/notifyBudget'
 import { life } from '../bridge'
 import { Row, Switch } from '../settingsUi'
 import { Icon } from '../Icon'
+import './simple.css'
 
 const SLOT_NAME: Record<PushSlot, string> = { morning: 'your 3 must-dos', afternoon: 'afternoon nudge', weekly: 'the week', plan: "pick tomorrow's 3", winddown: 'wind down' }
 
@@ -20,6 +22,7 @@ export function SimpleModeSettings() {
     const next = await life.notifications?.saveSimple?.(p).catch(() => null)
     if (next) setM(next)
   }
+  const label = (id: string) => MODULES.find((x) => x.id === id)?.label ?? id
   return (
     <section className="panel" data-testid="simple-mode">
       <header className="panel-head">
@@ -28,7 +31,7 @@ export function SimpleModeSettings() {
         </h2>
         <span className={`chip ${m.on ? 'ok' : ''}`}>{m.on ? 'On' : 'Off'}</span>
       </header>
-      <p className="hint block">Today shows 3 numbers: sleep, focus blocks and 3 must-dos. While Simple mode is on, these are hidden from the menu, Today and notifications: {HIDDEN_MODULES.map((x) => x.label.toLowerCase()).join(', ')}. Nothing is deleted; turn it off to bring them back.</p>
+      <p className="hint block">The menu shows Today, Study Time, Sport Track and Money. Every other page is in the Archive at the bottom of the menu (Ctrl+K finds them all). Also hidden: {HIDDEN_MODULES.map((x) => x.label.toLowerCase()).join(', ')}. Nothing is deleted; turn Simple mode off to bring everything back.</p>
       <Row title="Simple mode" hint={m.on ? 'On: the unused parts are hidden.' : 'Off: everything shows again, with all its data.'}>
         <Switch on={m.on} label="Simple mode" onChange={(v) => void save({ on: v })} />
       </Row>
@@ -38,6 +41,20 @@ export function SimpleModeSettings() {
       <Row title={`Afternoon nudge (${SLOT_TIME.afternoon})`} hint='One short "2 of 3 done" in the afternoon. Off by default.'>
         <Switch on={m.afternoon} label="Afternoon nudge" onChange={(v) => void save({ afternoon: v })} />
       </Row>
+      {m.on && (
+        <div className="sm-archive" data-testid="simple-archive">
+          <h3>Archive pages in the menu</h3>
+          <p className="hint">Switch one on to put it back in the menu, under Money.</p>
+          <ul>
+            {ARCHIVE_PAGES.map((id) => (
+              <li key={id}>
+                <span>{label(id)}</span>
+                <Switch on={m.shown.includes(id)} label={`Show ${label(id)} in the menu`} onChange={(v) => void save({ shown: toggleShown(m, id, v) })} />
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       <p className="hint" data-testid="push-count">
         Pushes today: {led?.sent.length ?? 0} of {DAILY_PUSH_CAP}
         {led?.sent.length ? ` (${led.sent.map((s) => SLOT_NAME[s]).join(', ')})` : ''}

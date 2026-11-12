@@ -255,6 +255,8 @@ function useNow(ms: number) {
 }
 
 type Run = NonNullable<IslandSnapshot['running']>
+/** 750 → "0.75", 1500 → "1.5", 2000 → "2" (litres, for the water button). */
+const litres = (ml: number) => (ml / 1000).toFixed(2).replace(/\.?0+$/, '')
 /**
  * Study Time's clock: a pomodoro counts down (then +over), count up shows the
  * time studied; a break with a length shows its time left (brk). `mins`: what
@@ -2643,13 +2645,15 @@ export function DesktopIsland() {
       </section>
       <section className="dis-grid" aria-label="Record">
         {run ? (
-          <button data-q="stop" {...tp('simple:stop', () => tap({ kind: 'stop' }))}>⏹ Stop focus</button>
+          <button data-q="stop" title={`Stop and log ${run.subject}`} {...tp('simple:stop', () => tap({ kind: 'stop' }))}>⏹ Stop focus · <LiveTimer run={run} /></button>
         ) : (
           <button data-q="start" {...tp('simple:start', () => tap({ kind: 'start', subject: (firstOpen ?? 'Focus').slice(0, 40), minutes: 25 }))}>▶ Focus 25 min</button>
         )}
         <button data-q="bed" {...tp('simple:bed', () => tap({ kind: 'bed' }))}>🌙 In bed now</button>
         <button data-q="wake" {...tp('simple:wake', () => tap({ kind: 'wake' }))}>☀️ Up now</button>
-        <button data-q="water" {...tp('simple:water', () => tap({ kind: 'water', ml: 250 }))}>💧 +250 ml</button>
+        <button data-q="water" title="Log a glass of water" {...tp('simple:water', () => tap({ kind: 'water', ml: 250 }))}>
+          💧 +250 ml{s.water ? <small className="dis-water"> · {litres(s.water.ml)} of {litres(s.water.target)} L</small> : null}
+        </button>
         <button data-q="meal" {...tp('simple:meal', () => tap({ kind: 'open', page: 'food-paste' }))}>🍽 Log a meal / Paste from AI</button>
       </section>
       <form

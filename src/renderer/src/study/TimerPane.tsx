@@ -119,7 +119,6 @@ function TimerCard({ store, run, selected, onSelect }: { store: StudyStore; run:
             ▶ Start
           </button>
         </div>
-        <p className="sy-hint">One timer at a time: here, on the island and on your other devices. Breaks and pauses never count as study.</p>
       </section>
     )
   }

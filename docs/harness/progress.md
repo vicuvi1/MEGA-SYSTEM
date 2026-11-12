@@ -12,6 +12,11 @@ Keep it short and true: anything written here is what the next session will trus
 
 ## Session record
 
+### 2026-11-12: usability pass (Simple mode menu + the 7 daily flows)
+- Menu in Simple mode: Today, Study Time, Sport Track, Money (owner keeps Money), Settings; the rest in a closed Archive, any page back from Settings; Alt+number follows the menu.
+- Today logs last night in place, names the must-do it starts, shows a running block with Stop, Set tomorrow's 3 any hour; no dim / goal / verdict cards in Simple mode; one main button on Study Time, Sport Dashboard, Workout done; + Log on repeat meals; island Stop shows the time.
+- Fixed: the in-app focus island stayed open and empty after time was up. Verified: tsc, full vitest, full smoke. Branch usability-core, not pushed.
+
 ### 2026-11-07: Ben 2 and Sport Track v3
 - **Goal:** Ben 2 (41 picks) and the Sport Track muscle-growth system.
 - **Completed:**

@@ -767,6 +767,8 @@ export interface LifeApi {
     logBed(time?: string): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>
     /** The real wake-up time for today or one of the last 14 days (coins only for today). */
     setWake(day: string, time: string): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>
+    /** A bedtime for a past night (the morning row `day`): the record only, never points. */
+    setBed?(day: string, time: string): Promise<SleepLog>
     setTargets(weekday: string, weekend: string, bedtime?: string): Promise<SleepSummary>
     logs?(): Promise<SleepLog[]>
     setQuality?(day: string, quality: number): Promise<SleepLog>

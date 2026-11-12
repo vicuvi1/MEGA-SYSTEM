@@ -77,11 +77,12 @@ export function WorkoutMode({ t, flow, onClose, onDone }: { t: SportTrain; flow:
       e.preventDefault()
       if (painOpen) setPainOpen(false)
       else if (choice) setChoice(null)
-      else if (!done) onClose()
+      else if (done) onDone()
+      else onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [painOpen, choice, done, onClose])
+  }, [painOpen, choice, done, onClose, onDone])
 
   const gear = useMemo(() => trainOf(t.st).gear, [t.st])
   const choices = useMemo(() => (it ? moveChoices(it, gear) : null), [it, gear])
@@ -143,7 +144,8 @@ export function WorkoutMode({ t, flow, onClose, onDone }: { t: SportTrain; flow:
         <main className="wm-main">
           <section className="wm-media-col">
             <ExerciseMedia move={it.level.move} verdicts={t.verdicts} onVerdict={t.verdict} ctl={ctl} tempo={tempoFor(it.level)} className="wm-media fill" />
-            <MediaBar ctl={ctl} hasMedia={media.length > 0} />
+            {/* No demo: no dead play / repeat / speed buttons. */}
+            {media.length > 0 && <MediaBar ctl={ctl} hasMedia />}
           </section>
           <aside className="wm-side">
             <div className="wm-id">

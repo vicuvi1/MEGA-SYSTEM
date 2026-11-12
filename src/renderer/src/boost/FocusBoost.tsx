@@ -18,6 +18,7 @@ import { cleanMusicKit } from '@core/music'
 import { dayKey } from '@core/dates'
 import { life } from '../bridge'
 import { useToast } from '../ui'
+import { useSimple } from '../useSimple'
 import { askWhyStalling, DOJO_EVENT, loadBoost, musicPlaying, playUrl, STALL_EVENT, useBoost } from './boostBus'
 import { endKit, openKit } from './launch'
 import { installWins, onWinClip } from './wins'
@@ -65,6 +66,11 @@ export function FocusBoost() {
   const kitOpen = useRef<LaunchKit | null>(null)
   const prefsRef = useRef(prefs)
   prefsRef.current = prefs
+  // Simple mode (usability pass, 2026-11-12): no goal question at the start and no "how did it go?" at the end
+  // (Study Time already asks "What did you do?"; a must-do is its own goal). Settings → Simple mode brings them back.
+  const simple = useSimple()
+  const simpleRef = useRef(simple.on)
+  simpleRef.current = simple.on
 
   const onStart = useCallback(
     async (r: Run) => {
@@ -75,7 +81,7 @@ export function FocusBoost() {
         const res = await openKit(kit)
         toast(res.text, res.ok ? 'good' : 'info')
       }
-      if (p.goals) {
+      if (p.goals && !simpleRef.current) {
         setGoal('')
         setCard({ t: 'goal', run: r, kit: kit && !kit.auto ? kit : null })
       }
@@ -96,7 +102,7 @@ export function FocusBoost() {
     }
     const s = st.todaySessions.find((x) => x.startedAt === r.startedAt) ?? st.todaySessions.filter((x) => x.subject === r.subject).slice(-1)[0]
     // A cancelled timer logs nothing: no verdict to give.
-    if (!s || !p.goals) return
+    if (!s || !p.goals || simpleRef.current) return
     setCard({ t: 'verdict', run: r, minutes: s.minutes, goal: goals.current[r.startedAt] ?? '' })
   }, [toast])
 

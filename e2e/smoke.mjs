@@ -267,6 +267,56 @@ try {
       await pg.evaluate(() => localStorage.removeItem('life_soak'))
     }
   })
+  // Usability pass (2026-11-12): in Simple mode the menu is Today, Study Time, Sport Track and Money (the owner keeps
+  // Money), then Settings; every other page is in one closed Archive group. A page comes back from Settings → Simple mode;
+  // Alt+number follows the menu; Today logs last night in place and offers "Set tomorrow's 3" at any hour.
+  await step('Simple mode menu: Today, Study Time, Sport Track, Money; the rest in a closed Archive; a page comes back from Settings; Alt+number follows the menu', async () => {
+    await pg.setViewportSize({ width: 1920, height: 1080 })
+    await open('today')
+    await pg.waitForSelector('aside.sb [data-testid="sb-archive-toggle"]', { timeout: 10000 })
+    const main = () => pg.locator('aside.sb .sb-group:not(.sb-archive) .sb-item').evaluateAll((b) => b.map((x) => x.getAttribute('aria-label')).join())
+    if ((await main()) !== 'Today,Study Time,Sport Track,Money') throw new Error(`the menu is ${await main()}`)
+    if (!(await pg.locator('aside.sb .sb-item.sb-settings[aria-label="Settings"]').count())) throw new Error('no Settings in the menu')
+    if ((await pg.locator('aside.sb [data-testid="sb-archive-toggle"]').getAttribute('aria-expanded')) !== 'false') throw new Error('the Archive is open on a fresh start')
+    if (await pg.locator('aside.sb .sb-archive .sb-item[aria-label="Calendar"]').count()) throw new Error('a closed Archive shows its pages')
+    // Opened: every other page is there (nothing deleted), and it goes to it.
+    await pg.click('aside.sb [data-testid="sb-archive-toggle"]')
+    const arch = await pg.locator('aside.sb .sb-archive .sb-item:not(.sb-archive-toggle)').evaluateAll((b) => b.map((x) => x.getAttribute('aria-label')))
+    for (const l of ['Calendar', 'Coach', 'Goals', 'Season', 'Career', 'Insights', 'Rewards', 'Sleep', 'Photo Locker', 'Discipline', 'Music', 'Custom Center', 'Tasks']) if (!arch.includes(l)) throw new Error(`${l} is not in the Archive (${arch.join()})`)
+    if (arch.includes('Money')) throw new Error('Money is in the Archive')
+    await pg.click('aside.sb .sb-archive .sb-item[aria-label="Calendar"]')
+    await pg.waitForFunction(() => document.querySelector('aside.sb .sb-item[aria-label="Calendar"]')?.getAttribute('aria-current') === 'page', null, { timeout: 8000 })
+    await pg.click('aside.sb [data-testid="sb-archive-toggle"]')
+    // Alt+2 is Study Time (the second item in the menu), Alt+1 back to Today.
+    await pg.keyboard.press('Alt+2')
+    await pg.waitForFunction(() => document.querySelector('aside.sb .sb-item[aria-label="Study Time"]')?.getAttribute('aria-current') === 'page', null, { timeout: 8000 })
+    await pg.keyboard.press('Alt+1')
+    await pg.waitForFunction(() => document.querySelector('aside.sb .sb-item[aria-label="Today"]')?.getAttribute('aria-current') === 'page', null, { timeout: 8000 })
+    // Restore Sleep from Settings → Simple mode: it joins the menu after Money; switched off, it goes back to the Archive.
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Simple mode' }).first().click()
+    const sleepSw = pg.locator('[data-testid="simple-archive"] [role="switch"][aria-label="Show Sleep in the menu"]')
+    await sleepSw.waitFor({ timeout: 8000 })
+    await sleepSw.click()
+    await pg.waitForFunction(() => [...document.querySelectorAll('aside.sb .sb-group:not(.sb-archive) .sb-item')].map((x) => x.getAttribute('aria-label')).join() === 'Today,Study Time,Sport Track,Money,Sleep', null, { timeout: 8000 })
+    await sleepSw.click()
+    await pg.waitForFunction(() => ![...document.querySelectorAll('aside.sb .sb-group:not(.sb-archive) .sb-item')].some((x) => x.getAttribute('aria-label') === 'Sleep'), null, { timeout: 8000 })
+    // Today: last night in place (a typed bedtime is a record only), and tomorrow's 3 at 08:30 from "Set tomorrow's 3".
+    await open('today')
+    await pg.click('.td2 .ptabs [data-tab="now"]')
+    await pg.waitForSelector('[data-testid="three-numbers"]', { timeout: 10000 })
+    if (!(await pg.locator('[data-testid="tn-sleep-form"]').count())) await pg.click('[data-testid="tn-sleep-open"]')
+    await pg.fill('[data-testid="tn-sleep-form"] input[aria-label="Asleep at"]', '23:10')
+    await pg.fill('[data-testid="tn-sleep-form"] input[aria-label="Up at"]', '06:40')
+    await pg.click('[data-testid="tn-sleep-form"] button[type="submit"]')
+    await pg.waitForFunction(() => /23:10/.test(document.querySelector('[data-testid="tn-sleep-result"]')?.textContent ?? ''), null, { timeout: 10000 })
+    if (!(await pg.locator('[data-testid="pick-tomorrow"]').count())) {
+      await pg.click('[data-testid="plan-tomorrow"]')
+      await pg.waitForSelector('[data-testid="pick-tomorrow"] textarea', { timeout: 5000 })
+    }
+    await pg.setViewportSize({ width: 1440, height: 900 })
+  })
   // Simple mode (on by default): Tasks, focus goals, the weekly goal check-in and loot are hidden, never deleted;
   // Settings → Simple mode brings them back. The rest of the run uses the full app (Simple mode off; the push budget stays on).
   await step('Simple mode is on by default and hides the unused modules; Settings → Simple mode brings them back', async () => {

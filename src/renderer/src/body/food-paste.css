@@ -29,11 +29,11 @@
 }
 .fpa-name { font-weight: 600; }
 .fpa-items { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.fpa-item { display: grid; grid-template-columns: minmax(0, 1fr) 92px minmax(0, auto) 32px; gap: 8px; align-items: center; font-size: 13.5px; }
+.fpa-item { display: grid; grid-template-columns: minmax(0, 1fr) 108px minmax(0, auto) 32px; gap: 8px; align-items: center; font-size: 15px; }
 .fpa-item.need .fpa-grams input { border-color: var(--bdy-low, #ff8a3d); }
 .fpa-iname small { color: var(--bdy-muted, var(--muted)); }
 .fpa-grams { display: flex; align-items: center; gap: 4px; }
-.fpa-grams input { width: 64px; }
+.fpa-grams input { flex: none; width: 76px; min-width: 76px; }
 .fpa-nums { color: var(--bdy-muted, var(--muted)); font-size: 12.5px; text-align: right; }
 .fpa-total { margin: 0; font-weight: 600; text-align: right; }
 .fpa-foot { display: grid; gap: 6px; justify-items: end; }

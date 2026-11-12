@@ -14,6 +14,7 @@ import { useLive } from './live'
 import { useTodayEvents } from './todayEvents'
 import { useFocusSound } from './focusSound'
 import { useAction } from './ui'
+import { useSimple } from './useSimple'
 
 export interface IslandPrefs {
   on: boolean
@@ -70,6 +71,7 @@ export function FocusIsland({ hideNext = false, noDim = false }: { hideNext?: bo
   const act = useAction()
   const [prefs, setPrefsState] = useState<IslandPrefs>(loadPrefs)
   const [undimmed, setUndimmed] = useState<string | null>(null)
+  const simple = useSimple()
   const setPrefs = (p: Partial<IslandPrefs>) =>
     setPrefsState((cur) => {
       const next = { ...cur, ...p }
@@ -139,18 +141,24 @@ export function FocusIsland({ hideNext = false, noDim = false }: { hideNext?: bo
   const over = !!run && leftSec < 0
   const pct = run ? Math.min(1, (at - startMs) / (endMs - startMs)) : 0
 
-  // Time's up: flash, open for a moment, chime once per session.
+  // Time's up: flash, open for a moment, chime once per session. The close timer lives in a ref: the timer state
+  // reloads (a new `run` object, or none after Stop) used to clear it, and the island then stayed open, empty, on top of the page.
+  const pinnedRef = useRef(pinned)
+  pinnedRef.current = pinned
+  const flashT = useRef<number | null>(null)
+  useEffect(() => () => void (flashT.current && clearTimeout(flashT.current)), [])
   useEffect(() => {
     if (!run || !over || chimed.current === run.startedAt) return
     chimed.current = run.startedAt
     setFlash(true)
     setOpen(true)
-    const t = window.setTimeout(() => {
+    if (flashT.current) clearTimeout(flashT.current)
+    flashT.current = window.setTimeout(() => {
+      flashT.current = null
       setFlash(false)
-      if (!pinned) setOpen(false)
+      if (!pinnedRef.current) setOpen(false)
     }, 8000)
-    return () => clearTimeout(t)
-  }, [run, over, pinned])
+  }, [run, over])
   // Its sounds: the swell, your background, the last 10 seconds and the gong.
   useFocusSound(run ? { startedAt: startMs, endsAt: endMs } : null, prefs.chime)
 
@@ -186,7 +194,8 @@ export function FocusIsland({ hideNext = false, noDim = false }: { hideNext?: bo
 
   // AF19: while a timer runs the rest of the app dims (opacity only); a click
   // or Esc brings it back for this session.
-  const dimOn = !!run && prefs.dim && !noDim && undimmed !== run.startedAt
+  // Simple mode: no dimmed screen (a click on it only brought the app back, so the first click anywhere did nothing).
+  const dimOn = !!run && prefs.dim && !simple.on && !noDim && undimmed !== run.startedAt
   useEffect(() => {
     if (!dimOn || !run) return
     const k = (e: KeyboardEvent) => e.key === 'Escape' && setUndimmed(run.startedAt)
@@ -257,7 +266,7 @@ export function FocusIsland({ hideNext = false, noDim = false }: { hideNext?: bo
 
   return (
     <>
-      {run && prefs.dim && <div className={`focus-dim ${dimOn ? 'on' : ''}`} onClick={() => setUndimmed(run.startedAt)} title="Click to bring everything back" aria-hidden />}
+      {run && prefs.dim && !simple.on && <div className={`focus-dim ${dimOn ? 'on' : ''}`} onClick={() => setUndimmed(run.startedAt)} title="Click to bring everything back" aria-hidden />}
       {/* The hot zone: move the mouse to the top (under the camera) and it opens. */}
       <div className={`isl-zone pos-${prefs.pos}`} onMouseEnter={enter} onMouseLeave={leave} aria-hidden />
       {(run || showIdlePill) && (
