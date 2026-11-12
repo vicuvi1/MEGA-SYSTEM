@@ -66,6 +66,14 @@ const fingerprint = (data) => JSON.stringify(data, (k, v) => {
   return v;
 });
 
+// This page has a change still waiting to be written (store.js saveSoon) and
+// the stored copy changed meanwhile (Life System's sync, its Telegram inbox):
+// both together, the same merge as above (newest copy of each record wins,
+// deletions stick). Device-only parts stay this page's.
+export function mergeLocal(local, stored) {
+  return mergeStates(local, toCloud(stored, '')).state;
+}
+
 // Merge `remote` (the Drive file, or null) into `local`. Returns the merged
 // state and whether this device and/or Drive need the new version.
 export function mergeStates(local, remote) {

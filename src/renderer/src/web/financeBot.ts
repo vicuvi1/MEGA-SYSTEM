@@ -13,6 +13,8 @@ import { subsOf, subOf, subById, setSub } from '../../public/apps/finance/js/cat
 import { normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } from '../../public/apps/finance/js/model.js'
 // @ts-ignore
 import { toCloud } from '../../public/apps/finance/js/sync.js'
+// @ts-ignore
+import { rateToBase } from '../../public/apps/finance/js/fx.js'
 import { detectExpenseCategory } from '@core/botCommands'
 import { mainAccountId } from '@core/moneyHub'
 import { getSetting, setSetting } from '../../../main/settings'
@@ -121,7 +123,7 @@ function subKeyboard(state: any, t: any): any {
 }
 
 /** What a money message would log, without logging it (X5): "45 lei · Food", or null. */
-export function previewMoney(db: Db, text: string, opts: { mainAccount?: boolean } = {}): { amount: number; label: string; type: string; category: string; account: string; daysAgo: number } | null {
+export function previewMoney(db: Db, text: string, opts: { mainAccount?: boolean } = {}): { amount: number; currency: string; label: string; type: string; category: string; account: string; daysAgo: number } | null {
   const state = financeState(db)
   if (!state) return null
   const f = parseQuick(text, state)
@@ -132,7 +134,7 @@ export function previewMoney(db: Db, text: string, opts: { mainAccount?: boolean
   const sc = f.sub ? subById(state, f.sub) : null
   const cur = accOf(state, f.account)?.currency || state.settings.currency
   const a = accOf(state, f.account)
-  return { amount: f.amount, label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}${sc ? ` › ${sc.name}` : ''}` : ''}${f.type === 'income' ? ' (income)' : ''}`, type: f.type, category: `${c?.emoji ? c.emoji + ' ' : ''}${c?.name ?? 'Other'}${sc ? ` › ${sc.emoji ? sc.emoji + ' ' : ''}${sc.name}` : ''}`, account: `${a?.emoji ? a.emoji + ' ' : ''}${a?.name ?? ''}`, daysAgo: Number(f.daysAgo) || 0 }
+  return { amount: f.amount, currency: cur, label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}${sc ? ` › ${sc.name}` : ''}` : ''}${f.type === 'income' ? ' (income)' : ''}`, type: f.type, category: `${c?.emoji ? c.emoji + ' ' : ''}${c?.name ?? 'Other'}${sc ? ` › ${sc.emoji ? sc.emoji + ' ' : ''}${sc.name}` : ''}`, account: `${a?.emoji ? a.emoji + ' ' : ''}${a?.name ?? ''}`, daysAgo: Number(f.daysAgo) || 0 }
 }
 
 const ASK_KEY = 'money_ask'
@@ -177,7 +179,10 @@ export function logMoney(db: Db, text: string, key: string, today: string, now =
   if (opts.mainAccount) toMainAccount(state, text, f)
   const acc = accOf(state, f.account)
   const currency = acc?.currency || state.settings.currency
-  const rate = currency === state.settings.currency ? 1 : Number(state.rates?.[currency]) || 1
+  // Rates are units per 1 USD (state.rates.usd): 10 EUR is converted through
+  // USD to lei, never counted as 10 lei. With no rate known at all it is kept
+  // at 1 and shows up in Finance's "Re-price past entries" review.
+  const rate = rateToBase(state, currency) ?? 1
   const tx = recordFromMessage(f, { updateId: key.replace(/[^\w-]/g, '-'), date: recordDay(today, f), rate, currency, now })
   if (state.tx.some((x: any) => x.id === tx.id)) return null
   state.tx.push(tx)

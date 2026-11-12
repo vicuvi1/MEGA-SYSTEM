@@ -9,6 +9,9 @@ import type { Mirror } from './mirror'
 const SETTING = 'finance_inbox_json'
 const FINANCE_KEY = 'finance-helper.state'
 const KEEP_DAYS = 60
+/** From this age the Money page warns about entries not in Finance Helper yet. */
+export const WARN_DAYS = 50
+const DAY = 86400_000
 
 export interface InboxEntry {
   id: string
@@ -34,23 +37,78 @@ const parse = <T>(raw: string | null, fallback: T): T => {
   }
 }
 
+/** What Finance Helper already has, from its synced copy (null: never synced, so nothing is known to be in it). */
+function syncedFinance(db: DbLike): any | null {
+  const saved = parse<any>(getSetting(db, 'app_sync_finance'), null)
+  return saved?.data && Array.isArray(saved.data.tx) ? saved.data : null
+}
+
+/** An inbox entry Finance Helper already took (added, removed, or deleted there). */
+export function isApplied(e: InboxEntry, state: any | null): boolean {
+  if (!state || !Array.isArray(state.tx)) return false
+  const inTx = state.tx.some((t: any) => t && t.id === e.id)
+  const deleted = !!(state.deleted && typeof state.deleted === 'object' && state.deleted[e.id])
+  if (e.remove) return !inTx
+  if (inTx || deleted) return true
+  return e.type === 'saving' && (state.goals ?? []).some((g: any) => (g?.history ?? []).some((h: any) => h && h.id === e.id))
+}
+
+/**
+ * The inbox after clean-up: entries older than 60 days go only once Finance
+ * Helper has them. One it doesn't have yet is never dropped silently: it
+ * stays, and the Money page warns from day 50 (inboxWarning).
+ */
+export function keepInbox(list: InboxEntry[], now: number, finance: any | null): InboxEntry[] {
+  const cutoff = now - KEEP_DAYS * DAY
+  return list.filter((e) => e.at >= cutoff || !isApplied(e, finance))
+}
+
 /** Adds an expense to the inbox (call inside the bot's change). */
 export function queueFinanceExpense(db: DbLike, entry: InboxEntry): void {
-  const cutoff = entry.at - KEEP_DAYS * 86400_000
-  const list = parse<InboxEntry[]>(getSetting(db, SETTING), []).filter((e) => e.at >= cutoff && e.id !== entry.id)
+  const list = keepInbox(parse<InboxEntry[]>(getSetting(db, SETTING), []), entry.at, syncedFinance(db)).filter((e) => e.id !== entry.id)
   list.push(entry)
   setSetting(db, SETTING, JSON.stringify(list))
 }
 
 /** Adds many records at once (a bank statement); returns the ids that were new. */
 export function queueFinanceEntries(db: DbLike, entries: InboxEntry[], now = Date.now()): string[] {
-  const cutoff = now - KEEP_DAYS * 86400_000
-  const list = parse<InboxEntry[]>(getSetting(db, SETTING), []).filter((e) => e.at >= cutoff)
+  const list = keepInbox(parse<InboxEntry[]>(getSetting(db, SETTING), []), now, syncedFinance(db))
   const have = new Set(list.map((e) => e.id))
   const fresh = entries.filter((e) => !have.has(e.id))
   if (!fresh.length) return []
   setSetting(db, SETTING, JSON.stringify([...list, ...fresh]))
   return fresh.map((e) => e.id)
+}
+
+export interface InboxWarning {
+  /** Entries not in Finance Helper yet that are WARN_DAYS (50) days old or more. */
+  count: number
+  /** Days the oldest of them has waited. */
+  oldestDays: number
+  /** Days until the oldest is 60 days old (0: already past). */
+  daysLeft: number
+  line: string
+}
+
+/**
+ * Entries from Telegram still waiting for Finance Helper after 50 days
+ * (null when there are none). `state`: Finance Helper's data on this device
+ * (or its synced copy).
+ */
+export function inboxWarning(inbox: InboxEntry[], state: any | null, now = Date.now()): InboxWarning | null {
+  const old = inbox.filter((e) => Number.isFinite(e.at) && now - e.at >= WARN_DAYS * DAY && !isApplied(e, state))
+  if (!old.length) return null
+  const oldestDays = Math.floor((now - Math.min(...old.map((e) => e.at))) / DAY)
+  const daysLeft = Math.max(0, KEEP_DAYS - oldestDays)
+  const n = old.length
+  const what = `${n} ${n === 1 ? 'entry' : 'entries'} waiting from Telegram`
+  const line = daysLeft > 0 ? `${what} will expire in ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'}: apply now` : `${what} ${n === 1 ? 'is' : 'are'} over ${KEEP_DAYS} days old: apply now (kept until you do)`
+  return { count: n, oldestDays, daysLeft, line }
+}
+
+/** The inbox as it is now (read only). */
+export function readInbox(db: DbLike): InboxEntry[] {
+  return parse<InboxEntry[]>(getSetting(db, SETTING), [])
 }
 
 /** The ids already waiting in the inbox. */

@@ -9,9 +9,10 @@ import { reducedMotion } from './motionKit'
 import { soundCoin, soundSpend } from './soundKit'
 import { useToast } from './ui'
 import type { QuickAdded, QuickPreview } from './web/moneyApi'
+import { moneyText, totalText } from '@core/moneyText'
 import './money.css'
 
-const lei = (bani: number) => `${Math.round(bani / 100).toLocaleString('en-US')} lei`
+// One money formatter, shared with Finance Helper (core/moneyText).
 
 /** What the typed line would log (debounced), or null. */
 export function useMoneyPreview(text: string): QuickPreview | null {
@@ -131,7 +132,7 @@ export function QuickAddBox({ onAdded, compact = false, autoFocus = false, place
           <>
             <b className={preview.type === 'income' ? 'in' : ''}>
               {preview.type === 'income' ? '+' : '−'}
-              {lei(preview.amount)}
+              {moneyText(preview.amount, preview.currency)}
             </b>
             <span>{preview.category}</span>
             {preview.account && <span>{preview.account}</span>}
@@ -145,8 +146,8 @@ export function QuickAddBox({ onAdded, compact = false, autoFocus = false, place
   )
 }
 
-type PillState = { left: number; level: string } | null
-const pillOf = (h: { hero: { perDay: number; leftToday: number; dayLevel: string } } | null): PillState => (h && h.hero.perDay > 0 ? { left: h.hero.leftToday, level: h.hero.dayLevel } : null)
+type PillState = { left: number; level: string; currency: string } | null
+const pillOf = (h: { currency?: string; hero: { perDay: number; leftToday: number; dayLevel: string } } | null): PillState => (h && h.hero.perDay > 0 ? { left: h.hero.leftToday, level: h.hero.dayLevel, currency: h.currency || 'MDL' } : null)
 
 /** Today (MF11): "120 lei left today" with a quick add that opens on tap. */
 export function MoneyPill() {
@@ -189,7 +190,7 @@ export function MoneyPill() {
     <div className="money-pill-wrap" ref={wrap}>
       <span className={`money-pill lv-${v.level}`}>
         <span aria-hidden="true">💸</span>
-        <b>{v.left >= 0 ? `${lei(v.left)} left today` : `${lei(-v.left)} over today`}</b>
+        <b>{v.left >= 0 ? `${totalText(v.left, v.currency)} left today` : `${totalText(-v.left, v.currency)} over today`}</b>
         <button onClick={() => setOpen((o) => !o)} aria-expanded={open} aria-label="Add spending">
           + Add
         </button>

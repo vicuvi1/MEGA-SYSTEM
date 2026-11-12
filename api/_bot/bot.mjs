@@ -5653,7 +5653,7 @@ var localHm$1 = (iso) => {
 	return Number.isFinite(d.getTime()) ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` : "";
 };
 var cleanItems$1 = (raw) => (Array.isArray(raw) ? raw : []).map(cleanItem$1).filter((x) => !!x).slice(0, 20);
-var DAY$13 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$14 = /^\d{4}-\d{2}-\d{2}$/;
 /**
 * A clean food log: meals with a valid id, day and items, newest first, the
 * last LOG_DAYS days before `today` and at most LOG_MAX; favourites apart
@@ -5661,13 +5661,13 @@ var DAY$13 = /^\d{4}-\d{2}-\d{2}$/;
 */
 function cleanFoodLog(raw, today) {
 	const o = raw && typeof raw === "object" ? raw : {};
-	const from = today && DAY$13.test(today) ? addDays$8(today, -45) : "";
+	const from = today && DAY$14.test(today) ? addDays$8(today, -45) : "";
 	const seen = /* @__PURE__ */ new Set();
 	const meals = [];
 	for (const m of Array.isArray(o.meals) ? o.meals : []) {
 		if (!m || typeof m !== "object") continue;
 		const id = String(m.id ?? "");
-		if (!/^fd-[a-z0-9]{1,24}$/.test(id) || seen.has(id) || !DAY$13.test(String(m.day)) || String(m.day) < from) continue;
+		if (!/^fd-[a-z0-9]{1,24}$/.test(id) || seen.has(id) || !DAY$14.test(String(m.day)) || String(m.day) < from) continue;
 		const items = cleanItems$1(m.items);
 		if (!items.length) continue;
 		seen.add(id);
@@ -5752,10 +5752,10 @@ function kcalOfDay(events, day) {
 function yesterdayMeals(log, events, today) {
 	return mealsOfDay(log, events, addDays$8(today, -1)).filter((m) => !m.removed);
 }
-var fmt$9 = (n) => Math.round(n).toLocaleString("en-US");
+var fmt$10 = (n) => Math.round(n).toLocaleString("en-US");
 /** "Protein 92 / 150 g · 1,850 / 2,700 kcal today". */
 function dayLine(o, when = "today") {
-	return `Protein ${fmt$9(o.protein)} / ${fmt$9(o.proteinGoal)} g · ${fmt$9(o.kcal)} / ${fmt$9(o.kcalGoal)} kcal ${when}`.trim();
+	return `Protein ${fmt$10(o.protein)} / ${fmt$10(o.proteinGoal)} g · ${fmt$10(o.kcal)} / ${fmt$10(o.kcalGoal)} kcal ${when}`.trim();
 }
 /**
 * The last 7 days ending `today` (for the weekly food report and Ben's
@@ -5781,7 +5781,7 @@ function foodWeek(events, today, goals, proteinOf) {
 	if (!logged.length && !pDays.length) line = "No food logged this week. Log a meal to see your week.";
 	else {
 		const parts = [`Protein ${avgProtein} g a day on average (goal ${goals.protein} g), reached on ${proteinHit} of 7 days`];
-		if (logged.length) parts.push(`${fmt$9(avgKcal)} kcal a day on the ${logged.length} ${logged.length === 1 ? "day" : "days"} you logged meals (goal ${fmt$9(goals.kcal)})`);
+		if (logged.length) parts.push(`${fmt$10(avgKcal)} kcal a day on the ${logged.length} ${logged.length === 1 ? "day" : "days"} you logged meals (goal ${fmt$10(goals.kcal)})`);
 		line = `${parts.join("; ")}.`;
 	}
 	return {
@@ -7057,7 +7057,7 @@ var toFoodItems = (items) => items.filter((i) => i.grams >= 1 || i.kcal >= 1).ma
 }));
 /** The meal slot from the local time (breakfast / lunch / dinner / snack). */
 var slotNow = (now = /* @__PURE__ */ new Date()) => mealTypeAt(`${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
-var fmt$8 = (n) => Math.round(n).toLocaleString("en-US");
+var fmt$9 = (n) => Math.round(n).toLocaleString("en-US");
 var qtyName = (i) => {
 	const q = Math.round(i.qty * 10) / 10;
 	return q !== 1 && i.unit !== "g" ? `${q} ${i.name}` : i.name;
@@ -7067,15 +7067,15 @@ var qtyName = (i) => {
 * "3 eggs + 2 bread: ~375 kcal, 24 g protein. Today: 1,400 / 2,700 kcal, 60 / 130 g. ~1,300 kcal left, 70 g protein; next: <idea from what to eat next>."
 */
 function photoReplyLine(o) {
-	const head = `${o.items.slice(0, 3).map(qtyName).join(" + ") + (o.items.length > 3 ? ` +${o.items.length - 3}` : "") || "Meal"}: ~${fmt$8(o.meal.kcal)} kcal, ${fmt$8(o.meal.protein)} g protein.`;
+	const head = `${o.items.slice(0, 3).map(qtyName).join(" + ") + (o.items.length > 3 ? ` +${o.items.length - 3}` : "") || "Meal"}: ~${fmt$9(o.meal.kcal)} kcal, ${fmt$9(o.meal.protein)} g protein.`;
 	const d = o.day;
-	const today = `Today: ${fmt$8(d.kcal)} / ${fmt$8(d.kcalGoal)} kcal, ${fmt$8(d.protein)} / ${fmt$8(d.proteinGoal)} g.`;
+	const today = `Today: ${fmt$9(d.kcal)} / ${fmt$9(d.kcalGoal)} kcal, ${fmt$9(d.protein)} / ${fmt$9(d.proteinGoal)} g.`;
 	const kLeft = Math.round(d.kcalGoal - d.kcal);
 	const pLeft = Math.round(d.proteinGoal - d.protein);
 	let left;
 	if (kLeft <= 0 && pLeft <= 0) left = "Both goals done for today.";
-	else if (kLeft <= 0) left = `Over the kcal goal by ${fmt$8(-kLeft)}; ${fmt$8(pLeft)} g protein left.`;
-	else left = `~${fmt$8(kLeft)} kcal left${pLeft > 0 ? `, ${fmt$8(pLeft)} g protein` : ""}${o.idea ? `; next: ${o.idea.replace(/\.$/, "")}` : ""}.`;
+	else if (kLeft <= 0) left = `Over the kcal goal by ${fmt$9(-kLeft)}; ${fmt$9(pLeft)} g protein left.`;
+	else left = `~${fmt$9(kLeft)} kcal left${pLeft > 0 ? `, ${fmt$9(pLeft)} g protein` : ""}${o.idea ? `; next: ${o.idea.replace(/\.$/, "")}` : ""}.`;
 	return `${head} ${today} ${left}`;
 }
 var COOK_WORDS = /* @__PURE__ */ new Set([
@@ -7259,11 +7259,11 @@ function recentPhotoMeal(meals, now, live) {
 		return Number.isFinite(t) && now - t >= 0 && now - t <= 54e5;
 	}).sort((a, b) => Date.parse(b.at) - Date.parse(a.at))[0] ?? null;
 }
-var fmt$7 = (n) => Math.round(n).toLocaleString("en-US");
+var fmt$8 = (n) => Math.round(n).toLocaleString("en-US");
 /** "Left: 120 g rice, 40 g chicken" (or "Nothing left: all of it eaten"). */
 function leftLine(r) {
 	if (!r.left.length) return "Nothing left: all of it counts.";
-	return `Left: ${r.left.map((l) => `${fmt$7(l.grams)} g ${l.of.toLowerCase()}`).join(", ")}${r.unmatched.length ? ` (not in the meal: ${r.unmatched.join(", ")})` : ""}.`;
+	return `Left: ${r.left.map((l) => `${fmt$8(l.grams)} g ${l.of.toLowerCase()}`).join(", ")}${r.unmatched.length ? ` (not in the meal: ${r.unmatched.join(", ")})` : ""}.`;
 }
 // src/core/foodScore.ts
 var norm$9 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -8042,7 +8042,7 @@ function looksLikeFoodReply(text) {
 	if ((/```/.test(t) || /[{[][\s\S]*[}\]]/.test(t)) && /\b(protein|proteins|kcal|calories|carbs|carbohydrates|fat|grams)\b/i.test(t) && /\d/.test(t)) return true;
 	return /\bprotein\b/i.test(t) && /\b(kcal|calories)\b/i.test(t) && (t.match(/\d+/g) ?? []).length >= 3;
 }
-var fmt$6 = (n) => Math.round(n).toLocaleString("en-US");
+var fmt$7 = (n) => Math.round(n).toLocaleString("en-US");
 var cap$4 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 var escHtml = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 /** The preview on Telegram (HTML): each food, the total and the AI's question. */
@@ -8050,8 +8050,8 @@ function draftText$1(d) {
 	const t = sumItems(d.items);
 	return [
 		"🍽 <b>Check the meal, then Save</b>",
-		...d.items.map((it, i) => `${i + 1}. ${escHtml(cap$4(it.name))} · ${fmt$6(it.grams)} g · ${fmt$6(it.protein)} g protein · ${fmt$6(it.kcal)} kcal`),
-		`<b>Total: ${fmt$6(t.protein)} g protein · ${fmt$6(t.kcal)} kcal</b> (carbs ${fmt$6(t.carbs)} g · fat ${fmt$6(t.fat)} g)`,
+		...d.items.map((it, i) => `${i + 1}. ${escHtml(cap$4(it.name))} · ${fmt$7(it.grams)} g · ${fmt$7(it.protein)} g protein · ${fmt$7(it.kcal)} kcal`),
+		`<b>Total: ${fmt$7(t.protein)} g protein · ${fmt$7(t.kcal)} kcal</b> (carbs ${fmt$7(t.carbs)} g · fat ${fmt$7(t.fat)} g)`,
 		...d.question ? [`❓ ${escHtml(d.question)}`] : [],
 		`Tap −/+ for 25 g, or type the food and the grams, e.g. <code>${escHtml(d.items[0].name.split(" ")[0].toLowerCase())} 175</code>.`
 	].join("\n");
@@ -8271,8 +8271,8 @@ function foodReport(o) {
 	const w = o.week;
 	const pDays = w.perDay.filter((d) => d.protein > 0).length;
 	if (!w.days && !pDays) return null;
-	const lines = [`Protein: ${fmt$6(w.avgProtein)} g a day on average (goal ${fmt$6(o.goals.protein)} g), on the ${pDays} ${pDays === 1 ? "day" : "days"} you logged it`];
-	lines.push(w.days ? `Calories: ${fmt$6(w.avgKcal)} kcal a day on the ${w.days} ${w.days === 1 ? "day" : "days"} you logged meals (goal ${fmt$6(o.goals.kcal)})` : "Calories: no meals logged with the food counter this week");
+	const lines = [`Protein: ${fmt$7(w.avgProtein)} g a day on average (goal ${fmt$7(o.goals.protein)} g), on the ${pDays} ${pDays === 1 ? "day" : "days"} you logged it`];
+	lines.push(w.days ? `Calories: ${fmt$7(w.avgKcal)} kcal a day on the ${w.days} ${w.days === 1 ? "day" : "days"} you logged meals (goal ${fmt$7(o.goals.kcal)})` : "Calories: no meals logged with the food counter this week");
 	const sign = (n) => n > 0 ? `+${n}` : `${n}`;
 	lines.push(o.weight ? `Weight: ${o.weight.from} → ${o.weight.to} kg (${sign(o.weight.delta)} kg this week)` : "Weight: not enough weigh-ins this week");
 	lines.push(`Days on the protein goal: ${w.proteinHit} of 7`);
@@ -8280,9 +8280,9 @@ function foodReport(o) {
 	const kOver = w.days ? w.avgKcal - o.goals.kcal : 0;
 	let tip;
 	if (pDays < 4) tip = "Log protein on more days next week, so the averages tell the truth.";
-	else if (pShort >= 10) tip = `Protein is ${fmt$6(pShort)} g a day short on average: add one protein snack a day (a shake or skyr).`;
-	else if (w.days >= 3 && kOver > o.goals.kcal * .1 && (o.weight?.delta ?? 0) > .2) tip = `Calories are ${fmt$6(kOver)} kcal a day over the goal and your weight went up: drop one snack a day.`;
-	else if (w.days >= 3 && -kOver > o.goals.kcal * .1 && (o.weight?.delta ?? 0) <= 0) tip = `Calories are ${fmt$6(-kOver)} kcal a day under the goal and your weight is not going up: eat a bit more on training days.`;
+	else if (pShort >= 10) tip = `Protein is ${fmt$7(pShort)} g a day short on average: add one protein snack a day (a shake or skyr).`;
+	else if (w.days >= 3 && kOver > o.goals.kcal * .1 && (o.weight?.delta ?? 0) > .2) tip = `Calories are ${fmt$7(kOver)} kcal a day over the goal and your weight went up: drop one snack a day.`;
+	else if (w.days >= 3 && -kOver > o.goals.kcal * .1 && (o.weight?.delta ?? 0) <= 0) tip = `Calories are ${fmt$7(-kOver)} kcal a day under the goal and your weight is not going up: eat a bit more on training days.`;
 	else tip = "Good week: keep the same plan.";
 	const html = [
 		"🍽 <b>Food this week</b>",
@@ -8433,16 +8433,16 @@ function photoDraftText(d, type) {
 		"",
 		...list.map((it, i) => {
 			const q = qtyText(it);
-			const range = it.lo != null && it.hi != null && it.hi > it.lo ? ` <i>(${fmt$6(it.lo)}–${fmt$6(it.hi)})</i>` : "";
-			return `${i + 1}. <b>${escHtml(cap$4(it.name))}</b>${q ? ` · ${escHtml(q)}` : ""}${it.grams ? ` · ${fmt$6(it.grams)} g${range}` : ""}${SRC_MARK[it.src ?? ""] ?? ""}\n    ${fmt$6(it.kcal)} kcal · P ${fmt$6(it.protein)} · C ${fmt$6(it.carbs)} · F ${fmt$6(it.fat)}${it.confidence === "low" ? " · ⚠️ check it" : ""}`;
+			const range = it.lo != null && it.hi != null && it.hi > it.lo ? ` <i>(${fmt$7(it.lo)}–${fmt$7(it.hi)})</i>` : "";
+			return `${i + 1}. <b>${escHtml(cap$4(it.name))}</b>${q ? ` · ${escHtml(q)}` : ""}${it.grams ? ` · ${fmt$7(it.grams)} g${range}` : ""}${SRC_MARK[it.src ?? ""] ?? ""}\n    ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}${it.confidence === "low" ? " · ⚠️ check it" : ""}`;
 		}),
 		"",
-		`<b>Total ~${fmt$6(t.kcal)} kcal · ${fmt$6(t.protein)} g protein</b>`,
-		`Carbs ${fmt$6(t.carbs)} g · Fat ${fmt$6(t.fat)} g · ${badge.dot} ${badge.word}`,
+		`<b>Total ~${fmt$7(t.kcal)} kcal · ${fmt$7(t.protein)} g protein</b>`,
+		`Carbs ${fmt$7(t.carbs)} g · Fat ${fmt$7(t.fat)} g · ${badge.dot} ${badge.word}`,
 		...d.photo?.message ? [`💬 ${escHtml(d.photo.message)}`] : [],
 		...d.photo?.miss ? [`🔖 ${escHtml(missLine(d.photo.miss.code, d.photo.miss.why))}`] : [],
 		...d.photo?.hidden ? [`🫒 ${HIDDEN[d.photo.hidden].ask} Tap ➕ ${HIDDEN[d.photo.hidden].label} if so.`] : [],
-		ask ? `\n❓ <b>About how many grams of ${escHtml(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt$6(ask.grams || 150)}</code>.` : "Tap a food to fix it, or type e.g. <code>" + escHtml((list[0]?.name ?? "rice").split(" ")[0].toLowerCase()) + " 150</code>."
+		ask ? `\n❓ <b>About how many grams of ${escHtml(ask.name.toLowerCase())}?</b> Type the number, e.g. <code>${fmt$7(ask.grams || 150)}</code>.` : "Tap a food to fix it, or type e.g. <code>" + escHtml((list[0]?.name ?? "rice").split(" ")[0].toLowerCase()) + " 150</code>."
 	].join("\n");
 }
 /** The preview's buttons: the foods two to a row (tap one to fix it), then Save and Add photo, then Not this meal. */
@@ -8529,10 +8529,10 @@ function afterText(d) {
 		escHtml(leftLine(r)),
 		"",
 		"<b>Eaten:</b>",
-		...r.eaten.length ? r.eaten.map((it, i) => `${i + 1}. <b>${escHtml(cap$4(it.name))}</b> · ${fmt$6(it.grams)} g
-    ${fmt$6(it.kcal)} kcal · P ${fmt$6(it.protein)} · C ${fmt$6(it.carbs)} · F ${fmt$6(it.fat)}`) : ["Nothing: all of it was left."],
+		...r.eaten.length ? r.eaten.map((it, i) => `${i + 1}. <b>${escHtml(cap$4(it.name))}</b> · ${fmt$7(it.grams)} g
+    ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}`) : ["Nothing: all of it was left."],
 		"",
-		`<b>Counts ~${fmt$6(t.kcal)} kcal · ${fmt$6(t.protein)} g protein</b> (the full plate was ${fmt$6(was.kcal)} kcal)`,
+		`<b>Counts ~${fmt$7(t.kcal)} kcal · ${fmt$7(t.protein)} g protein</b> (the full plate was ${fmt$7(was.kcal)} kcal)`,
 		"Save logs only what was eaten."
 	].join("\n");
 }
@@ -8737,7 +8737,7 @@ function swapChoices(item, saved, max = 6) {
 function swapKeyboard(d, index, saved) {
 	const it = d.photo?.now[index];
 	const rows = it ? swapChoices(it, saved).map(({ ref, n }) => [{
-		text: `${ref.name.slice(0, 30)} · ${fmt$6(ref.kcal)} kcal`,
+		text: `${ref.name.slice(0, 30)} · ${fmt$7(ref.kcal)} kcal`,
 		callback_data: `fd|W|${d.id}|${index}|${n}`
 	}]) : [];
 	rows.push([{
@@ -8886,8 +8886,8 @@ function photoSavedText(items, type, at, dayLine, extra = []) {
 	const score = mealScore(toFoodItems(items));
 	return [
 		`✅ <b>${MEAL_WORD[type]} saved</b> · ${whenText$1(at)}`,
-		...items.slice(0, 8).map((it) => `• ${escHtml(cap$4(it.name))}${it.grams ? ` ${fmt$6(it.grams)} g` : ""}: ${fmt$6(it.kcal)} kcal · P ${fmt$6(it.protein)} · C ${fmt$6(it.carbs)} · F ${fmt$6(it.fat)}`),
-		`<b>${fmt$6(t.kcal)} kcal · ${fmt$6(t.protein)} g protein</b> · C ${fmt$6(t.carbs)} · F ${fmt$6(t.fat)} · ${badge.dot}`,
+		...items.slice(0, 8).map((it) => `• ${escHtml(cap$4(it.name))}${it.grams ? ` ${fmt$7(it.grams)} g` : ""}: ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}`),
+		`<b>${fmt$7(t.kcal)} kcal · ${fmt$7(t.protein)} g protein</b> · C ${fmt$7(t.carbs)} · F ${fmt$7(t.fat)} · ${badge.dot}`,
 		...score ? [`🏅 Score <b>${score.grade}</b>: ${escHtml(score.tip)}`] : [],
 		escHtml(dayLine),
 		...extra.filter(Boolean).map(escHtml)
@@ -8899,8 +8899,8 @@ function afterSavedText(eaten, of, extra = []) {
 	const was = sumItems(of.before);
 	return [
 		eaten.length ? `✅ <b>${MEAL_WORD[of.type]} updated</b> · only what you ate (${whenText$1(of.at)})` : `✅ <b>${MEAL_WORD[of.type]} removed</b>: all of it was left`,
-		...eaten.slice(0, 8).map((it) => `• ${escHtml(cap$4(it.name))} ${fmt$6(it.grams)} g: ${fmt$6(it.kcal)} kcal · P ${fmt$6(it.protein)} · C ${fmt$6(it.carbs)} · F ${fmt$6(it.fat)}`),
-		...eaten.length ? [`<b>${fmt$6(t.kcal)} kcal · ${fmt$6(t.protein)} g protein</b> (the full plate was ${fmt$6(was.kcal)} kcal)`] : [],
+		...eaten.slice(0, 8).map((it) => `• ${escHtml(cap$4(it.name))} ${fmt$7(it.grams)} g: ${fmt$7(it.kcal)} kcal · P ${fmt$7(it.protein)} · C ${fmt$7(it.carbs)} · F ${fmt$7(it.fat)}`),
+		...eaten.length ? [`<b>${fmt$7(t.kcal)} kcal · ${fmt$7(t.protein)} g protein</b> (the full plate was ${fmt$7(was.kcal)} kcal)`] : [],
 		...extra.filter(Boolean).map(escHtml)
 	].join("\n");
 }
@@ -10411,7 +10411,7 @@ function pushStyle(level, caps = {
 	};
 }
 // src/core/foodInsights.ts
-var fmt$5 = (n) => Math.round(n).toLocaleString("en-US");
+var fmt$6 = (n) => Math.round(n).toLocaleString("en-US");
 /** "13:05" local time of an ISO moment. */
 var hmOf$10 = (iso) => {
 	const d = new Date(iso);
@@ -10442,11 +10442,11 @@ function daySummary(o) {
 	const kDiff = Math.round(o.goals.kcal - o.kcal);
 	let change;
 	if (pShort >= 20) change = `Protein was ${pShort} g short: add one protein snack in the afternoon${o.ideas?.[0] ? ` (${o.ideas[0].replace(/\.$/, "")})` : " (250 g brânză de vaci or a shake)"}.`;
-	else if (kDiff >= 300) change = `About ${fmt$5(kDiff)} kcal short: add a bigger lunch portion or a glass of milk with a spoon of peanut butter.`;
-	else if (kDiff <= -400) change = `About ${fmt$5(-kDiff)} kcal over: make tomorrow's dinner a little smaller.`;
+	else if (kDiff >= 300) change = `About ${fmt$6(kDiff)} kcal short: add a bigger lunch portion or a glass of milk with a spoon of peanut butter.`;
+	else if (kDiff <= -400) change = `About ${fmt$6(-kDiff)} kcal over: make tomorrow's dinner a little smaller.`;
 	else if (worst && worst.s.points <= 3) change = `${TYPE_WORD[worst.m.type]} scored ${worst.s.grade}: ${worst.s.tip}`;
 	else change = "Keep the same plan: today worked.";
-	const lines = [`${fmt$5(o.kcal)} / ${fmt$5(o.goals.kcal)} kcal · ${fmt$5(o.protein)} / ${fmt$5(o.goals.protein)} g protein · ${live.length} ${live.length === 1 ? "meal" : "meals"}`];
+	const lines = [`${fmt$6(o.kcal)} / ${fmt$6(o.goals.kcal)} kcal · ${fmt$6(o.protein)} / ${fmt$6(o.goals.protein)} g protein · ${live.length} ${live.length === 1 ? "meal" : "meals"}`];
 	const best = bestOne ? {
 		name: bestOne.m.name,
 		type: bestOne.m.type,
@@ -10467,7 +10467,7 @@ function daySummary(o) {
 	};
 }
 // src/core/foodTiming.ts
-var fmt$4 = (n) => Math.round(n).toLocaleString("en-US");
+var fmt$5 = (n) => Math.round(n).toLocaleString("en-US");
 /** Minutes into the app day of a moment (00:00–03:59 count as 24:00–27:59). */
 var appMin = (d) => {
 	const m = d.getHours() * 60 + d.getMinutes();
@@ -10535,7 +10535,7 @@ function workoutNote(i) {
 function proteinLeftLine(o) {
 	const left = Math.round(o.goal - o.protein);
 	if (!(o.goal > 0)) return "";
-	if (left <= 0) return `🥩 Protein done for today: ${fmt$4(o.protein)} / ${fmt$4(o.goal)} g.`;
+	if (left <= 0) return `🥩 Protein done for today: ${fmt$5(o.protein)} / ${fmt$5(o.goal)} g.`;
 	const fix = o.ideas.slice(0, 2).map((x) => x.replace(/\.$/, ""));
 	return `🥩 ${left} g protein left today${fix.length ? `: ${fix.join(", or ")}` : ""}.`;
 }
@@ -12081,12 +12081,12 @@ var DEFAULT_COACH = {
 	bloodDismissed: null,
 	updatedAt: 0
 };
-var DAY$12 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$13 = /^\d{4}-\d{2}-\d{2}$/;
 var num$6 = (v, lo, hi, d) => {
 	const n = Number(v);
 	return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
 };
-var day$2 = (v) => typeof v === "string" && DAY$12.test(v) ? v : null;
+var day$2 = (v) => typeof v === "string" && DAY$13.test(v) ? v : null;
 var txt = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 var pair = (v, lo, hi, d) => {
 	if (!Array.isArray(v)) return d;
@@ -12503,7 +12503,7 @@ function dailyPlan(i, date = i.date) {
 		notes
 	};
 }
-var DAY$11 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$12 = /^\d{4}-\d{2}-\d{2}$/;
 var n15 = (v) => {
 	const n = Math.round(Number(v));
 	return Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 3;
@@ -12551,7 +12551,7 @@ function cleanDay$1(x) {
 function cleanDays$1(raw, today) {
 	const o = raw && typeof raw === "object" ? raw : {};
 	const days = {};
-	const keys = Object.keys(o.days ?? {}).filter((k) => DAY$11.test(k) && (!today || k <= addDays$8(today, 1) && k > addDays$8(today, -120))).sort();
+	const keys = Object.keys(o.days ?? {}).filter((k) => DAY$12.test(k) && (!today || k <= addDays$8(today, 1) && k > addDays$8(today, -120))).sort();
 	for (const k of keys) days[k] = cleanDay$1(o.days[k]);
 	const out = {
 		v: 1,
@@ -15084,7 +15084,7 @@ function sessionMinutes$1(items) {
 /** Shows the level-up / step-back suggestion only when a session came after your last "not yet". */
 var suggestNow = (status, last, declinedOn) => (status.state === "complete" || status.state === "struggling" || status.state === "hurt") && (!declinedOn || (last?.day ?? "") > declinedOn);
 // src/core/coachTalk.ts
-var fmt$3 = (n) => Math.round(n).toLocaleString("en-US");
+var fmt$4 = (n) => Math.round(n).toLocaleString("en-US");
 var toMin$11 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 var isHm$2 = (t) => typeof t === "string" && /^\d{1,2}:\d{2}$/.test(t);
 /** Minutes into the app day (it turns at 04:00, so 00:30 is 24:30). */
@@ -15112,7 +15112,7 @@ var hours$2 = (n) => String(Math.round(n * 2) / 2);
 function checkinLines(f) {
 	const ro = f.lang === "ro";
 	const out = [
-		ro ? `Mâncare: ${fmt$3(f.kcal)} / ${fmt$3(f.kcalGoal)} kcal · ${fmt$3(f.protein)} / ${fmt$3(f.proteinGoal)} g proteine` : `Food: ${fmt$3(f.kcal)} / ${fmt$3(f.kcalGoal)} kcal · ${fmt$3(f.protein)} / ${fmt$3(f.proteinGoal)} g protein`,
+		ro ? `Mâncare: ${fmt$4(f.kcal)} / ${fmt$4(f.kcalGoal)} kcal · ${fmt$4(f.protein)} / ${fmt$4(f.proteinGoal)} g proteine` : `Food: ${fmt$4(f.kcal)} / ${fmt$4(f.kcalGoal)} kcal · ${fmt$4(f.protein)} / ${fmt$4(f.proteinGoal)} g protein`,
 		f.training === "rest" ? ro ? "Antrenament: zi de pauză" : "Workout: rest day" : f.training === "done" ? `${ro ? "Antrenament" : "Workout"}: ${f.session ?? (ro ? "făcut" : "done")} ✓` : `${ro ? "Antrenament" : "Workout"}: ${f.session ?? ""} ${ro ? "nefăcut" : "not done"}`.replace(/\s+/g, " "),
 		f.weighed ? `${ro ? "Cântărire" : "Weigh-in"}: ${f.weight != null ? `${kg(f.weight)} kg ` : ""}✓` : `${ro ? "Cântărire" : "Weigh-in"}: ${ro ? "nu azi" : "not today"}`
 	];
@@ -15146,8 +15146,8 @@ function checkinReply(f, t) {
 	const goal = Math.max(KCAL_FLOOR, f.kcalGoal);
 	let good;
 	if (f.training === "done") good = ro ? `Ai făcut ${f.session ?? "antrenamentul"} azi, bravo.` : `You did ${f.session ?? "your workout"} today, nice work.`;
-	else if (pPct >= .9) good = ro ? `Proteinele au ieșit: ${fmt$3(f.protein)} g.` : `Protein hit: ${fmt$3(f.protein)} g.`;
-	else if (kPct >= .9) good = ro ? `Ai mâncat ${fmt$3(f.kcal)} kcal, aproape de ${fmt$3(goal)}.` : `You ate ${fmt$3(f.kcal)} kcal, close to your ${fmt$3(goal)}.`;
+	else if (pPct >= .9) good = ro ? `Proteinele au ieșit: ${fmt$4(f.protein)} g.` : `Protein hit: ${fmt$4(f.protein)} g.`;
+	else if (kPct >= .9) good = ro ? `Ai mâncat ${fmt$4(f.kcal)} kcal, aproape de ${fmt$4(goal)}.` : `You ate ${fmt$4(f.kcal)} kcal, close to your ${fmt$4(goal)}.`;
 	else if (f.weighed) good = ro ? "Te-ai cântărit azi: media săptămânii rămâne corectă." : "You weighed in today: the weekly average stays honest.";
 	else if (f.training === "rest" && kPct >= .7) good = ro ? "O zi de pauză adevărată, cu mâncare." : "A real rest day with food in.";
 	else if (t.sleep != null && t.sleep >= 7.5) good = ro ? `Ai dormit bine: ${hours$2(t.sleep)} h.` : `Good sleep last night: ${hours$2(t.sleep)} h.`;
@@ -15157,8 +15157,8 @@ function checkinReply(f, t) {
 	const adds = addOnsFor(Math.max(gap, f.low ? 300 : 0)).slice(0, 2);
 	const addText = adds.map((a) => a.label.replace(/^\+/, "")).join(ro ? " și " : " and ");
 	if (f.low && adds.length) next = ro ? `Mâine adaugă ${addText} la mese: puțin câte puțin.` : `Tomorrow, add ${addText} to your meals: a little at a time.`;
-	else if (kPct < .8 && adds.length) next = ro ? `Mâine adaugă ${addText} ca să ajungi la ${fmt$3(goal)} kcal.` : `Tomorrow, add ${addText} to reach ${fmt$3(goal)} kcal.`;
-	else if (pPct < .8 && f.proteinGoal > 0) next = ro ? `Mâine pune proteină la fiecare masă: ținta e ${fmt$3(f.proteinGoal)} g.` : `Tomorrow, put protein in every meal: ${fmt$3(f.proteinGoal)} g is the aim.`;
+	else if (kPct < .8 && adds.length) next = ro ? `Mâine adaugă ${addText} ca să ajungi la ${fmt$4(goal)} kcal.` : `Tomorrow, add ${addText} to reach ${fmt$4(goal)} kcal.`;
+	else if (pPct < .8 && f.proteinGoal > 0) next = ro ? `Mâine pune proteină la fiecare masă: ținta e ${fmt$4(f.proteinGoal)} g.` : `Tomorrow, put protein in every meal: ${fmt$4(f.proteinGoal)} g is the aim.`;
 	else if (t.sleep != null && t.sleep < 7 || t.energy <= 2) next = ro ? `Diseară stinge lumina la ${f.bed}: somnul face parte din antrenament.` : `Tonight, lights out by ${f.bed}: sleep is part of the training.`;
 	else if (t.soreness >= 4 && f.tomorrow?.kind === "session") next = ro ? `Mâine ${f.tomorrow.title}: ritm ușor, oprește fiecare set cu 3 repetări în rezervă.` : `Tomorrow's ${f.tomorrow.title}: easy pace, stop each set 3 reps before failure.`;
 	else if (f.tomorrow?.kind === "session") next = ro ? `Mâine ${f.tomorrow.title}: bate data trecută cu o repetare.` : `Tomorrow's ${f.tomorrow.title}: beat last time by one rep.`;
@@ -15283,7 +15283,7 @@ function decideCoachNudge(i) {
 	if (i.prefs.protein && !sent("protein") && m >= 840 && m < 1200 && i.proteinGoal > 0 && i.protein < i.proteinGoal * .4 && capAllows("protein", i)) {
 		const foods = i.proteinFoods.slice(0, 2);
 		const fix = foods.length ? foods.join(ro ? " sau " : " or ") : ro ? "ouă sau brânză de vaci" : "eggs or brânză de vaci";
-		const text = ro ? `Proteinele rămân în urmă (${fmt$3(i.protein)} / ${fmt$3(i.proteinGoal)} g): ${fix} la masa următoare.` : `Protein's behind (${fmt$3(i.protein)} / ${fmt$3(i.proteinGoal)} g): ${fix} with your next meal.`;
+		const text = ro ? `Proteinele rămân în urmă (${fmt$4(i.protein)} / ${fmt$4(i.proteinGoal)} g): ${fix} la masa următoare.` : `Protein's behind (${fmt$4(i.protein)} / ${fmt$4(i.proteinGoal)} g): ${fix} with your next meal.`;
 		return {
 			...base,
 			key: coachKey("protein", i.day),
@@ -15365,7 +15365,7 @@ var isCoachAsk = (text) => COACH_ASK.test(plain(text));
 /** The hard rules, in the prompt (the same rules are checked again in code). */
 var COACH_RULES = [
 	"Coach rules (hard, checked in code): reply in the language of his message (English or Romanian); at most 80 words unless he asks for detail; one concrete action.",
-	`Never suggest under ${fmt$3(KCAL_FLOOR)} kcal a day, eating less, a cut or a deficit while his weekly-average weight is not rising. Nothing about how his body looks.`,
+	`Never suggest under ${fmt$4(KCAL_FLOOR)} kcal a day, eating less, a cut or a deficit while his weekly-average weight is not rising. Nothing about how his body looks.`,
 	"Supplements: only an optional protein shake or creatine 3–5 g a day; never fat burners or pills. Dizziness, chest pain, fainting, sharp or joint pain, breathing trouble: only \"stop training and see a doctor\".",
 	"Use only numbers from the coach data below or his message."
 ].join("\n");
@@ -15373,7 +15373,7 @@ var COACH_RULES = [
 var PROPOSE_HELP = "To PROPOSE a plan change (shown with Apply / Not now; nothing changes until he taps Apply), add one \"propose\" object: {\"kind\":\"swap\",\"slot\":\"<standard-day slot>\",\"from\":\"<food in it>\",\"to\":\"<saved food>\"} · {\"kind\":\"meal\",\"slot\":\"<slot>\",\"foods\":[\"2 Egg\",\"Rye bread\"]} · {\"kind\":\"move\",\"from\":\"<weekday>\",\"to\":\"<weekday>\"} (moves that training day in his week) · {\"kind\":\"ramp\",\"baseline\":<kcal he used to eat>} or {\"kind\":\"ramp\",\"stop\":true}. Use only saved foods and slots listed.";
 /** The coach part of the prompt: the rules, the compact context and what can be proposed. */
 function coachNote(o) {
-	const foods = o.saved ? o.saved.foods.slice(0, 20).map((f) => `${f.name} (${f.portionLabel}, ${fmt$3(f.kcal)} kcal, ${Math.round(f.protein)} g)`).join("; ") : "";
+	const foods = o.saved ? o.saved.foods.slice(0, 20).map((f) => `${f.name} (${f.portionLabel}, ${fmt$4(f.kcal)} kcal, ${Math.round(f.protein)} g)`).join("; ") : "";
 	const slots = o.saved ? o.saved.day.slots.map((s) => `${s.label}: ${s.items.map((x) => itemLabel(foodOf(o.saved, x.foodId)?.name ?? "?", x.qty)).join(" + ")}`).join("; ") : "";
 	return [
 		COACH_RULES,
@@ -15643,7 +15643,7 @@ function proposalText$1(p, saved, lang = "en") {
 	if (p.kind === "meal") return `${slot(p.slotId)}${ro ? " devine" : " becomes"}: ${p.items.map((x) => itemLabel(food(x.foodId), x.qty)).join(" + ")}`;
 	if (p.kind === "move") return ro ? `Mută antrenamentul de ${WEEKDAYS_RO[p.from]} pe ${WEEKDAYS_RO[p.to]}` : `Move ${WEEKDAYS$2[p.from]}'s training to ${WEEKDAYS$2[p.to]}`;
 	if (p.stop) return ro ? "Oprește creșterea treptată (ramp-up)" : "Stop the ramp-up";
-	return ro ? `Începe creșterea treptată de 2 săptămâni de la ${fmt$3(p.baseline ?? 0)} kcal` : `Start the 2-week ramp-up from ${fmt$3(p.baseline ?? 0)} kcal`;
+	return ro ? `Începe creșterea treptată de 2 săptămâni de la ${fmt$4(p.baseline ?? 0)} kcal` : `Start the 2-week ramp-up from ${fmt$4(p.baseline ?? 0)} kcal`;
 }
 /** "✅ Apply" / "Not now" for a proposal (the app's buttons; Telegram: cp|a|<id>, cp|n|<id>). */
 var proposalButtons = (id, lang = "en") => [{
@@ -16487,7 +16487,7 @@ async function dropChatPhotos(kv, chat) {
 	]);
 }
 // src/renderer/src/web/bots/foodBot.ts
-var fmt$2 = (n) => Math.round(n).toLocaleString("en-US");
+var fmt$3 = (n) => Math.round(n).toLocaleString("en-US");
 var shortId = () => Math.random().toString(36).slice(2, 8) || "d";
 var readFoodBen = (db) => cleanFoodBen(readSetting(db, FOOD_BEN_KEY));
 var writeFoodBen = (db, fb) => writeSetting(db, FOOD_BEN_KEY, fb);
@@ -16552,7 +16552,7 @@ function savedOffer(s, hit) {
 	if (hit.kind === "day") {
 		const t = dayTotals(s);
 		return {
-			reply: `🍽 <b>Your standard day</b>: ${s.day.slots.length} meals · ${fmt$2(t.kcal)} kcal · ${fmt$2(t.protein)} g protein\nLog all of it now?`,
+			reply: `🍽 <b>Your standard day</b>: ${s.day.slots.length} meals · ${fmt$3(t.kcal)} kcal · ${fmt$3(t.protein)} g protein\nLog all of it now?`,
 			keyboard: { inline_keyboard: [[{
 				text: "✅ Log my standard day",
 				callback_data: "fd|g|day"
@@ -16564,7 +16564,7 @@ function savedOffer(s, hit) {
 	}
 	const t = totalsOf(s, hit.meal.items);
 	return {
-		reply: `🍽 <b>${esc$5(hit.meal.name)}</b> · ${fmt$2(t.kcal)} kcal · ${fmt$2(t.protein)} g protein\nLog it now?`,
+		reply: `🍽 <b>${esc$5(hit.meal.name)}</b> · ${fmt$3(t.kcal)} kcal · ${fmt$3(t.protein)} g protein\nLog it now?`,
 		keyboard: { inline_keyboard: [[{
 			text: "✅ Log it",
 			callback_data: `fd|g|${hit.meal.id}`
@@ -16580,12 +16580,12 @@ function mealsMenu(s) {
 	if (!s.meals.length && !s.day.slots.length) return { reply: "No saved meals yet. Save one in Body → Food, then send /meals again." };
 	const rows = [];
 	if (s.day.slots.length) rows.push([{
-		text: `📅 Standard day · ${fmt$2(dayTotals(s).kcal)} kcal`,
+		text: `📅 Standard day · ${fmt$3(dayTotals(s).kcal)} kcal`,
 		callback_data: "fd|g|day"
 	}]);
 	const meals = [...s.meals.filter((m) => m.photo), ...s.meals.filter((m) => !m.photo)];
 	for (const m of meals.slice(0, 12)) rows.push([{
-		text: `${m.photo ? "📷 " : ""}${m.name.slice(0, 40)} · ${fmt$2(totalsOf(s, m.items).kcal)} kcal`,
+		text: `${m.photo ? "📷 " : ""}${m.name.slice(0, 40)} · ${fmt$3(totalsOf(s, m.items).kcal)} kcal`,
 		callback_data: `fd|g|${m.id}`.slice(0, 64)
 	}]);
 	return {
@@ -16728,13 +16728,13 @@ function pasteMessage(db, text, nowMs = Date.now()) {
 		}
 	});
 	const all = sumItems(made.flatMap((m) => m.items));
-	const lines = [`✅ <b>Logged ${made.length} ${made.length === 1 ? "meal" : "meals"}</b> · ${fmt$2(all.kcal)} kcal · ${fmt$2(all.protein)} g protein`];
+	const lines = [`✅ <b>Logged ${made.length} ${made.length === 1 ? "meal" : "meals"}</b> · ${fmt$3(all.kcal)} kcal · ${fmt$3(all.protein)} g protein`];
 	for (const m of made) {
 		const t = sumItems(m.items);
 		lines.push("", `<b>${PASTE_TYPE[m.type] ?? "Meal"}</b> · ${esc$5(whenText$1(Date.parse(m.at)))} · ${esc$5(m.name)}`);
-		for (const it of m.items.slice(0, 10)) lines.push(`• ${esc$5(it.name)} ${fmt$2(it.grams)} g: ${fmt$2(it.kcal)} kcal · P ${fmt$2(it.protein)} · C ${fmt$2(it.carbs)} · F ${fmt$2(it.fat)}`);
+		for (const it of m.items.slice(0, 10)) lines.push(`• ${esc$5(it.name)} ${fmt$3(it.grams)} g: ${fmt$3(it.kcal)} kcal · P ${fmt$3(it.protein)} · C ${fmt$3(it.carbs)} · F ${fmt$3(it.fat)}`);
 		if (m.items.length > 10) lines.push(`• +${m.items.length - 10} more`);
-		lines.push(`<b>${fmt$2(t.kcal)} kcal · ${fmt$2(t.protein)} g protein</b>`);
+		lines.push(`<b>${fmt$3(t.kcal)} kcal · ${fmt$3(t.protein)} g protein</b>`);
 	}
 	lines.push("", esc$5(foodDayTotals(db, now).line), ...proteinLeftNow(db, now).map(esc$5), ...warnText);
 	const rows = made.slice(0, 6).map((m) => [{
@@ -17013,7 +17013,7 @@ function coverIdea(db, now, kcalLeft) {
 	const kcal = totalsOf(s, left.flatMap((sl) => sl.items)).kcal;
 	if (kcal < kcalLeft * .8 || kcal > kcalLeft * 1.15) return null;
 	const names = left.map((sl) => sl.label.toLowerCase());
-	return `your ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`} ${left.length === 1 ? "meal covers" : "meals cover"} it (~${fmt$2(kcal)} kcal)`;
+	return `your ${names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`} ${left.length === 1 ? "meal covers" : "meals cover"} it (~${fmt$3(kcal)} kcal)`;
 }
 /** Logs a slot of the standard day (its usual items, or its swap) as a meal now. */
 function logMealSlot(db, kind, alt, source, now = /* @__PURE__ */ new Date()) {
@@ -17109,7 +17109,7 @@ function savedText(db, items, now) {
 	const t = sumItems(items);
 	const day = foodDayTotals(db, now);
 	return [
-		`✅ <b>Saved:</b> ${esc$5(mealName(items))} · ${fmt$2(t.protein)} g protein · ${fmt$2(t.kcal)} kcal`,
+		`✅ <b>Saved:</b> ${esc$5(mealName(items))} · ${fmt$3(t.protein)} g protein · ${fmt$3(t.kcal)} kcal`,
 		esc$5(day.line),
 		...proteinLeftNow(db, now).map(esc$5)
 	].join("\n");
@@ -17141,7 +17141,7 @@ function foodPushAct(db, op, now = /* @__PURE__ */ new Date(), key = "", arg) {
 		const kind = mealKindOfKey(key);
 		const r = kind ? logMealSlot(db, kind, arg === "alt", "island", now) : null;
 		if (!r) return "That meal is not in your standard day any more.";
-		return `✅ Logged: ${r.name} · ${fmt$2(r.kcal)} kcal · ${fmt$2(r.protein)} g protein. Fix it in Body → Food.`;
+		return `✅ Logged: ${r.name} · ${fmt$3(r.kcal)} kcal · ${fmt$3(r.protein)} g protein. Fix it in Body → Food.`;
 	}
 	const m = yesterdayMeal(db, now);
 	if (!m) return "Nothing from yesterday to repeat.";
@@ -17150,7 +17150,7 @@ function foodPushAct(db, op, now = /* @__PURE__ */ new Date(), key = "", arg) {
 		name: m.name
 	}, "island", now);
 	if (!saved) return "Nothing from yesterday to repeat.";
-	return `✅ Saved: ${m.name} · ${fmt$2(saved.totals.protein)} g protein · ${fmt$2(saved.totals.kcal)} kcal. Fix it in Body → Food.`;
+	return `✅ Saved: ${m.name} · ${fmt$3(saved.totals.protein)} g protein · ${fmt$3(saved.totals.kcal)} kcal. Fix it in Body → Food.`;
 }
 /** What the evening nudge and the dinner reminder are decided from (all from the logs). */
 function foodFacts(db, now = /* @__PURE__ */ new Date()) {
@@ -17335,7 +17335,7 @@ var FOOD_CALLBACK = {
 				return null;
 			}
 			const text = [
-				`✅ <b>Logged:</b> ${esc$5(r.name)} · ${fmt$2(r.totals.kcal)} kcal · ${fmt$2(r.totals.protein)} g protein`,
+				`✅ <b>Logged:</b> ${esc$5(r.name)} · ${fmt$3(r.totals.kcal)} kcal · ${fmt$3(r.totals.protein)} g protein`,
 				esc$5(r.line),
 				...r.left.map(esc$5)
 			].join("\n");
@@ -17394,7 +17394,7 @@ var FOOD_CALLBACK = {
 				return "skip";
 			}
 			const text = [
-				`✅ <b>Logged:</b> ${esc$5(res.r.name)} · ${fmt$2(res.r.kcal)} kcal · ${fmt$2(res.r.protein)} g protein`,
+				`✅ <b>Logged:</b> ${esc$5(res.r.name)} · ${fmt$3(res.r.kcal)} kcal · ${fmt$3(res.r.protein)} g protein`,
 				esc$5(res.line),
 				...res.left.map(esc$5)
 			].join("\n");
@@ -24951,10 +24951,10 @@ var CHAPTERS_12 = [
 var chaptersOf = (s) => s.weeks === 8 ? CHAPTERS : CHAPTERS_12;
 /** 1-based chapter number for a 1-based week. */
 var chapterNo = (s, week) => s.weeks === 8 ? week : Math.ceil(week / 2);
-var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$11 = /^\d{4}-\d{2}-\d{2}$/;
 var str$7 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var hex = (v, d) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d;
-var day = (v) => typeof v === "string" && DAY$10.test(v) ? v : null;
+var day = (v) => typeof v === "string" && DAY$11.test(v) ? v : null;
 /** The Monday of the week holding `d` (or `d` itself on a Monday). */
 function mondayOf$7(d) {
 	return addDays$8(d, -(((/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay() + 6) % 7));
@@ -25807,12 +25807,12 @@ function pickSideQuest(i, pool = SIDE_QUESTS) {
 		].filter(Boolean).join(", ")}.`
 	};
 }
-var DAY$9 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
 var str$4 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanSide(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	const weeks = {};
-	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$9.test(k)).sort().slice(-26)) {
+	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$10.test(k)).sort().slice(-26)) {
 		const w = r.weeks[k] ?? {};
 		weeks[k] = {
 			passed: (Array.isArray(w.passed) ? w.passed : []).map((x) => str$4(x, 24)).filter(Boolean).slice(0, 10),
@@ -25821,7 +25821,7 @@ function cleanSide(raw) {
 	}
 	return {
 		weeks,
-		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$4(a.title, 90) && DAY$9.test(String(a.day))).map((a, i) => ({
+		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$4(a.title, 90) && DAY$10.test(String(a.day))).map((a, i) => ({
 			id: str$4(a.id, 24) || `a${i + 1}`,
 			questId: a.questId ? str$4(a.questId, 24) : null,
 			title: str$4(a.title, 90),
@@ -25949,12 +25949,12 @@ var MANUAL = [
 		manual: false
 	}
 ].filter((k) => k.manual).map((k) => k.id);
-var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$9 = /^\d{4}-\d{2}-\d{2}$/;
 var str$3 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanWins$1(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	return {
-		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$3(w.title, 120) && DAY$8.test(String(w.day))).map((w, i) => ({
+		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$3(w.title, 120) && DAY$9.test(String(w.day))).map((w, i) => ({
 			id: str$3(w.id, 24) || `w${i + 1}`,
 			day: String(w.day),
 			kind: MANUAL.includes(w.kind) ? w.kind : "other",
@@ -26691,7 +26691,7 @@ var DEFAULT_ACTIVE = [
 	"strong",
 	"study"
 ];
-var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
 var str$2 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var num$4 = (v) => v === null || v === void 0 || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null;
 var isMetric = (m) => Object.prototype.hasOwnProperty.call(METRICS, m);
@@ -26747,11 +26747,11 @@ function cleanLadder$1(raw) {
 	for (const t of TEMPLATES) if (!seen.has(t.id)) goals.push(freshGoal(t, false));
 	let on = 0;
 	for (const g of goals) if (g.on && ++on > 3) g.on = false;
-	const days = (v, n) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x)).filter((x) => DAY$7.test(x.slice(0, 10))))].sort().slice(-n);
+	const days = (v, n) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x)).filter((x) => DAY$8.test(x.slice(0, 10))))].sort().slice(-n);
 	return {
 		v: 1,
 		goals,
-		start: typeof r.start === "string" && DAY$7.test(r.start) ? r.start : null,
+		start: typeof r.start === "string" && DAY$8.test(r.start) ? r.start : null,
 		reviews: days(r.reviews, 30),
 		monthReviews: days(r.monthReviews, 12)
 	};
@@ -28194,7 +28194,7 @@ function habitStreak(doneDays, today, o = {}) {
 	};
 }
 var BOARD_PREFS = "habit_board";
-var DAY$6 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
 var ID$3 = /^[\w:.-]{1,60}$/;
 function cleanLook(v) {
 	const out = {};
@@ -28211,7 +28211,7 @@ function cleanPrefs$1(v) {
 		for (const [k, l] of Object.entries(v.looks).slice(0, 60)) if (ID$3.test(k)) looks[k] = cleanLook(l);
 	}
 	const skips = {};
-	if (v?.skips && typeof v.skips === "object") for (const d of Object.keys(v.skips).filter((d) => DAY$6.test(d)).sort().slice(-90)) {
+	if (v?.skips && typeof v.skips === "object") for (const d of Object.keys(v.skips).filter((d) => DAY$7.test(d)).sort().slice(-90)) {
 		const list = ids(v.skips[d]);
 		if (list.length) skips[d] = list;
 	}
@@ -28230,7 +28230,7 @@ function skipsOf(prefs, id) {
 var MY_HABITS = "my_habits";
 /** The rule that pays a tap (+2, at most 6 a day across all your habits). */
 var HABIT_RULE = "habit.own";
-var DAY$5 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$6 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$10 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanBook(v) {
 	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$10(h.name, 60)).map((h) => {
@@ -28246,7 +28246,7 @@ function cleanBook(v) {
 	}) : [];
 	const log = {};
 	if (v?.log && typeof v.log === "object") {
-		const days = Object.keys(v.log).filter((d) => DAY$5.test(d)).sort().slice(-400);
+		const days = Object.keys(v.log).filter((d) => DAY$6.test(d)).sort().slice(-400);
 		for (const d of days) if (Array.isArray(v.log[d])) log[d] = [...new Set(v.log[d].map(String))];
 	}
 	return {
@@ -28375,8 +28375,8 @@ var MODES = {
 	}
 };
 var MODE_KINDS = Object.keys(MODES);
-var DAY$4 = /^\d{4}-\d{2}-\d{2}$/;
-var okMode = (m) => !!m && MODE_KINDS.includes(m.kind) && DAY$4.test(m.from) && DAY$4.test(m.until) && m.until >= m.from;
+var DAY$5 = /^\d{4}-\d{2}-\d{2}$/;
+var okMode = (m) => !!m && MODE_KINDS.includes(m.kind) && DAY$5.test(m.from) && DAY$5.test(m.until) && m.until >= m.from;
 /** A saved book, with a mode whose last day has passed moved to the past. */
 function cleanModes(v, today) {
 	const past = (Array.isArray(v?.past) ? v.past : []).filter(okMode).map((m) => ({
@@ -28540,14 +28540,14 @@ var TRACKS = {
 	}
 };
 var TRACK_IDS = Object.keys(TRACKS);
-var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$4 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$9 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var cleanLink = (s) => {
 	const t = clip$9(s, 300);
 	return /^https?:\/\/\S+$/i.test(t) ? t : null;
 };
 function cleanLearn(v) {
-	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$9(e.title, 120) && DAY$3.test(e.day)).map((e) => ({
+	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$9(e.title, 120) && DAY$4.test(e.day)).map((e) => ({
 		id: clip$9(e.id, 40) || `l${e.day}`,
 		track: e.track,
 		title: clip$9(e.title, 120),
@@ -31266,6 +31266,7 @@ var gmail_default = definePlugin({
 // src/renderer/src/web/financeInbox.ts
 var SETTING$1 = "finance_inbox_json";
 var KEEP_DAYS = 60;
+var DAY$3 = 864e5;
 var parse$2 = (raw, fallback) => {
 	try {
 		return raw ? JSON.parse(raw) : fallback;
@@ -31273,17 +31274,38 @@ var parse$2 = (raw, fallback) => {
 		return fallback;
 	}
 };
+/** What Finance Helper already has, from its synced copy (null: never synced, so nothing is known to be in it). */
+function syncedFinance(db) {
+	const saved = parse$2(getSetting(db, "app_sync_finance"), null);
+	return saved?.data && Array.isArray(saved.data.tx) ? saved.data : null;
+}
+/** An inbox entry Finance Helper already took (added, removed, or deleted there). */
+function isApplied(e, state) {
+	if (!state || !Array.isArray(state.tx)) return false;
+	const inTx = state.tx.some((t) => t && t.id === e.id);
+	const deleted = !!(state.deleted && typeof state.deleted === "object" && state.deleted[e.id]);
+	if (e.remove) return !inTx;
+	if (inTx || deleted) return true;
+	return e.type === "saving" && (state.goals ?? []).some((g) => (g?.history ?? []).some((h) => h && h.id === e.id));
+}
+/**
+* The inbox after clean-up: entries older than 60 days go only once Finance
+* Helper has them. One it doesn't have yet is never dropped silently: it
+* stays, and the Money page warns from day 50 (inboxWarning).
+*/
+function keepInbox(list, now, finance) {
+	const cutoff = now - KEEP_DAYS * DAY$3;
+	return list.filter((e) => e.at >= cutoff || !isApplied(e, finance));
+}
 /** Adds an expense to the inbox (call inside the bot's change). */
 function queueFinanceExpense(db, entry) {
-	const cutoff = entry.at - KEEP_DAYS * 864e5;
-	const list = parse$2(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff && e.id !== entry.id);
+	const list = keepInbox(parse$2(getSetting(db, SETTING$1), []), entry.at, syncedFinance(db)).filter((e) => e.id !== entry.id);
 	list.push(entry);
 	setSetting(db, SETTING$1, JSON.stringify(list));
 }
 /** Adds many records at once (a bank statement); returns the ids that were new. */
 function queueFinanceEntries(db, entries, now = Date.now()) {
-	const cutoff = now - KEEP_DAYS * 864e5;
-	const list = parse$2(getSetting(db, SETTING$1), []).filter((e) => e.at >= cutoff);
+	const list = keepInbox(parse$2(getSetting(db, SETTING$1), []), now, syncedFinance(db));
 	const have = new Set(list.map((e) => e.id));
 	const fresh = entries.filter((e) => !have.has(e.id));
 	if (!fresh.length) return [];
@@ -38146,7 +38168,7 @@ function yesterdayLine(store, today) {
 }
 // src/core/tgPlanText.ts
 var esc$2 = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-var fmt$1 = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m} min`;
+var fmt$2 = (m) => m >= 60 ? `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}` : `${m} min`;
 var short$2 = (s, n) => s.length > n ? `${s.slice(0, n - 1)}…` : s;
 /** The indexes of the plan's blocks that stay once the plan is cleaned (one thing = one block), in time order. */
 function shownBlocks(plan) {
@@ -38171,7 +38193,7 @@ function alsoShown(plan) {
 }
 /** One reason line for an "Also today" task, the app's words: "30 min · no slot yet · University · overdue". */
 var alsoWhy = (a) => [
-	fmt$1(a.minutes),
+	fmt$2(a.minutes),
 	a.event ? `at the ${a.event} event` : "no slot yet",
 	a.project,
 	a.overdue ? "overdue" : ""
@@ -47381,8 +47403,6 @@ function formatMoney$1(bani, currency = "MDL") {
 	})} ${currency}`;
 }
 // src/main/money.ts
-/** The ledger note of the points a free day paid (so undo only takes back those). */
-var FREE_DAY_NOTE = "Spending logged (free day, no spending)";
 function toExpense(r) {
 	return {
 		id: r.id,
@@ -47547,45 +47567,6 @@ var MoneyService = class {
 			day,
 			already
 		};
-	}
-	/**
-	* A free day: "No spending today". Marks today as a no-spend day and pays
-	* "Spending logged" once, with the same ref a real spend uses (so a spend
-	* logged later the same day never pays again). Only for today, at the time.
-	*/
-	freeDay(other = [], now = /* @__PURE__ */ new Date()) {
-		const day = this.wallet.today(now);
-		if (moneyDay([...this.nativeDayTx(), ...other], day).everydayBani > 0) throw new LedgerError("You already logged spending today, so it is not a free day");
-		const already = this.days("money_nothing_spent").includes(day);
-		if (!already) this.addDay("money_nothing_spent", day);
-		const ref = `fin:logged:${day}`;
-		if (this.wallet.effective().some((e) => e.ref === ref)) return {
-			day,
-			already,
-			paid: 0,
-			ledgerId: null
-		};
-		const before = this.wallet.summary().balance;
-		const ledgerId = this.wallet.awardRule("money.logged", {
-			now,
-			day,
-			ref,
-			note: FREE_DAY_NOTE
-		});
-		return {
-			day,
-			already,
-			paid: this.wallet.summary().balance - before,
-			ledgerId
-		};
-	}
-	/** Takes today's free day back, with the points it paid (a real spend's points stay). */
-	undoFreeDay(now = /* @__PURE__ */ new Date()) {
-		const day = this.wallet.today(now);
-		setSetting(this.db, "money_nothing_spent", JSON.stringify(this.days("money_nothing_spent").filter((d) => d !== day)));
-		const paid = this.wallet.effective().find((e) => e.ref === `fin:logged:${day}` && e.note === "Spending logged (free day, no spending)");
-		if (paid) this.wallet.undo(paid.id, "Free day undone", now);
-		return { day };
 	}
 	/** "I cooked at home today": you confirm it, then it pays (once a day). */
 	confirmCooked(now = /* @__PURE__ */ new Date()) {
@@ -54415,12 +54396,6 @@ syncFinance: (recordDays) => write((s) => {
 			days: () => read((s) => moneyDays(s)),
 			/** FX3: "Nothing spent today" (counts once the day is over, if it stays true). */
 			nothingSpent: () => write((s) => (s.money.nothingSpent(financeDayTx(s)), moneyDays(s)), W),
-			/** A free day: "No spending today" ticks the Log spending habit once (same pay as a spend). */
-			freeDay: () => write((s) => ({
-				...s.money.freeDay(financeDayTx(s)),
-				state: moneyDays(s)
-			}), W),
-			undoFreeDay: () => write((s) => (s.money.undoFreeDay(), moneyDays(s)), W),
 			/** FX3: "I cooked at home today" (you confirm it, it pays). */
 			confirmCooked: () => write((s) => (s.money.confirmCooked(), moneyDays(s)), W)
 		},
@@ -55932,6 +55907,24 @@ function convert(cents, from, to, rates) {
 	if (!a || !b) return null;
 	return Math.round(cents / a * b);
 }
+function pairRate(from, to, rates) {
+	if (from === to) return 1;
+	const a = perUsd(rates, from);
+	const b = perUsd(rates, to);
+	return a && b ? b / a : null;
+}
+function rateToBase(state, cur) {
+	const base = state?.settings?.currency || "MDL";
+	if (!cur || cur === base) return 1;
+	const live = pairRate(cur, base, state?.rates);
+	if (live) return Math.round(live * 1e4) / 1e4;
+	let best = null;
+	for (const t of state?.tx || []) {
+		if (!t || t.currency !== cur || !(t.rate > 0) || t.rate === 1 && t.base === t.amount) continue;
+		if (!best || String(t.date) > String(best.date) || t.date === best.date && (t.createdAt || 0) > (best.createdAt || 0)) best = t;
+	}
+	return best ? best.rate : null;
+}
 function coinUsd(rates, asset) {
 	if (STABLE[asset]) return STABLE[asset];
 	const p = rates?.crypto?.[asset];
@@ -57197,6 +57190,22 @@ function sharedRates(rates) {
 		usd
 	};
 }
+// src/core/moneyText.ts
+/**
+* One way to write money everywhere: Finance Helper's own formatter
+* (public/apps/finance/js/money.js formatMoney), so the Money page, quick add
+* and Finance Helper show the same thing: "12,50 MDL", "1 240 MDL".
+* - moneyText: a single amount, with its bani when it has any ("12,50 MDL").
+* - totalText: a total, rounded to whole units the same way Finance's
+*   headline totals are ("1 240 MDL").
+* The currency is the one Finance Helper uses (its settings.currency, MDL by
+* default); the label is always the code (MDL), never "lei".
+*/
+var fmt$1 = formatMoney;
+/** A total in bani, rounded to whole units: "1 240 MDL". */
+function totalText(bani, currency = "MDL") {
+	return fmt$1(Math.round((Number(bani) || 0) / 100) * 100, currency || "MDL");
+}
 // src/core/moneyHub.ts
 /**
 * Night 11 (MO1–MF11): the Money hub's numbers, pure. Built on Finance
@@ -57230,8 +57239,8 @@ var MONTHS$1 = [
 	"December"
 ];
 var monthName = (key) => MONTHS$1[Number(key.slice(5, 7)) - 1] ?? key;
-/** "1,240 lei" (whole lei, rounded). */
-var leiText = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
+/** A total: "1 240 MDL" (whole units, rounded), Finance Helper's own formatter (core/moneyText). */
+var leiText = (bani, currency = "MDL") => totalText(bani, currency);
 var signed = (bani) => `${bani >= 0 ? "+" : "−"}${leiText(Math.abs(bani))}`;
 var isExpense = (t) => t.type === "expense";
 function spent(tx, from, to, everydayOnly = false) {
@@ -57602,6 +57611,7 @@ function previewMoney(db, text, opts = {}) {
 	const a = account(state, f.account);
 	return {
 		amount: f.amount,
+		currency: cur,
 		label: `${Math.round(f.amount) / 100} ${cur}${c?.name ? ` · ${c.name}${sc ? ` › ${sc.name}` : ""}` : ""}${f.type === "income" ? " (income)" : ""}`,
 		type: f.type,
 		category: `${c?.emoji ? c.emoji + " " : ""}${c?.name ?? "Other"}${sc ? ` › ${sc.emoji ? sc.emoji + " " : ""}${sc.name}` : ""}`,
@@ -57652,7 +57662,7 @@ function logMoney(db, text, key, today, now = Date.now(), opts = {}) {
 	fileIt(state, f);
 	if (opts.mainAccount) toMainAccount(state, text, f);
 	const currency = account(state, f.account)?.currency || state.settings.currency;
-	const rate = currency === state.settings.currency ? 1 : Number(state.rates?.[currency]) || 1;
+	const rate = rateToBase(state, currency) ?? 1;
 	const tx = recordFromMessage(f, {
 		updateId: key.replace(/[^\w-]/g, "-"),
 		date: recordDay$1(today, f),
@@ -70974,6 +70984,9 @@ function notifFromMessage(html, markup, at) {
 		}
 	};
 }
+// src/renderer/public/apps/finance/js/catshare.js
+var isPointsReward = (t) => String(t?.id || "").startsWith("life-reward-");
+var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t);
 // src/renderer/src/web/moneyHub.ts
 var B = (t) => Number.isInteger(t?.base) ? t.base : Number(t?.amount) || 0;
 /** Finance Helper's state in its current shape (null without data). */
@@ -70989,7 +71002,7 @@ function cleanFinance(raw) {
 	}
 }
 function hubTx(state) {
-	return state.tx.filter((t) => t && !t.deleted && typeof t.date === "string" && t.type !== "transfer" && !t.loan).map((t) => ({
+	return state.tx.filter((t) => t && !t.deleted && typeof t.date === "string" && t.type !== "transfer" && !t.loan && (t.type !== "expense" || countsAsSpending(t))).map((t) => ({
 		id: String(t.id),
 		date: t.date.slice(0, 10),
 		type: t.type,

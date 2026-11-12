@@ -31,7 +31,7 @@ describe('the Money hub view (Finance Helper data → numbers)', () => {
     const f = nudgeFacts(state, TODAY)!
     expect(f.limit).toEqual({ amount: 300000, spent: 100000, daysLeft: 21 })
     expect(f.loggedToday).toBe(true)
-    expect(weekMoneyLine(state, TODAY)).toBe('This week: 200 lei, the same as the same days last week.')
+    expect(weekMoneyLine(state, TODAY)).toBe('This week: 200\u00a0MDL, the same as the same days last week.')
     expect(hubView(null, TODAY)).toBeNull()
   })
 })

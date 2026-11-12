@@ -1,15 +1,15 @@
 // The app: screens, the add/edit sheet, import and backup. All numbers come
 // from model.js; this file only turns them into HTML and handles taps.
 
-import { load, save, backupText, restoreJSON, requestPersistence, isSealed, openImported, wipeStore, hasSession, reopen, STORAGE_KEYS } from './store.js';
+import { load, saveSoon, flushSave, hasPendingSave, onSaved, backupText, restoreJSON, requestPersistence, isSealed, openImported, wipeStore, hasSession, reopen, STORAGE_KEYS } from './store.js';
 import * as M from './model.js';
 import * as T from './cattree.js';
 import * as Cats from './screens/categories.js';
 import { formatMoney, evalAmount, centsToPlain } from './money.js';
 import { todayISO, monthKey, monthLabel, addMonths, daysInMonth, dayLabel, dowIndex, DOW_LONG, DOW_SHORT, MONTHS, addDays } from './dates.js';
-import { convert, pairRate, formatRate } from './fx.js';
+import { convert, pairRate, formatRate, rateToBase } from './fx.js';
 import { parseCSV, toCSV } from './csv.js';
-import { importRows, importWorkbook, importCheck, exportRows, toTSV, monthSheet, overviewSheet, detectColumns } from './importer.js';
+import { importRows, importWorkbook, importCheck, exportRows, toTSV, monthSheet, overviewSheet, detectColumns, fillRate, fillKnownRates, skipNoRate } from './importer.js';
 import { readWorkbook } from './xlsx-read.js';
 import { workbook } from './xlsx.js';
 import { refreshRates, backfillRates, recordRates } from './rates.js';
@@ -36,6 +36,8 @@ import * as Motion from './motion.js';
 import * as Calc from './screens/calc.js';
 import * as Buddy from './screens/buddy.js';
 import * as ImportCheck from './screens/importcheck.js';
+import * as Reprice from './screens/reprice.js';
+import * as RateGaps from './screens/rategaps.js';
 import * as WorkHour from './screens/workhour.js';
 import * as YearReview from './screens/yearreview.js';
 import { workText } from './workhours.js';
@@ -49,6 +51,7 @@ import { invoiceStatus } from './invoices.js';
 import { tableHTML, calendarHTML, dayLabelHTML, accountOptionsHTML, accountDisplayName } from './logviews.js';
 import { sheetHTML, monthTabs } from './sheetview.js';
 import { createHistory } from './history.js';
+import { mergeLocal } from './sync.js';
 import { searchTx, searchSummary, SEARCH_HINT, savedFilters, saveFilter, removeFilter } from './search.js';
 import { safeToSpend, shortDay, limitStatus, suggestLimit, everydaySpent } from './safespend.js';
 import { verdict, nextSteps } from './nextsteps.js';
@@ -140,20 +143,35 @@ const countUp = (c, key, opts) => (c = Math.round(c / 100) * 100, `<span data-co
 
 // Save. Each save is an undo step, except quiet ones: changes that didn't
 // come from you (sync, the daily net-worth snapshot, Binance balances).
+// The write itself waits a moment (store.js saveSoon): a burst of changes is
+// one write, and leaving the page writes at once.
+const SAVE_FAILED = 'Could not save. Is your browser storage full or blocked?';
 function persist({ quiet = false } = {}) {
-  if (!save(state)) toast('Could not save. Is your browser storage full or blocked?');
+  if (!saveSoon(state)) toast(SAVE_FAILED);
   if (quiet) history.reset(state);
   else history.record(state);
 }
+
+// Life System hears about a change once it is really stored (it reads the
+// stored copy to pay "Spending logged").
+let tellLife = null;
+onSaved((ok) => {
+  if (!ok) toast(SAVE_FAILED);
+  if (!tellLife) return;
+  const payload = tellLife.opts;
+  tellLife = null;
+  try { window.parent.postMessage({ type: 'FINANCE_TRANSACTION_LOGGED', payload }, '*'); } catch {}
+});
+for (const ev of ['pagehide', 'beforeunload']) window.addEventListener(ev, () => flushSave());
+document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
 
 function commit(opts) {
   persist(opts);
   render();
   Sync.changed();
   if (typeof window !== 'undefined' && window.parent && window.parent !== window) {
-    try {
-      window.parent.postMessage({ type: 'FINANCE_TRANSACTION_LOGGED', payload: opts }, '*');
-    } catch {}
+    tellLife = { opts };
+    if (!hasPendingSave()) { tellLife = null; try { window.parent.postMessage({ type: 'FINANCE_TRANSACTION_LOGGED', payload: opts }, '*'); } catch {} }
   }
 }
 
@@ -162,7 +180,7 @@ function undoRedo(dir) {
   if (state._sealed) return;
   const e = dir < 0 ? history.undo(state) : history.redo(state);
   if (!e) { toast(dir < 0 ? 'Nothing to undo' : 'Nothing to redo'); return; }
-  if (!save(state)) toast('Could not save. Is your browser storage full or blocked?');
+  if (!saveSoon(state)) toast(SAVE_FAILED);
   ui.selected?.clear();
   render();
   Sync.changed();
@@ -1026,6 +1044,7 @@ function viewHome() {
   ${Updates.updateBanner()}
   ${DEMO ? '<div class="banner"><p>Live preview with <b>example data</b> (a made-up month). What you add here stays in this browser only.</p></div>' : ''}
   ${Telegram.alertBanner()}
+  ${Reprice.banner()}
   ${welcome}
   ${safeCard(today)}
   ${stepsCard(today)}
@@ -1305,8 +1324,9 @@ function filterPanel() {
     </div></details>`;
 }
 
-// Free days ("No spending today"): kept by Life System (it ticks the Log spending
-// habit once and syncs the days to your other devices); this page only shows and asks.
+// "Nothing spent today": kept by Life System (the one no-spend button, as on
+// Today and the Money page). It pays nothing now; once the day is over it
+// counts as a no-spend day if nothing was logged for it. This page only shows and asks.
 const inLife = (() => { try { return window.parent && window.parent !== window; } catch { return false; } })();
 let freeDays = new Set();
 if (inLife) {
@@ -1314,8 +1334,7 @@ if (inLife) {
     if (e.origin !== location.origin || !e.data || e.data.type !== 'LIFE_FINANCE_FREE_DAYS') return;
     freeDays = new Set(Array.isArray(e.data.days) ? e.data.days : []);
     if (e.data.error) toast(e.data.error);
-    else if (e.data.op === 'mark') toast('No spending today ✓');
-    else if (e.data.op === 'undo') toast('Free day taken back');
+    else if (e.data.op === 'mark') toast('Noted. If it stays that way, tonight counts as a no-spend day.');
     render();
   });
   try { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'FINANCE_FREE_DAY', payload: { op: 'ask' } }, location.origin); } catch {}
@@ -1324,8 +1343,8 @@ function freeDayStrip() {
   if (!inLife || ui.month !== monthKey(todayISO())) return '';
   const on = freeDays.has(todayISO());
   return `<section class="card free-day" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;padding:10px 14px">
-    <span>${on ? '<b>No spending today ✓</b> <small class="muted">Log spending is done for today.</small>' : '<span>Spent nothing today? Count it as a free day.</span>'}</span>
-    <button type="button" class="btn ${on ? '' : 'primary'}" data-act="free-day" data-op="${on ? 'undo' : 'mark'}">${on ? 'Undo' : 'No spending today'}</button>
+    <span>${on ? '<b>Nothing spent today ✓</b> <small class="muted">It counts tonight if nothing is logged for today.</small>' : '<span>Spent nothing today? Tonight it counts as a no-spend day.</span>'}</span>
+    ${on ? '' : '<button type="button" class="btn primary" data-act="free-day" data-op="mark">Nothing spent today</button>'}
   </section>`;
 }
 
@@ -1757,13 +1776,10 @@ function accLabel(a) {
 }
 
 // Rate to the base currency we'd suggest for a new record: today's rate if
-// known, else the last one you used for that currency.
+// known, else the last one you used for that currency (fx.js rateToBase, the
+// same rule Telegram and Life System's quick add use).
 function suggestedRate(cur) {
-  if (cur === state.settings.currency) return 1;
-  const live = pairRate(cur, state.settings.currency, state.rates);
-  if (live) return Math.round(live * 10000) / 10000;
-  const last = M.sortTx(state.tx).find((t) => t.currency === cur && t.rate);
-  return last?.rate || null;
+  return rateToBase(state, cur);
 }
 
 function openTxSheet(existing = null, preset = {}) {
@@ -2706,19 +2722,54 @@ async function onCSVFile(text) {
     if (res.duplicates && res.format === 'sheet') ImportCheck.show(importCheck([{ name: res.allMonths.map((m) => monthLabel(m)).join(', ') || 'Your sheet', ...res }]));
     return;
   }
-  const incomes = res.tx.filter((t) => t.type === 'income').length;
-  const expenses = res.tx.filter((t) => t.type === 'expense').length;
-  openSheet(`<h3>Import ${res.format === 'app' ? 'CSV' : 'from your sheet'} <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
+  // Rows in another currency without a rate: warned about, never imported 1:1.
+  let accPick = null;
+  const body = () => {
+    const incomes = res.tx.filter((t) => t.type === 'income').length;
+    const expenses = res.tx.filter((t) => t.type === 'expense').length;
+    const gaps = RateGaps.gapsOf(res.tx);
+    return `<h3>Import ${res.format === 'app' ? 'CSV' : 'from your sheet'} <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
     <p style="margin-top:0">${res.months.map((m) => monthLabel(m)).join(', ')}</p>
     <div class="split-row"><span>${incomes} incomes</span><b class="money income">${money(res.income)}</b></div>
     <div class="split-row"><span>${expenses} expenses</span><b class="money expense">${money(res.expense)}</b></div>
     ${res.duplicates ? `<div class="split-row"><span class="muted">Already here, skipped</span><b>${res.duplicates}</b></div>` : ''}
+    ${RateGaps.gapHTML(gaps)}
     <p class="muted small">Check these totals match your sheet. Categories are guessed from your notes; tap any record later to fix it.</p>
-    ${res.format === 'sheet' ? `<label class="field"><span>Put them in</span><select id="imp-acc">${state.settings.accounts.map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></label>` : ''}
-    <div class="btns"><button class="btn" data-close>Cancel</button><button class="btn primary" id="imp-go">Import ${res.tx.length}</button></div>`, (sheet) => {
-    sheet.querySelector('#imp-go').addEventListener('click', () => {
-      const acc = sheet.querySelector('#imp-acc')?.value;
-      if (acc) for (const t of res.tx) if (t.account) t.account = acc;
+    ${res.format === 'sheet' ? `<label class="field"><span>Put them in</span><select id="imp-acc">${state.settings.accounts.map((a) => `<option value="${esc(a.id)}" ${a.id === accPick ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select></label>` : ''}
+    <div class="btns"><button class="btn" data-close>Cancel</button><button class="btn primary" id="imp-go" ${gaps.length || !res.tx.length ? 'disabled' : ''}>Import ${res.tx.length}</button></div>`;
+  };
+  // The sheet format goes into one account: its currency decides the rate.
+  const applyAcc = () => {
+    if (res.format !== 'sheet' || !accPick) return;
+    const cur = M.account(state, accPick)?.currency || state.settings.currency;
+    for (const t of res.tx) {
+      if (!t.account) continue;
+      t.account = accPick;
+      if (t.currency !== cur) { t.currency = cur; t.rate = suggestedRate(cur); t.base = t.rate ? Math.round(t.amount * t.rate) : t.amount; }
+    }
+  };
+  openSheet(body(), (sheet) => {
+    const paint = () => { sheet.innerHTML = `<div class="grab"></div>${body()}`; };
+    accPick = sheet.querySelector('#imp-acc')?.value || null;
+    applyAcc();
+    paint();
+    sheet.addEventListener('change', (e) => {
+      if (e.target.id !== 'imp-acc') return;
+      accPick = e.target.value;
+      applyAcc();
+      paint();
+    });
+    sheet.addEventListener('click', (e) => {
+      if (RateGaps.onGapClick(e, sheet, async (g) => {
+        const base = state.settings.currency;
+        if (g.kind === 'set') fillRate(res.tx, g.currency, g.rate, base);
+        else if (g.kind === 'skip') res.tx = skipNoRate(res.tx, g.currency, base);
+        else if (g.kind === 'fetch') { await RateGaps.fetchRates(); fillKnownRates(res.tx, state); }
+        res.income = res.tx.filter((t) => t.type === 'income').reduce((a, t) => a + t.amount, 0);
+        res.expense = res.tx.filter((t) => t.type === 'expense').reduce((a, t) => a + t.amount, 0);
+        paint();
+      })) return;
+      if (!e.target.closest('#imp-go') || RateGaps.gapsOf(res.tx).length || !res.tx.length) return;
       state.tx.push(...res.tx);
       commit();
       closeSheet();
@@ -2753,22 +2804,51 @@ async function onWorkbookFile(buf) {
     <p class="muted small" style="margin-top:0">Check the totals against your sheet. Categories are guessed from your notes; fix any later in the Log.</p>
     <div class="list tab-list">${tabs.map(row).join('')}</div>
     <label class="field" style="margin-top:12px"><span>Put them in</span><select id="imp-acc">${state.settings.accounts.filter((a) => !a.archived).map((a) => `<option value="${esc(a.id)}">${esc(a.name)}</option>`).join('')}</select></label>
+    <div id="imp-gaps"></div>
     <div class="btns"><button class="btn" data-close>Cancel</button><button class="btn primary" id="imp-go">Import</button></div>`, (sheet) => {
-    const count = () => [...sheet.querySelectorAll('[data-tab-i]:checked')].reduce((a, el) => a + tabs[el.dataset.tabI].tx.length, 0);
+    const pickedTabs = () => [...sheet.querySelectorAll('[data-tab-i]:checked')].map((el) => tabs[el.dataset.tabI]);
+    const count = () => pickedTabs().reduce((a, t) => a + t.tx.length, 0);
     const btn = sheet.querySelector('#imp-go');
-    const label = () => { const n = count(); btn.textContent = `Import ${n} record${n === 1 ? '' : 's'}`; btn.disabled = !n; };
-    sheet.addEventListener('change', label);
-    label();
-    btn.addEventListener('click', () => {
+    // The account's currency decides each row's rate; rates you set stay.
+    const fx = {};
+    const applyAcc = () => {
       const acc = sheet.querySelector('#imp-acc').value;
       const cur = M.account(state, acc)?.currency || state.settings.currency;
-      const pickedTabs = [...sheet.querySelectorAll('[data-tab-i]:checked')].map((el) => tabs[el.dataset.tabI]);
-      const picked = pickedTabs.flatMap((t) => t.tx);
-      for (const t of picked) {
+      for (const t of tabs.flatMap((x) => x.tx)) {
         if (!t.account) continue;
         t.account = acc;
-        if (cur !== t.currency) { t.currency = cur; t.rate = suggestedRate(cur) || 1; t.base = Math.round(t.amount * t.rate); }
+        if (cur !== t.currency) { t.currency = cur; t.rate = fx[cur] || suggestedRate(cur); t.base = t.rate ? Math.round(t.amount * t.rate) : t.amount; }
       }
+    };
+    // Rows in another currency without a rate: warned about, never imported 1:1.
+    const label = () => {
+      const gaps = RateGaps.gapsOf(pickedTabs().flatMap((t) => t.tx));
+      sheet.querySelector('#imp-gaps').innerHTML = RateGaps.gapHTML(gaps);
+      const n = count();
+      btn.textContent = `Import ${n} record${n === 1 ? '' : 's'}`;
+      btn.disabled = !n || gaps.length > 0;
+    };
+    sheet.addEventListener('change', (e) => {
+      if (e.target.id === 'imp-acc') applyAcc();
+      label();
+    });
+    applyAcc();
+    label();
+    sheet.addEventListener('click', (e) => {
+      RateGaps.onGapClick(e, sheet, async (g) => {
+        const base = state.settings.currency;
+        for (const t of tabs) {
+          if (g.kind === 'set') { fx[g.currency] = g.rate; fillRate(t.tx, g.currency, g.rate, base); }
+          else if (g.kind === 'skip') t.tx = skipNoRate(t.tx, g.currency, base);
+        }
+        if (g.kind === 'fetch') { await RateGaps.fetchRates(); for (const t of tabs) fillKnownRates(t.tx, state); }
+        label();
+      });
+    });
+    btn.addEventListener('click', () => {
+      const chosen = pickedTabs();
+      const picked = chosen.flatMap((t) => t.tx);
+      if (!picked.length || RateGaps.gapsOf(picked).length) return;
       state.tx.push(...picked);
       commit();
       closeSheet();
@@ -2776,7 +2856,7 @@ async function onWorkbookFile(buf) {
       if (months.length) ui.month = months.at(-1);
       location.hash = '#log';
       toast(`Imported ${picked.length} records from ${months.length} month${months.length === 1 ? '' : 's'}`);
-      const checks = importCheck(pickedTabs.filter((t) => t.format === 'sheet'));
+      const checks = importCheck(chosen.filter((t) => t.format === 'sheet'));
       if (checks.length) setTimeout(() => ImportCheck.show(checks), 250);
     });
   });
@@ -3107,12 +3187,13 @@ document.addEventListener('click', (e) => {
   else if (act.startsWith('update-')) Updates.onClick(act);
   else if (act === 'cat-open') Spending.openCategory(el.dataset.cat, el.dataset.period, el.dataset.type);
   else if (Spending.onClick(act, el)) { /* the "Where your money goes" card */ }
+  else if (Reprice.onClick(act)) { /* "Re-price past entries" */ }
   else if (act === 'add') openTxSheet();
   else if (act === 'edit') openTxSheet(state.tx.find((t) => t.id === el.dataset.id));
   else if (act === 'transfer') openTransferSheet(el.dataset.from);
   else if (act === 'month') goToMonth(addMonths(ui.month, Number(el.dataset.step)));
   else if (act === 'goto-month') goToMonth(el.dataset.month);
-  else if (act === 'free-day') { try { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'FINANCE_FREE_DAY', payload: { op: el.dataset.op === 'undo' ? 'undo' : 'mark' } }, location.origin); } catch {} }
+  else if (act === 'free-day') { try { window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'FINANCE_FREE_DAY', payload: { op: 'mark' } }, location.origin); } catch {} }
   else if (act === 'year') goToMonth(`${Number(ui.month.slice(0, 4)) + Number(el.dataset.step)}${ui.month.slice(4)}`);
   else if (act === 'year') { ui.year += Number(el.dataset.step); render({ enter: true }); }
   else if (act === 'open-month') { ui.month = el.dataset.key; ui.search = ''; location.hash = '#log'; }
@@ -3546,6 +3627,19 @@ document.addEventListener('paste', (e) => {
 // Another tab or window changed the data: pick it up.
 window.addEventListener('storage', (e) => {
   if (e.key === STORAGE_KEYS.KEY) {
+    // A change made here is still waiting to be written: merge the stored copy
+    // into it (newest copy of each record wins, deletions stick), then write.
+    // Neither side's change is lost.
+    if (hasPendingSave()) {
+      try {
+        const stored = load();
+        if (!stored._sealed) state = mergeLocal(state, stored);
+      } catch { /* keep this device's copy; the next sync merges */ }
+      saveSoon(state);
+      flushSave();
+      render();
+      return;
+    }
     state = load();
     render();
   }

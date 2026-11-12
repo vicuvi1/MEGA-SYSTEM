@@ -12,6 +12,7 @@
  * - mainAccountId: quick add's default account (the main lei wallet).
  */
 import { addDays, daysBetween } from './dates'
+import { totalText } from './moneyText'
 
 export interface HubTx {
   id: string
@@ -39,8 +40,8 @@ export const prevMonth = (key: string): string => {
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 export const monthName = (key: string): string => MONTHS[Number(key.slice(5, 7)) - 1] ?? key
 
-/** "1,240 lei" (whole lei, rounded). */
-export const leiText = (bani: number): string => `${Math.round(bani / 100).toLocaleString('en-US')} lei`
+/** A total: "1 240 MDL" (whole units, rounded), Finance Helper's own formatter (core/moneyText). */
+export const leiText = (bani: number, currency = 'MDL'): string => totalText(bani, currency)
 const signed = (bani: number) => `${bani >= 0 ? '+' : '−'}${leiText(Math.abs(bani))}`
 
 const isExpense = (t: HubTx) => t.type === 'expense'

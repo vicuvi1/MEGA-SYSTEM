@@ -1332,7 +1332,7 @@ export function createTursoWebBridge(): Bridge {
     // Career: job board, portfolio, flashcards, essays, the shift study kit, the money plan, letters.
     career: createCareer(svcP, (db) => financeStateFrom(db, typeof localStorage !== 'undefined' ? localStorage : null), serverAi(currentSession)),
     // The Money hub and one-line quick add (Finance Helper's data).
-    finance: createMoneyApi(svcP, () => syncsP.then((list) => list.find((x) => x.spec === FINANCE)?.sync())),
+    finance: createMoneyApi(svcP, () => syncsP.then((list) => list.find((x) => x.spec === FINANCE)?.sync()), applyFinance),
     system: {
       health: async () => {
         const h = await readHealth(turso)

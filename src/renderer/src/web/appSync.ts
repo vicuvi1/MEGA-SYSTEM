@@ -76,9 +76,18 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     return legacy ? { savedAt: 0, data: share(legacy) } : null
   }
 
+  // The local copy as it was when this device last agreed with the database:
+  // a save that leaves it unchanged is not an edit. Comparing the raw text is
+  // cheap; turning a big copy into its shared form on every save was not.
+  let agreedRaw: string | null = null
   /** The app changed its data on this device (its page, the bot, a quest…). */
   const noteEdit = () => {
-    if (sharedOf(get(spec.localKey)) !== get(SYNCED)) set(EDITED, String(Date.now()))
+    const raw = get(spec.localKey)
+    if (agreedRaw !== null) {
+      if (raw !== agreedRaw) set(EDITED, String(Date.now()))
+      return
+    }
+    if (sharedOf(raw) !== get(SYNCED)) set(EDITED, String(Date.now()))
   }
 
   const once = async (): Promise<void> => {
@@ -94,7 +103,10 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     // The copy here says something the database's log doesn't (Sport Track's
     // water and reps): put it right even when nothing else changed.
     const drifted = !localChanged && !remoteChanged && !!spec.finalize && localRaw != null && (await mirror.read((db) => JSON.stringify(spec.finalize!(db, parse(localRaw), false)) !== localRaw))
-    if (!localChanged && !remoteChanged && !drifted) return
+    if (!localChanged && !remoteChanged && !drifted) {
+      if (localShared != null) agreedRaw = localRaw
+      return
+    }
 
     let merged: any
     if (!localChanged && spec.finalize) {
@@ -138,6 +150,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     }
     set(SYNCED, JSON.stringify(share(merged)))
     const next = JSON.stringify(merged)
+    agreedRaw = next
     if (next !== localRaw) {
       set(spec.localKey, next)
       if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))

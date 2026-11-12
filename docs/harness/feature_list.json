@@ -528,16 +528,15 @@
    "id": "F-FREEDAY",
    "priority": 2,
    "area": "money",
-   "title": "Free day (No spending today)",
-   "user_visible_behavior": "A No spending today button in the Today spending line and in Finance Helper's Log ticks Log spending once for today; undo takes the points back; Finance lists the day as No spending",
+   "title": "One no-spend button (Nothing spent today)",
+   "user_visible_behavior": "One honest 'Nothing spent today' button (Today's spending line, the Money page, Finance Helper's Log strip). It pays nothing at the tap; once the day is over it counts as a no-spend day only if nothing was logged for it. The old 'No spending today' (instant points) is gone; days it marked are judged the same way, paid once, and the points it paid stay.",
    "status": "passing",
    "verification": [
-    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-    "SMOKE_ONLY=\"No spending\" npm run smoke",
-    "SMOKE_ONLY=\"Today Now\" npm run smoke"
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/honestMoney.test.ts",
+    "SMOKE_ONLY=\"No spending\" npm run smoke"
    ],
-   "evidence": "honestMoney.test.ts 'a free day' (3 tests); smoke step No spending",
-   "notes": "Marker is the synced money_nothing_spent setting, not a transaction; same pay ref as a real spend"
+   "evidence": "2026-11-12: honestMoney.test.ts 'one no-spend button' (3 tests); smoke step No spending",
+   "notes": "Marker is the synced money_nothing_spent setting; day-end pay is money.no_spend (ref fin:nospend:<day>). MoneyService.freeDay/undoFreeDay removed."
   },
   {
    "id": "F-ALIVE",
@@ -1178,6 +1177,22 @@
   ],
   "evidence": "2026-11-12: branch module-switch; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); real 1920x1080 screenshots of the sidebar + Today and of Settings \u2192 Modules kept outside the repo.",
   "notes": "core/modules.ts (registry, readModules, menuPages, altPage, jobOn, offReply, notifOn, islandWithout), settingsKeys modules_on, tursoWebBridge life.modules, useModules.ts, ModuleOff.tsx, settings/modules.tsx, Sidebar.tsx, App.tsx, Palette.tsx, pages/Today.tsx, ThreeToday.tsx, todayEvents.ts, NotifToasts.tsx, Notifications.tsx, capture.ts, coachUnread.ts, vault/driveSync.ts, automationsFeed.ts, IslandFeed.tsx, DesktopIsland.tsx; web/webBots.ts (offReply, Coach off); server/telegramBot.ts (runTick parts, runDaily, runPlugins, Todoist pay); desktop/island.ts (setModule, island:module), main.ts (tray, timer: notifications), preload.ts. Money's own code untouched."
+   },
+   {
+ },
+ {
+  "id": "F-MONEY-SIX",
+  "priority": 1,
+  "area": "money",
+  "title": "Money fixes: foreign currency, import rates, one spending rule, decimals, one no-spend button, faster saves",
+  "user_visible_behavior": "A 10 EUR quick add or Telegram entry counts as its MDL value (through USD), not 10 MDL; Finance Home offers a one-time 'Re-price N past entries' review (before and after, confirm, Undo). An import preview warns 'No EUR→MDL rate for 12 rows: they would count 1:1' with Fetch rates, Set rate or Skip these rows, and Import waits. The Money hub's totals leave out points-only reward buys like Finance's donut. Single amounts show their bani (12,50 MDL) with Finance Helper's own formatter; totals are whole; the label is MDL everywhere. One 'Nothing spent today' button. Finance saves wait a moment and write once; Telegram entries still waiting after 50 days get a warning with Apply now on the Money page and are never dropped silently.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/moneyFixes.test.ts src/renderer/src/web/honestMoney.test.ts src/core/moneyHub.test.ts",
+   "SMOKE_ONLY=\"Money amounts|Finance import|No spending|Money hub|Finance categories\" npm run smoke"
+  ],
+  "evidence": "2026-11-12: branch money-six-fixes; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "finance/js/fx.js rateToBase + rateOnDay, reprice.js + screens/reprice.js, importer.js rateGaps/fillRate/fillKnownRates/skipNoRate + screens/rategaps.js (CSV, workbook, bank imports), store.js saveSoon/flushSave/onSaved, sync.js mergeLocal; web/financeBot.ts, web/moneyHub.ts (countsAsSpending), web/appSync.ts (cheap noteEdit), web/financeInbox.ts (keepInbox, inboxWarning), web/moneyApi.ts (inboxWarning, applyInbox), core/moneyText.ts, core/moneyHub.ts leiText, pages/Money.tsx, MoneyQuick.tsx, DayFlow.tsx, EmbedHost.tsx, main/money.ts."
  }
  ]
 }

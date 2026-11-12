@@ -39,7 +39,7 @@ describe('same-day comparison', () => {
     const c = sameDayCompare([ex('2026-10-01', 80)], '2026-11-01', cats)
     expect(c.thisTotal).toBe(0)
     expect(c.pct).toBeNull()
-    expect(c.changes[0]).toBe('Food: nothing yet, 80 lei by this day in October')
+    expect(c.changes[0]).toBe('Food: nothing yet, 80\u00a0MDL by this day in October')
   })
 
   it('cuts last month at its own end (31 March vs February)', () => {
@@ -51,7 +51,7 @@ describe('same-day comparison', () => {
   it('names the top 3 changes in plain words, biggest first', () => {
     const tx = [ex('2026-10-02', 100), ex('2026-11-02', 400), ex('2026-10-03', 200, 'transport'), ex('2026-11-03', 50, 'transport'), ex('2026-11-04', 60, 'fun'), ex('2026-11-04', 5, 'gifts')]
     const c = sameDayCompare(tx, '2026-11-05', cats)
-    expect(c.changes).toEqual(['Food: 300 lei more than by this day in October', 'Transport: 150 lei less than by this day in October', 'Fun: 60 lei, nothing by this day in October'])
+    expect(c.changes).toEqual(['Food: 300\u00a0MDL more than by this day in October', 'Transport: 150\u00a0MDL less than by this day in October', 'Fun: 60\u00a0MDL, nothing by this day in October'])
     expect(c.byCat.map((r) => r.id)).toEqual(['food', 'fun', 'transport', 'gifts'])
   })
 
@@ -69,7 +69,7 @@ describe('week comparison', () => {
     const w = weekCompare(tx, '2026-11-05')
     expect(w.thisWeek).toBe(8000)
     expect(w.lastWeek).toBe(10000)
-    expect(w.line).toBe('This week: 80 lei, 20 lei less than the same days last week.')
+    expect(w.line).toBe('This week: 80\u00a0MDL, 20\u00a0MDL less than the same days last week.')
   })
 })
 
@@ -81,7 +81,7 @@ describe('forecast to month end', () => {
     expect(f.pace).toBe(5000)
     // 3000 − 500 − 1000 − 20 days × 50 = 500 lei
     expect(f.endNet).toBe(50000)
-    expect(f.line).toBe('At this pace you end November at +500 lei')
+    expect(f.line).toBe('At this pace you end November at +500\u00a0MDL')
     expect(f.actual).toHaveLength(10)
     expect(f.projected[0]).toEqual({ day: '2026-11-10', net: 250000 })
     expect(f.projected.at(-1)).toEqual({ day: '2026-11-30', net: 50000 })
@@ -94,7 +94,7 @@ describe('forecast to month end', () => {
     const f = monthForecast(tx, '2026-11-01')
     expect(f.pace).toBe(3000)
     expect(f.endNet).toBe(-29 * 3000)
-    expect(f.line).toBe('At this pace you end November at −870 lei')
+    expect(f.line).toBe('At this pace you end November at −870\u00a0MDL')
   })
 
   it('leaves bills out of the pace but in the total', () => {
@@ -145,7 +145,7 @@ describe('goals', () => {
     expect(g.eta).toBe('May 2027')
     // 9000 lei over 12 weeks = 750 lei a week
     expect(g.perWeek).toBe(75000)
-    expect(g.line).toBe('Put 750 lei a week to get there by 28 Jan')
+    expect(g.line).toBe('Put 750\u00a0MDL a week to get there by 28 Jan')
   })
 
   it('without a deadline: a 12-week plan; reached goals say so', () => {
@@ -176,11 +176,11 @@ describe('quick add default account', () => {
 describe("Ben's money lines", () => {
   const f = { perDay: 18000, leftToday: 18000, limit: { amount: 400000, spent: 330000, daysLeft: 26 }, loggedToday: false, bill: { name: 'Internet', amount: 15000, date: '2026-11-06' } }
   it('morning: safe to spend, what is left, the 80% warning', () => {
-    expect(morningMoneyLine(f)).toBe('💸 Safe to spend today: 180 lei · 700 lei left for 26 days\n⚠️ 83% of this month\'s limit is used, 26 days to go. 📅 Internet (150 lei) is due 6 Nov.')
+    expect(morningMoneyLine(f)).toBe('💸 Safe to spend today: 180\u00a0MDL · 700\u00a0MDL left for 26 days\n⚠️ 83% of this month\'s limit is used, 26 days to go. 📅 Internet (150\u00a0MDL) is due 6 Nov.')
     expect(morningMoneyLine({ ...f, perDay: null })).toBeNull()
   })
   it('warning: over the limit, a bill tomorrow', () => {
-    expect(warnLine({ ...f, limit: { amount: 100000, spent: 120000, daysLeft: 3 } }, '2026-11-05')).toBe('⚠️ Over your monthly limit by 200 lei. 📅 Internet (150 lei) is due tomorrow.')
+    expect(warnLine({ ...f, limit: { amount: 100000, spent: 120000, daysLeft: 3 } }, '2026-11-05')).toBe('⚠️ Over your monthly limit by 200\u00a0MDL. 📅 Internet (150\u00a0MDL) is due tomorrow.')
     expect(warnLine({ ...f, limit: null, bill: null })).toBeNull()
   })
   it('evening: asked only when nothing was logged', () => {

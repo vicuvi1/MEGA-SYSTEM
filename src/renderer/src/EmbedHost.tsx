@@ -200,14 +200,16 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         }
       }
 
-      // Finance Helper's "No spending today": the same free day as on Today → Now (ticks Log spending once).
+      // Finance Helper's "Nothing spent today": the one honest no-spend button (as on Today and
+      // the Money page). It pays nothing now; the day is judged once it is over. No undo, no instant points.
       if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'FINANCE_FREE_DAY') {
         const op = data.payload?.op
         let out: { days: string[]; paid?: number; error?: string } = { days: [] }
         try {
-          if (op === 'mark') out = await life.finance!.freeDay()
-          else if (op === 'undo') out = await life.finance!.undoFreeDay()
-          else out = { days: (await life.finance?.freeDays()) ?? [] }
+          if (op === 'mark') {
+            await life.money.nothingSpent()
+            out = { days: (await life.finance?.freeDays()) ?? [] }
+          } else out = { days: (await life.finance?.freeDays()) ?? [] }
           if (op === 'mark' || op === 'undo') window.dispatchEvent(new CustomEvent('life-wallet-changed'))
         } catch (err) {
           out = { days: (await life.finance?.freeDays().catch(() => [])) ?? [], error: (err as Error).message }

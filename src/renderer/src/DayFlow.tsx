@@ -140,27 +140,22 @@ export function DayFlow(props: DayFlowProps) {
       props.onChange()
     }
   }
-  // A free day: "No spending today" ticks Log spending once (same pay as a spend), today only.
-  const [freeToday, setFreeToday] = useState(false)
+  // One no-spend button, the honest one (the same as on the Money page): it pays
+  // nothing now; once the day is over it counts as a no-spend day only if no
+  // spending was logged for it (MoneyService.payDays, money.no_spend).
+  const [nothingToday, setNothingToday] = useState(false)
   useEffect(() => {
     if (!spendOpen) return
-    life.finance?.freeDays().then((d) => setFreeToday(d.includes(summary.today))).catch(() => {})
+    life.money
+      .days()
+      .then((d) => setNothingToday(!!d?.today?.nothingSpentTapped))
+      .catch(() => {})
   }, [spendOpen, summary.today])
-  const markFree = async () => {
-    if (!life.finance || spendBusy) return
-    const r = await spendAct(() => life.finance!.freeDay(), 'No spending today. Nice.')
+  const markNothing = async () => {
+    if (spendBusy) return
+    const r = await spendAct(() => life.money.nothingSpent(), 'Noted. If it stays that way, tonight counts as a no-spend day.')
     if (r) {
-      setFreeToday(true)
-      if (r.paid > 0) soundCoin()
-      window.dispatchEvent(new CustomEvent('life-wallet-changed'))
-      props.onChange()
-    }
-  }
-  const undoFree = async () => {
-    const r = life.finance ? await spendAct(() => life.finance!.undoFreeDay(), 'Free day taken back') : null
-    if (r) {
-      setFreeToday(false)
-      window.dispatchEvent(new CustomEvent('life-wallet-changed'))
+      setNothingToday(true)
       props.onChange()
     }
   }
@@ -828,11 +823,9 @@ export function DayFlow(props: DayFlowProps) {
         >
           <input autoFocus value={spendText} onChange={(e) => setSpendText(e.target.value)} placeholder="45 lunch · 120 groceries · 30 taxi" aria-label="What you spent" onKeyDown={(e) => e.key === 'Escape' && setSpendOpen(false)} />
           <button className="btn primary small" disabled={!spendText.trim() || spendBusy}>{spendBusy ? 'Saving…' : 'Log'}</button>
-          {life.finance && (freeToday ? (
-            <button type="button" className="btn ghost small" data-testid="free-day" onClick={() => void undoFree()} title="Take the free day back">✓ No spending today · Undo</button>
-          ) : (
-            <button type="button" className="btn small" data-testid="free-day" onClick={() => void markFree()} title="Spent nothing today? Count it as done">No spending today</button>
-          ))}
+          <button type="button" className="btn small" data-testid="no-spend" disabled={nothingToday} onClick={() => void markNothing()} title="Spent nothing today? It counts as a no-spend day once the day is over, if nothing is logged for it">
+            {nothingToday ? '✓ Nothing spent today' : 'Nothing spent today'}
+          </button>
           <button type="button" className="btn ghost small" onClick={() => props.onOpenApp('money')} title="Open Finance Helper">Finance Helper</button>
           <button type="button" className="btn ghost small" onClick={() => setSpendOpen(false)} aria-label="Close">✕</button>
         </form>

@@ -6,10 +6,13 @@
 import { LedgerError } from '@core/ledger'
 import { financeStateFrom } from './botBrain'
 import type { MoneyHubView } from './moneyHub'
+import { inboxWarning, readInbox, type InboxWarning } from './financeInbox'
 import type { WebServices } from './webServices'
 
 export interface QuickPreview {
   amount: number
+  /** The record's own currency (the account's), e.g. EUR for "10 food euro card". */
+  currency?: string
   label: string
   type: string
   category: string
@@ -22,6 +25,8 @@ export interface QuickAdded {
   line: string
   type: string
   amount: number
+  /** The record's own currency. */
+  currency?: string
   txId: string
   /** Points paid for the day's first log (0 when not). */
   paid: number
@@ -34,24 +39,18 @@ export interface MoneyApi {
   preview(text: string): Promise<QuickPreview | null>
   quickAdd(text: string): Promise<QuickAdded>
   undo(txId: string, ledgerId?: number | null): Promise<MoneyHubView | null>
-  /** A free day: "No spending today". Ticks Log spending once (same pay as a spend); today only. */
-  freeDay(): Promise<FreeDay>
-  undoFreeDay(): Promise<FreeDay>
-  /** Days marked as free, for Finance Helper's day list. */
+  /** Days you said nothing was spent ("Nothing spent today"), for Finance Helper's day list. */
   freeDays(): Promise<string[]>
-}
-
-export interface FreeDay {
-  day: string
-  /** Points paid now (0 when the day was already paid or counted). */
-  paid: number
-  days: string[]
+  /** Entries from Telegram still not in Finance Helper after 50 days (null: none). */
+  inboxWarning(): Promise<InboxWarning | null>
+  /** "Apply now": adds the waiting entries to Finance Helper on this device; returns how many and what still waits. */
+  applyInbox(): Promise<{ added: number; warning: InboxWarning | null }>
 }
 
 const store = () => (typeof localStorage !== 'undefined' ? localStorage : null)
 const W = 'life-wallet-changed'
 
-export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Promise<unknown>): MoneyApi {
+export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Promise<unknown>, applyFinanceInbox: () => Promise<number> = async () => 0): MoneyApi {
   const hubMod = () => import('./moneyHub')
   const botMod = () => import('./financeBot')
   const hub = async (preferTx?: string): Promise<MoneyHubView | null> => {
@@ -65,17 +64,16 @@ export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Pr
     })
   }
   const freeDays = async () => (await svcP).read((s) => s.money.marks().nothingSpent)
+  const warning = async () => (await svcP).read((s) => inboxWarning(readInbox(s.db as any), financeStateFrom(s.db, store())))
   return {
     hub: () => hub(),
-    freeDay: async () => {
-      const r = await (await svcP).money.freeDay()
-      return { day: r.day, paid: r.paid, days: await freeDays() }
-    },
-    undoFreeDay: async () => {
-      const r = await (await svcP).money.undoFreeDay()
-      return { day: r.today.day, paid: 0, days: await freeDays() }
-    },
     freeDays,
+    inboxWarning: warning,
+    applyInbox: async () => {
+      const added = await applyFinanceInbox().catch(() => 0)
+      if (added) await syncFinance().catch(() => null)
+      return { added, warning: await warning() }
+    },
     preview: async (text) => {
       const t = text.trim()
       if (!t || t.length > 120) return null
@@ -106,7 +104,7 @@ export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Pr
           }
         }
         const plain = r.reply.split('\n')[0].replace(/<[^>]+>/g, '').replace(/^✅\s*/, '')
-        return { line: plain, type: String(r.tx.type), amount: Number(r.tx.amount), txId: String(r.tx.id), paid, ledgerId }
+        return { line: plain, type: String(r.tx.type), amount: Number(r.tx.amount), currency: String(r.tx.currency || ''), txId: String(r.tx.id), paid, ledgerId }
       }, W)
       if (!out) throw new Error(`No amount in "${t.slice(0, 40)}". Try "45 food", "120+45 groceries yesterday" or "+500 salary".`)
       await syncFinance().catch(() => null)

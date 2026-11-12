@@ -10,6 +10,8 @@ import { parseCSV } from '../csv.js';
 import { readWorkbook } from '../xlsx-read.js';
 import { formatMoney } from '../money.js';
 import { dayLabel, monthLabel } from '../dates.js';
+import { fillRate, fillKnownRates, skipNoRate } from '../importer.js';
+import * as RateGaps from './rategaps.js';
 
 // Bank CSVs are often not UTF-8 (Windows Cyrillic or Central European).
 export function decodeText(buf) {
@@ -54,6 +56,9 @@ export function openBankImport(rows, { fileName = '' } = {}) {
     account: accounts.some((a) => a.id === preset?.account) ? preset.account : accounts.find((a) => a.kind === 'card')?.id || accounts[0]?.id,
   };
   let res = null;
+  // Rows in another currency without a rate: a rate you set, or skipped (never 1:1).
+  const fx = {};
+  const skipCur = new Set();
   // The review: rows you untick stay out; categories you change are kept.
   // Keyed by date|amount|note|n so a repaint (new ids) keeps your choices.
   const unticked = new Set();
@@ -68,6 +73,14 @@ export function openBankImport(rows, { fileName = '' } = {}) {
   const preview = () => {
     const ok = cfg.map.date != null && (cfg.map.amount != null || cfg.map.debit != null || cfg.map.credit != null);
     res = ok ? parseStatement(rows, cfg, state, cfg) : null;
+    if (res) {
+      const base = state.settings.currency;
+      for (const [cur, r] of Object.entries(fx)) fillRate(res.tx, cur, r, base);
+      fillKnownRates(res.tx, state);
+      for (const cur of skipCur) res.tx = skipNoRate(res.tx, cur, base);
+      res.income = res.tx.filter((t) => t.type === 'income').reduce((a, t) => a + t.base, 0);
+      res.expense = res.tx.filter((t) => t.type === 'expense').reduce((a, t) => a + t.base, 0);
+    }
     if (!ok) return '<p class="lock-msg">Pick the date column and either the amount column or the money in / out columns.</p>';
     if (!res.tx.length) return `<p class="muted">${res.duplicates ? `All ${res.duplicates} records are already in the app.` : 'No rows with a date and an amount under these headings. Check the heading row and the columns.'}</p>`;
     const cur = (t) => formatMoney(t.type === 'income' ? t.amount : -t.amount, t.currency, { sign: t.type === 'income' });
@@ -75,6 +88,7 @@ export function openBankImport(rows, { fileName = '' } = {}) {
       <div class="split-row"><span>${res.tx.filter((t) => t.type === 'expense').length} out</span><b class="money expense">${ctx.money(res.expense)}</b></div>
       ${res.duplicates ? `<div class="split-row"><span class="muted">Already in the app, skipped</span><b>${res.duplicates}</b></div>` : ''}
       ${res.skipped ? `<div class="split-row"><span class="muted">Rows without a date or amount (totals, notes)</span><b>${res.skipped}</b></div>` : ''}
+      ${RateGaps.gapHTML(RateGaps.gapsOf(res.tx))}
       <p class="muted small">${res.months.map((m) => monthLabel(m)).join(', ')}. Check the totals against the statement.</p>
       <p class="small" style="margin:8px 0 4px"><b>Check each row.</b> Untick what you don't want; change a guessed category. <button type="button" class="linkish" data-bk="all">Tick all</button> · <button type="button" class="linkish" data-bk="none">Untick all</button></p>
       <div class="bank-prev bank-review">${res.tx.map((t, i) => {
@@ -97,7 +111,7 @@ export function openBankImport(rows, { fileName = '' } = {}) {
       ${cfg.map.amount != null ? `<label class="field check"><input type="checkbox" id="bk-flip" ${cfg.flip ? 'checked' : ''}><span>Money out shows as positive numbers</span></label>` : ''}
     </details>
     <div id="bk-preview">${preview()}</div>
-    <div class="btns" style="margin-top:12px"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="bk-go" ${chosen().length ? '' : 'disabled'}>Import ${chosen().length || ''}</button></div>`;
+    <div class="btns" style="margin-top:12px"><button class="btn" type="button" data-close>Cancel</button><button class="btn primary" type="button" id="bk-go" ${chosen().length && !RateGaps.gapsOf(chosen()).length ? '' : 'disabled'}>Import ${chosen().length || ''}</button></div>`;
 
   ctx.openSheet('', (sheet) => {
     const paint = () => {
@@ -109,7 +123,7 @@ export function openBankImport(rows, { fileName = '' } = {}) {
     const goLabel = () => {
       const go = sheet.querySelector('#bk-go');
       const n = chosen().length;
-      if (go) { go.textContent = `Import ${n || ''}`; go.disabled = !n; }
+      if (go) { go.textContent = `Import ${n || ''}`; go.disabled = !n || RateGaps.gapsOf(chosen()).length > 0; }
     };
     sheet.addEventListener('change', (e) => {
       const el = e.target;
@@ -131,6 +145,12 @@ export function openBankImport(rows, { fileName = '' } = {}) {
       paint();
     });
     sheet.addEventListener('click', (e) => {
+      if (RateGaps.onGapClick(e, sheet, async (g) => {
+        if (g.kind === 'set') fx[g.currency] = g.rate;
+        else if (g.kind === 'skip') skipCur.add(g.currency);
+        else if (g.kind === 'fetch') await RateGaps.fetchRates();
+        paint();
+      })) return;
       const bk = e.target.closest('[data-bk]');
       if (bk) {
         unticked.clear();
@@ -140,7 +160,7 @@ export function openBankImport(rows, { fileName = '' } = {}) {
         return;
       }
       const picked = chosen().map(({ _k, ...t }) => t);
-      if (!e.target.closest('#bk-go') || !picked.length) return;
+      if (!e.target.closest('#bk-go') || !picked.length || RateGaps.gapsOf(picked).length) return;
       const st = ctx.state;
       st.settings.bankPresets = { ...(st.settings.bankPresets || {}), [signature(rows, cfg.headerRow)]: { map: cfg.map, flip: cfg.flip, account: cfg.account } };
       st.settings.updatedAt = Date.now();
