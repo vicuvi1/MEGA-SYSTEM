@@ -119,24 +119,60 @@ function idField(...lists: unknown[][]): string | null {
 }
 
 /**
+ * Columns (and JSON fields) that are real running counts: both sides' changes
+ * add up when both changed them. Everything else that is a number (a weight,
+ * a position, a start time, a price…) is never added up.
+ * - `allocated_coins`, `allocated_real_cost`: a goal jar's balance (shop.ts adds and takes coins).
+ * - `count`: how many of an item you hold (inventory_items).
+ * - `doneToday`, `currentMl`, `waterMl`: today's reps and water inside Sport Track's copy.
+ */
+export const COUNTER_KEYS: ReadonlySet<string> = new Set(['allocated_coins', 'allocated_real_cost', 'count', 'doneToday', 'currentMl', 'waterMl'])
+
+/** The fields that say when a row or record was last changed. */
+const EDIT_TIME_KEYS = ['updated_at', 'updatedAt', 'editedAt', 'savedAt']
+const timeValue = (v: unknown): number | null => {
+  if (typeof v === 'number' && Number.isFinite(v)) return v
+  if (typeof v === 'string' && v) {
+    const t = Date.parse(v)
+    return Number.isNaN(t) ? null : t
+  }
+  return null
+}
+/** true: the server's copy was changed later; false: mine was; null: can't tell. */
+function serverIsLater(a: Record<string, unknown>, s: Record<string, unknown>): boolean | null {
+  for (const k of EDIT_TIME_KEYS) {
+    const ta = timeValue(a[k])
+    const ts = timeValue(s[k])
+    if (ta == null || ts == null) continue
+    if (ts !== ta) return ts > ta
+  }
+  return null
+}
+
+/**
  * Three-way merge of one value: `b` the common start, `a` mine (this desktop),
  * `s` the server's. Only one side changed → that side. Both changed: objects
- * and lists merge field by field, counters add both changes, times take the
- * later one, anything else keeps mine.
+ * and lists merge field by field, the counters in COUNTER_KEYS add both
+ * changes, times take the later one, and anything else (other numbers
+ * included) takes the side whose row was changed later (`updated_at`,
+ * `updatedAt`, `editedAt` or `savedAt`), or else mine.
+ * `serverLater`: the enclosing row or record says the server's copy is newer.
  */
-export function merge3(key: string, b: unknown, a: unknown, s: unknown): unknown {
+export function merge3(key: string, b: unknown, a: unknown, s: unknown, serverLater = false): unknown {
   if (same(a, b)) return s
   if (same(s, b) || same(a, s)) return a
+  const clash = serverLater ? s : a
   if (typeof a === 'number' && typeof s === 'number') {
     if (isTimeKey(key)) return Math.max(a, s)
-    if (typeof b === 'number') return s + (a - b)
-    return a
+    if (COUNTER_KEYS.has(key) && typeof b === 'number') return s + (a - b)
+    return clash
   }
   if (isObj(a) && isObj(s)) {
     const base = isObj(b) ? b : {}
+    const later = serverIsLater(a, s) ?? serverLater
     const out: Record<string, unknown> = {}
     for (const k of new Set([...Object.keys(s), ...Object.keys(a)])) {
-      const v = merge3(k, base[k], a[k], s[k])
+      const v = merge3(k, base[k], a[k], s[k], later)
       if (v !== undefined) out[k] = v
     }
     return out
@@ -152,7 +188,7 @@ export function merge3(key: string, b: unknown, a: unknown, s: unknown): unknown
       const order = [...s.map(id), ...a.map(id).filter((k) => !sm.has(k))]
       const out: unknown[] = []
       for (const k of order) {
-        const v = merge3(key, bm.get(k), am.get(k), sm.get(k))
+        const v = merge3(key, bm.get(k), am.get(k), sm.get(k), serverLater)
         if (v !== undefined) out.push(v)
       }
       return out
@@ -172,15 +208,16 @@ export function merge3(key: string, b: unknown, a: unknown, s: unknown): unknown
       }
     }
     const [pa, ps] = [parse(a), parse(s)]
-    if (pa !== undefined && ps !== undefined) return JSON.stringify(merge3(key, parse(b), pa, ps))
+    if (pa !== undefined && ps !== undefined) return JSON.stringify(merge3(key, parse(b), pa, ps, serverLater))
   }
-  return a
+  return clash
 }
 
-/** Merges one row; `b` null when this desktop created it. */
+/** Merges one row; `b` null when this desktop created it. A clash goes to the later `updated_at`, else this desktop. */
 export function mergeRow(b: Row | null, a: Row, s: Row): Row {
+  const later = serverIsLater(a, s) ?? false
   const out: Row = {}
-  for (const k of new Set([...Object.keys(s), ...Object.keys(a)])) out[k] = merge3(k, b ? b[k] : undefined, a[k], s[k]) as Param
+  for (const k of new Set([...Object.keys(s), ...Object.keys(a)])) out[k] = merge3(k, b ? b[k] : undefined, a[k], s[k], later) as Param
   return out
 }
 

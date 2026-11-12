@@ -45,7 +45,14 @@ const parse = (raw: string | null): any => {
 /** `onSynced`: after each sync run (e.g. Waky's times go into the sleep log). */
 export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null, onSynced?: () => void) {
   const SYNCED = `life_sync_${spec.setting}` // what both sides last agreed on
+  // When you last changed the app here, on the shared edit timeline (below).
+  // Cleared once that edit is synced, so an old time never stands for a newer edit.
   const EDITED = `life_sync_${spec.setting}_edited`
+  // The `editedAt` of the database copy this device last agreed with. Edit
+  // times are only ever compared with `editedAt` values: an edit made after
+  // seeing a copy counts as later than it (at least its editedAt + 1), even
+  // when this device's clock is behind the one that wrote it.
+  const SEEN = `life_sync_${spec.setting}_seen`
   const share = spec.share ?? ((x: any) => x)
   const fromShared = spec.fromShared ?? ((x: any) => x)
   let running: Promise<void> | null = null
@@ -65,6 +72,15 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       /* private window */
     }
   }
+  const del = (k: string) => {
+    try {
+      store?.removeItem(k)
+    } catch {
+      /* private window */
+    }
+  }
+  /** An edit's time: this device's clock, but never before the copy it was made on. */
+  const editStamp = () => Math.max(Date.now(), (Number(get(SEEN)) || 0) + 1)
   const sharedOf = (raw: string | null) => {
     const obj = parse(raw)
     return obj ? JSON.stringify(share(obj)) : null
@@ -84,10 +100,10 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
   const noteEdit = () => {
     const raw = get(spec.localKey)
     if (agreedRaw !== null) {
-      if (raw !== agreedRaw) set(EDITED, String(Date.now()))
+      if (raw !== agreedRaw) set(EDITED, String(editStamp()))
       return
     }
-    if (sharedOf(raw) !== get(SYNCED)) set(EDITED, String(Date.now()))
+    if (sharedOf(raw) !== get(SYNCED)) set(EDITED, String(editStamp()))
   }
 
   const once = async (): Promise<void> => {
@@ -109,6 +125,8 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     }
 
     let merged: any
+    // The editedAt of the copy this run agrees on (kept as SEEN).
+    let agreedAt = Number(remoteNow?.editedAt ?? remoteNow?.savedAt) || 0
     if (!localChanged && spec.finalize) {
       // Only the other side changed, but the database's copy may be off from the log: check first.
       const mine = parse(localRaw)
@@ -119,7 +137,8 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     }
     if (localChanged) {
       // Not edited here (only the log check asked for a write): the other side is the newer one.
-      const edited = realEdit ? Number(get(EDITED)) || Date.now() : -1
+      // No marker (the app saved without telling us): the edit is now.
+      const edited = realEdit ? Math.max(Number(get(EDITED)) || Date.now(), (Number(get(SEEN)) || 0) + 1) : -1
       merged = await mirror.write((db) => {
         // Read again inside the change: another device may have just saved.
         const remote = remoteOf(db)
@@ -127,12 +146,16 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
         if (!mine) return null
         // The other copy's last real change: a write of only the log's numbers (Sport Track) keeps `editedAt`.
         const theirsAt = Number(remote?.editedAt ?? remote?.savedAt) || 0
+        agreedAt = theirsAt
         let out = remote?.data && JSON.stringify(remote.data) !== synced ? pruneDeleted(spec, spec.merge(mine, remote.data, edited >= theirsAt), parse(synced), share(mine), remote.data) : mine
         if (spec.finalize) out = spec.finalize(db, out, true)
         if (!remote?.data || JSON.stringify(share(out)) !== JSON.stringify(remote.data)) {
           const at = Date.now()
           // Only the log check asked for this write (nothing edited here): the copy's last real change stays as it was.
-          setSetting(db as any, spec.setting, JSON.stringify({ savedAt: at, editedAt: realEdit || !theirsAt ? at : theirsAt, data: share(out) }))
+          // A real edit is stamped after the copy it merged with, whatever this clock says.
+          const editedAt = realEdit ? Math.max(at, edited, theirsAt + 1) : theirsAt || at
+          agreedAt = editedAt
+          setSetting(db as any, spec.setting, JSON.stringify({ savedAt: at, editedAt, data: share(out) }))
         }
         return out
       })
@@ -144,11 +167,16 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     // You changed the app again while this sync was waiting (Y4): never overwrite
     // that newer edit; the next run merges it.
     if (get(spec.localKey) !== localRaw) {
-      if (localChanged) set(SYNCED, JSON.stringify(share(merged)))
+      if (localChanged) {
+        set(SYNCED, JSON.stringify(share(merged)))
+        set(SEEN, String(agreedAt))
+      }
       soon()
       return
     }
     set(SYNCED, JSON.stringify(share(merged)))
+    set(SEEN, String(agreedAt))
+    del(EDITED)
     const next = JSON.stringify(merged)
     agreedRaw = next
     if (next !== localRaw) {
@@ -221,16 +249,39 @@ const unionBy = (key: (x: any) => string, ...lists: any[][]) => {
 }
 const asJson = (x: any) => JSON.stringify(x)
 
-/** Waky: every morning, night and opened chest from both; settings from the newer. */
+const ENTRY_TIME = ['updatedAt', 'editedAt', 'at', 'ts']
+const isRecord = (x: any) => !!x && typeof x === 'object' && !Array.isArray(x)
+/**
+ * One record (a Waky morning, night or chest) changed on both devices: every
+ * field from both. A field both have: the record with the later time
+ * (`updatedAt`, `editedAt`, `at`, `ts`) wins, else the newer copy.
+ */
+export function mergeEntry(older: any, newer: any): any {
+  if (!isRecord(older) || !isRecord(newer)) return newer ?? older
+  for (const k of ENTRY_TIME) {
+    const o = Number(older[k])
+    const n = Number(newer[k])
+    if (Number.isFinite(o) && Number.isFinite(n) && o !== n) return o > n ? { ...newer, ...older } : { ...older, ...newer }
+  }
+  return { ...older, ...newer }
+}
+/** Two maps of records (day → record): every key from both, each record merged field by field. */
+export function mergeEntries(older: any, newer: any): Record<string, any> {
+  const out: Record<string, any> = { ...(isRecord(older) ? older : {}) }
+  for (const [k, v] of Object.entries(isRecord(newer) ? newer : {})) out[k] = k in out ? mergeEntry(out[k], v) : v
+  return out
+}
+
+/** Waky: every morning, night and opened chest from both (field by field); settings from the newer. */
 export function mergeWaky(mine: any, theirs: any, mineIsNewer: boolean): any {
   const newer = mineIsNewer ? mine : theirs
   const older = mineIsNewer ? theirs : mine
   return {
     ...older,
     ...newer,
-    days: { ...(older?.days ?? {}), ...(newer?.days ?? {}) },
-    nights: { ...(older?.nights ?? {}), ...(newer?.nights ?? {}) },
-    opened: { ...(older?.opened ?? {}), ...(newer?.opened ?? {}) },
+    days: mergeEntries(older?.days, newer?.days),
+    nights: mergeEntries(older?.nights, newer?.nights),
+    opened: mergeEntries(older?.opened, newer?.opened),
     spent: unionBy(asJson, newer?.spent, older?.spent),
     shielded: unionBy(asJson, newer?.shielded, older?.shielded)
   }

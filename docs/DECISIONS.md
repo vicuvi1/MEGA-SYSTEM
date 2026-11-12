@@ -517,3 +517,18 @@ entry that says why.
   decides; two engines would disagree about his level.
 - **Rules out:** a level that changes by itself, a second progression engine in the Training home or the
   Classic tracker's Today, deleting old rep logs when moving to sets × reps, points for levels or offers.
+
+### Sync merges never add up plain numbers and never drop one side's records (2026-11-12)
+- **Decision:** the desktop offline merge adds both changes only for the counters listed in
+  `COUNTER_KEYS` (`web/desktopSync.ts`); any other clash goes to the later `updated_at` (or
+  `updatedAt` / `editedAt` / `savedAt`), else this desktop. App copies order edits on the shared
+  `editedAt` timeline (an edit is never stamped before the copy it was made on), and the edit marker is
+  cleared after each sync. Sport Track exercises and past days, and Waky days, nights and chests, merge
+  as a union (field by field); a deletion sticks only through the three-way check against the last
+  synced copy (`lists`). An unreadable offline queue is backed up before it is ever overwritten.
+- **Why:** each old rule lost real data: a weight became the sum of two edits, an exercise added on the
+  older device vanished, a Waky morning lost its mood, and a device with a slow clock lost edits it
+  made after seeing the other copy.
+- **Rules out:** adding up a numeric column that is not in `COUNTER_KEYS`, "newer copy replaces the whole
+  record", comparing this device's clock with another device's `editedAt` without the `+1` rule, and
+  writing over stored data that could not be parsed.
