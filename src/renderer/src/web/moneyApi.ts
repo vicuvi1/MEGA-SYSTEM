@@ -61,16 +61,7 @@ export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Pr
       let state = financeStateFrom(s.db, store())
       // This device's copy may not have the new record yet (Finance Helper locked here): use the synced one.
       if (preferTx && !(state?.tx ?? []).some((t: any) => t?.id === preferTx)) state = financeState(s.db as any) ?? state
-      // [books] This device's Personal / Business / Both pick (shared with Finance Helper) and the business report currency.
-      const st = store()
-      const read = (k: string) => {
-        try {
-          return st?.getItem(k) ?? null
-        } catch {
-          return null
-        }
-      }
-      const view = hubView(state, today, read('money_book'), read('money_biz_currency'))
+      const view = hubView(state, today)
       // The long-view card (net worth, savings rate, runway): read only.
       if (view) view.long = longCardView(cleanFinance(state), today)
       return view

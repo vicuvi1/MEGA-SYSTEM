@@ -136,30 +136,6 @@ describe('books', () => {
     expect(savingsRates(s, '2026-03-31', { book: 'business' }).months[0].rate).toBeCloseTo(0.8)
     expect(savingsRates(s, '2026-03-31', { book: 'personal' }).months[0].rate).toBeCloseTo(0.8)
   })
-
-  it("a record without its own book follows its account's book (books.js), and pay yourself is counted once", () => {
-    const s = state({
-      settings: { accounts: [acc('cash', { start: 100000 }), acc('biz', { start: 50000, book: 'business' })] },
-      tx: [
-        tx({ type: 'income', category: 'work', amount: 200000, account: 'biz', date: '2026-03-01' }), // no book: the account's
-        tx({ amount: 40000, account: 'biz', date: '2026-03-02' }),
-        tx({ amount: 5000, account: 'cash', book: 'business', date: '2026-03-03' }), // a business cost on a personal account
-        tx({ type: 'transfer', amount: 60000, from: 'biz', to: 'cash', date: '2026-03-04', category: undefined, account: undefined }), // pay yourself
-        tx({ amount: 20000, date: '2026-03-05' })
-      ]
-    })
-    expect(booksIn(s)).toEqual(['personal', 'business'])
-    const all = netWorthHistory(s, '2026-03-31').now
-    const p = netWorthHistory(s, '2026-03-31', { book: 'personal' }).now
-    const b = netWorthHistory(s, '2026-03-31', { book: 'business' }).now
-    expect(b).toBe(50000 + 200000 - 40000 - 60000)
-    expect(p).toBe(100000 - 5000 + 60000 - 20000)
-    expect(p + b).toBe(all)
-    const flow = (book?: string) => monthFlows(s, { book }).get('2026-03')
-    expect(flow('business')).toMatchObject({ income: 200000, spending: 45000 })
-    expect(flow('personal')).toMatchObject({ income: 60000, spending: 20000 }) // the draw is your income
-    expect(flow()).toMatchObject({ income: 200000, spending: 65000 }) // all books: the client money once
-  })
 })
 
 describe('savings rate', () => {

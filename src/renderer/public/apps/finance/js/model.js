@@ -194,8 +194,7 @@ export function sortTx(list) {
 }
 
 export const category = (state, id) => state.settings.categories.find((c) => c.id === id);
-// [books] In a one-book view (books.js) an account of the other book still has a name.
-export const account = (state, id) => state.settings.accounts.find((a) => a.id === id) || state._allAccounts?.find((a) => a.id === id);
+export const account = (state, id) => state.settings.accounts.find((a) => a.id === id);
 export const person = (state, id) => state.people.find((p) => p.id === id);
 // The order of your cards (Accounts screen: drag them, or the arrows).
 // Accounts you never moved keep the old order: by kind, then as added; ones
