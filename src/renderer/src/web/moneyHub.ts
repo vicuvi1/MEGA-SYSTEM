@@ -11,7 +11,7 @@ import { rateToBase } from '../../public/apps/finance/js/fx.js'
 // @ts-ignore
 import { reconDue } from '../../public/apps/finance/js/reconcile.js'
 // @ts-ignore
-import { countsAsSpending, countsAsIncome } from '../../public/apps/finance/js/catshare.js'
+import { countsAsSpending, countsAsIncome, isRefund } from '../../public/apps/finance/js/catshare.js'
 // @ts-ignore
 import { goalStatus, normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } from '../../public/apps/finance/js/model.js'
 import { addDays } from '@core/dates'
@@ -87,7 +87,7 @@ function hubTx(state: any): HubTx[] {
     // its "Where your money goes" donut): a reward bought with points
     // (life-reward-…) is not real money and is left out here too.
     .filter((t) => t && !t.deleted && typeof t.date === 'string' && (countsAsSpending(t) || countsAsIncome(t)))
-    .map((t) => ({ id: String(t.id), date: t.date.slice(0, 10), type: t.type, amount: Math.abs(B(t)), category: String(t.category ?? 'other'), note: t.note ? String(t.note) : undefined, everyday: t.type === 'expense' && isEveryday(state, t) }))
+    .map((t) => ({ id: String(t.id), date: t.date.slice(0, 10), type: isRefund(t) ? 'expense' : t.type, amount: Math.abs(B(t)), category: String(t.category ?? 'other'), note: t.note ? String(t.note) : undefined, everyday: (t.type === 'expense' || isRefund(t)) && isEveryday(state, t), ...(isRefund(t) ? { refund: true } : {}) }))
 }
 
 // A recurring item's amount in the main currency. Rules keep their own

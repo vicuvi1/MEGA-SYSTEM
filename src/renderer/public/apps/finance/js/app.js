@@ -25,6 +25,7 @@ import * as Binance from './screens/binance.js';
 import * as Sync from './screens/sync.js';
 import * as SelfCheck from './screens/selfcheck.js';
 import * as Backups from './screens/backups.js';
+import * as Tidy from './screens/moneytidy.js';
 import * as Plan from './screens/plan.js';
 import * as Clients from './screens/clients.js';
 import * as Rules from './screens/rules.js';
@@ -67,7 +68,7 @@ import { AmbientMusic } from './ambient.js';
 import { openPalette, closePalette, isPaletteOpen } from './palette.js';
 import { bindSankeyHover } from './charts.js';
 import { APP_VERSION } from './version.js';
-import { countsAsSpending, countsAsIncome } from './catshare.js';
+import { countsAsSpending, countsAsIncome, signed, isRefund } from './catshare.js';
 import * as E from './everyday.js';
 
 let state = load();
@@ -313,7 +314,7 @@ function monthNav() {
     if (!t.date.startsWith(String(year))) continue;
     const k = t.date.slice(0, 7);
     count[k] = (count[k] || 0) + 1;
-    if (countsAsSpending(t)) spent[k] = (spent[k] || 0) + M.B(t);
+    if (countsAsSpending(t)) spent[k] = (spent[k] || 0) + signed(t, M.B(t));
   }
   const max = Math.max(1, ...Object.values(spent));
   const pills = MONTHS.map((name, i) => {
@@ -376,9 +377,9 @@ function ratesLine(totalCents = null) {
   const parts = others.filter((c) => pair(c)).map((c) => `1 ${c === 'USD' ? '$' : '€'} = ${formatRate(pair(c))} ${base0 === 'MDL' ? 'lei' : base0}`);
   if (!parts.length) return '';
   const alt = totalCents == null ? '' : others.map((c) => convert(totalCents, base0, c, r)).map((v, i) => (v == null ? '' : formatMoney(Math.round(v / 100) * 100, others[i], { compact: true }))).filter(Boolean).join(' · ');
-  const age = M.ratesAge(state);
-  const when = age.date ? `rates from ${Number(age.date.slice(8, 10))} ${MONTHS[Number(age.date.slice(5, 7)) - 1].slice(0, 3)}` : 'rates from your last records';
-  return `<p class="rates-note">${alt ? `≈ ${alt} · ` : ''}${parts.join(' · ')}${age.stale ? ` · <b>${when}</b>` : ''}</p>`;
+  // The date of the rate used (js/ratedate.js), and a quiet chip when it is more than 3 days old.
+  const dated = Tidy.rateDateHTML({ today: todayISO() });
+  return `<p class="rates-note">${alt ? `≈ ${alt} · ` : ''}${parts.join(' · ')}${dated ? ` · ${dated}` : ' · rates from your last records'}</p>`;
 }
 
 // Inside Life: one slim strip of sections at the top (Life has the sidebar).
@@ -550,7 +551,8 @@ function txRow(t, { showDate = false } = {}) {
     const fromRewards = String(t.id || '').startsWith('life-reward-') ? '<span class="pill" title="Bought with points in Life System Rewards">From Rewards (points)</span> ' : '';
     // A reconciliation adjustment (js/reconcile.js): labelled, it is not income or spending.
     const recon = t.reconcile ? '<span class="pill" title="Settles a difference with your bank; not income or spending">Reconciliation</span> ' : '';
-    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${fromRewards}${recon}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
+    const refundPill = isRefund(t) ? '<span class="pill" title="Money back for something you bought: it lowers spending, it is not income">Refund</span> ' : '';
+    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${fromRewards}${recon}${refundPill}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
   }
   if (showDate) sub = `${dayLabel(t.date)} · ${sub}`;
   return `<button class="tx" data-act="edit" data-id="${esc(t.id)}">
@@ -948,7 +950,7 @@ function safeCard(today) {
   for (let i = 6; i >= 0; i--) {
     const d = addDays(today, -i);
     const spent = state.tx.filter((t) => t.date === d && countsAsSpending(t) && !t.recurring && !M.isBillCategory(state, t.category))
-      .reduce((a, t) => a + M.B(t), 0);
+      .reduce((a, t) => a + signed(t, M.B(t)), 0);
     week.push({ d, spent });
   }
   // Scale to what you really spent; the daily share joins the scale only when
@@ -1406,6 +1408,7 @@ function viewLog() {
     ${view === 'calendar' ? '' : `<input type="search" id="search" placeholder="Search: coffee, >100, #trip, cat:food, from:2026-01-01…" value="${esc(ui.search)}" aria-label="Search all records">`}
     <div class="log-actions">
       ${undoButtons()}
+      ${Tidy.logButtons()}
       <button type="button" class="btn" data-act="copy-table" title="Copy this month as a table to paste into Excel or Google Sheets">Copy table</button>
       <button type="button" class="btn" data-act="export-month" title="Download this month as a file Excel opens">Export month</button>
     </div>
@@ -1846,6 +1849,8 @@ function openTxSheet(existing = null, preset = {}) {
   // One-tap fills for things you log often (and your favorites).
   const picks = existing || preset.fromRule ? [] : M.quickPicks(state, todayISO(), 8);
 
+  // A refund is income with an expense category: its category chips are the expense ones.
+  const catType = () => (draft.type === 'income' && draft.refund ? 'expense' : draft.type);
   const curOf = () => M.account(state, draft.type === 'transfer' ? draft.from : draft.account)?.currency || baseCur;
   const toCur = () => M.account(state, draft.to)?.currency || baseCur;
 
@@ -1925,13 +1930,14 @@ function openTxSheet(existing = null, preset = {}) {
         <input id="tx-note" type="text" list="note-list" autocomplete="off" value="${esc(draft.note)}" placeholder="${draft.type === 'income' ? 'e.g. salary, project for a client' : isT ? 'e.g. to the safe' : 'e.g. groceries, taxi, rent'}"></label>
       <datalist id="note-list">${M.noteSuggestions(state, draft.type).map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
       ${(() => { const tags = M.allTags(state).slice(0, 8); return `<div class="tag-picks" role="group" aria-label="Tags">${tags.map((g) => `<button type="button" class="tag-pick" data-tag="${esc(g.tag)}" aria-pressed="${M.tagsOf(draft.note).includes(g.tag)}">#${esc(g.tag)}</button>`).join('')}<span class="muted small">${tags.length ? 'Tap a tag, or' : 'Tags:'} type #trip in the note</span></div>`; })()}
-      ${isT ? '' : `<div class="cats" role="group" aria-label="Category">${categoryOrder(draft.type).map((c) => `<button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${draft.category === c.id}">${catChipIcon(c)}<span>${esc(c.name)}</span></button>`).join('')}
+      ${isT ? '' : `<div class="cats" role="group" aria-label="Category">${categoryOrder(catType()).map((c) => `<button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${draft.category === c.id}">${catChipIcon(c)}<span>${esc(c.name)}</span></button>`).join('')}
         ${addingCat ? `<span class="cat-new"><input id="new-cat" type="text" placeholder="New category" aria-label="New category name"><button type="button" class="btn primary" data-act="cat-create">Add</button></span>` : '<button type="button" class="cat cat-add" data-act="cat-new">+ New</button>'}</div>
         <div id="sub-row-wrap">${subRow()}</div>`}
       ${isT ? '' : `<div class="row2">
         <label class="field"><span>${draft.type === 'income' ? 'From who? (optional)' : 'To who? (optional)'}</span><input id="tx-person" type="text" list="people-list" autocomplete="off" value="${esc(draft.personName)}" placeholder="Name"></label>
         <label class="field check"><input id="tx-loan" type="checkbox" ${draft.loan ? 'checked' : ''}><span>${draft.type === 'income' ? 'Borrowed: I pay it back' : 'Lent: they pay it back'}</span></label>
-      </div><datalist id="people-list">${people}</datalist>`}
+      </div><datalist id="people-list">${people}</datalist>
+      ${draft.type === 'income' ? `<label class="field check"><input id="tx-refund" data-testid="tx-refund" type="checkbox" ${draft.refund ? 'checked' : ''}><span>This is a refund: money back for something I bought. It lowers that category's spending and is not income.</span></label>` : ''}`}
       <div class="row2">
         ${isT ? accSelect('from', 'From') + accSelect('to', 'To') : accSelect('account', draft.type === 'income' ? 'Into' : 'Paid from')}
       </div>
@@ -1941,9 +1947,9 @@ function openTxSheet(existing = null, preset = {}) {
       ${existing ? Taxes.sheetRow(existing.id) : ''}
       <div class="btns">
         ${existing ? '<button type="button" class="btn danger" data-act="tx-delete">Delete</button>' : ''}
-        ${existing && draft.type === 'income' && !existing.loan ? '<button type="button" class="btn" data-act="tx-split">Split</button>' : ''}
+        ${existing && draft.type === 'income' && !existing.loan && !draft.refund ? '<button type="button" class="btn" data-act="tx-split">Split</button>' : ''}
         ${existing && existing.type === 'expense' && draft.type === 'expense' ? '<button type="button" class="btn" data-act="tx-split-receipt" title="Divide this receipt across categories or people">Split receipt</button>' : ''}
-        ${existing?.type === 'income' && draft.type === 'income' && !existing.loan ? '<button type="button" class="btn" data-act="tx-allocate">Allocate to goals</button>' : ''}
+        ${existing?.type === 'income' && draft.type === 'income' && !existing.loan && !draft.refund ? '<button type="button" class="btn" data-act="tx-allocate">Allocate to goals</button>' : ''}
         ${existing && !isT ? `<button type="button" class="btn" data-act="tx-fav" aria-pressed="${M.isFavorite(state, existing)}">${M.isFavorite(state, existing) ? '★ Favorite' : '☆ Make favorite'}</button>` : ''}
         <button type="submit" class="btn primary">${existing ? 'Save' : 'Add'}</button>
       </div>
@@ -1960,6 +1966,7 @@ function openTxSheet(existing = null, preset = {}) {
     if (v('#tx-to-amount')) toText = v('#tx-to-amount').value;
     if (v('#tx-person')) draft.personName = v('#tx-person').value;
     if (v('#tx-loan')) draft.loan = v('#tx-loan').checked;
+    if (v('#tx-refund')) { draft.refund = v('#tx-refund').checked; if (draft.refund) draft.loan = false; }
     if (v('#tx-repeat')) draft.repeat = v('#tx-repeat').value;
     for (const f of ['account', 'from', 'to']) {
       const el = v(`#tx-${f}`);
@@ -2053,10 +2060,22 @@ function openTxSheet(existing = null, preset = {}) {
       if (draft.type === 'transfer') return;
       draft.note = e.target.value;
       const before = draft.category;
-      if (!catTouched) draft.category = M.suggestCategory(state, e.target.value, draft.type);
+      if (!catTouched) draft.category = M.suggestCategory(state, e.target.value, catType());
       reguess();
       paintSub(sheet);
       if (draft.category && draft.category !== before) followCategory(sheet);
+    });
+    sheet.querySelector('#tx-refund')?.addEventListener('change', () => {
+      // The category list switches between income and expense categories.
+      readInputs(sheet);
+      draft.category = M.suggestCategory(state, draft.note, catType());
+      catTouched = false;
+      subTouched = false;
+      draft.sub = null;
+      addingCat = false;
+      if (!accTouched) draft.account = M.defaultAccount(state, 'income', draft.category);
+      paint(sheet, false);
+      updateHint(sheet);
     });
     sheet.querySelector('#new-cat')?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); sheet.querySelector('[data-act="cat-create"]').click(); }
@@ -2109,14 +2128,15 @@ function openTxSheet(existing = null, preset = {}) {
         ...common,
         amount: entry.amount,
         account: draft.account,
-        category: draft.category || (draft.type === 'income' ? 'other-in' : 'other'),
+        category: draft.category || (draft.type === 'income' && !draft.refund ? 'other-in' : 'other'),
         ...(draft.type === 'expense' && draft.sub && T.subById(state, draft.sub)?.parent === draft.category ? { sub: draft.sub } : {}),
         rate,
         base: Math.round(entry.amount * rate),
         ...(entry.orig ? { orig: entry.orig } : {}),
         ...(entry.debt ? { debt: entry.debt } : {}),
         ...(personId ? { person: personId } : {}),
-        ...(personId && draft.loan ? { loan: true } : {}),
+        ...(personId && draft.loan && !draft.refund ? { loan: true } : {}),
+        ...(draft.type === 'income' && draft.refund && !draft.loan ? { refund: true } : {}),
       };
     }
     // Logged from a recurring item on the Plan screen.
@@ -2153,7 +2173,8 @@ function openTxSheet(existing = null, preset = {}) {
     if (!existing && offerMonthlyBill(tx)) return;
     const alert = !existing && M.budgetAlert(state, tx);
     if (alert) { toast(alert.text); return; }
-    if (!existing && tx.type === 'income' && !tx.loan) openSplitSheet(tx);
+    if (!existing && tx.type === 'income' && !tx.loan && !tx.refund) openSplitSheet(tx);
+    else if (!existing && tx.refund) toast(`Refund ${formatMoney(tx.amount, tx.currency)}: lowers ${catOf(tx.category).name} spending`, 'Undo', () => undoRedo(-1));
     else toast(existing ? 'Saved' : `${tx.type === 'expense' ? 'Spent' : tx.type === 'income' ? 'Earned' : 'Moved'} ${tx.orig ? `${formatMoney(tx.orig.amount, tx.orig.currency)} (${formatMoney(tx.amount, tx.currency)})` : formatMoney(tx.amount, tx.currency)}`);
   };
 
@@ -2167,7 +2188,8 @@ function openTxSheet(existing = null, preset = {}) {
         readInputs(sheet);
         if (seg.dataset.type !== draft.type) {
           draft.type = seg.dataset.type;
-          draft.category = catTouched ? null : M.suggestCategory(state, draft.note, draft.type);
+          if (draft.type !== 'income') draft.refund = false;
+          draft.category = catTouched ? null : M.suggestCategory(state, draft.note, catType());
           catTouched = false;
           addingCat = false;
           subTouched = false;
@@ -2708,7 +2730,7 @@ function onTableEnter(el) {
 function openDaySheet(date) {
   const items = M.sortTx(state.tx.filter((t) => t.date === date));
   const inc = items.filter((t) => countsAsIncome(t)).reduce((a, t) => a + M.B(t), 0);
-  const exp = items.filter((t) => countsAsSpending(t)).reduce((a, t) => a + M.B(t), 0);
+  const exp = items.filter((t) => countsAsSpending(t)).reduce((a, t) => a + signed(t, M.B(t)), 0);
   openSheet(`<h3>${dayLabel(date)} <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
     <div class="stats" style="margin-bottom:12px">
       <div class="stat"><span class="k">Earned</span><b class="income">${money(inc)}</b></div>
@@ -3218,6 +3240,7 @@ document.addEventListener('click', (e) => {
   else if (Spending.onClick(act, el)) { /* the "Where your money goes" card */ }
   else if (Reprice.onClick(act)) { /* "Re-price past entries" */ }
   else if (Reconcile.onClick(act, el)) { /* monthly reconciliation */ }
+  else if (Tidy.onClick(act)) { /* duplicates, refund suggestions, rate update */ }
   else if (act === 'add') openTxSheet();
   else if (act === 'edit') openTxSheet(state.tx.find((t) => t.id === el.dataset.id));
   else if (act === 'transfer') openTransferSheet(el.dataset.from);

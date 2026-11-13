@@ -275,7 +275,7 @@ function allocationCard() {
   const s = M.goalAllocationSummary(ctx.state);
   const rows = ctx.state.goalAllocations || [];
   return `<section class="card goal-reservations"><h2>Your reservations</h2>
-    ${s.unfunded ? `<p class="allocation-warning" role="status">${ctx.money(s.unfunded)} of requested reservations cannot be funded. Balances or income may have changed, or another device may have allocated the same funds. Review and release the affected reservations below.</p>` : ''}
+    ${s.unfunded ? shortfallHTML() : ''}
     ${s.unpriced.length ? '<p class="allocation-warning" role="status">Some reservations need an exchange rate. Update Rates or release those reservations before allocating more.</p>' : ''}
     <p class="muted small">Reserving money labels part of your cash and bank balances. It does not create an expense or transfer. Crypto and accounts without exchange rates are excluded. Reached goals keep their reservations until you release them.</p>
     ${rows.length ? `<details><summary>Manage ${rows.length} reservations</summary>${rows.map((a) => {
@@ -283,6 +283,24 @@ function allocationCard() {
       const income = a.incomeId && ctx.state.tx.find((t) => t.id === a.incomeId);
       return `<div class="reservation-row"><span><b>${esc(goal?.name || 'Deleted goal')}</b><small>${esc(a.date)} · ${a.incomeId ? esc(income?.note || (income ? 'Income' : 'Deleted income')) : 'Existing funds'}</small><small>Funded: ${ctx.money(s.effectiveById[a.id] || 0)}</small></span><span class="money">${formatAllocation(a)}</span><button class="btn sm" data-act="goal-release" data-id="${esc(a.id)}">Release</button></div>`;
     }).join('')}</details>` : '<p class="muted small">No money reserved yet. Allocate existing funds or part of an income to your goals.</p>'}</section>`;
+}
+
+// Which goals are short and by how much, why, and one fix per goal.
+function shortfallHTML() {
+  const { state } = ctx;
+  const f = M.goalShortfalls(state);
+  if (!f.rows.length) return '';
+  const why = f.cashShort
+    ? `Your cash and bank total is ${ctx.money(f.cash)}, reservations ask for ${ctx.money(f.requested)}.`
+    : 'The income some reservations came from is now smaller, or another device reserved the same money.';
+  return `<div class="allocation-warning" role="status" data-testid="goal-short">
+    <p style="margin:0 0 6px"><b>Not every reservation can be funded.</b> ${esc(why)}</p>
+    ${f.rows.map((r) => `<div class="goal-short-row" data-goal="${esc(r.goalId)}" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;justify-content:space-between;padding:4px 0">
+      <span>${esc(r.emoji)} <b>${esc(r.name)}</b> is short by <b>${ctx.money(r.short)}</b></span>
+      <span class="btns" style="margin:0">${r.lowerable.length ? `<button type="button" class="btn sm" data-act="goal-lower" data-id="${esc(r.goalId)}" data-testid="goal-lower">Lower to ${ctx.money(r.lowerTo)}</button>` : ''}<button type="button" class="btn sm" data-act="goal-review" data-id="${esc(r.goalId)}">Review</button></span>
+    </div>`).join('')}
+    <p class="muted small" style="margin:6px 0 0">Nothing is released by itself. Lowering keeps the reservation and cuts it to what can be funded; Undo puts it back.</p>
+  </div>`;
 }
 
 function formatAllocation(a) { return formatMoney(a.amount, a.currency || ctx.state.settings.currency); }
@@ -337,6 +355,19 @@ function releaseSheet(id) {
 export function onClick(act, el) {
   const find = () => (ctx.state.goals || []).find((g) => g.id === el.dataset.id);
   if (act === 'goal-new') { goalSheet(); return true; }
+  if (act === 'goal-lower') {
+    const row = M.goalShortfalls(ctx.state).rows.find((r) => r.goalId === el.dataset.id);
+    const n = M.lowerGoalReservations(ctx.state, el.dataset.id);
+    if (!n) return true;
+    ctx.commit();
+    ctx.toast(`${row?.name || 'Goal'} lowered to ${ctx.money(row?.lowerTo || 0)}`, 'Undo', () => ctx.undo?.());
+    return true;
+  }
+  if (act === 'goal-review') {
+    const d = document.querySelector('.goal-reservations details');
+    if (d) { d.open = true; d.scrollIntoView?.({ block: 'center' }); }
+    return true;
+  }
   if (act === 'goal-allocate') { openAllocationSheet(null, el.dataset.id); return true; }
   if (act === 'goal-release') { releaseSheet(el.dataset.id); return true; }
   if (act === 'goal-money') { const g = find(); if (g) moneySheet(g); return true; }

@@ -7,8 +7,8 @@
 // - Income and spending: catshare.js countsAsIncome / countsAsSpending, the
 //   one rule Reports, the year review and the Money page use (loans, rewards
 //   bought with points and reconciliation adjustments are neither). Transfers
-//   between your accounts are never either. A refund logged as income counts
-//   as income, exactly as in Reports.
+//   between your accounts are never either. A refund (`refund: true`) is not income: it lowers its category's spending
+//   (the same in Reports and on the Money page).
 // - Money is in your main currency: each record's own `base` (fixed at the
 //   rate of its day). Account balances in another currency are converted with
 //   the saved rate of that day (or the nearest earlier saved day), else the
@@ -26,7 +26,7 @@
 //   every book, so a book view is always rebuilt.
 
 import { B, category, knownRates } from './model.js';
-import { countsAsSpending, countsAsIncome } from './catshare.js';
+import { countsAsSpending, countsAsIncome, signed } from './catshare.js';
 import { pairRate, convert, coinValue } from './fx.js';
 import { addMonths, daysInMonth, monthKey } from './dates.js';
 
@@ -257,7 +257,7 @@ export function monthFlows(state, { book = null, from = null, to = null, cur = n
     // Each record at its own day's rate (its `base`; shown in another currency at that day's rate).
     if (countsAsIncome(t)) m.income += view.show(B(t), d) ?? 0;
     else if (countsAsSpending(t)) {
-      const v = view.show(B(t), d) ?? 0;
+      const v = signed(t, view.show(B(t), d) ?? 0);
       m.spending += v;
       m.byCat.set(t.category, (m.byCat.get(t.category) || 0) + v);
     }

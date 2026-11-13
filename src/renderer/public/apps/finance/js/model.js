@@ -6,7 +6,7 @@ import { monthKey, addMonths, daysInMonth, monthLabel, addDays, isValidISO } fro
 import { convert, coinValue } from './fx.js';
 import { perMonth } from './recurring.js';
 import { ensureTree, memorySub, suggestSub, subOf } from './cattree.js';
-import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome } from './catshare.js';
+import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome, isRefund, signed } from './catshare.js';
 import { addRule2, removeRule2, merchantChoice } from './learn.js';
 
 // v1: first release. v2: custom multi-currency accounts, people, loans,
@@ -510,16 +510,18 @@ export const txInMonth = (state, key) => state.tx.filter((t) => monthKey(t.date)
 
 function sumBy(list, keyFn) {
   const out = new Map();
-  for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + B(t));
+  for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + signed(t, B(t)));
   return [...out.entries()].map(([id, amount]) => ({ id, amount })).sort((a, b) => b.amount - a.amount);
 }
 
 export function monthSummary(state, key) {
   const list = txInMonth(state, key);
-  const incomes = list.filter((t) => t.type === 'income' && counts(t));
+  // A refund (income with `refund: true`) is not income: it lowers its category's spending.
+  const incomes = list.filter((t) => t.type === 'income' && counts(t) && !isRefund(t));
   const expenses = list.filter((t) => t.type === 'expense' && counts(t));
+  const refunds = list.filter((t) => isRefund(t));
   const income = incomes.reduce((a, t) => a + B(t), 0);
-  const expense = expenses.reduce((a, t) => a + B(t), 0);
+  const expense = expenses.reduce((a, t) => a + B(t), 0) - refunds.reduce((a, t) => a + B(t), 0);
   const net = income - expense;
   return {
     key,
@@ -528,11 +530,12 @@ export function monthSummary(state, key) {
     net,
     // Share of this month's income you did not spend.
     savingsRate: income > 0 ? net / income : null,
-    byCategory: sumBy(expenses, (t) => t.category),
+    byCategory: sumBy([...expenses, ...refunds], (t) => t.category),
     bySource: sumBy(incomes, (t) => t.category),
     count: list.length,
     expenses,
     incomes,
+    refunds,
   };
 }
 
@@ -583,7 +586,7 @@ export const payOn = (state) => {
 export function personalMonth(state, key) {
   const s = monthSummary(state, key);
   const workIncome = s.incomes.filter((t) => isWorkIncome(state, t.category)).reduce((a, t) => a + B(t), 0);
-  const workCosts = s.expenses.filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + B(t), 0);
+  const workCosts = [...s.expenses, ...s.refunds].filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + signed(t, B(t)), 0);
   const otherIncome = s.income - workIncome;
   const pay = payOn(state);
   const salary = pay ? txInMonth(state, key).filter((t) => t.type === 'transfer' && t.salary).reduce((a, t) => a + B(t), 0) : 0;
@@ -607,10 +610,10 @@ export function jarStatus(state, key, today = null) {
   const usual = today && monthKey(today) === key ? expectedIncome(state, key) : 0;
   const basis = Math.max(mine.personalIncome, usual);
   const spentByJar = {};
-  for (const t of sum.expenses) {
+  for (const t of [...sum.expenses, ...sum.refunds]) {
     const j = jarOf(state, t.category);
     if (j === NO_JAR) continue;
-    spentByJar[j] = (spentByJar[j] || 0) + B(t);
+    spentByJar[j] = (spentByJar[j] || 0) + signed(t, B(t));
   }
   return state.settings.jars.map((j) => {
     // Whole lei: nobody budgets 2 446,30.
@@ -689,6 +692,53 @@ export function goalAllocationSummary(state, asOf = null) {
     reserved += funded;
   }
   return { cash, reserved, requested, unallocated: Math.max(0, cash - reserved), unfunded: requested - reserved, byGoal, byIncome, effectiveById, unpriced };
+}
+
+// Which goals ask for more than can be funded, and by how much (base currency).
+// Pure: it only reads. `rows` has one entry per short goal:
+//   { goalId, name, emoji, requested, funded, short, lowerTo, lowerable }
+// `lowerTo` is what the goal's reservations can really hold (its funded money);
+// `lowerable` lists the reservations that are partly funded (these can be lowered
+// without releasing anything).
+export function goalShortfalls(state) {
+  const s = goalAllocationSummary(state);
+  const base = state.settings.currency;
+  const per = new Map();
+  for (const a of state.goalAllocations || []) {
+    const amount = a.currency && a.currency !== base ? convert(a.amount, a.currency, base, state.rates) : a.amount;
+    if (!Number.isSafeInteger(amount) || amount <= 0) continue;
+    const funded = s.effectiveById[a.id] || 0;
+    const r = per.get(a.goalId) || { goalId: a.goalId, requested: 0, funded: 0, lowerable: [] };
+    r.requested += amount;
+    r.funded += funded;
+    if (funded < amount && funded > 0) r.lowerable.push({ id: a.id, funded, amount });
+    per.set(a.goalId, r);
+  }
+  const rows = [...per.values()].filter((r) => r.requested > r.funded).map((r) => {
+    const g = (state.goals || []).find((x) => x.id === r.goalId);
+    return { ...r, name: g?.name || 'Deleted goal', emoji: g?.emoji || '🎯', short: r.requested - r.funded, lowerTo: r.funded };
+  });
+  return { rows, cash: s.cash, requested: s.requested, cashShort: s.requested > s.cash, summary: s };
+}
+
+// Lower one goal's partly funded reservations to what can be funded. It never
+// releases a reservation: one with nothing funded stays as it is (review it by
+// hand). Returns the number of reservations lowered.
+export function lowerGoalReservations(state, goalId, now = Date.now()) {
+  const row = goalShortfalls(state).rows.find((r) => r.goalId === goalId);
+  if (!row) return 0;
+  const base = state.settings.currency;
+  let n = 0;
+  for (const part of row.lowerable) {
+    const a = (state.goalAllocations || []).find((x) => x.id === part.id);
+    if (!a) continue;
+    const own = a.currency && a.currency !== base ? convert(part.funded, base, a.currency, state.rates) : part.funded;
+    if (!Number.isSafeInteger(own) || own <= 0 || own >= a.amount) continue;
+    a.amount = own;
+    touch(a, now);
+    n++;
+  }
+  return n;
 }
 
 export function allocateToGoals(state, entries, { incomeId = null, date, now = Date.now() } = {}) {
@@ -903,8 +953,8 @@ export function toggleFavorite(state, t, now = Date.now()) {
 // currency's cents). Loans don't count, same as everywhere else.
 
 const spentIn = (state, key, catId) => txInMonth(state, key)
-  .filter((t) => t.type === 'expense' && counts(t) && t.category === catId)
-  .reduce((a, t) => a + B(t), 0);
+  .filter((t) => (t.type === 'expense' && counts(t) || isRefund(t)) && t.category === catId)
+  .reduce((a, t) => a + signed(t, B(t)), 0);
 
 // Average spent per month in a category over the `months` full months before `key`.
 export function averageSpend(state, catId, key, months = 3) {
@@ -1191,7 +1241,7 @@ export function applyRule(state, rule, list = ruleTargets(state, rule), now = Da
 // Fields the add/edit sheet sets (or clears) itself. Every other field on a
 // record (source, confirmedAt, catBy, book, reconcile, moved, a newer app's
 // own…) is kept as it was when the record is edited.
-const FORM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'type', 'amount', 'currency', 'date', 'note', 'from', 'to', 'toAmount', 'rate', 'base', 'account', 'category', 'sub', 'orig', 'debt', 'person', 'loan', 'recurring', 'tax', 'receipts']);
+const FORM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'type', 'amount', 'currency', 'date', 'note', 'from', 'to', 'toAmount', 'rate', 'base', 'account', 'category', 'sub', 'orig', 'debt', 'person', 'loan', 'recurring', 'tax', 'receipts', 'refund']);
 export function keptOnEdit(existing, tx) {
   const out = {};
   for (const [k, v] of Object.entries(existing || {})) if (!FORM_FIELDS.has(k) && !(k in tx)) out[k] = v;
@@ -1382,11 +1432,14 @@ export function periodRange(id, today) {
 // Spending (or income) per category between two dates, in the base currency,
 // biggest first, each with its share and number of records.
 export function totalsByCategory(state, from, to, type = 'expense') {
-  const list = state.tx.filter((t) => t.type === type && counts(t) && t.date >= from && t.date <= to);
-  const total = list.reduce((a, t) => a + B(t), 0);
+  const list = state.tx.filter((t) => (t.type === type && counts(t) && !(type === 'income' && isRefund(t)) || (type === 'expense' && isRefund(t))) && t.date >= from && t.date <= to);
+  const total = list.reduce((a, t) => a + signed(t, B(t)), 0);
   const count = {};
   for (const t of list) count[t.category] = (count[t.category] || 0) + 1;
-  const rows = sumBy(list, (t) => t.category).map((r) => ({ ...r, share: total ? r.amount / total : 0, count: count[r.id] }));
+  // A category a refund took below 0 shows as nothing; the shares are of what is shown.
+  const pos = sumBy(list, (t) => t.category).filter((r) => r.amount > 0);
+  const shown = pos.reduce((a, r) => a + r.amount, 0);
+  const rows = pos.map((r) => ({ ...r, share: shown ? r.amount / shown : 0, count: count[r.id] }));
   return { total, rows, list };
 }
 
@@ -1420,8 +1473,8 @@ function group(list, key) {
 export function report(state, from, to, { withPrev = true, today = null } = {}) {
   const inRange = state.tx.filter((t) => t.date >= from && t.date <= to);
   const real = inRange.filter((t) => t.type !== 'transfer' && counts(t));
-  const income = real.filter((t) => t.type === 'income').reduce((a, t) => a + B(t), 0);
-  const expense = real.filter((t) => t.type === 'expense').reduce((a, t) => a + B(t), 0);
+  const income = real.filter((t) => t.type === 'income' && !isRefund(t)).reduce((a, t) => a + B(t), 0);
+  const expense = real.filter((t) => t.type === 'expense' || isRefund(t)).reduce((a, t) => a + signed(t, B(t)), 0);
   const days = isoDays(from, to);
   // A period still running counts only the days that have passed so far.
   const end = today && today >= from && today < to ? today : to;

@@ -6,6 +6,7 @@
 
 import { accountBalances, B, category, savingsJar, sortTx } from './model.js';
 import { addDays } from './dates.js';
+import { isRefund, signed } from './catshare.js';
 
 const counts = (t) => !t.loan && t.type !== 'transfer';
 const inRange = (t, from, to) => t.date >= from && t.date <= to;
@@ -23,22 +24,22 @@ export function loggingStreak(state, today) {
 export function weeklyReview(state, today) {
   const from = addDays(today, -6);
   const week = state.tx.filter((t) => counts(t) && inRange(t, from, today));
-  const income = week.filter((t) => t.type === 'income').reduce((a, t) => a + B(t), 0);
-  const expense = week.filter((t) => t.type === 'expense').reduce((a, t) => a + B(t), 0);
+  const income = week.filter((t) => t.type === 'income' && !isRefund(t)).reduce((a, t) => a + B(t), 0);
+  const expense = week.filter((t) => t.type === 'expense' || isRefund(t)).reduce((a, t) => a + signed(t, B(t)), 0);
   // The 4 weeks before, as "a usual week" (weeks with no records skipped).
   const prior = [];
   const perCat = {};
   for (let w = 1; w <= 4; w++) {
     const f = addDays(from, -7 * w);
     const to = addDays(today, -7 * w);
-    const list = state.tx.filter((t) => counts(t) && t.type === 'expense' && inRange(t, f, to));
+    const list = state.tx.filter((t) => counts(t) && (t.type === 'expense' || isRefund(t)) && inRange(t, f, to));
     if (!state.tx.some((t) => inRange(t, f, to))) continue;
-    prior.push(list.reduce((a, t) => a + B(t), 0));
-    for (const t of list) perCat[t.category] = (perCat[t.category] || 0) + B(t);
+    prior.push(list.reduce((a, t) => a + signed(t, B(t)), 0));
+    for (const t of list) perCat[t.category] = (perCat[t.category] || 0) + signed(t, B(t));
   }
   const usual = prior.length ? Math.round(prior.reduce((a, b) => a + b, 0) / prior.length) : null;
   const byCat = {};
-  for (const t of week.filter((x) => x.type === 'expense')) byCat[t.category] = (byCat[t.category] || 0) + B(t);
+  for (const t of week.filter((x) => x.type === 'expense' || isRefund(x))) byCat[t.category] = (byCat[t.category] || 0) + signed(t, B(t));
   // Biggest leak: the category most above its usual week (or simply the biggest).
   let leak = null;
   for (const [id, amount] of Object.entries(byCat)) {

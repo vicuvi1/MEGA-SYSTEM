@@ -17,8 +17,14 @@ export const isPointsReward = (t) => String(t?.id || '').startsWith('life-reward
 // A reconciliation adjustment (js/reconcile.js) settles a difference with the
 // bank: it moves the balance but is neither income nor spending.
 export const isCorrection = (t) => !!t?.reconcile;
-export const countsAsSpending = (t) => t.type === 'expense' && !t.loan && !isPointsReward(t) && !isCorrection(t);
-export const countsAsIncome = (t) => t.type === 'income' && !t.loan && !isCorrection(t);
+// A refund is money back for something bought: an income record (`refund: true`)
+// with an expense category. The money did arrive (balances see it), but it is
+// not income: it lowers its category's spending instead (see `signed`).
+export const isRefund = (t) => t?.type === 'income' && t.refund === true && !t.loan && !isCorrection(t) && !isPointsReward(t);
+export const countsAsSpending = (t) => (t.type === 'expense' && !t.loan && !isPointsReward(t) && !isCorrection(t)) || isRefund(t);
+export const countsAsIncome = (t) => t.type === 'income' && !t.loan && !isCorrection(t) && !isRefund(t);
+// A spending record's amount with the refund sign: a refund is negative.
+export const signed = (t, v) => (isRefund(t) ? -v : v);
 
 // "This month", "Last month", "3 months", "Year", or "m:2026-09" (a month you picked).
 export const SPEND_PERIODS = [
@@ -78,7 +84,7 @@ function sum(list, base, from, to) {
   let total = 0;
   for (const t of list) {
     if (!countsAsSpending(t) || t.date < from || t.date > to) continue;
-    const a = base(t);
+    const a = signed(t, base(t));
     by.set(t.category, (by.get(t.category) || 0) + a);
     count.set(t.category, (count.get(t.category) || 0) + 1);
     total += a;
@@ -95,9 +101,11 @@ function sum(list, base, from, to) {
 export function categoryShares(list, range, base) {
   const now = sum(list, base, range.from, range.to);
   const before = range.prev ? sum(list, base, range.prev.from, range.prev.to) : { by: new Map(), count: new Map(), total: 0 };
-  const make = (id, amount, count, prev) => ({ id, amount, count, prev, share: now.total ? amount / now.total : 0, change: prev > 0 ? (amount - prev) / prev : null });
+  // A category a refund took below 0 shows as nothing; the shares are of what is shown.
+  const shown = [...now.by.values()].reduce((a, x) => a + Math.max(0, x), 0);
+  const make = (id, amount, count, prev) => ({ id, amount, count, prev, share: shown ? amount / shown : 0, change: prev > 0 ? (amount - prev) / prev : null });
   const all = [...now.by.entries()].filter(([, a]) => a > 0)
-    .map(([id, a]) => make(id, a, now.count.get(id) || 0, before.by.get(id) || 0))
+    .map(([id, a]) => make(id, a, now.count.get(id) || 0, Math.max(0, before.by.get(id) || 0)))
     .sort((a, b) => b.amount - a.amount || String(a.id).localeCompare(String(b.id)));
   let keep = all.filter((r) => r.share >= FOLD_BELOW);
   let small = all.filter((r) => r.share < FOLD_BELOW);

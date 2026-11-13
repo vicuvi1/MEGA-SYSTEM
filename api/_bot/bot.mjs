@@ -56257,8 +56257,10 @@ function isValidISO(iso) {
 // src/renderer/public/apps/finance/js/catshare.js
 var isPointsReward = (t) => String(t?.id || "").startsWith("life-reward-");
 var isCorrection = (t) => !!t?.reconcile;
-var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t) && !isCorrection(t);
-var countsAsIncome = (t) => t.type === "income" && !t.loan && !isCorrection(t);
+var isRefund = (t) => t?.type === "income" && t.refund === true && !t.loan && !isCorrection(t) && !isPointsReward(t);
+var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t) && !isCorrection(t) || isRefund(t);
+var countsAsIncome = (t) => t.type === "income" && !t.loan && !isCorrection(t) && !isRefund(t);
+var signed$1 = (t, v) => isRefund(t) ? -v : v;
 // src/renderer/public/apps/finance/js/cattree.js
 var fold$5 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 var SUB_DEFAULTS = [
@@ -57558,7 +57560,7 @@ var monthsBetweenKeys = (a, b) => {
 var txInMonth = (state, key) => state.tx.filter((t) => monthKey(t.date) === key);
 function sumBy(list, keyFn) {
 	const out = /* @__PURE__ */ new Map();
-	for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + B$2(t));
+	for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + signed$1(t, B$2(t)));
 	return [...out.entries()].map(([id, amount]) => ({
 		id,
 		amount
@@ -57566,10 +57568,11 @@ function sumBy(list, keyFn) {
 }
 function monthSummary(state, key) {
 	const list = txInMonth(state, key);
-	const incomes = list.filter((t) => t.type === "income" && counts(t));
+	const incomes = list.filter((t) => t.type === "income" && counts(t) && !isRefund(t));
 	const expenses = list.filter((t) => t.type === "expense" && counts(t));
+	const refunds = list.filter((t) => isRefund(t));
 	const income = incomes.reduce((a, t) => a + B$2(t), 0);
-	const expense = expenses.reduce((a, t) => a + B$2(t), 0);
+	const expense = expenses.reduce((a, t) => a + B$2(t), 0) - refunds.reduce((a, t) => a + B$2(t), 0);
 	const net = income - expense;
 	return {
 		key,
@@ -57577,11 +57580,12 @@ function monthSummary(state, key) {
 		expense,
 		net,
 		savingsRate: income > 0 ? net / income : null,
-		byCategory: sumBy(expenses, (t) => t.category),
+		byCategory: sumBy([...expenses, ...refunds], (t) => t.category),
 		bySource: sumBy(incomes, (t) => t.category),
 		count: list.length,
 		expenses,
-		incomes
+		incomes,
+		refunds
 	};
 }
 var WORK_INCOME = /\b(work|job|jobs|client|clients|freelance|salary|salariu|lucru|proiect|project|invoice|factur\w*)\b/i;
@@ -57602,7 +57606,7 @@ var payOn = (state) => {
 function personalMonth(state, key) {
 	const s = monthSummary(state, key);
 	const workIncome = s.incomes.filter((t) => isWorkIncome(state, t.category)).reduce((a, t) => a + B$2(t), 0);
-	const workCosts = s.expenses.filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + B$2(t), 0);
+	const workCosts = [...s.expenses, ...s.refunds].filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
 	const otherIncome = s.income - workIncome;
 	const pay = payOn(state);
 	const salary = pay ? txInMonth(state, key).filter((t) => t.type === "transfer" && t.salary).reduce((a, t) => a + B$2(t), 0) : 0;
@@ -57725,7 +57729,7 @@ function goalStatus(state, today, goal = mainGoal(state)) {
 		onTrack: perMonth == null ? null : pace != null && pace >= perMonth
 	};
 }
-var spentIn = (state, key, catId) => txInMonth(state, key).filter((t) => t.type === "expense" && counts(t) && t.category === catId).reduce((a, t) => a + B$2(t), 0);
+var spentIn = (state, key, catId) => txInMonth(state, key).filter((t) => (t.type === "expense" && counts(t) || isRefund(t)) && t.category === catId).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
 function budgetAlert(state, t) {
 	return subBudgetAlert(state, t) || categoryBudgetAlert(state, t);
 }
@@ -57998,8 +58002,8 @@ function spentFrom(state, today, window = 60) {
 	for (const t of state.tx) {
 		if (!countsAsSpending(t) || t.recurring || t.date < since || t.date > today) continue;
 		if (isBillCategory(state, t.category) || isWorkCost(state, t.category)) continue;
-		by.set(t.account, (by.get(t.account) || 0) + B$2(t));
-		total += B$2(t);
+		by.set(t.account, (by.get(t.account) || 0) + signed$1(t, B$2(t)));
+		total += signed$1(t, B$2(t));
 	}
 	return [...by.entries()].map(([id, amount]) => ({
 		id,
@@ -58021,7 +58025,7 @@ function spendingIds(state, today = null) {
 // src/renderer/public/apps/finance/js/safespend.js
 var lei$2 = (c) => Math.floor(c / 100) * 100;
 var isEveryday = (state, t) => countsAsSpending(t) && !t.recurring && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
-var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + B$2(t), 0);
+var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
 var limitOn = (state) => !!(state.settings.limit?.on && state.settings.limit.amount > 0);
 function limitStatus(state, today) {
 	if (!limitOn(state)) return null;
@@ -58227,7 +58231,7 @@ var esc$1 = (s) => String(s ?? "").replace(/[&<>]/g, (c) => ({
 	">": "&gt;"
 })[c]);
 var fm = (state, c) => esc$1(formatMoney(Math.round(c / 100) * 100, state.settings.currency));
-var spentOn = (state, from, to) => state.tx.filter((t) => countsAsSpending(t) && t.date >= from && t.date <= to).reduce((a, t) => a + B$2(t), 0);
+var spentOn = (state, from, to) => state.tx.filter((t) => countsAsSpending(t) && t.date >= from && t.date <= to).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
 function loggedText(state, t, today = null) {
 	const c = category(state, t.category)?.name || "";
 	const sc = subOf(state, t);
@@ -58239,7 +58243,7 @@ function loggedText(state, t, today = null) {
 	if (work) lines.push(`⏱ ${esc$1(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
-		const catMonth = state.tx.filter((x) => countsAsSpending(x) && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + B$2(x), 0);
+		const catMonth = state.tx.filter((x) => countsAsSpending(x) && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + signed$1(x, B$2(x)), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
 		lines.push(`${esc$1(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
@@ -58354,9 +58358,11 @@ var monthName = (key) => MONTHS$1[Number(key.slice(5, 7)) - 1] ?? key;
 var leiText = (bani, currency = "MDL") => totalText(bani, currency);
 var signed = (bani) => `${bani >= 0 ? "+" : "−"}${leiText(Math.abs(bani))}`;
 var isExpense = (t) => t.type === "expense";
+/** What a spending row adds: a refund takes its amount off. */
+var spend = (t) => t.refund ? -Math.abs(t.amount) : Math.abs(t.amount);
 function spent(tx, from, to, everydayOnly = false) {
 	let s = 0;
-	for (const t of tx) if (isExpense(t) && t.date >= from && t.date <= to && (!everydayOnly || t.everyday)) s += Math.abs(t.amount);
+	for (const t of tx) if (isExpense(t) && t.date >= from && t.date <= to && (!everydayOnly || t.everyday)) s += spend(t);
 	return s;
 }
 function earned(tx, from, to) {
@@ -58398,8 +58404,8 @@ function sameDayCompare(tx, today, cats) {
 	};
 	for (const t of tx) {
 		if (!isExpense(t)) continue;
-		if (t.date >= from && t.date <= today) row(t.category).now += Math.abs(t.amount);
-		else if (t.date >= lastFrom && t.date <= lastTo) row(t.category).last += Math.abs(t.amount);
+		if (t.date >= from && t.date <= today) row(t.category).now += spend(t);
+		else if (t.date >= lastFrom && t.date <= lastTo) row(t.category).last += spend(t);
 	}
 	const all = [...rows.values()].map((r) => ({
 		...r,
@@ -72582,11 +72588,12 @@ function hubTx(state) {
 	return state.tx.filter((t) => t && !t.deleted && typeof t.date === "string" && (countsAsSpending(t) || countsAsIncome(t))).map((t) => ({
 		id: String(t.id),
 		date: t.date.slice(0, 10),
-		type: t.type,
+		type: isRefund(t) ? "expense" : t.type,
 		amount: Math.abs(B(t)),
 		category: String(t.category ?? "other"),
 		note: t.note ? String(t.note) : void 0,
-		everyday: t.type === "expense" && isEveryday(state, t)
+		everyday: (t.type === "expense" || isRefund(t)) && isEveryday(state, t),
+		...isRefund(t) ? { refund: true } : {}
 	}));
 }
 function ruleInBase(state, rule) {

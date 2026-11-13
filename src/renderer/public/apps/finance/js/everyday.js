@@ -6,7 +6,7 @@
 // "Everything" never goes through here, so its totals stay exactly as before.
 
 import { convert } from './fx.js';
-import { countsAsSpending } from './catshare.js';
+import { countsAsSpending, isRefund, signed } from './catshare.js';
 
 export const DEFAULT_LIMIT_MDL = 100000; // 1 000 MDL, in cents
 
@@ -23,7 +23,7 @@ export function everydayLimit(settings, rates) {
 export const workCostIds = (settings) => new Set((settings?.categories || []).filter((c) => c.workCost).map((c) => c.id));
 
 // A single expense at or above the limit (the limit itself counts as one-off).
-export const isOneOff = (t, limit, base) => countsAsSpending(t) && base(t) >= limit;
+export const isOneOff = (t, limit, base) => countsAsSpending(t) && !isRefund(t) && base(t) >= limit;
 
 // The records that count as everyday spending, plus how much was left out of
 // the spending in [from, to] (main currency cents).
@@ -34,7 +34,7 @@ export function everydayList(list, { settings, rates, base, from, to }) {
   let leftOut = 0;
   for (const t of list) {
     if (countsAsSpending(t) && (work.has(t.category) || isOneOff(t, limit, base))) {
-      if ((from == null || t.date >= from) && (to == null || t.date <= to)) leftOut += base(t);
+      if ((from == null || t.date >= from) && (to == null || t.date <= to)) leftOut += signed(t, base(t));
       continue;
     }
     keep.push(t);

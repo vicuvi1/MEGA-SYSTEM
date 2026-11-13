@@ -12,7 +12,7 @@ import { dueItems, upcomingItems } from './recurring.js';
 import { spendingIds } from './forecast.js';
 import { daysBetween, monthKey, addMonths, addDays, daysInMonth } from './dates.js';
 import { convert } from './fx.js';
-import { countsAsSpending } from './catshare.js';
+import { countsAsSpending, signed } from './catshare.js';
 
 const lei = (c) => Math.floor(c / 100) * 100; // whole lei, rounded down: never promise more
 
@@ -23,7 +23,7 @@ const lei = (c) => Math.floor(c / 100) * 100; // whole lei, rounded down: never 
 export const isEveryday = (state, t) => countsAsSpending(t) && !t.recurring
   && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
 export const everydaySpent = (state, from, to) => state.tx
-  .filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + B(t), 0);
+  .filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + signed(t, B(t)), 0);
 
 export const limitOn = (state) => !!(state.settings.limit?.on && state.settings.limit.amount > 0);
 

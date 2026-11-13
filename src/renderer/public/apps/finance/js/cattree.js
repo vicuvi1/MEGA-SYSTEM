@@ -5,7 +5,7 @@
 //
 //   settings.subcats    [{ id, parent, key?, name, emoji, color?, budget?, updatedAt }]
 //   settings.subMemory  { "<merchant words>": subId }  learned from your own choices
-import { countsAsSpending } from './catshare.js';
+import { countsAsSpending, signed, isRefund } from './catshare.js';
 
 const fold = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -429,13 +429,13 @@ export function totalsBySub(state, list, catId) {
   const rows = new Map();
   let total = 0;
   for (const t of list) {
-    if (t.type !== 'expense' || t.loan || t.category !== catId) continue;
+    if ((t.type !== 'expense' && !isRefund(t)) || t.loan || t.category !== catId) continue;
     const s = subOf(state, t);
     const id = s ? s.id : NO_SUB;
     const r = rows.get(id) || { id, amount: 0, count: 0 };
-    r.amount += B(t);
+    r.amount += signed(t, B(t));
     r.count++;
-    total += B(t);
+    total += signed(t, B(t));
     rows.set(id, r);
   }
   const out = [...rows.values()].sort((a, b) => b.amount - a.amount);
@@ -448,11 +448,11 @@ export function totalsBySub(state, list, catId) {
 export function totalsAllSubs(state, list) {
   const rows = new Map();
   for (const t of list) {
-    if (t.type !== 'expense' || t.loan) continue;
+    if ((t.type !== 'expense' && !isRefund(t)) || t.loan) continue;
     const s = subOf(state, t);
     const id = s ? s.id : `${NO_SUB}:${t.category}`;
     const r = rows.get(id) || { id, parent: t.category, sub: s, amount: 0, count: 0 };
-    r.amount += B(t);
+    r.amount += signed(t, B(t));
     r.count++;
     rows.set(id, r);
   }
@@ -506,7 +506,7 @@ export function monthlyAverage(state, from, key, months = 6) {
 
 export function subBudgetStatus(state, key) {
   return subList(state).filter((s) => s.budget > 0 && !s.archived).map((s) => {
-    const spent = state.tx.filter((t) => countsAsSpending(t) && t.date.startsWith(key) && t.sub === s.id && t.category === s.parent).reduce((a, t) => a + B(t), 0);
+    const spent = state.tx.filter((t) => countsAsSpending(t) && t.date.startsWith(key) && t.sub === s.id && t.category === s.parent).reduce((a, t) => a + signed(t, B(t)), 0);
     const pct = spent / s.budget;
     return { sub: s, budget: s.budget, spent, left: s.budget - spent, pct, level: pct > 1 ? 'over' : pct >= 0.8 ? 'near' : 'ok' };
   }).sort((a, b) => b.pct - a.pct);

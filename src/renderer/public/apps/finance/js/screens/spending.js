@@ -14,7 +14,7 @@ import * as M from '../model.js';
 import * as T from '../cattree.js';
 import * as E from '../everyday.js';
 import { todayISO, addMonths, monthKey, monthLabel } from '../dates.js';
-import { categoryShares, changeText, spendRange, SPEND_PERIODS, OTHER_ID, countsAsSpending } from '../catshare.js';
+import { categoryShares, changeText, spendRange, SPEND_PERIODS, OTHER_ID, countsAsSpending, isRefund } from '../catshare.js';
 import { spreadLabels } from '../donutlabels.js';
 
 const TOP = 7; // openCategory's own fold ("Everything else"), kept for the old sheet
@@ -203,7 +203,7 @@ function recordsPanel(key, it, range, list, limit, base) {
   const nm = (cid) => M.category(state, cid)?.name || 'Unknown';
   const SHOWN = 6;
   return `<div class="dn-recs" role="region" aria-label="${esc(it.name)} records">
-    ${recs.slice(0, SHOWN).map((t) => `<div class="dn-rec"><span class="d">${esc(shortDate(t.date))}</span><span class="n">${esc(t.note || (id === OTHER_ID ? nm(t.category) : it.name))}${id === OTHER_ID && t.note ? ` <em>${esc(nm(t.category))}</em>` : ''}${E.isOneOff(t, limit, base) ? '<span class="one">one-off</span>' : ''}</span><span class="v">${esc(ctx.money(t.amount, { currency: t.currency }))}</span></div>`).join('')}
+    ${recs.slice(0, SHOWN).map((t) => `<div class="dn-rec"><span class="d">${esc(shortDate(t.date))}</span><span class="n">${esc(t.note || (id === OTHER_ID ? nm(t.category) : it.name))}${id === OTHER_ID && t.note ? ` <em>${esc(nm(t.category))}</em>` : ''}${E.isOneOff(t, limit, base) ? '<span class="one">one-off</span>' : ''}${isRefund(t) ? '<span class="one">refund</span>' : ''}</span><span class="v">${isRefund(t) ? '−' : ''}${esc(ctx.money(t.amount, { currency: t.currency }))}</span></div>`).join('')}
     ${recs.length > SHOWN ? `<p class="muted small" style="margin:4px 0 0">${recs.length - SHOWN} more.</p>` : ''}
     <div class="dn-recs-foot"><span class="muted small">${recs.length} record${recs.length === 1 ? '' : 's'} · ${esc(range.label)}</span><button type="button" class="btn sm" data-act="cat-log" data-key="${key}" data-cat="${esc(id)}">See all in the Log</button></div>
   </div>`;

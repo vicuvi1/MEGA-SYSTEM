@@ -19,7 +19,7 @@ import { workbook } from '../xlsx.js';
 import { parseQuery, searchTx, relRange } from '../search.js';
 import { catIcon, subColor } from './categories.js';
 import * as Spending from './spending.js';
-import { countsAsSpending } from '../catshare.js';
+import { countsAsSpending, signed, isRefund } from '../catshare.js';
 
 const PRESETS = [
   { id: 'month', name: 'Month' },
@@ -125,7 +125,7 @@ function whereItWent(state, fs, r, r0) {
   const inCat = (t) => t.category === cat;
   const inSub = (t) => inCat(t) && (sub === T.NO_SUB ? !T.subOf(state, t) : t.sub === sub && !!T.subOf(state, t));
   const levelList = !cat ? expenses : !sub ? expenses.filter(inCat) : expenses.filter(inSub);
-  const levelTotal = levelList.reduce((a, t) => a + M.B(t), 0);
+  const levelTotal = levelList.reduce((a, t) => a + signed(t, M.B(t)), 0);
   const subName = (id) => (id === T.NO_SUB ? 'No subcategory' : T.subById(state, id)?.name || 'Unknown');
 
   // Rows for the treemap and the table at this level.
@@ -254,7 +254,8 @@ export function view() {
 
   // Drill-down also narrows "Biggest expenses".
   const d = drillState(state);
-  const bigList = d.cat ? expenses.filter((t) => t.category === d.cat && (!d.sub || (d.sub === T.NO_SUB ? !T.subOf(state, t) : t.sub === d.sub))) : expenses;
+  const noRefunds = expenses.filter((t) => !isRefund(t));
+  const bigList = d.cat ? noRefunds.filter((t) => t.category === d.cat && (!d.sub || (d.sub === T.NO_SUB ? !T.subOf(state, t) : t.sub === d.sub))) : noRefunds;
   const biggest = [...bigList].sort((a, b) => M.B(b) - M.B(a)).slice(0, 10);
   const bigWhere = d.cat ? ` in ${d.sub && d.sub !== T.NO_SUB ? T.subById(state, d.sub)?.name : catName(d.cat)}` : '';
 

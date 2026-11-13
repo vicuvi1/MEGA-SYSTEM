@@ -7,7 +7,7 @@ import { dueItems, upcomingItems } from './recurring.js';
 import { invoiceStatus, invoiceTotal } from './invoices.js';
 import { addDays, daysBetween } from './dates.js';
 import { convert } from './fx.js';
-import { countsAsSpending } from './catshare.js';
+import { countsAsSpending, signed } from './catshare.js';
 
 export const isLiquid = (a) => !a.archived && !a.savings && a.kind !== 'savings' && a.kind !== 'crypto';
 
@@ -20,8 +20,8 @@ export function spentFrom(state, today, window = 60) {
   for (const t of state.tx) {
     if (!countsAsSpending(t) || t.recurring || t.date < since || t.date > today) continue;
     if (isBillCategory(state, t.category) || isWorkCost(state, t.category)) continue;
-    by.set(t.account, (by.get(t.account) || 0) + B(t));
-    total += B(t);
+    by.set(t.account, (by.get(t.account) || 0) + signed(t, B(t)));
+    total += signed(t, B(t));
   }
   return [...by.entries()].map(([id, amount]) => ({ id, amount, share: total ? amount / total : 0 })).sort((a, b) => b.amount - a.amount);
 }
@@ -55,7 +55,7 @@ export function dailySpend(state, today, window = 90) {
   if (!list.length) return 0;
   const first = list.reduce((m, t) => (t.date < m ? t.date : m), today);
   const span = Math.max(14, daysBetween(first, today) + 1);
-  return Math.round(list.reduce((a, t) => a + B(t), 0) / span);
+  return Math.round(list.reduce((a, t) => a + signed(t, B(t)), 0) / span);
 }
 
 export function forecast(state, today, { days = 60 } = {}) {

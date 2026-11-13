@@ -1320,6 +1320,20 @@
   ],
   "evidence": "2026-11-13: tsc, vitest (financeEveryday.test.ts), smoke steps Finance categories (2).",
   "notes": "apps/finance/js/everyday.js (new), screens/spending.js, app.js (Work cost checkbox, everyday limit), css .dn-*, sw.js v45."
+ },
+ {
+  "id": "F-MONEY-BATCH1",
+  "priority": 2,
+  "area": "money",
+  "title": "Money batch 1: refunds, goal reservations warning, rate date, duplicate finder",
+  "user_visible_behavior": "A record can be a refund: it lowers its category's spending and is not income (balances unchanged), with a 'Looks like a refund?' list for old income records; the Goals warning names the short goal, the amount and why, with Lower to / Review; converted totals and Rates show 'rate from 12 Nov' and a quiet 'Update rates' chip when the rate is over 3 days old; Find duplicates in the Log groups look-alike records, keeps one, removes the rest after a backup, with one Undo",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+   "SMOKE_ONLY=\"Money refunds|Money goals warning|Money exchange rates|Money duplicates\" npm run smoke"
+  ],
+  "evidence": "2026-11-13: tsc, full vitest (moneyBatch1.test.ts, 20 tests), the four smoke steps (CHROMIUM_PATH chromium-1243).",
+  "notes": "apps/finance/js: catshare.js (isRefund, signed), model.js, refunds.js, dupes.js, ratedate.js (new), screens/moneytidy.js (new), screens/goals.js, app.js, sw.js v47; core/moneyHub.ts + web/moneyHub.ts; bot bundle rebuilt."
  }
  ]
 }

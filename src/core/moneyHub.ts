@@ -24,6 +24,8 @@ export interface HubTx {
   note?: string
   /** Day-to-day spending: not a bill, a repeating payment, a loan or a work cost. */
   everyday: boolean
+  /** Money back for a purchase: kept as an expense row that lowers spending (amount stays positive). */
+  refund?: boolean
 }
 
 export interface HubCat {
@@ -45,9 +47,11 @@ export const leiText = (bani: number, currency = 'MDL'): string => totalText(ban
 const signed = (bani: number) => `${bani >= 0 ? '+' : '−'}${leiText(Math.abs(bani))}`
 
 const isExpense = (t: HubTx) => t.type === 'expense'
+/** What a spending row adds: a refund takes its amount off. */
+const spend = (t: HubTx) => (t.refund ? -Math.abs(t.amount) : Math.abs(t.amount))
 export function spent(tx: HubTx[], from: string, to: string, everydayOnly = false): number {
   let s = 0
-  for (const t of tx) if (isExpense(t) && t.date >= from && t.date <= to && (!everydayOnly || t.everyday)) s += Math.abs(t.amount)
+  for (const t of tx) if (isExpense(t) && t.date >= from && t.date <= to && (!everydayOnly || t.everyday)) s += spend(t)
   return s
 }
 function earned(tx: HubTx[], from: string, to: string): number {
@@ -104,8 +108,8 @@ export function sameDayCompare(tx: HubTx[], today: string, cats: HubCat[]): Same
   }
   for (const t of tx) {
     if (!isExpense(t)) continue
-    if (t.date >= from && t.date <= today) row(t.category).now += Math.abs(t.amount)
-    else if (t.date >= lastFrom && t.date <= lastTo) row(t.category).last += Math.abs(t.amount)
+    if (t.date >= from && t.date <= today) row(t.category).now += spend(t)
+    else if (t.date >= lastFrom && t.date <= lastTo) row(t.category).last += spend(t)
   }
   const all = [...rows.values()].map((r) => ({ ...r, diff: r.now - r.last }))
   const thisTotal = all.reduce((s, r) => s + r.now, 0)
