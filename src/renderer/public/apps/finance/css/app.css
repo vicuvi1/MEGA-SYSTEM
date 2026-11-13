@@ -6149,3 +6149,49 @@ html[data-calm] .theme-atmosphere, html[data-calm] .atmosphere-particle { displa
 .recon-pair { border: 1px dashed var(--line-strong); border-radius: 12px; padding: 2px 6px; margin-bottom: 6px; }
 .recon-history { margin-top: 14px; }
 .recon-history summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+
+/* Money ideas: calendar, "Can I afford it?" and the wishlist (js/screens/calendar.js, afford.js, wishlist.js) */
+.mi-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.mc-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.mc-head h2 { margin: 0; flex: 1; text-align: center; text-transform: none; letter-spacing: 0; font-size: 17px; }
+.mc-sum { margin: 4px 0 12px; }
+.mc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.mc-dow { text-align: center; font-size: 11px; color: var(--muted); padding: 2px 0; }
+.mc-cell { display: flex; flex-direction: column; gap: 1px; min-height: 96px; padding: 5px 6px; text-align: left; font: inherit; font-size: 11px; color: var(--text); background: var(--surface-2); border: 1px solid var(--line); border-radius: 9px; cursor: pointer; min-width: 0; overflow: hidden; }
+.mc-cell.mc-pad { background: transparent; border-color: transparent; cursor: default; }
+.mc-cell:hover:not(.mc-pad) { border-color: var(--line-strong); }
+.mc-cell.today { border-color: var(--gold); }
+.mc-cell.future { background: transparent; }
+.mc-cell.tight { background: var(--expense-soft); border-color: var(--expense); }
+.mc-n { font-weight: 600; font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
+.mc-ns, .mc-key .mc-ns { color: var(--income); font-size: 9px; font-style: normal; }
+.mc-sp { color: var(--expense); font-variant-numeric: tabular-nums; }
+.mc-bill { color: var(--warn); font-variant-numeric: tabular-nums; }
+.mc-inc { color: var(--income); font-variant-numeric: tabular-nums; }
+.mc-big { color: var(--gold); font-variant-numeric: tabular-nums; }
+.mc-left { margin-top: auto; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mc-tt { font-size: 10px; color: var(--expense); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.mc-key { margin: 12px 0 0; }
+.mc-floor { max-width: 260px; margin: 14px 0 0; }
+.mc-h { margin: 16px 0 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.mc-warn { color: var(--expense); margin: 0 0 8px; }
+.af-verdict { font-size: 18px; font-weight: 600; margin: 14px 0 10px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); }
+.af-verdict.tone-ok { background: var(--income-soft); border-color: var(--income); }
+.af-verdict.tone-warn { background: var(--warn-soft); border-color: var(--warn); }
+.af-verdict.tone-bad { background: var(--expense-soft); border-color: var(--expense); }
+.af-goals { list-style: none; margin: 0 0 8px; padding: 0; }
+.af-goals li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-top: 1px solid var(--line); }
+.wl-form { display: grid; grid-template-columns: 2fr 1fr; gap: 0 12px; align-items: end; }
+.wl-form .wl-wide, .wl-form .btns { grid-column: 1 / -1; }
+.wl-item { display: block; }
+.wl-item > .t, .wl-item > .v { display: inline-block; }
+.wl-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.wl-ready { color: var(--muted); font-size: 13px; }
+.wl-item.ready .wl-ready { color: var(--gold); font-weight: 600; }
+.wl-note a { color: var(--info); }
+.wl-saved { margin: 14px 0 0; padding-top: 10px; border-top: 1px dashed var(--line); }
+.wl-wait { max-width: 200px; }
+@media (max-width: 720px) {
+  .mc-cell { min-height: 72px; padding: 3px 4px; }
+  .wl-form { grid-template-columns: 1fr; }
+}

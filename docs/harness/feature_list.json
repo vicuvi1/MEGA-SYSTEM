@@ -1348,6 +1348,48 @@
   ],
   "evidence": "2026-11-13: tsc, vitest (simpleMode.test.ts, points.test.ts), smoke step Coins are hidden by default.",
   "notes": "simple_mode.coins (core/simpleMode.ts); useShowCoins / coinsShownNow in useSimple.ts; Coins in ui.tsx renders nothing while hidden."
- }
+ },
+  {
+   "id": "F907",
+   "priority": 2,
+   "area": "money",
+   "title": "Finance money calendar with no-spend days",
+   "user_visible_behavior": "Plan > Calendar: a month with spent, bills due, income expected, big buys, a money-left line and tight days under a safety floor; no-spend days marked and counted against last month",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money calendar|Money afford|Money wishlist\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (financeMoneyIdeas.test.ts), smoke steps Money calendar / afford / wishlist.",
+   "notes": "apps/finance/js/moneycal.js, afford.js, wishlist.js, screens/calendar.js, afford.js, wishlist.js; settings.moneyFloor, wishlist, wishlistDays; sw.js v47."
+  },
+  {
+   "id": "F908",
+   "priority": 2,
+   "area": "money",
+   "title": "Finance: Can I afford it?",
+   "user_visible_behavior": "Sheet on Money Home: price gives safe to spend before and after, days the money runs short, goal delays in weeks and a plain verdict; creates no record; Add to wishlist instead",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money calendar|Money afford|Money wishlist\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (financeMoneyIdeas.test.ts), smoke steps Money calendar / afford / wishlist.",
+   "notes": "apps/finance/js/moneycal.js, afford.js, wishlist.js, screens/calendar.js, afford.js, wishlist.js; settings.moneyFloor, wishlist, wishlistDays; sw.js v47."
+  },
+  {
+   "id": "F909",
+   "priority": 2,
+   "area": "money",
+   "title": "Finance wishlist with a wait",
+   "user_visible_behavior": "Plan > Wishlist: items locked for 7 days (a setting), then Buy fills the expense sheet or Remove; shows the list total and Saved by waiting; syncs in settings",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money calendar|Money afford|Money wishlist\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (financeMoneyIdeas.test.ts), smoke steps Money calendar / afford / wishlist.",
+   "notes": "apps/finance/js/moneycal.js, afford.js, wishlist.js, screens/calendar.js, afford.js, wishlist.js; settings.moneyFloor, wishlist, wishlistDays; sw.js v47."
+  }
  ]
 }

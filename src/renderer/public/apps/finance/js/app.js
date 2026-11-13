@@ -46,6 +46,9 @@ import * as WorkHour from './screens/workhour.js';
 import * as YearReview from './screens/yearreview.js';
 import * as LongView from './screens/longview.js';
 import * as Taxes from './screens/taxes.js';
+import * as MoneyCalendar from './screens/calendar.js';
+import * as Wishlist from './screens/wishlist.js';
+import * as Afford from './screens/afford.js';
 import { workText } from './workhours.js';
 import { planSplit, splitTransfers, splitPrefs, isSplit } from './split.js';
 import { openBankImport, rowsFromFile, decodeText } from './screens/bankimport.js';
@@ -1058,6 +1061,7 @@ function viewHome() {
   ${Reprice.banner()}
   ${welcome}
   ${safeCard(today)}
+  ${Afford.homeRow()}
   ${stepsCard(today)}
   ${payCard(today)}
   ${homeStrip(s, key)}
@@ -3518,11 +3522,12 @@ const SUB_TABS = [
   [{ tab: 'accounts', label: 'Cards & accounts' }, { tab: 'rates', label: 'Rates & converter' }],
   [{ tab: 'people', label: 'People & loans' }, { tab: 'clients', label: 'Clients & invoices' }],
   [{ tab: 'reports', label: 'Reports' }, { tab: 'review', label: 'Year in review' }, { tab: 'longview', label: 'Long view' }, { tab: 'taxes', label: 'Taxes' }],
+  [{ tab: 'plan', label: 'Plan' }, { tab: 'calendar', label: 'Calendar' }, { tab: 'wishlist', label: 'Wishlist' }],
 ];
-const NAV_PARENT = { rates: 'accounts', clients: 'people', review: 'reports', longview: 'reports', taxes: 'reports' };
+const NAV_PARENT = { rates: 'accounts', clients: 'people', review: 'reports', longview: 'reports', taxes: 'reports', calendar: 'plan', wishlist: 'plan' };
 
 const SCREENS = {
-  home: { view: viewHome, onClick: (a, el) => Plan.onClick(a, el) },
+  home: { view: viewHome, onClick: (a, el) => Plan.onClick(a, el) || Afford.onClick(a) },
   log: { view: viewLog },
   accounts: AccountsScreen,
   goals: Goals,
@@ -3533,6 +3538,8 @@ const SCREENS = {
   review: YearReview,
   longview: LongView,
   taxes: Taxes,
+  calendar: MoneyCalendar,
+  wishlist: Wishlist,
   rates: RatesScreen,
   telegram: TelegramHub,
   bot: TelegramHub,
