@@ -36,6 +36,21 @@ export function liveLog(date: string, createdAt: number | null | undefined, dayO
   return dayOf(ms) === date || dayOf(ms - 4 * 3600_000) === date
 }
 
+/**
+ * Money v2 plan D9: a captured payment (source 'capture', from Phone
+ * payments) or an auto-logged bill (source 'auto') counts as logged on the
+ * day only by its `confirmedAt` (the owner's tap), never by `createdAt`; an
+ * unconfirmed one counts as imported. Returns the time to judge "live" by,
+ * and whether it is imported.
+ */
+export function logMoment(t: { id?: unknown; source?: unknown; createdAt?: unknown; confirmedAt?: unknown }): { at: number; imported: boolean } {
+  if (/^(capture|auto)$/i.test(String(t.source ?? ''))) {
+    const c = Number(t.confirmedAt)
+    return Number.isFinite(c) && c > 0 ? { at: c, imported: false } : { at: 0, imported: true }
+  }
+  return { at: Number(t.createdAt), imported: isImported(t) }
+}
+
 /** Imported from a bank statement or a sheet (not logged by hand). */
 export const isImported = (t: { id?: unknown; source?: unknown }) => /^tg-life-bank-|^imp-|^bank-/.test(String(t.id ?? '')) || /^(bank|import|csv|sheet|xlsx)$/i.test(String(t.source ?? ''))
 

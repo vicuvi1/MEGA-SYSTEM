@@ -7,9 +7,9 @@
 // these UTC crons are the backup. Both claim the same `daily:<job>` slot.
 // GET /api/cron?job=backup (CRON_SECRET): the newest daily backup as gzip, for
 // the weekly encrypted off-site copy (.github/workflows/backup.yml, LT1).
-import { bearer, bearerIs, botDefaults, checkWebhooks, config, countCall, cronSecretOk, gate, requireSession, send, serverBots } from './_lib.mjs'
-import { DAILY_GAP_MS, dailyDue, dailyGate, healthAlarm, healthPush, localMinute, runDaily, runPlugins, runTick, selfCheck, sportShared, tickHealth, webhookVerdict } from './_bot/bot.mjs'
-import { dropHealthKey, healthKeyOk, listHealthKeys, newHealthKey } from './_health.mjs'
+import { bearer, bearerIs, botDefaults, checkWebhooks, clientIp, config, countCall, cronSecretOk, gate, requireSession, send, serverBots } from './_lib.mjs'
+import { DAILY_GAP_MS, dailyDue, dailyGate, healthAlarm, healthPush, localMinute, phonePay, runDaily, runPlugins, runTick, selfCheck, sportShared, tickHealth, webhookVerdict } from './_bot/bot.mjs'
+import { dropHealthKey, healthKeyOk, listHealthKeys, newHealthKey, payRequest, readCapped } from './_health.mjs'
 import { readBody } from './_lib.mjs'
 import { deadlineIn, modelUntil, pingModel, rollupUsage } from './ai.mjs'
 import { googleEnv } from './google.mjs'
@@ -59,6 +59,8 @@ export default async function handler(req, res) {
   if (new URL(req.url, 'http://x').searchParams.get('job') === 'sport') return sport(req, res)
   // job=health: your phone sends weight, steps and sleep (a key made in Settings → Plugins).
   if (new URL(req.url, 'http://x').searchParams.get('job') === 'health') return health(req, res)
+  // job=pay: your phone sends each payment notification (MacroDroid, a key made in Settings → Phone payments).
+  if (new URL(req.url, 'http://x').searchParams.get('job') === 'pay') return pay(req, res)
   // job=plugins: "Refresh now" in Settings → Plugins (signed in).
   if (new URL(req.url, 'http://x').searchParams.get('job') === 'plugins') return plugins(req, res)
   const secret = process.env.CRON_SECRET || ''
@@ -199,6 +201,23 @@ async function health(req, res) {
     console.error('health:', e)
     send(res, 503, { error: e.message || 'Database not reachable' })
   }
+}
+
+// POST /api/cron?job=pay (Phone payments, docs/phone-payments.md)
+//   Authorization: Bearer <payment key>, {app, title, text, time} → kept in money_tosort to sort
+//   Signed in (the app): {op:'list'} · {op:'new', label} → {key} once · {op:'drop', id} · {op:'test'}
+// Size- and rate-limited; 401 without a valid key; 503 on a database hiccup; never echoes the key or the text.
+async function pay(req, res) {
+  const cfg = config()
+  if (!cfg.ok) return send(res, 503, { error: 'Server not set up' })
+  let body = { size: 0, raw: '' }
+  try {
+    body = await readCapped(req)
+  } catch {
+    return send(res, 400, { error: 'Could not read the request' })
+  }
+  const [status, out] = await payRequest({ cfg, method: req.method, token: bearer(req), ip: clientIp(req), size: body.size, raw: body.raw, capture: (input) => phonePay(botEnv(cfg), input) })
+  send(res, status, out)
 }
 
 async function plugins(req, res) {

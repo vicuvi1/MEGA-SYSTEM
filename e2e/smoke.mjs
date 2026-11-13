@@ -4417,6 +4417,41 @@ try {
     const init = await pg.evaluate(async (t) => (await fetch('/api/mcp', { method: 'POST', headers: { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) })).json(), tok.trim())
     if (!init?.result?.tools?.some((x) => x.name === 'get_today')) throw new Error('the token does not open the MCP tools')
   })
+  // Phone payments: make a key, "Send test" posts through the real job=pay URL with it (as MacroDroid will),
+  // and the test payment waits in money_tosort (never in Finance Helper); a wrong key gets 401.
+  await step('Settings: Phone payments (make a key, a test payment lands in To sort)', async () => {
+    await open('settings')
+    await pg.locator('.st-item', { hasText: 'Phone payments' }).first().click()
+    await pg.waitForSelector('[data-testid="phone-pay"] [data-testid="pp-steps"]', { timeout: 8000 })
+    const steps = await pg.locator('[data-testid="pp-steps"]').innerText()
+    if (!/Notification received/.test(steps) || !/HTTP request/.test(steps) || !/job=pay/.test(steps)) throw new Error(`MacroDroid steps read: ${steps.slice(0, 160)}`)
+    await pg.fill('[data-testid="pp-label"]', 'Smoke phone')
+    await pg.getByRole('button', { name: 'Make a key' }).click()
+    await pg.waitForSelector('[data-testid="pp-key"]', { timeout: 10000 })
+    const key = (await pg.locator('[data-testid="pp-key"]').innerText()).trim()
+    if (!/^pk_[\w-]{20,}$/.test(key)) throw new Error(`odd key: ${key.slice(0, 6)}`)
+    if (!(await pg.locator('[data-testid="pp-steps"]', { hasText: `Bearer ${key}` }).count())) throw new Error('the steps do not show the new key')
+    await pg.waitForSelector('[data-testid="pp-keys"] li:has-text("Smoke phone")', { timeout: 8000 })
+    await pg.click('[data-testid="pp-test"]')
+    await pg.waitForSelector('[data-testid="pp-recent"] li:has-text("TEST SHOP")', { timeout: 15000 })
+    const line = await pg.locator('[data-testid="pp-recent"] li', { hasText: 'TEST SHOP' }).first().innerText()
+    if (!/1,00 MDL/.test(line) || !/to sort/.test(line) || !/\(test\)/.test(line)) throw new Error(`last received reads: ${line}`)
+    const seen = await pg.evaluate(async (k) => {
+      const s = localStorage.getItem('life_web_session') ?? ''
+      const q = async (sql) => {
+        const res = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql, args: [] } }, { type: 'close' }] }) })
+        return (await res.json())?.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? null
+      }
+      const tosort = JSON.parse((await q("SELECT value FROM settings WHERE key = 'money_tosort'")) || '{"items":[]}')
+      const fin = (await q("SELECT value FROM settings WHERE key = 'app_sync_finance'")) || ''
+      const wrong = await fetch('/api/cron?job=pay', { method: 'POST', headers: { Authorization: `Bearer ${k.slice(0, -2)}zz`, 'Content-Type': 'text/plain' }, body: '{"app":"maib","text":"Plată: 2,00 MDL la X"}' })
+      return { items: tosort.items, inFinance: fin.includes('TEST SHOP'), wrong: wrong.status }
+    }, key)
+    const it = seen.items.find((x) => x.merchant === 'TEST SHOP')
+    if (!it || it.state !== 'new' || !it.test || it.amount !== 100 || it.currency !== 'MDL') throw new Error(`money_tosort holds ${JSON.stringify(seen.items).slice(0, 200)}`)
+    if (seen.inFinance) throw new Error('the test payment went into Finance Helper')
+    if (seen.wrong !== 401) throw new Error(`a wrong key got ${seen.wrong}, not 401`)
+  })
   await step('Notebook opens with your starter notes', async () => {
     await open('notebook')
     await pg.waitForSelector('.nb-item', { timeout: 15000 })

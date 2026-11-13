@@ -48,6 +48,12 @@ Bot tokens come from @BotFather. If a token was ever pasted in a chat or screens
 - Passkeys (fingerprint/face) and a device list with "sign this device out" (Settings → General).
 - `vercel.json` sends a Content-Security-Policy: strict for the app (`script-src 'self'`, `frame-ancestors 'none'`, `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`), and a looser one for `/apps/*` (their big inline scripts). The embedded apps run in same-origin iframes WITHOUT `sandbox`: the host injects their theme and data into them, and they keep their own localStorage, which a sandbox (opaque origin) would break. The trade-off: code running inside an embedded app could read the session; keep those apps free of third-party scripts.
 - The bots obey only `TELEGRAM_CHAT_ID`.
+- **Phone payment keys** (`/api/cron?job=pay`, `api/_health.mjs`): their own key kind. Keys start with `pk_` and live in `sys_pay_keys`, which holds only a salted SHA-256 hash, checked in constant time. Each key has a name per phone and can be removed. Health keys (`hk_`, `sys_health_keys`) and payment keys can never stand in for each other. Limits:
+  - body at most 4 KB (413);
+  - 30 requests a minute per IP and 30 payments per 10 minutes per key, kept in memory (429);
+  - fields must be strings, with length caps (400).
+
+  Answers: 401 without a valid key, 503 on a database hiccup (never 401). The answer never repeats the key or the notification text. Signed-in ops (`list`, `new`, `drop`, `test`) need a session. The server keeps no log of the text: only the item in `money_tosort`, with at most 200 characters of raw text, cleared once sorted.
 
 ### Google Drive (Photo Locker)
 - Scope: only `https://www.googleapis.com/auth/drive.file` (the app sees only files and folders it made), added by "Connect Google Drive" on top of the calendar (incremental consent). Never the full `drive` scope. Details: [vault.md](vault.md).

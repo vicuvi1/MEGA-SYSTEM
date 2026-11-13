@@ -1249,6 +1249,20 @@
   ],
   "evidence": "2026-11-12: branch money-phase4-longview; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "apps/finance/js/longview.js (pure), screens/longview.js, css/longview.css (loaded by the screen); app.js: import, SUB_TABS, NAV_PARENT, SCREENS, goto 'longview'; sw.js 3 lines; web/moneyLong.ts, MoneyLong.tsx, moneyLong.css; web/moneyApi.ts adds view.long (not in moneyHub.ts, so the bot bundle is unchanged); pages/Money.tsx one card."
+ },
+ {
+  "id": "F-PHONE-PAY-1",
+  "priority": 1,
+  "area": "money",
+  "title": "Phone payments backend: MacroDroid notifications to To sort (money_tosort), keys, Telegram paste",
+  "user_visible_behavior": "Settings → Phone payments: make or remove a key per phone, the exact MacroDroid steps (Notification received from maib, Google Wallet, Revolut, Paynet → HTTP POST to /api/cron?job=pay with Authorization: Bearer <key> and the body template), Send test, and the last 5 notifications received with what was read. Each payment is saved at once in To sort (money_tosort), in its own currency, and never goes into Finance Helper before a tap. maib + Google Wallet for one tap is kept once. Declined, codes and money in are skipped with a reason; an unreadable one is kept to sort by hand. Pasting a notification to the finance bot does the same. No points until sorted on the day.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/payNotify.test.ts src/core/moneyToSort.test.ts src/renderer/src/web/phonePay.test.ts src/renderer/src/web/healthKeys.test.ts",
+   "SMOKE_ONLY=\"Phone payments\" npm run smoke"
+  ],
+  "evidence": "2026-11-13: branch phone-payments; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+  "notes": "core/payNotify.ts (+ fixtures), core/moneyToSort.ts, core/moneyDays.ts logMoment, web/phonePay.ts, web/webServices.ts financeDayTx, web/webBots.ts (paste), server/telegramBot.ts phonePay, api/_health.mjs (key kinds, payRequest, readPayBody), api/cron.mjs job=pay, settings/phonePay.tsx, bridge plugins.phonePay, settingsKeys money_tosort, e2e/server.mjs job=pay. The To sort card UI is the next batch."
  }
  ]
 }

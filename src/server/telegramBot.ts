@@ -43,6 +43,8 @@ import { bodyLine, healthyDay, screenBreaks, sleptOnTime, stillQuiet, telegramWi
 import { cleanNudgeStore, dayOf } from '@core/islandNudges'
 import { bedLoggedTonight } from '@core/bedSense'
 import { addDays, calendarDay, dayKey } from '@core/dates'
+import { payTime } from '@core/payNotify'
+import { capturePayment, type PayCapture } from '../renderer/src/web/phonePay'
 import { financeSpending, progressReport, progressText } from '@core/progress'
 import { getSetting, setSetting, readSetting, writeSetting } from '../main/settings'
 import { promiseAsk, promiseButtons, type PromiseReminder } from '@core/benPromise'
@@ -1947,6 +1949,20 @@ export async function healthPush(env: BotEnv, body: unknown): Promise<{ ok: bool
   } catch (e) {
     return { ok: false, error: (e as Error).message }
   }
+}
+
+/**
+ * Phone payments: one bank / wallet notification from MacroDroid (the key was
+ * checked in api/_health.mjs) → an item in money_tosort, waiting for a
+ * category (web/phonePay.ts). Nothing goes into Finance Helper and no points
+ * are paid until the owner sorts it. Throws on a database hiccup (→ 503).
+ */
+export async function phonePay(env: BotEnv, input: { app?: string; title?: string; text?: string; time?: string; test?: boolean }): Promise<PayCapture> {
+  const tz = lifeTz(env)
+  const { mirror } = await botsFor(env)
+  const now = Date.now()
+  const at = payTime(input.time, now, tz)
+  return mirror.write((db) => capturePayment(db as any, input, { at, day: calendarDay(new Date(at), tz), now, via: 'phone' }))
 }
 
 export { handleMcp, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, NEEDS_WRITE as MCP_NEEDS_WRITE } from './mcp'

@@ -1,7 +1,7 @@
 // The desktop services (src/main/*.ts) running on the web app's copy of the
 // Turso database. Same rules as the desktop: daily caps, cooldowns, undo,
 // quests, the shop, streaks. Each change is saved to Turso before it shows.
-import { isImported, liveLog, moneyDay, type DayTx } from '@core/moneyDays'
+import { liveLog, logMoment, moneyDay, type DayTx } from '@core/moneyDays'
 import { moneyNumbers } from './benDesk'
 import { financeStateFrom } from './botBrain'
 import { queueFinanceExpense, savingTarget } from './financeInbox'
@@ -94,7 +94,8 @@ export function financeDayTx(s: Services, finance: any = financeOf(s), withLife 
       category: names.get(String(t.category)) ?? String(t.category ?? ''),
       note: String(t.note ?? ''),
       amount: Math.round(txLei(t, finance?.rates, finance?.settings?.currency) * 100),
-      live: liveLog(t.date.slice(0, 10), Number(t.createdAt), dayOf, isImported(t))
+      // A captured payment is live only when you sorted it on its own day (logMoment, Money v2 D9).
+      live: ((m) => liveLog(t.date.slice(0, 10), m.at, dayOf, m.imported))(logMoment(t))
     }))
 }
 

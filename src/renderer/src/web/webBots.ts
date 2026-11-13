@@ -17,6 +17,7 @@ import { nightNotifId, nightNudgeDue, nightText, pickOpen } from '@core/benOneJo
 import { getSetting, setSetting, readSetting, writeSetting } from '../../../main/settings'
 import { logReps, saveSport, sportBlob } from '../../../main/bodyLog'
 import { queueFinanceExpense } from './financeInbox'
+import { capturePayment, pastedNotice, pastedReply } from './phonePay'
 import { deleteMoney, editMoney, keepMoneyAsk, logMoney, moneyRecord, moneyRows, monthSpend, previewMoney, recentMoney } from './financeBot'
 import { payTodoist } from './todoistCoins'
 import { pLabel, sortToday, todayText, type TodoTask } from '@core/todoist'
@@ -553,6 +554,9 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (career) return career
     const viaFocus = runFocus(s, text, focusEnded)
     if (viaFocus) return viaFocus
+    // A pasted bank / wallet notification ("Plată: 123,45 MDL la …"): the Phone payments parser, kept to sort (no points).
+    const notice = currentDb && !text.startsWith('/') ? pastedNotice(text) : null
+    if (notice) return { reply: esc(pastedReply(capturePayment(currentDb, notice, { at: Date.now(), day: s.wallet.today(), via: 'telegram' }))) }
     const parsed = parseTelegramText(text)
     // "exam on 12 december", "woke up at 7 am": a number, but not money (X2).
     if ((parsed.type === 'expense' || parsed.type === 'unknown') && !text.startsWith('/') && !notMoney(text)) {

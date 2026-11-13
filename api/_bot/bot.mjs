@@ -98,6 +98,7 @@ var SETTINGS = {
 	finance_backup_json: json$7("older copy of the Finance Helper data", null),
 	waky_backup_json: json$7("older copy of the Waky data", null),
 	finance_inbox_json: json$7("bank lines waiting to be sorted in Finance Helper", []),
+	money_tosort: json$7("Phone payments waiting for a category (Money v2 plan D9): {items:[{id, at, day, source, sources, amount, currency, merchant, last4, rate, raw (at most 200 characters, cleared once sorted), kind debit|refund|ignore, reason, state new|sorted|dismissed, txId, via, test, updatedAt}]}; outside Finance Helper's data, merged by id, the state only moves forward (core/moneyToSort.ts)", null),
 	fin_tx_links: json$7("money entries linked to Finance Helper transactions", null),
 	tg_expense_links: json$7("Telegram messages linked to the expenses they logged", null),
 	conn_finance_since: text$2("when Finance Helper was first connected"),
@@ -1374,7 +1375,7 @@ function proteinGoal(weightKg, gPerKg = GPK.def) {
 	};
 }
 var round1 = (n) => Math.round(n * 10) / 10;
-var NUM$3 = "(\\d{1,4}(?:[.,]\\d)?)";
+var NUM$4 = "(\\d{1,4}(?:[.,]\\d)?)";
 var WORDNUM = {
 	a: 1,
 	an: 1,
@@ -1423,7 +1424,7 @@ var COUNT_UNIT = {
 function parseProtein(text) {
 	let t = norm$11(text).replace(/^\/(protein|p)\b/, "protein").replace(/^(i\s+)?(ate|had|log|add|eaten|just ate|mancat|am mancat|съел)\s+/, "").replace(/[.!]+$/, "");
 	if (!t || t.length > 48 || t.split(" ").length > 6 || /\?/.test(t)) return null;
-	let m = new RegExp(`^(?:protein|proteine|proteina|белок|prot)\\s*:?\\s*\\+?${NUM$3}\\s*g?$`).exec(t) ?? new RegExp(`^\\+?${NUM$3}\\s*g(?:rams?)?\\s*(?:of\\s+)?(?:protein|proteine|proteina|белка|prot)$`).exec(t);
+	let m = new RegExp(`^(?:protein|proteine|proteina|белок|prot)\\s*:?\\s*\\+?${NUM$4}\\s*g?$`).exec(t) ?? new RegExp(`^\\+?${NUM$4}\\s*g(?:rams?)?\\s*(?:of\\s+)?(?:protein|proteine|proteina|белка|prot)$`).exec(t);
 	if (m) {
 		const g = Math.round(Number(m[1].replace(",", ".")));
 		return g >= 1 && g <= 300 ? {
@@ -1434,13 +1435,13 @@ function parseProtein(text) {
 		} : null;
 	}
 	t = t.replace(/^(a\s+)?(can|cans|tin|scoop|scoops|glass|slice|slices|portion|portions|bowl)\s+of\s+/, (x) => /^a\s/.test(x) ? "a " : "").replace(/\bof\s+/g, "");
-	m = new RegExp(`^${NUM$3}\\s*(g|gr|grams?|ml)\\s+(.+)$`).exec(t);
+	m = new RegExp(`^${NUM$4}\\s*(g|gr|grams?|ml)\\s+(.+)$`).exec(t);
 	if (m) {
 		const f = matchFood(m[3]);
 		const grams = Number(m[1].replace(",", "."));
 		return f && f.grams && grams >= 10 && grams <= 2e3 ? logOf(f, { grams }) : null;
 	}
-	m = new RegExp(`^(.+?)\\s+${NUM$3}\\s*(g|gr|grams?|ml)$`).exec(t);
+	m = new RegExp(`^(.+?)\\s+${NUM$4}\\s*(g|gr|grams?|ml)$`).exec(t);
 	if (m) {
 		const f = matchFood(m[1]);
 		const grams = Number(m[2].replace(",", "."));
@@ -5669,7 +5670,7 @@ var localHm$1 = (iso) => {
 	return Number.isFinite(d.getTime()) ? `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}` : "";
 };
 var cleanItems$1 = (raw) => (Array.isArray(raw) ? raw : []).map(cleanItem$1).filter((x) => !!x).slice(0, 20);
-var DAY$14 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$15 = /^\d{4}-\d{2}-\d{2}$/;
 /**
 * A clean food log: meals with a valid id, day and items, newest first, the
 * last LOG_DAYS days before `today` and at most LOG_MAX; favourites apart
@@ -5677,13 +5678,13 @@ var DAY$14 = /^\d{4}-\d{2}-\d{2}$/;
 */
 function cleanFoodLog(raw, today) {
 	const o = raw && typeof raw === "object" ? raw : {};
-	const from = today && DAY$14.test(today) ? addDays$8(today, -45) : "";
+	const from = today && DAY$15.test(today) ? addDays$8(today, -45) : "";
 	const seen = /* @__PURE__ */ new Set();
 	const meals = [];
 	for (const m of Array.isArray(o.meals) ? o.meals : []) {
 		if (!m || typeof m !== "object") continue;
 		const id = String(m.id ?? "");
-		if (!/^fd-[a-z0-9]{1,24}$/.test(id) || seen.has(id) || !DAY$14.test(String(m.day)) || String(m.day) < from) continue;
+		if (!/^fd-[a-z0-9]{1,24}$/.test(id) || seen.has(id) || !DAY$15.test(String(m.day)) || String(m.day) < from) continue;
 		const items = cleanItems$1(m.items);
 		if (!items.length) continue;
 		seen.add(id);
@@ -7407,7 +7408,7 @@ var TYPE_AREA = {
 	chores: "chores",
 	work: "work"
 };
-var WORDS = [
+var WORDS$1 = [
 	["work", /\b(work|shift|job|office|client|standup|stand-up|invoice report)\b/i],
 	["body", /\b(gym|workout|training|train|run|running|walk|stretch|yoga|swim|push-?ups|sport)\b/i],
 	["sleep", /\b(sleep|bed|nap|wind[- ]?down)\b/i],
@@ -7416,7 +7417,7 @@ var WORDS = [
 ];
 /** The area a block or task belongs to, from its name (study when nothing else fits: deep work is mostly study). */
 function areaOfTitle(title) {
-	for (const [a, re] of WORDS) if (re.test(title)) return a;
+	for (const [a, re] of WORDS$1) if (re.test(title)) return a;
 	return "study";
 }
 /** A nudge's area: from its kind, or for a block (check-in, drift) from the block's name. */
@@ -12116,12 +12117,12 @@ var DEFAULT_COACH = {
 	bloodDismissed: null,
 	updatedAt: 0
 };
-var DAY$13 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$14 = /^\d{4}-\d{2}-\d{2}$/;
 var num$6 = (v, lo, hi, d) => {
 	const n = Number(v);
 	return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : d;
 };
-var day$2 = (v) => typeof v === "string" && DAY$13.test(v) ? v : null;
+var day$2 = (v) => typeof v === "string" && DAY$14.test(v) ? v : null;
 var txt = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
 var pair = (v, lo, hi, d) => {
 	if (!Array.isArray(v)) return d;
@@ -12538,7 +12539,7 @@ function dailyPlan(i, date = i.date) {
 		notes
 	};
 }
-var DAY$12 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$13 = /^\d{4}-\d{2}-\d{2}$/;
 var n15 = (v) => {
 	const n = Math.round(Number(v));
 	return Number.isFinite(n) ? Math.max(1, Math.min(5, n)) : 3;
@@ -12586,7 +12587,7 @@ function cleanDay$1(x) {
 function cleanDays$1(raw, today) {
 	const o = raw && typeof raw === "object" ? raw : {};
 	const days = {};
-	const keys = Object.keys(o.days ?? {}).filter((k) => DAY$12.test(k) && (!today || k <= addDays$8(today, 1) && k > addDays$8(today, -120))).sort();
+	const keys = Object.keys(o.days ?? {}).filter((k) => DAY$13.test(k) && (!today || k <= addDays$8(today, 1) && k > addDays$8(today, -120))).sort();
 	for (const k of keys) days[k] = cleanDay$1(o.days[k]);
 	const out = {
 		v: 1,
@@ -24977,10 +24978,10 @@ var CHAPTERS_12 = [
 var chaptersOf = (s) => s.weeks === 8 ? CHAPTERS : CHAPTERS_12;
 /** 1-based chapter number for a 1-based week. */
 var chapterNo = (s, week) => s.weeks === 8 ? week : Math.ceil(week / 2);
-var DAY$11 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$12 = /^\d{4}-\d{2}-\d{2}$/;
 var str$7 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var hex = (v, d) => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : d;
-var day = (v) => typeof v === "string" && DAY$11.test(v) ? v : null;
+var day = (v) => typeof v === "string" && DAY$12.test(v) ? v : null;
 /** The Monday of the week holding `d` (or `d` itself on a Monday). */
 function mondayOf$7(d) {
 	return addDays$8(d, -(((/* @__PURE__ */ new Date(`${d}T12:00:00Z`)).getUTCDay() + 6) % 7));
@@ -25833,12 +25834,12 @@ function pickSideQuest(i, pool = SIDE_QUESTS) {
 		].filter(Boolean).join(", ")}.`
 	};
 }
-var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$11 = /^\d{4}-\d{2}-\d{2}$/;
 var str$4 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanSide(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	const weeks = {};
-	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$10.test(k)).sort().slice(-26)) {
+	for (const k of Object.keys(r.weeks && typeof r.weeks === "object" ? r.weeks : {}).filter((k) => DAY$11.test(k)).sort().slice(-26)) {
 		const w = r.weeks[k] ?? {};
 		weeks[k] = {
 			passed: (Array.isArray(w.passed) ? w.passed : []).map((x) => str$4(x, 24)).filter(Boolean).slice(0, 10),
@@ -25847,7 +25848,7 @@ function cleanSide(raw) {
 	}
 	return {
 		weeks,
-		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$4(a.title, 90) && DAY$10.test(String(a.day))).map((a, i) => ({
+		log: (Array.isArray(r.log) ? r.log : []).filter((a) => a && str$4(a.title, 90) && DAY$11.test(String(a.day))).map((a, i) => ({
 			id: str$4(a.id, 24) || `a${i + 1}`,
 			questId: a.questId ? str$4(a.questId, 24) : null,
 			title: str$4(a.title, 90),
@@ -25975,12 +25976,12 @@ var MANUAL = [
 		manual: false
 	}
 ].filter((k) => k.manual).map((k) => k.id);
-var DAY$9 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$10 = /^\d{4}-\d{2}-\d{2}$/;
 var str$3 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanWins$1(raw) {
 	const r = raw && typeof raw === "object" ? raw : {};
 	return {
-		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$3(w.title, 120) && DAY$9.test(String(w.day))).map((w, i) => ({
+		mine: (Array.isArray(r.mine) ? r.mine : []).filter((w) => w && str$3(w.title, 120) && DAY$10.test(String(w.day))).map((w, i) => ({
 			id: str$3(w.id, 24) || `w${i + 1}`,
 			day: String(w.day),
 			kind: MANUAL.includes(w.kind) ? w.kind : "other",
@@ -26717,7 +26718,7 @@ var DEFAULT_ACTIVE = [
 	"strong",
 	"study"
 ];
-var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$9 = /^\d{4}-\d{2}-\d{2}$/;
 var str$2 = (v, n) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var num$4 = (v) => v === null || v === void 0 || v === "" ? null : Number.isFinite(Number(v)) ? Number(v) : null;
 var isMetric = (m) => Object.prototype.hasOwnProperty.call(METRICS, m);
@@ -26773,11 +26774,11 @@ function cleanLadder$1(raw) {
 	for (const t of TEMPLATES) if (!seen.has(t.id)) goals.push(freshGoal(t, false));
 	let on = 0;
 	for (const g of goals) if (g.on && ++on > 3) g.on = false;
-	const days = (v, n) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x)).filter((x) => DAY$8.test(x.slice(0, 10))))].sort().slice(-n);
+	const days = (v, n) => [...new Set((Array.isArray(v) ? v : []).map((x) => String(x)).filter((x) => DAY$9.test(x.slice(0, 10))))].sort().slice(-n);
 	return {
 		v: 1,
 		goals,
-		start: typeof r.start === "string" && DAY$8.test(r.start) ? r.start : null,
+		start: typeof r.start === "string" && DAY$9.test(r.start) ? r.start : null,
 		reviews: days(r.reviews, 30),
 		monthReviews: days(r.monthReviews, 12)
 	};
@@ -28220,7 +28221,7 @@ function habitStreak(doneDays, today, o = {}) {
 	};
 }
 var BOARD_PREFS = "habit_board";
-var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$8 = /^\d{4}-\d{2}-\d{2}$/;
 var ID$3 = /^[\w:.-]{1,60}$/;
 function cleanLook(v) {
 	const out = {};
@@ -28237,7 +28238,7 @@ function cleanPrefs$1(v) {
 		for (const [k, l] of Object.entries(v.looks).slice(0, 60)) if (ID$3.test(k)) looks[k] = cleanLook(l);
 	}
 	const skips = {};
-	if (v?.skips && typeof v.skips === "object") for (const d of Object.keys(v.skips).filter((d) => DAY$7.test(d)).sort().slice(-90)) {
+	if (v?.skips && typeof v.skips === "object") for (const d of Object.keys(v.skips).filter((d) => DAY$8.test(d)).sort().slice(-90)) {
 		const list = ids(v.skips[d]);
 		if (list.length) skips[d] = list;
 	}
@@ -28256,7 +28257,7 @@ function skipsOf(prefs, id) {
 var MY_HABITS = "my_habits";
 /** The rule that pays a tap (+2, at most 6 a day across all your habits). */
 var HABIT_RULE = "habit.own";
-var DAY$6 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$7 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$10 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 function cleanBook(v) {
 	const habits = Array.isArray(v?.habits) ? v.habits.filter((h) => h && typeof h.id === "string" && clip$10(h.name, 60)).map((h) => {
@@ -28272,7 +28273,7 @@ function cleanBook(v) {
 	}) : [];
 	const log = {};
 	if (v?.log && typeof v.log === "object") {
-		const days = Object.keys(v.log).filter((d) => DAY$6.test(d)).sort().slice(-400);
+		const days = Object.keys(v.log).filter((d) => DAY$7.test(d)).sort().slice(-400);
 		for (const d of days) if (Array.isArray(v.log[d])) log[d] = [...new Set(v.log[d].map(String))];
 	}
 	return {
@@ -28401,8 +28402,8 @@ var MODES = {
 	}
 };
 var MODE_KINDS = Object.keys(MODES);
-var DAY$5 = /^\d{4}-\d{2}-\d{2}$/;
-var okMode = (m) => !!m && MODE_KINDS.includes(m.kind) && DAY$5.test(m.from) && DAY$5.test(m.until) && m.until >= m.from;
+var DAY$6 = /^\d{4}-\d{2}-\d{2}$/;
+var okMode = (m) => !!m && MODE_KINDS.includes(m.kind) && DAY$6.test(m.from) && DAY$6.test(m.until) && m.until >= m.from;
 /** A saved book, with a mode whose last day has passed moved to the past. */
 function cleanModes(v, today) {
 	const past = (Array.isArray(v?.past) ? v.past : []).filter(okMode).map((m) => ({
@@ -28566,14 +28567,14 @@ var TRACKS = {
 	}
 };
 var TRACK_IDS = Object.keys(TRACKS);
-var DAY$4 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$5 = /^\d{4}-\d{2}-\d{2}$/;
 var clip$9 = (s, n) => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, n);
 var cleanLink = (s) => {
 	const t = clip$9(s, 300);
 	return /^https?:\/\/\S+$/i.test(t) ? t : null;
 };
 function cleanLearn(v) {
-	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$9(e.title, 120) && DAY$4.test(e.day)).map((e) => ({
+	return (Array.isArray(v) ? v : []).filter((e) => e && TRACK_IDS.includes(e.track) && clip$9(e.title, 120) && DAY$5.test(e.day)).map((e) => ({
 		id: clip$9(e.id, 40) || `l${e.day}`,
 		track: e.track,
 		title: clip$9(e.title, 120),
@@ -30716,7 +30717,7 @@ function askedFor(text, risk) {
 	if (INJECTION.test(t)) return false;
 	return ASKED[risk].test(t);
 }
-var LABEL = {
+var LABEL$1 = {
 	delete: "🗑 Yes, delete",
 	shift: "↪️ Yes, move them",
 	reward: "🎁 Yes, add the reward",
@@ -30728,7 +30729,7 @@ function confirmButton(risk, what, id) {
 	const w = what.replace(/\s+/g, " ").trim().slice(0, 40);
 	const say = (id ? `✓${id} ` : "") + (risk === "delete" ? `Yes, delete ${w}` : risk === "shift" ? `Yes, move ${w}` : risk === "reward" ? `Yes, add the reward ${w}` : risk === "log" ? `I did ${w}` : `Yes, mark ${w} done`);
 	return {
-		label: `${LABEL[risk]}${w ? `: ${w}` : ""}`.slice(0, 40),
+		label: `${LABEL$1[risk]}${w ? `: ${w}` : ""}`.slice(0, 40),
 		do: `say:${say}`
 	};
 }
@@ -31302,7 +31303,7 @@ var gmail_default = definePlugin({
 // src/renderer/src/web/financeInbox.ts
 var SETTING$1 = "finance_inbox_json";
 var KEEP_DAYS = 60;
-var DAY$3 = 864e5;
+var DAY$4 = 864e5;
 var parse$2 = (raw, fallback) => {
 	try {
 		return raw ? JSON.parse(raw) : fallback;
@@ -31330,7 +31331,7 @@ function isApplied(e, state) {
 * stays, and the Money page warns from day 50 (inboxWarning).
 */
 function keepInbox(list, now, finance) {
-	const cutoff = now - KEEP_DAYS * DAY$3;
+	const cutoff = now - KEEP_DAYS * DAY$4;
 	return list.filter((e) => e.at >= cutoff || !isApplied(e, finance));
 }
 /** Adds an expense to the inbox (call inside the bot's change). */
@@ -31418,7 +31419,7 @@ function splitLine(line, delim) {
 	return out;
 }
 /** "-1.234,56 MDL", "(12.50)", "1 234.56" → a number, or null. */
-function parseAmount$1(raw) {
+function parseAmount$2(raw) {
 	let s = String(raw ?? "").replace(/[\s ']/g, "");
 	if (!s) return null;
 	let neg = false;
@@ -31530,7 +31531,7 @@ function parseBankCsv(text) {
 		const sample = body.slice(0, 10);
 		const n = Math.max(...sample.map((r) => r.length));
 		const share = (k, f) => sample.filter((r) => f(r[k] ?? "")).length / sample.length;
-		const isNum = (s) => /\d/.test(s) && parseAmount$1(s) != null && parseDate(s) == null;
+		const isNum = (s) => /\d/.test(s) && parseAmount$2(s) != null && parseDate(s) == null;
 		for (let k = 0; k < n; k++) if (col.date < 0 && share(k, (s) => parseDate(s) != null) >= .6) col.date = k;
 		for (let k = n - 1; k >= 0; k--) if (col.amount < 0 && k !== col.date && share(k, isNum) >= .6) col.amount = k;
 		let best = 0;
@@ -31545,10 +31546,10 @@ function parseBankCsv(text) {
 	for (const r of body) {
 		const date = parseDate(r[col.date] ?? "");
 		let amount = null;
-		if (col.amount >= 0) amount = parseAmount$1(r[col.amount] ?? "");
+		if (col.amount >= 0) amount = parseAmount$2(r[col.amount] ?? "");
 		else {
-			const d = parseAmount$1(r[col.debit] ?? "");
-			const c = parseAmount$1(r[col.credit] ?? "");
+			const d = parseAmount$2(r[col.debit] ?? "");
+			const c = parseAmount$2(r[col.credit] ?? "");
 			if (d) amount = -Math.abs(d);
 			else if (c) amount = Math.abs(c);
 		}
@@ -34227,7 +34228,7 @@ function parseDeadline(text, today) {
 	}
 	return null;
 }
-var NUM$2 = String.raw`(\d+(?:[.,]\d+)?)\s*(k(?![a-z]))?`;
+var NUM$3 = String.raw`(\d+(?:[.,]\d+)?)\s*(k(?![a-z]))?`;
 var num$2 = (n, k) => Number(n.replace(",", ".")) * (k ? 1e3 : 1);
 /** The unit a word means. */
 function unitOf(word) {
@@ -34261,7 +34262,7 @@ function parseGoalText(raw, today) {
 	};
 	const kinds = parseKinds(rest, deadline);
 	if (kinds) return kinds;
-	let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM$2}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, "i").exec(rest);
+	let m = new RegExp(String.raw`(?:finish|do|study|put|log|spend)?\s*${NUM$3}\s*(?:h|hours?|hrs?)\s+(?:of|on|for)\s+(.{2,40})$`, "i").exec(rest);
 	if (m) {
 		const subject = cap$3(m[3].trim());
 		return {
@@ -34279,7 +34280,7 @@ function parseGoalText(raw, today) {
 			template: "hours"
 		};
 	}
-	m = new RegExp(String.raw`\b(lose|drop|cut|gain|put on)\s+${NUM$2}\s*(kg|kilos?)\b`, "i").exec(rest);
+	m = new RegExp(String.raw`\b(lose|drop|cut|gain|put on)\s+${NUM$3}\s*(kg|kilos?)\b`, "i").exec(rest);
 	if (m) {
 		const n = num$2(m[2], m[3]);
 		const down = !/gain|put on/i.test(m[1]);
@@ -34296,7 +34297,7 @@ function parseGoalText(raw, today) {
 			template: "lose"
 		};
 	}
-	m = new RegExp(String.raw`\b(?:weigh|weight(?: to)?|get (?:down )?to|reach)\s+${NUM$2}\s*(kg|kilos?)\b`, "i").exec(rest);
+	m = new RegExp(String.raw`\b(?:weigh|weight(?: to)?|get (?:down )?to|reach)\s+${NUM$3}\s*(kg|kilos?)\b`, "i").exec(rest);
 	if (m) return {
 		...base,
 		kind: "measure",
@@ -34308,7 +34309,7 @@ function parseGoalText(raw, today) {
 		curve: "front",
 		template: "lose"
 	};
-	const money = new RegExp(String.raw`(?:(€|\$)\s*${NUM$2}|${NUM$2}\s*(lei|leu|mdl|ron|€|eur|euros?|\$|usd|dollars?|kg|km|%|percent))`, "i").exec(rest);
+	const money = new RegExp(String.raw`(?:(€|\$)\s*${NUM$3}|${NUM$3}\s*(lei|leu|mdl|ron|€|eur|euros?|\$|usd|dollars?|kg|km|%|percent))`, "i").exec(rest);
 	const what = /\b(profit|income|revenue|earn(?:ings)?|salary|savings?|save|saved)\b/i.exec(lower)?.[1]?.toLowerCase();
 	if (money) {
 		const n = money[1] ? num$2(money[2], money[3]) : num$2(money[4], money[5]);
@@ -34377,7 +34378,7 @@ function parseGoalText(raw, today) {
 			source: { kind: "manual" }
 		};
 	}
-	m = new RegExp(String.raw`${NUM$2}\s+([\p{L}][\p{L}\s-]{1,30})$`, "iu").exec(rest.replace(/\s+(in total|total)$/i, ""));
+	m = new RegExp(String.raw`${NUM$3}\s+([\p{L}][\p{L}\s-]{1,30})$`, "iu").exec(rest.replace(/\s+(in total|total)$/i, ""));
 	if (m) {
 		const n = num$2(m[1], m[2]);
 		const thing = m[3].trim().replace(/^(more|new)\s+/i, "");
@@ -34438,7 +34439,7 @@ function parseGoalText(raw, today) {
 			template: star ? "stars" : "custom"
 		};
 	}
-	m = new RegExp(String.raw`${NUM$2}`, "i").exec(rest);
+	m = new RegExp(String.raw`${NUM$3}`, "i").exec(rest);
 	if (m && what) {
 		const n = num$2(m[1], m[2]);
 		if (/profit|revenue/.test(what)) return {
@@ -34518,7 +34519,7 @@ function parseKinds(rest, deadline) {
 			steps
 		};
 	}
-	m = new RegExp(String.raw`(?:at most|max(?:imum)?|no more than|less than|under|up to|≤|<=|limit\s+\w+\s+to)\s*${NUM$2}\s*(hours?|hrs?|h|minutes?|mins?|m\b|lei|mdl|€|eur|\$|usd)?\s*(?:of|on)?\s*([\p{L}\s]{0,30}?)\s*${PER}`, "iu").exec(rest);
+	m = new RegExp(String.raw`(?:at most|max(?:imum)?|no more than|less than|under|up to|≤|<=|limit\s+\w+\s+to)\s*${NUM$3}\s*(hours?|hrs?|h|minutes?|mins?|m\b|lei|mdl|€|eur|\$|usd)?\s*(?:of|on)?\s*([\p{L}\s]{0,30}?)\s*${PER}`, "iu").exec(rest);
 	if (m) {
 		let n = num$2(m[1], m[2]);
 		const u = (m[3] ?? "").toLowerCase();
@@ -34661,7 +34662,7 @@ function parseKinds(rest, deadline) {
 			source: { kind: "manual" }
 		};
 	}
-	m = new RegExp(String.raw`(?:(€|\$)\s*${NUM$2}|${NUM$2}\s*([\p{L}€$]+(?:\s[\p{L}]+)?))\s*${PER}`, "iu").exec(rest);
+	m = new RegExp(String.raw`(?:(€|\$)\s*${NUM$3}|${NUM$3}\s*([\p{L}€$]+(?:\s[\p{L}]+)?))\s*${PER}`, "iu").exec(rest);
 	if (m && /\b(save|saving|put aside|set aside|invest|read|write|publish|solve|ship|post|do|finish)\b/i.test(lower)) {
 		if (m[7].toLowerCase() === "day") return null;
 		const per = m[7].toLowerCase() === "week" ? "week" : "month";
@@ -37986,7 +37987,7 @@ var SOURCES = [
 	"said",
 	"plan"
 ];
-var DAY$2 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
 var HM$3 = /^\d{2}:\d{2}$/;
 var num$1 = (x, lo, hi) => typeof x === "number" && Number.isFinite(x) ? Math.max(lo, Math.min(hi, Math.round(x))) : null;
 var strs = (x) => Array.isArray(x) ? x.filter((s) => typeof s === "string" && !!s.trim()).map((s) => s.slice(0, 120)).slice(0, 12) : void 0;
@@ -38020,7 +38021,7 @@ function cleanReview(raw) {
 		days
 	};
 	for (const [day, d] of Object.entries(src)) {
-		if (!DAY$2.test(day) || !d || typeof d.items !== "object") continue;
+		if (!DAY$3.test(day) || !d || typeof d.items !== "object") continue;
 		const items = {};
 		for (const [id, x] of Object.entries(d.items ?? {})) {
 			const it = cleanItem(x, id);
@@ -44223,6 +44224,29 @@ function liveLog(date, createdAt, dayOf, imported = false) {
 	const ms = Number(createdAt);
 	return dayOf(ms) === date || dayOf(ms - 144e5) === date;
 }
+/**
+* Money v2 plan D9: a captured payment (source 'capture', from Phone
+* payments) or an auto-logged bill (source 'auto') counts as logged on the
+* day only by its `confirmedAt` (the owner's tap), never by `createdAt`; an
+* unconfirmed one counts as imported. Returns the time to judge "live" by,
+* and whether it is imported.
+*/
+function logMoment(t) {
+	if (/^(capture|auto)$/i.test(String(t.source ?? ""))) {
+		const c = Number(t.confirmedAt);
+		return Number.isFinite(c) && c > 0 ? {
+			at: c,
+			imported: false
+		} : {
+			at: 0,
+			imported: true
+		};
+	}
+	return {
+		at: Number(t.createdAt),
+		imported: isImported(t)
+	};
+}
 /** Imported from a bank statement or a sheet (not logged by hand). */
 var isImported = (t) => /^tg-life-bank-|^imp-|^bank-/.test(String(t.id ?? "")) || /^(bank|import|csv|sheet|xlsx)$/i.test(String(t.source ?? ""));
 function moneyDay(tx, day, marks = {}) {
@@ -45699,7 +45723,7 @@ function stallFix(reason, subject, ctx = {}) {
 		};
 	}
 }
-var CODE = {
+var CODE$1 = {
 	tired: "t",
 	unclear: "u",
 	big: "b",
@@ -45717,8 +45741,8 @@ var bytes = (s) => new TextEncoder().encode(s).length;
 /** Callback data for a reason, kept under Telegram's 64 bytes (the subject is cut to fit). */
 function stallCallback(reason, subject) {
 	let s = clip$2(subject, 50);
-	while (s && bytes(`sl|${CODE[reason]}|${s}`) > 64) s = s.slice(0, -1);
-	return `sl|${CODE[reason]}|${s}`;
+	while (s && bytes(`sl|${CODE$1[reason]}|${s}`) > 64) s = s.slice(0, -1);
+	return `sl|${CODE$1[reason]}|${s}`;
 }
 function readStallCallback(data) {
 	const m = /^sl\|([tubos])\|(.*)$/s.exec(String(data ?? ""));
@@ -51084,7 +51108,7 @@ var WORK_KINDS = [
 	"meeting",
 	"money"
 ];
-var DAY$1 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$2 = /^\d{4}-\d{2}-\d{2}$/;
 var json$3 = (s, d) => {
 	try {
 		return JSON.parse(String(s ?? "")) ?? d;
@@ -51390,7 +51414,7 @@ var GoalsService = class {
 		const type = prevMeta && input.id ? input.meta?.type ?? prevMeta.type : input.meta?.type ?? "target";
 		const period = isPeriodType(type);
 		const deadline = period && !input.deadline ? NO_END : String(input.deadline ?? "");
-		if (!DAY$1.test(deadline)) throw new LedgerError("Pick the deadline");
+		if (!DAY$2.test(deadline)) throw new LedgerError("Pick the deadline");
 		const today = this.wallet.today(now);
 		if (!input.id && deadline <= today) throw new LedgerError("The deadline needs to be after today");
 		const steps = type === "project" ? input.meta?.steps ?? prevMeta?.steps ?? [] : [];
@@ -51405,7 +51429,7 @@ var GoalsService = class {
 		} : { kind: "manual" };
 		const meta = SOURCES$1.find((s) => s.id === source.kind);
 		if (meta.needsArg && !source.arg && !argOptional(source.kind)) throw new LedgerError(`${meta.label}: which one? (${meta.needsArg})`);
-		const startDay = input.startDay && DAY$1.test(input.startDay) && input.startDay <= today ? input.startDay : today;
+		const startDay = input.startDay && DAY$2.test(input.startDay) && input.startDay <= today ? input.startDay : today;
 		let start = type !== "target" ? 0 : input.start == null || !Number.isFinite(Number(input.start)) ? null : Number(input.start);
 		if (start == null) start = isAuto(source) && !countsFromStart(source.kind) ? this.autoValue({
 			source,
@@ -51503,7 +51527,7 @@ var GoalsService = class {
 		if (!isPeriodType(meta.type) || isAuto(g.source)) throw new LedgerError("This goal counts itself");
 		if (!Number.isFinite(amount) || !amount || Math.abs(amount) > 1e7) throw new LedgerError("Type how much, e.g. 1");
 		const today = this.wallet.today(now);
-		const day = onDay && DAY$1.test(onDay) && onDay <= today && periodOf(meta.per, onDay).key === periodOf(meta.per, today).key ? onDay : today;
+		const day = onDay && DAY$2.test(onDay) && onDay <= today && periodOf(meta.per, onDay).key === periodOf(meta.per, today).key ? onDay : today;
 		return this.db.transaction(() => {
 			const before = this.checkins(id);
 			const dayHas = before.filter((c) => c.day === day && (c.by === "me" || c.by === "ben")).reduce((t, c) => t + c.value, 0);
@@ -54228,7 +54252,7 @@ function financeDayTx(s, finance = financeOf(s), withLife = false) {
 		category: names.get(String(t.category)) ?? String(t.category ?? ""),
 		note: String(t.note ?? ""),
 		amount: Math.round(txLei(t, finance?.rates, finance?.settings?.currency) * 100),
-		live: liveLog(t.date.slice(0, 10), Number(t.createdAt), dayOf, isImported(t))
+		live: ((m) => liveLog(t.date.slice(0, 10), m.at, dayOf, m.imported))(logMoment(t))
 	}));
 }
 /** Today's money day, the last 14 judged days and the saving streak (FX3, RL6). */
@@ -55457,6 +55481,367 @@ function pickOpen(pick, now) {
 	if (!pick?.at) return false;
 	const at = Date.parse(pick.at);
 	return Number.isFinite(at) && now.getTime() >= at && now.getTime() - at < 108e5;
+}
+// src/core/payNotify.ts
+/** Currencies a payment may be in (Finance Helper's list). */
+var PAY_CURRENCIES = [
+	"MDL",
+	"EUR",
+	"USD",
+	"RON",
+	"GBP",
+	"UAH",
+	"CHF",
+	"PLN",
+	"TRY",
+	"CAD"
+];
+/** Two notifications of one payment (maib and Google Wallet) arrive within this window. */
+var TWIN_WINDOW_MS = 3e5;
+var SOURCE_TESTS = [
+	["gwallet", /google\s*(wallet|pay)|walletnfcrel|com\.google\.android\.apps\.wallet|\bgpay\b/i],
+	["revolut", /revolut/i],
+	["paynet", /paynet/i],
+	["maib", /\bmaib\b|md\.maib|moldova\s*agroindbank|maibank/i]
+];
+/** Which app sent it: the app name first, then the title, then the text. */
+function paySource(n) {
+	for (const part of [
+		n.app,
+		n.title,
+		n.text
+	]) {
+		const s = String(part ?? "");
+		if (!s) continue;
+		for (const [src, re] of SOURCE_TESTS) if (re.test(s)) return src;
+	}
+	return "generic";
+}
+var CODES = "MDL|EUR|USD|RON|GBP|UAH|CHF|PLN|TRY|CAD";
+var SYMBOLS = {
+	"€": "EUR",
+	$: "USD",
+	"£": "GBP",
+	"₴": "UAH"
+};
+var WORDS = [
+	[/^(lei|leu|лей|леев|лея)$/i, "MDL"],
+	[/^(euro|eur|евро)$/i, "EUR"],
+	[/^(usd|dollars?|долл?\.?)$/i, "USD"]
+];
+var NUM$2 = String.raw`(?<![\d.,:*•·])(\d{1,3}(?:[ \u00a0\u202f.,]\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?![\d])`;
+var SIGN = String.raw`([+\-−–]?)\s?`;
+var AFTER_WORD = String.raw`(?![\p{L}])`;
+var AMOUNT_RES = [{
+	re: new RegExp(String.raw`${SIGN}(€|\$|£|₴|(?<![\p{L}])(?:${CODES})${AFTER_WORD})\s?${SIGN}${NUM$2}`, "giu"),
+	sign: 1,
+	cur: 2,
+	num: 4
+}, {
+	re: new RegExp(String.raw`${SIGN}${NUM$2}\s?(€|\$|£|₴|(?:${CODES}|lei|leu|лей|леев|лея|euro|евро)${AFTER_WORD})`, "giu"),
+	sign: 1,
+	num: 2,
+	cur: 3
+}];
+/** "1 234,56" → 123456 cents; null when it isn't a plain amount. */
+function parseAmount$1(s) {
+	let t = String(s ?? "").replace(/[\s\u00a0\u202f]/g, "");
+	if (!/^\d[\d.,]*$/.test(t)) return null;
+	const last = Math.max(t.lastIndexOf("."), t.lastIndexOf(","));
+	let int = t;
+	let frac = "";
+	if (last >= 0) {
+		const tail = t.slice(last + 1);
+		if (tail.length === 1 || tail.length === 2) {
+			int = t.slice(0, last);
+			frac = tail;
+		} else if (tail.length !== 3) return null;
+	}
+	const groups = int.split(/[.,]/);
+	if (groups.length > 1 && groups.slice(1).some((g) => g.length !== 3)) return null;
+	int = groups.join("");
+	if (!/^\d+$/.test(int)) return null;
+	t = `${int}.${frac.padEnd(2, "0")}`;
+	const cents = Math.round(Number(t) * 100);
+	return Number.isFinite(cents) ? cents : null;
+}
+function currencyOf(token) {
+	const t = token.trim();
+	if (SYMBOLS[t]) return SYMBOLS[t];
+	const up = t.toUpperCase();
+	if (PAY_CURRENCIES.includes(up)) return up;
+	for (const [re, code] of WORDS) if (re.test(t)) return code;
+	return null;
+}
+var NOT_AMOUNT_BEFORE = /(sold|balan[tț]|disponibil|limit|comision|tax[aă]|остаток|баланс|доступно|лимит|комисси|balance|available|fee|cashback|кешбэк|кэшбэк)[^\d\n]{0,25}$/iu;
+/** Every amount next to a currency, in text order (balances and fees left out). */
+function payAmounts(text) {
+	const hits = [];
+	for (const { re, num, cur, sign } of AMOUNT_RES) {
+		re.lastIndex = 0;
+		for (let m = re.exec(text); m; m = re.exec(text)) {
+			const amount = parseAmount$1(m[num]);
+			const currency = currencyOf(m[cur]);
+			if (amount == null || !currency) continue;
+			if (NOT_AMOUNT_BEFORE.test(text.slice(Math.max(0, m.index - 40), m.index))) continue;
+			const sg = (m[sign] || (AMOUNT_RES[0].re === re ? m[3] : "") || "").trim();
+			hits.push({
+				amount,
+				currency,
+				sign: sg === "+" ? "+" : sg ? "-" : "",
+				index: m.index,
+				end: m.index + m[0].length
+			});
+		}
+	}
+	hits.sort((a, b) => a.index - b.index);
+	return hits.filter((h, i) => !hits.slice(0, i).some((o) => h.index < o.end && o.index < h.end));
+}
+var DECLINED = /(declin|respins|refuz|neaprobat|nu a fost aprobat|e[sș]uat|nereu[sș]it|insuficient|blocat|отклон|отказ|недостаточно|не\s*прошл|не\s*выполнен|failed|unsuccessful|not approved|was not completed|insufficient)/iu;
+var REFUND = /(refund|rambursa|returnare|stornare|anulare|reversal|reversed|returned|возврат|отмена\s+операции|сторно)/iu;
+var MONEY_IN = /(ai primit|a[țt]i primit|primit[aă]?\b|received|you got|incoming|alimentare|suplinire|transfer primit|intrare|зачислен|поступлени|пополнени|получен|top[\s-]?up|added to your|salary|salariu|зарплат)/iu;
+var CODE = /((?:cod(?:ul)?|code|код|parol[aă]|password|пароль)(?![\p{L}])[^\n]{0,40}(?:confirm|verific|подтвержд|одноразов|otp|3-?d)|\botp\b|3-?d\s*secure)/iu;
+var PAYMENT = /(plat[aă]|plăți|achit|tranzac[tț]i|cump[aă]r|pay|paid|payment|purchase|spent|charged|debit|card\s*\*|оплат|покупк|списан|транзакц|платеж|платёж)/iu;
+var LABEL = /(?:comerciant|merchant|magazin|loca[tț]ie|beneficiar|destinatar|место|торговец|получатель|магазин)\s*[:\-–]\s*([^\n;]+)/iu;
+var BEFORE_SHOP = String.raw`(?:de\s+la|c[aă]tre|catre|la|at|to|în|in|pe|в|во|у|от|from)`;
+var SHOP_END = String.raw`(?=\s+(?:cu|with|using|card|карт|on|via|prin|pe\s+card|\d{1,2}[.:/]\d{2})|\s*[\n;(]|[,.]\s|\.?$)`;
+var AFTER_AMOUNT = new RegExp(String.raw`^\s*[,.:]?\s*${BEFORE_SHOP}\s+(.+?)${SHOP_END}`, "iu");
+var PHRASE = new RegExp(String.raw`(?:payment to|paid to|paid at|spent at|purchase at|you paid|plat[aă]\s+(?:la|c[aă]tre)|achitare\s+la|cump[aă]r[aă]tur[aă]\s+la|оплата\s+в|покупка\s+в|оплата\s+у)\s+(.+?)${SHOP_END}`, "iu");
+var NOT_SHOP = /^(plat[aă]|plăți|tranzac[tț]i[ea]?(\s+reu[sș]it[aă])?|payment|paid|purchase|оплата|покупка|транзакция|списание|notification|notificare|card|google\s*(wallet|pay)|wallet|revolut|maib|paynet|you paid|refund|возврат|rambursare|\d+)$/iu;
+var CARD_ONLY = /^(?:card|карта|visa|mastercard|mc|debit)?\s*(?:\*+|•+|x+|nr\.?)?\s*\d{4}$/iu;
+function cleanShop(s) {
+	let t = s.replace(/\s+/g, " ").trim();
+	t = t.replace(/^[-–:,.\s"'«]+|[-–:,.\s"'»!]+$/g, "");
+	for (let i = 0; i < 2; i++) t = t.replace(/\s+(?:md|mda|moldova|chi[sș]in[aă]u|кишин[её]в)$/iu, "").trim();
+	if (!/\p{L}/u.test(t) || NOT_SHOP.test(t) || CARD_ONLY.test(t)) return "";
+	return t.slice(0, 60);
+}
+function merchantOf(text, title, hit, source, app) {
+	const label = LABEL.exec(text);
+	if (label) {
+		const s = cleanShop(label[1].split(/[,;]|\s{2,}/)[0]);
+		if (s) return s;
+	}
+	const after = AFTER_AMOUNT.exec(text.slice(hit.end));
+	if (after) {
+		const s = cleanShop(after[1]);
+		if (s) return s;
+	}
+	const phrase = PHRASE.exec(text) ?? PHRASE.exec(title);
+	if (phrase) {
+		const s = cleanShop(phrase[1].replace(new RegExp(`${NUM$2}.*$`, "u"), "").replace(/[€$£₴]\s*$/u, ""));
+		if (s) return s;
+	}
+	const t = cleanShop(title);
+	if (t && !(app && t.toLowerCase() === app.trim().toLowerCase()) && !PAYMENT.test(t) && !DECLINED.test(t)) return t;
+	for (const line of text.split(/\n|\s{2,}/)) {
+		if (payAmounts(line).length || PAYMENT.test(line) || /\d{2}[.:/]\d{2}/.test(line)) continue;
+		const s = cleanShop(line);
+		if (s && s.length >= 2) return s;
+	}
+	return "";
+}
+var LAST4 = /(?:\*{1,6}|•{2,}|·{2,}|x{2,}|card\s*(?:nr\.?\s*)?|карт[аыу]?\s*(?:№\s*)?)\s?(\d{4})(?!\d)/iu;
+/**
+* Reads one notification. `at`: when it came (ms). Returns the payment, or
+* why it isn't one (never a guessed amount).
+*/
+function parsePayNotification(n, opts) {
+	const app = String(n.app ?? "").trim();
+	const title = String(n.title ?? "").trim();
+	const body = String(n.text ?? "").trim();
+	const raw = [title, body].filter(Boolean).join("\n").slice(0, 1e3);
+	const source = paySource(n);
+	const all = `${title}\n${body}`;
+	const no = (kind, reason) => ({
+		ok: false,
+		kind,
+		reason,
+		source,
+		raw
+	});
+	if (!body && !title) return no("unreadable", "The notification was empty");
+	if (/\[(?:notification|not_title|notification_title|app_name)[^\]]*\]/i.test(all)) return no("unreadable", "MacroDroid sent the placeholder, not the text: insert it with the magic text button");
+	if (DECLINED.test(all)) return no("declined", "A declined payment: nothing was spent");
+	if (CODE.test(all)) return no("not-payment", "A code or a security message, not a payment");
+	const refundWords = REFUND.test(all);
+	const fromBody = payAmounts(body);
+	const fromTitle = payAmounts(title);
+	const hit = fromBody[0] ?? fromTitle[0];
+	if (!hit) return no("unreadable", "No amount with a currency in it");
+	const inText = fromBody[0] ? body : title;
+	if (!(hit.amount > 0)) return no("unreadable", "The amount is zero");
+	if (hit.amount > 1e8) return no("unreadable", "The amount is too big to be a card payment");
+	if (!refundWords && MONEY_IN.test(all)) return no("not-payment", "Money in (a transfer or a top-up), not a payment");
+	if (source === "generic" && !refundWords && !PAYMENT.test(all)) return no("not-payment", "No payment words in it (paid, payment, plată, оплата…)");
+	const refund = refundWords || hit.sign === "+";
+	const card = LAST4.exec(all);
+	const merchant = merchantOf(inText, inText === title ? "" : title, hit, source, app);
+	return {
+		ok: true,
+		amount: hit.amount,
+		currency: hit.currency,
+		merchant,
+		at: opts.at,
+		source,
+		...card ? { last4: card[1] } : {},
+		...refund ? { refund: true } : {},
+		raw
+	};
+}
+/**
+* When the payment happened, from MacroDroid's `time`: ms or seconds since
+* 1970, an ISO date, or "HH:MM" (your local time, the last such minute). Falls
+* back to `now` when missing, odd, in the future or over 7 days old.
+*/
+function payTime(time, now, timeZone = "Europe/Chisinau") {
+	const ok = (ms) => Number.isFinite(ms) && ms <= now + 6e5 && ms >= now - 6048e5;
+	if (typeof time === "number" || typeof time === "string" && /^\d{9,13}$/.test(time.trim())) {
+		const n = Number(time);
+		const ms = n > 0xe8d4a51000 ? n : n * 1e3;
+		return ok(ms) ? ms : now;
+	}
+	const s = String(time ?? "").trim();
+	if (!s) return now;
+	const hm = /^(\d{1,2})[:.](\d{2})(?::\d{2})?$/.exec(s);
+	if (hm) {
+		const h = Number(hm[1]);
+		const m = Number(hm[2]);
+		if (h > 23 || m > 59) return now;
+		const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+			timeZone,
+			hour: "2-digit",
+			minute: "2-digit",
+			hourCycle: "h23"
+		}).formatToParts(new Date(now)).map((p) => [p.type, p.value]));
+		let diff = Number(parts.hour) * 60 + Number(parts.minute) - (h * 60 + m);
+		if (diff < -10) diff += 1440;
+		const ms = now - diff * 6e4;
+		return ok(ms) ? Math.floor(ms / 6e4) * 6e4 : now;
+	}
+	const ms = Date.parse(s);
+	return ok(ms) ? ms : now;
+}
+/**
+* The entry a new notification belongs to, or -1: the same amount and
+* currency within ±5 minutes, from another app (maib and Google Wallet both
+* telling about one tap), or the very same text again (a re-sent
+* notification). Two real payments of the same sum from the same app, with
+* different texts, stay two.
+*/
+function findTwin(list, p, windowMs = TWIN_WINDOW_MS) {
+	let best = -1;
+	let bestGap = Infinity;
+	list.forEach((e, i) => {
+		if (e.remove || e.amount !== p.amount || (e.currency ?? "") !== p.currency) return;
+		const gap = Math.abs(e.at - p.at);
+		if (gap > windowMs) return;
+		const sources = e.sources ?? [];
+		if (!(e.raw ?? []).includes(p.raw) && sources.includes(p.source)) return;
+		if (gap < bestGap) {
+			best = i;
+			bestGap = gap;
+		}
+	});
+	return best;
+}
+// src/core/moneyToSort.ts
+var TOSORT_KEY = "money_tosort";
+/** Unreadable / ignored items kept for the review list (newest first). */
+var IGNORED_KEEP = 50;
+var DAY$1 = 864e5;
+var DONE_KEEP_DAYS = 30;
+/** The stored value, read safely (anything odd reads as empty). */
+function readToSort(raw) {
+	try {
+		const v = raw ? JSON.parse(raw) : null;
+		return { items: Array.isArray(v?.items) ? v.items.filter((x) => x && typeof x.id === "string") : [] };
+	} catch {
+		return { items: [] };
+	}
+}
+/**
+* Adds one caught notification. A payment the same as one already waiting
+* (same amount and currency within ±5 minutes, from another app, or the very
+* same text again) joins it: one item with both sources. Unreadable and
+* ignored notices are kept too (state 'new' when unreadable, so you can type
+* the amount; 'dismissed' when declined / a code / money in), so nothing is
+* dropped silently.
+*/
+function addCapture(list, item, now) {
+	const items = list.items;
+	if (items.some((x) => x.id === item.id)) return {
+		list,
+		status: "duplicate",
+		item: items.find((x) => x.id === item.id)
+	};
+	if (item.kind !== "ignore") {
+		const open = items.filter((x) => x.kind === item.kind && !x.test === !item.test);
+		const i = findTwin(open.map((x) => ({
+			amount: x.amount,
+			currency: x.currency,
+			at: x.at,
+			sources: x.sources ?? [x.source],
+			raw: x.raw ? [x.raw] : []
+		})), {
+			amount: item.amount,
+			currency: item.currency,
+			at: item.at,
+			source: item.source,
+			raw: item.raw ?? ""
+		});
+		if (i >= 0) {
+			const twin = open[i];
+			const sources = [.../* @__PURE__ */ new Set([...twin.sources ?? [twin.source], item.source])];
+			if (sources.length === (twin.sources ?? [twin.source]).length) return {
+				list,
+				status: "duplicate",
+				item: twin
+			};
+			const merged = {
+				...twin,
+				sources,
+				merchant: twin.merchant || item.merchant,
+				last4: twin.last4 ?? item.last4,
+				rate: twin.rate ?? item.rate ?? null,
+				updatedAt: now
+			};
+			return {
+				list: { items: items.map((x) => x.id === twin.id ? merged : x) },
+				status: "merged",
+				item: merged
+			};
+		}
+	}
+	const status = item.kind !== "ignore" ? "saved" : item.state === "new" ? "unparsed" : "ignored";
+	return {
+		list: { items: capIgnored([...items, {
+			...item,
+			raw: item.raw?.slice(0, 200)
+		}]) },
+		status,
+		item
+	};
+}
+/** At most 50 ignored items (the oldest go first); a payment is never dropped here. */
+function capIgnored(items) {
+	const ignored = items.filter((x) => x.kind === "ignore" && x.state !== "new").sort((a, b) => b.at - a.at);
+	if (ignored.length <= IGNORED_KEEP) return items;
+	const drop = new Set(ignored.slice(IGNORED_KEEP).map((x) => x.id));
+	return items.filter((x) => !drop.has(x.id));
+}
+/**
+* Clean-up: a 'new' item is never dropped. Sorted or dismissed items go after
+* 30 days, a sorted one only once Finance Helper has its record (or deleted it).
+*/
+function keepToSort(list, finance, now) {
+	const has = (id) => !!id && (!!finance?.tx?.some((t) => t && t.id === id) || !!finance?.deleted?.[id]);
+	return { items: list.items.filter((x) => {
+		if (x.state === "new") return true;
+		if (now - (x.updatedAt ?? x.at) < DONE_KEEP_DAYS * DAY$1) return true;
+		if (x.state === "dismissed") return false;
+		return !has(x.txId);
+	}) };
 }
 // src/renderer/public/apps/finance/js/money.js
 var LETTERS = /[^\d.,+\-*/()x×÷]/gi;
@@ -58183,6 +58568,103 @@ function editMoney(db, id, patch) {
 		ok: true,
 		text: changed.join(" · ")
 	};
+}
+// src/renderer/src/web/phonePay.ts
+var srcOf = (s) => s === "generic" ? "unknown" : s;
+/** Stable id: source, the minute, the text (the same notification twice → the same id). */
+function captureId(source, at, raw) {
+	let h = 2166136261;
+	for (const ch of `${source}|${Math.floor(at / 6e4)}|${raw}`) h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
+	return `${Math.floor(at / 6e4).toString(36)}${h.toString(36)}`;
+}
+/** The to-sort list as stored. */
+function readToSortDb(db) {
+	return readToSort(getSetting(db, TOSORT_KEY));
+}
+/**
+* Reads the notification and keeps it in `money_tosort` (call inside a
+* change). `at`: when it happened; `day`: its calendar day (your time zone).
+*/
+function capturePayment(db, n, opts) {
+	const now = opts.now ?? Date.now();
+	const p = parsePayNotification(n, { at: opts.at });
+	const raw = p.raw.slice(0, 200);
+	const test = n.test === true ? { test: true } : {};
+	const base = {
+		id: captureId(p.source, opts.at, p.raw),
+		at: opts.at,
+		day: opts.day,
+		source: srcOf(p.source),
+		sources: [srcOf(p.source)],
+		raw,
+		via: opts.via ?? "phone",
+		updatedAt: now,
+		...test
+	};
+	let item;
+	if (!p.ok) item = {
+		...base,
+		amount: 0,
+		currency: "",
+		merchant: "",
+		kind: "ignore",
+		reason: p.reason,
+		state: p.kind === "unreadable" ? "new" : "dismissed"
+	};
+	else {
+		const state = financeState(db);
+		const main = state?.settings?.currency || "MDL";
+		const rate = p.currency === main ? 1 : rateToBase(state, p.currency) ?? null;
+		item = {
+			...base,
+			amount: p.amount,
+			currency: p.currency,
+			merchant: p.merchant,
+			...p.last4 ? { last4: p.last4 } : {},
+			rate,
+			kind: p.refund ? "refund" : "debit",
+			state: "new"
+		};
+	}
+	const finance = financeState(db);
+	const r = addCapture(keepToSort(readToSortDb(db), finance, now), item, now);
+	if (r.status !== "duplicate") setSetting(db, TOSORT_KEY, JSON.stringify(r.list));
+	return {
+		status: r.status,
+		id: r.item.id,
+		...p.ok ? {
+			amount: p.amount,
+			currency: p.currency,
+			merchant: r.item.merchant || p.merchant,
+			...p.refund ? { refund: true } : {}
+		} : { reason: p.reason },
+		source: srcOf(p.source),
+		...test
+	};
+}
+var NOTICE_SHAPE = /(card\s*(?:visa|mastercard)?\s*\*\d{4}|\*\d{4}(?!\d)|[•·]{2,}\s?\d{4}|карт[аы]\s*\*|\bplat[aă]\s*:|tranzac[tț]i|achitare\s+la|оплата\s|покупка\s|you paid|payment (?:to|of|at)|paid (?:at|to|with)|refund of|rambursare|возврат\s+\d)/iu;
+/**
+* A text pasted to the bot that is clearly a bank / wallet notification (its
+* wording, with an amount and a currency), or null. Plain money messages
+* ("taxi 45 maib", "coffee 35 lei") are left to the usual money parser.
+*/
+function pastedNotice(text) {
+	const t = String(text ?? "").trim();
+	if (t.length < 12 || t.length > 1500 || t.startsWith("/") || !NOTICE_SHAPE.test(t)) return null;
+	const r = parsePayNotification({ text: t }, { at: 0 });
+	if (!r.ok && r.kind === "unreadable") return null;
+	return {
+		app: "",
+		title: "",
+		text: t
+	};
+}
+/** The bot's answer to a pasted notification. */
+function pastedReply(r) {
+	const amt = r.amount != null ? `${(r.amount / 100).toFixed(2).replace(".", ",")} ${r.currency}` : "";
+	if (r.status === "saved") return `📲 Saved ${amt}${r.merchant ? ` at ${r.merchant}` : ""} to sort. Tap what it was for in the app; it goes into Finance Helper then.`;
+	if (r.status === "merged" || r.status === "duplicate") return `📲 Already have ${amt}${r.merchant ? ` at ${r.merchant}` : ""}: kept as one payment.`;
+	return `📲 Not saved as a payment: ${r.reason ?? "not a payment"}.`;
 }
 // src/core/focusBot.ts
 var esc = (s) => s.replace(/[<>&]/g, (c) => ({
@@ -66338,6 +66820,12 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		if (career) return career;
 		const viaFocus = runFocus(s, text, focusEnded);
 		if (viaFocus) return viaFocus;
+		const notice = currentDb && !text.startsWith("/") ? pastedNotice(text) : null;
+		if (notice) return { reply: esc$5(pastedReply(capturePayment(currentDb, notice, {
+			at: Date.now(),
+			day: s.wallet.today(),
+			via: "telegram"
+		}))) };
 		const parsed = parseTelegramText(text);
 		if ((parsed.type === "expense" || parsed.type === "unknown") && !text.startsWith("/") && !notMoney(text)) {
 			if (parsed.type === "unknown" && currentDb) {
@@ -77522,6 +78010,24 @@ async function healthPush(env, body) {
 	}
 }
 /**
+* Phone payments: one bank / wallet notification from MacroDroid (the key was
+* checked in api/_health.mjs) → an item in money_tosort, waiting for a
+* category (web/phonePay.ts). Nothing goes into Finance Helper and no points
+* are paid until the owner sorts it. Throws on a database hiccup (→ 503).
+*/
+async function phonePay(env, input) {
+	const tz = lifeTz(env);
+	const { mirror } = await botsFor(env);
+	const now = Date.now();
+	const at = payTime(input.time, now, tz);
+	return mirror.write((db) => capturePayment(db, input, {
+		at,
+		day: calendarDay(new Date(at), tz),
+		now,
+		via: "phone"
+	}));
+}
+/**
 * AU9: the one door in for n8n and other flows: {action: add_task | note |
 * ask_ben | log_habit, …} runs as the same Life System tool an AI app would
 * call (lands on the Coach page with Undo; a habit pays only when logged now).
@@ -77578,4 +78084,4 @@ async function foodInbox(env, body, tokens, now = Date.now()) {
 	const kv = (stmts) => new TursoHttp(env.tursoUrl, env.tursoToken).writeAtomic(stmts);
 	return foodInboxOp(kv, body, tokens, (token, fileId) => downloadFile(token, fileId, "photo"), now);
 }
-export { DAILY_GAP_MS, DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, driveAccessToken, exchangeCode, flowsOp, foodInbox, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };
+export { DAILY_GAP_MS, DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, driveAccessToken, exchangeCode, flowsOp, foodInbox, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, phonePay, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };

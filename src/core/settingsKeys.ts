@@ -145,6 +145,7 @@ export const SETTINGS = {
   finance_backup_json: json<Record<string, unknown> | null>('older copy of the Finance Helper data', null),
   waky_backup_json: json<Record<string, unknown> | null>('older copy of the Waky data', null),
   finance_inbox_json: json<unknown[]>('bank lines waiting to be sorted in Finance Helper', []),
+  money_tosort: json<Record<string, unknown> | null>("Phone payments waiting for a category (Money v2 plan D9): {items:[{id, at, day, source, sources, amount, currency, merchant, last4, rate, raw (at most 200 characters, cleared once sorted), kind debit|refund|ignore, reason, state new|sorted|dismissed, txId, via, test, updatedAt}]}; outside Finance Helper's data, merged by id, the state only moves forward (core/moneyToSort.ts)", null),
   fin_tx_links: json<Record<string, unknown> | null>('money entries linked to Finance Helper transactions', null),
   tg_expense_links: json<Record<string, unknown> | null>('Telegram messages linked to the expenses they logged', null),
   conn_finance_since: text('when Finance Helper was first connected'),
