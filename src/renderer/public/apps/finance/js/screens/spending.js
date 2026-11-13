@@ -1,91 +1,76 @@
-// "Where my money goes": a donut of spending by category (labels with leader
-// lines when there is room, a legend on a phone) and, below it, one rounded
-// row per category: icon, name, amount, its share in a small circle, a thin
-// bar and how it compares with the period before. Tap a segment or a row to
-// light it up and see its records; "See all in the Log" opens the Log
-// filtered to that category. Categories under 3% fold into "Other".
+// "Where my money goes": two columns. Left a donut with the total in the
+// middle and a few facts under it; right a compact ranked list: icon, name,
+// a thin budget-used bar, amount, share and a change pill against the period
+// before. Click a row to open its records right under it; "See all in the Log"
+// opens the Log filtered to that category. Categories under 3% fold into
+// "Other". "Everyday only" leaves out work costs and one-off buys (everyday.js).
 // The numbers come from catshare.js (tested). Drawn as inline SVG, no library.
 
 import { ctx, esc } from '../ctx.js';
 import * as M from '../model.js';
 import * as T from '../cattree.js';
+import * as E from '../everyday.js';
 import { todayISO, addMonths, monthKey, monthLabel } from '../dates.js';
 import { categoryShares, changeText, spendRange, SPEND_PERIODS, OTHER_ID, countsAsSpending } from '../catshare.js';
 
 const TOP = 7; // openCategory's own fold ("Everything else"), kept for the old sheet
 
-// Stable color per category (its place in your category list, the same one the
-// Log's chips use), moving to the next free color only when two shown
-// categories would share one.
-function colorsFor(state, ids) {
-  const used = new Set();
-  const out = {};
-  for (const id of ids) {
-    const i = Math.max(0, state.settings.categories.findIndex((c) => c.id === id));
-    let slot = (i % 8) + 1;
-    for (let k = 0; k < 8 && used.has(slot); k++) slot = (slot % 8) + 1;
-    used.add(slot);
-    out[id] = `var(--c${slot})`;
-  }
-  return out;
+// The chart draws categories in neutral hues (not green or red), so green and
+// red on this card only ever mean "spent less / more than last month". This
+// only changes how the card draws them; the colours saved in your data stay.
+const NEUTRAL = ['var(--n1)', 'var(--n2)', 'var(--n3)', 'var(--n4)', 'var(--n5)', 'var(--n6)'];
+
+const MODE_KEY = 'finance-helper.spend-mode';
+// "Everything" or "Everyday only": a choice of this device, never in your data.
+function getMode() {
+  if (ctx.ui.spendMode) return ctx.ui.spendMode;
+  let m = 'all';
+  try { m = localStorage.getItem(MODE_KEY) === 'day' ? 'day' : 'all'; } catch { /* private mode */ }
+  ctx.ui.spendMode = m;
+  return m;
+}
+function setMode(m) {
+  ctx.ui.spendMode = m;
+  try { localStorage.setItem(MODE_KEY, m); } catch { /* ignore */ }
 }
 
 // ---------- The donut ----------
 
 const f = (n) => Math.round(n * 100) / 100;
+const plain = (cents) => ctx.money(cents, { compact: false }).replace(/\s[A-Za-z]{3}$/, '');
 
-// A ring of stroked circles (pathLength 100), one per segment. `wide` adds
-// labels with leader lines either side; the narrow one has none (the legend
-// is the list under it).
-function donutSvg(items, { total, wide, selected, label }) {
-  const W = wide ? 480 : 220;
-  const H = wide ? 240 : 220;
+// A ring of stroked circles (pathLength 100), one per segment. No labels:
+// the list beside it is the legend. Hovering a segment shows its name.
+function donutSvg(items, { total, selected, label, mid }) {
+  const W = 220;
   const cx = W / 2;
-  const cy = H / 2;
-  const R = wide ? 74 : 78;
-  const SW = wide ? 28 : 30;
+  const R = 82;
+  const SW = 30;
   const gap = items.length > 1 ? 0.5 : 0;
   let at = 0;
   const segs = [];
-  const labels = [];
   for (const it of items) {
     const len = it.share * 100;
-    const mid = (at + len / 2) / 100 * Math.PI * 2;
-    segs.push(`<circle class="dn-seg${selected === it.id ? ' sel' : ''}" cx="${cx}" cy="${cy}" r="${R}" pathLength="100" data-act="cat-pick" data-cat="${esc(it.id)}" style="--c:${it.color};--len:${f(Math.max(0.2, len - gap))};--off:${f(-(at + gap / 2))};--i:${segs.length}" transform="rotate(-90 ${cx} ${cy})"/>`);
-    if (wide && it.pct >= 4) {
-      const s = Math.sin(mid);
-      const c = -Math.cos(mid);
-      labels.push({ it, side: s >= 0 ? 1 : -1, x0: cx + (R + SW / 2) * s, y0: cy + (R + SW / 2) * c, x1: cx + (R + SW / 2 + 12) * s, y1: cy + (R + SW / 2 + 12) * c });
-    }
+    segs.push(`<circle class="dn-seg${selected === it.id ? ' sel' : ''}" cx="${cx}" cy="${cx}" r="${R}" pathLength="100" data-act="cat-pick" data-cat="${esc(it.id)}" style="--c:${it.color};--len:${f(Math.max(0.2, len - gap))};--off:${f(-(at + gap / 2))};--i:${segs.length}" transform="rotate(-90 ${cx} ${cx})"><title>${esc(it.name)} ${it.pct}%</title></circle>`);
     at += len;
   }
-  // Labels: keep each side's apart (15 units) so none sit on another.
-  let leaders = '';
-  if (wide) {
-    for (const side of [-1, 1]) {
-      const mine = labels.filter((l) => l.side === side).sort((a, b) => a.y1 - b.y1);
-      for (let k = 0; k < mine.length; k++) { mine[k].y = k && mine[k].y1 < mine[k - 1].y + 15 ? mine[k - 1].y + 15 : mine[k].y1; }
-      for (let k = mine.length - 1; k >= 0; k--) { if (mine[k].y > H - 10) mine[k].y = H - 10; if (k < mine.length - 1 && mine[k].y > mine[k + 1].y - 15) mine[k].y = mine[k + 1].y - 15; }
-      for (const l of mine) {
-        const x2 = cx + side * (R + SW / 2 + 30);
-        leaders += `<g class="dn-lab" data-act="cat-pick" data-cat="${esc(l.it.id)}"><path d="M${f(l.x0)} ${f(l.y0)} L${f(l.x1)} ${f(l.y1)} L${f(x2)} ${f(l.y)}" fill="none" stroke="${l.it.color}" stroke-width="1.5" stroke-linecap="round"/><text x="${f(x2 + side * 5)}" y="${f(l.y + 4)}" text-anchor="${side > 0 ? 'start' : 'end'}">${esc(l.it.name)} <tspan class="dn-lab-p">${l.it.pct}%</tspan></text></g>`;
-      }
-    }
-  }
-  const money = ctx.money(total, { compact: false });
-  return `<svg class="dn-svg ${wide ? 'dn-wide' : 'dn-narrow'}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">
-    <circle cx="${cx}" cy="${cy}" r="${R}" fill="none" class="dn-track" stroke-width="${SW}"/>
+  return `<div class="dn-donut"><svg class="dn-svg" viewBox="0 0 ${W} ${W}" role="img" aria-label="${esc(label)}">
+    <circle cx="${cx}" cy="${cx}" r="${R}" fill="none" class="dn-track" stroke-width="${SW}"/>
     <g class="dn-ring" stroke-width="${SW}">${segs.join('')}</g>
-    ${leaders}
-    <text class="dn-c1" x="${cx}" y="${cy - 8}" text-anchor="middle">Spent</text>
-    <text class="dn-c2" x="${cx}" y="${cy + 16}" text-anchor="middle">${esc(money)}</text>
-  </svg>`;
+  </svg>
+  <div class="dn-mid"><small>${esc(mid)}</small><strong>${esc(plain(total))}</strong><span>${esc(ctx.state.settings.currency || '')}</span></div></div>`;
 }
 
 // ---------- The card ----------
 
 // Remembered so a tap can redraw just the card (no jump, no replayed animation).
 const last = {};
+
+const daysBetween = (a, b) => Math.round((Date.parse(`${b}T12:00:00Z`) - Date.parse(`${a}T12:00:00Z`)) / 86400000) + 1;
+const monthsIn = (range) => Math.max(1, (Number(range.to.slice(0, 4)) - Number(range.from.slice(0, 4))) * 12 + Number(range.to.slice(5, 7)) - Number(range.from.slice(5, 7)) + 1);
+const daysInMonthOf = (iso) => new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)), 0).getDate();
+const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const shortDate = (iso) => `${MON[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}`;
 
 export function spendingCard(opts = {}) {
   const { state, ui } = ctx;
@@ -95,71 +80,93 @@ export function spendingCard(opts = {}) {
   const period = opts.period || 'month';
   const range = opts.range || spendRange(period, today);
   const base = opts.base || M.B;
-  const list = opts.list || state.tx;
-  const { total, rows } = categoryShares(list, range, base);
+  const allList = opts.list || state.tx;
+  const mode = getMode();
+  const ed = mode === 'day' ? E.everydayList(allList, { settings: state.settings, rates: state.rates, base, from: range.from, to: range.to }) : null;
+  const list = ed ? ed.list : allList;
+  const limit = E.everydayLimit(state.settings, state.rates);
+  const { total, prevTotal, rows } = categoryShares(list, range, base);
   const word = range.prev?.word || 'before';
   const name = (id) => (id === OTHER_ID ? 'Other' : M.category(state, id)?.name || 'Unknown');
   const icon = (id) => (id === OTHER_ID ? '…' : M.category(state, id)?.emoji || '');
-  const colors = colorsFor(state, rows.filter((r) => r.id !== OTHER_ID).map((r) => r.id));
-  const item = (r) => ({ ...r, name: name(r.id), icon: icon(r.id), color: r.id === OTHER_ID ? 'var(--faint)' : colors[r.id] || `var(--c${(Math.max(0, state.settings.categories.findIndex((c) => c.id === r.id)) % 8) + 1})` });
-  const items = rows.map(item);
+  const items = rows.map((r, i) => ({ ...r, name: name(r.id), icon: icon(r.id), color: r.id === OTHER_ID ? 'var(--faint)' : NEUTRAL[i % NEUTRAL.length] }));
   const sel = ui.catSel?.[key] || null;
-  const otherOpen = !!ui.catOtherOpen?.[key];
 
   const stepper = !opts.range && (period === 'month' || period === 'last' || /^m:/.test(period));
   const cur = range.from.slice(0, 7);
-  const chips = opts.range ? '' : `<div class="chips">${SPEND_PERIODS.map((p) => `<button class="chip" data-act="spend-period" data-key="${key}" data-period="${p.id}" aria-pressed="${p.id === period}">${p.name}</button>`).join('')}
-    ${stepper ? `<span class="spend-step" role="group" aria-label="Pick a month"><button type="button" class="chip" data-act="spend-step" data-key="${key}" data-step="-1" aria-label="Month before">‹</button><button type="button" class="chip" data-act="spend-step" data-key="${key}" data-step="1" aria-label="Month after" ${cur >= monthKey(today) ? 'disabled' : ''}>›</button></span>` : ''}</div>`;
-
+  const chips = opts.range ? '' : `<div class="dn-pills" role="group" aria-label="Period">${SPEND_PERIODS.map((p) => `<button type="button" data-act="spend-period" data-key="${key}" data-period="${p.id}" aria-pressed="${p.id === period}">${p.name}</button>`).join('')}</div>${stepper ? `<span class="spend-step" role="group" aria-label="Pick a month"><button type="button" class="chip" data-act="spend-step" data-key="${key}" data-step="-1" aria-label="Month before">‹</button><button type="button" class="chip" data-act="spend-step" data-key="${key}" data-step="1" aria-label="Month after" ${cur >= monthKey(today) ? 'disabled' : ''}>›</button></span>` : ''}`;
+  const modeSeg = `<div class="dn-pills" role="group" aria-label="What to count"><button type="button" data-act="spend-mode" data-key="${key}" data-mode="all" aria-pressed="${mode === 'all'}">Everything</button><button type="button" data-act="spend-mode" data-key="${key}" data-mode="day" aria-pressed="${mode === 'day'}" title="Leaves out work costs and one-off buys">Everyday only</button></div>`;
   const title = esc(opts.title || 'Where your money goes');
+  const head = `<div class="dn-top"><h2>${title} <span class="muted dn-when">· ${esc(range.label)}</span></h2><div class="dn-controls">${chips}${modeSeg}</div></div>`;
+  const leftOut = ed ? ed.leftOut : 0;
+  const note = leftOut > 0 ? `<p class="dn-hidden">Not counted: ${esc(plain(leftOut))} ${esc(state.settings.currency || '')} of work costs and one-off buys.</p>` : '';
   if (!total) {
-    return `<section class="card spend" data-spend="expense" data-key="${key}"><h2>${title} <span class="right muted">${esc(range.label)}</span></h2>${chips}
-      <p class="muted" style="margin:6px 0 0">Nothing spent in ${esc(range.label)}.</p></section>`;
+    return `<section class="card spend dn-card" data-spend="expense" data-key="${key}">${head}
+      <p class="muted" style="margin:6px 0 0">${mode === 'day' ? 'No everyday spending' : 'Nothing spent'} in ${esc(range.label)}.</p>${note}</section>`;
   }
 
-  const aria = `Spending by category, ${range.label}: ${items.map((it) => `${it.name} ${it.pct}%`).join(', ')}. Total ${ctx.money(total)}.`;
-  const donut = `<div class="dn-wrap">${donutSvg(items, { total, wide: true, selected: sel, label: aria })}${donutSvg(items, { total, wide: false, selected: sel, label: aria })}</div>`;
+  // Under the donut: change against the period before (same days), per day, days counted.
+  const ch = prevTotal > 0 ? Math.round((total / prevTotal - 1) * 100) : null;
+  const sameMonth = range.from.slice(0, 7) === range.to.slice(0, 7);
+  const counted = daysBetween(range.from, range.to > today ? today : range.to);
+  const vs = word === 'same days last month' || word === 'the month before' ? 'last month' : word;
+  const facts = `<div class="dn-facts">${ch == null ? '' : `<span class="dn-chip ${ch > 0 ? 'up' : ch < 0 ? 'down' : ''}">${ch > 0 ? '↑ ' : ch < 0 ? '↓ ' : ''}${Math.abs(ch)}% vs ${esc(vs)}</span>`}<span class="dn-chip">${esc(plain(Math.round(total / Math.max(1, counted) / 100) * 100))} a day</span><span class="dn-chip">${sameMonth ? `${counted} of ${daysInMonthOf(range.from)} days` : `${counted} days`}</span></div>`;
 
-  const row = (it, { child = false } = {}) => {
-    const cmp = changeText(it, word);
-    const pressed = sel === it.id;
-    const exp = it.id === OTHER_ID ? ` aria-expanded="${otherOpen}"` : '';
-    return `<button type="button" class="dn-row${child ? ' child' : ''}${pressed ? ' sel' : ''}" data-act="cat-pick" data-cat="${esc(it.id)}" data-key="${key}" aria-pressed="${pressed}"${exp} style="--c:${it.color}">
-      <span class="dn-ic" aria-hidden="true">${it.icon ? esc(it.icon) : `<i class="dot" style="--c:${it.color}"></i>`}</span>
-      <span class="dn-name">${esc(it.name)}${it.id === OTHER_ID ? ` <span class="muted small">(${it.items.length})</span>` : ''}</span>
-      <span class="dn-amt">${ctx.money(it.amount)}</span>
-      <span class="dn-pct" aria-label="${it.pct} percent">${it.pct}%</span>
-      <span class="dn-bar" aria-hidden="true"><i style="width:${Math.max(1.5, it.share * 100).toFixed(1)}%"></i></span>
-      <span class="dn-cmp muted small">${esc(cmp)}${it.count ? ` · ${it.count} record${it.count === 1 ? '' : 's'}` : ''}</span>
+  const aria = `Spending by category, ${range.label}: ${items.map((it) => `${it.name} ${it.pct}%`).join(', ')}. Total ${ctx.money(total)}.`;
+  const donut = donutSvg(items, { total, selected: sel, label: aria, mid: mode === 'day' ? 'Everyday spending' : 'Spent' });
+
+  const months = monthsIn(range);
+  const monthly = /^(month|last|m:)/.test(period) || (opts.range && sameMonth);
+  const row = (it) => {
+    const open = sel === it.id;
+    const cat = it.id === OTHER_ID ? null : M.category(state, it.id);
+    const budget = cat?.budget > 0 ? cat.budget * months : 0;
+    const over = budget > 0 && it.amount > budget;
+    const bar = budget > 0
+      ? `<span class="dn-bar${over ? ' over' : ''}" title="${esc(plain(it.amount))} of ${esc(plain(budget))} budget"><i style="width:${Math.min(100, (it.amount / budget) * 100).toFixed(1)}%"></i></span>`
+      : '<span class="dn-bar" title="No budget set"><i style="width:0"></i></span>';
+    const subText = budget > 0 ? `${plain(it.amount)} of ${plain(budget)}${over ? ' · over' : ''}`
+      : it.id === OTHER_ID ? it.items.map((c) => name(c.id)).slice(0, 3).join(', ') + (it.items.length > 3 ? '…' : '')
+        : cat?.workCost ? 'work cost' : '';
+    const p = it.change == null ? null : Math.round(it.change * 100);
+    const tag = p == null ? `<span class="dn-tag first">${monthly ? 'first this month' : 'first this period'}</span>`
+      : p === 0 ? '<span class="dn-tag first">no change</span>'
+        : `<span class="dn-tag ${p > 0 ? 'up' : 'down'}">${p > 0 ? '↑' : '↓'} ${Math.abs(p)}%</span>`;
+    const btn = `<button type="button" class="dn-row${open ? ' open' : ''}" data-act="cat-pick" data-cat="${esc(it.id)}" data-key="${key}" aria-expanded="${open}" aria-label="${esc(it.name)}: ${esc(plain(it.amount))}, ${it.pct} percent" style="--c:${it.color}">
+      <span class="dn-ic" aria-hidden="true">${it.icon ? esc(it.icon) : '<i class="dot"></i>'}</span>
+      <span class="dn-name"><b>${esc(it.name)}${it.id === OTHER_ID ? ` <em>(${it.items.length})</em>` : ''}${subText ? `<em>${esc(subText)}</em>` : ''}</b>${bar}</span>
+      <span class="dn-amt">${esc(plain(it.amount))}</span><span class="dn-pct" aria-hidden="true">${it.pct}%</span>${tag}
     </button>`;
+    return btn + (open ? recordsPanel(key, it, range, list, limit, base) : '');
   };
-  const rowsHtml = items.map((it) => row(it) + (it.id === OTHER_ID && otherOpen ? it.items.map((c) => row(item(c), { child: true })).join('') : '')).join('');
 
   const table = `<table class="sr-only"><caption>Spending by category, ${esc(range.label)}</caption><thead><tr><th>Category</th><th>Amount</th><th>Share</th></tr></thead><tbody>${items.map((it) => `<tr><td>${esc(it.name)}</td><td>${esc(ctx.money(it.amount))}</td><td>${it.pct}%</td></tr>`).join('')}</tbody></table>`;
 
-  return `<section class="card spend dn-card" data-spend="expense" data-key="${key}"><h2>${title} <span class="right muted">${esc(range.label)}</span></h2>
-    ${chips}
-    ${donut}
-    <div class="dn-list" role="group" aria-label="Categories, biggest first">${rowsHtml}</div>
-    ${selectedPanel(key, items, range, list, base)}
+  return `<section class="card spend dn-card" data-spend="expense" data-key="${key}">${head}
+    <div class="dn-body">
+      <div class="dn-left">${donut}${facts}${note}</div>
+      <div class="dn-list" role="group" aria-label="Categories, biggest first">
+        <div class="dn-head"><span></span><span>Category · budget used</span><span class="r">Amount</span><span class="r p">Share</span><span class="r">vs last month</span></div>
+        ${items.map(row).join('')}
+        <div class="dn-legend"><span><b class="up">↑</b> spent more than ${esc(word)}</span><span><b class="down">↓</b> spent less</span><span><b class="gold">one-off</b> = a single buy of ${esc(plain(limit))} or more</span></div>
+      </div>
+    </div>
     ${table}
   </section>`;
 }
 
-// The records of the tapped category in this period, with a way into the Log.
-function selectedPanel(key, items, range, list, base) {
-  const { ui, state } = ctx;
-  const id = ui.catSel?.[key];
-  const it = id && items.find((x) => x.id === id) || id && items.flatMap((x) => x.items || []).find((x) => x.id === id);
-  if (!it) return '';
+// The records of the opened category, right under its row.
+function recordsPanel(key, it, range, list, limit, base) {
+  const { state } = ctx;
+  const id = it.id;
   const ids = new Set(id === OTHER_ID ? it.items.map((x) => x.id) : [id]);
   const recs = M.sortTx(list.filter((t) => countsAsSpending(t) && ids.has(t.category) && t.date >= range.from && t.date <= range.to));
-  const nm = id === OTHER_ID ? 'Other' : M.category(state, id)?.name || 'Unknown';
-  return `<div class="dn-sel" role="region" aria-label="${esc(nm)} records">
-    <div class="dn-sel-h"><b>${esc(nm)}</b><span class="muted small">${recs.length} record${recs.length === 1 ? '' : 's'} · ${esc(range.label)}</span>
-      <button type="button" class="btn sm" data-act="cat-log" data-key="${key}" data-cat="${esc(id)}">See all in the Log</button></div>
-    <div class="list">${recs.slice(0, 6).map((t) => ctx.txRow(t, { showDate: true })).join('')}</div>
-    ${recs.length > 6 ? `<p class="muted small" style="margin:6px 0 0">${recs.length - 6} more in the Log.</p>` : ''}
+  const nm = (cid) => M.category(state, cid)?.name || 'Unknown';
+  const SHOWN = 6;
+  return `<div class="dn-recs" role="region" aria-label="${esc(it.name)} records">
+    ${recs.slice(0, SHOWN).map((t) => `<div class="dn-rec"><span class="d">${esc(shortDate(t.date))}</span><span class="n">${esc(t.note || (id === OTHER_ID ? nm(t.category) : it.name))}${id === OTHER_ID && t.note ? ` <em>${esc(nm(t.category))}</em>` : ''}${E.isOneOff(t, limit, base) ? '<span class="one">one-off</span>' : ''}</span><span class="v">${esc(ctx.money(t.amount, { currency: t.currency }))}</span></div>`).join('')}
+    ${recs.length > SHOWN ? `<p class="muted small" style="margin:4px 0 0">${recs.length - SHOWN} more.</p>` : ''}
+    <div class="dn-recs-foot"><span class="muted small">${recs.length} record${recs.length === 1 ? '' : 's'} · ${esc(range.label)}</span><button type="button" class="btn sm" data-act="cat-log" data-key="${key}" data-cat="${esc(id)}">See all in the Log</button></div>
   </div>`;
 }
 
@@ -171,8 +178,13 @@ export function onClick(act, el) {
     const id = el.dataset.cat;
     const was = ui.catSel?.[key] === id;
     ui.catSel = { ...(ui.catSel || {}), [key]: was ? null : id };
-    if (id === OTHER_ID) ui.catOtherOpen = { ...(ui.catOtherOpen || {}), [key]: !was };
     redraw(el, key);
+    return true;
+  }
+  if (act === 'spend-mode') {
+    setMode(el.dataset.mode === 'day' ? 'day' : 'all');
+    ui.catSel = { ...(ui.catSel || {}), [key]: null };
+    redraw(el, key, true);
     return true;
   }
   if (act === 'spend-period') {
