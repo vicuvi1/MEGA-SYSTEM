@@ -789,6 +789,20 @@ try {
     if (info.amts.some((a, i) => i && a > info.amts[i - 1])) throw new Error('rows are not biggest first')
     if (!/\d/.test(info.centre)) throw new Error('no total in the donut centre')
     if (info.table !== info.rows) throw new Error('the table fallback does not match the rows')
+    // Callout labels never overlap, every row has the same height, the pill sits in the second line, hover links row and slice.
+    const lay = await frame.evaluate(() => {
+      const labs = [...document.querySelectorAll('.dn-card .dn-wide .dn-lab text')].map((t) => t.getBoundingClientRect())
+      let overlap = 0
+      for (let i = 0; i < labs.length; i++) for (let j = i + 1; j < labs.length; j++) { const a = labs[i], b = labs[j]; if (a.left < b.right && b.left < a.right && a.top < b.bottom - 1 && b.top < a.bottom - 1) overlap++ }
+      const hs = [...document.querySelectorAll('.dn-card .dn-list > .dn-row:not(.child)')].map((r) => Math.round(r.getBoundingClientRect().height))
+      return { labels: labs.length, overlap, hs, pills: document.querySelectorAll('.dn-card .dn-row .dn-line .dn-tag').length }
+    })
+    if (lay.labels < 2) throw new Error(`only ${lay.labels} callout labels`)
+    if (lay.overlap) throw new Error(`${lay.overlap} callout labels overlap`)
+    if (Math.max(...lay.hs) - Math.min(...lay.hs) > 2) throw new Error(`rows differ in height ${lay.hs}`)
+    if (!lay.pills) throw new Error('no change pills in the rows')
+    await frame.hover('.dn-card .dn-list > .dn-row')
+    await frame.waitForFunction(() => document.querySelector('.dn-card.hovering .dn-seg.hot'), null, { timeout: 3000 })
     if (process.env.FIN_CAT_SHOTS) {
       // Two looks for the report: phone in dark, desktop in light.
       for (const [w, h, scheme] of [[390, 900, 'dark'], [1280, 900, 'light'], [390, 900, 'light'], [1280, 900, 'dark']]) {
@@ -813,8 +827,8 @@ try {
     await frame.evaluate(() => { const s = document.getElementById('search'); if (s) { s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })) } })
   })
   // Finance "Where your money goes" redesign: Everyday only leaves out work costs and one-offs and says how much,
-  // a budget shows as a bar (and "over" turns it warm), rows open in place. Fake data only.
-  await step('Finance categories: Everyday only, budget bar and open in place', async () => {
+  // a budget shows in the second line (and "over" turns it warm), rows open in place. Fake data only.
+  await step('Finance categories: Everyday only, budget text and open in place', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('money')
     await pg.waitForSelector('.mh-open, iframe', { timeout: 10000 }).catch(() => {})
@@ -825,6 +839,7 @@ try {
     if (!frame) throw new Error('Finance Helper frame not loaded')
     await frame.evaluate(() => { location.hash = '#home' })
     await frame.waitForSelector('.dn-card .dn-row', { timeout: 15000 })
+    await pg.waitForTimeout(1500) // let any pending save of the page finish before the data is edited
     // A made-up budget (50 lei) on the biggest row's category and a one-off record (5 000 lei), on this device.
     await frame.evaluate(() => {
       const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
@@ -840,13 +855,13 @@ try {
       setTimeout(() => location.reload(), 50)
     })
     await pg.waitForTimeout(600)
-    await frame.waitForSelector('.dn-bar.over', { timeout: 15000 })
-    const all = await frame.evaluate(() => ({ centre: document.querySelector('.dn-mid strong').textContent, over: document.querySelectorAll('.dn-bar.over').length, note: !!document.querySelector('.dn-hidden') }))
+    await frame.waitForSelector('.dn-bud.over', { timeout: 15000 })
+    const all = await frame.evaluate(() => ({ centre: document.querySelector('.dn-mid strong').textContent, over: document.querySelectorAll('.dn-bud.over').length, note: !!document.querySelector('.dn-hidden') }))
     if (all.note) throw new Error('"Not counted" shows under Everything')
-    if (!all.over) throw new Error('the over-budget bar is not warm in Everything')
+    if (!all.over) throw new Error('the over-budget text is not warm in Everything')
     await frame.click('.dn-pills button[data-mode="day"]')
     await frame.waitForSelector('.dn-hidden', { timeout: 5000 })
-    const day = await frame.evaluate(() => ({ centre: document.querySelector('.dn-mid strong').textContent, note: document.querySelector('.dn-hidden').textContent, over: document.querySelectorAll('.dn-bar.over').length }))
+    const day = await frame.evaluate(() => ({ centre: document.querySelector('.dn-mid strong').textContent, note: document.querySelector('.dn-hidden').textContent, over: document.querySelectorAll('.dn-bud.over').length }))
     if (!/^Not counted: .* of work costs and one-off buys\.$/.test(day.note.replace(/\s+/g, ' ').trim())) throw new Error(`note: ${day.note}`)
     if (day.centre === all.centre) throw new Error('Everyday only did not change the total')
     // The choice is remembered on this device only.

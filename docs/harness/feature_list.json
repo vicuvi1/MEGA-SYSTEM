@@ -1311,8 +1311,8 @@
   "id": "F-MONEY-WHERE",
   "priority": 2,
   "area": "money",
-  "title": "Money: Where your money goes redesign + Everyday only",
-  "user_visible_behavior": "Two columns: donut with the total and facts, and a compact ranked list with budget-used bars, change pills (up/down vs same days last month, first this month) and rows that open in place. Everything / Everyday only toggle (leaves out work-cost categories and one-offs, says how much); neutral chart colours.",
+  "title": "Money: Where your money goes, old look back plus Everyday only",
+  "user_visible_behavior": "Centred donut with callout labels that never overlap, and full-width rows (icon, name, share bar, amount, round % badge) with stored category colours; change pills, budget text and records in the second line; rows open in place; hover links row and slice. Everything / Everyday only toggle (leaves out work-cost categories and one-offs, says how much)",
   "status": "passing",
   "verification": [
    "npx tsc --noEmit -p tsconfig.json && npx vitest run",

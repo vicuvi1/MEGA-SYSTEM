@@ -101,3 +101,23 @@ describe('work cost and everyday limit survive saving and syncing', () => {
     expect(merged.settings.categories.find((c: any) => c.id === 'fees').workCost).toBe(true)
   })
 })
+
+// "Where your money goes": callout labels on the donut never sit closer than the gap.
+// @ts-ignore plain JS module from the embedded app
+import { spreadLabels } from '../../public/apps/finance/js/donutlabels.js'
+describe('donut callout labels', () => {
+  it('pushes neighbouring small slices apart and keeps their order', () => {
+    const ys: number[] = spreadLabels([{ y: 40 }, { y: 44 }, { y: 47 }, { y: 150 }], { gap: 18, top: 14, bottom: 286 })
+    for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(18)
+    expect(ys[3]).toBe(150)
+  })
+  it('stays inside the picture when the labels crowd the bottom', () => {
+    const ys: number[] = spreadLabels([{ y: 280 }, { y: 284 }, { y: 290 }], { gap: 18, top: 14, bottom: 286 })
+    expect(Math.max(...ys)).toBeLessThanOrEqual(286)
+    expect(Math.min(...ys)).toBeGreaterThanOrEqual(14)
+    for (let i = 1; i < ys.length; i++) expect(ys[i] - ys[i - 1]).toBeGreaterThanOrEqual(18)
+  })
+  it('returns heights in the order given', () => {
+    expect(spreadLabels([{ y: 100 }, { y: 20 }], { gap: 18, top: 14, bottom: 286 })).toEqual([100, 20])
+  })
+})
