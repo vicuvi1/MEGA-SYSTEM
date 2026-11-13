@@ -72,6 +72,7 @@ import './island/island-v2.css'
 import { lookClasses } from '@core/islandTiles'
 import './island.css'
 import './island/island-simple.css'
+import { coinsShownNow } from './simpleCache'
 import './island-motion.css'
 import './island-move.css'
 import './island-fit.css'
@@ -1732,7 +1733,7 @@ export function DesktopIsland() {
     if (b == null) return
     const before = prevPts.current
     prevPts.current = b
-    if (before != null && b > before) fly('coin', `+${b - before}`)
+    if (before != null && b > before && coinsShownNow()) fly('coin', `+${b - before}`)
   }, [s.points?.balance, fly])
   const prevWater = useRef<number | null>(null)
   useEffect(() => {

@@ -455,10 +455,17 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   // (the whole database, zipped) waits until the page is idle.
   useEffect(() => {
     refresh()
-    life.bots?.pollOnce?.().then((res) => {
-      if (res && res.processedCount > 0) refresh()
-    }).catch(() => {})
-    return whenIdle(() => void life.data.saveDailySnapshot?.().catch(() => {}), 4000)
+    // The first bot check waits 3 s so its code (a big file) doesn't compete with Today's first draw.
+    const first = setTimeout(() => {
+      life.bots?.pollOnce?.().then((res) => {
+        if (res && res.processedCount > 0) refresh()
+      }).catch(() => {})
+    }, 3000)
+    const cancelSnap = whenIdle(() => void life.data.saveDailySnapshot?.().catch(() => {}), 4000)
+    return () => {
+      clearTimeout(first)
+      cancelSnap()
+    }
   }, [refresh])
   // Photo Locker: uploads that were waiting (or cut off by a reload) carry on once the page is idle.
   useEffect(() => whenIdle(() => void import('./vault/driveSync').then((m) => m.vaultBoot()).catch(() => {}), 20_000), [])

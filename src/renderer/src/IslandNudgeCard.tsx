@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from 'react'
 import { breathAt, breathSteps, stepCount, type MovePill, type Nudge, type NudgeOp } from '@core/islandNudges'
 import type { IslandAction, IslandAlert } from '@core/islandModel'
 import { tp } from './islandTap'
+import { coinsShownNow } from './simpleCache'
 import { barFill, reducedMotion } from './motionKit'
 import { DRILL, DRILL_SECONDS, drillAt } from '@core/deskMobility'
 import { stillFrame } from '@core/sportFigure'
@@ -72,7 +73,7 @@ function MoveCard({ a, n: d, tap, onRun }: { a: IslandAlert; n: Extract<Nudge, {
         <Count id={a.id} n={count} set={setCount} />
         <button className="primary" {...tp(`nd:${a.id}:log`, () => tap(nudge({ op: 'move', ex: opt.ex, name: opt.name, n: count, alertId: a.id })))}>
           ✓ {count} {opt.name}
-          {d.coins > 0 && <em className="nd-plus">+{d.coins}</em>}
+          {d.coins > 0 && coinsShownNow() && <em className="nd-plus">+{d.coins}</em>}
         </button>
       </div>
       <div className="di-actions nd-row">
@@ -372,7 +373,7 @@ export function IslandMoveBadge({ move, now }: { move: MovePill | null | undefin
   const pct = Math.min(1, move.goal > 0 ? move.done / move.goal : 0)
   const r = 7
   const c = 2 * Math.PI * r
-  const plus = move.plus && now - move.plus.at < 8000 ? move.plus.coins : 0
+  const plus = move.plus && coinsShownNow() && now - move.plus.at < 8000 ? move.plus.coins : 0
   return (
     <span className="nd-badge" title={`Moved today: ${move.done}/${move.goal} ${move.unit === 'min' ? 'min' : 'reps'}${move.challenge ? ` · challenge ${move.challenge.done}/${move.challenge.target} ${move.challenge.name}` : ''}${move.streak ? ` · move streak ${move.streak} days` : ''}`}>
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>

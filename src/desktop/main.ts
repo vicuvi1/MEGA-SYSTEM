@@ -54,6 +54,16 @@ const smokeLog = (step: string): void => {
     /* no log */
   }
 }
+/** LIFE_TIMING=1 (or the dev run): how long each startup step took, in the console. */
+const timing = process.env.LIFE_TIMING === '1' || !app.isPackaged
+async function timed<T>(what: string, fn: () => Promise<T>): Promise<T> {
+  const t = Date.now()
+  try {
+    return await fn()
+  } finally {
+    if (timing) console.info(`[startup] ${what}: ${Date.now() - t} ms (at ${Date.now() - t0} ms)`)
+  }
+}
 /**
  * Quit right away (the release check, the 90 s safety net). app.exit skips
  * will-quit, so the island's PowerShell watcher kept running and on Windows the
@@ -336,30 +346,34 @@ if (firstCopy) void app.whenReady().then(async () => {
     win.webContents.send('island:tick')
   }, 15_000)
   win.on('closed', () => clearInterval(islandClock))
-  const pc = await createPc({
-    dir,
-    win,
-    onPrefs: (p) => {
-      island.restartWatcher()
-      pcPrefsNow = p
-    },
-    onAction: (a) => {
-      if (a === 'talk') island.voice()
-      else if (a === 'capture') island.capture()
-      else if (a === 'focus25') win.webContents.send('desktop:jump', a)
-    }
-  })
+  // These set up independent parts (each reads its own small files and registers its own IPC calls), so they
+  // start together instead of one after the other; the page loads when all of them are ready.
+  const [pc] = await Promise.all([
+    timed('Ben on this PC', () => createPc({
+      dir,
+      win,
+      onPrefs: (p) => {
+        island.restartWatcher()
+        pcPrefsNow = p
+      },
+      onAction: (a) => {
+        if (a === 'talk') island.voice()
+        else if (a === 'capture') island.capture()
+        else if (a === 'focus25') win.webContents.send('desktop:jump', a)
+      }
+    })),
+    // Settings → PC & automation: music, ActivityWatch, Ben's actions (all off until switched on).
+    timed('PC extras', () => registerPcExtras({ dir, win, origin })).catch(() => {}),
+    // Island pages: System (CPU, memory, apps…) and AI usage (off until switched on).
+    timed('system monitor', () => registerSysmon({ dir, origin })).catch(() => {}),
+    // Custom Center: the Windows wallpaper per mode (off until you switch it on; only the app window may ask).
+    timed('wallpaper', () => registerWallpaper({ dir, appWindow: win })).catch(() => {}),
+    // Automation hub: local webhooks / n8n (safeStorage), scripts, workspaces, sensors (only those in use).
+    timed('automations', () => registerAutomations({ dir, win, origin })).catch(() => {})
+  ])
   pcRef.current = pc
-  // Settings → PC & automation: music, ActivityWatch, Ben's actions (all off until switched on).
-  await registerPcExtras({ dir, win, origin }).catch(() => {})
-  // Island pages: System (CPU, memory, apps…) and AI usage (off until switched on).
-  await registerSysmon({ dir, origin }).catch(() => {})
-  // Custom Center: the Windows wallpaper per mode (off until you switch it on; only the app window may ask).
-  await registerWallpaper({ dir, appWindow: win }).catch(() => {})
   // "Sign in to SoundCloud": its own isolated view (off until you sign in; nothing loads before).
   createScWeb({ dir, origin, appWindow: win })
-  // Automation hub: local webhooks / n8n (safeStorage), scripts, workspaces, sensors (only those in use).
-  await registerAutomations({ dir, win, origin }).catch(() => {})
   eyes.attach(win, () => refreshTray(), () => pc.prefs().goalWords ?? [])
   let pcPrefsNow = pc.prefs()
   pcAction = (a) => {
@@ -499,6 +513,7 @@ if (firstCopy) void app.whenReady().then(async () => {
   smokeLog('loading the page')
   await win.loadURL(origin + '/')
   smokeLog('loadURL done')
+  if (timing) console.info(`[startup] page loaded at ${Date.now() - t0} ms`)
   // When you go to bed, without watching the screen: the last moment you used
   // the PC (mouse/keys; before it locked, slept or shut down) is kept on disk.
   // Coming back hours later tells the app, which logs the bedtime in Waky.

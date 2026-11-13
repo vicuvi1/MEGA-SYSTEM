@@ -5,6 +5,7 @@
 // core/sounds.ts; nothing here is a file, everything is synthesized.
 import { DEFAULT_SOUND_PREFS, BED_LOWPASS, HAPTICS, SOUND_CATEGORY, bedSamples, cleanSoundPrefs, createDebounce, remindSound, soundBlock, soundLength, themed, themeVoices, type BedKind, type PlayCheck, type SoundCategory, type SoundName, type SoundPrefs, type Voice } from '@core/sounds'
 import { DEFAULT_NOTIF, getUiPrefs } from './uiPrefs'
+import { coinsShownNow } from './simpleCache'
 import { BODY_REMINDER_SOUND, reminderGain, type BodyReminder } from '@core/islandReminderSound'
 import { MOMENT_CATEGORY, momentForNotif, momentRecipe, pickFor, type MomentId, type MomentSound } from '@core/soundMoments'
 
@@ -174,10 +175,14 @@ export interface PlayOpts {
   loud?: number
 }
 
+/** Coin, spend and reward sounds stay silent while coins are hidden (Settings, Show coins). Previews still play. */
+export const coinSoundHidden = (name: SoundName, shown: boolean = coinsShownNow(), preview = false): boolean => !shown && !preview && SOUND_CATEGORY[name] === 'money'
+
 /** Plays one of the app's sounds if it may (SO3), with its phone buzz (SO9). */
 export function play(name: SoundName, opts: PlayOpts = {}): void {
   const cat = SOUND_CATEGORY[name]
   if (!cat) return
+  if (coinSoundHidden(name, coinsShownNow(), opts.preview)) return
   const now = Date.now()
   if (!debounced(name, now)) return
   const long = LONG_DEBOUNCE[name]

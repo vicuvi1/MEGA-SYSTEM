@@ -1,8 +1,9 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { applyTheme } from './uiPrefs'
 
 applyTheme()
+performance.mark('ls:boot')
 
 // AF1: nothing animates while the window is hidden (tray, minimized, other tab).
 const markHidden = () => document.documentElement.classList.toggle('doc-hidden', document.hidden)
@@ -59,23 +60,49 @@ if (isQuick) {
   // reading `.App` of it threw "Cannot read properties of undefined (reading 'App')". Try once more
   // instead, and show nothing (the reload is on its way) if it still fails.
   const load = <T,>(f: () => Promise<T>): Promise<T> => f().then((m) => m ?? new Promise<T>((r) => setTimeout(r, 300)).then(f))
+  // The first screen waits only for the app, its bar and its styles. The island feed and the backups (desktop only)
+  // load beside it and join as soon as their code is here, so Today never waits for them.
+  const lateParts = Promise.all([
+    desk?.islandState ? load(() => import('./IslandFeed')) : none,
+    desk?.writeBackup ? load(() => import('./DesktopBackups')) : none
+  ])
+  const Late = () => {
+    const [parts, setParts] = useState<Awaited<typeof lateParts> | null>(null)
+    useEffect(() => {
+      void lateParts.then(setParts)
+    }, [])
+    if (!parts) return null
+    const [feed, backups] = parts
+    return (
+      <>
+        {feed && <feed.IslandFeed />}
+        {backups && <backups.DesktopAutoBackup />}
+      </>
+    )
+  }
   void Promise.all([
     load(() => import('./App')),
     desk ? load(() => import('./DesktopBar')) : none,
-    desk?.islandState ? load(() => import('./IslandFeed')) : none,
-    desk?.writeBackup ? load(() => import('./DesktopBackups')) : none,
     load(() => import('./appStyles'))
-  ]).then(([appMod, bar, feed, backups]) =>
-    appMod &&
+  ]).then(([appMod, bar]) => {
+    performance.mark('ls:code-loaded')
+    // Timing (set localStorage ls.timing=1): the first screen's marks in the console.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      performance.mark('ls:first-frame')
+      try {
+        if (localStorage.getItem('ls.timing') === '1')
+          console.info('[startup]', ['ls:boot', 'ls:code-loaded', 'ls:first-frame'].map((m) => `${m} ${Math.round(performance.getEntriesByName(m)[0]?.startTime ?? 0)} ms`).join(' | '))
+      } catch { /* no storage */ }
+    }))
+    if (!appMod) return
     root.render(
       <StrictMode>
         {bar && <bar.DesktopBar />}
-        {feed && <feed.IslandFeed />}
-        {backups && <backups.DesktopAutoBackup />}
+        <Late />
         <appMod.App />
       </StrictMode>
     )
-  )
+  })
 }
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator && !window.life && !window.desktop && !isQuick) {
