@@ -45,6 +45,27 @@ export interface AppSyncSpec {
   finalize?: (db: any, merged: any, canWrite: boolean) => any
   /** After a restore: this device's data from its own device-only parts and the restored shared data (default: both, the restored winning). */
   adopt?: (mine: any, shared: any) => any
+  /**
+   * Runs before the usual round; a run it returns replaces that round (Money
+   * locked with its PIN: only sealed copies travel, see financeSync.ts). Null:
+   * the usual round.
+   */
+  custom?: (ctx: AppSyncContext) => Promise<AppSyncRun | null>
+  /** Other localStorage keys whose change (from the app's frame) starts a sync soon. */
+  watch?: string[]
+}
+
+/** What a `custom` round gets from the sync. */
+export interface AppSyncContext {
+  mirror: Mirror
+  store: Storage
+  /** Compare with the server's own copy (start, every few minutes, "Sync now", a copy not confirmed yet). */
+  checking: boolean
+  /** "Sync now": always download the server's copy. */
+  full: boolean
+  report: (patch: Partial<AppSyncStatus>) => void
+  /** true: the server hasn't confirmed yet (the next run checks again); false: confirmed. */
+  unconfirmed: (v: boolean) => void
 }
 
 /** What one copy lacks next to another: list items (records) and other changes (settings, map entries). */
@@ -85,6 +106,10 @@ export interface AppSyncRun {
   changes: number
   /** The server confirmed it has everything this device has. */
   confirmed: boolean
+  /** Records this device took from the cloud. */
+  got?: number
+  /** Only a sealed copy travelled (Money locked with its PIN). */
+  locked?: boolean
 }
 
 /**
@@ -200,6 +225,95 @@ export function appSyncRunText(r: AppSyncRun): string {
   return r.confirmed ? `${sent} · cloud up to date` : `${sent} · the cloud hasn't confirmed it yet, trying again`
 }
 
+// ---- Sync history (Settings → Data safety → Show history) -------------------
+
+/** One remembered sync event on this device. */
+export interface AppSyncEvent {
+  at: number
+  setting: string
+  label: string
+  /** "sent 37 records · cloud up to date", "skipped (Money locked)", "failed: offline". */
+  text: string
+  /** The same event in a row (a repeated skip or error) is kept once, counted. */
+  times?: number
+}
+
+/** Kept on this device only (localStorage), at most this many per app. */
+export const HISTORY_KEY = 'life_sync_history'
+export const HISTORY_PER_APP = 20
+
+const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`
+const shortError = (e?: string) => {
+  const t = String(e ?? 'error').split(/(?<=\.)\s/)[0].replace(/\.$/, '')
+  return t.length > 80 ? `${t.slice(0, 79)}…` : t
+}
+
+/**
+ * A run as one plain history line, or null when there is nothing worth
+ * remembering (a routine check that found nothing to do). `manual`: "Sync now"
+ * was pressed, so even "nothing to send" is remembered.
+ */
+export function appSyncEventText(r: AppSyncRun, manual = false): string | null {
+  if (r.skipped) return `skipped (${r.skipped})`
+  if (!r.ok) return `failed: ${shortError(r.error)}`
+  const parts: string[] = []
+  if (r.sent) parts.push(`sent ${plural(r.sent, 'record')}${r.locked ? ' (locked)' : ''}`)
+  else if (r.changes) parts.push(r.locked ? 'sent the locked copy' : `sent ${plural(r.changes, 'change')}`)
+  if (r.got) parts.push(`got ${plural(r.got, 'record')}${r.locked ? ' from the locked copy' : ''}`)
+  if (!parts.length) {
+    if (!manual) return null
+    parts.push('nothing to send')
+  }
+  parts.push(r.confirmed ? 'cloud up to date' : 'waiting for the cloud')
+  return parts.join(' · ')
+}
+
+const readHistory = (store: Storage | null): AppSyncEvent[] => {
+  try {
+    const list = JSON.parse(store?.getItem(HISTORY_KEY) || '[]')
+    return Array.isArray(list) ? list.filter((e) => e && typeof e.text === 'string' && Number.isFinite(e.at)) : []
+  } catch {
+    return []
+  }
+}
+
+/** Every app's last events on this device, newest first. */
+export function appSyncHistory(store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null): AppSyncEvent[] {
+  return readHistory(store).sort((a, b) => b.at - a.at)
+}
+
+/** Remembers one event: capped per app, and a full storage never breaks a sync (older events go first). */
+export function addAppSyncEvent(store: Storage | null, e: AppSyncEvent): void {
+  if (!store) return
+  const list = readHistory(store)
+  const last = list.filter((x) => x.setting === e.setting).sort((a, b) => b.at - a.at)[0]
+  if (last && last.text === e.text && /^(skipped|failed|nothing)/.test(e.text)) {
+    last.at = e.at
+    last.times = (last.times ?? 1) + 1
+  } else list.push(e)
+  const keep = (per: number) => {
+    const out: AppSyncEvent[] = []
+    for (const app of new Set(list.map((x) => x.setting))) out.push(...list.filter((x) => x.setting === app).sort((a, b) => b.at - a.at).slice(0, per))
+    return out
+  }
+  for (const per of [HISTORY_PER_APP, 5, 1]) {
+    try {
+      store.setItem(HISTORY_KEY, JSON.stringify(keep(per)))
+      return
+    } catch {
+      /* storage full: keep fewer */
+    }
+  }
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const two = (n: number) => String(n).padStart(2, '0')
+/** "13 Nov 21:40 · Money · sent 37 records · cloud up to date" (this device's time, the same on every system). */
+export function appSyncEventLine(e: AppSyncEvent): string {
+  const d = new Date(e.at)
+  return `${d.getDate()} ${MONTHS[d.getMonth()]} ${two(d.getHours())}:${two(d.getMinutes())} · ${e.label} · ${e.text}${(e.times ?? 1) > 1 ? ` (${e.times} times)` : ''}`
+}
+
 class StorageFullError extends Error {}
 
 /** `onSynced`: after each sync run (e.g. Waky's times go into the sleep log). */
@@ -304,6 +418,15 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
    * believes is there (what it wrote, or this device's copy of the database);
    * `full`: always download the server's copy and compare.
    */
+  /** Records `next` has that this device's copy (`localShared`, as it travels) lacked. */
+  const gotOf = (next: any, localShared: string | null): number => {
+    try {
+      return gapFor(next, localShared ? JSON.parse(localShared) : {}).records
+    } catch {
+      return 0
+    }
+  }
+
   const serverHas = async (state: any, expected: string | null, full: boolean): Promise<boolean> => {
     // The size + start check answers "same text" without a download; what that text lacks is still compared.
     const serverRaw = await mirror.serverSetting(spec.setting, full ? undefined : expected)
@@ -323,6 +446,10 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     // compares with the server's own copy, not only with what this device last agreed.
     const checking = !!opts.check || !!opts.full || get(UNCONFIRMED) != null
     if (checking) await mirror.refresh()
+    if (spec.custom) {
+      const own = await spec.custom({ mirror, store, checking, full: !!opts.full, report, unconfirmed: (v) => (v ? set(UNCONFIRMED, '1') : del(UNCONFIRMED)) })
+      if (own) return own
+    }
     const localRaw = get(spec.localKey)
     const localShared = sharedOf(localRaw)
     const synced = get(SYNCED)
@@ -346,7 +473,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       agreedRaw = text
       if (text !== localRaw && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))
       report({ state: 'ok', okAt: Date.now(), error: null, note: null })
-      return { ...none, confirmed: true }
+      return { ...none, confirmed: true, got: text !== localRaw ? gotOf(next, localShared) : 0 }
     }
     // A big change made here (an import, a bulk delete, a re-price): a "before" backup first.
     if (realEdit && bigChangeGuard && synced != null && localShared != null) await bigChangeGuard(spec, parse(synced), parse(localShared)).catch(() => {})
@@ -436,6 +563,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       return { ok: true, sent: sent.records, changes: sent.other, confirmed: false }
     }
     const next = JSON.stringify(merged)
+    const got = next !== localRaw ? gotOf(merged, localShared) : 0
     // The app's data first: the agreed copy is only moved once the data it describes is kept.
     if (next !== localRaw) setStrict(spec.localKey, next)
     setStrict(SYNCED, JSON.stringify(share(merged)))
@@ -452,7 +580,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     }
     if (confirmed) report({ state: 'ok', okAt: Date.now(), error: null, note: null, ...(sent.records ? { sent: sent.records } : {}) })
     else if (wrote != null || checking) report({ state: 'waiting', error: null, note: null })
-    return { ok: true, sent: sent.records, changes: sent.other, confirmed }
+    return { ok: true, sent: sent.records, changes: sent.other, confirmed, got }
   }
 
   const retryLater = () => {
@@ -469,11 +597,16 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
   /** Copies changes both ways; safe to call often (one run at a time). `check`: compare with the server's own copy. */
   const sync = (opts: { check?: boolean; full?: boolean } = {}): Promise<AppSyncRun> => {
     if (running) return running.then(() => sync(opts))
+    const remember = (r: AppSyncRun) => {
+      const text = appSyncEventText(r, !!opts.full)
+      if (text) addAppSyncEvent(store, { at: Date.now(), setting: spec.setting, label, text })
+      return r
+    }
     running = once(opts)
       .then((r) => {
         if (r.skipped || r.confirmed || get(UNCONFIRMED) == null) fails = 0
         else retryLater()
-        return r
+        return remember(r)
       })
       .catch((e): AppSyncRun => {
         // Offline, storage full, or another device saved first: shown in the
@@ -482,7 +615,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
         const error = String((e as Error)?.message ?? e).slice(0, 240)
         report({ state: 'error', error, note: null })
         retryLater()
-        return { ok: false, error, sent: 0, changes: 0, confirmed: false }
+        return remember({ ok: false, error, sent: 0, changes: 0, confirmed: false })
       })
       .finally(() => {
         running = null
@@ -495,6 +628,13 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     noteEdit()
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => void sync(), 1500)
+  }
+
+  // The app's frame saved another key this sync reads (Money's sealed data while it's locked).
+  if (spec.watch?.length && typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener('storage', (e) => {
+      if (e.key && spec.watch!.includes(e.key)) soon()
+    })
   }
 
   return { sync, soon, spec, status: () => ({ ...status }) }

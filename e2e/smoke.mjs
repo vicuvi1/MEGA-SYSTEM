@@ -9195,6 +9195,22 @@ try {
     if (await pg.locator('[data-testid="backup-check"]').count()) throw new Error('the website shows the desktop backup check row')
   })
 
+  // Sync history (2026-11-13): "Show history" lists this device's last sync events per app, newest first, in plain words.
+  await step('Settings → Data safety: Sync history lists the Money sync just made', async () => {
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+    await pg.waitForSelector('[data-testid="sync-money-now"]', { timeout: 15000 })
+    await pg.click('[data-testid="sync-money-now"]')
+    await pg.waitForFunction(() => /cloud up to date|Not synced/.test(document.querySelector('[data-testid="sync-money-result"]')?.textContent ?? ''), null, { timeout: 30000 })
+    await pg.click('[data-testid="sync-history-toggle"]')
+    const LINE = /^\d{1,2} [A-Z][a-z]{2} \d\d:\d\d · Money · .*(cloud up to date|waiting for the cloud)/
+    await pg.waitForFunction((src) => [...document.querySelectorAll('[data-testid="sync-history"] li')].some((li) => new RegExp(src).test(li.textContent ?? '')), LINE.source, { timeout: 10000 }).catch(async () => {
+      throw new Error(`the history says: ${await pg.textContent('[data-testid="sync-history"]').catch(() => 'nothing')}`)
+    })
+    await pg.click('[data-testid="sync-history-toggle"]')
+  })
+
   // Data safety (2026-11-12): one light per copy, the size, "Back up now" (the cloud backup in parts),
   // "Export everything" (one zip of CSV + JSON) and "Restore from file" (that zip back in, after a
   // "before restore" backup that then shows under "Undo to before…"). The website has no local backup: amber, never red.

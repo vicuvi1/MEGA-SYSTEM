@@ -94,6 +94,7 @@ var SETTINGS = {
 	body_tape: json$7("Body: tape measurements (arm, chest, shoulders, thigh in cm) by day; waist stays in body_metrics", []),
 	ben_workouts: json$7("workouts Ben logged", []),
 	app_sync_finance: json$7("Finance Helper data synced into Life System", null),
+	app_sync_finance_sealed: json$7("Money's sealed copy while it is locked with its PIN: {savedAt, editedAt, box} (AES-GCM; the server never sees the PIN or the data; web/financeSync.ts)", null),
 	app_sync_waky: json$7("Waky (sleep) data synced into Life System", null),
 	finance_backup_json: json$7("older copy of the Finance Helper data", null),
 	waky_backup_json: json$7("older copy of the Waky data", null),
@@ -55175,6 +55176,7 @@ var MODULE_LIST = [
 		pushes: [],
 		settings: [
 			"app_sync_finance",
+			"app_sync_finance_sealed",
 			"money_daily_budget",
 			"money_nothing_spent",
 			"money_receipts"

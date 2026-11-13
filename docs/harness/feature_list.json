@@ -1440,7 +1440,7 @@
     "SMOKE_ONLY=\"sync|Sync|Money|Finance|Data safety\" npm run smoke"
    ],
    "evidence": "2026-11-13: tsc, vitest (moneySyncHeal.test.ts: 12 tests), scoped smoke incl. the new step Settings → Data safety: Sync Money now.",
-   "notes": "web/appSync.ts (gapOf, UNCONFIRMED marker, status registry, appSyncAlert), financeSync.ts financeGap, Mirror.serverSetting / useServerCopy, financeBot save keeps editedAt + restore, SyncPanel, DesktopBar. Encrypted Money (finance-helper.enc) still can't sync: shown as skipped (Money locked)."
+   "notes": "web/appSync.ts (gapOf, UNCONFIRMED marker, status registry, appSyncAlert), financeSync.ts financeGap, Mirror.serverSetting / useServerCopy, financeBot save keeps editedAt + restore, SyncPanel, DesktopBar. Encrypted Money (finance-helper.enc) still can't sync: shown as skipped (Money locked). Replaced 2026-11-13 by money-locked-sync."
   },
   {
    "id": "weekly-backup-check",
@@ -1453,6 +1453,18 @@
    ],
    "evidence": "2026-11-13: tsc, vitest (weeklyCheck.test.ts: 8 tests: ok, truncated, broken, encrypted, none, real data untouched, weekly gating). Smoke step added (desktop-only row absent on the website); the smoke build could not run in the agent sandbox (onnxruntime-web file missing).",
    "notes": "core/weeklyBackupCheck.ts, renderer/safety/weeklyCheck.ts, settings/backups.tsx, DesktopBackups.tsx. Uses the 'backup' notification slot."
+  },
+  {
+   "id": "money-locked-sync",
+   "title": "Sync history, and Money syncs while it is locked with its PIN",
+   "user_visible_behavior": "Settings → Data safety → Show history lists this device's last sync events per app, newest first (\"13 Nov 21:40 · Money · sent 37 records · cloud up to date\", \"skipped (Money PIN needed)\", \"failed: <short error>\"). Money locked with its PIN now syncs as a sealed copy: the desktop sends it without the PIN; a device that needs to open it (the website, or the desktop taking other devices' changes) asks for the Money PIN once in Data safety and keeps it only in that window. A wrong PIN, or two devices locked with different PINs, shows a clear message and changes nothing.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Sync Money now|Sync history\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, full vitest, moneyLockedSync.test.ts (9 tests: sealed send without PIN, the server never sees PIN or records, wrong PIN, different PINs, tombstones, bot record, history cap and storage full), scoped smoke steps Sync Money now + Sync history.",
+   "notes": "web/financeSync.ts lockedRound (settings.app_sync_finance_sealed {savedAt, editedAt, box}, cipher.js AES-GCM/PBKDF2, compare-and-set write), web/appSync.ts custom round hook + watch keys + history (life_sync_history, 20 per app), SyncPanel PIN form + Show history, finance app.js merges a waiting save into a reopened sealed copy (sw.js v61). While the cloud copy is sealed the plain app_sync_finance is read (bots still add there) but never rewritten from locked data, so server-side Money readers see only the pre-lock copy plus bot records. No way yet to stop sealing the cloud copy once no device is locked."
   }
  ]
 }

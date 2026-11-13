@@ -141,6 +141,7 @@ export const SETTINGS = {
   body_tape: json<unknown[]>('Body: tape measurements (arm, chest, shoulders, thigh in cm) by day; waist stays in body_metrics', []),
   ben_workouts: json<unknown[]>('workouts Ben logged', []),
   app_sync_finance: json<Record<string, unknown> | null>('Finance Helper data synced into Life System', null),
+  app_sync_finance_sealed: json<Record<string, unknown> | null>("Money's sealed copy while it is locked with its PIN: {savedAt, editedAt, box} (AES-GCM; the server never sees the PIN or the data; web/financeSync.ts)", null),
   app_sync_waky: json<Record<string, unknown> | null>('Waky (sleep) data synced into Life System', null),
   finance_backup_json: json<Record<string, unknown> | null>('older copy of the Finance Helper data', null),
   waky_backup_json: json<Record<string, unknown> | null>('older copy of the Waky data', null),

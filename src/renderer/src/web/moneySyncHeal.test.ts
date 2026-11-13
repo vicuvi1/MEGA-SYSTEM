@@ -204,7 +204,7 @@ describe('Money sync: the cloud always ends with every record', () => {
 })
 
 describe('Money sync: never silent', () => {
-  it('locked Money says "skipped (Money locked)", never "Synced"', async () => {
+  it('locked Money whose sealed data can\'t be read here says "skipped (Money locked)", never "Synced"', async () => {
     cloud()
     const pc = memStore()
     pc.setItem('finance-helper.enc', '{"sealed":true}')

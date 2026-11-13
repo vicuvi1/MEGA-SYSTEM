@@ -3792,7 +3792,15 @@ window.addEventListener('storage', (e) => {
     render();
   }
   if (e.key === STORAGE_KEYS.ENC && hasSession()) {
-    reopen().then((next) => { if (next) { state = next; render(); } }).catch(() => {});
+    // Locked data changed elsewhere (Life System's sync merged another device's
+    // copy): a change waiting here is merged into it, never thrown away.
+    const waiting = hasPendingSave();
+    reopen().then((next) => {
+      if (!next) return;
+      state = waiting ? mergeLocal(state, next) : next;
+      if (waiting) { saveSoon(state); flushSave(); }
+      render();
+    }).catch(() => {});
   }
 });
 

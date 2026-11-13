@@ -1,16 +1,25 @@
 // Settings → Backups & data: how syncing is doing on this device (Y9).
 // Last sync, changes waiting, anything that couldn't be sent, backup trouble,
-// and each app's own sync (Money, Sport Track…) with "Sync Money now".
+// and each app's own sync (Money, Sport Track…) with "Sync Money now", the
+// Money PIN when Money is locked, and the last sync events ("Show history").
 import { useCallback, useEffect, useState } from 'react'
 import type { SyncHealth } from '@shared/api'
 import { life } from './bridge'
 import { timeAgo } from './ui'
-import { appSyncLine } from './web/appSync'
+import { appSyncEventLine, appSyncHistory, appSyncLine, type AppSyncEvent } from './web/appSync'
+import { moneyPinState, setMoneyPin } from './web/financeSync'
 
 export function SyncPanel() {
   const [h, setH] = useState<SyncHealth | null>(null)
   const [money, setMoney] = useState<{ busy: boolean; text: string; ok: boolean } | null>(null)
-  const load = useCallback(() => void life.sync.health?.().then(setH).catch(() => {}), [])
+  const [history, setHistory] = useState<AppSyncEvent[] | null>(null)
+  const [pinText, setPinText] = useState('')
+  const [pinState, setPinState] = useState(moneyPinState)
+  const load = useCallback(() => {
+    void life.sync.health?.().then(setH).catch(() => {})
+    setPinState(moneyPinState())
+    setHistory((open) => (open ? appSyncHistory() : open))
+  }, [])
   useEffect(() => {
     load()
     const t = setInterval(load, 15_000)
@@ -36,6 +45,14 @@ export function SyncPanel() {
     }
     load()
   }
+  // Money locked with its PIN: the PIN stays in this window's memory only (never saved, never sent).
+  const unlockMoney = async () => {
+    if (!pinText) return
+    setMoneyPin(pinText)
+    setPinText('')
+    await syncMoney()
+  }
+  const askPin = pinState.wanted && !pinState.held
   return (
     <section className="panel" aria-label="Sync status" data-testid="sync-panel">
       <header className="panel-head">
@@ -70,6 +87,38 @@ export function SyncPanel() {
           )}
         </div>
       )}
+      {life.sync.moneyNow && askPin && (
+        <form
+          className="row"
+          data-testid="money-pin-form"
+          style={{ marginTop: 8, gap: 8, flexWrap: 'wrap', alignItems: 'center' }}
+          onSubmit={(e) => {
+            e.preventDefault()
+            void unlockMoney()
+          }}
+        >
+          <span className="small">Money is locked with its PIN. Enter it to sync Money here. It stays in this window only and is never sent.</span>
+          <input type="password" className="input small" aria-label="Money PIN" data-testid="money-pin" autoComplete="off" value={pinText} onChange={(e) => setPinText(e.target.value)} style={{ width: 120 }} />
+          <button type="submit" className="btn small" disabled={!pinText || money?.busy}>
+            Unlock Money sync
+          </button>
+        </form>
+      )}
+      <div style={{ marginTop: 8 }}>
+        <button type="button" className="btn ghost small" data-testid="sync-history-toggle" aria-expanded={history != null} onClick={() => setHistory(history ? null : appSyncHistory())}>
+          {history ? 'Hide history' : 'Show history'}
+        </button>
+        {history && (
+          <ul className="list-plain small" data-testid="sync-history" style={{ margin: '6px 0 0', paddingLeft: '1.1rem', maxHeight: 220, overflow: 'auto' }}>
+            {history.length === 0 && <li className="hint">No sync events on this device yet.</li>}
+            {history.map((e) => (
+              <li key={`${e.setting}-${e.at}`} data-app={e.setting}>
+                {appSyncEventLine(e)}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
       {h.failed.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <strong className="small">Couldn't sync ({h.failed.length})</strong>

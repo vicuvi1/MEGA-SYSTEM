@@ -84,7 +84,7 @@ export const MODULE_LIST: ModuleDef[] = [
     server: [],
     bot: ['expense', 'buy', 'spent', 'pay', 'paid', 'balance', 'accounts', 'money'],
     pushes: [],
-    settings: ['app_sync_finance', 'money_daily_budget', 'money_nothing_spent', 'money_receipts']
+    settings: ['app_sync_finance', 'app_sync_finance_sealed', 'money_daily_budget', 'money_nothing_spent', 'money_receipts']
   },
   {
     id: 'sleep',
