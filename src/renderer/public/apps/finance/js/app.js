@@ -68,6 +68,7 @@ import { openPalette, closePalette, isPaletteOpen } from './palette.js';
 import { bindSankeyHover } from './charts.js';
 import { APP_VERSION } from './version.js';
 import { countsAsSpending, countsAsIncome } from './catshare.js';
+import * as E from './everyday.js';
 
 let state = load();
 // Undo / redo for this session (js/history.js).
@@ -1450,7 +1451,8 @@ function viewSettings() {
     <input type="text" value="${esc(c.name)}" data-cat="${esc(c.id)}" data-field="name" aria-label="Name">
     ${c.type === 'expense'
     ? `<select data-cat="${esc(c.id)}" data-field="jar" aria-label="Jar">${jarOptions(c.jar)}</select>
-      <label class="cat-bill" title="A bill (rent, internet, utilities): paying it doesn't use up today's safe-to-spend"><input type="checkbox" data-cat="${esc(c.id)}" data-field="bill" ${M.isBillCategory(state, c.id) ? 'checked' : ''}><span>Bill</span></label>`
+      <span class="cat-flags"><label class="cat-bill" title="A bill (rent, internet, utilities): paying it doesn't use up today's safe-to-spend"><input type="checkbox" data-cat="${esc(c.id)}" data-field="bill" ${M.isBillCategory(state, c.id) ? 'checked' : ''}><span>Bill</span></label>
+      <label class="cat-bill" title="Work cost (leave out of Everyday): fees and taxes of your work are not counted in Everyday only on Where your money goes"><input type="checkbox" data-cat="${esc(c.id)}" data-field="workCost" ${c.workCost ? 'checked' : ''}><span>Work cost (leave out of Everyday)</span></label></span>`
     : used.has(c.id) ? '<span></span><span></span>' : `<button class="btn danger" data-act="del-cat" data-id="${esc(c.id)}">Remove</button><span></span>`}
   </div>`;
   const lastBackup = state.meta.lastBackup ? new Date(state.meta.lastBackup).toLocaleDateString() : 'never';
@@ -1476,6 +1478,7 @@ function viewSettings() {
     categories: `<section class="card"><h2>Categories</h2>
     <p class="muted small" style="margin-top:0">Spending: pick which jar it comes from. Work costs (fees, taxes) can stay outside the jars. Tick <b>Bill</b> for rent, internet and other bills: paying them doesn't use up today's safe-to-spend.</p>
     ${st.categories.filter((c) => c.type === 'expense').map(catRow).join('')}
+    <label class="field" style="margin:12px 0 0"><span>Everyday limit (${esc(st.currency)}): a single buy of this much or more is a one-off, left out of "Everyday only" on Where your money goes</span><input type="text" inputmode="decimal" data-set="everydayLimit" value="${esc(centsToPlain(E.everydayLimit(st, state.rates)))}" aria-label="Everyday limit"></label>
     <p class="muted small">Income sources</p>
     ${st.categories.filter((c) => c.type === 'income').map(catRow).join('')}
     <div class="btns" style="margin-top:10px">
@@ -3068,6 +3071,7 @@ function onSettingsChange(el) {
     }
     else if (key === 'themeMotion') { st.themeMotion = el.checked; applyTheme(); }
     else if (key === 'sound') { st.sound = el.checked; if (st.sound) sound.test(state); }
+    else if (key === 'everydayLimit') st.everydayLimit = Math.max(0, evalAmount(v) || 0);
     else if (key === 'currency') st.currency = v.trim().toUpperCase() || 'MDL';
     else if (key === 'wallpaper') {
       st.wallpaper = v;
@@ -3098,6 +3102,7 @@ function onSettingsChange(el) {
     else if (el.dataset.field === 'emoji') c.emoji = v.trim() || '•';
     else if (el.dataset.field === 'jar') { c.jar = v; c.jarChosen = true; }
     else if (el.dataset.field === 'bill') c.bill = el.checked;
+    else if (el.dataset.field === 'workCost') c.workCost = el.checked;
   } else return;
   persist();
   Sync.changed();

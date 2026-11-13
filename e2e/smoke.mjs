@@ -765,19 +765,24 @@ try {
   // Finance Home: "Where your money goes" is a donut plus rows, biggest first, shares adding to 100;
   // tapping a row lights it up and lists its records; "See all in the Log" opens the Log filtered to it.
   await step('Finance categories: donut, sorted rows add to 100, tap a row opens its records and the Log', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
     await open('money')
+    await pg.waitForSelector('.mh-open, iframe', { timeout: 10000 }).catch(() => {})
     if (await pg.$('.mh-open')) await pg.click('.mh-open')
-    await pg.waitForTimeout(3500)
-    const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
-    const frame = src && pg.frames().find((f) => f.url().includes(src))
-    if (!frame) throw new Error('Finance Helper frame not loaded')
+    let frame = null
+    for (let i = 0; i < 12 && !frame; i++) {
+      await pg.waitForTimeout(1500)
+      const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
+      frame = src && pg.frames().find((f) => f.url().includes(src))
+    }
+    if (!frame) throw new Error('Finance Helper frame not loaded DBG ' + JSON.stringify(await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].map((e) => [e.getAttribute('src'), !!e.offsetParent])))+ ' ' + pg.frames().map((f) => f.url()).join(' '))
     await frame.waitForSelector('.dn-card .dn-row', { timeout: 15000 })
     const info = await frame.evaluate(() => {
       const card = document.querySelector('.dn-card')
-      const rows = [...card.querySelectorAll('.dn-row:not(.child)')]
+      const rows = [...card.querySelectorAll('.dn-row')]
       const pcts = rows.map((r) => Number(r.querySelector('.dn-pct').textContent.replace('%', '')))
       const amts = rows.filter((r) => r.dataset.cat !== '__other').map((r) => Number(r.querySelector('.dn-amt').textContent.replace(/[^\d]/g, '')))
-      return { segs: card.querySelectorAll('.dn-narrow .dn-seg').length, pcts, amts, centre: card.querySelector('.dn-narrow .dn-c2')?.textContent || '', table: card.querySelectorAll('table.sr-only tbody tr').length, rows: rows.length }
+      return { segs: card.querySelectorAll('.dn-seg').length, pcts, amts, centre: card.querySelector('.dn-mid strong')?.textContent || '', table: card.querySelectorAll('table.sr-only tbody tr').length, rows: rows.length }
     })
     if (info.segs < 2) throw new Error(`donut has ${info.segs} segments`)
     if (info.pcts.reduce((a, b) => a + b, 0) !== 100) throw new Error(`shares add up to ${info.pcts.reduce((a, b) => a + b, 0)}, not 100`)
@@ -795,11 +800,86 @@ try {
       }
       await pg.setViewportSize({ width: 1440, height: 900 })
     }
-    await frame.click('.dn-card .dn-row:not(.child)')
-    await frame.waitForSelector('.dn-sel .tx', { timeout: 5000 })
-    await frame.click('.dn-sel [data-act="cat-log"]')
+    // Click a row: its records open right under it (no sheet); click again closes; "See all" opens the Log.
+    await frame.click('.dn-card .dn-row')
+    await frame.waitForSelector('.dn-card .dn-row.open + .dn-recs .dn-rec', { timeout: 5000 })
+    await frame.click('.dn-card .dn-row.open')
+    await frame.waitForFunction(() => !document.querySelector('.dn-card .dn-recs'), null, { timeout: 5000 })
+    await frame.focus('.dn-card .dn-row')
+    await pg.keyboard.press('Enter')
+    await frame.waitForSelector('.dn-recs [data-act="cat-log"]', { timeout: 5000 })
+    await frame.click('.dn-recs [data-act="cat-log"]')
     await frame.waitForFunction(() => location.hash === '#log' && /cat:/.test(document.getElementById('search')?.value || ''), null, { timeout: 8000 })
     await frame.evaluate(() => { const s = document.getElementById('search'); if (s) { s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })) } })
+  })
+  // Finance "Where your money goes" redesign: Everyday only leaves out work costs and one-offs and says how much,
+  // a budget shows as a bar (and "over" turns it warm), rows open in place. Fake data only.
+  await step('Finance categories: Everyday only, budget bar and open in place', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('money')
+    await pg.waitForSelector('.mh-open, iframe', { timeout: 10000 }).catch(() => {})
+    if (await pg.$('.mh-open')) await pg.click('.mh-open')
+    await pg.waitForTimeout(3500)
+    const src = await pg.evaluate(() => [...document.querySelectorAll('iframe, webview')].find((e) => e.offsetParent)?.getAttribute('src') ?? null)
+    const frame = src && pg.frames().find((f) => f.url().includes(src))
+    if (!frame) throw new Error('Finance Helper frame not loaded')
+    await frame.evaluate(() => { location.hash = '#home' })
+    await frame.waitForSelector('.dn-card .dn-row', { timeout: 15000 })
+    // A made-up budget (50 lei) on the biggest row's category and a one-off record (5 000 lei), on this device.
+    await frame.evaluate(() => {
+      const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+      if (!st) throw new Error('no Finance Helper data')
+      const now = Date.now()
+      const day = new Date().toISOString().slice(0, 10)
+      const cat = st.settings.categories.find((c) => c.type === 'expense' && c.id === 'food') || st.settings.categories.find((c) => c.type === 'expense')
+      cat.budget = 5000
+      cat.updatedAt = now
+      st.settings.updatedAt = now
+      st.tx.push({ id: 'smoke-oneoff', type: 'expense', amount: 500000, base: 500000, currency: st.settings.currency || 'MDL', date: day, category: cat.id, account: st.settings.accounts[0].id, note: 'smoke big buy', createdAt: now, updatedAt: now })
+      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      setTimeout(() => location.reload(), 50)
+    })
+    await pg.waitForTimeout(600)
+    await frame.waitForSelector('.dn-bar.over', { timeout: 15000 })
+    const all = await frame.evaluate(() => ({ centre: document.querySelector('.dn-mid strong').textContent, over: document.querySelectorAll('.dn-bar.over').length, note: !!document.querySelector('.dn-hidden') }))
+    if (all.note) throw new Error('"Not counted" shows under Everything')
+    if (!all.over) throw new Error('the over-budget bar is not warm in Everything')
+    await frame.click('.dn-pills button[data-mode="day"]')
+    await frame.waitForSelector('.dn-hidden', { timeout: 5000 })
+    const day = await frame.evaluate(() => ({ centre: document.querySelector('.dn-mid strong').textContent, note: document.querySelector('.dn-hidden').textContent, over: document.querySelectorAll('.dn-bar.over').length }))
+    if (!/^Not counted: .* of work costs and one-off buys\.$/.test(day.note.replace(/\s+/g, ' ').trim())) throw new Error(`note: ${day.note}`)
+    if (day.centre === all.centre) throw new Error('Everyday only did not change the total')
+    // The choice is remembered on this device only.
+    const kept = await frame.evaluate(() => localStorage.getItem('finance-helper.spend-mode'))
+    if (kept !== 'day') throw new Error(`mode not remembered (${kept})`)
+    await frame.click('.dn-card .dn-row[data-cat="food"]').catch(() => frame.click('.dn-card .dn-row'))
+    await frame.waitForSelector('.dn-row.open + .dn-recs', { timeout: 5000 })
+    // Back to Everything: the one-off shows with its tag.
+    await frame.click('.dn-pills button[data-mode="all"]')
+    await frame.click('.dn-card .dn-row[data-cat="food"]').catch(() => frame.click('.dn-card .dn-row'))
+    await frame.waitForSelector('.dn-recs .one', { timeout: 5000 })
+    if (process.env.FIN_CAT_SHOTS) {
+      await pg.emulateMedia({ colorScheme: 'dark' })
+      for (const [w, h] of [[1920, 1080], [1280, 800]]) {
+        await pg.setViewportSize({ width: w, height: h })
+        await pg.waitForTimeout(1200)
+        await frame.locator('.dn-card').scrollIntoViewIfNeeded()
+        await frame.locator('.dn-card').screenshot({ path: `${process.env.FIN_CAT_SHOTS}/finance-where-${w}.png` })
+      }
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    // Put the data back.
+    await frame.evaluate(() => {
+      const st = JSON.parse(localStorage.getItem('finance-helper.state'))
+      st.tx = st.tx.filter((t) => t.id !== 'smoke-oneoff')
+      const cat = st.settings.categories.find((c) => c.budget === 5000)
+      if (cat) { cat.budget = null; cat.updatedAt = Date.now() }
+      st.settings.updatedAt = Date.now()
+      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      localStorage.removeItem('finance-helper.spend-mode')
+      setTimeout(() => location.reload(), 50)
+    })
+    await frame.waitForSelector('.dn-card .dn-row', { timeout: 15000 })
   })
   // Money fix 2: rows in a currency with no rate are never imported 1:1. The preview warns
   // ("No ZZZ→MDL rate for 12 rows: they would count 1:1") and Import waits for a rate or a skip.

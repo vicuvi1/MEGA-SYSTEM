@@ -1306,6 +1306,20 @@
   ],
   "evidence": "2026-11-12: branch money-phase5; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "apps/finance/js/learn.js (new), model.js (suggestCategory sure merchant, addRule/removeRule via learn.js, keptOnEdit), app.js (edit keeps unknown fields), sync.js (rules list merge), sw.js v42; web/moneySortCore.ts, web/moneySort.ts, money/ToSortCard.tsx, money/RulesCard.tsx, money/sort.css (new); web/financeBot.ts (learnCategory, saveFinance), core/moneyDays.ts (countsAsLogged on logMoment), core/moneyToSort.ts (auto, reopen; keepToSort keeps reopen), core/moneyText.ts typedBani, tursoWebBridge.ts, bridge.ts, pages/Money.tsx."
+ },
+ {
+  "id": "F-MONEY-WHERE",
+  "priority": 2,
+  "area": "money",
+  "title": "Money: Where your money goes redesign + Everyday only",
+  "user_visible_behavior": "Two columns: donut with the total and facts, and a compact ranked list with budget-used bars, change pills (up/down vs same days last month, first this month) and rows that open in place. Everything / Everyday only toggle (leaves out work-cost categories and one-offs, says how much); neutral chart colours.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+   "SMOKE_ONLY=\"Finance categories\" npm run smoke"
+  ],
+  "evidence": "2026-11-13: tsc, vitest (financeEveryday.test.ts), smoke steps Finance categories (2).",
+  "notes": "apps/finance/js/everyday.js (new), screens/spending.js, app.js (Work cost checkbox, everyday limit), css .dn-*, sw.js v45."
  }
  ]
 }
