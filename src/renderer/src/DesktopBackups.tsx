@@ -1,7 +1,7 @@
 // Desktop: a full backup .zip every day on its own (offline, in the backup
 // folder, plus Google Drive when found), a restore test of it once a day, and
 // one of the day's 4 notifications when something about your backups is red
-// (2026-11-12). Settings → Data safety shows it all (safety/DataSafetyPanel.tsx).
+// (2026-11-12), and a weekly check of the newest backup file (2026-11-13). Settings → Data safety shows it all (safety/DataSafetyPanel.tsx).
 import { useEffect } from 'react'
 import type { BackupStatus } from '../../desktop/localBackups'
 import { life } from './bridge'
@@ -10,6 +10,7 @@ import { slotNotifId } from '@core/notifyBudget'
 import { backupTextOf } from './safety/backupFiles'
 import { loadSafety, loadSql, readLocalDrill, safetyChanged, saveLocalDrill } from './safety/safetyState'
 import { restoreDrill } from './web/restoreDrill'
+import { weeklyCheckIfDue } from './safety/weeklyCheck'
 
 const localDay = () => calendarDay(new Date())
 
@@ -75,6 +76,7 @@ export function DesktopAutoBackup() {
         if (s.lastDay !== localDay()) await backupNow().catch(() => null)
         const drill = readLocalDrill()
         if (!drill || drill.at.slice(0, 10) !== new Date().toISOString().slice(0, 10)) await testLocalRestore().catch(() => null)
+        await weeklyCheckIfDue().catch(() => null)
         await warnIfRed().catch(() => {})
       } catch {
         /* locked or still loading: the next run tries again */

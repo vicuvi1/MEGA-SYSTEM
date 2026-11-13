@@ -9186,6 +9186,15 @@ try {
     // Stays on Settings: the next step opens Data safety itself (going to Today and straight back is lost in the page change).
   })
 
+  // Weekly backup check (2026-11-13) is a desktop feature (needs the backup folder): the website shows no "Last backup check" row.
+  await step('Settings → Backups: the weekly backup check row is desktop only', async () => {
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+    await pg.waitForSelector('[data-testid="data-safety"]', { timeout: 15000 })
+    if (await pg.locator('[data-testid="backup-check"]').count()) throw new Error('the website shows the desktop backup check row')
+  })
+
   // Data safety (2026-11-12): one light per copy, the size, "Back up now" (the cloud backup in parts),
   // "Export everything" (one zip of CSV + JSON) and "Restore from file" (that zip back in, after a
   // "before restore" backup that then shows under "Undo to before…"). The website has no local backup: amber, never red.

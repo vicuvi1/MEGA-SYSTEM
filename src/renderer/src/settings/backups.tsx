@@ -1,17 +1,57 @@
 // Settings → Data safety (LT11: split out of pages/Settings.tsx; the state lives in useSettingsState).
 // The backups, restore and export live in safety/DataSafetyPanel.tsx (2026-11-12).
+import { useEffect, useState } from 'react'
 import { features } from '../bridge'
+import { checkLine } from '@core/weeklyBackupCheck'
+import { checkBackupNow, readWeeklyCheck } from '../safety/weeklyCheck'
+import { onSafety } from '../safety/safetyState'
 import { DataSafetyPanel } from '../safety/DataSafetyPanel'
 import { Icon } from '../Icon'
 import { SyncPanel } from '../SyncPanel'
 import { timeAgo } from '../ui'
 import type { SettingsState } from './useSettingsState'
 
+/** Desktop only: "Last backup check: 10 Nov · OK (backup from 9 Nov, 4,210 rows)" and a Check now button. */
+function BackupCheckRow() {
+  const desk = typeof window !== 'undefined' ? window.desktop : undefined
+  const [note, setNote] = useState(readWeeklyCheck)
+  const [busy, setBusy] = useState(false)
+  useEffect(() => onSafety(() => setNote(readWeeklyCheck())), [])
+  if (!desk?.readBackup) return null
+  const bad = note?.state === 'failed'
+  return (
+    <section className="panel" data-testid="backup-check">
+      <p className={`bk-note ${bad ? 'warn' : 'muted'}`} data-testid="backup-check-line" data-state={note?.state ?? 'none'}>
+        {checkLine(note, note?.day)}
+      </p>
+      <div className="bk-row">
+        <button
+          className="btn"
+          data-testid="backup-check-now"
+          disabled={busy}
+          onClick={() => {
+            setBusy(true)
+            void checkBackupNow()
+              .catch(() => null)
+              .finally(() => {
+                setNote(readWeeklyCheck())
+                setBusy(false)
+              })
+          }}
+        >
+          {busy ? 'Checking…' : 'Check now'}
+        </button>
+      </div>
+    </section>
+  )
+}
+
 export function BackupsSection({ s }: { s: SettingsState }) {
   const { syncCfg, setSyncCfg, syncTestMsg, syncingNow, showSyncSecret, setShowSyncSecret, syncInstructionsOpen, setSyncInstructionsOpen, saveSyncConfig, testSyncConnection, pullSyncNow } = s
   return (
         <>
       <DataSafetyPanel />
+      <BackupCheckRow />
       <SyncPanel />
       {features.cloudflareSync && (
       <section className="panel">

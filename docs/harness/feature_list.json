@@ -1441,6 +1441,18 @@
    ],
    "evidence": "2026-11-13: tsc, vitest (moneySyncHeal.test.ts: 12 tests), scoped smoke incl. the new step Settings → Data safety: Sync Money now.",
    "notes": "web/appSync.ts (gapOf, UNCONFIRMED marker, status registry, appSyncAlert), financeSync.ts financeGap, Mirror.serverSetting / useServerCopy, financeBot save keeps editedAt + restore, SyncPanel, DesktopBar. Encrypted Money (finance-helper.enc) still can't sync: shown as skipped (Money locked)."
+  },
+  {
+   "id": "weekly-backup-check",
+   "title": "Weekly backup check (desktop)",
+   "user_visible_behavior": "Once a week the app test-restores the newest backup on this PC into a throwaway database and Settings → Backups shows 'Last backup check: 10 Nov · OK (backup from 9 Nov, 4,210 rows)', 'Failed: <reason>' (plus one notification: make a new backup) or 'Can't check: backup is encrypted', with a Check now button",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"weekly backup check\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (weeklyCheck.test.ts: 8 tests: ok, truncated, broken, encrypted, none, real data untouched, weekly gating). Smoke step added (desktop-only row absent on the website); the smoke build could not run in the agent sandbox (onnxruntime-web file missing).",
+   "notes": "core/weeklyBackupCheck.ts, renderer/safety/weeklyCheck.ts, settings/backups.tsx, DesktopBackups.tsx. Uses the 'backup' notification slot."
   }
  ]
 }
