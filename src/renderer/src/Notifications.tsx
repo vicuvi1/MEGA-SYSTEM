@@ -9,6 +9,7 @@ import type { LedgerEntry, Rule, Summary } from '@shared/api'
 import { life } from './bridge'
 import { Icon, type IconName } from './Icon'
 import { MODULE_LABEL, moduleLabel, type PageId } from './modules'
+import { useShowCoins } from './useSimple'
 import { Coins, describeEntry, timeAgo } from './ui'
 
 export interface Alert {
@@ -44,6 +45,7 @@ const hm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digi
  * points in and out under Activity.
  */
 export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[]; summary: Summary | null; rules: Rule[]; onGo: (p: PageId) => void }) {
+  const showCoins = useShowCoins()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<'inbox' | 'activity'>('inbox')
   const [entries, setEntries] = useState<LedgerEntry[]>([])
@@ -156,9 +158,11 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
               <button role="tab" aria-selected={tab === 'inbox'} className={tab === 'inbox' ? 'on' : ''} onClick={() => setTab('inbox')}>
                 Inbox{unread ? <i>{unread}</i> : null}
               </button>
-              <button role="tab" aria-selected={tab === 'activity'} className={tab === 'activity' ? 'on' : ''} onClick={() => (setTab('activity'), markActivitySeen())}>
-                Activity{newActivity ? <i>{newActivity}</i> : null}
-              </button>
+              {showCoins && (
+                <button role="tab" aria-selected={tab === 'activity'} className={tab === 'activity' ? 'on' : ''} onClick={() => (setTab('activity'), markActivitySeen())}>
+                  Activity{newActivity ? <i>{newActivity}</i> : null}
+                </button>
+              )}
             </div>
             <div className="notif-scroll">
               {tab === 'inbox' && (
@@ -226,7 +230,7 @@ export function Notifications({ alerts, summary, rules, onGo }: { alerts: Alert[
                   )}
                 </>
               )}
-              {tab === 'activity' && (
+              {tab === 'activity' && showCoins && (
                 <>
                   {activity.length === 0 && <div className="notif-empty">No points in or out yet.</div>}
                   {activity.slice(0, 30).map((e) => {

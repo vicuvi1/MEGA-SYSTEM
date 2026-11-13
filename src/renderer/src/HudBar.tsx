@@ -3,11 +3,13 @@ import { life } from './bridge'
 import { parseTelegramText } from '@core/botCommands'
 import { formatMdl } from '@core/economy'
 import { soundSuccess, soundTick, soundFanfare } from './soundKit'
+import { useShowCoins } from './useSimple'
 import './hud.css'
 
 export function HudBar() {
   const [query, setQuery] = useState('')
   const [feedback, setFeedback] = useState<string | null>(null)
+  const showCoins = useShowCoins()
   const [balance, setBalance] = useState<number>(0)
   const [budgetRemaining, setBudgetRemaining] = useState<number>(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -196,10 +198,12 @@ export function HudBar() {
       </div>
 
       <div className="hud-stats">
-        <div className="hud-stat" title="Your points">
-          <span className="hud-stat-label">Points</span>
-          <span className="hud-stat-val gold">{balance}</span>
-        </div>
+        {showCoins && (
+          <div className="hud-stat" title="Your points">
+            <span className="hud-stat-label">Points</span>
+            <span className="hud-stat-val gold">{balance}</span>
+          </div>
+        )}
         <div className="hud-stat" title="Daily Budget Remaining">
           <span className="hud-stat-label">Budget</span>
           <span className="hud-stat-val emerald">{budgetRemaining.toFixed(0)} L</span>

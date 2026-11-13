@@ -27,6 +27,7 @@ import { play, soundCoin, soundSuccess } from './soundKit'
 import { useAction, useToast } from './ui'
 import { useLive } from './live'
 import { addDays, dayKey } from '@core/dates'
+import { useShowCoins } from './useSimple'
 import { PLAN_ITEM_COINS, isPlanFor, type PlanItem } from '@core/focus'
 import { BIG3_POINTS } from '../../main/points'
 import { MissTwiceNote, useMyHabits } from './MyHabits'
@@ -160,6 +161,7 @@ export function DayFlow(props: DayFlowProps) {
     }
   }
   // What one Todoist task pays (the real rule, shown on every row).
+  const showCoins = useShowCoins()
   const taskPts = props.rules?.find((x) => x.id === 'tasks.todoist_done')?.coins ?? 5
   // Skipped "Do this now" steps, remembered for the day (F3: the top row can skip too).
   const [skipped, setSkippedRaw] = useState<string[]>(() => {
@@ -320,7 +322,7 @@ export function DayFlow(props: DayFlowProps) {
     setAllTasks((cur) => (cur ? cur.filter((x) => x.id !== t.id) : cur))
     setLeaving((l) => l.filter((x) => x !== t.id))
     const r = await act(() => life.todoist!.complete(t))
-    if (r) toast(`Done: ${t.content}${r.paid ? ` · +${taskPts} points` : ''}`, 'good')
+    if (r) toast(`Done: ${t.content}${r.paid && showCoins ? ` · +${taskPts} points` : ''}`, 'good')
     if (r?.paid) soundCoin()
     refresh()
   }
@@ -637,7 +639,7 @@ export function DayFlow(props: DayFlowProps) {
       extra={
         <>
           {extra}
-          <span className="tt-pts" title={`Done = +${isStar ? 10 : taskPts} points`}>+{isStar ? 10 : taskPts} ⭐</span>
+          {showCoins && <span className="tt-pts" title={`Done = +${isStar ? 10 : taskPts} points`}>+{isStar ? 10 : taskPts} ⭐</span>}
         </>
       }
       key={t.id}
@@ -744,7 +746,7 @@ export function DayFlow(props: DayFlowProps) {
         key: `p${i}`,
         text: p.text,
         done: p.done,
-        pts: i < 3 ? `+${PLAN_ITEM_COINS}` : '',
+        pts: i < 3 && showCoins ? `+${PLAN_ITEM_COINS}` : '',
         meta: t ? taskMeta(t) : undefined,
         swipe: t ? `star:${t.id}` : `must:${i}`,
         movable: true,
@@ -759,7 +761,7 @@ export function DayFlow(props: DayFlowProps) {
         key: `s${t.id}`,
         text: t.content,
         done: false,
-        pts: `+${taskPts}`,
+        pts: showCoins ? `+${taskPts}` : '',
         meta: taskMeta(t),
         swipe: `star:${t.id}`,
         onTick: () => void doneStarred(t),
@@ -771,7 +773,7 @@ export function DayFlow(props: DayFlowProps) {
   const mustDos = (
     <MustDos
       items={topItems}
-      coins={PLAN_ITEM_COINS}
+      coins={showCoins ? PLAN_ITEM_COINS : 0}
       canAdd={topItems.length < 3}
       adding={adding}
       setAdding={setAdding}
@@ -785,14 +787,14 @@ export function DayFlow(props: DayFlowProps) {
   const otherItems: OtherItem[] = [
     ...bigNamed
       .filter((b) => !b.done)
-      .map((b): OtherItem => ({ key: `b${b.i}`, text: b.text, tag: 'This week', pts: `+${BIG3_POINTS}`, swipe: `big:${b.i}`, onDone: () => void toggleBig(b.i), play: playBtn(b.text, subjectOf(b.text), null) })),
+      .map((b): OtherItem => ({ key: `b${b.i}`, text: b.text, tag: 'This week', pts: showCoins ? `+${BIG3_POINTS}` : '', swipe: `big:${b.i}`, onDone: () => void toggleBig(b.i), play: playBtn(b.text, subjectOf(b.text), null) })),
     ...loose.map(
       (t): OtherItem => ({
         key: t.id,
         text: t.content,
         meta: taskMeta(t),
         late: !!t.due && t.due < today,
-        pts: `+${taskPts}`,
+        pts: showCoins ? `+${taskPts}` : '',
         swipe: `todo:${t.id}`,
         leaving: leaving.includes(t.id),
         onDone: () => void doneTodo(t),
@@ -1053,7 +1055,7 @@ export function DayFlow(props: DayFlowProps) {
                     {b.done ? <Tick /> : ''}
                   </button>
                   <span className="dl-text">{b.text}</span>
-                  <span className="tt-pts">+{BIG3_POINTS} ⭐</span>
+                  {showCoins && <span className="tt-pts">+{BIG3_POINTS} ⭐</span>}
                   {!b.done && playBtn(b.text, subjectOf(b.text), null)}
                 </li>
               ))}
@@ -1096,7 +1098,7 @@ export function DayFlow(props: DayFlowProps) {
                   dropTask(items[0]?.id ?? null, g.key)
                 }}
               >
-                <i /> {g.name} <small>{g.items.length} · +{taskPts} each</small>
+                <i /> {g.name} <small>{g.items.length}{showCoins ? ` · +${taskPts} each` : ''}</small>
               </h3>
               <ul className="dl">{items.map((t) => taskRow(t, false, g.key))}</ul>
               <AreaAdd name={plainName(g.name) || g.name} onAdd={(v) => addToArea(g.key, v)} />
@@ -1191,7 +1193,7 @@ export function DayFlow(props: DayFlowProps) {
                   dropTask(items[0]?.id ?? null, g.key)
                 }}
               >
-                <i /> {g.name} <small>{g.items.length} · +{taskPts} each</small>
+                <i /> {g.name} <small>{g.items.length}{showCoins ? ` · +${taskPts} each` : ''}</small>
               </h3>
               <ul className="dl">{items.map((t) => taskRow(t, false, g.key))}</ul>
               <AreaAdd name={plainName(g.name) || g.name} onAdd={(v) => addToArea(g.key, v)} />

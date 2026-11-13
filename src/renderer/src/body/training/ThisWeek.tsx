@@ -6,6 +6,7 @@ import { askConfirm } from '../../confirmSheet'
 import { life } from '../../bridge'
 import { Icon } from '../../Icon'
 import { usePoints } from '../../usePoints'
+import { useShowCoins } from '../../useSimple'
 import { useAction } from '../../ui'
 import { StrengthCard } from '../../StrengthCard'
 import { SkillPaths } from '../../SkillPaths'
@@ -14,6 +15,7 @@ import { MuscleWeekCard } from '../MuscleWeekCard'
 export function ThisWeek({ state, onState, onWallet, hold }: { state: BodyState; onState: (s: BodyState) => void; onWallet: () => void; hold: boolean }) {
   const act = useAction()
   const pts = usePoints()
+  const coins = useShowCoins()
   const handleDelete = async (id: number) => {
     if (!(await askConfirm('Delete this workout record? Any points earned from it will be taken back.'))) return
     const next = await act(() => life.body.deleteWorkout(id), 'Workout removed')
@@ -37,7 +39,7 @@ export function ThisWeek({ state, onState, onWallet, hold }: { state: BodyState;
             <section className="panel">
               <header className="panel-head">
                 <h2>Recent workouts</h2>
-                <span className="hint">Logs feed into your streaks and earn {pts('body.workout_done', 10)} points.</span>
+                <span className="hint">{coins ? `Logs feed into your streaks and earn ${pts('body.workout_done', 10)} points.` : 'Logs feed into your streaks.'}</span>
               </header>
               {state.recentWorkouts.length === 0 ? (
                 <div className="empty">

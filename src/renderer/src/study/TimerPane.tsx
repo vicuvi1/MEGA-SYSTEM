@@ -25,6 +25,7 @@ import {
 } from '@core/studyTime'
 import { life } from '../bridge'
 import { useAction } from '../ui'
+import { coinsShownNow } from '../useSimple'
 import { play, soundSuccess, soundTick } from '../soundKit'
 import { hhmm, useTick, type Running } from './studyData'
 
@@ -155,7 +156,7 @@ function TimerCard({ store, run, selected, onSelect }: { store: StudyStore; run:
     sub = `${plainPause ? 'Paused · ' : ''}Open stopwatch (up to 4 h)`
   }
   const stop = async (withNote: boolean) => {
-    const r = await act(() => life.study!.finish(withNote ? note : null), (x) => `Logged ${x.session.minutes} min${x.coins ? ` · +${x.coins} points` : ''}`)
+    const r = await act(() => life.study!.finish(withNote ? note : null), (x) => `Logged ${x.session.minutes} min${x.coins && coinsShownNow() ? ` · +${x.coins} points` : ''}`)
     if (r) {
       soundSuccess()
       setNote('')

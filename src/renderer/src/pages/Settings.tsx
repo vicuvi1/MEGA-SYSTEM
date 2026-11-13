@@ -53,7 +53,7 @@ export function Settings(props: SettingsProps) {
       label: 'Simple mode',
       icon: 'spark',
       hint: '3 numbers, hidden extras, at most 4 pushes a day',
-      keywords: 'simple mode feature freeze hide loot chest buffs inventory goal check-ins focus goals tasks push budget notifications afternoon nudge',
+      keywords: 'show coins rewards points wallet hide simple mode feature freeze hide loot chest buffs inventory goal check-ins focus goals tasks push budget notifications afternoon nudge',
       body: <SimpleModeSettings />
     },
     {

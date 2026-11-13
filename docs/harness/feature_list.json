@@ -1334,6 +1334,20 @@
   ],
   "evidence": "2026-11-13: tsc, full vitest (moneyBatch1.test.ts, 20 tests), the four smoke steps (CHROMIUM_PATH chromium-1243).",
   "notes": "apps/finance/js: catshare.js (isRefund, signed), model.js, refunds.js, dupes.js, ratedate.js (new), screens/moneytidy.js (new), screens/goals.js, app.js, sw.js v47; core/moneyHub.ts + web/moneyHub.ts; bot bundle rebuilt."
+ },
+ {
+  "id": "F-COINS-HIDDEN",
+  "priority": 2,
+  "area": "rewards",
+  "title": "Show coins and rewards: off by default",
+  "user_visible_behavior": "Coins are hidden in the desktop app until Settings → Simple mode → Show coins and rewards is on: no wallet chip, coin numbers, +N payouts, coin flight, Activity tab, Fun and Points cards, or coin text in toasts and the island. Coins are still earned and stored the same way.",
+  "status": "passing",
+  "verification": [
+   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+   "npm run smoke"
+  ],
+  "evidence": "2026-11-13: tsc, vitest (simpleMode.test.ts, points.test.ts), smoke step Coins are hidden by default.",
+  "notes": "simple_mode.coins (core/simpleMode.ts); useShowCoins / coinsShownNow in useSimple.ts; Coins in ui.tsx renders nothing while hidden."
  }
  ]
 }

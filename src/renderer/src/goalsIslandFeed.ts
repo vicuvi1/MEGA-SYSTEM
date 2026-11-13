@@ -1,6 +1,7 @@
 // The app window's side of goals on the island: the top goals for the
 // snapshot (fetched at most once a minute, at once after a change), the
 // check-in peek when one is due, and the island's check-in taps.
+import { coinsShownNow } from './useSimple'
 import { life } from './bridge'
 import { calendarDay } from '@core/dates'
 import { goalPeek, islandGoals, type IslandGoal } from '@core/goalsIsland'
@@ -38,5 +39,5 @@ export async function goalAct(a: Extract<IslandAction, { kind: 'goal' }>): Promi
   if (value == null || cur == null) throw new Error('Open Goals to type the number')
   const r = await ex.goalCheckIn(a.goalId, value)
   cache = { ...cache, at: 0 }
-  return `✅ ${r.card.goal.title}: ${r.card.pct}%${r.done ? ' · goal reached 🏆' : r.milestones.length ? ' · milestone 🎉' : ''}${r.paid ? ` · +${r.paid}` : ''}`
+  return `✅ ${r.card.goal.title}: ${r.card.pct}%${r.done ? ' · goal reached 🏆' : r.milestones.length ? ' · milestone 🎉' : ''}${r.paid && coinsShownNow() ? ` · +${r.paid}` : ''}`
 }

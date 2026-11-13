@@ -65,7 +65,7 @@ export function OtherTasks({ items, onAdd, canAdd, empty, starFull }: { items: O
               )}
             </span>
             {t.play}
-            <span className="ot-pts">{t.pts}</span>
+            {t.pts ? <span className="ot-pts">{t.pts}</span> : null}
             {t.onStar && (
               <button className="ot-star" aria-label={`Make ${t.text} one of the Top 3`} title={starFull ? 'Your Top 3 is full: it joins as a 4th (no extra points)' : 'Make it one of your Top 3'} onClick={t.onStar}>
                 ☆

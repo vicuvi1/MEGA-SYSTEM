@@ -3,6 +3,7 @@
 // their buttons ask. Move breaks go into Sport Track, the workout log and
 // the ledger (body.move_break, capped), and an undo or "I only did 12" takes
 // back exactly that. Tallies (eyes, posture, calm) are quiet records.
+import { coinsShownNow } from './useSimple'
 import { calendarDay, dayKey } from '@core/dates'
 import type { IslandAction } from '@core/islandModel'
 import {
@@ -317,7 +318,7 @@ async function logMove(op: Extract<NudgeOp, { op: 'move' }>, tapId: string | und
   window.dispatchEvent(new CustomEvent('life-body-changed'))
   window.dispatchEvent(new CustomEvent('life-wallet-changed'))
   const line = await checkChallenge(day)
-  return `💪 ${n} ${op.name}${coins ? ` · +${coins}` : ''}${line ? ` · ${line}` : ''}`
+  return `💪 ${n} ${op.name}${coins && coinsShownNow() ? ` · +${coins}` : ''}${line ? ` · ${line}` : ''}`
 }
 
 async function undoLog(logId: string): Promise<string> {
@@ -336,7 +337,7 @@ async function undoLog(logId: string): Promise<string> {
   await checkChallenge(log.day)
   window.dispatchEvent(new CustomEvent('life-body-changed'))
   window.dispatchEvent(new CustomEvent('life-wallet-changed'))
-  return `↶ Took back ${log.n} ${log.name}${log.coins ? ` and +${log.coins}` : ''}`
+  return `↶ Took back ${log.n} ${log.name}${log.coins && coinsShownNow() ? ` and +${log.coins}` : ''}`
 }
 
 async function fixLog(logId: string, n: number): Promise<string> {
@@ -423,7 +424,7 @@ export async function nudgeAct(a: IslandAction, o: { moved: () => void }): Promi
         // A tiny thank-you, at most 3 a day (the rule's cap).
         const paid = await payOnce(EYES_RULE, `eyes:${op.alertId}`, '20-20-20')
         if (paid) window.dispatchEvent(new CustomEvent('life-wallet-changed'))
-        return `👁️ Eye break done${paid ? ` · +${await ruleCoins(EYES_RULE)}` : ''}`
+        return `👁️ Eye break done${paid && coinsShownNow() ? ` · +${await ruleCoins(EYES_RULE)}` : ''}`
       }
       if (op.kind === 'posture') {
         save(tally(s, day, op.ok ? 'posture' : 'postureFix', now))

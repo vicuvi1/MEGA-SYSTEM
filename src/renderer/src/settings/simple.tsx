@@ -33,6 +33,9 @@ export function SimpleModeSettings() {
       <Row title="Simple mode" hint={m.on ? 'On: the unused parts are hidden.' : 'Off: everything shows again, with all its data.'}>
         <Switch on={m.on} label="Simple mode" onChange={(v) => void save({ on: v })} />
       </Row>
+      <Row title="Show coins and rewards" hint={m.coins ? 'On: coins, rewards and "+N" payouts show everywhere.' : 'Off: coins and rewards are hidden. You still earn them quietly in the background.'}>
+        <Switch on={m.coins} label="Show coins and rewards" onChange={(v) => void save({ coins: v })} />
+      </Row>
       <Row title={`At most ${DAILY_PUSH_CAP} pushes a day`} hint={`${SLOT_TIME.morning} your 3 must-dos · ${SLOT_TIME.plan} pick tomorrow's 3 · ${SLOT_TIME.winddown} wind down · Sunday ${SLOT_TIME.weekly} your week. Everything else waits quietly in the bell.`}>
         <Switch on={m.budget} label="Daily push budget" onChange={(v) => void save({ budget: v })} />
       </Row>

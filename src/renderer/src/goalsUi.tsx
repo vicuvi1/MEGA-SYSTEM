@@ -5,6 +5,7 @@
 // the steps, the history, the "future you" picture and the reward. The New /
 // Edit sheet is goalSheet.tsx; the celebrations are goalsFx.tsx. Pure maths
 // lives in core/goals.ts and core/goalKinds.ts.
+import { coinsShownNow } from './useSimple'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { m } from 'framer-motion'
 import { createPortal } from 'react-dom'
@@ -249,7 +250,7 @@ function useToday(card: GoalCard, onChanged: () => void, el: React.RefObject<HTM
     }
     return r
   }
-  const paid = (x: any) => (x?.paid ? ` · +${x.paid} points` : '')
+  const paid = (x: any) => (x?.paid && coinsShownNow() ? ` · +${x.paid} points` : '')
   return {
     busy,
     logDay: () => run(() => life.extras!.goalLog(g.id, 1), (x) => `✓ ${g.title}: ${x.card.value} of ${g.target} this ${perWord(card.period?.per ?? 'week')}${paid(x)}`),

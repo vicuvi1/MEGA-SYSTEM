@@ -27,9 +27,11 @@ export interface SimpleMode {
   budget: boolean
   /** The optional afternoon nudge. */
   afternoon: boolean
+  /** Show coins and rewards (the wallet display). Off by default; coins are still earned and stored. */
+  coins: boolean
 }
 
-export const DEFAULT_SIMPLE: SimpleMode = { on: true, budget: true, afternoon: false }
+export const DEFAULT_SIMPLE: SimpleMode = { on: true, budget: true, afternoon: false, coins: false }
 
 /** Missing or unreadable = the defaults (on). An old `shown` list (the Archive) is ignored. */
 export function readSimple(raw: unknown): SimpleMode {
@@ -42,7 +44,7 @@ export function readSimple(raw: unknown): SimpleMode {
     }
   }
   if (!r || typeof r !== 'object') return { ...DEFAULT_SIMPLE }
-  return { on: r.on !== false, budget: r.budget !== false, afternoon: r.afternoon === true }
+  return { on: r.on !== false, budget: r.budget !== false, afternoon: r.afternoon === true, coins: r.coins === true }
 }
 
 /** Is this game part hidden right now? */

@@ -10,6 +10,7 @@ import type { CoachStatus } from './web/coachStatus'
 import type { ShopState } from '@shared/api'
 import { life } from './bridge'
 import { useAction } from './ui'
+import { useShowCoins } from './useSimple'
 import { useLive } from './live'
 import { useTodayEvents } from './todayEvents'
 import { blockSubject, localDay } from '@core/dayTime'
@@ -28,6 +29,7 @@ const greet = () => {
 
 export function TodayHero({ name, onGo, slim = false }: { name?: string; onGo: (page: 'coach' | 'shop') => void; /** Today → Now: one slim line (what's on, what's next, the plan to approve, a ⋯ menu). */ slim?: boolean }) {
   const act = useAction()
+  const showCoins = useShowCoins()
   const [st, setSt] = useState<CoachStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const load = useCallback(() => {
@@ -246,7 +248,7 @@ export function TodayHero({ name, onGo, slim = false }: { name?: string; onGo: (
             </button>
           )}
         </div>
-        {goal && (
+        {goal && showCoins && (
           <button className={`thb-reward mini ${balance >= goal.price ? 'ready' : ''}`} onClick={() => onGo('shop')} title={balance >= goal.price ? `Ready: ${goal.title}` : `${goal.price - balance} points to ${goal.title}`}>
             <span className="thb-goal">
               <i style={{ ['--p' as string]: `${Math.min(100, (balance / goal.price) * 100)}%` }} />
@@ -284,7 +286,7 @@ export function TodayHero({ name, onGo, slim = false }: { name?: string; onGo: (
           </button>
         )}
       </div>
-      <button className={`thb-reward ${goal && balance >= goal.price ? 'ready' : ''}`} onClick={() => onGo('shop')} title="Your rewards: add your own (1h manga, a film…) and redeem them">
+      {showCoins && <button className={`thb-reward ${goal && balance >= goal.price ? 'ready' : ''}`} onClick={() => onGo('shop')} title="Your rewards: add your own (1h manga, a film…) and redeem them">
         {/* Your balance shows once, in the top bar: here only the reward you're working toward. */}
         {goal ? (
           <span className="thb-goal">
@@ -294,7 +296,7 @@ export function TodayHero({ name, onGo, slim = false }: { name?: string; onGo: (
         ) : (
           <small className="thb-goal-empty">+ Add a reward to work toward</small>
         )}
-      </button>
+      </button>}
       {/* Water shows once on Today: in the "Reps & water" card, where you log it. */}
       <div className="thb-nums">
         <span className={live.score >= 70 ? 'good' : ''} title={`Today's score: sleep, focus blocks and must-dos. Raise it: ${live.gains.map((g) => `${g.label} +${g.points}`).join(', ') || 'a perfect day'}`}>

@@ -78,9 +78,11 @@ export function MustDos({
             {done}/{total}
           </span>
         )}
-        <span className="t3-pts" title={`Each of your first 3 pays +${coins} when it's done`}>
-          +{coins} each
-        </span>
+        {coins > 0 && (
+          <span className="t3-pts" title={`Each of your first 3 pays +${coins} when it's done`}>
+            +{coins} each
+          </span>
+        )}
         {week && week.total > 0 && (
           <span className={`t3-week ${week.done === week.total ? 'all' : ''}`} title={`This week's big 3: ${week.names.join(' · ')}`}>
             {week.done === week.total ? "✓ Week's big 3 done" : `Week's big 3 · ${week.done}/${week.total}`}
@@ -125,7 +127,7 @@ export function MustDos({
               </span>
             )}
             {!m.done && m.play}
-            <span className="t3-pts-row">{m.pts}</span>
+            {m.pts ? <span className="t3-pts-row">{m.pts}</span> : null}
             {m.onUnstar && !m.done && (
               <button className="t3-star" aria-label={`Take ${m.text} out of the Top 3`} title="Take it out of the Top 3" onClick={m.onUnstar}>
                 ★

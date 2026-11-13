@@ -7,6 +7,14 @@ import { useLive } from './live'
 
 let cached: SimpleMode = DEFAULT_SIMPLE
 
+/** Coins shown right now, for code outside React (island text, toasts). Off until the setting is read. */
+export const coinsShownNow = (): boolean => cached.coins
+
+/** The one switch for the coin display (Settings, Show coins and rewards). Earning is never affected. */
+export function useShowCoins(): boolean {
+  return useSimple().coins
+}
+
 export function useSimple(): SimpleMode {
   const [m, setM] = useState<SimpleMode>(cached)
   const load = () =>

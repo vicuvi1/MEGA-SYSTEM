@@ -13,6 +13,7 @@ import { Icon } from '../Icon'
 import { soundCoin, soundWarning } from '../soundKit'
 import { useAction } from '../ui'
 import { usePoints } from '../usePoints'
+import { useShowCoins } from '../useSimple'
 import { flyTo, QuickAddBox } from '../MoneyQuick'
 import { budgetEffect, goalPlan, mergeGoals, overLine, worstLevel, daysInMonth, type BudgetLevel, type GoalIn, type GoalPlan } from '@core/moneyHub'
 import { moneyText, totalNumber, totalText } from '@core/moneyText'
@@ -87,6 +88,7 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
   const [tab, setTab] = usePageTab('money', ['today', 'month', 'goals'], 'today')
   const days = useMoneyDays(onWallet)
   const ring = useRef<HTMLDivElement>(null)
+  const showCoins = useShowCoins()
   const [pop, setPop] = useState(0)
   const openApp = onOpenApp ?? (() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'money' })))
   const added = (r: { line: string; amount: number; type: string; currency?: string }, input: HTMLElement | null) => {
@@ -148,8 +150,8 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
             <div className="mh-grid">
               <Goals view={view} />
               <div className="mh-stack">
-                <FunCard />
-                <PointsCard state={state} onState={onState} days={days} onWallet={onWallet} />
+                {showCoins && <FunCard />}
+                {showCoins && <PointsCard state={state} onState={onState} days={days} onWallet={onWallet} />}
               </div>
             </div>
           </TabPanel>
@@ -223,6 +225,7 @@ function Ring({ frac, level, size = 168, stroke = 14, children, className = '' }
 }
 
 function Hero({ view, ringRef, pop, streak }: { view: MoneyHubView; ringRef: React.RefObject<HTMLDivElement | null>; pop: number; streak: number }) {
+  const showCoins = useShowCoins()
   const h = view.hero
   const cur = view.currency
   const left = useCountUp(Math.max(0, h.leftToday), 380)
@@ -292,7 +295,7 @@ function Hero({ view, ringRef, pop, streak }: { view: MoneyHubView; ringRef: Rea
           <span className="mh-ring-num num">{h.perDay > 0 ? `${Math.round(frac * 100)}%` : '–'}</span>
           <small>{h.leftToday < 0 ? 'over today' : 'of today left'}</small>
         </Ring>
-        {pop > 0 && (
+        {pop > 0 && showCoins && (
           <span key={pop} className="mh-coin" aria-hidden="true">
             🪙
           </span>

@@ -52,3 +52,16 @@ describe('points without the game', () => {
     expect(applyPointsV3(db)).toBe(false)
   })
 })
+
+describe('Show coins and rewards is only a display switch', () => {
+  it('coins are still earned and stored with it off (the default)', () => {
+    const db = openDatabase()
+    db.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('simple_mode', ?)").run(JSON.stringify({ on: true, coins: false }))
+    const wallet = new Wallet(db)
+    const now = new Date('2026-11-04T10:00:00')
+    const before = wallet.summary(now).balance
+    expect(payOnce(wallet, 'coins-off:1', 7, 'done while hidden', now)).toBe(true)
+    expect(wallet.summary(now).balance - before).toBe(7)
+    expect((db.prepare("SELECT COUNT(*) AS n FROM ledger WHERE note = 'done while hidden'").get() as { n: number }).n).toBe(1)
+  })
+})

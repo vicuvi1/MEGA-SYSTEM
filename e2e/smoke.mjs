@@ -121,10 +121,7 @@ await pg.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.f
 const MODULE_IDS = ['today', 'money', 'sleep', 'sport', 'discipline', 'study', 'calendar', 'tasks', 'coach', 'goals', 'season', 'career', 'insights', 'rewards', 'locker', 'music', 'custom', 'focusBoost', 'island', 'growth', 'notebook', 'plugins']
 const DEFAULT_ON = ['today', 'money', 'sleep', 'sport', 'discipline']
 /** Writes `modules_on` straight into the made-up database before the page opens (null = removed: the owner's default). */
-const setModules = async (onIds) => {
-  const stmt = onIds == null
-    ? { sql: "DELETE FROM settings WHERE key = 'modules_on'", args: [] }
-    : { sql: "INSERT INTO settings (key, value) VALUES ('modules_on', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [{ type: 'text', value: JSON.stringify({ on: Object.fromEntries(MODULE_IDS.map((id) => [id, onIds.includes(id)])) }) }] }
+const setSetting = async (stmt) => {
   // Written like the app's own tracked change (web/tableVersions.ts trackStatements): the settings table gets a new
   // version and data_version moves on with the chain, so open pages reload just that table and their own writes go on.
   const v = { type: 'text', value: `smoke-modules-${Date.now()}` }
@@ -138,12 +135,22 @@ const setModules = async (onIds) => {
   const r = await fetch(`http://127.0.0.1:${port}/v2/pipeline`, { method: 'POST', headers: { Authorization: 'Bearer fake-turso-key', 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [...track, stmt, dv].map((x) => ({ type: 'execute', stmt: x })) }) })
   if (!r.ok) throw new Error(`modules_on: ${r.status}`)
 }
+const setModules = async (onIds) => {
+  const stmt = onIds == null
+    ? { sql: "DELETE FROM settings WHERE key = 'modules_on'", args: [] }
+    : { sql: "INSERT INTO settings (key, value) VALUES ('modules_on', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [{ type: 'text', value: JSON.stringify({ on: Object.fromEntries(MODULE_IDS.map((id) => [id, onIds.includes(id)])) }) }] }
+  await setSetting(stmt)
+}
+// "Show coins and rewards" (core/simpleMode.ts, off by default): the older steps check the coin parts, so the run
+// starts with it on; the coins step checks the default and puts it on again.
+const setCoins = (on) => setSetting({ sql: "INSERT INTO settings (key, value) VALUES ('simple_mode', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [{ type: 'text', value: JSON.stringify({ on: true, budget: true, afternoon: false, coins: on }) }] })
 const allModulesOn = () => setModules(MODULE_IDS)
 
 try {
   await step('opens and signs in with the PIN', async () => {
     // Every module on for the older steps (see setModules above).
     await allModulesOn()
+    await setCoins(true)
     const res = await pg.goto(`http://127.0.0.1:${port}/`)
     if (!/frame-ancestors 'none'/.test(res?.headers()['content-security-policy'] ?? '')) throw new Error('no Content-Security-Policy header')
     await pg.waitForSelector('input', { timeout: 20000 })
@@ -213,6 +220,51 @@ try {
     if (r.days > 14.1 || r.days < 13.9) throw new Error(`session lasts ${r.days.toFixed(1)} days`)
     if (r.del !== 403) throw new Error(`deleting the backups answered ${r.del}`)
     if (r.read !== 200) throw new Error(`reading the backups answered ${r.read}`)
+  })
+  // "Show coins and rewards" is off by default: no coin chip, numbers, "+N" payouts or Rewards entry anywhere a
+  // user goes; the switch in Settings → Simple mode brings them all back. (The run keeps coins on elsewhere.)
+  await step('Coins are hidden by default; Settings → Simple mode → Show coins and rewards brings them back', async () => {
+    const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+    await setCoins(false)
+    await pg.reload()
+    await pg.waitForSelector('.td2, main.content, input', { timeout: 20000 })
+    if (!(await pg.$('main.content'))) {
+      await pg.fill('input', '1234')
+      await pg.keyboard.press('Enter')
+    }
+    await pg.waitForSelector('.td2', { timeout: 20000 })
+    const seen = () => pg.evaluate(() => ({
+      chip: !!document.querySelector('header.topbar .tb-me, .tb-coins'),
+      coins: document.querySelectorAll('.coins, .coin-dot, .t3-pts, .tt-pts, .hb-pts, .ot-pts, .thb-reward').length,
+      text: /\+\d+ coins|\bpoints\b to go|Treat yourself|Points for money|Points milestones/i.test(document.querySelector('main.content')?.textContent ?? '')
+    }))
+    await open('today')
+    await pg.waitForSelector('.td2', { timeout: 10000 })
+    await pg.waitForFunction(() => !document.querySelector('header.topbar .tb-me'), null, { timeout: 8000 })
+    let v = await seen()
+    if (v.chip || v.coins || v.text) throw new Error(`coins show on Today by default: ${JSON.stringify(v)} ${await pg.evaluate(() => [...document.querySelectorAll('.coins, .coin-dot, .t3-pts, .tt-pts, .hb-pts, .ot-pts, .thb-reward')].map((e) => e.className + ':' + e.textContent).join('|'))}`)
+    if (process.env.COINS_SHOT) {
+      await pg.setViewportSize({ width: 1920, height: 1080 })
+      await pg.screenshot({ path: process.env.COINS_SHOT })
+      await pg.setViewportSize({ width: 1440, height: 900 })
+    }
+    for (const page of ['money', 'sleep', 'discipline']) {
+      await open(page)
+      await pg.waitForTimeout(700)
+      v = await seen()
+      if (v.chip || v.coins || v.text) throw new Error(`coins show on ${page} by default: ${JSON.stringify(v)}`)
+    }
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Simple mode' }).first().click()
+    const sw = pg.locator('[data-testid="simple-mode"] [role="switch"][aria-label="Show coins and rewards"]')
+    await sw.waitFor({ timeout: 8000 })
+    if ((await sw.getAttribute('aria-checked')) !== 'false') throw new Error('Show coins and rewards is not off by default')
+    await sw.click()
+    await pg.waitForSelector('[data-testid="simple-mode"] [role="switch"][aria-label="Show coins and rewards"][aria-checked="true"]', { timeout: 8000 })
+    await pg.waitForSelector('header.topbar .tb-me', { timeout: 8000 })
+    await open('today')
+    await pg.waitForSelector('.td2', { timeout: 10000 })
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)

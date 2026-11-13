@@ -72,9 +72,12 @@ export function useAction() {
   )
 }
 
+import { useShowCoins } from './useSimple'
+
 export function Coins({ n, sign = false }: { n: number; sign?: boolean }) {
   // Points count to their new value (AF7).
   const v = Math.round(useCountUp(n))
+  if (!useShowCoins()) return null
   const text = `${sign && v > 0 ? '+' : ''}${v.toLocaleString()}`
   return (
     <span className={`coins num ${n < 0 ? 'neg' : ''}`}>

@@ -25,7 +25,7 @@ import { NotifToasts } from './NotifToasts'
 import { RestDayButton } from './RestDay'
 import { GrowthChip } from './body/progress/GrowthLevel'
 import { SIDEBAR_PAGES, Sidebar } from './Sidebar'
-import { useSimple } from './useSimple'
+import { useSimple, useShowCoins, coinsShownNow } from './useSimple'
 import { useModules } from './useModules'
 import { ModuleGate, ModuleOff } from './ModuleOff'
 import { altPage, isOn, pageModule, pageOn, type ModulesOn } from '@core/modules'
@@ -196,7 +196,7 @@ function WindowErrors() {
   useEffect(() => {
     const on = (e: Event) => {
       const n = Number((e as CustomEvent).detail?.paid) || 0
-      if (n) toast(`✅ ${n} Todoist task${n > 1 ? 's' : ''} done: points added`, 'good')
+      if (n) toast(`✅ ${n} Todoist task${n > 1 ? 's' : ''} done${coinsShownNow() ? ': points added' : ''}`, 'good')
     }
     window.addEventListener('life-todoist-paid', on)
     return () => window.removeEventListener('life-todoist-paid', on)
@@ -581,6 +581,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
 
   // Alt+number follows the menu as you see it: the pages of the modules that are on (core/modules.ts altPage).
   const simpleNav = useSimple()
+  const showCoins = useShowCoins()
   const navRef = useRef<{ mods: ModulesOn; hidden: string[] }>({ mods, hidden: [] })
   navRef.current.mods = mods
   // Shortcuts, also while an app inside is focused (main forwards them).
@@ -697,7 +698,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       { id: 'a:mobile-sync', label: features.cloudflareSync ? 'Sync Mobile Telegram Logs (Heal Streaks)' : 'Sync now (get what other devices changed)', hint: features.cloudflareSync ? 'Cloudflare 24/7' : 'Turso', group: 'Actions', icon: 'cloud', color: '#00d2ff', run: triggerMobileSync },
       { id: 'a:modules', label: 'Modules: turn parts of the app on or off', hint: 'Settings', group: 'Actions', icon: 'sliders', run: () => openSettingsTab('modules') }
     ].filter((a) => modOn(ACTION_PAGE[a.id] ?? 'settings')) as Command[],
-    pageOn: modOn
+    pageOn: modOn,
+    showCoins
   })
 
   // Small counts on the sidebar and the "needs you" list in the bell.
@@ -713,7 +715,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const badges: Partial<Record<PageId, { n?: number; dot?: 'lime' | 'warn' }>> = {
     coach: coachUnread ? { n: coachUnread } : undefined,
     discipline: checkInDue ? { dot: 'lime' } : undefined,
-    shop: shopReady && modOn('shop') ? { dot: 'lime' } : undefined,
+    shop: showCoins && shopReady && modOn('shop') ? { dot: 'lime' } : undefined,
     settings: updateReady || backup?.lastError ? { dot: updateReady ? 'lime' : 'warn' } : undefined
   }
   const alerts: Alert[] = []
@@ -880,7 +882,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           </button>
 
           {/* Your points: tap to spend them (Shop). */}
-          {summary && modOn('shop') && (
+          {summary && showCoins && modOn('shop') && (
             <button className="tb-me" onClick={() => setPage('shop')} title="Your points: spend them on fun time and rewards">
               <span className="tb-coins">
                 <Coins n={summary.balance} />

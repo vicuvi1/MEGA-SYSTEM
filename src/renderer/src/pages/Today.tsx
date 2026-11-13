@@ -9,6 +9,7 @@ import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { MODULE_LABEL, MODULES, type PageId } from '../modules'
 import { todayLayout, useUiPrefs, type TodaySectionId } from '../uiPrefs'
+import { useShowCoins } from '../useSimple'
 import { Coins, describeEntry, timeAgo, useAction } from '../ui'
 import { DayFlow } from '../DayFlow'
 import { SoloDailyQuestBanner } from '../SoloDailyQuestBanner'
@@ -58,6 +59,7 @@ interface Props {
 export function Today({ summary, rules, shop, tasks, schedule, discipline, connections, body, onOpenApp, onChange, onTasks, onSchedule, onGo }: Props) {
   const onOpenShop = () => onGo('shop')
   const act = useAction()
+  const showCoins = useShowCoins()
   const [pops, setPops] = useState<Pop[]>([])
   const titles = useMemo(() => Object.fromEntries(rules.map((r) => [r.id, r.title])), [rules])
   const groups = useMemo(() => {
@@ -125,16 +127,18 @@ export function Today({ summary, rules, shop, tasks, schedule, discipline, conne
     day: () => null,
     progress: () => <ProgressCard onOpen={() => onGo('progress')} />,
     timeline: () => null,
-    fun: () => <FunCard onWallet={() => onChange()} onOpenShop={onOpenShop} />,
+    fun: () => !showCoins ? null : <FunCard onWallet={() => onChange()} onOpenShop={onOpenShop} />,
     quicklog: () => (
         <>
       <div className="cols">
         <section className="panel">
           <header className="panel-head">
             <h2>Quick log</h2>
-            <button className="btn small ghost" onClick={() => onGo('shop')} title="What each thing pays (Rewards → How you earn)">
-              <Icon name="coin" size={13} /> How points work
-            </button>
+            {showCoins && (
+              <button className="btn small ghost" onClick={() => onGo('shop')} title="What each thing pays (Rewards → How you earn)">
+                <Icon name="coin" size={13} /> How points work
+              </button>
+            )}
           </header>
           <p className="hint block">Tap what you just did. Limits and cooldowns apply.</p>
           <div className="groups">

@@ -7,6 +7,7 @@ import type { GroomView } from '@core/grooming'
 import { sunnyDay } from '@core/grooming'
 import { life } from '../bridge'
 import { useAction } from '../ui'
+import { coinsShownNow } from '../useSimple'
 import { play } from '../soundKit'
 import { weatherToday } from '../widgets/widgetsFeed'
 import { SheetFrame } from './HabitBoard'
@@ -51,7 +52,7 @@ export function GroomingSheet({ onClose, onChange }: { onClose: () => void; onCh
       .catch(() => {})
   }, [])
   const tick = async (id: string, on: boolean) => {
-    const r = await act(() => life.care!.groomStep(id, on, sunny), (x) => (x.coins ? `Grooming done today · +${x.coins}` : ''))
+    const r = await act(() => life.care!.groomStep(id, on, sunny), (x) => (x.coins ? `Grooming done today${coinsShownNow() ? ` · +${x.coins}` : ''}` : ''))
     if (!r) return
     setV(r)
     if (r.coins) {

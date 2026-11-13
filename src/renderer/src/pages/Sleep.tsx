@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { SleepSteady } from '../SleepSteady'
 import { SleepCarePanel } from '../SleepCare'
 import { usePoints } from '../usePoints'
+import { useShowCoins } from '../useSimple'
 import type { ConnectionsState, SleepLog, SleepSummary } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
@@ -162,6 +163,7 @@ function WakeEditor({ state, onState, onWallet, openSignal = 0 }: { state: Conne
 
 function WakySleepView({ w }: { w: ConnectionsState['waky'] }) {
   const pts = usePoints()
+  const coins = useShowCoins()
   const rows = w.mornings.slice(0, 14).reverse()
   const maxOff = Math.max(30, ...rows.map((m) => Math.abs(toMin(m.time) - toMin(m.target))))
   return (
@@ -170,7 +172,7 @@ function WakySleepView({ w }: { w: ConnectionsState['waky'] }) {
         <div className="stat hero teal">
           <span className="label">This morning</span>
           <div className="big">{w.today ? w.today.time : '–'}</div>
-          <span className="sub">{w.today ? (w.today.onTime ? `On time (target ${w.today.target}) · +${pts('sleep.up_on_time', 10)} paid` : `Late (target ${w.today.target})`) : 'No check-in in Waky yet today'}</span>
+          <span className="sub">{w.today ? (w.today.onTime ? `On time (target ${w.today.target}) ${coins ? `· +${pts('sleep.up_on_time', 10)} paid` : ''}`.trimEnd() : `Late (target ${w.today.target})`) : 'No check-in in Waky yet today'}</span>
         </div>
         <div className="stat">
           <span className="label">Wake streak</span>
@@ -259,6 +261,7 @@ function OnTimeRule() {
 
 function NativeSleepView({ onWallet }: { onWallet: () => void }) {
   const pts = usePoints()
+  const coins = useShowCoins()
   const [summary, setSummary] = useState<SleepSummary | null>(null)
   const [wakeTime, setWakeTime] = useState('')
   const [quality, setQuality] = useState(5)
@@ -334,7 +337,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
           <span className="label">This morning</span>
           <div className="big">{todayLog?.wakeTime || '–'}</div>
           <span className="sub">
-            {todayLog ? (todayLog.onTime ? `On time (target ${todayLog.wakeTarget}) · +${pts('sleep.up_on_time', 10)} points` : `Late (target ${todayLog.wakeTarget})`) : 'Not logged yet today'}
+            {todayLog ? (todayLog.onTime ? `On time (target ${todayLog.wakeTarget}) ${coins ? `· +${pts('sleep.up_on_time', 10)} points` : ''}`.trimEnd() : `Late (target ${todayLog.wakeTarget})`) : 'Not logged yet today'}
           </span>
         </div>
         <div className="stat">
@@ -363,7 +366,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
             <h2>
               <Icon name="sun" /> Morning check-in
             </h2>
-            <span className="hint">Wake up by {summary.weekdayTarget} to earn +{pts('sleep.up_on_time', 10)} points</span>
+            <span className="hint">{coins ? `Wake up by ${summary.weekdayTarget} to earn +${pts('sleep.up_on_time', 10)} points` : `Wake up by ${summary.weekdayTarget}`}</span>
           </header>
           {todayLog ? (
             <div className="empty small-empty">
@@ -403,7 +406,7 @@ function NativeSleepView({ onWallet }: { onWallet: () => void }) {
             <h2>
               <Icon name="moon" /> Bedtime check-in
             </h2>
-            <span className="hint">In bed on time earns +{pts('sleep.bed_on_time', 5)} points</span>
+            {coins && <span className="hint">In bed on time earns +{pts('sleep.bed_on_time', 5)} points</span>}
           </header>
           {(summary.tonight ?? todayLog)?.bedTime ? (
             <div className="empty small-empty">

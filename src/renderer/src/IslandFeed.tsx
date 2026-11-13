@@ -1,6 +1,7 @@
 // Desktop only: the app window (it keeps running hidden in the tray) feeds the
 // desktop island its snapshot and does what the island's buttons ask. The
 // island window itself never opens your data, so there is one owner of it.
+import { coinsShownNow } from './useSimple'
 import { modulesNow, useModules } from './useModules'
 import { islandWithout } from '@core/modules'
 import { pushStyle, workToday } from '@core/lifeFit'
@@ -583,7 +584,7 @@ function IslandFeedOn() {
           lastEyesAt: nudges.lastEyesAt,
           lastWaterAt: get<number>(LAST_WATER, 0),
           exercises: nudges.exercises,
-          coins: nudges.coins,
+          coins: coinsShownNow() ? nudges.coins : 0,
           doing: doingForBreaks(now),
           eyeBreaks: get<boolean>(EYES, EYE_BREAKS_DEFAULT),
           running: focusRun,
@@ -731,7 +732,7 @@ function IslandFeedOn() {
         (call || classOn ? null : study?.gentle) ??
         (() => {
           // A reward you can now afford: celebrate it (for 3 minutes, once).
-          const r = rewardAlert({ balance: shop?.balance ?? 0, goal: goal ? { title: goal.title, price: goal.price } : null, celebrated: Object.keys(celebrated).filter((k) => now - celebrated[k] > 3 * 60_000), now, dismissed })
+          const r = !coinsShownNow() ? null : rewardAlert({ balance: shop?.balance ?? 0, goal: goal ? { title: goal.title, price: goal.price } : null, celebrated: Object.keys(celebrated).filter((k) => now - celebrated[k] > 3 * 60_000), now, dismissed })
           if (r && !celebrated[r.id]) put(CELEBRATED, { ...celebrated, [r.id]: now })
           return r
         })() ??
@@ -798,7 +799,7 @@ function IslandFeedOn() {
         dayState: dayState({ now, dayPct: live.score, mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, restDay: !!wk && wk.mode === 'off', drifting }),
         top3: top3Of({ mustdos: todos.mustdos, top: weekTop3?.top ?? [], todoist: todos.todoist }),
         next3h: next3h({ now, blocks: blocks.current.list, reminders: remindCache.list.filter((r) => !r.done && r.kind === 'remind').map((r) => ({ at: Date.parse(r.at), text: r.text })).filter((r) => Number.isFinite(r.at)), tasks: todos.todoist.map((t) => ({ content: t.content, at: t.time ? new Date(`${localDayOf(now)}T${t.time}:00`).getTime() : null })) }),
-        ...(pointsWatch.fx ? { pointsFx: { id: pointsWatch.fx.id, delta: pointsWatch.fx.delta, label: pointsWatch.fx.label } } : {}),
+        ...(pointsWatch.fx && coinsShownNow() ? { pointsFx: { id: pointsWatch.fx.id, delta: pointsWatch.fx.delta, label: pointsWatch.fx.label } } : {}),
         shield: { on: !!focusRun && !focusRun.pausedAt && alivePrefs().shield, held: aliveOut.held },
         ...(() => {
           const story = dayStory({ now, focusMin: status.today.focusMin, waterMl: localWater, waterTarget, mustDone: status.today.mustDone, mustTotal: status.today.mustTotal, streak: sportStreak })
@@ -893,7 +894,7 @@ function IslandFeedOn() {
       money: moneyCache.v,
       saga: sagaCache.v,
       points: (() => {
-        if (!shop) return undefined
+        if (!shop || !coinsShownNow()) return undefined
         const rewards = shop.rewards.filter((r) => !r.archived && r.price > 0)
         const goal = rewards.find((r) => r.pinned) ?? [...rewards].sort((a, b) => a.price - b.price).find((r) => r.price > shop.balance) ?? null
         return { balance: shop.balance, goal: goal ? { title: goal.title, price: goal.price } : null }

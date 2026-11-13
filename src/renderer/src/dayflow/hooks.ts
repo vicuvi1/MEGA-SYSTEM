@@ -12,6 +12,7 @@ import { useLive } from '../live'
 import { useTapHabit } from '../MyHabits'
 import type { HabitsView } from '../web/lifeExtras'
 import { GROOMING_OPEN, useGrooming } from '../habits/GroomingSheet'
+import { useShowCoins } from '../useSimple'
 
 export interface DayFlowProps {
   summary: Summary
@@ -82,6 +83,7 @@ export interface Habit {
 
 export function useHabits({ summary, discipline, connections, body, onChange, onGo, rules }: DayFlowProps, focusMin: number, onSpend: () => void, own: HabitsView | null, reloadOwn: () => void, focusTarget = 50): Habit[] {
   const act = useAction()
+  const showCoins = useShowCoins()
   const groom = useGrooming()
   const tapOwn = useTapHabit(() => {
     reloadOwn()
@@ -116,5 +118,7 @@ export function useHabits({ summary, discipline, connections, body, onChange, on
     ...(own?.rows ?? []).map((h) => ({ id: `own:${h.id}`, ownId: h.id, label: h.name, hint: `${own?.pays ? `+${own.pays}` : ''}${h.streak ? ` · 🔥${h.streak}` : ''}`.replace(/^ · /, '') || 'tap when done', pays: own?.pays ? `+${own.pays}` : '', source: 'Your habit', done: h.done, run: () => tapOwn(h.id, h.name).then((ok) => (ok && pluck(), ok)) }))
   ]
   doneToday = list.filter((h) => h.done).length
+  // Coins hidden: no "+N" payouts on the habits (they are still earned).
+  if (!showCoins) return list.map((h) => ({ ...h, pays: '', hint: h.hint ? h.hint.replace(/\s*\+\d+(?:\s*(?:\/|per)\s*\d+\s*min)?/g, '').replace(/^[\s\u00b7]+|[\s\u00b7]+$/g, '') : h.hint }))
   return list
 }

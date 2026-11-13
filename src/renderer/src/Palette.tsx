@@ -29,6 +29,8 @@ interface Sources {
   actions: Command[]
   /** The module switch (core/modules.ts pageOn): a page of a module that is off is not offered. Missing = every page. */
   pageOn?: (page: string) => boolean
+  /** Show coins and rewards (core/simpleMode.ts): the "+N points" hints. Missing = hidden. */
+  showCoins?: boolean
 }
 
 /** Everything the palette can do right now. */
@@ -51,7 +53,7 @@ export function buildCommands(s: Sources): Command[] {
     { id: 'go:man', label: 'MAN', hint: 'Open the app', group: 'Go to', icon: 'shield', color: '#FF8A3D', run: () => s.go('discipline', 'app') }
   )
   for (const r of s.rules.filter((r) => r.enabled && !isFlowRule(r.id))) {
-    out.push({ id: `log:${r.id}`, label: r.title, hint: `${r.coins > 0 ? '+' : ''}${r.coins} points`, group: 'Log', icon: 'plus', run: () => s.award(r) })
+    out.push({ id: `log:${r.id}`, label: r.title, hint: s.showCoins ? `${r.coins > 0 ? '+' : ''}${r.coins} points` : '', group: 'Log', icon: 'plus', run: () => s.award(r) })
   }
   for (const t of on('tasks') ? s.todo ?? [] : []) {
     out.push({ id: `todo:${t.id}`, label: t.content, hint: `Done in Todoist${t.dueTime ? ` · ${t.dueTime}` : ''}`, group: 'Tasks', icon: 'check', run: () => s.completeTodo(t) })

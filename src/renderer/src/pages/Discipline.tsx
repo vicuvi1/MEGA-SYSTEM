@@ -8,6 +8,7 @@ import type { ConnectionsState, DisciplineState } from '@shared/api'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { Coins, useAction } from '../ui'
+import { useShowCoins } from '../useSimple'
 import { CountUp } from '../motionKit'
 import { celebrate as burst } from '../fx'
 import { mmss } from './planUi'
@@ -53,6 +54,7 @@ interface Props {
  */
 export function Discipline({ state, man, onState, onWallet, revealed, onReveal, urgeOpen, onUrgeOpen }: Props) {
   const act = useAction()
+  const showCoins = useShowCoins()
   const [confirmReset, setConfirmReset] = useState(false)
   const [comeback, setComeback] = useState(false)
   const [celebrate, setCelebrate] = useState<string | null>(null)
@@ -139,7 +141,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
             </header>
             <RankLadder current={state.current} />
             <Badges state={state} />
-            <CoinMilestones
+            {showCoins && <CoinMilestones
               state={state}
               claimable={claimable.length}
               onClaim={async (days) => {
@@ -147,10 +149,10 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
                 if (r) {
                   onState(r.state)
                   onWallet()
-                  setCelebrate(`${days} days! +${r.coins} coins`)
+                  setCelebrate(showCoins ? `${days} days! +${r.coins} coins` : `${days} days!`)
                 }
               }}
-            />
+            />}
             <Campaign day={dayShown(state)} />
           </section>
         </div>
@@ -184,7 +186,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
               </button>
             </div>
             {state.undoResetUntil && Date.parse(state.undoResetUntil) > Date.now() && life.discipline.undoReset && (
-              <button className="btn small ghost" onClick={() => void run(() => life.discipline.undoReset!(), 'Reset taken back. Your streak and coins are back.')}>
+              <button className="btn small ghost" onClick={() => void run(() => life.discipline.undoReset!(), showCoins ? 'Reset taken back. Your streak and coins are back.' : 'Reset taken back. Your streak is back.')}>
                 <Icon name="undo" size={14} /> Take the reset back (a test or a wrong tap)
               </button>
             )}
@@ -197,7 +199,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
         <div className="sheet" role="dialog" aria-label="Reset streak">
           <div className="sheet-card">
             <h3>Reset the streak?</h3>
-            <p className="hint">Being honest is the strong move. Your best ({state.best} days) and your {state.totalClean} total clean days stay. The count starts again from today, and it costs a few coins. You can take it back in the next 10 minutes if it was a test or a wrong tap.</p>
+            <p className="hint">Being honest is the strong move. Your best ({state.best} days) and your {state.totalClean} total clean days stay. The count starts again from today{showCoins ? ', and it costs a few coins' : ''}. You can take it back in the next 10 minutes if it was a test or a wrong tap.</p>
             <div className="sheet-actions">
               <button className="btn ghost" onClick={() => setConfirmReset(false)}>
                 Cancel
@@ -249,7 +251,7 @@ export function Discipline({ state, man, onState, onWallet, revealed, onReveal, 
                   className="btn small ghost"
                   onClick={async () => {
                     if (!life.discipline.undoReset) return
-                    const s = await run(() => life.discipline.undoReset!(), 'Reset taken back. Your streak and coins are back.')
+                    const s = await run(() => life.discipline.undoReset!(), showCoins ? 'Reset taken back. Your streak and coins are back.' : 'Reset taken back. Your streak is back.')
                     if (s) setComeback(false)
                   }}
                 >
