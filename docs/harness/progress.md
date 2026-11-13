@@ -4,13 +4,18 @@ Every session reads this first and adds one entry at the end. Newest entry on to
 Keep it short and true: anything written here is what the next session will trust.
 
 ## Current verified state (keep to 5–8 lines)
-- **Milestone:** AI coach (Today card, ramp-up, Sunday review, check-in, nudges ≤3/day, chat with Apply, safety rules), Growth tab + growth levels, Photo Locker (Google Drive), Goal Ladder, Todoist audit, island sound + simpler Day page, finance donut, multi-photo food — all on main; Windows release v1.4.1428 green (eddc11f).
-- **Safeguards:** unit tests also run on Windows in CI; ship steps check the Windows release first; "Desktop updates" health alert; flaky checks fixed at the root (docs/areas/workflow.md).
-- **Known gaps:** real AI replies/photo/scale reads and Google Drive untried (fakes only); owner must enable the Drive API + drive.file scope; Today → Now is ~1.65 screens on Sun/Mon (limit 1.75).
-- **Next:** scale Phase 2 sync once the owner says Xiaomi Home or Mi Fitness; Telegram versions of the Goal Ladder reviews; UI clean-up pick list.
+- **Milestone:** Money for life and business (5 phases: trust, books, taxes + receipts, long view, less typing), data safety (chunked cloud + PC backups, undo, restore), phone payments (MacroDroid -> To sort); modules ON: Today, Money, Sleep, Sport Track, Discipline (island off). Windows release v1.4.1460 green (6c0a43d).
+- **Safeguards:** unit tests on Windows in CI; ship steps check the Windows release first; backup before risky steps; restores all-or-nothing.
+- **Known gaps:** receipts and phone payments tested only with fakes; 2026 tax exemption marked "check"; refunds count as income; calendar.test.ts fails outside UTC (module off).
+- **Next:** owner picks from the round-2 fix list; then the long-term batch (see session-handoff.md).
 - **Verify:** `bash scripts/init.sh` · `npm run smoke` · `bash scripts/release-status.sh`.
 
 ## Session record
+
+### 2026-11-13: Money phases 1-5, data safety, phone payments (on main)
+- Trust (reconcile, export, tested totals), Personal/Business/Both books + Pay yourself, taxes (individual entrepreneur) + receipts + accountant Excel, long view, To sort card + learned categories + bills to confirm.
+- Data safety and phone payments (/api/cron?job=pay, revocable pk_ keys) shipped; v1.4.1459 then v1.4.1460 green.
+- Verified: tsc, 4,573 unit tests, full smoke (131 steps). Owner to-dos in session-handoff.md.
 
 ### 2026-11-12: no data loss (branch data-safety, not pushed)
 - Cloud backup in 1.5 MB parts with SHA-256 (no size ceiling; warn at a 2.5 MB chunk); off-site job fetches the parts and reports back.

@@ -15,12 +15,12 @@ Running background agents keep running. The new session sees their commits on `m
 
 ## Coordinator handoff (overwrite each time, keep it under ~15 lines)
 ```
-Milestone:   Simplify + harden: module switch (Today, Money, Sleep, Sport Track, Discipline ON; island OFF), security, Money 6 fixes, sync data-loss fixes, sleep/discipline/food fixes; release v1.4.1454 green
-Completed:   <commits/features landed, one line each>
+Milestone:   Money for life and business (all 5 phases) + data safety + phone payments; release v1.4.1460 green (6c0a43d)
+Completed:   phase 1 trust (reconcile, export, tested totals); 2 Personal/Business/Both books, Business view, Pay yourself; 3 taxes (individual entrepreneur profile) + receipts + accountant Excel; 4 long view; 5 To sort card, learned categories, bills to confirm; data safety (chunked cloud backup, PC backups, undo to before X, docs/RECOVERY.md); phone payments (/api/cron?job=pay, pk_ keys, MacroDroid)
 Active:      none.
-Blockers:    owner: change PIN (6-12 digits); confirm or skip Finance "Re-price N past entries"; store BACKUP_PASSPHRASE + CRON_SECRET in a password manager. Known: src/core/calendar.test.ts fails outside UTC (Calendar module is off).
-Next action: long-term batch (small steps): backup size alert at 2.5 MB + split backup + second copy; quarterly plain-SQLite export + monthly Drive copy; CSV export per module; AI model names in one config with fallback; Electron + Node 24 bumps; DST/year-rollover clock test; recovery runbook + yearly checklist in docs. Later, after the freeze: design the University module (years > semesters > courses > labs/exams/grades) together with the owner.
-Files:       <the 3–6 files/docs the next session needs first>
+Blockers:    owner: change PIN; BACKUP_PASSPHRASE + CRON_SECRET in a password manager; confirm 2026 tax exemption in Taxes (29,700 vs 27,000, marked "check"); attach one receipt with real Drive; set up MacroDroid (Settings > Phone payments); send 2-3 real maib / Google Wallet notification texts (card numbers blurred). Known: refunds count as income; calendar.test.ts fails outside UTC (module off).
+Next action: round-2 fix pick list (artifact EfdmeVe1Pj71CbWzHBnC3w) waits for the owner's picks; then long-term batch (AI model names in config + fallback, Electron/Node 24, DST/year-rollover clock test, calendar.test outside UTC).
+Files:       docs/areas/finance.md, docs/design/money/money-v2-plan.md, docs/RECOVERY.md, src/core/payNotify.ts, src/core/moneyToSort.ts
 ```
 
 ### Current handoff (2026-11-10, evening)
