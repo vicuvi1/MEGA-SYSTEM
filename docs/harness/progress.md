@@ -4,13 +4,18 @@ Every session reads this first and adds one entry at the end. Newest entry on to
 Keep it short and true: anything written here is what the next session will trust.
 
 ## Current verified state (keep to 5–8 lines)
-- **Milestone:** Money for life and business (5 phases: trust, books, taxes + receipts, long view, less typing), data safety (chunked cloud + PC backups, undo, restore), phone payments (MacroDroid -> To sort); modules ON: Today, Money, Sleep, Sport Track, Discipline (island off). Windows release v1.4.1460 green (6c0a43d).
-- **Safeguards:** unit tests on Windows in CI; ship steps check the Windows release first; backup before risky steps; restores all-or-nothing.
-- **Known gaps:** receipts and phone payments tested only with fakes; 2026 tax exemption marked "check"; refunds count as income; calendar.test.ts fails outside UTC (module off).
-- **Next:** owner picks from the round-2 fix list; then the long-term batch (see session-handoff.md).
+- **Milestone:** Money improvements (refunds, goals warning, quick add, shortcuts, bulk edit, budgets from 3 months, month review, net worth line, subscriptions per year, rate date, cash count, duplicate finder, 2026 tax exemption, calendar, afford, wishlist, salary watch, price memory, Ask, no-spend days); Money sync fix + self-heal + sync history + locked-Money sync (sealed copy in `app_sync_finance_sealed`); weekly backup check; coins hidden = silent; faster start. Business books removed (owner). Windows release v1.4.1474 green (d83eaa8).
+- **Safeguards:** a copy counts as synced only after the server has it; sync only adds records (tombstones delete); unit tests on Windows in CI; backup before risky steps.
+- **Known gaps:** locked Money: server readers (bot, morning spending) see only the pre-lock copy, no "stop sealing" switch, restore while locked merges; "Focus boost" smoke step flaky outside Windows; desktop startup cuts unmeasured; calendar.test.ts fails outside UTC.
+- **Next:** owner confirms the 13 Nov record reaches the web on v1.4.1474; then the round-2 fix list / Today-around-3-numbers simplification.
 - **Verify:** `bash scripts/init.sh` · `npm run smoke` · `bash scripts/release-status.sh`.
 
 ## Session record
+
+### 2026-11-13 (late): Money picks, sync fix, data-safety extras (on main)
+- All owner-picked Money improvements and 7 ideas shipped (6d644cf..2e69c1b); coins hidden by switch (0d13290); books reverted (90380ff).
+- Sync: Money desktop->web gap fixed (bd35bfe: confirm before "synced", write back merges, self-heal on start/10 min/focus, Sync Money now, per-app status + dot); sync history + locked-Money sync (d83eaa8).
+- Weekly backup test-restore (38b6e6f); coin sounds/island badge off when hidden + startup cuts (b325170). v1.4.1474 green.
 
 ### 2026-11-13: Money phases 1-5, data safety, phone payments (on main)
 - Trust (reconcile, export, tested totals), Personal/Business/Both books + Pay yourself, taxes (individual entrepreneur) + receipts + accountant Excel, long view, To sort card + learned categories + bills to confirm.
