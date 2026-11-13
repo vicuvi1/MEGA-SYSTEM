@@ -923,6 +923,11 @@ http
         if (down) return ((r.statusCode = 503), r.end('{"error":"down for the soak test"}'))
         // The soak test's "new database version": writes from this page are refused until it reloads (LT22).
         if (schemaOld && n === 'db' && /\b(INSERT|UPDATE|DELETE)\b/i.test(body)) return (r.setHeader('Content-Type', 'application/json'), (r.statusCode = 409), r.end('{"error":"A new version is out — please reload","reload":true}'))
+        // Phone payments (job=pay): the real handler, keys and money_tosort on the fake Turso.
+        if (n === 'cron' && url.searchParams.get('job') === 'pay') {
+          api.cron ??= import(pathToFileURL(join(repo, 'api', 'cron.mjs')).href).then((m) => m.default)
+          return api.cron.then((h) => h(q, r))
+        }
         // A stand-in for Ben's server tick (the app wakes it every few minutes).
         if (n === 'cron') return (r.setHeader('Content-Type', 'application/json'), r.end('{"ok":true,"skipped":true}'))
         if (n === 'google') return gcal(q, r)

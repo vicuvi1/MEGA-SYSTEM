@@ -224,6 +224,14 @@ export type Bridge = LifeApi & {
     importBank(text: string): Promise<string>
     healthKeys(op: { op: 'list' } | { op: 'new'; label: string } | { op: 'drop'; id: string }): Promise<{ keys?: { id: string; label: string; created: number; lastUsed: number | null }[]; key?: string; id?: string; label?: string }>
     connectGmail(): Promise<void>
+    /**
+     * Settings → Phone payments: payment keys (list / new / drop), "Send test"
+     * (with `key`: through the real URL and that key, as MacroDroid would;
+     * without: signed in), and the last 5 notifications received (`recent`).
+     */
+    phonePay?(
+      op: { op: 'list' } | { op: 'new'; label: string } | { op: 'drop'; id: string } | { op: 'test'; key?: string } | { op: 'recent' }
+    ): Promise<{ keys?: { id: string; label: string; created: number; lastUsed: number | null }[]; key?: string; id?: string; label?: string; status?: string; what?: string; recent?: import('@core/moneyToSort').ToSortItem[] }>
   }
   /** Your own habits, goals list, life modes, learning path, month and year reviews, reward locks (web). */
   extras?: import('./web/lifeExtras').ExtrasApi

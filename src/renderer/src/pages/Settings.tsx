@@ -23,6 +23,7 @@ import { VoiceSettings } from '../voice/VoiceSettings'
 import { BenSection } from '../settings/ben'
 import { ConnectionsSection } from '../settings/connections'
 import { RewardsSection } from '../settings/rewards'
+import { PhonePaySection } from '../settings/phonePay'
 import { BackupsSection } from '../settings/backups'
 import { DiagnosticsSection } from '../settings/diagnostics'
 
@@ -125,6 +126,14 @@ export function Settings(props: SettingsProps) {
       hint: 'Your monthly fun budget, what a point is worth, leftover to savings',
       keywords: 'rewards fun budget money points value lei shop treat savings leftover goal finance entertainment',
       body: <RewardsSection />
+    },
+    {
+      id: 'phonepay',
+      label: 'Phone payments',
+      icon: 'coin',
+      hint: 'Card payments from your phone land in To sort (MacroDroid)',
+      keywords: 'phone payments nfc card maib google wallet revolut paynet macrodroid notification android key money to sort capture',
+      body: <PhonePaySection />
     },
     {
       id: 'connections',

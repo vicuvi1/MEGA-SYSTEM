@@ -41,6 +41,8 @@ import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { careApi } from './web/careApi'
 import { getSetting, setSetting, readSetting, writeSetting } from '../../main/settings'
+import { lastReceived, readToSort, TOSORT_KEY } from '@core/moneyToSort'
+import { TEST_NOTICE } from './web/phonePay'
 import { cleanSetup, cleanState as cleanCustomState, readSetup, CUSTOM_MAX_BYTES, CUSTOM_SETUP_KEY, CUSTOM_STATE_KEY, CUSTOM_VERSION, type CustomSetup, type CustomState } from '@core/custom'
 import { cleanLooks, type CoachLooks } from '@core/coachLooks'
 import { cleanWallpaper, okWallpaperPhoto, type WallpaperPrefs } from '@core/wallpaper'
@@ -1805,6 +1807,18 @@ export function createTursoWebBridge(): Bridge {
         const r = await fetch('/api/cron?job=health', { method: 'POST', headers: { Authorization: `Bearer ${currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(op) })
         const j = await r.json().catch(() => ({}))
         if (!r.ok) throw new Error(j.error || httpProblem('Health keys', r.status))
+        return j
+      },
+      phonePay: async (op: { op: 'list' } | { op: 'new'; label: string } | { op: 'drop'; id: string } | { op: 'test'; key?: string } | { op: 'recent' }) => {
+        const m = await mirrorP
+        if (op.op === 'recent') return { recent: await m.read((db) => lastReceived(readToSort(getSetting(db as any, TOSORT_KEY)), 5)) }
+        // "Send test" with a fresh key goes the way MacroDroid does: the URL, the key, the notification body.
+        const viaKey = op.op === 'test' && op.key
+        const body = viaKey ? { ...TEST_NOTICE, time: '', test: true } : op.op === 'test' ? { op: 'test' } : op
+        const r = await fetch('/api/cron?job=pay', { method: 'POST', headers: { Authorization: `Bearer ${viaKey ? op.key : currentSession()}`, 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        const j = await r.json().catch(() => ({}))
+        if (!r.ok) throw new Error(j.error || httpProblem('Phone payments', r.status))
+        if (op.op === 'test') await m.refresh().catch(() => false)
         return j
       },
       connectGmail: async () => {
