@@ -106,7 +106,7 @@ describe('local backup files', () => {
     expect(risk).toMatchObject({ before: 'finance re price', time: '14:30', day: '2026-11-10' })
     // The temp file never stays behind.
     expect(names.some((n) => n.endsWith('.tmp'))).toBe(false)
-  })
+  }, 60_000) // 400 files: 13.7 s on the Windows release runner (antivirus scans each write)
 
   it('a failed write is kept as a visible error and thrown, never silent', async () => {
     const docs = join(root, 'Documents')
