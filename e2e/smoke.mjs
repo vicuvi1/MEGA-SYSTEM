@@ -1489,10 +1489,11 @@ try {
     await shot(`${prog} .ph-card`, 'photo-compare-slider')
     await pg.locator(`${prog} .ph-card .ph-actions .btn`, { hasText: 'Done' }).click()
     // No photo data reached the (fake) server's database. Photo Locker's index (vault_index) may name
-    // the photo and its type (metadata only, see docs/areas/vault.md), but never holds image data.
+    // the photo and its type (metadata only, see docs/areas/vault.md), but never holds image data; so
+    // may Money's receipt index (money_receipts: a receipt's name and type, docs/areas/rewards-money.md).
     const leaked = await pg.evaluate(async () => {
       const s = localStorage.getItem('life_web_session') ?? ''
-      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%data:image%' OR value LIKE '%;base64,%' OR (key != 'vault_index' AND (value LIKE '%image/%' OR value LIKE '%ph-demo%')) OR (key LIKE '%photo%' AND key != 'look_wallpaper_photo')", args: [] } }, { type: 'close' }] }) })
+      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%data:image%' OR value LIKE '%;base64,%' OR (key NOT IN ('vault_index', 'money_receipts') AND (value LIKE '%image/%' OR value LIKE '%ph-demo%')) OR (key LIKE '%photo%' AND key != 'look_wallpaper_photo')", args: [] } }, { type: 'close' }] }) })
       const j = await r.json()
       return Number(j.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? -1)
     })
