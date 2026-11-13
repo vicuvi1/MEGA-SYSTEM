@@ -9179,7 +9179,8 @@ try {
     await pg.waitForFunction((s) => /cloud up to date|Not synced/.test(document.querySelector(s)?.textContent ?? ''), RESULT, { timeout: 30000 })
     const said = (await pg.textContent(RESULT)).trim()
     if (!/^(Sent \d+ (records?|changes?)|Nothing to send) · cloud up to date$/.test(said)) throw new Error(`Sync Money now said: ${said}`)
-    await pg.waitForFunction(() => /Money: synced/.test(document.querySelector('[data-testid="app-sync"]')?.textContent ?? ''), null, { timeout: 15000 }).catch(async () => {
+    // 30 s: the Windows release runner is slower.
+    await pg.waitForFunction(() => /Money: synced/.test(document.querySelector('[data-testid="app-sync"]')?.textContent ?? ''), null, { timeout: 30000 }).catch(async () => {
       throw new Error(`the Money line says: ${await pg.textContent('[data-testid="app-sync"]').catch(() => 'nothing')}`)
     })
     // Stays on Settings: the next step opens Data safety itself (going to Today and straight back is lost in the page change).
