@@ -1132,6 +1132,9 @@ try {
   await (await import('./smokeMoneyB1.mjs')).moneyB1Steps({ step, pg, open, financeFrame })
   // Money ideas: the money calendar, "Can I afford it?" and the wishlist with a wait (e2e/smokeMoneyIdeas.mjs).
   await (await import('./smokeMoneyIdeas.mjs')).moneyIdeasSteps({ step, pg, open, financeFrame, storedTx })
+
+  // Money batch 3: keyboard shortcuts, bulk record changes, the weekly cash count (e2e/smokeMoneyB3.mjs).
+  await (await import('./smokeMoneyB3.mjs')).moneyB3Steps({ step, pg, open, financeFrame })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.

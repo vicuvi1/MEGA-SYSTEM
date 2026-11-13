@@ -1390,6 +1390,20 @@
    ],
    "evidence": "2026-11-13: tsc, vitest (financeMoneyIdeas.test.ts), smoke steps Money calendar / afford / wishlist.",
    "notes": "apps/finance/js/moneycal.js, afford.js, wishlist.js, screens/calendar.js, afford.js, wishlist.js; settings.moneyFloor, wishlist, wishlistDays; sw.js v47."
+  },
+  {
+   "id": "money-batch-3",
+   "priority": 2,
+   "area": "money",
+   "title": "Money batch 3: keyboard shortcuts, bulk record changes, weekly cash count, 2026 exemption check",
+   "user_visible_behavior": "Finance Helper keys: N new, / search, E edit, Ctrl+Z undo, G then H/L/A/G/P/R go to a screen, ? help list (also under More and Settings). In the Log table, tick records, then set category, date or account (a confirm shows the count) or delete (Life System backs up first); one Undo restores all. Once a week Home asks you to count your cash: a different count adds one Cash count record with Undo. The 2026 personal exemption (MDL 29,700) is confirmed with its source.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money shortcuts|Money bulk|Money cash\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (moneyBatch3.test.ts 13 tests, financeTax.test.ts), three smoke steps (e2e/smokeMoneyB3.mjs).",
+   "notes": "apps/finance/js: bulk.js, cashcount.js, shortcuts.js, screens/cashcount.js (new), app.js, taxprofiles.js, sw.js v48. New settings keys cashCountOn/Day/Last (plain scalars, sync test)."
   }
  ]
 }

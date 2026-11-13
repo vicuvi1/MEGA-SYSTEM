@@ -162,7 +162,9 @@ describe('profiles and the estimate (not tax advice)', () => {
     setProfile(s, 'individual', 5)
     const t = taxYear(s, 2026)
     expect(t.estimate).toMatchObject({ exemption: 2970000, base: 1030000, tax: 123600 })
-    expect(t.profile.warnings.some((w: string) => /not confirmed/.test(w))).toBe(true)
+    expect(t.profile.warnings.some((w: string) => /not confirmed/.test(w))).toBe(false)
+    expect(t.profile.unconfirmed).toEqual([])
+    expect(t.profile.sources.join(' ')).toMatch(/monitorul\.fisc\.md.*29,700/)
     s.tx[0].base = s.tx[0].amount = 36000000
     expect(taxYear(s, 2026).estimate).toMatchObject({ exemption: 0, base: 36000000, tax: 4320000 })
   })

@@ -6195,3 +6195,11 @@ html[data-calm] .theme-atmosphere, html[data-calm] .atmosphere-particle { displa
   .mc-cell { min-height: 72px; padding: 3px 4px; }
   .wl-form { grid-template-columns: 1fr; }
 }
+
+/* Money batch 3: cash count card, shortcuts help, bulk bar extras */
+.cash-count-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.cash-count-row input { flex: 1; min-width: 140px; }
+.kbd-list { display: grid; gap: 6px; margin: 8px 0; }
+.kbd-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; }
+.kbd-keys { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.kbd-row kbd { border: 1px solid var(--line-strong, #555); border-bottom-width: 2px; border-radius: 6px; padding: 1px 7px; font: 600 12px/1.6 inherit; background: color-mix(in srgb, var(--text, #fff) 6%, transparent); }

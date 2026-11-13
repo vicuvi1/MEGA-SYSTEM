@@ -26,6 +26,10 @@ import * as Sync from './screens/sync.js';
 import * as SelfCheck from './screens/selfcheck.js';
 import * as Backups from './screens/backups.js';
 import * as Tidy from './screens/moneytidy.js';
+import * as CashCount from './screens/cashcount.js';
+import * as Shortcuts from './shortcuts.js';
+import * as Bulk from './bulk.js';
+import { backupBefore } from './dupes.js';
 import * as Plan from './screens/plan.js';
 import * as Clients from './screens/clients.js';
 import * as Rules from './screens/rules.js';
@@ -1064,6 +1068,7 @@ function viewHome() {
   ${Afford.homeRow()}
   ${stepsCard(today)}
   ${payCard(today)}
+  ${CashCount.card(today)}
   ${homeStrip(s, key)}
   ${Spending.spendingCard({ key: 'home', period: ui.spendPeriod })}
   ${Goals.homeCard({ featured: true })}
@@ -1137,13 +1142,14 @@ function bulkBar() {
   const inc = list.filter((t) => t.type === 'income').reduce((a, t) => a + M.B(t), 0);
   const cats = (type, label) => `<optgroup label="${label}">${state.settings.categories.filter((c) => c.type === type).map((c) => `<option value="${esc(c.id)}">${esc(`${c.emoji || ''} ${c.name}`.trim())}</option>`).join('')}</optgroup>`;
   return `<div class="bulk-bar" role="toolbar" aria-label="Change selected records">
-    <b>${list.length} selected</b>
+    <b data-testid="bulk-count">${list.length} selected</b>
     <span class="muted small">${[out ? `−${money(out)}` : '', inc ? `+${money(inc)}` : ''].filter(Boolean).join(' · ')}</span>
-    <select data-bulk="category" aria-label="Set category"><option value="">Category…</option>${cats('expense', 'Spent')}${cats('income', 'Earned')}</select>
-    <select data-bulk="account" aria-label="Set account"><option value="">Account…</option>${accountOptionsHTML(state.settings.accounts.filter((a) => !a.archived), '', { baseCur: state.settings.currency })}</select>
+    <select data-bulk="category" aria-label="Set category"><option value="">Set category…</option>${cats('expense', 'Spent')}${cats('income', 'Earned')}</select>
+    <select data-bulk="account" aria-label="Set account"><option value="">Set account…</option>${accountOptionsHTML(state.settings.accounts.filter((a) => !a.archived), '', { baseCur: state.settings.currency })}</select>
     ${Taxes.bulkSelectHTML()}
-    <label class="bulk-date"><span>Date</span><input type="date" data-bulk="date" aria-label="Set date"></label>
-    <button type="button" class="btn danger" data-act="bulk-del">Delete</button>
+    <label class="bulk-date"><span>Set date</span><input type="date" data-bulk="date" aria-label="Set date"></label>
+    <button type="button" class="btn" data-act="bulk-all" data-testid="bulk-all">Select all shown</button>
+    <button type="button" class="btn danger" data-act="bulk-del" data-testid="bulk-del">Delete</button>
     <button type="button" class="btn" data-act="bulk-clear">Clear</button>
   </div>`;
 }
@@ -1193,38 +1199,67 @@ function setTxAccount(t, id) {
   }
 }
 
-function onBulkChange(el) {
-  const v = el.value;
-  if (!v) return;
-  const list = selectedTx();
+// Each bulk change asks first ("Set the category of 3 records to Food?"),
+// applies to all of them, and is one Undo step.
+function confirmBulk({ title, text, ok, danger = false, onOk }) {
+  openSheet(`<h3>${esc(title)} <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>
+    <p data-testid="bulk-confirm-text">${esc(text)}</p>
+    <div class="btns"><button type="button" class="btn" data-close>Cancel</button><button type="button" class="btn ${danger ? 'danger' : 'primary'}" data-bulk-ok data-testid="bulk-confirm-ok">${esc(ok)}</button></div>`, (sheet) => {
+    sheet.querySelector('[data-bulk-ok]').addEventListener('click', (e) => { e.target.disabled = true; onOk(); });
+  });
+}
+
+const plural = (n) => `${n} record${n === 1 ? '' : 's'}`;
+
+function runBulk(kind, v, ids) {
   let changed = 0;
   let skipped = 0;
-  for (const t of list) {
-    if (el.dataset.bulk === 'date') {
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
-      t.date = v;
-    } else if (t.type === 'transfer') { skipped++; continue; }
-    else if (el.dataset.bulk === 'category') {
-      if (M.category(state, v)?.type !== t.type) { skipped++; continue; }
-      t.category = v;
-    } else if (el.dataset.bulk === 'account') setTxAccount(t, v);
-    else if (el.dataset.bulk === 'tax' && !Taxes.bulkTag(t, v)) { skipped++; continue; }
-    M.touch(t);
-    changed++;
-  }
-  if (!changed) { toast(skipped ? 'None of the selected records can take that (moves, or a different type)' : 'Nothing changed'); el.value = ''; return; }
+  if (kind === 'tax') {
+    for (const t of state.tx.filter((x) => ids.includes(x.id))) {
+      if (!Taxes.bulkTag(t, v)) { skipped++; continue; }
+      M.touch(t);
+      changed++;
+    }
+  } else ({ changed, skipped } = Bulk.applyBulk(state, ids, kind, v, { rateFor: (cur) => suggestedRate(cur) }));
+  closeSheet();
+  if (!changed) { toast(skipped ? 'None of the selected records can take that (moves, or a different type)' : 'Nothing changed'); return; }
   commit();
-  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag' }[el.dataset.bulk];
-  toast(`Changed the ${what} of ${changed} record${changed === 1 ? '' : 's'}${skipped ? ` (${skipped} skipped)` : ''}`, 'Undo', () => undoRedo(-1));
+  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag' }[kind];
+  toast(`Changed the ${what} of ${plural(changed)}${skipped ? ` (${skipped} skipped)` : ''}`, 'Undo', () => undoRedo(-1));
+}
+
+function onBulkChange(el) {
+  const v = el.value;
+  const kind = el.dataset.bulk;
+  if (!v) return;
+  const label = el.tagName === 'SELECT' ? el.selectedOptions[0]?.textContent.trim() : v;
+  el.value = '';
+  const ids = [...ui.selected];
+  if (kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
+  const n = kind === 'tax' ? ids.length : Bulk.countApplicable(state, ids, kind, v);
+  if (!n) { toast('None of the selected records can take that (moves, or a different type)'); return; }
+  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag' }[kind];
+  confirmBulk({ title: `Set ${what}`, text: `Set the ${what} of ${plural(n)} to ${label}? One Undo puts every record back exactly as it was.`, ok: `Change ${plural(n)}`, onOk: () => runBulk(kind, v, ids) });
 }
 
 function bulkDelete() {
-  const list = selectedTx();
-  if (!list.length) return;
-  for (const t of list) M.removeTx(state, t.id);
-  ui.selected.clear();
-  commit();
-  toast(`Deleted ${list.length} record${list.length === 1 ? '' : 's'}`, 'Undo', () => undoRedo(-1));
+  const ids = selectedTx().map((t) => t.id);
+  if (!ids.length) return;
+  confirmBulk({
+    title: 'Delete records',
+    text: `Delete ${plural(ids.length)}? Life System saves a backup first, and one Undo brings them all back.`,
+    ok: `Delete ${plural(ids.length)}`,
+    danger: true,
+    onOk: async () => {
+      const bk = await backupBefore(`deleting ${plural(ids.length)} from the Log`);
+      closeSheet();
+      if (!bk.ok) { toast(`Nothing was deleted: ${bk.error}`); return; }
+      const n = Bulk.deleteMany(state, ids);
+      ui.selected.clear();
+      commit();
+      toast(`Deleted ${plural(n)}`, 'Undo', () => undoRedo(-1));
+    },
+  });
 }
 
 // ---------- Sheet view (Log) ----------
@@ -1600,7 +1635,7 @@ function viewSettings() {
   };
   // One section at a time, picked on the left (like any settings screen).
   const sections = [
-    { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals },
+    { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Shortcuts.settingsCard() },
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
     { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() },
     { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + Backups.settingsCard() + Sync.settingsCard() },
@@ -3097,6 +3132,8 @@ function onSettingsChange(el) {
     }
     else if (key === 'themeMotion') { st.themeMotion = el.checked; applyTheme(); }
     else if (key === 'sound') { st.sound = el.checked; if (st.sound) sound.test(state); }
+    else if (key === 'cashCountOn') st.cashCountOn = el.checked;
+    else if (key === 'cashCountDay') st.cashCountDay = Math.max(0, Math.min(6, Math.round(Number(v)) || 0));
     else if (key === 'everydayLimit') st.everydayLimit = Math.max(0, evalAmount(v) || 0);
     else if (key === 'currency') st.currency = v.trim().toUpperCase() || 'MDL';
     else if (key === 'wallpaper') {
@@ -3245,6 +3282,9 @@ document.addEventListener('click', (e) => {
   else if (Reprice.onClick(act)) { /* "Re-price past entries" */ }
   else if (Reconcile.onClick(act, el)) { /* monthly reconciliation */ }
   else if (Tidy.onClick(act)) { /* duplicates, refund suggestions, rate update */ }
+  else if (CashCount.onClick(act, el)) { /* weekly cash count card */ }
+  else if (act === 'shortcuts-help') Shortcuts.openHelp();
+  else if (act === 'bulk-all') { for (const r of document.querySelectorAll('#tx-table tr[data-id]')) ui.selected.add(r.dataset.id); refreshSelection(); }
   else if (act === 'add') openTxSheet();
   else if (act === 'edit') openTxSheet(state.tx.find((t) => t.id === el.dataset.id));
   else if (act === 'transfer') openTransferSheet(el.dataset.from);
@@ -3495,6 +3535,7 @@ document.addEventListener('keydown', (e) => {
   if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.target.closest('input, select, textarea') && Calc.onKey(e)) return;
   if (e.ctrlKey || e.metaKey || e.altKey || sheetRoot.firstChild) return;
   if (e.target.closest('input, select, textarea')) return;
+  if (Shortcuts.onKey(e, { go: (tab) => { location.hash = `#${tab}`; } })) return;
   if ((e.key === 'l' || e.key === 'L') && Security.hasLock()) { Security.lock(); return; }
   if (e.key === 'h' || e.key === 'H') {
     e.preventDefault();
@@ -3507,6 +3548,12 @@ document.addEventListener('keydown', (e) => {
   if (ui.tab === 'log' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); goToMonth(addMonths(ui.month, e.key === 'ArrowLeft' ? -1 : 1)); return; }
   const tabs = { 1: 'home', 2: 'log', 3: 'accounts', 4: 'goals', 5: 'plan', 6: 'people', 7: 'reports', 8: 'telegram', 0: 'settings' };
   if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openTxSheet(); }
+  else if (e.key === 'e' || e.key === 'E') {
+    e.preventDefault();
+    const id = ui.selected.size === 1 ? [...ui.selected][0] : document.activeElement?.closest?.('[data-id]')?.dataset.id;
+    const t = id && state.tx.find((x) => x.id === id);
+    if (t) openTxSheet(t); else toast('Tick one record in the Table first, then press E');
+  }
   else if (e.key === '/') {
     e.preventDefault();
     if (ui.tab !== 'log') location.hash = '#log';
@@ -3557,6 +3604,7 @@ function openMoreSheet() {
       ${item('reports', 'Reports', 'Any period, year in review, income for taxes')}
       ${item('rates', 'Rates & converter', 'Exchange rates, good day to convert USD?')}
       ${item('settings', 'Settings', 'Goal, smart split, categories, backups')}
+      <button type="button" class="tx more-item" data-act="shortcuts-help" data-testid="more-shortcuts"><span class="t"><b>Keyboard shortcuts</b><span>N, /, E, Ctrl+Z, G then a letter</span></span><span class="muted">›</span></button>
     </div>`);
 }
 

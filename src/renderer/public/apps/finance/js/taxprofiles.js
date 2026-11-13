@@ -11,6 +11,7 @@ const SOURCES = {
   pit: 'Moldova Tax Code art. 15 (12% income tax) and art. 33 (personal exemption); KPMG and PwC Moldova tax summaries',
   cet18: 'State Tax Service (monitorul.fisc.md): the yearly CET18 declaration is due 30 April of the next year',
   entrepreneur: 'Moldova Tax Code (income tax of individual entrepreneurs, declaration by 25 March); logos-pres.md',
+  exemption2026: 'State Tax Service (monitorul.fisc.md/scutirile-personale-pentru-anul-2026-nu-au-fost-revizuite/, checked 2026-11-13): the 2026 personal exemption was not revised, MDL 29,700 a year (since 1 Jan 2025, Law 214/2024), for residents with taxable income under MDL 360,000 (Tax Code art. 33)',
   itpark: 'Law 77/2016 on IT parks (mitp.md, invest.gov.md): single tax 7% of sales revenue, IU17 by the 25th of each month',
 };
 
@@ -51,14 +52,14 @@ export const PROFILES = {
     years: {
       2026: {
         pitBp: 1200,
-        // KPMG and Taxravens give MDL 29,700 for 2026; other sources say 27,000 (2025) or 31,500
-        // for some groups. Not confirmed: the screen asks the owner to check it.
+        // Confirmed 2026-11-13: the State Tax Service says the 2026 exemption is unchanged from
+        // 2025, MDL 29,700 (27,000 was the 2024 figure). See SOURCES.exemption2026.
         exemption: 2970000,
         exemptionCap: 36000000,
         checked: CHECKED,
-        sources: [SOURCES.pit, SOURCES.cet18],
+        sources: [SOURCES.exemption2026, SOURCES.pit, SOURCES.cet18],
         deadlines: [{ md: '04-30', next: true, label: 'CET18 yearly declaration' }],
-        unconfirmed: ['exemption'],
+        unconfirmed: [],
       },
     },
   },
