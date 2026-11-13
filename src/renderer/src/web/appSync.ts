@@ -32,6 +32,18 @@ export interface AppSyncSpec {
    * `canWrite`: inside a change (may add rows), else a read.
    */
   finalize?: (db: any, merged: any, canWrite: boolean) => any
+  /** After a restore: this device's data from its own device-only parts and the restored shared data (default: both, the restored winning). */
+  adopt?: (mine: any, shared: any) => any
+}
+
+/**
+ * Called before a big change of an app's data goes to the database (an import,
+ * a bulk delete, a re-price…), with the copy from before and the new one: the
+ * app takes a "before" backup there (one-click undo). Set once by the bridge.
+ */
+let bigChangeGuard: ((spec: AppSyncSpec, before: any, after: any) => Promise<unknown>) | null = null
+export function setBigChangeGuard(fn: typeof bigChangeGuard) {
+  bigChangeGuard = fn
 }
 
 const parse = (raw: string | null): any => {
@@ -53,6 +65,9 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
   // seeing a copy counts as later than it (at least its editedAt + 1), even
   // when this device's clock is behind the one that wrote it.
   const SEEN = `life_sync_${spec.setting}_seen`
+  // The restore this device last took (a restore marks the database copy with
+  // an id: a device that hasn't seen it takes that copy as it is, see below).
+  const RESTORED = `life_sync_${spec.setting}_restore`
   const share = spec.share ?? ((x: any) => x)
   const fromShared = spec.fromShared ?? ((x: any) => x)
   let running: Promise<void> | null = null
@@ -85,7 +100,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     const obj = parse(raw)
     return obj ? JSON.stringify(share(obj)) : null
   }
-  const remoteOf = (db: any): { savedAt: number; editedAt?: number; data: any } | null => {
+  const remoteOf = (db: any): { savedAt: number; editedAt?: number; restore?: string; data: any } | null => {
     const saved = parse(getSetting(db, spec.setting))
     if (saved?.data) return saved
     const legacy = spec.legacySetting ? parse(getSetting(db, spec.legacySetting)) : null
@@ -114,6 +129,27 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     let localChanged = localShared != null && localShared !== synced
     const realEdit = localChanged
     const remoteNow = await mirror.read((db) => remoteOf(db))
+    // A restore happened (here or on another device) that this device hasn't taken yet:
+    // the restored copy wins as it is. Merging would bring back what the restore removed.
+    // This device's copy from before is kept next to it (nothing is lost).
+    if (remoteNow?.data && remoteNow.restore && String(remoteNow.restore) !== get(RESTORED)) {
+      const mine = parse(localRaw)
+      if (localRaw != null) set(`${SYNCED}_before_restore`, JSON.stringify({ at: new Date().toISOString(), restore: String(remoteNow.restore), raw: localRaw }))
+      const next = mine != null ? (spec.adopt ?? ((m: any, d: any) => (m && typeof m === 'object' && !Array.isArray(m) && d && typeof d === 'object' && !Array.isArray(d) ? { ...m, ...d } : d)))(mine, remoteNow.data) : fromShared(remoteNow.data)
+      const text = JSON.stringify(next)
+      set(SYNCED, JSON.stringify(share(next)))
+      set(SEEN, String(Number(remoteNow.editedAt ?? remoteNow.savedAt) || 0))
+      set(RESTORED, String(remoteNow.restore))
+      del(EDITED)
+      agreedRaw = text
+      if (text !== localRaw) {
+        set(spec.localKey, text)
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))
+      }
+      return
+    }
+    // A big change made here (an import, a bulk delete, a re-price): a "before" backup first.
+    if (realEdit && bigChangeGuard && synced != null && localShared != null) await bigChangeGuard(spec, parse(synced), parse(localShared)).catch(() => {})
     const remoteRaw = remoteNow?.data ? JSON.stringify(remoteNow.data) : null
     const remoteChanged = remoteRaw != null && remoteRaw !== synced
     // The copy here says something the database's log doesn't (Sport Track's
@@ -155,7 +191,9 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
           // A real edit is stamped after the copy it merged with, whatever this clock says.
           const editedAt = realEdit ? Math.max(at, edited, theirsAt + 1) : theirsAt || at
           agreedAt = editedAt
-          setSetting(db as any, spec.setting, JSON.stringify({ savedAt: at, editedAt, data: share(out) }))
+          // The restore mark stays on the copy, so a device that was away still takes the restored copy first.
+          const restore = (remote as any)?.restore
+          setSetting(db as any, spec.setting, JSON.stringify({ savedAt: at, editedAt, data: share(out), ...(restore ? { restore } : {}) }))
         }
         return out
       })

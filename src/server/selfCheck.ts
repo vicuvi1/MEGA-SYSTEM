@@ -7,6 +7,7 @@
 import { alertDecisions, alertKeyboard, alertText, type Beats, type Check } from '@core/health'
 import { confirmed, selfCheckChecks, selfCheckLine, type BotProbe, type Probe } from '@core/selfCheck'
 import { calendarDay } from '@core/dates'
+import { readManifest } from '@core/backupPack'
 import { TursoHttp } from '../renderer/src/web/tursoHttp'
 import { readHealth, setNote } from '../renderer/src/web/systemHealth'
 
@@ -67,8 +68,16 @@ export async function runSelfCheck(d: SelfCheckDeps): Promise<{ checks: Check[];
     db = { ok: false, error: (e as Error).message }
   }
   const day = calendarDay(now)
-  const [snap] = await t.readMany([{ sql: 'SELECT day, COALESCE(size_bytes, LENGTH(data)) FROM cloud_snapshots WHERE day = ?', args: [day] }]).catch(() => [new Error('no answer')])
-  const snapshot = snap instanceof Error || !snap.rows.length ? null : { day: String(snap.rows[0][0]), bytes: Number(snap.rows[0][1]) || 0 }
+  // A parts backup's row holds only its manifest (small): its biggest part is the size to watch.
+  const [snap] = await t.readMany([{ sql: "SELECT day, COALESCE(size_bytes, LENGTH(data)), CASE WHEN data LIKE 'parts:%' THEN data ELSE NULL END, LENGTH(data) FROM cloud_snapshots WHERE day = ?", args: [day] }]).catch(() => [new Error('no answer')])
+  const snapshot =
+    snap instanceof Error || !snap.rows.length
+      ? null
+      : (() => {
+          const [d, bytes, manifest, len] = snap.rows[0]
+          const m = manifest ? readManifest(String(manifest)) : null
+          return { day: String(d), bytes: Number(bytes) || 0, parts: m?.parts ?? 1, biggest: m ? Math.max(0, ...m.sizes) : Number(len) || 0 }
+        })()
   const h = await readHealth(t).catch(() => ({ beats: {} as Beats, notes: {} as Record<string, any>, errors: [], latestSnapshot: null }))
   const drillAt = typeof h.notes.drill === 'string' ? h.notes.drill : h.beats.restoreDrill?.ok ?? null
   const checks = selfCheckChecks({ now, bots, google, todoist, ai, budget, db, snapshot, drillAt, beats: h.beats })

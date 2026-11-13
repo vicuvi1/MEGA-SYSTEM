@@ -227,10 +227,10 @@ export function Settings(props: SettingsProps) {
       : []),
     {
       id: 'backups',
-      label: 'Backups & data',
-      icon: 'cloud',
-      hint: 'Daily backups, restore, export',
-      keywords: 'backup restore export import google drive folder snapshot data',
+      label: 'Data safety',
+      icon: 'shield',
+      hint: 'Backups, restore, undo, export everything',
+      keywords: 'data safety backup backups restore undo export everything import google drive folder snapshot data off-site offsite csv zip',
       body: <BackupsSection s={s} />
     },
     ...(features.updates

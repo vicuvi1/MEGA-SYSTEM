@@ -176,12 +176,15 @@ if (firstCopy) void app.whenReady().then(async () => {
     return result.filePath
   })
   // Daily backup files (PC folder + Google Drive), written from the app window's export.
-  const backups = createBackups(dir)
+  // Local backups (2026-11-12): a .zip a day and before each risky step, with this PC's database file in it.
+  const backups = createBackups(dir, file, () => saves)
+  const where = (w: unknown) => (w === 'drive' || w === 'old' ? w : 'local')
   handle('backups:status', () => backups.status())
-  handle('backups:write', (text: string, day: string) => backups.write(text, day))
-  handle('backups:read', (where: 'local' | 'drive', name: string) => backups.read(where, name))
-  handle('backups:choose', () => backups.choose(win))
-  handle('backups:open', (where: 'local' | 'drive') => backups.open(where))
+  handle('backups:write', (text: string, day: string, reason?: string | null) => backups.write(text, day, reason))
+  handle('backups:read', (w: unknown, name: string) => backups.read(where(w), String(name)))
+  handle('backups:choose', (w?: unknown) => backups.choose(win, w === 'local' ? 'local' : 'drive'))
+  handle('backups:resetLocal', () => backups.resetLocal())
+  handle('backups:open', (w: unknown) => backups.open(where(w)))
   // Your Obsidian vault (read-only): titles, headings and first lines.
   const vault = createVault(dir)
   handle('vault:choose', () => vault.choose(win))

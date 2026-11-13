@@ -21,7 +21,7 @@ It ships three ways from one codebase:
 ## Invariants: never break these
 - **Public repo:** no secrets, ids, emails or the owner's real data in code, tests, docs or screenshots. Use made-up data. Importers parse files locally in the browser.
 - **Security:**
-  - `/api/db` refuses the server-only `sys_*` tables and ATTACH/PRAGMA, and pages may only *read* `cloud_snapshots` (`api/_sqlguard.mjs`).
+  - `/api/db` refuses the server-only `sys_*` tables and ATTACH/PRAGMA, and pages may only *read* `cloud_snapshots` and `cloud_snapshot_parts` (`api/_sqlguard.mjs`).
   - The PIN lives only on the server (`sys_auth`) and changes through `/api/login {changePin}`.
   - Bots obey only the owner's chat ids.
   - A database hiccup is a 503, never a sign-out.
@@ -80,6 +80,7 @@ Other docs:
 - [desktop.md](desktop.md), [web-server.md](web-server.md) and [code-signing.md](code-signing.md);
 - [PLAN.md](PLAN.md) for long-term tasks;
 - [DECISIONS.md](DECISIONS.md) for choices not to undo.
+- [RECOVERY.md](RECOVERY.md): how to get the data back from each backup (one page).
 
 **Keep docs in their area:** update the matching `docs/areas/*.md` file, not `AI_HANDOFF.md`. All handoff sections up to 2026-11-07 (Career and Body included) are already in the area files.
 

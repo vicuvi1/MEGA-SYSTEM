@@ -1,11 +1,11 @@
 // POST /api/db (Bearer session): a Turso pipeline request, sent on with the
 // server's Turso key. Server-only tables and statements are refused (_sqlguard.mjs).
-// POST /api/db {snapshot: {day, data}}: the app's daily cloud backup (LT1). The
+// POST /api/db {snapshot: {day, data}} (and {snapshotPart} for each part of a big one): the app's daily cloud backup (LT1). The
 // backups are read-only for pages, so this only ADDS today's (never replaces one).
 import { pipelineProblem, pipelineWrites } from './_sqlguard.mjs'
 import { SCHEMA_VERSION, schemaTooOld } from './_schema.mjs'
 import { bearer, config, countCall, readBody, rowsOf, send, requireSession, turso } from './_lib.mjs'
-import { saveSnapshot } from './_snapshots.mjs'
+import { saveSnapshot, saveSnapshotPart } from './_snapshots.mjs'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
@@ -16,6 +16,11 @@ export default async function handler(req, res) {
     const body = await readBody(req)
     if (body && body.snapshot) {
       const r = await saveSnapshot(cfg, body.snapshot)
+      return send(res, r.status, r.body)
+    }
+    // A big backup goes in parts, one request each, then its manifest as {snapshot}.
+    if (body && body.snapshotPart) {
+      const r = await saveSnapshotPart(cfg, body.snapshotPart)
       return send(res, r.status, r.body)
     }
 

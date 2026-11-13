@@ -41,7 +41,7 @@ describe('the daily self-check (CL3, CL11)', () => {
     const bad = c.filter((x) => !x.ok).map((x) => x.id)
     expect(bad.sort()).toEqual(['sc:ai', 'sc:budget', 'sc:db', 'sc:drill', 'sc:google', 'sc:snapshot', 'sc:tick', 'sc:timer'])
     expect(c.find((x) => x.id === 'sc:budget')!.detail).toMatch(/85%/)
-    expect(c.find((x) => x.id === 'sc:snapshot')!.detail).toMatch(/4\.5 MB/)
+    expect(c.find((x) => x.id === 'sc:snapshot')!.detail).toMatch(/one piece is 3\.6 MB/)
     expect(selfCheckChecks({ ...base, snapshot: null }).find((x) => x.id === 'sc:snapshot')!.ok).toBe(false)
   })
   it('a problem is told once a day (as the same kind as the 30-minute check), and "working again" comes when it stays fixed', () => {

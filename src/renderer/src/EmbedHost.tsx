@@ -200,6 +200,23 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
         }
       }
 
+      // Backup before risk (2026-11-12): an embedded app asks for a full backup before a risky
+      // step (an import, a re-price, a bulk delete): { type: 'LIFE_SYSTEM_BRIDGE', action: 'BACKUP_BEFORE',
+      // payload: { label, id } }. The answer says whether it was saved; on ok: false the app should not go ahead.
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'BACKUP_BEFORE') {
+        const label = String(data.payload?.label || 'a change in an app').slice(0, 60)
+        let reply: { ok: boolean; error?: string } = { ok: false }
+        try {
+          if (!life.data.backupBeforeRisk) throw new Error('Backups are not available here')
+          await life.data.backupBeforeRisk(label)
+          reply = { ok: true }
+        } catch (err) {
+          reply = { ok: false, error: (err as Error).message }
+        }
+        ;(e.source as Window | null)?.postMessage({ type: 'LIFE_BACKUP_DONE', id: data.payload?.id ?? null, label, ...reply }, window.location.origin)
+        return
+      }
+
       // Finance Helper's "Nothing spent today": the one honest no-spend button (as on Today and
       // the Money page). It pays nothing now; the day is judged once it is over. No undo, no instant points.
       if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'FINANCE_FREE_DAY') {

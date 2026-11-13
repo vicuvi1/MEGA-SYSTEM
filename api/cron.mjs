@@ -5,16 +5,20 @@
 // Night: the wind-down before bedtime, only while wake-ups are slipping.
 // LT2: the tick sends these too, by YOUR local time (src/core/dailyClock.ts);
 // these UTC crons are the backup. Both claim the same `daily:<job>` slot.
-// GET /api/cron?job=backup (CRON_SECRET): the newest daily backup as gzip, for
-// the weekly encrypted off-site copy (.github/workflows/backup.yml, LT1).
-import { bearer, bearerIs, botDefaults, checkWebhooks, clientIp, config, countCall, cronSecretOk, gate, requireSession, send, serverBots } from './_lib.mjs'
+// GET /api/cron?job=backup (CRON_SECRET): the newest daily backup for the weekly
+// encrypted off-site copy (.github/workflows/backup.yml, LT1): `&list=1` its day
+// and parts, `&day=D&part=N` one part's gzip bytes (joined, the parts are one
+// gzip file), no extra: the whole gzip when it fits one answer.
+// POST /api/cron?job=offsite (CRON_SECRET): the workflow says the copy is kept
+// (Settings → Data safety shows when).
+import { bearer, bearerIs, botDefaults, checkWebhooks, clientIp, config, countCall, cronSecretOk, gate, requireSession, run, send, serverBots } from './_lib.mjs'
 import { DAILY_GAP_MS, dailyDue, dailyGate, healthAlarm, healthPush, localMinute, phonePay, runDaily, runPlugins, runTick, selfCheck, sportShared, tickHealth, webhookVerdict } from './_bot/bot.mjs'
 import { dropHealthKey, healthKeyOk, listHealthKeys, newHealthKey, payRequest, readCapped } from './_health.mjs'
 import { readBody } from './_lib.mjs'
 import { deadlineIn, modelUntil, pingModel, rollupUsage } from './ai.mjs'
 import { googleEnv } from './google.mjs'
 import { pushNew } from './_push.mjs'
-import { newestSnapshot } from './_snapshots.mjs'
+import { newestSnapshot, newestSnapshotInfo, snapshotPart } from './_snapshots.mjs'
 
 const appUrl = () => process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : '')
 const sleepBotOf = () => serverBots().find((b) => b.name === 'WAKY_BOT_TOKEN') ?? serverBots().find((b) => b.name === 'MAN_BOT_TOKEN')
@@ -66,7 +70,8 @@ export default async function handler(req, res) {
   const secret = process.env.CRON_SECRET || ''
   if (!secret || !cronSecretOk(req)) return send(res, 401, { error: 'Not allowed' })
   const job = new URL(req.url, 'http://x').searchParams.get('job')
-  if (job === 'backup') return backup(res)
+  if (job === 'backup') return backup(req, res)
+  if (job === 'offsite') return offsite(req, res)
   if (!['morning', 'reask', 'midday', 'evening', 'night'].includes(job)) return send(res, 400, { error: 'job=morning|reask|midday|evening|night' })
   const cfg = config()
   const bot = serverBots().find((b) => b.name === 'MEGA_BOT_TOKEN') ?? serverBots()[0]
@@ -135,18 +140,64 @@ async function tick(req, res) {
   }
 }
 
-/** The newest daily backup, gzipped (the backup workflow encrypts it before storing it). */
-async function backup(res) {
+/** One answer may carry at most 4.5 MB: a bigger backup is fetched part by part. */
+const ONE_ANSWER = 4_300_000
+
+/**
+ * The newest daily backup (the backup workflow encrypts it before storing it):
+ * `list=1` its day, size and parts with their SHA-256; `day&part` one part's
+ * gzip bytes; nothing: the whole gzip when it fits one answer.
+ */
+async function backup(req, res) {
+  const cfg = config()
+  if (!cfg.ok) return send(res, 503, { error: 'Server not set up' })
+  const q = new URL(req.url, 'http://x').searchParams
+  try {
+    if (q.get('list')) {
+      const info = await newestSnapshotInfo(cfg)
+      return info ? send(res, 200, info) : send(res, 404, { error: 'No backup yet' })
+    }
+    const gzip = (day, bytes) => {
+      res.statusCode = 200
+      res.setHeader('Content-Type', 'application/gzip')
+      res.setHeader('Cache-Control', 'no-store')
+      res.setHeader('X-Snapshot-Day', day)
+      res.end(bytes)
+    }
+    if (q.get('part') != null) {
+      const day = String(q.get('day') || '')
+      const part = Number(q.get('part'))
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isInteger(part)) return send(res, 400, { error: 'day=YYYY-MM-DD&part=N' })
+      const bytes = await snapshotPart(cfg, day, part)
+      return bytes ? gzip(day, bytes) : send(res, 404, { error: 'No such part' })
+    }
+    const info = await newestSnapshotInfo(cfg)
+    if (!info) return send(res, 404, { error: 'No backup yet' })
+    if (info.bytes > ONE_ANSWER) return send(res, 413, { error: 'The backup is bigger than one answer: fetch it with list=1, then each part', parts: info.parts })
+    const snap = await newestSnapshot(cfg)
+    if (!snap) return send(res, 404, { error: 'No backup yet' })
+    gzip(snap.day, snap.gz)
+  } catch (e) {
+    send(res, 503, { error: e.message || 'Database not reachable' })
+  }
+}
+
+/** The off-site workflow kept an encrypted copy (POST {day, bytes}) or failed ({error}): Settings → Data safety shows it. */
+async function offsite(req, res) {
+  if (req.method !== 'POST') return send(res, 405, { error: 'POST only' })
   const cfg = config()
   if (!cfg.ok) return send(res, 503, { error: 'Server not set up' })
   try {
-    const snap = await newestSnapshot(cfg)
-    if (!snap) return send(res, 404, { error: 'No backup yet' })
-    res.statusCode = 200
-    res.setHeader('Content-Type', 'application/gzip')
-    res.setHeader('Cache-Control', 'no-store')
-    res.setHeader('X-Snapshot-Day', snap.day)
-    res.end(snap.gz)
+    const body = (await readBody(req)) || {}
+    const now = new Date().toISOString()
+    const ok = !body.error && /^\d{4}-\d{2}-\d{2}$/.test(String(body.day || ''))
+    const msg = ok ? JSON.stringify({ day: String(body.day), bytes: Number(body.bytes) || 0 }) : String(body.error || 'The off-site copy failed').slice(0, 300)
+    await run(cfg, [
+      ['CREATE TABLE IF NOT EXISTS sys_health (key TEXT PRIMARY KEY, at TEXT NOT NULL, msg TEXT)'],
+      ['INSERT INTO sys_health (key, at, msg) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = excluded.msg', [ok ? 'offsite:ok' : 'offsite:err', now, msg]],
+      ...(ok ? [['INSERT INTO sys_health (key, at, msg) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET at = excluded.at, msg = excluded.msg', ['note:offsite', now, msg]]] : [])
+    ])
+    send(res, 200, { ok: true })
   } catch (e) {
     send(res, 503, { error: e.message || 'Database not reachable' })
   }

@@ -13,9 +13,8 @@ export const SELF_CHECK = {
   errorHours: 24,
   /** A plain SELECT slower than this is a slow database. */
   dbSlowMs: 2000,
-  /** Today's backup: warn above this size (a server answer may be at most 4.5 MB). */
-  snapshotWarnBytes: 3_000_000,
-  snapshotMaxBytes: 4_500_000,
+  /** Today's backup: warn when a single stored chunk reaches this (one request may carry 4.5 MB; backups go in parts of about 2 MB, so only an old one-piece backup gets here). */
+  snapshotWarnBytes: 2_500_000,
   /** The restore drill runs weekly; older than this is a missed drill. */
   drillDays: 8,
   /** Ben's tick and the outside timer should run every 10 minutes. */
@@ -53,7 +52,7 @@ export interface SelfCheckInput {
   budget?: { spent: number; budget: number } | null
   db: Probe
   /** Today's cloud backup (calendar day), or null when there is none yet. */
-  snapshot: { day: string; bytes: number } | null
+  snapshot: { day: string; bytes: number; parts?: number; biggest?: number } | null
   /** When the last restore drill ran (ISO), or null. */
   drillAt: string | null
   beats: Beats
@@ -98,9 +97,9 @@ export function selfCheckChecks(i: SelfCheckInput): Check[] {
   }
   add('db', 'Database', i.db.ok && (i.db.ms ?? 0) < SELF_CHECK.dbSlowMs, !i.db.ok ? `Not reachable: ${String(i.db.error ?? '').slice(0, 120)}` : `Answers in ${i.db.ms} ms${(i.db.ms ?? 0) >= SELF_CHECK.dbSlowMs ? ' (slow)' : ''}`)
   if (!i.snapshot) add('snapshot', "Today's backup", false, 'Not made yet today')
-  else if (i.snapshot.bytes >= SELF_CHECK.snapshotWarnBytes)
-    add('snapshot', "Today's backup", false, `${mb(i.snapshot.bytes)}: close to the ${mb(SELF_CHECK.snapshotMaxBytes)} a backup may be. Download a backup in Settings → Data and tell your helper to make backups smaller`)
-  else add('snapshot', "Today's backup", true, `Saved (${mb(i.snapshot.bytes)})`)
+  else if ((i.snapshot.biggest ?? i.snapshot.bytes) >= SELF_CHECK.snapshotWarnBytes)
+    add('snapshot', "Today's backup", false, `Saved, but one piece is ${mb(i.snapshot.biggest ?? i.snapshot.bytes)} (a piece should stay under ${mb(SELF_CHECK.snapshotWarnBytes)}; one request may carry 4.5 MB). Tell your helper; your local backup in Settings → Data safety has everything`)
+  else add('snapshot', "Today's backup", true, `Saved (${mb(i.snapshot.bytes)}${(i.snapshot.parts ?? 1) > 1 ? `, ${i.snapshot.parts} parts` : ''})`)
   if (!i.drillAt) add('drill', 'Restore drill', false, 'Has not run yet')
   else {
     const m = mins(now, i.drillAt)

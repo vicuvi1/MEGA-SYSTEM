@@ -23,11 +23,11 @@ const INTERNAL = /^(sqlite_dbpage|dbstat|pragma_\w+)$/
 /** The text of a statement's arguments (positional and named). */
 const argText = (stmt) => [...(Array.isArray(stmt.args) ? stmt.args : []), ...(Array.isArray(stmt.named_args) ? stmt.named_args.map((a) => a?.value) : [])].map((a) => (a && typeof a === 'object' ? String(a.value ?? a.base64 ?? '') : String(a ?? ''))).join('\n').toLowerCase()
 /**
- * Tables a page may only read (LT1): the 30 daily cloud backups. A stolen
+ * Tables a page may only read (LT1): the 30 daily cloud backups and their parts. A stolen
  * session must not be able to wipe or rewrite them; the app saves its daily
  * backup through the server ({snapshot} in api/db.mjs), which only adds.
  */
-export const READ_ONLY_TABLES = ['cloud_snapshots']
+export const READ_ONLY_TABLES = ['cloud_snapshots', 'cloud_snapshot_parts']
 const WRITES = new Set(['insert', 'update', 'delete', 'replace', 'drop', 'alter', 'create', 'upsert', 'truncate', 'reindex'])
 
 /**
