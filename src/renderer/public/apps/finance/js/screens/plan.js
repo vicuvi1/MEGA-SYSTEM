@@ -11,6 +11,7 @@ import { convert } from '../fx.js';
 import { forecast } from '../forecast.js';
 import { lineChart } from '../charts.js';
 import { findSubscriptions, recurringFrom } from '../subs.js';
+import * as MoneyB2 from './moneyb2.js';
 
 const initial = (name) => esc((String(name).match(/\p{L}|\p{N}/u) || ['•'])[0].toUpperCase());
 const catOf = (id) => M.category(ctx.state, id) || { name: 'Other', emoji: '•' };
@@ -542,7 +543,8 @@ function budgetCard() {
   if (!st.rows.length && !subRows.length) {
     return `<section class="card"><h2>Budgets</h2>
       <p class="muted" style="margin-top:0">Give the categories you want to keep in check (food, going out, clothes…) a monthly limit. You get a warning at 80%, when you go over, and when your pace would take you over.</p>
-      <button class="btn primary block" data-act="budget-set">Set budgets</button></section>`;
+      <button class="btn primary block" data-act="budget-set">Set budgets</button>
+      <div style="margin-top:8px">${MoneyB2.suggestButton()}</div></section>`;
   }
   const evenPace = (Number(today.slice(8, 10)) / daysInMonth(key)) * 100;
   const rows = st.rows.map((r) => {
@@ -566,7 +568,8 @@ function budgetCard() {
   }).join('');
   return `<section class="card"><h2>Budgets · ${esc(monthLabel(key))} <button class="card-link right" data-act="budget-set">Edit</button></h2>
     <p class="muted small" style="margin-top:0">${ctx.money(st.spent)} of ${ctx.money(st.budget)} · ${st.left >= 0 ? `${ctx.money(st.left)} left` : `<b class="expense">${ctx.money(-st.left)} over</b>`} · ${st.daysLeft} day${st.daysLeft === 1 ? '' : 's'} to go. The line marks an even pace.</p>
-    ${rows}${subs ? `<p class="muted small" style="margin:14px 0 6px">Subcategories</p>${subs}` : ''}</section>`;
+    ${rows}${subs ? `<p class="muted small" style="margin:14px 0 6px">Subcategories</p>${subs}` : ''}
+    <div style="margin-top:12px">${MoneyB2.suggestButton()}</div></section>`;
 }
 
 function budgetSheet() {
@@ -684,6 +687,9 @@ export function view() {
     case 'budgets':
       tabContent = budgetCard();
       break;
+    case 'yearly':
+      tabContent = MoneyB2.subsTab();
+      break;
     default:
       tabContent = subsFinderCard(state, today) + subscriptionsTab(state, today, rules, scheduled);
       break;
@@ -707,6 +713,7 @@ export function view() {
       <button class="chip" data-act="plan-tab" data-tab="calendar" aria-pressed="${tab === 'calendar'}">📅 Payment Timeline ${due.length ? `<span class="tab-badge bad">${due.length} due</span>` : ''}</button>
       <button class="chip" data-act="plan-tab" data-tab="forecast" aria-pressed="${tab === 'forecast'}">📈 Cash-Flow Forecast</button>
       <button class="chip" data-act="plan-tab" data-tab="budgets" aria-pressed="${tab === 'budgets'}">🎯 Monthly Budgets</button>
+      <button class="chip" data-act="plan-tab" data-tab="yearly" aria-pressed="${tab === 'yearly'}">💳 Subscriptions per year</button>
     </div>
 
     <div class="plan-tab-body">

@@ -6203,3 +6203,18 @@ html[data-calm] .theme-atmosphere, html[data-calm] .atmosphere-particle { displa
 .kbd-row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; align-items: center; }
 .kbd-keys { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .kbd-row kbd { border: 1px solid var(--line-strong, #555); border-bottom-width: 2px; border-radius: 6px; padding: 1px 7px; font: 600 12px/1.6 inherit; background: color-mix(in srgb, var(--text, #fff) 6%, transparent); }
+
+/* Money batch 2: month review, net worth line, budget suggestions, subscriptions per year (js/screens/moneyb2.js) */
+.b2-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; margin: 8px 0; }
+.b2-facts > div { min-width: 0; }
+.b2-facts dt { color: var(--muted); font-size: 12px; }
+.b2-facts dd { margin: 2px 0 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.b2-facts dd small { color: var(--muted); }
+.b2-tip { margin: 8px 0; padding: 8px 12px; border-radius: 10px; background: rgba(127,127,127,.1); }
+.b2-nw { cursor: pointer; }
+.b2-nw-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 4px; }
+.b2-nw-top b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.b2-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.2fr) 110px; }
+.b2-row .n input[type="checkbox"] { margin-right: 6px; }
+.b2-sub .sub-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.b2-note { display: block; color: var(--gold); font-size: 12px; margin-top: 2px; }

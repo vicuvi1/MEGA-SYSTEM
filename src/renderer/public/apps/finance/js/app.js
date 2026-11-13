@@ -49,6 +49,7 @@ import * as RateGaps from './screens/rategaps.js';
 import * as WorkHour from './screens/workhour.js';
 import * as YearReview from './screens/yearreview.js';
 import * as LongView from './screens/longview.js';
+import * as MoneyB2 from './screens/moneyb2.js';
 import * as Taxes from './screens/taxes.js';
 import * as MoneyCalendar from './screens/calendar.js';
 import * as Wishlist from './screens/wishlist.js';
@@ -1063,6 +1064,7 @@ function viewHome() {
   ${DEMO ? '<div class="banner"><p>Live preview with <b>example data</b> (a made-up month). What you add here stays in this browser only.</p></div>' : ''}
   ${Telegram.alertBanner()}
   ${Reprice.banner()}
+  ${MoneyB2.reviewCard(today)}
   ${welcome}
   ${safeCard(today)}
   ${Afford.homeRow()}
@@ -1081,6 +1083,7 @@ function viewHome() {
     <div class="dash-side">
       ${Goals.otherGoalsCard()}
       ${Plan.homeCard()}
+      ${MoneyB2.netWorthCard(today)}
       ${tips.length ? `<section class="card"><h2>Heads up <button class="card-link right" data-go="reports">Reports</button></h2>${tips.map(tipCard).join('')}</section>` : ''}
       ${jarsCard(key)}
     </div>
@@ -3280,6 +3283,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'cat-open') Spending.openCategory(el.dataset.cat, el.dataset.period, el.dataset.type);
   else if (Spending.onClick(act, el)) { /* the "Where your money goes" card */ }
   else if (Reprice.onClick(act)) { /* "Re-price past entries" */ }
+  else if (MoneyB2.onClick(act, el)) { /* budgets from 3 months, month review, subscriptions */ }
   else if (Reconcile.onClick(act, el)) { /* monthly reconciliation */ }
   else if (Tidy.onClick(act)) { /* duplicates, refund suggestions, rate update */ }
   else if (CashCount.onClick(act, el)) { /* weekly cash count card */ }
