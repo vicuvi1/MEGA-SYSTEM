@@ -72863,7 +72863,8 @@ var SIMPLE_KEY = "simple_mode";
 var DEFAULT_SIMPLE = {
 	on: true,
 	budget: true,
-	afternoon: false
+	afternoon: false,
+	coins: false
 };
 /** Missing or unreadable = the defaults (on). An old `shown` list (the Archive) is ignored. */
 function readSimple(raw) {
@@ -72877,7 +72878,8 @@ function readSimple(raw) {
 	return {
 		on: r.on !== false,
 		budget: r.budget !== false,
-		afternoon: r.afternoon === true
+		afternoon: r.afternoon === true,
+		coins: r.coins === true
 	};
 }
 // src/server/mcp.ts
