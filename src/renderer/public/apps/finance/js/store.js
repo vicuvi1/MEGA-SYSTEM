@@ -91,8 +91,6 @@ function failed(e) {
 }
 
 export function save(state, storage = globalThis.localStorage) {
-  // [books] A one-book view (books.js bookView/bookLens) is never saved: it holds only part of your data.
-  if (state?._view) return false;
   // A direct save is the newest copy: a waiting (debounced) one must not land after it.
   cancelPending();
   try {
@@ -142,7 +140,6 @@ export function onSaved(fn) {
 export const hasPendingSave = () => !!pending;
 
 export function saveSoon(state, storage = globalThis.localStorage, delay = SAVE_DELAY) {
-  if (state?._view) return false; // [books] never a one-book view
   if (isPlaceholder(state) && !readHead(storage)?.enc) return false;
   pending = { state, storage };
   if (timer) clearTimeout(timer);

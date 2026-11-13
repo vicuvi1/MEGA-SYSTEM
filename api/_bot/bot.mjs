@@ -5121,12 +5121,12 @@ function debtLine(d, a) {
 	return `SLEEP DEBT: ${hm$15(d.debtMin)} behind a ${hm$15(d.needMin)} need over the last ${d.logged} logged nights.${a.napOk ? " Suggest one 20-min nap before 15:00." : " No nap today (too late)."}${a.early ? ` Suggest bed at ${a.early.bed} ${a.early.label === "tonight" || a.early.label === "tomorrow" ? a.early.label : `on ${a.early.label}`} (his next free evening).` : ""} Say it once, not every message.`;
 }
 // src/core/benGround.ts
-var pad$18 = (n) => String(n).padStart(2, "0");
+var pad$17 = (n) => String(n).padStart(2, "0");
 var TIME$2 = /\b([01]?\d|2[0-3]):([0-5]\d)\b/g;
 var AMPM = /\b(1[0-2]|0?[1-9])(?::([0-5]\d))?\s?(am|pm)\b/gi;
 var EVENT$1 = /\b(meetings?|appointments?|interviews?|lectures?|class(?:es)?|seminars?|exams?)\b/gi;
 var PROGRESS = /\b(?:nearly|almost|mostly|half(?:way)?|basically|practically)\s+(?:done|finished|through|complete|there)\b/i;
-var norm$10 = (h, m) => `${pad$18(h)}:${pad$18(m)}`;
+var norm$10 = (h, m) => `${pad$17(h)}:${pad$17(m)}`;
 /** Every clock time in a text, as "HH:MM" (am/pm turned into 24 h). */
 function timesIn(text) {
 	const out = [];
@@ -11290,7 +11290,7 @@ function coffeePlain(v, bed) {
 	return `☕ Logged your ${nth} coffee today.\nHave your last caffeine by ${v.curfew}, so it doesn't hurt your sleep (bed at ${bed}).`;
 }
 // src/core/benQuick.ts
-var pad$17 = (n) => String(n).padStart(2, "0");
+var pad$16 = (n) => String(n).padStart(2, "0");
 var ymd$3 = (d) => calendarDay(d);
 var at$1 = (day) => /* @__PURE__ */ new Date(`${day}T12:00:00`);
 var plus = (day, n) => {
@@ -11363,7 +11363,7 @@ function rangeOf$1(text, today) {
 		const idx = MONTHS$9.findIndex((x) => x.startsWith(m[1]));
 		let year = Number(today.slice(0, 4));
 		if (idx > Number(today.slice(5, 7)) - 1) year -= 1;
-		const from = `${year}-${pad$17(idx + 1)}-01`;
+		const from = `${year}-${pad$16(idx + 1)}-01`;
 		const end = new Date(year, idx + 1, 0);
 		return {
 			from,
@@ -11430,7 +11430,7 @@ var ICON = {
 	tasks: "✅",
 	points: "🪙"
 };
-var hmOf$9 = (d) => `${pad$17(d.getHours())}:${pad$17(d.getMinutes())}`;
+var hmOf$9 = (d) => `${pad$16(d.getHours())}:${pad$16(d.getMinutes())}`;
 var minOf$2 = (hm) => {
 	const m = /^(\d{1,2}):(\d{2})$/.exec(hm);
 	return m ? Number(m[1]) * 60 + Number(m[2]) : NaN;
@@ -11450,7 +11450,7 @@ function nowSlots(blocks, events, now, after) {
 		all.push({
 			title: b.title,
 			start: b.start,
-			end: `${pad$17(Math.floor(e / 60) % 24)}:${pad$17(e % 60)}`,
+			end: `${pad$16(Math.floor(e / 60) % 24)}:${pad$16(e % 60)}`,
 			kind: "block",
 			s,
 			e
@@ -16299,7 +16299,7 @@ var sweep = (now) => ({
 	args: [now - SET_TTL_MS]
 });
 /** Message ids padded, so the keys sort in the order the photos were sent. */
-var pad$16 = (m) => String(Math.max(0, Math.floor(m) || 0)).padStart(12, "0");
+var pad$15 = (m) => String(Math.max(0, Math.floor(m) || 0)).padStart(12, "0");
 var clean$3 = (s) => String(s ?? "").replace(/[^\w-]/g, "").slice(0, 40);
 var partPrefix = (chat, set) => `fdp:${clean$3(chat)}:${set}:`;
 var leadKey = (chat, gid) => `fdl:${clean$3(chat)}:g${clean$3(gid)}`;
@@ -16323,7 +16323,7 @@ var partOf$1 = (v) => {
 };
 var partRow = (prefix, p) => ({
 	sql: "INSERT OR REPLACE INTO sys_kv (key, value) VALUES (?, ?)",
-	args: [prefix + pad$16(p.m), JSON.stringify({
+	args: [prefix + pad$15(p.m), JSON.stringify({
 		f: p.f,
 		c: p.c.slice(0, 300),
 		m: p.m,
@@ -16367,7 +16367,7 @@ async function joinAlbum(kv, chat, gid, part, now) {
 	if (parse$4(r[4]?.[0]?.[0])?.st !== "taken") return "wait";
 	await kv([{
 		sql: "DELETE FROM sys_kv WHERE key = ?",
-		args: [prefix + pad$16(part.m)]
+		args: [prefix + pad$15(part.m)]
 	}]);
 	return "late";
 }
@@ -19825,8 +19825,8 @@ function dedupeTasks(tasks) {
 	}
 	return out;
 }
-var pad$15 = (n) => String(n).padStart(2, "0");
-var hmOf$8 = (d) => `${pad$15(d.getHours())}:${pad$15(d.getMinutes())}`;
+var pad$14 = (n) => String(n).padStart(2, "0");
+var hmOf$8 = (d) => `${pad$14(d.getHours())}:${pad$14(d.getMinutes())}`;
 var toM$2 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 /**
 * The calendar events a task or block can be "the same thing" as: today's
@@ -20795,9 +20795,9 @@ function relinkAlso(plan) {
 // src/core/benTalk.ts
 /** A regex with Unicode word edges: \\b only knows ASCII, so "arată" or "второй" would never match. */
 var uw = (src, flags = "") => new RegExp(src.replace(/\\b/g, "(?:(?<![\\p{L}\\p{N}])(?=[\\p{L}\\p{N}])|(?<=[\\p{L}\\p{N}])(?![\\p{L}\\p{N}]))"), `${flags}u`);
-var pad$14 = (n) => String(n).padStart(2, "0");
+var pad$13 = (n) => String(n).padStart(2, "0");
 var ymd$2 = (d) => calendarDay(d);
-var hmOf$7 = (d) => `${pad$14(d.getHours())}:${pad$14(d.getMinutes())}`;
+var hmOf$7 = (d) => `${pad$13(d.getHours())}:${pad$13(d.getMinutes())}`;
 var label$1 = (d) => d.toLocaleDateString("en-GB", {
 	weekday: "short",
 	day: "numeric",
@@ -20812,11 +20812,11 @@ function timeFrame(now = /* @__PURE__ */ new Date(), startHour = 4) {
 	const appDay = ymd$2(app);
 	const nextCal = new Date(now);
 	nextCal.setDate(nextCal.getDate() + 1);
-	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$7(now)}, ${label$1(now)}. App day: ${label$1(app)} (the app's day turns at ${pad$14(startHour)}:00).`];
+	const lines = [`== The time (read this before you say "today", "tonight" or "tomorrow") ==`, `Clock: ${hmOf$7(now)}, ${label$1(now)}. App day: ${label$1(app)} (the app's day turns at ${pad$13(startHour)}:00).`];
 	if (afterMidnight) {
 		const seven = new Date(now);
 		seven.setHours(7, 0, 0, 0);
-		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label$1(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label$1(now)} from ${pad$14(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label$1(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label$1(app)} until ${pad$14(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label$1(now)}); ask with chips only if it really matters.`);
+		lines.push(`It is AFTER MIDNIGHT. He has not slept yet: for him it is still the night of ${label$1(app)}.`, `- "tonight" = right now, until he sleeps.`, `- "this morning" / "in the morning" = ${label$1(now)} from ${pad$13(startHour)}:00 on, only a few hours away. Times like 07:00 are TODAY's calendar date (${label$1(now)}), so say it as "this morning" with how far it is (07:00 is ${whenWords(seven, now, startHour)}), never "tomorrow morning".`, `- "today" in the app (points, habits, focus) still means ${label$1(app)} until ${pad$13(startHour)}:00. If he says "tomorrow" he usually means after he sleeps (${label$1(now)}); ask with chips only if it really matters.`);
 	} else if (h >= 18) lines.push(`- "tonight" = this evening (${label$1(now)}). "tomorrow morning" = ${label$1(nextCal)}.`);
 	else if (h < 12) lines.push(`- "this morning" = now (${label$1(now)}). "tonight" = this evening. "tomorrow" = ${label$1(nextCal)}.`);
 	else lines.push(`- "this afternoon" = now. "tonight" = this evening (${label$1(now)}). "tomorrow" = ${label$1(nextCal)}.`);
@@ -21120,7 +21120,7 @@ var timeOf$1 = (s) => {
 	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
 	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
 	const mi = Number(m[2] ?? 0);
-	return h < 24 && mi < 60 ? `${pad$14(h)}:${pad$14(mi)}` : null;
+	return h < 24 && mi < 60 ? `${pad$13(h)}:${pad$13(mi)}` : null;
 };
 var BLOCK = "(?:block|blocks|blocul|blocului|блок|блока)";
 /**
@@ -21202,7 +21202,7 @@ function pickChoice(text, labels) {
 	if (exact >= 0) return exact;
 	const time = /\b(\d{1,2})[:.](\d{2})\b/.exec(t) ?? /\b(?:at|la|в)\s+(\d{1,2})\b/.exec(t);
 	if (time) {
-		const hm = `${pad$14(Number(time[1]))}:${time[2] ?? "00"}`;
+		const hm = `${pad$13(Number(time[1]))}:${time[2] ?? "00"}`;
 		const k = labels.findIndex((l) => l.endsWith(hm));
 		if (k >= 0) return k;
 	}
@@ -23632,7 +23632,7 @@ function strengthSummary(workouts) {
 // src/core/progress.ts
 var WEEKS = 6;
 /** Sum of `value` for days in [from, to]. */
-function sum$3(rows, from, to, value) {
+function sum$2(rows, from, to, value) {
 	let t = 0;
 	for (const r of rows) if (r.day >= from && r.day <= to) t += value(r);
 	return t;
@@ -23664,7 +23664,7 @@ function progressReport(i) {
 			id: "focus",
 			label: "Focus time",
 			higherBetter: true,
-			f: (a, b) => sum$3(i.focus, a, b, (r) => r.minutes),
+			f: (a, b) => sum$2(i.focus, a, b, (r) => r.minutes),
 			text: hm$10,
 			day: (v) => v ? hm$10(v) : "·",
 			target: 600,
@@ -23674,7 +23674,7 @@ function progressReport(i) {
 			id: "wake",
 			label: "On-time wake-ups",
 			higherBetter: true,
-			f: (a, b) => sum$3(i.wakes, a, b, (r) => r.onTime ? 1 : 0),
+			f: (a, b) => sum$2(i.wakes, a, b, (r) => r.onTime ? 1 : 0),
 			text: (v) => `${v}/7`,
 			day: tick,
 			target: 7,
@@ -23704,7 +23704,7 @@ function progressReport(i) {
 			id: "todoist",
 			label: "Todoist tasks done",
 			higherBetter: true,
-			f: (a, b) => sum$3(i.todoist, a, b, () => 1),
+			f: (a, b) => sum$2(i.todoist, a, b, () => 1),
 			text: (v) => String(v),
 			day: (v) => v ? String(v) : "·",
 			target: 15,
@@ -23714,7 +23714,7 @@ function progressReport(i) {
 			id: "mustdo",
 			label: "Must-dos done",
 			higherBetter: true,
-			f: (a, b) => sum$3(i.mustdos ?? [], a, b, (r) => r.done ? 1 : 0),
+			f: (a, b) => sum$2(i.mustdos ?? [], a, b, (r) => r.done ? 1 : 0),
 			text: (v) => String(v),
 			day: (v) => v ? String(v) : "·",
 			target: 10,
@@ -23725,7 +23725,7 @@ function progressReport(i) {
 			id: "spend",
 			label: "Spent",
 			higherBetter: false,
-			f: (a, b) => sum$3(i.spending ?? [], a, b, (r) => r.bani),
+			f: (a, b) => sum$2(i.spending ?? [], a, b, (r) => r.bani),
 			text: lei,
 			day: (v) => v ? String(Math.round(v / 100)) : "·",
 			target: null,
@@ -29663,7 +29663,7 @@ var DAYS$6 = [
 	"Fri",
 	"Sat"
 ];
-var pad$13 = (n) => String(n % 24).padStart(2, "0");
+var pad$12 = (n) => String(n % 24).padStart(2, "0");
 var W = {
 	urge: 1,
 	reset: 3
@@ -29702,8 +29702,8 @@ function riskWindows(events, now = /* @__PURE__ */ new Date(), max = 3) {
 	const win = (slot, weekday, a) => ({
 		slot,
 		weekday,
-		from: `${pad$13(slot * 2)}:00`,
-		to: `${pad$13(slot * 2 + 2)}:00`,
+		from: `${pad$12(slot * 2)}:00`,
+		to: `${pad$12(slot * 2 + 2)}:00`,
 		urges: a.urges,
 		resets: a.resets,
 		score: a.score
@@ -33564,12 +33564,12 @@ function stepsFromText(text) {
 	}
 	return out.slice(0, 40);
 }
-var pad$12 = (n) => String(n).padStart(2, "0");
+var pad$11 = (n) => String(n).padStart(2, "0");
 var mondayOf$2 = (day) => addDays$8(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
 var lastOfMonth = (day) => {
 	const y = Number(day.slice(0, 4));
 	const m = Number(day.slice(5, 7));
-	return `${y}-${pad$12(m)}-${pad$12(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
+	return `${y}-${pad$11(m)}-${pad$11(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
 };
 /** The week (Monday–Sunday) or month a day is in. */
 function periodOf(per, day) {
@@ -33733,7 +33733,7 @@ var nice$1 = (n, unit) => {
 /** "45 min", "1h30" for hours. */
 var hoursText$1 = (h) => {
 	const m = Math.round(h * 60);
-	return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad$12(m % 60) : ""}`;
+	return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad$11(m % 60) : ""}`;
 };
 var amount = (g, n) => {
 	if (g.unit === "hours") return hoursText$1(n);
@@ -34153,7 +34153,7 @@ var MONTHS$5 = [
 	"dec"
 ];
 var monthOf = (w) => MONTHS$5.indexOf(w.slice(0, 3).toLowerCase());
-var pad$11 = (n) => String(n).padStart(2, "0");
+var pad$10 = (n) => String(n).padStart(2, "0");
 var lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
 var valid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= lastDay(y, m);
 /** The first date in the text after today: "31 Dec", "Dec 31", "31.12", "2026-12-31", "end of month", "in 3 months", "by June". */
@@ -34162,8 +34162,8 @@ function parseDeadline(text, today) {
 	const y0 = Number(today.slice(0, 4));
 	const future = (y, m, d, yearGiven) => {
 		if (!valid(y, m, d)) return null;
-		let day = `${y}-${pad$11(m)}-${pad$11(d)}`;
-		if (!yearGiven && day < today) day = `${y + 1}-${pad$11(m)}-${pad$11(Math.min(d, lastDay(y + 1, m)))}`;
+		let day = `${y}-${pad$10(m)}-${pad$10(d)}`;
+		if (!yearGiven && day < today) day = `${y + 1}-${pad$10(m)}-${pad$10(Math.min(d, lastDay(y + 1, m)))}`;
 		return day;
 	};
 	let m = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(t);
@@ -34200,7 +34200,7 @@ function parseDeadline(text, today) {
 		const y = y0;
 		const mo = Number(today.slice(5, 7));
 		return {
-			day: m[1] === "year" ? `${y}-12-31` : `${y}-${pad$11(mo)}-${pad$11(lastDay(y, mo))}`,
+			day: m[1] === "year" ? `${y}-12-31` : `${y}-${pad$10(mo)}-${pad$10(lastDay(y, mo))}`,
 			match: m[0]
 		};
 	}
@@ -34485,7 +34485,7 @@ var timeOf = (t) => {
 	let h = Number(m[1]);
 	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
 	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
-	return h > 23 ? null : `${pad$11(h)}:${m[2] ?? "00"}`;
+	return h > 23 ? null : `${pad$10(h)}:${m[2] ?? "00"}`;
 };
 var PC_KIND = [
 	[/gam(e|es|ing)|steam|valorant|cs2|lol\b/i, "gaming"],
@@ -38444,7 +38444,7 @@ var MONTHS$4 = [
 	"december"
 ];
 var cap$2 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-var pad$10 = (n) => String(n).padStart(2, "0");
+var pad$9 = (n) => String(n).padStart(2, "0");
 var toMin$3 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 function lev(a, b) {
 	const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
@@ -38510,11 +38510,11 @@ function parseQuick$1(input, ctx) {
 	let minutes = null;
 	const hmOf = (h, m, ap) => {
 		if (ap) {
-			if (h < 1 || h > 12 || m > 59) return fail$1(`I couldn't read ${h}:${pad$10(m)} ${ap} as a time. Try 7pm or 19:00.`);
-			return `${pad$10(h % 12 + (/^p/i.test(ap) ? 12 : 0))}:${pad$10(m)}`;
+			if (h < 1 || h > 12 || m > 59) return fail$1(`I couldn't read ${h}:${pad$9(m)} ${ap} as a time. Try 7pm or 19:00.`);
+			return `${pad$9(h % 12 + (/^p/i.test(ap) ? 12 : 0))}:${pad$9(m)}`;
 		}
-		if (h > 23 || m > 59) return fail$1(`I couldn't read ${h}:${pad$10(m)} as a time. Try 18:30.`);
-		return `${pad$10(h)}:${pad$10(m)}`;
+		if (h > 23 || m > 59) return fail$1(`I couldn't read ${h}:${pad$9(m)} as a time. Try 18:30.`);
+		return `${pad$9(h)}:${pad$9(m)}`;
 	};
 	const range = take(/(?:(?:\b(?:at|from)|@)\s*)?\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/i);
 	if (range) {
@@ -38623,8 +38623,8 @@ function parseQuick$1(input, ctx) {
 			ask: `I couldn't read "${dm[0].trim()}" as a date. Try 20 Nov.`
 		};
 		let y = Number(today.slice(0, 4));
-		let day = `${y}-${pad$10(mon + 1)}-${pad$10(d)}`;
-		if (day < today) day = `${++y}-${pad$10(mon + 1)}-${pad$10(d)}`;
+		let day = `${y}-${pad$9(mon + 1)}-${pad$9(d)}`;
+		if (day < today) day = `${++y}-${pad$9(mon + 1)}-${pad$9(d)}`;
 		if ((/* @__PURE__ */ new Date(`${day}T12:00:00`)).getDate() !== d) return {
 			ok: false,
 			ask: `There is no ${d} ${cap$2(MONTHS$4[mon])}. Which day?`
@@ -46169,7 +46169,7 @@ var addDays$2 = (d, n) => {
 	x.setUTCDate(x.getUTCDate() + n);
 	return x.toISOString().slice(0, 10);
 };
-var sum$2 = (s, today, from, to, counted) => {
+var sum$1 = (s, today, from, to, counted) => {
 	const vals = [];
 	for (let k = from; k <= to; k++) {
 		const v = s[addDays$2(today, -k)];
@@ -46186,8 +46186,8 @@ function lifeReview(series, urges, today) {
 	const gaps = {};
 	const area = (m, label, fmt, perDay, better) => {
 		const counted = m !== "sleep";
-		const w = sum$2(series[m], today, 0, 6, counted);
-		const u = sum$2(series[m], today, 7, 34, counted);
+		const w = sum$1(series[m], today, 0, 6, counted);
+		const u = sum$1(series[m], today, 7, 34, counted);
 		if (!w.n || !u.n) return;
 		const week = perDay ? w.total / w.n : w.total;
 		const usual = perDay ? u.total / u.n : u.total / u.n * 7;
@@ -56207,9 +56207,9 @@ var MONTHS$3 = [
 	"November",
 	"December"
 ];
-var pad$9 = (n) => String(n).padStart(2, "0");
+var pad$8 = (n) => String(n).padStart(2, "0");
 function toISO(d) {
-	return `${d.getFullYear()}-${pad$9(d.getMonth() + 1)}-${pad$9(d.getDate())}`;
+	return `${d.getFullYear()}-${pad$8(d.getMonth() + 1)}-${pad$8(d.getDate())}`;
 }
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
@@ -56220,7 +56220,7 @@ function monthLabel(key, short = false) {
 function addMonths(key, n) {
 	const [y, m] = key.split("-").map(Number);
 	const idx = y * 12 + (m - 1) + n;
-	return `${Math.floor(idx / 12)}-${pad$9(idx % 12 + 1)}`;
+	return `${Math.floor(idx / 12)}-${pad$8(idx % 12 + 1)}`;
 }
 function daysInMonth$1(key) {
 	const [y, m] = key.split("-").map(Number);
@@ -56853,12 +56853,6 @@ function rateToBase(state, cur) {
 	}
 	return best ? best.rate : null;
 }
-function rateOnDay(state, cur, date) {
-	const base = state?.settings?.currency || "MDL";
-	if (!cur || cur === base) return 1;
-	const day = state?.rates?.history?.[date];
-	return (day ? pairRate(cur, base, { usd: day }) : null) || pairRate(cur, base, state?.rates);
-}
 function coinUsd(rates, asset) {
 	if (STABLE[asset]) return STABLE[asset];
 	const p = rates?.crypto?.[asset];
@@ -56875,13 +56869,13 @@ var MONTHS$2 = {
 	"3months": 3,
 	year: 12
 };
-var pad$8 = (n) => String(n).padStart(2, "0");
+var pad$7 = (n) => String(n).padStart(2, "0");
 function nth(rule, n) {
 	if (rule.every === "once") return rule.start;
 	if (rule.every === "week") return addDays$1(rule.start, 7 * n);
 	if (rule.every === "2weeks") return addDays$1(rule.start, 14 * n);
 	const key = addMonths(monthKey(rule.start), (MONTHS$2[rule.every] || 1) * n);
-	return `${key}-${pad$8(Math.min(Number(rule.start.slice(8, 10)), daysInMonth$1(key)))}`;
+	return `${key}-${pad$7(Math.min(Number(rule.start.slice(8, 10)), daysInMonth$1(key)))}`;
 }
 function occurrences(rule, from, to, max = 1e3) {
 	const out = [];
@@ -56991,7 +56985,7 @@ function choiceTable(state, now = Date.now()) {
 	return table;
 }
 var top = (map) => [...map.entries()].sort((a, b) => b[1] - a[1]);
-var sum$1 = (map) => [...map.values()].reduce((a, b) => a + b, 0);
+var sum = (map) => [...map.values()].reduce((a, b) => a + b, 0);
 var levelOf = (confidence, n) => confidence >= .9 && n >= 3 ? "sure" : confidence >= .6 ? "maybe" : "guess";
 /** An explicit rule ("contains linella -> Food") for a note: the longest match wins. */
 function ruleFor(state, note, type) {
@@ -57007,11 +57001,11 @@ function merchantChoice(state, note, type, now = Date.now()) {
 	if (!row) return null;
 	const cats = top(row.cats).filter(([id]) => validCat(state, id, type));
 	if (!cats.length) return null;
-	const total = sum$1(row.cats);
+	const total = sum(row.cats);
 	const confidence = Math.round(cats[0][1] / total * 100) / 100;
 	const subs = top(row.subs).filter(([k]) => k.startsWith(`${cats[0][0]}|`));
 	const books = top(row.books);
-	const book = books.length && books[0][1] / sum$1(row.books) >= .9 ? books[0][0] : null;
+	const book = books.length && books[0][1] / sum(row.books) >= .9 ? books[0][0] : null;
 	return {
 		merchant: m,
 		category: cats[0][0],
@@ -57490,7 +57484,7 @@ function sortTx(list) {
 	return [...list].sort((a, b) => a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1);
 }
 var category = (state, id) => state.settings.categories.find((c) => c.id === id);
-var account = (state, id) => state.settings.accounts.find((a) => a.id === id) || state._allAccounts?.find((a) => a.id === id);
+var account = (state, id) => state.settings.accounts.find((a) => a.id === id);
 function knownRates(state) {
 	const r = state.rates || null;
 	const baseCur = state.settings.currency || "MDL";
@@ -57880,14 +57874,7 @@ var EMOJI_GROUPS = [
 ];
 [...new Set(EMOJI_GROUPS.flatMap((g) => g.items.map((x) => x.e)))];
 // src/renderer/public/apps/finance/js/invoices.js
-var lineAmount = (l) => Number(l.hours) > 0 && Number.isInteger(l.rate) ? Math.round(Number(l.hours) * l.rate) : Number.isInteger(l.amount) ? l.amount : 0;
-var invoiceTotal = (inv) => (inv.items || []).reduce((a, l) => a + lineAmount(l), 0);
 var invoiceHours = (inv) => (inv.items || []).reduce((a, l) => a + (Number(l.hours) > 0 ? Number(l.hours) : 0), 0);
-function invoiceStatus(inv, today) {
-	if (inv.paidDate) return "paid";
-	if (!inv.sent) return "draft";
-	return inv.due && inv.due < today ? "overdue" : "sent";
-}
 var workPrefs = (state) => ({
 	mode: "auto",
 	rate: 0,
@@ -57948,7 +57935,7 @@ function workText(state, amountBase, today) {
 	return formatWork(workHours(amountBase, r.rate));
 }
 // src/renderer/public/apps/finance/js/payyourself.js
-var pad$7 = (n) => String(n).padStart(2, "0");
+var pad$6 = (n) => String(n).padStart(2, "0");
 var toBase = (state, c, cur) => !cur || cur === state.settings.currency ? c : convert(c, cur, state.settings.currency, state.rates);
 function suggestSalary(state, today) {
 	const key = monthKey(today);
@@ -57972,7 +57959,7 @@ function suggestSalary(state, today) {
 		months: months.length
 	};
 }
-var salaryDate = (key, day = 1) => `${key}-${pad$7(Math.min(Math.max(1, day), daysInMonth$1(key)))}`;
+var salaryDate = (key, day = 1) => `${key}-${pad$6(Math.min(Math.max(1, day), daysInMonth$1(key)))}`;
 var salaryOf = (state, key) => state.tx.find((t) => t.type === "transfer" && t.salary === key) || null;
 function payStatus(state, today) {
 	if (!payOn(state)) return {
@@ -60488,9 +60475,9 @@ function blockFor(what, blocks) {
 	}
 	return best?.b ?? null;
 }
-var pad$6 = (n) => String(n).padStart(2, "0");
+var pad$5 = (n) => String(n).padStart(2, "0");
 var toMin = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
-var fromMin = (m) => `${pad$6(Math.floor(m / 60) % 24)}:${pad$6(m % 60)}`;
+var fromMin = (m) => `${pad$5(Math.floor(m / 60) % 24)}:${pad$5(m % 60)}`;
 /**
 * The reply: "Go." plus a ▶ button for a timer now and a "Later" chip. Only real facts:
 * the block's own times when it is in the plan, the timer that is really running.
@@ -60880,7 +60867,7 @@ function cleanKnow(raw) {
 		offers: offers.slice(-12)
 	};
 }
-var pad$5 = (n) => String(n).padStart(2, "0");
+var pad$4 = (n) => String(n).padStart(2, "0");
 /** "18", "18:30", "6pm", "6.30" → "HH:MM". */
 function clock$1(s) {
 	const m = /^(\d{1,2})(?:[:.h](\d{2}))?\s*(am|pm)?$/i.exec(String(s ?? "").trim());
@@ -60890,7 +60877,7 @@ function clock$1(s) {
 	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
 	const mi = Number(m[2] ?? 0);
 	if (h === 24 && mi === 0) return "24:00";
-	return h < 24 && mi < 60 ? `${pad$5(h)}:${pad$5(mi)}` : null;
+	return h < 24 && mi < 60 ? `${pad$4(h)}:${pad$4(mi)}` : null;
 }
 var minutesOf = (n, unit) => {
 	const v = Number(n.replace(",", "."));
@@ -61183,7 +61170,7 @@ function prefsForPrompt(k, text, intent = "chat", max = 6) {
 	return `What he told you (use it): ${hit.slice(-max).map((p) => prefText(p)).join("; ")}.`;
 }
 // src/core/benPromise.ts
-var pad$4 = (n) => String(n).padStart(2, "0");
+var pad$3 = (n) => String(n).padStart(2, "0");
 var ymd$1 = (d) => calendarDay(d);
 var DAYS = [
 	"sunday",
@@ -61230,7 +61217,7 @@ function askAt(word, now) {
 		if (d.getTime() <= now.getTime()) d = new Date(d.getTime() + 864e5);
 		return {
 			d,
-			when: `at ${pad$4(h)}:${pad$4(m)}`
+			when: `at ${pad$3(h)}:${pad$3(m)}`
 		};
 	}
 	if (/^(tomorrow|maine)$/.test(w) || w === "завтра") {
@@ -61839,13 +61826,13 @@ var eventNotes = (b) => ["Planned with your coach in Life System", ...b.tasks?.l
 var TOP3_ASK = "week_top3_ask";
 /** LT4: a log entry's time on your clock (the log keeps UTC; the app day is dayKey). */
 var localHm = (iso) => new Date(iso).toTimeString().slice(0, 5);
-var pad$3 = (n) => String(n).padStart(2, "0");
-var hmNow = (d = /* @__PURE__ */ new Date()) => `${pad$3(d.getHours())}:${pad$3(d.getMinutes())}`;
+var pad$2 = (n) => String(n).padStart(2, "0");
+var hmNow = (d = /* @__PURE__ */ new Date()) => `${pad$2(d.getHours())}:${pad$2(d.getMinutes())}`;
 /** "HH:MM" of an ISO time, local. */
 var hmOf = (iso) => hmNow(new Date(iso));
 var quarterNow = (d = /* @__PURE__ */ new Date()) => {
 	const m = Math.ceil((d.getHours() * 60 + d.getMinutes()) / 15) * 15;
-	return `${pad$3(Math.min(23, Math.floor(m / 60)))}:${pad$3(m % 60)}`;
+	return `${pad$2(Math.min(23, Math.floor(m / 60)))}:${pad$2(m % 60)}`;
 };
 function readJson$1(db, key, fallback) {
 	try {
@@ -66632,7 +66619,7 @@ function undoLabel(undoable) {
 	return undoable > 1 ? `↩ Undo all ${undoable}` : "↩ Undo";
 }
 // src/core/benSplit.ts
-var pad$2 = (n) => String(n).padStart(2, "0");
+var pad$1 = (n) => String(n).padStart(2, "0");
 var ymd = (d) => calendarDay(d);
 var plusDays = (d, n) => {
 	const x = new Date(d);
@@ -66672,7 +66659,7 @@ function timeIn(text, now) {
 		const d = new Date(now.getTime() + Number(inMin[1]) * (/^h/.test(inMin[2]) ? 60 : 1) * 6e4);
 		return {
 			day: ymd(d),
-			time: `${pad$2(d.getHours())}:${pad$2(d.getMinutes())}`
+			time: `${pad$1(d.getHours())}:${pad$1(d.getMinutes())}`
 		};
 	}
 	const m = /\bat (\d{1,2}(?:[:.]\d{2})?\s*(?:am|pm)?)(?![\d:])/.exec(t);
@@ -66689,19 +66676,19 @@ function timeIn(text, now) {
 	const today = day === ymd(now);
 	if (!today && !/\btonight\b/.test(t)) return {
 		day,
-		time: h <= 6 ? `${pad$2(h + 12)}:${mins}` : exact
+		time: h <= 6 ? `${pad$1(h + 12)}:${mins}` : exact
 	};
 	const nowMin = now.getHours() * 60 + now.getMinutes();
 	const amAhead = !today || h * 60 + Number(mins) > nowMin;
 	const pmAhead = !today || (h + 12) * 60 + Number(mins) > nowMin;
 	if (/\btonight\b/.test(t) || pmAhead && !amAhead) return {
 		day,
-		time: `${pad$2(h + 12)}:${mins}`
+		time: `${pad$1(h + 12)}:${mins}`
 	};
 	if (amAhead && pmAhead) {
 		if (h <= 6) return {
 			day,
-			time: `${pad$2(h + 12)}:${mins}`
+			time: `${pad$1(h + 12)}:${mins}`
 		};
 		if (h === 11) return {
 			day,
@@ -66712,7 +66699,7 @@ function timeIn(text, now) {
 			time: exact
 		}, {
 			day,
-			time: `${pad$2(h + 12)}:${mins}`
+			time: `${pad$1(h + 12)}:${mins}`
 		}] };
 	}
 	return {
@@ -66794,7 +66781,7 @@ function whichQuestion(n, what, lang = "en") {
 	return lang === "ro" ? `Se potrivesc ${n}: ${what}. Care?` : lang === "ru" ? `Подходят ${n}: ${what}. Какой?` : `${n} fit: ${what}. Which one?`;
 }
 // src/core/benSmartRemind.ts
-var pad$1 = (n) => String(n).padStart(2, "0");
+var pad = (n) => String(n).padStart(2, "0");
 /**
 * "remind me to X when I get home" / "after the lab" / "after my workout"
 * (also "remind me when I get home to X", Romanian and Russian). Null when it
@@ -66871,7 +66858,7 @@ function smartPlan(f, now, events = []) {
 	const end = new Date(ev.end);
 	return {
 		at: end.toISOString(),
-		words: `after ${ev.title} (${pad$1(end.getHours())}:${pad$1(end.getMinutes())})`
+		words: `after ${ev.title} (${pad(end.getHours())}:${pad(end.getMinutes())})`
 	};
 }
 /**
@@ -72577,379 +72564,7 @@ function reconDue(state, today, days = 31) {
 	}
 	return out;
 }
-// src/renderer/public/apps/finance/js/books.js
-var VIEWS = [
-	"personal",
-	"business",
-	"both"
-];
-var FROM_BIZ = "from-business";
-var FROM_BIZ_CAT = {
-	id: FROM_BIZ,
-	type: "income",
-	name: "From your business",
-	emoji: "💼",
-	jar: void 0
-};
-var isBook = (b) => b === "personal" || b === "business";
-var isView = (v) => VIEWS.includes(v);
-var accountOf = (state, id) => id == null ? null : state.settings.accounts.find((a) => a.id === id) || null;
-var booksOn = (state) => !!state?.settings?.books?.on || (state?.settings?.accounts || []).some((a) => a.book === "business");
-var accountBook = (a) => a && a.book === "business" ? "business" : "personal";
-var bookOfAccount = (state, id) => accountBook(accountOf(state, id));
-function bookOf(state, t) {
-	if (isBook(t?.book)) return t.book;
-	return bookOfAccount(state, t?.account);
-}
-function transferBooks(state, t) {
-	return {
-		from: bookOfAccount(state, t.from),
-		to: bookOfAccount(state, t.to)
-	};
-}
-function crossKind(state, t) {
-	if (!t) return null;
-	if (t.type === "transfer") {
-		const s = transferBooks(state, t);
-		if (s.from === s.to) return null;
-		return s.from === "business" ? "draw" : "ownerIn";
-	}
-	const own = bookOf(state, t);
-	if (own === bookOfAccount(state, t.account)) return null;
-	if (t.type === "expense") return own === "business" ? "paidForBiz" : "personalFromBiz";
-	return own === "business" ? "bizIncomeToPersonal" : "personalIncomeToBiz";
-}
-var synth = (t, over) => ({
-	...t,
-	...over,
-	synthetic: true,
-	of: t.id
-});
-var BOOK_SIDE = {
-	business: "book:business",
-	personal: "book:personal"
-};
-var SIDE_ACCOUNTS = [{
-	id: BOOK_SIDE.business,
-	name: "Business",
-	emoji: "💼",
-	archived: true,
-	holdings: []
-}, {
-	id: BOOK_SIDE.personal,
-	name: "Personal",
-	emoji: "🙂",
-	archived: true,
-	holdings: []
-}];
-var CROSS_NOTE = {
-	paidForBiz: "Paid for business",
-	personalFromBiz: "Paid to you",
-	personalIncomeToBiz: "Owner money in"
-};
-function viewRecords(state, book) {
-	const out = [];
-	for (const t of state.tx) {
-		const kind = crossKind(state, t);
-		if (!kind) {
-			if ((t.type === "transfer" ? transferBooks(state, t).from : bookOf(state, t)) === book) out.push(t);
-			continue;
-		}
-		if (kind === "draw" || kind === "ownerIn") {
-			const toAcc = accountOf(state, t.to);
-			if (kind === "draw" && book === "personal") {
-				const amount = Number.isInteger(t.toAmount) ? t.toAmount : t.amount;
-				out.push(synth(t, {
-					type: "income",
-					category: FROM_BIZ,
-					account: t.to,
-					amount,
-					currency: toAcc?.currency || t.currency,
-					base: B$2(t),
-					from: void 0,
-					to: void 0,
-					toAmount: void 0
-				}));
-			} else out.push(t);
-			continue;
-		}
-		const acc = t.account;
-		if (kind === "paidForBiz" || kind === "personalFromBiz") {
-			if (bookOf(state, t) === book) out.push(t);
-			else out.push(synth(t, {
-				type: "transfer",
-				from: acc,
-				to: kind === "paidForBiz" ? BOOK_SIDE.business : BOOK_SIDE.personal,
-				account: void 0,
-				category: void 0,
-				cross: kind,
-				note: t.note ? `${CROSS_NOTE[kind]} · ${t.note}` : CROSS_NOTE[kind]
-			}));
-			continue;
-		}
-		if (bookOf(state, t) === book) out.push(t);
-		else if (kind === "bizIncomeToPersonal") out.push(synth(t, {
-			category: FROM_BIZ,
-			cross: kind
-		}));
-		else out.push(synth(t, {
-			type: "transfer",
-			from: BOOK_SIDE.personal,
-			to: acc,
-			account: void 0,
-			category: void 0,
-			cross: kind,
-			note: t.note ? `${CROSS_NOTE[kind]} · ${t.note}` : CROSS_NOTE[kind]
-		}));
-	}
-	return out;
-}
-function parts(state, book) {
-	const tx = viewRecords(state, book);
-	return {
-		tx,
-		accounts: state.settings.accounts.filter((a) => accountBook(a) === book),
-		categories: book === "personal" && tx.some((t) => t.synthetic && t.category === "from-business") && !state.settings.categories.some((c) => c.id === "from-business") ? [...state.settings.categories, FROM_BIZ_CAT] : state.settings.categories
-	};
-}
-var mark = (obj, book, state) => {
-	Object.defineProperty(obj, "_view", {
-		value: book,
-		enumerable: false
-	});
-	Object.defineProperty(obj, "_allAccounts", {
-		value: [...state.settings.accounts, ...SIDE_ACCOUNTS],
-		enumerable: false
-	});
-	return obj;
-};
-function bookView(state, book) {
-	if (!state || !isBook(book)) return state;
-	const p = parts(state, book);
-	const view = {
-		...state,
-		tx: p.tx,
-		settings: {
-			...state.settings,
-			accounts: p.accounts,
-			categories: p.categories
-		}
-	};
-	return Object.freeze(mark(view, book, state));
-}
-// src/renderer/public/apps/finance/js/business.js
-var REPORT_CURRENCIES = [
-	"MDL",
-	"USD",
-	"EUR"
-];
-var pad = (n) => String(n).padStart(2, "0");
-var monthRange = (key) => ({
-	from: `${key}-01`,
-	to: `${key}-${pad(daysInMonth$1(key))}`
-});
-function valueIn(state, t, cur) {
-	const base = state.settings.currency || "MDL";
-	if (!cur || cur === base) return B$2(t);
-	if (t.currency === cur && Number.isInteger(t.amount) && t.type !== "transfer") return t.amount;
-	const r = rateOnDay(state, cur, t.date);
-	return r > 0 ? Math.round(B$2(t) / r) : null;
-}
-function baseIn(state, cents, cur, date) {
-	const base = state.settings.currency || "MDL";
-	if (!cur || cur === base) return cents;
-	const r = rateOnDay(state, cur, date);
-	return r > 0 ? Math.round(cents / r) : null;
-}
-function sum(state, list, cur) {
-	let total = 0;
-	let missing = 0;
-	for (const t of list) {
-		const v = valueIn(state, t, cur);
-		if (v == null) missing++;
-		else total += v;
-	}
-	return {
-		total,
-		missing
-	};
-}
-var inRange = (t, from, to) => t.date >= from && t.date <= to;
-function businessMonth(state, key, cur = state.settings.currency) {
-	const { from, to } = monthRange(key);
-	return businessPeriod(state, from, to, cur);
-}
-function businessPeriod(state, from, to, cur = state.settings.currency) {
-	const list = bookView(state, "business").tx.filter((t) => inRange(t, from, to));
-	const incomes = list.filter((t) => countsAsIncome(t) && !(t.synthetic && t.category === "from-business"));
-	const costs = list.filter(countsAsSpending);
-	const kindOf = (t) => t.synthetic ? t.cross : crossKind(state, t);
-	const drawsList = list.filter((t) => t.type === "transfer" && !t.loan && ["draw", "personalFromBiz"].includes(kindOf(t)));
-	const inList = list.filter((t) => t.type === "transfer" && !t.loan && ["ownerIn", "personalIncomeToBiz"].includes(kindOf(t)));
-	const income = sum(state, incomes, cur);
-	const cost = sum(state, costs, cur);
-	const byCost = /* @__PURE__ */ new Map();
-	for (const t of costs) byCost.set(t.category, (byCost.get(t.category) || 0) + (valueIn(state, t, cur) || 0));
-	return {
-		from,
-		to,
-		currency: cur,
-		income: income.total,
-		costs: cost.total,
-		profit: income.total - cost.total,
-		draws: sum(state, drawsList, cur).total,
-		ownerIn: sum(state, inList, cur).total,
-		missing: income.missing + cost.missing,
-		byCost: [...byCost.entries()].map(([id, amount]) => ({
-			id,
-			amount
-		})).sort((a, b) => b.amount - a.amount),
-		byClient: clientIncome(state, from, to, cur)
-	};
-}
-function clientIncome(state, from, to, cur = state.settings.currency) {
-	const v = bookView(state, "business");
-	const by = /* @__PURE__ */ new Map();
-	for (const t of v.tx) {
-		if (!inRange(t, from, to) || !countsAsIncome(t) || t.synthetic && t.category === "from-business") continue;
-		const id = t.person || null;
-		const row = by.get(id) || {
-			person: id ? state.people.find((p) => p.id === id) || null : null,
-			id,
-			amount: 0,
-			invoices: 0
-		};
-		row.amount += valueIn(state, t, cur) || 0;
-		if (t.invoice) row.invoices++;
-		by.set(id, row);
-	}
-	const rows = [...by.values()].sort((a, b) => b.amount - a.amount);
-	const total = rows.reduce((a, r) => a + r.amount, 0);
-	return rows.map((r) => ({
-		...r,
-		share: total > 0 ? r.amount / total : 0
-	}));
-}
-function openInvoices(state, today, cur = state.settings.currency) {
-	const open = (state.invoices || []).filter((i) => ["sent", "overdue"].includes(invoiceStatus(i, today)));
-	const byCurrency = {};
-	for (const i of open) byCurrency[i.currency] = (byCurrency[i.currency] || 0) + invoiceTotal(i);
-	const rates = knownRates(state);
-	let total = 0;
-	let missing = 0;
-	for (const [c, amount] of Object.entries(byCurrency)) {
-		const x = c === cur ? amount : convert(amount, c, cur, rates);
-		if (x == null) missing++;
-		else total += x;
-	}
-	const overdue = open.filter((i) => invoiceStatus(i, today) === "overdue").sort((a, b) => String(a.due).localeCompare(String(b.due)));
-	return {
-		count: open.length,
-		total,
-		missing,
-		byCurrency,
-		overdue,
-		open
-	};
-}
-function hoursMoney(state, from, to, today, cur = state.settings.currency) {
-	const rates = knownRates(state);
-	let hours = 0;
-	let earned = 0;
-	for (const inv of state.invoices || []) {
-		if (!(inv.date >= from && inv.date <= to)) continue;
-		const h = invoiceHours(inv);
-		if (!(h > 0)) continue;
-		hours += h;
-		const amount = invoiceTotal(inv);
-		const x = inv.currency === cur ? amount : convert(amount, inv.currency, cur, rates);
-		earned += x || 0;
-	}
-	const r = hourlyRate(state, today);
-	const rateIn = r ? baseIn(state, r.rate, cur, today) : null;
-	return {
-		hours: Math.round(hours * 10) / 10,
-		earned,
-		perHour: hours > 0 ? Math.round(earned / hours) : rateIn,
-		source: hours > 0 ? "invoices" : r?.source || null
-	};
-}
-function businessCash(state, cur = state.settings.currency) {
-	const v = bookView(state, "business");
-	const bal = accountBalances(v);
-	const rates = knownRates(state);
-	const byAccount = v.settings.accounts.filter((a) => !a.archived).map((a) => {
-		const own = bal[a.id] || 0;
-		return {
-			account: a,
-			own,
-			inCur: (a.currency || state.settings.currency) === cur ? own : convert(own, a.currency || state.settings.currency, cur, rates)
-		};
-	});
-	return {
-		total: byAccount.reduce((a, x) => a + (x.inCur || 0), 0),
-		byAccount
-	};
-}
-function profitSeries(state, today, n = 6, cur = state.settings.currency) {
-	const now = monthKey(today);
-	const out = [];
-	for (let i = n - 1; i >= 0; i--) {
-		const key = addMonths(now, -i);
-		const m = businessMonth(state, key, cur);
-		out.push({
-			key,
-			income: m.income,
-			costs: m.costs,
-			profit: m.profit
-		});
-	}
-	return out;
-}
-function businessSummary(state, today, cur = state.settings.currency) {
-	const key = monthKey(today);
-	return {
-		key,
-		currency: cur,
-		month: businessMonth(state, key, cur),
-		year: businessPeriod(state, `${today.slice(0, 4)}-01-01`, today, cur),
-		invoices: openInvoices(state, today, cur),
-		hours: hoursMoney(state, `${key}-01`, today, today, cur),
-		hoursYear: hoursMoney(state, `${today.slice(0, 4)}-01-01`, today, today, cur),
-		cash: businessCash(state, cur),
-		series: profitSeries(state, today, 6, cur),
-		knownRate: cur === state.settings.currency || !!perUsd(knownRates(state), cur)
-	};
-}
 // src/renderer/src/web/moneyHub.ts
-/** [books] The Business card's numbers in MDL, USD or EUR (null without data). */
-function businessHub(state, today, cur) {
-	try {
-		const c = REPORT_CURRENCIES.includes(cur) ? cur : state.settings.currency || "MDL";
-		const s = businessSummary(state, today, c);
-		const hasBusiness = state.settings.accounts.some((a) => a.book === "business") || state.tx.some((t) => t.book === "business");
-		return {
-			currency: c,
-			profit: s.month.profit,
-			income: s.month.income,
-			costs: s.month.costs,
-			draws: s.month.draws,
-			unpaid: s.invoices.count,
-			overdue: s.invoices.overdue.length,
-			unpaidText: Object.entries(s.invoices.byCurrency).map(([k, v]) => totalText(v, k)).join(" + "),
-			clients: s.year.byClient.slice(0, 3).map((r) => ({
-				name: String(r.person?.name || "No client"),
-				amount: Number(r.amount) || 0
-			})),
-			hours: Number(s.hours.hours) || 0,
-			perHour: s.hours.perHour ?? null,
-			cash: s.cash.total,
-			hasBusiness
-		};
-	} catch {
-		return null;
-	}
-}
 var B = (t) => Number.isInteger(t?.base) ? t.base : Number(t?.amount) || 0;
 /** Finance Helper's state in its current shape (null without data). */
 function cleanFinance(raw) {
@@ -73006,12 +72621,9 @@ function reconcileDue(state, today) {
 	}
 }
 /** Everything the Money hub shows (pure read of Finance Helper's data). */
-function hubView(raw, today, pick, bizCurrency) {
-	const full = cleanFinance(raw);
-	if (!full) return null;
-	const on = booksOn(full);
-	const book = isView(pick) ? pick : on ? "personal" : "both";
-	const state = book === "both" ? full : bookView(full, book);
+function hubView(raw, today) {
+	const state = cleanFinance(raw);
+	if (!state) return null;
 	const tx = hubTx(state);
 	const cats = state.settings.categories.map((c) => ({
 		id: String(c.id),
@@ -73055,7 +72667,7 @@ function hubView(raw, today, pick, bizCurrency) {
 	const goals = (state.goals ?? []).filter((g) => g && !g.archived && !g.deleted && Number(g.target) > 0).slice(0, 6).map((g) => {
 		let st = null;
 		try {
-			st = goalStatus(full, today, g);
+			st = goalStatus(state, today, g);
 		} catch {
 			st = null;
 		}
@@ -73108,10 +72720,7 @@ function hubView(raw, today, pick, bizCurrency) {
 		recent,
 		bills,
 		loggedToday: tx.some((t) => t.date === today && month === today.slice(0, 7)),
-		reconcile: reconcileDue(full, today),
-		book,
-		booksOn: on,
-		business: book === "business" ? businessHub(full, today, bizCurrency ?? void 0) : null
+		reconcile: reconcileDue(state, today)
 	};
 }
 /** Sunday: this week against the same days last week (null without data). */

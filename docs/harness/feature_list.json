@@ -1306,20 +1306,6 @@
   ],
   "evidence": "2026-11-12: branch money-phase5; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
   "notes": "apps/finance/js/learn.js (new), model.js (suggestCategory sure merchant, addRule/removeRule via learn.js, keptOnEdit), app.js (edit keeps unknown fields), sync.js (rules list merge), sw.js v42; web/moneySortCore.ts, web/moneySort.ts, money/ToSortCard.tsx, money/RulesCard.tsx, money/sort.css (new); web/financeBot.ts (learnCategory, saveFinance), core/moneyDays.ts (countsAsLogged on logMoment), core/moneyToSort.ts (auto, reopen; keepToSort keeps reopen), core/moneyText.ts typedBani, tursoWebBridge.ts, bridge.ts, pages/Money.tsx."
- },
- {
-  "id": "F-MONEY-BOOKS-2",
-  "priority": 1,
-  "area": "money",
-  "title": "Money v2 phase 2: business and personal books",
-  "user_visible_behavior": "One Personal / Business / Both switch at the top of Finance Helper and of the Money page (shared on this device; Both until an account is Business). Every list, total, budget, report, donut and safe to spend follows it. A record's book is its account's unless it says otherwise; Books… marks an account Business (its records move with it, Undo); Log → Table → tick → Move to… moves records (Undo move, kept in the record). The Business view shows this month's profit, income, costs, paid to you, a 6-month profit bar, unpaid and overdue invoices, hours billed and the hour rate, business cash, income per client and costs by category, in MDL, USD or EUR (each record at its own day's rate). Pay yourself moves money business → personal: income in Personal, 'Paid to you' in Business (never a cost), nothing in Both.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeBooks.test.ts src/renderer/src/web/financeBusiness.test.ts",
-   "SMOKE_ONLY=\"Money books\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch money-books; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "apps/finance/js/books.js (bookOf, crossKind, bookView, bookLens, bookTotals, moveToBook, undoMove, setAccountBook, drawTx, stampBook), business.js (businessMonth, clientIncome, openInvoices, hoursMoney, businessCash, valueIn), screens/books.js; shared lines marked [books] in app.js, model.js (account lookup), store.js (never saves a view), screens/spending.js, sw.js, css/app.css; web/moneyHub.ts hubView(raw, today, book, bizCurrency), web/moneyApi.ts, MoneyBooks.tsx, pages/Money.tsx, money.css."
  }
  ]
 }

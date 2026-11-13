@@ -10,17 +10,12 @@ import { upcomingItems } from '../../public/apps/finance/js/recurring.js'
 import { rateToBase } from '../../public/apps/finance/js/fx.js'
 // @ts-ignore
 import { reconDue } from '../../public/apps/finance/js/reconcile.js'
-// @ts-ignore [books] Personal / Business / Both (Money v2 phase 2)
-import { bookView, booksOn, isView } from '../../public/apps/finance/js/books.js'
-// @ts-ignore
-import { businessSummary, REPORT_CURRENCIES } from '../../public/apps/finance/js/business.js'
 // @ts-ignore
 import { countsAsSpending, countsAsIncome } from '../../public/apps/finance/js/catshare.js'
 // @ts-ignore
 import { goalStatus, normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } from '../../public/apps/finance/js/model.js'
 import { addDays } from '@core/dates'
 import type { LongCard } from './moneyLong'
-import { totalText } from '@core/moneyText'
 import {
   budgetLevel,
   goalPlan,
@@ -72,55 +67,6 @@ export interface MoneyHubView {
   reconcile: { id: string; name: string; days: number | null }[]
   /** The long view in one card (Finance's longview.js), added by moneyApi so the bot bundle stays as it is. */
   long?: LongCard | null
-  /** [books] Which money these numbers are about, and whether books are on. */
-  book: MoneyBook
-  booksOn: boolean
-  /** [books] The Business view's summary (only when book is 'business'). */
-  business: BusinessHub | null
-}
-
-export type MoneyBook = 'personal' | 'business' | 'both'
-
-export interface BusinessHub {
-  currency: string
-  profit: number
-  income: number
-  costs: number
-  draws: number
-  unpaid: number
-  overdue: number
-  unpaidText: string
-  clients: { name: string; amount: number }[]
-  hours: number
-  perHour: number | null
-  cash: number
-  hasBusiness: boolean
-}
-
-/** [books] The Business card's numbers in MDL, USD or EUR (null without data). */
-export function businessHub(state: any, today: string, cur?: string): BusinessHub | null {
-  try {
-    const c = REPORT_CURRENCIES.includes(cur) ? cur : state.settings.currency || 'MDL'
-    const s = businessSummary(state, today, c)
-    const hasBusiness = (state.settings.accounts as any[]).some((a) => a.book === 'business') || (state.tx as any[]).some((t) => t.book === 'business')
-    return {
-      currency: c,
-      profit: s.month.profit,
-      income: s.month.income,
-      costs: s.month.costs,
-      draws: s.month.draws,
-      unpaid: s.invoices.count,
-      overdue: s.invoices.overdue.length,
-      unpaidText: Object.entries(s.invoices.byCurrency as Record<string, number>).map(([k, v]) => totalText(v, k)).join(' + '),
-      clients: (s.year.byClient as any[]).slice(0, 3).map((r) => ({ name: String(r.person?.name || 'No client'), amount: Number(r.amount) || 0 })),
-      hours: Number(s.hours.hours) || 0,
-      perHour: s.hours.perHour ?? null,
-      cash: s.cash.total,
-      hasBusiness
-    }
-  } catch {
-    return null
-  }
 }
 
 const B = (t: any) => (Number.isInteger(t?.base) ? t.base : Number(t?.amount) || 0)
@@ -176,13 +122,9 @@ function reconcileDue(state: any, today: string): MoneyHubView['reconcile'] {
 }
 
 /** Everything the Money hub shows (pure read of Finance Helper's data). */
-export function hubView(raw: any, today: string, pick?: string | null, bizCurrency?: string | null): MoneyHubView | null {
-  const full = cleanFinance(raw)
-  if (!full) return null
-  // [books] A read-only view of one book; without a pick, Personal once books are on (Ben, nudges), else Both (today's numbers).
-  const on = booksOn(full)
-  const book: MoneyBook = isView(pick) ? (pick as MoneyBook) : on ? 'personal' : 'both'
-  const state = book === 'both' ? full : bookView(full, book)
+export function hubView(raw: any, today: string): MoneyHubView | null {
+  const state = cleanFinance(raw)
+  if (!state) return null
   const tx = hubTx(state)
   const cats = state.settings.categories.map((c: any) => ({ id: String(c.id), name: String(c.name), emoji: c.emoji ? String(c.emoji) : undefined }))
   let safe: any = null
@@ -222,7 +164,7 @@ export function hubView(raw: any, today: string, pick?: string | null, bizCurren
     .map((g) => {
       let st: any = null
       try {
-        st = goalStatus(full, today, g) // [books] goals count all your money
+        st = goalStatus(state, today, g)
       } catch {
         st = null
       }
@@ -253,10 +195,7 @@ export function hubView(raw: any, today: string, pick?: string | null, bizCurren
     recent,
     bills,
     loggedToday: tx.some((t) => t.date === today && month === today.slice(0, 7)),
-    reconcile: reconcileDue(full, today),
-    book,
-    booksOn: on,
-    business: book === 'business' ? businessHub(full, today, bizCurrency ?? undefined) : null
+    reconcile: reconcileDue(state, today)
   }
 }
 

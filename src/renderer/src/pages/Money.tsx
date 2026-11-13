@@ -23,7 +23,6 @@ import { Donut } from '../Donut'
 import { LongViewCard } from '../MoneyLong'
 import { ToSortCard } from '../money/ToSortCard'
 import { RulesCard } from '../money/RulesCard'
-import { BookSwitch, BusinessHubCard } from '../MoneyBooks' // [books]
 
 // One money formatter, shared with Finance Helper (core/moneyText): single
 // amounts keep their bani (12,50 MDL), totals are whole units; the label is
@@ -84,7 +83,7 @@ function useHub(): [MoneyHubView | null | undefined, (v: MoneyHubView | null) =>
 }
 
 export function Money({ state, onState, onWallet, onOpenApp }: { state: ConnectionsState; onState: (s: ConnectionsState) => void; onWallet: () => void; onOpenApp?: () => void }) {
-  const [view, , reloadHub] = useHub()
+  const [view] = useHub()
   const [tab, setTab] = usePageTab('money', ['today', 'month', 'goals'], 'today')
   const days = useMoneyDays(onWallet)
   const ring = useRef<HTMLDivElement>(null)
@@ -108,8 +107,6 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
         <EmptyHub onOpenApp={openApp} />
       ) : (
         <>
-          <BookSwitch view={view} onChange={reloadHub} />
-          <BusinessHubCard view={view} onChange={reloadHub} />
           <PageTabs
             page="money"
             label="Money views"
