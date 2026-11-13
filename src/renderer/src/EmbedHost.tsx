@@ -27,6 +27,7 @@ import { offerWorkoutNote } from './benPushFeed'
 import { openTab } from './PageTabs'
 import { clearSportStart, SPORT_START_CODE, SPORT_START_EVENT, sportStartPending } from './sportStart'
 import { handleReceiptMessage, startReceiptUploads } from './money/receiptBridge'
+import { salaryNotice } from '@core/salaryNotice'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
@@ -235,6 +236,21 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
           out = { days: (await life.finance?.freeDays().catch(() => [])) ?? [], error: (err as Error).message }
         }
         ;(e.source as Window | null)?.postMessage({ type: 'LIFE_FINANCE_FREE_DAYS', op, ...out }, window.location.origin)
+        return
+      }
+
+      // Finance Helper: the salary is late (pay day + 2 days, nothing matching in the log). One bell entry a month,
+      // through the daily push budget (slot 'salary'); quiet hours and focus are handled by the bell. { month, due }.
+      if (data.type === 'LIFE_SYSTEM_BRIDGE' && data.action === 'FINANCE_SALARY_LATE') {
+        let last: string | null = null
+        try { last = localStorage.getItem('life_salary_notified') } catch { /* private mode */ }
+        const out = salaryNotice(data.payload, dayKey(new Date()), new Date(), last)
+        if (out) {
+          try {
+            await life.notifications?.add?.(out.notif)
+            try { localStorage.setItem('life_salary_notified', out.month) } catch { /* private mode */ }
+          } catch { /* the next start tries again */ }
+        }
         return
       }
 

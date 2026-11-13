@@ -54,6 +54,7 @@ import * as Taxes from './screens/taxes.js';
 import * as MoneyCalendar from './screens/calendar.js';
 import * as Wishlist from './screens/wishlist.js';
 import * as Afford from './screens/afford.js';
+import * as MoneyB from './screens/moneyb.js';
 import { workText } from './workhours.js';
 import { planSplit, splitTransfers, splitPrefs, isSplit } from './split.js';
 import { openBankImport, rowsFromFile, decodeText } from './screens/bankimport.js';
@@ -1060,6 +1061,7 @@ function viewHome() {
   </section>`;
 
   return `<header class="top home-top v-${v.tone}"><div><div class="eyebrow">${esc(monthLabel(key))} · ${hello}</div><h1>${esc(v.title)}</h1><div class="sub home-verdict">${esc(v.sub)}</div></div><div class="sub">${dayLabel(today)}</div></header>
+  ${MoneyB.topHTML()}
   ${Updates.updateBanner()}
   ${DEMO ? '<div class="banner"><p>Live preview with <b>example data</b> (a made-up month). What you add here stays in this browser only.</p></div>' : ''}
   ${Telegram.alertBanner()}
@@ -1068,6 +1070,7 @@ function viewHome() {
   ${welcome}
   ${safeCard(today)}
   ${Afford.homeRow()}
+  ${MoneyB.askBox()}
   ${stepsCard(today)}
   ${payCard(today)}
   ${CashCount.card(today)}
@@ -1638,7 +1641,7 @@ function viewSettings() {
   };
   // One section at a time, picked on the left (like any settings screen).
   const sections = [
-    { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Shortcuts.settingsCard() },
+    { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + MoneyB.settingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Shortcuts.settingsCard() },
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
     { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() },
     { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + Backups.settingsCard() + Sync.settingsCard() },
@@ -2041,6 +2044,16 @@ function openTxSheet(existing = null, preset = {}) {
     }
     hint.style.color = '';
     hint.textContent = parts.join('  ') || (draft.type === 'transfer' ? 'Move money between your accounts' : 'Tip: type 120+45 and it adds up');
+    paintPriceMemory(sheet);
+  };
+
+  // What the same payee usually costs, under the amount (js/prices.js): read only, nothing stored.
+  const paintPriceMemory = (sheet) => {
+    const typed = evalAmount(sheet.querySelector('#tx-amount')?.value) || 0;
+    const cur = curOf();
+    const rate = cur === baseCur ? 1 : Number(String(sheet.querySelector('#tx-rate')?.value || '').replace(',', '.')) || suggestedRate(cur) || 0;
+    const er = entryOn() ? Number(String(sheet.querySelector('#tx-erate')?.value || '').replace(',', '.')) : 1;
+    MoneyB.paintPrice(sheet, { note: sheet.querySelector('#tx-note')?.value ?? draft.note, type: draft.type, amountBase: Math.round(typed * (er > 0 ? er : 0) * rate), existingId: existing?.id || null });
   };
 
   // A category picked (or guessed): the account follows it, unless you chose one.
@@ -2101,6 +2114,7 @@ function openTxSheet(existing = null, preset = {}) {
     sheet.querySelector('#tx-note').addEventListener('input', (e) => {
       if (draft.type === 'transfer') return;
       draft.note = e.target.value;
+      paintPriceMemory(sheet);
       const before = draft.category;
       if (!catTouched) draft.category = M.suggestCategory(state, e.target.value, catType());
       reguess();
@@ -3895,6 +3909,7 @@ bindSankeyHover(app);
 bindTilt(document);
 requestPersistence();
 if (!DEMO) Security.initLock();
+MoneyB.init();
 route();
 Updates.initUpdates();
 Binance.initBinance();

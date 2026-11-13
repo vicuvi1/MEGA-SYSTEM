@@ -1418,6 +1418,17 @@
   ],
   "evidence": "2026-11-13: tsc, vitest (financeMoneyB2.test.ts, 14 tests), smoke steps Money month review and net worth line, Money budgets from the last 3 months, Money subscriptions per year.",
   "notes": "apps/finance: js/budgetsuggest.js, monthreview.js, subslist.js, screens/moneyb2.js (new), small hooks in app.js and screens/plan.js, sw.js v48. New settings keys subsKept and subsRemind (synced as scalars); review dismissal is localStorage only."
- }
+ },
+  {
+   "id": "money-ideas-b",
+   "title": "Money: quick add (Q), salary watch, price memory, Ask about your money",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money quick|Money salary|Money price|Money Ask\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (financeMoneyIdeasB.test.ts, salaryNotice.test.ts), smoke steps Money quick add / salary watch / price memory / Ask.",
+   "notes": "apps/finance/js/quickadd.js, salary.js, prices.js, ask.js, screens/moneyb.js; settings.salary; slot 'salary' in core/notifyBudget.ts; no AI fallback (no bridge)."
+  }
  ]
 }

@@ -6218,3 +6218,26 @@ html[data-calm] .theme-atmosphere, html[data-calm] .atmosphere-particle { displa
 .b2-row .n input[type="checkbox"] { margin-right: 6px; }
 .b2-sub .sub-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .b2-note { display: block; color: var(--gold); font-size: 12px; margin-top: 2px; }
+/* Money ideas B: quick add (Q), salary watch, price memory, Ask about your money. */
+.qa-card, .ask-card { margin-bottom: 14px; }
+.qa-label { display: block; font-weight: 600; margin: 0 0 6px; }
+.qa-label kbd { font: inherit; font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); margin-left: 4px; }
+#qa-input, #ask-input { width: 100%; box-sizing: border-box; font-size: 17px; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
+#qa-input:focus, #ask-input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+.qa-preview { margin-top: 8px; min-height: 22px; font-size: 14px; }
+.qa-line { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin-bottom: 4px; }
+.qa-amt { font-weight: 700; font-size: 16px; }
+.qa-cat { display: inline-flex; align-items: center; gap: 6px; }
+.qa-cat i { font-style: normal; color: var(--muted); font-size: 12px; }
+.qa-cat select { max-width: 200px; }
+.qa-note { color: var(--muted); }
+.qa-miss { color: var(--expense); }
+.sal-card { border-color: var(--warn); }
+.sal-card h2 { margin-top: 0; }
+.price-mem { font-size: 13px; color: var(--muted); margin: 2px 0 8px; }
+.pm-high { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--warn); color: var(--warn); margin-left: 4px; }
+.ask-row { display: flex; gap: 8px; align-items: center; }
+.ask-row input { flex: 1; min-width: 0; }
+.ask-answer { margin-top: 12px; }
+.ask-num { font-size: 28px; font-weight: 700; }
+.ask-list { margin-bottom: 8px; }

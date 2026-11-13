@@ -1138,6 +1138,8 @@ try {
 
   // Money batch 2: budgets from 3 months, month review, net worth line, subscriptions per year (e2e/smokeMoneyB2.mjs).
   await (await import('./smokeMoneyB2.mjs')).moneyB2Steps({ step, pg, open, financeFrame, resetClock: fakeNow })
+  // Money ideas B: quick add, salary watch, price memory and Ask about your money (e2e/smokeMoneyIdeasB.mjs).
+  await (await import('./smokeMoneyIdeasB.mjs')).moneyIdeasBSteps({ step, pg, open, financeFrame, storedTx })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.

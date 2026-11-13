@@ -13,16 +13,18 @@
 // count toward the 4 and is not a slot of the server tick (not in SLOTS).
 // A failed backup (2026-11-12, Data safety) is one of the 4: slot 'backup', at most once a
 // day, only when something is red; it has no fixed time (not in SLOTS).
+// Money's "salary not in yet" (2026-11-13) is one of the 4 too: slot 'salary', no fixed time, at most once a
+// day here and once a month from Finance Helper (core/salaryNotice.ts).
 // Everything else is silent and in the app only (the bell). Not pushes, so not
 // counted: timers you started yourself (a focus or study block ending, the rest
 // timer) are sounds in the app, and reminders you set yourself ("remind me at 18").
 // Text is neutral and private: "Life System: 2 of 3 done", never food or body details.
 
-export type PushSlot = 'morning' | 'plan' | 'winddown' | 'afternoon' | 'weekly' | 'lastcall' | 'backup'
+export type PushSlot = 'morning' | 'plan' | 'winddown' | 'afternoon' | 'weekly' | 'lastcall' | 'backup' | 'salary'
 
 export const DAILY_PUSH_CAP = 4
 export const SLOTS: PushSlot[] = ['morning', 'afternoon', 'weekly', 'plan', 'winddown']
-export const SLOT_TIME: Record<PushSlot, string> = { morning: '07:00', afternoon: '15:30', weekly: '18:00', plan: '21:15', winddown: '23:15', lastcall: '00:00', backup: '' }
+export const SLOT_TIME: Record<PushSlot, string> = { morning: '07:00', afternoon: '15:30', weekly: '18:00', plan: '21:15', winddown: '23:15', lastcall: '00:00', backup: '', salary: '' }
 /** The sleep reminders the desktop sends itself (src/desktop/main.ts), only while bed isn't logged. */
 export const SLEEP_REMINDERS = ['winddown', 'lastcall'] as const
 export type SleepReminder = (typeof SLEEP_REMINDERS)[number]
@@ -43,7 +45,7 @@ export interface BudgetPrefs {
 
 export const DEFAULT_BUDGET: BudgetPrefs = { on: true, afternoon: false }
 
-export const isSlot = (x: unknown): x is PushSlot => typeof x === 'string' && (x === 'lastcall' || x === 'backup' || (SLOTS as string[]).includes(x))
+export const isSlot = (x: unknown): x is PushSlot => typeof x === 'string' && (x === 'lastcall' || x === 'backup' || x === 'salary' || (SLOTS as string[]).includes(x))
 
 /** The bell id of a slot's message: one per slot and day, so every device adds it once. */
 export const slotNotifId = (slot: PushSlot, day: string): string => `budget:${slot}:${day}`
@@ -140,6 +142,8 @@ export function slotText(slot: PushSlot, f: { mustDone: number; mustTotal: numbe
       return 'Life System: it is midnight and bed is not logged. Go to sleep now.'
     case 'backup':
       return 'Life System: a backup needs a look. Open Settings → Data safety.'
+    case 'salary':
+      return 'Life System: your salary is not in yet. Open Money.'
   }
 }
 
