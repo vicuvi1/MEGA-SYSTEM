@@ -20,26 +20,29 @@
 // - A month with a saved net-worth snapshot (state.netWorth) and no records
 //   after it that month uses the snapshot: it holds that day's real rates and
 //   coins. Other months are rebuilt from records.
-// - Books (`tx.book ?? 'personal'`, `account.book ?? 'personal'`): with a book
-//   picked, only that book's records count, and an account's starting balance
-//   counts in its own book. The books add up to the whole. Snapshots hold
-//   every book, so a book view is always rebuilt.
+// - Books are books.js's (Money v2 D3/D4): a record's own book, else its
+//   account's. With a book picked, everything is read from books.js bookView
+//   (that book's records and accounts; money between books as its synthetic
+//   records), the same view the rest of Finance shows. The books add up to the
+//   whole. Snapshots hold every book, so a book view is always rebuilt.
 
 import { B, category, knownRates } from './model.js';
 import { countsAsSpending, countsAsIncome } from './catshare.js';
 import { pairRate, convert, coinValue } from './fx.js';
 import { addMonths, daysInMonth, monthKey } from './dates.js';
+import { bookView, bookOf as recordBook, accountBook as accBook } from './books.js';
 
-export const bookOf = (t) => t?.book ?? 'personal';
-export const accountBook = (a) => a?.book ?? 'personal';
+export const bookOf = (t, state) => recordBook(state, t);
+export const accountBook = (a) => accBook(a);
 const allBooks = (book) => !book || book === 'all';
-const inBook = (t, book) => allBooks(book) || bookOf(t) === book;
 const accInBook = (a, book) => allBooks(book) || accountBook(a) === book;
+// One book's records and accounts (books.js bookView); all books: the state itself.
+const inBookView = (state, book) => (allBooks(book) ? state : bookView(state, book));
 
 // Every book that appears in your records or accounts ("personal" first).
 export function booksIn(state) {
   const set = new Set(['personal']);
-  for (const t of state.tx || []) if (t) set.add(bookOf(t));
+  for (const t of state.tx || []) if (t) set.add(bookOf(t, state));
   for (const a of state.settings?.accounts || []) set.add(accountBook(a));
   return [...set].sort((a, b) => (a === 'personal' ? -1 : b === 'personal' ? 1 : a.localeCompare(b)));
 }
@@ -150,14 +153,16 @@ function move(bal, t) {
 //   accounts: [{ id, name, emoji, currency, archived, now, change }]  (change: this year)
 //   opening, now, changeThisYear, currency, missing
 export function netWorthHistory(state, today, { book = null, cur = null } = {}) {
+  const full = state;
+  state = inBookView(full, book);
   const base = state.settings?.currency || 'MDL';
   const accounts = state.settings?.accounts || [];
-  const rate = rateBook(state);
-  const known = knownRates(state);
-  const view = viewIn(state, cur, rate);
+  const rate = rateBook(full);
+  const known = knownRates(full);
+  const view = viewIn(full, cur, rate);
   // Shown in the picked currency at the rate of that day (MDL: as it is).
   const shown = (v, date, current) => ({ ...v, total: view.show(v.total, date, current), byAccount: Object.fromEntries(Object.entries(v.byAccount).map(([id, x]) => [id, view.show(x, date, current)])) });
-  const txs = live(state).filter((t) => inBook(t, book) && t.date.slice(0, 10) <= today).sort((a, b) => a.date.localeCompare(b.date));
+  const txs = live(state).filter((t) => t.date.slice(0, 10) <= today).sort((a, b) => a.date.localeCompare(b.date));
   const now = monthKey(today);
   const firstKey = txs.length ? monthKey(txs[0].date) : now;
   const snaps = allBooks(book) ? (state.netWorth || []).filter((x) => x && typeof x.date === 'string' && Number.isFinite(x.total)).sort((a, b) => a.date.localeCompare(b.date)) : [];
@@ -247,9 +252,9 @@ export function contributions(history, key) {
 // key -> { income, spending, records, byCat: Map(category -> cents) }
 export function monthFlows(state, { book = null, from = null, to = null, cur = null, view = viewIn(state, cur) } = {}) {
   const out = new Map();
-  for (const t of live(state)) {
+  for (const t of live(inBookView(state, book))) {
     const d = t.date.slice(0, 10);
-    if (!inBook(t, book) || (from && d < from) || (to && d > to)) continue;
+    if ((from && d < from) || (to && d > to)) continue;
     const k = monthKey(d);
     if (!out.has(k)) out.set(k, { income: 0, spending: 0, records: 0, byCat: new Map() });
     const m = out.get(k);

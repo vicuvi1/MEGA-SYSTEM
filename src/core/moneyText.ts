@@ -34,3 +34,9 @@ export function totalNumber(bani: number): string {
 export function moneyNumber(bani: number): string {
   return fmt(Math.round(Number(bani) || 0), '')
 }
+
+/** "45", "12,50", "1 200.5" → bani; 0 when it isn't a positive amount. */
+export function typedBani(text: string): number {
+  const n = Number(String(text).replace(/\s/g, '').replace(',', '.'))
+  return Number.isFinite(n) && n > 0 ? Math.round(n * 100) : 0
+}

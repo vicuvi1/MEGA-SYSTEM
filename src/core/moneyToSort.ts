@@ -43,6 +43,10 @@ export interface ToSortItem {
   via?: 'phone' | 'telegram'
   /** "Send test" in Settings → Phone payments: never becomes a record. */
   test?: boolean
+  /** The To sort card (web/moneySortCore.ts): filed by itself from a sure rule (state 'sorted', record not confirmed yet). */
+  auto?: boolean
+  /** The To sort card: Undo put it back to wait for a tap. The state can't move back to 'new', so this marks it waiting again. */
+  reopen?: boolean
   updatedAt: number
 }
 
@@ -134,7 +138,7 @@ export function keepToSort(list: ToSort, finance: { tx?: { id: string }[]; delet
   const has = (id?: string) => !!id && (!!finance?.tx?.some((t) => t && t.id === id) || !!finance?.deleted?.[id])
   return {
     items: list.items.filter((x) => {
-      if (x.state === 'new') return true
+      if (x.state === 'new' || x.reopen) return true // put back by Undo: waiting again, never dropped
       if (now - (x.updatedAt ?? x.at) < DONE_KEEP_DAYS * DAY) return true
       if (x.state === 'dismissed') return false
       return !has(x.txId)

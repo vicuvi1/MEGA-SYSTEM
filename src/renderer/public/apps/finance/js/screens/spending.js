@@ -212,7 +212,8 @@ function redraw(el, key, replay = false) {
   const card = el.closest('.spend') || document.querySelector(`.spend[data-key="${key}"]`);
   const o = last[key];
   if (!card || !o) { ctx.render(); return; }
-  const next = spendingCard({ ...o, period: key === 'home' ? ctx.ui.spendPeriod : o.period });
+  const draw = () => spendingCard({ ...o, period: key === 'home' ? ctx.ui.spendPeriod : o.period });
+  const next = ctx.withBook ? ctx.withBook(draw) : draw(); // [books] the chosen book, like the full screen
   const tpl = document.createElement('template');
   tpl.innerHTML = next.trim();
   const fresh = tpl.content.firstElementChild;
@@ -223,6 +224,7 @@ function redraw(el, key, replay = false) {
 // Records of one category in a period, with its last 6 months for context.
 // `period` is a preset id ("month", "3m"...) or a { from, to, label } range.
 export function openCategory(id, period = 'month', type = 'expense') {
+  if (ctx.withBook && !ctx.state._view && ctx.ui.book && ctx.ui.book !== 'both') return ctx.withBook(() => openCategory(id, period, type)); // [books]
   const { state } = ctx;
   const today = todayISO();
   const range = typeof period === 'string' ? M.periodRange(period, today) : period;

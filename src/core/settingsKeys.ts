@@ -181,6 +181,7 @@ export const SETTINGS = {
   custom_setup: json<Record<string, unknown> | null>('Custom Center: your widgets, where they sit (pill, open island, home), actions, reminder rules, modes and their schedules, and the looks; versioned, at most 48 KB (core/custom)', null),
   custom_state: json<Record<string, unknown> | null>("Custom Center: today's numbers of your own counters and checklists, and when each reminder rule last fired (core/custom); counters that track water or reps keep no number here", null),
   vault_index: json<Record<string, unknown> | null>('Photo Locker: which photos, videos and files exist and which are in Google Drive (names, tags, dates, sizes, Drive file ids, the chosen folder); metadata only, never image data, at most 400 KB (core/vaultSync.ts)', null),
+  money_receipts: json<Record<string, unknown> | null>("Money receipts: per receipt id its file name, type, size, the Finance record it belongs to and its Google Drive file id; metadata only, never the file, at most 400 KB (core/receiptIndex.ts)", null),
   // ---- the saga (LF1, LF4–LF7, LF12, LF15, LF18): src/renderer/src/web/sagaStore.ts ----
   saga_seasons: json<Record<string, unknown> | null>('your seasons (12 weeks = the quarter; old ones 8): name, theme, cover, three main quests and the boss (src/core/season.ts)', null),
   goal_ladder: json<Record<string, unknown> | null>('the goal ladder: up to 3 critical goals for the quarter, "Not now" goals, your weekly targets, confirmed monthly milestones and reviews done (src/core/goalLadder.ts)', null),

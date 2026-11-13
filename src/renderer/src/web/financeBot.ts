@@ -15,6 +15,8 @@ import { normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } f
 import { toCloud } from '../../public/apps/finance/js/sync.js'
 // @ts-ignore
 import { rateToBase } from '../../public/apps/finance/js/fx.js'
+// @ts-ignore
+import { suggest } from '../../public/apps/finance/js/learn.js'
 import { detectExpenseCategory } from '@core/botCommands'
 import { mainAccountId } from '@core/moneyHub'
 import { getSetting, setSetting } from '../../../main/settings'
@@ -32,6 +34,11 @@ export function financeState(db: Db): any | null {
   } catch {
     return null
   }
+}
+
+/** Writes Finance Helper's synced copy (every device merges it in). */
+export function saveFinance(db: Db, state: any): void {
+  save(db, state)
 }
 
 function save(db: Db, state: any): void {
@@ -94,8 +101,10 @@ export function moneyKeyboard(state: any, t: any, extra = ''): any {
   for (let i = 0; i < accs.length; i += 3) {
     rows.push(accs.slice(i, i + 3).map((a: any) => ({ text: `${a.id === t.account ? '✓ ' : ''}${a.emoji ? a.emoji + ' ' : ''}${a.name}`, callback_data: `fa|${t.id}|${a.id}` })))
   }
+  // Phase 5: not sure of the category → three one-tap choices first.
+  if (t.catBy === 'auto' && Array.isArray(t._chips) && t._chips.length) rows.unshift(t._chips.slice(0, 3).map((id: string) => ({ text: `${id === t.category ? '✓ ' : ''}${catOf(state, id)?.emoji ? catOf(state, id).emoji + ' ' : ''}${catOf(state, id)?.name ?? id}`, callback_data: `fk|${t.id}|${id}` })))
   rows.push([
-    { text: `📂 ${catLabel(state, t)}`, callback_data: `fc|${t.id}` },
+    { text: `📂 ${catLabel(state, t)} · change`, callback_data: `fc|${t.id}` },
     { text: '↩️ Undo', callback_data: `fu|${t.id}${extra ? '|' + extra : ''}` }
   ])
   return { inline_keyboard: rows }
@@ -185,9 +194,40 @@ export function logMoney(db: Db, text: string, key: string, today: string, now =
   const rate = rateToBase(state, currency) ?? 1
   const tx = recordFromMessage(f, { updateId: key.replace(/[^\w-]/g, '-'), date: recordDay(today, f), rate, currency, now })
   if (state.tx.some((x: any) => x.id === tx.id)) return null
+  const pick = learnCategory(state, tx)
   state.tx.push(tx)
   save(db, state)
-  return { tx, reply: loggedText(state, tx, today), keyboard: moneyKeyboard(state, tx) }
+  const shown = { ...tx, _chips: pick.chips }
+  return { tx, reply: pick.line ? `${loggedText(state, tx, today)}\n${pick.line}` : loggedText(state, tx, today), keyboard: moneyKeyboard(state, shown) }
+}
+
+const LEVEL_TEXT: Record<string, string> = { sure: 'sure', maybe: 'maybe', guess: 'a guess' }
+const escHtml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/**
+ * Phase 5 (js/learn.js): your rules and what you chose before for this
+ * merchant. Sure → filed there (catBy 'rule' / 'learned'); otherwise the
+ * category stays a guess (catBy 'auto', not learned from) and the reply
+ * offers three one-tap choices. The book is set only when the merchant's
+ * usual book differs from the account's.
+ */
+export function learnCategory(state: any, tx: any): { line: string; chips: string[] } {
+  if (tx.type !== 'expense' && tx.type !== 'income') return { line: '', chips: [] }
+  const s = suggest(state, { note: tx.note, type: tx.type }, { guess: tx.category })
+  if (s.level === 'sure' && s.category) {
+    if (s.category !== tx.category) {
+      tx.category = s.category
+      if (tx.sub && subById(state, tx.sub)?.parent !== s.category) delete tx.sub
+    }
+    if (s.sub && subById(state, s.sub)?.parent === tx.category) tx.sub = s.sub
+    tx.catBy = s.why === 'rule' ? 'rule' : 'learned'
+    const accBook = accOf(state, tx.account)?.book ?? 'personal'
+    if (s.book && s.book !== accBook) tx.book = s.book
+  } else tx.catBy = 'auto'
+  const name = catLabel(state, tx)
+  const why = s.why === 'rule' ? 'your rule' : s.why === 'merchant' ? `${s.n} like it before` : 'from the words'
+  const line = tx.catBy === 'auto' ? `📂 ${escHtml(name)} (${LEVEL_TEXT[s.level] ?? 'a guess'}, ${why}): tap the right one below` : `📂 ${escHtml(name)} (sure, ${why})`
+  return { line, chips: tx.catBy === 'auto' ? s.alternatives : [] }
 }
 
 /** A button under a logged record was tapped: returns the new text and buttons. */
@@ -208,12 +248,14 @@ export function moneyButton(db: Db, data: string, today: string): { text: string
   if (kind === 'fs') {
     // A subcategory picked: filed there, and the merchant is remembered.
     if (!setSub(state, t, arg, { now })) return null
+    t.catBy = 'you' // your own choice: learned from from now on
     save(db, state)
     return { text: loggedText(state, t, today), keyboard: moneyKeyboard(state, t), toast: `✓ ${subById(state, arg).name}` }
   }
   if (kind === 'fa' && accOf(state, arg)) t.account = arg
   else if (kind === 'fk' && catOf(state, arg)) {
     t.category = arg
+    t.catBy = 'you' // your own choice: learned from from now on
     if (t.sub && subById(state, t.sub)?.parent !== arg) delete t.sub
   } else return null
   t.updatedAt = now

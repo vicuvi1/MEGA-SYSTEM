@@ -7,6 +7,7 @@ import { convert, coinValue } from './fx.js';
 import { perMonth } from './recurring.js';
 import { ensureTree, memorySub, suggestSub, subOf } from './cattree.js';
 import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome } from './catshare.js';
+import { addRule2, removeRule2, merchantChoice } from './learn.js';
 
 // v1: first release. v2: custom multi-currency accounts, people, loans,
 // per-record timestamps and deletion markers for sync.
@@ -193,7 +194,8 @@ export function sortTx(list) {
 }
 
 export const category = (state, id) => state.settings.categories.find((c) => c.id === id);
-export const account = (state, id) => state.settings.accounts.find((a) => a.id === id);
+// [books] In a one-book view (books.js) an account of the other book still has a name.
+export const account = (state, id) => state.settings.accounts.find((a) => a.id === id) || state._allAccounts?.find((a) => a.id === id);
 export const person = (state, id) => state.people.find((p) => p.id === id);
 // The order of your cards (Accounts screen: drag them, or the arrows).
 // Accounts you never moved keep the old order: by kind, then as added; ones
@@ -1163,15 +1165,14 @@ export function ruleWord(note) {
 export function addRule(state, { match, type, category }, now = Date.now()) {
   const m = fold(match).trim();
   if (!m || !category) return null;
-  const rules = (state.settings.rules || []).filter((r) => !(fold(r.match) === m && r.type === type));
-  const rule = { id: uid(), match: m, type, category, createdAt: now };
-  state.settings.rules = [...rules, rule];
+  // Rules merge as a list by id (js/learn.js): same text and type keeps its id.
+  const rule = addRule2(state, { match: m, type, category }, now);
   state.settings.updatedAt = now;
   return rule;
 }
 
 export function removeRule(state, id, now = Date.now()) {
-  state.settings.rules = (state.settings.rules || []).filter((r) => r.id !== id);
+  removeRule2(state, id, now); // leaves a tombstone, so it stays deleted everywhere
   state.settings.updatedAt = now;
 }
 
@@ -1188,12 +1189,27 @@ export function applyRule(state, rule, list = ruleTargets(state, rule), now = Da
   return list.length;
 }
 
+// Fields the add/edit sheet sets (or clears) itself. Every other field on a
+// record (source, confirmedAt, catBy, book, reconcile, moved, a newer app's
+// own…) is kept as it was when the record is edited.
+const FORM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'type', 'amount', 'currency', 'date', 'note', 'from', 'to', 'toAmount', 'rate', 'base', 'account', 'category', 'sub', 'orig', 'debt', 'person', 'loan', 'recurring', 'tax', 'receipts']);
+export function keptOnEdit(existing, tx) {
+  const out = {};
+  for (const [k, v] of Object.entries(existing || {})) if (!FORM_FIELDS.has(k) && !(k in tx)) out[k] = v;
+  // You picked the category yourself now: learned from from now on (js/learn.js).
+  if (existing && tx.type !== 'transfer' && (existing.catBy === 'auto' || existing.category !== tx.category)) out.catBy = 'you';
+  return { ...tx, ...out };
+}
+
 export function suggestCategory(state, note, type) {
   const n = (note || '').trim().toLowerCase();
   if (!n || type === 'transfer') return null;
   const valid = (id) => state.settings.categories.some((c) => c.id === id && c.type === type);
   const rule = matchRule(state, note, type);
   if (rule && valid(rule.category)) return rule.category;
+  // A merchant you filed the same way at least 3 times (90%+): "LINELLA 23" too.
+  const sure = merchantChoice(state, note, type);
+  if (sure?.level === 'sure' && valid(sure.category)) return sure.category;
   const past = sortTx(state.tx).find((t) => t.type === type && (t.note || '').trim().toLowerCase() === n);
   if (past && valid(past.category)) return past.category;
   // A merchant you filed under a subcategory before.

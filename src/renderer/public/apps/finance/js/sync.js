@@ -5,9 +5,10 @@
 // theme, log view, backups info) never travel.
 
 import { normalizeState, SCHEMA_VERSION } from './model.js';
+import { mergeRules } from './learn.js';
 
 const LOCAL_SETTINGS = ['theme', 'themeInLife', 'themeMotion', 'logView'];
-const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'accounts', 'categories', 'subcats', 'subMemory', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
+const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'accounts', 'categories', 'subcats', 'subMemory', 'rules', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
 
 // What goes to Drive.
 export function toCloud(state, deviceId, now = Date.now()) {
@@ -98,6 +99,8 @@ export function mergeStates(local, remote) {
   settings.categories = mergeList(local.settings.categories, r.settings.categories, deleted);
   settings.jars = mergeList(local.settings.jars, r.settings.jars, deleted);
   settings.subcats = mergeList(local.settings.subcats, r.settings.subcats, deleted);
+  // Category rules (phase 5): a list by id, the newer rule wins, deleted ones stay deleted (js/learn.js).
+  if (Array.isArray(local.settings.rules) || Array.isArray(r.settings.rules)) settings.rules = mergeRules(local.settings.rules, r.settings.rules, deleted, local.settings.updatedAt || 0, r.settings.updatedAt || 0);
   // Learned merchants: both sides, the newer settings winning on the same merchant.
   settings.subMemory = newer ? { ...(local.settings.subMemory || {}), ...(r.settings.subMemory || {}) } : { ...(r.settings.subMemory || {}), ...(local.settings.subMemory || {}) };
 

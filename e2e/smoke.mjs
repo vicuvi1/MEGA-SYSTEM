@@ -713,6 +713,40 @@ try {
       window.dispatchEvent(new CustomEvent('life-finance-changed'))
     })
   })
+  // Money phase 5 (less typing): a captured payment waits in To sort; one tap on a chip files it and
+  // teaches the rule; the next one from the same merchant ("Smokebistro #7") is filed by itself, marked auto.
+  await step('Money to sort: one tap files a payment, the rule is learned, the next one files itself', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('money')
+    await pg.click('.mh .ptabs [data-tab="today"]').catch(() => {})
+    await pg.waitForSelector('[data-testid="ts-item"][data-id="smoke-cap-1"]', { timeout: 15000 }).catch(async () => {
+      throw new Error(`no To sort card: ${(await pg.locator('.mh').innerText().catch(() => '')).slice(0, 200)}`)
+    })
+    if (!(await pg.$('[data-testid="ts-item"][data-id="smoke-cap-2"]'))) throw new Error('the second payment should wait too (no rule yet)')
+    const row = pg.locator('[data-testid="ts-item"][data-id="smoke-cap-1"]')
+    if ((await row.locator('[data-testid="ts-chip"]').count()) < 1 || !(await row.locator('[data-testid="ts-other"]').count())) throw new Error('no category chips or Other…')
+    const chip = row.locator('[data-testid="ts-chip"]').first()
+    const cat = await chip.getAttribute('data-cat')
+    await chip.click()
+    // The rule is learned: the next one is filed by itself in the same category, marked "auto".
+    await pg.waitForSelector('[data-testid="ts-auto"][data-id="smoke-cap-2"]', { timeout: 15000 }).catch(async () => {
+      throw new Error(`the next payment was not filed by itself: ${(await pg.locator('[data-testid="tosort"]').innerText().catch(() => 'card gone')).slice(0, 300)}`)
+    })
+    if (await pg.$('[data-testid="ts-item"][data-id="smoke-cap-1"]')) throw new Error('the tapped payment is still in To sort')
+    const autoCat = await pg.locator('[data-testid="ts-auto"][data-id="smoke-cap-2"] [data-testid="ts-auto-cat"]').innerText()
+    if (!/auto/.test(autoCat)) throw new Error(`no "auto" mark: ${autoCat}`)
+    if (process.env.MONEY5_SHOT) await pg.locator('[data-testid="tosort"]').screenshot({ path: process.env.MONEY5_SHOT }).catch(() => {})
+    // The rule shows on the Rules card (Month tab), learned from To sort.
+    await pg.click('.mh .ptabs [data-tab="month"]')
+    await pg.click('[data-testid="rules-card"] summary')
+    await pg.waitForSelector('[data-testid="rule-row"][data-match="smokebistro"]', { timeout: 10000 })
+    const picked = await pg.locator('[data-testid="rule-row"][data-match="smokebistro"] select').inputValue()
+    if (picked !== cat) throw new Error(`the rule files to ${picked}, the tap picked ${cat}`)
+    // Back on Today: OK confirms the auto-filed one and the card empties.
+    await pg.click('.mh .ptabs [data-tab="today"]')
+    await pg.click('[data-testid="ts-auto"][data-id="smoke-cap-2"] [data-testid="ts-ok"]')
+    await pg.waitForFunction(() => !document.querySelector('[data-testid="ts-auto"]'), null, { timeout: 10000 })
+  })
   for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky']]) {
     await step(`${name} loads with its own content`, async () => {
       await open(page)
@@ -944,6 +978,72 @@ try {
     if (process.env.MONEY4_SHOTS) await frame.locator('main#app').screenshot({ path: `${process.env.MONEY4_SHOTS}/long-view-1440.png` })
     // Read only: every stored record is exactly as it was.
     if (JSON.stringify(await storedTx()) !== txBefore) throw new Error('opening the long view changed a stored record')
+  })
+  // Money v2 phase 3: a tax tag, the year summary, the accountant export (e2e/smokeTaxes.mjs).
+  await (await import('./smokeTaxes.mjs')).taxSteps({ step, pg, open, financeFrame, storedTx })
+  // Money v2 phase 2: one Personal / Business / Both switch on the Money page and in Finance Helper.
+  // With no business account Both is the default and Business says so; marking an account Business
+  // (undoable) fills the Business card; Pay yourself is "Paid to you" there; everything is put back.
+  await step('Money books: the Personal / Business / Both switch, the business view and pay yourself', async () => {
+    const stored = () => pg.evaluate(() => JSON.parse(localStorage.getItem('finance-helper.state') || '{}'))
+    await open('money')
+    await pg.waitForTimeout(800)
+    if (!(await pg.$('.mh-hero'))) await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click()
+    await pg.waitForSelector('[data-testid="money-book-switch"]', { timeout: 15000 })
+    const on = () => pg.locator('[data-testid="money-book-switch"] button[aria-checked="true"]').innerText()
+    if ((await on()) !== 'Both') throw new Error(`with no business account the switch shows ${await on()}, not Both`)
+    const before = await stored()
+    await pg.locator('[data-testid="money-book-switch"] button', { hasText: 'Business' }).click()
+    await pg.waitForSelector('[data-testid="money-business"]', { timeout: 8000 })
+    if (!/No business money yet/.test(await pg.locator('[data-testid="money-business"]').innerText())) throw new Error('the empty Business card does not say there is no business money')
+    // The step before may leave the Month tab open; the full-app button is on Today.
+    if (await pg.$('.mh .ptabs [data-tab="today"]')) await pg.click('.mh .ptabs [data-tab="today"]')
+    await pg.waitForSelector('.mh-open', { state: 'visible', timeout: 8000 })
+    await pg.click('.mh-open')
+    await pg.waitForTimeout(2500)
+    const frame = await financeFrame()
+    await frame.evaluate(() => { location.hash = '#home' })
+    // Finance Helper follows the same switch.
+    await frame.waitForSelector('[data-testid="book-switch"] [data-book="business"][aria-pressed="true"]', { timeout: 10000 })
+    await frame.waitForSelector('[data-testid="business-view"] [data-act="book-manage"]', { timeout: 8000 })
+    const mdl = before.settings.accounts.filter((a) => !a.archived && (a.currency || 'MDL') === before.settings.currency)
+    if (mdl.length < 2) throw new Error('the fixture needs two accounts in the main currency')
+    const [biz, mine] = mdl
+    await frame.click('[data-testid="business-view"] [data-act="book-manage"]')
+    await frame.click(`.sheet [data-acc="${biz.id}"][data-to="business"]`)
+    await pg.waitForFunction((id) => JSON.parse(localStorage.getItem('finance-helper.state')).settings.accounts.find((a) => a.id === id)?.book === 'business', biz.id, { timeout: 5000 })
+    await frame.click('.sheet .icon-btn[data-close]')
+    await frame.waitForSelector('[data-testid="biz-profit"]', { timeout: 5000 })
+    // Pay yourself: a transfer business → personal, "Paid to you" in Business (never a cost).
+    const costs = await frame.locator('[data-testid="business-view"] .bk-kpis div:nth-child(3) b').innerText()
+    await frame.click('[data-testid="book-pay"]')
+    await frame.waitForSelector('.sheet [data-testid="pay-amount"]', { timeout: 5000 })
+    await frame.selectOption('.sheet #bk-from', biz.id)
+    await frame.selectOption('.sheet #bk-to', mine.id)
+    await frame.fill('.sheet [data-testid="pay-amount"]', '123')
+    await frame.click('.sheet [data-testid="pay-go"]')
+    await pg.waitForFunction(() => JSON.parse(localStorage.getItem('finance-helper.state')).tx.some((t) => t.draw && t.amount === 12300 && t.type === 'transfer'), null, { timeout: 5000 })
+    await frame.waitForFunction(() => /123/.test(document.querySelector('[data-testid="biz-draws"]')?.textContent || ''), null, { timeout: 5000 })
+    if ((await frame.locator('[data-testid="business-view"] .bk-kpis div:nth-child(3) b').innerText()) !== costs) throw new Error('paying yourself changed the business costs')
+    if (process.env.BOOKS_SHOTS) {
+      await frame.locator('[data-testid="business-view"]').screenshot({ path: `${process.env.BOOKS_SHOTS}/finance-business-view.png` })
+    }
+    // Undo the payment, then Personal: no Business card.
+    await frame.click('#toast button')
+    await pg.waitForFunction(() => !JSON.parse(localStorage.getItem('finance-helper.state')).tx.some((t) => t.draw && t.amount === 12300), null, { timeout: 5000 })
+    await frame.click('[data-testid="book-switch"] [data-book="personal"]')
+    await frame.waitForSelector('[data-testid="book-switch"] [data-book="personal"][aria-pressed="true"]', { timeout: 5000 })
+    if (await frame.$('[data-testid="business-view"]')) throw new Error('the Business card shows in the Personal view')
+    // Put the account back (Books… → Personal) and the switch on Both: everything as before.
+    await frame.click('[data-testid="book-switch"] [data-act="book-manage"]')
+    await frame.click(`.sheet [data-acc="${biz.id}"][data-to="personal"]`)
+    await pg.waitForFunction((id) => !JSON.parse(localStorage.getItem('finance-helper.state')).settings.accounts.find((a) => a.id === id)?.book, biz.id, { timeout: 5000 })
+    await frame.click('.sheet .icon-btn[data-close]')
+    await frame.click('[data-testid="book-switch"] [data-book="both"]')
+    await frame.waitForSelector('[data-testid="book-switch"] [data-book="both"][aria-pressed="true"]', { timeout: 5000 })
+    const after = await stored()
+    if (after.tx.length !== before.tx.length) throw new Error(`records changed: ${before.tx.length} → ${after.tx.length}`)
+    if (after.tx.some((t) => t.book)) throw new Error('a record got a book field')
   })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
@@ -1487,10 +1587,11 @@ try {
     await shot(`${prog} .ph-card`, 'photo-compare-slider')
     await pg.locator(`${prog} .ph-card .ph-actions .btn`, { hasText: 'Done' }).click()
     // No photo data reached the (fake) server's database. Photo Locker's index (vault_index) may name
-    // the photo and its type (metadata only, see docs/areas/vault.md), but never holds image data.
+    // the photo and its type (metadata only, see docs/areas/vault.md), but never holds image data; so
+    // may Money's receipt index (money_receipts: a receipt's name and type, docs/areas/rewards-money.md).
     const leaked = await pg.evaluate(async () => {
       const s = localStorage.getItem('life_web_session') ?? ''
-      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%data:image%' OR value LIKE '%;base64,%' OR (key != 'vault_index' AND (value LIKE '%image/%' OR value LIKE '%ph-demo%')) OR (key LIKE '%photo%' AND key != 'look_wallpaper_photo')", args: [] } }, { type: 'close' }] }) })
+      const r = await fetch('/api/db', { method: 'POST', headers: { Authorization: `Bearer ${s}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ requests: [{ type: 'execute', stmt: { sql: "SELECT COUNT(*) FROM settings WHERE value LIKE '%data:image%' OR value LIKE '%;base64,%' OR (key NOT IN ('vault_index', 'money_receipts') AND (value LIKE '%image/%' OR value LIKE '%ph-demo%')) OR (key LIKE '%photo%' AND key != 'look_wallpaper_photo')", args: [] } }, { type: 'close' }] }) })
       const j = await r.json()
       return Number(j.results?.[0]?.response?.result?.rows?.[0]?.[0]?.value ?? -1)
     })

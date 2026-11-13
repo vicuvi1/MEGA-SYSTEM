@@ -195,6 +195,12 @@ export type Bridge = LifeApi & {
     /** Joins with the saved index (another device may have saved in between) and saves. */
     saveIndex(next: import('@core/vaultSync').VaultIndex): Promise<import('@core/vaultSync').VaultIndex>
   }
+  /** Money receipts' synced index `money_receipts` (metadata only, core/receiptIndex.ts). */
+  moneyReceipts?: {
+    index(): Promise<import('@core/receiptIndex').ReceiptIndex>
+    /** Joins with the saved index and saves (read → merge → write). */
+    saveIndex(next: import('@core/receiptIndex').ReceiptIndex): Promise<import('@core/receiptIndex').ReceiptIndex>
+  }
   /** "Am I improving?": the last 7 days against your usual week (web). */
   progress?: { report(): Promise<ProgressReport>; insights?(): Promise<Insights>; growth?(): Promise<Growth>; seenMilestones?(): Promise<string[]>; markMilestones?(ids: string[], replace?: boolean): Promise<void> }
   /** Day templates for the calendar ("study day"), synced (web). */
@@ -241,6 +247,8 @@ export type Bridge = LifeApi & {
   career?: import('./web/career').CareerApi
   /** The Money hub (Finance Helper's numbers) and one-line quick add. */
   finance?: import('./web/moneyApi').MoneyApi
+  /** Money phase 5: To sort (captures, bills due), learned category rules. */
+  moneySort?: import('./web/moneySort').SortApi
   weekPlan?: { saved(): Promise<WeekPlan | null>; save(p: Partial<WeekPlan>): Promise<WeekPlan>; toggle(i: number): Promise<WeekPlan> }
   /** The Sync button: pulls Todoist and Google Calendar now, then every list reads again. Resolves with the time. */
   syncNow?: () => Promise<number>

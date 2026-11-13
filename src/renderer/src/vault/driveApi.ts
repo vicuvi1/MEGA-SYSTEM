@@ -86,7 +86,7 @@ export function createDrive(getToken: () => Promise<string>, fetchImpl: typeof f
       return { files, folders }
     },
     /** Folders this app made (drive.file sees only those), for "Use an existing folder". */
-    listFolders: async (): Promise<DriveFolder[]> => (await listAll(`mimeType = '${FOLDER_MIME}' and trashed = false`)).filter((f) => f.appProperties?.lsApp !== 'locker-sub').map((f) => ({ id: f.fileId, name: f.name })),
+    listFolders: async (): Promise<DriveFolder[]> => (await listAll(`mimeType = '${FOLDER_MIME}' and trashed = false`)).filter((f) => f.appProperties?.lsApp !== 'locker-sub' && f.appProperties?.lsApp !== 'receipt-folder').map((f) => ({ id: f.fileId, name: f.name })),
     /** A folder: the Locker's own (no parent), or a sub-folder inside it (Food, 2026-11). */
     createFolder: async (name: string, parentId?: string): Promise<DriveFolder> => {
       const meta = { name: name.slice(0, 120) || 'Photo Locker', mimeType: FOLDER_MIME, appProperties: { lsApp: parentId ? 'locker-sub' : 'locker-folder' }, ...(parentId ? { parents: [parentId] } : {}) }
