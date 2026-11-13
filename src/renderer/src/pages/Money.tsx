@@ -20,6 +20,7 @@ import { pointValue, pointValueLine, type PointValue } from '@core/pointValue'
 import type { MoneyHubView } from '../web/moneyHub'
 import '../money.css'
 import { Donut } from '../Donut'
+import { LongViewCard } from '../MoneyLong'
 
 // One money formatter, shared with Finance Helper (core/moneyText): single
 // amounts keep their bani (12,50 MDL), totals are whole units; the label is
@@ -136,6 +137,7 @@ export function Money({ state, onState, onWallet, onOpenApp }: { state: Connecti
             <div className="mh-grid">
               <WhereMoneyGoes view={view} />
               <Forecast view={view} />
+              <LongViewCard view={view} onOpenApp={openApp} />
             </div>
           </TabPanel>
           <TabPanel page="money" id="goals" value={tab}>

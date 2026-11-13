@@ -1,0 +1,13 @@
+/* Money page → Month: the long-view card (MoneyLong.tsx). */
+.mlv { grid-column: span 6; padding-top: 16px; padding-bottom: 14px; }
+.mlv .mh-head { margin-bottom: 8px; }
+.mlv-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.mlv-row div { min-width: 0; }
+.mlv-row dt { color: var(--text-dim, var(--muted)); font-size: 12px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+.mlv-row dd { margin: 2px 0 0; font: 650 18px/1.25 var(--display, inherit); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+.mlv-row dd.good { color: var(--mh-ok); }
+.mlv-row dd.bad { color: var(--mh-red); }
+.mlv-line { margin: 8px 0 0; font-size: 13.5px; color: var(--text-dim, var(--muted)); }
+@media (max-width: 640px) {
+  .mlv-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

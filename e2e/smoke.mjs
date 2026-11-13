@@ -883,6 +883,68 @@ try {
     await frame.click('.sheet .icon-btn[data-close]')
     if ((await storedTx()).length !== count) throw new Error('records changed after the re-import')
   })
+  // Money phase 4: the long view (read only). The Money page's Month tab has one card with net
+  // worth, its change this year, the savings rate and the runway; Finance's Reports → Long view
+  // shows the 4 metrics, the net worth chart and tables, savings rate, this year vs last and the
+  // runway; MDL is the default and USD converts at each day's rate. Nothing is written.
+  await step('Money long view: the Money card and Reports → Long view with net worth, savings rate, year over year and runway', async () => {
+    await pg.setViewportSize({ width: 1440, height: 900 })
+    await open('money')
+    await pg.waitForTimeout(800)
+    if (!(await pg.$('.mh-hero'))) await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click()
+    await pg.waitForSelector('.mh .ptabs [data-tab="month"]', { timeout: 15000 })
+    await pg.click('.mh .ptabs [data-tab="month"]')
+    await pg.waitForSelector('[data-testid="money-long"] dd', { timeout: 10000 })
+    const card = (await pg.locator('[data-testid="money-long"]').innerText()).replace(/\s+/g, ' ')
+    for (const w of ['Net worth', 'This year', 'Savings rate', 'Runway']) if (!card.toLowerCase().includes(w.toLowerCase())) throw new Error(`the Money card has no "${w}": ${card.slice(0, 200)}`)
+    if (!/You could live [\d,]+ months? on your savings|No spending logged yet/.test(card)) throw new Error(`no runway line: ${card.slice(0, 200)}`)
+    if (!/\d MDL/.test(card.replace(/ /g, ' '))) throw new Error(`the card has no MDL amount: ${card.slice(0, 200)}`)
+    if (process.env.MONEY4_SHOTS) await pg.locator('[data-testid="money-long"]').screenshot({ path: `${process.env.MONEY4_SHOTS}/money-card.png` })
+    // Made-up rates on this device (units per 1 USD: 1 USD = 17.6 MDL), so USD and EUR can be shown.
+    await pg.evaluate(() => {
+      const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+      if (!st || st.rates?.usd?.EUR > 0) return
+      st.rates = { ...(st.rates || {}), usd: { ...(st.rates?.usd || {}), USD: 1, MDL: 17.6, EUR: 0.88 }, crypto: st.rates?.crypto || {}, history: st.rates?.history || {}, fetchedAt: Date.now() }
+      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+    })
+    const txBefore = JSON.stringify(await storedTx())
+    // "See it all" opens Finance Helper on Reports → Long view.
+    await pg.locator('[data-testid="money-long"] .mh-link').click()
+    await pg.waitForTimeout(2500)
+    const frame = await financeFrame()
+    await frame.evaluate(() => { if (location.hash !== '#longview') location.hash = '#longview' })
+    // An app opened by an earlier step still holds the rates it had: reload it once to read them.
+    if (!(await frame.evaluate(() => JSON.parse(localStorage.getItem('finance-helper.state') || '{}').rates?.usd?.EUR > 0 && !!document.querySelector('[data-testid="lv-currency"]')))) {
+      await frame.evaluate(() => location.reload())
+      await pg.waitForTimeout(2500)
+    }
+    await frame.waitForSelector('[data-testid="lv-metrics"] .lv-metric', { timeout: 10000 })
+    const metrics = await frame.locator('[data-testid="lv-metrics"] .lv-metric').evaluateAll((els) => els.map((e) => e.dataset.metric))
+    if (metrics.join() !== 'networth,savings,yoy,runway') throw new Error(`metrics: ${metrics.join()}`)
+    for (const id of ['lv-networth', 'lv-savings', 'lv-yoy', 'lv-runway', 'lv-accounts']) if (!(await frame.locator(`[data-testid="${id}"]`).count())) throw new Error(`no ${id}`)
+    if (!(await frame.locator('[data-testid="lv-networth"] svg.line-chart').count())) throw new Error('no net worth chart')
+    if (!/Long view/.test(await frame.locator('.subtabs [aria-current="page"]').innerText())) throw new Error('Long view is not the current Reports tab')
+    const runway = (await frame.locator('[data-testid="lv-runway"] .lv-rw-text').innerText()).trim()
+    if (!/^You could live [\d,]+ months? on your savings\.$/.test(runway)) throw new Error(`runway: ${runway}`)
+    const yoyRows = await frame.locator('[data-testid="lv-yoy"] tbody tr').count()
+    if (yoyRows < 3) throw new Error(`this year vs last has ${yoyRows} rows`)
+    // Years, then back to months.
+    await frame.click('[data-act="lv-nw-mode"][data-mode="years"]')
+    await frame.waitForSelector('[data-act="lv-nw-mode"][data-mode="years"][aria-pressed="true"]', { timeout: 3000 })
+    await frame.click('[data-act="lv-nw-mode"][data-mode="months"]')
+    // Currency: MDL by default; USD converts (when this device has a USD rate).
+    const curBox = (await financeFrame()).locator('[data-testid="lv-currency"]')
+    if (await curBox.count()) {
+      if (!(await frame.locator('[data-act="lv-cur"][data-cur="MDL"][aria-pressed="true"]').count())) throw new Error('MDL is not the default currency')
+      await frame.click('[data-act="lv-cur"][data-cur="USD"]')
+      await frame.waitForFunction(() => /USD/.test(document.querySelector('[data-metric="networth"] b')?.textContent || ''), null, { timeout: 5000 })
+      await frame.click('[data-act="lv-cur"][data-cur="MDL"]')
+      await frame.waitForFunction(() => /MDL/.test(document.querySelector('[data-metric="networth"] b')?.textContent || ''), null, { timeout: 5000 })
+    } else throw new Error('no MDL / USD / EUR switch on the long view')
+    if (process.env.MONEY4_SHOTS) await frame.locator('main#app').screenshot({ path: `${process.env.MONEY4_SHOTS}/long-view-1440.png` })
+    // Read only: every stored record is exactly as it was.
+    if (JSON.stringify(await storedTx()) !== txBefore) throw new Error('opening the long view changed a stored record')
+  })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.

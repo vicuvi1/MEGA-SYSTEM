@@ -52,15 +52,19 @@ const W = 'life-wallet-changed'
 
 export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Promise<unknown>, applyFinanceInbox: () => Promise<number> = async () => 0): MoneyApi {
   const hubMod = () => import('./moneyHub')
+  const longMod = () => import('./moneyLong')
   const botMod = () => import('./financeBot')
   const hub = async (preferTx?: string): Promise<MoneyHubView | null> => {
-    const [{ hubView }, { financeState }] = await Promise.all([hubMod(), botMod()])
+    const [{ hubView, cleanFinance }, { financeState }, { longCardView }] = await Promise.all([hubMod(), botMod(), longMod()])
     return (await svcP).read((s) => {
       const today = s.wallet.today()
       let state = financeStateFrom(s.db, store())
       // This device's copy may not have the new record yet (Finance Helper locked here): use the synced one.
       if (preferTx && !(state?.tx ?? []).some((t: any) => t?.id === preferTx)) state = financeState(s.db as any) ?? state
-      return hubView(state, today)
+      const view = hubView(state, today)
+      // The long-view card (net worth, savings rate, runway): read only.
+      if (view) view.long = longCardView(cleanFinance(state), today)
+      return view
     })
   }
   const freeDays = async () => (await svcP).read((s) => s.money.marks().nothingSpent)

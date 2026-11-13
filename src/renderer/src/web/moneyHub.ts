@@ -15,6 +15,7 @@ import { countsAsSpending, countsAsIncome } from '../../public/apps/finance/js/c
 // @ts-ignore
 import { goalStatus, normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } from '../../public/apps/finance/js/model.js'
 import { addDays } from '@core/dates'
+import type { LongCard } from './moneyLong'
 import {
   budgetLevel,
   goalPlan,
@@ -64,6 +65,8 @@ export interface MoneyHubView {
   loggedToday: boolean
   /** Accounts not reconciled for more than 31 days (Finance's reconcile.js). */
   reconcile: { id: string; name: string; days: number | null }[]
+  /** The long view in one card (Finance's longview.js), added by moneyApi so the bot bundle stays as it is. */
+  long?: LongCard | null
 }
 
 const B = (t: any) => (Number.isInteger(t?.base) ? t.base : Number(t?.amount) || 0)
