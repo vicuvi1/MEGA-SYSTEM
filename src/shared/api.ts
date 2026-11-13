@@ -877,6 +877,8 @@ export interface LifeApi {
     health?(): Promise<SyncHealth>
     /** Forget the "couldn't sync" list. */
     clearFailed?(): Promise<void>
+    /** "Sync Money now": a full compare with the cloud copy and a send of anything missing ("Sent 37 records · cloud up to date"). */
+    moneyNow?(): Promise<{ ok: boolean; text: string }>
   }
 }
 
@@ -890,6 +892,20 @@ export interface SyncHealth {
   /** Changes the database refused (another device changed the same thing). */
   failed: { at: string; error: string }[]
   backupError: string | null
+  /** Each app's sync (Money, Sport Track…): last time the server confirmed it, skipped, or the error. */
+  apps?: AppSyncState[]
+}
+
+/** One app's sync on this device (web/appSync.ts AppSyncStatus). */
+export interface AppSyncState {
+  setting: string
+  label: string
+  state: 'ok' | 'waiting' | 'skipped' | 'error' | 'never'
+  okAt: number | null
+  at: number | null
+  error: string | null
+  note: string | null
+  sent: number
 }
 
 /** IPC replies are wrapped so error messages reach the UI cleanly. */

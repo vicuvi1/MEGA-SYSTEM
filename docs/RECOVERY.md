@@ -57,6 +57,13 @@ app's data as JSON and CSV. Restore from file takes this zip too. PINs, keys and
   other device takes the restored copy instead of merging its old one back in. Each device keeps its
   copy from before next to it (`life_sync_<app>_before_restore` in its storage).
 
+## If Money (or another app) looks different on two devices
+Settings → Data safety → Sync lists each app with the last time the cloud confirmed it. Press **Sync Money now**
+on the device that has the records: it compares with the cloud copy and sends what is missing
+("Sent 37 records · cloud up to date"), then the other device gets them on its next sync. Records are only ever
+added or updated by a sync, never dropped. "Skipped (Money locked)" means Money is encrypted with a PIN on that
+device, so it can't sync from there.
+
 ## If a light is red
 - **Cloud backup:** Settings → Data safety → Back up now. Still red: the line says why (often the server
   or the internet). Your data is safe in the main database and on this PC.

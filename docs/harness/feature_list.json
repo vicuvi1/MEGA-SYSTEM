@@ -1429,6 +1429,18 @@
    ],
    "evidence": "2026-11-13: tsc, vitest (financeMoneyIdeasB.test.ts, salaryNotice.test.ts), smoke steps Money quick add / salary watch / price memory / Ask.",
    "notes": "apps/finance/js/quickadd.js, salary.js, prices.js, ask.js, screens/moneyb.js; settings.salary; slot 'salary' in core/notifyBudget.ts; no AI fallback (no bridge)."
+  },
+  {
+   "id": "money-sync-heal",
+   "title": "Money sync you can trust: confirmed by the server, self-healing, shown per app",
+   "user_visible_behavior": "Money (Finance Helper) records reach the website and the desktop: a copy counts as synced only once the server has it, a merge sends back what the cloud lacks, a check on start and every 10 minutes sends anything missing, Settings → Data safety lists each app's sync and has Sync Money now (\"Sent 37 records · cloud up to date\"), and the top-bar dot turns amber/red when Money is locked, failing or not synced for 15 minutes",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"sync|Sync|Money|Finance|Data safety\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (moneySyncHeal.test.ts: 12 tests), scoped smoke incl. the new step Settings → Data safety: Sync Money now.",
+   "notes": "web/appSync.ts (gapOf, UNCONFIRMED marker, status registry, appSyncAlert), financeSync.ts financeGap, Mirror.serverSetting / useServerCopy, financeBot save keeps editedAt + restore, SyncPanel, DesktopBar. Encrypted Money (finance-helper.enc) still can't sync: shown as skipped (Money locked)."
   }
  ]
 }

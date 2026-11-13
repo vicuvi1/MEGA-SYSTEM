@@ -111,17 +111,57 @@ export class Mirror {
     if (desktop && typeof window !== 'undefined') {
       window.addEventListener('life-desktop-retry', () => { void this.refresh().catch(() => {}) })
       window.addEventListener('life-desktop-use-server', () => {
-        void this.ready.then(() => this.lock(async () => {
-          // The UI has already saved an explicit backup and confirmed this choice.
-          // Rebuild downloads fully before replacing the current local database.
-          await this.rebuild()
-          await this.store!.save(this.current.raw.export())
-          this.lastError = null
-          this.emit()
-          this.desktopStatus()
-        })).catch((error) => { this.lastError = error.message; this.desktopStatus() })
+        void this.useServerCopy().catch(() => {})
       })
     }
+  }
+
+  /**
+   * Desktop: replace this PC's copy with the server's (the "Back up and use
+   * server copy" button; the UI has already saved a backup). Changes not sent
+   * yet are dropped here; the apps' sync (appSync.ts) sends their data again.
+   */
+  useServerCopy(): Promise<void> {
+    return this.ready.then(() => this.lock(async () => {
+      // Rebuild downloads fully before replacing the current local database.
+      await this.rebuild()
+      await this.store!.save(this.current.raw.export())
+      this.lastError = null
+      this.emit()
+      this.desktopStatus()
+    })).catch((error) => { this.lastError = error.message; this.desktopStatus(); throw error })
+  }
+
+  /**
+   * What the SERVER holds for one setting (not this device's copy): changes
+   * still waiting here are sent first (a failure throws, so nothing counts as
+   * synced while it waits). `expected`: the text the caller believes is there;
+   * a cheap check (size + start) answers without downloading it again when it
+   * matches. Null: the server has no such setting.
+   */
+  async serverSetting(key: string, expected?: string | null): Promise<string | null> {
+    await this.ready
+    await this.lock(async () => {
+      if (this.desktop) {
+        if (this.db) await this.flushDesktop()
+        if (this.db && this.pending().length) throw new MirrorError(`${this.pending().length} change(s) on this PC are not sent yet`)
+      } else {
+        await this.flushOffline(true)
+        if (this.outbox().length) throw new MirrorError(this.waitingNote(this.outbox().length))
+      }
+    })
+    const HEAD = 48 // {"savedAt":<ms>,"editedAt":<ms>…: plain ASCII, and savedAt changes with every write
+    if (expected != null) {
+      const [probe] = await this.turso.readMany([{ sql: 'SELECT length(CAST(value AS BLOB)), substr(value, 1, ?) FROM settings WHERE key = ?', args: [HEAD, key] }])
+      if (probe instanceof Error) throw probe
+      const row = probe.rows[0]
+      if (!row) return null
+      if (Number(row[0]) === new TextEncoder().encode(expected).length && String(row[1] ?? '') === expected.slice(0, HEAD)) return expected
+    }
+    const [r] = await this.turso.readMany([{ sql: 'SELECT value FROM settings WHERE key = ?', args: [key] }])
+    if (r instanceof Error) throw r
+    const v = r.rows[0]?.[0]
+    return v == null ? null : String(v)
   }
 
   onChange(cb: () => void): () => void {

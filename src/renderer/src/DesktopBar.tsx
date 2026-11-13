@@ -7,9 +7,13 @@ import { askConfirm } from './confirmSheet'
 import { useEffect, useRef, useState } from 'react'
 import type { UpdateStatus } from '../../shared/api'
 import type {} from '../../shared/desktop'
+import { appSyncAlert, appSyncStatuses } from './web/appSync'
 
 export function DesktopBar() {
   const [sync, setSync] = useState<{ pending: number; error: string | null; syncedAt: string | null }>({ pending: 0, error: null, syncedAt: null })
+  // Each app's own sync (Money, Sport Track…): Life's tables can be synced while Money is not.
+  const [apps, setApps] = useState(() => appSyncStatuses())
+  const [now, setNow] = useState(() => Date.now())
   const [update, setUpdate] = useState<UpdateStatus | null>(null)
   const [message, setMessage] = useState('')
   const [busy, setBusy] = useState(false)
@@ -46,12 +50,18 @@ export function DesktopBar() {
     if (!desktop) return
     const changed = (event: Event) => setSync((event as CustomEvent).detail)
     window.addEventListener('life-desktop-sync', changed)
+    const appsChanged = () => {
+      setApps(appSyncStatuses())
+      setNow(Date.now())
+    }
+    window.addEventListener('life-app-sync', appsChanged)
+    const tick = setInterval(appsChanged, 60_000)
     // The update status arrives when it changes; a slow poll is only a safety net.
     const poll = () => desktop.updateStatus().then(setUpdate).catch(() => {})
     void poll()
     desktop.onUpdateStatus?.(setUpdate)
     const interval = setInterval(poll, 60_000)
-    return () => { clearInterval(interval); window.removeEventListener('life-desktop-sync', changed) }
+    return () => { clearInterval(interval); clearInterval(tick); window.removeEventListener('life-desktop-sync', changed); window.removeEventListener('life-app-sync', appsChanged) }
   }, [desktop])
   // Just updated: say so once, with what's new (saved when the update was ready).
   useEffect(() => {
@@ -89,8 +99,11 @@ export function DesktopBar() {
     try { await fn() } catch (error) { setMessage((error as Error).message) } finally { setBusy(false) }
   }
   const conflict = !!sync.error?.startsWith('Sync conflict:')
-  const state = conflict ? 'bad' : sync.error ? 'warn' : sync.pending ? 'warn' : sync.syncedAt ? 'ok' : 'idle'
-  const label = conflict ? 'Sync needs you' : sync.pending ? `${sync.pending} waiting to sync` : sync.error ? 'Offline · saved here' : sync.syncedAt ? 'Synced' : 'Opening…'
+  // "Synced" only when Life's tables AND every app (Money…) are confirmed by the server.
+  const appAlert = appSyncAlert(apps, now, typeof navigator === 'undefined' || navigator.onLine !== false)
+  const state = conflict || appAlert?.level === 'bad' ? 'bad' : sync.error || sync.pending || appAlert ? 'warn' : sync.syncedAt ? 'ok' : 'idle'
+  const label = conflict ? 'Sync needs you' : sync.pending ? `${sync.pending} waiting to sync` : sync.error ? 'Offline · saved here' : appAlert ? appAlert.short : sync.syncedAt ? 'Synced' : 'Opening…'
+  const title = sync.error ?? appAlert?.text ?? (sync.syncedAt ? `Last synced ${new Date(sync.syncedAt).toLocaleTimeString()}. Click to sync now.` : 'Sync now')
   const needsLogin = !!update?.error && /sign in|401|403|404|auth|token|credential/i.test(update.error)
 
   return (
@@ -134,7 +147,7 @@ export function DesktopBar() {
           </button>
         )}
       </span>
-      <button className={`dbar-sync ${state}`} disabled={busy} onClick={() => window.dispatchEvent(new Event('life-desktop-retry'))} title={sync.error ?? (sync.syncedAt ? `Last synced ${new Date(sync.syncedAt).toLocaleTimeString()}. Click to sync now.` : 'Sync now')}>
+      <button className={`dbar-sync ${state}`} disabled={busy} onClick={() => { window.dispatchEvent(new Event('life-desktop-retry')); window.dispatchEvent(new Event('life-apps-check')) }} title={title}>
         <i />
         {label}
       </button>

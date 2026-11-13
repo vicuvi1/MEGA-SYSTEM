@@ -36,7 +36,7 @@ import { createTodoistClient, localStore } from './web/todoistClient'
 import { setSportLogger, sportDay } from './sportTrack'
 import type { TodoCompleted, TodoTask } from '@core/todoist'
 import { SPORT } from './web/sportSync'
-import { MAN, WAKY, createAppSync, setBigChangeGuard, type AppSyncSpec } from './web/appSync'
+import { MAN, WAKY, appSyncRunText, appSyncStatuses, createAppSync, setBigChangeGuard, type AppSyncSpec } from './web/appSync'
 import { FINANCE } from './web/financeSync'
 import { createWebAi, serverAi } from './web/webAi'
 import { careApi } from './web/careApi'
@@ -314,9 +314,27 @@ export function createTursoWebBridge(): Bridge {
         })
         .catch(() => null)
     const list = [SPORT, FINANCE, WAKY, MAN].map((spec) => createAppSync(m, spec, undefined, spec === WAKY ? wakyToSleep : undefined))
-    for (const s of list) void s.sync()
+    // On start, each app compares its data with the server's own copy and sends what the cloud lacks.
+    for (const s of list) void s.sync({ check: true })
     return list
   })
+  /** Every app compares with the server's copy (desktop and web): sends what the cloud lacks, takes what it has. */
+  let checkedAt = Date.now()
+  const checkApps = (minGap = 0) => {
+    if (Date.now() - checkedAt < minGap) return
+    checkedAt = Date.now()
+    void syncsP.then((list) => list.forEach((s) => void s.sync({ check: true })))
+  }
+  if (typeof window !== 'undefined' && typeof document !== 'undefined') {
+    // Every 10 minutes (so "synced" is never more than a few minutes old), and when you come
+    // back to the window or the internet comes back (the website pulls on focus too).
+    setInterval(() => checkApps(), 10 * 60_000)
+    window.addEventListener('online', () => checkApps())
+    // The desktop's sync dot was clicked.
+    window.addEventListener('life-apps-check', () => checkApps())
+    window.addEventListener('focus', () => checkApps(2 * 60_000))
+    document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && checkApps(2 * 60_000))
+  }
   const syncAll = () => syncsP.then((list) => Promise.all(list.map((s) => s.sync())))
   /** Sport Track's copy here takes the log's new sums (water or reps logged by the app, a deep link, the history list). */
   const sportResync = () => void syncsP.then((list) => list.find((x) => x.spec === SPORT)?.sync()).catch(() => {})
@@ -1498,7 +1516,15 @@ export function createTursoWebBridge(): Bridge {
     // Turso is the sync on the web: "Sync" fetches what other devices changed now.
     sync: {
       config: async () => ({ syncUrl: 'Turso (automatic)', syncSecret: '', autoSyncOnStartup: true, syncIntervalMinutes: 1, lastSyncedAt: (await mirrorP).syncedAt, lastSyncedCount: 0 }),
-      health: async () => ({ ...(await mirrorP).health(), backupError: store?.getItem('life_snapshot_error') ?? null }),
+      health: async () => ({ ...(await mirrorP).health(), backupError: store?.getItem('life_snapshot_error') ?? null, apps: appSyncStatuses() }),
+      // "Sync Money now": the Telegram inbox first, then a full compare with the server's copy and a send of anything missing.
+      moneyNow: async () => {
+        await applyFinance()
+        const money = (await syncsP).find((x) => x.spec === FINANCE)
+        if (!money) return { ok: false, text: 'Money is not synced on this device' }
+        const r = await money.sync({ check: true, full: true })
+        return { ok: r.ok && !r.skipped && r.confirmed, text: appSyncRunText(r) }
+      },
       clearFailed: async () => (await mirrorP).clearFailed(),
       saveConfig: async () => bridge.sync.config(),
       test: async () => {

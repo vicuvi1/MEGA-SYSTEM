@@ -12,6 +12,8 @@ export interface AppSyncSpec {
   localKey: string
   /** Turso settings key. */
   setting: string
+  /** The app's name in the sync status ("Money"). */
+  label?: string
   /** Older Turso backups to start from on a new device (raw app data). */
   legacySetting?: string
   /** Event that makes the open app reload (EmbedHost listens). */
@@ -24,8 +26,17 @@ export interface AppSyncSpec {
   merge: (mine: any, theirs: any, mineIsNewer: boolean) => any
   /** Skip this round (e.g. Finance Helper locked with a PIN on this device). */
   skip?: (store: Storage) => boolean
+  /** Why a round was skipped, for the sync status ("Money locked"). */
+  skipNote?: string
   /** Lists where a deletion must stick: an item gone on either side since the last sync stays gone. */
   lists?: { path: string; key: (x: any) => string }[]
+  /**
+   * What `theirs` (a copy as it travels) is missing from `mine` (the full local
+   * data): records it doesn't have or has an older edit of, and other changes.
+   * Default: `gapOf` on the shared form. Must agree with `merge`, so two devices
+   * never keep sending each other the same thing.
+   */
+  gap?: (mine: any, theirs: any) => SyncGap
   /**
    * The merged data checked against the database before it is kept (Sport
    * Track: today's water and reps always come from the one log, body_log).
@@ -34,6 +45,46 @@ export interface AppSyncSpec {
   finalize?: (db: any, merged: any, canWrite: boolean) => any
   /** After a restore: this device's data from its own device-only parts and the restored shared data (default: both, the restored winning). */
   adopt?: (mine: any, shared: any) => any
+}
+
+/** What one copy lacks next to another: list items (records) and other changes (settings, map entries). */
+export interface SyncGap {
+  records: number
+  other: number
+}
+
+/** How one app's sync is doing on this device (Settings → Data safety, the top-bar dot). */
+export interface AppSyncStatus {
+  setting: string
+  label: string
+  /**
+   * ok: the SERVER confirmed it has everything this device has; waiting: sent
+   * or merged here, not confirmed yet (tried again soon); skipped: not synced
+   * on purpose (`note` says why); error: the last run failed (`error`).
+   */
+  state: 'ok' | 'waiting' | 'skipped' | 'error' | 'never'
+  /** When the server last confirmed it (ms). */
+  okAt: number | null
+  /** When it last ran (ms). */
+  at: number | null
+  error: string | null
+  note: string | null
+  /** Records sent by the last run that sent any. */
+  sent: number
+}
+
+/** What one run did (the "Sync Money now" button shows it). */
+export interface AppSyncRun {
+  ok: boolean
+  /** Not synced on purpose (e.g. "Money locked"). */
+  skipped?: string
+  error?: string
+  /** Records sent to the cloud. */
+  sent: number
+  /** Other changes sent (settings, deletions). */
+  changes: number
+  /** The server confirmed it has everything this device has. */
+  confirmed: boolean
 }
 
 /**
@@ -54,6 +105,103 @@ const parse = (raw: string | null): any => {
   }
 }
 
+const isPlain = (x: any) => !!x && typeof x === 'object' && !Array.isArray(x)
+/** The same data gives the same text, whatever order its fields were written in. */
+export const canonical = (x: any): string =>
+  JSON.stringify(x, (_k, v) => (isPlain(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]])) : v))
+
+/**
+ * What `theirs` lacks from `mine` (both as they travel), whatever the order:
+ * a list item it doesn't have exactly counts as a record; a missing key or a
+ * different value counts as another change. Only additions and changes count:
+ * a deletion travels as a tombstone or through the three-way list check.
+ */
+export function gapOf(mine: any, theirs: any): SyncGap {
+  const out: SyncGap = { records: 0, other: 0 }
+  const walk = (a: any, b: any) => {
+    if (Array.isArray(a)) {
+      if (!Array.isArray(b)) {
+        out.records += a.length
+        return
+      }
+      const have = new Set(b.map(canonical))
+      for (const x of a) if (!have.has(canonical(x))) out.records++
+      return
+    }
+    if (isPlain(a)) {
+      if (!isPlain(b)) {
+        out.other++
+        return
+      }
+      for (const k of Object.keys(a)) {
+        if (a[k] === undefined) continue
+        if (!(k in b)) {
+          if (Array.isArray(a[k])) out.records += a[k].length
+          else out.other++
+          continue
+        }
+        walk(a[k], b[k])
+      }
+      return
+    }
+    if (a !== b && !(a == null && b == null)) out.other++
+  }
+  walk(mine, theirs)
+  return out
+}
+const gapSize = (g: SyncGap) => g.records + g.other
+
+// ---- Status of every app's sync on this device ------------------------------
+
+const statuses = new Map<string, AppSyncStatus>()
+/** Every app's sync status on this device (one per app synced here). */
+export function appSyncStatuses(): AppSyncStatus[] {
+  return [...statuses.values()]
+}
+
+/** Money and the others: not synced for this long while online turns the dot amber. */
+export const STALE_MS = 15 * 60_000
+
+/**
+ * The top-bar dot's word on the apps: the worst of them. Error for over 15
+ * minutes (or never synced) = bad; an error, a skipped run, a copy not
+ * confirmed, or nothing confirmed for 15 minutes while online = warn.
+ */
+export function appSyncAlert(list: AppSyncStatus[], now: number, online: boolean): { level: 'warn' | 'bad'; text: string; short: string } | null {
+  let worst: { level: 'warn' | 'bad'; text: string; short: string } | null = null
+  const put = (level: 'warn' | 'bad', text: string, short: string) => {
+    if (!worst || (level === 'bad' && worst.level === 'warn')) worst = { level, text, short }
+  }
+  for (const s of list) {
+    const stale = s.okAt == null || now - s.okAt > STALE_MS
+    if (s.state === 'error') put(stale && online ? 'bad' : 'warn', `${s.label} not synced: ${s.error ?? 'error'}`, `${s.label} not synced`)
+    else if (s.state === 'skipped') put('warn', `${s.label}: skipped (${s.note ?? 'locked'})`, `${s.label}: skipped`)
+    else if (s.state === 'waiting' && online) put('warn', `${s.label} waiting to sync`, `${s.label} waiting`)
+    else if (s.state === 'ok' && online && stale) put('warn', `${s.label} not synced for ${Math.round((now - (s.okAt ?? now)) / 60_000)} min`, `${s.label} not synced`)
+  }
+  return worst
+}
+
+/** One app's line in the sync panel ("synced 3 min ago", "skipped (Money locked)", the error). */
+export function appSyncLine(s: AppSyncStatus, now = Date.now()): string {
+  if (s.state === 'skipped') return `skipped (${s.note ?? 'locked'})`
+  if (s.state === 'error') return `not synced: ${s.error ?? 'error'}`
+  if (s.state === 'waiting') return 'waiting for the cloud to confirm'
+  if (s.state === 'never' || s.okAt == null) return 'not checked yet'
+  const min = Math.floor((now - s.okAt) / 60_000)
+  return `synced ${min < 1 ? 'just now' : min < 60 ? `${min} min ago` : `${Math.floor(min / 60)} h ago`}`
+}
+
+/** One line for a run ("Sent 37 records · cloud up to date"). */
+export function appSyncRunText(r: AppSyncRun): string {
+  if (r.skipped) return `Not synced: skipped (${r.skipped})`
+  if (!r.ok) return `Not synced: ${r.error ?? 'error'}. Nothing was lost; it tries again by itself.`
+  const sent = r.sent ? `Sent ${r.sent} record${r.sent === 1 ? '' : 's'}` : r.changes ? `Sent ${r.changes} change${r.changes === 1 ? '' : 's'}` : 'Nothing to send'
+  return r.confirmed ? `${sent} · cloud up to date` : `${sent} · the cloud hasn't confirmed it yet, trying again`
+}
+
+class StorageFullError extends Error {}
+
 /** `onSynced`: after each sync run (e.g. Waky's times go into the sleep log). */
 export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null, onSynced?: () => void) {
   const SYNCED = `life_sync_${spec.setting}` // what both sides last agreed on
@@ -68,10 +216,22 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
   // The restore this device last took (a restore marks the database copy with
   // an id: a device that hasn't seen it takes that copy as it is, see below).
   const RESTORED = `life_sync_${spec.setting}_restore`
+  // Set while the server hasn't confirmed it holds what this device sent or
+  // has: the next run compares with the server's own copy and sends again.
+  const UNCONFIRMED = `life_sync_${spec.setting}_unconfirmed`
+  const STATUS = `life_sync_${spec.setting}_status`
+  const label = spec.label ?? spec.setting.replace(/^app_sync_/, '')
   const share = spec.share ?? ((x: any) => x)
   const fromShared = spec.fromShared ?? ((x: any) => x)
-  let running: Promise<void> | null = null
+  /** What `theirs` (as it travels) lacks from this device's full data. */
+  const gapFor = (mine: any, theirs: any): SyncGap => (spec.gap ? spec.gap(mine, theirs) : gapOf(share(mine), theirs))
+  let running: Promise<AppSyncRun> | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
+  let retryTimer: ReturnType<typeof setTimeout> | null = null
+  let fails = 0
+  // A send of only what the cloud lacked (no edit here), to stop two devices
+  // ever trading the same copy back and forth: at most one a minute.
+  let gapPushAt = 0
 
   const get = (k: string) => {
     try {
@@ -87,6 +247,14 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       /* private window */
     }
   }
+  /** A write that must not fail silently (the app's data, the agreed copy). */
+  const setStrict = (k: string, v: string) => {
+    try {
+      store?.setItem(k, v)
+    } catch (e) {
+      throw new StorageFullError(`This device's storage is full, so ${label}'s newest data couldn't be saved here (${String((e as Error)?.name ?? e)}). The cloud copy has it.`)
+    }
+  }
   const del = (k: string) => {
     try {
       store?.removeItem(k)
@@ -94,6 +262,16 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       /* private window */
     }
   }
+
+  const status: AppSyncStatus = { setting: spec.setting, label, state: 'never', okAt: null, at: null, error: null, note: null, sent: 0, ...(parse(get(STATUS)) ?? {}) }
+  status.label = label
+  statuses.set(spec.setting, status)
+  const report = (patch: Partial<AppSyncStatus>) => {
+    Object.assign(status, patch, { at: Date.now() })
+    set(STATUS, JSON.stringify(status))
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent('life-app-sync', { detail: { ...status } }))
+  }
+
   /** An edit's time: this device's clock, but never before the copy it was made on. */
   const editStamp = () => Math.max(Date.now(), (Number(get(SEEN)) || 0) + 1)
   const sharedOf = (raw: string | null) => {
@@ -121,14 +299,36 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     if (sharedOf(raw) !== get(SYNCED)) set(EDITED, String(editStamp()))
   }
 
-  const once = async (): Promise<void> => {
-    if (!store || spec.skip?.(store)) return
+  /**
+   * Does the SERVER hold everything in `state`? `expected`: the text this run
+   * believes is there (what it wrote, or this device's copy of the database);
+   * `full`: always download the server's copy and compare.
+   */
+  const serverHas = async (state: any, expected: string | null, full: boolean): Promise<boolean> => {
+    // The size + start check answers "same text" without a download; what that text lacks is still compared.
+    const serverRaw = await mirror.serverSetting(spec.setting, full ? undefined : expected)
+    const data = parse(serverRaw)?.data
+    if (!data) return state == null
+    return gapSize(gapFor(state, data)) === 0
+  }
+
+  const once = async (opts: { check?: boolean; full?: boolean }): Promise<AppSyncRun> => {
+    const none: AppSyncRun = { ok: true, sent: 0, changes: 0, confirmed: false }
+    if (!store) return none
+    if (spec.skip?.(store)) {
+      report({ state: 'skipped', note: spec.skipNote ?? 'locked', error: null })
+      return { ...none, skipped: spec.skipNote ?? 'locked' }
+    }
+    // A check (startup, every few minutes, "Sync now", or a copy not confirmed yet)
+    // compares with the server's own copy, not only with what this device last agreed.
+    const checking = !!opts.check || !!opts.full || get(UNCONFIRMED) != null
+    if (checking) await mirror.refresh()
     const localRaw = get(spec.localKey)
     const localShared = sharedOf(localRaw)
     const synced = get(SYNCED)
     let localChanged = localShared != null && localShared !== synced
     const realEdit = localChanged
-    const remoteNow = await mirror.read((db) => remoteOf(db))
+    const { remote: remoteNow, raw: mirrorRaw } = await mirror.read((db) => ({ remote: remoteOf(db), raw: getSetting(db as any, spec.setting) }))
     // A restore happened (here or on another device) that this device hasn't taken yet:
     // the restored copy wins as it is. Merging would bring back what the restore removed.
     // This device's copy from before is kept next to it (nothing is lost).
@@ -137,16 +337,16 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       if (localRaw != null) set(`${SYNCED}_before_restore`, JSON.stringify({ at: new Date().toISOString(), restore: String(remoteNow.restore), raw: localRaw }))
       const next = mine != null ? (spec.adopt ?? ((m: any, d: any) => (m && typeof m === 'object' && !Array.isArray(m) && d && typeof d === 'object' && !Array.isArray(d) ? { ...m, ...d } : d)))(mine, remoteNow.data) : fromShared(remoteNow.data)
       const text = JSON.stringify(next)
-      set(SYNCED, JSON.stringify(share(next)))
+      if (text !== localRaw) setStrict(spec.localKey, text)
+      setStrict(SYNCED, JSON.stringify(share(next)))
       set(SEEN, String(Number(remoteNow.editedAt ?? remoteNow.savedAt) || 0))
       set(RESTORED, String(remoteNow.restore))
       del(EDITED)
+      del(UNCONFIRMED)
       agreedRaw = text
-      if (text !== localRaw) {
-        set(spec.localKey, text)
-        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))
-      }
-      return
+      if (text !== localRaw && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))
+      report({ state: 'ok', okAt: Date.now(), error: null, note: null })
+      return { ...none, confirmed: true }
     }
     // A big change made here (an import, a bulk delete, a re-price): a "before" backup first.
     if (realEdit && bigChangeGuard && synced != null && localShared != null) await bigChangeGuard(spec, parse(synced), parse(localShared)).catch(() => {})
@@ -155,24 +355,46 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     // The copy here says something the database's log doesn't (Sport Track's
     // water and reps): put it right even when nothing else changed.
     const drifted = !localChanged && !remoteChanged && !!spec.finalize && localRaw != null && (await mirror.read((db) => JSON.stringify(spec.finalize!(db, parse(localRaw), false)) !== localRaw))
-    if (!localChanged && !remoteChanged && !drifted) {
+    const quiet = !localChanged && !remoteChanged && !drifted
+    if (quiet && !checking) {
       if (localShared != null) agreedRaw = localRaw
-      return
+      return none
+    }
+    if (localRaw == null && !remoteNow?.data) {
+      // Nothing on either side: nothing to lose.
+      del(UNCONFIRMED)
+      report({ state: 'ok', okAt: Date.now(), error: null, note: null })
+      return { ...none, confirmed: true }
     }
 
     let merged: any
+    let wrote: string | null = null
+    let sent: SyncGap = { records: 0, other: 0 }
+    let gapPush = false
     // The editedAt of the copy this run agrees on (kept as SEEN).
     let agreedAt = Number(remoteNow?.editedAt ?? remoteNow?.savedAt) || 0
-    if (!localChanged && spec.finalize) {
-      // Only the other side changed, but the database's copy may be off from the log: check first.
+    if (!localChanged) {
+      // Not edited here: only the other side changed, or this is a check. Merge here,
+      // then send back whatever the database's copy lacks (records, edits, settings):
+      // before this, a merged result that only lived here was never sent again.
       const mine = parse(localRaw)
-      const plain = mine ? pruneDeleted(spec, spec.merge(mine, remoteNow?.data ?? mine, false), parse(synced), share(mine), remoteNow?.data ?? mine) : fromShared(remoteNow!.data)
-      const fixed = await mirror.read((db) => spec.finalize!(db, plain, false))
-      localChanged = remoteRaw == null || JSON.stringify(share(fixed)) !== remoteRaw
-      merged = fixed
+      let plain = mine ? pruneDeleted(spec, spec.merge(mine, remoteNow?.data ?? share(mine), false), parse(synced), share(mine), remoteNow?.data ?? share(mine)) : fromShared(remoteNow!.data)
+      // The database's copy may be off from the log (Sport Track): check first.
+      if (spec.finalize) plain = await mirror.read((db) => spec.finalize!(db, plain, false))
+      if (!remoteNow?.data) localChanged = true
+      else if (spec.finalize && !quiet) localChanged = JSON.stringify(share(plain)) !== remoteRaw
+      else gapPush = localChanged = gapSize(gapFor(plain, remoteNow.data)) > 0
+      // Nothing changed on either side (a check): the data here stays exactly as it is.
+      merged = quiet ? (mine ?? plain) : plain
+      if (gapPush && Date.now() - gapPushAt < 60_000) {
+        // Sent one a moment ago: keep the merge here, send on the next try.
+        localChanged = false
+        set(UNCONFIRMED, '1')
+      }
     }
     if (localChanged) {
-      // Not edited here (only the log check asked for a write): the other side is the newer one.
+      if (gapPush) gapPushAt = Date.now()
+      // Not edited here (only the log check or a gap asked for a write): the other side is the newer one.
       // No marker (the app saved without telling us): the edit is now.
       const edited = realEdit ? Math.max(Number(get(EDITED)) || Date.now(), (Number(get(SEEN)) || 0) + 1) : -1
       merged = await mirror.write((db) => {
@@ -187,48 +409,80 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
         if (spec.finalize) out = spec.finalize(db, out, true)
         if (!remote?.data || JSON.stringify(share(out)) !== JSON.stringify(remote.data)) {
           const at = Date.now()
-          // Only the log check asked for this write (nothing edited here): the copy's last real change stays as it was.
+          sent = remote?.data ? gapFor(out, remote.data) : { records: 0, other: 1 }
+          // Only the log check or a gap asked for this write (nothing edited here): the copy's last real change stays as it was.
           // A real edit is stamped after the copy it merged with, whatever this clock says.
           const editedAt = realEdit ? Math.max(at, edited, theirsAt + 1) : theirsAt || at
           agreedAt = editedAt
           // The restore mark stays on the copy, so a device that was away still takes the restored copy first.
           const restore = (remote as any)?.restore
-          setSetting(db as any, spec.setting, JSON.stringify({ savedAt: at, editedAt, data: share(out), ...(restore ? { restore } : {}) }))
+          wrote = JSON.stringify({ savedAt: at, editedAt, data: share(out), ...(restore ? { restore } : {}) })
+          setSetting(db as any, spec.setting, wrote)
         }
         return out
       })
-    } else if (!spec.finalize) {
-      const mine = parse(localRaw)
-      merged = mine ? pruneDeleted(spec, spec.merge(mine, remoteNow!.data, false), parse(synced), share(mine), remoteNow!.data) : fromShared(remoteNow!.data)
     }
-    if (merged == null) return
+    if (merged == null) return none
+    // Until the server confirms it, the next run checks again (and sends again).
+    if (wrote != null) set(UNCONFIRMED, '1')
     // You changed the app again while this sync was waiting (Y4): never overwrite
     // that newer edit; the next run merges it.
     if (get(spec.localKey) !== localRaw) {
       if (localChanged) {
-        set(SYNCED, JSON.stringify(share(merged)))
+        setStrict(SYNCED, JSON.stringify(share(merged)))
         set(SEEN, String(agreedAt))
       }
       soon()
-      return
+      return { ok: true, sent: sent.records, changes: sent.other, confirmed: false }
     }
-    set(SYNCED, JSON.stringify(share(merged)))
+    const next = JSON.stringify(merged)
+    // The app's data first: the agreed copy is only moved once the data it describes is kept.
+    if (next !== localRaw) setStrict(spec.localKey, next)
+    setStrict(SYNCED, JSON.stringify(share(merged)))
     set(SEEN, String(agreedAt))
     del(EDITED)
-    const next = JSON.stringify(merged)
     agreedRaw = next
-    if (next !== localRaw) {
-      set(spec.localKey, next)
-      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))
+    if (next !== localRaw && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))
+    // Synced only once the SERVER has it (on the desktop a write is saved on this PC first).
+    let confirmed = false
+    if (wrote != null || checking || get(UNCONFIRMED) != null) {
+      confirmed = await serverHas(merged, wrote ?? (mirrorRaw as string | null), !!opts.full)
+      if (confirmed) del(UNCONFIRMED)
+      else set(UNCONFIRMED, '1')
     }
+    if (confirmed) report({ state: 'ok', okAt: Date.now(), error: null, note: null, ...(sent.records ? { sent: sent.records } : {}) })
+    else if (wrote != null || checking) report({ state: 'waiting', error: null, note: null })
+    return { ok: true, sent: sent.records, changes: sent.other, confirmed }
   }
 
-  /** Copies changes both ways; safe to call often (one run at a time). */
-  const sync = (): Promise<void> => {
-    if (running) return running.then(() => sync())
-    running = once()
-      .catch(() => {
-        /* offline or another device saved first: the next run retries */
+  const retryLater = () => {
+    if (retryTimer) clearTimeout(retryTimer)
+    const wait = Math.min(10 * 60_000, 30_000 * 2 ** Math.min(fails, 5))
+    fails++
+    retryTimer = setTimeout(() => {
+      retryTimer = null
+      void sync({ check: true })
+    }, wait)
+    ;(retryTimer as any)?.unref?.()
+  }
+
+  /** Copies changes both ways; safe to call often (one run at a time). `check`: compare with the server's own copy. */
+  const sync = (opts: { check?: boolean; full?: boolean } = {}): Promise<AppSyncRun> => {
+    if (running) return running.then(() => sync(opts))
+    running = once(opts)
+      .then((r) => {
+        if (r.skipped || r.confirmed || get(UNCONFIRMED) == null) fails = 0
+        else retryLater()
+        return r
+      })
+      .catch((e): AppSyncRun => {
+        // Offline, storage full, or another device saved first: shown in the
+        // sync status (never silent), nothing lost, and tried again later.
+        set(UNCONFIRMED, '1')
+        const error = String((e as Error)?.message ?? e).slice(0, 240)
+        report({ state: 'error', error, note: null })
+        retryLater()
+        return { ok: false, error, sent: 0, changes: 0, confirmed: false }
       })
       .finally(() => {
         running = null
@@ -243,7 +497,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     timer = setTimeout(() => void sync(), 1500)
   }
 
-  return { sync, soon, spec }
+  return { sync, soon, spec, status: () => ({ ...status }) }
 }
 
 /**
@@ -288,7 +542,7 @@ const unionBy = (key: (x: any) => string, ...lists: any[][]) => {
 const asJson = (x: any) => JSON.stringify(x)
 
 const ENTRY_TIME = ['updatedAt', 'editedAt', 'at', 'ts']
-const isRecord = (x: any) => !!x && typeof x === 'object' && !Array.isArray(x)
+const isRecord = isPlain
 /**
  * One record (a Waky morning, night or chest) changed on both devices: every
  * field from both. A field both have: the record with the later time
@@ -349,6 +603,7 @@ export function mergeMan(mine: any, theirs: any, mineIsNewer: boolean): any {
 
 export const WAKY: AppSyncSpec = {
   localKey: 'waky_web_data_v2',
+  label: 'Waky',
   setting: 'app_sync_waky',
   legacySetting: 'waky_backup_json',
   event: 'life-waky-changed',
@@ -361,6 +616,7 @@ export const WAKY: AppSyncSpec = {
 
 export const MAN: AppSyncSpec = {
   localKey: 'MAN_SPARTAN_DATA',
+  label: 'MAN',
   setting: 'app_sync_man',
   legacySetting: 'man_spartan_data',
   event: 'life-man-changed',

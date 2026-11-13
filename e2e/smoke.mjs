@@ -3581,11 +3581,11 @@ try {
     if (await pg.$('.discipline')) {
       if (await pg.$('.discipline .ptabs')) throw new Error('Discipline still has tabs')
       for (const sel of ['.dx-hero', '.dx-stats', '.dx-miles', '.dx-history .dx-heat', '.dx-tools', '.dx-settings']) if (!(await pg.$(sel))) throw new Error(`Discipline has no ${sel}`)
-      // The urge crusher opens as one focused panel; "Stop the timer" closes it.
+      // The urge crusher opens as one focused panel; "Stop the timer" closes it. 15 s: 5 s timed out on the slower Windows release runner.
       await pg.click('.dx-crush')
-      await pg.waitForSelector('.dx-urge .dx-breath', { timeout: 5000 })
+      await pg.waitForSelector('.dx-urge .dx-breath', { timeout: 15000 })
       await pg.locator('.dx-urge button', { hasText: 'Stop the timer' }).click()
-      await pg.waitForSelector('.dx-urge', { state: 'detached', timeout: 5000 })
+      await pg.waitForSelector('.dx-urge', { state: 'detached', timeout: 15000 })
     }
   })
   // Owner picks (2026-11-12): ONE day number on Discipline (the ring and the 90-day campaign say the same "Day N"),
@@ -9165,6 +9165,24 @@ try {
       await pg.context().clock.setSystemTime(fakeNow())
       await reloadApp()
     }
+  })
+
+  // Money sync (2026-11-13): Settings → Data safety lists each app's sync (Money, Sport Track…) with the last time the
+  // server confirmed it; "Sync Money now" compares Money with the cloud copy, sends anything missing and says so.
+  await step('Settings → Data safety: Sync Money now compares Money with the cloud and shows a result line', async () => {
+    await open('settings')
+    await pg.waitForSelector('.st-item', { timeout: 10000 })
+    await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+    await pg.waitForSelector('[data-testid="sync-money-now"]', { timeout: 15000 })
+    await pg.click('[data-testid="sync-money-now"]')
+    const RESULT = '[data-testid="sync-money-result"]'
+    await pg.waitForFunction((s) => /cloud up to date|Not synced/.test(document.querySelector(s)?.textContent ?? ''), RESULT, { timeout: 30000 })
+    const said = (await pg.textContent(RESULT)).trim()
+    if (!/^(Sent \d+ (records?|changes?)|Nothing to send) · cloud up to date$/.test(said)) throw new Error(`Sync Money now said: ${said}`)
+    await pg.waitForFunction(() => /Money: synced/.test(document.querySelector('[data-testid="app-sync"]')?.textContent ?? ''), null, { timeout: 15000 }).catch(async () => {
+      throw new Error(`the Money line says: ${await pg.textContent('[data-testid="app-sync"]').catch(() => 'nothing')}`)
+    })
+    // Stays on Settings: the next step opens Data safety itself (going to Today and straight back is lost in the page change).
   })
 
   // Data safety (2026-11-12): one light per copy, the size, "Back up now" (the cloud backup in parts),

@@ -126,6 +126,7 @@ const parse = (raw: string | null): any => {
 
 export const SPORT: AppSyncSpec = {
   localKey: SPORT_KEY,
+  label: 'Sport Track',
   setting: SETTING,
   event: 'life-sport-changed',
   merge: mergeSport,

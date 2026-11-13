@@ -42,7 +42,18 @@ export function saveFinance(db: Db, state: any): void {
 }
 
 function save(db: Db, state: any): void {
-  setSetting(db, SETTING, JSON.stringify({ savedAt: Date.now(), data: toCloud(state, '').data }))
+  // The copy's edit time and restore id stay (appSync.ts): this is a real edit, so it is
+  // stamped after the copy it changed, and a device away during a restore still takes
+  // the restored copy first. Dropping them made the app sync misjudge which copy is newer.
+  let prev: any = null
+  try {
+    prev = JSON.parse(getSetting(db, SETTING) || 'null')
+  } catch {
+    prev = null
+  }
+  const now = Date.now()
+  const editedAt = Math.max(now, (Number(prev?.editedAt ?? prev?.savedAt) || 0) + 1)
+  setSetting(db, SETTING, JSON.stringify({ savedAt: now, editedAt, data: toCloud(state, '').data, ...(prev?.restore ? { restore: prev.restore } : {}) }))
 }
 
 const fold = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
