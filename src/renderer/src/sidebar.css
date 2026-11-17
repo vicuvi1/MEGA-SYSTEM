@@ -124,3 +124,25 @@
   border: 1px solid rgb(var(--ink) / 0.1); box-shadow: 0 6px 22px rgba(200, 241, 53, 0.22), inset 0 1px 0 rgb(var(--ink) / 0.08);
 }
 :root[data-theme='light'] .sb-mark { color: var(--lime); }
+
+/* Edit menu (Sidebar.tsx): every page with an eye toggle; hidden ones are dimmed. */
+.sb-edit-btn { margin-top: 6px; height: 40px; color: var(--muted); }
+.sb-edit-btn .sb-name { color: var(--muted); }
+.sb-erow { display: flex; align-items: center; gap: 11px; min-height: 40px; padding: 0 6px; border-radius: 12px; color: var(--text); }
+.sb-erow.off { opacity: 0.5; }
+.sb-erow .sb-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-eye { flex: none; width: 30px; height: 30px; display: grid; place-items: center; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.1); background: transparent; color: var(--text); cursor: pointer; }
+.sb-eye:hover:not(:disabled) { border-color: rgba(200, 241, 53, 0.4); }
+.sb-eye:focus-visible { outline: 2px solid var(--lime); outline-offset: 1px; }
+.sb-eye:disabled { opacity: 0.35; cursor: not-allowed; }
+.sb.collapsed .sb-erow { padding: 0; justify-content: center; }
+.sb.collapsed .sb-eye { display: none; }
+.sb-ctx { position: fixed; z-index: 60; min-width: 160px; padding: 4px; border-radius: 12px; border: 1px solid rgb(var(--ink) / 0.12); background: #141822; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5); }
+.sb-ctx button { width: 100%; text-align: left; padding: 8px 10px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; font-size: 13px; cursor: pointer; }
+.sb-ctx button:hover:not(:disabled), .sb-ctx button:focus-visible { background: rgb(var(--ink) / 0.08); }
+.sb-ctx button:disabled { opacity: 0.4; cursor: not-allowed; }
+:root[data-theme='light'] .sb-ctx { background: #fff; }
+.sb-group[hidden] { display: none; }
+/* While editing, Done sits first so it is always in reach. */
+.sb-nav:has(.sb-edit) .sb-edit-btn { order: -1; margin: 0 0 6px; }
+.sb-nav:has(.sb-edit) .sb-more { display: none; }

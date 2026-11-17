@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { AnimatePresence, m } from 'framer-motion'
 import { Icon, Logo } from './Icon'
 import { MODULES, type ModuleDef, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
 import { useModules } from './useModules'
 import { menuPages } from '@core/modules'
+import { canHidePage, editablePages, setPageHidden } from './menuPrefs'
 
 export type Badge = { n?: number; dot?: 'lime' | 'warn' }
 
@@ -23,11 +24,27 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
   const [tip, setTip] = useState<{ label: string; y: number } | null>(null)
   const open = !collapsed
   const byId = Object.fromEntries(MODULES.map((m) => [m.id, m])) as Record<PageId, ModuleDef>
-  const [ui] = useUiPrefs()
+  const [ui, setUi] = useUiPrefs()
+  const [editing, setEditing] = useState(false)
+  const [ctx, setCtx] = useState<{ id: PageId; x: number; y: number } | null>(null)
   // The module switch (Settings → Modules): only the pages of modules that are on, in module order.
   // A module that is off is not here at all (no Archive); its data waits untouched until it is on again.
   const mods = useModules()
   const ids = menuPages(mods, SIDEBAR_PAGES, ui.hiddenPages ?? []) as PageId[]
+  const hiddenList = ui.hiddenPages ?? []
+  const editIds = editablePages(mods, SIDEBAR_PAGES) as PageId[]
+  const setHidden = (id: PageId, hide: boolean) => setUi({ hiddenPages: setPageHidden(hiddenList, id, hide) })
+  useEffect(() => {
+    if (!ctx) return
+    const close = () => setCtx(null)
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && close()
+    window.addEventListener('click', close)
+    window.addEventListener('keydown', key)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('keydown', key)
+    }
+  }, [ctx])
   let index = 0
 
   const showTip = (label: string, el: HTMLElement) => {
@@ -57,7 +74,35 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
         </div>
 
         <nav className="sb-nav" aria-label="Sections">
-          <div className="sb-group" data-testid="sb-modules">
+          {editing && (
+            <div className="sb-group sb-edit" data-testid="sb-edit-list">
+              {editIds.map((id) => {
+                const m = byId[id]
+                if (!m) return null
+                const shown = !hiddenList.includes(id)
+                const locked = !canHidePage(id)
+                return (
+                  <div key={id} className={`sb-erow ${shown ? '' : 'off'}`} data-page={id} style={{ ['--c' as string]: m.color }}>
+                    <span className="sb-tile">
+                      <Icon name={m.icon} size={17} />
+                    </span>
+                    <span className="sb-label sb-name">{m.label}</span>
+                    <button
+                      className="sb-eye"
+                      aria-pressed={shown}
+                      aria-label={`${shown ? 'Hide' : 'Show'} ${m.label} in the menu`}
+                      disabled={locked}
+                      title={locked ? `${m.label} can't be hidden` : shown ? 'Hide from menu' : 'Show in menu'}
+                      onClick={() => setHidden(id, shown)}
+                    >
+                      <Icon name="eye" size={15} />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          <div className="sb-group" data-testid="sb-modules" hidden={editing}>
             {ids.map((id) => {
               const m = byId[id]
               if (!m) return null
@@ -74,6 +119,10 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
                   className={`sb-item ${on ? 'on' : ''} ${soon ? 'soon' : ''}`}
                   style={{ ['--c' as string]: m.color }}
                   onClick={() => go(id)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setCtx({ id, x: e.clientX, y: e.clientY })
+                  }}
                   onMouseEnter={(e) => showTip(`${m.label}${soon ? ' · soon' : ''}${n < 10 ? `  Alt+${n}` : ''}`, e.currentTarget)}
                   onMouseLeave={() => setTip(null)}
                 >
@@ -116,7 +165,35 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
             </span>
             <span className="sb-label sb-name">Modules</span>
           </button>
+          <button
+            className="sb-item sb-edit-btn"
+            style={{ ['--c' as string]: 'var(--muted)' }}
+            data-testid={editing ? 'sb-edit-done' : 'sb-edit-open'}
+            aria-label={editing ? 'Done editing the menu' : 'Edit menu'}
+            onClick={() => setEditing((v) => !v)}
+            onMouseEnter={(e) => showTip(editing ? 'Done' : 'Edit menu: hide or show pages', e.currentTarget)}
+            onMouseLeave={() => setTip(null)}
+            title={editing ? 'Done' : 'Edit menu: hide or show pages'}
+          >
+            <span className="sb-tile">
+              <Icon name={editing ? 'check' : 'edit'} size={17} />
+            </span>
+            <span className="sb-label sb-name">{editing ? 'Done' : 'Edit menu'}</span>
+          </button>
         </nav>
+
+        {ctx && (
+          <div className="sb-ctx" role="menu" style={{ left: ctx.x, top: ctx.y }} onClick={(e) => e.stopPropagation()}>
+            <button
+              role="menuitem"
+              disabled={!canHidePage(ctx.id)}
+              title={canHidePage(ctx.id) ? undefined : `${byId[ctx.id]?.label} can't be hidden`}
+              onClick={() => (setHidden(ctx.id, true), setCtx(null))}
+            >
+              Hide from menu
+            </button>
+          </div>
+        )}
 
         <button className="sb-toggle" onClick={onToggle} aria-label={collapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)'} title={collapsed ? 'Expand (Ctrl+B)' : 'Collapse (Ctrl+B)'}>
           <span className={collapsed ? 'flip' : ''}>‹</span>

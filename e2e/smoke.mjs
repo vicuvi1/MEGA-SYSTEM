@@ -423,6 +423,35 @@ try {
       await pg.setViewportSize({ width: 1440, height: 900 })
     }
   })
+  // Edit menu (owner, 2026-11-17): the sidebar's pencil button lists every page with an eye toggle. A hidden page is gone
+  // (and out of Alt+number) at once and after a reload; showing it again puts it back in its own place. Today and Settings can't be hidden.
+  await step('Sidebar Edit menu: hide a page, it is gone after a reload; show it again, it is back in place; Today stays', async () => {
+    const menu = () => pg.locator('aside.sb [data-testid="sb-modules"] .sb-item').evaluateAll((b) => b.map((x) => x.getAttribute('aria-label')).join())
+    const before = await menu()
+    if (!before.includes('Money')) throw new Error(`Money is not in the menu: ${before}`)
+    await pg.click('[data-testid="sb-edit-open"]')
+    await pg.waitForSelector('[data-testid="sb-edit-list"]', { timeout: 10000 })
+    // Settings is not a menu page (the top bar and Modules link open it) and is locked in the code (menuPrefs.test.ts).
+    if (!(await pg.locator('.sb-erow[data-page="today"] .sb-eye').isDisabled())) throw new Error('Today can be hidden')
+    await pg.click('.sb-erow[data-page="money"] .sb-eye')
+    await pg.waitForSelector('.sb-erow[data-page="money"] .sb-eye[aria-pressed="false"]', { timeout: 8000 })
+    if (process.env.EDIT_MENU_SHOT) await pg.screenshot({ path: process.env.EDIT_MENU_SHOT })
+    await pg.click('[data-testid="sb-edit-done"]')
+    await pg.waitForFunction(() => ![...document.querySelectorAll('aside.sb [data-testid="sb-modules"] .sb-item')].some((x) => x.getAttribute('aria-label') === 'Money'), null, { timeout: 8000 })
+    await pg.reload()
+    await pg.waitForSelector('.td2, main.content, input', { timeout: 20000 })
+    if (!(await pg.$('main.content'))) {
+      await pg.fill('input', '1234')
+      await pg.keyboard.press('Enter')
+      await pg.waitForSelector('main.content', { timeout: 20000 })
+    }
+    await pg.waitForSelector('aside.sb [data-testid="sb-modules"] .sb-item', { timeout: 10000 })
+    if ((await menu()).includes('Money')) throw new Error('Money came back after the reload')
+    await pg.click('[data-testid="sb-edit-open"]')
+    await pg.click('.sb-erow[data-page="money"] .sb-eye')
+    await pg.click('[data-testid="sb-edit-done"]')
+    await pg.waitForFunction((b) => [...document.querySelectorAll('aside.sb [data-testid="sb-modules"] .sb-item')].map((x) => x.getAttribute('aria-label')).join() === b, before, { timeout: 8000 })
+  })
   // Settings → Modules: one switch per module with one line each. Study Time (off) comes back at once with its blocks,
   // and goes again when switched off. Nothing is deleted.
   await step('Modules: turning Study Time on in Settings → Modules brings it back with its data; off again, it is gone', async () => {

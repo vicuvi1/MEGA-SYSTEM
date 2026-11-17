@@ -1465,6 +1465,18 @@
    ],
    "evidence": "2026-11-13: tsc, full vitest, moneyLockedSync.test.ts (9 tests: sealed send without PIN, the server never sees PIN or records, wrong PIN, different PINs, tombstones, bot record, history cap and storage full), scoped smoke steps Sync Money now + Sync history.",
    "notes": "web/financeSync.ts lockedRound (settings.app_sync_finance_sealed {savedAt, editedAt, box}, cipher.js AES-GCM/PBKDF2, compare-and-set write), web/appSync.ts custom round hook + watch keys + history (life_sync_history, 20 per app), SyncPanel PIN form + Show history, finance app.js merges a waiting save into a reopened sealed copy (sw.js v61). While the cloud copy is sealed the plain app_sync_finance is read (bots still add there) but never rewritten from locked data, so server-side Money readers see only the pre-lock copy plus bot records. No way yet to stop sealing the cloud copy once no device is locked."
+  },
+  {
+   "id": "sidebar-edit-menu",
+   "title": "Edit menu: hide or show sidebar pages right in the sidebar",
+   "user_visible_behavior": "A pencil button at the bottom of the sidebar opens Edit menu: every page of the modules that are on is listed with an eye toggle (Hide / Show); Done leaves it. A hidden page leaves the sidebar and Alt+number at once and stays gone after a restart; shown again, it is back in its own place. Right-click a sidebar item for Hide from menu. Today and Settings can't be hidden. Same list as Settings > Layout.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Sidebar Edit menu|Modules: only|Simple mode\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: tsc, menuPrefs.test.ts (4 tests), scoped smoke step Sidebar Edit menu.",
+   "notes": "renderer/menuPrefs.ts (pure), Sidebar.tsx, LayoutEditor.tsx, sidebar.css. Source of truth is uiPrefs.hiddenPages read by core/modules menuPages (Simple mode and normal mode share it; there is no Archive group). Pages of modules that are off stay in Settings > Modules."
   }
  ]
 }

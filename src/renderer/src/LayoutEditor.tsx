@@ -3,6 +3,7 @@
 import { MODULES, SYSTEM_PAGES } from './modules'
 import { Icon } from './Icon'
 import { ReorderList, Row, Saved, Switch, useSaved } from './settingsUi'
+import { setPageHidden } from './menuPrefs'
 import { TODAY_SECTIONS, todayLayout, useUiPrefs } from './uiPrefs'
 
 export function LayoutEditor() {
@@ -13,10 +14,7 @@ export function LayoutEditor() {
 
   const hidden = new Set(ui.hiddenPages ?? [])
   const togglePage = (id: string) => {
-    const next = new Set(hidden)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    setUi({ hiddenPages: [...next] })
+    setUi({ hiddenPages: setPageHidden(ui.hiddenPages ?? [], id, !hidden.has(id)) })
   }
   const pages = [...MODULES, ...SYSTEM_PAGES].filter((m, i, all) => m.phase === 0 && m.id !== 'today' && m.id !== 'settings' && all.findIndex((x) => x.id === m.id) === i)
 
