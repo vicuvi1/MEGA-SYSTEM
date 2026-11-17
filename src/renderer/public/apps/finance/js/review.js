@@ -6,9 +6,9 @@
 
 import { accountBalances, B, category, savingsJar, sortTx } from './model.js';
 import { addDays } from './dates.js';
-import { isRefund, signed } from './catshare.js';
+import { isRefund, isNotCounted, signed } from './catshare.js';
 
-const counts = (t) => !t.loan && t.type !== 'transfer';
+const counts = (t) => !t.loan && t.type !== 'transfer' && !isNotCounted(t);
 const inRange = (t, from, to) => t.date >= from && t.date <= to;
 
 // Days in a row with at least one record, ending today (or yesterday, so

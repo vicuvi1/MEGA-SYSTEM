@@ -330,7 +330,7 @@ export function monthSpend(db: Db, today: string): { spentMonth: number; limit: 
   const state = financeState(db)
   if (!state) return null
   const month = today.slice(0, 7)
-  const list = state.tx.filter((t: any) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string' && t.date.startsWith(month))
+  const list = state.tx.filter((t: any) => t && t.type === 'expense' && !t.notSpending && !t.deleted && typeof t.date === 'string' && t.date.startsWith(month))
   const by = new Map<string, number>()
   let spentMonth = 0
   for (const t of list) {

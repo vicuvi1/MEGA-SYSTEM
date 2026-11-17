@@ -27,7 +27,7 @@ export function findSubscriptions(state, today, { minCount = 3, lookbackDays = 4
   const haveRec = new Set((state.recurring || []).filter((r) => r.type === 'expense').map((r) => `${payeeKey(r.note)}|${r.currency}`));
   const groups = new Map();
   for (const t of state.tx) {
-    if (t.type !== 'expense' || t.loan || t.recurring || t.date < from || t.date > today) continue;
+    if (t.type !== 'expense' || t.loan || t.notSpending || t.recurring || t.date < from || t.date > today) continue;
     const p = payeeKey(t.note);
     if (!p) continue;
     const key = `${p}|${t.currency}`;

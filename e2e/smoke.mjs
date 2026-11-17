@@ -1179,6 +1179,8 @@ try {
   await (await import('./smokeTaxes.mjs')).taxSteps({ step, pg, open, financeFrame, storedTx })
   // Money batch 1: refunds, the goals warning, the rate date, the duplicate finder (e2e/smokeMoneyB1.mjs).
   await (await import('./smokeMoneyB1.mjs')).moneyB1Steps({ step, pg, open, financeFrame })
+  // "Doesn't count as income": the Not income? suggestion, totals and Undo (e2e/smokeMoneyNotIncome.mjs).
+  await (await import('./smokeMoneyNotIncome.mjs')).moneyNotIncomeSteps({ step, pg, open, financeFrame })
   // Money ideas: the money calendar, "Can I afford it?" and the wishlist with a wait (e2e/smokeMoneyIdeas.mjs).
   await (await import('./smokeMoneyIdeas.mjs')).moneyIdeasSteps({ step, pg, open, financeFrame, storedTx })
 

@@ -281,7 +281,7 @@ const lei = (bani: number) => `${Math.round(bani / 100).toLocaleString('en-US')}
 export function moneyContext(state: any, today: string): string {
   if (!state || !Array.isArray(state.tx)) return 'Money: Finance Helper data not available.'
   const cats = new Map<string, string>((state.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
-  const exp = (state.tx as any[]).filter((t) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string')
+  const exp = (state.tx as any[]).filter((t) => t && t.type === 'expense' && !t.notSpending && !t.deleted && typeof t.date === 'string')
   const amt = (t: any) => Math.abs(Number(t.base ?? t.amount) || 0)
   const month = today.slice(0, 7)
   const weekFrom = addDays(today, -6)
@@ -1227,7 +1227,7 @@ export function moneyInsight(state: any, tx: { category?: string | null; amount:
   if (!state || !Array.isArray(state.tx) || tx.type === 'income') return null
   const cats = new Map<string, string>((state.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
   const amt = (t: any) => Math.abs(Number(t.base ?? t.amount) || 0)
-  const exp = (state.tx as any[]).filter((t) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string')
+  const exp = (state.tx as any[]).filter((t) => t && t.type === 'expense' && !t.notSpending && !t.deleted && typeof t.date === 'string')
   const weekFrom = addDays(today, -6)
   const same = exp.filter((t) => t.date >= weekFrom && t.date <= today && String(t.category) === String(tx.category))
   const name = cats.get(String(tx.category)) ?? 'this'
@@ -1284,7 +1284,7 @@ export function answerLocal(need: string, d: LookupData): string | null {
     if (!st || !Array.isArray(st.tx)) return `Spending ${span}: Finance Helper data not available.`
     const cats = new Map<string, string>((st.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
     const want = rest.join(' ').toLowerCase()
-    const exp = (st.tx as any[]).filter((t) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string' && inRange(t.date.slice(0, 10)))
+    const exp = (st.tx as any[]).filter((t) => t && t.type === 'expense' && !t.notSpending && !t.deleted && typeof t.date === 'string' && inRange(t.date.slice(0, 10)))
     const name = (t: any) => cats.get(String(t.category)) ?? String(t.category ?? 'Other')
     const pick = want ? exp.filter((t) => name(t).toLowerCase().includes(want) || String(t.note ?? '').toLowerCase().includes(want)) : exp
     const amt = (t: any) => Math.abs(Number(t.base ?? t.amount) || 0)

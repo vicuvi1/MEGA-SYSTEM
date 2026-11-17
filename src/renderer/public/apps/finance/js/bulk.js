@@ -15,7 +15,13 @@ export function applyBulk(state, ids, kind, value, { rateFor = () => null, now =
   for (const t of state.tx) {
     if (!set.has(t.id)) continue;
     if (kind === 'date') t.date = value;
-    else if (t.type === 'transfer') { skipped++; continue; }
+    else if (kind === 'income' || kind === 'spending') {
+      // "Count as income / spending": yes puts the record back in the totals, no leaves it out.
+      const type = kind === 'income' ? 'income' : 'expense';
+      if (t.type !== type || t.loan || t.reconcile || t.refund) { skipped++; continue; }
+      const field = kind === 'income' ? 'notIncome' : 'notSpending';
+      if (value === 'no') { if (t[field]) continue; t[field] = true; } else { if (!t[field]) continue; delete t[field]; }
+    } else if (t.type === 'transfer') { skipped++; continue; }
     else if (kind === 'category') {
       if (category(state, value)?.type !== t.type) { skipped++; continue; }
       t.category = value;
@@ -37,6 +43,11 @@ export function applyBulk(state, ids, kind, value, { rateFor = () => null, now =
 // How many of the selected records a change would touch (for the confirm text).
 export function countApplicable(state, ids, kind, value) {
   const set = new Set(ids);
+  if (kind === 'income' || kind === 'spending') {
+    const type = kind === 'income' ? 'income' : 'expense';
+    const field = kind === 'income' ? 'notIncome' : 'notSpending';
+    return state.tx.filter((t) => set.has(t.id) && t.type === type && !t.loan && !t.reconcile && !t.refund && (value === 'no' ? !t[field] : !!t[field])).length;
+  }
   return state.tx.filter((t) => set.has(t.id) && (kind === 'date' || (t.type !== 'transfer' && (kind !== 'category' || category(state, value)?.type === t.type)))).length;
 }
 

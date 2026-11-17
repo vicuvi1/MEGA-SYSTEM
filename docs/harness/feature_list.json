@@ -1564,6 +1564,19 @@
    ],
    "evidence": "2026-11-17: financeMoney3.test.ts (meter math), smoke step (3.4 months).",
    "notes": "finance js/emergency.js, screens/money3.js; settings.emergency {accounts, essential} chosen in Settings > General > Emergency fund."
+  },
+  {
+   "id": "money-not-income",
+   "area": "money",
+   "title": "Records that don't count as income or spending",
+   "user_visible_behavior": "Earned records can be marked \"Doesn't count as income\" (Spent ones \"Doesn't count as spending\") in the add/edit form, in the Log bulk bar (Count as income/spending: yes/no, with Undo) or from the \"Not income? (N)\" suggestion for Other income records with no note. The balance still changes, but the record is left out of Earned/Spent, net, savings rate, Reports, month review, budgets, safe to spend, salary watch, Ask, the Money hub and Life goals. Grey tag and amount in the Log.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/moneyNotIncome.test.ts",
+    "SMOKE_ONLY=\"Money not income\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: moneyNotIncome.test.ts (11 tests incl. an EUR record valued in MDL, bulk toggle and undo), smoke step.",
+   "notes": "finance js/catshare.js isNotCounted, js/notincome.js, js/bulk.js; fields notIncome / notSpending / notIncomeNo; sw cache v65."
   }
  ]
 }

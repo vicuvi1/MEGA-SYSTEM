@@ -7,6 +7,7 @@ import { ctx, esc } from '../ctx.js';
 import * as M from '../model.js';
 import * as D from '../dupes.js';
 import * as R from '../refunds.js';
+import * as NI from '../notincome.js';
 import * as RD from '../ratedate.js';
 import { todayISO } from '../dates.js';
 import { formatMoney } from '../money.js';
@@ -131,15 +132,65 @@ export function openRefundSuggestions() {
   });
 }
 
+// ---------- "Not income?" ----------
+
+export function openNotIncomeSuggestions() {
+  const body = () => {
+    const list = NI.notIncomeSuggestions(ctx.state);
+    const head = `<h3>Not income? <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>`;
+    if (!list.length) return `${head}<p data-testid="notincome-none"><b>Nothing to suggest.</b></p>`;
+    return `${head}
+      <p class="muted small" style="margin-top:0">Earned records in "Other income" with no note. If it was money you already had, mark it: the balance stays, but it is left out of Earned and savings. Nothing changes until you tap.</p>
+      ${list.slice(0, 20).map((t) => `<div class="split-row" data-notincome="${esc(t.id)}" data-testid="notincome-suggestion" style="gap:8px;flex-wrap:wrap">
+        <span style="flex:1;min-width:140px"><b>${esc(formatMoney(t.amount, t.currency))}</b><br><span class="muted small">${esc(dayText(t.date))} · ${esc(M.account(ctx.state, t.account)?.name || '')}</span></span>
+        <span class="btns" style="margin:0"><button type="button" class="btn sm primary" data-ni="mark" data-id="${esc(t.id)}">Not income</button><button type="button" class="btn sm" data-ni="no" data-id="${esc(t.id)}">It is income</button></span>
+      </div>`).join('')}
+      ${list.length > 1 ? `<div class="btns"><button type="button" class="btn" data-ni="all" data-testid="notincome-all">Mark all ${list.length} as not income</button></div>` : ''}`;
+  };
+  ctx.openSheet(body(), (sheet) => {
+    const paint = () => { sheet.innerHTML = `<div class="grab"></div>${body()}`; };
+    sheet.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ni]');
+      if (!b) return;
+      if (b.dataset.ni === 'all') {
+        const list = NI.notIncomeSuggestions(ctx.state);
+        let n = 0;
+        for (const t of list) if (NI.markNotIncome(t)) n++;
+        if (!n) return;
+        ctx.commit();
+        paint();
+        ctx.toast(`Marked ${n} as not income`, 'Undo', () => ctx.undo?.());
+        return;
+      }
+      const t = ctx.state.tx.find((x) => x.id === b.dataset.id);
+      if (!t) return;
+      if (b.dataset.ni === 'mark') {
+        if (!NI.markNotIncome(t)) return;
+        ctx.commit();
+        paint();
+        ctx.toast('Marked as not income', 'Undo', () => ctx.undo?.());
+      } else if (b.dataset.ni === 'no') {
+        NI.dismissNotIncome(t);
+        ctx.commit();
+        paint();
+        ctx.toast('Got it, no more suggestion for this one', 'Undo', () => ctx.undo?.());
+      }
+    });
+  });
+}
+
 // The buttons for the Log's action row (the refund one only when there is something to suggest).
 export function logButtons() {
   const n = ctx.state ? R.refundSuggestions(ctx.state).length : 0;
-  return `<button type="button" class="btn" data-act="dupes-open" data-testid="dupes-open" title="Find records that look entered twice">Find duplicates</button>${n ? `<button type="button" class="btn" data-act="refunds-open" data-testid="refunds-open" title="Income records that look like refunds">Looks like a refund? (${n})</button>` : ''}`;
+  const ni = ctx.state ? NI.notIncomeSuggestions(ctx.state).length : 0;
+  const niBtn = ni ? `<button type="button" class="btn" data-act="notincome-open" data-testid="notincome-open" title="Earned records in Other income with no note">Not income? (${ni})</button>` : '';
+  return `<button type="button" class="btn" data-act="dupes-open" data-testid="dupes-open" title="Find records that look entered twice">Find duplicates</button>${n ? `<button type="button" class="btn" data-act="refunds-open" data-testid="refunds-open" title="Income records that look like refunds">Looks like a refund? (${n})</button>` : ''}${niBtn}`;
 }
 
 export function onClick(act) {
   if (act === 'dupes-open') { openDuplicates(); return true; }
   if (act === 'refunds-open') { openRefundSuggestions(); return true; }
+  if (act === 'notincome-open') { openNotIncomeSuggestions(); return true; }
   if (act === 'rate-update') { updateRates(); return true; }
   return false;
 }

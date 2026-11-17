@@ -205,7 +205,7 @@ export function searchTx(state, query, today) {
 // Totals for the result line: how many, spent / earned, first and last date,
 // in how many months.
 export function searchSummary(list, base = (t) => t.base ?? t.amount) {
-  const real = list.filter((t) => !t.loan);
+  const real = list.filter((t) => !t.loan && !(t.notIncome || t.notSpending));
   const spent = real.filter((t) => t.type === 'expense').reduce((a, t) => a + base(t), 0);
   const earned = real.filter((t) => t.type === 'income').reduce((a, t) => a + base(t), 0);
   const dates = list.map((t) => t.date).sort();

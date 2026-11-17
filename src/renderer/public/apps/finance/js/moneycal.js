@@ -49,7 +49,7 @@ export function moneyLine(state, today, to) {
     if (x.rule.type === 'income') at(x.date).in += v; else if (x.rule.type === 'expense') at(x.date).out += v;
   }
   for (const t of state.tx) {
-    if (t.date <= today || t.date > to) continue;
+    if (t.date <= today || t.date > to || t.notIncome || t.notSpending) continue;
     if (t.type === 'income') at(t.date).in += B(t); else if (t.type === 'expense') at(t.date).out += B(t);
   }
   out.set(today, { left, in: 0, out: 0 });

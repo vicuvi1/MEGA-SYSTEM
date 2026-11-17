@@ -35122,7 +35122,7 @@ var lei$3 = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
 function moneyContext(state, today) {
 	if (!state || !Array.isArray(state.tx)) return "Money: Finance Helper data not available.";
 	const cats = new Map((state.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
-	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
+	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string");
 	const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
 	const month = today.slice(0, 7);
 	const weekFrom = addDays$8(today, -6);
@@ -36098,7 +36098,7 @@ function moneyInsight(state, tx, today) {
 	if (!state || !Array.isArray(state.tx) || tx.type === "income") return null;
 	const cats = new Map((state.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 	const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
-	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
+	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string");
 	const weekFrom = addDays$8(today, -6);
 	const same = exp.filter((t) => t.date >= weekFrom && t.date <= today && String(t.category) === String(tx.category));
 	const name = cats.get(String(tx.category)) ?? "this";
@@ -36162,7 +36162,7 @@ function answerLocal(need, d) {
 		if (!st || !Array.isArray(st.tx)) return `Spending ${span}: Finance Helper data not available.`;
 		const cats = new Map((st.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 		const want = rest.join(" ").toLowerCase();
-		const exp = st.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string" && inRange(t.date.slice(0, 10)));
+		const exp = st.tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string" && inRange(t.date.slice(0, 10)));
 		const name = (t) => cats.get(String(t.category)) ?? String(t.category ?? "Other");
 		const pick = want ? exp.filter((t) => name(t).toLowerCase().includes(want) || String(t.note ?? "").toLowerCase().includes(want)) : exp;
 		const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
@@ -46658,7 +46658,7 @@ function sessionsOf(db, from) {
 function moneyNumbers(finance, today) {
 	const tx = Array.isArray(finance?.tx) ? finance.tx : [];
 	const B = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
-	const exp = tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string");
+	const exp = tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string");
 	const from30 = addDays$8(today, -29);
 	const perDay = Math.round(exp.filter((t) => t.date >= from30 && t.date <= today).reduce((s, t) => s + B(t), 0) / 30);
 	const wh = finance?.settings?.workHour;
@@ -51440,7 +51440,7 @@ function moneyBetween(state, from, to) {
 	let income = 0;
 	let spent = 0;
 	for (const t of state.tx) {
-		if (!t || t.deleted || typeof t.date !== "string") continue;
+		if (!t || t.deleted || t.notIncome || t.notSpending || typeof t.date !== "string") continue;
 		const d = t.date.slice(0, 10);
 		if (d < from || d > to) continue;
 		const v = Math.abs(Number(t.base ?? t.amount) || 0) / 100;
@@ -51592,7 +51592,7 @@ var GoalsService = class {
 				const fin = finance ?? financeFromDb(this.db);
 				if (!fin || !Array.isArray(fin.tx)) return null;
 				for (const t of fin.tx) {
-					if (!t || t.deleted || typeof t.date !== "string") continue;
+					if (!t || t.deleted || t.notIncome || t.notSpending || typeof t.date !== "string") continue;
 					const v = Math.abs(Number(t.base ?? t.amount) || 0) / 100;
 					const inc = t.type === "income";
 					const exp = t.type === "expense";
@@ -54551,7 +54551,7 @@ function financeDayTx(s, finance = financeOf(s), withLife = false) {
 	if (!txs.length) return [];
 	const names = new Map((finance?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 	const dayOf = (ms) => s.wallet.today(new Date(ms));
-	return txs.filter((t) => t && !t.deleted && typeof t.date === "string" && t.type !== "transfer" && (withLife || !String(t.id ?? "").startsWith("life-exp-"))).map((t) => ({
+	return txs.filter((t) => t && !t.deleted && !t.notIncome && !t.notSpending && typeof t.date === "string" && t.type !== "transfer" && (withLife || !String(t.id ?? "").startsWith("life-exp-"))).map((t) => ({
 		date: t.date.slice(0, 10),
 		type: String(t.type),
 		category: names.get(String(t.category)) ?? String(t.category ?? ""),
@@ -56309,8 +56309,9 @@ function isValidISO(iso) {
 var isPointsReward = (t) => String(t?.id || "").startsWith("life-reward-");
 var isCorrection = (t) => !!t?.reconcile;
 var isRefund = (t) => t?.type === "income" && t.refund === true && !t.loan && !isCorrection(t) && !isPointsReward(t);
-var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t) && !isCorrection(t) || isRefund(t);
-var countsAsIncome = (t) => t.type === "income" && !t.loan && !isCorrection(t) && !isRefund(t);
+var isNotCounted = (t) => t?.type === "income" && t.notIncome === true || t?.type === "expense" && t.notSpending === true;
+var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t) && !isCorrection(t) && !isNotCounted(t) || isRefund(t);
+var countsAsIncome = (t) => t.type === "income" && !t.loan && !isCorrection(t) && !isRefund(t) && !isNotCounted(t);
 var signed$1 = (t, v) => isRefund(t) ? -v : v;
 // src/renderer/public/apps/finance/js/cattree.js
 var fold$5 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -57532,7 +57533,7 @@ function validTx(t) {
 	].includes(t.type) && Number.isInteger(t.amount) && t.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(t.date);
 }
 var B$2 = (t) => Number.isInteger(t.base) ? t.base : t.amount;
-var counts = (t) => !t.loan && !isPointsReward(t) && !isCorrection(t);
+var counts = (t) => !t.loan && !isPointsReward(t) && !isCorrection(t) && !isNotCounted(t);
 function sortTx(list) {
 	return [...list].sort((a, b) => a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1);
 }
@@ -59008,7 +59009,7 @@ function monthSpend(db, today) {
 	const state = financeState(db);
 	if (!state) return null;
 	const month = today.slice(0, 7);
-	const list = state.tx.filter((t) => t && t.type === "expense" && !t.deleted && typeof t.date === "string" && t.date.startsWith(month));
+	const list = state.tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string" && t.date.startsWith(month));
 	const by = /* @__PURE__ */ new Map();
 	let spentMonth = 0;
 	for (const t of list) {

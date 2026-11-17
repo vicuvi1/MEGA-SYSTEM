@@ -105,7 +105,7 @@ export function moneyBetween(state: any, from: string, to: string): { income: nu
   let income = 0
   let spent = 0
   for (const t of state.tx) {
-    if (!t || t.deleted || typeof t.date !== 'string') continue
+    if (!t || t.deleted || t.notIncome || t.notSpending || typeof t.date !== 'string') continue
     const d = t.date.slice(0, 10)
     if (d < from || d > to) continue
     const v = Math.abs(Number(t.base ?? t.amount) || 0) / 100
@@ -247,7 +247,7 @@ export class GoalsService {
         const fin = finance ?? financeFromDb(this.db)
         if (!fin || !Array.isArray(fin.tx)) return null
         for (const t of fin.tx) {
-          if (!t || t.deleted || typeof t.date !== 'string') continue
+          if (!t || t.deleted || t.notIncome || t.notSpending || typeof t.date !== 'string') continue
           const v = Math.abs(Number(t.base ?? t.amount) || 0) / 100
           const inc = t.type === 'income'
           const exp = t.type === 'expense'

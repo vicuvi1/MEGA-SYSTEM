@@ -438,7 +438,7 @@ export function yearView(s: Services, finance: any, year?: number, now = new Dat
   const input = s.progress.input(null, now, Math.max(366, daysBetween(from, today) + 1))
   const tx = Array.isArray(finance?.tx) ? finance.tx : null
   const money = tx
-    ? tx.filter((t: any) => t && !t.deleted && typeof t.date === 'string' && (t.type === 'income' || t.type === 'expense')).map((t: any) => ({ day: t.date.slice(0, 10), bani: Math.abs(Number(t.base ?? t.amount) || 0), type: t.type }))
+    ? tx.filter((t: any) => t && !t.deleted && !t.notIncome && !t.notSpending && typeof t.date === 'string' && (t.type === 'income' || t.type === 'expense')).map((t: any) => ({ day: t.date.slice(0, 10), bani: Math.abs(Number(t.base ?? t.amount) || 0), type: t.type }))
     : null
   const recap = yearRecap({
     year: y,

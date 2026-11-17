@@ -6,7 +6,7 @@ import { monthKey, addMonths, daysInMonth, monthLabel, addDays, isValidISO } fro
 import { convert, coinValue } from './fx.js';
 import { perMonth } from './recurring.js';
 import { ensureTree, memorySub, suggestSub, subOf } from './cattree.js';
-import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome, isRefund, signed } from './catshare.js';
+import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome, isRefund, isNotCounted, signed } from './catshare.js';
 import { addRule2, removeRule2, merchantChoice } from './learn.js';
 
 // v1: first release. v2: custom multi-currency accounts, people, loans,
@@ -181,7 +181,7 @@ export const B = (t) => (Number.isInteger(t.base) ? t.base : t.amount);
 // Loans are money that comes back: they move balances but are not income or
 // spending. Neither are a reward bought with points (life-reward-…, the same
 // rule as catshare.js countsAsSpending) or a reconciliation adjustment.
-const counts = (t) => !t.loan && !isPointsReward(t) && !isCorrection(t);
+const counts = (t) => !t.loan && !isPointsReward(t) && !isCorrection(t) && !isNotCounted(t);
 
 export function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -1241,7 +1241,7 @@ export function applyRule(state, rule, list = ruleTargets(state, rule), now = Da
 // Fields the add/edit sheet sets (or clears) itself. Every other field on a
 // record (source, confirmedAt, catBy, book, reconcile, moved, a newer app's
 // own…) is kept as it was when the record is edited.
-const FORM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'type', 'amount', 'currency', 'date', 'note', 'from', 'to', 'toAmount', 'rate', 'base', 'account', 'category', 'sub', 'orig', 'debt', 'person', 'loan', 'recurring', 'tax', 'receipts', 'refund']);
+const FORM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'type', 'amount', 'currency', 'date', 'note', 'from', 'to', 'toAmount', 'rate', 'base', 'account', 'category', 'sub', 'orig', 'debt', 'person', 'loan', 'recurring', 'tax', 'receipts', 'refund', 'notIncome', 'notSpending']);
 export function keptOnEdit(existing, tx) {
   const out = {};
   for (const [k, v] of Object.entries(existing || {})) if (!FORM_FIELDS.has(k) && !(k in tx)) out[k] = v;

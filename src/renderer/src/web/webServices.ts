@@ -87,7 +87,7 @@ export function financeDayTx(s: Services, finance: any = financeOf(s), withLife 
   const names = new Map<string, string>((finance?.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
   const dayOf = (ms: number) => s.wallet.today(new Date(ms))
   return txs
-    .filter((t) => t && !t.deleted && typeof t.date === 'string' && t.type !== 'transfer' && (withLife || !String(t.id ?? '').startsWith('life-exp-')))
+    .filter((t) => t && !t.deleted && !t.notIncome && !t.notSpending && typeof t.date === 'string' && t.type !== 'transfer' && (withLife || !String(t.id ?? '').startsWith('life-exp-')))
     .map((t) => ({
       date: t.date.slice(0, 10),
       type: String(t.type),

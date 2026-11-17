@@ -83,7 +83,7 @@ import { AmbientMusic } from './ambient.js';
 import { openPalette, closePalette, isPaletteOpen } from './palette.js';
 import { bindSankeyHover } from './charts.js';
 import { APP_VERSION } from './version.js';
-import { countsAsSpending, countsAsIncome, signed, isRefund } from './catshare.js';
+import { countsAsSpending, countsAsIncome, signed, isRefund, isNotCounted } from './catshare.js';
 import * as E from './everyday.js';
 
 let state = load();
@@ -579,7 +579,8 @@ function txRow(t, { showDate = false } = {}) {
     // A reconciliation adjustment (js/reconcile.js): labelled, it is not income or spending.
     const recon = t.reconcile ? '<span class="pill" title="Settles a difference with your bank; not income or spending">Reconciliation</span> ' : '';
     const refundPill = isRefund(t) ? '<span class="pill" title="Money back for something you bought: it lowers spending, it is not income">Refund</span> ' : '';
-    amount = `<span class="amount ${t.type === 'income' ? 'income' : ''}">${fromRewards}${recon}${refundPill}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
+    const notPill = isNotCounted(t) ? `<span class="pill not-counted" data-testid="not-counted-tag" title="The balance changed, but this is left out of ${t.type === 'income' ? 'income' : 'spending'} totals">${t.type === 'income' ? 'not income' : 'not spending'}</span> ` : '';
+    amount = `<span class="amount ${isNotCounted(t) ? 'not-counted' : t.type === 'income' ? 'income' : ''}">${fromRewards}${recon}${refundPill}${notPill}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
   }
   if (showDate) sub = `${dayLabel(t.date)} · ${sub}`;
   return `<button class="tx" data-act="edit" data-id="${esc(t.id)}">
@@ -1172,14 +1173,16 @@ function selectedTx() {
 function bulkBar() {
   const list = selectedTx();
   if (!list.length) return '';
-  const out = list.filter((t) => t.type === 'expense').reduce((a, t) => a + M.B(t), 0);
-  const inc = list.filter((t) => t.type === 'income').reduce((a, t) => a + M.B(t), 0);
+  const out = list.filter((t) => t.type === 'expense' && !t.notSpending).reduce((a, t) => a + M.B(t), 0);
+  const inc = list.filter((t) => t.type === 'income' && !t.notIncome).reduce((a, t) => a + M.B(t), 0);
   const cats = (type, label) => `<optgroup label="${label}">${state.settings.categories.filter((c) => c.type === type).map((c) => `<option value="${esc(c.id)}">${esc(`${c.emoji || ''} ${c.name}`.trim())}</option>`).join('')}</optgroup>`;
   return `<div class="bulk-bar" role="toolbar" aria-label="Change selected records">
     <b data-testid="bulk-count">${list.length} selected</b>
     <span class="muted small">${[out ? `−${money(out)}` : '', inc ? `+${money(inc)}` : ''].filter(Boolean).join(' · ')}</span>
     <select data-bulk="category" aria-label="Set category"><option value="">Set category…</option>${cats('expense', 'Spent')}${cats('income', 'Earned')}</select>
     <select data-bulk="account" aria-label="Set account"><option value="">Set account…</option>${accountOptionsHTML(state.settings.accounts.filter((a) => !a.archived), '', { baseCur: state.settings.currency })}</select>
+    ${list.some((t) => t.type === 'income' && !t.loan) ? '<select data-bulk="income" data-testid="bulk-income" aria-label="Count as income"><option value="">Count as income…</option><option value="yes">Count as income: yes</option><option value="no">Count as income: no</option></select>' : ''}
+    ${list.some((t) => t.type === 'expense' && !t.loan) ? '<select data-bulk="spending" data-testid="bulk-spending" aria-label="Count as spending"><option value="">Count as spending…</option><option value="yes">Count as spending: yes</option><option value="no">Count as spending: no</option></select>' : ''}
     ${Taxes.bulkSelectHTML()}
     <label class="bulk-date"><span>Set date</span><input type="date" data-bulk="date" aria-label="Set date"></label>
     <button type="button" class="btn" data-act="bulk-all" data-testid="bulk-all">Select all shown</button>
@@ -1258,7 +1261,7 @@ function runBulk(kind, v, ids) {
   closeSheet();
   if (!changed) { toast(skipped ? 'None of the selected records can take that (moves, or a different type)' : 'Nothing changed'); return; }
   commit();
-  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag' }[kind];
+  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag', income: 'income setting', spending: 'spending setting' }[kind];
   toast(`Changed the ${what} of ${plural(changed)}${skipped ? ` (${skipped} skipped)` : ''}`, 'Undo', () => undoRedo(-1));
 }
 
@@ -1272,7 +1275,13 @@ function onBulkChange(el) {
   if (kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
   const n = kind === 'tax' ? ids.length : Bulk.countApplicable(state, ids, kind, v);
   if (!n) { toast('None of the selected records can take that (moves, or a different type)'); return; }
-  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag' }[kind];
+  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag', income: 'income setting', spending: 'spending setting' }[kind];
+  if (kind === 'income' || kind === 'spending') {
+    const w = kind === 'income' ? 'income' : 'spending';
+    const text = v === 'no' ? `Leave ${plural(n)} out of ${w}? The money still counts in the account balances. One Undo puts it back.` : `Count ${plural(n)} as ${w} again? One Undo puts it back.`;
+    confirmBulk({ title: `Count as ${w}`, text, ok: v === 'no' ? `Leave out ${plural(n)}` : `Count ${plural(n)}`, onOk: () => runBulk(kind, v, ids) });
+    return;
+  }
   confirmBulk({ title: `Set ${what}`, text: `Set the ${what} of ${plural(n)} to ${label}? One Undo puts every record back exactly as it was.`, ok: `Change ${plural(n)}`, onOk: () => runBulk(kind, v, ids) });
 }
 
@@ -1461,7 +1470,7 @@ function viewLog() {
     if (!q) for (const d of freeDays) if (d.startsWith(ui.month) && !groups.has(d)) groups.set(d, []);
     const ordered = [...groups.entries()].sort((a, b) => (a[0] < b[0] ? 1 : a[0] > b[0] ? -1 : 0));
     content = ordered.map(([date, items]) => {
-      const net = items.reduce((a, t) => a + (t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0), 0);
+      const net = items.filter((t) => !isNotCounted(t)).reduce((a, t) => a + (t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0), 0);
       return `<div class="day dow-${dowIndex(date)}${date === todayISO() ? ' is-today' : ''}"><div class="day-head"><span class="dh">${dayLabelHTML(date, todayISO())}${q ? ` ${date.slice(0, 4)}` : ''}</span><span class="money ${net > 0 ? 'income' : ''}">${net ? money(net, { sign: true }) : ''}</span></div>
         <div class="list">${items.length ? items.map((t) => txRow(t)).join('') : '<div class="row"><b>No spending ✓</b></div>'}</div></div>`;
     }).join('') || `<div class="empty"><b>${q ? 'Nothing found' : 'No records this month'}</b>${q ? `Try: ${esc(SEARCH_HINT)}` : 'Tap + to add one.'}</div>`;
@@ -2010,7 +2019,9 @@ function openTxSheet(existing = null, preset = {}) {
         <label class="field"><span>${draft.type === 'income' ? 'From who? (optional)' : 'To who? (optional)'}</span><input id="tx-person" type="text" list="people-list" autocomplete="off" value="${esc(draft.personName)}" placeholder="Name"></label>
         <label class="field check"><input id="tx-loan" type="checkbox" ${draft.loan ? 'checked' : ''}><span>${draft.type === 'income' ? 'Borrowed: I pay it back' : 'Lent: they pay it back'}</span></label>
       </div><datalist id="people-list">${people}</datalist>
-      ${draft.type === 'income' ? `<label class="field check"><input id="tx-refund" data-testid="tx-refund" type="checkbox" ${draft.refund ? 'checked' : ''}><span>This is a refund: money back for something I bought. It lowers that category's spending and is not income.</span></label>` : ''}`}
+      ${draft.type === 'income' ? `<label class="field check"><input id="tx-refund" data-testid="tx-refund" type="checkbox" ${draft.refund ? 'checked' : ''}><span>This is a refund: money back for something I bought. It lowers that category's spending and is not income.</span></label>` : ''}
+      ${draft.type === 'income' && !draft.refund && !draft.loan ? `<label class="field check"><input id="tx-notincome" data-testid="tx-notincome" type="checkbox" ${draft.notIncome ? 'checked' : ''}><span>Doesn't count as income: money I already had. The balance still changes, but it is left out of Earned and savings.</span></label>` : ''}
+      ${draft.type === 'expense' && !draft.loan ? `<label class="field check"><input id="tx-notspending" data-testid="tx-notspending" type="checkbox" ${draft.notSpending ? 'checked' : ''}><span>Doesn't count as spending: money that left but was not really spent. The balance still changes, but it is left out of Spent.</span></label>` : ''}`}
       <div class="row2">
         ${isT ? accSelect('from', 'From') + accSelect('to', 'To') : accSelect('account', draft.type === 'income' ? 'Into' : 'Paid from')}
       </div>
@@ -2039,7 +2050,9 @@ function openTxSheet(existing = null, preset = {}) {
     if (v('#tx-to-amount')) toText = v('#tx-to-amount').value;
     if (v('#tx-person')) draft.personName = v('#tx-person').value;
     if (v('#tx-loan')) draft.loan = v('#tx-loan').checked;
-    if (v('#tx-refund')) { draft.refund = v('#tx-refund').checked; if (draft.refund) draft.loan = false; }
+    if (v('#tx-refund')) { draft.refund = v('#tx-refund').checked; if (draft.refund) { draft.loan = false; draft.notIncome = false; } }
+    if (v('#tx-notincome')) draft.notIncome = v('#tx-notincome').checked;
+    if (v('#tx-notspending')) draft.notSpending = v('#tx-notspending').checked;
     if (v('#tx-repeat')) draft.repeat = v('#tx-repeat').value;
     for (const f of ['account', 'from', 'to']) {
       const el = v(`#tx-${f}`);
@@ -2152,6 +2165,7 @@ function openTxSheet(existing = null, preset = {}) {
     sheet.querySelector('#tx-refund')?.addEventListener('change', () => {
       // The category list switches between income and expense categories.
       readInputs(sheet);
+      if (draft.refund) draft.notIncome = false;
       draft.category = M.suggestCategory(state, draft.note, catType());
       catTouched = false;
       subTouched = false;
@@ -2221,6 +2235,8 @@ function openTxSheet(existing = null, preset = {}) {
         ...(personId ? { person: personId } : {}),
         ...(personId && draft.loan && !draft.refund ? { loan: true } : {}),
         ...(draft.type === 'income' && draft.refund && !draft.loan ? { refund: true } : {}),
+        ...(draft.type === 'income' && draft.notIncome && !draft.refund && !draft.loan ? { notIncome: true } : {}),
+        ...(draft.type === 'expense' && draft.notSpending && !draft.loan ? { notSpending: true } : {}),
       };
     }
     // Logged from a recurring item on the Plan screen.
@@ -2273,6 +2289,8 @@ function openTxSheet(existing = null, preset = {}) {
         if (seg.dataset.type !== draft.type) {
           draft.type = seg.dataset.type;
           if (draft.type !== 'income') draft.refund = false;
+          draft.notIncome = false;
+          draft.notSpending = false;
           draft.category = catTouched ? null : M.suggestCategory(state, draft.note, catType());
           catTouched = false;
           addingCat = false;

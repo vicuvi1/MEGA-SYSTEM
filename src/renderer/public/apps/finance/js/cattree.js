@@ -463,7 +463,7 @@ export function totalsAllSubs(state, list) {
 export function topMerchants(list, n = 8) {
   const m = new Map();
   for (const t of list) {
-    if (t.type !== 'expense' || t.loan) continue;
+    if (t.type !== 'expense' || t.loan || t.notSpending) continue;
     const k = merchantKey(t.note) || '';
     if (!k) continue;
     const r = m.get(k) || { key: k, label: String(t.note || '').replace(/#[\p{L}\p{N}_-]+/gu, '').trim(), amount: 0, count: 0, labels: new Map() };
@@ -492,7 +492,7 @@ export function monthlyAverage(state, from, key, months = 6) {
   const want = new Set(keys);
   const sums = new Map();
   for (const t of state.tx) {
-    if (t.type !== 'expense' || t.loan || !want.has(t.date.slice(0, 7))) continue;
+    if (t.type !== 'expense' || t.loan || t.notSpending || !want.has(t.date.slice(0, 7))) continue;
     const k = key(t);
     if (k == null) continue;
     sums.set(k, (sums.get(k) || 0) + B(t));

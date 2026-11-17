@@ -21,8 +21,13 @@ export const isCorrection = (t) => !!t?.reconcile;
 // with an expense category. The money did arrive (balances see it), but it is
 // not income: it lowers its category's spending instead (see `signed`).
 export const isRefund = (t) => t?.type === 'income' && t.refund === true && !t.loan && !isCorrection(t) && !isPointsReward(t);
-export const countsAsSpending = (t) => (t.type === 'expense' && !t.loan && !isPointsReward(t) && !isCorrection(t)) || isRefund(t);
-export const countsAsIncome = (t) => t.type === 'income' && !t.loan && !isCorrection(t) && !isRefund(t);
+// "Doesn't count as income / spending": money you already had that was put into
+// an account (`notIncome: true` on an income record), or money that left but was
+// not really spending (`notSpending: true` on an expense). The balance still
+// moves; the record is left out of every income / spending total.
+export const isNotCounted = (t) => (t?.type === 'income' && t.notIncome === true) || (t?.type === 'expense' && t.notSpending === true);
+export const countsAsSpending = (t) => (t.type === 'expense' && !t.loan && !isPointsReward(t) && !isCorrection(t) && !isNotCounted(t)) || isRefund(t);
+export const countsAsIncome = (t) => t.type === 'income' && !t.loan && !isCorrection(t) && !isRefund(t) && !isNotCounted(t);
 // A spending record's amount with the refund sign: a refund is negative.
 export const signed = (t, v) => (isRefund(t) ? -v : v);
 

@@ -117,8 +117,8 @@ const dayShort = (iso) => `${DOW_SHORT[dowIndex(iso)]} ${Number(iso.slice(8))}`;
 
 export function todayText(state, today) {
   const list = state.tx.filter((t) => t.date === today && (countsAsSpending(t) || countsAsIncome(t)));
-  const out = list.filter((t) => t.type === 'expense').reduce((a, t) => a + B(t), 0);
-  const inc = list.filter((t) => t.type === 'income').reduce((a, t) => a + B(t), 0);
+  const out = list.filter((t) => t.type === 'expense' && !t.notSpending).reduce((a, t) => a + B(t), 0);
+  const inc = list.filter((t) => t.type === 'income' && !t.notIncome).reduce((a, t) => a + B(t), 0);
   const s = monthSummary(state, monthKey(today));
   const cur = state.settings.currency;
   const lines = list.slice(-8).map((t) => `${t.type === 'income' ? '+' : '−'}${formatMoney(t.amount, t.currency)} · ${esc(t.note || category(state, t.category)?.name || '')}`);

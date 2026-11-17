@@ -9,7 +9,7 @@ import { addDays } from './dates.js';
 export const MAX_FAVS = 6;
 const norm = (s) => String(s ?? '').trim().toLowerCase();
 export const favKey = (t) => [t.type, t.category || '', t.account || '', norm(t.note)].join('|');
-const usable = (t) => (t.type === 'expense' || t.type === 'income') && !t.loan && !t.reconcile && !t.refund && !String(t.id || '').startsWith('life-reward-');
+const usable = (t) => (t.type === 'expense' || t.type === 'income') && !t.loan && !t.reconcile && !t.refund && !t.notIncome && !t.notSpending && !String(t.id || '').startsWith('life-reward-');
 
 /** @returns {{ key: string, type: string, category: string, account: string, note: string, sub?: string, amount: number, currency: string, count: number, last: string, pinned: boolean }[]} */
 export function rankFavorites(state, today, { n = MAX_FAVS, days = 90 } = {}) {

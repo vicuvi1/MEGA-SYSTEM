@@ -5,7 +5,7 @@ import { formatMoney } from './money.js';
 import { daysInMonth, weekday, todayISO, dowIndex, DOW_LONG, DOW_SHORT, MONTHS, addDays } from './dates.js';
 import { TYPE_LABEL } from './importer.js';
 import { B, category } from './model.js';
-import { countsAsSpending, countsAsIncome, signed } from './catshare.js';
+import { countsAsSpending, countsAsIncome, signed, isNotCounted } from './catshare.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const plain = (c) => formatMoney(c, '');
@@ -130,16 +130,17 @@ function cells(state, t, { who = true } = {}) {
     : `<select data-col="account" aria-label="Account">${accountOptionsHTML(accounts, t.account, { baseCur: state.settings.currency })}</select>`;
   const di = t.date ? dowIndex(t.date) : 0;
   const shown = t.date ? `<span class="dow-tag dow-${di}">${DOW_SHORT[di]}</span><span class="dtext">${Number(t.date.slice(8, 10))} ${MONTHS[Number(t.date.slice(5, 7)) - 1].slice(0, 3)}</span>` : '';
+  const ncTag = isNotCounted(t) ? `<span class="tbl-loan-badge not-counted-tag" data-testid="not-counted-tag" title="The balance changed, but this is left out of ${t.type === 'income' ? 'income' : 'spending'} totals">${t.type === 'income' ? 'not income' : 'not spending'}</span>` : '';
   const loanBadge = isLoan ? `<span class="tbl-loan-badge ${t.type === 'expense' ? 'lent' : 'borrowed'}" title="${t.type === 'expense' ? 'Loan given (Lent)' : 'Loan received (Borrowed)'}">⚡ ${t.type === 'expense' ? 'Lent' : 'Borrowed'}</span>` : '';
   const debtTag = t.debt ? `<span class="cur-tag debt-cur-tag" title="Original loan: ${formatMoney(t.debt.amount, t.debt.currency)}">⚡ ${t.debt.amount ? plain(t.debt.amount) : ''} ${esc(t.debt.currency)}</span>` : '';
   const signPrefix = t.type === 'income' ? '+' : t.type === 'expense' ? '−' : '';
   const isBaseCur = !t.currency || t.currency === state.settings.currency;
   return `<td class="c-date"><span class="dcell">${shown}<input type="date" class="dpick" data-col="date" value="${esc(t.date)}" aria-label="Date"></span></td>
     <td class="c-type">${typeSel}</td><td class="c-cat">${cat}</td>
-    <td class="c-note"><span class="note-cell">${loanBadge}<input type="text" data-col="note" value="${esc(t.note)}" placeholder="${isLoan ? 'Loan note' : 'What for?'}" aria-label="Note"></span></td>
+    <td class="c-note"><span class="note-cell">${ncTag}${loanBadge}<input type="text" data-col="note" value="${esc(t.note)}" placeholder="${isLoan ? 'Loan note' : 'What for?'}" aria-label="Note"></span></td>
     ${who ? `<td class="c-who">${isT ? '' : `<input type="text" data-col="person" list="people-list" value="${esc(state.people.find((p) => p.id === t.person)?.name || t.personName || '')}" placeholder="—" aria-label="Who" autocomplete="off">`}</td>` : ''}
     <td class="c-acc">${acc}</td>
-    <td class="c-amt"><span class="amt-cell ${t.type}"><span class="amt-sign" aria-hidden="true">${signPrefix}</span><input type="text" inputmode="decimal" class="amt" data-col="amount" value="${t.amount ? plain(t.amount) : ''}" placeholder="0" aria-label="Amount" autocomplete="off">${debtTag || (!isBaseCur ? `<span class="cur-tag">${esc(t.currency)}</span>` : `<span class="cur-tag cur-faint">${esc(state.settings.currency || 'MDL')}</span>`)}</span></td>`;
+    <td class="c-amt"><span class="amt-cell ${t.type}${isNotCounted(t) ? ' not-counted' : ''}"><span class="amt-sign" aria-hidden="true">${signPrefix}</span><input type="text" inputmode="decimal" class="amt" data-col="amount" value="${t.amount ? plain(t.amount) : ''}" placeholder="0" aria-label="Amount" autocomplete="off">${debtTag || (!isBaseCur ? `<span class="cur-tag">${esc(t.currency)}</span>` : `<span class="cur-tag cur-faint">${esc(state.settings.currency || 'MDL')}</span>`)}</span></td>`;
 }
 
 // "Saturday 10 October · Today" with the day's totals.
@@ -177,6 +178,7 @@ export function tableHTML(state, list, { sort, draft, fmt: fmtExact, selected = 
     const d = (perDay[t.date] ||= { in: 0, out: 0, n: 0, loanIn: 0, loanOut: 0 });
     d.n++;
     if (t.type === 'transfer') continue;
+    if (isNotCounted(t)) continue;
     if (t.loan) {
       if (t.type === 'income') d.loanIn = (d.loanIn || 0) + B(t);
       else d.loanOut = (d.loanOut || 0) + B(t);
@@ -252,7 +254,7 @@ export function calendarHTML(state, key) {
   for (const t of state.tx) {
     if (!t.date.startsWith(key) || t.type === 'transfer') continue;
     const d = (per[t.date] ||= { in: 0, out: 0, n: 0, categories: [], topNote: '', maxSingleOut: 0 });
-    if (t.loan) continue;
+    if (t.loan || isNotCounted(t)) continue;
     if (t.type === 'income') {
       const bAmt = B(t);
       d.in += bAmt;

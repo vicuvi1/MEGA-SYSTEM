@@ -116,7 +116,7 @@ function sessionsOf(db: any, from: string) {
 export function moneyNumbers(finance: any, today: string): DeskView['money'] {
   const tx: any[] = Array.isArray(finance?.tx) ? finance.tx : []
   const B = (t: any) => Math.abs(Number(t.base ?? t.amount) || 0)
-  const exp = tx.filter((t) => t && t.type === 'expense' && !t.deleted && typeof t.date === 'string')
+  const exp = tx.filter((t) => t && t.type === 'expense' && !t.notSpending && !t.deleted && typeof t.date === 'string')
   const from30 = addDays(today, -29)
   const perDay = Math.round(exp.filter((t) => t.date >= from30 && t.date <= today).reduce((s, t) => s + B(t), 0) / 30)
   // Your hour: what you set in Finance Helper, else 3 months of income over 160 h.
