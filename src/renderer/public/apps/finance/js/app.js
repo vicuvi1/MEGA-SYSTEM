@@ -72,6 +72,8 @@ import { sheetHTML, monthTabs } from './sheetview.js';
 import { createHistory } from './history.js';
 import { mergeLocal } from './sync.js';
 import { searchTx, searchSummary, SEARCH_HINT, savedFilters, saveFilter, removeFilter } from './search.js';
+import { chipsHTML, withoutTerm } from './searchchips.js';
+import * as Money3 from './screens/money3.js';
 import { safeToSpend, shortDay, limitStatus, suggestLimit, everydaySpent } from './safespend.js';
 import { verdict, nextSteps } from './nextsteps.js';
 import { openRecap } from './screens/recap.js';
@@ -1076,7 +1078,16 @@ function viewHome() {
     <p class="muted small" style="margin-bottom:0">Already have money in the wallet or safe? Set it under Settings → Accounts.</p>
   </section>`;
 
-  return `<header class="top home-top v-${v.tone}"><div><div class="eyebrow">${esc(monthLabel(key))} · ${hello}</div><h1>${esc(v.title)}</h1><div class="sub home-verdict">${esc(v.sub)}</div></div><div class="sub">${dayLabel(today)}</div></header>
+  // Inside Life the Finance sidebar is Life's own: the total balance sits big at the top-left of Home instead.
+  const balance = inLifeNow() && !state._sealed ? (() => {
+    const { total } = M.totalBalance(state);
+    const net = M.monthSummary(state, key).net;
+    return `<section class="home-balance" data-testid="home-balance" aria-label="All my money"><span class="label">All my money</span>
+      <div class="big">${bigMoney(total)}</div>
+      <span class="hb-net ${net >= 0 ? 'income' : 'expense'}">${net >= 0 ? '▲' : '▼'} ${money(Math.round(Math.abs(net) / 100) * 100)} this month</span></section>`;
+  })() : '';
+
+  return `${balance}<header class="top home-top v-${v.tone}"><div><div class="eyebrow">${esc(monthLabel(key))} · ${hello}</div><h1>${esc(v.title)}</h1><div class="sub home-verdict">${esc(v.sub)}</div></div><div class="sub">${dayLabel(today)}</div></header>
   ${MoneyB.topHTML()}
   ${Updates.updateBanner()}
   ${DEMO ? '<div class="banner"><p>Live preview with <b>example data</b> (a made-up month). What you add here stays in this browser only.</p></div>' : ''}
@@ -1093,8 +1104,9 @@ function viewHome() {
   ${homeStrip(s, key)}
   ${Spending.spendingCard({ key: 'home', period: ui.spendPeriod })}
   ${Goals.homeCard({ featured: true })}
+  ${Money3.emergencyCard()}
   ${monthComparison(today)}
-  ${quickRow()}
+  ${Money3.favsCard() || quickRow()}
   <div class="dash">
     <div class="dash-main">
       ${recent.length ? `<section class="card"><h2>Recent <button class="card-link right" data-go="log">Open log</button></h2><div class="list">${recent.map((t) => txRow(t, { showDate: true })).join('')}</div></section>` : ''}
@@ -1496,7 +1508,7 @@ function viewLog() {
     </div>
     ${filterPanel()}
   `}
-  ${q && view !== 'calendar' ? searchCard(list) : ''}
+  ${q && view !== 'calendar' ? chipsHTML(ui.search, esc, state) + searchCard(list) : ''}
   ${content}
   ${view === 'sheet' && !q ? '<p class="muted small">Type an amount and it saves. Clear it to delete. <b>+</b> at the bottom adds the next month.</p>' : ''}
   ${view === 'table' ? '<p class="muted small">Edit any cell; it saves by itself. <b>Enter</b> moves down a row. <b>←</b> / <b>→</b> switch months. Tick rows (Shift+click for a range) to change many at once. <b>Ctrl+Z</b> undoes anything. Paste rows copied from Excel or Google Sheets anywhere on this page to import them.</p>' : ''}
@@ -1657,7 +1669,7 @@ function viewSettings() {
   };
   // One section at a time, picked on the left (like any settings screen).
   const sections = [
-    { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + MoneyB.settingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Shortcuts.settingsCard() },
+    { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + MoneyB.settingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Money3.settingsCard() + Shortcuts.settingsCard() },
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
     { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() + BudgetWarn.settingsCard() },
     { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + ChangesScreen.settingsCard() + Backups.settingsCard() + Sync.settingsCard() },
@@ -3311,6 +3323,8 @@ document.addEventListener('click', (e) => {
   else if (Reconcile.onClick(act, el)) { /* monthly reconciliation */ }
   else if (Tidy.onClick(act)) { /* duplicates, refund suggestions, rate update */ }
   else if (CashCount.onClick(act, el)) { /* weekly cash count card */ }
+  else if (Money3.onClick(act, el)) { /* favourites and the emergency fund */ }
+  else if (act === 'sq-chip-x') { ui.search = withoutTerm(ui.search, Number(el.dataset.i), state); render(); }
   else if (act === 'shortcuts-help') Shortcuts.openHelp();
   else if (act === 'bulk-all') { for (const r of document.querySelectorAll('#tx-table tr[data-id]')) ui.selected.add(r.dataset.id); refreshSelection(); }
   else if (act === 'add') openTxSheet();
@@ -3517,6 +3531,8 @@ document.addEventListener('input', (e) => {
     s.setSelectionRange(pos, pos);
   }
 });
+
+Money3.install();
 
 // Desktop shortcuts: N = new record, / = search, 1-9 and 0 = sections, Esc = close.
 document.addEventListener('keydown', (e) => {
@@ -3765,6 +3781,8 @@ function takeGoto() {
       location.hash = '#accounts';
     } else openIt();
   } else if (g.screen === 'longview') location.hash = '#longview';
+  // Life's Money menu item: always open on Home (the total balance), not where you left off.
+  else if (g.screen === 'home') location.hash = '#home';
 }
 window.addEventListener('storage', (e) => { if (e.key === GOTO_KEY && e.newValue) takeGoto(); });
 setTimeout(takeGoto, 300);

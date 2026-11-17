@@ -19,6 +19,8 @@ export async function moneyPrivacySteps({ step, pg, open, financeFrame }) {
   await step('Money privacy: amounts start hidden; Space shows them all, Space hides them; typing a space in a box is left alone', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('money')
+    // Money opens on Finance Helper's Home; the Life hub is its "Money hub" tab.
+    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click({ timeout: 10000 }).catch(() => {})
     // After the earlier Money steps Life's hub can be empty (no synced data yet); then only the
     // Finance Helper part runs here (the hub part is checked whenever the hub has its numbers).
     const hubOK = await pg.waitForSelector('.mh-hero .mh-big', { timeout: 8000 }).then(() => true).catch(() => false)
@@ -51,8 +53,8 @@ export async function moneyPrivacySteps({ step, pg, open, financeFrame }) {
     }
 
     // Finance Helper follows the same state: open it, it starts shown; Space hides it; Life follows.
-    await pg.waitForFunction(() => !!document.querySelector('.mh-open') || [...document.querySelectorAll('iframe')].some((e) => e.offsetParent), null, { timeout: 15000 })
-    if (await pg.$('.mh-open')) await pg.click('.mh-open')
+    await pg.waitForFunction(() => !!document.querySelector('.seg-switch') || [...document.querySelectorAll('iframe')].some((e) => e.offsetParent), null, { timeout: 15000 })
+    if (!(await pg.evaluate(() => [...document.querySelectorAll('iframe')].some((e) => e.offsetParent)))) await pg.locator('.seg-switch [role="tab"]', { hasText: 'Finance Helper' }).click({ timeout: 5500 })
     let frame = null
     for (const end = Date.now() + 20000; !frame; ) {
       await pg.waitForTimeout(600)

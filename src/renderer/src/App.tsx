@@ -553,9 +553,9 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const embed = pageOn(mods, page) ? EMBED_OF[page] : undefined
   // Stealth hides MAN too until the section is revealed.
   const hiddenByStealth = page === 'discipline' && !!discipline?.stealth && !revealed
-  // Money opens on its own hub (Night 11); the full Finance Helper is one tap away.
+  // Money opens on Finance Helper's Home with the total balance top-left (owner, 2026-11-17); the Life hub is the "Money hub" tab.
   // Sport Track opens on its Dashboard; its embedded app is the "Classic tracker" (⋯ menu, not a tab).
-  const tab: SectionView = embed ? (hiddenByStealth ? 'system' : view[page] ?? (page === 'money' ? 'system' : page === 'body' ? 'train' : 'app')) : 'system'
+  const tab: SectionView = embed ? (hiddenByStealth ? 'system' : view[page] ?? (page === 'body' ? 'train' : 'app')) : 'system'
   const segTabs: { id: SectionView; label: string; icon: IconName }[] = !embed
     ? []
     : embed.kind === 'sport'
@@ -644,6 +644,20 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
       off()
     }
   }, [toggleSidebar, embed, page, tab])
+
+  // Leaving Money forgets the Money hub tab, so the next click on Money opens the balance again.
+  useEffect(() => {
+    if (page !== 'money') {
+      setView((v) => (v.money && v.money !== 'app' ? { ...v, money: 'app' } : v))
+      return
+    }
+    // Finance Helper stays loaded behind the scenes: tell it to show Home again (read once there).
+    try {
+      localStorage.setItem('finance-helper.goto', JSON.stringify({ screen: 'home', at: Date.now() }))
+    } catch {
+      // not available: it opens where it was
+    }
+  }, [page])
 
   const go = useCallback((p: PageId, v?: 'app' | 'system') => {
     if (v) setView((cur) => ({ ...cur, [p]: v }))

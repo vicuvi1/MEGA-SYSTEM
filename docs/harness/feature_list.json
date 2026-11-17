@@ -1512,6 +1512,58 @@
    ],
    "evidence": "2026-11-17: tsc, moneyPrivacy.test.ts (7 tests: default hidden, formatter dots, Space ignored in boxes, key-up swallowed, idle re-hide with fake timers, minimise), smoke step Money privacy.",
    "notes": "finance js/money.js (formatMoney masks; reveal option for typed text and Telegram), js/privacy.js (state, idle timer, Space, BroadcastChannel life-money-privacy shared with the Life shell), renderer/src/money/privacy.ts (hooks), settings in localStorage finance-helper.privacy.* (not synced, not a blob key). sw.js v62."
+  },
+  {
+   "id": "money-opens-on-balance",
+   "area": "money",
+   "title": "Money opens on Finance Home with the balance big at the top-left",
+   "user_visible_behavior": "Clicking Money in the menu opens Finance Helper's Home every time, with All my money (the total, dots while hidden) big at the top-left and this month's change under it. The Life hub (safe to spend ring, quick add, goals) is the Money hub tab beside Finance Helper; leaving Money forgets that tab.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money|Long pages\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: tsc, vitest, smoke step Money opens on the balance; hub steps use openHub.",
+   "notes": "App.tsx (default view app, reset on leaving, finance-helper.goto {screen:'home'} on entering), finance app.js home-balance (only inside Life). sw.js v64."
+  },
+  {
+   "id": "money-favourites",
+   "area": "money",
+   "title": "Favourites on Finance Home: one tap adds, hold to edit, Pin keeps one",
+   "user_visible_behavior": "Up to 6 buttons on Home: your most common records of the last 90 days (same type, category, account and note; amount from the most recent). One tap adds today's record with an Undo toast; right-click or hold opens the form first; Pin keeps one whatever you did lately.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/financeMoney3.test.ts",
+    "SMOKE_ONLY=\"Money favourites\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: financeMoney3.test.ts (ranking, pin, one-click record), smoke step Money favourites, search and emergency fund.",
+   "notes": "finance js/favorites.js, screens/money3.js; pins are settings.favorites (shared with the older star button)."
+  },
+  {
+   "id": "money-search-words",
+   "area": "money",
+   "title": "Log search: over / under, date ranges and removable chips",
+   "user_visible_behavior": "The Log search understands \"over 500\", \"under 100\", \"500-1000\", account and category names, this month / last month and \"from 1 Oct to 15 Oct\", combined. Each filter is a chip with an X; the result line shows the count and totals (dots while hidden).",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/financeMoney3.test.ts",
+    "SMOKE_ONLY=\"Money favourites\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: financeMoney3.test.ts (parser, combinations, chips), smoke step.",
+   "notes": "finance js/search.js (parseQuery(q, today)), js/searchchips.js."
+  },
+  {
+   "id": "money-emergency-fund",
+   "area": "money",
+   "title": "Emergency fund meter on Home and Goals",
+   "user_visible_behavior": "\"Emergency fund: 3.4 months\" = savings (accounts marked savings, or the ones chosen in Settings) divided by the average monthly essential spending of the last 3 months (refunds, loans and transfers left out; all spending when no category is marked essential). A bar with 3 and 6 month marks and one line of advice.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/financeMoney3.test.ts",
+    "SMOKE_ONLY=\"Money favourites\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: financeMoney3.test.ts (meter math), smoke step (3.4 months).",
+   "notes": "finance js/emergency.js, screens/money3.js; settings.emergency {accounts, essential} chosen in Settings > General > Emergency fund."
   }
  ]
 }

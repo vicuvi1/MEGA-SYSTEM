@@ -11,6 +11,7 @@
 //   sub:coffee                  a subcategory (name, start of it)
 //   this year  last month       a period (also "this week"); "all", "my" are ignored
 //   from:2026-01-01 to:2026-01-31   a date range (or 2026-01-01..2026-01-31)
+//   over 500  under 100  from 1 oct to 15 oct   the same, in words
 // Pure; app.js shows the results and the summary.
 
 import { addDays, addMonths } from './dates.js';
@@ -65,11 +66,34 @@ export function relRange(rel, today) {
   return null;
 }
 
-export function parseQuery(q) {
+const MON_RE = MONTH_WORDS.flat().filter((w) => w.length >= 3 && /^[a-z]+$/.test(w)).sort((a, b) => b.length - a.length).join('|');
+const monthNo = (w) => MONTH_WORDS.findIndex((names) => names.includes(w)) + 1;
+const OVER_RE = /\b(?:over|above|more than|peste)\s+(?=\d)/g;
+const UNDER_RE = /\b(?:under|below|less than|sub)\s+(?=\d)/g;
+const RANGE_RE = new RegExp(`\\bfrom\\s+(\\d{1,2})\\s+(${MON_RE})(?:\\s+(\\d{4}))?\\s+(?:to|until|-)\\s+(\\d{1,2})\\s+(${MON_RE})(?:\\s+(\\d{4}))?`, 'g');
+const iso = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
+// "from 1 oct to 15 oct" (year optional: this year, or last year if that would be in the future) -> { from, to }.
+export function wordRange(m, today) {
+  const ty = Number((today || new Date().toISOString().slice(0, 10)).slice(0, 4));
+  const m1 = monthNo(m[2]);
+  const m2 = monthNo(m[5]);
+  let y2 = m[6] ? Number(m[6]) : ty;
+  let to = iso(y2, m2, Number(m[4]));
+  if (!m[6] && today && to > today) { y2 -= 1; to = iso(y2, m2, Number(m[4])); }
+  const y1 = m[3] ? Number(m[3]) : y2;
+  let from = iso(y1, m1, Number(m[1]));
+  if (!m[3] && from > to) from = iso(y1 - 1, m1, Number(m[1]));
+  return { from, to };
+}
+
+export function parseQuery(q, today) {
   const out = { words: [], min: null, max: null, exact: null, months: [], year: null, day: null, type: null, tags: [], cats: [], subs: [], accs: [], from: null, to: null, rel: null };
   // Join "1 000" into "1000", "> 1000" into ">1000", "100 - 500" into "100-500".
   let text = fold(q).replace(/(\d)[\s\u00a0](?=\d{3}(?!\d))/g, '$1').replace(/([<>]=?)\s+(?=\d)/g, '$1').replace(/(\d)\s*-\s*(\d)/g, '$1-$2').trim();
   // "this year", "last month", "anul acesta", "в этом году": a period from today.
+  text = text.replace(RANGE_RE, (...m) => { const r = wordRange(m, today); out.from = r.from; out.to = r.to; return ' '; });
+  text = text.replace(OVER_RE, '>').replace(UNDER_RE, '<');
   for (const [re, rel] of REL_WORDS) text = text.replace(re, () => { out.rel = rel; return ' '; });
   for (const tok of text.split(/\s+/).filter(Boolean)) {
     let m;
@@ -142,7 +166,7 @@ function haystack(state, t) {
 }
 
 export function searchTx(state, query, today) {
-  const q = typeof query === 'string' ? parseQuery(query) : query;
+  const q = typeof query === 'string' ? parseQuery(query, today) : query;
   const day = q.day == null ? null : addDays(today, q.day);
   const rel = relRange(q.rel, today);
   return state.tx.filter((t) => {

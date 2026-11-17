@@ -606,11 +606,12 @@ try {
   // the run's clock comes back afterwards, pass or fail.
   const reloadApp = async () => {
     await pg.reload()
-    await pg.waitForSelector('.td2, main.content, input', { timeout: 20000 })
-    if (!(await pg.$('main.content'))) {
+    // The page it reloads on can be Money, which opens Finance Helper (an iframe, no main.content).
+    await pg.waitForSelector('.td2, main.content, iframe, input', { timeout: 20000 })
+    if (!(await pg.$('main.content, iframe'))) {
       await pg.fill('input', '1234')
       await pg.keyboard.press('Enter')
-      await pg.waitForSelector('main.content', { timeout: 20000 })
+      await pg.waitForSelector('main.content, iframe', { timeout: 20000 })
     }
   }
   // SIMPLE_SHOTS=<dir> (with SMOKE_DSF=2): clean phone and desktop shots of one Body tab.
@@ -737,9 +738,14 @@ try {
     await pg.setViewportSize({ width: 1440, height: 900 })
     console.log(`  Today screens: ${sizes.join(' · ')}`)
   })
-  // Night 11: Money opens on its own hub (Finance Helper's synced numbers), with quick add.
-  await step('Money hub: safe to spend, quick add into Finance Helper, insights', async () => {
+  // Money opens on Finance Helper's Home (owner, 2026-11-17); the Life hub is its "Money hub" tab.
+  const openHub = async () => {
     await open('money')
+    await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click({ timeout: 10000 })
+  }
+  // Night 11: Money has its own hub (Finance Helper's synced numbers), with quick add.
+  await step('Money hub: safe to spend, quick add into Finance Helper, insights', async () => {
+    await openHub()
     await pg.waitForSelector('.mh-hero .mh-big', { timeout: 15000 })
     for (const sel of ['.mh-quick input', '.mh-donut', '.mh-forecast-line', '.mh-goal', '.mh-open']) if (!(await pg.$(sel))) throw new Error(`no ${sel}`)
     if (!/At this pace you end/.test(await pg.locator('.mh-forecast-line').innerText())) throw new Error('no forecast line')
@@ -752,7 +758,7 @@ try {
   // and a single amount shows its bani with Finance Helper's own formatter ("12,50 MDL").
   await step('Money amounts: a 10 EUR quick add counts as 200 MDL; a single amount shows 12,50 MDL', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
-    await open('money')
+    await openHub()
     await pg.waitForSelector('.mh-hero .mh-big', { timeout: 15000 })
     // A made-up euro account and rates (units per 1 USD: 1 EUR = 17.6 / 0.88 = 20 MDL) on this device;
     // the app sync carries them to the synced copy quick add reads.
@@ -812,7 +818,7 @@ try {
   // teaches the rule; the next one from the same merchant ("Smokebistro #7") is filed by itself, marked auto.
   await step('Money to sort: one tap files a payment, the rule is learned, the next one files itself', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
-    await open('money')
+    await openHub()
     await pg.click('.mh .ptabs [data-tab="today"]').catch(() => {})
     await pg.waitForSelector('[data-testid="ts-item"][data-id="smoke-cap-1"]', { timeout: 15000 }).catch(async () => {
       throw new Error(`no To sort card: ${(await pg.locator('.mh').innerText().catch(() => '')).slice(0, 200)}`)
@@ -845,7 +851,7 @@ try {
   for (const [page, name] of [['body', 'Sport Track'], ['money', 'Finance Helper'], ['sleep', 'Waky']]) {
     await step(`${name} loads with its own content`, async () => {
       await open(page)
-      if (page === 'money') await pg.click('.mh-open')
+      if (page === 'money' && (await pg.$('.mh-open'))) await pg.click('.mh-open')
       // Sport Track opens on its Dashboard; its own app is the Classic tracker in the ⋯ menu.
       if (page === 'body') await openClassic()
       await pg.waitForTimeout(3500)
@@ -1183,6 +1189,9 @@ try {
   await (await import('./smokeMoneyB3.mjs')).moneyB3Steps({ step, pg, open, financeFrame })
   // Money change history: old -> new with the device, Put back with Undo, Bring back a deleted record (e2e/smokeMoneyHistory.mjs).
   await (await import('./smokeMoneyHistory.mjs')).moneyHistorySteps({ step, pg, open, financeFrame })
+
+  // Money opens on the balance, favourites, search chips and the emergency fund meter (e2e/smokeMoney3.mjs).
+  await (await import('./smokeMoney3.mjs')).money3Steps({ step, pg, open, financeFrame })
 
   // Money batch 2: budgets from 3 months, month review, net worth line, subscriptions per year (e2e/smokeMoneyB2.mjs).
   await (await import('./smokeMoneyB2.mjs')).moneyB2Steps({ step, pg, open, financeFrame, resetClock: fakeNow })
@@ -7540,7 +7549,9 @@ try {
       await open('today')
       await pg.waitForSelector('.td2', { timeout: 10000 })
       await open(page)
-      await pg.waitForSelector(`${scope} .ptabs [data-tab="${ids[ids.length - 1]}"][aria-selected="true"]`, { timeout: 5000 })
+      // Money opens on Finance Home each time; the hub tab inside it is the one that is remembered.
+      if (page === 'money') await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click({ timeout: 5500 })
+      await pg.waitForSelector(`${scope} .ptabs [data-tab="${ids[ids.length - 1]}"][aria-selected="true"]`, { timeout: 5500 })
       await pg.click(`${scope} .ptabs [data-tab="${ids[0]}"]`)
       report.push(`${page}: ${sizes.join(', ')}`)
     }
