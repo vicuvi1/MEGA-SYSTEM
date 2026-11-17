@@ -9,6 +9,7 @@
 
 import { budgetStatus } from './model.js';
 import { monthKey } from './dates.js';
+import { isMoneyHidden } from './money.js';
 
 export const LEVELS = [80, 100];
 
@@ -48,17 +49,10 @@ export function newWarnings(crossings, sentKeys = []) {
 }
 
 /**
- * Amounts hidden by default in Money ("Space to show"): then a warning names the
- * percentage only. Reads the hide setting wherever it is kept.
+ * Amounts are hidden (Space shows them): then a warning names the percentage only.
+ * This is the real privacy state (js/privacy.js flips it through money.js), not a guess.
  */
-export function amountsHidden(state, storage) {
-  const s = state?.settings || {};
-  if (s.hideAmounts === true || s.amountsHidden === true) return true;
-  try {
-    const v = storage?.getItem?.('finance-helper.hide-amounts');
-    return v === '1' || v === 'true';
-  } catch { return false; }
-}
+export const amountsHidden = () => isMoneyHidden();
 
 /** Keeps only this month's keys (the guard starts over each month). */
 export const thisMonthKeys = (keys, month) => (Array.isArray(keys) ? keys.filter((k) => typeof k === 'string' && k.startsWith(`${month}:`)) : []);

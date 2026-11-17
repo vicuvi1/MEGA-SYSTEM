@@ -8,6 +8,7 @@ import { ctx, esc } from './ctx.js';
 export const GO = { h: 'home', l: 'log', a: 'accounts', g: 'goals', p: 'plan', r: 'reports' };
 
 export const LIST = [
+  ['Space', 'Show or hide all amounts (H does the same)'],
   ['N', 'New record'],
   ['/', 'Search the log'],
   ['E', 'Edit the selected record (tick one in the Table first)'],
@@ -34,7 +35,7 @@ export function openHelp() { ctx.openSheet(helpHTML()); }
 
 export function settingsCard() {
   return `<section class="card"><h2>Keyboard shortcuts</h2>
-    <p class="muted small" style="margin-top:0">N new record, / search, E edit, Ctrl+Z undo, G then a letter to go to a screen.</p>
+    <p class="muted small" style="margin-top:0">Space show or hide amounts, N new record, / search, E edit, Ctrl+Z undo, G then a letter to go to a screen.</p>
     <button type="button" class="btn" data-act="shortcuts-help" data-testid="shortcuts-open">Keyboard shortcuts</button></section>`;
 }
 

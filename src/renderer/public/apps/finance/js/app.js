@@ -6,6 +6,7 @@ import * as M from './model.js';
 import * as T from './cattree.js';
 import * as Cats from './screens/categories.js';
 import { formatMoney, evalAmount, centsToPlain } from './money.js';
+import * as Privacy from './privacy.js';
 import { todayISO, monthKey, monthLabel, addMonths, daysInMonth, dayLabel, dowIndex, DOW_LONG, DOW_SHORT, MONTHS, addDays } from './dates.js';
 import { convert, pairRate, formatRate, rateToBase } from './fx.js';
 import { parseCSV, toCSV } from './csv.js';
@@ -97,7 +98,6 @@ const ui = {
   sort: { col: 'date', dir: 1 },
   spendPeriod: 'month',
   incomePeriod: 'month',
-  maskBalance: (() => { try { return localStorage.getItem('finance-helper.mask-balance') === '1'; } catch { return false; } })(),
   // Table view's empty "new row": keeps date/type/account between adds.
   draft: null,
   // Table rows ticked for a bulk change.
@@ -397,6 +397,9 @@ function ratesLine(totalCents = null) {
   return `<p class="rates-note">${alt ? `≈ ${alt} · ` : ''}${parts.join(' · ')}${dated ? ` · ${dated}` : ' · rates from your last records'}</p>`;
 }
 
+const EYE_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+
 // Inside Life: one slim strip of sections at the top (Life has the sidebar).
 const LIFE_TABS = [['home', 'Home'], ['log', 'Log'], ['accounts', 'Accounts'], ['goals', 'Goals'], ['plan', 'Plan'], ['reports', 'Reports']];
 function renderLifeTabs() {
@@ -413,12 +416,21 @@ function renderLifeTabs() {
     };
     const dots = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>';
     nav.innerHTML = `<div class="lt-scroll">${LIFE_TABS.map(([tab, label]) => { const i = icon(tab); return `<a href="#${tab}" data-tab="${tab}" style="--nc:${i.color}">${i.svg ? `<span class="lt-i">${i.svg}</span>` : ''}<span>${label}</span></a>`; }).join('')}<button type="button" class="lt-more" data-act="more" aria-label="More sections"><span class="lt-i">${dots}</span><span>More</span></button></div>
+      <button type="button" class="lt-eye" data-act="toggle-mask" data-testid="privacy-eye"></button>
       <button type="button" class="lt-add" data-act="add" aria-label="Add a record"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>`;
   }
   const cur = NAV_PARENT[ui.tab] || ui.tab;
   const inStrip = LIFE_TABS.some(([t]) => t === cur);
   for (const a of nav.querySelectorAll('a')) a.toggleAttribute('aria-current', a.dataset.tab === cur);
   nav.querySelector('.lt-more')?.setAttribute('aria-pressed', String(!inStrip));
+  const eye = nav.querySelector('.lt-eye');
+  if (eye) {
+    const hid = Privacy.isHidden();
+    eye.innerHTML = hid ? EYE_OFF : EYE_ON;
+    eye.title = hid ? 'Show amounts (Space)' : 'Hide amounts (Space)';
+    eye.setAttribute('aria-label', hid ? 'Show amounts' : 'Hide amounts');
+    eye.setAttribute('aria-pressed', String(hid));
+  }
 }
 
 function renderSidebar() {
@@ -434,8 +446,8 @@ function renderSidebar() {
   const before = renderSidebar.last;
   renderSidebar.last = shown;
 
-  const isMasked = !!ui.maskBalance;
-  const totalDisplay = isMasked ? '<span class="sc-masked">••••••••</span>' : formatMoney(shown, '');
+  const isMasked = Privacy.isHidden();
+  const totalDisplay = formatMoney(shown, '');
   const netSign = s.net >= 0 ? '+' : '−';
   const netAbs = Math.abs(s.net);
   const trendDisplay = isMasked ? '••••' : `${netSign}${money(Math.round(netAbs / 100) * 100, { compact: true })}`;
@@ -445,10 +457,8 @@ function renderSidebar() {
   top.innerHTML = `<div class="sc-body" role="button" tabindex="0" data-go="accounts" title="Open Accounts &amp; Net Worth">
     <div class="sc-head">
       <span class="sc-label">All my money</span>
-      <button type="button" class="sc-mask-btn" data-act="toggle-mask" title="${isMasked ? 'Reveal balance (H)' : 'Hide balance (H)'}">
-        ${isMasked
-          ? `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>`
-          : `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`}
+      <button type="button" class="sc-mask-btn" data-act="toggle-mask" title="${isMasked ? 'Show amounts (Space)' : 'Hide amounts (Space)'}" aria-label="${isMasked ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${isMasked}">
+        ${isMasked ? EYE_OFF : EYE_ON}
       </button>
     </div>
     <div class="sc-total-wrap">
@@ -461,7 +471,7 @@ function renderSidebar() {
     <div class="sc-row">
       <div class="sc-stat">
         <span class="sc-stat-label">This month</span>
-        <b class="sc-stat-val ${s.net >= 0 ? 'income' : 'expense'}">${isMasked ? '••••••' : money(Math.round(s.net / 100) * 100, { sign: true })}</b>
+        <b class="sc-stat-val ${s.net >= 0 ? 'income' : 'expense'}">${money(Math.round(s.net / 100) * 100, { sign: true })}</b>
       </div>
       <div class="sc-stat sc-stat-right">
         <span class="sc-stat-label">Savings rate</span>
@@ -1307,7 +1317,7 @@ function onSheetChange(el) {
         return;
       }
       const c = evalAmount(v);
-      if (!c || c <= 0) { toast('Type a number, e.g. 120 or 120+45'); el.value = formatMoney(t.amount, ''); return; }
+      if (!c || c <= 0) { toast('Type a number, e.g. 120 or 120+45'); el.value = formatMoney(t.amount, '', { reveal: true }); return; }
       t.amount = c;
       t.base = Math.round(c * (t.rate || 1));
     } else if (field === 'note') {
@@ -1653,7 +1663,7 @@ function viewSettings() {
     { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + ChangesScreen.settingsCard() + Backups.settingsCard() + Sync.settingsCard() },
     { id: 'connect', icon: '🔗', label: 'Telegram & Binance', sub: 'Your bot, crypto balances', desc: 'Your own Telegram bot for logging from your phone, and Binance balances (read-only).', html: () => Telegram.settingsCard() + TgBlocks.settingsCard() + Binance.settingsCard() },
     { id: 'buddy', icon: '🤖', label: 'Bit, your buddy', sub: 'Show, name, color', desc: 'Bit, the little robot that cheers you on: show or hide it, its name and color.', html: () => Buddy.settingsCard() },
-    { id: 'security', icon: '🔒', label: 'Security', sub: 'PIN and encryption', desc: 'A PIN when the app opens, and your data locked with a password.', html: () => Security.settingsCard() },
+    { id: 'security', icon: '🔒', label: 'Security', sub: 'PIN, encryption, hide amounts', desc: 'A PIN when the app opens, your data locked with a password, and hiding every amount until you press Space.', html: () => Security.settingsCard() + Security.privacyCard() },
     { id: 'about', icon: 'ℹ️', label: 'About & updates', sub: 'Version, check, erase', desc: 'Your version and updates, a quick health check, and erasing everything.', badgeText: `v${APP_VERSION}`, badgeClass: 'gold', html: () => Updates.settingsCard() + SelfCheck.settingsCard() + cards.danger },
   ];
   const cur = sections.find((x) => x.id === ui.settingsTab) || sections[0];
@@ -1725,7 +1735,7 @@ function runCounters(entering) {
     const key = el.dataset.ck;
     const from = shownCounts.has(key) ? shownCounts.get(key) : entering ? 0 : to;
     shownCounts.set(key, to);
-    if (from === to || reducedMotion()) continue;
+    if (from === to || reducedMotion() || Privacy.isHidden()) continue;
     const fmt = (v) => (el.dataset.cur ? money(v, { sign: !!el.dataset.sign }) : formatMoney(v, ''));
     const start = performance.now();
     const dur = 800;
@@ -2664,7 +2674,7 @@ function onCellChange(el) {
   if (!t) return;
   if (col === 'amount') {
     const c = evalAmount(v);
-    if (!c || c <= 0) { toast('Amount must be a number bigger than 0'); el.value = formatMoney(t.amount, ''); return; }
+    if (!c || c <= 0) { toast('Amount must be a number bigger than 0'); el.value = formatMoney(t.amount, '', { reveal: true }); return; }
     t.amount = c;
     t.base = Math.round(c * (t.rate || 1));
     if (t.debt && t.currency === t.debt.currency) {
@@ -3210,13 +3220,7 @@ document.addEventListener('click', (e) => {
   const el = e.target.closest('[data-act]');
   if (el && !el.closest('.sheet')) {
     const act = el.dataset.act;
-    if (act === 'toggle-mask') {
-      ui.maskBalance = !ui.maskBalance;
-      try { localStorage.setItem('finance-helper.mask-balance', ui.maskBalance ? '1' : '0'); } catch {}
-      renderSidebar();
-      toast(ui.maskBalance ? 'Balance masked 🔒' : 'Balance revealed 👁️');
-      return;
-    }
+    if (act === 'toggle-mask') { Privacy.toggle(); return; }
     if (act === 'cmd-palette') {
       openPalette({
         state,
@@ -3517,6 +3521,8 @@ document.addEventListener('input', (e) => {
 // Desktop shortcuts: N = new record, / = search, 1-9 and 0 = sections, Esc = close.
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && isPaletteOpen()) { e.preventDefault(); closePalette(); return; }
+  // Space shows or hides every amount (never while typing in a box; see privacy.js).
+  if (!Security.isLocked() && Privacy.onKey(e)) return;
   if (Cats.onKey(e) || ReportsScreen.onKey?.(e)) return;
   if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
     e.preventDefault();
@@ -3561,14 +3567,7 @@ document.addEventListener('keydown', (e) => {
   if (e.target.closest('input, select, textarea')) return;
   if (Shortcuts.onKey(e, { go: (tab) => { location.hash = `#${tab}`; } })) return;
   if ((e.key === 'l' || e.key === 'L') && Security.hasLock()) { Security.lock(); return; }
-  if (e.key === 'h' || e.key === 'H') {
-    e.preventDefault();
-    ui.maskBalance = !ui.maskBalance;
-    try { localStorage.setItem('finance-helper.mask-balance', ui.maskBalance ? '1' : '0'); } catch {}
-    renderSidebar();
-    toast(ui.maskBalance ? 'Balance masked 🔒' : 'Balance revealed 👁️');
-    return;
-  }
+  if (e.key === 'h' || e.key === 'H') { e.preventDefault(); Privacy.toggle(); return; }
   if (ui.tab === 'log' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) { e.preventDefault(); goToMonth(addMonths(ui.month, e.key === 'ArrowLeft' ? -1 : 1)); return; }
   const tabs = { 1: 'home', 2: 'log', 3: 'accounts', 4: 'goals', 5: 'plan', 6: 'people', 7: 'reports', 8: 'telegram', 0: 'settings' };
   if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openTxSheet(); }
@@ -3922,6 +3921,17 @@ async function seedDemo() {
   history.clear();
   commit({ quiet: true });
 }
+
+// Money privacy: amounts start hidden; Space, the eye or H show them; they hide again
+// when the window is hidden or after a while with no input (screens/security.js settings).
+document.body.classList.toggle('money-hidden', Privacy.isHidden());
+Privacy.start();
+document.addEventListener('keyup', Privacy.onKeyUp);
+Privacy.subscribe((hidden) => {
+  document.body.classList.toggle('money-hidden', hidden);
+  if (!state._sealed && !Security.isLocked()) { render(); renderSidebar(); }
+  toast(hidden ? 'Amounts hidden' : 'Amounts shown');
+});
 
 Spending.bindHover(app);
 bindSankeyHover(app);

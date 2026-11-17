@@ -1500,6 +1500,18 @@
    ],
    "evidence": "2026-11-17: financeBudgetWarn.test.ts (9 tests, pinned clock: once per month per category, jump, next month, other device's bell entry, hidden amounts, off, locked).",
    "notes": "apps/finance/js/budgetwarn.js (pure, uses model.budgetStatus), screens/budgetwarn.js (switch, settings.budgetWarn); core/budgetNotice.ts; money/budgetWarnRunner.ts started from EmbedHost (start + 20 s, Money saves, app sync, every 30 min); core/notifyBudget.ts slot budgetwarn; Life keeps life_budget_warned."
+  },
+  {
+   "id": "money-privacy",
+   "title": "Money privacy: every amount is hidden until you press Space",
+   "user_visible_behavior": "Every time the app opens, all money amounts show as dots (the currency stays, nothing jumps), in Finance Helper (Home, Log, accounts, goals, plan, reports, charts, Ask, toasts) and on Life's Money page, the Ben desk Money tab and the island's money pill. Space shows them all, Space hides them again (H does the same; the eye button has the tooltip \"Show amounts (Space)\"). Space does nothing while typing in a box, and with a button in focus it toggles instead of pressing the button. They hide again when the window is minimised or hidden and after 1 / 5 / 15 minutes without input, or only on close (Finance Settings > Security > Hide amounts, plus \"Hide amounts when the app opens\").",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: tsc, moneyPrivacy.test.ts (7 tests: default hidden, formatter dots, Space ignored in boxes, key-up swallowed, idle re-hide with fake timers, minimise), smoke step Money privacy.",
+   "notes": "finance js/money.js (formatMoney masks; reveal option for typed text and Telegram), js/privacy.js (state, idle timer, Space, BroadcastChannel life-money-privacy shared with the Life shell), renderer/src/money/privacy.ts (hooks), settings in localStorage finance-helper.privacy.* (not synced, not a blob key). sw.js v62."
   }
  ]
 }

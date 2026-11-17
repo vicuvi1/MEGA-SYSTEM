@@ -10,6 +10,7 @@ import { soundCoin, soundSpend } from './soundKit'
 import { useToast } from './ui'
 import type { QuickAdded, QuickPreview } from './web/moneyApi'
 import { moneyText, totalText } from '@core/moneyText'
+import { useMoneyHidden } from './money/privacy'
 import './money.css'
 
 // One money formatter, shared with Finance Helper (core/moneyText).
@@ -132,7 +133,7 @@ export function QuickAddBox({ onAdded, compact = false, autoFocus = false, place
           <>
             <b className={preview.type === 'income' ? 'in' : ''}>
               {preview.type === 'income' ? '+' : '−'}
-              {moneyText(preview.amount, preview.currency)}
+              {moneyText(preview.amount, preview.currency, { reveal: true })}
             </b>
             <span>{preview.category}</span>
             {preview.account && <span>{preview.account}</span>}
@@ -151,6 +152,7 @@ const pillOf = (h: { currency?: string; hero: { perDay: number; leftToday: numbe
 
 /** Today (MF11): "120 lei left today" with a quick add that opens on tap. */
 export function MoneyPill() {
+  useMoneyHidden()
   const [v, setV] = useState<PillState>(null)
   const [open, setOpen] = useState(false)
   const wrap = useRef<HTMLDivElement>(null)

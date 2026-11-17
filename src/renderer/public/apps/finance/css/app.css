@@ -6241,3 +6241,18 @@ html[data-calm] .theme-atmosphere, html[data-calm] .atmosphere-particle { displa
 .ask-answer { margin-top: 12px; }
 .ask-num { font-size: 28px; font-weight: 700; }
 .ask-list { margin-bottom: 8px; }
+
+/* ---------- Hide amounts (js/privacy.js) ----------
+   Amounts are drawn as dots by the formatter itself; this covers the amount
+   boxes on a screen (the Table, the Sheet, budgets). A box you are typing in
+   and the sheets (edit / add a record) show their numbers. */
+body.money-hidden #app input[inputmode="decimal"]:not(:focus) { -webkit-text-security: disc; }
+.lt-eye { display: none; }
+html[data-in-life] .lt-eye {
+  flex: none; display: inline-grid; place-items: center; width: 34px; height: 34px; padding: 0;
+  border-radius: 10px; border: 0; background: none; color: var(--muted); cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+html[data-in-life] .lt-eye:hover { color: var(--text); background: var(--surface-2); }
+html[data-in-life] .lt-eye[aria-pressed="true"] { color: var(--gold); }
+html[data-in-life] .lt-eye svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round; }

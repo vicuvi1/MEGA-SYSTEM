@@ -93,11 +93,20 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
     // No slide-in reminder cards (water behind, an event soon, bedtime): they
     // come at some hours only and would sit on top of what a step clicks. Nothing
     // here checks them; the bell and the inbox still get every notification.
+    if (process.env.SMOKE_PRIVACY_FRESH === '1') await ctx.addInitScript(() => { window.__smokeFresh = true })
     await ctx.addInitScript(() => {
       try {
         const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
         // smoke_popups=1: one step (the push budget) turns them on for itself.
         if (localStorage.getItem('smoke_popups') !== '1' && p.notif?.popups !== false) localStorage.setItem('ls.ui', JSON.stringify({ ...p, notif: { ...p.notif, popups: false } }))
+        // Money amounts start hidden in the real app. The steps that read amounts need them shown,
+        // so every page starts with "hide when the app opens" off (SMOKE_PRIVACY_FRESH=1 keeps the real default).
+        if (!window.__smokeFresh) {
+          localStorage.setItem('finance-helper.privacy.hide-on-open', '0')
+          // Headless pages report "hidden" when another page is in front, and some steps move the clock:
+          // neither may hide the amounts under a step (the unit tests cover minimise and idle).
+          localStorage.setItem('finance-helper.privacy.after', '0')
+        }
       } catch {
         /* no storage on this page */
       }
@@ -1166,6 +1175,9 @@ try {
   await (await import('./smokeMoneyB1.mjs')).moneyB1Steps({ step, pg, open, financeFrame })
   // Money ideas: the money calendar, "Can I afford it?" and the wishlist with a wait (e2e/smokeMoneyIdeas.mjs).
   await (await import('./smokeMoneyIdeas.mjs')).moneyIdeasSteps({ step, pg, open, financeFrame, storedTx })
+
+  // Money privacy: amounts hidden until Space, in Life's Money page and in Finance Helper (e2e/smokeMoneyPrivacy.mjs).
+  await (await import('./smokeMoneyPrivacy.mjs')).moneyPrivacySteps({ step, pg, open, financeFrame })
 
   // Money batch 3: keyboard shortcuts, bulk record changes, the weekly cash count (e2e/smokeMoneyB3.mjs).
   await (await import('./smokeMoneyB3.mjs')).moneyB3Steps({ step, pg, open, financeFrame })

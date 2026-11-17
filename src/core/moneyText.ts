@@ -11,12 +11,12 @@
 // @ts-ignore plain JS module from the embedded app
 import { formatMoney } from '../renderer/public/apps/finance/js/money.js'
 
-const fmt = formatMoney as (cents: number, currency?: string, opts?: { sign?: boolean; compact?: boolean }) => string
+const fmt = formatMoney as (cents: number, currency?: string, opts?: { sign?: boolean; compact?: boolean; reveal?: boolean }) => string
 
 export const DEFAULT_CURRENCY = 'MDL'
 
 /** A single amount in bani: "12,50 MDL" (no ",00" for whole amounts). */
-export function moneyText(bani: number, currency: string = DEFAULT_CURRENCY, opts: { sign?: boolean } = {}): string {
+export function moneyText(bani: number, currency: string = DEFAULT_CURRENCY, opts: { sign?: boolean; reveal?: boolean } = {}): string {
   return fmt(Math.round(Number(bani) || 0), currency || DEFAULT_CURRENCY, opts)
 }
 

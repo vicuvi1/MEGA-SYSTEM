@@ -95,6 +95,7 @@ import { calmStationOf } from '@core/healthyDay'
 import { STARTER_STATIONS } from '@core/starterStations'
 import { NUDGE_CLOSES, nudgeTapLabel } from '@core/islandNudges'
 import { BenThinking, EveningScene, LiveStack, MomentPill, PillEditor, RECAP_MS, SnapGhost, ThinkWave, leanFor, makeJelly, snapBounceIn } from './islandWidgets'
+import { IslandMoneyLeft } from './money/HiddenAmount'
 
 const desk = () => window.desktop
 /** A clickable area in CSS px of this page (the desktop applies the page zoom) (IS2). */
@@ -1884,7 +1885,7 @@ export function DesktopIsland() {
                   <button {...tp('rewards', () => tap({ kind: 'open', page: 'shop' }))}>Rewards</button>
                   {s.money && (
                     <button className={`di-money lv-${s.money.level}`} {...tp('money', () => tap({ kind: 'open', page: 'money' }))} title="Safe to spend today (Finance Helper)">
-                      💸 {Math.round(Math.abs(s.money.left) / 100)} lei {s.money.left >= 0 ? 'left' : 'over'}
+                      <IslandMoneyLeft left={s.money.left} />
                     </button>
                   )}
                 </section>) : null

@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // @ts-ignore plain JS modules from the embedded app
 import * as M from '../../public/apps/finance/js/model.js'
 // @ts-ignore
+import { setMoneyHidden } from '../../public/apps/finance/js/money.js'
+// @ts-ignore
 import { budgetCrossings, newWarnings, warningsOn, thisMonthKeys } from '../../public/apps/finance/js/budgetwarn.js'
 import { checkBudgetWarnings, SENT_KEY } from '../money/budgetWarnRunner'
 import { budgetNoticeText, budgetNotices, alreadyInBell } from '@core/budgetNotice'
@@ -26,6 +28,7 @@ const memStore = () => {
 }
 
 beforeEach(() => {
+  setMoneyHidden(false)
   vi.useFakeTimers({ toFake: ['Date'] })
   vi.setSystemTime(new Date('2026-11-17T12:00:00'))
 })
@@ -123,8 +126,10 @@ describe('the app-side check (pinned clock)', () => {
 
   it('hidden amounts: percentage only; switched off or locked Money: nothing', async () => {
     const hidden = memStore()
-    hidden.setItem('finance-helper.state', JSON.stringify(money([tx(170000)], 200000, { hideAmounts: true })))
+    hidden.setItem('finance-helper.state', JSON.stringify(money([tx(170000)], 200000)))
+    setMoneyHidden(true)
     expect((await run(hidden, [])).added[0].title).toBe("Food: 85% of this month's budget used")
+    setMoneyHidden(false)
     const off = memStore()
     off.setItem('finance-helper.state', JSON.stringify(money([tx(250000)], 200000, { budgetWarn: false })))
     expect((await run(off, [])).added).toEqual([])

@@ -9,6 +9,7 @@ import { budgetNotices, type BudgetCrossing } from '@core/budgetNotice'
 import type { Notif } from '@core/notify'
 // @ts-ignore plain JS module from the embedded app
 import { normalizeState } from '../../public/apps/finance/js/model.js'
+import './privacy' // loads the shared privacy state (hidden until Space)
 // @ts-ignore plain JS module from the embedded app
 import { budgetCrossings, newWarnings, thisMonthKeys, warningsOn, amountsHidden } from '../../public/apps/finance/js/budgetwarn.js'
 
@@ -39,7 +40,7 @@ export async function checkBudgetWarnings(d: WarnDeps): Promise<Omit<Notif, 'rea
   const { warn, keys } = newWarnings(budgetCrossings(state, day), sent) as { warn: BudgetCrossing[]; keys: string[] }
   if (!warn.length) return []
   const ids = await d.bellIds().catch(() => [] as string[])
-  const out = budgetNotices(warn, { day, now: d.now, currency: state.settings.currency || 'MDL', hideAmounts: !!amountsHidden(state, store), bellIds: ids })
+  const out = budgetNotices(warn, { day, now: d.now, currency: state.settings.currency || 'MDL', hideAmounts: !!amountsHidden(), bellIds: ids })
   for (const n of out) await d.add(n)
   try { store.setItem(SENT_KEY, JSON.stringify({ month, keys })) } catch { /* private window: the bell's own check still stops a repeat */ }
   return out

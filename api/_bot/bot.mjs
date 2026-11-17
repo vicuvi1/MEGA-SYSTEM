@@ -47832,7 +47832,7 @@ function computeDailyExpenseSummary(expenses, day, dailyBudgetBani) {
 		byCategory
 	};
 }
-function formatMoney$1(bani, currency = "MDL") {
+function formatMoney$2(bani, currency = "MDL") {
 	return `${(bani / 100).toLocaleString(void 0, {
 		minimumFractionDigits: bani % 100 === 0 ? 0 : 2,
 		maximumFractionDigits: 2
@@ -56225,7 +56225,10 @@ function evalAmount(text) {
 	if (v == null || i !== tokens.length || !Number.isFinite(v)) return null;
 	return Math.round(v * 100);
 }
-function formatMoney(cents, currency = "MDL", { sign = false, compact = false } = {}) {
+var MASK = "••••";
+var hidden = false;
+function formatMoney$1(cents, currency = "MDL", { sign = false, compact = false, reveal = false } = {}) {
+	if (hidden && !reveal) return MASK + (currency ? " " + currency : "");
 	const neg = cents < 0;
 	const abs = Math.abs(Math.round(cents));
 	let whole = Math.floor(abs / 100);
@@ -57786,7 +57789,7 @@ function subBudgetAlert(state, t) {
 	if (!(s?.budget > 0)) return null;
 	const after = txInMonth(state, monthKey(t.date)).filter((x) => x.type === "expense" && counts(x) && x.sub === s.id && x.category === s.parent).reduce((a, x) => a + B$2(x), 0);
 	const before = after - B$2(t);
-	const fmt = (x) => formatMoney(x, state.settings.currency);
+	const fmt = (x) => formatMoney$1(x, state.settings.currency);
 	if (before <= s.budget && after > s.budget) return {
 		level: "over",
 		text: `${s.name} is over budget: ${fmt(after)} of ${fmt(s.budget)} (${fmt(after - s.budget)} over).`
@@ -57802,7 +57805,7 @@ function categoryBudgetAlert(state, t) {
 	if (t.type !== "expense" || !counts(t) || !(c?.budget > 0)) return null;
 	const after = spentIn(state, monthKey(t.date), c.id);
 	const before = after - B$2(t);
-	const fmt = (x) => formatMoney(x, state.settings.currency);
+	const fmt = (x) => formatMoney$1(x, state.settings.currency);
 	if (before <= c.budget && after > c.budget) return {
 		level: "over",
 		text: `${c.name} is over budget: ${fmt(after)} of ${fmt(c.budget)} (${fmt(after - c.budget)} over).`
@@ -58183,6 +58186,10 @@ var shortDay = (iso) => `${Number(iso.slice(8))} ${[
 	"Dec"
 ][Number(iso.slice(5, 7)) - 1]}`;
 // src/renderer/public/apps/finance/js/telegram.js
+var formatMoney = (c, cur, o) => formatMoney$1(c, cur, {
+	...o,
+	reveal: true
+});
 var fold$2 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 var INCOME_WORDS = /^(\+|got|earned|income|salary|salariu|venit|primit|зарплата|получил|доход)$/;
 var stripIcons = (s) => s.replace(/[\p{Extended_Pictographic}\u{FE0F}\u{200D}]/gu, "").trim();
@@ -58364,7 +58371,7 @@ function sharedRates(rates) {
 * The currency is the one Finance Helper uses (its settings.currency, MDL by
 * default); the label is always the code (MDL), never "lei".
 */
-var fmt$1 = formatMoney;
+var fmt$1 = formatMoney$1;
 /** A total in bani, rounded to whole units: "1 240 MDL". */
 function totalText(bani, currency = "MDL") {
 	return fmt$1(Math.round((Number(bani) || 0) / 100) * 100, currency || "MDL");
@@ -65458,7 +65465,7 @@ function runCommand(s, parsed, text, env) {
 			const cat = parsed.expenseCategory || "other";
 			const note = parsed.expenseNote || "";
 			if (cat === "income") return {
-				reply: `💰 <b>Income noted:</b> ${formatMoney$1(cents, "MDL")}${note ? ` · ${esc$5(note)}` : ""}\n\nAdded to Finance Helper.`,
+				reply: `💰 <b>Income noted:</b> ${formatMoney$2(cents, "MDL")}${note ? ` · ${esc$5(note)}` : ""}\n\nAdded to Finance Helper.`,
 				expense: {
 					amount: cents,
 					category: "income",
@@ -65469,7 +65476,7 @@ function runCommand(s, parsed, text, env) {
 			const res = s.money.addExpense(cents, cat, note ? `[Telegram] ${note}` : "[Telegram]", /* @__PURE__ */ new Date(), true);
 			const cur = res.state.currency || "MDL";
 			return {
-				reply: formatExpenseResponse(formatMoney$1(cents, cur), cat, note || null, formatMoney$1(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
+				reply: formatExpenseResponse(formatMoney$2(cents, cur), cat, note || null, formatMoney$2(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
 				expense: {
 					amount: cents,
 					category: res.expense?.category ?? cat,

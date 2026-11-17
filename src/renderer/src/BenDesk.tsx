@@ -4,6 +4,7 @@
 //   You:   the weekly pattern report, energy map, mood, excuses, Ben's profile of you
 //   Money: the spending coach, repeating charges, "should I buy it?"
 //   Month: the month as a calendar, its numbers and Ben's letter
+import { moneyHidden, useMoneyHidden } from './money/privacy'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { life } from './bridge'
 import { useAction } from './ui'
@@ -34,7 +35,7 @@ export const DESK_TABS: { id: DeskTab; label: string; icon: string }[] = [
   { id: 'log', label: 'Log', icon: '🧾' }
 ]
 
-const lei = (bani: number) => `${Math.round(bani / 100).toLocaleString('en-US')} lei`
+const lei = (bani: number) => (moneyHidden() ? '•••• lei' : `${Math.round(bani / 100).toLocaleString('en-US')} lei`)
 const hm = (ms: number) => new Date(ms).toTimeString().slice(0, 5)
 const dayName = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
 const left = (iso: string, now: number) => {
@@ -858,6 +859,7 @@ function MoodTrend({ v }: { v: DeskView }) {
 // ------------------------------------------------------------------- Money
 
 function MoneyTab({ v }: { v: DeskView }) {
+  useMoneyHidden()
   const [what, setWhat] = useState('')
   const [price, setPrice] = useState('')
   const [verdict, setVerdict] = useState<PurchaseVerdict | null>(null)
@@ -938,6 +940,7 @@ function MoneyTab({ v }: { v: DeskView }) {
 // ------------------------------------------------------------------- Month
 
 function MonthTab({ v, reload, change }: { v: DeskView; reload: () => void; change: Change }) {
+  useMoneyHidden()
   const act = useAction()
   const [busy, setBusy] = useState(false)
   const [pick, setPick] = useState<string | null>(null)

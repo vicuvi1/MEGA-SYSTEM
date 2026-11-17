@@ -3,7 +3,10 @@
 // record, builds the quick-button keyboard and the bot's short replies.
 // The desktop main process (electron/telegram.cjs) only moves messages.
 
-import { evalAmount, formatMoney } from './money.js';
+import { evalAmount, formatMoney as formatMoneyShown } from './money.js';
+
+// Messages to your own Telegram bot always carry the real amounts (the on-screen hiding does not apply).
+const formatMoney = (c, cur, o) => formatMoneyShown(c, cur, { ...o, reveal: true });
 import { suggestSub, subOf } from './cattree.js';
 import { suggestCategory, sortTx, monthSummary, totalBalance, accountValues, jarStatus, budgetAlert, category, account, B, goalStatus } from './model.js';
 import { monthKey, addMonths, addDays, MONTHS, DOW_SHORT, dowIndex, monthLabel } from './dates.js';

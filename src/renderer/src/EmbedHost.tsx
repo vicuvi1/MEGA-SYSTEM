@@ -29,6 +29,7 @@ import { clearSportStart, SPORT_START_CODE, SPORT_START_EVENT, sportStartPending
 import { handleReceiptMessage, startReceiptUploads } from './money/receiptBridge'
 import { salaryNotice } from '@core/salaryNotice'
 import { startBudgetWarnings } from './money/budgetWarnRunner'
+import { useMoneyPrivacyKeys } from './money/privacy'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
@@ -52,6 +53,8 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
   const [error, setError] = useState<string | null>(null)
   const [visited, setVisited] = useState<EmbedKind[]>([])
   const [waky, setWaky] = useState<{ ok: boolean; error: string | null } | null>(isDemo ? { ok: true, error: null } : null)
+  // Space shows or hides money amounts (shared with Finance Helper) while it is open.
+  useMoneyPrivacyKeys(active === 'finance')
 
   useEffect(() => {
     life.apps.info().then(setInfo, (e) => setError((e as Error).message))

@@ -11,12 +11,13 @@ import { life } from '../bridge'
 import { useCountUp, useSeen } from '../motionKit'
 import { Icon } from '../Icon'
 import { soundCoin, soundWarning } from '../soundKit'
-import { useAction } from '../ui'
+import { useAction, useToast } from '../ui'
 import { usePoints } from '../usePoints'
 import { useShowCoins } from '../useSimple'
 import { flyTo, QuickAddBox } from '../MoneyQuick'
 import { budgetEffect, goalPlan, mergeGoals, overLine, worstLevel, daysInMonth, type BudgetLevel, type GoalIn, type GoalPlan } from '@core/moneyHub'
 import { moneyText, totalNumber, totalText } from '@core/moneyText'
+import { useMoneyHidden, useMoneyPrivacyKeys } from '../money/privacy'
 import { pointValue, pointValueLine, type PointValue } from '@core/pointValue'
 import type { MoneyHubView } from '../web/moneyHub'
 import '../money.css'
@@ -85,6 +86,15 @@ function useHub(): [MoneyHubView | null | undefined, (v: MoneyHubView | null) =>
 
 export function Money({ state, onState, onWallet, onOpenApp }: { state: ConnectionsState; onState: (s: ConnectionsState) => void; onWallet: () => void; onOpenApp?: () => void }) {
   const [view] = useHub()
+  // Amounts are hidden until Space (shared with Finance Helper, money/privacy.ts).
+  const hidden = useMoneyHidden()
+  useMoneyPrivacyKeys(true)
+  const toast = useToast()
+  const wasHidden = useRef(hidden)
+  useEffect(() => {
+    if (wasHidden.current !== hidden) toast(hidden ? 'Amounts hidden' : 'Amounts shown', 'info')
+    wasHidden.current = hidden
+  }, [hidden, toast])
   const [tab, setTab] = usePageTab('money', ['today', 'month', 'goals'], 'today')
   const days = useMoneyDays(onWallet)
   const ring = useRef<HTMLDivElement>(null)

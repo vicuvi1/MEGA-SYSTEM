@@ -3,6 +3,7 @@
 // while hidden, and stands still with reduced motion (the island's `motion-off`).
 // Data comes from the snapshot's optional fields (declared below until the
 // shared type has them all): when a field is missing its piece just isn't drawn.
+import { useMoneyHidden } from './money/privacy'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react'
 import { lineAt } from '@core/lyrics'
 import { toggleFav, type Fav } from '@core/music'
@@ -520,7 +521,7 @@ export function miniCards(s: IslandSnapshot, now: number): MiniCard[] {
       node: (
         <div className={`alive-mini-body ${money < 0 ? 'neg' : ''}`}>
           <span className="alive-ico" aria-hidden>💸</span>
-          <b>{Math.round(money)}</b>
+          <MoneyFigure v={Math.round(money)} />
           <small>{money < 0 ? 'over today' : 'left today'}</small>
         </div>
       )
@@ -705,4 +706,9 @@ export function AlertFx({ kind, text = '' }: { kind: string; text?: string }) {
       )}
     </span>
   )
+}
+
+/** The money number of the alive card: dots while amounts are hidden. */
+function MoneyFigure({ v }: { v: number }) {
+  return <b>{useMoneyHidden() ? '••••' : v}</b>
 }
