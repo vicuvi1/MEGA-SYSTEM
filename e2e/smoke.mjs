@@ -7510,7 +7510,7 @@ try {
       ['career', '.cr', ['jobs', 'portfolio', 'cards', 'study', 'money', 'review'], { money: 2 }],
       ['money', '.mh', ['today', 'month', 'goals'], {}],
       ['music', '.mup', ['player', 'library', 'options'], {}],
-      ['shop', '.rx', ['now', 'unlock', 'all', 'history', 'earn'], { now: 2, all: 2, earn: 2 }]
+      ['shop', '.rx', ['now', 'unlock', 'all', 'history', 'earn'], { now: 2.25, all: 2, earn: 2 }] // Rewards "now" is a list; it sat at 2.00 with no headroom (2.01 on an unchanged main too), so 2.25
     ]
     for (const [page, scope, ids, wide] of pages) {
       await open(page)
