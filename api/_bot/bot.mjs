@@ -72825,13 +72825,14 @@ var SLOT_TIME = {
 	winddown: "23:15",
 	lastcall: "00:00",
 	backup: "",
-	salary: ""
+	salary: "",
+	budgetwarn: ""
 };
 var DEFAULT_BUDGET = {
 	on: true,
 	afternoon: false
 };
-var isSlot = (x) => typeof x === "string" && (x === "lastcall" || x === "backup" || x === "salary" || SLOTS.includes(x));
+var isSlot = (x) => typeof x === "string" && (x === "lastcall" || x === "backup" || x === "salary" || x === "budgetwarn" || SLOTS.includes(x));
 /** The bell id of a slot's message: one per slot and day, so every device adds it once. */
 var slotNotifId = (slot, day) => `budget:${slot}:${day}`;
 function cleanLedger(raw, day) {
@@ -72908,6 +72909,7 @@ function slotText(slot, f) {
 		case "lastcall": return "Life System: it is midnight and bed is not logged. Go to sleep now.";
 		case "backup": return "Life System: a backup needs a look. Open Settings → Data safety.";
 		case "salary": return "Life System: your salary is not in yet. Open Money.";
+		case "budgetwarn": return "Life System: a Money budget is nearly used up. Open Money.";
 	}
 }
 /** Reads the `simple_mode` setting's budget part (missing = on, afternoon off). */

@@ -55,6 +55,9 @@ import * as MoneyCalendar from './screens/calendar.js';
 import * as Wishlist from './screens/wishlist.js';
 import * as Afford from './screens/afford.js';
 import * as MoneyB from './screens/moneyb.js';
+import * as Changes from './changestore.js';
+import * as ChangesScreen from './screens/changes.js';
+import * as BudgetWarn from './screens/budgetwarn.js';
 import { workText } from './workhours.js';
 import { planSplit, splitTransfers, splitPrefs, isSplit } from './split.js';
 import { openBankImport, rowsFromFile, decodeText } from './screens/bankimport.js';
@@ -84,6 +87,7 @@ let state = load();
 // Undo / redo for this session (js/history.js).
 const history = createHistory();
 history.reset(state);
+Changes.reset(state); // change history (js/changestore.js)
 const ui = {
   tab: 'home',
   month: monthKey(todayISO()),
@@ -164,6 +168,7 @@ const countUp = (c, key, opts) => (c = Math.round(c / 100) * 100, `<span data-co
 // one write, and leaving the page writes at once.
 const SAVE_FAILED = 'Could not save. Is your browser storage full or blocked?';
 function persist({ quiet = false } = {}) {
+  Changes.track(state, quiet ? 'quiet' : 'local');
   if (!saveSoon(state)) toast(SAVE_FAILED);
   if (quiet) history.reset(state);
   else history.record(state);
@@ -197,6 +202,7 @@ function undoRedo(dir) {
   if (state._sealed) return;
   const e = dir < 0 ? history.undo(state) : history.redo(state);
   if (!e) { toast(dir < 0 ? 'Nothing to undo' : 'Nothing to redo'); return; }
+  Changes.track(state, dir < 0 ? 'undo' : 'redo');
   if (!saveSoon(state)) toast(SAVE_FAILED);
   ui.selected?.clear();
   render();
@@ -1643,8 +1649,8 @@ function viewSettings() {
   const sections = [
     { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + MoneyB.settingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Shortcuts.settingsCard() },
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
-    { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() },
-    { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + Backups.settingsCard() + Sync.settingsCard() },
+    { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() + BudgetWarn.settingsCard() },
+    { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + ChangesScreen.settingsCard() + Backups.settingsCard() + Sync.settingsCard() },
     { id: 'connect', icon: '🔗', label: 'Telegram & Binance', sub: 'Your bot, crypto balances', desc: 'Your own Telegram bot for logging from your phone, and Binance balances (read-only).', html: () => Telegram.settingsCard() + TgBlocks.settingsCard() + Binance.settingsCard() },
     { id: 'buddy', icon: '🤖', label: 'Bit, your buddy', sub: 'Show, name, color', desc: 'Bit, the little robot that cheers you on: show or hide it, its name and color.', html: () => Buddy.settingsCard() },
     { id: 'security', icon: '🔒', label: 'Security', sub: 'PIN and encryption', desc: 'A PIN when the app opens, and your data locked with a password.', html: () => Security.settingsCard() },
@@ -3605,6 +3611,7 @@ const SCREENS = {
   taxes: Taxes,
   calendar: MoneyCalendar,
   wishlist: Wishlist,
+  changes: ChangesScreen,
   rates: RatesScreen,
   telegram: TelegramHub,
   bot: TelegramHub,
@@ -3621,6 +3628,7 @@ function openMoreSheet() {
       ${item('telegram', 'Telegram bot', 'Phone sync, custom keyboard buttons & bot commands')}
       ${item('reports', 'Reports', 'Any period, year in review, income for taxes')}
       ${item('rates', 'Rates & converter', 'Exchange rates, good day to convert USD?')}
+      ${item('changes', 'Change history', 'Every change on this device, with Put back')}
       ${item('settings', 'Settings', 'Goal, smart split, categories, backups')}
       <button type="button" class="tx more-item" data-act="shortcuts-help" data-testid="more-shortcuts"><span class="t"><b>Keyboard shortcuts</b><span>N, /, E, Ctrl+Z, G then a letter</span></span><span class="muted">›</span></button>
     </div>`);
@@ -3707,7 +3715,7 @@ Object.assign(ctx, {
   replaceState: (next) => { state = next; persist({ quiet: true }); },
   // Swap the data in memory without saving (lock / unlock with encryption).
   // Undo steps hold readable data, so they go too.
-  setState: (next) => { state = next; history.clear(); history.reset(next); },
+  setState: (next) => { state = next; history.clear(); history.reset(next); Changes.reset(next); },
   // After unlocking encrypted data: catch up on what waited for it.
   afterUnlock: () => {
     applyTheme();
@@ -3782,6 +3790,7 @@ window.addEventListener('storage', (e) => {
       try {
         const stored = load();
         if (!stored._sealed) state = mergeLocal(state, stored);
+        Changes.track(state, 'sync'); history.reset(state); // arrived from elsewhere: logged, never part of an undo step
       } catch { /* keep this device's copy; the next sync merges */ }
       saveSoon(state);
       flushSave();
@@ -3789,6 +3798,7 @@ window.addEventListener('storage', (e) => {
       return;
     }
     state = load();
+    Changes.track(state, 'sync'); history.reset(state); // arrived from elsewhere: logged, never part of an undo step
     render();
   }
   if (e.key === STORAGE_KEYS.ENC && hasSession()) {
@@ -3798,6 +3808,7 @@ window.addEventListener('storage', (e) => {
     reopen().then((next) => {
       if (!next) return;
       state = waiting ? mergeLocal(state, next) : next;
+      Changes.track(state, 'sync'); history.reset(state); // arrived from elsewhere: logged, never part of an undo step
       if (waiting) { saveSoon(state); flushSave(); }
       render();
     }).catch(() => {});
@@ -3918,6 +3929,8 @@ bindTilt(document);
 requestPersistence();
 if (!DEMO) Security.initLock();
 MoneyB.init();
+ChangesScreen.init();
+BudgetWarn.init();
 route();
 Updates.initUpdates();
 Binance.initBinance();

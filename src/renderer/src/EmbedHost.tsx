@@ -28,6 +28,7 @@ import { openTab } from './PageTabs'
 import { clearSportStart, SPORT_START_CODE, SPORT_START_EVENT, sportStartPending } from './sportStart'
 import { handleReceiptMessage, startReceiptUploads } from './money/receiptBridge'
 import { salaryNotice } from '@core/salaryNotice'
+import { startBudgetWarnings } from './money/budgetWarnRunner'
 
 export type EmbedKind = 'finance' | 'waky' | 'man' | 'sport'
 
@@ -271,9 +272,12 @@ export function EmbedHost({ active, soundEnabled = true }: { active: EmbedKind |
 
     window.addEventListener('message', onWindowMessage)
     const stopReceipts = startReceiptUploads()
+    // Money's budget warnings at 80% and 100% (money/budgetWarnRunner.ts), with or without Money open.
+    const stopBudgetWarnings = startBudgetWarnings()
     return () => {
       window.removeEventListener('message', onWindowMessage)
       stopReceipts()
+      stopBudgetWarnings()
     }
   }, [])
 

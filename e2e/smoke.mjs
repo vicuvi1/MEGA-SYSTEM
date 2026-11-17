@@ -1169,6 +1169,8 @@ try {
 
   // Money batch 3: keyboard shortcuts, bulk record changes, the weekly cash count (e2e/smokeMoneyB3.mjs).
   await (await import('./smokeMoneyB3.mjs')).moneyB3Steps({ step, pg, open, financeFrame })
+  // Money change history: old -> new with the device, Put back with Undo, Bring back a deleted record (e2e/smokeMoneyHistory.mjs).
+  await (await import('./smokeMoneyHistory.mjs')).moneyHistorySteps({ step, pg, open, financeFrame })
 
   // Money batch 2: budgets from 3 months, month review, net worth line, subscriptions per year (e2e/smokeMoneyB2.mjs).
   await (await import('./smokeMoneyB2.mjs')).moneyB2Steps({ step, pg, open, financeFrame, resetClock: fakeNow })

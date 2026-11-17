@@ -1477,6 +1477,29 @@
    ],
    "evidence": "2026-11-17: tsc, menuPrefs.test.ts (4 tests), scoped smoke step Sidebar Edit menu.",
    "notes": "renderer/menuPrefs.ts (pure), Sidebar.tsx, LayoutEditor.tsx, sidebar.css. Source of truth is uiPrefs.hiddenPages read by core/modules menuPages (Simple mode and normal mode share it; there is no Archive group). Pages of modules that are off stay in Settings > Modules."
+  },
+  {
+   "id": "money-change-history",
+   "title": "Money: change history with Put back (#15)",
+   "user_visible_behavior": "Finance Helper → More → Change history (also Settings → Data & backups): every add, edit, delete, undo and Put back of a record, account, category (budget) or goal, newest first, with time, device (Desktop, Web, Phone, Telegram bot, Automatic, Another device) and each field old → new. Filters: kind (or Deleted only), day, device, one record. Put back restores the record as it was before the change (Bring back for a deleted one, Remove for an added one, Put back all for a step with several); it is logged itself and has Undo. Kept on this device for 90 days, 2,000 entries at most.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeChanges.test.ts",
+    "SMOKE_ONLY=\"Money change history\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: financeChanges.test.ts (13 tests: logging, sync device, cap, Put back of edit/delete/add with the sync merge both ways, bulk, stored log); smoke step Money change history.",
+   "notes": "apps/finance/js/changelog.js (pure), changestore.js (IndexedDB, sealed when encrypted), screens/changes.js, css/changes.css; app.js hooks in persist, undoRedo, the storage handler (also resets the undo base), setState. Records changed here get editedOn. DECISIONS.md 2026-11-17."
+  },
+  {
+   "id": "money-budget-warnings",
+   "title": "Money: budget warnings at 80% and 100% (#8)",
+   "user_visible_behavior": "When a category's spending this month reaches 80% and then 100% of its monthly budget, one calm notification each (\"Food: 80% of this month's budget used (1 600 of 2 000 MDL)\"; the percentage only when amounts are hidden), once per category per month, one of the 4 pushes a day (slot budgetwarn). A jump past both sends only the 100% one. Finance Settings → Categories & rules → Budget warnings (on by default).",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeBudgetWarn.test.ts src/core/notifyBudget.test.ts"
+   ],
+   "evidence": "2026-11-17: financeBudgetWarn.test.ts (9 tests, pinned clock: once per month per category, jump, next month, other device's bell entry, hidden amounts, off, locked).",
+   "notes": "apps/finance/js/budgetwarn.js (pure, uses model.budgetStatus), screens/budgetwarn.js (switch, settings.budgetWarn); core/budgetNotice.ts; money/budgetWarnRunner.ts started from EmbedHost (start + 20 s, Money saves, app sync, every 30 min); core/notifyBudget.ts slot budgetwarn; Life keeps life_budget_warned."
   }
  ]
 }
