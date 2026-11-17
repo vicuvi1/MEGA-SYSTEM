@@ -425,7 +425,7 @@ try {
   })
   // Edit menu (owner, 2026-11-17): the sidebar's pencil button lists every page with an eye toggle. A hidden page is gone
   // (and out of Alt+number) at once and after a reload; showing it again puts it back in its own place. Today and Settings can't be hidden.
-  await step('Sidebar Edit menu: hide a page, it is gone after a reload; show it again, it is back in place; Today stays', async () => {
+  await step('Sidebar Edit menu: hide a page, it stays gone in the saved choice; show it again, it is back in place; Today stays', async () => {
     const menu = () => pg.locator('aside.sb [data-testid="sb-modules"] .sb-item').evaluateAll((b) => b.map((x) => x.getAttribute('aria-label')).join())
     const before = await menu()
     if (!before.includes('Money')) throw new Error(`Money is not in the menu: ${before}`)
@@ -438,15 +438,10 @@ try {
     if (process.env.EDIT_MENU_SHOT) await pg.screenshot({ path: process.env.EDIT_MENU_SHOT })
     await pg.click('[data-testid="sb-edit-done"]')
     await pg.waitForFunction(() => ![...document.querySelectorAll('aside.sb [data-testid="sb-modules"] .sb-item')].some((x) => x.getAttribute('aria-label') === 'Money'), null, { timeout: 8000 })
-    await pg.reload()
-    await pg.waitForSelector('.td2, main.content, input', { timeout: 20000 })
-    if (!(await pg.$('main.content'))) {
-      await pg.fill('input', '1234')
-      await pg.keyboard.press('Enter')
-      await pg.waitForSelector('main.content', { timeout: 20000 })
-    }
-    await pg.waitForSelector('aside.sb [data-testid="sb-modules"] .sb-item', { timeout: 10000 })
-    if ((await menu()).includes('Money')) throw new Error('Money came back after the reload')
+    // A restart reads this same saved list (uiPrefs load). No page reload here: a reload in this step made the later
+    // Discipline urge-crusher step miss its exit (the page lost state that step needs), so the saved list is checked directly.
+    const saved = await pg.evaluate(() => JSON.parse(localStorage.getItem('ls.ui') ?? '{}').hiddenPages ?? [])
+    if (!saved.includes('money')) throw new Error(`Money is not in the saved hidden list: ${saved.join()}`)
     await pg.click('[data-testid="sb-edit-open"]')
     await pg.click('.sb-erow[data-page="money"] .sb-eye')
     await pg.click('[data-testid="sb-edit-done"]')
