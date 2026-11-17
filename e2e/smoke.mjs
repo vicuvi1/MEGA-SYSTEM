@@ -451,6 +451,16 @@ try {
     await pg.click('.sb-erow[data-page="money"] .sb-eye')
     await pg.click('[data-testid="sb-edit-done"]')
     await pg.waitForFunction((b) => [...document.querySelectorAll('aside.sb [data-testid="sb-modules"] .sb-item')].map((x) => x.getAttribute('aria-label')).join() === b, before, { timeout: 8000 })
+    // Modules from the same menu: right-click Music, Turn off; it moves to "Turned off"; Turn on brings it back in place.
+    await pg.click('[data-testid="sb-edit-open"]')
+    await pg.click('.sb-erow[data-page="music"]', { button: 'right' })
+    await pg.click('.sb-ctx button:has-text("Turn off Music")')
+    await pg.waitForSelector('[data-testid="sb-off-list"] [data-module="music"]', { timeout: 15000 })
+    await pg.waitForFunction(() => !document.querySelector('.sb-erow[data-page="music"]'), null, { timeout: 15000 })
+    await pg.click('[data-testid="sb-off-list"] [data-module="music"] .sb-turn')
+    await pg.waitForSelector('.sb-erow[data-page="music"]', { timeout: 15000 })
+    await pg.click('[data-testid="sb-edit-done"]')
+    await pg.waitForFunction((b) => [...document.querySelectorAll('aside.sb [data-testid="sb-modules"] .sb-item')].map((x) => x.getAttribute('aria-label')).join() === b, before, { timeout: 15000 })
   })
   // Settings → Modules: one switch per module with one line each. Study Time (off) comes back at once with its blocks,
   // and goes again when switched off. Nothing is deleted.

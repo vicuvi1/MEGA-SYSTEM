@@ -146,3 +146,10 @@
 /* While editing, Done sits first so it is always in reach. */
 .sb-nav:has(.sb-edit) .sb-edit-btn { order: -1; margin: 0 0 6px; }
 .sb-nav:has(.sb-edit) .sb-more { display: none; }
+
+.sb-off { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgb(var(--ink) / 0.06); }
+.sb-off-title { margin: 0 6px 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+.sb-turn { flex: none; padding: 5px 10px; border-radius: 9px; border: 1px solid rgb(var(--ink) / 0.14); background: transparent; color: var(--text); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.sb-turn:hover { border-color: rgba(200, 241, 53, 0.5); }
+.sb-turn:focus-visible { outline: 2px solid var(--lime); outline-offset: 1px; }
+.sb.collapsed .sb-off { display: none; }

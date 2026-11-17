@@ -5,7 +5,10 @@ import { MODULES, type ModuleDef, type PageId } from './modules'
 import { useUiPrefs } from './uiPrefs'
 import { useModules } from './useModules'
 import { menuPages } from '@core/modules'
-import { canHidePage, editablePages, setPageHidden } from './menuPrefs'
+import { canHidePage, editablePages, offableModule, offModules, setPageHidden } from './menuPrefs'
+import { life } from './bridge'
+import { useToast } from './ui'
+import type { ModuleId } from '@core/modules'
 
 export type Badge = { n?: number; dot?: 'lime' | 'warn' }
 
@@ -25,6 +28,7 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
   const open = !collapsed
   const byId = Object.fromEntries(MODULES.map((m) => [m.id, m])) as Record<PageId, ModuleDef>
   const [ui, setUi] = useUiPrefs()
+  const toast = useToast()
   const [editing, setEditing] = useState(false)
   const [ctx, setCtx] = useState<{ id: PageId; x: number; y: number } | null>(null)
   // The module switch (Settings → Modules): only the pages of modules that are on, in module order.
@@ -45,6 +49,12 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
       window.removeEventListener('keydown', key)
     }
   }, [ctx])
+  const setModuleOn = async (id: ModuleId, on: boolean, label: string) => {
+    const next = await life.modules?.set(id, on).catch(() => null)
+    if (next) toast(on ? `${label} is on, with all its data` : `${label} is off. Nothing was deleted`, 'good')
+    else toast(`Couldn't change ${label}. Try again`, 'bad')
+  }
+  const turnedOff = offModules(mods)
   let index = 0
 
   const showTip = (label: string, el: HTMLElement) => {
@@ -82,7 +92,14 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
                 const shown = !hiddenList.includes(id)
                 const locked = !canHidePage(id)
                 return (
-                  <div key={id} className={`sb-erow ${shown ? '' : 'off'}`} data-page={id} style={{ ['--c' as string]: m.color }}>
+                  <div
+                    key={id}
+                    className={`sb-erow ${shown ? '' : 'off'}`}
+                    data-page={id}
+                    onContextMenu={(e) => {
+                      e.preventDefault()
+                      setCtx({ id, x: e.clientX, y: e.clientY })
+                    }} style={{ ['--c' as string]: m.color }}>
                     <span className="sb-tile">
                       <Icon name={m.icon} size={17} />
                     </span>
@@ -100,6 +117,19 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
                   </div>
                 )
               })}
+              {turnedOff.length > 0 && (
+                <div className="sb-off" data-testid="sb-off-list">
+                  <p className="sb-off-title">Turned off</p>
+                  {turnedOff.map((d) => (
+                    <div key={d.id} className="sb-erow" data-module={d.id}>
+                      <span className="sb-label sb-name">{d.label}</span>
+                      <button className="sb-turn" aria-label={`Turn on ${d.label}`} title={d.line} onClick={() => void setModuleOn(d.id, true, d.label)}>
+                        Turn on
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
           <div className="sb-group" data-testid="sb-modules" hidden={editing}>
@@ -192,6 +222,14 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
             >
               Hide from menu
             </button>
+            {(() => {
+              const def = offableModule(ctx.id)
+              return (
+                <button role="menuitem" disabled={!def} title={def ? undefined : `${byId[ctx.id]?.label} can't be turned off`} onClick={() => (def && void setModuleOn(def.id, false, def.label), setCtx(null))}>
+                  {def ? `Turn off ${def.label}` : "Can't be turned off"}
+                </button>
+              )
+            })()}
           </div>
         )}
 
