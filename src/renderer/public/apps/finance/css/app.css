@@ -5731,11 +5731,12 @@ details.card > summary { color: var(--text); font-size: 15px; }
 .sh-week-k { flex-wrap: wrap; } .sh-week-k span:first-child { white-space: nowrap; }
 
 /* ---------- Inside Life System (html[data-in-life]) ----------
-   Life has the sidebar, the header and the sounds: here only a slim strip of
-   sections at the top, no robot or floating buttons, and room at the bottom
-   so Life's pop-ups (bottom centre) never sit on the app's buttons. */
+   From 720px wide Finance Helper keeps its OWN sidebar (balance card top-left,
+   sections, search), exactly like standalone. Below that, Life's header is the
+   only one: a slim strip of sections at the top and no bottom bar. No robot or
+   floating buttons, and room at the bottom so Life's pop-ups never sit on the
+   app's buttons. */
 .life-tabs { display: none; }
-html[data-in-life] .tabbar,
 html[data-in-life] .buddy,
 html[data-in-life] .buddy-card,
 html[data-in-life] .calc-fab,
@@ -5779,15 +5780,20 @@ html[data-in-life] .lt-add {
 }
 html[data-in-life] .lt-add svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; }
 html[data-in-life] .app {
-  margin-left: 0 !important; max-width: none;
+  max-width: none;
   padding: 18px 16px 88px !important;
+}
+@media (max-width: 719px) {
+  html[data-in-life] .tabbar { display: none !important; }
+  html[data-in-life] .app { margin-left: 0 !important; }
+}
+@media (min-width: 720px) {
+  /* The sidebar does the sections; the strip is for phones only. */
+  html[data-in-life] .life-tabs { display: none !important; }
 }
 html[data-in-life] .sheet { padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 76px); }
 html[data-in-life] .toast { left: 50% !important; bottom: 84px; }
 @media (min-width: 760px) {
-  /* Life's "+N points" pop lands under its header on the right: the strip
-     keeps that corner free. */
-  html[data-in-life] .life-tabs:not([hidden]) { padding-right: 236px; padding-left: 24px; }
   html[data-in-life] .app { padding: 24px 28px 88px !important; }
 }
 @media (min-width: 1100px) {

@@ -1,5 +1,5 @@
-// Money smoke steps (called from e2e/smoke.mjs): Money opens on Finance Helper's Home with the balance
-// top-left; favourites add a record with Undo; the Log search understands over / under / date ranges and
+// Money smoke steps (called from e2e/smoke.mjs): Money opens on Finance Helper's Home with its own sidebar and the balance
+// card top-left (kept on Log too); favourites add a record with Undo; the Log search understands over / under / date ranges and
 // shows removable chips with a count and total; the emergency fund meter shows its months.
 // Made-up data only: the stored copy is put back at the end. Timeouts keep 10%+ headroom.
 // MONEY3_SHOTS=<dir> saves a screenshot of Money Home.
@@ -18,18 +18,28 @@ export async function money3Steps({ step, pg, open, financeFrame }) {
   }
   const stored = () => pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{"tx":[]}'), KEY)
 
-  await step('Money opens on the balance: clicking Money in the menu shows Finance Home with the total top-left, the Life hub is one tab away', async () => {
+  await step('Money opens on the balance: clicking Money in the menu shows Finance Home with its own sidebar and the balance card top-left, kept on Log, the Life hub is one tab away', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('today')
     await pg.waitForSelector('aside.sb .sb-item[aria-label="Money"]', { timeout: 11000 })
     await pg.click('aside.sb .sb-item[aria-label="Money"]')
     const frame = await waitFrame()
-    await frame.waitForSelector('[data-testid="home-balance"] .fig', { timeout: 16500 }).catch(async (e) => { if (shots) await pg.screenshot({ path: `${shots}/money-fail.png` }); throw e })
-    const box = await frame.locator('[data-testid="home-balance"] .fig').boundingBox()
-    if (!box || box.x > 400 || box.y > 330) throw new Error(`the balance is not top-left: ${JSON.stringify(box)}`)
-    if (!/\d/.test(await frame.locator('[data-testid="home-balance"] .fig').innerText())) throw new Error('the balance shows no number')
+    // Finance Helper's own sidebar is visible, with the balance card top-left, on Home and then on Log.
+    const sideBalance = async (where) => {
+      await frame.waitForSelector('.tabbar .side-card .sc-total', { state: 'visible', timeout: 16500 }).catch(async (e) => { if (shots) await pg.screenshot({ path: `${shots}/money-fail.png` }); throw e })
+      const box = await frame.waitForFunction(() => { const r = document.querySelector('.tabbar .side-card .sc-total')?.getBoundingClientRect(); return r && r.width > 0 ? { x: r.x, y: r.y } : null }, null, { timeout: 5500 }).then((h) => h.jsonValue()).catch(() => null)
+      if (!box || box.x > 400 || box.y > 330) throw new Error(`the balance card is not top-left on ${where}: ${JSON.stringify(box)}`)
+      if (!/\d/.test(await frame.locator('.tabbar .side-card .sc-total').innerText())) throw new Error(`the balance shows no number on ${where}`)
+      if (!(await frame.locator('.tabbar a[data-tab="log"]').isVisible())) throw new Error(`the sidebar sections are not visible on ${where}`)
+    }
+    await sideBalance('Home')
+    if (await frame.locator('[data-testid="home-balance"]').count()) throw new Error('Home still repeats the balance block above its title')
     if (!(await frame.evaluate(() => /home|^$/.test(location.hash.replace('#', ''))))) throw new Error(`Finance did not open on Home: ${await frame.evaluate(() => location.hash)}`)
     if (shots) await pg.screenshot({ path: `${shots}/money-home.png` })
+    await frame.locator('.tabbar a[data-tab="log"]').click({ timeout: 5500 })
+    await frame.waitForFunction(() => location.hash === '#log', null, { timeout: 5500 })
+    await sideBalance('Log')
+    await frame.locator('.tabbar a[data-tab="home"]').click({ timeout: 5500 })
     // The Life hub is still there, and leaving Money and coming back opens the balance again.
     await pg.locator('.seg-switch [role="tab"]', { hasText: 'Money hub' }).click({ timeout: 5500 })
     // The hub shows its numbers, or its empty card when no synced data came yet: either is the hub.

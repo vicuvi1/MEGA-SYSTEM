@@ -402,11 +402,18 @@ function ratesLine(totalCents = null) {
 const EYE_ON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
 const EYE_OFF = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
 
-// Inside Life: one slim strip of sections at the top (Life has the sidebar).
+// Inside Life on a phone-width screen: one slim strip of sections at the top. From 720px the sidebar does this.
 const LIFE_TABS = [['home', 'Home'], ['log', 'Log'], ['accounts', 'Accounts'], ['goals', 'Goals'], ['plan', 'Plan'], ['reports', 'Reports']];
+const LIFE_NARROW = window.matchMedia('(max-width: 719px)');
+LIFE_NARROW.addEventListener?.('change', () => { if (!state._sealed) renderSidebar(); });
 function renderLifeTabs() {
   const nav = document.getElementById('life-tabs');
   if (!nav || !inLifeNow()) return;
+  // Only a phone-width screen has the strip; wider ones have the sidebar (and one "New record" button, not two).
+  if (!LIFE_NARROW.matches) {
+    if (nav.dataset.ready) { nav.innerHTML = ''; nav.hidden = true; delete nav.dataset.ready; }
+    return;
+  }
   if (!nav.dataset.ready) {
     nav.dataset.ready = '1';
     nav.hidden = false;
@@ -418,7 +425,7 @@ function renderLifeTabs() {
     };
     const dots = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></svg>';
     nav.innerHTML = `<div class="lt-scroll">${LIFE_TABS.map(([tab, label]) => { const i = icon(tab); return `<a href="#${tab}" data-tab="${tab}" style="--nc:${i.color}">${i.svg ? `<span class="lt-i">${i.svg}</span>` : ''}<span>${label}</span></a>`; }).join('')}<button type="button" class="lt-more" data-act="more" aria-label="More sections"><span class="lt-i">${dots}</span><span>More</span></button></div>
-      <button type="button" class="lt-eye" data-act="toggle-mask" data-testid="privacy-eye"></button>
+      <button type="button" class="lt-eye" data-act="toggle-mask" data-testid="privacy-eye-strip"></button>
       <button type="button" class="lt-add" data-act="add" aria-label="Add a record"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New</span></button>`;
   }
   const cur = NAV_PARENT[ui.tab] || ui.tab;
@@ -459,7 +466,7 @@ function renderSidebar() {
   top.innerHTML = `<div class="sc-body" role="button" tabindex="0" data-go="accounts" title="Open Accounts &amp; Net Worth">
     <div class="sc-head">
       <span class="sc-label">All my money</span>
-      <button type="button" class="sc-mask-btn" data-act="toggle-mask" title="${isMasked ? 'Show amounts (Space)' : 'Hide amounts (Space)'}" aria-label="${isMasked ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${isMasked}">
+      <button type="button" class="sc-mask-btn" data-act="toggle-mask" data-testid="privacy-eye" title="${isMasked ? 'Show amounts (Space)' : 'Hide amounts (Space)'}" aria-label="${isMasked ? 'Show amounts' : 'Hide amounts'}" aria-pressed="${isMasked}">
         ${isMasked ? EYE_OFF : EYE_ON}
       </button>
     </div>
@@ -1079,16 +1086,7 @@ function viewHome() {
     <p class="muted small" style="margin-bottom:0">Already have money in the wallet or safe? Set it under Settings → Accounts.</p>
   </section>`;
 
-  // Inside Life the Finance sidebar is Life's own: the total balance sits big at the top-left of Home instead.
-  const balance = inLifeNow() && !state._sealed ? (() => {
-    const { total } = M.totalBalance(state);
-    const net = M.monthSummary(state, key).net;
-    return `<section class="home-balance" data-testid="home-balance" aria-label="All my money"><span class="label">All my money</span>
-      <div class="big">${bigMoney(total)}</div>
-      <span class="hb-net ${net >= 0 ? 'income' : 'expense'}">${net >= 0 ? '▲' : '▼'} ${money(Math.round(Math.abs(net) / 100) * 100)} this month</span></section>`;
-  })() : '';
-
-  return `${balance}<header class="top home-top v-${v.tone}"><div><div class="eyebrow">${esc(monthLabel(key))} · ${hello}</div><h1>${esc(v.title)}</h1><div class="sub home-verdict">${esc(v.sub)}</div></div><div class="sub">${dayLabel(today)}</div></header>
+  return `<header class="top home-top v-${v.tone}"><div><div class="eyebrow">${esc(monthLabel(key))} · ${hello}</div><h1>${esc(v.title)}</h1><div class="sub home-verdict">${esc(v.sub)}</div></div><div class="sub">${dayLabel(today)}</div></header>
   ${MoneyB.topHTML()}
   ${Updates.updateBanner()}
   ${DEMO ? '<div class="banner"><p>Live preview with <b>example data</b> (a made-up month). What you add here stays in this browser only.</p></div>' : ''}

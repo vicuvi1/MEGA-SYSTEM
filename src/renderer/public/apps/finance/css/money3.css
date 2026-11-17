@@ -24,11 +24,3 @@
 .ef-picks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 6px 0 14px; }
 .ef-pick { display: inline-flex; align-items: center; gap: 6px; }
 
-/* The total balance, big at the top-left of Home inside Life. */
-.home-balance { margin: 0 0 24px; }
-.home-balance .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.09em; font-weight: 600; }
-.home-balance .big { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 6px; }
-.home-balance .fig { font-size: 52px; }
-.hb-net { font-size: 0.9rem; font-weight: 600; }
-.hb-net.income { color: var(--income, var(--c3, #6fcf97)); }
-.hb-net.expense { color: var(--expense, var(--c1, #eb5757)); }

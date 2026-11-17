@@ -1577,6 +1577,17 @@
    ],
    "evidence": "2026-11-17: moneyNotIncome.test.ts (11 tests incl. an EUR record valued in MDL, bulk toggle and undo), smoke step.",
    "notes": "finance js/catshare.js isNotCounted, js/notincome.js, js/bulk.js; fields notIncome / notSpending / notIncomeNo; sw cache v65."
+  },
+  {
+   "id": "money-own-sidebar",
+   "area": "money",
+   "title": "Finance Helper keeps its own sidebar with the balance card inside Life",
+   "status": "passing",
+   "verification": [
+    "SMOKE_ONLY=\"Money opens on the balance|Money hidden\" npm run smoke"
+   ],
+   "evidence": "2026-11-17: smoke step checks the sidebar balance card top-left on Home and Log; no Home balance block.",
+   "notes": "finance css/app.css html[data-in-life] block, js/app.js renderLifeTabs (phone only); sw cache v66."
   }
  ]
 }
