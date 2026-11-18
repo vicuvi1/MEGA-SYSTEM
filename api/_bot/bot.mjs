@@ -34986,6 +34986,67 @@ function careContext(s, db, now = /* @__PURE__ */ new Date()) {
 		return [];
 	}
 }
+// src/renderer/public/apps/finance/js/splits.js
+/** Can this record be split? Spent or Earned, not a loan, a move, an adjustment or a points buy. */
+var canSplit = (t) => !!t && (t.type === "expense" || t.type === "income") && !t.loan && !t.reconcile && !String(t.id || "").startsWith("life-reward-");
+/** The record's lines when they are good (two or more, each above 0 with a category, adding up), else null. */
+function validLines(t) {
+	if (!canSplit(t) || !Array.isArray(t.splits) || t.splits.length < 2) return null;
+	let sum = 0;
+	for (const l of t.splits) {
+		if (!l || typeof l !== "object" || !Number.isSafeInteger(l.amount) || l.amount <= 0 || typeof l.category !== "string" || !l.category) return null;
+		sum += l.amount;
+	}
+	return sum === t.amount ? t.splits : null;
+}
+/** Each line's share of `whole` (the record's base), the last one taking the rounding. */
+function shares(lines, total, whole) {
+	let left = whole;
+	return lines.map((l, i) => {
+		if (i === lines.length - 1) return left;
+		const v = total ? Math.round(l.amount * whole / total) : 0;
+		left -= v;
+		return v;
+	});
+}
+/** The record as its lines (a record that is not split: itself, alone). */
+function splitLines(t) {
+	const lines = validLines(t);
+	if (!lines) return [t];
+	const whole = Number.isInteger(t.base) ? t.base : t.amount;
+	const base = shares(lines, t.amount, whole);
+	return lines.map((l, i) => {
+		const out = {
+			...t,
+			amount: l.amount,
+			base: base[i],
+			category: l.category,
+			lineOf: t.id,
+			line: i
+		};
+		delete out.splits;
+		delete out.orig;
+		delete out.debt;
+		if (l.sub) out.sub = l.sub;
+		else delete out.sub;
+		const note = [t.note, l.note].map((x) => String(x || "").trim()).filter(Boolean).join(" · ");
+		if (note) out.note = note;
+		else delete out.note;
+		if (l.incomeSource) out.incomeSource = l.incomeSource;
+		return out;
+	});
+}
+/** A list with every split record replaced by its lines. The same array back when nothing is split. */
+function expandSplits(list) {
+	const arr = Array.isArray(list) ? list : [];
+	if (!arr.some((t) => t && t.splits)) return arr;
+	const out = [];
+	for (const t of arr) if (t && t.splits) out.push(...splitLines(t));
+	else out.push(t);
+	return out;
+}
+/** Every record of the state as lines: what totals count. */
+var linesOf = (state) => expandSplits(state?.tx || []);
 // src/renderer/src/web/botBrain.ts
 var MEMORY = "coach_memory";
 function loadMemory(db) {
@@ -35122,7 +35183,7 @@ var lei$3 = (bani) => `${Math.round(bani / 100).toLocaleString("en-US")} lei`;
 function moneyContext(state, today) {
 	if (!state || !Array.isArray(state.tx)) return "Money: Finance Helper data not available.";
 	const cats = new Map((state.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
-	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string");
+	const exp = expandSplits(state.tx).filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string");
 	const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
 	const month = today.slice(0, 7);
 	const weekFrom = addDays$8(today, -6);
@@ -36098,7 +36159,7 @@ function moneyInsight(state, tx, today) {
 	if (!state || !Array.isArray(state.tx) || tx.type === "income") return null;
 	const cats = new Map((state.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 	const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
-	const exp = state.tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string");
+	const exp = expandSplits(state.tx).filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string");
 	const weekFrom = addDays$8(today, -6);
 	const same = exp.filter((t) => t.date >= weekFrom && t.date <= today && String(t.category) === String(tx.category));
 	const name = cats.get(String(tx.category)) ?? "this";
@@ -36162,7 +36223,7 @@ function answerLocal(need, d) {
 		if (!st || !Array.isArray(st.tx)) return `Spending ${span}: Finance Helper data not available.`;
 		const cats = new Map((st.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 		const want = rest.join(" ").toLowerCase();
-		const exp = st.tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string" && inRange(t.date.slice(0, 10)));
+		const exp = expandSplits(st.tx).filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string" && inRange(t.date.slice(0, 10)));
 		const name = (t) => cats.get(String(t.category)) ?? String(t.category ?? "Other");
 		const pick = want ? exp.filter((t) => name(t).toLowerCase().includes(want) || String(t.note ?? "").toLowerCase().includes(want)) : exp;
 		const amt = (t) => Math.abs(Number(t.base ?? t.amount) || 0);
@@ -47317,7 +47378,7 @@ function rewardMoneyRows(finance, inbox = []) {
 function funSpentLei(i) {
 	let sum = i.rewardBuysLei.reduce((a, b) => a + (b > 0 ? b : 0), 0);
 	const cat = i.setting?.source === "finance" ? financeFunCategory(i.finance) : null;
-	if (cat && Array.isArray(i.finance?.tx)) for (const t of i.finance.tx) {
+	if (cat && Array.isArray(i.finance?.tx)) for (const t of expandSplits(i.finance.tx)) {
 		if (!t || t.deleted || t.type !== "expense" || t.loan || String(t.category) !== cat.id) continue;
 		if (typeof t.date !== "string" || !t.date.startsWith(i.month)) continue;
 		if (String(t.id ?? "").startsWith("life-reward-")) continue;
@@ -54551,7 +54612,7 @@ function financeDayTx(s, finance = financeOf(s), withLife = false) {
 	if (!txs.length) return [];
 	const names = new Map((finance?.settings?.categories ?? []).map((c) => [String(c.id), String(c.name)]));
 	const dayOf = (ms) => s.wallet.today(new Date(ms));
-	return txs.filter((t) => t && !t.deleted && !t.notIncome && !t.notSpending && typeof t.date === "string" && t.type !== "transfer" && (withLife || !String(t.id ?? "").startsWith("life-exp-"))).map((t) => ({
+	return expandSplits(txs).filter((t) => t && !t.deleted && !t.notIncome && !t.notSpending && typeof t.date === "string" && t.type !== "transfer" && (withLife || !String(t.id ?? "").startsWith("life-exp-"))).map((t) => ({
 		date: t.date.slice(0, 10),
 		type: String(t.type),
 		category: names.get(String(t.category)) ?? String(t.category ?? ""),
@@ -57729,7 +57790,8 @@ function sumBy(list, keyFn) {
 }
 function monthSummary(state, key) {
 	state = forRange(state, `${key}-01`);
-	const list = txInMonth(state, key);
+	const records = txInMonth(state, key);
+	const list = expandSplits(records);
 	const incomes = list.filter((t) => t.type === "income" && counts(t) && !isRefund(t));
 	const expenses = list.filter((t) => t.type === "expense" && counts(t));
 	const refunds = list.filter((t) => isRefund(t));
@@ -57744,7 +57806,7 @@ function monthSummary(state, key) {
 		savingsRate: income > 0 ? net / income : null,
 		byCategory: sumBy([...expenses, ...refunds], (t) => t.category),
 		bySource: sumBy(incomes, (t) => t.category),
-		count: list.length,
+		count: records.length,
 		expenses,
 		incomes,
 		refunds
@@ -57891,12 +57953,12 @@ function goalStatus(state, today, goal = mainGoal(state)) {
 		onTrack: perMonth == null ? null : pace != null && pace >= perMonth
 	};
 }
-var spentIn = (state, key, catId) => txInMonth(state, key).filter((t) => (t.type === "expense" && counts(t) || isRefund(t)) && t.category === catId).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
+var spentIn = (state, key, catId) => expandSplits(txInMonth(state, key)).filter((t) => (t.type === "expense" && counts(t) || isRefund(t)) && t.category === catId).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
 function budgetAlert(state, t) {
 	return subBudgetAlert(state, t) || categoryBudgetAlert(state, t);
 }
 function subBudgetAlert(state, t) {
-	const s = t.type === "expense" && counts(t) ? subOf(state, t) : null;
+	const s = t.type === "expense" && counts(t) && !t.splits ? subOf(state, t) : null;
 	if (!(s?.budget > 0)) return null;
 	const after = txInMonth(state, monthKey(t.date)).filter((x) => x.type === "expense" && counts(x) && x.sub === s.id && x.category === s.parent).reduce((a, x) => a + B$2(x), 0);
 	const before = after - B$2(t);
@@ -57913,7 +57975,7 @@ function subBudgetAlert(state, t) {
 }
 function categoryBudgetAlert(state, t) {
 	const c = category(state, t.category);
-	if (t.type !== "expense" || !counts(t) || !(c?.budget > 0)) return null;
+	if (t.type !== "expense" || !counts(t) || t.splits || !(c?.budget > 0)) return null;
 	const after = spentIn(state, monthKey(t.date), c.id);
 	const before = after - B$2(t);
 	const fmt = (x) => formatMoney$1(x, state.settings.currency);
@@ -58161,7 +58223,7 @@ function spentFrom(state, today, window = 60) {
 	const since = addDays$1(today, -window + 1);
 	const by = /* @__PURE__ */ new Map();
 	let total = 0;
-	for (const t of state.tx) {
+	for (const t of linesOf(state)) {
 		if (!countsAsSpending(t) || t.recurring || t.date < since || t.date > today) continue;
 		if (isBillCategory(state, t.category) || isWorkCost(state, t.category)) continue;
 		by.set(t.account, (by.get(t.account) || 0) + signed$1(t, B$2(t)));
@@ -58187,7 +58249,7 @@ function spendingIds(state, today = null) {
 // src/renderer/public/apps/finance/js/safespend.js
 var lei$2 = (c) => Math.floor(c / 100) * 100;
 var isEveryday = (state, t) => countsAsSpending(t) && !t.recurring && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
-var everydaySpent = (state, from, to) => state.tx.filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
+var everydaySpent = (state, from, to) => linesOf(state).filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
 var limitOn = (state) => !!(state.settings.limit?.on && state.settings.limit.amount > 0);
 function limitStatus(state, today) {
 	if (!limitOn(state)) return null;
@@ -58409,7 +58471,7 @@ function loggedText(state, t, today = null) {
 	if (work) lines.push(`⏱ ${esc$1(work)} of your work`);
 	if (t.type === "expense" && t.date) {
 		const key = monthKey(t.date);
-		const catMonth = state.tx.filter((x) => countsAsSpending(x) && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + signed$1(x, B$2(x)), 0);
+		const catMonth = linesOf(state).filter((x) => countsAsSpending(x) && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + signed$1(x, B$2(x)), 0);
 		lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
 		lines.push(`${esc$1(c || "This category")} this month: ${fm(state, catMonth)}`);
 	}
@@ -59119,7 +59181,7 @@ function monthSpend(db, today) {
 	const state = financeState(db);
 	if (!state) return null;
 	const month = today.slice(0, 7);
-	const list = state.tx.filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string" && t.date.startsWith(month));
+	const list = expandSplits(state.tx).filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string" && t.date.startsWith(month));
 	const by = /* @__PURE__ */ new Map();
 	let spentMonth = 0;
 	for (const t of list) {
@@ -59136,7 +59198,7 @@ function monthSpend(db, today) {
 			name,
 			amount
 		})),
-		records: list.length
+		records: new Set(list.map((t) => t.id)).size
 	};
 }
 /** A deleted record, as it was (for Undo). */
@@ -72761,8 +72823,8 @@ function cleanFinance(raw) {
 	}
 }
 function hubTx(state) {
-	return state.tx.filter((t) => t && !t.deleted && typeof t.date === "string" && (countsAsSpending(t) || countsAsIncome(t))).map((t) => ({
-		id: String(t.id),
+	return expandSplits(state.tx).filter((t) => t && !t.deleted && typeof t.date === "string" && (countsAsSpending(t) || countsAsIncome(t))).map((t) => ({
+		id: t.lineOf ? `${t.id}#${t.line}` : String(t.id),
 		date: t.date.slice(0, 10),
 		type: isRefund(t) ? "expense" : t.type,
 		amount: Math.abs(B(t)),

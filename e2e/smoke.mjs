@@ -1191,6 +1191,8 @@ try {
   await (await import('./smokeMoneyNotIncome.mjs')).moneyNotIncomeSteps({ step, pg, open, financeFrame })
   // Income sources: create Job 1 / Job 2, log income to them, Reports totals, archive (e2e/smokeMoneyIncomeSources.mjs).
   await (await import('./smokeMoneyIncomeSources.mjs')).moneyIncomeSourcesSteps({ step, pg, open, financeFrame })
+  // Split records, your own fields and colour tags (e2e/smokeMoneyRecordX.mjs).
+  await (await import('./smokeMoneyRecordX.mjs')).moneyRecordXSteps({ step, pg, open, financeFrame })
   // Money ideas: the money calendar, "Can I afford it?" and the wishlist with a wait (e2e/smokeMoneyIdeas.mjs).
   await (await import('./smokeMoneyIdeas.mjs')).moneyIdeasSteps({ step, pg, open, financeFrame, storedTx })
 

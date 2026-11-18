@@ -16,6 +16,7 @@ import * as E from '../everyday.js';
 import { todayISO, addMonths, monthKey, monthLabel } from '../dates.js';
 import { categoryShares, changeText, spendRange, SPEND_PERIODS, OTHER_ID, countsAsSpending, isRefund } from '../catshare.js';
 import { spreadLabels } from '../donutlabels.js';
+import { expandSplits } from '../splits.js';
 
 const TOP = 7; // openCategory's own fold ("Everything else"), kept for the old sheet
 
@@ -122,7 +123,7 @@ export function spendingCard(opts = {}) {
   const allList = opts.list || state.tx;
   const mode = getMode();
   const ed = mode === 'day' ? E.everydayList(allList, { settings: state.settings, rates: state.rates, base, from: range.from, to: range.to }) : null;
-  const list = ed ? ed.list : allList;
+  const list = ed ? ed.list : expandSplits(allList); // split records as their lines (js/splits.js)
   const limit = E.everydayLimit(state.settings, state.rates);
   const { total, prevTotal, rows } = categoryShares(list, range, base);
   const word = range.prev?.word || 'before';

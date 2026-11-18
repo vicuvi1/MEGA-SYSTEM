@@ -7,6 +7,7 @@
 
 import { convert } from './fx.js';
 import { countsAsSpending, isRefund, signed } from './catshare.js';
+import { splitLines } from './splits.js';
 
 export const DEFAULT_LIMIT_MDL = 100000; // 1 000 MDL, in cents
 
@@ -32,12 +33,16 @@ export function everydayList(list, { settings, rates, base, from, to }) {
   const work = workCostIds(settings);
   const keep = [];
   let leftOut = 0;
-  for (const t of list) {
-    if (countsAsSpending(t) && (work.has(t.category) || isOneOff(t, limit, base))) {
-      if ((from == null || t.date >= from) && (to == null || t.date <= to)) leftOut += signed(t, base(t));
-      continue;
+  for (const r of list) {
+    // A split record: one-off is judged on the whole buy, work costs per line (js/splits.js).
+    const big = isOneOff(r, limit, base);
+    for (const t of splitLines(r)) {
+      if (countsAsSpending(t) && (work.has(t.category) || big)) {
+        if ((from == null || t.date >= from) && (to == null || t.date <= to)) leftOut += signed(t, base(t));
+        continue;
+      }
+      keep.push(t);
     }
-    keep.push(t);
   }
   return { list: keep, leftOut, limit };
 }

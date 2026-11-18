@@ -10,6 +10,7 @@ import { netWorthHistory } from './longview.js';
 import { roundUp50 } from './budgetsuggest.js';
 import { formatMoney } from './money.js';
 import { sourceTotals, sourceName, NONE } from './incomesources.js';
+import { expandSplits } from './splits.js';
 
 const base = (t) => (Number.isInteger(t.base) ? t.base : t.amount);
 
@@ -18,7 +19,7 @@ function month(state, key) {
   const byCat = new Map();
   let spent = 0;
   let income = 0;
-  for (const t of list) {
+  for (const t of expandSplits(list)) { // a split record per line (js/splits.js)
     if (countsAsSpending(t)) {
       const v = signed(t, base(t));
       spent += v;

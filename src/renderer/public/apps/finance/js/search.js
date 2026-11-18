@@ -10,12 +10,15 @@
 //   cat:food  acc:cash          a category or account (name or id, start of it)
 //   source:"Job 2"            an income source (name or start of it, spaces optional)
 //   sub:coffee                  a subcategory (name, start of it)
+//   project:website             one of your own fields (js/fields.js; yes / no, >10 for numbers)
 //   this year  last month       a period (also "this week"); "all", "my" are ignored
 //   from:2026-01-01 to:2026-01-31   a date range (or 2026-01-01..2026-01-31)
 //   over 500  under 100  from 1 oct to 15 oct   the same, in words
 // Pure; app.js shows the results and the summary.
 
 import { addDays, addMonths } from './dates.js';
+import { splitLines } from './splits.js';
+import { fieldFilters, matchesFilters } from './fields.js';
 
 const fold = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -171,11 +174,16 @@ function haystack(state, t) {
   return fold(parts.filter(Boolean).join(' '));
 }
 
-export function searchTx(state, query, today) {
+// A split record (js/splits.js) is found when one of its lines matches (its
+// category, its note or #tag); amounts are the whole record's. With `lines`,
+// the matching lines come back instead of the records (for totals).
+export function searchTx(state, query, today, { lines = false } = {}) {
   const q = typeof query === 'string' ? parseQuery(query, today) : query;
   const day = q.day == null ? null : addDays(today, q.day);
   const rel = relRange(q.rel, today);
-  return state.tx.filter((t) => {
+  const fx = fieldFilters(state, q.words);
+  const words = fx.words;
+  const test = (t, whole) => {
     if (q.type && t.type !== q.type) return false;
     if (rel && (t.date < rel.from || t.date > rel.to)) return false;
     if (q.from && t.date < q.from) return false;
@@ -205,12 +213,21 @@ export function searchTx(state, query, today) {
     if (q.year && !t.date.startsWith(q.year)) return false;
     if (q.months.length && !q.months.includes(Number(t.date.slice(5, 7)))) return false;
     // Amounts are compared in the record's own currency, as you see them.
-    if (q.min != null && t.amount < q.min) return false;
-    if (q.max != null && t.amount > q.max) return false;
-    const hay = q.words.length || q.exact ? haystack(state, t) : '';
-    if (q.exact && Math.floor(t.amount / 100) * 100 !== q.exact.cents && t.amount !== q.exact.cents && !hay.includes(q.exact.text)) return false;
-    return q.words.every((w) => hay.includes(w));
-  });
+    if (q.min != null && whole.amount < q.min) return false;
+    if (q.max != null && whole.amount > q.max) return false;
+    if (fx.filters.length && !matchesFilters(t, fx.filters)) return false;
+    const hay = words.length || q.exact ? haystack(state, t) : '';
+    const hit = (a) => Math.floor(a / 100) * 100 === q.exact.cents || a === q.exact.cents;
+    if (q.exact && !hit(t.amount) && !hit(whole.amount) && !hay.includes(q.exact.text)) return false;
+    return words.every((w) => hay.includes(w));
+  };
+  const out = [];
+  for (const t of state.tx) {
+    const parts = t.splits ? splitLines(t) : [t];
+    if (lines) { for (const l of parts) if (test(l, t)) out.push(l); }
+    else if (parts.some((l) => test(l, t))) out.push(t);
+  }
+  return out;
 }
 
 // Totals for the result line: how many, spent / earned, first and last date,

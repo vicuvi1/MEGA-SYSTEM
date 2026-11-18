@@ -13,6 +13,7 @@
 import { addMonths, monthKey, monthLabel, daysInMonth } from './dates.js';
 import { B } from './model.js';
 import { countsAsIncome, isPointsReward } from './catshare.js';
+import { linesOf } from './splits.js';
 
 export const NONE = '__none';
 export const COLOR_SLOTS = 8; // --c1 .. --c8
@@ -250,7 +251,7 @@ export function sourceTotals(state, from, to) {
   const by = new Map();
   let total = 0;
   const list = [];
-  for (const t of state.tx) {
+  for (const t of linesOf(state)) { // a split income counts per line (js/splits.js)
     if (!countsAsIncome(t) || t.date < from || t.date > to) continue;
     const id = t.incomeSource && known.has(t.incomeSource) ? t.incomeSource : NONE;
     const v = B(t);
@@ -267,7 +268,7 @@ export function sourceTotals(state, from, to) {
 /** The Earned records of one source in a period (newest first). NONE gives the ones without a source. */
 export function sourceRecords(state, id, from, to) {
   const known = new Set(sourcesOf(state).map((s) => s.id));
-  return state.tx.filter((t) => countsAsIncome(t) && t.date >= from && t.date <= to && (id === NONE ? !(t.incomeSource && known.has(t.incomeSource)) : t.incomeSource === id))
+  return linesOf(state).filter((t) => countsAsIncome(t) && t.date >= from && t.date <= to && (id === NONE ? !(t.incomeSource && known.has(t.incomeSource)) : t.incomeSource === id))
     .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (b.createdAt || 0) - (a.createdAt || 0)));
 }
 
@@ -283,7 +284,7 @@ export function sourceReport(state, today, { months = 12 } = {}) {
   const idx = new Map(keys.map((k, i) => [k, i]));
   const known = new Map(sourcesOf(state).map((s) => [s.id, s]));
   const acc = new Map();
-  for (const t of state.tx) {
+  for (const t of linesOf(state)) {
     if (!countsAsIncome(t)) continue;
     const i = idx.get(t.date.slice(0, 7));
     if (i == null || t.date > `${end}-${String(daysInMonth(end)).padStart(2, '0')}`) continue;

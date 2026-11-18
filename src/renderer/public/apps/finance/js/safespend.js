@@ -13,6 +13,7 @@ import { spendingIds } from './forecast.js';
 import { daysBetween, monthKey, addMonths, addDays, daysInMonth } from './dates.js';
 import { convert } from './fx.js';
 import { countsAsSpending, signed } from './catshare.js';
+import { linesOf } from './splits.js';
 
 const lei = (c) => Math.floor(c / 100) * 100; // whole lei, rounded down: never promise more
 
@@ -22,7 +23,7 @@ const lei = (c) => Math.floor(c / 100) * 100; // whole lei, rounded down: never 
 // adjustment: catshare.js countsAsSpending, the same rule as the Money hub).
 export const isEveryday = (state, t) => countsAsSpending(t) && !t.recurring
   && !isBillCategory(state, t.category) && !isWorkCost(state, t.category);
-export const everydaySpent = (state, from, to) => state.tx
+export const everydaySpent = (state, from, to) => linesOf(state) // a split record counts per line (bills / work costs apart)
   .filter((t) => t.date >= from && t.date <= to && isEveryday(state, t)).reduce((a, t) => a + signed(t, B(t)), 0);
 
 export const limitOn = (state) => !!(state.settings.limit?.on && state.settings.limit.amount > 0);

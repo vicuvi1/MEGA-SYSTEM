@@ -12,6 +12,7 @@ import { countsAsSpending, countsAsIncome, signed, isRefund } from './catshare.j
 import { formatMoney } from './money.js';
 import { shortDay } from './safespend.js';
 import { sourceInText } from './incomesources.js';
+import { linesOf } from './splits.js';
 
 export const CANT = 'I can answer questions about amounts, categories and months.';
 
@@ -100,7 +101,8 @@ export function askMoney(state, question, today) {
   const src = type === 'income' ? sourceInText(state, per.rest) : null;
   const words = (src ? src.rest : per.rest).split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '')).filter((w) => w && !STOP.has(w) && !/^\d+$/.test(w));
 
-  const inScope = state.tx.filter((t) => (type === 'income' ? countsAsIncome(t) : countsAsSpending(t)) && t.date >= per.from && t.date <= per.to);
+  const lines = linesOf(state); // a split record answers per line (js/splits.js)
+  const inScope = lines.filter((t) => (type === 'income' ? countsAsIncome(t) : countsAsSpending(t)) && t.date >= per.from && t.date <= per.to);
 
   // Content words: a category (or subcategory) of yours, else a word in the notes; anything else is a question we can't answer.
   const cats = new Set();
@@ -115,7 +117,7 @@ export function askMoney(state, question, today) {
     const sc = !c && subRows.find((x) => !x.archived && catRows.some((r) => r.id === x.parent) && fold(x.name).split(/[^\p{L}\p{N}]+/u).some((p) => p.length >= 3 && wordMatches(w, p)));
     if (c) { cats.add(c.id); catLabels.push(c.name); }
     else if (sc) { subs.add(sc.id); catLabels.push(sc.name); }
-    else if (inScope.length === 0 ? false : state.tx.some((t) => fold(t.note).includes(w))) noteWords.push(w);
+    else if (inScope.length === 0 ? false : lines.some((t) => fold(t.note).includes(w))) noteWords.push(w);
     else return no;
   }
 

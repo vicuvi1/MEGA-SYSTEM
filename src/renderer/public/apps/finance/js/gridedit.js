@@ -177,6 +177,7 @@ function commit(m, dir) {
 // ---------- Setting values (paste, fill, clear) ----------
 
 function setCell(ctl, text) {
+  if (ctl.readOnly || ctl.disabled) return 'skip'; // e.g. a split record's amount (js/splits.js): changed in the record
   const v = String(text ?? '');
   if (ctl.tagName === 'SELECT') {
     const o = N.matchOption([...ctl.options].map((x) => ({ value: x.value, label: x.textContent })), v);

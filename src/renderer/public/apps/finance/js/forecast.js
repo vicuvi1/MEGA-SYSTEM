@@ -8,6 +8,7 @@ import { invoiceStatus, invoiceTotal } from './invoices.js';
 import { addDays, daysBetween } from './dates.js';
 import { convert } from './fx.js';
 import { countsAsSpending, signed } from './catshare.js';
+import { linesOf } from './splits.js';
 
 export const isLiquid = (a) => !a.archived && !a.savings && a.kind !== 'savings' && a.kind !== 'crypto';
 
@@ -17,7 +18,7 @@ export function spentFrom(state, today, window = 60) {
   const since = addDays(today, -window + 1);
   const by = new Map();
   let total = 0;
-  for (const t of state.tx) {
+  for (const t of linesOf(state)) { // a split record per line: bills and work costs apart
     if (!countsAsSpending(t) || t.recurring || t.date < since || t.date > today) continue;
     if (isBillCategory(state, t.category) || isWorkCost(state, t.category)) continue;
     by.set(t.account, (by.get(t.account) || 0) + signed(t, B(t)));

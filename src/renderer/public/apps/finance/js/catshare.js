@@ -8,6 +8,7 @@
 // ("From Rewards (points)", id life-reward-…) are left out.
 
 import { addMonths, daysInMonth, monthKey, monthLabel } from './dates.js';
+import { expandSplits } from './splits.js';
 
 export const OTHER_ID = '__other';
 export const FOLD_BELOW = 0.03; // categories under 3% fold into Other
@@ -87,7 +88,8 @@ function sum(list, base, from, to) {
   const by = new Map();
   const count = new Map();
   let total = 0;
-  for (const t of list) {
+  // A split record counts as its lines (js/splits.js): 400 Food + 200 Home.
+  for (const t of expandSplits(list)) {
     if (!countsAsSpending(t) || t.date < from || t.date > to) continue;
     const a = signed(t, base(t));
     by.set(t.category, (by.get(t.category) || 0) + a);

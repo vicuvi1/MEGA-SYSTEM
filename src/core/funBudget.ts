@@ -11,6 +11,8 @@
  * Pure: no database here.
  */
 import { pointsForLei, type PointValue } from './pointValue'
+// @ts-ignore plain JS module of the embedded app (split records)
+import { expandSplits } from '../renderer/public/apps/finance/js/splits.js'
 
 export interface FunBudgetSetting {
   lei: number
@@ -124,7 +126,7 @@ export function funSpentLei(i: FunSpendInput): number {
   let sum = i.rewardBuysLei.reduce((a, b) => a + (b > 0 ? b : 0), 0)
   const cat = i.setting?.source === 'finance' ? financeFunCategory(i.finance) : null
   if (cat && Array.isArray(i.finance?.tx)) {
-    for (const t of i.finance.tx) {
+    for (const t of expandSplits(i.finance.tx) as any[]) { // a split record counts per line
       if (!t || t.deleted || t.type !== 'expense' || t.loan || String(t.category) !== cat.id) continue
       if (typeof t.date !== 'string' || !t.date.startsWith(i.month)) continue
       if (String(t.id ?? '').startsWith(REWARD_FIN_PREFIX)) continue // counted from the buy itself

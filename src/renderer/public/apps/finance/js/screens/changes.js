@@ -23,7 +23,7 @@ const FIELD = {
   amount: 'Amount', base: 'Value', type: 'Type', date: 'Date', category: 'Category', sub: 'Subcategory', account: 'Account', from: 'From', to: 'To',
   note: 'Note', currency: 'Currency', rate: 'Rate', tax: 'Tax tag', refund: 'Refund', name: 'Name', emoji: 'Icon', budget: 'Monthly budget',
   target: 'Target', saved: 'Saved', deadline: 'Deadline', start: 'Starting balance', archived: 'Archived', goalId: 'Goal', jar: 'Jar',
-  incomeSource: 'Income source', expected: 'Expected per month', payday: 'Pay day', color: 'Colour', pct: 'Share', every: 'Repeats', paused: 'Paused', real: 'Real balance', diff: 'Difference', price: 'Price', person: 'Person', receipts: 'Receipts',
+  incomeSource: 'Income source', expected: 'Expected per month', payday: 'Pay day', color: 'Colour', pct: 'Share', every: 'Repeats', paused: 'Paused', real: 'Real balance', diff: 'Difference', price: 'Price', person: 'Person', receipts: 'Receipts', splits: 'Split', fields: 'Your fields',
 };
 /** "lastMilestone" -> "Last milestone" for a field without its own name. */
 const fieldName = (k) => FIELD[k] || String(k).replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase()).replace(/ ([A-Z])/g, (m, c) => ` ${c.toLowerCase()}`);
@@ -52,6 +52,9 @@ const nameOfRef = (field, v) => {
 
 function valueText(field, v, rec) {
   if (v === undefined || v === null || v === '') return '–';
+  // Split lines and your own fields (js/splits.js, js/fields.js), in words.
+  if (field === 'splits' && Array.isArray(v)) return esc(v.map((l) => `${named('categories', l?.category)?.name || 'Other'} ${moneyIn(l?.amount, rec?.currency)}`).join(' · ') || '–');
+  if (field === 'fields' && typeof v === 'object') return esc(Object.entries(v).map(([id, x]) => `${(ctx.state.settings.customFields || []).find((d) => d.id === id)?.name || id}: ${x === true ? 'Yes' : x === false ? 'No' : x}`).join(', ') || '–');
   if (MONEY.has(field) && Number.isFinite(Number(v))) return esc(moneyIn(v, field === 'amount' ? rec?.currency : null));
   const ref = nameOfRef(field, v);
   if (ref != null) return esc(ref);

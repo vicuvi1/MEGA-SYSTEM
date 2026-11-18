@@ -67,6 +67,8 @@ import * as Recent from './screens/recent.js';
 import * as SavedBar from './screens/savedbar.js';
 import * as GridEdit from './gridedit.js';
 import * as ChangesScreen from './screens/changes.js';
+import * as RecordX from './screens/recordx.js'; // your own fields, split records, colour tags
+import * as TagsReport from './screens/tagsreport.js';
 import * as BudgetWarn from './screens/budgetwarn.js';
 import * as IncomeSources from './screens/incomesources.js';
 import * as IS from './incomesources.js';
@@ -621,9 +623,9 @@ function txRow(t, { showDate = false } = {}) {
   if (showDate) sub = `${dayLabel(t.date)} · ${sub}`;
   return `<button class="tx" data-act="edit" data-id="${esc(t.id)}">
     ${av}
-    <span class="t"><b>${esc(title)}</b><span>${esc(sub)}</span></span>
+    <span class="t"><b>${esc(title)}</b><span>${esc(sub)}</span>${RecordX.rowChips(t)}</span>
     ${amount}
-  </button>`;
+  </button>${RecordX.splitDetails(t)}`;
 }
 
 const TIP_LABEL = { bad: 'Over', warn: 'Watch', good: 'Good', info: 'Note' };
@@ -1171,7 +1173,11 @@ function logRecords() {
 
 // Search results: how many, the totals, and when it first and last happened.
 function searchCard(list) {
-  const r = searchSummary(list, M.B);
+  // Totals from the matching split lines (js/splits.js): "cat:food" counts only the Food part.
+  // Count and dates are the records found (archived years included when switched on).
+  const whole = searchSummary(list, M.B);
+  const lines = searchSummary(searchTx({ ...state, tx: list }, ui.search.trim(), todayISO(), { lines: true }), M.B);
+  const r = { ...whole, spent: lines.spent, earned: lines.earned };
   if (!r.count) return '';
   const d = (iso) => `${Number(iso.slice(8))} ${MONTHS[Number(iso.slice(5, 7)) - 1].slice(0, 3)} ${iso.slice(0, 4)}`;
   const kpi = (label, value, cls = '') => `<div class="kpi"><span class="muted small">${label}</span><b class="${cls}">${value}</b></div>`;
@@ -1215,6 +1221,7 @@ function bulkBar() {
     ${list.some((t) => t.type === 'expense' && !t.loan) ? '<select data-bulk="spending" data-testid="bulk-spending" aria-label="Count as spending"><option value="">Count as spending…</option><option value="yes">Count as spending: yes</option><option value="no">Count as spending: no</option></select>' : ''}
     ${list.some((t) => IS.canHaveSource(t)) && IS.hasSources(state) ? `<select data-bulk="source" data-testid="bulk-source" aria-label="Set source"><option value="">Set source…</option>${IS.activeSources(state).map((s) => `<option value="${esc(s.id)}">${esc(`${s.emoji || ''} ${s.name}`.trim())}</option>`).join('')}<option value="${IS.NONE}">No source</option></select>` : ''}
     ${Taxes.bulkSelectHTML()}
+    ${RecordX.bulkHTML()}
     <label class="bulk-date"><span>Set date</span><input type="date" data-bulk="date" aria-label="Set date"></label>
     <button type="button" class="btn" data-act="bulk-all" data-testid="bulk-all">Select all shown</button>
     <button type="button" class="btn danger" data-act="bulk-del" data-testid="bulk-del">Delete</button>
@@ -1495,7 +1502,7 @@ function viewLog() {
     const shown = new Set(list.map((t) => t.id));
     for (const id of ui.selected) if (!shown.has(id)) ui.selected.delete(id);
     content = `<div id="bulk-slot">${bulkBar()}</div>`
-      + tableHTML(state, list, { sort: ui.sort, draft: q ? null : draftRow(), fmt: (c) => money(c), selected: ui.selected, years: !!q })
+      + tableHTML(state, list, { sort: ui.sort, draft: q ? null : draftRow(), fmt: (c) => money(c), selected: ui.selected, years: !!q, extra: RecordX.tableCols() })
       + `<datalist id="people-list">${state.people.map((p) => `<option value="${esc(p.name)}">`).join('')}</datalist>`;
   } else {
     const groups = new Map();
@@ -1720,7 +1727,7 @@ function viewSettings() {
   const sections = [
     { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + MoneyB.settingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Checkup.settingsCard() + Money3.settingsCard() + Shortcuts.settingsCard() },
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
-    { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() + BudgetWarn.settingsCard() },
+    { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + RecordX.fieldsCard() + RecordX.tagsCard() + Rules.settingsCard() + BudgetWarn.settingsCard() },
     { id: 'sources', icon: '💼', label: 'Income sources', sub: 'Job 1, Job 2, clients', desc: 'Your own tags for where money comes from. Pick one when you log income, and see each one in Reports.', html: () => IncomeSources.settingsCard() },
     { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + ArchiveCard.settingsCard() + ChangesScreen.settingsCard() + Backups.settingsCard() + Sync.settingsCard() },
     { id: 'connect', icon: '🔗', label: 'Telegram & Binance', sub: 'Your bot, crypto balances', desc: 'Your own Telegram bot for logging from your phone, and Binance balances (read-only).', html: () => Telegram.settingsCard() + TgBlocks.settingsCard() + Binance.settingsCard() },
@@ -1961,6 +1968,7 @@ function openTxSheet(existing = null, preset = {}) {
     draft.incomeSource = IS.rememberedSource(state, { category: draft.category, note: draft.note });
   };
   if (!existing && draft.type === 'income') reSrc();
+  RecordX.initDraft(draft, existing); // your own fields and split lines (js/screens/recordx.js)
   const guessSub = () => (draft.type === 'expense' ? T.suggestSub(state, draft.note, { category: draft.category })?.sub || null : null);
   // After the note or category changed (unless you picked one yourself). A
   // new record takes the guess (shown as "Is this …?"); an old one only
@@ -2067,8 +2075,9 @@ function openTxSheet(existing = null, preset = {}) {
       <label class="field"><span>${isT ? 'Note (optional)' : 'What for?'}</span>
         <input id="tx-note" type="text" list="note-list" autocomplete="off" value="${esc(draft.note)}" placeholder="${draft.type === 'income' ? 'e.g. salary, project for a client' : isT ? 'e.g. to the safe' : 'e.g. groceries, taxi, rent'}"></label>
       <datalist id="note-list">${M.noteSuggestions(state, draft.type).map((n) => `<option value="${esc(n)}">`).join('')}</datalist>
-      ${(() => { const tags = M.allTags(state).slice(0, 8); return `<div class="tag-picks" role="group" aria-label="Tags">${tags.map((g) => `<button type="button" class="tag-pick" data-tag="${esc(g.tag)}" aria-pressed="${M.tagsOf(draft.note).includes(g.tag)}">#${esc(g.tag)}</button>`).join('')}<span class="muted small">${tags.length ? 'Tap a tag, or' : 'Tags:'} type #trip in the note</span></div>`; })()}
-      ${isT ? '' : `<div class="cats" role="group" aria-label="Category">${categoryOrder(catType()).map((c) => `<button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${draft.category === c.id}">${catChipIcon(c)}<span>${esc(c.name)}</span></button>`).join('')}
+      ${RecordX.tagRow(draft)}
+      ${isT ? '' : RecordX.splitHTML(draft, { cats: categoryOrder(catType()), cur, total: evalAmount(amountText) || 0, entryOn: entryOn() })}
+      ${isT || RecordX.hidesCategory(draft) ? '' : `<div class="cats" role="group" aria-label="Category">${categoryOrder(catType()).map((c) => `<button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${draft.category === c.id}">${catChipIcon(c)}<span>${esc(c.name)}</span></button>`).join('')}
         ${addingCat ? `<span class="cat-new"><input id="new-cat" type="text" placeholder="New category" aria-label="New category name"><button type="button" class="btn primary" data-act="cat-create">Add</button></span>` : '<button type="button" class="cat cat-add" data-act="cat-new">+ New</button>'}</div>
         <div id="sub-row-wrap">${subRow()}</div>
         <div id="src-row-wrap">${srcShown() ? IncomeSources.pickerHTML(state, { selected: draft.incomeSource, adding: addingSrc }) : ''}</div>`}
@@ -2085,11 +2094,12 @@ function openTxSheet(existing = null, preset = {}) {
       ${!existing && !isT && !draft.fromRule ? `<div class="row2"><label class="field"><span>Date</span><input id="tx-date" type="date" value="${esc(draft.date)}"></label>
         <label class="field"><span>Repeat</span><select id="tx-repeat"><option value="">No</option>${FREQS.filter((f) => f.id !== 'once' && f.id !== 'custom').map((f) => `<option value="${f.id}" ${draft.repeat === f.id ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label></div>`
     : `<label class="field"><span>Date</span><input id="tx-date" type="date" value="${esc(draft.date)}"></label>`}
+      ${RecordX.fieldsHTML(draft)}
       ${existing ? Taxes.sheetRow(existing.id) : ''}
       <div class="btns">
         ${existing ? '<button type="button" class="btn danger" data-act="tx-delete">Delete</button>' : ''}
-        ${existing && draft.type === 'income' && !existing.loan && !draft.refund ? '<button type="button" class="btn" data-act="tx-split">Split</button>' : ''}
-        ${existing && existing.type === 'expense' && draft.type === 'expense' ? '<button type="button" class="btn" data-act="tx-split-receipt" title="Divide this receipt across categories or people">Split receipt</button>' : ''}
+        ${existing && draft.type === 'income' && !existing.loan && !draft.refund ? '<button type="button" class="btn" data-act="tx-split">Divide into jars</button>' : ''}
+        ${existing && existing.type === 'expense' && draft.type === 'expense' && !draft.splitOn ? '<button type="button" class="btn" data-act="tx-split-receipt" title="Make separate records for each person or category">Split with people</button>' : ''}
         ${existing?.type === 'income' && draft.type === 'income' && !existing.loan && !draft.refund ? '<button type="button" class="btn" data-act="tx-allocate">Allocate to goals</button>' : ''}
         ${existing && !isT && !existing.loan ? '<button type="button" class="btn" data-act="tx-repeat" data-testid="tx-repeat">Repeat this…</button>' : ''}
         ${existing && !isT ? `<button type="button" class="btn" data-act="tx-fav" aria-pressed="${M.isFavorite(state, existing)}">${M.isFavorite(state, existing) ? '★ Favorite' : '☆ Make favorite'}</button>` : ''}
@@ -2116,6 +2126,7 @@ function openTxSheet(existing = null, preset = {}) {
       const el = v(`#tx-${f}`);
       if (el) draft[f] = el.value;
     }
+    RecordX.read(sheet, draft);
   };
 
   // Live line under the amount: the calculator result and the value in MDL.
@@ -2259,6 +2270,8 @@ function openTxSheet(existing = null, preset = {}) {
   const saveDraft = (sheet) => {
     const amount = evalAmount(amountText);
     if (!amount || amount <= 0) return fail(sheet, 'Enter an amount bigger than 0', '#tx-amount');
+    const rxProblem = RecordX.check(draft, amount, { entryOn: entryOn(), cur: curOf() }); // fields and split lines
+    if (rxProblem) return fail(sheet, rxProblem);
     const cur = curOf();
     const now = Date.now();
     const common = { id: existing?.id || M.uid(), createdAt: existing?.createdAt || now, updatedAt: now, type: draft.type, amount, currency: cur, date: draft.date, note: draft.note.trim() };
@@ -2320,6 +2333,7 @@ function openTxSheet(existing = null, preset = {}) {
     if (existing) Object.assign(tx, Taxes.keepOnEdit(state, existing.id));
     // Nor where it came from, its book or whether you confirmed it (phase 5): kept too (model.js keptOnEdit).
     if (existing) tx = M.keptOnEdit(existing, tx);
+    tx = RecordX.apply(tx, draft, existing); // your own fields, split lines (or none: unsplit)
     if (existing) state.tx = state.tx.map((t) => (t.id === existing.id ? tx : t));
     else state.tx.push(tx);
     // You picked or confirmed the subcategory: remember the shop for next time.
@@ -2344,6 +2358,7 @@ function openTxSheet(existing = null, preset = {}) {
   // listener sits on the sheet itself, so it is bound once.
   openSheet('', (sheet) => {
     Taxes.bindSheet(sheet);
+    RecordX.bind(sheet, { draft, repaint: () => { paint(sheet, false); updateHint(sheet); }, readAll: () => readInputs(sheet), total: () => evalAmount(sheet.querySelector('#tx-amount')?.value) || 0, cur: () => curOf() });
     sheet.addEventListener('click', (e) => {
       const seg = e.target.closest('.seg button');
       if (seg) {
@@ -3407,6 +3422,7 @@ document.addEventListener('click', (e) => {
     if (ui.tab === 'settings' && ui.settingsTab === 'general') render();
     return;
   }
+  if (RecordX.onClick(act, el)) return; // fields, tags, bulk "Set field" / "Add tag"
   if (SCREENS[ui.tab]?.onClick?.(act, el)) return;
   if (act === 'acc-open') AccountsScreen.openAccount(el.dataset.id);
   else if (act === 'person-open') PeopleScreen.openPerson(el.dataset.id);
@@ -3735,10 +3751,10 @@ document.addEventListener('keydown', (e) => {
 const SUB_TABS = [
   [{ tab: 'accounts', label: 'Cards & accounts' }, { tab: 'rates', label: 'Rates & converter' }],
   [{ tab: 'people', label: 'People & loans' }, { tab: 'clients', label: 'Clients & invoices' }],
-  [{ tab: 'reports', label: 'Reports' }, { tab: 'review', label: 'Year in review' }, { tab: 'longview', label: 'Long view' }, { tab: 'taxes', label: 'Taxes' }],
+  [{ tab: 'reports', label: 'Reports' }, { tab: 'review', label: 'Year in review' }, { tab: 'longview', label: 'Long view' }, { tab: 'taxes', label: 'Taxes' }, { tab: 'tags', label: 'Tags' }],
   [{ tab: 'plan', label: 'Plan' }, { tab: 'calendar', label: 'Calendar' }, { tab: 'wishlist', label: 'Wishlist' }],
 ];
-const NAV_PARENT = { rates: 'accounts', clients: 'people', review: 'reports', longview: 'reports', taxes: 'reports', calendar: 'plan', wishlist: 'plan' };
+const NAV_PARENT = { rates: 'accounts', clients: 'people', review: 'reports', longview: 'reports', taxes: 'reports', tags: 'reports', calendar: 'plan', wishlist: 'plan' };
 
 const SCREENS = {
   home: { view: viewHome, onClick: (a, el) => Plan.onClick(a, el) || Afford.onClick(a) },
@@ -3752,6 +3768,7 @@ const SCREENS = {
   review: YearReview,
   longview: LongView,
   taxes: Taxes,
+  tags: TagsReport,
   calendar: MoneyCalendar,
   wishlist: Wishlist,
   changes: ChangesScreen,

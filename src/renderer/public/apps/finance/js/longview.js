@@ -30,6 +30,7 @@ import { withArchive } from './archive.js';
 import { countsAsSpending, countsAsIncome, signed } from './catshare.js';
 import { pairRate, convert, coinValue } from './fx.js';
 import { addMonths, daysInMonth, monthKey } from './dates.js';
+import { expandSplits } from './splits.js';
 
 export const bookOf = (t) => t?.book ?? 'personal';
 export const accountBook = (a) => a?.book ?? 'personal';
@@ -46,7 +47,8 @@ export function booksIn(state) {
 }
 
 const monthEnd = (k) => `${k}-${String(daysInMonth(k)).padStart(2, '0')}`;
-const live = (state) => (state.tx || []).filter((t) => t && !t.deleted && typeof t.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(t.date));
+// A split record counts as its lines (js/splits.js).
+const live = (state) => expandSplits(state.tx || []).filter((t) => t && !t.deleted && typeof t.date === 'string' && /^\d{4}-\d{2}-\d{2}/.test(t.date));
 
 
 // ---------- Rates on a past day ----------

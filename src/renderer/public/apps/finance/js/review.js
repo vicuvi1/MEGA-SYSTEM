@@ -7,6 +7,7 @@
 import { accountBalances, B, category, savingsJar, sortTx } from './model.js';
 import { addDays } from './dates.js';
 import { isRefund, isNotCounted, signed } from './catshare.js';
+import { linesOf } from './splits.js';
 
 const counts = (t) => !t.loan && t.type !== 'transfer' && !isNotCounted(t);
 const inRange = (t, from, to) => t.date >= from && t.date <= to;
@@ -23,7 +24,8 @@ export function loggingStreak(state, today) {
 
 export function weeklyReview(state, today) {
   const from = addDays(today, -6);
-  const week = state.tx.filter((t) => counts(t) && inRange(t, from, today));
+  const lines = linesOf(state); // a split record counts per line (js/splits.js)
+  const week = lines.filter((t) => counts(t) && inRange(t, from, today));
   const income = week.filter((t) => t.type === 'income' && !isRefund(t)).reduce((a, t) => a + B(t), 0);
   const expense = week.filter((t) => t.type === 'expense' || isRefund(t)).reduce((a, t) => a + signed(t, B(t)), 0);
   // The 4 weeks before, as "a usual week" (weeks with no records skipped).
@@ -32,7 +34,7 @@ export function weeklyReview(state, today) {
   for (let w = 1; w <= 4; w++) {
     const f = addDays(from, -7 * w);
     const to = addDays(today, -7 * w);
-    const list = state.tx.filter((t) => counts(t) && (t.type === 'expense' || isRefund(t)) && inRange(t, f, to));
+    const list = lines.filter((t) => counts(t) && (t.type === 'expense' || isRefund(t)) && inRange(t, f, to));
     if (!state.tx.some((t) => inRange(t, f, to))) continue;
     prior.push(list.reduce((a, t) => a + signed(t, B(t)), 0));
     for (const t of list) perCat[t.category] = (perCat[t.category] || 0) + signed(t, B(t));
@@ -54,7 +56,7 @@ export function weeklyReview(state, today) {
   const other = sortTx(state.tx.filter((t) => t.type === 'expense' && t.category === 'other' && t.note && t.date >= addDays(today, -13) && t.date <= today && !t.cashCheck)).slice(0, 5);
   const target = savingsJar(state)?.pct ?? 0;
   const kept = income > 0 ? (income - expense) / income : null;
-  return { from, to: today, income, expense, kept, target, usual, change: usual ? (expense - usual) / usual : null, leak, other, streak: loggingStreak(state, today), records: week.length };
+  return { from, to: today, income, expense, kept, target, usual, change: usual ? (expense - usual) / usual : null, leak, other, streak: loggingStreak(state, today), records: new Set(week.map((t) => t.id)).size };
 }
 
 export const cashAccounts = (state) => state.settings.accounts.filter((a) => a.kind === 'cash' && !a.archived);

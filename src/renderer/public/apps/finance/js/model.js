@@ -9,6 +9,7 @@ import { ensureTree, memorySub, suggestSub, subOf } from './cattree.js';
 import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome, isRefund, isNotCounted, signed } from './catshare.js';
 import { addRule2, removeRule2, merchantChoice } from './learn.js';
 import { archivedBalanceUpTo, withArchive, forRange } from './archive.js';
+import { expandSplits } from './splits.js';
 
 // v1: first release. v2: custom multi-currency accounts, people, loans,
 // per-record timestamps and deletion markers for sync.
@@ -520,7 +521,9 @@ function sumBy(list, keyFn) {
 
 export function monthSummary(state, key) {
   state = forRange(state, `${key}-01`);
-  const list = txInMonth(state, key);
+  const records = txInMonth(state, key);
+  // A split record counts as its lines (js/splits.js): same totals, each part in its own category.
+  const list = expandSplits(records);
   // A refund (income with `refund: true`) is not income: it lowers its category's spending.
   const incomes = list.filter((t) => t.type === 'income' && counts(t) && !isRefund(t));
   const expenses = list.filter((t) => t.type === 'expense' && counts(t));
@@ -537,7 +540,7 @@ export function monthSummary(state, key) {
     savingsRate: income > 0 ? net / income : null,
     byCategory: sumBy([...expenses, ...refunds], (t) => t.category),
     bySource: sumBy(incomes, (t) => t.category),
-    count: list.length,
+    count: records.length,
     expenses,
     incomes,
     refunds,
@@ -958,7 +961,7 @@ export function toggleFavorite(state, t, now = Date.now()) {
 // A category can have a monthly budget (category.budget, in the main
 // currency's cents). Loans don't count, same as everywhere else.
 
-const spentIn = (state, key, catId) => txInMonth(state, key)
+const spentIn = (state, key, catId) => expandSplits(txInMonth(state, key))
   .filter((t) => (t.type === 'expense' && counts(t) || isRefund(t)) && t.category === catId)
   .reduce((a, t) => a + signed(t, B(t)), 0);
 
@@ -995,7 +998,7 @@ export function budgetAlert(state, t) {
 
 // The same for a subcategory with its own budget (Food › Cafés & coffee).
 function subBudgetAlert(state, t) {
-  const s = t.type === 'expense' && counts(t) ? subOf(state, t) : null;
+  const s = t.type === 'expense' && counts(t) && !t.splits ? subOf(state, t) : null;
   if (!(s?.budget > 0)) return null;
   const after = txInMonth(state, monthKey(t.date)).filter((x) => x.type === 'expense' && counts(x) && x.sub === s.id && x.category === s.parent).reduce((a, x) => a + B(x), 0);
   const before = after - B(t);
@@ -1007,7 +1010,7 @@ function subBudgetAlert(state, t) {
 
 function categoryBudgetAlert(state, t) {
   const c = category(state, t.category);
-  if (t.type !== 'expense' || !counts(t) || !(c?.budget > 0)) return null;
+  if (t.type !== 'expense' || !counts(t) || t.splits || !(c?.budget > 0)) return null;
   const after = spentIn(state, monthKey(t.date), c.id);
   const before = after - B(t);
   const fmt = (x) => formatMoney(x, state.settings.currency);
@@ -1438,7 +1441,7 @@ export function periodRange(id, today) {
 // Spending (or income) per category between two dates, in the base currency,
 // biggest first, each with its share and number of records.
 export function totalsByCategory(state, from, to, type = 'expense') {
-  const list = state.tx.filter((t) => (t.type === type && counts(t) && !(type === 'income' && isRefund(t)) || (type === 'expense' && isRefund(t))) && t.date >= from && t.date <= to);
+  const list = expandSplits(state.tx).filter((t) => (t.type === type && counts(t) && !(type === 'income' && isRefund(t)) || (type === 'expense' && isRefund(t))) && t.date >= from && t.date <= to);
   const total = list.reduce((a, t) => a + signed(t, B(t)), 0);
   const count = {};
   for (const t of list) count[t.category] = (count[t.category] || 0) + 1;
@@ -1478,7 +1481,8 @@ function group(list, key) {
 // noted. `prev` holds the same numbers for the period just before.
 export function report(state, from, to, { withPrev = true, today = null } = {}) {
   state = forRange(state, withPrev ? `${Number(from.slice(0, 4)) - 1}-01-01` : from);
-  const inRange = state.tx.filter((t) => t.date >= from && t.date <= to);
+  const records = state.tx.filter((t) => t.date >= from && t.date <= to);
+  const inRange = expandSplits(records);
   const real = inRange.filter((t) => t.type !== 'transfer' && counts(t));
   const income = real.filter((t) => t.type === 'income' && !isRefund(t)).reduce((a, t) => a + B(t), 0);
   const expense = real.filter((t) => t.type === 'expense' || isRefund(t)).reduce((a, t) => a + signed(t, B(t)), 0);
@@ -1506,7 +1510,7 @@ export function report(state, from, to, { withPrev = true, today = null } = {}) 
     savingsRate: income > 0 ? (income - expense) / income : null,
     perDay: counted ? Math.round(expense / counted) : 0,
     noSpendDays: Math.max(0, counted - spendDays),
-    count: inRange.length,
+    count: records.length,
     spending, sources, byAccount, byPerson,
     byCurrency: [...cur.values()],
     loansOut: loans.filter((t) => t.type === 'expense').reduce((a, t) => a + B(t), 0),

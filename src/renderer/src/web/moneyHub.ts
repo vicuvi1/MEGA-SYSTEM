@@ -33,6 +33,8 @@ import {
   type Upcoming,
   type WeekCompare
 } from '@core/moneyHub'
+// @ts-ignore plain JS module of the embedded app (split records)
+import { expandSplits } from '../../public/apps/finance/js/splits.js'
 
 export interface MoneyHubView {
   ok: boolean
@@ -82,12 +84,13 @@ export function cleanFinance(raw: any): any | null {
 }
 
 function hubTx(state: any): HubTx[] {
-  return (state.tx as any[])
+  // A split record (apps/finance/js/splits.js) is one row per line, so categories add up right.
+  return (expandSplits(state.tx) as any[])
     // Spending is Finance's own rule (catshare.js countsAsSpending, the same as
     // its "Where your money goes" donut): a reward bought with points
     // (life-reward-…) is not real money and is left out here too.
     .filter((t) => t && !t.deleted && typeof t.date === 'string' && (countsAsSpending(t) || countsAsIncome(t)))
-    .map((t) => ({ id: String(t.id), date: t.date.slice(0, 10), type: isRefund(t) ? 'expense' : t.type, amount: Math.abs(B(t)), category: String(t.category ?? 'other'), note: t.note ? String(t.note) : undefined, everyday: (t.type === 'expense' || isRefund(t)) && isEveryday(state, t), ...(isRefund(t) ? { refund: true } : {}) }))
+    .map((t) => ({ id: t.lineOf ? `${t.id}#${t.line}` : String(t.id), date: t.date.slice(0, 10), type: isRefund(t) ? 'expense' : t.type, amount: Math.abs(B(t)), category: String(t.category ?? 'other'), note: t.note ? String(t.note) : undefined, everyday: (t.type === 'expense' || isRefund(t)) && isEveryday(state, t), ...(isRefund(t) ? { refund: true } : {}) }))
 }
 
 // A recurring item's amount in the main currency. Rules keep their own

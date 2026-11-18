@@ -9,6 +9,7 @@
 import * as M from './model.js';
 import { addMonths, monthKey } from './dates.js';
 import { countsAsSpending, isRefund } from './catshare.js';
+import { linesOf } from './splits.js';
 
 export const MARKS = [3, 6];
 export const SCALE_MAX = 8; // the bar is full at 8 months
@@ -41,8 +42,9 @@ export function emergencyFund(state, today) {
   const first = state.tx.reduce((m, t) => (t.date < m ? t.date : m), '9999-99-99').slice(0, 7);
   const keys = [1, 2, 3].map((i) => addMonths(now, -i)).filter((k) => k >= first);
   let total = 0;
+  const lines = linesOf(state); // a split record per line (js/splits.js)
   for (const k of keys) {
-    for (const t of state.tx) {
+    for (const t of lines) {
       if (!t.date.startsWith(k) || t.type !== 'expense' || !countsAsSpending(t) || isRefund(t)) continue;
       if (ess && !ess.has(t.category)) continue;
       total += M.B(t);

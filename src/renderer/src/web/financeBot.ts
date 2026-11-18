@@ -20,6 +20,8 @@ import { suggest } from '../../public/apps/finance/js/learn.js'
 import { detectExpenseCategory } from '@core/botCommands'
 import { mainAccountId } from '@core/moneyHub'
 import { getSetting, setSetting } from '../../../main/settings'
+// @ts-ignore plain JS module of the embedded app (split records)
+import { expandSplits } from '../../public/apps/finance/js/splits.js'
 
 const SETTING = 'app_sync_finance'
 type Db = Parameters<typeof getSetting>[0]
@@ -330,7 +332,7 @@ export function monthSpend(db: Db, today: string): { spentMonth: number; limit: 
   const state = financeState(db)
   if (!state) return null
   const month = today.slice(0, 7)
-  const list = state.tx.filter((t: any) => t && t.type === 'expense' && !t.notSpending && !t.deleted && typeof t.date === 'string' && t.date.startsWith(month))
+  const list = (expandSplits(state.tx) as any[]).filter((t: any) => t && t.type === 'expense' && !t.notSpending && !t.deleted && typeof t.date === 'string' && t.date.startsWith(month))
   const by = new Map<string, number>()
   let spentMonth = 0
   for (const t of list) {
@@ -340,7 +342,7 @@ export function monthSpend(db: Db, today: string): { spentMonth: number; limit: 
     by.set(name, (by.get(name) ?? 0) + v)
   }
   const lim = state.settings?.limit
-  return { spentMonth, limit: lim?.on && Number(lim.amount) > 0 ? Number(lim.amount) : null, byCategory: [...by].map(([name, amount]) => ({ name, amount })), records: list.length }
+  return { spentMonth, limit: lim?.on && Number(lim.amount) > 0 ? Number(lim.amount) : null, byCategory: [...by].map(([name, amount]) => ({ name, amount })), records: new Set(list.map((t: any) => t.id)).size }
 }
 
 /** A deleted record, as it was (for Undo). */

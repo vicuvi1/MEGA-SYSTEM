@@ -1654,6 +1654,19 @@
    ],
    "evidence": "2026-11-18: 17 unit tests (undo stack over the change history incl. other-device entries and a reload, saved views with relative dates and sync, key rules and clipboard parsing) and one combined smoke step.",
    "notes": "finance js/undolog.js, savedviews.js, gridnav.js, gridedit.js, screens/recent.js, savedbar.js, css/usability.css; small hooks in app.js and history.js; sw cache bumped."
+  },
+  {
+   "id": "money-record-model",
+   "area": "money",
+   "title": "Money: split one record, your own fields, colour tags",
+   "user_visible_behavior": "Split one amount into category lines that must add up (one balance change, totals per line everywhere); custom fields (text, number, date, yes/no, pick-list) in the form, Log columns, search, bulk and export/import; coloured tags with a Tags manager, bulk add/remove and Reports → Tags.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeSplits.test.ts src/renderer/src/web/financeFields.test.ts src/renderer/src/web/financeTags.test.ts",
+    "SMOKE_ONLY=\"Money split\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: unit tests (splits across every totals path, fields round trip, tag merge) and the smoke step pass.",
+   "notes": "finance js/splits.js (expandSplits, the one helper all totals use), js/fields.js, js/tags.js, js/screens/recordx.js, js/screens/tagsreport.js; record fields splits / fields, settings keys customFields / tagStyles; sw cache v72. DECISIONS.md 2026-11-18."
   }
  ]
 }

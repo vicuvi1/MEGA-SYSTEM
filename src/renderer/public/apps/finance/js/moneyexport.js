@@ -19,6 +19,7 @@ import { tagsOf, uid } from './model.js';
 import { parseAmount } from './money.js';
 import { isValidISO } from './dates.js';
 import { describe } from './recurring.js';
+import { exportDefs, columnName, cellOf, valueOf, readImportFields } from './fields.js';
 
 export const TX_HEADER = ['ID', 'Date', 'Type', 'Account', 'From', 'To', 'To amount', 'Category', 'Subcategory', 'Amount', 'Currency', 'Base amount', 'Base currency', 'Rate',
   'Note', 'Tags', 'Person', 'Client', 'Invoice ID', 'Loan', 'Repriced from', 'Recurring ID', 'Reconciliation ID', 'Created', 'Updated',
@@ -61,7 +62,10 @@ export function txRows(state, list = state.tx) {
   const n = names(state);
   const baseCur = state.settings.currency;
   const sorted = [...list].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.createdAt || 0) - (b.createdAt || 0)));
-  const rows = [TX_HEADER];
+  // Your own fields (js/fields.js) get a readable column each, "Field: Project", after the
+  // fixed ones; the values also stay in "Other fields", so the round trip loses nothing.
+  const defs = exportDefs(state, list);
+  const rows = [defs.length ? [...TX_HEADER, ...defs.map(columnName)] : TX_HEADER];
   for (const t of sorted) {
     const other = {};
     for (const k of Object.keys(t)) if (!OWN.has(k) && t[k] !== undefined) other[k] = t[k];
@@ -72,6 +76,7 @@ export function txRows(state, list = state.tx) {
       t.note || '', tagsOf(t.note || '').join(' '), p?.name || '', p?.client ? p.name : '', t.invoice || '', t.loan ? 'yes' : '', json(t.repricedFrom),
       t.recurring || '', t.reconcile || '', iso(t.createdAt), iso(t.updatedAt),
       t.account || '', t.from || '', t.to || '', t.category || '', t.sub || '', t.person || '', Object.keys(other).length ? JSON.stringify(other) : '',
+      ...defs.map((d) => cellOf(d, valueOf(t, d.id))),
     ]);
   }
   return rows;
@@ -233,6 +238,9 @@ export function previewImport(rows, state, { now = Date.now() } = {}) {
     if (rc) t.reconcile = rc;
     const rep = get(row, 'Repriced from');
     if (rep) { try { t.repricedFrom = JSON.parse(rep); } catch { /* kept out: not readable */ } }
+    // "Field: Project" columns (edited in a spreadsheet) win over the copy in Other fields.
+    const fr = readImportFields(state, rows[0].map((c) => String(c ?? '').replace(/^﻿/, '').trim()), (h) => get(row, h), t.fields);
+    if (Object.keys(fr.fields).length) t.fields = fr.fields;
     const created = Date.parse(get(row, 'Created'));
     t.createdAt = Number.isFinite(created) ? created : stamp;
     // Changed now, so the import syncs to your other devices.

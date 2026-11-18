@@ -17,6 +17,7 @@ import { trendChart, dailyChart, sankeyChart } from '../charts.js';
 import { monthSheet } from '../importer.js';
 import { workbook } from '../xlsx.js';
 import { parseQuery, searchTx, relRange } from '../search.js';
+import { expandSplits } from '../splits.js';
 import { catIcon, subColor } from './categories.js';
 import * as Spending from './spending.js';
 import * as IncomeSources from './incomesources.js';
@@ -72,7 +73,9 @@ function scope() {
   // Archived years (js/archive.js) are read when the period, its year before or a search reaches back there.
   const cut = cutoffOf(ctx.state);
   const state = cut && (`${Number(r0.from.slice(0, 4)) - 1}-01-01` < cut || rs.q.trim()) ? withArchive(ctx.state) : ctx.state;
-  let list = state.tx;
+  // Split records as their lines (js/splits.js), so a tag or search on one line finds that part.
+  const all = expandSplits(state.tx);
+  let list = all;
   if (rs.acc) list = list.filter((t) => t.account === rs.acc || t.from === rs.acc || t.to === rs.acc);
   if (rs.tag) list = list.filter((t) => M.tagsOf(t.note).includes(rs.tag));
   if (rs.person) list = list.filter((t) => t.person === rs.person);
@@ -85,7 +88,7 @@ function scope() {
     if (rr) r0 = { ...rr, label: `"${q}"`, searched: true };
     list = searchTx({ ...state, tx: list }, pq, today);
   }
-  const filtered = list !== state.tx;
+  const filtered = list !== all;
   return { r0, fs: filtered ? { ...state, tx: list } : state, filtered };
 }
 

@@ -30,7 +30,8 @@ export function applyBulk(state, ids, kind, value, { rateFor = () => null, now =
       if (value === 'no') { if (t[field]) continue; t[field] = true; } else { if (!t[field]) continue; delete t[field]; }
     } else if (t.type === 'transfer') { skipped++; continue; }
     else if (kind === 'category') {
-      if (category(state, value)?.type !== t.type) { skipped++; continue; }
+      // A split record keeps its lines' categories (open it to change them).
+      if (category(state, value)?.type !== t.type || t.splits) { skipped++; continue; }
       t.category = value;
     } else if (kind === 'account') {
       t.account = value;
@@ -58,7 +59,7 @@ export function countApplicable(state, ids, kind, value) {
     const field = kind === 'income' ? 'notIncome' : 'notSpending';
     return state.tx.filter((t) => set.has(t.id) && t.type === type && !t.loan && !t.reconcile && !t.refund && (value === 'no' ? !t[field] : !!t[field])).length;
   }
-  return state.tx.filter((t) => set.has(t.id) && (kind === 'date' || (t.type !== 'transfer' && (kind !== 'category' || category(state, value)?.type === t.type)))).length;
+  return state.tx.filter((t) => set.has(t.id) && (kind === 'date' || (t.type !== 'transfer' && (kind !== 'category' || (category(state, value)?.type === t.type && !t.splits))))).length;
 }
 
 export function deleteMany(state, ids, now = Date.now()) {

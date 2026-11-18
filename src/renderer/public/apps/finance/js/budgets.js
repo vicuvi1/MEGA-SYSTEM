@@ -12,6 +12,7 @@
 import { addDays, daysInMonth, daysBetween, monthKey } from './dates.js';
 import { countsAsSpending, signed } from './catshare.js';
 import { B, tagsOf } from './model.js';
+import { linesOf } from './splits.js';
 
 export const PERIODS = [
   { id: 'week', name: 'Every week', word: "this week's" },
@@ -52,7 +53,7 @@ export function matches(b, t) {
 export function budgetProgress(state, b, today) {
   const w = windowOf(b, today);
   let spent = 0;
-  for (const t of state.tx) {
+  for (const t of linesOf(state)) { // a split record counts per line (js/splits.js)
     if (t.date < w.from || t.date > w.to || !countsAsSpending(t) || !matches(b, t)) continue;
     spent += signed(t, B(t));
   }

@@ -15,6 +15,7 @@ import { dueItems, upcomingItems } from './recurring.js';
 import { workText } from './workhours.js';
 import { safeLine, safeToSpend, shortDay, limitStatus } from './safespend.js';
 import { countsAsSpending, countsAsIncome, signed } from './catshare.js';
+import { linesOf } from './splits.js';
 
 const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const INCOME_WORDS = /^(\+|got|earned|income|salary|salariu|venit|primit|зарплата|получил|доход)$/;
@@ -104,7 +105,7 @@ export function loggedText(state, t, today = null) {
   if (work) lines.push(`⏱ ${esc(work)} of your work`);
   if (t.type === 'expense' && t.date) {
     const key = monthKey(t.date);
-    const catMonth = state.tx.filter((x) => countsAsSpending(x) && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + signed(x, B(x)), 0);
+    const catMonth = linesOf(state).filter((x) => countsAsSpending(x) && x.category === t.category && monthKey(x.date) === key).reduce((s, x) => s + signed(x, B(x)), 0);
     lines.push(`\n📊 Spent that day: <b>${fm(state, spentOn(state, t.date, t.date))}</b> · month: ${fm(state, monthSummary(state, key).expense)}`);
     lines.push(`${esc(c || 'This category')} this month: ${fm(state, catMonth)}`);
   }

@@ -43,6 +43,8 @@ import { rewardsMore } from './rewardsMore'
 import type { RewardRules } from '@core/rewardGuard'
 import type { BrowserDb } from './browserDb'
 import type { Mirror } from './mirror'
+// @ts-ignore plain JS module of the embedded app (split records)
+import { expandSplits } from '../../public/apps/finance/js/splits.js'
 
 /** Finance Helper's data on this device (else the synced copy). */
 const financeOf = (s: { db: any }) => financeStateFrom(s.db, typeof localStorage !== 'undefined' ? localStorage : null)
@@ -86,7 +88,7 @@ export function financeDayTx(s: Services, finance: any = financeOf(s), withLife 
   if (!txs.length) return []
   const names = new Map<string, string>((finance?.settings?.categories ?? []).map((c: any) => [String(c.id), String(c.name)]))
   const dayOf = (ms: number) => s.wallet.today(new Date(ms))
-  return txs
+  return (expandSplits(txs) as any[]) // a split record is one row per line (apps/finance/js/splits.js)
     .filter((t) => t && !t.deleted && !t.notIncome && !t.notSpending && typeof t.date === 'string' && t.type !== 'transfer' && (withLife || !String(t.id ?? '').startsWith('life-exp-')))
     .map((t) => ({
       date: t.date.slice(0, 10),
