@@ -7,7 +7,7 @@ import { KEEP_TEXT, sizeLabel, statusLine, type SyncFolderStatus, type SyncPrevi
 import { askConfirm } from '../confirmSheet'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
-import { syncFolder } from './syncFolder'
+import { syncFolder, syncFolderIpc } from './syncFolder'
 import { APP_KEYS } from './syncFolderClient'
 
 const DOT: Record<string, string> = { green: 'on', amber: 'idle', red: 'off', off: 'idle' }
@@ -19,7 +19,7 @@ let wired = false
 /** Headless: answers the desktop when it wants a copy, and tells it when an app's own data changed. */
 export function SyncFolderLive() {
   useEffect(() => {
-    const ipc = window.desktop?.syncFolder
+    const ipc = syncFolderIpc()
     if (!ipc || wired) return
     wired = true
     let busy = false
@@ -72,7 +72,7 @@ export function SyncFolderPanel() {
   }, [])
   useEffect(() => {
     reload()
-    window.desktop?.syncFolder?.onChanged(reload)
+    syncFolderIpc()?.onChanged(reload)
     const t = window.setInterval(reload, 60_000)
     return () => clearInterval(t)
   }, [reload])
