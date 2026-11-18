@@ -17875,6 +17875,8 @@ function focusEndsAt(run) {
 }
 /** Fun (games, YouTube, scrolling) costs 1 coin a minute. */
 var funCost = (minutes) => Math.max(1, Math.round(minutes));
+/** One must-do's identity: its Todoist task when linked, else its words. */
+var planKey = (p) => p.todoistId ? `td:${p.todoistId}` : p.text.trim().toLowerCase().replace(/\s+/g, " ");
 /** Why a must-do didn't happen (one tap in the evening). */
 var REASONS$1 = [
 	"Tired",
@@ -40840,6 +40842,12 @@ var MIGRATIONS = [
   );
   CREATE UNIQUE INDEX IF NOT EXISTS body_comp_dedupe ON body_comp(dedupe);
   CREATE INDEX IF NOT EXISTS body_comp_day ON body_comp(day);
+  `,
+	`
+  ALTER TABLE sleep_logs ADD COLUMN bed_at TEXT;
+  ALTER TABLE sleep_logs ADD COLUMN wake_at TEXT;
+  ALTER TABLE sleep_logs ADD COLUMN updated_at TEXT;
+  ALTER TABLE day_plans ADD COLUMN removed TEXT NOT NULL DEFAULT '[]';
   `
 ];
 // src/core/rules.ts
@@ -41316,8 +41324,72 @@ function normalize(sql, raw) {
 	};
 }
 var isWrite = (sql) => !/^\s*(SELECT|WITH\s[\s\S]*SELECT|PRAGMA\s+\w+\s*$|EXPLAIN)/i.test(sql);
+/**
+* A statement touched data this copy has not downloaded yet (the server's
+* copy starts without the big app blobs and without most tables: Mirror
+* `lazy`). The mirror downloads what is named here and runs the whole read or
+* change again; nothing ever runs against a table that is only empty because
+* it was not loaded.
+*/
+var NeedData = class extends Error {
+	tables;
+	keys;
+	allKeys;
+	constructor(tables, keys, allKeys) {
+		super(`Data not loaded yet: ${[
+			...tables,
+			...keys,
+			...allKeys ? ["every setting"] : []
+		].join(", ")}`);
+		this.tables = tables;
+		this.keys = keys;
+		this.allKeys = allKeys;
+		this.name = "NeedData";
+	}
+};
 var BrowserDb = class BrowserDb {
 	raw;
+	/** Set by the mirror on the server's copy only. */
+	lazy = null;
+	need = null;
+	/** What statements needed since the last call (also when the caller swallowed the error). */
+	takeNeed() {
+		const n = this.need;
+		this.need = null;
+		return n ? new NeedData([...n.tables], [...n.keys], n.allKeys) : null;
+	}
+	static WORDS = /[A-Za-z_][A-Za-z0-9_]*/g;
+	static ONE_KEY = /\bkey\s*=\s*(\?|'[^']*')|\bkey\s+IN\s*\(|\(\s*key\s*,\s*value\s*\)\s*VALUES/i;
+	/** Refuses a statement that names data not loaded yet, and remembers what it needs. */
+	guard(sql, args) {
+		const lazy = this.lazy;
+		if (!lazy) return;
+		const tables = /* @__PURE__ */ new Set();
+		let settings = false;
+		for (const w of sql.match(BrowserDb.WORDS) ?? []) {
+			const t = w.toLowerCase();
+			if (t === "settings") settings = true;
+			else if (lazy.tables.has(t)) tables.add(t);
+		}
+		const keys = /* @__PURE__ */ new Set();
+		let allKeys = false;
+		if (settings && !lazy.allKeys) {
+			if (BrowserDb.ONE_KEY.test(sql)) {
+				const named = [...args.filter((a) => typeof a === "string"), ...[...sql.matchAll(/'([^']*)'/g)].map((m) => m[1])];
+				for (const k of named) if (k.length <= 200 && lazy.isBlob(k) && !lazy.keys.has(k)) keys.add(k);
+			} else allKeys = true;
+		}
+		if (!tables.size && !keys.size && !allKeys) return;
+		this.need ??= {
+			tables: /* @__PURE__ */ new Set(),
+			keys: /* @__PURE__ */ new Set(),
+			allKeys: false
+		};
+		for (const t of tables) this.need.tables.add(t);
+		for (const k of keys) this.need.keys.add(k);
+		this.need.allKeys ||= allKeys;
+		throw new NeedData([...tables], [...keys], allKeys);
+	}
 	depth = 0;
 	sp = 0;
 	/** Changes made since the last `takeChanges()`, in order. */
@@ -41394,6 +41466,8 @@ var BrowserDb = class BrowserDb {
 		const r = this.raw.exec(sql);
 		return Number(r[0]?.values[0]?.[0] ?? 0);
 	}
+	/** Tables whose rows are upserted by a natural key (sleep_logs: one row per day); nothing points at their ids. */
+	static BY_NATURAL_KEY = /* @__PURE__ */ new Set(["sleep_logs"]);
 	/** The INTEGER PRIMARY KEY column of a table (its rowid), if it has one. */
 	rowidColumn(table) {
 		if (this.pkCache.has(table)) return this.pkCache.get(table);
@@ -41408,6 +41482,7 @@ var BrowserDb = class BrowserDb {
 	*/
 	withExplicitId(change, id) {
 		const m = /^\s*INSERT(\s+OR\s+\w+)?\s+INTO\s+["`]?(\w+)["`]?\s*\(([^)]*)\)\s*VALUES\s*\(/i.exec(change.sql);
+		if (m && BrowserDb.BY_NATURAL_KEY.has(m[2].toLowerCase())) return change;
 		if (!m || /\bSELECT\b/i.test(change.sql) || (change.sql.match(/\bVALUES\b/gi) || []).length !== 1) return change;
 		const col = this.rowidColumn(m[2]);
 		if (!col) return change;
@@ -41419,6 +41494,7 @@ var BrowserDb = class BrowserDb {
 	}
 	run(sql, raw) {
 		const change = normalize(sql, raw);
+		this.guard(change.sql, change.args);
 		const edit = BrowserDb.ROW_EDIT.exec(change.sql);
 		if (edit) {
 			const table = edit[1] ?? edit[2];
@@ -41464,15 +41540,18 @@ var BrowserDb = class BrowserDb {
 			run: (...args) => this.run(sql, args),
 			get: (...args) => {
 				const c = normalize(sql, args);
+				this.guard(c.sql, c.args);
 				return this.rows(c.sql, c.args)[0];
 			},
 			all: (...args) => {
 				const c = normalize(sql, args);
+				this.guard(c.sql, c.args);
 				return this.rows(c.sql, c.args);
 			}
 		};
 	}
 	exec(sql) {
+		this.guard(sql, []);
 		if (isWrite(sql)) this.touch(sql);
 		this.raw.exec(sql);
 		if (isWrite(sql)) this.changes.push({
@@ -41481,6 +41560,7 @@ var BrowserDb = class BrowserDb {
 		});
 	}
 	pragma(source, opts) {
+		this.guard(source, []);
 		const r = this.rows(`PRAGMA ${source}`, []);
 		if (opts?.simple) return r[0] ? Object.values(r[0])[0] : void 0;
 		return r;
@@ -41621,7 +41701,8 @@ function schemaInfo(db) {
 	const info = {
 		keys: {},
 		intPk: {},
-		fks: {}
+		fks: {},
+		natural: {}
 	};
 	const tables = (db.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []).map((r) => String(r[0])).filter((t) => !SKIP$1.test(t));
 	for (const t of tables) {
@@ -41633,6 +41714,15 @@ function schemaInfo(db) {
 			from: String(r[3]),
 			to: String(r[4] ?? "")
 		}));
+		info.natural[t] = null;
+		if (info.intPk[t]) for (const ix of db.exec(`PRAGMA index_list(${q$1(t)})`)[0]?.values ?? []) {
+			if (Number(ix[2]) !== 1 || String(ix[3]) !== "u") continue;
+			const cols = db.exec(`PRAGMA index_info(${q$1(String(ix[1]))})`)[0]?.values ?? [];
+			if (cols.length === 1 && cols[0][2] != null) {
+				info.natural[t] = String(cols[0][2]);
+				break;
+			}
+		}
 	}
 	return info;
 }
@@ -41892,6 +41982,37 @@ function mergeRow(b, a, s) {
 	for (const k of /* @__PURE__ */ new Set([...Object.keys(s), ...Object.keys(a)])) out[k] = merge3(k, b ? b[k] : void 0, a[k], s[k], later);
 	return out;
 }
+/**
+* A sleep night (sleep_logs): each half carries when it was logged (`wake_at`,
+* `bed_at`), and the half logged later wins as a whole, with its target and
+* "on time" (the same rule as the statement in main/sleep.ts). A half only one
+* side logged is kept. Without any stamp (rows from before), the general rule.
+*/
+function mergeNight(b, a, s) {
+	const out = mergeRow(b, a, s);
+	const half = (stamp, cols) => {
+		const ta = String(a[stamp] ?? "");
+		const ts = String(s[stamp] ?? "");
+		if (!ta && !ts) return;
+		const from = ts > ta ? s : a;
+		for (const c of [stamp, ...cols]) out[c] = from[c] ?? null;
+	};
+	half("wake_at", [
+		"wake_time",
+		"wake_target",
+		"on_time"
+	]);
+	half("bed_at", [
+		"bed_time",
+		"bed_target",
+		"bed_on_time"
+	]);
+	if (out.wake_time == null) out.wake_time = "";
+	out.updated_at = [a.updated_at, s.updated_at].map((v) => String(v ?? "")).sort()[1] || null;
+	return out;
+}
+/** Tables with their own merge rule; every other table merges column by column. */
+var ROW_MERGE = { sleep_logs: mergeNight };
 function applyRemap(row, t, map, info) {
 	if (!row) return row;
 	const out = { ...row };
@@ -41949,6 +42070,12 @@ async function rebaseWrite(turso, write, info) {
 		sql: `SELECT MAX(${q$1(info.intPk[t])}) FROM ${q$1(t)}`,
 		args: []
 	});
+	const naturalOf = (r) => info.intPk[r.t] && info.natural?.[r.t] ? (r.after ?? r.before)?.[info.natural[r.t]] ?? null : null;
+	const twins = rows.map((r, j) => naturalOf(r) != null ? j : -1).filter((j) => j >= 0);
+	for (const j of twins) reads.push({
+		sql: `SELECT * FROM ${q$1(rows[j].t)} WHERE ${q$1(info.natural[rows[j].t])} = ?`,
+		args: [naturalOf(rows[j])]
+	});
 	const res = await turso.readMany(reads);
 	const bad = res.find((r) => r instanceof Error);
 	if (bad) throw bad;
@@ -41959,11 +42086,27 @@ async function rebaseWrite(turso, write, info) {
 		return r.rows[0] ? Object.fromEntries(r.cols.map((c, j) => [c, r.rows[0][j]])) : null;
 	});
 	const own = {};
+	const adopted = /* @__PURE__ */ new Set();
+	twins.forEach((j, n) => {
+		const res = ok[rows.length + 1 + insertTables.length + n];
+		const r = rows[j];
+		const pk = info.intPk[r.t];
+		adopted.add(j);
+		server[j] = null;
+		if (!res.rows[0]) return;
+		const twin = Object.fromEntries(res.cols.map((c, k) => [c, res.rows[0][k]]));
+		const mine = (r.after ?? r.before)[pk];
+		if (String(twin[pk]) !== String(mine)) own[r.t] = {
+			...own[r.t] ?? {},
+			[String(mine)]: Number(twin[pk])
+		};
+		server[j] = twin;
+	});
 	insertTables.forEach((t, i) => {
 		const pk = info.intPk[t];
 		let next = Math.max(Number(ok[rows.length + 1 + i].rows[0]?.[0] ?? 0), ...rows.filter((r) => r.t === t && r.after).map((r) => Number(r.after[pk]) || 0));
 		rows.forEach((r, j) => {
-			if (r.t !== t || r.before || !r.after || !server[j] || same(server[j], r.after)) return;
+			if (r.t !== t || r.before || !r.after || adopted.has(j) || !server[j] || same(server[j], r.after)) return;
 			own[t] = {
 				...own[t] ?? {},
 				[String(r.after[pk])]: ++next
@@ -41975,18 +42118,21 @@ async function rebaseWrite(turso, write, info) {
 	const out = [...write.changes.filter((c) => /^\s*(CREATE|ALTER)\s/i.test(c.sql))];
 	rows.forEach((r, i) => {
 		const s = server[i];
-		const key = r.before ? r.key : applyRemap(r.key, r.t, own, info);
-		const after = r.before ? applyRemap(r.after, r.t, own, info) : applyRemap(r.after, r.t, map, info);
+		const byKey = adopted.has(i);
+		const pk = info.intPk[r.t];
+		const key = byKey && s && pk ? { [pk]: s[pk] } : r.before ? r.key : applyRemap(r.key, r.t, own, info);
+		const after = byKey || !r.before ? applyRemap(r.after, r.t, map, info) : applyRemap(r.after, r.t, own, info);
 		const w = where(key);
 		if (!after) {
-			if (s && same(s, r.before)) out.push({
+			const before = byKey ? applyRemap(r.before, r.t, map, info) : r.before;
+			if (s && same(s, before)) out.push({
 				sql: `DELETE FROM ${q$1(r.t)} WHERE ${w.sql}`,
 				args: w.args
 			});
 			return;
 		}
 		if (!s) {
-			const cols = Object.keys(after);
+			const cols = Object.keys(after).filter((c) => !(byKey && c === pk));
 			const withRowid = "rowid" in key && !(info.keys[r.t] ?? []).length;
 			const names = [...withRowid ? ["rowid"] : [], ...cols.map(q$1)];
 			out.push({
@@ -41995,7 +42141,7 @@ async function rebaseWrite(turso, write, info) {
 			});
 			return;
 		}
-		const merged = mergeRow(r.before, after, s);
+		const merged = (ROW_MERGE[r.t] ?? mergeRow)(r.before, after, s);
 		const changed = Object.keys(merged).filter((c) => !same(merged[c], s[c]));
 		if (!changed.length) return;
 		out.push({
@@ -42362,11 +42508,13 @@ function markRestoredApps(snap, restoreId, now, share = {}) {
 // src/renderer/src/web/mirror.ts
 var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|restore_stage_|cloud_snapshots$|cloud_snapshot_parts$)/;
 var MirrorError = class extends Error {};
+var likeToRe = (p) => new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".")}$`);
 var Mirror = class Mirror {
 	SQL;
 	turso;
 	store;
 	desktop;
+	lazy;
 	db = null;
 	queue = Promise.resolve();
 	listeners = /* @__PURE__ */ new Set();
@@ -42393,11 +42541,13 @@ var Mirror = class Mirror {
 	nextFlushAt = 0;
 	/** CL7: the session ended (401): the waiting changes stay here until you enter your PIN. */
 	locked = false;
-	constructor(SQL, turso, store = null, desktop = false) {
+	constructor(SQL, turso, store = null, desktop = false, lazy = null) {
 		this.SQL = SQL;
 		this.turso = turso;
 		this.store = store;
 		this.desktop = desktop;
+		this.lazy = lazy;
+		if (lazy && (store || desktop)) throw new MirrorError("A lazy copy is for the server only");
 		this.ready = this.start();
 		if (typeof window !== "undefined" && !this.desktop) window.addEventListener("online", () => {
 			this.nextFlushAt = 0;
@@ -42496,6 +42646,7 @@ var Mirror = class Mirror {
 			this.db = new BrowserDb(new this.SQL.Database(cached));
 			this.version = String(this.db.prepare("SELECT value FROM settings WHERE key = 'data_version'").get()?.value ?? "");
 			this.tv = this.loadTv();
+			this.schemaBehind = this.addMissing(this.db.raw).length > 0;
 			this.rebuiltAt = Date.now();
 			this.refresh().catch(() => {});
 			return;
@@ -42511,7 +42662,91 @@ var Mirror = class Mirror {
 	/** A read on the current copy. */
 	async read(fn) {
 		await this.ready;
-		return this.lock(() => fn(this.current));
+		if (!this.lazy) return this.lock(() => fn(this.current));
+		return this.lock(async () => {
+			for (let round = 0;; round++) {
+				const db = this.current;
+				db.takeNeed();
+				let out;
+				let err = null;
+				try {
+					out = fn(db);
+				} catch (e) {
+					err = e;
+				}
+				const need = db.takeNeed();
+				if (need && round < Mirror.LAZY_ROUNDS) {
+					await this.loadLazy(need);
+					continue;
+				}
+				if (err) throw err;
+				return out;
+			}
+		});
+	}
+	static LAZY_ROUNDS = 60;
+	/** What the lazy copy may read now: the eager and already loaded tables. */
+	lazyState(tables, before) {
+		const eager = new Set(this.lazy.eager.map((t) => t.toLowerCase()));
+		const blobs = this.lazy.blobs.map(likeToRe);
+		return {
+			tables: new Set(tables.map((t) => t.toLowerCase()).filter((t) => t !== "settings" && !eager.has(t) && (!before || before.tables.has(t)))),
+			isBlob: (k) => blobs.some((r) => r.test(k)),
+			keys: new Set(before?.keys ?? []),
+			allKeys: before?.allKeys ?? false
+		};
+	}
+	/** The settings rows a lazy copy holds: everything but the big ones not asked for yet. */
+	lazySettingsFilter(state) {
+		if (!this.lazy || !this.lazy.blobs.length || state?.allKeys) return null;
+		const keys = [...state?.keys ?? []];
+		return {
+			where: `(NOT (${this.lazy.blobs.map(() => "key LIKE ?").join(" OR ")})${keys.length ? ` OR key IN (${keys.map(() => "?").join(", ")})` : ""})`,
+			args: [...this.lazy.blobs, ...keys]
+		};
+	}
+	/** Downloads what a statement needed (tables, settings) into the copy. */
+	async loadLazy(need) {
+		const db = this.current;
+		const state = db.lazy;
+		if (!state) return;
+		const raw = db.raw;
+		const tables = need.tables.filter((t) => state.tables.has(t));
+		const real = new Map(this.localTables().map((t) => [t.toLowerCase(), t]));
+		const names = tables.map((t) => real.get(t)).filter((t) => !!t);
+		const keys = need.allKeys ? [] : need.keys.filter((k) => !state.keys.has(k));
+		const [data, some] = await Promise.all([names.length ? this.readTables(names) : Promise.resolve(/* @__PURE__ */ new Map()), need.allKeys && !state.allKeys ? this.turso.readMany([{
+			sql: `SELECT key, value FROM settings WHERE ${this.lazy.blobs.map(() => "key LIKE ?").join(" OR ")}`,
+			args: this.lazy.blobs
+		}]) : keys.length ? this.turso.readMany([{
+			sql: `SELECT key, value FROM settings WHERE key IN (${keys.map(() => "?").join(", ")})`,
+			args: keys
+		}]) : Promise.resolve([])]);
+		const got = some[0];
+		if (got instanceof Error) throw new MirrorError(`Could not read settings: ${got.message}`);
+		raw.run("BEGIN");
+		try {
+			for (const t of names) {
+				const res = data.get(t);
+				raw.run(`DELETE FROM "${t}"`);
+				if (!res || !res.rows.length) continue;
+				const stmt = raw.prepare(`INSERT INTO "${t}" (${res.cols.map((c) => `"${c}"`).join(", ")}) VALUES (${res.cols.map(() => "?").join(", ")})`);
+				try {
+					for (const row of res.rows) stmt.run(row);
+				} finally {
+					stmt.free();
+				}
+			}
+			for (const row of got?.rows ?? []) raw.run("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [row[0], row[1]]);
+			raw.run("COMMIT");
+		} catch (e) {
+			raw.run("ROLLBACK");
+			throw e;
+		}
+		this.rowsRead += got?.rows.length ?? 0;
+		for (const t of tables) state.tables.delete(t);
+		for (const k of keys) state.keys.add(k);
+		if (need.allKeys) state.allKeys = true;
 	}
 	/**
 	* A change: runs on the copy, then goes to Turso in one transaction. Only
@@ -42521,6 +42756,7 @@ var Mirror = class Mirror {
 		await this.ready;
 		if (this.desktop) return this.writeDesktop(fn);
 		return this.lock(async () => {
+			if (this.schemaBehind) await this.remoteSchema().catch(() => {});
 			let behind = false;
 			if (this.outbox().length) {
 				await this.flushOffline();
@@ -42529,7 +42765,24 @@ var Mirror = class Mirror {
 			for (let attempt = 0;; attempt++) {
 				const db = this.current;
 				db.dropChanges();
-				const result = db.transaction(() => fn(db))();
+				let result;
+				for (let round = 0;; round++) {
+					db.takeNeed();
+					try {
+						result = db.transaction(() => {
+							const r = fn(db);
+							const need = db.takeNeed();
+							if (need) throw need;
+							return r;
+						})();
+						break;
+					} catch (e) {
+						const need = e instanceof NeedData ? e : db.takeNeed();
+						if (!need || !this.lazy || round >= Mirror.LAZY_ROUNDS) throw e;
+						db.dropChanges();
+						await this.loadLazy(need);
+					}
+				}
 				const changes = db.takeChanges();
 				const expected = db.takeExpected();
 				const rowChecks = attempt < 2 ? db.takeRowChecks() : (db.takeRowChecks(), []);
@@ -42730,6 +42983,7 @@ var Mirror = class Mirror {
 		const list = [...this.outbox(), batch];
 		this.saveOutbox(list);
 		this.lastError = this.waitingNote(list.length);
+		if (this.outboxUnsaved && typeof window !== "undefined" && typeof window.dispatchEvent === "function" && typeof CustomEvent !== "undefined") window.dispatchEvent(new CustomEvent("life-not-stored", { detail: { waiting: list.length } }));
 	}
 	/** What the sync status says about changes still waiting (CL7). */
 	waitingNote(n) {
@@ -42759,6 +43013,7 @@ var Mirror = class Mirror {
 	async flushOffline(force = false) {
 		const list = this.outbox();
 		if (!list.length) return;
+		if (this.schemaBehind) await this.remoteSchema().catch(() => {});
 		if (this.locked || !force && Date.now() < this.nextFlushAt) {
 			this.lastError = this.waitingNote(list.length);
 			return;
@@ -42783,10 +43038,32 @@ var Mirror = class Mirror {
 				failed = true;
 				break;
 			}
+			const safe = batch.filter((c) => Mirror.SELF_MERGING.test(c.sql));
+			let rest = batch;
+			if (safe.length) {
+				const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+				try {
+					await this.turso.writeAtomic([
+						...writeOnce(version, { create: true }),
+						...safe,
+						...trackStatements(touchedTables(safe), version),
+						{
+							sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+							args: [version]
+						}
+					]);
+					rest = batch.filter((c) => !safe.includes(c));
+				} catch (e2) {
+					if (e2 instanceof UnauthorizedError || isOffline(e2) || isRetryable(e2)) {
+						failed = true;
+						break;
+					}
+				}
+			}
 			this.saveFailed([...this.failedSync, {
 				at: (/* @__PURE__ */ new Date()).toISOString(),
 				error: String(e?.message ?? e).slice(0, 200),
-				batch
+				batch: rest
 			}]);
 			sent++;
 		}
@@ -42800,6 +43077,8 @@ var Mirror = class Mirror {
 		if (left) this.lastError = this.waitingNote(left);
 		else if (sent) this.lastError = null;
 	}
+	/** Statements that merge with the server's row by themselves: a night's sleep and a day's must-dos. */
+	static SELF_MERGING = /^\s*INSERT INTO (sleep_logs|day_plans)\b[\s\S]*\bON CONFLICT\b/i;
 	static FAILED = "life_sync_failed";
 	/** Offline changes the database refused (newest last, up to 50), for the sync panel. */
 	get failedSync() {
@@ -42855,6 +43134,8 @@ var Mirror = class Mirror {
 	*/
 	async reloadTables(tables, version, remote) {
 		const raw = this.current.raw;
+		const lazy = this.current.lazy;
+		if (lazy) tables = tables.filter((t) => !lazy.tables.has(t.toLowerCase()));
 		const tail = /* @__PURE__ */ new Map();
 		const appendOnly = tables.filter((t) => APPEND_ONLY.has(t));
 		if (appendOnly.length) {
@@ -42878,7 +43159,7 @@ var Mirror = class Mirror {
 		const data = await this.readTables(tables, (t) => tail.has(t) ? {
 			where: "id > ?",
 			args: [tail.get(t)]
-		} : null);
+		} : t === "settings" ? this.lazySettingsFilter(lazy) : null);
 		raw.run("BEGIN");
 		try {
 			for (const t of tables) {
@@ -43150,6 +43431,7 @@ var Mirror = class Mirror {
 		let merged = false;
 		try {
 			const ids = this.pendingIds();
+			if (ids.length && this.schemaBehind) await this.remoteSchema();
 			const info = ids.length ? this.schema() : void 0;
 			for (const id of ids) {
 				const row = this.pendingRow(id);
@@ -43351,6 +43633,79 @@ var Mirror = class Mirror {
 		for (const m of MIGRATIONS) ref.exec(m);
 		return ref;
 	}
+	/**
+	* Adds to `raw` the tables and columns this app's migrations have and it
+	* lacks (never removes any). Returns the statements, for Turso.
+	*/
+	addMissing(raw) {
+		const ddl = [];
+		const ref = this.referenceDb();
+		try {
+			const refTables = ref.exec("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? [];
+			const have = new Set((raw.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []).map((r) => String(r[0])));
+			for (const [name, sql] of refTables) {
+				if (!have.has(name)) {
+					const create = sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, "CREATE TABLE IF NOT EXISTS ");
+					raw.exec(create);
+					ddl.push({
+						sql: create,
+						args: []
+					});
+					const idx = ref.exec(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = '${name}' AND sql IS NOT NULL`)[0]?.values ?? [];
+					for (const [isql] of idx) {
+						const c = isql.replace(/^CREATE (UNIQUE )?INDEX\s+(IF NOT EXISTS\s+)?/i, (_m, u) => `CREATE ${u ?? ""}INDEX IF NOT EXISTS `);
+						raw.exec(c);
+						ddl.push({
+							sql: c,
+							args: []
+						});
+					}
+					continue;
+				}
+				const localCols = new Set((raw.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []).map((r) => String(r[1]).toLowerCase()));
+				for (const col of ref.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []) {
+					const [, cname, ctype, notnull, dflt] = col;
+					if (localCols.has(cname.toLowerCase())) continue;
+					const def = `ALTER TABLE ${name} ADD COLUMN ${cname} ${ctype}${notnull && dflt != null ? " NOT NULL" : ""}${dflt != null ? ` DEFAULT ${dflt}` : ""}`;
+					raw.exec(def);
+					ddl.push({
+						sql: def,
+						args: []
+					});
+				}
+			}
+		} finally {
+			ref.close();
+		}
+		return ddl;
+	}
+	/**
+	* The copy kept on this device was made by an older version of the app (a
+	* new column since): the copy got the new tables and columns at once
+	* (start), and Turso gets what it still lacks here, before this device's
+	* next change is sent. Offline: tried again with the next change.
+	*/
+	schemaBehind = false;
+	async remoteSchema() {
+		if (!this.schemaBehind) return;
+		const probe = new this.SQL.Database();
+		try {
+			const [schema] = await this.turso.readMany([{
+				sql: "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL",
+				args: []
+			}]);
+			if (schema instanceof Error) throw schema;
+			for (const [name, sql] of schema.rows) if (!SKIP.test(String(name))) probe.exec(String(sql));
+			const ddl = this.addMissing(probe);
+			if (ddl.length) await this.turso.writeAtomic(ddl);
+		} catch (e) {
+			if (isOffline(e) || isRetryable(e)) throw e;
+			this.rebuiltAt = 0;
+		} finally {
+			probe.close();
+		}
+		this.schemaBehind = false;
+	}
 	async rebuild() {
 		const [preDv, preTv, schema] = await this.turso.readMany([...READ_VERSIONS, {
 			sql: "SELECT type, name, tbl_name, sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'index' THEN 1 ELSE 2 END, rowid",
@@ -43366,45 +43721,12 @@ var Mirror = class Mirror {
 		const raw = new this.SQL.Database();
 		const local = new BrowserDb(raw);
 		for (const o of objects.filter((x) => x.type === "table")) raw.exec(o.sql);
-		const ddl = [];
-		const ref = this.referenceDb();
-		const refTables = ref.exec("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? [];
-		const have = new Set(objects.filter((x) => x.type === "table").map((x) => x.name));
-		for (const [name, sql] of refTables) {
-			if (!have.has(name)) {
-				const create = sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, "CREATE TABLE IF NOT EXISTS ");
-				raw.exec(create);
-				ddl.push({
-					sql: create,
-					args: []
-				});
-				const idx = ref.exec(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = '${name}' AND sql IS NOT NULL`)[0]?.values ?? [];
-				for (const [isql] of idx) {
-					const c = isql.replace(/^CREATE (UNIQUE )?INDEX\s+(IF NOT EXISTS\s+)?/i, (_m, u) => `CREATE ${u ?? ""}INDEX IF NOT EXISTS `);
-					raw.exec(c);
-					ddl.push({
-						sql: c,
-						args: []
-					});
-				}
-				continue;
-			}
-			const localCols = new Set((raw.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []).map((r) => String(r[1]).toLowerCase()));
-			for (const col of ref.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []) {
-				const [, cname, ctype, notnull, dflt] = col;
-				if (localCols.has(cname.toLowerCase())) continue;
-				const def = `ALTER TABLE ${name} ADD COLUMN ${cname} ${ctype}${notnull && dflt != null ? " NOT NULL" : ""}${dflt != null ? ` DEFAULT ${dflt}` : ""}`;
-				raw.exec(def);
-				ddl.push({
-					sql: def,
-					args: []
-				});
-			}
-		}
-		ref.close();
+		const ddl = this.addMissing(raw);
 		if (ddl.length) await this.turso.writeAtomic(ddl);
 		const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0]));
-		const loaded = await this.readTables(tables);
+		if (this.lazy) local.lazy = this.lazyState(tables, this.db?.lazy ?? null);
+		const wanted = local.lazy ? tables.filter((t) => !local.lazy.tables.has(t.toLowerCase())) : tables;
+		const loaded = await this.readTables(wanted, (t) => t === "settings" ? this.lazySettingsFilter(local.lazy) : null);
 		raw.run("BEGIN");
 		for (const t of tables) {
 			const res = loaded.get(t);
@@ -48102,7 +48424,9 @@ var Body = class {
          weight = COALESCE(excluded.weight, body_metrics.weight),
          waist = COALESCE(excluded.waist, body_metrics.waist),
          note = COALESCE(excluded.note, body_metrics.note),
-         updated_at = excluded.updated_at`).run(today, input.weight ?? null, input.waist ?? null, input.note?.trim() || null, ts);
+         updated_at = excluded.updated_at
+       -- Two devices, the same day: the entry saved later stays, whichever is sent last.
+       WHERE excluded.updated_at >= body_metrics.updated_at`).run(today, input.weight ?? null, input.waist ?? null, input.note?.trim() || null, ts);
 		return this.state(now);
 	}
 };
@@ -51094,6 +51418,23 @@ var SleepService = class {
 		this.db = db;
 		this.wallet = wallet;
 	}
+	putWake(day, time, target, onTime, quality, now, ifEmpty = false) {
+		const at = now.toISOString();
+		this.db.prepare(`INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at, wake_at, updated_at)
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?)
+         ON CONFLICT(day) DO UPDATE SET wake_time = excluded.wake_time, wake_target = excluded.wake_target, on_time = excluded.on_time,
+           quality = COALESCE(excluded.quality, sleep_logs.quality), wake_at = excluded.wake_at,
+           updated_at = MAX(COALESCE(sleep_logs.updated_at, ''), excluded.updated_at)
+         WHERE ${ifEmpty ? "COALESCE(sleep_logs.wake_time, '') = ''" : "excluded.wake_at >= COALESCE(sleep_logs.wake_at, '')"}`).run(day, time, target, onTime ? 1 : 0, quality, at, at, at);
+	}
+	putBed(day, time, target, onTime, now) {
+		const at = now.toISOString();
+		this.db.prepare(`INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at, bed_at, updated_at)
+         VALUES (?, '', ?, 0, ?, ?, ?, NULL, ?, ?, ?)
+         ON CONFLICT(day) DO UPDATE SET bed_time = excluded.bed_time, bed_target = excluded.bed_target, bed_on_time = excluded.bed_on_time,
+           bed_at = excluded.bed_at, updated_at = MAX(COALESCE(sleep_logs.updated_at, ''), excluded.updated_at)
+         WHERE excluded.bed_at >= COALESCE(sleep_logs.bed_at, '')`).run(day, targetForDay(day, this.weekdayTarget(), this.weekendTarget()), time, target, onTime ? 1 : 0, at, at, at);
+	}
 	weekdayTarget() {
 		return getSetting(this.db, "sleep_weekday_target") || DEFAULT_WAKE;
 	}
@@ -51154,7 +51495,7 @@ var SleepService = class {
 			const row = this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(watch.day);
 			if (row) {
 				const target = row.bed_target || this.bedtimeTarget();
-				this.db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_on_time = ? WHERE day = ?").run(step.time, isBedOnTime(step.time, target) ? 1 : 0, watch.day);
+				this.putBed(watch.day, step.time, target, isBedOnTime(step.time, target), now);
 			}
 			return { said: watch.log[watch.log.length - 1] };
 		}
@@ -51186,8 +51527,7 @@ var SleepService = class {
 			awarded: false
 		};
 		if (existing && existing.on_time && !onTime) this.unpay("sleep.up_on_time", today, now);
-		if (existing) this.db.prepare("UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ?, quality = ? WHERE day = ?").run(wakeTime, target, onTime ? 1 : 0, quality ?? existing.quality, today);
-		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)").run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString());
+		this.putWake(today, wakeTime, target, onTime, quality ?? null, now, !time);
 		const nowMin = now.getHours() * 60 + now.getMinutes();
 		const [wh, wm] = wakeTime.split(":").map(Number);
 		const gap = Math.abs(nowMin - (wh * 60 + wm)) % 1440;
@@ -51224,8 +51564,7 @@ var SleepService = class {
 		if (day === today) return this.logWake(wakeTime, void 0, now);
 		const target = targetForDay(day, this.weekdayTarget(), this.weekendTarget());
 		const onTime = isWakeOnTime(wakeTime, target);
-		if (this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day)) this.db.prepare("UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ? WHERE day = ?").run(wakeTime, target, onTime ? 1 : 0, day);
-		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)").run(day, wakeTime, target, onTime ? 1 : 0, now.toISOString());
+		this.putWake(day, wakeTime, target, onTime, null, now);
 		return {
 			log: toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day)),
 			state: this.state(now),
@@ -51250,11 +51589,7 @@ var SleepService = class {
 		const today = bedNightDay(this.wallet.today(now), now.getHours());
 		const existing = this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(today);
 		if (existing && existing.bed_on_time && !onTime) this.unpay("sleep.bed_on_time", this.wallet.today(now), now);
-		if (existing) this.db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(bedTime, target, onTime ? 1 : 0, today);
-		else {
-			const wakeTarget = targetForDay(today, this.weekdayTarget(), this.weekendTarget());
-			this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)").run(today, "", wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString());
-		}
+		this.putBed(today, bedTime, target, onTime, now);
 		const [bh, bm] = bedTime.split(":").map(Number);
 		const gap = Math.abs(now.getHours() * 60 + now.getMinutes() - (bh * 60 + bm)) % 1440;
 		if (!time || Math.min(gap, 1440 - gap) <= 20) setSetting(this.db, "sleep_bed_watch", JSON.stringify(startBedWatch(now, today, this.wallet.today(now), bedTime)));
@@ -51277,10 +51612,50 @@ var SleepService = class {
 	setBed(day, time, now = /* @__PURE__ */ new Date()) {
 		if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time)) throw new LedgerError("Use a day and a time like 23:30");
 		const target = this.bedtimeTarget();
-		const onTime = isBedOnTime(time, target) ? 1 : 0;
-		if (this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day)) this.db.prepare("UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?").run(time, target, onTime, day);
-		else this.db.prepare("INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)").run(day, "", targetForDay(day, this.weekdayTarget(), this.weekendTarget()), time, target, onTime, now.toISOString());
+		this.putBed(day, time, target, isBedOnTime(time, target), now);
 		return toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day));
+	}
+	/**
+	* Last night typed in one go ("asleep at", "up at"): one write, both halves
+	* stamped with the same moment, so on another device the whole entry wins or
+	* loses together. Points as in setWake (today, typed within 20 minutes of
+	* getting up); the bedtime is a record only.
+	*/
+	setNight(day, bed, up, now = /* @__PURE__ */ new Date()) {
+		if (!bed && !up) throw new LedgerError("Type a time first");
+		const awarded = up ? this.setWake(day, up, now).awarded : false;
+		if (bed) this.setBed(day, bed, now);
+		return {
+			log: toLog(this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day)),
+			awarded
+		};
+	}
+	/**
+	* Honest points after two devices met: a sleep reward stays only while the
+	* night's record still says "on time", and only once. (Each device pays on
+	* its own copy while offline; a later entry from the other device may have
+	* replaced the time it paid for.) Returns how many payments it took back.
+	*/
+	settle(now = /* @__PURE__ */ new Date()) {
+		const today = this.wallet.today(now);
+		const all = this.wallet.entries();
+		const gone = new Set(all.map((e) => e.undoOf).filter((x) => x != null));
+		let n = 0;
+		const check = (ruleId, ref, onTime) => {
+			const paid = all.filter((e) => e.ruleId === ruleId && e.ref === ref && e.coins > 0 && !gone.has(e.id));
+			for (const e of onTime === false ? paid : paid.slice(1)) try {
+				this.wallet.undo(e.id, onTime === false ? "Sleep time corrected" : "Paid twice for one night", now);
+				n++;
+			} catch {}
+		};
+		const row = (day) => this.db.prepare("SELECT * FROM sleep_logs WHERE day = ?").get(day);
+		const up = row(today);
+		check("sleep.up_on_time", `up:${today}`, up && up.wake_time ? !!up.on_time : null);
+		for (const day of [today, addDays$8(today, 1)]) {
+			const r = row(day);
+			check("sleep.bed_on_time", `bed:${day}`, r && r.bed_time ? !!r.bed_on_time : null);
+		}
+		return n;
 	}
 	/**
 	* Copies Waky's wake-ups and bedtimes (its synced data) into the sleep log
@@ -51340,6 +51715,49 @@ function cleanStages(v) {
 }
 // src/main/focus.ts
 var RUNNING = "focus_running";
+var planCols = (from, src) => `SELECT ${src} AS src, key AS pos, json_extract(value, '$.id') AS k, COALESCE(json_extract(value, '$.editedAt'), 0) AS at, value AS v FROM json_each(${from}) WHERE json_extract(value, '$.id') IS NOT NULL`;
+var goneCols = (from) => `SELECT json_extract(value, '$.id') AS k, COALESCE(json_extract(value, '$.editedAt'), 0) AS at FROM json_each(${from}) WHERE json_extract(value, '$.id') IS NOT NULL`;
+/**
+* The must-do write (args: planArgs). When the day has
+* a row already, the two lists are merged inside the statement:
+* - a must-do in both: the copy changed later (`editedAt`) stays, the incoming one on a tie;
+* - a must-do in only one of them stays (the incoming list's order first);
+* - a removed must-do (`removed`) is left out unless its copy is newer than the removal;
+* - must-dos saved before ids existed are replaced by the incoming list (it was made from them).
+* The review and its reasons are not touched (saveReview). The incoming lists are
+* read from the arguments again and the row by its day: SQLite sees neither `excluded`
+* nor the row being updated inside these subqueries (so the arguments repeat: planArgs).
+*/
+/** PLAN_MERGE's arguments, in the order its question marks come. */
+var planArgs = (day, items, updatedAt, removed) => [
+	day,
+	items,
+	updatedAt,
+	removed,
+	day,
+	items,
+	day,
+	removed,
+	day,
+	removed
+];
+var PLAN_MERGE = `INSERT INTO day_plans (day, items, review, reasons, updated_at, removed) VALUES (?, ?, NULL, '[]', ?, ?)
+  ON CONFLICT(day) DO UPDATE SET
+    items = (
+      WITH c AS (${planCols("(SELECT items FROM day_plans WHERE day = ?)", 0)} UNION ALL ${planCols("?", 1)}),
+           g AS (${goneCols("COALESCE((SELECT removed FROM day_plans WHERE day = ?), '[]')")} UNION ALL ${goneCols("?")})
+      SELECT COALESCE(json_group_array(json(v)), '[]') FROM (
+        SELECT c.v FROM c
+        WHERE NOT EXISTS (SELECT 1 FROM c d WHERE d.k = c.k AND (d.at > c.at OR (d.at = c.at AND d.src > c.src)))
+          AND NOT EXISTS (SELECT 1 FROM g WHERE g.k = c.k AND g.at >= c.at)
+        ORDER BY (SELECT MAX(d.src) FROM c d WHERE d.k = c.k) DESC, (SELECT d.pos FROM c d WHERE d.k = c.k ORDER BY d.src DESC LIMIT 1)
+      )
+    ),
+    removed = (
+      WITH g AS (${goneCols("COALESCE((SELECT removed FROM day_plans WHERE day = ?), '[]')")} UNION ALL ${goneCols("?")})
+      SELECT COALESCE(json_group_array(json_object('id', k, 'editedAt', at)), '[]') FROM (SELECT k, MAX(at) AS at FROM g GROUP BY k ORDER BY k)
+    ),
+    updated_at = MAX(day_plans.updated_at, excluded.updated_at)`;
 var luck = () => globalThis.process?.env?.VITEST ? 1 : Math.random();
 var FocusService = class {
 	db;
@@ -51377,7 +51795,8 @@ var FocusService = class {
 		};
 		const parse = (s) => {
 			try {
-				return JSON.parse(s);
+				const v = JSON.parse(s || "[]");
+				return Array.isArray(v) ? v : [];
 			} catch {
 				return [];
 			}
@@ -51386,12 +51805,51 @@ var FocusService = class {
 			day,
 			items: parse(row.items),
 			review: row.review,
-			reasons: parse(row.reasons)
+			reasons: parse(row.reasons),
+			removed: parse(row.removed)
 		};
 	}
+	/**
+	* Saves the day's must-dos. `p.items` is the list as it should be now.
+	* Each must-do has an id (planKey) and the time it was last changed; one
+	* that left the list is remembered in `removed` with the time. The statement
+	* itself merges with the row that is there (PLAN_MERGE), because a change
+	* made offline is replayed later as it is: the newer copy of a must-do wins,
+	* one that only the other device has is kept, and one that was removed stays
+	* removed unless it was added again later. Nothing changed: nothing written.
+	*/
 	savePlan(p, now) {
-		this.db.prepare(`INSERT INTO day_plans (day, items, review, reasons, updated_at) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(day) DO UPDATE SET items = excluded.items, review = excluded.review, reasons = excluded.reasons, updated_at = excluded.updated_at`).run(p.day, JSON.stringify(p.items.slice(0, 5)), p.review, JSON.stringify(p.reasons), now.toISOString());
+		const cur = this.plan(p.day);
+		const t = now.getTime();
+		const was = new Map(cur.items.map((i) => [i.id ?? planKey(i), i]));
+		const gone = new Map((cur.removed ?? []).map((g) => [g.id, Number(g.editedAt) || 0]));
+		const seen = /* @__PURE__ */ new Set();
+		const items = [];
+		for (const i of p.items) {
+			const id = planKey(i);
+			if (seen.has(id)) continue;
+			seen.add(id);
+			const old = was.get(id);
+			const editedAt = !!old && old.id === id && old.text === i.text && !!old.done === !!i.done && (old.todoistId ?? null) === (i.todoistId ?? null) ? Number(old.editedAt) || 0 : Math.max(t, (gone.get(id) ?? -1) + 1, (Number(old?.editedAt) || 0) + 1);
+			items.push({
+				text: i.text,
+				done: !!i.done,
+				...i.todoistId ? { todoistId: i.todoistId } : {},
+				id,
+				editedAt
+			});
+		}
+		const removed = [...was].filter(([id]) => !seen.has(id)).map(([id, old]) => ({
+			id,
+			editedAt: Math.max(t, (Number(old.editedAt) || 0) + 1)
+		}));
+		if (!removed.length && JSON.stringify(items) === JSON.stringify(cur.items)) return;
+		this.db.prepare(PLAN_MERGE).run(...planArgs(p.day, JSON.stringify(items), now.toISOString(), JSON.stringify(removed)));
+	}
+	/** The evening review's line and reasons: its own write, the must-dos are not touched. */
+	saveReview(day, review, reasons, now) {
+		this.db.prepare(`INSERT INTO day_plans (day, items, review, reasons, updated_at) VALUES (?, '[]', ?, ?, ?)
+         ON CONFLICT(day) DO UPDATE SET review = excluded.review, reasons = excluded.reasons, updated_at = MAX(day_plans.updated_at, excluded.updated_at)`).run(day, review, JSON.stringify(reasons), now.toISOString());
 	}
 	timed(day) {
 		try {
@@ -51604,7 +52062,7 @@ var FocusService = class {
 		} : x).map((x) => ({
 			text: String(x.text ?? "").trim().slice(0, 140),
 			todoistId: x.todoistId ? String(x.todoistId) : null
-		})).filter((x) => x.text).slice(0, 5).map(({ text, todoistId }) => {
+		})).filter((x) => x.text).map(({ text, todoistId }) => {
 			const was = cur.items.find((i) => todoistId && i.todoistId === todoistId || i.text === text);
 			const id = todoistId ?? was?.todoistId ?? null;
 			return {
@@ -51614,9 +52072,11 @@ var FocusService = class {
 			};
 		});
 		if (!next.length) throw new LedgerError("Write at least one must-do");
+		const have = new Set(cur.items.map((i) => i.id ?? planKey(i)));
+		let room = 5;
 		this.savePlan({
 			...cur,
-			items: next
+			items: next.filter((x) => have.has(planKey(x)) || room-- > 0)
 		}, now);
 		return this.plan(d);
 	}
@@ -51641,6 +52101,48 @@ var FocusService = class {
 		this.savePlan({
 			...cur,
 			items: next
+		}, now);
+		return this.plan(d);
+	}
+	/**
+	* Takes one must-do off the day's list (a ticked one keeps its points: it
+	* was done). Returns it with its place, for Undo (restorePlan).
+	*/
+	removePlan(index, now = /* @__PURE__ */ new Date(), day) {
+		const d = day ?? this.wallet.today(now);
+		const p = this.plan(d);
+		const item = p.items[index];
+		if (!item) throw new LedgerError("No must-do with that number");
+		this.savePlan({
+			...p,
+			items: p.items.filter((_, k) => k !== index)
+		}, now);
+		return {
+			plan: this.plan(d),
+			removed: item,
+			index
+		};
+	}
+	/** Undo of removePlan: the must-do is back where it was, ticked as it was (no points are paid again). */
+	restorePlan(item, index, now = /* @__PURE__ */ new Date(), day) {
+		const d = day ?? this.wallet.today(now);
+		const p = this.plan(d);
+		const text = String(item.text ?? "").trim().slice(0, 140);
+		if (!text) throw new LedgerError("Nothing to put back");
+		const back = {
+			text,
+			done: !!item.done,
+			...item.todoistId ? { todoistId: String(item.todoistId) } : {}
+		};
+		const rest = p.items.filter((i) => (i.id ?? planKey(i)) !== planKey(back));
+		const at = Math.max(0, Math.min(rest.length, Math.round(index) || 0));
+		this.savePlan({
+			...p,
+			items: [
+				...rest.slice(0, at),
+				back,
+				...rest.slice(at)
+			]
 		}, now);
 		return this.plan(d);
 	}
@@ -51709,11 +52211,7 @@ var FocusService = class {
 	review(text, reasons, now = /* @__PURE__ */ new Date(), day) {
 		const d = day ?? this.wallet.today(now);
 		const p = this.plan(d);
-		this.savePlan({
-			...p,
-			review: text?.trim().slice(0, 500) || p.review,
-			reasons: [...new Set(reasons.map((r) => String(r).slice(0, 40)))].slice(0, 6)
-		}, now);
+		this.saveReview(d, text?.trim().slice(0, 500) || p.review, [...new Set(reasons.map((r) => String(r).slice(0, 40)))].slice(0, 6), now);
 		return this.plan(d);
 	}
 	saveGoal(g, now = /* @__PURE__ */ new Date()) {
@@ -55323,6 +55821,8 @@ syncFinance: (recordDays) => write((s) => {
 			add: (subject, minutes, day) => write((s) => s.focus.add(subject, minutes, day), W),
 			setPlan: (items, day) => write((s) => s.focus.setPlan(items, /* @__PURE__ */ new Date(), day)),
 			togglePlan: (index) => write((s) => s.focus.togglePlan(index), W),
+			removePlan: (index) => write((s) => s.focus.removePlan(index)),
+			restorePlan: (item, index) => write((s) => s.focus.restorePlan(item, index)),
 			review: (text, reasons) => write((s) => s.focus.review(text, reasons)),
 			saveGoal: (g) => write((s) => s.focus.saveGoal(g)),
 			archiveGoal: (id) => write((s) => s.focus.archiveGoal(id)),
@@ -55349,6 +55849,10 @@ syncFinance: (recordDays) => write((s) => {
 			setWake: (day, time) => write((s) => s.sleep.setWake(day, time), W),
 			/** A bedtime for a past night (the morning row `day`): the record only, no points. */
 			setBed: (day, time) => write((s) => s.sleep.setBed(day, time), "life-sleep-changed"),
+			/** Last night typed in one go (one write: the whole entry wins or loses together). */
+			setNight: (day, bed, up) => write((s) => s.sleep.setNight(day, bed, up), W, "life-sleep-changed"),
+			/** After another device's changes arrived: a sleep reward stays only while the record says on time, and once. */
+			settle: () => write((s) => s.sleep.settle(), W),
 			/** Waky's wake-ups and bedtimes into the sleep log, where it has none yet. */
 			fromWaky: () => write((s) => s.sleep.fromWaky(), W),
 			setTargets: (weekday, weekend, bedtime) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime)),
@@ -77325,7 +77829,7 @@ async function botsFor(env) {
 		if (cold.on && typeof res?.clone === "function") cold.rows += await res.clone().json().then(rowsIn, () => 0);
 		return res;
 	});
-	const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken, void 0, countingFetch), null);
+	const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken, void 0, countingFetch), null, false, SERVER_COPY);
 	await mirror.ready;
 	cold.on = false;
 	mirror.takeReadRows();
@@ -77399,6 +77903,22 @@ async function botsFor(env) {
 * ids only, never the picture (bots/foodAlbum.ts).
 */
 var photoKvFor = (env) => (stmts) => new TursoHttp(env.tursoUrl, env.tursoToken).writeAtomic(stmts);
+/**
+* What the server's copy holds from its start: the settings (without the
+* apps' big copies: Money, Waky, MAN and the old backup texts), the point
+* rules, the exercises and the points history. Every other table, and each of
+* those big settings, is downloaded when a message or the tick first reads it.
+* Before (2026-11-18) every cold start read the whole database.
+*/
+var SERVER_COPY = {
+	eager: [
+		"settings",
+		"rules",
+		"exercises",
+		"ledger"
+	],
+	blobs: ["app_sync_%", "%_backup_json"]
+};
 /** Rows in a Turso pipeline answer (reads and batch steps). */
 function rowsIn(json) {
 	let n = 0;
@@ -79468,4 +79988,4 @@ async function foodInbox(env, body, tokens, now = Date.now()) {
 	const kv = (stmts) => new TursoHttp(env.tursoUrl, env.tursoToken).writeAtomic(stmts);
 	return foodInboxOp(kv, body, tokens, (token, fileId) => downloadFile(token, fileId, "photo"), now);
 }
-export { DAILY_GAP_MS, DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, driveAccessToken, exchangeCode, flowsOp, foodInbox, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, phonePay, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };
+export { DAILY_GAP_MS, DRIVE_FILE_SCOPE, GMAIL_READ_SCOPE, GOOGLE_SETTING, NEEDS_WRITE as MCP_NEEDS_WRITE, TOOLS as MCP_TOOLS, WRITE_TOOLS as MCP_WRITE_TOOLS, SERVER_COPY, answerMeta, authUrl, automationOp, cleanupPrompt, coachChat, coachRhythm, coachSettle, coachUndo, createCalendarApi, createTodoistApi, dailyDue, dailyGate, driveAccessToken, exchangeCode, flowsOp, foodInbox, handleMcp, handleTelegramUpdate, healthAlarm, healthPush, hookIn, keepGooglePrefs, localCleanup, localIso, localMinute, mcpCall, outboxAdd, parseCleanup, payTodoistDone, phonePay, recordColdStart, recordReloadRows, rowsIn, runBenEval, runDaily, runPlugins, runTick, seenCutoff, selfCheck, sportShared, tickHealth, todoistOp, webhookVerdict };

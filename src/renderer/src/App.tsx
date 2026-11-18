@@ -1,4 +1,5 @@
 import { SafetyDot } from './safety/SafetyDot'
+import { backupRetryMs, saveChip } from '@core/saveChip'
 import { Suspense, createElement, lazy, useCallback, useEffect, useRef, useState, type ComponentType } from 'react'
 import { AnimatePresence, m } from 'framer-motion'
 import { MotionRoot, viewSwitch } from './motionKit'
@@ -239,6 +240,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
   const [rules, setRules] = useState<Rule[]>([])
   const [quickCommandOpen, setQuickCommandOpen] = useState(false)
   const [backup, setBackup] = useState<BackupStatus | null>(null)
+  const [saveState, setSaveState] = useState<{ online: boolean; waiting: number }>({ online: typeof navigator === 'undefined' || navigator.onLine !== false, waiting: 0 })
   const [shop, setShop] = useState<ShopState | null>(null)
   const [tasks, setTasks] = useState<TasksState | null>(null)
   const [schedule, setSchedule] = useState<ScheduleState | null>(null)
@@ -462,12 +464,58 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
         if (res && res.processedCount > 0) refresh()
       }).catch(() => {})
     }, 3000)
-    const cancelSnap = whenIdle(() => void life.data.saveDailySnapshot?.().catch(() => {}), 4000)
-    return () => {
-      clearTimeout(first)
-      cancelSnap()
-    }
+    return () => clearTimeout(first)
   }, [refresh])
+  // Today's cloud backup: once the page is idle, and again by itself when it
+  // failed (offline at the start, a server hiccup): 30 s, 1 min, 2 min … at
+  // most every 30 min, and right when the internet is back. "Backup missed"
+  // goes away as soon as one try works. Every 3 hours it looks again (a new day).
+  useEffect(() => {
+    let stop = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let fails = 0
+    let running = false
+    const run = async () => {
+      if (stop || running) return
+      running = true
+      const ok = navigator.onLine === false ? false : await Promise.resolve(life.data.saveDailySnapshot?.()).catch(() => false)
+      running = false
+      if (stop) return
+      void life.backup.status().then(setBackup).catch(() => {})
+      clearTimeout(timer)
+      timer = setTimeout(run, ok === false ? backupRetryMs(fails++) : ((fails = 0), 3 * 3600_000))
+    }
+    const cancel = whenIdle(() => void run(), 4000)
+    const online = () => {
+      fails = 0
+      clearTimeout(timer)
+      timer = setTimeout(run, 1500)
+    }
+    window.addEventListener('online', online)
+    return () => {
+      stop = true
+      cancel()
+      clearTimeout(timer)
+      window.removeEventListener('online', online)
+    }
+  }, [])
+  // What the cloud chip may say: changes still waiting on this device, and the connection.
+  useEffect(() => {
+    let stop = false
+    const look = () =>
+      void Promise.resolve(life.sync?.health?.())
+        .then((h) => !stop && setSaveState({ online: navigator.onLine !== false, waiting: (h?.waiting ?? 0) + (h?.desktopPending ?? 0) }))
+        .catch(() => !stop && setSaveState((cur) => ({ ...cur, online: navigator.onLine !== false })))
+    look()
+    const t = setInterval(look, 15_000)
+    const evs = ['online', 'offline', 'life-not-stored', 'life-desktop-sync', 'life-wallet-changed', 'life-focus-changed', 'life-sleep-changed']
+    for (const e of evs) window.addEventListener(e, look)
+    return () => {
+      stop = true
+      clearInterval(t)
+      for (const e of evs) window.removeEventListener(e, look)
+    }
+  }, [])
   // Photo Locker: uploads that were waiting (or cut off by a reload) carry on once the page is idle.
   useEffect(() => whenIdle(() => void import('./vault/driveSync').then((m) => m.vaultBoot()).catch(() => {}), 20_000), [])
 
@@ -883,21 +931,16 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           <Notifications alerts={alerts} summary={summary} rules={rules} onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
           <NotifToasts onGo={(p) => go(p, EMBED_OF[p] ? 'system' : undefined)} />
           {!window.desktop && <UpdateChip status={update} onClick={() => setPage('settings')} />}
-          {backup && !isDemo && (
-            <button
-              className={`chip ${backup.lastError ? 'warn' : 'ok'}`}
-              onClick={() => openTab('data', 'backups')}
-              aria-label={backup.lastError ? 'Today’s cloud backup didn’t save: open the Data center' : 'Backed up: open the Data center'}
-              title={
-                backup.lastError
-                  ? `Today’s cloud backup didn’t save.\n${backup.lastError}\nYour data is safe; only today’s copy is missing. Click to open the Data center.`
-                  : `Cloud backup saved${backup.last?.at ? ` (${backup.last.at})` : ''}. Click to open the Data center.`
-              }
-            >
-              <Icon name="cloud" size={15} />
-              <span className="chip-text">{backup.lastError ? 'Backup missed' : 'Backed up'}</span>
-            </button>
-          )}
+          {backup && !isDemo && (() => {
+            // Honest (core/saveChip.ts): never "Backed up" while offline or while changes wait on this device.
+            const chip = saveChip({ ...saveState, backupError: backup.lastError ?? null, backupAt: backup.last?.at ?? null })
+            return (
+              <button className={`chip ${chip.tone}`} data-testid="save-chip" onClick={() => openTab('data', 'backups')} aria-label={`${chip.text}: open the Data center`} title={chip.title}>
+                <Icon name="cloud" size={15} />
+                <span className="chip-text">{chip.text}</span>
+              </button>
+            )
+          })()}
           {/* The one Settings button (the sidebar has none); a dot when an update or a missed backup waits there. */}
           <button className={`tb-icon tb-settings ${page === 'settings' ? 'active' : ''}`} aria-label="Settings" title="Settings" onClick={() => setPage('settings')}>
             <Icon name="gear" size={16} />

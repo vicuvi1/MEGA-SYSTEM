@@ -47,10 +47,16 @@ Runbook for getting data back: [`docs/RECOVERY.md`](../RECOVERY.md). Settings â†
 ### Cost watch
 
 
-- Each cold server start downloads the whole database into memory; the rows it read are counted per month (`sys_health` `note:coldreads:YYYY-MM`) and shown in System health (warns near Turso's free monthly reads). A `/tmp` cache was not added: on Vercel each function has its own instances and a warm instance already keeps its copy in memory.
+- Since 2026-11-18 a cold server start downloads only the settings (without the apps' big copies), the point rules, the exercises and the ledger; the rest comes when first read ([data-sync.md](data-sync.md), "The server's copy starts small"). Before, each cold start downloaded the whole database. The rows it read are counted per month (`sys_health` `note:coldreads:YYYY-MM`) and shown in System health (warns near Turso's free monthly reads). A `/tmp` cache was not added: on Vercel each function has its own instances and a warm instance already keeps its copy in memory.
 - `ai_usage`: calls older than 90 days are rolled up into one row per month, model and kind (`calls` column) once a day; `bot_seen_updates` keeps 14 days (pruned by the server and the app). The ledger and focus history are kept whole: they are the honest record of points; they are small (one row per action).
 
 ## 6. Reliability (how the system protects itself)
+
+- **Dates to act on (reminders, written 2026-11-18):**
+  - **Node 22 reaches end of life on 2027-04-30.** Before then move CI, the release build (`.github/workflows/release.yml`, `ci.yml`, `backup.yml`: `node-version`), Vercel's Node setting and `engines` in `package.json` to the next LTS (Node 24), run the full checks, and ship. Start in March 2027.
+  - **Electron 45 reaches end of life around Q2 2027** (Electron supports its newest three majors; check the date at electronjs.org/docs/latest/tutorial/electron-timelines). Dependabot ignores Electron majors on purpose, so nobody is told: do the quarterly Electron task in `docs/PLAN.md` no later than March 2027 (bump the major, rebuild native modules, run the Windows release and the desktop smoke).
+  - The code-signing certificate also has an end date: see [`docs/code-signing.md`](../code-signing.md).
+- **The first PIN** needs `CRON_SECRET` (or `PIN_SETUP_SECRET`) on the server: see [security.md](security.md). A database that never had a PIN opens for nobody until it is set.
 
 - **Checks before shipping:** `.github/workflows/ci.yml` (tsc, vitest, bundle up to date, build, smoke test under the real CSP). Vercel's `vercel-build` runs tests + tsc, so a red commit never goes live. The Windows release (`release.yml`) runs the same smoke test and opens the app on Windows before publishing.
 

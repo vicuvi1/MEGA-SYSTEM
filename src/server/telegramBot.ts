@@ -224,7 +224,9 @@ async function botsFor(env: BotEnv) {
     if (cold.on && typeof (res as any)?.clone === 'function') cold.rows += await res.clone().json().then(rowsIn, () => 0)
     return res
   }) as typeof fetch
-  const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken, undefined, countingFetch), null)
+  // The start downloads only what nearly every message needs (SERVER_COPY); the
+  // rest comes the first time something reads it (web/mirror.ts LazyLoad).
+  const mirror = new Mirror(SQL, new TursoHttp(env.tursoUrl, env.tursoToken, undefined, countingFetch), null, false, SERVER_COPY)
   await mirror.ready
   cold.on = false
   // The start's download is counted above; from here on the copy counts its own reloads (CL6).
@@ -286,6 +288,15 @@ async function botsFor(env: BotEnv) {
  * ids only, never the picture (bots/foodAlbum.ts).
  */
 const photoKvFor = (env: BotEnv) => (stmts: Parameters<TursoHttp['writeAtomic']>[0]) => new TursoHttp(env.tursoUrl, env.tursoToken).writeAtomic(stmts)
+
+/**
+ * What the server's copy holds from its start: the settings (without the
+ * apps' big copies: Money, Waky, MAN and the old backup texts), the point
+ * rules, the exercises and the points history. Every other table, and each of
+ * those big settings, is downloaded when a message or the tick first reads it.
+ * Before (2026-11-18) every cold start read the whole database.
+ */
+export const SERVER_COPY = { eager: ['settings', 'rules', 'exercises', 'ledger'], blobs: ['app_sync_%', '%_backup_json'] }
 
 /** Rows in a Turso pipeline answer (reads and batch steps). */
 export function rowsIn(json: any): number {

@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { beforeAll, describe, expect, it } from 'vitest'
 import initSqlJs, { type SqlJsStatic, type Database as SqlJsDatabase } from 'sql.js'
 // @ts-expect-error plain JS module without types
-import { config, login, makeSession, sessionOk, sessionSigned, signOutAll, forgetEpoch, pinMatches, botDefaults, serverBots, changePin, requireSession, sidOf } from '../../../../api/_lib.mjs'
+import { config, login, setupPin, makeSession, sessionOk, sessionSigned, signOutAll, forgetEpoch, pinMatches, botDefaults, serverBots, changePin, requireSession, sidOf } from '../../../../api/_lib.mjs'
 // @ts-expect-error plain JS module without types
 import { pipelineProblem, codeWords } from '../../../../api/_sqlguard.mjs'
 import { handlePipeline } from './fakeTurso'
@@ -60,10 +60,70 @@ describe('web server', () => {
     expect((await login(cfg, '4821', t, fetchImpl, '1.1.1.1')).status).toBe(200)
   })
 
-  it('accepts 2007 only while no PIN is set, and an old plain PIN', async () => {
-    expect((await login(cfg, '2007', Date.now(), fake(null).fetchImpl)).status).toBe(200)
+  it('has no default PIN: with none set nothing signs in, and an old plain PIN still works', async () => {
+    const { fetchImpl } = fake(null)
+    for (const pin of ['2007', '0000', '1234', '']) {
+      const r = await login(cfg, pin, Date.now(), fetchImpl)
+      expect(r.status).toBe(409)
+      expect(r.body.setup).toBe(true)
+      expect(r.body.session).toBeUndefined()
+    }
+    expect(await pinMatches(null, '2007')).toBe(false)
+    expect(await pinMatches('', '')).toBe(false)
     expect(await pinMatches('1234', '1234')).toBe(true)
     expect(await pinMatches('1234', '2007')).toBe(false)
+  })
+
+  describe('the first PIN (setupPin)', () => {
+    const env = { CRON_SECRET: 'made-up-setup-key' }
+    const t = 1_900_000_000_000
+
+    it('needs the server secret, sets a 4 to 8 digit PIN once, and then that PIN signs in', async () => {
+      const { db, fetchImpl } = fake(null)
+      expect((await setupPin(cfg, 'wrong-key', '4821', t, fetchImpl, '3.3.3.1', env)).status).toBe(401)
+      expect((await setupPin(cfg, '', '4821', t, fetchImpl, '3.3.3.1', env)).status).toBe(401)
+      for (const bad of ['123', '123456789', 'abcd', '']) expect((await setupPin(cfg, env.CRON_SECRET, bad, t, fetchImpl, '3.3.3.2', env)).status).toBe(400)
+      const ok = await setupPin(cfg, env.CRON_SECRET, '4821', t, fetchImpl, '3.3.3.2', env)
+      expect(ok.status).toBe(200)
+      expect(await sessionOk(cfg, ok.body.session, t, fetchImpl)).toBe(true)
+      // Stored hashed, only in sys_auth.
+      const stored = String(db.exec("SELECT value FROM sys_auth WHERE key = 'pin_hash'")[0].values[0][0])
+      expect(stored).toMatch(/^[0-9a-f]{32}:[0-9a-f]{64}$/)
+      expect(db.exec("SELECT COUNT(*) FROM settings WHERE key = 'pin_hash'")[0].values[0][0]).toBe(0)
+      forgetEpoch()
+      expect((await login(cfg, '4821', t, fetchImpl, '3.3.3.3')).status).toBe(200)
+      expect((await login(cfg, '2007', t, fetchImpl, '3.3.3.3')).status).toBe(401)
+      // Eight digits are fine too.
+      const eight = fake(null)
+      expect((await setupPin(cfg, env.CRON_SECRET, '12345678', t, eight.fetchImpl, '3.3.3.4', env)).status).toBe(200)
+    })
+
+    it('is refused for good once a PIN exists (even with the right key), so it can never replace your PIN', async () => {
+      const { db, fetchImpl } = fake(await hashPin('4821'))
+      const before = () => String(db.exec("SELECT value FROM sys_auth WHERE key = 'pin_hash'")[0].values[0][0])
+      expect((await login(cfg, '4821', t, fetchImpl, '4.4.4.1')).status).toBe(200)
+      const was = before()
+      const r = await setupPin(cfg, env.CRON_SECRET, '9999', t, fetchImpl, '4.4.4.2', env)
+      expect(r.status).toBe(409)
+      expect(before()).toBe(was)
+      forgetEpoch()
+      expect((await login(cfg, '4821', t, fetchImpl, '4.4.4.3')).status).toBe(200)
+    })
+
+    it('without a secret on the server it is off, and wrong keys are limited like wrong PINs', async () => {
+      const { fetchImpl } = fake(null)
+      expect((await setupPin(cfg, 'anything', '4821', t, fetchImpl, '5.5.5.1', {})).status).toBe(503)
+      for (let i = 0; i < 4; i++) expect((await setupPin(cfg, `guess-${i}`, '4821', t, fetchImpl, '5.5.5.2', env)).status).toBe(401)
+      expect((await setupPin(cfg, 'guess-5', '4821', t, fetchImpl, '5.5.5.2', env)).status).toBe(429)
+      // Locked out: even the right key waits.
+      expect((await setupPin(cfg, env.CRON_SECRET, '4821', t + 1000, fetchImpl, '5.5.5.2', env)).status).toBe(429)
+      expect((await setupPin(cfg, env.CRON_SECRET, '4821', t + 62_000, fetchImpl, '5.5.5.2', env)).status).toBe(200)
+    })
+
+    it('a longer PIN the owner already has keeps working (nothing forces a new one)', async () => {
+      const { fetchImpl } = fake(await hashPin('123456789012'))
+      expect((await login(cfg, '123456789012', t, fetchImpl, '6.6.6.1')).status).toBe(200)
+    })
   })
 
   it('sessions expire and cannot be forged', () => {

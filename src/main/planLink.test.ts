@@ -16,11 +16,11 @@ describe('must-dos linked to Todoist by id', () => {
     f.togglePlan(0, now)
     // Renamed in Todoist: same id, new words, still done and linked.
     let p = f.setPlan([{ text: 'Lab report v2', todoistId: 't1' }, 'Gym'], now)
-    expect(p.items[0]).toEqual({ text: 'Lab report v2', done: true, todoistId: 't1' })
+    expect(p.items[0]).toMatchObject({ text: 'Lab report v2', done: true, todoistId: 't1' })
     // Something else sets the plan by words only: the link survives.
     p = f.setPlan(['Lab report v2', 'Gym', 'Read'], now)
     expect(p.items[0].todoistId).toBe('t1')
-    expect(p.items[2]).toEqual({ text: 'Read', done: false })
+    expect(p.items[2]).toMatchObject({ text: 'Read', done: false })
   })
   it('matching: by id when linked, else by words', () => {
     expect(isPlanFor({ text: 'Old name', todoistId: 't1' }, { id: 't1', content: 'New name' })).toBe(true)

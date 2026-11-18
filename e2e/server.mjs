@@ -34,7 +34,8 @@ for (const m of [...readFileSync(join(repo, 'src/core/schema.ts'), 'utf8').match
 const day = (n) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10)
 db.run("INSERT INTO ledger (ts, day, module, kind, coins, xp, note) VALUES (?, ?, 'quests', 'adjust', 500, 0, 'starting coins')", [new Date().toISOString(), day(3)])
 if (process.env.E2E_DISCIPLINE !== 'demo') db.run("INSERT INTO discipline_events (kind, day, ts) VALUES ('start', ?, ?)", [day(10), new Date().toISOString()])
-db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
+// E2E_NO_PIN=1: a database where no PIN was ever set (the first-PIN setup step, e2e/offline/steps.mjs).
+if (!process.env.E2E_NO_PIN) db.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '1234')")
 // E2E_DISCIPLINE=demo: a made-up 5-month Discipline history (check-ins, urges, two
 // honest resets) for screenshots of the Discipline page.
 if (process.env.E2E_DISCIPLINE === 'demo') {

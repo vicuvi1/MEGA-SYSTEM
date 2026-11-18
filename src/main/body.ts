@@ -319,7 +319,9 @@ export class Body {
          weight = COALESCE(excluded.weight, body_metrics.weight),
          waist = COALESCE(excluded.waist, body_metrics.waist),
          note = COALESCE(excluded.note, body_metrics.note),
-         updated_at = excluded.updated_at`
+         updated_at = excluded.updated_at
+       -- Two devices, the same day: the entry saved later stays, whichever is sent last.
+       WHERE excluded.updated_at >= body_metrics.updated_at`
     ).run(today, input.weight ?? null, input.waist ?? null, input.note?.trim() || null, ts)
 
     return this.state(now)

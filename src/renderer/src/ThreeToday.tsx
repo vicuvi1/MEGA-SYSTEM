@@ -19,7 +19,7 @@ import { BED_BY, FOCUS_GOAL, MUST_DOS, ON_TIME_GRACE_MIN, UP_BY, honestScore, sl
 import { checkPick, vagueReason } from '@core/mustDoRule'
 import type { CoachStatus } from './web/coachStatus'
 import { life } from './bridge'
-import { useAction } from './ui'
+import { useAction, useToast } from './ui'
 import { useLive } from './live'
 import { useTodayEvents } from './todayEvents'
 import { useModules } from './useModules'
@@ -35,6 +35,7 @@ export function pickTime(d: Date): boolean {
 
 export function ThreeToday() {
   const act = useAction()
+  const toast = useToast()
   const [st, setSt] = useState<CoachStatus | null>(null)
   const [adding, setAdding] = useState('')
   const [addErr, setAddErr] = useState<string | null>(null)
@@ -87,6 +88,17 @@ export function ThreeToday() {
       load()
     }
   }
+  // Remove one (a typo, a change of plan), with Undo. Still exactly 3: the place can be filled again.
+  const remove = async (i: number) => {
+    const r = await act(() => life.focus.removePlan!(i))
+    if (!r) return
+    load()
+    toast(`Removed: ${r.removed.text}`, 'info', {
+      label: 'Undo',
+      run: () => void act(() => life.focus.restorePlan!(r.removed, r.index), 'Must-do is back').then(load)
+    })
+  }
+  const more = (st?.mustdos ?? []).length - items.length
   const firstOpen = items.find((x) => !x.done)?.text ?? null
   const startBlock = async () => {
     const subject = firstOpen ?? 'Focus'
@@ -157,9 +169,19 @@ export function ThreeToday() {
                   {x.done ? '✓' : ''}
                 </button>
                 <span>{x.text}</span>
+                {life.focus.removePlan && (
+                  <button className="tn-del" aria-label={`Remove: ${x.text}`} title="Remove (you can undo)" onClick={() => void remove(x.i)}>
+                    ✕
+                  </button>
+                )}
               </li>
             ))}
           </ul>
+          {more > 0 && (
+            <p className="tn-more" data-testid="tn-more">
+              {more} more from another device. Remove one above to see the next.
+            </p>
+          )}
           {items.length < MUST_DOS && (
             <form
               className="tn-add"
@@ -215,8 +237,12 @@ function SleepForm({ night, onSaved }: { night: { bedTime: string | null; wakeTi
     const f = await life.focus.state().catch(() => null)
     const today = f?.today ?? new Date().toISOString().slice(0, 10)
     const ok = await act(async () => {
-      if (up) await life.sleep.setWake(today, up)
-      if (bed && life.sleep.setBed) await life.sleep.setBed(today, bed)
+      // One write for the night (asleep + up): on another device the whole entry wins or loses together.
+      if (life.sleep.setNight) await life.sleep.setNight(today, bed || null, up || null)
+      else {
+        if (up) await life.sleep.setWake(today, up)
+        if (bed && life.sleep.setBed) await life.sleep.setBed(today, bed)
+      }
       window.dispatchEvent(new Event('life-sleep-changed'))
       return true
     }, 'Last night saved')

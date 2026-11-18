@@ -6,8 +6,11 @@
 // POST /api/login {passkey:'options'|'register'|'login', …}: fingerprint/face unlock (_passkey.mjs).
 // POST /api/login {devices: session} → your devices and passkeys; {revokeDevice: sid | revokePasskey: id, session} (A6).
 // POST /api/login {changePin: session, current, pin} → {session}: the new PIN, checked here (A2).
+// POST /api/login {setup: <server setup key>, pin} → {session}: the FIRST PIN, only while none is set
+// (the key is CRON_SECRET or PIN_SETUP_SECRET from the server's environment; there is no default PIN).
+// A PIN login answers 409 {setup: true} while no PIN is set.
 // A PIN login may send {prev: <old session>} so the device keeps its id.
-import { changePin, clientIp, config, liveEpoch, login, makeSession, readBody, send, sessionOk, sessionSigned, sidOf, signOutAll } from './_lib.mjs'
+import { changePin, clientIp, config, liveEpoch, login, makeSession, readBody, send, sessionOk, sessionSigned, setupPin, sidOf, signOutAll } from './_lib.mjs'
 import { expectedSite, passkeyLogin, passkeyOptions, passkeyRegister } from './_passkey.mjs'
 import { listDevices, removePasskey, revokeDevice, touchDevice } from './_devices.mjs'
 
@@ -37,6 +40,11 @@ export default async function handler(req, res) {
     if (body.passkey === 'register') {
       if (!(await sessionOk(cfg, body.session))) return send(res, 401, { error: 'Unlock with your PIN first' })
       return send(res, 200, await passkeyRegister(cfg, body, expectedSite(req), Date.now(), fetch, sessionSigned(cfg, body.session)?.sid ?? null))
+    }
+    // The first PIN: only while none is set, with the server's setup key.
+    if (body.setup) {
+      const r = await setupPin(cfg, body.setup, pin, Date.now(), fetch, clientIp(req))
+      return r.body?.session ? reply(r.status, r.body) : send(res, r.status, r.body)
     }
     // A new PIN (A2): your session AND the current PIN, both checked here.
     if (body.changePin) {

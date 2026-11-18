@@ -9520,6 +9520,9 @@ try {
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })
+
+  // Offline and two devices: honest status, the same night and must-dos on two devices, the first PIN (e2e/offline/steps.mjs).
+  await (await import('./offline/steps.mjs')).offlineSteps({ step, browser, clock: fakeNow })
 } finally {
   await browser.close()
   server.kill()

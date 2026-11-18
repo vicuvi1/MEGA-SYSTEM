@@ -442,6 +442,8 @@ export function createWebServices(mirror: Mirror) {
       add: (subject: string, minutes: number, day?: string) => write((s) => s.focus.add(subject, minutes, day), W),
       setPlan: (items: import('@core/focus').PlanInput[], day?: string) => write((s) => s.focus.setPlan(items, new Date(), day)),
       togglePlan: (index: number) => write((s) => s.focus.togglePlan(index), W),
+      removePlan: (index: number) => write((s) => s.focus.removePlan(index)),
+      restorePlan: (item: import('@core/focus').PlanItem, index: number) => write((s) => s.focus.restorePlan(item, index)),
       review: (text: string | null, reasons: string[]) => write((s) => s.focus.review(text, reasons)),
       saveGoal: (g: { id?: number; title: string; subject: string; deadline: string; hours: number }) => write((s) => s.focus.saveGoal(g)),
       archiveGoal: (id: number) => write((s) => s.focus.archiveGoal(id)),
@@ -465,6 +467,10 @@ export function createWebServices(mirror: Mirror) {
       setWake: (day: string, time: string) => write((s) => s.sleep.setWake(day, time), W),
       /** A bedtime for a past night (the morning row `day`): the record only, no points. */
       setBed: (day: string, time: string) => write((s) => s.sleep.setBed(day, time), 'life-sleep-changed'),
+      /** Last night typed in one go (one write: the whole entry wins or loses together). */
+      setNight: (day: string, bed: string | null, up: string | null) => write((s) => s.sleep.setNight(day, bed, up), W, 'life-sleep-changed'),
+      /** After another device's changes arrived: a sleep reward stays only while the record says on time, and once. */
+      settle: () => write((s) => s.sleep.settle(), W),
       /** Waky's wake-ups and bedtimes into the sleep log, where it has none yet. */
       fromWaky: () => write((s) => s.sleep.fromWaky(), W),
       setTargets: (weekday: string, weekend: string, bedtime?: string) => write((s) => s.sleep.setTargets(weekday, weekend, bedtime)),

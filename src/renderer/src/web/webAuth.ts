@@ -5,8 +5,10 @@
 // never synced, so no other session can read it (the shared settings.pin_hash
 // copy was crackable by any signed-in page and is gone). A device with no
 // local copy must be online once to unlock. Only the dev/test direct-Turso
-// mode still keeps the PIN in settings (no server there). 2007 only opens the
-// app when no PIN was ever set (direct mode).
+// mode still keeps the PIN in settings (no server there). There is no default
+// PIN anywhere: on the website the first PIN is set through the server's
+// one-time setup (api/_lib.mjs setupPin); in direct mode (dev and tests, a
+// database of your own) the first PIN typed becomes the PIN.
 import { scrypt } from 'scrypt-js'
 import type { AuthStatus } from '@shared/api'
 import { getSetting, setSetting } from '../../../main/settings'
@@ -14,7 +16,6 @@ import type { Mirror } from './mirror'
 
 const MAX_TRIES = 5
 const LOCKOUT_MS = 30_000
-const DEFAULT_PIN = '2007'
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('')
 const unhex = (s: string) => Uint8Array.from(s.match(/../g) ?? [], (h) => parseInt(h, 16))
@@ -25,7 +26,7 @@ export async function hashPin(pin: string, salt = crypto.getRandomValues(new Uin
 }
 
 export async function pinMatches(stored: string | null, pin: string): Promise<boolean> {
-  if (!stored) return pin === DEFAULT_PIN
+  if (!stored) return false
   const [saltHex, hashHex] = stored.split(':')
   if (saltHex && hashHex) {
     const key = await scrypt(new TextEncoder().encode(pin), unhex(saltHex), 16384, 8, 1, 32)
@@ -85,8 +86,16 @@ export function createWebAuth(mirror: Mirror, local?: PinStore) {
       const now = Date.now()
       if (!checked && now < blockedUntil) throw new Error(`Too many tries. Wait ${Math.ceil((blockedUntil - now) / 1000)} s`)
       const s = await stored()
-      // Offline with no copy of our own: never fall back to 2007.
+      // Offline with no copy of our own: nothing opens the app.
       if (!checked && local && !s) throw new Error(OFFLINE_NO_COPY)
+      // Direct mode (dev and tests), no PIN yet: the first one typed (4 to 8 digits) is saved as the PIN.
+      if (!checked && !local && !s) {
+        if (!/^\d{4,8}$/.test(pin)) throw new Error('No PIN is set yet: type a new PIN of 4 to 8 digits')
+        await save(await hashPin(pin))
+        failures = 0
+        locked = false
+        return status()
+      }
       if (!checked && !(await pinMatches(s, pin))) {
         if (++failures >= MAX_TRIES) {
           failures = 0

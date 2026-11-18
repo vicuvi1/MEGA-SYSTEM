@@ -1,5 +1,6 @@
 // Focus sessions, the daily plan and goals, on any database with the
 // better-sqlite3 API (the desktop file, the web app's copy, the bot server).
+import { planKey, type PlanGone } from '@core/focus'
 import { addDays } from '@core/dates'
 import { LedgerError, balance } from '@core/ledger'
 import {
@@ -63,6 +64,40 @@ export interface FocusState {
 }
 
 const RUNNING = 'focus_running'
+
+const planCols = (from: string, src: number) =>
+  `SELECT ${src} AS src, key AS pos, json_extract(value, '$.id') AS k, COALESCE(json_extract(value, '$.editedAt'), 0) AS at, value AS v FROM json_each(${from}) WHERE json_extract(value, '$.id') IS NOT NULL`
+const goneCols = (from: string) => `SELECT json_extract(value, '$.id') AS k, COALESCE(json_extract(value, '$.editedAt'), 0) AS at FROM json_each(${from}) WHERE json_extract(value, '$.id') IS NOT NULL`
+/**
+ * The must-do write (args: planArgs). When the day has
+ * a row already, the two lists are merged inside the statement:
+ * - a must-do in both: the copy changed later (`editedAt`) stays, the incoming one on a tie;
+ * - a must-do in only one of them stays (the incoming list's order first);
+ * - a removed must-do (`removed`) is left out unless its copy is newer than the removal;
+ * - must-dos saved before ids existed are replaced by the incoming list (it was made from them).
+ * The review and its reasons are not touched (saveReview). The incoming lists are
+ * read from the arguments again and the row by its day: SQLite sees neither `excluded`
+ * nor the row being updated inside these subqueries (so the arguments repeat: planArgs).
+ */
+/** PLAN_MERGE's arguments, in the order its question marks come. */
+export const planArgs = (day: string, items: string, updatedAt: string, removed: string): string[] => [day, items, updatedAt, removed, day, items, day, removed, day, removed]
+export const PLAN_MERGE = `INSERT INTO day_plans (day, items, review, reasons, updated_at, removed) VALUES (?, ?, NULL, '[]', ?, ?)
+  ON CONFLICT(day) DO UPDATE SET
+    items = (
+      WITH c AS (${planCols('(SELECT items FROM day_plans WHERE day = ?)', 0)} UNION ALL ${planCols('?', 1)}),
+           g AS (${goneCols("COALESCE((SELECT removed FROM day_plans WHERE day = ?), '[]')")} UNION ALL ${goneCols('?')})
+      SELECT COALESCE(json_group_array(json(v)), '[]') FROM (
+        SELECT c.v FROM c
+        WHERE NOT EXISTS (SELECT 1 FROM c d WHERE d.k = c.k AND (d.at > c.at OR (d.at = c.at AND d.src > c.src)))
+          AND NOT EXISTS (SELECT 1 FROM g WHERE g.k = c.k AND g.at >= c.at)
+        ORDER BY (SELECT MAX(d.src) FROM c d WHERE d.k = c.k) DESC, (SELECT d.pos FROM c d WHERE d.k = c.k ORDER BY d.src DESC LIMIT 1)
+      )
+    ),
+    removed = (
+      WITH g AS (${goneCols("COALESCE((SELECT removed FROM day_plans WHERE day = ?), '[]')")} UNION ALL ${goneCols('?')})
+      SELECT COALESCE(json_group_array(json_object('id', k, 'editedAt', at)), '[]') FROM (SELECT k, MAX(at) AS at FROM g GROUP BY k ORDER BY k)
+    ),
+    updated_at = MAX(day_plans.updated_at, excluded.updated_at)`
 const luck = () => ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env?.VITEST ? 1 : Math.random())
 
 export class FocusService {
@@ -91,25 +126,58 @@ export class FocusService {
   }
 
   plan(day: string): DayPlan {
-    const row = this.db.prepare('SELECT * FROM day_plans WHERE day = ?').get(day) as { items: string; review: string | null; reasons: string } | undefined
+    const row = this.db.prepare('SELECT * FROM day_plans WHERE day = ?').get(day) as { items: string; review: string | null; reasons: string; removed?: string | null } | undefined
     if (!row) return { day, items: [], review: null, reasons: [] }
-    const parse = (s: string) => {
+    const parse = (s: string | null | undefined) => {
       try {
-        return JSON.parse(s)
+        const v = JSON.parse(s || '[]')
+        return Array.isArray(v) ? v : []
       } catch {
         return []
       }
     }
-    return { day, items: parse(row.items), review: row.review, reasons: parse(row.reasons) }
+    return { day, items: parse(row.items), review: row.review, reasons: parse(row.reasons), removed: parse(row.removed) }
   }
 
+  /**
+   * Saves the day's must-dos. `p.items` is the list as it should be now.
+   * Each must-do has an id (planKey) and the time it was last changed; one
+   * that left the list is remembered in `removed` with the time. The statement
+   * itself merges with the row that is there (PLAN_MERGE), because a change
+   * made offline is replayed later as it is: the newer copy of a must-do wins,
+   * one that only the other device has is kept, and one that was removed stays
+   * removed unless it was added again later. Nothing changed: nothing written.
+   */
   private savePlan(p: DayPlan, now: Date): void {
+    const cur = this.plan(p.day)
+    const t = now.getTime()
+    const was = new Map(cur.items.map((i) => [i.id ?? planKey(i), i]))
+    const gone = new Map((cur.removed ?? []).map((g) => [g.id, Number(g.editedAt) || 0]))
+    const seen = new Set<string>()
+    const items: PlanItem[] = []
+    for (const i of p.items) {
+      const id = planKey(i)
+      if (seen.has(id)) continue
+      seen.add(id)
+      const old = was.get(id)
+      const same = !!old && old.id === id && old.text === i.text && !!old.done === !!i.done && (old.todoistId ?? null) === (i.todoistId ?? null)
+      // Later than its own removal, so a must-do added again stays.
+      const editedAt = same ? Number(old!.editedAt) || 0 : Math.max(t, (gone.get(id) ?? -1) + 1, (Number(old?.editedAt) || 0) + 1)
+      items.push({ text: i.text, done: !!i.done, ...(i.todoistId ? { todoistId: i.todoistId } : {}), id, editedAt })
+    }
+    const removed: PlanGone[] = [...was].filter(([id]) => !seen.has(id)).map(([id, old]) => ({ id, editedAt: Math.max(t, (Number(old.editedAt) || 0) + 1) }))
+    if (!removed.length && JSON.stringify(items) === JSON.stringify(cur.items)) return
+    this.db.prepare(PLAN_MERGE).run(...planArgs(p.day, JSON.stringify(items), now.toISOString(), JSON.stringify(removed)))
+  }
+
+  /** The evening review's line and reasons: its own write, the must-dos are not touched. */
+  private saveReview(day: string, review: string | null, reasons: string[], now: Date): void {
     this.db
       .prepare(
-        `INSERT INTO day_plans (day, items, review, reasons, updated_at) VALUES (?, ?, ?, ?, ?)
-         ON CONFLICT(day) DO UPDATE SET items = excluded.items, review = excluded.review, reasons = excluded.reasons, updated_at = excluded.updated_at`
+        `INSERT INTO day_plans (day, items, review, reasons, updated_at) VALUES (?, '[]', ?, ?, ?)
+         ON CONFLICT(day) DO UPDATE SET review = excluded.review, reasons = excluded.reasons, updated_at = MAX(day_plans.updated_at, excluded.updated_at)`
       )
-      .run(p.day, JSON.stringify(p.items.slice(0, 5)), p.review, JSON.stringify(p.reasons), now.toISOString())
+      .run(day, review, JSON.stringify(reasons), now.toISOString())
   }
 
   private timed(day: string): FocusState['todaySessions'] {
@@ -271,7 +339,6 @@ export class FocusService {
       .map((x) => (typeof x === 'string' ? { text: x, todoistId: null } : x))
       .map((x) => ({ text: String(x.text ?? '').trim().slice(0, 140), todoistId: x.todoistId ? String(x.todoistId) : null }))
       .filter((x) => x.text)
-      .slice(0, 5)
       .map(({ text, todoistId }) => {
         // Same must-do as before: by its Todoist id, else by its words (keeps done and the link).
         const was = cur.items.find((i) => (todoistId && i.todoistId === todoistId) || i.text === text)
@@ -279,7 +346,10 @@ export class FocusService {
         return { text, done: was?.done ?? false, ...(id ? { todoistId: id } : {}) }
       })
     if (!next.length) throw new LedgerError('Write at least one must-do')
-    this.savePlan({ ...cur, items: next }, now)
+    // At most 5 are taken from one list; one that is already there is never cut by that.
+    const have = new Set(cur.items.map((i) => i.id ?? planKey(i)))
+    let room = 5
+    this.savePlan({ ...cur, items: next.filter((x) => have.has(planKey(x)) || room-- > 0) }, now)
     return this.plan(d)
   }
 
@@ -301,6 +371,32 @@ export class FocusService {
       .slice(0, 5)
     if (!next.length) return cur
     this.savePlan({ ...cur, items: next }, now)
+    return this.plan(d)
+  }
+
+  /**
+   * Takes one must-do off the day's list (a ticked one keeps its points: it
+   * was done). Returns it with its place, for Undo (restorePlan).
+   */
+  removePlan(index: number, now = new Date(), day?: string): { plan: DayPlan; removed: PlanItem; index: number } {
+    const d = day ?? this.wallet.today(now)
+    const p = this.plan(d)
+    const item = p.items[index]
+    if (!item) throw new LedgerError('No must-do with that number')
+    this.savePlan({ ...p, items: p.items.filter((_, k) => k !== index) }, now)
+    return { plan: this.plan(d), removed: item, index }
+  }
+
+  /** Undo of removePlan: the must-do is back where it was, ticked as it was (no points are paid again). */
+  restorePlan(item: Pick<PlanItem, 'text' | 'done' | 'todoistId'>, index: number, now = new Date(), day?: string): DayPlan {
+    const d = day ?? this.wallet.today(now)
+    const p = this.plan(d)
+    const text = String(item.text ?? '').trim().slice(0, 140)
+    if (!text) throw new LedgerError('Nothing to put back')
+    const back: PlanItem = { text, done: !!item.done, ...(item.todoistId ? { todoistId: String(item.todoistId) } : {}) }
+    const rest = p.items.filter((i) => (i.id ?? planKey(i)) !== planKey(back))
+    const at = Math.max(0, Math.min(rest.length, Math.round(index) || 0))
+    this.savePlan({ ...p, items: [...rest.slice(0, at), back, ...rest.slice(at)] }, now)
     return this.plan(d)
   }
 
@@ -353,7 +449,7 @@ export class FocusService {
   review(text: string | null, reasons: string[], now = new Date(), day?: string): DayPlan {
     const d = day ?? this.wallet.today(now)
     const p = this.plan(d)
-    this.savePlan({ ...p, review: text?.trim().slice(0, 500) || p.review, reasons: [...new Set(reasons.map((r) => String(r).slice(0, 40)))].slice(0, 6) }, now)
+    this.saveReview(d, text?.trim().slice(0, 500) || p.review, [...new Set(reasons.map((r) => String(r).slice(0, 40)))].slice(0, 6), now)
     return this.plan(d)
   }
 

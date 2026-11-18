@@ -1720,6 +1720,21 @@
    ],
    "evidence": "2026-11-18: tsc clean; full vitest green (12 new tests: coalescing, the version chain, a merge after coalescing, one export per change, undo after a failed disk save, set-aside by size and by 413, merge skip with the server still asked).",
    "notes": "mirror.ts (writeDesktop, flushDesktop, stuckWrites, retryStuck), desktopSync.ts (snapshotTable, diffFrom, undoRows, settingKeysOf, requestBytes), browserDb.ts onTouch, appSync.ts compareKey, core/textHash.ts, SyncPanel.tsx. Rules: docs/DECISIONS.md \"Desktop waiting changes\"."
+  },
+  {
+   "id": "F-OFFLINE-TWO-DEVICES",
+   "priority": 1,
+   "area": "data-sync",
+   "title": "Offline and two devices: honest status, one night, must-dos kept, no default PIN",
+   "user_visible_behavior": "Offline the top bar says Offline or N waiting, never Backed up; the backup is tried again by itself; with a full storage the toast says Not saved yet; the same night typed on two devices ends as the later entry, whole; a must-do added on each device is kept on both; a must-do can be removed with Undo; with no PIN set nothing opens the app until the first PIN is set with the server's setup key; the server's cold start no longer reads the whole database; Finance Helper's offline list is complete",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/renderer/src/web/offlineTwoDevices.test.ts src/renderer/src/web/server.test.ts src/server/lazyCopy.test.ts src/renderer/src/web/financePrecache.test.ts src/core/saveChip.test.ts",
+    "SMOKE_ONLY=\"Offline\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: the unit tests and the 6 Offline smoke steps pass (website and desktop mode, both reconnect orders); the whole suite also ran with the clock in 2028 (two food test files pinned)",
+   "notes": "Known limit: on the website a payment refused because another device took its ledger number stays in the could-not-sync list in Settings (the night and the must-dos of that batch are sent on their own). The offline steps start their own made-up servers."
   }
  ]
 }

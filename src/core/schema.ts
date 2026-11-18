@@ -411,5 +411,11 @@ export const MIGRATIONS: string[] = [
   );
   CREATE UNIQUE INDEX IF NOT EXISTS body_comp_dedupe ON body_comp(dedupe);
   CREATE INDEX IF NOT EXISTS body_comp_day ON body_comp(day);
+  `,
+  /* 024 Two devices, one night and one list: a sleep night's halves say when they were logged, and a day's removed must-dos are remembered (main/sleep.ts, main/focus.ts) */ `
+  ALTER TABLE sleep_logs ADD COLUMN bed_at TEXT;
+  ALTER TABLE sleep_logs ADD COLUMN wake_at TEXT;
+  ALTER TABLE sleep_logs ADD COLUMN updated_at TEXT;
+  ALTER TABLE day_plans ADD COLUMN removed TEXT NOT NULL DEFAULT '[]';
   `
 ]

@@ -29,6 +29,8 @@ export interface SchemaInfo {
   intPk: Record<string, string | null>
   /** Columns that point at another table's row. */
   fks: Record<string, { from: string; table: string; to: string }[]>
+  /** A numbered table's one-column UNIQUE key (sleep_logs.day): the same row on two devices even with two numbers. */
+  natural?: Record<string, string | null>
 }
 
 const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_)/
@@ -54,7 +56,7 @@ export function touchedTables(changes: Change[]): string[] {
 }
 
 export function schemaInfo(db: SqlJsDatabase): SchemaInfo {
-  const info: SchemaInfo = { keys: {}, intPk: {}, fks: {} }
+  const info: SchemaInfo = { keys: {}, intPk: {}, fks: {}, natural: {} }
   const tables = (db.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []).map((r) => String(r[0])).filter((t) => !SKIP.test(t))
   for (const t of tables) {
     const cols = db.exec(`PRAGMA table_info(${q(t)})`)[0]?.values ?? []
@@ -62,6 +64,18 @@ export function schemaInfo(db: SqlJsDatabase): SchemaInfo {
     info.keys[t] = pk.map((c) => String(c[1]))
     info.intPk[t] = pk.length === 1 && String(pk[0][2]).toUpperCase() === 'INTEGER' ? String(pk[0][1]) : null
     info.fks[t] = (db.exec(`PRAGMA foreign_key_list(${q(t)})`)[0]?.values ?? []).map((r) => ({ table: String(r[2]), from: String(r[3]), to: String(r[4] ?? '') }))
+    info.natural![t] = null
+    if (info.intPk[t]) {
+      // A UNIQUE constraint of the table itself (origin "u"), on one column.
+      for (const ix of db.exec(`PRAGMA index_list(${q(t)})`)[0]?.values ?? []) {
+        if (Number(ix[2]) !== 1 || String(ix[3]) !== 'u') continue
+        const cols = db.exec(`PRAGMA index_info(${q(String(ix[1]))})`)[0]?.values ?? []
+        if (cols.length === 1 && cols[0][2] != null) {
+          info.natural![t] = String(cols[0][2])
+          break
+        }
+      }
+    }
   }
   return info
 }
@@ -323,6 +337,32 @@ export function mergeRow(b: Row | null, a: Row, s: Row): Row {
   return out
 }
 
+/**
+ * A sleep night (sleep_logs): each half carries when it was logged (`wake_at`,
+ * `bed_at`), and the half logged later wins as a whole, with its target and
+ * "on time" (the same rule as the statement in main/sleep.ts). A half only one
+ * side logged is kept. Without any stamp (rows from before), the general rule.
+ */
+function mergeNight(b: Row | null, a: Row, s: Row): Row {
+  const out = mergeRow(b, a, s)
+  const half = (stamp: string, cols: string[]) => {
+    const ta = String(a[stamp] ?? '')
+    const ts = String(s[stamp] ?? '')
+    if (!ta && !ts) return
+    const from = ts > ta ? s : a
+    for (const c of [stamp, ...cols]) out[c] = from[c] ?? null
+  }
+  half('wake_at', ['wake_time', 'wake_target', 'on_time'])
+  half('bed_at', ['bed_time', 'bed_target', 'bed_on_time'])
+  // A wake-up is never NULL in this table: no wake-up yet is ''.
+  if (out.wake_time == null) out.wake_time = ''
+  const times = [a.updated_at, s.updated_at].map((v) => String(v ?? '')).sort()
+  out.updated_at = times[1] || null
+  return out
+}
+/** Tables with their own merge rule; every other table merges column by column. */
+const ROW_MERGE: Record<string, (b: Row | null, a: Row, s: Row) => Row> = { sleep_logs: mergeNight }
+
 function applyRemap(row: Row | null, t: string, map: Remap, info: SchemaInfo): Row | null {
   if (!row) return row
   const out = { ...row }
@@ -365,6 +405,11 @@ export async function rebaseWrite(turso: TursoHttp, write: PendingWrite, info: S
   }
   const insertTables = [...new Set(rows.filter((r) => !r.before && info.intPk[r.t]).map((r) => r.t))]
   for (const t of insertTables) reads.push({ sql: `SELECT MAX(${q(info.intPk[t]!)}) FROM ${q(t)}`, args: [] })
+  // A row of a table with a natural key (a night by its day) is the server's row for that key,
+  // whatever number each side gave it (such rows are sent without their number: browserDb BY_NATURAL_KEY).
+  const naturalOf = (r: RowChange) => (info.intPk[r.t] && info.natural?.[r.t] ? (r.after ?? r.before)?.[info.natural[r.t]!] ?? null : null)
+  const twins = rows.map((r, j) => (naturalOf(r) != null ? j : -1)).filter((j) => j >= 0)
+  for (const j of twins) reads.push({ sql: `SELECT * FROM ${q(rows[j].t)} WHERE ${q(info.natural![rows[j].t]!)} = ?`, args: [naturalOf(rows[j])] })
   const res = await turso.readMany(reads)
   const bad = res.find((r) => r instanceof Error)
   if (bad) throw bad
@@ -375,13 +420,29 @@ export async function rebaseWrite(turso: TursoHttp, write: PendingWrite, info: S
     return r.rows[0] ? (Object.fromEntries(r.cols.map((c, j) => [c, r.rows[0][j]])) as Row) : null
   })
 
-  // Same new id made on both sides: this desktop's row gets the next free one.
   const own: Remap = {}
+  // The same night (same day) made on both sides is ONE row: this desktop's
+  // row takes the server's number and the two are merged below.
+  const adopted = new Set<number>()
+  twins.forEach((j, n) => {
+    const res = ok[rows.length + 1 + insertTables.length + n]
+    const r = rows[j]
+    const pk = info.intPk[r.t]!
+    adopted.add(j)
+    // Not on the server under its key: the row its number points at there (if any) is another row.
+    server[j] = null
+    if (!res.rows[0]) return
+    const twin = Object.fromEntries(res.cols.map((c, k) => [c, res.rows[0][k]])) as Row
+    const mine = (r.after ?? r.before)![pk]
+    if (String(twin[pk]) !== String(mine)) own[r.t] = { ...(own[r.t] ?? {}), [String(mine)]: Number(twin[pk]) }
+    server[j] = twin
+  })
+  // Same new id made on both sides: this desktop's row gets the next free one.
   insertTables.forEach((t, i) => {
     const pk = info.intPk[t]!
     let next = Math.max(Number(ok[rows.length + 1 + i].rows[0]?.[0] ?? 0), ...rows.filter((r) => r.t === t && r.after).map((r) => Number(r.after![pk]) || 0))
     rows.forEach((r, j) => {
-      if (r.t !== t || r.before || !r.after || !server[j] || same(server[j], r.after)) return
+      if (r.t !== t || r.before || !r.after || adopted.has(j) || !server[j] || same(server[j], r.after)) return
       own[t] = { ...(own[t] ?? {}), [String(r.after[pk])]: ++next }
       server[j] = null
     })
@@ -392,22 +453,27 @@ export async function rebaseWrite(turso: TursoHttp, write: PendingWrite, info: S
   const out: Change[] = [...ddl]
   rows.forEach((r, i) => {
     const s = server[i]
-    const key = r.before ? r.key : applyRemap(r.key, r.t, own, info)!
-    const after = r.before ? applyRemap(r.after, r.t, own, info) : applyRemap(r.after, r.t, map, info)
+    const byKey = adopted.has(i)
+    const pk = info.intPk[r.t]
+    // A natural-key row is addressed by the server's number for it.
+    const key = byKey && s && pk ? { [pk]: s[pk] } : r.before ? r.key : applyRemap(r.key, r.t, own, info)!
+    const after = byKey || !r.before ? applyRemap(r.after, r.t, map, info) : applyRemap(r.after, r.t, own, info)
     const w = where(key)
     if (!after) {
       // Deleted here: only if the server still has it as it was.
-      if (s && same(s, r.before)) out.push({ sql: `DELETE FROM ${q(r.t)} WHERE ${w.sql}`, args: w.args })
+      const before = byKey ? applyRemap(r.before, r.t, map, info) : r.before
+      if (s && same(s, before)) out.push({ sql: `DELETE FROM ${q(r.t)} WHERE ${w.sql}`, args: w.args })
       return
     }
     if (!s) {
-      const cols = Object.keys(after)
+      // (A natural-key row goes in without its number: the server gives it one.)
+      const cols = Object.keys(after).filter((c) => !(byKey && c === pk))
       const withRowid = 'rowid' in key && !(info.keys[r.t] ?? []).length
       const names = [...(withRowid ? ['rowid'] : []), ...cols.map(q)]
       out.push({ sql: `INSERT INTO ${q(r.t)} (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`, args: [...(withRowid ? [key.rowid] : []), ...cols.map((c) => after[c])] })
       return
     }
-    const merged = mergeRow(r.before, after, s)
+    const merged = (ROW_MERGE[r.t] ?? mergeRow)(r.before, after, s)
     const changed = Object.keys(merged).filter((c) => !same(merged[c], s[c]))
     if (!changed.length) return
     out.push({ sql: `UPDATE ${q(r.t)} SET ${changed.map((c) => `${q(c)} = ?`).join(', ')} WHERE ${w.sql}`, args: [...changed.map((c) => merged[c]), ...w.args] })

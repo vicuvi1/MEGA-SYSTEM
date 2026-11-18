@@ -479,6 +479,8 @@ export interface LifeApi {
   auth: {
     status(): Promise<AuthStatus>
     setPin(pin: string, currentPin?: string): Promise<AuthStatus>
+    /** The first PIN, while the server has none: the server's setup key and the new PIN (4 to 8 digits). */
+    setupPin?(key: string, pin: string): Promise<AuthStatus>
     /** End every other device's session (they must enter the PIN again). */
     signOutOthers?(): Promise<void>
     /** Fingerprint / face unlock (passkeys, website and installed app). */
@@ -767,6 +769,10 @@ export interface LifeApi {
     /** `day`: another day's must-dos (tomorrow's 3); today when left out. */
     setPlan(items: import('@core/focus').PlanInput[], day?: string): Promise<DayPlan>
     togglePlan(index: number): Promise<{ plan: DayPlan; coins: number }>
+    /** Takes one must-do off today's list; the answer has what Undo needs (restorePlan). */
+    removePlan?(index: number): Promise<{ plan: DayPlan; removed: import('@core/focus').PlanItem; index: number }>
+    /** Undo of removePlan: back in its place, ticked as it was. */
+    restorePlan?(item: import('@core/focus').PlanItem, index: number): Promise<DayPlan>
     review(text: string | null, reasons: string[]): Promise<DayPlan>
     saveGoal(g: { id?: number; title: string; subject: string; deadline: string; hours: number }): Promise<FocusState>
     archiveGoal(id: number): Promise<FocusState>
@@ -810,6 +816,8 @@ export interface LifeApi {
     setWake(day: string, time: string): Promise<{ log: SleepLog; state: SleepSummary; awarded: boolean }>
     /** A bedtime for a past night (the morning row `day`): the record only, never points. */
     setBed?(day: string, time: string): Promise<SleepLog>
+    /** Last night typed in one go: one write, so the whole entry wins or loses together on another device. */
+    setNight?(day: string, bed: string | null, up: string | null): Promise<{ log: SleepLog; awarded: boolean }>
     setTargets(weekday: string, weekend: string, bedtime?: string): Promise<SleepSummary>
     logs?(): Promise<SleepLog[]>
     setQuality?(day: string, quality: number): Promise<SleepLog>

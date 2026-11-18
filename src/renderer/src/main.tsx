@@ -21,6 +21,9 @@ const root = createRoot(document.getElementById('root')!)
 window.addEventListener('vite:preloadError', (e) => {
   e.preventDefault()
   console.warn('preload failed:', (e as any).payload?.message ?? '')
+  // No internet: a reload could not fetch the file either, and would throw away
+  // what this window still holds in memory (changes waiting to be sent). Stay.
+  if (navigator.onLine === false) return
   try {
     if (Date.now() - Number(sessionStorage.getItem('ls.staleReload') || 0) < 60_000) return
     sessionStorage.setItem('ls.staleReload', String(Date.now()))

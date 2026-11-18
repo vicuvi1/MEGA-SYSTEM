@@ -2,7 +2,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openDb, type DB } from './db'
 import { bodyPlusView, logProtein, readPrefs, savePrefs, sportInsightNow } from './bodyPlus'
 import { addFoodMeal, addFoodSupp, addFoodWater, adjustNow, answerAdjust, editFoodMeal, foodDayTotals, foodView, foodWeekNow, gainDefaultOnce, leanDefaultOnce, needsLeanDefault, readFoodGoals, readFoodLog, saveFoodPrices, sportFoodLineNow, waterNow, toggleFoodFav, toggleFoodMeal, whatNextNow } from './food'
@@ -17,11 +17,15 @@ const chicken = { name: 'chicken breast', grams: 150, protein: 46, carbs: 0, fat
 const rice = { name: 'rice', grams: 200, protein: 5, carbs: 56, fat: 1, kcal: 260, confidence: 'sure' }
 
 beforeEach(() => {
+  // Pinned: the food log only keeps recent days, counted from "today".
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(now)
   dir = mkdtempSync(join(tmpdir(), 'life-food-test-'))
   db = openDb(join(dir, 'life.db'))
   db.prepare("INSERT INTO body_metrics (day, weight, waist, note, updated_at) VALUES ('2026-11-07', 75, NULL, NULL, 'x')").run()
 })
 afterEach(() => {
+  vi.useRealTimers()
   db.close()
   rmSync(dir, { recursive: true, force: true })
 })

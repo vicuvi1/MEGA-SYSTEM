@@ -55,6 +55,18 @@ export interface PlanItem {
   done: boolean
   /** The Todoist task this must-do is (linked by id, so a rename keeps the link). */
   todoistId?: string
+  /** Which must-do this is on every device (planKey): the same one added on two devices is one. */
+  id?: string
+  /** When it was last added, ticked or changed (ms): on two devices, the later one wins. */
+  editedAt?: number
+}
+/** One must-do's identity: its Todoist task when linked, else its words. */
+export const planKey = (p: Pick<PlanItem, 'text' | 'todoistId'>): string =>
+  p.todoistId ? `td:${p.todoistId}` : p.text.trim().toLowerCase().replace(/\s+/g, ' ')
+/** A must-do that was removed, and when (kept so it doesn't come back from another device). */
+export interface PlanGone {
+  id: string
+  editedAt: number
 }
 /** A must-do as you set it: its words, and the Todoist task when it is one. */
 export type PlanInput = string | { text: string; todoistId?: string | null }
@@ -67,6 +79,8 @@ export interface DayPlan {
   items: PlanItem[]
   review: string | null
   reasons: string[]
+  /** Removed must-dos of this day (main/focus.ts savePlan). */
+  removed?: PlanGone[]
 }
 /** Why a must-do didn't happen (one tap in the evening). */
 export const REASONS = ['Tired', 'Phone / social media', 'Task unclear', 'No time', 'Forgot', 'Other'] as const

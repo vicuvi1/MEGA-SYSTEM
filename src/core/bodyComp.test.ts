@@ -182,7 +182,8 @@ describe('waist reminder', () => {
 describe('migration', () => {
   it('adds body_comp in a new migration and bumps the schema version', () => {
     expect(SCHEMA_VERSION).toBe(MIGRATIONS.length)
-    expect(MIGRATIONS[MIGRATIONS.length - 1]).toMatch(/CREATE TABLE IF NOT EXISTS body_comp/)
-    expect(MIGRATIONS[MIGRATIONS.length - 1]).toMatch(/UNIQUE INDEX IF NOT EXISTS body_comp_dedupe ON body_comp\(dedupe\)/)
+    // Migration 023 (index 22); later migrations come after it.
+    expect(MIGRATIONS[22]).toMatch(/CREATE TABLE IF NOT EXISTS body_comp/)
+    expect(MIGRATIONS[22]).toMatch(/UNIQUE INDEX IF NOT EXISTS body_comp_dedupe ON body_comp\(dedupe\)/)
   })
 })

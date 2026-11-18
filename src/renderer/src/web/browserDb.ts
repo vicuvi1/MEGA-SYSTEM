@@ -59,7 +59,71 @@ export function normalize(sql: string, raw: unknown[]): Change {
 
 const isWrite = (sql: string) => !/^\s*(SELECT|WITH\s[\s\S]*SELECT|PRAGMA\s+\w+\s*$|EXPLAIN)/i.test(sql)
 
+/**
+ * A statement touched data this copy has not downloaded yet (the server's
+ * copy starts without the big app blobs and without most tables: Mirror
+ * `lazy`). The mirror downloads what is named here and runs the whole read or
+ * change again; nothing ever runs against a table that is only empty because
+ * it was not loaded.
+ */
+export class NeedData extends Error {
+  constructor(public tables: string[], public keys: string[], public allKeys: boolean) {
+    super(`Data not loaded yet: ${[...tables, ...keys, ...(allKeys ? ['every setting'] : [])].join(', ')}`)
+    this.name = 'NeedData'
+  }
+}
+
+/** What a lazy copy has not loaded yet. */
+export interface LazyState {
+  /** Tables not downloaded yet (lower case). */
+  tables: Set<string>
+  /** Is this settings key one of the big ones left out at the start? */
+  isBlob: (key: string) => boolean
+  /** Left-out settings that were downloaded since (or looked up and not there). */
+  keys: Set<string>
+  /** Every left-out setting was downloaded. */
+  allKeys: boolean
+}
+
 export class BrowserDb {
+  /** Set by the mirror on the server's copy only. */
+  lazy: LazyState | null = null
+  private need: { tables: Set<string>; keys: Set<string>; allKeys: boolean } | null = null
+  /** What statements needed since the last call (also when the caller swallowed the error). */
+  takeNeed(): NeedData | null {
+    const n = this.need
+    this.need = null
+    return n ? new NeedData([...n.tables], [...n.keys], n.allKeys) : null
+  }
+  private static WORDS = /[A-Za-z_][A-Za-z0-9_]*/g
+  private static ONE_KEY = /\bkey\s*=\s*(\?|'[^']*')|\bkey\s+IN\s*\(|\(\s*key\s*,\s*value\s*\)\s*VALUES/i
+  /** Refuses a statement that names data not loaded yet, and remembers what it needs. */
+  private guard(sql: string, args: readonly unknown[]): void {
+    const lazy = this.lazy
+    if (!lazy) return
+    const tables = new Set<string>()
+    let settings = false
+    for (const w of sql.match(BrowserDb.WORDS) ?? []) {
+      const t = w.toLowerCase()
+      if (t === 'settings') settings = true
+      else if (lazy.tables.has(t)) tables.add(t)
+    }
+    const keys = new Set<string>()
+    let allKeys = false
+    if (settings && !lazy.allKeys) {
+      if (BrowserDb.ONE_KEY.test(sql)) {
+        const named = [...args.filter((a): a is string => typeof a === 'string'), ...[...sql.matchAll(/'([^']*)'/g)].map((m) => m[1])]
+        for (const k of named) if (k.length <= 200 && lazy.isBlob(k) && !lazy.keys.has(k)) keys.add(k)
+      } else allKeys = true
+    }
+    if (!tables.size && !keys.size && !allKeys) return
+    this.need ??= { tables: new Set(), keys: new Set(), allKeys: false }
+    for (const t of tables) this.need.tables.add(t)
+    for (const k of keys) this.need.keys.add(k)
+    this.need.allKeys ||= allKeys
+    throw new NeedData([...tables], [...keys], allKeys)
+  }
+
   private depth = 0
   private sp = 0
   /** Changes made since the last `takeChanges()`, in order. */
@@ -143,6 +207,9 @@ export class BrowserDb {
     return Number(r[0]?.values[0]?.[0] ?? 0)
   }
 
+  /** Tables whose rows are upserted by a natural key (sleep_logs: one row per day); nothing points at their ids. */
+  private static BY_NATURAL_KEY: ReadonlySet<string> = new Set(['sleep_logs'])
+
   /** The INTEGER PRIMARY KEY column of a table (its rowid), if it has one. */
   private rowidColumn(table: string): string | null {
     if (this.pkCache.has(table)) return this.pkCache.get(table)!
@@ -159,6 +226,9 @@ export class BrowserDb {
    */
   private withExplicitId(change: Change, id: number): Change {
     const m = /^\s*INSERT(\s+OR\s+\w+)?\s+INTO\s+["`]?(\w+)["`]?\s*\(([^)]*)\)\s*VALUES\s*\(/i.exec(change.sql)
+    // A row every device finds by its day, never by its number: sent with a number,
+    // the same number taken by another day on another device would refuse the night.
+    if (m && BrowserDb.BY_NATURAL_KEY.has(m[2].toLowerCase())) return change
     if (!m || /\bSELECT\b/i.test(change.sql) || (change.sql.match(/\bVALUES\b/gi) || []).length !== 1) return change
     const col = this.rowidColumn(m[2])
     if (!col) return change
@@ -170,6 +240,7 @@ export class BrowserDb {
 
   private run(sql: string, raw: unknown[]): { changes: number; lastInsertRowid: number } {
     const change = normalize(sql, raw)
+    this.guard(change.sql, change.args)
     const edit = BrowserDb.ROW_EDIT.exec(change.sql)
     if (edit) {
       const table = edit[1] ?? edit[2]
@@ -211,22 +282,26 @@ export class BrowserDb {
       run: (...args: unknown[]) => this.run(sql, args),
       get: (...args: unknown[]) => {
         const c = normalize(sql, args)
+        this.guard(c.sql, c.args)
         return this.rows(c.sql, c.args)[0]
       },
       all: (...args: unknown[]) => {
         const c = normalize(sql, args)
+        this.guard(c.sql, c.args)
         return this.rows(c.sql, c.args)
       }
     }
   }
 
   exec(sql: string): void {
+    this.guard(sql, [])
     if (isWrite(sql)) this.touch(sql)
     this.raw.exec(sql)
     if (isWrite(sql)) this.changes.push({ sql, args: [] })
   }
 
   pragma(source: string, opts?: { simple?: boolean }): unknown {
+    this.guard(source, [])
     const r = this.rows(`PRAGMA ${source}`, [])
     if (opts?.simple) return r[0] ? Object.values(r[0])[0] : undefined
     return r

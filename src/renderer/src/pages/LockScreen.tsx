@@ -32,6 +32,9 @@ export function LockScreen({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void
   const [busy, setBusy] = useState(false)
   const len = useRef(knownLength())
 
+  // No PIN was ever set on the server: the one-time setup (there is no default PIN).
+  const [setup, setSetup] = useState(false)
+
   async function tryPin(value: string) {
     if (busy || value.length < 4) return
     setBusy(true)
@@ -40,6 +43,13 @@ export function LockScreen({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void
       rememberPinLength(value)
       onUnlocked(s)
     } catch (err) {
+      if ((err as Error).name === 'SetupNeeded' || /No PIN is set yet/i.test((err as Error).message)) {
+        setSetup(true)
+        setError(null)
+        setPin('')
+        setBusy(false)
+        return
+      }
       setError((err as Error).message)
       setPin('')
       setShake((n) => n + 1)
@@ -52,6 +62,8 @@ export function LockScreen({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void
     if (len.current && pin.length === len.current) void tryPin(pin)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pin])
+
+  if (setup && life.auth.setupPin) return <FirstPin onUnlocked={onUnlocked} />
 
   return (
     <div className="lock">
@@ -108,6 +120,59 @@ export function LockScreen({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void
             🔐 Unlock with fingerprint / face
           </button>
         )}
+      </form>
+    </div>
+  )
+}
+
+/**
+ * The first PIN. Shown once, when the server has no PIN yet: you type the
+ * server's setup key (the CRON_SECRET value from Vercel) and choose a PIN of
+ * 4 to 8 digits. The server checks the key; nothing is built in.
+ */
+function FirstPin({ onUnlocked }: { onUnlocked: (a: AuthStatus) => void }) {
+  const [key, setKey] = useState('')
+  const [pin, setPin] = useState('')
+  const [again, setAgain] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const ready = key.trim().length > 0 && /^\d{4,8}$/.test(pin) && pin === again
+  const save = async () => {
+    if (!ready || busy) return
+    setBusy(true)
+    setError(null)
+    try {
+      const s = await life.auth.setupPin!(key.trim(), pin)
+      rememberPinLength(pin)
+      onUnlocked(s)
+    } catch (err) {
+      setError((err as Error).message)
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="lock">
+      <form
+        className="lock-card"
+        data-testid="first-pin"
+        onSubmit={(e) => {
+          e.preventDefault()
+          void save()
+        }}
+      >
+        <div className="lock-icon">
+          <Icon name="lock" size={26} />
+        </div>
+        <h1>Set your PIN</h1>
+        <p>No PIN is set yet. To set the first one, type the server's setup key (the CRON_SECRET value in Vercel) and choose a PIN of 4 to 8 digits.</p>
+        <input className="pin" type="password" autoComplete="off" autoFocus aria-label="Setup key" placeholder="Setup key" value={key} readOnly={busy} onChange={(e) => (setError(null), setKey(e.target.value))} />
+        <input className="pin" type="password" inputMode="numeric" autoComplete="new-password" aria-label="New PIN" placeholder="New PIN" value={pin} maxLength={8} readOnly={busy} onChange={(e) => (setError(null), setPin(e.target.value.replace(/\D/g, '')))} />
+        <input className="pin" type="password" inputMode="numeric" autoComplete="new-password" aria-label="New PIN again" placeholder="New PIN again" value={again} maxLength={8} readOnly={busy} onChange={(e) => (setError(null), setAgain(e.target.value.replace(/\D/g, '')))} />
+        {again.length >= 4 && pin !== again && <div className="err">The two PINs are not the same</div>}
+        {error && <div className="err">{error}</div>}
+        <button className="btn primary" disabled={!ready || busy}>
+          {busy ? 'Saving…' : 'Set PIN and open'}
+        </button>
       </form>
     </div>
   )

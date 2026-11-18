@@ -18,6 +18,10 @@
 .tn-list li.done span { color: var(--muted); text-decoration: line-through; }
 .tn-check { flex: none; width: 22px; height: 22px; display: grid; place-items: center; padding: 0; border: 1.5px solid var(--muted); border-radius: 7px; background: transparent; color: var(--lime-ink); font-weight: 700; cursor: pointer; }
 .tn-list li.done .tn-check { border-color: var(--lime); background: var(--lime); }
+.tn-list li span { flex: 1 1 auto; }
+.tn-del { flex: none; width: 24px; height: 24px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--muted); font-size: 13px; cursor: pointer; opacity: .55; }
+.tn-del:hover, .tn-del:focus-visible { opacity: 1; color: var(--orange); background: var(--line); }
+.tn-more { margin: 0; font-size: 13.5px; color: var(--muted); }
 .tn-add { display: flex; gap: 6px; width: 100%; }
 .tn-add input { flex: 1 1 auto; min-width: 0; }
 .tn-err { margin: 0; font-size: 14px; color: var(--orange); }

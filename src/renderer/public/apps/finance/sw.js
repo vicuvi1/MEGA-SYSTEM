@@ -173,6 +173,8 @@ const SHELL = [
   './icons/icon-512.png',
   './icons/apple-touch-icon.png',
   './icons/icon-maskable-512.png',
+  './js/seedFinance.js',
+  './js/screens/telegram_hub.js',
 ];
 
 self.addEventListener('install', (e) => {

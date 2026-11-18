@@ -10,7 +10,7 @@ import type { SqlJsStatic, Database as SqlJsDatabase } from 'sql.js'
 import { MIGRATIONS } from '@core/schema'
 import { DEFAULT_RULES } from '@core/rules'
 import { DEFAULT_EXERCISES } from '@core/body'
-import { BrowserDb, type Change, type Param } from './browserDb'
+import { NeedData, type LazyState, BrowserDb, type Change, type Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
 import { decodePending, diffFrom, encodePending, requestBytes, schemaInfo, sendPending, settingKeysOf, snapshotTable, touchedTables, undoRows, type PendingWrite, type Remap, type RowChange, type SchemaInfo, type TableSnap } from './desktopSync'
 import { READ_VERSIONS, catchUpPlan, parseVersions, repairStatements, trackStatements, versionsBefore, type TableVersions } from './tableVersions'
@@ -70,6 +70,20 @@ type OutboxRow = { id: number; data: string; skeys: string | null; base: string 
 /** What a desktop change did locally besides the change itself, so it can be taken back if the disk save fails. */
 interface Queued { version: string; dropped: OutboxRow[]; nextBase: { id: number; base: string | null }[]; held: { base: string; when: string } | null; outboxId: number; local: RowChange[]; ddl: boolean }
 
+/**
+ * The server's copy (Ben, the bots, the tick) starts small: a cold start used
+ * to download the whole database. With this, it downloads only `eager`
+ * tables and the settings without the big app copies (`blobs`, SQL LIKE
+ * patterns on the key); every other table and each left-out setting is
+ * downloaded the first time a statement names it (browserDb.ts guard), and the
+ * read or change is then run again. Devices never use it.
+ */
+export interface LazyLoad {
+  eager: string[]
+  blobs: string[]
+}
+const likeToRe = (p: string) => new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/%/g, '.*').replace(/_/g, '.')}$`)
+
 export class Mirror {
   private db: BrowserDb | null = null
   private queue: Promise<unknown> = Promise.resolve()
@@ -98,7 +112,8 @@ export class Mirror {
   /** CL7: the session ended (401): the waiting changes stay here until you enter your PIN. */
   private locked = false
 
-  constructor(private SQL: SqlJsStatic, private turso: TursoHttp, private store: MirrorStore | null = null, private desktop = false) {
+  constructor(private SQL: SqlJsStatic, private turso: TursoHttp, private store: MirrorStore | null = null, private desktop = false, private lazy: LazyLoad | null = null) {
+    if (lazy && (store || desktop)) throw new MirrorError('A lazy copy is for the server only')
     this.ready = this.start()
     if (typeof window !== 'undefined' && !this.desktop)
       window.addEventListener('online', () => {
@@ -197,6 +212,8 @@ export class Mirror {
         this.db = new BrowserDb(new this.SQL.Database(cached))
         this.version = String(this.db.prepare("SELECT value FROM settings WHERE key = 'data_version'").get()?.value ?? '')
         this.tv = this.loadTv()
+        // A copy saved by an older version of the app: the new tables and columns now (remoteSchema does Turso).
+        this.schemaBehind = this.addMissing(this.db.raw).length > 0
         // Cached copy: compare table by table on the first refresh.
         this.rebuiltAt = Date.now()
         // Fresh data arrives in the background; the cached copy shows now.
@@ -217,7 +234,90 @@ export class Mirror {
   /** A read on the current copy. */
   async read<T>(fn: (db: BrowserDb) => T): Promise<T> {
     await this.ready
-    return this.lock(() => fn(this.current))
+    if (!this.lazy) return this.lock(() => fn(this.current))
+    return this.lock(async () => {
+      for (let round = 0; ; round++) {
+        const db = this.current
+        db.takeNeed()
+        let out: T | undefined
+        let err: unknown = null
+        try {
+          out = fn(db)
+        } catch (e) {
+          err = e
+        }
+        // Something it touched is not downloaded yet (even if the caller swallowed the error): get it, read again.
+        const need = db.takeNeed()
+        if (need && round < Mirror.LAZY_ROUNDS) {
+          await this.loadLazy(need)
+          continue
+        }
+        if (err) throw err
+        return out as T
+      }
+    })
+  }
+
+  private static LAZY_ROUNDS = 60
+  /** What the lazy copy may read now: the eager and already loaded tables. */
+  private lazyState(tables: string[], before: LazyState | null): LazyState {
+    const eager = new Set(this.lazy!.eager.map((t) => t.toLowerCase()))
+    const blobs = this.lazy!.blobs.map(likeToRe)
+    const waiting = new Set(tables.map((t) => t.toLowerCase()).filter((t) => t !== 'settings' && !eager.has(t) && (!before || before.tables.has(t))))
+    return { tables: waiting, isBlob: (k) => blobs.some((r) => r.test(k)), keys: new Set(before?.keys ?? []), allKeys: before?.allKeys ?? false }
+  }
+  /** The settings rows a lazy copy holds: everything but the big ones not asked for yet. */
+  private lazySettingsFilter(state: LazyState | null): { where: string; args: Param[] } | null {
+    if (!this.lazy || !this.lazy.blobs.length || state?.allKeys) return null
+    const keys = [...(state?.keys ?? [])]
+    return {
+      where: `(NOT (${this.lazy.blobs.map(() => 'key LIKE ?').join(' OR ')})${keys.length ? ` OR key IN (${keys.map(() => '?').join(', ')})` : ''})`,
+      args: [...this.lazy.blobs, ...keys]
+    }
+  }
+  /** Downloads what a statement needed (tables, settings) into the copy. */
+  private async loadLazy(need: NeedData): Promise<void> {
+    const db = this.current
+    const state = db.lazy
+    if (!state) return
+    const raw = db.raw
+    const tables = need.tables.filter((t) => state.tables.has(t))
+    const real = new Map(this.localTables().map((t) => [t.toLowerCase(), t]))
+    const names = tables.map((t) => real.get(t)).filter((t): t is string => !!t)
+    const keys = need.allKeys ? [] : need.keys.filter((k) => !state.keys.has(k))
+    const [data, some] = await Promise.all([
+      names.length ? this.readTables(names) : Promise.resolve(new Map<string, { cols: string[]; rows: unknown[][] }>()),
+      need.allKeys && !state.allKeys
+        ? this.turso.readMany([{ sql: `SELECT key, value FROM settings WHERE ${this.lazy!.blobs.map(() => 'key LIKE ?').join(' OR ')}`, args: this.lazy!.blobs }])
+        : keys.length
+          ? this.turso.readMany([{ sql: `SELECT key, value FROM settings WHERE key IN (${keys.map(() => '?').join(', ')})`, args: keys }])
+          : Promise.resolve([])
+    ])
+    const got = some[0]
+    if (got instanceof Error) throw new MirrorError(`Could not read settings: ${got.message}`)
+    raw.run('BEGIN')
+    try {
+      for (const t of names) {
+        const res = data.get(t)
+        raw.run(`DELETE FROM "${t}"`)
+        if (!res || !res.rows.length) continue
+        const stmt = raw.prepare(`INSERT INTO "${t}" (${res.cols.map((c) => `"${c}"`).join(', ')}) VALUES (${res.cols.map(() => '?').join(', ')})`)
+        try {
+          for (const row of res.rows) stmt.run(row as Param[] as any)
+        } finally {
+          stmt.free()
+        }
+      }
+      for (const row of got?.rows ?? []) raw.run('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', [row[0], row[1]] as any)
+      raw.run('COMMIT')
+    } catch (e) {
+      raw.run('ROLLBACK')
+      throw e
+    }
+    this.rowsRead += got?.rows.length ?? 0
+    for (const t of tables) state.tables.delete(t)
+    for (const k of keys) state.keys.add(k)
+    if (need.allKeys) state.allKeys = true
   }
 
   /**
@@ -228,6 +328,7 @@ export class Mirror {
     await this.ready
     if (this.desktop) return this.writeDesktop(fn)
     return this.lock(async () => {
+     if (this.schemaBehind) await this.remoteSchema().catch(() => {})
      // BG2: changes still waiting from a hiccup go first. If they still can't
      // go, this one waits behind them (sent alone, it could clash with them
      // and wipe them from this copy).
@@ -241,7 +342,25 @@ export class Mirror {
      for (let attempt = 0; ; attempt++) {
       const db = this.current
       db.dropChanges()
-      const result = db.transaction(() => fn(db))()
+      let result!: T
+      for (let round = 0; ; round++) {
+        db.takeNeed()
+        try {
+          result = db.transaction(() => {
+            const r = fn(db)
+            // Lazy copy: a statement was refused (data not downloaded yet) and the caller swallowed it: undo and run again.
+            const need = db.takeNeed()
+            if (need) throw need
+            return r
+          })()
+          break
+        } catch (e) {
+          const need = e instanceof NeedData ? e : db.takeNeed()
+          if (!need || !this.lazy || round >= Mirror.LAZY_ROUNDS) throw e
+          db.dropChanges()
+          await this.loadLazy(need)
+        }
+      }
       const changes = db.takeChanges()
       const expected = db.takeExpected()
       // Records edited or deleted by id must still be as we read them (after 2
@@ -463,6 +582,9 @@ export class Mirror {
     const list = [...this.outbox(), batch]
     this.saveOutbox(list)
     this.lastError = this.waitingNote(list.length)
+    // Offline AND this browser could not store the change: it lives only in this
+    // tab's memory. The screen must say so instead of "saved" (ui.tsx useAction).
+    if (this.outboxUnsaved && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') window.dispatchEvent(new CustomEvent('life-not-stored', { detail: { waiting: list.length } }))
   }
   /** What the sync status says about changes still waiting (CL7). */
   private waitingNote(n: number): string {
@@ -492,6 +614,7 @@ export class Mirror {
   private async flushOffline(force = false): Promise<void> {
     const list = this.outbox()
     if (!list.length) return
+    if (this.schemaBehind) await this.remoteSchema().catch(() => {})
     if (this.locked || (!force && Date.now() < this.nextFlushAt)) {
       this.lastError = this.waitingNote(list.length)
       return
@@ -521,9 +644,31 @@ export class Mirror {
           failed = true
           break
         }
-        // Refused by the database for good (e.g. a row deleted elsewhere): kept
-        // in "couldn't sync" (Settings shows it) instead of vanishing.
-        this.saveFailed([...this.failedSync, { at: new Date().toISOString(), error: String((e as Error)?.message ?? e).slice(0, 200), batch }])
+        // Refused by the database for good (e.g. a row deleted elsewhere, a number
+        // another device took meanwhile). The night's sleep and the must-dos in it
+        // merge by themselves with whatever the server holds (main/sleep.ts,
+        // main/focus.ts): they are sent on their own, so they are never lost with
+        // the rest. The rest is kept in "couldn't sync" (Settings shows it).
+        const safe = batch.filter((c) => Mirror.SELF_MERGING.test(c.sql))
+        let rest = batch
+        if (safe.length) {
+          const version = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+          try {
+            await this.turso.writeAtomic([
+              ...writeOnce(version, { create: true }),
+              ...safe,
+              ...trackStatements(touchedTables(safe), version),
+              { sql: "INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", args: [version] }
+            ])
+            rest = batch.filter((c) => !safe.includes(c))
+          } catch (e2) {
+            if (e2 instanceof UnauthorizedError || isOffline(e2) || isRetryable(e2)) {
+              failed = true
+              break
+            }
+          }
+        }
+        this.saveFailed([...this.failedSync, { at: new Date().toISOString(), error: String((e as Error)?.message ?? e).slice(0, 200), batch: rest }])
         sent++
       }
     }
@@ -538,6 +683,8 @@ export class Mirror {
     else if (sent) this.lastError = null
   }
 
+  /** Statements that merge with the server's row by themselves: a night's sleep and a day's must-dos. */
+  private static SELF_MERGING = /^\s*INSERT INTO (sleep_logs|day_plans)\b[\s\S]*\bON CONFLICT\b/i
   private static FAILED = 'life_sync_failed'
   /** Offline changes the database refused (newest last, up to 50), for the sync panel. */
   get failedSync(): { at: string; error: string; batch: Change[] }[] {
@@ -602,6 +749,9 @@ export class Mirror {
    */
   private async reloadTables(tables: string[], version: string, remote: TableVersions): Promise<void> {
     const raw = this.current.raw
+    // The server's copy: a table it has not asked for yet stays not loaded (it is downloaded fresh when needed).
+    const lazy = this.current.lazy
+    if (lazy) tables = tables.filter((t) => !lazy.tables.has(t.toLowerCase()))
     // Append-only: only when this copy's rows are still exactly Turso's first rows (same count up to our newest id).
     const tail = new Map<string, number>()
     const appendOnly = tables.filter((t) => APPEND_ONLY.has(t))
@@ -616,7 +766,7 @@ export class Mirror {
         if (l.max > 0 && !(r instanceof Error) && Number(r.rows[0]?.[0]) === l.n) tail.set(l.t, l.max)
       })
     }
-    const data = await this.readTables(tables, (t) => (tail.has(t) ? { where: 'id > ?', args: [tail.get(t)!] } : null))
+    const data = await this.readTables(tables, (t) => (tail.has(t) ? { where: 'id > ?', args: [tail.get(t)!] } : t === 'settings' ? this.lazySettingsFilter(lazy) : null))
     raw.run('BEGIN')
     try {
       for (const t of tables) {
@@ -884,6 +1034,7 @@ export class Mirror {
     let merged = false
     try {
       const ids = this.pendingIds()
+      if (ids.length && this.schemaBehind) await this.remoteSchema()
       const info = ids.length ? this.schema() : undefined
       for (const id of ids) {
         // Read it again: an earlier merge may have marked it.
@@ -1082,6 +1233,70 @@ export class Mirror {
     return ref
   }
 
+  /**
+   * Adds to `raw` the tables and columns this app's migrations have and it
+   * lacks (never removes any). Returns the statements, for Turso.
+   */
+  private addMissing(raw: SqlJsDatabase): Change[] {
+    const ddl: Change[] = []
+    const ref = this.referenceDb()
+    try {
+      const refTables = ref.exec("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []
+      const have = new Set((raw.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []).map((r) => String(r[0])))
+      for (const [name, sql] of refTables as [string, string][]) {
+        if (!have.has(name)) {
+          const create = sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, 'CREATE TABLE IF NOT EXISTS ')
+          raw.exec(create)
+          ddl.push({ sql: create, args: [] })
+          const idx = ref.exec(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = '${name}' AND sql IS NOT NULL`)[0]?.values ?? []
+          for (const [isql] of idx as [string][]) {
+            const c = isql.replace(/^CREATE (UNIQUE )?INDEX\s+(IF NOT EXISTS\s+)?/i, (_m, u) => `CREATE ${u ?? ''}INDEX IF NOT EXISTS `)
+            raw.exec(c)
+            ddl.push({ sql: c, args: [] })
+          }
+          continue
+        }
+        const localCols = new Set((raw.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []).map((r) => String(r[1]).toLowerCase()))
+        for (const col of ref.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []) {
+          const [, cname, ctype, notnull, dflt] = col as [number, string, string, number, string | null]
+          if (localCols.has(cname.toLowerCase())) continue
+          const def = `ALTER TABLE ${name} ADD COLUMN ${cname} ${ctype}${notnull && dflt != null ? ' NOT NULL' : ''}${dflt != null ? ` DEFAULT ${dflt}` : ''}`
+          raw.exec(def)
+          ddl.push({ sql: def, args: [] })
+        }
+      }
+    } finally {
+      ref.close()
+    }
+    return ddl
+  }
+
+  /**
+   * The copy kept on this device was made by an older version of the app (a
+   * new column since): the copy got the new tables and columns at once
+   * (start), and Turso gets what it still lacks here, before this device's
+   * next change is sent. Offline: tried again with the next change.
+   */
+  private schemaBehind = false
+  private async remoteSchema(): Promise<void> {
+    if (!this.schemaBehind) return
+    const probe = new this.SQL.Database()
+    try {
+      const [schema] = await this.turso.readMany([{ sql: "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL", args: [] }])
+      if (schema instanceof Error) throw schema
+      for (const [name, sql] of schema.rows) if (!SKIP.test(String(name))) probe.exec(String(sql))
+      const ddl = this.addMissing(probe)
+      if (ddl.length) await this.turso.writeAtomic(ddl)
+    } catch (e) {
+      // No connection or a hiccup: next time. Anything else: the next refresh downloads everything (which also does this).
+      if (isOffline(e) || isRetryable(e)) throw e
+      this.rebuiltAt = 0
+    } finally {
+      probe.close()
+    }
+    this.schemaBehind = false
+  }
+
   private async rebuild(): Promise<void> {
     // The versions first: the data read after them is at least this new.
     // The versions and the schema in one round trip (S2).
@@ -1100,40 +1315,17 @@ export class Mirror {
 
     // Bring Turso up to the schema this app expects: missing tables and
     // columns are added (never removed), on Turso and here.
-    const ddl: Change[] = []
-    const ref = this.referenceDb()
-    const refTables = ref.exec("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []
-    const have = new Set(objects.filter((x) => x.type === 'table').map((x) => x.name))
-    for (const [name, sql] of refTables as [string, string][]) {
-      if (!have.has(name)) {
-        const create = sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, 'CREATE TABLE IF NOT EXISTS ')
-        raw.exec(create)
-        ddl.push({ sql: create, args: [] })
-        const idx = ref.exec(`SELECT sql FROM sqlite_master WHERE type = 'index' AND tbl_name = '${name}' AND sql IS NOT NULL`)[0]?.values ?? []
-        for (const [isql] of idx as [string][]) {
-          const c = isql.replace(/^CREATE (UNIQUE )?INDEX\s+(IF NOT EXISTS\s+)?/i, (_m, u) => `CREATE ${u ?? ''}INDEX IF NOT EXISTS `)
-          raw.exec(c)
-          ddl.push({ sql: c, args: [] })
-        }
-        continue
-      }
-      const localCols = new Set((raw.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []).map((r) => String(r[1]).toLowerCase()))
-      for (const col of ref.exec(`PRAGMA table_info("${name}")`)[0]?.values ?? []) {
-        const [, cname, ctype, notnull, dflt] = col as [number, string, string, number, string | null]
-        if (localCols.has(cname.toLowerCase())) continue
-        const def = `ALTER TABLE ${name} ADD COLUMN ${cname} ${ctype}${notnull && dflt != null ? ' NOT NULL' : ''}${dflt != null ? ` DEFAULT ${dflt}` : ''}`
-        raw.exec(def)
-        ddl.push({ sql: def, args: [] })
-      }
-    }
-    ref.close()
+    const ddl = this.addMissing(raw)
     if (ddl.length) await this.turso.writeAtomic(ddl)
 
     // The data, in pages (a request stays far below the server's 4.5 MB limit
     // however big the history grows), and all or nothing: if any part can't be
     // read, this copy is thrown away and the old one stays (never a half-empty copy).
     const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0]))
-    const loaded = await this.readTables(tables)
+    // The server's copy: only what it starts with, plus what it already asked for (see LazyLoad).
+    if (this.lazy) local.lazy = this.lazyState(tables, this.db?.lazy ?? null)
+    const wanted = local.lazy ? tables.filter((t) => !local.lazy!.tables.has(t.toLowerCase())) : tables
+    const loaded = await this.readTables(wanted, (t) => (t === 'settings' ? this.lazySettingsFilter(local.lazy) : null))
     raw.run('BEGIN')
     for (const t of tables) {
       const res = loaded.get(t)

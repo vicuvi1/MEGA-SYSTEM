@@ -53,15 +53,25 @@ function ToastCard({ t, out, onDismiss, onAct }: { t: Toast; out: boolean; onDis
 
 export const useToast = () => useContext(ToastCtx)
 
+// A change made offline that this browser could not store either (storage
+// full, private window) lives only in this tab's memory (web/mirror.ts says so
+// with this event). Then no toast may say "saved".
+let notStored = 0
+if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') window.addEventListener('life-not-stored', () => void notStored++)
+export const NOT_STORED_TEXT = "Not saved yet: you are offline and this device's storage is full. Keep this window open until you are back online, or free up space (Settings → Data safety)."
+
 /** Runs an async action and shows its error as a toast. */
 export function useAction() {
   const toast = useToast()
   return useCallback(
     async <T,>(fn: () => Promise<T>, success?: string | ((out: T) => string)): Promise<T | undefined> => {
       try {
+        const seen = notStored
         const out = await fn()
         const said = typeof success === 'function' ? success(out) : success
-        if (said) toast(said, 'good')
+        // Never "saved" for a change that is only in memory.
+        if (notStored !== seen) toast(NOT_STORED_TEXT, 'bad')
+        else if (said) toast(said, 'good')
         return out
       } catch (e) {
         toast((e as Error).message, 'bad')

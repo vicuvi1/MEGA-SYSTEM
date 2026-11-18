@@ -1,5 +1,5 @@
 import { bedNightDay, computeSleepStats, isBedOnTime, isWakeOnTime, targetForDay, wakyFill, type SleepLog, type SleepSummary } from '@core/sleep'
-import { daysBetween } from '@core/dates'
+import { addDays, daysBetween } from '@core/dates'
 import { bedWatchStep, cleanBedWatch, startBedWatch, type BedWatch } from '@core/bedSense'
 import { LedgerError } from '@core/ledger'
 import { DEFAULT_BED, DEFAULT_WAKE } from '@core/lifeFit'
@@ -37,6 +37,40 @@ function toLog(r: SleepLogRow): SleepLog {
 
 export class SleepService {
   constructor(private db: DB, private wallet: Wallet) {}
+
+  // One night is one row, written whole. Each half (the wake-up, the bedtime)
+  // carries the moment it was logged (`wake_at`, `bed_at`), and the statement
+  // itself keeps the newer one: two devices that logged the same night offline
+  // end with the later entry, whichever of them reconnects last (the queued
+  // statement is replayed as it is, so the rule has to live in the SQL).
+  // `ifEmpty`: an "I'm up" tap never replaces a wake-up that is already there.
+  private putWake(day: string, time: string, target: string, onTime: boolean, quality: number | null, now: Date, ifEmpty = false): void {
+    const at = now.toISOString()
+    this.db
+      .prepare(
+        `INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at, wake_at, updated_at)
+         VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, ?)
+         ON CONFLICT(day) DO UPDATE SET wake_time = excluded.wake_time, wake_target = excluded.wake_target, on_time = excluded.on_time,
+           quality = COALESCE(excluded.quality, sleep_logs.quality), wake_at = excluded.wake_at,
+           updated_at = MAX(COALESCE(sleep_logs.updated_at, ''), excluded.updated_at)
+         WHERE ${ifEmpty ? "COALESCE(sleep_logs.wake_time, '') = ''" : "excluded.wake_at >= COALESCE(sleep_logs.wake_at, '')"}`
+      )
+      .run(day, time, target, onTime ? 1 : 0, quality, at, at, at)
+  }
+
+  private putBed(day: string, time: string, target: string, onTime: boolean, now: Date): void {
+    const at = now.toISOString()
+    this.db
+      .prepare(
+        // No wake-up yet: an empty wake time (never a made-up 07:00).
+        `INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at, bed_at, updated_at)
+         VALUES (?, '', ?, 0, ?, ?, ?, NULL, ?, ?, ?)
+         ON CONFLICT(day) DO UPDATE SET bed_time = excluded.bed_time, bed_target = excluded.bed_target, bed_on_time = excluded.bed_on_time,
+           bed_at = excluded.bed_at, updated_at = MAX(COALESCE(sleep_logs.updated_at, ''), excluded.updated_at)
+         WHERE excluded.bed_at >= COALESCE(sleep_logs.bed_at, '')`
+      )
+      .run(day, targetForDay(day, this.weekdayTarget(), this.weekendTarget()), time, target, onTime ? 1 : 0, at, at, at)
+  }
 
   weekdayTarget(): string {
     return getSetting(this.db, 'sleep_weekday_target') || DEFAULT_WAKE
@@ -101,7 +135,7 @@ export class SleepService {
       const row = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(watch.day) as SleepLogRow | undefined
       if (row) {
         const target = row.bed_target || this.bedtimeTarget()
-        this.db.prepare('UPDATE sleep_logs SET bed_time = ?, bed_on_time = ? WHERE day = ?').run(step.time, isBedOnTime(step.time, target) ? 1 : 0, watch.day)
+        this.putBed(watch.day, step.time, target, isBedOnTime(step.time, target), now)
       }
       return { said: watch.log[watch.log.length - 1] }
     }
@@ -138,17 +172,7 @@ export class SleepService {
 
     // Corrected to a late time: the "up on time" points go back (P3).
     if (existing && existing.on_time && !onTime) this.unpay('sleep.up_on_time', today, now)
-    if (existing) {
-      this.db
-        .prepare('UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ?, quality = ? WHERE day = ?')
-        .run(wakeTime, target, onTime ? 1 : 0, quality ?? existing.quality, today)
-    } else {
-      this.db
-        .prepare(
-          'INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, ?, ?)'
-        )
-        .run(today, wakeTime, target, onTime ? 1 : 0, quality ?? null, now.toISOString())
-    }
+    this.putWake(today, wakeTime, target, onTime, quality ?? null, now, !time)
 
     // Points only for a wake-up logged as you get up (a tap, the Waky alarm,
     // or a time within 20 minutes of now). A time typed later is recorded,
@@ -193,14 +217,8 @@ export class SleepService {
 
     const target = targetForDay(day, this.weekdayTarget(), this.weekendTarget())
     const onTime = isWakeOnTime(wakeTime, target)
-    const existing = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow | undefined
-    if (existing) {
-      this.db.prepare('UPDATE sleep_logs SET wake_time = ?, wake_target = ?, on_time = ? WHERE day = ?').run(wakeTime, target, onTime ? 1 : 0, day)
-    } else {
-      this.db
-        .prepare('INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, ?, NULL, NULL, NULL, NULL, ?)')
-        .run(day, wakeTime, target, onTime ? 1 : 0, now.toISOString())
-    }
+    // Corrected to a late time on a past day: nothing was paid for it, nothing to take back.
+    this.putWake(day, wakeTime, target, onTime, null, now)
     const updated = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow
     return { log: toLog(updated), state: this.state(now), awarded: false }
   }
@@ -236,19 +254,7 @@ export class SleepService {
 
     // Corrected to a late bedtime: the "in bed on time" points go back (P3).
     if (existing && existing.bed_on_time && !onTime) this.unpay('sleep.bed_on_time', this.wallet.today(now), now)
-    if (existing) {
-      this.db
-        .prepare('UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?')
-        .run(bedTime, target, onTime ? 1 : 0, today)
-    } else {
-      const wakeTarget = targetForDay(today, this.weekdayTarget(), this.weekendTarget())
-      this.db
-        .prepare(
-          'INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)'
-        )
-        // No wake-up yet: an empty wake time (never a made-up 07:00).
-        .run(today, '', wakeTarget, bedTime, target, onTime ? 1 : 0, now.toISOString())
-    }
+    this.putBed(today, bedTime, target, onTime, now)
 
     // A bedtime logged as you go (a tap, or a time within 20 minutes of now): the desktop
     // checks that the PC really stops (bedActivity). A time typed later is not watched.
@@ -277,14 +283,53 @@ export class SleepService {
   setBed(day: string, time: string, now = new Date()): SleepLog {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || !/^\d{2}:\d{2}$/.test(time)) throw new LedgerError('Use a day and a time like 23:30')
     const target = this.bedtimeTarget()
-    const onTime = isBedOnTime(time, target) ? 1 : 0
-    const existing = this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow | undefined
-    if (existing) this.db.prepare('UPDATE sleep_logs SET bed_time = ?, bed_target = ?, bed_on_time = ? WHERE day = ?').run(time, target, onTime, day)
-    else
-      this.db
-        .prepare('INSERT INTO sleep_logs (day, wake_time, wake_target, on_time, bed_time, bed_target, bed_on_time, quality, created_at) VALUES (?, ?, ?, 0, ?, ?, ?, NULL, ?)')
-        .run(day, '', targetForDay(day, this.weekdayTarget(), this.weekendTarget()), time, target, onTime, now.toISOString())
+    this.putBed(day, time, target, isBedOnTime(time, target), now)
     return toLog(this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow)
+  }
+
+  /**
+   * Last night typed in one go ("asleep at", "up at"): one write, both halves
+   * stamped with the same moment, so on another device the whole entry wins or
+   * loses together. Points as in setWake (today, typed within 20 minutes of
+   * getting up); the bedtime is a record only.
+   */
+  setNight(day: string, bed: string | null, up: string | null, now = new Date()): { log: SleepLog; awarded: boolean } {
+    if (!bed && !up) throw new LedgerError('Type a time first')
+    const awarded = up ? this.setWake(day, up, now).awarded : false
+    if (bed) this.setBed(day, bed, now)
+    return { log: toLog(this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow), awarded }
+  }
+
+  /**
+   * Honest points after two devices met: a sleep reward stays only while the
+   * night's record still says "on time", and only once. (Each device pays on
+   * its own copy while offline; a later entry from the other device may have
+   * replaced the time it paid for.) Returns how many payments it took back.
+   */
+  settle(now = new Date()): number {
+    const today = this.wallet.today(now)
+    const all = this.wallet.entries()
+    const gone = new Set(all.map((e) => e.undoOf).filter((x): x is number => x != null))
+    let n = 0
+    const check = (ruleId: string, ref: string, onTime: boolean | null): void => {
+      const paid = all.filter((e) => e.ruleId === ruleId && e.ref === ref && e.coins > 0 && !gone.has(e.id))
+      for (const e of onTime === false ? paid : paid.slice(1)) {
+        try {
+          this.wallet.undo(e.id, onTime === false ? 'Sleep time corrected' : 'Paid twice for one night', now)
+          n++
+        } catch {
+          /* already taken back */
+        }
+      }
+    }
+    const row = (day: string) => this.db.prepare('SELECT * FROM sleep_logs WHERE day = ?').get(day) as SleepLogRow | undefined
+    const up = row(today)
+    check('sleep.up_on_time', `up:${today}`, up && up.wake_time ? !!up.on_time : null)
+    for (const day of [today, addDays(today, 1)]) {
+      const r = row(day)
+      check('sleep.bed_on_time', `bed:${day}`, r && r.bed_time ? !!r.bed_on_time : null)
+    }
+    return n
   }
 
   /**

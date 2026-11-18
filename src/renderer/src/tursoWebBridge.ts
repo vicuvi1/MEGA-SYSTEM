@@ -114,7 +114,7 @@ import { createSaga } from './web/sagaApi'
 import { createCareer } from './web/career'
 import { createMoneyApi } from './web/moneyApi'
 import { createSortApi, paysLogged } from './web/moneySort'
-import { NetworkError, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
+import { NetworkError, SetupNeeded, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, serverSetupPin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 import { MIGRATIONS } from '@core/schema'
 import { cleanBlockKinds, setBlockKind, type BlockKind, type BlockKinds } from '@core/blockKind'
 import { cleanPins, togglePin, PINS_KEY, type ChatPin } from '@core/chatPins'
@@ -606,6 +606,8 @@ export function createTursoWebBridge(): Bridge {
       try {
         const m = await mirrorP
         const changed = await m.refresh()
+        // Another device's sleep entry may have replaced the one this device paid for (honest points).
+        if (changed) await svcP.then((s) => s.sleep.settle()).catch(() => 0)
         if (changed || force) {
           await applyFinance().catch(() => {})
           await syncAll().catch(() => {})
@@ -729,7 +731,25 @@ export function createTursoWebBridge(): Bridge {
       todoAt = 0
       todoQuickAt = 0
       void pullOutside?.()
+      // Another device may have saved something meanwhile: look now, not at the next slow round.
+      void check()
     })
+    // The internet is back: send what waited (the mirror does), then take the other devices' changes at once.
+    window.addEventListener('online', () => {
+      fails = 0
+      void check(true)
+    })
+  }
+
+  /** A corrected wake-up into Waky's own copy of that morning. */
+  const wakyWake = (day: string, log: { wakeTime: string; wakeTarget: string }) => {
+    const waky = readJson<any>('waky_web_data_v2')
+    if (waky && typeof waky === 'object' && waky.days?.[day]?.time !== log.wakeTime) {
+      waky.days = waky.days || {}
+      waky.days[day] = { reps: 0, mode: 'edited', sent: true, ...(waky.days[day] || {}), time: log.wakeTime, target: waky.days[day]?.target || waky.settings?.weekday || log.wakeTarget }
+      store?.setItem('waky_web_data_v2', JSON.stringify(waky))
+      window.dispatchEvent(new CustomEvent('life-waky-changed'))
+    }
   }
 
   /**
@@ -1636,6 +1656,17 @@ export function createTursoWebBridge(): Bridge {
         if (checked) void mirrorP.then((m) => m.resume())
         return s
       },
+      // The first PIN (the server has none yet): checked by the server against its setup key.
+      setupPin: async (key: string, pin: string) => {
+        if (direct) throw new Error('The setup key is only needed on the website and the installed app')
+        await serverSetupPin(key, pin)
+        haveSession()
+        const s = await (await authP).unlock(pin, true)
+        unlocked = !s.locked
+        if (unlocked) lockedOnPurpose = false
+        void mirrorP.then((m) => m.resume())
+        return s
+      },
       // Fingerprint / face (M7): the server checks the passkey and gives a session like the PIN.
       unlockPasskey: async () => {
         if (direct) throw new Error('Passkeys work on the website and the installed app')
@@ -2004,13 +2035,12 @@ export function createTursoWebBridge(): Bridge {
       // both show the same (Waky's data then syncs to your other devices).
       setWake: async (day: string, time: string) => {
         const res = await (await svcP).sleep.setWake(day, time)
-        const waky = readJson<any>('waky_web_data_v2')
-        if (waky && typeof waky === 'object' && waky.days?.[day]?.time !== res.log.wakeTime) {
-          waky.days = waky.days || {}
-          waky.days[day] = { reps: 0, mode: 'edited', sent: true, ...(waky.days[day] || {}), time: res.log.wakeTime, target: waky.days[day]?.target || waky.settings?.weekday || res.log.wakeTarget }
-          store?.setItem('waky_web_data_v2', JSON.stringify(waky))
-          window.dispatchEvent(new CustomEvent('life-waky-changed'))
-        }
+        wakyWake(day, res.log)
+        return res
+      },
+      setNight: async (day: string, bed: string | null, up: string | null) => {
+        const res = await (await svcP).sleep.setNight(day, bed, up)
+        if (up) wakyWake(day, res.log)
         return res
       }
     }) as Bridge['sleep'],

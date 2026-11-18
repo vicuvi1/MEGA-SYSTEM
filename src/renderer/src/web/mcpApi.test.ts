@@ -24,6 +24,8 @@ beforeAll(async () => {
   const SQL = await initSqlJs({ locateFile: (f: string) => require.resolve(`sql.js/dist/${f}`) })
   remote = new SQL.Database()
   for (const m of MIGRATIONS) remote.exec(m)
+  // A made-up PIN (there is no default one): an old plain PIN in settings, moved to sys_auth on the first read.
+  remote.run("INSERT INTO settings (key, value) VALUES ('pin_hash', '4821')")
   Object.assign(process.env, { TURSO_URL: 'https://mcp-api.fake.turso.io', TURSO_TOKEN: 'fake-key', SESSION_SECRET: 'test-secret', LIFE_TZ: 'UTC' })
   delete process.env.OPENROUTER_API_KEY
   delete process.env.GEMINI_API_KEY
@@ -75,7 +77,7 @@ describe('/api/mcp: personal tokens', () => {
   let writeTok = ''
   it('Settings makes tokens with a session only, and shows each once', async () => {
     expect((await tokensOp({ action: 'list' }, 'forged.session')).status).toBe(401)
-    session = (await login(config(), '2007')).body.session
+    session = (await login(config(), '4821')).body.session
     const r = await tokensOp({ action: 'create', label: 'Claude Desktop', scope: 'read' })
     expect(r.status).toBe(200)
     readTok = r.json.created.token
@@ -207,7 +209,7 @@ describe('/api/mcp: OAuth for claude.ai and ChatGPT (MC4)', () => {
     const form = Object.fromEntries(params)
     const wrong = await call({ url: '/api/mcp?oauth=authorize', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: { ...form, pin: '9999', access: 'write' } })
     expect(wrong.status).toBe(401)
-    const okR = await call({ url: '/api/mcp?oauth=authorize', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: { ...form, pin: '2007', access: 'write' } })
+    const okR = await call({ url: '/api/mcp?oauth=authorize', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: { ...form, pin: '4821', access: 'write' } })
     expect(okR.status).toBe(302)
     const back = new URL(okR.headers.location)
     expect(back.origin + back.pathname).toBe(redirect)

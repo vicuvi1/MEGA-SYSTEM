@@ -5,7 +5,8 @@ They live in the project's Environment Variables, and three small functions
 in `api/` use them:
 
 - `POST /api/login {pin}` checks the PIN against `settings.pin_hash` in Turso
-  (same scrypt format as the desktop; 2007 only while no PIN is set) and
+  (same scrypt format as the desktop; there is no default PIN: the first one is
+  set once with the server's setup key, see `docs/areas/security.md`) and
   returns a 30-day session. After 5 wrong PINs it makes you wait, 1 minute
   and doubling up to a day (counted in Turso, so on every device).
 - `POST /api/db` (session required) passes a Turso pipeline request on with

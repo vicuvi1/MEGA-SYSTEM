@@ -6,7 +6,10 @@ import { createHash, createHmac, randomBytes, scrypt, timingSafeEqual } from 'no
 import { removeDevicePasskeys, revokedSids } from './_devices.mjs'
 import { dropPush } from './_push.mjs'
 
-const DEFAULT_PIN = '2007' // only while no PIN was ever set, like the app
+// There is NO built-in PIN. While none was ever set (sys_auth is empty), nobody
+// can sign in; the first PIN is set once with a secret the server already has
+// (setupPin below: CRON_SECRET, or PIN_SETUP_SECRET when set).
+export const NO_PIN_YET = 'No PIN is set yet'
 // LT3: 14 days, renewed while you use the app (session.ts renewSession), so an
 // unused or stolen session runs out sooner. A failed check is never a sign-out.
 export const SESSION_DAYS = 14
@@ -61,7 +64,7 @@ const scryptAsync = (pin, salt) =>
 /** The same check as the app and the desktop: "saltHex:scryptHex", or an old plain PIN. */
 export async function pinMatches(stored, pin) {
   pin = String(pin ?? '')
-  if (!stored) return pin === DEFAULT_PIN
+  if (!stored) return false
   const [saltHex, hashHex] = String(stored).split(':')
   if (saltHex && hashHex) {
     const key = await scryptAsync(pin, Buffer.from(saltHex, 'hex'))
@@ -112,7 +115,7 @@ const T_AUTH = 'CREATE TABLE IF NOT EXISTS sys_auth (key TEXT PRIMARY KEY, value
 /** A new data marker: every device downloads everything once (and so drops its old copy of a deleted row). */
 const bumpVersion = (tag, now = Date.now()) => ["INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [`${tag}-${now}-${randomBytes(4).toString('hex')}`]]
 
-/** { pin: "salt:hash" | null (none set: 2007), counter } from sys_auth. */
+/** { pin: "salt:hash" | null (none set: nobody signs in until setupPin), counter } from sys_auth. */
 export async function authState(cfg, fetchImpl = fetch) {
   const [, , , rows, cleaned] = await run(
     cfg,
@@ -228,7 +231,11 @@ const wait = (fails, lim) => (fails >= lim.free ? Math.min(60_000 * 2 ** (fails 
  * Checks a PIN with the wrong-PIN limits: null when it's right, else the
  * answer to send ({ status: 401 | 429, body }).
  */
-export async function checkPin(cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 'unknown') {
+export const checkPin = (cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 'unknown') =>
+  guardedTry(cfg, async () => pinMatches((await authState(cfg, fetchImpl)).pin, pin), 'Wrong PIN', now, fetchImpl, ip)
+
+/** One counted try of a secret (`test` says whether it was right), with the limits above. */
+async function guardedTry(cfg, test, wrong, now, fetchImpl, ip) {
   const scopes = [`ip:${String(ip).slice(0, 64)}`, 'all']
   const lims = [LIMITS.ip, LIMITS.all]
   const [, rows] = await run(cfg, [[GUARD_TABLE], ['SELECT scope, until FROM sys_login_guard WHERE scope IN (?, ?)', scopes]], fetchImpl)
@@ -247,12 +254,11 @@ export async function checkPin(cfg, pin, now = Date.now(), fetchImpl = fetch, ip
     await run(cfg, over.map((sc) => ['UPDATE sys_login_guard SET until = MAX(until, ?) WHERE scope = ?', [until, sc]]), fetchImpl)
     return tooMany(until)
   }
-  const { pin: stored } = await authState(cfg, fetchImpl)
-  if (!(await pinMatches(stored, pin))) {
+  if (!(await test())) {
     const waits = fails.map((f, k) => wait(f, lims[k]))
     const locks = waits.map((w, k) => [w ? 'UPDATE sys_login_guard SET until = ?, quota = ? WHERE scope = ?' : 'SELECT ?, ?, ?', [now + w, fails[k] + 1, scopes[k]]])
     if (Math.max(...waits)) await run(cfg, locks, fetchImpl)
-    return Math.max(...waits) ? tooMany(now + Math.max(...waits)) : { status: 401, body: { error: 'Wrong PIN' } }
+    return Math.max(...waits) ? tooMany(now + Math.max(...waits)) : { status: 401, body: { error: wrong } }
   }
   await run(cfg, scopes.map((sc, k) => ['UPDATE sys_login_guard SET fails = 0, until = 0, quota = ? WHERE scope = ?', [lims[k].free, sc]]), fetchImpl)
   return null
@@ -260,6 +266,8 @@ export async function checkPin(cfg, pin, now = Date.now(), fetchImpl = fetch, ip
 
 /** `sid`: this device's id from its previous session (kept unless it was signed out). */
 export async function login(cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 'unknown', sid = null) {
+  // No PIN was ever set: nothing opens the app (there is no default). The page shows the one-time setup.
+  if (!(await authState(cfg, fetchImpl)).pin) return { status: 409, body: { error: `${NO_PIN_YET}. Set the first one with the server's setup key.`, setup: true } }
   const refused = await checkPin(cfg, pin, now, fetchImpl, ip)
   if (refused) return refused
   forgetEpoch()
@@ -270,6 +278,34 @@ export async function login(cfg, pin, now = Date.now(), fetchImpl = fetch, ip = 
 /** "saltHex:scryptHex", the format the app and the desktop read. */
 export async function hashPinServer(pin, salt = randomBytes(16)) {
   return `${salt.toString('hex')}:${(await scryptAsync(String(pin), salt)).toString('hex')}`
+}
+
+const sameSecret = (a, b) => {
+  const [x, y] = [a, b].map((v) => createHash('sha256').update(String(v ?? '')).digest())
+  return timingSafeEqual(x, y)
+}
+
+/**
+ * The FIRST PIN (only while none is set): it needs a secret the server
+ * already has in its environment (PIN_SETUP_SECRET, else CRON_SECRET), typed
+ * once on the setup screen. Never a built-in value. Wrong keys are counted
+ * like wrong PINs. 4 to 8 digits. Once a PIN exists this answers 409 for
+ * good: a PIN is changed with changePin (the current PIN and a session).
+ */
+export async function setupPin(cfg, key, pin, now = Date.now(), fetchImpl = fetch, ip = 'unknown', env = process.env) {
+  const want = String(env.PIN_SETUP_SECRET || env.CRON_SECRET || '').trim()
+  if (!want) return { status: 503, body: { error: 'First PIN setup needs CRON_SECRET in the server settings (Vercel → Environment Variables)' } }
+  if ((await authState(cfg, fetchImpl)).pin) return { status: 409, body: { error: 'A PIN is already set: sign in with it' } }
+  pin = String(pin ?? '')
+  if (!/^\d{4,8}$/.test(pin)) return { status: 400, body: { error: 'PIN must be 4 to 8 digits' } }
+  const refused = await guardedTry(cfg, async () => sameSecret(String(key ?? '').trim(), want), 'Wrong setup key', now, fetchImpl, ip)
+  if (refused) return refused
+  const hash = await hashPinServer(pin)
+  // Only into the empty slot (two setups at once: one wins).
+  const [set] = await run(cfg, [["UPDATE sys_auth SET value = ? WHERE key = 'pin_hash' AND value = '' RETURNING key", [hash]]], fetchImpl)
+  if (!set.length) return { status: 409, body: { error: 'A PIN is already set: sign in with it' } }
+  forgetEpoch()
+  return { status: 200, body: { session: makeSession(cfg, now, await liveEpoch(cfg, fetchImpl, now)) } }
 }
 
 /**

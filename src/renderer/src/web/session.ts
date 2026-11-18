@@ -5,6 +5,8 @@
 const KEY = 'life_web_session'
 
 export class NetworkError extends Error {}
+/** No PIN was ever set on the server: the lock screen shows the one-time setup (there is no default PIN). */
+export class SetupNeeded extends Error {}
 
 const store = () => (typeof localStorage !== 'undefined' ? localStorage : null)
 
@@ -47,9 +49,28 @@ export async function serverLogin(pin: string): Promise<void> {
   }
   const body = await res.json().catch(() => ({}))
   if (!res.ok || !body.session) {
+    if (body.setup) throw new SetupNeeded(body.error || 'No PIN is set yet')
     if (res.status >= 500 && res.status !== 503) throw new NetworkError(body.error || `Server error ${res.status}`)
     throw new Error(body.error || `Login failed (${res.status})`)
   }
+  try {
+    store()?.setItem(KEY, body.session)
+  } catch {
+    /* private window: works until the tab closes */
+  }
+  memory = body.session
+}
+
+/** The first PIN (only while the server has none): the server's setup key and the new PIN. Signs this device in. */
+export async function serverSetupPin(key: string, pin: string): Promise<void> {
+  let res: Response
+  try {
+    res = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ setup: key, pin }) })
+  } catch {
+    throw new NetworkError('No connection: the first PIN can only be set online')
+  }
+  const body = await res.json().catch(() => ({}))
+  if (!res.ok || !body.session) throw new Error(body.error || `Setup failed (${res.status})`)
   try {
     store()?.setItem(KEY, body.session)
   } catch {

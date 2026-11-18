@@ -2,7 +2,7 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { openDb, type DB } from './db'
 import { addFoodMeal, editFoodMeal, foodDayTotals, foodView, readFoodLog, readFoodSaved, saveFoodSaved, toggleFoodMeal } from './food'
 import { logSavedFood, logSavedMeal, logStandardDay, saveLoggedAsMeal } from './foodSaved'
@@ -15,11 +15,15 @@ const now = new Date('2026-11-08T08:30:00')
 const later = (min: number) => new Date(now.getTime() + min * 60_000)
 
 beforeEach(() => {
+  // Pinned: the food log only keeps recent days, counted from "today".
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(now)
   dir = mkdtempSync(join(tmpdir(), 'life-food-saved-'))
   db = openDb(join(dir, 'life.db'))
   db.prepare("INSERT INTO body_metrics (day, weight, waist, note, updated_at) VALUES ('2026-11-07', 73.5, NULL, NULL, 'x')").run()
 })
 afterEach(() => {
+  vi.useRealTimers()
   db.close()
   rmSync(dir, { recursive: true, force: true })
 })
