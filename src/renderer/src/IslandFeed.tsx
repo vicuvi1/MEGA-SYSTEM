@@ -3,7 +3,7 @@
 // island window itself never opens your data, so there is one owner of it.
 import { coinsShownNow } from './useSimple'
 import { modulesNow, useModules } from './useModules'
-import { islandWithout } from '@core/modules'
+import { islandWithout, isOn } from '@core/modules'
 import { pushStyle, workToday } from '@core/lifeFit'
 import { weekTop3View, type WeekPlan } from '@core/weekPlan'
 import { dedupeTodoist, dedupeTodos } from '@core/islandTodos'
@@ -373,7 +373,7 @@ async function onAway(w: { from: string; to: string }): Promise<void> {
 /** The Dynamic island module (core/modules.ts): off, nothing here runs (no snapshots, sounds or notices) and the desktop makes no island window. */
 export function IslandFeed() {
   const mods = useModules()
-  return mods.island ? <IslandFeedOn /> : null
+  return isOn(mods, 'island') ? <IslandFeedOn /> : null
 }
 
 function IslandFeedOn() {

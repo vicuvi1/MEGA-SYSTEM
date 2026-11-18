@@ -42,7 +42,7 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
     await pg.setViewportSize({ width: 1920, height: 1080 })
     let frame = await openFinance()
     await pg.waitForTimeout(1500) // nothing waiting to be saved before the seed goes in
-    const seeded = await frame.evaluate(([KEY, tag]) => {
+    const seedFn = ([KEY, tag]) => {
       const pad = (n) => String(n).padStart(2, '0')
       const now = new Date()
       const key = (y, m) => { const d = new Date(y, m, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}` }
@@ -77,10 +77,20 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
       }
       localStorage.setItem(KEY, JSON.stringify(next))
       return { raw, P, N, daysP: dim(P), daysN: dim(N), today }
-    }, [KEY, tag])
+    }
+    // The app may still write its own copy back (a save or sync landing after the seed) and wipe it: check the seed
+    // survived the reload, and put it in again (up to 3 times) instead of failing on a lost race.
+    let seeded = null
+    for (let tries = 0; tries < 3; tries++) {
+      const s = await frame.evaluate(seedFn, [KEY, tag])
+      if (!seeded) seeded = s
+      frame = await reloadFrame()
+      const stored = await storedTx()
+      if (stored.some((t) => t.id === `mi-2-${tag}`)) break
+      await pg.waitForTimeout(1500)
+    }
     original = JSON.parse(seeded.raw).settings
     ;({ P, N, daysP, daysN, today } = seeded)
-    frame = await reloadFrame()
     await frame.evaluate(() => { location.hash = '#calendar' })
     await frame.waitForSelector('[data-testid="money-calendar"]', { timeout: 10000 })
     if (!(await frame.locator('.subtabs a[aria-current="page"]', { hasText: 'Calendar' }).count())) throw new Error('Calendar is not a tab next to Plan')
@@ -115,7 +125,13 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
     const left = async (d) => Number(await frame.locator(`[data-testid="mc-day"][data-date="${N}-${d}"]`).getAttribute('data-left'))
     const l19 = await left(19)
     // The rent on the 20th takes 1 500 off the line, the salary on the 28th adds 4 000.
-    if ((await left(20)) !== l19 - 150000) throw new Error(`the 20th: ${await left(20)}, expected ${l19 - 150000}`)
+    // The made-up data has its own monthly bills whose day depends on the clock (Internet starts on the 20th when the
+    // run's clock says the 18th): those land on the same day, so they count too.
+    const others = await frame.evaluate((tagId) => JSON.parse(localStorage.getItem('finance-helper.state')).recurring
+      .filter((r) => !r.id.endsWith(tagId) && r.every === 'month' && r.type === 'expense' && String(r.start).slice(8) === '20')
+      .reduce((s, r) => s + r.amount, 0), tag)
+    const want20 = l19 - 150000 - others
+    if ((await left(20)) !== want20) throw new Error(`the 20th: ${await left(20)}, expected ${want20}`)
     if ((await left(28)) !== (await left(27)) + 400000) throw new Error('the salary on the 28th does not lift the line by 4 000')
     // A floor just above what is left after the rent: the 20th to the 27th are tight.
     await frame.fill('#mc-floor', String((l19 - 149900) / 100))
