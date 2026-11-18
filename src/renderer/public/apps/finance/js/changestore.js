@@ -159,3 +159,8 @@ export const device = () => tracker.dev;
 if (typeof window !== 'undefined') {
   for (const ev of ['pagehide', 'beforeunload']) window.addEventListener(ev, () => { flushChanges(); });
 }
+
+/** This device's name in the log ('desktop', 'web' or 'phone'). */
+export const thisDevice = tracker.dev;
+/** The coming save is an undo or redo of the action whose first entry is `of`. */
+export const expectRevert = (of) => tracker.expect({ of });

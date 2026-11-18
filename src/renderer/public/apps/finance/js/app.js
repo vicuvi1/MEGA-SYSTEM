@@ -63,6 +63,9 @@ import * as Wishlist from './screens/wishlist.js';
 import * as Afford from './screens/afford.js';
 import * as MoneyB from './screens/moneyb.js';
 import * as Changes from './changestore.js';
+import * as Recent from './screens/recent.js';
+import * as SavedBar from './screens/savedbar.js';
+import * as GridEdit from './gridedit.js';
 import * as ChangesScreen from './screens/changes.js';
 import * as BudgetWarn from './screens/budgetwarn.js';
 import * as IncomeSources from './screens/incomesources.js';
@@ -177,11 +180,13 @@ const countUp = (c, key, opts) => (c = Math.round(c / 100) * 100, `<span data-co
 // The write itself waits a moment (store.js saveSoon): a burst of changes is
 // one write, and leaving the page writes at once.
 const SAVE_FAILED = 'Could not save. Is your browser storage full or blocked?';
+let holdDepth = 0; // a paste or fill of many cells: every cell saves, but it is one undo step
 function persist({ quiet = false } = {}) {
-  Changes.track(state, quiet ? 'quiet' : 'local');
+  if (holdDepth) { if (!saveSoon(state)) toast(SAVE_FAILED); return; }
+  const added = Changes.track(state, quiet ? 'quiet' : 'local');
   if (!saveSoon(state)) toast(SAVE_FAILED);
   if (quiet) history.reset(state);
-  else history.record(state);
+  else history.tag(history.record(state), added[0]?.grp); // the undo step knows its change-history action
 }
 
 // Life System hears about a change once it is really stored (it reads the
@@ -207,17 +212,28 @@ function commit(opts) {
   }
 }
 
-// Ctrl+Z / Ctrl+Y and the Undo / Redo buttons.
-function undoRedo(dir) {
-  if (state._sealed) return;
-  const e = dir < 0 ? history.undo(state) : history.redo(state);
-  if (!e) { toast(dir < 0 ? 'Nothing to undo' : 'Nothing to redo'); return; }
+// Ctrl+Z / Ctrl+Y and the Undo / Redo buttons. The session steps first (they
+// also cover plain settings); after a reload the change history takes over
+// (js/screens/recent.js). `force`: the person said yes to "this was made on
+// another device" or "changed since".
+function finishRevert(dir, label, of) {
+  if (of) Changes.expectRevert(of);
   Changes.track(state, dir < 0 ? 'undo' : 'redo');
+  history.reset(state);
   if (!saveSoon(state)) toast(SAVE_FAILED);
   ui.selected?.clear();
   render();
   Sync.changed();
-  toast(`${dir < 0 ? 'Undone' : 'Redone'}: ${e.label}`, dir < 0 ? 'Redo' : 'Undo', () => undoRedo(-dir));
+  toast(`${dir < 0 ? 'Undone' : 'Redone'}: ${label}`, dir < 0 ? 'Redo' : 'Undo', () => undoRedo(-dir));
+}
+function undoRedo(dir, force) {
+  if (state._sealed) return;
+  if (Recent.guard(dir, force)) return;
+  const grp = history.topGrp(dir);
+  const e = dir < 0 ? history.undo(state) : history.redo(state);
+  if (!e) { if (!Recent.step(dir)) toast(dir < 0 ? 'Nothing to undo' : 'Nothing to redo'); return; }
+  const first = grp && Changes.entries().find((x) => x.grp === grp)?.id;
+  finishRevert(dir, e.label, first);
 }
 
 const THEME_STYLES = [
@@ -544,7 +560,7 @@ function renderSidebar() {
 
   // The sidebar is the menu: the goal lives on Home and in the Goals badge,
   // Bit in Settings → Bit; only the music shows here, and only while playing.
-  bottom.innerHTML = ambState.playing ? ambPill : '';
+  bottom.innerHTML = (ambState.playing ? ambPill : '') + Recent.sideButton();
 }
 
 // "Today · Saturday, 10 October" in today's weekday color.
@@ -1170,11 +1186,12 @@ function searchCard(list) {
 }
 
 function undoButtons() {
-  const u = history.nextUndo();
-  const r = history.nextRedo();
+  const u = history.nextUndo() || Recent.nextLabel(-1);
+  const r = history.nextRedo() || Recent.nextLabel(1);
   return `<span class="undo-pair" role="group" aria-label="Undo and redo">
     <button type="button" class="icon-btn" data-act="undo" ${u ? '' : 'disabled'} title="${u ? `Undo: ${esc(u)} (Ctrl+Z)` : 'Nothing to undo'}" aria-label="Undo">↶</button>
-    <button type="button" class="icon-btn" data-act="redo" ${r ? '' : 'disabled'} title="${r ? `Redo: ${esc(r)} (Ctrl+Y)` : 'Nothing to redo'}" aria-label="Redo">↷</button></span>`;
+    <button type="button" class="icon-btn" data-act="redo" ${r ? '' : 'disabled'} title="${r ? `Redo: ${esc(r)} (Ctrl+Y)` : 'Nothing to redo'}" aria-label="Redo">↷</button>
+    <button type="button" class="icon-btn" data-act="recent-actions" title="Recent actions (U)" aria-label="Recent actions" data-testid="recent-open-log">🕘</button></span>`;
 }
 
 // ---------- Bulk changes (Table) ----------
@@ -1524,6 +1541,7 @@ function viewLog() {
         ${chip('transfer', '🔄 Moves')}
         ${chip('loan', '⚡ Loans')}
       </div>
+      ${SavedBar.barHTML(state, ui)}
       <div class="log-quick-chips">
         <span class="muted small" style="font-size:11px;">Quick:</span>
         <button type="button" class="lq-chip" data-act="log-quick-search" data-q="today">📅 Today</button>
@@ -1531,8 +1549,6 @@ function viewLog() {
         <button type="button" class="lq-chip" data-act="log-quick-search" data-q="50-200">50–200</button>
         ${M.allTags(state).slice(0, 4).map((g) => `<button type="button" class="lq-chip" data-act="log-quick-search" data-q="#${esc(g.tag)}">#${esc(g.tag)}</button>`).join('')}
         ${IS.activeSources(state).slice(0, 6).map((x) => `<button type="button" class="lq-chip src-lq" data-act="log-quick-search" data-testid="src-filter" data-q="${esc(`source:"${x.name}"`)}" style="--c:${IS.colorVar(x)}"><i aria-hidden="true"></i>${esc(x.name)}</button>`).join('')}
-        ${savedFilters(state).map((f) => `<span class="lq-saved"><button type="button" class="lq-chip saved" data-act="log-quick-search" data-q="${esc(f.q)}" title="${esc(f.q)}">☆ ${esc(f.name)}</button><button type="button" class="lq-x" data-act="filter-forget" data-q="${esc(f.q)}" aria-label="Forget the saved filter ${esc(f.name)}">✕</button></span>`).join('')}
-        ${q && !savedFilters(state).some((f) => f.q === ui.search.trim()) ? '<button type="button" class="lq-chip" data-act="filter-save">☆ Save this search</button>' : ''}
         ${isArchived(state) ? `<button type="button" class="lq-chip" data-act="log-archived" aria-pressed="${!!ui.archived}" data-testid="include-archived">${ui.archived ? '✓ ' : ''}Include archived years</button>` : ''}
         ${q ? `<button type="button" class="lq-chip lq-clear" data-act="log-clear-search">✕ Clear search</button>` : ''}
       </div>
@@ -3681,8 +3697,9 @@ document.addEventListener('keydown', (e) => {
   // middle of typing in a box (then the box's own undo works).
   const z = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (z === 'z' || z === 'y') && !sheetRoot.firstChild) {
-    const f = e.target.closest?.('input, textarea');
-    if (f && f.type !== 'checkbox' && f.value !== f.defaultValue) return;
+    // Typing in a box (a note, the search, a cell being edited): Ctrl+Z undoes the text, never a record.
+    const f = e.target.closest?.('input, textarea, [contenteditable=""], [contenteditable="true"]');
+    if (f && !/^(checkbox|radio|button|range)$/.test(f.type || '') && !f.readOnly) return;
     e.preventDefault();
     undoRedo(z === 'y' || e.shiftKey ? 1 : -1);
     return;
@@ -3827,6 +3844,13 @@ Object.assign(ctx, {
     return n;
   },
   undo: () => undoRedo(-1),
+  undoRedo,
+  holdHistory: () => { holdDepth++; },
+  releaseHistory: () => { if (holdDepth && --holdDepth === 0) persist(); },
+  finishRevert,
+  topGrp: (dir) => history.topGrp(dir),
+  canSession: (dir) => (dir < 0 ? history.canUndo() : history.canRedo()),
+  clearSession: () => { history.clear(); history.reset(state); },
   openTableForTx: (tx) => {
     state.settings.logView = 'table';
     if (tx?.date) ui.month = tx.date.slice(0, 7);
@@ -4075,6 +4099,9 @@ requestPersistence();
 if (!DEMO) Security.initLock();
 MoneyB.init();
 ChangesScreen.init();
+Recent.init();
+SavedBar.init();
+GridEdit.init();
 BudgetWarn.init();
 route();
 Updates.initUpdates();

@@ -1642,6 +1642,18 @@
    ],
    "evidence": "2026-11-18: tsc clean, vitest 527 files pass; smoke steps Money feel (2) and Money archive pass",
    "notes": "Motion is off in Life's Calm mode and in the smoke run (finance-helper.motion = off). Archive is settings.archive (docs/DECISIONS.md). sw cache v69."
+  },
+  {
+   "id": "money-usability-undo-views-sheet",
+   "area": "money",
+   "title": "Finance: Ctrl+Z everywhere with Recent actions, saved Log views, spreadsheet editing in the Log",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/financeUsability.test.ts",
+    "SMOKE_ONLY=\"Money usability\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: 17 unit tests (undo stack over the change history incl. other-device entries and a reload, saved views with relative dates and sync, key rules and clipboard parsing) and one combined smoke step.",
+   "notes": "finance js/undolog.js, savedviews.js, gridnav.js, gridedit.js, screens/recent.js, savedbar.js, css/usability.css; small hooks in app.js and history.js; sw cache bumped."
   }
  ]
 }

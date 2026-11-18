@@ -12,7 +12,16 @@ export const LIST = [
   ['N', 'New record'],
   ['/', 'Search the log'],
   ['E', 'Edit the selected record (tick one in the Table first)'],
-  ['Ctrl+Z', 'Undo the last change (Ctrl+Y redoes it)'],
+  ['Ctrl+Z', 'Undo the last change on any screen (Ctrl+Shift+Z or Ctrl+Y redoes it; in a text box it undoes the text)'],
+  ['U', 'Recent actions: the last 10 changes, each with Undo this'],
+  ['Arrows', 'Log Sheet and Table: move the active cell (press ArrowDown once to start)'],
+  ['Enter/F2', 'Log cell: edit it (on a dropdown: open it, then type to filter); Enter saves and moves down'],
+  ['Tab', 'Log cell: save and move right (Shift+Tab left)'],
+  ['Esc', 'Log cell: cancel the edit, clear the range, leave the grid'],
+  ['Shift+arrows', 'Log cells: select a range (Shift+click too)'],
+  ['Ctrl+C/X/V', 'Log cells: copy, cut or paste cells and columns (also from Excel)'],
+  ['Delete', 'Log cell: clear it (Shift+Delete deletes the record)'],
+  ['Ctrl+D', 'Log cells: fill down'],
   ['G then H', 'Go to Home'],
   ['G then L', 'Go to Log'],
   ['G then A', 'Go to Accounts'],
@@ -35,7 +44,7 @@ export function openHelp() { ctx.openSheet(helpHTML()); }
 
 export function settingsCard() {
   return `<section class="card"><h2>Keyboard shortcuts</h2>
-    <p class="muted small" style="margin-top:0">Space show or hide amounts, N new record, / search, E edit, Ctrl+Z undo, G then a letter to go to a screen.</p>
+    <p class="muted small" style="margin-top:0">Space show or hide amounts, N new record, / search, E edit, Ctrl+Z undo, U recent actions, G then a letter to go to a screen.</p>
     <button type="button" class="btn" data-act="shortcuts-help" data-testid="shortcuts-open">Keyboard shortcuts</button></section>`;
 }
 

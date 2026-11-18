@@ -1205,6 +1205,9 @@ try {
   // Money change history: old -> new with the device, Put back with Undo, Bring back a deleted record (e2e/smokeMoneyHistory.mjs).
   await (await import('./smokeMoneyHistory.mjs')).moneyHistorySteps({ step, pg, open, financeFrame })
 
+  // Money usability: Ctrl+Z everywhere, Recent actions, saved views, spreadsheet keys (e2e/smokeMoneyUsability.mjs).
+  await (await import('./smokeMoneyUsability.mjs')).moneyUsabilitySteps({ step, pg, open, financeFrame })
+
   // Money opens on the balance, favourites, search chips and the emergency fund meter (e2e/smokeMoney3.mjs).
   await (await import('./smokeMoney3.mjs')).money3Steps({ step, pg, open, financeFrame })
 

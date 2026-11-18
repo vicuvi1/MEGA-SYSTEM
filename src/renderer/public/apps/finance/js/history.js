@@ -118,7 +118,7 @@ export function createHistory({ limit = 60 } = {}) {
     if (!e) return null;
     apply(state, e.changes, now);
     const next = snapshot(state);
-    to.push({ changes: diff(base, next), label: e.label });
+    to.push({ changes: diff(base, next), label: e.label, grp: e.grp });
     base = next;
     return e;
   };
@@ -145,6 +145,9 @@ export function createHistory({ limit = 60 } = {}) {
     canRedo: () => redos.length > 0,
     nextUndo: () => undos.at(-1)?.label || null,
     nextRedo: () => redos.at(-1)?.label || null,
+    // The change-history group of the next undo / redo step (js/undolog.js asks before it touches another device's work).
+    topGrp: (dir) => (dir < 0 ? undos : redos).at(-1)?.grp || null,
+    tag(step, grp) { if (step && grp) step.grp = grp; },
     clear() { undos.length = 0; redos.length = 0; },
   };
 }
