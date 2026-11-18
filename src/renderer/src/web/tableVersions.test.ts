@@ -23,7 +23,8 @@ function fakeTurso(): { remote: SqlJsDatabase; fullReads: string[][] } {
   const fullReads: string[][] = []
   vi.stubGlobal('fetch', async (_url: string, init: { body: string }) => {
     const body = JSON.parse(init.body)
-    const reads = body.requests.map((r: any) => /^SELECT \* FROM "(\w+)"(?: ORDER BY rowid LIMIT \d+ OFFSET 0)?$/.exec(r.stmt?.sql ?? '')?.[1]).filter(Boolean)
+    // Settings are read by size (keys and sizes first, then the values in groups): that first read stands for the table.
+    const reads = body.requests.map((r: any) => /^SELECT \* FROM "(\w+)"(?: ORDER BY rowid LIMIT \d+ OFFSET 0)?$/.exec(r.stmt?.sql ?? '')?.[1] ?? /^SELECT key, length\(CAST\(value AS BLOB\)\) FROM (settings) ORDER BY rowid$/.exec(r.stmt?.sql ?? '')?.[1]).filter(Boolean)
     if (reads.length) fullReads.push(reads)
     const json = handlePipeline(remote, body)
     return { ok: true, status: 200, json: async () => json, text: async () => JSON.stringify(json) }
@@ -89,7 +90,7 @@ describe('download only what changed', () => {
     remote.run("UPDATE settings SET value = 'old-app-1' WHERE key = 'data_version'")
     fullReads.length = 0
     await b.refresh()
-    expect(fullReads[0].length).toBeGreaterThan(5)
+    expect(fullReads.flat().length).toBeGreaterThan(5)
     expect(await b.read((db) => db.prepare('SELECT COUNT(*) AS n FROM day_notes').get())).toEqual({ n: 2 })
     await a.refresh() // the repair marked every table: a downloads everything too
     fullReads.length = 0

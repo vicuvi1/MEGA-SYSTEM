@@ -6,7 +6,7 @@ The **Data center** page (bottom of the sidebar; Settings → Data safety links 
 
 | Copy | Where | How often | Kept |
 |---|---|---|---|
-| **Main data** | Turso cloud database | every change | — |
+| **Main data** | Turso cloud database (a big app copy such as Money is stored there as a short list in `settings` plus its pieces in `setting_parts`; every device and every backup holds it whole) | every change | — |
 | **Cloud backup** | the same Turso database (`cloud_snapshots` + `cloud_snapshot_parts`) | daily (Ben's server, and the app) | 30 days |
 | **Backup on this PC** | `Documents/LifeSystem/Backups` (or the folder you chose), plus a copy in Google Drive when found | daily, and before every risky step | 14 daily, 8 weekly, 12 monthly, 30 "before" |
 | **Sync folder** (desktop, if you chose one) | `<your folder>/Life System Sync/<PC name>/` (OneDrive, Google Drive, Dropbox, a USB drive…) | a few seconds after every change; works with the server down | 24 hourly, 14 daily, 12 monthly |
@@ -88,8 +88,14 @@ added or updated by a sync, never dropped. "Skipped (Money locked)" means Money 
 device, so it can't sync from there.
 
 ## If the Data center says a store is filling up
-- **A synced copy (usually Money) near 4.5 MB:** one request can't carry more, and a copy that is too big would stop
-  that app's sync. Tell your helper while it is amber (2.5 MB): the fix is in code (splitting the copy), not a button.
+- **A synced copy (usually Money):** it travels to the server in pieces, so one request no longer limits it. Its bar
+  is measured against 48 MB, the size it is tested at (amber at 24 MB): past that nothing breaks at once, but saving
+  and comparing get slow. Tell your helper while it is amber.
+- **"Too big to send" in Data center → Sync (desktop):** one change was bigger than a request can carry. It is kept
+  on this PC and nothing after it is blocked. Press **Try again**; if it stays, tell your helper what the line says.
+- **"Could not read … a piece is missing / damaged":** a device refused a download that did not check out; its own
+  copy is untouched. Open the app on the device that has the newest Money and press **Sync Money now** there: its
+  next save sends every missing piece again.
 - **App storage on this device near 5 million characters:** Data center → Clean up → clear the copy from before a
   restore (a backup with it inside is saved first; Undo puts it back) and the app caches.
 - Nothing in Clean up removes your records. Deletion marks are kept on purpose.

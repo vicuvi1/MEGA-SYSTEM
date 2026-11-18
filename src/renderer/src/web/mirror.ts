@@ -12,6 +12,8 @@ import { DEFAULT_RULES } from '@core/rules'
 import { DEFAULT_EXERCISES } from '@core/body'
 import { NeedData, type LazyState, BrowserDb, type Change, type Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
+import { ChunkedTurso, type TursoLike } from './chunkedTurso'
+import { MANIFEST_HEAD } from '@core/settingParts'
 import { decodePending, diffFrom, encodePending, requestBytes, schemaInfo, sendPending, settingKeysOf, snapshotTable, touchedTables, undoRows, type PendingWrite, type Remap, type RowChange, type SchemaInfo, type TableSnap } from './desktopSync'
 import { READ_VERSIONS, catchUpPlan, parseVersions, repairStatements, trackStatements, versionsBefore, type TableVersions } from './tableVersions'
 import { retryDelay } from '@core/retry'
@@ -19,7 +21,8 @@ import { APPEND_ONLY } from '@core/backupPlan'
 
 // cloud_snapshots (+ their parts): 30 full backups, read straight from Turso when needed, never copied to every device.
 // restore_stage_*: a restore's staging tables (core/backupPlan.ts), gone when the restore ends.
-const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|restore_stage_|cloud_snapshots$|cloud_snapshot_parts$)/
+// setting_parts (+ its check table): the pieces of big synced settings (core/settingParts.ts). Devices hold the whole value in `settings`.
+const SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|restore_stage_|cloud_snapshots$|cloud_snapshot_parts$|setting_parts$|setting_parts_ok$)/
 
 export interface MirrorStore {
   load(): Promise<Uint8Array | null>
@@ -112,8 +115,20 @@ export class Mirror {
   /** CL7: the session ended (401): the waiting changes stay here until you enter your PIN. */
   private locked = false
 
-  constructor(private SQL: SqlJsStatic, private turso: TursoHttp, private store: MirrorStore | null = null, private desktop = false, private lazy: LazyLoad | null = null) {
+  /** The connection, with big app copies travelling in pieces (web/chunkedTurso.ts). */
+  private turso: ChunkedTurso
+
+  constructor(private SQL: SqlJsStatic, turso: TursoHttp | TursoLike, private store: MirrorStore | null = null, private desktop = false, private lazy: LazyLoad | null = null) {
     if (lazy && (store || desktop)) throw new MirrorError('A lazy copy is for the server only')
+    this.turso = new ChunkedTurso(turso, (key) => {
+      try {
+        const v = this.db?.raw.exec('SELECT value FROM settings WHERE key = ?', [key])[0]?.values[0]?.[0]
+        return v == null ? null : String(v)
+      } catch {
+        return null
+      }
+    })
+    this.chunkable = (c) => this.turso.travelsInParts(c)
     this.ready = this.start()
     if (typeof window !== 'undefined' && !this.desktop)
       window.addEventListener('online', () => {
@@ -171,16 +186,26 @@ export class Mirror {
     })
     const HEAD = 48 // {"savedAt":<ms>,"editedAt":<ms>…: plain ASCII, and savedAt changes with every write
     if (expected != null) {
-      const [probe] = await this.turso.readMany([{ sql: 'SELECT length(CAST(value AS BLOB)), substr(value, 1, ?) FROM settings WHERE key = ?', args: [HEAD, key] }])
+      // A value stored in pieces: its manifest is short and says exactly which text it is.
+      const [probe] = await this.turso.readRaw([{ sql: `SELECT length(CAST(value AS BLOB)), substr(value, 1, ?), CASE WHEN substr(value, 1, ${MANIFEST_HEAD.length}) = ? THEN value END FROM settings WHERE key = ?`, args: [HEAD, MANIFEST_HEAD, key] }])
       if (probe instanceof Error) throw probe
       const row = probe.rows[0]
       if (!row) return null
-      if (Number(row[0]) === new TextEncoder().encode(expected).length && String(row[1] ?? '') === expected.slice(0, HEAD)) return expected
+      if (row[2] != null) {
+        if (String(row[2]) === this.turso.manifestText(key, expected)) return expected
+      } else if (Number(row[0]) === new TextEncoder().encode(expected).length && String(row[1] ?? '') === expected.slice(0, HEAD)) return expected
     }
-    const [r] = await this.turso.readMany([{ sql: 'SELECT value FROM settings WHERE key = ?', args: [key] }])
-    if (r instanceof Error) throw r
-    const v = r.rows[0]?.[0]
-    return v == null ? null : String(v)
+    // Whole, however big it is (pieces put together; an old whole value read in slices).
+    const value = await this.turso.readSetting(key)
+    // A full compare ("Sync now"): also make sure the server has every piece of it
+    // (this device put the value together partly from its own copy).
+    if (expected === undefined && value != null) await this.turso.heal(key, value).catch(() => {})
+    return value
+  }
+
+  /** What travelled to and from the server in pieces (the speed check, tests). */
+  get transport(): ChunkedTurso['stats'] {
+    return this.turso.stats
   }
 
   onChange(cb: () => void): () => void {
@@ -814,6 +839,11 @@ export class Mirror {
       return { sql: `SELECT * FROM "${t}"${f ? ` WHERE ${f.where}` : ''} ORDER BY rowid LIMIT ${PAGE} OFFSET ${offset}`, args: f ? f.args : [] }
     }
     const loaded = new Map<string, { cols: string[]; rows: unknown[][] }>()
+    // Settings hold the apps' whole copies: read by size, never the whole table in one answer.
+    if (tables.includes('settings') && !filter('settings')) {
+      loaded.set('settings', await this.readSettings())
+      tables = tables.filter((t) => t !== 'settings')
+    }
     const groups: string[][] = []
     for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8))
     // A long table (two years of points) also says how many rows it has, so
@@ -860,6 +890,61 @@ export class Mirror {
       }
     }))
     return loaded
+  }
+
+  /** One answer with several settings in it stays under this many bytes. */
+  static SETTINGS_ANSWER = 1_000_000
+  /**
+   * The settings table, by size: first every key with its size (tiny), then
+   * the values in groups that each fit one answer; a value too big for one
+   * answer is read by itself (pieces put together, an old whole value in
+   * slices). The whole table in one answer made every app's copy share the
+   * 4.5 MB an answer may be.
+   */
+  private async readSettings(): Promise<{ cols: string[]; rows: unknown[][] }> {
+    const [sizes] = await this.turso.readRaw([{ sql: 'SELECT key, length(CAST(value AS BLOB)) FROM settings ORDER BY rowid', args: [] }])
+    if (sizes instanceof Error) throw new MirrorError(`Could not read settings: ${sizes.message}`)
+    const groups: string[][] = []
+    const alone: string[] = []
+    let cur: string[] = []
+    let bytes = 0
+    for (const [k, n] of sizes.rows) {
+      const key = String(k)
+      // JSON adds a byte for each quote and backslash: a copy full of them can be twice its size on the wire.
+      const size = Number(n) * 2 + key.length + 64
+      if (size > Mirror.SETTINGS_ANSWER) {
+        alone.push(key)
+        continue
+      }
+      if (cur.length && bytes + size > Mirror.SETTINGS_ANSWER) {
+        groups.push(cur)
+        cur = []
+        bytes = 0
+      }
+      cur.push(key)
+      bytes += size
+    }
+    if (cur.length) groups.push(cur)
+    const value = new Map<string, unknown>()
+    let next = 0
+    await Promise.all(Array.from({ length: Math.min(4, groups.length) }, async () => {
+      while (next < groups.length) {
+        const g = groups[next++]
+        const [r] = await this.turso.readMany([{ sql: 'SELECT key, value FROM settings WHERE key IN (SELECT value FROM json_each(?))', args: [JSON.stringify(g)] }])
+        if (r instanceof Error) throw new MirrorError(`Could not read settings: ${r.message}`)
+        for (const [k, v] of r.rows) value.set(String(k), v)
+      }
+    }))
+    for (const key of alone) {
+      const v = await this.turso.readSetting(key).catch((e) => {
+        throw new MirrorError(`Could not read settings (${key}): ${(e as Error).message}`)
+      })
+      if (v != null) value.set(key, v)
+    }
+    // In the table's own order; a setting removed between the two reads is simply not there.
+    const rows = sizes.rows.map(([k]) => String(k)).filter((k) => value.has(k)).map((k) => [k, value.get(k)])
+    this.rowsRead += rows.length
+    return { cols: ['key', 'value'], rows }
   }
 
   private loadTv(): TableVersions | null {
@@ -1237,13 +1322,18 @@ export class Mirror {
    * Adds to `raw` the tables and columns this app's migrations have and it
    * lacks (never removes any). Returns the statements, for Turso.
    */
-  private addMissing(raw: SqlJsDatabase): Change[] {
+  private addMissing(raw: SqlJsDatabase, onServer?: Set<string>): Change[] {
     const ddl: Change[] = []
     const ref = this.referenceDb()
     try {
       const refTables = ref.exec("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []
       const have = new Set((raw.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []).map((r) => String(r[0])))
       for (const [name, sql] of refTables as [string, string][]) {
+        if (SKIP.test(name)) {
+          // A table that lives only on the server (the pieces of big settings): made there once, never copied here.
+          if (onServer && !onServer.has(name)) ddl.push({ sql: sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, 'CREATE TABLE IF NOT EXISTS '), args: [] })
+          continue
+        }
         if (!have.has(name)) {
           const create = sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, 'CREATE TABLE IF NOT EXISTS ')
           raw.exec(create)
@@ -1315,13 +1405,13 @@ export class Mirror {
 
     // Bring Turso up to the schema this app expects: missing tables and
     // columns are added (never removed), on Turso and here.
-    const ddl = this.addMissing(raw)
+    const ddl = this.addMissing(raw, new Set(schema.rows.filter((r) => String(r[0]) === 'table').map((r) => String(r[1]))))
     if (ddl.length) await this.turso.writeAtomic(ddl)
 
     // The data, in pages (a request stays far below the server's 4.5 MB limit
     // however big the history grows), and all or nothing: if any part can't be
     // read, this copy is thrown away and the old one stays (never a half-empty copy).
-    const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0]))
+    const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0])).filter((t) => !SKIP.test(t))
     // The server's copy: only what it starts with, plus what it already asked for (see LazyLoad).
     if (this.lazy) local.lazy = this.lazyState(tables, this.db?.lazy ?? null)
     const wanted = local.lazy ? tables.filter((t) => !local.lazy!.tables.has(t.toLowerCase())) : tables

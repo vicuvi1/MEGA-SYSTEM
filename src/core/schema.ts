@@ -417,5 +417,13 @@ export const MIGRATIONS: string[] = [
   ALTER TABLE sleep_logs ADD COLUMN wake_at TEXT;
   ALTER TABLE sleep_logs ADD COLUMN updated_at TEXT;
   ALTER TABLE day_plans ADD COLUMN removed TEXT NOT NULL DEFAULT '[]';
+  `,
+  /* 025 big synced settings travel in pieces (core/settingParts.ts). On the server
+     settings.value of a big app copy is a short manifest and its pieces are here;
+     devices keep the whole value in settings and never copy this table. A client
+     built before this migration can't write any more (the X-Life-Schema check in
+     api/db.mjs), so it can never put an old whole copy over a value stored in pieces. */ `
+  CREATE TABLE IF NOT EXISTS setting_parts (key TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (key, id));
+  CREATE TABLE IF NOT EXISTS setting_parts_ok (parts_ok INTEGER NOT NULL CHECK (parts_ok = 1));
   `
 ]

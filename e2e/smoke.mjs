@@ -9300,7 +9300,7 @@ try {
       if (!['ok', 'warn', 'red'].includes(m.level)) throw new Error(`${id} has level ${m.level}`)
     }
     const [money, local, lifeT] = [await meter('sync:app_sync_finance'), await meter('local'), await meter('life')]
-    if (!/of 4\.5 MB/.test(money.text)) throw new Error(`Money's bar does not show the 4.5 MB limit: ${money.text}`)
+    if (!/of 48(\.0)? MB/.test(money.text)) throw new Error(`Money's bar does not show the 48 MB it is tested at: ${money.text}`)
     if (!(local.used > 0) || !/of 5\.0 M characters/.test(local.text)) throw new Error(`app storage bar: ${local.text}`)
     if (!(lifeT.used > 0)) throw new Error(`Life tables measure ${lifeT.used}`)
     if (local.level !== 'ok') throw new Error(`app storage is ${local.level} on made-up data (${local.text})`)

@@ -278,7 +278,7 @@ export function DataCenter({ onGo }: { onGo: (page: 'money') => void }) {
             ))}
             {!g && <li className="muted">Measuring…</li>}
           </ul>
-          <p className="muted bk-note">These are estimates on the careful side: the fastest growth seen is used, the date is rounded down, and the limit is the hard one (4.5 MB for one request, about 5 million characters of app storage, 5 GB of cloud database on the free plan). This page takes one size sample a day, so the estimate gets better with time.</p>
+          <p className="muted bk-note">These are estimates on the careful side: the fastest growth seen is used, the date is rounded down, and the limit is the careful one (48 MB for an app's synced copy, the size it is tested at; 4.5 MB for any other single setting; about 5 million characters of app storage; 5 GB of cloud database on the free plan). This page takes one size sample a day, so the estimate gets better with time.</p>
         </section>
       </TabPanel>
 

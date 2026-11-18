@@ -23,6 +23,7 @@ import {
   sampleRate,
   storageEntries,
   syncMeter,
+  partsMeter,
   utf8Bytes,
   addSample,
   type DeviceSeen,
@@ -208,15 +209,15 @@ export function quickMeters(local: { chars: number }, db: DataUsage | null): Met
     const plain = settingOf(db, a.setting)
     const sealed = a.sealed ? settingOf(db, a.sealed) : null
     const bytes = Math.max(plain?.requestBytes ?? 0, sealed?.requestBytes ?? 0)
-    out.push(syncMeter(`sync:${a.setting}`, `${a.label}: synced copy`, bytes, sealed && sealed.requestBytes > (plain?.requestBytes ?? 0) ? 'Locked with the Money PIN (the sealed copy is the bigger one).' : undefined))
+    out.push(partsMeter(`sync:${a.setting}`, `${a.label}: synced copy`, bytes, sealed && sealed.requestBytes > (plain?.requestBytes ?? 0) ? 'Locked with the Money PIN (the sealed copy is the bigger one).' : undefined))
   }
   if (db)
     out.push(
       meter({
         id: 'settings',
-        label: 'All synced copies and settings together',
-        where: 'Cloud database: a device fetches them in one answer when one of them changes',
-        used: db.settings.reduce((n, s) => n + s.requestBytes, 0),
+        label: 'Biggest other setting',
+        where: 'Cloud database: one setting that is not an app copy must fit one request (they are fetched in groups, by size)',
+        used: db.settings.filter((s) => !/^app_sync_/.test(s.key)).reduce((n, s) => Math.max(n, s.requestBytes), 0),
         limit: REQUEST_CAP,
         warnAt: SYNC_WARN,
         redAt: SYNC_RED

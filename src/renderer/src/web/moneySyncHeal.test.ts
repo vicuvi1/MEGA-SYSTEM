@@ -251,6 +251,7 @@ describe('Money sync: never silent', () => {
     expect(d.app.status()).toMatchObject({ state: 'error' })
     expect(d.app.status().error).toMatch(/storage is full/)
     expect(ids(pc)).toEqual(['a', 'mine'])
+    await d.mirror.read(() => 0) // the upload goes right after the write: let it finish first
     expect(net.cloudIds()).toEqual(['a', 'mine', 'tg'])
     pc.full = false
     const r2 = await d.app.sync()

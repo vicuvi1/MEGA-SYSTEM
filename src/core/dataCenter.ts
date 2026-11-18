@@ -6,8 +6,16 @@
 
 export type Level = 'ok' | 'warn' | 'red'
 
-/** A server request or answer may be at most this big (Vercel). An app's whole synced copy travels in one. */
+/** A server request or answer may be at most this big (Vercel). One ordinary setting must fit in one. */
 export const REQUEST_CAP = 4_500_000
+/**
+ * An app's synced copy travels in pieces (core/settingParts.ts), so one request no longer limits it.
+ * This is the size it is tested at (about 200,000 Money records); past it nothing breaks at once,
+ * but saving and comparing get slow.
+ */
+export const PARTS_LIMIT = 48_000_000
+export const PARTS_WARN = 24_000_000
+export const PARTS_RED = 36_000_000
 export const SYNC_WARN = 2_500_000
 export const SYNC_RED = 3_500_000
 /** What a browser (and the desktop app's window) lets one site keep in localStorage: about 5 million characters. */
@@ -63,7 +71,11 @@ export function meter(m: Omit<Meter, 'level'>): Meter {
   return { ...m, level: levelOf(m.used, m.warnAt, m.redAt) }
 }
 
-/** An app's synced copy against the 4.5 MB one request may carry (warn at 2.5 MB, red at 3.5 MB). */
+/** An app's synced copy, sent in pieces: against the size it is tested at (48 MB; warn at 24 MB, red at 36 MB). */
+export const partsMeter = (id: string, label: string, bytes: number, note?: string): Meter =>
+  meter({ id, label, where: 'Cloud database, sent and fetched in pieces (only what changed)', used: bytes, limit: PARTS_LIMIT, warnAt: PARTS_WARN, redAt: PARTS_RED, note })
+
+/** One value against the 4.5 MB one request may carry (warn at 2.5 MB, red at 3.5 MB). */
 export const syncMeter = (id: string, label: string, bytes: number, note?: string): Meter =>
   meter({ id, label, where: 'Cloud database, sent and fetched in one request', used: bytes, limit: REQUEST_CAP, warnAt: SYNC_WARN, redAt: SYNC_RED, note })
 

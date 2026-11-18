@@ -40848,6 +40848,10 @@ var MIGRATIONS = [
   ALTER TABLE sleep_logs ADD COLUMN wake_at TEXT;
   ALTER TABLE sleep_logs ADD COLUMN updated_at TEXT;
   ALTER TABLE day_plans ADD COLUMN removed TEXT NOT NULL DEFAULT '[]';
+  `,
+	`
+  CREATE TABLE IF NOT EXISTS setting_parts (key TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (key, id));
+  CREATE TABLE IF NOT EXISTS setting_parts_ok (parts_ok INTEGER NOT NULL CHECK (parts_ok = 1));
   `
 ];
 // src/core/rules.ts
@@ -42251,6 +42255,540 @@ async function sendPending(turso, write, info) {
 	}
 	throw new Error(`Sync conflict: could not merge a change made offline (${String(last?.message ?? last).slice(0, 160)}). Your local changes are kept. Save a backup before resolving this.`);
 }
+// src/core/textHash.ts
+/** 64 bits of the text's UTF-16 units as 16 hex letters (two independent 32-bit mixes). */
+function hash64(text, from = 0, to = text.length) {
+	let h1 = 3735928559 ^ to - from;
+	let h2 = 1103547991 ^ to - from;
+	for (let i = from; i < to; i++) {
+		const c = text.charCodeAt(i);
+		h1 = Math.imul(h1 ^ c, 2654435761);
+		h2 = Math.imul(h2 ^ c, 1597334677);
+	}
+	h1 = Math.imul(h1 ^ h1 >>> 16, 2246822507) ^ Math.imul(h2 ^ h2 >>> 13, 3266489909);
+	h2 = Math.imul(h2 ^ h2 >>> 16, 2246822507) ^ Math.imul(h1 ^ h1 >>> 13, 3266489909);
+	return (h2 >>> 0).toString(16).padStart(8, "0") + (h1 >>> 0).toString(16).padStart(8, "0");
+}
+// src/core/settingParts.ts
+/** The pieces' table on the server (migration 025; never copied to devices). */
+var PARTS_TABLE = "setting_parts";
+/** Its one-row check table: a write fails when a piece is missing (`parts_ok = 1`). */
+var PARTS_OK_TABLE = "setting_parts_ok";
+var PARTS_DDL = [`CREATE TABLE IF NOT EXISTS ${PARTS_TABLE} (key TEXT NOT NULL, id TEXT NOT NULL, data TEXT NOT NULL, at INTEGER NOT NULL, PRIMARY KEY (key, id))`, `CREATE TABLE IF NOT EXISTS ${PARTS_OK_TABLE} (parts_ok INTEGER NOT NULL CHECK (parts_ok = 1))`];
+/** Only the apps' copies travel in pieces (`app_sync_<app>`, Money's sealed copy included). */
+var travelsInParts = (key) => /^app_sync_/.test(key);
+/** A piece is at least / at most this long (characters); about 40,000 on average for a list of records. */
+var PART_MIN = 8e3;
+var PART_MAX = 128e3;
+var CUT_MASK = 127;
+var WINDOW = 24;
+/**
+* Cuts a text into pieces at places that depend only on the text around them
+* (after a `}` that is followed by `,{`: the end of a record in a list), so
+* an edit in one record changes one or two pieces and leaves the others (and
+* their names) exactly as they were. Joining the pieces gives the text back.
+*/
+function splitText(text) {
+	const n = text.length;
+	if (n <= 128e3) return [text];
+	const out = [];
+	let start = 0;
+	let i = PART_MIN;
+	while (i < n) {
+		let cut = -1;
+		const max = Math.min(n, start + PART_MAX);
+		for (let j = Math.max(i, start + PART_MIN); j < max - 2; j++) {
+			if (text.charCodeAt(j) !== 125 || text.charCodeAt(j + 1) !== 44 || text.charCodeAt(j + 2) !== 123) continue;
+			let h = 2166136261;
+			for (let k = j - WINDOW; k <= j; k++) h = Math.imul(h ^ text.charCodeAt(k), 16777619);
+			h ^= h >>> 15;
+			if ((h & CUT_MASK) === 0) {
+				cut = j + 1;
+				break;
+			}
+		}
+		if (cut < 0) {
+			if (max >= n) break;
+			cut = max;
+			const c = text.charCodeAt(cut - 1);
+			if (c >= 55296 && c <= 56319) cut--;
+		}
+		out.push(text.slice(start, cut));
+		start = cut;
+		i = start + PART_MIN;
+	}
+	if (start < n) out.push(text.slice(start));
+	return out;
+}
+var MANIFEST_HEAD = "{\"lifeParts\":1,";
+/** A stored value that is a manifest (cheap: by its first letters). */
+var looksLikeManifest = (v) => typeof v === "string" && v.startsWith("{\"lifeParts\":1,");
+var sumOf = (p, len) => hash64(`${p.join(",")}|${len}`);
+/** The manifest of a text and its pieces. */
+function manifestOf(key, text) {
+	const parts = splitText(text).map((t) => ({
+		id: hash64(t),
+		text: t
+	}));
+	const p = parts.map((x) => x.id);
+	const m = {
+		lifeParts: 1,
+		key,
+		len: text.length,
+		sum: sumOf(p, text.length),
+		p,
+		n: parts.map((x) => x.text.length)
+	};
+	return {
+		manifest: JSON.stringify(m),
+		parts
+	};
+}
+/** A manifest read back, or null when the text isn't one (or was damaged). */
+function parseManifest(text) {
+	if (!looksLikeManifest(text)) return null;
+	let m;
+	try {
+		m = JSON.parse(text);
+	} catch {
+		return null;
+	}
+	if (!m || m.lifeParts !== 1 || typeof m.key !== "string" || !Array.isArray(m.p) || !Array.isArray(m.n) || m.p.length !== m.n.length || !m.p.length) return null;
+	if (!m.p.every((x) => typeof x === "string" && /^[0-9a-f]{16}$/.test(x)) || !m.n.every((x) => Number.isInteger(x) && x >= 0)) return null;
+	if (m.n.reduce((a, b) => a + b, 0) !== m.len || sumOf(m.p, m.len) !== m.sum) return null;
+	return m;
+}
+var PartsError = class extends Error {};
+/** True when this text is the piece with this name and length. */
+var partOk = (id, len, text) => typeof text === "string" && text.length === len && hash64(text) === id;
+/**
+* The whole text from a manifest and its pieces. Throws when a piece is
+* missing or is not the text its name says (never a half or mixed-up value).
+*/
+function assemble(m, get) {
+	const out = [];
+	for (let i = 0; i < m.p.length; i++) {
+		const t = get(m.p[i]);
+		if (t === void 0) throw new PartsError(`A piece of ${m.key} is missing (${i + 1} of ${m.p.length})`);
+		if (!partOk(m.p[i], m.n[i], t)) throw new PartsError(`A piece of ${m.key} is damaged (${i + 1} of ${m.p.length})`);
+		out.push(t);
+	}
+	const text = out.join("");
+	if (text.length !== m.len) throw new PartsError(`The pieces of ${m.key} don't add up`);
+	return text;
+}
+// src/renderer/src/web/chunkedTurso.ts
+var UPSERT = /^\s*INSERT\s+INTO\s+["`]?settings["`]?\s*\(\s*["`]?key["`]?\s*,\s*["`]?value["`]?\s*\)\s*VALUES\s*\(\s*\?\s*,\s*\?\s*\)/i;
+var UPDATE = /^\s*UPDATE\s+["`]?settings["`]?\s+SET\s+["`]?value["`]?\s*=\s*\?\s+WHERE\s+["`]?key["`]?\s*=\s*\?\s*$/i;
+var CAS = /^\s*INSERT\s+INTO\s+sys_cas\s*\(ok\)\s*VALUES\s*\(\(SELECT\s+value\s+FROM\s+settings\s+WHERE\s+key\s*=\s*\?\)\s+IS\s+\?\)\s*$/i;
+/** A statement whose big value travels in pieces, or null. */
+function shapeOf$1(c) {
+	const big = (key, value) => typeof key === "string" && travelsInParts(key) && typeof value === "string" && value.length > 1e5 && !looksLikeManifest(value);
+	if (c.args.length === 2) {
+		if (UPSERT.test(c.sql) && big(c.args[0], c.args[1])) return {
+			kind: "set",
+			key: c.args[0],
+			value: c.args[1],
+			arg: 1
+		};
+		if (UPDATE.test(c.sql) && big(c.args[1], c.args[0])) return {
+			kind: "set",
+			key: c.args[1],
+			value: c.args[0],
+			arg: 0
+		};
+		if (CAS.test(c.sql) && big(c.args[0], c.args[1])) return {
+			kind: "cas",
+			key: c.args[0],
+			value: c.args[1]
+		};
+	}
+	return null;
+}
+var isMissingPart = (e) => new RegExp(`${PARTS_OK_TABLE}|parts_ok`, "i").test(String(e?.message ?? e));
+var isNoTable = (e) => new RegExp(`no such table: ${PARTS_TABLE}`, "i").test(String(e?.message ?? e));
+var ChunkedTurso = class ChunkedTurso {
+	inner;
+	local;
+	/** One upload request carries at most this many bytes of pieces (far below the server's 4.5 MB). */
+	static UPLOAD_BYTES = 9e5;
+	/** One download request asks for at most this many characters of pieces. */
+	static FETCH_CHARS = 6e5;
+	/** A whole (not chunked) value bigger than this is read in slices. */
+	static SLICE_OVER = 12e5;
+	static SLICE_CHARS = 5e5;
+	/** An old piece is only cleaned up when it is at least this old (a reader or a writer may still be using it). */
+	static GRACE_MS = 6e5;
+	/** Pieces this device holds, per key (of the newest values it wrote or read). */
+	have = /* @__PURE__ */ new Map();
+	/** The last two texts encoded per key (a write names the value it replaces and the new one; encoding them again costs nothing). */
+	last = /* @__PURE__ */ new Map();
+	/** For the speed check and tests: what travelled. */
+	stats = {
+		requests: 0,
+		partsUp: 0,
+		bytesUp: 0,
+		partsDown: 0,
+		charsDown: 0,
+		biggestRequest: 0
+	};
+	/** `local(key)`: this device's own copy of a setting (its pieces need no download). */
+	constructor(inner, local = () => null) {
+		this.inner = inner;
+		this.local = local;
+	}
+	/** True when this statement's big value goes up in pieces (so it never makes a request too big). */
+	travelsInParts(c) {
+		return shapeOf$1(c)?.kind === "set";
+	}
+	encode(key, text) {
+		const list = this.last.get(key) ?? [];
+		const was = list.find((x) => x.text.length === text.length && x.text === text);
+		if (was) return was;
+		const enc = {
+			text,
+			...manifestOf(key, text)
+		};
+		this.last.set(key, [enc, ...list].slice(0, 2));
+		return enc;
+	}
+	/** The manifest text a value is stored as (null: it is stored whole). */
+	manifestText(key, text) {
+		return travelsInParts(key) && text.length > 1e5 ? this.encode(key, text).manifest : null;
+	}
+	keep(key, parts) {
+		this.have.set(key, new Map(parts.map((p) => [p.id, p.text])));
+	}
+	async raw(stmts) {
+		this.count(stmts);
+		return this.inner.readMany(stmts);
+	}
+	count(stmts) {
+		this.stats.requests++;
+		let n = 0;
+		for (const s of stmts) {
+			n += s.sql.length + 40;
+			for (const a of s.args) n += typeof a === "string" ? jsonBytes(a) : 24;
+		}
+		if (n > this.stats.biggestRequest) this.stats.biggestRequest = n;
+	}
+	/** Reads without putting manifests together (the mirror's "is it still the same?" probe). */
+	readRaw(stmts) {
+		return this.raw(stmts);
+	}
+	/** Sends the pieces of `enc` the server doesn't have yet. */
+	async upload(key, enc) {
+		const ids = [...new Set(enc.parts.map((p) => p.id))];
+		let there = /* @__PURE__ */ new Set();
+		const [r] = await this.raw([{
+			sql: `SELECT id FROM ${PARTS_TABLE} WHERE key = ? AND id IN (SELECT value FROM json_each(?))`,
+			args: [key, JSON.stringify(ids)]
+		}]);
+		if (r instanceof Error) {
+			if (!isNoTable(r)) throw r;
+		} else there = new Set(r.rows.map((x) => String(x[0])));
+		const todo = [];
+		const seen = /* @__PURE__ */ new Set();
+		for (const p of enc.parts) {
+			if (there.has(p.id) || seen.has(p.id)) continue;
+			seen.add(p.id);
+			todo.push(p);
+		}
+		const now = Date.now();
+		let batch = [];
+		let size = 0;
+		const flush = async () => {
+			if (!batch.length) return;
+			const stmts = [...PARTS_DDL.map((sql) => ({
+				sql,
+				args: []
+			})), ...batch];
+			this.count(stmts);
+			await this.inner.writeAtomic(stmts);
+			this.stats.partsUp += batch.length;
+			this.stats.bytesUp += size;
+			batch = [];
+			size = 0;
+		};
+		for (const p of todo) {
+			const bytes = jsonBytes(p.text);
+			if (batch.length && size + bytes > ChunkedTurso.UPLOAD_BYTES) await flush();
+			batch.push({
+				sql: `INSERT INTO ${PARTS_TABLE} (key, id, data, at) VALUES (?, ?, ?, ?) ON CONFLICT(key, id) DO UPDATE SET at = excluded.at`,
+				args: [
+					key,
+					p.id,
+					p.text,
+					now
+				]
+			});
+			size += bytes;
+		}
+		await flush();
+	}
+	/**
+	* Makes sure the server has every piece of this value (a piece lost or damaged
+	* there is sent again from this device's whole copy). Changes no value.
+	*/
+	async heal(key, text) {
+		if (!travelsInParts(key) || text.length <= 1e5) return;
+		const enc = this.encode(key, text);
+		const ids = [...new Set(enc.parts.map((p) => p.id))];
+		const size = new Map(enc.parts.map((p) => [p.id, p.text.length]));
+		const [lens] = await this.raw([{
+			sql: `SELECT id, length(data) FROM ${PARTS_TABLE} WHERE key = ? AND id IN (SELECT value FROM json_each(?))`,
+			args: [key, JSON.stringify(ids)]
+		}]);
+		if (!(lens instanceof Error)) {
+			const bad = lens.rows.filter(([id, n]) => size.get(String(id)) !== Number(n)).map(([id]) => String(id));
+			if (bad.length) await this.inner.writeAtomic([{
+				sql: `DELETE FROM ${PARTS_TABLE} WHERE key = ? AND id IN (SELECT value FROM json_each(?))`,
+				args: [key, JSON.stringify(bad)]
+			}]);
+		}
+		await this.upload(key, enc);
+	}
+	async writeAtomic(stmts) {
+		const shapes = stmts.map(shapeOf$1);
+		if (!shapes.some(Boolean)) {
+			this.count(stmts);
+			return this.inner.writeAtomic(stmts);
+		}
+		const encAt = shapes.map((s) => s ? this.encode(s.key, s.value) : null);
+		const sets = shapes.some((s) => s?.kind === "set");
+		let last = null;
+		for (let attempt = 0; attempt < 3; attempt++) {
+			for (let i = 0; i < shapes.length; i++) if (shapes[i]?.kind === "set") await this.upload(shapes[i].key, encAt[i]);
+			const out = [];
+			const at = [];
+			if (sets) for (const sql of PARTS_DDL) out.push({
+				sql,
+				args: []
+			});
+			const cutoff = Date.now() - ChunkedTurso.GRACE_MS;
+			stmts.forEach((c, i) => {
+				const s = shapes[i];
+				if (!s) {
+					at[i] = out.push(c) - 1;
+					return;
+				}
+				if (s.kind === "cas") {
+					const text = s.value;
+					at[i] = out.push({
+						sql: "INSERT INTO sys_cas (ok) VALUES (COALESCE((SELECT (value = ?) OR (length(value) = ? AND substr(value, 1, 96) = ? AND substr(value, -96) = ?) FROM settings WHERE key = ?), 0))",
+						args: [
+							encAt[i].manifest,
+							text.length,
+							text.slice(0, 96),
+							text.slice(-96),
+							s.key
+						]
+					}) - 1;
+					return;
+				}
+				const enc = encAt[i];
+				const ids = JSON.stringify([...new Set(enc.parts.map((p) => p.id))]);
+				const args = [...c.args];
+				args[s.arg] = enc.manifest;
+				out.push({
+					sql: `INSERT INTO ${PARTS_OK_TABLE} (parts_ok) VALUES ((SELECT COUNT(*) FROM ${PARTS_TABLE} WHERE key = ? AND id IN (SELECT value FROM json_each(?))) = ?)`,
+					args: [
+						s.key,
+						ids,
+						new Set(enc.parts.map((p) => p.id)).size
+					]
+				});
+				at[i] = out.push({
+					sql: c.sql,
+					args
+				}) - 1;
+				out.push({
+					sql: `DELETE FROM ${PARTS_TABLE} WHERE key = ? AND at < ? AND id NOT IN (SELECT value FROM json_each(?))`,
+					args: [
+						s.key,
+						cutoff,
+						ids
+					]
+				});
+			});
+			if (sets) out.push({
+				sql: `DELETE FROM ${PARTS_OK_TABLE}`,
+				args: []
+			});
+			try {
+				this.count(out);
+				const res = await this.inner.writeAtomic(out);
+				shapes.forEach((sh, i) => sh?.kind === "set" && this.keep(sh.key, encAt[i].parts));
+				return stmts.map((_, i) => res[at[i]] ?? []);
+			} catch (e) {
+				last = e;
+				if (!isMissingPart(e) && !isNoTable(e)) throw e;
+			}
+		}
+		throw last;
+	}
+	async readMany(stmts) {
+		const res = await this.raw(stmts);
+		const out = [];
+		for (const r of res) {
+			if (r instanceof Error) {
+				out.push(r);
+				continue;
+			}
+			let failed = null;
+			for (const row of r.rows) {
+				for (let i = 0; i < row.length && !failed; i++) {
+					if (!looksLikeManifest(row[i])) continue;
+					const m = parseManifest(row[i]);
+					if (!m || !travelsInParts(m.key)) continue;
+					try {
+						row[i] = await this.resolve(m);
+					} catch (e) {
+						failed = e instanceof Error ? e : new Error(String(e));
+					}
+				}
+				if (failed) break;
+			}
+			out.push(failed ?? r);
+		}
+		return out;
+	}
+	/** The whole text of a manifest: this device's pieces first, the rest downloaded and checked. */
+	async resolve(first) {
+		let m = first;
+		for (let attempt = 0;; attempt++) {
+			const got = await this.gather(m);
+			if (got != null) return got;
+			if (attempt >= 3) throw new PartsError(`Could not read ${m.key}: its pieces changed while reading. Try again.`);
+			const [r] = await this.raw([{
+				sql: "SELECT value FROM settings WHERE key = ?",
+				args: [m.key]
+			}]);
+			if (r instanceof Error) throw r;
+			const v = r.rows[0]?.[0];
+			const next = parseManifest(v);
+			if (!next) {
+				if (typeof v === "string") return v;
+				throw new PartsError(`Could not read ${m.key}: it was removed while reading.`);
+			}
+			if (next.sum === m.sum && attempt >= 1) throw new PartsError(`Could not read ${m.key}: a piece is missing on the server. This device's own copy is not changed.`);
+			m = next;
+		}
+	}
+	/** All pieces of `m` put together, or null when the server no longer has one of them. */
+	async gather(m) {
+		let mine = this.have.get(m.key) ?? /* @__PURE__ */ new Map();
+		const lacks = () => m.p.filter((id, i) => !partOk(id, m.n[i], mine.get(id)));
+		if (lacks().length) {
+			const own = this.local(m.key);
+			if (own != null && own.length > 0) {
+				mine = new Map(mine);
+				for (const t of splitText(own)) mine.set(hash64(t), t);
+			}
+		}
+		const need = [...new Set(lacks())];
+		if (need.length) {
+			const size = new Map(m.p.map((id, i) => [id, m.n[i]]));
+			const groups = [];
+			let cur = [];
+			let chars = 0;
+			for (const id of need) {
+				const n = size.get(id) ?? 0;
+				if (cur.length && chars + n > ChunkedTurso.FETCH_CHARS) {
+					groups.push(cur);
+					cur = [];
+					chars = 0;
+				}
+				cur.push(id);
+				chars += n;
+			}
+			if (cur.length) groups.push(cur);
+			mine = new Map(mine);
+			let next = 0;
+			let gone = false;
+			await Promise.all(Array.from({ length: Math.min(4, groups.length) }, async () => {
+				while (next < groups.length && !gone) {
+					const g = groups[next++];
+					const [r] = await this.raw([{
+						sql: `SELECT id, data FROM ${PARTS_TABLE} WHERE key = ? AND id IN (SELECT value FROM json_each(?))`,
+						args: [m.key, JSON.stringify(g)]
+					}]);
+					if (r instanceof Error) {
+						if (isNoTable(r)) {
+							gone = true;
+							return;
+						}
+						throw r;
+					}
+					for (const [id, data] of r.rows) {
+						const n = size.get(String(id)) ?? -1;
+						if (partOk(String(id), n, data)) {
+							mine.set(String(id), data);
+							this.stats.partsDown++;
+							this.stats.charsDown += data.length;
+						}
+					}
+				}
+			}));
+			if (gone || lacks().length) return null;
+		}
+		const text = assemble(m, (id) => mine.get(id));
+		this.have.set(m.key, new Map(m.p.map((id) => [id, mine.get(id)])));
+		return text;
+	}
+	/**
+	* One setting as the server holds it, whole, however big: a manifest is put
+	* together; a big whole value (written before pieces existed, or put back by
+	* a restore) is read in slices so no answer is too big. Null: no such setting.
+	*/
+	async readSetting(key) {
+		for (let attempt = 0;; attempt++) {
+			const probe = {
+				sql: "SELECT length(value), length(CAST(value AS BLOB)), substr(value, 1, 64), substr(value, -64) FROM settings WHERE key = ?",
+				args: [key]
+			};
+			const [p] = await this.raw([probe]);
+			if (p instanceof Error) throw p;
+			const row = p.rows[0];
+			if (!row) return null;
+			const chars = Number(row[0]);
+			if (Number(row[1]) <= ChunkedTurso.SLICE_OVER || String(row[2] ?? "").startsWith("{\"lifeParts\":1,")) {
+				const [r] = await this.readMany([{
+					sql: "SELECT value FROM settings WHERE key = ?",
+					args: [key]
+				}]);
+				if (r instanceof Error) throw r;
+				const v = r.rows[0]?.[0];
+				return v == null ? null : String(v);
+			}
+			const reads = [];
+			for (let o = 1; o <= chars; o += ChunkedTurso.SLICE_CHARS) reads.push({
+				sql: "SELECT substr(value, ?, ?) FROM settings WHERE key = ?",
+				args: [
+					o,
+					ChunkedTurso.SLICE_CHARS,
+					key
+				]
+			});
+			const slices = new Array(reads.length);
+			let next = 0;
+			await Promise.all(Array.from({ length: Math.min(4, reads.length) }, async () => {
+				while (next < reads.length) {
+					const i = next++;
+					const [r] = await this.raw([reads[i]]);
+					if (r instanceof Error) throw r;
+					slices[i] = String(r.rows[0]?.[0] ?? "");
+				}
+			}));
+			const [q] = await this.raw([probe]);
+			if (q instanceof Error) throw q;
+			const text = slices.join("");
+			const again = q.rows[0];
+			if (again && Number(again[0]) === chars && String(again[2]) === String(row[2]) && String(again[3]) === String(row[3]) && text.length === chars) return text;
+			if (attempt >= 3) throw new PartsError(`Could not read ${key}: it kept changing while reading. Try again.`);
+		}
+	}
+};
 // src/core/retry.ts
 /** How long to wait before try number `attempt` (0 = the first retry). */
 function retryDelay(attempt, o = {}) {
@@ -42506,12 +43044,11 @@ function markRestoredApps(snap, restoreId, now, share = {}) {
 	};
 }
 // src/renderer/src/web/mirror.ts
-var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|restore_stage_|cloud_snapshots$|cloud_snapshot_parts$)/;
+var SKIP = /^(sqlite_|libsql_|_litestream|_cf_|desktop_|sys_|restore_stage_|cloud_snapshots$|cloud_snapshot_parts$|setting_parts$|setting_parts_ok$)/;
 var MirrorError = class extends Error {};
 var likeToRe = (p) => new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/%/g, ".*").replace(/_/g, ".")}$`);
 var Mirror = class Mirror {
 	SQL;
-	turso;
 	store;
 	desktop;
 	lazy;
@@ -42541,13 +43078,23 @@ var Mirror = class Mirror {
 	nextFlushAt = 0;
 	/** CL7: the session ended (401): the waiting changes stay here until you enter your PIN. */
 	locked = false;
+	/** The connection, with big app copies travelling in pieces (web/chunkedTurso.ts). */
+	turso;
 	constructor(SQL, turso, store = null, desktop = false, lazy = null) {
 		this.SQL = SQL;
-		this.turso = turso;
 		this.store = store;
 		this.desktop = desktop;
 		this.lazy = lazy;
 		if (lazy && (store || desktop)) throw new MirrorError("A lazy copy is for the server only");
+		this.turso = new ChunkedTurso(turso, (key) => {
+			try {
+				const v = this.db?.raw.exec("SELECT value FROM settings WHERE key = ?", [key])[0]?.values[0]?.[0];
+				return v == null ? null : String(v);
+			} catch {
+				return null;
+			}
+		});
+		this.chunkable = (c) => this.turso.travelsInParts(c);
 		this.ready = this.start();
 		if (typeof window !== "undefined" && !this.desktop) window.addEventListener("online", () => {
 			this.nextFlushAt = 0;
@@ -42606,22 +43153,28 @@ var Mirror = class Mirror {
 		});
 		const HEAD = 48;
 		if (expected != null) {
-			const [probe] = await this.turso.readMany([{
-				sql: "SELECT length(CAST(value AS BLOB)), substr(value, 1, ?) FROM settings WHERE key = ?",
-				args: [HEAD, key]
+			const [probe] = await this.turso.readRaw([{
+				sql: `SELECT length(CAST(value AS BLOB)), substr(value, 1, ?), CASE WHEN substr(value, 1, ${MANIFEST_HEAD.length}) = ? THEN value END FROM settings WHERE key = ?`,
+				args: [
+					HEAD,
+					MANIFEST_HEAD,
+					key
+				]
 			}]);
 			if (probe instanceof Error) throw probe;
 			const row = probe.rows[0];
 			if (!row) return null;
-			if (Number(row[0]) === new TextEncoder().encode(expected).length && String(row[1] ?? "") === expected.slice(0, HEAD)) return expected;
+			if (row[2] != null) {
+				if (String(row[2]) === this.turso.manifestText(key, expected)) return expected;
+			} else if (Number(row[0]) === new TextEncoder().encode(expected).length && String(row[1] ?? "") === expected.slice(0, HEAD)) return expected;
 		}
-		const [r] = await this.turso.readMany([{
-			sql: "SELECT value FROM settings WHERE key = ?",
-			args: [key]
-		}]);
-		if (r instanceof Error) throw r;
-		const v = r.rows[0]?.[0];
-		return v == null ? null : String(v);
+		const value = await this.turso.readSetting(key);
+		if (expected === void 0 && value != null) await this.turso.heal(key, value).catch(() => {});
+		return value;
+	}
+	/** What travelled to and from the server in pieces (the speed check, tests). */
+	get transport() {
+		return this.turso.stats;
 	}
 	onChange(cb) {
 		this.listeners.add(cb);
@@ -43208,6 +43761,10 @@ var Mirror = class Mirror {
 			};
 		};
 		const loaded = /* @__PURE__ */ new Map();
+		if (tables.includes("settings") && !filter("settings")) {
+			loaded.set("settings", await this.readSettings());
+			tables = tables.filter((t) => t !== "settings");
+		}
 		const groups = [];
 		for (let i = 0; i < tables.length; i += 8) groups.push(tables.slice(i, i + 8));
 		const count = (t) => {
@@ -43256,6 +43813,67 @@ var Mirror = class Mirror {
 			}
 		}));
 		return loaded;
+	}
+	/** One answer with several settings in it stays under this many bytes. */
+	static SETTINGS_ANSWER = 1e6;
+	/**
+	* The settings table, by size: first every key with its size (tiny), then
+	* the values in groups that each fit one answer; a value too big for one
+	* answer is read by itself (pieces put together, an old whole value in
+	* slices). The whole table in one answer made every app's copy share the
+	* 4.5 MB an answer may be.
+	*/
+	async readSettings() {
+		const [sizes] = await this.turso.readRaw([{
+			sql: "SELECT key, length(CAST(value AS BLOB)) FROM settings ORDER BY rowid",
+			args: []
+		}]);
+		if (sizes instanceof Error) throw new MirrorError(`Could not read settings: ${sizes.message}`);
+		const groups = [];
+		const alone = [];
+		let cur = [];
+		let bytes = 0;
+		for (const [k, n] of sizes.rows) {
+			const key = String(k);
+			const size = Number(n) * 2 + key.length + 64;
+			if (size > Mirror.SETTINGS_ANSWER) {
+				alone.push(key);
+				continue;
+			}
+			if (cur.length && bytes + size > Mirror.SETTINGS_ANSWER) {
+				groups.push(cur);
+				cur = [];
+				bytes = 0;
+			}
+			cur.push(key);
+			bytes += size;
+		}
+		if (cur.length) groups.push(cur);
+		const value = /* @__PURE__ */ new Map();
+		let next = 0;
+		await Promise.all(Array.from({ length: Math.min(4, groups.length) }, async () => {
+			while (next < groups.length) {
+				const g = groups[next++];
+				const [r] = await this.turso.readMany([{
+					sql: "SELECT key, value FROM settings WHERE key IN (SELECT value FROM json_each(?))",
+					args: [JSON.stringify(g)]
+				}]);
+				if (r instanceof Error) throw new MirrorError(`Could not read settings: ${r.message}`);
+				for (const [k, v] of r.rows) value.set(String(k), v);
+			}
+		}));
+		for (const key of alone) {
+			const v = await this.turso.readSetting(key).catch((e) => {
+				throw new MirrorError(`Could not read settings (${key}): ${e.message}`);
+			});
+			if (v != null) value.set(key, v);
+		}
+		const rows = sizes.rows.map(([k]) => String(k)).filter((k) => value.has(k)).map((k) => [k, value.get(k)]);
+		this.rowsRead += rows.length;
+		return {
+			cols: ["key", "value"],
+			rows
+		};
 	}
 	loadTv() {
 		try {
@@ -43637,13 +44255,20 @@ var Mirror = class Mirror {
 	* Adds to `raw` the tables and columns this app's migrations have and it
 	* lacks (never removes any). Returns the statements, for Turso.
 	*/
-	addMissing(raw) {
+	addMissing(raw, onServer) {
 		const ddl = [];
 		const ref = this.referenceDb();
 		try {
 			const refTables = ref.exec("SELECT name, sql FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? [];
 			const have = new Set((raw.exec("SELECT name FROM sqlite_master WHERE type = 'table'")[0]?.values ?? []).map((r) => String(r[0])));
 			for (const [name, sql] of refTables) {
+				if (SKIP.test(name)) {
+					if (onServer && !onServer.has(name)) ddl.push({
+						sql: sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, "CREATE TABLE IF NOT EXISTS "),
+						args: []
+					});
+					continue;
+				}
 				if (!have.has(name)) {
 					const create = sql.replace(/^CREATE TABLE\s+(IF NOT EXISTS\s+)?/i, "CREATE TABLE IF NOT EXISTS ");
 					raw.exec(create);
@@ -43721,9 +44346,9 @@ var Mirror = class Mirror {
 		const raw = new this.SQL.Database();
 		const local = new BrowserDb(raw);
 		for (const o of objects.filter((x) => x.type === "table")) raw.exec(o.sql);
-		const ddl = this.addMissing(raw);
+		const ddl = this.addMissing(raw, new Set(schema.rows.filter((r) => String(r[0]) === "table").map((r) => String(r[1]))));
 		if (ddl.length) await this.turso.writeAtomic(ddl);
-		const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0]));
+		const tables = (raw.exec("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")[0]?.values ?? []).map((r) => String(r[0])).filter((t) => !SKIP.test(t));
 		if (this.lazy) local.lazy = this.lazyState(tables, this.db?.lazy ?? null);
 		const wanted = local.lazy ? tables.filter((t) => !local.lazy.tables.has(t.toLowerCase())) : tables;
 		const loaded = await this.readTables(wanted, (t) => t === "settings" ? this.lazySettingsFilter(local.lazy) : null);

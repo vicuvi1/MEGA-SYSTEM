@@ -1712,7 +1712,7 @@
    "id": "data-growth-10-years",
    "area": "data-sync",
    "title": "Money and the other app copies stay safe as they grow for 10+ years",
-   "user_visible_behavior": "Step 1 (desktop): days offline leave one waiting Money change instead of one per save; each change writes the database out once, not twice; a change too big for one request is set aside and shown in Data center → Sync (\"Too big to send\", with Try again) while everything after it keeps syncing; the routine Money check no longer re-merges tens of thousands of records when nothing changed.",
+   "user_visible_behavior": "Step 1 (desktop): days offline leave one waiting Money change instead of one per save; each change writes the database out once, not twice; a change too big for one request is set aside and shown in Data center → Sync (\"Too big to send\", with Try again) while everything after it keeps syncing; the routine Money check no longer re-merges tens of thousands of records when nothing changed. Step 2: an app's synced copy over 100,000 characters travels to the server in pieces (only what changed is sent or fetched), settings are fetched in groups by size, and the Data center's bar for a synced copy shows 48 MB (the tested size) instead of 4.5 MB; an older app version can read but not write.",
    "status": "passing",
    "verification": [
     "npx vitest run src/renderer/src/web/desktopOutbox.test.ts src/renderer/src/web/appSyncSkip.test.ts src/renderer/src/web/desktopSync.test.ts",

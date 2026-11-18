@@ -1,7 +1,7 @@
 import { trackStatements } from './tableVersions'
 import type { Database as SqlJsDatabase } from 'sql.js'
 import type { Change, Param } from './browserDb'
-import type { TursoHttp } from './tursoHttp'
+import type { TursoLike as TursoHttp } from './chunkedTurso'
 
 export type Row = Record<string, Param>
 /** One row a desktop change touched: how it looked before and after (null = absent). */
