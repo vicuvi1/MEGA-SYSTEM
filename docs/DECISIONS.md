@@ -612,3 +612,18 @@ entry that says why.
 - **Why:** the ring said "0 days clean" while Today said "Day 1" and the campaign "Day 0 of 90".
 - **Rules out:** showing `current` as the streak's day anywhere.
 
+### Finance "Archive old years" lives in a settings key and syncs (2026-11-18)
+- **Decision:** `settings.archive = { cutoff, at, opening, years: { '2024': [records] } }` (`apps/finance/js/archive.js`).
+  Records before the cut-off leave `state.tx`; `opening` keeps each account's balance from them, and
+  `accountBalances` adds it (a past day before the cut-off reads the archived records instead). History readers
+  (Year in review, Reports, Long view, net worth chart, search with "Include archived years") read `withArchive(state)`.
+  Sync (`sync.js mergeStates`) settles it with `settleArchive`: the archive with the newest `at` decides the cut-off,
+  every record from both sides stays and is only placed (archived or not), so devices converge. Unarchive keeps an
+  empty marker with a new `at`, so another device does not archive again.
+- **Why a settings key:** sync, the bots and older app versions keep unknown SETTINGS keys but drop unknown
+  top-level keys, so a top-level `archive` would be lost by the Telegram bot's save. The archive moves records
+  within the same blob, so it adds no bytes and the blob is no bigger than before (Hobby request limit 4.5 MB
+  stays the real ceiling, unchanged); what it saves is memory, render and merge work in the app.
+- **Rules out:** a device-only archive (the other device would bring the records straight back through the merge),
+  a new top-level state key, and deleting old years. Archived records are read-only until Unarchive.
+

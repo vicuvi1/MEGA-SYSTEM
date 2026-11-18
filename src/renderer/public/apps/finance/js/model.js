@@ -8,6 +8,7 @@ import { perMonth } from './recurring.js';
 import { ensureTree, memorySub, suggestSub, subOf } from './cattree.js';
 import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome, isRefund, isNotCounted, signed } from './catshare.js';
 import { addRule2, removeRule2, merchantChoice } from './learn.js';
+import { archivedBalanceUpTo, withArchive, forRange } from './archive.js';
 
 // v1: first release. v2: custom multi-currency accounts, people, loans,
 // per-record timestamps and deletion markers for sync.
@@ -405,6 +406,8 @@ export function setBalance(state, accountId, target, { mode = 'start', date, id 
 
 export function accountBalances(state, upTo = null) {
   const bal = Object.fromEntries(state.settings.accounts.map((a) => [a.id, a.start || 0]));
+  // Archived years (js/archive.js): their records' total is the opening balance.
+  archivedBalanceUpTo(state, upTo, bal);
   for (const t of state.tx) {
     if (upTo && t.date > upTo) continue;
     if (t.type === 'income' && t.account in bal) bal[t.account] += t.amount;
@@ -484,6 +487,7 @@ export function rebuiltTotal(state, date) {
 // One point per month end: the last snapshot of that month when there is
 // one, otherwise rebuilt from records; this month is today's real total.
 export function netWorthSeries(state, today, months = 12) {
+  state = withArchive(state); // archived years count for the chart's length
   const now = monthKey(today);
   const first = state.tx.reduce((m, t) => (t.date < m ? t.date : m), today).slice(0, 7);
   const span = Math.min(months, monthsBetweenKeys(first, now) + 1);
@@ -515,6 +519,7 @@ function sumBy(list, keyFn) {
 }
 
 export function monthSummary(state, key) {
+  state = forRange(state, `${key}-01`);
   const list = txInMonth(state, key);
   // A refund (income with `refund: true`) is not income: it lowers its category's spending.
   const incomes = list.filter((t) => t.type === 'income' && counts(t) && !isRefund(t));
@@ -864,6 +869,7 @@ export function goalMessage(st) {
 }
 
 export function yearOverview(state, year) {
+  state = forRange(state, `${year}-01-01`);
   const rows = [];
   for (let m = 1; m <= 12; m++) {
     const key = `${year}-${String(m).padStart(2, '0')}`;
@@ -1471,6 +1477,7 @@ function group(list, key) {
 // Everything a report shows for [from, to], in the base currency unless
 // noted. `prev` holds the same numbers for the period just before.
 export function report(state, from, to, { withPrev = true, today = null } = {}) {
+  state = forRange(state, withPrev ? `${Number(from.slice(0, 4)) - 1}-01-01` : from);
   const inRange = state.tx.filter((t) => t.date >= from && t.date <= to);
   const real = inRange.filter((t) => t.type !== 'transfer' && counts(t));
   const income = real.filter((t) => t.type === 'income' && !isRefund(t)).reduce((a, t) => a + B(t), 0);
@@ -1516,6 +1523,7 @@ export function report(state, from, to, { withPrev = true, today = null } = {}) 
 
 // Income and spending per day (short periods) or per month (long ones).
 export function reportSeries(state, from, to) {
+  state = forRange(state, from);
   const days = isoDays(from, to);
   const real = state.tx.filter((t) => t.date >= from && t.date <= to && (countsAsSpending(t) || countsAsIncome(t)));
   const buckets = new Map();

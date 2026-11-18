@@ -8,6 +8,7 @@ import { yearReview, taxSummary } from '../yearreview.js';
 import { workbook } from '../xlsx.js';
 import { workText } from '../workhours.js';
 import * as YearSummary from './yearsummary.js';
+import * as Tips from '../tips.js';
 
 let year = null;
 const curYear = () => year || Number(todayISO().slice(0, 4));
@@ -38,7 +39,7 @@ export function view() {
 
   return `<header class="top"><div><h1>${y} in review</h1><div class="sub">${r.partial ? `So far, up to ${dayLabel(today)}` : 'The whole year'} · ${r.records} records</div></div>
     <div class="month-switch"><button class="icon-btn" data-act="yr-step" data-step="-1" aria-label="Previous year">‹</button><b>${y}</b><button class="icon-btn" data-act="yr-step" data-step="1" aria-label="Next year" ${y >= Number(today.slice(0, 4)) ? 'disabled' : ''}>›</button></div></header>
-  ${!hasData ? `<div class="empty"><b>Nothing logged in ${y}</b>Pick another year.</div>` : `
+  ${!hasData ? Tips.EMPTY.year(y) : `
   <section class="card yr-hero">
     <div class="yr-big"><span class="k">You kept</span><span class="fig">${ctx.countUp(r.net, 'yr-net')}</span><span class="yr-pct">${kept} of what you earned</span>${vsLine(r.net, r.vs?.net)}</div>
     <div class="yr-split">

@@ -10,6 +10,8 @@ import { formatMoney } from '../money.js';
 import { todayISO, monthLabel, dayLabel } from '../dates.js';
 import { lineChart } from '../charts.js';
 import { netWorthHistory, contributions, savingsRates, yearOverYear, runway, booksIn, monthsText, viewCurrencies, rateBook } from '../longview.js';
+import { withArchive } from '../archive.js';
+import * as Tips from '../tips.js';
 
 const lv = { book: 'all', cur: null, nw: 'months', pick: null, showAll: false, yoy: 'soFar', year: null };
 let shownCur = 'MDL';
@@ -32,7 +34,7 @@ const bookName = (b) => (b === 'all' ? 'All' : b.charAt(0).toUpperCase() + b.sli
 
 export function view() {
   ensureStyles();
-  const { state } = ctx;
+  const state = withArchive(ctx.state); // archived years count here (js/archive.js)
   const today = todayISO();
   const books = booksIn(state);
   if (lv.book !== 'all' && !books.includes(lv.book)) lv.book = 'all';
@@ -52,7 +54,7 @@ export function view() {
     ${curs.length > 1 ? `<div class="seg lv-cur" role="group" aria-label="Currency" data-testid="lv-currency" style="grid-template-columns:repeat(${curs.length},1fr)">${curs.map((c) => `<button type="button" data-act="lv-cur" data-cur="${esc(c)}" aria-pressed="${c === shownCur}">${esc(c)}</button>`).join('')}</div>` : ''}</header>
   ${shownCur !== base ? `<p class="muted small lv-note">In ${esc(shownCur)}: every record and month end at the rate of its day, today at today's rate.</p>` : ''}
   ${books.length > 1 ? `<div class="chips lv-books" role="group" aria-label="Book">${['all', ...books].map((b) => `<button type="button" class="chip" data-act="lv-book" data-book="${esc(b)}" aria-pressed="${lv.book === b}">${esc(bookName(b))}</button>`).join('')}</div>` : ''}
-  ${!hasData ? '<div class="empty"><b>Nothing logged yet</b>Your long view fills in as you log income and spending.</div>' : `
+  ${!hasData ? Tips.EMPTY.longview() : `
   ${metrics(nw, sr, yy, rw)}
   ${netWorthCard(nw)}
   <div class="lv-two">${savingsCard(sr)}${runwayCard(rw)}</div>

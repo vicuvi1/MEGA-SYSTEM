@@ -6,9 +6,10 @@
 
 import { normalizeState, SCHEMA_VERSION } from './model.js';
 import { mergeRules } from './learn.js';
+import { settleArchive } from './archive.js';
 
 const LOCAL_SETTINGS = ['theme', 'themeInLife', 'themeMotion', 'logView'];
-const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'incomeSources', 'accounts', 'categories', 'subcats', 'subMemory', 'rules', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
+const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'incomeSources', 'accounts', 'categories', 'subcats', 'subMemory', 'rules', 'archive', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
 
 // What goes to Drive.
 export function toCloud(state, deviceId, now = Date.now()) {
@@ -127,6 +128,12 @@ export function mergeStates(local, remote) {
     deleted,
     rates: withRates(local.rates, remote.data.lastRates),
   };
+  // Archived years (js/archive.js): the newest archive choice decides what is archived; every record of both sides stays.
+  if (local.settings.archive || r.settings.archive) {
+    const s = settleArchive(merged.tx, local, r, deleted);
+    merged.tx = s.tx;
+    merged.settings = { ...merged.settings, archive: s.archive };
+  }
   const localData = toCloud(local, '').data;
   const mergedData = toCloud(merged, '').data;
   return {

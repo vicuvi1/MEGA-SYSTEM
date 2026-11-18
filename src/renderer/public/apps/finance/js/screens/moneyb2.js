@@ -12,6 +12,7 @@ import { lineChart } from '../charts.js';
 import { suggestBudgets } from '../budgetsuggest.js';
 import { monthReview, dismissedReviews, dismissReview, netWorthLine } from '../monthreview.js';
 import { subscriptionRows, setSubAnswer } from '../subslist.js';
+import * as Tips from '../tips.js';
 
 const cur = () => ctx.state.settings.currency;
 const shortDay = (iso) => dayLabel(iso).replace(/^\w+, /, '');
@@ -108,7 +109,7 @@ export function subsTab() {
   const st = ctx.state;
   const { rows, total } = subscriptionRows(st, todayISO());
   const f = (c) => formatMoney(c, cur());
-  if (!rows.length) return '<section class="card" data-testid="b2-subs"><h2>Subscriptions</h2><p class="muted" style="margin-top:0">Nothing found yet. Payments that come back every month, and your recurring payments, show up here with what they cost a year.</p></section>';
+  if (!rows.length) return `<section class="card" data-testid="b2-subs"><h2>Subscriptions</h2>${Tips.EMPTY.subscriptions()}</section>`;
   const row = (x) => `<div class="tx rec-row b2-sub" data-testid="b2-sub-row" data-key="${esc(x.key)}">
     <span class="t"><b>${esc(x.name)}</b><span>${esc(x.every)} · last ${esc(formatMoney(x.amount, x.currency))}${x.next ? ` · next around ${esc(shortDay(x.next))}` : ''}</span>
       ${x.kept ? `<span class="b2-note">Kept (${esc(shortDay(x.kept))}) <button type="button" class="card-link" data-act="b2-sub" data-op="unkeep" data-key="${esc(x.key)}">Undo</button></span>` : ''}

@@ -26,6 +26,7 @@
 //   every book, so a book view is always rebuilt.
 
 import { B, category, knownRates } from './model.js';
+import { withArchive } from './archive.js';
 import { countsAsSpending, countsAsIncome, signed } from './catshare.js';
 import { pairRate, convert, coinValue } from './fx.js';
 import { addMonths, daysInMonth, monthKey } from './dates.js';
@@ -411,6 +412,7 @@ export function runwayText(liquid, w) {
 
 // Net worth, its change this year, this year's savings rate and the runway.
 export function longCard(state, today, { book = null } = {}) {
+  state = withArchive(state);
   const nw = netWorthHistory(state, today, { book });
   const sr = savingsRates(state, today, { book });
   const rw = runway(state, today, { book });

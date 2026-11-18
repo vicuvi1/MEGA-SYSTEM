@@ -10,6 +10,7 @@ import { todayISO } from '../dates.js';
 import { shortDay } from '../safespend.js';
 import * as Afford from './afford.js';
 import { summary, statusOf, readyOn, daysLeft, addItem, removeItem, buyItem, putBack } from '../wishlist.js';
+import * as Tips from '../tips.js';
 
 const safeLink = (s) => (/^https?:\/\/\S+$/i.test(s) ? s : null);
 
@@ -51,7 +52,7 @@ export function view() {
   </section>
   <section class="card">
     <h2>Waiting <span class="right muted" data-testid="wl-total">${s.waiting.length ? `${s.waiting.length} item${s.waiting.length === 1 ? '' : 's'} · ${esc(whole(s.total))}` : ''}</span></h2>
-    ${s.waiting.length ? `<div class="list">${s.waiting.map((it) => itemRow(it, today, s.wait, cur)).join('')}</div>` : '<p class="muted">Nothing on the list. When you want something, add it here and give it a few days.</p>'}
+    ${s.waiting.length ? `<div class="list">${s.waiting.map((it) => itemRow(it, today, s.wait, cur)).join('')}</div>` : Tips.EMPTY.wishlist()}
     <p class="wl-saved" data-testid="wl-saved"><b>Saved by waiting: ${esc(whole(s.saved))}</b>${s.removed.length ? ` <span class="muted">from ${s.removed.length} item${s.removed.length === 1 ? '' : 's'} you decided against</span>` : ''}</p>
   </section>
   ${s.bought.length ? `<section class="card"><h2>Bought</h2><div class="list">${s.bought.map((it) => `<div class="tx"><span class="t"><b>${esc(it.name)}</b><span>bought ${esc(shortDay(it.boughtAt))} · if you did not save the expense, put it back</span></span><span class="v">${esc(formatMoney(it.price, cur))}</span><button type="button" class="btn sm" data-act="wl-back" data-id="${esc(it.id)}">Put back</button></div>`).join('')}</div></section>` : ''}

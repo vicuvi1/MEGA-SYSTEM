@@ -107,6 +107,9 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
           // neither may hide the amounts under a step (the unit tests cover minimise and idle).
           localStorage.setItem('finance-helper.privacy.after', '0')
         }
+        // Finance's own motion (fades, count-ups, rows easing in) is off in the smoke run so it never slows a step;
+        // the "Money feel" step switches it on for itself (e2e/smokeMoneyFlow.mjs).
+        if (localStorage.getItem('finance-helper.motion') == null) localStorage.setItem('finance-helper.motion', 'off')
       } catch {
         /* no storage on this page */
       }
@@ -1196,6 +1199,9 @@ try {
 
   // Money batch 3: keyboard shortcuts, bulk record changes, the weekly cash count (e2e/smokeMoneyB3.mjs).
   await (await import('./smokeMoneyB3.mjs')).moneyB3Steps({ step, pg, open, financeFrame })
+  // Money feel and long run: empty states, tips, rows easing in, hidden digits, archive old years (e2e/smokeMoneyFlow.mjs).
+  await (await import('./smokeMoneyFlow.mjs')).moneyFlowSteps({ step, pg, open, financeFrame })
+
   // Money change history: old -> new with the device, Put back with Undo, Bring back a deleted record (e2e/smokeMoneyHistory.mjs).
   await (await import('./smokeMoneyHistory.mjs')).moneyHistorySteps({ step, pg, open, financeFrame })
 

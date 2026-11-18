@@ -1,7 +1,7 @@
 // Offline support. Network first so you always get the newest version when
 // online; the cache is the fallback when there is no connection.
 
-const CACHE = 'finance-helper-v68';
+const CACHE = 'finance-helper-v69';
 const SHELL = [
   './',
   './index.html',
@@ -74,6 +74,11 @@ const SHELL = [
   './js/emergency.js',
   './js/screens/money3.js',
   './css/money3.css',
+  './css/flow.css',
+  './js/flow.js',
+  './js/tips.js',
+  './js/archive.js',
+  './js/screens/archivecard.js',
   './js/budgetwarn.js',
   './js/screens/changes.js',
   './js/screens/budgetwarn.js',

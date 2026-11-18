@@ -14,6 +14,7 @@ import { findSubscriptions, recurringFrom } from '../subs.js';
 import * as MoneyB2 from './moneyb2.js';
 import * as Repeating from './repeating.js';
 import * as Budgets from './budgetkinds.js';
+import * as Tips from '../tips.js';
 
 const initial = (name) => esc((String(name).match(/\p{L}|\p{N}/u) || ['•'])[0].toUpperCase());
 const catOf = (id) => M.category(ctx.state, id) || { name: 'Other', emoji: '•' };
@@ -470,11 +471,7 @@ function subscriptionsTab(state, today, rules, scheduled) {
         }).join('')}
       </div>
     ` : `
-      <section class="card empty">
-        <b>No subscriptions found</b>
-        <p class="muted">Add a recurring expense, or pick one from the quick presets above.</p>
-        <button class="btn primary" data-act="rec-new">+ Add subscription</button>
-      </section>
+      <section class="card">${Tips.EMPTY.subscriptions()}</section>
     `}
 
     <!-- Scheduled One-Time Bills (if any) -->
@@ -543,10 +540,8 @@ function budgetCard() {
   const st = M.budgetStatus(ctx.state, key, today);
   const subRows = T.subBudgetStatus(ctx.state, key);
   if (!st.rows.length && !subRows.length) {
-    return `<section class="card"><h2>Budgets</h2>
-      <p class="muted" style="margin-top:0">Give the categories you want to keep in check (food, going out, clothes…) a monthly limit. You get a warning at 80%, when you go over, and when your pace would take you over.</p>
-      <button class="btn primary block" data-act="budget-set">Set budgets</button>
-      <div style="margin-top:8px">${MoneyB2.suggestButton()}</div></section>`;
+    return `<section class="card"><h2>Budgets</h2>${Tips.EMPTY.budgets()}
+      <div style="margin-top:8px;text-align:center">${MoneyB2.suggestButton()}</div></section>`;
   }
   const evenPace = (Number(today.slice(8, 10)) / daysInMonth(key)) * 100;
   const rows = st.rows.map((r) => {

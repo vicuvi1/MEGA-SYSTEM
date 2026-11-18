@@ -41,6 +41,10 @@ import * as Telegram from './screens/telegram.js';
 import * as TgBlocks from './screens/tgblocks.js';
 import * as TelegramHub from './screens/telegram_hub.js';
 import * as Motion from './motion.js';
+import * as Flow from './flow.js';
+import { isArchived, withArchive } from './archive.js';
+import * as Tips from './tips.js';
+import * as ArchiveCard from './screens/archivecard.js';
 import * as Calc from './screens/calc.js';
 import * as Buddy from './screens/buddy.js';
 import * as ImportCheck from './screens/importcheck.js';
@@ -493,6 +497,11 @@ function renderSidebar() {
     </div>
   </div>`;
 
+  // The balance rolls to its new value (never while amounts are hidden).
+  const totalEl = top.querySelector('.sc-total');
+  if (before != null && before !== shown && totalEl?.firstChild?.nodeType === 3) {
+    Flow.countTo(totalEl.firstChild, { from: before, to: shown, fmt: (v) => formatMoney(v, ''), hidden: Privacy.isHidden, off: () => reducedMotion() || Flow.flowOff() });
+  }
   // The balance moved (a record, an undo, a sync): show by how much.
   if (before != null && before !== shown && !isMasked) {
     const body = top.querySelector('.sc-body');
@@ -1137,7 +1146,8 @@ function logView() {
 
 function logRecords() {
   const q = ui.search.trim();
-  let list = q ? searchTx(state, q, todayISO()) : M.txInMonth(state, ui.month);
+  // "Include archived years" (js/archive.js) lets the search read them too.
+  let list = q ? searchTx(ui.archived ? withArchive(state) : state, q, todayISO()) : M.txInMonth(state, ui.month);
   if (ui.filter === 'loan') list = list.filter((t) => t.loan);
   else if (ui.filter !== 'all') list = list.filter((t) => t.type === ui.filter);
   return list;
@@ -1483,7 +1493,7 @@ function viewLog() {
       const net = items.filter((t) => !isNotCounted(t)).reduce((a, t) => a + (t.type === 'income' ? t.amount : t.type === 'expense' ? -t.amount : 0), 0);
       return `<div class="day dow-${dowIndex(date)}${date === todayISO() ? ' is-today' : ''}"><div class="day-head"><span class="dh">${dayLabelHTML(date, todayISO())}${q ? ` ${date.slice(0, 4)}` : ''}</span><span class="money ${net > 0 ? 'income' : ''}">${net ? money(net, { sign: true }) : ''}</span></div>
         <div class="list">${items.length ? items.map((t) => txRow(t)).join('') : '<div class="row"><b>No spending ✓</b></div>'}</div></div>`;
-    }).join('') || `<div class="empty"><b>${q ? 'Nothing found' : 'No records this month'}</b>${q ? `Try: ${esc(SEARCH_HINT)}` : 'Tap + to add one.'}</div>`;
+    }).join('') || (q ? `<div class="empty"><b>Nothing found</b>Try: ${esc(SEARCH_HINT)}</div>` : Tips.EMPTY.log());
   }
 
   const chip = (id, label) => `<button class="chip" data-act="filter" data-filter="${id}" aria-pressed="${ui.filter === id}">${label}</button>`;
@@ -1523,6 +1533,7 @@ function viewLog() {
         ${IS.activeSources(state).slice(0, 6).map((x) => `<button type="button" class="lq-chip src-lq" data-act="log-quick-search" data-testid="src-filter" data-q="${esc(`source:"${x.name}"`)}" style="--c:${IS.colorVar(x)}"><i aria-hidden="true"></i>${esc(x.name)}</button>`).join('')}
         ${savedFilters(state).map((f) => `<span class="lq-saved"><button type="button" class="lq-chip saved" data-act="log-quick-search" data-q="${esc(f.q)}" title="${esc(f.q)}">☆ ${esc(f.name)}</button><button type="button" class="lq-x" data-act="filter-forget" data-q="${esc(f.q)}" aria-label="Forget the saved filter ${esc(f.name)}">✕</button></span>`).join('')}
         ${q && !savedFilters(state).some((f) => f.q === ui.search.trim()) ? '<button type="button" class="lq-chip" data-act="filter-save">☆ Save this search</button>' : ''}
+        ${isArchived(state) ? `<button type="button" class="lq-chip" data-act="log-archived" aria-pressed="${!!ui.archived}" data-testid="include-archived">${ui.archived ? '✓ ' : ''}Include archived years</button>` : ''}
         ${q ? `<button type="button" class="lq-chip lq-clear" data-act="log-clear-search">✕ Clear search</button>` : ''}
       </div>
     </div>
@@ -1606,6 +1617,7 @@ function viewSettings() {
     look: `<section class="card look-card"><h2>Look</h2>
     ${themePicker(st)}
     <label class="field"><span>Currency</span><input type="text" data-set="currency" value="${esc(st.currency)}" maxlength="5"></label>
+    ${Tips.settingsRow()}
   </section>
 `,
     extras: `<section class="card look-card"><h2>Extras</h2>
@@ -1693,7 +1705,7 @@ function viewSettings() {
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
     { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() + BudgetWarn.settingsCard() },
     { id: 'sources', icon: '💼', label: 'Income sources', sub: 'Job 1, Job 2, clients', desc: 'Your own tags for where money comes from. Pick one when you log income, and see each one in Reports.', html: () => IncomeSources.settingsCard() },
-    { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + ChangesScreen.settingsCard() + Backups.settingsCard() + Sync.settingsCard() },
+    { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + ArchiveCard.settingsCard() + ChangesScreen.settingsCard() + Backups.settingsCard() + Sync.settingsCard() },
     { id: 'connect', icon: '🔗', label: 'Telegram & Binance', sub: 'Your bot, crypto balances', desc: 'Your own Telegram bot for logging from your phone, and Binance balances (read-only).', html: () => Telegram.settingsCard() + TgBlocks.settingsCard() + Binance.settingsCard() },
     { id: 'buddy', icon: '🤖', label: 'Bit, your buddy', sub: 'Show, name, color', desc: 'Bit, the little robot that cheers you on: show or hide it, its name and color.', html: () => Buddy.settingsCard() },
     { id: 'security', icon: '🔒', label: 'Security', sub: 'PIN, encryption, hide amounts', desc: 'A PIN when the app opens, your data locked with a password, and hiding every amount until you press Space.', html: () => Security.settingsCard() + Security.privacyCard() },
@@ -1768,20 +1780,10 @@ function runCounters(entering) {
     const key = el.dataset.ck;
     const from = shownCounts.has(key) ? shownCounts.get(key) : entering ? 0 : to;
     shownCounts.set(key, to);
-    if (from === to || reducedMotion() || Privacy.isHidden()) continue;
+    if (from === to) continue;
     const fmt = (v) => (el.dataset.cur ? money(v, { sign: !!el.dataset.sign }) : formatMoney(v, ''));
-    const start = performance.now();
-    const dur = 800;
-    const step = (now) => {
-      const t = Math.min(1, (now - start) / dur);
-      const e = 1 - (1 - t) ** 3;
-      const v = from + (to - from) * e;
-      // Whole lei while counting unless the real value has bani.
-      el.textContent = fmt(to % 100 ? Math.round(v) : Math.round(v / 100) * 100);
-      if (t < 1 && el.isConnected) requestAnimationFrame(step);
-    };
-    el.textContent = fmt(from);
-    requestAnimationFrame(step);
+    // js/flow.js: never animates while amounts are hidden or motion is off.
+    Flow.countTo(el, { from, to, fmt, hidden: Privacy.isHidden, off: () => reducedMotion() || Flow.flowOff() });
   }
 }
 
@@ -1827,12 +1829,18 @@ function render({ enter = false } = {}) {
   // Sections that share a sidebar item get tabs under their title.
   const group = SUB_TABS.find((g) => g.some((x) => x.tab === ui.tab));
   if (group) app.querySelector('header.top')?.insertAdjacentHTML('afterend', `<nav class="subtabs" aria-label="Sections">${group.map((x) => `<a href="#${x.tab}"${x.tab === ui.tab ? ' aria-current="page"' : ''}>${x.label}</a>`).join('')}</nav>`);
+  // One dismissible tip under the title (js/tips.js; off with Settings -> Tips).
+  const tip = Tips.tipHTML(ui.tab);
+  if (tip) (app.querySelector('.subtabs') || app.querySelector('header.top'))?.insertAdjacentHTML('afterend', tip);
   if (enter) {
     shownCounts.clear();
     playEnter();
   }
   runCounters(enter);
   Motion.slideSegs(app);
+  // js/flow.js: a short fade for a sub-screen, rows that ease in, out and light up when saved.
+  Flow.afterScreen(app, `${ui.tab}|${ui.settingsTab || ''}|${state.settings.logView || ''}`, { enter });
+  Flow.afterRender(app, `${ui.tab}|${ui.month || ''}|${ui.filter || ''}|${ui.search || ''}|${ui.settingsTab || ''}`, { enter });
   // Phone: keep the chosen month visible in the scrolling month strip.
   const strip = app.querySelector('.mnav-months');
   const on = strip?.querySelector('.mpill.on');
@@ -2228,7 +2236,7 @@ function openTxSheet(existing = null, preset = {}) {
     const hint = sheet.querySelector('#calc-hint');
     hint.textContent = msg;
     hint.style.color = 'var(--expense)';
-    if (focusSel) sheet.querySelector(focusSel)?.focus();
+    if (focusSel) { const f = sheet.querySelector(focusSel); f?.focus(); Flow.shake(f); }
   };
 
   const saveDraft = (sheet) => {
@@ -3428,7 +3436,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'shortcuts-help') Shortcuts.openHelp();
   else if (act === 'bulk-all') { for (const r of document.querySelectorAll('#tx-table tr[data-id]')) ui.selected.add(r.dataset.id); refreshSelection(); }
   else if (act === 'add') openTxSheet();
-  else if (act === 'edit') openTxSheet(state.tx.find((t) => t.id === el.dataset.id));
+  else if (act === 'edit') { const t = state.tx.find((x) => x.id === el.dataset.id); if (t) openTxSheet(t); else toast('This record is in an archived year. Unarchive it in Settings → Data & backups to change it.'); }
   else if (act === 'transfer') openTransferSheet(el.dataset.from);
   else if (act === 'month') goToMonth(addMonths(ui.month, Number(el.dataset.step)));
   else if (act === 'goto-month') goToMonth(el.dataset.month);
@@ -3439,6 +3447,7 @@ document.addEventListener('click', (e) => {
   else if (act === 'filter') { ui.filter = el.dataset.filter; render(); }
   else if (act === 'log-quick-search') { ui.search = el.dataset.q; render(); document.getElementById('search')?.focus(); }
   else if (act === 'log-clear-search') { ui.search = ''; render(); }
+  else if (act === 'log-archived') { ui.archived = !ui.archived; render(); }
   else if (act === 'filter-save') {
     const q = ui.search.trim();
     if (q) { saveFilter(state, q, q.length > 24 ? `${q.slice(0, 22)}…` : q); commit({ quiet: true }); toast('Saved. Tap the chip to run it again.'); }
@@ -3810,6 +3819,13 @@ Object.assign(ctx, {
   buddy: (msg) => Buddy.say(msg),
   openSplit: (tx) => openSplitSheet(tx),
   backupNow: () => Backups.autoBackup({ force: true }),
+  // Archive / Unarchive (js/archive.js): a bulk move that is not an edit, so no change-history entries and no undo step.
+  archiveApply: (fn) => {
+    if (state._sealed) return 0;
+    const n = fn(state);
+    if (n) { Changes.reset(state); history.reset(state); if (!saveSoon(state)) toast(SAVE_FAILED); render(); Sync.changed(); }
+    return n;
+  },
   undo: () => undoRedo(-1),
   openTableForTx: (tx) => {
     state.settings.logView = 'table';
@@ -4068,6 +4084,9 @@ Backups.initBackups();
 Plan.initPlan();
 Telegram.initTelegram();
 Motion.initMotion();
+Flow.initFlow();
+Tips.init({ rerender: () => render() });
+ArchiveCard.init();
 Calc.initCalc();
 Buddy.initBuddy();
 

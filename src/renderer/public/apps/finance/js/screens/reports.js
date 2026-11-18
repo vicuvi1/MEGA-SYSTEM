@@ -22,6 +22,7 @@ import * as Spending from './spending.js';
 import * as IncomeSources from './incomesources.js';
 import * as IS from '../incomesources.js';
 import { countsAsSpending, signed, isRefund } from '../catshare.js';
+import { withArchive, cutoffOf } from '../archive.js';
 
 const PRESETS = [
   { id: 'month', name: 'Month' },
@@ -51,7 +52,7 @@ function range() {
     case 'year': return { from: `${m.slice(0, 4)}-01-01`, to: `${m.slice(0, 4)}-12-31`, label: m.slice(0, 4), step: 12 };
     case 'lastyear': { const y = Number(today.slice(0, 4)) - 1; return { from: `${y}-01-01`, to: `${y}-12-31`, label: String(y) }; }
     case 'all': {
-      const dates = ctx.state.tx.map((t) => t.date).sort();
+      const dates = withArchive(ctx.state).tx.map((t) => t.date).sort();
       return { from: dates[0] || today, to: dates.at(-1) > today ? dates.at(-1) : today, label: 'All time' };
     }
     case 'custom': {
@@ -66,9 +67,11 @@ function range() {
 // The records this page looks at (filters and search) and the period: a
 // search that names one ("this year", "2025", "march") picks it.
 function scope() {
-  const { state } = ctx;
   const today = todayISO();
   let r0 = range();
+  // Archived years (js/archive.js) are read when the period, its year before or a search reaches back there.
+  const cut = cutoffOf(ctx.state);
+  const state = cut && (`${Number(r0.from.slice(0, 4)) - 1}-01-01` < cut || rs.q.trim()) ? withArchive(ctx.state) : ctx.state;
   let list = state.tx;
   if (rs.acc) list = list.filter((t) => t.account === rs.acc || t.from === rs.acc || t.to === rs.acc);
   if (rs.tag) list = list.filter((t) => M.tagsOf(t.note).includes(rs.tag));

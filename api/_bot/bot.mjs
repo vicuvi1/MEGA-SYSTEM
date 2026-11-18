@@ -57052,13 +57052,13 @@ function isEvidence(t) {
 	if ((t.source === "capture" || t.source === "auto") && !t.confirmedAt) return false;
 	return true;
 }
-var cache = /* @__PURE__ */ new WeakMap();
+var cache$1 = /* @__PURE__ */ new WeakMap();
 function choiceTable(state, now = Date.now()) {
 	const tx = state.tx || [];
 	let last = 0;
 	for (const t of tx) if ((t.updatedAt || 0) > last) last = t.updatedAt || 0;
 	const key = `${tx.length}|${last}|${Math.floor(now / DAY$1)}`;
-	const hit = cache.get(tx);
+	const hit = cache$1.get(tx);
 	if (hit && hit.key === key) return hit.table;
 	const table = /* @__PURE__ */ new Map();
 	for (const t of tx) {
@@ -57089,7 +57089,7 @@ function choiceTable(state, now = Date.now()) {
 			row.label = t.note;
 		}
 	}
-	cache.set(tx, {
+	cache$1.set(tx, {
 		key,
 		table
 	});
@@ -57195,6 +57195,57 @@ function suggest(state, { note, type = "expense" }, { guess = null, now = Date.n
 	out.alternatives = list.filter((id) => id && !isOther(id) && validCat(state, id, type) && !seen.has(id) && seen.add(id)).slice(0, chips);
 	out.merchant = m;
 	return out;
+}
+// src/renderer/public/apps/finance/js/archive.js
+function applyTx(bal, t) {
+	if (t.type === "income") bal[t.account] = (bal[t.account] || 0) + t.amount;
+	else if (t.type === "expense") bal[t.account] = (bal[t.account] || 0) - t.amount;
+	else if (t.type === "transfer") {
+		bal[t.from] = (bal[t.from] || 0) - t.amount;
+		bal[t.to] = (bal[t.to] || 0) + (Number.isInteger(t.toAmount) ? t.toAmount : t.amount);
+	}
+}
+function archivedTx(state) {
+	const years = state?.settings?.archive?.years;
+	if (!years) return [];
+	return Object.keys(years).sort().flatMap((y) => years[y] || []);
+}
+function archivedBalanceUpTo(state, upTo, bal) {
+	const a = state.settings.archive;
+	if (!a?.cutoff) return;
+	if (!upTo || upTo >= a.cutoff) {
+		for (const [id, v] of Object.entries(a.opening || {})) if (id in bal) bal[id] += v;
+		return;
+	}
+	for (const t of archivedTx(state)) {
+		if (t.date > upTo) continue;
+		const tmp = {};
+		applyTx(tmp, t);
+		for (const [id, v] of Object.entries(tmp)) if (id in bal) bal[id] += v;
+	}
+}
+var cache = /* @__PURE__ */ new WeakMap();
+function withArchive(state) {
+	if (!state?.settings?.archive?.cutoff) return state;
+	const a = state.settings.archive;
+	const hit = cache.get(state.tx);
+	if (hit && hit.a === a && hit.base === state.settings) return hit.out;
+	const { archive: _gone, ...rest } = state.settings;
+	const out = {
+		...state,
+		tx: [...archivedTx(state), ...state.tx],
+		settings: rest
+	};
+	cache.set(state.tx, {
+		a,
+		base: state.settings,
+		out
+	});
+	return out;
+}
+function forRange(state, from) {
+	const c = state?.settings?.archive?.cutoff;
+	return c && from < c ? withArchive(state) : state;
 }
 var ACCOUNT_DEFAULTS = {
 	bank: "",
@@ -57626,6 +57677,7 @@ function knownRates(state) {
 var savingsJar = (state) => state.settings.jars.find((j) => j.savings) || state.settings.jars[0];
 function accountBalances(state, upTo = null) {
 	const bal = Object.fromEntries(state.settings.accounts.map((a) => [a.id, a.start || 0]));
+	archivedBalanceUpTo(state, upTo, bal);
 	for (const t of state.tx) {
 		if (upTo && t.date > upTo) continue;
 		if (t.type === "income" && t.account in bal) bal[t.account] += t.amount;
@@ -57676,6 +57728,7 @@ function sumBy(list, keyFn) {
 	})).sort((a, b) => b.amount - a.amount);
 }
 function monthSummary(state, key) {
+	state = forRange(state, `${key}-01`);
 	const list = txInMonth(state, key);
 	const incomes = list.filter((t) => t.type === "income" && counts(t) && !isRefund(t));
 	const expenses = list.filter((t) => t.type === "expense" && counts(t));

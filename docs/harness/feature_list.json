@@ -1588,7 +1588,7 @@
     "SMOKE_ONLY=\"Money income sources\" npm run smoke"
    ],
    "evidence": "2026-11-18: moneyIncomeSources.test.ts (20 tests: totals with EUR and notIncome, @ parsing, suggestions, archive, bulk undo, search, Ask, salary watch with a pinned clock, sync), smoke step.",
-   "notes": "finance js/incomesources.js, screens/incomesources.js; settings.incomeSources + record field incomeSource; core/salaryNotice.ts tag/source/kind; sw cache v67."
+   "notes": "finance js/incomesources.js, screens/incomesources.js; settings.incomeSources + record field incomeSource; core/salaryNotice.ts tag/source/kind; sw cache v69."
   },
   {
    "id": "money-own-sidebar",
@@ -1626,8 +1626,22 @@
     "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/moneyLongTerm.test.ts",
     "SMOKE_ONLY=\"Money long-term\" npm run smoke"
    ],
-   "evidence": "2026-11-18: new unit tests (24) and the smoke step pass; sw cache v67.",
+   "evidence": "2026-11-18: new unit tests (24) and the smoke step pass; sw cache v69.",
    "notes": "Settings keys: checkupOn/Day/Last/Snooze, budgets. Rule fields: n, unit, dom."
+  },
+  {
+   "id": "F-FIN-FLOW",
+   "priority": 2,
+   "area": "money",
+   "title": "Finance feel, empty states, tips and Archive old years",
+   "user_visible_behavior": "Short fades between Finance screens, numbers that count (never digits while amounts are hidden), rows that ease in or out, a gentle shake on a wrong field; empty Goals, Budgets, Wishlist, Log and Subscriptions explain themselves with one example and one button; one closable tip per screen with a Tips switch; Settings, Data: Archive years before N keeps balances and year summaries, search can include archived years, Unarchive restores everything, and it syncs.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: tsc clean, vitest 527 files pass; smoke steps Money feel (2) and Money archive pass",
+   "notes": "Motion is off in Life's Calm mode and in the smoke run (finance-helper.motion = off). Archive is settings.archive (docs/DECISIONS.md). sw cache v69."
   }
  ]
 }

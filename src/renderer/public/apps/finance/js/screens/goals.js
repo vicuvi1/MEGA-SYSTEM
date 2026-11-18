@@ -10,6 +10,8 @@ import { evalAmount, centsToPlain, formatMoney } from '../money.js';
 import { CARD_THEMES } from '../cards.js';
 import { countsAsIncome } from '../catshare.js';
 import * as Money3 from './money3.js';
+import * as Tips from '../tips.js';
+import * as Flow from '../flow.js';
 
 const TEMPLATES = [
   { emoji: '🛟', name: 'Emergency fund', account: 'savings', theme: 'teal', emergency: true },
@@ -88,7 +90,7 @@ export function view() {
   ${Money3.emergencyCard()}
   ${allocationCard()}
   ${active.length ? `<div class="goal-grid">${active.map((g) => goalCard(g, today)).join('')}<button type="button" class="goal-add" data-act="goal-new"><span>+</span>New goal</button></div>`
-    : `<div class="empty"><b>No goals yet</b>An emergency fund is a great first one: six months of your usual spending, kept in your savings.<div class="btns" style="justify-content:center;margin-top:12px"><button class="btn primary" data-act="goal-new">Set a goal</button></div></div>`}
+    : Tips.EMPTY.goals()}
   ${finished.length ? `<h2 class="section-h">Reached 🎉</h2><div class="goal-grid">${finished.map((g) => goalCard(g, today)).join('')}</div>` : ''}`;
 }
 
@@ -235,8 +237,8 @@ function goalSheet(existing = null) {
       e.preventDefault();
       read(sheet);
       const msg = sheet.querySelector('#g-msg');
-      if (!g.name) { msg.textContent = 'Give the goal a name.'; return; }
-      if (!(g.target > 0)) { msg.textContent = 'Set a target bigger than 0.'; return; }
+      if (!g.name) { msg.textContent = 'Give the goal a name.'; Flow.shake(sheet.querySelector('#g-name')); return; }
+      if (!(g.target > 0)) { msg.textContent = 'Set a target bigger than 0.'; Flow.shake(sheet.querySelector('#g-target')); return; }
       if (existing && g.account !== 'allocated' && (state.goalAllocations || []).some((a) => a.goalId === existing.id)) { msg.textContent = 'Release this goal’s reservations before changing how it is tracked.'; return; }
       const now = Date.now();
       const list = state.goals || (state.goals = []);
