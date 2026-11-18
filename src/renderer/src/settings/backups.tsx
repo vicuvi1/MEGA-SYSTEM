@@ -6,6 +6,7 @@ import { checkLine } from '@core/weeklyBackupCheck'
 import { checkBackupNow, readWeeklyCheck } from '../safety/weeklyCheck'
 import { onSafety } from '../safety/safetyState'
 import { DataSafetyPanel } from '../safety/DataSafetyPanel'
+import { SyncFolderPanel } from '../safety/SyncFolderPanel'
 import { Icon } from '../Icon'
 import { SyncPanel } from '../SyncPanel'
 import { timeAgo } from '../ui'
@@ -51,6 +52,7 @@ export function BackupsSection({ s }: { s: SettingsState }) {
   return (
         <>
       <DataSafetyPanel />
+      <SyncFolderPanel />
       <BackupCheckRow />
       <SyncPanel />
       {features.cloudflareSync && (

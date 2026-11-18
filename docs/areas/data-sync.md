@@ -44,3 +44,51 @@ Runbook: [`docs/RECOVERY.md`](../RECOVERY.md). Code: `core/backupPlan.ts restore
 - Rows missing a column keep that column's default (rows are grouped by the columns they carry). Append-only history (`ledger`, `discipline_events`) only gets missing rows back; settings are upserted except `pin_hash`, `bot_bridge_config`, `data_version`; `data_version` moves so every device reloads.
 - **The apps' own data:** a backup holds each app's localStorage copy (`APP_BLOBS`: Finance and its locked copy, Sport Track, Waky, MAN). A restore rewrites each app's synced setting as `{savedAt, editedAt, restore: <id>, data}` (`markRestoredApps`) inside the same transaction, and puts the data back on this device (`putBackApps`: this device's own settings stay, Finance through `FINANCE.adopt`). The app sync (`appSync.ts`): a device whose `life_sync_<setting>_restore` differs from the copy's `restore` id takes the copy as it is (no merge, so nothing the restore removed comes back), keeps its own copy from before in `life_sync_<setting>_before_restore`, and remembers the id. Later writes keep the `restore` id on the copy, so a device that was away for weeks still takes the restored copy first. Test: `web/backupBeforeRisk.test.ts`.
 - **Restore drill:** `restoreDrill.ts` restores a backup into an empty database built from the migrations and an empty app storage, then compares every table's row count and checksum and every app copy's checksum (`core/backupCheck.ts`). The server runs it weekly on the newest cloud backup; the desktop daily on its newest local backup. Tests: `web/restoreDrill.test.ts` (also with foreign keys enforced and a failure half-way).
+
+### Sync folder (desktop, 2026-11-18)
+A live, complete copy of all data in a folder you choose, so the data stays whole when the server (Vercel, Turso) is down.
+Settings → Data safety → **Sync folder**. Off until a folder is chosen. Desktop only: the website shows nothing.
+Recovery steps: [`docs/RECOVERY.md`](../RECOVERY.md) step 2b. Choices not to undo: `docs/DECISIONS.md` "Sync folder".
+- **Folder.** Any folder: the picker suggests the OneDrive, Google Drive, Dropbox or iCloud Drive folder when one is found
+  (`cloudFolderCandidates`), and a USB drive works too. The chosen folder must exist; the app only makes
+  `Life System Sync/<PC name>-<6 letters>/` inside it and never recreates a folder that went missing (a pulled USB
+  drive must not turn into a plain folder on the system disk).
+- **A copy** is one file, `life-sync-<UTC time>Z.zip`, holding `backup.json` (every table and every app's own data: Finance and
+  its locked copy, Sport Track, Waky, MAN; the same format Restore takes), `life-system.sqlite` (this PC's database file),
+  `manifest.json` (app version, schema version, device, time, rows per table, each app's size and checksum, and the
+  **SHA-256 and size of each file**) and `README.txt`. `backup.json` is the copy a restore uses; the database file is there to
+  open in any SQLite viewer.
+- **Written whole.** The zip goes to `.~<name>.tmp` (a name cloud-drive apps skip), is flushed to the disk, read back,
+  compared byte for byte and opened to check every file against its SHA-256, and only then renamed to its real name. A copy
+  that fails the check never gets a real name; the last good one stays, and the panel turns red.
+- **When.** 15 s after the last change, at most 60 s after the first one while changes keep coming, and at once on quit,
+  sleep and lock (`createPacer`). A change is: the desktop saved the database file (`desktop:save`), or an embedded app
+  changed its own data in the window's storage (the `storage` event and the apps' change events → `touch()`). A copy of
+  exactly the same data is not written twice (SHA-256 of the database file + the apps' checksums). Big copies are spaced
+  out (over 16 MB: one a minute; over 64 MB: one every 5 minutes). No call to the server anywhere on this path.
+- **Versions kept:** the newest copy of each of the 24 newest hours, 14 newest days and 12 newest months that have one
+  (`versionsToDelete`; a PC that was off keeps its old ones). Files with other names, and other PCs' folders, are never touched.
+- **Folder missing** (USB removed, cloud drive paused): the panel says so (amber; red after a day), the app keeps working,
+  and the copy is tried again by itself after 30 s, 1 min, 2 min, then every 5 minutes, and on wake / unlock.
+- **Restore.** Versions list (this PC's and other PCs') → Preview (date, device, app version, rows, tables, apps; the files
+  are checked first) → Restore this version → the app's own `restoreSnapshot` (a "before restore" backup first, all or nothing,
+  a restore id on every app copy). A restore needs the server, because it changes the data for every device. While the
+  server is down the copies stay whole and open without the app.
+- **Encryption (off by default).** "Encrypt the sync folder copy": AES-256-GCM, key from the passphrase by scrypt, file
+  `…zip.enc`. The passphrase is kept only on this PC with Electron `safeStorage` (`sync-folder.key` in the app's data folder),
+  never in the folder, the database or the settings file. A new passphrase must open the encrypted copies already in the
+  folder. With encryption on and the passphrase unreadable, nothing is written (never a plain copy by mistake).
+- **A second PC in the same folder** gets its own sub-folder; each PC lists the other's versions and can restore one.
+  "Merge from sync folder" is **not built**: `merge()` refuses and changes nothing (design in `docs/DECISIONS.md`).
+- **For pages (the Data center):** import `syncFolder` from `src/renderer/src/safety/syncFolder.ts`:
+  `available()`, `status()` → `{ enabled, folder, device, lastWrite, lastVerifiedOk, versions, sizeBytes, lastSizeBytes, error, missing, encrypt, passphraseSaved, others }`,
+  `suggestions()`, `choose(path?)`, `turnOff()`, `writeNow()`, `listVersions()` → `[{ id, device, mine, at, sizeBytes, encrypted }]`,
+  `preview(versionId)`, `restore(versionId)`, `merge()`, `setEncryption(on, passphrase?)`, `open()`. `statusLine(status)` in
+  `core/syncFolder.ts` gives the light and the one line of text; `<SyncFolderPanel />` is the ready-made panel. Underneath is
+  `window.desktop.syncFolder` (`SyncFolderIpc` in `src/shared/api.ts`; IPC channels `syncFolder:*` in `src/desktop/syncFolder.ts`,
+  only the app window may call them, and `choose(path)` takes a path only when it is one of the suggestions found on this PC).
+- **Code:** `src/core/syncFolder.ts` (pure: names, versions kept, manifest counts, pacing, status line),
+  `src/desktop/syncFolderStore.ts` (files; no Electron), `src/desktop/syncFolder.ts` (Electron: picker, safeStorage, quit / sleep / lock),
+  `src/renderer/src/safety/syncFolderClient.ts`, `SyncFolderPanel.tsx` (the panel and the headless `SyncFolderLive`).
+  Tests: `src/core/syncFolder.test.ts`, `src/desktop/syncFolderStore.test.ts` (temp folder, fake clock, a damaged read-back),
+  `src/renderer/src/safety/syncFolderClient.test.ts`; smoke step "Settings → Data safety: the Sync folder is hidden on the website…".

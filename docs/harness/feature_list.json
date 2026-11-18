@@ -1667,6 +1667,20 @@
    ],
    "evidence": "2026-11-18: unit tests (splits across every totals path, fields round trip, tag merge) and the smoke step pass.",
    "notes": "finance js/splits.js (expandSplits, the one helper all totals use), js/fields.js, js/tags.js, js/screens/recordx.js, js/screens/tagsreport.js; record fields splits / fields, settings keys customFields / tagStyles; sw cache v72. DECISIONS.md 2026-11-18."
+  },
+  {
+   "id": "F-SYNC-FOLDER",
+   "priority": 1,
+   "area": "data-sync",
+   "title": "Sync folder (desktop): a live copy of all data in a folder you choose",
+   "user_visible_behavior": "Settings → Data safety → Sync folder: choose a folder (OneDrive, Google Drive, Dropbox, a USB drive; found ones are suggested). A complete copy (database, every app's data, manifest with SHA-256) is written a few seconds after every change and on quit, sleep and lock, checked after writing, with 24 hourly, 14 daily and 12 monthly versions. A missing folder is shown and retried; the app is never blocked. Pick a version, preview its counts, restore it through the normal restore. Optional encryption with a passphrase kept only on this PC (off by default). Works with the server down. Merge from another PC's copy is not built (it refuses).",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/syncFolder.test.ts src/desktop/syncFolderStore.test.ts src/renderer/src/safety/syncFolderClient.test.ts",
+    "SMOKE_ONLY=\"Sync folder\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: 38 unit tests (atomic write and rename, a damaged read-back, rotation, manifest and SHA-256, missing folder, preview and restore, encryption, pacing with a fake clock, merge refuses) and the smoke step pass.",
+   "notes": "Not run on real Windows hardware with OneDrive or a USB drive: the Electron wiring (folder picker, safeStorage, quit/sleep/lock) is type-checked only. Restore needs the server. Merge design: docs/DECISIONS.md."
   }
  ]
 }

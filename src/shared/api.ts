@@ -427,6 +427,41 @@ export interface BackupStatus {
   lastError: string | null
 }
 
+// ---- Sync folder (desktop): a live copy of all data in a folder you choose ----
+export type { SyncCopyMeta, SyncFolderStatus, SyncPreview, SyncSuggestion, SyncVersion } from '../core/syncFolder'
+import type { SyncCopyMeta, SyncFolderStatus, SyncPreview, SyncSuggestion, SyncVersion } from '../core/syncFolder'
+/**
+ * `window.desktop.syncFolder` (the desktop app only; the website has none).
+ * Pages should use the helper `syncFolder` in `src/renderer/src/safety/syncFolderClient.ts`,
+ * which adds `writeNow()`, `restore(versionId)` and `merge()` on top of this.
+ */
+export interface SyncFolderIpc {
+  status(): Promise<SyncFolderStatus>
+  /** Cloud-drive folders found on this PC (OneDrive, Google Drive, Dropbox…). */
+  suggestions(): Promise<SyncSuggestion[]>
+  /** Opens the folder picker, or takes one of the suggested paths. The first copy is written right after. */
+  choose(suggestedPath?: string | null): Promise<SyncFolderStatus>
+  /** Stops the live copy. Copies already in the folder stay there. */
+  turnOff(): Promise<SyncFolderStatus>
+  /** Writes one copy from the app's backup JSON (the desktop adds the database file). `force` writes even when nothing changed. */
+  write(json: string, meta: SyncCopyMeta, force?: boolean): Promise<SyncFolderStatus>
+  /** An app's own data changed: a copy follows in about 15 seconds. */
+  touch(): void
+  /** Every version in the folder, newest first (this PC's and other PCs'). */
+  listVersions(): Promise<SyncVersion[]>
+  /** A version's date and row counts, after its files were checked against their SHA-256. */
+  preview(versionId: string): Promise<SyncPreview>
+  /** A version's backup JSON (checked), for the restore. */
+  read(versionId: string): Promise<string>
+  /** Encrypt new copies with a passphrase kept only on this PC. */
+  setEncryption(on: boolean, passphrase?: string | null): Promise<SyncFolderStatus>
+  open(): Promise<void>
+  /** The desktop asks for a copy now (a change, quit, sleep, lock). */
+  onWant(cb: () => void): void
+  /** The status changed (a copy was written, the folder went missing…). */
+  onChanged(cb: () => void): void
+}
+
 export interface VerifyResult {
   ok: boolean
   name: string | null

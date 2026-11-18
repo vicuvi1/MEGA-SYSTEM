@@ -64,7 +64,8 @@ if (isQuick) {
   // load beside it and join as soon as their code is here, so Today never waits for them.
   const lateParts = Promise.all([
     desk?.islandState ? load(() => import('./IslandFeed')) : none,
-    desk?.writeBackup ? load(() => import('./DesktopBackups')) : none
+    desk?.writeBackup ? load(() => import('./DesktopBackups')) : none,
+    desk?.syncFolder ? load(() => import('./safety/SyncFolderPanel')) : none
   ])
   const Late = () => {
     const [parts, setParts] = useState<Awaited<typeof lateParts> | null>(null)
@@ -72,11 +73,12 @@ if (isQuick) {
       void lateParts.then(setParts)
     }, [])
     if (!parts) return null
-    const [feed, backups] = parts
+    const [feed, backups, syncLive] = parts
     return (
       <>
         {feed && <feed.IslandFeed />}
         {backups && <backups.DesktopAutoBackup />}
+        {syncLive && <syncLive.SyncFolderLive />}
       </>
     )
   }

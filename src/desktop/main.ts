@@ -20,6 +20,7 @@ import { widgetFetch } from './widgetNet'
 import { PLACEMENT_LABEL, PLACEMENTS } from './islandWin'
 import { PROFILE_IDS, PROFILE_LABEL } from '../core/islandControlPrefs'
 import { createBackups } from './backups'
+import { registerSyncFolder } from './syncFolder'
 import { createVault } from './vault'
 import { createScWeb } from './scWeb'
 import { createPc } from './pc'
@@ -177,6 +178,8 @@ if (firstCopy) void app.whenReady().then(async () => {
       await rename(file + '.tmp', file)
     })
     saves = save.catch(() => {})
+    // Sync folder: every change ends in this save, so the live copy follows it.
+    void save.then(() => syncFolder.touch(), () => {})
     return save
   })
   handle('desktop:backup', async () => {
@@ -196,6 +199,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   handle('backups:choose', (w?: unknown) => backups.choose(win, w === 'local' ? 'local' : 'drive'))
   handle('backups:resetLocal', () => backups.resetLocal())
   handle('backups:open', (w: unknown) => backups.open(where(w)))
+  // Sync folder (2026-11-18): a live copy of all data in a folder you choose (off until chosen). Never needs the server.
+  const syncFolder = registerSyncFolder({ userData: dir, dbFile: file, beforeRead: () => saves, win, handle, smoke })
   // Your Obsidian vault (read-only): titles, headings and first lines.
   const vault = createVault(dir)
   handle('vault:choose', () => vault.choose(win))
@@ -306,7 +311,7 @@ if (firstCopy) void app.whenReady().then(async () => {
   // reminders keep working); Quit in the tray menu really quits.
   let quitting = false
   app.on('before-quit', () => { quitting = true })
-  markQuitting = () => { quitting = true }
+  markQuitting = () => { quitting = true; syncFolder.skipQuitFlush() }
   pushUpdate = (s) => { if (!win.isDestroyed()) win.webContents.send('desktop:update', s) }
   win.on('close', (event) => {
     if (quitting) return

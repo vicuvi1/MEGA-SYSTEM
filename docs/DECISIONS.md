@@ -632,3 +632,34 @@ entry that says why.
 - **Rules out:** a device-only archive (the other device would bring the records straight back through the merge),
   a new top-level state key, and deleting old years. Archived records are read-only until Unarchive.
 
+### Sync folder: a live copy next to the server, never a second sync path (2026-11-18)
+- **Decision:** the desktop's sync folder (`src/desktop/syncFolderStore.ts`, docs/areas/data-sync.md "Sync folder") is a
+  **copy**, not a way for devices to exchange data. Each PC writes only into its own sub-folder
+  (`Life System Sync/<PC>-<id>/`), one whole `.zip` per copy (temp name → read back, byte compare, SHA-256 of each
+  file → rename), versions thinned to 24 hourly / 14 daily / 12 monthly. Nothing on this path calls the server. Data
+  comes back only through the app's existing restore (`restoreSnapshot`: backup first, all or nothing, restore id).
+- **Why:** the owner asked that the data stays intact when the server is down. One file per copy is the only way a
+  cloud-drive app can never upload half a copy; one folder per PC means two PCs can never overwrite or thin each
+  other's files; reusing the restore keeps one tested way of changing data.
+- **Encryption is off by default** (the owner wants no passwords for now). On, the passphrase lives only in Electron
+  `safeStorage` on that PC; a copy is never written plain while encryption is on.
+- **"Merge from sync folder" is not built; `merge()` refuses and changes nothing.** Design for when it is:
+  1. Only the newest checked copy of **another** PC's sub-folder is read; this PC's data is backed up first
+     (`backupBeforeRisk('merge from sync folder')`).
+  2. App copies (Money, Sport Track, Waky, MAN) go through the same functions the app sync uses (`appSync.ts` specs:
+     Finance Helper's `mergeStates`, `mergeSport`, `mergeWaky`: newer edit wins, records only added, deletions by
+     tombstones). The other PC's copy plays the part of "the server's copy"; the result is written as a normal local edit,
+     so the server gets it through the usual sync when it is back. A copy with a different `restore` id is refused.
+  3. Tables need a **shared base**. Today's rules (`merge3` / `mergeRow` in `web/desktopSync.ts`) are three-way: without the
+     base a row missing on one side cannot be told from a row deleted there, and tables without `updated_at` have no
+     "newer". So each copy must first carry the server marker it was last in step with (`data_version` + per-table
+     versions) and the PC's waiting changes with their row images (the outbox, `PendingWrite.rows`); the merge then
+     replays the other PC's waiting changes through `mergeRow` onto this PC, as if they had arrived from the server.
+     Append-only tables (`ledger`, `discipline_events`, `body_log`) may take missing rows by id without a base.
+  4. Refused, with a clear line, when: the schema versions differ, the base markers differ, the copy fails its check,
+     or the other copy is older than this PC's last merge from it. Never a table replaced as a whole.
+- **Rules out:** two PCs writing the same file; treating the folder as the source of truth on start; a "merge" that
+  replaces tables or app copies wholesale; adding up numbers or dropping one side's rows (see "Sync merges never add
+  up plain numbers…"); writing a plain copy when encryption is on; recreating a missing chosen folder; keeping the
+  passphrase in the folder, the database or a settings key.
+

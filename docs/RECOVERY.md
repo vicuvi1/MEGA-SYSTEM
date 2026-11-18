@@ -1,6 +1,6 @@
 # Recovery: how to get your data back
 
-One page. Your data is in four places, and any one of them is enough to get everything back.
+One page. Your data is in four places (five with a sync folder), and any one of them is enough to get everything back.
 Settings → **Data safety** shows how fresh each one is (green, amber or red).
 
 | Copy | Where | How often | Kept |
@@ -8,6 +8,7 @@ Settings → **Data safety** shows how fresh each one is (green, amber or red).
 | **Main data** | Turso cloud database | every change | — |
 | **Cloud backup** | the same Turso database (`cloud_snapshots` + `cloud_snapshot_parts`) | daily (Ben's server, and the app) | 30 days |
 | **Backup on this PC** | `Documents/LifeSystem/Backups` (or the folder you chose), plus a copy in Google Drive when found | daily, and before every risky step | 14 daily, 8 weekly, 12 monthly, 30 "before" |
+| **Sync folder** (desktop, if you chose one) | `<your folder>/Life System Sync/<PC name>/` (OneDrive, Google Drive, Dropbox, a USB drive…) | a few seconds after every change; works with the server down | 24 hourly, 14 daily, 12 monthly |
 | **Off-site copy** | GitHub → Actions → Off-site backup → Artifacts (encrypted) | weekly (Mondays) | 90 days |
 
 Every restore first saves a backup of how things are now, so a restore can itself be undone
@@ -29,6 +30,27 @@ a big delete or a big change of an app's data (Finance, Sport Track, Waky, MAN).
   every app's data); `life-system.sqlite` opens in any SQLite viewer (for example DB Browser for SQLite);
   `manifest.json` lists row counts and checksums.
 - On a new PC: install Life System, sign in, then Restore from file.
+
+## 2b. From the sync folder (also on a new PC)
+The sync folder holds a live copy of everything, written a few seconds after every change, even while the server is down.
+Each `life-sync-<time>.zip` in `Life System Sync/<PC name>/` is one complete copy (the time in the name is UTC).
+- **On this PC:** Settings → Data safety → **Sync folder** → pick a version → **Preview** (date, rows, apps; the files are
+  checked against their SHA-256 first) → **Restore this version**. A backup of today is saved first.
+- **On a new PC:**
+  1. Install the cloud-drive app (OneDrive, Google Drive, Dropbox) and wait until the `Life System Sync` folder is there,
+     or plug in the USB drive.
+  2. Install Life System and sign in.
+  3. Settings → Data safety → Sync folder → choose the same folder. The old PC's versions show in the list
+     (under the old PC's name); the new PC writes into its own sub-folder and never changes the old one's files.
+  4. Preview the newest version of the old PC → Restore this version.
+  5. If the copies are encrypted (`.zip.enc`): press "Enter the passphrase to open encrypted copies" and type the
+     passphrase first. Without it an encrypted copy cannot be opened by anyone.
+- **While the server is down:** the copies keep being written and stay whole. Putting one back in the app needs the server
+  (a restore changes the data for every device), so wait until it answers again, or open the copy without the app.
+- **Without the app:** a `.zip` opens with any zip tool: `backup.json` (everything, plain JSON), `life-system.sqlite`
+  (any SQLite viewer), `manifest.json` (row counts and the SHA-256 of each file). Restore from file takes the zip too.
+- "Folder not found" in the panel: the USB drive is out or the cloud drive is paused. The app keeps trying by itself;
+  nothing is lost on the PC meanwhile.
 
 ## 3. From a cloud backup
 Settings → Data safety → **Cloud backups** → Restore (one of the last 30 days). A big backup is stored
@@ -69,4 +91,6 @@ device, so it can't sync from there.
   or the internet). Your data is safe in the main database and on this PC.
 - **Backup on this PC:** the folder may be full or gone: Change folder, then Back up now.
 - **Off-site copy:** GitHub → Actions → Off-site backup → the failed run. Usually a missing secret.
+- **Sync folder:** the line says why (folder not found, disk full, a copy that failed its check). It tries again by
+  itself; Copy now tries at once. A folder that is gone for good: Change, and pick a new one.
 - **Restore test:** a backup did not come back whole. Back up now, then Test a restore; tell your helper.

@@ -121,6 +121,8 @@ export interface DesktopApi {
   chooseBackupFolder?(where?: 'local' | 'drive'): Promise<BackupStatus>
   resetBackupFolder?(): Promise<BackupStatus>
   openBackupFolder?(where: BackupWhere): Promise<void>
+  // ---- sync folder: a live copy of all data in a folder you choose (optional: older desktops don't have it) ----
+  syncFolder?: import('./api').SyncFolderIpc
   // ---- your Obsidian vault, read-only (optional: older desktops don't have it) ----
   vaultChoose?(): Promise<import('../plugins/notes/vault').VaultData | null>
   vaultScan?(): Promise<import('../plugins/notes/vault').VaultData | null>

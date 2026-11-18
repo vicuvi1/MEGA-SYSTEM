@@ -9338,6 +9338,79 @@ try {
     await open('today')
   })
 
+  // Sync folder (2026-11-18, desktop only): a live copy of all data in a folder you choose. The website shows nothing;
+  // the desktop app (a stand-in here: the real folder work is unit-tested) shows it Off until a folder is chosen, then
+  // the status, the versions and a preview before a restore.
+  await step('Settings → Data safety: the Sync folder is hidden on the website; in the desktop app it is off until a folder is chosen, then lists versions with a preview', async () => {
+    // The step before ends on Today: a page change made straight after another one can be lost, so ask until Settings is there.
+    for (let i = 0; i < 5; i++) {
+      await pg.waitForTimeout(700)
+      await open('settings')
+      if (await pg.locator('.st-item', { hasText: 'Data safety' }).first().waitFor({ timeout: 6000 }).then(() => true, () => false)) break
+    }
+    await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+    await pg.waitForSelector('[data-testid="data-safety"]', { timeout: 15000 })
+    if (await pg.$('[data-testid="sync-folder"]')) throw new Error('the website shows the desktop-only Sync folder panel')
+    await open('today')
+    const dp = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
+    try {
+      dp.on('pageerror', (e) => errors.push(`desktop app (sync folder): ${e.message}`))
+      await dp.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.fulfill({ status: 200, body: '{}' }))
+      await dp.addInitScript(() => {
+        const sf = { folder: null, writes: 0, restored: [] }
+        window.__sf = sf
+        const id = 'Made-up-PC-a1b2c3/life-sync-20261113T082500Z.zip'
+        const status = async () => ({ enabled: !!sf.folder, folder: sf.folder, device: 'Made-up-PC-a1b2c3', lastWrite: sf.folder ? new Date(Date.now() - 60_000).toISOString() : null, lastVerifiedOk: sf.folder ? true : null, versions: sf.folder ? 1 : 0, sizeBytes: sf.folder ? 2_500_000 : 0, lastSizeBytes: null, error: null, missing: false, encrypt: false, passphraseSaved: false, others: [] })
+        window.desktop = new Proxy({
+          load: async () => null,
+          save: async () => {},
+          eyes: undefined,
+          syncFolder: {
+            status,
+            suggestions: async () => [{ label: 'OneDrive', path: 'C:\\Users\\made-up\\OneDrive' }],
+            choose: async (p) => { sf.folder = p ?? 'E:\\'; return status() },
+            turnOff: async () => { sf.folder = null; return status() },
+            write: async () => { sf.writes++; return status() },
+            touch: () => {},
+            listVersions: async () => (sf.folder ? [{ id, device: 'Made-up-PC-a1b2c3', mine: true, at: '2026-11-13T08:25:00.000Z', sizeBytes: 2_500_000, encrypted: false }] : []),
+            preview: async () => ({ id, at: '2026-11-13T08:25:00.000Z', device: 'Made-up-PC', appVersion: '1.4.0', schemaVersion: 1, rows: 4210, tables: { ledger: 3000, tasks: 1210 }, apps: [{ field: 'financeState', label: 'Finance', size: 10, sum: 'x' }], sizeBytes: 2_500_000, encrypted: false }),
+            read: async () => '{}',
+            setEncryption: status,
+            open: async () => {},
+            onWant: () => {},
+            onChanged: () => {}
+          }
+        }, { get: (t, k) => (k in t ? t[k] : typeof k !== 'string' || k === 'then' ? undefined : /^(on|island|show)/.test(k) ? () => () => {} : async () => null) })
+      })
+      await dp.goto(`http://127.0.0.1:${port}/`)
+      await dp.waitForSelector('input', { timeout: 20000 })
+      await dp.fill('input', '1234')
+      await dp.keyboard.press('Enter')
+      await dp.waitForSelector('.td2', { timeout: 20000 })
+      await dp.evaluate(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'settings' })))
+      await dp.waitForSelector('.st-item', { timeout: 10000 })
+      await dp.locator('.st-item', { hasText: 'Data safety' }).first().click()
+      const SF = '[data-testid="sync-folder"]'
+      await dp.waitForSelector(`${SF} [data-testid="sync-folder-status"][data-light="off"]`, { timeout: 15000 })
+      if ((await dp.textContent(`${SF} [data-testid="sync-folder-chip"]`)) !== 'Off') throw new Error('the sync folder is not off before a folder is chosen')
+      if (await dp.$(`${SF} [data-testid="sync-folder-versions"]`)) throw new Error('versions listed before a folder is chosen')
+      await dp.locator(`${SF} [data-testid="sync-folder-choose"] button`, { hasText: 'Use OneDrive' }).click()
+      await dp.waitForSelector(`${SF} [data-testid="sync-folder-status"][data-light="green"]`, { timeout: 10000 })
+      if (!/checked/.test(await dp.textContent(`${SF} [data-testid="sync-folder-status"]`))) throw new Error('the status does not say the copy was checked')
+      if (await dp.isChecked(`${SF} [data-testid="sync-folder-encrypt"]`)) throw new Error('encryption is on by default')
+      await dp.locator(`${SF} button`, { hasText: 'Copy now' }).click()
+      await dp.waitForFunction(() => window.__sf.writes === 1, null, { timeout: 15000 })
+      await dp.locator(`${SF} [data-testid="sync-folder-versions"] li button`, { hasText: 'Preview' }).first().click()
+      await dp.waitForSelector(`${SF} [data-testid="sync-folder-preview"]`, { timeout: 8000 })
+      const pv = await dp.textContent(`${SF} [data-testid="sync-folder-preview"]`)
+      // SYNC_SHOT=<file.png>: a picture of the panel (kept outside the repo).
+      if (process.env.SYNC_SHOT) await dp.locator(SF).screenshot({ path: process.env.SYNC_SHOT })
+      if (!/4,210 rows|4.210 rows|4\s?210 rows/.test(pv) || !/Finance/.test(pv) || !/Restore this version/.test(pv)) throw new Error(`the preview reads "${pv.slice(0, 160)}"`)
+    } finally {
+      await dp.context().close()
+    }
+  })
+
   await step('no uncaught page errors', async () => {
     if (errors.length) throw new Error(errors.slice(0, 3).join(' | '))
   })
